@@ -1030,8 +1030,13 @@ assocLoc lv ul = do
 
 -- | The copy repair tactic:
 copy :: Result -> LocVar -> TiM Result
-copy = _
-  -- TODO
+copy (e,ty,cs) lv1 =
+    case ty of
+      PackedTy tc lv2 ->
+          let copyName = "copy_" ++ tc -- assume a copy function with this name
+              eapp = l$ AppE (toVar copyName) [lv1,lv2] e
+          in return (eapp, PackedTy tc lv1, [])
+      _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
 
 -- | For a packed type, get its location.
 locOfTy :: Ty2 -> LocVar
@@ -1201,3 +1206,11 @@ mkAdd1Fun bod = L1.FunDef "add1" ("tr",treeTy) treeTy bod
 
 exadd1 :: L1.Prog
 exadd1 = mkAdd1Prog exadd1Bod Nothing
+
+mkIdProg :: Maybe (L L1.Exp1) -> L1.Prog
+mkIdProg mainExp = L1.Prog treeDD
+                           (M.fromList [("id",idFun)])
+                           mainExp
+
+idFun :: L1.FunDef L1.Ty1 (L L1.Exp1)
+idFun = L1.FunDef "id" ("tr",treeTy) treeTy (l$ VarE "tr")
