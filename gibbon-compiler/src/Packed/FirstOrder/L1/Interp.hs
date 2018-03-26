@@ -13,8 +13,7 @@ module Packed.FirstOrder.L1.Interp
     , main
     ) where
 
-import           Blaze.ByteString.Builder (Builder, toLazyByteString)
-import           Blaze.ByteString.Builder.Char.Utf8 (fromString)
+import           Data.ByteString.Builder (Builder, toLazyByteString, string8)
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.Writer
@@ -370,10 +369,10 @@ interpProg rc Prog {ddefs,fundefs, mainExp=Just e} =
                 let tm = fromIntegral (toNanoSecs $ diffTimeSpec en st)
                           / 10e9 :: Double
                 if isIter
-                 then do tell$ fromString $ "ITERS: "++show iters       ++"\n"
-                         tell$ fromString $ "SIZE: " ++show (rcSize rc) ++"\n"
-                         tell$ fromString $ "BATCHTIME: "++show tm      ++"\n"
-                 else tell$ fromString $ "SELFTIMED: "++show tm ++"\n"
+                 then do tell$ string8 $ "ITERS: "++show iters       ++"\n"
+                         tell$ string8 $ "SIZE: " ++show (rcSize rc) ++"\n"
+                         tell$ string8 $ "BATCHTIME: "++show tm      ++"\n"
+                 else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
                 return $! val
 
 

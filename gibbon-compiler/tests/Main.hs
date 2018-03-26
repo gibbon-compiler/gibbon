@@ -278,8 +278,8 @@ add1_prog = T.Prog [build_tree, add1]
              (RetValsT [])
             )
   where
-    build_tree = FunDecl "build_tree" [("n",T.IntTy),("tout",T.CursorTy)] T.CursorTy buildTree_tail
-    add1 = FunDecl "add1" [("t",T.CursorTy),("tout",T.CursorTy)] (T.ProdTy [T.CursorTy,T.CursorTy]) add1_tail
+    build_tree = FunDecl "build_tree" [("n",T.IntTy),("tout",T.CursorTy)] T.CursorTy buildTree_tail True
+    add1 = FunDecl "add1" [("t",T.CursorTy),("tout",T.CursorTy)] (T.ProdTy [T.CursorTy,T.CursorTy]) add1_tail True
 
     buildTree_tail =
         Switch (VarTriv "n") (IntAlts [(0, base_case)]) (Just recursive_case)

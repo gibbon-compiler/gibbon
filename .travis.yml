@@ -1,7 +1,7 @@
 ## Based on the travis-simple.yml (https://raw.githubusercontent.com/commercialhaskell/stack/stable/doc/travis-simple.yml)
 
-# Use new container infrastructure to enable caching
-sudo: false
+# To set the default GCC version to 7
+sudo: required
 
 # Do not choose a language; we provide our own build tools.
 language: generic
@@ -14,8 +14,11 @@ cache:
 # Ensure necessary system libraries are present
 addons:
   apt:
+    sources:
+    - ubuntu-toolchain-r-test
     packages:
       - libgmp-dev
+      - gcc-5
 
 env:
   global:
@@ -35,6 +38,9 @@ install:
   - git clone https://github.com/greghendershott/travis-racket.git
   - cat travis-racket/install-racket.sh | bash
   - export PATH="${RACKET_DIR}/bin:${PATH}"
+
+  # GCC
+  - sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-5 /usr/bin/gcc
 
 # We have a private submodule, and can't clone it without adding proper keys to Travis
 git:

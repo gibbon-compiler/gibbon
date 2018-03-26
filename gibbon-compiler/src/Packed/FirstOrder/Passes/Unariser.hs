@@ -11,7 +11,6 @@ import Packed.FirstOrder.Common hiding (FunDef, FunDefs)
 import Packed.FirstOrder.L1.Syntax hiding (FunDef, Prog(..), FunDefs)
 import Packed.FirstOrder.L3.Syntax
 import Packed.FirstOrder.GenericOps
-import Text.PrettyPrint.GenericPretty
 
 
 -- | This pass gets ready for Lower by converting most uses of

@@ -50,7 +50,7 @@ harvestStructTys (Prog funs mtal) =
   -- structs f = makeStructs $ S.toList $ harvestStructTys prg
 
   funTys :: FunDecl -> [Ty]
-  funTys (FunDecl _ args ty _) = ty : (map snd args)
+  funTys (FunDecl _ args ty _ _) = ty : (map snd args)
 
   allTails = (case mtal of
                 Just (PrintExp t) -> [t]
@@ -116,8 +116,7 @@ codegenProg isPacked prg@(Prog funs mtal) = do
       return (rts ++ '\n' : pretty 80 (stack (map ppr defs)))
     where
       defs = fst $ runSyM 0 $ do
-        funs' <- mapM codegenFun funs
-        prots <- mapM makeProt funs
+        (prots,funs') <- unzip <$> mapM codegenFun funs
         main_expr' <- main_expr
         return (makeStructs (S.toList $ harvestStructTys prg) ++ prots ++ funs' ++ [main_expr'])
 
@@ -131,7 +130,7 @@ codegenProg isPacked prg@(Prog funs mtal) = do
             return $ C.FuncDef [cfun| void __main_expr() { return; } |] noLoc
 
       codegenFun' :: FunDecl -> SyM C.Func
-      codegenFun' (FunDecl nam args ty tal) =
+      codegenFun' (FunDecl nam args ty tal _) =
           do let retTy   = codegenTy ty
                  params  = map (\(v,t) -> [cparam| $ty:(codegenTy t) $id:v |]) args
              body <- runReaderT (codegenTail tal retTy) isPacked
@@ -140,14 +139,19 @@ codegenProg isPacked prg@(Prog funs mtal) = do
                      } |]
              return fun
 
-      makeProt :: FunDecl -> SyM C.Definition
-      makeProt fd = do fn <- codegenFun' fd  -- This is bad and I apologize
-                       return $ C.DecDef (C.funcProto fn) noLoc
+      makeProt :: C.Func -> Bool -> C.InitGroup
+      makeProt fn ispure =
+        let prot@(C.InitGroup decl_spec _ inits lc) = C.funcProto fn
+            purattr = C.Attr (C.Id "pure" noLoc) [] noLoc
+        in if ispure
+           then C.InitGroup decl_spec [purattr] inits lc
+           else prot
 
-      codegenFun :: FunDecl -> SyM C.Definition
+      codegenFun :: FunDecl -> SyM (C.Definition, C.Definition)
       codegenFun fd =
           do fun <- codegenFun' fd
-             return $ C.FuncDef fun noLoc
+             let prot = makeProt fun (isPure fd)
+             return (C.DecDef prot noLoc, C.FuncDef fun noLoc)
 
 makeStructs :: [[Ty]] -> [C.Definition]
 makeStructs [] = []

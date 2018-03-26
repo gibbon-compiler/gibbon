@@ -174,7 +174,7 @@ extendEnv = foldr (uncurry M.insert)
 
 apply :: Env -> Val -> [Val] -> IO [Val]
 
-apply env (FunVal (FunDecl _ as _ body)) args =
+apply env (FunVal (FunDecl _ as _ body _)) args =
     exec (extendEnv env (zip (map fst as) args)) body
 
 apply _ notFun _ =

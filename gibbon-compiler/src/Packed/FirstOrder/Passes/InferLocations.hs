@@ -240,7 +240,7 @@ inferLocs (L1.Prog dfs fds me) = do
                                    return $ L2.FunDef fn arrty (fst fa) fbod'
           return $ L2.Prog dfs' fds' me'
 
-    
+
 -- | Destination can be a single location var, a tuple of destinations,
 -- or nothing (for scalar values)
 data Dest = SingleDest LocVar -- TODO: refactor to just be list of locations, or actually enforce invariants of non-empty list, etc
@@ -708,7 +708,6 @@ inferExp env@FullEnv{dataDefs}
           tryBindReg (lc$ L2.LetE (vr,[],ty,L sl2 $ TimeIt e' ty b) bod'',
                     ty'', fcs)
           
-
         _oth -> err $ "Unhandled case in lhs of let: " ++ (show lex0)
 
     _oth -> err $ "Unhandled case: " ++ (show lex0)
@@ -1063,7 +1062,6 @@ prim p = case p of
            L1.SizeParam -> L1.SizeParam
            _ -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
 
-       
 -- Notes on program repair:
 --------------------------------------------------------------------------------
 
