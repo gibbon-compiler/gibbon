@@ -1070,7 +1070,8 @@ prim p = case p of
            L1.SizeParam -> L1.SizeParam
            _ -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
 
-
+-- | Generate a copy function for a particular data definition.
+-- Note: there will be redundant let bindings in the function body which may need to be inlined.
 genCopyFn :: DDef L1.Ty1 -> SyM (L1.FunDef L1.Ty1 (L L1.Exp1))
 genCopyFn DDef{tyName, dataCons} = do
   arg <- gensym $ "arg"
@@ -1089,33 +1090,18 @@ genCopyFn DDef{tyName, dataCons} = do
                      , funRetTy = L1.PackedTy (fromVar tyName) ()
                      , funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
                      }
-                                     
+
+-- | Get the data constructor type from a type, failing if it's not packed
 tyToDataCon :: L1.Ty1 -> DataCon
 tyToDataCon (PackedTy dcon _) = dcon
 tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
 
+-- | Add copy functions for each data type in a prog
 addCopyFns :: L1.Prog -> SyM L1.Prog
 addCopyFns (L1.Prog dfs fds me) = do
   newFns <- mapM genCopyFn dfs
   return $ inlineTriv $
          L1.Prog dfs (fds `M.union` (M.mapKeys (toVar . ("copy_" ++) . fromVar) newFns)) me
-
-
--- Notes on program repair:
---------------------------------------------------------------------------------
-
--- Tactic 1: reorder definitions and retry
--- Tactic 2: replace a hole containing 'e' with '(copy e)'
--- Tactic 3: change field x to be a pointer, making size(x) constant
--- Tactic 4: inline a binding duplicating work (usually bad)
-
--- Notes on testing:
---------------------------------------------------------------------------------
--- Test on:
--- add1ProgLetLeft  : succeeds in one try
--- add1ProgLetRight : fails with CyclicDependence and needs reorder tactic
--- add1ProgChallenge : fails with CyclicDependence and needs copy tactic
--- add1ProgSharing : fails with FailedLocUnify: l_x2 cannot equal 'l_x2 + size(x2)'
 
                
 emptyEnv :: FullEnv
