@@ -113,7 +113,7 @@ import qualified Packed.FirstOrder.L1.Syntax as L1
 import Packed.FirstOrder.L2.Syntax as L2
 import Packed.FirstOrder.L2.Typecheck as T
 import Packed.FirstOrder.Passes.InlineTriv (inlineTriv)
-
+import Packed.FirstOrder.Passes.Flatten (flattenL1)
 
 -- Environments
 ----------------------------------------------------------------------------------------------------
@@ -465,6 +465,14 @@ inferExp env@FullEnv{dataDefs}
                     return (e',ty',c:cs')
       bindAfterLoc _ (e,ty,[]) = return (e,ty,[])
 
+      -- | Transform a result by discharging AfterVariable constraints corresponding to
+      -- a list of newly bound variables.
+      bindAfterLocs :: [Var] -> Result -> TiM Result
+      bindAfterLocs (v:vs) res =
+          do res' <- bindAfterLoc v res
+             bindAfterLocs vs res'
+      bindAfterLocs [] res = return res
+
       -- | Transforms a result by binding any additional locations that are safe to be bound
       -- once the location passed in has been bound. For example, if we know `loc1` is `n`
       -- bytes after `loc2`, and `loc2` has been passed in, we can bind `loc1`. 
@@ -516,7 +524,8 @@ inferExp env@FullEnv{dataDefs}
         let contys = lookupDataCon ddfs con
             newtys = L.map (\(ty,(_,lv)) -> fmap (const lv) ty) $ zip contys vars'
             env' = L.foldr (\(v,ty) a -> extendVEnv v ty a) env $ zip (L.map fst vars') newtys
-        (rhs',ty',cs') <- inferExp env' rhs dst
+        res <- inferExp env' rhs dst
+        (rhs',ty',cs') <- bindAfterLocs (L.map fst vars') res
         -- traceShowM cs'
         -- let cs'' = removeLocs (L.map snd vars') cs'
         -- TODO: check constraints are correct and fail/repair if they're not!!!
@@ -671,7 +680,7 @@ inferExp env@FullEnv{dataDefs}
           (bod',ty',cs') <- inferExp (extendVEnv vr (PackedTy (getTyOfDataCon dataDefs k) loc) env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ rcs)
           fcs <- tryInRegion cs''
-          tryBindReg (lc$ L2.LetE (vr,[loc],PackedTy k loc,rhs') bod'',
+          tryBindReg (lc$ L2.LetE (vr,[loc],PackedTy (getTyOfDataCon dataDefs k) loc,rhs') bod'',
                     ty', fcs)
         LitSymE x     -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr IntTy env) bod dest
@@ -1100,8 +1109,8 @@ tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
 addCopyFns :: L1.Prog -> SyM L1.Prog
 addCopyFns (L1.Prog dfs fds me) = do
   newFns <- mapM genCopyFn dfs
-  return $ inlineTriv $
-         L1.Prog dfs (fds `M.union` (M.mapKeys (toVar . ("copy_" ++) . fromVar) newFns)) me
+  prg <- flattenL1 $ L1.Prog dfs (fds `M.union` (M.mapKeys (toVar . ("copy_" ++) . fromVar) newFns)) me
+  return $ inlineTriv $ prg
 
                
 emptyEnv :: FullEnv
