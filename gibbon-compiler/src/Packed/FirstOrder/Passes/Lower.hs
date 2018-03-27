@@ -73,15 +73,18 @@ genDcons [] tail fields     = do
   return $ T.LetAllocT ptr fields $ T.RetValsT [T.VarTriv ptr, T.VarTriv tail]
 
 genAlts :: [(DataCon,[(IsBoxed,Ty3)])] -> Var -> Var -> Int64 -> SyM T.Alts
-genAlts ((_, typs):xs) tail tag n = do
+genAlts ((dcons, typs):xs) tail tag n = do
   let (_,typs') = unzip typs
   -- WARNING: IsBoxed ignored here
   curTail <- genDcons typs' tail [(T.TagTyPacked, T.VarTriv tag)]
   alts    <- genAlts xs tail tag (n+1)
+  let alt = if dcons == indirectionTag
+            then indirectionAlt
+            else n
   case alts of
-    T.IntAlts []   -> return $ T.IntAlts [(n::Int64, curTail)]
+    T.IntAlts []   -> return $ T.IntAlts [(alt::Int64, curTail)]
     -- T.TagAlts []   -> return $ T.TagAlts [(n::Word8, curTail)]
-    T.IntAlts tags -> return $ T.IntAlts ((n::Int64, curTail) : tags)
+    T.IntAlts tags -> return $ T.IntAlts ((alt::Int64, curTail) : tags)
     -- T.TagAlts tags -> return $ T.TagAlts ((n::Word8, curTail) : tags)
     _              -> error $ "Invalid case statement type."
 
@@ -162,10 +165,13 @@ genAltPrinter ((dcons, typs):xs) tail n = do
   -- WARNING: IsBoxed ignored here
   curTail <- (openParen dcons) <$> genDconsPrinter typs' tail
   alts    <- genAltPrinter xs tail (n+1)
+  let alt = if dcons == indirectionTag
+            then indirectionAlt
+            else n
   case alts of
-    T.IntAlts []   -> return $ T.IntAlts [(n::Int64, curTail)]
+    T.IntAlts []   -> return $ T.IntAlts [(alt::Int64, curTail)]
     -- T.TagAlts []   -> return $ T.TagAlts [(n::Word8, curTail)]
-    T.IntAlts tags -> return $ T.IntAlts ((n::Int64, curTail) : tags)
+    T.IntAlts tags -> return $ T.IntAlts ((alt::Int64, curTail) : tags)
     -- T.TagAlts tags -> return $ T.TagAlts ((n::Word8, curTail) : tags)
     _              -> error $ "Invalid case statement type."
 genAltPrinter [] _ _                = return $ T.IntAlts []
