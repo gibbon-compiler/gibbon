@@ -516,12 +516,12 @@ But Infinite regions do not support sizes yet. Re-enable this later.
 
 
 -- ASSUMPTIONS:
--- 1) `locs` has [in_regions, out_regions, in_locs, out_locs] for the function.
---    But after Cursorize, the calling convention changes so that input
---    locations appear last. Plus, `arg` would supply those. So we can
---    safely drop them from `locs`.
+-- (1) `locs` has [in_regions, out_regions, in_locs, out_locs] for the function.
+--     But after Cursorize, the calling convention changes so that input
+--     locations appear last. Plus, `arg` would supply those. So we can
+--     safely drop them from `locs`.
 --
--- 2) We update `arg` so that all packed values in it only have start cursors.
+-- (2) We update `arg` so that all packed values in it only have start cursors.
 cursorizeAppE :: DDefs Ty2 -> NewFuns -> DepEnv -> TEnv -> L Exp2 -> SyM L3.Exp3
 cursorizeAppE ddfs fundefs denv tenv (L _ ex) =
   case ex of
@@ -545,9 +545,6 @@ cursorizeAppE ddfs fundefs denv tenv (L _ ex) =
     _ -> error $ "cursorizeAppE: Unexpected " ++ sdoc ex
 
 
-cursorizeLet :: DDefs Ty2 -> NewFuns -> DepEnv -> TEnv -> Bool
-             -> (Var, [Var], Ty2, L Exp2) -> L Exp2 -> SyM L3.Exp3
-cursorizeLet ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
 {- Note [Cursorizing let expressions]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -568,6 +565,9 @@ we can take a shortcut here and directly bind `v` to the tagged location.
 Other bindings are straightforward projections of the processed RHS.
 
 -}
+cursorizeLet :: DDefs Ty2 -> NewFuns -> DepEnv -> TEnv -> Bool
+             -> (Var, [Var], Ty2, L Exp2) -> L Exp2 -> SyM L3.Exp3
+cursorizeLet ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
     | isPackedTy ty = do
         rhs' <- fromDi <$> cursorizePackedExp ddfs fundefs denv tenv rhs
         fresh <- gensym "tup_packed"
@@ -625,19 +625,20 @@ Other bindings are straightforward projections of the processed RHS.
         case locs of
             [] -> LetE (v,[],L3.stripTyLocs ty, rhs') <$>
                     go (M.insert v ty tenv) bod
+{-
+             This was a scalar binding before, but now has been transformed to
+             also return an end_read cursor. So the type of the binding now
+             becomes:
 
-            -- This was a scalar binding before, but now has been transformed to
-            -- also return an end_read cursor. So the type of the binding now
-            -- becomes:
-            --
-            --     ProdTy [CursorTy, old_ty]
-            --
-            -- Also, the binding itself now changes to:
-            --
-            --     end_read -> ProjE 0 RHS'
-            --     v        -> ProjE 1 RHS'
-            --
-            -- `rightmost` is an example of a program that does this
+                 ProdTy [CursorTy, old_ty]
+
+             Also, the binding itself now changes to:
+
+                 end_read -> ProjE 0 RHS'
+                 v        -> ProjE 1 RHS'
+
+             `rightmost` is an example of a program that does this
+-}
             [loc] -> do
               fresh <- gensym "tup_scalar"
               let ty'  = ProdTy ([CursorTy | _ <- locs] ++ [L3.cursorizeTy ty])
