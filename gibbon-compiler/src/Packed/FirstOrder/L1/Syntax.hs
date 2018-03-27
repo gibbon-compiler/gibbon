@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -42,7 +43,7 @@ module Packed.FirstOrder.L1.Syntax
     , assertTriv, assertTrivs, hasTimeIt, isTrivial
     , projNonFirst, mkProj, mkProd, mkProdTy, mkLets, flatLets
 
-      -- * Examples
+      -- * Examples.  TODO: Move to separate examples file.
     , add1Prog
     , add1ProgLetLeft
     , add1ProgLetRight
@@ -157,7 +158,7 @@ data PreExp (ext :: * -> * -> *) loc dec =
   | Ext (ext loc dec) -- ^ Extension point for downstream language extensions.
 
   deriving (Show, Read, Eq, Ord, Generic, NFData, Functor)
-
+  -- Foldable, Traversable - need instances for L in turn
 
 instance NFData (PreExp e l d) => NFData (L (PreExp e l d)) where
   rnf (L loc a) = seq loc (rnf a)
@@ -188,6 +189,10 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
                          | otherwise -> False
         MkProdE ls -> all (\(L _ x) -> f x) ls
 
+        -- DataCon's are a bit tricky.  May want to inline them at
+        -- some point if it avoids region conflicts.
+        DataConE{} -> False
+
         IfE{}      -> False
         CaseE{}    -> False
         LetE {}    -> False
@@ -195,7 +200,6 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         FoldE {}   -> False
         AppE  {}   -> False
         TimeIt {}  -> False
-        DataConE{} -> False
         Ext ext -> isTrivial ext
 
 
@@ -326,7 +330,7 @@ data Prim ty
             -- type of the file being read.  The `Ty` tracks the type as the program evolvels
             -- (first PackedTy then CursorTy).  The TyCon tracks the original type name.
 
-  deriving (Read, Show, Eq, Ord, Generic, NFData, Functor)
+  deriving (Read, Show, Eq, Ord, Generic, NFData, Functor, Foldable, Traversable)
 
 instance Out d => Out (Prim d)
 instance Out a => Out (UrTy a)
@@ -349,7 +353,7 @@ type Ty1 = UrTy ()
 
 -- | Types include boxed/pointer-based products as well as unpacked
 -- algebraic datatypes.  This data is parameterized to allow
--- annotation later on.
+-- annotation on Packed types later on.
 data UrTy a =
           IntTy
 --        | SymTy -- ^ Symbols used in writing compiler passes.
@@ -375,7 +379,7 @@ data UrTy a =
                    -- to an unkwown type or to a fraction of a complete value.
                    -- It is a machine pointer that can point to any byte.
 
-  deriving (Show, Read, Ord, Eq, Generic, NFData, Functor)
+  deriving (Show, Read, Ord, Eq, Generic, NFData, Functor, Foldable, Traversable)
 
 
 projTy :: (Out a) => Int -> UrTy a -> UrTy a

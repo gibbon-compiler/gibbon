@@ -127,25 +127,21 @@ test-suite test-gibbon
   hs-source-dirs:      tests
   main-is:             Main.hs
 
-  build-depends:       base
-                     , gibbon
-                     , containers
-                     , filepath
-                     , directory
-                     , process
-                     , mtl
-                     , srcloc
-                     , tasty
-                     , tasty-hunit
-                     , tasty-th
-
-  other-modules:       RouteEnds
-                       InferEffects
-                       Unariser
-                       Compiler
-                       L2.Typecheck
-                       L1.Typecheck
-                       L3.Typecheck
+  build-depends:       base,
+                       gibbon, containers,
+                       filepath, directory, process,
+                       srcloc,
+                       mtl, transformers,
+                       tasty, tasty-hunit, tasty-th
+  other-modules:
+                RouteEnds
+                InferEffects
+                InferLocations
+                Unariser
+                Compiler
+                L2.Typecheck
+                L1.Typecheck
+                L3.Typecheck
 
   default-language:    Haskell2010
   ghc-options:         -fdefer-typed-holes

@@ -27,12 +27,14 @@ import Compiler
 import L2.Typecheck
 import L1.Typecheck
 import L3.Typecheck
+import InferLocations
 
 main :: IO ()
 main = defaultMain allTests
   where allTests = testGroup "All"
                    [ tests
                    , routeEnds2Tests
+                   , inferLocations2Tests
                    , inferEffects2Tests
                    , unariser2Tests
                    -- , l2TypecheckerTests

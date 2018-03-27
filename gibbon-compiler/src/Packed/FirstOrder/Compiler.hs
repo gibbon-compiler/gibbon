@@ -388,10 +388,13 @@ passes config@Config{mode,packed} l1 = do
                      _ -> l1
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    (return . inlineTriv)   l1
-
+            
       -- TODO: Write interpreters for L2 and L3
       l3 <- if packed
             then do
+              -- TODO: push data contstructors under conditional
+              -- branches before InferLocations.
+              
               -- Note: L1 -> L2
               l2 <- go "inferLocations"   inferLocs     l1
               l2 <- go "L2.flatten"       flattenL2     l2

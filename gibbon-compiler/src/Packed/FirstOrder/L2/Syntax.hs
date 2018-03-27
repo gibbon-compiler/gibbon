@@ -26,6 +26,7 @@ module Packed.FirstOrder.L2.Syntax
 
     -- *
     , allLocVars, inLocVars, outLocVars, substEffs, substTy, mapPacked, prependArgs
+    , isPackedTy', locsInTy
 
     -- * Temporary backwards compatibility, plus rexports
     , UrTy(..)
@@ -77,7 +78,14 @@ import qualified Packed.FirstOrder.L1.Syntax as L1
 --------------------------------------------------------------------------------
 
 -- | Extended expressions, L2.  Monomorphic.
+-- 
+--   By adding a `LocVar` decoration, all data constructors,
+--   applications, and bindings gain a location annotation.  
 type Exp2 = E2 LocVar Ty2
+
+-- | L1 expressions extended with L2.  This is the polymorphic version.
+-- Shorthand for recursions above.
+type E2 l d = PreExp E2Ext l d
 
 -- | The extension that turns L1 into L2.
 data E2Ext loc dec =
@@ -86,10 +94,6 @@ data E2Ext loc dec =
   | RetE [loc] Var     -- ^ Return a value together with extra loc values.
   | FromEndE loc -- ^ Bind a location from an EndOf location (for RouteEnds and after)
  deriving (Show, Ord, Eq, Read, Generic, NFData)
-
--- | L1 expressions extended with L2.  This is the polymorphic version.
--- Shorthand for recursions above.
-type E2 l d = PreExp E2Ext l d
 
 -- instance Read (E2 l d) where
 -- instance Read (L (E2 l d)) where
@@ -183,14 +187,15 @@ instance (Typeable (E2Ext l (UrTy l)),
 
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
-data ArrowTy t = ArrowTy { locVars :: [LRM]       -- ^ Universally-quantified location params.
-                                                  -- Only these should be referenced in arrIn/arrOut.
-                         , arrIn :: t             -- ^ Input type for the function.
-                         , arrEffs:: (Set Effect) -- ^ These are present-but-empty initially,
-                                                  -- and the populated by InferEffects.
-                         , arrOut:: t             -- ^ Output type for the function.
-                         , locRets :: [LocRet]    -- ^ L2B feature: multi-valued returns.
-                         }
+data ArrowTy t = ArrowTy
+    { locVars :: [LRM]       -- ^ Universally-quantified location params.
+                             -- Only these should be referenced in arrIn/arrOut.
+    , arrIn :: t             -- ^ Input type for the function.
+    , arrEffs:: (Set Effect) -- ^ These are present-but-empty initially,
+                             -- and the populated by InferEffects.
+    , arrOut:: t             -- ^ Output type for the function.
+    , locRets :: [LocRet]    -- ^ L2B feature: multi-valued returns.
+    }
   deriving (Read,Show,Eq,Ord, Generic, NFData)
 
 -- | The side-effect of evaluating a function.
@@ -329,6 +334,17 @@ mapPacked fn t =
 prependArgs :: [UrTy l] -> UrTy l -> UrTy l
 prependArgs [] t = t
 prependArgs ls t = ProdTy $ ls ++ [t]
+
+isPackedTy' :: Ty2 -> Bool
+isPackedTy' (PackedTy _ _) = True
+isPackedTy' _ = False
+
+locsInTy :: Ty2 -> [LocVar]
+locsInTy ty =
+    case ty of
+      PackedTy _ lv -> [lv]
+      ProdTy tys -> concatMap locsInTy tys
+      _ -> []
 
 
 {-
