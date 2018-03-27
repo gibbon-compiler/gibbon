@@ -102,6 +102,7 @@ cursorizeFunDef ddefs fundefs FunDef{funname,funty,funarg,funbod} =
   let inLocs  = inLocVars funty
       outLocs = outLocVars funty
       outRegs = outRegVars funty
+      inRegs  = inRegVars funty
       inT     = arrIn funty
       outT    = arrOut funty
       funty'  = cursorizeArrowTy funty
@@ -109,19 +110,19 @@ cursorizeFunDef ddefs fundefs FunDef{funname,funty,funarg,funbod} =
    newarg <- gensym "newarg"
 
    let
-       numOutRegs = length outRegs
+       totalRegs = length inRegs + length outRegs
 
-       -- Output regions are always inserted before all other arguments.
-       outRegBinds =  mkLets [ (toEndV reg, [], CursorTy, l$ ProjE i (l$ VarE newarg))
-                             | (reg, i) <- zip outRegs [0..]]
+       -- Input & output regions are always inserted before all other arguments.
+       regBinds =  mkLets [ (toEndV reg, [], CursorTy, l$ ProjE i (l$ VarE newarg))
+                          | (reg, i) <- zip (inRegs ++ outRegs) [0..]]
 
        -- Output cursors after that.
-       outCurBinds = outRegBinds .
+       outCurBinds = regBinds .
                      mkLets [ (cur,[],CursorTy, l$ ProjE i (l$ VarE newarg))
-                            | (cur,i) <- zip outLocs [numOutRegs..]]
+                            | (cur,i) <- zip outLocs [totalRegs..]]
 
        -- Then the input cursors. Create projections for input cursors here
-       afterOutLocs  = nProj (numOutRegs + length outLocs) newarg
+       afterOutLocs  = nProj (totalRegs + length outLocs) newarg
        inCurBinds = case inLocs of
                       [] -> mkLets [(funarg,[],L3.stripTyLocs inT, afterOutLocs)]
                       _  -> let projs = mkInProjs afterOutLocs inT
@@ -192,8 +193,8 @@ cursorizeFunDef ddefs fundefs FunDef{funname,funty,funarg,funbod} =
     cursorizeArrowTy ty@L2.ArrowTy{L2.arrIn,L2.arrOut,L2.locVars,L2.locRets} =
       let
           -- Regions corresponding to ouput cursors. (See Note [Infinite regions])
-          numRegs = length (L2.outRegVars ty)
-          regs = L.map (\_ -> CursorTy) [1..numRegs]
+          numOutRegs = length (L2.outRegVars ty)
+          regs = L.map (\_ -> CursorTy) [1..numOutRegs]
 
           -- Adding additional outputs corresponding to end-of-input-value witnesses
           -- We've already computed additional location return value in RouteEnds
@@ -207,7 +208,8 @@ cursorizeFunDef ddefs fundefs FunDef{funname,funty,funarg,funbod} =
           -- are written.
           outCurs = L.filter (\(LRM _ _ m) -> m == Output) locVars
           outCurTys = L.map (\_ -> CursorTy) outCurs
-          inT      = L2.prependArgs (regs ++ outCurTys) arrIn
+          inRegs = L.map (\_ -> CursorTy) (L2.inRegVars ty)
+          inT      = L2.prependArgs (inRegs ++ regs ++ outCurTys) arrIn
 
           -- Packed types in the input now become (read-only) cursors.
           newIn    = L2.mapPacked (\_ _ -> CursorTy) inT
@@ -223,23 +225,7 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
     LitE n    -> return $ LitE n
     LitSymE n -> return $ LitSymE n
 
-    AppE f _ arg -> do
-      let fnTy   = case M.lookup f fundefs of
-                     Just g -> funty g
-                     Nothing -> error $ "Unknown function: " ++ sdoc f
-          inT    = arrIn fnTy
-          {-
-          inLocs = inLocVars fnTy
-          numOutRegs = 2 * length (outRegVars fnTy)
-          -- Drop input locations, but keep everything else
-          outs   = (take numOutRegs locs) ++  (drop numOutRegs $ drop (length inLocs) $ locs)
-          -}
-          argTy  = gTypeExp ddfs (Env2 tenv M.empty) arg
-      arg' <- if hasPacked inT
-              then fromDi <$> cursorizePackedExp ddfs fundefs denv tenv arg
-              else cursorizeExp ddfs fundefs denv tenv arg
-      starts <- return $ giveStarts argTy arg'
-      return $ AppE f [] starts
+    AppE{} -> cursorizeAppE ddfs fundefs denv tenv (L p ex)
 
     PrimAppE PEndOf [arg] -> do
       let (L _ (VarE v)) = arg
@@ -321,29 +307,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
     LitE _n    -> error $ "Shouldn't encounter LitE in packed context:" ++ sdoc ex
     LitSymE _n -> error $ "Shouldn't encounter LitSymE in packed context:" ++ sdoc ex
 
-    -- ASSUMPTIONS:
-    -- 1) `locs` has [out_regions, in_locs, out_locs] for the function.
-    --    But after Cursorize, the calling convention changes so that input
-    --    locations appear last. Plus, `arg` would supply those. So we can
-    --    safely drop them from `locs`.
-    --
-    -- 2) We update `arg` so that all packed values in it only have start cursors.
-    AppE f locs arg -> do
-      let fnTy   = case M.lookup f fundefs of
-                     Just g -> funty g
-                     Nothing -> error $ "Unknown function: " ++ sdoc f
-          inT    = arrIn fnTy
-          inLocs = inLocVars fnTy
-          numOutRegs = length (outRegVars fnTy)
-          -- Drop input locations, but keep everything else
-          outs   = (take numOutRegs locs) ++  (drop numOutRegs $ drop (length inLocs) $ locs)
-          argTy  = gTypeExp ddfs (Env2 tenv M.empty) arg
-      arg' <- if hasPacked inT
-              then fromDi <$> go tenv arg
-              else cursorizeExp ddfs fundefs denv tenv arg
-      starts <- return $ giveStarts argTy arg'
-      return $ dl$ AppE f [] $ l$ MkProdE $ [l$ VarE loc | loc <- outs] ++ [starts]
-
+    AppE{} -> dl <$> cursorizeAppE ddfs fundefs denv tenv (L p ex)
 
     PrimAppE _ _ -> error $ "cursorizePackedExp: unexpected PrimAppE in packed context" ++ sdoc ex
 
@@ -549,6 +513,37 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                        GlobR v _ -> l$ VarE v
                        DynR  v _ -> l$ VarE v
     oth -> error $ "cursorizeLocExp: todo " ++ sdoc oth
+
+
+-- ASSUMPTIONS:
+-- 1) `locs` has [in_regions, out_regions, in_locs, out_locs] for the function.
+--    But after Cursorize, the calling convention changes so that input
+--    locations appear last. Plus, `arg` would supply those. So we can
+--    safely drop them from `locs`.
+--
+-- 2) We update `arg` so that all packed values in it only have start cursors.
+cursorizeAppE :: DDefs Ty2 -> NewFuns -> DepEnv -> TEnv -> L Exp2 -> SyM L3.Exp3
+cursorizeAppE ddfs fundefs denv tenv (L _ ex) =
+  case ex of
+    AppE f locs arg -> do
+      let fnTy   = case M.lookup f fundefs of
+                     Just g -> funty g
+                     Nothing -> error $ "Unknown function: " ++ sdoc f
+          inT    = arrIn fnTy
+          inLocs = inLocVars fnTy
+          numRegs = length (outRegVars fnTy) + length (inRegVars fnTy)
+          -- Drop input locations, but keep everything else
+          outs   = (take numRegs locs) ++  (drop numRegs $ drop (length inLocs) $ locs)
+          argTy  = gTypeExp ddfs (Env2 tenv M.empty) arg
+      arg' <- if hasPacked inT
+              then fromDi <$> cursorizePackedExp ddfs fundefs denv tenv arg
+              else cursorizeExp ddfs fundefs denv tenv arg
+      starts <- return $ giveStarts argTy arg'
+      case locs of
+        [] -> return $ AppE f [] starts
+        _  -> return $ AppE f [] (l$ MkProdE $ [l$ VarE loc | loc <- outs] ++ [starts])
+    _ -> error $ "cursorizeAppE: Unexpected " ++ sdoc ex
+
 
 cursorizeLet :: DDefs Ty2 -> NewFuns -> DepEnv -> TEnv -> Bool
              -> (Var, [Var], Ty2, L Exp2) -> L Exp2 -> SyM L3.Exp3

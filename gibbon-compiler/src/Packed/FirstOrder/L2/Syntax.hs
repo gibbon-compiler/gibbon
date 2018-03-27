@@ -26,7 +26,7 @@ module Packed.FirstOrder.L2.Syntax
 
     -- * Operations on types
     , allLocVars, inLocVars, outLocVars, outRegVars, substEffs, substTy, prependArgs
-    , isPackedTy', locsInTy, initFunEnv, getTyLocs
+    , isPackedTy', locsInTy, initFunEnv, getTyLocs, inRegVars
 
     -- * Temporary backwards compatibility, plus rexports
     , UrTy(..)
@@ -278,6 +278,10 @@ outLocVars ty = L.map (\(LRM l _ _) -> l) $
 outRegVars :: ArrowTy t -> [LocVar]
 outRegVars ty = L.map (\(LRM _ r _) -> regionVar r) $
                 L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
+
+inRegVars :: ArrowTy t -> [LocVar]
+inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionVar r) $
+               L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
 -- | Apply a variable substitution to a type.
 substTy :: Map LocVar LocVar -> Ty2 -> Ty2

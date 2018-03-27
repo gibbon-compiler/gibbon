@@ -639,7 +639,7 @@ addTreesFun = FunDef "addTrees" addTreesTy "trees354" addTreesBod
     addTreesTy :: ArrowTy Ty2
     addTreesTy = (ArrowTy
                   [LRM "lin351" (VarR "r350") Input,
-                   LRM "lin352" (VarR "r350") Input,
+                   LRM "lin352" (VarR "r351") Input,
                    LRM "lout353" (VarR "r754") Output]
                   (ProdTy [PackedTy "Tree" "lin351", PackedTy "Tree" "lin352"])
                   (S.empty)
