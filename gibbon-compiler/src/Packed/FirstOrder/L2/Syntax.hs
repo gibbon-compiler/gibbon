@@ -25,8 +25,8 @@ module Packed.FirstOrder.L2.Syntax
     , progToEnv
 
     -- * Operations on types
-    , allLocVars, inLocVars, outLocVars, substEffs, substTy, mapPacked, prependArgs
-    , isPackedTy', locsInTy, initFunEnv
+    , allLocVars, inLocVars, outLocVars, outRegVars, substEffs, substTy, prependArgs
+    , isPackedTy', locsInTy, initFunEnv, getTyLocs
 
     -- * Temporary backwards compatibility, plus rexports
     , UrTy(..)
