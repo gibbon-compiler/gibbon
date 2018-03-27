@@ -472,7 +472,7 @@ Reason: unariser can only eliminate direct projections of this form.
 
         BoundsCheck i bound cur -> return <$> dl <$> Ext $ L3.BoundsCheck i bound cur
 
-        IndirectionE tycon at to -> do
+        IndirectionE _ (at,_) (to,_) -> do
           -- TODO: Bump refcount and update the outset
           go tenv (l$ DataConE at indirectionTag [l$ VarE to])
 
