@@ -84,7 +84,11 @@ function's type transforms as follows:
 With this type, inferExp will immediately fail on the body of 'id x = x', requiring
 a copy-insertion tactic to repair the failure and proceed.
 
-TODO: Actually implement this!
+Copy-insertion is very simple. For each data type, we generate a copy traversal
+function which matches on each element of the structure. These functions undergo
+location inference just like normal user code. During location inference when
+a unification failure indicates a copy must be inserted, a call to `"copy_Type"` 
+is emitted, where `Type` is the name of the packed data type that must be copied.
 
 -}
 
@@ -108,6 +112,7 @@ import Packed.FirstOrder.Common (Var, Env2, DDefs, LocVar, runSyM, SyM, gensym, 
 import qualified Packed.FirstOrder.L1.Syntax as L1
 import Packed.FirstOrder.L2.Syntax as L2
 import Packed.FirstOrder.L2.Typecheck as T
+import Packed.FirstOrder.Passes.InlineTriv (inlineTriv)
 
 
 -- Environments
@@ -213,21 +218,15 @@ data Constraint = AfterConstantL LocVar Int LocVar
 type Result = (L Exp2, Ty2, [Constraint])
 
 inferLocs :: L1.Prog -> SyM L2.Prog
-inferLocs (L1.Prog dfs fds me) = do
-  prg <- St.runStateT (runExceptT m) M.empty
-  case fst prg of
-    Right a -> return a
-    Left a -> err $ show a
-  where m = do
+inferLocs initPrg = do
+  (L1.Prog dfs fds me) <- addCopyFns initPrg
+  let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
           fenv <- forM fds $ \(L1.FunDef _ (_,inty) outty _) ->
                   lift $ lift $ convertFunTy (inty,outty)
           let fe = FullEnv dfs' M.empty fenv
           me' <- case me of
             Just me -> do
-              -- l1 <- fresh
-              -- u1 <- fixLoc l1
-              -- (me',ty') <- inferExp' fe me $ SingleDest l1
               (me',ty') <- inferExp' fe me NoDest
               return $ Just (me',ty')
             Nothing -> return Nothing
@@ -239,7 +238,11 @@ inferLocs (L1.Prog dfs fds me) = do
                                    (fbod',_) <- inferExp' fe' fbod dest
                                    return $ L2.FunDef fn arrty (fst fa) fbod'
           return $ L2.Prog dfs' fds' me'
-
+  prg <- St.runStateT (runExceptT m) M.empty
+  case fst prg of
+    Right a -> return a
+    Left a -> err $ show a
+  where 
 
 -- | Destination can be a single location var, a tuple of destinations,
 -- or nothing (for scalar values)
@@ -1066,6 +1069,37 @@ prim p = case p of
            L1.MkFalse -> L1.MkFalse
            L1.SizeParam -> L1.SizeParam
            _ -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
+
+
+genCopyFn :: DDef L1.Ty1 -> SyM (L1.FunDef L1.Ty1 (L L1.Exp1))
+genCopyFn DDef{tyName, dataCons} = do
+  arg <- gensym $ "arg"
+  casebod <- forM dataCons $ \(dcon, tys) ->
+             do xs <- mapM (\_ -> gensym "x") tys
+                ys <- mapM (\_ -> gensym "y") tys
+                let bod = foldr (\(ty,x,y) acc ->
+                                     if L1.isPackedTy ty
+                                     then l$ LetE (y, [], ty, l$ AppE (toVar $ "copy_" ++ (tyToDataCon ty)) [] (l$ VarE x)) acc
+                                     else l$ LetE (y, [], ty, l$ VarE x) acc)
+                          (l$ L1.DataConE () dcon $ map (l . VarE) ys)
+                          (zip3 (L.map snd tys) xs ys)
+                return (dcon, L.map (\x -> (x,())) xs, bod)
+  return $ L1.FunDef { funName = toVar $ "copy_" ++ (fromVar tyName)
+                     , funArg = (arg, L1.PackedTy (fromVar tyName) ())
+                     , funRetTy = L1.PackedTy (fromVar tyName) ()
+                     , funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
+                     }
+                                     
+tyToDataCon :: L1.Ty1 -> DataCon
+tyToDataCon (PackedTy dcon _) = dcon
+tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
+
+addCopyFns :: L1.Prog -> SyM L1.Prog
+addCopyFns (L1.Prog dfs fds me) = do
+  newFns <- mapM genCopyFn dfs
+  return $ inlineTriv $
+         L1.Prog dfs (fds `M.union` (M.mapKeys (toVar . ("copy_" ++) . fromVar) newFns)) me
+
 
 -- Notes on program repair:
 --------------------------------------------------------------------------------
