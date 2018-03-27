@@ -132,20 +132,16 @@ test-suite test-gibbon
   hs-source-dirs:      tests
   main-is:             Main.hs
 
-  build-depends:       base
-                     , gibbon
-                     , containers
-                     , filepath
-                     , directory
-                     , process
-                     , mtl
-                     , srcloc
-                     , tasty
-                     , tasty-hunit
-                     , tasty-th
+  build-depends:       base,
+                       gibbon, containers,
+                       filepath, directory, process,
+                       srcloc,
+                       mtl, transformers,
+                       tasty, tasty-hunit, tasty-th
 
   other-modules:       RouteEnds
                        InferEffects
+                       InferLocations
                        Unariser
                        InferMul
                        Compiler
