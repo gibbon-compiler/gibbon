@@ -97,6 +97,7 @@ data E2Ext loc dec =
   | RetE [loc] Var     -- ^ Return a value together with extra loc values.
   | FromEndE loc -- ^ Bind a location from an EndOf location (for RouteEnds and after)
   | BoundsCheck Int loc loc  -- ^ Bytes required, region, write cursor
+  | IndirectionE TyCon loc loc -- ^ An inter-region indirection
  deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 -- instance Read (E2 l d) where
@@ -128,6 +129,7 @@ instance FreeVars (E2Ext l d) where
      RetE _ vr          -> S.singleton vr
      FromEndE _         -> S.empty
      BoundsCheck{}      -> S.empty
+     IndirectionE{}     -> S.empty
 
 
 instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
@@ -140,6 +142,7 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       RetE{}       -> False -- Umm... this one could be potentially.
       FromEndE{}   -> True
       BoundsCheck{}-> False
+      IndirectionE{} -> False
 
 instance (Out l, Show l, Typeable (L (E2 l (UrTy l)))) => Typeable (E2Ext l (UrTy l)) where
   gTypeExp ddfs env2 ex =
@@ -151,6 +154,7 @@ instance (Out l, Show l, Typeable (L (E2 l (UrTy l)))) => Typeable (E2Ext l (UrT
                                Nothing -> error $ "gTypeExp: unbound variable " ++ sdoc var
       FromEndE _loc       -> error $ "Shouldn't enconter FromEndE in tail position"
       BoundsCheck{}       -> error $ "Shouldn't enconter BoundsCheck in tail position"
+      IndirectionE tycon _ to -> PackedTy tycon to
 
 
 instance (Out l, Show l, Typeable (L (E2 l (UrTy l))),
@@ -176,6 +180,7 @@ instance (Typeable (E2Ext l (UrTy l)),
           RetE{}        -> return ([],ex)
           FromEndE{}    -> return ([],ex)
           BoundsCheck{} -> return ([],ex)
+          IndirectionE{}-> return ([],ex)
 
     where go = gFlattenGatherBinds ddfs env
 
@@ -374,6 +379,7 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               RetE{}     -> acc
               FromEndE{} -> acc
               BoundsCheck{} -> acc
+              IndirectionE{} -> acc
           VarE v -> M.insertWith (++) v [v] acc
           IfE _ b c -> go (go acc b) c
           -- The "dummy" annotation is a small trick to properly handle AST's with a
@@ -408,6 +414,7 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               RetE locs _     -> S.fromList locs `S.union` gFreeVars ex
               FromEndE loc    -> S.singleton loc
               BoundsCheck _ reg cur -> S.fromList [reg,cur]
+              IndirectionE _ a b    -> S.fromList [a,b]
           _ -> gFreeVars ex
 
 

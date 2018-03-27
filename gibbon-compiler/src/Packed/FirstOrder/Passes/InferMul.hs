@@ -101,6 +101,7 @@ inferRegScope (L p ex) = L p $
         RetE{}     -> Ext ext
         FromEndE{} -> Ext ext
         BoundsCheck{} -> Ext ext
+        IndirectionE{}-> Ext ext
 
     -- Straightforward recursion ...
     VarE{}     -> ex

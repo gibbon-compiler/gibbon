@@ -102,6 +102,7 @@ threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
         FromEndE{}    -> return ex
         BoundsCheck sz _bound cur -> do
           return $ Ext $ BoundsCheck sz (toEndV (lenv # cur)) cur
+        IndirectionE{} -> return ex
 
     -- Straightforward recursion
 

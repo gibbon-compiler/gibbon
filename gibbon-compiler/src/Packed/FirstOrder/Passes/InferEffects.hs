@@ -159,6 +159,7 @@ inferExp ddfs fenv env (L _p exp) =
     Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env rhs
     Ext (RetE _ _)         -> (S.empty, Nothing)
     Ext (FromEndE _ )      -> (S.empty, Nothing)
+    Ext (IndirectionE{})   -> (S.empty, Nothing)
 
     oth -> error $ "FINISHME: inferExp " ++ sdoc oth
 

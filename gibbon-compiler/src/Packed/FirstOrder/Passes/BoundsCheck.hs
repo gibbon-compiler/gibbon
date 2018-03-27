@@ -224,6 +224,7 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
         FromEndE{} -> return ex
         RetE{}     -> return ex
         BoundsCheck{} -> error "Shouldn't encounter BoundsCheck before this pass."
+        IndirectionE{}-> return ex
 
 
     VarE{}     -> return ex

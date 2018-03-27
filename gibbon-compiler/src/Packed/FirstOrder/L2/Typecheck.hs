@@ -386,6 +386,8 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
       -- The IntTy is just a placeholder. BoundsCheck is a side-effect
       Ext (BoundsCheck{}) -> return (IntTy,tstatein)
 
+      Ext (IndirectionE tycon _ b) -> return (PackedTy tycon b, tstatein)
+
       hole -> error $ "FINISHME: L2.tcExp " ++ show hole
 
     where recur ts e = tcExp ddfs env funs constrs regs ts e

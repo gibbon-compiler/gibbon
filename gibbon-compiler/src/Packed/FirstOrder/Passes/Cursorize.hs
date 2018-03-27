@@ -279,7 +279,9 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
 
         BoundsCheck i bound cur -> return $ Ext $ L3.BoundsCheck i bound cur
 
-        _ -> error $ "TODO: cursorizeExp Ext: " ++ sdoc ext
+        FromEndE{} -> error $ "cursorizeExp: TODO FromEndE" ++ sdoc ext
+
+        IndirectionE{} -> error $ "cursorizeExp: Unexpected IndirectionE"
 
     MapE{} -> error $ "TODO: cursorizeExp MapE"
     FoldE{} -> error $ "TODO: cursorizeExp FoldE"
@@ -469,6 +471,10 @@ Reason: unariser can only eliminate direct projections of this form.
         FromEndE{} -> error $ "cursorizePackedExp: TODO " ++ sdoc ext
 
         BoundsCheck i bound cur -> return <$> dl <$> Ext $ L3.BoundsCheck i bound cur
+
+        IndirectionE tycon at to -> do
+          -- TODO: Bump refcount and update the outset
+          go tenv (l$ DataConE at indirectionTag [l$ VarE to])
 
     MapE{}  -> error $ "TODO: cursorizePackedExp MapE"
     FoldE{} -> error $ "TODO: cursorizePackedExp FoldE"

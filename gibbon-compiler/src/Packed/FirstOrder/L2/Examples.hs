@@ -1394,7 +1394,7 @@ indrIDFun = FunDef "indrID" indrIDTy "tr800" indrIDBod
 
     indrIDBod :: L Exp2
     indrIDBod = l$ LetE ("a804",[], PackedTy "Tree" "lout803",
-                         l$ DataConE "lout803" "INDIRECTION" [l$ VarE "lin802"]) $
+                         l$ Ext $ IndirectionE "Tree" "lout803" "lin802") $
                 l$ VarE ("a804")
 
 
