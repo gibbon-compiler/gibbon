@@ -300,21 +300,22 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                return (tys !! 0,tstate')
 
       DataConE l dc es -> do
-
-               (tys,tstate1) <- tcExps ddfs env funs constrs regs tstatein es
                let dcty = getTyOfDataCon ddfs dc
-               let args = lookupDataCon ddfs dc
+               if (dc /= indirectionTag)
+               then do
+                 (tys,tstate1) <- tcExps ddfs env funs constrs regs tstatein es
+                 let args = lookupDataCon ddfs dc
 
-               if length args /= length es
-               then throwError $ GenericTC "Invalid argument length" exp
-               else do
-
-                 sequence_ [ ensureEqualTyNoLoc exp ty1 ty2
-                           | (ty1,ty2) <- zip args tys ]
-                 -- TODO: need to fix this check
-                 -- ensureDataCon exp l tys constrs
-                 tstate2 <- switchOutLoc exp tstate1 l
-                 return (PackedTy dcty l, tstate2)
+                 if length args /= length es
+                 then throwError $ GenericTC "Invalid argument length" exp
+                 else do
+                   sequence_ [ ensureEqualTyNoLoc exp ty1 ty2
+                             | (ty1,ty2) <- zip args tys ]
+                   -- TODO: need to fix this check
+                   -- ensureDataCon exp l tys constrs
+                   tstate2 <- switchOutLoc exp tstate1 l
+                   return (PackedTy dcty l, tstate2)
+               else return (PackedTy dcty l, tstatein)
 
       TimeIt e _ty _b -> do
 

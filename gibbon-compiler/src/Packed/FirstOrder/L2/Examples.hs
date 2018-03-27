@@ -14,6 +14,7 @@ module Packed.FirstOrder.L2.Examples
   , rightmostProg, buildTreeProg, buildTreeSumProg, printTupProg, addTreesProg
   , printTupProg2, buildSTreeProg, sumUpProg, setEvenProg, sumUpSetEvenProg, substProg
   , buildTwoTreesProg, sumTreeProg, sumSTreeProg, indrRightmostProg, indrBuildTreeProg
+  , indrIDProg
   ) where
 
 import Data.Loc
@@ -1377,3 +1378,41 @@ indrRightmostProg :: Prog
 indrRightmostProg = Prog ddtree' (M.fromList [("indrRightmost", indrRightmostFun)
                                              ,("indrBuildTree",indrBuildTreeFun)])
                     (Just (indrRightmostMainExp, IntTy))
+
+--------------------------------------------------------------------------------
+
+indrIDFun :: FunDef
+indrIDFun = FunDef "indrID" indrIDTy "tr800" indrIDBod
+  where
+    indrIDTy :: ArrowTy Ty2
+    indrIDTy = (ArrowTy
+                [LRM "lin802" (VarR "r801") Input, LRM "lout803" (VarR "r803") Output]
+                (PackedTy "Tree" "lin802")
+                (S.empty)
+                (PackedTy "Tree" "lout803")
+                [])
+
+    indrIDBod :: L Exp2
+    indrIDBod = l$ LetE ("a804",[], PackedTy "Tree" "lout803",
+                         l$ DataConE "lout803" "INDIRECTION" [l$ VarE "lin802"]) $
+                l$ VarE ("a804")
+
+
+indrIDMainExp :: L Exp2
+indrIDMainExp = l$ Ext $ LetRegionE (VarR "r806") $
+                l$ Ext $ LetLocE "l807" (StartOfLE (VarR "r806")) $
+                l$ LetE ("tr1",[], PackedTy "Tree" "l807",
+                         l$ AppE "indrBuildTree" ["l807"] (l$ LitE 2)) $
+                l$ Ext $ LetRegionE (VarR "r808") $
+                l$ Ext $ LetLocE "l809" (StartOfLE (VarR "r808")) $
+                l$ LetE ("tr2",[], PackedTy "Tree" "l809",
+                         l$ AppE "indrID" ["l807", "l809"] (l$ VarE "tr1")) $
+                l$ LetE ("rmost",[], IntTy,
+                          l$ AppE "indrRightmost" ["l809"] (l$ VarE "tr2")) $
+                l$ VarE "rmost"
+
+indrIDProg :: Prog
+indrIDProg = Prog ddtree' (M.fromList [("indrBuildTree", indrBuildTreeFun)
+                                      ,("indrID", indrIDFun)
+                                      ,("indrRightmost",indrRightmostFun)])
+             (Just (indrIDMainExp, IntTy))

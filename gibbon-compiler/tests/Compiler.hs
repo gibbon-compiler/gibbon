@@ -175,5 +175,8 @@ case_indrrightmost = runner "indrrightmost.c" indrRightmostProg "1"
 case_indrbuildtree :: Assertion
 case_indrbuildtree = runner "indrbuildtree.c" indrBuildTreeProg "(Node^ (INDIRECTION ) (Node^ (INDIRECTION ) (Node^ (INDIRECTION ) (Leaf 1) (Leaf 1)) (Node^ (INDIRECTION ) (Leaf 1) (Leaf 1))) (Node^ (INDIRECTION ) (Node^ (INDIRECTION ) (Leaf 1) (Leaf 1)) (Node^ (INDIRECTION ) (Leaf 1) (Leaf 1))))"
 
+case_indr_rightmost_dot_id :: Assertion
+case_indr_rightmost_dot_id = runner "indrrid.c" indrIDProg "1"
+
 compilerTests :: TestTree
 compilerTests = $(testGroupGenerator)
