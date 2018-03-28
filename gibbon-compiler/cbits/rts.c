@@ -270,23 +270,24 @@ typedef struct RegionFooter_struct {
     CursorTy outset_ptr;
 } RegionFooter;
 
-RegionTy alloc_region(IntTy size) {
+RegionTy* alloc_region(IntTy size) {
     // Allocate the first chunk
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy start = ALLOC_PACKED(total_size);
     CursorTy end = start + size;
 
-    // TODO:
-    /* RegionTy reg = (RegionTy) {0,start}; */
     RegionTy* reg = malloc(sizeof(RegionTy));
     reg->refcount = 0;
     reg->start_ptr = start;
 
     // Write the footer
-    RegionFooter footer = {size, &(reg->refcount), NULL};
-    *(RegionFooter *) end = footer;
+    RegionFooter* footer = malloc(sizeof(RegionFooter));
+    footer->size = size;
+    footer->refcount_ptr = &(reg->refcount);
+    footer->outset_ptr = NULL;
+    *(RegionFooter *) end = *footer;
 
-    return *reg;
+    return reg;
 }
 
 typedef struct ChunkTy_struct {
@@ -305,21 +306,26 @@ ChunkTy alloc_chunk(CursorTy end_ptr) {
     CursorTy end = start + newsize;
 
     // Write the footer
-    RegionFooter new_footer = {newsize, footer.refcount_ptr, NULL};
-    *(RegionFooter *) end = new_footer;
+    RegionFooter* new_footer = malloc(sizeof(RegionFooter));
+    new_footer->size = newsize;
+    new_footer->refcount_ptr = footer.refcount_ptr;
+    new_footer->outset_ptr = NULL;
+    *(RegionFooter *) end = *new_footer;
 
     return (ChunkTy) {start , end};
 }
 
-void print_ref_count(CursorTy end_ptr) {
+int get_ref_count(CursorTy end_ptr) {
     RegionFooter footer = *(RegionFooter *) end_ptr;
-    printf("prc: %d\n",*(footer.refcount_ptr));
+    return *(footer.refcount_ptr);
 }
 
-IntTy bump_ref_count(CursorTy end_ptr) {
-    RegionFooter footer = *(RegionFooter *) end_ptr;
-    int refcount = *(footer.refcount_ptr);
-    *(int *) footer.refcount_ptr =  + 1;
+// If B -> A, bump A's refcount, and update B's offset ptr
+IntTy bump_ref_count(CursorTy end_a) {
+    // Bump refcount
+    RegionFooter footer_a = *(RegionFooter *) end_a;
+    int refcount = *(footer_a.refcount_ptr);
+    *(int *) footer_a.refcount_ptr =  + 1;
     return refcount;
 }
 

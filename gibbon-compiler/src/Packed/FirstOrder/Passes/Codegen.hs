@@ -399,8 +399,8 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                    let [(outV,CursorTy)] = bnds
                        bufsize = codegenMultiplicity mul
                    pure
-                     [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = alloc_region($id:bufsize); |]
-                     , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg.start_ptr; |]
+                     [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($id:bufsize); |]
+                     , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start_ptr; |]
                      ]
                  ScopedBuffer mul -> let [(outV,CursorTy)] = bnds
                                          bufsize = codegenMultiplicity mul
