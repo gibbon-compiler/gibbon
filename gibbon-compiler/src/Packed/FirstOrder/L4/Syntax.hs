@@ -185,6 +185,8 @@ data Prim
 
     | BoundsCheck
 
+    | BumpRefCount
+
     | SizeOfPacked
     -- ^ Take start and end cursors and return size of data they represent
     -- This could be represented as (end - start) / (sizeof(Int))

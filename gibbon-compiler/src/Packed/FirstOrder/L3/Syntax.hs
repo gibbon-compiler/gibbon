@@ -54,7 +54,9 @@ data E3Ext loc dec =
   | SizeOfScalar Var               -- ^ sizeof(var)
   | BoundsCheck Int Var Var        -- ^ Bytes required, region, write cursor
   | ReadCursor Var                 -- ^ Reads and returns the cursor at Var
-  | WriteCursor Var (L (E3 loc dec)) -- ^ Write a cursor, and return a cursort
+  | WriteCursor Var (L (E3 loc dec)) -- ^ Write a cursor, and return a cursor
+  | BumpRefCount Var               -- ^ Given an end-of-region ptr, bump it's refcount.
+                                   --   Return the updated count (optional).
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 -- | L1 expressions extended with L3.  This is the polymorphic version.
@@ -76,7 +78,8 @@ instance FreeVars (E3Ext l d) where
       SizeOfScalar v     -> S.singleton v
       BoundsCheck{}      -> S.empty
       ReadCursor v       -> S.singleton v
-      WriteCursor c ex    -> S.insert c (gFreeVars ex)
+      WriteCursor c ex   -> S.insert c (gFreeVars ex)
+      BumpRefCount v     -> S.singleton v
 
 instance (Out l, Out d) => Out (E3Ext l d)
 

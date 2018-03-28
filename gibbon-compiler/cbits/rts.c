@@ -275,13 +275,18 @@ RegionTy alloc_region(IntTy size) {
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy start = ALLOC_PACKED(total_size);
     CursorTy end = start + size;
-    RegionTy reg = (RegionTy) {0,start};
+
+    // TODO:
+    /* RegionTy reg = (RegionTy) {0,start}; */
+    RegionTy* reg = malloc(sizeof(RegionTy));
+    reg->refcount = 0;
+    reg->start_ptr = start;
 
     // Write the footer
-    RegionFooter footer = {size, &reg.refcount, NULL};
+    RegionFooter footer = {size, &(reg->refcount), NULL};
     *(RegionFooter *) end = footer;
 
-    return reg;
+    return *reg;
 }
 
 typedef struct ChunkTy_struct {
@@ -304,6 +309,18 @@ ChunkTy alloc_chunk(CursorTy end_ptr) {
     *(RegionFooter *) end = new_footer;
 
     return (ChunkTy) {start , end};
+}
+
+void print_ref_count(CursorTy end_ptr) {
+    RegionFooter footer = *(RegionFooter *) end_ptr;
+    printf("prc: %d\n",*(footer.refcount_ptr));
+}
+
+IntTy bump_ref_count(CursorTy end_ptr) {
+    RegionFooter footer = *(RegionFooter *) end_ptr;
+    int refcount = *(footer.refcount_ptr);
+    *(int *) footer.refcount_ptr =  + 1;
+    return refcount;
 }
 
 /* -------------------------------------------------------------------------------- */
