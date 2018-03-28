@@ -268,6 +268,7 @@ typedef struct RegionFooter_struct {
     IntTy size;
     CursorTy refcount_ptr;
     CursorTy outset_ptr;
+    CursorTy next;
 } RegionFooter;
 
 RegionTy* alloc_region(IntTy size) {
@@ -285,6 +286,7 @@ RegionTy* alloc_region(IntTy size) {
     footer->size = size;
     footer->refcount_ptr = &(reg->refcount);
     footer->outset_ptr = NULL;
+    footer-> next = NULL;
     *(RegionFooter *) end = *footer;
 
     return reg;
@@ -297,19 +299,23 @@ typedef struct ChunkTy_struct {
 
 ChunkTy alloc_chunk(CursorTy end_ptr) {
     // Get size from current footer
-    RegionFooter footer = *(RegionFooter *) end_ptr;
-    IntTy newsize = footer.size * 2;
+    RegionFooter* footer = (RegionFooter *) end_ptr;
+    IntTy newsize = footer->size * 2;
     IntTy total_size = newsize + sizeof(RegionFooter);
 
     // Allocate
     CursorTy start = ALLOC_PACKED(total_size);
     CursorTy end = start + newsize;
 
+    // Link the next chunk's footer
+    footer->next = end;
+
     // Write the footer
     RegionFooter* new_footer = malloc(sizeof(RegionFooter));
     new_footer->size = newsize;
-    new_footer->refcount_ptr = footer.refcount_ptr;
+    new_footer->refcount_ptr = footer->refcount_ptr;
     new_footer->outset_ptr = NULL;
+    new_footer->next = NULL;
     *(RegionFooter *) end = *new_footer;
 
     return (ChunkTy) {start , end};
@@ -325,8 +331,21 @@ IntTy bump_ref_count(CursorTy end_a) {
     // Bump refcount
     RegionFooter footer_a = *(RegionFooter *) end_a;
     int refcount = *(footer_a.refcount_ptr);
-    *(int *) footer_a.refcount_ptr =  + 1;
+    *(int *) footer_a.refcount_ptr = refcount + 1;
     return refcount;
+}
+
+void free_region(CursorTy reg_start, CursorTy reg_end) {
+    RegionFooter footer = *(RegionFooter *) reg_end;
+    CursorTy next_chunk = footer.next;
+
+    // TODO: Only free if refcount is 0
+    while (next_chunk != NULL) {
+        footer = *(RegionFooter *) next_chunk;
+        free(next_chunk - footer.size);
+        next_chunk = footer.next;
+    }
+    free(reg_start);
 }
 
 /* -------------------------------------------------------------------------------- */
