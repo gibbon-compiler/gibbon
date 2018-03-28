@@ -180,5 +180,9 @@ case_indrbuildtree = runner "indrbuildtree.c" indrBuildTreeProg "(Node^ (INDIREC
 case_indr_rightmost_dot_id :: Assertion
 case_indr_rightmost_dot_id = runner "indrrid.c" indrIDProg "1"
 
+case_sum_of_indr_id :: Assertion
+case_sum_of_indr_id = runner "indrridsum.c" indrIDSumProg "1024"
+
+
 compilerTests :: TestTree
 compilerTests = $(testGroupGenerator)

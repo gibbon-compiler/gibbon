@@ -14,7 +14,7 @@ module Packed.FirstOrder.L2.Examples
   , rightmostProg, buildTreeProg, buildTreeSumProg, printTupProg, addTreesProg
   , printTupProg2, buildSTreeProg, sumUpProg, setEvenProg, sumUpSetEvenProg, substProg
   , buildTwoTreesProg, sumTreeProg, sumSTreeProg, indrRightmostProg, indrBuildTreeProg
-  , indrIDProg
+  , indrIDProg, indrIDSumProg
   ) where
 
 import Data.Loc
@@ -1399,6 +1399,8 @@ indrIDFun = FunDef "indrID" indrIDTy "tr800" indrIDBod
                 l$ VarE ("a804")
 
 
+--------------------------------------------------------------------------------
+
 indrIDMainExp :: L Exp2
 indrIDMainExp = l$ Ext $ LetRegionE (VarR "r806") $
                 l$ Ext $ LetLocE "l807" (StartOfLE (VarR "r806")) $
@@ -1417,3 +1419,25 @@ indrIDProg = Prog ddtree' (M.fromList [("indrBuildTree", indrBuildTreeFun)
                                       ,("indrID", indrIDFun)
                                       ,("indrRightmost",indrRightmostFun)])
              (Just (indrIDMainExp, IntTy))
+
+
+--------------------------------------------------------------------------------
+
+indrIDSumMainExp :: L Exp2
+indrIDSumMainExp = l$ Ext $ LetRegionE (VarR "r806") $
+                   l$ Ext $ LetLocE "l807" (StartOfLE (VarR "r806")) $
+                   l$ LetE ("tr1",[], PackedTy "Tree" "l807",
+                         l$ AppE "buildTree" ["l807"] (l$ LitE 10)) $
+                   l$ Ext $ LetRegionE (VarR "r808") $
+                   l$ Ext $ LetLocE "l809" (StartOfLE (VarR "r808")) $
+                   l$ LetE ("tr2",[], PackedTy "Tree" "l809",
+                            l$ AppE "indrID" ["l807", "l809"] (l$ VarE "tr1")) $
+                   l$ LetE ("total",[], IntTy,
+                            l$ AppE "sumTree" ["l809"] (l$ VarE "tr2")) $
+                   l$ VarE "total"
+
+indrIDSumProg :: Prog
+indrIDSumProg = Prog ddtree' (M.fromList [("buildTree", buildTreeFun)
+                                         ,("indrID", indrIDFun)
+                                         ,("sumTree",sumTreeFun)])
+                (Just (indrIDSumMainExp, IntTy))
