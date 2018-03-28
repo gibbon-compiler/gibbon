@@ -55,7 +55,7 @@ data E3Ext loc dec =
   | BoundsCheck Int Var Var        -- ^ Bytes required, region, write cursor
   | ReadCursor Var                 -- ^ Reads and returns the cursor at Var
   | WriteCursor Var (L (E3 loc dec)) -- ^ Write a cursor, and return a cursor
-  | BumpRefCount Var               -- ^ Given an end-of-region ptr, bump it's refcount.
+  | BumpRefCount Var Var           -- ^ Given an end-of-region ptr, bump it's refcount.
                                    --   Return the updated count (optional).
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
@@ -79,7 +79,7 @@ instance FreeVars (E3Ext l d) where
       BoundsCheck{}      -> S.empty
       ReadCursor v       -> S.singleton v
       WriteCursor c ex   -> S.insert c (gFreeVars ex)
-      BumpRefCount v     -> S.singleton v
+      BumpRefCount r1 r2 -> S.fromList [r1, r2]
 
 instance (Out l, Out d) => Out (E3Ext l d)
 

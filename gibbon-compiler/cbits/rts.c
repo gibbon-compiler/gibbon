@@ -327,11 +327,20 @@ int get_ref_count(CursorTy end_ptr) {
 }
 
 // If B -> A, bump A's refcount, and update B's offset ptr
-IntTy bump_ref_count(CursorTy end_a) {
+IntTy bump_ref_count(CursorTy end_b, CursorTy end_a) {
     // Bump refcount
     RegionFooter footer_a = *(RegionFooter *) end_a;
     int refcount = *(footer_a.refcount_ptr);
     *(int *) footer_a.refcount_ptr = refcount + 1;
+
+    // Add A to B's outset
+    RegionFooter* footer_b = (RegionFooter *) end_b;
+    if (footer_b->outset_ptr == NULL) {
+        footer_b->outset_ptr = end_a;
+    } else if (footer_b->outset_ptr != end_a) {
+        printf("Outset isn't a real set yet..");
+    }
+
     return refcount;
 }
 
@@ -339,13 +348,23 @@ void free_region(CursorTy reg_start, CursorTy reg_end) {
     RegionFooter footer = *(RegionFooter *) reg_end;
     CursorTy next_chunk = footer.next;
 
-    // TODO: Only free if refcount is 0
-    while (next_chunk != NULL) {
-        footer = *(RegionFooter *) next_chunk;
-        free(next_chunk - footer.size);
-        next_chunk = footer.next;
+    // Decrement refcounts of all regions `reg` points to
+    if (footer.outset_ptr != NULL) {
+        RegionFooter* xyz = (RegionFooter *) footer.outset_ptr;
+        *(xyz->refcount_ptr) = *(xyz->refcount_ptr) - 1;
     }
-    free(reg_start);
+
+    // Free all chunks if recount is 0
+    if (*(footer.refcount_ptr) == 0) {
+        while (next_chunk != NULL) {
+            footer = *(RegionFooter *) next_chunk;
+            free(next_chunk - footer.size);
+            next_chunk = footer.next;
+        }
+        free(reg_start);
+    } else {
+        printf("free_region: refcount non-zero.\n");
+    }
 }
 
 /* -------------------------------------------------------------------------------- */

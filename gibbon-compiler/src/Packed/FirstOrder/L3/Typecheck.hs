@@ -106,9 +106,11 @@ tcExp ddfs env exp@(L p ex) =
           ensureEqualTy exp valty CursorTy
           return CursorTy
 
-        BumpRefCount end_reg -> do
-          end_reg_ty  <- lookupVar env end_reg exp
-          ensureEqualTy exp end_reg_ty CursorTy
+        BumpRefCount end_r1 end_r2 -> do
+          end_r1_ty  <- lookupVar env end_r1 exp
+          ensureEqualTy exp end_r1_ty CursorTy
+          end_r2_ty  <- lookupVar env end_r2 exp
+          ensureEqualTy exp end_r2_ty CursorTy
           return IntTy
 
     -- All the other cases are exactly same as L1.Typecheck

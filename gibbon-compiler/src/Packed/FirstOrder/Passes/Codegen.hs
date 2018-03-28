@@ -440,8 +440,8 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                                  [ C.BlockStm [cstm| *( $ty:(codegenTy CursorTy)  *)($id:cur) = $(codegenTriv val); |]
                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + 8; |] ]
 
-                 BumpRefCount -> let [(VarTriv end_reg)] = rnds
-                                 in pure [ C.BlockStm [cstm| bump_ref_count($id:end_reg); |] ]
+                 BumpRefCount -> let [(VarTriv end_r1), (VarTriv end_r2)] = rnds
+                                 in pure [ C.BlockStm [cstm| bump_ref_count($id:end_r1, $id:end_r2); |] ]
 
                  BoundsCheck -> do
                    new_chunk   <- lift $ gensym "new_chunk"
