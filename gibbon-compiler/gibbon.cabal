@@ -53,6 +53,7 @@ library
                        Packed.FirstOrder.Passes.Unariser
                        Packed.FirstOrder.Passes.Lower
                        Packed.FirstOrder.Passes.FollowRedirects
+                       Packed.FirstOrder.Passes.RearrangeFree
                        Packed.FirstOrder.Passes.Codegen
 
   -- other-modules:

@@ -33,6 +33,7 @@ import Packed.FirstOrder.Passes.HoistNewBuf
 import Packed.FirstOrder.Passes.FindWitnesses
 import Packed.FirstOrder.Passes.Lower
 import Packed.FirstOrder.Passes.FollowRedirects
+import Packed.FirstOrder.Passes.RearrangeFree
 import Packed.FirstOrder.TargetInterp
 import Packed.FirstOrder.Passes.Codegen
 import Packed.FirstOrder.Passes.Flatten
@@ -77,7 +78,8 @@ run2T l3 = fst $ runSyM 0 $ do
     l3 <- flattenL3 l3
     l3 <- L3.tcProg l3
     l4 <- lower (True, mainTyPre) l3
-    followRedirects l4
+    l4 <- followRedirects l4
+    rearrangeFree l4
 
 
 cg :: Prog -> IO String

@@ -602,8 +602,15 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
         tail bod
 
     LetE (v,_,_, L _ (Ext (NewBuffer mul))) bod -> do
-      T.LetPrimCallT [(v,T.CursorTy)] (T.NewBuffer mul) [] <$>
-         tail bod
+      let toEndV = varAppend "end_"
+      reg <- gensym "region"
+      tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy)] (T.NewBuffer mul) [] <$>
+               tail bod
+      -- The type shouldn't matter. PtrTy is not used often in current programs,
+      -- and would be easy to spot.
+      T.withTail (tl',T.PtrTy) $ \trvs ->
+         (T.LetPrimCallT [] T.FreeBuffer [(T.VarTriv reg),(T.VarTriv v),(T.VarTriv (toEndV v))] $
+            T.RetValsT trvs)
 
     LetE (v,_,_, L _ (Ext (ScopedBuffer mul))) bod -> do
       T.LetPrimCallT [(v,T.CursorTy)] (T.ScopedBuffer mul) [] <$>

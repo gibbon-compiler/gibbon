@@ -395,8 +395,7 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                     [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = dict_has_key_int($id:dict); |] ]
 
                  NewBuffer mul -> do
-                   reg <- lift $ gensym "region"
-                   let [(outV,CursorTy)] = bnds
+                   let [(reg, CursorTy),(outV,CursorTy)] = bnds
                        bufsize = codegenMultiplicity mul
                    pure
                      [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($id:bufsize); |]
@@ -411,6 +410,12 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                                              bufsize = codegenMultiplicity mul
                                          in pure
                                             [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:sizev = $id:bufsize; |] ]
+
+                 FreeBuffer -> let [(VarTriv reg),(VarTriv rcur),(VarTriv endr_cur)] = rnds
+                               in pure
+                               [ C.BlockStm [cstm| free_region($id:rcur, $id:endr_cur); |],
+                                 C.BlockStm [cstm| free($id:reg); |]
+                               ]
 
                  WriteTag -> let [(outV,CursorTy)] = bnds
                                  [(TagTriv tag),(VarTriv cur)] = rnds in pure
