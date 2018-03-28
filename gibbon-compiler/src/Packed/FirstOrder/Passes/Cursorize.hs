@@ -472,9 +472,10 @@ Reason: unariser can only eliminate direct projections of this form.
 
         BoundsCheck i bound cur -> return <$> dl <$> Ext $ L3.BoundsCheck i bound cur
 
-        IndirectionE _ (at,_) (to,_) -> do
-          -- TODO: Bump refcount and update the outset
-          go tenv (l$ DataConE at indirectionTag [l$ VarE to])
+        IndirectionE _ (at,_r1) (to,r2) -> do
+          -- TODO: Update the outset
+          onDi (mkLets [("_",[],IntTy, l$ Ext (L3.BumpRefCount (toEndV r2)))]) <$>
+            go tenv (l$ DataConE at indirectionTag [l$ VarE to])
 
     MapE{}  -> error $ "TODO: cursorizePackedExp MapE"
     FoldE{} -> error $ "TODO: cursorizePackedExp FoldE"
