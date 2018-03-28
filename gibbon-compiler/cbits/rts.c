@@ -271,11 +271,13 @@ typedef struct RegionFooter_struct {
 } RegionFooter;
 
 RegionTy alloc_region(IntTy size) {
+    // Allocate the first chunk
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy start = ALLOC_PACKED(total_size);
     CursorTy end = start + size;
     RegionTy reg = (RegionTy) {0,start};
 
+    // Write the footer
     RegionFooter footer = {size, &reg.refcount, NULL};
     *(RegionFooter *) end = footer;
 
@@ -288,11 +290,19 @@ typedef struct ChunkTy_struct {
 } ChunkTy;
 
 ChunkTy alloc_chunk(CursorTy end_ptr) {
+    // Get size from current footer
     RegionFooter footer = *(RegionFooter *) end_ptr;
     IntTy newsize = footer.size * 2;
     IntTy total_size = newsize + sizeof(RegionFooter);
+
+    // Allocate
     CursorTy start = ALLOC_PACKED(total_size);
     CursorTy end = start + newsize;
+
+    // Write the footer
+    RegionFooter new_footer = {newsize, footer.refcount_ptr, NULL};
+    *(RegionFooter *) end = new_footer;
+
     return (ChunkTy) {start , end};
 }
 
