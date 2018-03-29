@@ -1,0 +1,14 @@
+#lang gibbon
+
+(require "test_ddtree.gib")
+(require "test_buildtree.gib")
+
+(define (sumtree [tr : Tree]) : Int
+  (case tr
+    [(Leaf n) n]
+    [(Node x y)
+     (let ([sumx : Int (sumtree x)])
+       (let ([sumy : Int (sumtree y)])
+         (+ sumx sumy)))]))
+
+(sumtree (buildtree 2))

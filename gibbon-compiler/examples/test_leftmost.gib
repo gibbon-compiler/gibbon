@@ -1,0 +1,11 @@
+#lang gibbon
+
+(require "test_ddtree.gib")
+(require "test_buildtree.gib")
+
+(define (leftmost [tr : Tree]) : Int
+  (case tr
+    [(Leaf n) n]
+    [(Node x y) (leftmost x)]))
+
+(leftmost (buildtree 5))
