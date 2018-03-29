@@ -4,7 +4,16 @@
       [A Int]
       [B Foo Int])
 
+(define (trav-foo [x : Foo]) : Foo
+  (case x
+    [(A n) (A n)]
+    [(B j n) (let ([j1 : Foo (trav-foo j)])
+               (B j1 n))]))
+
 (define (foo [x : Foo]) : Int
   (case x
     [(A n) n]
-    [(B y n) n]))
+    [(B y n) (let [(y1 : Foo (trav-foo y))]
+               n)]))
+
+(foo (B (A 1) 10))

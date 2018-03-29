@@ -48,7 +48,7 @@ type TEnv = M.Map Var Ty2
 --   but `loc` is not bound yet, we'll add the variable to this map.
 --   This is a stupid/simple way to get rid of FindWitnesses.
 --   See `FindWitnesses.hs` for why that is needed.
-type DepEnv = M.Map LocVar [Var]
+type DepEnv = M.Map LocVar [(Var,[()],L3.Ty3, L L3.Exp3)]
 
 -- |
 cursorize :: Prog -> SyM L3.Prog
@@ -94,7 +94,7 @@ cursorize Prog{ddefs,fundefs,mainExp} = do
                                             ++ [(funarg,[], cursorizeInTy inT, newargExp)]
                                 in mkLets bnds
 
-           initEnv = M.singleton funarg (cursorizeInTy inT)
+           initEnv = M.fromList $ [(funarg,(cursorizeInTy inT))] ++ L.map (\(LRM a _ _) -> (a,CursorTy)) (locVars funty)
 
        bod <- if hasPacked outT
               then fromDi <$> cursorizePackedExp ddefs fundefs M.empty initEnv funbod
@@ -213,12 +213,14 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
         -- All locations are transformed into cursors here. All the location expressions
         -- are expressed in terms of corresponding cursor operations. See `cursorizeLocExp`
         LetLocE loc rhs bod -> do
-          let rhs' = cursorizeLocExp tenv rhs
+          let rhs_either = cursorizeLocExp loc denv tenv rhs
               bnds = case M.lookup loc denv of
                        Nothing -> []
-                       Just vs -> [(v,[],CursorTy,l$ VarE loc) | v <- vs]
-          unLoc . mkLets ((loc,[],CursorTy,rhs') : bnds) <$>
-            cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv) bod
+                       Just vs -> vs
+          case rhs_either of
+            Right rhs' -> unLoc . mkLets ((loc,[],CursorTy,rhs') : bnds) <$>
+                            cursorizeExp ddfs fundefs denv (M.insert loc CursorTy $ M.union tenv (M.fromList $ L.map (\(a,_,_,_) -> (a,CursorTy)) bnds)) bod
+            Left depenv -> unLoc <$> cursorizeExp ddfs fundefs depenv (M.insert loc CursorTy tenv) bod
 
         -- Exactly same as cursorizePackedExp
         LetRegionE reg bod -> do
@@ -401,12 +403,14 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
         -- All locations are transformed into cursors here. All the location expressions
         -- are expressed in terms of corresponding cursor operations. See `cursorizeLocExp`
         LetLocE loc rhs bod -> do
-          let rhs' = cursorizeLocExp tenv rhs
+          let rhs_either = cursorizeLocExp loc denv tenv rhs
               bnds = case M.lookup loc denv of
                        Nothing -> []
-                       Just vs -> [(v,[],CursorTy,l$ VarE loc) | v <- vs]
-          onDi (mkLets ((loc,[],CursorTy,rhs') : bnds)) <$>
-            go (M.insert loc CursorTy tenv) bod
+                       Just vs -> vs
+          case rhs_either of
+            Right rhs' -> onDi (mkLets ((loc,[],CursorTy,rhs') : bnds)) <$>
+                           go (M.insert loc CursorTy tenv) bod
+            Left depenv -> cursorizePackedExp ddfs fundefs depenv tenv bod
 
         -- ASSUMPTION: RetE forms are inserted at the tail position of functions,
         -- and we safely just return ends-witnesses & ends of the dilated expressions
@@ -434,10 +438,14 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
         dl = Di <$> L p
 
 
-cursorizeLocExp :: TEnv -> LocExp -> L L3.Exp3
-cursorizeLocExp tenv locExp =
+cursorizeLocExp :: LocVar -> DepEnv -> TEnv -> LocExp -> Either DepEnv (L L3.Exp3)
+cursorizeLocExp lvar denv tenv locExp =
   case locExp of
-    AfterConstantLE i loc -> l$ Ext $ L3.AddCursor loc (l$ LitE i)
+    AfterConstantLE i loc ->
+      case (M.lookup loc tenv) of
+        Just _ -> Right $ l$ Ext $ L3.AddCursor loc (l$ LitE i)
+        Nothing -> Left (M.insertWith (++) loc [(lvar,[],CursorTy, l$ Ext $ L3.AddCursor loc (l$ LitE i))] denv)
+
     -- TODO: handle product types here
     AfterVariableLE v loc ->
       let vty = case M.lookup v tenv of
@@ -449,10 +457,12 @@ cursorizeLocExp tenv locExp =
                     PackedTy{} -> l$ Ext $ L3.SizeOfPacked v endVar
                     _          -> l$ Ext $ L3.SizeOfScalar v
           bod = l$ Ext $ L3.AddCursor loc (l$ VarE (sizeVar))
-      in mkLets [(sizeVar,[], IntTy, sizeVal)] bod
+      in case (M.lookup loc tenv) of
+           Just _ -> Right $ mkLets [(sizeVar,[], IntTy, sizeVal)] bod
+           Nothing -> Left (M.insertWith (++) loc [(lvar,[],CursorTy, l$ Ext $ L3.AddCursor loc (l$ VarE (sizeVar)))] denv)
 
-    FromEndLE loc -> l$ VarE loc
-    StartOfLE r   -> case r of
+    FromEndLE loc -> Right $ l$ VarE loc
+    StartOfLE r   -> Right $ case r of
                        GlobR v -> l$ VarE v
                        VarR v  -> l$ VarE v
                        DynR v  -> l$ VarE v
@@ -506,7 +516,9 @@ cursorizeLet ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
                                        ,(v       ,[], projTy 0 $ projTy nLocs ty'' , mkProjE 0 $ mkProjE nLocs rhs'')
                                        ,(toEndV v,[], projTy 1 $ projTy nLocs ty'' , mkProjE 1 $ mkProjE nLocs rhs'')]
                            in bnds' ++ locBnds
-
+        case M.lookup (toEndV v) denv of
+          Just xs -> error $ "todo: " ++ sdoc xs
+          Nothing -> return ()
         bod' <- go tenv' bod
         return $ unLoc $ mkLets bnds bod'
 
@@ -576,7 +588,7 @@ unpackDataCon ddfs fundefs denv' tenv isPacked scrtCur (dcon,vlocs,rhs) = do
   cur <- gensym scrtCur
   (dcon,[],)
     <$> mkLets [(cur,[],CursorTy, l$ Ext $ L3.AddCursor scrtCur (l$ LitE 1))]
-    <$> go cur vlocs tys True denv' tenv
+    <$> go cur vlocs tys True denv' (M.insert cur CursorTy tenv)
 
   where -- (vars,locs) = unzip vlocs
         tys  = lookupDataCon ddfs dcon
@@ -594,18 +606,22 @@ unpackDataCon ddfs fundefs denv' tenv isPacked scrtCur (dcon,vlocs,rhs) = do
             IntTy -> do
               tmp <- gensym (toVar "readint_tpl")
               let env' = M.union (M.fromList [(tmp     , ProdTy [IntTy, CursorTy]),
-                                              (loc     , CursorTy),
+                                              -- (loc     , CursorTy),
                                               (v       , IntTy),
                                               (toEndV v, CursorTy)])
                          env
-
                   bnds = [(loc     , [], CursorTy, l$ VarE cur),
                           (tmp     , [], ProdTy [IntTy, CursorTy], l$ Ext $ L3.ReadInt loc),
                           (v       , [], IntTy   , l$ ProjE 0 (l$ VarE tmp)),
                           (toEndV v, [], CursorTy, l$ ProjE 1 (l$ VarE tmp))]
-
-              bod <- go (toEndV v) rst rtys True denv (M.insert loc CursorTy env')
-              return $ mkLets bnds bod
+              case M.lookup cur env' of
+                Just _ty -> do
+                  bod <- go (toEndV v) rst rtys isFirstPacked denv (M.insert loc CursorTy env')
+                  return $ mkLets bnds bod
+                Nothing -> do
+                  -- trace ("waiting on" ++ sdoc (cur,loc)) (return ())
+                  bod <- go (toEndV v) rst rtys isFirstPacked (M.insert loc (tail bnds) denv) env'
+                  return bod
 
             _ -> do
               let env' = M.insert v CursorTy env
@@ -617,7 +633,7 @@ unpackDataCon ddfs fundefs denv' tenv isPacked scrtCur (dcon,vlocs,rhs) = do
                          bod
               else
                 -- Don't create a `let v = loc` binding. Instead, add it to DepEnv
-                go (toEndV v) rst rtys False (M.insertWith (++) loc [v] denv) env'
+                go (toEndV v) rst rtys False (M.insertWith (++) loc [(v,[],CursorTy,l$ VarE loc)] denv) env'
 
         go _ vls rtys _ _ _ = error $ "Unexpected numnber of varible, type pairs: " ++ show (vls,rtys)
 
