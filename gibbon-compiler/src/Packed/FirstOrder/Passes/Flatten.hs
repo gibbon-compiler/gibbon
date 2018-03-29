@@ -154,9 +154,9 @@ exp ddfs env2 (L sloc e0) =
                         LetE (v1,lv1,t1,rhs1) bod)
       return (bnd, unLoc rhs)
 
-    LetE (v,_,t,rhs) bod -> do (bnd1,rhs') <- go rhs
-                               (bnd2,bod') <- exp ddfs (extendVEnv v t env2) bod
-                               return (bnd1++[(v,[],t,rhs')]++bnd2, unLoc bod')
+    LetE (v,locs,t,rhs) bod -> do (bnd1,rhs') <- go rhs
+                                  (bnd2,bod') <- exp ddfs (extendVEnv v t env2) bod
+                                  return (bnd1++[(v,locs,t,rhs')]++bnd2, unLoc bod')
     IfE a b c -> do (b1,a') <- triv "If" a
                     (b2,b') <- go b
                     (b3,c') <- go c
