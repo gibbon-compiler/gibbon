@@ -256,8 +256,12 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
           AddP    -> IntTy
           SubP    -> IntTy
           MulP    -> IntTy
+          ModP    -> IntTy
+          DivP    -> IntTy
           EqIntP  -> BoolTy
           EqSymP  -> BoolTy
+          LtP     -> BoolTy
+          GtP     -> BoolTy
           MkTrue  -> BoolTy
           MkFalse -> BoolTy
           SymAppend      -> SymTy
@@ -267,7 +271,6 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
           DictHasKeyP ty -> SymDictTy (noLocsHere ty)
           SizeParam      -> IntTy
           ReadPackedFile _ _ ty -> (noLocsHere ty)
-          _ -> error $ "case " ++ (show p) ++ " not handled in typeExp yet"
 
       LetE (v,_,t,_) e -> gTypeExp ddfs (extendVEnv v t env2) e
       IfE _ e _        -> gTypeExp ddfs env2 e

@@ -208,9 +208,13 @@ interpProg rc Prog {ddefs,fundefs, mainExp=Just e} =
      (AddP,[VInt x, VInt y]) -> VInt (x+y)
      (SubP,[VInt x, VInt y]) -> VInt (x-y)
      (MulP,[VInt x, VInt y]) -> VInt (x*y)
+     (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
+     (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
      (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
      (EqSymP,[VInt x, VInt y]) -> VBool (x==y)
      (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
+     (LtP,[VInt x, VInt y]) -> VBool (x < y)
+     (GtP,[VInt x, VInt y]) -> VBool (x > y)
      ((DictInsertP _ty),[VDict mp, key, val]) -> VDict (M.insert key val mp)
      ((DictLookupP _),[VDict mp, key])        -> mp # key
      ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)
