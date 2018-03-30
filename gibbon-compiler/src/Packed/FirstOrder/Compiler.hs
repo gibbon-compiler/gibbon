@@ -55,6 +55,8 @@ import           Packed.FirstOrder.Passes.InlineTriv     (inlineTriv)
 
 import           Packed.FirstOrder.Passes.DirectL3       (directL3)
 import           Packed.FirstOrder.Passes.InferLocations (inferLocs)
+import           Packed.FirstOrder.Passes.InferMul       (inferMul)
+import           Packed.FirstOrder.Passes.ThreadRegions  (threadRegions)
 import           Packed.FirstOrder.Passes.InferEffects   (inferEffects)
 import           Packed.FirstOrder.Passes.RouteEnds      (routeEnds)
 import           Packed.FirstOrder.Passes.Cursorize      (cursorize)
@@ -388,20 +390,22 @@ passes config@Config{mode,packed} l1 = do
                      _ -> l1
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    (return . inlineTriv)   l1
-            
+
       -- TODO: Write interpreters for L2 and L3
       l3 <- if packed
             then do
               -- TODO: push data contstructors under conditional
               -- branches before InferLocations.
-              
+
               -- Note: L1 -> L2
               l2 <- go "inferLocations"   inferLocs     l1
               l2 <- go "L2.flatten"       flattenL2     l2
+              l2 <- go "inferMul"         inferMul      l2
               l2 <- go "inferEffects"     inferEffects  l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "routeEnds"        routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "threadRegions"    threadRegions l2
               -- Note: L2 -> L3
               l3 <- go "cursorize"        cursorize     l2
               l3 <- go "L3.flatten"       flattenL3     l3
@@ -484,7 +488,7 @@ pass Config{stopAfter} who fn x = do
 
 passChatterLvl :: Int
 passChatterLvl = 3
-   
+
 
 -- | Like 'pass', but also evaluates and checks the result.
 --

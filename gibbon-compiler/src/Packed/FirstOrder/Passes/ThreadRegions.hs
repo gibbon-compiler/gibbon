@@ -148,5 +148,5 @@ threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
           case ty of
             PackedTy tycon _ -> substLocs rlocs rtys (acc ++ [PackedTy tycon lc'])
             ProdTy tys' -> error $ "substLocs: Unexpected type: " ++ sdoc tys'
-            _ -> substLocs rlocs rtys (ty:acc)
+            _ -> substLocs rlocs rtys (acc ++ [ty])
         _ -> error $ "substLocs: " ++ sdoc (locs,tys)

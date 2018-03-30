@@ -257,9 +257,8 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
       case ext of
         RetE locs v ->
           case locs of
-              []    -> return (VarE v)
-              [loc] -> return $ MkProdE [l$ VarE loc, l$ VarE v]
-              _ -> error $ "cursorizeExp: RetE todo "
+              [] -> return (VarE v)
+              _  -> return $ MkProdE $ [l$ VarE loc | loc <- locs] ++ [l$ VarE v]
 
         -- All locations are transformed into cursors here. Location arithmetic
         -- is expressed in terms of corresponding cursor operations.
