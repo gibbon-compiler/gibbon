@@ -48,7 +48,7 @@ type TEnv = M.Map Var Ty2
 --   but `loc` is not bound yet, we'll add the variable to this map.
 --   This is a stupid/simple way to get rid of FindWitnesses.
 --   See `FindWitnesses.hs` for why that is needed.
-type DepEnv = M.Map LocVar [Var]
+type DepEnv = M.Map LocVar [(Var,[()],L3.Ty3,L L3.Exp3)]
 
 -- |
 cursorize :: Prog -> SyM L3.Prog
@@ -94,7 +94,7 @@ cursorize Prog{ddefs,fundefs,mainExp} = do
                                             ++ [(funarg,[], cursorizeInTy inT, newargExp)]
                                 in mkLets bnds
 
-           initEnv = M.singleton funarg (cursorizeInTy inT)
+           initEnv = M.fromList $ [(funarg, cursorizeInTy inT)] ++ [(a,CursorTy) | (LRM a _ _) <- locVars funty]
 
        bod <- if hasPacked outT
               then fromDi <$> cursorizePackedExp ddefs fundefs M.empty initEnv funbod
@@ -216,7 +216,7 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
           let rhs' = cursorizeLocExp tenv rhs
               bnds = case M.lookup loc denv of
                        Nothing -> []
-                       Just vs -> [(v,[],CursorTy,l$ VarE loc) | v <- vs]
+                       Just vs -> vs
           unLoc . mkLets ((loc,[],CursorTy,rhs') : bnds) <$>
             cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv) bod
 
@@ -404,7 +404,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
           let rhs' = cursorizeLocExp tenv rhs
               bnds = case M.lookup loc denv of
                        Nothing -> []
-                       Just vs -> [(v,[],CursorTy,l$ VarE loc) | v <- vs]
+                       Just vs -> vs
           onDi (mkLets ((loc,[],CursorTy,rhs') : bnds)) <$>
             go (M.insert loc CursorTy tenv) bod
 
@@ -589,27 +589,32 @@ unpackDataCon ddfs fundefs denv' tenv isPacked scrtCur (dcon,vlocs,rhs) = do
         --
         go :: (Show t) => Var -> [(Var, Var)] -> [UrTy t] -> Bool -> DepEnv -> TEnv -> SyM (L L3.Exp3)
         go _c [] [] _isFirst denv env = processRhs denv env
-        go cur ((v,loc):rst) (ty:rtys) isFirstPacked denv env =
+        go cur ((v,loc):rst) (ty:rtys) canBind denv env =
           case ty of
             IntTy -> do
               tmp <- gensym (toVar "readint_tpl")
               let env' = M.union (M.fromList [(tmp     , ProdTy [IntTy, CursorTy]),
-                                              (loc     , CursorTy),
                                               (v       , IntTy),
                                               (toEndV v, CursorTy)])
                          env
 
-                  bnds = [(loc     , [], CursorTy, l$ VarE cur),
-                          (tmp     , [], ProdTy [IntTy, CursorTy], l$ Ext $ L3.ReadInt loc),
+                  bnds = [(tmp     , [], ProdTy [IntTy, CursorTy], l$ Ext $ L3.ReadInt loc),
                           (v       , [], IntTy   , l$ ProjE 0 (l$ VarE tmp)),
                           (toEndV v, [], CursorTy, l$ ProjE 1 (l$ VarE tmp))]
 
-              bod <- go (toEndV v) rst rtys True denv (M.insert loc CursorTy env')
-              return $ mkLets bnds bod
+              if canBind
+              then do
+                let bnds' = (loc,[],CursorTy, l$ VarE cur):bnds
+                    env'' = M.insert loc CursorTy env'
+                bod <- go (toEndV v) rst rtys canBind denv env''
+                return $ mkLets bnds' bod
+              else do
+                let denv'' = M.insertWith (++) loc bnds denv
+                go (toEndV v) rst rtys canBind denv'' env'
 
             _ -> do
               let env' = M.insert v CursorTy env
-              if isFirstPacked
+              if canBind
               then do
                 bod <- go (toEndV v) rst rtys False denv (M.insert loc CursorTy env')
                 return $ mkLets [(loc, [], CursorTy, l$ VarE cur)
@@ -617,7 +622,7 @@ unpackDataCon ddfs fundefs denv' tenv isPacked scrtCur (dcon,vlocs,rhs) = do
                          bod
               else
                 -- Don't create a `let v = loc` binding. Instead, add it to DepEnv
-                go (toEndV v) rst rtys False (M.insertWith (++) loc [v] denv) env'
+                go (toEndV v) rst rtys False (M.insertWith (++) loc [(v,[],CursorTy,l$ VarE loc)] denv) env'
 
         go _ vls rtys _ _ _ = error $ "Unexpected numnber of varible, type pairs: " ++ show (vls,rtys)
 
