@@ -8,7 +8,7 @@ temporary: prebuild build
 	$(MAKE) run_tests_interp1
 #	$(MAKE) run_tests_interp2
 	$(MAKE) run_tests_pointer
-#	$(MAKE) run_tests_packed
+	$(MAKE) run_tests_packed
 
 default:
 	rm -f *.err $(BLD)/*.err
@@ -274,12 +274,33 @@ else
 endif
 
 PACKED_FAILING ?= \
+ test00d_printData.gib test00e_func.gib test02d_printPair.gib test02e_printNest.gib test04c_ifvector.gib \
+ test04d_vecfun.gib test05c_arity2.gib \
+ test06a_two_cases.gib test06b_case.gib test06c_nested.gib \
+ test06d_rec.gib test06e_rec.gib test06f_rec.gib test06g_rec.gib test06h_rec.gib test06i_casecase.gib \
+ test08_dict.gib test08b_dict.gib test08c_dict.gib test08d_sharedict.gib \
+ test10_desugar.gib test10b_desugar.gib \
+ test11c_funrec.gib test11d_funrec.gib test11e_funrec.gib test11f_funrec.gib \
+ test12b_traverse.gib test12c_traverse.gib \
+ test15b_symappend.gib \
  test12_skip.gib test16_forlist.gib test17_forfold.gib \
- test18b_tupconstraint.gib test18f_flip.gib \
- test20b_bintree.gib  \
- test25a_withprint.gib \
- test27a_subst.gib \
- test27b_subst.gib test27c_subst.gib test28_copyprop.gib
+ test18_badconstraint.gib test18b_tupconstraint.gib test18c_identity1.gib test18d_identity2.gib \
+ test18e_identity3.gib test18f_flip.gib test18g_identity4.gib \
+ test20a_withprint.gib test20b_bintree.gib \
+ test24_defs.gib \
+ test25a_withprint.gib test25d_racketcore.gib test25f_countnodes.gib \
+ test26a_treewalk.gib test26_treewalk.gib \
+ test27a_subst.gib test27b_subst.gib test27c_subst.gib \
+ test28_copyprop.gib \
+ test_add1.gib test_addtrees.gib test_buildstree.gib test_buildtreesum.gib test_buildtwotrees.gib \
+ test_rightmost.gib test_stree.gib test_sumstree.gib test_sumupseteven.gib
+
+ # test12_skip.gib test16_forlist.gib test17_forfold.gib \
+ # test18b_tupconstraint.gib test18f_flip.gib \
+ # test20b_bintree.gib  \
+ # test25a_withprint.gib \
+ # test27a_subst.gib \
+ # test27b_subst.gib test27c_subst.gib test28_copyprop.gib
 
 # test20b_bintree.gib   -- requires copy insertion
 # test12_skip.gib       -- requires copy insertion!! unbound var thru to C code
