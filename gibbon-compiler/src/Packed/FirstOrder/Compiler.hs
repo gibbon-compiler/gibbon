@@ -56,6 +56,7 @@ import           Packed.FirstOrder.Passes.InlineTriv     (inlineTriv)
 import           Packed.FirstOrder.Passes.DirectL3       (directL3)
 import           Packed.FirstOrder.Passes.InferLocations (inferLocs)
 import           Packed.FirstOrder.Passes.InferMul       (inferMul)
+import           Packed.FirstOrder.Passes.BoundsCheck    (boundsCheck)
 import           Packed.FirstOrder.Passes.ThreadRegions  (threadRegions)
 import           Packed.FirstOrder.Passes.InferEffects   (inferEffects)
 import           Packed.FirstOrder.Passes.RouteEnds      (routeEnds)
@@ -65,6 +66,8 @@ import           Packed.FirstOrder.Passes.Cursorize      (cursorize)
 import           Packed.FirstOrder.Passes.HoistNewBuf    (hoistNewBuf)
 import           Packed.FirstOrder.Passes.Unariser       (unariser)
 import           Packed.FirstOrder.Passes.Lower          (lower)
+import           Packed.FirstOrder.Passes.FollowRedirects(followRedirects)
+import           Packed.FirstOrder.Passes.RearrangeFree  (rearrangeFree)
 import           Packed.FirstOrder.Passes.Codegen        (codegenProg)
 #ifdef LLVM_ENABLED
 import qualified Packed.FirstOrder.Passes.LLVM.Codegen as LLVM
@@ -405,6 +408,7 @@ passes config@Config{mode,packed} l1 = do
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "routeEnds"        routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "boundsCheck"      boundsCheck   l2
               l2 <- go "threadRegions"    threadRegions l2
               -- Note: L2 -> L3
               l3 <- go "cursorize"        cursorize     l2
@@ -423,6 +427,8 @@ passes config@Config{mode,packed} l1 = do
       let mainTy = fmap snd $   L3.mainExp              l3
       -- Note: L3 -> L4
       l4 <- go "lower" (lower (packed,mainTy))          l3
+      l4 <- go "followRedirects" followRedirects        l4
+      l4 <- go "rearrangeFree"   rearrangeFree          l4
       return l4
   where
       go :: PassRunner a b
