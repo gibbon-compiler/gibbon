@@ -270,13 +270,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
           -- the program.
           PrimAppE pr es -> do
                  v' <- gensym "tailprim"
-                 let ty = case pr of
-                            L1.AddP -> IntTy
-                            L1.SubP -> IntTy
-                            L1.MulP -> IntTy
-                            L1.MkTrue -> BoolTy
-                            L1.MkFalse -> BoolTy
-                            _ -> error "fixme, PrimAppE in tail"
+                 let ty = L1.primRetTy pr
                      e' = LetE (v',[],ty, l$ PrimAppE pr es) (l$ VarE v')
                  -- we fmap location at the top-level case expression
                  fmap unLoc $ exp fns retlocs eor lenv afterenv (l$ e')

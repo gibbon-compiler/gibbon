@@ -579,7 +579,7 @@ isPackedTy _ = False
 
 
 -- | Return type for a primitive operation.
-primRetTy :: Prim Ty1 -> Ty1
+primRetTy :: Prim (UrTy a) -> (UrTy a)
 primRetTy p =
   case p of
     AddP -> IntTy
@@ -603,7 +603,7 @@ primRetTy p =
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ ty -> ty
 
-dummyCursorTy :: Ty1
+dummyCursorTy :: UrTy a
 dummyCursorTy = CursorTy
 
 numIndrsDataCon :: Out a => DDefs (UrTy a) -> DataCon -> Maybe Int
