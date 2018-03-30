@@ -1,0 +1,15 @@
+#lang gibbon
+
+(require "test_stree.gib")
+(require "test_buildstree.gib")
+
+(define (sumstree [tr : STree]) : Int
+  (case tr
+    [(Leaf n) n]
+    [(Inner i j x y)
+     (let ([sumx : Int (sumstree x)])
+       (let ([sumy : Int (sumstree y)])
+         (+ sumx sumy)))]))
+
+
+(sumstree (buildstree 2))

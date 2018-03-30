@@ -202,7 +202,19 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
           CaseE (L _ (VarE x)) brs -> do
                  -- We will need to gensym while processing the case clauses, so
                  -- it has to be in the SyM monad
-                 brs' <- forM brs $ \(dc, vls, e) -> do
+                 brs' <-
+                     forM brs $ \(dc, vls, e) ->
+                       case vls of
+                         [] ->
+                           case (M.lookup x lenv) of
+                             Just l1 -> do
+                               l2 <- gensym "jump"
+                               let eor' = mkEnd l1 l2 eor
+                                   e' = l$ Ext $ LetLocE l2 (AfterConstantLE 1 l1) e
+                               e'' <- exp fns retlocs eor' lenv (M.insert l1 l2 lenv) e'
+                               return (dc, vls, e'')
+                             Nothing -> error $ "Failed to find " ++ sdoc x
+                         _ -> do
                            let need = snd $ last vls
                                argtys = lookupDataCon ddefs dc
                                lx = case M.lookup x lenv of

@@ -1,0 +1,18 @@
+#lang gibbon
+
+(require "test_ddtree.gib")
+
+(define (buildtreesum [n : Int]) : (Vector Int Tree)
+  (if (= n 0)
+      (vector 1 (Leaf 1))
+      (let ([itr1 : (Vector Int Tree) (buildtreesum (- n 1))])
+        (let ([jtr2 : (Vector Int Tree) (buildtreesum (- n 1))])
+          (let ([i : Int (vector-ref itr1 0)])
+            (let ([j : Int (vector-ref jtr2 0)])
+              (let ([tr1 : Tree (vector-ref itr1 1)])
+                (let ([tr2 : Tree (vector-ref jtr2 1)])
+                  (let ([total : Int (+ i j)])
+                    (vector total (Node tr1 tr2)))))))))))
+
+
+;; (buildtreesum 2)
