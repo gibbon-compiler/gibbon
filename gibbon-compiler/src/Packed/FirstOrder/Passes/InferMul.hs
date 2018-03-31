@@ -93,7 +93,9 @@ inferRegScope (L p ex) = L p $
                      -- TODO: Warn the user when this happens in a fn ?
                  in if path g retVertex regVertex
                     then Ext$ LetRegionE (GlobR regV Infinite) (inferRegScope rhs)
-                    else Ext$ LetRegionE (DynR regV Infinite) (inferRegScope rhs)
+                    -- [2018.03.30] - TEMP: Turning off scoped buffers.
+                    -- else Ext$ LetRegionE (DynR regV Infinite) (inferRegScope rhs)
+                    else Ext$ LetRegionE (GlobR regV Infinite) (inferRegScope rhs)
                [] -> ex
 
         -- Straightforward recursion

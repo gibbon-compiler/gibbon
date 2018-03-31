@@ -57,7 +57,7 @@ case_t2 = expected @=? actual
             l$ LitE 1
 
     expected :: L L2.Exp2
-    expected = l$ Ext $ LetRegionE (DynR "r1" Infinite) $
+    expected = l$ Ext $ LetRegionE (GlobR "r1" Infinite) $
                l$ Ext $ LetLocE "l1" (StartOfLE (VarR "r1")) $
                l$ LetE ("x1",[],PackedTy "A" "l1",
                         l$ DataConE "l1" "A" [l$ LitE 1]) $
