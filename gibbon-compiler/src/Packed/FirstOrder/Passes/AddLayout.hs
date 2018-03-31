@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Packed.FirstOrder.Passes.InferLayout where
+module Packed.FirstOrder.Passes.AddLayout where
 
 
 import Data.Loc
@@ -37,18 +37,44 @@ addLayoutFun ddfs fd@FunDef{funBody} = do
   bod <- addLayoutExp ddfs M.empty funBody
   return $ fd{funBody = bod}
 
+{- Note [Layout information]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
--- | Add layout information to the AST
---
--- (1) Convert DDefs to (Sized DDefs)
---
--- (2) All data constructors that should have size fields are transformed to "sized" data constructors.
---     And the size fields are added at appropriate places (before all other arguments so that they're
---     written immediately after the tag).
---
--- (3) Case expressions are modified to work with the "sized" data constructors.
---     Pattern matches for these constructors now bind the additional size fields too.
---
+Adding layout information involves 3 steps:
+
+(1) Convert DDefs to `WithLayout DDefs` (we don't have a separate type for those yet).
+
+(2) All data constructors that should have indirection pointers are updated.
+    And the indirections are added at appropriate places (before all other arguments so that they're
+    written immediately after the tag).
+
+(3) Case expressions are modified to work with the modified data constructors.
+    Pattern matches for these constructors now bind the additional size fields too.
+
+
+For example,
+
+    ddtree :: DDefs Ty1
+    ddtree = fromListDD [DDef (toVar "Tree")
+                          [ ("Leaf",[(False,IntTy)])
+                          , ("Node",[ (False,PackedTy "Tree" ())
+                                    , (False,PackedTy "Tree" ())])
+                          ]]
+
+becomes,
+
+    ddtree :: DDefs Ty1
+    ddtree = fromListDD [DDef (toVar "Tree")
+                         [ ("Leaf"   ,[(False,IntTy)])
+                         , ("Node",  [ (False,PackedTy "Tree" ())
+                                     , (False,PackedTy "Tree" ())])
+                         , ("Node^", [ (False, CursorTy) -- indirection pointer
+                                     , (False,PackedTy "Tree" ())
+                                     , (False,PackedTy "Tree" ())])
+                         ]]
+
+-}
+
 addLayoutExp :: Out a => DDefs (UrTy a) -> SEnv -> L Exp1 -> SyM (L Exp1)
 addLayoutExp ddfs senv (L p ex) = L p <$>
   case ex of
@@ -60,7 +86,7 @@ addLayoutExp ddfs senv (L p ex) = L p <$>
                          v <- gensym "indr"
                          case inferSize senv arg of
                            Just sz -> return (v,[],IntTy, l$ LitE sz)
-                           Nothing -> return (v,[],IntTy, l$ PrimAppE PEndOf [arg]))
+                           Nothing -> return (v,[],CursorTy, l$ PrimAppE PEndOf [arg]))
                  needSizeOf
           let szVars = L.map (\(v,_,_,_) -> v) szs
               szExps = L.map (l . VarE) szVars
@@ -139,41 +165,3 @@ toIndrDDefs ddfs = M.map go ddfs
                               )
                    [] dataCons
       in dd {dataCons = dcons'}
-
-{- Note [Sized DDefs]:
-~~~~~~~~~~~~~~~~~~~~~~
-
-ddtree :: DDefs Ty1
-ddtree = fromListDD [DDef (toVar "Tree")
-                      [ ("Leaf",[(False,IntTy)])
-                      , ("Node",[ (False,PackedTy "Tree" ())
-                                , (False,PackedTy "Tree" ())])
-                      ]]
-
-becomes,
-
-ddtree :: DDefs Ty1
-ddtree = fromListDD [DDef (toVar "Tree")
-                     [ ("Leaf"      ,[(False,IntTy)])
-
-                     , ("Node",     [ (False,PackedTy "Tree" ())
-                                    , (False,PackedTy "Tree" ())])
-
-                     , (Sized_Node, [ (False, IntTy) -- size field
-                                    , (False,PackedTy "Tree" ())
-                                    , (False,PackedTy "Tree" ())])
-                     ]]
-
-
-TODO: Need to encode this information in the type
-
-
-Location Inference:
-~~~~~~~~~~~~~~~~~~~
-
-To get a location l' after a _sized_ tag at l,
-
-let skip = 1 + (8 * #indirections_for_tag)
-in  l'   = AfterConstantLE skip l
-
--}

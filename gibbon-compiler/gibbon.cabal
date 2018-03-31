@@ -39,7 +39,7 @@ library
                        Packed.FirstOrder.Passes.Flatten
                        Packed.FirstOrder.Passes.InlineTriv
                        Packed.FirstOrder.Passes.DirectL3
-                       Packed.FirstOrder.Passes.InferLayout
+                       Packed.FirstOrder.Passes.AddLayout
                        Packed.FirstOrder.Passes.InferLocations
                        Packed.FirstOrder.Passes.RemoveCopies
                        Packed.FirstOrder.Passes.InferMul

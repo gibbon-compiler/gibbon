@@ -528,10 +528,12 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                   Nothing -> error $ "cursorizeLocExp: Var " ++ sdoc v ++ " not found."
           bod = case vty of
                   PackedTy{} -> l$ VarE (toEndV v)
-                  _ -> let sizeVar = varAppend "sizeof_" v
-                           sizeVal = l$ Ext $ L3.SizeOfScalar v
-                           rhs = l$ Ext $ L3.AddCursor loc (l$ VarE (sizeVar))
-                       in mkLets [(sizeVar,[], IntTy, sizeVal)] rhs
+                  CursorTy -> l$ VarE (toEndV v)
+                  IntTy -> let sizeVar = varAppend "sizeof_" v
+                               sizeVal = l$ Ext $ L3.SizeOfScalar v
+                               rhs = l$ Ext $ L3.AddCursor loc (l$ VarE (sizeVar))
+                           in mkLets [(sizeVar,[], IntTy, sizeVal)] rhs
+                  oth -> error $ "cursorizeLocExp: AfterVariable TODO " ++ sdoc oth
       if isBound loc
       then Right bod
       else Left $ M.insertWith (++) loc
@@ -740,6 +742,26 @@ unpackDataCon ddfs fundefs denv1 tenv isPacked scrtCur (dcon,vlocs,rhs) = do
 
                   bnds = [(tmp     , [], ProdTy [IntTy, CursorTy], l$ Ext $ L3.ReadInt loc),
                           (v       , [], IntTy   , l$ ProjE 0 (l$ VarE tmp)),
+                          (toEndV v, [], CursorTy, l$ ProjE 1 (l$ VarE tmp))]
+              if canBind
+              then do
+                let bnds' = (loc,[],CursorTy, l$ VarE cur):bnds
+                    env'' = M.insert loc CursorTy env'
+                bod <- go (toEndV v) rst rtys indrVars canBind denv env''
+                return $ mkLets bnds' bod
+              else do
+                let denv'' = M.insertWith (++) loc bnds denv
+                go (toEndV v) rst rtys indrVars canBind denv'' env'
+
+            CursorTy -> do
+              tmp <- gensym (toVar "readcursor_tpl")
+              let env' = M.union (M.fromList [(tmp     , ProdTy [CursorTy, CursorTy]),
+                                              (v       , CursorTy),
+                                              (toEndV v, CursorTy)])
+                         env
+
+                  bnds = [(tmp     , [], ProdTy [CursorTy, CursorTy], l$ Ext $ L3.ReadCursor loc),
+                          (v       , [], CursorTy, l$ ProjE 0 (l$ VarE tmp)),
                           (toEndV v, [], CursorTy, l$ ProjE 1 (l$ VarE tmp))]
               if canBind
               then do

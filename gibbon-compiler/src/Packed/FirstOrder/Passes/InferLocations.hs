@@ -1077,6 +1077,7 @@ prim p = case p of
            L1.MkTrue -> L1.MkTrue
            L1.MkFalse -> L1.MkFalse
            L1.SizeParam -> L1.SizeParam
+           L1.PEndOf    -> L1.PEndOf
            _ -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
 
 -- | Generate a copy function for a particular data definition.
