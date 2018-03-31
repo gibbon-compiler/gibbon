@@ -42,7 +42,7 @@ library
                        Packed.FirstOrder.Passes.AddLayout
                        Packed.FirstOrder.Passes.InferLocations
                        Packed.FirstOrder.Passes.RemoveCopies
-                       Packed.FirstOrder.Passes.InferMul
+                       Packed.FirstOrder.Passes.InferMultiplicity
                        Packed.FirstOrder.Passes.InferEffects
                        Packed.FirstOrder.Passes.RouteEnds
                        Packed.FirstOrder.Passes.BoundsCheck
@@ -145,7 +145,7 @@ test-suite test-gibbon
                        InferEffects
                        InferLocations
                        Unariser
-                       InferMul
+                       InferMultiplicity
                        Compiler
                        L2.Typecheck
                        L1.Typecheck

@@ -23,7 +23,7 @@ import qualified Packed.FirstOrder.TargetInterp as TI
 -- |
 import RouteEnds
 import InferEffects
-import InferMul
+import InferMultiplicity
 import Unariser
 import Compiler
 import L2.Typecheck
@@ -38,7 +38,7 @@ main = defaultMain allTests
                    , routeEnds2Tests
                    , inferLocations2Tests
                    , inferEffects2Tests
-                   , inferMulTests
+                   , inferRegScopeTests
                    , unariser2Tests
                    -- , l2TypecheckerTests
                    , l1TypecheckerTests
