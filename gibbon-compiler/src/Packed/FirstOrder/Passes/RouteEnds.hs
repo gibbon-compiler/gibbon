@@ -327,10 +327,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
           Ext (LetLocE v (AfterVariableLE x l1) e) -> do
                  e' <- exp fns retlocs eor lenv afterenv e
                  return $ Ext (LetLocE v (AfterVariableLE x l1) e')
-
-          _ -> internalError $ "RouteEnds: Unsupported expression: " ++ (show e)
-
-
+          Ext (IndirectionE{}) -> return e
 
         where  mkRet :: [LocVar] -> (L Exp2) -> SyM (L Exp2)
                mkRet ls (L p (VarE v)) =

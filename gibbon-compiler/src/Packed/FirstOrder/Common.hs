@@ -24,7 +24,7 @@ module Packed.FirstOrder.Common
 
          -- * Variables and gensyms
        , Var(..), fromVar, toVar, varAppend, SyM, gensym, genLetter, runSyM
-       , cleanFunName
+       , cleanFunName, mkCopyFunName, isCopyFunName
 
          -- * Regions and locations
        , LocVar, Region(..), Modality(..), LRM(..), dummyLRM
@@ -591,3 +591,9 @@ mkUnpackerName tyCons = toVar $ "unpack_" ++ tyCons
 -- | Map a DataCon onto the name of the generated print function.
 mkPrinterName :: DataCon -> Var
 mkPrinterName tyCons = toVar $ "print_" ++ tyCons
+
+mkCopyFunName :: DataCon -> Var
+mkCopyFunName dcon = "copy_" `varAppend` (toVar dcon)
+
+isCopyFunName :: Var -> Bool
+isCopyFunName = isPrefixOf "copy_" . fromVar

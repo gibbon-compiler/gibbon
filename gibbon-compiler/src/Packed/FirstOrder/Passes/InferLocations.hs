@@ -1045,8 +1045,8 @@ copy :: Result -> LocVar -> TiM Result
 copy (e,ty,cs) lv1 =
     case ty of
       PackedTy tc lv2 ->
-          let copyName = "copy_" ++ tc -- assume a copy function with this name
-              eapp = l$ AppE (toVar copyName) [lv1,lv2] e
+          let copyName = mkCopyFunName tc -- assume a copy function with this name
+              eapp = l$ AppE copyName [lv2,lv1] e
           in return (eapp, PackedTy tc lv1, [])
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
 
@@ -1089,12 +1089,12 @@ genCopyFn DDef{tyName, dataCons} = do
                 ys <- mapM (\_ -> gensym "y") tys
                 let bod = foldr (\(ty,x,y) acc ->
                                      if L1.isPackedTy ty
-                                     then l$ LetE (y, [], ty, l$ AppE (toVar $ "copy_" ++ (tyToDataCon ty)) [] (l$ VarE x)) acc
+                                     then l$ LetE (y, [], ty, l$ AppE (mkCopyFunName (tyToDataCon ty)) [] (l$ VarE x)) acc
                                      else l$ LetE (y, [], ty, l$ VarE x) acc)
                           (l$ L1.DataConE () dcon $ map (l . VarE) ys)
                           (zip3 (L.map snd tys) xs ys)
                 return (dcon, L.map (\x -> (x,())) xs, bod)
-  return $ L1.FunDef { funName = toVar $ "copy_" ++ (fromVar tyName)
+  return $ L1.FunDef { funName = mkCopyFunName (fromVar tyName)
                      , funArg = (arg, L1.PackedTy (fromVar tyName) ())
                      , funRetTy = L1.PackedTy (fromVar tyName) ()
                      , funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
@@ -1109,7 +1109,7 @@ tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
 addCopyFns :: L1.Prog -> SyM L1.Prog
 addCopyFns (L1.Prog dfs fds me) = do
   newFns <- mapM genCopyFn dfs
-  prg <- flattenL1 $ L1.Prog dfs (fds `M.union` (M.mapKeys (toVar . ("copy_" ++) . fromVar) newFns)) me
+  prg <- flattenL1 $ L1.Prog dfs (fds `M.union` (M.mapKeys (mkCopyFunName . fromVar) newFns)) me
   return $ inlineTriv $ prg
 
 
