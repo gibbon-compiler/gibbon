@@ -41,6 +41,7 @@ library
                        Packed.FirstOrder.Passes.DirectL3
                        Packed.FirstOrder.Passes.InferLayout
                        Packed.FirstOrder.Passes.InferLocations
+                       Packed.FirstOrder.Passes.RemoveCopies
                        Packed.FirstOrder.Passes.InferMul
                        Packed.FirstOrder.Passes.InferEffects
                        Packed.FirstOrder.Passes.RouteEnds
