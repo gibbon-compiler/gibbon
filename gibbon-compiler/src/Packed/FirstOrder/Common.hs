@@ -51,6 +51,7 @@ module Packed.FirstOrder.Common
          -- * Redirections and indirections
        , redirectionSize, redirectionTag, redirectionAlt
        , toIndrDataCon, fromIndrDataCon, isIndrDataCon, indirectionTag, indirectionAlt
+       , isIndirectionTag
 
          -- * Misc helpers
        , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv, l
@@ -304,7 +305,7 @@ getTyOfDataCon dds con = (fromVar . fst) $ lkp dds con
 -- | Look up the numeric tag for a dataCon
 getTagOfDataCon :: Out a => DDefs a -> DataCon -> Word8
 getTagOfDataCon dds dcon =
-    if dcon == indirectionTag
+    if isIndirectionTag dcon
     then indirectionAlt
     else fromIntegral ix
   where Just ix = L.elemIndex dcon $ getConOrdering dds (fromVar tycon)
@@ -353,6 +354,9 @@ redirectionAlt = 100
 
 indirectionTag :: DataCon
 indirectionTag = "INDIRECTION"
+
+isIndirectionTag :: DataCon -> Bool
+isIndirectionTag = isPrefixOf indirectionTag
 
 indirectionAlt :: Num a => a
 indirectionAlt = 90

@@ -9,8 +9,6 @@ import Packed.FirstOrder.Common hiding (FunDef(..))
 import Packed.FirstOrder.L1.Syntax hiding (Prog(..), FunDef(..))
 import Packed.FirstOrder.L2.Syntax as L2
 
-import Debug.Trace
-
 --------------------------------------------------------------------------------
 
 -- Maps a location to a region
@@ -18,16 +16,22 @@ type LocEnv = M.Map LocVar Var
 
 removeCopies :: L2.Prog -> SyM L2.Prog
 removeCopies Prog{ddefs,fundefs,mainExp} = do
-  fds' <- mapM (removeCopiesFn ddefs fundefs) $ M.elems fundefs
+
+  ddefs' <- mapM (\ddf@DDef{dataCons} -> do
+                    dcon <- fromVar <$> gensym (toVar indirectionTag)
+                    return ddf {dataCons = dataCons ++ [(dcon, [(False, CursorTy)])]} )
+               ddefs
+  -- Don't process copy* functions
+  fds' <- mapM (\fn -> if isCopyFunName (funname fn)
+                       then return fn
+                       else removeCopiesFn ddefs' fundefs fn)
+               (M.elems fundefs)
   let fundefs' = M.fromList $ map (\f -> (funname f,f)) fds'
       env2 = Env2 M.empty (initFunEnv fundefs)
-      ddefs' = M.map (\ddf@DDef{dataCons} ->
-                        ddf {dataCons = dataCons ++ [(indirectionTag, [(False, CursorTy)])]} )
-               ddefs
   mainExp' <- case mainExp of
                 Nothing -> return Nothing
                 Just (mn, ty) -> Just . (,ty) <$>
-                  removeCopiesExp ddefs fundefs M.empty env2 mn
+                  removeCopiesExp ddefs' fundefs M.empty env2 mn
   return $ Prog ddefs' fundefs' mainExp'
 
 removeCopiesFn :: DDefs Ty2 -> NewFuns -> L2.FunDef -> SyM L2.FunDef
@@ -42,14 +46,28 @@ removeCopiesExp :: DDefs Ty2 -> NewFuns -> LocEnv -> Env2 Ty2 -> L L2.Exp2 -> Sy
 removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
   case ex of
     AppE f [lin,lout] _ | isCopyFunName f -> do
-      let ty@(PackedTy tycon _) = gTypeExp ddefs env2 ex
+      let (PackedTy tycon _) = gTypeExp ddefs env2 ex
       indirection <- gensym "indirection"
-      return $ unLoc $ mkLets ([(indirection,[],PackedTy tycon lout,l$ Ext $ IndirectionE tycon (lout , lenv # lout) (lin, lenv # lin))]) (l$ VarE indirection)
+      -- Get the indirection datacon for this type
+      let indrDcon = filter isIndirectionTag $ getConOrdering ddefs tycon
+      case indrDcon of
+        [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
+        [dcon] -> do
+          return $ unLoc $
+            mkLets ([(indirection,[],PackedTy tycon lout,
+                      l$ Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin))])
+            (l$ VarE indirection)
+        oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
     LetE (v,locs,ty@(PackedTy tycon _), (L _ (AppE f [lin,lout] _))) bod | isCopyFunName f -> do
-      -- trace (sdoc (v,ty)) (return ())
-      LetE (v,locs,ty, l$ Ext $ IndirectionE tycon (lout , lenv # lout) (lin, lenv # lin)) <$>
-        removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
+      -- Get the indirection datacon for this type
+      let indrDcon = filter isIndirectionTag $ getConOrdering ddefs tycon
+      case indrDcon of
+        [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
+        [dcon] -> do
+          LetE (v,locs,ty, l$ Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin)) <$>
+            removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
+        oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
     LetE (v,locs,ty, rhs) bod ->
       -- trace (sdoc (v,rhs))

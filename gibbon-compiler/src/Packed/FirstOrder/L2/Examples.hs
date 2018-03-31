@@ -1295,7 +1295,7 @@ ddtree' = fromListDD [DDef (toVar "Tree")
                        , ("Node^", [ (False,PackedTy "Tree" "l")
                                    , (False,PackedTy "Tree" "l")
                                    , (False,PackedTy "Tree" "l")])
-                       , (indirectionTag, [(False,CursorTy)])
+                       , (indirectionTag++"1", [(False,CursorTy)])
                        ]]
 
 -- The rightmost function *without* copy-insertion. Gibbon should add and use
@@ -1327,7 +1327,7 @@ indrBuildTreeFun = FunDef "indrBuildTree" indrBuildTreeTy "i270" indrBuildTreeBo
                         l$ LetE ("indr_cur",[],CursorTy,
                                  l$ PrimAppE PEndOf [l$ VarE "x275"]) $
                         l$ LetE ("indr_node",[], PackedTy "Tree" "loc_indr",
-                                 l$ DataConE "loc_indr" indirectionTag [l$ VarE "indr_cur"]) $
+                                 l$ DataConE "loc_indr" (indirectionTag++"1") [l$ VarE "indr_cur"]) $
                         l$ LetE ("a278",[],PackedTy "Tree" "lout272",
                                  l$ DataConE "lout272" "Node^" [l$ VarE "indr_node",
                                                                 l$ VarE "x275",
@@ -1342,7 +1342,7 @@ indrBuildTreeMainExp = l$ Ext $ LetRegionE (VarR "r800") $
                        l$ VarE "tr802"
 
 indrBuildTreeProg :: Prog
-indrBuildTreeProg = Prog ddtree' (M.fromList [("indrBuildtree", indrBuildTreeFun)])
+indrBuildTreeProg = Prog ddtree' (M.fromList [("indrBuildTree", indrBuildTreeFun)])
                          (Just (indrBuildTreeMainExp, PackedTy "Tree" "l801"))
 
 
@@ -1394,8 +1394,10 @@ indrIDFun = FunDef "indrID" indrIDTy "tr800" indrIDBod
 
     indrIDBod :: L Exp2
     indrIDBod = l$ LetE ("a804",[], PackedTy "Tree" "lout803",
-                         l$ Ext $ IndirectionE "Tree" ("lout803","r803")
-                                                      ("lin802", "r801")) $
+                         l$ Ext $ IndirectionE "Tree"
+                                               (indirectionTag++"1")
+                                               ("lout803","r803")
+                                               ("lin802", "r801")) $
                 l$ VarE ("a804")
 
 

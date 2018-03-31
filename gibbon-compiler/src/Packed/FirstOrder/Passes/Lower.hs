@@ -78,7 +78,7 @@ genAlts ((dcons, typs):xs) tail tag n = do
   -- WARNING: IsBoxed ignored here
   curTail <- genDcons typs' tail [(T.TagTyPacked, T.VarTriv tag)]
   alts    <- genAlts xs tail tag (n+1)
-  let alt = if dcons == indirectionTag
+  let alt = if isIndirectionTag dcons
             then indirectionAlt
             else n
   case alts of
@@ -165,7 +165,7 @@ genAltPrinter ((dcons, typs):xs) tail n = do
   -- WARNING: IsBoxed ignored here
   curTail <- (openParen dcons) <$> genDconsPrinter typs' tail
   alts    <- genAltPrinter xs tail (n+1)
-  let alt = if dcons == indirectionTag
+  let alt = if isIndirectionTag dcons
             then indirectionAlt
             else n
   case alts of
