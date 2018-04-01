@@ -266,7 +266,7 @@ destFromType' :: Ty2 -> TiM Dest
 destFromType' frt = 
   case frt of
     PackedTy _tc lv -> return (SingleDest lv)
-    ProdTy tys -> mapM destFromType tys >>= return . TupleDest
+    ProdTy tys -> mapM destFromType' tys >>= return . TupleDest
     _ -> return NoDest
 
 freshTyLocs :: Ty2 -> TiM Ty2
