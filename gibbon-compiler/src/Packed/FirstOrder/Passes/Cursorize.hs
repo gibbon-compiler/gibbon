@@ -538,7 +538,9 @@ cursorizeLet ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
                                        ,(v       ,[], projTy 0 $ projTy nLocs ty'' , mkProjE 0 $ mkProjE nLocs rhs'')
                                        ,(toEndV v,[], projTy 1 $ projTy nLocs ty'' , mkProjE 1 $ mkProjE nLocs rhs'')]
                            in bnds' ++ locBnds
-
+        case M.lookup (toEndV v) denv of
+          Just xs -> error $ "todo: " ++ sdoc xs
+          Nothing -> return ()
         bod' <- go tenv' bod
         return $ unLoc $ mkLets bnds bod'
 
