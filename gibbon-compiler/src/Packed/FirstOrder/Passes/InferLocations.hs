@@ -249,6 +249,7 @@ inferLocs initPrg = do
 data Dest = SingleDest LocVar -- TODO: refactor to just be list of locations, or actually enforce invariants of non-empty list, etc
           | TupleDest [Dest]
           | NoDest
+            deriving Show
 
 mkDest :: [LocVar] -> Dest
 mkDest [lv] = SingleDest lv
@@ -266,7 +267,7 @@ destFromType' :: Ty2 -> TiM Dest
 destFromType' frt = 
   case frt of
     PackedTy _tc lv -> return (SingleDest lv)
-    ProdTy tys -> mapM destFromType tys >>= return . TupleDest
+    ProdTy tys -> mapM destFromType' tys >>= return . TupleDest
     _ -> return NoDest
 
 freshTyLocs :: Ty2 -> TiM Ty2
@@ -298,7 +299,7 @@ inferExp' env lex0@(L sl1 exp) dest =
                     case i of
                       AfterConstantL lv1 v lv2 -> lc$ Ext (LetLocE lv1 (AfterConstantLE v lv2) a)
                       AfterVariableL lv1 v lv2 -> lc$ Ext (LetLocE lv1 (AfterVariableLE v lv2) a)
-                      StartRegionL lv r -> lc$ Ext (LetLocE lv (StartOfLE r) a)
+                      StartRegionL lv r -> lc$ Ext (LetRegionE r (lc $ Ext (LetLocE lv (StartOfLE r) a)))
                       AfterTagL lv1 lv2 -> lc$ Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
 
       -- bindAllStartRegions :: Result -> TiM Result
@@ -552,6 +553,24 @@ inferExp env@FullEnv{dataDefs}
                             (return (e',ty',[]))
                             (copy (e',ty,[]) d)
 
+    L1.ProjE i (L p (VarE v)) ->
+        let ProdTy tys = lookupVEnv v env
+            ty = tys !! i
+            e' = ProjE i (L p (VarE v))
+        in case dest of
+             NoDest -> return (lc$ e', ty, [])
+             TupleDest ds -> err $ "TODO: handle tuple of destinations for ProjE"
+             SingleDest d -> do
+                  loc <- case ty of
+                           PackedTy _ lv -> return lv
+                           _ -> lift $ lift $ freshLocVar "imm"
+                  let ty' = case ty of
+                              PackedTy k lv -> PackedTy k d
+                              t -> t
+                  unify d loc
+                            (return (l$ e',ty',[]))
+                            (copy (l$ e',ty,[]) d)
+
     L1.MkProdE ls ->
       case dest of
         NoDest -> err $ "Expected destination(s) for expression"
@@ -580,6 +599,15 @@ inferExp env@FullEnv{dataDefs}
         do (e',ty',cs') <- inferExp env e dest
            return (lc$ TimeIt e' ty' b, ty', cs')
 
+    L1.DataConE () k [] ->
+        case dest of
+          NoDest -> err $ "Expected single location destination for DataConE"
+          TupleDest _ds -> err $ "Expected single location destination for DataConE"
+          SingleDest d ->
+              do fakeLoc <- fresh
+                 let constrs = [AfterTagL fakeLoc d]
+                 return (lc$ DataConE d k [], PackedTy (getTyOfDataCon dataDefs k) d, constrs)
+
     L1.DataConE () k ls ->
       case dest of
         NoDest -> err $ "Expected single location destination for DataConE"
@@ -592,6 +620,8 @@ inferExp env@FullEnv{dataDefs}
                       afterVar ((Just (L _ (VarE v))), (Just loc1), (Just loc2)) =
                           Just $ AfterVariableL loc1 v loc2
                       afterVar ((Just (L _ (LitE _))), (Just loc1), (Just loc2)) =
+                          Just $ AfterConstantL loc1 8 loc2
+                      afterVar ((Just (L _ (LitSymE _))), (Just loc1), (Just loc2)) =
                           Just $ AfterConstantL loc1 8 loc2
                       afterVar _ = Nothing
                       constrs = concat $ [c | (_,_,c) <- ls']
@@ -651,7 +681,7 @@ inferExp env@FullEnv{dataDefs}
           (arg',aty,acs) <- inferExp env arg argDest
           res <- inferExp (extendVEnv vr valTy env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr res
-          vcs <- tryNeedRegion (locsInTy valTy) ty'' $ acs ++ cs''
+          vcs <- tryNeedRegion (locsInTy argTy ++ locsInTy valTy) ty'' $ acs ++ cs''
           fcs <- tryInRegion vcs
           -- fcs <- tryInRegion $ acs ++ cs''
           res <- tryBindReg (lc$ L2.LetE (vr,[], valTy, L sl2 $ L2.AppE f (locsInTy aty ++ locsInTy valTy) arg') bod'', ty'', fcs)
@@ -1046,7 +1076,7 @@ copy (e,ty,cs) lv1 =
     case ty of
       PackedTy tc lv2 ->
           let copyName = "copy_" ++ tc -- assume a copy function with this name
-              eapp = l$ AppE (toVar copyName) [lv1,lv2] e
+              eapp = l$ AppE (toVar copyName) [lv2,lv1] e
           in return (eapp, PackedTy tc lv1, [])
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
 
