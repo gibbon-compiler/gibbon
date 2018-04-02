@@ -362,12 +362,11 @@ rightmostBod = l$ CaseE (l$ VarE "t242")
                [("Leaf", [("n246","l247")],
                  l$ VarE "n246"),
                 ("Node", [("x248","l249"), ("y250","l251")],
-                 l$ Ext $ LetRegionE (VarR "r252") $
-                 l$ Ext $ LetLocE "l253" (StartOfLE (VarR "r252")) $
-                 l$ LetE ("x254",[],PackedTy "Tree" "l253",
-                          l$ AppE "copyTree" ["l249", "l253"] (l$ VarE "x248")) $
-                 l$ LetE ("lm255",[],IntTy, l$ AppE "rightmost" ["l251"] (l$ VarE "y250")) $
-                 l$ VarE "lm255"
+                 -- l$ Ext $ LetRegionE (VarR "r252") $
+                 -- l$ Ext $ LetLocE "l253" (StartOfLE (VarR "r252")) $
+                 -- l$ LetE ("x254",[],PackedTy "Tree" "l253",
+                 --          l$ AppE "copyTree" ["l249", "l253"] (l$ VarE "x248")) $
+                 l$ AppE "rightmost" ["l251"] (l$ VarE "y250")
                 )]
 
 rightmostMainExp :: L Exp2
@@ -386,7 +385,7 @@ rightmostMainExp = l$ Ext $ LetRegionE (VarR "r253") $
                    l$ VarE "a260"
 
 rightmostProg :: Prog
-rightmostProg = Prog ddtree (M.fromList [("rightmost", rightmostFun), ("copyTree",copyTreeFun)])
+rightmostProg = Prog ddtree (M.fromList [("rightmost", rightmostFun)])
                 (Just (rightmostMainExp, IntTy))
 
 

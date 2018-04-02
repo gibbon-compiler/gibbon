@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Packed.FirstOrder.Passes.AddLayout
-  (addLayout, smartAddLayout) where
+  (smartAddLayout, needsLayout) where
 
 import Data.Loc
 import Data.List as L
@@ -10,6 +10,7 @@ import Data.Map as M
 import Data.Set as S
 import Text.PrettyPrint.GenericPretty
 
+import Packed.FirstOrder.GenericOps
 import Packed.FirstOrder.Common
 import Packed.FirstOrder.L1.Syntax
 import qualified Packed.FirstOrder.L2.Syntax as L2
@@ -19,14 +20,12 @@ import Packed.FirstOrder.Passes.InferEffects   (inferEffects)
 import Packed.FirstOrder.Passes.RemoveCopies   (removeCopies)
 import Packed.FirstOrder.Passes.Flatten        (flattenL2)
 
-import Debug.Trace
-
 --------------------------------------------------------------------------------
 
 {- Note [Adding layout information]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This pass runs immediately after location inference & infereffects.
+This pass runs afetr InferEffects.
 
 Instead of using "dummy_traversals" as another program repair strategy in
 InferLocations, it's easier to annotate the program first, and
@@ -36,8 +35,8 @@ Consider this example:
 
     main = add1 . buildtree
 
-This example doesn't need to be repaired, and can compile in it's current form. But
-on the other hand, this program;
+This example doesn't need to be repaired, and can be compiled in it's current form.
+But on the other hand,
 
     main =  add1 . rightmost . buildtree
 
@@ -86,12 +85,10 @@ becomes,
 
 --------------------------------------------------------------------------------
 
--- type LocEnv = M.Map Var (Int,LocVar)
-
 -- | Add layout information to the program, but only if required
 smartAddLayout :: L2.Prog -> SyM L2.Prog
 smartAddLayout prg =
-  if needsLayoutProg prg
+  if  needsLayout prg
   then do
     let l1 = L2.revertToL1 prg
     l1 <- addLayout l1
@@ -103,29 +100,153 @@ smartAddLayout prg =
   else return prg
 
 -- Maybe we should use the Continuation monad here..
-needsLayoutProg :: L2.Prog -> Bool
-needsLayoutProg _ = True
+needsLayout :: L2.Prog -> Bool
+needsLayout (L2.Prog ddefs fundefs mainExp) =
+  let env2 = Env2 M.empty (L2.initFunEnv fundefs)
+      specialfns = L.foldl' (\acc fn -> if isSpecialFn ddefs fn
+                                        then S.insert (L2.funname fn) acc
+                                        else acc)
+                   S.empty (M.elems fundefs)
+      mainExp' = case mainExp of
+                   Nothing -> False
+                   Just (mn, _) -> needsLayoutExp ddefs fundefs False specialfns S.empty env2 mn
+  in mainExp'
 
--- needsLayoutExp :: L2.NewFuns -> LocEnv -> Int -> L L2.Exp2 -> Bool
--- needsLayoutExp fundefs lenv n (L _ ex) =
---   case ex of
---     CaseE scrt brs -> any id (L.map (docase n) brs)
---     Ext ext ->
---       case ext of
---         L2.LetRegionE r bod -> needsLayoutExp fundefs lenv (n+1) bod
---         L2.LetLocE loc rhs bod -> needsLayoutExp fundefs lenv (n+1) bod
+needsLayoutExp :: DDefs L2.Ty2 -> L2.NewFuns -> Bool -> S.Set Var -> S.Set LocVar
+               -> Env2 L2.Ty2 -> L L2.Exp2 -> Bool
+needsLayoutExp ddefs fundefs base special traversed env2 (L _ ex) = base ||
+  case ex of
+    VarE{}    -> base
+    LitE{}    -> base
+    LitSymE{} -> base
+    AppE f _ arg  ->
+      let argty = gTypeExp ddefs env2 arg
+          g = if f `S.member` special then specialTraversal else fnTraversal
+          (traversed', base') = g traversed (fundefs # f) (L2.getTyLocs argty)
+          base'' = base || base'
+      in needsLayoutExp ddefs fundefs base'' traversed' special env2 arg
+    PrimAppE _ ls -> all (go env2) ls
+    LetE (v,_,ty, L _ (AppE f _ arg)) bod ->
+      let argty = gTypeExp ddefs env2 arg
+          g = if f `S.member` special then specialTraversal else fnTraversal
+          (traversed', base') = g traversed (fundefs # f) (L2.getTyLocs argty)
+          base'' = base || base'
+      in (needsLayoutExp ddefs fundefs base'' traversed' special env2 arg) ||
+         (needsLayoutExp ddefs fundefs base'' traversed' special (extendVEnv v ty env2) bod)
+    LetE (v,_,ty,rhs) bod ->
+      go env2 rhs ||  go (extendVEnv v ty env2) bod
+    IfE a b c   -> (go env2 a) || (go env2 b) || (go env2 c)
+    MkProdE ls  -> all (go env2) ls
+    ProjE _ e   -> go env2 e
+    CaseE _ brs -> any id (L.map (docase traversed env2) brs)
+    DataConE _ _ ls -> all (go env2) ls
+    TimeIt e _ _ -> go env2 e
+    Ext ext ->
+      case ext of
+        L2.LetRegionE _ bod ->  go env2 bod
+        L2.LetLocE _ _ bod -> go env2 bod
+        _ -> False
+    MapE{}  -> error $ "needsLayoutExp: TODO MapE"
+    FoldE{} -> error $ "needsLayoutExp: TODO FoldE"
+  where
+    go = needsLayoutExp ddefs fundefs base special traversed
 
+    docase :: S.Set LocVar -> Env2 L2.Ty2
+           -> (DataCon, [(Var,LocVar)], L L2.Exp2) -> Bool
+    docase traversed1 env21 (dcon,vlocs,bod) =
+      let (vars,locs) = unzip vlocs
+          tys = lookupDataCon ddefs dcon
+          tys' = substLocs locs tys []
+          env2' = extendsVEnv (M.fromList $ zip vars tys') env21
+      in (needsLayoutExp ddefs fundefs base special traversed1 env2' bod)
 
---   where
---     docase n1 (dcon,vlocs,bod) =
---       let (vars,locs) = unzip vlocs
---           (n1',lenv') = L.foldr (\((var,loc), x) (_,acc) ->
---                                      (x, M.insert var (x,loc) acc))
---                         (n1,M.empty)
---                         (zip vlocs [n1..])
---       in trace (sdoc (n1',lenv')) (needsLayoutExp fundefs lenv' n1' bod)
+    substLocs :: [LocVar] -> [L2.Ty2] -> [L2.Ty2] -> [L2.Ty2]
+    substLocs locs tys acc =
+      case (locs,tys) of
+        ([],[]) -> acc
+        (lc':rlocs, ty:rtys) ->
+          case ty of
+            PackedTy tycon _ -> substLocs rlocs rtys (acc ++ [PackedTy tycon lc'])
+            ProdTy tys' -> error $ "substLocs: Unexpected type: " ++ sdoc tys'
+            _ -> substLocs rlocs rtys (acc ++ [ty])
+        _ -> error $ "substLocs: " ++ sdoc (locs,tys)
+
+isSpecialFn :: DDefs L2.Ty2 -> L2.FunDef -> Bool
+isSpecialFn ddefs L2.FunDef{L2.funty, L2.funbod} =
+  if traversesAllInputs
+  then True
+  else go funbod
+  where
+    traversesAllInputs =
+      length (L2.inLocVars funty) == length (S.toList $ L2.arrEffs funty)
+
+    go :: L L2.Exp2 -> Bool
+    go (L _ e) =
+      case e of
+        CaseE _ brs -> all docase brs
+        -- Straightforward recursion
+        VarE{} -> False
+        LitE{} -> False
+        LitSymE{}  -> False
+        AppE{}     -> False
+        PrimAppE{} -> False
+        LetE (_,_,_,rhs) bod -> (go rhs) || (go bod)
+        IfE a b c  -> (go a) || (go b) || (go c)
+        MkProdE ls -> any go ls
+        ProjE _ e  -> go e
+        DataConE _ _ ls -> any go ls
+        TimeIt e _ _    -> go e
+        Ext ext ->
+          case ext of
+            L2.LetLocE _ _ bod   -> go bod
+            L2.LetRegionE _ bod -> go bod
+            _ -> False
+        MapE{}  -> error "isSpecialFn: MapE"
+        FoldE{} -> error "isSpecialFn: FoldE"
+
+    docase :: (DataCon, [(Var,LocVar)], L L2.Exp2) -> Bool
+    docase (dcon,vlocs,bod) =
+      let (vars,_) = unzip vlocs
+          tys = lookupDataCon ddefs dcon
+          needtraversal = cantunpack False tys vars []
+      -- It's special if it has some packed elements which cannot be accessed,
+      -- but those are unused
+      in all (\v -> not $ L2.occurs v bod) needtraversal
+
+    cantunpack :: Bool -> [L2.Ty2] -> [Var] -> [Var] -> [Var]
+    cantunpack _ [] [] acc = acc
+    cantunpack wasPacked (ty:tys) (v:vs) acc  =
+      case (hasPacked ty, wasPacked) of
+        -- This is not the first packed element. Add it to the acc
+        (True, True)  -> cantunpack wasPacked tys vs (v:acc)
+        -- First packed element. Record that fact
+        (True, False) -> cantunpack True tys vs acc
+        (False, _)    -> cantunpack wasPacked tys vs acc
+    cantunpack _ _ _ _ = error "cantunpack: error"
+
+fnTraversal :: S.Set Var -> L2.FunDef -> [LocVar] -> (S.Set LocVar, Bool)
+fnTraversal traversed L2.FunDef{L2.funty} locs =
+  let funeff = L2.arrEffs funty
+      inlocs = L2.inLocVars funty
+      substMap = M.fromList $ zip inlocs locs
+      funeff' = L2.substEffs substMap funeff
+  in ( S.union (S.map (\(L2.Traverse a) -> a) funeff') traversed
+     , length inlocs /= length (S.toList funeff')
+     )
+
+-- Some functions are special (eg. leftmost). They don't traverse their input,
+-- but they can be compiled without adding any layout information to the program.
+-- To return the correct value from `needsLayoutExp`, we mark all input
+-- locations at the call site of such functions as "traversed".
+specialTraversal :: S.Set Var -> L2.FunDef -> [LocVar] -> (S.Set LocVar, Bool)
+specialTraversal traversed L2.FunDef{L2.funty} locs =
+  let fninlocs = L2.inLocVars funty
+      inlocs = take (length fninlocs) locs
+  in (S.union (S.fromList inlocs) traversed, False)
 
 --------------------------------------------------------------------------------
+
+-- Operates on an L1 program, and updates it to have layout information
 
 type FunDef1 = FunDef Ty1 (L Exp1)
 

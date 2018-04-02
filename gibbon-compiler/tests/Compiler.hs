@@ -127,8 +127,10 @@ case_leaf = runner "leaf.c" leafProg "(Leaf 1)"
 case_leftmost :: Assertion
 case_leftmost = runner "leftmost.c" leftmostProg "1"
 
+{- [2018.04.02]: Modified the function to not copy the left node
 case_rightmost :: Assertion
 case_rightmost = runner "rightmost.c" rightmostProg "2"
+-}
 
 case_buildleaf :: Assertion
 case_buildleaf = runner "buildleaf.c" buildLeafProg "(Leaf 42)"

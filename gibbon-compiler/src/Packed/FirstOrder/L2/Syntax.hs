@@ -37,7 +37,7 @@ module Packed.FirstOrder.L2.Syntax
     , Exp2, E2Ext(..), Ty2
 
     -- * Other helpers
-    , mapPacked, depList
+    , mapPacked, depList, occurs
 
     -- * Conversion back to L1
     , revertToL1
@@ -399,6 +399,31 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
     docase (dcon,vlocs,rhs) =
       let (vars,_) = unzip vlocs
       in (dcon, zip vars (repeat ()), revertExp rhs)
+
+
+-- | If a variable occurs in an expression
+occurs :: Var -> L Exp2 -> Bool
+occurs w (L _ ex) =
+  case ex of
+    VarE v -> v == w
+    LitE{}    -> False
+    LitSymE{} -> False
+    AppE _ _ arg -> occurs w arg
+    PrimAppE _ ls -> any (occurs w) ls
+    LetE (_,_,_,rhs) bod -> occurs w rhs || occurs w bod
+    IfE a b c -> occurs w a || occurs w b || occurs w c
+    MkProdE ls -> any (occurs w) ls
+    ProjE _ e  -> occurs w e
+    CaseE e brs -> occurs w e || any (\(_,_,bod) -> occurs w bod) brs
+    DataConE _ _ ls -> any (occurs w) ls
+    TimeIt e _ _ -> occurs w e
+    Ext ext ->
+      case ext of
+        LetRegionE _ bod -> occurs w bod
+        LetLocE _ _ bod  -> occurs w bod
+        _ -> False
+    MapE{} -> error "occurs: TODO MapE"
+    FoldE{} -> error "occurs: TODO FoldE"
 
 mapPacked :: (Var -> l -> UrTy l) -> UrTy l -> UrTy l
 mapPacked fn t =
