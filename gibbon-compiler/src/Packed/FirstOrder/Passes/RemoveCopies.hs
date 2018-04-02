@@ -19,8 +19,11 @@ removeCopies Prog{ddefs,fundefs,mainExp} = do
 
   ddefs' <- mapM (\ddf@DDef{dataCons} -> do
                     dcon <- fromVar <$> gensym (toVar indirectionTag)
-                    return ddf {dataCons = dataCons ++ [(dcon, [(False, CursorTy)])]} )
-               ddefs
+                    -- RemoveCopies might run more than once (b.c smartAddLayout), so
+                    -- we ensure that we add the Indirection constructor only once.
+                    let datacons = filter (not . isIndirectionTag . fst) dataCons
+                    return ddf {dataCons = datacons ++ [(dcon, [(False, CursorTy)])]} )
+            ddefs
   -- Don't process copy* functions
   fds' <- mapM (\fn -> if isCopyFunName (funname fn)
                        then return fn

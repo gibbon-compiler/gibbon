@@ -16,6 +16,8 @@ import qualified Packed.FirstOrder.L2.Syntax as L2
 
 import Packed.FirstOrder.Passes.InferLocations (inferLocs)
 import Packed.FirstOrder.Passes.InferEffects   (inferEffects)
+import Packed.FirstOrder.Passes.RemoveCopies   (removeCopies)
+import Packed.FirstOrder.Passes.Flatten        (flattenL2)
 
 import Debug.Trace
 
@@ -94,6 +96,8 @@ smartAddLayout prg =
     let l1 = L2.revertToL1 prg
     l1 <- addLayout l1
     l2 <- inferLocs l1
+    l2 <- flattenL2 l2
+    l2 <- removeCopies l2
     l2 <- inferEffects l2
     return l2
   else return prg

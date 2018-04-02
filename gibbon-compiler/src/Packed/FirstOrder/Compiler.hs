@@ -55,6 +55,7 @@ import           Packed.FirstOrder.Passes.InlineTriv     (inlineTriv)
 
 import           Packed.FirstOrder.Passes.DirectL3       (directL3)
 import           Packed.FirstOrder.Passes.InferLocations (inferLocs)
+import           Packed.FirstOrder.Passes.AddLayout      (smartAddLayout)
 import           Packed.FirstOrder.Passes.RemoveCopies   (removeCopies)
 import           Packed.FirstOrder.Passes.InferMultiplicity (inferRegScope)
 import           Packed.FirstOrder.Passes.BoundsCheck    (boundsCheck)
@@ -405,8 +406,10 @@ passes config@Config{mode,packed} l1 = do
               l2 <- go "inferLocations"   inferLocs     l1
               l2 <- go "L2.flatten"       flattenL2     l2
               l2 <- go "removeCopies"     removeCopies  l2
-              l2 <- go "inferRegScope"    inferRegScope l2
               l2 <- go "inferEffects"     inferEffects  l2
+              -- TODO: Enable after some minor fixes in InferLocs
+              -- l2 <- go "smartAddLayout"  smartAddLayout l2
+              l2 <- go "inferRegScope"    inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "routeEnds"        routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
