@@ -26,7 +26,7 @@ module Packed.FirstOrder.L2.Syntax
 
     -- * Operations on types
     , allLocVars, inLocVars, outLocVars, outRegVars, substEffs, substTy, prependArgs
-    , isPackedTy', locsInTy, initFunEnv, getTyLocs, inRegVars
+    , isPackedTy', locsInTy, initFunEnv, getTyLocs, inRegVars, stripTyLocs
 
     -- * Temporary backwards compatibility, plus rexports
     , UrTy(..)
@@ -342,6 +342,19 @@ mapPacked fn t =
 prependArgs :: [UrTy l] -> UrTy l -> UrTy l
 prependArgs [] t = t
 prependArgs ls t = ProdTy $ ls ++ [t]
+
+-- | Remove the extra location annotations.
+stripTyLocs :: UrTy a -> UrTy ()
+stripTyLocs ty =
+  case ty of
+    IntTy     -> IntTy
+    BoolTy    -> BoolTy
+    ProdTy ls -> ProdTy $ L.map stripTyLocs ls
+    SymDictTy ty'    -> SymDictTy $ stripTyLocs ty'
+    PackedTy tycon _ -> PackedTy tycon ()
+    ListTy ty'       -> ListTy $ stripTyLocs ty'
+    PtrTy    -> PtrTy
+    CursorTy -> CursorTy
 
 -- | Collect all the locations mentioned in a type.
 getTyLocs :: Ty2 -> [LocVar]

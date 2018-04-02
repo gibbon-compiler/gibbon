@@ -89,9 +89,9 @@ cursorize Prog{ddefs,fundefs,mainExp} = do
                 Nothing -> return Nothing
                 Just (e,ty) -> do
                   if hasPacked ty
-                  then Just . (, L3.stripTyLocs ty) <$>
+                  then Just . (, stripTyLocs ty) <$>
                          fromDi <$> cursorizePackedExp ddefs fundefs M.empty M.empty e
-                  else Just . (,L3.stripTyLocs ty) <$>
+                  else Just . (,stripTyLocs ty) <$>
                          cursorizeExp ddefs fundefs M.empty M.empty e
   return $ L3.Prog ddefs' fundefs' mainExp'
 
@@ -123,7 +123,7 @@ cursorizeFunDef ddefs fundefs FunDef{funname,funty,funarg,funbod} =
        -- Then the input cursors. Create projections for input cursors here
        afterOutLocs  = nProj (totalRegs + length outLocs) newarg
        inCurBinds = case inLocs of
-                      [] -> mkLets [(funarg,[],L3.stripTyLocs inT, afterOutLocs)]
+                      [] -> mkLets [(funarg,[],stripTyLocs inT, afterOutLocs)]
                       _  -> let projs = mkInProjs afterOutLocs inT
                                 bnds  = [(loc,[],CursorTy,proj) | (loc,proj) <- zip inLocs projs]
                                         ++ [(funarg,[], cursorizeInTy inT, afterOutLocs)]
@@ -213,7 +213,7 @@ cursorizeFunDef ddefs fundefs FunDef{funname,funty,funarg,funbod} =
           -- Packed types in the input now become (read-only) cursors.
           newIn    = L2.mapPacked (\_ _ -> CursorTy) inT
 
-      in L3.ArrowTy { L3.arrIn = L3.stripTyLocs newIn, L3.arrOut = L3.stripTyLocs newOut }
+      in L3.ArrowTy { L3.arrIn = stripTyLocs newIn, L3.arrOut = stripTyLocs newOut }
 
 
 -- | Cursorize expressions NOT producing `Packed` values
@@ -250,7 +250,7 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
 
     DataConE _ _ _ -> error $ "cursorizeExp: Should not have encountered DataConE if type is not packed: "++ndoc ex
 
-    TimeIt e ty b -> TimeIt <$> go e <*> pure (L3.stripTyLocs ty) <*> pure b
+    TimeIt e ty b -> TimeIt <$> go e <*> pure (stripTyLocs ty) <*> pure b
 
     -- Eg. leftmost
     Ext ext ->
@@ -441,7 +441,7 @@ Reason: unariser can only eliminate direct projections of this form.
 
     TimeIt e t b -> do
       Di e' <- go tenv e
-      return $ Di $ l$ TimeIt e' (L3.stripTyLocs t) b
+      return $ Di $ l$ TimeIt e' (stripTyLocs t) b
 
     Ext ext ->
       case ext of
@@ -618,7 +618,7 @@ cursorizeLet ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
                       [(v, ty),(fresh, ty'),(toEndV v, projTy 1 ty')] ++ [(loc,CursorTy) | loc <- locs]
 
             -- TEnv and L3 expresssions are tagged with different types
-            ty''  = L3.stripTyLocs ty'
+            ty''  = stripTyLocs ty'
             rhs'' = l$ VarE fresh
 
             bnds = case locs of
@@ -643,7 +643,7 @@ cursorizeLet ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
         let ty' = case locs of
                     [] -> L3.cursorizeTy ty
                     xs -> ProdTy ([CursorTy | _ <- xs] ++ [L3.cursorizeTy ty])
-            ty''  = L3.stripTyLocs ty'
+            ty''  = stripTyLocs ty'
             tenv' = M.union (M.insert v ty tenv) (M.fromList [(loc,CursorTy) | loc <- locs])
         case locs of
           [] -> LetE (v,[], ty'', rhs') <$>
@@ -660,7 +660,7 @@ cursorizeLet ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
     | otherwise = do
         rhs' <- cursorizeExp ddfs fundefs denv tenv rhs
         case locs of
-            [] -> LetE (v,[],L3.stripTyLocs ty, rhs') <$>
+            [] -> LetE (v,[],stripTyLocs ty, rhs') <$>
                     go (M.insert v ty tenv) bod
 {-
              This was a scalar binding before, but now has been transformed to
@@ -681,7 +681,7 @@ cursorizeLet ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
               let ty'  = ProdTy ([CursorTy | _ <- locs] ++ [L3.cursorizeTy ty])
                   -- We cannot resuse ty' here because TEnv and expresssions are
                   -- tagged with different
-                  ty'' = L3.stripTyLocs ty'
+                  ty'' = stripTyLocs ty'
                   tenv' = M.union (M.fromList [(fresh, ty'),
                                                (loc, projTy 0 ty'),
                                                (v, projTy 1 ty')])

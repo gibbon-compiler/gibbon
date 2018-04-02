@@ -12,7 +12,7 @@ module Packed.FirstOrder.L3.Syntax
   , Prog(..), FunDef(..), FunDefs, ArrowTy(..)
 
     -- * Functions
-  , eraseLocMarkers, stripTyLocs, mapMExprs, toL3Prim, progToEnv
+  , eraseLocMarkers, mapMExprs, toL3Prim, progToEnv
   , cursorizeTy
   )
 where
@@ -127,20 +127,7 @@ instance Out Prog
 eraseLocMarkers :: DDef L2.Ty2 -> DDef Ty3
 eraseLocMarkers (DDef tyname ls) = DDef tyname $ L.map go ls
   where go :: (DataCon,[(IsBoxed,L2.Ty2)]) -> (DataCon,[(IsBoxed,Ty3)])
-        go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,stripTyLocs ty)) ls')
-
--- | Remove the extra location annotations.
-stripTyLocs :: UrTy a -> Ty3
-stripTyLocs ty =
-  case ty of
-    IntTy     -> IntTy
-    BoolTy    -> BoolTy
-    ProdTy ls -> ProdTy $ L.map stripTyLocs ls
-    SymDictTy ty'    -> SymDictTy $ stripTyLocs ty'
-    PackedTy tycon _ -> PackedTy tycon ()
-    ListTy ty'       -> ListTy $ stripTyLocs ty'
-    PtrTy    -> PtrTy
-    CursorTy -> CursorTy
+        go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,L2.stripTyLocs ty)) ls')
 
 cursorizeTy :: UrTy a -> UrTy b
 cursorizeTy ty =
@@ -188,12 +175,12 @@ toL3Prim pr =
     MkFalse   -> MkFalse
     SizeParam -> SizeParam
     SymAppend -> SymAppend
-    DictInsertP ty -> DictInsertP (stripTyLocs ty)
-    DictLookupP ty -> DictLookupP (stripTyLocs ty)
-    DictEmptyP  ty -> DictEmptyP  (stripTyLocs ty)
-    DictHasKeyP ty -> DictHasKeyP (stripTyLocs ty)
-    ErrorP s ty    -> ErrorP s (stripTyLocs ty)
-    ReadPackedFile fp tycon ty -> ReadPackedFile fp tycon (stripTyLocs ty)
+    DictInsertP ty -> DictInsertP (L2.stripTyLocs ty)
+    DictLookupP ty -> DictLookupP (L2.stripTyLocs ty)
+    DictEmptyP  ty -> DictEmptyP  (L2.stripTyLocs ty)
+    DictHasKeyP ty -> DictHasKeyP (L2.stripTyLocs ty)
+    ErrorP s ty    -> ErrorP s (L2.stripTyLocs ty)
+    ReadPackedFile fp tycon ty -> ReadPackedFile fp tycon (L2.stripTyLocs ty)
     MkNullCursor -> MkNullCursor
     PEndOf -> error "Do not use PEndOf after L2."
 
