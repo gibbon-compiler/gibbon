@@ -319,11 +319,86 @@ substEffs mp ef =
                  Just v2 -> Traverse v2
                  Nothing -> Traverse v) ef
 
--- | TODO: Fix or remove this function
 -- Because L2 just adds a bit of metadata and enriched types, it is
 -- possible to strip it back down to L1.
 revertToL1 :: Prog -> L1.Prog
-revertToL1 = undefined
+revertToL1 Prog{ddefs,fundefs,mainExp} =
+  L1.Prog ddefs' funefs' mainExp'
+  where
+    ddefs'   = M.map revertDDef ddefs
+    funefs'  = M.map revertFunDef fundefs
+    mainExp' = fmap (revertExp . fst) mainExp
+
+    revertDDef :: DDef Ty2 -> DDef Ty1
+    revertDDef (DDef a b) =
+      DDef a (L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
+
+    revertFunDef :: FunDef -> (L1.FunDef Ty1 (L L1.Exp1))
+    revertFunDef FunDef{funname,funarg,funty,funbod} =
+      L1.FunDef { funName  = funname
+                , funArg   =  (funarg, stripTyLocs (arrIn funty))
+                , funRetTy = stripTyLocs (arrOut funty)
+                , funBody  = revertExp funbod
+                }
+
+    revertExp :: L Exp2 -> L L1.Exp1
+    revertExp (L p ex) = L p $
+      case ex of
+        VarE v    -> VarE v
+        LitE n    -> LitE n
+        LitSymE v -> LitSymE v
+        AppE v _ arg    -> AppE v [] (revertExp arg)
+        PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
+        LetE (v,_,ty,rhs) bod ->
+          LetE (v,[], stripTyLocs ty, revertExp rhs) (revertExp bod)
+        IfE a b c  -> IfE (revertExp a) (revertExp b) (revertExp c)
+        MkProdE ls -> MkProdE $ L.map revertExp ls
+        ProjE i e  -> ProjE i (revertExp e)
+        CaseE scrt brs     -> CaseE (revertExp scrt) (L.map docase brs)
+        DataConE _ dcon ls -> DataConE () dcon $ L.map revertExp ls
+        TimeIt e ty b -> TimeIt (revertExp e) (stripTyLocs ty) b
+        Ext ext ->
+          case ext of
+            LetRegionE _ bod -> unLoc $ revertExp bod
+            LetLocE _ _ bod  -> unLoc $ revertExp bod
+            RetE _ v -> VarE v
+            FromEndE{} -> error "revertExp: TODO FromEndLE"
+            BoundsCheck{} -> error "revertExp: TODO BoundsCheck"
+            IndirectionE{} -> error "revertExp: TODO IndirectionE"
+        MapE{}  -> error $ "revertExp: TODO MapE"
+        FoldE{} -> error $ "revertExp: TODO FoldE"
+
+    -- Ugh .. this is bad. Can we remove the identity cases here ?
+    -- TODO: Get rid of this (and L3.toL3Prim) soon.
+    revertPrim :: Prim Ty2 -> Prim L1.Ty1
+    revertPrim pr =
+      case pr of
+        AddP      -> AddP
+        SubP      -> SubP
+        MulP      -> MulP
+        DivP      -> DivP
+        ModP      -> ModP
+        EqSymP    -> EqSymP
+        EqIntP    -> EqIntP
+        LtP       -> LtP
+        GtP       -> GtP
+        MkTrue    -> MkTrue
+        MkFalse   -> MkFalse
+        SizeParam -> SizeParam
+        SymAppend -> SymAppend
+        DictInsertP ty -> DictInsertP (stripTyLocs ty)
+        DictLookupP ty -> DictLookupP (stripTyLocs ty)
+        DictEmptyP  ty -> DictEmptyP  (stripTyLocs ty)
+        DictHasKeyP ty -> DictHasKeyP (stripTyLocs ty)
+        ErrorP s ty    -> ErrorP s (stripTyLocs ty)
+        ReadPackedFile fp tycon ty -> ReadPackedFile fp tycon (stripTyLocs ty)
+        MkNullCursor -> MkNullCursor
+        PEndOf -> error "Do not use PEndOf after L2."
+
+    docase :: (DataCon, [(Var,LocVar)], L Exp2) -> (DataCon, [(Var,())], L L1.Exp1)
+    docase (dcon,vlocs,rhs) =
+      let (vars,_) = unzip vlocs
+      in (dcon, zip vars (repeat ()), revertExp rhs)
 
 mapPacked :: (Var -> l -> UrTy l) -> UrTy l -> UrTy l
 mapPacked fn t =
