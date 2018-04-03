@@ -181,7 +181,8 @@ exp ddfs env2 (L sloc e0) =
                               return (k,vrs, flatLets b2 rhs')
                      return (b, CaseE e' ls')
     -- TimeIt is treated like a conditional.  Don't lift out of it:
-    TimeIt e t b -> do (bnd,e') <- go e
-                       return ([], TimeIt (flatLets bnd e') t b)
+    TimeIt e _t b -> do
+      (bnd,e') <- go e
+      return ([], TimeIt (flatLets bnd e') (gTypeExp ddfs env2 e) b)
     MapE _ _      -> error "FINISHLISTS"
     FoldE _ _ _   -> error "FINISHLISTS"
