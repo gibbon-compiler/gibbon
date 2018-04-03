@@ -681,7 +681,7 @@ inferExp env@FullEnv{dataDefs}
           (arg',aty,acs) <- inferExp env arg argDest
           res <- inferExp (extendVEnv vr valTy env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr res
-          vcs <- tryNeedRegion (locsInTy argTy ++ locsInTy valTy) ty'' $ acs ++ cs''
+          vcs <- tryNeedRegion (locsInTy valTy) ty'' $ acs ++ cs''
           fcs <- tryInRegion vcs
           -- fcs <- tryInRegion $ acs ++ cs''
           res <- tryBindReg (lc$ L2.LetE (vr,[], valTy, L sl2 $ L2.AppE f (locsInTy aty ++ locsInTy valTy) arg') bod'', ty'', fcs)
