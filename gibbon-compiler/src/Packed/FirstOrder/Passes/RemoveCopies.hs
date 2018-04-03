@@ -48,7 +48,7 @@ removeCopiesFn ddefs fundefs f@FunDef{funarg,funty,funbod} = do
 removeCopiesExp :: DDefs Ty2 -> NewFuns -> LocEnv -> Env2 Ty2 -> L L2.Exp2 -> SyM (L L2.Exp2)
 removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
   case ex of
-    AppE f [lin,lout] _ | isCopyFunName f -> do
+    AppE f [lin,lout] arg | isCopyFunName f -> do
       let (PackedTy tycon _) = gTypeExp ddefs env2 ex
       indirection <- gensym "indirection"
       -- Get the indirection datacon for this type
@@ -58,17 +58,17 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
         [dcon] -> do
           return $ unLoc $
             mkLets ([(indirection,[],PackedTy tycon lout,
-                      l$ Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin))])
+                      l$ Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin) arg)])
             (l$ VarE indirection)
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
-    LetE (v,locs,ty@(PackedTy tycon _), (L _ (AppE f [lin,lout] _))) bod | isCopyFunName f -> do
+    LetE (v,locs,ty@(PackedTy tycon _), (L _ (AppE f [lin,lout] arg))) bod | isCopyFunName f -> do
       -- Get the indirection datacon for this type
       let indrDcon = filter isIndirectionTag $ getConOrdering ddefs tycon
       case indrDcon of
         [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
         [dcon] -> do
-          LetE (v,locs,ty, l$ Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin)) <$>
+          LetE (v,locs,ty, l$ Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin) arg) <$>
             removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 

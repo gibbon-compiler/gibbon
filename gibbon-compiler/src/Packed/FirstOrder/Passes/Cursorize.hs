@@ -478,7 +478,7 @@ Reason: unariser can only eliminate direct projections of this form.
 
         BoundsCheck i bound cur -> return <$> dl <$> Ext $ L3.BoundsCheck i bound cur
 
-        IndirectionE _ dcon (at,r1) (to,r2) -> do
+        IndirectionE _ dcon (at,r1) (to,r2) _ -> do
           onDi (mkLets [("_",[],IntTy, l$ Ext (L3.BumpRefCount (toEndV r1) (toEndV r2)))]) <$>
             go tenv (l$ DataConE at dcon [l$ VarE to])
 

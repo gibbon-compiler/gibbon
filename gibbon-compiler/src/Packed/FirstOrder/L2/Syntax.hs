@@ -97,7 +97,7 @@ data E2Ext loc dec =
   | RetE [loc] Var     -- ^ Return a value together with extra loc values.
   | FromEndE loc -- ^ Bind a location from an EndOf location (for RouteEnds and after)
   | BoundsCheck Int loc loc  -- ^ Bytes required, region, write cursor
-  | IndirectionE TyCon DataCon (loc,Var) (loc,Var) -- ^ An inter-region indirection
+  | IndirectionE TyCon DataCon (loc,Var) (loc,Var) (L (E2 loc dec)) -- ^ An inter-region indirection
  deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 -- instance Read (E2 l d) where
@@ -154,7 +154,7 @@ instance (Out l, Show l, Typeable (L (E2 l (UrTy l)))) => Typeable (E2Ext l (UrT
                                Nothing -> error $ "gTypeExp: unbound variable " ++ sdoc var
       FromEndE _loc       -> error $ "Shouldn't enconter FromEndE in tail position"
       BoundsCheck{}       -> error $ "Shouldn't enconter BoundsCheck in tail position"
-      IndirectionE tycon _ _ (to,_) -> PackedTy tycon to
+      IndirectionE tycon _ _ (to,_) _ -> PackedTy tycon to
 
 
 instance (Out l, Show l, Typeable (L (E2 l (UrTy l))),
@@ -350,6 +350,9 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         LitSymE v -> LitSymE v
         AppE v _ arg    -> AppE v [] (revertExp arg)
         PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
+        LetE (v,locs,ty, L _ (Ext (IndirectionE _ _ _ _ arg))) bod ->
+          let PackedTy tycon _ =  ty in
+          LetE (v,[],(stripTyLocs ty), l$ AppE (mkCopyFunName tycon) [] (revertExp arg)) (revertExp bod)
         LetE (v,_,ty,rhs) bod ->
           LetE (v,[], stripTyLocs ty, revertExp rhs) (revertExp bod)
         IfE a b c  -> IfE (revertExp a) (revertExp b) (revertExp c)
@@ -528,7 +531,7 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               RetE locs _     -> S.fromList locs `S.union` gFreeVars ex
               FromEndE loc    -> S.singleton loc
               BoundsCheck _ reg cur -> S.fromList [reg,cur]
-              IndirectionE _ _ (a,b) (c,d) -> S.fromList $ [a,b,c,d]
+              IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
           _ -> gFreeVars ex
 
 

@@ -1396,7 +1396,8 @@ indrIDFun = FunDef "indrID" indrIDTy "tr800" indrIDBod
                          l$ Ext $ IndirectionE "Tree"
                                                (indirectionTag++"1")
                                                ("lout803","r803")
-                                               ("lin802", "r801")) $
+                                               ("lin802", "r801")
+                                               (l$ LitE 10)) $
                 l$ VarE ("a804")
 
 
