@@ -54,7 +54,7 @@ testDir = makeValid ("examples" </> "build_tmp")
 runT :: Prog -> L3.Prog
 runT prg = fst $ runSyM 0 $ do
     l2 <- flattenL2 prg
-    l2 <- inferRegScope l2
+    l2 <- inferRegScope Infinite l2
     l2 <- inferEffects l2
     l2 <- tcProg l2
     l2 <- routeEnds l2

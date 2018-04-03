@@ -21,17 +21,17 @@ import Packed.FirstOrder.L2.Syntax as L2
 -- All regions are "infinite" right now
 
 -- | Infer multiplicity for a program annotated with regions & locations
-inferRegScope :: L2.Prog -> SyM L2.Prog
-inferRegScope Prog{ddefs,fundefs,mainExp} = do
-  let fds' = map inferRegScopeFun $ M.elems fundefs
+inferRegScope :: Multiplicity -> L2.Prog -> SyM L2.Prog
+inferRegScope mul Prog{ddefs,fundefs,mainExp} = do
+  let fds' = map (inferRegScopeFun mul) $ M.elems fundefs
       fundefs' = M.fromList $ map (\f -> (funname f,f)) fds'
       mainExp' = case mainExp of
                    Nothing -> Nothing
-                   Just (mn, ty) -> Just (inferRegScopeExp mn,ty)
+                   Just (mn, ty) -> Just (inferRegScopeExp mul mn,ty)
   return $ Prog ddefs fundefs' mainExp'
 
-inferRegScopeFun :: L2.FunDef -> L2.FunDef
-inferRegScopeFun f@FunDef{funbod} = f {funbod = inferRegScopeExp funbod}
+inferRegScopeFun :: Multiplicity -> L2.FunDef -> L2.FunDef
+inferRegScopeFun mul f@FunDef{funbod} = f {funbod = inferRegScopeExp mul funbod}
 
 {- Region scoping rules:
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -67,8 +67,8 @@ In fnB, there's no path from `rb` to 1.
 -- | Decide if a region should be global or local (dynamic).
 --
 --  Dynamic regions are stack allocated and automatically freed
-inferRegScopeExp :: L L2.Exp2 -> L L2.Exp2
-inferRegScopeExp (L p ex) = L p $
+inferRegScopeExp :: Multiplicity -> L L2.Exp2 -> L L2.Exp2
+inferRegScopeExp mul (L p ex) = L p $
   case ex of
     Ext ext ->
       case ext of
@@ -92,14 +92,14 @@ inferRegScopeExp (L p ex) = L p $
                      -- a path between the region variable and the thing returned.
                      -- TODO: Warn the user when this happens in a fn ?
                  in if path g retVertex regVertex
-                    then Ext$ LetRegionE (GlobR regV Infinite) (inferRegScopeExp rhs)
+                    then Ext$ LetRegionE (GlobR regV mul) (go rhs)
                     -- [2018.03.30] - TEMP: Turning off scoped buffers.
-                    -- else Ext$ LetRegionE (DynR regV Infinite) (inferRegScopeExp rhs)
-                    else Ext$ LetRegionE (GlobR regV Infinite) (inferRegScopeExp rhs)
+                    -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
+                    else Ext$ LetRegionE (GlobR regV mul) (go rhs)
                [] -> ex
 
         -- Straightforward recursion
-        LetLocE loc le bod -> Ext $ LetLocE loc le (inferRegScopeExp bod)
+        LetLocE loc le bod -> Ext $ LetLocE loc le (go bod)
         RetE{}     -> Ext ext
         FromEndE{} -> Ext ext
         BoundsCheck{} -> Ext ext
@@ -112,11 +112,13 @@ inferRegScopeExp (L p ex) = L p $
     AppE{}     -> ex
     PrimAppE{} -> ex
     DataConE{} -> ex
-    ProjE i e  -> ProjE i (inferRegScopeExp e)
-    IfE a b c  -> IfE a (inferRegScopeExp b) (inferRegScopeExp c)
-    MkProdE ls -> MkProdE $ map inferRegScopeExp ls
-    LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty, inferRegScopeExp rhs) (inferRegScopeExp bod)
-    CaseE scrt mp -> CaseE scrt $ map (\(a,b,c) -> (a,b, inferRegScopeExp c)) mp
-    TimeIt e ty b -> TimeIt (inferRegScopeExp e) ty b
+    ProjE i e  -> ProjE i (go e)
+    IfE a b c  -> IfE a (go b) (go c)
+    MkProdE ls -> MkProdE $ map go ls
+    LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty, go rhs) (go bod)
+    CaseE scrt mp -> CaseE scrt $ map (\(a,b,c) -> (a,b, go c)) mp
+    TimeIt e ty b -> TimeIt (go e) ty b
     MapE{}  -> error $ "inferRegScopeExp: TODO MapE"
     FoldE{} -> error $ "inferRegScopeExp: TODO FoldE"
+  where
+    go = inferRegScopeExp mul

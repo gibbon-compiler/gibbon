@@ -29,7 +29,7 @@ import Test.Tasty
 runT :: Prog -> L3.Prog
 runT prg = fst $ runSyM 0 $ do
   l2 <- inferEffects prg
-  l2 <- inferRegScope l2
+  l2 <- inferRegScope Infinite l2
   l2 <- L2.tcProg l2
   l2 <- routeEnds l2
   l2 <- L2.tcProg l2

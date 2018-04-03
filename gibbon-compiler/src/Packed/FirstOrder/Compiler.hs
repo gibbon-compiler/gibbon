@@ -117,6 +117,7 @@ data Config = Config
   , exefile   :: Maybe FilePath -- ^ Optional override to destination binary file.
   , backend   :: Backend -- ^ Compilation backend used
   , stopAfter    :: String  -- ^ Stop the compilation pipeline after this pass
+  , multiplicity :: Multiplicity
   }
   deriving (Show,Read,Eq,Ord)
 
@@ -159,6 +160,7 @@ defaultConfig =
          , exefile = Nothing
          , backend = C
          , stopAfter = ""
+         , multiplicity = Infinite
          }
 
 suppress_warnings :: String
@@ -199,6 +201,7 @@ configParser = Config <$> inputParser
                       <*> backendParser
                       <*> ((strOption $ long "stop-after" <> help "Stop the compilation pipeline after this pass")
                             <|> pure (stopAfter defaultConfig))
+                      <*> multiplicityParser
  where
   inputParser :: Parser Input
                 -- I'd like to display a separator and some more info.  How?
@@ -221,6 +224,9 @@ configParser = Config <$> inputParser
   backendParser :: Parser Backend
   backendParser = flag C LLVM (long "llvm" <> help "use the llvm backend for compilation")
 
+
+  multiplicityParser :: Parser Multiplicity
+  multiplicityParser = flag Infinite BigInfinite (long "biginfinite" <> help "use biginfinite regions.")
 
 -- | Parse configuration as well as file arguments.
 configWithArgs :: Parser (Config,[FilePath])
@@ -385,7 +391,7 @@ interpProg l1 =
 
 -- | The main compiler pipeline
 passes :: Config -> L1.Prog -> StateT CompileState IO L4.Prog
-passes config@Config{mode,packed} l1 = do
+passes config@Config{mode,packed,multiplicity} l1 = do
       l1 <- goE "typecheck"  L1.tcProg l1
       l1 <- goE "freshNames" freshNames l1
       -- If we are executing a benchmark, then we
@@ -409,11 +415,13 @@ passes config@Config{mode,packed} l1 = do
               l2 <- go "inferEffects"     inferEffects  l2
               -- TODO: Enable after some minor fixes in InferLocs
               l2 <- go "smartAddLayout"  smartAddLayout l2
-              l2 <- go "inferRegScope"    inferRegScope l2
+              l2 <- go "inferRegScope"    (inferRegScope multiplicity) l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "routeEnds"        routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- go "boundsCheck"      boundsCheck   l2
+              l2 <- if multiplicity == Infinite
+                    then go "boundsCheck" boundsCheck   l2
+                    else return l2
               l2 <- go "threadRegions"    threadRegions l2
               -- Note: L2 -> L3
               l3 <- go "cursorize"        cursorize     l2
