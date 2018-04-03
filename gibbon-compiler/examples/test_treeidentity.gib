@@ -1,0 +1,10 @@
+#lang gibbon
+
+(require "test_ddtree.gib")
+(require "test_buildtree.gib")
+
+(define (id [tr : Tree]) : Tree
+  tr)
+
+(let ([x : Tree (id (buildtree 10))])
+  10)
