@@ -1,0 +1,3 @@
+[submodule "BintreeBench"]
+	path = BintreeBench
+	url = git@github.com:iu-parfunc/BintreeShootout.git
