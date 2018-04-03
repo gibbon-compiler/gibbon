@@ -282,7 +282,7 @@ RegionTy* alloc_region(IntTy size) {
     reg->start_ptr = start;
 
     // Write the footer
-    RegionFooter* footer = malloc(sizeof(RegionFooter));
+    RegionFooter* footer = (RegionFooter *) end;
     footer->size = size;
     footer->refcount_ptr = &(reg->refcount);
     footer->outset_ptr = NULL;
@@ -311,7 +311,7 @@ ChunkTy alloc_chunk(CursorTy end_ptr) {
     footer->next = end;
 
     // Write the footer
-    RegionFooter* new_footer = malloc(sizeof(RegionFooter));
+    RegionFooter* new_footer = (RegionFooter *) end;
     new_footer->size = newsize;
     new_footer->refcount_ptr = footer->refcount_ptr;
     new_footer->outset_ptr = NULL;
