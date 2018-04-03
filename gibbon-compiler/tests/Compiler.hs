@@ -177,7 +177,7 @@ case_indrrightmost :: Assertion
 case_indrrightmost = runner "indrrightmost.c" indrRightmostProg "1"
 
 case_indrbuildtree :: Assertion
-case_indrbuildtree = runner "indrbuildtree.c" indrBuildTreeProg "(Node^ (INDIRECTION1 ) (Node^ (INDIRECTION1 ) (Node^ (INDIRECTION1 ) (Leaf 1) (Leaf 1)) (Node^ (INDIRECTION1 ) (Leaf 1) (Leaf 1))) (Node^ (INDIRECTION1 ) (Node^ (INDIRECTION1 ) (Leaf 1) (Leaf 1)) (Node^ (INDIRECTION1 ) (Leaf 1) (Leaf 1))))"
+case_indrbuildtree = runner "indrbuildtree.c" indrBuildTreeProg "(Node^ (Node^ (Node^ (Leaf 1) (Leaf 1)) (Node^ (Leaf 1) (Leaf 1))) (Node^ (Node^ (Leaf 1) (Leaf 1)) (Node^ (Leaf 1) (Leaf 1))))"
 
 case_indr_rightmost_dot_id :: Assertion
 case_indr_rightmost_dot_id = runner "indrrid.c" indrIDProg "1"

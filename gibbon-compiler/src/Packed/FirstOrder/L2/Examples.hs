@@ -1291,7 +1291,7 @@ ddtree' = fromListDD [DDef (toVar "Tree")
                        [ ("Leaf",[(False,IntTy)])
                        , ("Node",[ (False,PackedTy "Tree" "l")
                                  , (False,PackedTy "Tree" "l")])
-                       , ("Node^", [ (False,PackedTy "Tree" "l")
+                       , ("Node^", [ (False,CursorTy)
                                    , (False,PackedTy "Tree" "l")
                                    , (False,PackedTy "Tree" "l")])
                        , (indirectionTag++"1", [(False,CursorTy)])
@@ -1317,7 +1317,7 @@ indrBuildTreeFun = FunDef "indrBuildTree" indrBuildTreeTy "i270" indrBuildTreeBo
                        (l$ DataConE "lout272" "Leaf" [l$ LitE 1])
                        (l$ LetE ("i273",[], IntTy, l$ PrimAppE SubP [l$ VarE "i270", l$ LitE 1]) $
                         l$ Ext $ LetLocE "loc_indr" (AfterConstantLE 1 "lout272") $
-                        l$ Ext $ LetLocE "l274" (AfterConstantLE 9 "loc_indr") $
+                        l$ Ext $ LetLocE "l274" (AfterConstantLE 8 "loc_indr") $
                         l$ LetE ("x275",[],PackedTy "Tree" "l274",
                                  l$ AppE "indrBuildTree" ["l274"] (l$ VarE "i273")) $
                         l$ Ext $ LetLocE "l276" (AfterVariableLE "x275" "l274") $
@@ -1325,10 +1325,10 @@ indrBuildTreeFun = FunDef "indrBuildTree" indrBuildTreeTy "i270" indrBuildTreeBo
                                  l$ AppE "indrBuildTree" ["l276"] (l$ VarE "i273")) $
                         l$ LetE ("indr_cur",[],CursorTy,
                                  l$ PrimAppE PEndOf [l$ VarE "x275"]) $
-                        l$ LetE ("indr_node",[], PackedTy "Tree" "loc_indr",
-                                 l$ DataConE "loc_indr" (indirectionTag++"1") [l$ VarE "indr_cur"]) $
+                        -- l$ LetE ("indr_node",[], PackedTy "Tree" "loc_indr",
+                        --          l$ DataConE "loc_indr" (indirectionTag++"1") [l$ VarE "indr_cur"]) $
                         l$ LetE ("a278",[],PackedTy "Tree" "lout272",
-                                 l$ DataConE "lout272" "Node^" [l$ VarE "indr_node",
+                                 l$ DataConE "lout272" "Node^" [l$ VarE "indr_cur",
                                                                 l$ VarE "x275",
                                                                 l$ VarE "y277"]) $
                         l$ VarE "a278")
