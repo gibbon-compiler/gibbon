@@ -8,4 +8,4 @@
     [(Leaf n) n]
     [(Node x y) (rightmost y)]))
 
-(rightmost (buildtree 5))
+(rightmost (Node (Leaf 10) (Leaf 5)))

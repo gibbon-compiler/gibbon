@@ -408,7 +408,7 @@ passes config@Config{mode,packed} l1 = do
               l2 <- go "removeCopies"     removeCopies  l2
               l2 <- go "inferEffects"     inferEffects  l2
               -- TODO: Enable after some minor fixes in InferLocs
-              -- l2 <- go "smartAddLayout"  smartAddLayout l2
+              l2 <- go "smartAddLayout"  smartAddLayout l2
               l2 <- go "inferRegScope"    inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "routeEnds"        routeEnds     l2

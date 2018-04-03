@@ -90,6 +90,7 @@ smartAddLayout :: L2.Prog -> SyM L2.Prog
 smartAddLayout prg =
   if  needsLayout prg
   then do
+    dbgTrace 5 (" [addLayout] Updating layout to have indirections ") (return ())
     let l1 = L2.revertToL1 prg
     l1 <- addLayout l1
     l2 <- inferLocs l1
