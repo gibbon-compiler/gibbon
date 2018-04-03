@@ -11,6 +11,8 @@ import Packed.FirstOrder.Common hiding (FunDef(..))
 import Packed.FirstOrder.L1.Syntax hiding (Prog(..), FunDef(..))
 import Packed.FirstOrder.L2.Syntax as L2
 
+--------------------------------------------------------------------------------
+
 -- Maps a location to a region
 type LocEnv = M.Map LocVar Var
 
@@ -39,6 +41,28 @@ threadRegionsExp :: DDefs Ty2 -> NewFuns -> Bool -> LocEnv -> Env2 Ty2 -> L L2.E
               -> SyM (L L2.Exp2)
 threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
   case ex of
+    AppE f applocs arg -> do
+      let ty = gTypeExp ddefs env2 ex
+          argty = gTypeExp ddefs env2 arg
+          argtylocs = getTyLocs argty
+          argregs = foldr (\x acc -> case M.lookup x lenv of
+                                       Just r -> r:acc
+                                       Nothing -> acc)
+                    [] argtylocs
+      case ty of
+        _ | hasPacked ty -> do
+          let fnty = funty $ fundefs # f
+              arrOutMp = M.fromList $ zip (allLocVars fnty) applocs
+              -- TODO: Fix this in gTypeExp
+              outT'  = substTy arrOutMp ty
+              tylocs = getTyLocs outT'
+              regs   = map (lenv #) tylocs
+          let newapplocs = nub $ (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
+          return $ AppE f newapplocs arg
+        _ -> do
+          let newapplocs = nub $ (map toEndV argregs) ++ applocs
+          return $ AppE f newapplocs arg
+
     LetE (v,locs,ty, (L _ (AppE f applocs arg))) bod -> do
       let argty = gTypeExp ddefs env2 arg
           argtylocs = getTyLocs argty
@@ -109,7 +133,6 @@ threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
     VarE{}     -> return ex
     LitE{}     -> return ex
     LitSymE{}  -> return ex
-    AppE{}     -> return ex
     PrimAppE{} -> return ex
     DataConE{} -> return ex
     ProjE i e  -> ProjE i <$> go e

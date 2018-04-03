@@ -6,5 +6,7 @@
 (define (id [tr : Tree]) : Tree
   tr)
 
-(let ([x : Tree (id (buildtree 10))])
-  10)
+(let ([tr0 : Tree (buildtree 10)])
+  (let ([tr1 : Tree (iterate (let ([tr2 : Tree (id tr0)])
+                               tr2))])
+    10))
