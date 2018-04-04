@@ -5,12 +5,7 @@
 (define (foo [ev : Foo]) : Foo
   (case ev
     [(A x) (B x)]    
-    [(B y) ev] ;; Needs copy-insertion.  This can be as simple as "B y".
-               ;; It could call an out-of-line copy function but that would be wasteful.
-    ; [(B y) (A y)]
-    ))
+    [(B y) ev]))
 
-(foo (A 1))
-
-;; This will make --packed fail currently:
-; (foo (B 33))
+(let ([x : Foo (foo (A 1))])
+  0)

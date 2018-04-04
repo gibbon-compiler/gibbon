@@ -4,8 +4,6 @@
       [Leaf Int]
       [Node Tree Tree])
 
-(data Result [Success])
-
 (define (build-tree [n : Int]) : Tree
   (if (= n 0)
       (Leaf 1)
@@ -21,4 +19,4 @@
 ;; Here we time a fold over the tree:
 (let ((tr0 : Tree (build-tree (size-param))))
   (let ((tr1 : Tree (iterate (id-tree tr0))))
-    (Success)))
+    0))

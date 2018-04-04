@@ -5,4 +5,5 @@
 (define (id2 [ev : Foo]) : Foo
   (if True ev ev))
 
-(id2 (A 1))
+(let ([a : Foo (id2 (A 1))])
+  0)

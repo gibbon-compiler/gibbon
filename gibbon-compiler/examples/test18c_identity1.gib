@@ -5,4 +5,5 @@
 ;; Foo_a -{}-> Foo_a
 (define (id [x : Foo]) : Foo x)
 
-(id (A 1))
+(let ([a : Foo (id (A 1))])
+  0)

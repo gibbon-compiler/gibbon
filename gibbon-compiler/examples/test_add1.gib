@@ -10,4 +10,5 @@
     [(Leaf n) (Leaf (+ n 1))]
     [(Node x y) (Node (add1 x) (add1 y))]))
 
-(add1 (Node (Node (Leaf 1) (Leaf 1)) (Node (Leaf 1) (Leaf 1))))
+(let ([tr : Tree (add1 (Node (Node (Leaf 1) (Leaf 1)) (Node (Leaf 1) (Leaf 1))))])
+  0)

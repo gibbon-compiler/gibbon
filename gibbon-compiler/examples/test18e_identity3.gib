@@ -7,4 +7,5 @@
     [(A x) ev]
     [(B y) ev]))
 
-(id3 (A 1))
+(let ([a : Foo (id3 (A 1))])
+  0)
