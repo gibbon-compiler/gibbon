@@ -436,7 +436,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
 
     TimeIt e t b -> do
       Di e' <- go tenv e
-      return $ Di $ l$ TimeIt e' (L3.stripTyLocs t) b
+      return $ Di $ l$ TimeIt e' (L3.cursorizeTy t) b
 
     Ext ext ->
       case ext of

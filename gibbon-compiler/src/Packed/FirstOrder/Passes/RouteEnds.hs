@@ -275,6 +275,11 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                  -- we fmap location at the top-level case expression
                  fmap unLoc $ exp fns retlocs eor lenv afterenv (l$ e')
 
+          LetE (v,ls,PackedTy n l,e1@(L _ TimeIt{})) e2 -> do
+                 e1' <- exp fns retlocs eor lenv afterenv e1
+                 e2' <- exp fns retlocs eor (M.insert v l lenv) afterenv e2
+                 return $ LetE (v,ls,PackedTy n l,e1') e2'
+
           -- Less exciting LetE case, just recur on the body with an updated lenv
           LetE (v,ls,PackedTy n l,e1) e2 -> do
                  e2' <- exp fns retlocs eor (M.insert v l lenv) afterenv e2

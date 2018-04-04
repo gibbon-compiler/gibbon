@@ -18,7 +18,16 @@
 (define (id-tree [tr : Tree]) : Tree
   tr)
 
+(define (sumtree [tr : Tree]) : Int
+  (case tr
+    [(Leaf n) n]
+    [(Node x y)
+     (let ([sumx : Int (sumtree x)])
+       (let ([sumy : Int (sumtree y)])
+         (+ sumx sumy)))]))
+
 ;; Here we time a fold over the tree:
-(let ((tr0 : Tree (build-tree (size-param))))
-  (let ((tr1 : Tree (iterate (id-tree tr0))))
-    (Success)))
+(let ((tr0 : Tree (build-tree 2)))
+  (let ((tr1 : Tree (iterate (let ([tr2 : Tree (id-tree tr0)])
+                               tr2))))
+    (sumtree tr0)))
