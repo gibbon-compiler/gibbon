@@ -182,6 +182,38 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
     PrimAppE pr args -> PrimAppE (L3.toL3Prim pr) <$> mapM go args
 
     -- Same as `cursorizePackedExp`
+    LetE (v,_locs,ProdTy tys, rhs@(L _ (MkProdE ls))) bod -> do
+      es <- forM (zip tys ls) $ \(ty,e) -> do
+              case ty of
+                  _ | isPackedTy ty -> fromDi <$> cursorizePackedExp ddfs fundefs denv tenv e
+                  _ | hasPacked ty  -> error $ "cursorizePackedExp: nested tuples" ++ sdoc rhs
+                  _ -> cursorizeExp ddfs fundefs denv tenv e
+      let rhs' = l$ MkProdE es
+          ty   = gTypeExp ddfs (Env2 tenv M.empty) rhs
+          ty'  = L3.cursorizeTy ty
+      LetE (v,[],ty', rhs') <$>
+        cursorizeExp ddfs fundefs denv (M.insert v ty' tenv) bod
+
+
+    -- Same as `cursorizePackedExp`
+    LetE (v,_locs,ty, rhs@(L _ ProjE{})) bod | isPackedTy ty -> do
+      rhs' <- go rhs
+      let ty'  = gTypeExp ddfs (Env2 tenv M.empty) rhs
+          ty'' = L3.cursorizeTy ty'
+          bnds = if isPackedTy ty'
+                 then [ (v       ,[], projValTy ty'' , mkProjE 0 rhs')
+                      , (toEndV v,[], projEndsTy ty'', mkProjE 1 rhs')
+                      ]
+                 else [(v,[], ty'', rhs')]
+
+          tenv' = if isPackedTy ty'
+                  then M.union (M.fromList [(v,ty'), (toEndV v, projEndsTy ty')]) tenv
+                  else M.insert v ty' tenv
+      bod' <- cursorizeExp ddfs fundefs denv tenv' bod
+      return $ unLoc $ mkLets bnds bod'
+
+
+    -- Same as `cursorizePackedExp`
     LetE bnd bod -> cursorizeLet ddfs fundefs denv tenv False bnd bod
 
     IfE a b c  -> IfE <$> go a <*> go b <*> go c
@@ -236,6 +268,7 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
 
   where
     go = cursorizeExp ddfs fundefs denv tenv
+    toEndV = varAppend "end_"
 
 
 -- Cursorize expressions producing `Packed` values
@@ -341,7 +374,14 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
       return $ Di $ mkLets bnds bod'
 
 
-    MkProdE{} -> error "cursorizePackedExp: unexpected MkProdE"
+    MkProdE ls -> do
+      let tys = L.map (gTypeExp ddfs (Env2 tenv M.empty)) ls
+      es <- forM (zip tys ls) $ \(ty,e) -> do
+              case ty of
+                  _ | isPackedTy ty -> fromDi <$> cursorizePackedExp ddfs fundefs denv tenv e
+                  _ -> cursorizeExp ddfs fundefs denv tenv e
+      let rhs' = l$ MkProdE es
+      return $ Di rhs'
 
     LetE bnd bod -> dl <$> cursorizeLet ddfs fundefs denv tenv True bnd bod
 
@@ -670,6 +710,8 @@ giveStarts ty e =
     ProdTy tys -> case unLoc e of
                     MkProdE es -> l$ MkProdE $ L.map (\(ty',e') -> giveStarts ty' e') (zip tys es)
                     VarE{} -> l$ MkProdE $ L.map (\(ty',n) -> giveStarts ty' (mkProjE n e)) (zip tys [0..])
+                    -- This doesn't look right..
+                    ProjE n x -> giveStarts (tys !! n) (mkProjE 0 (mkProjE n x))
                     oth -> error $ "giveStarts: unexpected expresson" ++ sdoc (oth,ty)
     _ -> e
 
