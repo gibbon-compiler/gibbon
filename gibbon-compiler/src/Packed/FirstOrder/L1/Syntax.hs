@@ -183,9 +183,13 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         PrimAppE MkTrue  [] -> True
         PrimAppE MkFalse [] -> True
         PrimAppE _ _        -> False
-        -- Tuple projections are not inlined
-        ProjE{} -> False
-        MkProdE{} -> False
+
+        ----------------- POLICY DECISION ---------------
+        -- Leave these tuple ops as trivial for now:
+        -- See https://github.com/iu-parfunc/gibbon/issues/86
+        ProjE _ (L _ et) | f et -> True
+                         | otherwise -> False
+        MkProdE ls -> all (\(L _ x) -> f x) ls
                      
         -- DataCon's are a bit tricky.  May want to inline them at
         -- some point if it avoids region conflicts.
