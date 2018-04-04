@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -127,11 +128,6 @@ data FullEnv = FullEnv
 
 extendVEnv :: Var -> Ty2 -> FullEnv -> FullEnv
 extendVEnv v ty fe@FullEnv{valEnv} = fe { valEnv = M.insert v ty valEnv }
-
-lookupVarLoc :: Var -> FullEnv -> LocVar
-lookupVarLoc v env = case lookupVEnv v env of
-                       PackedTy _ lv -> lv
-                       _ -> err $ "Variable does not have location: " ++ (show v)
              
 lookupVEnv :: Var -> FullEnv -> Ty2
 lookupVEnv v FullEnv{valEnv} = valEnv # v
@@ -251,11 +247,6 @@ data Dest = SingleDest LocVar -- TODO: refactor to just be list of locations, or
           | NoDest
             deriving Show
 
-mkDest :: [LocVar] -> Dest
-mkDest [lv] = SingleDest lv
-mkDest [] = NoDest
-mkDest lvs = TupleDest $ L.map (mkDest . (\lv -> [lv])) lvs
-
 destFromType :: Ty2 -> TiM Dest
 destFromType frt = 
   case frt of
@@ -302,31 +293,11 @@ inferExp' env lex0@(L sl1 exp) dest =
                       StartRegionL lv r -> lc$ Ext (LetRegionE r (lc $ Ext (LetLocE lv (StartOfLE r) a)))
                       AfterTagL lv1 lv2 -> lc$ Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
 
-      -- bindAllStartRegions :: Result -> TiM Result
-      -- bindAllStartRegions (expr,ty,constrs) = return $ (expr',ty,[])
-      --     where constrs' = L.nub constrs
-      --           expr' = foldr addLetLoc expr constrs'
-      --           addLetLoc i a =
-      --               case i of
-      --                 StartRegionL lv r -> lc$ Ext (LetLocE lv (StartOfLE r) a)
-      --                 _ -> a
-
-      -- bindAllAfterTags :: Result -> TiM Result
-      -- bindAllAfterTags (expr,ty,constrs) = return $ (expr',ty,[])
-      --     where constrs' = L.nub constrs
-      --           expr' = foldr addLetLoc expr constrs'
-      --           addLetLoc i a =
-      --               case i of
-      --                 AfterTagL lv1 lv2 -> lc$ Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
-      --                 _ -> a
-
   in do res <- inferExp env lex0 dest
-        let (_,_,rcs) = res
         (e,ty,cs) <- bindAllLocations res
         e' <- finishExp e
         let (e'',_s) = cleanExp e'
         return (e'',ty)
-     -- inferExp env lex0 dest >>= bindAllLocations >>= \(a,b,_) -> return (a,b)
                     
 -- | We proceed in a destination-passing style given the target region
 -- into which we must produce the resulting value.
@@ -446,10 +417,6 @@ inferExp env@FullEnv{dataDefs}
                       return (l$ Ext (LetLocE lv1 (AfterVariableLE v lv2) e'), ty', cs')
                _ -> return (e,ty,cs) -- Should this signal an error instead of silently returning?
 
-      handleTrailingBindLocs :: [Var] -> Result -> TiM Result
-      handleTrailingBindLocs (v:vs) res = handleTrailingBindLoc v res >>= handleTrailingBindLocs vs
-      handleTrailingBindLocs _ res = return res
-
       -- | Transforms a result by adding a location binding derived from an AfterVariable constraint
       -- associated with the passed-in variable.
       bindAfterLoc :: Var -> Result -> TiM Result
@@ -502,17 +469,6 @@ inferExp env@FullEnv{dataDefs}
                     return (e',ty',c:cs')
       bindTrivialAfterLoc _ (e,ty,[]) = return (e,ty,[])
 
-      -- | Remove all constraints associated with a list of locations
-      removeLocs :: [LocVar] -> [Constraint] -> [Constraint]
-      removeLocs ls (c:cs) =
-          let lv = case c of
-                     AfterTagL lv _ -> lv
-                     AfterConstantL lv _ _ -> lv
-                     AfterVariableL lv _ _ -> lv
-                     StartRegionL lv _ -> lv
-          in if L.elem lv ls then removeLocs ls cs else c:(removeLocs ls cs)
-      removeLocs ls [] = []
-
       -- | To handle a case expression, we need to bind locations
       -- appropriately for all the fields.
       doCase :: DDefs Ty2 -> FullEnv -> LocVar -> Dest
@@ -527,10 +483,10 @@ inferExp env@FullEnv{dataDefs}
             env' = L.foldr (\(v,ty) a -> extendVEnv v ty a) env $ zip (L.map fst vars') newtys
         res <- inferExp env' rhs dst
         (rhs',ty',cs') <- bindAfterLocs (L.map fst vars') res
-        -- traceShowM cs'
         -- let cs'' = removeLocs (L.map snd vars') cs'
         -- TODO: check constraints are correct and fail/repair if they're not!!!
         return ((con,vars',rhs'),ty',cs')
+
 
   in
   case ex0 of
@@ -574,6 +530,8 @@ inferExp env@FullEnv{dataDefs}
                   unify d loc
                             (return (l$ e',ty',[]))
                             (copy (l$ e',ty,[]) d)
+
+    L1.ProjE{} -> err$ "Invalid tuple projection: " ++ (show ex0)
 
     L1.MkProdE ls ->
       case dest of
@@ -677,6 +635,8 @@ inferExp env@FullEnv{dataDefs}
 
     L1.LetE (vr,locs,bty,L sl2 rhs) bod | [] <- locs ->
       case rhs of
+        L1.VarE{} -> err$ "Unexpected variable aliasing: " ++ (show ex0)
+        
         L1.AppE f [] arg -> do
           let arrty = lookupFEnv f env
           valTy <- freshTyLocs $ arrOut arrty
@@ -688,10 +648,15 @@ inferExp env@FullEnv{dataDefs}
           vcs <- tryNeedRegion (locsInTy valTy) ty'' $ acs ++ cs''
           fcs <- tryInRegion vcs
           -- fcs <- tryInRegion $ acs ++ cs''
-          res <- tryBindReg (lc$ L2.LetE (vr,[], valTy, L sl2 $ L2.AppE f (locsInTy aty ++ locsInTy valTy) arg') bod'', ty'', fcs)
-          bindImmediateDependentLocs (locsInTy aty ++ locsInTy valTy) res
+          res' <- tryBindReg (lc$ L2.LetE (vr,[], valTy, L sl2 $ L2.AppE f (locsInTy aty ++ locsInTy valTy) arg') bod'', ty'', fcs)
+          bindImmediateDependentLocs (locsInTy aty ++ locsInTy valTy) res'
+
+        L1.AppE{} -> err$ "Malformed function application: " ++ (show ex0)
+
+        L1.IfE{} -> err$ "Unexpected conditional in let binding: " ++ (show ex0)
 
         L1.LetE{} -> err $ "Expected let spine, encountered nested lets: " ++ (show lex0)
+                     
         L1.LitE i -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr IntTy env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
@@ -721,8 +686,8 @@ inferExp env@FullEnv{dataDefs}
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs''
           tryBindReg (lc$ L2.LetE (vr,[],IntTy,L sl2 $ L2.LitSymE x) bod'', ty'', fcs)
-        ProjE i e     -> do
-          (e,ProdTy tys,cs) <- inferExp env e NoDest
+        ProjE i arg     -> do
+          (e,ProdTy tys,cs) <- inferExp env arg NoDest
           (bod',ty',cs') <- inferExp (extendVEnv vr (tys !! i) env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs ++ cs')
           fcs <- tryInRegion cs''
@@ -762,11 +727,15 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion vcs
           tryBindReg (lc$ L2.LetE (vr,[],ty,L sl2 $ TimeIt e' ty b) bod'',
                     ty'', fcs)
-          
-        _oth -> err $ "Unhandled case in lhs of let: " ++ (show lex0)
 
-    _oth -> err $ "Unhandled case: " ++ (show lex0)
+        MapE{} -> err$ "MapE unsupported"
+        FoldE{} -> err$ "FoldE unsupported"
+        Ext{} -> err$ "Not expecting any Ext in inferLocs"
 
+    L1.LetE{} -> err$ "Malformed let expression: " ++ (show ex0)
+    L1.MapE{} -> err$ "MapE unsupported"
+    FoldE{} -> err$ "FoldE unsupported"
+    Ext{} -> err$ "Not expecting any Ext in inferLocs"
 
 
 -- TODO: Should eventually allow src and dest regions to be the same
@@ -846,7 +815,9 @@ finishExp (L i e) =
                                     return $ AfterVariableLE v lv'
                        oth -> return oth
              return $ l$ Ext (LetLocE loc' lex' e1')
-      _ -> err $ "Unhandled case in finishExp: " ++ (show e)
+      Ext{} -> err$ "Unexpected Ext: " ++ (show e)
+      MapE{} -> err$ "MapE not supported"
+      FoldE{} -> err$ "FoldE not supported"
 
 -- | Remove unused location bindings
 -- Returns pair of (new exp, set of free locations)
@@ -894,46 +865,11 @@ cleanExp (L i e) =
                                          in (l$ Ext (LetLocE loc lex e'),
                                               S.delete loc $ S.union s' $ S.fromList ls)
                                     else (e',s')
-      _ -> err $ "Unhandled case in cleanExp: " ++ (show e)
-                                      
-                           
--- | Check if a location is contained in a type.
--- This includes locations afterward in a data structure.
-containsLoc :: LocVar -> L2.Ty2 -> [Constraint] -> TiM Bool
-containsLoc lv1 ty cs =
-    case ty of
-      PackedTy _ lv2 ->
-          do lv1' <- finalLocVar lv1
-             lv2' <- finalLocVar lv2
-             if lv1' == lv2'
-             then return True
-             else do lvs <- associatedLocs lv2 cs
-                     return $ elem lv1' lvs
-      _ -> return False
+      Ext{} -> err$ "Unexpected Ext: " ++ (show e)
+      MapE{} -> err$ "MapE not supported"
+      FoldE{} -> err$ "FoldE not supported"
 
--- | Return a list of all locations known to be after a particular
--- location.
-associatedLocs :: LocVar -> [Constraint] -> TiM [LocVar]
-associatedLocs lv (c:cs) =
-    do lv' <- finalLocVar lv
-       lvs <- associatedLocs lv cs
-       case c of
-         AfterConstantL lv1 _v lv2 ->
-             do lv1' <- finalLocVar lv1
-                lv2' <- finalLocVar lv2   
-                if lv' == lv2'
-                then do lvs' <- associatedLocs lv1' cs
-                        return $ L.nub $ lv1' : (lvs ++ lvs')
-                else return lvs
-         AfterVariableL lv1 _v lv2 ->
-             do lv1' <- finalLocVar lv1
-                lv2' <- finalLocVar lv2   
-                if lv' == lv2'
-                then do lvs' <- associatedLocs lv1' cs
-                        return $ L.nub $ lv1' : (lvs ++ lvs')
-                else return lvs
-         _ -> return lvs
-associatedLocs lv [] = return []
+                           
 
 -- | Checks that there are no constraints specifying a location
 -- after the location passed in.
@@ -981,7 +917,7 @@ noBeforeLoc lv [] = return True
 noRegionStart :: LocVar -> [Constraint] -> TiM Bool
 noRegionStart lv (c:cs) =
     case c of
-      StartRegionL lv r -> return False
+      StartRegionL _lv _r -> return False
       _ -> noRegionStart lv cs
 noRegionStart lv [] = return True
 
@@ -990,35 +926,36 @@ noRegionStart lv [] = return True
 -- the store.  In the case of success, the new equalities are placed
 -- in the store /before/ executing the success branch.
 unify :: LocVar -> LocVar -> TiM a -> TiM a -> TiM a
-unify v1 v2 success fail = do
+unify v1 v2 successA failA = do
   ut1 <- lookupUnifyLoc v1
   ut2 <- lookupUnifyLoc v2
   case (ut1,ut2) of
     (FixedLoc l1, FixedLoc l2) ->
-        if l1 == l2 then success else fail
+        if l1 == l2 then successA else failA
     (FreshLoc l1, FixedLoc l2) ->
         do assocLoc l1 (FixedLoc l2)
-           success
+           successA
     (FixedLoc l2, FreshLoc l1) -> 
         do assocLoc l1 (FixedLoc l2)
-           success
+           successA
     (FreshLoc l1, FreshLoc l2) ->
         do assocLoc l1 (FreshLoc l2)
-           success
+           successA
 
 unifyAll :: [Dest] -> [Ty2] -> TiM a -> TiM a -> TiM a
-unifyAll (d:ds) (ty:tys) success fail =
+unifyAll (d:ds) (ty:tys) successA failA =
     case (d,ty) of
-      (SingleDest lv1, PackedTy _ lv2) -> unify lv1 lv2 (unifyAll ds tys success fail) fail
-      (TupleDest ds', ProdTy tys') -> unifyAll ds' tys' (unifyAll ds tys success fail) fail
+      (SingleDest lv1, PackedTy _ lv2) -> unify lv1 lv2 (unifyAll ds tys successA failA) failA
+      (TupleDest ds', ProdTy tys') -> unifyAll ds' tys' (unifyAll ds tys successA failA) failA
       (NoDest, PackedTy _ _) -> err$ "Expected destination for packed type"
       (SingleDest _, ProdTy _ ) -> err$ "Expected prod destination for prod type: " ++ (show (d,ty))
-      (SingleDest _, _) -> unifyAll ds tys success fail
+      (SingleDest _, _) -> unifyAll ds tys successA failA
       (TupleDest _, PackedTy _ _) -> err$ "Expected prod type for prod destination: " ++ (show (d,ty))
-      (TupleDest _, _) -> unifyAll ds tys success fail
-      (NoDest, _) -> unifyAll ds tys success fail
-      _ -> err$ "Unexpected unification case: " ++ (show (d,ty))
-unifyAll [] [] success _ = success
+      (TupleDest _, _) -> unifyAll ds tys successA failA
+      (NoDest, _) -> unifyAll ds tys successA failA
+unifyAll (_:_) [] _ _ = err$ "Mismatched destination and product type arity"
+unifyAll [] (_:_) _ _ = err$ "Mismatched destination and product type arity" 
+unifyAll [] [] successA _ = successA
 
 freshLocVar :: String -> SyM LocVar
 freshLocVar m = gensym (toVar m)
@@ -1041,22 +978,6 @@ notFixedLoc lv = do
   case uv of
     FixedLoc _ -> return False
     _ -> return True
-
-regionNotInType :: Region -> Ty2 -> [Constraint] -> TiM Bool
-regionNotInType r ty cs =
-    case ty of
-      PackedTy _ lv -> do
-              r' <- regionOfLocVar lv cs
-              return $ (Just r) == r'
-      _ -> return True
-
--- TODO: Fix this!! It should return the correct region for *any location*
--- not just the first location in a region.
-regionOfLocVar :: LocVar -> [Constraint] -> TiM (Maybe Region)
-regionOfLocVar lv1 ((StartRegionL lv2 r) : cs) =
-    if lv1 == lv2 then return (Just r) else regionOfLocVar lv1 cs
-regionOfLocVar lv1 (_ : cs) = regionOfLocVar lv1 cs
-regionOfLocVar _ [] = return Nothing
          
 finalLocVar :: LocVar -> TiM LocVar
 finalLocVar v = do
@@ -1169,13 +1090,14 @@ addCopyFns (L1.Prog dfs fds me) = do
   prg <- flattenL1 $ L1.Prog dfs (fds `M.union` (M.mapKeys (toVar . ("copy_" ++) . fromVar) newFns)) me
   return $ inlineTriv $ prg
 
-               
+
 emptyEnv :: FullEnv
 emptyEnv = FullEnv { dataDefs = C.emptyDD
                    , valEnv   = M.empty
                    , funEnv   = M.empty }
 
-
+{--
+               
 t0 :: ArrowTy Ty2
 t0 = fst$ runSyM 0 $
      convertFunTy (snd (L1.funArg fd), L1.funRetTy fd)
@@ -1300,3 +1222,5 @@ mkIdProg mainExp = L1.Prog treeDD
 
 idFun :: L1.FunDef L1.Ty1 (L L1.Exp1)
 idFun = L1.FunDef "id" ("tr",treeTy) treeTy (l$ VarE "tr")
+
+--}
