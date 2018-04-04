@@ -312,6 +312,11 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                  e2' <- exp fns retlocs eor (M.insert v l lenv) afterenv (extendVEnv v ty env2) e2
                  return $ LetE (v,ls,PackedTy n l,e1') e2'
 
+          LetE (v,ls,ty,e1@(L _ TimeIt{})) e2 -> do
+                 e1' <- go e1
+                 e2' <- exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) e2
+                 return $ LetE (v,ls,ty,e1') e2'
+
           -- Most boring LetE case, just recur on body
           LetE (v,ls,ty,e1) e2 -> do
                  e2' <- exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) e2
