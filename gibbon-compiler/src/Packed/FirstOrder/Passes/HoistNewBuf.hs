@@ -46,6 +46,11 @@ hoistExp _ ex0 = return $ gocap ex0
         let (lts1,bod') = go bod in
         ((v,locs,t, nb):lts1, unLoc bod')
 
+    (LetE (v,locs,t, nb@(L _ (Ext (AddCursor _ (L _ (Ext (InitSizeOfBuffer{})))))))
+       bod) ->
+        let (lts1,bod') = go bod in
+        ((v,locs,t, nb):lts1, unLoc bod')
+
     -- boilerplate
     (LetE (v,locs,t,rhs) bod) ->
         let (lts1, rhs') = go rhs

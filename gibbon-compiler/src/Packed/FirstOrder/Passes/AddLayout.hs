@@ -125,19 +125,19 @@ needsLayoutExp ddefs fundefs base special traversed env2 (L _ ex) = base ||
           g = if f `S.member` special then specialTraversal else fnTraversal
           (traversed', base') = g traversed (fundefs # f) (L2.getTyLocs argty)
           base'' = base || base'
-      in needsLayoutExp ddefs fundefs base'' traversed' special env2 arg
-    PrimAppE _ ls -> all (go env2) ls
+      in (needsLayoutExp ddefs fundefs base'' special traversed' env2 arg)
+    PrimAppE{} -> base
     LetE (v,_,ty, L _ (AppE f _ arg)) bod ->
       let argty = gTypeExp ddefs env2 arg
           g = if f `S.member` special then specialTraversal else fnTraversal
           (traversed', base') = g traversed (fundefs # f) (L2.getTyLocs argty)
           base'' = base || base'
-      in (needsLayoutExp ddefs fundefs base'' traversed' special env2 arg) ||
-         (needsLayoutExp ddefs fundefs base'' traversed' special (extendVEnv v ty env2) bod)
+      in (needsLayoutExp ddefs fundefs base'' special traversed' env2 arg) ||
+         (needsLayoutExp ddefs fundefs base'' special traversed' (extendVEnv v ty env2) bod)
     LetE (v,_,ty,rhs) bod ->
       go env2 rhs ||  go (extendVEnv v ty env2) bod
     IfE a b c   -> (go env2 a) || (go env2 b) || (go env2 c)
-    MkProdE ls  -> all (go env2) ls
+    MkProdE{}   -> base
     ProjE _ e   -> go env2 e
     CaseE _ brs -> any id (L.map (docase traversed env2) brs)
     DataConE _ _ ls -> all (go env2) ls
