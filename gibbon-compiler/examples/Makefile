@@ -284,7 +284,7 @@ PACKED_FAILING ?= \
  test12_skip.gib test16_forlist.gib test17_forfold.gib \
  test18b_tupconstraint.gib \
  test18f_flip.gib \
- test20b_bintree.gib test20h_idree.gib \
+ test20b_bintree.gib \
  test24_defs.gib \
  test25d_racketcore.gib test25f_countnodes.gib \
  test26a_treewalk.gib test26_treewalk.gib \
