@@ -538,7 +538,11 @@ inferExp env@FullEnv{dataDefs}
       let e' = lc$ VarE v in
       case dest of
         NoDest -> return (e', lookupVEnv v env, [])
-        TupleDest ds -> err $ "TODO: handle tuple of destinations for VarE"
+        TupleDest ds ->
+           let ProdTy tys = lookupVEnv v env               
+           in unifyAll ds tys
+              (return (e', ProdTy tys, []))
+              (err$ "TODO: support copying parts of tuples")
         SingleDest d  -> do
                   let ty  = lookupVEnv v env
                   loc <- case ty of
@@ -698,7 +702,7 @@ inferExp env@FullEnv{dataDefs}
           lsrec <- mapM (\e -> inferExp env e NoDest) ls
           ty <- lift $ lift $ convertTy bty
           (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
-          let ls' = L.map (\(a,_,_)->a) lsrec
+          let ls' = [a | (a,_,_) <- lsrec]
               cs'' = concat $ [c | (_,_,c) <- lsrec]
           (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ cs'')
           fcs <- tryInRegion cs'''
@@ -722,7 +726,7 @@ inferExp env@FullEnv{dataDefs}
           (bod',ty',cs') <- inferExp (extendVEnv vr (tys !! i) env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs ++ cs')
           fcs <- tryInRegion cs''
-          tryBindReg (lc$ L2.LetE (vr,[],ProdTy tys,L sl2 $ L2.ProjE i e) bod'',
+          tryBindReg (lc$ L2.LetE (vr,[],tys !! i,L sl2 $ L2.ProjE i e) bod'',
                              ty'', fcs)
         CaseE ex ls    -> do
           loc <- lift $ lift $ freshLocVar "scrut"
@@ -736,7 +740,16 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion cs''
           tryBindReg (lc$ L2.LetE (vr,locsInTy rhsTy,rhsTy, L sl2 $ L2.CaseE ex' ([a | (a,_,_) <- pairs])) bod'',
                         ty'', L.nub $ cs ++ fcs)
-        MkProdE ls    -> _mkprod
+        MkProdE ls    -> do
+          lsrec <- mapM (\e -> inferExp env e NoDest) ls
+          ty <- lift $ lift $ convertTy bty
+          (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
+          let als = [a | (a,_,_) <- lsrec]
+              acs = concat $ [c | (_,_,c) <- lsrec]
+              aty = [b | (_,b,_) <- lsrec]
+          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ acs)
+          fcs <- tryInRegion cs'''
+          tryBindReg (lc$ L2.LetE (vr,[], ProdTy aty, L sl2 $ L2.MkProdE als) bod'', ty'', fcs)
         TimeIt e t b       -> do
           lv <- lift $ lift $ freshLocVar "timeit"
           let subdest = case bty of
@@ -992,6 +1005,20 @@ unify v1 v2 success fail = do
     (FreshLoc l1, FreshLoc l2) ->
         do assocLoc l1 (FreshLoc l2)
            success
+
+unifyAll :: [Dest] -> [Ty2] -> TiM a -> TiM a -> TiM a
+unifyAll (d:ds) (ty:tys) success fail =
+    case (d,ty) of
+      (SingleDest lv1, PackedTy _ lv2) -> unify lv1 lv2 (unifyAll ds tys success fail) fail
+      (TupleDest ds', ProdTy tys') -> unifyAll ds' tys' (unifyAll ds tys success fail) fail
+      (NoDest, PackedTy _ _) -> err$ "Expected destination for packed type"
+      (SingleDest _, ProdTy _ ) -> err$ "Expected prod destination for prod type: " ++ (show (d,ty))
+      (SingleDest _, _) -> unifyAll ds tys success fail
+      (TupleDest _, PackedTy _ _) -> err$ "Expected prod type for prod destination: " ++ (show (d,ty))
+      (TupleDest _, _) -> unifyAll ds tys success fail
+      (NoDest, _) -> unifyAll ds tys success fail
+      _ -> err$ "Unexpected unification case: " ++ (show (d,ty))
+unifyAll [] [] success _ = success
 
 freshLocVar :: String -> SyM LocVar
 freshLocVar m = gensym (toVar m)
