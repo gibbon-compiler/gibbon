@@ -1,0 +1,23 @@
+#lang gibbon
+
+(data Tree
+      [Leaf Int]
+      [Node Tree Tree])
+
+(define (buildtree [n : Int]) : Tree
+  (if (= n 0)
+      (Leaf 1)
+      (Node (buildtree (- n 1))
+            (buildtree (- n 1)))))
+
+(define (sumtree [tr : Tree]) : Int
+  (case tr
+    [(Leaf n) n]
+    [(Node x y)
+     (let ([sumx : Int (sumtree x)])
+       (let ([sumy : Int (sumtree y)])
+         (+ sumx sumy)))]))
+
+(let ((tr0 : Tree (buildtree (size-param))))
+  (let ((n : Int (iterate (sumtree tr0))))
+    n))

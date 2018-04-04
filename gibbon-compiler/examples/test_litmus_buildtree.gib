@@ -4,13 +4,13 @@
       [Leaf Int]
       [Node Tree Tree])
 
-(define (build-tree [n : Int]) : Tree
+(define (buildtree [n : Int]) : Tree
   (if (= n 0)
       (Leaf 100)
       (let ([min1  : Int (- n 1)])
-      (let ([l : Tree (build-tree min1)]
-            [r : Tree (build-tree min1)])
-        (Node l r)))))
+        (let ([l : Tree (buildtree min1)]
+              [r : Tree (buildtree min1)])
+          (Node l r)))))
 
 (define (sumtree [tr : Tree]) : Int
   (case tr
@@ -20,5 +20,5 @@
        (let ([sumy : Int (sumtree y)])
          (+ sumx sumy)))]))
 
-(let ((tr0 : Tree (time (build-tree 2))))
+(let ((tr0 : Tree (iterate (buildtree (size-param)))))
   (sumtree tr0))
