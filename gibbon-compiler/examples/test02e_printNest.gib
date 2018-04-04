@@ -4,4 +4,5 @@
 (data Bar (MkBar Foo Foo))
 (data Quux (MkQuux Bar))
 
-(MkQuux (MkBar (MkFoo 1 2) (MkFoo 3 4)))
+(let ([x : Quux (MkQuux (MkBar (MkFoo 1 2) (MkFoo 3 4)))])
+  0)

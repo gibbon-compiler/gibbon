@@ -4,8 +4,6 @@
       [Leaf Int]
       [Node Tree Tree])
 
-(data Result [Success])
-
 (define (build-tree [n : Int]) : Tree
   (if (= n 0)
       (Leaf 1)
@@ -30,4 +28,4 @@
 (let ((tr0 : Tree (build-tree 2)))
   (let ((tr1 : Tree (iterate (let ([tr2 : Tree (id-tree tr0)])
                                tr2))))
-    (sumtree tr0)))
+    (sumtree tr1)))

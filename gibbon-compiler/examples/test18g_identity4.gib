@@ -5,4 +5,10 @@
 (define (id [x : Int] [y : Foo]) : Foo
   y)
 
-(id 10 (A 20))
+(define (unwrap-foo [a : Foo]) : Int
+  (case a
+    [(A x) x]
+    [(B y) y]))
+
+(let ([a : Foo (id 10 (A 20))])
+  (unwrap-foo a))
