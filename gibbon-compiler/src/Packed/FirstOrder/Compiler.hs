@@ -388,13 +388,13 @@ passes config@Config{mode,packed} l1 = do
                      _ -> l1
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    (return . inlineTriv)   l1
-            
+
       -- TODO: Write interpreters for L2 and L3
       l3 <- if packed
             then do
               -- TODO: push data contstructors under conditional
               -- branches before InferLocations.
-              
+
               -- Note: L1 -> L2
               l2 <- go "inferLocations"   inferLocs     l1
               l2 <- go "L2.flatten"       flattenL2     l2
@@ -404,7 +404,14 @@ passes config@Config{mode,packed} l1 = do
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- Note: L2 -> L3
               l3 <- go "cursorize"        cursorize     l2
-              l3 <- go "L3.flatten"       flattenL3     l3
+{-
+[2018.04.04]: Changing the `isTrivial` policy for tuples and projections
+caused some unexpected breakage. Unariser and Lower seem to depend on the
+old policy, and programs produce incorrect output at runtime. It's strange
+that they typecheck without any errors. So if we want to keep the updated
+policy we cannot flatten anything after Cursorize.
+-}
+              -- l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck"     L3.tcProg     l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
               return l3
@@ -415,7 +422,7 @@ passes config@Config{mode,packed} l1 = do
       l3 <- go "L3.typecheck"   L3.tcProg               l3
       l3 <- go "unariser"       unariser                l3
       l3 <- go "L3.typecheck"   L3.tcProg               l3
-      l3 <- go "L3.flatten"     flattenL3               l3
+      -- l3 <- go "L3.flatten"     flattenL3               l3
       let mainTy = fmap snd $   L3.mainExp              l3
       -- Note: L3 -> L4
       l4 <- go "lower" (lower (packed,mainTy))          l3
@@ -475,7 +482,7 @@ pass Config{stopAfter} who fn x = do
   if dbgLvl >= passChatterLvl+1
      then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++sdoc y'
      -- TODO: Switch to a node-count for size output (add to GenericOps):
-     else lift$ dbgPrintLn passChatterLvl $ "   => "++ show (length (sdoc y')) ++ " characters output." 
+     else lift$ dbgPrintLn passChatterLvl $ "   => "++ show (length (sdoc y')) ++ " characters output."
   when (stopAfter == who) $ do
     dbgTrace 0 ("Compilation stopped; --stop-after=" ++ who) (return ())
     liftIO exitSuccess
@@ -484,7 +491,7 @@ pass Config{stopAfter} who fn x = do
 
 passChatterLvl :: Int
 passChatterLvl = 3
-   
+
 
 -- | Like 'pass', but also evaluates and checks the result.
 --
