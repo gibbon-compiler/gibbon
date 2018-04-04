@@ -176,31 +176,33 @@ isSpecialFn :: DDefs L2.Ty2 -> L2.FunDef -> Bool
 isSpecialFn ddefs L2.FunDef{L2.funty, L2.funbod} =
   if traversesAllInputs
   then True
-  else go funbod
+  else go (S.fromList $ L2.inLocVars funty) funbod
   where
     traversesAllInputs =
       length (L2.inLocVars funty) == length (S.toList $ L2.arrEffs funty)
 
-    go :: L L2.Exp2 -> Bool
-    go (L _ e) =
+    go :: S.Set LocVar -> L L2.Exp2 -> Bool
+    go need (L _ e) =
       case e of
         CaseE _ brs -> all docase brs
         -- Straightforward recursion
-        VarE{} -> False
-        LitE{} -> False
-        LitSymE{}  -> False
-        AppE{}     -> False
-        PrimAppE{} -> False
-        LetE (_,_,_,rhs) bod -> (go rhs) || (go bod)
-        IfE a b c  -> (go a) || (go b) || (go c)
-        MkProdE ls -> any go ls
-        ProjE _ e  -> go e
-        DataConE _ _ ls -> any go ls
-        TimeIt e _ _    -> go e
+        VarE{} -> S.null need
+        LitE{} -> S.null need
+        LitSymE{}  -> S.null need
+        AppE{}     -> S.null need
+        PrimAppE{} -> S.null need
+        LetE (_,_,_,(L _ (Ext (L2.IndirectionE _ _ _ (a,_) _)))) bod ->
+          go (S.delete a need) bod
+        LetE (_,_,_,rhs) bod -> (go need rhs) || (go need bod)
+        IfE a b c  -> (go need a) || (go need b) || (go need c)
+        MkProdE ls -> any (go need) ls
+        ProjE _ e  -> go need e
+        DataConE _ _ ls -> any (go need) ls
+        TimeIt e _ _    -> go need e
         Ext ext ->
           case ext of
-            L2.LetLocE _ _ bod   -> go bod
-            L2.LetRegionE _ bod -> go bod
+            L2.LetLocE _ _ bod   -> go need bod
+            L2.LetRegionE _ bod  -> go need bod
             _ -> False
         MapE{}  -> error "isSpecialFn: MapE"
         FoldE{} -> error "isSpecialFn: FoldE"
