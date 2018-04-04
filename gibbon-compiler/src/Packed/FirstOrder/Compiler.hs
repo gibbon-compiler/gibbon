@@ -431,8 +431,9 @@ caused some unexpected breakage. Unariser and Lower seem to depend on the
 old policy, and programs produce incorrect output at runtime. It's strange
 that they typecheck without any errors. So if we want to keep the updated
 policy we cannot flatten anything after Cursorize.
+See https://github.com/iu-parfunc/gibbon/issues/86.
 -}
-              -- l3 <- go "L3.flatten"       flattenL3     l3
+              l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck"     L3.tcProg     l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
               return l3
@@ -443,7 +444,7 @@ policy we cannot flatten anything after Cursorize.
       l3 <- go "L3.typecheck"   L3.tcProg               l3
       l3 <- go "unariser"       unariser                l3
       l3 <- go "L3.typecheck"   L3.tcProg               l3
-      -- l3 <- go "L3.flatten"     flattenL3               l3
+      l3 <- go "L3.flatten"     flattenL3               l3
       let mainTy = fmap snd $   L3.mainExp              l3
       -- Note: L3 -> L4
       l4 <- go "lower" (lower (packed,mainTy))          l3

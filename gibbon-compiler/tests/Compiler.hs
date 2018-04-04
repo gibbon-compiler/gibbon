@@ -68,14 +68,14 @@ runT prg = fst $ runSyM 0 $ do
 
 run2T :: L3.Prog -> L4.Prog
 run2T l3 = fst $ runSyM 0 $ do
-    -- l3 <- flattenL3 l3
+    l3 <- flattenL3 l3
     -- l3 <- findWitnesses l3
     -- l3 <- shakeTree l3
     l3 <- L3.tcProg l3
     l3 <- hoistNewBuf l3
     l3 <- unariser l3
     let mainTyPre = fmap snd $ L3.mainExp l3
-    -- l3 <- flattenL3 l3
+    l3 <- flattenL3 l3
     l3 <- L3.tcProg l3
     l4 <- lower (True, mainTyPre) l3
     l4 <- followRedirects l4
@@ -164,6 +164,7 @@ caused some unexpected breakage. Unariser and Lower seem to depend on the
 old policy, and programs produce incorrect output at runtime. It's strange
 that they typecheck without any errors. So if we want to keep the updated
 policy we cannot flatten anything after Cursorize.
+See https://github.com/iu-parfunc/gibbon/issues/86.
 -}
 case_sumupseteven :: Assertion
 case_sumupseteven = runner "sumupseteven.c" sumUpSetEvenProg "'#((Inner 8 1 (Inner 4 1 (Inner 2 1 (Leaf 1) (Leaf 1)) (Inner 2 1 (Leaf 1) (Leaf 1))) (Inner 4 1 (Inner 2 1 (Leaf 1) (Leaf 1)) (Inner 2 1 (Leaf 1) (Leaf 1)))) 8)"
