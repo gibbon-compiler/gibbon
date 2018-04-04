@@ -21,7 +21,7 @@
 static long long global_init_biginf_buf_size = (5 * GB);
 
 // Initial size of Infinite buffers
-static long long global_init_inf_buf_size = 64;
+static long long global_init_inf_buf_size = 4 * KB;
 
 static long long global_size_param = 1;
 static long long global_iters_param = 1;
@@ -363,7 +363,9 @@ void free_region(CursorTy reg_start, CursorTy reg_end) {
         }
         free(reg_start);
     } else {
+        #ifdef DEBUG
         printf("free_region: refcount non-zero.\n");
+        #endif
     }
 }
 
