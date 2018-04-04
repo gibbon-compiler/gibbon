@@ -40,6 +40,7 @@ import Data.Map as M
 import Data.Set as S
 import Control.Monad
 
+import Packed.FirstOrder.GenericOps
 import Packed.FirstOrder.Common
 import Packed.FirstOrder.L2.Syntax as L2
 import qualified Packed.FirstOrder.L1.Syntax as L1
@@ -103,11 +104,14 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
   fds'' <- mapM (fd fundefs') fds'
   let fundefs'' = M.fromList $ L.map (\f -> (funname f,f)) fds''
 
-
+      initFEnv fds = M.foldr (\fn acc -> let fnty = (funty fn)
+                                         in M.insert (funname fn) (arrIn fnty, arrOut fnty) acc)
+                              M.empty fds
+      env2 = (Env2 M.empty (initFEnv fundefs))
   -- Handle the main expression (if it exists):
   mainExp' <- case mainExp of
                 Nothing -> return Nothing
-                Just (e,t) -> do e' <- exp fundefs'' [] emptyRel M.empty M.empty e
+                Just (e,t) -> do e' <- exp fundefs'' [] emptyRel M.empty M.empty env2 e
                                  return $ Just (e',t)
 
   -- Return the updated Prog
@@ -136,7 +140,12 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                         PackedTy _n l -> M.insert funarg l $ M.empty
                         ProdTy _tys -> M.empty
                         _ -> M.empty
-           funbod' <- exp fns retlocs emptyRel lenv M.empty funbod
+               initVEnv  = M.singleton funarg (arrIn funty)
+               initFEnv fds = M.foldr (\_fn acc -> let fnty = funty
+                                                   in M.insert funname (arrIn fnty, arrOut fnty) acc)
+                              M.empty fds
+               env2 = Env2 initVEnv (initFEnv fundefs)
+           funbod' <- exp fns retlocs emptyRel lenv M.empty env2 funbod
            return L2.FunDef{funname,funty,funarg,funbod=funbod'}
 
 
@@ -149,8 +158,8 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
     -- 5. a map from location to location after it
     -- 6. the expression to process
     exp :: NewFuns -> [LocVar] -> EndOfRel -> M.Map Var LocVar ->
-           M.Map LocVar LocVar -> L Exp2 -> SyM (L Exp2)
-    exp fns retlocs eor lenv afterenv (L p e) = fmap (L p) $
+           M.Map LocVar LocVar -> Env2 Ty2 -> L Exp2 -> SyM (L Exp2)
+    exp fns retlocs eor lenv afterenv env2 (L p e) = fmap (L p) $
         case e of
 
           -- Variable case, *should* be the base case assuming our expression was
@@ -195,7 +204,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                  newls <- foldM handleTravList [] travlist
                  let eor' = L.foldr mkEor eor newls
                  let outlocs = L.map snd newls
-                 e2' <- exp fns retlocs eor' lenv' afterenv e2
+                 e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) e2
                  return $ LetE (v,outlocs,ty, l$ AppE f lsin e1)
                                (wrapBody e2' newls)
 
@@ -211,7 +220,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                                l2 <- gensym "jump"
                                let eor' = mkEnd l1 l2 eor
                                    e' = l$ Ext $ LetLocE l2 (AfterConstantLE 1 l1) e
-                               e'' <- exp fns retlocs eor' lenv (M.insert l1 l2 lenv) e'
+                               e'' <- exp fns retlocs eor' lenv (M.insert l1 l2 lenv) env2 e'
                                return (dc, vls, e'')
                              Nothing -> error $ "Failed to find " ++ sdoc x
                          _ -> do
@@ -240,14 +249,17 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                                     return (eor', l$ e')
 
                            (eor'',e') <- foldM handleLoc (eor',e) $ zip (L.map snd vls) argtys
-                           e'' <- exp fns retlocs eor'' lenv afterenv' e'
+                           e'' <- exp fns retlocs eor'' lenv afterenv' env2 e'
                            return (dc, vls, e'')
                  return $ CaseE (l$ VarE x) brs'
 
 
 
-
-
+          CaseE complex brs -> do
+            let ty = gTypeExp ddefs env2 complex
+            v <- gensym "flt_RE"
+            let ex = L1.mkLets [(v,[],ty,complex)] (l$ CaseE (l$ VarE v) brs)
+            unLoc <$> exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) ex
 
           -------------------------------------------------------------------------------------------------------------------------
           --- That's all the interesting cases. The rest are straightforward:
@@ -264,7 +276,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                      outT     = substTy arrOutMp (arrOut ty)
                      e' = LetE (v',[], outT, l$ AppE v args e) (l$ VarE v')
                  -- we fmap location at the top-level case expression
-                 fmap unLoc $ exp fns retlocs eor lenv afterenv (l$ e')
+                 fmap unLoc $ go (l$ e')
 
           -- Same as above. This could just fail, instead of trying to repair
           -- the program.
@@ -273,33 +285,58 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                  let ty = L1.primRetTy pr
                      e' = LetE (v',[],ty, l$ PrimAppE pr es) (l$ VarE v')
                  -- we fmap location at the top-level case expression
-                 fmap unLoc $ exp fns retlocs eor lenv afterenv (l$ e')
+                 fmap unLoc $ go (l$ e')
 
-          LetE (v,ls,PackedTy n l,e1@(L _ TimeIt{})) e2 -> do
-                 e1' <- exp fns retlocs eor lenv afterenv e1
-                 e2' <- exp fns retlocs eor (M.insert v l lenv) afterenv e2
+
+          -- RouteEnds creates let bindings for such expressions (see those cases below).
+          -- Processing the RHS here would cause an infinite loop.
+
+          LetE (v,ls,ty@(PackedTy _ loc),e1@(L _ DataConE{})) e2 -> do
+            e2' <- exp fns retlocs eor (M.insert v loc lenv) afterenv env2 e2
+            return $ LetE (v,ls,ty,e1) e2'
+
+          LetE (v,ls,ty,e1@(L _ ProjE{})) e2 -> do
+            let lenv' = case ty of
+                          PackedTy _ loc -> M.insert v loc lenv
+                          _ -> lenv
+            e2' <- exp fns retlocs eor lenv' afterenv env2 e2
+            return $ LetE (v,ls,ty,e1) e2'
+
+          LetE (v,ls,ty,e1@(L _ MkProdE{})) e2 -> do
+            LetE (v,ls,ty,e1) <$> go e2
+
+          --
+
+          LetE (v,ls,ty@(PackedTy n l),e1) e2 -> do
+                 e1' <- go e1
+                 e2' <- exp fns retlocs eor (M.insert v l lenv) afterenv (extendVEnv v ty env2) e2
                  return $ LetE (v,ls,PackedTy n l,e1') e2'
 
-          -- Less exciting LetE case, just recur on the body with an updated lenv
-          LetE (v,ls,PackedTy n l,e1) e2 -> do
-                 e2' <- exp fns retlocs eor (M.insert v l lenv) afterenv e2
-                 return $ LetE (v,ls,PackedTy n l,e1) e2'
-
-          -- Most boding LetE case, just recur on body
+          -- Most boring LetE case, just recur on body
           LetE (v,ls,ty,e1) e2 -> do
-                 e2' <- exp fns retlocs eor lenv afterenv e2
+                 e2' <- exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) e2
                  return $ LetE (v,ls,ty,e1) e2'
 
           IfE e1 e2 e3 -> do
-                 e2' <- exp fns retlocs eor lenv afterenv e2
-                 e3' <- exp fns retlocs eor lenv afterenv e3
+                 e2' <- go e2
+                 e3' <- go e3
                  return $ IfE e1 e2' e3'
 
-          -- Not worth trying to fix the un-flattened program here, since we would need
-          -- to know the types of the exps in es to make a let binding.
-          MkProdE _es -> internalError $ "Found complex expression in tail: " ++ (show e)
+          MkProdE ls -> do
+            let tys = L.map (gTypeExp ddefs env2) ls
+                prodty = ProdTy tys
+            v <- gensym "flt_RE"
+            let ex = L1.mkLets [(v,[],prodty,(l$ MkProdE ls))] (l$ VarE v)
+            unLoc <$> exp fns retlocs eor lenv afterenv (extendVEnv v prodty env2) ex
 
-          ProjE _i _e -> internalError $ "Found complex expression in tail: " ++ (show e)
+          ProjE{} -> do
+            v <- gensym "flt_RE"
+            let ty = gTypeExp ddefs env2 e
+                lenv' = case ty of
+                          PackedTy _ loc -> M.insert v loc lenv
+                          _ -> lenv
+                ex = L1.mkLets [(v,[],ty,l$ e)] (l$ VarE v)
+            unLoc <$> exp fns retlocs eor lenv' afterenv (extendVEnv v ty env2) ex
 
           -- Could fail here, but try to fix the broken program
           DataConE loc dc es -> do
@@ -307,30 +344,30 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                  let ty = PackedTy (getTyOfDataCon ddefs dc) loc
                      e' = LetE (v',[],ty, l$ DataConE loc dc es)
                                (l$ VarE v')
-                 fmap unLoc $ exp fns retlocs eor lenv afterenv (l$ e')
+                 fmap unLoc $ exp fns retlocs eor (M.insert v' loc lenv) afterenv (extendVEnv v' ty env2) (l$ e')
 
           LitE i -> return $ LitE i
 
           LitSymE v -> return $ LitSymE v
 
           TimeIt e ty b -> do
-                 e' <- exp fns retlocs eor lenv afterenv e
+                 e' <- go e
                  return $ TimeIt e' ty b
 
           Ext (LetRegionE r e) -> do
-                 e' <- exp fns retlocs eor lenv afterenv e
+                 e' <- go e
                  return $ Ext (LetRegionE r e')
 
           Ext (LetLocE v (StartOfLE r) e) -> do
-                 e' <- exp fns retlocs eor lenv afterenv e
+                 e' <- go e
                  return $ Ext (LetLocE v (StartOfLE r) e')
 
           Ext (LetLocE v (AfterConstantLE i l1) e) -> do
-                 e' <- exp fns retlocs eor lenv afterenv e
+                 e' <- go e
                  return $ Ext (LetLocE v (AfterConstantLE i l1) e')
 
           Ext (LetLocE v (AfterVariableLE x l1) e) -> do
-                 e' <- exp fns retlocs eor lenv afterenv e
+                 e' <- go e
                  return $ Ext (LetLocE v (AfterVariableLE x l1) e')
 
           _ -> internalError $ "RouteEnds: Unsupported expression: " ++ (show e)
@@ -348,3 +385,5 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                funtype v = case M.lookup v fns of
                              Nothing -> error $ "Function " ++ (show v) ++ " not found"
                              Just fundef -> funty fundef
+
+               go = exp fns retlocs eor lenv afterenv env2
