@@ -15,8 +15,7 @@
 (define (rightmost [tr : Tree]) : Int
   (case tr
     [(Leaf n) n]
-    [(Node x y) (let ([x1 : Tree (copy x)])
-                  (rightmost y))]))
+    [(Node x y) (rightmost y)]))
 
 (let ((tr0 : Tree (buildtree (size-param))))
   (let ((n : Int (iterate (rightmost tr0))))
