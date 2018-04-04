@@ -286,16 +286,14 @@ PACKED_FAILING ?= \
  test12_skip.gib test16_forlist.gib test17_forfold.gib \
  test18_badconstraint.gib test18b_tupconstraint.gib test18c_identity1.gib test18d_identity2.gib \
  test18e_identity3.gib test18f_flip.gib test18g_identity4.gib \
- test20a_withprint.gib test20b_bintree.gib \
+ test20a_withprint.gib test20b_bintree.gib test20g_bintree.gib test20h_idree.gib \
  test24_defs.gib \
  test25a_withprint.gib test25d_racketcore.gib test25f_countnodes.gib \
  test26a_treewalk.gib test26_treewalk.gib \
- test27a_subst.gib test27b_subst.gib test27c_subst.gib \
+ test27b_subst.gib test27c_subst.gib \
  test28_copyprop.gib \
  test_add1.gib test_addtrees.gib test_buildstree.gib test_buildtreesum.gib test_buildtwotrees.gib \
- test_stree.gib test_sumstree.gib test_sumupseteven.gib test_treeidentity.gib \
- test20_bintree.gib test_leftmost.gib test20g_bintree.gib \
- test20e_bintree.gib
+ test_rightmost.gib test_stree.gib test_sumstree.gib test_sumupseteven.gib
 
  # test12_skip.gib test16_forlist.gib test17_forfold.gib \
  # test18b_tupconstraint.gib test18f_flip.gib \

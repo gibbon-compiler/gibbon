@@ -1,6 +1,3 @@
-[submodule "benchdata"]
-	path = benchdata
-	url = git@github.com:iu-parfunc/tree-velocity-benchdata.git
 [submodule "BintreeBench"]
 	path = BintreeBench
 	url = git@github.com:iu-parfunc/BintreeShootout.git

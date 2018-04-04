@@ -1,0 +1,31 @@
+#lang gibbon
+
+(data Tree
+      [Leaf Int]
+      [Node Tree Tree])
+
+(define (build-tree [n : Int]) : Tree
+  (if (= n 0)
+      (Leaf 1)
+      (let ([l : Tree (build-tree (- n 1))]
+            [r : Tree (build-tree (- n 1))])
+        (Node l r))))
+
+;; Non-recursive, two-level match:
+;; This is actually a hard one -- it requires copy insertion.
+(define (id-tree [tr : Tree]) : Tree
+  tr)
+
+(define (sumtree [tr : Tree]) : Int
+  (case tr
+    [(Leaf n) n]
+    [(Node x y)
+     (let ([sumx : Int (sumtree x)])
+       (let ([sumy : Int (sumtree y)])
+         (+ sumx sumy)))]))
+
+;; Here we time a fold over the tree:
+(let ((tr0 : Tree (build-tree 2)))
+  (let ((tr1 : Tree (iterate (let ([tr2 : Tree (id-tree tr0)])
+                               tr2))))
+    (sumtree tr1)))

@@ -425,7 +425,14 @@ passes config@Config{mode,packed,multiplicity} l1 = do
               l2 <- go "threadRegions"    threadRegions l2
               -- Note: L2 -> L3
               l3 <- go "cursorize"        cursorize     l2
-              l3 <- go "L3.flatten"       flattenL3     l3
+{-
+[2018.04.04]: Changing the `isTrivial` policy for tuples and projections
+caused some unexpected breakage. Unariser and Lower seem to depend on the
+old policy, and programs produce incorrect output at runtime. It's strange
+that they typecheck without any errors. So if we want to keep the updated
+policy we cannot flatten anything after Cursorize.
+-}
+              -- l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck"     L3.tcProg     l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
               return l3
@@ -436,7 +443,7 @@ passes config@Config{mode,packed,multiplicity} l1 = do
       l3 <- go "L3.typecheck"   L3.tcProg               l3
       l3 <- go "unariser"       unariser                l3
       l3 <- go "L3.typecheck"   L3.tcProg               l3
-      l3 <- go "L3.flatten"     flattenL3               l3
+      -- l3 <- go "L3.flatten"     flattenL3               l3
       let mainTy = fmap snd $   L3.mainExp              l3
       -- Note: L3 -> L4
       l4 <- go "lower" (lower (packed,mainTy))          l3

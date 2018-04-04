@@ -5,5 +5,10 @@
 ;; Foo_a -{}-> Foo_a
 (define (id [x : Foo]) : Foo x)
 
-(let ([x : Foo(id (A 1))])
-  42)
+(define (unwrap-foo [a : Foo]) : Int
+  (case a
+    [(A x) x]
+    [(B y) y]))
+
+(let ([a : Foo (id (A 1))])
+  (unwrap-foo a))
