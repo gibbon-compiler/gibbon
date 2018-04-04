@@ -291,7 +291,8 @@ PACKED_FAILING ?= \
  test27b_subst.gib test27c_subst.gib \
  test28_copyprop.gib \
  test_addtrees.gib test_buildstree.gib test_buildtreesum.gib test_buildtwotrees.gib \
- test_rightmost.gib test_stree.gib test_sumupseteven.gib test_sumstree.gib
+ test_stree.gib test_sumupseteven.gib test_sumstree.gib \
+ test_litmus_rightmost_layout.gib
 
 
  # test12_skip.gib test16_forlist.gib test17_forfold.gib \
