@@ -577,21 +577,25 @@ inferExp env@FullEnv{dataDefs}
         SingleDest d -> do
                   locs <- sequence $ replicate (length ls) fresh
                   ls' <- mapM (\(e,lv) -> (inferExp env e $ SingleDest lv)) $ zip ls locs
-                  -- HACK: references to a cursor act like literals
+                  -- Arguments are either a fixed size or a variable
+                  -- TODO: audit this!
                   argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
                            case arg of
-                             L sl (VarE v) -> case lookupVEnv v env of
-                                               CursorTy -> return $ L sl (LitE 0)
-                                               _ -> return $ L sl (VarE v)
-                             _ -> return arg
+                             L _ (VarE v) -> case lookupVEnv v env of
+                                               CursorTy -> return $ Left 8
+                                               IntTy -> return $ Left 8
+                                               SymTy -> return $ Left 8
+                                               BoolTy -> return $ Left 8
+                                               _ -> return $ Right v
+                             L _ (LitE _) -> return $ Left 8
+                             L _ (LitSymE _) -> return $ Left 8
+                             _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
                   newLocs <- mapM finalLocVar locs
-                  let afterVar :: (Maybe (L Exp2), Maybe LocVar, Maybe LocVar) -> Maybe Constraint
-                      afterVar ((Just (L _ (VarE v))), (Just loc1), (Just loc2)) =
+                  let afterVar :: (Either Int Var, Maybe LocVar, Maybe LocVar) -> Maybe Constraint
+                      afterVar ((Right v), (Just loc1), (Just loc2)) =
                           Just $ AfterVariableL loc1 v loc2
-                      afterVar ((Just (L _ (LitE _))), (Just loc1), (Just loc2)) =
-                          Just $ AfterConstantL loc1 8 loc2
-                      afterVar ((Just (L _ (LitSymE _))), (Just loc1), (Just loc2)) =
-                          Just $ AfterConstantL loc1 8 loc2
+                      afterVar ((Left s), (Just loc1), (Just loc2)) =
+                          Just $ AfterConstantL loc1 s loc2
                       afterVar _ = Nothing
                       constrs = concat $ [c | (_,_,c) <- ls']
                       constrs' = if null locs
@@ -599,7 +603,7 @@ inferExp env@FullEnv{dataDefs}
                                  else let tmpconstrs = [AfterTagL (L.head locs) d] ++
                                                        (mapMaybe afterVar $ zip3
                                                          -- ((map Just $ L.tail ([a | (a,_,_) <- ls' ])) ++ [Nothing])
-                                                        (map Just argLs)
+                                                        argLs
                                                          -- (map Just locs)
                                                         ((map Just $ L.tail locs) ++ [Nothing])
                                                         (map Just locs))
