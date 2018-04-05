@@ -116,7 +116,6 @@ data Config = Config
   , cfile     :: Maybe FilePath -- ^ Optional override to destination .c file.
   , exefile   :: Maybe FilePath -- ^ Optional override to destination binary file.
   , backend   :: Backend -- ^ Compilation backend used
-  , stopAfter    :: String  -- ^ Stop the compilation pipeline after this pass
   , multiplicity :: Multiplicity
   }
   deriving (Show,Read,Eq,Ord)
@@ -133,7 +132,7 @@ data Mode = ToParse  -- ^ Parse and then stop
           | ToExe    -- ^ Compile to C then build a binary.
           | RunExe   -- ^ Compile to executable then run.
           | Interp2  -- ^ Interp late in the compiler pipeline.
-          | Interp1  -- ^ Interp early.  Not implemented.
+          | Interp1  -- ^ Interp early.
 
           | Bench Var -- ^ Benchmark a particular function applied to the packed data within an input file.
 
@@ -159,7 +158,6 @@ defaultConfig =
          , cfile = Nothing
          , exefile = Nothing
          , backend = C
-         , stopAfter = ""
          , multiplicity = Infinite
          }
 
@@ -491,7 +489,7 @@ type PassRunner a b = (Out b, NFData a, NFData b) =>
 -- | Run a pass and return the result
 --
 pass :: Config -> PassRunner a b
-pass Config{stopAfter} who fn x = do
+pass _config who fn x = do
   cs@CompileState{cnt} <- get
   x' <- if dbgLvl >= passChatterLvl
         then lift $ evaluate $ force x
@@ -507,9 +505,6 @@ pass Config{stopAfter} who fn x = do
      then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++sdoc y'
      -- TODO: Switch to a node-count for size output (add to GenericOps):
      else lift$ dbgPrintLn passChatterLvl $ "   => "++ show (length (sdoc y')) ++ " characters output."
-  when (stopAfter == who) $ do
-    dbgTrace 0 ("Compilation stopped; --stop-after=" ++ who) (return ())
-    liftIO exitSuccess
   return y'
 
 
