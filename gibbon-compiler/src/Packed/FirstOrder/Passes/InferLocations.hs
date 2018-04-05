@@ -577,6 +577,13 @@ inferExp env@FullEnv{dataDefs}
         SingleDest d -> do
                   locs <- sequence $ replicate (length ls) fresh
                   ls' <- mapM (\(e,lv) -> (inferExp env e $ SingleDest lv)) $ zip ls locs
+                  -- HACK: references to a cursor act like literals
+                  argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
+                           case arg of
+                             L sl (VarE v) -> case lookupVEnv v env of
+                                               CursorTy -> return $ L sl (LitE 0)
+                                               _ -> return $ L sl (VarE v)
+                             _ -> return arg
                   newLocs <- mapM finalLocVar locs
                   let afterVar :: (Maybe (L Exp2), Maybe LocVar, Maybe LocVar) -> Maybe Constraint
                       afterVar ((Just (L _ (VarE v))), (Just loc1), (Just loc2)) =
@@ -592,7 +599,7 @@ inferExp env@FullEnv{dataDefs}
                                  else let tmpconstrs = [AfterTagL (L.head locs) d] ++
                                                        (mapMaybe afterVar $ zip3
                                                          -- ((map Just $ L.tail ([a | (a,_,_) <- ls' ])) ++ [Nothing])
-                                                        (map Just ([a | (a,_,_) <- ls']))
+                                                        (map Just argLs)
                                                          -- (map Just locs)
                                                         ((map Just $ L.tail locs) ++ [Nothing])
                                                         (map Just locs))
@@ -662,6 +669,11 @@ inferExp env@FullEnv{dataDefs}
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs''
           tryBindReg (lc$ L2.LetE (vr,[],IntTy,L sl2 $ L2.LitE i) bod'', ty'', fcs)
+
+        -- Don't process the EndOf operation at all, just recur through it
+        PrimAppE L1.PEndOf [L la (L1.VarE v)] -> do
+          (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
+          return (lc$ L2.LetE (vr,[],CursorTy,L sl2 $ L2.PrimAppE L1.PEndOf [L la (L2.VarE v)]) bod', ty', cs')
 
         PrimAppE p ls -> do
           lsrec <- mapM (\e -> inferExp env e NoDest) ls
