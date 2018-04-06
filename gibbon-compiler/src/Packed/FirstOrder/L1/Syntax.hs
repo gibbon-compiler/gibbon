@@ -38,6 +38,7 @@ module Packed.FirstOrder.L1.Syntax
     , mapExprs
     , mapExt
     , mapLocs
+    , numIndrsDataCon
 
       -- * Trivial expressions
     , assertTriv, assertTrivs, hasTimeIt, isTrivial
@@ -334,6 +335,12 @@ data Prim ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
             -- type of the file being read.  The `Ty` tracks the type as the program evolvels
             -- (first PackedTy then CursorTy).  The TyCon tracks the original type name.
+          | PEndOf
+          -- ^ This shouldn't be here. But this is the fastest way to encode
+          -- indirection nodes right now. This can be an L2 extension, after we make
+          -- InferLayout the pass that takes L1->L2, and InferLocations is an
+          -- L2->L2 pass.
+
 
   deriving (Read, Show, Eq, Ord, Generic, NFData, Functor, Foldable, Traversable)
 
@@ -445,8 +452,8 @@ hasPacked t =
     IntTy          -> False
     SymDictTy ty   -> hasPacked ty
     ListTy _       -> error "FINISHLISTS"
-    PtrTy          -> error$ "hasPacked: should not be using this when PtrTy is introduced: "++show t
-    CursorTy       -> error$ "hasPacked: should not be using this when CursorTy is introduced: "++show t
+    PtrTy          -> False
+    CursorTy       -> False
 
 -- | Provide a size in bytes, if it is statically known.
 sizeOf :: UrTy a -> Maybe Int
@@ -600,6 +607,15 @@ primRetTy p =
 
 dummyCursorTy :: UrTy a
 dummyCursorTy = CursorTy
+
+numIndrsDataCon :: Out a => DDefs (UrTy a) -> DataCon -> Maybe Int
+numIndrsDataCon ddfs dcon =
+    if numPacked > 1
+    then Just (numPacked - 1)
+    else Nothing
+  where
+    tys = lookupDataCon ddfs dcon
+    numPacked = length $ L.filter isPackedTy tys
 
 --------------------------------------------------------------------------------
 

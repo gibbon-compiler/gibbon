@@ -128,7 +128,7 @@ exec env (LetTimedT flg bnds rhs bod) = do
      else putStrLn $ "SELFTIMED: "++show tm
     exec env' bod
 
-exec env (Switch tr alts def) =
+exec env (Switch _ tr alts def) =
     case final_alt of
       Nothing -> error "Switch: No branch to choose."
       Just br -> exec env br
@@ -190,7 +190,7 @@ applyPrim MulP [IntVal i1, IntVal i2] = pure [IntVal (i1 * i2)]
 
 applyPrim EqP  [IntVal i1, IntVal i2] = pure [IntVal (if i1 == i2 then 1 else 0)]
 
-applyPrim NewBuf [] = pure [BufVal Seq.empty]
+applyPrim NewBuffer{} [] = pure [BufVal Seq.empty]
 
 applyPrim WriteTag [TagVal tag, BufVal is] = pure [BufVal (is |> fromIntegral tag)]
 applyPrim WriteInt [IntVal i,   BufVal is] = pure [BufVal (is |> i)]
@@ -207,7 +207,7 @@ applyPrim PrintInt [IntVal i] = do print i; return []
 applyPrim (PrintString st) [] = do putStrLn st; return []
 
 applyPrim SizeParam [] = error "TargetInterp/applyPrim: finish SizeParam"
-applyPrim ScopedBuf [] = error "TargetInterp/applyPrim: finish ScopedBuf"
+applyPrim ScopedBuffer{} [] = error "TargetInterp/applyPrim: finish ScopedBuf"
 applyPrim GetFirstWord [] = error "TargetInterp/applyPrim: finish GetFirstWord"
 
 applyPrim (DictInsertP _) [] = error "TargetInterp/applyPrim: finish DictInsertP"

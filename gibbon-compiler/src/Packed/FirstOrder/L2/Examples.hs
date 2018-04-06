@@ -12,7 +12,9 @@ module Packed.FirstOrder.L2.Examples
   , add1Prog, id1Prog, copyTreeProg, id2Prog, copyOnId1Prog, id3Prog, intAddProg
   , leftmostProg, buildLeafProg, testProdProg, nodeProg, leafProg, testFlattenProg
   , rightmostProg, buildTreeProg, buildTreeSumProg, printTupProg, addTreesProg
-  , printTupProg2, sumUpProg, setEvenProg, sumUpSetEvenProg, substProg
+  , printTupProg2, buildSTreeProg, sumUpProg, setEvenProg, sumUpSetEvenProg, substProg
+  , buildTwoTreesProg, sumTreeProg, sumSTreeProg, indrRightmostProg, indrBuildTreeProg
+  , indrIDProg, indrIDSumProg
   ) where
 
 import Data.Loc
@@ -56,7 +58,7 @@ add1Fun = FunDef "add1" add1FunTy "tr1" add1FunBod
 
 add1FunTy :: ArrowTy Ty2
 add1FunTy = (ArrowTy
-             [LRM "lin2" (VarR "r3") Input, LRM "lout4" (VarR "r3") Output]
+             [LRM "lin2" (VarR "r3") Input, LRM "lout4" (VarR "r750") Output]
              (PackedTy "Tree" "lin2")
              (S.empty)
              (PackedTy "Tree" "lout4")
@@ -148,7 +150,7 @@ id1Fun = FunDef "id1" idFunTy "tr18" idFunBod
 
     idFunTy :: ArrowTy Ty2
     idFunTy = (ArrowTy
-               [LRM "lin19" (VarR "r20") Input, LRM "lout21" (VarR "r20") Output]
+               [LRM "lin19" (VarR "r20") Input, LRM "lout21" (VarR "r751") Output]
                (PackedTy "Tree" "lin19")
                (S.empty)
                (PackedTy "Tree" "lout21")
@@ -164,7 +166,7 @@ copyTreeFun :: FunDef
 copyTreeFun = FunDef "copyTree" copyFunTy "tr22" copyBod
   where
     copyFunTy = (ArrowTy
-                 [LRM "lin23" (VarR "r24") Input, LRM "lout25" (VarR "r24") Output]
+                 [LRM "lin23" (VarR "r24") Input, LRM "lout25" (VarR "r752") Output]
                  (PackedTy "Tree" "lin23")
                  S.empty
                  (PackedTy "Tree" "lout25")
@@ -214,7 +216,7 @@ id2Fun = FunDef "id2" id2Ty "tr41" id2Bod
   where
     id2Ty :: ArrowTy Ty2
     id2Ty = (ArrowTy
-             [LRM "lin37" (VarR "r38") Input, LRM "lout39" (VarR "r38") Output]
+             [LRM "lin37" (VarR "r38") Input, LRM "lout39" (VarR "r753") Output]
              (PackedTy "Tree" "lin37")
              (S.empty)
              (PackedTy "Tree" "lout39")
@@ -360,12 +362,12 @@ rightmostBod = l$ CaseE (l$ VarE "t242")
                [("Leaf", [("n246","l247")],
                  l$ VarE "n246"),
                 ("Node", [("x248","l249"), ("y250","l251")],
-                 l$ Ext $ LetRegionE (DynR "r252") $
-                 l$ Ext $ LetLocE "l253" (StartOfLE (DynR "r252")) $
-                 l$ LetE ("x254",[],PackedTy "Tree" "l253",
-                        l$ AppE "copyTree" ["l249", "l253"] (l$ VarE "x248")) $
-                 l$ LetE ("lm255",[],IntTy, l$ AppE "rightmost" ["l251"] (l$ VarE "y250")) $
-                 l$ VarE "lm255")]
+                 -- l$ Ext $ LetRegionE (VarR "r252") $
+                 -- l$ Ext $ LetLocE "l253" (StartOfLE (VarR "r252")) $
+                 -- l$ LetE ("x254",[],PackedTy "Tree" "l253",
+                 --          l$ AppE "copyTree" ["l249", "l253"] (l$ VarE "x248")) $
+                 l$ AppE "rightmost" ["l251"] (l$ VarE "y250")
+                )]
 
 rightmostMainExp :: L Exp2
 rightmostMainExp = l$ Ext $ LetRegionE (VarR "r253") $
@@ -383,7 +385,7 @@ rightmostMainExp = l$ Ext $ LetRegionE (VarR "r253") $
                    l$ VarE "a260"
 
 rightmostProg :: Prog
-rightmostProg = Prog ddtree (M.fromList [("rightmost", rightmostFun), ("copyTree",copyTreeFun)])
+rightmostProg = Prog ddtree (M.fromList [("rightmost", rightmostFun)])
                 (Just (rightmostMainExp, IntTy))
 
 
@@ -453,6 +455,43 @@ buildTreeProg = Prog ddtree (M.fromList [("buildTree", buildTreeFun)]) (Just (bu
 
 --------------------------------------------------------------------------------
 
+
+buildTwoTreesFun :: FunDef
+buildTwoTreesFun = FunDef "buildTwoTrees" buildTreeTy "i750" buildTreeBod
+  where
+    buildTreeTy :: ArrowTy Ty2
+    buildTreeTy = (ArrowTy
+                   [LRM "lout752" (VarR "r751") Output, LRM "lout754" (VarR "r753") Output]
+                   (IntTy)
+                   (S.empty)
+                   (ProdTy [PackedTy "Tree" "lout752", PackedTy "Tree" "lout754"])
+                   [])
+
+    buildTreeBod :: L Exp2
+    buildTreeBod = l$ LetE ("tree1",[],PackedTy "Tree" "lout752",
+                            l$ AppE "buildTree" ["lout752"] (l$ VarE "i750")) $
+                   l$ LetE ("tree2",[],PackedTy "Tree" "lout754",
+                            l$ AppE "buildTree" ["lout754"] (l$ VarE "i750")) $
+                   l$ LetE ("a755",[], ProdTy [PackedTy "Tree" "lout752", PackedTy "Tree" "lout754"],
+                            l$ MkProdE [l$ VarE "tree1", l$ VarE "tree2"]) $
+                   l$ VarE "a755"
+
+buildTwoTreesMainExp :: L Exp2
+buildTwoTreesMainExp = l$ Ext $ LetRegionE (VarR "r756") $
+                       l$ Ext $ LetLocE "l757" (StartOfLE (VarR "r756")) $
+                       l$ Ext $ LetRegionE (VarR "r758") $
+                       l$ Ext $ LetLocE "l759" (StartOfLE (VarR "r758")) $
+                       l$ LetE ("treeprod", [], ProdTy [PackedTy "Tree" "lout757", PackedTy "Tree" "lout759"],
+                                l$ AppE "buildTwoTrees" ["l757", "l759"] (l$ LitE 2)) $
+                       l$ VarE "treeprod"
+
+buildTwoTreesProg :: Prog
+buildTwoTreesProg = Prog ddtree (M.fromList [("buildTree", buildTreeFun),
+                                             ("buildTwoTrees", buildTwoTreesFun)])
+                         (Just (buildTwoTreesMainExp, ProdTy [PackedTy "Tree" "lout757", PackedTy "Tree" "lout759"]))
+
+--------------------------------------------------------------------------------
+
 buildTreeSumFun :: FunDef
 buildTreeSumFun = FunDef "buildTreeSum" buildTreeSumTy "i302" buildTreeSumBod
   where
@@ -502,6 +541,47 @@ buildTreeSumMainExp = l$ Ext $ LetRegionE (VarR "r313") $
 buildTreeSumProg :: Prog
 buildTreeSumProg = Prog ddtree (M.fromList [("buildTreeSum", buildTreeSumFun)]) (Just (buildTreeSumMainExp, ProdTy [IntTy, PackedTy "Tree" "l314"]))
 
+--------------------------------------------------------------------------------
+
+sumTreeFun :: FunDef
+sumTreeFun = FunDef "sumTree" sumTreeTy "tr762" sumTreeBod
+  where
+    sumTreeTy :: ArrowTy Ty2
+    sumTreeTy = (ArrowTy
+                      [LRM "lin761" (VarR "r760") Input]
+                      (PackedTy "Tree" "lin761")
+                      (S.empty)
+                      (IntTy)
+                      [])
+
+    sumTreeBod :: L Exp2
+    sumTreeBod = l$ CaseE (l$ VarE "tr762")
+                 [ ("Leaf", [("n763", "l764")],
+                   l$ VarE "n763")
+                 , ("Node", [("x764","l765"), ("y766","l767")],
+                   l$ LetE ("sx768", [], IntTy,
+                            l$ AppE "sumTree" ["l765"] (l$ VarE "x764")) $
+                   l$ LetE ("sy769", [], IntTy,
+                            l$ AppE "sumTree" ["l767"] (l$ VarE "y766")) $
+                   l$ LetE ("total770", [], IntTy ,
+                            l$ PrimAppE AddP [l$ VarE "sx768", l$ VarE "sy769"]) $
+                   l$ VarE "total770"
+                   )]
+
+sumTreeMainExp :: L Exp2
+sumTreeMainExp = l$ Ext $ LetRegionE (VarR "r771") $
+                 l$ Ext $ LetLocE "l772" (StartOfLE (VarR "r771")) $
+                 l$ LetE ("tr773", [], PackedTy "Tree" "l772",
+                          l$ AppE "buildTree" ["l772"] (l$ LitE 3)) $
+                 l$ LetE ("sum774", [], IntTy,
+                          l$ AppE "sumTree" ["l772"] (l$ VarE "tr773")) $
+                 l$ VarE "sum774"
+
+sumTreeProg :: Prog
+sumTreeProg = Prog ddtree (M.fromList [("buildTree", buildTreeFun),
+                                       ("sumTree", sumTreeFun)
+                                      ])
+                   (Just (sumTreeMainExp, IntTy))
 
 --------------------------------------------------------------------------------
 
@@ -558,8 +638,8 @@ addTreesFun = FunDef "addTrees" addTreesTy "trees354" addTreesBod
     addTreesTy :: ArrowTy Ty2
     addTreesTy = (ArrowTy
                   [LRM "lin351" (VarR "r350") Input,
-                   LRM "lin352" (VarR "r350") Input,
-                   LRM "lout353" (VarR "r350") Output]
+                   LRM "lin352" (VarR "r351") Input,
+                   LRM "lout353" (VarR "r754") Output]
                   (ProdTy [PackedTy "Tree" "lin351", PackedTy "Tree" "lin352"])
                   (S.empty)
                   (PackedTy "Tree" "lout353")
@@ -606,7 +686,9 @@ addTreesMainExp = l$ Ext $ LetRegionE (VarR "r400") $
                   l$ Ext $ LetLocE "l401" (StartOfLE (VarR "r400")) $
                   l$ LetE ("x402",[], PackedTy "Tree" "l401",
                            l$ AppE "buildTree" ["l401"] (l$ LitE 2)) $
-                  l$ Ext $ LetLocE "l403" (AfterVariableLE "x402" "l401") $
+                  -- l$ Ext $ LetLocE "l403" (AfterVariableLE "x402" "l401") $
+                  l$ Ext $ LetRegionE (VarR "r403") $
+                  l$ Ext $ LetLocE "l403" (StartOfLE (VarR "r403")) $
                   l$ LetE ("y404",[], PackedTy "Tree" "l403",
                            l$ AppE "buildTree" ["l403"] (l$ LitE 2)) $
                   l$ LetE ("z405",[], ProdTy [PackedTy "Tree" "l401", PackedTy "Tree" "l403"],
@@ -628,7 +710,7 @@ testProdFun :: FunDef
 testProdFun = FunDef "testprod" testprodTy "tup130" testprodBod
   where
     testprodTy = (ArrowTy
-                  [LRM "lin131" (VarR "r132") Input, LRM "lout133" (VarR "r132") Output]
+                  [LRM "lin131" (VarR "r132") Input, LRM "lout133" (VarR "r755") Output]
                   (ProdTy [(PackedTy "Tree" "lin131"), IntTy])
                   (S.empty)
                   (ProdTy [(PackedTy "Tree" "lout133"), IntTy])
@@ -721,7 +803,7 @@ sumUpFun = FunDef "sumUp" sumUpFunTy "tr1" sumUpFunBod
   where
     sumUpFunTy :: ArrowTy Ty2
     sumUpFunTy = (ArrowTy
-                  [LRM "lin501" (VarR "r500") Input, LRM "lout502" (VarR "r500") Output]
+                  [LRM "lin501" (VarR "r500") Input, LRM "lout502" (VarR "r756") Output]
                   (PackedTy "STree" "lin501")
                   (S.empty)
                   (PackedTy "STree" "lout502")
@@ -806,6 +888,64 @@ buildSTreeFun = FunDef "buildSTree" buildSTreeTy "i543" buildSTreeBod
                                                             l$ VarE "x545", l$ VarE "y546"]) $
                     l$ VarE "a547")
 
+
+buildSTreeMainExp :: L Exp2
+buildSTreeMainExp = l$ Ext $ LetRegionE (VarR "r530") $
+                    l$ Ext $ LetLocE "l531" (StartOfLE (VarR "r530")) $
+                    l$ LetE ("x532",[], PackedTy "STree" "l531",
+                             l$ AppE "buildSTree" ["l531"] (l$ LitE 3)) $
+                    l$ VarE "x532"
+
+
+buildSTreeProg :: Prog
+buildSTreeProg = Prog stree (M.fromList [("buildSTree", buildSTreeFun)])
+                      (Just (buildSTreeMainExp, PackedTy "STree" "l531"))
+
+
+--------------------------------------------------------------------------------
+
+sumSTreeFun :: FunDef
+sumSTreeFun = FunDef "sumSTree" sumSTreeTy "tr762" sumSTreeBod
+  where
+    sumSTreeTy :: ArrowTy Ty2
+    sumSTreeTy = (ArrowTy
+                      [LRM "lin761" (VarR "r760") Input]
+                      (PackedTy "STree" "lin761")
+                      (S.empty)
+                      (IntTy)
+                      [])
+
+    sumSTreeBod :: L Exp2
+    sumSTreeBod = l$ CaseE (l$ VarE "tr762")
+                 [ ("Leaf", [("n763", "l764")],
+                   l$ VarE "n763")
+                 , ("Inner", [("i775","l776"),("b777","l778"),
+                              ("x764","l765"), ("y766","l767")],
+                   l$ LetE ("sx768", [], IntTy,
+                            l$ AppE "sumSTree" ["l765"] (l$ VarE "x764")) $
+                   l$ LetE ("sy769", [], IntTy,
+                            l$ AppE "sumSTree" ["l767"] (l$ VarE "y766")) $
+                   l$ LetE ("total770", [], IntTy ,
+                            l$ PrimAppE AddP [l$ VarE "sx768", l$ VarE "sy769"]) $
+                   l$ VarE "total770"
+                   )]
+
+sumSTreeMainExp :: L Exp2
+sumSTreeMainExp = l$ Ext $ LetRegionE (VarR "r771") $
+                 l$ Ext $ LetLocE "l772" (StartOfLE (VarR "r771")) $
+                 l$ LetE ("tr773", [], PackedTy "STree" "l772",
+                          l$ AppE "buildSTree" ["l772"] (l$ LitE 3)) $
+                 l$ LetE ("sum774", [], IntTy,
+                          l$ AppE "sumSTree" ["l772"] (l$ VarE "tr773")) $
+                 l$ VarE "sum774"
+
+sumSTreeProg :: Prog
+sumSTreeProg = Prog stree (M.fromList [("buildSTree", buildSTreeFun),
+                                       ("sumSTree", sumSTreeFun)])
+                   (Just (sumSTreeMainExp, IntTy))
+
+--------------------------------------------------------------------------------
+
 sumUpMainExp :: L Exp2
 sumUpMainExp = l$ Ext $ LetRegionE (VarR "r530") $
                   l$ Ext $ LetLocE "l531" (StartOfLE (VarR "r530")) $
@@ -866,7 +1006,7 @@ setEvenFun = FunDef "setEven" setEvenFunTy "tr570" setEvenFunBod
   where
     setEvenFunTy :: ArrowTy Ty2
     setEvenFunTy = (ArrowTy
-                    [LRM "lin571" (VarR "r570") Input, LRM "lout572" (VarR "r570") Output]
+                    [LRM "lin571" (VarR "r570") Input, LRM "lout572" (VarR "r757") Output]
                     (PackedTy "STree" "lin571")
                     (S.empty)
                     (PackedTy "STree" "lout572")
@@ -948,7 +1088,7 @@ sumUpSetEvenFun = FunDef "sumUpSetEven" sumUpSetEvenFunTy "tr600" sumUpSetEvenFu
   where
     sumUpSetEvenFunTy :: ArrowTy Ty2
     sumUpSetEvenFunTy = (ArrowTy
-                         [LRM "lin601" (VarR "r600") Input, LRM "lout602" (VarR "r600") Output]
+                         [LRM "lin601" (VarR "r600") Input, LRM "lout602" (VarR "r758") Output]
                          (PackedTy "STree" "lin601")
                          (S.empty)
                          (ProdTy [PackedTy "STree" "lout602", IntTy])
@@ -1041,7 +1181,7 @@ copyExprFun = FunDef "copyExpr" copyExprFunTy "e700" copyExprFunBod
     copyExprFunTy :: ArrowTy Ty2
     copyExprFunTy = (ArrowTy
                      [LRM "lin702" (VarR "r701") Input,
-                      LRM "lout703" (VarR "r701") Output]
+                      LRM "lout703" (VarR "r759") Output]
                      (PackedTy "Expr" "lin702")
                      (S.empty)
                      (PackedTy "Expr" "lout703")
@@ -1073,7 +1213,7 @@ substFun = FunDef "subst" substFunTy "tr653" substFunBod
     substFunTy = (ArrowTy
                   [LRM "lin651" (VarR "r650") Input,
                    LRM "lin652" (VarR "r650") Input,
-                   LRM "lout653" (VarR "r650") Output]
+                   LRM "lout653" (VarR "r760") Output]
                   (ProdTy [IntTy,
                            PackedTy "Expr" "lin651",
                            PackedTy "Expr" "lin652"])
@@ -1143,3 +1283,163 @@ substProg :: Prog
 substProg = Prog ddexpr (M.fromList [("subst", substFun),
                                      ("copyExpr", copyExprFun)])
             (Just (substMainExp, PackedTy "Expr" "l730"))
+
+--------------------------------------------------------------------------------
+
+ddtree' :: DDefs Ty2
+ddtree' = fromListDD [DDef (toVar "Tree")
+                       [ ("Leaf",[(False,IntTy)])
+                       , ("Node",[ (False,PackedTy "Tree" "l")
+                                 , (False,PackedTy "Tree" "l")])
+                       , ("Node^", [ (False,CursorTy)
+                                   , (False,PackedTy "Tree" "l")
+                                   , (False,PackedTy "Tree" "l")])
+                       , (indirectionTag++"1", [(False,CursorTy)])
+                       ]]
+
+-- The rightmost function *without* copy-insertion. Gibbon should add and use
+-- indirection pointers to get to the rightmost node of the tree.
+
+indrBuildTreeFun :: FunDef
+indrBuildTreeFun = FunDef "indrBuildTree" indrBuildTreeTy "i270" indrBuildTreeBod
+  where
+    indrBuildTreeTy :: ArrowTy Ty2
+    indrBuildTreeTy = (ArrowTy
+                   [LRM "lout272" (VarR "r271") Output]
+                   (IntTy)
+                   (S.empty)
+                   (PackedTy "Tree" "lout272")
+                   [])
+
+    indrBuildTreeBod :: L Exp2
+    indrBuildTreeBod = l$ LetE ("b279",[], BoolTy, l$ PrimAppE EqIntP [l$ VarE "i270", l$ LitE 0]) $
+                       l$ IfE (l$ VarE "b279")
+                       (l$ DataConE "lout272" "Leaf" [l$ LitE 1])
+                       (l$ LetE ("i273",[], IntTy, l$ PrimAppE SubP [l$ VarE "i270", l$ LitE 1]) $
+                        l$ Ext $ LetLocE "loc_indr" (AfterConstantLE 1 "lout272") $
+                        l$ Ext $ LetLocE "l274" (AfterConstantLE 8 "loc_indr") $
+                        l$ LetE ("x275",[],PackedTy "Tree" "l274",
+                                 l$ AppE "indrBuildTree" ["l274"] (l$ VarE "i273")) $
+                        l$ Ext $ LetLocE "l276" (AfterVariableLE "x275" "l274") $
+                        l$ LetE ("y277",[],PackedTy "Tree" "l276",
+                                 l$ AppE "indrBuildTree" ["l276"] (l$ VarE "i273")) $
+                        l$ LetE ("indr_cur",[],CursorTy,
+                                 l$ PrimAppE PEndOf [l$ VarE "x275"]) $
+                        -- l$ LetE ("indr_node",[], PackedTy "Tree" "loc_indr",
+                        --          l$ DataConE "loc_indr" (indirectionTag++"1") [l$ VarE "indr_cur"]) $
+                        l$ LetE ("a278",[],PackedTy "Tree" "lout272",
+                                 l$ DataConE "lout272" "Node^" [l$ VarE "indr_cur",
+                                                                l$ VarE "x275",
+                                                                l$ VarE "y277"]) $
+                        l$ VarE "a278")
+
+indrBuildTreeMainExp :: L Exp2
+indrBuildTreeMainExp = l$ Ext $ LetRegionE (VarR "r800") $
+                       l$ Ext $ LetLocE "l801" (StartOfLE (VarR "r800")) $
+                       l$ LetE ("tr802", [], PackedTy "Tree" "l801",
+                                l$ AppE "indrBuildTree" ["l801"] (l$ LitE 3)) $
+                       l$ VarE "tr802"
+
+indrBuildTreeProg :: Prog
+indrBuildTreeProg = Prog ddtree' (M.fromList [("indrBuildTree", indrBuildTreeFun)])
+                         (Just (indrBuildTreeMainExp, PackedTy "Tree" "l801"))
+
+
+indrRightmostFun :: FunDef
+indrRightmostFun = FunDef "indrRightmost" indrRightmostTy "t742" indrRightmostBod
+  where
+    indrRightmostTy :: ArrowTy Ty2
+    indrRightmostTy = (ArrowTy
+                       [LRM "lin741" (VarR "r740") Input]
+                       (PackedTy "Tree" "lin741")
+                       (S.empty)
+                       (IntTy)
+                       [])
+
+indrRightmostBod :: L Exp2
+indrRightmostBod = l$ CaseE (l$ VarE "t742")
+               [("Leaf", [("n746","l747")],
+                 l$ VarE "n746"),
+                ("Node^", [("indr_y750","lindr_y750"),("x748","l749"), ("y750","l751")],
+                 l$ LetE ("lm752",[],IntTy, l$ AppE "indrRightmost" ["l751"] (l$ VarE "y750")) $
+                 l$ VarE "lm752")]
+
+indrRightmostMainExp :: L Exp2
+indrRightmostMainExp = l$ Ext $ LetRegionE (VarR "r753") $
+                       l$ Ext $ LetLocE "l754" (StartOfLE (VarR "r753")) $
+                       l$ LetE ("tr1", [], PackedTy "Tree" "l754",
+                                l$ AppE "indrBuildTree" ["l754"] (l$ LitE 3)) $
+                       l$ LetE ("a760",[], IntTy,
+                                l$ AppE "indrRightmost" ["l754"] (l$ VarE "tr1")) $
+                       l$ VarE "a760"
+
+indrRightmostProg :: Prog
+indrRightmostProg = Prog ddtree' (M.fromList [("indrRightmost", indrRightmostFun)
+                                             ,("indrBuildTree",indrBuildTreeFun)])
+                    (Just (indrRightmostMainExp, IntTy))
+
+--------------------------------------------------------------------------------
+
+indrIDFun :: FunDef
+indrIDFun = FunDef "indrID" indrIDTy "tr800" indrIDBod
+  where
+    indrIDTy :: ArrowTy Ty2
+    indrIDTy = (ArrowTy
+                [LRM "lin802" (VarR "r801") Input, LRM "lout803" (VarR "r803") Output]
+                (PackedTy "Tree" "lin802")
+                (S.empty)
+                (PackedTy "Tree" "lout803")
+                [])
+
+    indrIDBod :: L Exp2
+    indrIDBod = l$ LetE ("a804",[], PackedTy "Tree" "lout803",
+                         l$ Ext $ IndirectionE "Tree"
+                                               (indirectionTag++"1")
+                                               ("lout803","r803")
+                                               ("lin802", "r801")
+                                               (l$ LitE 10)) $
+                l$ VarE ("a804")
+
+
+--------------------------------------------------------------------------------
+
+indrIDMainExp :: L Exp2
+indrIDMainExp = l$ Ext $ LetRegionE (VarR "r806") $
+                l$ Ext $ LetLocE "l807" (StartOfLE (VarR "r806")) $
+                l$ LetE ("tr1",[], PackedTy "Tree" "l807",
+                         l$ AppE "indrBuildTree" ["l807"] (l$ LitE 2)) $
+                l$ Ext $ LetRegionE (VarR "r808") $
+                l$ Ext $ LetLocE "l809" (StartOfLE (VarR "r808")) $
+                l$ LetE ("tr2",[], PackedTy "Tree" "l809",
+                         l$ AppE "indrID" ["l807", "l809"] (l$ VarE "tr1")) $
+                l$ LetE ("rmost",[], IntTy,
+                          l$ AppE "indrRightmost" ["l809"] (l$ VarE "tr2")) $
+                l$ VarE "rmost"
+
+indrIDProg :: Prog
+indrIDProg = Prog ddtree' (M.fromList [("indrBuildTree", indrBuildTreeFun)
+                                      ,("indrID", indrIDFun)
+                                      ,("indrRightmost",indrRightmostFun)])
+             (Just (indrIDMainExp, IntTy))
+
+
+--------------------------------------------------------------------------------
+
+indrIDSumMainExp :: L Exp2
+indrIDSumMainExp = l$ Ext $ LetRegionE (VarR "r806") $
+                   l$ Ext $ LetLocE "l807" (StartOfLE (VarR "r806")) $
+                   l$ LetE ("tr1",[], PackedTy "Tree" "l807",
+                         l$ AppE "buildTree" ["l807"] (l$ LitE 10)) $
+                   l$ Ext $ LetRegionE (VarR "r808") $
+                   l$ Ext $ LetLocE "l809" (StartOfLE (VarR "r808")) $
+                   l$ LetE ("tr2",[], PackedTy "Tree" "l809",
+                            l$ AppE "indrID" ["l807", "l809"] (l$ VarE "tr1")) $
+                   l$ LetE ("total",[], IntTy,
+                            l$ AppE "sumTree" ["l809"] (l$ VarE "tr2")) $
+                   l$ VarE "total"
+
+indrIDSumProg :: Prog
+indrIDSumProg = Prog ddtree' (M.fromList [("buildTree", buildTreeFun)
+                                         ,("indrID", indrIDFun)
+                                         ,("sumTree",sumTreeFun)])
+                (Just (indrIDSumMainExp, IntTy))

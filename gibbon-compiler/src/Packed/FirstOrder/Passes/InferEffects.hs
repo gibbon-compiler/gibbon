@@ -22,7 +22,7 @@ import Data.Set as S
 import Data.Map as M
 
 import Packed.FirstOrder.L2.Syntax
-import Packed.FirstOrder.Common hiding (FunDef)
+import Packed.FirstOrder.Common hiding (FunDef, FunEnv)
 import Packed.FirstOrder.L1.Syntax hiding (Prog, FunDef, ddefs, fundefs, mainExp)
 
 --------------------------------------------------------------------------------
@@ -159,6 +159,7 @@ inferExp ddfs fenv env (L _p exp) =
     Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env rhs
     Ext (RetE _ _)         -> (S.empty, Nothing)
     Ext (FromEndE _ )      -> (S.empty, Nothing)
+    Ext (IndirectionE{})   -> (S.empty, Nothing)
 
     oth -> error $ "FINISHME: inferExp " ++ sdoc oth
 
@@ -192,16 +193,13 @@ inferExp ddfs fenv env (L _p exp) =
                    -- If there is NO packed child data, then our object has static size:
                    (L.all (not . hasPacked) tys) ||
 
-                   -- Or if the last non-static item was in fact traversed:
+                   -- Or if all non-static items were traversed:
                    (case packedOnly of
-                         []  -> False
-                         _:_ -> let patVMap       = M.fromList patVs
-                                    lastPackedLoc = case M.lookup (fst$last packedOnly) patVMap of
-                                                      Just loc -> loc
-                                                      Nothing -> error $
-                                                                 sdoc patVMap ++ "does not contain"
-                                                                 ++  sdoc (fst$last packedOnly)
-                                in S.member (Traverse lastPackedLoc) eff)
+                      [] -> False
+                      ls -> let patVMap = M.fromList patVs
+                                packedlocs = L.map (\(a,_) -> patVMap # a) ls
+                            in all (\x -> S.member (Traverse x) eff) packedlocs)
+
                    -- Or maybe the last-use rule applies:
                    -- TODO
 

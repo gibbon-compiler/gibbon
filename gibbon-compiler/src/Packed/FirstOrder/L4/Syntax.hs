@@ -9,7 +9,7 @@
 
 module Packed.FirstOrder.L4.Syntax
     ( Var, Tag, Tail(..), Triv(..), Ty(..), Prim(..), FunDecl(..)
-    , Alts(..), Prog(..), MainExp(..)
+    , Alts(..), Prog(..), MainExp(..), Label
     -- * Utility functions
     , withTail
     , fromL3Ty
@@ -44,8 +44,6 @@ data MainExp
 
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
-type Tag = Word8
-
 data Triv
     = VarTriv Var
     | IntTriv Int64
@@ -68,9 +66,15 @@ instance Out Word8 where
   doc w = doc (fromIntegral w :: Int)
   docPrec n w = docPrec n (fromIntegral w :: Int)
 
+type Label = Var
+
 data Tail
     = RetValsT [Triv] -- ^ Only in tail position, for returning from a function.
-    | AssnValsT [(Var,Ty,Triv)] -- ^ INTERNAL ONLY: used for assigning instead of returning.
+    | AssnValsT { upd       :: [(Var,Ty,Triv)]
+                , bod_maybe :: Maybe Tail
+                }
+
+    -- ^ INTERNAL ONLY: used for assigning instead of returning.
 
     | LetCallT { binds :: [(Var,Ty)],
                  rator :: Var,
@@ -113,9 +117,10 @@ data Tail
                 , timed  :: Tail
                 , bod    :: Tail } -- ^ This is like a one-armed if.  It needs a struct return.
 
-    | Switch Triv Alts (Maybe Tail) -- TODO: remove maybe on default case
+    | Switch Label Triv Alts (Maybe Tail) -- TODO: remove maybe on default case
     -- ^ For casing on numeric tags or integers.
     | TailCall Var [Triv]
+    | Goto Label
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data Ty
@@ -132,6 +137,8 @@ data Ty
 
     | PtrTy   -- ^ A machine word.  Same width as IntTy.  Untyped.
               -- This is a pointer to a struct value which may contain other pointers.
+    | RegionTy -- ^ Region start and a refcount
+    | ChunkTy  -- ^ Start and end pointers
 
 -- TODO: Make Ptrs more type safe like this:
 --    | StructPtrTy { fields :: [Ty] } -- ^ A pointer to a struct containing the given fields.
@@ -153,12 +160,15 @@ data Prim
 
     | ReadPackedFile (Maybe FilePath) TyCon
 
-    | NewBuf
+    | NewBuffer Multiplicity
     -- ^ Allocate a new buffer, return a cursor.
-    | ScopedBuf
+    | ScopedBuffer Multiplicity
     -- ^ Returns a pointer to a buffer, with the invariant that data written
     -- to this region is no longer used after the enclosing function returns.
     -- I.e. this can be stack allocated data.
+
+    | InitSizeOfBuffer Multiplicity
+    -- ^ Returns the initial buffer size for a specific multiplicity
 
     | WriteTag
     -- ^ Write a static tag value, takes a cursor to target.
@@ -168,6 +178,16 @@ data Prim
     -- ^ Read one byte from the cursor and advance it.
     | ReadInt
     -- ^ Read an 8 byte Int from the cursor and advance.
+    | ReadCursor
+    -- ^ Read and return a cursor
+
+    | WriteCursor
+
+    | BoundsCheck
+
+    | BumpRefCount
+
+    | FreeBuffer
 
     | SizeOfPacked
     -- ^ Take start and end cursors and return size of data they represent
@@ -202,9 +222,10 @@ withTail :: (Tail,Ty) -> ([Triv] -> Tail) -> SyM Tail
 withTail (tl0,retty) fn =
   let go x = withTail (x,retty) fn in -- ^ Warning: assumes same type.
   case tl0 of
+    Goto{} -> return tl0
     RetValsT ls -> return $ fn ls
     (ErrT x)    -> return $ ErrT x
-    (AssnValsT _) -> error $ "withTail: expected tail expression returning values, not: "++show tl0
+    (AssnValsT _ _) -> error $ "withTail: expected tail expression returning values, not: "++show tl0
     (LetCallT { binds, rator, rands, bod })    -> LetCallT binds rator rands    <$> go bod
     (LetPrimCallT { binds, prim, rands, bod }) -> LetPrimCallT binds prim rands <$> go bod
     (LetTrivT { bnd, bod })                    -> LetTrivT   bnd                <$> go bod
@@ -218,7 +239,7 @@ withTail (tl0,retty) fn =
         -- LetIfT _vr (tst,con,els)  $ fn [VarTriv _vr]
 
     -- Uh oh, here we don't have a LetSwitch form... duplicate code.
-    (Switch trv alts mlast) -> Switch trv <$> mapAltsM go alts <*> sequence (fmap go mlast)
+    (Switch lbl trv alts mlast) -> Switch lbl trv <$> mapAltsM go alts <*> sequence (fmap go mlast)
     (TailCall x1 x2)        -> do bnds <- genTmps retty
                                   return $ LetCallT bnds x1 x2 $ fn (map (VarTriv . fst) bnds)
  where

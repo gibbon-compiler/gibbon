@@ -201,7 +201,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                                                  Just la -> wrapBody (L p' (Ext (LetLocE la (FromEndLE l2) e))) ls
                      wrapBody e [] = e
 
-                 newls <- foldM handleTravList [] travlist
+                 newls <- reverse <$> foldM handleTravList [] travlist
                  let eor' = L.foldr mkEor eor newls
                  let outlocs = L.map snd newls
                  e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) e2
@@ -374,10 +374,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
           Ext (LetLocE v (AfterVariableLE x l1) e) -> do
                  e' <- go e
                  return $ Ext (LetLocE v (AfterVariableLE x l1) e')
-
-          _ -> internalError $ "RouteEnds: Unsupported expression: " ++ (show e)
-
-
+          Ext (IndirectionE{}) -> return e
 
         where  mkRet :: [LocVar] -> (L Exp2) -> SyM (L Exp2)
                mkRet ls (L p (VarE v)) =

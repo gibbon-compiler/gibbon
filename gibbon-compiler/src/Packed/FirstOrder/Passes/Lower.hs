@@ -58,22 +58,33 @@ genDcons (x:xs) tail fields = case x of
     t    <- gensym  "tail"
     T.LetCallT [(ptr, T.PtrTy), (t, T.CursorTy)] (mkUnpackerName tyCons) [(T.VarTriv tail)]
       <$> genDcons xs t (fields ++ [(T.CursorTy, T.VarTriv ptr)])
-  _                    -> error $ "genDcons: FIXME " ++ show x
+
+  -- Indirection, don't do anything
+  CursorTy -> do
+    next <- gensym "next"
+    afternext <- gensym "afternext"
+    T.LetPrimCallT [(next, T.CursorTy),(afternext,T.CursorTy)] T.ReadCursor [(T.VarTriv tail)] <$>
+      genDcons xs afternext fields
+
+  _ -> error $ "genDcons: FIXME " ++ show x
 
 genDcons [] tail fields     = do
   ptr <- gensym "ptr"
   return $ T.LetAllocT ptr fields $ T.RetValsT [T.VarTriv ptr, T.VarTriv tail]
 
 genAlts :: [(DataCon,[(IsBoxed,Ty3)])] -> Var -> Var -> Int64 -> SyM T.Alts
-genAlts ((_, typs):xs) tail tag n = do
+genAlts ((dcons, typs):xs) tail tag n = do
   let (_,typs') = unzip typs
   -- WARNING: IsBoxed ignored here
   curTail <- genDcons typs' tail [(T.TagTyPacked, T.VarTriv tag)]
   alts    <- genAlts xs tail tag (n+1)
+  let alt = if isIndirectionTag dcons
+            then indirectionAlt
+            else n
   case alts of
-    T.IntAlts []   -> return $ T.IntAlts [(n::Int64, curTail)]
+    T.IntAlts []   -> return $ T.IntAlts [(alt::Int64, curTail)]
     -- T.TagAlts []   -> return $ T.TagAlts [(n::Word8, curTail)]
-    T.IntAlts tags -> return $ T.IntAlts ((n::Int64, curTail) : tags)
+    T.IntAlts tags -> return $ T.IntAlts ((alt::Int64, curTail) : tags)
     -- T.TagAlts tags -> return $ T.TagAlts ((n::Word8, curTail) : tags)
     _              -> error $ "Invalid case statement type."
 
@@ -85,8 +96,9 @@ genUnpacker DDef{tyName, dataCons} = do
   tag  <- gensym "tag"
   tail <- gensym "tail"
   alts <- genAlts dataCons tail tag 0
+  lbl  <- gensym "switch"
   bod  <- return $ T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] T.ReadTag [(T.VarTriv p)] $
-            T.Switch (T.VarTriv tag) alts Nothing
+            T.Switch lbl (T.VarTriv tag) alts Nothing
   return T.FunDecl{ T.funName  = mkUnpackerName (fromVar tyName),
                     T.funArgs  = [(p, T.CursorTy)],
                     T.funRetTy = T.ProdTy [T.PtrTy, T.CursorTy],
@@ -135,6 +147,8 @@ genDconsPrinter (x:xs) tail = case x of
        maybeSpace <$>
          genDconsPrinter xs t
 
+  L1.CursorTy -> genDconsPrinter xs tail
+
   _ -> error "FINISHME: genDconsPrinter"
 
  where
@@ -151,10 +165,13 @@ genAltPrinter ((dcons, typs):xs) tail n = do
   -- WARNING: IsBoxed ignored here
   curTail <- (openParen dcons) <$> genDconsPrinter typs' tail
   alts    <- genAltPrinter xs tail (n+1)
+  let alt = if isIndirectionTag dcons
+            then indirectionAlt
+            else n
   case alts of
-    T.IntAlts []   -> return $ T.IntAlts [(n::Int64, curTail)]
+    T.IntAlts []   -> return $ T.IntAlts [(alt::Int64, curTail)]
     -- T.TagAlts []   -> return $ T.TagAlts [(n::Word8, curTail)]
-    T.IntAlts tags -> return $ T.IntAlts ((n::Int64, curTail) : tags)
+    T.IntAlts tags -> return $ T.IntAlts ((alt::Int64, curTail) : tags)
     -- T.TagAlts tags -> return $ T.TagAlts ((n::Word8, curTail) : tags)
     _              -> error $ "Invalid case statement type."
 genAltPrinter [] _ _                = return $ T.IntAlts []
@@ -165,8 +182,10 @@ genPrinter DDef{tyName, dataCons} = do
   tag  <- gensym "tag"
   tail <- gensym "tail"
   alts <- genAltPrinter dataCons tail 0
+  lbl  <- gensym "switch"
+  -- TODO: Why is this ReadInt ?
   bod  <- return $ T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] T.ReadInt [(T.VarTriv p)] $
-            T.Switch (T.VarTriv tag) alts Nothing
+            T.Switch lbl (T.VarTriv tag) alts Nothing
   return T.FunDecl{ T.funName  = mkPrinterName (fromVar tyName),
                     T.funArgs  = [(p, T.CursorTy)],
                     T.funRetTy = T.PtrTy,
@@ -359,18 +378,24 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
             rest = reverse restrev
         tagtmp <- gensym $ toVar "tmpval"
         ctmp   <- gensym $ toVar "tmpcur"
-        -- We only need to thread one value through, the cursor resulting from read.
-        let doalt (k,ls,rhs) =
-             (getTagOfDataCon ddefs k,) <$>
-             case ls of
-               []  -> tail rhs -- AUDITME -- is this legit, or should it have one cursor param anyway?
-               [(c,_)] -> tail (subst c (l$ VarE ctmp) rhs)
-               oth -> error $ "lower.tail.CaseE: unexpected pattern" ++ show oth
+        -- Here we lamely chase down all the tuple references and make them variables:
+        -- So that Goto's work properly (See [Modifying switch statements to use redirection nodes]).
+        let doalt (k,ls,rhs) = do
+              let rhs' = L1.substE (l$ Ext (AddCursor scrut (l$ LitE 1))) (l$ VarE ctmp) $
+                         rhs
+              -- We only need to thread one value through, the cursor resulting from read.
+              (getTagOfDataCon ddefs k,) <$>
+                case ls of
+                  []  -> tail rhs' -- AUDITME -- is this legit, or should it have one cursor param anyway?
+                  [(c,_)] -> tail (subst c (l$ VarE ctmp) rhs')
+                  oth -> error $ "lower.tail.CaseE: unexpected pattern" ++ show oth
         alts <- mapM doalt rest
         (_,last') <- doalt last
+        lbl <- gensym "switch"
         return $
          T.LetPrimCallT [(tagtmp,T.TagTyPacked),(ctmp,T.CursorTy)] T.ReadTag [T.VarTriv scrut] $
-          T.Switch (T.VarTriv tagtmp)
+          T.Switch lbl
+                   (T.VarTriv tagtmp)
                    (T.TagAlts alts)
                    (Just last')
 
@@ -417,13 +442,14 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
 
       alts'    <- mapM mk_alt alts
       (_, def) <- mk_alt def_alt
+      lbl <- gensym "switch"
 
       return $
         T.LetPrimCallT
           [(tag_bndr, T.TagTyPacked), (tail_bndr, T.CursorTy)]
           T.ReadInt
           [e_triv]
-          (T.Switch (T.VarTriv tag_bndr) (T.IntAlts alts') (Just def))
+          (T.Switch lbl (T.VarTriv tag_bndr) (T.IntAlts alts') (Just def))
 
 
     -- Accordingly, constructor allocation becomes an allocation.
@@ -488,7 +514,8 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
 
     IfE a b c       -> do b' <- tail b
                           c' <- tail c
-                          return $ T.Switch (triv "if test" a)
+                          lbl <- gensym "switch"
+                          return $ T.Switch lbl (triv "if test" a)
                                       -- If we are treating the boolean as a tag, then tag "0" is false
                                       (T.IntAlts [(0, c')])
                                       -- And tag "1" is true:
@@ -541,14 +568,32 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
 
 
     -- In Target, AddP is overloaded still:
+    LetE (v,_, _, L _ (Ext (AddCursor c (L _ (Ext (InitSizeOfBuffer mul)))))) bod -> do
+      size <- gensym (varAppend "sizeof_" v)
+      T.LetPrimCallT [(size,T.IntTy)] (T.InitSizeOfBuffer mul) [] <$>
+        T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv "addCursor base" (l$ VarE c)
+                                               , triv "addCursor offset" (l$ VarE size)] <$>
+        tail bod
+
     LetE (v,_, _, L _ (Ext (AddCursor c e))) bod ->
       T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv "addCursor base" (l$ VarE c)
                                              , triv "addCursor offset" e] <$>
          tail bod
 
+    LetE (v,_, _, L _ (Ext (ReadTag cur))) bod -> do
+      vtmp <- gensym $ toVar "tmptag"
+      ctmp <- gensym $ toVar "tmpcur"
 
-    LetE (_v,_, _, L _ (Ext (ReadTag _cur))) _bod ->
-      error $ "lower: ReadTag not handled yet."
+      -- Here we lamely chase down all the tuple references and make them variables:
+      let bod' = L1.substE (l$ ProjE 0 (l$ VarE v)) (l$ VarE vtmp) $
+                 L1.substE (l$ ProjE 1 (l$ VarE v)) (l$ VarE ctmp)
+                 bod
+
+      dbgTrace 5 (" [lower] ReadTag, after substing references to "
+                  ++(fromVar v)++":\n  "++sdoc bod') <$>
+        T.LetPrimCallT [(vtmp,T.TagTyPacked),(ctmp,T.CursorTy)] T.ReadTag [T.VarTriv cur] <$>
+          tail bod'
+      -- error $ "lower: ReadTag not handled yet."
 
 
     LetE (cursOut,_, _, L _ (Ext (WriteTag dcon cursIn))) bod -> do
@@ -556,12 +601,19 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
         [ T.TagTriv (getTagOfDataCon ddefs dcon) , triv "WriteTag cursor" (l$ VarE cursIn) ] <$>
         tail bod
 
-    LetE (v,_,_, L _ (Ext NewBuffer)) bod -> do
-      T.LetPrimCallT [(v,T.CursorTy)] T.NewBuf [] <$>
-         tail bod
+    LetE (v,_,_, L _ (Ext (NewBuffer mul))) bod -> do
+      let toEndV = varAppend "end_"
+      reg <- gensym "region"
+      tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy)] (T.NewBuffer mul) [] <$>
+               tail bod
+      -- The type shouldn't matter. PtrTy is not used often in current programs,
+      -- and would be easy to spot.
+      T.withTail (tl',T.PtrTy) $ \trvs ->
+         (T.LetPrimCallT [] T.FreeBuffer [(T.VarTriv reg),(T.VarTriv v),(T.VarTriv (toEndV v))] $
+            T.RetValsT trvs)
 
-    LetE (v,_,_, L _ (Ext ScopedBuffer)) bod -> do
-      T.LetPrimCallT [(v,T.CursorTy)] T.ScopedBuf [] <$>
+    LetE (v,_,_, L _ (Ext (ScopedBuffer mul))) bod -> do
+      T.LetPrimCallT [(v,T.CursorTy)] (T.ScopedBuffer mul) [] <$>
          tail bod
 
     LetE (v,_,_, L _ (Ext (SizeOfPacked start end))) bod -> do
@@ -570,6 +622,29 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
 
     LetE (v,_,_, L _ (Ext (SizeOfScalar w))) bod -> do
       T.LetPrimCallT [(v,T.IntTy)] T.SizeOfScalar [ T.VarTriv w ] <$>
+        tail bod
+
+    -- Just a side effect
+    LetE(_,_,_, L _ (Ext (BoundsCheck i bound cur))) bod -> do
+      let args = [T.IntTriv (fromIntegral i), T.VarTriv bound, T.VarTriv cur]
+      T.LetPrimCallT [] T.BoundsCheck args <$> tail bod
+
+    LetE(v,_,_, L _ (Ext (ReadCursor c))) bod -> do
+      vtmp <- gensym $ toVar "tmpcur"
+      ctmp <- gensym $ toVar "tmpaftercur"
+      -- Here we lamely chase down all the tuple references and make them variables:
+      let bod' = L1.substE (l$ ProjE 0 (l$ VarE v)) (l$ VarE vtmp) $
+                 L1.substE (l$ ProjE 1 (l$ VarE v)) (l$ VarE ctmp)
+                 bod
+      T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy)] T.ReadCursor [T.VarTriv c] <$>
+        tail bod'
+
+    LetE (v, _, _, L _ (Ext (WriteCursor cur e))) bod ->
+      T.LetPrimCallT [(v,T.CursorTy)] T.WriteInt [triv "WriteCursor arg" e, T.VarTriv cur] <$>
+         tail bod
+
+    LetE (_, _, _, L _ (Ext (BumpRefCount end_r1 end_r2))) bod ->
+      T.LetPrimCallT [] T.BumpRefCount [T.VarTriv end_r1, T.VarTriv end_r2] <$>
         tail bod
 
     Ext _ -> error $ "lower: unexpected extension" ++ sdoc ex0
@@ -759,3 +834,4 @@ prim p =
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."
     MkFalse      -> error "lower/prim: internal error. MkFalse should not get here."
     SymAppend    -> error "lower/prim: internal error. SymAppend should not get here."
+    PEndOf       -> error "lower/prim: internal error. PEndOf shouldn't be here."

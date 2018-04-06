@@ -9,7 +9,7 @@ maintainer:            rrnewton@gmail.com
 -- copyright:
 -- category:
 build-type:            Simple
-extra-source-files:    README.md, rts.c
+extra-source-files:    README.md, cbits/rts.c
 cabal-version:         >=1.10
 
 flag LLVM_ENABLED
@@ -39,15 +39,22 @@ library
                        Packed.FirstOrder.Passes.Flatten
                        Packed.FirstOrder.Passes.InlineTriv
                        Packed.FirstOrder.Passes.DirectL3
+                       Packed.FirstOrder.Passes.AddLayout
                        Packed.FirstOrder.Passes.InferLocations
+                       Packed.FirstOrder.Passes.RemoveCopies
+                       Packed.FirstOrder.Passes.InferMultiplicity
                        Packed.FirstOrder.Passes.InferEffects
                        Packed.FirstOrder.Passes.RouteEnds
+                       Packed.FirstOrder.Passes.BoundsCheck
+                       Packed.FirstOrder.Passes.ThreadRegions
                        Packed.FirstOrder.Passes.Cursorize
                        Packed.FirstOrder.Passes.FindWitnesses
                        Packed.FirstOrder.Passes.ShakeTree
                        Packed.FirstOrder.Passes.HoistNewBuf
                        Packed.FirstOrder.Passes.Unariser
                        Packed.FirstOrder.Passes.Lower
+                       Packed.FirstOrder.Passes.FollowRedirects
+                       Packed.FirstOrder.Passes.RearrangeFree
                        Packed.FirstOrder.Passes.Codegen
 
   -- other-modules:
@@ -133,15 +140,17 @@ test-suite test-gibbon
                        srcloc,
                        mtl, transformers,
                        tasty, tasty-hunit, tasty-th
-  other-modules:
-                RouteEnds
-                InferEffects
-                InferLocations
-                Unariser
-                Compiler
-                L2.Typecheck
-                L1.Typecheck
-                L3.Typecheck
+
+  other-modules:       RouteEnds
+                       InferEffects
+                       InferLocations
+                       Unariser
+                       InferMultiplicity
+                       AddLayout
+                       Compiler
+                       L2.Typecheck
+                       L1.Typecheck
+                       L3.Typecheck
 
   default-language:    Haskell2010
   ghc-options:         -fdefer-typed-holes

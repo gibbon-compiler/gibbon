@@ -63,10 +63,12 @@ tcExp ddfs env exp@(L p ex) =
           return CursorTy
 
         -- ^ Create a new buffer, and return a cursor
-        NewBuffer -> return CursorTy
+        NewBuffer{} -> return CursorTy
 
         -- ^ Create a scoped buffer, and return a cursor
-        ScopedBuffer -> return CursorTy
+        ScopedBuffer{} -> return CursorTy
+
+        InitSizeOfBuffer{} -> return IntTy
 
         -- ^ Takes in start and end cursors, and returns an Int
         SizeOfPacked start end -> do
@@ -84,6 +86,32 @@ tcExp ddfs env exp@(L p ex) =
           ensureEqualTy exp sty IntTy
           return IntTy
 
+        -- The IntTy is just a placeholder. BoundsCheck is a side-effect
+        BoundsCheck _ bound cur -> do
+          rty <- lookupVar env bound exp
+          ensureEqualTy exp rty CursorTy
+          cty <- lookupVar env cur exp
+          ensureEqualTy exp cty CursorTy
+          return IntTy
+
+        ReadCursor v -> do
+          vty <- lookupVar env v exp
+          ensureEqualTy exp vty CursorTy
+          return $ ProdTy [CursorTy, CursorTy]
+
+        WriteCursor cur val -> do
+          curty  <- lookupVar env cur exp
+          ensureEqualTy exp curty CursorTy
+          valty <- go val
+          ensureEqualTy exp valty CursorTy
+          return CursorTy
+
+        BumpRefCount end_r1 end_r2 -> do
+          end_r1_ty  <- lookupVar env end_r1 exp
+          ensureEqualTy exp end_r1_ty CursorTy
+          end_r2_ty  <- lookupVar env end_r2 exp
+          ensureEqualTy exp end_r2_ty CursorTy
+          return IntTy
 
     -- All the other cases are exactly same as L1.Typecheck
 
@@ -186,6 +214,8 @@ tcExp ddfs env exp@(L p ex) =
         MkNullCursor -> do
           len0
           return CursorTy
+
+        PEndOf -> error "Do not use PEndOf after L2."
 
         oth -> error $ "L3.tcExp : PrimAppE : TODO " ++ sdoc oth
 

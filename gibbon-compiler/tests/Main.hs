@@ -16,13 +16,16 @@ import Test.Tasty.TH
 -- |
 import Packed.FirstOrder.L4.Syntax hiding (Prog (..), Ty (..))
 
+import Packed.FirstOrder.Common (Multiplicity(..))
 import qualified Packed.FirstOrder.L4.Syntax as T
 import qualified Packed.FirstOrder.TargetInterp as TI
 
 -- |
 import RouteEnds
 import InferEffects
+import InferMultiplicity
 import Unariser
+import AddLayout
 import Compiler
 import L2.Typecheck
 import L1.Typecheck
@@ -33,9 +36,11 @@ main :: IO ()
 main = defaultMain allTests
   where allTests = testGroup "All"
                    [ tests
+                   , addLayoutTests
                    , routeEnds2Tests
                    , inferLocations2Tests
                    , inferEffects2Tests
+                   , inferRegScopeTests
                    , unariser2Tests
                    -- , l2TypecheckerTests
                    , l1TypecheckerTests
@@ -271,8 +276,8 @@ _case_copy =
 add1_prog :: T.Prog
 add1_prog = T.Prog [build_tree, add1]
             (Just $ PrintExp $
-             LetPrimCallT [("buf", T.CursorTy)] T.NewBuf [] $
-             LetPrimCallT [("buf2", T.CursorTy)] T.NewBuf [] $
+             LetPrimCallT [("buf", T.CursorTy)] (T.NewBuffer BigInfinite) [] $
+             LetPrimCallT [("buf2", T.CursorTy)] (T.NewBuffer BigInfinite) [] $
              LetCallT [( "tr", T.PtrTy)] "build_tree" [IntTriv 10, VarTriv "buf"] $
              LetCallT [("ignored1", T.CursorTy), ("ignored2", T.CursorTy)] "add1"  [VarTriv "tr", VarTriv "buf2"] $
              (RetValsT [])
@@ -282,7 +287,7 @@ add1_prog = T.Prog [build_tree, add1]
     add1 = FunDecl "add1" [("t",T.CursorTy),("tout",T.CursorTy)] (T.ProdTy [T.CursorTy,T.CursorTy]) add1_tail True
 
     buildTree_tail =
-        Switch (VarTriv "n") (IntAlts [(0, base_case)]) (Just recursive_case)
+        Switch "switch1" (VarTriv "n") (IntAlts [(0, base_case)]) (Just recursive_case)
       where
         base_case, recursive_case :: Tail
 
@@ -299,7 +304,7 @@ add1_prog = T.Prog [build_tree, add1]
 
     add1_tail =
         LetPrimCallT [("ttag",T.TagTyPacked),("t2",T.CursorTy)] ReadTag [VarTriv "t"] $
-        Switch (VarTriv "ttag")
+        Switch "switch2" (VarTriv "ttag")
                (TagAlts [(leafTag,leafCase),
                          (nodeTag,nodeCase)])
                Nothing

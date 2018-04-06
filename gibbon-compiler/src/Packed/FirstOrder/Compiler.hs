@@ -55,6 +55,11 @@ import           Packed.FirstOrder.Passes.InlineTriv     (inlineTriv)
 
 import           Packed.FirstOrder.Passes.DirectL3       (directL3)
 import           Packed.FirstOrder.Passes.InferLocations (inferLocs)
+import           Packed.FirstOrder.Passes.AddLayout      (smartAddLayout)
+import           Packed.FirstOrder.Passes.RemoveCopies   (removeCopies)
+import           Packed.FirstOrder.Passes.InferMultiplicity (inferRegScope)
+import           Packed.FirstOrder.Passes.BoundsCheck    (boundsCheck)
+import           Packed.FirstOrder.Passes.ThreadRegions  (threadRegions)
 import           Packed.FirstOrder.Passes.InferEffects   (inferEffects)
 import           Packed.FirstOrder.Passes.RouteEnds      (routeEnds)
 import           Packed.FirstOrder.Passes.Cursorize      (cursorize)
@@ -63,6 +68,8 @@ import           Packed.FirstOrder.Passes.Cursorize      (cursorize)
 import           Packed.FirstOrder.Passes.HoistNewBuf    (hoistNewBuf)
 import           Packed.FirstOrder.Passes.Unariser       (unariser)
 import           Packed.FirstOrder.Passes.Lower          (lower)
+import           Packed.FirstOrder.Passes.FollowRedirects(followRedirects)
+import           Packed.FirstOrder.Passes.RearrangeFree  (rearrangeFree)
 import           Packed.FirstOrder.Passes.Codegen        (codegenProg)
 #ifdef LLVM_ENABLED
 import qualified Packed.FirstOrder.Passes.LLVM.Codegen as LLVM
@@ -96,20 +103,16 @@ lowerCopiesAndTraversals p = pure p
 -- | Overall configuration of the compiler, as determined by command
 -- line arguments and possible environment variables.
 data Config = Config
-  { input     :: Input
-  , mode      :: Mode -- ^ How to run, which backend.
+  { input      :: Input
+  , mode       :: Mode -- ^ How to run, which backend.
   , benchInput :: Maybe FilePath -- ^ What packed, binary .gpkd file to use as input.
-  , benchPrint :: Bool  -- ^ Should the benchamrked function have its output printed?
-  , packed     :: Bool  -- ^ Use packed representation.
-  , bumpAlloc  :: Bool  -- ^ Use bump-pointer allocation if using the non-packed backend.
   , verbosity  :: Int   -- ^ Debugging output, equivalent to DEBUG env var.
-  , cc        :: String -- ^ C compiler to use
-  , optc      :: String -- ^ Options to the C compiler
-  , warnc     :: Bool
-  , cfile     :: Maybe FilePath -- ^ Optional override to destination .c file.
-  , exefile   :: Maybe FilePath -- ^ Optional override to destination binary file.
-  , backend   :: Backend -- ^ Compilation backend used
-  , stopAfter    :: String  -- ^ Stop the compilation pipeline after this pass
+  , cc         :: String -- ^ C compiler to use
+  , optc       :: String -- ^ Options to the C compiler
+  , cfile      :: Maybe FilePath -- ^ Optional override to destination .c file.
+  , exefile    :: Maybe FilePath -- ^ Optional override to destination binary file.
+  , backend    :: Backend        -- ^ Compilation backend used
+  , dynflags   :: DynFlags
   }
   deriving (Show,Read,Eq,Ord)
 
@@ -125,10 +128,8 @@ data Mode = ToParse  -- ^ Parse and then stop
           | ToExe    -- ^ Compile to C then build a binary.
           | RunExe   -- ^ Compile to executable then run.
           | Interp2  -- ^ Interp late in the compiler pipeline.
-          | Interp1  -- ^ Interp early.  Not implemented.
-
+          | Interp1  -- ^ Interp early.
           | Bench Var -- ^ Benchmark a particular function applied to the packed data within an input file.
-
           | BenchInput FilePath -- ^ Hardcode the input file to the benchmark in the C code.
   deriving (Show,Read,Eq,Ord)
 
@@ -136,26 +137,81 @@ data Mode = ToParse  -- ^ Parse and then stop
 data Backend = C | LLVM
   deriving (Show,Read,Eq,Ord)
 
+--------------------------------------------------------------------------------
+-- Flags à la GHC
+
+data GeneralFlag
+  = Opt_Gibbon1            -- ^ Set Opt_No_RemoveCopies & Opt_BigInfiniteRegions
+  | Opt_Gibbon2            -- ^ Set Opt_RemoveCopies & Opt_InfiniteRegions
+  | Opt_RemoveCopies       -- ^ Calls to copy functions are converted to indirections
+  | Opt_No_RemoveCopies    -- ^ Unset Opt_RemoveCopies
+  | Opt_InfiniteRegions    -- ^ Use infinite regions
+  | Opt_BigInfiniteRegions -- ^ Use big infinite regions
+  | Opt_BenchPrint         -- ^ Should the benchamrked function have its output printed?
+  | Opt_Packed             -- ^ Use packed representation
+  | Opt_Pointer            -- ^ Use pointer representation
+  | Opt_BumpAlloc          -- ^ Use bump-pointer allocation if using the non-packed backend
+  | Opt_Warnc              -- ^ Show warnings from the C compiler
+  deriving (Show,Read,Eq,Ord)
+
+-- Coming soon ...
+-- data DebugFlag
+-- data WarningFlag
+
+data DynFlags = DynFlags { generalFlags :: Set GeneralFlag }
+  deriving (Show,Read,Eq,Ord)
+
+defaultDynFlags :: DynFlags
+defaultDynFlags = DynFlags { generalFlags = S.empty }
+
+-- | Test whether a 'GeneralFlag' is set
+gopt :: GeneralFlag -> DynFlags -> Bool
+gopt f dflags  = f `S.member` generalFlags dflags
+
+dynflagsParser :: Parser DynFlags
+dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser)
+  where
+    gflagsParser :: Parser GeneralFlag
+    gflagsParser = -- Default Opt_Gibbon2
+                   flag' Opt_Gibbon1 (long "gibbon1" <>
+                                      help "Gibbon1 mode") <|>
+                   -- Default Opt_RemoveCopies
+                   flag' Opt_No_RemoveCopies (long "no-rcopies" <>
+                                              help "Calls to copy functions are *not* converted to indirections") <|>
+                   -- Default Opt_InfiniteRegions
+                   flag' Opt_BigInfiniteRegions (long "biginf" <>
+                                                 help "Use big infinite regions") <|>
+                   flag' Opt_BenchPrint (long "bench-print" <>
+                                         help "Print the output of the benchmarked function, rather than #t") <|>
+                   flag' Opt_Packed (short 'p' <>
+                                     long "packed" <>
+                                     help "Enable packed tree representation in C backend") <|>
+                   flag' Opt_Pointer (long "pointer" <>
+                                      help "Enable pointer-based trees in C backend (default)") <|>
+                   flag' Opt_BumpAlloc (long "bumpalloc" <>
+                                        help "Use BUMPALLOC mode in generated C code.  Only affects --pointer") <|>
+                   flag' Opt_Warnc (short 'w' <>
+                                    long "warnc" <>
+                                    help "Show warnings from C compiler, normally suppressed")
+
+--------------------------------------------------------------------------------
+
 defaultConfig :: Config
 defaultConfig =
   Config { input = Unspecified
          , mode  = ToExe
          , benchInput = Nothing
-         , benchPrint = False
-         , packed    = False
-         , bumpAlloc = False
          , verbosity = 1
          , cc = "gcc"
          , optc = " -O3  "
-         , warnc = False
          , cfile = Nothing
          , exefile = Nothing
          , backend = C
-         , stopAfter = ""
+         , dynflags = defaultDynFlags
          }
 
 suppress_warnings :: String
-suppress_warnings = " -Wno-incompatible-pointer-types -Wno-int-conversion "
+suppress_warnings = " -Wno-incompatible-pointer-types -Wno-int-conversion -Wno-int-to-pointer-cast "
 
 configParser :: Parser Config
 configParser = Config <$> inputParser
@@ -165,33 +221,20 @@ configParser = Config <$> inputParser
                                             " becomes a command-line argument of the resulting binary."++
                                             " Also we RUN the benchmark right away if this is provided.")))
                           <|> pure Nothing)
-                      <*> (switch (long "bench-print" <>
-                                  help "print the output of the benchmarked function, rather than #t"))
-                      <*> (switch (short 'p' <> long "packed" <>
-                                  help "enable packed tree representation in C backend")
-                           <|> fmap not (switch (long "pointer" <>
-                                         help "enable pointer-based trees in C backend (default)"))
-                          )
-                      <*> switch (long "bumpalloc" <>
-                                  help "Use BUMPALLOC mode in generated C code.  Only affects --pointer")
-
                       <*> (option auto (short 'v' <> long "verbose" <>
                                        help "Set the debug output level, 1-5, mirrors DEBUG env var.")
                            <|> pure 1)
-                      <*> ((strOption $ long "cc" <> help "set C compiler, default 'gcc'")
+                      <*> ((strOption $ long "cc" <> help "Set C compiler, default 'gcc'")
                             <|> pure (cc defaultConfig))
-                      <*> ((strOption $ long "optc" <> help "set C compiler options, default '-std=gnu11 -O3'")
+                      <*> ((strOption $ long "optc" <> help "Set C compiler options, default '-std=gnu11 -O3'")
                            <|> pure (optc defaultConfig))
-                      <*> switch (short 'w' <> long "warnc" <>
-                                  help "Show warnings from C compiler, normally suppressed")
-                      <*> ((fmap Just (strOption $ long "cfile" <> help "set the destination file for generated C code"))
+                      <*> ((fmap Just (strOption $ long "cfile" <> help "Set the destination file for generated C code"))
                            <|> pure (cfile defaultConfig))
                       <*> ((fmap Just (strOption $ short 'o' <> long "exefile" <>
-                                       help "set the destination file for the executable"))
+                                       help "Set the destination file for the executable"))
                            <|> pure (exefile defaultConfig))
                       <*> backendParser
-                      <*> ((strOption $ long "stop-after" <> help "Stop the compilation pipeline after this pass")
-                            <|> pure (stopAfter defaultConfig))
+                      <*> dynflagsParser
  where
   inputParser :: Parser Input
                 -- I'd like to display a separator and some more info.  How?
@@ -200,14 +243,14 @@ configParser = Config <$> inputParser
                 flag Unspecified SExpr (long "gib")
 
   modeParser = -- infoOption "foo" (help "bar") <*>
-               flag' ToParse (long "parse" <> help "only parse, then print & stop") <|>
-               flag' ToC     (long "toC" <> help "compile to a C file, named after the input") <|>
+               flag' ToParse (long "parse" <> help "Only parse, then print & stop") <|>
+               flag' ToC     (long "toC" <> help "Compile to a C file, named after the input") <|>
                flag' Interp1 (long "interp1" <> help "run through the interpreter early, right after parsing") <|>
                flag' Interp2 (short 'i' <> long "interp2" <>
-                              help "run through the interpreter after cursor insertion") <|>
-               flag' RunExe  (short 'r' <> long "run"     <> help "compile and then run executable") <|>
+                              help "Run through the interpreter after cursor insertion") <|>
+               flag' RunExe  (short 'r' <> long "run"     <> help "Compile and then run executable") <|>
                (Bench <$> toVar <$> strOption (short 'b' <> long "bench-fun" <> metavar "FUN" <>
-                                     help ("generate code to benchmark a 1-argument FUN against a input packed file."++
+                                     help ("Generate code to benchmark a 1-argument FUN against a input packed file."++
                                            "  If --bench-input is provided, then the benchmark is run as well.")))
 
   -- use C as the default backend
@@ -221,7 +264,7 @@ configWithArgs = (,) <$> configParser
                      <*> some (argument str (metavar "FILES..."
                                              <> help "Files to compile."))
 
-----------------------------------------
+--------------------------------------------------------------------------------
 
 -- | Command line version of the compiler entrypoint.  Parses command
 -- line arguments given as string inputs.  This also allows us to run
@@ -255,7 +298,7 @@ data CompileState =
 -- | Compiler entrypoint, given a full configuration and a list of
 -- files to process, do the thing.
 compile :: Config -> FilePath -> IO ()
-compile config@Config{mode,input,verbosity,backend,cfile,packed} fp0 = do
+compile config@Config{mode,input,verbosity,backend,cfile,dynflags} fp0 = do
   -- set the env var DEBUG, to verbosity, when > 1
   setDebugEnvVar verbosity
 
@@ -278,7 +321,7 @@ compile config@Config{mode,input,verbosity,backend,cfile,packed} fp0 = do
       initResult <- interpProg l1
 
       -- (Stage 2) C/LLVM codegen
-      let outfile = getOutfile backend fp cfile
+      let outfile = getOutfile dynflags backend fp cfile
 
       -- run the initial program through the compiler pipeline
       stM <- return $ passes config l1
@@ -291,9 +334,9 @@ compile config@Config{mode,input,verbosity,backend,cfile,packed} fp0 = do
         exitSuccess
       else do
         str <- case backend of
-                 C    -> codegenProg packed l4
+                 C    -> codegenProg (gopt Opt_Packed dynflags) l4
 #ifdef LLVM_ENABLED
-                 LLVM -> LLVM.codegenProg packed l4
+                 LLVM -> LLVM.codegenProg True l4
 #endif
                  LLVM -> error $ "Cannot execute through the LLVM backend. To build Gibbon with LLVM: "
                          ++ "stack build --flag gibbon:llvm_enabled"
@@ -378,14 +421,20 @@ interpProg l1 =
 
 -- | The main compiler pipeline
 passes :: Config -> L1.Prog -> StateT CompileState IO L4.Prog
-passes config@Config{mode,packed} l1 = do
+passes config@Config{mode,dynflags} l1 = do
+      let packed     = gopt Opt_Packed dynflags
+          biginf     = gopt Opt_BigInfiniteRegions dynflags
+          gibbon1    = gopt Opt_Gibbon1 dynflags
+          no_rcopies = gopt Opt_No_RemoveCopies dynflags
       l1 <- goE "typecheck"  L1.tcProg l1
       l1 <- goE "freshNames" freshNames l1
+
       -- If we are executing a benchmark, then we
       -- replace the main function with benchmark code:
       l1 <- pure $ case mode of
                      Bench fnname -> benchMainExp config l1 fnname
                      _ -> l1
+
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    (return . inlineTriv)   l1
 
@@ -398,20 +447,32 @@ passes config@Config{mode,packed} l1 = do
               -- Note: L1 -> L2
               l2 <- go "inferLocations"   inferLocs     l1
               l2 <- go "L2.flatten"       flattenL2     l2
+
+              l2 <- if gibbon1 || no_rcopies
+                    then return l2
+                    else go "removeCopies" removeCopies l2
+
               l2 <- go "inferEffects"     inferEffects  l2
+
+              l2 <- if gibbon1
+                    then return l2
+                    else go "smartAddLayout" smartAddLayout l2
+
+              l2 <- if gibbon1 || biginf
+                    then go "inferRegScope" (inferRegScope BigInfinite) l2
+                    else go "inferRegScope" (inferRegScope Infinite) l2
+
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "routeEnds"        routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
+
+              l2 <- if gibbon1 || biginf
+                    then return l2
+                    else go "boundsCheck" boundsCheck   l2
+
+              l2 <- go "threadRegions"    threadRegions l2
               -- Note: L2 -> L3
               l3 <- go "cursorize"        cursorize     l2
-{-
-[2018.04.04]: Changing the `isTrivial` policy for tuples and projections
-caused some unexpected breakage. Unariser and Lower seem to depend on the
-old policy, and programs produce incorrect output at runtime. It's strange
-that they typecheck without any errors. So if we want to keep the updated
-policy we cannot flatten anything after Cursorize.
-See https://github.com/iu-parfunc/gibbon/issues/86.
--}
               l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck"     L3.tcProg     l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
@@ -427,6 +488,12 @@ See https://github.com/iu-parfunc/gibbon/issues/86.
       let mainTy = fmap snd $   L3.mainExp              l3
       -- Note: L3 -> L4
       l4 <- go "lower" (lower (packed,mainTy))          l3
+
+      l4 <- if gibbon1
+            then return l4
+            else go "followRedirects" followRedirects   l4
+
+      l4 <- go "rearrangeFree"   rearrangeFree          l4
       return l4
   where
       go :: PassRunner a b
@@ -439,7 +506,7 @@ See https://github.com/iu-parfunc/gibbon/issues/86.
 -- | Replace the main function with benchmark code
 --
 benchMainExp :: Config -> L1.Prog -> Var -> L1.Prog
-benchMainExp Config{benchInput,benchPrint} l1 fnname = do
+benchMainExp Config{benchInput,dynflags} l1 fnname = do
   let tmp = "bnch"
       (arg@(L1.PackedTy tyc _),ret) = L1.getFunTy fnname l1
       -- At L1, we assume ReadPackedFile has a single return value:
@@ -455,7 +522,7 @@ benchMainExp Config{benchInput,benchPrint} l1 fnname = do
                $
                 -- FIXME: should actually return the result,
                 -- as soon as we are able to print it.
-               (if benchPrint
+               (if (gopt Opt_BenchPrint dynflags)
                 then l$ L1.VarE (toVar "benchres")
                 else l$ L1.PrimAppE L1.MkTrue [])
   l1{ L1.mainExp = Just $ L NoLoc newExp }
@@ -468,7 +535,7 @@ type PassRunner a b = (Out b, NFData a, NFData b) =>
 -- | Run a pass and return the result
 --
 pass :: Config -> PassRunner a b
-pass Config{stopAfter} who fn x = do
+pass _config who fn x = do
   cs@CompileState{cnt} <- get
   x' <- if dbgLvl >= passChatterLvl
         then lift $ evaluate $ force x
@@ -484,9 +551,6 @@ pass Config{stopAfter} who fn x = do
      then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++sdoc y'
      -- TODO: Switch to a node-count for size output (add to GenericOps):
      else lift$ dbgPrintLn passChatterLvl $ "   => "++ show (length (sdoc y')) ++ " characters output."
-  when (stopAfter == who) $ do
-    dbgTrace 0 ("Compilation stopped; --stop-after=" ++ who) (return ())
-    liftIO exitSuccess
   return y'
 
 
@@ -536,7 +600,7 @@ wrapInterp mode pass who fn x =
 -- | Compile and run the generated code if appropriate
 --
 compileAndRunExe :: Config -> FilePath -> IO String
-compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
+compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile,dynflags} fp = do
   exepath <- makeAbsolute exe
   clearFile exepath
 
@@ -561,37 +625,50 @@ compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
         Just _ | isBench mode   -> runExe $ " " ++show (rcSize runConf) ++ " " ++ show (rcIters runConf)
         _      | mode == RunExe -> runExe ""
         _                                -> return ""
-  where outfile = getOutfile backend fp cfile
-        exe = getExeFile backend fp exefile
+  where outfile = getOutfile dynflags backend fp cfile
+        exe = getExeFile dynflags backend fp exefile
         cmd = compilationCmd backend cfg ++ outfile ++ " -o " ++ exe
 
 
 -- | Return the correct filename to store the generated code,
 -- based on the backend used, and override options specified
 --
-getOutfile :: Backend -> FilePath -> Maybe FilePath -> FilePath
-getOutfile _ _ (Just override) = override
-getOutfile LLVM fp Nothing = replaceExtension fp ".ll"
-getOutfile C fp Nothing  = replaceExtension fp ".c"
-
+getOutfile :: DynFlags -> Backend -> FilePath -> Maybe FilePath -> FilePath
+getOutfile _ _ _ (Just override) = override
+getOutfile dflags backend fp Nothing =
+  let ext = case backend of
+              C    -> ".c"
+              LLVM -> ".ll"
+      fp' = if gopt Opt_Gibbon1 dflags
+            then replaceFileName fp ((takeBaseName fp) ++ "_gibbon1")
+            else fp
+  in replaceExtension fp' ext
 
 -- | Return the correct filename for the generated exe,
 -- based on the backend used, and override options specified
 --
-getExeFile :: Backend -> FilePath -> Maybe FilePath -> FilePath
-getExeFile _ _ (Just override) = override
-getExeFile LLVM fp Nothing = replaceExtension (replaceFileName fp ((takeBaseName fp) ++ "_llvm")) ".exe"
-getExeFile C fp Nothing = replaceExtension fp ".exe"
-
+getExeFile :: DynFlags -> Backend -> FilePath -> Maybe FilePath -> FilePath
+getExeFile _ _ _ (Just override) = override
+getExeFile dflags backend fp Nothing =
+  let fp' = case backend of
+               C -> fp
+               LLVM -> replaceFileName fp ((takeBaseName fp) ++ "_llvm")
+      fp'' = if gopt Opt_Gibbon1 dflags
+             then replaceFileName fp' ((takeBaseName fp') ++ "_gibbon1")
+             else fp'
+  in replaceExtension fp'' ".exe"
 
 -- | Compilation command
 --
 compilationCmd :: Backend -> Config -> String
 compilationCmd LLVM _   = "clang-5.0 lib.o "
 compilationCmd C config = (cc config) ++" -std=gnu11 "
-                          ++(if (bumpAlloc config) then "-DBUMPALLOC " else "")
+                          ++(if bumpAlloc then "-DBUMPALLOC " else "")
                           ++(optc config)++"  "
-                          ++(if (warnc config) then "" else suppress_warnings)
+                          ++(if warnc then "" else suppress_warnings)
+  where dflags = dynflags config
+        bumpAlloc = gopt Opt_BumpAlloc dflags
+        warnc = gopt Opt_Warnc dflags
 
 -- |
 isBench :: Mode -> Bool

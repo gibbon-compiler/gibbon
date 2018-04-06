@@ -70,7 +70,7 @@ typedef struct CursorCursorCursorProd_struct {
 
 /* #define INF_REG_INIT_SIZE (300 * MB) */
 /* #define INF_REG_INIT_SIZE 20 */
-#define INF_REG_INIT_SIZE (64 * KB)
+#define INF_REG_INIT_SIZE 64
 #define INF_REG_MAX_SIZE (2 * GB)
 
 #define MAX(a,b) (((a)>(b))?(a):(b))

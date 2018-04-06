@@ -22,13 +22,13 @@ module Packed.FirstOrder.Passes.InferLocations
      -- main functions
      unify, inferLocs, inferExp, inferExp', convertFunTy)
     where
-      
+
 {-
   Basic Strategy
   --------------
 
 The basic strategy here is to use a simple, type-directed pass to translate
-programs from L1 to L2. First, we start with a function type, with the 
+programs from L1 to L2. First, we start with a function type, with the
 basic starting assumption that all packed values will have distinct locations:
 
 ```
@@ -41,7 +41,7 @@ the inference procedure proceeds to walk through the body of the function.
 
 To infer location bindings in an expression, we build up a set of *constraints*
 and propogate them up the expression (ie, recurring on a sub-expression will
-yield the constraints induced by that sub-expression). After recurring on 
+yield the constraints induced by that sub-expression). After recurring on
 all sub-expressions, we use these constraints to determine whether to
 emit a binding for a new location or a new region.
 
@@ -50,11 +50,11 @@ in type checking L2. When the expression in consideration is a data type
 constructor, a series of constraints are generated: the locations for
 each field in the constructor are constrained to occur after the previous one
 (enforcing that they occur in the right order), and the first field must
-occur after the tag of the data constructor itself. 
+occur after the tag of the data constructor itself.
 
 Knowing all this *isn't enough* to generate the location bindings, however,
 since the values that we use in the constructor may have been produced
-by multiple different function calls (for example), so the locations 
+by multiple different function calls (for example), so the locations
 must carefully be bound earlier in the expression at the right locations.
 Ideally, we also want them to be bound as tightly as possible, to avoid
 binding locations that aren't used (eg, in some branches of a conditional).
@@ -62,16 +62,16 @@ So the constraints are *discharged* as the recursion unwinds.
 
 For example, a constraint that location `loc1` occurs after the value `x2`
 can safely be discharged after the value `x2` is bound, so in the handling
-of a let binding for a packed value, we search through the constraints 
+of a let binding for a packed value, we search through the constraints
 returned by recurring on the body of the let and discharge any constraint
-that invloves a location occurring after that newly-bound variable. 
+that invloves a location occurring after that newly-bound variable.
 
  Program repair
  --------------
 
 During the inference procedure, unification will occur between locations,
 and if two *fixed* locations are unified there will be an error thrown.
-To recover, the procedure will have to transform (repair) the expression. 
+To recover, the procedure will have to transform (repair) the expression.
 The simplest way to do this is to insert a copy.
 
 Naively, this simple strategy will require lots of copies. For exmaple, the identity
@@ -88,7 +88,7 @@ a copy-insertion tactic to repair the failure and proceed.
 Copy-insertion is very simple. For each data type, we generate a copy traversal
 function which matches on each element of the structure. These functions undergo
 location inference just like normal user code. During location inference when
-a unification failure indicates a copy must be inserted, a call to `"copy_Type"` 
+a unification failure indicates a copy must be inserted, a call to `"copy_Type"`
 is emitted, where `Type` is the name of the packed data type that must be copied.
 
 -}
@@ -108,7 +108,7 @@ import Debug.Trace
 
 
 import Packed.FirstOrder.GenericOps (gFreeVars)
-import Packed.FirstOrder.Common as C hiding (extendVEnv)
+import Packed.FirstOrder.Common as C hiding (extendVEnv, lookupVEnv) -- (l, LRM(..))
 import Packed.FirstOrder.Common (Var, Env2, DDefs, LocVar, runSyM, SyM, gensym, toVar)
 import qualified Packed.FirstOrder.L1.Syntax as L1
 import Packed.FirstOrder.L2.Syntax as L2
@@ -128,7 +128,7 @@ data FullEnv = FullEnv
 
 extendVEnv :: Var -> Ty2 -> FullEnv -> FullEnv
 extendVEnv v ty fe@FullEnv{valEnv} = fe { valEnv = M.insert v ty valEnv }
-             
+
 lookupVEnv :: Var -> FullEnv -> Ty2
 lookupVEnv v FullEnv{valEnv} = valEnv # v
 
@@ -238,7 +238,7 @@ inferLocs initPrg = do
   case fst prg of
     Right a -> return a
     Left a -> err $ show a
-  where 
+  where
 
 -- | Destination can be a single location var, a tuple of destinations,
 -- or nothing (for scalar values)
@@ -248,14 +248,14 @@ data Dest = SingleDest LocVar -- TODO: refactor to just be list of locations, or
             deriving Show
 
 destFromType :: Ty2 -> TiM Dest
-destFromType frt = 
+destFromType frt =
   case frt of
     PackedTy _tc lv -> fixLoc lv >> return (SingleDest lv)
     ProdTy tys -> mapM destFromType tys >>= return . TupleDest
     _ -> return NoDest
 
 destFromType' :: Ty2 -> TiM Dest
-destFromType' frt = 
+destFromType' frt =
   case frt of
     PackedTy _tc lv -> return (SingleDest lv)
     ProdTy tys -> mapM destFromType' tys >>= return . TupleDest
@@ -298,7 +298,7 @@ inferExp' env lex0@(L sl1 exp) dest =
         e' <- finishExp e
         let (e'',_s) = cleanExp e'
         return (e'',ty)
-                    
+
 -- | We proceed in a destination-passing style given the target region
 -- into which we must produce the resulting value.
 inferExp :: FullEnv -> (L L1.Exp1) -> Dest -> TiM Result
@@ -315,7 +315,7 @@ inferExp env@FullEnv{dataDefs}
           do lv' <- finalLocVar lv
              (e',ty',cs') <- tryBindReg (e,ty,cs)
              b1 <- noAfterLoc lv' cs' cs'
-             if b1 
+             if b1
              then do (e'',ty'',cs'') <- bindTrivialAfterLoc lv' (e',ty',cs')
                      return (l$ Ext (LetRegionE r (l$ Ext (LetLocE lv' (StartOfLE r) e''))), ty'', cs'')
              else return (e',ty',(StartRegionL lv r):cs')
@@ -443,7 +443,7 @@ inferExp env@FullEnv{dataDefs}
 
       -- | Transforms a result by binding any additional locations that are safe to be bound
       -- once the location passed in has been bound. For example, if we know `loc1` is `n`
-      -- bytes after `loc2`, and `loc2` has been passed in, we can bind `loc1`. 
+      -- bytes after `loc2`, and `loc2` has been passed in, we can bind `loc1`.
       bindTrivialAfterLoc :: LocVar -> Result -> TiM Result
       bindTrivialAfterLoc lv (e,ty,c:cs) =
           case c of
@@ -544,7 +544,7 @@ inferExp env@FullEnv{dataDefs}
                            return (lc$ MkProdE ([a | (a,_,_) <- results]),
                                      ProdTy ([b | (_,b,_) <- results]),
                                      concat $ [c | (_,_,c) <- results])
-          
+
     L1.LitE n -> return (lc$ LitE n, IntTy, [])
 
     L1.LitSymE s -> return (lc$ LitSymE s, SymTy, [])
@@ -577,14 +577,25 @@ inferExp env@FullEnv{dataDefs}
         SingleDest d -> do
                   locs <- sequence $ replicate (length ls) fresh
                   ls' <- mapM (\(e,lv) -> (inferExp env e $ SingleDest lv)) $ zip ls locs
-                  newLocs <- mapM finalLocVar locs                  
-                  let afterVar :: (Maybe (L Exp2), Maybe LocVar, Maybe LocVar) -> Maybe Constraint
-                      afterVar ((Just (L _ (VarE v))), (Just loc1), (Just loc2)) =
+                  -- Arguments are either a fixed size or a variable
+                  -- TODO: audit this!
+                  argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
+                           case arg of
+                             L _ (VarE v) -> case lookupVEnv v env of
+                                               CursorTy -> return $ Left 8
+                                               IntTy -> return $ Left 8
+                                               SymTy -> return $ Left 8
+                                               BoolTy -> return $ Left 8
+                                               _ -> return $ Right v
+                             L _ (LitE _) -> return $ Left 8
+                             L _ (LitSymE _) -> return $ Left 8
+                             _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
+                  newLocs <- mapM finalLocVar locs
+                  let afterVar :: (Either Int Var, Maybe LocVar, Maybe LocVar) -> Maybe Constraint
+                      afterVar ((Right v), (Just loc1), (Just loc2)) =
                           Just $ AfterVariableL loc1 v loc2
-                      afterVar ((Just (L _ (LitE _))), (Just loc1), (Just loc2)) =
-                          Just $ AfterConstantL loc1 8 loc2
-                      afterVar ((Just (L _ (LitSymE _))), (Just loc1), (Just loc2)) =
-                          Just $ AfterConstantL loc1 8 loc2
+                      afterVar ((Left s), (Just loc1), (Just loc2)) =
+                          Just $ AfterConstantL loc1 s loc2
                       afterVar _ = Nothing
                       constrs = concat $ [c | (_,_,c) <- ls']
                       constrs' = if null locs
@@ -592,7 +603,7 @@ inferExp env@FullEnv{dataDefs}
                                  else let tmpconstrs = [AfterTagL (L.head locs) d] ++
                                                        (mapMaybe afterVar $ zip3
                                                          -- ((map Just $ L.tail ([a | (a,_,_) <- ls' ])) ++ [Nothing])
-                                                        (map Just ([a | (a,_,_) <- ls']))
+                                                        argLs
                                                          -- (map Just locs)
                                                         ((map Just $ L.tail locs) ++ [Nothing])
                                                         (map Just locs))
@@ -602,7 +613,7 @@ inferExp env@FullEnv{dataDefs}
                   return (lc$ DataConE d k [ e' | (e',_,_)  <- ls'],
                             PackedTy (getTyOfDataCon dataDefs k) d,
                             constrs')
-    
+
     L1.IfE a b c@(L _ ce) -> do
        -- Here we blithely assume BoolTy because L1 typechecking has already passed:
        (a',bty,acs) <- inferExp env a NoDest
@@ -613,17 +624,17 @@ inferExp env@FullEnv{dataDefs}
        (c',tyc,csc)    <- inferExp env c dest
        return (lc$ IfE a' b' c', tyc, L.nub $ acs ++ csb ++ csc)
 
-    L1.PrimAppE pr es -> 
+    L1.PrimAppE pr es ->
       case dest of
-        SingleDest _ -> err "Cannot unify primop with destination" 
-        TupleDest _ -> err "Cannot unify primop with destination" 
+        SingleDest _ -> err "Cannot unify primop with destination"
+        TupleDest _ -> err "Cannot unify primop with destination"
         NoDest -> do results <- mapM (\e -> inferExp env e NoDest) es
                      -- Assume arguments to PrimAppE are trivial
                      -- so there's no need to deal with constraints or locations
                      ty <- lift $ lift $ convertTy $ L1.primRetTy pr
                      return (lc$ PrimAppE (prim pr) [a | (a,_,_) <- results], ty, [])
 
-    L1.CaseE ex ls -> do 
+    L1.CaseE ex ls -> do
       -- Case expressions introduce fresh destinations for the scrutinee:
       loc <- lift $ lift $ freshLocVar "scrut"
       (ex',ty2,cs) <- inferExp env ex (SingleDest loc)
@@ -662,7 +673,12 @@ inferExp env@FullEnv{dataDefs}
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs''
           tryBindReg (lc$ L2.LetE (vr,[],IntTy,L sl2 $ L2.LitE i) bod'', ty'', fcs)
-                     
+
+        -- Don't process the EndOf operation at all, just recur through it
+        PrimAppE L1.PEndOf [L la (L1.VarE v)] -> do
+          (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
+          return (lc$ L2.LetE (vr,[],CursorTy,L sl2 $ L2.PrimAppE L1.PEndOf [L la (L2.VarE v)]) bod', ty', cs')
+
         PrimAppE p ls -> do
           lsrec <- mapM (\e -> inferExp env e NoDest) ls
           ty <- lift $ lift $ convertTy bty
@@ -740,7 +756,7 @@ inferExp env@FullEnv{dataDefs}
 
 -- TODO: Should eventually allow src and dest regions to be the same
 -- for in-place updates packed data with linear types.
-  
+
 -- | Transforms an expression by updating all locations to their final mapping
 -- as a result of unification.
 finishExp :: L Exp2 -> TiM (L Exp2)
@@ -889,7 +905,7 @@ noAfterLoc lv fcs (c:cs) =
                      b2 <- noAfterLoc lv1 fcs fcs
                      return (b1 && b2)
              else noAfterLoc lv fcs cs
-      AfterConstantL lv1 v lv2 -> 
+      AfterConstantL lv1 v lv2 ->
           do lv2' <- finalLocVar lv2
              lv' <- finalLocVar lv
              if lv' == lv2' then return False else noAfterLoc lv fcs cs
@@ -910,7 +926,7 @@ noBeforeLoc lv (c:cs) =
       AfterTagL lv1 lv2 ->
           do lv1' <- finalLocVar lv1
              lv' <- finalLocVar lv
-             if lv' == lv1' then return False else noBeforeLoc lv cs      
+             if lv' == lv1' then return False else noBeforeLoc lv cs
       _ -> noBeforeLoc lv cs
 noBeforeLoc lv [] = return True
 
@@ -978,7 +994,7 @@ notFixedLoc lv = do
   case uv of
     FixedLoc _ -> return False
     _ -> return True
-         
+
 finalLocVar :: LocVar -> TiM LocVar
 finalLocVar v = do
   u <- finalUnifyLoc v
@@ -1007,7 +1023,7 @@ lookupUnifyLoc lv = do
     Just (FixedLoc l') -> return $ FixedLoc l'
 
 fixLoc :: LocVar -> TiM UnifyLoc
-fixLoc lv = do 
+fixLoc lv = do
   -- l' <- fresh
   m <- lift $ St.get
   lift $ St.put $ M.insert lv (FixedLoc lv) m
@@ -1023,16 +1039,16 @@ copy :: Result -> LocVar -> TiM Result
 copy (e,ty,cs) lv1 =
     case ty of
       PackedTy tc lv2 ->
-          let copyName = "copy_" ++ tc -- assume a copy function with this name
-              eapp = l$ AppE (toVar copyName) [lv2,lv1] e
+          let copyName = mkCopyFunName tc -- assume a copy function with this name
+              eapp = l$ AppE copyName [lv2,lv1] e
           in return (eapp, PackedTy tc lv1, [])
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
 
 -- | For a packed type, get its location.
 locOfTy :: Ty2 -> LocVar
 locOfTy (PackedTy _ lv) = lv
-locOfTy ty2 = err $ "Expected packed type, got "++show ty2 
-       
+locOfTy ty2 = err $ "Expected packed type, got "++show ty2
+
 err :: String -> a
 err m = error $ "InferLocations: " ++ m
 
@@ -1055,6 +1071,7 @@ prim p = case p of
            L1.MkTrue -> L1.MkTrue
            L1.MkFalse -> L1.MkFalse
            L1.SizeParam -> L1.SizeParam
+           L1.PEndOf    -> L1.PEndOf
            _ -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
 
 -- | Generate a copy function for a particular data definition.
@@ -1067,12 +1084,12 @@ genCopyFn DDef{tyName, dataCons} = do
                 ys <- mapM (\_ -> gensym "y") tys
                 let bod = foldr (\(ty,x,y) acc ->
                                      if L1.isPackedTy ty
-                                     then l$ LetE (y, [], ty, l$ AppE (toVar $ "copy_" ++ (tyToDataCon ty)) [] (l$ VarE x)) acc
+                                     then l$ LetE (y, [], ty, l$ AppE (mkCopyFunName (tyToDataCon ty)) [] (l$ VarE x)) acc
                                      else l$ LetE (y, [], ty, l$ VarE x) acc)
                           (l$ L1.DataConE () dcon $ map (l . VarE) ys)
                           (zip3 (L.map snd tys) xs ys)
                 return (dcon, L.map (\x -> (x,())) xs, bod)
-  return $ L1.FunDef { funName = toVar $ "copy_" ++ (fromVar tyName)
+  return $ L1.FunDef { funName = mkCopyFunName (fromVar tyName)
                      , funArg = (arg, L1.PackedTy (fromVar tyName) ())
                      , funRetTy = L1.PackedTy (fromVar tyName) ()
                      , funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
@@ -1087,7 +1104,7 @@ tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
 addCopyFns :: L1.Prog -> SyM L1.Prog
 addCopyFns (L1.Prog dfs fds me) = do
   newFns <- mapM genCopyFn dfs
-  prg <- flattenL1 $ L1.Prog dfs (fds `M.union` (M.mapKeys (toVar . ("copy_" ++) . fromVar) newFns)) me
+  prg <- flattenL1 $ L1.Prog dfs (fds `M.union` (M.mapKeys (mkCopyFunName . fromVar) newFns)) me
   return $ inlineTriv $ prg
 
 
@@ -1102,7 +1119,7 @@ t0 :: ArrowTy Ty2
 t0 = fst$ runSyM 0 $
      convertFunTy (snd (L1.funArg fd), L1.funRetTy fd)
    where fd = L1.fundefs L1.add1Prog M.! "add1"
-           
+
 tester1 :: L L1.Exp1 -> L Exp2
 tester1 e = case fst $ fst $ runSyM 0 $ St.runStateT (runExceptT (inferExp emptyEnv e NoDest)) M.empty of
               Right a -> (\(a,_,_)->a) a
