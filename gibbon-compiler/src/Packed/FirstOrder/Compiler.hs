@@ -321,7 +321,7 @@ compile config@Config{mode,input,verbosity,backend,cfile,dynflags} fp0 = do
       initResult <- interpProg l1
 
       -- (Stage 2) C/LLVM codegen
-      let outfile = getOutfile backend fp cfile
+      let outfile = getOutfile dynflags backend fp cfile
 
       -- run the initial program through the compiler pipeline
       stM <- return $ passes config l1
@@ -600,7 +600,7 @@ wrapInterp mode pass who fn x =
 -- | Compile and run the generated code if appropriate
 --
 compileAndRunExe :: Config -> FilePath -> IO String
-compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
+compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile,dynflags} fp = do
   exepath <- makeAbsolute exe
   clearFile exepath
 
@@ -625,28 +625,38 @@ compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
         Just _ | isBench mode   -> runExe $ " " ++show (rcSize runConf) ++ " " ++ show (rcIters runConf)
         _      | mode == RunExe -> runExe ""
         _                                -> return ""
-  where outfile = getOutfile backend fp cfile
-        exe = getExeFile backend fp exefile
+  where outfile = getOutfile dynflags backend fp cfile
+        exe = getExeFile dynflags backend fp exefile
         cmd = compilationCmd backend cfg ++ outfile ++ " -o " ++ exe
 
 
 -- | Return the correct filename to store the generated code,
 -- based on the backend used, and override options specified
 --
-getOutfile :: Backend -> FilePath -> Maybe FilePath -> FilePath
-getOutfile _ _ (Just override) = override
-getOutfile LLVM fp Nothing = replaceExtension fp ".ll"
-getOutfile C fp Nothing  = replaceExtension fp ".c"
-
+getOutfile :: DynFlags -> Backend -> FilePath -> Maybe FilePath -> FilePath
+getOutfile _ _ _ (Just override) = override
+getOutfile dflags backend fp Nothing =
+  let ext = case backend of
+              C    -> ".c"
+              LLVM -> ".ll"
+      fp' = if gopt Opt_Gibbon1 dflags
+            then replaceFileName fp ((takeBaseName fp) ++ "_gibbon1")
+            else fp
+  in replaceExtension fp' ext
 
 -- | Return the correct filename for the generated exe,
 -- based on the backend used, and override options specified
 --
-getExeFile :: Backend -> FilePath -> Maybe FilePath -> FilePath
-getExeFile _ _ (Just override) = override
-getExeFile LLVM fp Nothing = replaceExtension (replaceFileName fp ((takeBaseName fp) ++ "_llvm")) ".exe"
-getExeFile C fp Nothing = replaceExtension fp ".exe"
-
+getExeFile :: DynFlags -> Backend -> FilePath -> Maybe FilePath -> FilePath
+getExeFile _ _ _ (Just override) = override
+getExeFile dflags backend fp Nothing =
+  let fp' = case backend of
+               C -> fp
+               LLVM -> replaceFileName fp ((takeBaseName fp) ++ "_llvm")
+      fp'' = if gopt Opt_Gibbon1 dflags
+             then replaceFileName fp' ((takeBaseName fp') ++ "_gibbon1")
+             else fp'
+  in replaceExtension fp'' ".exe"
 
 -- | Compilation command
 --
