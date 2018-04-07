@@ -20,6 +20,7 @@ library
   exposed-modules:     Packed.FirstOrder.Common
                        Packed.FirstOrder.GenericOps
                        Packed.FirstOrder.Compiler
+                       Packed.FirstOrder.DynFlags
                        Packed.FirstOrder.HaskellFrontend
                        Packed.FirstOrder.TargetInterp
                        Packed.FirstOrder.L1.Syntax

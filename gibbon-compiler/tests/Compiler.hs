@@ -17,6 +17,7 @@ import System.FilePath
 import System.Directory
 
 import Packed.FirstOrder.Common hiding (FunDef)
+import Packed.FirstOrder.DynFlags
 import Packed.FirstOrder.L1.Syntax hiding (FunDef, Prog, add1Prog)
 import Packed.FirstOrder.L2.Syntax as L2
 import Packed.FirstOrder.L2.Typecheck
@@ -83,7 +84,7 @@ run2T l3 = fst $ runSyM 0 $ do
 
 
 cg :: Prog -> IO String
-cg = codegenProg True . run2T . runT
+cg = codegenProg defaultDynFlags . run2T . runT
 
 
 type Expected = String

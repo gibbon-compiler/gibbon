@@ -321,6 +321,33 @@ ChunkTy alloc_chunk(CursorTy end_ptr) {
     return (ChunkTy) {start , end};
 }
 
+// Almost the same as 'alloc_chunk'. But this doesn't set
+// some of the footer arguments and results in ~15-20% speedup.
+ChunkTy alloc_chunk_no_gc(CursorTy end_ptr) {
+    // Get size from current footer
+    RegionFooter* footer = (RegionFooter *) end_ptr;
+    IntTy newsize = footer->size * 2;
+    IntTy total_size = newsize + sizeof(RegionFooter);
+
+    // Allocate
+    CursorTy start = ALLOC_PACKED(total_size);
+    CursorTy end = start + newsize;
+
+    /* // Link the next chunk's footer */
+    /* footer->next = end; */
+
+    // Write the footer
+    RegionFooter* new_footer = (RegionFooter *) end;
+    new_footer->size = newsize;
+    /* TODO: Optimize this */
+    /* new_footer->refcount_ptr = footer->refcount_ptr; */
+    /* new_footer->outset_ptr = NULL; */
+    /* new_footer->next = NULL; */
+    *(RegionFooter *) end = *new_footer;
+
+    return (ChunkTy) {start , end};
+}
+
 int get_ref_count(CursorTy end_ptr) {
     RegionFooter footer = *(RegionFooter *) end_ptr;
     return *(footer.refcount_ptr);
