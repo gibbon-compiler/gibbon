@@ -275,16 +275,15 @@ else
 endif
 
 PACKED_FAILING ?= \
- test00d_printData.gib test00e_func.gib test02d_printPair.gib test02e_printNest.gib test04c_ifvector.gib \
- test04d_vecfun.gib test05c_arity2.gib \
- test06a_two_cases.gib test06b_case.gib test06c_nested.gib \
- test06d_rec.gib test06e_rec.gib test06f_rec.gib test06g_rec.gib test06h_rec.gib test06i_casecase.gib \
+ test04c_ifvector.gib \
+ test06c_nested.gib \
+ test06h_rec.gib test06i_casecase.gib \
  test08_dict.gib test08b_dict.gib test08c_dict.gib test08d_sharedict.gib \
  test10_desugar.gib test10b_desugar.gib \
  test11c_funrec.gib test11d_funrec.gib test11e_funrec.gib test11f_funrec.gib \
- test12b_traverse.gib test12c_traverse.gib \
+ test12_skip.gib test12b_traverse.gib test12c_traverse.gib \
  test15b_symappend.gib \
- test12_skip.gib test16_forlist.gib test17_forfold.gib \
+ test16_forlist.gib test17_forfold.gib \
  test18b_tupconstraint.gib \
  test18f_flip.gib \
  test20b_bintree.gib \
@@ -311,7 +310,8 @@ PACKED_FAILING ?= \
 # test17_forfold.gib    -- requires lists. No lists yet
 
 # This is the default mode:
-run_tests_pointer: run_tests
+run_tests_pointer:
+	$(MAKE) run_tests GIBBONARGS=" --optc=-g "
 
 # Run the tests that work under the packed regime:
 run_tests_packed: answers
