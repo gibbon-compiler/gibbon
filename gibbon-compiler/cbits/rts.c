@@ -297,7 +297,7 @@ typedef struct ChunkTy_struct {
     CursorTy end_ptr;
 } ChunkTy;
 
-ChunkTy alloc_chunk(CursorTy end_ptr) {
+inline ChunkTy alloc_chunk(CursorTy end_ptr) {
     // Get size from current footer
     RegionFooter* footer = (RegionFooter *) end_ptr;
     IntTy newsize = footer->size * 2;
@@ -321,9 +321,14 @@ ChunkTy alloc_chunk(CursorTy end_ptr) {
     return (ChunkTy) {start , end};
 }
 
+
 // Almost the same as 'alloc_chunk'. But this doesn't set
 // some of the footer arguments and results in ~15-20% speedup.
-ChunkTy alloc_chunk_no_gc(CursorTy end_ptr) {
+// Inlining and the no-gc flag seem to work best.
+// Do not use '-g' with when using this function!
+//
+// TODO: Why no-gc ?
+inline ChunkTy alloc_chunk_no_gc(CursorTy end_ptr) {
     // Get size from current footer
     RegionFooter* footer = (RegionFooter *) end_ptr;
     IntTy newsize = footer->size * 2;
@@ -339,7 +344,6 @@ ChunkTy alloc_chunk_no_gc(CursorTy end_ptr) {
     // Write the footer
     RegionFooter* new_footer = (RegionFooter *) end;
     new_footer->size = newsize;
-    /* TODO: Optimize this */
     /* new_footer->refcount_ptr = footer->refcount_ptr; */
     /* new_footer->outset_ptr = NULL; */
     /* new_footer->next = NULL; */

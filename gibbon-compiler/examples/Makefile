@@ -160,7 +160,8 @@ EXTRA_SUFFIX ?= .ptr
 # How far to compile, --toC, --exe, --run:
 RUN_MODE     ?= --run
 # Additional args besides RUN_MODE:
-GIBBONARGS ?= --optc=-g
+# [2018.04.07]: Seems to cause problems with inlining
+# GIBBONARGS ?= --optc=-g
 
 TREELANGDIR ?= ../../
 SANDBOXDIR= $(TREELANGDIR)/.racket_sandbox/

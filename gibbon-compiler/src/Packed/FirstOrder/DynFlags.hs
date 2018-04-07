@@ -64,4 +64,4 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser)
                                     long "warnc" <>
                                     help "Show warnings from C compiler, normally suppressed") <|>
                    flag' Opt_DisableGC (long "no-gc" <>
-                                        help "Disable the garbage collector.")
+                                        help "Disable the garbage collector (don't use -g when using this flag).")
