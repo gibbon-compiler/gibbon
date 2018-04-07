@@ -6,7 +6,7 @@
 
 (define (buildtree [n : Int]) : Tree
   (if (= n 0)
-      (Leaf 100)
+      (Leaf 1)
       (let ([min1  : Int (- n 1)])
         (let ([l : Tree (buildtree min1)]
               [r : Tree (buildtree min1)])

@@ -489,10 +489,8 @@ passes config@Config{mode,dynflags} l1 = do
       -- Note: L3 -> L4
       l4 <- go "lower" (lower (packed,mainTy))          l3
 
-      l4 <- if gibbon1
-            then return l4
-            else go "followRedirects" followRedirects   l4
-
+      -- Always include the extra case clauses
+      l4 <- go "followRedirects" followRedirects        l4
       l4 <- go "rearrangeFree"   rearrangeFree          l4
       return l4
   where
