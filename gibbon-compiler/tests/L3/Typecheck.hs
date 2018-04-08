@@ -15,6 +15,7 @@ import Packed.FirstOrder.Passes.ShakeTree
 import Packed.FirstOrder.Passes.HoistNewBuf
 import Packed.FirstOrder.Passes.FindWitnesses
 import Packed.FirstOrder.Common
+import Packed.FirstOrder.DynFlags
 import Packed.FirstOrder.L1.Syntax hiding (FunDef, Prog, add1Prog)
 import Packed.FirstOrder.L2.Syntax
 import Packed.FirstOrder.L2.Examples
@@ -35,7 +36,7 @@ runT prg = fst $ runSyM 0 $ do
   l2 <- L2.tcProg l2
   l2 <- boundsCheck l2
   l2 <- threadRegions l2
-  l3 <- cursorize l2
+  l3 <- cursorize defaultDynFlags l2
   l3 <- findWitnesses l3
   l3 <- L3.tcProg l3
   l3 <- shakeTree l3

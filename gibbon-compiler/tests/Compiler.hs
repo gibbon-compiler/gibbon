@@ -63,7 +63,7 @@ runT prg = fst $ runSyM 0 $ do
     l2 <- boundsCheck l2
     l2 <- threadRegions l2
     l2 <- flattenL2 l2
-    l3 <- cursorize l2
+    l3 <- cursorize defaultDynFlags l2
     return l3
 
 
