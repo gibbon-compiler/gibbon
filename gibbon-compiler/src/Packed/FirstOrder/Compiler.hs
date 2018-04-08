@@ -414,7 +414,7 @@ passes config@Config{mode,dynflags} l1 = do
 
               l2 <- go "threadRegions"    threadRegions l2
               -- Note: L2 -> L3
-              l3 <- go "cursorize"        cursorize     l2
+              l3 <- go "cursorize" (cursorize dynflags) l2
               l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck"     L3.tcProg     l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
