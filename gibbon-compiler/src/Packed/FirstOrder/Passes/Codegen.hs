@@ -301,13 +301,16 @@ codegenTail (LetTimedT flg bnds rhs body) ty =
                    | (vr0,ty0) <- bnds ]
        let rhs' = rewriteReturns rhs bnds
        rhs'' <- codegenTail rhs' ty
+       batchtime <- lift $ gensym "batchtime"
+       selftimed <- lift $ gensym "selftimed"
        let ident = case bnds of
                      ((v,_):_) -> v
                      _ -> (toVar "")
            begn  = "begin_" ++ (fromVar ident)
            end   = "end_" ++ (fromVar ident)
            iters = "iters_"++ (fromVar ident)
-       let timebod = [ C.BlockDecl [cdecl| struct timespec $id:begn; |]
+
+           timebod = [ C.BlockDecl [cdecl| struct timespec $id:begn; |]
                      , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |]
                      , (if flg
                         -- Save and restore EXCEPT on the last iteration.  This "cancels out" the effect of intermediate allocations.
@@ -318,12 +321,15 @@ codegenTail (LetTimedT flg bnds rhs body) ty =
                         else C.BlockStm [cstm| { $items:rhs'' } |])
                      , C.BlockDecl [cdecl| struct timespec $id:end; |]
                      , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
+                     , C.BlockDecl [cdecl| double $id:batchtime = difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
+                     , C.BlockDecl [cdecl| double $id:selftimed = $id:batchtime / global_iters_param; |]
                      ]
            withPrnt = timebod ++
                        if flg
                        then [ C.BlockStm [cstm| printf("ITERS: %lld\n", global_iters_param); |]
                             , C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
-                            , C.BlockStm [cstm| printf("BATCHTIME: %lf\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |]
+                            , C.BlockStm [cstm| printf("BATCHTIME: %lf\n", $id:batchtime); |]
+                            , C.BlockStm [cstm| printf("SELFTIMED: %lf\n", $id:selftimed); |]
                             ]
                        else [ C.BlockStm [cstm| printf("SELFTIMED: %lf\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ]
        tal <- codegenTail body ty
