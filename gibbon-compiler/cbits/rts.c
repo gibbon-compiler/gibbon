@@ -316,7 +316,6 @@ inline ChunkTy alloc_chunk(CursorTy end_ptr) {
     new_footer->refcount_ptr = footer->refcount_ptr;
     new_footer->outset_ptr = NULL;
     new_footer->next = NULL;
-    *(RegionFooter *) end = *new_footer;
 
     return (ChunkTy) {start , end};
 }
@@ -347,7 +346,6 @@ inline ChunkTy alloc_chunk_no_gc(CursorTy end_ptr) {
     /* new_footer->refcount_ptr = footer->refcount_ptr; */
     /* new_footer->outset_ptr = NULL; */
     /* new_footer->next = NULL; */
-    *(RegionFooter *) end = *new_footer;
 
     return (ChunkTy) {start , end};
 }
