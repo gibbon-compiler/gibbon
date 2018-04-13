@@ -111,7 +111,8 @@ needsLayout (L2.Prog ddefs fundefs mainExp) =
       mainExp' = case mainExp of
                    Nothing -> False
                    Just (mn, _) -> needsLayoutExp ddefs fundefs False specialfns S.empty env2 mn
-  in mainExp'
+      fnsneedlayout = any (needsLayoutExp ddefs fundefs False specialfns S.empty env2 . L2.funbod) (M.elems fundefs)
+  in mainExp' || fnsneedlayout
 
 needsLayoutExp :: DDefs L2.Ty2 -> L2.NewFuns -> Bool -> S.Set Var -> S.Set LocVar
                -> Env2 L2.Ty2 -> L L2.Exp2 -> Bool
@@ -277,7 +278,10 @@ addLayoutExp ddfs (L p ex) = L p <$>
     DataConE loc dcon args ->
       case numIndrsDataCon ddfs dcon of
         Just n  -> do
-          let needSizeOf = take n args
+          let tys = lookupDataCon ddfs dcon
+              packedOnly = L.map snd $
+                           L.filter (\(ty,_) -> isPackedTy ty) (zip tys args)
+              needSizeOf = take n packedOnly
           szs <- mapM (\arg -> do
                          v <- gensym "indr"
                          return (v,[],CursorTy, l$ PrimAppE PEndOf [arg]))
