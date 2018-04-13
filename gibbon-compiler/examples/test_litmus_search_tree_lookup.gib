@@ -13,7 +13,7 @@
       (Null)
       (if (= s e)
           (Leaf s)
-          (let ([m : Int (+ (/ (- e s) 2) s)])
+          (let ([m : Int (+ (div (- e s) 2) s)])
             (Node m (helper s (- m 1))
                   (helper (+ m 1) e))))))
 
