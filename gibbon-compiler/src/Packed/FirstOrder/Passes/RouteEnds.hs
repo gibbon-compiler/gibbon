@@ -351,7 +351,14 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                                (l$ VarE v')
                  fmap unLoc $ exp fns retlocs eor (M.insert v' loc lenv) afterenv (extendVEnv v' ty env2) (l$ e')
 
-          LitE i -> return $ LitE i
+          -- [2018.04.14]: TODO: Audit this later
+          -- This is part of the "hacks to get tree-insert working" series of commits..
+          -- Actually, only `sum-tree` defined on the updated tree definition requires this.
+          -- But that's a reasonable function that Gibbon should be able compile.
+          LitE i -> do
+            v <- gensym "fltLitTail"
+            let bod = L1.mkLets [(v,[],IntTy, l$ LitE i)] (l$ VarE v)
+            unLoc <$> go bod
 
           LitSymE v -> return $ LitSymE v
 
