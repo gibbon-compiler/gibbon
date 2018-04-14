@@ -377,6 +377,9 @@ void free_region(CursorTy reg_start, CursorTy reg_end) {
     RegionFooter footer = *(RegionFooter *) reg_end;
     CursorTy next_chunk = footer.next;
 
+    int num_chunks = 0;
+    IntTy total_bytesize = footer.size;
+
     // Decrement refcounts of all regions `reg` points to
     if (footer.outset_ptr != NULL) {
         RegionFooter* xyz = (RegionFooter *) footer.outset_ptr;
@@ -386,10 +389,20 @@ void free_region(CursorTy reg_start, CursorTy reg_end) {
     // Free all chunks if recount is 0
     if (*(footer.refcount_ptr) == 0) {
         while (next_chunk != NULL) {
+            // Bookkeeping
+            num_chunks++;
+            total_bytesize = total_bytesize + footer.size;
+
             footer = *(RegionFooter *) next_chunk;
             free(next_chunk - footer.size);
             next_chunk = footer.next;
         }
+        num_chunks++;
+        total_bytesize = total_bytesize + footer.size;
+        #ifdef DEBUG
+        printf("GC: Freed %lld bytes across %d chunks.\n",total_bytesize,num_chunks);
+        #endif
+
         free(reg_start);
     } else {
         #ifdef DEBUG
