@@ -23,4 +23,4 @@
     [(Node x y) (Node (add1-tree x)
                       (add1-tree y))]))
 
-(iterate (sum-tree (add1-tree (build-tree (size-param)))))
+(time (sum-tree (add1-tree (build-tree (size-param)))))

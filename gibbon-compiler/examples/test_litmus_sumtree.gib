@@ -19,5 +19,5 @@
          (+ sumx sumy)))]))
 
 (let ((tr0 : Tree (buildtree (size-param))))
-  (let ((n : Int (iterate (sumtree tr0))))
+  (let ((n : Int (time (sumtree tr0))))
     n))
