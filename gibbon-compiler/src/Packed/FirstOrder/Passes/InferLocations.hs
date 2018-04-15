@@ -297,6 +297,8 @@ inferExp' env lex0@(L sl1 exp) dest =
                       AfterVariableL lv1 v lv2 -> lc$ Ext (LetLocE lv1 (AfterVariableLE v lv2) a)
                       StartRegionL lv r -> lc$ Ext (LetRegionE r (lc $ Ext (LetLocE lv (StartOfLE r) a)))
                       AfterTagL lv1 lv2 -> lc$ Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
+                      AfterCopyL lv1 v1 v' lv2 v2 lvs -> lc$ LetE (v',[],arrOut $ lookupFEnv v2 env, lc$ AppE v2 lvs (lc$ VarE v1)) $
+                                                         lc$ Ext (LetLocE lv1 (AfterVariableLE v' lv2) a)
 
   in do res <- inferExp env lex0 dest
         (e,ty,cs) <- bindAllLocations res
@@ -639,8 +641,15 @@ inferExp env@FullEnv{dataDefs}
                                                     ArgCopy _ v' _ _ -> return (l$ VarE v',ty,cs)
                                                     _ -> undefined
                               _ -> return (e,ty,cs)
-                  return (lc$ DataConE d k [ e' | (e',_,_)  <- ls''],
-                            PackedTy (getTyOfDataCon dataDefs k) d, constrs')
+                  -- bod <- return $ lc$ DataConE d k [ e' | (e',_,_)  <- ls'']
+                  bod <- if (length ls) > 0 && (isCpyCall $ last [e | (e,_,_) <- ls'])
+                         then case last [e | (e,_,_) <- ls'] of
+                                L i (AppE f lvs e) ->
+                                    let (ArgCopy _ v' _ _) = last argLs
+                                    in return $ lc$ LetE (v',[],arrOut $ lookupFEnv f env, lc$ AppE f lvs e) $
+                                       lc$ DataConE d k [ e' | (e',_,_) <- ls'']
+                         else return $ lc$ DataConE d k [ e' | (e',_,_)  <- ls'']       
+                  return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 
     L1.IfE a b c@(L _ ce) -> do
        -- Here we blithely assume BoolTy because L1 typechecking has already passed:
@@ -1003,6 +1012,10 @@ unifyAll [] [] successA _ = successA
 
 isCpyVar :: Var -> Bool
 isCpyVar v = (take 3 (fromVar v)) == "cpy"
+
+isCpyCall :: L Exp2 -> Bool
+isCpyCall (L _ (AppE f _ _)) = True -- TODO: check if it's a real copy call, to be safe
+isCpyCall _ = False
 
 freshLocVar :: String -> SyM LocVar
 freshLocVar m = gensym (toVar m)
