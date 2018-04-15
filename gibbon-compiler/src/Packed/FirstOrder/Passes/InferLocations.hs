@@ -301,9 +301,8 @@ inferExp' env lex0@(L sl1 exp) dest =
   in do res <- inferExp env lex0 dest
         (e,ty,cs) <- bindAllLocations res
         e' <- finishExp e
-        let e'' = fixCopyExp' e'
-        let (e''',_s) = cleanExp e''
-        return (e''',ty)
+        let (e'',_s) = cleanExp e'
+        return (e'',ty)
 
 -- | We proceed in a destination-passing style given the target region
 -- into which we must produce the resulting value.
@@ -857,61 +856,6 @@ finishExp (L i e) =
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
-
-fixCopyExp' :: L Exp2 -> L Exp2
-fixCopyExp' e = let (e',m') = fixCopyExp e
-                in M.foldr addBnd e' m'
-    where addBnd bnd e = l$ LetE bnd e
-
-fixCopyExp :: L Exp2 -> (L Exp2, M.Map Var (Var, [LocVar], Ty2, L Exp2)) 
-fixCopyExp (L i e) =
-    let l e = L i e
-    in
-    case e of
-      LetE (v,lvs,ty,L i2 (AppE f ls (L i3 (VarE arg)))) e2 ->
-          if isCpyVar v
-          then let (e2',m2') = fixCopyExp e2
-               in (e2', M.union m2' (M.singleton arg (v,lvs,ty,L i2 (AppE f ls (L i3 (VarE arg))))))
-          else let (e2',m2') = fixCopyExp e2
-               in case M.lookup v m2' of
-                 Nothing -> (l$ LetE (v,lvs,ty,L i2 (AppE f ls (L i3 (VarE arg)))) e2', m2')
-                 Just bnd -> (l$ LetE (v,lvs,ty,L i2 (AppE f ls (L i3 (VarE arg)))) (l$ LetE bnd e2'),
-                               M.delete v m2')
-      LetE (v,lvs,ty,e1) e2 ->
-          let (e2',m2') = fixCopyExp e2
-          in case M.lookup v m2' of
-               Nothing -> (l$ LetE (v,lvs,ty,e1) e2',m2')
-               Just bnd -> (l$ LetE (v,lvs,ty,e1) (l$ LetE bnd e2'), M.delete v m2')
-      VarE v -> (l$ VarE v, M.empty)
-      LitE v -> (l$ LitE v, M.empty)
-      LitSymE v -> (l$ LitSymE v, M.empty)
-      AppE v ls e -> let (e',m') = fixCopyExp e
-                     in (l$ AppE v ls e', m')
-      PrimAppE pr es -> let (es', ms') = unzip $ L.map fixCopyExp es
-                        in (l$ PrimAppE pr es', M.unions ms')
-      IfE e1 e2 e3 -> let (e2', m2') = fixCopyExp e2
-                          (e3', m3') = fixCopyExp e3
-                      in (l$ IfE e1 e2' e3', M.union m2' m3')
-      MkProdE es -> let (es', ms') = unzip $ L.map fixCopyExp es
-                    in (l$ MkProdE es', M.unions ms')
-      ProjE i e -> let (e',m') = fixCopyExp e
-                   in (l$ ProjE i e', m')
-      CaseE e1 prs -> let (prs', ms') = unzip $ L.map
-                                        (\(dc,lvs,e2) -> let (e2', m2') = fixCopyExp e2
-                                                             (e2'', m2'') = dischargeBinds e2' m2' $ L.map fst lvs
-                                                         in ((dc,lvs,e2''), m2'')) prs
-                      in (l$ CaseE e1 prs', M.unions ms')
-      DataConE lv dc es -> let (es', ms') = unzip $ L.map fixCopyExp es
-                           in (l$ DataConE lv dc es', M.unions ms')
-      TimeIt e d b -> let (e',m') = fixCopyExp e
-                      in (l$ TimeIt e' d b, m')
-      Ext (LetRegionE r e) -> let (e',m') = fixCopyExp e
-                              in (l$ Ext (LetRegionE r e'), m')
-      Ext (LetLocE loc lex e) -> let (e',m') = fixCopyExp e
-                                 in (l$ Ext (LetLocE loc lex e'), m')
-      Ext{} -> err$ "Unexpected Ext: " ++ (show e)
-      MapE{} -> err$ "MapE not supported"
-      FoldE{} -> err$ "FoldE not supported"
                                  
 -- | Remove unused location bindings
 -- Returns pair of (new exp, set of free locations)
@@ -1053,13 +997,6 @@ unifyAll [] [] successA _ = successA
 
 isCpyVar :: Var -> Bool
 isCpyVar v = (take 3 (fromVar v)) == "cpy"
-
-dischargeBinds :: L Exp2 -> M.Map Var (Var, [LocVar], Ty2, L Exp2) -> [Var] -> (L Exp2, M.Map Var (Var, [LocVar], Ty2, L Exp2))
-dischargeBinds e m (v:vs) = case M.lookup v m of
-                              Nothing -> dischargeBinds e m vs
-                              Just bnd -> let (e',m') = dischargeBinds e (M.delete v m) vs
-                                          in (l$ LetE bnd e', m')
-dischargeBinds e m [] = (e,m)
 
 freshLocVar :: String -> SyM LocVar
 freshLocVar m = gensym (toVar m)
