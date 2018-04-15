@@ -576,12 +576,16 @@ inferExp env@FullEnv{dataDefs}
         TupleDest _ds -> err $ "Expected single location destination for DataConE"
         SingleDest d -> do
                   locs <- sequence $ replicate (length ls) fresh
+                  mapM_ fixLoc locs -- Don't allow argument locations to freely unify
                   ls' <- mapM (\(e,lv) -> (inferExp env e $ SingleDest lv)) $ zip ls locs
+                  let ls'' = L.map unNestLet ls'
+                      bnds = catMaybes $ L.map pullBnds ls'
+                      env' = addCopyVarToEnv ls' env
                   -- Arguments are either a fixed size or a variable
                   -- TODO: audit this!
-                  argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
+                  argLs <- forM [a | (a,_,_) <- ls''] $ \arg ->
                            case arg of
-                             L _ (VarE v) -> case lookupVEnv v env of
+                             L _ (VarE v) -> case lookupVEnv v env' of
                                                CursorTy -> return $ Left 8
                                                IntTy -> return $ Left 8
                                                SymTy -> return $ Left 8
@@ -597,7 +601,7 @@ inferExp env@FullEnv{dataDefs}
                       afterVar ((Left s), (Just loc1), (Just loc2)) =
                           Just $ AfterConstantL loc1 s loc2
                       afterVar _ = Nothing
-                      constrs = concat $ [c | (_,_,c) <- ls']
+                      constrs = concat $ [c | (_,_,c) <- ls'']
                       constrs' = if null locs
                                  then constrs
                                  else let tmpconstrs = [AfterTagL (L.head locs) d] ++
@@ -610,9 +614,8 @@ inferExp env@FullEnv{dataDefs}
                                                          -- ((map Just $ L.tail locs) ++ [Nothing])) ++
                                       in tmpconstrs ++ constrs
                   -- traceShow k $ traceShow locs $
-                  return (lc$ DataConE d k [ e' | (e',_,_)  <- ls'],
-                            PackedTy (getTyOfDataCon dataDefs k) d,
-                            constrs')
+                  let newe = buildLets bnds $ lc$ DataConE d k [ e' | (e',_,_)  <- ls'']
+                  return (newe, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 
     L1.IfE a b c@(L _ ce) -> do
        -- Here we blithely assume BoolTy because L1 typechecking has already passed:
@@ -1038,11 +1041,33 @@ assocLoc lv ul = do
 copy :: Result -> LocVar -> TiM Result
 copy (e,ty,cs) lv1 =
     case ty of
-      PackedTy tc lv2 ->
+      PackedTy tc lv2 -> do
           let copyName = mkCopyFunName tc -- assume a copy function with this name
               eapp = l$ AppE copyName [lv2,lv1] e
-          in return (eapp, PackedTy tc lv1, [])
+          newx <- lift $ lift $ freshLocVar "cpy"
+          return (l$ LetE (newx,[],PackedTy tc lv1, eapp) (l$ VarE newx), PackedTy tc lv1, [])
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
+
+unNestLet :: Result -> Result
+unNestLet (L _ (LetE _ e),ty,cs) = (e,ty,cs)
+unNestLet (e,ty,cs) = (e,ty,cs)
+
+pullBnds :: Result -> Maybe (Var, [LocVar], Ty2, L Exp2)
+pullBnds (L _ (LetE bnd _),_ty,_cs) = Just bnd
+pullBnds (_e,_ty,_cs) = Nothing
+
+buildLets :: [(Var, [LocVar], Ty2, L Exp2)] -> L Exp2 -> L Exp2
+buildLets (bnd:bnds) e =
+    let e' = buildLets bnds e
+    in l$ LetE bnd e'
+buildLets [] e = e
+
+addCopyVarToEnv :: [(L (PreExp t2 t1 t), Ty2, t3)] -> FullEnv -> FullEnv
+addCopyVarToEnv ((L _ (LetE (v,_,_,_) _),ty,_cs):ls) env =
+    let env' = extendVEnv v ty env
+    in addCopyVarToEnv ls env'
+addCopyVarToEnv (r:ls) env = addCopyVarToEnv ls env
+addCopyVarToEnv [] env = env
 
 -- | For a packed type, get its location.
 locOfTy :: Ty2 -> LocVar
