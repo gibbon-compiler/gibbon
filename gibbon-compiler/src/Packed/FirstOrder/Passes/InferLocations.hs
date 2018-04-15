@@ -207,11 +207,16 @@ data Constraint = AfterConstantL LocVar Int LocVar
                 | AfterVariableL LocVar Var LocVar
                 | AfterTagL LocVar LocVar
                 | StartRegionL LocVar Region
+                | AfterCopyL LocVar Var Var LocVar Var [LocVar]
                   deriving (Show, Eq)
 
 -- | The result type for this pass.  Return a new expression and its
 -- type, which includes/implies its location.
 type Result = (L Exp2, Ty2, [Constraint])
+
+data DCArg = ArgFixed Int
+           | ArgVar Var
+           | ArgCopy Var Var Var [LocVar]
 
 inferLocs :: L1.Prog -> SyM L2.Prog
 inferLocs initPrg = do
@@ -296,8 +301,9 @@ inferExp' env lex0@(L sl1 exp) dest =
   in do res <- inferExp env lex0 dest
         (e,ty,cs) <- bindAllLocations res
         e' <- finishExp e
-        let (e'',_s) = cleanExp e'
-        return (e'',ty)
+        let e'' = fixCopyExp' e'
+        let (e''',_s) = cleanExp e''
+        return (e''',ty)
 
 -- | We proceed in a destination-passing style given the target region
 -- into which we must produce the resulting value.
@@ -427,6 +433,15 @@ inferExp env@FullEnv{dataDefs}
                 then do lv1' <- finalLocVar lv1
                         lv2' <- finalLocVar lv2
                         return (lc$ Ext (LetLocE lv1' (AfterVariableLE v lv2) e), ty, cs)
+                else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
+                        return (e',ty',c:cs')
+            AfterCopyL lv1 v1 v' lv2 v2 lvs ->
+                if v == v1
+                then do lv1' <- finalLocVar lv1
+                        lv2' <- finalLocVar lv2
+                        let arrty = lookupFEnv v2 env
+                        return (lc$ LetE (v',[],arrOut arrty,l$ AppE v2 lvs (l$ VarE v1)) $
+                                lc$ Ext (LetLocE lv1' (AfterVariableLE v' lv2') e), ty, cs)
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
                         return (e',ty',c:cs')
             _ -> do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
@@ -578,30 +593,34 @@ inferExp env@FullEnv{dataDefs}
                   locs <- sequence $ replicate (length ls) fresh
                   mapM_ fixLoc locs -- Don't allow argument locations to freely unify
                   ls' <- mapM (\(e,lv) -> (inferExp env e $ SingleDest lv)) $ zip ls locs
-                  let ls'' = L.map unNestLet ls'
-                      bnds = catMaybes $ L.map pullBnds ls'
-                      env' = addCopyVarToEnv ls' env
+                  -- let ls'' = L.map unNestLet ls'
+                  --     bnds = catMaybes $ L.map pullBnds ls'
+                  --     env' = addCopyVarToEnv ls' env
                   -- Arguments are either a fixed size or a variable
                   -- TODO: audit this!
-                  argLs <- forM [a | (a,_,_) <- ls''] $ \arg ->
+                  argLs <- forM [a | (a,_,_) <- ls'] $ \arg ->
                            case arg of
-                             L _ (VarE v) -> case lookupVEnv v env' of
-                                               CursorTy -> return $ Left 8
-                                               IntTy -> return $ Left 8
-                                               SymTy -> return $ Left 8
-                                               BoolTy -> return $ Left 8
-                                               _ -> return $ Right v
-                             L _ (LitE _) -> return $ Left 8
-                             L _ (LitSymE _) -> return $ Left 8
+                             L _ (VarE v) -> case lookupVEnv v env of
+                                               CursorTy -> return $ ArgFixed 8
+                                               IntTy -> return $ ArgFixed 8
+                                               SymTy -> return $ ArgFixed 8
+                                               BoolTy -> return $ ArgFixed 8
+                                               _ -> return $ ArgVar v
+                             L _ (LitE _) -> return $ ArgFixed 8
+                             L _ (LitSymE _) -> return $ ArgFixed 8
+                             L _ (AppE f lvs (L _ (VarE v))) -> do v' <- lift $ lift $ freshLocVar "cpy" 
+                                                                   return $ ArgCopy v v' f lvs
                              _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
                   newLocs <- mapM finalLocVar locs
-                  let afterVar :: (Either Int Var, Maybe LocVar, Maybe LocVar) -> Maybe Constraint
-                      afterVar ((Right v), (Just loc1), (Just loc2)) =
+                  let afterVar :: (DCArg, Maybe LocVar, Maybe LocVar) -> Maybe Constraint
+                      afterVar ((ArgVar v), (Just loc1), (Just loc2)) =
                           Just $ AfterVariableL loc1 v loc2
-                      afterVar ((Left s), (Just loc1), (Just loc2)) =
+                      afterVar ((ArgFixed s), (Just loc1), (Just loc2)) =
                           Just $ AfterConstantL loc1 s loc2
+                      afterVar ((ArgCopy v v' f lvs), (Just loc1), (Just loc2)) =
+                          Just $ AfterCopyL loc1 v v' loc2 f lvs
                       afterVar _ = Nothing
-                      constrs = concat $ [c | (_,_,c) <- ls'']
+                      constrs = concat $ [c | (_,_,c) <- ls']
                       constrs' = if null locs
                                  then constrs
                                  else let tmpconstrs = [AfterTagL (L.head locs) d] ++
@@ -614,8 +633,9 @@ inferExp env@FullEnv{dataDefs}
                                                          -- ((map Just $ L.tail locs) ++ [Nothing])) ++
                                       in tmpconstrs ++ constrs
                   -- traceShow k $ traceShow locs $
-                  let newe = buildLets bnds $ lc$ DataConE d k [ e' | (e',_,_)  <- ls'']
-                  return (newe, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
+                  --let newe = buildLets bnds $ lc$ DataConE d k [ e' | (e',_,_)  <- ls'']
+                  return (lc$ DataConE d k [ e' | (e',_,_)  <- ls'],
+                            PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 
     L1.IfE a b c@(L _ ce) -> do
        -- Here we blithely assume BoolTy because L1 typechecking has already passed:
@@ -838,6 +858,61 @@ finishExp (L i e) =
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 
+fixCopyExp' :: L Exp2 -> L Exp2
+fixCopyExp' e = let (e',m') = fixCopyExp e
+                in M.foldr addBnd e' m'
+    where addBnd bnd e = l$ LetE bnd e
+
+fixCopyExp :: L Exp2 -> (L Exp2, M.Map Var (Var, [LocVar], Ty2, L Exp2)) 
+fixCopyExp (L i e) =
+    let l e = L i e
+    in
+    case e of
+      LetE (v,lvs,ty,L i2 (AppE f ls (L i3 (VarE arg)))) e2 ->
+          if isCpyVar v
+          then let (e2',m2') = fixCopyExp e2
+               in (e2', M.union m2' (M.singleton arg (v,lvs,ty,L i2 (AppE f ls (L i3 (VarE arg))))))
+          else let (e2',m2') = fixCopyExp e2
+               in case M.lookup v m2' of
+                 Nothing -> (l$ LetE (v,lvs,ty,L i2 (AppE f ls (L i3 (VarE arg)))) e2', m2')
+                 Just bnd -> (l$ LetE (v,lvs,ty,L i2 (AppE f ls (L i3 (VarE arg)))) (l$ LetE bnd e2'),
+                               M.delete v m2')
+      LetE (v,lvs,ty,e1) e2 ->
+          let (e2',m2') = fixCopyExp e2
+          in case M.lookup v m2' of
+               Nothing -> (l$ LetE (v,lvs,ty,e1) e2',m2')
+               Just bnd -> (l$ LetE (v,lvs,ty,e1) (l$ LetE bnd e2'), M.delete v m2')
+      VarE v -> (l$ VarE v, M.empty)
+      LitE v -> (l$ LitE v, M.empty)
+      LitSymE v -> (l$ LitSymE v, M.empty)
+      AppE v ls e -> let (e',m') = fixCopyExp e
+                     in (l$ AppE v ls e', m')
+      PrimAppE pr es -> let (es', ms') = unzip $ L.map fixCopyExp es
+                        in (l$ PrimAppE pr es', M.unions ms')
+      IfE e1 e2 e3 -> let (e2', m2') = fixCopyExp e2
+                          (e3', m3') = fixCopyExp e3
+                      in (l$ IfE e1 e2' e3', M.union m2' m3')
+      MkProdE es -> let (es', ms') = unzip $ L.map fixCopyExp es
+                    in (l$ MkProdE es', M.unions ms')
+      ProjE i e -> let (e',m') = fixCopyExp e
+                   in (l$ ProjE i e', m')
+      CaseE e1 prs -> let (prs', ms') = unzip $ L.map
+                                        (\(dc,lvs,e2) -> let (e2', m2') = fixCopyExp e2
+                                                             (e2'', m2'') = dischargeBinds e2' m2' $ L.map fst lvs
+                                                         in ((dc,lvs,e2''), m2'')) prs
+                      in (l$ CaseE e1 prs', M.unions ms')
+      DataConE lv dc es -> let (es', ms') = unzip $ L.map fixCopyExp es
+                           in (l$ DataConE lv dc es', M.unions ms')
+      TimeIt e d b -> let (e',m') = fixCopyExp e
+                      in (l$ TimeIt e' d b, m')
+      Ext (LetRegionE r e) -> let (e',m') = fixCopyExp e
+                              in (l$ Ext (LetRegionE r e'), m')
+      Ext (LetLocE loc lex e) -> let (e',m') = fixCopyExp e
+                                 in (l$ Ext (LetLocE loc lex e'), m')
+      Ext{} -> err$ "Unexpected Ext: " ++ (show e)
+      MapE{} -> err$ "MapE not supported"
+      FoldE{} -> err$ "FoldE not supported"
+                                 
 -- | Remove unused location bindings
 -- Returns pair of (new exp, set of free locations)
 -- TODO: avoid generating location bindings for immediate values
@@ -976,6 +1051,16 @@ unifyAll (_:_) [] _ _ = err$ "Mismatched destination and product type arity"
 unifyAll [] (_:_) _ _ = err$ "Mismatched destination and product type arity" 
 unifyAll [] [] successA _ = successA
 
+isCpyVar :: Var -> Bool
+isCpyVar v = (take 3 (fromVar v)) == "cpy"
+
+dischargeBinds :: L Exp2 -> M.Map Var (Var, [LocVar], Ty2, L Exp2) -> [Var] -> (L Exp2, M.Map Var (Var, [LocVar], Ty2, L Exp2))
+dischargeBinds e m (v:vs) = case M.lookup v m of
+                              Nothing -> dischargeBinds e m vs
+                              Just bnd -> let (e',m') = dischargeBinds e (M.delete v m) vs
+                                          in (l$ LetE bnd e', m')
+dischargeBinds e m [] = (e,m)
+
 freshLocVar :: String -> SyM LocVar
 freshLocVar m = gensym (toVar m)
 
@@ -1044,9 +1129,18 @@ copy (e,ty,cs) lv1 =
       PackedTy tc lv2 -> do
           let copyName = mkCopyFunName tc -- assume a copy function with this name
               eapp = l$ AppE copyName [lv2,lv1] e
-          newx <- lift $ lift $ freshLocVar "cpy"
-          return (l$ LetE (newx,[],PackedTy tc lv1, eapp) (l$ VarE newx), PackedTy tc lv1, [])
+          return (eapp, PackedTy tc lv1, [])
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
+
+-- copy :: Result -> LocVar -> TiM Result
+-- copy (e,ty,cs) lv1 =
+--     case ty of
+--       PackedTy tc lv2 -> do
+--           let copyName = mkCopyFunName tc -- assume a copy function with this name
+--               eapp = l$ AppE copyName [lv2,lv1] e
+--           newx <- lift $ lift $ freshLocVar "cpy"
+--           return (l$ LetE (newx,[],PackedTy tc lv1, eapp) (l$ VarE newx), PackedTy tc lv1, [])
+--       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
 
 unNestLet :: Result -> Result
 unNestLet (L _ (LetE _ e),ty,cs) = (e,ty,cs)
