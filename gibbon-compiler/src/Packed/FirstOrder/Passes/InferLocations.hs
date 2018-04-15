@@ -633,7 +633,13 @@ inferExp env@FullEnv{dataDefs}
                                       in tmpconstrs ++ constrs
                   -- traceShow k $ traceShow locs $
                   --let newe = buildLets bnds $ lc$ DataConE d k [ e' | (e',_,_)  <- ls'']
-                  return (lc$ DataConE d k [ e' | (e',_,_)  <- ls'],
+                  ls'' <- forM (zip argLs ls') $ \(arg,(e,ty,cs)) -> do
+                            case e of
+                              L i (AppE _ _ _) -> case arg of
+                                                    ArgCopy _ v' _ _ -> return (l$ VarE v',ty,cs)
+                                                    _ -> undefined
+                              _ -> return (e,ty,cs)
+                  return (lc$ DataConE d k [ e' | (e',_,_)  <- ls''],
                             PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 
     L1.IfE a b c@(L _ ce) -> do
