@@ -188,10 +188,19 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         ----------------- POLICY DECISION ---------------
         -- Leave these tuple ops as trivial for now:
         -- See https://github.com/iu-parfunc/gibbon/issues/86
-        ProjE _ (L _ et) | f et -> True
-                         | otherwise -> False
+        --
+        -- ProjE _ (L _ et) | f et -> True
+        --                  | otherwise -> False
+        --
+        -- [2018.04.13]:
+        -- Turning this off to make tree_lookup go through InferLocs.
+        -- The sumUpSetEven examples seems to be working. Maybe we could
+        -- hack inferLocs to work around this though.
+        -- Double check everything else before merging into master!!!
+        ProjE{} -> False
+        --
         MkProdE ls -> all (\(L _ x) -> f x) ls
-                     
+
         -- DataCon's are a bit tricky.  May want to inline them at
         -- some point if it avoids region conflicts.
         DataConE{} -> False

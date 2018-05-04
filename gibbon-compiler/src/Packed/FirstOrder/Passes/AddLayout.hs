@@ -2,7 +2,7 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Packed.FirstOrder.Passes.AddLayout
-  (smartAddLayout, needsLayout) where
+  (repairProgram, needsLayout) where
 
 import Data.Loc
 import Data.List as L
@@ -12,6 +12,7 @@ import Text.PrettyPrint.GenericPretty
 
 import Packed.FirstOrder.GenericOps
 import Packed.FirstOrder.Common
+import Packed.FirstOrder.DynFlags
 import Packed.FirstOrder.L1.Syntax
 import qualified Packed.FirstOrder.L2.Syntax as L2
 
@@ -86,22 +87,35 @@ becomes,
 --------------------------------------------------------------------------------
 
 -- | Add layout information to the program, but only if required
-smartAddLayout :: L2.Prog -> SyM L2.Prog
-smartAddLayout prg =
-  if  needsLayout prg
-  then do
-    dbgTrace 5 (" [addLayout] Updating layout to have indirections ") (return ())
-    let l1 = L2.revertToL1 prg
-    l1 <- addLayout l1
-    l2 <- inferLocs l1
-    l2 <- flattenL2 l2
-    l2 <- removeCopies l2
-    l2 <- inferEffects l2
-    return l2
+repairProgram :: DynFlags -> Prog -> L2.Prog -> SyM L2.Prog
+repairProgram dflags oldl1 prg =
+  if repair
+  then if (gopt Opt_Gibbon1 dflags)
+       then repairGibbon1
+       else repairGibbon2
   else return prg
+  where
+    (repair,fns) = needsLayout prg
+
+    repairGibbon1 =
+      dbgTrace 5 ("Runing AddTraversals") <$> do
+        l1 <- addTraversals fns oldl1
+        l2 <- inferLocs l1
+        l2 <- flattenL2 l2
+        l2 <- inferEffects l2
+        return l2
+
+    repairGibbon2 =
+      dbgTrace 5 ("Running AddLayout") <$> do
+        l1 <- addLayout oldl1
+        l2 <- inferLocs l1
+        l2 <- flattenL2 l2
+        l2 <- removeCopies l2
+        l2 <- inferEffects l2
+        return l2
 
 -- Maybe we should use the Continuation monad here..
-needsLayout :: L2.Prog -> Bool
+needsLayout :: L2.Prog -> (Bool, S.Set Var)
 needsLayout (L2.Prog ddefs fundefs mainExp) =
   let env2 = Env2 M.empty (L2.initFunEnv fundefs)
       specialfns = L.foldl' (\acc fn -> if isSpecialFn ddefs fn
@@ -111,7 +125,12 @@ needsLayout (L2.Prog ddefs fundefs mainExp) =
       mainExp' = case mainExp of
                    Nothing -> False
                    Just (mn, _) -> needsLayoutExp ddefs fundefs False specialfns S.empty env2 mn
-  in mainExp'
+      fnsneedlayout = M.map (\L2.FunDef{L2.funname,L2.funbod} ->
+                               if funname `S.member` specialfns
+                               then False
+                               else needsLayoutExp ddefs fundefs False specialfns S.empty env2 funbod)
+                      fundefs
+  in (mainExp' || (L.any id (M.elems fnsneedlayout)), (S.fromList $ M.keys $ M.filter id fnsneedlayout))
 
 needsLayoutExp :: DDefs L2.Ty2 -> L2.NewFuns -> Bool -> S.Set Var -> S.Set LocVar
                -> Env2 L2.Ty2 -> L L2.Exp2 -> Bool
@@ -277,7 +296,10 @@ addLayoutExp ddfs (L p ex) = L p <$>
     DataConE loc dcon args ->
       case numIndrsDataCon ddfs dcon of
         Just n  -> do
-          let needSizeOf = take n args
+          let tys = lookupDataCon ddfs dcon
+              packedOnly = L.map snd $
+                           L.filter (\(ty,_) -> isPackedTy ty) (zip tys args)
+              needSizeOf = take n packedOnly
           szs <- mapM (\arg -> do
                          v <- gensym "indr"
                          return (v,[],CursorTy, l$ PrimAppE PEndOf [arg]))
@@ -332,3 +354,74 @@ toIndrDDefs ddfs = M.map go ddfs
                               )
                    [] dataCons
       in dd {dataCons = dcons'}
+
+
+--------------------------------------------------------------------------------
+-- Old repair strategy: Add traversals
+
+addTraversals :: S.Set Var -> Prog -> SyM Prog
+addTraversals unsafeFns prg@Prog{ddefs,fundefs,mainExp} =
+  dbgTrace 5 ("AddTraversals: Fixing functions:" ++ sdoc unsafeFns) <$> do
+    funs <- mapM (\(nm,f) -> (nm,) <$> addTraversalsFn unsafeFns ddefs f) (M.toList fundefs)
+    mainExp' <-
+      case mainExp of
+        Just ex -> fmap Just (addTraversalsExp ddefs ex)
+        Nothing -> return Nothing
+    return prg { ddefs = ddefs
+               , fundefs = M.fromList funs
+               , mainExp = mainExp'
+               }
+
+
+-- Process body and reset traversal effects.
+addTraversalsFn :: S.Set Var -> DDefs Ty1 -> FunDef1 -> SyM FunDef1
+addTraversalsFn unsafeFns ddefs f@FunDef{funName, funBody} =
+  if funName `S.member` unsafeFns
+  then do
+    bod' <- addTraversalsExp ddefs funBody
+    return $ f {funBody = bod'}
+  else return f
+
+-- Generate traversals for the first (n-1) packed elements
+addTraversalsExp :: DDefs Ty1-> L Exp1 -> SyM (L Exp1)
+addTraversalsExp ddefs (L p ex) = L p <$>
+  case ex of
+    CaseE scrt brs -> CaseE scrt <$> mapM docase brs
+
+    -- standard recursion here
+    VarE{}    -> return ex
+    LitE{}    -> return ex
+    LitSymE{} -> return ex
+    AppE f locs arg -> AppE f locs <$> go arg
+    PrimAppE f args -> PrimAppE f <$> mapM go args
+    LetE (v,loc,ty,rhs) bod -> do
+      LetE <$> (v,loc,ty,) <$> go rhs <*> go bod
+    IfE a b c  -> IfE <$> go a <*> go b <*> go c
+    MkProdE xs -> MkProdE <$> mapM go xs
+    ProjE i e  -> ProjE i <$> go e
+    DataConE{} -> return ex
+    TimeIt e ty b -> do
+      e' <- go e
+      return $ TimeIt e' ty b
+    Ext _ -> return ex
+    MapE{}  -> error "addLayoutExp: TODO MapE"
+    FoldE{} -> error "addLayoutExp: TODO FoldE"
+
+  where
+    go = addTraversalsExp ddefs
+    docase (dcon,vlocs,rhs) = do
+      let tys = lookupDataCon ddefs dcon
+          (vars,_) = unzip vlocs
+          -- First (n-1) packed elements
+          packedOnly = L.filter (\(_,ty) -> isPackedTy ty) (zip vars tys)
+      case packedOnly of
+        [] -> (dcon,vlocs,) <$> go rhs
+        _ -> do
+          let ls = init packedOnly
+          travbinds <- mapM (\(v,ty) -> do
+                               let PackedTy dc _ = ty
+                                   copyfn = mkCopyFunName dc
+                               v' <- gensym v
+                               return (v',[], ty, l$ AppE copyfn [] (l$ VarE v)))
+                       ls
+          (dcon,vlocs,) <$> mkLets travbinds <$> go rhs

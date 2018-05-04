@@ -402,7 +402,7 @@ primMap = M.fromList
   [ ("+", AddP)
   , ("-", SubP)
   , ("*", MulP)
-  , ("/", DivP)
+  , ("div", DivP)
   , ("mod", ModP)
   , ("eq?", EqSymP)
   , ("=", EqIntP)

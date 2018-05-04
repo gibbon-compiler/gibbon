@@ -17,7 +17,8 @@ import Packed.FirstOrder.L2.Examples
 
 runner prg = fst $ runSyM 0 $ do
   l2 <- inferEffects prg
-  return $ needsLayout l2
+  let (needs,_) = needsLayout l2
+  return needs
 
 case_rightmost :: Assertion
 case_rightmost = True @=? runner rightmostProg

@@ -56,7 +56,7 @@ import           Packed.FirstOrder.Passes.InlineTriv     (inlineTriv)
 
 import           Packed.FirstOrder.Passes.DirectL3       (directL3)
 import           Packed.FirstOrder.Passes.InferLocations (inferLocs)
-import           Packed.FirstOrder.Passes.AddLayout      (smartAddLayout)
+import           Packed.FirstOrder.Passes.AddLayout      (repairProgram)
 import           Packed.FirstOrder.Passes.RemoveCopies   (removeCopies)
 import           Packed.FirstOrder.Passes.InferMultiplicity (inferRegScope)
 import           Packed.FirstOrder.Passes.BoundsCheck    (boundsCheck)
@@ -396,9 +396,7 @@ passes config@Config{mode,dynflags} l1 = do
 
               l2 <- go "inferEffects"     inferEffects  l2
 
-              l2 <- if gibbon1
-                    then return l2
-                    else go "smartAddLayout" smartAddLayout l2
+              l2 <- go "repairProgram" (repairProgram dynflags l1) l2
 
               l2 <- if gibbon1 || biginf
                     then go "inferRegScope" (inferRegScope BigInfinite) l2
