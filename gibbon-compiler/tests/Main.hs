@@ -14,11 +14,11 @@ import Test.Tasty.TH
 
 
 -- |
-import Packed.FirstOrder.L4.Syntax hiding (Prog (..), Ty (..))
+import Gibbon.L4.Syntax hiding (Prog (..), Ty (..))
 
-import Packed.FirstOrder.Common (Multiplicity(..))
-import qualified Packed.FirstOrder.L4.Syntax as T
-import qualified Packed.FirstOrder.TargetInterp as TI
+import Gibbon.Common (Multiplicity(..))
+import qualified Gibbon.L4.Syntax as T
+import qualified Gibbon.TargetInterp as TI
 
 -- |
 import RouteEnds

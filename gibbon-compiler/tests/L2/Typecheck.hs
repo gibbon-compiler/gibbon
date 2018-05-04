@@ -16,11 +16,11 @@ import Data.Loc
 import Data.Map as M
 import Data.Set as S
 
-import Packed.FirstOrder.Common hiding (FunDef)
-import Packed.FirstOrder.L2.Syntax as L2
-import Packed.FirstOrder.L2.Typecheck
-import Packed.FirstOrder.L2.Examples
-import qualified Packed.FirstOrder.L1.Syntax as L1
+import Gibbon.Common hiding (FunDef)
+import Gibbon.L2.Syntax as L2
+import Gibbon.L2.Typecheck
+import Gibbon.L2.Examples
+import qualified Gibbon.L1.Syntax as L1
 
 --
 
