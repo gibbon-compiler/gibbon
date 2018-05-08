@@ -2,4 +2,5 @@
 
 (data T (MkA) (MkB))
 
-(MkA)
+(let ([a : T (MkA)])
+  0)

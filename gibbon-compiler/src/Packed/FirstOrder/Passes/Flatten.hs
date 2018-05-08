@@ -154,9 +154,9 @@ exp ddfs env2 (L sloc e0) =
                         LetE (v1,lv1,t1,rhs1) bod)
       return (bnd, unLoc rhs)
 
-    LetE (v,_,t,rhs) bod -> do (bnd1,rhs') <- go rhs
-                               (bnd2,bod') <- exp ddfs (extendVEnv v t env2) bod
-                               return (bnd1++[(v,[],t,rhs')]++bnd2, unLoc bod')
+    LetE (v,locs,t,rhs) bod -> do (bnd1,rhs') <- go rhs
+                                  (bnd2,bod') <- exp ddfs (extendVEnv v t env2) bod
+                                  return (bnd1++[(v,locs,t,rhs')]++bnd2, unLoc bod')
     IfE a b c -> do (b1,a') <- triv "If" a
                     (b2,b') <- go b
                     (b3,c') <- go c
@@ -181,7 +181,8 @@ exp ddfs env2 (L sloc e0) =
                               return (k,vrs, flatLets b2 rhs')
                      return (b, CaseE e' ls')
     -- TimeIt is treated like a conditional.  Don't lift out of it:
-    TimeIt e _t b -> do (bnd,e') <- go e
-                        return ([], TimeIt (flatLets bnd e') (gTypeExp ddfs env2 e) b)
+    TimeIt e _t b -> do
+      (bnd,e') <- go e
+      return ([], TimeIt (flatLets bnd e') (gTypeExp ddfs env2 e) b)
     MapE _ _      -> error "FINISHLISTS"
     FoldE _ _ _   -> error "FINISHLISTS"

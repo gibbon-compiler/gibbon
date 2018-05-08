@@ -5,4 +5,10 @@
 (define (id2 [ev : Foo]) : Foo
   (if True ev ev))
 
-(id2 (A 1))
+(define (unwrap-foo [a : Foo]) : Int
+  (case a
+    [(A x) x]
+    [(B y) y]))
+
+(let ([a : Foo (id2 (A 1))])
+  (unwrap-foo a))

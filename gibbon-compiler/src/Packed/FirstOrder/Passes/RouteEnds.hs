@@ -1,349 +1,391 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
--- | A pass to route end-witnesses as additional function returns.
+-- | Insert end witnesses in an L2 program by changing function types,
+-- and updating expressions to pass (second-class) end locations around
+-- via RetE in tail position and an extended binding form in LetE.
+-- Assumes that expressions are flattened and in ANF, and that location
+-- symbols are all unique! Failure to meet these assumptions will cause
+-- this pass to fail or possibly produce wrong output.
 --
--- GRAMMAR: takes and produces a flattened L2 program.
--- Returns a program following the "end-witnesses" calling convention.
---
+--- Steps:
+---
+--- 1. For each function type, inspect its input parameter type and traversal
+---    effect to determine which packed arguments are completely traversed,
+---    and update the type to indicate that the EndOf witness for each
+---    of these traversed arguments is returned.
+---
+--- 2. For each function body, walk through the let spine, updating bindings
+---    to include locations returned as end witnesses, and add coersions from
+---    EndOf witnesses to expected locations. Upon reaching tail position,
+---    emit a RetE form and compute what the proper EndOf locations are.
+---
+--- 3. For the main body, do the same thing minus inserting the RetE in tail
+---    position.
+
 module Packed.FirstOrder.Passes.RouteEnds
     ( routeEnds ) where
 
-import           Packed.FirstOrder.Common hiding (FunDef)
-import qualified Packed.FirstOrder.L1.Syntax as L1
-import qualified Packed.FirstOrder.L2.Syntax as L2
-
--- We use some pieces from this other attempt:
-import           Packed.FirstOrder.L2.Syntax as L2
-import           Packed.FirstOrder.Passes.InferEffects (instantiateApp, freshLoc)
-import Data.List as L hiding (tail)
+import Data.List as L
+import Data.Loc
 import Data.Map as M
 import Data.Set as S
-import Text.PrettyPrint.GenericPretty
 import Control.Monad
-import Control.Exception
-import Prelude hiding (exp)
 
--- | Chatter level for this module:
-lvl :: Int
-lvl = 4
-
-
--- =============================================================================
+import Packed.FirstOrder.GenericOps
+import Packed.FirstOrder.Common
+import Packed.FirstOrder.L2.Syntax as L2
+import qualified Packed.FirstOrder.L1.Syntax as L1
 
 
--- | The goal of this pass is to take effect signatures and translate
--- them into extra arguments and returns.  This pass does not worry
--- about where the witnesses come from to synthesize these extra
--- returns, it just inserts references to them that create *demand*.
+-- | Data structure that accumulates what we know about the relationship
+-- between locations and EndOf witnesses.
 --
--- This pass introduces *witness variables*.  These are operationally
--- equivalent to the original variable, but they always have type
--- CursorTy, even though the original value they are witnessing has
--- not YET been turned into a cursor.  Thus, `witness_x = (CursorTy)x`.
+-- Performing a lookup (to find the end of a given location) will first check
+-- if there exists a mapping in the endOf map for that location, then will check
+-- if there exists a mapping in the equivTo map, and if so will recur to find
+-- the end of that location.
 --
-routeEnds :: L2.Prog -> SyM L2.Prog
-routeEnds L2.Prog{ddefs,fundefs,mainExp} = do
-    fds' <- mapM fd $ M.elems fundefs
+-- This is used for when we perform pattern matching. The end of some binary tree
+-- (for example) is the same as the end of its second node, so we want to record
+-- that knowledge as we traverse the AST.
+data EndOfRel = EndOfRel
+    {
+      endOf :: M.Map LocVar LocVar -- ^ Map a location to it's EndOf witness
+    , equivTo :: M.Map LocVar LocVar -- ^ Map of a location to a known equivalent location
+    }
+  deriving (Eq, Ord, Read, Show)
 
-    mn <- case mainExp of
-            Nothing -> return Nothing
-            Just (x,t)  -> do (x',_) <- exp [] M.empty x
-                              return $ Just (x',t)
-                -- do let initWenv = WE (M.singleton gloc (L1.VarE "gcurs")) M.empty
-                --    tl' <- tail [] (M.empty,initWenv) x
-                --    return $ Just $ L1.LetE ("gcurs", CursorTy, NewBuffer) tl'
-    return L2.Prog{ fundefs = M.fromList $ L.map (\f -> (L2.funname f,f)) fds'
-                  , ddefs = ddefs
-                  , mainExp = mn
-                  }
- where
+-- | Create an empty EndOfRel
+emptyRel :: EndOfRel
+emptyRel = EndOfRel M.empty M.empty
 
-  fd :: L2.FunDef -> SyM L2.FunDef
-  fd (f@L2.FunDef{funname,funty,funarg,funbod}) =
-      let ArrowTy oldInT _effs _ = funty
-          (newTy@(ArrowTy inT _ _),newOut) = cursorizeUrTy funty
-      in
-      dbgTrace lvl ("Processing fundef: "++show(doc f)++
-                    "\n  new type: "++sdoc newTy++"\n  newOut: " ++ show (newOut)) $
-   do
-      -- First off, we need to use the lexical variable name to name
-      -- the input's fixed abstract location (from the lambda body's prspective).
-      let argLoc  = argtyToLoc (L2.mangle funarg) oldInT
+-- | Assert that one location's end is equivalent to another's end.
+-- Order is important here: we expect to look up the end of the first
+-- location argument, not the second.
+mkEqual :: LocVar -> LocVar -> EndOfRel -> EndOfRel
+mkEqual l1 l2 EndOfRel{endOf,equivTo} =
+    EndOfRel{endOf=endOf,equivTo=M.insert l1 l2 equivTo}
 
---          localizedEffects  = substEffs (zipLT argLoc inT) effs
---          localizedEffects2 = substEffs (zipTL inT argLoc) effs
+-- | Assert that we have found an EndOf relation between two locations.
+mkEnd :: LocVar -> LocVar -> EndOfRel -> EndOfRel
+mkEnd l1 l2 EndOfRel{endOf,equivTo} =
+    EndOfRel{endOf=M.insert l1 l2 endOf,equivTo=equivTo}
 
-      -- We use the new type to determine the NEW return values:
-      (_efs, retlocs) <- instantiateApp newTy argLoc
-      let augments = if L.null newOut
-                     then []
-                     else case retlocs of
-                            TupLoc l -> L.init l
-                            _ -> error$ "routeEnds: expected a tuple return location: "++show retlocs
-      let env0 =
-           dbgTrace lvl (" !!! argLoc "++show argLoc++", inTy "++show inT++", instantiate: "++show retlocs) $
---           dbgTrace lvl (" !!! localEffs1 "++show localizedEffects++" locEffs2 "++show localizedEffects2) $
-           M.singleton newArg argLoc
-          newArg = funarg
-          bod = funbod
-          demand = L.map ((\(Just x) -> x) . getLocVar) augments -- newOut
-      (exp',_) <- exp demand env0 bod
-      return $ L2.FunDef funname newTy newArg exp'
+-- | Look up the end of a location.
+findEnd :: LocVar -> EndOfRel -> LocVar
+findEnd l EndOfRel{endOf,equivTo} =
+    case M.lookup l endOf of -- Can we immediately look up the end of l?
+      Nothing -> case M.lookup l equivTo of -- Is there an equivalent location to use?
+                   Nothing -> error $ "Failed finding the end of " ++ (show l)
+                   Just leq -> findEnd leq EndOfRel{endOf,equivTo}
+      Just lend -> lend
 
 
-  funType f = funty $ fundefs # f
+-- | Process an L2 Prog and thread through explicit end-witnesses.
+-- Requires Gensym and runs in SyM. Assumes the Prog has been flattened.
+routeEnds :: Prog -> SyM Prog
+routeEnds Prog{ddefs,fundefs,mainExp} = do
 
-  triv :: L1.Exp -> L1.Exp
-  triv tr =
-   case tr of
-     VarE _                 -> tr -- Think about witness/end marking here.
-     LitE _                 -> tr
-     LitSymE _              -> tr
-     PrimAppE L1.MkTrue  [] -> tr
-     PrimAppE L1.MkFalse [] -> tr
-     MkProdE ls             -> MkProdE $ L.map triv ls
-     ProjE ix e             -> ProjE ix $ triv e
-
-     _ -> error$ " [routeEnds] trivial expected: "++sdoc tr
-
-  -- | Arguments:
+  -- Handle functions in two steps (to account for mutual recursion):
   --
-  --  (1) the N demanded traversal witnesses (end-of-input cursors)
-  --  (2) an environment mapping lexical variables to abstract locations
-  --  (3) expression to process
-  --
-  -- Return values:
-  --
-  --  (1) The updated expression, possibly with a tupled return type
-  --      thereby including the N new cursor returns.
-  --  (2) The location of the processed expression, NOT including the
-  --      added returns.
-  exp :: [LocVar] -> LocEnv -> L1.Exp -> SyM (L1.Exp, Loc)
-  exp demanded env ex =
-    dbgTrace lvl ("\n [routeEnds] exp, demanding "++show demanded++": "++show ex++"\n  with env: "++show env) $
-    let trivLoc (VarE v)  = env # v
-        trivLoc (LitE _i) = Bottom
-        trivLoc (LitSymE _v) = Bottom
-        trivLoc (MkProdE ls) = TupLoc (L.map trivLoc ls)
-        trivLoc (ProjE ix trv) =
-            case trivLoc trv of
-              TupLoc ls -> ls !! ix
-              oth -> error $ "No way to describe a location projected from a tuple of this location: "++show oth
+  -- First, compute the new types, and build a new fundefs structure:
+  fds' <- mapM fdty $ M.elems fundefs
+  let fundefs' = M.fromList $ L.map (\f -> (funname f,f)) fds'
+  -- Then process the actual function bodies using the new fundefs structure:
+  fds'' <- mapM (fd fundefs') fds'
+  let fundefs'' = M.fromList $ L.map (\f -> (funname f,f)) fds''
 
-        trivLoc (PrimAppE L1.MkTrue [])  = Bottom
-        trivLoc (PrimAppE L1.MkFalse []) = Bottom
-        trivLoc t = error $ "Case in trivLoc not handled for: " ++ (show t)
+      initFEnv fds = M.foldr (\fn acc -> let fnty = (funty fn)
+                                         in M.insert (funname fn) (arrIn fnty, arrOut fnty) acc)
+                              M.empty fds
+      env2 = (Env2 M.empty (initFEnv fundefs))
+  -- Handle the main expression (if it exists):
+  mainExp' <- case mainExp of
+                Nothing -> return Nothing
+                Just (e,t) -> do e' <- exp fundefs'' [] emptyRel M.empty M.empty env2 e
+                                 return $ Just (e',t)
 
-        -- When we get to the end... we just mention the names of what we want:
-        defaultReturn e = L1.mkProd $ (L.map VarE demanded) ++ [e]
-    in
-    case ex of
-     -----------------Trivials---------------------
-     -- ASSUMPTION we are ONLY given demands that we can FULFILL:
-
-     tr | L1.isTriv tr -> return ( defaultReturn (triv tr)
-                                 , trivLoc tr)
-     ----------------End Trivials-------------------
-
-     -- PrimApps do not currently produce end-witnesses:
-     PrimAppE p ls -> L1.assertTrivs ls $
-                       pure (defaultReturn (PrimAppE p (L.map triv ls)),Bottom)
-
-     -- A datacon is the beginning of something new, it certainly
-     -- cannot witness the end of anything else!
-     DataConE k ls -> L1.assertTrivs ls $
-       do fresh <- freshLoc "dunno"
-          return (defaultReturn (DataConE k ls), fresh)
-
-     -- Allocating new data doesn't witness the end of any data being read.
-     LetE (v,ty, DataConE k ls) bod -> L1.assertTrivs ls $
-       do env' <- extendLocEnv [(v,ty)] env
-          (bod',loc) <- exp demanded env' bod
-          return (LetE (v,ty,DataConE k ls) bod', loc)
-
-     -- FIXME: Need unariser pass:
-     LetE (vr,ty, MkProdE ls) bod -> L1.assertTrivs ls $ do
-      -- As long as we keep these trivial, this is book-keeping only.  Nothing to route out of here.
-      env' <- extendLocEnv [(vr,ty)] env
-      (bod',loc) <- exp demanded env' bod
-      return (LetE (vr,ty,MkProdE ls) bod', loc)
-
-    -- A let is a fork in the road, a compound expression where we
-    -- need to decide which branch can fulfill a given demand.
-     LetE (v,t,rhs) bod ->
-      do
-         ((fulfilled,demanded'), rhs', _rloc) <- maybeFulfill demanded env rhs
-         env' <- extendLocEnv [(v,t)] env
-         (bod', bloc) <- exp demanded' env' bod
-         let num1 = length fulfilled
-             num2 = length demanded'
-             newExp = LetE (v,t, L1.mkProj num1 (num1+1) rhs') bod'
-         assert (num1 + num2 == length demanded) $
-            return (newExp, bloc)
-
-     --  We're allowing these as tail calls:
-     AppE rat rand -> -- L1.assertTriv rnd $
-       let loc = trivLoc rand in
-          do
-             -- This looks up the type before this pass, not with end cursors:
-             let arrTy@(ArrowTy _ _ ouT) = funType rat
-             (effs,loc) <- instantiateApp arrTy loc
-             if L.null effs
-              then dbgTrace lvl (" [routeEnds] processing app with ZERO extra end-witness returns:\n  "++sdoc ex) $
-                   assert (demanded == []) $
-                   return (AppE rat rand, loc) -- Nothing to see here.
-              else do
-                -- FIXME: THESE COULD BE IN THE WRONG ORDER:  (But it doesn't matter below.)
-                let outs = L.map (\(Traverse v) -> toEndVar v) (S.toList effs)
-                -- FIXME: assert that the demands match what we got back...
-                -- might need to shuffle the order
-                assert (length demanded == length outs) $! return ()
-                let ouT' = L1.ProdTy $ (L.map mkCursorTy outs) ++ [ouT]
-                tmp <- gensym $ toVar "hoistapp"
-                let newExp = LetE (tmp, fmap (const ()) ouT', AppE rat rand) $
-                               letBindProjections (L.map (\v -> (v,mkCursorTy ())) outs) (VarE tmp) $
-                                 -- FIXME/TODO: unpack the witnesses we know about, returns 1-(N-1):
-                                 (ProjE (length effs) (VarE tmp))
-                dbgTrace lvl (" [routeEnds] processing app with these extra returns: "++
-                                 show effs++", new expr:\n "++sdoc newExp) $!
-                  return (defaultReturn newExp,loc)
-
-     -- Here we must fulfill the demand on ALL branches uniformly.
-     --
-     -- FIXME: We will also need to create NEW DEMAND to witness the
-     -- end of our non-first packed fields within the subexpressions
-     -- of this case.  After copy insertion we know it is POSSIBLE,
-     -- but we still need to figure out which subexpressions shoud be
-     -- be demanded to produce them.
-     CaseE e1 ls -> L1.assertTriv e1 $
-      let scrutloc = let lp (VarE sv)     = env # sv
-                         lp (ProjE ix e') = let TupLoc ls = lp e'
-                                            in ls !!! ix
-                         lp oth = error$ "[RouteEnds] FINISHME, handle case scrutinee at loc: "++show oth
-                     in lp e1
-
-          docase (dcon,patVs,rhs) = do
-            let tys    = lookupDataCon ddefs dcon
-                zipped = fragileZip patVs tys
-
-            env' <- extendLocEnv zipped env
-            (rhs',loc) <- exp demanded env' rhs
-
-            -- Since this pass is the one concerned with End propogation,
-            -- it's the one that reifies the fact "last field's end is constructors end".
-            let rhs'' =
-                  let Fixed v = scrutloc
-                  in LetE (toEndVar v, mkCursorTy (),
-                           case sequence (L.map L1.sizeOf tys) of
-                             -- Here we statically know the layout, plus one for the tag:
-                             Just ns -> AddCursor (L2.toWitnessVar v) (sum ns+1)
-                             Nothing -> VarE (toEndVar (L.last patVs)))
-                       rhs'
-
-            return ((dcon,patVs,rhs''),loc)
-
-      in do
-            (ls',locs) <- unzip <$> mapM docase ls
-            -- unless (1 == (length $ nub $ L.map L.length extras)) $
-            --   error $ "Got inconsintent-length augmented-return types from branches of case:\n  "
-            --           ++show extras++"\nExpr:\n  "++sdoc ex
-            let (locFin,cnstrts) = joins locs
-
-            when (not (L.null cnstrts)) $
-             dbgTrace 1 ("Warning: routeEnds/FINISHME: process these constraints: "++show cnstrts) (return ())
-
-            return (CaseE e1 ls', locFin)
-
-     IfE a b c -> L1.assertTriv a $ do
-       (b',bloc) <- exp demanded env b
-       (c',cloc) <- exp demanded env c
-       let (retloc,_) = L2.join bloc cloc
-       return (IfE a b' c', retloc)
-
-     TimeIt e t b -> do (e',l) <- exp demanded env e
-                        return (TimeIt e' t b, l)
-
-     _ -> error$ "[routeEnds] Unfinished.  Needs to handle:\n  "++sdoc ex
-{-
-      -- MapE (v,t,rhs) bod -> MapE <$> ((v,t,) <$> go rhs) <*> go bod
-      -- FoldE (v1,t1,r1) (v2,t2,r2) bod ->
-      --     FoldE <$> ((v1,t1,) <$> go r1)
-      --           <*> ((v2,t2,) <$> go r2)
-      --           <*> go bod
--}
-
-  -- | Process an expression multiple times, first to see what it can
-  -- offer, and then again if it can offer something we want.
-  -- Returns hits followed by misses.
-  maybeFulfill :: [LocVar] -> LocEnv -> L1.Exp -> SyM (([LocVar],[LocVar]),L1.Exp, Loc)
-  maybeFulfill demand env ex = do
-    (ex', loc) <- exp [] env ex
-    let offered = locToEndVars loc
-        matches = S.intersection (S.fromList demand) (S.fromList offered)
-
-    if dbgTrace 2 ("[routeEnds] maybeFulfill, offered "++show offered
-                   ++", demanded "++show demand++", from: "++show ex) $
-       S.null matches
-     then return (([],demand),ex',loc)
-     else do
-      let (hits,misses) = L.partition (`S.member` matches) demand
-      (ex',loc) <- exp [] env ex
-      return ((hits,misses), ex', loc)
+  -- Return the updated Prog
+  return $ Prog ddefs fundefs'' mainExp'
 
 
-
-locToEndVars :: Loc -> [Var]
-locToEndVars l =
- case l of
-   (Fixed x) | isEndVar x -> [x]
-             | otherwise -> []
-   (Fresh _) -> []
-   (TupLoc ls) -> concatMap locToEndVars ls
-   Top    -> []
-   Bottom -> []
-
-
-letBindProjections :: [(Var, L1.Ty)] -> Exp -> Exp -> Exp
-letBindProjections ls tupname bod = go 0 ls
   where
-    go _ [] = bod
-    go ix ((vr,ty):rst) = LetE (vr, ty, ProjE ix tupname) $ go (ix+1) rst
+    -- Helper functions:
+
+    -- | Process function types (but don't handle bodies)
+    fdty :: L2.FunDef -> SyM L2.FunDef
+    fdty L2.FunDef{funname,funty,funarg,funbod} =
+        do let (ArrowTy locin tyin eff tyout _locout) = funty
+               handleLoc (LRM l r m) ls = if S.member (Traverse l) eff then (LRM l r m):ls else ls
+               locout' = L.map EndOf $ L.foldr handleLoc [] locin
+           return L2.FunDef{funname,funty=(ArrowTy locin tyin eff tyout locout'),funarg,funbod}
 
 
--- | Let bind IFF there are extra cursor results.
+    -- | Process function bodies
+    fd :: NewFuns -> L2.FunDef -> SyM L2.FunDef
+    fd fns L2.FunDef{funname,funty,funarg,funbod} =
+        do let (ArrowTy locin tyin eff _tyout _locout) = funty
+               handleLoc (LRM l _r _m) ls = if S.member (Traverse l) eff then l:ls else ls
+               retlocs = L.foldr handleLoc [] locin
+               lenv = case tyin of
+                        PackedTy _n l -> M.insert funarg l $ M.empty
+                        ProdTy _tys -> M.empty
+                        _ -> M.empty
+               initVEnv  = M.singleton funarg (arrIn funty)
+               initFEnv fds = M.foldr (\_fn acc -> let fnty = funty
+                                                   in M.insert funname (arrIn fnty, arrOut fnty) acc)
+                              M.empty fds
+               env2 = Env2 initVEnv (initFEnv fundefs)
+           funbod' <- exp fns retlocs emptyRel lenv M.empty env2 funbod
+           return L2.FunDef{funname,funty,funarg,funbod=funbod'}
 
--- maybeLetTup :: [Loc] -> (L1.Ty, L1.Exp) -> WitnessEnv
---             -> (L1.Exp -> WitnessEnv -> SyM L1.Exp) -> SyM L1.Exp
--- maybeLetTup locs (ty,ex) env fn = __refactor
-{-maybeLetTup locs (ty,ex) env fn =
-  case locs of
-   -- []  -> error$ "maybeLetTup: didn't expect zero locs:\n  " ++sdoc (ty,ex)
-   -- Zero extra cursor return values
-   [] -> fn ex env
-   -- Otherwise the layout of the tuple is (cursor0,..cursorn, origValue):
-   _   -> do
-     -- The name doesn't matter, just that it's in the environment:
-     tmp <- gensym "mlt"
-     -- Let-bind all the new things that come back with the exp
-     -- to bring them into the environment.
-     let env' = witnessBinding tmp (TupLoc locs) `unionWEnv` env
-         n = length locs
-     bod <- fn (mkProj (n - 1) n (L1.VarE tmp)) env'
-     return $ L1.LetE (tmp, ty, ex) bod
--}
 
--- | A variable binding may be able to
+    -- | Process expressions.
+    -- Takes the following arguments:
+    -- 1. a function environment
+    -- 2. a list of locations we need to return the ends of
+    -- 3. an end-of relation
+    -- 4. a map of var to location
+    -- 5. a map from location to location after it
+    -- 6. the expression to process
+    exp :: NewFuns -> [LocVar] -> EndOfRel -> M.Map Var LocVar ->
+           M.Map LocVar LocVar -> Env2 Ty2 -> L Exp2 -> SyM (L Exp2)
+    exp fns retlocs eor lenv afterenv env2 (L p e) = fmap (L p) $
+        case e of
 
--- varToWitnesses :: Var -> Loc -> M.Map LocVar Exp
--- varToWitnesses = __
-{- varToWitnesses vr loc = WE (M.fromList $ go loc (L1.VarE vr)) M.empty
-  where
-   go (TupLoc ls) ex =
-       concat [ go x (mkProj ix (length ls) ex)
-              | (ix,x) <- zip [0..] ls ]
-   go (Fresh v) e = [ (v,e) ]
-   go (Fixed v) e = [ (v,e) ]
-   go Top       _ = []
-   go Bottom    _ = [] -}
+          -- Variable case, *should* be the base case assuming our expression was
+          -- properly put in ANF.
+          -- We generate our RetE form here. By this point we should know the ends
+          -- of each of the locactions in relocs.
 
--- data WitnessEnv -- WIP: REMOVE ME
+          -- we fmap location at the top-level case expression
+          VarE v -> fmap unLoc $ mkRet retlocs $ l$ VarE v
+
+          -- This is the most interesting case: a let bound function application.
+          -- We need to update the let binding's extra location binding list with
+          -- the end witnesses returned from the function.
+          LetE (v,_ls,ty,(L p' (AppE f lsin e1))) e2 -> do
+
+                 let fty = funtype f
+                     rets = S.fromList $ locRets fty
+                     -- The travlist is a list of pair (location, bool) where the bool is
+                     -- if the location was traversed, and the location is from the
+                     -- AppE call.
+                     travlist = zip lsin $ L.map (\l -> S.member (EndOf l) rets)  (locVars fty)
+                     lenv' = case ty of
+                               PackedTy _n l -> M.insert v l lenv
+                               _ -> lenv
+
+                 -- For each traversed location, gensym a new variable for its end,
+                 -- and generate a list of (location, endof location) pairs.
+                 let handleTravList lst (_l,False) = return lst
+                     handleTravList lst (l,True) = gensym "endof" >>= \l' -> return $ (l,l'):lst
+
+                 -- Walk through our pairs of (location, endof location) and update the
+                 -- endof relation.
+                 let mkEor (l1,l2) eor = mkEnd l1 l2 eor
+
+                 -- We may need to emit some additional let bindings if we've reached
+                 -- an end witness that is equivalent to the after location of something.
+                 let wrapBody e ((l1,l2):ls) = case M.lookup l1 afterenv of
+                                                 Nothing -> wrapBody e ls
+                                                 Just la -> wrapBody (L p' (Ext (LetLocE la (FromEndLE l2) e))) ls
+                     wrapBody e [] = e
+
+                 newls <- reverse <$> foldM handleTravList [] travlist
+                 let eor' = L.foldr mkEor eor newls
+                 let outlocs = L.map snd newls
+                 e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) e2
+                 return $ LetE (v,outlocs,ty, l$ AppE f lsin e1)
+                               (wrapBody e2' newls)
+
+          CaseE (L _ (VarE x)) brs -> do
+                 -- We will need to gensym while processing the case clauses, so
+                 -- it has to be in the SyM monad
+                 brs' <-
+                     forM brs $ \(dc, vls, e) ->
+                       case vls of
+                         [] ->
+                           case (M.lookup x lenv) of
+                             Just l1 -> do
+                               l2 <- gensym "jump"
+                               let eor' = mkEnd l1 l2 eor
+                                   e' = l$ Ext $ LetLocE l2 (AfterConstantLE 1 l1) e
+                               e'' <- exp fns retlocs eor' lenv (M.insert l1 l2 lenv) env2 e'
+                               return (dc, vls, e'')
+                             Nothing -> error $ "Failed to find " ++ sdoc x
+                         _ -> do
+                           let need = snd $ last vls
+                               argtys = lookupDataCon ddefs dc
+                               lx = case M.lookup x lenv of
+                                      Nothing -> error $ "Failed to find " ++ (show x)
+                                      Just l -> l
+                               -- we know lx and need have the same end, since
+                               -- lx is the whole packed thing and need is its
+                               -- last field, so when we look up the end of lx
+                               -- what we really want is the end of need.
+                               eor' = mkEqual lx need eor
+                               f (l1,l2) env = M.insert l1 l2 env
+                               afterenv' = L.foldr f afterenv $ zip (L.map snd vls) (tail $ L.map snd vls)
+                               -- two cases here for handing bound parameters:
+                               -- we have a packed type:
+                               handleLoc (eor,e) (_,(PackedTy _ _)) = return (eor,e)
+                               -- or we have a non-packed type, and we need to "jump" over it and
+                               -- bind a location to after it
+                               handleLoc (eor,e) (l1,ty) = do
+                                    l2 <- gensym "jump"
+                                    let eor' = mkEnd l1 l2 eor
+                                        (Just jump) = L1.sizeOf ty
+                                        e' = Ext $ LetLocE l2 (AfterConstantLE jump l1) e
+                                    return (eor', l$ e')
+
+                           (eor'',e') <- foldM handleLoc (eor',e) $ zip (L.map snd vls) argtys
+                           e'' <- exp fns retlocs eor'' lenv afterenv' env2 e'
+                           return (dc, vls, e'')
+                 return $ CaseE (l$ VarE x) brs'
+
+
+
+          CaseE complex brs -> do
+            let ty = gTypeExp ddefs env2 complex
+            v <- gensym "flt_RE"
+            let ex = L1.mkLets [(v,[],ty,complex)] (l$ CaseE (l$ VarE v) brs)
+            unLoc <$> exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) ex
+
+          -------------------------------------------------------------------------------------------------------------------------
+          --- That's all the interesting cases. The rest are straightforward:
+
+
+          -- This shouldn't happen, but as a convenience we can ANF-ify this AppE
+          -- by gensyming a new variable, sticking the AppE in a LetE, and recuring.
+          -- Question: should this fail instead? I'm not sure.
+          AppE v args e -> do
+                 v' <- gensym "tailapp"
+                 let ty = funtype v
+                     -- use locVars used at call-site in the type
+                     arrOutMp = M.fromList $ zip (allLocVars ty) args
+                     outT     = substTy arrOutMp (arrOut ty)
+                     e' = LetE (v',[], outT, l$ AppE v args e) (l$ VarE v')
+                 -- we fmap location at the top-level case expression
+                 fmap unLoc $ go (l$ e')
+
+          -- Same as above. This could just fail, instead of trying to repair
+          -- the program.
+          PrimAppE pr es -> do
+                 v' <- gensym "tailprim"
+                 let ty = L1.primRetTy pr
+                     e' = LetE (v',[],ty, l$ PrimAppE pr es) (l$ VarE v')
+                 -- we fmap location at the top-level case expression
+                 fmap unLoc $ go (l$ e')
+
+
+          -- RouteEnds creates let bindings for such expressions (see those cases below).
+          -- Processing the RHS here would cause an infinite loop.
+
+          LetE (v,ls,ty@(PackedTy _ loc),e1@(L _ DataConE{})) e2 -> do
+            e2' <- exp fns retlocs eor (M.insert v loc lenv) afterenv env2 e2
+            return $ LetE (v,ls,ty,e1) e2'
+
+          LetE (v,ls,ty,e1@(L _ ProjE{})) e2 -> do
+            let lenv' = case ty of
+                          PackedTy _ loc -> M.insert v loc lenv
+                          _ -> lenv
+            e2' <- exp fns retlocs eor lenv' afterenv env2 e2
+            return $ LetE (v,ls,ty,e1) e2'
+
+          LetE (v,ls,ty,e1@(L _ MkProdE{})) e2 -> do
+            LetE (v,ls,ty,e1) <$> go e2
+
+          --
+
+          LetE (v,ls,ty@(PackedTy n l),e1) e2 -> do
+                 e1' <- go e1
+                 e2' <- exp fns retlocs eor (M.insert v l lenv) afterenv (extendVEnv v ty env2) e2
+                 return $ LetE (v,ls,PackedTy n l,e1') e2'
+
+          LetE (v,ls,ty,e1@(L _ TimeIt{})) e2 -> do
+                 e1' <- go e1
+                 e2' <- exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) e2
+                 return $ LetE (v,ls,ty,e1') e2'
+
+          -- Most boring LetE case, just recur on body
+          LetE (v,ls,ty,e1) e2 -> do
+                 e2' <- exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) e2
+                 return $ LetE (v,ls,ty,e1) e2'
+
+          IfE e1 e2 e3 -> do
+                 e2' <- go e2
+                 e3' <- go e3
+                 return $ IfE e1 e2' e3'
+
+          MkProdE ls -> do
+            let tys = L.map (gTypeExp ddefs env2) ls
+                prodty = ProdTy tys
+            v <- gensym "flt_RE"
+            let ex = L1.mkLets [(v,[],prodty,(l$ MkProdE ls))] (l$ VarE v)
+            unLoc <$> exp fns retlocs eor lenv afterenv (extendVEnv v prodty env2) ex
+
+          ProjE{} -> do
+            v <- gensym "flt_RE"
+            let ty = gTypeExp ddefs env2 e
+                lenv' = case ty of
+                          PackedTy _ loc -> M.insert v loc lenv
+                          _ -> lenv
+                ex = L1.mkLets [(v,[],ty,l$ e)] (l$ VarE v)
+            unLoc <$> exp fns retlocs eor lenv' afterenv (extendVEnv v ty env2) ex
+
+          -- Could fail here, but try to fix the broken program
+          DataConE loc dc es -> do
+                 v' <- gensym "taildc"
+                 let ty = PackedTy (getTyOfDataCon ddefs dc) loc
+                     e' = LetE (v',[],ty, l$ DataConE loc dc es)
+                               (l$ VarE v')
+                 fmap unLoc $ exp fns retlocs eor (M.insert v' loc lenv) afterenv (extendVEnv v' ty env2) (l$ e')
+
+          LitE i -> return $ LitE i
+
+          LitSymE v -> return $ LitSymE v
+
+          TimeIt e ty b -> do
+                 e' <- go e
+                 return $ TimeIt e' ty b
+
+          Ext (LetRegionE r e) -> do
+                 e' <- go e
+                 return $ Ext (LetRegionE r e')
+
+          Ext (LetLocE v (StartOfLE r) e) -> do
+                 e' <- go e
+                 return $ Ext (LetLocE v (StartOfLE r) e')
+
+          Ext (LetLocE v (AfterConstantLE i l1) e) -> do
+                 e' <- go e
+                 return $ Ext (LetLocE v (AfterConstantLE i l1) e')
+
+          Ext (LetLocE v (AfterVariableLE x l1) e) -> do
+                 e' <- go e
+                 return $ Ext (LetLocE v (AfterVariableLE x l1) e')
+          Ext (IndirectionE{}) -> return e
+
+        where  mkRet :: [LocVar] -> (L Exp2) -> SyM (L Exp2)
+               mkRet ls (L p (VarE v)) =
+                 let ends = L.map (\l -> findEnd l eor) ls
+                 in return $ L p $ Ext (RetE ends v)
+               mkRet _ e = error $ "Expected variable reference in tail call, got "
+                           ++ (show e)
+
+               funtype :: Var -> ArrowTy Ty2
+               funtype v = case M.lookup v fns of
+                             Nothing -> error $ "Function " ++ (show v) ++ " not found"
+                             Just fundef -> funty fundef
+
+               go = exp fns retlocs eor lenv afterenv env2

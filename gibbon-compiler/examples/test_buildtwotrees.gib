@@ -1,0 +1,11 @@
+#lang gibbon
+
+(require "test_ddtree.gib")
+(require "test_buildtree.gib")
+
+(define (buildtwotrees [n : Int]) : (Vector Tree Tree)
+  (let ([tr1 : Tree (buildtree n)])
+    (let ([tr2 : Tree (buildtree n)])
+      (vector tr1 tr2))))
+
+;; (buildtwotrees 2)

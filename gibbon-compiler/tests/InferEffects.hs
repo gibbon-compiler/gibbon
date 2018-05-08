@@ -4,7 +4,7 @@
 
 -- | Tests for RouteEnds2
 --
-module InferEffects2 where
+module InferEffects where
 
 import Data.Set as S
 import Data.Map as M
@@ -16,7 +16,7 @@ import Test.Tasty.TH
 import Packed.FirstOrder.Common hiding (FunDef)
 import Packed.FirstOrder.L2.Syntax as L2
 import Packed.FirstOrder.L2.Examples
-import Packed.FirstOrder.Passes.InferEffects2
+import Packed.FirstOrder.Passes.InferEffects
 import qualified Packed.FirstOrder.L1.Syntax as L1
 
 

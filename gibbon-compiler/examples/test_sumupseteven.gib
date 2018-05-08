@@ -1,0 +1,26 @@
+#lang gibbon
+
+(require "test_stree.gib")
+(require "test_buildstree.gib")
+
+(define (even [n : Int]) : Int
+  (if (= (mod n 2) 0)
+      1
+      0))
+
+(define (sumupseteven [tr : STree]) : (Vector STree Int)
+  (case tr
+    [(Leaf n) (vector (Leaf n) n)]
+    [(Inner i b x y)
+     (let ([tup1 : (Vector STree Int) (sumupseteven x)])
+       (let ([x1 : STree (vector-ref tup1 0)])
+         (let ([v1 : Int (vector-ref tup1 1)])
+           (let ([tup2 : (Vector STree Int) (sumupseteven y)])
+             (let ([y1 : STree (vector-ref tup2 0)])
+               (let ([v2 : Int (vector-ref tup2 1)])
+                 (let [(total : Int (+ v1 v2))]
+                   (let ([b2 : Int (even total)])
+                     (vector (Inner total b2 x1 y1) total)))))))))]))
+
+
+;; (sumupseteven (buildstree 2))

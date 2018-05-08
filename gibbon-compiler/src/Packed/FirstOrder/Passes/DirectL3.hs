@@ -9,6 +9,7 @@ import Data.Map as M
 import Packed.FirstOrder.Common
 import Packed.FirstOrder.L1.Syntax
 import Packed.FirstOrder.L1.Typecheck
+import Packed.FirstOrder.L2.Syntax (stripTyLocs)
 import qualified Packed.FirstOrder.L3.Syntax as L3
 
 
@@ -38,7 +39,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
                      }
 
     toL3Ty :: Ty1 -> L3.Ty3
-    toL3Ty = L3.stripTyLocs
+    toL3Ty = stripTyLocs
 
     go :: L Exp1 -> L L3.Exp3
     go (L p ex) = L p $
