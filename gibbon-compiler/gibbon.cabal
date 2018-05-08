@@ -73,6 +73,8 @@ library
                      , deepseq
                      , mtl
                      , transformers
+                     , vector
+                     , tuple
                      -- Parsers:
                      , parsec
                      , optparse-applicative
