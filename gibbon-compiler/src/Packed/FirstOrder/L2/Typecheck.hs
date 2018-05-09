@@ -85,7 +85,7 @@ newtype LocationTypeState = LocationTypeState
 
 -- | A region set is (as you would expect) a set of regions. They are the
 -- regions that are currently live while checking a particular expression.
-newtype RegionSet = RegionSet { regSet :: S.Set Region }
+newtype RegionSet = RegionSet { regSet :: S.Set Var }
   deriving (Read, Show, Eq, Ord, Generic, NFData)
 
 
@@ -245,6 +245,8 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                  L1.MkNullCursor -> do
                    return (CursorTy, tstate)
 
+                 L1.PEndOf -> return (CursorTy, tstate)
+
                  oth -> error $ "L2.tcExp : PrimAppE : TODO " ++ sdoc oth
 
 
@@ -298,15 +300,13 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                return (tys !! 0,tstate')
 
       DataConE l dc es -> do
-
-               (tys,tstate1) <- tcExps ddfs env funs constrs regs tstatein es
                let dcty = getTyOfDataCon ddfs dc
+               (tys,tstate1) <- tcExps ddfs env funs constrs regs tstatein es
                let args = lookupDataCon ddfs dc
 
                if length args /= length es
                then throwError $ GenericTC "Invalid argument length" exp
                else do
-
                  sequence_ [ ensureEqualTyNoLoc exp ty1 ty2
                            | (ty1,ty2) <- zip args tys ]
                  -- TODO: need to fix this check
@@ -379,6 +379,11 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
 
                -- skip returned locations for now
                recur tstatein $ L NoLoc $ VarE v
+
+      -- The IntTy is just a placeholder. BoundsCheck is a side-effect
+      Ext (BoundsCheck{}) -> return (IntTy,tstatein)
+
+      Ext (IndirectionE tycon _ (a,_) _ _) -> return (PackedTy tycon a, tstatein)
 
       hole -> error $ "FINISHME: L2.tcExp " ++ show hole
 
@@ -502,19 +507,19 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
 -- Includes an expression for error reporting.
 regionInsert :: Exp -> Region -> RegionSet -> TcM RegionSet
 regionInsert e r (RegionSet regSet) = do
-  if (S.member r regSet)
+  if (S.member (regionVar r) regSet)
   then throwError $ GenericTC "Shadowed regions not allowed" e
-  else return $ RegionSet (S.insert r regSet)
+  else return $ RegionSet (S.insert (regionVar r) regSet)
 
 -- | Ask if a region is in the region set.
 hasRegion :: Region -> RegionSet -> Bool
-hasRegion r (RegionSet regSet) = S.member r regSet
+hasRegion r (RegionSet regSet) = S.member (regionVar r) regSet
 
 -- | Ensure that a region is in a region set, reporting an error otherwise.
 -- Includes an expression for error reporting.
 ensureRegion :: Exp -> Region -> RegionSet -> TcM ()
 ensureRegion exp r (RegionSet regSet) =
-    if S.member r regSet then return ()
+    if S.member (regionVar r) regSet then return ()
     else throwError $ GenericTC ("Region " ++ (show r) ++ " not in scope") exp
 
 -- | Get the region of a location variable.
@@ -530,7 +535,7 @@ getRegion exp (ConstraintSet cs) l = go $ S.toList cs
 funRegs :: [LRM] -> RegionSet
 funRegs ((LRM _l r _m):lrms) =
     let (RegionSet rs) = funRegs lrms
-    in RegionSet $ S.insert r rs
+    in RegionSet $ S.insert (regionVar r) rs
 funRegs [] = RegionSet $ S.empty
 
 -- | Get the constraints from the location bindings in a function type.

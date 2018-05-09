@@ -19,7 +19,7 @@ import Packed.FirstOrder.Common hiding (FunDef, FunDefs)
 import Packed.FirstOrder.L1.Syntax hiding (FunDef, Prog(..), FunDefs)
 import Packed.FirstOrder.L3.Syntax
 import Packed.FirstOrder.GenericOps
-import Packed.FirstOrder.Passes.Unariser2
+import Packed.FirstOrder.Passes.Unariser
 
 
 run :: L Exp3 -> L Exp3

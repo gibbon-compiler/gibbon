@@ -4,14 +4,18 @@
 
 module L3.Typecheck where
 
-import Packed.FirstOrder.Passes.InferEffects2
-import Packed.FirstOrder.Passes.RouteEnds2
-import Packed.FirstOrder.Passes.Cursorize4
+import Packed.FirstOrder.Passes.InferEffects
+import Packed.FirstOrder.Passes.InferMultiplicity
+import Packed.FirstOrder.Passes.RouteEnds
+import Packed.FirstOrder.Passes.BoundsCheck
+import Packed.FirstOrder.Passes.ThreadRegions
+import Packed.FirstOrder.Passes.Cursorize
 import Packed.FirstOrder.Passes.Unariser
 import Packed.FirstOrder.Passes.ShakeTree
 import Packed.FirstOrder.Passes.HoistNewBuf
 import Packed.FirstOrder.Passes.FindWitnesses
 import Packed.FirstOrder.Common
+import Packed.FirstOrder.DynFlags
 import Packed.FirstOrder.L1.Syntax hiding (FunDef, Prog, add1Prog)
 import Packed.FirstOrder.L2.Syntax
 import Packed.FirstOrder.L2.Examples
@@ -26,9 +30,13 @@ import Test.Tasty
 runT :: Prog -> L3.Prog
 runT prg = fst $ runSyM 0 $ do
   l2 <- inferEffects prg
+  l2 <- inferRegScope Infinite l2
   l2 <- L2.tcProg l2
   l2 <- routeEnds l2
-  l3 <- cursorize l2
+  l2 <- L2.tcProg l2
+  l2 <- boundsCheck l2
+  l2 <- threadRegions l2
+  l3 <- cursorize defaultDynFlags l2
   l3 <- findWitnesses l3
   l3 <- L3.tcProg l3
   l3 <- shakeTree l3

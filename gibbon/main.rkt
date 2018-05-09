@@ -9,7 +9,7 @@
          eq? = Listof True False
          sym-append
 
-         time + * -
+         time + * - / mod < >
          size-param iterate
 
          fl- fl+ fl* fl/ flsqrt fl> fl< flsqrt
@@ -221,6 +221,9 @@ lit := int | #t | #f
   
   (define (= [a : Int] [b : Int]) : Bool
     (req? a b))
+
+  (define (mod [a : Int] [b : Int]) : Int
+    (unsafe-fxremainder a b))
   )
 
 (define size-param  : (Parameter Int) (make-parameter 1))

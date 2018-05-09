@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -37,12 +38,13 @@ module Packed.FirstOrder.L1.Syntax
     , mapExprs
     , mapExt
     , mapLocs
+    , numIndrsDataCon
 
       -- * Trivial expressions
     , assertTriv, assertTrivs, hasTimeIt, isTrivial
     , projNonFirst, mkProj, mkProd, mkProdTy, mkLets, flatLets
 
-      -- * Examples
+      -- * Examples.  TODO: Move to separate examples file.
     , add1Prog
     , add1ProgLetLeft
     , add1ProgLetRight
@@ -157,7 +159,7 @@ data PreExp (ext :: * -> * -> *) loc dec =
   | Ext (ext loc dec) -- ^ Extension point for downstream language extensions.
 
   deriving (Show, Read, Eq, Ord, Generic, NFData, Functor)
-
+  -- Foldable, Traversable - need instances for L in turn
 
 instance NFData (PreExp e l d) => NFData (L (PreExp e l d)) where
   rnf (L loc a) = seq loc (rnf a)
@@ -182,11 +184,17 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         PrimAppE MkTrue  [] -> True
         PrimAppE MkFalse [] -> True
         PrimAppE _ _        -> False
+
         ----------------- POLICY DECISION ---------------
         -- Leave these tuple ops as trivial for now:
+        -- See https://github.com/iu-parfunc/gibbon/issues/86
         ProjE _ (L _ et) | f et -> True
                          | otherwise -> False
         MkProdE ls -> all (\(L _ x) -> f x) ls
+                     
+        -- DataCon's are a bit tricky.  May want to inline them at
+        -- some point if it avoids region conflicts.
+        DataConE{} -> False
 
         IfE{}      -> False
         CaseE{}    -> False
@@ -195,7 +203,6 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         FoldE {}   -> False
         AppE  {}   -> False
         TimeIt {}  -> False
-        DataConE{} -> False
         Ext ext -> isTrivial ext
 
 
@@ -252,8 +259,12 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
           AddP    -> IntTy
           SubP    -> IntTy
           MulP    -> IntTy
+          ModP    -> IntTy
+          DivP    -> IntTy
           EqIntP  -> BoolTy
           EqSymP  -> BoolTy
+          LtP     -> BoolTy
+          GtP     -> BoolTy
           MkTrue  -> BoolTy
           MkFalse -> BoolTy
           SymAppend      -> SymTy
@@ -263,7 +274,6 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
           DictHasKeyP ty -> SymDictTy (noLocsHere ty)
           SizeParam      -> IntTy
           ReadPackedFile _ _ ty -> (noLocsHere ty)
-          _ -> error $ "case " ++ (show p) ++ " not handled in typeExp yet"
 
       LetE (v,_,t,_) e -> gTypeExp ddfs (extendVEnv v t env2) e
       IfE _ e _        -> gTypeExp ddfs env2 e
@@ -325,8 +335,14 @@ data Prim ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
             -- type of the file being read.  The `Ty` tracks the type as the program evolvels
             -- (first PackedTy then CursorTy).  The TyCon tracks the original type name.
+          | PEndOf
+          -- ^ This shouldn't be here. But this is the fastest way to encode
+          -- indirection nodes right now. This can be an L2 extension, after we make
+          -- InferLayout the pass that takes L1->L2, and InferLocations is an
+          -- L2->L2 pass.
 
-  deriving (Read, Show, Eq, Ord, Generic, NFData, Functor)
+
+  deriving (Read, Show, Eq, Ord, Generic, NFData, Functor, Foldable, Traversable)
 
 instance Out d => Out (Prim d)
 instance Out a => Out (UrTy a)
@@ -349,7 +365,7 @@ type Ty1 = UrTy ()
 
 -- | Types include boxed/pointer-based products as well as unpacked
 -- algebraic datatypes.  This data is parameterized to allow
--- annotation later on.
+-- annotation on Packed types later on.
 data UrTy a =
           IntTy
 --        | SymTy -- ^ Symbols used in writing compiler passes.
@@ -375,7 +391,7 @@ data UrTy a =
                    -- to an unkwown type or to a fraction of a complete value.
                    -- It is a machine pointer that can point to any byte.
 
-  deriving (Show, Read, Ord, Eq, Generic, NFData, Functor)
+  deriving (Show, Read, Ord, Eq, Generic, NFData, Functor, Foldable, Traversable)
 
 
 projTy :: (Out a) => Int -> UrTy a -> UrTy a
@@ -436,8 +452,8 @@ hasPacked t =
     IntTy          -> False
     SymDictTy ty   -> hasPacked ty
     ListTy _       -> error "FINISHLISTS"
-    PtrTy          -> error$ "hasPacked: should not be using this when PtrTy is introduced: "++show t
-    CursorTy       -> error$ "hasPacked: should not be using this when CursorTy is introduced: "++show t
+    PtrTy          -> False
+    CursorTy       -> False
 
 -- | Provide a size in bytes, if it is statically known.
 sizeOf :: UrTy a -> Maybe Int
@@ -565,7 +581,7 @@ isPackedTy _ = False
 
 
 -- | Return type for a primitive operation.
-primRetTy :: Prim Ty1 -> Ty1
+primRetTy :: Prim (UrTy a) -> (UrTy a)
 primRetTy p =
   case p of
     AddP -> IntTy
@@ -589,8 +605,17 @@ primRetTy p =
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ ty -> ty
 
-dummyCursorTy :: Ty1
+dummyCursorTy :: UrTy a
 dummyCursorTy = CursorTy
+
+numIndrsDataCon :: Out a => DDefs (UrTy a) -> DataCon -> Maybe Int
+numIndrsDataCon ddfs dcon =
+    if numPacked > 1
+    then Just (numPacked - 1)
+    else Nothing
+  where
+    tys = lookupDataCon ddfs dcon
+    numPacked = length $ L.filter isPackedTy tys
 
 --------------------------------------------------------------------------------
 

@@ -12,7 +12,7 @@ module Packed.FirstOrder.L3.Syntax
   , Prog(..), FunDef(..), FunDefs, ArrowTy(..)
 
     -- * Functions
-  , eraseLocMarkers, stripTyLocs, cursorizeArrowTy, mapMExprs, toL3Prim, progToEnv
+  , eraseLocMarkers, mapMExprs, toL3Prim, progToEnv
   , cursorizeTy
   )
 where
@@ -44,12 +44,19 @@ data E3Ext loc dec =
   | AddCursor Var (L (E3 loc dec)) -- ^ Add a constant offset to a cursor variable
   | ReadTag   Var                  -- ^ One cursor in, (tag,cursor) out
   | WriteTag  DataCon Var          -- ^ Write Tag at Cursor, and return a cursor
-  | NewBuffer                      -- ^ Create a new buffer, and return a cursor
-  | ScopedBuffer                   -- ^ Create a temporary scoped buffer, and
+  | NewBuffer Multiplicity         -- ^ Create a new buffer, and return a cursor
+  | ScopedBuffer Multiplicity      -- ^ Create a temporary scoped buffer, and
                                    --   return a cursor
+  | InitSizeOfBuffer Multiplicity  -- ^ Returns the initial buffer size for a specific multiplicity
+                                   --
   | SizeOfPacked Var Var           -- ^ Takes in start and end cursors, and returns an Int
                                    --   we'll probably represent (sizeof x) as (end_x - start_x) / INT
   | SizeOfScalar Var               -- ^ sizeof(var)
+  | BoundsCheck Int Var Var        -- ^ Bytes required, region, write cursor
+  | ReadCursor Var                 -- ^ Reads and returns the cursor at Var
+  | WriteCursor Var (L (E3 loc dec)) -- ^ Write a cursor, and return a cursor
+  | BumpRefCount Var Var           -- ^ Given an end-of-region ptr, bump it's refcount.
+                                   --   Return the updated count (optional).
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 -- | L1 expressions extended with L3.  This is the polymorphic version.
@@ -64,27 +71,23 @@ instance FreeVars (E3Ext l d) where
       AddCursor v ex -> S.insert v (gFreeVars ex)
       ReadTag v      -> S.singleton v
       WriteTag _ v   -> S.singleton v
-      NewBuffer      -> S.empty
-      ScopedBuffer   -> S.empty
+      NewBuffer{}    -> S.empty
+      ScopedBuffer{} -> S.empty
+      InitSizeOfBuffer{} -> S.empty
       SizeOfPacked c1 c2 -> S.fromList [c1, c2]
       SizeOfScalar v     -> S.singleton v
+      BoundsCheck{}      -> S.empty
+      ReadCursor v       -> S.singleton v
+      WriteCursor c ex   -> S.insert c (gFreeVars ex)
+      BumpRefCount r1 r2 -> S.fromList [r1, r2]
 
 instance (Out l, Out d) => Out (E3Ext l d)
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
   type LocOf (E3Ext l d) = l
   type TyOf  (E3Ext l d) = UrTy l
-  isTrivial e =
-    case e of
-      ReadInt{}      -> False
-      WriteInt{}     -> False
-      AddCursor{}    -> False
-      ReadTag{}      -> False
-      WriteTag{}     -> False
-      NewBuffer      -> False
-      ScopedBuffer   -> False
-      SizeOfPacked{} -> False
-      SizeOfScalar{} -> False
+  isTrivial _ = False
+
 
 instance (Out l, Show l) => Typeable (E3Ext l (UrTy l)) where
     gTypeExp = error "L3.gTypeExp"
@@ -124,20 +127,7 @@ instance Out Prog
 eraseLocMarkers :: DDef L2.Ty2 -> DDef Ty3
 eraseLocMarkers (DDef tyname ls) = DDef tyname $ L.map go ls
   where go :: (DataCon,[(IsBoxed,L2.Ty2)]) -> (DataCon,[(IsBoxed,Ty3)])
-        go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,stripTyLocs ty)) ls')
-
--- | Remove the extra location annotations.
-stripTyLocs :: UrTy a -> Ty3
-stripTyLocs ty =
-  case ty of
-    IntTy     -> IntTy
-    BoolTy    -> BoolTy
-    ProdTy ls -> ProdTy $ L.map stripTyLocs ls
-    SymDictTy ty'    -> SymDictTy $ stripTyLocs ty'
-    PackedTy tycon _ -> PackedTy tycon ()
-    ListTy ty'       -> ListTy $ stripTyLocs ty'
-    PtrTy    -> PtrTy
-    CursorTy -> CursorTy
+        go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,L2.stripTyLocs ty)) ls')
 
 cursorizeTy :: UrTy a -> UrTy b
 cursorizeTy ty =
@@ -150,30 +140,6 @@ cursorizeTy ty =
     ListTy ty'    -> ListTy $ cursorizeTy ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
-
-
--- |
-cursorizeArrowTy :: L2.ArrowTy L2.Ty2 -> ArrowTy Ty3
-cursorizeArrowTy L2.ArrowTy{L2.arrIn,L2.arrOut,L2.locVars,L2.locRets} =
-  let
-      -- Adding additional outputs corresponding to end-of-input-value witnesses
-      -- We've already computed additional location return value in RouteEnds
-      rets = L.map (\_ -> CursorTy) locRets
-      outT = L2.prependArgs rets arrOut
-
-      -- Packed types in the output then become end-cursors for those same destinations.
-      newOut = L2.mapPacked (\_ _ -> ProdTy [CursorTy, CursorTy]) outT
-
-      -- Adding additional input arguments for the destination cursors to which outputs
-      -- are written.
-      mOutCurs = L.filter (\(LRM _ _ m) -> m == Output) locVars
-      inT      = L2.prependArgs (L.map (\_ -> CursorTy) mOutCurs) arrIn
-
-      -- Packed types in the input now become (read-only) cursors.
-      newIn    = L2.mapPacked (\_ _ -> CursorTy) inT
-
-  in ArrowTy { arrIn = stripTyLocs newIn, arrOut = stripTyLocs newOut }
-
 
 -- | Map exprs with an initial type environment:
 -- Exactly the same function that was in L2 before
@@ -209,13 +175,14 @@ toL3Prim pr =
     MkFalse   -> MkFalse
     SizeParam -> SizeParam
     SymAppend -> SymAppend
-    DictInsertP ty -> DictInsertP (stripTyLocs ty)
-    DictLookupP ty -> DictLookupP (stripTyLocs ty)
-    DictEmptyP  ty -> DictEmptyP  (stripTyLocs ty)
-    DictHasKeyP ty -> DictHasKeyP (stripTyLocs ty)
-    ErrorP s ty    -> ErrorP s (stripTyLocs ty)
-    ReadPackedFile fp tycon ty -> ReadPackedFile fp tycon (stripTyLocs ty)
+    DictInsertP ty -> DictInsertP (L2.stripTyLocs ty)
+    DictLookupP ty -> DictLookupP (L2.stripTyLocs ty)
+    DictEmptyP  ty -> DictEmptyP  (L2.stripTyLocs ty)
+    DictHasKeyP ty -> DictHasKeyP (L2.stripTyLocs ty)
+    ErrorP s ty    -> ErrorP s (L2.stripTyLocs ty)
+    ReadPackedFile fp tycon ty -> ReadPackedFile fp tycon (L2.stripTyLocs ty)
     MkNullCursor -> MkNullCursor
+    PEndOf -> error "Do not use PEndOf after L2."
 
 -- | Abstract some of the differences of top level program types, by
 -- having a common way to extract an initial environment.

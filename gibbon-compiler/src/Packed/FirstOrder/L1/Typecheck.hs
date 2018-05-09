@@ -133,6 +133,9 @@ tcExp ddfs env exp@(L p ex) =
           len0
           return CursorTy
 
+        PEndOf -> do
+          return CursorTy
+
         oth -> error $ "L1.tcExp : PrimAppE : TODO " ++ sdoc oth
 
     LetE (v,locs,ty,rhs) e -> do

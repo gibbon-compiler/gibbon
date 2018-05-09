@@ -12,7 +12,7 @@ pipeline {
   stages {
     stage('Build') {
       steps {
-        sh "./.jenkins_script.sh"
+        sh 'srun --exclusive -N1 --exclude=cutter[01,02,15,16] -t 1:00:00 "./.jenkins_script.sh"'
       }
     }
   }

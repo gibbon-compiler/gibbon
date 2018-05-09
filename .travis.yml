@@ -1,7 +1,7 @@
 ## Based on the travis-simple.yml (https://raw.githubusercontent.com/commercialhaskell/stack/stable/doc/travis-simple.yml)
 
-# Use new container infrastructure to enable caching
-sudo: false
+# To set the default GCC version to 7
+sudo: required
 
 # Do not choose a language; we provide our own build tools.
 language: generic
@@ -14,8 +14,11 @@ cache:
 # Ensure necessary system libraries are present
 addons:
   apt:
+    sources:
+    - ubuntu-toolchain-r-test
     packages:
       - libgmp-dev
+      - gcc-5
 
 env:
   global:
@@ -36,6 +39,9 @@ install:
   - cat travis-racket/install-racket.sh | bash
   - export PATH="${RACKET_DIR}/bin:${PATH}"
 
+  # GCC
+  - sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-5 /usr/bin/gcc
+
 # We have a private submodule, and can't clone it without adding proper keys to Travis
 git:
   submodules: false
@@ -52,6 +58,7 @@ script:
 notifications:
   email: false
   slack:
-    on_success: never
+    on_success: change
     on_failure: always
-    secure: W0V/gX0an9TL/I/Sseet9yLcwOvc7ZXA08QmzXDNQtJE/juHKPAI0zzMELWVzQ1W4qeil3vlPfrcA3zLsCJ2Ecco0+KN/XEvgKpE8McQ7h9WLCdk/laaASEx/bMGEKDPfUIgA/1vlI6AX+rr/5DpGW1o1IixqIRrxwE5yHmFUNUuAyMI82gU1Whv1pwxiKs6r9q/+9HnuQSJQa+OO8rEQa91zjFKshfh2tFdD1DhjVK5UUsZnMlV6C3btbVTfltO0sudzUST7kftAq3lRYYMRfRJbtKNtzDCbhiUp4bbAT7bRe34CkkIZcapyaSGcSDhK91XSd1vFDVynJSCF1yql9YP4uuaYEmzKx78iqiT/zhH2Cyu7Laxc5aoBI9TVaupeDpGJH/kcLDvCsBZU8PsHI2TUZiWc94rX4GA3cVpjfwlo+gNQutDfuDUa75WNQCSZzUWzpnFcMTftBuQYztpoeR+Y5+UaTSqZcVpSKaOxeRIknz4umIiUjCGug9CjqWqgbxL2cnFnWWJMxhcr+INBwiickSV+xSuqqE92ZIHA5ildA2Ett10yduN/wMBat9qOO0wlur7Nv6yLDNWfkYkD5IlWEbxgtfCbgbwOn/GtgTG7SfXpct1g2HtDcM1d2MPSczkzMJvFSt86uGOoiltcMwesnoQuyxifQhWWGRppXg=
+    rooms:
+      secure: W0V/gX0an9TL/I/Sseet9yLcwOvc7ZXA08QmzXDNQtJE/juHKPAI0zzMELWVzQ1W4qeil3vlPfrcA3zLsCJ2Ecco0+KN/XEvgKpE8McQ7h9WLCdk/laaASEx/bMGEKDPfUIgA/1vlI6AX+rr/5DpGW1o1IixqIRrxwE5yHmFUNUuAyMI82gU1Whv1pwxiKs6r9q/+9HnuQSJQa+OO8rEQa91zjFKshfh2tFdD1DhjVK5UUsZnMlV6C3btbVTfltO0sudzUST7kftAq3lRYYMRfRJbtKNtzDCbhiUp4bbAT7bRe34CkkIZcapyaSGcSDhK91XSd1vFDVynJSCF1yql9YP4uuaYEmzKx78iqiT/zhH2Cyu7Laxc5aoBI9TVaupeDpGJH/kcLDvCsBZU8PsHI2TUZiWc94rX4GA3cVpjfwlo+gNQutDfuDUa75WNQCSZzUWzpnFcMTftBuQYztpoeR+Y5+UaTSqZcVpSKaOxeRIknz4umIiUjCGug9CjqWqgbxL2cnFnWWJMxhcr+INBwiickSV+xSuqqE92ZIHA5ildA2Ett10yduN/wMBat9qOO0wlur7Nv6yLDNWfkYkD5IlWEbxgtfCbgbwOn/GtgTG7SfXpct1g2HtDcM1d2MPSczkzMJvFSt86uGOoiltcMwesnoQuyxifQhWWGRppXg=

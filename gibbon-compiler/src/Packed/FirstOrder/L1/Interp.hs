@@ -13,8 +13,7 @@ module Packed.FirstOrder.L1.Interp
     , main
     ) where
 
-import           Blaze.ByteString.Builder (Builder, toLazyByteString)
-import           Blaze.ByteString.Builder.Char.Utf8 (fromString)
+import           Data.ByteString.Builder (Builder, toLazyByteString, string8)
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.Writer
@@ -209,9 +208,13 @@ interpProg rc Prog {ddefs,fundefs, mainExp=Just e} =
      (AddP,[VInt x, VInt y]) -> VInt (x+y)
      (SubP,[VInt x, VInt y]) -> VInt (x-y)
      (MulP,[VInt x, VInt y]) -> VInt (x*y)
+     (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
+     (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
      (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
      (EqSymP,[VInt x, VInt y]) -> VBool (x==y)
      (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
+     (LtP,[VInt x, VInt y]) -> VBool (x < y)
+     (GtP,[VInt x, VInt y]) -> VBool (x > y)
      ((DictInsertP _ty),[VDict mp, key, val]) -> VDict (M.insert key val mp)
      ((DictLookupP _),[VDict mp, key])        -> mp # key
      ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)
@@ -370,10 +373,10 @@ interpProg rc Prog {ddefs,fundefs, mainExp=Just e} =
                 let tm = fromIntegral (toNanoSecs $ diffTimeSpec en st)
                           / 10e9 :: Double
                 if isIter
-                 then do tell$ fromString $ "ITERS: "++show iters       ++"\n"
-                         tell$ fromString $ "SIZE: " ++show (rcSize rc) ++"\n"
-                         tell$ fromString $ "BATCHTIME: "++show tm      ++"\n"
-                 else tell$ fromString $ "SELFTIMED: "++show tm ++"\n"
+                 then do tell$ string8 $ "ITERS: "++show iters       ++"\n"
+                         tell$ string8 $ "SIZE: " ++show (rcSize rc) ++"\n"
+                         tell$ string8 $ "BATCHTIME: "++show tm      ++"\n"
+                 else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
                 return $! val
 
 

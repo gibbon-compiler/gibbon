@@ -1,0 +1,7 @@
+#lang gibbon
+
+(provide Tree Leaf Node)
+
+(data Tree
+      [Leaf Int]
+      [Node Tree Tree])

@@ -30,7 +30,9 @@ elif [ "$USE_NIX" == "1" ]; then
     nix-shell --pure --command  "./run_all_tests.sh $@"
 
 else
-
+    # HACK to get Jenkins to use proper Racket and GCC versions
+    export PATH=/opt/gcc/5.3.0/bin/:$PATH
+    export PATH=/u/crest-team/opt/bin:$PATH
+    echo $PATH
     ./run_all_tests.sh $@
-
 fi
