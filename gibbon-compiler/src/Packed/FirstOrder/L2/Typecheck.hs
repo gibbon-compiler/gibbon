@@ -39,13 +39,15 @@ import qualified Packed.FirstOrder.L1.Syntax as L1
 
 -- | Constraints on locations.  Used during typechecking.  Roughly analogous to LocExp.
 data LocConstraint = StartOfC LocVar Region -- ^ Location is equal to start of this region.
-                   | AfterConstantC Int     -- ^ Number of bytes after.
-                                    LocVar  -- ^ Location which is before
-                                    LocVar  -- ^ Location which is after
-                   | AfterVariableC Var     -- ^ Name of variable v. This loc is size(v) bytes after.
-                                    LocVar  -- ^ Location which is before
-                                    LocVar  -- ^ Location which is after
-                   | InRegionC LocVar Region -- ^ Location is somewher within this region.
+                   -- Can't attach haddocks to data constructor arguments with < GHC 8.4.2
+                   -- See https://github.com/haskell/haddock/pull/709.
+                   | AfterConstantC Int     -- Number of bytes after.
+                                    LocVar  -- Location which is before
+                                    LocVar  -- Location which is after
+                   | AfterVariableC Var     -- Name of variable v. This loc is size(v) bytes after.
+                                    LocVar  -- Location which is before
+                                    LocVar  -- Location which is after
+                   | InRegionC LocVar Region -- Location is somewher within this region.
   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
 

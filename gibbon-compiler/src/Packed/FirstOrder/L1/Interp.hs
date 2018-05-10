@@ -235,14 +235,14 @@ interpProg rc Prog {ddefs,fundefs, mainExp=Just e} =
       go env (L _ x0) =
           case x0 of
             Ext _ -> error "L1.Interp: Should not interpret empty extension point."
-                      -- ^ Or... we could give this a void/empty-tuple value.
+                      -- Or... we could give this a void/empty-tuple value.
 
             LitE c         -> return $ VInt c
             LitSymE s      -> return $ VInt (strToInt $ fromVar s)
             -- In L2.5 witnesses are really justs casts:
             -- FIXME: We need some way to mediate between symbolic
             -- values and Cursors... or this won't work.
-            VarE v -- | Just v' <- L2.fromWitnessVar v -> return $ env # v'
+            VarE v -- Just v' <- L2.fromWitnessVar v -> return $ env # v'
                    | otherwise                      -> return $ env # v
 
             PrimAppE p ls  -> do args <- mapM (go env) ls

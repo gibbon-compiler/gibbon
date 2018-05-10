@@ -220,7 +220,7 @@ data FunDecl = FunDecl
 -- once and duplicate code.
 withTail :: (Tail,Ty) -> ([Triv] -> Tail) -> SyM Tail
 withTail (tl0,retty) fn =
-  let go x = withTail (x,retty) fn in -- ^ Warning: assumes same type.
+  let go x = withTail (x,retty) fn in -- Warning: assumes same type.
   case tl0 of
     Goto{} -> return tl0
     RetValsT ls -> return $ fn ls

@@ -105,10 +105,12 @@ data E2Ext loc dec =
 
 -- | Define a location in terms of a different location.
 data PreLocExp loc = StartOfLE Region
-                   | AfterConstantLE Int -- ^ Number of bytes after.
-                                    loc  -- ^ Location which this location is offset from.
-                   | AfterVariableLE Var -- ^ Name of variable v. This loc is size(v) bytes after.
-                                    loc  -- ^ Location which this location is offset from.
+                   -- Can't attach haddocks to data constructor arguments with < GHC 8.4.2
+                   -- See https://github.com/haskell/haddock/pull/709.
+                   | AfterConstantLE Int -- Number of bytes after.
+                                    loc  -- Location which this location is offset from.
+                   | AfterVariableLE Var -- Name of variable v. This loc is size(v) bytes after.
+                                    loc  -- Location which this location is offset from.
                    | InRegionLE Region
                    | FromEndLE  loc
                      deriving (Read, Show, Eq, Ord, Generic, NFData)

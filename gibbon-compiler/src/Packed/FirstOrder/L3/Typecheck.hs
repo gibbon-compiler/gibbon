@@ -27,13 +27,13 @@ tcExp ddfs env exp@(L p ex) =
   case ex of
     Ext ext ->
       case ext of
-        -- ^ One cursor in, (int, cursor') out
+        -- One cursor in, (int, cursor') out
         ReadInt v -> do
           vty <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
           return $ ProdTy [IntTy, CursorTy]
 
-        -- ^ Write int at cursor, and return a cursor
+        -- Write int at cursor, and return a cursor
         WriteInt v rhs -> do
           vty  <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
@@ -41,7 +41,7 @@ tcExp ddfs env exp@(L p ex) =
           ensureEqualTy exp vrhs IntTy
           return CursorTy
 
-        -- ^ Add a constant offset to a cursor variable
+        -- Add a constant offset to a cursor variable
         AddCursor v rhs -> do
           vty  <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
@@ -49,28 +49,28 @@ tcExp ddfs env exp@(L p ex) =
           ensureEqualTy exp vrhs IntTy
           return CursorTy
 
-        -- ^ One cursor in, (tag,cursor) out
+        -- One cursor in, (tag,cursor) out
         -- QUESTION: what should be the type of the tag ?  It's just an Int for now
         ReadTag v -> do
           vty  <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
           return $ ProdTy [IntTy, CursorTy]
 
-        -- ^ Write Tag at Cursor, and return a cursor
+        -- Write Tag at Cursor, and return a cursor
         WriteTag _dcon v -> do
           vty  <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
           return CursorTy
 
-        -- ^ Create a new buffer, and return a cursor
+        -- Create a new buffer, and return a cursor
         NewBuffer{} -> return CursorTy
 
-        -- ^ Create a scoped buffer, and return a cursor
+        -- Create a scoped buffer, and return a cursor
         ScopedBuffer{} -> return CursorTy
 
         InitSizeOfBuffer{} -> return IntTy
 
-        -- ^ Takes in start and end cursors, and returns an Int
+        -- Takes in start and end cursors, and returns an Int
         SizeOfPacked start end -> do
           sty  <- lookupVar env start exp
           ensureEqualTy exp sty CursorTy
@@ -79,7 +79,7 @@ tcExp ddfs env exp@(L p ex) =
           return IntTy
 
 
-        -- ^ Takes in a variable, and returns an Int
+        -- Takes in a variable, and returns an Int
         SizeOfScalar v -> do
           sty <- lookupVar env v exp
           -- ASSUMPTION: Int is the only scalar value right now

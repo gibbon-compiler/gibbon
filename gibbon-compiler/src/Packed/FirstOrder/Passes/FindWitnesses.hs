@@ -90,7 +90,7 @@ findWitnesses = mapMExprs fn
             (goE (Set.insert v (bound `Set.union` Map.keysSet mp)) Map.empty bod)
 
         LetE (v,locs,t,rhs) bod
-            -- | isWitnessVar v -> error$ " findWitnesses: internal error, did not expect to see BINDING of witness var: "++show v
+            -- isWitnessVar v -> error$ " findWitnesses: internal error, did not expect to see BINDING of witness var: "++show v
             | otherwise -> go (Map.insert v (v,locs,t,rhs') mp) bod -- don't put the bod in the map
               where rhs' = go Map.empty rhs -- recur on rhs, but flatten makes these pretty boring.
 

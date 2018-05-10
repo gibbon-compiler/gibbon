@@ -304,10 +304,10 @@ exp se =
    A loc v          -> L (toLoc loc) $ VarE (textToVar v)
    G loc (HSInt n)  -> L (toLoc loc) $ LitE (fromIntegral n)
 
-   -- | This type gets replaced later in flatten:
+   -- This type gets replaced later in flatten:
    Ls2 l "time" arg -> loc l $ TimeIt (exp arg) (PackedTy "DUMMY_TY" ()) False
 
-   -- | This variant inserts a loop, controlled by the iters
+   -- This variant inserts a loop, controlled by the iters
    -- argument on the command line.
    Ls2 l "iterate" arg -> loc l $ TimeIt (exp arg) (PackedTy "DUMMY_TY" ()) True
 

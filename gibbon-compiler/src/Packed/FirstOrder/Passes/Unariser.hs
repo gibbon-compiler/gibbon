@@ -43,7 +43,7 @@ unariser Prog{ddefs,fundefs,mainExp} = do
   return $ Prog ddefs fds' mn
 
 
-  -- | Modifies function to satisfy output invariant (1)
+  -- Modifies function to satisfy output invariant (1)
   --
   where
     funEnv = M.map (\f -> let ty = funty f
