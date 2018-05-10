@@ -244,7 +244,7 @@ cursorizeExp dflags ddfs fundefs denv tenv (L p ex) = L p <$>
           ty   = gTypeExp ddfs (Env2 tenv M.empty) rhs
           ty'  = L3.cursorizeTy ty
       LetE (v,[],ty', rhs') <$>
-        cursorizeExp dflags ddfs fundefs denv (M.insert v ty' tenv) bod
+        cursorizeExp dflags ddfs fundefs denv (M.insert v ty tenv) bod
 
 
     -- Same as `cursorizePackedExp`
@@ -615,7 +615,7 @@ cursorizeAppE dflags ddfs fundefs denv tenv (L _ ex) =
           inLocs = inLocVars fnTy
           numRegs = length (outRegVars fnTy) + length (inRegVars fnTy)
           -- Drop input locations, but keep everything else
-          outs   = (take numRegs locs) ++  (drop numRegs $ drop (length inLocs) $ locs)
+          outs   = (L.take numRegs locs) ++  (L.drop numRegs $ L.drop (length inLocs) $ locs)
           argTy  = gTypeExp ddfs (Env2 tenv M.empty) arg
       arg' <- if hasPacked inT
               then fromDi <$> cursorizePackedExp dflags ddfs fundefs denv tenv arg
@@ -757,8 +757,8 @@ unpackDataCon dflags ddfs fundefs denv1 tenv isPacked scrtCur (dcon,vlocs,rhs) =
   let indrVars = if isIndrDataCon dcon
                  then (case numIndrsDataCon ddfs (fromIndrDataCon dcon) of
                          Just n ->
-                           let indrs = L.map fst $ take n vlocs
-                               vars  = L.map fst $ reverse (take n (reverse vlocs))
+                           let indrs = L.map fst $ L.take n vlocs
+                               vars  = L.map fst $ reverse (L.take n (reverse vlocs))
                            in zip indrs vars
                          Nothing -> error $ "unpackDataCon: Sized constructor should have packed fields.")
                  else []

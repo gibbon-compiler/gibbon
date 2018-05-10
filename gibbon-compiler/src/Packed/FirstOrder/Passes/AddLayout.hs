@@ -263,7 +263,7 @@ fnTraversal traversed L2.FunDef{L2.funty} locs =
 specialTraversal :: S.Set Var -> L2.FunDef -> [LocVar] -> (S.Set LocVar, Bool)
 specialTraversal traversed L2.FunDef{L2.funty} locs =
   let fninlocs = L2.inLocVars funty
-      inlocs = take (length fninlocs) locs
+      inlocs = L.take (length fninlocs) locs
   in (S.union (S.fromList inlocs) traversed, False)
 
 --------------------------------------------------------------------------------
@@ -299,7 +299,7 @@ addLayoutExp ddfs (L p ex) = L p <$>
           let tys = lookupDataCon ddfs dcon
               packedOnly = L.map snd $
                            L.filter (\(ty,_) -> isPackedTy ty) (zip tys args)
-              needSizeOf = take n packedOnly
+              needSizeOf = L.take n packedOnly
           szs <- mapM (\arg -> do
                          v <- gensym "indr"
                          return (v,[],CursorTy, l$ PrimAppE PEndOf [arg]))
