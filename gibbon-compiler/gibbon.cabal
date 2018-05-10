@@ -17,46 +17,46 @@ flag LLVM_ENABLED
   default:             False
 
 library
-  exposed-modules:     Packed.FirstOrder.Common
-                       Packed.FirstOrder.GenericOps
-                       Packed.FirstOrder.Compiler
-                       Packed.FirstOrder.DynFlags
-                       Packed.FirstOrder.HaskellFrontend
-                       Packed.FirstOrder.TargetInterp
-                       Packed.FirstOrder.L1.Syntax
-                       Packed.FirstOrder.L1.Typecheck
-                       Packed.FirstOrder.L2.Syntax
-                       Packed.FirstOrder.L2.Typecheck
-                       Packed.FirstOrder.L2.Examples
-                       Packed.FirstOrder.L4.Syntax
-                       Packed.FirstOrder.L1.Interp
-                       Packed.FirstOrder.L2.Interp
-                       Packed.FirstOrder.L3.Syntax
-                       Packed.FirstOrder.L3.Typecheck
-                       Packed.FirstOrder.SExpFrontend
+  exposed-modules:     Gibbon.Common
+                       Gibbon.GenericOps
+                       Gibbon.Compiler
+                       Gibbon.DynFlags
+                       Gibbon.HaskellFrontend
+                       Gibbon.TargetInterp
+                       Gibbon.L1.Syntax
+                       Gibbon.L1.Typecheck
+                       Gibbon.L2.Syntax
+                       Gibbon.L2.Typecheck
+                       Gibbon.L2.Examples
+                       Gibbon.L4.Syntax
+                       Gibbon.L1.Interp
+                       Gibbon.L2.Interp
+                       Gibbon.L3.Syntax
+                       Gibbon.L3.Typecheck
+                       Gibbon.SExpFrontend
 
                        -- compiler passes, roughly in the order they're run
-                       Packed.FirstOrder.Passes.Freshen
-                       Packed.FirstOrder.Passes.Flatten
-                       Packed.FirstOrder.Passes.InlineTriv
-                       Packed.FirstOrder.Passes.DirectL3
-                       Packed.FirstOrder.Passes.AddLayout
-                       Packed.FirstOrder.Passes.InferLocations
-                       Packed.FirstOrder.Passes.RemoveCopies
-                       Packed.FirstOrder.Passes.InferMultiplicity
-                       Packed.FirstOrder.Passes.InferEffects
-                       Packed.FirstOrder.Passes.RouteEnds
-                       Packed.FirstOrder.Passes.BoundsCheck
-                       Packed.FirstOrder.Passes.ThreadRegions
-                       Packed.FirstOrder.Passes.Cursorize
-                       Packed.FirstOrder.Passes.FindWitnesses
-                       Packed.FirstOrder.Passes.ShakeTree
-                       Packed.FirstOrder.Passes.HoistNewBuf
-                       Packed.FirstOrder.Passes.Unariser
-                       Packed.FirstOrder.Passes.Lower
-                       Packed.FirstOrder.Passes.FollowRedirects
-                       Packed.FirstOrder.Passes.RearrangeFree
-                       Packed.FirstOrder.Passes.Codegen
+                       Gibbon.Passes.Freshen
+                       Gibbon.Passes.Flatten
+                       Gibbon.Passes.InlineTriv
+                       Gibbon.Passes.DirectL3
+                       Gibbon.Passes.AddLayout
+                       Gibbon.Passes.InferLocations
+                       Gibbon.Passes.RemoveCopies
+                       Gibbon.Passes.InferMultiplicity
+                       Gibbon.Passes.InferEffects
+                       Gibbon.Passes.RouteEnds
+                       Gibbon.Passes.BoundsCheck
+                       Gibbon.Passes.ThreadRegions
+                       Gibbon.Passes.Cursorize
+                       Gibbon.Passes.FindWitnesses
+                       Gibbon.Passes.ShakeTree
+                       Gibbon.Passes.HoistNewBuf
+                       Gibbon.Passes.Unariser
+                       Gibbon.Passes.Lower
+                       Gibbon.Passes.FollowRedirects
+                       Gibbon.Passes.RearrangeFree
+                       Gibbon.Passes.Codegen
 
   -- other-modules:
   other-extensions:    DeriveDataTypeable CPP
@@ -89,14 +89,14 @@ library
 --                     , either
 
   if flag(LLVM_ENABLED)
-    exposed-modules:   Packed.FirstOrder.Passes.LLVM.Codegen
-                       Packed.FirstOrder.Passes.LLVM.Monad
-                       Packed.FirstOrder.Passes.LLVM.Global
-                       Packed.FirstOrder.Passes.LLVM.Gibbon
-                       Packed.FirstOrder.Passes.LLVM.Instruction
-                       Packed.FirstOrder.Passes.LLVM.Terminator
-                       Packed.FirstOrder.Passes.LLVM.Type
-                       Packed.FirstOrder.Passes.LLVM.Utils
+    exposed-modules:   Gibbon.Passes.LLVM.Codegen
+                       Gibbon.Passes.LLVM.Monad
+                       Gibbon.Passes.LLVM.Global
+                       Gibbon.Passes.LLVM.Gibbon
+                       Gibbon.Passes.LLVM.Instruction
+                       Gibbon.Passes.LLVM.Terminator
+                       Gibbon.Passes.LLVM.Type
+                       Gibbon.Passes.LLVM.Utils
 
     build-depends:     llvm-hs-pure,
                        llvm-hs

@@ -13,10 +13,10 @@ Further reading
 Aside from looking at the code documentation, you may want to read
 about the basic intermediate languages that the compiler uses.
 
- * [L1](src/Packed/FirstOrder/L1)
- * [L2](src/Packed/FirstOrder/L2)
- * [L3](src/Packed/FirstOrder/L3)
- * [L4](src/Packed/FirstOrder/L4)
+ * [L1](src/Gibbon/L1)
+ * [L2](src/Gibbon/L2)
+ * [L3](src/Gibbon/L3)
+ * [L4](src/Gibbon/L4)
 
 You can also read the ECOOP'17 paper, however it is already
 substantially out of date (as of 2017.08.01).

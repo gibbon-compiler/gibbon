@@ -13,11 +13,11 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.TH
 
-import Packed.FirstOrder.Common hiding (FunDef)
-import Packed.FirstOrder.L2.Syntax as L2
-import Packed.FirstOrder.L2.Examples
-import Packed.FirstOrder.Passes.InferEffects
-import qualified Packed.FirstOrder.L1.Syntax as L1
+import Gibbon.Common hiding (FunDef)
+import Gibbon.L2.Syntax as L2
+import Gibbon.L2.Examples
+import Gibbon.Passes.InferEffects
+import qualified Gibbon.L1.Syntax as L1
 
 
 assertInferEffects :: Prog -> Var -> Set Effect -> Assertion

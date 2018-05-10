@@ -14,9 +14,9 @@ import Data.Loc
 import Data.Map as M
 import Data.Set as S
 
-import Packed.FirstOrder.Common hiding (FunDef)
-import Packed.FirstOrder.L1.Syntax
-import Packed.FirstOrder.L1.Typecheck
+import Gibbon.Common hiding (FunDef)
+import Gibbon.L1.Syntax
+import Gibbon.L1.Typecheck
 
 type Exp = L Exp1
 

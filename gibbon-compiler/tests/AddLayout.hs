@@ -10,10 +10,10 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.TH
 
-import Packed.FirstOrder.Common
-import Packed.FirstOrder.Passes.AddLayout
-import Packed.FirstOrder.Passes.InferEffects
-import Packed.FirstOrder.L2.Examples
+import Gibbon.Common
+import Gibbon.Passes.AddLayout
+import Gibbon.Passes.InferEffects
+import Gibbon.L2.Examples
 
 runner prg = fst $ runSyM 0 $ do
   l2 <- inferEffects prg
