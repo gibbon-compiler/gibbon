@@ -89,18 +89,9 @@ library
 --                     , either
 
   if flag(LLVM_ENABLED)
-    exposed-modules:   Gibbon.Passes.LLVM.Codegen
-                       Gibbon.Passes.LLVM.Monad
-                       Gibbon.Passes.LLVM.Global
-                       Gibbon.Passes.LLVM.Gibbon
-                       Gibbon.Passes.LLVM.Instruction
-                       Gibbon.Passes.LLVM.Terminator
-                       Gibbon.Passes.LLVM.Type
-                       Gibbon.Passes.LLVM.Utils
-
-    build-depends:     llvm-hs-pure,
-                       llvm-hs
-
+    -- exposed-modules:
+    build-depends:     llvm-hs-pure             >= 6.2.0     &&  < 0.7
+                     , llvm-hs                  >= 6.2.0     &&  < 0.7
     cpp-options:       -DLLVM_ENABLED
 
   hs-source-dirs:      src
