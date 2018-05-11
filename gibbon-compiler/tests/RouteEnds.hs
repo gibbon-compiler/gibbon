@@ -14,13 +14,13 @@ import Test.Tasty.HUnit
 import Test.Tasty.TH
 import Test.Tasty
 
-import Packed.FirstOrder.Common hiding (FunDef)
-import Packed.FirstOrder.L2.Syntax as L2
-import Packed.FirstOrder.L2.Examples
-import Packed.FirstOrder.L2.Typecheck
-import Packed.FirstOrder.Passes.RouteEnds
-import Packed.FirstOrder.Passes.InferEffects
-import Packed.FirstOrder.L1.Syntax hiding (Prog, FunDef, ddefs, fundefs, mainExp, add1Prog)
+import Gibbon.Common hiding (FunDef)
+import Gibbon.L2.Syntax as L2
+import Gibbon.L2.Examples
+import Gibbon.L2.Typecheck
+import Gibbon.Passes.RouteEnds
+import Gibbon.Passes.InferEffects
+import Gibbon.L1.Syntax hiding (Prog, FunDef, ddefs, fundefs, mainExp, add1Prog)
 
 {-
 
