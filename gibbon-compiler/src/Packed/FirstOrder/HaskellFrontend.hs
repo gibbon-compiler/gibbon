@@ -101,7 +101,7 @@ collectTopLevel funTys (S.FunBind [S.Match fname args (S.UnGuardedRhs rhs) Nothi
     getRetTy (Arrow ts) = last ts
     getRetTy (T1 t)     = t
 
-collectTopLevel _ (S.DataDecl S.DataType Nothing decl_head cons Nothing) = do
+collectTopLevel _ (S.DataDecl S.DataType Nothing decl_head cons _deriving_binds) = do
     let ty_name' = nameToStr ty_name
         ty_name = case decl_head of
                     S.DHead name -> name
