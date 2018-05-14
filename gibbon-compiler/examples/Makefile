@@ -8,7 +8,8 @@ temporary: prebuild build
 	$(MAKE) run_tests_interp1
 #	$(MAKE) run_tests_interp2
 	$(MAKE) run_tests_pointer
-	$(MAKE) run_tests_packed
+# TestRunner runs these tests.
+#	$(MAKE) run_tests_packed
 
 default:
 	rm -f *.err $(BLD)/*.err
