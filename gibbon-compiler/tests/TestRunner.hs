@@ -3,6 +3,7 @@ module TestRunner
 
 import Data.List
 import Data.Foldable
+import Data.Time.LocalTime
 import Options.Applicative hiding (empty)
 import System.Clock
 import System.Directory
@@ -220,15 +221,16 @@ isBenchOutput s = isInfixOf "BATCHTIME" s || isInfixOf "SELFTIMED" s
 summary :: TestConfig -> TestRun -> IO String
 summary tc tr = do
     endTime <- getTime clk
+    day <- getZonedTime
     let timeTaken = quot (toNanoSecs (diffTimeSpec endTime (startTime tr))) (10^9)
-    return $ render (go timeTaken)
+    return $ render (go timeTaken day)
   where
-    go :: (Num a, Show a) => a -> Doc
-    go timeTaken =
-        text "\n\nGibbon testsuite summary:" $$
+    go :: (Num a, Show a) => a -> ZonedTime -> Doc
+    go timeTaken day =
+        text "\n\nGibbon testsuite summary: " <+> parens (text $ show day) $$
         text "--------------------------------------------------------------------------------" $$
         text "Time taken:" <+> text (show timeTaken) PP.<> text "s" $$
-        text "There were:" $$
+        text "" $$
         (int $ length $ expectedPasses tr) <+> text "expected passes"  $$
         (int $ length $ unexpectedPasses tr) <+> text "unexpected passes" $$
         (int $ length $ expectedFailures tr) <+> text "expected failures" $$
@@ -247,7 +249,7 @@ summary tc tr = do
                          text "--------------------------------------------------------------------------------" $$
                          vcat (map
                                (\t -> text (name t) <+>
-                                      (if (verbosity tc) >= 2
+                                      (if (verbosity tc) >= 3
                                        then text "=>" $$ text (errors tr M.! name t)
                                        else empty))
                                ls)
@@ -259,7 +261,7 @@ summary tc tr = do
                    text "--------------------------------------------------------------------------------" $$
                    vcat (map
                          (\t -> text (name t) <+>
-                                (if (verbosity tc) >= 2
+                                (if (verbosity tc) >= 3
                                  then text "=>" $$ text (errors tr M.! name t)
                                  else empty))
                          ls))

@@ -129,7 +129,7 @@ test-suite test-gibbon
   build-depends:       base,
                        gibbon, containers,
                        filepath, directory, process,
-                       srcloc, pretty,
+                       srcloc, pretty, time,
                        mtl, transformers,
                        tasty, tasty-hunit, tasty-th
 
