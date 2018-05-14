@@ -238,6 +238,19 @@ summary tc tr = do
              ls -> text "\nUnexpected passes:" $$
                    text "--------------------------------------------------------------------------------" $$
                    vcat (map (text . name) ls)) $$
+        (case expectedFailures tr of
+             [] -> empty
+             ls -> if (verbosity tc) >= 2
+                   then  text "\nExpected failures:" $$
+                         text "--------------------------------------------------------------------------------" $$
+                         vcat (map
+                               (\t -> text (name t) <+>
+                                      (if (verbosity tc) >= 2
+                                       then text "=>" $$ text (errors tr M.! name t)
+                                       else empty))
+                               ls)
+                   else empty
+        ) $$
         (case unexpectedFailures tr of
              [] -> empty
              ls -> text "\nUnexpected failures:" $$
