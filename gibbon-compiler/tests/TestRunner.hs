@@ -240,8 +240,10 @@ runTest tc (Test name dir expect) = do
 diff :: FilePath -> FilePath -> IO (Maybe String)
 diff a b = do
     (_, Just hout, _, phandle) <-
-        createProcess (proc "diff" [a, b]) { std_out = CreatePipe
-                                           , std_err = CreatePipe }
+        -- Ignore whitespace
+        createProcess (proc "diff" ["-w", a, b])
+            { std_out = CreatePipe
+            , std_err = CreatePipe }
     exitCode <- waitForProcess phandle
     case exitCode of
         ExitSuccess -> return Nothing
