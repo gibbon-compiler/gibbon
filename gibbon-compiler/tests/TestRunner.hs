@@ -3,14 +3,16 @@ module TestRunner
 
 import Data.List
 import Data.Foldable
+import Options.Applicative hiding (empty)
 import System.Clock
 import System.Directory
 import System.Exit
 import System.FilePath
 import System.IO
 import System.Process
-import Text.PrettyPrint as PP
+import Text.PrettyPrint hiding ((<>))
 
+import qualified Text.PrettyPrint as PP
 import qualified Data.Map as M
 
 --------------------------------------------------------------------------------
@@ -62,6 +64,24 @@ defaultTestConfig = TestConfig
     , tempdir     = "examples/build_tmp"
     }
 
+
+configParser :: Parser TestConfig
+configParser = TestConfig
+                   <$> switch (long "run-failing" <>
+                               help "Run tests in the error/ directory too." <>
+                               showDefault)
+                   <*> option auto (short 'v' <>
+                                    help "Verbosity level." <>
+                                    showDefault <>
+                                    value (verbosity defaultTestConfig))
+                   <*> strOption (long "summary-file" <>
+                                  help "File in which to store the test summary" <>
+                                  showDefault <>
+                                  value (summaryFile defaultTestConfig))
+                   <*> strOption (long "tempdir" <>
+                                  help "Temporary directory to store the build artifacts" <>
+                                  showDefault <>
+                                  value (tempdir defaultTestConfig))
 -- TODO: add a parser to allow specifying overrides via command line
 
 -- Not used atm.
@@ -233,7 +253,7 @@ summary tc tr = do
 
 main :: IO ()
 main = do
-    let tc = defaultTestConfig
+    tc <- execParser opts
     test_run <- getTestRun tc
     test_run' <- runTests tc test_run
     report <- summary tc test_run'
@@ -243,3 +263,8 @@ main = do
     case (unexpectedFailures test_run' , unexpectedPasses test_run') of
         ([],[]) -> return ()
         _ -> exitFailure
+  where
+     opts = info (configParser <**> helper)
+         (fullDesc
+              <> progDesc "Print a greeting for TARGET"
+              <> header "hello - a test for optparse-applicative" )
