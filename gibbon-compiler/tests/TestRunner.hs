@@ -49,7 +49,7 @@ isGibbonTestFile fp =
 -- Test configuration
 
 data TestConfig = TestConfig
-    { runFailing  :: Bool     -- ^ Allows us to inspect all failures in a single report
+    { skipFailing :: Bool     -- ^ Don't run the expected failures.
     , verbosity   :: Int      -- ^ Ranges from [0..5], and is passed on to Gibbon
     , summaryFile :: FilePath -- ^ File in which to store the test summary
     , tempdir     :: FilePath -- ^ Temporary directory to store the build artifacts
@@ -58,7 +58,7 @@ data TestConfig = TestConfig
 
 defaultTestConfig :: TestConfig
 defaultTestConfig = TestConfig
-    { runFailing  = False
+    { skipFailing  = False
     , verbosity   = 1
     , summaryFile = "gibbon-test-summary.txt"
     , tempdir     = "examples/build_tmp"
@@ -67,8 +67,8 @@ defaultTestConfig = TestConfig
 
 configParser :: Parser TestConfig
 configParser = TestConfig
-                   <$> switch (long "run-failing" <>
-                               help "Run tests in the error/ directory too." <>
+                   <$> switch (long "skip-failing" <>
+                               help "Skip tests in the error/ directory." <>
                                showDefault)
                    <*> option auto (short 'v' <>
                                     help "Verbosity level." <>
@@ -120,9 +120,9 @@ getTestRun tc = do
     testsDir = "examples"
     errorTestsDir = "examples/error"
 
-    rootDirs = if (runFailing tc)
-               then [(testsDir, Pass), (errorTestsDir, Fail)]
-               else [(testsDir, Pass)]
+    rootDirs = if (skipFailing tc)
+               then [(testsDir, Pass)]
+               else [(testsDir, Pass), (errorTestsDir, Fail)]
 
 --------------------------------------------------------------------------------
 -- The main event
@@ -239,7 +239,9 @@ summary tc tr = do
                    text "--------------------------------------------------------------------------------" $$
                    vcat (map (text . name) ls)) $$
         (case expectedFailures tr of
-             [] -> empty
+             [] -> if skipFailing tc
+                   then text "Expected failures: skipped."
+                   else empty
              ls -> if (verbosity tc) >= 2
                    then  text "\nExpected failures:" $$
                          text "--------------------------------------------------------------------------------" $$
@@ -271,7 +273,7 @@ main = do
     test_run' <- runTests tc test_run
     report <- summary tc test_run'
     writeFile (summaryFile tc) report
-    putStrLn $ "Wrote " ++ (summaryFile tc) ++ "."
+    putStrLn $ "\nWrote " ++ (summaryFile tc) ++ "."
     putStrLn report
     case (unexpectedFailures test_run' , unexpectedPasses test_run') of
         ([],[]) -> return ()
