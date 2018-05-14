@@ -1,7 +1,7 @@
 #lang gibbon
 
-(require "../../ASTBenchmarks/grammar_racket.gib")
-(require "../../ASTBenchmarks/treewalk/gibbon/treewalk_gibbon.gib")
+(require "../../../ASTBenchmarks/grammar_racket.gib")
+(require "../../../ASTBenchmarks/treewalk/gibbon/treewalk_gibbon.gib")
 
 ; (walk-datum (INTLIT 3))
 

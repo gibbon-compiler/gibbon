@@ -1,12 +1,11 @@
 #lang gibbon
 
-(require "../../ASTBenchmarks/grammar_racket.gib")
-(require "../../ASTBenchmarks/countnodes/treelang/countnodes.gib")
+(require "../../../ASTBenchmarks/grammar_racket.gib")
+(require "../../../ASTBenchmarks/countnodes/treelang/countnodes.gib")
 
 ;; A small test:
 (+ (datum   (INTLIT 3))
-(+ (formals (F3 (quote hi)))
-(+ (expr    (VARREF (quote hi)))
-   (top (BeginTop (NULLTOPLVL)))
-   )))
-
+   (+ (formals (F3 (quote hi)))
+      (+ (expr    (VARREF (quote hi)))
+         (top (BeginTop (NULLTOPLVL)))
+         )))

@@ -1,6 +1,6 @@
 #lang gibbon
 
-(require "../../ASTBenchmarks/grammar_racket.gib")
+(require "../../../ASTBenchmarks/grammar_racket.gib")
 
 ;; This can be run on any file from disk:
 (define (foo [e : Toplvl]) : Int
@@ -11,6 +11,6 @@
     [(BeginTop listToplvl)         103]
     [(Expression x)                104]
     ))
-    ;[Expression Expr]
+;[Expression Expr]
 
 (foo (Expression (VARREF (quote hi))))

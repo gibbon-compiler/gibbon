@@ -1,7 +1,7 @@
 #lang gibbon
 
-(require "../../ASTBenchmarks/grammar_racket.gib")
-(require "../../ASTBenchmarks/substitution/treelang/subst_gibbon.gib")
+(require "../../../ASTBenchmarks/grammar_racket.gib")
+(require "../../../ASTBenchmarks/substitution/treelang/subst_gibbon.gib")
 
 (subst (quote hi)
        (quote hello)
