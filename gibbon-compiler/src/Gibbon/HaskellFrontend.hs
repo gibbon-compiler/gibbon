@@ -76,7 +76,7 @@ collectTopLevel :: M.Map Var TopTy -> S.Decl -> Ds (Maybe (Either (DDef Ty1) (Fu
 collectTopLevel _ (S.PatBind (S.PVar name) (S.UnGuardedRhs rhs) _) = do
   let name' = toVar $ nameToStr name
   rhs' <- desugarExp rhs
-  return $ Just $ Right $ FunDef name' ("nothing",ProdTy []) (ProdTy []) rhs'
+  return $ Just $ Right $ FunDef name' "nothing" (ProdTy [],ProdTy []) rhs'
 
 collectTopLevel _ S.TypeSig{} = return Nothing
 collectTopLevel funTys (S.FunBind [S.Match fname args (S.UnGuardedRhs rhs) Nothing]) = do
@@ -87,7 +87,7 @@ collectTopLevel funTys (S.FunBind [S.Match fname args (S.UnGuardedRhs rhs) Nothi
     -- Limiting to one argument for now:
     [arg_ty] <- mapM (getArgTy fun_ty) [ 1 .. length [arg'] ]
     rhs'    <- desugarExp rhs
-    return (Just (Right (FunDef fname' (arg',arg_ty) (getRetTy fun_ty) rhs')))
+    return (Just (Right (FunDef fname' arg' (arg_ty, getRetTy fun_ty) rhs')))
   where
     collectArg :: S.Pat -> Ds Var
     collectArg (S.PVar n) = return $ (toVar . nameToStr) n

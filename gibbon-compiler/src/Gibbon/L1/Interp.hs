@@ -180,7 +180,7 @@ interpProg :: RunConfig -> Prog -> IO (Value, B.ByteString)
 interpProg _ Prog {mainExp=Nothing} = return $ (VProd [], B.empty)
 interpProg rc Prog {ddefs,fundefs, mainExp=Just e} =
     do
-       let fenv = M.fromList [ (funName f , (fst (funArg f), funBody f))
+       let fenv = M.fromList [ (funName f , (funArg f, funBody f))
                              | f <- M.elems fundefs]
 
        -- logs contains print side effects:

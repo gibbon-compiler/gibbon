@@ -338,10 +338,10 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
 
     revertFunDef :: FunDef -> (L1.FunDef Ty1 (L L1.Exp1))
     revertFunDef FunDef{funname,funarg,funty,funbod} =
-      L1.FunDef { funName  = funname
-                , funArg   =  (funarg, stripTyLocs (arrIn funty))
-                , funRetTy = stripTyLocs (arrOut funty)
-                , funBody  = revertExp funbod
+      L1.FunDef { funName = funname
+                , funArg  = funarg
+                , funTy   = (stripTyLocs (arrIn funty), stripTyLocs (arrOut funty))
+                , funBody = revertExp funbod
                 }
 
     revertExp :: L Exp2 -> L L1.Exp1

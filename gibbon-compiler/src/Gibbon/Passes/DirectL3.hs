@@ -30,11 +30,11 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
     L3.Prog ddfs fndefs' mnExp'
   where
     fd :: FunDef Ty1 (L Exp1) -> L3.FunDef
-    fd FunDef{funName,funArg,funRetTy,funBody} =
-        let (arg,ty) = funArg
+    fd FunDef{funName,funArg,funTy,funBody} =
+        let (argty,retty) = funTy
         in L3.FunDef { L3.funname = funName
-                     , L3.funty = L3.ArrowTy (toL3Ty ty) (toL3Ty funRetTy)
-                     , L3.funarg = arg
+                     , L3.funty  = L3.ArrowTy (toL3Ty argty) (toL3Ty retty)
+                     , L3.funarg = funArg
                      , L3.funbod = go funBody
                      }
 

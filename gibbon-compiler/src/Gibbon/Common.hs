@@ -377,9 +377,8 @@ isIndrDataCon = isSuffixOf "^"
 type FunDefs ty ex = Map Var (FunDef ty ex)
 
 data FunDef ty ex = FunDef { funName  :: Var
-                               -- ^ Return type
-                           , funArg   :: (Var,ty)
-                           , funRetTy :: ty
+                           , funArg   :: Var
+                           , funTy    :: (ty, ty) -- ^ (in, out)
                            , funBody  :: ex }
   deriving (Read,Show,Eq,Ord, Generic, Functor, Traversable, Foldable)
 

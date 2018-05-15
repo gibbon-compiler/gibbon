@@ -92,7 +92,7 @@ progToEnv :: Prog -> Env2 (UrTy ())
 progToEnv Prog{fundefs} =
     Env2 M.empty
          (M.fromList [ (n,(fmap (\_->()) a, fmap (\_->()) b))
-                     | FunDef n (_,a) b _ <- M.elems fundefs ])
+                     | FunDef n _ (a,b) _ <- M.elems fundefs ])
 
 
 -- | A convenient, default instantiation of the L1 expression type.
@@ -490,7 +490,7 @@ mapExprs fn prg@Prog{fundefs,mainExp} =
 getFunTy :: Var -> Prog -> (Ty1,Ty1)
 getFunTy fn Prog{fundefs} =
     case M.lookup fn fundefs of
-      Just FunDef{funArg=(_vr,argty), funRetTy} -> (argty,funRetTy)
+      Just FunDef{funTy=(argty,retty)} -> (argty,retty)
       Nothing -> error $ "getFunTy: L1 program does not contain binding for function: "++show fn
 
 
@@ -719,7 +719,7 @@ mkAdd1Prog bod mainExp = Prog treeDD
                               mainExp
 
 mkAdd1Fun :: ex -> FunDef Ty1 ex
-mkAdd1Fun bod = FunDef "add1" ("tr",treeTy) treeTy bod
+mkAdd1Fun bod = FunDef "add1" "tr" (treeTy,treeTy) bod
 
 ----------------
 
@@ -780,7 +780,7 @@ add1ProgChallenge :: Prog
 add1ProgChallenge =
     Prog treeDD
          (M.fromList [ ("add1",mkAdd1Fun bod)
-                     , ("pred", FunDef "pred" ("tr", treeTy) BoolTy
+                     , ("pred", FunDef "pred" "tr" (treeTy, BoolTy)
                         (l$ CaseE (l$ VarE "tr") $
                          [ ("Leaf", [("n",())], l$ PrimAppE MkTrue [])
                          , ("Node", [("x",()),("y",())], l$ PrimAppE MkFalse [])]))])

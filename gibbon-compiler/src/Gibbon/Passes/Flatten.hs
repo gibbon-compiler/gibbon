@@ -39,10 +39,10 @@ flattenL1 prg@(L1.Prog defs funs main) = do
     return $ L1.Prog defs funs' main'
   where
     flattenFuns = mapM flattenFun
-    flattenFun (FunDef nam (narg,targ) ty bod) = do
+    flattenFun (FunDef nam narg (targ, ty) bod) = do
       let env2 = Env2 (M.singleton narg targ) (fEnv env20)
       bod' <- gFlattenExp defs env2 bod
-      return $ FunDef nam (narg,targ) ty bod'
+      return $ FunDef nam narg (targ, ty) bod'
 
     env20 = L1.progToEnv prg
 

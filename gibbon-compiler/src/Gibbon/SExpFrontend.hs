@@ -195,10 +195,10 @@ parseSExp ses =
                             return (vr,ty,newbod)
          -- Here we directly desugar multiple arguments into a tuple
          -- argument.
-         go rst dds (FunDef { funName  = textToVar name
-                            , funArg   = (arg, ty)
-                            , funRetTy = typ retty
-                            , funBody  = bod''
+         go rst dds (FunDef { funName = textToVar name
+                            , funArg  = arg
+                            , funTy   = (ty, typ retty)
+                            , funBody = bod''
                             } : fds)
             cds mn
 

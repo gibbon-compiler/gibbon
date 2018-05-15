@@ -20,8 +20,8 @@ inlineTriv :: Prog -> Prog
 inlineTriv (Prog ddefs funs main) =
     Prog ddefs (fmap inlineTrivFun funs) (fmap (inlineTrivExp ddefs) main)
   where
-    inlineTrivFun (FunDef nam (narg,targ) ty bod) =
-      FunDef nam (narg,targ) ty (inlineTrivExp ddefs bod)
+    inlineTrivFun (FunDef nam narg (targ, ty) bod) =
+      FunDef nam narg (targ, ty) (inlineTrivExp ddefs bod)
 
 type MyExp l = L (PreExp NoExt l (UrTy l))
 type Env l = [(Var, (UrTy l, MyExp l))]

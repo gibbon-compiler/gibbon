@@ -239,15 +239,15 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
     env = L1.progToEnv prg
 
     -- fd :: forall e l . FunDef Ty1 Exp -> SyM ()
-    fd FunDef{funArg,funRetTy,funBody} = do
-      let (arg,argTy) = funArg
-          env' = Env2 (M.singleton arg argTy) (fEnv env)
+    fd FunDef{funArg,funTy,funBody} = do
+      let (argTy,retty) = funTy
+          env' = Env2 (M.singleton funArg argTy) (fEnv env)
           res = runExcept $ tcExp ddefs env' funBody
       case res of
         Left err -> error $ sdoc err
-        Right ty -> if ty == funRetTy
+        Right ty -> if ty == retty
                     then return ()
-                    else error $ "Expected type " ++ (sdoc funRetTy)
+                    else error $ "Expected type " ++ (sdoc retty)
                          ++ " and got type " ++ (sdoc ty)
 
       return ()
