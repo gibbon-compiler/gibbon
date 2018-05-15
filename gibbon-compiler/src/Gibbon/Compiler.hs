@@ -233,7 +233,7 @@ sepline = replicate 80 '='
 
 data CompileState =
      CompileState { cnt :: Int -- ^ Gensym counter
-                  , result :: Maybe SI.Value -- ^ Result of evaluating output of prior pass, if available.
+                  , result :: Maybe Value -- ^ Result of evaluating output of prior pass, if available.
                   }
 
 -- | Compiler entrypoint, given a full configuration and a list of
@@ -347,7 +347,7 @@ parseInput ip fp =
 
 
 -- |
-interpProg :: L1.Prog -> IO (Maybe SI.Value)
+interpProg :: L1.Prog -> IO (Maybe Value)
 interpProg l1 =
   if dbgLvl >= interpDbgLevel
   then do

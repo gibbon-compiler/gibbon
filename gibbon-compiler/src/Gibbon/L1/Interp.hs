@@ -9,11 +9,10 @@
 
 module Gibbon.L1.Interp
     ( execAndPrint, interpProg
-    , Value(..)
     , main
     ) where
 
-import           Data.ByteString.Builder (Builder, toLazyByteString, string8)
+import           Data.ByteString.Builder (toLazyByteString, string8)
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.Writer
@@ -24,14 +23,10 @@ import           Data.List as L
 import           Data.Loc
 import           Data.Map as M
 import           Data.Sequence (Seq, ViewL ((:<)), (|>))
-import           Data.Word
-import           GHC.Generics
 import           System.Clock
 import           System.IO.Unsafe (unsafePerformIO)
-import           Text.PrettyPrint.GenericPretty
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Sequence as S
-import qualified Data.Foldable as F
 
 import           Gibbon.Common
 import           Gibbon.GenericOps
@@ -58,81 +53,6 @@ instance Interp Prog where
   interpWithStdout rc p = do
    (v,logs) <- interpProg rc p
    return (show v, lines (B.unpack logs))
-
-
--- Stores and buffers:
-------------------------------------------------------------
-
--- | A store is an address space full of buffers.
-data Store = Store (IntMap Buffer)
-  deriving (Read,Eq,Ord,Generic, Show)
-
-instance Out Store
-
-instance Out a => Out (IntMap a) where
-  doc im       = doc       (IM.toList im)
-  docPrec n im = docPrec n (IM.toList im)
-
-data Buffer = Buffer (Seq SerializedVal)
-  deriving (Read,Eq,Ord,Generic, Show)
-
-instance Out Buffer
-
-data SerializedVal = SerTag Word8 DataCon | SerInt Int
-  deriving (Read,Eq,Ord,Generic, Show)
-
-byteSize :: SerializedVal -> Int
-byteSize (SerInt _) = 8 -- FIXME: get this constant from elsewhere.
-byteSize (SerTag _ _) = 1
-
-instance Out SerializedVal
-instance NFData SerializedVal
-
-instance Out Word8 where
-  doc w       = doc       (fromIntegral w :: Int)
-  docPrec n w = docPrec n (fromIntegral w :: Int)
-
-instance Out a => Out (Seq a) where
-  doc s       = doc       (F.toList s)
-  docPrec n s = docPrec n (F.toList s)
-
--- Values
--------------------------------------------------------------
-
--- | It's a first order language with simple values.
-data Value = VInt Int
-           | VBool Bool
-           | VDict (M.Map Value Value)
--- FINISH:       | VList
-           | VProd [Value]
-           | VPacked DataCon [Value]
-
-           | VCursor { bufID :: Int, offset :: Int }
-             -- ^ Cursor are a pointer into the Store plus an offset into the Buffer.
-
-  deriving (Read,Eq,Ord,Generic)
-
-instance Out Value
-instance NFData Value
-
-instance Show Value where
- show v =
-  case v of
-   VInt n   -> show n
-   VBool b  -> if b then truePrinted else falsePrinted
--- TODO: eventually want Haskell style tuple-printing:
---    VProd ls -> "("++ concat(intersperse ", " (L.map show ls)) ++")"
--- For now match Gibbon's Racket backend
-   VProd ls -> "'#("++ concat(intersperse " " (L.map show ls)) ++")"
-   VDict m      -> show (M.toList m)
-
-   -- F(x) style.  Maybe we'll switch to sweet-exps to keep everything in sync:
-   -- VPacked k ls -> k ++ show (VProd ls)
-
-   -- For now, Racket style:
-   VPacked k ls -> "(" ++ k ++ concat (L.map ((" "++) . show) ls) ++ ")"
-
-   VCursor idx off -> "<cursor "++show idx++", "++show off++">"
 
 type ValEnv = Map Var Value
 
@@ -168,8 +88,6 @@ execAndPrint rc prg = do
     -- Special case: don't print void return:
     VProd [] -> return () -- FIXME: remove this.
     _ -> print val
-
-type Log = Builder
 
 -- TODO: add a flag for whether we support cursors:
 

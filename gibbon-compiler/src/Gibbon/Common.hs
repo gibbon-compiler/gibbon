@@ -36,8 +36,9 @@ module Gibbon.Common
        , vEnv, fEnv, extendVEnv, extendsVEnv, extendFEnv, emptyEnv2
        , lookupVEnv
 
-         -- * Runtime configuration
+         -- * Interpreter configuration
        , RunConfig(..), getRunConfig
+       , Store(..), Buffer(..), SerializedVal(..), Value(..), Log
 
          -- * Data definitions
        , DDef(..), DDefs, fromListDD, emptyDD, insertDD
@@ -64,9 +65,12 @@ module Gibbon.Common
 import Control.DeepSeq (NFData(..), force)
 import Control.Exception (evaluate)
 import Control.Monad.State.Strict
+import Data.ByteString.Builder (Builder)
 import Data.Char
 import Data.List as L
+import Data.IntMap as IM
 import Data.Map as M
+import Data.Sequence (Seq)
 import Data.String
 import Data.Symbol
 import Data.Loc
@@ -80,6 +84,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import Debug.Trace
 import Language.C.Quote.CUDA (ToIdent, toIdent)
 
+import qualified Data.Foldable as F
 
 -- | Orphaned instance: read without source locations.
 instance Read t => Read (L t) where
@@ -491,6 +496,82 @@ getRunConfig ls =
      return $ RunConfig { rcSize=read sz, rcIters=read iters, rcDbg= dbgLvl, rcCursors= False }
    _ -> error $ "getRunConfig: too many command line args, expected <size> <iters> at most: "++show ls
 
+
+-- Stores and buffers:
+------------------------------------------------------------
+
+-- | A store is an address space full of buffers.
+data Store = Store (IntMap Buffer)
+  deriving (Read,Eq,Ord,Generic, Show)
+
+instance Out Store
+
+instance Out a => Out (IntMap a) where
+  doc im       = doc       (IM.toList im)
+  docPrec n im = docPrec n (IM.toList im)
+
+data Buffer = Buffer (Seq SerializedVal)
+  deriving (Read,Eq,Ord,Generic, Show)
+
+instance Out Buffer
+
+data SerializedVal = SerTag Word8 DataCon | SerInt Int
+  deriving (Read,Eq,Ord,Generic, Show)
+
+byteSize :: SerializedVal -> Int
+byteSize (SerInt _) = 8 -- FIXME: get this constant from elsewhere.
+byteSize (SerTag _ _) = 1
+
+instance Out SerializedVal
+instance NFData SerializedVal
+
+instance Out Word8 where
+  doc w       = doc       (fromIntegral w :: Int)
+  docPrec n w = docPrec n (fromIntegral w :: Int)
+
+instance Out a => Out (Seq a) where
+  doc s       = doc       (F.toList s)
+  docPrec n s = docPrec n (F.toList s)
+
+-- Values
+-------------------------------------------------------------
+
+-- | It's a first order language with simple values.
+data Value = VInt Int
+           | VBool Bool
+           | VDict (M.Map Value Value)
+-- FINISH:       | VList
+           | VProd [Value]
+           | VPacked DataCon [Value]
+
+           | VCursor { bufID :: Int, offset :: Int }
+             -- ^ Cursor are a pointer into the Store plus an offset into the Buffer.
+
+  deriving (Read,Eq,Ord,Generic)
+
+instance Out Value
+instance NFData Value
+
+instance Show Value where
+ show v =
+  case v of
+   VInt n   -> show n
+   VBool b  -> if b then truePrinted else falsePrinted
+-- TODO: eventually want Haskell style tuple-printing:
+--    VProd ls -> "("++ concat(intersperse ", " (L.map show ls)) ++")"
+-- For now match Gibbon's Racket backend
+   VProd ls -> "'#("++ concat(intersperse " " (L.map show ls)) ++")"
+   VDict m      -> show (M.toList m)
+
+   -- F(x) style.  Maybe we'll switch to sweet-exps to keep everything in sync:
+   -- VPacked k ls -> k ++ show (VProd ls)
+
+   -- For now, Racket style:
+   VPacked k ls -> "(" ++ k ++ concat (L.map ((" "++) . show) ls) ++ ")"
+
+   VCursor idx off -> "<cursor "++show idx++", "++show off++">"
+
+type Log = Builder
 
 ----------------------------------------------------------------------------------------------------
 -- DEBUGGING

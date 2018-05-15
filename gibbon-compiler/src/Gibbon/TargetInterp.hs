@@ -47,9 +47,7 @@ instance Out UTCTime where
 instance Out TimeSpec where
     doc s = text (show s)
     docPrec _ s = text (show s)
-instance (Out a, Show a) => Out (Seq a) where
-    doc s = text (show s)
-    docPrec _ s = text (show s)
+
 instance Out Val
 
 execProg :: Prog -> IO [Val]
