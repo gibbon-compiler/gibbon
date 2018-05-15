@@ -39,10 +39,6 @@ module Gibbon.Common
          -- * Runtime configuration
        , RunConfig(..), getRunConfig
 
-         -- * Top-level function defs
-       , FunDef(..), FunDefs
-       , insertFD, fromListFD
-
          -- * Data definitions
        , DDef(..), DDefs, fromListDD, emptyDD, insertDD
        , lookupDDef, lookupDataCon, getConOrdering, getTyOfDataCon, getTagOfDataCon
@@ -369,31 +365,6 @@ fromIndrDataCon = init
 
 isIndrDataCon :: DataCon -> Bool
 isIndrDataCon = isSuffixOf "^"
-
--- Fundefs
-----------------------------------------
-
--- | A set of top-level recursive function definitions
-type FunDefs ty ex = Map Var (FunDef ty ex)
-
-data FunDef ty ex = FunDef { funName  :: Var
-                           , funArg   :: Var
-                           , funTy    :: (ty, ty) -- ^ (in, out)
-                           , funBody  :: ex }
-  deriving (Read,Show,Eq,Ord, Generic, Functor, Traversable, Foldable)
-
--- deriving
-instance (NFData t, NFData e) => NFData (FunDef t e) where
-
-instance (Out a, Out b) => Out (FunDef a b)
-
-insertFD :: FunDef t e -> FunDefs t e -> FunDefs t e
-insertFD d = M.insertWith err' (funName d) d
-  where
-   err' = error $ "insertFD: function definition with duplicate name: "++show (funName d)
-
-fromListFD :: [FunDef t e] -> FunDefs t e
-fromListFD = L.foldr insertFD M.empty
 
 
 -- Gensym monad:

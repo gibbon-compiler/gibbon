@@ -22,7 +22,6 @@ module Gibbon.L1.Syntax
       -- * Core types
       Prog(..), DDef(..), FunDefs, FunDef(..),
       Exp1, PreExp(..)
-    , progToEnv
 
       -- * Primitive operations
     , Prim(..), primArgsTy
@@ -39,6 +38,8 @@ module Gibbon.L1.Syntax
     , mapExt
     , mapLocs
     , numIndrsDataCon
+    , progToEnv
+    , insertFD, fromListFD
 
       -- * Trivial expressions
     , assertTriv, assertTrivs, hasTimeIt, isTrivial
@@ -73,7 +74,7 @@ import Gibbon.GenericOps
 -- we will expect a "benchmark" function definition which consumes an
 -- appropriate packed AST datatype.
 data Prog = Prog { ddefs    :: DDefs Ty1
-                 , fundefs  :: FunDefs Ty1 (L Exp1)
+                 , fundefs  :: FunDefs
                  , mainExp  :: Maybe (L Exp1)
 --                 , constraints :: [Constraint]
                  }
@@ -94,6 +95,33 @@ progToEnv Prog{fundefs} =
          (M.fromList [ (n,(fmap (\_->()) a, fmap (\_->()) b))
                      | FunDef n _ (a,b) _ <- M.elems fundefs ])
 
+
+--------------------------------------------------------------------------------
+-- Fundefs
+
+-- | A set of top-level recursive function definitions
+type FunDefs = Map Var FunDef
+
+data FunDef = FunDef { funName  :: Var
+                     , funArg   :: Var
+                     , funTy    :: (Ty1, Ty1) -- ^ (in, out)
+                     , funBody  :: L Exp1 }
+  deriving (Read,Show,Eq,Ord, Generic)
+
+-- deriving
+instance NFData FunDef where
+
+instance Out FunDef
+
+insertFD :: FunDef -> FunDefs -> FunDefs
+insertFD d = M.insertWith err' (funName d) d
+  where
+   err' = error $ "insertFD: function definition with duplicate name: "++show (funName d)
+
+fromListFD :: [FunDef] -> FunDefs
+fromListFD = L.foldr insertFD M.empty
+
+--------------------------------------------------------------------------------
 
 -- | A convenient, default instantiation of the L1 expression type.
 type Exp1 = PreExp NoExt () Ty1
@@ -480,7 +508,7 @@ sizeOf t =
 -- | Transform the expressions within a program.
 mapExprs :: (L Exp1 -> L Exp1) -> Prog -> Prog
 mapExprs fn prg@Prog{fundefs,mainExp} =
-  prg{ fundefs = fmap (fmap fn) fundefs
+  prg{ fundefs = M.map (\g -> g {funBody = fn (funBody g)}) fundefs
      , mainExp = fmap fn mainExp }
 
 
@@ -718,7 +746,7 @@ mkAdd1Prog bod mainExp = Prog treeDD
                               (M.fromList [("add1",mkAdd1Fun bod)])
                               mainExp
 
-mkAdd1Fun :: ex -> FunDef Ty1 ex
+mkAdd1Fun :: L Exp1 -> FunDef
 mkAdd1Fun bod = FunDef "add1" "tr" (treeTy,treeTy) bod
 
 ----------------

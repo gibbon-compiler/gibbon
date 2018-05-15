@@ -336,7 +336,7 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
       DDef a (L.filter (\(dcon,_) -> not $ isIndirectionTag dcon) $
               L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
 
-    revertFunDef :: FunDef -> (L1.FunDef Ty1 (L L1.Exp1))
+    revertFunDef :: FunDef -> L1.FunDef
     revertFunDef FunDef{funname,funarg,funty,funbod} =
       L1.FunDef { funName = funname
                 , funArg  = funarg

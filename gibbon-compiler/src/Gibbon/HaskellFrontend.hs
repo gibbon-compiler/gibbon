@@ -68,7 +68,7 @@ collectTopFunTy decl =
     unsupported      -> err ("collectTopFunTy: Unsupported top-level thing: " ++ show unsupported)
 
 
-collectTopLevel :: M.Map Var TopTy -> S.Decl -> Ds (Maybe (Either (DDef Ty1) (FunDef Ty1 (L L1.Exp1))))
+collectTopLevel :: M.Map Var TopTy -> S.Decl -> Ds (Maybe (Either (DDef Ty1) FunDef))
 
 -- This is the main expression. We're disguising it as a FunDef just for convenience.
 -- We should probably create a sum type with these 3 things; ddefs, fundefs, and mainExp

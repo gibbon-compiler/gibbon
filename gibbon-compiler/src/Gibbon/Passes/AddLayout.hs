@@ -13,7 +13,7 @@ import Text.PrettyPrint.GenericPretty
 import Gibbon.GenericOps
 import Gibbon.Common
 import Gibbon.DynFlags
-import Gibbon.L1.Syntax
+import Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
 
 import Gibbon.Passes.InferLocations (inferLocs)
@@ -270,8 +270,6 @@ specialTraversal traversed L2.FunDef{L2.funty} locs =
 
 -- Operates on an L1 program, and updates it to have layout information
 
-type FunDef1 = FunDef Ty1 (L Exp1)
-
 addLayout :: Prog -> SyM Prog
 addLayout prg@Prog{ddefs,fundefs,mainExp} = do
   let iddefs = toIndrDDefs ddefs
@@ -285,7 +283,7 @@ addLayout prg@Prog{ddefs,fundefs,mainExp} = do
              , mainExp = mainExp'
              }
 
-addLayoutFun :: DDefs Ty1 -> FunDef1 -> SyM FunDef1
+addLayoutFun :: DDefs Ty1 -> L1.FunDef -> SyM L1.FunDef
 addLayoutFun ddfs fd@FunDef{funBody} = do
   bod <- addLayoutExp ddfs funBody
   return $ fd{funBody = bod}
@@ -374,7 +372,7 @@ addTraversals unsafeFns prg@Prog{ddefs,fundefs,mainExp} =
 
 
 -- Process body and reset traversal effects.
-addTraversalsFn :: S.Set Var -> DDefs Ty1 -> FunDef1 -> SyM FunDef1
+addTraversalsFn :: S.Set Var -> DDefs Ty1 -> L1.FunDef -> SyM L1.FunDef
 addTraversalsFn unsafeFns ddefs f@FunDef{funName, funBody} =
   if funName `S.member` unsafeFns
   then do

@@ -29,7 +29,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
         fndefs' = M.fromList $ L.map (\f -> (L3.funname f, f)) fds
     L3.Prog ddfs fndefs' mnExp'
   where
-    fd :: FunDef Ty1 (L Exp1) -> L3.FunDef
+    fd :: FunDef -> L3.FunDef
     fd FunDef{funName,funArg,funTy,funBody} =
         let (argty,retty) = funTy
         in L3.FunDef { L3.funname = funName

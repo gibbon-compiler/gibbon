@@ -111,6 +111,7 @@ import Gibbon.GenericOps (gFreeVars)
 import Gibbon.Common as C hiding (extendVEnv, lookupVEnv) -- (l, LRM(..))
 import Gibbon.Common (Var, Env2, DDefs, LocVar, runSyM, SyM, gensym, toVar)
 import qualified Gibbon.L1.Syntax as L1
+import Gibbon.L1.Syntax (FunDef(..))
 import Gibbon.L2.Syntax as L2
 import Gibbon.L2.Typecheck as T
 import Gibbon.Passes.InlineTriv (inlineTriv)
@@ -1153,7 +1154,7 @@ prim p = case p of
 
 -- | Generate a copy function for a particular data definition.
 -- Note: there will be redundant let bindings in the function body which may need to be inlined.
-genCopyFn :: DDef L1.Ty1 -> SyM (L1.FunDef L1.Ty1 (L L1.Exp1))
+genCopyFn :: DDef L1.Ty1 -> SyM L1.FunDef
 genCopyFn DDef{tyName, dataCons} = do
   arg <- gensym $ "arg"
   casebod <- forM dataCons $ \(dcon, tys) ->
