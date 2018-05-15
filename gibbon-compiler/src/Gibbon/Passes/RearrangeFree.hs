@@ -4,7 +4,7 @@
 module Gibbon.Passes.RearrangeFree
   ( rearrangeFree ) where
 
-import Gibbon.Common hiding (FunDef(..))
+import Gibbon.Common
 import Gibbon.L4.Syntax
 
 -- Ensure that any calls to `free` are the last thing in the program.

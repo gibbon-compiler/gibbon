@@ -22,7 +22,7 @@ import Data.Set as S
 import Data.Map as M
 -- import Text.PrettyPrint.GenericPretty
 
-import Gibbon.Common hiding (FunDef)
+import Gibbon.Common
 import Gibbon.L2.Syntax
 import Gibbon.L1.Syntax hiding (Prog, FunDef, ddefs, fundefs, mainExp, add1Prog)
 import Gibbon.GenericOps

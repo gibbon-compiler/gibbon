@@ -24,7 +24,7 @@ import Data.Set as S
 import Data.List as L
 import Text.PrettyPrint.GenericPretty
 
-import Gibbon.Common hiding (FunDef, FunDefs)
+import Gibbon.Common
 import Gibbon.L1.Syntax hiding (FunDef(..), FunDefs, Prog(..), progToEnv)
 import Gibbon.GenericOps
 import Gibbon.L1.Syntax (UrTy(..), PreExp(..))

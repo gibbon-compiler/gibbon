@@ -30,7 +30,7 @@ import qualified Data.Set as Set
 -- import Data.List as L hiding (tail)
 
 import Gibbon.GenericOps
-import Gibbon.Common hiding (FunDef)
+import Gibbon.Common
 import Gibbon.L1.Syntax hiding (FunDef, FunDefs, Prog)
 import Gibbon.L3.Syntax
 -- import Gibbon.L2.Syntax as L2

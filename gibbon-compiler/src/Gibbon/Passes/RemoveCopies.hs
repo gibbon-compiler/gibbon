@@ -5,7 +5,7 @@ import Data.Loc
 import qualified Data.Map as M
 
 import Gibbon.GenericOps
-import Gibbon.Common hiding (FunDef(..))
+import Gibbon.Common
 import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..))
 import Gibbon.L2.Syntax as L2
 

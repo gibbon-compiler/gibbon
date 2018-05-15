@@ -14,7 +14,7 @@ import Data.Loc
 import Data.Graph
 import qualified Data.Map as M
 
-import Gibbon.Common hiding (FunDef(..))
+import Gibbon.Common
 import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..))
 import Gibbon.L2.Syntax as L2
 

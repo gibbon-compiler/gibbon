@@ -23,7 +23,7 @@ import           GHC.Generics (Generic)
 import           Prelude hiding (init)
 import           Text.PrettyPrint.GenericPretty (Out (..))
 
-import           Gibbon.Common hiding (funBody)
+import           Gibbon.Common
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L3.Syntax as L3
 

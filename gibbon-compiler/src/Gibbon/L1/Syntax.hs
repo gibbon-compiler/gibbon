@@ -311,6 +311,8 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
           DictHasKeyP ty -> SymDictTy (noLocsHere ty)
           SizeParam      -> IntTy
           ReadPackedFile _ _ ty -> (noLocsHere ty)
+          ErrorP _ ty -> (noLocsHere ty)
+          PEndOf -> CursorTy
 
       LetE (v,_,t,_) e -> gTypeExp ddfs (extendVEnv v t env2) e
       IfE _ e _        -> gTypeExp ddfs env2 e
@@ -608,6 +610,7 @@ primArgsTy p =
     DictHasKeyP _ty  -> error "primArgsTy: dicts not handled yet"
     ReadPackedFile{} -> []
     (ErrorP _ _) -> []
+    PEndOf -> error "primArgsTy: PEndOf not handled yet"
 
 
 isPackedTy :: UrTy a -> Bool
@@ -638,6 +641,7 @@ primRetTy p =
     DictLookupP ty -> ty
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ ty -> ty
+    PEndOf -> error "primRetTy: PEndOf not handled yet"
 
 dummyCursorTy :: UrTy a
 dummyCursorTy = CursorTy

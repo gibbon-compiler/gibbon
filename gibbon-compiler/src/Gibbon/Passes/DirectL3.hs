@@ -6,7 +6,6 @@ import Data.Loc
 import Data.List as L
 import Data.Map as M
 
-import Gibbon.Common
 import Gibbon.L1.Syntax
 import Gibbon.L1.Typecheck
 import Gibbon.L2.Syntax (stripTyLocs)

@@ -23,7 +23,6 @@ import           Control.Exception
 import           Control.Monad.State.Strict
 import           Data.Loc
 import           Data.Set as S hiding (map)
-import           Data.Monoid
 import           Options.Applicative
 import           System.Directory
 import           System.Environment

@@ -72,7 +72,7 @@ import Data.Set as S
 import Data.Map as M
 import Text.PrettyPrint.GenericPretty
 
-import Gibbon.Common hiding (FunDef)
+import Gibbon.Common
 import Gibbon.GenericOps
 import Gibbon.L1.Syntax hiding
        (FunDef, Prog, mapExprs, progToEnv, fundefs, getFunTy, add1Prog)
@@ -352,7 +352,7 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         LitSymE v -> LitSymE v
         AppE v _ arg    -> AppE v [] (revertExp arg)
         PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
-        LetE (v,locs,ty, L _ (Ext (IndirectionE _ _ _ _ arg))) bod ->
+        LetE (v,_,ty, L _ (Ext (IndirectionE _ _ _ _ arg))) bod ->
           let PackedTy tycon _ =  ty in
           LetE (v,[],(stripTyLocs ty), l$ AppE (mkCopyFunName tycon) [] (revertExp arg)) (revertExp bod)
         LetE (v,_,ty,rhs) bod ->

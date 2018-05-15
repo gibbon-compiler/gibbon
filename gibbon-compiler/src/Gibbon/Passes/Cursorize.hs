@@ -11,7 +11,7 @@ import Text.PrettyPrint.GenericPretty
 
 import Gibbon.DynFlags
 import Gibbon.GenericOps
-import Gibbon.Common    hiding (FunDefs, FunDef(..))
+import Gibbon.Common
 import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..), FunDefs)
 import Gibbon.L2.Syntax as L2
 import qualified Gibbon.L3.Syntax as L3

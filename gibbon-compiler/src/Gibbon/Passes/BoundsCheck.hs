@@ -10,7 +10,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 
 import Gibbon.GenericOps
-import Gibbon.Common hiding (FunDef(..))
+import Gibbon.Common
 import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..))
 import Gibbon.L2.Syntax as L2
 
@@ -131,7 +131,7 @@ boundsCheck :: L2.Prog -> SyM L2.Prog
 boundsCheck Prog{ddefs,fundefs,mainExp} = do
   fds' <- mapM (boundsCheckFn ddefs fundefs) $ M.elems fundefs
   let fundefs' = M.fromList $ map (\f -> (funname f,f)) fds'
-      env2 = Env2 M.empty (initFunEnv fundefs)
+      _env2 = Env2 M.empty (initFunEnv fundefs)
   -- mainExp' <- case mainExp of
   --               Nothing -> return Nothing
   --               Just (mn, ty) -> Just . (,ty) <$>

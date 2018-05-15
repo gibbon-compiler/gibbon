@@ -32,7 +32,7 @@ import qualified Data.List as L
 
 
 import Gibbon.GenericOps
-import Gibbon.Common hiding (FunDef)
+import Gibbon.Common
 import Gibbon.L1.Syntax hiding (FunDef, Prog(..), progToEnv)
 import Gibbon.L3.Syntax
 import qualified Gibbon.L1.Syntax as L1

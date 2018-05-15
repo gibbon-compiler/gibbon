@@ -22,7 +22,7 @@ import Data.Set as S
 import Data.Map as M
 
 import Gibbon.L2.Syntax
-import Gibbon.Common hiding (FunDef, FunEnv)
+import Gibbon.Common hiding (FunEnv)
 import Gibbon.L1.Syntax hiding (Prog, FunDef, ddefs, fundefs, mainExp)
 
 --------------------------------------------------------------------------------
