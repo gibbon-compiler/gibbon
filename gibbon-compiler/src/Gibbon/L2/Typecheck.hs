@@ -244,9 +244,6 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    len3
                    return (ty, tstate)
 
-                 L1.MkNullCursor -> do
-                   return (CursorTy, tstate)
-
                  L1.PEndOf -> return (CursorTy, tstate)
 
                  oth -> error $ "L2.tcExp : PrimAppE : TODO " ++ sdoc oth

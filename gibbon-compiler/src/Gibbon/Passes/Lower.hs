@@ -829,7 +829,6 @@ prim p =
 
     ReadPackedFile mf tyc _ -> T.ReadPackedFile mf tyc
 
-    MkNullCursor -> error$ "lower/prim: internal error, should not have got to here: "++show p
     ErrorP{}     -> error$ "lower/prim: internal error, should not have got to here: "++show p
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."
     MkFalse      -> error "lower/prim: internal error. MkFalse should not get here."

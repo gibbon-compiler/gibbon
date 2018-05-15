@@ -181,7 +181,6 @@ toL3Prim pr =
     DictHasKeyP ty -> DictHasKeyP (L2.stripTyLocs ty)
     ErrorP s ty    -> ErrorP s (L2.stripTyLocs ty)
     ReadPackedFile fp tycon ty -> ReadPackedFile fp tycon (L2.stripTyLocs ty)
-    MkNullCursor -> MkNullCursor
     PEndOf -> error "Do not use PEndOf after L2."
 
 -- | Abstract some of the differences of top level program types, by

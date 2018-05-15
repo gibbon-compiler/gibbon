@@ -398,7 +398,6 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         DictHasKeyP ty -> DictHasKeyP (stripTyLocs ty)
         ErrorP s ty    -> ErrorP s (stripTyLocs ty)
         ReadPackedFile fp tycon ty -> ReadPackedFile fp tycon (stripTyLocs ty)
-        MkNullCursor -> MkNullCursor
         PEndOf -> error "Do not use PEndOf after L2."
 
     docase :: (DataCon, [(Var,LocVar)], L Exp2) -> (DataCon, [(Var,())], L L1.Exp1)

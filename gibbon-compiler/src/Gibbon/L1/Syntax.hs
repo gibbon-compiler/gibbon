@@ -367,7 +367,6 @@ data Prim ty
           | MkTrue  -- ^ Zero argument constructor.
           | MkFalse -- ^ Zero argument constructor.
 
-          | MkNullCursor -- ^ Zero argument constructor.
           | ReadPackedFile (Maybe FilePath) TyCon ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
             -- type of the file being read.  The `Ty` tracks the type as the program evolvels
@@ -602,7 +601,6 @@ primArgsTy p =
     MkTrue  -> []
     MkFalse -> []
     SymAppend        -> [SymTy, IntTy]
-    MkNullCursor     -> []
     SizeParam        -> []
     DictEmptyP _ty   -> []
     DictInsertP _ty  -> error "primArgsTy: dicts not handled yet"
@@ -632,7 +630,6 @@ primRetTy p =
     GtP  -> BoolTy
     MkTrue  -> BoolTy
     MkFalse -> BoolTy
-    MkNullCursor   -> dummyCursorTy
     SymAppend      -> SymTy
     SizeParam      -> IntTy
     DictHasKeyP _  -> BoolTy

@@ -211,10 +211,6 @@ tcExp ddfs env exp@(L p ex) =
           len3
           return ty
 
-        MkNullCursor -> do
-          len0
-          return CursorTy
-
         PEndOf -> error "Do not use PEndOf after L2."
 
         oth -> error $ "L3.tcExp : PrimAppE : TODO " ++ sdoc oth
