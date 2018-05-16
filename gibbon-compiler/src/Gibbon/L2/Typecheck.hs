@@ -406,7 +406,7 @@ tcCases ddfs env funs constrs regs tstatein lin reg ((dc, vs, e):cases) = do
       genConstrs (((_v1,l1),PackedTy _ _),Just ((v2,l2),PackedTy _ _)) (_lin,lst) =
           (l1,[AfterVariableC v2 l2 l1, InRegionC l1 reg] ++ lst)
       genConstrs (((_v1,l1),PackedTy _ _),Just ((_v2,_l2),IntTy)) (lin,lst) =
-        let sz = fromMaybe 1 (L1.sizeOf IntTy)
+        let sz = fromMaybe 1 (L1.sizeOfTy IntTy)
         in (l1, [AfterConstantC sz lin l1, InRegionC l1 reg] ++ lst)
       genConstrs (((_,l1),_),_) (lin,lst) =
         (lin, (InRegionC l1 reg : lst))

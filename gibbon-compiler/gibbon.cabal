@@ -25,6 +25,7 @@ library
                        Gibbon.TargetInterp
                        Gibbon.L1.Syntax
                        Gibbon.L1.Typecheck
+                       Gibbon.L1.Examples
                        Gibbon.L2.Syntax
                        Gibbon.L2.Typecheck
                        Gibbon.L2.Examples

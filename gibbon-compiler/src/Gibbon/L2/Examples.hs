@@ -24,7 +24,7 @@ import Data.Map as M
 
 import Gibbon.Common
 import Gibbon.L2.Syntax
-import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..), FunDefs, add1Prog)
+import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..), FunDefs)
 import Gibbon.GenericOps
 
 ddtree :: DDefs Ty2

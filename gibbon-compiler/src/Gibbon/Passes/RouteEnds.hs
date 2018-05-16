@@ -244,7 +244,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                                handleLoc (eor,e) (l1,ty) = do
                                     l2 <- gensym "jump"
                                     let eor' = mkEnd l1 l2 eor
-                                        (Just jump) = L1.sizeOf ty
+                                        (Just jump) = L1.sizeOfTy ty
                                         e' = Ext $ LetLocE l2 (AfterConstantLE jump l1) e
                                     return (eor', l$ e')
 

@@ -75,7 +75,7 @@ import Text.PrettyPrint.GenericPretty
 import Gibbon.Common
 import Gibbon.GenericOps
 import Gibbon.L1.Syntax hiding
-       (FunDefs, FunDef(..), Prog(..), mapExprs, progToEnv, fundefs, getFunTy, add1Prog)
+       (FunDefs, FunDef(..), Prog(..), mapExprs, progToEnv, fundefs, getFunTy)
 import qualified Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
@@ -252,7 +252,7 @@ progToEnv Prog{fundefs} =
 -- | A function definition with the function's effects.
 data FunDef = FunDef { funName :: Var
                      , funArg  :: Var
-                     , funTy   :: (ArrowTy Ty2)
+                     , funTy   :: ArrowTy Ty2
                      , funBody :: L Exp2 }
   deriving (Show, Ord, Eq, Generic, NFData)
 --------------------------------------------------------------------------------

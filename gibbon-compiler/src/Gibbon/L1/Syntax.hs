@@ -20,37 +20,21 @@
 module Gibbon.L1.Syntax
     (
       -- * Core types
-      Prog(..), DDef(..), FunDefs, FunDef(..),
-      Exp1, PreExp(..)
+      Prog(..), FunDef(..), FunDefs
 
-      -- * Primitive operations
-    , Prim(..), primArgsTy
+      -- * Expressions and helpers
+    , PreExp(..), Exp1, Prim(..)
+    , insertFD, fromListFD, mapExt, mapLocs, mapExprs, visitExp
+    , progToEnv, getFunTy, subst, substE, hasTimeIt, projNonFirst
+    , mkProj, mkProd, mkLets, flatLets
 
       -- * Types and helpers
-    , Ty1, UrTy(..), pattern Packed, pattern SymTy
-    , voidTy, hasPacked, sizeOf, isPackedTy, primRetTy, projTy
-    , isProdTy, isNestedProdTy
+    , UrTy(..), Ty1, pattern SymTy
+    , mkProdTy, projTy , voidTy, isProdTy, isNestedProdTy, isPackedTy, hasPacked
+    , sizeOfTy, primArgsTy, primRetTy, dummyCursorTy
 
-
-      -- * Expression and Prog helpers
-    , subst, substE, getFunTy
-    , mapExprs
-    , mapExt
-    , mapLocs
-    , numIndrsDataCon
-    , progToEnv
-    , insertFD, fromListFD
-
-      -- * Trivial expressions
-    , assertTriv, assertTrivs, hasTimeIt, isTrivial
-    , projNonFirst, mkProj, mkProd, mkProdTy, mkLets, flatLets
-
-      -- * Examples.  TODO: Move to separate examples file.
-    , add1Prog
-    , add1ProgLetLeft
-    , add1ProgLetRight
-    , add1ProgChallenge
-    , add1ProgSharing
+      -- * Misc
+    , numIndrsDataCon, assertTriv, assertTrivs
     )
     where
 
@@ -77,27 +61,8 @@ data Prog = Prog { ddefs    :: DDefs Ty1
                  , fundefs  :: FunDefs
                  , mainExp  :: Maybe (L Exp1, Ty1)
                  }
-  deriving (Show,Eq,Ord, Generic, NFData)
+  deriving (Show, Eq, Ord, Generic, NFData)
 
-
--- FIXME: Finish this and merge with L2.Constraint
-{-# DEPRECATED Constraint "L2 defines constraints" #-}
-data Constraint = Constraint
-  deriving (Read,Show,Eq,Ord, Generic, NFData)
-instance Out Constraint
-
-
--- | Abstract some of the differences of top level program types, by
---   having a common way to extract an initial environment.
-progToEnv :: Prog -> Env2 (UrTy ())
-progToEnv Prog{fundefs} =
-    Env2 M.empty
-         (M.fromList [ (n,(fmap (\_->()) a, fmap (\_->()) b))
-                     | FunDef n _ (a,b) _ <- M.elems fundefs ])
-
-
---------------------------------------------------------------------------------
--- Fundefs
 
 -- | A set of top-level recursive function definitions
 type FunDefs = Map Var FunDef
@@ -106,26 +71,16 @@ data FunDef = FunDef { funName  :: Var
                      , funArg   :: Var
                      , funTy    :: (Ty1, Ty1) -- ^ (in, out)
                      , funBody  :: L Exp1 }
-  deriving (Read,Show,Eq,Ord, Generic)
+  deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
--- deriving
-instance NFData FunDef where
-
-instance Out FunDef
-
-insertFD :: FunDef -> FunDefs -> FunDefs
-insertFD d = M.insertWith err' (funName d) d
-  where
-   err' = error $ "insertFD: function definition with duplicate name: "++show (funName d)
-
-fromListFD :: [FunDef] -> FunDefs
-fromListFD = L.foldr insertFD M.empty
-
---------------------------------------------------------------------------------
 
 -- | A convenient, default instantiation of the L1 expression type.
 type Exp1 = PreExp NoExt () Ty1
 
+-- | The type rperesentation used in L1.
+type Ty1 = UrTy ()
+
+--------------------------------------------------------------------------------
 
 -- Shorthand to make the below definition more readable.
 -- I.e., this covers all the verbose recursive fields.
@@ -192,12 +147,8 @@ data PreExp (ext :: * -> * -> *) loc dec =
 instance NFData (PreExp e l d) => NFData (L (PreExp e l d)) where
   rnf (L loc a) = seq loc (rnf a)
 
-instance Out (PreExp e l d) => Out (L (PreExp e l d)) where
-  doc (L _ a)       = doc a
-  docPrec n (L _ a) = docPrec n a
-
 instance (Out l, Show l, Show d, Out d, Expression (e l d))
-         => Expression (PreExp e l d) where
+      => Expression (PreExp e l d) where
   type (TyOf (PreExp e l d))  = d
   type (LocOf (PreExp e l d)) = l
   isTrivial = f
@@ -248,11 +199,9 @@ instance Expression (PreExp e l d) => Expression (L (PreExp e l d)) where
   type (LocOf (L (PreExp e l d))) = l
   isTrivial (L _ e) = isTrivial e
 
+
 -- | Free data variables.  Does not include function variables, which
 -- currently occupy a different namespace.  Does not include location/region variables.
-instance FreeVars (PreExp e l d) => FreeVars (L (PreExp e l d)) where
-  gFreeVars (L _ a) = gFreeVars a
-
 instance FreeVars (e l d) => FreeVars (PreExp e l d) where
   gFreeVars ex = case ex of
       VarE v    -> S.singleton v
@@ -277,42 +226,19 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
 
       Ext q -> gFreeVars q
 
+
 -- Recover type of an expression given a type-expression
 instance (Show l, Out l, Expression (e l (UrTy l)),
           TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)),
           Typeable (e l (UrTy l)))
-         =>
-         Typeable (PreExp e l (UrTy l)) where
+       => Typeable (PreExp e l (UrTy l)) where
   gTypeExp ddfs env2 ex =
     case ex of
-      VarE v       -> M.findWithDefault
-                      (error $ "Cannot find type of variable " ++ show v)
-                      v (vEnv env2)
+      VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v) v (vEnv env2)
       LitE _       -> IntTy
       LitSymE _    -> SymTy
       AppE v _ _   -> snd $ fEnv env2 # v
-      PrimAppE p _ ->
-        case p of
-          AddP    -> IntTy
-          SubP    -> IntTy
-          MulP    -> IntTy
-          ModP    -> IntTy
-          DivP    -> IntTy
-          EqIntP  -> BoolTy
-          EqSymP  -> BoolTy
-          LtP     -> BoolTy
-          GtP     -> BoolTy
-          MkTrue  -> BoolTy
-          MkFalse -> BoolTy
-          SymAppend      -> SymTy
-          DictInsertP ty -> SymDictTy (noLocsHere ty)
-          DictLookupP ty -> noLocsHere ty
-          DictEmptyP  ty -> SymDictTy (noLocsHere ty)
-          DictHasKeyP ty -> SymDictTy (noLocsHere ty)
-          SizeParam      -> IntTy
-          ReadPackedFile _ _ ty -> (noLocsHere ty)
-          ErrorP _ ty -> (noLocsHere ty)
-          PEndOf -> CursorTy
+      PrimAppE p _ -> primRetTy p
 
       LetE (v,_,t,_) e -> gTypeExp ddfs (extendVEnv v t env2) e
       IfE _ e _        -> gTypeExp ddfs env2 e
@@ -335,13 +261,6 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
             args' = L.map fst args
         in gTypeExp ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
 
-    where
-      -- This crops up in the types for primitive operations.  Can we remove the need for this?
-      noLocsHere :: Show a => UrTy a -> UrTy b
-      noLocsHere t = fmap (\_ -> error $ "This type should not contain a location: "++show t) t
-
-
-
 instance Typeable (PreExp e l (UrTy l)) => Typeable (L (PreExp e l (UrTy l))) where
   gTypeExp ddfs env2 (L _ ex) = gTypeExp ddfs env2 ex
 
@@ -362,8 +281,6 @@ data Prim ty
               -- ^ crash and issue a static error message.
               --   To avoid needing inference, this is labeled with a return type.
 
---          | GetLoc Var
---          | AddLoc Int Var
           | SizeParam
 
           | MkTrue  -- ^ Zero argument constructor.
@@ -379,27 +296,28 @@ data Prim ty
           -- InferLayout the pass that takes L1->L2, and InferLocations is an
           -- L2->L2 pass.
 
-
   deriving (Read, Show, Eq, Ord, Generic, NFData, Functor, Foldable, Traversable)
 
-instance Out d => Out (Prim d)
-instance Out a => Out (UrTy a)
--- Do this manually to get prettier formatting:
+-----------------------------------------------------------------------------------------
+-- Do this manually to get prettier formatting: (Issue #90)
+
+instance Out (PreExp e l d) => Out (L (PreExp e l d)) where
+  doc (L _ a)       = doc a
+  docPrec n (L _ a) = docPrec n a
 
 instance (Out l, Out d, Out (e l d)) => Out (PreExp e l d)
 
+instance Out d => Out (Prim d)
+
+instance Out a => Out (UrTy a)
+
 instance Out Prog
+
+-----------------------------------------------------------------------------------------
 
 -- TODO/FIXME: leaving out these for now.
 pattern SymTy :: forall a. UrTy a
 pattern SymTy = IntTy
-
-{-# DEPRECATED Packed "getting rid of this shorthand" #-}
-pattern Packed :: TyCon -> UrTy ()
-pattern Packed c = PackedTy c ()
-
--- | The type rperesentation used in L1.
-type Ty1 = UrTy ()
 
 -- | Types include boxed/pointer-based products as well as unpacked
 -- algebraic datatypes.  This data is parameterized to allow
@@ -431,26 +349,18 @@ data UrTy a =
 
   deriving (Show, Read, Ord, Eq, Generic, NFData, Functor, Foldable, Traversable)
 
+--------------------------------------------------------------------------------
+-- Helpers
 
-projTy :: (Out a) => Int -> UrTy a -> UrTy a
-projTy 0 (ProdTy (ty:_))  = ty
-projTy n (ProdTy (_:tys)) = projTy (n-1) (ProdTy tys)
-projTy _ ty = error $ "projTy: " ++ sdoc ty ++ " is not a projection!"
+-- | Insert a 'FunDef' into 'FunDefs'.
+-- Raise an error if a function with the same name already exists.
+insertFD :: FunDef -> FunDefs -> FunDefs
+insertFD d = M.insertWith err' (funName d) d
+  where
+   err' = error $ "insertFD: function definition with duplicate name: "++show (funName d)
 
-
-isNestedProdTy :: UrTy a -> Bool
-isNestedProdTy ty =
-  case ty of
-    ProdTy tys -> if any isProdTy tys
-                  then True
-                  else False
-    _ -> False
-
-
-isProdTy :: UrTy a -> Bool
-isProdTy ProdTy{} = True
-isProdTy _ = False
-
+fromListFD :: [FunDef] -> FunDefs
+fromListFD = L.foldr insertFD M.empty
 
 -- | Apply a function to the extension points only.
 mapExt :: (e1 l d -> e2 l d) -> PreExp e1 l d -> PreExp e2 l d
@@ -460,6 +370,15 @@ mapExt fn = visitExp id fn id
 mapLocs :: (e l2 d -> e l2 d) -> PreExp e l2 d -> PreExp e l2 d
 mapLocs fn = visitExp id fn id
 
+-- | Transform the expressions within a program.
+mapExprs :: (L Exp1 -> L Exp1) -> Prog -> Prog
+mapExprs fn prg@Prog{fundefs,mainExp} =
+  let mainExp' = case mainExp of
+                   Nothing -> Nothing
+                   Just (ex,ty) -> Just (fn ex, ty)
+  in
+  prg{ fundefs = M.map (\g -> g {funBody = fn (funBody g)}) fundefs
+     , mainExp =  mainExp' }
 
 -- | Apply a function to the locations, extensions, and
 -- binder-decorations, respectively.
@@ -476,48 +395,14 @@ visitExp _fl fe _fd exp0 = fin
        Ext  x        -> Ext (fe x)
        _ -> _finishme
 
-voidTy :: Ty1
-voidTy = ProdTy []
+-- | Abstract some of the differences of top level program types, by
+--   having a common way to extract an initial environment.
+progToEnv :: Prog -> Env2 Ty1
+progToEnv Prog{fundefs} =
+    Env2 M.empty
+         (M.fromList [ (n,(fmap (\_->()) a, fmap (\_->()) b))
+                     | FunDef n _ (a,b) _ <- M.elems fundefs ])
 
--- | Do values of this type contain packed data?
-hasPacked :: Show a => UrTy a -> Bool
-hasPacked t =
-  case t of
-    PackedTy{}     -> True
-    ProdTy ls      -> any hasPacked ls
-    SymTy          -> False
-    BoolTy         -> False
-    IntTy          -> False
-    SymDictTy ty   -> hasPacked ty
-    ListTy _       -> error "FINISHLISTS"
-    PtrTy          -> False
-    CursorTy       -> False
-
--- | Provide a size in bytes, if it is statically known.
-sizeOf :: UrTy a -> Maybe Int
-sizeOf t =
-  case t of
-    PackedTy{}  -> Nothing
-    ProdTy ls   -> sum <$> mapM sizeOf ls
-    SymDictTy _ -> Just 8 -- Always a pointer.
-    IntTy       -> Just 8
-    BoolTy      -> sizeOf IntTy
-    ListTy _    -> error "FINISHLISTS"
-    PtrTy{}     -> Just 8 -- Assuming 64 bit
-    CursorTy{}  -> Just 8
-
--- | Transform the expressions within a program.
-mapExprs :: (L Exp1 -> L Exp1) -> Prog -> Prog
-mapExprs fn prg@Prog{fundefs,mainExp} =
-  let mainExp' = case mainExp of
-                   Nothing -> Nothing
-                   Just (ex,ty) -> Just (fn ex, ty)
-  in
-  prg{ fundefs = M.map (\g -> g {funBody = fn (funBody g)}) fundefs
-     , mainExp =  mainExp' }
-
-
---------------------------------------------------------------------------------
 
 -- | Look up the input/output type of a top-level function binding.
 getFunTy :: Var -> Prog -> (Ty1,Ty1)
@@ -526,9 +411,9 @@ getFunTy fn Prog{fundefs} =
       Just FunDef{funTy=(argty,retty)} -> (argty,retty)
       Nothing -> error $ "getFunTy: L1 program does not contain binding for function: "++show fn
 
-
+-- | Substitute an expression in place of a variable.
 subst :: (Eq d, Eq l, Eq (e l d)) => Var -> L (PreExp e l d) -> L (PreExp e l d)
-       -> L (PreExp e l d)
+      -> L (PreExp e l d)
 subst old new (L p0 ex) = L p0 $
   let go = subst old new in
   case ex of
@@ -559,14 +444,13 @@ subst old new (L p0 ex) = L p0 $
 
     Ext _ -> ex
 
--- | Expensive subst that looks for a whole matching sub-EXPRESSION.
---   If the old expression is a variable, this still avoids going under binder.
+-- | Expensive 'subst' that looks for a whole matching sub-EXPRESSION.
+-- If the old expression is a variable, this still avoids going under binder.
 substE :: (Eq d, Eq l, Eq (e l d)) => L (PreExp e l d) -> L (PreExp e l d) -> L (PreExp e l d)
        -> L (PreExp e l d)
 substE old new (L p0 ex) = L p0 $
   let go = substE old new in
   case ex of
-    -- TODO(cskksc): this would return incorrect Loc
     _ | ex == unLoc old -> unLoc new
 
     VarE v          -> VarE v
@@ -592,6 +476,119 @@ substE old new (L p0 ex) = L p0 $
 
     Ext _ -> ex
 
+-- | Does the expression contain a TimeIt form?
+hasTimeIt :: L (PreExp e l d) -> Bool
+hasTimeIt (L _ rhs) =
+    case rhs of
+      TimeIt _ _ _ -> True
+      DataConE{}   -> False
+      VarE _       -> False
+      LitE _       -> False
+      LitSymE _    -> False
+      AppE _ _ _   -> False
+      PrimAppE _ _ -> False
+      ProjE _ e    -> hasTimeIt e
+      MkProdE ls   -> any hasTimeIt ls
+      IfE a b c    -> hasTimeIt a || hasTimeIt b || hasTimeIt c
+      CaseE _ ls   -> any hasTimeIt [ e | (_,_,e) <- ls ]
+      LetE (_,_,_,e1) e2 -> hasTimeIt e1 || hasTimeIt e2
+      MapE (_,_,e1) e2   -> hasTimeIt e1 || hasTimeIt e2
+      FoldE (_,_,e1) (_,_,e2) e3 -> hasTimeIt e1 || hasTimeIt e2 || hasTimeIt e3
+      Ext _ -> False
+
+-- | Project something which had better not be the first thing in a tuple.
+projNonFirst :: (Out l, Out d, Out (e l d)) => Int -> L (PreExp e l d) -> L (PreExp e l d)
+projNonFirst 0 e = error $ "projNonFirst: expected nonzero index into expr: " ++ sdoc e
+projNonFirst i e = L (locOf e) $ ProjE i e
+
+-- | Project position K of N, unless (K,N) = (0,1) in which case no
+-- projection is necessary.
+mkProj :: (Eq a, Num a) => Int -> a -> L (PreExp e l d) -> L (PreExp e l d)
+mkProj 0 1 e  = e
+mkProj ix _ e = L (locOf e) $ ProjE ix e
+
+-- | Make a product type while avoiding unary products.
+mkProd :: [L (PreExp e l d)]-> L (PreExp e l d)
+mkProd [e] = e
+mkProd ls  = L (locOf $ head ls) $ MkProdE ls
+
+-- | Make a nested series of lets.
+mkLets :: [(Var, [loc], dec, L (PreExp ext loc dec))] -> L (PreExp ext loc dec) -> L (PreExp ext loc dec)
+mkLets [] bod     = bod
+mkLets (b:bs) bod = L NoLoc $ LetE b (mkLets bs bod)
+
+-- | Helper function that lifts out Lets on the RHS of other Lets.
+-- Absolutely requires unique names.
+mkLetE :: (Var, [l], d, L (PreExp e l d)) -> L (PreExp e l d) -> L (PreExp e l d)
+mkLetE (vr,lvs,ty,(L _ (LetE bnd e))) bod = mkLetE bnd $ mkLetE (vr,lvs,ty,e) bod
+mkLetE bnd bod = L NoLoc $ LetE bnd bod
+
+-- | Alternative version of L1.mkLets that also flattens
+flatLets :: [(Var,[l],d,L (PreExp e l d))] -> L (PreExp e l d) -> L (PreExp e l d)
+flatLets [] bod = bod
+flatLets (b:bs) bod = mkLetE b (flatLets bs bod)
+
+-- | Same as mkProd, at the type level
+mkProdTy :: [UrTy a]-> UrTy a
+mkProdTy [t] = t
+mkProdTy ls  = ProdTy ls
+
+projTy :: (Out a) => Int -> UrTy a -> UrTy a
+projTy 0 (ProdTy (ty:_))  = ty
+projTy n (ProdTy (_:tys)) = projTy (n-1) (ProdTy tys)
+projTy _ ty = error $ "projTy: " ++ sdoc ty ++ " is not a projection!"
+
+-- | A makeshift void type.
+voidTy :: Ty1
+voidTy = ProdTy []
+
+-- | Are values of this type tuples ?
+isProdTy :: UrTy a -> Bool
+isProdTy ProdTy{} = True
+isProdTy _ = False
+
+-- | Do values of this type contain nested tuples ?
+isNestedProdTy :: UrTy a -> Bool
+isNestedProdTy ty =
+  case ty of
+    ProdTy tys -> if any isProdTy tys
+                  then True
+                  else False
+    _ -> False
+
+-- | Are values of this type Packed ?
+isPackedTy :: UrTy a -> Bool
+isPackedTy PackedTy{} = True
+isPackedTy _ = False
+
+-- | Do values of this type contain packed data?
+hasPacked :: Show a => UrTy a -> Bool
+hasPacked t =
+  case t of
+    PackedTy{}     -> True
+    ProdTy ls      -> any hasPacked ls
+    SymTy          -> False
+    BoolTy         -> False
+    IntTy          -> False
+    SymDictTy ty   -> hasPacked ty
+    ListTy _       -> error "FINISHLISTS"
+    PtrTy          -> False
+    CursorTy       -> False
+
+-- | Provide a size in bytes, if it is statically known.
+sizeOfTy :: UrTy a -> Maybe Int
+sizeOfTy t =
+  case t of
+    PackedTy{}  -> Nothing
+    ProdTy ls   -> sum <$> mapM sizeOfTy ls
+    SymDictTy _ -> Just 8 -- Always a pointer.
+    IntTy       -> Just 8
+    BoolTy      -> sizeOfTy IntTy
+    ListTy _    -> error "FINISHLISTS"
+    PtrTy{}     -> Just 8 -- Assuming 64 bit
+    CursorTy{}  -> Just 8
+
+-- | Type of the arguments for a primitive operation.
 primArgsTy :: Prim Ty1 -> [Ty1]
 primArgsTy p =
   case p of
@@ -615,12 +612,6 @@ primArgsTy p =
     ReadPackedFile{} -> []
     (ErrorP _ _) -> []
     PEndOf -> error "primArgsTy: PEndOf not handled yet"
-
-
-isPackedTy :: UrTy a -> Bool
-isPackedTy PackedTy{} = True
-isPackedTy _ = False
-
 
 -- | Return type for a primitive operation.
 primRetTy :: Prim (UrTy a) -> (UrTy a)
@@ -650,6 +641,7 @@ primRetTy p =
 dummyCursorTy :: UrTy a
 dummyCursorTy = CursorTy
 
+-- | The number of indirections needed by a 'DataCon' for full random access
 numIndrsDataCon :: Out a => DDefs (UrTy a) -> DataCon -> Maybe Int
 numIndrsDataCon ddfs dcon =
     if numPacked > 1
@@ -659,186 +651,14 @@ numIndrsDataCon ddfs dcon =
     tys = lookupDataCon ddfs dcon
     numPacked = length $ L.filter isPackedTy tys
 
---------------------------------------------------------------------------------
-
--- Simple invariant assertions:
-
--- assertTriv :: (Out l, Out d, Out (e l d)) => L (PreExp e l d) -> a -> a
+-- | Ensure that an expression is trivial.
 assertTriv :: (Expression e) => L e -> a -> a
 assertTriv (L _ e) =
   if isTrivial e
   then id
   else error$ "Expected trivial argument, got: "++sdoc e
 
+-- | List version of 'assertTriv'.
 assertTrivs :: (Expression e) => [L e] -> a -> a
 assertTrivs [] = id
 assertTrivs (a:b) = assertTriv a . assertTrivs b
-
--- | Does the expression contain a TimeIt form?
-hasTimeIt :: L Exp1 -> Bool
-hasTimeIt (L _ rhs) =
-    case rhs of
-      TimeIt _ _ _ -> True
-      DataConE{}   -> False
-      VarE _       -> False
-      LitE _       -> False
-      LitSymE _    -> False
-      AppE _ _ _   -> False
-      PrimAppE _ _ -> False
-      ProjE _ e    -> hasTimeIt e
-      MkProdE ls   -> any hasTimeIt ls
-      IfE a b c    -> hasTimeIt a || hasTimeIt b || hasTimeIt c
-      CaseE _ ls   -> any hasTimeIt [ e | (_,_,e) <- ls ]
-      LetE (_,_,_,e1) e2 -> hasTimeIt e1 || hasTimeIt e2
-      MapE (_,_,e1) e2   -> hasTimeIt e1 || hasTimeIt e2
-      FoldE (_,_,e1) (_,_,e2) e3 -> hasTimeIt e1 || hasTimeIt e2 || hasTimeIt e3
-      Ext _ -> False
-
--- | Project something which had better not be the first thing in a tuple.
-projNonFirst :: Int -> L Exp1 -> L Exp1
-projNonFirst 0 e = error $ "projNonFirst: expected nonzero index into expr: " ++ sdoc e
-projNonFirst i e = L (locOf e) $ ProjE i e
-
--- | Project position K of N, unless (K,N) = (0,1) in which case no
--- projection is necessary.
-mkProj :: (Eq a, Num a) => Int -> a -> L (PreExp e l d) -> L (PreExp e l d)
-mkProj 0 1 e  = e
-mkProj ix _ e = L (locOf e) $ ProjE ix e
-
--- | Make a product type while avoiding unary products.
-mkProd :: [L (PreExp e l d)]-> L (PreExp e l d)
-mkProd [e] = e
--- TODO(cskksc): this or NoLoc ?
-mkProd ls  = L (locOf $ head ls) $ MkProdE ls
-
--- | Same as mkProd, at the type level
-mkProdTy :: [UrTy a]-> UrTy a
-mkProdTy [t] = t
-mkProdTy ls  = ProdTy ls
-
--- | Make a nested series of lets.
-mkLets :: [(Var, [loc], dec, L (PreExp ext loc dec))] -> L (PreExp ext loc dec) ->
-          L (PreExp ext loc dec)
-mkLets [] bod     = bod
-mkLets (b:bs) bod = L NoLoc $ LetE b (mkLets bs bod)
-
-
--- | Helper function that lifts out Lets on the RHS of other Lets.
---   Absolutely requires unique names.
-mkLetE :: (Var, [l], d, L (PreExp e l d)) -> L (PreExp e l d) -> L (PreExp e l d)
-mkLetE (vr,lvs,ty,(L _ (LetE bnd e))) bod = mkLetE bnd $ mkLetE (vr,lvs,ty,e) bod
-mkLetE bnd bod = L NoLoc $ LetE bnd bod
-
--- | Alternative version of L1.mkLets that also flattens
-flatLets :: [(Var,[l],d,L (PreExp e l d))] -> L (PreExp e l d) -> L (PreExp e l d)
-flatLets [] bod = bod
-flatLets (b:bs) bod = mkLetE b (flatLets bs bod)
-
-
---------------------------------------------------------------------------------
-
-treeTy :: Ty1
-treeTy = Packed "Tree"
-
-treeDD :: DDefs (UrTy ())
-treeDD = (fromListDD [DDef "Tree"
-                      [ ("Leaf",[(False,IntTy)])
-                      , ("Node",[(False,Packed "Tree")
-                                ,(False,Packed "Tree")])]])
-
-mkAdd1Prog :: L Exp1 -> Maybe (L Exp1, Ty1) -> Prog
-mkAdd1Prog bod mainExp = Prog treeDD
-                              (M.fromList [("add1",mkAdd1Fun bod)])
-                              mainExp
-
-mkAdd1Fun :: L Exp1 -> FunDef
-mkAdd1Fun bod = FunDef "add1" "tr" (treeTy,treeTy) bod
-
-----------------
-
--- TODO(cskksc): a function from Exp1 to (L Exp1) to avoid writing
--- (L NoLoc exp) everywhere. How to get around #define EXP ?
-
--- | The basic form of the add1 program where recursions happen
--- immediately as arguments to the data-constructor.
-add1Prog :: Prog
-add1Prog = mkAdd1Prog exadd1Bod Nothing
-
-exadd1Bod :: L Exp1
-exadd1Bod = l$
-    CaseE (l$ VarE "tr") $
-      [ ("Leaf", [("n",())],
-         l$ PrimAppE AddP [l$ VarE "n", l$ LitE 1])
-      , ("Node", [("x",()),("y",())],
-         l$ DataConE () "Node"
-          [ l$ AppE "add1" [] (l$ VarE "x")
-          , l$ AppE "add1" [] (l$ VarE "y")])
-      ]
-
-exadd1BodLetLeft :: L Exp1
-exadd1BodLetLeft = l$
-    CaseE (l$ VarE "tr") $
-      [ ("Leaf", [("n",())], l$ PrimAppE AddP [l$ VarE "n", l$ LitE 1])
-      , ("Node", [("x",()),("y",())],
-         l$ LetE ("x2",[], Packed "Tree", l$ AppE "add1" [] (l$ VarE "x")) $
-         l$ LetE ("y2",[], Packed "Tree", l$ AppE "add1" [] (l$ VarE "y")) $
-         l$ DataConE () "Node"
-          [ l$ VarE "x2", l$ VarE "y2"])
-      ]
-
--- | A more challenging case where recursions are performed right-to-left
-exadd1BodLetRight :: L Exp1
-exadd1BodLetRight = l$
-    CaseE (l$ VarE "tr") $
-      [ ("Leaf", [("n",())], l$ PrimAppE AddP [l$ VarE "n", l$ LitE 1])
-      , ("Node", [("x",()),("y",())],
-         l$ LetE ("y2",[], Packed "Tree", l$ AppE "add1" [] (l$ VarE "y")) $
-         l$ LetE ("x2",[], Packed "Tree", l$ AppE "add1" [] (l$ VarE "x")) $
-         l$ DataConE () "Node"
-          [ l$ VarE "x2", l$ VarE "y2"])
-      ]
-
--- | Add1 program with let bindings, recurring in left-to-right order.
-add1ProgLetLeft :: Prog
-add1ProgLetLeft = mkAdd1Prog exadd1BodLetLeft Nothing
-
--- | Add1 program with let bindings, recurring in right-to-left order.
-add1ProgLetRight :: Prog
-add1ProgLetRight = mkAdd1Prog exadd1BodLetRight Nothing
-
-
--- | An even more challenging case where there is an (apparent) data
--- dependency where x2 depends on y2.
-add1ProgChallenge :: Prog
-add1ProgChallenge =
-    Prog treeDD
-         (M.fromList [ ("add1",mkAdd1Fun bod)
-                     , ("pred", FunDef "pred" "tr" (treeTy, BoolTy)
-                        (l$ CaseE (l$ VarE "tr") $
-                         [ ("Leaf", [("n",())], l$ PrimAppE MkTrue [])
-                         , ("Node", [("x",()),("y",())], l$ PrimAppE MkFalse [])]))])
-         Nothing
-  where
-   bod = l$
-    CaseE (l$ VarE "tr") $
-      [ ("Leaf", [("n",())], l$ PrimAppE AddP [l$ VarE "n", l$ LitE 1])
-      , ("Node", [("x",()),("y",())],
-         l$ LetE ("y2",[], Packed "Tree", l$ AppE "add1" [] (l$ VarE "y")) $
-         l$ LetE ("x2",[], Packed "Tree",
-              (l$ IfE (l$ AppE "pred" [] (l$ VarE "y2"))
-                   (l$ AppE "add1" [] (l$ VarE "x"))
-                   (l$ AppE "add1" [] (l$ VarE "x")))) $
-         l$ DataConE () "Node" [ l$ VarE "x2", l$ VarE "y2"])
-      ]
-
--- | This program is a challenge because a packed value flows to two destinations.
-add1ProgSharing :: Prog
-add1ProgSharing = Prog treeDD (M.fromList [("add1",mkAdd1Fun bod)]) Nothing
-  where
-   bod = l$
-    CaseE (l$ VarE "tr") $
-      [ ("Leaf", [("n",())], l$ PrimAppE AddP [l$ VarE "n", l$ LitE 1])
-      , ("Node", [("x",()),("y",())],
-         l$ LetE ("x2",[], Packed "Tree", l$ AppE "add1" [] (l$ VarE "x")) $
-         l$ DataConE () "Node" [ l$ VarE "x2", l$ VarE "x2"])
-      ]

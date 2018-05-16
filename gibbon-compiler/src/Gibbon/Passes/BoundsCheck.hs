@@ -287,7 +287,7 @@ sizeOfScalars ddfs dcon =
     tys =  lookupDataCon ddfs dcon
     scalars = filter (not . isPackedTy) tys
     packed  = filter isPackedTy tys
-    sizes = sum $ map (fromJust . sizeOf) scalars -- or just assume 8 for now ?
+    sizes = sum $ map (fromJust . sizeOfTy) scalars -- or just assume 8 for now ?
 
 
 -- | Add redirection nodes to the ddefs
