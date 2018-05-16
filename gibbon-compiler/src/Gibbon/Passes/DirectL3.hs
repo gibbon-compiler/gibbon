@@ -1,13 +1,11 @@
 module Gibbon.Passes.DirectL3
     (directL3) where
 
-import Control.Monad.Except
 import Data.Loc
 import Data.List as L
 import Data.Map as M
 
 import Gibbon.L1.Syntax
-import Gibbon.L1.Typecheck
 import Gibbon.L2.Syntax (stripTyLocs)
 import qualified Gibbon.L3.Syntax as L3
 
@@ -15,7 +13,7 @@ import qualified Gibbon.L3.Syntax as L3
 -- | Directly convert the source program to L3. Used in the pointer mode
 --
 directL3 :: Prog -> L3.Prog
-directL3 prg@(Prog ddfs fndefs mnExp) = do
+directL3 (Prog ddfs fndefs mnExp) = do
     let mnExp' = case mnExp of
                    Nothing -> Nothing
                    Just (ex,ty) -> Just (go ex, stripTyLocs ty)

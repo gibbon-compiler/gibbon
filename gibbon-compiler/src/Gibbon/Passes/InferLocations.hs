@@ -651,6 +651,7 @@ inferExp env@FullEnv{dataDefs}
                                     let (ArgCopy _ v' _ _) = last argLs
                                     in return $ lc$ LetE (v',[],arrOut $ lookupFEnv f env, lc$ AppE f lvs e) $
                                        lc$ DataConE d k [ e' | (e',_,_) <- ls'']
+                                _ -> error "inferExp: Unexpected pattern <error1>"
                          else return $ lc$ DataConE d k [ e' | (e',_,_)  <- ls'']
                   return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 

@@ -381,7 +381,17 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
           Ext (LetLocE v (AfterVariableLE x l1) e) -> do
                  e' <- go e
                  return $ Ext (LetLocE v (AfterVariableLE x l1) e')
+
+          Ext (LetLocE v (InRegionLE r) bod) -> do
+                 bod' <- go bod
+                 return $ Ext (LetLocE v (InRegionLE r) bod')
+
           Ext (IndirectionE{}) -> return e
+
+          Ext ext -> error $ "RouteEnds: Shouldn't encounter " ++ sdoc ext
+
+          MapE{} -> error "RouteEnds: todo MapE"
+          FoldE{} -> error "RouteEnds: todo FoldE"
 
         where  mkRet :: [LocVar] -> (L Exp2) -> SyM (L Exp2)
                mkRet ls (L p (VarE v)) =
