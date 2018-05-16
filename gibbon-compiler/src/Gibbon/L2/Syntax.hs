@@ -21,7 +21,7 @@
 module Gibbon.L2.Syntax
     ( Prog(..), FunDef(..), Effect(..), ArrowTy(..)
     , LocRet(..), LocExp, PreLocExp(..)
-    , NewFuns, getFunTy
+    , FunDefs, getFunTy
     , progToEnv
 
     -- * Operations on types
@@ -75,7 +75,7 @@ import Text.PrettyPrint.GenericPretty
 import Gibbon.Common
 import Gibbon.GenericOps
 import Gibbon.L1.Syntax hiding
-       (FunDef, Prog, mapExprs, progToEnv, fundefs, getFunTy, add1Prog)
+       (FunDefs, FunDef, Prog, mapExprs, progToEnv, fundefs, getFunTy, add1Prog)
 import qualified Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
@@ -228,11 +228,11 @@ instance Out LocRet
 type Ty2 = L1.UrTy LocVar
 
 
-type NewFuns = M.Map Var FunDef
+type FunDefs = M.Map Var FunDef
 
 -- | Here we only change the types of FUNCTIONS:
 data Prog = Prog { ddefs    :: DDefs Ty2
-                 , fundefs  :: NewFuns
+                 , fundefs  :: FunDefs
                  , mainExp  :: Maybe (L Exp2, Ty2)
                  }
   deriving (Show, Ord, Eq, Generic, NFData)
@@ -258,7 +258,7 @@ data FunDef = FunDef { funname :: Var
 --------------------------------------------------------------------------------
 
 -- | Retrieve the type of a function:
-getFunTy :: NewFuns -> Var -> ArrowTy Ty2
+getFunTy :: FunDefs -> Var -> ArrowTy Ty2
 getFunTy mp f = case M.lookup f mp of
                   Nothing -> error $ "getFunTy: function was not bound: "++show f
                   Just (FunDef{funty}) -> funty
@@ -538,7 +538,7 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           _ -> gFreeVars ex
 
 
-initFunEnv :: NewFuns -> FunEnv Ty2
+initFunEnv :: FunDefs -> FunEnv Ty2
 initFunEnv fds = M.foldr (\fn acc -> let fnty = (funty fn)
                                      in M.insert (funname fn) (arrIn fnty, arrOut fnty) acc)
                  M.empty fds

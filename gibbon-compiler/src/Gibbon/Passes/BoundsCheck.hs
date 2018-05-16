@@ -11,7 +11,7 @@ import qualified Data.Set as S
 
 import Gibbon.GenericOps
 import Gibbon.Common
-import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..))
+import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..), FunDefs)
 import Gibbon.L2.Syntax as L2
 
 {- Note [Infinite regions]
@@ -138,7 +138,7 @@ boundsCheck Prog{ddefs,fundefs,mainExp} = do
   --                 boundsCheckExp ddefs fundefs M.empty env2 (depList mn) S.empty mn
   return $ Prog ddefs fundefs' mainExp
 
-boundsCheckFn :: DDefs Ty2 -> NewFuns -> L2.FunDef -> SyM L2.FunDef
+boundsCheckFn :: DDefs Ty2 -> FunDefs -> L2.FunDef -> SyM L2.FunDef
 boundsCheckFn ddefs fundefs f@FunDef{funarg,funty,funbod} = do
   let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionVar r)) (locVars funty)
       initTyEnv  = M.singleton funarg (arrIn funty)
@@ -147,7 +147,7 @@ boundsCheckFn ddefs fundefs f@FunDef{funarg,funty,funbod} = do
   bod' <- boundsCheckExp ddefs fundefs initRegEnv env2 deps S.empty funbod
   return $ f {funbod = bod'}
 
-boundsCheckExp :: DDefs Ty2 -> NewFuns -> RegEnv -> Env2 Ty2 -> Deps -> S.Set Var
+boundsCheckExp :: DDefs Ty2 -> FunDefs -> RegEnv -> Env2 Ty2 -> Deps -> S.Set Var
                -> L L2.Exp2 -> SyM (L L2.Exp2)
 boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
   case ex of

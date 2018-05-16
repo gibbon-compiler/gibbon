@@ -132,7 +132,7 @@ needsLayout (L2.Prog ddefs fundefs mainExp) =
                       fundefs
   in (mainExp' || (L.any id (M.elems fnsneedlayout)), (S.fromList $ M.keys $ M.filter id fnsneedlayout))
 
-needsLayoutExp :: DDefs L2.Ty2 -> L2.NewFuns -> Bool -> S.Set Var -> S.Set LocVar
+needsLayoutExp :: DDefs L2.Ty2 -> L2.FunDefs -> Bool -> S.Set Var -> S.Set LocVar
                -> Env2 L2.Ty2 -> L L2.Exp2 -> Bool
 needsLayoutExp ddefs fundefs base special traversed env2 (L _ ex) = base ||
   case ex of

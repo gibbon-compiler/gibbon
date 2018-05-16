@@ -116,7 +116,7 @@ type TcM a = Except TCError a
 -- | Check an expression. Given the data definitions, an general type environment, a function map,
 -- a constraint set, a region set, an (input) location state map, and the expression, this function
 -- will either throw an error, or return a pair of expression type and new location state map.
-tcExp :: DDefs Ty2 -> Env2 Ty2 -> NewFuns
+tcExp :: DDefs Ty2 -> Env2 Ty2 -> FunDefs
       -> ConstraintSet -> RegionSet -> LocationTypeState -> Exp
       -> TcM (Ty2, LocationTypeState)
 tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
@@ -391,7 +391,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
 
 
 -- | Helper function to check case branches.
-tcCases :: DDefs Ty2 -> Env2 Ty2 -> NewFuns
+tcCases :: DDefs Ty2 -> Env2 Ty2 -> FunDefs
         -> ConstraintSet -> RegionSet -> LocationTypeState -> LocVar
         -> Region -> [(DataCon, [(Var,LocVar)], Exp)]
         -> TcM ([Ty2], LocationTypeState)
@@ -446,7 +446,7 @@ tcProj e _i ty = throwError $ GenericTC ("Projection from non-tuple type " ++ (s
 -- the order matters because the location state map is threaded through,
 -- so this is assuming the list of expressions would have been evaluated
 -- in first-to-last order.
-tcExps :: DDefs Ty2 -> Env2 Ty2 -> NewFuns
+tcExps :: DDefs Ty2 -> Env2 Ty2 -> FunDefs
       -> ConstraintSet -> RegionSet -> LocationTypeState -> [Exp]
       -> TcM ([Ty2], LocationTypeState)
 tcExps ddfs env funs constrs regs tstatein (exp:exps) =

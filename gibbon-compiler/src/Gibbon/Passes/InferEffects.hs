@@ -23,7 +23,7 @@ import Data.Map as M
 
 import Gibbon.L2.Syntax
 import Gibbon.Common hiding (FunEnv)
-import Gibbon.L1.Syntax hiding (Prog, FunDef, ddefs, fundefs, mainExp)
+import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..), FunDefs)
 
 --------------------------------------------------------------------------------
 
@@ -42,7 +42,7 @@ type TyEnv  = M.Map Var Ty2
 -- | We initially populate all functions with MAXIMUM effect signatures.
 --   Subsequently, these monotonically SHRINK until a fixpoint.
 --   We also associate fresh location variables with packed types.
-initialEnv :: NewFuns -> FunEnv
+initialEnv :: FunDefs -> FunEnv
 initialEnv mp = M.map go mp
   where
     go :: FunDef -> ArrowTy Ty2
@@ -60,7 +60,7 @@ inferEffects prg@Prog{ddefs,fundefs} = do
              fundefs
   return $ prg { fundefs = funs }
   where
-    fixpoint :: Int -> NewFuns -> FunEnv -> FunEnv
+    fixpoint :: Int -> FunDefs -> FunEnv -> FunEnv
     fixpoint iter funs fenv =
        let funtys = M.map (inferFunDef ddefs fenv) funs
        in

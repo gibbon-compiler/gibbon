@@ -131,7 +131,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
 
 
     -- | Process function bodies
-    fd :: NewFuns -> L2.FunDef -> SyM L2.FunDef
+    fd :: FunDefs -> L2.FunDef -> SyM L2.FunDef
     fd fns L2.FunDef{funname,funty,funarg,funbod} =
         do let (ArrowTy locin tyin eff _tyout _locout) = funty
                handleLoc (LRM l _r _m) ls = if S.member (Traverse l) eff then l:ls else ls
@@ -157,7 +157,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
     -- 4. a map of var to location
     -- 5. a map from location to location after it
     -- 6. the expression to process
-    exp :: NewFuns -> [LocVar] -> EndOfRel -> M.Map Var LocVar ->
+    exp :: FunDefs -> [LocVar] -> EndOfRel -> M.Map Var LocVar ->
            M.Map LocVar LocVar -> Env2 Ty2 -> L Exp2 -> SyM (L Exp2)
     exp fns retlocs eor lenv afterenv env2 (L p e) = fmap (L p) $
         case e of

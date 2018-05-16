@@ -8,7 +8,7 @@ import qualified Data.Map as M
 
 import Gibbon.GenericOps
 import Gibbon.Common
-import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..))
+import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..), FunDefs)
 import Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
@@ -29,7 +29,7 @@ threadRegions Prog{ddefs,fundefs,mainExp} = do
                   threadRegionsExp ddefs fundefs True M.empty env2 mn
   return $ Prog ddefs fundefs' mainExp'
 
-threadRegionsFn :: DDefs Ty2 -> NewFuns -> L2.FunDef -> SyM L2.FunDef
+threadRegionsFn :: DDefs Ty2 -> FunDefs -> L2.FunDef -> SyM L2.FunDef
 threadRegionsFn ddefs fundefs f@FunDef{funarg,funty,funbod} = do
   let initLocEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionVar r)) (locVars funty)
       initTyEnv  = M.singleton funarg (arrIn funty)
@@ -37,7 +37,7 @@ threadRegionsFn ddefs fundefs f@FunDef{funarg,funty,funbod} = do
   bod' <- threadRegionsExp ddefs fundefs False initLocEnv env2 funbod
   return $ f {funbod = bod'}
 
-threadRegionsExp :: DDefs Ty2 -> NewFuns -> Bool -> LocEnv -> Env2 Ty2 -> L L2.Exp2
+threadRegionsExp :: DDefs Ty2 -> FunDefs -> Bool -> LocEnv -> Env2 Ty2 -> L L2.Exp2
               -> SyM (L L2.Exp2)
 threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
   case ex of
