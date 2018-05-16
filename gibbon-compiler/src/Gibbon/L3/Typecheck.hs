@@ -16,7 +16,7 @@ import Prelude hiding (exp)
 
 import Gibbon.Common
 import Gibbon.L1.Typecheck hiding (tcProg, tcExp)
-import Gibbon.L1.Syntax hiding (FunDef, Prog(..), progToEnv)
+import Gibbon.L1.Syntax hiding (FunDef(..), Prog(..), progToEnv)
 import Gibbon.L3.Syntax
 
 -- | Typecheck a L1 expression
@@ -328,14 +328,14 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
         _ -> ty1 == ty2
 
     -- fd :: forall e l . FunDef Ty1 Exp -> SyM ()
-    fd FunDef{funarg,funty,funbod} = do
-      let env' = Env2 (M.singleton funarg inT) (fEnv env)
-          res = runExcept $ tcExp ddefs env' funbod
-          inT = arrIn funty
-          outT = arrOut funty
+    fd FunDef{funArg,funTy,funBody} = do
+      let env' = Env2 (M.singleton funArg inT) (fEnv env)
+          res = runExcept $ tcExp ddefs env' funBody
+          inT = arrIn funTy
+          outT = arrOut funTy
       case res of
         Left err -> error $ sdoc err
-        Right ty -> if ty == arrOut funty
+        Right ty -> if ty == arrOut funTy
                     then return ()
                     else error $ "Expected type " ++ (sdoc outT)
                          ++ " and got type " ++ (sdoc ty)

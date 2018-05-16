@@ -46,17 +46,17 @@ initialEnv :: FunDefs -> FunEnv
 initialEnv mp = M.map go mp
   where
     go :: FunDef -> ArrowTy Ty2
-    go FunDef{funty} =
-      let locs       = allLocVars funty
+    go FunDef{funTy} =
+      let locs       = allLocVars funTy
           maxEffects = locsEffect locs
-      in funty { arrEffs = maxEffects }
+      in funTy { arrEffs = maxEffects }
 
 
 inferEffects :: Prog -> SyM Prog
 inferEffects prg@Prog{ddefs,fundefs} = do
   let finalFunTys = fixpoint 1 fundefs (initialEnv fundefs)
-      funs = M.map (\fn@FunDef{funname} ->
-                       fn{ funty = finalFunTys ! funname })
+      funs = M.map (\fn@FunDef{funName} ->
+                       fn{ funTy = finalFunTys ! funName })
              fundefs
   return $ prg { fundefs = funs }
   where
@@ -70,11 +70,11 @@ inferEffects prg@Prog{ddefs,fundefs} = do
 
 
 inferFunDef :: DDefs Ty2 -> FunEnv -> FunDef -> ArrowTy Ty2
-inferFunDef ddfs fenv FunDef{funarg,funbod,funty} = funty { arrEffs = S.intersection travs eff }
+inferFunDef ddfs fenv FunDef{funArg,funBody,funTy} = funTy { arrEffs = S.intersection travs eff }
   where
-    env0  = M.singleton funarg (arrIn funty)
-    travs = S.fromList $ L.map Traverse $ inLocVars funty
-    (eff,_outLoc) = inferExp ddfs fenv env0 funbod
+    env0  = M.singleton funArg (arrIn funTy)
+    travs = S.fromList $ L.map Traverse $ inLocVars funTy
+    (eff,_outLoc) = inferExp ddfs fenv env0 funBody
 
 
 inferExp :: DDefs Ty2 -> FunEnv -> TyEnv -> L Exp2 -> (Set Effect, Maybe LocVar)

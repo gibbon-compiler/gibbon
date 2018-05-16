@@ -99,13 +99,13 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
   --
   -- First, compute the new types, and build a new fundefs structure:
   fds' <- mapM fdty $ M.elems fundefs
-  let fundefs' = M.fromList $ L.map (\f -> (funname f,f)) fds'
+  let fundefs' = M.fromList $ L.map (\f -> (funName f,f)) fds'
   -- Then process the actual function bodies using the new fundefs structure:
   fds'' <- mapM (fd fundefs') fds'
-  let fundefs'' = M.fromList $ L.map (\f -> (funname f,f)) fds''
+  let fundefs'' = M.fromList $ L.map (\f -> (funName f,f)) fds''
 
-      initFEnv fds = M.foldr (\fn acc -> let fnty = (funty fn)
-                                         in M.insert (funname fn) (arrIn fnty, arrOut fnty) acc)
+      initFEnv fds = M.foldr (\fn acc -> let fnty = (funTy fn)
+                                         in M.insert (funName fn) (arrIn fnty, arrOut fnty) acc)
                               M.empty fds
       env2 = (Env2 M.empty (initFEnv fundefs))
   -- Handle the main expression (if it exists):
@@ -123,30 +123,30 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
 
     -- | Process function types (but don't handle bodies)
     fdty :: L2.FunDef -> SyM L2.FunDef
-    fdty L2.FunDef{funname,funty,funarg,funbod} =
-        do let (ArrowTy locin tyin eff tyout _locout) = funty
+    fdty L2.FunDef{funName,funTy,funArg,funBody} =
+        do let (ArrowTy locin tyin eff tyout _locout) = funTy
                handleLoc (LRM l r m) ls = if S.member (Traverse l) eff then (LRM l r m):ls else ls
                locout' = L.map EndOf $ L.foldr handleLoc [] locin
-           return L2.FunDef{funname,funty=(ArrowTy locin tyin eff tyout locout'),funarg,funbod}
+           return L2.FunDef{funName,funTy=(ArrowTy locin tyin eff tyout locout'),funArg,funBody}
 
 
     -- | Process function bodies
     fd :: FunDefs -> L2.FunDef -> SyM L2.FunDef
-    fd fns L2.FunDef{funname,funty,funarg,funbod} =
-        do let (ArrowTy locin tyin eff _tyout _locout) = funty
+    fd fns L2.FunDef{funName,funTy,funArg,funBody} =
+        do let (ArrowTy locin tyin eff _tyout _locout) = funTy
                handleLoc (LRM l _r _m) ls = if S.member (Traverse l) eff then l:ls else ls
                retlocs = L.foldr handleLoc [] locin
                lenv = case tyin of
-                        PackedTy _n l -> M.insert funarg l $ M.empty
+                        PackedTy _n l -> M.insert funArg l $ M.empty
                         ProdTy _tys -> M.empty
                         _ -> M.empty
-               initVEnv  = M.singleton funarg (arrIn funty)
-               initFEnv fds = M.foldr (\_fn acc -> let fnty = funty
-                                                   in M.insert funname (arrIn fnty, arrOut fnty) acc)
+               initVEnv  = M.singleton funArg (arrIn funTy)
+               initFEnv fds = M.foldr (\_fn acc -> let fnty = funTy
+                                                   in M.insert funName (arrIn fnty, arrOut fnty) acc)
                               M.empty fds
                env2 = Env2 initVEnv (initFEnv fundefs)
-           funbod' <- exp fns retlocs emptyRel lenv M.empty env2 funbod
-           return L2.FunDef{funname,funty,funarg,funbod=funbod'}
+           funBody' <- exp fns retlocs emptyRel lenv M.empty env2 funBody
+           return L2.FunDef{funName,funTy,funArg,funBody=funBody'}
 
 
     -- | Process expressions.
@@ -403,6 +403,6 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                funtype :: Var -> ArrowTy Ty2
                funtype v = case M.lookup v fns of
                              Nothing -> error $ "Function " ++ (show v) ++ " not found"
-                             Just fundef -> funty fundef
+                             Just fundef -> funTy fundef
 
                go = exp fns retlocs eor lenv afterenv env2

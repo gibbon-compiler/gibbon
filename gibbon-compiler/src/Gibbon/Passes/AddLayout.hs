@@ -119,16 +119,16 @@ needsLayout :: L2.Prog -> (Bool, S.Set Var)
 needsLayout (L2.Prog ddefs fundefs mainExp) =
   let env2 = Env2 M.empty (L2.initFunEnv fundefs)
       specialfns = L.foldl' (\acc fn -> if isSpecialFn ddefs fn
-                                        then S.insert (L2.funname fn) acc
+                                        then S.insert (L2.funName fn) acc
                                         else acc)
                    S.empty (M.elems fundefs)
       mainExp' = case mainExp of
                    Nothing -> False
                    Just (mn, _) -> needsLayoutExp ddefs fundefs False specialfns S.empty env2 mn
-      fnsneedlayout = M.map (\L2.FunDef{L2.funname,L2.funbod} ->
-                               if funname `S.member` specialfns
+      fnsneedlayout = M.map (\L2.FunDef{L2.funName,L2.funBody} ->
+                               if funName `S.member` specialfns
                                then False
-                               else needsLayoutExp ddefs fundefs False specialfns S.empty env2 funbod)
+                               else needsLayoutExp ddefs fundefs False specialfns S.empty env2 funBody)
                       fundefs
   in (mainExp' || (L.any id (M.elems fnsneedlayout)), (S.fromList $ M.keys $ M.filter id fnsneedlayout))
 
@@ -192,13 +192,13 @@ needsLayoutExp ddefs fundefs base special traversed env2 (L _ ex) = base ||
         _ -> error $ "substLocs: " ++ sdoc (locs,tys)
 
 isSpecialFn :: DDefs L2.Ty2 -> L2.FunDef -> Bool
-isSpecialFn ddefs L2.FunDef{L2.funty, L2.funbod} =
+isSpecialFn ddefs L2.FunDef{L2.funTy, L2.funBody} =
   if traversesAllInputs
   then True
-  else go (S.fromList $ L2.inLocVars funty) funbod
+  else go (S.fromList $ L2.inLocVars funTy) funBody
   where
     traversesAllInputs =
-      length (L2.inLocVars funty) == length (S.toList $ L2.arrEffs funty)
+      length (L2.inLocVars funTy) == length (S.toList $ L2.arrEffs funTy)
 
     go :: S.Set LocVar -> L L2.Exp2 -> Bool
     go need (L _ e) =
@@ -247,9 +247,9 @@ isSpecialFn ddefs L2.FunDef{L2.funty, L2.funbod} =
     cantunpack _ _ _ _ = error "cantunpack: error"
 
 fnTraversal :: S.Set Var -> L2.FunDef -> [LocVar] -> (S.Set LocVar, Bool)
-fnTraversal traversed L2.FunDef{L2.funty} locs =
-  let funeff = L2.arrEffs funty
-      inlocs = L2.inLocVars funty
+fnTraversal traversed L2.FunDef{L2.funTy} locs =
+  let funeff = L2.arrEffs funTy
+      inlocs = L2.inLocVars funTy
       substMap = M.fromList $ zip inlocs locs
       funeff' = L2.substEffs substMap funeff
   in ( S.union (S.map (\(L2.Traverse a) -> a) funeff') traversed
@@ -261,8 +261,8 @@ fnTraversal traversed L2.FunDef{L2.funty} locs =
 -- To return the correct value from `needsLayoutExp`, we mark all input
 -- locations at the call site of such functions as "traversed".
 specialTraversal :: S.Set Var -> L2.FunDef -> [LocVar] -> (S.Set LocVar, Bool)
-specialTraversal traversed L2.FunDef{L2.funty} locs =
-  let fninlocs = L2.inLocVars funty
+specialTraversal traversed L2.FunDef{L2.funTy} locs =
+  let fninlocs = L2.inLocVars funTy
       inlocs = L.take (length fninlocs) locs
   in (S.union (S.fromList inlocs) traversed, False)
 

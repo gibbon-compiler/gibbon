@@ -83,7 +83,7 @@ type DepEnv = M.Map LocVar [(Var,[()],L3.Ty3,L L3.Exp3)]
 cursorize :: DynFlags -> Prog -> SyM L3.Prog
 cursorize dflags Prog{ddefs,fundefs,mainExp} = do
   fns' <- mapM (cursorizeFunDef dflags ddefs fundefs . snd) (M.toList fundefs)
-  let fundefs' = M.fromList $ L.map (\f -> (L3.funname f, f)) fns'
+  let fundefs' = M.fromList $ L.map (\f -> (L3.funName f, f)) fns'
       ddefs'   = M.map L3.eraseLocMarkers ddefs
 
   mainExp' <- case mainExp of
@@ -98,14 +98,14 @@ cursorize dflags Prog{ddefs,fundefs,mainExp} = do
 
 -- |
 cursorizeFunDef :: DynFlags -> DDefs Ty2 -> FunDefs ->  FunDef -> SyM L3.FunDef
-cursorizeFunDef dflags ddefs fundefs FunDef{funname,funty,funarg,funbod} =
-  let inLocs  = inLocVars funty
-      outLocs = outLocVars funty
-      outRegs = outRegVars funty
-      inRegs  = inRegVars funty
-      inT     = arrIn funty
-      outT    = arrOut funty
-      funty'  = cursorizeArrowTy funty
+cursorizeFunDef dflags ddefs fundefs FunDef{funName,funTy,funArg,funBody} =
+  let inLocs  = inLocVars funTy
+      outLocs = outLocVars funTy
+      outRegs = outRegVars funTy
+      inRegs  = inRegVars funTy
+      inT     = arrIn funTy
+      outT    = arrOut funTy
+      funTy'  = cursorizeArrowTy funTy
   in do
    newarg <- gensym "newarg"
 
@@ -124,19 +124,19 @@ cursorizeFunDef dflags ddefs fundefs FunDef{funname,funty,funarg,funbod} =
        -- Then the input cursors. Create projections for input cursors here
        afterOutLocs  = nProj (totalRegs + length outLocs) newarg
        inCurBinds = case inLocs of
-                      [] -> mkLets [(funarg,[],stripTyLocs inT, afterOutLocs)]
+                      [] -> mkLets [(funArg,[],stripTyLocs inT, afterOutLocs)]
                       _  -> let projs = mkInProjs afterOutLocs inT
                                 bnds  = [(loc,[],CursorTy,proj) | (loc,proj) <- zip inLocs projs]
-                                        ++ [(funarg,[], cursorizeInTy inT, afterOutLocs)]
+                                        ++ [(funArg,[], cursorizeInTy inT, afterOutLocs)]
                             in mkLets bnds
 
-       initTyEnv = M.fromList $ [(funarg, cursorizeInTy inT)] ++ [(a,CursorTy) | (LRM a _ _) <- locVars funty]
+       initTyEnv = M.fromList $ [(funArg, cursorizeInTy inT)] ++ [(a,CursorTy) | (LRM a _ _) <- locVars funTy]
 
    bod <- if hasPacked outT
-          then fromDi <$> cursorizePackedExp dflags ddefs fundefs M.empty initTyEnv funbod
-          else cursorizeExp dflags ddefs fundefs M.empty initTyEnv funbod
+          then fromDi <$> cursorizePackedExp dflags ddefs fundefs M.empty initTyEnv funBody
+          else cursorizeExp dflags ddefs fundefs M.empty initTyEnv funBody
    ret <- return $ outCurBinds (inCurBinds bod)
-   return $ L3.FunDef funname funty' newarg ret
+   return $ L3.FunDef funName newarg funTy' ret
 
   where
     -- | The only difference between this and L3.cursorizeTy is that here,
@@ -165,10 +165,10 @@ cursorizeFunDef dflags ddefs fundefs FunDef{funname,funty,funarg,funbod} =
     --   This is used to create bindings for input location variables.
     --
     -- >>> mkInProjs e (PackedTy "T" "l")
-    -- [VarE (Var "funarg")]
+    -- [VarE (Var "funArg")]
     --
     -- >>> mkInProjs e (ProdTy [IntTy,PackedTy "T" "l"])
-    -- [ProjE 1 VarE (Var "funarg")]
+    -- [ProjE 1 VarE (Var "funArg")]
     --
     -- >>> mkInProje e (ProdTy [ProdTy [PackedTy "T" "l", PackedTy "T" "l"], IntTy])
     -- [ProjE 0 ProjE 0 e, ProjE 1 ProjE 0 e]
@@ -609,7 +609,7 @@ cursorizeAppE dflags ddfs fundefs denv tenv (L _ ex) =
   case ex of
     AppE f locs arg -> do
       let fnTy   = case M.lookup f fundefs of
-                     Just g -> funty g
+                     Just g -> funTy g
                      Nothing -> error $ "Unknown function: " ++ sdoc f
           inT    = arrIn fnTy
           inLocs = inLocVars fnTy

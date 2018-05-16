@@ -111,7 +111,6 @@ import Gibbon.GenericOps (gFreeVars)
 import Gibbon.Common as C hiding (extendVEnv, lookupVEnv) -- (l, LRM(..))
 import Gibbon.Common (Var, Env2, DDefs, LocVar, runSyM, SyM, gensym, toVar)
 import qualified Gibbon.L1.Syntax as L1
-import Gibbon.L1.Syntax (FunDef(..))
 import Gibbon.L2.Syntax as L2
 import Gibbon.L2.Typecheck as T
 import Gibbon.Passes.InlineTriv (inlineTriv)
@@ -240,7 +239,7 @@ inferLocs initPrg = do
                                    dest <- destFromType (arrOut arrty)
                                    fixType_ (arrIn arrty)
                                    (fbod',_) <- inferExp' fe' fbod dest
-                                   return $ L2.FunDef fn arrty fa fbod'
+                                   return $ L2.FunDef fn fa arrty fbod'
           return $ L2.Prog dfs' fds' me'
   prg <- St.runStateT (runExceptT m) M.empty
   case fst prg of
@@ -1170,11 +1169,11 @@ genCopyFn DDef{tyName, dataCons} = do
                           (l$ L1.DataConE () dcon $ map (l . VarE) ys)
                           (zip3 (L.map snd tys) xs ys)
                 return (dcon, L.map (\x -> (x,())) xs, bod)
-  return $ L1.FunDef { funName = mkCopyFunName (fromVar tyName)
-                     , funArg = arg
-                     , funTy  = ( L1.PackedTy (fromVar tyName) ()
-                                , L1.PackedTy (fromVar tyName) () )
-                     , funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
+  return $ L1.FunDef { L1.funName = mkCopyFunName (fromVar tyName)
+                     , L1.funArg = arg
+                     , L1.funTy  = ( L1.PackedTy (fromVar tyName) ()
+                                   , L1.PackedTy (fromVar tyName) () )
+                     , L1.funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
                      }
 
 -- | Get the data constructor type from a type, failing if it's not packed

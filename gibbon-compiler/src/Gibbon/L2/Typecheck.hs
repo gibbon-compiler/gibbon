@@ -482,17 +482,17 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
   where
 
     fd :: L2.FunDef -> SyM ()
-    fd L2.FunDef{funty,funarg,funbod} = do
-        let env = extendEnv (Env2 M.empty M.empty) funarg (arrIn funty)
-            constrs = funConstrs (locVars funty)
-            regs = funRegs (locVars funty)
-            tstate = funTState (locVars funty)
-            res = runExcept $ tcExp ddefs env fundefs constrs regs tstate funbod
+    fd L2.FunDef{funTy,funArg,funBody} = do
+        let env = extendEnv (Env2 M.empty M.empty) funArg (arrIn funTy)
+            constrs = funConstrs (locVars funTy)
+            regs = funRegs (locVars funTy)
+            tstate = funTState (locVars funTy)
+            res = runExcept $ tcExp ddefs env fundefs constrs regs tstate funBody
         case res of
           Left err -> error $ show err
-          Right (ty,_) -> if ty == (arrOut funty)
+          Right (ty,_) -> if ty == (arrOut funTy)
                           then return ()
-                          else error $ "Expected type " ++ (show (arrOut funty))
+                          else error $ "Expected type " ++ (show (arrOut funTy))
                                     ++ " and got type " ++ (show ty)
 
 

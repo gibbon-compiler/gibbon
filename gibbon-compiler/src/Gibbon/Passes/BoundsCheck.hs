@@ -130,7 +130,7 @@ type Deps = [(Var, Var, [Var])]
 boundsCheck :: L2.Prog -> SyM L2.Prog
 boundsCheck Prog{ddefs,fundefs,mainExp} = do
   fds' <- mapM (boundsCheckFn ddefs fundefs) $ M.elems fundefs
-  let fundefs' = M.fromList $ map (\f -> (funname f,f)) fds'
+  let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
       _env2 = Env2 M.empty (initFunEnv fundefs)
   -- mainExp' <- case mainExp of
   --               Nothing -> return Nothing
@@ -139,13 +139,13 @@ boundsCheck Prog{ddefs,fundefs,mainExp} = do
   return $ Prog ddefs fundefs' mainExp
 
 boundsCheckFn :: DDefs Ty2 -> FunDefs -> L2.FunDef -> SyM L2.FunDef
-boundsCheckFn ddefs fundefs f@FunDef{funarg,funty,funbod} = do
-  let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionVar r)) (locVars funty)
-      initTyEnv  = M.singleton funarg (arrIn funty)
+boundsCheckFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
+  let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionVar r)) (locVars funTy)
+      initTyEnv  = M.singleton funArg (arrIn funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
-      deps = [(lc, lc, []) | lc <- outLocVars funty] ++ depList funbod
-  bod' <- boundsCheckExp ddefs fundefs initRegEnv env2 deps S.empty funbod
-  return $ f {funbod = bod'}
+      deps = [(lc, lc, []) | lc <- outLocVars funTy] ++ depList funBody
+  bod' <- boundsCheckExp ddefs fundefs initRegEnv env2 deps S.empty funBody
+  return $ f {funBody = bod'}
 
 boundsCheckExp :: DDefs Ty2 -> FunDefs -> RegEnv -> Env2 Ty2 -> Deps -> S.Set Var
                -> L L2.Exp2 -> SyM (L L2.Exp2)

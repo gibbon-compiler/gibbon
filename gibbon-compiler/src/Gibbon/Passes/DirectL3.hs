@@ -19,16 +19,16 @@ directL3 (Prog ddfs fndefs mnExp) = do
                    Just (ex,ty) -> Just (go ex, stripTyLocs ty)
 
         fds = L.map fd $ M.elems fndefs
-        fndefs' = M.fromList $ L.map (\f -> (L3.funname f, f)) fds
+        fndefs' = M.fromList $ L.map (\f -> (L3.funName f, f)) fds
     L3.Prog ddfs fndefs' mnExp'
   where
     fd :: FunDef -> L3.FunDef
     fd FunDef{funName,funArg,funTy,funBody} =
         let (argty,retty) = funTy
-        in L3.FunDef { L3.funname = funName
-                     , L3.funty  = L3.ArrowTy (toL3Ty argty) (toL3Ty retty)
-                     , L3.funarg = funArg
-                     , L3.funbod = go funBody
+        in L3.FunDef { L3.funName = funName
+                     , L3.funTy   = L3.ArrowTy (toL3Ty argty) (toL3Ty retty)
+                     , L3.funArg  = funArg
+                     , L3.funBody = go funBody
                      }
 
     toL3Ty :: Ty1 -> L3.Ty3

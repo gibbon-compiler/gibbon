@@ -13,7 +13,7 @@ import qualified Data.Set as S
 
 import Gibbon.GenericOps
 import Gibbon.Common (SyM, dbgTrace)
-import Gibbon.L1.Syntax hiding (FunDef, Prog(..))
+import Gibbon.L1.Syntax hiding (FunDef(..), Prog(..))
 import Gibbon.L3.Syntax
 
 
@@ -26,7 +26,7 @@ shakeTree prg@Prog{fundefs,mainExp} = return $
                     (Just (e,t)) -> Just (shakeTreeExp e, t)
       }
  where
-   fd f@FunDef{funbod} = f { funbod = shakeTreeExp funbod }
+   fd f@FunDef{funBody} = f { funBody = shakeTreeExp funBody }
 
 shakeTreeExp :: L Exp3 -> L Exp3
 shakeTreeExp = go

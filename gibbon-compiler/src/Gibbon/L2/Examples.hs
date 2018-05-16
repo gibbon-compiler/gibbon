@@ -24,7 +24,7 @@ import Data.Map as M
 
 import Gibbon.Common
 import Gibbon.L2.Syntax
-import Gibbon.L1.Syntax hiding (Prog, FunDef, ddefs, fundefs, mainExp, add1Prog)
+import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..), FunDefs, add1Prog)
 import Gibbon.GenericOps
 
 ddtree :: DDefs Ty2
@@ -48,12 +48,12 @@ testTypeable = gTypeExp ddtree emptyEnv2 tTypeable
 -- Add1
 
 add1TraversedFun :: FunDef
-add1TraversedFun = FunDef "add1" add1TraversedFunTy "tr1" add1FunBod
+add1TraversedFun = FunDef "add1" "tr1" add1TraversedFunTy add1FunBod
   where add1TraversedFunTy = add1FunTy { arrEffs = S.fromList [Traverse "lin2"] }
 
 
 add1Fun :: FunDef
-add1Fun = FunDef "add1" add1FunTy "tr1" add1FunBod
+add1Fun = FunDef "add1" "tr1" add1FunTy add1FunBod
 
 
 add1FunTy :: ArrowTy Ty2
@@ -144,7 +144,7 @@ nodeProg = Prog ddtree (M.empty) (Just (nodeMainExp, PackedTy "Tree" "l156"))
 --------------------------------------------------------------------------------
 
 id1Fun :: FunDef
-id1Fun = FunDef "id1" idFunTy "tr18" idFunBod
+id1Fun = FunDef "id1" "tr18" idFunTy idFunBod
   where
     idFunBod = (l$ VarE "tr18")
 
@@ -163,7 +163,7 @@ id1Prog = Prog ddtree (M.fromList [("id1", id1Fun)]) Nothing
 --------------------------------------------------------------------------------
 
 copyTreeFun :: FunDef
-copyTreeFun = FunDef "copyTree" copyFunTy "tr22" copyBod
+copyTreeFun = FunDef "copyTree" "tr22" copyFunTy copyBod
   where
     copyFunTy = (ArrowTy
                  [LRM "lin23" (VarR "r24") Input, LRM "lout25" (VarR "r752") Output]
@@ -212,7 +212,7 @@ copyTreeProg = Prog ddtree (M.fromList [("copyTree", copyTreeFun)]) $
 --------------------------------------------------------------------------------
 
 id2Fun :: FunDef
-id2Fun = FunDef "id2" id2Ty "tr41" id2Bod
+id2Fun = FunDef "id2" "tr41" id2Ty id2Bod
   where
     id2Ty :: ArrowTy Ty2
     id2Ty = (ArrowTy
@@ -255,15 +255,15 @@ copyOnId1MainExp = l$ Ext $ LetRegionE (VarR "r220") $
                    l$ VarE "a229"
 
 id1WithCopyFun :: FunDef
-id1WithCopyFun = id1Fun { funbod = l$ AppE "copyTree" ["lin19","lout21"]
+id1WithCopyFun = id1Fun { funBody = l$ AppE "copyTree" ["lin19","lout21"]
                                    (l$ VarE "tr18")
-                        , funname = "id1WithCopy"
+                        , funName = "id1WithCopy"
                         }
 
 --------------------------------------------------------------------------------
 
 id3Fun :: FunDef
-id3Fun = FunDef "id3" id3Ty "i42" id3Bod
+id3Fun = FunDef "id3" "i42" id3Ty id3Bod
   where
     id3Ty :: ArrowTy Ty2
     id3Ty = (ArrowTy
@@ -284,7 +284,7 @@ id3Prog = Prog ddtree (M.fromList [("id3", id3Fun)]) $ Just (id3MainExp, IntTy)
 --------------------------------------------------------------------------------
 
 intAddFun :: FunDef
-intAddFun = FunDef "intAdd" intAddTy "i109" id3Bod
+intAddFun = FunDef "intAdd" "i109" intAddTy id3Bod
   where
     intAddTy :: ArrowTy Ty2
     intAddTy = (ArrowTy
@@ -307,7 +307,7 @@ intAddProg = Prog M.empty (M.fromList [("intAdd", intAddFun)]) (Just (intAddMain
 --------------------------------------------------------------------------------
 
 leftmostFun :: FunDef
-leftmostFun = FunDef "leftmost" leftmostTy "t111" leftmostBod
+leftmostFun = FunDef "leftmost" "t111" leftmostTy leftmostBod
   where
     leftmostTy :: ArrowTy Ty2
     leftmostTy = (ArrowTy
@@ -347,7 +347,7 @@ leftmostProg = Prog ddtree (M.fromList [("leftmost", leftmostFun)]) (Just (leftm
 --------------------------------------------------------------------------------
 
 rightmostFun :: FunDef
-rightmostFun = FunDef "rightmost" rightmostTy "t242" rightmostBod
+rightmostFun = FunDef "rightmost" "t242" rightmostTy rightmostBod
   where
     rightmostTy :: ArrowTy Ty2
     rightmostTy = (ArrowTy
@@ -392,7 +392,7 @@ rightmostProg = Prog ddtree (M.fromList [("rightmost", rightmostFun)])
 --------------------------------------------------------------------------------
 
 buildLeafFun :: FunDef
-buildLeafFun = FunDef "buildLeaf" buildLeafTy "i125" buildLeafBod
+buildLeafFun = FunDef "buildLeaf" "i125" buildLeafTy buildLeafBod
   where
     buildLeafTy :: ArrowTy Ty2
     buildLeafTy = (ArrowTy
@@ -418,7 +418,7 @@ buildLeafProg = Prog ddtree (M.fromList [("buildLeaf", buildLeafFun)]) (Just (bu
 --------------------------------------------------------------------------------
 
 buildTreeFun :: FunDef
-buildTreeFun = FunDef "buildTree" buildTreeTy "i270" buildTreeBod
+buildTreeFun = FunDef "buildTree" "i270" buildTreeTy buildTreeBod
   where
     buildTreeTy :: ArrowTy Ty2
     buildTreeTy = (ArrowTy
@@ -457,7 +457,7 @@ buildTreeProg = Prog ddtree (M.fromList [("buildTree", buildTreeFun)]) (Just (bu
 
 
 buildTwoTreesFun :: FunDef
-buildTwoTreesFun = FunDef "buildTwoTrees" buildTreeTy "i750" buildTreeBod
+buildTwoTreesFun = FunDef "buildTwoTrees" "i750" buildTreeTy buildTreeBod
   where
     buildTreeTy :: ArrowTy Ty2
     buildTreeTy = (ArrowTy
@@ -493,7 +493,7 @@ buildTwoTreesProg = Prog ddtree (M.fromList [("buildTree", buildTreeFun),
 --------------------------------------------------------------------------------
 
 buildTreeSumFun :: FunDef
-buildTreeSumFun = FunDef "buildTreeSum" buildTreeSumTy "i302" buildTreeSumBod
+buildTreeSumFun = FunDef "buildTreeSum" "i302" buildTreeSumTy buildTreeSumBod
   where
     buildTreeSumTy :: ArrowTy Ty2
     buildTreeSumTy = (ArrowTy
@@ -544,7 +544,7 @@ buildTreeSumProg = Prog ddtree (M.fromList [("buildTreeSum", buildTreeSumFun)]) 
 --------------------------------------------------------------------------------
 
 sumTreeFun :: FunDef
-sumTreeFun = FunDef "sumTree" sumTreeTy "tr762" sumTreeBod
+sumTreeFun = FunDef "sumTree" "tr762" sumTreeTy sumTreeBod
   where
     sumTreeTy :: ArrowTy Ty2
     sumTreeTy = (ArrowTy
@@ -633,7 +633,7 @@ addTrees t1 t2 =
 -}
 
 addTreesFun :: FunDef
-addTreesFun = FunDef "addTrees" addTreesTy "trees354" addTreesBod
+addTreesFun = FunDef "addTrees" "trees354" addTreesTy addTreesBod
   where
     addTreesTy :: ArrowTy Ty2
     addTreesTy = (ArrowTy
@@ -707,7 +707,7 @@ addTreesProg = Prog ddtree (M.fromList [("addTrees", addTreesFun)
 --------------------------------------------------------------------------------
 
 testProdFun :: FunDef
-testProdFun = FunDef "testprod" testprodTy "tup130" testprodBod
+testProdFun = FunDef "testprod" "tup130" testprodTy testprodBod
   where
     testprodTy = (ArrowTy
                   [LRM "lin131" (VarR "r132") Input, LRM "lout133" (VarR "r755") Output]
@@ -799,7 +799,7 @@ sumUp tree =
 -}
 
 sumUpFun :: FunDef
-sumUpFun = FunDef "sumUp" sumUpFunTy "tr1" sumUpFunBod
+sumUpFun = FunDef "sumUp" "tr1" sumUpFunTy sumUpFunBod
   where
     sumUpFunTy :: ArrowTy Ty2
     sumUpFunTy = (ArrowTy
@@ -837,7 +837,7 @@ sumUpFun = FunDef "sumUp" sumUpFunTy "tr1" sumUpFunBod
 
 
 valueSTreeFun :: FunDef
-valueSTreeFun = FunDef "valueSTree" valueSTreeFunTy "tr522" valueSTreeFunBod
+valueSTreeFun = FunDef "valueSTree" "tr522" valueSTreeFunTy valueSTreeFunBod
   where
     valueSTreeFunTy :: ArrowTy Ty2
     valueSTreeFunTy = (ArrowTy
@@ -858,7 +858,7 @@ valueSTreeFun = FunDef "valueSTree" valueSTreeFunTy "tr522" valueSTreeFunBod
 
 
 buildSTreeFun :: FunDef
-buildSTreeFun = FunDef "buildSTree" buildSTreeTy "i543" buildSTreeBod
+buildSTreeFun = FunDef "buildSTree" "i543" buildSTreeTy buildSTreeBod
   where
     buildSTreeTy :: ArrowTy Ty2
     buildSTreeTy = (ArrowTy
@@ -905,7 +905,7 @@ buildSTreeProg = Prog stree (M.fromList [("buildSTree", buildSTreeFun)])
 --------------------------------------------------------------------------------
 
 sumSTreeFun :: FunDef
-sumSTreeFun = FunDef "sumSTree" sumSTreeTy "tr762" sumSTreeBod
+sumSTreeFun = FunDef "sumSTree" "tr762" sumSTreeTy sumSTreeBod
   where
     sumSTreeTy :: ArrowTy Ty2
     sumSTreeTy = (ArrowTy
@@ -967,7 +967,7 @@ sumUpProg = Prog stree (M.fromList [("sumUp", sumUpFun)
 --------------------------------------------------------------------------------
 
 evenFun :: FunDef
-evenFun = FunDef "even" evenFunTy "i560" evenFunBod
+evenFun = FunDef "even" "i560" evenFunTy evenFunBod
   where
     evenFunTy :: ArrowTy Ty2
     evenFunTy = (ArrowTy
@@ -1002,7 +1002,7 @@ setEven tree =
 
 
 setEvenFun :: FunDef
-setEvenFun = FunDef "setEven" setEvenFunTy "tr570" setEvenFunBod
+setEvenFun = FunDef "setEven" "tr570" setEvenFunTy setEvenFunBod
   where
     setEvenFunTy :: ArrowTy Ty2
     setEvenFunTy = (ArrowTy
@@ -1084,7 +1084,7 @@ merged tr =
 -}
 
 sumUpSetEvenFun :: FunDef
-sumUpSetEvenFun = FunDef "sumUpSetEven" sumUpSetEvenFunTy "tr600" sumUpSetEvenFunBod
+sumUpSetEvenFun = FunDef "sumUpSetEven" "tr600" sumUpSetEvenFunTy sumUpSetEvenFunBod
   where
     sumUpSetEvenFunTy :: ArrowTy Ty2
     sumUpSetEvenFunTy = (ArrowTy
@@ -1176,7 +1176,7 @@ ddexpr = fromListDD [DDef (toVar "Expr")
                       ]]
 
 copyExprFun :: FunDef
-copyExprFun = FunDef "copyExpr" copyExprFunTy "e700" copyExprFunBod
+copyExprFun = FunDef "copyExpr" "e700" copyExprFunTy copyExprFunBod
   where
     copyExprFunTy :: ArrowTy Ty2
     copyExprFunTy = (ArrowTy
@@ -1207,7 +1207,7 @@ copyExprFun = FunDef "copyExpr" copyExprFunTy "e700" copyExprFunBod
 
 
 substFun :: FunDef
-substFun = FunDef "subst" substFunTy "tr653" substFunBod
+substFun = FunDef "subst" "tr653" substFunTy substFunBod
   where
     substFunTy :: ArrowTy Ty2
     substFunTy = (ArrowTy
@@ -1301,7 +1301,7 @@ ddtree' = fromListDD [DDef (toVar "Tree")
 -- indirection pointers to get to the rightmost node of the tree.
 
 indrBuildTreeFun :: FunDef
-indrBuildTreeFun = FunDef "indrBuildTree" indrBuildTreeTy "i270" indrBuildTreeBod
+indrBuildTreeFun = FunDef "indrBuildTree" "i270" indrBuildTreeTy indrBuildTreeBod
   where
     indrBuildTreeTy :: ArrowTy Ty2
     indrBuildTreeTy = (ArrowTy
@@ -1346,7 +1346,7 @@ indrBuildTreeProg = Prog ddtree' (M.fromList [("indrBuildTree", indrBuildTreeFun
 
 
 indrRightmostFun :: FunDef
-indrRightmostFun = FunDef "indrRightmost" indrRightmostTy "t742" indrRightmostBod
+indrRightmostFun = FunDef "indrRightmost" "t742" indrRightmostTy indrRightmostBod
   where
     indrRightmostTy :: ArrowTy Ty2
     indrRightmostTy = (ArrowTy
@@ -1381,7 +1381,7 @@ indrRightmostProg = Prog ddtree' (M.fromList [("indrRightmost", indrRightmostFun
 --------------------------------------------------------------------------------
 
 indrIDFun :: FunDef
-indrIDFun = FunDef "indrID" indrIDTy "tr800" indrIDBod
+indrIDFun = FunDef "indrID" "tr800" indrIDTy indrIDBod
   where
     indrIDTy :: ArrowTy Ty2
     indrIDTy = (ArrowTy

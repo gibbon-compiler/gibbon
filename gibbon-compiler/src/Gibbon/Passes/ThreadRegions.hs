@@ -21,7 +21,7 @@ type TypeEnv = M.Map Var Ty2
 threadRegions :: L2.Prog -> SyM L2.Prog
 threadRegions Prog{ddefs,fundefs,mainExp} = do
   fds' <- mapM (threadRegionsFn ddefs fundefs) $ M.elems fundefs
-  let fundefs' = M.fromList $ map (\f -> (funname f,f)) fds'
+  let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
       env2 = Env2 M.empty (initFunEnv fundefs)
   mainExp' <- case mainExp of
                 Nothing -> return Nothing
@@ -30,12 +30,12 @@ threadRegions Prog{ddefs,fundefs,mainExp} = do
   return $ Prog ddefs fundefs' mainExp'
 
 threadRegionsFn :: DDefs Ty2 -> FunDefs -> L2.FunDef -> SyM L2.FunDef
-threadRegionsFn ddefs fundefs f@FunDef{funarg,funty,funbod} = do
-  let initLocEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionVar r)) (locVars funty)
-      initTyEnv  = M.singleton funarg (arrIn funty)
+threadRegionsFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
+  let initLocEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionVar r)) (locVars funTy)
+      initTyEnv  = M.singleton funArg (arrIn funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
-  bod' <- threadRegionsExp ddefs fundefs False initLocEnv env2 funbod
-  return $ f {funbod = bod'}
+  bod' <- threadRegionsExp ddefs fundefs False initLocEnv env2 funBody
+  return $ f {funBody = bod'}
 
 threadRegionsExp :: DDefs Ty2 -> FunDefs -> Bool -> LocEnv -> Env2 Ty2 -> L L2.Exp2
               -> SyM (L L2.Exp2)
@@ -51,7 +51,7 @@ threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
                     [] argtylocs
       case ty of
         _ | hasPacked ty -> do
-          let fnty = funty $ fundefs # f
+          let fnty = funTy $ fundefs # f
               arrOutMp = M.fromList $ zip (allLocVars fnty) applocs
               -- TODO: Fix this in gTypeExp
               outT'  = substTy arrOutMp ty

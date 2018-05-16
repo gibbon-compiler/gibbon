@@ -8,7 +8,7 @@ import qualified Data.Map as M
 import qualified Data.List as L
 
 import Gibbon.Common
-import Gibbon.L1.Syntax hiding (FunDef, Prog(..), FunDefs)
+import Gibbon.L1.Syntax hiding (FunDef(..), Prog(..), FunDefs)
 import Gibbon.L3.Syntax
 import Gibbon.GenericOps
 
@@ -39,31 +39,31 @@ unariser Prog{ddefs,fundefs,mainExp} = do
                            return $ Just (m', flattenTy t)
           Nothing -> return Nothing
 
-  let fds' = M.fromList $ L.map (\f -> (funname f,f)) fds
+  let fds' = M.fromList $ L.map (\f -> (funName f,f)) fds
   return $ Prog ddefs fds' mn
 
 
   -- Modifies function to satisfy output invariant (1)
   --
   where
-    funEnv = M.map (\f -> let ty = funty f
+    funEnv = M.map (\f -> let ty = funTy f
                           in (arrIn ty, arrOut ty))
              fundefs
 
     unariserFun :: FunDef -> SyM FunDef
-    unariserFun f@FunDef{funty,funarg,funbod} = do
-      let inT  = arrIn funty
-          outT = arrOut funty
+    unariserFun f@FunDef{funTy,funArg,funBody} = do
+      let inT  = arrIn funTy
+          outT = arrOut funTy
           fn = case inT of
                  ProdTy _ ->
                    let ty  = flattenTy inT
-                       bod =  flattenExp funarg inT funbod
-                   in f{funbod = bod, funty = funty{arrIn = ty, arrOut = flattenTy outT}}
+                       bod =  flattenExp funArg inT funBody
+                   in f{funBody = bod, funTy = funTy{arrIn = ty, arrOut = flattenTy outT}}
                  _ -> f
-          env2 = Env2 (M.singleton funarg inT) funEnv
+          env2 = Env2 (M.singleton funArg inT) funEnv
 
-      bod <- unariserExp ddefs [] env2 funbod
-      return $ fn { funbod = bod}
+      bod <- unariserExp ddefs [] env2 funBody
+      return $ fn { funBody = bod}
 
 
 -- | A projection stack can be viewed as a list of ProjE operations to

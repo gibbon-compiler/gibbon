@@ -75,7 +75,7 @@ import Text.PrettyPrint.GenericPretty
 import Gibbon.Common
 import Gibbon.GenericOps
 import Gibbon.L1.Syntax hiding
-       (FunDefs, FunDef, Prog, mapExprs, progToEnv, fundefs, getFunTy, add1Prog)
+       (FunDefs, FunDef(..), Prog(..), mapExprs, progToEnv, fundefs, getFunTy, add1Prog)
 import qualified Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
@@ -246,14 +246,14 @@ progToEnv :: Prog -> Env2 Ty2
 progToEnv Prog{fundefs} =
     Env2 M.empty
          (M.fromList [ (n,(a, b))
-                     | FunDef n (ArrowTy _ a _ b _) _ _ <- M.elems fundefs ])
+                     | FunDef n _ (ArrowTy _ a _ b _) _ <- M.elems fundefs ])
 
 
 -- | A function definition with the function's effects.
-data FunDef = FunDef { funname :: Var
-                     , funty   :: (ArrowTy Ty2)
-                     , funarg  :: Var
-                     , funbod  :: L Exp2 }
+data FunDef = FunDef { funName :: Var
+                     , funArg  :: Var
+                     , funTy   :: (ArrowTy Ty2)
+                     , funBody :: L Exp2 }
   deriving (Show, Ord, Eq, Generic, NFData)
 --------------------------------------------------------------------------------
 
@@ -261,7 +261,7 @@ data FunDef = FunDef { funname :: Var
 getFunTy :: FunDefs -> Var -> ArrowTy Ty2
 getFunTy mp f = case M.lookup f mp of
                   Nothing -> error $ "getFunTy: function was not bound: "++show f
-                  Just (FunDef{funty}) -> funty
+                  Just (FunDef{funTy}) -> funTy
 
 
 
@@ -339,11 +339,11 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
               L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
 
     revertFunDef :: FunDef -> L1.FunDef
-    revertFunDef FunDef{funname,funarg,funty,funbod} =
-      L1.FunDef { funName = funname
-                , funArg  = funarg
-                , funTy   = (stripTyLocs (arrIn funty), stripTyLocs (arrOut funty))
-                , funBody = revertExp funbod
+    revertFunDef FunDef{funName,funArg,funTy,funBody} =
+      L1.FunDef { funName = funName
+                , funArg  = funArg
+                , funTy   = (stripTyLocs (arrIn funTy), stripTyLocs (arrOut funTy))
+                , funBody = revertExp funBody
                 }
 
     revertExp :: L Exp2 -> L L1.Exp1
@@ -539,8 +539,8 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
 
 
 initFunEnv :: FunDefs -> FunEnv Ty2
-initFunEnv fds = M.foldr (\fn acc -> let fnty = (funty fn)
-                                     in M.insert (funname fn) (arrIn fnty, arrOut fnty) acc)
+initFunEnv fds = M.foldr (\fn acc -> let fnty = (funTy fn)
+                                     in M.insert (funName fn) (arrIn fnty, arrOut fnty) acc)
                  M.empty fds
 
 isPackedTy' :: Ty2 -> Bool
@@ -568,8 +568,8 @@ we can just delete all of these!
 --           }
 --  where
 --    go FunDef{..} =
---        let ArrowTy{arrIn,arrOut} = funty in
---        L1.FunDef funname (funarg, stripTyLocs arrIn) (stripTyLocs arrOut) (exp funbod)
+--        let ArrowTy{arrIn,arrOut} = funTy in
+--        L1.FunDef funName (funArg, stripTyLocs arrIn) (stripTyLocs arrOut) (exp funBody)
 --    exp :: E2' () Ty -> L1.Exp
 --    exp ex = mapExt (\(e::E2 () Ty) ->
 --                     error $ "revertToL1: cannot revert, essential L2 construct used:\n  "++show e)

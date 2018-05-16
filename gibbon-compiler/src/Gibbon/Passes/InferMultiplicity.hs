@@ -24,14 +24,14 @@ import Gibbon.L2.Syntax as L2
 inferRegScope :: Multiplicity -> L2.Prog -> SyM L2.Prog
 inferRegScope mul Prog{ddefs,fundefs,mainExp} = do
   let fds' = map (inferRegScopeFun mul) $ M.elems fundefs
-      fundefs' = M.fromList $ map (\f -> (funname f,f)) fds'
+      fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
       mainExp' = case mainExp of
                    Nothing -> Nothing
                    Just (mn, ty) -> Just (inferRegScopeExp mul mn,ty)
   return $ Prog ddefs fundefs' mainExp'
 
 inferRegScopeFun :: Multiplicity -> L2.FunDef -> L2.FunDef
-inferRegScopeFun mul f@FunDef{funbod} = f {funbod = inferRegScopeExp mul funbod}
+inferRegScopeFun mul f@FunDef{funBody} = f {funBody = inferRegScopeExp mul funBody}
 
 {- Region scoping rules:
 ~~~~~~~~~~~~~~~~~~~~~~~~

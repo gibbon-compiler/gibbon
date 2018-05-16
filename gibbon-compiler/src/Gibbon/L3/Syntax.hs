@@ -103,10 +103,10 @@ data ArrowTy t = ArrowTy { arrIn  :: t
 
 instance (Out t) => Out (ArrowTy t)
 
-data FunDef = FunDef { funname :: Var
-                     , funty   :: ArrowTy Ty3
-                     , funarg  :: Var
-                     , funbod  :: L Exp3
+data FunDef = FunDef { funName :: Var
+                     , funArg  :: Var
+                     , funTy   :: ArrowTy Ty3
+                     , funBody :: L Exp3
                      }
   deriving (Show, Ord, Eq, Generic, NFData)
 
@@ -146,15 +146,15 @@ cursorizeTy ty =
 mapMExprs :: Monad m => (Env2 Ty3 -> L Exp3 -> m (L Exp3)) -> Prog -> m Prog
 mapMExprs fn (Prog ddfs fundefs mainExp) =
   Prog ddfs <$>
-    (mapM (\f@FunDef{funarg,funty,funbod} ->
-              let env = Env2 (M.singleton funarg (arrIn funty)) funEnv
+    (mapM (\f@FunDef{funArg,funTy,funBody} ->
+              let env = Env2 (M.singleton funArg (arrIn funTy)) funEnv
               in do
-                bod' <- fn env funbod
-                return $ f { funbod =  bod' })
+                bod' <- fn env funBody
+                return $ f { funBody =  bod' })
      fundefs)
     <*>
     (mapM (\ (e,t) -> (,t) <$> fn (Env2 M.empty funEnv) e) mainExp)
-  where funEnv = M.map (\f -> let ty = funty f
+  where funEnv = M.map (\f -> let ty = funTy f
                               in (arrIn ty, arrOut ty))
                  fundefs
 
@@ -188,7 +188,7 @@ toL3Prim pr =
 progToEnv :: Prog -> Env2 Ty3
 progToEnv Prog{fundefs} =
     Env2 M.empty
-         (M.fromList [ (funname ,(inT, outT))
-                     | FunDef{funty,funname} <- M.elems fundefs ,
-                     let inT = arrIn funty
-                         outT = arrOut funty])
+         (M.fromList [ (funName ,(inT, outT))
+                     | FunDef{funTy,funName} <- M.elems fundefs ,
+                     let inT = arrIn funTy
+                         outT = arrOut funTy])
