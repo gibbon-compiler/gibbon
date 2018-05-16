@@ -26,7 +26,7 @@ directL3 (Prog ddfs fndefs mnExp) = do
     fd FunDef{funName,funArg,funTy,funBody} =
         let (argty,retty) = funTy
         in L3.FunDef { L3.funName = funName
-                     , L3.funTy   = L3.ArrowTy (toL3Ty argty) (toL3Ty retty)
+                     , L3.funTy   = (toL3Ty argty, toL3Ty retty)
                      , L3.funArg  = funArg
                      , L3.funBody = go funBody
                      }

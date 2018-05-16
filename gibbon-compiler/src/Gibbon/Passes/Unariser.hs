@@ -46,19 +46,16 @@ unariser Prog{ddefs,fundefs,mainExp} = do
   -- Modifies function to satisfy output invariant (1)
   --
   where
-    funEnv = M.map (\f -> let ty = funTy f
-                          in (arrIn ty, arrOut ty))
-             fundefs
+    funEnv = M.map funTy fundefs
 
     unariserFun :: FunDef -> SyM FunDef
     unariserFun f@FunDef{funTy,funArg,funBody} = do
-      let inT  = arrIn funTy
-          outT = arrOut funTy
+      let (inT, outT) = funTy
           fn = case inT of
                  ProdTy _ ->
                    let ty  = flattenTy inT
                        bod =  flattenExp funArg inT funBody
-                   in f{funBody = bod, funTy = funTy{arrIn = ty, arrOut = flattenTy outT}}
+                   in f{funBody = bod, funTy = (ty, flattenTy outT)}
                  _ -> f
           env2 = Env2 (M.singleton funArg inT) funEnv
 

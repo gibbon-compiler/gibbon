@@ -123,20 +123,21 @@ t1Prog = Prog {ddefs = M.fromList [],
         fundefs = M.fromList
                   [("mul2",
                     FunDef {funName = "mul2",
-                            funArg = ("x_y1", ProdTy [IntTy,IntTy]),
-                            funRetTy = IntTy,
+                            funArg = "x_y1",
+                            funTy = (ProdTy [IntTy,IntTy] , IntTy),
                             funBody = l$ PrimAppE MulP
                                       [l$ ProjE 0 (l$ VarE "x_y1"), l$ ProjE 1 (l$ VarE "x_y1")]}),
                    ("add2",
                     FunDef {funName = "add2",
-                            funArg = ("x_y0", ProdTy [IntTy,IntTy]),
-                            funRetTy = IntTy,
+                            funArg = "x_y0",
+                            funTy = (ProdTy [IntTy,IntTy], IntTy),
                             funBody = l$ PrimAppE AddP
                                       [l$ ProjE 0 (l$ VarE "x_y0"),
                                        l$ ProjE 1 (l$ VarE "x_y0")]})],
-        mainExp = Just $ l$  AppE "mul2"
-                  []
-                  (l$ MkProdE [l$ LitE 10, l$ AppE "add2" [] (l$ MkProdE [l$ LitE 40, l$ LitE 2])])}
+        mainExp = Just
+                  ( l$  AppE "mul2" [] (l$ MkProdE [l$ LitE 10, l$ AppE "add2" [] (l$ MkProdE [l$ LitE 40, l$ LitE 2])])
+                  , IntTy)
+              }
 
 -- | upon successful typechecking, it just returns the same program
 case_run_tcProg :: Assertion

@@ -304,7 +304,7 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
 
  where
   fund :: FunDef -> SyM T.FunDecl
-  fund FunDef{funName,funTy=(ArrowTy inty outty),funArg,funBody} = do
+  fund FunDef{funName,funTy=(inty, outty),funArg,funBody} = do
       (args,bod) <- case inty of
                       -- ASSUMPTION: no nested tuples after unariser:
                       ProdTy ls -> do let tys'  = L.map (fmap (const ())) ls
@@ -666,7 +666,7 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
     -- Tail calls are just an optimization, if we have a Proj/App it cannot be tail:
     ProjE ix (L _ (AppE f _ e)) -> do
         tmp <- gensym $ toVar "prjapp"
-        let ArrowTy (ProdTy inTs) _ = funTy (fundefs # f)
+        let (ProdTy inTs, _) = funTy (fundefs # f)
         tail $ l$ LetE ( tmp
                        , []
                        , fmap (const ()) (inTs !! ix)
@@ -678,7 +678,7 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
 
     -- Non-tail call:
     LetE (vr, _,t, projOf -> (stk, (L _ (L1.AppE f _ arg)))) bod -> do
-        let ArrowTy _ outTy = funTy (fundefs # f)
+        let (_ , outTy) = funTy (fundefs # f)
         let f' = cleanFunName f
         (vsts,bod') <- case outTy of
                         L1.ProdTy [] -> error "lower: FINISHME: unit valued function"

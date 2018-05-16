@@ -189,7 +189,7 @@ cursorizeFunDef dflags ddefs fundefs FunDef{funName,funTy,funArg,funBody} =
                                  acc (zip tys [0..])
            _ -> acc
 
-    cursorizeArrowTy :: L2.ArrowTy L2.Ty2 -> L3.ArrowTy L3.Ty3
+    cursorizeArrowTy :: L2.ArrowTy L2.Ty2 -> (L3.Ty3 , L3.Ty3)
     cursorizeArrowTy ty@L2.ArrowTy{L2.arrIn,L2.arrOut,L2.locVars,L2.locRets} =
       let
           -- Regions corresponding to ouput cursors. (See Note [Infinite regions])
@@ -214,7 +214,7 @@ cursorizeFunDef dflags ddefs fundefs FunDef{funName,funTy,funArg,funBody} =
           -- Packed types in the input now become (read-only) cursors.
           newIn    = L2.mapPacked (\_ _ -> CursorTy) inT
 
-      in L3.ArrowTy { L3.arrIn = stripTyLocs newIn, L3.arrOut = stripTyLocs newOut }
+      in (stripTyLocs newIn, stripTyLocs newOut)
 
 
 -- | Cursorize expressions NOT producing `Packed` values

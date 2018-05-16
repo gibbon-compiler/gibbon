@@ -77,7 +77,7 @@ flattenL3 prg@(L3.Prog defs funs main) = do
   where
     flattenFuns = mapM flattenFun
     flattenFun (L3.FunDef nam narg ty bod) = do
-      let env2 = Env2 (M.singleton narg (L3.arrIn ty)) (fEnv env20)
+      let env2 = Env2 (M.singleton narg (fst ty)) (fEnv env20)
       bod' <- gFlattenExp defs env2 bod
       return $ L3.FunDef nam narg ty bod'
 

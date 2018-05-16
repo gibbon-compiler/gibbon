@@ -331,11 +331,10 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
     fd FunDef{funArg,funTy,funBody} = do
       let env' = Env2 (M.singleton funArg inT) (fEnv env)
           res = runExcept $ tcExp ddefs env' funBody
-          inT = arrIn funTy
-          outT = arrOut funTy
+          (inT, outT) = funTy
       case res of
         Left err -> error $ sdoc err
-        Right ty -> if ty == arrOut funTy
+        Right ty -> if ty == outT
                     then return ()
                     else error $ "Expected type " ++ (sdoc outT)
                          ++ " and got type " ++ (sdoc ty)
