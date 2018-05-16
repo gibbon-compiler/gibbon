@@ -276,7 +276,7 @@ addLayout prg@Prog{ddefs,fundefs,mainExp} = do
   funs <- mapM (\(nm,f) -> (nm,) <$> addLayoutFun iddefs f) (M.toList fundefs)
   mainExp' <-
     case mainExp of
-      Just ex -> fmap Just (addLayoutExp iddefs ex)
+      Just (ex,ty) -> Just <$> (,ty) <$> addLayoutExp iddefs ex
       Nothing -> return Nothing
   return prg { ddefs = iddefs
              , fundefs = M.fromList funs
@@ -363,7 +363,7 @@ addTraversals unsafeFns prg@Prog{ddefs,fundefs,mainExp} =
     funs <- mapM (\(nm,f) -> (nm,) <$> addTraversalsFn unsafeFns ddefs f) (M.toList fundefs)
     mainExp' <-
       case mainExp of
-        Just ex -> fmap Just (addTraversalsExp ddefs ex)
+        Just (ex,ty) -> Just <$> (,ty) <$> addTraversalsExp ddefs ex
         Nothing -> return Nothing
     return prg { ddefs = ddefs
                , fundefs = M.fromList funs

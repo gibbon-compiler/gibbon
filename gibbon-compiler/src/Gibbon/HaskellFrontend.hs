@@ -54,8 +54,11 @@ desugarModule (S.Module _ _ _ decls) = do
       ( funBody <$> M.lookup (toVar "main") funMap
       , M.delete (toVar "main") funMap
       )
-
-  return (Prog dataMap funMapNoMain mainFn)
+    -- Initialize the main expression with a void type. The typechecker will fix the type later.
+    main = case mainFn of
+             Just x  -> Just (x, ProdTy [])
+             Nothing -> Nothing
+  return (Prog dataMap funMapNoMain main)
 
 collectTopFunTy :: S.Decl -> Ds (Maybe (Var, TopTy))
 collectTopFunTy decl =

@@ -219,17 +219,18 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   -- Handle functions
   mapM_ fd $ M.elems fundefs
 
-  -- Handle main expression
-  case mainExp of
-    Nothing -> return ()
-    Just e  ->
-      let res = runExcept $ tcExp ddefs env e
-      in case res of
-        Left err -> error $ sdoc err
-        Right _ -> return ()
+  -- Handle main expression.
+  -- Run the typechecker on the expression, and update it's type in the program
+  -- (the parser initializes the main expression with the void type).
+  let mainExp' = case mainExp of
+                   Nothing -> Nothing
+                   Just (e,_voidty)  ->
+                     let res = runExcept $ tcExp ddefs env e
+                     in case res of
+                         Left err -> error $ sdoc err
+                         Right ty -> Just (e, ty)
 
-  -- Identity function for now.
-  return prg
+  return prg { mainExp = mainExp' }
 
   where
     env = L1.progToEnv prg

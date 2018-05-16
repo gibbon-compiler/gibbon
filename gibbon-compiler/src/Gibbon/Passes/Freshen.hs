@@ -22,8 +22,8 @@ freshNames :: L1.Prog -> SyM L1.Prog
 freshNames (L1.Prog defs funs main) =
     do main' <- case main of
                   Nothing -> return Nothing
-                  Just m -> do m' <- freshExp [] m
-                               return $ Just m'
+                  Just (m,ty) -> do m' <- freshExp [] m
+                                    return $ Just (m',ty)
        funs' <- freshFuns funs
        return $ L1.Prog defs funs' main'
     where freshFuns m = M.fromList <$> mapM freshFun (M.toList m)

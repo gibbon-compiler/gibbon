@@ -34,7 +34,9 @@ import qualified Gibbon.L3.Syntax as L3
 --   let-expression.
 flattenL1 :: L1.Prog -> SyM L1.Prog
 flattenL1 prg@(L1.Prog defs funs main) = do
-    main' <- mapM (gFlattenExp defs env20) main
+    main' <- case main of
+               Just (e,ty) -> Just <$> (,ty) <$> gFlattenExp defs env20 e
+               Nothing -> return Nothing
     funs' <- flattenFuns funs
     return $ L1.Prog defs funs' main'
   where

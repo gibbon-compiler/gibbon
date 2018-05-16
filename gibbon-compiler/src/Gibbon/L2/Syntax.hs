@@ -329,7 +329,9 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
   where
     ddefs'   = M.map revertDDef ddefs
     funefs'  = M.map revertFunDef fundefs
-    mainExp' = fmap (revertExp . fst) mainExp
+    mainExp' = case mainExp of
+                 Nothing -> Nothing
+                 Just (e,ty) -> Just (revertExp e, stripTyLocs ty)
 
     revertDDef :: DDef Ty2 -> DDef Ty1
     revertDDef (DDef a b) =

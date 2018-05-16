@@ -216,9 +216,11 @@ parseSExp ses =
      (ex : rst) ->
        let ex' = exp ex
        in go rst dds fds cds (case mn of
-                            Nothing -> Just ex'
-                            Just x  -> error$ "Two main expressions: "++
-                                             sdoc x++"\nAnd:\n"++prnt ex)
+                                -- Initialize the main expression with a void type.
+                                -- The typechecker will fix it later.
+                                Nothing -> Just (ex', ProdTy [])
+                                Just x  -> error$ "Two main expressions: "++
+                                                 sdoc x++"\nAnd:\n"++prnt ex)
 
 
 tuplizeRefs :: Var -> [Var] -> L Exp1 -> L Exp1

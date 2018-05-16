@@ -228,7 +228,9 @@ inferLocs initPrg = do
                   lift $ lift $ convertFunTy (inty,outty)
           let fe = FullEnv dfs' M.empty fenv
           me' <- case me of
-            Just me -> do
+            -- We ignore the type of the main expression inferred in L1..
+            -- Probably should add a small check here
+            Just (me,_ty) -> do
               (me',ty') <- inferExp' fe me NoDest
               return $ Just (me',ty')
             Nothing -> return Nothing

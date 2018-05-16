@@ -96,7 +96,7 @@ execAndPrint rc prg = do
 interpProg :: RunConfig -> Prog -> IO (Value, B.ByteString)
 -- Print nothing, return "void"              :
 interpProg _ Prog {mainExp=Nothing} = return $ (VProd [], B.empty)
-interpProg rc Prog {ddefs,fundefs, mainExp=Just e} =
+interpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
     do
        let fenv = M.fromList [ (funName f , (funArg f, funBody f))
                              | f <- M.elems fundefs]
@@ -331,8 +331,8 @@ lookup3 k ls = go ls
 
 p1 :: Prog
 p1 = Prog emptyDD  M.empty
-          (Just (L NoLoc $ LetE ("x", [], IntTy, L NoLoc $ LitE 3) (L NoLoc $ VarE (toVar "x"))))
-         -- IntTy
+          (Just ( L NoLoc $ LetE ("x", [], IntTy, L NoLoc $ LitE 3) (L NoLoc $ VarE (toVar "x"))
+                , IntTy))
 
 main :: IO ()
 main = execAndPrint (RunConfig 1 1 dbgLvl False) p1

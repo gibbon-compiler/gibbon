@@ -18,10 +18,14 @@ import           Gibbon.L1.Syntax as L1 hiding (mkProj)
 --   the output of `flatten`.
 inlineTriv :: Prog -> Prog
 inlineTriv (Prog ddefs funs main) =
-    Prog ddefs (fmap inlineTrivFun funs) (fmap (inlineTrivExp ddefs) main)
+    Prog ddefs (fmap inlineTrivFun funs) main'
   where
     inlineTrivFun (FunDef nam narg (targ, ty) bod) =
       FunDef nam narg (targ, ty) (inlineTrivExp ddefs bod)
+    main' = case main of
+              Nothing -> Nothing
+              Just (m,ty) -> Just (inlineTrivExp ddefs m, ty)
+
 
 type MyExp l = L (PreExp NoExt l (UrTy l))
 type Env l = [(Var, (UrTy l, MyExp l))]

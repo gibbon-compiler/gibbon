@@ -18,11 +18,7 @@ directL3 :: Prog -> L3.Prog
 directL3 prg@(Prog ddfs fndefs mnExp) = do
     let mnExp' = case mnExp of
                    Nothing -> Nothing
-                   Just ex -> do
-                       ty <- return $ runExcept $ tcExp ddfs (progToEnv prg) ex
-                       case ty of
-                         Left err -> error $ show err
-                         Right ty' -> Just (go ex, ty')
+                   Just (ex,ty) -> Just (go ex, stripTyLocs ty)
 
         fds = L.map fd $ M.elems fndefs
         fndefs' = M.fromList $ L.map (\f -> (L3.funname f, f)) fds

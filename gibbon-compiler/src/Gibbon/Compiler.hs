@@ -376,6 +376,7 @@ passes config@Config{mode,dynflags} l1 = do
                      Bench fnname -> benchMainExp config l1 fnname
                      _ -> l1
 
+      l1 <- goE "typecheck"  L1.tcProg l1
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    (return . inlineTriv)   l1
 
@@ -463,7 +464,8 @@ benchMainExp Config{benchInput,dynflags} l1 fnname = do
                (if (gopt Opt_BenchPrint dynflags)
                 then l$ L1.VarE (toVar "benchres")
                 else l$ L1.PrimAppE L1.MkTrue [])
-  l1{ L1.mainExp = Just $ L NoLoc newExp }
+  -- Initialize the main expression with a void type. The typechecker will fix it later.
+  l1{ L1.mainExp = Just $ (l$ newExp, L1.ProdTy []) }
 
 
 type PassRunner a b = (Out b, NFData a, NFData b) =>

@@ -75,13 +75,13 @@ import Gibbon.GenericOps
 -- appropriate packed AST datatype.
 data Prog = Prog { ddefs    :: DDefs Ty1
                  , fundefs  :: FunDefs
-                 , mainExp  :: Maybe (L Exp1)
---                 , constraints :: [Constraint]
+                 , mainExp  :: Maybe (L Exp1, Ty1)
                  }
   deriving (Show,Eq,Ord, Generic, NFData)
 
 
 -- FIXME: Finish this and merge with L2.Constraint
+{-# DEPRECATED Constraint "L2 defines constraints" #-}
 data Constraint = Constraint
   deriving (Read,Show,Eq,Ord, Generic, NFData)
 instance Out Constraint
@@ -509,8 +509,12 @@ sizeOf t =
 -- | Transform the expressions within a program.
 mapExprs :: (L Exp1 -> L Exp1) -> Prog -> Prog
 mapExprs fn prg@Prog{fundefs,mainExp} =
+  let mainExp' = case mainExp of
+                   Nothing -> Nothing
+                   Just (ex,ty) -> Just (fn ex, ty)
+  in
   prg{ fundefs = M.map (\g -> g {funBody = fn (funBody g)}) fundefs
-     , mainExp = fmap fn mainExp }
+     , mainExp =  mainExp' }
 
 
 --------------------------------------------------------------------------------
@@ -742,7 +746,7 @@ treeDD = (fromListDD [DDef "Tree"
                       , ("Node",[(False,Packed "Tree")
                                 ,(False,Packed "Tree")])]])
 
-mkAdd1Prog :: L Exp1 -> Maybe (L Exp1) -> Prog
+mkAdd1Prog :: L Exp1 -> Maybe (L Exp1, Ty1) -> Prog
 mkAdd1Prog bod mainExp = Prog treeDD
                               (M.fromList [("add1",mkAdd1Fun bod)])
                               mainExp
