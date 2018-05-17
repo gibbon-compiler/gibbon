@@ -941,9 +941,10 @@ noAfterLoc lv fcs (c:cs) =
           do lv2' <- finalLocVar lv2
              lv' <- finalLocVar lv
              if lv' == lv2'
-             then do b1 <- noAfterLoc lv fcs cs
-                     b2 <- noAfterLoc lv1 fcs fcs
-                     return (b1 && b2)
+             then return False
+                 -- do b1 <- noAfterLoc lv fcs cs
+                 --    b2 <- noAfterLoc lv1 fcs fcs
+                 --    return (b1 && b2)
              else noAfterLoc lv fcs cs
       AfterConstantL lv1 v lv2 ->
           do lv2' <- finalLocVar lv2

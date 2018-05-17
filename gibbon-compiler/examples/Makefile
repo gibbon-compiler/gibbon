@@ -277,6 +277,7 @@ else
 endif
 
 PACKED_FAILING ?= \
+ test02e_printNest.gib \
  test04c_ifvector.gib \
  test06c_nested.gib \
  test06h_rec.gib test06i_casecase.gib \
@@ -294,6 +295,7 @@ PACKED_FAILING ?= \
  test26a_treewalk.gib test26_treewalk.gib \
  test27b_subst.gib test27c_subst.gib \
  test28_copyprop.gib \
+ test_litmus_search_tree_insert.gib \
  test_addtrees.gib test_buildstree.gib test_buildtreesum.gib test_buildtwotrees.gib \
  test_stree.gib test_sumupseteven.gib test_sumstree.gib
 

@@ -566,7 +566,9 @@ compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
         _                                -> return ""
   where outfile = getOutfile backend fp cfile
         exe = getExeFile backend fp exefile
-        cmd = compilationCmd backend cfg ++ outfile ++ " -o " ++ exe
+        pointer = gopt Opt_Pointer $ dynflags cfg
+        links = if pointer then " -lgc " else ""
+        cmd = compilationCmd backend cfg ++ outfile ++ links ++ " -o " ++ exe
 
 
 -- | Return the correct filename to store the generated code,
@@ -597,10 +599,12 @@ compilationCmd :: Backend -> Config -> String
 compilationCmd LLVM _   = "clang-5.0 lib.o "
 compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++(if bumpAlloc then "-DBUMPALLOC " else "")
+                          ++(if pointer then "-D_POINTER " else "")
                           ++(optc config)++"  "
                           ++(if warnc then "" else suppress_warnings)
   where dflags = dynflags config
         bumpAlloc = gopt Opt_BumpAlloc dflags
+        pointer = gopt Opt_Pointer dflags
         warnc = gopt Opt_Warnc dflags
 
 -- |

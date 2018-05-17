@@ -12,7 +12,9 @@
 #include <fcntl.h>
 #include <stdarg.h> // For va_start etc
 #include <errno.h>
-
+#ifdef _POINTER
+#include <gc.h>
+#endif
 #define KB (1 * 1000lu)
 #define MB (KB * 1000lu)
 #define GB (MB * 1000lu)
@@ -126,7 +128,11 @@ static const int num_workers = 1;
   void save_alloc_state() {}
   void restore_alloc_state() {}
 
-  #define ALLOC(n) malloc(n)
+#ifdef _POINTER
+#define ALLOC(n) GC_MALLOC(n)
+#else
+#define ALLOC(n) malloc(n)
+#endif
 
 #endif // BUMPALLOC
 
