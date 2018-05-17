@@ -16,7 +16,7 @@ import Data.Set as S
 
 import Gibbon.Common 
 import Gibbon.L0.Syntax as L0
-import Gibbon.L1.Syntax as L1
+import Gibbon.L1.Syntax as L1 hiding (FunDef(..), FunDefs)
 import Gibbon.L0.Specialize
 
 type Exp = L Exp0
@@ -44,7 +44,7 @@ t1Call :: CCall
 t1Call = l $ Ext $ PolyAppE (l $ VarE (toVar "f")) (l $ LitE 3)
 
 t1Ex :: (L0Fun, FCall)
-t1Ex = (FunDef (toVar "f1") (toVar "x", L0.ProdTy []) L0.IntTy (l $ LitE 3), l $ AppE (toVar "f1") [] $ l$ MkProdE [])
+t1Ex = (FunDef (toVar "f1") (toVar "x") (L0.ProdTy [], L0.IntTy) (l $ LitE 3), l $ AppE (toVar "f1") [] $ l$ MkProdE [])
 
 case_t1 :: Assertion
 case_t1 = assertValue t1Fun t1Call t1Ex
@@ -67,7 +67,7 @@ t2Call = (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ VarE $
            
 
 t2Ex :: (L0Fun, FCall)
-t2Ex = (FunDef (toVar "f11") (toVar "x" , L0.ProdTy []) L0.IntTy (l $ PrimAppE AddP [(l $ LitE 4),(l $ LitE 6)]),
+t2Ex = (FunDef (toVar "f11") (toVar "x") (L0.ProdTy [], L0.IntTy) (l $ PrimAppE AddP [(l $ LitE 4),(l $ LitE 6)]),
         l $ AppE (toVar "f11") [] $ l$ MkProdE [])
   
 case_t2 :: Assertion
@@ -93,7 +93,7 @@ t3Call = (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ VarE $
            
 
 t3Ex :: (L0Fun, FCall)
-t3Ex = (FunDef (toVar "f11") (toVar "x", L0.ProdTy []) L0.IntTy (l $ PrimAppE AddP [(l $ PrimAppE AddP [(l $ LitE 4), (l $ LitE 4)]),(l $ LitE 6)]),
+t3Ex = (FunDef (toVar "f11") (toVar "x") (L0.ProdTy [], L0.IntTy) (l $ PrimAppE AddP [(l $ PrimAppE AddP [(l $ LitE 4), (l $ LitE 4)]),(l $ LitE 6)]),
         l $ AppE (toVar "f11") [] $ l$ MkProdE [])
   
 case_t3 :: Assertion
@@ -120,7 +120,7 @@ t4Call = (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ VarE $
            
 
 t4Ex :: (L0Fun, FCall)
-t4Ex = (FunDef (toVar "f11") (toVar "x" , L0.ProdTy [L0.BoolTy , L0.IntTy]) L0.IntTy
+t4Ex = (FunDef (toVar "f11") (toVar "x") (L0.ProdTy [L0.BoolTy , L0.IntTy], L0.IntTy)
         (l $ PrimAppE AddP [(l $ IfE (l $ ProjE 0 $ l$ VarE $ toVar "x") (l $ LitE 2) (l $ LitE 4)),(l $ ProjE 1 $ l$ VarE $ toVar "x")]),
         l $ AppE (toVar "f11") [] $ l$ MkProdE [(l $ VarE $ toVar "y") , (l $ VarE $ toVar "z")])
   
@@ -152,7 +152,7 @@ mapCall = l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ VarE $ toVar "map")
                              (l $ VarE $ toVar "ls")
 
 mapEx :: (L0Fun, FCall)
-mapEx = (FunDef (toVar "map1") (toVar "x", L0.ProdTy [listTy]) listTy mapBodEx,
+mapEx = (FunDef (toVar "map1") (toVar "x") (L0.ProdTy [listTy], listTy) mapBodEx,
          l $ AppE (toVar "map1") [] $ l$ MkProdE [(l $ VarE $ toVar "ls")])
 
 mapBodEx :: Exp

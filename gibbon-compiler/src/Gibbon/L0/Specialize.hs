@@ -9,7 +9,7 @@ import Data.Loc
 import Gibbon.Common as C
 
 import Gibbon.L0.Syntax as L0
-import Gibbon.L1.Syntax as L1
+import Gibbon.L1.Syntax as L1 hiding (FunDef(..), FunDefs)
 
 -- | specializing functions on curried calls
 type Exp = (L Exp0)
@@ -40,7 +40,7 @@ updateTy err _ _ = error $ "updateTy: Not an arrow type " ++ show err
 -- | now actually specialize the function to the values in the call
 specializeFunc :: CurFun -> (Ty0, Ty0) -> VarMap -> L0Fun
 specializeFunc VarDef {varName, varBody} (t0 , t1) varMap =
-  FunDef {funName=newName, funArg=(newVar,t0), funRetTy=t1, funBody=newFB}
+  FunDef {funName=newName, funArg=newVar, funTy=(t0,t1), funBody=newFB}
     where
       newName = fst $ runSyM 1 $ gensym varName
       newVar  = toVar "x" -- just a variable name, may cause issues later

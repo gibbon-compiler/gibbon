@@ -13,14 +13,14 @@ import Gibbon.Common as C
 -- import Gibbon.GenericOps
 
 import Gibbon.L0.Syntax as L0
-import Gibbon.L1.Syntax as L1
+import Gibbon.L1.Syntax as L1 hiding (FunDef(..), FunDefs)
 
 -- | specializing functions on types 
 type Exp = (L Exp0)
 
 -- | polymorphic/monomorphic functions
 type PolyFD = PFDef Ty0 Exp
-type MonoFD = FunDef Ty0 Exp
+type MonoFD = FunDef
 
 -- | polymorphic/monomorphic variable defns
 type PolyVD = PVDef Ty0 Exp
@@ -39,7 +39,7 @@ type Defns = Map Var Defn
 
 isPolyFun :: PolyFD -> Either PolyFD MonoFD
 isPolyFun (PFDef name arg (ForAll [] (ArrowTy t0 t1)) b) =
-  Right $ FunDef name (arg,t0) t1 b 
+  Right $ FunDef name arg (t0,t1) b
 isPolyFun pf = Left pf
 
 
@@ -73,7 +73,7 @@ filterPDefs pds = M.foldr (\ pd (acc1,acc2) ->
                   (M.empty, M.empty)
                   pds
 
-filterPFDefs :: PFDefs Ty0 Exp -> (PFDefs Ty0 Exp, FunDefs Ty0 Exp)
+filterPFDefs :: PFDefs Ty0 Exp -> (PFDefs Ty0 Exp, FunDefs)
 filterPFDefs pfds = M.foldr (\ pd (acc1,acc2) ->
                              case isPolyFun pd of
                                Left  y -> (M.insert (fName y) y acc1,acc2)
@@ -92,7 +92,7 @@ filterPVDefs pfds = M.foldr (\ pv (acc1,acc2) ->
 updatePF :: PolyFD -> (Ty0 , Ty0) -> MonoFD
 updatePF (PFDef name arg _ b)  (t0, t1) =
   let newName = addToName name t0 in
-  FunDef newName (arg,t0) t1 $ replaceName name newName b
+  FunDef newName arg (t0,t1) $ replaceName name newName b
 
 updatePV :: PolyVD -> Ty0 -> MonoVD
 updatePV (PVDef name _ b) t =
@@ -209,7 +209,7 @@ tACExp pfs pvs pds (L loc e) = L loc <$>
 
 -- Helpers
 
-mergeDefns :: Defns -> DDefs Ty0 -> FunDefs Ty0 Exp -> VarDefs Ty0 Exp -> (DDefs Ty0, FunDefs Ty0 Exp, VarDefs Ty0 Exp)
+mergeDefns :: Defns -> DDefs Ty0 -> FunDefs -> VarDefs Ty0 Exp -> (DDefs Ty0, FunDefs, VarDefs Ty0 Exp)
 mergeDefns defns ds fs vs = (M.union dds ds, M.union dfs fs, M.union dvs vs)
   where (dds, dfs, dvs) = L.foldr f (M.empty, M.empty, M.empty) $ M.toList defns
         f (v,defn) (dds', dfs', dvs') =

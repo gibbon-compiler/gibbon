@@ -19,7 +19,10 @@ module Gibbon.L0.Syntax
          VarDef(..), VarDefs,
 
          -- * polymorphic versions of definitions (functions,vars,ddefs)
-         PVDef(..), PVDefs, PFDef(..), PFDefs, PDDef(..), PDDefs
+         PVDef(..), PVDefs, PFDef(..), PFDefs, PDDef(..), PDDefs,
+
+         -- * old function definitions
+         FunDefs, FunDef(..)
        )
 where
    
@@ -63,6 +66,15 @@ data VarDef a ex = VarDef { varName :: Var
 
 type VarDefs a ex = Map Var (VarDef a ex)
 
+type FunDefs = M.Map Var FunDef
+
+data FunDef = FunDef { funName :: Var
+                     , funArg  :: Var
+                     , funTy   :: (Ty0 , Ty0)
+                     , funBody :: L Exp0
+                     }
+  deriving (Show, Eq, Ord, Generic, NFData)
+
 -- ^ Polymorphic version
 
 data PVDef a ex = PVDef { vName :: Var
@@ -102,7 +114,7 @@ data PProg = PProg { pddefs    :: PDDefs Ty0
 
 -- ^ Monomorphic program
 data MProg = MProg { ddefs    :: DDefs Ty0
-                   , fundefs  :: FunDefs Ty0 (L Exp0)
+                   , fundefs  :: FunDefs
                    , vardefs  :: VarDefs Ty0 (L Exp0)
                    , mainExp  :: Maybe (L Exp0)
                    }
@@ -137,7 +149,7 @@ type CurFun  = VarDef Ty0 Exp
 type CCall = Exp
 
 -- | Monomorphized functions 
-type L0Fun = FunDef Ty0 Exp
+type L0Fun = FunDef
 type FCall = Exp
 
 arrIn :: Ty0 -> Ty0
