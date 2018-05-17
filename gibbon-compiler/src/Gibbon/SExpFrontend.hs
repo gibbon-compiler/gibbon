@@ -195,10 +195,10 @@ parseSExp ses =
                             return (vr,ty,newbod)
          -- Here we directly desugar multiple arguments into a tuple
          -- argument.
-         go rst dds (FunDef { funName  = textToVar name
-                            , funArg   = (arg, ty)
-                            , funRetTy = typ retty
-                            , funBody  = bod''
+         go rst dds (FunDef { funName = textToVar name
+                            , funArg  = arg
+                            , funTy   = (ty, typ retty)
+                            , funBody = bod''
                             } : fds)
             cds mn
 
@@ -216,9 +216,11 @@ parseSExp ses =
      (ex : rst) ->
        let ex' = exp ex
        in go rst dds fds cds (case mn of
-                            Nothing -> Just ex'
-                            Just x  -> error$ "Two main expressions: "++
-                                             sdoc x++"\nAnd:\n"++prnt ex)
+                                -- Initialize the main expression with a void type.
+                                -- The typechecker will fix it later.
+                                Nothing -> Just (ex', ProdTy [])
+                                Just x  -> error$ "Two main expressions: "++
+                                                 sdoc x++"\nAnd:\n"++prnt ex)
 
 
 tuplizeRefs :: Var -> [Var] -> L Exp1 -> L Exp1
@@ -304,10 +306,10 @@ exp se =
    A loc v          -> L (toLoc loc) $ VarE (textToVar v)
    G loc (HSInt n)  -> L (toLoc loc) $ LitE (fromIntegral n)
 
-   -- | This type gets replaced later in flatten:
+   -- This type gets replaced later in flatten:
    Ls2 l "time" arg -> loc l $ TimeIt (exp arg) (PackedTy "DUMMY_TY" ()) False
 
-   -- | This variant inserts a loop, controlled by the iters
+   -- This variant inserts a loop, controlled by the iters
    -- argument on the command line.
    Ls2 l "iterate" arg -> loc l $ TimeIt (exp arg) (PackedTy "DUMMY_TY" ()) True
 

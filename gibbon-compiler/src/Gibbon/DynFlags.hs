@@ -1,11 +1,14 @@
--- Flags à la GHC
+{-# LANGUAGE CPP #-}
+-- | Flags à la GHC
 module Gibbon.DynFlags
   ( DynFlags(..), GeneralFlag(..)
   , defaultDynFlags, dynflagsParser
   , gopt
   ) where
 
-import Data.Monoid
+#if !MIN_VERSION_base(4,11,0)
+import           Data.Monoid
+#endif
 import Data.Set as S
 import Options.Applicative
 

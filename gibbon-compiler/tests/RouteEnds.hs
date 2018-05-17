@@ -20,7 +20,7 @@ import Gibbon.L2.Examples
 import Gibbon.L2.Typecheck
 import Gibbon.Passes.RouteEnds
 import Gibbon.Passes.InferEffects
-import Gibbon.L1.Syntax hiding (Prog, FunDef, ddefs, fundefs, mainExp, add1Prog)
+import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..))
 
 {-
 
@@ -62,7 +62,7 @@ assertRouteEnds :: Prog -> Var -> [LocRet] -> Assertion
 assertRouteEnds prg fnName expected = expected @=? lRets
   where -- runT and get LocRet
         Prog{fundefs} = runT prg
-        lRets = locRets $ funty (fundefs ! fnName)
+        lRets = locRets $ funTy (fundefs ! fnName)
 
 -- | add1 reaches the end of its input
 case_add1_test2 :: Assertion

@@ -24,7 +24,7 @@ assertInferEffects :: Prog -> Var -> Set Effect -> Assertion
 assertInferEffects prg fnName expected = expected @=? eff
   where -- run inferEffects and get the effect from it's type
         Prog{fundefs} = fst $ runSyM 0 $ inferEffects prg
-        eff = arrEffs $ funty (fundefs ! fnName)
+        eff = arrEffs $ funTy (fundefs ! fnName)
 
 
 -- | Add1 function has a traversal effect [Traverse "lin2"]

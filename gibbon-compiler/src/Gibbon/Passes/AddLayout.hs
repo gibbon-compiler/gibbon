@@ -13,7 +13,7 @@ import Text.PrettyPrint.GenericPretty
 import Gibbon.GenericOps
 import Gibbon.Common
 import Gibbon.DynFlags
-import Gibbon.L1.Syntax
+import Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
 
 import Gibbon.Passes.InferLocations (inferLocs)
@@ -119,20 +119,20 @@ needsLayout :: L2.Prog -> (Bool, S.Set Var)
 needsLayout (L2.Prog ddefs fundefs mainExp) =
   let env2 = Env2 M.empty (L2.initFunEnv fundefs)
       specialfns = L.foldl' (\acc fn -> if isSpecialFn ddefs fn
-                                        then S.insert (L2.funname fn) acc
+                                        then S.insert (L2.funName fn) acc
                                         else acc)
                    S.empty (M.elems fundefs)
       mainExp' = case mainExp of
                    Nothing -> False
                    Just (mn, _) -> needsLayoutExp ddefs fundefs False specialfns S.empty env2 mn
-      fnsneedlayout = M.map (\L2.FunDef{L2.funname,L2.funbod} ->
-                               if funname `S.member` specialfns
+      fnsneedlayout = M.map (\L2.FunDef{L2.funName,L2.funBody} ->
+                               if funName `S.member` specialfns
                                then False
-                               else needsLayoutExp ddefs fundefs False specialfns S.empty env2 funbod)
+                               else needsLayoutExp ddefs fundefs False specialfns S.empty env2 funBody)
                       fundefs
   in (mainExp' || (L.any id (M.elems fnsneedlayout)), (S.fromList $ M.keys $ M.filter id fnsneedlayout))
 
-needsLayoutExp :: DDefs L2.Ty2 -> L2.NewFuns -> Bool -> S.Set Var -> S.Set LocVar
+needsLayoutExp :: DDefs L2.Ty2 -> L2.FunDefs -> Bool -> S.Set Var -> S.Set LocVar
                -> Env2 L2.Ty2 -> L L2.Exp2 -> Bool
 needsLayoutExp ddefs fundefs base special traversed env2 (L _ ex) = base ||
   case ex of
@@ -192,13 +192,13 @@ needsLayoutExp ddefs fundefs base special traversed env2 (L _ ex) = base ||
         _ -> error $ "substLocs: " ++ sdoc (locs,tys)
 
 isSpecialFn :: DDefs L2.Ty2 -> L2.FunDef -> Bool
-isSpecialFn ddefs L2.FunDef{L2.funty, L2.funbod} =
+isSpecialFn ddefs L2.FunDef{L2.funTy, L2.funBody} =
   if traversesAllInputs
   then True
-  else go (S.fromList $ L2.inLocVars funty) funbod
+  else go (S.fromList $ L2.inLocVars funTy) funBody
   where
     traversesAllInputs =
-      length (L2.inLocVars funty) == length (S.toList $ L2.arrEffs funty)
+      length (L2.inLocVars funTy) == length (S.toList $ L2.arrEffs funTy)
 
     go :: S.Set LocVar -> L L2.Exp2 -> Bool
     go need (L _ e) =
@@ -247,9 +247,9 @@ isSpecialFn ddefs L2.FunDef{L2.funty, L2.funbod} =
     cantunpack _ _ _ _ = error "cantunpack: error"
 
 fnTraversal :: S.Set Var -> L2.FunDef -> [LocVar] -> (S.Set LocVar, Bool)
-fnTraversal traversed L2.FunDef{L2.funty} locs =
-  let funeff = L2.arrEffs funty
-      inlocs = L2.inLocVars funty
+fnTraversal traversed L2.FunDef{L2.funTy} locs =
+  let funeff = L2.arrEffs funTy
+      inlocs = L2.inLocVars funTy
       substMap = M.fromList $ zip inlocs locs
       funeff' = L2.substEffs substMap funeff
   in ( S.union (S.map (\(L2.Traverse a) -> a) funeff') traversed
@@ -261,16 +261,14 @@ fnTraversal traversed L2.FunDef{L2.funty} locs =
 -- To return the correct value from `needsLayoutExp`, we mark all input
 -- locations at the call site of such functions as "traversed".
 specialTraversal :: S.Set Var -> L2.FunDef -> [LocVar] -> (S.Set LocVar, Bool)
-specialTraversal traversed L2.FunDef{L2.funty} locs =
-  let fninlocs = L2.inLocVars funty
-      inlocs = take (length fninlocs) locs
+specialTraversal traversed L2.FunDef{L2.funTy} locs =
+  let fninlocs = L2.inLocVars funTy
+      inlocs = L.take (length fninlocs) locs
   in (S.union (S.fromList inlocs) traversed, False)
 
 --------------------------------------------------------------------------------
 
 -- Operates on an L1 program, and updates it to have layout information
-
-type FunDef1 = FunDef Ty1 (L Exp1)
 
 addLayout :: Prog -> SyM Prog
 addLayout prg@Prog{ddefs,fundefs,mainExp} = do
@@ -278,14 +276,14 @@ addLayout prg@Prog{ddefs,fundefs,mainExp} = do
   funs <- mapM (\(nm,f) -> (nm,) <$> addLayoutFun iddefs f) (M.toList fundefs)
   mainExp' <-
     case mainExp of
-      Just ex -> fmap Just (addLayoutExp iddefs ex)
+      Just (ex,ty) -> Just <$> (,ty) <$> addLayoutExp iddefs ex
       Nothing -> return Nothing
   return prg { ddefs = iddefs
              , fundefs = M.fromList funs
              , mainExp = mainExp'
              }
 
-addLayoutFun :: DDefs Ty1 -> FunDef1 -> SyM FunDef1
+addLayoutFun :: DDefs Ty1 -> L1.FunDef -> SyM L1.FunDef
 addLayoutFun ddfs fd@FunDef{funBody} = do
   bod <- addLayoutExp ddfs funBody
   return $ fd{funBody = bod}
@@ -299,7 +297,7 @@ addLayoutExp ddfs (L p ex) = L p <$>
           let tys = lookupDataCon ddfs dcon
               packedOnly = L.map snd $
                            L.filter (\(ty,_) -> isPackedTy ty) (zip tys args)
-              needSizeOf = take n packedOnly
+              needSizeOf = L.take n packedOnly
           szs <- mapM (\arg -> do
                          v <- gensym "indr"
                          return (v,[],CursorTy, l$ PrimAppE PEndOf [arg]))
@@ -365,7 +363,7 @@ addTraversals unsafeFns prg@Prog{ddefs,fundefs,mainExp} =
     funs <- mapM (\(nm,f) -> (nm,) <$> addTraversalsFn unsafeFns ddefs f) (M.toList fundefs)
     mainExp' <-
       case mainExp of
-        Just ex -> fmap Just (addTraversalsExp ddefs ex)
+        Just (ex,ty) -> Just <$> (,ty) <$> addTraversalsExp ddefs ex
         Nothing -> return Nothing
     return prg { ddefs = ddefs
                , fundefs = M.fromList funs
@@ -374,7 +372,7 @@ addTraversals unsafeFns prg@Prog{ddefs,fundefs,mainExp} =
 
 
 -- Process body and reset traversal effects.
-addTraversalsFn :: S.Set Var -> DDefs Ty1 -> FunDef1 -> SyM FunDef1
+addTraversalsFn :: S.Set Var -> DDefs Ty1 -> L1.FunDef -> SyM L1.FunDef
 addTraversalsFn unsafeFns ddefs f@FunDef{funName, funBody} =
   if funName `S.member` unsafeFns
   then do

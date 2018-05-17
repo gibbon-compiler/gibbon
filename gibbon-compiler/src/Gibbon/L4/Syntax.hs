@@ -18,12 +18,11 @@ module Gibbon.L4.Syntax
 import           Control.DeepSeq
 import           Data.Int
 import           Data.Maybe
-import           Data.Word (Word8)
 import           GHC.Generics (Generic)
 import           Prelude hiding (init)
 import           Text.PrettyPrint.GenericPretty (Out (..))
 
-import           Gibbon.Common hiding (funBody)
+import           Gibbon.Common
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L3.Syntax as L3
 
@@ -61,10 +60,6 @@ data Alts
 instance Out Int64 where
   doc w = doc (fromIntegral w :: Integer)
   docPrec n w = docPrec n (fromIntegral w :: Integer)
-
-instance Out Word8 where
-  doc w = doc (fromIntegral w :: Int)
-  docPrec n w = docPrec n (fromIntegral w :: Int)
 
 type Label = Var
 
@@ -220,7 +215,7 @@ data FunDecl = FunDecl
 -- once and duplicate code.
 withTail :: (Tail,Ty) -> ([Triv] -> Tail) -> SyM Tail
 withTail (tl0,retty) fn =
-  let go x = withTail (x,retty) fn in -- ^ Warning: assumes same type.
+  let go x = withTail (x,retty) fn in -- Warning: assumes same type.
   case tl0 of
     Goto{} -> return tl0
     RetValsT ls -> return $ fn ls

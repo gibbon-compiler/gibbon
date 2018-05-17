@@ -19,49 +19,24 @@
 -- | An intermediate language with an effect system that captures traversals.
 
 module Gibbon.L2.Syntax
-    ( Prog(..), FunDef(..), Effect(..), ArrowTy(..)
-    , LocRet(..), LocExp, PreLocExp(..)
-    , NewFuns, getFunTy
-    , progToEnv
-
-    -- * Operations on types
-    , allLocVars, inLocVars, outLocVars, outRegVars, substEffs, substTy, prependArgs
-    , isPackedTy', locsInTy, initFunEnv, getTyLocs, inRegVars, stripTyLocs
-
-    -- * Temporary backwards compatibility, plus rexports
-    , UrTy(..)
-    , PreExp(..)
-    , pattern SymTy
+    (
+      -- * Core types
+      Prog(..), FunDef(..), FunDefs
 
     -- * Extended language L2.0 with location types.
-    , Exp2, E2Ext(..), Ty2
+    , Exp2, E2, E2Ext(..), Ty2
+    , Effect(..), ArrowTy(..) , LocRet(..), LocExp, PreLocExp(..)
+
+    -- * Re-exports
+    , PreExp(..), UrTy(..), pattern SymTy
+
+    -- * Operations on types
+    , progToEnv, getFunTy
+    , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substTy, substEffs
+    , prependArgs, stripTyLocs, getTyLocs, locsInTy
 
     -- * Other helpers
-    , mapPacked, depList, occurs
-
-    -- * Conversion back to L1
-    , revertToL1
-
-    {-
-    , mapMExprs
-
-
-
-    -- The following will be removed:
-
-    -- (Maybe) DEPRECATED:
-    -- * Extended "L2.1", for inline packed:
-    , pattern NamedVal
-
-    -- DEPRECATED:
-    -- * Extended "L2.2", for after cursor insertion:
-    , pattern WriteInt, pattern ReadInt, pattern NewBuffer
-    , pattern ScopedBuffer, pattern AddCursor
-    , isExtendedPattern
-    , builtinTEnv
-    , includeBuiltins
-    -}
-
+    , revertToL1, occurs, mapPacked, depList, initFunEnv
     )
     where
 
@@ -72,19 +47,40 @@ import Data.Set as S
 import Data.Map as M
 import Text.PrettyPrint.GenericPretty
 
-import Gibbon.Common hiding (FunDef)
+import Gibbon.Common
 import Gibbon.GenericOps
 import Gibbon.L1.Syntax hiding
-       (FunDef, Prog, mapExprs, progToEnv, fundefs, getFunTy, add1Prog)
+       (FunDefs, FunDef(..), Prog(..), mapExprs, progToEnv, fundefs, getFunTy)
 import qualified Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
+
+-- | Here we only change the types of FUNCTIONS:
+data Prog = Prog { ddefs    :: DDefs Ty2
+                 , fundefs  :: FunDefs
+                 , mainExp  :: Maybe (L Exp2, Ty2)
+                 }
+  deriving (Show, Ord, Eq, Generic, NFData)
+
+type FunDefs = M.Map Var FunDef
+
+-- | A function definition with the function's effects.
+data FunDef = FunDef { funName :: Var
+                     , funArg  :: Var
+                     , funTy   :: ArrowTy Ty2
+                     , funBody :: L Exp2 }
+  deriving (Show, Ord, Eq, Generic, NFData)
 
 -- | Extended expressions, L2.  Monomorphic.
 --
 --   By adding a `LocVar` decoration, all data constructors,
 --   applications, and bindings gain a location annotation.
 type Exp2 = E2 LocVar Ty2
+
+-- | L1 Types extended with abstract Locations.
+type Ty2 = L1.UrTy LocVar
+
+--------------------------------------------------------------------------------
 
 -- | L1 expressions extended with L2.  This is the polymorphic version.
 -- Shorthand for recursions above.
@@ -100,15 +96,14 @@ data E2Ext loc dec =
   | IndirectionE TyCon DataCon (loc,Var) (loc,Var) (L (E2 loc dec)) -- ^ An inter-region indirection
  deriving (Show, Ord, Eq, Read, Generic, NFData)
 
--- instance Read (E2 l d) where
--- instance Read (L (E2 l d)) where
-
 -- | Define a location in terms of a different location.
 data PreLocExp loc = StartOfLE Region
-                   | AfterConstantLE Int -- ^ Number of bytes after.
-                                    loc  -- ^ Location which this location is offset from.
-                   | AfterVariableLE Var -- ^ Name of variable v. This loc is size(v) bytes after.
-                                    loc  -- ^ Location which this location is offset from.
+                   -- Can't attach haddocks to data constructor arguments with < GHC 8.4.2
+                   -- See https://github.com/haskell/haddock/pull/709.
+                   | AfterConstantLE Int -- Number of bytes after.
+                                    loc  -- Location which this location is offset from.
+                   | AfterVariableLE Var -- Name of variable v. This loc is size(v) bytes after.
+                                    loc  -- Location which this location is offset from.
                    | InRegionLE Region
                    | FromEndLE  loc
                      deriving (Read, Show, Eq, Ord, Generic, NFData)
@@ -188,8 +183,6 @@ instance (Typeable (E2Ext l (UrTy l)),
                                return e'
 
 
-----------------------------------------------------------------------------------------------------
-
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
 data ArrowTy t = ArrowTy
@@ -209,7 +202,9 @@ data Effect = Traverse LocVar
               -- of the value living at this location.
   deriving (Read,Show,Eq,Ord, Generic, NFData)
 
--- instance Out Ty
+-----------------------------------------------------------------------------------------
+-- Do this manually to get prettier formatting: (Issue #90)
+
 instance Out t => Out (ArrowTy t)
 instance Out Effect
 instance Out a => Out (Set a) where
@@ -221,21 +216,7 @@ instance (Out l, Out d) => Out (E2Ext l d)
 instance Out l => Out (PreLocExp l)
 instance Out LocRet
 
-
--- | L1 Types extended with abstract Locations.
-type Ty2 = L1.UrTy LocVar
-
-
-type NewFuns = M.Map Var FunDef
-
--- | Here we only change the types of FUNCTIONS:
-data Prog = Prog { ddefs    :: DDefs Ty2
-                 , fundefs  :: NewFuns
-                 , mainExp  :: Maybe (L Exp2, Ty2)
-                 }
-  deriving (Show, Ord, Eq, Generic, NFData)
-
-----------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 -- | Abstract some of the differences of top level program types, by
 --   having a common way to extract an initial environment.  The
@@ -244,28 +225,14 @@ progToEnv :: Prog -> Env2 Ty2
 progToEnv Prog{fundefs} =
     Env2 M.empty
          (M.fromList [ (n,(a, b))
-                     | FunDef n (ArrowTy _ a _ b _) _ _ <- M.elems fundefs ])
-
-
--- | A function definition with the function's effects.
-data FunDef = FunDef { funname :: Var
-                     , funty   :: (ArrowTy Ty2)
-                     , funarg  :: Var
-                     , funbod  :: L Exp2 }
-  deriving (Show, Ord, Eq, Generic, NFData)
---------------------------------------------------------------------------------
+                     | FunDef n _ (ArrowTy _ a _ b _) _ <- M.elems fundefs ])
 
 -- | Retrieve the type of a function:
-getFunTy :: NewFuns -> Var -> ArrowTy Ty2
+getFunTy :: FunDefs -> Var -> ArrowTy Ty2
 getFunTy mp f = case M.lookup f mp of
                   Nothing -> error $ "getFunTy: function was not bound: "++show f
-                  Just (FunDef{funty}) -> funty
+                  Just (FunDef{funTy}) -> funTy
 
-
-
-
--- TODO: beta-branch: REVAMP BELOW HERE
---------------------------------------------------------------------------------
 
 -- | Retrieve all LocVars from a fn type (Arrow)
 allLocVars :: ArrowTy t -> [LocVar]
@@ -319,6 +286,46 @@ substEffs mp ef =
                  Just v2 -> Traverse v2
                  Nothing -> Traverse v) ef
 
+-- | Injected cursor args go first in input and output:
+prependArgs :: [UrTy l] -> UrTy l -> UrTy l
+prependArgs [] t = t
+prependArgs ls t = ProdTy $ ls ++ [t]
+
+-- | Remove the extra location annotations.
+stripTyLocs :: UrTy a -> UrTy ()
+stripTyLocs ty =
+  case ty of
+    IntTy     -> IntTy
+    BoolTy    -> BoolTy
+    ProdTy ls -> ProdTy $ L.map stripTyLocs ls
+    SymDictTy ty'    -> SymDictTy $ stripTyLocs ty'
+    PackedTy tycon _ -> PackedTy tycon ()
+    ListTy ty'       -> ListTy $ stripTyLocs ty'
+    PtrTy    -> PtrTy
+    CursorTy -> CursorTy
+
+-- Duplicate of locsInTy. Delete one of these.
+-- | Collect all the locations mentioned in a type.
+getTyLocs :: Ty2 -> [LocVar]
+getTyLocs t =
+    case t of
+      SymTy     -> []
+      BoolTy    -> []
+      IntTy     -> []
+      PackedTy _ v  -> [v]
+      ProdTy ls     -> L.concatMap getTyLocs ls
+      SymDictTy elt -> getTyLocs elt
+      PtrTy    -> []
+      CursorTy -> []
+      ListTy _ -> error "allLocVars: FIXME lists"
+
+locsInTy :: Ty2 -> [LocVar]
+locsInTy ty =
+    case ty of
+      PackedTy _ lv -> [lv]
+      ProdTy tys -> concatMap locsInTy tys
+      _ -> []
+
 -- Because L2 just adds a bit of metadata and enriched types, it is
 -- possible to strip it back down to L1.
 revertToL1 :: Prog -> L1.Prog
@@ -327,19 +334,21 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
   where
     ddefs'   = M.map revertDDef ddefs
     funefs'  = M.map revertFunDef fundefs
-    mainExp' = fmap (revertExp . fst) mainExp
+    mainExp' = case mainExp of
+                 Nothing -> Nothing
+                 Just (e,ty) -> Just (revertExp e, stripTyLocs ty)
 
     revertDDef :: DDef Ty2 -> DDef Ty1
     revertDDef (DDef a b) =
       DDef a (L.filter (\(dcon,_) -> not $ isIndirectionTag dcon) $
               L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
 
-    revertFunDef :: FunDef -> (L1.FunDef Ty1 (L L1.Exp1))
-    revertFunDef FunDef{funname,funarg,funty,funbod} =
-      L1.FunDef { funName  = funname
-                , funArg   =  (funarg, stripTyLocs (arrIn funty))
-                , funRetTy = stripTyLocs (arrOut funty)
-                , funBody  = revertExp funbod
+    revertFunDef :: FunDef -> L1.FunDef
+    revertFunDef FunDef{funName,funArg,funTy,funBody} =
+      L1.FunDef { funName = funName
+                , funArg  = funArg
+                , funTy   = (stripTyLocs (arrIn funTy), stripTyLocs (arrOut funTy))
+                , funBody = revertExp funBody
                 }
 
     revertExp :: L Exp2 -> L L1.Exp1
@@ -350,7 +359,7 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         LitSymE v -> LitSymE v
         AppE v _ arg    -> AppE v [] (revertExp arg)
         PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
-        LetE (v,locs,ty, L _ (Ext (IndirectionE _ _ _ _ arg))) bod ->
+        LetE (v,_,ty, L _ (Ext (IndirectionE _ _ _ _ arg))) bod ->
           let PackedTy tycon _ =  ty in
           LetE (v,[],(stripTyLocs ty), l$ AppE (mkCopyFunName tycon) [] (revertExp arg)) (revertExp bod)
         LetE (v,_,ty,rhs) bod ->
@@ -396,7 +405,6 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         DictHasKeyP ty -> DictHasKeyP (stripTyLocs ty)
         ErrorP s ty    -> ErrorP s (stripTyLocs ty)
         ReadPackedFile fp tycon ty -> ReadPackedFile fp tycon (stripTyLocs ty)
-        MkNullCursor -> MkNullCursor
         PEndOf -> error "Do not use PEndOf after L2."
 
     docase :: (DataCon, [(Var,LocVar)], L Exp2) -> (DataCon, [(Var,())], L L1.Exp1)
@@ -405,7 +413,7 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
       in (dcon, zip vars (repeat ()), revertExp rhs)
 
 
--- | If a variable occurs in an expression
+-- | Does a variable occurs in an expression ?
 occurs :: Var -> L Exp2 -> Bool
 occurs w (L _ ex) =
   case ex of
@@ -441,39 +449,6 @@ mapPacked fn t =
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ListTy{} -> error "FINISHLISTS"
-
--- Injected cursor args go first in input and output:
-prependArgs :: [UrTy l] -> UrTy l -> UrTy l
-prependArgs [] t = t
-prependArgs ls t = ProdTy $ ls ++ [t]
-
--- | Remove the extra location annotations.
-stripTyLocs :: UrTy a -> UrTy ()
-stripTyLocs ty =
-  case ty of
-    IntTy     -> IntTy
-    BoolTy    -> BoolTy
-    ProdTy ls -> ProdTy $ L.map stripTyLocs ls
-    SymDictTy ty'    -> SymDictTy $ stripTyLocs ty'
-    PackedTy tycon _ -> PackedTy tycon ()
-    ListTy ty'       -> ListTy $ stripTyLocs ty'
-    PtrTy    -> PtrTy
-    CursorTy -> CursorTy
-
--- | Collect all the locations mentioned in a type.
-getTyLocs :: Ty2 -> [LocVar]
--- TODO: could just be a fold
-getTyLocs t =
-    case t of
-      SymTy     -> []
-      BoolTy    -> []
-      IntTy     -> []
-      PackedTy _ v  -> [v]
-      ProdTy ls     -> L.concatMap getTyLocs ls
-      SymDictTy elt -> getTyLocs elt
-      PtrTy    -> []
-      CursorTy -> []
-      ListTy _ -> error "allLocVars: FIXME lists"
 
 -- | Build a dependency list which can be later converted to a graph
 depList :: L Exp2 -> [(Var, Var, [Var])]
@@ -534,358 +509,7 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
           _ -> gFreeVars ex
 
-
-initFunEnv :: NewFuns -> FunEnv Ty2
-initFunEnv fds = M.foldr (\fn acc -> let fnty = (funty fn)
-                                     in M.insert (funname fn) (arrIn fnty, arrOut fnty) acc)
+initFunEnv :: FunDefs -> FunEnv Ty2
+initFunEnv fds = M.foldr (\fn acc -> let fnty = (funTy fn)
+                                     in M.insert (funName fn) (arrIn fnty, arrOut fnty) acc)
                  M.empty fds
-
-isPackedTy' :: Ty2 -> Bool
-isPackedTy' (PackedTy _ _) = True
-isPackedTy' _ = False
-
-locsInTy :: Ty2 -> [LocVar]
-locsInTy ty =
-    case ty of
-      PackedTy _ lv -> [lv]
-      ProdTy tys -> concatMap locsInTy tys
-      _ -> []
-
-
-{-
-
-Commenting out unused functions, to make L2 look a bit cleaner. After we finish
-writing + verifying Cursorize and other related passes which depend on this,
-we can just delete all of these!
-
--- revertToL1 Prog{ ..} =
---   L1.Prog { L1.ddefs   = fmap (fmap (fmap (const ()))) ddefs
---           , L1.fundefs = M.map go fundefs
---           , L1.mainExp = fmap (exp . fst) mainExp
---           }
---  where
---    go FunDef{..} =
---        let ArrowTy{arrIn,arrOut} = funty in
---        L1.FunDef funname (funarg, stripTyLocs arrIn) (stripTyLocs arrOut) (exp funbod)
---    exp :: E2' () Ty -> L1.Exp
---    exp ex = mapExt (\(e::E2 () Ty) ->
---                     error $ "revertToL1: cannot revert, essential L2 construct used:\n  "++show e)
---                    (fmap stripTyLocs ex)
-
-
--- | Collect all the locations mentioned in a type.
-_allLocVars :: Ty2 -> [LocVar]
--- TODO: could just be a fold
-_allLocVars t =
-    case t of
-      SymTy     -> []
-      BoolTy    -> []
-      IntTy     -> []
-      PackedTy _ v  -> [v]
-      ProdTy ls     -> L.concatMap _allLocVars ls
-      SymDictTy elt -> _allLocVars elt
-      PtrTy    -> []
-      CursorTy -> []
-      ListTy _ -> error "allLocVars: FIXME lists"
-
-
--- | Retrieve all LocVars mentioned in a type
-_getTyLocs :: Ty2 -> Set LocVar
-_getTyLocs t =
-    case t of
-      IntTy  -> S.empty
-      SymTy  -> S.empty
-      BoolTy -> S.empty
-      ProdTy ls     -> S.unions (L.map _getTyLocs ls)
-      PackedTy _ lv -> S.singleton lv -- This is a tricky case:
-      SymDictTy elt -> _getTyLocs elt
-      -- TODO(chai):
-      PtrTy    -> S.empty
-      CursorTy -> S.empty
-      ListTy{} -> error "FINISHLISTS"
-
-
--- | Annotate a naked type with fresh location variables.
-_tyWithFreshLocs :: Ty1 -> SyM Ty2
-_tyWithFreshLocs t =
-  case t of
-    L1.IntTy    -> return IntTy
-    L1.SymTy    -> return SymTy
-    L1.BoolTy   -> return BoolTy
-    L1.ProdTy l -> ProdTy <$> mapM _tyWithFreshLocs l
-    L1.SymDictTy v  -> SymDictTy <$> _tyWithFreshLocs v
-    L1.PackedTy _ _ -> error $ "tyWithFreshLocs: unexpected type: " ++ show t
-    L1.PtrTy    -> error $ "FINISHME: _tyWithFreshLocs PtrTy"
-    L1.CursorTy -> error $ "FINISHME: _tyWithFreshLocs CursorTy"
-    L1.ListTy _ -> error "tyWithFreshLocs: FIXME implement lists"
-
-
-Cursor types encoded into the current language
-
-
-
--- Cursorizing arguments and returns -- abstracting the conventions
---------------------------------------------------------------------------------
-
--- _addOutputParamArgs = __
-
-
--- _addEndWitnessReturns = __
-
--- Cursorizing types.
---------------------------------------------------------------------------------
--- This happens in two stages, corresponding to the passes RouteEnds
--- and CursorDirect.
-
--- | Step 1/3: add additional outputs corresponding to
--- end-of-input-value witnesses.  Return the new type and the added
--- outputs.
-cursorizeUrTy :: ArrowTy Ty -> (ArrowTy Ty, [LocVar])
-cursorizeUrTy (ArrowTy inT ef ouT) = (newArr, newOut)
- where
-  newArr = ArrowTy inT ef newOutTy
-  newOutTy = prependArgs (L.map mkCursorTy newOut)
-                         ouT
-  -- Every _traversed_ packed input means a POTENTIAL output (new
-  -- return value for the cursor's final value).
-  newOut   = [ toEndVar v  -- This determines the ORDER of added inputs.
-             | Traverse v <- S.toList ef ] -- ^ Because we traverse all outputs,
-                                           -- this effect set  is just what we need.
-
--- | Step 2/3: continue the conversion by:
---
---  (1) First, adding additional input arguments for the destination
---      cursors to which outputs are written.
---  (2) Packed types in the output then become end-cursors for those
---      same destinations.
---  (3) Packed types in the input STAY non-cursor packed types.
---
---  Results: the new type as well as the extra params added to the
---  input type.
-cursorizeTy2 :: ArrowTy Ty -> (ArrowTy Ty, [LocVar])
-cursorizeTy2 (ArrowTy inT ef ouT) =  (newArr, newIn)
- where
-  newArr   = ArrowTy newInTy ef newOutTy
-  newInTy  = prependArgs (L.map mkCursorTy newIn) -- These are cursors
-                         inT -- These remain non-cursors.
-                         -- (mapPacked (\_ l -> mkCursorTy l) inT)
-  -- Let's turn output values into updated-output-cursors:
-  -- NOTE: we could distinguish between the (size ef) output cursors
-  -- that are already prepended here:
-  newOutTy = mapPacked (\_ l -> mkCursorTy (ensureEndVar l)) ouT
-  newIn    =
-   if S.null ef
-   then allLocVars ouT -- These stay in their original order (preorder)
-   else -- Strip the added output cursors off before computing this
-        let ProdTy ls = ouT in
-        allLocVars (ProdTy (L.drop (S.size ef) ls))
-
--- | Take the final step (3/3)
---   Packed types in the input now become (read-only) cursors.
-cursorizeArrty3 :: ArrowTy Ty -> ArrowTy Ty
-cursorizeArrty3 arr@(ArrowTy inT ef ouT) =
-    if hasRealPacked ouT
-    then error $"Bad input to cursorizeArrty3, has non-cursor packed outputs.  Was this put through cursorizeTy2?:+ "
-             ++show arr
-    else ArrowTy (cursorizeTy3 inT) ef ouT
-
--- | The non-arrow counterpart to `cursorizeArrTy3`
-cursorizeTy3 :: Ty2 -> Ty2
-cursorizeTy3  = mapPacked (\ _k l -> mkCursorTy l)
-
-
-ensureEndVar :: Var -> Var
-ensureEndVar v | isEndVar v = v
-               | otherwise  = toEndVar v
-
---------------------------------------------------------------------------------
-
--- | Map every lexical variable in scope to an abstract location.
---   This is useful for compiler passes that need to track abstract
---   locations of program terms.
-type LocEnv = M.Map Var Loc
-
--- | Convert the type of a function argument to an abstract location
--- for that function argument.
-argtyToLoc :: Var -> Ty -> Loc
-argtyToLoc v ty =
- case ty of
-  PackedTy{}
-    | isCursorTy ty -> Fixed $ cursorTyLoc ty
-    | otherwise -> Fixed v
-    -- ^ Here we set the type based on the variable binding name, not the
-    -- quantified loc variable in the type signature.
-  (ProdTy ls)   -> TupLoc [argtyToLoc (subloc v i) t | (t,i) <- zip ls [1..]]
-   -- ^ Here we generate fixed locations that are *subparts* of the function argument.
-  SymTy         -> Bottom
-  IntTy         -> Bottom
-  BoolTy        -> Bottom
-  SymDictTy _t  -> -- ^ This may contain packed objects, but it is not contiguous.
-    Fixed v
-    -- if hasPacked t then Top else Bottom
-  ListTy _ -> error "allLocVars: FIXME lists"
-
-
--- A bit of name mangling when promoting lexical variables to location vars
----------------------------------------------------------------------------
--- | First, lift program variables so they don't interfere with ones
--- we introduce.  Also, remove internal underscores.
-mangle :: Var -> Var
-mangle v = v
--- mangle v = "_" ++ L.filter (/='_') v
-
--- | Refer to a portion of the data associated with a var.
-subloc :: Var -> Int -> Var
-subloc v n = varAppend v (toVar (show n))
-
--- Strip off any subloc modifiers
--- root :: Var -> Var
-------------------------------------------------------------
-
--- | Take a location which is expected to be a single variable, and
--- retrieve that variable.
-getLocVar :: Loc -> Maybe Var
-getLocVar (Fresh v) = Just v
-getLocVar (Fixed v) = Just v
-getLocVar Top = Nothing
-getLocVar l = error $"getLocVar: expected a single packed value location, got: "
-                    ++show(doc l)
-
-
-
--- | We extend the environment when going under lexical binders, which
--- always have fixed abstract locations associated with them.
-extendLocEnv :: [(Var,L1.Ty)] -> LocEnv -> SyM LocEnv
-extendLocEnv []    e     = return e
-extendLocEnv ((v,t):r) e =
-    do t' <- tyWithFreshLocs t -- Temp, just to call argtyToLoc.
-       extendLocEnv r (M.insert v (argtyToLoc (mangle v) t') e)
-
-
--- FIXME: Remove:
-mapExprs :: (Env2 (UrTy ()) -> Exp -> Exp) -> Prog -> Prog
-mapExprs fn (Prog dd fundefs mainExp) =
-    Prog dd
-         (fmap (\ (FunDef nm arrTy@(ArrowTy inT _ _) arg bod) ->
-                 let env = Env2 (M.singleton arg (fmap (\_->()) inT))
-                                funEnv
-                 in FunDef nm arrTy arg (fn env bod))
-            fundefs)
-         -- The function is implicitly assumed not to change the type!
-         -- TODO: perhaps should re-infer the type here?
-         (fmap (\(e,t) -> (fn (Env2 M.empty funEnv) e, t) ) mainExp)
-  where
-    funEnv = fEnv $ includeBuiltins $ progToEnv (Prog dd fundefs mainExp)
-
--- | Map exprs with an initial type environment:
-mapMExprs :: Monad m => (Env2 (UrTy LocVar) -> L Exp2 -> m (L Exp2)) -> Prog ->
-             m Prog
-mapMExprs = error $ "FINISHME: L2 mapMExprs"
--- mapMExprs fn (Prog dd fundefs mainExp) =
---     Prog dd <$>
---          (mapM (\ (FunDef nm arrTy@(ArrowTy inT _ _) arg bod) ->
---                  let env = Env2 (M.singleton arg (fmap (\_->()) inT))
---                                 funEnv
---                  in
---                    FunDef nm arrTy arg <$> (fn env bod))
---             fundefs)
---          <*>
---          (mapM (\ (e,t) ->
---                  (,t) <$> fn (Env2 M.empty funEnv) e) mainExp)
---   where
---     funEnv = fEnv $ includeBuiltins $ progToEnv (Prog dd fundefs mainExp)
-
-
---------------------------------------------------------------------------------
-
-
--- Conventions encoded inside the existing Core IR
--- =============================================================================
-
--- For use after inlinePacked / before cursorize:
--------------------------------------------------
-
--- | Used to inline variable bindings while retaining their (former) name and type.
-pattern NamedVal :: forall t t1 (t2 :: * -> * -> *).
-                    Var -> t -> L (PreExp t2 t1 t) -> PreExp t2 t1 t
-pattern NamedVal vr ty e <- LetE (vr,[],ty,e)
-                                  (L _ (VarE (Var "NAMED_VAL_PATTERN_SYN")))
-  where NamedVal vr ty e = LetE (vr,[],ty,e)
-                                    (L NoLoc (VarE "NAMED_VAL_PATTERN_SYN"))
-
-
--- For use after cursorize:
---------------------------------------------------------------------------------
-
-pattern NewBuffer :: forall t t1 (t2 :: * -> * -> *). PreExp t2 t1 t
-pattern NewBuffer <- AppE (Var "NewBuffer") [] (L _ (MkProdE []))
-  where NewBuffer = AppE "NewBuffer" [] (L NoLoc (MkProdE []))
-
--- | output buffer space that is known not to escape the current function.
-pattern ScopedBuffer :: forall t t1 (t2 :: * -> * -> *). PreExp t2 t1 t
-pattern ScopedBuffer <- AppE (Var "ScopedBuffer") [] (L _ (MkProdE []))
-  where ScopedBuffer = AppE "ScopedBuffer" [] (L NoLoc (MkProdE []))
-
--- | Tag writing is still modeled by DataConE.
-pattern WriteInt :: forall t t1 (t2 :: * -> * -> *).
-                    Var -> L (PreExp t2 t1 t) -> PreExp t2 t1 t
-pattern WriteInt v e <- AppE (Var "WriteInt") [] (L _ (MkProdE [L _ (VarE v), e]))
-  where WriteInt v e = AppE "WriteInt" [] (L NoLoc (MkProdE [L NoLoc (VarE v), e]))
-
--- | One cursor in, (int,cursor') output.
-pattern ReadInt :: forall t t1 (t2 :: * -> * -> *). Var -> PreExp t2 t1 t
-pattern ReadInt v <- AppE (Var "ReadInt") [] (L _ (VarE v))
-  where ReadInt v = AppE "ReadInt" [] (L NoLoc (VarE v))
-
--- | Add a constant offset to a cursor variable.
-pattern AddCursor :: forall t t1 (t2 :: * -> * -> *).
-                     Var -> Int -> PreExp t2 t1 t
-pattern AddCursor v i <- AppE (Var "AddCursor") []
-                               (L _ (MkProdE [L _ (VarE v), L _ (LitE i)]))
-  where AddCursor v i = AppE "AddCursor" []
-                                 (L NoLoc (MkProdE [L NoLoc (VarE v),
-                                                    L NoLoc (LitE i)]))
-
-
--- | A predicate to check if the form is part of the extended "L2.5" language.
-isExtendedPattern :: PreExp l e d -> Bool
-isExtendedPattern e =
-  case e of
-    NewBuffer{}    -> True
-    ScopedBuffer{} -> True
-    ReadInt{}      -> True
-    WriteInt{}     -> True
-    AddCursor{}    -> True
-    _              -> False
-
-
--- Initial type environments
---------------------------------------------------------------------------------
-
--- | A type environment listing the types of built-in functions.
---
---   Using this table represents a policy decision.  Specifically,
---   that a type checker is relying on the fact that all the L2.5
---   patterns above are valid AppE forms.  The alternative is for that
---   typechecker to match against these patterns before the AppE
---   cases.
---
-builtinTEnv :: M.Map Var (ArrowTy L1.Ty1)
-builtinTEnv = undefined
-  -- M.fromList
-  -- [ ("NewBuffer",    ArrowTy voidTy S.empty dummyCursorTy)
-  -- , ("ScopedBuffer", ArrowTy voidTy S.empty dummyCursorTy)
-  -- , ("ReadInt",      ArrowTy dummyCursorTy S.empty (ProdTy [IntTy, dummyCursorTy]))
-  -- , ("WriteInt",     ArrowTy (ProdTy [dummyCursorTy, IntTy]) S.empty dummyCursorTy)
-  -- , ("AddCursor",    ArrowTy (ProdTy [dummyCursorTy, IntTy]) S.empty dummyCursorTy)
-  -- -- Note: ReadPackedFile is a builtin/primitive.  It is polymorphic,
-  -- -- which currently doesn't allow us to model it as a function like
-  -- -- this [2017.01.08].
-  -- ]
-
-includeBuiltins :: Env2 (UrTy ()) -> Env2 (UrTy ())
-includeBuiltins (Env2 _ _) = undefined
-    -- Env2 v (f `M.union` f')
-    -- where f' = M.fromList [ (n,(fmap (\_->()) a, fmap (\_->()) b))
-    --                       | (n, ArrowTy a _ b) <- M.assocs builtinTEnv ]
--}

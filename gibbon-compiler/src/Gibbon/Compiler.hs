@@ -21,9 +21,10 @@ module Gibbon.Compiler
 import           Control.DeepSeq
 import           Control.Exception
 import           Control.Monad.State.Strict
-import           Data.Loc
 import           Data.Set as S hiding (map)
+#if !MIN_VERSION_base(4,11,0)
 import           Data.Monoid
+#endif
 import           Options.Applicative
 import           System.Directory
 import           System.Environment
@@ -234,7 +235,7 @@ sepline = replicate 80 '='
 
 data CompileState =
      CompileState { cnt :: Int -- ^ Gensym counter
-                  , result :: Maybe SI.Value -- ^ Result of evaluating output of prior pass, if available.
+                  , result :: Maybe Value -- ^ Result of evaluating output of prior pass, if available.
                   }
 
 -- | Compiler entrypoint, given a full configuration and a list of
@@ -348,7 +349,7 @@ parseInput ip fp =
 
 
 -- |
-interpProg :: L1.Prog -> IO (Maybe SI.Value)
+interpProg :: L1.Prog -> IO (Maybe Value)
 interpProg l1 =
   if dbgLvl >= interpDbgLevel
   then do
@@ -377,6 +378,7 @@ passes config@Config{mode,dynflags} l1 = do
                      Bench fnname -> benchMainExp config l1 fnname
                      _ -> l1
 
+      l1 <- goE "typecheck"  L1.tcProg l1
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    (return . inlineTriv)   l1
 
@@ -464,7 +466,8 @@ benchMainExp Config{benchInput,dynflags} l1 fnname = do
                (if (gopt Opt_BenchPrint dynflags)
                 then l$ L1.VarE (toVar "benchres")
                 else l$ L1.PrimAppE L1.MkTrue [])
-  l1{ L1.mainExp = Just $ L NoLoc newExp }
+  -- Initialize the main expression with a void type. The typechecker will fix it later.
+  l1{ L1.mainExp = Just $ (l$ newExp, L1.ProdTy []) }
 
 
 type PassRunner a b = (Out b, NFData a, NFData b) =>

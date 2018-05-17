@@ -54,8 +54,11 @@ desugarModule (S.Module _ _ _ decls) = do
       ( funBody <$> M.lookup (toVar "main") funMap
       , M.delete (toVar "main") funMap
       )
-
-  return (Prog dataMap funMapNoMain mainFn)
+    -- Initialize the main expression with a void type. The typechecker will fix the type later.
+    main = case mainFn of
+             Just x  -> Just (x, ProdTy [])
+             Nothing -> Nothing
+  return (Prog dataMap funMapNoMain main)
 
 collectTopFunTy :: S.Decl -> Ds (Maybe (Var, TopTy))
 collectTopFunTy decl =
@@ -68,7 +71,7 @@ collectTopFunTy decl =
     unsupported      -> err ("collectTopFunTy: Unsupported top-level thing: " ++ show unsupported)
 
 
-collectTopLevel :: M.Map Var TopTy -> S.Decl -> Ds (Maybe (Either (DDef Ty1) (FunDef Ty1 (L L1.Exp1))))
+collectTopLevel :: M.Map Var TopTy -> S.Decl -> Ds (Maybe (Either (DDef Ty1) FunDef))
 
 -- This is the main expression. We're disguising it as a FunDef just for convenience.
 -- We should probably create a sum type with these 3 things; ddefs, fundefs, and mainExp
@@ -76,7 +79,7 @@ collectTopLevel :: M.Map Var TopTy -> S.Decl -> Ds (Maybe (Either (DDef Ty1) (Fu
 collectTopLevel _ (S.PatBind (S.PVar name) (S.UnGuardedRhs rhs) _) = do
   let name' = toVar $ nameToStr name
   rhs' <- desugarExp rhs
-  return $ Just $ Right $ FunDef name' ("nothing",ProdTy []) (ProdTy []) rhs'
+  return $ Just $ Right $ FunDef name' "nothing" (ProdTy [],ProdTy []) rhs'
 
 collectTopLevel _ S.TypeSig{} = return Nothing
 collectTopLevel funTys (S.FunBind [S.Match fname args (S.UnGuardedRhs rhs) Nothing]) = do
@@ -87,7 +90,7 @@ collectTopLevel funTys (S.FunBind [S.Match fname args (S.UnGuardedRhs rhs) Nothi
     -- Limiting to one argument for now:
     [arg_ty] <- mapM (getArgTy fun_ty) [ 1 .. length [arg'] ]
     rhs'    <- desugarExp rhs
-    return (Just (Right (FunDef fname' (arg',arg_ty) (getRetTy fun_ty) rhs')))
+    return (Just (Right (FunDef fname' arg' (arg_ty, getRetTy fun_ty) rhs')))
   where
     collectArg :: S.Pat -> Ds Var
     collectArg (S.PVar n) = return $ (toVar . nameToStr) n
@@ -101,7 +104,7 @@ collectTopLevel funTys (S.FunBind [S.Match fname args (S.UnGuardedRhs rhs) Nothi
     getRetTy (Arrow ts) = last ts
     getRetTy (T1 t)     = t
 
-collectTopLevel _ (S.DataDecl S.DataType Nothing decl_head cons Nothing) = do
+collectTopLevel _ (S.DataDecl S.DataType Nothing decl_head cons _deriving_binds) = do
     let ty_name' = nameToStr ty_name
         ty_name = case decl_head of
                     S.DHead name -> name

@@ -1,14 +1,11 @@
 module Gibbon.Passes.DirectL3
     (directL3) where
 
-import Control.Monad.Except
 import Data.Loc
 import Data.List as L
 import Data.Map as M
 
-import Gibbon.Common
 import Gibbon.L1.Syntax
-import Gibbon.L1.Typecheck
 import Gibbon.L2.Syntax (stripTyLocs)
 import qualified Gibbon.L3.Syntax as L3
 
@@ -16,26 +13,22 @@ import qualified Gibbon.L3.Syntax as L3
 -- | Directly convert the source program to L3. Used in the pointer mode
 --
 directL3 :: Prog -> L3.Prog
-directL3 prg@(Prog ddfs fndefs mnExp) = do
+directL3 (Prog ddfs fndefs mnExp) = do
     let mnExp' = case mnExp of
                    Nothing -> Nothing
-                   Just ex -> do
-                       ty <- return $ runExcept $ tcExp ddfs (progToEnv prg) ex
-                       case ty of
-                         Left err -> error $ show err
-                         Right ty' -> Just (go ex, ty')
+                   Just (ex,ty) -> Just (go ex, stripTyLocs ty)
 
         fds = L.map fd $ M.elems fndefs
-        fndefs' = M.fromList $ L.map (\f -> (L3.funname f, f)) fds
+        fndefs' = M.fromList $ L.map (\f -> (L3.funName f, f)) fds
     L3.Prog ddfs fndefs' mnExp'
   where
-    fd :: FunDef Ty1 (L Exp1) -> L3.FunDef
-    fd FunDef{funName,funArg,funRetTy,funBody} =
-        let (arg,ty) = funArg
-        in L3.FunDef { L3.funname = funName
-                     , L3.funty = L3.ArrowTy (toL3Ty ty) (toL3Ty funRetTy)
-                     , L3.funarg = arg
-                     , L3.funbod = go funBody
+    fd :: FunDef -> L3.FunDef
+    fd FunDef{funName,funArg,funTy,funBody} =
+        let (argty,retty) = funTy
+        in L3.FunDef { L3.funName = funName
+                     , L3.funTy   = (toL3Ty argty, toL3Ty retty)
+                     , L3.funArg  = funArg
+                     , L3.funBody = go funBody
                      }
 
     toL3Ty :: Ty1 -> L3.Ty3

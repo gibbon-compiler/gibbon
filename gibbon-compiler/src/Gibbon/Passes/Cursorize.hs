@@ -11,7 +11,7 @@ import Text.PrettyPrint.GenericPretty
 
 import Gibbon.DynFlags
 import Gibbon.GenericOps
-import Gibbon.Common    hiding (FunDefs, FunDef(..))
+import Gibbon.Common
 import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..), FunDefs)
 import Gibbon.L2.Syntax as L2
 import qualified Gibbon.L3.Syntax as L3
@@ -83,7 +83,7 @@ type DepEnv = M.Map LocVar [(Var,[()],L3.Ty3,L L3.Exp3)]
 cursorize :: DynFlags -> Prog -> SyM L3.Prog
 cursorize dflags Prog{ddefs,fundefs,mainExp} = do
   fns' <- mapM (cursorizeFunDef dflags ddefs fundefs . snd) (M.toList fundefs)
-  let fundefs' = M.fromList $ L.map (\f -> (L3.funname f, f)) fns'
+  let fundefs' = M.fromList $ L.map (\f -> (L3.funName f, f)) fns'
       ddefs'   = M.map L3.eraseLocMarkers ddefs
 
   mainExp' <- case mainExp of
@@ -97,15 +97,15 @@ cursorize dflags Prog{ddefs,fundefs,mainExp} = do
   return $ L3.Prog ddefs' fundefs' mainExp'
 
 -- |
-cursorizeFunDef :: DynFlags -> DDefs Ty2 -> NewFuns ->  FunDef -> SyM L3.FunDef
-cursorizeFunDef dflags ddefs fundefs FunDef{funname,funty,funarg,funbod} =
-  let inLocs  = inLocVars funty
-      outLocs = outLocVars funty
-      outRegs = outRegVars funty
-      inRegs  = inRegVars funty
-      inT     = arrIn funty
-      outT    = arrOut funty
-      funty'  = cursorizeArrowTy funty
+cursorizeFunDef :: DynFlags -> DDefs Ty2 -> FunDefs ->  FunDef -> SyM L3.FunDef
+cursorizeFunDef dflags ddefs fundefs FunDef{funName,funTy,funArg,funBody} =
+  let inLocs  = inLocVars funTy
+      outLocs = outLocVars funTy
+      outRegs = outRegVars funTy
+      inRegs  = inRegVars funTy
+      inT     = arrIn funTy
+      outT    = arrOut funTy
+      funTy'  = cursorizeArrowTy funTy
   in do
    newarg <- gensym "newarg"
 
@@ -124,19 +124,19 @@ cursorizeFunDef dflags ddefs fundefs FunDef{funname,funty,funarg,funbod} =
        -- Then the input cursors. Create projections for input cursors here
        afterOutLocs  = nProj (totalRegs + length outLocs) newarg
        inCurBinds = case inLocs of
-                      [] -> mkLets [(funarg,[],stripTyLocs inT, afterOutLocs)]
+                      [] -> mkLets [(funArg,[],stripTyLocs inT, afterOutLocs)]
                       _  -> let projs = mkInProjs afterOutLocs inT
                                 bnds  = [(loc,[],CursorTy,proj) | (loc,proj) <- zip inLocs projs]
-                                        ++ [(funarg,[], cursorizeInTy inT, afterOutLocs)]
+                                        ++ [(funArg,[], cursorizeInTy inT, afterOutLocs)]
                             in mkLets bnds
 
-       initTyEnv = M.fromList $ [(funarg, cursorizeInTy inT)] ++ [(a,CursorTy) | (LRM a _ _) <- locVars funty]
+       initTyEnv = M.fromList $ [(funArg, cursorizeInTy inT)] ++ [(a,CursorTy) | (LRM a _ _) <- locVars funTy]
 
    bod <- if hasPacked outT
-          then fromDi <$> cursorizePackedExp dflags ddefs fundefs M.empty initTyEnv funbod
-          else cursorizeExp dflags ddefs fundefs M.empty initTyEnv funbod
+          then fromDi <$> cursorizePackedExp dflags ddefs fundefs M.empty initTyEnv funBody
+          else cursorizeExp dflags ddefs fundefs M.empty initTyEnv funBody
    ret <- return $ outCurBinds (inCurBinds bod)
-   return $ L3.FunDef funname funty' newarg ret
+   return $ L3.FunDef funName newarg funTy' ret
 
   where
     -- | The only difference between this and L3.cursorizeTy is that here,
@@ -165,10 +165,10 @@ cursorizeFunDef dflags ddefs fundefs FunDef{funname,funty,funarg,funbod} =
     --   This is used to create bindings for input location variables.
     --
     -- >>> mkInProjs e (PackedTy "T" "l")
-    -- [VarE (Var "funarg")]
+    -- [VarE (Var "funArg")]
     --
     -- >>> mkInProjs e (ProdTy [IntTy,PackedTy "T" "l"])
-    -- [ProjE 1 VarE (Var "funarg")]
+    -- [ProjE 1 VarE (Var "funArg")]
     --
     -- >>> mkInProje e (ProdTy [ProdTy [PackedTy "T" "l", PackedTy "T" "l"], IntTy])
     -- [ProjE 0 ProjE 0 e, ProjE 1 ProjE 0 e]
@@ -189,7 +189,7 @@ cursorizeFunDef dflags ddefs fundefs FunDef{funname,funty,funarg,funbod} =
                                  acc (zip tys [0..])
            _ -> acc
 
-    cursorizeArrowTy :: L2.ArrowTy L2.Ty2 -> L3.ArrowTy L3.Ty3
+    cursorizeArrowTy :: L2.ArrowTy L2.Ty2 -> (L3.Ty3 , L3.Ty3)
     cursorizeArrowTy ty@L2.ArrowTy{L2.arrIn,L2.arrOut,L2.locVars,L2.locRets} =
       let
           -- Regions corresponding to ouput cursors. (See Note [Infinite regions])
@@ -214,11 +214,11 @@ cursorizeFunDef dflags ddefs fundefs FunDef{funname,funty,funarg,funbod} =
           -- Packed types in the input now become (read-only) cursors.
           newIn    = L2.mapPacked (\_ _ -> CursorTy) inT
 
-      in L3.ArrowTy { L3.arrIn = stripTyLocs newIn, L3.arrOut = stripTyLocs newOut }
+      in (stripTyLocs newIn, stripTyLocs newOut)
 
 
 -- | Cursorize expressions NOT producing `Packed` values
-cursorizeExp :: DynFlags -> DDefs Ty2 -> NewFuns -> DepEnv -> TEnv -> L Exp2 -> SyM (L L3.Exp3)
+cursorizeExp :: DynFlags -> DDefs Ty2 -> FunDefs -> DepEnv -> TEnv -> L Exp2 -> SyM (L L3.Exp3)
 cursorizeExp dflags ddfs fundefs denv tenv (L p ex) = L p <$>
   case ex of
     VarE v    -> return $ VarE v
@@ -244,7 +244,7 @@ cursorizeExp dflags ddfs fundefs denv tenv (L p ex) = L p <$>
           ty   = gTypeExp ddfs (Env2 tenv M.empty) rhs
           ty'  = L3.cursorizeTy ty
       LetE (v,[],ty', rhs') <$>
-        cursorizeExp dflags ddfs fundefs denv (M.insert v ty' tenv) bod
+        cursorizeExp dflags ddfs fundefs denv (M.insert v ty tenv) bod
 
 
     -- Same as `cursorizePackedExp`
@@ -325,7 +325,7 @@ cursorizeExp dflags ddfs fundefs denv tenv (L p ex) = L p <$>
 
 
 -- Cursorize expressions producing `Packed` values
-cursorizePackedExp :: DynFlags -> DDefs Ty2 -> NewFuns -> DepEnv -> TEnv -> L Exp2
+cursorizePackedExp :: DynFlags -> DDefs Ty2 -> FunDefs -> DepEnv -> TEnv -> L Exp2
                    -> SyM (DiExp (L L3.Exp3))
 cursorizePackedExp dflags ddfs fundefs denv tenv (L p ex) =
   case ex of
@@ -604,18 +604,18 @@ But Infinite regions do not support sizes yet. Re-enable this later.
 --     safely drop them from `locs`.
 --
 -- (2) We update `arg` so that all packed values in it only have start cursors.
-cursorizeAppE :: DynFlags -> DDefs Ty2 -> NewFuns -> DepEnv -> TEnv -> L Exp2 -> SyM L3.Exp3
+cursorizeAppE :: DynFlags -> DDefs Ty2 -> FunDefs -> DepEnv -> TEnv -> L Exp2 -> SyM L3.Exp3
 cursorizeAppE dflags ddfs fundefs denv tenv (L _ ex) =
   case ex of
     AppE f locs arg -> do
       let fnTy   = case M.lookup f fundefs of
-                     Just g -> funty g
+                     Just g -> funTy g
                      Nothing -> error $ "Unknown function: " ++ sdoc f
           inT    = arrIn fnTy
           inLocs = inLocVars fnTy
           numRegs = length (outRegVars fnTy) + length (inRegVars fnTy)
           -- Drop input locations, but keep everything else
-          outs   = (take numRegs locs) ++  (drop numRegs $ drop (length inLocs) $ locs)
+          outs   = (L.take numRegs locs) ++  (L.drop numRegs $ L.drop (length inLocs) $ locs)
           argTy  = gTypeExp ddfs (Env2 tenv M.empty) arg
       arg' <- if hasPacked inT
               then fromDi <$> cursorizePackedExp dflags ddfs fundefs denv tenv arg
@@ -647,7 +647,7 @@ we can take a shortcut here and directly bind `v` to the tagged location.
 Other bindings are straightforward projections of the processed RHS.
 
 -}
-cursorizeLet :: DynFlags -> DDefs Ty2 -> NewFuns -> DepEnv -> TEnv -> Bool
+cursorizeLet :: DynFlags -> DDefs Ty2 -> FunDefs -> DepEnv -> TEnv -> Bool
              -> (Var, [Var], Ty2, L Exp2) -> L Exp2 -> SyM L3.Exp3
 cursorizeLet dflags ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
     | isPackedTy ty = do
@@ -750,15 +750,15 @@ cursorizeLet dflags ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
 -- (2) If the first bound varaible is a scalar (IntTy), read it using the newly
 -- returned cursor. Otherwise, just process the body. it'll have the correct
 -- instructions to process other bound locations
-unpackDataCon :: DynFlags -> DDefs Ty2 -> NewFuns -> DepEnv -> TEnv -> Bool -> Var
+unpackDataCon :: DynFlags -> DDefs Ty2 -> FunDefs -> DepEnv -> TEnv -> Bool -> Var
               -> (DataCon, [(Var, Var)], L Exp2) -> SyM (DataCon, [t], L L3.Exp3)
 unpackDataCon dflags ddfs fundefs denv1 tenv isPacked scrtCur (dcon,vlocs,rhs) = do
 
   let indrVars = if isIndrDataCon dcon
                  then (case numIndrsDataCon ddfs (fromIndrDataCon dcon) of
                          Just n ->
-                           let indrs = L.map fst $ take n vlocs
-                               vars  = L.map fst $ reverse (take n (reverse vlocs))
+                           let indrs = L.map fst $ L.take n vlocs
+                               vars  = L.map fst $ reverse (L.take n (reverse vlocs))
                            in zip indrs vars
                          Nothing -> error $ "unpackDataCon: Sized constructor should have packed fields.")
                  else []

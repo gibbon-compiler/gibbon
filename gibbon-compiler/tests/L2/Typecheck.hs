@@ -156,9 +156,9 @@ case_test6 =  assertValue exp (IntTy,LocationTypeState {tsmap = M.fromList []})
 
 -- | Return type of a function is updated with locVars at the call-site
 case_copy_on_add1 :: Assertion
-case_copy_on_add1 = PackedTy "Tree" (Var "lout21") @=? (arrOut funty)
+case_copy_on_add1 = PackedTy "Tree" (Var "lout21") @=? (arrOut funTy)
   where Prog{fundefs} = fst $ runSyM 0 $ tcProg copyOnId1Prog
-        FunDef{funty} = fundefs ! "id1WithCopy"
+        FunDef{funTy} = fundefs ! "id1WithCopy"
 
 
 -- case_test7 :: Assertion

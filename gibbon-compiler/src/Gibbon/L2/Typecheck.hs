@@ -39,13 +39,15 @@ import qualified Gibbon.L1.Syntax as L1
 
 -- | Constraints on locations.  Used during typechecking.  Roughly analogous to LocExp.
 data LocConstraint = StartOfC LocVar Region -- ^ Location is equal to start of this region.
-                   | AfterConstantC Int     -- ^ Number of bytes after.
-                                    LocVar  -- ^ Location which is before
-                                    LocVar  -- ^ Location which is after
-                   | AfterVariableC Var     -- ^ Name of variable v. This loc is size(v) bytes after.
-                                    LocVar  -- ^ Location which is before
-                                    LocVar  -- ^ Location which is after
-                   | InRegionC LocVar Region -- ^ Location is somewher within this region.
+                   -- Can't attach haddocks to data constructor arguments with < GHC 8.4.2
+                   -- See https://github.com/haskell/haddock/pull/709.
+                   | AfterConstantC Int     -- Number of bytes after.
+                                    LocVar  -- Location which is before
+                                    LocVar  -- Location which is after
+                   | AfterVariableC Var     -- Name of variable v. This loc is size(v) bytes after.
+                                    LocVar  -- Location which is before
+                                    LocVar  -- Location which is after
+                   | InRegionC LocVar Region -- Location is somewher within this region.
   deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
 
 
@@ -114,7 +116,7 @@ type TcM a = Except TCError a
 -- | Check an expression. Given the data definitions, an general type environment, a function map,
 -- a constraint set, a region set, an (input) location state map, and the expression, this function
 -- will either throw an error, or return a pair of expression type and new location state map.
-tcExp :: DDefs Ty2 -> Env2 Ty2 -> NewFuns
+tcExp :: DDefs Ty2 -> Env2 Ty2 -> FunDefs
       -> ConstraintSet -> RegionSet -> LocationTypeState -> Exp
       -> TcM (Ty2, LocationTypeState)
 tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
@@ -241,9 +243,6 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                  L1.ReadPackedFile _fp _tycon ty -> do
                    len3
                    return (ty, tstate)
-
-                 L1.MkNullCursor -> do
-                   return (CursorTy, tstate)
 
                  L1.PEndOf -> return (CursorTy, tstate)
 
@@ -392,7 +391,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
 
 
 -- | Helper function to check case branches.
-tcCases :: DDefs Ty2 -> Env2 Ty2 -> NewFuns
+tcCases :: DDefs Ty2 -> Env2 Ty2 -> FunDefs
         -> ConstraintSet -> RegionSet -> LocationTypeState -> LocVar
         -> Region -> [(DataCon, [(Var,LocVar)], Exp)]
         -> TcM ([Ty2], LocationTypeState)
@@ -407,7 +406,7 @@ tcCases ddfs env funs constrs regs tstatein lin reg ((dc, vs, e):cases) = do
       genConstrs (((_v1,l1),PackedTy _ _),Just ((v2,l2),PackedTy _ _)) (_lin,lst) =
           (l1,[AfterVariableC v2 l2 l1, InRegionC l1 reg] ++ lst)
       genConstrs (((_v1,l1),PackedTy _ _),Just ((_v2,_l2),IntTy)) (lin,lst) =
-        let sz = fromMaybe 1 (L1.sizeOf IntTy)
+        let sz = fromMaybe 1 (L1.sizeOfTy IntTy)
         in (l1, [AfterConstantC sz lin l1, InRegionC l1 reg] ++ lst)
       genConstrs (((_,l1),_),_) (lin,lst) =
         (lin, (InRegionC l1 reg : lst))
@@ -447,7 +446,7 @@ tcProj e _i ty = throwError $ GenericTC ("Projection from non-tuple type " ++ (s
 -- the order matters because the location state map is threaded through,
 -- so this is assuming the list of expressions would have been evaluated
 -- in first-to-last order.
-tcExps :: DDefs Ty2 -> Env2 Ty2 -> NewFuns
+tcExps :: DDefs Ty2 -> Env2 Ty2 -> FunDefs
       -> ConstraintSet -> RegionSet -> LocationTypeState -> [Exp]
       -> TcM ([Ty2], LocationTypeState)
 tcExps ddfs env funs constrs regs tstatein (exp:exps) =
@@ -483,17 +482,17 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
   where
 
     fd :: L2.FunDef -> SyM ()
-    fd L2.FunDef{funty,funarg,funbod} = do
-        let env = extendEnv (Env2 M.empty M.empty) funarg (arrIn funty)
-            constrs = funConstrs (locVars funty)
-            regs = funRegs (locVars funty)
-            tstate = funTState (locVars funty)
-            res = runExcept $ tcExp ddefs env fundefs constrs regs tstate funbod
+    fd L2.FunDef{funTy,funArg,funBody} = do
+        let env = extendEnv (Env2 M.empty M.empty) funArg (arrIn funTy)
+            constrs = funConstrs (locVars funTy)
+            regs = funRegs (locVars funTy)
+            tstate = funTState (locVars funTy)
+            res = runExcept $ tcExp ddefs env fundefs constrs regs tstate funBody
         case res of
           Left err -> error $ show err
-          Right (ty,_) -> if ty == (arrOut funty)
+          Right (ty,_) -> if ty == (arrOut funTy)
                           then return ()
-                          else error $ "Expected type " ++ (show (arrOut funty))
+                          else error $ "Expected type " ++ (show (arrOut funTy))
                                     ++ " and got type " ++ (show ty)
 
 

@@ -30,7 +30,7 @@ import           System.Environment
 import           Text.PrettyPrint.Mainland
 import           Text.PrettyPrint.Mainland.Class
 
-import           Gibbon.Common hiding (funBody)
+import           Gibbon.Common
 import           Gibbon.DynFlags
 import           Gibbon.L4.Syntax
 

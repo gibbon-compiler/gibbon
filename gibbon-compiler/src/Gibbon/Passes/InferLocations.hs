@@ -223,21 +223,23 @@ inferLocs initPrg = do
   (L1.Prog dfs fds me) <- addCopyFns initPrg
   let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
-          fenv <- forM fds $ \(L1.FunDef _ (_,inty) outty _) ->
+          fenv <- forM fds $ \(L1.FunDef _ _ (inty, outty) _) ->
                   lift $ lift $ convertFunTy (inty,outty)
           let fe = FullEnv dfs' M.empty fenv
           me' <- case me of
-            Just me -> do
+            -- We ignore the type of the main expression inferred in L1..
+            -- Probably should add a small check here
+            Just (me,_ty) -> do
               (me',ty') <- inferExp' fe me NoDest
               return $ Just (me',ty')
             Nothing -> return Nothing
-          fds' <- forM fds $ \(L1.FunDef fn fa frt fbod) -> do
+          fds' <- forM fds $ \(L1.FunDef fn fa (intty,outty) fbod) -> do
                                    let arrty = lookupFEnv fn fe
-                                       fe' = extendVEnv (fst fa) (arrIn arrty) fe
+                                       fe' = extendVEnv fa (arrIn arrty) fe
                                    dest <- destFromType (arrOut arrty)
                                    fixType_ (arrIn arrty)
                                    (fbod',_) <- inferExp' fe' fbod dest
-                                   return $ L2.FunDef fn arrty (fst fa) fbod'
+                                   return $ L2.FunDef fn fa arrty fbod'
           return $ L2.Prog dfs' fds' me'
   prg <- St.runStateT (runExceptT m) M.empty
   case fst prg of
@@ -511,7 +513,7 @@ inferExp env@FullEnv{dataDefs}
       case dest of
         NoDest -> return (e', lookupVEnv v env, [])
         TupleDest ds ->
-           let ProdTy tys = lookupVEnv v env               
+           let ProdTy tys = lookupVEnv v env
            in unifyAll ds tys
               (return (e', ProdTy tys, []))
               (err$ "TODO: support copying parts of tuples")
@@ -609,7 +611,7 @@ inferExp env@FullEnv{dataDefs}
                                                _ -> return $ ArgVar v
                              L _ (LitE _) -> return $ ArgFixed 8
                              L _ (LitSymE _) -> return $ ArgFixed 8
-                             L _ (AppE f lvs (L _ (VarE v))) -> do v' <- lift $ lift $ freshLocVar "cpy" 
+                             L _ (AppE f lvs (L _ (VarE v))) -> do v' <- lift $ lift $ freshLocVar "cpy"
                                                                    return $ ArgCopy v v' f lvs
                              _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
                   newLocs <- mapM finalLocVar locs
@@ -648,7 +650,8 @@ inferExp env@FullEnv{dataDefs}
                                     let (ArgCopy _ v' _ _) = last argLs
                                     in return $ lc$ LetE (v',[],arrOut $ lookupFEnv f env, lc$ AppE f lvs e) $
                                        lc$ DataConE d k [ e' | (e',_,_) <- ls'']
-                         else return $ lc$ DataConE d k [ e' | (e',_,_)  <- ls'']       
+                                _ -> error "inferExp: Unexpected pattern <error1>"
+                         else return $ lc$ DataConE d k [ e' | (e',_,_)  <- ls'']
                   return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 
     L1.IfE a b c@(L _ ce) -> do
@@ -684,7 +687,7 @@ inferExp env@FullEnv{dataDefs}
     L1.LetE (vr,locs,bty,L sl2 rhs) bod | [] <- locs ->
       case rhs of
         L1.VarE{} -> err$ "Unexpected variable aliasing: " ++ (show ex0)
-        
+
         L1.AppE f [] arg -> do
           let arrty = lookupFEnv f env
           valTy <- freshTyLocs $ arrOut arrty
@@ -704,7 +707,7 @@ inferExp env@FullEnv{dataDefs}
         L1.IfE{} -> err$ "Unexpected conditional in let binding: " ++ (show ex0)
 
         L1.LetE{} -> err $ "Expected let spine, encountered nested lets: " ++ (show lex0)
-                     
+
         L1.LitE i -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr IntTy env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
@@ -871,7 +874,7 @@ finishExp (L i e) =
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
-                                 
+
 -- | Remove unused location bindings
 -- Returns pair of (new exp, set of free locations)
 -- TODO: avoid generating location bindings for immediate values
@@ -922,7 +925,7 @@ cleanExp (L i e) =
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 
-                           
+
 
 -- | Checks that there are no constraints specifying a location
 -- after the location passed in.
@@ -989,7 +992,7 @@ unify v1 v2 successA failA = do
     (FreshLoc l1, FixedLoc l2) ->
         do assocLoc l1 (FixedLoc l2)
            successA
-    (FixedLoc l2, FreshLoc l1) -> 
+    (FixedLoc l2, FreshLoc l1) ->
         do assocLoc l1 (FixedLoc l2)
            successA
     (FreshLoc l1, FreshLoc l2) ->
@@ -1008,7 +1011,7 @@ unifyAll (d:ds) (ty:tys) successA failA =
       (TupleDest _, _) -> unifyAll ds tys successA failA
       (NoDest, _) -> unifyAll ds tys successA failA
 unifyAll (_:_) [] _ _ = err$ "Mismatched destination and product type arity"
-unifyAll [] (_:_) _ _ = err$ "Mismatched destination and product type arity" 
+unifyAll [] (_:_) _ _ = err$ "Mismatched destination and product type arity"
 unifyAll [] [] successA _ = successA
 
 isCpyVar :: Var -> Bool
@@ -1154,7 +1157,7 @@ prim p = case p of
 
 -- | Generate a copy function for a particular data definition.
 -- Note: there will be redundant let bindings in the function body which may need to be inlined.
-genCopyFn :: DDef L1.Ty1 -> SyM (L1.FunDef L1.Ty1 (L L1.Exp1))
+genCopyFn :: DDef L1.Ty1 -> SyM L1.FunDef
 genCopyFn DDef{tyName, dataCons} = do
   arg <- gensym $ "arg"
   casebod <- forM dataCons $ \(dcon, tys) ->
@@ -1167,10 +1170,11 @@ genCopyFn DDef{tyName, dataCons} = do
                           (l$ L1.DataConE () dcon $ map (l . VarE) ys)
                           (zip3 (L.map snd tys) xs ys)
                 return (dcon, L.map (\x -> (x,())) xs, bod)
-  return $ L1.FunDef { funName = mkCopyFunName (fromVar tyName)
-                     , funArg = (arg, L1.PackedTy (fromVar tyName) ())
-                     , funRetTy = L1.PackedTy (fromVar tyName) ()
-                     , funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
+  return $ L1.FunDef { L1.funName = mkCopyFunName (fromVar tyName)
+                     , L1.funArg = arg
+                     , L1.funTy  = ( L1.PackedTy (fromVar tyName) ()
+                                   , L1.PackedTy (fromVar tyName) () )
+                     , L1.funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
                      }
 
 -- | Get the data constructor type from a type, failing if it's not packed
@@ -1192,7 +1196,7 @@ emptyEnv = FullEnv { dataDefs = C.emptyDD
                    , funEnv   = M.empty }
 
 {--
-               
+
 t0 :: ArrowTy Ty2
 t0 = fst$ runSyM 0 $
      convertFunTy (snd (L1.funArg fd), L1.funRetTy fd)

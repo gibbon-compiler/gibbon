@@ -14,9 +14,9 @@ import qualified Data.Map as M
 import qualified Data.List as L
 import Prelude hiding (exp)
 
-import Gibbon.Common hiding (FunDef, FunDefs)
+import Gibbon.Common
 import Gibbon.L1.Typecheck hiding (tcProg, tcExp)
-import Gibbon.L1.Syntax hiding (FunDef, Prog(..), progToEnv)
+import Gibbon.L1.Syntax hiding (FunDef(..), Prog(..), progToEnv)
 import Gibbon.L3.Syntax
 
 -- | Typecheck a L1 expression
@@ -27,13 +27,13 @@ tcExp ddfs env exp@(L p ex) =
   case ex of
     Ext ext ->
       case ext of
-        -- ^ One cursor in, (int, cursor') out
+        -- One cursor in, (int, cursor') out
         ReadInt v -> do
           vty <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
           return $ ProdTy [IntTy, CursorTy]
 
-        -- ^ Write int at cursor, and return a cursor
+        -- Write int at cursor, and return a cursor
         WriteInt v rhs -> do
           vty  <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
@@ -41,7 +41,7 @@ tcExp ddfs env exp@(L p ex) =
           ensureEqualTy exp vrhs IntTy
           return CursorTy
 
-        -- ^ Add a constant offset to a cursor variable
+        -- Add a constant offset to a cursor variable
         AddCursor v rhs -> do
           vty  <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
@@ -49,28 +49,28 @@ tcExp ddfs env exp@(L p ex) =
           ensureEqualTy exp vrhs IntTy
           return CursorTy
 
-        -- ^ One cursor in, (tag,cursor) out
+        -- One cursor in, (tag,cursor) out
         -- QUESTION: what should be the type of the tag ?  It's just an Int for now
         ReadTag v -> do
           vty  <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
           return $ ProdTy [IntTy, CursorTy]
 
-        -- ^ Write Tag at Cursor, and return a cursor
+        -- Write Tag at Cursor, and return a cursor
         WriteTag _dcon v -> do
           vty  <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
           return CursorTy
 
-        -- ^ Create a new buffer, and return a cursor
+        -- Create a new buffer, and return a cursor
         NewBuffer{} -> return CursorTy
 
-        -- ^ Create a scoped buffer, and return a cursor
+        -- Create a scoped buffer, and return a cursor
         ScopedBuffer{} -> return CursorTy
 
         InitSizeOfBuffer{} -> return IntTy
 
-        -- ^ Takes in start and end cursors, and returns an Int
+        -- Takes in start and end cursors, and returns an Int
         SizeOfPacked start end -> do
           sty  <- lookupVar env start exp
           ensureEqualTy exp sty CursorTy
@@ -79,7 +79,7 @@ tcExp ddfs env exp@(L p ex) =
           return IntTy
 
 
-        -- ^ Takes in a variable, and returns an Int
+        -- Takes in a variable, and returns an Int
         SizeOfScalar v -> do
           sty <- lookupVar env v exp
           -- ASSUMPTION: Int is the only scalar value right now
@@ -211,10 +211,6 @@ tcExp ddfs env exp@(L p ex) =
           len3
           return ty
 
-        MkNullCursor -> do
-          len0
-          return CursorTy
-
         PEndOf -> error "Do not use PEndOf after L2."
 
         oth -> error $ "L3.tcExp : PrimAppE : TODO " ++ sdoc oth
@@ -332,14 +328,13 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
         _ -> ty1 == ty2
 
     -- fd :: forall e l . FunDef Ty1 Exp -> SyM ()
-    fd FunDef{funarg,funty,funbod} = do
-      let env' = Env2 (M.singleton funarg inT) (fEnv env)
-          res = runExcept $ tcExp ddefs env' funbod
-          inT = arrIn funty
-          outT = arrOut funty
+    fd FunDef{funArg,funTy,funBody} = do
+      let env' = Env2 (M.singleton funArg inT) (fEnv env)
+          res = runExcept $ tcExp ddefs env' funBody
+          (inT, outT) = funTy
       case res of
         Left err -> error $ sdoc err
-        Right ty -> if ty == arrOut funty
+        Right ty -> if ty == outT
                     then return ()
                     else error $ "Expected type " ++ (sdoc outT)
                          ++ " and got type " ++ (sdoc ty)

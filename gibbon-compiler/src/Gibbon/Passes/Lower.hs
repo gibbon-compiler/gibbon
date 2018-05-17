@@ -32,8 +32,8 @@ import qualified Data.List as L
 
 
 import Gibbon.GenericOps
-import Gibbon.Common hiding (FunDef)
-import Gibbon.L1.Syntax hiding (FunDef, Prog(..), progToEnv)
+import Gibbon.Common
+import Gibbon.L1.Syntax hiding (FunDef(..), Prog(..), progToEnv)
 import Gibbon.L3.Syntax
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L4.Syntax as T
@@ -304,22 +304,22 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
 
  where
   fund :: FunDef -> SyM T.FunDecl
-  fund FunDef{funname,funty=(ArrowTy inty outty),funarg,funbod} = do
+  fund FunDef{funName,funTy=(inty, outty),funArg,funBody} = do
       (args,bod) <- case inty of
                       -- ASSUMPTION: no nested tuples after unariser:
                       ProdTy ls -> do let tys'  = L.map (fmap (const ())) ls
                                           tys'' = L.map typ ls
-                                      (vs,e') <- eliminateProjs funarg tys' funbod
+                                      (vs,e') <- eliminateProjs funArg tys' funBody
                                       return $
-                                        dbgTrace 5 (" [lower] unzipping funarg "++show funarg++" to "++show vs) $
+                                        dbgTrace 5 (" [lower] unzipping funArg "++show funArg++" to "++show vs) $
                                         (zip vs tys'', e')
-                      _ -> return ([(funarg, typ inty)], funbod)
+                      _ -> return ([(funArg, typ inty)], funBody)
       tl <- tail bod
-      return T.FunDecl{ T.funName = funname
+      return T.FunDecl{ T.funName = funName
                       , T.funArgs = args
                       , T.funRetTy = typ outty
                       , T.funBody = tl
-                      , T.isPure  = ispure funbod
+                      , T.isPure  = ispure funBody
                       }
 
   -- TimeIt forms are impure because they have print statements after codegen
@@ -666,7 +666,7 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
     -- Tail calls are just an optimization, if we have a Proj/App it cannot be tail:
     ProjE ix (L _ (AppE f _ e)) -> do
         tmp <- gensym $ toVar "prjapp"
-        let ArrowTy (ProdTy inTs) _ = funty (fundefs # f)
+        let (ProdTy inTs, _) = funTy (fundefs # f)
         tail $ l$ LetE ( tmp
                        , []
                        , fmap (const ()) (inTs !! ix)
@@ -678,7 +678,7 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
 
     -- Non-tail call:
     LetE (vr, _,t, projOf -> (stk, (L _ (L1.AppE f _ arg)))) bod -> do
-        let ArrowTy _ outTy = funty (fundefs # f)
+        let (_ , outTy) = funTy (fundefs # f)
         let f' = cleanFunName f
         (vsts,bod') <- case outTy of
                         L1.ProdTy [] -> error "lower: FINISHME: unit valued function"
@@ -829,7 +829,6 @@ prim p =
 
     ReadPackedFile mf tyc _ -> T.ReadPackedFile mf tyc
 
-    MkNullCursor -> error$ "lower/prim: internal error, should not have got to here: "++show p
     ErrorP{}     -> error$ "lower/prim: internal error, should not have got to here: "++show p
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."
     MkFalse      -> error "lower/prim: internal error. MkFalse should not get here."

@@ -129,10 +129,6 @@ tcExp ddfs env exp@(L p ex) =
           len3
           return ty
 
-        MkNullCursor -> do
-          len0
-          return CursorTy
-
         PEndOf -> do
           return CursorTy
 
@@ -223,31 +219,32 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   -- Handle functions
   mapM_ fd $ M.elems fundefs
 
-  -- Handle main expression
-  case mainExp of
-    Nothing -> return ()
-    Just e  ->
-      let res = runExcept $ tcExp ddefs env e
-      in case res of
-        Left err -> error $ sdoc err
-        Right _ -> return ()
+  -- Handle main expression.
+  -- Run the typechecker on the expression, and update it's type in the program
+  -- (the parser initializes the main expression with the void type).
+  let mainExp' = case mainExp of
+                   Nothing -> Nothing
+                   Just (e,_voidty)  ->
+                     let res = runExcept $ tcExp ddefs env e
+                     in case res of
+                         Left err -> error $ sdoc err
+                         Right ty -> Just (e, ty)
 
-  -- Identity function for now.
-  return prg
+  return prg { mainExp = mainExp' }
 
   where
     env = L1.progToEnv prg
 
     -- fd :: forall e l . FunDef Ty1 Exp -> SyM ()
-    fd FunDef{funArg,funRetTy,funBody} = do
-      let (arg,argTy) = funArg
-          env' = Env2 (M.singleton arg argTy) (fEnv env)
+    fd FunDef{funArg,funTy,funBody} = do
+      let (argTy,retty) = funTy
+          env' = Env2 (M.singleton funArg argTy) (fEnv env)
           res = runExcept $ tcExp ddefs env' funBody
       case res of
         Left err -> error $ sdoc err
-        Right ty -> if ty == funRetTy
+        Right ty -> if ty == retty
                     then return ()
-                    else error $ "Expected type " ++ (sdoc funRetTy)
+                    else error $ "Expected type " ++ (sdoc retty)
                          ++ " and got type " ++ (sdoc ty)
 
       return ()

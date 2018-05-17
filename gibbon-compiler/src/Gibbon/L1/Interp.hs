@@ -9,11 +9,10 @@
 
 module Gibbon.L1.Interp
     ( execAndPrint, interpProg
-    , Value(..)
     , main
     ) where
 
-import           Data.ByteString.Builder (Builder, toLazyByteString, string8)
+import           Data.ByteString.Builder (toLazyByteString, string8)
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.Writer
@@ -24,17 +23,13 @@ import           Data.List as L
 import           Data.Loc
 import           Data.Map as M
 import           Data.Sequence (Seq, ViewL ((:<)), (|>))
-import           Data.Word
-import           GHC.Generics
 import           System.Clock
 import           System.IO.Unsafe (unsafePerformIO)
-import           Text.PrettyPrint.GenericPretty
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Sequence as S
-import qualified Data.Foldable as F
 
 import           Gibbon.Common
-import           Gibbon.GenericOps(Interp, interpNoLogs, interpWithStdout)
+import           Gibbon.GenericOps
 import           Gibbon.L1.Syntax as L1
 
 -- We got rid of these pattern variables from L2, and they are now defined as L3 extensions instead
@@ -58,81 +53,6 @@ instance Interp Prog where
   interpWithStdout rc p = do
    (v,logs) <- interpProg rc p
    return (show v, lines (B.unpack logs))
-
-
--- Stores and buffers:
-------------------------------------------------------------
-
--- | A store is an address space full of buffers.
-data Store = Store (IntMap Buffer)
-  deriving (Read,Eq,Ord,Generic, Show)
-
-instance Out Store
-
-instance Out a => Out (IntMap a) where
-  doc im       = doc       (IM.toList im)
-  docPrec n im = docPrec n (IM.toList im)
-
-data Buffer = Buffer (Seq SerializedVal)
-  deriving (Read,Eq,Ord,Generic, Show)
-
-instance Out Buffer
-
-data SerializedVal = SerTag Word8 DataCon | SerInt Int
-  deriving (Read,Eq,Ord,Generic, Show)
-
-byteSize :: SerializedVal -> Int
-byteSize (SerInt _) = 8 -- FIXME: get this constant from elsewhere.
-byteSize (SerTag _ _) = 1
-
-instance Out SerializedVal
-instance NFData SerializedVal
-
-instance Out Word8 where
-  doc w       = doc       (fromIntegral w :: Int)
-  docPrec n w = docPrec n (fromIntegral w :: Int)
-
-instance Out a => Out (Seq a) where
-  doc s       = doc       (F.toList s)
-  docPrec n s = docPrec n (F.toList s)
-
--- Values
--------------------------------------------------------------
-
--- | It's a first order language with simple values.
-data Value = VInt Int
-           | VBool Bool
-           | VDict (M.Map Value Value)
--- FINISH:       | VList
-           | VProd [Value]
-           | VPacked DataCon [Value]
-
-           | VCursor { bufID :: Int, offset :: Int }
-             -- ^ Cursor are a pointer into the Store plus an offset into the Buffer.
-
-  deriving (Read,Eq,Ord,Generic)
-
-instance Out Value
-instance NFData Value
-
-instance Show Value where
- show v =
-  case v of
-   VInt n   -> show n
-   VBool b  -> if b then truePrinted else falsePrinted
--- TODO: eventually want Haskell style tuple-printing:
---    VProd ls -> "("++ concat(intersperse ", " (L.map show ls)) ++")"
--- For now match Gibbon's Racket backend
-   VProd ls -> "'#("++ concat(intersperse " " (L.map show ls)) ++")"
-   VDict m      -> show (M.toList m)
-
-   -- F(x) style.  Maybe we'll switch to sweet-exps to keep everything in sync:
-   -- VPacked k ls -> k ++ show (VProd ls)
-
-   -- For now, Racket style:
-   VPacked k ls -> "(" ++ k ++ concat (L.map ((" "++) . show) ls) ++ ")"
-
-   VCursor idx off -> "<cursor "++show idx++", "++show off++">"
 
 type ValEnv = Map Var Value
 
@@ -159,15 +79,6 @@ deserialize ddefs seq0 = final
 
 
 ------------------------------------------------------------
-{-
--- | Promote a value to a term that evaluates to it.
-l1FromValue :: Value -> Exp
-l1FromValue x =
-  case x of
-    (VInt y) -> __
-    (VProd ls) -> __
-    (VPacked y1 y2) -> __
--}
 
 execAndPrint :: RunConfig -> Prog -> IO ()
 execAndPrint rc prg = do
@@ -178,8 +89,6 @@ execAndPrint rc prg = do
     VProd [] -> return () -- FIXME: remove this.
     _ -> print val
 
-type Log = Builder
-
 -- TODO: add a flag for whether we support cursors:
 
 -- | Interpret a program, including printing timings to the screen.
@@ -187,9 +96,14 @@ type Log = Builder
 interpProg :: RunConfig -> Prog -> IO (Value, B.ByteString)
 -- Print nothing, return "void"              :
 interpProg _ Prog {mainExp=Nothing} = return $ (VProd [], B.empty)
-interpProg rc Prog {ddefs,fundefs, mainExp=Just e} =
-    do -- logs contains print side effects:
-       ((x,logs),Store finstore) <- runStateT (runWriterT (interp e)) (Store IM.empty)
+interpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
+    do
+       let fenv = M.fromList [ (funName f , (funArg f, funBody f))
+                             | f <- M.elems fundefs]
+
+       -- logs contains print side effects:
+       ((x,logs),Store finstore) <-
+         runStateT (runWriterT (interp rc ddefs fenv e)) (Store IM.empty)
 
        -- Policy: don't return cursors
        let res = case x of
@@ -199,56 +113,35 @@ interpProg rc Prog {ddefs,fundefs, mainExp=Just e} =
                   _ -> x
        return (res, toLazyByteString logs)
 
- where
-  applyPrim :: Prim Ty1 -> [Value] -> Value
-  applyPrim p ls =
-   case (p,ls) of
-     (MkTrue,[])             -> VBool True
-     (MkFalse,[])            -> VBool False
-     (AddP,[VInt x, VInt y]) -> VInt (x+y)
-     (SubP,[VInt x, VInt y]) -> VInt (x-y)
-     (MulP,[VInt x, VInt y]) -> VInt (x*y)
-     (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
-     (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
-     (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
-     (EqSymP,[VInt x, VInt y]) -> VBool (x==y)
-     (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
-     (LtP,[VInt x, VInt y]) -> VBool (x < y)
-     (GtP,[VInt x, VInt y]) -> VBool (x > y)
-     ((DictInsertP _ty),[VDict mp, key, val]) -> VDict (M.insert key val mp)
-     ((DictLookupP _),[VDict mp, key])        -> mp # key
-     ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)
-     ((DictEmptyP _),[])                      -> VDict M.empty
-     ((ErrorP msg _ty),[]) -> error msg
-     (SizeParam,[]) -> VInt (rcSize rc)
-     (ReadPackedFile file _ ty,[]) ->
-         error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
-     oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
-  interp :: L Exp1 -> WriterT Log (StateT Store IO) Value
-  interp = go M.empty
-    where
-      {-# NOINLINE goWrapper #-}
-      goWrapper !_ix env ex = go env ex
+interp :: RunConfig
+       -> DDefs Ty1
+       -> M.Map Var (Var, L Exp1)
+       -> L Exp1
+       -> WriterT Log (StateT Store IO) Value
+interp rc ddefs fenv = go M.empty
+  where
+    {-# NOINLINE goWrapper #-}
+    goWrapper !_ix env ex = go env ex
 
-      go :: ValEnv -> L L1.Exp1 -> WriterT Log (StateT Store IO) Value
-      go env (L _ x0) =
-          case x0 of
-            Ext _ -> error "L1.Interp: Should not interpret empty extension point."
-                      -- ^ Or... we could give this a void/empty-tuple value.
+    go :: ValEnv -> L L1.Exp1 -> WriterT Log (StateT Store IO) Value
+    go env (L _ x0) =
+        case x0 of
+          Ext _ -> error "L1.Interp: Should not interpret empty extension point."
+                    -- Or... we could give this a void/empty-tuple value.
 
-            LitE c         -> return $ VInt c
-            LitSymE s      -> return $ VInt (strToInt $ fromVar s)
-            -- In L2.5 witnesses are really justs casts:
-            -- FIXME: We need some way to mediate between symbolic
-            -- values and Cursors... or this won't work.
-            VarE v -- | Just v' <- L2.fromWitnessVar v -> return $ env # v'
-                   | otherwise                      -> return $ env # v
+          LitE c         -> return $ VInt c
+          LitSymE s      -> return $ VInt (strToInt $ fromVar s)
+          -- In L2.5 witnesses are really justs casts:
+          -- FIXME: We need some way to mediate between symbolic
+          -- values and Cursors... or this won't work.
+          VarE v -- Just v' <- L2.fromWitnessVar v -> return $ env # v'
+                 | otherwise                      -> return $ env # v
 
-            PrimAppE p ls  -> do args <- mapM (go env) ls
-                                 return $ applyPrim p args
-            ProjE ix ex -> do VProd ls <- go env ex
-                              return $ ls !! ix
+          PrimAppE p ls  -> do args <- mapM (go env) ls
+                               return $ applyPrim p args
+          ProjE ix ex -> do VProd ls <- go env ex
+                            return $ ls !! ix
 
             {-
             AddCursor vr bytesadd -> do
@@ -308,88 +201,112 @@ interpProg rc Prog {ddefs,fundefs, mainExp=Just e} =
                internalError$ "L1.Interp: Unhandled extended L2 pattern: "++ndoc p
             -}
 
-            AppE f _ b ->  do rand <- go env b
-                              case M.lookup f fundefs of
-                               Just FunDef{funArg=(vr,_),funBody} -> go (M.insert vr rand env) funBody
-                               Nothing -> error $ "L1.Interp: unbound function in application: "++ndoc x0
+          AppE f _ b ->  do rand <- go env b
+                            case M.lookup f fenv of
+                             Just (vr, funBody) -> go (M.insert vr rand env) funBody
+                             Nothing -> error $ "L1.Interp: unbound function in application: "++ndoc x0
 
-            (CaseE _ []) -> error$ "L1.Interp: CaseE with empty alternatives list: "++ndoc x0
+          (CaseE _ []) -> error$ "L1.Interp: CaseE with empty alternatives list: "++ndoc x0
 
-            (CaseE x1 alts@((sometag,_,_):_)) -> do
-                   v <- go env x1
-                   case v of
-                     VCursor idx off | rcCursors rc ->
-                        do Store store <- get
-                           let Buffer seq1 = store IM.! idx
-                           case S.viewl (S.drop off seq1) of
-                             S.EmptyL -> error "L1.Interp: case scrutinize on empty/out-of-bounds cursor."
-                             SerTag tg _ :< _rst -> do
-                               let tycon = getTyOfDataCon ddefs sometag
-                                   datacon = (getConOrdering ddefs tycon) !! fromIntegral tg
-                               let (_tagsym,[(curname,_)],rhs) = lookup3 datacon alts
-                                   -- At this ^ point, we assume that a pattern match against a cursor binds ONE value.
-                               let env' = M.insert curname (VCursor idx (off+1)) env
-                               go env' rhs
-                             oth :< _ -> error $ "L1.Interp: expected to read tag from scrutinee cursor, found: "++show oth
-
-                     VPacked k ls2 ->
-                         let vs = L.map fst prs
-                             (_,prs,rhs) = lookup3 k alts
-                             env' = M.union (M.fromList (zip vs ls2)) env
-                         in go env' rhs
-                     _ -> error$ "L1.Interp: type error, expected data constructor, got: "++ndoc v++
-                                 "\nWhen evaluating scrutinee of case expression: "++ndoc x1
-
-
-            (LetE (v,_,_ty,rhs) bod) -> do
-              rhs' <- go env rhs
-              let env' = M.insert v rhs' env
-              go env' bod
-
-            (MkProdE ls) -> VProd <$> mapM (go env) ls
-            -- TODO: Should check this against the ddefs.
-            (DataConE _ k ls) -> do
-                args <- mapM (go env) ls
-                case args of
-                -- Constructors are overloaded.  They have different behavior depending on
-                -- whether we are AFTER Cursorize or not.
-                  [ VCursor idx off ] | rcCursors rc ->
+          (CaseE x1 alts@((sometag,_,_):_)) -> do
+                 v <- go env x1
+                 case v of
+                   VCursor idx off | rcCursors rc ->
                       do Store store <- get
-                         let tag       = SerTag (getTagOfDataCon ddefs k) k
-                             store'    = IM.alter (\(Just (Buffer s1)) -> Just (Buffer $ s1 |> tag)) idx store
-                         put (Store store')
-                         return $ VCursor idx (off+1)
-                  _ -> return $ VPacked k args
+                         let Buffer seq1 = store IM.! idx
+                         case S.viewl (S.drop off seq1) of
+                           S.EmptyL -> error "L1.Interp: case scrutinize on empty/out-of-bounds cursor."
+                           SerTag tg _ :< _rst -> do
+                             let tycon = getTyOfDataCon ddefs sometag
+                                 datacon = (getConOrdering ddefs tycon) !! fromIntegral tg
+                             let (_tagsym,[(curname,_)],rhs) = lookup3 datacon alts
+                                 -- At this ^ point, we assume that a pattern match against a cursor binds ONE value.
+                             let env' = M.insert curname (VCursor idx (off+1)) env
+                             go env' rhs
+                           oth :< _ -> error $ "L1.Interp: expected to read tag from scrutinee cursor, found: "++show oth
+
+                   VPacked k ls2 ->
+                       let vs = L.map fst prs
+                           (_,prs,rhs) = lookup3 k alts
+                           env' = M.union (M.fromList (zip vs ls2)) env
+                       in go env' rhs
+                   _ -> error$ "L1.Interp: type error, expected data constructor, got: "++ndoc v++
+                               "\nWhen evaluating scrutinee of case expression: "++ndoc x1
 
 
-            TimeIt bod _ isIter -> do
-                let iters = if isIter then rcIters rc else 1
-                !_ <- return $! force env
-                st <- liftIO $ getTime clk
-                val <- foldM (\ _ i -> goWrapper i env bod)
-                              (error "Internal error: this should be unused.")
-                           [1..iters]
-                en <- liftIO $ getTime clk
-                let tm = fromIntegral (toNanoSecs $ diffTimeSpec en st)
-                          / 10e9 :: Double
-                if isIter
-                 then do tell$ string8 $ "ITERS: "++show iters       ++"\n"
-                         tell$ string8 $ "SIZE: " ++show (rcSize rc) ++"\n"
-                         tell$ string8 $ "BATCHTIME: "++show tm      ++"\n"
-                 else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
-                return $! val
+          (LetE (v,_,_ty,rhs) bod) -> do
+            rhs' <- go env rhs
+            let env' = M.insert v rhs' env
+            go env' bod
+
+          (MkProdE ls) -> VProd <$> mapM (go env) ls
+          -- TODO: Should check this against the ddefs.
+          (DataConE _ k ls) -> do
+              args <- mapM (go env) ls
+              case args of
+              -- Constructors are overloaded.  They have different behavior depending on
+              -- whether we are AFTER Cursorize or not.
+                [ VCursor idx off ] | rcCursors rc ->
+                    do Store store <- get
+                       let tag       = SerTag (getTagOfDataCon ddefs k) k
+                           store'    = IM.alter (\(Just (Buffer s1)) -> Just (Buffer $ s1 |> tag)) idx store
+                       put (Store store')
+                       return $ VCursor idx (off+1)
+                _ -> return $ VPacked k args
 
 
-            IfE a b c -> do v <- go env a
-                            case v of
-                             VBool flg -> if flg
-                                          then go env b
-                                          else go env c
-                             oth -> error$ "interp: expected bool, got: "++show oth
+          TimeIt bod _ isIter -> do
+              let iters = if isIter then rcIters rc else 1
+              !_ <- return $! force env
+              st <- liftIO $ getTime clk
+              val <- foldM (\ _ i -> goWrapper i env bod)
+                            (error "Internal error: this should be unused.")
+                         [1..iters]
+              en <- liftIO $ getTime clk
+              let tm = fromIntegral (toNanoSecs $ diffTimeSpec en st)
+                        / 10e9 :: Double
+              if isIter
+               then do tell$ string8 $ "ITERS: "++show iters       ++"\n"
+                       tell$ string8 $ "SIZE: " ++show (rcSize rc) ++"\n"
+                       tell$ string8 $ "BATCHTIME: "++show tm      ++"\n"
+               else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
+              return $! val
 
-            MapE _ _bod    -> error "L1.Interp: finish MapE"
-            FoldE _ _ _bod -> error "L1.Interp: finish FoldE"
 
+          IfE a b c -> do v <- go env a
+                          case v of
+                           VBool flg -> if flg
+                                        then go env b
+                                        else go env c
+                           oth -> error$ "interp: expected bool, got: "++show oth
+
+          MapE _ _bod    -> error "L1.Interp: finish MapE"
+          FoldE _ _ _bod -> error "L1.Interp: finish FoldE"
+
+    applyPrim :: Prim Ty1 -> [Value] -> Value
+    applyPrim p ls =
+     case (p,ls) of
+       (MkTrue,[])             -> VBool True
+       (MkFalse,[])            -> VBool False
+       (AddP,[VInt x, VInt y]) -> VInt (x+y)
+       (SubP,[VInt x, VInt y]) -> VInt (x-y)
+       (MulP,[VInt x, VInt y]) -> VInt (x*y)
+       (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
+       (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
+       (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
+       (EqSymP,[VInt x, VInt y]) -> VBool (x==y)
+       (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
+       (LtP,[VInt x, VInt y]) -> VBool (x < y)
+       (GtP,[VInt x, VInt y]) -> VBool (x > y)
+       ((DictInsertP _ty),[VDict mp, key, val]) -> VDict (M.insert key val mp)
+       ((DictLookupP _),[VDict mp, key])        -> mp # key
+       ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)
+       ((DictEmptyP _),[])                      -> VDict M.empty
+       ((ErrorP msg _ty),[]) -> error msg
+       (SizeParam,[]) -> VInt (rcSize rc)
+       (ReadPackedFile file _ ty,[]) ->
+           error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
+       oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
 
 clk :: Clock
@@ -414,8 +331,8 @@ lookup3 k ls = go ls
 
 p1 :: Prog
 p1 = Prog emptyDD  M.empty
-          (Just (L NoLoc $ LetE ("x", [], IntTy, L NoLoc $ LitE 3) (L NoLoc $ VarE (toVar "x"))))
-         -- IntTy
+          (Just ( L NoLoc $ LetE ("x", [], IntTy, L NoLoc $ LitE 3) (L NoLoc $ VarE (toVar "x"))
+                , IntTy))
 
 main :: IO ()
 main = execAndPrint (RunConfig 1 1 dbgLvl False) p1

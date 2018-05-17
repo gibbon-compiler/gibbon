@@ -6,25 +6,26 @@
 -- representations inside the compiler.
 
 module Gibbon.GenericOps
-    (
-       Interp(..)
+    ( Interp(..)
 
-     -- * Free Variables, generic interface
-     , FreeVars(..)
+    -- * Free Variables, generic interface
+    , FreeVars(..)
 
-     -- * Genereric interface for expressions and select passes
-     , Expression(..), NoExt
-     , Flattenable(..)
-     , Simplifiable(..)
-     , Typeable(..)
+    -- * Genereric interface for expressions and select passes
+    , Expression(..), NoExt
+    , Flattenable(..)
+    , Simplifiable(..)
+    , Typeable(..)
     )
     where
 
 import Control.DeepSeq (NFData)
+import Data.Loc
 import GHC.Generics
-import qualified Data.Set as S
-import Gibbon.Common
 import Text.PrettyPrint.GenericPretty
+import qualified Data.Set as S
+
+import Gibbon.Common
 
 --------------------------------------------------------------------------------
 -- Things which can be interpreted to yield a final, printed value.
@@ -41,9 +42,9 @@ class Interp a where
   -- final, printed result.  The output lines include timing information.
   interpWithStdout :: RunConfig -> a -> IO (String,[String])
 
-----------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 -- Free Variables
-----------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 -- | Expression and program types which support a notion of free variables.
 class FreeVars a where
@@ -53,10 +54,12 @@ class FreeVars a where
 instance FreeVars (NoExt l d) where
   gFreeVars _ = S.empty
 
+instance FreeVars e => FreeVars (L e) where
+  gFreeVars (L _ e) = gFreeVars e
 
-----------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 -- Compiler passes used in multiple phases
-----------------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
 
 -- | A generic interface to expressions found in different phases of
 -- the compiler.
@@ -65,7 +68,6 @@ class (Show e, Out e, FreeVars e) => Expression e where
   type TyOf e
   -- | The location (variable) representation used in this expression.
   type LocOf e
-
   -- | Is an expression considered trivial (duplicatable by the compiler)?
   isTrivial :: e -> Bool
 
@@ -93,6 +95,8 @@ class Expression e => Simplifiable e where
 class Expression e => Typeable e where
   gTypeExp :: DDefs (TyOf e) -> Env2 (TyOf e) -> e -> TyOf e
 
+--------------------------------------------------------------------------------
+
 -- | An uninhabidited type indicating that the base grammar is not extended with any
 -- additional constructs.
 data NoExt l d   deriving (Generic, NFData)
@@ -108,7 +112,6 @@ instance Eq (NoExt l d) where
   _ == _ = True
 instance Ord (NoExt l d) where
   compare _ _ = EQ
-
 
 -- | A dummy instance for "no-extension" extension point.
 instance Expression (NoExt l d) where

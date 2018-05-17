@@ -7,7 +7,7 @@ module Gibbon.Passes.FollowRedirects
 
 import qualified Data.Map as M
 
-import Gibbon.Common hiding (FunDef(..))
+import Gibbon.Common
 import Gibbon.L4.Syntax
 
 {- [Modifying switch statements to use redirection nodes]

@@ -11,6 +11,6 @@
     [(BeginTop listToplvl)         103]
     [(Expression x)                104]
     ))
-    ;[Expression Expr]
+;[Expression Expr]
 
 (foo (Expression (VARREF (quote hi))))

@@ -180,7 +180,6 @@ typecheck' TCConfig{postCursorize} success prg@(L2.Prog defs _funs _main) = each
                  L1.MkTrue    -> return $ Concrete BoolTy
                  L1.MkFalse   -> return $ Concrete BoolTy
 
-                 L1.MkNullCursor -> return $ Concrete (CursorTy ())
                  -- WARNING: tricky convention here.  We DONT update 'ty' to CursorTy, because we need to remember
                  -- the name of this type for later (i.e. calling the right print function).
                  L1.ReadPackedFile _ _ ty -> return $ Concrete ty

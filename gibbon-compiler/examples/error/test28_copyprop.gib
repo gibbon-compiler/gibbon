@@ -1,0 +1,6 @@
+#lang gibbon
+
+(require "../../../ASTBenchmarks/grammar_racket.gib")
+(require "../../../ASTBenchmarks/copyprop/treelang/copyprop.gib")
+
+(copyprop (Expression (VARREF (quote x))))

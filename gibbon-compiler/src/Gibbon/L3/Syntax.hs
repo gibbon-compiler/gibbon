@@ -8,12 +8,11 @@
 module Gibbon.L3.Syntax
   (
     -- * Extended language
-    Exp3, E3Ext(..), Ty3
-  , Prog(..), FunDef(..), FunDefs, ArrowTy(..)
+    Prog(..), FunDef(..), FunDefs
+  , Exp3, E3Ext(..), Ty3
 
     -- * Functions
-  , eraseLocMarkers, mapMExprs, toL3Prim, progToEnv
-  , cursorizeTy
+  , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim, progToEnv
   )
 where
 
@@ -24,7 +23,7 @@ import Data.Set as S
 import Data.List as L
 import Text.PrettyPrint.GenericPretty
 
-import Gibbon.Common hiding (FunDef, FunDefs)
+import Gibbon.Common
 import Gibbon.L1.Syntax hiding (FunDef(..), FunDefs, Prog(..), progToEnv)
 import Gibbon.GenericOps
 import Gibbon.L1.Syntax (UrTy(..), PreExp(..))
@@ -32,36 +31,49 @@ import qualified Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
-type Exp3 = E3 () Ty3
+-- | Other than Exp3, everything is identical to L2
+data Prog = Prog { ddefs   :: DDefs Ty3
+                 , fundefs :: FunDefs
+                 , mainExp :: Maybe (L Exp3, Ty3)
+                 }
+  deriving (Show, Ord, Eq, Generic, NFData)
 
--- |
+type FunDefs = M.Map Var FunDef
+
+data FunDef = FunDef { funName :: Var
+                     , funArg  :: Var
+                     , funTy   :: (Ty3, Ty3) -- ^ (in , out)
+                     , funBody :: L Exp3
+                     }
+  deriving (Show, Ord, Eq, Generic, NFData)
+
+-- | The expression type used in L3.
+type Exp3 = PreExp E3Ext () Ty3
+
+-- | The type representation used in L3.
 type Ty3 = UrTy ()
+
+--------------------------------------------------------------------------------
 
 -- | The extension that turns L1 into L3.
 data E3Ext loc dec =
     ReadInt   Var                  -- ^ One cursor in, (int, cursor') out
-  | WriteInt  Var (L (E3 loc dec)) -- ^ Write int at cursor, and return a cursor
-  | AddCursor Var (L (E3 loc dec)) -- ^ Add a constant offset to a cursor variable
+  | WriteInt  Var (L (PreExp E3Ext loc dec)) -- ^ Write int at cursor, and return a cursor
+  | AddCursor Var (L (PreExp E3Ext loc dec)) -- ^ Add a constant offset to a cursor variable
   | ReadTag   Var                  -- ^ One cursor in, (tag,cursor) out
   | WriteTag  DataCon Var          -- ^ Write Tag at Cursor, and return a cursor
   | NewBuffer Multiplicity         -- ^ Create a new buffer, and return a cursor
-  | ScopedBuffer Multiplicity      -- ^ Create a temporary scoped buffer, and
-                                   --   return a cursor
+  | ScopedBuffer Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
   | InitSizeOfBuffer Multiplicity  -- ^ Returns the initial buffer size for a specific multiplicity
-                                   --
   | SizeOfPacked Var Var           -- ^ Takes in start and end cursors, and returns an Int
                                    --   we'll probably represent (sizeof x) as (end_x - start_x) / INT
   | SizeOfScalar Var               -- ^ sizeof(var)
   | BoundsCheck Int Var Var        -- ^ Bytes required, region, write cursor
   | ReadCursor Var                 -- ^ Reads and returns the cursor at Var
-  | WriteCursor Var (L (E3 loc dec)) -- ^ Write a cursor, and return a cursor
+  | WriteCursor Var (L (PreExp E3Ext loc dec)) -- ^ Write a cursor, and return a cursor
   | BumpRefCount Var Var           -- ^ Given an end-of-region ptr, bump it's refcount.
                                    --   Return the updated count (optional).
   deriving (Show, Ord, Eq, Read, Generic, NFData)
-
--- | L1 expressions extended with L3.  This is the polymorphic version.
--- Shorthand for recursions above.
-type E3 l d = PreExp E3Ext l d
 
 instance FreeVars (E3Ext l d) where
   gFreeVars  e =
@@ -81,13 +93,10 @@ instance FreeVars (E3Ext l d) where
       WriteCursor c ex   -> S.insert c (gFreeVars ex)
       BumpRefCount r1 r2 -> S.fromList [r1, r2]
 
-instance (Out l, Out d) => Out (E3Ext l d)
-
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
   type LocOf (E3Ext l d) = l
   type TyOf  (E3Ext l d) = UrTy l
   isTrivial _ = False
-
 
 instance (Out l, Show l) => Typeable (E3Ext l (UrTy l)) where
     gTypeExp = error "L3.gTypeExp"
@@ -96,32 +105,16 @@ instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
     gFlattenGatherBinds _ddfs _env ex = return ([], ex)
     gFlattenExp _ddfs _env ex = return ex
 
-data ArrowTy t = ArrowTy { arrIn  :: t
-                         , arrOut :: t
-                         }
-  deriving (Show, Ord, Eq, Generic, NFData)
-
-instance (Out t) => Out (ArrowTy t)
-
-data FunDef = FunDef { funname :: Var
-                     , funty   :: ArrowTy Ty3
-                     , funarg  :: Var
-                     , funbod  :: L Exp3
-                     }
-  deriving (Show, Ord, Eq, Generic, NFData)
+-----------------------------------------------------------------------------------------
+-- Do this manually to get prettier formatting: (Issue #90)
 
 instance Out FunDef
 
-type FunDefs = M.Map Var FunDef
-
--- | Other than Exp3, everything is identical to L2
-data Prog = Prog { ddefs   :: DDefs Ty3
-                 , fundefs :: FunDefs
-                 , mainExp :: Maybe (L Exp3, Ty3)
-                 }
-  deriving (Show, Ord, Eq, Generic, NFData)
-
 instance Out Prog
+
+instance (Out l, Out d) => Out (E3Ext l d)
+
+-----------------------------------------------------------------------------------------
 
 -- | Erase LocVar markers from the data definition
 eraseLocMarkers :: DDef L2.Ty2 -> DDef Ty3
@@ -146,17 +139,15 @@ cursorizeTy ty =
 mapMExprs :: Monad m => (Env2 Ty3 -> L Exp3 -> m (L Exp3)) -> Prog -> m Prog
 mapMExprs fn (Prog ddfs fundefs mainExp) =
   Prog ddfs <$>
-    (mapM (\f@FunDef{funarg,funty,funbod} ->
-              let env = Env2 (M.singleton funarg (arrIn funty)) funEnv
+    (mapM (\f@FunDef{funArg,funTy,funBody} ->
+              let env = Env2 (M.singleton funArg (fst funTy)) funEnv
               in do
-                bod' <- fn env funbod
-                return $ f { funbod =  bod' })
+                bod' <- fn env funBody
+                return $ f { funBody =  bod' })
      fundefs)
     <*>
     (mapM (\ (e,t) -> (,t) <$> fn (Env2 M.empty funEnv) e) mainExp)
-  where funEnv = M.map (\f -> let ty = funty f
-                              in (arrIn ty, arrOut ty))
-                 fundefs
+  where funEnv = M.map funTy fundefs
 
 -- Ugh .. this is bad. Can we remove the identity cases here ?
 toL3Prim :: Prim L2.Ty2 -> Prim Ty3
@@ -181,7 +172,6 @@ toL3Prim pr =
     DictHasKeyP ty -> DictHasKeyP (L2.stripTyLocs ty)
     ErrorP s ty    -> ErrorP s (L2.stripTyLocs ty)
     ReadPackedFile fp tycon ty -> ReadPackedFile fp tycon (L2.stripTyLocs ty)
-    MkNullCursor -> MkNullCursor
     PEndOf -> error "Do not use PEndOf after L2."
 
 -- | Abstract some of the differences of top level program types, by
@@ -189,7 +179,5 @@ toL3Prim pr =
 progToEnv :: Prog -> Env2 Ty3
 progToEnv Prog{fundefs} =
     Env2 M.empty
-         (M.fromList [ (funname ,(inT, outT))
-                     | FunDef{funty,funname} <- M.elems fundefs ,
-                     let inT = arrIn funty
-                         outT = arrOut funty])
+         (M.fromList [ (funName ,(inT, outT))
+                     | FunDef{funTy=(inT, outT),funName} <- M.elems fundefs])

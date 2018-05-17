@@ -11,6 +11,6 @@
     [(DefineSyntaxes listSym expr) 102]
     [(BeginTop listToplvl)         103]
     ))
-    ;[Expression Expr]
+;[Expression Expr]
 
 (foo (Expression (VARREF (quote hi))))

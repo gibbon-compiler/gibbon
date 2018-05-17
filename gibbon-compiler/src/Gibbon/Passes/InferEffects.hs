@@ -22,8 +22,8 @@ import Data.Set as S
 import Data.Map as M
 
 import Gibbon.L2.Syntax
-import Gibbon.Common hiding (FunDef, FunEnv)
-import Gibbon.L1.Syntax hiding (Prog, FunDef, ddefs, fundefs, mainExp)
+import Gibbon.Common hiding (FunEnv)
+import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..), FunDefs)
 
 --------------------------------------------------------------------------------
 
@@ -42,25 +42,25 @@ type TyEnv  = M.Map Var Ty2
 -- | We initially populate all functions with MAXIMUM effect signatures.
 --   Subsequently, these monotonically SHRINK until a fixpoint.
 --   We also associate fresh location variables with packed types.
-initialEnv :: NewFuns -> FunEnv
+initialEnv :: FunDefs -> FunEnv
 initialEnv mp = M.map go mp
   where
     go :: FunDef -> ArrowTy Ty2
-    go FunDef{funty} =
-      let locs       = allLocVars funty
+    go FunDef{funTy} =
+      let locs       = allLocVars funTy
           maxEffects = locsEffect locs
-      in funty { arrEffs = maxEffects }
+      in funTy { arrEffs = maxEffects }
 
 
 inferEffects :: Prog -> SyM Prog
 inferEffects prg@Prog{ddefs,fundefs} = do
   let finalFunTys = fixpoint 1 fundefs (initialEnv fundefs)
-      funs = M.map (\fn@FunDef{funname} ->
-                       fn{ funty = finalFunTys ! funname })
+      funs = M.map (\fn@FunDef{funName} ->
+                       fn{ funTy = finalFunTys ! funName })
              fundefs
   return $ prg { fundefs = funs }
   where
-    fixpoint :: Int -> NewFuns -> FunEnv -> FunEnv
+    fixpoint :: Int -> FunDefs -> FunEnv -> FunEnv
     fixpoint iter funs fenv =
        let funtys = M.map (inferFunDef ddefs fenv) funs
        in
@@ -70,11 +70,11 @@ inferEffects prg@Prog{ddefs,fundefs} = do
 
 
 inferFunDef :: DDefs Ty2 -> FunEnv -> FunDef -> ArrowTy Ty2
-inferFunDef ddfs fenv FunDef{funarg,funbod,funty} = funty { arrEffs = S.intersection travs eff }
+inferFunDef ddfs fenv FunDef{funArg,funBody,funTy} = funTy { arrEffs = S.intersection travs eff }
   where
-    env0  = M.singleton funarg (arrIn funty)
-    travs = S.fromList $ L.map Traverse $ inLocVars funty
-    (eff,_outLoc) = inferExp ddfs fenv env0 funbod
+    env0  = M.singleton funArg (arrIn funTy)
+    travs = S.fromList $ L.map Traverse $ inLocVars funTy
+    (eff,_outLoc) = inferExp ddfs fenv env0 funBody
 
 
 inferExp :: DDefs Ty2 -> FunEnv -> TyEnv -> L Exp2 -> (Set Effect, Maybe LocVar)
