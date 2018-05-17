@@ -24,7 +24,7 @@ module Gibbon.L2.Syntax
       Prog(..), FunDef(..), FunDefs
 
     -- * Extended language L2.0 with location types.
-    , Exp2, E2Ext(..), Ty2
+    , Exp2, E2, E2Ext(..), Ty2
     , Effect(..), ArrowTy(..) , LocRet(..), LocExp, PreLocExp(..)
 
     -- * Re-exports

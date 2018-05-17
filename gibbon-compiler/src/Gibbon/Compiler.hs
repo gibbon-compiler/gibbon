@@ -22,6 +22,9 @@ import           Control.DeepSeq
 import           Control.Exception
 import           Control.Monad.State.Strict
 import           Data.Set as S hiding (map)
+#if !MIN_VERSION_base(4,11,0)
+import           Data.Monoid
+#endif
 import           Options.Applicative
 import           System.Directory
 import           System.Environment
