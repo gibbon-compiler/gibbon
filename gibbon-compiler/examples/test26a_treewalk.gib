@@ -6,6 +6,7 @@
 ; (walk-datum (INTLIT 3))
 
 ;; No vars so it PRINTS the same:
-(treewalk (BeginTop (CONSTOPLVL (Expression
-                                 (Quote (INTLIT 33)))
-                                (NULLTOPLVL))))
+(let ([treewalk : Toplvl (BeginTop (CONSTOPLVL (Expression
+                                                (Quote (INTLIT 33)))
+                                               (NULLTOPLVL)))])
+  0)

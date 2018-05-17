@@ -3,5 +3,6 @@
 (require "../../ASTBenchmarks/grammar_racket.gib")
 
 
-(BeginTop (CONSTOPLVL (Expression (VARREF (quote hello)))
-                      (NULLTOPLVL)))
+(let ([top : Toplvl (BeginTop (CONSTOPLVL (Expression (VARREF (quote hello)))
+                                      (NULLTOPLVL)))])
+  0)

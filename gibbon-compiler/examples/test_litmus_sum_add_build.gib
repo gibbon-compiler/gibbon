@@ -1,0 +1,26 @@
+#lang gibbon
+
+(data Tree
+      [Leaf Int]
+      [Node Tree Tree])
+
+(define (build-tree [n : Int]) : Tree
+  (if (= n 0)
+      (Leaf 1)
+      (let ([l : Tree (build-tree (- n 1))]
+            [r : Tree (build-tree (- n 1))])
+        (Node l r))))
+
+(define (sum-tree [tr : Tree]) : Int
+  (case tr
+    [(Leaf n) n]
+    [(Node x y) (+ (sum-tree x) (sum-tree y))]))
+
+
+(define (add1-tree [tr : Tree]) : Tree
+  (case tr
+    [(Leaf n) (Leaf (+ 1 n))]
+    [(Node x y) (Node (add1-tree x)
+                      (add1-tree y))]))
+
+(time (sum-tree (add1-tree (build-tree (size-param)))))

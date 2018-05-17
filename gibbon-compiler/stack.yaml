@@ -4,13 +4,10 @@
 resolver: lts-9.21
 
 packages:
-- location:
-    git: https://github.com/aisamanra/s-cargot
-    commit: eec500106f2c507ba3ffb4e9b025704103fb6dea
-  extra-dep: true
 - '.'
 
 extra-deps:
+- s-cargot-0.1.3.0
 - llvm-hs-5.1.3
 - llvm-hs-pure-5.1.2
 - GenericPretty-1.2.1

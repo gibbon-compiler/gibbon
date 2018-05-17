@@ -8,7 +8,7 @@ temporary: prebuild build
 	$(MAKE) run_tests_interp1
 #	$(MAKE) run_tests_interp2
 	$(MAKE) run_tests_pointer
-#	$(MAKE) run_tests_packed
+	$(MAKE) run_tests_packed
 
 default:
 	rm -f *.err $(BLD)/*.err
@@ -160,7 +160,8 @@ EXTRA_SUFFIX ?= .ptr
 # How far to compile, --toC, --exe, --run:
 RUN_MODE     ?= --run
 # Additional args besides RUN_MODE:
-GIBBONARGS ?= --optc=-g
+# [2018.04.07]: Seems to cause problems with inlining
+# GIBBONARGS ?= --optc=-g
 
 TREELANGDIR ?= ../../
 SANDBOXDIR= $(TREELANGDIR)/.racket_sandbox/
@@ -274,12 +275,35 @@ else
 endif
 
 PACKED_FAILING ?= \
- test12_skip.gib test16_forlist.gib test17_forfold.gib \
- test18b_tupconstraint.gib test18f_flip.gib \
- test20b_bintree.gib  \
- test25a_withprint.gib \
- test27a_subst.gib \
- test27b_subst.gib test27c_subst.gib test28_copyprop.gib
+ test02e_printNest.gib \
+ test04c_ifvector.gib \
+ test06c_nested.gib \
+ test06h_rec.gib test06i_casecase.gib \
+ test08_dict.gib test08b_dict.gib test08c_dict.gib test08d_sharedict.gib \
+ test10_desugar.gib test10b_desugar.gib \
+ test11c_funrec.gib test11d_funrec.gib test11e_funrec.gib test11f_funrec.gib \
+ test12_skip.gib test12b_traverse.gib test12c_traverse.gib \
+ test15b_symappend.gib \
+ test16_forlist.gib test17_forfold.gib \
+ test18b_tupconstraint.gib \
+ test18f_flip.gib \
+ test20b_bintree.gib \
+ test24_defs.gib \
+ test25a_withprint.gib test25d_racketcore.gib test25f_countnodes.gib \
+ test26a_treewalk.gib test26_treewalk.gib \
+ test27b_subst.gib test27c_subst.gib \
+ test28_copyprop.gib \
+ test_litmus_search_tree_insert.gib \
+ test_addtrees.gib test_buildstree.gib test_buildtreesum.gib test_buildtwotrees.gib \
+ test_stree.gib test_sumupseteven.gib test_sumstree.gib
+
+
+ # test12_skip.gib test16_forlist.gib test17_forfold.gib \
+ # test18b_tupconstraint.gib test18f_flip.gib \
+ # test20b_bintree.gib  \
+ # test25a_withprint.gib \
+ # test27a_subst.gib \
+ # test27b_subst.gib test27c_subst.gib test28_copyprop.gib
 
 # test20b_bintree.gib   -- requires copy insertion
 # test12_skip.gib       -- requires copy insertion!! unbound var thru to C code
@@ -287,7 +311,8 @@ PACKED_FAILING ?= \
 # test17_forfold.gib    -- requires lists. No lists yet
 
 # This is the default mode:
-run_tests_pointer: run_tests
+run_tests_pointer:
+	$(MAKE) run_tests GIBBONARGS=" --optc=-g "
 
 # Run the tests that work under the packed regime:
 run_tests_packed: answers

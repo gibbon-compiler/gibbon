@@ -1,141 +1,137 @@
-
-name:                gibbon
-version:             0.1.0.0
-synopsis:            A compiler for operating on serialized trees.
+name:                  gibbon
+version:               0.1.0.0
+synopsis:              A compiler for operating on serialized trees.
 -- description:
 -- license:
--- license-file:        LICENSE
-author:              Ryan Newton
-maintainer:          rrnewton@gmail.com
+-- license-file:          LICENSE
+author:                Ryan Newton
+maintainer:            rrnewton@gmail.com
 -- copyright:
 -- category:
-build-type:          Simple
-extra-source-files:  README.md, rts.c
-cabal-version:       >=1.10
+build-type:            Simple
+extra-source-files:    README.md, cbits/rts.c
+cabal-version:         >=1.10
 
 flag LLVM_ENABLED
-  description: Enable LLVM backend
-  default: False
+  description:         Enable LLVM backend
+  default:             False
 
 library
-  exposed-modules:
-                  Packed.FirstOrder.Common
-                  Packed.FirstOrder.GenericOps
-                  Packed.FirstOrder.Compiler
-                  Packed.FirstOrder.HaskellFrontend
-                  Packed.FirstOrder.TargetInterp
-                  Packed.FirstOrder.L0.Syntax
-                  Packed.FirstOrder.L0.Specialize
-                  Packed.FirstOrder.L1.Syntax
-                  Packed.FirstOrder.L1.Typecheck
-                  Packed.FirstOrder.L2.Syntax
-                  Packed.FirstOrder.L2.Typecheck
-                  Packed.FirstOrder.L2.Examples
-                  Packed.FirstOrder.L4.Syntax
-                  Packed.FirstOrder.L1.Interp
-                  Packed.FirstOrder.L2.Interp
-                  Packed.FirstOrder.L3.Syntax
-                  Packed.FirstOrder.L3.Typecheck
-                  Packed.FirstOrder.SExpFrontend
 
-                  -- compiler passes, roughly in the order they're run
-                  Packed.FirstOrder.Passes.Freshen
-                  Packed.FirstOrder.Passes.Flatten
-                  Packed.FirstOrder.Passes.InlineTriv
-                  Packed.FirstOrder.Passes.DirectL3
-                  Packed.FirstOrder.Passes.InferLocations
-                  Packed.FirstOrder.Passes.InferEffects2
-                  Packed.FirstOrder.Passes.RouteEnds2
-                  Packed.FirstOrder.Passes.Cursorize4
-                  Packed.FirstOrder.Passes.FindWitnesses
-                  Packed.FirstOrder.Passes.ShakeTree
-                  Packed.FirstOrder.Passes.HoistNewBuf
-                  Packed.FirstOrder.Passes.Unariser
-                  Packed.FirstOrder.Passes.Unariser2
-                  Packed.FirstOrder.Passes.Lower
-                  -- Packed.FirstOrder.Passes.Typecheck
-                  Packed.FirstOrder.Passes.Codegen
-
--- First attempt, slated for removal:
-                    -- Packed.HigherOrder.L1_Source, Packed.HigherOrder.L2_Intermediate,
-                    -- Packed.HigherOrder.L4.Syntax,
-                    -- Packed.HigherOrder.Translate, Packed.HigherOrder.Common,
+  exposed-modules:     Gibbon.Common
+                       Gibbon.GenericOps
+                       Gibbon.Compiler
+                       Gibbon.DynFlags
+                       Gibbon.HaskellFrontend
+                       Gibbon.TargetInterp
+                       Gibbon.L1.Syntax
+                       Gibbon.L1.Typecheck
+                       Gibbon.L2.Syntax
+                       Gibbon.L2.Typecheck
+                       Gibbon.L2.Examples
+                       Gibbon.L4.Syntax
+                       Gibbon.L1.Interp
+                       Gibbon.L2.Interp
+                       Gibbon.L3.Syntax
+                       Gibbon.L3.Typecheck
+                       Gibbon.SExpFrontend
+                       Gibbon.L0.Syntax
+                       Gibbon.L0.Specialize
+                       
+                       -- compiler passes, roughly in the order they're run
+                       Gibbon.Passes.Freshen
+                       Gibbon.Passes.Flatten
+                       Gibbon.Passes.InlineTriv
+                       Gibbon.Passes.DirectL3
+                       Gibbon.Passes.AddLayout
+                       Gibbon.Passes.InferLocations
+                       Gibbon.Passes.RemoveCopies
+                       Gibbon.Passes.InferMultiplicity
+                       Gibbon.Passes.InferEffects
+                       Gibbon.Passes.RouteEnds
+                       Gibbon.Passes.BoundsCheck
+                       Gibbon.Passes.ThreadRegions
+                       Gibbon.Passes.Cursorize
+                       Gibbon.Passes.FindWitnesses
+                       Gibbon.Passes.ShakeTree
+                       Gibbon.Passes.HoistNewBuf
+                       Gibbon.Passes.Unariser
+                       Gibbon.Passes.Lower
+                       Gibbon.Passes.FollowRedirects
+                       Gibbon.Passes.RearrangeFree
+                       Gibbon.Passes.Codegen
 
 
   -- other-modules:
   other-extensions:    DeriveDataTypeable CPP
 
-  build-depends:
-                aeson,
-                base >=4.8,
-                bytestring,
-                containers,
-                deepseq,
-                filepath,
-                GenericPretty, pretty,
-                haskell-src-exts,
-                haskell-src-exts-simple,
-                language-c-quote,
-                mainland-pretty,
-                mtl,
-                parsec,
-                srcloc,
-                s-cargot,
-                text,
-                optparse-applicative,
-                process,
-                directory,
-                -- time,
-                clock,
-                -- tslogger,
-                blaze-builder,
-                symbol,
-                srcloc,
-                transformers
+  build-depends:       base                     >= 4.8       &&  < 4.11
+                     , bytestring               >= 0.10.4.1  &&  < 0.11
+                     , text
+                     , process
+                     , filepath
+                     , directory
+                     , clock
+                     , containers
+                     , deepseq
+                     , mtl
+                     , transformers
+                     -- Parsers:
+                     , parsec
+                     , optparse-applicative
+                     , haskell-src-exts         >= 1.18      &&  < 1.20
+                     , haskell-src-exts-simple  >= 1.18      &&  < 1.20
+                     , s-cargot                 >= 0.1.3.0   &&  < 0.2
+                     , srcloc
+                     , symbol
+                     -- Pretty printers:
+                     , pretty
+                     , language-c-quote
+                     , GenericPretty
+                     , mainland-pretty
 -- Brings in lots of ekmett dependencies:
---              , either
+--                     , either
 
   if flag(LLVM_ENABLED)
-    exposed-modules:
-                    Packed.FirstOrder.Passes.LLVM.Codegen
-                    Packed.FirstOrder.Passes.LLVM.Monad
-                    Packed.FirstOrder.Passes.LLVM.Global
-                    Packed.FirstOrder.Passes.LLVM.Gibbon
-                    Packed.FirstOrder.Passes.LLVM.Instruction
-                    Packed.FirstOrder.Passes.LLVM.Terminator
-                    Packed.FirstOrder.Passes.LLVM.Type
-                    Packed.FirstOrder.Passes.LLVM.Utils
-    build-depends:
-                  llvm-hs-pure,
-                  llvm-hs
-    cpp-options: -DLLVM_ENABLED
+    exposed-modules:   Gibbon.Passes.LLVM.Codegen
+                       Gibbon.Passes.LLVM.Monad
+                       Gibbon.Passes.LLVM.Global
+                       Gibbon.Passes.LLVM.Gibbon
+                       Gibbon.Passes.LLVM.Instruction
+                       Gibbon.Passes.LLVM.Terminator
+                       Gibbon.Passes.LLVM.Type
+                       Gibbon.Passes.LLVM.Utils
+
+    build-depends:     llvm-hs-pure,
+                       llvm-hs
+
+    cpp-options:       -DLLVM_ENABLED
 
   hs-source-dirs:      src
   default-language:    Haskell2010
-  -- TEMP: Turning off typed holes and unused-top-level warnings for now [2017.08.25]:
+-- TEMP: Turning off typed holes and unused-top-level warnings for now [2017.08.25]:
 --  ghc-options:         -Wno-all
 --  ghc-options:         -Wall -fno-warn-typed-holes -Wno-unused-top-binds -fdefer-typed-holes -fno-warn-orphans
-  ghc-options:        -Wredundant-constraints
-  ghc-options:        -Wall -Wno-unused-top-binds -Wno-orphans -Wno-partial-type-signatures
-  ghc-options:        -Wno-typed-holes
-  ghc-options:        -fdefer-typed-holes
-  default-extensions: ScopedTypeVariables PatternSynonyms DeriveGeneric DeriveFunctor
-                      NamedFieldPuns TupleSections TypeFamilies
-  default-extensions: PartialTypeSignatures
-                      -- This can break things: DeriveAnyClass
+  ghc-options:         -Wredundant-constraints
+                       -Wall -Wno-unused-top-binds -Wno-orphans
+                       -Wno-partial-type-signatures
+                       -Wno-typed-holes -fdefer-typed-holes
+  default-extensions:  ScopedTypeVariables PatternSynonyms DeriveGeneric DeriveFunctor
+                       NamedFieldPuns TupleSections TypeFamilies
+                       PartialTypeSignatures
+                       -- This can break things: DeriveAnyClass
 
 executable gibbon
   hs-source-dirs:      app
   main-is:             Frontend.hs
 
-  build-depends:       base,
-                       haskell-src-exts,
-                       filepath,
-                       gibbon
+  build-depends:       base
+                     , haskell-src-exts
+                     , filepath
+                     , gibbon
 
   default-language:    Haskell2010
---  ghc-options:         -Wall
-  ghc-options:         -rtsopts -fdefer-typed-holes
+  ghc-options:         -Wall -rtsopts -fdefer-typed-holes
 
 
 test-suite test-gibbon
@@ -146,19 +142,21 @@ test-suite test-gibbon
   build-depends:       base,
                        gibbon, containers,
                        filepath, directory, process,
-                       mtl,
                        srcloc,
+                       mtl, transformers,
                        tasty, tasty-hunit, tasty-th
-  other-modules:
-                RouteEnds2
-                InferEffects2
-                Unariser
-                Compiler
-                L2.Typecheck
-                L1.Typecheck
-                L3.Typecheck
-                L0.Specialize
+
+  other-modules:       RouteEnds
+                       InferEffects
+                       InferLocations
+                       Unariser
+                       InferMultiplicity
+                       AddLayout
+                       Compiler
+                       L2.Typecheck
+                       L1.Typecheck
+                       L3.Typecheck
+                       L0.Specialize
 
   default-language:    Haskell2010
---   ghc-options:         -Wall
   ghc-options:         -fdefer-typed-holes

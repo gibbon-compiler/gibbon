@@ -1,0 +1,12 @@
+#lang gibbon
+
+(require "test_stree.gib")
+
+(provide buildstree)
+
+(define (buildstree [n : Int]) : STree
+  (if (= n 0)
+      (Leaf 1)
+      (Inner 0 0
+             (buildstree (- n 1))
+             (buildstree (- n 1)))))

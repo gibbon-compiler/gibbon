@@ -1,0 +1,7 @@
+#lang gibbon
+
+(provide STree Leaf Inner)
+
+(data STree
+      [Leaf Int]
+      [Inner Int Int STree STree])

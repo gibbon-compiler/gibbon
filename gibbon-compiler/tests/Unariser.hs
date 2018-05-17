@@ -15,11 +15,11 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.TH
 
-import Packed.FirstOrder.Common hiding (FunDef, FunDefs)
-import Packed.FirstOrder.L1.Syntax hiding (FunDef, Prog(..), FunDefs)
-import Packed.FirstOrder.L3.Syntax
-import Packed.FirstOrder.GenericOps
-import Packed.FirstOrder.Passes.Unariser2
+import Gibbon.Common hiding (FunDef, FunDefs)
+import Gibbon.L1.Syntax hiding (FunDef, Prog(..), FunDefs)
+import Gibbon.L3.Syntax
+import Gibbon.GenericOps
+import Gibbon.Passes.Unariser
 
 
 run :: L Exp3 -> L Exp3
