@@ -17,7 +17,6 @@ flag LLVM_ENABLED
   default:             False
 
 library
-
   exposed-modules:     Gibbon.Common
                        Gibbon.GenericOps
                        Gibbon.Compiler
@@ -61,8 +60,11 @@ library
                        Gibbon.Passes.RearrangeFree
                        Gibbon.Passes.Codegen
 
+  other-modules:
+                       Gibbon.L0.Mono
+-- This one looks far from done:
+--                       Gibbon.L0.Interp
 
-  -- other-modules:
   other-extensions:    DeriveDataTypeable CPP
 
   build-depends:       base                     >= 4.8       &&  < 4.11

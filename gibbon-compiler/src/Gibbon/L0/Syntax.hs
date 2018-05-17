@@ -31,10 +31,10 @@ import Data.Set as S
 import GHC.Generics
 import Text.PrettyPrint.GenericPretty
 
-import Packed.FirstOrder.Common as C
-import Packed.FirstOrder.GenericOps
+import Gibbon.Common as C hiding (FunEnv)
+import Gibbon.GenericOps
 
-import qualified Packed.FirstOrder.L1.Syntax as L1
+import qualified Gibbon.L1.Syntax as L1
     
 -----------------------------------------------------------
 

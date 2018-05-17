@@ -14,10 +14,10 @@ import Data.Loc
 import Data.Map as M
 import Data.Set as S
 
-import Packed.FirstOrder.Common 
-import Packed.FirstOrder.L0.Syntax as L0
-import Packed.FirstOrder.L1.Syntax as L1
-import Packed.FirstOrder.L0.Specialize
+import Gibbon.Common 
+import Gibbon.L0.Syntax as L0
+import Gibbon.L1.Syntax as L1
+import Gibbon.L0.Specialize
 
 type Exp = L Exp0
 
