@@ -81,6 +81,8 @@ findTestFiles dirs = concat <$> mapM go dirs
         listDirectory dir
 
 isGibbonTestFile :: FilePath -> Bool
+-- Ignore dotfiles, especially .# files:
+isGibbonTestFile ('.':_) = False
 isGibbonTestFile fp =
     -- Add a .hs extension here soon...
     takeExtension fp `elem` [".gib"]
