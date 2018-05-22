@@ -120,7 +120,7 @@ instance FromJSON Mode where
         case T.toLower s of
             "packed"  -> return Packed
             "pointer" -> return Pointer
-            "interp"  -> return Interp1
+            "interp1" -> return Interp1
 
 -- This doesn't have to be a new datatype. But it makes parsing the YAML file easier.
 -- We peel off this layer later.
@@ -326,7 +326,7 @@ summary tc tr = do
 
     go :: (Num a, Show a) => a -> ZonedTime -> Doc
     go timeTaken day =
-        text "\n\nGibbon testsuite summary: " <+> parens (text $ show day) $$
+        text "Gibbon testsuite summary: " <+> parens (text $ show day) $$
         text "--------------------------------------------------------------------------------" $$
         text "Time taken:" <+> text (show timeTaken) PP.<> text "s" $$
         text "" $$
@@ -378,6 +378,6 @@ main = do
             report <- summary tc test_run'
             writeFile (summaryFile tc) report
             putStrLn $ "\nWrote " ++ (summaryFile tc) ++ "."
-            putStrLn report
+            putStrLn $ "\n\n" ++ report
             unless (M.null (unexpectedFailures test_run') && M.null (unexpectedPasses test_run'))
                 exitFailure

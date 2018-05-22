@@ -1,0 +1,160 @@
+# The config file for the Gibbon testsuite.
+# These configuration parameters are only used by TestRunner.hs and
+# have no effect on the unit tests (i.e stack test).
+
+tests:
+  - name: test00_add.gib
+  - name: test00a_size.gib
+  - name: test00b_printBool.gib
+  - name: test00c_printBool.gib
+  - name: test00d_printData.gib
+  - name: test00e_func.gib
+  - name: test01b_ifif.gib
+  - name: test01_if.gib
+  - name: test02_arith.gib
+  - name: test02b_datacon.gib
+  - name: test02c_case.gib
+  - name: test02d_printPair.gib
+  - name: test02e_printNest.gib
+  - name: test03b_eqs.gib
+  - name: test03c_eqs.gib
+  - name: test03d_eqs.gib
+  - name: test03_let.gib
+  - name: test04b_vector.gib
+  - name: test04d_vecfun.gib
+  - name: test04_vector.gib
+  - name: test05_app.gib
+  - name: test05b_app.gib
+  - name: test05c_arity2.gib
+  - name: test06a_two_cases.gib
+  - name: test06b_case.gib
+  - name: test06_case.gib
+  - name: test06c_nested.gib
+  - name: test06d_rec.gib
+  - name: test06e_rec.gib
+  - name: test06f_rec.gib
+  - name: test06g_rec.gib
+  - name: test07b_iterate.gib
+  - name: test07_time.gib
+  - name: test09_recur.gib
+  - name: test11b_fundata.gib
+  - name: test11c_funrec.gib
+  - name: test11d_funrec.gib
+  - name: test11e_funrec.gib
+  - name: test11f_funrec.gib
+  - name: test11_fundata.gib
+  - name: test12b_traverse.gib
+  - name: test12c_traverse.gib
+  - name: test13b_build.gib
+  - name: test13_build.gib
+  - name: test19_unarytree.gib
+  - name: test20b_bintree.gib
+  - name: test20_bintree.gib
+  - name: test20c_bintree.gib
+  - name: test20d_bintree.gib
+  - name: test20e_bintree.gib
+  - name: test20f_bintree.gib
+  - name: test20h_idree.gib
+  - name: test25a_withprint.gib
+  - name: test25b_racketcore.gib
+  - name: test25c_racketcore.gib
+  - name: test25e_countnodes.gib
+  - name: test25_rackcore.gib
+  - name: test26_treewalk.gib
+  - name: test26a_treewalk.gib
+  - name: test27a_subst.gib
+  - name: test27c_subst.gib
+  - name: test_buildstree.gib
+  - name: test_buildtree.gib
+  - name: test_buildtwotrees.gib
+  - name: test_ddtree.gib
+  - name: test_litmus_add1.gib
+  - name: test_litmus_buildtree.gib
+  - name: test_litmus_copy.gib
+  - name: test_litmus_id.gib
+  - name: test_litmus_leftmost.gib
+  - name: test_litmus_rightmost.gib
+  - name: test_litmus_search_tree_lookup.gib
+  - name: test_litmus_sum_add_build.gib
+  - name: test_litmus_sumtree.gib
+  - name: test_stree.gib
+  - name: test_sumstree.gib
+  - name: test_sumtree.gib
+
+  # Failing tests:
+  - name: test04c_ifvector.gib
+    failing: [packed]
+  - name: test06h_rec.gib
+    failing: [packed]
+  - name: test06i_casecase.gib
+    failing: [packed]
+  - name: test08b_dict.gib
+    failing: [packed]
+  - name: test08c_dict.gib
+    failing: [packed]
+  - name: test08_dict.gib
+    failing: [packed]
+  - name: test08d_sharedict.gib
+    failing: [packed]
+  - name: test10b_desugar.gib
+    failing: [packed]
+  - name: test10_desugar.gib
+    failing: [packed]
+  - name: test12_skip.gib
+    failing: [packed]
+
+  # sym-append not implemented in the RTS
+  - name: test15b_symappend.gib
+    failing: [packed, pointer]
+
+  # Probably safe to delete these tests permanently
+  - name: test16_forlist.gib
+    failing: [packed,pointer,interp1]
+  - name: test17_forfold.gib
+    failing: [packed,pointer,interp1]
+
+  # Work without -O3. Need to turn off inlining / pure annotations.
+  - name: test18_badconstraint.gib
+    failing: [pointer]
+  - name: test18c_identity1.gib
+    failing: [pointer]
+  - name: test18d_identity2.gib
+    failing: [pointer]
+  - name: test18e_identity3.gib
+    failing: [pointer]
+  - name: test18g_identity4.gib
+    failing: [pointer]
+  - name: test_unpacking.gib
+    failing: [pointer]
+
+  #
+  - name: test18b_tupconstraint.gib
+    failing: [packed]
+  - name: test18f_flip.gib
+    failing: [packed]
+
+  #
+  - name: test24_defs.gib
+    failing: [packed]
+  - name: test25d_racketcore.gib
+    failing: [packed]
+  - name: test25f_countnodes.gib
+    failing: [packed]
+
+  # This test depends on real symbols, which we don't support atm.
+  - name: test27b_subst.gib
+    failing: [pointer,packed,interp1]
+
+  # No gensym, or real symbols.
+  - name: test28_copyprop.gib
+    failing: [packed,pointer,interp1]
+
+  #
+  - name: test_addtrees.gib
+    failing: [packed]
+  - name: test_buildtreesum.gib
+    failing: [packed]
+  - name: test_litmus_search_tree_insert.gib
+    failing: [packed]
+  - name: test_sumupseteven.gib
+    failing: [packed]
