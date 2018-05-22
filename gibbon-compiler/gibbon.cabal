@@ -38,7 +38,7 @@ library
                        Gibbon.SExpFrontend
                        Gibbon.L0.Syntax
                        Gibbon.L0.Specialize
-                       
+
                        -- compiler passes, roughly in the order they're run
                        Gibbon.Passes.Freshen
                        Gibbon.Passes.Flatten
@@ -139,7 +139,8 @@ test-suite test-gibbon
                        filepath, directory, process,
                        srcloc, pretty, time,
                        mtl, transformers,
-                       tasty, tasty-hunit, tasty-th
+                       tasty, tasty-hunit, tasty-th,
+                       yaml, text, bytestring
 
   other-modules:       RouteEnds
                        InferEffects
