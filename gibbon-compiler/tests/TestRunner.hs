@@ -73,14 +73,17 @@ data Test = Test
     { name :: String
     , dir  :: FilePath
     , expectedResults :: M.Map Mode Result
+    , skip :: Bool
     }
   deriving (Show, Eq, Read)
 
-defaultTestExpectedResults :: M.Map Mode Result
-defaultTestExpectedResults = M.fromList [(Packed, Pass), (Pointer, Pass), (Interp1, Pass)]
-
-defaultTestDir :: FilePath
-defaultTestDir = "examples"
+defaultTest :: Test
+defaultTest = Test
+    { name = ""
+    , dir = "examples"
+    , expectedResults = M.fromList [(Packed, Pass), (Pointer, Pass), (Interp1, Pass)]
+    , skip = False
+    }
 
 instance Ord Test where
     compare t1 t2 = compare (name t1) (name t2)
@@ -88,12 +91,13 @@ instance Ord Test where
 instance FromJSON Test where
     parseJSON (Y.Object o) = do
         name <- o .: "name"
-        dir  <- o .:? "dir" .!= defaultTestDir
+        dir  <- o .:? "dir" .!= (dir defaultTest)
+        skip <- o .:? "skip" .!= (skip defaultTest)
         failing <- o .:? "failing" .!= []
         let expectedFailures = M.fromList [(mode, Fail) | mode <- failing]
             -- Overlay the expected failures on top of the defaults.
-            expectedResults = M.union expectedFailures defaultTestExpectedResults
-        return $ Test name dir expectedResults
+            expected = M.union expectedFailures (expectedResults defaultTest)
+        return $ Test name dir expected skip
 
 data Result = Pass | Fail
   deriving (Show, Eq, Read, Ord)
@@ -187,6 +191,7 @@ data TestRun = TestRun
     , unexpectedPasses :: M.Map String [Mode]
     , expectedFailures :: M.Map String [(Mode, String)]
     , unexpectedFailures :: M.Map String [(Mode, String)]
+    , skipped :: [String]
     }
   deriving (Show, Eq, Read, Ord)
 
@@ -203,6 +208,7 @@ getTestRun (Tests tests) = do
         , unexpectedPasses = M.empty
         , expectedFailures = M.empty
         , unexpectedFailures = M.empty
+        , skipped = []
         }
 
 --------------------------------------------------------------------------------
@@ -229,17 +235,20 @@ runTests tc tr = foldlM (\acc t -> do
                              go t acc)
                  tr (sort $ tests tr)
   where
-    go test acc = do
-        results <- runTest tc test
-        let extend = M.insertWith (++) (name test)
-        foldrM
-            (\(mode,res) acc2 ->
-                 return $ case res of
-                    EP -> acc2 { expectedPasses = extend [mode] (expectedPasses acc2) }
-                    UP -> acc2 { unexpectedPasses = extend [mode] (unexpectedPasses acc2) }
-                    EF err -> acc2 { expectedFailures = extend [(mode,err)] (expectedFailures acc2) }
-                    UF err -> acc2 { unexpectedFailures = extend [(mode,err)] (unexpectedFailures acc2) })
-            acc results
+    go test acc =
+        if skip test
+        then return (acc { skipped = (name test):(skipped acc) })
+        else do
+            results <- runTest tc test
+            let extend = M.insertWith (++) (name test)
+            foldrM
+                (\(mode,res) acc2 ->
+                     return $ case res of
+                        EP -> acc2 { expectedPasses = extend [mode] (expectedPasses acc2) }
+                        UP -> acc2 { unexpectedPasses = extend [mode] (unexpectedPasses acc2) }
+                        EF err -> acc2 { expectedFailures = extend [(mode,err)] (expectedFailures acc2) }
+                        UF err -> acc2 { unexpectedFailures = extend [(mode,err)] (unexpectedFailures acc2) })
+                acc results
 
 runTest :: TestConfig -> Test -> IO [(Mode,TestResult)]
 runTest tc Test{name,dir,expectedResults} =
@@ -333,6 +342,12 @@ summary tc tr = do
         (int $ length $ unexpectedPasses tr) <+> text "unexpected passes" $$
         (int $ length $ expectedFailures tr) <+> text "expected failures" $$
         (int $ length $ unexpectedFailures tr) <+> text "unexpected failures" $$
+        (int $ length $ skipped tr) <+> text "skipped" $$
+        (case skipped tr of
+             [] -> empty
+             ls -> if (verbosity tc) >= 2
+                   then text "\nSkipped: " $$ hline (hsep $ punctuate comma (map text ls))
+                   else empty) $$
         (case M.toList (unexpectedPasses tr) of
              [] -> empty
              ls -> text "\nUnexpected passes:" $$
@@ -344,7 +359,9 @@ summary tc tr = do
              [] -> if skipFailing tc
                    then text "Expected failures: skipped."
                    else empty
-             ls -> text "\nExpected failures:" $$ hline (docErrors ls))
+             ls -> if (verbosity tc) >= 3
+                   then text "\nExpected failures:" $$ hline (docErrors ls)
+                   else empty)
 
 sdoc :: Show a => a -> Doc
 sdoc = text . show

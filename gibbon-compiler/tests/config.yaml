@@ -109,9 +109,9 @@ tests:
 
   # Probably safe to delete these tests permanently
   - name: test16_forlist.gib
-    failing: [packed,pointer,interp1]
+    skip: true
   - name: test17_forfold.gib
-    failing: [packed,pointer,interp1]
+    skip: true
 
   # Work without -O3. Need to turn off inlining / pure annotations.
   - name: test18_badconstraint.gib
