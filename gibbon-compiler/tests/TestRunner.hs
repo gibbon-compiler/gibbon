@@ -61,9 +61,8 @@ We ignore such failures for now. Later, we could add a "bench" mode, which ensur
 the delta is within some reasonable range (like nofib).
 
 TODOs:
-(1) Run tests in all modes - interp, pointer etc.
-(2) Compare benchmark results
-(3) ...
+(1) Compare benchmark results
+(2) ...
 
 -}
 

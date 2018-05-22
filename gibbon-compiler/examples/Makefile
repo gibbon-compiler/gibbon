@@ -5,9 +5,9 @@
 test: temporary
 temporary: prebuild build
 	$(MAKE) run_answers
-	$(MAKE) run_tests_interp1
+#	$(MAKE) run_tests_interp1
 #	$(MAKE) run_tests_interp2
-	$(MAKE) run_tests_pointer
+#	$(MAKE) run_tests_pointer
 # TestRunner runs these tests.
 #	$(MAKE) run_tests_packed
 
