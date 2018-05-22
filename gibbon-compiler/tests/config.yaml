@@ -1,6 +1,20 @@
-# The config file for the Gibbon testsuite.
-# These configuration parameters are only used by TestRunner.hs and
-# have no effect on the unit tests (i.e stack test).
+## The config file for the Gibbon testsuite.
+## These configuration parameters are only used by TestRunner.hs and
+## have no effect on the unit tests (i.e stack test).
+
+## Configuration that can be added to the entire testsuite (or passed via command line):
+##
+## skip-failing: True    -- ^ Don't run the expected failures. (default: false)
+## verbosity:    Int     -- ^ Controls the summary that's generated at the end. (default: 1)
+## summaryFile:  String  -- ^ File in which to store the test summary. (default: gibbon-test-summary.txt)
+## tempdir:      String  -- ^ Temporary directory to store the build artifacts (default: examples/build_tmp)
+
+## Specifiying an individual test:
+##
+## name: name of the testfile
+## dir : location of the testfile (default: examples)
+## failing: modes in which the test is expected to fail (default: [])
+## skip: whether to skip this test (default: false)
 
 tests:
   - name: test00_add.gib
