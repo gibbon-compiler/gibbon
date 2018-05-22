@@ -9,7 +9,7 @@ import Data.List
 import Data.Foldable
 import Data.Time.LocalTime
 import Data.Yaml as Y
-import Options.Applicative hiding (empty)
+import Options.Applicative as OA hiding (empty)
 import System.Clock
 import System.Directory
 import System.Exit
@@ -158,30 +158,25 @@ instance FromJSON TestConfig where
                                  o .:? "summary-file" .!= (summaryFile defaultTestConfig) <*>
                                  o .:? "tempdir"      .!= (tempdir defaultTestConfig)
 
-{- Note [Command line args]
----------------------------
-Turning off command line options for now. Perhaps we could *combine* these options
-with the ones read from the config file (command line args would have higher precedence).
-
-configParser :: Parser TestConfig
-configParser = TestConfig
+-- Accept a default test config as a fallback, either 'DefaultTestConfig',
+-- or read from the config file.
+configParser :: TestConfig -> OA.Parser TestConfig
+configParser dtc = TestConfig
                    <$> switch (long "skip-failing" <>
                                help "Skip tests in the error/ directory." <>
                                showDefault)
                    <*> option auto (short 'v' <>
                                     help "Verbosity level." <>
                                     showDefault <>
-                                    value (verbosity defaultTestConfig))
+                                    value (verbosity dtc))
                    <*> strOption (long "summary-file" <>
                                   help "File in which to store the test summary" <>
                                   showDefault <>
-                                  value (summaryFile defaultTestConfig))
+                                  value (summaryFile dtc))
                    <*> strOption (long "tempdir" <>
                                   help "Temporary directory to store the build artifacts" <>
                                   showDefault <>
-                                  value (tempdir defaultTestConfig))
-
--}
+                                  value (tempdir dtc))
 
 --------------------------------------------------------------------------------
 
@@ -199,8 +194,8 @@ data TestRun = TestRun
 clk :: Clock
 clk = RealtimeCoarse
 
-getTestRun :: TestConfig -> Tests -> IO TestRun
-getTestRun _tc (Tests tests) = do
+getTestRun :: Tests -> IO TestRun
+getTestRun (Tests tests) = do
     time <- getTime clk
     return $ TestRun
         { tests = tests
@@ -342,29 +337,25 @@ summary tc tr = do
         (case M.toList (unexpectedPasses tr) of
              [] -> empty
              ls -> text "\nUnexpected passes:" $$
-                   hline (vcat (map (\(name,modes) -> docNameModes name modes) ls))
-        ) $$
+                   hline (vcat (map (\(name,modes) -> docNameModes name modes) ls))) $$
         (case M.toList (unexpectedFailures tr) of
             [] -> empty
-            ls -> text "\nUnexpected failures:" $$ hline (docErrors ls)
-        ) $$
+            ls -> text "\nUnexpected failures:" $$ hline (docErrors ls)) $$
         (case M.toList (expectedFailures tr) of
              [] -> if skipFailing tc
                    then text "Expected failures: skipped."
                    else empty
-             ls -> text "\nExpected failures:" $$ hline (docErrors ls)
-        )
+             ls -> text "\nExpected failures:" $$ hline (docErrors ls))
 
 sdoc :: Show a => a -> Doc
 sdoc = text . show
-
 
 configFile :: String
 configFile = "tests/config.yaml"
 
 main :: IO ()
 main = do
-    -- Parse the config
+    -- Parse the config file
     configstr <- readFile configFile
     let mb_tc :: Maybe TestConfig
         mb_tc = Y.decode (BS.pack configstr)
@@ -375,11 +366,17 @@ main = do
     case (mb_tc, mb_tests) of
         (Nothing,_) -> error $ "Couldn't parse the configuration in " ++ configFile
         (_,Nothing) -> error $ "Couldn't parse the tests in " ++ configFile
-        (Just tc, Just tests) -> do
-            test_run <- getTestRun tc tests
+        (Just file_tc, Just tests) -> do
+            -- Combine the options read from the config file with the command line
+            -- arguments (which have higher precedence).
+            let opts = info (configParser file_tc <**> helper)
+                           (fullDesc
+                            <> header "TestRunner - a simple harnness for the Gibbon testsuite.")
+            tc <- execParser opts
+            test_run <- getTestRun tests
             test_run' <- runTests tc test_run
             report <- summary tc test_run'
-            -- writeFile (summaryFile tc) report
+            writeFile (summaryFile tc) report
             putStrLn $ "\nWrote " ++ (summaryFile tc) ++ "."
             putStrLn report
             unless (M.null (unexpectedFailures test_run') && M.null (unexpectedPasses test_run'))
