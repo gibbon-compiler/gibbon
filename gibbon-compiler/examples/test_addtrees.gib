@@ -1,6 +1,6 @@
 #lang gibbon
 
-(require "../test_ddtree.gib")
+(require "test_ddtree.gib")
 
 (define (addtrees [tr1 : Tree] [tr2 : Tree]) : Int
   (case tr1

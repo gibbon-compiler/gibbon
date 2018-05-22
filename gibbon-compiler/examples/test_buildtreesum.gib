@@ -1,6 +1,6 @@
 #lang gibbon
 
-(require "../test_ddtree.gib")
+(require "test_ddtree.gib")
 
 (define (buildtreesum [n : Int]) : (Vector Int Tree)
   (if (= n 0)

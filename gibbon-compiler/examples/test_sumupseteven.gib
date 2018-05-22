@@ -1,7 +1,7 @@
 #lang gibbon
 
-(require "../test_stree.gib")
-(require "../test_buildstree.gib")
+(require "test_stree.gib")
+(require "test_buildstree.gib")
 
 (define (even [n : Int]) : Int
   (if (= (mod n 2) 0)
