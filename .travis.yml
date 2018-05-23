@@ -17,6 +17,7 @@ addons:
     sources:
     - ubuntu-toolchain-r-test
     packages:
+      - libgc-dev
       - libgmp-dev
       - gcc-5
 
