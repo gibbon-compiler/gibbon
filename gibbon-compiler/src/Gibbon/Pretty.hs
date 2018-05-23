@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -11,9 +12,11 @@ import qualified Gibbon.L2.Syntax as L2
 import Gibbon.Common
 import Gibbon.GenericOps
 import Data.Loc
+import Data.List
 import qualified Data.Map as M
 import Text.PrettyPrint.HughesPJ as PP
 import Text.PrettyPrint.GenericPretty
+import Prelude (String, Maybe(..), Show(..), ($), error)
 
 class Expression e => Pretty e where
     pprint :: e -> Doc
