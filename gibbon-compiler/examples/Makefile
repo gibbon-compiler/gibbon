@@ -178,8 +178,8 @@ $(BLD):
 	mkdir -p $(BLD)
 
 # [2018.04.14]: test24_defs.gib was moved to "error" as it doesn't compile in packed mode.
-test24_input.gpkd: error/test24_input.dat error/test24_packit.rkt error/test24_defs.gib
-	cd error/; \$(RUNRACKET) test24_packit.rkt
+test24_input.gpkd: test24_input.dat test24_packit.rkt test24_defs.gib
+	\$(RUNRACKET) test24_packit.rkt
 
 #----------------------------------------
 # Test direct Racket execution:
