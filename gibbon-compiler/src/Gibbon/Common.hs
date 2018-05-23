@@ -95,7 +95,7 @@ newtype Var = Var Symbol
   deriving (Eq, Ord, Read, Show)
 
 instance Out Var where
-  doc         = doc . fromVar
+  doc         = text . fromVar
   docPrec n v = docPrec n (fromVar v)
 
 instance NFData Var where

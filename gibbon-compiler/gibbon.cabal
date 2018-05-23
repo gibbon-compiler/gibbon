@@ -23,6 +23,7 @@ library
                        Gibbon.DynFlags
                        Gibbon.HaskellFrontend
                        Gibbon.TargetInterp
+                       Gibbon.Pretty
                        Gibbon.L1.Syntax
                        Gibbon.L1.Typecheck
                        Gibbon.L1.Examples

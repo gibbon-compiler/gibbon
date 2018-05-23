@@ -349,6 +349,14 @@ data UrTy a =
 
   deriving (Show, Read, Ord, Eq, Generic, NFData, Functor, Foldable, Traversable)
 
+instance (Show l, Out l) => Expression (UrTy l) where
+    type LocOf (UrTy l) = l
+    type TyOf (UrTy l) = UrTy l
+    isTrivial _ = True -- I guess?
+
+instance FreeVars (UrTy l) where
+    gFreeVars _ = S.empty
+
 --------------------------------------------------------------------------------
 -- Helpers
 

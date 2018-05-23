@@ -108,6 +108,14 @@ data PreLocExp loc = StartOfLE Region
                    | FromEndLE  loc
                      deriving (Read, Show, Eq, Ord, Generic, NFData)
 
+instance (Show l, Out l) => Expression (PreLocExp l) where
+    type LocOf (PreLocExp l) = l
+    type TyOf (PreLocExp l) = UrTy l
+    isTrivial _ = True
+
+instance FreeVars (PreLocExp l) where
+    gFreeVars _ = S.empty -- TODO: audit this, not used, could check after variable constraint
+
 type LocExp = PreLocExp LocVar
 
 -- | Locations (end-witnesses) returned from functions after RouteEnds.
