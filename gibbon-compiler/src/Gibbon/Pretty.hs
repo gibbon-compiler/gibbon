@@ -4,18 +4,41 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Gibbon.Pretty ( Pretty(..) ) where
+module Gibbon.Pretty ( Pretty(..), printL1, printL2 ) where
 
 import Gibbon.L1.Syntax
 import qualified Gibbon.L2.Syntax as L2
 import Gibbon.Common
 import Gibbon.GenericOps
-import Data.Loc    
+import Data.Loc
+import qualified Data.Map as M
 import Text.PrettyPrint.HughesPJ as PP
 import Text.PrettyPrint.GenericPretty
 
 class Expression e => Pretty e where
     pprint :: e -> Doc
+
+printL1 :: Prog -> String
+printL1 (Prog _ funs me) =
+    let meDoc = case me of
+                  Nothing -> empty
+                  Just (e,_) -> pprint e
+        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (pprint $ funBody fd)) $ M.elems funs 
+    in render $ funsDoc $+$ renderMain meDoc
+
+printL2 :: L2.Prog -> String
+printL2 (L2.Prog _ funs me) =
+    let meDoc = case me of
+                  Nothing -> empty
+                  Just (e,_) -> pprint e
+        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ L2.funName fd) (doc $ L2.funArg fd) (pprint $ L2.funBody fd)) $ M.elems funs 
+    in render $ funsDoc $+$ renderMain meDoc
+
+renderfunc :: String -> Doc -> Doc -> Doc
+renderfunc f arg m = text f <+> arg <+> equals $$ nest 4 m 
+    
+renderMain :: Doc -> Doc
+renderMain m = renderfunc "main" (text "()") m
 
 instance Pretty (NoExt l d) where
     pprint _ = empty
@@ -50,7 +73,7 @@ instance (Show l, Out l, Pretty (e l (UrTy l)), Expression (e l (UrTy l)), TyOf 
           MkProdE es -> lparen <> hcat (punctuate (text ",") (map pprint es)) <> rparen
           ProjE i e -> text "#" <> int i <+> pprint e 
           CaseE e bnds -> text "case" <+> pprint e <+> text "of" $+$
-                          nest 4 (vcat $ map (\(dc,vls,e) -> text dc <+> hcat (punctuate (text " ") (map (\(v,l) -> vdoc v <> colon <> doc l) vls)) <+> text "->" <+> pprint e) bnds)
+                          nest 4 (vcat $ map (\(dc,vls,e) -> text dc <+> hcat (punctuate (text " ") (map (\(v,l) -> doc v <> colon <> doc l) vls)) <+> text "->" <+> pprint e) bnds)
           DataConE l dc es -> text dc <+> lbrack <> doc l <> rbrack <+>
                               lparen <> hcat (punctuate (text ",") (map pprint es)) <> rparen
           TimeIt e _ty _b -> pprint e
@@ -101,27 +124,3 @@ instance (Show l, Out l) => Pretty (UrTy l) where
           ListTy ty -> text "list" <+> pprint ty
           PtrTy -> text "ptr"
           CursorTy -> text "cursor"
-
-vdoc :: Var -> Doc
-vdoc = text . fromVar
-
-
-add1FunBod :: L L2.Exp2
-add1FunBod = l$ CaseE (l$ VarE "tr1") $
-  [ ("Leaf", [("n5","l6")],
-      l$ LetE ("v7",[],IntTy,
-               l$ PrimAppE AddP [l$ VarE "n5", l$ LitE 1]) $
-      l$ LetE ("lf8",[],PackedTy "Tree" "lout4",
-               l$ DataConE "lout4" "Leaf" [l$ VarE "v7"]) $
-      l$ VarE "lf8")
-
-  , ("Node", [("x9","l10"),("y11","l12")],
-     l$ Ext $ L2.LetLocE "l13" (L2.AfterConstantLE 1 "lout4") $
-     l$ LetE ("x14",[],PackedTy "Tree" "l13",
-               l$ AppE "add1" ["l10","l13"] (l$ VarE "x9")) $
-     l$ Ext $ L2.LetLocE "l15" (L2.AfterVariableLE "x14" "l13") $
-     l$ LetE ("y16",[],PackedTy "Tree" "l15", l$ AppE "add1" ["l12","l15"] (l$ VarE "y11")) $
-     l$ LetE ("z17",[],PackedTy "Tree" "lout4",
-              l$ DataConE "lout4" "Node" [ l$ VarE "x14" , l$ VarE "y16"]) $
-     l$ VarE "z17")
-  ]
