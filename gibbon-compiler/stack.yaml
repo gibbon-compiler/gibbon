@@ -1,12 +1,10 @@
-resolver: nightly-2018-05-11
+resolver: lts-11.10
 
 packages:
 - '.'
 
 extra-deps:
 - s-cargot-0.1.4.0
-- llvm-hs-5.1.3
-- llvm-hs-pure-5.1.2
 - haskell-src-exts-simple-1.20.0.0
 
 flags: {}
@@ -24,7 +22,12 @@ nix:
   # path: ["nixpgs=https://github.com/NixOS/nixpkgs-channels/archive/1e1472ed93e1256dfdac4908ae8edcb90ceff21c.tar.gz"]
   # shell-file: shell.nix
 
-system-ghc: true
+# [2018.05.23] (chai):
+# Ugh, Stack fails to construct a build plan with my system GHC, even though it's pinned to 8.2.2,
+# which is the same version that it expects. It tries to build deepseq-1.4.4.0 which is not even released yet.
+# Pinning a particular version of deepseq leads to further errors. Disabling this for now.
+#
+# system-ghc: true
 
 docker:
   enable: false

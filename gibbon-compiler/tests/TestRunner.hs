@@ -1,12 +1,16 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE CPP #-}
 module TestRunner
     (main) where
 
 import Control.Monad
-import Data.List
 import Data.Foldable
+import Data.List
+#if !MIN_VERSION_base(4,11,0)
+import Data.Monoid
+#endif
 import Data.Time.LocalTime
 import Data.Yaml as Y
 import Options.Applicative as OA hiding (empty)
