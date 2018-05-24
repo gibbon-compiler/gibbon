@@ -3,6 +3,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -27,6 +28,7 @@ import           Data.Map as M
 import           Data.Sequence (Seq, ViewL ((:<)), (|>))
 import           System.Clock
 import           System.IO.Unsafe (unsafePerformIO)
+import           Text.PrettyPrint.GenericPretty
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Sequence as S
 
@@ -34,11 +36,6 @@ import           Gibbon.Common
 import           Gibbon.GenericOps
 import           Gibbon.L1.Syntax as L1
 
--- We got rid of these pattern variables from L2, and they are now defined as L3 extensions instead
--- TODO: L3.Interp
-
--- import Gibbon.L2.Syntax ( pattern WriteInt, pattern ReadInt, pattern NewBuffer
---                                    , pattern ScopedBuffer, pattern AddCursor)
 
 -- TODO:
 -- It's a SUPERSET, but use the Value type from TargetInterp anyway:
@@ -58,10 +55,8 @@ instance Interp Prog1 where
 
 type ValEnv = Map Var Value
 
-------------------------------------------------------------
-
 -- | Code to read a final answer back out.
-deserialize :: DDefs Ty1 -> Seq SerializedVal -> Value
+deserialize :: (Out ty) => DDefs ty -> Seq SerializedVal -> Value
 deserialize ddefs seq0 = final
  where
   ([final],_) = readN 1 seq0
@@ -80,8 +75,6 @@ deserialize ddefs seq0 = final
          in (VPacked k args : more, rst'')
 
 
-------------------------------------------------------------
-
 execAndPrint :: RunConfig -> Prog1 -> IO ()
 execAndPrint rc prg = do
   (val,logs) <- interpProg rc prg
@@ -95,17 +88,20 @@ execAndPrint rc prg = do
 
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
-interpProg :: RunConfig -> Prog1 -> IO (Value, B.ByteString)
--- Print nothing, return "void"              :
-interpProg _ Prog {mainExp=Nothing} = return $ (VProd [], B.empty)
+interpProg :: ( Out ty
+              , InterpE ex
+              , TyOf ex ~ ty , ExpTy ex ~ ex )
+           => RunConfig -> Prog ty ex -> IO (Value, B.ByteString)
+interpProg _ Prog {mainExp=Nothing} =
+    -- Print nothing, return "void"
+    return $ (VProd [], B.empty)
 interpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
     do
-       let fenv = M.fromList [ (funName f , (funArg f, funBody f))
-                             | f <- M.elems fundefs]
+       let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
 
        -- logs contains print side effects:
        ((x,logs),Store finstore) <-
-         runStateT (runWriterT (interp rc ddefs fenv e)) (Store IM.empty)
+         runStateT (runWriterT (interpE rc ddefs fenv e)) (Store IM.empty)
 
        -- Policy: don't return cursors
        let res = case x of
@@ -115,22 +111,35 @@ interpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
                   _ -> x
        return (res, toLazyByteString logs)
 
+instance ( Out l, Show l
+         , Expression (e l (UrTy l))
+         , TyOf (e l (UrTy l)) ~ TyOf (L (PreExp e l (UrTy l)))
+         , ExpTy (e l (UrTy l)) ~ ExpTy (L (PreExp e l (UrTy l)))
+         , InterpE (e l (UrTy l)) )
+        => InterpE (L (PreExp e l (UrTy l))) where
+  type ExpTy (L (PreExp e l (UrTy l))) = (L (PreExp e l (UrTy l)))
+  interpE = interp
 
-interp :: RunConfig
-       -> DDefs Ty1
-       -> M.Map Var (Var, L Exp1)
-       -> L Exp1
+interp :: forall l e.
+          ( Out l, Show l
+          , Expression (e l (UrTy l))
+          , TyOf (e l (UrTy l)) ~ TyOf (L (PreExp e l (UrTy l)))
+          , ExpTy (e l (UrTy l)) ~ ExpTy (L (PreExp e l (UrTy l)))
+          , InterpE (e l (UrTy l)) )
+       => RunConfig
+       -> DDefs (TyOf (L (PreExp e l (UrTy l))))
+       -> M.Map Var (FunDef (UrTy l) (L (PreExp e l (UrTy l))))
+       -> L (PreExp e l (UrTy l))
        -> WriterT Log (StateT Store IO) Value
 interp rc ddefs fenv = go M.empty
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env ex = go env ex
 
-    go :: ValEnv -> L L1.Exp1 -> WriterT Log (StateT Store IO) Value
+    go :: ValEnv -> L (PreExp e l (UrTy l)) -> WriterT Log (StateT Store IO) Value
     go env (L _ x0) =
         case x0 of
-          Ext _ -> error "L1.Interp: Should not interpret empty extension point."
-                    -- Or... we could give this a void/empty-tuple value.
+          Ext ext -> interpE rc ddefs fenv ext
 
           LitE c         -> return $ VInt c
           LitSymE s      -> return $ VInt (strToInt $ fromVar s)
@@ -205,7 +214,7 @@ interp rc ddefs fenv = go M.empty
 
           AppE f _ b ->  do rand <- go env b
                             case M.lookup f fenv of
-                             Just (vr, funBody) -> go (M.insert vr rand env) funBody
+                             Just fn -> go (M.insert (funArg fn) rand env) (funBody fn)
                              Nothing -> error $ "L1.Interp: unbound function in application: "++ndoc x0
 
           (CaseE _ []) -> error$ "L1.Interp: CaseE with empty alternatives list: "++ndoc x0
@@ -285,7 +294,7 @@ interp rc ddefs fenv = go M.empty
           MapE _ _bod    -> error "L1.Interp: finish MapE"
           FoldE _ _ _bod -> error "L1.Interp: finish FoldE"
 
-    applyPrim :: Prim Ty1 -> [Value] -> Value
+    applyPrim :: Prim (UrTy l) -> [Value] -> Value
     applyPrim p ls =
      case (p,ls) of
        (MkTrue,[])             -> VBool True

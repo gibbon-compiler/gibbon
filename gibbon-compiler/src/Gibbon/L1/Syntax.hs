@@ -27,6 +27,9 @@ module Gibbon.L1.Syntax
       -- * Core types specific to L1
     , Prog1, FunDef1, Exp1, Ty1, pattern SymTy
 
+      -- * Interpreter
+    , InterpE(..)
+
       -- * Functions on expressions
     , insertFD, fromListFD, mapExt, mapLocs, mapExprs, visitExp
     , progToEnv, getFunTy, subst, substE, hasTimeIt, projNonFirst
@@ -42,6 +45,8 @@ module Gibbon.L1.Syntax
     where
 
 import Control.DeepSeq (NFData, rnf)
+import Control.Monad.Writer
+import Control.Monad.State
 import Data.List as L
 import Data.Loc
 import Data.Map as M
@@ -60,6 +65,8 @@ import Gibbon.GenericOps
 -- datatype.  For running a pass benchmark, main will be Nothing and
 -- we will expect a "benchmark" function definition which consumes an
 -- appropriate packed AST datatype.
+
+-- TODO: ty ~ TyOf ex
 data Prog ty ex = Prog { ddefs    :: DDefs ty
                        , fundefs  :: FunDefs ty ex
                        , mainExp  :: Maybe (ex, ty)
@@ -388,6 +395,27 @@ instance (Show l, Out l) => Expression (UrTy l) where
 
 instance FreeVars (UrTy l) where
     gFreeVars _ = S.empty
+
+--------------------------------------------------------------------------------
+
+class Expression e => InterpE e where
+  -- | A temporary HACK which gives the type of the expression being
+  -- interpreted. We need the type to get the proper 'FunDef', which
+  -- is used to interpret function applications.
+  --
+  -- For 'PreExp' or other datatypes which are actual expressions,
+  -- this is set to the same datatype. However, when we're defining
+  -- an instance of this class for an extension, it isn't
+  -- clear how to infer the type of the expression without this.
+  type ExpTy e
+
+  -- | Interpret an expression and return a 'Value'
+  interpE :: RunConfig -> DDefs (TyOf e) -> M.Map Var (FunDef (TyOf e) (ExpTy e)) -> e
+          -> WriterT Log (StateT Store IO) Value
+
+instance InterpE (NoExt l d) where
+    type ExpTy (NoExt l d) = L (PreExp NoExt l (UrTy l))
+    interpE _ _ _ _ = error "<NoExt: This should be impossible to evaluate>"
 
 --------------------------------------------------------------------------------
 -- Helpers
