@@ -35,6 +35,7 @@ import Debug.Trace
 
 import Gibbon.Common
 import Gibbon.L2.Syntax as L2
+import Gibbon.L1.Syntax
 import qualified Gibbon.L1.Syntax as L1
 
 -- | Constraints on locations.  Used during typechecking.  Roughly analogous to LocExp.
@@ -116,7 +117,7 @@ type TcM a = Except TCError a
 -- | Check an expression. Given the data definitions, an general type environment, a function map,
 -- a constraint set, a region set, an (input) location state map, and the expression, this function
 -- will either throw an error, or return a pair of expression type and new location state map.
-tcExp :: DDefs Ty2 -> Env2 Ty2 -> FunDefs
+tcExp :: DDefs Ty2 -> Env2 Ty2 -> FunDefs2
       -> ConstraintSet -> RegionSet -> LocationTypeState -> Exp
       -> TcM (Ty2, LocationTypeState)
 tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
@@ -141,7 +142,10 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
           --    locations.
           --  * We need to make sure that if we pass a packed structure as an argument, its
           --    location is among the passed-in locations.
-          do let (ArrowTy locVars arrIn _arrEffs arrOut _locRets) = getFunTy funs v
+          do let (ArrowTy2 locVars arrIn _arrEffs arrOut _locRets) =
+                     case M.lookup v funs of
+                       Just f -> funTy f
+                       Nothing -> error $ "tcExp: Unbound function: " ++ sdoc v
 
              -- Check argument
              (ty,tstate) <- recur tstatein e
@@ -391,7 +395,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
 
 
 -- | Helper function to check case branches.
-tcCases :: DDefs Ty2 -> Env2 Ty2 -> FunDefs
+tcCases :: DDefs Ty2 -> Env2 Ty2 -> FunDefs2
         -> ConstraintSet -> RegionSet -> LocationTypeState -> LocVar
         -> Region -> [(DataCon, [(Var,LocVar)], Exp)]
         -> TcM ([Ty2], LocationTypeState)
@@ -446,7 +450,7 @@ tcProj e _i ty = throwError $ GenericTC ("Projection from non-tuple type " ++ (s
 -- the order matters because the location state map is threaded through,
 -- so this is assuming the list of expressions would have been evaluated
 -- in first-to-last order.
-tcExps :: DDefs Ty2 -> Env2 Ty2 -> FunDefs
+tcExps :: DDefs Ty2 -> Env2 Ty2 -> FunDefs2
       -> ConstraintSet -> RegionSet -> LocationTypeState -> [Exp]
       -> TcM ([Ty2], LocationTypeState)
 tcExps ddfs env funs constrs regs tstatein (exp:exps) =
@@ -458,7 +462,7 @@ tcExps _ _ _ _ _ ts [] = return ([],ts)
 
 
 -- | Main entry point, checks a whole program (functions and main body).
-tcProg :: Prog -> SyM Prog
+tcProg :: Prog2 -> SyM Prog2
 tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
 
   -- Handle functions
@@ -481,8 +485,8 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
 
   where
 
-    fd :: L2.FunDef -> SyM ()
-    fd L2.FunDef{funTy,funArg,funBody} = do
+    fd :: L2.FunDef2 -> SyM ()
+    fd FunDef{funTy,funArg,funBody} = do
         let env = extendEnv (Env2 M.empty M.empty) funArg (arrIn funTy)
             constrs = funConstrs (locVars funTy)
             regs = funRegs (locVars funTy)

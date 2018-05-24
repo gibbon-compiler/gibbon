@@ -9,7 +9,7 @@ import Data.Loc
 import Gibbon.Common as C
 
 import Gibbon.L0.Syntax as L0
-import Gibbon.L1.Syntax as L1 hiding (FunDef(..), FunDefs)
+import Gibbon.L1.Syntax as L1
 
 -- | specializing functions on curried calls
 type Exp = (L Exp0)
@@ -22,10 +22,10 @@ specialize f@VarDef {varTy=ty, varBody} call = (newFunc, callFunc)
         newTy    = updateTy ty [] args
         newFunc  = specializeFunc f newTy varMap
         callFunc = \ x -> updateCall x $ funName newFunc
-        
+
 varsToArgs :: [Var] -> [Exp] -> VarMap
 varsToArgs vs as = M.fromList $ L.filter f $ L.zip vs as
-  where f = \ p -> not $ isVarE $ snd p 
+  where f = \ p -> not $ isVarE $ snd p
 
 updateTy :: Ty0 -> [Ty0] -> [Exp] -> (Ty0,Ty0)
 updateTy (ArrowTy t0 t1) _ [] = (t0,t1)
@@ -36,7 +36,7 @@ updateTy (ArrowTy t0 t1) ts (a:as) = if isVarE a
                                      then updateTy t1 (t0:ts) as
                                      else updateTy t1 ts as
 updateTy err _ _ = error $ "updateTy: Not an arrow type " ++ show err
-                   
+
 -- | now actually specialize the function to the values in the call
 specializeFunc :: CurFun -> (Ty0, Ty0) -> VarMap -> L0Fun
 specializeFunc VarDef {varName, varBody} (t0 , t1) varMap =
@@ -135,7 +135,7 @@ replaceLam (L _ (Ext (LambdaE (var,_) body))) ex = replace var ex body
           MapE _ _     -> error $ "not implemented"
           FoldE _ _ _  -> error $ "not implemented"
           where go = replace v e
-replaceLam e _ = error $ "replaceLam: Not a lambda: " ++ show e                                                       
+replaceLam e _ = error $ "replaceLam: Not a lambda: " ++ show e
 
 -- | used to update the callsite(s)
 -- changes curried functions to function calls with tuples
@@ -147,7 +147,7 @@ updateCall e@(L loc ex) newName = L loc $
 
 
 -- | Helpers
- 
+
 isVarE :: Exp -> Bool
 isVarE (L _ e) = case e of
                    VarE _ -> True
@@ -175,6 +175,3 @@ isSelfCall (L _ ex) name =
     Ext (PolyAppE (L _ (VarE v)) _) -> v == name
     Ext (PolyAppE f _) -> isSelfCall f name
     err                -> error $ "Not an application " ++ show err
-
-
-

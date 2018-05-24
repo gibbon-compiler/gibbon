@@ -1,6 +1,8 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -48,7 +50,7 @@ interpChatter = 7
 
 ------------------------------------------------------------
 
-instance Interp Prog where
+instance Interp Prog1 where
   interpNoLogs rc p = unsafePerformIO $ show . fst <$> interpProg rc p
   interpWithStdout rc p = do
    (v,logs) <- interpProg rc p
@@ -80,7 +82,7 @@ deserialize ddefs seq0 = final
 
 ------------------------------------------------------------
 
-execAndPrint :: RunConfig -> Prog -> IO ()
+execAndPrint :: RunConfig -> Prog1 -> IO ()
 execAndPrint rc prg = do
   (val,logs) <- interpProg rc prg
   B.putStr logs
@@ -93,7 +95,7 @@ execAndPrint rc prg = do
 
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
-interpProg :: RunConfig -> Prog -> IO (Value, B.ByteString)
+interpProg :: RunConfig -> Prog1 -> IO (Value, B.ByteString)
 -- Print nothing, return "void"              :
 interpProg _ Prog {mainExp=Nothing} = return $ (VProd [], B.empty)
 interpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
@@ -329,7 +331,7 @@ lookup3 k ls = go ls
 
 --------------------------------------------------------------------------------
 
-p1 :: Prog
+p1 :: Prog1
 p1 = Prog emptyDD  M.empty
           (Just ( L NoLoc $ LetE ("x", [], IntTy, L NoLoc $ LitE 3) (L NoLoc $ VarE (toVar "x"))
                 , IntTy))

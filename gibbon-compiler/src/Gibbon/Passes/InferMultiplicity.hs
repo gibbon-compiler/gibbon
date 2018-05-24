@@ -15,13 +15,13 @@ import Data.Graph
 import qualified Data.Map as M
 
 import Gibbon.Common
-import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..))
+import Gibbon.L1.Syntax
 import Gibbon.L2.Syntax as L2
 
 -- All regions are "infinite" right now
 
 -- | Infer multiplicity for a program annotated with regions & locations
-inferRegScope :: Multiplicity -> L2.Prog -> SyM L2.Prog
+inferRegScope :: Multiplicity -> L2.Prog2 -> SyM L2.Prog2
 inferRegScope mul Prog{ddefs,fundefs,mainExp} = do
   let fds' = map (inferRegScopeFun mul) $ M.elems fundefs
       fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
@@ -30,7 +30,7 @@ inferRegScope mul Prog{ddefs,fundefs,mainExp} = do
                    Just (mn, ty) -> Just (inferRegScopeExp mul mn,ty)
   return $ Prog ddefs fundefs' mainExp'
 
-inferRegScopeFun :: Multiplicity -> L2.FunDef -> L2.FunDef
+inferRegScopeFun :: Multiplicity -> L2.FunDef2 -> L2.FunDef2
 inferRegScopeFun mul f@FunDef{funBody} = f {funBody = inferRegScopeExp mul funBody}
 
 {- Region scoping rules:

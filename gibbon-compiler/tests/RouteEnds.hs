@@ -20,7 +20,7 @@ import Gibbon.L2.Examples
 import Gibbon.L2.Typecheck
 import Gibbon.Passes.RouteEnds
 import Gibbon.Passes.InferEffects
-import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..))
+import Gibbon.L1.Syntax
 
 {-
 
@@ -28,7 +28,7 @@ This is very brittle, and has to be kept in sync by hand. It's safe to comment t
 
 test1 :: L Exp2
 test1 = l$ Ext $ LetRegionE (VarR "r") $ l$ Ext $ LetLocE "ltest" (StartOfLE (VarR "r")) $
-        l$ Ext $ LetLocE "ltest1" (AfterConstantLE 1 "ltest") $
+        l$ Ext $ LetLocE "ltest1" (AfterConstantLE 1 "ltest") $f
         l$ LetE ("x", [], PackedTy "Tree" "ltest1", l$ DataConE "ltest1" "Leaf" [l$ LitE 1]) $
         l$ Ext $ LetLocE "ltest2" (AfterVariableLE "x" "ltest1") $
         l$ LetE ("y", [], PackedTy "Tree" "ltest2", l$ DataConE "ltest2" "Leaf" [l$ LitE 2]) $
@@ -51,14 +51,14 @@ case_add1_test1 =
 
 -}
 
-runT :: Prog -> Prog
+runT :: Prog2 -> Prog2
 runT prg = fst $ runSyM 0 $ do
   l2 <- inferEffects prg
   l2 <- tcProg l2
   routeEnds l2
 
 
-assertRouteEnds :: Prog -> Var -> [LocRet] -> Assertion
+assertRouteEnds :: Prog2 -> Var -> [LocRet] -> Assertion
 assertRouteEnds prg fnName expected = expected @=? lRets
   where -- runT and get LocRet
         Prog{fundefs} = runT prg

@@ -9,7 +9,7 @@ module Gibbon.Passes.InlinePacked
     where
 
 import qualified Data.Map as M
-import qualified Data.Set as S 
+import qualified Data.Set as S
 import qualified Data.List as L
 import Gibbon.Common (SyM, Var, dbgTrace, ndoc, sdoc, lookupDataCon, DDefs)
 import qualified Gibbon.L1.Syntax as L1
@@ -39,8 +39,8 @@ import Gibbon.Common (Var(..), toVar, fromVar)
 --       occur inside the arguments to data constructors.  Any place
 --       where this is not the case will involve either a scoped
 --       region or extra copying.
--- 
-inlinePacked :: L2.Prog -> SyM L2.Prog
+--
+inlinePacked :: L2.Prog2 -> SyM L2.Prog2
 inlinePacked prg@L2.Prog{ddefs,fundefs,mainExp} = return $
   prg { fundefs = M.map fd fundefs
       , mainExp = case mainExp of

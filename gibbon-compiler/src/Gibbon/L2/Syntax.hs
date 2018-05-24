@@ -20,18 +20,16 @@
 
 module Gibbon.L2.Syntax
     (
-      -- * Core types
-      Prog(..), FunDef(..), FunDefs
-
-    -- * Extended language L2.0 with location types.
-    , Exp2, E2, E2Ext(..), Ty2
-    , Effect(..), ArrowTy(..) , LocRet(..), LocExp, PreLocExp(..)
+    -- * Extended language L2 with location types.
+      E2Ext(..)
+    , Prog2, FunDef2, FunDefs2, Exp2, E2, Ty2
+    , Effect(..), ArrowTy2(..) , LocRet(..), LocExp, PreLocExp(..)
 
     -- * Re-exports
     , PreExp(..), UrTy(..), pattern SymTy
 
     -- * Operations on types
-    , progToEnv, getFunTy
+    , progToEnv
     , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substTy, substEffs
     , prependArgs, stripTyLocs, getTyLocs, locsInTy
 
@@ -49,27 +47,20 @@ import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
 import Gibbon.GenericOps
-import Gibbon.L1.Syntax hiding
-       (FunDefs, FunDef(..), Prog(..), mapExprs, progToEnv, fundefs, getFunTy)
+import Gibbon.L1.Syntax hiding (mapExprs, progToEnv, fundefs, getFunTy)
 import qualified Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
 
 -- | Here we only change the types of FUNCTIONS:
-data Prog = Prog { ddefs    :: DDefs Ty2
-                 , fundefs  :: FunDefs
-                 , mainExp  :: Maybe (L Exp2, Ty2)
-                 }
-  deriving (Show, Ord, Eq, Generic, NFData)
-
-type FunDefs = M.Map Var FunDef
+type Prog2 = L1.Prog Ty2 (L Exp2)
 
 -- | A function definition with the function's effects.
-data FunDef = FunDef { funName :: Var
-                     , funArg  :: Var
-                     , funTy   :: ArrowTy Ty2
-                     , funBody :: L Exp2 }
-  deriving (Show, Ord, Eq, Generic, NFData)
+type FunDef2 = L1.FunDef Ty2 (L Exp2)
+
+type FunDefs2 = L1.FunDefs Ty2 (L Exp2)
+
+type instance L1.ArrowTy Ty2 = ArrowTy2
 
 -- | Extended expressions, L2.  Monomorphic.
 --
@@ -190,16 +181,15 @@ instance (Typeable (E2Ext l (UrTy l)),
   gFlattenExp ddfs env ex = do (_b,e') <- gFlattenGatherBinds ddfs env ex
                                return e'
 
-
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
-data ArrowTy t = ArrowTy
+data ArrowTy2 = ArrowTy2
     { locVars :: [LRM]       -- ^ Universally-quantified location params.
                              -- Only these should be referenced in arrIn/arrOut.
-    , arrIn :: t             -- ^ Input type for the function.
+    , arrIn :: Ty2           -- ^ Input type for the function.
     , arrEffs:: (Set Effect) -- ^ These are present-but-empty initially,
                              -- and the populated by InferEffects.
-    , arrOut:: t             -- ^ Output type for the function.
+    , arrOut:: Ty2           -- ^ Output type for the function.
     , locRets :: [LocRet]    -- ^ L2B feature: multi-valued returns.
     }
   deriving (Read,Show,Eq,Ord, Generic, NFData)
@@ -213,13 +203,12 @@ data Effect = Traverse LocVar
 -----------------------------------------------------------------------------------------
 -- Do this manually to get prettier formatting: (Issue #90)
 
-instance Out t => Out (ArrowTy t)
+instance Out ArrowTy2
 instance Out Effect
 instance Out a => Out (Set a) where
   docPrec n x = docPrec n (S.toList x)
   doc x = doc (S.toList x)
-instance Out FunDef
-instance Out Prog
+instance Out Prog2
 instance (Out l, Out d) => Out (E2Ext l d)
 instance Out l => Out (PreLocExp l)
 instance Out LocRet
@@ -229,37 +218,30 @@ instance Out LocRet
 -- | Abstract some of the differences of top level program types, by
 --   having a common way to extract an initial environment.  The
 --   initial environment has types only for functions.
-progToEnv :: Prog -> Env2 Ty2
+progToEnv :: Prog2 -> Env2 Ty2
 progToEnv Prog{fundefs} =
     Env2 M.empty
          (M.fromList [ (n,(a, b))
-                     | FunDef n _ (ArrowTy _ a _ b _) _ <- M.elems fundefs ])
-
--- | Retrieve the type of a function:
-getFunTy :: FunDefs -> Var -> ArrowTy Ty2
-getFunTy mp f = case M.lookup f mp of
-                  Nothing -> error $ "getFunTy: function was not bound: "++show f
-                  Just (FunDef{funTy}) -> funTy
-
+                     | FunDef n _ (ArrowTy2 _ a _ b _) _ <- M.elems fundefs ])
 
 -- | Retrieve all LocVars from a fn type (Arrow)
-allLocVars :: ArrowTy t -> [LocVar]
+allLocVars :: ArrowTy2 -> [LocVar]
 allLocVars ty = L.map (\(LRM l _ _) -> l) (locVars ty)
 
 
-inLocVars :: ArrowTy t -> [LocVar]
+inLocVars :: ArrowTy2 -> [LocVar]
 inLocVars ty = L.map (\(LRM l _ _) -> l) $
                L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
-outLocVars :: ArrowTy t -> [LocVar]
+outLocVars :: ArrowTy2 -> [LocVar]
 outLocVars ty = L.map (\(LRM l _ _) -> l) $
                 L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
-outRegVars :: ArrowTy t -> [LocVar]
+outRegVars :: ArrowTy2 -> [LocVar]
 outRegVars ty = L.map (\(LRM _ r _) -> regionVar r) $
                 L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
-inRegVars :: ArrowTy t -> [LocVar]
+inRegVars :: ArrowTy2 -> [LocVar]
 inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionVar r) $
                L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
@@ -336,7 +318,7 @@ locsInTy ty =
 
 -- Because L2 just adds a bit of metadata and enriched types, it is
 -- possible to strip it back down to L1.
-revertToL1 :: Prog -> L1.Prog
+revertToL1 :: Prog2 -> L1.Prog1
 revertToL1 Prog{ddefs,fundefs,mainExp} =
   L1.Prog ddefs' funefs' mainExp'
   where
@@ -351,7 +333,7 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
       DDef a (L.filter (\(dcon,_) -> not $ isIndirectionTag dcon) $
               L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
 
-    revertFunDef :: FunDef -> L1.FunDef
+    revertFunDef :: FunDef2 -> L1.FunDef1
     revertFunDef FunDef{funName,funArg,funTy,funBody} =
       L1.FunDef { funName = funName
                 , funArg  = funArg
@@ -517,7 +499,7 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
           _ -> gFreeVars ex
 
-initFunEnv :: FunDefs -> FunEnv Ty2
+initFunEnv :: FunDefs2 -> FunEnv Ty2
 initFunEnv fds = M.foldr (\fn acc -> let fnty = (funTy fn)
                                      in M.insert (funName fn) (arrIn fnty, arrOut fnty) acc)
                  M.empty fds

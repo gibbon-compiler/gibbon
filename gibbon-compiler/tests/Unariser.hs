@@ -16,7 +16,7 @@ import Test.Tasty.HUnit
 import Test.Tasty.TH
 
 import Gibbon.Common hiding (FunDef, FunDefs)
-import Gibbon.L1.Syntax hiding (FunDef, Prog(..), FunDefs)
+import Gibbon.L1.Syntax hiding (FunDef, Prog, PreProg(..), FunDefs)
 import Gibbon.L3.Syntax
 import Gibbon.GenericOps
 import Gibbon.Passes.Unariser

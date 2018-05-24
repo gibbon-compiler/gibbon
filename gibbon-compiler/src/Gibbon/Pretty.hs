@@ -21,25 +21,25 @@ import Prelude (String, Maybe(..), Show(..), ($), error)
 class Expression e => Pretty e where
     pprint :: e -> Doc
 
-printL1 :: Prog -> String
+printL1 :: Prog1 -> String
 printL1 (Prog _ funs me) =
     let meDoc = case me of
                   Nothing -> empty
                   Just (e,_) -> pprint e
-        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (pprint $ funBody fd)) $ M.elems funs 
+        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (pprint $ funBody fd)) $ M.elems funs
     in render $ funsDoc $+$ renderMain meDoc
 
-printL2 :: L2.Prog -> String
-printL2 (L2.Prog _ funs me) =
+printL2 :: L2.Prog2 -> String
+printL2 (Prog _ funs me) =
     let meDoc = case me of
                   Nothing -> empty
                   Just (e,_) -> pprint e
-        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ L2.funName fd) (doc $ L2.funArg fd) (pprint $ L2.funBody fd)) $ M.elems funs 
+        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (pprint $ funBody fd)) $ M.elems funs
     in render $ funsDoc $+$ renderMain meDoc
 
 renderfunc :: String -> Doc -> Doc -> Doc
-renderfunc f arg m = text f <+> arg <+> equals $$ nest 4 m 
-    
+renderfunc f arg m = text f <+> arg <+> equals $$ nest 4 m
+
 renderMain :: Doc -> Doc
 renderMain m = renderfunc "main" (text "()") m
 
@@ -74,7 +74,7 @@ instance (Show l, Out l, Pretty (e l (UrTy l)), Expression (e l (UrTy l)), TyOf 
                           text "else" <+>
                           pprint e3
           MkProdE es -> lparen <> hcat (punctuate (text ",") (map pprint es)) <> rparen
-          ProjE i e -> text "#" <> int i <+> pprint e 
+          ProjE i e -> text "#" <> int i <+> pprint e
           CaseE e bnds -> text "case" <+> pprint e <+> text "of" $+$
                           nest 4 (vcat $ map (\(dc,vls,e) -> text dc <+> hcat (punctuate (text " ") (map (\(v,l) -> doc v <> colon <> doc l) vls)) <+> text "->" <+> pprint e) bnds)
           DataConE l dc es -> text dc <+> lbrack <> doc l <> rbrack <+>

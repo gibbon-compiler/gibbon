@@ -12,12 +12,12 @@ import qualified Data.List as L
 -- import qualified Data.Map as M
 
 import Gibbon.Common
-import Gibbon.L1.Syntax hiding (FunDef, Prog(..))
+import Gibbon.L1.Syntax
 import Gibbon.L3.Syntax
 
 
 -- | Strip out the NewBuf bindings up until the point control flow diverges.
-hoistNewBuf :: Prog -> SyM Prog
+hoistNewBuf :: Prog3 -> SyM Prog3
 hoistNewBuf = mapMExprs hoistExp
 
 hoistExp :: ignored -> L Exp3 -> SyM (L Exp3)

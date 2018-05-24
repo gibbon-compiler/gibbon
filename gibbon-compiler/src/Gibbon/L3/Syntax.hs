@@ -8,8 +8,7 @@
 module Gibbon.L3.Syntax
   (
     -- * Extended language
-    Prog(..), FunDef(..), FunDefs
-  , Exp3, E3Ext(..), Ty3
+    E3Ext(..), Prog3, FunDef3, FunDefs3 , Exp3, Ty3
 
     -- * Functions
   , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim, progToEnv
@@ -24,33 +23,23 @@ import Data.List as L
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
-import Gibbon.L1.Syntax hiding (FunDef(..), FunDefs, Prog(..), progToEnv)
+import Gibbon.L1.Syntax hiding (progToEnv)
 import Gibbon.GenericOps
 import Gibbon.L1.Syntax (UrTy(..), PreExp(..))
 import qualified Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
--- | Other than Exp3, everything is identical to L2
-data Prog = Prog { ddefs   :: DDefs Ty3
-                 , fundefs :: FunDefs
-                 , mainExp :: Maybe (L Exp3, Ty3)
-                 }
-  deriving (Show, Ord, Eq, Generic, NFData)
+type Prog3 = Prog Ty3 (L Exp3)
 
-type FunDefs = M.Map Var FunDef
+type FunDefs3 = FunDefs Ty3 (L Exp3)
 
-data FunDef = FunDef { funName :: Var
-                     , funArg  :: Var
-                     , funTy   :: (Ty3, Ty3) -- ^ (in , out)
-                     , funBody :: L Exp3
-                     }
-  deriving (Show, Ord, Eq, Generic, NFData)
+type FunDef3 = FunDef Ty3 (L Exp3)
 
--- | The expression type used in L3.
+type instance ArrowTy Ty3 = (Ty3 , Ty3)
+
 type Exp3 = PreExp E3Ext () Ty3
 
--- | The type representation used in L3.
 type Ty3 = UrTy ()
 
 --------------------------------------------------------------------------------
@@ -108,10 +97,7 @@ instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
 -----------------------------------------------------------------------------------------
 -- Do this manually to get prettier formatting: (Issue #90)
 
-instance Out FunDef
-
-instance Out Prog
-
+instance Out Prog3
 instance (Out l, Out d) => Out (E3Ext l d)
 
 -----------------------------------------------------------------------------------------
@@ -136,7 +122,7 @@ cursorizeTy ty =
 
 -- | Map exprs with an initial type environment:
 -- Exactly the same function that was in L2 before
-mapMExprs :: Monad m => (Env2 Ty3 -> L Exp3 -> m (L Exp3)) -> Prog -> m Prog
+mapMExprs :: Monad m => (Env2 Ty3 -> L Exp3 -> m (L Exp3)) -> Prog3 -> m Prog3
 mapMExprs fn (Prog ddfs fundefs mainExp) =
   Prog ddfs <$>
     (mapM (\f@FunDef{funArg,funTy,funBody} ->
@@ -176,7 +162,7 @@ toL3Prim pr =
 
 -- | Abstract some of the differences of top level program types, by
 -- having a common way to extract an initial environment.
-progToEnv :: Prog -> Env2 Ty3
+progToEnv :: Prog3 -> Env2 Ty3
 progToEnv Prog{fundefs} =
     Env2 M.empty
          (M.fromList [ (funName ,(inT, outT))

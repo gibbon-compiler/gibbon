@@ -11,7 +11,7 @@ import Data.Loc
 import qualified Data.Map as M
 
 import Gibbon.Common hiding (FunDef, FunDefs)
-import Gibbon.L1.Syntax hiding (FunDef, Prog(..))
+import Gibbon.L1.Syntax hiding (FunDef, Prog, PreProg(..))
 import Gibbon.L3.Syntax
 
 -- | This pass gets ready for Lower by converting most uses of

@@ -20,7 +20,7 @@ import qualified Data.Map as M
 import Gibbon.Common
 import Gibbon.GenericOps
 import Gibbon.L1.Syntax as L1
-import qualified Gibbon.L2.Syntax as L2
+import Gibbon.L2.Syntax as L2
 import qualified Gibbon.L3.Syntax as L3
 
 
@@ -32,7 +32,7 @@ import qualified Gibbon.L3.Syntax as L3
 --   Note that it does not require tail expressions to be trivial.
 --   For example, it allows AppE and PrimAppE in the body of a
 --   let-expression.
-flattenL1 :: L1.Prog -> SyM L1.Prog
+flattenL1 :: L1.Prog1 -> SyM L1.Prog1
 flattenL1 prg@(L1.Prog defs funs main) = do
     main' <- case main of
                Just (e,ty) -> Just <$> (,ty) <$> gFlattenExp defs env20 e
@@ -48,38 +48,38 @@ flattenL1 prg@(L1.Prog defs funs main) = do
 
     env20 = L1.progToEnv prg
 
-flattenL2 :: Flattenable (L2.E2Ext Var (UrTy LocVar)) => L2.Prog -> SyM L2.Prog
-flattenL2 prg@(L2.Prog defs funs main) = do
+flattenL2 :: Flattenable (L2.E2Ext Var (UrTy LocVar)) => L2.Prog2 -> SyM L2.Prog2
+flattenL2 prg@(Prog defs funs main) = do
     main' <-
       case main of
         Nothing -> return Nothing
         Just (ex,ty) -> fmap (Just . (,ty)) (gFlattenExp defs env20 ex)
     funs' <- flattenFuns funs
-    return $ L2.Prog defs funs' main'
+    return $ Prog defs funs' main'
   where
     flattenFuns = mapM flattenFun
-    flattenFun (L2.FunDef nam narg ty bod) = do
+    flattenFun (FunDef nam narg ty bod) = do
       let env2 = Env2 (M.singleton narg (L2.arrIn ty)) (fEnv env20)
       bod' <- gFlattenExp defs env2 bod
-      return $ L2.FunDef nam narg ty bod'
+      return $ FunDef nam narg ty bod'
 
     env20 = L2.progToEnv prg
 
 
-flattenL3 :: L3.Prog -> SyM L3.Prog
-flattenL3 prg@(L3.Prog defs funs main) = do
+flattenL3 :: L3.Prog3 -> SyM L3.Prog3
+flattenL3 prg@(Prog defs funs main) = do
     main' <-
       case main of
         Nothing -> return Nothing
         Just (ex,ty) -> fmap (Just . (,ty)) (gFlattenExp defs env20 ex)
     funs' <- flattenFuns funs
-    return $ L3.Prog defs funs' main'
+    return $ Prog defs funs' main'
   where
     flattenFuns = mapM flattenFun
-    flattenFun (L3.FunDef nam narg ty bod) = do
+    flattenFun (FunDef nam narg ty bod) = do
       let env2 = Env2 (M.singleton narg (fst ty)) (fEnv env20)
       bod' <- gFlattenExp defs env2 bod
-      return $ L3.FunDef nam narg ty bod'
+      return $ FunDef nam narg ty bod'
 
     env20 = L3.progToEnv prg
 

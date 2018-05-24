@@ -35,7 +35,7 @@ err = Left
 
 --------------------------------------------------------------------------------
 
-desugarModule :: S.Module -> Ds Prog
+desugarModule :: S.Module -> Ds Prog1
 desugarModule (S.Module _ _ _ decls) = do
   -- since top-level function types and their types can't be declared in
   -- single top-level declaration we first collect types and then collect
@@ -71,7 +71,7 @@ collectTopFunTy decl =
     unsupported      -> err ("collectTopFunTy: Unsupported top-level thing: " ++ show unsupported)
 
 
-collectTopLevel :: M.Map Var TopTy -> S.Decl -> Ds (Maybe (Either (DDef Ty1) FunDef))
+collectTopLevel :: M.Map Var TopTy -> S.Decl -> Ds (Maybe (Either (DDef Ty1) FunDef1))
 
 -- This is the main expression. We're disguising it as a FunDef just for convenience.
 -- We should probably create a sum type with these 3 things; ddefs, fundefs, and mainExp
@@ -298,7 +298,7 @@ litToInt l         = err ("Literal not supported: " ++ show l)
 
 ----------------------------------------
 
-parseFile :: FilePath -> IO (L1.Prog, Int)
+parseFile :: FilePath -> IO (L1.Prog1, Int)
 parseFile path = do
     fmap parse (readFile path) >>= \case
       ParseOk hs -> do

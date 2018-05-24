@@ -23,7 +23,7 @@ import Data.Map as M
 
 import Gibbon.L2.Syntax
 import Gibbon.Common hiding (FunEnv)
-import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..), FunDefs)
+import Gibbon.L1.Syntax
 
 --------------------------------------------------------------------------------
 
@@ -31,7 +31,7 @@ import Gibbon.L1.Syntax hiding (Prog(..), FunDef(..), FunDefs)
 lvl :: Int
 lvl = 5
 
-type FunEnv = M.Map Var (ArrowTy Ty2)
+type FunEnv = M.Map Var ArrowTy2
 
 locsEffect :: [LocVar] -> Set Effect
 locsEffect = S.fromList . L.map Traverse
@@ -42,17 +42,17 @@ type TyEnv  = M.Map Var Ty2
 -- | We initially populate all functions with MAXIMUM effect signatures.
 --   Subsequently, these monotonically SHRINK until a fixpoint.
 --   We also associate fresh location variables with packed types.
-initialEnv :: FunDefs -> FunEnv
+initialEnv :: FunDefs2 -> FunEnv
 initialEnv mp = M.map go mp
   where
-    go :: FunDef -> ArrowTy Ty2
+    go :: FunDef2 -> ArrowTy2
     go FunDef{funTy} =
       let locs       = allLocVars funTy
           maxEffects = locsEffect locs
       in funTy { arrEffs = maxEffects }
 
 
-inferEffects :: Prog -> SyM Prog
+inferEffects :: Prog2 -> SyM Prog2
 inferEffects prg@Prog{ddefs,fundefs} = do
   let finalFunTys = fixpoint 1 fundefs (initialEnv fundefs)
       funs = M.map (\fn@FunDef{funName} ->
@@ -60,7 +60,7 @@ inferEffects prg@Prog{ddefs,fundefs} = do
              fundefs
   return $ prg { fundefs = funs }
   where
-    fixpoint :: Int -> FunDefs -> FunEnv -> FunEnv
+    fixpoint :: Int -> FunDefs2 -> FunEnv -> FunEnv
     fixpoint iter funs fenv =
        let funtys = M.map (inferFunDef ddefs fenv) funs
        in
@@ -69,7 +69,7 @@ inferEffects prg@Prog{ddefs,fundefs} = do
          else fixpoint (iter+1) funs funtys
 
 
-inferFunDef :: DDefs Ty2 -> FunEnv -> FunDef -> ArrowTy Ty2
+inferFunDef :: DDefs Ty2 -> FunEnv -> FunDef2 -> ArrowTy2
 inferFunDef ddfs fenv FunDef{funArg,funBody,funTy} = funTy { arrEffs = S.intersection travs eff }
   where
     env0  = M.singleton funArg (arrIn funTy)

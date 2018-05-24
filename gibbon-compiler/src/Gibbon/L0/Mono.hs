@@ -13,24 +13,24 @@ import Gibbon.Common as C
 -- import Gibbon.GenericOps
 
 import Gibbon.L0.Syntax as L0
-import Gibbon.L1.Syntax as L1 hiding (FunDef(..), FunDefs)
+import Gibbon.L1.Syntax as L1
 
--- | specializing functions on types 
+-- | specializing functions on types
 type Exp = (L Exp0)
 
 -- | polymorphic/monomorphic functions
 type PolyFD = PFDef Ty0 Exp
-type MonoFD = FunDef
+type MonoFD = FunDef0
 
 -- | polymorphic/monomorphic variable defns
 type PolyVD = PVDef Ty0 Exp
 type MonoVD = VarDef Ty0 Exp
 
 -- | polymorphic/monomorphic data defns
-type PolyDD = PDDef Ty0 
-type MonoDD = DDef Ty0 
+type PolyDD = PDDef Ty0
+type MonoDD = DDef Ty0
 
-  
+
 data Defn = VDef MonoVD
           | FDef MonoFD
           | Def  MonoDD
@@ -45,7 +45,7 @@ isPolyFun pf = Left pf
 
 isPolyVar :: PolyVD -> Either PolyVD MonoVD
 isPolyVar (PVDef n (ForAll [] t) b) =
-  Right $ VarDef n t b 
+  Right $ VarDef n t b
 isPolyVar pf = Left pf
 
 isPolyDef :: PolyDD -> Either PolyDD MonoDD
@@ -73,7 +73,7 @@ filterPDefs pds = M.foldr (\ pd (acc1,acc2) ->
                   (M.empty, M.empty)
                   pds
 
-filterPFDefs :: PFDefs Ty0 Exp -> (PFDefs Ty0 Exp, FunDefs)
+filterPFDefs :: PFDefs Ty0 Exp -> (PFDefs Ty0 Exp, FunDefs0)
 filterPFDefs pfds = M.foldr (\ pd (acc1,acc2) ->
                              case isPolyFun pd of
                                Left  y -> (M.insert (fName y) y acc1,acc2)
@@ -97,12 +97,12 @@ updatePF (PFDef name arg _ b)  (t0, t1) =
 updatePV :: PolyVD -> Ty0 -> MonoVD
 updatePV (PVDef name _ b) t =
   let newName = addToName name t in
-  VarDef newName t $ replaceName name newName b 
+  VarDef newName t $ replaceName name newName b
 
-updatePD :: PolyDD -> [(DataCon, [(IsBoxed,Ty0)])] -> MonoDD 
+updatePD :: PolyDD -> [(DataCon, [(IsBoxed,Ty0)])] -> MonoDD
 updatePD (PDDef name _) ts =
   DDef (addToName name $ L.map snd ts) ts
-   
+
 
 traverseAndCopy :: PProg -> MProg
 traverseAndCopy (PProg ds fs vs main) =
@@ -143,7 +143,7 @@ tACExp pfs pvs pds (L loc e) = L loc <$>
                        let t = getFDType -- ^ TODO get types
                            nfd = updatePF fd t
                            fdName = funName nfd
-                       ds' <- get 
+                       ds' <- get
                        _   <- put $ M.insert fdName (FDef nfd) ds'
                        return $ AppE fdName ls a'
                      Nothing -> do
@@ -209,7 +209,7 @@ tACExp pfs pvs pds (L loc e) = L loc <$>
 
 -- Helpers
 
-mergeDefns :: Defns -> DDefs Ty0 -> FunDefs -> VarDefs Ty0 Exp -> (DDefs Ty0, FunDefs, VarDefs Ty0 Exp)
+mergeDefns :: Defns -> DDefs Ty0 -> FunDefs0 -> VarDefs Ty0 Exp -> (DDefs Ty0, FunDefs0, VarDefs Ty0 Exp)
 mergeDefns defns ds fs vs = (M.union dds ds, M.union dfs fs, M.union dvs vs)
   where (dds, dfs, dvs) = L.foldr f (M.empty, M.empty, M.empty) $ M.toList defns
         f (v,defn) (dds', dfs', dvs') =
@@ -219,12 +219,12 @@ mergeDefns defns ds fs vs = (M.union dds ds, M.union dfs fs, M.union dvs vs)
             Def dd  -> (M.insert v dd dds', dfs', dvs')
 
 funCall :: Exp -> Exp
-funCall (L loc ex) = 
+funCall (L loc ex) =
   case ex of
     Ext (PolyAppE (L _ (VarE v)) _) -> L loc $ VarE v
-    Ext (PolyAppE f _) -> funCall f 
+    Ext (PolyAppE f _) -> funCall f
     e                  -> L loc $ e
-    
+
 var :: Exp -> Var
 var (L _ (VarE v)) = v
 var e = error $ "Not a var " ++ show e
@@ -268,5 +268,3 @@ getFDType = (L0.IntTy, L0.IntTy)
 
 getDDType :: [(DataCon, [(IsBoxed,Ty0)])]
 getDDType = []
-
-

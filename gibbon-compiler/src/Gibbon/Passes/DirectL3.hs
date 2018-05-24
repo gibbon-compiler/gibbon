@@ -12,24 +12,24 @@ import qualified Gibbon.L3.Syntax as L3
 
 -- | Directly convert the source program to L3. Used in the pointer mode
 --
-directL3 :: Prog -> L3.Prog
+directL3 :: Prog1 -> L3.Prog3
 directL3 (Prog ddfs fndefs mnExp) = do
     let mnExp' = case mnExp of
                    Nothing -> Nothing
                    Just (ex,ty) -> Just (go ex, stripTyLocs ty)
 
         fds = L.map fd $ M.elems fndefs
-        fndefs' = M.fromList $ L.map (\f -> (L3.funName f, f)) fds
-    L3.Prog ddfs fndefs' mnExp'
+        fndefs' = M.fromList $ L.map (\f -> (funName f, f)) fds
+    Prog ddfs fndefs' mnExp'
   where
-    fd :: FunDef -> L3.FunDef
+    fd :: FunDef1 -> L3.FunDef3
     fd FunDef{funName,funArg,funTy,funBody} =
         let (argty,retty) = funTy
-        in L3.FunDef { L3.funName = funName
-                     , L3.funTy   = (toL3Ty argty, toL3Ty retty)
-                     , L3.funArg  = funArg
-                     , L3.funBody = go funBody
-                     }
+        in FunDef { funName = funName
+                  , funTy   = (toL3Ty argty, toL3Ty retty)
+                  , funArg  = funArg
+                  , funBody = go funBody
+                  }
 
     toL3Ty :: Ty1 -> L3.Ty3
     toL3Ty = stripTyLocs

@@ -31,7 +31,7 @@ import qualified Data.Set as Set
 
 import Gibbon.GenericOps
 import Gibbon.Common
-import Gibbon.L1.Syntax hiding (FunDef, FunDefs, Prog)
+import Gibbon.L1.Syntax
 import Gibbon.L3.Syntax
 -- import Gibbon.L2.Syntax as L2
 
@@ -44,7 +44,7 @@ bigNumber = 10 -- limit number of loops
 -- witnesses into scope.
 --
 -- Phase Ordering: This must run after flatten.
-findWitnesses :: Prog -> SyM Prog
+findWitnesses :: Prog3 -> SyM Prog3
 findWitnesses = mapMExprs fn
  where
   fn Env2{vEnv,fEnv} ex = return (goFix (Map.keysSet vEnv `Set.union` Map.keysSet fEnv)
