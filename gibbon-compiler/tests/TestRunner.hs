@@ -216,7 +216,8 @@ configParser dtc = TestConfig
                                   value (tempdir dtc))
                    -- TODO: actually parse this
                    <*> option stringToModes (long "run-modes" <>
-                                             help "Only run the tests in these modes")
+                                             help "Only run the tests in these modes" <>
+                                             value (gRunModes dtc))
 
 --------------------------------------------------------------------------------
 
@@ -277,14 +278,15 @@ runTests tc tr = foldlM (\acc t -> do
         then return (acc { skipped = (name test):(skipped acc) })
         else do
             -- Check if the global gRunModes or the test specific runModes was modified
-            let test' = case (runModes test, gRunModes tc) of
+            let allModes = [Packed, Pointer, Interp1]
+                test' = case (runModes test, gRunModes tc) of
                             -- Nothing was globally modified
-                            (_,[])  -> test
+                            (_,[])  -> test { runModes = allModes }
                             -- The tests doesn't specify an override, but there's a global override
                             ([],ms) -> test { runModes = ms }
                             -- There's a global override, but the one specified for a test
                             -- has higher precedence
-                            _ -> test
+                            _ -> test { runModes = allModes }
             results <- runTest tc test'
             let extend = M.insertWith (++) (name test')
             foldrM
