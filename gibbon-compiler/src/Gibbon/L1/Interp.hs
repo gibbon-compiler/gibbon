@@ -11,7 +11,7 @@
 --
 
 module Gibbon.L1.Interp
-    ( execAndPrint, interpProg
+    ( execAndPrint, gInterpProg
     , main
     ) where
 
@@ -27,7 +27,6 @@ import           Data.Loc
 import           Data.Map as M
 import           Data.Sequence (Seq, ViewL ((:<)), (|>))
 import           System.Clock
-import           System.IO.Unsafe (unsafePerformIO)
 import           Text.PrettyPrint.GenericPretty
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Sequence as S
@@ -48,10 +47,7 @@ interpChatter = 7
 ------------------------------------------------------------
 
 instance Interp Prog1 where
-  interpNoLogs rc p = unsafePerformIO $ show . fst <$> interpProg rc p
-  interpWithStdout rc p = do
-   (v,logs) <- interpProg rc p
-   return (show v, lines (B.unpack logs))
+  interpProg = gInterpProg
 
 type ValEnv = Map Var Value
 
@@ -88,14 +84,14 @@ execAndPrint rc prg = do
 
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
-interpProg :: ( Out ty
+gInterpProg :: ( Out ty
               , InterpE ex
               , TyOf ex ~ ty , ExpTy ex ~ ex )
            => RunConfig -> Prog ty ex -> IO (Value, B.ByteString)
-interpProg _ Prog {mainExp=Nothing} =
+gInterpProg _ Prog {mainExp=Nothing} =
     -- Print nothing, return "void"
     return $ (VProd [], B.empty)
-interpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
+gInterpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
     do
        let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
 

@@ -37,11 +37,11 @@ import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
 import           Gibbon.DynFlags
-import           Gibbon.GenericOps(Interp, interpNoLogs)
+import           Gibbon.GenericOps
 import qualified Gibbon.HaskellFrontend as HS
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
-import qualified Gibbon.L3.Syntax as L3
+-- import qualified Gibbon.L3.Syntax as L3
 import qualified Gibbon.L4.Syntax as L4
 import qualified Gibbon.SExpFrontend as SExp
 import qualified Gibbon.L1.Interp as SI
@@ -261,7 +261,7 @@ compile config@Config{mode,input,verbosity,backend,cfile,dynflags} fp0 = do
             else show (length (sdoc l1)) ++ " characters."
 
       -- (Stage 1) Run the program through the interpreter
-      initResult <- interpProg l1
+      initResult <- withPrintInterpProg l1
 
       -- (Stage 2) C/LLVM codegen
       let outfile = getOutfile backend fp cfile
@@ -349,13 +349,13 @@ parseInput ip fp =
 
 
 -- |
-interpProg :: L1.Prog1 -> IO (Maybe Value)
-interpProg l1 =
+withPrintInterpProg :: L1.Prog1 -> IO (Maybe Value)
+withPrintInterpProg l1 =
   if dbgLvl >= interpDbgLevel
   then do
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
-    (val,_stdout) <- SI.interpProg runConf l1
+    (val,_stdout) <- interpProg runConf l1
     dbgPrintLn 2 $ " [eval] Init prog evaluated to: "++show val
     return $ Just val
   else

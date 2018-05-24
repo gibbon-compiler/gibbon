@@ -22,11 +22,7 @@ import           Gibbon.L1.Interp as L1
 import           Gibbon.L2.Syntax as L2
 
 instance Interp Prog2 where
-  interpNoLogs rc p = unsafePerformIO $ show . fst <$> L1.interpProg rc p
-  interpWithStdout rc p = do
-   (v,logs) <- L1.interpProg rc p
-   return (show v, lines (B.unpack logs))
-
+  interpProg = L1.gInterpProg
 
 instance (Out d, Out l, Show l, Show d) => InterpE (E2Ext l d) where
     type ExpTy (E2Ext l d) = L (PreExp E2Ext l (UrTy l))
