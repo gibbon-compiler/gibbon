@@ -6,6 +6,7 @@ module TestRunner
     (main) where
 
 import Control.Monad
+import Control.Monad.Reader
 import Data.Foldable
 import Data.List
 #if !MIN_VERSION_base(4,11,0)
@@ -14,6 +15,7 @@ import Data.Monoid
 import Data.Time.LocalTime
 import Data.Yaml as Y
 import Options.Applicative as OA hiding (empty)
+import Options.Applicative.Types (readerAsk)
 import System.Clock
 import System.Directory
 import System.Exit
@@ -115,6 +117,16 @@ data Result = Pass | Fail
 data Mode = Packed | Pointer | Interp1
   deriving (Show, Eq, Read, Ord)
 
+instance FromJSON Mode where
+    parseJSON (Y.String s) = return $ readMode s
+
+readMode :: T.Text -> Mode
+readMode s =
+    case T.toLower s of
+        "packed"  -> Packed
+        "pointer" -> Pointer
+        "interp1" -> Interp1
+
 -- Must match the flag expected by Gibbon.
 modeRunOptions :: Mode -> [String]
 modeRunOptions Packed  = ["--run", "--packed"]
@@ -126,12 +138,20 @@ modeFileSuffix Packed  = "_pkd"
 modeFileSuffix Pointer = "_ptr"
 modeFileSuffix Interp1 = "_interp1"
 
-instance FromJSON Mode where
-    parseJSON (Y.String s) =
-        case T.toLower s of
-            "packed"  -> return Packed
-            "pointer" -> return Pointer
-            "interp1" -> return Interp1
+-- Couldn't figure out how to write a parser which accepts multiple arguments.
+-- The 'many' thing cannot be used with an option. I suppose that just
+-- having modes trailing at the end, or as flags is also acceptable.
+-- This needs to go away soon.
+-- > stringToModes packed = [Packed]
+-- > stringToModes "packed, pointer" = [Packed, Pointer]
+-- > stringToModes "packed, packed" = [Packed]
+stringToModes :: ReadM [Mode]
+stringToModes = do
+    str <- readerAsk
+    let txt = T.pack str
+        split = T.splitOn "," txt
+        clean = map T.strip split
+    mapM (return . readMode) (nub clean)
 
 -- This doesn't have to be a new datatype. But it makes parsing the YAML file easier.
 -- We peel off this layer later.
@@ -195,9 +215,8 @@ configParser dtc = TestConfig
                                   showDefault <>
                                   value (tempdir dtc))
                    -- TODO: actually parse this
-                   <*> option auto (long "run-modes" <>
-                                    help "Only run the tests in these modes" <>
-                                    value (gRunModes dtc))
+                   <*> option stringToModes (long "run-modes" <>
+                                             help "Only run the tests in these modes")
 
 --------------------------------------------------------------------------------
 
