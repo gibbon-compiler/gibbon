@@ -30,11 +30,11 @@ import qualified Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
-type Prog3 = Prog Ty3 (L Exp3)
+type Prog3 = Prog (L Exp3)
 
-type FunDefs3 = FunDefs Ty3 (L Exp3)
+type FunDefs3 = FunDefs (L Exp3)
 
-type FunDef3 = FunDef Ty3 (L Exp3)
+type FunDef3 = FunDef (L Exp3)
 
 type instance ArrowTy Ty3 = (Ty3 , Ty3)
 

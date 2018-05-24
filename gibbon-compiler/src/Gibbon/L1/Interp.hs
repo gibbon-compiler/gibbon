@@ -84,10 +84,10 @@ execAndPrint rc prg = do
 
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
-gInterpProg :: ( Out ty
-              , InterpE ex
-              , TyOf ex ~ ty , ExpTy ex ~ ex )
-           => RunConfig -> Prog ty ex -> IO (Value, B.ByteString)
+gInterpProg :: ( Out (TyOf ex)
+               , InterpE ex
+               , ExpTy ex ~ ex )
+           => RunConfig -> Prog ex -> IO (Value, B.ByteString)
 gInterpProg _ Prog {mainExp=Nothing} =
     -- Print nothing, return "void"
     return $ (VProd [], B.empty)
@@ -124,7 +124,7 @@ interp :: forall l e.
           , InterpE (e l (UrTy l)) )
        => RunConfig
        -> DDefs (TyOf (L (PreExp e l (UrTy l))))
-       -> M.Map Var (FunDef (UrTy l) (L (PreExp e l (UrTy l))))
+       -> M.Map Var (FunDef (L (PreExp e l (UrTy l))))
        -> L (PreExp e l (UrTy l))
        -> WriterT Log (StateT Store IO) Value
 interp rc ddefs fenv = go M.empty

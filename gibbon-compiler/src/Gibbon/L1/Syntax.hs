@@ -65,54 +65,52 @@ import Gibbon.GenericOps
 -- datatype.  For running a pass benchmark, main will be Nothing and
 -- we will expect a "benchmark" function definition which consumes an
 -- appropriate packed AST datatype.
-
--- TODO: ty ~ TyOf ex
-data Prog ty ex = Prog { ddefs    :: DDefs ty
-                       , fundefs  :: FunDefs ty ex
-                       , mainExp  :: Maybe (ex, ty)
-                       }
+data Prog ex = Prog { ddefs   :: DDefs (TyOf ex)
+                    , fundefs :: FunDefs ex
+                    , mainExp :: Maybe (ex, (TyOf ex))
+                    }
 
 -- Since 'FunDef' is defined using a type family, we cannot use the deriving clause.
 -- Ryan Scott recommended using singletons-like alternative outlined here:
 -- https://lpaste.net/365181
 --
-deriving instance (Read ty, Read ex, Read (ArrowTy ty)) => Read (Prog ty ex)
-deriving instance (Show ty, Show ex, Show (ArrowTy ty)) => Show (Prog ty ex)
-deriving instance (Eq ty, Eq ex, Eq (ArrowTy ty)) => Eq (Prog ty ex)
-deriving instance (Ord ty, Ord ex, Ord (ArrowTy ty)) => Ord (Prog ty ex)
-deriving instance Generic (Prog ty ex)
-deriving instance (NFData ty, NFData (ArrowTy ty), NFData ex , Generic (ArrowTy ty)) => NFData (Prog ty ex)
+deriving instance (Read (TyOf ex), Read ex, Read (ArrowTy (TyOf ex))) => Read (Prog ex)
+deriving instance (Show (TyOf ex), Show ex, Show (ArrowTy (TyOf ex))) => Show (Prog ex)
+deriving instance (Eq (TyOf ex), Eq ex, Eq (ArrowTy (TyOf ex))) => Eq (Prog ex)
+deriving instance (Ord (TyOf ex), Ord ex, Ord (ArrowTy (TyOf ex))) => Ord (Prog ex)
+deriving instance Generic (Prog ex)
+deriving instance (NFData (TyOf ex), NFData (ArrowTy (TyOf ex)), NFData ex, Generic (ArrowTy (TyOf ex))) => NFData (Prog ex)
 
 -- | A set of top-level recursive function definitions.
-type FunDefs ty ex = Map Var (FunDef ty ex)
+type FunDefs ex = Map Var (FunDef ex)
 
 -- | A type family describing function types.
 type family ArrowTy ty
 type instance ArrowTy Ty1 = (Ty1 , Ty1)
 
 -- | A function definiton indexed by a type and expression.
-data FunDef ty ex = FunDef { funName  :: Var
-                           , funArg   :: Var
-                           , funTy    :: ArrowTy ty
-                           , funBody  :: ex
-                           }
+data FunDef ex = FunDef { funName  :: Var
+                        , funArg   :: Var
+                        , funTy    :: ArrowTy (TyOf ex)
+                        , funBody  :: ex
+                        }
 
-deriving instance (Read ex, Read (ArrowTy ty)) => Read (FunDef ty ex)
-deriving instance (Show ex, Show (ArrowTy ty)) => Show (FunDef ty ex)
-deriving instance (Eq ex, Eq (ArrowTy ty)) => Eq (FunDef ty ex)
-deriving instance (Ord ex, Ord (ArrowTy ty)) => Ord (FunDef ty ex)
-deriving instance Generic (FunDef ty ex)
-deriving instance (Generic (ArrowTy ty), NFData ex, NFData (ArrowTy ty)) => NFData (FunDef ty ex)
-deriving instance (Generic (ArrowTy ty), Out ex, Out (ArrowTy ty)) =>  Out (FunDef ty ex)
+deriving instance (Read ex, Read (ArrowTy (TyOf ex))) => Read (FunDef ex)
+deriving instance (Show ex, Show (ArrowTy (TyOf ex))) => Show (FunDef ex)
+deriving instance (Eq ex, Eq (ArrowTy (TyOf ex))) => Eq (FunDef ex)
+deriving instance (Ord ex, Ord (ArrowTy (TyOf ex))) => Ord (FunDef ex)
+deriving instance Generic (FunDef ex)
+deriving instance (Generic (ArrowTy (TyOf ex)), NFData ex, NFData (ArrowTy (TyOf ex))) => NFData (FunDef ex)
+deriving instance (Generic (ArrowTy (TyOf ex)), Out ex, Out (ArrowTy (TyOf ex))) =>  Out (FunDef ex)
 
 -- | A convenient, default instantiation of the L1 expression type.
 type Exp1 = PreExp NoExt () Ty1
 
 -- | An L1 program.
-type Prog1 = Prog Ty1 (L Exp1)
+type Prog1 = Prog (L Exp1)
 
 -- | Function definition used in L1 programs.
-type FunDef1 = FunDef Ty1 (L Exp1)
+type FunDef1 = FunDef (L Exp1)
 
 -- | The type rperesentation used in L1.
 type Ty1 = UrTy ()
@@ -410,7 +408,7 @@ class Expression e => InterpE e where
   type ExpTy e
 
   -- | Interpret an expression and return a 'Value'
-  interpE :: RunConfig -> DDefs (TyOf e) -> M.Map Var (FunDef (TyOf e) (ExpTy e)) -> e
+  interpE :: RunConfig -> DDefs (TyOf e) -> M.Map Var (FunDef (ExpTy e)) -> e
           -> WriterT Log (StateT Store IO) Value
 
 instance InterpE (NoExt l d) where
@@ -422,12 +420,12 @@ instance InterpE (NoExt l d) where
 
 -- | Insert a 'FunDef' into 'FunDefs'.
 -- Raise an error if a function with the same name already exists.
-insertFD :: FunDef ty ex -> FunDefs ty ex -> FunDefs ty ex
+insertFD :: FunDef ex -> FunDefs ex -> FunDefs ex
 insertFD d = M.insertWith err' (funName d) d
   where
    err' = error $ "insertFD: function definition with duplicate name: "++show (funName d)
 
-fromListFD :: [FunDef ty ex] -> FunDefs ty ex
+fromListFD :: [FunDef ex] -> FunDefs ex
 fromListFD = L.foldr insertFD M.empty
 
 -- | Apply a function to the extension points only.
@@ -473,7 +471,7 @@ progToEnv Prog{fundefs} =
 
 
 -- | Look up the input/output type of a top-level function binding.
-getFunTy :: Var -> Prog ty ex -> ArrowTy ty
+getFunTy :: Var -> Prog ex -> ArrowTy (TyOf ex)
 getFunTy fn Prog{fundefs} =
     case M.lookup fn fundefs of
       Just f -> funTy f

@@ -30,7 +30,7 @@ instance (Out d, Out l, Show l, Show d) => InterpE (E2Ext l d) where
 
 interpE2Ext :: RunConfig
             -> DDefs (TyOf (E2Ext l d))
-            -> M.Map Var (FunDef (UrTy l) (L (PreExp e l (UrTy l))))
+            -> M.Map Var (FunDef (L (PreExp e l (UrTy l))))
             -> E2Ext l d
             -> WriterT Log (StateT Store IO) Value
 interpE2Ext _rc _ddefs _fenv _ext = error "TODO: interpE2Ext"

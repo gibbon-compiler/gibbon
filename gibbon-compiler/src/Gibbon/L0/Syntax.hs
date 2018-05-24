@@ -67,7 +67,7 @@ type VarDefs a ex = Map Var (VarDef a ex)
 
 type FunDefs0 = M.Map Var FunDef0
 
-type FunDef0 = L1.FunDef Ty0 (L Exp0)
+type FunDef0 = L1.FunDef (L Exp0)
 
 type instance L1.ArrowTy Ty0 = (Ty0 , Ty0)
 

@@ -53,12 +53,12 @@ import qualified Gibbon.L1.Syntax as L1
 --------------------------------------------------------------------------------
 
 -- | Here we only change the types of FUNCTIONS:
-type Prog2 = L1.Prog Ty2 (L Exp2)
+type Prog2 = L1.Prog (L Exp2)
 
 -- | A function definition with the function's effects.
-type FunDef2 = L1.FunDef Ty2 (L Exp2)
+type FunDef2 = L1.FunDef (L Exp2)
 
-type FunDefs2 = L1.FunDefs Ty2 (L Exp2)
+type FunDefs2 = L1.FunDefs (L Exp2)
 
 type instance L1.ArrowTy Ty2 = ArrowTy2
 
