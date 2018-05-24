@@ -26,6 +26,7 @@ import Text.Printf
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text as T
 import qualified Data.Map as M
+import qualified Data.Set as S
 import qualified Text.PrettyPrint as PP
 
 import Debug.Trace
@@ -78,6 +79,7 @@ data Test = Test
     , dir  :: FilePath
     , expectedResults :: M.Map Mode Result
     , skip :: Bool
+    , runModes :: [Mode] -- ^ If non-empty, run this test only in the specified modes.
     }
   deriving (Show, Eq, Read)
 
@@ -87,6 +89,7 @@ defaultTest = Test
     , dir = "examples"
     , expectedResults = M.fromList [(Packed, Pass), (Pointer, Pass), (Interp1, Pass)]
     , skip = False
+    , runModes = []
     }
 
 instance Ord Test where
@@ -98,10 +101,11 @@ instance FromJSON Test where
         dir  <- o .:? "dir" .!= (dir defaultTest)
         skip <- o .:? "skip" .!= (skip defaultTest)
         failing <- o .:? "failing" .!= []
+        runmodes <- o .:? "run-modes" .!= (runModes defaultTest)
         let expectedFailures = M.fromList [(mode, Fail) | mode <- failing]
             -- Overlay the expected failures on top of the defaults.
             expected = M.union expectedFailures (expectedResults defaultTest)
-        return $ Test name dir expected skip
+        return $ Test name dir expected skip runmodes
 
 data Result = Pass | Fail
   deriving (Show, Eq, Read, Ord)
@@ -147,6 +151,10 @@ data TestConfig = TestConfig
     , verbosity   :: Int      -- ^ Ranges from [0..5], and is passed on to Gibbon
     , summaryFile :: FilePath -- ^ File in which to store the test summary
     , tempdir     :: FilePath -- ^ Temporary directory to store the build artifacts
+    , gRunModes   :: [Mode] -- ^ When not empty, only run the tests in these modes.
+                            --   It's a global parameter i.e it affects ALL tests.
+                            --   However, if a corresponding parameter is specified
+                            --   for a particular test, that has higher precedence.
     }
   deriving (Show, Eq, Read, Ord)
 
@@ -156,6 +164,7 @@ defaultTestConfig = TestConfig
     , verbosity   = 1
     , summaryFile = "gibbon-test-summary.txt"
     , tempdir     = "examples/build_tmp"
+    , gRunModes   = []
     }
 
 instance FromJSON TestConfig where
@@ -163,7 +172,8 @@ instance FromJSON TestConfig where
                                  o .:? "skip-failing" .!= (skipFailing defaultTestConfig) <*>
                                  o .:? "verbosity"    .!= (verbosity defaultTestConfig)   <*>
                                  o .:? "summary-file" .!= (summaryFile defaultTestConfig) <*>
-                                 o .:? "tempdir"      .!= (tempdir defaultTestConfig)
+                                 o .:? "tempdir"      .!= (tempdir defaultTestConfig)     <*>
+                                 o .:? "run-modes"    .!= (gRunModes defaultTestConfig)
 
 -- Accept a default test config as a fallback, either 'DefaultTestConfig',
 -- or read from the config file.
@@ -184,6 +194,10 @@ configParser dtc = TestConfig
                                   help "Temporary directory to store the build artifacts" <>
                                   showDefault <>
                                   value (tempdir dtc))
+                   -- TODO: actually parse this
+                   <*> option auto (long "run-modes" <>
+                                    help "Only run the tests in these modes" <>
+                                    value (gRunModes dtc))
 
 --------------------------------------------------------------------------------
 
@@ -243,8 +257,17 @@ runTests tc tr = foldlM (\acc t -> do
         if skip test
         then return (acc { skipped = (name test):(skipped acc) })
         else do
-            results <- runTest tc test
-            let extend = M.insertWith (++) (name test)
+            -- Check if the global gRunModes or the test specific runModes was modified
+            let test' = case (runModes test, gRunModes tc) of
+                            -- Nothing was globally modified
+                            (_,[])  -> test
+                            -- The tests doesn't specify an override, but there's a global override
+                            ([],ms) -> test { runModes = ms }
+                            -- There's a global override, but the one specified for a test
+                            -- has higher precedence
+                            _ -> test
+            results <- runTest tc test'
+            let extend = M.insertWith (++) (name test')
             foldrM
                 (\(mode,res) acc2 ->
                      return $ case res of
@@ -255,8 +278,8 @@ runTests tc tr = foldlM (\acc t -> do
                 acc results
 
 runTest :: TestConfig -> Test -> IO [(Mode,TestResult)]
-runTest tc Test{name,dir,expectedResults} =
-    mapM (\(m,e) -> go m e) (M.toList expectedResults)
+runTest tc Test{name,dir,expectedResults,runModes} =
+    mapM (\(m,e) -> go m e) (M.toList $ M.restrictKeys expectedResults (S.fromList runModes))
   where
     go :: Mode -> Result -> IO (Mode, TestResult)
     go mode expected = do
