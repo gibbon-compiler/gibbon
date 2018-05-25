@@ -73,6 +73,7 @@ import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.FollowRedirects(followRedirects)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
+import           Gibbon.Pretty
 #ifdef LLVM_ENABLED
 import qualified Gibbon.Passes.LLVM.Codegen as LLVM
 #endif
@@ -470,7 +471,7 @@ benchMainExp Config{benchInput,dynflags} l1 fnname = do
   l1{ L1.mainExp = Just $ (l$ newExp, L1.ProdTy []) }
 
 
-type PassRunner a b = (Out b, NFData a, NFData b) =>
+type PassRunner a b = (Printer b, Out b, NFData a, NFData b) =>
                       String -> (a -> SyM b) -> a -> StateT CompileState IO b
 
 
@@ -490,7 +491,7 @@ pass _config who fn x = do
         then lift $ evaluate $ force y
         else return y
   if dbgLvl >= passChatterLvl+1
-     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++sdoc y'
+     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++pprinter y'
      -- TODO: Switch to a node-count for size output (add to GenericOps):
      else lift$ dbgPrintLn passChatterLvl $ "   => "++ show (length (sdoc y')) ++ " characters output."
   return y'
@@ -516,7 +517,7 @@ passF config = pass config
 
 -- | Wrapper to enable running a pass AND interpreting the result.
 --
-wrapInterp :: (NFData p1, NFData p2, Interp p2, Out p2) =>
+wrapInterp :: (NFData p1, NFData p2, Interp p2, Out p2, Printer p2) =>
               Mode -> PassRunner p1 p2 -> String -> (p1 -> SyM p2) -> p1 ->
               StateT CompileState IO p2
 wrapInterp mode pass who fn x =
