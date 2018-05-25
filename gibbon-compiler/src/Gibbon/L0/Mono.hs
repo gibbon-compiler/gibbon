@@ -136,11 +136,11 @@ tACVarDef pfs pvs pds PVDef{vName,vTy,vBody} =
 tACExp :: PFDefs Ty0 Exp -> PVDefs Ty0 Exp -> PDDefs Ty0 -> Exp -> State Defns Exp
 tACExp pfs pvs pds (L loc e) = L loc <$>
   case e of
-    -- ^ functions
+    -- functions
     AppE f ls a -> case M.lookup f pfs of
                      Just fd -> do
                        a' <- go a
-                       let t = getFDType -- ^ TODO get types
+                       let t = getFDType -- TODO get types
                            nfd = updatePF fd t
                            fdName = funName nfd
                        ds' <- get
@@ -149,12 +149,12 @@ tACExp pfs pvs pds (L loc e) = L loc <$>
                      Nothing -> do
                        a' <- go a
                        return $ AppE f ls a'
-    -- ^ calls to variable definitions
+    -- calls to variable definitions
     Ext (PolyAppE f d) | isVarE $ funCall f ->
                            case M.lookup (var $ funCall f) pvs of
                              Just vd -> do
                                d' <- go d
-                               let ts = getVDType -- ^ TODO get types
+                               let ts = getVDType -- TODO get types
                                    nvd = updatePV vd ts
                                    vdName = varName nvd
                                ds' <- get
@@ -165,11 +165,11 @@ tACExp pfs pvs pds (L loc e) = L loc <$>
                                d' <- go d
                                f' <- go f
                                return $ Ext $ PolyAppE f' d'
-    -- ^ calls to data defns
+    -- calls to data defns
     DataConE lc dc es -> case M.lookup (toVar dc) pds of
                            Just dd -> do
                              es' <- mapM go es
-                             let ts = getDDType -- ^ TODO get types
+                             let ts = getDDType -- TODO get types
                                  ndd = updatePD dd ts
                                  ddName = tyName ndd
                              ds' <- get

@@ -47,8 +47,9 @@ type Exp0 = E0 () Ty0
 -- | The extension that turns L1 into L0.
 data E0Ext loc dec =
    LambdaE (Var,dec) (L (E0 loc dec)) -- ^ Variable tagged with type
- | PolyAppE (L (E0 loc dec)) -- ^ Operator
-            (L (E0 loc dec)) -- ^ Operand
+ -- Can't attach haddocks to data constructor arguments with < GHC 8.4.2
+ | PolyAppE (L (E0 loc dec)) -- Operator
+            (L (E0 loc dec)) -- Operand
  deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 -- | L1 expressions extended with L0.  This is the polymorphic version.
@@ -182,7 +183,7 @@ instance FreeVars (E0Ext l d) where
 instance (Out l, Out d, Show l, Show d) => Expression (E0Ext l d) where
   type LocOf (E0Ext l d) = l
   type TyOf (E0Ext l d)  = Ty0
-  isTrivial _ = False -- ^ TODO
+  isTrivial _ = False -- TODO
 
 instance (Out l, Show l, Typeable (L (E0 l Ty0))) => Typeable (E0Ext l Ty0) where
   gTypeExp ddfs env2 ex =

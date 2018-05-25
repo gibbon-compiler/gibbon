@@ -30,7 +30,7 @@ varsToArgs vs as = M.fromList $ L.filter f $ L.zip vs as
 updateTy :: Ty0 -> [Ty0] -> [Exp] -> (Ty0,Ty0)
 updateTy (ArrowTy t0 t1) _ [] = (t0,t1)
 updateTy (ArrowTy t0 t1) ts (a:[]) = if isVarE a
-                                     then (L0.ProdTy $ reverse (t0:ts), t1) -- ^ have to reverse to match order of args
+                                     then (L0.ProdTy $ reverse (t0:ts), t1) -- have to reverse to match order of args
                                      else (L0.ProdTy $ reverse ts, t1)
 updateTy (ArrowTy t0 t1) ts (a:as) = if isVarE a
                                      then updateTy t1 (t0:ts) as
@@ -63,11 +63,11 @@ specializeFunc VarDef {varName, varBody} (t0 , t1) varMap =
           VarE x -> case M.lookup x vM of
                       Just v  -> v
                       Nothing -> if x == varName then L loc $ VarE newName else expr
-          -- | remove the specialized argument(s) from recursive calls
+          -- remove the specialized argument(s) from recursive calls
           -- change from PolyApp to App
           Ext (PolyAppE _ _) | isSelfCall expr varName ->
             L loc $ AppE newName [] $ L loc $ MkProdE $ filterArgs expr
-             -- | this removes any arguments that exist within the varmap
+             -- this removes any arguments that exist within the varmap
              -- i.e., being specialized on, so no longer needed in recursive calls
              -- TO DO: what if not just the argument is being passed, but some sort of variant of it?
              -- this seems impossible however, because then the specialized function would be wrong
@@ -76,12 +76,12 @@ specializeFunc VarDef {varName, varBody} (t0 , t1) varMap =
                    f = \ x -> case x of
                                 (L _ (VarE y)) -> not $ member y vM
                                 _              -> False
-          -- | application with a var (i.e. a lambda)
+          -- application with a var (i.e. a lambda)
           Ext (PolyAppE r@(L _ (VarE x)) rd) ->
             case M.lookup x vM of
               Just v  -> replaceLam v $ go rd
               Nothing -> L loc $ Ext $ PolyAppE r $ go rd
-          -- | remove any lambdas with specialized variables
+          -- remove any lambdas with specialized variables
           -- this includes removing the "top level" lambda(s),
           -- since the top level variables are assigned to tuple access
           Ext (LambdaE (x,t) bd) ->
@@ -93,7 +93,7 @@ specializeFunc VarDef {varName, varBody} (t0 , t1) varMap =
           PrimAppE p ls -> L loc $ PrimAppE p $ L.map go ls
           MkProdE ls    -> L loc $ MkProdE $ L.map go ls
           ProjE i x     -> L loc $ ProjE i $ go x
-          -- ^ application, change name if necessary
+          -- application, change name if necessary
           AppE a ls d   -> if (a == varName)
                            then L loc $ AppE newName ls $ go d
                            else L loc $ AppE a ls $ go d
