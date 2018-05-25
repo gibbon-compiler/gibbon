@@ -152,7 +152,7 @@ tagDataCons ddefs = go allCons
        FoldE (v1,t1,e1) (v2,t2,e2) b -> FoldE (v1,t1,go cons e1) (v2,t2,go cons e2) (go cons b)
 
 -- | Convert from raw, unstructured S-Expression into the program datatype we expect.
-parseSExp :: [Sexp] -> SyM Prog
+parseSExp :: [Sexp] -> SyM Prog1
 parseSExp ses =
   do prog@Prog {ddefs} <- go ses [] [] [] Nothing
      return $ mapExprs (tagDataCons ddefs) prog
@@ -451,7 +451,7 @@ handleRequire baseFile (l:ls) =
       return $ l:ls'
 
 
-parseFile :: FilePath -> IO (Prog, Int)
+parseFile :: FilePath -> IO (Prog1, Int)
 parseFile file = do
   txt    <- fmap bracketHacks $
             -- fmap stripHashLang $

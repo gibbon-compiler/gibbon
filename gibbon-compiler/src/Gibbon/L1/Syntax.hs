@@ -8,8 +8,9 @@
 {-# LANGUAGE DeriveFunctor     #-}
 {-# LANGUAGE NamedFieldPuns    #-}
 {-# LANGUAGE PatternSynonyms   #-}
-
+{-# LANGUAGE StandaloneDeriving#-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE CPP      #-}
 
 -- | The source language for recursive tree traversals.
@@ -19,17 +20,22 @@
 
 module Gibbon.L1.Syntax
     (
-      -- * Core types
-      Prog(..), FunDef(..), FunDefs
+      -- * Generic types shared across all the IR's
+      Prog(..), FunDef(..), FunDefs, PreExp(..), Prim(..)
+    , UrTy(..), ArrowTy
 
-      -- * Expressions and helpers
-    , PreExp(..), Exp1, Prim(..)
+      -- * Core types specific to L1
+    , Prog1, FunDef1, Exp1, Ty1, pattern SymTy
+
+      -- * Interpreter
+    , InterpE(..)
+
+      -- * Functions on expressions
     , insertFD, fromListFD, mapExt, mapLocs, mapExprs, visitExp
     , progToEnv, getFunTy, subst, substE, hasTimeIt, projNonFirst
     , mkProj, mkProd, mkLets, flatLets
 
-      -- * Types and helpers
-    , UrTy(..), Ty1, pattern SymTy
+      -- * Functions on types
     , mkProdTy, projTy , voidTy, isProdTy, isNestedProdTy, isPackedTy, hasPacked
     , sizeOfTy, primArgsTy, primRetTy, dummyCursorTy
 
@@ -39,6 +45,8 @@ module Gibbon.L1.Syntax
     where
 
 import Control.DeepSeq (NFData, rnf)
+import Control.Monad.Writer
+import Control.Monad.State
 import Data.List as L
 import Data.Loc
 import Data.Map as M
@@ -57,25 +65,52 @@ import Gibbon.GenericOps
 -- datatype.  For running a pass benchmark, main will be Nothing and
 -- we will expect a "benchmark" function definition which consumes an
 -- appropriate packed AST datatype.
-data Prog = Prog { ddefs    :: DDefs Ty1
-                 , fundefs  :: FunDefs
-                 , mainExp  :: Maybe (L Exp1, Ty1)
-                 }
-  deriving (Show, Eq, Ord, Generic, NFData)
+data Prog ex = Prog { ddefs   :: DDefs (TyOf ex)
+                    , fundefs :: FunDefs ex
+                    , mainExp :: Maybe (ex, (TyOf ex))
+                    }
 
+-- Since 'FunDef' is defined using a type family, we cannot use the deriving clause.
+-- Ryan Scott recommended using singletons-like alternative outlined here:
+-- https://lpaste.net/365181
+--
+deriving instance (Read (TyOf ex), Read ex, Read (ArrowTy (TyOf ex))) => Read (Prog ex)
+deriving instance (Show (TyOf ex), Show ex, Show (ArrowTy (TyOf ex))) => Show (Prog ex)
+deriving instance (Eq (TyOf ex), Eq ex, Eq (ArrowTy (TyOf ex))) => Eq (Prog ex)
+deriving instance (Ord (TyOf ex), Ord ex, Ord (ArrowTy (TyOf ex))) => Ord (Prog ex)
+deriving instance Generic (Prog ex)
+deriving instance (NFData (TyOf ex), NFData (ArrowTy (TyOf ex)), NFData ex, Generic (ArrowTy (TyOf ex))) => NFData (Prog ex)
 
--- | A set of top-level recursive function definitions
-type FunDefs = Map Var FunDef
+-- | A set of top-level recursive function definitions.
+type FunDefs ex = Map Var (FunDef ex)
 
-data FunDef = FunDef { funName  :: Var
-                     , funArg   :: Var
-                     , funTy    :: (Ty1, Ty1) -- ^ (in, out)
-                     , funBody  :: L Exp1 }
-  deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
+-- | A type family describing function types.
+type family ArrowTy ty
+type instance ArrowTy Ty1 = (Ty1 , Ty1)
 
+-- | A function definiton indexed by a type and expression.
+data FunDef ex = FunDef { funName  :: Var
+                        , funArg   :: Var
+                        , funTy    :: ArrowTy (TyOf ex)
+                        , funBody  :: ex
+                        }
+
+deriving instance (Read ex, Read (ArrowTy (TyOf ex))) => Read (FunDef ex)
+deriving instance (Show ex, Show (ArrowTy (TyOf ex))) => Show (FunDef ex)
+deriving instance (Eq ex, Eq (ArrowTy (TyOf ex))) => Eq (FunDef ex)
+deriving instance (Ord ex, Ord (ArrowTy (TyOf ex))) => Ord (FunDef ex)
+deriving instance Generic (FunDef ex)
+deriving instance (Generic (ArrowTy (TyOf ex)), NFData ex, NFData (ArrowTy (TyOf ex))) => NFData (FunDef ex)
+deriving instance (Generic (ArrowTy (TyOf ex)), Out ex, Out (ArrowTy (TyOf ex))) =>  Out (FunDef ex)
 
 -- | A convenient, default instantiation of the L1 expression type.
 type Exp1 = PreExp NoExt () Ty1
+
+-- | An L1 program.
+type Prog1 = Prog (L Exp1)
+
+-- | Function definition used in L1 programs.
+type FunDef1 = FunDef (L Exp1)
 
 -- | The type rperesentation used in L1.
 type Ty1 = UrTy ()
@@ -146,6 +181,8 @@ data PreExp (ext :: * -> * -> *) loc dec =
 
 instance NFData (PreExp e l d) => NFData (L (PreExp e l d)) where
   rnf (L loc a) = seq loc (rnf a)
+
+deriving instance Generic (L (PreExp e l d))
 
 instance (Out l, Show l, Show d, Out d, Expression (e l d))
       => Expression (PreExp e l d) where
@@ -311,7 +348,7 @@ instance Out d => Out (Prim d)
 
 instance Out a => Out (UrTy a)
 
-instance Out Prog
+instance (Generic (L Exp1), Generic (ArrowTy Ty1)) => Out Prog1
 
 -----------------------------------------------------------------------------------------
 
@@ -358,16 +395,37 @@ instance FreeVars (UrTy l) where
     gFreeVars _ = S.empty
 
 --------------------------------------------------------------------------------
+
+class Expression e => InterpE e where
+  -- | A temporary HACK which gives the type of the expression being
+  -- interpreted. We need the type to get the proper 'FunDef', which
+  -- is used to interpret function applications.
+  --
+  -- For 'PreExp' or other datatypes which are actual expressions,
+  -- this is set to the same datatype. However, when we're defining
+  -- an instance of this class for an extension, it isn't
+  -- clear how to infer the type of the expression without this.
+  type ExpTy e
+
+  -- | Interpret an expression and return a 'Value'
+  interpE :: RunConfig -> DDefs (TyOf e) -> M.Map Var (FunDef (ExpTy e)) -> e
+          -> WriterT Log (StateT Store IO) Value
+
+instance InterpE (NoExt l d) where
+    type ExpTy (NoExt l d) = L (PreExp NoExt l (UrTy l))
+    interpE _ _ _ _ = error "<NoExt: This should be impossible to evaluate>"
+
+--------------------------------------------------------------------------------
 -- Helpers
 
 -- | Insert a 'FunDef' into 'FunDefs'.
 -- Raise an error if a function with the same name already exists.
-insertFD :: FunDef -> FunDefs -> FunDefs
+insertFD :: FunDef ex -> FunDefs ex -> FunDefs ex
 insertFD d = M.insertWith err' (funName d) d
   where
    err' = error $ "insertFD: function definition with duplicate name: "++show (funName d)
 
-fromListFD :: [FunDef] -> FunDefs
+fromListFD :: [FunDef ex] -> FunDefs ex
 fromListFD = L.foldr insertFD M.empty
 
 -- | Apply a function to the extension points only.
@@ -379,7 +437,7 @@ mapLocs :: (e l2 d -> e l2 d) -> PreExp e l2 d -> PreExp e l2 d
 mapLocs fn = visitExp id fn id
 
 -- | Transform the expressions within a program.
-mapExprs :: (L Exp1 -> L Exp1) -> Prog -> Prog
+mapExprs :: (L Exp1 -> L Exp1) -> Prog1 -> Prog1
 mapExprs fn prg@Prog{fundefs,mainExp} =
   let mainExp' = case mainExp of
                    Nothing -> Nothing
@@ -405,7 +463,7 @@ visitExp _fl fe _fd exp0 = fin
 
 -- | Abstract some of the differences of top level program types, by
 --   having a common way to extract an initial environment.
-progToEnv :: Prog -> Env2 Ty1
+progToEnv :: Prog1 -> Env2 Ty1
 progToEnv Prog{fundefs} =
     Env2 M.empty
          (M.fromList [ (n,(fmap (\_->()) a, fmap (\_->()) b))
@@ -413,10 +471,10 @@ progToEnv Prog{fundefs} =
 
 
 -- | Look up the input/output type of a top-level function binding.
-getFunTy :: Var -> Prog -> (Ty1,Ty1)
+getFunTy :: Var -> Prog ex -> ArrowTy (TyOf ex)
 getFunTy fn Prog{fundefs} =
     case M.lookup fn fundefs of
-      Just FunDef{funTy=(argty,retty)} -> (argty,retty)
+      Just f -> funTy f
       Nothing -> error $ "getFunTy: L1 program does not contain binding for function: "++show fn
 
 -- | Substitute an expression in place of a variable.

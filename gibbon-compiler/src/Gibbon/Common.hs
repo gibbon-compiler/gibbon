@@ -466,8 +466,7 @@ abbrv n x =
        else L.take (n-3) str ++ "..."
 
 ----------------------------------------------------------------------------------------------------
--- Global parameters
-----------------------------------------------------------------------------------------------------
+-- Things related to interpreting Gibbon programs
 
 -- | Runtime configuration for executing interpreters.
 data RunConfig =

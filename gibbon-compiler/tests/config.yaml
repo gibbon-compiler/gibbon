@@ -8,6 +8,7 @@
 ## verbosity:    Int     -- ^ Controls the summary that's generated at the end. (default: 1)
 ## summaryFile:  String  -- ^ File in which to store the test summary. (default: gibbon-test-summary.txt)
 ## tempdir:      String  -- ^ Temporary directory to store the build artifacts (default: examples/build_tmp)
+## run-modes:   [String] -- ^ If non-empty, run tests only in the specified modes. (default: [])
 
 ## Specifiying an individual test:
 ##
@@ -15,6 +16,8 @@
 ## dir : location of the testfile (default: examples)
 ## failing: modes in which the test is expected to fail (default: [])
 ## skip: whether to skip this test (default: false)
+## run-modes: if non-empty, run this test only in the specified modes.
+##            has higher precendence than the global run-mode parameter (default [])
 
 tests:
   - name: test00_add.gib

@@ -52,7 +52,7 @@ testDir = makeValid ("examples" </> "build_tmp")
 -- | The compiler pipeline after inferLocations
 --   It's divided into 2 functions for easy debugging. There's a good chance that we'd
 --   want to inspect the output of Cursorize in most cases
-runT :: Prog -> L3.Prog
+runT :: Prog2 -> L3.Prog3
 runT prg = fst $ runSyM 0 $ do
     l2 <- flattenL2 prg
     l2 <- inferRegScope Infinite l2
@@ -67,7 +67,7 @@ runT prg = fst $ runSyM 0 $ do
     return l3
 
 
-run2T :: L3.Prog -> L4.Prog
+run2T :: L3.Prog3 -> L4.Prog
 run2T l3 = fst $ runSyM 0 $ do
     l3 <- flattenL3 l3
     -- l3 <- findWitnesses l3
@@ -75,7 +75,7 @@ run2T l3 = fst $ runSyM 0 $ do
     l3 <- L3.tcProg l3
     l3 <- hoistNewBuf l3
     l3 <- unariser l3
-    let mainTyPre = fmap snd $ L3.mainExp l3
+    let mainTyPre = fmap snd $ mainExp l3
     l3 <- flattenL3 l3
     l3 <- L3.tcProg l3
     l4 <- lower (True, mainTyPre) l3
@@ -83,13 +83,13 @@ run2T l3 = fst $ runSyM 0 $ do
     rearrangeFree l4
 
 
-cg :: Prog -> IO String
+cg :: Prog2 -> IO String
 cg = codegenProg defaultDynFlags . run2T . runT
 
 
 type Expected = String
 
-runner :: FilePath -> Prog -> Expected -> Assertion
+runner :: FilePath -> Prog2 -> Expected -> Assertion
 runner fp prg exp = do
     _ <- createDirectoryIfMissing True testDir
     fp <- makeAbsolute $ testDir </> fp

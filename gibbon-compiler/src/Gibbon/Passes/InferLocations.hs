@@ -110,7 +110,7 @@ import Debug.Trace
 import Gibbon.GenericOps (gFreeVars)
 import Gibbon.Common as C hiding (extendVEnv, lookupVEnv) -- (l, LRM(..))
 import Gibbon.Common (Var, Env2, DDefs, LocVar, runSyM, SyM, gensym, toVar)
-import qualified Gibbon.L1.Syntax as L1
+import Gibbon.L1.Syntax as L1
 import Gibbon.L2.Syntax as L2
 import Gibbon.L2.Typecheck as T
 import Gibbon.Passes.InlineTriv (inlineTriv)
@@ -123,7 +123,7 @@ import Gibbon.Passes.Flatten (flattenL1)
 data FullEnv = FullEnv
     { dataDefs :: (DDefs Ty2)           -- ^ Data type definitions
     , valEnv :: M.Map Var Ty2           -- ^ Type env for local bindings
-    , funEnv :: M.Map Var (ArrowTy Ty2) -- ^ Top level fundef types
+    , funEnv :: M.Map Var ArrowTy2 -- ^ Top level fundef types
     } deriving Show
 
 extendVEnv :: Var -> Ty2 -> FullEnv -> FullEnv
@@ -132,7 +132,7 @@ extendVEnv v ty fe@FullEnv{valEnv} = fe { valEnv = M.insert v ty valEnv }
 lookupVEnv :: Var -> FullEnv -> Ty2
 lookupVEnv v FullEnv{valEnv} = valEnv # v
 
-lookupFEnv :: Var -> FullEnv -> ArrowTy Ty2
+lookupFEnv :: Var -> FullEnv -> ArrowTy2
 lookupFEnv v FullEnv{funEnv} = funEnv # v
 
 -- Types
@@ -142,14 +142,14 @@ lookupFEnv v FullEnv{funEnv} = funEnv # v
 -- If we assume output regions are disjoint from input ones, then we
 -- can instantiate an L1 function type into a polymorphic L2 one,
 -- mechanically.
-convertFunTy :: (L1.Ty1,L1.Ty1) -> SyM (ArrowTy Ty2)
+convertFunTy :: (L1.Ty1,L1.Ty1) -> SyM ArrowTy2
 convertFunTy (from,to) = do
     from' <- convertTy from
     to'   <- convertTy to
     -- For this simple version, we assume every location is in a separate region:
     lrm1 <- toLRM from' Input
     lrm2 <- toLRM to'   Output
-    return $ ArrowTy { locVars = lrm1 ++ lrm2
+    return $ ArrowTy2 { locVars = lrm1 ++ lrm2
                      , arrIn   = from'
                      , arrEffs = S.empty
                      , arrOut  = to'
@@ -218,7 +218,7 @@ data DCArg = ArgFixed Int
            | ArgVar Var
            | ArgCopy Var Var Var [LocVar]
 
-inferLocs :: L1.Prog -> SyM L2.Prog
+inferLocs :: L1.Prog1 -> SyM L2.Prog2
 inferLocs initPrg = do
   (L1.Prog dfs fds me) <- addCopyFns initPrg
   let m = do
@@ -239,8 +239,8 @@ inferLocs initPrg = do
                                    dest <- destFromType (arrOut arrty)
                                    fixType_ (arrIn arrty)
                                    (fbod',_) <- inferExp' fe' fbod dest
-                                   return $ L2.FunDef fn fa arrty fbod'
-          return $ L2.Prog dfs' fds' me'
+                                   return $ FunDef fn fa arrty fbod'
+          return $ Prog dfs' fds' me'
   prg <- St.runStateT (runExceptT m) M.empty
   case fst prg of
     Right a -> return a
@@ -1157,7 +1157,7 @@ prim p = case p of
 
 -- | Generate a copy function for a particular data definition.
 -- Note: there will be redundant let bindings in the function body which may need to be inlined.
-genCopyFn :: DDef L1.Ty1 -> SyM L1.FunDef
+genCopyFn :: DDef L1.Ty1 -> SyM L1.FunDef1
 genCopyFn DDef{tyName, dataCons} = do
   arg <- gensym $ "arg"
   casebod <- forM dataCons $ \(dcon, tys) ->
@@ -1183,7 +1183,7 @@ tyToDataCon (PackedTy dcon _) = dcon
 tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
 
 -- | Add copy functions for each data type in a prog
-addCopyFns :: L1.Prog -> SyM L1.Prog
+addCopyFns :: L1.Prog1 -> SyM L1.Prog1
 addCopyFns (L1.Prog dfs fds me) = do
   newFns <- mapM genCopyFn dfs
   prg <- flattenL1 $ L1.Prog dfs (fds `M.union` (M.mapKeys (mkCopyFunName . fromVar) newFns)) me

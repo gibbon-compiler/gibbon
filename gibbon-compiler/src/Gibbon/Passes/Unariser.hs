@@ -8,7 +8,7 @@ import qualified Data.Map as M
 import qualified Data.List as L
 
 import Gibbon.Common
-import Gibbon.L1.Syntax hiding (FunDef(..), Prog(..), FunDefs)
+import Gibbon.L1.Syntax
 import Gibbon.L3.Syntax
 import Gibbon.GenericOps
 
@@ -31,7 +31,7 @@ import Gibbon.GenericOps
 -- transformed to varrefs in lower.
 --
 
-unariser :: Prog -> SyM Prog
+unariser :: Prog3 -> SyM Prog3
 unariser Prog{ddefs,fundefs,mainExp} = do
   fds <- mapM unariserFun $ M.elems fundefs
   mn <- case mainExp of
@@ -48,7 +48,7 @@ unariser Prog{ddefs,fundefs,mainExp} = do
   where
     funEnv = M.map funTy fundefs
 
-    unariserFun :: FunDef -> SyM FunDef
+    unariserFun :: FunDef3 -> SyM FunDef3
     unariserFun f@FunDef{funTy,funArg,funBody} = do
       let (inT, outT) = funTy
           fn = case inT of

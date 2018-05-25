@@ -7,8 +7,8 @@
 module Gibbon.Pretty ( Printer(..), Pretty(..), printL1, printL2, printL3 ) where
 
 import Gibbon.L1.Syntax
-import qualified Gibbon.L2.Syntax as L2
-import qualified Gibbon.L3.Syntax as L3
+import Gibbon.L2.Syntax as L2
+import Gibbon.L3.Syntax as L3
 import qualified Gibbon.L4.Syntax as L4
 import Gibbon.Common
 import Gibbon.GenericOps
@@ -20,45 +20,45 @@ import Text.PrettyPrint.GenericPretty
 class Printer a where
     pprinter :: a -> String
 
-printL1 :: Prog -> String
+printL1 :: Prog1 -> String
 printL1 (Prog _ funs me) =
     let meDoc = case me of
                   Nothing -> empty
                   Just (e,_) -> renderMain $ pprint e
-        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (doc $ fst $ funTy fd) (pprint $ funBody fd)) $ M.elems funs 
+        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (doc $ fst $ funTy fd) (pprint $ funBody fd)) $ M.elems funs
     in render $ funsDoc $+$ meDoc
 
-instance Printer Prog where
+instance Printer Prog1 where
     pprinter = printL1
 
-printL2 :: L2.Prog -> String
-printL2 (L2.Prog _ funs me) =
+printL2 :: L2.Prog2 -> String
+printL2 (Prog _ funs me) =
     let meDoc = case me of
                   Nothing -> empty
                   Just (e,_) -> renderMain $ pprint e
-        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ L2.funName fd) (doc $ L2.funArg fd) (doc $ L2.arrOut $ L2.funTy fd) (pprint $ L2.funBody fd)) $ M.elems funs 
+        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (doc $ L2.arrOut $ funTy fd) (pprint $ funBody fd)) $ M.elems funs
     in render $ funsDoc $+$ meDoc
 
-instance Printer L2.Prog where
+instance Printer L2.Prog2 where
     pprinter = printL2
 
-printL3 :: L3.Prog -> String
-printL3 (L3.Prog _ funs me) = 
+printL3 :: L3.Prog3 -> String
+printL3 (Prog _ funs me) =
     let meDoc = case me of
                   Nothing -> empty
                   Just (e,_) -> renderMain $ pprint e
-        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ L3.funName fd) (doc $ L3.funArg fd) (doc $ fst $ L3.funTy fd) (pprint $ L3.funBody fd)) $ M.elems funs 
+        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (doc $ fst $ funTy fd) (pprint $ funBody fd)) $ M.elems funs
     in render $ funsDoc $+$ meDoc
 
-instance Printer L3.Prog where
+instance Printer L3.Prog3 where
     pprinter = printL3
 
 instance Printer L4.Prog where
     pprinter = show -- TODO: implement pretty printing for L4
 
 renderfunc :: String -> Doc -> Doc -> Doc -> Doc
-renderfunc f arg ty m = text f <+> arg <> colon <> ty <+> equals $$ nest 4 m 
-    
+renderfunc f arg ty m = text f <+> arg <> colon <> ty <+> equals $$ nest 4 m
+
 renderMain :: Doc -> Doc
 renderMain m = text "main" <+> equals $$ nest 4 m
 
@@ -96,7 +96,7 @@ instance (Show l, Out l, Pretty (e l (UrTy l)), Expression (e l (UrTy l)), TyOf 
                           text "else" <+>
                           pprint e3
           MkProdE es -> lparen <> hcat (punctuate (text ",") (map pprint es)) <> rparen
-          ProjE i e -> text "#" <> int i <+> pprint e 
+          ProjE i e -> text "#" <> int i <+> pprint e
           CaseE e bnds -> text "case" <+> pprint e <+> text "of" $+$
                           nest 4 (vcat $ map (\(dc,vls,e) -> text dc <+> hcat (punctuate (text " ") (map (\(v,l) -> doc v <> colon <> doc l) vls)) <+> text "->" <+> pprint e) bnds)
           DataConE l dc es -> text dc <+> lbrack <> doc l <> rbrack <+>

@@ -1,6 +1,9 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
@@ -8,7 +11,7 @@
 --
 
 module Gibbon.L1.Interp
-    ( execAndPrint, interpProg
+    ( execAndPrint, gInterpProg
     , main
     ) where
 
@@ -24,7 +27,7 @@ import           Data.Loc
 import           Data.Map as M
 import           Data.Sequence (Seq, ViewL ((:<)), (|>))
 import           System.Clock
-import           System.IO.Unsafe (unsafePerformIO)
+import           Text.PrettyPrint.GenericPretty
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Sequence as S
 
@@ -32,11 +35,6 @@ import           Gibbon.Common
 import           Gibbon.GenericOps
 import           Gibbon.L1.Syntax as L1
 
--- We got rid of these pattern variables from L2, and they are now defined as L3 extensions instead
--- TODO: L3.Interp
-
--- import Gibbon.L2.Syntax ( pattern WriteInt, pattern ReadInt, pattern NewBuffer
---                                    , pattern ScopedBuffer, pattern AddCursor)
 
 -- TODO:
 -- It's a SUPERSET, but use the Value type from TargetInterp anyway:
@@ -48,18 +46,13 @@ interpChatter = 7
 
 ------------------------------------------------------------
 
-instance Interp Prog where
-  interpNoLogs rc p = unsafePerformIO $ show . fst <$> interpProg rc p
-  interpWithStdout rc p = do
-   (v,logs) <- interpProg rc p
-   return (show v, lines (B.unpack logs))
+instance Interp Prog1 where
+  interpProg = gInterpProg
 
 type ValEnv = Map Var Value
 
-------------------------------------------------------------
-
 -- | Code to read a final answer back out.
-deserialize :: DDefs Ty1 -> Seq SerializedVal -> Value
+deserialize :: (Out ty) => DDefs ty -> Seq SerializedVal -> Value
 deserialize ddefs seq0 = final
  where
   ([final],_) = readN 1 seq0
@@ -78,9 +71,7 @@ deserialize ddefs seq0 = final
          in (VPacked k args : more, rst'')
 
 
-------------------------------------------------------------
-
-execAndPrint :: RunConfig -> Prog -> IO ()
+execAndPrint :: RunConfig -> Prog1 -> IO ()
 execAndPrint rc prg = do
   (val,logs) <- interpProg rc prg
   B.putStr logs
@@ -93,17 +84,20 @@ execAndPrint rc prg = do
 
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
-interpProg :: RunConfig -> Prog -> IO (Value, B.ByteString)
--- Print nothing, return "void"              :
-interpProg _ Prog {mainExp=Nothing} = return $ (VProd [], B.empty)
-interpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
+gInterpProg :: ( Out (TyOf ex)
+               , InterpE ex
+               , ExpTy ex ~ ex )
+           => RunConfig -> Prog ex -> IO (Value, B.ByteString)
+gInterpProg _ Prog {mainExp=Nothing} =
+    -- Print nothing, return "void"
+    return $ (VProd [], B.empty)
+gInterpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
     do
-       let fenv = M.fromList [ (funName f , (funArg f, funBody f))
-                             | f <- M.elems fundefs]
+       let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
 
        -- logs contains print side effects:
        ((x,logs),Store finstore) <-
-         runStateT (runWriterT (interp rc ddefs fenv e)) (Store IM.empty)
+         runStateT (runWriterT (interpE rc ddefs fenv e)) (Store IM.empty)
 
        -- Policy: don't return cursors
        let res = case x of
@@ -113,102 +107,53 @@ interpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
                   _ -> x
        return (res, toLazyByteString logs)
 
+instance ( Out l, Show l
+         , Expression (e l (UrTy l))
+         , TyOf (e l (UrTy l)) ~ TyOf (L (PreExp e l (UrTy l)))
+         , ExpTy (e l (UrTy l)) ~ ExpTy (L (PreExp e l (UrTy l)))
+         , InterpE (e l (UrTy l)) )
+        => InterpE (L (PreExp e l (UrTy l))) where
+  type ExpTy (L (PreExp e l (UrTy l))) = (L (PreExp e l (UrTy l)))
+  interpE = interp
 
-interp :: RunConfig
-       -> DDefs Ty1
-       -> M.Map Var (Var, L Exp1)
-       -> L Exp1
+interp :: forall l e.
+          ( Out l, Show l
+          , Expression (e l (UrTy l))
+          , TyOf (e l (UrTy l)) ~ TyOf (L (PreExp e l (UrTy l)))
+          , ExpTy (e l (UrTy l)) ~ ExpTy (L (PreExp e l (UrTy l)))
+          , InterpE (e l (UrTy l)) )
+       => RunConfig
+       -> DDefs (TyOf (L (PreExp e l (UrTy l))))
+       -> M.Map Var (FunDef (L (PreExp e l (UrTy l))))
+       -> L (PreExp e l (UrTy l))
        -> WriterT Log (StateT Store IO) Value
 interp rc ddefs fenv = go M.empty
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env ex = go env ex
 
-    go :: ValEnv -> L L1.Exp1 -> WriterT Log (StateT Store IO) Value
+    go :: ValEnv -> L (PreExp e l (UrTy l)) -> WriterT Log (StateT Store IO) Value
     go env (L _ x0) =
         case x0 of
-          Ext _ -> error "L1.Interp: Should not interpret empty extension point."
-                    -- Or... we could give this a void/empty-tuple value.
+          Ext ext -> interpE rc ddefs fenv ext
 
-          LitE c         -> return $ VInt c
-          LitSymE s      -> return $ VInt (strToInt $ fromVar s)
-          -- In L2.5 witnesses are really justs casts:
-          -- FIXME: We need some way to mediate between symbolic
-          -- values and Cursors... or this won't work.
-          VarE v -- Just v' <- L2.fromWitnessVar v -> return $ env # v'
-                 | otherwise                      -> return $ env # v
+          LitE c    -> return $ VInt c
+          LitSymE s -> return $ VInt (strToInt $ fromVar s)
+          VarE v    -> return $ env # v
 
-          PrimAppE p ls  -> do args <- mapM (go env) ls
-                               return $ applyPrim p args
-          ProjE ix ex -> do VProd ls <- go env ex
-                            return $ ls !! ix
-
-            {-
-            AddCursor vr bytesadd -> do
-                Store store <- get
-                -- Note: the added offset is always in BYTES:
-                let VCursor idx off = env # vr
-                    Buffer sq = store IM.! idx
-                    dropped = lp bytesadd (S.viewl (S.drop off sq))
-                    lp 0 _ = 0
-                    lp n (hd :< tl) | n >= byteSize hd = 1 + lp (n - byteSize hd) (S.viewl tl)
-                                    | otherwise = error $ errHeader ++ "Cannot skip "++
-                                                      show n++" bytes, next value in buffer is: "++ show hd
-                                                      ++" of size "++show (byteSize hd) ++".\n"++moreContext
-                    lp n S.EmptyL = error $ errHeader ++ "Cannot skip ahead "
-                                    ++show n++" bytes.  Buffer is empty.\n"++moreContext
-
-                    errHeader = "Pointer arithmetic error in AddCursor of "++show (vr,bytesadd)++".  "
-                    moreContext = " Starting cursor, "++show (VCursor idx off)
-                                  ++" in Buffer: "++ndoc sq
-                liftIO $ dbgPrintLn interpChatter ("\n Interp [AddP Ptr, "++ show (vr,bytesadd)
-                                                   ++"] scroll "++show bytesadd++" bytes, "
-                                                   ++"dropping" ++show dropped++" elems,\n     "
-                                                   ++moreContext)
-                return $ VCursor idx (off+dropped)
-
--- FIXME: Nead an L2 interpreter.
-
-            --- Pattern synonyms specific to post-cursorize ASTs:
-            NewBuffer    -> do Store store0 <- get
-                               let idx = IM.size store0
-                                   store1 = IM.insert idx (Buffer S.empty) store0
-                               put (Store store1)
-                               return $ VCursor idx 0
-            ScopedBuffer -> go env (L NoLoc NewBuffer) -- ^ No operational difference.
-            WriteInt v ex -> do let VCursor idx off = env # v
-                                VInt num <- go env ex
-                                Store store0 <- get
-                                let store1 = IM.alter (\(Just (Buffer s1)) -> Just (Buffer $ s1 |> SerInt num)) idx store0
-                                put (Store store1)
-                                return $ VCursor idx (off+1)
-            ReadInt v -> do
-              Store store <- get
-              liftIO$ dbgPrint interpChatter $ " Interp [ReadInt "++(fromVar v)++"] from store: "++ndoc store
-              let VCursor idx off = env # v
-                  Buffer buf = store IM.! idx
-              liftIO$ dbgPrintLn interpChatter $ " Interp [ReadInt "++(fromVar v)++"] from that store at pos: "
-                                                 ++show (VCursor idx off)
-              case S.viewl (S.drop off buf) of
-                SerInt n :< _ -> return $ VProd [VInt n, VCursor idx (off+1)]
-                S.EmptyL      -> internalError "L1.Interp: ReadInt on empty cursor/buffer."
-                oth :< _      ->
-                 internalError $"L1.Interp: ReadInt expected Int in buffer, found: "++show oth
-
-            L2.NamedVal _ _ bd -> go env bd
-
-            p | L2.isExtendedPattern p ->
-               internalError$ "L1.Interp: Unhandled extended L2 pattern: "++ndoc p
-            -}
+          PrimAppE p ls -> do args <- mapM (go env) ls
+                              return $ applyPrim p args
+          ProjE ix ex   -> do VProd ls <- go env ex
+                              return $ ls !! ix
 
           AppE f _ b ->  do rand <- go env b
                             case M.lookup f fenv of
-                             Just (vr, funBody) -> go (M.insert vr rand env) funBody
+                             Just fn -> go (M.insert (funArg fn) rand env) (funBody fn)
                              Nothing -> error $ "L1.Interp: unbound function in application: "++ndoc x0
 
-          (CaseE _ []) -> error$ "L1.Interp: CaseE with empty alternatives list: "++ndoc x0
+          CaseE _ [] -> error$ "L1.Interp: CaseE with empty alternatives list: "++ndoc x0
 
-          (CaseE x1 alts@((sometag,_,_):_)) -> do
+          CaseE x1 alts@((sometag,_,_):_) -> do
                  v <- go env x1
                  case v of
                    VCursor idx off | rcCursors rc ->
@@ -234,14 +179,14 @@ interp rc ddefs fenv = go M.empty
                                "\nWhen evaluating scrutinee of case expression: "++ndoc x1
 
 
-          (LetE (v,_,_ty,rhs) bod) -> do
+          LetE (v,_,_ty,rhs) bod -> do
             rhs' <- go env rhs
             let env' = M.insert v rhs' env
             go env' bod
 
-          (MkProdE ls) -> VProd <$> mapM (go env) ls
+          MkProdE ls -> VProd <$> mapM (go env) ls
           -- TODO: Should check this against the ddefs.
-          (DataConE _ k ls) -> do
+          DataConE _ k ls -> do
               args <- mapM (go env) ls
               case args of
               -- Constructors are overloaded.  They have different behavior depending on
@@ -283,7 +228,7 @@ interp rc ddefs fenv = go M.empty
           MapE _ _bod    -> error "L1.Interp: finish MapE"
           FoldE _ _ _bod -> error "L1.Interp: finish FoldE"
 
-    applyPrim :: Prim Ty1 -> [Value] -> Value
+    applyPrim :: Prim (UrTy l) -> [Value] -> Value
     applyPrim p ls =
      case (p,ls) of
        (MkTrue,[])             -> VBool True
@@ -329,7 +274,7 @@ lookup3 k ls = go ls
 
 --------------------------------------------------------------------------------
 
-p1 :: Prog
+p1 :: Prog1
 p1 = Prog emptyDD  M.empty
           (Just ( L NoLoc $ LetE ("x", [], IntTy, L NoLoc $ LitE 3) (L NoLoc $ VarE (toVar "x"))
                 , IntTy))

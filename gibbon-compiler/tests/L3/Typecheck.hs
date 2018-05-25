@@ -27,7 +27,7 @@ import Test.Tasty.HUnit
 import Test.Tasty.TH
 import Test.Tasty
 
-runT :: Prog -> L3.Prog
+runT :: Prog2 -> L3.Prog3
 runT prg = fst $ runSyM 0 $ do
   l2 <- inferEffects prg
   l2 <- inferRegScope Infinite l2

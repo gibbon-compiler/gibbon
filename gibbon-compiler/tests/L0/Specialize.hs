@@ -14,9 +14,9 @@ import Data.Loc
 import Data.Map as M
 import Data.Set as S
 
-import Gibbon.Common 
+import Gibbon.Common
 import Gibbon.L0.Syntax as L0
-import Gibbon.L1.Syntax as L1 hiding (FunDef(..), FunDefs)
+import Gibbon.L1.Syntax as L1
 import Gibbon.L0.Specialize
 
 type Exp = L Exp0
@@ -52,7 +52,7 @@ case_t1 = assertValue t1Fun t1Call t1Ex
 -- function f1 \ (f) (x) (y) -> (+ (f x) y)
 t2Fun :: CurFun
 t2Fun = VarDef (toVar "f1") (ArrowTy (ArrowTy L0.IntTy L0.IntTy) (ArrowTy L0.IntTy (ArrowTy L0.IntTy L0.IntTy)))
-        (l $ Ext $ LambdaE ((toVar "f"), ArrowTy L0.IntTy L0.IntTy) 
+        (l $ Ext $ LambdaE ((toVar "f"), ArrowTy L0.IntTy L0.IntTy)
           (l $ Ext $ LambdaE ((toVar "x"), L0.IntTy)
             (l $ Ext $ LambdaE ((toVar "y"), L0.IntTy)
                (l $ PrimAppE AddP [(l $ Ext $ PolyAppE (l $ VarE $ toVar "f") (l $ VarE $ toVar "x")),
@@ -64,12 +64,12 @@ t2Call = (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ VarE $
                                                                                                          (l $ VarE $ toVar "x")))
                                                  (l $ LitE 4))
                              (l $ LitE 6))
-           
+
 
 t2Ex :: (L0Fun, FCall)
 t2Ex = (FunDef (toVar "f11") (toVar "x") (L0.ProdTy [], L0.IntTy) (l $ PrimAppE AddP [(l $ LitE 4),(l $ LitE 6)]),
         l $ AppE (toVar "f11") [] $ l$ MkProdE [])
-  
+
 case_t2 :: Assertion
 case_t2 = assertValue t2Fun t2Call t2Ex
 
@@ -90,12 +90,12 @@ t3Call = (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ VarE $
                                                                                                     (l $ VarE $ toVar "x")])))
                                                  (l $ LitE 4))
                              (l $ LitE 6))
-           
+
 
 t3Ex :: (L0Fun, FCall)
 t3Ex = (FunDef (toVar "f11") (toVar "x") (L0.ProdTy [], L0.IntTy) (l $ PrimAppE AddP [(l $ PrimAppE AddP [(l $ LitE 4), (l $ LitE 4)]),(l $ LitE 6)]),
         l $ AppE (toVar "f11") [] $ l$ MkProdE [])
-  
+
 case_t3 :: Assertion
 case_t3 = assertValue t3Fun t3Call t3Ex
 
@@ -117,13 +117,13 @@ t4Call = (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ Ext $ PolyAppE (l $ VarE $
                                                             (l $ LitE 2)
                                                             (l $ LitE 4))))
                              (l $ VarE $ toVar "z"))
-           
+
 
 t4Ex :: (L0Fun, FCall)
 t4Ex = (FunDef (toVar "f11") (toVar "x") (L0.ProdTy [L0.BoolTy , L0.IntTy], L0.IntTy)
         (l $ PrimAppE AddP [(l $ IfE (l $ ProjE 0 $ l$ VarE $ toVar "x") (l $ LitE 2) (l $ LitE 4)),(l $ ProjE 1 $ l$ VarE $ toVar "x")]),
         l $ AppE (toVar "f11") [] $ l$ MkProdE [(l $ VarE $ toVar "y") , (l $ VarE $ toVar "z")])
-  
+
 case_t4 :: Assertion
 case_t4 = assertValue t4Fun t4Call t4Ex
 
@@ -166,4 +166,3 @@ mapBodEx = l $ CaseE (l$ ProjE 0 $ l $ VarE $ toVar "x")
 
 case_map :: Assertion
 case_map = assertValue mapF mapCall mapEx
-

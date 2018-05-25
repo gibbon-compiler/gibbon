@@ -20,7 +20,7 @@ import Gibbon.Common hiding (FunDef)
 import Gibbon.L2.Syntax as L2
 import Gibbon.L2.Typecheck
 import Gibbon.L2.Examples
-import qualified Gibbon.L1.Syntax as L1
+import Gibbon.L1.Syntax as L1
 
 --
 

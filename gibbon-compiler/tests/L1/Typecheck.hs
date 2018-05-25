@@ -118,7 +118,7 @@ t1 = l$  AppE "mul" []
      (l$ MkProdE [l$ LitE 10, l$ AppE "add" [] (l$ MkProdE [l$ LitE 40, l$ LitE 2])])
 
 
-t1Prog :: Prog
+t1Prog :: Prog1
 t1Prog = Prog {ddefs = M.fromList [],
         fundefs = M.fromList
                   [("mul2",

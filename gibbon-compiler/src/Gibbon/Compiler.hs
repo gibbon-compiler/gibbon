@@ -37,11 +37,11 @@ import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
 import           Gibbon.DynFlags
-import           Gibbon.GenericOps(Interp, interpNoLogs)
+import           Gibbon.GenericOps
 import qualified Gibbon.HaskellFrontend as HS
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
-import qualified Gibbon.L3.Syntax as L3
+-- import qualified Gibbon.L3.Syntax as L3
 import qualified Gibbon.L4.Syntax as L4
 import qualified Gibbon.SExpFrontend as SExp
 import qualified Gibbon.L1.Interp as SI
@@ -87,16 +87,16 @@ import qualified Gibbon.Passes.LLVM.Codegen as LLVM
 
 -- | Find all local variables bound by case expressions which must be
 -- traversed, but which are not by the current program.
-findMissingTraversals :: L2.Prog -> SyM (Set Var)
+findMissingTraversals :: L2.Prog2 -> SyM (Set Var)
 findMissingTraversals _ = pure S.empty
 
 -- | Add calls to an implicitly-defined, polymorphic "traverse"
 -- function of type `p -> ()` for any packed type p.
-addTraversals :: Set Var -> L2.Prog -> SyM L2.Prog
+addTraversals :: Set Var -> L2.Prog2 -> SyM L2.Prog2
 addTraversals _ p = pure p
 
 -- | Generate code
-lowerCopiesAndTraversals :: L2.Prog -> SyM L2.Prog
+lowerCopiesAndTraversals :: L2.Prog2 -> SyM L2.Prog2
 lowerCopiesAndTraversals p = pure p
 
 
@@ -262,7 +262,7 @@ compile config@Config{mode,input,verbosity,backend,cfile,dynflags} fp0 = do
             else show (length (sdoc l1)) ++ " characters."
 
       -- (Stage 1) Run the program through the interpreter
-      initResult <- interpProg l1
+      initResult <- withPrintInterpProg l1
 
       -- (Stage 2) C/LLVM codegen
       let outfile = getOutfile backend fp cfile
@@ -299,7 +299,7 @@ compile config@Config{mode,input,verbosity,backend,cfile,dynflags} fp0 = do
 
 
 -- | The compiler's policy for running/printing L1 programs.
-runL1 :: L1.Prog -> IO ()
+runL1 :: L1.Prog1 -> IO ()
 runL1 l1 = do
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
@@ -308,7 +308,7 @@ runL1 l1 = do
     exitSuccess
 
 -- | The compiler's policy for running/printing L2 programs.
-runL2 :: L2.Prog -> IO ()
+runL2 :: L2.Prog2 -> IO ()
 runL2 l2 = runL1 (L2.revertToL1 l2)
 
 -- | Set the env var DEBUG, to verbosity, when > 1
@@ -324,7 +324,7 @@ setDebugEnvVar verbosity =
 
 
 -- |
-parseInput :: Input -> FilePath -> IO (IO (L1.Prog, Int), FilePath)
+parseInput :: Input -> FilePath -> IO (IO (L1.Prog1, Int), FilePath)
 parseInput ip fp =
   case ip of
     Haskell -> return (HS.parseFile fp, fp)
@@ -350,13 +350,13 @@ parseInput ip fp =
 
 
 -- |
-interpProg :: L1.Prog -> IO (Maybe Value)
-interpProg l1 =
+withPrintInterpProg :: L1.Prog1 -> IO (Maybe Value)
+withPrintInterpProg l1 =
   if dbgLvl >= interpDbgLevel
   then do
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
-    (val,_stdout) <- SI.interpProg runConf l1
+    (val,_stdout) <- interpProg runConf l1
     dbgPrintLn 2 $ " [eval] Init prog evaluated to: "++show val
     return $ Just val
   else
@@ -364,7 +364,7 @@ interpProg l1 =
 
 
 -- | The main compiler pipeline
-passes :: Config -> L1.Prog -> StateT CompileState IO L4.Prog
+passes :: Config -> L1.Prog1 -> StateT CompileState IO L4.Prog
 passes config@Config{mode,dynflags} l1 = do
       let packed     = gopt Opt_Packed dynflags
           biginf     = gopt Opt_BigInfiniteRegions dynflags
@@ -428,7 +428,7 @@ passes config@Config{mode,dynflags} l1 = do
       l3 <- go "unariser"       unariser                l3
       l3 <- go "L3.typecheck"   L3.tcProg               l3
       l3 <- go "L3.flatten"     flattenL3               l3
-      let mainTy = fmap snd $   L3.mainExp              l3
+      let mainTy = fmap snd $   L1.mainExp              l3
       -- Note: L3 -> L4
       l4 <- go "lower" (lower (packed,mainTy))          l3
 
@@ -447,7 +447,7 @@ passes config@Config{mode,dynflags} l1 = do
 
 -- | Replace the main function with benchmark code
 --
-benchMainExp :: Config -> L1.Prog -> Var -> L1.Prog
+benchMainExp :: Config -> L1.Prog1 -> Var -> L1.Prog1
 benchMainExp Config{benchInput,dynflags} l1 fnname = do
   let tmp = "bnch"
       (arg@(L1.PackedTy tyc _),ret) = L1.getFunTy fnname l1

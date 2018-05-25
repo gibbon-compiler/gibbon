@@ -43,7 +43,7 @@ import Control.Monad
 import Gibbon.GenericOps
 import Gibbon.Common
 import Gibbon.L2.Syntax as L2
-import qualified Gibbon.L1.Syntax as L1
+import Gibbon.L1.Syntax as L1
 
 
 -- | Data structure that accumulates what we know about the relationship
@@ -92,7 +92,7 @@ findEnd l EndOfRel{endOf,equivTo} =
 
 -- | Process an L2 Prog and thread through explicit end-witnesses.
 -- Requires Gensym and runs in SyM. Assumes the Prog has been flattened.
-routeEnds :: Prog -> SyM Prog
+routeEnds :: Prog2 -> SyM Prog2
 routeEnds Prog{ddefs,fundefs,mainExp} = do
 
   -- Handle functions in two steps (to account for mutual recursion):
@@ -122,18 +122,18 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
     -- Helper functions:
 
     -- | Process function types (but don't handle bodies)
-    fdty :: L2.FunDef -> SyM L2.FunDef
-    fdty L2.FunDef{funName,funTy,funArg,funBody} =
-        do let (ArrowTy locin tyin eff tyout _locout) = funTy
+    fdty :: L2.FunDef2 -> SyM L2.FunDef2
+    fdty FunDef{funName,funTy,funArg,funBody} =
+        do let (ArrowTy2 locin tyin eff tyout _locout) = funTy
                handleLoc (LRM l r m) ls = if S.member (Traverse l) eff then (LRM l r m):ls else ls
                locout' = L.map EndOf $ L.foldr handleLoc [] locin
-           return L2.FunDef{funName,funTy=(ArrowTy locin tyin eff tyout locout'),funArg,funBody}
+           return FunDef{funName,funTy=(ArrowTy2 locin tyin eff tyout locout'),funArg,funBody}
 
 
     -- | Process function bodies
-    fd :: FunDefs -> L2.FunDef -> SyM L2.FunDef
-    fd fns L2.FunDef{funName,funTy,funArg,funBody} =
-        do let (ArrowTy locin tyin eff _tyout _locout) = funTy
+    fd :: FunDefs2 -> L2.FunDef2 -> SyM L2.FunDef2
+    fd fns FunDef{funName,funTy,funArg,funBody} =
+        do let (ArrowTy2 locin tyin eff _tyout _locout) = funTy
                handleLoc (LRM l _r _m) ls = if S.member (Traverse l) eff then l:ls else ls
                retlocs = L.foldr handleLoc [] locin
                lenv = case tyin of
@@ -146,7 +146,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                               M.empty fds
                env2 = Env2 initVEnv (initFEnv fundefs)
            funBody' <- exp fns retlocs emptyRel lenv M.empty env2 funBody
-           return L2.FunDef{funName,funTy,funArg,funBody=funBody'}
+           return FunDef{funName,funTy,funArg,funBody=funBody'}
 
 
     -- | Process expressions.
@@ -157,7 +157,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
     -- 4. a map of var to location
     -- 5. a map from location to location after it
     -- 6. the expression to process
-    exp :: FunDefs -> [LocVar] -> EndOfRel -> M.Map Var LocVar ->
+    exp :: FunDefs2 -> [LocVar] -> EndOfRel -> M.Map Var LocVar ->
            M.Map LocVar LocVar -> Env2 Ty2 -> L Exp2 -> SyM (L Exp2)
     exp fns retlocs eor lenv afterenv env2 (L p e) = fmap (L p) $
         case e of
@@ -400,7 +400,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                mkRet _ e = error $ "Expected variable reference in tail call, got "
                            ++ (show e)
 
-               funtype :: Var -> ArrowTy Ty2
+               funtype :: Var -> ArrowTy2
                funtype v = case M.lookup v fns of
                              Nothing -> error $ "Function " ++ (show v) ++ " not found"
                              Just fundef -> funTy fundef

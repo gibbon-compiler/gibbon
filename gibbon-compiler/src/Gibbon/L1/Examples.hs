@@ -18,19 +18,19 @@ treeDD = (fromListDD [DDef "Tree"
                       , ("Node",[(False,treeTy)
                                 ,(False,treeTy)])]])
 
-mkAdd1Prog :: L Exp1 -> Maybe (L Exp1, Ty1) -> Prog
+mkAdd1Prog :: L Exp1 -> Maybe (L Exp1, Ty1) -> Prog1
 mkAdd1Prog bod mainExp = Prog treeDD
                               (M.fromList [("add1",mkAdd1Fun bod)])
                               mainExp
 
-mkAdd1Fun :: L Exp1 -> FunDef
+mkAdd1Fun :: L Exp1 -> FunDef1
 mkAdd1Fun bod = FunDef "add1" "tr" (treeTy,treeTy) bod
 
 ----------------
 
 -- | The basic form of the add1 program where recursions happen
 -- immediately as arguments to the data-constructor.
-add1Prog :: Prog
+add1Prog :: Prog1
 add1Prog = mkAdd1Prog exadd1Bod Nothing
 
 exadd1Bod :: L Exp1
@@ -68,17 +68,17 @@ exadd1BodLetRight = l$
       ]
 
 -- | Add1 program with let bindings, recurring in left-to-right order.
-add1ProgLetLeft :: Prog
+add1ProgLetLeft :: Prog1
 add1ProgLetLeft = mkAdd1Prog exadd1BodLetLeft Nothing
 
 -- | Add1 program with let bindings, recurring in right-to-left order.
-add1ProgLetRight :: Prog
+add1ProgLetRight :: Prog1
 add1ProgLetRight = mkAdd1Prog exadd1BodLetRight Nothing
 
 
 -- | An even more challenging case where there is an (apparent) data
 -- dependency where x2 depends on y2.
-add1ProgChallenge :: Prog
+add1ProgChallenge :: Prog1
 add1ProgChallenge =
     Prog treeDD
          (M.fromList [ ("add1",mkAdd1Fun bod)
@@ -101,7 +101,7 @@ add1ProgChallenge =
       ]
 
 -- | This program is a challenge because a packed value flows to two destinations.
-add1ProgSharing :: Prog
+add1ProgSharing :: Prog1
 add1ProgSharing = Prog treeDD (M.fromList [("add1",mkAdd1Fun bod)]) Nothing
   where
    bod = l$

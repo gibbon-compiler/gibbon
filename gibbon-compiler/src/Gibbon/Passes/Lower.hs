@@ -33,7 +33,7 @@ import qualified Data.List as L
 
 import Gibbon.GenericOps
 import Gibbon.Common
-import Gibbon.L1.Syntax hiding (FunDef(..), Prog(..), progToEnv)
+import Gibbon.L1.Syntax hiding (progToEnv)
 import Gibbon.L3.Syntax
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L4.Syntax as T
@@ -289,7 +289,7 @@ addPrintToTail pkd ty tl0 =
 --
 -- First argument indicates (1) whether we're inpacked mode, and (2)
 -- the pre-cursorize type of the mainExp, if there is a mainExp.
-lower :: (Bool,Maybe Ty3) -> Prog -> SyM T.Prog
+lower :: (Bool,Maybe Ty3) -> Prog3 -> SyM T.Prog
 lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
   mn <- case mainExp of
           Nothing    -> return Nothing
@@ -303,7 +303,7 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
 --  T.Prog <$> mapM fund (M.elems fundefs) <*> pure mn
 
  where
-  fund :: FunDef -> SyM T.FunDecl
+  fund :: FunDef3 -> SyM T.FunDecl
   fund FunDef{funName,funTy=(inty, outty),funArg,funBody} = do
       (args,bod) <- case inty of
                       -- ASSUMPTION: no nested tuples after unariser:

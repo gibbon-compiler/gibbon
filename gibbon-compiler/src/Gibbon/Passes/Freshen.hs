@@ -18,7 +18,7 @@ import Gibbon.L1.Syntax as L1
 -- lookup.  We should standardize on a fast symbol-map.
 
 -- | Rename all local variables.
-freshNames :: L1.Prog -> SyM L1.Prog
+freshNames :: L1.Prog1 -> SyM L1.Prog1
 freshNames (L1.Prog defs funs main) =
     do main' <- case main of
                   Nothing -> return Nothing

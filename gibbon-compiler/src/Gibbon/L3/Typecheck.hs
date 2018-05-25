@@ -16,7 +16,7 @@ import Prelude hiding (exp)
 
 import Gibbon.Common
 import Gibbon.L1.Typecheck hiding (tcProg, tcExp)
-import Gibbon.L1.Syntax hiding (FunDef(..), Prog(..), progToEnv)
+import Gibbon.L1.Syntax hiding (progToEnv)
 import Gibbon.L3.Syntax
 
 -- | Typecheck a L1 expression
@@ -295,7 +295,7 @@ tcExp ddfs env exp@(L p ex) =
 
 -- | Typecheck a L1 program
 --
-tcProg :: Prog -> SyM Prog
+tcProg :: Prog3 -> SyM Prog3
 tcProg prg@Prog{ddefs,fundefs,mainExp} = do
 
   -- Handle functions
