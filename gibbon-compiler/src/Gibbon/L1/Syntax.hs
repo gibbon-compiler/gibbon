@@ -437,7 +437,7 @@ mapLocs :: (e l2 d -> e l2 d) -> PreExp e l2 d -> PreExp e l2 d
 mapLocs fn = visitExp id fn id
 
 -- | Transform the expressions within a program.
-mapExprs :: (L Exp1 -> L Exp1) -> Prog1 -> Prog1
+mapExprs :: (e -> e) -> Prog e -> Prog e
 mapExprs fn prg@Prog{fundefs,mainExp} =
   let mainExp' = case mainExp of
                    Nothing -> Nothing

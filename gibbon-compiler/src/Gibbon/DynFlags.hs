@@ -7,7 +7,7 @@ module Gibbon.DynFlags
   ) where
 
 #if !MIN_VERSION_base(4,11,0)
-import           Data.Monoid
+import Data.Monoid
 #endif
 import Data.Set as S
 import Options.Applicative

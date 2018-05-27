@@ -234,10 +234,10 @@ sepline :: String
 sepline = replicate 80 '='
 
 
-data CompileState =
-     CompileState { cnt :: Int -- ^ Gensym counter
-                  , result :: Maybe Value -- ^ Result of evaluating output of prior pass, if available.
-                  }
+data CompileState = CompileState
+    { cnt :: Int -- ^ Gensym counter
+    , result :: Maybe Value -- ^ Result of evaluating output of prior pass, if available.
+    }
 
 -- | Compiler entrypoint, given a full configuration and a list of
 -- files to process, do the thing.
@@ -362,6 +362,94 @@ withPrintInterpProg l1 =
   else
     return Nothing
 
+-- | Compile and run the generated code if appropriate
+--
+compileAndRunExe :: Config -> FilePath -> IO String
+compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
+  exepath <- makeAbsolute exe
+  clearFile exepath
+
+  -- (Stage 4) Codegen finished, generate a binary
+  dbgPrintLn minChatLvl cmd
+  cd <- system cmd
+  case cd of
+    ExitFailure n -> error$ (show backend) ++" compiler failed!  Code: "++show n
+    ExitSuccess -> do
+      -- (Stage 5) Binary compiled, run if appropriate
+      let runExe extra = do
+            (_,Just hout,_, phandle) <- createProcess (shell (exepath++extra))
+                                                 { std_out = CreatePipe }
+            exitCode <- waitForProcess phandle
+            case exitCode of
+                ExitSuccess   -> hGetContents hout
+                ExitFailure n -> die$ "Treelang program exited with error code  "++ show n
+
+      runConf <- getRunConfig [] -- FIXME: no command line option atm.  Just env vars.
+      case benchInput of
+        -- CONVENTION: In benchmark mode we expect the generated executable to take 2 extra params:
+        Just _ | isBench mode   -> runExe $ " " ++show (rcSize runConf) ++ " " ++ show (rcIters runConf)
+        _      | mode == RunExe -> runExe ""
+        _                                -> return ""
+  where outfile = getOutfile backend fp cfile
+        exe = getExeFile backend fp exefile
+        pointer = gopt Opt_Pointer $ dynflags cfg
+        links = if pointer then " -lgc " else ""
+        cmd = compilationCmd backend cfg ++ outfile ++ links ++ " -o " ++ exe
+
+
+-- | Return the correct filename to store the generated code,
+-- based on the backend used, and override options specified
+--
+getOutfile :: Backend -> FilePath -> Maybe FilePath -> FilePath
+getOutfile _ _ (Just override) = override
+getOutfile backend fp Nothing =
+  replaceExtension fp $
+    case backend of
+      C    -> ".c"
+      LLVM -> ".ll"
+
+-- | Return the correct filename for the generated exe,
+-- based on the backend used, and override options specified
+--
+getExeFile :: Backend -> FilePath -> Maybe FilePath -> FilePath
+getExeFile _ _ (Just override) = override
+getExeFile backend fp Nothing =
+  let fp' = case backend of
+               C -> fp
+               LLVM -> replaceFileName fp ((takeBaseName fp) ++ "_llvm")
+  in replaceExtension fp' ".exe"
+
+-- | Compilation command
+--
+compilationCmd :: Backend -> Config -> String
+compilationCmd LLVM _   = "clang-5.0 lib.o "
+compilationCmd C config = (cc config) ++" -std=gnu11 "
+                          ++(if bumpAlloc then "-DBUMPALLOC " else "")
+                          ++(if pointer then "-D_POINTER " else "")
+                          ++(optc config)++"  "
+                          ++(if warnc then "" else suppress_warnings)
+  where dflags = dynflags config
+        bumpAlloc = gopt Opt_BumpAlloc dflags
+        pointer = gopt Opt_Pointer dflags
+        warnc = gopt Opt_Warnc dflags
+
+-- |
+isBench :: Mode -> Bool
+isBench (Bench _) = True
+isBench _ = False
+
+-- | The debug level at which we start to call the interpreter on the program during compilation.
+interpDbgLevel :: Int
+interpDbgLevel = 1
+
+-- |
+clearFile :: FilePath -> IO ()
+clearFile fileName = removeFile fileName `catch` handleErr
+  where
+   handleErr e | isDoesNotExistError e = return ()
+               | otherwise = throwIO e
+
+--------------------------------------------------------------------------------
 
 -- | The main compiler pipeline
 passes :: Config -> L1.Prog1 -> StateT CompileState IO L4.Prog
@@ -538,91 +626,3 @@ wrapInterp mode pass who fn x =
          ++show res2'++"\nExpected:  "++show res1
        dbgPrintLn 5 $ " [interp] answer was: "++sdoc res2'
      return p2
-
-
--- | Compile and run the generated code if appropriate
---
-compileAndRunExe :: Config -> FilePath -> IO String
-compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
-  exepath <- makeAbsolute exe
-  clearFile exepath
-
-  -- (Stage 4) Codegen finished, generate a binary
-  dbgPrintLn minChatLvl cmd
-  cd <- system cmd
-  case cd of
-    ExitFailure n -> error$ (show backend) ++" compiler failed!  Code: "++show n
-    ExitSuccess -> do
-      -- (Stage 5) Binary compiled, run if appropriate
-      let runExe extra = do
-            (_,Just hout,_, phandle) <- createProcess (shell (exepath++extra))
-                                                 { std_out = CreatePipe }
-            exitCode <- waitForProcess phandle
-            case exitCode of
-                ExitSuccess   -> hGetContents hout
-                ExitFailure n -> die$ "Treelang program exited with error code  "++ show n
-
-      runConf <- getRunConfig [] -- FIXME: no command line option atm.  Just env vars.
-      case benchInput of
-        -- CONVENTION: In benchmark mode we expect the generated executable to take 2 extra params:
-        Just _ | isBench mode   -> runExe $ " " ++show (rcSize runConf) ++ " " ++ show (rcIters runConf)
-        _      | mode == RunExe -> runExe ""
-        _                                -> return ""
-  where outfile = getOutfile backend fp cfile
-        exe = getExeFile backend fp exefile
-        pointer = gopt Opt_Pointer $ dynflags cfg
-        links = if pointer then " -lgc " else ""
-        cmd = compilationCmd backend cfg ++ outfile ++ links ++ " -o " ++ exe
-
-
--- | Return the correct filename to store the generated code,
--- based on the backend used, and override options specified
---
-getOutfile :: Backend -> FilePath -> Maybe FilePath -> FilePath
-getOutfile _ _ (Just override) = override
-getOutfile backend fp Nothing =
-  let ext = case backend of
-              C    -> ".c"
-              LLVM -> ".ll"
-  in replaceExtension fp ext
-
--- | Return the correct filename for the generated exe,
--- based on the backend used, and override options specified
---
-getExeFile :: Backend -> FilePath -> Maybe FilePath -> FilePath
-getExeFile _ _ (Just override) = override
-getExeFile backend fp Nothing =
-  let fp' = case backend of
-               C -> fp
-               LLVM -> replaceFileName fp ((takeBaseName fp) ++ "_llvm")
-  in replaceExtension fp' ".exe"
-
--- | Compilation command
---
-compilationCmd :: Backend -> Config -> String
-compilationCmd LLVM _   = "clang-5.0 lib.o "
-compilationCmd C config = (cc config) ++" -std=gnu11 "
-                          ++(if bumpAlloc then "-DBUMPALLOC " else "")
-                          ++(if pointer then "-D_POINTER " else "")
-                          ++(optc config)++"  "
-                          ++(if warnc then "" else suppress_warnings)
-  where dflags = dynflags config
-        bumpAlloc = gopt Opt_BumpAlloc dflags
-        pointer = gopt Opt_Pointer dflags
-        warnc = gopt Opt_Warnc dflags
-
--- |
-isBench :: Mode -> Bool
-isBench (Bench _) = True
-isBench _ = False
-
--- | The debug level at which we start to call the interpreter on the program during compilation.
-interpDbgLevel :: Int
-interpDbgLevel = 1
-
--- |
-clearFile :: FilePath -> IO ()
-clearFile fileName = removeFile fileName `catch` handleErr
-  where
-   handleErr e | isDoesNotExistError e = return ()
-               | otherwise = throwIO e
