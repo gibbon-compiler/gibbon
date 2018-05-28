@@ -1,4 +1,4 @@
-
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveAnyClass     #-}
 {-# LANGUAGE DeriveGeneric      #-}
 
@@ -16,6 +16,7 @@ module Gibbon.L4.Syntax
     ) where
 
 import           Control.DeepSeq
+import           Control.Monad.State.Strict
 import           Data.Int
 import           Data.Maybe
 import           GHC.Generics (Generic)
@@ -213,7 +214,7 @@ data FunDecl = FunDecl
 --
 -- WARNING: presently this may invoke the given function more than
 -- once and duplicate code.
-withTail :: (Tail,Ty) -> ([Triv] -> Tail) -> SyM Tail
+withTail :: MonadState Int m => (Tail,Ty) -> ([Triv] -> Tail) -> m Tail
 withTail (tl0,retty) fn =
   let go x = withTail (x,retty) fn in -- Warning: assumes same type.
   case tl0 of

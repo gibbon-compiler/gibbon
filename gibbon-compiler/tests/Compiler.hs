@@ -53,7 +53,7 @@ testDir = makeValid ("examples" </> "build_tmp")
 --   It's divided into 2 functions for easy debugging. There's a good chance that we'd
 --   want to inspect the output of Cursorize in most cases
 runT :: Prog2 -> L3.Prog3
-runT prg = fst $ runSyM 0 $ do
+runT prg = fst $ defaultRunPassM $ do
     l2 <- flattenL2 prg
     l2 <- inferRegScope Infinite l2
     l2 <- inferEffects l2
@@ -68,7 +68,7 @@ runT prg = fst $ runSyM 0 $ do
 
 
 run2T :: L3.Prog3 -> L4.Prog
-run2T l3 = fst $ runSyM 0 $ do
+run2T l3 = fst $ defaultRunPassM $ do
     l3 <- flattenL3 l3
     -- l3 <- findWitnesses l3
     -- l3 <- shakeTree l3

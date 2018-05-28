@@ -462,7 +462,7 @@ tcExps _ _ _ _ _ ts [] = return ([],ts)
 
 
 -- | Main entry point, checks a whole program (functions and main body).
-tcProg :: Prog2 -> SyM Prog2
+tcProg :: Prog2 -> PassM Prog2
 tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
 
   -- Handle functions
@@ -485,7 +485,7 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
 
   where
 
-    fd :: L2.FunDef2 -> SyM ()
+    fd :: L2.FunDef2 -> PassM ()
     fd FunDef{funTy,funArg,funBody} = do
         let env = extendEnv (Env2 M.empty M.empty) funArg (arrIn funTy)
             constrs = funConstrs (locVars funTy)

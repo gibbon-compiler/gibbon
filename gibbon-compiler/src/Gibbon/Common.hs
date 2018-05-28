@@ -5,6 +5,7 @@
 -- {-# LANGUAGE DeriveAnyClass #-} -- Actually breaks Applicative SymM deriving!
 -- {-# LANGUAGE PartialTypeSignatures #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -36,9 +37,15 @@ module Gibbon.Common
        , vEnv, fEnv, extendVEnv, extendsVEnv, extendFEnv, emptyEnv2
        , lookupVEnv
 
-         -- * Interpreter configuration
+         -- * Interpreter
        , RunConfig(..), getRunConfig
        , Store(..), Buffer(..), SerializedVal(..), Value(..), Log
+
+         -- * PassM monad
+       , PassM, runPassM, defaultRunPassM
+
+         -- * Gibbon configuration
+       , Config(..), Input(..), Mode(..), Backend(..), defaultConfig
 
          -- * Data definitions
        , DDef(..), DDefs, fromListDD, emptyDD, insertDD
@@ -65,6 +72,7 @@ module Gibbon.Common
 import Control.DeepSeq (NFData(..), force)
 import Control.Exception (evaluate)
 import Control.Monad.State.Strict
+import Control.Monad.Reader
 import Data.ByteString.Builder (Builder)
 import Data.Char
 import Data.List as L
@@ -77,14 +85,17 @@ import Data.Loc
 import Data.Word
 import GHC.Generics
 import Text.PrettyPrint.GenericPretty
-import Text.PrettyPrint.HughesPJ as PP
+import Text.PrettyPrint.HughesPJ as PP hiding (Mode(..), Style(..))
 import System.IO
 import System.Environment
 import System.IO.Unsafe (unsafePerformIO)
 import Debug.Trace
 import Language.C.Quote.CUDA (ToIdent, toIdent)
-
 import qualified Data.Foldable as F
+
+import Gibbon.DynFlags
+
+--------------------------------------------------------------------------------
 
 -- | Orphaned instance: read without source locations.
 instance Read t => Read (L t) where
@@ -116,6 +127,16 @@ toVar s = Var $ intern s
 -- | String concatenation on variables.
 varAppend :: Var -> Var -> Var
 varAppend x y = toVar (fromVar x ++ fromVar y)
+
+-- | Filter out non-C compatible characters.  This naively assumes it
+-- will get no conflicts.  Which may be correct if function names were
+-- gensym'd also....
+cleanFunName :: Var -> Var
+cleanFunName f =
+  toVar [ if isNumber c || isAlpha c
+          then c
+          else '_'
+        | c <- (fromVar f) ]
 
 type DataCon = String
 type TyCon   = String
@@ -379,7 +400,7 @@ newtype SyM a = SyM (State Int a)
  deriving (Functor, Applicative, Monad, MonadState Int)
 
 -- | Generate a unique symbol by attaching a numeric suffix.
-gensym :: Var -> SyM Var
+gensym :: MonadState Int m => Var -> m Var
 gensym v = state (\n -> (cleanFunName v `varAppend` toVar (show n), n + 1))
 
 -- | Generate alphabetic variables 'a','b',...
@@ -392,15 +413,73 @@ genLetter = do
 runSyM :: Int -> SyM a -> (a,Int)
 runSyM n (SyM a) = runState a n
 
--- | Filter out non-C compatible characters.  This naively assumes it
--- will get no conflicts.  Which may be correct if function names were
--- gensym'd also....
-cleanFunName :: Var -> Var
-cleanFunName f =
-  toVar [ if isNumber c || isAlpha c
-          then c
-          else '_'
-        | c <- (fromVar f) ]
+-- Pass monad:
+----------------------------------------
+
+-- | The monad used by core Gibbon passes to access 'Config' and other shared state.
+newtype PassM a = PassM (ReaderT Config SyM a)
+  deriving (Functor, Applicative, Monad, MonadReader Config, MonadState Int)
+
+runPassM :: Config -> Int -> PassM a -> (a,Int)
+runPassM cfg cnt (PassM pass) = runSyM cnt (runReaderT pass cfg)
+
+-- | A convenient wrapper over 'runPassM'.
+defaultRunPassM :: PassM a -> (a,Int)
+defaultRunPassM = runPassM defaultConfig 0
+
+-- Gibbon config:
+----------------------------------------
+
+-- | Overall configuration of the compiler, as determined by command
+-- line arguments and possible environment variables.
+data Config = Config
+  { input      :: Input
+  , mode       :: Mode -- ^ How to run, which backend.
+  , benchInput :: Maybe FilePath -- ^ What packed, binary .gpkd file to use as input.
+  , verbosity  :: Int   -- ^ Debugging output, equivalent to DEBUG env var.
+  , cc         :: String -- ^ C compiler to use
+  , optc       :: String -- ^ Options to the C compiler
+  , cfile      :: Maybe FilePath -- ^ Optional override to destination .c file.
+  , exefile    :: Maybe FilePath -- ^ Optional override to destination binary file.
+  , backend    :: Backend        -- ^ Compilation backend used
+  , dynflags   :: DynFlags
+  }
+  deriving (Show,Read,Eq,Ord)
+
+-- | What input format to expect on disk.
+data Input = Haskell
+           | SExpr
+           | Unspecified
+  deriving (Show,Read,Eq,Ord,Enum,Bounded)
+
+-- | How far to run the compiler/interpreter.
+data Mode = ToParse  -- ^ Parse and then stop
+          | ToC      -- ^ Compile to C
+          | ToExe    -- ^ Compile to C then build a binary.
+          | RunExe   -- ^ Compile to executable then run.
+          | Interp2  -- ^ Interp late in the compiler pipeline.
+          | Interp1  -- ^ Interp early.
+          | Bench Var -- ^ Benchmark a particular function applied to the packed data within an input file.
+          | BenchInput FilePath -- ^ Hardcode the input file to the benchmark in the C code.
+  deriving (Show,Read,Eq,Ord)
+
+-- | Compilation backend used
+data Backend = C | LLVM
+  deriving (Show,Read,Eq,Ord)
+
+defaultConfig :: Config
+defaultConfig =
+  Config { input = Unspecified
+         , mode  = ToExe
+         , benchInput = Nothing
+         , verbosity = 1
+         , cc = "gcc"
+         , optc = " -O3  "
+         , cfile = Nothing
+         , exefile = Nothing
+         , backend = C
+         , dynflags = defaultDynFlags
+         }
 
 ----------------------------------------
 

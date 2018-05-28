@@ -85,12 +85,12 @@ class (Show e, Out e, FreeVars e) => Expression e where
 class Expression e => Flattenable e where
   -- | Process an expression into a fully-flattened expression which typically includes a
   -- larger number of temporary, local variable bindings.
-  gFlattenExp :: DDefs (TyOf e) -> Env2 (TyOf e) -> e -> SyM e
+  gFlattenExp :: DDefs (TyOf e) -> Env2 (TyOf e) -> e -> PassM e
 
   -- | A private method.  Gather the bindings from a subexpression,
   -- but do not "discharge" them by creating a let expression.  They
   -- are in order, so later may depend on earlier.
-  gFlattenGatherBinds :: DDefs (TyOf e) -> Env2 (TyOf e) -> e -> SyM ([Binds e],e)
+  gFlattenGatherBinds :: DDefs (TyOf e) -> Env2 (TyOf e) -> e -> PassM ([Binds e],e)
 
 type Binds e = (Var,[LocOf e],TyOf e, e)
 

@@ -15,7 +15,7 @@ import Gibbon.Passes.AddLayout
 import Gibbon.Passes.InferEffects
 import Gibbon.L2.Examples
 
-runner prg = fst $ runSyM 0 $ do
+runner prg = fst $ defaultRunPassM $ do
   l2 <- inferEffects prg
   let (needs,_) = needsLayout l2
   return needs

@@ -18,7 +18,7 @@ import Gibbon.L1.Syntax as L1
 -- lookup.  We should standardize on a fast symbol-map.
 
 -- | Rename all local variables.
-freshNames :: L1.Prog1 -> SyM L1.Prog1
+freshNames :: L1.Prog1 -> PassM L1.Prog1
 freshNames (L1.Prog defs funs main) =
     do main' <- case main of
                   Nothing -> return Nothing
@@ -33,7 +33,7 @@ freshNames (L1.Prog defs funs main) =
                  let nam' = cleanFunName nam
                  return (nam', FunDef nam' narg' (targ,ty) bod')
 
-          freshExp :: [(Var,Var)] -> L Exp1 -> SyM (L L1.Exp1)
+          freshExp :: [(Var,Var)] -> L Exp1 -> PassM (L L1.Exp1)
           freshExp vs (L sloc exp) = fmap (L sloc) $
             case exp of
               L1.Ext _     -> return exp

@@ -12,13 +12,13 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 
 import Gibbon.GenericOps
-import Gibbon.Common (SyM, dbgTrace)
+import Gibbon.Common (PassM, dbgTrace)
 import Gibbon.L1.Syntax
 import Gibbon.L3.Syntax
 
 
 -- | Drop all unreferenced let-bindings.
-shakeTree :: Prog3 -> SyM Prog3
+shakeTree :: Prog3 -> PassM Prog3
 shakeTree prg@Prog{fundefs,mainExp} = return $
   prg { fundefs = M.map fd fundefs
       , mainExp = case mainExp of

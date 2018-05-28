@@ -10,7 +10,7 @@ import Gibbon.L4.Syntax
 -- Ensure that any calls to `free` are the last thing in the program.
 -- TODO: We should figure out a way to do this in Lower. Also `withTail`
 -- _does_ end up duplicating some calls to `free`. Need to fix that.
-rearrangeFree :: Prog -> SyM Prog
+rearrangeFree :: Prog -> PassM Prog
 rearrangeFree (Prog fundefs mainExp) = do
   fundefs' <- mapM rearrangeFreeFn fundefs
   mainExp' <- case mainExp of
@@ -19,12 +19,12 @@ rearrangeFree (Prog fundefs mainExp) = do
                 Nothing -> return Nothing
   return $ Prog fundefs' mainExp'
 
-rearrangeFreeFn :: FunDecl -> SyM FunDecl
+rearrangeFreeFn :: FunDecl -> PassM FunDecl
 rearrangeFreeFn f@FunDecl{funBody} = do
   bod' <- rearrangeFreeExp Nothing funBody
   return $ f {funBody = bod'}
 
-rearrangeFreeExp :: Maybe (Tail -> Tail) -> Tail -> SyM Tail
+rearrangeFreeExp :: Maybe (Tail -> Tail) -> Tail -> PassM Tail
 rearrangeFreeExp frees tail =
   case tail of
     LetPrimCallT binds prim rands bod ->

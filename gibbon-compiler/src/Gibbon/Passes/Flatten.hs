@@ -32,7 +32,7 @@ import qualified Gibbon.L3.Syntax as L3
 --   Note that it does not require tail expressions to be trivial.
 --   For example, it allows AppE and PrimAppE in the body of a
 --   let-expression.
-flattenL1 :: L1.Prog1 -> SyM L1.Prog1
+flattenL1 :: L1.Prog1 -> PassM L1.Prog1
 flattenL1 prg@(L1.Prog defs funs main) = do
     main' <- case main of
                Just (e,ty) -> Just <$> (,ty) <$> gFlattenExp defs env20 e
@@ -48,7 +48,7 @@ flattenL1 prg@(L1.Prog defs funs main) = do
 
     env20 = L1.progToEnv prg
 
-flattenL2 :: Flattenable (L2.E2Ext Var (UrTy LocVar)) => L2.Prog2 -> SyM L2.Prog2
+flattenL2 :: Flattenable (L2.E2Ext Var (UrTy LocVar)) => L2.Prog2 -> PassM L2.Prog2
 flattenL2 prg@(Prog defs funs main) = do
     main' <-
       case main of
@@ -66,7 +66,7 @@ flattenL2 prg@(Prog defs funs main) = do
     env20 = L2.progToEnv prg
 
 
-flattenL3 :: L3.Prog3 -> SyM L3.Prog3
+flattenL3 :: L3.Prog3 -> PassM L3.Prog3
 flattenL3 prg@(Prog defs funs main) = do
     main' <-
       case main of
@@ -115,9 +115,9 @@ exp :: forall l e .
     => DDefs (TyOf (L (Exp e l)))
     -> Env2 (TyOf (L (Exp e l)))
     -> L (Exp e l)
-    -> SyM ([Binds (L (Exp e l))], L (Exp e l))
+    -> PassM ([Binds (L (Exp e l))], L (Exp e l))
 exp ddfs env2 (L sloc e0) =
-  let triv :: String -> L (Exp e l) -> SyM ([Binds (L (Exp e l))], L (Exp e l))
+  let triv :: String -> L (Exp e l) -> PassM ([Binds (L (Exp e l))], L (Exp e l))
       triv m e = -- Force something to be trivial
         if isTrivial e
         then return ([],e)
@@ -127,7 +127,7 @@ exp ddfs env2 (L sloc e0) =
                 return ( bnds++[(tmp,[],ty,e')]
                        , L NoLoc $ VarE tmp)
 
-      go :: L (Exp e l) -> SyM ([Binds (L (Exp e l))], L (Exp e l))
+      go :: L (Exp e l) -> PassM ([Binds (L (Exp e l))], L (Exp e l))
       go = exp ddfs env2
 
       gols f ls m = do (bndss,ls') <- unzip <$> mapM (triv m) ls

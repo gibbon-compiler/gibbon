@@ -17,10 +17,10 @@ import Gibbon.L3.Syntax
 
 
 -- | Strip out the NewBuf bindings up until the point control flow diverges.
-hoistNewBuf :: Prog3 -> SyM Prog3
+hoistNewBuf :: Prog3 -> PassM Prog3
 hoistNewBuf = mapMExprs hoistExp
 
-hoistExp :: ignored -> L Exp3 -> SyM (L Exp3)
+hoistExp :: ignored -> L Exp3 -> PassM (L Exp3)
 hoistExp _ ex0 = return $ gocap ex0
   where
 

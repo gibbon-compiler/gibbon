@@ -142,4 +142,4 @@ t1Prog = Prog {ddefs = M.fromList [],
 -- | upon successful typechecking, it just returns the same program
 case_run_tcProg :: Assertion
 case_run_tcProg = t1Prog @=? res
-  where res = fst $ runSyM 0 $ tcProg t1Prog
+  where res = fst $ defaultRunPassM $ tcProg t1Prog

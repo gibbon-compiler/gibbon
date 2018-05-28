@@ -127,7 +127,7 @@ type RegEnv = M.Map LocVar Var
 
 type Deps = [(Var, Var, [Var])]
 
-boundsCheck :: L2.Prog2 -> SyM L2.Prog2
+boundsCheck :: L2.Prog2 -> PassM L2.Prog2
 boundsCheck Prog{ddefs,fundefs,mainExp} = do
   fds' <- mapM (boundsCheckFn ddefs fundefs) $ M.elems fundefs
   let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
@@ -138,7 +138,7 @@ boundsCheck Prog{ddefs,fundefs,mainExp} = do
   --                 boundsCheckExp ddefs fundefs M.empty env2 (depList mn) S.empty mn
   return $ Prog ddefs fundefs' mainExp
 
-boundsCheckFn :: DDefs Ty2 -> FunDefs2 -> L2.FunDef2 -> SyM L2.FunDef2
+boundsCheckFn :: DDefs Ty2 -> FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
 boundsCheckFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
   let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionVar r)) (locVars funTy)
       initTyEnv  = M.singleton funArg (arrIn funTy)
@@ -148,7 +148,7 @@ boundsCheckFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
   return $ f {funBody = bod'}
 
 boundsCheckExp :: DDefs Ty2 -> FunDefs2 -> RegEnv -> Env2 Ty2 -> Deps -> S.Set Var
-               -> L L2.Exp2 -> SyM (L L2.Exp2)
+               -> L L2.Exp2 -> PassM (L L2.Exp2)
 boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
   case ex of
     LetE (v, locs, ty, rhs@(L _ (DataConE lc dcon _))) bod -> do

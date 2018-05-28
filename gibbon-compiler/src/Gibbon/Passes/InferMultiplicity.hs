@@ -21,7 +21,7 @@ import Gibbon.L2.Syntax as L2
 -- All regions are "infinite" right now
 
 -- | Infer multiplicity for a program annotated with regions & locations
-inferRegScope :: Multiplicity -> L2.Prog2 -> SyM L2.Prog2
+inferRegScope :: Multiplicity -> L2.Prog2 -> PassM L2.Prog2
 inferRegScope mul Prog{ddefs,fundefs,mainExp} = do
   let fds' = map (inferRegScopeFun mul) $ M.elems fundefs
       fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'

@@ -80,7 +80,7 @@ type TEnv = M.Map Var Ty2
 type DepEnv = M.Map LocVar [(Var,[()],L3.Ty3,L L3.Exp3)]
 
 -- |
-cursorize :: DynFlags -> Prog2 -> SyM L3.Prog3
+cursorize :: DynFlags -> Prog2 -> PassM L3.Prog3
 cursorize dflags Prog{ddefs,fundefs,mainExp} = do
   fns' <- mapM (cursorizeFunDef dflags ddefs fundefs . snd) (M.toList fundefs)
   let fundefs' = M.fromList $ L.map (\f -> (funName f, f)) fns'
@@ -97,7 +97,7 @@ cursorize dflags Prog{ddefs,fundefs,mainExp} = do
   return $ Prog ddefs' fundefs' mainExp'
 
 -- |
-cursorizeFunDef :: DynFlags -> DDefs Ty2 -> FunDefs2 -> FunDef2 -> SyM L3.FunDef3
+cursorizeFunDef :: DynFlags -> DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM L3.FunDef3
 cursorizeFunDef dflags ddefs fundefs FunDef{funName,funTy,funArg,funBody} =
   let inLocs  = inLocVars funTy
       outLocs = outLocVars funTy
@@ -218,7 +218,7 @@ cursorizeFunDef dflags ddefs fundefs FunDef{funName,funTy,funArg,funBody} =
 
 
 -- | Cursorize expressions NOT producing `Packed` values
-cursorizeExp :: DynFlags -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> L Exp2 -> SyM (L L3.Exp3)
+cursorizeExp :: DynFlags -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> L Exp2 -> PassM (L L3.Exp3)
 cursorizeExp dflags ddfs fundefs denv tenv (L p ex) = L p <$>
   case ex of
     VarE v    -> return $ VarE v
@@ -326,7 +326,7 @@ cursorizeExp dflags ddfs fundefs denv tenv (L p ex) = L p <$>
 
 -- Cursorize expressions producing `Packed` values
 cursorizePackedExp :: DynFlags -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> L Exp2
-                   -> SyM (DiExp (L L3.Exp3))
+                   -> PassM (DiExp (L L3.Exp3))
 cursorizePackedExp dflags ddfs fundefs denv tenv (L p ex) =
   case ex of
     -- Here the allocation has already been performed:
@@ -452,7 +452,7 @@ Reason: unariser can only eliminate direct projections of this form.
       let
           -- Return (start,end) cursors
           -- The final return value lives at the position of the out cursors:
-          go2 :: Var -> [(L Exp2, Ty2)] -> SyM L3.Exp3
+          go2 :: Var -> [(L Exp2, Ty2)] -> PassM L3.Exp3
           go2 d [] = return $ MkProdE [l$ VarE sloc, l$ VarE d]
 
           go2 d ((rnd, ty):rst) = do
@@ -604,7 +604,7 @@ But Infinite regions do not support sizes yet. Re-enable this later.
 --     safely drop them from `locs`.
 --
 -- (2) We update `arg` so that all packed values in it only have start cursors.
-cursorizeAppE :: DynFlags -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> L Exp2 -> SyM L3.Exp3
+cursorizeAppE :: DynFlags -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> L Exp2 -> PassM L3.Exp3
 cursorizeAppE dflags ddfs fundefs denv tenv (L _ ex) =
   case ex of
     AppE f locs arg -> do
@@ -648,7 +648,7 @@ Other bindings are straightforward projections of the processed RHS.
 
 -}
 cursorizeLet :: DynFlags -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> Bool
-             -> (Var, [Var], Ty2, L Exp2) -> L Exp2 -> SyM L3.Exp3
+             -> (Var, [Var], Ty2, L Exp2) -> L Exp2 -> PassM L3.Exp3
 cursorizeLet dflags ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
     | isPackedTy ty = do
         rhs' <- fromDi <$> cursorizePackedExp dflags ddfs fundefs denv tenv rhs
@@ -751,7 +751,7 @@ cursorizeLet dflags ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
 -- returned cursor. Otherwise, just process the body. it'll have the correct
 -- instructions to process other bound locations
 unpackDataCon :: DynFlags -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> Bool -> Var
-              -> (DataCon, [(Var, Var)], L Exp2) -> SyM (DataCon, [t], L L3.Exp3)
+              -> (DataCon, [(Var, Var)], L Exp2) -> PassM (DataCon, [t], L L3.Exp3)
 unpackDataCon dflags ddfs fundefs denv1 tenv isPacked scrtCur (dcon,vlocs,rhs) = do
 
   let indrVars = if isIndrDataCon dcon
@@ -775,7 +775,7 @@ unpackDataCon dflags ddfs fundefs denv1 tenv isPacked scrtCur (dcon,vlocs,rhs) =
 
         -- Loop over fields.  Issue reads to get out all Ints. Otherwise, just bind vars to locations
         --
-        go :: (Show t) => Var -> [(Var, Var)] -> [UrTy t] -> [(Var, Var)] -> Bool -> Bool -> DepEnv -> TEnv -> SyM (L L3.Exp3)
+        go :: (Show t) => Var -> [(Var, Var)] -> [UrTy t] -> [(Var, Var)] -> Bool -> Bool -> DepEnv -> TEnv -> PassM (L L3.Exp3)
         go _c [] [] _ _ _ denv env = processRhs denv env
         go cur ((v,loc):rst) (ty:rtys) indrVars canBind hasIndrs denv env =
           case ty of

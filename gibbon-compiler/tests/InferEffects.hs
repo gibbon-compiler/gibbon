@@ -13,7 +13,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.TH
 
-import Gibbon.Common hiding (FunDef)
+import Gibbon.Common
 import Gibbon.L2.Syntax as L2
 import Gibbon.L2.Examples
 import Gibbon.Passes.InferEffects
@@ -23,7 +23,7 @@ import Gibbon.L1.Syntax as L1
 assertInferEffects :: Prog2 -> Var -> Set Effect -> Assertion
 assertInferEffects prg fnName expected = expected @=? eff
   where -- run inferEffects and get the effect from it's type
-        Prog{fundefs} = fst $ runSyM 0 $ inferEffects prg
+        Prog{fundefs} = fst $ defaultRunPassM $ inferEffects prg
         eff = arrEffs $ funTy (fundefs ! fnName)
 
 

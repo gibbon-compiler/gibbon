@@ -14,7 +14,7 @@ import Gibbon.L2.Syntax as L2
 -- Maps a location to a region
 type LocEnv = M.Map LocVar Var
 
-removeCopies :: L2.Prog2 -> SyM L2.Prog2
+removeCopies :: L2.Prog2 -> PassM L2.Prog2
 removeCopies Prog{ddefs,fundefs,mainExp} = do
 
   ddefs' <- mapM (\ddf@DDef{dataCons} -> do
@@ -37,7 +37,7 @@ removeCopies Prog{ddefs,fundefs,mainExp} = do
                   removeCopiesExp ddefs' fundefs M.empty env2 mn
   return $ Prog ddefs' fundefs' mainExp'
 
-removeCopiesFn :: DDefs Ty2 -> FunDefs2 -> L2.FunDef2 -> SyM L2.FunDef2
+removeCopiesFn :: DDefs Ty2 -> FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
 removeCopiesFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
   let initLocEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionVar r)) (locVars funTy)
       initTyEnv  = M.singleton funArg (arrIn funTy)
@@ -45,7 +45,7 @@ removeCopiesFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
   bod' <- removeCopiesExp ddefs fundefs initLocEnv env2 funBody
   return $ f {funBody = bod'}
 
-removeCopiesExp :: DDefs Ty2 -> FunDefs2 -> LocEnv -> Env2 Ty2 -> L L2.Exp2 -> SyM (L L2.Exp2)
+removeCopiesExp :: DDefs Ty2 -> FunDefs2 -> LocEnv -> Env2 Ty2 -> L L2.Exp2 -> PassM (L L2.Exp2)
 removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
   case ex of
     AppE f [lin,lout] arg | isCopyFunName f -> do

@@ -87,72 +87,21 @@ import qualified Gibbon.Passes.LLVM.Codegen as LLVM
 
 -- | Find all local variables bound by case expressions which must be
 -- traversed, but which are not by the current program.
-findMissingTraversals :: L2.Prog2 -> SyM (Set Var)
+findMissingTraversals :: L2.Prog2 -> PassM (Set Var)
 findMissingTraversals _ = pure S.empty
 
 -- | Add calls to an implicitly-defined, polymorphic "traverse"
 -- function of type `p -> ()` for any packed type p.
-addTraversals :: Set Var -> L2.Prog2 -> SyM L2.Prog2
+addTraversals :: Set Var -> L2.Prog2 -> PassM L2.Prog2
 addTraversals _ p = pure p
 
 -- | Generate code
-lowerCopiesAndTraversals :: L2.Prog2 -> SyM L2.Prog2
+lowerCopiesAndTraversals :: L2.Prog2 -> PassM L2.Prog2
 lowerCopiesAndTraversals p = pure p
 
 
 -- Configuring and launching the compiler.
 --------------------------------------------------------------------------------
-
--- | Overall configuration of the compiler, as determined by command
--- line arguments and possible environment variables.
-data Config = Config
-  { input      :: Input
-  , mode       :: Mode -- ^ How to run, which backend.
-  , benchInput :: Maybe FilePath -- ^ What packed, binary .gpkd file to use as input.
-  , verbosity  :: Int   -- ^ Debugging output, equivalent to DEBUG env var.
-  , cc         :: String -- ^ C compiler to use
-  , optc       :: String -- ^ Options to the C compiler
-  , cfile      :: Maybe FilePath -- ^ Optional override to destination .c file.
-  , exefile    :: Maybe FilePath -- ^ Optional override to destination binary file.
-  , backend    :: Backend        -- ^ Compilation backend used
-  , dynflags   :: DynFlags
-  }
-  deriving (Show,Read,Eq,Ord)
-
--- | What input format to expect on disk.
-data Input = Haskell
-           | SExpr
-           | Unspecified
-  deriving (Show,Read,Eq,Ord,Enum,Bounded)
-
--- | How far to run the compiler/interpreter.
-data Mode = ToParse  -- ^ Parse and then stop
-          | ToC      -- ^ Compile to C
-          | ToExe    -- ^ Compile to C then build a binary.
-          | RunExe   -- ^ Compile to executable then run.
-          | Interp2  -- ^ Interp late in the compiler pipeline.
-          | Interp1  -- ^ Interp early.
-          | Bench Var -- ^ Benchmark a particular function applied to the packed data within an input file.
-          | BenchInput FilePath -- ^ Hardcode the input file to the benchmark in the C code.
-  deriving (Show,Read,Eq,Ord)
-
--- | Compilation backend used
-data Backend = C | LLVM
-  deriving (Show,Read,Eq,Ord)
-
-defaultConfig :: Config
-defaultConfig =
-  Config { input = Unspecified
-         , mode  = ToExe
-         , benchInput = Nothing
-         , verbosity = 1
-         , cc = "gcc"
-         , optc = " -O3  "
-         , cfile = Nothing
-         , exefile = Nothing
-         , backend = C
-         , dynflags = defaultDynFlags
-         }
 
 suppress_warnings :: String
 suppress_warnings = " -Wno-incompatible-pointer-types -Wno-int-conversion -Wno-int-to-pointer-cast "
@@ -560,20 +509,20 @@ benchMainExp Config{benchInput,dynflags} l1 fnname = do
 
 
 type PassRunner a b = (Printer b, Out b, NFData a, NFData b) =>
-                      String -> (a -> SyM b) -> a -> StateT CompileState IO b
+                      String -> (a -> PassM b) -> a -> StateT CompileState IO b
 
 
 -- | Run a pass and return the result
 --
 pass :: Config -> PassRunner a b
-pass _config who fn x = do
+pass config who fn x = do
   cs@CompileState{cnt} <- get
   x' <- if dbgLvl >= passChatterLvl
         then lift $ evaluate $ force x
         else return x
   lift$ dbgPrint passChatterLvl $ " [compiler] Running pass, " ++who
 
-  let (y,cnt') = runSyM cnt (fn x')
+  let (y,cnt') = runPassM config cnt (fn x')
   put cs{cnt=cnt'}
   y' <- if dbgLvl >= passChatterLvl
         then lift $ evaluate $ force y
@@ -606,7 +555,7 @@ passF config = pass config
 -- | Wrapper to enable running a pass AND interpreting the result.
 --
 wrapInterp :: (NFData p1, NFData p2, Interp p2, Out p2, Printer p2) =>
-              Mode -> PassRunner p1 p2 -> String -> (p1 -> SyM p2) -> p1 ->
+              Mode -> PassRunner p1 p2 -> String -> (p1 -> PassM p2) -> p1 ->
               StateT CompileState IO p2
 wrapInterp mode pass who fn x =
   do CompileState{result} <- get
