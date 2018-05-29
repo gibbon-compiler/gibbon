@@ -1187,7 +1187,7 @@ addCopyFns :: L1.Prog1 -> PassM L1.Prog1
 addCopyFns (L1.Prog dfs fds me) = do
   newFns <- mapM genCopyFn dfs
   prg <- flattenL1 $ L1.Prog dfs (fds `M.union` (M.mapKeys (mkCopyFunName . fromVar) newFns)) me
-  return $ inlineTriv $ prg
+  inlineTriv prg
 
 
 emptyEnv :: FullEnv

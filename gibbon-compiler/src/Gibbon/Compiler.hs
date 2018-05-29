@@ -21,6 +21,7 @@ module Gibbon.Compiler
 import           Control.DeepSeq
 import           Control.Exception
 import           Control.Monad.State.Strict
+import           Control.Monad.Reader (ask)
 import           Data.Set as S hiding (map)
 #if !MIN_VERSION_base(4,11,0)
 import           Data.Monoid
@@ -400,25 +401,52 @@ clearFile fileName = removeFile fileName `catch` handleErr
 
 --------------------------------------------------------------------------------
 
+-- | Replace the main function with benchmark code
+--
+benchMainExp :: L1.Prog1 -> PassM L1.Prog1
+benchMainExp l1 = do
+  Config{benchInput,dynflags,mode} <- ask
+  case mode of
+    Bench fnname -> do
+      let tmp = "bnch"
+          (arg@(L1.PackedTy tyc _),ret) = L1.getFunTy fnname l1
+          -- At L1, we assume ReadPackedFile has a single return value:
+          newExp = L1.LetE (toVar tmp, [],
+                            arg,
+                            l$ L1.PrimAppE
+                            (L1.ReadPackedFile benchInput tyc arg) [])
+                   $ l$ L1.LetE (toVar "benchres", [],
+                             ret,
+                             l$ L1.TimeIt
+                             (l$ L1.AppE fnname []
+                              (l$ L1.VarE (toVar tmp))) ret True)
+                   $
+                    -- FIXME: should actually return the result,
+                    -- as soon as we are able to print it.
+                   (if (gopt Opt_BenchPrint dynflags)
+                    then l$ L1.VarE (toVar "benchres")
+                    else l$ L1.PrimAppE L1.MkTrue [])
+      -- Initialize the main expression with a void type. The typechecker will fix it later.
+      return $ l1{ L1.mainExp = Just $ (l$ newExp, L1.ProdTy []) }
+    _ -> return l1
+
 -- | The main compiler pipeline
 passes :: Config -> L1.Prog1 -> StateT CompileState IO L4.Prog
-passes config@Config{mode,dynflags} l1 = do
+passes config@Config{dynflags} l1 = do
       let packed     = gopt Opt_Packed dynflags
           biginf     = gopt Opt_BigInfiniteRegions dynflags
           gibbon1    = gopt Opt_Gibbon1 dynflags
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
-      l1 <- goE "typecheck"  L1.tcProg l1
-      l1 <- goE "freshNames" freshNames l1
+      l1 <- goE "typecheck"  L1.tcProg                  l1
+      l1 <- goE "freshNames" freshNames                 l1
 
       -- If we are executing a benchmark, then we
       -- replace the main function with benchmark code:
-      l1 <- pure $ case mode of
-                     Bench fnname -> benchMainExp config l1 fnname
-                     _ -> l1
+      l1 <- goE "benchMainExp" benchMainExp             l1
 
-      l1 <- goE "typecheck"  L1.tcProg l1
+      l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- goE "flatten"       flattenL1               l1
-      l1 <- goE "inlineTriv"    (return . inlineTriv)   l1
+      l1 <- goE "inlineTriv"    inlineTriv              l1
 
       -- TODO: Write interpreters for L2 and L3
       l3 <- if packed
@@ -456,14 +484,13 @@ passes config@Config{mode,dynflags} l1 = do
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
               return l3
             else do
-              l3 <- go "directL3" (return . directL3)   l1
+              l3 <- go "directL3"         directL3      l1
               return l3
 
       l3 <- go "L3.typecheck"   L3.tcProg               l3
       l3 <- go "unariser"       unariser                l3
       l3 <- go "L3.typecheck"   L3.tcProg               l3
       l3 <- go "L3.flatten"     flattenL3               l3
-      let mainTy = fmap snd $   L1.mainExp              l3
       -- Note: L3 -> L4
       l4 <- go "lower"          lower                   l3
 
@@ -478,33 +505,6 @@ passes config@Config{mode,dynflags} l1 = do
 
       goE :: (Interp b) => PassRunner a b
       goE = passE config
-
-
--- | Replace the main function with benchmark code
---
-benchMainExp :: Config -> L1.Prog1 -> Var -> L1.Prog1
-benchMainExp Config{benchInput,dynflags} l1 fnname = do
-  let tmp = "bnch"
-      (arg@(L1.PackedTy tyc _),ret) = L1.getFunTy fnname l1
-      -- At L1, we assume ReadPackedFile has a single return value:
-      newExp = L1.LetE (toVar tmp, [],
-                        arg,
-                        l$ L1.PrimAppE
-                        (L1.ReadPackedFile benchInput tyc arg) [])
-               $ l$ L1.LetE (toVar "benchres", [],
-                         ret,
-                         l$ L1.TimeIt
-                         (l$ L1.AppE fnname []
-                          (l$ L1.VarE (toVar tmp))) ret True)
-               $
-                -- FIXME: should actually return the result,
-                -- as soon as we are able to print it.
-               (if (gopt Opt_BenchPrint dynflags)
-                then l$ L1.VarE (toVar "benchres")
-                else l$ L1.PrimAppE L1.MkTrue [])
-  -- Initialize the main expression with a void type. The typechecker will fix it later.
-  l1{ L1.mainExp = Just $ (l$ newExp, L1.ProdTy []) }
-
 
 type PassRunner a b = (Printer b, Out b, NFData a, NFData b) =>
                       String -> (a -> PassM b) -> a -> StateT CompileState IO b

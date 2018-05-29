@@ -16,9 +16,9 @@ import           Gibbon.L1.Syntax as L1 hiding (mkProj)
 
 -- | Inline trivial let bindings (binding a var to a var or int), mainly to clean up
 --   the output of `flatten`.
-inlineTriv :: Prog1 -> Prog1
+inlineTriv :: Prog1 -> PassM Prog1
 inlineTriv (Prog ddefs funs main) =
-    Prog ddefs (fmap inlineTrivFun funs) main'
+    return (Prog ddefs (fmap inlineTrivFun funs) main')
   where
     inlineTrivFun (FunDef nam narg (targ, ty) bod) =
       FunDef nam narg (targ, ty) (inlineTrivExp ddefs bod)
