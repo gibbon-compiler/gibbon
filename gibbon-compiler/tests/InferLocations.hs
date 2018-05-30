@@ -31,7 +31,7 @@ import Data.Loc
 
 
 -- some basic tests of unification, some should succeed and others should fail
-utest1 = defaultRunPassM $ St.runStateT (runExceptT m) M.empty
+utest1 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
     where m = do
             u1 <- fixLoc "a"
             u2 <- fixLoc "b"
@@ -41,7 +41,7 @@ utest1 = defaultRunPassM $ St.runStateT (runExceptT m) M.empty
             assocLoc l2 u2
             unify l1 l2 (return True) (return False)
 
-utest2 = defaultRunPassM $ St.runStateT (runExceptT m) M.empty
+utest2 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
     where m = do
             u1 <- fixLoc "a"
             u2 <- fixLoc "b"
@@ -51,7 +51,7 @@ utest2 = defaultRunPassM $ St.runStateT (runExceptT m) M.empty
             assocLoc l2 u1
             unify l1 l2 (return True) (return False)
 
-utest3 = defaultRunPassM $ St.runStateT (runExceptT m) M.empty
+utest3 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
     where m = do
             u1 <- fixLoc "a"
             u2 <- fixLoc "b"
@@ -64,7 +64,7 @@ utest3 = defaultRunPassM $ St.runStateT (runExceptT m) M.empty
             assocLoc l3 u3
             unify l1 l3 (unify l2 l3 (return True) (return False)) (return False)
 
-utest4 = defaultRunPassM $ St.runStateT (runExceptT m) M.empty
+utest4 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
     where m = do
             u1 <- fixLoc "a"
             u2 <- fixLoc "b"
@@ -90,7 +90,7 @@ case_unify3 = (Right False) @=? (fst $ fst utest3)
 case_unify4 :: Assertion
 case_unify4 = (Right True) @=? (fst $ fst utest4)
 
-etest1 = defaultRunPassM $ St.runStateT (runExceptT m) M.empty
+etest1 = defaultPackedRunPassM $ St.runStateT (runExceptT m) M.empty
     where m = do
             u1 <- fixLoc "a"
             u2 <- fixLoc "b"
@@ -105,7 +105,7 @@ case_etest1 :: Assertion
 case_etest1 = (Right (l$ DataConE "a" "Node" [l$ VarE "x", l$ VarE "y"])) @=? (fst $ fst etest1)
 
 tester1 :: L L1.Exp1 -> L Exp2
-tester1 e = case fst $ fst $ defaultRunPassM $ St.runStateT (runExceptT (inferExp emptyEnv e NoDest)) M.empty of
+tester1 e = case fst $ fst $ defaultPackedRunPassM $ St.runStateT (runExceptT (inferExp emptyEnv e NoDest)) M.empty of
               Right a -> (\(a,_,_)->a) a
               Left a -> error $ show a
 

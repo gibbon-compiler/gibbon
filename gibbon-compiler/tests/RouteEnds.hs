@@ -52,7 +52,7 @@ case_add1_test1 =
 -}
 
 runT :: Prog2 -> Prog2
-runT prg = fst $ defaultRunPassM $ do
+runT prg = fst $ defaultPackedRunPassM $ do
   l2 <- inferEffects prg
   l2 <- tcProg l2
   routeEnds l2

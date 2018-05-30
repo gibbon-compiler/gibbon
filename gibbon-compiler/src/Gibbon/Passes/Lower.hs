@@ -33,6 +33,7 @@ import qualified Data.List as L
 
 import Gibbon.GenericOps
 import Gibbon.Common
+import Gibbon.DynFlags
 import Gibbon.L1.Syntax hiding (progToEnv)
 import Gibbon.L3.Syntax
 import qualified Gibbon.L1.Syntax as L1
@@ -266,12 +267,13 @@ properTrivs pkd ty trvs =
 
 -- printTy ty trvs = error $ "Invalid L1 data type; " ++ show ty ++ " " ++ show trvs
 
-addPrintToTail :: Bool -> Ty3 -> T.Tail-> PassM T.Tail
-addPrintToTail pkd ty tl0 =
-  let ty' = if pkd
-            then T.IntTy
-            else T.fromL3Ty ty
-  in
+addPrintToTail :: Ty3 -> T.Tail-> PassM T.Tail
+addPrintToTail ty tl0 = do
+    dflags <- getDynFlags
+    let pkd = gopt Opt_Packed dflags
+        ty' = if pkd
+              then T.IntTy
+              else T.fromL3Ty ty
     T.withTail (tl0, ty') $ \ trvs ->
       printTy pkd ty (properTrivs pkd ty trvs) $
         -- Always print a trailing newline at the end of execution:
@@ -289,11 +291,11 @@ addPrintToTail pkd ty tl0 =
 --
 -- First argument indicates (1) whether we're inpacked mode, and (2)
 -- the pre-cursorize type of the mainExp, if there is a mainExp.
-lower :: (Bool,Maybe Ty3) -> Prog3 -> PassM T.Prog
-lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
+lower :: Prog3 -> PassM T.Prog
+lower Prog{fundefs,ddefs,mainExp} = do
   mn <- case mainExp of
           Nothing    -> return Nothing
-          Just (x,mty) -> (Just . T.PrintExp) <$> (addPrintToTail pkd mty =<< tail x)
+          Just (x,mty) -> (Just . T.PrintExp) <$> (addPrintToTail mty =<< tail x)
 
   funs       <- mapM fund (M.elems fundefs)
   unpackers  <- mapM genUnpacker (M.elems ddefs)
@@ -335,7 +337,9 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
 
   tail :: L Exp3 -> PassM T.Tail
   tail (L _ ex0) =
-   dbgTrace 7 ("\n [lower] processing tail:\n  "++sdoc ex0) $
+   dbgTrace 7 ("\n [lower] processing tail:\n  "++sdoc ex0) $ do
+   dflags <- getDynFlags
+   let pkd = gopt Opt_Packed dflags
    case ex0 of
 
     -- HACK! We don't have LetSwitchT yet.  This means potential exponential code duplication:

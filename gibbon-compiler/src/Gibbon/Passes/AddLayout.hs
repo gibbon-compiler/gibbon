@@ -87,14 +87,16 @@ becomes,
 --------------------------------------------------------------------------------
 
 -- | Add layout information to the program, but only if required
-repairProgram :: DynFlags -> Prog1 -> L2.Prog2 -> PassM L2.Prog2
-repairProgram dflags oldl1 prg =
+repairProgram :: Prog1 -> L2.Prog2 -> PassM L2.Prog2
+repairProgram oldl1 prg = do
+  isGibbon1 <- gopt Opt_Gibbon1 <$> getDynFlags
   if repair
-  then if (gopt Opt_Gibbon1 dflags)
+  then if isGibbon1
        then repairGibbon1
        else repairGibbon2
   else return prg
   where
+
     (repair,fns) = needsLayout prg
 
     repairGibbon1 =

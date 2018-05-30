@@ -42,7 +42,8 @@ module Gibbon.Common
        , Store(..), Buffer(..), SerializedVal(..), Value(..), Log
 
          -- * PassM monad
-       , PassM, runPassM, defaultRunPassM
+       , PassM, runPassM, defaultRunPassM, defaultPackedRunPassM
+       , getDynFlags
 
          -- * Gibbon configuration
        , Config(..), Input(..), Mode(..), Backend(..), defaultConfig
@@ -427,6 +428,14 @@ runPassM cfg cnt (PassM pass) = runSyM cnt (runReaderT pass cfg)
 defaultRunPassM :: PassM a -> (a,Int)
 defaultRunPassM = runPassM defaultConfig 0
 
+-- | A convenient wrapper over 'runPassM' for running passes in packed mode.
+defaultPackedRunPassM :: PassM a -> (a,Int)
+defaultPackedRunPassM = runPassM (defaultConfig { dynflags = dflags}) 0
+  where dflags = gopt_set Opt_Packed defaultDynFlags
+
+getDynFlags :: PassM DynFlags
+getDynFlags = dynflags <$> ask
+
 -- Gibbon config:
 ----------------------------------------
 
@@ -493,8 +502,7 @@ internalError :: String -> a
 internalError s = error ("internal error: "++s)
 
 
-(#) :: (Ord a, Out a, Out b, Show a)
-    => Map a b -> a -> b
+(#) :: (Ord a, Out a, Out b, Show a) => Map a b -> a -> b
 m # k = case M.lookup k m of
           Just x  -> x
           Nothing -> err $ "Map lookup failed on key: "++show k

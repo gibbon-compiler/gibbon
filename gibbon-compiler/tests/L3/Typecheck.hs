@@ -28,15 +28,15 @@ import Test.Tasty.TH
 import Test.Tasty
 
 runT :: Prog2 -> L3.Prog3
-runT prg = fst $ defaultRunPassM $ do
+runT prg = fst $ defaultPackedRunPassM $ do
   l2 <- inferEffects prg
-  l2 <- inferRegScope Infinite l2
+  l2 <- inferRegScope l2
   l2 <- L2.tcProg l2
   l2 <- routeEnds l2
   l2 <- L2.tcProg l2
   l2 <- boundsCheck l2
   l2 <- threadRegions l2
-  l3 <- cursorize defaultDynFlags l2
+  l3 <- cursorize l2
   l3 <- findWitnesses l3
   l3 <- L3.tcProg l3
   l3 <- shakeTree l3

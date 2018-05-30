@@ -23,7 +23,7 @@ import Gibbon.L1.Syntax as L1
 assertInferEffects :: Prog2 -> Var -> Set Effect -> Assertion
 assertInferEffects prg fnName expected = expected @=? eff
   where -- run inferEffects and get the effect from it's type
-        Prog{fundefs} = fst $ defaultRunPassM $ inferEffects prg
+        Prog{fundefs} = fst $ defaultPackedRunPassM $ inferEffects prg
         eff = arrEffs $ funTy (fundefs ! fnName)
 
 

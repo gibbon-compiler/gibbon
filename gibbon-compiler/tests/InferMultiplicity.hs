@@ -25,7 +25,7 @@ import qualified Gibbon.L1.Syntax as L1
 case_t1 :: Assertion
 case_t1 = expected @=? actual
   where
-    actual = inferRegScopeExp Infinite test1
+    actual = fst $ defaultPackedRunPassM $ inferRegScopeExp test1
 
     test1 :: L L2.Exp2
     test1 = l$ Ext $ LetRegionE (VarR "r1") $
@@ -47,7 +47,7 @@ case_t1 = expected @=? actual
 case_t2 :: Assertion
 case_t2 = expected @=? actual
   where
-    actual = inferRegScopeExp Infinite test1
+    actual = fst $ defaultPackedRunPassM $ inferRegScopeExp test1
 
     test1 :: L L2.Exp2
     test1 = l$ Ext $ LetRegionE (VarR "r1") $

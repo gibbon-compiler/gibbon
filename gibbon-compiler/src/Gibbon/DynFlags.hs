@@ -3,7 +3,7 @@
 module Gibbon.DynFlags
   ( DynFlags(..), GeneralFlag(..)
   , defaultDynFlags, dynflagsParser
-  , gopt
+  , gopt, gopt_set
   ) where
 
 #if !MIN_VERSION_base(4,11,0)
@@ -40,6 +40,9 @@ defaultDynFlags = DynFlags { generalFlags = S.empty }
 -- | Test whether a 'GeneralFlag' is set
 gopt :: GeneralFlag -> DynFlags -> Bool
 gopt f dflags  = f `S.member` generalFlags dflags
+
+gopt_set :: GeneralFlag -> DynFlags -> DynFlags
+gopt_set f dflags = dflags { generalFlags = S.insert f (generalFlags dflags) }
 
 dynflagsParser :: Parser DynFlags
 dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser)

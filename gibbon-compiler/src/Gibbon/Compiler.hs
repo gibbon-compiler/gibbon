@@ -436,11 +436,9 @@ passes config@Config{mode,dynflags} l1 = do
 
               l2 <- go "inferEffects"     inferEffects  l2
 
-              l2 <- go "repairProgram" (repairProgram dynflags l1) l2
+              l2 <- go "repairProgram"(repairProgram l1) l2
 
-              l2 <- if gibbon1 || biginf
-                    then go "inferRegScope" (inferRegScope BigInfinite) l2
-                    else go "inferRegScope" (inferRegScope Infinite) l2
+              l2 <- go "inferRegScope"    inferRegScope l2
 
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "routeEnds"        routeEnds     l2
@@ -452,7 +450,7 @@ passes config@Config{mode,dynflags} l1 = do
 
               l2 <- go "threadRegions"    threadRegions l2
               -- Note: L2 -> L3
-              l3 <- go "cursorize" (cursorize dynflags) l2
+              l3 <- go "cursorize"        cursorize     l2
               l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck"     L3.tcProg     l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
@@ -467,7 +465,7 @@ passes config@Config{mode,dynflags} l1 = do
       l3 <- go "L3.flatten"     flattenL3               l3
       let mainTy = fmap snd $   L1.mainExp              l3
       -- Note: L3 -> L4
-      l4 <- go "lower" (lower (packed,mainTy))          l3
+      l4 <- go "lower"          lower                   l3
 
       l4 <- if gibbon1
             then return l4
