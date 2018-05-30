@@ -27,8 +27,9 @@ import InferMultiplicity
 import Unariser
 import AddLayout
 import Compiler
-import L2.Typecheck
 import L1.Typecheck
+import L1.Interp
+import L2.Typecheck
 import L3.Typecheck
 import L0.Specialize
 import InferLocations
@@ -45,6 +46,7 @@ main = defaultMain allTests
                    , unariser2Tests
                    -- , l2TypecheckerTests
                    , l1TypecheckerTests
+                   , l1InterpTests
                    , l3TypecheckerTests
                    , specializeTests
                    , compilerTests

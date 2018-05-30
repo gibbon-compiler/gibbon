@@ -149,8 +149,10 @@ test-suite test-gibbon
                        InferMultiplicity
                        AddLayout
                        Compiler
-                       L2.Typecheck
                        L1.Typecheck
+                       L1.Interp
+                       L2.Typecheck
+                       L2.Interp
                        L3.Typecheck
                        L0.Specialize
 

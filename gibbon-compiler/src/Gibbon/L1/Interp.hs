@@ -12,7 +12,6 @@
 
 module Gibbon.L1.Interp
     ( execAndPrint, gInterpProg
-    , main
     ) where
 
 import           Data.ByteString.Builder (toLazyByteString, string8)
@@ -271,13 +270,3 @@ lookup3 k ls = go ls
    go ((k1,a1,b1):r)
       | k1 == k   = (k1,a1,b1)
       | otherwise = go r
-
---------------------------------------------------------------------------------
-
-p1 :: Prog1
-p1 = Prog emptyDD  M.empty
-          (Just ( L NoLoc $ LetE ("x", [], IntTy, L NoLoc $ LitE 3) (L NoLoc $ VarE (toVar "x"))
-                , IntTy))
-
-main :: IO ()
-main = execAndPrint (RunConfig 1 1 dbgLvl False) p1
