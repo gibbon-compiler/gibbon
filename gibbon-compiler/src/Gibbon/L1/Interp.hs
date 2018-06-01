@@ -11,7 +11,9 @@
 --
 
 module Gibbon.L1.Interp
-    ( execAndPrint, gInterpProg
+    ( execAndPrint, gInterpProg,
+      -- * Helpers
+      applyPrim, strToInt
     ) where
 
 import           Data.ByteString.Builder (toLazyByteString, string8)
@@ -20,11 +22,10 @@ import           Control.Monad
 import           Control.Monad.Writer
 import           Control.Monad.State
 import           Data.Char
-import           Data.IntMap as IM
 import           Data.List as L
 import           Data.Loc
 import           Data.Map as M
-import           Data.Sequence (Seq, ViewL ((:<)), (|>))
+import           Data.Sequence (Seq, ViewL ((:<)))
 import           System.Clock
 import           Text.PrettyPrint.GenericPretty
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -83,8 +84,8 @@ execAndPrint rc prg = do
 
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
-gInterpProg :: ( Out (TyOf ex)
-               , InterpE ex
+gInterpProg :: ( --Out (TyOf ex)
+                 InterpE ex
                , ExpTy ex ~ ex )
            => RunConfig -> Prog ex -> IO (Value, B.ByteString)
 gInterpProg _ Prog {mainExp=Nothing} =
@@ -95,15 +96,17 @@ gInterpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
        let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
 
        -- logs contains print side effects:
-       ((x,logs),Store finstore) <-
-         runStateT (runWriterT (interpE rc ddefs fenv e)) (Store IM.empty)
-
+       ((x,logs),Store _finstore) <-
+         runStateT (runWriterT (interpE rc ddefs fenv e)) (Store M.empty)
+{-
        -- Policy: don't return cursors
        let res = case x of
                   VCursor ix off ->
                       let Buffer b = finstore IM.! ix
                       in deserialize ddefs (S.drop off b)
                   _ -> x
+-}
+       let res = x
        return (res, toLazyByteString logs)
 
 instance ( Out l, Show l
@@ -141,7 +144,7 @@ interp rc ddefs fenv = go M.empty
           VarE v    -> return $ env # v
 
           PrimAppE p ls -> do args <- mapM (go env) ls
-                              return $ applyPrim p args
+                              return $ applyPrim rc p args
           ProjE ix ex   -> do VProd ls <- go env ex
                               return $ ls !! ix
 
@@ -152,9 +155,10 @@ interp rc ddefs fenv = go M.empty
 
           CaseE _ [] -> error$ "L1.Interp: CaseE with empty alternatives list: "++ndoc x0
 
-          CaseE x1 alts@((sometag,_,_):_) -> do
+          CaseE x1 alts@((_sometag,_,_):_) -> do
                  v <- go env x1
                  case v of
+{-
                    VCursor idx off | rcCursors rc ->
                       do Store store <- get
                          let Buffer seq1 = store IM.! idx
@@ -168,6 +172,7 @@ interp rc ddefs fenv = go M.empty
                              let env' = M.insert curname (VCursor idx (off+1)) env
                              go env' rhs
                            oth :< _ -> error $ "L1.Interp: expected to read tag from scrutinee cursor, found: "++show oth
+-}
 
                    VPacked k ls2 ->
                        let vs = L.map fst prs
@@ -187,9 +192,11 @@ interp rc ddefs fenv = go M.empty
           -- TODO: Should check this against the ddefs.
           DataConE _ k ls -> do
               args <- mapM (go env) ls
-              case args of
+              return $ VPacked k args
+{-
               -- Constructors are overloaded.  They have different behavior depending on
               -- whether we are AFTER Cursorize or not.
+              case args of
                 [ VCursor idx off ] | rcCursors rc ->
                     do Store store <- get
                        let tag       = SerTag (getTagOfDataCon ddefs k) k
@@ -197,7 +204,7 @@ interp rc ddefs fenv = go M.empty
                        put (Store store')
                        return $ VCursor idx (off+1)
                 _ -> return $ VPacked k args
-
+-}
 
           TimeIt bod _ isIter -> do
               let iters = if isIter then rcIters rc else 1
@@ -227,30 +234,30 @@ interp rc ddefs fenv = go M.empty
           MapE _ _bod    -> error "L1.Interp: finish MapE"
           FoldE _ _ _bod -> error "L1.Interp: finish FoldE"
 
-    applyPrim :: Prim (UrTy l) -> [Value] -> Value
-    applyPrim p ls =
-     case (p,ls) of
-       (MkTrue,[])             -> VBool True
-       (MkFalse,[])            -> VBool False
-       (AddP,[VInt x, VInt y]) -> VInt (x+y)
-       (SubP,[VInt x, VInt y]) -> VInt (x-y)
-       (MulP,[VInt x, VInt y]) -> VInt (x*y)
-       (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
-       (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
-       (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
-       (EqSymP,[VInt x, VInt y]) -> VBool (x==y)
-       (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
-       (LtP,[VInt x, VInt y]) -> VBool (x < y)
-       (GtP,[VInt x, VInt y]) -> VBool (x > y)
-       ((DictInsertP _ty),[VDict mp, key, val]) -> VDict (M.insert key val mp)
-       ((DictLookupP _),[VDict mp, key])        -> mp # key
-       ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)
-       ((DictEmptyP _),[])                      -> VDict M.empty
-       ((ErrorP msg _ty),[]) -> error msg
-       (SizeParam,[]) -> VInt (rcSize rc)
-       (ReadPackedFile file _ ty,[]) ->
-           error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
-       oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
+applyPrim :: (Show l) => RunConfig -> Prim (UrTy l) -> [Value] -> Value
+applyPrim rc p ls =
+ case (p,ls) of
+   (MkTrue,[])             -> VBool True
+   (MkFalse,[])            -> VBool False
+   (AddP,[VInt x, VInt y]) -> VInt (x+y)
+   (SubP,[VInt x, VInt y]) -> VInt (x-y)
+   (MulP,[VInt x, VInt y]) -> VInt (x*y)
+   (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
+   (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
+   (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
+   (EqSymP,[VInt x, VInt y]) -> VBool (x==y)
+   (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
+   (LtP,[VInt x, VInt y]) -> VBool (x < y)
+   (GtP,[VInt x, VInt y]) -> VBool (x > y)
+   ((DictInsertP _ty),[VDict mp, key, val]) -> VDict (M.insert key val mp)
+   ((DictLookupP _),[VDict mp, key])        -> mp # key
+   ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)
+   ((DictEmptyP _),[])                      -> VDict M.empty
+   ((ErrorP msg _ty),[]) -> error msg
+   (SizeParam,[]) -> VInt (rcSize rc)
+   (ReadPackedFile file _ ty,[]) ->
+       error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
+   oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
 
 clk :: Clock

@@ -77,7 +77,6 @@ import Control.Monad.Reader
 import Data.ByteString.Builder (Builder)
 import Data.Char
 import Data.List as L
-import Data.IntMap as IM
 import Data.Map as M
 import Data.Sequence (Seq)
 import Data.String
@@ -587,14 +586,10 @@ getRunConfig ls =
 ------------------------------------------------------------
 
 -- | A store is an address space full of buffers.
-data Store = Store (IntMap Buffer)
+data Store = Store (M.Map Var Buffer)
   deriving (Read,Eq,Ord,Generic, Show)
 
 instance Out Store
-
-instance Out a => Out (IntMap a) where
-  doc im       = doc       (IM.toList im)
-  docPrec n im = docPrec n (IM.toList im)
 
 data Buffer = Buffer (Seq SerializedVal)
   deriving (Read,Eq,Ord,Generic, Show)
