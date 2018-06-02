@@ -140,7 +140,7 @@ boundsCheck Prog{ddefs,fundefs,mainExp} = do
 
 boundsCheckFn :: DDefs Ty2 -> FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
 boundsCheckFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
-  let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionVar r)) (locVars funTy)
+  let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
       initTyEnv  = M.singleton funArg (arrIn funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
       deps = [(lc, lc, []) | lc <- outLocVars funTy] ++ depList funBody
@@ -174,8 +174,8 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
       case ext of
         LetLocE loc rhs bod -> do
           let reg = case rhs of
-                      StartOfLE r  -> regionVar r
-                      InRegionLE r -> regionVar r
+                      StartOfLE r  -> regionToVar r
+                      InRegionLE r -> regionToVar r
                       AfterConstantLE _ lc -> renv # lc
                       AfterVariableLE _ lc -> renv # lc
                       -- HACK: LetE form doesn't extend the RegEnv with the

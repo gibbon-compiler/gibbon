@@ -80,7 +80,7 @@ inferRegScopeExp (L p ex) = L p <$>
           in case deps of
                ((retVar,_,_):_) ->
                  let (g,_,vtxF) = graphFromEdges deps
-                     regV = regionVar r
+                     regV = regionToVar r
                      -- Vertex of the region variable
                      regVertex =
                        case vtxF regV of

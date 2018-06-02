@@ -510,19 +510,19 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
 -- Includes an expression for error reporting.
 regionInsert :: Exp -> Region -> RegionSet -> TcM RegionSet
 regionInsert e r (RegionSet regSet) = do
-  if (S.member (regionVar r) regSet)
+  if (S.member (regionToVar r) regSet)
   then throwError $ GenericTC "Shadowed regions not allowed" e
-  else return $ RegionSet (S.insert (regionVar r) regSet)
+  else return $ RegionSet (S.insert (regionToVar r) regSet)
 
 -- | Ask if a region is in the region set.
 hasRegion :: Region -> RegionSet -> Bool
-hasRegion r (RegionSet regSet) = S.member (regionVar r) regSet
+hasRegion r (RegionSet regSet) = S.member (regionToVar r) regSet
 
 -- | Ensure that a region is in a region set, reporting an error otherwise.
 -- Includes an expression for error reporting.
 ensureRegion :: Exp -> Region -> RegionSet -> TcM ()
 ensureRegion exp r (RegionSet regSet) =
-    if S.member (regionVar r) regSet then return ()
+    if S.member (regionToVar r) regSet then return ()
     else throwError $ GenericTC ("Region " ++ (show r) ++ " not in scope") exp
 
 -- | Get the region of a location variable.
@@ -538,7 +538,7 @@ getRegion exp (ConstraintSet cs) l = go $ S.toList cs
 funRegs :: [LRM] -> RegionSet
 funRegs ((LRM _l r _m):lrms) =
     let (RegionSet rs) = funRegs lrms
-    in RegionSet $ S.insert (regionVar r) rs
+    in RegionSet $ S.insert (regionToVar r) rs
 funRegs [] = RegionSet $ S.empty
 
 -- | Get the constraints from the location bindings in a function type.

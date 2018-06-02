@@ -238,11 +238,11 @@ outLocVars ty = L.map (\(LRM l _ _) -> l) $
                 L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
 outRegVars :: ArrowTy2 -> [LocVar]
-outRegVars ty = L.map (\(LRM _ r _) -> regionVar r) $
+outRegVars ty = L.map (\(LRM _ r _) -> regionToVar r) $
                 L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
 inRegVars :: ArrowTy2 -> [LocVar]
-inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionVar r) $
+inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) $
                L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
 -- | Apply a variable substitution to a type.
@@ -454,7 +454,7 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           Ext ext ->
             case ext of
               LetRegionE r rhs ->
-                let v = regionVar r
+                let v = regionToVar r
                 in go (M.insertWith (++) v (allFreeVars rhs) acc) rhs
               LetLocE loc phs rhs  ->
                 go (M.insertWith (++) loc (dep phs ++ allFreeVars rhs) acc) rhs
@@ -476,10 +476,10 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
       dep :: PreLocExp LocVar -> [Var]
       dep ex =
         case ex of
-          StartOfLE r -> [regionVar r]
+          StartOfLE r -> [regionToVar r]
           AfterConstantLE _ loc -> [loc]
           AfterVariableLE v loc -> [v,loc]
-          InRegionLE r  -> [regionVar r]
+          InRegionLE r  -> [regionToVar r]
           FromEndLE loc -> [loc]
 
       -- gFreeVars ++ locations ++ region variables
@@ -491,7 +491,7 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           DataConE loc _ _    -> S.singleton loc `S.union` gFreeVars ex
           Ext ext ->
             case ext of
-              LetRegionE r _  -> S.singleton (regionVar r) `S.union` gFreeVars ex
+              LetRegionE r _  -> S.singleton (regionToVar r) `S.union` gFreeVars ex
               LetLocE loc _ _ -> S.singleton loc `S.union` gFreeVars ex
               RetE locs _     -> S.fromList locs `S.union` gFreeVars ex
               FromEndE loc    -> S.singleton loc

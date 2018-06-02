@@ -39,7 +39,7 @@ removeCopies Prog{ddefs,fundefs,mainExp} = do
 
 removeCopiesFn :: DDefs Ty2 -> FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
 removeCopiesFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
-  let initLocEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionVar r)) (locVars funTy)
+  let initLocEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
       initTyEnv  = M.singleton funArg (arrIn funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
   bod' <- removeCopiesExp ddefs fundefs initLocEnv env2 funBody
@@ -82,8 +82,8 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
         -- Update lenv with a binding for loc
         LetLocE loc rhs bod -> do
           let reg = case rhs of
-                      StartOfLE r  -> regionVar r
-                      InRegionLE r -> regionVar r
+                      StartOfLE r  -> regionToVar r
+                      InRegionLE r -> regionToVar r
                       AfterConstantLE _ lc -> lenv # lc
                       AfterVariableLE _ lc -> lenv # lc
                       FromEndLE lc         -> lenv # lc -- TODO: This needs to be fixed

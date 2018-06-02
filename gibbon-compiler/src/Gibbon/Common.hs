@@ -29,7 +29,7 @@ module Gibbon.Common
 
          -- * Regions and locations
        , LocVar, Region(..), Modality(..), LRM(..), dummyLRM
-       , Multiplicity(..), regionVar
+       , Multiplicity(..), regionToVar
 
          -- * Environment and helpers
        , Env2(Env2) -- TODO: hide constructor
@@ -203,8 +203,8 @@ instance NFData LRM where
 dummyLRM :: LRM
 dummyLRM = LRM "l_dummy" (VarR "r_dummy") Input
 
-regionVar :: Region -> Var
-regionVar r = case r of
+regionToVar :: Region -> Var
+regionToVar r = case r of
                   GlobR v _ -> v
                   DynR  v _ -> v
                   VarR  v   -> v
