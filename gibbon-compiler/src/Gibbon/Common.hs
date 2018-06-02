@@ -37,16 +37,13 @@ module Gibbon.Common
        , vEnv, fEnv, extendVEnv, extendsVEnv, extendFEnv, emptyEnv2
        , lookupVEnv
 
-         -- * Interpreter
-       , RunConfig(..), getRunConfig
-       , Store(..), Buffer(..), SerializedVal(..), Value(..), Log
-
          -- * PassM monad
        , PassM, runPassM, defaultRunPassM, defaultPackedRunPassM
        , getDynFlags
 
          -- * Gibbon configuration
        , Config(..), Input(..), Mode(..), Backend(..), defaultConfig
+       , RunConfig(..), getRunConfig
 
          -- * Data definitions
        , DDef(..), DDefs, fromListDD, emptyDD, insertDD
@@ -74,11 +71,9 @@ import Control.DeepSeq (NFData(..), force)
 import Control.Exception (evaluate)
 import Control.Monad.State.Strict
 import Control.Monad.Reader
-import Data.ByteString.Builder (Builder)
 import Data.Char
 import Data.List as L
 import Data.Map as M
-import Data.Sequence (Seq)
 import Data.String
 import Data.Symbol
 import Data.Loc
@@ -91,7 +86,6 @@ import System.Environment
 import System.IO.Unsafe (unsafePerformIO)
 import Debug.Trace
 import Language.C.Quote.CUDA (ToIdent, toIdent)
-import qualified Data.Foldable as F
 
 import Gibbon.DynFlags
 
@@ -489,6 +483,34 @@ defaultConfig =
          , dynflags = defaultDynFlags
          }
 
+-- | Runtime configuration for executing interpreters.
+data RunConfig =
+    RunConfig { rcSize  :: Int
+              , rcIters :: Word64
+              , rcDbg   :: Int
+              , rcCursors :: Bool -- ^ Do we support cursors in L1.Exp at this point in the compiler.
+              }
+
+-- | We currently use the hacky approach of using env vars OR command
+-- line args to set the two universal benchmark params: SIZE and ITERS.
+--
+-- This takes extra, optional command line args [Size, Iters] provided
+-- after the file to process on the command line.  If these are not
+-- present it
+getRunConfig :: [String] -> IO RunConfig
+getRunConfig ls =
+ case ls of
+   [] -> case L.lookup "SIZE" theEnv of
+           Nothing -> getRunConfig ["1"]
+           Just n  -> getRunConfig [n]
+   [sz] -> case L.lookup "ITERS" theEnv  of
+             Nothing -> getRunConfig [sz,"1"]
+             Just i  -> getRunConfig [sz,i]
+   [sz,iters] ->
+     return $ RunConfig { rcSize=read sz, rcIters=read iters, rcDbg= dbgLvl, rcCursors= False }
+   _ -> error $ "getRunConfig: too many command line args, expected <size> <iters> at most: "++show ls
+
+
 ----------------------------------------
 
 -- | An alias for the error function we want to use throughout this project.
@@ -550,109 +572,6 @@ abbrv n x =
     in if len <= n
        then str
        else L.take (n-3) str ++ "..."
-
-----------------------------------------------------------------------------------------------------
--- Things related to interpreting Gibbon programs
-
--- | Runtime configuration for executing interpreters.
-data RunConfig =
-    RunConfig { rcSize  :: Int
-              , rcIters :: Word64
-              , rcDbg   :: Int
-              , rcCursors :: Bool -- ^ Do we support cursors in L1.Exp at this point in the compiler.
-              }
-
--- | We currently use the hacky approach of using env vars OR command
--- line args to set the two universal benchmark params: SIZE and ITERS.
---
--- This takes extra, optional command line args [Size, Iters] provided
--- after the file to process on the command line.  If these are not
--- present it
-getRunConfig :: [String] -> IO RunConfig
-getRunConfig ls =
- case ls of
-   [] -> case L.lookup "SIZE" theEnv of
-           Nothing -> getRunConfig ["1"]
-           Just n  -> getRunConfig [n]
-   [sz] -> case L.lookup "ITERS" theEnv  of
-             Nothing -> getRunConfig [sz,"1"]
-             Just i  -> getRunConfig [sz,i]
-   [sz,iters] ->
-     return $ RunConfig { rcSize=read sz, rcIters=read iters, rcDbg= dbgLvl, rcCursors= False }
-   _ -> error $ "getRunConfig: too many command line args, expected <size> <iters> at most: "++show ls
-
-
--- Stores and buffers:
-------------------------------------------------------------
-
--- | A store is an address space full of buffers.
-data Store = Store (M.Map Var Buffer)
-  deriving (Read,Eq,Ord,Generic, Show)
-
-instance Out Store
-
-data Buffer = Buffer (Seq SerializedVal)
-  deriving (Read,Eq,Ord,Generic, Show)
-
-instance Out Buffer
-
-data SerializedVal = SerTag Word8 DataCon | SerInt Int
-  deriving (Read,Eq,Ord,Generic, Show)
-
-byteSize :: SerializedVal -> Int
-byteSize (SerInt _) = 8 -- FIXME: get this constant from elsewhere.
-byteSize (SerTag _ _) = 1
-
-instance Out SerializedVal
-instance NFData SerializedVal
-
-instance Out Word8 where
-  doc w       = doc       (fromIntegral w :: Int)
-  docPrec n w = docPrec n (fromIntegral w :: Int)
-
-instance Out a => Out (Seq a) where
-  doc s       = doc       (F.toList s)
-  docPrec n s = docPrec n (F.toList s)
-
--- Values
--------------------------------------------------------------
-
--- | It's a first order language with simple values.
-data Value = VInt Int
-           | VBool Bool
-           | VDict (M.Map Value Value)
--- FINISH:       | VList
-           | VProd [Value]
-           | VPacked DataCon [Value]
-
-           | VCursor { bufID :: Int, offset :: Int }
-             -- ^ Cursor are a pointer into the Store plus an offset into the Buffer.
-
-  deriving (Read,Eq,Ord,Generic)
-
-instance Out Value
-instance NFData Value
-
-instance Show Value where
- show v =
-  case v of
-   VInt n   -> show n
-   VBool b  -> if b then truePrinted else falsePrinted
--- TODO: eventually want Haskell style tuple-printing:
---    VProd ls -> "("++ concat(intersperse ", " (L.map show ls)) ++")"
--- For now match Gibbon's Racket backend
-   VProd ls -> "'#("++ concat(intersperse " " (L.map show ls)) ++")"
-   VDict m      -> show (M.toList m)
-
-   -- F(x) style.  Maybe we'll switch to sweet-exps to keep everything in sync:
-   -- VPacked k ls -> k ++ show (VProd ls)
-
-   -- For now, Racket style:
-   VPacked k ls -> "(" ++ k ++ concat (L.map ((" "++) . show) ls) ++ ")"
-
-   VCursor idx off -> "<cursor "++show idx++", "++show off++">"
-
-type Log = Builder
 
 ----------------------------------------------------------------------------------------------------
 -- DEBUGGING

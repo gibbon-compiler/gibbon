@@ -55,6 +55,7 @@ import GHC.Generics
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common as C
+import Gibbon.Interp (Store, Value, Log)
 import Gibbon.GenericOps
 
 --------------------------------------------------------------------------------

@@ -24,6 +24,7 @@ library
                        Gibbon.HaskellFrontend
                        Gibbon.TargetInterp
                        Gibbon.Pretty
+                       Gibbon.Interp
                        Gibbon.L1.Syntax
                        Gibbon.L1.Typecheck
                        Gibbon.L1.Examples

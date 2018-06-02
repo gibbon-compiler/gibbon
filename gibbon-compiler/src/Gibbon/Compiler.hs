@@ -37,6 +37,7 @@ import           System.Process
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
+import           Gibbon.Interp
 import           Gibbon.DynFlags
 import           Gibbon.GenericOps
 import qualified Gibbon.HaskellFrontend as HS

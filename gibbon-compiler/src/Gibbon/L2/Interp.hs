@@ -20,6 +20,7 @@ import qualified Data.Sequence as S
 
 import           Gibbon.Common
 import           Gibbon.GenericOps
+import           Gibbon.Interp
 import           Gibbon.L1.Syntax as L1
 import           Gibbon.L1.Interp as L1
 import           Gibbon.L2.Syntax as L2

@@ -28,6 +28,7 @@ import qualified Data.Set as S
 import qualified Data.ByteString.Lazy.Char8 as B
 
 import Gibbon.Common
+import Gibbon.Interp (Value)
 
 --------------------------------------------------------------------------------
 -- Things which can be interpreted to yield a final, printed value.
