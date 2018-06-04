@@ -11,7 +11,7 @@
 --
 
 module Gibbon.L1.Interp
-    ( execAndPrint, gInterpProg,
+    ( execAndPrint, interpProg1,
       -- * Helpers
       applyPrim, strToInt
     ) where
@@ -48,9 +48,7 @@ interpChatter = 7
 ------------------------------------------------------------
 
 instance Interp Prog1 where
-  interpProg = gInterpProg
-
-type ValEnv = Map Var Value
+  interpProg = interpProg1
 
 -- | Code to read a final answer back out.
 deserialize :: (Out ty) => DDefs ty -> Seq SerializedVal -> Value
@@ -81,24 +79,19 @@ execAndPrint rc prg = do
     VProd [] -> return () -- FIXME: remove this.
     _ -> print val
 
--- TODO: add a flag for whether we support cursors:
-
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
-gInterpProg :: ( --Out (TyOf ex)
-                 InterpE ex
-               , ExpTy ex ~ ex )
-           => RunConfig -> Prog ex -> IO (Value, B.ByteString)
-gInterpProg _ Prog {mainExp=Nothing} =
+interpProg1 :: RunConfig -> Prog1 -> IO (Value, B.ByteString)
+interpProg1 _ Prog {mainExp=Nothing} =
     -- Print nothing, return "void"
     return $ (VProd [], B.empty)
-gInterpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
+interpProg1 rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
     do
        let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
 
        -- logs contains print side effects:
        ((x,logs),Store _finstore) <-
-         runStateT (runWriterT (interpE rc ddefs fenv e)) (Store M.empty)
+         runStateT (runWriterT (interp rc ddefs fenv e)) (Store M.empty)
 {-
        -- Policy: don't return cursors
        let res = case x of
@@ -110,27 +103,13 @@ gInterpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
        let res = x
        return (res, toLazyByteString logs)
 
-instance ( Out l, Show l
-         , Expression (e l (UrTy l))
-         , TyOf (e l (UrTy l)) ~ TyOf (L (PreExp e l (UrTy l)))
-         , ExpTy (e l (UrTy l)) ~ ExpTy (L (PreExp e l (UrTy l)))
-         , InterpE (e l (UrTy l)) )
-        => InterpE (L (PreExp e l (UrTy l))) where
-  type ExpTy (L (PreExp e l (UrTy l))) = (L (PreExp e l (UrTy l)))
-  interpE = interp
-
-interp :: forall l e.
-          ( Out l, Show l
-          , Expression (e l (UrTy l))
-          , TyOf (e l (UrTy l)) ~ TyOf (L (PreExp e l (UrTy l)))
-          , ExpTy (e l (UrTy l)) ~ ExpTy (L (PreExp e l (UrTy l)))
-          , InterpE (e l (UrTy l)) )
+interp :: forall l e. ( Out l, Show l, Expression (e l (UrTy l)) )
        => RunConfig
        -> DDefs (TyOf (L (PreExp e l (UrTy l))))
        -> M.Map Var (FunDef (L (PreExp e l (UrTy l))))
        -> L (PreExp e l (UrTy l))
        -> WriterT Log (StateT Store IO) Value
-interp rc ddefs fenv = go M.empty
+interp rc _ddefs fenv = go M.empty
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env ex = go env ex
@@ -138,7 +117,7 @@ interp rc ddefs fenv = go M.empty
     go :: ValEnv -> L (PreExp e l (UrTy l)) -> WriterT Log (StateT Store IO) Value
     go env (L _ x0) =
         case x0 of
-          Ext ext -> interpE rc ddefs fenv ext
+          Ext{} -> error "Cannot interpret NoExt"
 
           LitE c    -> return $ VInt c
           LitSymE s -> return $ VInt (strToInt $ fromVar s)

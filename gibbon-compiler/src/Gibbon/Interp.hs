@@ -6,8 +6,9 @@
 -----------------------------------------------------------------------------
 
 module Gibbon.Interp
-  ( Store(..), Buffer(..), SerializedVal(..), Value(..), Log
-  , insertIntoStore, lookupInStore, emptyBuffer
+  ( Store(..), insertIntoStore, lookupInStore
+  , Buffer(..), emptyBuffer
+  , SerializedVal(..), Value(..), Log, ValEnv
   ) where
 
 import Control.Monad.State
@@ -105,3 +106,4 @@ instance Show Value where
    VCursor idx off -> "<cursor "++show idx++", "++show off++">"
 
 type Log = Builder
+type ValEnv = M.Map Var Value

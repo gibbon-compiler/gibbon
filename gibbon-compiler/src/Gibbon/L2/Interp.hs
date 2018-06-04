@@ -27,11 +27,9 @@ import           Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
-type ValEnv = M.Map Var Value
-
-interpExp2 :: RunConfig -> DDefs Ty2 -> M.Map Var (FunDef (L Exp2)) -> L Exp2
+interp :: RunConfig -> DDefs Ty2 -> M.Map Var (FunDef (L Exp2)) -> L Exp2
         -> WriterT Log (StateT Store IO) Value
-interpExp2 rc ddefs fenv = go M.empty
+interp rc ddefs fenv = go M.empty
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env ex = go env ex
@@ -76,11 +74,3 @@ interpExp2 rc ddefs fenv = go M.empty
 
 clk :: Clock
 clk = Monotonic
-
-
--- interpE2Ext :: RunConfig
---             -> DDefs (TyOf (E2Ext l d))
---             -> M.Map Var (FunDef (L (PreExp e l (UrTy l))))
---             -> E2Ext l d
---             -> WriterT Log (StateT Store IO) Value
--- interpE2Ext _rc _ddefs _fenv _ext = error "TODO: interpE2Ext"
