@@ -19,6 +19,7 @@ import           Control.DeepSeq
 import           Control.Monad.State.Strict
 import           Data.Int
 import           Data.Maybe
+import           Data.Word (Word8)
 import           GHC.Generics (Generic)
 import           Prelude hiding (init)
 import           Text.PrettyPrint.GenericPretty (Out (..))
@@ -59,6 +60,10 @@ data Alts
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 instance Out Int64 where
+  doc w = doc (fromIntegral w :: Integer)
+  docPrec n w = docPrec n (fromIntegral w :: Integer)
+
+instance Out Word8 where
   doc w = doc (fromIntegral w :: Integer)
   docPrec n w = docPrec n (fromIntegral w :: Integer)
 

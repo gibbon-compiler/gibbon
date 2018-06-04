@@ -6,22 +6,54 @@
 -----------------------------------------------------------------------------
 
 module Gibbon.Interp
-  ( Store(..), insertIntoStore, lookupInStore
+  ( Interp(..)
+
+  , Store(..), insertIntoStore, lookupInStore
   , Buffer(..), emptyBuffer
   , SerializedVal(..), Value(..), Log, ValEnv
+
+  , execAndPrint, deserialize, strToInt, lookup3
   ) where
 
 import Control.Monad.State
 import Control.DeepSeq
 import Data.ByteString.Builder (Builder)
+import Data.Char (ord)
 import Data.Foldable as F
 import Data.List as L
 import Data.Map as M
-import Data.Sequence as Seq (Seq, empty)
+import Data.Sequence (Seq, ViewL(..))
 import Data.Word (Word8)
+import System.IO.Unsafe (unsafePerformIO)
 import Text.PrettyPrint.GenericPretty
+import qualified Data.ByteString.Lazy.Char8 as B
+import qualified Data.Sequence as S
 
+import Gibbon.L1.Syntax
 import Gibbon.Common
+
+--------------------------------------------------------------------------------
+-- Things which can be interpreted to yield a final, printed value.
+--------------------------------------------------------------------------------
+
+-- | Pure Gibbon programs, at any stage of compilation, should always
+-- be evaluatable to a unique value.  The only side effects are timing.
+class Interp a where
+  {-# MINIMAL interpProg #-}
+
+  interpProg :: RunConfig -> a -> IO (Value, B.ByteString)
+
+  -- | Interpret while ignoring timing constructs, and dropping the
+  -- corresponding output to stdout.
+  interpNoLogs :: RunConfig -> a -> String
+  interpNoLogs rc p = unsafePerformIO $ show . fst <$> interpProg rc p
+
+  -- | Interpret and produce a "log" of output lines, as well as a
+  -- final, printed result.  The output lines include timing information.
+  interpWithStdout :: RunConfig -> a -> IO (String,[String])
+  interpWithStdout rc p = do
+   (v,logs) <- interpProg rc p
+   return (show v, lines (B.unpack logs))
 
 
 -- Stores and buffers:
@@ -47,7 +79,7 @@ data Buffer = Buffer (Seq SerializedVal)
 instance Out Buffer
 
 emptyBuffer :: Buffer
-emptyBuffer = Buffer Seq.empty
+emptyBuffer = Buffer S.empty
 
 data SerializedVal = SerTag Word8 DataCon | SerInt Int
   deriving (Read,Eq,Ord,Generic, Show)
@@ -107,3 +139,45 @@ instance Show Value where
 
 type Log = Builder
 type ValEnv = M.Map Var Value
+
+--------------------------------------------------------------------------------
+
+-- | Code to read a final answer back out.
+deserialize :: (Out ty) => DDefs ty -> Seq SerializedVal -> Value
+deserialize ddefs seq0 = final
+ where
+  ([final],_) = readN 1 seq0
+
+  readN 0 seq = ([],seq)
+  readN n seq =
+     case S.viewl seq of
+       S.EmptyL -> error $ "deserialize: unexpected end of sequence: "++ndoc seq0
+       SerInt i :< rst ->
+         let (more,rst') = readN (n-1) rst
+         in (VInt i : more, rst')
+
+       SerTag _ k :< rst ->
+         let (args,rst')  = readN (length (lookupDataCon ddefs k)) rst
+             (more,rst'') = readN (n-1) rst'
+         in (VPacked k args : more, rst'')
+
+
+execAndPrint :: (Interp (Prog ex)) => RunConfig -> Prog ex -> IO ()
+execAndPrint rc prg = do
+  (val,logs) <- interpProg rc prg
+  B.putStr logs
+  case val of
+    -- Special case: don't print void return:
+    VProd [] -> return () -- FIXME: remove this.
+    _ -> print val
+
+strToInt :: String -> Int
+strToInt = product . L.map ord
+
+lookup3 :: (Eq k, Show k, Show a, Show b) => k -> [(k,a,b)] -> (k,a,b)
+lookup3 k ls = go ls
+  where
+   go [] = error$ "lookup3: key "++show k++" not found in list:\n  "++L.take 80 (show ls)
+   go ((k1,a1,b1):r)
+      | k1 == k   = (k1,a1,b1)
+      | otherwise = go r

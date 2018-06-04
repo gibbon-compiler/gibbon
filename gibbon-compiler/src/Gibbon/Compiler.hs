@@ -39,7 +39,6 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.Common
 import           Gibbon.Interp
 import           Gibbon.DynFlags
-import           Gibbon.GenericOps
 import qualified Gibbon.HaskellFrontend as HS
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2

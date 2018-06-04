@@ -50,35 +50,6 @@ interpChatter = 7
 instance Interp Prog1 where
   interpProg = interpProg1
 
--- | Code to read a final answer back out.
-deserialize :: (Out ty) => DDefs ty -> Seq SerializedVal -> Value
-deserialize ddefs seq0 = final
- where
-  ([final],_) = readN 1 seq0
-
-  readN 0 seq = ([],seq)
-  readN n seq =
-     case S.viewl seq of
-       S.EmptyL -> error $ "deserialize: unexpected end of sequence: "++ndoc seq0
-       SerInt i :< rst ->
-         let (more,rst') = readN (n-1) rst
-         in (VInt i : more, rst')
-
-       SerTag _ k :< rst ->
-         let (args,rst')  = readN (length (lookupDataCon ddefs k)) rst
-             (more,rst'') = readN (n-1) rst'
-         in (VPacked k args : more, rst'')
-
-
-execAndPrint :: RunConfig -> Prog1 -> IO ()
-execAndPrint rc prg = do
-  (val,logs) <- interpProg rc prg
-  B.putStr logs
-  case val of
-    -- Special case: don't print void return:
-    VProd [] -> return () -- FIXME: remove this.
-    _ -> print val
-
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
 interpProg1 :: RunConfig -> Prog1 -> IO (Value, B.ByteString)
@@ -242,18 +213,3 @@ applyPrim rc p ls =
 
 clk :: Clock
 clk = Monotonic
-
-
--- Misc Helpers
---------------------------------------------------------------------------------
-
-strToInt :: String -> Int
-strToInt = product . L.map ord
-
-lookup3 :: (Eq k, Show k, Show a, Show b) => k -> [(k,a,b)] -> (k,a,b)
-lookup3 k ls = go ls
-  where
-   go [] = error$ "lookup3: key "++show k++" not found in list:\n  "++L.take 80 (show ls)
-   go ((k1,a1,b1):r)
-      | k1 == k   = (k1,a1,b1)
-      | otherwise = go r
