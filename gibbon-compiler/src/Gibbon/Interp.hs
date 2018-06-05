@@ -9,7 +9,7 @@ module Gibbon.Interp
   ( Interp(..)
 
   , Store(..), insertIntoStore, lookupInStore
-  , Buffer(..), emptyBuffer
+  , Buffer(..), emptyBuffer, insertAtBuffer
   , SerializedVal(..), Value(..), Log, ValEnv
 
   , execAndPrint, deserialize, strToInt, lookup3
@@ -71,7 +71,7 @@ insertIntoStore v buf = modify (\(Store x) -> Store (M.insert v buf x))
 lookupInStore :: MonadState Store m => Var -> m (Maybe Buffer)
 lookupInStore v = do
   Store store <- get
-  return (M.lookup v store)
+  return $ M.lookup v store
 
 data Buffer = Buffer (Seq SerializedVal)
   deriving (Read,Eq,Ord,Generic, Show)
@@ -81,7 +81,11 @@ instance Out Buffer
 emptyBuffer :: Buffer
 emptyBuffer = Buffer S.empty
 
-data SerializedVal = SerTag Word8 DataCon | SerInt Int
+-- | Insert a value at a particular index in the buffer
+insertAtBuffer :: Int -> SerializedVal -> Buffer -> Buffer
+insertAtBuffer i v (Buffer b) = Buffer (S.insertAt i v b)
+
+data SerializedVal = SerTag Word8 DataCon | SerInt Int | SerBool Int
   deriving (Read,Eq,Ord,Generic, Show)
 
 byteSize :: SerializedVal -> Int
@@ -106,11 +110,10 @@ instance Out a => Out (Seq a) where
 data Value = VInt Int
            | VBool Bool
            | VDict (M.Map Value Value)
--- FINISH:       | VList
            | VProd [Value]
            | VPacked DataCon [Value]
-
-           | VCursor { bufID :: Int, offset :: Int }
+           | VLoc { bufID :: Var, offset :: Int }
+           | VCursor { bufID :: Var, offset :: Int }
              -- ^ Cursor are a pointer into the Store plus an offset into the Buffer.
 
   deriving (Read,Eq,Ord,Generic)
@@ -134,6 +137,8 @@ instance Show Value where
 
    -- For now, Racket style:
    VPacked k ls -> "(" ++ k ++ concat (L.map ((" "++) . show) ls) ++ ")"
+
+   VLoc buf off -> "<location "++show buf++", "++show off++">"
 
    VCursor idx off -> "<cursor "++show idx++", "++show off++">"
 

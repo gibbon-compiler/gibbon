@@ -21,7 +21,6 @@ import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.Writer
 import           Control.Monad.State
-import           Data.Char
 import           Data.List as L
 import           Data.Loc
 import           Data.Map as M
@@ -53,26 +52,17 @@ instance Interp Prog1 where
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
 interpProg1 :: RunConfig -> Prog1 -> IO (Value, B.ByteString)
-interpProg1 _ Prog {mainExp=Nothing} =
+interpProg1 rc Prog{ddefs,fundefs,mainExp} =
+  case mainExp of
     -- Print nothing, return "void"
-    return $ (VProd [], B.empty)
-interpProg1 rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
-    do
-       let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
-
-       -- logs contains print side effects:
-       ((x,logs),Store _finstore) <-
+    Nothing -> return (VProd [], B.empty)
+    Just (e,_) -> do
+      let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
+      -- logs contains print side effects
+      ((res,logs),Store _finstore) <-
          runStateT (runWriterT (interp rc ddefs fenv e)) (Store M.empty)
-{-
-       -- Policy: don't return cursors
-       let res = case x of
-                  VCursor ix off ->
-                      let Buffer b = finstore IM.! ix
-                      in deserialize ddefs (S.drop off b)
-                  _ -> x
--}
-       let res = x
-       return (res, toLazyByteString logs)
+      return (res, toLazyByteString logs)
+
 
 interp :: forall l e. ( Out l, Show l, Expression (e l (UrTy l)) )
        => RunConfig

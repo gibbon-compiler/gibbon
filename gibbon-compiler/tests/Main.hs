@@ -30,6 +30,7 @@ import Compiler
 import L1.Typecheck
 import L1.Interp
 import L2.Typecheck
+import L2.Interp
 import L3.Typecheck
 import L0.Specialize
 import InferLocations
@@ -47,6 +48,7 @@ main = defaultMain allTests
                    -- , l2TypecheckerTests
                    , l1TypecheckerTests
                    , l1InterpTests
+                   , l2InterpTests
                    , l3TypecheckerTests
                    , specializeTests
                    , compilerTests

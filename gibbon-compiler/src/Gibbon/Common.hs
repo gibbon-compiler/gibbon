@@ -43,7 +43,7 @@ module Gibbon.Common
 
          -- * Gibbon configuration
        , Config(..), Input(..), Mode(..), Backend(..), defaultConfig
-       , RunConfig(..), getRunConfig
+       , RunConfig(..), getRunConfig, defaultRunConfig
 
          -- * Data definitions
        , DDef(..), DDefs, fromListDD, emptyDD, insertDD
@@ -90,10 +90,6 @@ import Language.C.Quote.CUDA (ToIdent, toIdent)
 import Gibbon.DynFlags
 
 --------------------------------------------------------------------------------
-
--- | Orphaned instance: read without source locations.
-instance Read t => Read (L t) where
-  readsPrec n str = [ (L NoLoc a,s) | (a,s) <- readsPrec n str ]
 
 -- type CursorVar = Var
 newtype Var = Var Symbol
@@ -217,6 +213,10 @@ l x = L NoLoc x
 
 deriving instance Generic Loc
 deriving instance Generic Pos
+
+-- | Orphaned instance: read without source locations.
+instance Read t => Read (L t) where
+  readsPrec n str = [ (L NoLoc a,s) | (a,s) <- readsPrec n str ]
 
 instance Out Loc where
   docPrec _ loc = doc loc
@@ -490,6 +490,13 @@ data RunConfig =
               , rcDbg   :: Int
               , rcCursors :: Bool -- ^ Do we support cursors in L1.Exp at this point in the compiler.
               }
+
+defaultRunConfig :: RunConfig
+defaultRunConfig = RunConfig { rcSize  = 1
+                             , rcIters = 1
+                             , rcDbg   = 1
+                             , rcCursors = False
+                             }
 
 -- | We currently use the hacky approach of using env vars OR command
 -- line args to set the two universal benchmark params: SIZE and ITERS.

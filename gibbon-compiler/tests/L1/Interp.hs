@@ -12,8 +12,8 @@ import Test.Tasty.HUnit
 import Test.Tasty.TH
 import Test.Tasty
 
-import Gibbon.GenericOps
 import Gibbon.Common
+import Gibbon.Interp
 import Gibbon.L1.Syntax as L1
 import Gibbon.L1.Interp as L1
 
