@@ -13,7 +13,12 @@
 -- |  Parse an SExp representaton of our tree-walk language.
 
 module Gibbon.SExpFrontend
-       (parseFile, parseSExp, primMap, main) where
+       ( parseFile
+       , parseSExp
+       , primMap
+       -- , main
+       )
+  where
 
 import Data.List as L
 import Data.Loc
@@ -22,7 +27,6 @@ import Data.Set as S
 import Data.Text as T hiding (head)
 import Data.Text.IO (readFile)
 import System.FilePath
-import System.Environment
 import Text.Parsec
 -- import GHC.Generics (Generic)
 import Text.PrettyPrint.GenericPretty
@@ -43,6 +47,7 @@ import Data.SCargot.Repr -- (SExpr, RichSExpr, toRich)
 import qualified Data.SCargot.Common as SC
 
 import Gibbon.L1.Syntax
+import qualified Gibbon.L0.Syntax as L0
 import Gibbon.Common
 
 --------------------------------------------------------------------------------
@@ -64,6 +69,7 @@ instance Out Text where
 
 type Sexp = RichSExpr (SC.Located HaskLikeAtom)
 
+    
 prnt :: Sexp -> String
 prnt = T.unpack . encodeOne locatedHaskLikePrinter . fromRich
 
@@ -151,7 +157,7 @@ tagDataCons ddefs = go allCons
        MapE  (v,t,e) bod -> MapE (v,t, go cons e) (go cons bod)
        FoldE (v1,t1,e1) (v2,t2,e2) b -> FoldE (v1,t1,go cons e1) (v2,t2,go cons e2) (go cons b)
 
--- | Convert from raw, unstructured S-Expression into the program datatype we expect.
+-- | Convert from raw, unstructured S-Expression into the L1 program datatype we expect.
 parseSExp :: [Sexp] -> SyM Prog1
 parseSExp ses =
   do prog@Prog {ddefs} <- go ses [] [] [] Nothing
@@ -399,6 +405,8 @@ letbind s =
 isPrim :: Text -> Bool
 isPrim p = S.member p (M.keysSet primMap)
 
+-- ^ A map between SExp-frontend prefix function names, and Gibbon
+-- abstract Primops.
 primMap :: Map Text (Prim Ty1)
 primMap = M.fromList
   [ ("+", AddP)
@@ -419,11 +427,6 @@ prim t = case M.lookup t primMap of
            Just x -> x
            Nothing -> error$ "Internal error, this is not a primitive: "++show t
 
-main :: IO ()
-main = do
-  [file] <- getArgs
-  _ <- parseFile file
-  return ()
 
 handleRequire :: FilePath -> [RichSExpr (SC.Located HaskLikeAtom)] ->
                  IO [RichSExpr (SC.Located HaskLikeAtom)]
@@ -450,7 +453,7 @@ handleRequire baseFile (l:ls) =
       ls' <- handleRequire baseFile ls
       return $ l:ls'
 
-
+-- ^ Parse a file to an L1 program.  Return also the gensym counter.
 parseFile :: FilePath -> IO (Prog1, Int)
 parseFile file = do
   txt    <- fmap bracketHacks $
@@ -466,3 +469,9 @@ parseFile file = do
      Right ls -> do
        ls' <- handleRequire file ls
        return $ runSyM 0 $ parseSExp ls'
+
+
+-- FINISHME
+parseSExp0 :: [Sexp] -> SyM L0.PProg
+parseSExp0 = undefined
+
