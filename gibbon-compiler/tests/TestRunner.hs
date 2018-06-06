@@ -234,7 +234,7 @@ data TestRun = TestRun
   deriving (Show, Eq, Read, Ord)
 
 clk :: Clock
-clk = RealtimeCoarse
+clk = Realtime
 
 getTestRun :: Tests -> IO TestRun
 getTestRun (Tests tests) = do
