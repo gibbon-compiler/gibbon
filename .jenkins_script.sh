@@ -27,7 +27,7 @@ if [ "$DOCKER" == "1" ]; then
 elif [ "$USE_NIX" == "1" ]; then
 
     # Here by default we use a pinned version of the software ecosystem:
-    nix-shell --pure --command  "./run_all_tests.sh $@"
+    nix-shell --pure --command  "USE_NIX=1 ./run_all_tests.sh $@"
 
 else
     # HACK to get Jenkins to use proper Racket and GCC versions

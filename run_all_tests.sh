@@ -91,7 +91,13 @@ set -x
 # raco make -v $top/kdTree-BenchMark/racket/*.rkt
 racket $top/kdTree-BenchMark/racket/traversal.gib
 
-STK="stack --allow-different-user --install-ghc"
+STK="stack --allow-different-user"
+
+if [ "$USE_NIX" == "1" ]; then
+    STK+=" --system-ghc "
+else
+    STK+=" --install-ghc "
+fi
 
 set +x; echo
 echo "  Gibbon Compiler (1/2): build & unit tests"
