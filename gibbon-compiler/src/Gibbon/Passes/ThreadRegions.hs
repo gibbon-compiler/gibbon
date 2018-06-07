@@ -151,7 +151,6 @@ threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
 
   where
     go = threadRegionsExp ddefs fundefs isMain lenv env2
-    toEndV = varAppend "end_"
 
     docase reg lenv1 env21 (dcon,vlocs,bod) = do
       -- Update the envs with bindings for pattern matched variables and locations.

@@ -24,7 +24,8 @@ module Gibbon.Common
        , DataCon, TyCon, IsBoxed
 
          -- * Variables and gensyms
-       , Var(..), fromVar, toVar, varAppend, SyM, gensym, genLetter, runSyM
+       , Var(..), fromVar, toVar, varAppend, toEndV
+       , SyM, gensym, genLetter, runSyM
        , cleanFunName, mkCopyFunName, isCopyFunName
 
          -- * Regions and locations
@@ -127,6 +128,8 @@ cleanFunName f =
           then c
           else '_'
         | c <- (fromVar f) ]
+toEndV :: Var -> Var
+toEndV = varAppend "end_"
 
 type DataCon = String
 type TyCon   = String

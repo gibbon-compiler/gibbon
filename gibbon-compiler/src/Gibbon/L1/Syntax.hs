@@ -541,11 +541,11 @@ projNonFirst :: (Out l, Out d, Out (e l d)) => Int -> L (PreExp e l d) -> L (Pre
 projNonFirst 0 e = error $ "projNonFirst: expected nonzero index into expr: " ++ sdoc e
 projNonFirst i e = L (locOf e) $ ProjE i e
 
--- | Project position K of N, unless (K,N) = (0,1) in which case no
--- projection is necessary.
-mkProj :: (Eq a, Num a) => Int -> a -> L (PreExp e l d) -> L (PreExp e l d)
-mkProj 0 1 e  = e
-mkProj ix _ e = L (locOf e) $ ProjE ix e
+-- | Smart constructor that immediately destroys products if it can:
+-- Does NOT avoid single-element tuples.
+mkProj :: Int -> L (PreExp e l d) -> L (PreExp e l d)
+mkProj ix (L _ (MkProdE ls)) = ls !! ix
+mkProj ix e = l$ (ProjE ix e)
 
 -- | Make a product type while avoiding unary products.
 mkProd :: [L (PreExp e l d)]-> L (PreExp e l d)

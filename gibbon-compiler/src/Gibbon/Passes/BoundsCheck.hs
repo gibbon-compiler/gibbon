@@ -248,7 +248,6 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
     FoldE{} -> error $ "go: TODO FoldE"
 
   where go = boundsCheckExp ddfs fundefs renv env2 deps checked
-        toEndV = varAppend "end_"
         docase reg lenv1 env2' (dcon,vlocs,bod) = do
           -- Update the envs with bindings for pattern matched variables and locations.
           -- The locations point to the same region as the scrutinee.

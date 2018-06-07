@@ -606,7 +606,6 @@ lower Prog{fundefs,ddefs,mainExp} = do
         tail bod
 
     LetE (v,_,_, L _ (Ext (NewBuffer mul))) bod -> do
-      let toEndV = varAppend "end_"
       reg <- gensym "region"
       tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy)] (T.NewBuffer mul) [] <$>
                tail bod
