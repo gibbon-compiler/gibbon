@@ -303,8 +303,24 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
                                Just vs -> let extended = M.fromList [ (v,CursorTy) | (v,_,CursorTy,_) <- vs]
                                           in (vs, M.union extended tenv)
           case rhs_either of
-            Right rhs' -> unLoc . mkLets ((loc,[],CursorTy,rhs') : bnds) <$>
-                         cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') bod
+            -- Check if the location is already bound before. If so, don't
+            -- create a duplicate binding. This only happens when we
+            -- have indirection _and_ a end-witness for a particular value.
+            -- For example, consider a pattern like
+            --     (Node^ [(ind_y2, loc_ind_y2), (x1, loc_x1), (y2, loc_y2)] BODY)
+            --
+            -- occuring in a function like sum-tree.
+            --
+            -- While unpacking this constructor, we bind y2 to ind_y2.
+            -- But since sum-tree traverses it's input, we will enconter
+            -- (y2 = end_x1) sometime later in the AST (due to RouteEnds).
+            -- We just ignore the second binding for now.
+            --
+            Right rhs' ->
+              case M.lookup loc tenv of
+                Nothing ->  unLoc . mkLets ((loc,[],CursorTy,rhs') : bnds) <$>
+                              cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') bod
+                Just _  -> unLoc <$> cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') bod
             Left denv' -> unLoc <$> cursorizeExp ddfs fundefs denv' tenv' bod
 
         -- Exactly same as cursorizePackedExp
@@ -496,8 +512,11 @@ Reason: unariser can only eliminate direct projections of this form.
                                Just vs -> let extended = M.fromList [ (v,CursorTy) | (v,_,CursorTy,_) <- vs]
                                           in (vs, M.union extended tenv)
           case rhs_either of
-            Right rhs' -> onDi (mkLets ((loc,[],CursorTy,rhs') : bnds)) <$>
-                         go (M.insert loc CursorTy tenv') bod
+            Right rhs' ->
+              case M.lookup loc tenv of
+                Nothing ->  onDi (mkLets ((loc,[],CursorTy,rhs') : bnds)) <$>
+                              go (M.insert loc CursorTy tenv') bod
+                Just _  -> go (M.insert loc CursorTy tenv') bod
             Left denv' -> onDi (mkLets bnds) <$>
                             cursorizePackedExp ddfs fundefs denv' tenv' bod
                             --
@@ -746,130 +765,194 @@ cursorizeLet ddfs fundefs denv tenv isPackedContext (v,locs,ty,rhs) bod
                  else cursorizeExp ddfs fundefs denv t x
         dl = Di <$> L NoLoc
 
+{- Note [Unpacking constructors]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
--- (1) Take a cursor pointing to the start of the tag, and advance it by 1 byte.
--- (2) If the first bound varaible is a scalar (IntTy), read it using the newly
--- returned cursor. Otherwise, just process the body. it'll have the correct
--- instructions to process other bound locations
+(1) Take a cursor pointing to the start of the tag, and advance it by 1 byte.
+(2) If this DataCon has indirections, unpack those.
+(3) If the first bound varaible is a scalar (IntTy), read it using the newly
+returned cursor. Otherwise, just process the body. it'll have the correct
+instructions to process other bound locations
+
+Consider an example of unpacking of a Node^ pattern:
+
+    (Node^ [(ind_y3, loc_ind_y3), (n1, loc_n1) , (x2 , loc_x2), (y3 , loc_y3)]
+      BODY)
+
+-}
 unpackDataCon :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> Bool -> Var
               -> (DataCon, [(Var, Var)], L Exp2) -> PassM (DataCon, [t], L L3.Exp3)
-unpackDataCon ddfs fundefs denv1 tenv isPacked scrtCur (dcon,vlocs,rhs) = do
+unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
+  field_cur <- gensym "field_cur"
 
-  let indrVars = if isIndrDataCon dcon
-                 then (case numIndrsDataCon ddfs (fromIndrDataCon dcon) of
-                         Just n ->
-                           let indrs = L.map fst $ L.take n vlocs
-                               vars  = L.map fst $ reverse (L.take n (reverse vlocs))
-                           in zip indrs vars
-                         Nothing -> error $ "unpackDataCon: Sized constructor should have packed fields.")
-                 else []
-      hasIndrs = not (L.null indrVars)
-  cur <- gensym scrtCur
-  (dcon,[],)
-    <$> mkLets [(cur,[],CursorTy, l$ Ext $ L3.AddCursor scrtCur (l$ LitE 1))]
-    <$> go cur vlocs tys indrVars True hasIndrs denv1 (M.insert cur CursorTy tenv)
+  (dcon, [],)
+    -- Advance the cursor by 1 byte so that it points to the first field
+    <$> mkLets [(field_cur,[],CursorTy, l$ Ext $ L3.AddCursor scrtCur (l$ LitE 1))]
+    <$> (if isIndrDataCon dcon
+         then unpackWithIndirections field_cur
+         else unpackRegularDataCon field_cur)
+
   where
-        tys  = lookupDataCon ddfs dcon
-        processRhs denv env = if isPacked
-                              then fromDi <$> cursorizePackedExp ddfs fundefs denv env rhs
-                              else cursorizeExp ddfs fundefs denv env rhs
+    tys1 = lookupDataCon ddfs dcon
+    processRhs denv env = if isPacked
+                          then fromDi <$> cursorizePackedExp ddfs fundefs denv env rhs
+                          else cursorizeExp ddfs fundefs denv env rhs
 
-        -- Loop over fields.  Issue reads to get out all Ints. Otherwise, just bind vars to locations
-        --
-        go :: (Show t) => Var -> [(Var, Var)] -> [UrTy t] -> [(Var, Var)] -> Bool -> Bool -> DepEnv -> TEnv -> PassM (L L3.Exp3)
-        go _c [] [] _ _ _ denv env = processRhs denv env
-        go cur ((v,loc):rst) (ty:rtys) indrVars canBind hasIndrs denv env =
-          case ty of
-            IntTy -> do
-              tmp <- gensym (toVar "readint_tpl")
-              let env' = M.union (M.fromList [(tmp     , ProdTy [IntTy, CursorTy]),
-                                              (v       , IntTy),
-                                              (toEndV v, CursorTy)])
-                         env
-
-                  bnds = [(tmp     , [], ProdTy [IntTy, CursorTy], l$ Ext $ L3.ReadInt loc),
-                          (v       , [], IntTy   , l$ ProjE 0 (l$ VarE tmp)),
-                          (toEndV v, [], CursorTy, l$ ProjE 1 (l$ VarE tmp))]
-              if canBind
-              then do
-                let bnds' = (loc,[],CursorTy, l$ VarE cur):bnds
-                    env'' = M.insert loc CursorTy env'
-                bod <- go (toEndV v) rst rtys indrVars canBind hasIndrs denv env''
-                return $ mkLets bnds' bod
-              else do
-                let denv'' = M.insertWith (++) loc bnds denv
-                go (toEndV v) rst rtys indrVars canBind hasIndrs denv'' env'
-
-            CursorTy -> do
-              tmp <- gensym (toVar "readcursor_tpl")
-              let env' = M.union (M.fromList [(tmp     , ProdTy [CursorTy, CursorTy]),
-                                              (v       , CursorTy),
-                                              (toEndV v, CursorTy)])
-                         env
-
-                  bnds = [(tmp     , [], ProdTy [CursorTy, CursorTy], l$ Ext $ L3.ReadCursor loc),
-                          (v       , [], CursorTy, l$ ProjE 0 (l$ VarE tmp)),
-                          (toEndV v, [], CursorTy, l$ ProjE 1 (l$ VarE tmp))]
-              if canBind
-              then do
-                let bnds' = (loc,[],CursorTy, l$ VarE cur):bnds
-                    env'' = M.insert loc CursorTy env'
-                bod <- go (toEndV v) rst rtys indrVars canBind hasIndrs denv env''
-                return $ mkLets bnds' bod
-              else do
-                let denv'' = M.insertWith (++) loc bnds denv
-                go (toEndV v) rst rtys indrVars canBind hasIndrs denv'' env'
-
-            PackedTy{} -> do
-              let env' = M.insert v CursorTy env
-              case indrVars of
-                [] -> do
+    -- Since this constructor does not have indirections, we may not be able
+    -- to unpack all the fields. Basically, anything after the first packed
+    -- value isn't accessible since we have no way to reach it without knowing
+    -- the end of the packed value. So we punt on creating bindings for such
+    -- variables, and add them to the dependency environment instead. Later, when
+    -- the appropriate end locations become available (see the LetLocE cases),
+    -- these bindings are discharged from the dependency environment.
+    --
+    -- We recurse over the fields in `go`, and create bindings as long as we `canBind`.
+    -- Otherwise, we add things to the dependency environment. `canBind` is set
+    -- to true initially, and we flip it as soon as we see a packed value.
+    --
+    unpackRegularDataCon :: Var -> PassM (L L3.Exp3)
+    unpackRegularDataCon field_cur = go field_cur vlocs1 tys1 True denv1 (M.insert field_cur CursorTy tenv1)
+      where
+        go :: Var -> [(Var, LocVar)] -> [Ty2] -> Bool -> DepEnv -> TEnv -> PassM (L L3.Exp3)
+        go cur vlocs tys canBind denv tenv =
+          case (vlocs, tys) of
+            ([],[]) -> processRhs denv tenv
+            ((v,loc):rst_vlocs, ty:rst_tys) ->
+              case ty of
+                IntTy -> do
+                  (tenv', binds) <- intBinds v loc tenv
                   if canBind
                   then do
-                    bod <- go (toEndV v) rst rtys indrVars False hasIndrs denv (M.insert loc CursorTy env')
+                    -- If the location exists in the environment, it indicates that the
+                    -- corresponding variable was also bound and we shouldn't create duplicate
+                    -- bindings (checked in the LetLocE cases).
+                    let binds' = (loc,[],CursorTy, l$ VarE cur):binds
+                        tenv'' = M.insert loc CursorTy tenv'
+                    bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv''
+                    return $ mkLets binds' bod
+                  else do
+                    -- Cannot read this int. Instead, we add it to DepEnv.
+                    let denv' = M.insertWith (++) loc binds denv
+                    go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
+
+
+                PackedTy{} -> do
+                  let tenv' = M.insert v CursorTy tenv
+                  if canBind
+                  then do
+                    let tenv'' = M.insert loc CursorTy tenv'
+                    -- Flip canBind to indicate that the subsequent fields
+                    -- should be added to the dependency environment.
+                    bod <- go (toEndV v) rst_vlocs rst_tys False denv tenv''
                     return $ mkLets [(loc, [], CursorTy, l$ VarE cur)
                                     ,(v  , [], CursorTy, l$ VarE loc)]
                              bod
-                  else if hasIndrs
-                       then go (toEndV v) rst rtys indrVars False hasIndrs denv env'
-                       else do
-                         -- Don't create a `let v = loc` binding. Instead, add it to DepEnv
-                         let denv'' = M.insertWith (++) loc [(v,[],CursorTy,l$ VarE loc)] denv
-                         go (toEndV v) rst rtys indrVars False hasIndrs denv'' env'
-                ((a,dep):rest_indrs) -> do
-                  let env'' = M.insert dep CursorTy env'
-                  bod <- go (toEndV a) ((v,loc):rst) (ty:rtys) rest_indrs True hasIndrs denv env''
-                  return $ mkLets [(dep,[],CursorTy, l$ VarE a)] bod
-            _ -> error $ "unpackDataCon: Unexpected " ++ show ty
+                  else do
+                    -- Cannot read this. Instead, we add it to DepEnv.
+                    let denv' = M.insertWith (++) loc [(v,[],CursorTy,l$ VarE loc)] denv
+                    go (toEndV v) rst_vlocs rst_tys False denv' tenv'
 
-{-
-                -- Unpacking explicit indirections
-                --
-                ((_,dep):rest_indrs) -> do
-                  tmp1 <- gensym "tmp1"
-                  tmp2 <- gensym "tmp2"
-                  tagindr <- gensym "tag_indr"
-                  ptrindr <- gensym "ptr_indr"
+                _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
 
-                  let env'' = M.fromList [(tmp1     , ProdTy [IntTy, CursorTy])
-                                         ,(tagindr  , IntTy)
-                                         ,(ptrindr  , CursorTy)
-                                         ,(tmp2     , ProdTy [CursorTy, CursorTy])
-                                         ,(v        , CursorTy)
-                                         ,(toEndV v , CursorTy)]
-                  bod <- go v rst rtys rest_indrs True denv (M.union env' env'')
-                  return $
-                    mkLets [(loc      , [], CursorTy, l$ VarE cur),
-                            (tmp1     , [], ProdTy [IntTy, CursorTy], l$ Ext $ L3.ReadTag loc),
-                            (tagindr  , [], IntTy   , l$ ProjE 0 (l$ VarE tmp1)),
-                            (ptrindr  , [], CursorTy, l$ ProjE 1 (l$ VarE tmp1)),
-                            (tmp2     , [], ProdTy [CursorTy, CursorTy], l$ Ext $ L3.ReadCursor ptrindr),
-                            (v        , [], CursorTy, l$ ProjE 0 (l$ VarE tmp2)),
-                            (toEndV v , [], CursorTy, l$ ProjE 1 (l$ VarE tmp2)),
-                            (dep      , [], CursorTy, l$ VarE v)]
-                           bod
--}
-        go _ vls rtys _ _ _ _ _ = error $ "Unexpected numnber of varible, type pairs: " ++ show (vls,rtys)
+            _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
+
+    -- We have random access to all fields in this constructor, and can create
+    -- bindings for everything. We begin by unpacking the indirections.
+    unpackWithIndirections :: Var -> PassM (L L3.Exp3)
+    unpackWithIndirections field_cur =
+        -- A map from a variable to a tuple containing it's location and
+        -- the indirection field it depends on. Consider this constructor:
+        --
+        --     (Node^ [(ind_y3, loc_ind_y3), (n1, loc_n1) , (x2 , loc_x2), (y3 , loc_y3)] ...),
+        --
+        -- it will be the map:
+        --
+        --     (y3 -> (loc_y3, ind_y3))
+        let indirections_mp =
+              case numIndrsDataCon ddfs (fromIndrDataCon dcon) of
+                Nothing -> M.empty
+                Just n -> let -- Indirections occur immediately after the tag
+                              ind_vars = L.map fst $ L.take n vlocs1
+                              -- Everything else is a regular consturctor field,
+                              -- which depends on the indirection
+                              data_fields = L.take n (reverse vlocs1)
+                              (vars, var_locs) = unzip data_fields
+                          in M.fromList $ zip vars (zip var_locs ind_vars)
+        in go field_cur vlocs1 tys1 indirections_mp denv1 (M.insert field_cur CursorTy tenv1)
+      where
+        go :: Var -> [(Var, LocVar)] -> [Ty2] -> M.Map Var (Var,Var) -> DepEnv -> TEnv -> PassM (L L3.Exp3)
+        go cur vlocs tys indirections_env denv tenv = do
+          case (vlocs, tys) of
+            ([], []) -> processRhs denv tenv
+            ((v,loc):rst_vlocs, ty:rst_tys) ->
+              case ty of
+                -- The indirection field.
+                -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
+                CursorTy -> do
+                  tmp <- gensym "readcursor_tuple"
+                  let tenv' = M.union (M.fromList [(tmp     , ProdTy [CursorTy, CursorTy]),
+                                                   (loc     , CursorTy),
+                                                   (v       , CursorTy),
+                                                   (toEndV v, CursorTy)])
+                              tenv
+
+                      binds = [(tmp     , [], ProdTy [CursorTy, CursorTy], l$ Ext $ L3.ReadCursor cur),
+                               (loc     , [], CursorTy, l$ VarE cur),
+                               (v       , [], CursorTy, l$ ProjE 0 (l$ VarE tmp)),
+                               (toEndV v, [], CursorTy, l$ ProjE 1 (l$ VarE tmp))]
+                  bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv'
+                  return $ mkLets binds bod
+
+                IntTy -> do
+                  (tenv', binds) <- intBinds v loc tenv
+                  let loc_bind = case M.lookup v indirections_env of
+                                   -- This appears before the first packed field. Unpack it
+                                   -- in the usual way.
+                                   Nothing ->
+                                     (loc,[],CursorTy, l$ VarE cur)
+                                   -- We need to read this using an indirection.
+                                   Just (_var_loc, ind_var) ->
+                                     (loc,[],CursorTy, l$ VarE ind_var)
+                      binds' = loc_bind:binds
+                      tenv'' = M.insert loc CursorTy tenv'
+                  bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv''
+                  return $ mkLets binds' bod
+
+                PackedTy{} -> do
+                  let tenv' = M.union (M.fromList [ (loc, CursorTy)
+                                                  , (v,   CursorTy) ])
+                              tenv
+                      loc_bind = case M.lookup v indirections_env of
+                                   -- This is the first packed value. We can unpack this.
+                                   Nothing ->
+                                     (loc, [], CursorTy, l$ VarE cur)
+                                   -- We need to access this using an indirection.
+                                   Just (_var_loc, ind_var) ->
+                                     (loc, [], CursorTy, l$ VarE ind_var)
+                  bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv'
+                  return $ mkLets [ loc_bind, (v, [], CursorTy, l$ VarE loc) ] bod
+
+                _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
+
+            _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
+
+    -- Generate bindings for unpacking int fields. A convenient
+    intBinds :: Var -> LocVar -> TEnv -> PassM (TEnv, [(Var, [()], L3.Ty3, L L3.Exp3)])
+    intBinds v loc tenv = do
+      tmp <- gensym "readint_tuple"
+      -- Note that the location is not added to the type environment here.
+      -- The caller of this fn will do that later, depending on whether we're
+      -- binding the location now or later via DepEnv.
+      let tenv' = M.union (M.fromList [(tmp     , ProdTy [IntTy, CursorTy]),
+                                       (v       , IntTy),
+                                       (toEndV v, CursorTy)])
+                  tenv
+
+          binds = [(tmp     , [], ProdTy [IntTy, CursorTy], l$ Ext $ L3.ReadInt loc),
+                   (v       , [], IntTy   , l$ ProjE 0 (l$ VarE tmp)),
+                   (toEndV v, [], CursorTy, l$ ProjE 1 (l$ VarE tmp))]
+      return (tenv', binds)
+
 
 giveStarts :: Ty2 -> L L3.Exp3 -> L L3.Exp3
 giveStarts ty e =
