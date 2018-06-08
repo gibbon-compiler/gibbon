@@ -33,6 +33,7 @@ import qualified Data.List as L
 
 import Gibbon.GenericOps
 import Gibbon.Common
+import Gibbon.DynFlags
 import Gibbon.L1.Syntax hiding (progToEnv)
 import Gibbon.L3.Syntax
 import qualified Gibbon.L1.Syntax as L1
@@ -45,7 +46,7 @@ import qualified Gibbon.L4.Syntax as T
 -- Generating unpack functions from Packed->Pointer representation:
 -------------------------------------------------------------------------------
 
-genDcons :: [Ty3] -> Var -> [(T.Ty, T.Triv)] -> SyM T.Tail
+genDcons :: [Ty3] -> Var -> [(T.Ty, T.Triv)] -> PassM T.Tail
 genDcons (x:xs) tail fields = case x of
   IntTy             ->  do
     val  <- gensym "val"
@@ -72,7 +73,7 @@ genDcons [] tail fields     = do
   ptr <- gensym "ptr"
   return $ T.LetAllocT ptr fields $ T.RetValsT [T.VarTriv ptr, T.VarTriv tail]
 
-genAlts :: [(DataCon,[(IsBoxed,Ty3)])] -> Var -> Var -> Int64 -> SyM T.Alts
+genAlts :: [(DataCon,[(IsBoxed,Ty3)])] -> Var -> Var -> Int64 -> PassM T.Alts
 genAlts ((dcons, typs):xs) tail tag n = do
   let (_,typs') = unzip typs
   -- WARNING: IsBoxed ignored here
@@ -90,7 +91,7 @@ genAlts ((dcons, typs):xs) tail tag n = do
 
 genAlts [] _ _ _                  = return $ T.IntAlts []
 
-genUnpacker :: DDef Ty3 -> SyM T.FunDecl
+genUnpacker :: DDef Ty3 -> PassM T.FunDecl
 genUnpacker DDef{tyName, dataCons} = do
   p    <- gensym "p"
   tag  <- gensym "tag"
@@ -126,7 +127,7 @@ sandwich :: (T.Tail -> T.Tail) -> String -> T.Tail -> T.Tail
 sandwich mid s end = openParen s $ mid $ closeParen end
 
 -- Generate printing functions
-genDconsPrinter :: [Ty3] -> Var -> SyM T.Tail
+genDconsPrinter :: [Ty3] -> Var -> PassM T.Tail
 genDconsPrinter (x:xs) tail = case x of
   L1.IntTy             ->  do
     val  <- gensym "val"
@@ -159,7 +160,7 @@ genDconsPrinter (x:xs) tail = case x of
 genDconsPrinter [] tail     = do
   return $ closeParen $ T.RetValsT [(T.VarTriv tail)]
 
-genAltPrinter :: [(DataCon,[(IsBoxed, Ty3)])] -> Var -> Int64 -> SyM T.Alts
+genAltPrinter :: [(DataCon,[(IsBoxed, Ty3)])] -> Var -> Int64 -> PassM T.Alts
 genAltPrinter ((dcons, typs):xs) tail n = do
   let (_,typs') = unzip typs
   -- WARNING: IsBoxed ignored here
@@ -176,7 +177,7 @@ genAltPrinter ((dcons, typs):xs) tail n = do
     _              -> error $ "Invalid case statement type."
 genAltPrinter [] _ _                = return $ T.IntAlts []
 
-genPrinter  :: DDef Ty3 -> SyM T.FunDecl
+genPrinter  :: DDef Ty3 -> PassM T.FunDecl
 genPrinter DDef{tyName, dataCons} = do
   p    <- gensym "p"
   tag  <- gensym "tag"
@@ -199,7 +200,7 @@ printTy pkd ty trvs =
     (IntTy, [_one])             -> T.LetPrimCallT [] T.PrintInt trvs
     (SymDictTy ty', [_one])     -> sandwich (printTy pkd ty' trvs) "Dict"
     (PackedTy constr _, [one]) -> -- HACK: Using varAppend here was the simplest way to get
-                                  -- unique names without using the SyM monad.
+                                  -- unique names without using the PassM monad.
                                   -- ASSUMPTION: Argument (one) is always a variable reference.
                                   -- This is reasonable because the AST is always flattened before
                                   -- we try to lower it.
@@ -266,12 +267,13 @@ properTrivs pkd ty trvs =
 
 -- printTy ty trvs = error $ "Invalid L1 data type; " ++ show ty ++ " " ++ show trvs
 
-addPrintToTail :: Bool -> Ty3 -> T.Tail-> SyM T.Tail
-addPrintToTail pkd ty tl0 =
-  let ty' = if pkd
-            then T.IntTy
-            else T.fromL3Ty ty
-  in
+addPrintToTail :: Ty3 -> T.Tail-> PassM T.Tail
+addPrintToTail ty tl0 = do
+    dflags <- getDynFlags
+    let pkd = gopt Opt_Packed dflags
+        ty' = if pkd
+              then T.IntTy
+              else T.fromL3Ty ty
     T.withTail (tl0, ty') $ \ trvs ->
       printTy pkd ty (properTrivs pkd ty trvs) $
         -- Always print a trailing newline at the end of execution:
@@ -289,11 +291,11 @@ addPrintToTail pkd ty tl0 =
 --
 -- First argument indicates (1) whether we're inpacked mode, and (2)
 -- the pre-cursorize type of the mainExp, if there is a mainExp.
-lower :: (Bool,Maybe Ty3) -> Prog3 -> SyM T.Prog
-lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
+lower :: Prog3 -> PassM T.Prog
+lower Prog{fundefs,ddefs,mainExp} = do
   mn <- case mainExp of
           Nothing    -> return Nothing
-          Just (x,mty) -> (Just . T.PrintExp) <$> (addPrintToTail pkd mty =<< tail x)
+          Just (x,mty) -> (Just . T.PrintExp) <$> (addPrintToTail mty =<< tail x)
 
   funs       <- mapM fund (M.elems fundefs)
   unpackers  <- mapM genUnpacker (M.elems ddefs)
@@ -303,7 +305,7 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
 --  T.Prog <$> mapM fund (M.elems fundefs) <*> pure mn
 
  where
-  fund :: FunDef3 -> SyM T.FunDecl
+  fund :: FunDef3 -> PassM T.FunDecl
   fund FunDef{funName,funTy=(inty, outty),funArg,funBody} = do
       (args,bod) <- case inty of
                       -- ASSUMPTION: no nested tuples after unariser:
@@ -333,9 +335,11 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
       _ -> True
 
 
-  tail :: L Exp3 -> SyM T.Tail
+  tail :: L Exp3 -> PassM T.Tail
   tail (L _ ex0) =
-   dbgTrace 7 ("\n [lower] processing tail:\n  "++sdoc ex0) $
+   dbgTrace 7 ("\n [lower] processing tail:\n  "++sdoc ex0) $ do
+   dflags <- getDynFlags
+   let pkd = gopt Opt_Packed dflags
    case ex0 of
 
     -- HACK! We don't have LetSwitchT yet.  This means potential exponential code duplication:
@@ -431,7 +435,7 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
       let
         e_triv = triv "sum case scrutinee" e
 
-        mk_alt :: (DataCon, [(Var,())], L Exp3) -> SyM (Int64, T.Tail)
+        mk_alt :: (DataCon, [(Var,())], L Exp3) -> PassM (Int64, T.Tail)
         mk_alt (con, bndrs, rhs) = do
           let
             con_tag = getTagOfDataCon ddefs con
@@ -602,7 +606,6 @@ lower (pkd,_mMainTy) Prog{fundefs,ddefs,mainExp} = do
         tail bod
 
     LetE (v,_,_, L _ (Ext (NewBuffer mul))) bod -> do
-      let toEndV = varAppend "end_"
       reg <- gensym "region"
       tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy)] (T.NewBuffer mul) [] <$>
                tail bod
@@ -751,7 +754,7 @@ mkLetTail (vr,ty,rhs) =
 -}
 
 -- | Eliminate projections from a given tuple variable.  INEFFICIENT!
-eliminateProjs :: Var -> [Ty3] -> L Exp3 -> SyM ([Var],L Exp3)
+eliminateProjs :: Var -> [Ty3] -> L Exp3 -> PassM ([Var],L Exp3)
 eliminateProjs vr tys bod =
  dbgTrace 5 (" [lower] eliminating "++show (length tys)++
              " projections on variable "++show vr++" in expr with types "

@@ -5,6 +5,7 @@ import Data.Loc
 import Data.List as L
 import Data.Map as M
 
+import Gibbon.Common
 import Gibbon.L1.Syntax
 import Gibbon.L2.Syntax (stripTyLocs)
 import qualified Gibbon.L3.Syntax as L3
@@ -12,7 +13,7 @@ import qualified Gibbon.L3.Syntax as L3
 
 -- | Directly convert the source program to L3. Used in the pointer mode
 --
-directL3 :: Prog1 -> L3.Prog3
+directL3 :: Prog1 -> PassM L3.Prog3
 directL3 (Prog ddfs fndefs mnExp) = do
     let mnExp' = case mnExp of
                    Nothing -> Nothing
@@ -20,7 +21,7 @@ directL3 (Prog ddfs fndefs mnExp) = do
 
         fds = L.map fd $ M.elems fndefs
         fndefs' = M.fromList $ L.map (\f -> (funName f, f)) fds
-    Prog ddfs fndefs' mnExp'
+    return (Prog ddfs fndefs' mnExp')
   where
     fd :: FunDef1 -> L3.FunDef3
     fd FunDef{funName,funArg,funTy,funBody} =

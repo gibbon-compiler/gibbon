@@ -213,7 +213,7 @@ tcExp ddfs env exp@(L p ex) =
 
 -- | Typecheck a L1 program
 --
-tcProg :: Prog1 -> SyM Prog1
+tcProg :: Prog1 -> PassM Prog1
 tcProg prg@Prog{ddefs,fundefs,mainExp} = do
 
   -- Handle functions

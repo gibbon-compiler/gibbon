@@ -58,7 +58,7 @@ type TypeEnv = M.Map Var Ty
 -- Track the tail that was returned with this tag var
 type TagTailEnv = M.Map Var Var
 
-followRedirects :: Prog -> SyM Prog
+followRedirects :: Prog -> PassM Prog
 followRedirects (Prog fundefs mainExp) = do
   fundefs' <- mapM followRedirectsFn fundefs
   mainExp' <- case mainExp of
@@ -67,13 +67,13 @@ followRedirects (Prog fundefs mainExp) = do
                 Nothing -> return Nothing
   return $ Prog fundefs' mainExp'
 
-followRedirectsFn :: FunDecl -> SyM FunDecl
+followRedirectsFn :: FunDecl -> PassM FunDecl
 followRedirectsFn f@FunDecl{funArgs,funBody} = do
   let initTyEnv = M.fromList funArgs
   bod' <- followRedirectsExp M.empty initTyEnv funBody
   return $ f {funBody = bod'}
 
-followRedirectsExp :: TagTailEnv -> TypeEnv -> Tail -> SyM Tail
+followRedirectsExp :: TagTailEnv -> TypeEnv -> Tail -> PassM Tail
 followRedirectsExp ttailenv tenv tail =
   case tail of
     Switch lbl trv alts bod_maybe -> do

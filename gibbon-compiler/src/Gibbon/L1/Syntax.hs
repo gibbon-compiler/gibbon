@@ -27,9 +27,6 @@ module Gibbon.L1.Syntax
       -- * Core types specific to L1
     , Prog1, FunDef1, Exp1, Ty1, pattern SymTy
 
-      -- * Interpreter
-    , InterpE(..)
-
       -- * Functions on expressions
     , insertFD, fromListFD, mapExt, mapLocs, mapExprs, visitExp
     , progToEnv, getFunTy, subst, substE, hasTimeIt, projNonFirst
@@ -45,8 +42,6 @@ module Gibbon.L1.Syntax
     where
 
 import Control.DeepSeq (NFData, rnf)
-import Control.Monad.Writer
-import Control.Monad.State
 import Data.List as L
 import Data.Loc
 import Data.Map as M
@@ -395,27 +390,6 @@ instance FreeVars (UrTy l) where
     gFreeVars _ = S.empty
 
 --------------------------------------------------------------------------------
-
-class Expression e => InterpE e where
-  -- | A temporary HACK which gives the type of the expression being
-  -- interpreted. We need the type to get the proper 'FunDef', which
-  -- is used to interpret function applications.
-  --
-  -- For 'PreExp' or other datatypes which are actual expressions,
-  -- this is set to the same datatype. However, when we're defining
-  -- an instance of this class for an extension, it isn't
-  -- clear how to infer the type of the expression without this.
-  type ExpTy e
-
-  -- | Interpret an expression and return a 'Value'
-  interpE :: RunConfig -> DDefs (TyOf e) -> M.Map Var (FunDef (ExpTy e)) -> e
-          -> WriterT Log (StateT Store IO) Value
-
-instance InterpE (NoExt l d) where
-    type ExpTy (NoExt l d) = L (PreExp NoExt l (UrTy l))
-    interpE _ _ _ _ = error "<NoExt: This should be impossible to evaluate>"
-
---------------------------------------------------------------------------------
 -- Helpers
 
 -- | Insert a 'FunDef' into 'FunDefs'.
@@ -437,7 +411,7 @@ mapLocs :: (e l2 d -> e l2 d) -> PreExp e l2 d -> PreExp e l2 d
 mapLocs fn = visitExp id fn id
 
 -- | Transform the expressions within a program.
-mapExprs :: (L Exp1 -> L Exp1) -> Prog1 -> Prog1
+mapExprs :: (e -> e) -> Prog e -> Prog e
 mapExprs fn prg@Prog{fundefs,mainExp} =
   let mainExp' = case mainExp of
                    Nothing -> Nothing
@@ -567,11 +541,11 @@ projNonFirst :: (Out l, Out d, Out (e l d)) => Int -> L (PreExp e l d) -> L (Pre
 projNonFirst 0 e = error $ "projNonFirst: expected nonzero index into expr: " ++ sdoc e
 projNonFirst i e = L (locOf e) $ ProjE i e
 
--- | Project position K of N, unless (K,N) = (0,1) in which case no
--- projection is necessary.
-mkProj :: (Eq a, Num a) => Int -> a -> L (PreExp e l d) -> L (PreExp e l d)
-mkProj 0 1 e  = e
-mkProj ix _ e = L (locOf e) $ ProjE ix e
+-- | Smart constructor that immediately destroys products if it can:
+-- Does NOT avoid single-element tuples.
+mkProj :: Int -> L (PreExp e l d) -> L (PreExp e l d)
+mkProj ix (L _ (MkProdE ls)) = ls !! ix
+mkProj ix e = l$ (ProjE ix e)
 
 -- | Make a product type while avoiding unary products.
 mkProd :: [L (PreExp e l d)]-> L (PreExp e l d)

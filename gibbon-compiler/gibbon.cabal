@@ -24,6 +24,7 @@ library
                        Gibbon.HaskellFrontend
                        Gibbon.TargetInterp
                        Gibbon.Pretty
+                       Gibbon.Interp
                        Gibbon.L1.Syntax
                        Gibbon.L1.Typecheck
                        Gibbon.L1.Examples
@@ -75,7 +76,7 @@ library
                      , process                  >= 1.4.3     &&  < 1.7
                      , filepath                 >= 1.4.1     &&  < 1.5
                      , directory                >= 1.3       &&  < 1.4
-                     , containers               >= 0.5.7.1   &&  < 0.6
+                     , containers               >= 0.5.8     &&  < 0.6
                      , deepseq                  >= 1.4.2     &&  < 1.5
                      , mtl                      >= 2.2.1     &&  < 2.3
                      , transformers             >= 0.5.2     &&  < 0.6
@@ -149,8 +150,10 @@ test-suite test-gibbon
                        InferMultiplicity
                        AddLayout
                        Compiler
-                       L2.Typecheck
                        L1.Typecheck
+                       L1.Interp
+                       L2.Typecheck
+                       L2.Interp
                        L3.Typecheck
                        L0.Specialize
 

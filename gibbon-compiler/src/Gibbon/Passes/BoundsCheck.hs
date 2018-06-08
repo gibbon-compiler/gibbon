@@ -127,7 +127,7 @@ type RegEnv = M.Map LocVar Var
 
 type Deps = [(Var, Var, [Var])]
 
-boundsCheck :: L2.Prog2 -> SyM L2.Prog2
+boundsCheck :: L2.Prog2 -> PassM L2.Prog2
 boundsCheck Prog{ddefs,fundefs,mainExp} = do
   fds' <- mapM (boundsCheckFn ddefs fundefs) $ M.elems fundefs
   let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
@@ -138,9 +138,9 @@ boundsCheck Prog{ddefs,fundefs,mainExp} = do
   --                 boundsCheckExp ddefs fundefs M.empty env2 (depList mn) S.empty mn
   return $ Prog ddefs fundefs' mainExp
 
-boundsCheckFn :: DDefs Ty2 -> FunDefs2 -> L2.FunDef2 -> SyM L2.FunDef2
+boundsCheckFn :: DDefs Ty2 -> FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
 boundsCheckFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
-  let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionVar r)) (locVars funTy)
+  let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
       initTyEnv  = M.singleton funArg (arrIn funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
       deps = [(lc, lc, []) | lc <- outLocVars funTy] ++ depList funBody
@@ -148,7 +148,7 @@ boundsCheckFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
   return $ f {funBody = bod'}
 
 boundsCheckExp :: DDefs Ty2 -> FunDefs2 -> RegEnv -> Env2 Ty2 -> Deps -> S.Set Var
-               -> L L2.Exp2 -> SyM (L L2.Exp2)
+               -> L L2.Exp2 -> PassM (L L2.Exp2)
 boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
   case ex of
     LetE (v, locs, ty, rhs@(L _ (DataConE lc dcon _))) bod -> do
@@ -174,8 +174,8 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
       case ext of
         LetLocE loc rhs bod -> do
           let reg = case rhs of
-                      StartOfLE r  -> regionVar r
-                      InRegionLE r -> regionVar r
+                      StartOfLE r  -> regionToVar r
+                      InRegionLE r -> regionToVar r
                       AfterConstantLE _ lc -> renv # lc
                       AfterVariableLE _ lc -> renv # lc
                       -- HACK: LetE form doesn't extend the RegEnv with the
@@ -248,7 +248,6 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
     FoldE{} -> error $ "go: TODO FoldE"
 
   where go = boundsCheckExp ddfs fundefs renv env2 deps checked
-        toEndV = varAppend "end_"
         docase reg lenv1 env2' (dcon,vlocs,bod) = do
           -- Update the envs with bindings for pattern matched variables and locations.
           -- The locations point to the same region as the scrutinee.

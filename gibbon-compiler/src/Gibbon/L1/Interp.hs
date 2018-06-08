@@ -11,8 +11,9 @@
 --
 
 module Gibbon.L1.Interp
-    ( execAndPrint, gInterpProg
-    , main
+    ( execAndPrint, interpProg1,
+      -- * Helpers
+      applyPrim, strToInt
     ) where
 
 import           Data.ByteString.Builder (toLazyByteString, string8)
@@ -20,18 +21,17 @@ import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.Writer
 import           Control.Monad.State
-import           Data.Char
-import           Data.IntMap as IM
 import           Data.List as L
 import           Data.Loc
 import           Data.Map as M
-import           Data.Sequence (Seq, ViewL ((:<)), (|>))
+import           Data.Sequence (Seq, ViewL ((:<)))
 import           System.Clock
 import           Text.PrettyPrint.GenericPretty
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Sequence as S
 
 import           Gibbon.Common
+import           Gibbon.Interp
 import           Gibbon.GenericOps
 import           Gibbon.L1.Syntax as L1
 
@@ -47,87 +47,30 @@ interpChatter = 7
 ------------------------------------------------------------
 
 instance Interp Prog1 where
-  interpProg = gInterpProg
-
-type ValEnv = Map Var Value
-
--- | Code to read a final answer back out.
-deserialize :: (Out ty) => DDefs ty -> Seq SerializedVal -> Value
-deserialize ddefs seq0 = final
- where
-  ([final],_) = readN 1 seq0
-
-  readN 0 seq = ([],seq)
-  readN n seq =
-     case S.viewl seq of
-       S.EmptyL -> error $ "deserialize: unexpected end of sequence: "++ndoc seq0
-       SerInt i :< rst ->
-         let (more,rst') = readN (n-1) rst
-         in (VInt i : more, rst')
-
-       SerTag _ k :< rst ->
-         let (args,rst')  = readN (length (lookupDataCon ddefs k)) rst
-             (more,rst'') = readN (n-1) rst'
-         in (VPacked k args : more, rst'')
-
-
-execAndPrint :: RunConfig -> Prog1 -> IO ()
-execAndPrint rc prg = do
-  (val,logs) <- interpProg rc prg
-  B.putStr logs
-  case val of
-    -- Special case: don't print void return:
-    VProd [] -> return () -- FIXME: remove this.
-    _ -> print val
-
--- TODO: add a flag for whether we support cursors:
+  interpProg = interpProg1
 
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
-gInterpProg :: ( Out (TyOf ex)
-               , InterpE ex
-               , ExpTy ex ~ ex )
-           => RunConfig -> Prog ex -> IO (Value, B.ByteString)
-gInterpProg _ Prog {mainExp=Nothing} =
+interpProg1 :: RunConfig -> Prog1 -> IO (Value, B.ByteString)
+interpProg1 rc Prog{ddefs,fundefs,mainExp} =
+  case mainExp of
     -- Print nothing, return "void"
-    return $ (VProd [], B.empty)
-gInterpProg rc Prog {ddefs,fundefs, mainExp=Just (e,_)} =
-    do
-       let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
+    Nothing -> return (VProd [], B.empty)
+    Just (e,_) -> do
+      let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
+      -- logs contains print side effects
+      ((res,logs),Store _finstore) <-
+         runStateT (runWriterT (interp rc ddefs fenv e)) (Store M.empty)
+      return (res, toLazyByteString logs)
 
-       -- logs contains print side effects:
-       ((x,logs),Store finstore) <-
-         runStateT (runWriterT (interpE rc ddefs fenv e)) (Store IM.empty)
 
-       -- Policy: don't return cursors
-       let res = case x of
-                  VCursor ix off ->
-                      let Buffer b = finstore IM.! ix
-                      in deserialize ddefs (S.drop off b)
-                  _ -> x
-       return (res, toLazyByteString logs)
-
-instance ( Out l, Show l
-         , Expression (e l (UrTy l))
-         , TyOf (e l (UrTy l)) ~ TyOf (L (PreExp e l (UrTy l)))
-         , ExpTy (e l (UrTy l)) ~ ExpTy (L (PreExp e l (UrTy l)))
-         , InterpE (e l (UrTy l)) )
-        => InterpE (L (PreExp e l (UrTy l))) where
-  type ExpTy (L (PreExp e l (UrTy l))) = (L (PreExp e l (UrTy l)))
-  interpE = interp
-
-interp :: forall l e.
-          ( Out l, Show l
-          , Expression (e l (UrTy l))
-          , TyOf (e l (UrTy l)) ~ TyOf (L (PreExp e l (UrTy l)))
-          , ExpTy (e l (UrTy l)) ~ ExpTy (L (PreExp e l (UrTy l)))
-          , InterpE (e l (UrTy l)) )
+interp :: forall l e. ( Out l, Show l, Expression (e l (UrTy l)) )
        => RunConfig
        -> DDefs (TyOf (L (PreExp e l (UrTy l))))
        -> M.Map Var (FunDef (L (PreExp e l (UrTy l))))
        -> L (PreExp e l (UrTy l))
        -> WriterT Log (StateT Store IO) Value
-interp rc ddefs fenv = go M.empty
+interp rc _ddefs fenv = go M.empty
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env ex = go env ex
@@ -135,14 +78,14 @@ interp rc ddefs fenv = go M.empty
     go :: ValEnv -> L (PreExp e l (UrTy l)) -> WriterT Log (StateT Store IO) Value
     go env (L _ x0) =
         case x0 of
-          Ext ext -> interpE rc ddefs fenv ext
+          Ext{} -> error "Cannot interpret NoExt"
 
           LitE c    -> return $ VInt c
           LitSymE s -> return $ VInt (strToInt $ fromVar s)
           VarE v    -> return $ env # v
 
           PrimAppE p ls -> do args <- mapM (go env) ls
-                              return $ applyPrim p args
+                              return $ applyPrim rc p args
           ProjE ix ex   -> do VProd ls <- go env ex
                               return $ ls !! ix
 
@@ -153,9 +96,10 @@ interp rc ddefs fenv = go M.empty
 
           CaseE _ [] -> error$ "L1.Interp: CaseE with empty alternatives list: "++ndoc x0
 
-          CaseE x1 alts@((sometag,_,_):_) -> do
+          CaseE x1 alts@((_sometag,_,_):_) -> do
                  v <- go env x1
                  case v of
+{-
                    VCursor idx off | rcCursors rc ->
                       do Store store <- get
                          let Buffer seq1 = store IM.! idx
@@ -169,6 +113,7 @@ interp rc ddefs fenv = go M.empty
                              let env' = M.insert curname (VCursor idx (off+1)) env
                              go env' rhs
                            oth :< _ -> error $ "L1.Interp: expected to read tag from scrutinee cursor, found: "++show oth
+-}
 
                    VPacked k ls2 ->
                        let vs = L.map fst prs
@@ -188,9 +133,11 @@ interp rc ddefs fenv = go M.empty
           -- TODO: Should check this against the ddefs.
           DataConE _ k ls -> do
               args <- mapM (go env) ls
-              case args of
+              return $ VPacked k args
+{-
               -- Constructors are overloaded.  They have different behavior depending on
               -- whether we are AFTER Cursorize or not.
+              case args of
                 [ VCursor idx off ] | rcCursors rc ->
                     do Store store <- get
                        let tag       = SerTag (getTagOfDataCon ddefs k) k
@@ -198,7 +145,7 @@ interp rc ddefs fenv = go M.empty
                        put (Store store')
                        return $ VCursor idx (off+1)
                 _ -> return $ VPacked k args
-
+-}
 
           TimeIt bod _ isIter -> do
               let iters = if isIter then rcIters rc else 1
@@ -228,56 +175,31 @@ interp rc ddefs fenv = go M.empty
           MapE _ _bod    -> error "L1.Interp: finish MapE"
           FoldE _ _ _bod -> error "L1.Interp: finish FoldE"
 
-    applyPrim :: Prim (UrTy l) -> [Value] -> Value
-    applyPrim p ls =
-     case (p,ls) of
-       (MkTrue,[])             -> VBool True
-       (MkFalse,[])            -> VBool False
-       (AddP,[VInt x, VInt y]) -> VInt (x+y)
-       (SubP,[VInt x, VInt y]) -> VInt (x-y)
-       (MulP,[VInt x, VInt y]) -> VInt (x*y)
-       (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
-       (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
-       (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
-       (EqSymP,[VInt x, VInt y]) -> VBool (x==y)
-       (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
-       (LtP,[VInt x, VInt y]) -> VBool (x < y)
-       (GtP,[VInt x, VInt y]) -> VBool (x > y)
-       ((DictInsertP _ty),[VDict mp, key, val]) -> VDict (M.insert key val mp)
-       ((DictLookupP _),[VDict mp, key])        -> mp # key
-       ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)
-       ((DictEmptyP _),[])                      -> VDict M.empty
-       ((ErrorP msg _ty),[]) -> error msg
-       (SizeParam,[]) -> VInt (rcSize rc)
-       (ReadPackedFile file _ ty,[]) ->
-           error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
-       oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
+applyPrim :: (Show l) => RunConfig -> Prim (UrTy l) -> [Value] -> Value
+applyPrim rc p ls =
+ case (p,ls) of
+   (MkTrue,[])             -> VBool True
+   (MkFalse,[])            -> VBool False
+   (AddP,[VInt x, VInt y]) -> VInt (x+y)
+   (SubP,[VInt x, VInt y]) -> VInt (x-y)
+   (MulP,[VInt x, VInt y]) -> VInt (x*y)
+   (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
+   (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
+   (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
+   (EqSymP,[VInt x, VInt y]) -> VBool (x==y)
+   (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
+   (LtP,[VInt x, VInt y]) -> VBool (x < y)
+   (GtP,[VInt x, VInt y]) -> VBool (x > y)
+   ((DictInsertP _ty),[VDict mp, key, val]) -> VDict (M.insert key val mp)
+   ((DictLookupP _),[VDict mp, key])        -> mp # key
+   ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)
+   ((DictEmptyP _),[])                      -> VDict M.empty
+   ((ErrorP msg _ty),[]) -> error msg
+   (SizeParam,[]) -> VInt (rcSize rc)
+   (ReadPackedFile file _ ty,[]) ->
+       error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
+   oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
 
 clk :: Clock
 clk = Monotonic
-
-
--- Misc Helpers
---------------------------------------------------------------------------------
-
-strToInt :: String -> Int
-strToInt = product . L.map ord
-
-lookup3 :: (Eq k, Show k, Show a, Show b) => k -> [(k,a,b)] -> (k,a,b)
-lookup3 k ls = go ls
-  where
-   go [] = error$ "lookup3: key "++show k++" not found in list:\n  "++L.take 80 (show ls)
-   go ((k1,a1,b1):r)
-      | k1 == k   = (k1,a1,b1)
-      | otherwise = go r
-
---------------------------------------------------------------------------------
-
-p1 :: Prog1
-p1 = Prog emptyDD  M.empty
-          (Just ( L NoLoc $ LetE ("x", [], IntTy, L NoLoc $ LitE 3) (L NoLoc $ VarE (toVar "x"))
-                , IntTy))
-
-main :: IO ()
-main = execAndPrint (RunConfig 1 1 dbgLvl False) p1

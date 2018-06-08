@@ -53,9 +53,9 @@ testDir = makeValid ("examples" </> "build_tmp")
 --   It's divided into 2 functions for easy debugging. There's a good chance that we'd
 --   want to inspect the output of Cursorize in most cases
 runT :: Prog2 -> L3.Prog3
-runT prg = fst $ runSyM 0 $ do
+runT prg = fst $ defaultPackedRunPassM $ do
     l2 <- flattenL2 prg
-    l2 <- inferRegScope Infinite l2
+    l2 <- inferRegScope l2
     l2 <- inferEffects l2
     l2 <- tcProg l2
     l2 <- routeEnds l2
@@ -63,22 +63,21 @@ runT prg = fst $ runSyM 0 $ do
     l2 <- boundsCheck l2
     l2 <- threadRegions l2
     l2 <- flattenL2 l2
-    l3 <- cursorize defaultDynFlags l2
+    l3 <- cursorize l2
     return l3
 
 
 run2T :: L3.Prog3 -> L4.Prog
-run2T l3 = fst $ runSyM 0 $ do
+run2T l3 = fst $ defaultPackedRunPassM $ do
     l3 <- flattenL3 l3
     -- l3 <- findWitnesses l3
     -- l3 <- shakeTree l3
     l3 <- L3.tcProg l3
     l3 <- hoistNewBuf l3
     l3 <- unariser l3
-    let mainTyPre = fmap snd $ mainExp l3
     l3 <- flattenL3 l3
     l3 <- L3.tcProg l3
-    l4 <- lower (True, mainTyPre) l3
+    l4 <- lower l3
     l4 <- followRedirects l4
     rearrangeFree l4
 

@@ -295,7 +295,7 @@ tcExp ddfs env exp@(L p ex) =
 
 -- | Typecheck a L1 program
 --
-tcProg :: Prog3 -> SyM Prog3
+tcProg :: Prog3 -> PassM Prog3
 tcProg prg@Prog{ddefs,fundefs,mainExp} = do
 
   -- Handle functions
@@ -327,7 +327,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
                        in  all (\(a,b) -> tyEq a b) (zip tys1 tys2)
         _ -> ty1 == ty2
 
-    -- fd :: forall e l . FunDef Ty1 Exp -> SyM ()
+    -- fd :: forall e l . FunDef Ty1 Exp -> PassM ()
     fd FunDef{funArg,funTy,funBody} = do
       let env' = Env2 (M.singleton funArg inT) (fEnv env)
           res = runExcept $ tcExp ddefs env' funBody

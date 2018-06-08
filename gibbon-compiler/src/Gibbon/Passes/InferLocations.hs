@@ -109,7 +109,7 @@ import Debug.Trace
 
 import Gibbon.GenericOps (gFreeVars)
 import Gibbon.Common as C hiding (extendVEnv, lookupVEnv) -- (l, LRM(..))
-import Gibbon.Common (Var, Env2, DDefs, LocVar, runSyM, SyM, gensym, toVar)
+import Gibbon.Common (Var, Env2, DDefs, LocVar, runPassM, PassM, gensym, toVar)
 import Gibbon.L1.Syntax as L1
 import Gibbon.L2.Syntax as L2
 import Gibbon.L2.Typecheck as T
@@ -142,7 +142,7 @@ lookupFEnv v FullEnv{funEnv} = funEnv # v
 -- If we assume output regions are disjoint from input ones, then we
 -- can instantiate an L1 function type into a polymorphic L2 one,
 -- mechanically.
-convertFunTy :: (L1.Ty1,L1.Ty1) -> SyM ArrowTy2
+convertFunTy :: (L1.Ty1,L1.Ty1) -> PassM ArrowTy2
 convertFunTy (from,to) = do
     from' <- convertTy from
     to'   <- convertTy to
@@ -160,10 +160,10 @@ convertFunTy (from,to) = do
                       return $ LRM v (VarR r) md)
             (F.toList ls)
 
-convertTy :: L1.Ty1 -> SyM Ty2
+convertTy :: L1.Ty1 -> PassM Ty2
 convertTy ty = traverse (const (freshLocVar "loc")) ty
 
-convertDDefs :: DDefs L1.Ty1 -> SyM (DDefs Ty2)
+convertDDefs :: DDefs L1.Ty1 -> PassM (DDefs Ty2)
 convertDDefs ddefs = traverse f ddefs
     where f (DDef n dcs) = do
             dcs' <- forM dcs $ \(dc,bnds) -> do
@@ -177,7 +177,7 @@ convertDDefs ddefs = traverse f ddefs
 --------------------------------------------------------------------------------
 
 -- | The location inference monad is a stack of ExceptT and StateT.
-type TiM a = ExceptT Failure (St.StateT InferState SyM) a
+type TiM a = ExceptT Failure (St.StateT InferState PassM) a
 
 -- | The state of the inference procedure is a map from location variable
 -- to `UnifyLoc`, which is explained below.
@@ -218,7 +218,7 @@ data DCArg = ArgFixed Int
            | ArgVar Var
            | ArgCopy Var Var Var [LocVar]
 
-inferLocs :: L1.Prog1 -> SyM L2.Prog2
+inferLocs :: L1.Prog1 -> PassM L2.Prog2
 inferLocs initPrg = do
   (L1.Prog dfs fds me) <- addCopyFns initPrg
   let m = do
@@ -1021,10 +1021,10 @@ isCpyCall :: L Exp2 -> Bool
 isCpyCall (L _ (AppE f _ _)) = True -- TODO: check if it's a real copy call, to be safe
 isCpyCall _ = False
 
-freshLocVar :: String -> SyM LocVar
+freshLocVar :: String -> PassM LocVar
 freshLocVar m = gensym (toVar m)
 
-freshRegVar :: SyM Region
+freshRegVar :: PassM Region
 freshRegVar = do rv <- gensym (toVar "r")
                  return $ VarR rv
 
@@ -1157,7 +1157,7 @@ prim p = case p of
 
 -- | Generate a copy function for a particular data definition.
 -- Note: there will be redundant let bindings in the function body which may need to be inlined.
-genCopyFn :: DDef L1.Ty1 -> SyM L1.FunDef1
+genCopyFn :: DDef L1.Ty1 -> PassM L1.FunDef1
 genCopyFn DDef{tyName, dataCons} = do
   arg <- gensym $ "arg"
   casebod <- forM dataCons $ \(dcon, tys) ->
@@ -1183,11 +1183,11 @@ tyToDataCon (PackedTy dcon _) = dcon
 tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
 
 -- | Add copy functions for each data type in a prog
-addCopyFns :: L1.Prog1 -> SyM L1.Prog1
+addCopyFns :: L1.Prog1 -> PassM L1.Prog1
 addCopyFns (L1.Prog dfs fds me) = do
   newFns <- mapM genCopyFn dfs
   prg <- flattenL1 $ L1.Prog dfs (fds `M.union` (M.mapKeys (mkCopyFunName . fromVar) newFns)) me
-  return $ inlineTriv $ prg
+  inlineTriv prg
 
 
 emptyEnv :: FullEnv
@@ -1198,12 +1198,12 @@ emptyEnv = FullEnv { dataDefs = C.emptyDD
 {--
 
 t0 :: ArrowTy Ty2
-t0 = fst$ runSyM 0 $
+t0 = fst$ runPassM 0 $
      convertFunTy (snd (L1.funArg fd), L1.funRetTy fd)
    where fd = L1.fundefs L1.add1Prog M.! "add1"
 
 tester1 :: L L1.Exp1 -> L Exp2
-tester1 e = case fst $ fst $ runSyM 0 $ St.runStateT (runExceptT (inferExp emptyEnv e NoDest)) M.empty of
+tester1 e = case fst $ fst $ runPassM 0 $ St.runStateT (runExceptT (inferExp emptyEnv e NoDest)) M.empty of
               Right a -> (\(a,_,_)->a) a
               Left a -> err $ show a
 
@@ -1234,7 +1234,7 @@ treeEnv = FullEnv { dataDefs = ddtree
 
 
 tester2 :: L L1.Exp1 -> L Exp2
-tester2 e = case fst $ fst $ runSyM 0 $ St.runStateT (runExceptT (inferExp' treeEnv e NoDest)) M.empty of
+tester2 e = case fst $ fst $ runPassM 0 $ St.runStateT (runExceptT (inferExp' treeEnv e NoDest)) M.empty of
               Right a -> fst a
               Left a -> err $ show a
 

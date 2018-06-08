@@ -31,7 +31,7 @@ import Gibbon.GenericOps
 -- transformed to varrefs in lower.
 --
 
-unariser :: Prog3 -> SyM Prog3
+unariser :: Prog3 -> PassM Prog3
 unariser Prog{ddefs,fundefs,mainExp} = do
   fds <- mapM unariserFun $ M.elems fundefs
   mn <- case mainExp of
@@ -48,7 +48,7 @@ unariser Prog{ddefs,fundefs,mainExp} = do
   where
     funEnv = M.map funTy fundefs
 
-    unariserFun :: FunDef3 -> SyM FunDef3
+    unariserFun :: FunDef3 -> PassM FunDef3
     unariserFun f@FunDef{funTy,funArg,funBody} = do
       let (inT, outT) = funTy
           fn = case inT of
@@ -67,7 +67,7 @@ unariser Prog{ddefs,fundefs,mainExp} = do
 -- perform, from left to right.
 type ProjStack = [Int]
 
-unariserExp :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> L Exp3 -> SyM (L Exp3)
+unariserExp :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> L Exp3 -> PassM (L Exp3)
 unariserExp ddfs stk env2 (L p ex) = L p <$>
   case ex of
     LetE (v,locs,ty,rhs) bod ->
@@ -161,7 +161,7 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
 
 
 -- | Flatten nested tuples
-flattenProd :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> L Exp3 -> SyM (Exp3)
+flattenProd :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> L Exp3 -> PassM (Exp3)
 flattenProd ddfs stk env2 ex =
   case unLoc ex of
     MkProdE{} -> do
@@ -187,7 +187,7 @@ flattenProd ddfs stk env2 ex =
     -- let v = [1,2,3]
     --     w = [proj 0 v, proj 1 v, proj 2 v, 4]
     --
-    go2 :: [Ty3] -> [L Exp3] -> SyM [L Exp3]
+    go2 :: [Ty3] -> [L Exp3] -> PassM [L Exp3]
     go2 [] [] = return []
     go2 (t:ts) (e:es) =
       case (t,e) of

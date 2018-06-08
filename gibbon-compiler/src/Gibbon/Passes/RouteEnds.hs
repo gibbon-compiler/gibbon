@@ -91,8 +91,8 @@ findEnd l EndOfRel{endOf,equivTo} =
 
 
 -- | Process an L2 Prog and thread through explicit end-witnesses.
--- Requires Gensym and runs in SyM. Assumes the Prog has been flattened.
-routeEnds :: Prog2 -> SyM Prog2
+-- Requires Gensym and runs in PassM. Assumes the Prog has been flattened.
+routeEnds :: Prog2 -> PassM Prog2
 routeEnds Prog{ddefs,fundefs,mainExp} = do
 
   -- Handle functions in two steps (to account for mutual recursion):
@@ -122,7 +122,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
     -- Helper functions:
 
     -- | Process function types (but don't handle bodies)
-    fdty :: L2.FunDef2 -> SyM L2.FunDef2
+    fdty :: L2.FunDef2 -> PassM L2.FunDef2
     fdty FunDef{funName,funTy,funArg,funBody} =
         do let (ArrowTy2 locin tyin eff tyout _locout) = funTy
                handleLoc (LRM l r m) ls = if S.member (Traverse l) eff then (LRM l r m):ls else ls
@@ -131,7 +131,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
 
 
     -- | Process function bodies
-    fd :: FunDefs2 -> L2.FunDef2 -> SyM L2.FunDef2
+    fd :: FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
     fd fns FunDef{funName,funTy,funArg,funBody} =
         do let (ArrowTy2 locin tyin eff _tyout _locout) = funTy
                handleLoc (LRM l _r _m) ls = if S.member (Traverse l) eff then l:ls else ls
@@ -158,7 +158,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
     -- 5. a map from location to location after it
     -- 6. the expression to process
     exp :: FunDefs2 -> [LocVar] -> EndOfRel -> M.Map Var LocVar ->
-           M.Map LocVar LocVar -> Env2 Ty2 -> L Exp2 -> SyM (L Exp2)
+           M.Map LocVar LocVar -> Env2 Ty2 -> L Exp2 -> PassM (L Exp2)
     exp fns retlocs eor lenv afterenv env2 (L p e) = fmap (L p) $
         case e of
 
@@ -210,7 +210,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
 
           CaseE (L _ (VarE x)) brs -> do
                  -- We will need to gensym while processing the case clauses, so
-                 -- it has to be in the SyM monad
+                 -- it has to be in the PassM monad
                  brs' <-
                      forM brs $ \(dc, vls, e) ->
                        case vls of
@@ -393,7 +393,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
           MapE{} -> error "RouteEnds: todo MapE"
           FoldE{} -> error "RouteEnds: todo FoldE"
 
-        where  mkRet :: [LocVar] -> (L Exp2) -> SyM (L Exp2)
+        where  mkRet :: [LocVar] -> (L Exp2) -> PassM (L Exp2)
                mkRet ls (L p (VarE v)) =
                  let ends = L.map (\l -> findEnd l eor) ls
                  in return $ L p $ Ext (RetE ends v)

@@ -15,23 +15,26 @@ import Data.Graph
 import qualified Data.Map as M
 
 import Gibbon.Common
+import Gibbon.DynFlags
 import Gibbon.L1.Syntax
 import Gibbon.L2.Syntax as L2
 
 -- All regions are "infinite" right now
 
 -- | Infer multiplicity for a program annotated with regions & locations
-inferRegScope :: Multiplicity -> L2.Prog2 -> SyM L2.Prog2
-inferRegScope mul Prog{ddefs,fundefs,mainExp} = do
-  let fds' = map (inferRegScopeFun mul) $ M.elems fundefs
-      fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
-      mainExp' = case mainExp of
-                   Nothing -> Nothing
-                   Just (mn, ty) -> Just (inferRegScopeExp mul mn,ty)
+inferRegScope :: L2.Prog2 -> PassM L2.Prog2
+inferRegScope Prog{ddefs,fundefs,mainExp} = do
+  fds' <- mapM inferRegScopeFun $ M.elems fundefs
+  let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
+  mainExp' <- case mainExp of
+                Nothing -> return Nothing
+                Just (mn, ty) -> Just <$> (,ty) <$> inferRegScopeExp mn
   return $ Prog ddefs fundefs' mainExp'
 
-inferRegScopeFun :: Multiplicity -> L2.FunDef2 -> L2.FunDef2
-inferRegScopeFun mul f@FunDef{funBody} = f {funBody = inferRegScopeExp mul funBody}
+inferRegScopeFun :: L2.FunDef2 -> PassM L2.FunDef2
+inferRegScopeFun f@FunDef{funBody} = do
+  funBody' <- inferRegScopeExp funBody
+  return $ f {funBody = funBody'}
 
 {- Region scoping rules:
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -67,8 +70,8 @@ In fnB, there's no path from `rb` to 1.
 -- | Decide if a region should be global or local (dynamic).
 --
 --  Dynamic regions are stack allocated and automatically freed
-inferRegScopeExp :: Multiplicity -> L L2.Exp2 -> L L2.Exp2
-inferRegScopeExp mul (L p ex) = L p $
+inferRegScopeExp :: L L2.Exp2 -> PassM (L L2.Exp2)
+inferRegScopeExp (L p ex) = L p <$>
   case ex of
     Ext ext ->
       case ext of
@@ -77,7 +80,7 @@ inferRegScopeExp mul (L p ex) = L p $
           in case deps of
                ((retVar,_,_):_) ->
                  let (g,_,vtxF) = graphFromEdges deps
-                     regV = regionVar r
+                     regV = regionToVar r
                      -- Vertex of the region variable
                      regVertex =
                        case vtxF regV of
@@ -91,34 +94,41 @@ inferRegScopeExp mul (L p ex) = L p $
                      -- The value in the region  escapes the current scope if there's
                      -- a path between the region variable and the thing returned.
                      -- TODO: Warn the user when this happens in a fn ?
-                 in if path g retVertex regVertex
-                    then Ext$ LetRegionE (GlobR regV mul) (go rhs)
-                    -- [2018.03.30] - TEMP: Turning off scoped buffers.
-                    -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
-                    else Ext$ LetRegionE (GlobR regV mul) (go rhs)
-               [] -> ex
+                 in do dflags <- getDynFlags
+                       let defaultMul = if (gopt Opt_BigInfiniteRegions dflags) ||
+                                           (gopt Opt_Gibbon1 dflags)
+                                        then BigInfinite
+                                        else Infinite
+                       if path g retVertex regVertex
+                       then Ext <$> LetRegionE (GlobR regV defaultMul) <$> (go rhs)
+                       -- [2018.03.30] - TEMP: Turning off scoped buffers.
+                       -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
+                       else Ext <$> LetRegionE (GlobR regV defaultMul) <$> (go rhs)
+               [] -> return ex
 
         -- Straightforward recursion
-        LetLocE loc le bod -> Ext $ LetLocE loc le (go bod)
-        RetE{}     -> Ext ext
-        FromEndE{} -> Ext ext
-        BoundsCheck{} -> Ext ext
-        IndirectionE{}-> Ext ext
+        LetLocE loc le bod -> Ext <$> LetLocE loc le <$> (go bod)
+        RetE{}     -> return ex
+        FromEndE{} -> return ex
+        BoundsCheck{} -> return ex
+        IndirectionE{}-> return ex
 
     -- Straightforward recursion ...
-    VarE{}     -> ex
-    LitE{}     -> ex
-    LitSymE{}  -> ex
-    AppE{}     -> ex
-    PrimAppE{} -> ex
-    DataConE{} -> ex
-    ProjE i e  -> ProjE i (go e)
-    IfE a b c  -> IfE a (go b) (go c)
-    MkProdE ls -> MkProdE $ map go ls
-    LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty, go rhs) (go bod)
-    CaseE scrt mp -> CaseE scrt $ map (\(a,b,c) -> (a,b, go c)) mp
-    TimeIt e ty b -> TimeIt (go e) ty b
+    VarE{}     -> return ex
+    LitE{}     -> return ex
+    LitSymE{}  -> return ex
+    AppE{}     -> return ex
+    PrimAppE{} -> return ex
+    DataConE{} -> return ex
+    ProjE i e  -> ProjE i <$> go e
+    IfE a b c  -> (IfE a) <$> go b <*> go c
+    MkProdE ls -> MkProdE <$> mapM go ls
+    LetE (v,locs,ty,rhs) bod -> LetE <$> (v,locs,ty,) <$> go rhs <*> go bod
+    CaseE scrt mp -> (CaseE scrt) <$> mapM (\(a,b,c) -> (a,b,) <$> go c) mp
+    TimeIt e ty b -> do
+      e' <- go e
+      return $ TimeIt e' ty b
     MapE{}  -> error $ "inferRegScopeExp: TODO MapE"
     FoldE{} -> error $ "inferRegScopeExp: TODO FoldE"
   where
-    go = inferRegScopeExp mul
+    go = inferRegScopeExp

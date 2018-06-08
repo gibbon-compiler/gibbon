@@ -52,7 +52,7 @@ initialEnv mp = M.map go mp
       in funTy { arrEffs = maxEffects }
 
 
-inferEffects :: Prog2 -> SyM Prog2
+inferEffects :: Prog2 -> PassM Prog2
 inferEffects prg@Prog{ddefs,fundefs} = do
   let finalFunTys = fixpoint 1 fundefs (initialEnv fundefs)
       funs = M.map (\fn@FunDef{funName} ->

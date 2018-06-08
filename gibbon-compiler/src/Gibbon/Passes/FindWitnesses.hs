@@ -44,7 +44,7 @@ bigNumber = 10 -- limit number of loops
 -- witnesses into scope.
 --
 -- Phase Ordering: This must run after flatten.
-findWitnesses :: Prog3 -> SyM Prog3
+findWitnesses :: Prog3 -> PassM Prog3
 findWitnesses = mapMExprs fn
  where
   fn Env2{vEnv,fEnv} ex = return (goFix (Map.keysSet vEnv `Set.union` Map.keysSet fEnv)

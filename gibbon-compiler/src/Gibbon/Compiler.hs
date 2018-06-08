@@ -21,6 +21,7 @@ module Gibbon.Compiler
 import           Control.DeepSeq
 import           Control.Exception
 import           Control.Monad.State.Strict
+import           Control.Monad.Reader (ask)
 import           Data.Set as S hiding (map)
 #if !MIN_VERSION_base(4,11,0)
 import           Data.Monoid
@@ -36,8 +37,8 @@ import           System.Process
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
+import           Gibbon.Interp
 import           Gibbon.DynFlags
-import           Gibbon.GenericOps
 import qualified Gibbon.HaskellFrontend as HS
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
@@ -87,72 +88,21 @@ import qualified Gibbon.Passes.LLVM.Codegen as LLVM
 
 -- | Find all local variables bound by case expressions which must be
 -- traversed, but which are not by the current program.
-findMissingTraversals :: L2.Prog2 -> SyM (Set Var)
+findMissingTraversals :: L2.Prog2 -> PassM (Set Var)
 findMissingTraversals _ = pure S.empty
 
 -- | Add calls to an implicitly-defined, polymorphic "traverse"
 -- function of type `p -> ()` for any packed type p.
-addTraversals :: Set Var -> L2.Prog2 -> SyM L2.Prog2
+addTraversals :: Set Var -> L2.Prog2 -> PassM L2.Prog2
 addTraversals _ p = pure p
 
 -- | Generate code
-lowerCopiesAndTraversals :: L2.Prog2 -> SyM L2.Prog2
+lowerCopiesAndTraversals :: L2.Prog2 -> PassM L2.Prog2
 lowerCopiesAndTraversals p = pure p
 
 
 -- Configuring and launching the compiler.
 --------------------------------------------------------------------------------
-
--- | Overall configuration of the compiler, as determined by command
--- line arguments and possible environment variables.
-data Config = Config
-  { input      :: Input
-  , mode       :: Mode -- ^ How to run, which backend.
-  , benchInput :: Maybe FilePath -- ^ What packed, binary .gpkd file to use as input.
-  , verbosity  :: Int   -- ^ Debugging output, equivalent to DEBUG env var.
-  , cc         :: String -- ^ C compiler to use
-  , optc       :: String -- ^ Options to the C compiler
-  , cfile      :: Maybe FilePath -- ^ Optional override to destination .c file.
-  , exefile    :: Maybe FilePath -- ^ Optional override to destination binary file.
-  , backend    :: Backend        -- ^ Compilation backend used
-  , dynflags   :: DynFlags
-  }
-  deriving (Show,Read,Eq,Ord)
-
--- | What input format to expect on disk.
-data Input = Haskell
-           | SExpr
-           | Unspecified
-  deriving (Show,Read,Eq,Ord,Enum,Bounded)
-
--- | How far to run the compiler/interpreter.
-data Mode = ToParse  -- ^ Parse and then stop
-          | ToC      -- ^ Compile to C
-          | ToExe    -- ^ Compile to C then build a binary.
-          | RunExe   -- ^ Compile to executable then run.
-          | Interp2  -- ^ Interp late in the compiler pipeline.
-          | Interp1  -- ^ Interp early.
-          | Bench Var -- ^ Benchmark a particular function applied to the packed data within an input file.
-          | BenchInput FilePath -- ^ Hardcode the input file to the benchmark in the C code.
-  deriving (Show,Read,Eq,Ord)
-
--- | Compilation backend used
-data Backend = C | LLVM
-  deriving (Show,Read,Eq,Ord)
-
-defaultConfig :: Config
-defaultConfig =
-  Config { input = Unspecified
-         , mode  = ToExe
-         , benchInput = Nothing
-         , verbosity = 1
-         , cc = "gcc"
-         , optc = " -O3  "
-         , cfile = Nothing
-         , exefile = Nothing
-         , backend = C
-         , dynflags = defaultDynFlags
-         }
 
 suppress_warnings :: String
 suppress_warnings = " -Wno-incompatible-pointer-types -Wno-int-conversion -Wno-int-to-pointer-cast "
@@ -234,10 +184,10 @@ sepline :: String
 sepline = replicate 80 '='
 
 
-data CompileState =
-     CompileState { cnt :: Int -- ^ Gensym counter
-                  , result :: Maybe Value -- ^ Result of evaluating output of prior pass, if available.
-                  }
+data CompileState = CompileState
+    { cnt :: Int -- ^ Gensym counter
+    , result :: Maybe Value -- ^ Result of evaluating output of prior pass, if available.
+    }
 
 -- | Compiler entrypoint, given a full configuration and a list of
 -- files to process, do the thing.
@@ -362,184 +312,6 @@ withPrintInterpProg l1 =
   else
     return Nothing
 
-
--- | The main compiler pipeline
-passes :: Config -> L1.Prog1 -> StateT CompileState IO L4.Prog
-passes config@Config{mode,dynflags} l1 = do
-      let packed     = gopt Opt_Packed dynflags
-          biginf     = gopt Opt_BigInfiniteRegions dynflags
-          gibbon1    = gopt Opt_Gibbon1 dynflags
-          no_rcopies = gopt Opt_No_RemoveCopies dynflags
-      l1 <- goE "typecheck"  L1.tcProg l1
-      l1 <- goE "freshNames" freshNames l1
-
-      -- If we are executing a benchmark, then we
-      -- replace the main function with benchmark code:
-      l1 <- pure $ case mode of
-                     Bench fnname -> benchMainExp config l1 fnname
-                     _ -> l1
-
-      l1 <- goE "typecheck"  L1.tcProg l1
-      l1 <- goE "flatten"       flattenL1               l1
-      l1 <- goE "inlineTriv"    (return . inlineTriv)   l1
-
-      -- TODO: Write interpreters for L2 and L3
-      l3 <- if packed
-            then do
-              -- TODO: push data contstructors under conditional
-              -- branches before InferLocations.
-
-              -- Note: L1 -> L2
-              l2 <- go "inferLocations"   inferLocs     l1
-              l2 <- go "L2.flatten"       flattenL2     l2
-
-              l2 <- if gibbon1 || no_rcopies
-                    then return l2
-                    else go "removeCopies" removeCopies l2
-
-              l2 <- go "inferEffects"     inferEffects  l2
-
-              l2 <- go "repairProgram" (repairProgram dynflags l1) l2
-
-              l2 <- if gibbon1 || biginf
-                    then go "inferRegScope" (inferRegScope BigInfinite) l2
-                    else go "inferRegScope" (inferRegScope Infinite) l2
-
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- go "routeEnds"        routeEnds     l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
-
-              l2 <- if gibbon1 || biginf
-                    then return l2
-                    else go "boundsCheck" boundsCheck   l2
-
-              l2 <- go "threadRegions"    threadRegions l2
-              -- Note: L2 -> L3
-              l3 <- go "cursorize" (cursorize dynflags) l2
-              l3 <- go "L3.flatten"       flattenL3     l3
-              l3 <- go "L3.typecheck"     L3.tcProg     l3
-              l3 <- go "hoistNewBuf"      hoistNewBuf   l3
-              return l3
-            else do
-              l3 <- go "directL3" (return . directL3)   l1
-              return l3
-
-      l3 <- go "L3.typecheck"   L3.tcProg               l3
-      l3 <- go "unariser"       unariser                l3
-      l3 <- go "L3.typecheck"   L3.tcProg               l3
-      l3 <- go "L3.flatten"     flattenL3               l3
-      let mainTy = fmap snd $   L1.mainExp              l3
-      -- Note: L3 -> L4
-      l4 <- go "lower" (lower (packed,mainTy))          l3
-
-      l4 <- if gibbon1
-            then return l4
-            else go "followRedirects" followRedirects   l4
-      l4 <- go "rearrangeFree"  rearrangeFree           l4
-      return l4
-  where
-      go :: PassRunner a b
-      go = pass config
-
-      goE :: (Interp b) => PassRunner a b
-      goE = passE config
-
-
--- | Replace the main function with benchmark code
---
-benchMainExp :: Config -> L1.Prog1 -> Var -> L1.Prog1
-benchMainExp Config{benchInput,dynflags} l1 fnname = do
-  let tmp = "bnch"
-      (arg@(L1.PackedTy tyc _),ret) = L1.getFunTy fnname l1
-      -- At L1, we assume ReadPackedFile has a single return value:
-      newExp = L1.LetE (toVar tmp, [],
-                        arg,
-                        l$ L1.PrimAppE
-                        (L1.ReadPackedFile benchInput tyc arg) [])
-               $ l$ L1.LetE (toVar "benchres", [],
-                         ret,
-                         l$ L1.TimeIt
-                         (l$ L1.AppE fnname []
-                          (l$ L1.VarE (toVar tmp))) ret True)
-               $
-                -- FIXME: should actually return the result,
-                -- as soon as we are able to print it.
-               (if (gopt Opt_BenchPrint dynflags)
-                then l$ L1.VarE (toVar "benchres")
-                else l$ L1.PrimAppE L1.MkTrue [])
-  -- Initialize the main expression with a void type. The typechecker will fix it later.
-  l1{ L1.mainExp = Just $ (l$ newExp, L1.ProdTy []) }
-
-
-type PassRunner a b = (Printer b, Out b, NFData a, NFData b) =>
-                      String -> (a -> SyM b) -> a -> StateT CompileState IO b
-
-
--- | Run a pass and return the result
---
-pass :: Config -> PassRunner a b
-pass _config who fn x = do
-  cs@CompileState{cnt} <- get
-  x' <- if dbgLvl >= passChatterLvl
-        then lift $ evaluate $ force x
-        else return x
-  lift$ dbgPrint passChatterLvl $ " [compiler] Running pass, " ++who
-
-  let (y,cnt') = runSyM cnt (fn x')
-  put cs{cnt=cnt'}
-  y' <- if dbgLvl >= passChatterLvl
-        then lift $ evaluate $ force y
-        else return y
-  if dbgLvl >= passChatterLvl+1
-     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++pprinter y'
-     -- TODO: Switch to a node-count for size output (add to GenericOps):
-     else lift$ dbgPrintLn passChatterLvl $ "   => "++ show (length (sdoc y')) ++ " characters output."
-  return y'
-
-
-passChatterLvl :: Int
-passChatterLvl = 3
-
-
--- | Like 'pass', but also evaluates and checks the result.
---
-passE :: Config -> Interp p2 => PassRunner p1 p2
-passE config@Config{mode} = wrapInterp mode (pass config)
-
-
--- | An alternative version that allows FAILURE while running
--- the interpreter part.
--- FINISHME! For now not interpreting.
---
-passF :: Config -> PassRunner p1 p2
-passF config = pass config
-
-
--- | Wrapper to enable running a pass AND interpreting the result.
---
-wrapInterp :: (NFData p1, NFData p2, Interp p2, Out p2, Printer p2) =>
-              Mode -> PassRunner p1 p2 -> String -> (p1 -> SyM p2) -> p1 ->
-              StateT CompileState IO p2
-wrapInterp mode pass who fn x =
-  do CompileState{result} <- get
-     p2 <- pass who fn x
-     -- In benchmark mode we simply turn OFF the interpreter.
-     -- This decision should be finer grained.
-     when (dbgLvl >= interpDbgLevel && not (isBench mode)) $ lift $ do
-       let Just res1 = result
-       -- FIXME: no command line option atm.  Just env vars.
-       runConf <- getRunConfig []
-       let res2 = interpNoLogs runConf p2
-       res2' <- catch (evaluate (force res2))
-                (\exn -> error $ "Exception while running interpreter on pass result:\n"++sepline++"\n"
-                         ++ show (exn::SomeException) ++ "\n"++sepline++"\nProgram was: "++abbrv 300 p2)
-       unless (show res1 == res2') $
-         error $ "After pass "++who++", evaluating the program yielded the wrong answer.\nReceived:  "
-         ++show res2'++"\nExpected:  "++show res1
-       dbgPrintLn 5 $ " [interp] answer was: "++sdoc res2'
-     return p2
-
-
 -- | Compile and run the generated code if appropriate
 --
 compileAndRunExe :: Config -> FilePath -> IO String
@@ -581,10 +353,10 @@ compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
 getOutfile :: Backend -> FilePath -> Maybe FilePath -> FilePath
 getOutfile _ _ (Just override) = override
 getOutfile backend fp Nothing =
-  let ext = case backend of
-              C    -> ".c"
-              LLVM -> ".ll"
-  in replaceExtension fp ext
+  replaceExtension fp $
+    case backend of
+      C    -> ".c"
+      LLVM -> ".ll"
 
 -- | Return the correct filename for the generated exe,
 -- based on the backend used, and override options specified
@@ -626,3 +398,178 @@ clearFile fileName = removeFile fileName `catch` handleErr
   where
    handleErr e | isDoesNotExistError e = return ()
                | otherwise = throwIO e
+
+--------------------------------------------------------------------------------
+
+-- | Replace the main function with benchmark code
+--
+benchMainExp :: L1.Prog1 -> PassM L1.Prog1
+benchMainExp l1 = do
+  Config{benchInput,dynflags,mode} <- ask
+  case mode of
+    Bench fnname -> do
+      let tmp = "bnch"
+          (arg@(L1.PackedTy tyc _),ret) = L1.getFunTy fnname l1
+          -- At L1, we assume ReadPackedFile has a single return value:
+          newExp = L1.LetE (toVar tmp, [],
+                            arg,
+                            l$ L1.PrimAppE
+                            (L1.ReadPackedFile benchInput tyc arg) [])
+                   $ l$ L1.LetE (toVar "benchres", [],
+                             ret,
+                             l$ L1.TimeIt
+                             (l$ L1.AppE fnname []
+                              (l$ L1.VarE (toVar tmp))) ret True)
+                   $
+                    -- FIXME: should actually return the result,
+                    -- as soon as we are able to print it.
+                   (if (gopt Opt_BenchPrint dynflags)
+                    then l$ L1.VarE (toVar "benchres")
+                    else l$ L1.PrimAppE L1.MkTrue [])
+      -- Initialize the main expression with a void type. The typechecker will fix it later.
+      return $ l1{ L1.mainExp = Just $ (l$ newExp, L1.ProdTy []) }
+    _ -> return l1
+
+-- | The main compiler pipeline
+passes :: Config -> L1.Prog1 -> StateT CompileState IO L4.Prog
+passes config@Config{dynflags} l1 = do
+      let packed     = gopt Opt_Packed dynflags
+          biginf     = gopt Opt_BigInfiniteRegions dynflags
+          gibbon1    = gopt Opt_Gibbon1 dynflags
+          no_rcopies = gopt Opt_No_RemoveCopies dynflags
+      l1 <- goE "typecheck"  L1.tcProg                  l1
+      l1 <- goE "freshNames" freshNames                 l1
+
+      -- If we are executing a benchmark, then we
+      -- replace the main function with benchmark code:
+      l1 <- goE "benchMainExp" benchMainExp             l1
+
+      l1 <- goE "typecheck"     L1.tcProg               l1
+      l1 <- goE "flatten"       flattenL1               l1
+      l1 <- goE "inlineTriv"    inlineTriv              l1
+
+      -- TODO: Write interpreters for L2 and L3
+      l3 <- if packed
+            then do
+              -- TODO: push data contstructors under conditional
+              -- branches before InferLocations.
+
+              -- Note: L1 -> L2
+              l2 <- go "inferLocations"   inferLocs     l1
+              l2 <- go "L2.flatten"       flattenL2     l2
+
+              l2 <- if gibbon1 || no_rcopies
+                    then return l2
+                    else go "removeCopies" removeCopies l2
+
+              l2 <- go "inferEffects"     inferEffects  l2
+
+              l2 <- go "repairProgram"(repairProgram l1) l2
+
+              l2 <- go "inferRegScope"    inferRegScope l2
+
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "routeEnds"        routeEnds     l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
+
+              l2 <- if gibbon1 || biginf
+                    then return l2
+                    else go "boundsCheck" boundsCheck   l2
+
+              l2 <- go "threadRegions"    threadRegions l2
+              -- Note: L2 -> L3
+              l3 <- go "cursorize"        cursorize     l2
+              l3 <- go "L3.flatten"       flattenL3     l3
+              l3 <- go "L3.typecheck"     L3.tcProg     l3
+              l3 <- go "hoistNewBuf"      hoistNewBuf   l3
+              return l3
+            else do
+              l3 <- go "directL3"         directL3      l1
+              return l3
+
+      l3 <- go "L3.typecheck"   L3.tcProg               l3
+      l3 <- go "unariser"       unariser                l3
+      l3 <- go "L3.typecheck"   L3.tcProg               l3
+      l3 <- go "L3.flatten"     flattenL3               l3
+      -- Note: L3 -> L4
+      l4 <- go "lower"          lower                   l3
+
+      l4 <- if gibbon1
+            then return l4
+            else go "followRedirects" followRedirects   l4
+      l4 <- go "rearrangeFree"  rearrangeFree           l4
+      return l4
+  where
+      go :: PassRunner a b
+      go = pass config
+
+      goE :: (Interp b) => PassRunner a b
+      goE = passE config
+
+type PassRunner a b = (Printer b, Out b, NFData a, NFData b) =>
+                      String -> (a -> PassM b) -> a -> StateT CompileState IO b
+
+
+-- | Run a pass and return the result
+--
+pass :: Config -> PassRunner a b
+pass config who fn x = do
+  cs@CompileState{cnt} <- get
+  x' <- if dbgLvl >= passChatterLvl
+        then lift $ evaluate $ force x
+        else return x
+  lift$ dbgPrint passChatterLvl $ " [compiler] Running pass, " ++who
+
+  let (y,cnt') = runPassM config cnt (fn x')
+  put cs{cnt=cnt'}
+  y' <- if dbgLvl >= passChatterLvl
+        then lift $ evaluate $ force y
+        else return y
+  if dbgLvl >= passChatterLvl+1
+     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++pprinter y'
+     -- TODO: Switch to a node-count for size output (add to GenericOps):
+     else lift$ dbgPrintLn passChatterLvl $ "   => "++ show (length (sdoc y')) ++ " characters output."
+  return y'
+
+
+passChatterLvl :: Int
+passChatterLvl = 3
+
+
+-- | Like 'pass', but also evaluates and checks the result.
+--
+passE :: Config -> Interp p2 => PassRunner p1 p2
+passE config@Config{mode} = wrapInterp mode (pass config)
+
+
+-- | An alternative version that allows FAILURE while running
+-- the interpreter part.
+-- FINISHME! For now not interpreting.
+--
+passF :: Config -> PassRunner p1 p2
+passF config = pass config
+
+
+-- | Wrapper to enable running a pass AND interpreting the result.
+--
+wrapInterp :: (NFData p1, NFData p2, Interp p2, Out p2, Printer p2) =>
+              Mode -> PassRunner p1 p2 -> String -> (p1 -> PassM p2) -> p1 ->
+              StateT CompileState IO p2
+wrapInterp mode pass who fn x =
+  do CompileState{result} <- get
+     p2 <- pass who fn x
+     -- In benchmark mode we simply turn OFF the interpreter.
+     -- This decision should be finer grained.
+     when (dbgLvl >= interpDbgLevel && not (isBench mode)) $ lift $ do
+       let Just res1 = result
+       -- FIXME: no command line option atm.  Just env vars.
+       runConf <- getRunConfig []
+       let res2 = interpNoLogs runConf p2
+       res2' <- catch (evaluate (force res2))
+                (\exn -> error $ "Exception while running interpreter on pass result:\n"++sepline++"\n"
+                         ++ show (exn::SomeException) ++ "\n"++sepline++"\nProgram was: "++abbrv 300 p2)
+       unless (show res1 == res2') $
+         error $ "After pass "++who++", evaluating the program yielded the wrong answer.\nReceived:  "
+         ++show res2'++"\nExpected:  "++show res1
+       dbgPrintLn 5 $ " [interp] answer was: "++sdoc res2'
+     return p2

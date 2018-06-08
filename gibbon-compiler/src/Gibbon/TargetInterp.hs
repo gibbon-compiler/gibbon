@@ -2,6 +2,7 @@
 
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Gibbon.TargetInterp
@@ -49,6 +50,10 @@ instance Out TimeSpec where
     docPrec _ s = text (show s)
 
 instance Out Val
+
+instance Out (Seq Int) where
+    doc s = text (show s)
+    docPrec _ s = text (show s)
 
 execProg :: Prog -> IO [Val]
 execProg (Prog _ Nothing) = error "Can't evaluate program: No expression given"

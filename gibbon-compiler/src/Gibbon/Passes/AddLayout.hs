@@ -87,14 +87,16 @@ becomes,
 --------------------------------------------------------------------------------
 
 -- | Add layout information to the program, but only if required
-repairProgram :: DynFlags -> Prog1 -> L2.Prog2 -> SyM L2.Prog2
-repairProgram dflags oldl1 prg =
+repairProgram :: Prog1 -> L2.Prog2 -> PassM L2.Prog2
+repairProgram oldl1 prg = do
+  isGibbon1 <- gopt Opt_Gibbon1 <$> getDynFlags
   if repair
-  then if (gopt Opt_Gibbon1 dflags)
+  then if isGibbon1
        then repairGibbon1
        else repairGibbon2
   else return prg
   where
+
     (repair,fns) = needsLayout prg
 
     repairGibbon1 =
@@ -270,7 +272,7 @@ specialTraversal traversed FunDef{funTy} locs =
 
 -- Operates on an L1 program, and updates it to have layout information
 
-addLayout :: Prog1 -> SyM Prog1
+addLayout :: Prog1 -> PassM Prog1
 addLayout prg@Prog{ddefs,fundefs,mainExp} = do
   let iddefs = toIndrDDefs ddefs
   funs <- mapM (\(nm,f) -> (nm,) <$> addLayoutFun iddefs f) (M.toList fundefs)
@@ -283,12 +285,12 @@ addLayout prg@Prog{ddefs,fundefs,mainExp} = do
              , mainExp = mainExp'
              }
 
-addLayoutFun :: DDefs Ty1 -> L1.FunDef1 -> SyM L1.FunDef1
+addLayoutFun :: DDefs Ty1 -> L1.FunDef1 -> PassM L1.FunDef1
 addLayoutFun ddfs fd@FunDef{funBody} = do
   bod <- addLayoutExp ddfs funBody
   return $ fd{funBody = bod}
 
-addLayoutExp :: Out a => DDefs (UrTy a) -> L Exp1 -> SyM (L Exp1)
+addLayoutExp :: Out a => DDefs (UrTy a) -> L Exp1 -> PassM (L Exp1)
 addLayoutExp ddfs (L p ex) = L p <$>
   case ex of
     DataConE loc dcon args ->
@@ -329,7 +331,7 @@ addLayoutExp ddfs (L p ex) = L p <$>
   where
     go = addLayoutExp ddfs
 
-    docase :: (DataCon, [(Var,())], L Exp1) -> SyM (DataCon, [(Var,())], L Exp1)
+    docase :: (DataCon, [(Var,())], L Exp1) -> PassM (DataCon, [(Var,())], L Exp1)
     docase (dcon,vs,bod) = do
       case numIndrsDataCon ddfs dcon of
         Just n -> do
@@ -357,7 +359,7 @@ toIndrDDefs ddfs = M.map go ddfs
 --------------------------------------------------------------------------------
 -- Old repair strategy: Add traversals
 
-addTraversals :: S.Set Var -> Prog1 -> SyM Prog1
+addTraversals :: S.Set Var -> Prog1 -> PassM Prog1
 addTraversals unsafeFns prg@Prog{ddefs,fundefs,mainExp} =
   dbgTrace 5 ("AddTraversals: Fixing functions:" ++ sdoc unsafeFns) <$> do
     funs <- mapM (\(nm,f) -> (nm,) <$> addTraversalsFn unsafeFns ddefs f) (M.toList fundefs)
@@ -372,7 +374,7 @@ addTraversals unsafeFns prg@Prog{ddefs,fundefs,mainExp} =
 
 
 -- Process body and reset traversal effects.
-addTraversalsFn :: S.Set Var -> DDefs Ty1 -> L1.FunDef1 -> SyM L1.FunDef1
+addTraversalsFn :: S.Set Var -> DDefs Ty1 -> L1.FunDef1 -> PassM L1.FunDef1
 addTraversalsFn unsafeFns ddefs f@FunDef{funName, funBody} =
   if funName `S.member` unsafeFns
   then do
@@ -381,7 +383,7 @@ addTraversalsFn unsafeFns ddefs f@FunDef{funName, funBody} =
   else return f
 
 -- Generate traversals for the first (n-1) packed elements
-addTraversalsExp :: DDefs Ty1-> L Exp1 -> SyM (L Exp1)
+addTraversalsExp :: DDefs Ty1-> L Exp1 -> PassM (L Exp1)
 addTraversalsExp ddefs (L p ex) = L p <$>
   case ex of
     CaseE scrt brs -> CaseE scrt <$> mapM docase brs

@@ -93,6 +93,7 @@ tests:
   - name: test_litmus_rightmost.gib
   - name: test_litmus_search_tree_lookup.gib
   - name: test_litmus_sum_add_build.gib
+  - name: test_litmus_search_tree_insert.gib
   - name: test_litmus_sumtree.gib
   - name: test_stree.gib
   - name: test_sumstree.gib
@@ -170,8 +171,6 @@ tests:
   - name: test_addtrees.gib
     failing: [packed]
   - name: test_buildtreesum.gib
-    failing: [packed]
-  - name: test_litmus_search_tree_insert.gib
     failing: [packed]
   - name: test_sumupseteven.gib
     failing: [packed]
