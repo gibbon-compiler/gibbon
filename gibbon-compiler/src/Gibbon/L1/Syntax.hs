@@ -34,7 +34,7 @@ module Gibbon.L1.Syntax
 
       -- * Functions on types
     , mkProdTy, projTy , voidTy, isProdTy, isNestedProdTy, isPackedTy, hasPacked
-    , sizeOfTy, primArgsTy, primRetTy, dummyCursorTy
+    , sizeOfTy, primArgsTy, primRetTy, dummyCursorTy, tyToDataCon
 
       -- * Misc
     , numIndrsDataCon, assertTriv, assertTrivs
@@ -680,6 +680,11 @@ primRetTy p =
 
 dummyCursorTy :: UrTy a
 dummyCursorTy = CursorTy
+
+-- | Get the data constructor type from a type, failing if it's not packed
+tyToDataCon :: Show a => UrTy a -> DataCon
+tyToDataCon (PackedTy dcon _) = dcon
+tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
 
 -- | The number of indirections needed by a 'DataCon' for full random access
 numIndrsDataCon :: Out a => DDefs (UrTy a) -> DataCon -> Maybe Int

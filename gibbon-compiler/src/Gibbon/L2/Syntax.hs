@@ -270,7 +270,6 @@ substTy mp t = go t
 -- | Apply a substitution to an effect set.
 substEffs :: Map LocVar LocVar -> Set Effect -> Set Effect
 substEffs mp ef =
-    dbgTrace 5 ("\n  Substituting in effects "++show(mp,ef)) $
     S.map (\(Traverse v) ->
                case M.lookup v mp of
                  Just v2 -> Traverse v2

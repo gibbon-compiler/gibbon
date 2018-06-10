@@ -1165,7 +1165,7 @@ genCopyFn DDef{tyName, dataCons} = do
                 ys <- mapM (\_ -> gensym "y") tys
                 let bod = foldr (\(ty,x,y) acc ->
                                      if L1.isPackedTy ty
-                                     then l$ LetE (y, [], ty, l$ AppE (mkCopyFunName (tyToDataCon ty)) [] (l$ VarE x)) acc
+                                     then l$ LetE (y, [], ty, l$ AppE (mkCopyFunName (L1.tyToDataCon ty)) [] (l$ VarE x)) acc
                                      else l$ LetE (y, [], ty, l$ VarE x) acc)
                           (l$ L1.DataConE () dcon $ map (l . VarE) ys)
                           (zip3 (L.map snd tys) xs ys)
@@ -1176,11 +1176,6 @@ genCopyFn DDef{tyName, dataCons} = do
                                    , L1.PackedTy (fromVar tyName) () )
                      , L1.funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
                      }
-
--- | Get the data constructor type from a type, failing if it's not packed
-tyToDataCon :: L1.Ty1 -> DataCon
-tyToDataCon (PackedTy dcon _) = dcon
-tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
 
 -- | Add copy functions for each data type in a prog
 addCopyFns :: L1.Prog1 -> PassM L1.Prog1

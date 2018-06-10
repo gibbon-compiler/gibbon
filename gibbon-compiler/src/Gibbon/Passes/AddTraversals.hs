@@ -1,9 +1,12 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Gibbon.Passes.AddTraversals
   (addTraversals) where
 
-import Data.Set as S
-import Data.Map as M
+import Control.Monad (forM)
+import Data.Foldable (foldrM)
 import Data.List as L
+import Data.Map as M
+import Data.Set as S
 import Data.Loc
 
 import Gibbon.Common
@@ -16,12 +19,16 @@ addTraversals :: S.Set Var -> Prog1 -> PassM Prog1
 addTraversals unsafeFns prg@Prog{ddefs,fundefs,mainExp} =
   dbgTrace 5 ("AddTraversals: Fixing functions:" ++ sdoc (S.toList unsafeFns)) <$> do
     funs <- mapM (\(nm,f) -> (nm,) <$> addTraversalsFn unsafeFns ddefs f) (M.toList fundefs)
+    withTravFuns <- foldrM (\ddf acc -> do fn <- genTravFn ddf
+                                           return $ M.insert (funName fn) fn acc)
+                    (M.fromList funs)
+                    (M.elems ddefs)
     mainExp' <-
       case mainExp of
         Just (ex,ty) -> Just <$> (,ty) <$> addTraversalsExp ddefs ex
         Nothing -> return Nothing
     return prg { ddefs = ddefs
-               , fundefs = M.fromList funs
+               , fundefs = withTravFuns
                , mainExp = mainExp'
                }
 
@@ -72,9 +79,28 @@ addTraversalsExp ddefs (L p ex) = L p <$>
         _ -> do
           let ls = init packedOnly
           travbinds <- mapM (\(v,ty) -> do
-                               let PackedTy dc _ = ty
-                                   copyfn = mkCopyFunName dc
+                               let travfn = mkTravFunName (tyToDataCon ty)
                                v' <- gensym v
-                               return (v',[], ty, l$ AppE copyfn [] (l$ VarE v)))
+                               return (v',[], ty, l$ AppE travfn [] (l$ VarE v)))
                        ls
           (dcon,vlocs,) <$> mkLets travbinds <$> go rhs
+
+-- | Traverses a packed data type and always returns 42.
+genTravFn :: DDef Ty1 -> PassM FunDef1
+genTravFn DDef{tyName, dataCons} = do
+  arg <- gensym $ "arg"
+  casebod <- forM dataCons $ \(dcon, tys) ->
+             do xs <- mapM (\_ -> gensym "x") tys
+                ys <- mapM (\_ -> gensym "y") tys
+                let bod = L.foldr (\(ty,x,y) acc ->
+                                     if L1.isPackedTy ty
+                                     then l$ LetE (y, [], IntTy, l$ AppE (mkTravFunName (tyToDataCon ty)) [] (l$ VarE x)) acc
+                                     else l$ LetE (y, [], ty, l$ VarE x) acc)
+                          (l$ LitE 42)
+                          (zip3 (L.map snd tys) xs ys)
+                return (dcon, L.map (\x -> (x,())) xs, bod)
+  return $ L1.FunDef { L1.funName = mkTravFunName (fromVar tyName)
+                     , L1.funArg = arg
+                     , L1.funTy  = ( L1.PackedTy (fromVar tyName) () , IntTy )
+                     , L1.funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
+                     }

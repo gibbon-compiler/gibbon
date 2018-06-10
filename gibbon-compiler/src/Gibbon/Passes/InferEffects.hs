@@ -186,11 +186,7 @@ inferExp ddfs fenv env (L _p exp) =
           packedOnly = L.filter (\(_,t) -> hasPacked t) zipped
 
           (eff,_) = inferExp ddfs fenv env' e
-          winner = dbgTrace lvl ("\nInside caserhs, for "++show (dcon,patVs,tys)
-                        -- ++ "\n  freevars "++show freeRHS
-                        -- ++",\n  env "++show env'++",\n  eff "++show eff
-                                ) $
-                   -- If there is NO packed child data, then our object has static size:
+          winner = -- If there is NO packed child data, then our object has static size:
                    (L.all (not . hasPacked) tys) ||
 
                    -- Or if all non-static items were traversed:

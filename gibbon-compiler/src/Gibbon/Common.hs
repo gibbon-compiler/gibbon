@@ -26,7 +26,7 @@ module Gibbon.Common
          -- * Variables and gensyms
        , Var(..), fromVar, toVar, varAppend, toEndV
        , SyM, gensym, genLetter, runSyM
-       , cleanFunName, mkCopyFunName, isCopyFunName
+       , cleanFunName, mkCopyFunName, isCopyFunName, mkTravFunName
 
          -- * Regions and locations
        , LocVar, Region(..), Modality(..), LRM(..), dummyLRM
@@ -662,3 +662,6 @@ mkCopyFunName dcon = "copy_" `varAppend` (toVar dcon)
 
 isCopyFunName :: Var -> Bool
 isCopyFunName = isPrefixOf "copy_" . fromVar
+
+mkTravFunName :: DataCon -> Var
+mkTravFunName dcon = "_traverse_" `varAppend` (toVar dcon)
