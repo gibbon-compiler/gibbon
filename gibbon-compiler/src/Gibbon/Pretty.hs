@@ -144,11 +144,11 @@ instance (Show l, Out l) => Pretty (L2.PreLocExp l) where
 instance (Show l, Out l) => Pretty (UrTy l) where
     pprint ty =
         case ty of
-          IntTy -> text "int"
-          BoolTy -> text "bool"
-          ProdTy tys -> hcat $ punctuate "," $ map pprint tys
-          SymDictTy ty -> text "dict" <+> pprint ty
-          PackedTy tc l -> text "packed" <+> text tc <+> doc l
-          ListTy ty -> text "list" <+> pprint ty
-          PtrTy -> text "ptr"
-          CursorTy -> text "cursor"
+          IntTy -> text "Int"
+          BoolTy -> text "Bool"
+          ProdTy tys -> parens $ hcat $ punctuate "," $ map pprint tys
+          SymDictTy ty -> text "Dict" <+> pprint ty
+          PackedTy tc l -> text "Packed" <+> text tc <+> doc l
+          ListTy ty -> text "List" <+> pprint ty
+          PtrTy -> text "Ptr"
+          CursorTy -> text "Cursor"
