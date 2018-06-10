@@ -58,7 +58,7 @@ import           Gibbon.Passes.InlineTriv     (inlineTriv)
 
 import           Gibbon.Passes.DirectL3       (directL3)
 import           Gibbon.Passes.InferLocations (inferLocs)
-import           Gibbon.Passes.AddLayout      (repairProgram)
+import           Gibbon.Passes.RepairProgram  (repairProgram)
 import           Gibbon.Passes.RemoveCopies   (removeCopies)
 import           Gibbon.Passes.InferMultiplicity (inferRegScope)
 import           Gibbon.Passes.BoundsCheck    (boundsCheck)

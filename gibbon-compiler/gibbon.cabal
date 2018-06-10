@@ -45,7 +45,9 @@ library
                        Gibbon.Passes.Flatten
                        Gibbon.Passes.InlineTriv
                        Gibbon.Passes.DirectL3
+                       Gibbon.Passes.RepairProgram
                        Gibbon.Passes.AddLayout
+                       Gibbon.Passes.AddTraversals
                        Gibbon.Passes.InferLocations
                        Gibbon.Passes.RemoveCopies
                        Gibbon.Passes.InferMultiplicity
@@ -64,7 +66,7 @@ library
                        Gibbon.Passes.Codegen
 
   other-modules:
-                       Gibbon.L0.Mono
+                Gibbon.L0.Mono
 -- This one looks far from done:
 --                       Gibbon.L0.Interp
 
@@ -148,7 +150,7 @@ test-suite test-gibbon
                        InferLocations
                        Unariser
                        InferMultiplicity
-                       AddLayout
+                       RepairProgram
                        Compiler
                        L1.Typecheck
                        L1.Interp
