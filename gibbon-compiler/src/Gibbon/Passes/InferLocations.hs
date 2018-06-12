@@ -299,8 +299,13 @@ inferExp' env lex0@(L sl1 exp) dest =
                       AfterVariableL lv1 v lv2 -> lc$ Ext (LetLocE lv1 (AfterVariableLE v lv2) a)
                       StartRegionL lv r -> lc$ Ext (LetRegionE r (lc $ Ext (LetLocE lv (StartOfLE r) a)))
                       AfterTagL lv1 lv2 -> lc$ Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
-                      AfterCopyL lv1 v1 v' lv2 v2 lvs -> lc$ LetE (v',[],arrOut $ lookupFEnv v2 env, lc$ AppE v2 lvs (lc$ VarE v1)) $
-                                                         lc$ Ext (LetLocE lv1 (AfterVariableLE v' lv2) a)
+                      AfterCopyL lv1 v1 v' lv2 v2 lvs ->
+                        let arrty = arrOut $ lookupFEnv v2 env
+                            -- Substitute the location occurring at the call site
+                            -- in place of the one in the function's return type
+                            copyRetTy = substLoc' lv2 arrty
+                        in lc$ LetE (v',[],copyRetTy, lc$ AppE v2 lvs (lc$ VarE v1)) $
+                           lc$ Ext (LetLocE lv1 (AfterVariableLE v' lv2) a)
 
   in do res <- inferExp env lex0 dest
         (e,ty,cs) <- bindAllLocations res
@@ -443,7 +448,10 @@ inferExp env@FullEnv{dataDefs}
                 then do lv1' <- finalLocVar lv1
                         lv2' <- finalLocVar lv2
                         let arrty = lookupFEnv v2 env
-                        return (lc$ LetE (v',[],arrOut arrty,l$ AppE v2 lvs (l$ VarE v1)) $
+                            -- Substitute the location occurring at the call site
+                            -- in place of the one in the function's return type
+                            copyRetTy = substLoc' lv2 (arrOut arrty)
+                        return (lc$ LetE (v',[],copyRetTy,l$ AppE v2 lvs (l$ VarE v1)) $
                                 lc$ Ext (LetLocE lv1' (AfterVariableLE v' lv2') e), ty, cs)
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
                         return (e',ty',c:cs')
@@ -647,8 +655,13 @@ inferExp env@FullEnv{dataDefs}
                   bod <- if (length ls) > 0 && (isCpyCall $ last [e | (e,_,_) <- ls'])
                          then case last [e | (e,_,_) <- ls'] of
                                 L i (AppE f lvs e) ->
-                                    let (ArgCopy _ v' _ _) = last argLs
-                                    in return $ lc$ LetE (v',[],arrOut $ lookupFEnv f env, lc$ AppE f lvs e) $
+                                    let (ArgCopy _ v' _ copy_locs) = last argLs
+                                        arrty = arrOut $ lookupFEnv f env
+                                        -- Substitute the location occurring at the call site
+                                        -- in place of the one in the function's return type
+                                        -- re:last because we want the output location.
+                                        copyRetTy = substLoc' (last copy_locs) arrty
+                                    in return $ lc$ LetE (v',[],copyRetTy, lc$ AppE f lvs e) $
                                        lc$ DataConE d k [ e' | (e',_,_) <- ls'']
                                 _ -> error "inferExp: Unexpected pattern <error1>"
                          else return $ lc$ DataConE d k [ e' | (e',_,_)  <- ls'']
