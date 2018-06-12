@@ -44,7 +44,7 @@ threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
     AppE f applocs arg -> do
       let ty = gTypeExp ddefs env2 ex
           argty = gTypeExp ddefs env2 arg
-          argtylocs = getTyLocs argty
+          argtylocs = locsInTy argty
           argregs = foldr (\x acc -> case M.lookup x lenv of
                                        Just r -> r:acc
                                        Nothing -> acc)
@@ -54,8 +54,8 @@ threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
           let fnty = funTy $ fundefs # f
               arrOutMp = M.fromList $ zip (allLocVars fnty) applocs
               -- TODO: Fix this in gTypeExp
-              outT'  = substTy arrOutMp ty
-              tylocs = getTyLocs outT'
+              outT'  = substLoc arrOutMp ty
+              tylocs = locsInTy outT'
               regs   = map (lenv #) tylocs
           let newapplocs = nub $ (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
           return $ AppE f newapplocs arg
@@ -65,7 +65,7 @@ threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
 
     LetE (v,locs,ty, (L _ (AppE f applocs arg))) bod -> do
       let argty = gTypeExp ddefs env2 arg
-          argtylocs = getTyLocs argty
+          argtylocs = locsInTy argty
           argregs = foldr (\x acc -> case M.lookup x lenv of
                                        Just r -> r:acc
                                        Nothing -> acc)
@@ -75,7 +75,7 @@ threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
 
       case ty of
         _ | hasPacked ty -> do
-          let tylocs = getTyLocs ty
+          let tylocs = locsInTy ty
               regs   = map (lenv #) tylocs
           regs' <- mapM gensym regs
           -- Update all locations to point to the fresh region
@@ -116,7 +116,7 @@ threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
           let ty = lookupVEnv v env2
           if not isMain && hasPacked ty
           then do
-            let tylocs  = getTyLocs ty
+            let tylocs  = locsInTy ty
                 regs    = map (lenv #) tylocs
                 newlocs = map toEndV regs
             return $ Ext $ RetE (newlocs ++ locs) v
@@ -158,17 +158,6 @@ threadRegionsExp ddefs fundefs isMain lenv env2 (L p ex) = L p <$>
       let (vars,locs) = unzip vlocs
           lenv1' = foldr (\lc acc -> M.insert lc reg acc) lenv1 locs
           tys = lookupDataCon ddefs dcon
-          tys' = substLocs locs tys []
+          tys' = substLocs' locs tys
           env2' = extendsVEnv (M.fromList $ zip vars tys') env21
       (dcon,vlocs,) <$> (threadRegionsExp ddefs fundefs isMain lenv1' env2' bod)
-
-    substLocs :: [LocVar] -> [L2.Ty2] -> [L2.Ty2] -> [L2.Ty2]
-    substLocs locs tys acc =
-      case (locs,tys) of
-        ([],[]) -> acc
-        (lc':rlocs, ty:rtys) ->
-          case ty of
-            PackedTy tycon _ -> substLocs rlocs rtys (acc ++ [PackedTy tycon lc'])
-            ProdTy tys' -> error $ "substLocs: Unexpected type: " ++ sdoc tys'
-            _ -> substLocs rlocs rtys (acc ++ [ty])
-        _ -> error $ "substLocs: " ++ sdoc (locs,tys)

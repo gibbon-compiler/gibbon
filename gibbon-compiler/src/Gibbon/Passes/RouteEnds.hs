@@ -273,7 +273,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                  let ty = funtype v
                      -- use locVars used at call-site in the type
                      arrOutMp = M.fromList $ zip (allLocVars ty) args
-                     outT     = substTy arrOutMp (arrOut ty)
+                     outT     = substLoc arrOutMp (arrOut ty)
                      e' = LetE (v',[], outT, l$ AppE v args e) (l$ VarE v')
                  -- we fmap location at the top-level case expression
                  fmap unLoc $ go (l$ e')

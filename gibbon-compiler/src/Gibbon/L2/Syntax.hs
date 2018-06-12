@@ -30,8 +30,9 @@ module Gibbon.L2.Syntax
 
     -- * Operations on types
     , progToEnv
-    , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substTy, substEffs
-    , prependArgs, stripTyLocs, getTyLocs, locsInTy
+    , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substLoc
+    , substLoc', substLocs, substLocs', substEffs, prependArgs, stripTyLocs
+    , locsInTy
 
     -- * Other helpers
     , revertToL1, occurs, mapPacked, depList, initFunEnv
@@ -245,27 +246,37 @@ inRegVars :: ArrowTy2 -> [LocVar]
 inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) $
                L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
--- | Apply a variable substitution to a type.
-substTy :: Map LocVar LocVar -> Ty2 -> Ty2
-substTy mp t = go t
-  where
-    go t =
-     case t of
-      IntTy  -> IntTy
-      SymTy  -> SymTy
-      BoolTy -> BoolTy
-      SymDictTy te -> SymDictTy (go te)
-      ProdTy    ts -> ProdTy    (L.map go ts)
-      PackedTy k l ->
-          case M.lookup l mp of
-                Just v  -> PackedTy k v
-                Nothing -> PackedTy k l
-                -- errorWithStackTrace $ "substTy: failed to find "++show l++
-                --   "\n  in map: "++show mp++", when processing type "++show t
-      -- TODO(chai):
-      PtrTy    -> PtrTy
-      CursorTy -> CursorTy
-      ListTy _ -> error "tyWithFreshLocs: FIXME implement lists"
+-- TODO: error handling in these subst* functions.
+
+-- | Apply a location substitution to a type.
+substLoc :: Map LocVar LocVar -> Ty2 -> Ty2
+substLoc mp ty =
+  case ty of
+   SymDictTy te -> SymDictTy (go te)
+   ProdTy    ts -> ProdTy (L.map go ts)
+   PackedTy k l ->
+       case M.lookup l mp of
+             Just v  -> PackedTy k v
+             Nothing -> PackedTy k l
+   _ -> ty
+  where go = substLoc mp
+
+-- | Like 'substLoc', but constructs the map for you..
+substLoc' :: LocVar -> Ty2 -> Ty2
+substLoc' loc ty =
+  case locsInTy ty of
+    [loc2] -> substLoc (M.singleton loc2 loc) ty
+    _ -> substLoc M.empty ty
+
+-- | List version of 'substLoc'.
+substLocs :: Map LocVar LocVar -> [Ty2] -> [Ty2]
+substLocs mp tys = L.map (substLoc mp) tys
+
+-- | Like 'substLocs', but constructs the map for you.
+substLocs' :: [LocVar] -> [Ty2] -> [Ty2]
+substLocs' locs tys =
+  let mp = M.fromList $ zip (concatMap locsInTy tys) locs
+  in substLocs mp tys
 
 -- | Apply a substitution to an effect set.
 substEffs :: Map LocVar LocVar -> Set Effect -> Set Effect
@@ -293,21 +304,7 @@ stripTyLocs ty =
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
 
--- Duplicate of locsInTy. Delete one of these.
 -- | Collect all the locations mentioned in a type.
-getTyLocs :: Ty2 -> [LocVar]
-getTyLocs t =
-    case t of
-      SymTy     -> []
-      BoolTy    -> []
-      IntTy     -> []
-      PackedTy _ v  -> [v]
-      ProdTy ls     -> L.concatMap getTyLocs ls
-      SymDictTy elt -> getTyLocs elt
-      PtrTy    -> []
-      CursorTy -> []
-      ListTy _ -> error "allLocVars: FIXME lists"
-
 locsInTy :: Ty2 -> [LocVar]
 locsInTy ty =
     case ty of

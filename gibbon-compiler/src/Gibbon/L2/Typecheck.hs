@@ -168,7 +168,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
              -- Use locVars used at call-site in the returned type
              -- TODO: check this
              let arrOutMp = M.fromList $ zip (L.map (\(LRM l _ _) -> l) locVars) ls
-                 arrOut'  = substTy arrOutMp arrOut
+                 arrOut'  = substLoc arrOutMp arrOut
              return (arrOut',tstate')
 
       PrimAppE pr es -> do

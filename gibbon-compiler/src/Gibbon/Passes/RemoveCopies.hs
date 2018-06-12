@@ -123,17 +123,6 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
       let (vars,locs) = unzip vlocs
           lenv1' = foldr (\lc acc -> M.insert lc reg acc) lenv1 locs
           tys = lookupDataCon ddefs dcon
-          tys' = substLocs locs tys []
+          tys' = substLocs' locs tys
           env2' = extendsVEnv (M.fromList $ zip vars tys') env21
       (dcon,vlocs,) <$> (removeCopiesExp ddefs fundefs lenv1' env2' bod)
-
-    substLocs :: [LocVar] -> [L2.Ty2] -> [L2.Ty2] -> [L2.Ty2]
-    substLocs locs tys acc =
-      case (locs,tys) of
-        ([],[]) -> acc
-        (lc':rlocs, ty:rtys) ->
-          case ty of
-            PackedTy tycon _ -> substLocs rlocs rtys (acc ++ [PackedTy tycon lc'])
-            ProdTy tys' -> error $ "substLocs: Unexpected type: " ++ sdoc tys'
-            _ -> substLocs rlocs rtys (acc ++ [ty])
-        _ -> error $ "substLocs: " ++ sdoc (locs,tys)

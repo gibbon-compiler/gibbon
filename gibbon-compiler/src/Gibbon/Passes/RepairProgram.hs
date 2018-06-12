@@ -81,14 +81,14 @@ needsRepairExp ddefs fundefs base special traversed env2 (L _ ex) = base ||
     AppE f _ arg  ->
       let argty = gTypeExp ddefs env2 arg
           g = if f `S.member` special then specialTraversal else fnTraversal
-          (traversed', base') = g traversed (fundefs # f) (L2.getTyLocs argty)
+          (traversed', base') = g traversed (fundefs # f) (L2.locsInTy argty)
           base'' = base || base'
       in (needsRepairExp ddefs fundefs base'' special traversed' env2 arg)
     PrimAppE{} -> base
     LetE (v,_,ty, L _ (AppE f _ arg)) bod ->
       let argty = gTypeExp ddefs env2 arg
           g = if f `S.member` special then specialTraversal else fnTraversal
-          (traversed', base') = g traversed (fundefs # f) (L2.getTyLocs argty)
+          (traversed', base') = g traversed (fundefs # f) (L2.locsInTy argty)
           base'' = base || base'
       in (needsRepairExp ddefs fundefs base'' special traversed' env2 arg) ||
          (needsRepairExp ddefs fundefs base'' special traversed' (extendVEnv v ty env2) bod)
@@ -115,20 +115,9 @@ needsRepairExp ddefs fundefs base special traversed env2 (L _ ex) = base ||
     docase traversed1 env21 (dcon,vlocs,bod) =
       let (vars,locs) = unzip vlocs
           tys = lookupDataCon ddefs dcon
-          tys' = substLocs locs tys []
+          tys' = substLocs' locs tys
           env2' = extendsVEnv (M.fromList $ zip vars tys') env21
       in (needsRepairExp ddefs fundefs base special traversed1 env2' bod)
-
-    substLocs :: [LocVar] -> [L2.Ty2] -> [L2.Ty2] -> [L2.Ty2]
-    substLocs locs tys acc =
-      case (locs,tys) of
-        ([],[]) -> acc
-        (lc':rlocs, ty:rtys) ->
-          case ty of
-            PackedTy tycon _ -> substLocs rlocs rtys (acc ++ [PackedTy tycon lc'])
-            ProdTy tys' -> error $ "substLocs: Unexpected type: " ++ sdoc tys'
-            _ -> substLocs rlocs rtys (acc ++ [ty])
-        _ -> error $ "substLocs: " ++ sdoc (locs,tys)
 
 isSpecialFn :: DDefs L2.Ty2 -> L2.FunDef2 -> Bool
 isSpecialFn ddefs FunDef{funTy, funBody} =

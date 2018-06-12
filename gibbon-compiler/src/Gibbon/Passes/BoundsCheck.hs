@@ -197,7 +197,7 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
                           retType = gTypeExp ddfs env2 bod
                       in if hasPacked retType
                           then
-                            let  retLocs = getTyLocs retType
+                            let  retLocs = locsInTy retType
                                  retVertices = map (fromJust . vtxF) retLocs
                                  paths = map (\ret -> (ret, path g locVertex ret)) retVertices
                                  connected = filter snd paths
