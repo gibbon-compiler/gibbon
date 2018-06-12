@@ -69,7 +69,8 @@ the delta is within some reasonable range (like nofib).
 
 TODOs:
 (1) Compare benchmark results
-(2) ...
+(2) Could we somehow use tasty-golden to compare the output with the answer files ?
+(3) ...
 
 -}
 
@@ -82,6 +83,12 @@ data Test = Test
     , expectedResults :: M.Map Mode Result
     , skip :: Bool
     , runModes :: [Mode] -- ^ If non-empty, run this test only in the specified modes.
+    , isBenchmark :: Bool  -- ^ If a test is also a benchmark, (and if we're running
+                           --   benchmarks in this test run), we run this test with
+                           --   a larger SIZE parameter (eg. 25), and measure the median
+                           --   SELFTIMED across N runs. Then, we compare this with
+                           --   the expected time, modulo a reasonable delta, and fail
+                           --   if it doesn't.
     }
   deriving (Show, Eq, Read)
 
@@ -92,6 +99,7 @@ defaultTest = Test
     , expectedResults = M.fromList [(Packed, Pass), (Pointer, Pass), (Interp1, Pass)]
     , skip = False
     , runModes = []
+    , isBenchmark = False
     }
 
 instance Ord Test where
@@ -104,21 +112,25 @@ instance FromJSON Test where
         skip <- o .:? "skip" .!= (skip defaultTest)
         failing <- o .:? "failing" .!= []
         runmodes <- o .:? "run-modes" .!= (runModes defaultTest)
+        isbenchmark <- o .:? "bench" .!= (isBenchmark defaultTest)
         let expectedFailures = M.fromList [(mode, Fail) | mode <- failing]
             -- Overlay the expected failures on top of the defaults.
             expected = M.union expectedFailures (expectedResults defaultTest)
-        return $ Test name dir expected skip runmodes
+        return $ Test name dir expected skip runmodes isbenchmark
 
 data Result = Pass | Fail
   deriving (Show, Eq, Read, Ord)
 
 -- Not used atm.
 -- | Gibbon mode to run programs in
-data Mode = Packed | Pointer | Interp1
-  deriving (Show, Eq, Read, Ord)
+data Mode = Packed | Pointer | Interp1 | Gibbon1
+  deriving (Show, Eq, Read, Ord, Bounded, Enum)
 
 instance FromJSON Mode where
     parseJSON (Y.String s) = return $ readMode s
+
+allModes :: [Mode]
+allModes = [minBound ..]
 
 readMode :: T.Text -> Mode
 readMode s =
@@ -126,17 +138,20 @@ readMode s =
         "packed"  -> Packed
         "pointer" -> Pointer
         "interp1" -> Interp1
+        "gibbon1" -> Gibbon1
 
 -- Must match the flag expected by Gibbon.
 modeRunOptions :: Mode -> [String]
 modeRunOptions Packed  = ["--run", "--packed"]
 modeRunOptions Pointer = ["--run", "--pointer"]
 modeRunOptions Interp1 = ["--interp1"]
+modeRunOptions Gibbon1 = ["--run", "--packed", "--gibbon1"]
 
 modeFileSuffix :: Mode -> String
 modeFileSuffix Packed  = "_pkd"
 modeFileSuffix Pointer = "_ptr"
 modeFileSuffix Interp1 = "_interp1"
+modeFileSuffix Gibbon1 = "_gibbon1"
 
 -- Couldn't figure out how to write a parser which accepts multiple arguments.
 -- The 'many' thing cannot be used with an option. I suppose that just
@@ -171,10 +186,11 @@ data TestConfig = TestConfig
     , verbosity   :: Int      -- ^ Ranges from [0..5], and is passed on to Gibbon
     , summaryFile :: FilePath -- ^ File in which to store the test summary
     , tempdir     :: FilePath -- ^ Temporary directory to store the build artifacts
-    , gRunModes   :: [Mode] -- ^ When not empty, only run the tests in these modes.
-                            --   It's a global parameter i.e it affects ALL tests.
-                            --   However, if a corresponding parameter is specified
-                            --   for a particular test, that has higher precedence.
+    , gRunModes   :: [Mode]   -- ^ When not empty, only run the tests in these modes.
+                              --   It's a global parameter i.e it affects ALL tests.
+                              --   However, if a corresponding parameter is specified
+                              --   for a particular test, that has higher precedence.
+    , runBenchmarks :: Bool   -- ^ Should run (and validate) the benchmarks too ?
     }
   deriving (Show, Eq, Read, Ord)
 
@@ -185,6 +201,7 @@ defaultTestConfig = TestConfig
     , summaryFile = "gibbon-test-summary.txt"
     , tempdir     = "examples/build_tmp"
     , gRunModes   = []
+    , runBenchmarks = False
     }
 
 instance FromJSON TestConfig where
@@ -193,7 +210,8 @@ instance FromJSON TestConfig where
                                  o .:? "verbosity"    .!= (verbosity defaultTestConfig)   <*>
                                  o .:? "summary-file" .!= (summaryFile defaultTestConfig) <*>
                                  o .:? "tempdir"      .!= (tempdir defaultTestConfig)     <*>
-                                 o .:? "run-modes"    .!= (gRunModes defaultTestConfig)
+                                 o .:? "run-modes"    .!= (gRunModes defaultTestConfig)   <*>
+                                 o .:? "run-benchmarks" .!= (runBenchmarks defaultTestConfig)
 
 -- Accept a default test config as a fallback, either 'DefaultTestConfig',
 -- or read from the config file.
@@ -214,10 +232,12 @@ configParser dtc = TestConfig
                                   help "Temporary directory to store the build artifacts" <>
                                   showDefault <>
                                   value (tempdir dtc))
-                   -- TODO: actually parse this
                    <*> option stringToModes (long "run-modes" <>
                                              help "Only run the tests in these modes" <>
                                              value (gRunModes dtc))
+                   <*> switch (long "run-benchmarks" <>
+                               help "Run benchmarks." <>
+                               showDefault)
 
 --------------------------------------------------------------------------------
 
@@ -278,8 +298,7 @@ runTests tc tr = foldlM (\acc t -> do
         then return (acc { skipped = (name test):(skipped acc) })
         else do
             -- Check if the global gRunModes or the test specific runModes was modified
-            let allModes = [Packed, Pointer, Interp1]
-                test' = case (runModes test, gRunModes tc) of
+            let test' = case (runModes test, gRunModes tc) of
                             -- Nothing was globally modified
                             (_,[])  -> test { runModes = allModes }
                             -- The tests doesn't specify an override, but there's a global override
