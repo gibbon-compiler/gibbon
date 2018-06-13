@@ -24,11 +24,9 @@ import           Control.Monad.State
 import           Data.List as L
 import           Data.Loc
 import           Data.Map as M
-import           Data.Sequence (Seq, ViewL ((:<)))
 import           System.Clock
 import           Text.PrettyPrint.GenericPretty
 import qualified Data.ByteString.Lazy.Char8 as B
-import qualified Data.Sequence as S
 
 import           Gibbon.Common
 import           Gibbon.Interp

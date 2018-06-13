@@ -116,15 +116,15 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
                       bufWithTag = insertAtBuffer offset (SerTag tag dcon) buf
                       (bufWithVals, new_off) =
                         foldl
-                          (\(acc, off) ((v, sz), ty) ->
-                               let new_off = off + sizeToInt sz in
+                          (\(acc, off) ((v, sz), _ty) ->
+                               let new_off1 = off + sizeToInt sz in
                                  case v of
-                                   VInt i -> ( insertAtBuffer off (SerInt i) acc , new_off )
+                                   VInt i -> ( insertAtBuffer off (SerInt i) acc , new_off1 )
                                    -- This is a packed value, and it must already
                                    -- be written to the buffer (by the thing that
                                    -- returned this). So we just update the offset
                                    -- to point to the end of this value.
-                                   VLoc{} -> ( acc , new_off )
+                                   VLoc{} -> ( acc , new_off1 )
                                    _ -> error $ "L2.Interp: DataConE todo: " ++ sdoc v)
                           (bufWithTag, offset+1)
                           (zip vals tys)
@@ -195,8 +195,8 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
             (args, szs) <- unzip <$> mapM (go env sizeEnv) ls
             return (VProd args , SMany szs)
 
-        ProjE ix e -> do (VProd ls, SMany szs) <- go env sizeEnv e
-                         return (ls !! ix, szs !! ix)
+        ProjE ix e0 -> do (VProd ls, SMany szs) <- go env sizeEnv e0
+                          return (ls !! ix, szs !! ix)
 
         TimeIt bod _ isIter -> do
               let iters = if isIter then rcIters rc else 1

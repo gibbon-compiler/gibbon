@@ -90,6 +90,7 @@ data SerializedVal = SerTag Word8 DataCon | SerInt Int | SerBool Int
 
 byteSize :: SerializedVal -> Int
 byteSize (SerInt _) = 8 -- FIXME: get this constant from elsewhere.
+byteSize (SerBool _) = 8
 byteSize (SerTag _ _) = 1
 
 instance Out SerializedVal
@@ -153,13 +154,19 @@ deserialize ddefs seq0 = final
  where
   ([final],_) = readN 1 seq0
 
-  readN 0 seq = ([],seq)
-  readN n seq =
-     case S.viewl seq of
+  readN 0 seq1 = ([],seq1)
+  readN n seq1 =
+     case S.viewl seq1 of
        S.EmptyL -> error $ "deserialize: unexpected end of sequence: "++ndoc seq0
        SerInt i :< rst ->
          let (more,rst') = readN (n-1) rst
          in (VInt i : more, rst')
+
+       SerBool i :< rst ->
+         let (more,rst') = readN (n-1) rst
+             -- 1 is True
+             b = i /= 0
+         in (VBool b : more, rst')
 
        SerTag _ k :< rst ->
          let (args,rst')  = readN (length (lookupDataCon ddefs k)) rst
