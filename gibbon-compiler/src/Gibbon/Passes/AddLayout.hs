@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Gibbon.Passes.AddLayout
-  (addLayout) where
+  (addLayout, numIndrsDataCon) where
 
 import Data.Loc
 import Data.List as L
 import Data.Map as M
+import Data.Maybe (fromJust)
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
@@ -31,9 +32,10 @@ But on the other hand,
 
     main =  add1 . rightmost . buildtree
 
-...won't, because `rightmost` doesn't traverse the left element of a node.
-Instead of adding the traversal to `rightmost`, we take a step back, and add
-layout information to the program. This basically allows O(1) random
+...cannot run, because `rightmost` doesn't traverse the left element of a node.
+In Gibbon1, we would've fixed righmost so that it does traverse it's input. However,
+this changes it's asymptotic complexity. In Gibbon2, we compile such programs
+using layout information (indirections) instead. This basically allows O(1) random
 access to any element of the node.
 
 Note that we can't add layout information to an L2 program, as it would distort
@@ -44,13 +46,6 @@ version.
 Adding layout information involves 3 steps:
 
 (1) Convert DDefs to `WithLayout DDefs` (we don't have a separate type for those yet).
-
-(2) All data constructors that should have indirection pointers are updated.
-    And the indirections are added at appropriate places (before all other arguments so that they're
-    written immediately after the tag).
-
-(3) Case expressions are modified to work with the modified data constructors.
-    Pattern matches for these constructors now bind the additional size fields too.
 
 For example,
 
@@ -72,19 +67,43 @@ becomes,
                                      , (False,PackedTy "Tree" ())
                                      , (False,PackedTy "Tree" ())])
                          ]]
+
+(2) Update all data constructors that now need to write additional indirection pointers
+    (before all other arguments so that they're written immediately after the tag).
+
+(3) Case expressions are modified to work with these updated data constructors.
+    Pattern matches for these constructors now bind the additional indirections too.
+
+-}
+
+{- Note [Reusing indirections in case expressions]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If a data constructor occurs inside a case expression, we might already have an indirection
+for a variable that was bound in the pattern. In that case, we don't want to request yet
+another one using PEndOf. Consider this example:
+
+    (fn ...
+      (case tr
+        [(Node^ [(indr_y, _) (x, _), (y, _)]
+           (DataConE __HOLE x (fn y)))]))
+
+Here, we don't want to fill the HOLE with (PEndOf x). Instead, we should reuse indr_y.
+
 -}
 
 --------------------------------------------------------------------------------
 
--- Operates on an L1 program, and updates it to have layout information
+type IndrEnv = M.Map Var Var
 
+-- | Operates on an L1 program, and updates it to have layout information
 addLayout :: Prog1 -> PassM Prog1
 addLayout prg@Prog{ddefs,fundefs,mainExp} = do
   let iddefs = toIndrDDefs ddefs
   funs <- mapM (\(nm,f) -> (nm,) <$> addLayoutFun iddefs f) (M.toList fundefs)
   mainExp' <-
     case mainExp of
-      Just (ex,ty) -> Just <$> (,ty) <$> addLayoutExp iddefs ex
+      Just (ex,ty) -> Just <$> (,ty) <$> addLayoutExp iddefs M.empty ex
       Nothing -> return Nothing
   return prg { ddefs = iddefs
              , fundefs = M.fromList funs
@@ -93,27 +112,34 @@ addLayout prg@Prog{ddefs,fundefs,mainExp} = do
 
 addLayoutFun :: DDefs Ty1 -> L1.FunDef1 -> PassM L1.FunDef1
 addLayoutFun ddfs fd@FunDef{funBody} = do
-  bod <- addLayoutExp ddfs funBody
+  bod <- addLayoutExp ddfs M.empty funBody
   return $ fd{funBody = bod}
 
-addLayoutExp :: Out a => DDefs (UrTy a) -> L Exp1 -> PassM (L Exp1)
-addLayoutExp ddfs (L p ex) = L p <$>
+addLayoutExp :: DDefs Ty1 -> IndrEnv -> L Exp1 -> PassM (L Exp1)
+addLayoutExp ddfs ienv (L p ex) = L p <$>
   case ex of
     DataConE loc dcon args ->
       case numIndrsDataCon ddfs dcon of
-        Just n  -> do
+        0 -> return ex
+        n -> do
           let tys = lookupDataCon ddfs dcon
-              packedOnly = L.map snd $
-                           L.filter (\(ty,_) -> isPackedTy ty) (zip tys args)
-              needSizeOf = L.take n packedOnly
-          szs <- mapM (\arg -> do
-                         v <- gensym "indr"
-                         return (v,[],CursorTy, l$ PrimAppE PEndOf [arg]))
-                 needSizeOf
-          let szVars = L.map (\(v,_,_,_) -> v) szs
-              szExps = L.map (l . VarE) szVars
-          return $ unLoc $ mkLets szs (l$ DataConE loc (toIndrDataCon dcon) (szExps ++ args))
-        Nothing -> return ex
+              firstPacked = fromJust $ L.findIndex isPackedTy tys
+              -- n elements after the first packed one require indirections.
+              needIndrsFor = L.take n $ L.drop firstPacked args
+
+          indrs <- mapM (\arg -> do
+                           i <- gensym "indr"
+                           -- See Note [Reusing indirections in case expressions]
+                           let rhs = case unLoc arg of
+                                       VarE x -> case M.lookup x ienv of
+                                                   Just v -> VarE v
+                                                   Nothing -> PrimAppE PEndOf [arg]
+                                       _ -> PrimAppE PEndOf [arg]
+                           return (i,[],CursorTy, l$ rhs))
+                   needIndrsFor
+
+          let indrArgs = L.map (\(v,_,_,_) -> l$ VarE v) indrs
+          return $ unLoc $ mkLets indrs (l$ DataConE loc (toIndrDataCon dcon) (indrArgs ++ args))
 
     -- standard recursion here
     VarE{}    -> return ex
@@ -122,7 +148,7 @@ addLayoutExp ddfs (L p ex) = L p <$>
     AppE f locs arg -> AppE f locs <$> go arg
     PrimAppE f args -> PrimAppE f <$> mapM go args
     LetE (v,loc,ty,rhs) bod -> do
-      LetE <$> (v,loc,ty,) <$> go rhs <*> addLayoutExp ddfs bod
+      LetE <$> (v,loc,ty,) <$> go rhs <*> go bod
     IfE a b c  -> IfE <$> go a <*> go b <*> go c
     MkProdE xs -> MkProdE <$> mapM go xs
     ProjE i e  -> ProjE i <$> go e
@@ -135,28 +161,45 @@ addLayoutExp ddfs (L p ex) = L p <$>
     FoldE{} -> error "addLayoutExp: TODO FoldE"
 
   where
-    go = addLayoutExp ddfs
+    go = addLayoutExp ddfs ienv
 
     docase :: (DataCon, [(Var,())], L Exp1) -> PassM (DataCon, [(Var,())], L Exp1)
     docase (dcon,vs,bod) = do
       case numIndrsDataCon ddfs dcon of
-        Just n -> do
-          szVars <- mapM (\_ -> (, ()) <$> gensym "sz") [1..n]
-          (toIndrDataCon dcon, szVars ++ vs,) <$> go bod
-        Nothing -> (dcon,vs,) <$> go bod
+        0 -> (dcon,vs,) <$> go bod
+        n -> do
+          indrVars <- mapM (\_ -> gensym "indr") [1..n]
+          let tys = lookupDataCon ddfs dcon
+              -- See Note [Reusing indirections in case expressions]
+              -- We update the environment to track indirections of the
+              -- variables bound by this pattern.
+              firstPacked = fromJust $ L.findIndex isPackedTy tys
+              haveIndrsFor = L.take n $ L.drop firstPacked $ L.map fst vs
+              ienv' = M.union ienv (M.fromList $ zip haveIndrsFor indrVars)
+          (toIndrDataCon dcon, (L.map (,()) indrVars) ++ vs,) <$> addLayoutExp ddfs ienv' bod
 
 -- | Add "sized" constructors to the data definition
 toIndrDDefs :: Out a => DDefs (UrTy a) -> Map Var (DDef (UrTy a))
 toIndrDDefs ddfs = M.map go ddfs
   where
-    -- go :: DDef a -> DDef a
+    -- go :: DDef a -> DDef b
     go dd@DDef{dataCons} =
       let dcons' = L.foldr (\(dcon,tys) acc ->
                               case numIndrsDataCon ddfs dcon of
-                                Just n -> let tys'  = [(False,CursorTy) | _ <- [1..n]] ++ tys
-                                              dcon' = toIndrDataCon dcon
-                                          in [(dcon,tys), (dcon',tys')] ++ acc
-                                Nothing -> (dcon,tys) : acc
-                              )
+                                0 -> (dcon,tys) : acc
+                                n -> let tys'  = [(False,CursorTy) | _ <- [1..n]] ++ tys
+                                         dcon' = toIndrDataCon dcon
+                                     in [(dcon,tys), (dcon',tys')] ++ acc)
                    [] dataCons
       in dd {dataCons = dcons'}
+
+
+-- | The number of indirections needed by a 'DataCon' for full random access
+-- (which is equal the number of arguments occurring after the first packed type).
+--
+numIndrsDataCon :: Out a => DDefs (UrTy a) -> DataCon -> Int
+numIndrsDataCon ddfs dcon =
+  case L.findIndex isPackedTy tys of
+    Nothing -> 0
+    Just firstPacked -> (length tys) - firstPacked - 1
+  where tys = lookupDataCon ddfs dcon

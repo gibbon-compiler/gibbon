@@ -2,7 +2,7 @@
 
 module Gibbon.L2.Examples
   ( -- * Data definitions
-    ddtree, stree
+    ddtree, stree, ddexpr, ddsnoclist
 
     -- * Functions
   , add1Fun, add1TraversedFun, id1Fun, copyTreeFun, id2Fun, id3Fun, intAddFun
@@ -1443,3 +1443,12 @@ indrIDSumProg = Prog ddtree' (M.fromList [("buildTree", buildTreeFun)
                                          ,("indrID", indrIDFun)
                                          ,("sumTree",sumTreeFun)])
                 (Just (indrIDSumMainExp, IntTy))
+
+--------------------------------------------------------------------------------
+
+ddsnoclist :: DDefs Ty2
+ddsnoclist = fromListDD [DDef (toVar "SnocList")
+                         [ ("Nil"  , [])
+                         , ("Snoc" , [(False,PackedTy "SnocList" "l"),
+                                      (False,IntTy)])
+                         ]]

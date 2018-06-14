@@ -37,7 +37,7 @@ module Gibbon.L1.Syntax
     , sizeOfTy, primArgsTy, primRetTy, dummyCursorTy, tyToDataCon
 
       -- * Misc
-    , numIndrsDataCon, assertTriv, assertTrivs
+    , assertTriv, assertTrivs
     )
     where
 
@@ -685,16 +685,6 @@ dummyCursorTy = CursorTy
 tyToDataCon :: Show a => UrTy a -> DataCon
 tyToDataCon (PackedTy dcon _) = dcon
 tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
-
--- | The number of indirections needed by a 'DataCon' for full random access
-numIndrsDataCon :: Out a => DDefs (UrTy a) -> DataCon -> Maybe Int
-numIndrsDataCon ddfs dcon =
-    if numPacked > 1
-    then Just (numPacked - 1)
-    else Nothing
-  where
-    tys = lookupDataCon ddfs dcon
-    numPacked = length $ L.filter isPackedTy tys
 
 -- | Ensure that an expression is trivial.
 assertTriv :: (Expression e) => L e -> a -> a

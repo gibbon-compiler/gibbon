@@ -60,6 +60,7 @@ tests:
   - name: test11e_funrec.gib
   - name: test11f_funrec.gib
   - name: test11_fundata.gib
+  - name: test12_skip.gib
   - name: test12b_traverse.gib
   - name: test12c_traverse.gib
   - name: test13b_build.gib
@@ -117,8 +118,6 @@ tests:
   - name: test10b_desugar.gib
     failing: [packed]
   - name: test10_desugar.gib
-    failing: [packed]
-  - name: test12_skip.gib
     failing: [packed]
 
   # sym-append not implemented in the RTS

@@ -14,6 +14,7 @@ import Gibbon.GenericOps
 import Gibbon.Common
 import Gibbon.L1.Syntax
 import Gibbon.L2.Syntax as L2
+import Gibbon.Passes.AddLayout (numIndrsDataCon)
 import qualified Gibbon.L3.Syntax as L3
 
 {- Note: Cursor insertion, strategy one:
@@ -861,14 +862,14 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
         --     (y3 -> (loc_y3, ind_y3))
         let indirections_mp =
               case numIndrsDataCon ddfs (fromIndrDataCon dcon) of
-                Nothing -> M.empty
-                Just n -> let -- Indirections occur immediately after the tag
-                              ind_vars = L.map fst $ L.take n vlocs1
-                              -- Everything else is a regular consturctor field,
-                              -- which depends on the indirection
-                              data_fields = L.take n (reverse vlocs1)
-                              (vars, var_locs) = unzip data_fields
-                          in M.fromList $ zip vars (zip var_locs ind_vars)
+                0 -> M.empty
+                n -> let -- Indirections occur immediately after the tag
+                         ind_vars = L.map fst $ L.take n vlocs1
+                         -- Everything else is a regular consturctor field,
+                         -- which depends on the indirection
+                         data_fields = L.take n (reverse vlocs1)
+                         (vars, var_locs) = unzip data_fields
+                     in M.fromList $ zip vars (zip var_locs ind_vars)
         in go field_cur vlocs1 tys1 indirections_mp denv1 (M.insert field_cur CursorTy tenv1)
       where
         go :: Var -> [(Var, LocVar)] -> [Ty2] -> M.Map Var (Var,Var) -> DepEnv -> TEnv -> PassM (L L3.Exp3)
