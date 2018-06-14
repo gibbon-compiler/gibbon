@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Gibbon.L2.Examples
   ( -- * Data definitions
     ddtree, stree, ddexpr, ddsnoclist

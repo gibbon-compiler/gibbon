@@ -4,12 +4,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE KindSignatures    #-}
 {-# LANGUAGE DeriveAnyClass    #-}
-{-# LANGUAGE DeriveGeneric     #-}
-{-# LANGUAGE DeriveFunctor     #-}
-{-# LANGUAGE NamedFieldPuns    #-}
-{-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE StandaloneDeriving#-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE CPP      #-}
 

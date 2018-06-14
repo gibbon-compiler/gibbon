@@ -2,7 +2,6 @@
 {-# OPTIONS_GHC -Wno-type-defaults #-}
 
 {-# LANGUAGE ParallelListComp #-}
-{-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE QuasiQuotes        #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell    #-}

@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Gibbon.Passes.AddLayout
   (addLayout, numIndrsDataCon) where
 

@@ -1,5 +1,3 @@
--- {-# LANGUAGE OverloadedStrings #-}
-
 -- | Unique names.
 
 module Gibbon.Passes.Freshen (freshNames) where

@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Gibbon.L1.Examples where
 
 import Data.Loc

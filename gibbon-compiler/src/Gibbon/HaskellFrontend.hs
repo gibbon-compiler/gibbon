@@ -1,6 +1,4 @@
-{-# LANGUAGE OverloadedStrings    #-}
 {-# LANGUAGE LambdaCase           #-}
-{-# LANGUAGE TupleSections        #-}
 {-# OPTIONS_GHC -Wno-incomplete-patterns #-}
 
 module Gibbon.HaskellFrontend

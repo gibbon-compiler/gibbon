@@ -2,7 +2,6 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module Gibbon.Pretty ( Printer(..), Pretty(..), printL1, printL2, printL3 ) where
 

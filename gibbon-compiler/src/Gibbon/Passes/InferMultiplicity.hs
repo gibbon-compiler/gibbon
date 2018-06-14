@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 
 -- | Infer region multiplicities
 --

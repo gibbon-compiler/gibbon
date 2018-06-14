@@ -1,5 +1,4 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-{-# Language OverloadedStrings #-}
 
 -- | With the new location calculus and `inferLocations`, this pass should've been redundant.
 --   But not quite.. We still need it to reorder location variables bound in case expressions.

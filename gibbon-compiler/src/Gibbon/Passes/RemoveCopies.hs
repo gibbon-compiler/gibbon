@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Gibbon.Passes.RemoveCopies where
 
 import Data.Loc

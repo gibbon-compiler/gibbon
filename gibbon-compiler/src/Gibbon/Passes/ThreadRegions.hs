@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-
 module Gibbon.Passes.ThreadRegions where
 
 import Data.Loc

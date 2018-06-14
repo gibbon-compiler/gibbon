@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 module Gibbon.Passes.AddTraversals
   (addTraversals) where
 
