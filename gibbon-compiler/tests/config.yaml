@@ -65,6 +65,11 @@ tests:
   - name: test12c_traverse.gib
   - name: test13b_build.gib
   - name: test13_build.gib
+  - name: test18_badconstraint.gib
+  - name: test18c_identity1.gib
+  - name: test18d_identity2.gib
+  - name: test18e_identity3.gib
+  - name: test18g_identity4.gib
   - name: test19_unarytree.gib
   - name: test20b_bintree.gib
   - name: test20_bintree.gib
@@ -99,6 +104,7 @@ tests:
   - name: test_stree.gib
   - name: test_sumstree.gib
   - name: test_sumtree.gib
+  - name: test_unpacking.gib
 
   # Failing tests:
   - name: test04c_ifvector.gib
@@ -129,20 +135,6 @@ tests:
     skip: true
   - name: test17_forfold.gib
     skip: true
-
-  # Work without -O3. Need to turn off inlining / pure annotations.
-  - name: test18_badconstraint.gib
-    failing: [pointer]
-  - name: test18c_identity1.gib
-    failing: [pointer]
-  - name: test18d_identity2.gib
-    failing: [pointer]
-  - name: test18e_identity3.gib
-    failing: [pointer]
-  - name: test18g_identity4.gib
-    failing: [pointer]
-  - name: test_unpacking.gib
-    failing: [pointer]
 
   #
   - name: test18b_tupconstraint.gib

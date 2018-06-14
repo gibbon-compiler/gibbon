@@ -13,7 +13,6 @@ module Gibbon.Passes.Codegen
   ) where
 
 import           Control.Monad
-import           Control.Monad.Reader
 import           Data.Bifunctor (first)
 import           Data.Int
 import           Data.Loc -- For SrcLoc
@@ -108,8 +107,8 @@ harvestStructTys (Prog funs mtal) =
 -- "main" expression in that program.
 --
 --  The boolean flag is true when we are compiling in "Packed" mode.
-codegenProg :: DynFlags -> Prog -> IO String
-codegenProg dflags prg@(Prog funs mtal) = do
+codegenProg :: Config -> Prog -> IO String
+codegenProg cfg prg@(Prog funs mtal) = do
       env <- getEnvironment
       let rtsPath = case lookup "TREELANGDIR" env of
                       Just p -> p ++"/gibbon-compiler/cbits/rts.c"
@@ -120,45 +119,45 @@ codegenProg dflags prg@(Prog funs mtal) = do
       rts <- readFile rtsPath -- TODO (maybe): We can read this in in compile time using TH
       return (rts ++ '\n' : pretty 80 (stack (map ppr defs)))
     where
-      isPacked = gopt Opt_Packed dflags
-      noGC = gopt Opt_DisableGC dflags
-
-      defs = fst $ runSyM 0 $ do
+      defs = fst $ runPassM cfg 0 $ do
         (prots,funs') <- unzip <$> mapM codegenFun funs
         main_expr' <- main_expr
         return (makeStructs (S.toList $ harvestStructTys prg) ++ prots ++ funs' ++ [main_expr'])
 
-      main_expr :: SyM C.Definition
+      main_expr :: PassM C.Definition
       main_expr =
         case mtal of
           Just (PrintExp t) -> do
-            t' <- runReaderT (codegenTail t (codegenTy IntTy)) (isPacked, noGC)
+            t' <- codegenTail t (codegenTy IntTy)
             return $ C.FuncDef [cfun| void __main_expr() { $items:t' } |] noLoc
           _ ->
             return $ C.FuncDef [cfun| void __main_expr() { return; } |] noLoc
 
-      codegenFun' :: FunDecl -> SyM C.Func
+      codegenFun' :: FunDecl -> PassM C.Func
       codegenFun' (FunDecl nam args ty tal _) =
           do let retTy   = codegenTy ty
                  params  = map (\(v,t) -> [cparam| $ty:(codegenTy t) $id:v |]) args
-             body <- runReaderT (codegenTail tal retTy) (isPacked, noGC)
+             body <- codegenTail tal retTy
              let fun     = [cfun| $ty:retTy $id:nam ($params:params) {
                             $items:body
                      } |]
              return fun
 
-      makeProt :: C.Func -> Bool -> C.InitGroup
-      makeProt fn ispure =
+      makeProt :: C.Func -> Bool -> PassM C.InitGroup
+      makeProt fn ispure = do
+        dflags <- getDynFlags
         let prot@(C.InitGroup decl_spec _ inits lc) = C.funcProto fn
             purattr = C.Attr (C.Id "pure" noLoc) [] noLoc
-        in if ispure
-           then C.InitGroup decl_spec [purattr] inits lc
-           else prot
+            isPacked = gopt Opt_Packed dflags
+        -- Do not use the *pure* annotation in pointer mode. buildTree was absurdly fast because of this.
+        if ispure && not isPacked
+        then return $ C.InitGroup decl_spec [purattr] inits lc
+        else return prot
 
-      codegenFun :: FunDecl -> SyM (C.Definition, C.Definition)
+      codegenFun :: FunDecl -> PassM (C.Definition, C.Definition)
       codegenFun fd =
           do fun <- codegenFun' fd
-             let prot = makeProt fun (isPure fd)
+             prot <- makeProt fun (isPure fd)
              return (C.DecDef prot noLoc, C.FuncDef fun noLoc)
 
 makeStructs :: [[Ty]] -> [C.Definition]
@@ -212,7 +211,7 @@ codegenTriv (TagTriv i) = [cexp| ( $ty:(codegenTy TagTyPacked) )$i |]
 
 
 -- | The central codegen function.
-codegenTail :: Tail -> C.Type -> ReaderT (Bool,Bool) SyM [C.BlockItem]
+codegenTail :: Tail -> C.Type -> PassM [C.BlockItem]
 
 -- Void type:
 codegenTail (RetValsT []) _ty   = return [ C.BlockStm [cstm| return; |] ]
@@ -300,8 +299,8 @@ codegenTail (LetTimedT flg bnds rhs body) ty =
                    | (vr0,ty0) <- bnds ]
        let rhs' = rewriteReturns rhs bnds
        rhs'' <- codegenTail rhs' ty
-       batchtime <- lift $ gensym "batchtime"
-       selftimed <- lift $ gensym "selftimed"
+       batchtime <- gensym "batchtime"
+       selftimed <- gensym "selftimed"
        let ident = case bnds of
                      ((v,_):_) -> v
                      _ -> (toVar "")
@@ -343,7 +342,7 @@ codegenTail (LetCallT bnds ratr rnds body) ty
                                           (C.FnCall (cid ratr) (map codegenTriv rnds) noLoc)
                           return $ [call] ++ tal
     | otherwise = do
-       nam <- lift $ gensym $ toVar "tmp_struct"
+       nam <- gensym $ toVar "tmp_struct"
        let bind (v,t) f = assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
            fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
            ty0 = ProdTy $ map snd bnds
@@ -354,7 +353,10 @@ codegenTail (LetCallT bnds ratr rnds body) ty
 
 codegenTail (LetPrimCallT bnds prm rnds body) ty =
     do bod' <- codegenTail body ty
-       (isPacked, noGC) <- ask
+       dflags <- getDynFlags
+       let isPacked = gopt Opt_Packed dflags
+           noGC = gopt Opt_DisableGC dflags
+
        pre <- case prm of
                  AddP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
@@ -461,9 +463,9 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                                  in pure [ C.BlockStm [cstm| bump_ref_count($id:end_r1, $id:end_r2); |] ]
 
                  BoundsCheck -> do
-                   new_chunk   <- lift $ gensym "new_chunk"
-                   chunk_start <- lift $ gensym "chunk_start"
-                   chunk_end   <- lift $ gensym "chunk_end"
+                   new_chunk   <- gensym "new_chunk"
+                   chunk_start <- gensym "chunk_start"
+                   chunk_end   <- gensym "chunk_end"
                    let [(IntTriv i),(VarTriv bound), (VarTriv cur)] = rnds
                        alloc_chunk = if noGC
                                      then [ C.BlockDecl [cdecl| $ty:(codegenTy ChunkTy) $id:new_chunk = alloc_chunk_no_gc($id:bound); |] ]
@@ -563,7 +565,7 @@ altTail oth = error $ "altTail expected a 'singleton' Alts, got: "++ abbrv 80 ot
 
 -- | Generate a linear chain of tag tests.  Usually less efficient
 -- than letting the C compiler compile a switch statement.
-_genIfCascade :: Triv -> Alts -> Tail -> C.Type -> ReaderT (Bool, Bool) SyM [C.BlockItem]
+_genIfCascade :: Triv -> Alts -> Tail -> C.Type -> PassM [C.BlockItem]
 _genIfCascade tr alts lastE ty =
     do let trE = codegenTriv tr
            alts' = normalizeAlts alts
@@ -591,9 +593,9 @@ normalizeAlts alts =
       IntAlts as -> map (first mk_int_lhs) as
 
 -- | Generate a proper switch expression instead.
-genSwitch :: Label -> Triv -> Alts -> Tail -> C.Type -> ReaderT (Bool, Bool) SyM [C.BlockItem]
+genSwitch :: Label -> Triv -> Alts -> Tail -> C.Type -> PassM [C.BlockItem]
 genSwitch lbl tr alts lastE ty =
-    do let go :: [(C.Exp,Tail)] -> ReaderT (Bool, Bool) SyM [C.Stm]
+    do let go :: [(C.Exp,Tail)] -> PassM [C.Stm]
            go [] = do tal <- codegenTail lastE ty
                       return [[cstm| default: $stm:(mkBlock tal) |]]
            go ((ex,tl):rst) =

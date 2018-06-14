@@ -81,7 +81,7 @@ run2T l3 = fst $ defaultPackedRunPassM $ do
 
 
 cg :: Prog2 -> IO String
-cg = codegenProg defaultDynFlags . run2T . runT
+cg = codegenProg defaultConfig . run2T . runT
 
 
 type Expected = String

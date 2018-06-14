@@ -190,7 +190,7 @@ data CompileState = CompileState
 -- | Compiler entrypoint, given a full configuration and a list of
 -- files to process, do the thing.
 compile :: Config -> FilePath -> IO ()
-compile config@Config{mode,input,verbosity,backend,cfile,dynflags} fp0 = do
+compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   -- set the env var DEBUG, to verbosity, when > 1
   setDebugEnvVar verbosity
 
@@ -226,7 +226,7 @@ compile config@Config{mode,input,verbosity,backend,cfile,dynflags} fp0 = do
         exitSuccess
       else do
         str <- case backend of
-                 C    -> codegenProg dynflags l4
+                 C    -> codegenProg config l4
 #ifdef LLVM_ENABLED
                  LLVM -> LLVM.codegenProg True l4
 #endif
@@ -502,10 +502,13 @@ passes config@Config{dynflags} l1 = do
       -- Note: L3 -> L4
       l4 <- go "lower"          lower                   l3
 
-      l4 <- if gibbon1
+      l4 <- if gibbon1 || not packed
             then return l4
-            else go "followRedirects" followRedirects   l4
-      l4 <- go "rearrangeFree"  rearrangeFree           l4
+            else do
+              -- These additional case branches cause some tests in pointer mode to fail.
+              l4 <- go "followRedirects" followRedirects l4
+              go "rearrangeFree" rearrangeFree l4
+
       return l4
   where
       go :: PassRunner a b
