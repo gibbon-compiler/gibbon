@@ -425,7 +425,7 @@ benchMainExp l1 = do
                     then l$ L1.VarE (toVar "benchres")
                     else l$ L1.PrimAppE L1.MkTrue [])
       -- Initialize the main expression with a void type. The typechecker will fix it later.
-      return $ l1{ L1.mainExp = Just $ (l$ newExp, L1.ProdTy []) }
+      return $ l1{ L1.mainExp = Just $ (l$ newExp, L1.voidTy) }
     _ -> return l1
 
 -- | The main compiler pipeline
@@ -445,6 +445,7 @@ passes config@Config{dynflags} l1 = do
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    inlineTriv              l1
+      l1 <- goE "typecheck"     L1.tcProg               l1
 
       -- TODO: Write interpreters for L2 and L3
       l3 <- if packed
@@ -454,19 +455,25 @@ passes config@Config{dynflags} l1 = do
 
               -- Note: L1 -> L2
               l2 <- go "inferLocations"   inferLocs     l1
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
+
               l2 <- go "L2.flatten"       flattenL2     l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
 
               l2 <- if gibbon1 || no_rcopies
                     then return l2
                     else go "removeCopies" removeCopies l2
 
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
+
               l2 <- go "inferEffects"     inferEffects  l2
 
               l2 <- go "repairProgram"(repairProgram l1) l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
 
               l2 <- go "inferRegScope"    inferRegScope l2
-
               l2 <- go "L2.typecheck"     L2.tcProg     l2
+
               l2 <- go "routeEnds"        routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
 
@@ -475,6 +482,7 @@ passes config@Config{dynflags} l1 = do
                     else go "boundsCheck" boundsCheck   l2
 
               l2 <- go "threadRegions"    threadRegions l2
+
               -- Note: L2 -> L3
               l3 <- go "cursorize"        cursorize     l2
               l3 <- go "L3.flatten"       flattenL3     l3
@@ -489,6 +497,8 @@ passes config@Config{dynflags} l1 = do
       l3 <- go "unariser"       unariser                l3
       l3 <- go "L3.typecheck"   L3.tcProg               l3
       l3 <- go "L3.flatten"     flattenL3               l3
+      l3 <- go "L3.typecheck"   L3.tcProg               l3
+
       -- Note: L3 -> L4
       l4 <- go "lower"          lower                   l3
 

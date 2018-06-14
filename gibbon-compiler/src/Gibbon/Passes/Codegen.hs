@@ -531,7 +531,7 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                                        -- In packed mode we eagerly FORCE the IO to happen before we start benchmarking:
                                        then pure [ C.BlockStm [cstm| { int sum=0; for(int i=0; i < st.st_size; i++) sum += ptr[i]; } |]
                                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ptr; |]]
-                                       else codegenTail unpackcall (codegenTy (ProdTy []))
+                                       else codegenTail unpackcall (codegenTy voidTy)
                              return $ mmapCode ++ docall
                      | otherwise -> error $ "ReadPackedFile, wrong arguments "++show rnds++", or expected bindings "++show bnds
                  oth -> error$ "FIXME: codegen needs to handle primitive: "++show oth

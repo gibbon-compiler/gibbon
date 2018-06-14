@@ -574,7 +574,7 @@ projTy n (ProdTy (_:tys)) = projTy (n-1) (ProdTy tys)
 projTy _ ty = error $ "projTy: " ++ sdoc ty ++ " is not a projection!"
 
 -- | A makeshift void type.
-voidTy :: Ty1
+voidTy :: UrTy a
 voidTy = ProdTy []
 
 -- | Are values of this type tuples ?

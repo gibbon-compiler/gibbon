@@ -220,7 +220,7 @@ parseSExp ses =
        in go rst dds fds cds (case mn of
                                 -- Initialize the main expression with a void type.
                                 -- The typechecker will fix it later.
-                                Nothing -> Just (ex', ProdTy [])
+                                Nothing -> Just (ex', voidTy)
                                 Just x  -> error$ "Two main expressions: "++
                                                  sdoc x++"\nAnd:\n"++prnt ex)
 

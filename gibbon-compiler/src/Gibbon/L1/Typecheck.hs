@@ -223,11 +223,19 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   -- (the parser initializes the main expression with the void type).
   let mainExp' = case mainExp of
                    Nothing -> Nothing
-                   Just (e,_voidty)  ->
+                   Just (e,main_ty)  ->
                      let res = runExcept $ tcExp ddefs env e
                      in case res of
                          Left err -> error $ sdoc err
-                         Right ty -> Just (e, ty)
+                         Right ty ->
+                           -- The program was just parsed, the type of the
+                           -- expression must be *inferred*.
+                           -- Otherwise, fail if the types don't match.
+                           if main_ty == voidTy
+                           then Just (e, ty)
+                           else if main_ty == ty
+                                then return (e, ty)
+                                else error $ "Expected type " ++ sdoc main_ty ++ " and got type " ++ sdoc ty
 
   return prg { mainExp = mainExp' }
 

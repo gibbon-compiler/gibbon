@@ -54,7 +54,7 @@ desugarModule (S.Module _ _ _ decls) = do
       )
     -- Initialize the main expression with a void type. The typechecker will fix the type later.
     main = case mainFn of
-             Just x  -> Just (x, ProdTy [])
+             Just x  -> Just (x, voidTy)
              Nothing -> Nothing
   return (Prog dataMap funMapNoMain main)
 
@@ -77,7 +77,7 @@ collectTopLevel :: M.Map Var TopTy -> S.Decl -> Ds (Maybe (Either (DDef Ty1) Fun
 collectTopLevel _ (S.PatBind (S.PVar name) (S.UnGuardedRhs rhs) _) = do
   let name' = toVar $ nameToStr name
   rhs' <- desugarExp rhs
-  return $ Just $ Right $ FunDef name' "nothing" (ProdTy [],ProdTy []) rhs'
+  return $ Just $ Right $ FunDef name' "nothing" (voidTy,voidTy) rhs'
 
 collectTopLevel _ S.TypeSig{} = return Nothing
 collectTopLevel funTys (S.FunBind [S.Match fname args (S.UnGuardedRhs rhs) Nothing]) = do

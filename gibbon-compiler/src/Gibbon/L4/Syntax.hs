@@ -10,8 +10,7 @@ module Gibbon.L4.Syntax
     ( Var, Tag, Tail(..), Triv(..), Ty(..), Prim(..), FunDecl(..)
     , Alts(..), Prog(..), MainExp(..), Label
     -- * Utility functions
-    , withTail
-    , fromL3Ty
+    , withTail, fromL3Ty, voidTy
     ) where
 
 import           Control.DeepSeq
@@ -212,6 +211,8 @@ data FunDecl = FunDecl
   , isPure   :: Bool
   } deriving (Show, Ord, Eq, Generic, NFData, Out)
 
+voidTy :: Ty
+voidTy = ProdTy []
 
 -- | Extend the tail of a Tail.  Take the return values from a Tail
 -- expression and do some more computation.
