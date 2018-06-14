@@ -60,7 +60,6 @@ tests:
   - name: test11e_funrec.gib
   - name: test11f_funrec.gib
   - name: test11_fundata.gib
-  - name: test12_skip.gib
   - name: test12b_traverse.gib
   - name: test12c_traverse.gib
   - name: test13b_build.gib
@@ -71,7 +70,6 @@ tests:
   - name: test18e_identity3.gib
   - name: test18g_identity4.gib
   - name: test19_unarytree.gib
-  - name: test20b_bintree.gib
   - name: test20_bintree.gib
   - name: test20c_bintree.gib
   - name: test20d_bintree.gib
@@ -106,29 +104,35 @@ tests:
   - name: test_sumtree.gib
   - name: test_unpacking.gib
 
+  #
+  - name: test12_skip.gib
+    failing: [gibbon1]
+  - name: test20b_bintree.gib
+    failing: [gibbon1]
+
   # Failing tests:
   - name: test04c_ifvector.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
   - name: test06h_rec.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
   - name: test06i_casecase.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
   - name: test08b_dict.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
   - name: test08c_dict.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
   - name: test08_dict.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
   - name: test08d_sharedict.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
   - name: test10b_desugar.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
   - name: test10_desugar.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
 
   # sym-append not implemented in the RTS
   - name: test15b_symappend.gib
-    failing: [packed, pointer]
+    failing: [gibbon2, pointer, gibbon1]
 
   # Probably safe to delete these tests permanently
   - name: test16_forlist.gib
@@ -138,30 +142,30 @@ tests:
 
   #
   - name: test18b_tupconstraint.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
   - name: test18f_flip.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
 
   #
   - name: test24_defs.gib
-    failing: [packed]
+    failing: [gibbon2]
   - name: test25d_racketcore.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
   - name: test25f_countnodes.gib
-    failing: [packed]
+    failing: [gibbon2, gibbon1]
 
   # This test depends on real symbols, which we don't support atm.
   - name: test27b_subst.gib
-    failing: [pointer,packed,interp1]
+    failing: [pointer,gibbon2,interp1,gibbon1]
 
   # No gensym, or real symbols.
   - name: test28_copyprop.gib
-    failing: [packed,pointer,interp1]
+    failing: [gibbon2,pointer,interp1,gibbon1]
 
   #
   - name: test_addtrees.gib
-    failing: [packed]
+    failing: [gibbon2,gibbon1]
   - name: test_buildtreesum.gib
-    failing: [packed]
+    failing: [gibbon2,gibbon1]
   - name: test_sumupseteven.gib
-    failing: [packed]
+    failing: [gibbon2,gibbon1]

@@ -96,7 +96,7 @@ defaultTest :: Test
 defaultTest = Test
     { name = ""
     , dir = "examples"
-    , expectedResults = M.fromList [(Packed, Pass), (Pointer, Pass), (Interp1, Pass)]
+    , expectedResults = M.fromList (zip allModes (repeat Pass))
     , skip = False
     , runModes = []
     , isBenchmark = False
@@ -123,7 +123,7 @@ data Result = Pass | Fail
 
 -- Not used atm.
 -- | Gibbon mode to run programs in
-data Mode = Packed | Pointer | Interp1 | Gibbon1
+data Mode = Gibbon2 | Pointer | Interp1 | Gibbon1
   deriving (Show, Eq, Read, Ord, Bounded, Enum)
 
 instance FromJSON Mode where
@@ -135,20 +135,20 @@ allModes = [minBound ..]
 readMode :: T.Text -> Mode
 readMode s =
     case T.toLower s of
-        "packed"  -> Packed
+        "gibbon2" -> Gibbon2
         "pointer" -> Pointer
         "interp1" -> Interp1
         "gibbon1" -> Gibbon1
 
 -- Must match the flag expected by Gibbon.
 modeRunOptions :: Mode -> [String]
-modeRunOptions Packed  = ["--run", "--packed"]
+modeRunOptions Gibbon2  = ["--run", "--packed"]
 modeRunOptions Pointer = ["--run", "--pointer"]
 modeRunOptions Interp1 = ["--interp1"]
 modeRunOptions Gibbon1 = ["--run", "--packed", "--gibbon1"]
 
 modeFileSuffix :: Mode -> String
-modeFileSuffix Packed  = "_pkd"
+modeFileSuffix Gibbon2  = "_pkd"
 modeFileSuffix Pointer = "_ptr"
 modeFileSuffix Interp1 = "_interp1"
 modeFileSuffix Gibbon1 = "_gibbon1"
@@ -157,9 +157,9 @@ modeFileSuffix Gibbon1 = "_gibbon1"
 -- The 'many' thing cannot be used with an option. I suppose that just
 -- having modes trailing at the end, or as flags is also acceptable.
 -- This needs to go away soon.
--- > stringToModes packed = [Packed]
--- > stringToModes "packed, pointer" = [Packed, Pointer]
--- > stringToModes "packed, packed" = [Packed]
+-- > stringToModes gibbon2 = [Gibbon2]
+-- > stringToModes "gibbon2, pointer" = [Gibbon2, Pointer]
+-- > stringToModes "gibbon2, gibbon2" = [Gibbon2]
 stringToModes :: ReadM [Mode]
 stringToModes = do
     str <- readerAsk
