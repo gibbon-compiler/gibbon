@@ -8,7 +8,7 @@
 --
 
 module Gibbon.Passes.InferEffects
-  (inferEffects) where
+  (inferEffects, inferExp) where
 
 import Data.Loc
 import Data.List as L

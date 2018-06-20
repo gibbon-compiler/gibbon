@@ -1,0 +1,28 @@
+#lang gibbon
+
+(data List
+      [Nil]
+      [Cons Int List])
+
+(define (sum-list [xs : List]) : Int
+  (case xs
+    [(Nil) 0]
+    [(Cons y ys) (+ y (sum-list ys))]))
+
+(define (insert-at [i : Int] [x : Int] [xs : List]) : List
+  (case xs
+    [(Nil) (Cons x xs)]
+    [(Cons y ys) (if (= i 0)
+                     (Cons x (Cons y ys))
+                     (Cons y (insert-at (- i 1) x ys)))]))
+
+(define (replace-at [i : Int] [x : Int] [xs : List]) : List
+  (case xs
+    [(Nil) (Cons x xs)]
+    [(Cons y ys) (if (= i 0)
+                     (Cons x ys)
+                     (Cons y (replace-at (- i 1) x ys)))]))
+
+(let ([xs : List (Cons 1 (Cons 2 (Cons 3 (Nil))))])
+  (let ([ys : List (replace-at 0 33 (insert-at 1 4 xs))])
+    (sum-list ys)))

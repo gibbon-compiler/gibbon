@@ -333,7 +333,10 @@ runTest tc Test{name,dir,expectedResults,runModes} =
                 out <- hGetContents hout
                 writeFile outpath out
                 -- Diff the output and the answer
-                actual <- diff anspath outpath
+                answer_exists <- doesFileExist anspath
+                actual <- if answer_exists
+                          then diff anspath outpath
+                          else return $ Just ("File does not exist: " ++ anspath)
                 case (actual, expected) of
                     -- Nothing == No difference between the expected and actual answers
                     (Nothing, Pass) -> return (mode, EP)

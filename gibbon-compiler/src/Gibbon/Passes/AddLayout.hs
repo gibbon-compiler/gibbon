@@ -15,31 +15,9 @@ import Gibbon.L1.Syntax as L1
 {- Note [Adding layout information]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This pass runs after InferEffects.
-
-Instead of using "dummy_traversals" as another program repair strategy in
-InferLocations, it's easier to annotate the program first, and
-then repair it later if required. `needsLayout` makes this decision.
-
-Consider this example:
-
-    main = add1 . buildtree
-
-This example doesn't need to be repaired, and can be compiled in it's current form.
-But on the other hand,
-
-    main =  add1 . rightmost . buildtree
-
-...cannot run, because `rightmost` doesn't traverse the left element of a node.
-In Gibbon1, we would've fixed righmost so that it does traverse it's input. However,
-this changes it's asymptotic complexity. In Gibbon2, we compile such programs
-using layout information (indirections) instead. This basically allows O(1) random
-access to any element of the node.
-
-Note that we can't add layout information to an L2 program, as it would distort
-the the location arithmetic. Instead, (1) we transform the program to L1 and
-add layout information to that, (2) then run location inference on this updated
-version.
+We cannot add layout information to an L2 program, as it would distort the locations
+inferred by the previous analysis. Instead, (1) we use the old L1 program and
+add layout information to that, (2) then run location inference again.
 
 Adding layout information involves 3 steps:
 
@@ -77,9 +55,9 @@ becomes,
 {- Note [Reusing indirections in case expressions]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If a data constructor occurs inside a case expression, we might already have an indirection
-for a variable that was bound in the pattern. In that case, we don't want to request yet
-another one using PEndOf. Consider this example:
+If a data constructor occurs inside a case expression, we might already have an
+indirection for a variable that was bound in the pattern. In that case, we don't want
+to request yet another one using PEndOf. Consider this example:
 
     (fn ...
       (case tr

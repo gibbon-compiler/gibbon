@@ -60,6 +60,7 @@ tests:
   - name: test11e_funrec.gib
   - name: test11f_funrec.gib
   - name: test11_fundata.gib
+  - name: test12_skip.gib
   - name: test12b_traverse.gib
   - name: test12c_traverse.gib
   - name: test13b_build.gib
@@ -71,6 +72,7 @@ tests:
   - name: test18g_identity4.gib
   - name: test19_unarytree.gib
   - name: test20_bintree.gib
+  - name: test20b_bintree.gib
   - name: test20c_bintree.gib
   - name: test20d_bintree.gib
   - name: test20e_bintree.gib
@@ -85,6 +87,7 @@ tests:
   - name: test26a_treewalk.gib
   - name: test27a_subst.gib
   - name: test27c_subst.gib
+  - name: test29_list.gib
   - name: test_buildstree.gib
   - name: test_buildtree.gib
   - name: test_buildtwotrees.gib
@@ -103,12 +106,6 @@ tests:
   - name: test_sumstree.gib
   - name: test_sumtree.gib
   - name: test_unpacking.gib
-
-  #
-  - name: test12_skip.gib
-    failing: [gibbon1]
-  - name: test20b_bintree.gib
-    failing: [gibbon1]
 
   # Failing tests:
   - name: test04c_ifvector.gib
@@ -129,6 +126,34 @@ tests:
     failing: [gibbon2, gibbon1]
   - name: test10_desugar.gib
     failing: [gibbon2, gibbon1]
+  - name: test29a_list.gib
+    failing: [gibbon2, gibbon1]
+  - name: test18h_identity5.gib
+    failing: [gibbon2, gibbon1]
+  - name: test18b_tupconstraint.gib
+    failing: [gibbon2, gibbon1]
+  - name: test18f_flip.gib
+    failing: [gibbon2, gibbon1]
+  - name: test_addtrees.gib
+    failing: [gibbon2,gibbon1]
+  - name: test_buildtreesum.gib
+    failing: [gibbon2,gibbon1]
+  - name: test_sumupseteven.gib
+    failing: [gibbon2,gibbon1]
+  - name: test25d_racketcore.gib
+    failing: [gibbon2, gibbon1]
+  - name: test25f_countnodes.gib
+    failing: [gibbon2, gibbon1]
+  - name: test24_defs.gib
+    failing: [gibbon2]
+
+  # This test depends on real symbols, which we don't support atm.
+  - name: test27b_subst.gib
+    failing: [pointer,gibbon2,interp1,gibbon1]
+
+  # No gensym, or real symbols.
+  - name: test28_copyprop.gib
+    failing: [gibbon2,pointer,interp1,gibbon1]
 
   # sym-append not implemented in the RTS
   - name: test15b_symappend.gib
@@ -139,33 +164,3 @@ tests:
     skip: true
   - name: test17_forfold.gib
     skip: true
-
-  #
-  - name: test18b_tupconstraint.gib
-    failing: [gibbon2, gibbon1]
-  - name: test18f_flip.gib
-    failing: [gibbon2, gibbon1]
-
-  #
-  - name: test24_defs.gib
-    failing: [gibbon2]
-  - name: test25d_racketcore.gib
-    failing: [gibbon2, gibbon1]
-  - name: test25f_countnodes.gib
-    failing: [gibbon2, gibbon1]
-
-  # This test depends on real symbols, which we don't support atm.
-  - name: test27b_subst.gib
-    failing: [pointer,gibbon2,interp1,gibbon1]
-
-  # No gensym, or real symbols.
-  - name: test28_copyprop.gib
-    failing: [gibbon2,pointer,interp1,gibbon1]
-
-  #
-  - name: test_addtrees.gib
-    failing: [gibbon2,gibbon1]
-  - name: test_buildtreesum.gib
-    failing: [gibbon2,gibbon1]
-  - name: test_sumupseteven.gib
-    failing: [gibbon2,gibbon1]

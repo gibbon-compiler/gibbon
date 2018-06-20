@@ -218,7 +218,7 @@ data DCArg = ArgFixed Int
 
 inferLocs :: L1.Prog1 -> PassM L2.Prog2
 inferLocs initPrg = do
-  (L1.Prog dfs fds me) <- addCopyFns initPrg
+  (L1.Prog dfs fds me) <- addRepairFns initPrg
   let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
           fenv <- forM fds $ \(L1.FunDef _ _ (inty, outty) _) ->
@@ -243,7 +243,6 @@ inferLocs initPrg = do
   case fst prg of
     Right a -> return a
     Left a -> err $ show a
-  where
 
 -- | Destination can be a single location var, a tuple of destinations,
 -- or nothing (for scalar values)
@@ -1188,13 +1187,39 @@ genCopyFn DDef{tyName, dataCons} = do
                      , L1.funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
                      }
 
--- | Add copy functions for each data type in a prog
-addCopyFns :: L1.Prog1 -> PassM L1.Prog1
-addCopyFns (L1.Prog dfs fds me) = do
-  newFns <- mapM genCopyFn dfs
-  prg <- flattenL1 $ L1.Prog dfs (fds `M.union` (M.mapKeys (mkCopyFunName . fromVar) newFns)) me
-  inlineTriv prg
+-- | Traverses a packed data type and always returns 42.
+genTravFn :: DDef L1.Ty1 -> PassM L1.FunDef1
+genTravFn DDef{tyName, dataCons} = do
+  arg <- gensym $ "arg"
+  casebod <- forM dataCons $ \(dcon, tys) ->
+             do xs <- mapM (\_ -> gensym "x") tys
+                ys <- mapM (\_ -> gensym "y") tys
+                let bod = L.foldr (\(ty,x,y) acc ->
+                                     if L1.isPackedTy ty
+                                     then l$ LetE (y, [], IntTy, l$ AppE (mkTravFunName (tyToDataCon ty)) [] (l$ VarE x)) acc
+                                     else l$ LetE (y, [], ty, l$ VarE x) acc)
+                          (l$ LitE 42)
+                          (zip3 (L.map snd tys) xs ys)
+                return (dcon, L.map (\x -> (x,())) xs, bod)
+  return $ L1.FunDef { L1.funName = mkTravFunName (fromVar tyName)
+                     , L1.funArg = arg
+                     , L1.funTy  = ( L1.PackedTy (fromVar tyName) () , IntTy )
+                     , L1.funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
+                     }
 
+
+-- | Add copy & traversal functions for each data type in a prog
+addRepairFns :: L1.Prog1 -> PassM L1.Prog1
+addRepairFns (L1.Prog dfs fds me) = do
+  newFns <- concat <$>
+              mapM (\d -> do
+                    copy_fn <- genCopyFn d
+                    trav_fn <- genTravFn d
+                    return [copy_fn, trav_fn])
+              (M.elems dfs)
+  let fds' = fds `M.union` (M.fromList $ L.map (\f -> (funName f, f)) newFns)
+  prg <- flattenL1 $ L1.Prog dfs fds' me
+  inlineTriv prg
 
 emptyEnv :: FullEnv
 emptyEnv = FullEnv { dataDefs = C.emptyDD

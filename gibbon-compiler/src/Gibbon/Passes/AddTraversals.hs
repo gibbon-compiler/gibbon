@@ -2,48 +2,49 @@ module Gibbon.Passes.AddTraversals
   (addTraversals) where
 
 import Control.Monad (forM)
-import Data.Foldable (foldrM)
 import Data.List as L
 import Data.Map as M
 import Data.Set as S
 import Data.Loc
 
+import Gibbon.Passes.InferEffects (inferExp)
 import Gibbon.Common
 import Gibbon.L1.Syntax as L1
+import Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
--- |
-addTraversals :: S.Set Var -> Prog1 -> PassM Prog1
-addTraversals unsafeFns prg@Prog{ddefs,fundefs,mainExp} =
-  dbgTrace 5 ("AddTraversals: Fixing functions:" ++ sdoc (S.toList unsafeFns)) <$> do
-    funs <- mapM (\(nm,f) -> (nm,) <$> addTraversalsFn unsafeFns ddefs f) (M.toList fundefs)
-    withTravFuns <- foldrM (\ddf acc -> do fn <- genTravFn ddf
-                                           return $ M.insert (funName fn) fn acc)
-                    (M.fromList funs)
-                    (M.elems ddefs)
-    mainExp' <-
-      case mainExp of
-        Just (ex,ty) -> Just <$> (,ty) <$> addTraversalsExp ddefs ex
-        Nothing -> return Nothing
-    return prg { ddefs = ddefs
-               , fundefs = withTravFuns
-               , mainExp = mainExp'
-               }
+{- Note [Adding dummy traversals]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+-}
 
--- Process body and reset traversal effects.
-addTraversalsFn :: S.Set Var -> DDefs Ty1 -> L1.FunDef1 -> PassM L1.FunDef1
-addTraversalsFn unsafeFns ddefs f@FunDef{funName, funBody} =
-  if funName `S.member` unsafeFns
-  then do
-    bod' <- addTraversalsExp ddefs funBody
+addTraversals :: Prog2 -> PassM Prog2
+addTraversals prg@Prog{ddefs,fundefs,mainExp} = do
+  funs <- mapM (addTraversalsFn ddefs fundefs) fundefs
+  mainExp' <-
+    case mainExp of
+      Just (ex,ty) -> Just <$> (,ty) <$> addTraversalsExp ddefs fundefs M.empty ex
+      Nothing -> return Nothing
+  return prg { ddefs = ddefs
+             , fundefs = funs
+             , mainExp = mainExp'
+             }
+
+addTraversalsFn :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef2
+addTraversalsFn ddefs fundefs f@FunDef{funArg, funTy, funBody} =
+  if traversesAllInputs
+  then return f
+  else do
+    bod' <- addTraversalsExp ddefs fundefs (M.singleton funArg (arrIn funTy)) funBody
     return $ f {funBody = bod'}
-  else return f
+  where
+    traversesAllInputs = length (L2.inLocVars funTy) == length (S.toList $ L2.arrEffs funTy)
+
 
 -- Generate traversals for the first (n-1) packed elements
-addTraversalsExp :: DDefs Ty1-> L Exp1 -> PassM (L Exp1)
-addTraversalsExp ddefs (L p ex) = L p <$>
+addTraversalsExp :: DDefs Ty2 -> FunDefs2 -> M.Map Var Ty2 -> L Exp2 -> PassM (L Exp2)
+addTraversalsExp ddefs fundefs tyenv (L p ex) = L p <$>
   case ex of
     CaseE scrt brs -> CaseE scrt <$> mapM docase brs
 
@@ -62,44 +63,61 @@ addTraversalsExp ddefs (L p ex) = L p <$>
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
-    Ext _ -> return ex
+    Ext ext ->
+      case ext of
+        LetRegionE reg bod -> Ext <$> LetRegionE reg <$> go bod
+        LetLocE loc locexp bod -> Ext <$> LetLocE loc locexp <$> go bod
+        _ -> return ex
     MapE{}  -> error "addLayoutExp: TODO MapE"
     FoldE{} -> error "addLayoutExp: TODO FoldE"
 
   where
-    go = addTraversalsExp ddefs
-    docase (dcon,vlocs,rhs) = do
-      let tys = lookupDataCon ddefs dcon
-          (vars,_) = unzip vlocs
-          -- First (n-1) packed elements
-          packedOnly = L.filter (\(_,ty) -> isPackedTy ty) (zip vars tys)
-      case packedOnly of
-        [] -> (dcon,vlocs,) <$> go rhs
-        _ -> do
-          let ls = init packedOnly
-          travbinds <- mapM (\(v,ty) -> do
-                               let travfn = mkTravFunName (tyToDataCon ty)
-                               v' <- gensym v
-                               return (v',[], ty, l$ AppE travfn [] (l$ VarE v)))
-                       ls
-          (dcon,vlocs,) <$> mkLets travbinds <$> go rhs
+    go = addTraversalsExp ddefs fundefs tyenv
 
--- | Traverses a packed data type and always returns 42.
-genTravFn :: DDef Ty1 -> PassM FunDef1
-genTravFn DDef{tyName, dataCons} = do
-  arg <- gensym $ "arg"
-  casebod <- forM dataCons $ \(dcon, tys) ->
-             do xs <- mapM (\_ -> gensym "x") tys
-                ys <- mapM (\_ -> gensym "y") tys
-                let bod = L.foldr (\(ty,x,y) acc ->
-                                     if L1.isPackedTy ty
-                                     then l$ LetE (y, [], IntTy, l$ AppE (mkTravFunName (tyToDataCon ty)) [] (l$ VarE x)) acc
-                                     else l$ LetE (y, [], ty, l$ VarE x) acc)
-                          (l$ LitE 42)
-                          (zip3 (L.map snd tys) xs ys)
-                return (dcon, L.map (\x -> (x,())) xs, bod)
-  return $ L1.FunDef { L1.funName = mkTravFunName (fromVar tyName)
-                     , L1.funArg = arg
-                     , L1.funTy  = ( L1.PackedTy (fromVar tyName) () , IntTy )
-                     , L1.funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
-                     }
+    fenv = M.map funTy fundefs
+
+    -- If this case expression cannot unpack all the pattern matched variables:
+    -- (1) Everything after the first packed element should be unused in the RHS
+    -- (2) Otherwise, we must traverse the first (n-1) packed elements
+    docase (dcon,vlocs,rhs) = do
+      let (vars, _locs) = unzip vlocs
+          tys    = lookupDataCon ddefs dcon
+          v_tys  = zip vars tys
+          (eff,_)= inferExp ddefs fenv (M.union tyenv (M.fromList v_tys)) rhs
+          effToLoc (Traverse loc_var) = loc_var
+          packedOnly = L.filter (\(_,t) -> hasPacked t) v_tys
+
+          -- Collect all non-static items that were not traversed
+          -- (related: InferEffects)
+          notTraversed =
+            case packedOnly of
+              [] -> []
+              ls -> let patVMap = M.fromList vlocs
+                        packedlocs = L.map (\(a,_) -> Traverse (patVMap # a)) ls
+                    -- Using Data.Set changes the order of packedlocs, and we would
+                    -- like to preserve it.
+                    in L.map effToLoc $ packedlocs L.\\ (S.toList eff)
+
+      case L.findIndex isPackedTy tys of
+        Nothing -> (dcon, vlocs,) <$> go rhs
+        Just i  -> case notTraversed of
+                     -- All the packed elements were traversed
+                     [] -> (dcon, vlocs,) <$> go rhs
+                     _ls -> do
+                       -- Why (i+1): findIndex is 0-based, and drop is not
+                       let should_be_unused = S.fromList $ L.drop (i+1) vars
+                       -- If the problematic elements are unused, we don't need
+                       -- to add traversals
+                       if not (L2.occurs should_be_unused rhs)
+                       then (dcon,vlocs,) <$> go rhs
+                       -- Otherwise, traverse.
+                       else do
+                         let loc_map = M.fromList $ L.map (\(a,b) -> (b,a)) vlocs
+                         trav_binds <-
+                           forM notTraversed $ \p_loc -> do
+                              v <- gensym "trav"
+                              let p_var = loc_map # p_loc
+                                  ty = (M.fromList v_tys) # p_var
+                                  fn_name = mkTravFunName (tyToDataCon ty)
+                              return $ (v,[],IntTy, l$ AppE fn_name [p_loc] (l$ VarE p_var))
+                         (dcon,vlocs,) <$> mkLets trav_binds <$> go rhs

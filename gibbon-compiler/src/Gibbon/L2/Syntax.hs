@@ -393,10 +393,10 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
 
 
 -- | Does a variable occurs in an expression ?
-occurs :: Var -> L Exp2 -> Bool
+occurs :: S.Set Var -> L Exp2 -> Bool
 occurs w (L _ ex) =
   case ex of
-    VarE v -> v == w
+    VarE v -> v `S.member` w
     LitE{}    -> False
     LitSymE{} -> False
     AppE _ _ arg -> occurs w arg
