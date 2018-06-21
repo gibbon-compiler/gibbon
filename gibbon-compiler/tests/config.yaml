@@ -65,6 +65,7 @@ tests:
   - name: test12c_traverse.gib
   - name: test13b_build.gib
   - name: test13_build.gib
+  - name: test15a_symsearch.gib
   - name: test18_badconstraint.gib
   - name: test18c_identity1.gib
   - name: test18d_identity2.gib
@@ -88,6 +89,7 @@ tests:
   - name: test27a_subst.gib
   - name: test27c_subst.gib
   - name: test29_list.gib
+  - name: test30_twitter.gib
   - name: test_buildstree.gib
   - name: test_buildtree.gib
   - name: test_buildtwotrees.gib

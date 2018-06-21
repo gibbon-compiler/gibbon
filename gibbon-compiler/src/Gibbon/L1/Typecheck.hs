@@ -181,7 +181,7 @@ tcExp ddfs env exp@(L p ex) =
           let (PackedTy t _l) = tye
           if one == t
           then return ()
-          else error$ "Expected these to be the same: " ++ one ++ " & " ++ sdoc one
+          else error$ "Expected these to be the same: " ++ one ++ " & " ++ sdoc t
           tcCases ddfs env cs
         oth   -> throwError $ GenericTC ("Case branches have mismatched types: " ++ sdoc oth
                                          ++" , in " ++ sdoc exp) exp
