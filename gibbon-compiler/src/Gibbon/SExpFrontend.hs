@@ -276,6 +276,7 @@ keywords = S.fromList $ L.map pack $
            [ "quote", "if", "or", "and", "time", "let"
            , "case", "vector-ref", "for/fold", "for/list"
            , "insert", "empty-dict", "lookup", "error", "ann"
+           , "div", "mod"
            ]
 
 isKeyword :: Text -> Bool
@@ -364,7 +365,7 @@ exp se =
    Ls3 _ "ann" e _ty -> exp e
 
    Ls0 (A _ kwd : _args) | isKeyword kwd ->
-      error $ "Error reading treelang.  Badly formed expression:\n "++prnt se
+      error $ "Error reading treelang. " ++ show kwd ++ "is a keyword:\n "++prnt se
 
    ----------------------------------------
    -- If NOTHING else matches, we are an application.  Be careful we didn't miss anything:

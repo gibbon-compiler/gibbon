@@ -329,7 +329,8 @@ codegenTail (LetTimedT flg bnds rhs body) ty =
                             , C.BlockStm [cstm| printf("BATCHTIME: %e\n", $id:batchtime); |]
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", $id:selftimed); |]
                             ]
-                       else [ C.BlockStm [cstm| printf("SELFTIMED: %lf\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ]
+                       else [ C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
+                            , C.BlockStm [cstm| printf("SELFTIMED: %lf\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ]
        tal <- codegenTail body ty
        return $ decls ++ withPrnt ++ tal
 

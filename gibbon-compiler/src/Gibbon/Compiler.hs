@@ -18,6 +18,7 @@ module Gibbon.Compiler
 
 import           Control.DeepSeq
 import           Control.Exception
+import           Control.Monad (when)
 import           Control.Monad.State.Strict
 import           Control.Monad.Reader (ask)
 import           Data.Set as S hiding (map)
@@ -137,6 +138,7 @@ configParser = Config <$> inputParser
   modeParser = -- infoOption "foo" (help "bar") <*>
                flag' ToParse (long "parse" <> help "Only parse, then print & stop") <|>
                flag' ToC     (long "toC" <> help "Compile to a C file, named after the input") <|>
+               flag' ToExe   (long "to-exe" <> help "Compile to a C file, named after the input") <|>
                flag' Interp1 (long "interp1" <> help "run through the interpreter early, right after parsing") <|>
                flag' Interp2 (short 'i' <> long "interp2" <>
                               help "Run through the interpreter after cursor insertion") <|>
@@ -323,6 +325,7 @@ compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
   case cd of
     ExitFailure n -> error$ (show backend) ++" compiler failed!  Code: "++show n
     ExitSuccess -> do
+      when (mode == ToExe) exitSuccess
       -- (Stage 5) Binary compiled, run if appropriate
       let runExe extra = do
             (_,Just hout,_, phandle) <- createProcess (shell (exepath++extra))
@@ -417,7 +420,7 @@ benchMainExp l1 = do
                              ret,
                              l$ L1.TimeIt
                              (l$ L1.AppE fnname []
-                              (l$ L1.VarE (toVar tmp))) ret True)
+                              (l$ L1.VarE (toVar tmp))) ret False)
                    $
                     -- FIXME: should actually return the result,
                     -- as soon as we are able to print it.
