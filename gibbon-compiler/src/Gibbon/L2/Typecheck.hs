@@ -239,7 +239,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    return (ty, tstate)
 
                  L1.ReadPackedFile _fp _tycon ty -> do
-                   len3
+                   len0
                    return (ty, tstate)
 
                  L1.PEndOf -> return (CursorTy, tstate)

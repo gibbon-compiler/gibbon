@@ -207,7 +207,7 @@ tcExp ddfs env exp@(L p ex) =
           return ty
 
         ReadPackedFile _fp _tycon ty -> do
-          len3
+          len0
           return ty
 
         PEndOf -> error "Do not use PEndOf after L2."

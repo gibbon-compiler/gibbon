@@ -125,7 +125,7 @@ tcExp ddfs env exp@(L p ex) =
           return IntTy
 
         ReadPackedFile _fp _tycon ty -> do
-          len3
+          len0
           return ty
 
         PEndOf -> do
