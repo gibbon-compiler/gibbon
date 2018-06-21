@@ -106,6 +106,7 @@ tests:
   - name: test_sumstree.gib
   - name: test_sumtree.gib
   - name: test_unpacking.gib
+  - name: test24_defs.gib
 
   # Failing tests:
   - name: test04c_ifvector.gib
@@ -144,8 +145,6 @@ tests:
     failing: [gibbon2, gibbon1]
   - name: test25f_countnodes.gib
     failing: [gibbon2, gibbon1]
-  - name: test24_defs.gib
-    failing: [gibbon2]
 
   # This test depends on real symbols, which we don't support atm.
   - name: test27b_subst.gib

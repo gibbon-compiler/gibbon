@@ -252,7 +252,7 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
           let (vars,locs) = unzip vlocs
               lenv1' = foldr (\lc acc -> M.insert lc reg acc) lenv1 locs
               tys = lookupDataCon ddfs dcon
-              env2'' = extendsVEnv (M.fromList $ zip vars tys) env2'
+              env2'' = extendsVEnv (M.fromList $ zip vars (substLocs' locs tys)) env2'
           (dcon,vlocs,) <$> (boundsCheckExp ddfs fundefs lenv1' env2'' deps checked bod)
 
 

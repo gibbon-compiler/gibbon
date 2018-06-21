@@ -438,7 +438,9 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
     where
       go acc (L _ ex) =
         case ex of
-          LetE (v,_,_,rhs) bod -> go (M.insertWith (++) v (allFreeVars rhs) acc) bod
+          LetE (v,_,_,rhs) bod ->
+              let acc_rhs = go acc rhs
+              in go (M.insertWith (++) v (allFreeVars rhs) acc_rhs) bod
           CaseE _ mp -> L.foldr (\(_,_,e) acc' -> go acc' e) acc mp
           Ext ext ->
             case ext of
