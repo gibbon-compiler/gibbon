@@ -70,7 +70,10 @@ type FunDefs0 = M.Map Var FunDef0
 
 type FunDef0 = L1.FunDef (L Exp0)
 
-type instance L1.ArrowTy Ty0 = (Ty0 , Ty0)
+instance FunctionTy Ty0 where
+  type ArrowTy Ty0 = (Ty0 , Ty0)
+  inTy = fst
+  outTy = fst
 
 -- ^ Polymorphic version
 

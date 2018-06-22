@@ -89,7 +89,7 @@ repairProgram oldl1 prg = do
 -- that we can selectively enable indirections].
 needsRepair :: L2.Prog2 -> (Bool, S.Set Var)
 needsRepair (Prog ddefs fundefs mainExp) =
-  let env2 = Env2 M.empty (L2.initFunEnv fundefs)
+  let env2 = Env2 M.empty (initFunEnv fundefs)
       specialfns = L.foldl' (\acc fn -> if isSpecialFn ddefs fn
                                         then S.insert (funName fn) acc
                                         else acc)

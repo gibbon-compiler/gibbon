@@ -30,9 +30,6 @@ type FunEnv = M.Map Var ArrowTy2
 locsEffect :: [LocVar] -> Set Effect
 locsEffect = S.fromList . L.map Traverse
 
-type LocEnv = M.Map Var LocVar
-type TyEnv  = M.Map Var Ty2
-
 -- | We initially populate all functions with MAXIMUM effect signatures.
 --   Subsequently, these monotonically SHRINK until a fixpoint.
 --   We also associate fresh location variables with packed types.
@@ -71,7 +68,7 @@ inferFunDef ddfs fenv FunDef{funArg,funBody,funTy} = funTy { arrEffs = S.interse
     (eff,_outLoc) = inferExp ddfs fenv env0 funBody
 
 
-inferExp :: DDefs Ty2 -> FunEnv -> TyEnv -> L Exp2 -> (Set Effect, Maybe LocVar)
+inferExp :: DDefs Ty2 -> FunEnv -> TyEnv Ty2 -> L Exp2 -> (Set Effect, Maybe LocVar)
 inferExp ddfs fenv env (L _p exp) =
   case exp of
     -- QUESTION: does a variable reference count as traversing to the end?

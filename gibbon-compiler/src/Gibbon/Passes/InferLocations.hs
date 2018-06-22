@@ -1,13 +1,8 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-
--- TEMP:
--- {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
--- {-# OPTIONS_GHC -Wno-missing-signatures #-}
 {-# OPTIONS_GHC -Wno-unused-imports #-}
-
--- TEMP:
--- {-# OPTIONS_GHC -Wno-all #-}
 
 -- | Convert from L1 to L2, adding region constructs.
 
@@ -119,9 +114,9 @@ import Gibbon.Passes.Flatten (flattenL1)
 
 -- | Combine the different kinds of contextual information in-scope.
 data FullEnv = FullEnv
-    { dataDefs :: (DDefs Ty2)           -- ^ Data type definitions
-    , valEnv :: M.Map Var Ty2           -- ^ Type env for local bindings
-    , funEnv :: M.Map Var ArrowTy2 -- ^ Top level fundef types
+    { dataDefs :: DDefs Ty2 -- ^ Data type definitions
+    , valEnv :: TyEnv Ty2   -- ^ Type env for local bindings
+    , funEnv :: FunEnv Ty2  -- ^ Top level fundef types
     } deriving Show
 
 extendVEnv :: Var -> Ty2 -> FullEnv -> FullEnv

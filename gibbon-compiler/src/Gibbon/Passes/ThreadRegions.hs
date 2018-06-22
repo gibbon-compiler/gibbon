@@ -14,8 +14,6 @@ import Gibbon.L2.Syntax as L2
 -- Maps a location to a region
 type LocEnv = M.Map LocVar Var
 
-type TypeEnv = M.Map Var Ty2
-
 threadRegions :: L2.Prog2 -> PassM L2.Prog2
 threadRegions Prog{ddefs,fundefs,mainExp} = do
   fds' <- mapM (threadRegionsFn ddefs fundefs) $ M.elems fundefs

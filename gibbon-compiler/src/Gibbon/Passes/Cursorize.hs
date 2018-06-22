@@ -67,9 +67,6 @@ if the functions "traverses" it's input (more details in the paer).
 -}
 
 
-type TEnv = M.Map Var Ty2
-
-
 -- | Track variables depending on location variables.
 --
 --   If we have to create binding of the form `let v = loc` (in case expressions for example),
@@ -217,7 +214,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArg,funBody} =
 
 
 -- | Cursorize expressions NOT producing `Packed` values
-cursorizeExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> L Exp2 -> PassM (L L3.Exp3)
+cursorizeExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> L Exp2 -> PassM (L L3.Exp3)
 cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
   case ex of
     VarE v    -> return $ VarE v
@@ -313,7 +310,7 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
 
 
 -- Cursorize expressions producing `Packed` values
-cursorizePackedExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> L Exp2
+cursorizePackedExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> L Exp2
                    -> PassM (DiExp (L L3.Exp3))
 cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
   case ex of
@@ -478,7 +475,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
 --
 -- i.e `loc_a` may not always be bound. If that's the case, don't process `loc_b`
 -- now. Instead, add it to the dependency environment.
-cursorizeLocExp :: DepEnv -> TEnv -> LocVar -> LocExp -> Either DepEnv (L L3.Exp3)
+cursorizeLocExp :: DepEnv -> TyEnv Ty2 -> LocVar -> LocExp -> Either DepEnv (L L3.Exp3)
 cursorizeLocExp denv tenv lvar locExp =
   case locExp of
     AfterConstantLE i loc ->
@@ -537,7 +534,7 @@ But Infinite regions do not support sizes yet. Re-enable this later.
 --     safely drop them from `locs`.
 --
 -- (2) We update `arg` so that all packed values in it only have start cursors.
-cursorizeAppE :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> L Exp2 -> PassM L3.Exp3
+cursorizeAppE :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> L Exp2 -> PassM L3.Exp3
 cursorizeAppE ddfs fundefs denv tenv (L _ ex) =
   case ex of
     AppE f locs arg -> do
@@ -577,7 +574,7 @@ There are two ways in which projections can be cursorized:
 `cursorizeLet` creates the former, while the special case here outputs the latter.
 Reason: unariser can only eliminate direct projections of this form.
 -}
-cursorizeProj :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> Exp2 -> PassM L3.Exp3
+cursorizeProj :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Exp2 -> PassM L3.Exp3
 cursorizeProj isPackedContext ddfs fundefs denv tenv ex =
   case ex of
     LetE (v,_locs,ty, rhs@(L _ ProjE{})) bod | isPackedTy ty -> do
@@ -613,7 +610,7 @@ If it's just `CursorTy`, this packed value doesn't have an end cursor.
 Otherwise, the type is `PackedTy{}`, and it has an end cursor.
 
 -}
-cursorizeProd :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> Exp2 -> PassM L3.Exp3
+cursorizeProd :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Exp2 -> PassM L3.Exp3
 cursorizeProd isPackedContext ddfs fundefs denv tenv ex =
   case ex of
     LetE (v,_locs,ProdTy tys, rhs@(L _ (MkProdE ls))) bod -> do
@@ -655,7 +652,7 @@ we can take a shortcut here and directly bind `v` to the tagged location.
 
 Other bindings are straightforward projections of the processed RHS.
 -}
-cursorizeLet :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv
+cursorizeLet :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2
              -> (Var, [Var], Ty2, L Exp2) -> L Exp2 -> PassM L3.Exp3
 cursorizeLet isPackedContext ddfs fundefs denv tenv (v,locs,ty,rhs) bod
     | isPackedTy ty = do
@@ -668,7 +665,7 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv (v,locs,ty,rhs) bod
             tenv' = L.foldr (\(a,b) acc -> M.insert a b acc) tenv $
                       [(v, ty),(fresh, ty'),(toEndV v, projTy 1 ty')] ++ [(loc,CursorTy) | loc <- locs]
 
-            -- TEnv and L3 expresssions are tagged with different types
+            -- TyEnv Ty2 and L3 expresssions are tagged with different types
             ty''  = stripTyLocs ty'
             rhs'' = l$ VarE fresh
 
@@ -734,7 +731,7 @@ Also, the binding itself now changes to:
             [loc] -> do
               fresh <- gensym "tup_scalar"
               let ty'  = ProdTy ([CursorTy | _ <- locs] ++ [L3.cursorizeTy ty])
-                  -- We cannot resuse ty' here because TEnv and expresssions are
+                  -- We cannot resuse ty' here because TyEnv Ty2 and expresssions are
                   -- tagged with different
                   ty'' = stripTyLocs ty'
                   tenv' = M.union (M.fromList [(fresh, ty'),
@@ -770,7 +767,7 @@ Consider an example of unpacking of a Node^ pattern:
       BODY)
 
 -}
-unpackDataCon :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TEnv -> Bool -> Var
+unpackDataCon :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Bool -> Var
               -> (DataCon, [(Var, Var)], L Exp2) -> PassM (DataCon, [t], L L3.Exp3)
 unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
   field_cur <- gensym "field_cur"
@@ -803,7 +800,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
     unpackRegularDataCon :: Var -> PassM (L L3.Exp3)
     unpackRegularDataCon field_cur = go field_cur vlocs1 tys1 True denv1 (M.insert field_cur CursorTy tenv1)
       where
-        go :: Var -> [(Var, LocVar)] -> [Ty2] -> Bool -> DepEnv -> TEnv -> PassM (L L3.Exp3)
+        go :: Var -> [(Var, LocVar)] -> [Ty2] -> Bool -> DepEnv -> TyEnv Ty2 -> PassM (L L3.Exp3)
         go cur vlocs tys canBind denv tenv =
           case (vlocs, tys) of
             ([],[]) -> processRhs denv tenv
@@ -870,7 +867,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
                      in M.fromList $ zip vars (zip var_locs ind_vars)
         in go field_cur vlocs1 tys1 indirections_mp denv1 (M.insert field_cur CursorTy tenv1)
       where
-        go :: Var -> [(Var, LocVar)] -> [Ty2] -> M.Map Var (Var,Var) -> DepEnv -> TEnv -> PassM (L L3.Exp3)
+        go :: Var -> [(Var, LocVar)] -> [Ty2] -> M.Map Var (Var,Var) -> DepEnv -> TyEnv Ty2 -> PassM (L L3.Exp3)
         go cur vlocs tys indirections_env denv tenv = do
           case (vlocs, tys) of
             ([], []) -> processRhs denv tenv
@@ -927,7 +924,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
             _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
 
     -- Generate bindings for unpacking int fields. A convenient
-    intBinds :: Var -> LocVar -> TEnv -> PassM (TEnv, [(Var, [()], L3.Ty3, L L3.Exp3)])
+    intBinds :: Var -> LocVar -> TyEnv Ty2 -> PassM (TyEnv Ty2, [(Var, [()], L3.Ty3, L L3.Exp3)])
     intBinds v loc tenv = do
       tmp <- gensym "readint_tuple"
       -- Note that the location is not added to the type environment here.

@@ -24,7 +24,7 @@ module Gibbon.L1.Syntax
 
       -- * Functions on expressions
     , insertFD, fromListFD, mapExt, mapLocs, mapExprs, visitExp
-    , progToEnv, getFunTy, subst, substE, hasTimeIt, projNonFirst
+    , progToEnv, initFunEnv, getFunTy, subst, substE, hasTimeIt, projNonFirst
     , mkProj, mkProd, mkLets, flatLets
 
       -- * Functions on types
@@ -74,9 +74,11 @@ deriving instance (NFData (TyOf ex), NFData (ArrowTy (TyOf ex)), NFData ex, Gene
 -- | A set of top-level recursive function definitions.
 type FunDefs ex = Map Var (FunDef ex)
 
--- | A type family describing function types.
-type family ArrowTy ty
-type instance ArrowTy Ty1 = (Ty1 , Ty1)
+instance FunctionTy Ty1 where
+  -- | At this stage, function types are just (in , out) tuples.
+  type ArrowTy Ty1 = (Ty1 , Ty1)
+  inTy = fst
+  outTy = snd
 
 -- | A function definiton indexed by a type and expression.
 data FunDef ex = FunDef { funName  :: Var
@@ -257,14 +259,14 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
 -- Recover type of an expression given a type-expression
 instance (Show l, Out l, Expression (e l (UrTy l)),
           TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)),
-          Typeable (e l (UrTy l)))
+          FunctionTy (UrTy l), Typeable (e l (UrTy l)))
        => Typeable (PreExp e l (UrTy l)) where
   gTypeExp ddfs env2 ex =
     case ex of
       VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v) v (vEnv env2)
       LitE _       -> IntTy
       LitSymE _    -> SymTy
-      AppE v _ _   -> snd $ fEnv env2 # v
+      AppE v _ _   -> outTy $ fEnv env2 # v
       PrimAppE p _ -> primRetTy p
 
       LetE (v,_,t,_) e -> gTypeExp ddfs (extendVEnv v t env2) e
@@ -431,12 +433,13 @@ visitExp _fl fe _fd exp0 = fin
        _ -> _finishme
 
 -- | Abstract some of the differences of top level program types, by
---   having a common way to extract an initial environment.
-progToEnv :: Prog1 -> Env2 Ty1
-progToEnv Prog{fundefs} =
-    Env2 M.empty
-         (M.fromList [ (n,(fmap (\_->()) a, fmap (\_->()) b))
-                     | FunDef n _ (a,b) _ <- M.elems fundefs ])
+--   having a common way to extract an initial environment.  The
+--   initial environment has types only for functions.
+progToEnv :: Prog a -> Env2 (TyOf a)
+progToEnv Prog{fundefs} = Env2 M.empty (initFunEnv fundefs)
+
+initFunEnv :: FunDefs a -> FunEnv (TyOf a)
+initFunEnv fds = M.map funTy fds
 
 
 -- | Look up the input/output type of a top-level function binding.

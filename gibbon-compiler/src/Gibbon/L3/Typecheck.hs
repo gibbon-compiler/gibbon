@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# OPTIONS_GHC -Wno-unused-do-bind #-}
 
 -- | A simple typechecker for the L3 language
@@ -15,12 +16,13 @@ import Prelude hiding (exp)
 
 import Gibbon.Common
 import Gibbon.L1.Typecheck hiding (tcProg, tcExp)
-import Gibbon.L1.Syntax hiding (progToEnv)
+import Gibbon.L1.Syntax
 import Gibbon.L3.Syntax
 
 -- | Typecheck a L1 expression
 --
-tcExp :: (Out l, Eq l) => DDefs (UrTy l) -> Env2 (UrTy l) -> (L (PreExp E3Ext l (UrTy l))) ->
+tcExp :: (Out l, Eq l, FunctionTy (UrTy l)) =>
+         DDefs (UrTy l) -> Env2 (UrTy l) -> (L (PreExp E3Ext l (UrTy l))) ->
          TcM (UrTy l) (L (PreExp E3Ext l (UrTy l)))
 tcExp ddfs env exp@(L p ex) =
   case ex of
@@ -119,7 +121,7 @@ tcExp ddfs env exp@(L p ex) =
     LitSymE _ -> return IntTy
 
     AppE v locs e -> do
-      let (inTy, outTy) =
+      let funty =
             case (M.lookup v (fEnv env)) of
               Just ty -> ty
               Nothing -> error $ "Function not found: " ++ sdoc v ++ " while checking " ++
@@ -134,8 +136,8 @@ tcExp ddfs env exp@(L p ex) =
 
       -- Check argument type
       argTy <- go e
-      _     <- ensureEqualTy exp inTy argTy
-      return outTy
+      _     <- ensureEqualTy exp (inTy funty) argTy
+      return (outTy funty)
 
     PrimAppE pr es -> do
       let len0 = checkLen exp pr 0 es
@@ -341,7 +343,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
       return ()
 
 
-tcCases :: (Eq l, Out l) => DDefs (UrTy l) -> Env2 (UrTy l) ->
+tcCases :: (Eq l, Out l, FunctionTy (UrTy l)) => DDefs (UrTy l) -> Env2 (UrTy l) ->
            [(DataCon, [(Var, l)], L (PreExp E3Ext l (UrTy l)))] ->
            TcM (UrTy l) (L (PreExp E3Ext l (UrTy l)))
 tcCases ddfs env cs = do

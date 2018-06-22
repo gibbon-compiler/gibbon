@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 
@@ -27,7 +28,7 @@ import Prelude hiding (exp)
 
 -- | Typecheck a L1 expression
 --
-tcExp :: (Eq l, Out l, Out (e l (UrTy l))) =>
+tcExp :: (Eq l, Out l, Out (e l (UrTy l)), FunctionTy (UrTy l)) =>
          DDefs (UrTy l) -> Env2 (UrTy l) -> (L (PreExp e l (UrTy l))) ->
          TcM (UrTy l) (L (PreExp e l (UrTy l)))
 tcExp ddfs env exp@(L p ex) =
@@ -37,12 +38,11 @@ tcExp ddfs env exp@(L p ex) =
     LitSymE _ -> return IntTy
 
     AppE v locs e -> do
-      let (inTy, outTy) =
+      let funty =
             case (M.lookup v (fEnv env)) of
               Just ty -> ty
               Nothing -> error $ "Function not found: " ++ sdoc v ++ " while checking " ++
                                  sdoc exp ++ "\nat " ++ sdoc p
-
       -- Check that the expression does not have any locations
       case locs of
         [] -> return ()
@@ -52,8 +52,8 @@ tcExp ddfs env exp@(L p ex) =
 
       -- Check argument type
       argTy <- go e
-      _     <- ensureEqualTy exp inTy argTy
-      return outTy
+      _     <- ensureEqualTy exp (inTy funty) argTy
+      return (outTy funty)
 
     PrimAppE pr es -> do
       let len0 = checkLen exp pr 0 es
@@ -295,7 +295,8 @@ tcProj _ i (ProdTy tys) = return $ tys !! i
 tcProj e _i ty = throwError $ GenericTC ("Projection from non-tuple type " ++ (sdoc ty)) e
 
 
-tcCases :: (Out l, Eq l, Out (e l (UrTy l))) => DDefs (UrTy l) -> Env2 (UrTy l) ->
+tcCases :: (Out l, Eq l, Out (e l (UrTy l)), FunctionTy (UrTy l))
+        => DDefs (UrTy l) -> Env2 (UrTy l) ->
            [(DataCon, [(Var, l)], L (PreExp e l (UrTy l)))] ->
            TcM (UrTy l) (L (PreExp e l (UrTy l)))
 tcCases ddfs env cs = do

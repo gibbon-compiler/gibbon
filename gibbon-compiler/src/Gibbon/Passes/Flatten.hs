@@ -46,7 +46,7 @@ flattenL1 prg@(L1.Prog defs funs main) = do
       bod' <- gFlattenExp defs env2 bod
       return $ FunDef nam narg (targ, ty) bod'
 
-    env20 = L1.progToEnv prg
+    env20 = progToEnv prg
 
 flattenL2 :: Flattenable (L2.E2Ext Var (UrTy LocVar)) => L2.Prog2 -> PassM L2.Prog2
 flattenL2 prg@(Prog defs funs main) = do
@@ -63,7 +63,7 @@ flattenL2 prg@(Prog defs funs main) = do
       bod' <- gFlattenExp defs env2 bod
       return $ FunDef nam narg ty bod'
 
-    env20 = L2.progToEnv prg
+    env20 = progToEnv prg
 
 
 flattenL3 :: L3.Prog3 -> PassM L3.Prog3
@@ -81,7 +81,7 @@ flattenL3 prg@(Prog defs funs main) = do
       bod' <- gFlattenExp defs env2 bod
       return $ FunDef nam narg ty bod'
 
-    env20 = L3.progToEnv prg
+    env20 = progToEnv prg
 
 
 -- NOTE: / FIXME
@@ -97,6 +97,7 @@ type Binds e = (Var,[LocOf e],TyOf e, e)
 
 instance (Show l, Out l, Expression (e l (UrTy l)),
           TyOf (e l (UrTy l)) ~ TyOf (Exp e l),
+          FunctionTy (UrTy l),
           Typeable (e l (UrTy l)),
           Flattenable (e l (UrTy l)))
        => Flattenable (L (Exp e l)) where
@@ -110,6 +111,7 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
 exp :: forall l e .
        (Show l, Out l,
        TyOf (e l (UrTy l)) ~ TyOf (Exp e l),
+       FunctionTy (UrTy l),
        Typeable (e l (UrTy l)),
        Flattenable (e l (UrTy l)))
     => DDefs (TyOf (L (Exp e l)))

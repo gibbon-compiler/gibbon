@@ -43,7 +43,7 @@ addTraversalsFn ddefs fundefs f@FunDef{funArg, funTy, funBody} =
 
 
 -- Generate traversals for the first (n-1) packed elements
-addTraversalsExp :: DDefs Ty2 -> FunDefs2 -> M.Map Var Ty2 -> L Exp2 -> PassM (L Exp2)
+addTraversalsExp :: DDefs Ty2 -> FunDefs2 -> TyEnv Ty2 -> L Exp2 -> PassM (L Exp2)
 addTraversalsExp ddefs fundefs tyenv (L p ex) = L p <$>
   case ex of
     CaseE scrt brs -> CaseE scrt <$> mapM docase brs
@@ -74,8 +74,6 @@ addTraversalsExp ddefs fundefs tyenv (L p ex) = L p <$>
   where
     go = addTraversalsExp ddefs fundefs tyenv
 
-    fenv = M.map funTy fundefs
-
     -- If this case expression cannot unpack all the pattern matched variables:
     -- (1) Everything after the first packed element should be unused in the RHS
     -- (2) Otherwise, we must traverse the first (n-1) packed elements
@@ -83,6 +81,7 @@ addTraversalsExp ddefs fundefs tyenv (L p ex) = L p <$>
       let (vars, _locs) = unzip vlocs
           tys    = lookupDataCon ddefs dcon
           v_tys  = zip vars tys
+          fenv   = M.map funTy fundefs
           (eff,_)= inferExp ddefs fenv (M.union tyenv (M.fromList v_tys)) rhs
           effToLoc (Traverse loc_var) = loc_var
           packedOnly = L.filter (\(_,t) -> hasPacked t) v_tys

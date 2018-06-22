@@ -7,7 +7,7 @@ module Gibbon.Passes.FollowRedirects
 import qualified Data.Map as M
 
 import Gibbon.Common
-import Gibbon.L4.Syntax
+import Gibbon.L4.Syntax as L4
 
 {- [Modifying switch statements to use redirection nodes]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -52,8 +52,6 @@ now becomes:
 
 -}
 
-type TypeEnv = M.Map Var Ty
-
 -- Track the tail that was returned with this tag var
 type TagTailEnv = M.Map Var Var
 
@@ -72,7 +70,7 @@ followRedirectsFn f@FunDecl{funArgs,funBody} = do
   bod' <- followRedirectsExp M.empty initTyEnv funBody
   return $ f {funBody = bod'}
 
-followRedirectsExp :: TagTailEnv -> TypeEnv -> Tail -> PassM Tail
+followRedirectsExp :: TagTailEnv -> TyEnv L4.Ty -> Tail -> PassM Tail
 followRedirectsExp ttailenv tenv tail =
   case tail of
     Switch lbl trv alts bod_maybe -> do

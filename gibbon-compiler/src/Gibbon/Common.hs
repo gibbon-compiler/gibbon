@@ -27,10 +27,9 @@ module Gibbon.Common
        , Multiplicity(..), regionToVar
 
          -- * Environment and helpers
-       , Env2(Env2) -- TODO: hide constructor
-       , FunEnv
-       , vEnv, fEnv, extendVEnv, extendsVEnv, extendFEnv, emptyEnv2
-       , lookupVEnv
+       , Env2(..) -- TODO: hide constructor
+       , FunctionTy(..), TyEnv, FunEnv
+       , emptyTyEnv, emptyEnv2, extendVEnv, extendsVEnv, extendFEnv, lookupVEnv
 
          -- * PassM monad
        , PassM, runPassM, defaultRunPassM, defaultPackedRunPassM
@@ -230,16 +229,31 @@ instance Out Pos where
 
 --------------------------------------------------------------------------------
 
+-- | A type family describing function types.
+class (Out (ArrowTy ty), Show (ArrowTy ty)) => FunctionTy ty where
+  type ArrowTy ty
+  inTy  :: ArrowTy ty -> ty
+  outTy :: ArrowTy ty -> ty
+
+-- | Type environment for function defs only.  This works with type
+-- representations that do not include arrow types.
+type FunEnv a = M.Map Var (ArrowTy a)
+
+-- | A simple type environment
+type TyEnv a = M.Map Var a
+
+emptyTyEnv :: TyEnv a
+emptyTyEnv = M.empty
+
+
 -- | A common currency for a two part environment consisting of
 -- function bindings and regular value bindings.
-data Env2 a = Env2 { vEnv :: M.Map Var a
+data Env2 a = Env2 { vEnv :: TyEnv a
                    , fEnv :: FunEnv a }
 
-
--- |
 emptyEnv2 :: Env2 a
-emptyEnv2 = Env2 { vEnv = M.empty
-                 , fEnv = M.empty}
+emptyEnv2 = Env2 { vEnv = emptyTyEnv
+                 , fEnv = M.empty }
 
 -- | Extend non-function value environment.
 extendVEnv :: Var -> a -> Env2 a -> Env2 a
@@ -253,15 +267,11 @@ lookupVEnv :: Out a => Var -> Env2 a -> a
 lookupVEnv v env2 = (vEnv env2) # v
 
 -- | Extend function type environment.
-extendFEnv :: Var -> (a,a) -> Env2 a -> Env2 a
+extendFEnv :: Var -> ArrowTy a -> Env2 a -> Env2 a
 extendFEnv v t (Env2 ve fe) = Env2 ve (M.insert v t fe)
 
 
 --------------------------------------------------------------------------------
-
--- | Type environment for function defs only.  This works with type
--- representations that do not include arrow types.
-type FunEnv a = M.Map Var (a, a)
 
 -- Primitive for now:
 type DDefs a = Map Var (DDef a)
@@ -356,6 +366,10 @@ emptyDD  = M.empty
 fromListDD :: [DDef a] -> DDefs a
 fromListDD = L.foldr insertDD M.empty
 
+
+--------------------------------------------------------------------------------
+-- Some global constants
+
 redirectionSize :: Int
 redirectionSize = 9
 
@@ -382,6 +396,33 @@ fromIndrDataCon = init
 
 isIndrDataCon :: DataCon -> Bool
 isIndrDataCon = isSuffixOf "^"
+
+-- | For now this is designed to match the Racket output of "#lang
+-- gibbon" which itself should change once we implement a custom
+-- printer.
+truePrinted :: String
+truePrinted = "#t"
+-- truePrinted = "true"
+
+falsePrinted :: String
+falsePrinted = "#f"
+
+-- | Map a DataCon onto the name of the generated unpack function.
+mkUnpackerName :: TyCon -> Var
+mkUnpackerName tyCons = toVar $ "unpack_" ++ tyCons
+
+-- | Map a DataCon onto the name of the generated print function.
+mkPrinterName :: DataCon -> Var
+mkPrinterName tyCons = toVar $ "print_" ++ tyCons
+
+mkCopyFunName :: DataCon -> Var
+mkCopyFunName dcon = "copy_" `varAppend` (toVar dcon)
+
+isCopyFunName :: Var -> Bool
+isCopyFunName = isPrefixOf "copy_" . fromVar
+
+mkTravFunName :: DataCon -> Var
+mkTravFunName dcon = "_traverse_" `varAppend` (toVar dcon)
 
 
 -- Gensym monad:
@@ -629,33 +670,3 @@ dbgTraceIt lvl msg x = dbgTrace lvl (msg++": "++show x) x
 
 dbgPrintLn :: Int -> String -> IO ()
 dbgPrintLn lvl str = dbgPrint lvl (str++"\n")
-
-
-
--- | For now this is designed to match the Racket output of "#lang
--- gibbon" which itself should change once we implement a custom
--- printer.
-truePrinted :: String
-truePrinted = "#t"
--- truePrinted = "true"
-
-falsePrinted :: String
-falsePrinted = "#f"
-
-
--- | Map a DataCon onto the name of the generated unpack function.
-mkUnpackerName :: TyCon -> Var
-mkUnpackerName tyCons = toVar $ "unpack_" ++ tyCons
-
--- | Map a DataCon onto the name of the generated print function.
-mkPrinterName :: DataCon -> Var
-mkPrinterName tyCons = toVar $ "print_" ++ tyCons
-
-mkCopyFunName :: DataCon -> Var
-mkCopyFunName dcon = "copy_" `varAppend` (toVar dcon)
-
-isCopyFunName :: Var -> Bool
-isCopyFunName = isPrefixOf "copy_" . fromVar
-
-mkTravFunName :: DataCon -> Var
-mkTravFunName dcon = "_traverse_" `varAppend` (toVar dcon)

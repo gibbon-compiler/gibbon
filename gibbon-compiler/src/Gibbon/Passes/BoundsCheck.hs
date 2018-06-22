@@ -129,7 +129,6 @@ boundsCheck :: L2.Prog2 -> PassM L2.Prog2
 boundsCheck Prog{ddefs,fundefs,mainExp} = do
   fds' <- mapM (boundsCheckFn ddefs fundefs) $ M.elems fundefs
   let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
-      _env2 = Env2 M.empty (initFunEnv fundefs)
   -- mainExp' <- case mainExp of
   --               Nothing -> return Nothing
   --               Just (mn, ty) -> Just . (,ty) <$>

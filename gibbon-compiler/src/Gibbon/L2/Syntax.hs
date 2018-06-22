@@ -22,13 +22,12 @@ module Gibbon.L2.Syntax
     , PreExp(..), UrTy(..), pattern SymTy
 
     -- * Operations on types
-    , progToEnv
     , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substLoc
     , substLoc', substLocs, substLocs', substEffs, prependArgs, stripTyLocs
     , locsInTy
 
     -- * Other helpers
-    , revertToL1, occurs, mapPacked, depList, initFunEnv
+    , revertToL1, occurs, mapPacked, depList
     )
     where
 
@@ -54,7 +53,11 @@ type FunDef2 = L1.FunDef (L Exp2)
 
 type FunDefs2 = L1.FunDefs (L Exp2)
 
-type instance L1.ArrowTy Ty2 = ArrowTy2
+-- | Function types now have a way to talk about locations and traversal effects.
+instance FunctionTy Ty2 where
+  type ArrowTy Ty2 = ArrowTy2
+  inTy = arrIn
+  outTy = arrOut
 
 -- | Extended expressions, L2.  Monomorphic.
 --
@@ -208,15 +211,6 @@ instance Out l => Out (PreLocExp l)
 instance Out LocRet
 
 -------------------------------------------------------------------------------
-
--- | Abstract some of the differences of top level program types, by
---   having a common way to extract an initial environment.  The
---   initial environment has types only for functions.
-progToEnv :: Prog2 -> Env2 Ty2
-progToEnv Prog{fundefs} =
-    Env2 M.empty
-         (M.fromList [ (n,(a, b))
-                     | FunDef n _ (ArrowTy2 _ a _ b _) _ <- M.elems fundefs ])
 
 -- | Retrieve all LocVars from a fn type (Arrow)
 allLocVars :: ArrowTy2 -> [LocVar]
@@ -489,8 +483,3 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               BoundsCheck _ reg cur -> S.fromList [reg,cur]
               IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
           _ -> gFreeVars ex
-
-initFunEnv :: FunDefs2 -> FunEnv Ty2
-initFunEnv fds = M.foldr (\fn acc -> let fnty = (funTy fn)
-                                     in M.insert (funName fn) (arrIn fnty, arrOut fnty) acc)
-                 M.empty fds

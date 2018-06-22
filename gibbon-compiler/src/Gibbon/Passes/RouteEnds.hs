@@ -87,7 +87,7 @@ findEnd l EndOfRel{endOf,equivTo} =
 -- | Process an L2 Prog and thread through explicit end-witnesses.
 -- Requires Gensym and runs in PassM. Assumes the Prog has been flattened.
 routeEnds :: Prog2 -> PassM Prog2
-routeEnds Prog{ddefs,fundefs,mainExp} = do
+routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
   -- Handle functions in two steps (to account for mutual recursion):
   --
@@ -97,11 +97,7 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
   -- Then process the actual function bodies using the new fundefs structure:
   fds'' <- mapM (fd fundefs') fds'
   let fundefs'' = M.fromList $ L.map (\f -> (funName f,f)) fds''
-
-      initFEnv fds = M.foldr (\fn acc -> let fnty = (funTy fn)
-                                         in M.insert (funName fn) (arrIn fnty, arrOut fnty) acc)
-                              M.empty fds
-      env2 = (Env2 M.empty (initFEnv fundefs))
+      env2 = progToEnv prg
   -- Handle the main expression (if it exists):
   mainExp' <- case mainExp of
                 Nothing -> return Nothing
@@ -134,11 +130,8 @@ routeEnds Prog{ddefs,fundefs,mainExp} = do
                         PackedTy _n l -> M.insert funArg l $ M.empty
                         ProdTy _tys -> M.empty
                         _ -> M.empty
-               initVEnv  = M.singleton funArg (arrIn funTy)
-               initFEnv fds = M.foldr (\_fn acc -> let fnty = funTy
-                                                   in M.insert funName (arrIn fnty, arrOut fnty) acc)
-                              M.empty fds
-               env2 = Env2 initVEnv (initFEnv fundefs)
+               initVEnv = M.singleton funArg (arrIn funTy)
+               env2 = Env2 initVEnv (initFunEnv fundefs)
            funBody' <- exp fns retlocs emptyRel lenv M.empty env2 funBody
            return FunDef{funName,funTy,funArg,funBody=funBody'}
 

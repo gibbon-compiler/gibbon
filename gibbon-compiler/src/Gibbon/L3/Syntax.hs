@@ -9,7 +9,7 @@ module Gibbon.L3.Syntax
     E3Ext(..), Prog3, FunDef3, FunDefs3 , Exp3, Ty3
 
     -- * Functions
-  , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim, progToEnv
+  , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim
   )
 where
 
@@ -21,9 +21,8 @@ import Data.List as L
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
-import Gibbon.L1.Syntax hiding (progToEnv)
+import Gibbon.L1.Syntax
 import Gibbon.GenericOps
-import Gibbon.L1.Syntax (UrTy(..), PreExp(..))
 import qualified Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
@@ -34,7 +33,8 @@ type FunDefs3 = FunDefs (L Exp3)
 
 type FunDef3 = FunDef (L Exp3)
 
-type instance ArrowTy Ty3 = (Ty3 , Ty3)
+-- GHC uses the instance defined for L1.Ty1
+-- instance FunctionTy Ty3 where
 
 type Exp3 = PreExp E3Ext () Ty3
 
@@ -157,11 +157,3 @@ toL3Prim pr =
     ErrorP s ty    -> ErrorP s (L2.stripTyLocs ty)
     ReadPackedFile fp tycon ty -> ReadPackedFile fp tycon (L2.stripTyLocs ty)
     PEndOf -> error "Do not use PEndOf after L2."
-
--- | Abstract some of the differences of top level program types, by
--- having a common way to extract an initial environment.
-progToEnv :: Prog3 -> Env2 Ty3
-progToEnv Prog{fundefs} =
-    Env2 M.empty
-         (M.fromList [ (funName ,(inT, outT))
-                     | FunDef{funTy=(inT, outT),funName} <- M.elems fundefs])
