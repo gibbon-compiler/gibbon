@@ -1,9 +1,9 @@
 {-# LANGUAGE CPP #-}
 -- | Flags à la GHC
 module Gibbon.DynFlags
-  ( DynFlags(..), GeneralFlag(..)
+  ( DynFlags(..), GeneralFlag(..), DebugFlag(..)
   , defaultDynFlags, dynflagsParser
-  , gopt, gopt_set
+  , gopt, gopt_set, dopt, dopt_set
   ) where
 
 #if !MIN_VERSION_base(4,11,0)
@@ -27,15 +27,21 @@ data GeneralFlag
   | Opt_DisableGC          -- ^ Don't run the the garbage collector (used by Codegen).
   deriving (Show,Read,Eq,Ord)
 
+-- | Exactly like GHC's ddump flags.
+data DebugFlag
+  = Opt_D_Dump_Repair
+  deriving (Show,Read,Eq,Ord)
+
 -- Coming soon ...
--- data DebugFlag
 -- data WarningFlag
 
-data DynFlags = DynFlags { generalFlags :: Set GeneralFlag }
+data DynFlags = DynFlags { generalFlags :: Set GeneralFlag
+                         , debugFlags :: Set DebugFlag }
   deriving (Show,Read,Eq,Ord)
 
 defaultDynFlags :: DynFlags
-defaultDynFlags = DynFlags { generalFlags = S.empty }
+defaultDynFlags = DynFlags { generalFlags = S.empty
+                           , debugFlags = S.empty }
 
 -- | Test whether a 'GeneralFlag' is set
 gopt :: GeneralFlag -> DynFlags -> Bool
@@ -44,8 +50,14 @@ gopt f dflags  = f `S.member` generalFlags dflags
 gopt_set :: GeneralFlag -> DynFlags -> DynFlags
 gopt_set f dflags = dflags { generalFlags = S.insert f (generalFlags dflags) }
 
+dopt :: DebugFlag -> DynFlags -> Bool
+dopt f dflags = f `S.member` debugFlags dflags
+
+dopt_set :: DebugFlag -> DynFlags -> DynFlags
+dopt_set f dflags = dflags { debugFlags = S.insert f (debugFlags dflags) }
+
 dynflagsParser :: Parser DynFlags
-dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser)
+dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList <$> many dflagsParser)
   where
     gflagsParser :: Parser GeneralFlag
     gflagsParser = -- Default Opt_Gibbon2
@@ -71,3 +83,7 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser)
                                     help "Show warnings from C compiler, normally suppressed") <|>
                    flag' Opt_DisableGC (long "no-gc" <>
                                         help "Disable the garbage collector (don't use -g when using this flag).")
+
+    dflagsParser :: Parser DebugFlag
+    dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>
+                                            help "Dump some information while running RepairProgram")
