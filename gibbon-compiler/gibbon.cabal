@@ -147,7 +147,7 @@ test-suite test-gibbon
                        InferLocations
                        Unariser
                        InferMultiplicity
-                       RepairProgram
+                       AddLayout
                        Compiler
                        L1.Typecheck
                        L1.Interp

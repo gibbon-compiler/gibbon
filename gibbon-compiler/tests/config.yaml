@@ -65,6 +65,10 @@ tests:
   - name: test12c_traverse.gib
   - name: test13b_build.gib
   - name: test13_build.gib
+
+  # Needs manual inspection.
+  - name: test14_repair.gib
+
   - name: test15a_symsearch.gib
   - name: test18_badconstraint.gib
   - name: test18c_identity1.gib

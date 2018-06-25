@@ -24,7 +24,7 @@ import RouteEnds
 import InferEffects
 import InferMultiplicity
 import Unariser
-import RepairProgram
+import AddLayout
 import Compiler
 import L1.Typecheck
 import L1.Interp
@@ -38,7 +38,7 @@ main :: IO ()
 main = defaultMain allTests
   where allTests = testGroup "All"
                    [ tests
-                   , repairProgramTests
+                   , addLayoutTests
                    , routeEnds2Tests
                    , inferLocations2Tests
                    , inferEffects2Tests
