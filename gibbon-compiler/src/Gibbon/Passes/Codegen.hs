@@ -150,9 +150,11 @@ codegenProg cfg prg@(Prog funs mtal) = do
             purattr = C.Attr (C.Id "pure" noLoc) [] noLoc
             isPacked = gopt Opt_Packed dflags
         -- Do not use the *pure* annotation in pointer mode. buildTree was absurdly fast because of this.
-        if ispure && not isPacked
-        then return $ C.InitGroup decl_spec [purattr] inits lc
-        else return prot
+        if not isPacked
+        then return prot
+        else if ispure
+             then return $ C.InitGroup decl_spec [purattr] inits lc
+             else return prot
 
       codegenFun :: FunDecl -> PassM (C.Definition, C.Definition)
       codegenFun fd =
@@ -330,7 +332,7 @@ codegenTail (LetTimedT flg bnds rhs body) ty =
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", $id:selftimed); |]
                             ]
                        else [ C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
-                            , C.BlockStm [cstm| printf("SELFTIMED: %lf\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ]
+                            , C.BlockStm [cstm| printf("SELFTIMED: %e\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ]
        tal <- codegenTail body ty
        return $ decls ++ withPrnt ++ tal
 
