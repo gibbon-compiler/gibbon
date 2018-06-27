@@ -81,7 +81,7 @@ data E2Ext loc dec =
   | RetE [loc] Var     -- ^ Return a value together with extra loc values.
   | FromEndE loc -- ^ Bind a location from an EndOf location (for RouteEnds and after)
   | BoundsCheck Int loc loc  -- ^ Bytes required, region, write cursor
-  | IndirectionE TyCon DataCon (loc,Var) (loc,Var) (L (E2 loc dec)) -- ^ An inter-region indirection
+  | IndirectionE TyCon DataCon (loc,Var) (loc,Var) (L (E2 loc dec)) -- ^ An tagged indirection node
  deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 -- | Define a location in terms of a different location.

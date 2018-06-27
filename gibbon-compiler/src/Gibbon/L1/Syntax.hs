@@ -320,10 +320,8 @@ data Prim ty
             -- type of the file being read.  The `Ty` tracks the type as the program evolvels
             -- (first PackedTy then CursorTy).  The TyCon tracks the original type name.
           | PEndOf
-          -- ^ This shouldn't be here. But this is the fastest way to encode
-          -- indirection nodes right now. This can be an L2 extension, after we make
-          -- InferLayout the pass that takes L1->L2, and InferLocations is an
-          -- L2->L2 pass.
+          -- ^ Returns the end-of cursor for some packed value. These pointers serve as random access nodes
+          -- to the value that is packed after this one.
 
   deriving (Read, Show, Eq, Ord, Generic, NFData, Functor, Foldable, Traversable)
 

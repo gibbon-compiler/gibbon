@@ -756,7 +756,7 @@ Also, the binding itself now changes to:
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 (1) Take a cursor pointing to the start of the tag, and advance it by 1 byte.
-(2) If this DataCon has indirections, unpack those.
+(2) If this DataCon has random access nodes, unpack those.
 (3) If the first bound varaible is a scalar (IntTy), read it using the newly
 returned cursor. Otherwise, just process the body. it'll have the correct
 instructions to process other bound locations
@@ -776,7 +776,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
     -- Advance the cursor by 1 byte so that it points to the first field
     <$> mkLets [(field_cur,[],CursorTy, l$ Ext $ L3.AddCursor scrtCur (l$ LitE 1))]
     <$> (if isIndrDataCon dcon
-         then unpackWithIndirections field_cur
+         then unpackWithRAN field_cur
          else unpackRegularDataCon field_cur)
 
   where
@@ -785,7 +785,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
                           then fromDi <$> cursorizePackedExp ddfs fundefs denv env rhs
                           else cursorizeExp ddfs fundefs denv env rhs
 
-    -- Since this constructor does not have indirections, we may not be able
+    -- Since this constructor does not have random access nodes, we may not be able
     -- to unpack all the fields. Basically, anything after the first packed
     -- value isn't accessible since we have no way to reach it without knowing
     -- the end of the packed value. So we punt on creating bindings for such
@@ -843,29 +843,29 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
 
             _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
 
-    -- We have random access to all fields in this constructor, and can create
-    -- bindings for everything. We begin by unpacking the indirections.
-    unpackWithIndirections :: Var -> PassM (L L3.Exp3)
-    unpackWithIndirections field_cur =
+    -- We have access to all fields in this constructor, and can create
+    -- bindings for everything. We begin by unpacking the random access nodes.
+    unpackWithRAN :: Var -> PassM (L L3.Exp3)
+    unpackWithRAN field_cur =
         -- A map from a variable to a tuple containing it's location and
-        -- the indirection field it depends on. Consider this constructor:
+        -- the RAN field it depends on. Consider this constructor:
         --
         --     (Node^ [(ind_y3, loc_ind_y3), (n1, loc_n1) , (x2 , loc_x2), (y3 , loc_y3)] ...),
         --
         -- it will be the map:
         --
         --     (y3 -> (loc_y3, ind_y3))
-        let indirections_mp =
+        let ran_mp =
               case numIndrsDataCon ddfs (fromIndrDataCon dcon) of
                 0 -> M.empty
-                n -> let -- Indirections occur immediately after the tag
+                n -> let -- Random access nodes occur immediately after the tag
                          ind_vars = L.map fst $ L.take n vlocs1
                          -- Everything else is a regular consturctor field,
-                         -- which depends on the indirection
+                         -- which depends on some random access node
                          data_fields = L.take n (reverse vlocs1)
                          (vars, var_locs) = unzip data_fields
                      in M.fromList $ zip vars (zip var_locs ind_vars)
-        in go field_cur vlocs1 tys1 indirections_mp denv1 (M.insert field_cur CursorTy tenv1)
+        in go field_cur vlocs1 tys1 ran_mp denv1 (M.insert field_cur CursorTy tenv1)
       where
         go :: Var -> [(Var, LocVar)] -> [Ty2] -> M.Map Var (Var,Var) -> DepEnv -> TyEnv Ty2 -> PassM (L L3.Exp3)
         go cur vlocs tys indirections_env denv tenv = do
@@ -873,7 +873,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
             ([], []) -> processRhs denv tenv
             ((v,loc):rst_vlocs, ty:rst_tys) ->
               case ty of
-                -- The indirection field.
+                -- The random access node
                 -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
                 CursorTy -> do
                   tmp <- gensym "readcursor_tuple"
@@ -897,7 +897,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
                                    -- in the usual way.
                                    Nothing ->
                                      (loc,[],CursorTy, l$ VarE cur)
-                                   -- We need to read this using an indirection.
+                                   -- We need to read this using a random access node
                                    Just (_var_loc, ind_var) ->
                                      (loc,[],CursorTy, l$ VarE ind_var)
                       binds' = loc_bind:binds
@@ -913,7 +913,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
                                    -- This is the first packed value. We can unpack this.
                                    Nothing ->
                                      (loc, [], CursorTy, l$ VarE cur)
-                                   -- We need to access this using an indirection.
+                                   -- We need to access this using a random access node
                                    Just (_var_loc, ind_var) ->
                                      (loc, [], CursorTy, l$ VarE ind_var)
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv'

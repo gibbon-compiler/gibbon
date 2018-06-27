@@ -1,3 +1,4 @@
+-- | Replace calls to copy functions with tagged indirection nodes
 module Gibbon.Passes.RemoveCopies where
 
 import Data.Loc
@@ -18,7 +19,7 @@ removeCopies Prog{ddefs,fundefs,mainExp} = do
 
   ddefs' <- mapM (\ddf@DDef{dataCons} -> do
                     dcon <- fromVar <$> gensym (toVar indirectionTag)
-                    -- RemoveCopies might run more than once (b.c smartAddLayout), so
+                    -- RemoveCopies might run more than once (b.c repairProgram), so
                     -- we ensure that we add the Indirection constructor only once.
                     let datacons = filter (not . isIndirectionTag . fst) dataCons
                     return ddf {dataCons = datacons ++ [(dcon, [(False, CursorTy)])]} )

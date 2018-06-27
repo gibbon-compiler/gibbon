@@ -13,6 +13,10 @@ module Gibbon.Common
 --         cPackedTagSize, cPointerTagSize -- FINISHME
          mkUnpackerName
        , mkPrinterName
+       , redirectionSize, redirectionTag, redirectionAlt
+       , toIndrDataCon, fromIndrDataCon, isIndrDataCon, indirectionTag, indirectionAlt
+       , isIndirectionTag
+       , mkCopyFunName, isCopyFunName, mkTravFunName
 
          -- * Type and Data constructors
        , DataCon, TyCon, IsBoxed
@@ -20,7 +24,7 @@ module Gibbon.Common
          -- * Variables and gensyms
        , Var(..), fromVar, toVar, varAppend, toEndV
        , SyM, gensym, genLetter, runSyM
-       , cleanFunName, mkCopyFunName, isCopyFunName, mkTravFunName
+       , cleanFunName
 
          -- * Regions and locations
        , LocVar, Region(..), Modality(..), LRM(..), dummyLRM
@@ -43,11 +47,6 @@ module Gibbon.Common
        , DDef(..), DDefs, fromListDD, emptyDD, insertDD
        , lookupDDef, lookupDataCon, getConOrdering, getTyOfDataCon, getTagOfDataCon
        , Tag
-
-         -- * Redirections and indirections
-       , redirectionSize, redirectionTag, redirectionAlt
-       , toIndrDataCon, fromIndrDataCon, isIndrDataCon, indirectionTag, indirectionAlt
-       , isIndirectionTag
 
          -- * Misc helpers
        , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv, l
