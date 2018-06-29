@@ -1,7 +1,7 @@
 pipeline {
   // This is designed to run on Cutter @ IU
   agent {
-    label 'cutter-raw'
+    label 'linux-ubuntu-1604'
   }
 
   triggers {
@@ -15,12 +15,6 @@ pipeline {
         // sh 'srun -N1 -t 1:00:00 "./.jenkins_script.sh"'
         sh './.jenkins_script.sh'
       }
-    }
-  }
-
-  post {
-    failure {
-      slackSend (channel: "#treetraversals", color: '#FF0000', message: "FAILED: Job '${env.JOB_NAME} [${env.BUILD_NUMBER}]' (${env.BUILD_URL})")
     }
   }
 }
