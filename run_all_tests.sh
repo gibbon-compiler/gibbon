@@ -118,7 +118,7 @@ echo "--------------------------------------------"
 # Turning of -j for now [2016.11.06]
 cd $top/gibbon-compiler
 make answers
-stack runghc -- tests/TestRunner.hs -v1
+$STK runghc -- tests/TestRunner.hs -v1
 
 
 # [2017.04.24] TEMP: Disabling below here while the compiler is under construction.
