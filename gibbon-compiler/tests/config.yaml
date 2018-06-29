@@ -98,23 +98,50 @@ tests:
   - name: test_buildtree.gib
   - name: test_buildtwotrees.gib
   - name: test_ddtree.gib
-  - name: test_litmus_add1.gib
-  - name: test_litmus_buildtree.gib
-  - name: test_litmus_copy.gib
-  - name: test_litmus_id.gib
-  - name: test_litmus_leftmost.gib
-  - name: test_litmus_rightmost.gib
-  - name: test_litmus_search_tree_lookup.gib
-  - name: test_litmus_sum_add_build.gib
-  - name: test_litmus_search_tree_insert.gib
-  - name: test_litmus_sumtree.gib
   - name: test_stree.gib
   - name: test_sumstree.gib
   - name: test_sumtree.gib
   - name: test_unpacking.gib
   - name: test24_defs.gib
 
-  # Failing tests:
+  ## Benchmarks
+
+  - name: bench_add1.gib
+    bench: true
+
+  - name: bench_buildtree.gib
+    bench: true
+
+  - name: bench_copy.gib
+    bench: true
+
+  - name: bench_sumtree.gib
+    bench: true
+
+  - name: bench_sum_add_build.gib
+    bench: true
+
+  - name: bench_id.gib
+    # bench: true
+    # more-iters: [pointer, gibbon2]
+
+  - name: bench_leftmost.gib
+    # bench: true
+    # more-iters: [pointer, gibbon2]
+
+  - name: bench_rightmost.gib
+    # bench: true
+    # more-iters: [pointer, gibbon2]
+
+  - name: bench_tree_lookup.gib
+    # bench: true
+    # more-iters: [pointer, gibbon2]
+
+  - name: bench_tree_insert.gib
+    # bench: true
+    # more-iters: [pointer, gibbon2]
+
+  ## Failing tests:
   - name: test04c_ifvector.gib
     failing: [gibbon2, gibbon1]
   - name: test06h_rec.gib
