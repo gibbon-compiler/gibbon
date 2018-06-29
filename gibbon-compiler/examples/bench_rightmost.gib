@@ -18,6 +18,6 @@
     [(Node x y) (rightmost y)]))
 
 (let ([tr0 : Tree (buildtree (size-param))])
-  (let ([n : Int (time (let ([x : Int (rightmost tr0)])
-                               x))])
+  (let ([n : Int (iterate (let ([x : Int (rightmost tr0)])
+                            x))])
     n))

@@ -22,5 +22,5 @@
   tr)
 
 (let ((tr0 : Tree (buildtree (size-param))))
-  (let ((tr1 : Tree (time (id-tree tr0))))
+  (let ((tr1 : Tree (iterate (id-tree tr0))))
     (sumtree tr1)))
