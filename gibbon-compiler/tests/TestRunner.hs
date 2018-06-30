@@ -2,39 +2,35 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE CPP #-}
-module TestRunner
-    (main) where
+module TestRunner where
 
-import Control.Monad
-import Control.Monad.Reader
-import Data.Foldable
-import Data.List
+import           Control.Monad
+import           Data.Foldable
+import           Data.List
+import           Data.Scientific
+import           Data.Time.LocalTime
+import           Data.Yaml as Y
+import           Options.Applicative as OA hiding (empty, str)
+import           Options.Applicative.Types (readerAsk)
+import           System.Clock
+import           System.Directory
+import           System.Environment
+import           System.Exit
+import           System.FilePath
+import           System.IO
+import           System.Process
+import           Text.PrettyPrint hiding ((<>), Mode(..))
+import           Text.Printf
+
 #if !MIN_VERSION_base(4,11,0)
-import Data.Monoid
+import           Data.Monoid
 #endif
-import Data.Scientific
-import Data.String
-import Data.Time.LocalTime
-import Data.Yaml as Y
-import Options.Applicative as OA hiding (empty)
-import Options.Applicative.Types (readerAsk)
-import System.Clock
-import System.Directory
-import System.Environment
-import System.Exit
-import System.FilePath
-import System.IO
-import System.Process
-import Text.PrettyPrint hiding ((<>), Mode(..))
-import Text.Printf
 
 import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Text.PrettyPrint as PP
-
-import Debug.Trace
 
 {- TestRunner
 ~~~~~~~~~~~~~
@@ -132,6 +128,7 @@ instance FromJSON Test where
             -- Overlay the expected failures on top of the defaults.
             expected = M.union expectedFailures (expectedResults defaultTest)
         return $ Test name dir expected skip runmodes isbenchmark trials sizeparam moreiters
+    parseJSON oth = error $ "Cannot parse Test: " ++ show oth
 
 data Result = Pass | Fail
   deriving (Show, Eq, Read, Ord)
@@ -143,6 +140,7 @@ data Mode = Gibbon2 | Pointer | Interp1 | Gibbon1
 
 instance FromJSON Mode where
     parseJSON (Y.String s) = return $ readMode s
+    parseJSON oth = error $ "Cannot parse Mode: " ++ show oth
 
 allModes :: [Mode]
 allModes = [minBound ..]
@@ -199,6 +197,7 @@ instance FromJSON Tests where
     parseJSON (Y.Object o) = do
         tests <- o .:? "tests" .!= []
         return $ Tests tests
+    parseJSON oth = error $ "Cannot parse Tests: " ++ show oth
 
 -- | The things we care about when running benchmarks.
 newtype BenchResult = BenchResult Double
@@ -319,6 +318,7 @@ instance FromJSON TestConfig where
                                  o .:? "run-modes"    .!= (gRunModes defaultTestConfig)   <*>
                                  o .:? "check-perf"   .!= (checkPerf defaultTestConfig)   <*>
                                  o .:? "only-perf"    .!= (onlyPerf defaultTestConfig)
+    parseJSON oth = error $ "Cannot parse TestConfig: " ++ show oth
 
 -- Accept a default test config as a fallback, either 'DefaultTestConfig',
 -- or read from the config file.
@@ -473,8 +473,9 @@ runTest tc Test{name,dir,expectedResults,runModes} = do
         options =
             modeRunOptions mode ++ [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , dir </> name ]
 
+
 runBenchmark :: TestConfig -> Test -> IO [(Mode,TestVerdict)]
-runBenchmark tc Test{name,dir,expectedResults,runModes,numTrials,sizeParam,moreIters} = do
+runBenchmark tc t@Test{name,dir,expectedResults,runModes,numTrials} = do
     putStrLn $ "Benchmarking " ++ show name ++ "..."
     perf_exists <- doesFileExist perfpath
     -- Cannot really check the performance in Interp1 mode.
@@ -489,48 +490,52 @@ runBenchmark tc Test{name,dir,expectedResults,runModes,numTrials,sizeParam,moreI
 
     go :: M.Map Mode BenchResult -> Mode -> Result -> IO (Mode, TestVerdict)
     go expected_perf_res_mp mode expected = do
-        (_, Just hout, Just herr, phandle) <-
-          createProcess (proc cmd toexe_options) { std_out = CreatePipe
-                                                 , std_err = CreatePipe }
-        toexeExitCode <- waitForProcess phandle
-        case toexeExitCode of
-            ExitSuccess -> do
-                let iters = if mode `elem` moreIters
-                            then 10000000
-                            else 1
-                first_trial <- doTrial exepath sizeParam iters
-                case first_trial of
-                    Right{} -> do
-                        -- Run it N times, and record the median time.
-                        -- ASSUMPTION: If one trial ran without an error, all the others should do too.
-                        bench_results <- mapM (\_ -> fromRight_ <$> doTrial exepath sizeParam iters)
-                                              [0..numTrials]
-                        let med_res  = medianBenchResult numTrials bench_results
-                            diff_res = diffBenchResult med_res (expected_perf_res_mp M.! mode)
+      trials <- doNTrials tc mode t
+      case trials of
+        Right bench_results -> do
+            let median_res = medianBenchResult numTrials bench_results
+                diff_res = diffBenchResult median_res (expected_perf_res_mp M.! mode)
+            -- Nothing == No difference between the expected and actual answers
+            case (diff_res, expected) of
+                (Nothing, Pass) -> return (mode, EP)
+                (Nothing, Fail) -> return (mode, UP)
+                (Just err , Fail) -> return (mode, EF err)
+                (Just err , Pass) -> return (mode, UF err)
+        Left err ->
+            case expected of
+                Fail -> return (mode, EF err)
+                Pass -> return (mode, UF err)
 
-                        -- Nothing == No difference between the expected and actual answers
-                        case (diff_res, expected) of
-                            (Nothing, Pass) -> return (mode, EP)
-                            (Nothing, Fail) -> return (mode, UP)
-                            (Just err , Fail) -> return (mode, EF err)
-                            (Just err , Pass) -> return (mode, UF err)
-
-                    Left err ->
-                        case expected of
-                            Fail -> return (mode, EF err)
-                            Pass -> return (mode, UF err)
-            ExitFailure _ -> do
-                case expected of
-                    Fail -> (mode,) <$> EF <$> hGetContents herr
-                    Pass -> (mode,) <$> UF <$> hGetContents herr
-      where
-        tmppath  = tempdir tc </> name
-        basename = replaceBaseName tmppath (takeBaseName tmppath ++ modeFileSuffix mode)
-        cpath    = replaceExtension basename ".c"
-        exepath  = replaceExtension basename ".exe"
-        cmd = "gibbon"
-        toexe_options =
-            modeExeOptions mode ++ [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , dir </> name ]
+--
+doNTrials :: TestConfig -> Mode -> Test -> IO (Either String [BenchResult])
+doNTrials tc mode Test{name,dir,numTrials,sizeParam,moreIters} = do
+    (_, Just _hout, Just herr, phandle) <-
+      createProcess (proc cmd toexe_options) { std_out = CreatePipe
+                                             , std_err = CreatePipe }
+    toexeExitCode <- waitForProcess phandle
+    case toexeExitCode of
+        ExitSuccess -> do
+            let iters = if mode `elem` moreIters
+                        then 10000000
+                        else 1
+            first_trial <- doTrial exepath sizeParam iters
+            case first_trial of
+                Right{} -> do
+                    -- Run it N times, and record the median time.
+                    -- ASSUMPTION: If one trial ran without an error, all the others should do too.
+                    bench_results <- mapM (\_ -> fromRight_ <$> doTrial exepath sizeParam iters)
+                                          [0..numTrials]
+                    return (Right bench_results)
+                Left err -> return (Left err)
+        ExitFailure _ -> Left <$> hGetContents herr
+  where
+    tmppath  = tempdir tc </> name
+    basename = replaceBaseName tmppath (takeBaseName tmppath ++ modeFileSuffix mode)
+    cpath    = replaceExtension basename ".c"
+    exepath  = replaceExtension basename ".exe"
+    cmd = "gibbon"
+    toexe_options =
+        modeExeOptions mode ++ [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , dir </> name ]
 
 doTrial :: FilePath -> Int -> Int -> IO (Either String BenchResult)
 doTrial exepath sizeParam iters = do
@@ -637,10 +642,11 @@ mergeTestConfigWithEnv tc = do
     only_perf <- lookupEnv "ONLY_PERF"
     case only_perf of
         Just "1" -> return $ tc { onlyPerf = True }
-        Nothing  -> return $ tc
+        _ -> return tc
 
 main :: IO ()
 main = do
+    putStrLn "Executing TestRunner... \n"
     -- Parse the config file
     configstr <- readFile configFile
     let tc_mb :: Maybe TestConfig

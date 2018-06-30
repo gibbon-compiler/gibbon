@@ -140,9 +140,7 @@ test-suite test-gibbon
                        srcloc, pretty, time,
                        mtl, transformers,
                        tasty, tasty-hunit, tasty-th,
-                       yaml, text, bytestring,
-                       optparse-applicative,scientific
-
+                       text, bytestring
   other-modules:       RouteEnds
                        InferEffects
                        InferLocations
@@ -156,7 +154,22 @@ test-suite test-gibbon
                        L2.Interp
                        L3.Typecheck
                        L0.Specialize
-
   default-language:    Haskell2010
   ghc-options:         -fdefer-typed-holes
+  default-extensions:  OverloadedStrings NamedFieldPuns
+
+
+executable test-examples
+  hs-source-dirs:      tests
+  main-is:             BenchRunner.hs
+  build-depends:       gibbon,
+                       base, containers, mtl, transformers,
+                       process, filepath, directory,
+                       time, clock, pretty, text, bytestring,
+                       yaml, optparse-applicative, scientific
+
+  default-language:    Haskell2010
+  other-modules:       TestRunner
+  ghc-options:         -Wall -rtsopts -fdefer-typed-holes
+                       -main-is BenchRunner
   default-extensions:  OverloadedStrings NamedFieldPuns

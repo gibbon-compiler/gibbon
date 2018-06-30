@@ -122,24 +122,24 @@ tests:
     bench: true
 
   - name: bench_id.gib
-    # bench: true
-    # more-iters: [pointer, gibbon2]
+    bench: true
+    more-iters: [pointer, gibbon2]
 
   - name: bench_leftmost.gib
-    # bench: true
-    # more-iters: [pointer, gibbon2]
+    bench: true
+    more-iters: [pointer, gibbon2]
 
   - name: bench_rightmost.gib
-    # bench: true
-    # more-iters: [pointer, gibbon2]
+    bench: true
+    more-iters: [pointer, gibbon2]
 
   - name: bench_tree_lookup.gib
-    # bench: true
-    # more-iters: [pointer, gibbon2]
+    bench: true
+    more-iters: [pointer, gibbon2]
 
   - name: bench_tree_insert.gib
-    # bench: true
-    # more-iters: [pointer, gibbon2]
+    bench: true
+    more-iters: [pointer, gibbon2]
 
   ## Failing tests:
   - name: test04c_ifvector.gib
