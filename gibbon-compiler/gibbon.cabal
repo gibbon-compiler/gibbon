@@ -159,7 +159,7 @@ test-suite test-gibbon
   default-extensions:  OverloadedStrings NamedFieldPuns
 
 
-executable test-examples
+executable test-gibbon-examples
   hs-source-dirs:      tests
   main-is:             BenchRunner.hs
   build-depends:       gibbon,

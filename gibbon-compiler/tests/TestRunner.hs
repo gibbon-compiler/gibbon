@@ -438,6 +438,16 @@ runTest tc Test{name,dir,expectedResults,runModes} = do
   where
     go :: Mode -> Result -> IO (Mode, TestVerdict)
     go mode expected = do
+        compiler_dir <- getCompilerDir
+        let tmppath  = compiler_dir </> tempdir tc </> name
+            basename = compiler_dir </> replaceBaseName tmppath (takeBaseName tmppath ++ modeFileSuffix mode)
+            outpath  = replaceExtension basename ".out"
+            anspath  = replaceExtension tmppath ".ans"
+            cpath    = replaceExtension basename ".c"
+            exepath  = replaceExtension basename ".exe"
+            cmd = "gibbon"
+            options =
+                modeRunOptions mode ++ [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , dir </> name ]
         (_, Just hout, Just herr, phandle) <-
             createProcess (proc cmd options) { std_out = CreatePipe
                                              , std_err = CreatePipe }
@@ -462,17 +472,6 @@ runTest tc Test{name,dir,expectedResults,runModes} = do
                 case expected of
                     Fail -> (mode,) <$> EF <$> hGetContents herr
                     Pass -> (mode,) <$> UF <$> hGetContents herr
-      where
-        tmppath  = tempdir tc </> name
-        basename = replaceBaseName tmppath (takeBaseName tmppath ++ modeFileSuffix mode)
-        outpath  = replaceExtension basename ".out"
-        anspath  = replaceExtension tmppath ".ans"
-        cpath    = replaceExtension basename ".c"
-        exepath  = replaceExtension basename ".exe"
-        cmd = "gibbon"
-        options =
-            modeRunOptions mode ++ [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , dir </> name ]
-
 
 runBenchmark :: TestConfig -> Test -> IO [(Mode,TestVerdict)]
 runBenchmark tc t@Test{name,dir,expectedResults,runModes,numTrials} = do
@@ -509,6 +508,15 @@ runBenchmark tc t@Test{name,dir,expectedResults,runModes,numTrials} = do
 --
 doNTrials :: TestConfig -> Mode -> Test -> IO (Either String [BenchResult])
 doNTrials tc mode Test{name,dir,numTrials,sizeParam,moreIters} = do
+    compiler_dir <- getCompilerDir
+    let tmppath  = compiler_dir </> tempdir tc </> name
+        basename = compiler_dir </> replaceBaseName tmppath (takeBaseName tmppath ++ modeFileSuffix mode)
+        cpath    = replaceExtension basename ".c"
+        exepath  = replaceExtension basename ".exe"
+        cmd = "gibbon"
+        toexe_options =
+            modeExeOptions mode ++ [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , dir </> name ]
+
     (_, Just _hout, Just herr, phandle) <-
       createProcess (proc cmd toexe_options) { std_out = CreatePipe
                                              , std_err = CreatePipe }
@@ -528,14 +536,6 @@ doNTrials tc mode Test{name,dir,numTrials,sizeParam,moreIters} = do
                     return (Right bench_results)
                 Left err -> return (Left err)
         ExitFailure _ -> Left <$> hGetContents herr
-  where
-    tmppath  = tempdir tc </> name
-    basename = replaceBaseName tmppath (takeBaseName tmppath ++ modeFileSuffix mode)
-    cpath    = replaceExtension basename ".c"
-    exepath  = replaceExtension basename ".exe"
-    cmd = "gibbon"
-    toexe_options =
-        modeExeOptions mode ++ [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , dir </> name ]
 
 doTrial :: FilePath -> Int -> Int -> IO (Either String BenchResult)
 doTrial exepath sizeParam iters = do
@@ -635,6 +635,13 @@ fromRight_ oth  = error $ "fromRight_: Unexpected value " ++ show oth
 configFile :: String
 configFile = "tests/config.yaml"
 
+getCompilerDir :: IO String
+getCompilerDir = do
+    env <- getEnvironment
+    case lookup "TREELANGDIR" env of
+        Just p  -> return (p </> "gibbon-compiler")
+        Nothing -> return ("") -- Assume that we're running from the compiler DIR.
+
 -- It might be handy to configure some things via environment variables. We might want to have a Jenkins job
 -- to just run the benchmarks.
 mergeTestConfigWithEnv :: TestConfig -> IO TestConfig
@@ -648,7 +655,8 @@ main :: IO ()
 main = do
     putStrLn "Executing TestRunner... \n"
     -- Parse the config file
-    configstr <- readFile configFile
+    compiler_dir <- getCompilerDir
+    configstr <- readFile (compiler_dir </> configFile)
     let tc_mb :: Maybe TestConfig
         tc_mb = Y.decode (BS.pack configstr)
 

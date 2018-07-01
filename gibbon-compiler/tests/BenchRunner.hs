@@ -13,9 +13,6 @@ import qualified Data.ByteString.Char8 as BS
 import           TestRunner hiding (main)
 import qualified TestRunner as TR
 
-outputFile :: String
-outputFile = "bench_report.csv"
-
 main :: IO ()
 main = do
     args <- getArgs
@@ -30,8 +27,11 @@ getHostname = init <$> readCreateProcess (shell "hostname") ""
 bench_main :: Maybe FilePath -> IO ()
 bench_main fp_mb = do
     putStrLn "Executing BenchRunner...\n"
+
     -- Parse the config file
-    configstr <- readFile configFile
+    compiler_dir <- getCompilerDir
+    configstr <- readFile (compiler_dir </> configFile)
+
     let tc_mb :: Maybe TestConfig
         tc_mb = Y.decode (BS.pack configstr)
 
@@ -42,7 +42,7 @@ bench_main fp_mb = do
         (Nothing,_) -> error $ "Couldn't parse the configuration in " ++ configFile
         (_,Nothing) -> error $ "Couldn't parse the tests in " ++ configFile
         (Just file_tc, Just (Tests tests)) -> do
-            let benchmarks = take 1 $ filter isBenchmark tests
+            let benchmarks = filter isBenchmark tests
                 modesToBench = [Gibbon1, Gibbon2, Pointer]
             results <- mapM (go file_tc modesToBench) benchmarks
             mc <- getHostname
