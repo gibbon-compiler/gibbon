@@ -33,4 +33,4 @@
     (let ([tr0 : Tree (helper 0 total-nodes)])
       (let ([n : Int (iterate (let ([j : Int (mod (rand) total-nodes)])
                                 (tree-lookup tr0 j)))])
-        tr0))))
+        n))))
