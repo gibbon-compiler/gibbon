@@ -151,6 +151,8 @@ data Prim
     = AddP | SubP | MulP
     | DivP | ModP
     | EqP | LtP | GtP
+    | ExpP
+    | RandP
     | SizeParam
     | DictInsertP Ty -- ^ takes k,v,dict
     | DictLookupP Ty -- ^ takes k,dict, errors if absent

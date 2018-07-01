@@ -28,6 +28,9 @@
                            (tree-lookup y n)))]))
 
 (let ([m : Int (size-param)])
-  (let ([tr0 : Tree (helper 0 (- m 1))])
-    (let ([n : Int (iterate (tree-lookup tr0 m))])
-      n)))
+  ;; (2 ^ (n+1)) - 1
+  (let ([total-nodes : Int (- (exp 2 (+ (size-param) 1)) 1)])
+    (let ([tr0 : Tree (helper 0 total-nodes)])
+      (let ([n : Int (iterate (let ([j : Int (mod (rand) total-nodes)])
+                                (tree-lookup tr0 j)))])
+        tr0))))

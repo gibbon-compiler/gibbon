@@ -29,11 +29,14 @@
     [(Leaf n1)     (if (< n n1)
                        (Node n1 (Leaf n) (Null))
                        (Node n1 (Null) (Leaf n)))]
-    [(Node n1 l r) (if (> n1 n)
+    [(Node n1 l r) (if (< n1 n)
                        (Node n1 l (tree-insert r n))
                        (Node n1 (tree-insert l n) r))]))
 
-(let ([m : Int 25])
-  (let([tr0 : Tree (helper 1 2)])
-    (let ([tr1 : Tree (time (tree-insert tr0 1))])
-      (sum-tree tr1))))
+(let ([m : Int (size-param)])
+  ;; (2 ^ (n+1)) - 1
+  (let ([total-nodes : Int (- (exp 2 (+ (size-param) 1)) 1)])
+    (let ([tr0 : Tree (helper 0 total-nodes)])
+      (let ([tr1 : Tree (iterate (let ([j : Int (mod (rand) total-nodes)])
+                                   (tree-insert tr0 j))) ])
+        (sum-tree tr1)))))

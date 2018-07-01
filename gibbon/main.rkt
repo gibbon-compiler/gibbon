@@ -5,20 +5,20 @@
          define let  if :
          for/list for/fold or and
          Vector vector vector-ref
-         list and empty? error 
+         list and empty? error
          eq? = Listof True False
          sym-append
 
-         time + * - div mod < >
+         time + * - div mod < > rand exp
          size-param iterate
 
          fl- fl+ fl* fl/ flsqrt fl> fl< flsqrt
 
-         
+
          provide require only-in all-defined-out
          ;; So that we can import the treelang progs without runninga
          module+
-         
+
          pack-Int pack-Bool pack-Sym pack-Float
 
          #%app #%module-begin #%datum quote
@@ -40,7 +40,7 @@
 #| Grammar
 
 prog := #lang gibbon
-        d ... f ... e
+d ... f ... e
 
 ;; Data definitions:
 d := (data T [K fTy ...] ...)
@@ -53,37 +53,37 @@ fTy := t | (Listof t)
 
 ;; Types
 t := Int | Sym | Bool
-   | (Vector t ...) 
-   | (SymDict t) ;; maps symbols to t?
-   | T
+| (Vector t ...)
+| (SymDict t) ;; maps symbols to t?
+| T
 
 e := var | lit
-   | (f e ...)                      
-   | (vector e ...)                 
-   | (vector-ref e int)             
-   | (K e ...)                      
-   | (case e [(K v ...) e] ...)
-   | (let ([v : t e] ...) e)        :: CHANGED THIS, note the :
-   | (if e e e)                     
-   | primapp
-   | (for/list ([v : t e])  e)      ;; not enforced that only loops over single list
-   | (error string)
-   | (time e)                       ;; time a benchmark
+| (f e ...)
+| (vector e ...)
+| (vector-ref e int)
+| (K e ...)
+| (case e [(K v ...) e] ...)
+| (let ([v : t e] ...) e)        :: CHANGED THIS, note the :
+| (if e e e)
+| primapp
+| (for/list ([v : t e])  e)      ;; not enforced that only loops over single list
+| (error string)
+| (time e)                       ;; time a benchmark
 
 primapp := (binop e e)
-        | (insert e e e)
-        | (lookup e e)
-        | (empty-dict)
+| (insert e e e)
+| (lookup e e)
+| (empty-dict)
 
-binop := + | - | * 
+binop := + | - | *
 
 lit := int | #t | #f
 
 ;; Example "hello world" program in this grammar:
 
 (data Tree
-       [Leaf Int]
-       [Node Tree Tree])
+      [Leaf Int]
+      [Node Tree Tree])
 '
 (define (add1 [x : Tree]) : Tree
   (case x
@@ -141,9 +141,9 @@ lit := int | #t | #f
     (printf "ITERS: ~a\n" (iters-param))
     (let loop ([res (run)]
                [count (sub1 (iters-param))])
-           (if (zero? count)
-               res
-               (loop (run) (sub1 count))))))
+      (if (zero? count)
+          res
+          (loop (run) (sub1 count))))))
 
 (: run-n (All (a) (-> Integer (-> a) a)))
 (define (run-n n f)
@@ -195,7 +195,7 @@ lit := int | #t | #f
                          (syntax->list #'((f ...) ...)))])
        #'(begin
            (define-type type1 (U ts ...))
-           
+
            (struct ts ([f-ids : f] ...) #:transparent) ...
            (define (pack-id [v : type1]) : Bytes
              (match v
@@ -205,14 +205,14 @@ lit := int | #t | #f
 (define True  : Bool #t)
 (define False : Bool #f)
 
-(begin-encourage-inline 
+(begin-encourage-inline
   ;; FIXME: need to make sure these inline:
   (define (+ [a : Int] [b : Int]) : Int
     (unsafe-fx+ a b))
-  
+
   (define (- [a : Int] [b : Int]) : Int
     (unsafe-fx- a b))
-  
+
   (define (* [a : Int] [b : Int]) : Int
     (unsafe-fx* a b))
 
@@ -221,12 +221,19 @@ lit := int | #t | #f
 
   (define (eq? [a : Sym] [b : Sym]) : Bool
     (req? a b))
-  
+
   (define (= [a : Int] [b : Int]) : Bool
     (req? a b))
 
   (define (mod [a : Int] [b : Int]) : Int
     (unsafe-fxremainder a b))
+
+  (define (exp [base : Int] [pow : Int]) : Int
+    (unsafe-fl->fx (flexpt (unsafe-fx->fl base) (unsafe-fx->fl pow))))
+
+  ;; Constrained to the value of RAND_MAX (in C) on my laptop: 2147483647 (2^31 − 1)
+  (define (rand) : Int
+    (random 2147483647))
   )
 
 (define size-param  : (Parameter Int) (make-parameter 1))
@@ -235,15 +242,15 @@ lit := int | #t | #f
 
 #|
 (data Tree
-       [Leaf Int]
-       [Node Tree Tree])
+      [Leaf Int]
+      [Node Tree Tree])
 
 (define (add1 [x : Tree]) : Tree
   (case x
     [(Leaf n)   (Leaf (+ n 1))]
     [(Node x y) (Node (add1 x) (add1 y))]))
 |#
-                                  
+
 (match (current-command-line-arguments)
   [(vector s i) (size-param  (cast (string->number s) Int))
                 (iters-param (cast (string->number i) Integer))

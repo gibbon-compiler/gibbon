@@ -815,6 +815,8 @@ prim p =
     MulP -> T.MulP
     DivP -> T.DivP
     ModP -> T.ModP
+    ExpP -> T.ExpP
+    RandP -> T.RandP
     EqSymP -> T.EqP
     EqIntP -> T.EqP
     LtP    -> T.LtP

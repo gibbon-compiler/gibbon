@@ -65,7 +65,7 @@ instance Out Text where
 
 type Sexp = RichSExpr (SC.Located HaskLikeAtom)
 
-    
+
 prnt :: Sexp -> String
 prnt = T.unpack . encodeOne locatedHaskLikePrinter . fromRich
 
@@ -276,7 +276,7 @@ keywords = S.fromList $ L.map pack $
            [ "quote", "if", "or", "and", "time", "let"
            , "case", "vector-ref", "for/fold", "for/list"
            , "insert", "empty-dict", "lookup", "error", "ann"
-           , "div", "mod"
+           , "div", "mod", "exp", "rand"
            ]
 
 isKeyword :: Text -> Bool
@@ -411,6 +411,8 @@ primMap = M.fromList
   , ("*", MulP)
   , ("div", DivP)
   , ("mod", ModP)
+  , ("exp", ExpP)
+  , ("rand", RandP)
   , ("eq?", EqSymP)
   , ("=", EqIntP)
   , ("<", LtP)
@@ -471,4 +473,3 @@ parseFile file = do
 -- FINISHME
 parseSExp0 :: [Sexp] -> SyM L0.PProg
 parseSExp0 = undefined
-

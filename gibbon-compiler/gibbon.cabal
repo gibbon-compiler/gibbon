@@ -83,6 +83,7 @@ library
                      , mtl                      >= 2.2.1     &&  < 2.3
                      , transformers             >= 0.5.2     &&  < 0.6
                      , clock                    >= 0.7.1     &&  < 0.8
+                     , random                   >= 1.1       &&  < 1.2
                      -- Parsers:
                      , parsec                   >= 3.1.13    &&  < 3.2
                      , optparse-applicative     >= 0.13.2    &&  < 0.15

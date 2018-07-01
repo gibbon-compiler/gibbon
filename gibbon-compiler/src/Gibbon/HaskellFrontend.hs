@@ -188,6 +188,7 @@ desugarExp e = L NoLoc <$>
 
 -------------------------------------------------------------------------------
 
+-- TODO: These are not the only primops we have!
 desugarOp :: S.QOp -> Ds (Prim Ty1)
 desugarOp (S.QVarOp (S.UnQual (S.Symbol op))) =
   case op of

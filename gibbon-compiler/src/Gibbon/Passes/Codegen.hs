@@ -376,6 +376,11 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                  ModP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv pleft) % $(codegenTriv pright); |]]
+                 ExpP -> let [(outV,outT)] = bnds
+                             [pleft,pright] = rnds in pure
+                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = expll($(codegenTriv pleft), $(codegenTriv pright)); |]]
+                 RandP -> let [(outV,outT)] = bnds in pure
+                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = rand(); |]]
                  EqP -> let [(outV,outT)] = bnds
                             [pleft,pright] = rnds in pure
                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) == $(codegenTriv pright)); |]]

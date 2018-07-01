@@ -146,7 +146,7 @@ tcExp ddfs env exp@(L p ex) =
 
       tys <- mapM go es
       case pr of
-        _ | pr `elem` [AddP, SubP, MulP, DivP, ModP]  -> do
+        _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP]  -> do
           len2
           _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
           _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
@@ -167,6 +167,8 @@ tcExp ddfs env exp@(L p ex) =
           _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
           _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
           return BoolTy
+
+        RandP -> return IntTy
 
         SizeParam -> do
           len0

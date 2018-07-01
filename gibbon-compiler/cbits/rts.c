@@ -246,6 +246,18 @@ int compare_doubles(const void *a, const void *b)
     return (*da > *db) - (*da < *db);
 }
 
+// Exponentiation
+IntTy expll(IntTy base, IntTy pow) {
+    if (base == 2) {
+        return (1 << pow);
+    } else {
+        IntTy i, result = 1;
+        for (i = 0; i < pow; i++)
+            result *= base;
+        return result;
+    }
+ }
+
 /* Representation of regions at runtime:
 
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

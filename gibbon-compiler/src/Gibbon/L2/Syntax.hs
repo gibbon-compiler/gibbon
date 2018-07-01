@@ -364,6 +364,8 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         MulP      -> MulP
         DivP      -> DivP
         ModP      -> ModP
+        ExpP      -> ExpP
+        RandP     -> RandP
         EqSymP    -> EqSymP
         EqIntP    -> EqIntP
         LtP       -> LtP

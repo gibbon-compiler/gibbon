@@ -298,6 +298,10 @@ instance Typeable (PreExp e l (UrTy l)) => Typeable (L (PreExp e l (UrTy l))) wh
 data Prim ty
           = AddP | SubP | MulP -- ^ May need more numeric primitives...
           | DivP | ModP        -- ^ Integer division and modulus
+          | ExpP               -- ^ Exponentiation
+          | RandP              -- ^ Generate a random number.
+                               --   Translates to 'rand()' in C.
+                               --   TEMP: It's a side-effect, and should be removed.
           | EqSymP             -- ^ Equality on Sym
           | EqIntP             -- ^ Equality on Int
           | LtP | GtP          -- ^ (<) and (>) for Int's
@@ -320,8 +324,8 @@ data Prim ty
             -- type of the file being read.  The `Ty` tracks the type as the program evolvels
             -- (first PackedTy then CursorTy).  The TyCon tracks the original type name.
           | PEndOf
-          -- ^ Returns the end-of cursor for some packed value. These pointers serve as random access nodes
-          -- to the value that is packed after this one.
+          -- ^ Returns the end-of cursor for some packed value. These pointers
+          -- serve as random access nodes to the value that is packed after this one.
 
   deriving (Read, Show, Eq, Ord, Generic, NFData, Functor, Foldable, Traversable)
 
@@ -633,6 +637,8 @@ primArgsTy p =
     MulP    -> [IntTy, IntTy]
     DivP    -> [IntTy, IntTy]
     ModP    -> [IntTy, IntTy]
+    ExpP    -> [IntTy, IntTy]
+    RandP   -> []
     EqSymP  -> [SymTy, SymTy]
     EqIntP  -> [IntTy, IntTy]
     LtP  -> [IntTy, IntTy]
@@ -658,6 +664,8 @@ primRetTy p =
     MulP -> IntTy
     DivP -> IntTy
     ModP -> IntTy
+    ExpP -> IntTy
+    RandP-> IntTy
     EqSymP  -> BoolTy
     EqIntP  -> BoolTy
     LtP  -> BoolTy

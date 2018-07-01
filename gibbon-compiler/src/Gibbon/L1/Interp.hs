@@ -23,6 +23,8 @@ import           Data.List as L
 import           Data.Loc
 import           Data.Map as M
 import           System.Clock
+import           System.IO.Unsafe
+import           System.Random
 import           Text.PrettyPrint.GenericPretty
 import qualified Data.ByteString.Lazy.Char8 as B
 
@@ -181,6 +183,9 @@ applyPrim rc p ls =
    (MulP,[VInt x, VInt y]) -> VInt (x*y)
    (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
    (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
+   (ExpP,[VInt x, VInt y]) -> VInt (x ^ y)
+   -- Constrained to the value of RAND_MAX (in C) on my laptop: 2147483647 (2^31 − 1)
+   (RandP,[]) -> VInt $ (unsafePerformIO randomIO) `mod` 2147483647
    (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
    (EqSymP,[VInt x, VInt y]) -> VBool (x==y)
    (EqIntP,[VInt x, VInt y]) -> VBool (x==y)

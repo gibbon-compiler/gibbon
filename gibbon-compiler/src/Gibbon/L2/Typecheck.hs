@@ -175,7 +175,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    len0 = checkLen exp pr 0 es
                    len3 = checkLen exp pr 3 es
                case pr of
-                 _ | pr `elem` [L1.AddP, L1.SubP, L1.MulP, L1.DivP, L1.ModP] -> do
+                 _ | pr `elem` [L1.AddP, L1.SubP, L1.MulP, L1.DivP, L1.ModP, L1.ExpP] -> do
                        len2
                        ensureEqualTy exp IntTy (tys !! 0)
                        ensureEqualTy exp IntTy (tys !! 1)
@@ -190,6 +190,8 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                  _ | pr `elem` [L1.MkFalse, L1.MkTrue] -> do
                        len0
                        return $ (BoolTy,tstate)
+
+                 L1.RandP -> return (IntTy, tstate)
 
                  L1.EqSymP -> do
                    len2
