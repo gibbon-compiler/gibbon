@@ -56,7 +56,7 @@ bench_main fp_mb = do
     go :: TestConfig -> [Mode] -> Test -> IO [[String]]
     go tc modes t@Test{name,sizeParam,moreIters,numTrials} = do
         putStrLn $ "Benchmarking " ++ show name
-        mapM (\mode ->
+        results <- mapM (\mode ->
                   do trials <- doNTrials tc mode t
                      let res = case trials of
                                    Left err -> err
@@ -64,6 +64,9 @@ bench_main fp_mb = do
                                        let (BenchResult median_res) =
                                                medianBenchResult numTrials bench_results
                                        in printf "%e" median_res
+                         iters :: Int
                          iters = if mode `elem` moreIters then 10000000 else 1
                      return [takeBaseName name, show mode, show sizeParam, show numTrials, show iters, res])
              modes
+        putStrLn (show results)
+        return results
