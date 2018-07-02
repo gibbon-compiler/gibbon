@@ -141,6 +141,14 @@ tests:
     bench: true
     more-iters: [pointer, gibbon2]
 
+  ## Mega benchmarks, which use some dataset
+
+  - name: bench_count_tweets.gib
+    mega-bench: true
+    bench-fun: bench
+    bench-input: examples/bench_count_tweets.gpkd
+
+
   ## Failing tests:
   - name: test04c_ifvector.gib
     failing: [gibbon2, gibbon1]

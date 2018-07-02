@@ -94,6 +94,11 @@ data Test = Test
     , sizeParam :: Int
     , moreIters :: [Mode] -- ^ In these modes, this test would require lots of iterations to
                           -- keep it running for measurable amount of time.
+
+    -- Used in BenchWithDataset mode
+    , isMegaBench :: Bool
+    , benchFun    :: String
+    , benchInput  :: FilePath
     }
   deriving (Show, Eq, Read)
 
@@ -108,6 +113,9 @@ defaultTest = Test
     , numTrials = 9
     , sizeParam = 25
     , moreIters = []
+    , isMegaBench = False
+    , benchFun   = "bench"
+    , benchInput = ""
     }
 
 instance Ord Test where
@@ -123,11 +131,14 @@ instance FromJSON Test where
         isbenchmark <- o .:? "bench" .!= (isBenchmark defaultTest)
         trials      <- o .:? "trials" .!= (numTrials defaultTest)
         sizeparam   <- o .:? "size-param" .!= (sizeParam defaultTest)
-        moreiters  <- o .:? "more-iters" .!= (moreIters defaultTest)
+        moreiters   <- o .:? "more-iters" .!= (moreIters defaultTest)
+        megabench   <- o .:? "mega-bench" .!= (isMegaBench defaultTest)
+        benchfun    <- o .:? "bench-fun" .!= (benchFun defaultTest)
+        benchinput  <- o .:? "bench-input" .!= (benchInput defaultTest)
         let expectedFailures = M.fromList [(mode, Fail) | mode <- failing]
             -- Overlay the expected failures on top of the defaults.
             expected = M.union expectedFailures (expectedResults defaultTest)
-        return $ Test name dir expected skip runmodes isbenchmark trials sizeparam moreiters
+        return $ Test name dir expected skip runmodes isbenchmark trials sizeparam moreiters megabench benchfun benchinput
     parseJSON oth = error $ "Cannot parse Test: " ++ show oth
 
 data Result = Pass | Fail
@@ -476,6 +487,8 @@ runTest tc Test{name,dir,expectedResults,runModes} = do
 runBenchmark :: TestConfig -> Test -> IO [(Mode,TestVerdict)]
 runBenchmark tc t@Test{name,dir,expectedResults,runModes,numTrials} = do
     putStrLn $ "Benchmarking " ++ show name ++ "..."
+    compiler_dir <- getCompilerDir
+    let perfpath = compiler_dir </> replaceExtension (dir </> "perf" </> takeBaseName name) ".perf"
     perf_exists <- doesFileExist perfpath
     -- Cannot really check the performance in Interp1 mode.
     let modesToRun = S.fromList $ delete Gibbon1 $ delete Interp1 runModes
@@ -485,8 +498,6 @@ runBenchmark tc t@Test{name,dir,expectedResults,runModes,numTrials} = do
                  (M.toList $ M.restrictKeys expectedResults modesToRun)
     else mapM (\m -> return (m, UF ("File does not exist: " ++ perfpath))) (S.toList modesToRun)
   where
-    perfpath = replaceExtension (dir </> "perf" </> takeBaseName name) ".perf"
-
     go :: M.Map Mode BenchResult -> Mode -> Result -> IO (Mode, TestVerdict)
     go expected_perf_res_mp mode expected = do
       trials <- doNTrials tc mode t
@@ -507,48 +518,63 @@ runBenchmark tc t@Test{name,dir,expectedResults,runModes,numTrials} = do
 
 --
 doNTrials :: TestConfig -> Mode -> Test -> IO (Either String [BenchResult])
-doNTrials tc mode Test{name,dir,numTrials,sizeParam,moreIters} = do
+doNTrials tc mode t@Test{name,dir,numTrials,sizeParam,moreIters,isMegaBench,benchFun} = do
     compiler_dir <- getCompilerDir
     let tmppath  = compiler_dir </> tempdir tc </> name
         basename = compiler_dir </> replaceBaseName tmppath (takeBaseName tmppath ++ modeFileSuffix mode)
         cpath    = replaceExtension basename ".c"
         exepath  = replaceExtension basename ".exe"
-        cmd = "gibbon"
-        toexe_options =
-            modeExeOptions mode ++ [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , dir </> name ]
 
+        common_options = [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , dir </> name ]
+
+        toexe_options = modeExeOptions mode ++ common_options
+
+        cmd = "gibbon"
+        cmd_options = if isMegaBench
+                      then ["--bench-print","--bench-fun=" ++ benchFun] ++ common_options
+                      else toexe_options
+
+    when (verbosity tc > 1) $
+        putStrLn $ "Executing: " ++ cmd ++ (intercalate " " cmd_options)
     (_, Just _hout, Just herr, phandle) <-
-      createProcess (proc cmd toexe_options) { std_out = CreatePipe
-                                             , std_err = CreatePipe }
+      createProcess (proc cmd cmd_options) { std_out = CreatePipe
+                                           , std_err = CreatePipe }
     toexeExitCode <- waitForProcess phandle
     case toexeExitCode of
         ExitSuccess -> do
             let iters = if mode `elem` moreIters
                         then 10000000
                         else 1
-            first_trial <- doTrial exepath sizeParam iters
+            first_trial <- if isMegaBench
+                           then doMegaBenchmark tc cpath exepath t
+                           else doTrial tc exepath sizeParam iters
             case first_trial of
                 Right{} -> do
                     -- Run it N times, and record the median time.
                     -- ASSUMPTION: If one trial ran without an error, all the others should do too.
-                    bench_results <- mapM (\_ -> fromRight_ <$> doTrial exepath sizeParam iters)
+                    bench_results <- mapM (\_ -> if isMegaBench
+                                                 then fromRight_ <$> doTrial tc exepath sizeParam iters
+                                                 else fromRight_ <$> doMegaBenchmark tc cpath exepath t)
                                           [0..numTrials]
                     return (Right bench_results)
                 Left err -> return (Left err)
         ExitFailure _ -> Left <$> hGetContents herr
 
-doTrial :: FilePath -> Int -> Int -> IO (Either String BenchResult)
-doTrial exepath sizeParam iters = do
+doTrial :: TestConfig -> FilePath -> Int -> Int -> IO (Either String BenchResult)
+doTrial tc exepath sizeParam iters = do
+    let cmd_options = [show sizeParam, show iters]
+    when (verbosity tc > 1) $
+        putStrLn $ "Executing: " ++ exepath ++ (intercalate " " cmd_options)
     (_, Just hout, Just herr, phandle) <-
-        createProcess (proc exepath [show sizeParam, show iters])
+        createProcess (proc exepath cmd_options)
             { std_out = CreatePipe
             , std_err = CreatePipe }
     exitCode <- waitForProcess phandle
     case exitCode of
-      ExitSuccess -> do
-          out <- hGetContents hout
-          return $ Right (readBenchResult out)
-      ExitFailure _ -> Left <$> hGetContents herr
+        ExitSuccess -> do
+            out <- hGetContents hout
+            return $ Right (readBenchResult out)
+        ExitFailure _ -> Left <$> hGetContents herr
 
 -- a: actual, b: expected
 diff :: FilePath -> FilePath -> IO (Maybe String)
@@ -570,6 +596,27 @@ diff a b = do
 
 isBenchOutput :: String -> Bool
 isBenchOutput s = isInfixOf "BATCHTIME" s || isInfixOf "SELFTIMED" s
+
+doMegaBenchmark :: TestConfig -> FilePath -> FilePath -> Test -> IO (Either String BenchResult)
+doMegaBenchmark tc cpath exepath Test{name,dir,runModes,benchFun,benchInput} = do
+    compiler_dir <- getCompilerDir
+    bench_input_exists <- doesFileExist benchInput
+    if not bench_input_exists
+    then return $ Left ("File does not exist: " ++ benchInput)
+    else do
+        let cmd_options = ["--bench-input", benchInput]
+        -- when (verbosity tc > 1) $
+        putStrLn (show (proc exepath cmd_options))
+        (_, Just hout, Just herr, phandle) <-
+            createProcess (proc exepath cmd_options)
+                { std_out = CreatePipe
+                , std_err = CreatePipe }
+        exitCode <- waitForProcess phandle
+        case exitCode of
+            ExitSuccess -> do
+                out <- hGetContents hout
+                return $ Right (readBenchResult out)
+            ExitFailure _ -> Left <$> hGetContents herr
 
 --------------------------------------------------------------------------------
 

@@ -1,0 +1,43 @@
+#lang gibbon
+
+;; To run this benchmark:
+;;
+;; stack exec gibbon -- -v1 --bench-print --bench-fun=bench examples/bench_count_tweets.gib --bench-input=examples/bench_count_tweets.gpkd
+
+(data Hashtags
+      [NilHT]
+      [ConsHT Sym Hashtags])
+
+;; TweetMD user_id hash
+(data Tweet [TweetMD Int Hashtags])
+
+(data Tweets
+      [NilTW]
+      [ConsTW Tweet Tweets])
+
+;; Does the hastag occur in the list ?
+(define (elem-ht [x : Sym] [xs : Hashtags]) : Bool
+  (case xs
+    [(NilHT) False]
+    [(ConsHT y ys) (if (eq? x y)
+                       True
+                       (elem-ht x ys))]))
+
+;; Does the tweet contain a particular hashtag ?
+(define (tweet-has-ht [x : Sym] [t : Tweet]) : Bool
+  (case t
+    [(TweetMD i hs) (elem-ht x hs)]))
+
+;; How many times does a hashtag occur in the dataset ?
+(define (tweets-count-ht-go [acc : Int] [ht : Sym] [xs : Tweets]) : Int
+  (case xs
+    [(NilTW) acc]
+    [(ConsTW y ys) (if (tweet-has-ht ht y)
+                       (tweets-count-ht-go (+ acc 1) ht ys)
+                       (tweets-count-ht-go acc ht ys))]))
+
+(define (tweets-count-ht [ht : Sym] [xs : Tweets]) : Int
+  (tweets-count-ht-go 0 ht xs))
+
+(define (bench [tweets : Tweets]) : Int
+  (tweets-count-ht 'cats tweets))
