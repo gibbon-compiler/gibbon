@@ -412,7 +412,7 @@ runTests tc tr = do
           then do
               putStrLn "Only running performance tests."
               return $ filter isBenchmark (tests tr)
-          else return (tests tr)
+          else return $ filter (not . isMegaBench) (tests tr)
     foldlM (\acc t -> go t acc) tr (sort ls)
   where
     go test acc =

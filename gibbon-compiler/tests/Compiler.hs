@@ -70,11 +70,11 @@ run2T l3 = fst $ defaultPackedRunPassM $ do
     l3 <- flattenL3 l3
     -- l3 <- findWitnesses l3
     -- l3 <- shakeTree l3
-    l3 <- L3.tcProg l3
+    l3 <- L3.tcProg True l3
     l3 <- hoistNewBuf l3
     l3 <- unariser l3
     l3 <- flattenL3 l3
-    l3 <- L3.tcProg l3
+    l3 <- L3.tcProg True l3
     l4 <- lower l3
     l4 <- followRedirects l4
     rearrangeFree l4
