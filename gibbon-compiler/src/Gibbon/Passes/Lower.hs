@@ -574,6 +574,13 @@ lower Prog{fundefs,ddefs,mainExp} = do
                                                , triv "addCursor offset" (l$ VarE size)] <$>
         tail bod
 
+    LetE (v,_, _, L _ (Ext (AddCursor c (L _ (Ext (MMapFileSize w)))))) bod -> do
+      size <- gensym (varAppend "sizeof_" v)
+      T.LetPrimCallT [(size,T.IntTy)] (T.MMapFileSize w) [] <$>
+        T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv "addCursor base" (l$ VarE c)
+                                               , triv "addCursor offset" (l$ VarE size)] <$>
+        tail bod
+
     LetE (v,_, _, L _ (Ext (AddCursor c e))) bod ->
       T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv "addCursor base" (l$ VarE c)
                                              , triv "addCursor offset" e] <$>
@@ -827,7 +834,7 @@ prim p =
     DictEmptyP ty -> T.DictEmptyP $ typ ty
     DictHasKeyP ty -> T.DictHasKeyP $ typ ty
 
-    ReadPackedFile mf tyc _ -> T.ReadPackedFile mf tyc
+    ReadPackedFile mf tyc _ _ -> T.ReadPackedFile mf tyc
 
     ErrorP{}     -> error$ "lower/prim: internal error, should not have got to here: "++show p
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."

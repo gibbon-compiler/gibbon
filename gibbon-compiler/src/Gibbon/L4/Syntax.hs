@@ -171,6 +171,8 @@ data Prim
     | InitSizeOfBuffer Multiplicity
     -- ^ Returns the initial buffer size for a specific multiplicity
 
+    | MMapFileSize Var
+
     | WriteTag
     -- ^ Write a static tag value, takes a cursor to target.
     | WriteInt

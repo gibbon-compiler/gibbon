@@ -385,7 +385,7 @@ IntTy bump_ref_count(CursorTy end_b, CursorTy end_a) {
     if (footer_b->outset_ptr == NULL) {
         footer_b->outset_ptr = end_a;
     } else if (footer_b->outset_ptr != end_a) {
-        printf("Outset isn't a real set yet..");
+        printf("Outset isn't a real set yet..\n");
     }
 
     return refcount;

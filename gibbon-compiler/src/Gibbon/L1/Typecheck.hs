@@ -126,7 +126,7 @@ tcExp ddfs env exp@(L p ex) =
           len0
           return IntTy
 
-        ReadPackedFile _fp _tycon ty -> do
+        ReadPackedFile _fp _tycon _reg ty -> do
           len0
           return ty
 

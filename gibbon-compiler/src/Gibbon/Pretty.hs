@@ -24,7 +24,7 @@ printL1 (Prog _ funs me) =
     let meDoc = case me of
                   Nothing -> empty
                   Just (e,_) -> renderMain $ pprint e
-        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (doc $ fst $ funTy fd) (pprint $ funBody fd)) $ M.elems funs
+        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (doc $ fst $ funTy fd) (doc $ snd $ funTy fd) (pprint $ funBody fd)) $ M.elems funs
     in render $ funsDoc $+$ meDoc
 
 instance Printer Prog1 where
@@ -35,7 +35,7 @@ printL2 (Prog _ funs me) =
     let meDoc = case me of
                   Nothing -> empty
                   Just (e,_) -> renderMain $ pprint e
-        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (doc $ L2.arrOut $ funTy fd) (pprint $ funBody fd)) $ M.elems funs
+        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (doc $ L2.arrIn $ funTy fd) (doc $ L2.arrOut $ funTy fd) (pprint $ funBody fd)) $ M.elems funs
     in render $ funsDoc $+$ meDoc
 
 instance Printer L2.Prog2 where
@@ -46,7 +46,7 @@ printL3 (Prog _ funs me) =
     let meDoc = case me of
                   Nothing -> empty
                   Just (e,_) -> renderMain $ pprint e
-        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (doc $ fst $ funTy fd) (pprint $ funBody fd)) $ M.elems funs
+        funsDoc = vcat $ map (\fd -> renderfunc (fromVar $ funName fd) (doc $ funArg fd) (doc $ fst $ funTy fd) (doc $ snd $ funTy fd) (pprint $ funBody fd)) $ M.elems funs
     in render $ funsDoc $+$ meDoc
 
 instance Printer L3.Prog3 where
@@ -55,8 +55,9 @@ instance Printer L3.Prog3 where
 instance Printer L4.Prog where
     pprinter = show -- TODO: implement pretty printing for L4
 
-renderfunc :: String -> Doc -> Doc -> Doc -> Doc
-renderfunc f arg ty m = text f <+> arg <> colon <> ty <+> equals $$ nest 4 m
+renderfunc :: String -> Doc -> Doc -> Doc -> Doc -> Doc
+renderfunc f arg inty outty m = text f <+> colon <> colon <+> inty <+> text "->" <+> outty $$
+                                text f <+> arg <> equals $$ nest 4 m
 
 renderMain :: Doc -> Doc
 renderMain m = text "main" <+> equals $$ nest 4 m

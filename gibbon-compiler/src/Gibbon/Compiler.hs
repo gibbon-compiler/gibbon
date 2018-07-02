@@ -415,7 +415,7 @@ benchMainExp l1 = do
           newExp = L1.LetE (toVar tmp, [],
                             arg,
                             l$ L1.PrimAppE
-                            (L1.ReadPackedFile benchInput tyc arg) [])
+                            (L1.ReadPackedFile benchInput tyc Nothing arg) [])
                    $ l$ L1.LetE (toVar "benchres", [],
                              ret,
                              l$ L1.TimeIt
@@ -434,7 +434,7 @@ benchMainExp l1 = do
 -- | The main compiler pipeline
 passes :: Config -> L1.Prog1 -> StateT CompileState IO L4.Prog
 passes config@Config{dynflags} l1 = do
-      let packed     = gopt Opt_Packed dynflags
+      let isPacked   = gopt Opt_Packed dynflags
           biginf     = gopt Opt_BigInfiniteRegions dynflags
           gibbon1    = gopt Opt_Gibbon1 dynflags
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
@@ -451,7 +451,7 @@ passes config@Config{dynflags} l1 = do
       l1 <- goE "typecheck"     L1.tcProg               l1
 
       -- TODO: Write interpreters for L2 and L3
-      l3 <- if packed
+      l3 <- if isPacked
             then do
               -- TODO: push data contstructors under conditional
               -- branches before InferLocations.
@@ -487,25 +487,26 @@ passes config@Config{dynflags} l1 = do
               l2 <- go "threadRegions"    threadRegions l2
 
               -- Note: L2 -> L3
+              -- TODO: Compose L3.TcM with (ReaderT Config)
               l3 <- go "cursorize"        cursorize     l2
               l3 <- go "L3.flatten"       flattenL3     l3
-              l3 <- go "L3.typecheck"     L3.tcProg     l3
+              l3 <- go "L3.typecheck" (L3.tcProg isPacked) l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
               return l3
             else do
               l3 <- go "directL3"         directL3      l1
               return l3
 
-      l3 <- go "L3.typecheck"   L3.tcProg               l3
+      l3 <- go "L3.typecheck"   (L3.tcProg isPacked)    l3
       l3 <- go "unariser"       unariser                l3
-      l3 <- go "L3.typecheck"   L3.tcProg               l3
+      l3 <- go "L3.typecheck"   (L3.tcProg isPacked)    l3
       l3 <- go "L3.flatten"     flattenL3               l3
-      l3 <- go "L3.typecheck"   L3.tcProg               l3
+      l3 <- go "L3.typecheck"   (L3.tcProg isPacked)    l3
 
       -- Note: L3 -> L4
       l4 <- go "lower"          lower                   l3
 
-      l4 <- if gibbon1 || not packed
+      l4 <- if gibbon1 || not isPacked
             then return l4
             else do
               -- These additional case branches cause some tests in pointer mode to fail.

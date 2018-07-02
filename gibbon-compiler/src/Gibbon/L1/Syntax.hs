@@ -319,10 +319,12 @@ data Prim ty
           | MkTrue  -- ^ Zero argument constructor.
           | MkFalse -- ^ Zero argument constructor.
 
-          | ReadPackedFile (Maybe FilePath) TyCon ty
+          | ReadPackedFile (Maybe FilePath) TyCon (Maybe Var) ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
             -- type of the file being read.  The `Ty` tracks the type as the program evolvels
             -- (first PackedTy then CursorTy).  The TyCon tracks the original type name.
+            -- The variable represents the region that this file will be mapped to, and is
+            -- set by InferLocations.
           | PEndOf
           -- ^ Returns the end-of cursor for some packed value. These pointers
           -- serve as random access nodes to the value that is packed after this one.
@@ -679,7 +681,7 @@ primRetTy p =
     DictInsertP ty -> SymDictTy ty
     DictLookupP ty -> ty
     (ErrorP _ ty)  -> ty
-    ReadPackedFile _ _ ty -> ty
+    ReadPackedFile _ _ _ ty -> ty
     PEndOf -> error "primRetTy: PEndOf not handled yet"
 
 dummyCursorTy :: UrTy a

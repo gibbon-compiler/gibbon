@@ -52,6 +52,7 @@ data E3Ext loc dec =
   | NewBuffer Multiplicity         -- ^ Create a new buffer, and return a cursor
   | ScopedBuffer Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
   | InitSizeOfBuffer Multiplicity  -- ^ Returns the initial buffer size for a specific multiplicity
+  | MMapFileSize Var
   | SizeOfPacked Var Var           -- ^ Takes in start and end cursors, and returns an Int
                                    --   we'll probably represent (sizeof x) as (end_x - start_x) / INT
   | SizeOfScalar Var               -- ^ sizeof(var)
@@ -73,6 +74,7 @@ instance FreeVars (E3Ext l d) where
       NewBuffer{}    -> S.empty
       ScopedBuffer{} -> S.empty
       InitSizeOfBuffer{} -> S.empty
+      MMapFileSize v     -> S.singleton v
       SizeOfPacked c1 c2 -> S.fromList [c1, c2]
       SizeOfScalar v     -> S.singleton v
       BoundsCheck{}      -> S.empty
@@ -157,5 +159,5 @@ toL3Prim pr =
     DictEmptyP  ty -> DictEmptyP  (L2.stripTyLocs ty)
     DictHasKeyP ty -> DictHasKeyP (L2.stripTyLocs ty)
     ErrorP s ty    -> ErrorP s (L2.stripTyLocs ty)
-    ReadPackedFile fp tycon ty -> ReadPackedFile fp tycon (L2.stripTyLocs ty)
+    ReadPackedFile fp tycon reg ty -> ReadPackedFile fp tycon reg (L2.stripTyLocs ty)
     PEndOf -> error "Do not use PEndOf after L2."

@@ -74,35 +74,38 @@ inferRegScopeExp (L p ex) = L p <$>
     Ext ext ->
       case ext of
         LetRegionE r rhs ->
-          let deps = depList (L p ex)
-          in case deps of
-               ((retVar,_,_):_) ->
-                 let (g,_,vtxF) = graphFromEdges deps
-                     regV = regionToVar r
-                     -- Vertex of the region variable
-                     regVertex =
-                       case vtxF regV of
-                         Just x  -> x
-                         Nothing -> error $ "No vertex for:" ++ sdoc r
-                     -- Vertex of the return value
-                     retVertex =
-                       case vtxF retVar of
-                         Just x  -> x
-                         Nothing -> error $ "No vertex for:" ++ sdoc retVar
-                     -- The value in the region  escapes the current scope if there's
-                     -- a path between the region variable and the thing returned.
-                     -- TODO: Warn the user when this happens in a fn ?
-                 in do dflags <- getDynFlags
-                       let defaultMul = if (gopt Opt_BigInfiniteRegions dflags) ||
-                                           (gopt Opt_Gibbon1 dflags)
-                                        then BigInfinite
-                                        else Infinite
-                       if path g retVertex regVertex
-                       then Ext <$> LetRegionE (GlobR regV defaultMul) <$> (go rhs)
-                       -- [2018.03.30] - TEMP: Turning off scoped buffers.
-                       -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
-                       else Ext <$> LetRegionE (GlobR regV defaultMul) <$> (go rhs)
-               [] -> return ex
+          case r of
+            MMapR{} -> Ext <$> LetRegionE r <$> (go rhs)
+            _ ->
+              let deps = depList (L p ex)
+              in case deps of
+                   ((retVar,_,_):_) ->
+                     let (g,_,vtxF) = graphFromEdges deps
+                         regV = regionToVar r
+                         -- Vertex of the region variable
+                         regVertex =
+                           case vtxF regV of
+                             Just x  -> x
+                             Nothing -> error $ "No vertex for:" ++ sdoc r
+                         -- Vertex of the return value
+                         retVertex =
+                           case vtxF retVar of
+                             Just x  -> x
+                             Nothing -> error $ "No vertex for:" ++ sdoc retVar
+                         -- The value in the region  escapes the current scope if there's
+                         -- a path between the region variable and the thing returned.
+                         -- TODO: Warn the user when this happens in a fn ?
+                     in do dflags <- getDynFlags
+                           let defaultMul = if (gopt Opt_BigInfiniteRegions dflags) ||
+                                               (gopt Opt_Gibbon1 dflags)
+                                            then BigInfinite
+                                            else Infinite
+                           if path g retVertex regVertex
+                           then Ext <$> LetRegionE (GlobR regV defaultMul) <$> (go rhs)
+                           -- [2018.03.30] - TEMP: Turning off scoped buffers.
+                           -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
+                           else Ext <$> LetRegionE (GlobR regV defaultMul) <$> (go rhs)
+                   [] -> return ex
 
         -- Straightforward recursion
         LetLocE loc le bod -> Ext <$> LetLocE loc le <$> (go bod)

@@ -719,6 +719,21 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion cs''
           tryBindReg (lc$ L2.LetE (vr,[],IntTy,L sl2 $ L2.LitE i) bod'', ty'', fcs)
 
+        -- CSK: I've mostly copied the DataConE case with some minor modifications.
+        -- TODO: Have @vollmerm audit this once.
+        --
+        -- TODO: docs
+        L1.PrimAppE (L1.ReadPackedFile fp tycon _ ty) [] -> do
+          r <- lift $ lift $ gensym "r"
+          loc <- lift $ lift $ freshLocVar "mmap_file"
+          let rhs' = l$ L1.PrimAppE (L1.ReadPackedFile fp tycon (Just r) (PackedTy tycon loc)) []
+          (bod',ty',cs') <- inferExp (extendVEnv vr (PackedTy tycon loc) env) bod dest
+          (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
+          fcs <- tryInRegion cs'
+          tryBindReg ( (l$ Ext$ LetRegionE (MMapR r) $ l$ Ext $ LetLocE loc (StartOfLE (MMapR r)) $
+                        l$ L2.LetE (vr,[],PackedTy tycon loc,rhs') bod'')
+                     , ty', fcs)
+
         -- Don't process the EndOf operation at all, just recur through it
         PrimAppE L1.PEndOf [L la (L1.VarE v)] -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest

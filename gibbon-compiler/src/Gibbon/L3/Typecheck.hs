@@ -22,9 +22,9 @@ import Gibbon.L3.Syntax
 -- | Typecheck a L1 expression
 --
 tcExp :: (Out l, Eq l, FunctionTy (UrTy l)) =>
-         DDefs (UrTy l) -> Env2 (UrTy l) -> (L (PreExp E3Ext l (UrTy l))) ->
+         Bool -> DDefs (UrTy l) -> Env2 (UrTy l) -> (L (PreExp E3Ext l (UrTy l))) ->
          TcM (UrTy l) (L (PreExp E3Ext l (UrTy l)))
-tcExp ddfs env exp@(L p ex) =
+tcExp isPacked ddfs env exp@(L p ex) =
   case ex of
     Ext ext ->
       case ext of
@@ -71,6 +71,8 @@ tcExp ddfs env exp@(L p ex) =
 
         InitSizeOfBuffer{} -> return IntTy
 
+        MMapFileSize{} -> return IntTy
+
         -- Takes in start and end cursors, and returns an Int
         SizeOfPacked start end -> do
           sty  <- lookupVar env start exp
@@ -78,7 +80,6 @@ tcExp ddfs env exp@(L p ex) =
           ety  <- lookupVar env end exp
           ensureEqualTy exp ety CursorTy
           return IntTy
-
 
         -- Takes in a variable, and returns an Int
         SizeOfScalar v -> do
@@ -210,9 +211,11 @@ tcExp ddfs env exp@(L p ex) =
           len2
           return ty
 
-        ReadPackedFile _fp _tycon ty -> do
+        ReadPackedFile _fp _tycon _reg ty -> do
           len0
-          return ty
+          if isPacked
+          then return CursorTy
+          else return ty
 
         PEndOf -> error "Do not use PEndOf after L2."
 
@@ -230,7 +233,7 @@ tcExp ddfs env exp@(L p ex) =
       _ <- ensureEqualTy exp tyRhs ty
       let env' = extendEnv env [(v,ty)]
       -- Check body
-      tcExp ddfs env' e
+      tcExp isPacked ddfs env' e
 
     IfE tst consq alt -> do
       -- Check if the test is a boolean
@@ -265,7 +268,7 @@ tcExp ddfs env exp@(L p ex) =
           when (tye /= CursorTy && not (isPackedTy tye)) $
             throwError $ GenericTC ("Case scrutinee should be packed, or have a cursor type. Got"
                                     ++ sdoc tye) e
-          tcCases ddfs env cs
+          tcCases isPacked ddfs env cs
         oth   -> throwError $ GenericTC ("Case branches have mismatched types: " ++ sdoc oth
                                          ++" , in " ++ sdoc exp) exp
 
@@ -293,13 +296,13 @@ tcExp ddfs env exp@(L p ex) =
     -- oth -> error $ "L1.tcExp : TODO " ++ sdoc oth
 
   where
-    go = tcExp ddfs env
+    go = tcExp isPacked ddfs env
 
 
 -- | Typecheck a L1 program
 --
-tcProg :: Prog3 -> PassM Prog3
-tcProg prg@Prog{ddefs,fundefs,mainExp} = do
+tcProg :: Bool -> Prog3 -> PassM Prog3
+tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
 
   -- Handle functions
   mapM_ fd $ M.elems fundefs
@@ -311,7 +314,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   case mainExp of
     Nothing -> return ()
     Just (e,ty)  ->
-      let res = runExcept $ tcExp ddefs env e
+      let res = runExcept $ tcExp isPacked ddefs env e
       in case res of
         Left err -> error $ sdoc err
         Right ty' -> if tyEq ty ty'
@@ -333,7 +336,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
     -- fd :: forall e l . FunDef Ty1 Exp -> PassM ()
     fd FunDef{funArg,funTy,funBody} = do
       let env' = Env2 (M.singleton funArg inT) (fEnv env)
-          res = runExcept $ tcExp ddefs env' funBody
+          res = runExcept $ tcExp isPacked ddefs env' funBody
           (inT, outT) = funTy
       case res of
         Left err -> error $ sdoc err
@@ -345,15 +348,15 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
       return ()
 
 
-tcCases :: (Eq l, Out l, FunctionTy (UrTy l)) => DDefs (UrTy l) -> Env2 (UrTy l) ->
+tcCases :: (Eq l, Out l, FunctionTy (UrTy l)) => Bool -> DDefs (UrTy l) -> Env2 (UrTy l) ->
            [(DataCon, [(Var, l)], L (PreExp E3Ext l (UrTy l)))] ->
            TcM (UrTy l) (L (PreExp E3Ext l (UrTy l)))
-tcCases ddfs env cs = do
+tcCases isPacked ddfs env cs = do
   tys <- forM cs $ \(c,args',rhs) -> do
            let args  = L.map fst args'
                targs = lookupDataCon ddfs c
                env'  = extendEnv env (zip args targs)
-           tcExp ddfs env' rhs
+           tcExp isPacked ddfs env' rhs
   foldM_ (\acc (ex,ty) ->
             if ty == acc
             then return acc

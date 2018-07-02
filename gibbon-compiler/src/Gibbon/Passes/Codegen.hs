@@ -529,11 +529,15 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                                  unpackName = mkUnpackerName tyc
                                  unpackcall = LetCallT [(outV,PtrTy),(toVar "junk",CursorTy)]
                                                     unpackName [VarTriv (toVar "ptr")] (AssnValsT [] Nothing)
-                             let mmapCode =
+
+                                 mmap_size = varAppend outV "_size"
+
+                                 mmapCode =
                                   [ C.BlockDecl[cdecl| int fd = open( $filename, O_RDONLY); |]
                                   , C.BlockStm[cstm| { if(fd == -1) { fprintf(stderr,"fopen failed\n"); abort(); }} |]
                                   , C.BlockDecl[cdecl| struct stat st; |]
                                   , C.BlockStm  [cstm| fstat(fd, &st); |]
+                                  , C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:mmap_size = st.st_size;|]
                                   , C.BlockDecl[cdecl| $ty:(codegenTy CursorTy) ptr = ($ty:(codegenTy CursorTy)) mmap(0,st.st_size,PROT_READ,MAP_PRIVATE,fd,0); |]
                                   , C.BlockStm[cstm| { if(ptr==MAP_FAILED) { fprintf(stderr,"mmap failed\n"); abort(); }} |]
                                   ]
@@ -544,6 +548,13 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                                        else codegenTail unpackcall (codegenTy voidTy)
                              return $ mmapCode ++ docall
                      | otherwise -> error $ "ReadPackedFile, wrong arguments "++show rnds++", or expected bindings "++show bnds
+
+                 MMapFileSize v -> do
+                       let [(outV,IntTy)] = bnds
+                           -- Must match with mmap_size set by ReadPackedFile
+                           mmap_size = varAppend v "_size"
+                       return [ C.BlockDecl[cdecl| $ty:(codegenTy IntTy) $id:outV = $id:mmap_size; |] ]
+
                  oth -> error$ "FIXME: codegen needs to handle primitive: "++show oth
        return $ pre ++ bod'
 

@@ -229,6 +229,9 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
 
     PrimAppE pr args -> PrimAppE (L3.toL3Prim pr) <$> mapM go args
 
+    LetE (v,_locs, _ty, L _ (PrimAppE (ReadPackedFile path tyc reg ty2) [])) bod ->
+      unLoc <$> cursorizeReadPackedFile ddfs fundefs denv tenv True v path tyc reg ty2 bod
+
     LetE (_v,_locs,_ty, (L _ (MkProdE _ls))) _bod ->
       cursorizeProd False ddfs fundefs denv tenv ex
 
@@ -336,9 +339,9 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
     -- This is simpler than TimeIt below.  While it's out-of-line,
     -- it doesn't need memory allocation (NewBuffer/ScopedBuffer).
     -- This is more like the witness case below.
-    LetE (vr,_locs, _ty, L _ (PrimAppE (ReadPackedFile path tyc ty2) [])) bod ->
-      onDi (l <$> LetE (vr, [], CursorTy, l$ PrimAppE (L3.toL3Prim $ ReadPackedFile path tyc ty2) [])) <$>
-        go (M.insert vr CursorTy tenv) bod
+    LetE (v,_locs, _ty, L _ (PrimAppE (ReadPackedFile path tyc reg ty2) [])) bod ->
+       Di <$> cursorizeReadPackedFile ddfs fundefs denv tenv True v path tyc reg ty2 bod
+
 
     LetE (_v,_locs,_ty, (L _ (MkProdE _ls))) _bod ->
       dl <$> cursorizeProd True ddfs fundefs denv tenv ex
@@ -469,6 +472,20 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
         dl = Di <$> L p
 
 
+cursorizeReadPackedFile ddfs fundefs denv tenv isPackedContext v path tyc reg ty2 bod = do
+  case reg of
+    Nothing -> error $ "cursorizePackedExp: InferLocations did not set the reg for ReadPackedFile."
+    Just reg_var ->
+      mkLets [ (v, [], CursorTy, l$ PrimAppE (L3.toL3Prim $ ReadPackedFile path tyc reg ty2) [])
+             , (reg_var, [], CursorTy, l$ VarE v)
+             , (toEndV reg_var, [], CursorTy, l$ Ext$ L3.AddCursor reg_var (l$ Ext $ L3.MMapFileSize v))] <$>
+         go (M.insert v CursorTy tenv) bod
+
+  where
+    go t e = if isPackedContext
+             then fromDi <$> cursorizePackedExp ddfs fundefs denv t e
+             else cursorizeExp ddfs fundefs denv t e
+
 -- We may sometimes encounter a letloc which uses an unbound location.
 --
 --     letloc loc_b = loc_a + 1
@@ -517,10 +534,12 @@ But Infinite regions do not support sizes yet. Re-enable this later.
     FromEndLE loc -> if isBound loc
                      then Right$ l$ VarE loc
                      else Left$ M.insertWith (++) loc [(lvar,[],CursorTy,l$ VarE loc)] denv
-    StartOfLE r   -> Right$ case r of
-                       GlobR v _ -> l$ VarE v
-                       VarR v    -> l$ VarE v
-                       DynR v _  -> l$ VarE v
+    StartOfLE r   -> case r of
+                       GlobR v _ -> Right$ l$ VarE v
+                       VarR v    -> Right$ l$ VarE v
+                       DynR v _  -> Right$ l$ VarE v
+                       -- TODO: docs
+                       MMapR _v   -> Left$ denv
     InRegionLE{}  -> error $ "cursorizeExp: TODO InRegionLE"
   where
     isBound x = case M.lookup x tenv of
@@ -970,6 +989,8 @@ regionToBinds r =
                    , (toEndV v, [], CursorTy, l$ Ext$ L3.AddCursor v (l$ Ext $ L3.InitSizeOfBuffer mul))]
     DynR v mul  -> [ (v       , [], CursorTy, l$ Ext$ L3.ScopedBuffer mul)
                    , (toEndV v, [], CursorTy, l$ Ext$ L3.AddCursor v (l$ Ext $ L3.InitSizeOfBuffer mul))]
+    -- TODO: docs
+    MMapR _v    -> []
 
 -- ================================================================================
 --                         Dilation Conventions

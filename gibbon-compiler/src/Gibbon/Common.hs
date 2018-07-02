@@ -165,12 +165,16 @@ data Region = GlobR Var Multiplicity -- ^ A global region with lifetime equal to
                                      --   destroyed, tagged by an identifier.
             | VarR Var               -- ^ A region metavariable that can range over
                                      --   either global or dynamic regions.
+            | MMapR Var              -- ^ A region that doesn't result in an (explicit)
+                                     --   memory allocation. It merely ensures that there
+                                     --   are no free locations in the program.
   deriving (Read,Show,Eq,Ord, Generic)
 instance Out Region
 instance NFData Region where
   rnf (GlobR v _) = rnf v
   rnf (DynR v _)  = rnf v
   rnf (VarR v)    = rnf v
+  rnf (MMapR v)   = rnf v
 
 -- | The modality of locations and cursors: input/output, for reading
 -- and writing, respectively.
@@ -199,6 +203,7 @@ regionToVar r = case r of
                   GlobR v _ -> v
                   DynR  v _ -> v
                   VarR  v   -> v
+                  MMapR v   -> v
 
 --------------------------------------------------------------------------------
 -- Helper methods to integrate the Data.Loc with Gibbon
