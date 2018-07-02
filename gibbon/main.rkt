@@ -176,7 +176,10 @@ lit := int | #t | #f
 (define (pack-Int [i : Int]) (integer->integer-bytes i 8 #true))
 (define (pack-Float [f : Float]) (real->floating-point-bytes f 8))
 (define (pack-Bool [b : Bool]) (if b (bytes 1) (bytes 0)))
-(define (pack-Sym [s : Sym]) (integer->integer-bytes (eq-hash-code s) 8 #true))
+(define (pack-Sym [s : Sym]) : Bytes
+  (let ([i : Int (foldr (lambda (i acc) (* i acc)) 1 (map char->integer (string->list (symbol->string s))))])
+    (integer->integer-bytes i 8 #true)))
+
 
 (define-syntax (data stx)
   (syntax-case stx ()
