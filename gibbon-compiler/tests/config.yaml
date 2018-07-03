@@ -143,10 +143,10 @@ tests:
 
   ## Mega benchmarks, which use some dataset
 
-  - name: bench_count_tweets.gib
+  - name: bench_count_hashtag_occ.gib
     mega-bench: true
     bench-fun: bench
-    bench-input: examples/bench_count_tweets.gpkd
+    bench-input: examples/twitter_input.gpkd
 
 
   ## Failing tests:

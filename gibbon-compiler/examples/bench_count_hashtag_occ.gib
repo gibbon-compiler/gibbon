@@ -1,0 +1,31 @@
+#lang gibbon
+
+(require "twitter_types.gib")
+
+(provide (all-defined-out))
+
+;; To run this benchmark:
+;;
+;; stack exec gibbon -- -v1 --bench-print --bench-fun=bench examples/bench_count_hashtag_occ.gib --bench-input=examples/twitter_input.gpkd
+
+(define (count-hashtag-occ-in-tweet-go [acc : Int] [ht : Sym] [xs : Hashtags]) : Int
+  (case xs
+    [(NilHT) acc]
+    [(ConsHT y ys) (if (eq? y ht)
+                       (count-hashtag-occ-in-tweet-go (+ acc 1) ht ys)
+                       (count-hashtag-occ-in-tweet-go acc ht ys))]))
+
+(define (count-hashtag-occ-in-tweet [ht : Sym] [t : Tweet]) : Int
+  (case t
+    [(TweetMD i hs) (count-hashtag-occ-in-tweet-go 0 ht hs)]))
+
+(define (process-tweets [ht : Sym] [xs : Tweets]) : Int
+  (case xs
+    [(NilTW) 0]
+    [(ConsTW y ys) (+ (count-hashtag-occ-in-tweet ht y) (process-tweets ht ys))]))
+
+(define (bench [xs : Tweets]) : Int
+  (process-tweets 'cats xs))
+
+(let [(tweets : Tweets (ConsTW (TweetMD 0 (ConsHT 'cats (ConsHT 'cats (NilHT)))) (ConsTW (TweetMD 1 (ConsHT 'cats (NilHT))) (NilTW))))]
+  (bench tweets))
