@@ -298,7 +298,7 @@ acceptableTimeDelta = 0.05
 data TestConfig = TestConfig
     { skipFailing :: Bool     -- ^ Don't run the expected failures.
     , verbosity   :: Int      -- ^ Ranges from [0..5], and is passed on to Gibbon
-    , summaryFile :: FilePath -- ^ File in which to store the test summary
+    , testSummaryFile :: FilePath -- ^ File in which to store the test summary
     , tempdir     :: FilePath -- ^ Temporary directory to store the build artifacts
     , gRunModes   :: [Mode]   -- ^ When not empty, only run the tests in these modes.
                               --   It's a global parameter i.e it affects ALL tests.
@@ -306,6 +306,8 @@ data TestConfig = TestConfig
                               --   for a particular test, that has higher precedence.
     , checkPerf   :: Bool     -- ^ Should we also run the performance tests ?
     , onlyPerf    :: Bool     -- ^ If true, only run the benchmarks.
+    , recordBenchmarks :: Bool -- ^ If true, record the results of running fresh benchmarks. Used via BenchRunner.
+    , benchSummaryFile :: FilePath -- ^ A CSV file in which to store the benchmarks.
     }
   deriving (Show, Eq, Read, Ord)
 
@@ -313,22 +315,26 @@ defaultTestConfig :: TestConfig
 defaultTestConfig = TestConfig
     { skipFailing = False
     , verbosity   = 1
-    , summaryFile = "gibbon-test-summary.txt"
+    , testSummaryFile = "gibbon-test-summary.txt"
     , tempdir     = "examples/build_tmp"
     , gRunModes   = []
     , checkPerf   = False
     , onlyPerf    = False
+    , recordBenchmarks = False
+    , benchSummaryFile = "gibbon-benchmarks-summary.csv"
     }
 
 instance FromJSON TestConfig where
     parseJSON (Y.Object o) = TestConfig <$>
                                  o .:? "skip-failing" .!= (skipFailing defaultTestConfig) <*>
                                  o .:? "verbosity"    .!= (verbosity defaultTestConfig)   <*>
-                                 o .:? "summary-file" .!= (summaryFile defaultTestConfig) <*>
+                                 o .:? "test-summary-file" .!= (testSummaryFile defaultTestConfig) <*>
                                  o .:? "tempdir"      .!= (tempdir defaultTestConfig)     <*>
                                  o .:? "run-modes"    .!= (gRunModes defaultTestConfig)   <*>
                                  o .:? "check-perf"   .!= (checkPerf defaultTestConfig)   <*>
-                                 o .:? "only-perf"    .!= (onlyPerf defaultTestConfig)
+                                 o .:? "only-perf"    .!= (onlyPerf defaultTestConfig)    <*>
+                                 o .:? "run-benchmarks"   .!= (recordBenchmarks defaultTestConfig) <*>
+                                 o .:? "bench-summary-file" .!= (benchSummaryFile defaultTestConfig)
     parseJSON oth = error $ "Cannot parse TestConfig: " ++ show oth
 
 -- Accept a default test config as a fallback, either 'DefaultTestConfig',
@@ -342,10 +348,10 @@ configParser dtc = TestConfig
                                     help "Verbosity level." <>
                                     showDefault <>
                                     value (verbosity dtc))
-                   <*> strOption (long "summary-file" <>
+                   <*> strOption (long "test-summary-file" <>
                                   help "File in which to store the test summary" <>
                                   showDefault <>
-                                  value (summaryFile dtc))
+                                  value (testSummaryFile dtc))
                    <*> strOption (long "tempdir" <>
                                   help "Temporary directory to store the build artifacts" <>
                                   showDefault <>
@@ -359,6 +365,13 @@ configParser dtc = TestConfig
                    <*> switch (long "only-perf" <>
                                help "*Only* run performance tests." <>
                                showDefault)
+                   <*> switch (long "run-benchmarks" <>
+                               help "Record the results of running fresh benchmarks" <>
+                               showDefault)
+                   <*> strOption (long "bench-summary-file" <>
+                                  help "A CSV file in which to store the benchmarks." <>
+                                  showDefault <>
+                                  value (benchSummaryFile dtc))
 
 --------------------------------------------------------------------------------
 
@@ -553,8 +566,8 @@ doNTrials tc mode t@Test{name,dir,numTrials,sizeParam,moreIters,isMegaBench,benc
                     -- Run it N times, and record the median time.
                     -- ASSUMPTION: If one trial ran without an error, all the others should do too.
                     bench_results <- mapM (\_ -> if isMegaBench
-                                                 then fromRight_ <$> doTrial tc exepath sizeParam iters
-                                                 else fromRight_ <$> doMegaBenchmark tc cpath exepath t)
+                                                 then fromRight_ <$> doMegaBenchmark tc cpath exepath t
+                                                 else fromRight_ <$> doTrial tc exepath sizeParam iters)
                                           [0..numTrials]
                     return (Right bench_results)
                 Left err -> return (Left err)
@@ -698,33 +711,14 @@ mergeTestConfigWithEnv tc = do
         Just "1" -> return $ tc { onlyPerf = True }
         _ -> return tc
 
-main :: IO ()
-main = do
+test_main :: TestConfig -> Tests -> IO ()
+test_main tc tests = do
     putStrLn "Executing TestRunner... \n"
-    -- Parse the config file
-    compiler_dir <- getCompilerDir
-    configstr <- readFile (compiler_dir </> configFile)
-    let tc_mb :: Maybe TestConfig
-        tc_mb = Y.decode (BS.pack configstr)
-
-        tests_mb :: Maybe Tests
-        tests_mb = Y.decode (BS.pack configstr)
-
-    case (tc_mb, tests_mb) of
-        (Nothing,_) -> error $ "Couldn't parse the configuration in " ++ configFile
-        (_,Nothing) -> error $ "Couldn't parse the tests in " ++ configFile
-        (Just file_tc, Just tests) -> do
-            -- Combine the options read from the config file with the command line
-            -- arguments (which have higher precedence).
-            let opts = info (configParser file_tc <**> helper)
-                            (fullDesc <>
-                             header "TestRunner - a simple harnness for the Gibbon testsuite.")
-            tc <- execParser opts >>= mergeTestConfigWithEnv
-            test_run  <- getTestRun tests
-            test_run' <- runTests tc test_run
-            report <- summary tc test_run'
-            writeFile (summaryFile tc) report
-            putStrLn $ "\nWrote " ++ (summaryFile tc) ++ "."
-            putStrLn $ "\n\n" ++ report
-            unless (M.null (unexpectedFailures test_run') && M.null (unexpectedPasses test_run'))
-                exitFailure
+    test_run  <- getTestRun tests
+    test_run' <- runTests tc test_run
+    report <- summary tc test_run'
+    writeFile (testSummaryFile tc) report
+    putStrLn $ "\nWrote " ++ (testSummaryFile tc) ++ "."
+    putStrLn $ "\n\n" ++ report
+    unless (M.null (unexpectedFailures test_run') && M.null (unexpectedPasses test_run'))
+        exitFailure
