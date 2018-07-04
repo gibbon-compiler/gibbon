@@ -54,8 +54,8 @@ bench_main tc (Tests tests) = do
     results <- mapM (go modesToBench) benchmarks
     mc <- getHostname
     let csvs = map (\arg -> intercalate "," (mc:arg)) (concat results)
-    writeFile (benchSummaryFile tc) (unlines csvs)
-    putStrLn $ "Wrote results to" ++ (benchSummaryFile tc) ++ "."
+    appendFile (benchSummaryFile tc) (unlines csvs)
+    putStrLn $ "Wrote results to " ++ (benchSummaryFile tc) ++ "."
   where
     go :: [Mode] -> Test -> IO [[String]]
     go modes t@Test{name,sizeParam,moreIters,numTrials} = do
