@@ -279,18 +279,18 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- Processing the RHS here would cause an infinite loop.
 
           LetE (v,ls,ty@(PackedTy _ loc),e1@(L _ DataConE{})) e2 -> do
-            e2' <- exp fns retlocs eor (M.insert v loc lenv) afterenv env2 e2
+            e2' <- exp fns retlocs eor (M.insert v loc lenv) afterenv (extendVEnv v ty env2) e2
             return $ LetE (v,ls,ty,e1) e2'
 
           LetE (v,ls,ty@(PackedTy _ loc),e1@(L _ (PrimAppE (ReadPackedFile{}) []))) e2 -> do
-            e2' <- exp fns retlocs eor (M.insert v loc lenv) afterenv env2 e2
+            e2' <- exp fns retlocs eor (M.insert v loc lenv) afterenv (extendVEnv v ty env2) e2
             return $ LetE (v,ls,ty,e1) e2'
 
           LetE (v,ls,ty,e1@(L _ ProjE{})) e2 -> do
             let lenv' = case ty of
                           PackedTy _ loc -> M.insert v loc lenv
                           _ -> lenv
-            e2' <- exp fns retlocs eor lenv' afterenv env2 e2
+            e2' <- exp fns retlocs eor lenv' afterenv (extendVEnv v ty env2) e2
             return $ LetE (v,ls,ty,e1) e2'
 
           LetE (v,ls,ty,e1@(L _ MkProdE{})) e2 -> do

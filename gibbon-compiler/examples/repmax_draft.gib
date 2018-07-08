@@ -1,0 +1,51 @@
+#lang gibbon
+
+;; Data Parallel Programming for Irregular Tree Computations
+;; Todd Mytkowicz
+;; https://www.usenix.org/legacy/event/hotpar11/tech/final_files/Meyerovich.pdf
+
+;; The additional Int is an index. This serves the purpose of
+;; storing some state in the datatype itself. See 'buildtree'.
+;; Gibbon cannot yet compile a simpler version of this program --
+;; threading state by returning multiple values from buildtree.
+;;
+;; TODO: fix an unbound location variable in the L2 AST.
+
+(data Tree
+      [Leaf Int Int]
+      [Node Int Tree Tree])
+
+(define (get-index [tr : Tree]) : Int
+  (case tr
+    [(Leaf i j) i]
+    [(Node k left right) k]))
+
+;; (buildtree 1 1) => (Node 3 (Leaf 2 1) (Leaf 3 2))
+(define (buildtree [i : Int] [depth : Int]) : Tree
+  (if (= depth 0)
+      (Leaf (+ i 1) i)
+      (let ([tr0 : Tree (buildtree i (- depth 1))])
+        (let ([j : Int (get-index tr0)])
+          (let ([tr1 : Tree (buildtree j (- depth 1))])
+            (let ([k : Int (get-index tr1)])
+              (Node k tr0 tr1)))))))
+
+(define (max [x : Int] [y : Int]) : Int
+  (if (> x y) x y))
+
+(define (find-max [tr : Tree]) : Int
+  (case tr
+    [(Leaf i j) j]
+    [(Node k left right) (let ([a : Int (find-max left)])
+                           (let ([b : Int (find-max right)])
+                             (max a b)))]))
+
+(define (propogate-max [i : Int] [tr : Tree]) : Tree
+  (case tr
+    [(Leaf j n) (Leaf j i)]
+    [(Node k left right) (Node k (propogate-max i left) (propogate-max i right))]))
+
+(let ([tr2 : Tree (buildtree 1 (size-param))])
+  (let ([m : Int (iterate (find-max tr2))])
+    (let ([tr3 : Tree (iterate (propogate-max m tr2))])
+      (find-max tr3))))

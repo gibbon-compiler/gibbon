@@ -556,7 +556,7 @@ doNTrials tc mode t@Test{name,dir,numTrials,sizeParam,moreIters,isMegaBench,benc
     case toexeExitCode of
         ExitSuccess -> do
             let iters = if mode `elem` moreIters
-                        then 10000000
+                        then 10 ^ 8
                         else 1
             first_trial <- if isMegaBench
                            then doMegaBenchmark tc cpath exepath t
