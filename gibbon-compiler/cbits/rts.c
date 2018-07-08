@@ -325,6 +325,10 @@ inline ChunkTy alloc_chunk(CursorTy end_ptr) {
     CursorTy start = ALLOC_PACKED(total_size);
     CursorTy end = start + newsize;
 
+    #ifdef DEBUG
+    printf("Allocated a chunk: %lld bytes.\n", total_size);
+    #endif
+
     // Link the next chunk's footer
     footer->next = end;
 
@@ -334,36 +338,6 @@ inline ChunkTy alloc_chunk(CursorTy end_ptr) {
     new_footer->refcount_ptr = footer->refcount_ptr;
     new_footer->outset_ptr = NULL;
     new_footer->next = NULL;
-
-    return (ChunkTy) {start , end};
-}
-
-
-// Almost the same as 'alloc_chunk'. But this doesn't set
-// some of the footer arguments and results in ~15-20% speedup.
-// Inlining and the no-gc flag seem to work best.
-// Do not use '-g' with when using this function!
-//
-// TODO: Why no-gc ?
-inline ChunkTy alloc_chunk_no_gc(CursorTy end_ptr) {
-    // Get size from current footer
-    RegionFooter* footer = (RegionFooter *) end_ptr;
-    IntTy newsize = footer->size * 2;
-    IntTy total_size = newsize + sizeof(RegionFooter);
-
-    // Allocate
-    CursorTy start = ALLOC_PACKED(total_size);
-    CursorTy end = start + newsize;
-
-    /* // Link the next chunk's footer */
-    /* footer->next = end; */
-
-    // Write the footer
-    RegionFooter* new_footer = (RegionFooter *) end;
-    new_footer->size = newsize;
-    /* new_footer->refcount_ptr = footer->refcount_ptr; */
-    /* new_footer->outset_ptr = NULL; */
-    /* new_footer->next = NULL; */
 
     return (ChunkTy) {start , end};
 }
@@ -481,14 +455,14 @@ int main(int argc, char** argv)
             i++;
         }
         else if ((strcmp(argv[i], "--bench-input") == 0)) {
-	  if (i+1 >= argc) {
+          if (i+1 >= argc) {
             fprintf(stderr, "Not enough arguments after -file, expected <file>.\n");
             show_usage(argv);
             exit(1);
           }
-	  global_benchfile_param = argv[i+1];
-	  i++;
-	}
+          global_benchfile_param = argv[i+1];
+          i++;
+        }
         // If present, we expect the two arguments to be <size> <iters>
         else if (got_numargs >= 2) {
             fprintf(stderr, "Extra arguments left over: ");

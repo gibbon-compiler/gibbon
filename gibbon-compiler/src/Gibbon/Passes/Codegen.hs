@@ -475,11 +475,8 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                    chunk_start <- gensym "chunk_start"
                    chunk_end   <- gensym "chunk_end"
                    let [(IntTriv i),(VarTriv bound), (VarTriv cur)] = rnds
-                       alloc_chunk = if noGC
-                                     then [ C.BlockDecl [cdecl| $ty:(codegenTy ChunkTy) $id:new_chunk = alloc_chunk_no_gc($id:bound); |] ]
-                                     else [ C.BlockDecl [cdecl| $ty:(codegenTy ChunkTy) $id:new_chunk = alloc_chunk($id:bound); |] ]
-                       bck = alloc_chunk ++
-                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_start = $id:new_chunk.start_ptr; |]
+                       bck = [ C.BlockDecl [cdecl| $ty:(codegenTy ChunkTy) $id:new_chunk = alloc_chunk($id:bound); |]
+                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_start = $id:new_chunk.start_ptr; |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_end = $id:new_chunk.end_ptr; |]
                              , C.BlockStm  [cstm|  $id:bound = $id:chunk_end; |]
                              , C.BlockStm  [cstm|  *($ty:(codegenTy TagTyPacked) *) ($id:cur) = ($int:redirectionAlt); |]
