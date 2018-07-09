@@ -255,10 +255,6 @@ lit := int | #t | #f
 |#
 
 
-#|
-[2018.07.03]: This prevents us from using Gibbon in other Racket scripts. We need a better way to handle this,
-but it can wait until after the POPL submission.
-
 (match (current-command-line-arguments)
   [(vector s i) (size-param  (cast (string->number s) Int))
                 (iters-param (cast (string->number i) Integer))
@@ -269,7 +265,6 @@ but it can wait until after the POPL submission.
   [(vector)     (void)]
   [args (error (format "Usage error.\nExpected 0-2 optional command line arguments <size> <iters>, got ~a:\n  ~a"
                        (vector-length args) args))])
-|#
 
 (module reader syntax/module-reader
   gibbon)
