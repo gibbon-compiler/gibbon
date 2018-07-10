@@ -1,0 +1,48 @@
+#lang gibbon
+
+;; Measure propogate-max in a BST.
+
+(data Tree
+      [Null]
+      [Leaf Int]
+      [Node Int Tree Tree])
+
+;; buildtree:
+;; (helper 0 1) => (Node 1 (Leaf 0) (Node 2 (Null) (Leaf 3)))
+(define (helper [s : Int] [e : Int]) : Tree
+  (if (< e s)
+      (Null)
+      (if (= s e)
+          (Leaf s)
+          (let ([m : Int (+ (div (- e s) 2) s)])
+            (Node m (helper s (- m 1))
+                  (helper (+ m 1) e))))))
+
+(define (max [x : Int] [y : Int]) : Int
+  (if (> x y) x y))
+
+(define (find-max [acc : Int] [tr : Tree]) : Int
+  (case tr
+    [(Null)              acc]
+    [(Leaf n)            (max n acc)]
+    [(Node m left right) (find-max (max m acc) right)]))
+
+(define (sum-tree [tr : Tree]) : Int
+  (case tr
+    [(Null) 0]
+    [(Leaf n) n]
+    [(Node n l r) (+ n (+ (sum-tree l) (sum-tree r)))]))
+
+(define (propogate-max [i : Int] [tr : Tree]) : Tree
+  (case tr
+    [(Null)              (Null)]
+    [(Leaf n)            (Leaf i)]
+    [(Node k left right) (Node i (propogate-max i left) (propogate-max i right))]))
+
+(let ([n : Int (size-param)])
+  ;; (2 ^ (n+1)) - 1
+  (let ([total-nodes : Int (- (exp 2 (+ n 1)) 1)])
+    (let ([tr0 : Tree (helper 0 total-nodes)])
+      (let ([m : Int (find-max 0 tr0)])
+        (let ([tr1 : Tree (iterate (propogate-max m tr0))])
+          (sum-tree tr1))))))
