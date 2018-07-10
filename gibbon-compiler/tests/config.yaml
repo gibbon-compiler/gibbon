@@ -141,6 +141,23 @@ tests:
     bench: true
     more-iters: [pointer, gibbon2]
 
+  - name: bench_repmax1.gib
+    bench: true
+
+  - name: bench_repmax2.gib
+    bench: true
+
+  ## There is no significant difference between compose1 / compose2.
+  ## compose2 should be much faster.
+
+  - name: bench_compose1.gib
+    bench: true
+    more-iters: [pointer, gibbon2]
+
+  - name: bench_compose2.gib
+    bench: true
+    more-iters: [pointer, gibbon2]
+
   ## Mega benchmarks, which use some dataset
 
   - name: bench_count_hashtag_occ.gib
