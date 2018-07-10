@@ -127,11 +127,14 @@ tests:
 
   - name: bench_leftmost.gib
     bench: true
-    more-iters: [pointer, gibbon2]
+    more-iters: [gibbon1, pointer, gibbon2]
 
   - name: bench_rightmost.gib
     bench: true
     more-iters: [pointer, gibbon2]
+
+  - name: bench_build_searchtree.gib
+    bench: true
 
   - name: bench_tree_lookup.gib
     bench: true
