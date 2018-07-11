@@ -43,6 +43,6 @@
   ;; (2 ^ (n+1)) - 1
   (let ([total-nodes : Int (- (exp 2 (+ n 1)) 1)])
     (let ([tr0 : Tree (helper 0 total-nodes)])
-      (let ([m : Int (find-max 0 tr0)])
-        (let ([tr1 : Tree (iterate (propogate-max m tr0))])
-          (sum-tree tr1))))))
+      (let ([tr1 : Tree (iterate (let ([m : Int (find-max 0 tr0)])
+                                    (propogate-max m tr0)))])
+        (sum-tree tr1)))))
