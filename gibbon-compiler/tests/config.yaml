@@ -144,10 +144,10 @@ tests:
     bench: true
     more-iters: [pointer, gibbon2]
 
-  - name: bench_repmax1.gib
+  - name: bench_repmax.gib
     bench: true
 
-  - name: bench_repmax2.gib
+  - name: bench_repconst.gib
     bench: true
 
   ## There is no significant difference between compose1 / compose2.
