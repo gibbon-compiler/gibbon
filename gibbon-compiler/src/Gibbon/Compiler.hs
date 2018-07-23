@@ -412,21 +412,21 @@ benchMainExp l1 = do
       let tmp = "bnch"
           (arg@(L1.PackedTy tyc _),ret) = L1.getFunTy fnname l1
           -- At L1, we assume ReadPackedFile has a single return value:
-          newExp = L1.LetE (toVar tmp, [],
-                            arg,
-                            l$ L1.PrimAppE
-                            (L1.ReadPackedFile benchInput tyc Nothing arg) [])
-                   $ l$ L1.LetE (toVar "benchres", [],
-                             ret,
-                             l$ L1.TimeIt
-                             (l$ L1.AppE fnname []
-                              (l$ L1.VarE (toVar tmp))) ret False)
-                   $
-                    -- FIXME: should actually return the result,
-                    -- as soon as we are able to print it.
-                   (if (gopt Opt_BenchPrint dynflags)
-                    then l$ L1.VarE (toVar "benchres")
-                    else l$ L1.PrimAppE L1.MkTrue [])
+          newExp = L1.TimeIt (
+                        l$ (L1.LetE (toVar tmp, [],
+                                 arg,
+                                 l$ L1.PrimAppE
+                                 (L1.ReadPackedFile benchInput tyc Nothing arg) [])
+                        $ l$ L1.LetE (toVar "benchres", [],
+                                      ret,
+                                      (l$ L1.AppE fnname [] (l$ L1.VarE (toVar tmp))))
+                        $
+                        -- FIXME: should actually return the result,
+                        -- as soon as we are able to print it.
+                        (if (gopt Opt_BenchPrint dynflags)
+                         then l$ L1.VarE (toVar "benchres")
+                         else l$ L1.PrimAppE L1.MkTrue []))
+                   ) ret True
       -- Initialize the main expression with a void type. The typechecker will fix it later.
       return $ l1{ L1.mainExp = Just $ (l$ newExp, L1.voidTy) }
     _ -> return l1
