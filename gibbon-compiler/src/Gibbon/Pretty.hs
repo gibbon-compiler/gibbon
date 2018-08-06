@@ -62,7 +62,7 @@ renderfunc f arg inty outty m = text f <+> colon <> colon <+> inty <+> text "->"
 renderMain :: Doc -> Doc
 renderMain m = text "main" <+> equals $$ nest 4 m
 
-class Expression e => Pretty e where
+class Pretty e where
     pprint :: e -> Doc
 
 instance Pretty (NoExt l d) where
@@ -129,10 +129,10 @@ instance (Show l, Out l, Pretty (L (L2.E2 l (UrTy l)))) => Pretty (L2.E2Ext l (U
                                                      rparen <+>
                                                      pprint e
 
-instance (Show l, Out l) => Pretty (L3.E3Ext l (UrTy l)) where
+instance (Out l) => Pretty (L3.E3Ext l (UrTy l)) where
     pprint = doc -- TODO: replace this with actual pretty printing for L3 forms
 
-instance (Show l, Out l) => Pretty (L2.PreLocExp l) where
+instance (Out l) => Pretty (L2.PreLocExp l) where
     pprint le =
         case le of
           L2.StartOfLE r -> lparen <> text "startof" <+> text (show r) <> rparen
