@@ -208,7 +208,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
       dbgPrintLn passChatterLvl $
           " [compiler] pipeline starting, parsed program: "++
             if dbgLvl >= passChatterLvl+1
-            then "\n"++sepline ++ "\n" ++ sdoc l1
+            then "\n"++sepline ++ "\n" ++ pprinter l1
             else show (length (sdoc l1)) ++ " characters."
 
       -- (Stage 1) Run the program through the interpreter

@@ -404,7 +404,7 @@ isPrim p = S.member p (M.keysSet primMap)
 
 -- ^ A map between SExp-frontend prefix function names, and Gibbon
 -- abstract Primops.
-primMap :: Map Text (Prim Ty1)
+primMap :: Map Text (Prim (UrTy l))
 primMap = M.fromList
   [ ("+", AddP)
   , ("-", SubP)
