@@ -6,6 +6,7 @@
 
 module Gibbon.Pretty ( Printer(..), Pretty(..)) where
 
+import Prelude hiding ((<>))
 import Data.Loc
 import Data.Text (unpack)
 import Text.PrettyPrint.HughesPJ as PP
