@@ -1169,6 +1169,10 @@ prim p = case p of
            L1.RandP-> L1.RandP
            L1.LtP  -> L1.LtP
            L1.GtP  -> L1.GtP
+           L1.LtEqP-> L1.LtEqP
+           L1.GtEqP-> L1.GtEqP
+           L1.OrP  -> L1.OrP
+           L1.AndP -> L1.AndP
            L1.EqSymP -> L1.EqSymP
            L1.EqIntP -> L1.EqIntP
            L1.MkTrue -> L1.MkTrue

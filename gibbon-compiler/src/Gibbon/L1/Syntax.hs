@@ -305,6 +305,8 @@ data Prim ty
           | EqSymP             -- ^ Equality on Sym
           | EqIntP             -- ^ Equality on Int
           | LtP | GtP          -- ^ (<) and (>) for Int's
+          | LtEqP | GtEqP      -- ^ <= and >=
+          | OrP | AndP
           | SymAppend          -- ^ A quick hack till we have deterministic gensym
           | DictInsertP ty     -- ^ takes dict, k,v; annotated with element type
           | DictLookupP ty     -- ^ takes dict,k errors if absent; annotated with element type
@@ -637,6 +639,10 @@ primArgsTy p =
     EqIntP  -> [IntTy, IntTy]
     LtP  -> [IntTy, IntTy]
     GtP  -> [IntTy, IntTy]
+    LtEqP-> [IntTy, IntTy]
+    GtEqP-> [IntTy, IntTy]
+    OrP  -> [BoolTy, BoolTy]
+    AndP -> [BoolTy, BoolTy]
     MkTrue  -> []
     MkFalse -> []
     SymAppend        -> [SymTy, IntTy]
@@ -664,6 +670,10 @@ primRetTy p =
     EqIntP  -> BoolTy
     LtP  -> BoolTy
     GtP  -> BoolTy
+    OrP  -> BoolTy
+    LtEqP-> BoolTy
+    GtEqP-> BoolTy
+    AndP -> BoolTy
     MkTrue  -> BoolTy
     MkFalse -> BoolTy
     SymAppend      -> SymTy

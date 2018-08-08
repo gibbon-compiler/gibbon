@@ -9,7 +9,7 @@
          eq? = Listof True False
          sym-append
 
-         time + * - div mod < > rand exp
+         time + * - div mod < > <= >= rand exp
          size-param iterate
 
          fl- fl+ fl* fl/ flsqrt fl> fl< flsqrt

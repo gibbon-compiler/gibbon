@@ -390,6 +390,18 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                  GtP -> let [(outV,outT)] = bnds
                             [pleft,pright] = rnds in pure
                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) > $(codegenTriv pright)); |]]
+                 LtEqP -> let [(outV,outT)] = bnds
+                              [pleft,pright] = rnds in pure
+                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) <= $(codegenTriv pright)); |]]
+                 GtEqP -> let [(outV,outT)] = bnds
+                              [pleft,pright] = rnds in pure
+                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) >= $(codegenTriv pright)); |]]
+                 OrP -> let [(outV,outT)] = bnds
+                            [pleft,pright] = rnds in pure
+                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) || $(codegenTriv pright)); |]]
+                 AndP -> let [(outV,outT)] = bnds
+                             [pleft,pright] = rnds in pure
+                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) && $(codegenTriv pright)); |]]
                  DictInsertP IntTy -> let [(outV,ty)] = bnds
                                           [(VarTriv dict),keyTriv,valTriv] = rnds in pure
                     [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_int($id:dict, $(codegenTriv keyTriv), $(codegenTriv valTriv)); |] ]

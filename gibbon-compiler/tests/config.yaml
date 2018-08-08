@@ -170,6 +170,8 @@ tests:
 
 
   ## Failing tests:
+  - name: test00f_and.gib
+    failing: [gibbon2, gibbon1]
   - name: test04c_ifvector.gib
     failing: [gibbon2, gibbon1]
   - name: test06h_rec.gib

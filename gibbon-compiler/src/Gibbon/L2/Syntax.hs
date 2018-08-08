@@ -362,6 +362,10 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         EqIntP    -> EqIntP
         LtP       -> LtP
         GtP       -> GtP
+        LtEqP     -> LtEqP
+        GtEqP     -> GtEqP
+        OrP       -> OrP
+        AndP      -> AndP
         MkTrue    -> MkTrue
         MkFalse   -> MkFalse
         SizeParam -> SizeParam

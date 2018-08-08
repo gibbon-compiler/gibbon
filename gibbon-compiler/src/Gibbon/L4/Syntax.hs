@@ -150,7 +150,8 @@ data Ty
 data Prim
     = AddP | SubP | MulP
     | DivP | ModP
-    | EqP | LtP | GtP
+    | EqP | LtP | GtP | LtEqP | GtEqP
+    | OrP | AndP
     | ExpP
     | RandP
     | SizeParam

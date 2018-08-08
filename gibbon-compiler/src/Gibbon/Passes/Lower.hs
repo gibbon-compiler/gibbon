@@ -828,6 +828,10 @@ prim p =
     EqIntP -> T.EqP
     LtP    -> T.LtP
     GtP    -> T.GtP
+    LtEqP  -> T.LtEqP
+    GtEqP  -> T.GtEqP
+    OrP    -> T.OrP
+    AndP   -> T.AndP
     SizeParam -> T.SizeParam
     DictInsertP ty -> T.DictInsertP $ typ ty
     DictLookupP ty -> T.DictLookupP $ typ ty

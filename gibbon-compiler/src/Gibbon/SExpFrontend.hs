@@ -417,8 +417,14 @@ primMap = M.fromList
   , ("=", EqIntP)
   , ("<", LtP)
   , (">", GtP)
+  , ("<=", LtEqP)
+  , (">=", GtEqP)
+  , ("or" , OrP)
+  , ("and", AndP)
   , ("size-param", SizeParam)
   , ("sym-append", SymAppend)
+  , ("True", MkTrue)
+  , ("False", MkFalse)
   ]
 
 prim :: Text -> Prim Ty1

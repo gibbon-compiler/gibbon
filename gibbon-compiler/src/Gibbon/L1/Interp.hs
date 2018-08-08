@@ -191,6 +191,8 @@ applyPrim rc p ls =
    (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
    (LtP,[VInt x, VInt y]) -> VBool (x < y)
    (GtP,[VInt x, VInt y]) -> VBool (x > y)
+   (LtEqP,[VInt x, VInt y]) -> VBool (x <= y)
+   (GtEqP,[VInt x, VInt y]) -> VBool (x >= y)
    ((DictInsertP _ty),[VDict mp, key, val]) -> VDict (M.insert key val mp)
    ((DictLookupP _),[VDict mp, key])        -> mp # key
    ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)
