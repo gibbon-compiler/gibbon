@@ -62,8 +62,8 @@ shakeTreeExp = go
                     in CaseE (go e) mp'
 
     (DataConE c loc es) -> DataConE c loc $ map (go) es
-    (TimeIt e t b)     -> TimeIt (go e) t b
-
+    (TimeIt e t b)      -> TimeIt (go e) t b
+    (ParE a b)          -> ParE (go a) (go b)
     (MapE (v,t,e') e)   -> MapE (v,t,go e') (go e)
     (FoldE (v1,t1,e1) (v2,t2,e2) e3) ->
          FoldE (v1,t1,go e1) (v2,t2,go e2)
@@ -108,6 +108,8 @@ hasEffect (L _ rhs) =
       DataConE _ _ _ -> True
 
       TimeIt{} -> True -- Yes, has effect of printing!
+
+      ParE a b -> hasEffect a || hasEffect b
 
       MapE _ _ -> error "hasEffect: FIXME MapE"
       FoldE _ _ _ -> error "hasEffect: FIXME FoldE"

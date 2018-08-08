@@ -257,6 +257,8 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
 
     TimeIt e ty b -> TimeIt <$> go e <*> pure (stripTyLocs ty) <*> pure b
 
+    ParE a b -> ParE <$> go a <*> go b
+
     -- Eg. leftmost
     Ext ext ->
       case ext of
@@ -417,7 +419,12 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
 
     TimeIt e t b -> do
       Di e' <- go tenv e
-      return $ Di $ l$ TimeIt e' (L3.cursorizeTy t) b
+      return $ dl$ TimeIt e' (L3.cursorizeTy t) b
+
+    ParE a b -> do
+       Di a' <- go tenv a
+       Di b' <- go tenv b
+       return $ dl$ ParE a' b'
 
     Ext ext ->
       case ext of

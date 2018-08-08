@@ -103,6 +103,7 @@ specializeFunc VarDef {varName, varBody} (t0 , t1) varMap =
                                  where f = (\ (ds,vs,es) -> (ds,vs,go es))
           LetE (x,ls,d,a) bd -> L loc $ LetE (x,ls,d, go a) $ go bd
           TimeIt x d p       -> L loc $ TimeIt (go x) d p
+          ParE a b           -> L loc $ ParE (go a) (go b)
           Ext (PolyAppE a d) -> L loc $ Ext $ PolyAppE (go a) (go d)
           MapE _ _     -> error $ "not implemented"
           FoldE _ _ _  -> error $ "not implemented"
@@ -130,6 +131,7 @@ replaceLam (L _ (Ext (LambdaE (var,_) body))) ex = replace var ex body
           CaseE k ls         -> L loc $ CaseE k $ L.map (\ (ds,vs,es) -> (ds,vs,go es)) ls
           LetE (x,ls,d,a) bd -> L loc $ LetE (x,ls,d,go a) $ go bd
           TimeIt x d p       -> L loc $ TimeIt (go x) d p
+          ParE a c           -> L loc $ ParE (go a) (go c)
           Ext (LambdaE x bd) -> L loc $ Ext $ LambdaE x $ go bd
           Ext (PolyAppE a d) -> L loc $ Ext $ PolyAppE (go a) (go d)
           MapE _ _     -> error $ "not implemented"

@@ -157,6 +157,9 @@ data PreExp (ext :: * -> * -> *) loc dec =
     -- ^ The boolean being true indicates this TimeIt is really (iterate _)
     -- This iterate form is used for criterion-style benchmarking.
 
+   | ParE EXP EXP
+    -- ^ Parallel tuple combitor.
+
    -- Limited list handling:
    -- TODO: RENAME to "Array".
    -- TODO: Replace with Generate, add array reference.
@@ -220,6 +223,7 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         FoldE {}   -> False
         AppE  {}   -> False
         TimeIt {}  -> False
+        ParE{}     -> False
         Ext ext -> isTrivial ext
 
 
@@ -253,6 +257,8 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
           gFreeVars r1 `S.union` gFreeVars r2 `S.union`
           (S.delete v1 $ S.delete v2 $ gFreeVars bod)
 
+      ParE a b -> gFreeVars a `S.union` gFreeVars b
+
       Ext q -> gFreeVars q
 
 
@@ -284,6 +290,8 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
           oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                         ++"\nExpression:\n  "++ sdoc ex
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
+
+      ParE a b -> ProdTy $ L.map (gTypeExp ddfs env2) [a,b]
 
       CaseE _ mp ->
         let (c,args,e) = head mp
@@ -471,6 +479,8 @@ subst old new (L p0 ex) = L p0 $
     DataConE loc k ls -> DataConE loc k $ L.map go ls
     TimeIt e t b      -> TimeIt (go e) t b
     IfE a b c         -> IfE (go a) (go b) (go c)
+    ParE a b          -> ParE (go a) (go b)
+
     MapE (v,t,rhs) bod | v == old  -> MapE (v,t, rhs)    (go bod)
                        | otherwise -> MapE (v,t, go rhs) (go bod)
     FoldE (v1,t1,r1) (v2,t2,r2) bod ->
@@ -503,6 +513,7 @@ substE old new (L p0 ex) = L p0 $
     DataConE loc k ls -> DataConE loc k $ L.map go ls
     TimeIt e t b      -> TimeIt (go e) t b
     IfE a b c         -> IfE (go a) (go b) (go c)
+    ParE a b          -> ParE (go a) (go b)
     MapE (v,t,rhs) bod | VarE v == unLoc old  -> MapE (v,t, rhs)    (go bod)
                        | otherwise -> MapE (v,t, go rhs) (go bod)
     FoldE (v1,t1,r1) (v2,t2,r2) bod ->
@@ -528,6 +539,7 @@ hasTimeIt (L _ rhs) =
       IfE a b c    -> hasTimeIt a || hasTimeIt b || hasTimeIt c
       CaseE _ ls   -> any hasTimeIt [ e | (_,_,e) <- ls ]
       LetE (_,_,_,e1) e2 -> hasTimeIt e1 || hasTimeIt e2
+      ParE a b           -> hasTimeIt a || hasTimeIt b
       MapE (_,_,e1) e2   -> hasTimeIt e1 || hasTimeIt e2
       FoldE (_,_,e1) (_,_,e2) e3 -> hasTimeIt e1 || hasTimeIt e2 || hasTimeIt e3
       Ext _ -> False

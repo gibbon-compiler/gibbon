@@ -205,7 +205,14 @@ tcExp ddfs env exp@(L p ex) =
       ty <- go e
       return ty
 
-    oth -> error $ "L1.tcExp : TODO " ++ sdoc oth
+    ParE a b -> do
+      aty <- go a
+      bty <- go b
+      return (ProdTy [aty, bty])
+
+    Ext{} -> error $ "L1.Typecheck: Unexpected " ++ sdoc ex
+    MapE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc ex
+    FoldE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc ex
 
   where
     go = tcExp ddfs env

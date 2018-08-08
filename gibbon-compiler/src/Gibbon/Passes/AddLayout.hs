@@ -148,6 +148,7 @@ addLayoutExp tycons ddfs ienv (L p ex) = L p <$>
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
+    ParE a b -> ParE <$> (go a) <*> go b
     Ext _ -> return ex
     MapE{}  -> error "addLayoutExp: TODO MapE"
     FoldE{} -> error "addLayoutExp: TODO FoldE"
@@ -247,6 +248,7 @@ needsLayoutExp ddefs fundefs tyenv (L _p ex) =
     ProjE{}    -> S.empty
     DataConE{} -> S.empty
     TimeIt{}   -> S.empty
+    ParE a b   -> go a `S.union` go b
     Ext ext ->
       case ext of
         LetRegionE _ bod -> go bod

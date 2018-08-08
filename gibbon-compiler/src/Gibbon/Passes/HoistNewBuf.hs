@@ -72,6 +72,8 @@ hoistExp _ ex0 = return $ gocap ex0
     (DataConE c loc es) -> let (ltss,es') = unzip $ L.map go es in
                         (concat ltss, DataConE c loc es')
 
+    (ParE a b) -> ([], ParE (gocap a) (gocap b))
+
     (Ext _) -> ([], e0)
 
     -- (MapE (v,t,e') e) ->

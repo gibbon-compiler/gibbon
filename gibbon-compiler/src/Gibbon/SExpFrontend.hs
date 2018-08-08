@@ -148,6 +148,7 @@ tagDataCons ddefs = go allCons
        MkProdE ls     -> MkProdE $ L.map (go cons) ls
        DataConE loc k ls -> DataConE loc k $ L.map (go cons) ls
        TimeIt e t b -> TimeIt (go cons e) t b
+       ParE a b  -> ParE (go cons a) (go cons b)
        IfE a b c -> IfE (go cons a) (go cons b) (go cons c)
 
        MapE  (v,t,e) bod -> MapE (v,t, go cons e) (go cons bod)

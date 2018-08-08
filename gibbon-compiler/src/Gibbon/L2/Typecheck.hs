@@ -319,6 +319,11 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                -- ensureEqualTy exp ty ty1
                return (ty1,tstate1)
 
+      ParE a b -> do
+        (aty, tstate1) <- recur tstatein a
+        (bty, tstate2) <- recur tstate1 b
+        return (ProdTy [aty, bty], tstate2)
+
       MapE _ _ -> throwError $ UnsupportedExpTC exp
 
       FoldE _ _ _ -> throwError $ UnsupportedExpTC exp

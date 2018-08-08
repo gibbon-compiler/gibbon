@@ -1102,6 +1102,8 @@ assocLoc lv ul = do
   m <- lift $ St.get
   lift $ St.put $ M.insert lv ul m
 
+-- TODO: If operating in Gibbon2 mode, we can just add an IndirectionE here, and
+-- get rid of RemoveCopies.
 -- | The copy repair tactic:
 copy :: Result -> LocVar -> TiM Result
 copy (e,ty,cs) lv1 =

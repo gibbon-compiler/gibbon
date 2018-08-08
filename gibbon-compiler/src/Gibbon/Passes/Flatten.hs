@@ -188,5 +188,11 @@ exp ddfs env2 (L sloc e0) =
     TimeIt e _t b -> do
       (bnd,e') <- go e
       return ([], TimeIt (flatLets bnd e') (gTypeExp ddfs env2 e) b)
+
+    ParE a b -> do
+      (bnd ,a') <- go a
+      (bnd2,b') <- go b
+      return ([], ParE (flatLets bnd a') (flatLets bnd2 b'))
+
     MapE _ _      -> error "FINISHLISTS"
     FoldE _ _ _   -> error "FINISHLISTS"

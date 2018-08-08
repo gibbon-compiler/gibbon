@@ -91,6 +91,9 @@ freshNames (L1.Prog defs funs main) =
                 e' <- freshExp vs e
                 return $ L1.TimeIt e' t b
 
+              ParE a b -> do
+                ParE <$> freshExp vs a <*> freshExp vs b
+
               L1.MapE (v,t,b) e -> do
                 b' <- freshExp vs b
                 e' <- freshExp vs e

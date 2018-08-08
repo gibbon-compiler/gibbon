@@ -468,7 +468,7 @@ defaultPackedRunPassM :: PassM a -> (a,Int)
 defaultPackedRunPassM = runPassM (defaultConfig { dynflags = dflags}) 0
   where dflags = gopt_set Opt_Packed defaultDynFlags
 
-getDynFlags :: PassM DynFlags
+getDynFlags :: MonadReader Config m => m DynFlags
 getDynFlags = dynflags <$> ask
 
 -- Gibbon config:

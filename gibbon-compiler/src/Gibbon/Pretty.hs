@@ -111,6 +111,7 @@ instance (Show l, Out l, Eq l, Ord l, Pretty (e l (UrTy l)), Expression (e l (Ur
                                else doc l) <+>
                               lparen <> hcat (punctuate (text ",") (map pprint es)) <> rparen
           TimeIt e _ty _b -> pprint e
+          ParE a b -> pprint a <+> text "||" <+> pprint b
           Ext ext -> pprint ext
           MapE{} -> error $ "Unexpected form in program: " ++ show ex0
           FoldE{} -> error $ "Unexpected form in program: " ++ show ex0

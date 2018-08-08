@@ -140,6 +140,8 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
       e'  <- go env2 e
       return $ LetE (tmp,[],ty, l$ TimeIt e' ty b) (l$ VarE tmp)
 
+    ParE a b -> ParE <$> go env2 a <*> go env2 b
+
     Ext{}  -> return ex
     MapE{}  -> error "unariserExp: MapE TODO"
     FoldE{} -> error "unariserExp: FoldE TODO"

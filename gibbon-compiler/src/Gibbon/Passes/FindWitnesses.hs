@@ -119,6 +119,8 @@ findWitnesses = mapMExprs fn
             else (L p) $ IfE (go mp a) -- Otherwise we duplicate...
                              (go mp b)
                              (go mp c)
+        -- Like MkProdE
+        ParE a b -> handle' $ ParE (goClear a) (goClear b)
         MapE  (v,t,rhs) bod -> handle' $ MapE (v,t,rhs) (goClear bod)
         FoldE (v1,t1,r1) (v2,t2,r2) bod -> handle' $ FoldE (v1,t1,r1) (v2,t2,r2) (goClear bod)
 

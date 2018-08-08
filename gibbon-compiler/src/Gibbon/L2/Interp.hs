@@ -215,6 +215,11 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
                else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
               return $! (val, sz)
 
+        ParE a b -> do
+          (a',sza) <- go env sizeEnv a
+          (b',szb) <- go env sizeEnv b
+          return (VProd [a', b'], appendSize sza szb)
+
         MapE{} -> error $ "L2.Interp: TODO " ++ sdoc ex
         FoldE{} -> error $ "L2.Interp: TODO " ++ sdoc ex
 
@@ -232,3 +237,11 @@ type SizeEnv = M.Map Var Size
 sizeToInt :: Size -> Int
 sizeToInt (SOne i)   = i
 sizeToInt (SMany ls) = sum $ map sizeToInt ls
+
+appendSize :: Size -> Size -> Size
+appendSize a b =
+    case (a,b) of
+        (SOne i, SOne j)     -> SOne (i+j)
+        (SMany xs, SMany ys) -> SMany (xs ++ ys)
+        (x, SMany xs) -> SMany (x:xs)
+        (SMany xs, x) -> SMany (xs++[x])

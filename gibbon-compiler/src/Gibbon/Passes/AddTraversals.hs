@@ -64,6 +64,7 @@ addTraversalsExp ddefs fundefs tyenv context (L p ex) = L p <$>
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
+    ParE a b -> ParE <$> go a <*> go b
     Ext ext ->
       case ext of
         LetRegionE reg bod -> Ext <$> LetRegionE reg <$> go bod

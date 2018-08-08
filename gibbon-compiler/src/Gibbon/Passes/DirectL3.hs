@@ -50,6 +50,7 @@ directL3 (Prog ddfs fndefs mnExp) = do
         CaseE scrt ls -> CaseE (go scrt) $ L.map (\(dcon,vs,rhs) -> (dcon,vs,go rhs)) ls
         DataConE loc dcon args -> DataConE loc dcon $ L.map go args
         TimeIt arg ty b -> TimeIt (go arg) ty b
+        ParE a b -> ParE (go a) (go b)
         Ext _   -> error "directL3: Ext"
         MapE{}  -> error "directL3: todo MapE"
         FoldE{} -> error "directL3: todo FoldE"

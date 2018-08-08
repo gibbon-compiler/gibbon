@@ -162,6 +162,10 @@ interp rc _ddefs fenv = go M.empty
                else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
               return $! val
 
+          ParE a b -> do
+            a' <- go env a
+            b' <- go env b
+            return $ VProd [a', b']
 
           IfE a b c -> do v <- go env a
                           case v of

@@ -335,6 +335,7 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         CaseE scrt brs     -> CaseE (revertExp scrt) (L.map docase brs)
         DataConE _ dcon ls -> DataConE () dcon $ L.map revertExp ls
         TimeIt e ty b -> TimeIt (revertExp e) (stripTyLocs ty) b
+        ParE a b -> ParE (revertExp a) (revertExp b)
         Ext ext ->
           case ext of
             LetRegionE _ bod -> unLoc $ revertExp bod
@@ -400,6 +401,7 @@ occurs w (L _ ex) =
     CaseE e brs -> occurs w e || any (\(_,_,bod) -> occurs w bod) brs
     DataConE _ _ ls -> any (occurs w) ls
     TimeIt e _ _ -> occurs w e
+    ParE a b -> occurs w a || occurs w b
     Ext ext ->
       case ext of
         LetRegionE _ bod -> occurs w bod

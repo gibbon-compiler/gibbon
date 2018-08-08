@@ -290,6 +290,11 @@ tcExp isPacked ddfs env exp@(L p ex) =
       ty <- go e
       return ty
 
+    ParE a b -> do
+      aty <- go a
+      bty <- go b
+      return (ProdTy [aty, bty])
+
     MapE{}  -> throwError $ UnsupportedExpTC exp
     FoldE{} -> throwError $ UnsupportedExpTC exp
 

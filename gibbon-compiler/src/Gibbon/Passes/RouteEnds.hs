@@ -357,6 +357,8 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  e' <- go e
                  return $ TimeIt e' ty b
 
+          ParE a b -> ParE <$> go a <*> go b
+
           Ext (LetRegionE r e) -> do
                  e' <- go e
                  return $ Ext (LetRegionE r e')
