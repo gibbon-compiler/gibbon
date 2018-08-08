@@ -6,7 +6,7 @@
          for/list for/fold or and
          Vector vector vector-ref
          list and empty? error
-         ||
+         par
          eq? = Listof True False
          sym-append
 
@@ -209,7 +209,7 @@ lit := int | #t | #f
 (define True  : Bool #t)
 (define False : Bool #f)
 
-(define (|| [a : Any] [b : Any]) : (Pairof Any Any)
+(define (par [a : Any] [b : Any]) : (Pairof Any Any)
   (cons a b))
 
 (begin-encourage-inline

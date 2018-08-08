@@ -579,6 +579,8 @@ inferExp env@FullEnv{dataDefs}
         do (e',ty',cs') <- inferExp env e dest
            return (lc$ TimeIt e' ty' b, ty', cs')
 
+    L1.ParE a b -> err$ "inferExp: ParE"
+
     L1.DataConE () k [] ->
         case dest of
           NoDest -> err $ "Expected single location destination for DataConE"
@@ -804,6 +806,8 @@ inferExp env@FullEnv{dataDefs}
           tryBindReg (lc$ L2.LetE (vr,[],ty,L sl2 $ TimeIt e' ty b) bod'',
                     ty'', fcs)
 
+        ParE a b -> err$ "inferExp: ParE as a RHS"
+
         MapE{} -> err$ "MapE unsupported"
         FoldE{} -> err$ "FoldE unsupported"
         Ext{} -> err$ "Not expecting any Ext in inferLocs"
@@ -876,6 +880,9 @@ finishExp (L i e) =
                             return $ PackedTy tc lv'
                      _ -> return t
              return $ l$ TimeIt e1' t' b
+
+      ParE a b -> err$ "finishExp: ParE"
+
       Ext (LetRegionE r e1) -> do
              e1' <- finishExp e1
              return $ l$ Ext (LetRegionE r e1')
@@ -930,6 +937,9 @@ cleanExp (L i e) =
                            in (l$ DataConE lv dc es', S.union (S.singleton lv) $ S.unions ls')
       TimeIt e d b -> let (e',s') = cleanExp e
                       in (l$ TimeIt e' d b, s')
+
+      ParE a b -> err$ "cleanExp: ParE"
+
       Ext (LetRegionE r e) -> let (e',s') = cleanExp e
                               in (l$ Ext (LetRegionE r e'), s')
       Ext (LetLocE loc lex e) -> let (e',s') = cleanExp e

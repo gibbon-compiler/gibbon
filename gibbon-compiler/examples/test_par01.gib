@@ -1,0 +1,7 @@
+#lang gibbon
+
+(data List
+      [Nil]
+      [Cons Int List])
+
+(par (Cons 1 (Nil)) (Cons 2 (Nil)))

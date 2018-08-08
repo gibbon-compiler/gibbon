@@ -341,6 +341,9 @@ exp se =
 
    Ls3 l "vector-ref" evec (G _ (HSInt ind)) ->
        loc l $ ProjE (fromIntegral ind) (exp evec)
+
+   Ls3 l "par" a b -> loc l $ ParE (exp a) (exp b)
+
    Ls0 (A l "vector" : es) -> loc l $ MkProdE $ L.map exp es
 
    -- Dictionaries require type annotations for now.  No inference!

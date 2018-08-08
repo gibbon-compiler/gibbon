@@ -15,6 +15,7 @@ import Data.Either (partitionEithers)
 import Data.Foldable (foldrM)
 import Data.Loc
 import Data.Maybe (catMaybes)
+import Data.Text (pack)
 import Language.Haskell.Exts.Simple.Parser
 import qualified Language.Haskell.Exts.Simple.Syntax as S
 import qualified Data.Map as M
@@ -22,6 +23,7 @@ import qualified Data.List as L
 
 import Gibbon.L1.Syntax as L1
 import Gibbon.Common as C hiding (l)
+import Gibbon.SExpFrontend (primMap)
 import Prelude hiding (exp)
 
 --------------------------------------------------------------------------------
@@ -178,6 +180,9 @@ desugarExp e = L NoLoc <$>
         e' <- desugarExp e0
         Right $ unLoc e'
 
+      S.InfixApp e1 (S.QVarOp (S.UnQual (S.Symbol "||"))) e2 ->
+        ParE <$> desugarExp e1 <*> desugarExp e2
+
       S.InfixApp e1 op e2 -> do
         e1' <- desugarExp e1
         e2' <- desugarExp e2
@@ -188,15 +193,11 @@ desugarExp e = L NoLoc <$>
 
 -------------------------------------------------------------------------------
 
--- TODO: These are not the only primops we have!
 desugarOp :: S.QOp -> Ds (Prim Ty1)
 desugarOp (S.QVarOp (S.UnQual (S.Symbol op))) =
-  case op of
-    "+" -> return AddP
-    "-" -> return SubP
-    "*" -> return MulP
-    _   -> err $ "Unsupported binary op: " ++ show op
-
+  case M.lookup (pack op) primMap of
+    Just pr -> return pr
+    Nothing -> err $ "Unsupported binary op: " ++ show op
 desugarOp op = err $ "Unsupported op: " ++ show op
 
 --------------------------------------------------------------------------------
