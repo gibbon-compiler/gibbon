@@ -24,7 +24,7 @@ import qualified Gibbon.L4.Syntax as L4
 class Printer a where
     pprinter :: a -> String
 
-instance (Pretty ex, Pretty (TyOf ex), FunctionTy (TyOf ex)) => Printer (Prog ex) where
+instance (Pretty ex, Pretty (ArrowTy (TyOf ex))) => Printer (Prog ex) where
     pprinter (Prog _ funs me) =
         let meDoc = case me of
                       Nothing -> empty
@@ -38,15 +38,30 @@ instance Printer L4.Prog where
 doubleColon :: Doc
 doubleColon = colon <> colon
 
-renderfunc :: forall ex. (Pretty ex, Pretty (TyOf ex), FunctionTy (TyOf ex)) => FunDef ex -> Doc
-renderfunc FunDef{funName,funArg,funTy,funBody} = renderTy $$ renderBod
+renderfunc :: forall ex. (Pretty ex, Pretty (ArrowTy (TyOf ex)))
+           => FunDef ex -> Doc
+renderfunc FunDef{funName,funArg,funTy,funBody} = text (fromVar funName) <+> doubleColon <+> pprint funTy $$
+                                                  renderBod <> text "\n"
     where
       renderBod :: Doc
       renderBod = text (fromVar funName) <+> text (fromVar funArg) <+> equals $$ nest 4 (pprint funBody)
 
-      renderTy :: Doc
-      renderTy = text (fromVar funName) <+> doubleColon <+> pprint (inTy @(TyOf ex) funTy) <+>
-                 text "->" <+> pprint (outTy @(TyOf ex) funTy)
+-- Function type for L1 and L3
+instance Pretty (UrTy (), UrTy ()) where
+    pprint (a,b) = pprint a <+> text "->" <+> pprint b
+
+instance Pretty ArrowTy2 where
+    -- TODO: start metadata at column 0 instead of aligning it with the type
+    pprint fnty = pprint (arrIn fnty) <+> text "->" <+> pprint (arrOut fnty) $$
+                  braces (text "locvars" <+> doc (locVars fnty) <> comma $$
+                          text "effs: " <+> doc (arrEffs fnty) <> comma $$
+                          text "locrets: " <+> doc (locRets fnty))
+
+-- renderFnTy :: forall ex. (Pretty ex, Pretty (TyOf ex), FunctionTy (TyOf ex), Pretty (ArrowTy (TyOf ex)))
+--            => FunDef ex -> Doc
+-- renderFnTy FunDef{funTy,funName} =
+--     text (fromVar funName) <+> doubleColon <+> pprint (inTy @(TyOf ex) funTy) <+>
+--     text "->" <+> pprint (outTy @(TyOf ex) funTy)
 
 renderMain :: Doc -> Doc
 renderMain m = text "main" <+> equals $$ nest 4 m
@@ -62,7 +77,10 @@ instance Pretty (PreExp e l d) => Pretty (L (PreExp e l d)) where
 
 instance (Show l, Ord l, Out l) => Pretty (Prim (UrTy l)) where
     pprint pr =
-        let renderPrim = M.fromList $ map (\(a,b) -> (b,a)) (M.toList primMap)
+        -- We add PEndOf here because it's not exposed to the users, and as a result,
+        -- is not defined as a primop in the parser primMap.
+        let renderPrim = M.union (M.singleton PEndOf "pendof") $
+                         M.fromList (map (\(a,b) -> (b,a)) (M.toList primMap))
         in text (unpack (renderPrim # pr))
 
 instance (Show l, Out l, Eq l, Ord l, Pretty (e l (UrTy l)), Expression (e l (UrTy l)), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)), Pretty (UrTy l), Pretty l) => Pretty (PreExp e l (UrTy l)) where
