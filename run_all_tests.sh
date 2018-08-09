@@ -40,7 +40,7 @@ stack --version | head
 racket --version
 gcc --version
 
-# Set TREELANGDIR:
+# Set GIBBONDIR:
 source set_env.sh
 
 export PLTADDONDIR=`pwd`/.racket_sandbox/

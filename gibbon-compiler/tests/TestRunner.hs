@@ -698,7 +698,7 @@ configFile = "tests/config.yaml"
 getCompilerDir :: IO String
 getCompilerDir = do
     env <- getEnvironment
-    case lookup "TREELANGDIR" env of
+    case lookup "GIBBONDIR" env of
         Just p  -> return (p </> "gibbon-compiler")
         Nothing -> return ("") -- Assume that we're running from the compiler DIR.
 

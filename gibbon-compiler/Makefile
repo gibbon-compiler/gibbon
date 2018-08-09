@@ -1,6 +1,6 @@
-TREELANGDIR ?= ../
+GIBBONDIR ?= ../
 
-SANDBOXDIR= $(TREELANGDIR)/.racket_sandbox/
+SANDBOXDIR= $(GIBBONDIR)/.racket_sandbox/
 
 RUNRACKET= racket -A $(SANDBOXDIR)
 

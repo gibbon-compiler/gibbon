@@ -1,8 +1,8 @@
 # This file must be sourced with ". set_env.sh" or "source set_env.sh"
 
-export TREELANGDIR=`pwd`
+export GIBBONDIR=`pwd`
 
-export PLTADDONDIR=$TREELANGDIR/.racket_sandbox/
+export PLTADDONDIR=$GIBBONDIR/.racket_sandbox/
 
 STK="stack"
 BUILD_ARGS=" --install-ghc build "
@@ -10,7 +10,7 @@ BUILD_ARGS=" --install-ghc build "
 # A shortcut to make things easier:
 function tc() {
     cur=`pwd`
-    cd $TREELANGDIR/gibbon-compiler/
+    cd $GIBBONDIR/gibbon-compiler/
     $STK $BUILD_ARGS
     if [ "$?" == "0" ]; then
        # Version 1: find the executable, but execute natively:
@@ -43,7 +43,7 @@ function gibn() {
 
 function gibd() {
     # --docker-auto-pull isn't working:
-    (cd $TREELANGDIR/gibbon-compiler/ && stack docker pull 2> /dev/null) && \
+    (cd $GIBBONDIR/gibbon-compiler/ && stack docker pull 2> /dev/null) && \
      STK="stack --docker " tc $@
 }
 
@@ -51,7 +51,7 @@ function gibd() {
 # A quick verison that doesn't check for recompile.
 function tcq() {    
     cur=`pwd`
-    cd $TREELANGDIR/gibbon-compiler/
+    cd $GIBBONDIR/gibbon-compiler/
     CMD=`stack exec -- which gibbon`
     cd $cur
     $CMD $@
