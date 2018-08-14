@@ -97,8 +97,7 @@ import qualified Control.Monad.Trans.State.Strict as St
 import Control.Monad
 import Control.Monad.Trans.Except
 import Control.Monad.Trans (lift)
-import Debug.Trace
-
+import Text.PrettyPrint.GenericPretty
 
 import Gibbon.GenericOps (gFreeVars)
 import Gibbon.Common as C hiding (extendVEnv, lookupVEnv) -- (l, LRM(..))
@@ -201,7 +200,9 @@ data Constraint = AfterConstantL LocVar Int LocVar
                 | AfterTagL LocVar LocVar
                 | StartRegionL LocVar Region
                 | AfterCopyL LocVar Var Var LocVar Var [LocVar]
-                  deriving (Show, Eq)
+                  deriving (Show, Eq, Generic)
+
+instance Out Constraint
 
 -- | The result type for this pass.  Return a new expression and its
 -- type, which includes/implies its location.
@@ -291,12 +292,12 @@ inferExp' env lex0@(L sl1 exp) dest =
                       AfterVariableL lv1 v lv2 -> lc$ Ext (LetLocE lv1 (AfterVariableLE v lv2) a)
                       StartRegionL lv r -> lc$ Ext (LetRegionE r (lc $ Ext (LetLocE lv (StartOfLE r) a)))
                       AfterTagL lv1 lv2 -> lc$ Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
-                      AfterCopyL lv1 v1 v' lv2 v2 lvs ->
-                        let arrty = arrOut $ lookupFEnv v2 env
+                      AfterCopyL lv1 v1 v' lv2 f lvs ->
+                        let arrty = arrOut $ lookupFEnv f env
                             -- Substitute the location occurring at the call site
                             -- in place of the one in the function's return type
                             copyRetTy = substLoc' lv2 arrty
-                        in lc$ LetE (v',[],copyRetTy, lc$ AppE v2 lvs (lc$ VarE v1)) $
+                        in lc$ LetE (v',[],copyRetTy, lc$ AppE f lvs (lc$ VarE v1)) $
                            lc$ Ext (LetLocE lv1 (AfterVariableLE v' lv2) a)
 
   in do res <- inferExp env lex0 dest
@@ -435,15 +436,15 @@ inferExp env@FullEnv{dataDefs}
                         return (lc$ Ext (LetLocE lv1' (AfterVariableLE v lv2) e), ty, cs)
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
                         return (e',ty',c:cs')
-            AfterCopyL lv1 v1 v' lv2 v2 lvs ->
+            AfterCopyL lv1 v1 v' lv2 f lvs ->
                 if v == v1
                 then do lv1' <- finalLocVar lv1
                         lv2' <- finalLocVar lv2
-                        let arrty = lookupFEnv v2 env
+                        let arrty = lookupFEnv f env
                             -- Substitute the location occurring at the call site
                             -- in place of the one in the function's return type
                             copyRetTy = substLoc' lv2 (arrOut arrty)
-                        return (lc$ LetE (v',[],copyRetTy,l$ AppE v2 lvs (l$ VarE v1)) $
+                        return (lc$ LetE (v',[],copyRetTy,l$ AppE f lvs (l$ VarE v1)) $
                                 lc$ Ext (LetLocE lv1' (AfterVariableLE v' lv2') e), ty, cs)
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
                         return (e',ty',c:cs')
@@ -563,6 +564,8 @@ inferExp env@FullEnv{dataDefs}
                                      ProdTy ([b | (_,b,_) <- results]),
                                      concat $ [c | (_,_,c) <- results])
 
+    L1.ParE a b -> err$ "inferExp: ParE -- " ++ show dest
+
     L1.LitE n -> return (lc$ LitE n, IntTy, [])
 
     L1.LitSymE s -> return (lc$ LitSymE s, SymTy, [])
@@ -578,8 +581,6 @@ inferExp env@FullEnv{dataDefs}
     L1.TimeIt e t b ->
         do (e',ty',cs') <- inferExp env e dest
            return (lc$ TimeIt e' ty' b, ty', cs')
-
-    L1.ParE a b -> err$ "inferExp: ParE"
 
     L1.DataConE () k [] ->
         case dest of
@@ -793,6 +794,9 @@ inferExp env@FullEnv{dataDefs}
           (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ acs)
           fcs <- tryInRegion cs'''
           tryBindReg (lc$ L2.LetE (vr,[], ProdTy aty, L sl2 $ L2.MkProdE als) bod'', ty'', fcs)
+
+        ParE a b -> err$ "inferExp: ParE RHS -- " ++ show dest
+
         TimeIt e t b       -> do
           lv <- lift $ lift $ freshLocVar "timeit"
           let subdest = case bty of
@@ -805,8 +809,6 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion vcs
           tryBindReg (lc$ L2.LetE (vr,[],ty,L sl2 $ TimeIt e' ty b) bod'',
                     ty'', fcs)
-
-        ParE a b -> err$ "inferExp: ParE as a RHS"
 
         MapE{} -> err$ "MapE unsupported"
         FoldE{} -> err$ "FoldE unsupported"
@@ -881,7 +883,10 @@ finishExp (L i e) =
                      _ -> return t
              return $ l$ TimeIt e1' t' b
 
-      ParE a b -> err$ "finishExp: ParE"
+      ParE a b -> do
+          a' <- finishExp a
+          b' <- finishExp b
+          return (l$ ParE a' b')
 
       Ext (LetRegionE r e1) -> do
              e1' <- finishExp e1
@@ -938,7 +943,9 @@ cleanExp (L i e) =
       TimeIt e d b -> let (e',s') = cleanExp e
                       in (l$ TimeIt e' d b, s')
 
-      ParE a b -> err$ "cleanExp: ParE"
+      ParE a b -> let (a', s1) = cleanExp a
+                      (b', s2) = cleanExp b
+                  in (l$ ParE a' b', s1 `S.union` s2)
 
       Ext (LetRegionE r e) -> let (e',s') = cleanExp e
                               in (l$ Ext (LetRegionE r e'), s')
