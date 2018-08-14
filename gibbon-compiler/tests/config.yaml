@@ -75,6 +75,7 @@ tests:
   - name: test18d_identity2.gib
   - name: test18e_identity3.gib
   - name: test18g_identity4.gib
+  - name: test18h_identity5.gib
   - name: test19_unarytree.gib
   - name: test20_bintree.gib
   - name: test20b_bintree.gib
@@ -88,6 +89,7 @@ tests:
   - name: test25c_racketcore.gib
   - name: test25e_countnodes.gib
   - name: test25_rackcore.gib
+  - name: test25f_countnodes.gib
   - name: test26_treewalk.gib
   - name: test26a_treewalk.gib
   - name: test27a_subst.gib
@@ -192,8 +194,6 @@ tests:
     failing: [gibbon2, gibbon1]
   - name: test29a_list.gib
     failing: [gibbon2, gibbon1]
-  - name: test18h_identity5.gib
-    failing: [gibbon2, gibbon1]
   - name: test18b_tupconstraint.gib
     failing: [gibbon2, gibbon1]
   - name: test18f_flip.gib
@@ -205,8 +205,6 @@ tests:
   - name: test_sumupseteven.gib
     failing: [gibbon2,gibbon1]
   - name: test25d_racketcore.gib
-    failing: [gibbon2, gibbon1]
-  - name: test25f_countnodes.gib
     failing: [gibbon2, gibbon1]
 
   # This test depends on real symbols, which we don't support atm.

@@ -1011,7 +1011,7 @@ noBeforeLoc lv [] = return True
 noRegionStart :: LocVar -> [Constraint] -> TiM Bool
 noRegionStart lv (c:cs) =
     case c of
-      StartRegionL _lv _r -> return False
+      StartRegionL lv2 _r -> ((lv /= lv2) &&) <$> noRegionStart lv cs
       _ -> noRegionStart lv cs
 noRegionStart lv [] = return True
 
