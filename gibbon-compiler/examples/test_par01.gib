@@ -4,4 +4,17 @@
       [Nil]
       [Cons Int List])
 
-(par (Cons 1 (Nil)) (Cons 2 (Nil)))
+(define (sum-list [xs : List]) : Int
+  (case xs
+    [(Nil) 0]
+    [(Cons y ys) (+ y (sum-list ys))]))
+
+(let ([xs : List (Cons 1 (Nil))])
+  (let ([ys : List (Cons 2 (Nil))])
+    (let ([tup : (Vector Int Int) (par (sum-list xs) (sum-list ys))])
+      (vector-ref tup 0))))
+
+;; This requires more work: the expressions have to be extracted into separate functions.
+;;
+;; (let ([tup : (Vector List List) (par (Cons 1 (Nil)) (Cons 2 (Nil)))])
+;;   (sum-list (vector-ref tup 0)))

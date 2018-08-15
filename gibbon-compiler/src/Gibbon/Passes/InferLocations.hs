@@ -572,7 +572,11 @@ inferExp env@FullEnv{dataDefs}
                                      ProdTy ([b | (_,b,_) <- results]),
                                      concat $ [c | (_,_,c) <- results])
 
-    L1.ParE a b -> err$ "inferExp: ParE -- " ++ show dest
+    -- Location inference for the parallel combinator should work exactly like a regular tuple --
+    -- except that the result should be a `ParE` instead of a `MkProdE`.
+    L1.ParE a b -> do
+      (L lc1 (MkProdE [a',b']), ty, cs) <- inferExp env (l$ MkProdE [a,b]) dest
+      return (L lc1 (ParE a' b'), ty, cs)
 
     L1.LitE n -> return (lc$ LitE n, IntTy, [])
 
@@ -817,7 +821,14 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion cs'''
           tryBindReg (lc$ L2.LetE (vr,[], ProdTy aty, L sl2 $ L2.MkProdE als) bod'', ty'', fcs)
 
-        ParE a b -> err$ "inferExp: ParE RHS -- " ++ show dest
+        -- Location inference for the parallel combinator should work exactly like a regular tuple --
+        -- except that the result should be a `ParE` instead of a `MkProdE`.
+        ParE a b -> do
+           res <- inferExp env (l$ LetE (vr,locs,bty, l$ MkProdE [a,b]) bod) dest
+           case res of
+             (L lc1 (LetE (vr',locs', ty', L lc2 (MkProdE [a',b'])) bod), ty'', cs'') ->
+               return (L lc1 (LetE (vr',locs', ty', L lc2 (ParE a' b')) bod), ty'', cs'')
+             _  -> err$ "ParE -- unexpected result: " ++ sdoc res
 
         TimeIt e t b       -> do
           lv <- lift $ lift $ freshLocVar "timeit"
