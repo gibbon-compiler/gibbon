@@ -245,7 +245,15 @@ inferLocs initPrg = do
 data Dest = SingleDest LocVar -- TODO: refactor to just be list of locations, or actually enforce invariants of non-empty list, etc
           | TupleDest [Dest]
           | NoDest
-            deriving Show
+            deriving (Show, Generic)
+
+instance Out Dest
+
+locsInDest :: Dest -> [LocVar]
+locsInDest d = case d of
+                 SingleDest c -> [c]
+                 TupleDest ls -> L.concatMap locsInDest ls
+                 NoDest -> []
 
 destFromType :: Ty2 -> TiM Dest
 destFromType frt =
@@ -576,7 +584,21 @@ inferExp env@FullEnv{dataDefs}
            argTy <- freshTyLocs $ arrIn arrty
            argDest <- destFromType' argTy
            (arg',aty,acs) <- inferExp env arg argDest
-           return (lc$ L2.AppE f (locsInTy aty ++ locsInTy valTy) arg', valTy, acs)
+           -- [CSK]: Have Michael review this once.
+           case dest of
+             SingleDest d -> do
+               case locsInTy valTy of
+                 [outloc] -> unify d outloc
+                               (return (lc$ L2.AppE f (locsInTy aty ++ locsInDest dest) arg', valTy, acs))
+                               (err$ "(AppE) Cannot unify" ++ sdoc d ++ " and " ++ sdoc outloc)
+                 _ -> err$ "AppE expected a single output location in type: " ++ sdoc valTy
+             TupleDest ds ->
+               case valTy of
+                 ProdTy tys -> unifyAll ds tys
+                                 (return (lc$ L2.AppE f (locsInTy aty ++ locsInDest dest) arg', valTy, acs))
+                                 (err$ "(AppE) Cannot unify" ++ sdoc ds ++ " and " ++ sdoc tys)
+                 _ -> err$ "(AppE) Cannot unify" ++ sdoc dest ++ " and " ++ sdoc valTy
+             NoDest -> return (lc$ L2.AppE f (locsInTy aty ++ locsInDest dest) arg', valTy, acs)
 
     L1.TimeIt e t b ->
         do (e',ty',cs') <- inferExp env e dest

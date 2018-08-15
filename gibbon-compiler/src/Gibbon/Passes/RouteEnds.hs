@@ -235,8 +235,11 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                         e' = Ext $ LetLocE l2 (AfterConstantLE jump l1) e
                                     return (eor', l$ e')
 
+                               vars = L.map fst vls
+                               env2' = extendsVEnv (M.fromList (zip vars argtys)) env2
+
                            (eor'',e') <- foldM handleLoc (eor',e) $ zip (L.map snd vls) argtys
-                           e'' <- exp fns retlocs eor'' lenv afterenv' env2 e'
+                           e'' <- exp fns retlocs eor'' lenv afterenv' env2' e'
                            return (dc, vls, e'')
                  return $ CaseE (l$ VarE x) brs'
 

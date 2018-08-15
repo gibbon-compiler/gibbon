@@ -69,8 +69,12 @@ tests:
   # Needs manual inspection.
   - name: test14_repair.gib
 
+  - name: test14a_tup.gib
+  - name: test14b_tup.gib
+  - name: test14c_tail.gib
   - name: test15a_symsearch.gib
   - name: test18_badconstraint.gib
+  - name: test18b_tupconstraint.gib
   - name: test18c_identity1.gib
   - name: test18d_identity2.gib
   - name: test18e_identity3.gib
@@ -193,9 +197,7 @@ tests:
   - name: test10_desugar.gib
     failing: [gibbon2, gibbon1]
   - name: test29a_list.gib
-    failing: [gibbon2, gibbon1]
-  - name: test18b_tupconstraint.gib
-    failing: [gibbon2, gibbon1]
+    failing: [gibbon2]
   - name: test18f_flip.gib
     failing: [gibbon2, gibbon1]
   - name: test_addtrees.gib
