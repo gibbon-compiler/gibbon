@@ -48,7 +48,7 @@ genDcons (x:xs) tail fields = case x of
   PackedTy tyCons _ -> do
     ptr  <- gensym  "ptr"
     t    <- gensym  "tail"
-    T.LetCallT [(ptr, T.PtrTy), (t, T.CursorTy)] (mkUnpackerName tyCons) [(T.VarTriv tail)]
+    T.LetCallT False [(ptr, T.PtrTy), (t, T.CursorTy)] (mkUnpackerName tyCons) [(T.VarTriv tail)]
       <$> genDcons xs t (fields ++ [(T.CursorTy, T.VarTriv ptr)])
 
   -- Indirection, don't do anything
@@ -135,7 +135,7 @@ genDconsPrinter (x:xs) tail = case x of
     valc <- gensym "valcur"
     T.LetPrimCallT [(val, T.IntTy), (t, T.CursorTy)] T.ReadInt [(T.VarTriv tail)] <$>
       T.LetTrivT (valc, T.CursorTy, T.VarTriv val) <$>
-      T.LetCallT [(tmp, T.PtrTy)] (mkPrinterName tyCons) [(T.VarTriv valc)] <$>
+      T.LetCallT False [(tmp, T.PtrTy)] (mkPrinterName tyCons) [(T.VarTriv valc)] <$>
        maybeSpace <$>
          genDconsPrinter xs t
 
@@ -201,10 +201,10 @@ printTy pkd ty trvs =
                                       ignre = varAppend "ignre_" v
                                   in
                                     if pkd
-                                    then (\tl -> T.LetCallT [(unpkd, T.PtrTy), (ignre, T.CursorTy)]
+                                    then (\tl -> T.LetCallT False [(unpkd, T.PtrTy), (ignre, T.CursorTy)]
                                                  (mkUnpackerName constr) trvs $
-                                                 T.LetCallT [] (mkPrinterName constr) [T.VarTriv unpkd] tl)
-                                    else T.LetCallT [] (mkPrinterName constr) trvs
+                                                 T.LetCallT False [] (mkPrinterName constr) [T.VarTriv unpkd] tl)
+                                    else T.LetCallT False [] (mkPrinterName constr) trvs
     (ListTy ty', [_one])        -> sandwich (printTy pkd ty' trvs) "List"
 
     (BoolTy, [trv]) ->
@@ -710,8 +710,8 @@ See [Hacky substitution to encode ParE].
                         _ -> return ([(vr,typ t)], bod)
         case unLoc arg of
           MkProdE es ->
-               T.LetCallT vsts f' (L.map (triv "one of app rands") es) <$> (tail bod')
-          _ -> T.LetCallT vsts f' [(triv "app rand") arg]       <$> (tail bod')
+               T.LetCallT False vsts f' (L.map (triv "one of app rands") es) <$> (tail bod')
+          _ -> T.LetCallT False vsts f' [(triv "app rand") arg]       <$> (tail bod')
 
 
     LetE (v, _, t, L _ (IfE a b c)) bod -> do

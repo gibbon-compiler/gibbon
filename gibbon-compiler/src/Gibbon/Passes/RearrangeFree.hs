@@ -54,8 +54,8 @@ rearrangeFreeExp frees tail =
       return $ Switch lbl trv alts' bod_maybe
     Goto{} -> return tail
     AssnValsT{} -> return tail
-    LetCallT binds rator rands bod ->
-      LetCallT binds rator rands <$>
+    LetCallT async binds rator rands bod ->
+      LetCallT async binds rator rands <$>
         go bod
     LetTrivT bnd bod ->
       LetTrivT bnd <$> go bod

@@ -80,7 +80,7 @@ harvestStructTys (Prog funs mtal) =
            Nothing  -> [ProdTy (map (\(_,x,_) -> x) ls)]
        -- This creates a demand for a struct return, but it is covered
        -- by the fun signatures already:
-       (LetCallT binds _ _  bod)   -> ProdTy (map snd binds) : go bod
+       (LetCallT _ binds _ _  bod) -> ProdTy (map snd binds) : go bod
        -- INVARIANT: This does not create a struct:
        -- But just in case it does in the future, we add it:
        (LetPrimCallT binds _ _ bod)-> ProdTy (map snd binds) : go bod
@@ -196,7 +196,7 @@ rewriteReturns tl bnds =
    -- Oops, this is not REALLY a tail call.  Hoist it and go under:
    (TailCall f rnds) -> let (vs,ts) = unzip bnds
                             vs' = map (toVar . (++"hack")) (map fromVar vs) -- FIXME: Gensym
-                        in LetCallT (zip vs' ts) f rnds
+                        in LetCallT False (zip vs' ts) f rnds
                             (rewriteReturns (RetValsT (map VarTriv vs')) bnds)
  where
    mapAlts f (TagAlts ls) = TagAlts $ zip (map fst ls) (map (f . snd) ls)
@@ -337,7 +337,7 @@ codegenTail (LetTimedT flg bnds rhs body) ty =
        return $ decls ++ withPrnt ++ tal
 
 
-codegenTail (LetCallT bnds ratr rnds body) ty
+codegenTail (LetCallT _async bnds ratr rnds body) ty
     | [] <- bnds = do tal <- codegenTail body ty
                       return $ [toStmt (C.FnCall (cid ratr) (map codegenTriv rnds) noLoc)] ++ tal
     | [bnd] <- bnds  = do tal <- codegenTail body ty
@@ -536,7 +536,7 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                                               Just f  -> [cexp| $string:f |] -- Fixed at compile time.
                                               Nothing -> [cexp| read_benchfile_param() |] -- Will be set by command line arg.
                                  unpackName = mkUnpackerName tyc
-                                 unpackcall = LetCallT [(outV,PtrTy),(toVar "junk",CursorTy)]
+                                 unpackcall = LetCallT False [(outV,PtrTy),(toVar "junk",CursorTy)]
                                                     unpackName [VarTriv (toVar "ptr")] (AssnValsT [] Nothing)
 
                                  mmap_size = varAppend outV "_size"

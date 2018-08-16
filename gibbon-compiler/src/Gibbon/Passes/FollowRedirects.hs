@@ -110,8 +110,8 @@ followRedirectsExp ttailenv tenv tail =
     -- Straightforward recursion
     RetValsT{} -> return tail
     AssnValsT{} -> return tail
-    LetCallT binds rator rands bod ->
-      LetCallT binds rator rands <$>
+    LetCallT async binds rator rands bod ->
+      LetCallT async binds rator rands <$>
         go (M.union tenv (M.fromList binds)) bod
     LetPrimCallT binds prim rands bod ->
       case binds of

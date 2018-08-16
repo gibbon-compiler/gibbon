@@ -86,7 +86,7 @@ exec env (LetTrivT (v,_t,rhs) body) =
     env' = extendEnv env [(v,rhs')]
     rhs' = eval env rhs
 
-exec env (LetCallT binds op args body) = do
+exec env (LetCallT _async binds op args body) = do
     rets <- apply env (eval env (VarTriv op)) (map (eval env) args)
     let env' = extendEnv env (zip (map fst binds) rets)
     exec env' body

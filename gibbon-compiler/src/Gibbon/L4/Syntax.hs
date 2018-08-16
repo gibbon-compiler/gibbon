@@ -75,7 +75,8 @@ data Tail
 
     -- ^ INTERNAL ONLY: used for assigning instead of returning.
 
-    | LetCallT { binds :: [(Var,Ty)],
+    | LetCallT { async :: Bool, -- ^ Whether this call should be executed asynchronously (cilk_spawn).
+                 binds :: [(Var,Ty)],
                  rator :: Var,
                  rands :: [Triv],
                  bod   :: Tail }
@@ -234,7 +235,7 @@ withTail (tl0,retty) fn =
     RetValsT ls -> return $ fn ls
     (ErrT x)    -> return $ ErrT x
     (AssnValsT _ _) -> error $ "withTail: expected tail expression returning values, not: "++show tl0
-    (LetCallT { binds, rator, rands, bod })    -> LetCallT binds rator rands    <$> go bod
+    (LetCallT { async, binds, rator, rands, bod }) -> LetCallT async binds rator rands <$> go bod
     (LetPrimCallT { binds, prim, rands, bod }) -> LetPrimCallT binds prim rands <$> go bod
     (LetTrivT { bnd, bod })                    -> LetTrivT   bnd                <$> go bod
     (LetIfT { binds, ife, bod })               -> LetIfT     binds ife          <$> go bod
@@ -249,7 +250,7 @@ withTail (tl0,retty) fn =
     -- Uh oh, here we don't have a LetSwitch form... duplicate code.
     (Switch lbl trv alts mlast) -> Switch lbl trv <$> mapAltsM go alts <*> sequence (fmap go mlast)
     (TailCall x1 x2)        -> do bnds <- genTmps retty
-                                  return $ LetCallT bnds x1 x2 $ fn (map (VarTriv . fst) bnds)
+                                  return $ LetCallT False bnds x1 x2 $ fn (map (VarTriv . fst) bnds)
  where
    mapAltsM f (TagAlts ls) = TagAlts <$> sequence [ (tg,) <$> f tl | (tg,tl) <- ls ]
    mapAltsM f (IntAlts ls) = IntAlts <$> sequence [ (tg,) <$> f tl | (tg,tl) <- ls ]
