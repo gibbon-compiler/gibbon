@@ -337,22 +337,29 @@ codegenTail (LetTimedT flg bnds rhs body) ty =
        return $ decls ++ withPrnt ++ tal
 
 
-codegenTail (LetCallT _async bnds ratr rnds body) ty
+codegenTail (LetCallT async bnds ratr rnds body) ty
     | [] <- bnds = do tal <- codegenTail body ty
-                      return $ [toStmt (C.FnCall (cid ratr) (map codegenTriv rnds) noLoc)] ++ tal
+                      return $ [toStmt fnexp] ++ dosync ++ tal
     | [bnd] <- bnds  = do tal <- codegenTail body ty
-                          let call = assn (codegenTy (snd bnd)) (fst bnd)
-                                          (C.FnCall (cid ratr) (map codegenTriv rnds) noLoc)
-                          return $ [call] ++ tal
+                          let call = assn (codegenTy (snd bnd)) (fst bnd) (fnexp)
+                          return $ [call] ++ dosync ++ tal
     | otherwise = do
        nam <- gensym $ toVar "tmp_struct"
        let bind (v,t) f = assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
            fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
            ty0 = ProdTy $ map snd bnds
-           init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(C.FnCall (cid ratr) (map codegenTriv rnds) noLoc); |] ]
+           init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(fnexp); |] ] ++ dosync
        tal <- codegenTail body ty
        return $ init ++ zipWith bind bnds fields ++ tal
-
+  where
+    dospawn = if async
+              then text "cilk_spawn"
+              else empty
+    dosync = if async
+             then [ C.BlockStm [cstm| $exp:(C.EscExp "cilk_sync" noLoc); |] ]
+             else  []
+    fncall = C.FnCall (cid ratr) (map codegenTriv rnds) noLoc
+    fnexp = C.EscExp (prettyCompact (dospawn <> space <> ppr fncall)) noLoc
 
 codegenTail (LetPrimCallT bnds prm rnds body) ty =
     do bod' <- codegenTail body ty
@@ -564,7 +571,7 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                            mmap_size = varAppend v "_size"
                        return [ C.BlockDecl[cdecl| $ty:(codegenTy IntTy) $id:outV = $id:mmap_size; |] ]
 
-                 ParSync -> return []
+                 ParSync -> return [ C.BlockStm [cstm| $exp:(C.EscExp "cilk_sync" noLoc); |] ]
 
                  oth -> error$ "FIXME: codegen needs to handle primitive: "++show oth
        return $ pre ++ bod'

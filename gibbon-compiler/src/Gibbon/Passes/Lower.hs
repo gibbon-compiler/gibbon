@@ -508,7 +508,8 @@ See [Hacky substitution to encode ParE].
       (a', bod1) <- doParExp 0 tya a bod
       (b', bod2) <- doParExp 1 tyb b bod1
       bod' <- tail bod2
-      return $ a' { T.bod = b' { T.bod = bod' } }
+      return $ a' { T.bod = b' { T.bod = bod'
+                               , T.async = True } }
 
 
     -- We could eliminate these ahead of time:
