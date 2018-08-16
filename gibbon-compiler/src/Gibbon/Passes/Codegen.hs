@@ -564,6 +564,8 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                            mmap_size = varAppend v "_size"
                        return [ C.BlockDecl[cdecl| $ty:(codegenTy IntTy) $id:outV = $id:mmap_size; |] ]
 
+                 ParSync -> return []
+
                  oth -> error$ "FIXME: codegen needs to handle primitive: "++show oth
        return $ pre ++ bod'
 

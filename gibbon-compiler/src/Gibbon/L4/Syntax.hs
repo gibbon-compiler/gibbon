@@ -206,6 +206,8 @@ data Prim
     | PrintString String -- ^ Print a constant string to stdout.
                          -- TODO: add string values to the language.
 
+    | ParSync -- ^ cilk_sync
+
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data FunDecl = FunDecl

@@ -33,10 +33,6 @@ import Gibbon.L1.Syntax hiding (progToEnv)
 import Gibbon.L3.Syntax
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L4.Syntax as T
--- import           Gibbon.L1.Syntax (Exp(..))
--- import qualified Gibbon.L2.Syntax as L2
--- import           Gibbon.L2.Syntax ( FunDef(..), Prog(..) )
-
 
 -- Generating unpack functions from Packed->Pointer representation:
 -------------------------------------------------------------------------------
@@ -355,22 +351,6 @@ lower Prog{fundefs,ddefs,mainExp} = do
     -- Packed codegen
     --------------------------------------------------------------------------------
 
-{-  We're directly generating WriteTag calls in the newer cursorize.
-    But let's keep this around if we ever change that.
-
-    -- These are in a funny normal form atfer cursor insertion.  They take one cursor arg.
-    -- They basically are a WriteTag.
-    LetE (cursOut, _, _, L _ (DataConE loc k ls)) bod | pkd -> do
-      case ls of
-       [cursIn] -> T.LetPrimCallT [(cursOut,T.CursorTy)] T.WriteTag
-                     [ T.TagTriv (getTagOfDataCon ddefs k)
-                     , triv "WriteTag cursor" cursIn ] <$>
-                    tail bod
-       _ -> error$ "Lower: Expected one argument to data-constructor (which becomes WriteTag): "
-                   ++sdoc (DataConE loc k ls)
-
--}
-
     -- Likewise, Case really means ReadTag.  Argument is a cursor.
     CaseE (L _ (VarE scrut)) ls | pkd -> do
         let (last:restrev) = reverse ls
@@ -462,13 +442,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
           fields   = (T.IntTy, T.IntTriv (fromIntegral tag)) : fields0
           --  | is_prod   = fields0
           --  | otherwise = (T.IntTy, T.IntTriv (fromIntegral tag)) : fields0
-
-      -- trace ("data con: " ++ show k) (return ())
-      -- trace ("is_prod: " ++ show is_prod) (return ())
-      -- trace ("fields: " ++ show fields) (return ())
-
       bod' <- tail bod
-
       return (T.LetAllocT v fields bod')
 
 
@@ -484,15 +458,6 @@ lower Prog{fundefs,ddefs,mainExp} = do
     MkProdE ls   -> pure$ T.RetValsT (L.map (triv "returned element of tuple") ls)
     e | isTrivial e -> pure$ T.RetValsT [triv "<internal error1>" (l$ e)]
 
-
-    -- Was already commented out in the old version.
-    --
-    -- L1.LetE (v,t, L1.MkProdE ls) bod -> do
-    --   let rhss = L.map triv ls
-    --   vsts <- unzipTup v t
-    --   let go _ [] = tail bod
-    --       go ix ((v1,t1):rst) = T.LetTrivT (v1,t1, )
-
     -- We could eliminate these ahead of time (unariser):
     -- FIXME: Remove this when that is done a priori:
     LetE (v, _, ProdTy tys, L _ (MkProdE ls)) bod -> do
@@ -502,6 +467,49 @@ lower Prog{fundefs,ddefs,mainExp} = do
           go ((pvr,pty,rhs):rs) acc = go rs (l$ LetE (pvr,[],pty,rhs) acc)
       -- Finally reprocess teh whole thing
       tail (go (zip3 tmps tys ls) bod')
+
+{- Note [Lowering the parallel tuple combinator]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ASSUMPTION: Sub-expressions are function calls.
+
+The tuple combinator case is somewhat tricky to get right. Lower assumes
+fully flattened product types. However, Unariser does not flatten the tuple
+combinator since we need the original type to lower it properly.
+Therefore, if any of the subexpressions (a or b) does have a product type
+(tya or tyb), we have to handle it here. Consider this example:
+
+    let tup : ((Cursor, Int), Int) = sumtree (end_r, tr00) || ...
+    let fltT : (Cursor, Int) = #0 tup
+    let end_x : Int = #0 fltT
+    let x : Int = #1 fltT
+    ...
+
+After Lower runs, a function returning a product type is encoded as to return
+*multiple* values, instead of a tuple. So, the sumtree call is lowered as:
+
+    T.LetCallT [(pvrtmp0, Cursor), (pvrtmp1, Int)] sumtree [VarE end_r, VarE tr00] BOD
+
+This is a problem because we have "let flT : (Cursor, Int) = #0 tup" in the
+input program. So, we use hackyParSubst to get rid of the "flT" binding altogether.
+See [Hacky substitution to encode ParE].
+
+-}
+
+    LetE (v,_, ProdTy [tya, tyb], L _ (ParE a b)) bod -> do
+      let doParExp idx ty e b = do
+            tmp <- gensym "tmp_par"
+            e' <- tail (l$ LetE (tmp,[],ty,e) (l$ LitE 42))
+            if isProdTy ty
+            then return (e', hackyParSubst idx v (L.map fst (T.binds e')) b)
+            else return (e', substE (l$ ProjE idx (l$ VarE v))
+                                    (l$ VarE (fst (head (T.binds e'))))
+                                    b)
+      (a', bod1) <- doParExp 0 tya a bod
+      (b', bod2) <- doParExp 1 tyb b bod1
+      bod' <- tail bod2
+      return $ a' { T.bod = b' { T.bod = bod' } }
+
 
     -- We could eliminate these ahead of time:
     LetE (v,_,t,rhs) bod | isTrivial rhs ->
@@ -845,3 +853,35 @@ prim p =
     MkFalse      -> error "lower/prim: internal error. MkFalse should not get here."
     SymAppend    -> error "lower/prim: internal error. SymAppend should not get here."
     PEndOf       -> error "lower/prim: internal error. PEndOf shouldn't be here."
+
+{- Note [Hacky substitution to encode ParE]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+(1) find w s.t `w = proje i p`
+(2) map (\b -> subst (proje idx w) b) binds
+-}
+hackyParSubst :: Int -> Var -> [Var] -> L Exp3 -> L Exp3
+hackyParSubst i p binds (L loc ex) = L loc $
+  case ex of
+    VarE{} -> ex
+    LitE{} -> ex
+    LitSymE{} -> ex
+    AppE{} -> ex
+    PrimAppE{} -> ex
+    LetE (w,locs,ty, rhs@(L _ (ProjE j (L _ (VarE q))))) bod ->
+      if q == p && j == i
+      then unLoc $ L.foldr (\(v, i) acc -> substE (l$ ProjE i (l$ VarE w)) (l$ VarE v) acc) bod (zip binds [0..])
+      else LetE (w,locs,ty,rhs) (go bod)
+    LetE (v,locs,ty,rhs) bod ->
+      LetE (v,locs,ty,rhs) (go bod)
+    IfE a b c -> IfE a (go b) (go c)
+    MkProdE{} -> ex
+    ProjE{} -> ex
+    CaseE scrt brs -> CaseE scrt (L.map (\(br,vls,e) -> (br,vls, go e)) brs)
+    DataConE{} -> ex
+    TimeIt{} -> ex
+    ParE{} -> ex
+    Ext{} -> ex
+    MapE{} -> ex
+    FoldE{} -> ex
+  where
+    go = hackyParSubst i p binds

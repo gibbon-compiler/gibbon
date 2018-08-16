@@ -117,6 +117,10 @@ inferExp ddfs fenv env (L _p exp) =
       let (effs, _locs) = unzip $ L.map (inferExp ddfs fenv env) ls
       in (S.unions effs, Nothing)
 
+    ParE a b -> let (effa,_loca) = inferExp ddfs fenv env a
+                    (effb,_locb) = inferExp ddfs fenv env b
+                in ((S.union effa effb), Nothing)
+
     ProjE _n e ->
       let (eff, _loc) = inferExp ddfs fenv env e
       in (eff, Nothing)
