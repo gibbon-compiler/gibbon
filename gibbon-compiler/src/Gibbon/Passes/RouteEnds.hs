@@ -157,6 +157,16 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- we fmap location at the top-level case expression
           VarE v -> fmap unLoc $ mkRet retlocs $ l$ VarE v
 
+
+          -- If a function has a literal as it's tail, it cannot return any
+          -- end witnesses (since only VarE forms are converted to RetE's).
+          -- We therefore bind that literal to a variable, and recur. We need
+          -- to handle LetRegionE and LetLocE similarly.
+          LetE (v,ls,ty,rhs) (L _ (LitE n)) -> do
+            tmp <- gensym "fltLitTail"
+            let e = l$ LetE (v,ls,ty,rhs) (l$ LetE (tmp,[],IntTy,l$ LitE n) (l$ VarE tmp))
+            unLoc <$> exp fns retlocs eor lenv afterenv env2 e
+
           -- This is the most interesting case: a let bound function application.
           -- We need to update the let binding's extra location binding list with
           -- the end witnesses returned from the function.
@@ -345,14 +355,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                (l$ VarE v')
                  fmap unLoc $ exp fns retlocs eor (M.insert v' loc lenv) afterenv (extendVEnv v' ty env2) (l$ e')
 
-          -- [2018.04.14]: TODO: Audit this later
-          -- This is part of the "hacks to get tree-insert working" series of commits..
-          -- Actually, only `sum-tree` defined on the updated tree definition requires this.
-          -- But that's a reasonable function that Gibbon should be able compile.
-          LitE i -> do
-            v <- gensym "fltLitTail"
-            let bod = L1.mkLets [(v,[],IntTy, l$ LitE i)] (l$ VarE v)
-            unLoc <$> go bod
+          LitE i -> return (LitE i)
 
           LitSymE v -> return $ LitSymE v
 
@@ -362,9 +365,19 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
           ParE a b -> ParE <$> go a <*> go b
 
+          Ext (LetRegionE r (L _ (LitE n))) -> do
+                 tmp <- gensym "fltLitTail"
+                 let e = l$ Ext (LetRegionE r (l$ LetE (tmp,[],IntTy,l$ LitE n) (l$ VarE tmp)))
+                 unLoc <$> exp fns retlocs eor lenv afterenv env2 e
+
           Ext (LetRegionE r e) -> do
                  e' <- go e
                  return $ Ext (LetRegionE r e')
+
+          Ext (LetLocE v rhs (L _ (LitE n))) -> do
+                 tmp <- gensym "fltLitTail"
+                 let e = l$ Ext (LetLocE v rhs (l$ LetE (tmp,[],IntTy,l$ LitE n) (l$ VarE tmp)))
+                 unLoc <$> exp fns retlocs eor lenv afterenv env2 e
 
           Ext (LetLocE v (StartOfLE r) e) -> do
                  e' <- go e
