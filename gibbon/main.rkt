@@ -34,6 +34,7 @@
          racket/flonum
          racket/match
          racket/list
+         racket/future
          (for-syntax racket/syntax syntax/parse racket/base))
 
 ;; add for/list  w/types
@@ -209,8 +210,10 @@ lit := int | #t | #f
 (define True  : Bool #t)
 (define False : Bool #f)
 
-(define (par [a : Any] [b : Any]) : (Pairof Any Any)
-  (cons a b))
+(: par (All (a b) (-> a b (Vector a b))))
+(define (par a b)
+  (let ([fut (future (lambda () b))])
+    (vector a (touch fut))))
 
 (begin-encourage-inline
   ;; FIXME: need to make sure these inline:
