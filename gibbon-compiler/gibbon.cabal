@@ -46,7 +46,7 @@ library
                        Gibbon.Passes.InlineTriv
                        Gibbon.Passes.DirectL3
                        Gibbon.Passes.RepairProgram
-                       Gibbon.Passes.AddLayout
+                       Gibbon.Passes.AddRAN
                        Gibbon.Passes.AddTraversals
                        Gibbon.Passes.InferLocations
                        Gibbon.Passes.RemoveCopies
@@ -147,7 +147,7 @@ test-suite test-gibbon
                        InferLocations
                        Unariser
                        InferMultiplicity
-                       AddLayout
+                       AddRAN
                        Compiler
                        L1.Typecheck
                        L1.Interp

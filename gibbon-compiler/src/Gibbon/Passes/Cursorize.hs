@@ -12,7 +12,7 @@ import Gibbon.GenericOps
 import Gibbon.Common
 import Gibbon.L1.Syntax
 import Gibbon.L2.Syntax as L2
-import Gibbon.Passes.AddLayout (numIndrsDataCon)
+import Gibbon.Passes.AddRAN (numRANsDataCon)
 import qualified Gibbon.L3.Syntax as L3
 
 {- Note: Cursor insertion, strategy one:
@@ -635,11 +635,11 @@ cursorizeProj isPackedContext ddfs fundefs denv tenv ex =
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 As per the dilated representation, all packed values are (start,end) tuples.
-Except fn arguments and pattern matched vars. They're represented by just start
-cursors. So instead of using the type from the AST, which will always be `Packed`,
-we recover type of RHS in the current type environment, using gTypeExp.
-If it's just `CursorTy`, this packed value doesn't have an end cursor.
-Otherwise, the type is `PackedTy{}`, and it has an end cursor.
+Except fn arguments and pattern matched vars (which are just start cursors).
+So instead of using the type from the AST, which will always be `Packed`,
+we recover type of RHS in the current type environment using gTypeExp.
+If it's just `CursorTy`, this packed value doesn't have an end cursor,
+otherwise, the type is `PackedTy{}`, and it also has an end cursor.
 
 -}
 cursorizeProd :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Exp2 -> PassM L3.Exp3
@@ -677,7 +677,8 @@ How is it cursorized ?
 
     If the functions in the parallel tuple return any end-witnesses;
 
-    Then (1) Update the type of the let bound variable using gTypeExp.
+    Then (1) Update the type of the let bound variable using gTypeExp
+             (probably RouteEnds should do this step).
          (2) Use projections and products to recover the actual value
              of the tuple.
 
@@ -868,6 +869,8 @@ Consider an example of unpacking of a Node^ pattern:
     (Node^ [(ind_y3, loc_ind_y3), (n1, loc_n1) , (x2 , loc_x2), (y3 , loc_y3)]
       BODY)
 
+..TODO..
+
 -}
 unpackDataCon :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Bool -> Var
               -> (DataCon, [(Var, Var)], L Exp2) -> PassM (DataCon, [t], L L3.Exp3)
@@ -958,7 +961,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
         --
         --     (y3 -> (loc_y3, ind_y3))
         let ran_mp =
-              case numIndrsDataCon ddfs (fromIndrDataCon dcon) of
+              case numRANsDataCon ddfs (fromIndrDataCon dcon) of
                 0 -> M.empty
                 n -> let -- Random access nodes occur immediately after the tag
                          ind_vars = L.map fst $ L.take n vlocs1

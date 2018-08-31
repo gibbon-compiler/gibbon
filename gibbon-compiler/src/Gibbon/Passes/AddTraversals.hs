@@ -70,8 +70,8 @@ addTraversalsExp ddefs fundefs tyenv context (L p ex) = L p <$>
         LetRegionE reg bod -> Ext <$> LetRegionE reg <$> go bod
         LetLocE loc locexp bod -> Ext <$> LetLocE loc locexp <$> go bod
         _ -> return ex
-    MapE{}  -> error "addLayoutExp: TODO MapE"
-    FoldE{} -> error "addLayoutExp: TODO FoldE"
+    MapE{}  -> error "addTraversalsExp: TODO MapE"
+    FoldE{} -> error "addTraversalsExp: TODO FoldE"
 
   where
     go = addTraversalsExp ddefs fundefs tyenv context

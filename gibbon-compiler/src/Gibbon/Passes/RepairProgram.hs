@@ -15,7 +15,7 @@ import Gibbon.Passes.InferEffects   (inferEffects)
 import Gibbon.Passes.RemoveCopies   (removeCopies)
 import Gibbon.Passes.Flatten        (flattenL2)
 import Gibbon.Passes.AddTraversals  (addTraversals)
-import Gibbon.Passes.AddLayout      (addLayout,needsLayout)
+import Gibbon.Passes.AddRAN (addRAN,needsRAN)
 
 --------------------------------------------------------------------------------
 
@@ -24,7 +24,7 @@ import Gibbon.Passes.AddLayout      (addLayout,needsLayout)
 
 We need a program analysis that decides whether a L2 program needs to be repaired.
 Why ? Because, when we pattern match on a packed value, L2 assumes that *every*
-variable in that pattern is in scope. However, this is not always true.
+variable in that pattern is accessible. However, this is not always true.
 Consider the rightmost fn (which does not traverse it's input):
 
    (Node [(x, loc_x), (y, loc_y)] BODY)
@@ -35,15 +35,15 @@ looking for in this analyis is if we can unpack all the pattern matched variable
 in case expressions occurring in the program. For functions, it means that either
 the function should traverse it's input, or the un-reachable elements in the pattern
 match must remain unused (eg. 'leftmost'). On the other hand, we always have to
-repair the main expression.
+repair a broken main expression (since the "unused" case won't apply).
 
 The compiler has access to 2 program repair strategies -- dummy traversals or
-layout information. If we're operating in gibbon1 mode, it uses the former. However,
+random access nodes. If we're operating in gibbon1 mode, it uses the former. However,
 this changes the asymptotic complexity of the functions. In gibbon2 mode, we compile
-such programs using layout information (random access nodes) instead.
-This basically allows O(1) random access to any element of the node.
+such programs to store RAN's instead. This basically allows O(1) access to any element
+of a data constructor.
 
-Also see Note [Adding dummy traversals] and Note [Adding layout information].
+Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
 
 -}
 
@@ -54,15 +54,15 @@ repairProgram oldl1 prg = do
   isGibbon1 <- gopt Opt_Gibbon1 <$> getDynFlags
 
   if isGibbon1
-  -- addTraversals can figure out where/if traversals are needed. So we don't have to
+  -- addTraversals can figure out if/where traversals are needed. So we don't have to
   -- run any 'needs*' analysis before that.
   then repairGibbon1
-  else if not (S.null need_layout)
+  else if not (S.null need_ran)
        then repairGibbon2
        else return prg
 
   where
-    need_layout = needsLayout prg
+    need_ran = needsRAN prg
 
     repairGibbon1 = do
         l2 <- addTraversals prg
@@ -70,7 +70,7 @@ repairProgram oldl1 prg = do
         return l2
 
     repairGibbon2 = do
-        l1 <- addLayout need_layout oldl1
+        l1 <- addRAN need_ran oldl1
         l2 <- inferLocs l1
         l2 <- flattenL2 l2
         l2 <- removeCopies l2
