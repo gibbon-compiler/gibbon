@@ -11,14 +11,15 @@ import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
 import Gibbon.DynFlags
+import Gibbon.GenericOps
 import Gibbon.Passes.AddTraversals (needsTraversal)
 import Gibbon.L1.Syntax as L1
 import Gibbon.L2.Syntax as L2
 
---------------------------------------------------------------------------------
+{-
 
-{- Note [Adding layout information]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Note [Adding layout information]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We cannot add layout information to an L2 program, as it would distort the locations
 inferred by the previous analysis. Instead, (1) we use the old L1 program and
@@ -56,10 +57,9 @@ becomes,
     Pattern matches for these constructors now bind the additional
     random access nodes too.
 
--}
 
-{- Note [Reusing random access nodes in case expressions]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Note [Reusing random access nodes in case expressions]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If a data constructor occurs inside a case expression, we might already have a
 random access node for a variable that was bound in the pattern. In that case, we don't want
@@ -71,6 +71,29 @@ to request yet another one using PEndOf. Consider this example:
            (DataConE __HOLE x (fn y)))]))
 
 Here, we don't want to fill the HOLE with (PEndOf x). Instead, we should reuse indr_y.
+
+
+Note [When does a type 'needsLayout']
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+(1) If any pattern 'needsTraversal' so that we can unpack it, we mark the type of the
+    scrutinee as something that needs RAN's.
+
+-OR-
+
+(2) Consider the following prgram which uses the parallel tuple combinator to
+    parallelize the 'sumtree' function:
+
+        sumtree :: Tree -> Int
+        sumtree tr = case tr of
+                       Leaf n   -> n
+                       Node l r -> let tup : (Int, Int) = (sumtree l) || (sumtree r)
+                                   in (#0 tup) + (#1 tup)
+
+   To execute sumtree on both sub-trees in parallel, the program should be able
+   access them simultaneously (which is not possbile without RAN's). In general,
+   if the tuple combinator functions operate on values that reside in the same
+   region, RAN's are required for those values.
 
 -}
 
@@ -208,30 +231,39 @@ numIndrsDataCon ddfs dcon =
 
 --------------------------------------------------------------------------------
 
--- | Collect all data types that need layout information to be compiled.
---
--- If any pattern 'needsTraversal' so that we can unpack it, we mark the type of the
--- scrutinee as something that needs layout information.
+-- See Note [When does a type 'needsLayout']
+-- | Collect all types that need random access nodes to be compiled.
 needsLayout :: Prog2 -> S.Set TyCon
 needsLayout Prog{ddefs,fundefs,mainExp} =
-  let dofun FunDef{funArg,funTy,funBody} =
+  let funenv = initFunEnv fundefs
+      dofun FunDef{funArg,funTy,funBody} =
         let tyenv = M.singleton funArg (inTy funTy)
-        in needsLayoutExp ddefs fundefs tyenv funBody
+            env2 = Env2 tyenv funenv
+            lenv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm)))
+                               (locVars funTy)
+        in needsLayoutExp ddefs fundefs env2 lenv funBody
 
       funs = M.foldr (\f acc -> acc `S.union` dofun f) S.empty fundefs
 
       mn   = case mainExp of
                Nothing -> S.empty
-               Just (e,_ty) -> needsLayoutExp ddefs fundefs M.empty e
+               Just (e,_ty) -> let env2 = Env2 M.empty funenv
+                               in needsLayoutExp ddefs fundefs env2 M.empty e
   in S.union funs mn
 
-needsLayoutExp :: DDefs Ty2 -> FunDefs2 -> TyEnv Ty2 -> L Exp2 -> S.Set TyCon
-needsLayoutExp ddefs fundefs tyenv (L _p ex) =
+-- Maps a location to a region
+type LocEnv = M.Map LocVar Var
+
+needsLayoutExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> LocEnv -> L Exp2 -> S.Set TyCon
+needsLayoutExp ddefs fundefs env2 lenv (L _p ex) =
   case ex of
-    CaseE (L _ (VarE scrt)) brs -> if docase brs
-                                   then let PackedTy tycon _ = tyenv # scrt
-                                        in S.singleton tycon
-                                   else S.empty
+    CaseE (L _ (VarE scrt)) brs -> let PackedTy tycon tyloc = lookupVEnv scrt env2
+                                       reg = case M.lookup tyloc lenv of
+                                               Just r -> r
+                                               Nothing -> error $ "Couldn't find " ++ sdoc (tyloc, lenv)
+                                           -- lenv M.! tyloc
+                                   in S.unions $ L.map (docase tycon reg env2 lenv) brs
+
     CaseE scrt _ -> error $ "needsLayoutExp: Scrutinee is not flat " ++ sdoc scrt
 
     -- Standard recursion here (ASSUMPTION: everything is flat)
@@ -242,25 +274,62 @@ needsLayoutExp ddefs fundefs tyenv (L _p ex) =
     AppE{}     -> S.empty
     PrimAppE{} -> S.empty
     LetE(v,_,ty,rhs) bod -> go rhs `S.union`
-                            needsLayoutExp ddefs fundefs (M.insert v ty tyenv) bod
+                            needsLayoutExp ddefs fundefs (extendVEnv v ty env2) lenv bod
     IfE _a b c -> go b `S.union` go c
     MkProdE{}  -> S.empty
     ProjE{}    -> S.empty
     DataConE{} -> S.empty
     TimeIt{}   -> S.empty
-    ParE a b   -> go a `S.union` go b
+    -- See (2) in Note [When does a type 'needsLayout'].
+    ParE a b   -> let mp1 = parAppLoc env2 a
+                      mp2 = parAppLoc env2 b
+                      locs1 = M.keys mp1
+                      locs2 = M.keys mp2
+                      regs1 = S.fromList (L.map (lenv #) locs1)
+                      regs2 = S.fromList (L.map (lenv #) locs2)
+                      -- The regions used in BOTH parts of the tuple combinator --
+                      -- all values residing in these regions would need RAN's.
+                      common_regs = S.intersection regs1 regs2
+                  in if S.null common_regs
+                     then S.empty
+                     else let -- Get all the locations in 'common_regs'.
+                              want_ran_locs = L.filter (\lc -> (lenv # lc) `S.member` common_regs) (locs1 ++ locs2)
+                              common_mp = mp1 `M.union` mp2
+                          in S.fromList $ L.map (\lc -> common_mp # lc) want_ran_locs
     Ext ext ->
       case ext of
         LetRegionE _ bod -> go bod
-        LetLocE _ _ bod  -> go bod
+        LetLocE loc rhs bod  ->
+            let reg = case rhs of
+                        StartOfLE r  -> regionToVar r
+                        InRegionLE r -> regionToVar r
+                        AfterConstantLE _ lc -> lenv # lc
+                        AfterVariableLE _ lc -> lenv # lc
+                        FromEndLE lc         -> lenv # lc -- TODO: This needs to be fixed
+            in needsLayoutExp ddefs fundefs env2 (M.insert loc reg lenv) bod
         _ -> S.empty
     MapE{}     -> S.empty
     FoldE{}    -> S.empty
   where
-    go = needsLayoutExp ddefs fundefs tyenv
+    go = needsLayoutExp ddefs fundefs env2 lenv
 
-    -- Short circuit the computation if any of the branches needs traversals.
-    docase [] = False
-    docase (br:brs) = case needsTraversal ddefs fundefs tyenv br of
-                        Just _ls -> True
-                        Nothing  -> docase brs
+    -- Collect all the 'Tycon's which might need layout information
+    docase tycon reg env21 lenv1 br@(dcon,vlocs,bod) =
+      let (vars,locs) = unzip vlocs
+          lenv' = L.foldr (\lc acc -> M.insert lc reg acc) lenv1 locs
+          tys = lookupDataCon ddefs dcon
+          tys' = substLocs' locs tys
+          env2' = extendsVEnv (M.fromList $ zip vars tys') env21
+          layout_for_scrt = if L.null (needsTraversal ddefs fundefs (vEnv env2) br)
+                            then S.empty
+                            else S.singleton tycon
+      in layout_for_scrt `S.union` needsLayoutExp ddefs fundefs env2' lenv' bod
+
+    -- Return the location and tycon of an argument to a function call.
+    parAppLoc :: Env2 Ty2 -> L Exp2 -> M.Map LocVar TyCon
+    parAppLoc env21 (L _ (AppE _ _ arg)) =
+      let fn (PackedTy dcon loc) = [(loc, dcon)]
+          fn (ProdTy tys) = L.concatMap fn tys
+          fn _ = []
+      in M.fromList (fn $ gTypeExp ddefs env21 arg)
+    parAppLoc _ oth = error $ "parAppLoc: Cannot handle "  ++ sdoc oth
