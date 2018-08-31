@@ -283,8 +283,8 @@ add1_prog = T.Prog [build_tree, add1]
             (Just $ PrintExp $
              LetPrimCallT [("buf", T.CursorTy)] (T.NewBuffer BigInfinite) [] $
              LetPrimCallT [("buf2", T.CursorTy)] (T.NewBuffer BigInfinite) [] $
-             LetCallT [( "tr", T.PtrTy)] "build_tree" [IntTriv 10, VarTriv "buf"] $
-             LetCallT [("ignored1", T.CursorTy), ("ignored2", T.CursorTy)] "add1"  [VarTriv "tr", VarTriv "buf2"] $
+             LetCallT False [( "tr", T.PtrTy)] "build_tree" [IntTriv 10, VarTriv "buf"] $
+             LetCallT False [("ignored1", T.CursorTy), ("ignored2", T.CursorTy)] "add1"  [VarTriv "tr", VarTriv "buf2"] $
              (RetValsT [])
             )
   where
@@ -303,8 +303,8 @@ add1_prog = T.Prog [build_tree, add1]
         recursive_case =
           LetPrimCallT [("n1",T.IntTy)] SubP [VarTriv "n", IntTriv 1] $
           LetPrimCallT [("tout1",T.CursorTy)] WriteTag [TagTriv 1, VarTriv "tout"] $
-          LetCallT [("tout2",T.CursorTy)] "build_tree" [VarTriv "n1", VarTriv "tout1"] $
-          LetCallT [("tout3",T.CursorTy)] "build_tree" [VarTriv "n1", VarTriv "tout2"] $
+          LetCallT False [("tout2",T.CursorTy)] "build_tree" [VarTriv "n1", VarTriv "tout1"] $
+          LetCallT False [("tout3",T.CursorTy)] "build_tree" [VarTriv "n1", VarTriv "tout2"] $
           RetValsT [VarTriv "tout3"]
 
     add1_tail =
@@ -323,7 +323,7 @@ add1_prog = T.Prog [build_tree, add1]
 
         nodeCase =
           LetPrimCallT [("tout2",T.CursorTy)] WriteTag [TagTriv nodeTag, VarTriv "tout"] $
-          LetCallT [("t3",T.CursorTy),("tout3",T.CursorTy)] "add1" [VarTriv "t2", VarTriv "tout2"] $
+          LetCallT False [("t3",T.CursorTy),("tout3",T.CursorTy)] "add1" [VarTriv "t2", VarTriv "tout2"] $
           TailCall "add1" [VarTriv "t3", VarTriv "tout3"]
 
         leafTag, nodeTag :: Word8
