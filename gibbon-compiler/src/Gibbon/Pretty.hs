@@ -107,7 +107,7 @@ instance (Show l, Out l, Eq l, Ord l, Pretty (e l (UrTy l)), Expression (e l (Ur
 
           LetE (v,ls,ty,e1) e2 -> text "let" <+>
                                   doc v <+> colon <+>
-                                  hcat (map doc ls) <+>
+                                  brackets (hcat (punctuate comma (map doc ls))) <+>
                                   pprint ty <+>
                                   equals <+>
                                   pprint e1 <+>

@@ -665,8 +665,10 @@ cursorizeProd isPackedContext ddfs fundefs denv tenv ex =
              then fromDi <$> cursorizePackedExp ddfs fundefs denv t x
              else cursorizeExp ddfs fundefs denv t x
 
-{- Note [Cursorizing the parallel tuple combinator]:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{-
+
+Note [Cursorizing the parallel tuple combinator]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ASSUMPTIONS:
     (1) ParE only has function calls as sub expressions.
@@ -679,27 +681,42 @@ How is it cursorized ?
 
     Then (1) Update the type of the let bound variable using gTypeExp
              (probably RouteEnds should do this step).
-         (2) Use projections and products to recover the actual value
-             of the tuple.
+         (2) Bind the end-witnesses
+         (3) Use projections and products to recover the original value
+             (which doesn't include end-witnesses)
 
     Else Nothing special happens.
+
+
+Note [Projections off of parallel tuples]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Why don't we cursorize these projections like Note [Cursorizing projections] ?
+
+i.e instead of direct projections like (#0 #1 tup), we generate
+
+    let tmp = #1 tup
+    in #0 tmp
+
+TLDR: Because of the way Flatten, Unariser and Lower deal with parallel tuples.
+
+..TODO (finish this note)..
 
 -}
 cursorizePar :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Exp2 -> PassM L3.Exp3
 cursorizePar isPackedContext ddfs fundefs denv tenv ex =
   case ex of
-    LetE (v,_locs, ProdTy [tya, tyb], rhs@(L _ (ParE a b))) bod ->
+    LetE (v,locs, ProdTy [tya, tyb], rhs@(L _ (ParE a b))) bod ->
       case (a,b) of
         (L _ (AppE f _ _), L _ (AppE g _ _)) -> do
           tup   <- gensym "par_tup"
-          (tya', bnds1, left)  <- doapp f tya 0 tup
-          (tyb', bnds2, right) <- doapp g tya 1 tup
+          (tya', bnds1, left, idx1) <- doapp tup locs f tya 0
+          (tyb', bnds2, right, _)  <- doapp tup (L.drop idx1 locs) g tya 1
           rhs'  <- go tenv rhs
           let bnds = [ (tup,   [], ProdTy [tya', tyb'], rhs') ]
                      ++ bnds1 ++ bnds2 ++
                      [ (v,     [], ProdTy [stripTyLocs tya, stripTyLocs tyb],
-                       l$ MkProdE [(l$ VarE left), (l$ VarE right)])
-                     ]
+                       l$ MkProdE [(l$ VarE left), (l$ VarE right)]) ]
           --TODO: Extend it with proper types of the bindings created before.
           let tenv' = M.union (M.fromList []) tenv
           bod' <- go tenv' bod
@@ -713,17 +730,22 @@ cursorizePar isPackedContext ddfs fundefs denv tenv ex =
     -- After Cursorize, a function might return some end-witnesses along with the value.
     -- "doapp" ensures that "part" contains the return *value* which "cursorizePar" uses
     -- to stitch together the original tuple.
-    doapp f ty idx par_tup = do
+    doapp par_tup locs1 f ty idx = do
       let fnty = funTy (fundefs # f)
           retlocs = locVars fnty
           ty' = stripTyLocs ty
       part <- gensym "par_part"
       case retlocs of
-        [] -> return (ty', [(part,[], ty', mkProj idx (l$ VarE par_tup))], part)
+        [] -> return (ty', [(part,[], ty', mkProj idx (l$ VarE par_tup))], part, 0)
         _  -> do
+          -- See Note [Projections off of parallel tuples]
+          tmp <- gensym "par_tmp"
           let (ty'', idx1) = tyWithWitnesses f ty
-              bnds = [(part, [], ty', mkProj idx1 $ mkProj idx (l$ VarE par_tup))]
-          return (ty'', bnds, part)
+              bnds = [(tmp,  [], ty'', mkProj idx (l$ VarE par_tup))
+                     ,(part, [], ty' , mkProj idx1 (l$ VarE tmp))] ++
+                     [ (loc,[],CursorTy, mkProj i (l$ VarE tmp))
+                     | (loc, i) <- zip (L.take idx1 locs1) [0..]]
+          return (ty'', bnds, part, idx1)
 
     -- The *value* is after all the end-witnesses (length fnrets).
     tyWithWitnesses f oldty =

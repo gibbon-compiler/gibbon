@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
@@ -83,6 +84,20 @@ findEnd l EndOfRel{endOf,equivTo} =
                    Just leq -> findEnd leq EndOfRel{endOf,equivTo}
       Just lend -> lend
 
+eorAppend :: EndOfRel -> EndOfRel -> EndOfRel
+eorAppend eor1 eor2 =
+    EndOfRel { endOf   = (endOf eor1) `M.union` (endOf eor2)
+             , equivTo = (equivTo eor1) `M.union` (equivTo eor2) }
+
+instance Monoid EndOfRel where
+  mempty  = emptyRel
+
+#if !(MIN_VERSION_base(4,11,0))
+  mappend = eorAppend
+#endif
+
+instance Semigroup EndOfRel where
+  (<>) = eorAppend
 
 -- | Process an L2 Prog and thread through explicit end-witnesses.
 -- Requires Gensym and runs in PassM. Assumes the Prog has been flattened.
@@ -170,40 +185,30 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- This is the most interesting case: a let bound function application.
           -- We need to update the let binding's extra location binding list with
           -- the end witnesses returned from the function.
-          LetE (v,_ls,ty,(L p' (AppE f lsin e1))) e2 -> do
-
-                 let fty = funtype f
-                     rets = S.fromList $ locRets fty
-                     -- The travlist is a list of pair (location, bool) where the bool is
-                     -- if the location was traversed, and the location is from the
-                     -- AppE call.
-                     travlist = zip lsin $ L.map (\l -> S.member (EndOf l) rets)  (locVars fty)
-                     lenv' = case ty of
+          LetE (v,_ls,ty,rhs@(L _ (AppE f lsin e1))) e2 -> do
+                 let lenv' = case ty of
                                PackedTy _n l -> M.insert v l lenv
                                _ -> lenv
 
-                 -- For each traversed location, gensym a new variable for its end,
-                 -- and generate a list of (location, endof location) pairs.
-                 let handleTravList lst (_l,False) = return lst
-                     handleTravList lst (l,True) = gensym "endof" >>= \l' -> return $ (l,l'):lst
-
-                 -- Walk through our pairs of (location, endof location) and update the
-                 -- endof relation.
-                 let mkEor (l1,l2) eor = mkEnd l1 l2 eor
-
-                 -- We may need to emit some additional let bindings if we've reached
-                 -- an end witness that is equivalent to the after location of something.
-                 let wrapBody e ((l1,l2):ls) = case M.lookup l1 afterenv of
-                                                 Nothing -> wrapBody e ls
-                                                 Just la -> wrapBody (L p' (Ext (LetLocE la (FromEndLE l2) e))) ls
-                     wrapBody e [] = e
-
-                 newls <- reverse <$> foldM handleTravList [] travlist
-                 let eor' = L.foldr mkEor eor newls
-                 let outlocs = L.map snd newls
+                 (outlocs,newls,eor') <- doBoundApp rhs
                  e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) e2
                  return $ LetE (v,outlocs,ty, l$ AppE f lsin e1)
                                (wrapBody e2' newls)
+
+          --
+          LetE (v,_ls,ty, rhs@(L _ (ParE a b))) bod -> do
+            (outlocs1,newls1,eor1) <- doBoundApp a
+            (outlocs2,newls2,eor2) <- doBoundApp b
+            let eor' = eor1 <> eor2
+                newls' = newls1 <> newls2
+                outlocs' = outlocs1 <> outlocs2
+                -- TODO: How to handle tuples in lenv ?
+                -- lenv' = if hasPacked ty
+                --         then M.insert v (locsInTy ty) lenv
+                --         else lenv
+            bod' <- exp fns retlocs eor' lenv afterenv (extendVEnv v ty env2) bod
+            return $ LetE (v,outlocs',ty,rhs)
+                          (wrapBody bod' newls')
 
           CaseE (L _ (VarE x)) brs -> do
                  -- We will need to gensym while processing the case clauses, so
@@ -415,3 +420,38 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                              Just fundef -> funTy fundef
 
                go = exp fns retlocs eor lenv afterenv env2
+
+
+               -- We may need to emit some additional let bindings if we've reached
+               -- an end witness that is equivalent to the after location of something.
+               wrapBody e ((l1,l2):ls) =
+                 case M.lookup l1 afterenv of
+                   Nothing -> wrapBody e ls
+                   Just la -> wrapBody (l$ (Ext (LetLocE la (FromEndLE l2) e))) ls
+               wrapBody e [] = e
+
+               -- Process a let bound fn app.
+               doBoundApp :: L Exp2 -> PassM ([LocVar], [(LocVar, Var)], EndOfRel)
+               doBoundApp (L _ (AppE f lsin _e1)) = do
+                 let fty = funtype f
+                     rets = S.fromList $ locRets fty
+                     -- The travlist is a list of pair (location, bool) where the bool is
+                     -- if the location was traversed, and the location is from the
+                     -- AppE call.
+                     travlist = zip lsin $ L.map (\l -> S.member (EndOf l) rets)  (locVars fty)
+
+                 -- For each traversed location, gensym a new variable for its end,
+                 -- and generate a list of (location, endof location) pairs.
+                 let handleTravList lst (_l,False) = return lst
+                     handleTravList lst (l,True) = gensym "endof" >>= \l' -> return $ (l,l'):lst
+
+                 -- Walk through our pairs of (location, endof location) and update the
+                 -- endof relation.
+                 let mkEor (l1,l2) eor = mkEnd l1 l2 eor
+
+
+                 newls <- reverse <$> foldM handleTravList [] travlist
+                 let eor' = L.foldr mkEor eor newls
+                 let outlocs = L.map snd newls
+                 return (outlocs, newls, eor')
+               doBoundApp oth = error $ "RouteEnds.doBoundApp: Got " ++ sdoc oth
