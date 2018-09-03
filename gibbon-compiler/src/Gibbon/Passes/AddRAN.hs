@@ -73,8 +73,8 @@ to request yet another one using PEndOf. Consider this example:
 Here, we don't want to fill the HOLE with (PEndOf x). Instead, we should reuse indr_y.
 
 
-Note [When does a type 'needsLRAN']
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Note [When does a type 'needsRAN']
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 (1) If any pattern 'needsTraversal' so that we can unpack it, we mark the type of the
     scrutinee as something that needs RAN's.
@@ -239,9 +239,9 @@ needsRAN Prog{ddefs,fundefs,mainExp} =
       dofun FunDef{funArg,funTy,funBody} =
         let tyenv = M.singleton funArg (inTy funTy)
             env2 = Env2 tyenv funenv
-            lenv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm)))
+            renv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm)))
                                (locVars funTy)
-        in needsRANExp ddefs fundefs env2 lenv funBody
+        in needsRANExp ddefs fundefs env2 renv funBody
 
       funs = M.foldr (\f acc -> acc `S.union` dofun f) S.empty fundefs
 
@@ -252,17 +252,14 @@ needsRAN Prog{ddefs,fundefs,mainExp} =
   in S.union funs mn
 
 -- Maps a location to a region
-type LocEnv = M.Map LocVar Var
+type RegEnv = M.Map LocVar Var
 
-needsRANExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> LocEnv -> L Exp2 -> S.Set TyCon
-needsRANExp ddefs fundefs env2 lenv (L _p ex) =
+needsRANExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> L Exp2 -> S.Set TyCon
+needsRANExp ddefs fundefs env2 renv (L _p ex) =
   case ex of
     CaseE (L _ (VarE scrt)) brs -> let PackedTy tycon tyloc = lookupVEnv scrt env2
-                                       reg = case M.lookup tyloc lenv of
-                                               Just r -> r
-                                               Nothing -> error $ "Couldn't find " ++ sdoc (tyloc, lenv)
-                                           -- lenv M.! tyloc
-                                   in S.unions $ L.map (docase tycon reg env2 lenv) brs
+                                       reg = renv # tyloc
+                                   in S.unions $ L.map (docase tycon reg env2 renv) brs
 
     CaseE scrt _ -> error $ "needsRANExp: Scrutinee is not flat " ++ sdoc scrt
 
@@ -274,7 +271,7 @@ needsRANExp ddefs fundefs env2 lenv (L _p ex) =
     AppE{}     -> S.empty
     PrimAppE{} -> S.empty
     LetE(v,_,ty,rhs) bod -> go rhs `S.union`
-                            needsRANExp ddefs fundefs (extendVEnv v ty env2) lenv bod
+                            needsRANExp ddefs fundefs (extendVEnv v ty env2) renv bod
     IfE _a b c -> go b `S.union` go c
     MkProdE{}  -> S.empty
     ProjE{}    -> S.empty
@@ -285,15 +282,15 @@ needsRANExp ddefs fundefs env2 lenv (L _p ex) =
                       mp2 = parAppLoc env2 b
                       locs1 = M.keys mp1
                       locs2 = M.keys mp2
-                      regs1 = S.fromList (L.map (lenv #) locs1)
-                      regs2 = S.fromList (L.map (lenv #) locs2)
+                      regs1 = S.fromList (L.map (renv #) locs1)
+                      regs2 = S.fromList (L.map (renv #) locs2)
                       -- The regions used in BOTH parts of the tuple combinator --
                       -- all values residing in these regions would need RAN's.
                       common_regs = S.intersection regs1 regs2
                   in if S.null common_regs
                      then S.empty
                      else let -- Get all the locations in 'common_regs'.
-                              want_ran_locs = L.filter (\lc -> (lenv # lc) `S.member` common_regs) (locs1 ++ locs2)
+                              want_ran_locs = L.filter (\lc -> (renv # lc) `S.member` common_regs) (locs1 ++ locs2)
                               common_mp = mp1 `M.union` mp2
                           in S.fromList $ L.map (\lc -> common_mp # lc) want_ran_locs
     Ext ext ->
@@ -303,27 +300,27 @@ needsRANExp ddefs fundefs env2 lenv (L _p ex) =
             let reg = case rhs of
                         StartOfLE r  -> regionToVar r
                         InRegionLE r -> regionToVar r
-                        AfterConstantLE _ lc -> lenv # lc
-                        AfterVariableLE _ lc -> lenv # lc
-                        FromEndLE lc         -> lenv # lc -- TODO: This needs to be fixed
-            in needsRANExp ddefs fundefs env2 (M.insert loc reg lenv) bod
+                        AfterConstantLE _ lc -> renv # lc
+                        AfterVariableLE _ lc -> renv # lc
+                        FromEndLE lc         -> renv # lc -- TODO: This needs to be fixed
+            in needsRANExp ddefs fundefs env2 (M.insert loc reg renv) bod
         _ -> S.empty
     MapE{}     -> S.empty
     FoldE{}    -> S.empty
   where
-    go = needsRANExp ddefs fundefs env2 lenv
+    go = needsRANExp ddefs fundefs env2 renv
 
     -- Collect all the 'Tycon's which might random access nodes
-    docase tycon reg env21 lenv1 br@(dcon,vlocs,bod) =
+    docase tycon reg env21 renv1 br@(dcon,vlocs,bod) =
       let (vars,locs) = unzip vlocs
-          lenv' = L.foldr (\lc acc -> M.insert lc reg acc) lenv1 locs
+          renv' = L.foldr (\lc acc -> M.insert lc reg acc) renv1 locs
           tys = lookupDataCon ddefs dcon
           tys' = substLocs' locs tys
           env2' = extendsVEnv (M.fromList $ zip vars tys') env21
           ran_for_scrt = if L.null (needsTraversal ddefs fundefs (vEnv env2) br)
                             then S.empty
                             else S.singleton tycon
-      in ran_for_scrt `S.union` needsRANExp ddefs fundefs env2' lenv' bod
+      in ran_for_scrt `S.union` needsRANExp ddefs fundefs env2' renv' bod
 
     -- Return the location and tycon of an argument to a function call.
     parAppLoc :: Env2 Ty2 -> L Exp2 -> M.Map LocVar TyCon
