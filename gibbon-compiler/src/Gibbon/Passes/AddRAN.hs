@@ -240,7 +240,7 @@ needsRAN Prog{ddefs,fundefs,mainExp} =
         let tyenv = M.singleton funArg (inTy funTy)
             env2 = Env2 tyenv funenv
             renv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm)))
-                               (locVars funTy)
+                                      (locVars funTy)
         in needsRANExp ddefs fundefs env2 renv funBody
 
       funs = M.foldr (\f acc -> acc `S.union` dofun f) S.empty fundefs
@@ -317,7 +317,7 @@ needsRANExp ddefs fundefs env2 renv (L _p ex) =
           tys = lookupDataCon ddefs dcon
           tys' = substLocs' locs tys
           env2' = extendsVEnv (M.fromList $ zip vars tys') env21
-          ran_for_scrt = if L.null (needsTraversal ddefs fundefs (vEnv env2) br)
+          ran_for_scrt = if L.null (needsTraversal ddefs fundefs env2 br)
                             then S.empty
                             else S.singleton tycon
       in ran_for_scrt `S.union` needsRANExp ddefs fundefs env2' renv' bod

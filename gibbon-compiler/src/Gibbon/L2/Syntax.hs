@@ -253,9 +253,17 @@ substLocs mp tys = L.map (substLoc mp) tys
 
 -- | Like 'substLocs', but constructs the map for you.
 substLocs' :: [LocVar] -> [Ty2] -> [Ty2]
-substLocs' locs tys =
-  let mp = M.fromList $ zip (concatMap locsInTy tys) locs
-  in substLocs mp tys
+substLocs' locs tys = substLocs (M.fromList $ go tys locs) tys
+  where
+    go tys locs =
+      case (tys, locs) of
+        ([],[]) -> []
+        (ty:rtys, lc:rlocs) ->
+           case ty of
+             PackedTy _ loc -> [(loc,lc)] ++ go rtys rlocs
+             ProdTy{} -> error $ "substLocs': Unexpected type " ++ sdoc ty
+             _ -> go rtys rlocs
+        (_,_) -> error $ "substLocs': Unexpected args, " ++ sdoc (tys,locs)
 
 -- | Apply a substitution to an effect set.
 substEffs :: Map LocVar LocVar -> Set Effect -> Set Effect

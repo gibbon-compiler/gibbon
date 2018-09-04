@@ -1,0 +1,13 @@
+#lang gibbon
+
+(require "test_ddtree.gib")
+(require "test_buildtree.gib")
+
+(define (sumtree [xs : Tree]) : Int
+  (case xs
+    [(Leaf n) n]
+    [(Node l r) (let ([tup : (Vector Int Int) (par (sumtree r) (sumtree l))])
+                  (+ (vector-ref tup 0) (vector-ref tup 1)))]))
+
+(let ([tr0 : Tree (buildtree (size-param))])
+  (iterate (sumtree tr0)))

@@ -177,6 +177,10 @@ tests:
   ## Parallel tuple combinator tests
   - name: test_par01.gib
   - name: test_par03.gib
+  - name: test_par04.gib
+  ## A difficult test for AddTraversals.
+  - name: test_par05.gib
+    failing: [gibbon1]
 
   ## Failing tests:
   - name: test00f_and.gib
