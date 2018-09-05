@@ -74,6 +74,8 @@ tests:
   - name: test14c_tail.gib
   - name: test15a_symsearch.gib
   - name: test18_badconstraint.gib
+    # This only fails on GCC >= 7 (which we're using to fix certain other tests that use Cilk)
+    failing: [pointer]
   - name: test18b_tupconstraint.gib
   - name: test18c_identity1.gib
   - name: test18d_identity2.gib
@@ -175,6 +177,10 @@ tests:
     bench-input: examples/twitter_input.gpkd
 
   ## Parallel tuple combinator tests
+  ## A lot of these tests require GCC >= 7. Older GCC's complain:
+  ##
+  ## /usr/include/x86_64-linux-gnu/bits/stdio2.h:102:1: error: inlining failed in call to always_inline ‘printf’: function not inlinable
+ printf (const char *__restrict __fmt, ...)
   - name: test_par01.gib
   - name: test_par03.gib
   - name: test_par04.gib
