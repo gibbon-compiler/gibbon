@@ -20,7 +20,7 @@ module Gibbon.L1.Syntax
     , UrTy(..), ArrowTy
 
       -- * Core types specific to L1
-    , Prog1, FunDef1, Exp1, Ty1, pattern SymTy
+    , Prog1, FunDef1, FunDefs1, Exp1, Ty1, pattern SymTy
 
       -- * Functions on expressions
     , insertFD, fromListFD, mapExt, mapLocs, mapExprs, visitExp
@@ -103,6 +103,8 @@ type Prog1 = Prog (L Exp1)
 
 -- | Function definition used in L1 programs.
 type FunDef1 = FunDef (L Exp1)
+
+type FunDefs1 = FunDefs (L Exp1)
 
 -- | The type rperesentation used in L1.
 type Ty1 = UrTy ()

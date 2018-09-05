@@ -1,0 +1,13 @@
+#lang gibbon
+
+(define (fib [n : Int]) : Int
+  (if (= n 0)
+      1
+      (if (= n 1)
+          1
+          (let ([a : Int (- n 1)])
+            (let ([b : Int (- n 2)])
+              (let ([tup : (Vector Int Int) (par (fib a) (fib b))])
+                (+ (vector-ref tup 0) (vector-ref tup 1))))))))
+
+(fib 10)

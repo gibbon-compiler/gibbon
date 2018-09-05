@@ -178,6 +178,9 @@ tests:
   - name: test_par01.gib
   - name: test_par03.gib
   - name: test_par04.gib
+  - name: test_par07.gib
+  - name: test_par08.gib
+
   ## A difficult test for AddTraversals.
   - name: test_par05.gib
     failing: [gibbon1]

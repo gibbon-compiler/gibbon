@@ -45,6 +45,7 @@ library
                        Gibbon.Passes.Flatten
                        Gibbon.Passes.InlineTriv
                        Gibbon.Passes.DirectL3
+                       Gibbon.Passes.FloatOut
                        Gibbon.Passes.RepairProgram
                        Gibbon.Passes.AddRAN
                        Gibbon.Passes.AddTraversals

@@ -54,6 +54,7 @@ import qualified Gibbon.L3.Typecheck as L3
 import           Gibbon.Passes.Freshen        (freshNames)
 import           Gibbon.Passes.Flatten        (flattenL1, flattenL2, flattenL3)
 import           Gibbon.Passes.InlineTriv     (inlineTriv)
+import           Gibbon.Passes.FloatOut       (floatOut)
 
 import           Gibbon.Passes.DirectL3       (directL3)
 import           Gibbon.Passes.InferLocations (inferLocs)
@@ -449,6 +450,8 @@ passes config@Config{dynflags} l1 = do
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    inlineTriv              l1
+      l1 <- goE "typecheck"     L1.tcProg               l1
+      l1 <- goE "floatOut"      floatOut                l1
       l1 <- goE "typecheck"     L1.tcProg               l1
 
       -- TODO: Write interpreters for L2 and L3
