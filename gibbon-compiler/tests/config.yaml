@@ -177,10 +177,13 @@ tests:
     bench-input: examples/twitter_input.gpkd
 
   ## Parallel tuple combinator tests
-  ## A lot of these tests require GCC >= 7. Older GCC's complain:
+  ## Some of these tests require GCC >= 7. Older GCC's complain:
   ##
-  ## /usr/include/x86_64-linux-gnu/bits/stdio2.h:102:1: error: inlining failed in call to always_inline ‘printf’: function not inlinable
- printf (const char *__restrict __fmt, ...)
+  ##    /usr/include/x86_64-linux-gnu/bits/stdio2.h:102:1: error: inlining failed in call to always_inline
+  ##    'printf': function not inlinable
+  ##    printf (const char *__restrict __fmt, ...)
+  ##
+  ## TODO(CSK): I don't really understand this error, and a quick Google search didn't wasn't very helpful.
   - name: test_par01.gib
   - name: test_par03.gib
   - name: test_par04.gib
