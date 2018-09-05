@@ -117,8 +117,8 @@ echo "--------------------------------------------"
 
 # Turning of -j for now [2016.11.06]
 cd $top/gibbon-compiler
-make answers
-$STK exec test-gibbon-examples
+# make answers
+$STK exec test-gibbon-examples -- -v2
 
 
 # [2017.04.24] TEMP: Disabling below here while the compiler is under construction.

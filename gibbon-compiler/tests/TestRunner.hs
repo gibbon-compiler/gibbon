@@ -648,7 +648,7 @@ summary tc tr = do
 
     docErrors ls =
         vcat (map (\(name,m_errors) ->
-                       (if (verbosity tc) >= 3
+                       (if (verbosity tc) >= 2
                         then hang (fixedWidthText name <> colon) 2
                                   (vcat (map (\(m,err) -> hang (sdoc m <> colon) 2 (text err)) m_errors))
                         else docNameModes name (map fst m_errors)))
@@ -714,6 +714,22 @@ mergeTestConfigWithEnv tc = do
 test_main :: TestConfig -> Tests -> IO ()
 test_main tc tests = do
     putStrLn "Executing TestRunner... \n"
+
+    compiler_dir <- getCompilerDir
+
+    -- Generate Racket answers
+    (_, Just _hout, Just herr, phandle) <-
+        createProcess (proc "make" ["answers"])
+        { std_out = CreatePipe
+        , std_err = CreatePipe
+        , cwd = Just compiler_dir
+        }
+    exitCode <- waitForProcess phandle
+    case exitCode of
+      ExitSuccess -> return ()
+      ExitFailure _ -> error <$> hGetContents herr
+
+
     test_run  <- getTestRun tests
     test_run' <- runTests tc test_run
     report <- summary tc test_run'
