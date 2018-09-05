@@ -588,7 +588,6 @@ inferExp env@FullEnv{dataDefs}
            argTy <- freshTyLocs $ arrIn arrty
            argDest <- destFromType' argTy
            (arg',aty,acs) <- inferExp env arg argDest
-           -- [CSK]: Have Michael review this once.
            case dest of
              SingleDest d -> do
                case locsInTy valTy of
@@ -602,7 +601,10 @@ inferExp env@FullEnv{dataDefs}
                                  (return (lc$ L2.AppE f (locsInTy aty ++ locsInDest dest) arg', valTy, acs))
                                  (err$ "(AppE) Cannot unify" ++ sdoc ds ++ " and " ++ sdoc tys)
                  _ -> err$ "(AppE) Cannot unify" ++ sdoc dest ++ " and " ++ sdoc valTy
-             NoDest -> return (lc$ L2.AppE f (locsInTy aty ++ locsInDest dest) arg', valTy, acs)
+             NoDest ->
+               case locsInTy valTy of
+                 [] -> return (lc$ L2.AppE f (locsInTy aty ++ locsInDest dest) arg', valTy, acs)
+                 _  -> err$ "(AppE) Cannot unify NoDest with " ++ sdoc valTy
 
     L1.TimeIt e t b ->
         do (e',ty',cs') <- inferExp env e dest
@@ -619,7 +621,12 @@ inferExp env@FullEnv{dataDefs}
 
     L1.DataConE () k ls ->
       case dest of
-        NoDest -> err $ "Expected single location destination for DataConE"
+        NoDest -> do
+          -- CSK: Should this really be an error ?
+          loc <- lift $ lift $ freshLocVar "datacon"
+          (e',ty,cs) <- inferExp env (l$ DataConE () k ls) (SingleDest loc)
+          fcs <- tryInRegion cs
+          tryBindReg (e', ty, fcs)
         TupleDest _ds -> err $ "Expected single location destination for DataConE"
         SingleDest d -> do
                   locs <- sequence $ replicate (length ls) fresh
@@ -748,9 +755,6 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion cs''
           tryBindReg (lc$ L2.LetE (vr,[],IntTy,L sl2 $ L2.LitE i) bod'', ty'', fcs)
 
-        -- CSK: I've mostly copied the DataConE case with some minor modifications.
-        -- TODO: Have @vollmerm audit this once.
-        --
         -- TODO: docs
         L1.PrimAppE (L1.ReadPackedFile fp tycon _ ty) [] -> do
           r <- lift $ lift $ gensym "r"
