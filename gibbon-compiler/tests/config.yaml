@@ -183,12 +183,16 @@ tests:
   ##    'printf': function not inlinable
   ##    printf (const char *__restrict __fmt, ...)
   ##
-  ## TODO(CSK): I don't really understand this error, and a quick Google search didn't wasn't very helpful.
+  ## TODO(CSK): I don't really understand this error, and a quick Google search wasn't very helpful.
   - name: test_par01.gib
   - name: test_par03.gib
   - name: test_par04.gib
   - name: test_par07.gib
   - name: test_par08.gib
+
+  ## Fusion2 tests
+  - name: test_sumup_seteven.gib
+    failing: [gibbon1, gibbon2]
 
   ## A difficult test for AddTraversals.
   - name: test_par05.gib
@@ -222,9 +226,11 @@ tests:
   - name: test_addtrees.gib
     failing: [gibbon2,gibbon1]
   - name: test_buildtreesum.gib
-    failing: [gibbon2,gibbon1]
+
+    ## Fusion2 makes it work for some reason.
+    # failing: [gibbon2,gibbon1]
   - name: test_sumupseteven.gib
-    failing: [gibbon2,gibbon1]
+    # failing: [gibbon2,gibbon1]
   - name: test25d_racketcore.gib
     failing: [gibbon2, gibbon1]
 

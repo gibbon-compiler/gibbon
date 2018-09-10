@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
 {-# LANGUAGE FlexibleContexts #-}
 
-module Packed.FirstOrder.Passes.Fusion2 (fusion2) where
+module Gibbon.Passes.Fusion2 (fusion2) where
 import Prelude hiding (exp)
 
 import Control.Exception
@@ -12,19 +12,18 @@ import qualified Data.List as L
 import qualified  Data.Set as S
 import qualified Data.Vector as V
 import Data.Symbol
-import Packed.FirstOrder.Common
-import Packed.FirstOrder.L1.Syntax as L1
+import Gibbon.L1.Syntax as L1
 import Debug.Trace
 import Control.DeepSeq
 import GHC.Generics (Generic, Generic1)
-import Packed.FirstOrder.Common
+import Gibbon.Common
 import Data.Tuple.All
 import Data.Vector as V
 
                                                 
  
 
-freshExp :: [(Var,Var)] -> L Exp1 -> SyM (L L1.Exp1)
+freshExp :: [(Var,Var)] -> L Exp1 -> PassM (L L1.Exp1)
 freshExp vs (L sloc exp) = fmap (L sloc) $
             case exp of
               L1.Ext _     -> return exp
@@ -183,22 +182,22 @@ findPotential table skipList =
   
                  
 
-inline :: FunDef Ty1 (L Exp1)-> FunDef Ty1 (L Exp1) -> Int  ->  FunDef Ty1 (L Exp1)
+inline :: FunDef1 -> FunDef1 -> Int  ->  FunDef1
 inline inlined_fun outer_fun arg_pos  =  
   -- right now i am only handling when the outer function have one argument which is the tree prodcued by the inlined function 
   -- in the future i shoul allow multiple arguments ...
   -- why dont we always make the type prod for simplification !
 
   -- also right now we assume that the inlined fuction takes one argument which is the input tree
-  let old_exp  = l $ case ( snd (funArg outer_fun)) of
+  let old_exp  = l $ case (fst (funTy outer_fun)) of
                     ProdTy _      ->  error "not handled yet" --ProjE arg_pos (l (VarE (fst (funArg outer_fun) )) )
-                    _             ->  VarE (fst (funArg outer_fun)) 
+                    _             ->  VarE (funArg outer_fun)
 
 
-  in let newFunArg =  let argType_outer= snd  (funArg outer_fun) 
-                          argVar_outer = fst  (funArg outer_fun)   
-                          argType_inlined= snd  (funArg inlined_fun) 
-                          argVar_inlined = fst  (funArg inlined_fun)   
+  in let newFunArg =  let argType_outer= fst (funTy outer_fun)
+                          argVar_outer = funArg outer_fun
+                          argType_inlined= fst (funTy inlined_fun)
+                          argVar_inlined = funArg inlined_fun
 
                       in case  argType_outer  of 
                               ProdTy ls -> error "not supported yet" -- (argVar, ProdTy (take arg_pos ls  L.++ drop (1 + arg_pos) ls) )
@@ -211,7 +210,7 @@ inline inlined_fun outer_fun arg_pos  =
 
 
 --  THERE IS AN ASSUMPTION THAT DataConstE takes only list of variable references ( no nested pattern matching) 
-simplifyCases :: FunDef Ty1 ( L Exp1) -> FunDef Ty1 (L Exp1)
+simplifyCases :: FunDef1 -> FunDef1
 simplifyCases function = 
   function {funBody = rec ( funBody function) }
   where rec ( L l ex)  = case  ex of
@@ -248,7 +247,7 @@ simplifyCases function =
 -- it also assumes that there is no variables shadowing "imprtant!! " --> can be chnaged not to by carrying the deftable around 
 
 -- we have a probelem here and its that 
-foldFusedCalls_f ::(Var, Var, Int,Var ) -> FunDef Ty1 ( L Exp1)-> FunDef Ty1 ( L Exp1)
+foldFusedCalls_f ::(Var, Var, Int,Var ) -> FunDef1 -> FunDef1
 foldFusedCalls_f rule function = function{funBody= foldFusedCalls rule (funBody function)}
 
 foldFusedCalls :: (Var, Var, Int,Var ) -> L Exp1  ->(L Exp1) 
@@ -290,10 +289,10 @@ foldFusedCalls rule@(outerName, innerName, argPos,newName ) body =
                           otherwise -> L l ex --`debug` ("here6  ") 
   in rec body
 
-foldTupledFunctions_f :: ( FunDef Ty1 ( L Exp1)) ->[Var] ->( FunDef Ty1 ( L Exp1))
+foldTupledFunctions_f :: ( FunDef1) ->[Var] ->( FunDef1)
 foldTupledFunctions_f funDef ls = funDef{funBody = (foldTupledFunctions (funBody funDef ) funDef ls )}
 
-foldTupledFunctions ::   L Exp1 -> ( FunDef Ty1 ( L Exp1)) -> [Var] -> L Exp1
+foldTupledFunctions ::   L Exp1 -> ( FunDef1) -> [Var] -> L Exp1
 foldTupledFunctions body newFun oldCalls = 
     (rec  body  M.empty)  where
        rec (L l ex) mp = 
@@ -304,7 +303,7 @@ foldTupledFunctions body newFun oldCalls =
                                    Just i  -> case (M.lookup x mp) of
                                              Nothing  -> let newVar =toVar ((fromVar x) L.++ "_unq_") in 
                                                            let newMp = M.insert x newVar mp in
-                                                              L l $ LetE (newVar, [], (funRetTy newFun), (L l  (AppE  (funName newFun) [] ( L l (VarE x) )))) (rec (L l p) newMp) 
+                                                              L l $ LetE (newVar, [], (outTy (funTy newFun)), (L l  (AppE  (funName newFun) [] ( L l (VarE x) )))) (rec (L l p) newMp) 
                                              
                                              Just k   ->  L l $ LetE (Var y, loc, t, (L l (ProjE i  (L l $ VarE k)))) ( rec body mp)
 
@@ -320,7 +319,7 @@ foldTupledFunctions body newFun oldCalls =
                     otherwise                -> L l ex
 
 
-removeUnusedDefs :: FunDef Ty1 ( L Exp1) -> FunDef Ty1 ( L Exp1) 
+removeUnusedDefs :: FunDef1 -> FunDef1
 removeUnusedDefs f = f{funBody = removeUnusedDefs_exp (funBody f)}
 
 
@@ -340,19 +339,19 @@ removeUnusedDefs_exp exp =
                     TimeIt exp a b           ->  L l $ TimeIt (rec exp dTable) a b 
 
                     otherwise -> L l ex 
--- need to convert this to monand SyM and generate unique variable names later.
-tupleListOfFunctions :: DDefs Ty1 -> [FunDef Ty1 ( L Exp1)] ->   (FunDef Ty1 ( L Exp1), [Var] )
+-- need to convert this to monand PassM and generate unique variable names later.
+tupleListOfFunctions :: DDefs Ty1 -> [FunDef1] ->   (FunDef1, [Var] )
 tupleListOfFunctions  ddefs ls = do
   let newName = L.foldl  appendName "" ls where appendName tmp function = (tmp  L.++ (fromVar (funName function)))  
   -- we want to prepare the body of each function seperatly now
   let lsVector    = V.fromList ls 
-  let retTypes    = V.map (\f ->(funRetTy f)) lsVector
+  let retTypes    = V.map (\f -> (outTy (funTy f))) lsVector
   let newRetType  = ProdTy (V.toList retTypes)  
 
   let newArgVar = toVar "input"
-  let traversedType =snd (funArg( L.head ls))
-  let newArgs = (newArgVar,traversedType)
-  let step1 = L.map getBody ls where getBody fun = substE  (l (VarE (fst (funArg( L.head ls)))) ) (l (VarE newArgVar)) (funBody fun)  
+  let traversedType = inTy (funTy (L.head ls))
+  let newArgs = newArgVar
+  let step1 = L.map getBody ls where getBody fun = substE  (l (VarE (funArg( L.head ls))) ) (l (VarE newArgVar)) (funBody fun)  
 
   let step2 = L.map mapAndSplit step1  
                       where mapAndSplit (L _(CaseE e ls)) = L.foldr f M.empty ls 
@@ -380,9 +379,9 @@ tupleListOfFunctions  ddefs ls = do
                                                                                                         (Nothing) ->error "ooopsa1")  step2 
 
   let funNames = L.map (\f -> funName f ) ls                                                                                          
-  (FunDef  (toVar ("tupled__" L.++ newName) )newArgs newRetType (l reduceStep) , funNames)
+  (FunDef (toVar ("tupled__" L.++ newName) ) newArgs (traversedType, newRetType) (l reduceStep) , funNames)
 
-renameFunction:: FunDef Ty1 ( L Exp1) -> Var -> FunDef Ty1 ( L Exp1) 
+renameFunction :: FunDef1 -> Var -> FunDef1
 renameFunction function newName = 
   function{funName=newName, funBody = rec (funBody function)} where 
     rec (L l ex) = 
@@ -428,13 +427,12 @@ buildUseTable ex  = rec  ex (M.fromList []) where
 
 
 
-check2 :: [FunDef Ty1 ( L Exp1)] ->Bool
+check2 :: [FunDef1] ->Bool
 check2 []    = False
 check2 (x:[])  = False
-check2 (x:(y:xs)) = (hasCommonIfBody (getInVar x) (getInVar y) (funBody x)(funBody y)  ) || 
-                    (hasCommonCaseBody (getInVar x) (getInVar y)  (funBody x)(funBody y) ) 
+check2 (x:(y:xs)) = (hasCommonIfBody (funArg x) (funArg y) (funBody x)(funBody y)  ) ||
+                    (hasCommonCaseBody (funArg x) (funArg y)  (funBody x)(funBody y) )
   where
-    getInVar function = case(funArg x) of ((v,_))-> v 
     hasCommonIfBody in1 in2 (L _ (IfE e1 _ _ )) (L _ (IfE e2 _ _ )) = 
       if (subst in1 (l (VarE (toVar "input"))) e1 ) == (subst in2 (l (VarE (toVar "input"))) e2 ) then  True  else False
    
@@ -443,7 +441,7 @@ check2 (x:(y:xs)) = (hasCommonIfBody (getInVar x) (getInVar y) (funBody x)(funBo
     hasCommonCaseBody in1 in2 (L _ (CaseE (L _ (VarE in1_) ) _ ) ) (L _ (CaseE (L _ (VarE in2_) ) _ ) ) = (in1==in1_) && (in2==in2_)
     hasCommonCaseBody _ _ _ _ = False
 
-tuple :: DDefs Ty1 ->    FunDefs Ty1 (L Exp1) -> L Exp1 -> SyM (L Exp1,  FunDefs Ty1 (L Exp1))
+tuple :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> PassM (L Exp1,  FunDefs1)
 tuple ddefs fdefs oldExp = do
   let useTable        = buildUseTable oldExp
   
@@ -480,7 +478,7 @@ tuple ddefs fdefs oldExp = do
   let newDefs          = L.foldr (\(funDef,_) mp -> M.insert (funName funDef) funDef mp )    M.empty foldedTupledFunctions
   return (newExp, newDefs)
 
-fuse :: DDefs Ty1 -> FunDefs Ty1 (L Exp1)-> Var -> Var-> SyM  (Bool, Var,  FunDefs Ty1 (L Exp1) )
+fuse :: DDefs Ty1 -> FunDefs1 -> Var -> Var-> PassM  (Bool, Var,  FunDefs1)
 fuse ddefs fdefs  inner outer  = do
   let inner_fun =  fdefs M.! inner
   let outer_fun =  fdefs M.! outer
@@ -493,15 +491,15 @@ fuse ddefs fdefs  inner outer  = do
   return $(True, inline_name,fdefs1 ); 
 
 
-restrictionsViolation :: FunDefs Ty1 (L Exp1) -> Var -> Var -> Bool
+restrictionsViolation :: FunDefs1 -> Var -> Var -> Bool
 restrictionsViolation fdefs inner outer =
   do
     let innerDef = case (M.lookup inner fdefs) of (Just  v) ->v
     let outerDef = case (M.lookup outer fdefs) of (Just v) ->v
-    let p1 =  case (snd (funArg innerDef) ) of
+    let p1 =  case (fst (funTy innerDef) ) of
                              (PackedTy _ _ ) -> False 
                              otherwise  -> True
-    let p2 =  case (snd (funArg outerDef) ) of
+    let p2 =  case (fst (funTy outerDef) ) of
                              (PackedTy _ _) -> False 
                              otherwise  -> True
     (p1 || p2)
@@ -511,7 +509,7 @@ restrictionsViolation fdefs inner outer =
                                                 
 
 
-transform :: DDefs Ty1 -> FunDefs Ty1 (L Exp1)-> L Exp1 -> SyM (L Exp1,  FunDefs Ty1 (L Exp1))
+transform :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> PassM (L Exp1,  FunDefs1)
 transform  ddefs funDefs bodyin = do
   rec bodyin [] funDefs where
    rec (L l body) selectedItems fdefs = do
@@ -562,16 +560,16 @@ transform  ddefs funDefs bodyin = do
                     rec (L l body)  ((inner,outer):selectedItems) fdefs
 
         
-fusion2:: L1.Prog -> SyM L1.Prog 
+fusion2 :: Prog1 -> PassM Prog1
 fusion2 (L1.Prog defs funs main) = do
   (main', funs') <- case main of 
-                         Nothing   -> return $ (Nothing, M.empty)
-                         Just m    -> do 
-                                (m', newDefs) <- (transform defs funs m )
-                                return (Just m', M.union funs newDefs) 
-  return $ L1.Prog defs funs'  main'  
+                      Nothing   -> return $ (Nothing, M.empty)
+                      Just (m, ty)    -> do
+                             (m', newDefs) <- (transform defs funs m )
+                             return (Just (m',ty), M.union funs newDefs)
+  return $ L1.Prog defs funs' main'
 
--- combine ::  DDefs Ty1-> FunDefs Ty1 (L Exp1)-> Var -> Var-> SyM  (Bool, Var,  FunDefs Ty1 (L Exp1) )
+-- combine ::  DDefs Ty1-> FunDefs Ty1 (L Exp1)-> Var -> Var-> PassM  (Bool, Var,  FunDefs Ty1 (L Exp1) )
 -- combine ddefs fdefs  inner outer  = do
 --   -- let inner_fun =  fdefs M.! inner
 --   -- let outer_fun =  fdefs M.! outer
@@ -601,7 +599,7 @@ fusion2 (L1.Prog defs funs main) = do
 
 --right now outer have to take one arg exactly same for inner and must be of an ADT type
 
--- transformFuse :: DDefs Ty1 -> FunDefs Ty1 (L Exp1)-> L Exp1 -> SyM (L Exp1,  FunDefs Ty1 (L Exp1))
+-- transformFuse :: DDefs Ty1 -> FunDefs Ty1 (L Exp1)-> L Exp1 -> PassM (L Exp1,  FunDefs Ty1 (L Exp1))
 -- transformFuse  ddefs funDefs bodyin = do
 --   rec bodyin [] funDefs where
 --    rec (L l body) selectedItems fdefs = do
@@ -621,5 +619,3 @@ fusion2 (L1.Prog defs funs main) = do
 --                     in rec body' ((inner,outer):selectedItems) (M.union fdefs newDefs)
 --                   else
 --                     rec (L l body)  ((inner,outer):selectedItems) fdefs
-
-
