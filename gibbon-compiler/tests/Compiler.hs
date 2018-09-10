@@ -1,6 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NamedFieldPuns #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 -- | Tests for the compiler pipeline after L2
@@ -16,32 +14,32 @@ import Test.Tasty.TH
 import System.FilePath
 import System.Directory
 
-import Packed.FirstOrder.Common hiding (FunDef)
-import Packed.FirstOrder.DynFlags
-import Packed.FirstOrder.L1.Syntax hiding (FunDef, Prog, add1Prog)
-import Packed.FirstOrder.L2.Syntax as L2
-import Packed.FirstOrder.L2.Typecheck
-import Packed.FirstOrder.L2.Examples
-import Packed.FirstOrder.Passes.InferMultiplicity
-import Packed.FirstOrder.Passes.InferEffects
-import Packed.FirstOrder.Passes.RouteEnds
-import Packed.FirstOrder.Passes.ThreadRegions
-import Packed.FirstOrder.Passes.BoundsCheck
-import Packed.FirstOrder.Passes.Cursorize
-import Packed.FirstOrder.Passes.Unariser
-import Packed.FirstOrder.Passes.ShakeTree
-import Packed.FirstOrder.Passes.HoistNewBuf
-import Packed.FirstOrder.Passes.FindWitnesses
-import Packed.FirstOrder.Passes.Lower
-import Packed.FirstOrder.Passes.FollowRedirects
-import Packed.FirstOrder.Passes.RearrangeFree
-import Packed.FirstOrder.TargetInterp
-import Packed.FirstOrder.Passes.Codegen
-import Packed.FirstOrder.Passes.Flatten
-import Packed.FirstOrder.Compiler
-import qualified Packed.FirstOrder.L3.Typecheck as L3
-import qualified Packed.FirstOrder.L3.Syntax as L3
-import qualified Packed.FirstOrder.L4.Syntax as L4
+import Gibbon.Common hiding (FunDef)
+import Gibbon.DynFlags
+import Gibbon.L1.Syntax hiding (FunDef, Prog, add1Prog)
+import Gibbon.L2.Syntax as L2
+import Gibbon.L2.Typecheck
+import Gibbon.L2.Examples
+import Gibbon.Passes.InferMultiplicity
+import Gibbon.Passes.InferEffects
+import Gibbon.Passes.RouteEnds
+import Gibbon.Passes.ThreadRegions
+import Gibbon.Passes.BoundsCheck
+import Gibbon.Passes.Cursorize
+import Gibbon.Passes.Unariser
+import Gibbon.Passes.ShakeTree
+import Gibbon.Passes.HoistNewBuf
+import Gibbon.Passes.FindWitnesses
+import Gibbon.Passes.Lower
+import Gibbon.Passes.FollowRedirects
+import Gibbon.Passes.RearrangeFree
+import Gibbon.TargetInterp
+import Gibbon.Passes.Codegen
+import Gibbon.Passes.Flatten
+import Gibbon.Compiler
+import qualified Gibbon.L3.Typecheck as L3
+import qualified Gibbon.L3.Syntax as L3
+import qualified Gibbon.L4.Syntax as L4
 
 
 -- | Directory to write out *.c and *.exe files
@@ -52,10 +50,10 @@ testDir = makeValid ("examples" </> "build_tmp")
 -- | The compiler pipeline after inferLocations
 --   It's divided into 2 functions for easy debugging. There's a good chance that we'd
 --   want to inspect the output of Cursorize in most cases
-runT :: Prog -> L3.Prog
-runT prg = fst $ runSyM 0 $ do
+runT :: Prog2 -> L3.Prog3
+runT prg = fst $ defaultPackedRunPassM $ do
     l2 <- flattenL2 prg
-    l2 <- inferRegScope Infinite l2
+    l2 <- inferRegScope l2
     l2 <- inferEffects l2
     l2 <- tcProg l2
     l2 <- routeEnds l2
@@ -63,33 +61,32 @@ runT prg = fst $ runSyM 0 $ do
     l2 <- boundsCheck l2
     l2 <- threadRegions l2
     l2 <- flattenL2 l2
-    l3 <- cursorize defaultDynFlags l2
+    l3 <- cursorize l2
     return l3
 
 
-run2T :: L3.Prog -> L4.Prog
-run2T l3 = fst $ runSyM 0 $ do
+run2T :: L3.Prog3 -> L4.Prog
+run2T l3 = fst $ defaultPackedRunPassM $ do
     l3 <- flattenL3 l3
     -- l3 <- findWitnesses l3
     -- l3 <- shakeTree l3
-    l3 <- L3.tcProg l3
+    l3 <- L3.tcProg True l3
     l3 <- hoistNewBuf l3
     l3 <- unariser l3
-    let mainTyPre = fmap snd $ L3.mainExp l3
     l3 <- flattenL3 l3
-    l3 <- L3.tcProg l3
-    l4 <- lower (True, mainTyPre) l3
+    l3 <- L3.tcProg True l3
+    l4 <- lower l3
     l4 <- followRedirects l4
     rearrangeFree l4
 
 
-cg :: Prog -> IO String
-cg = codegenProg defaultDynFlags . run2T . runT
+cg :: Prog2 -> IO String
+cg = codegenProg defaultConfig . run2T . runT
 
 
 type Expected = String
 
-runner :: FilePath -> Prog -> Expected -> Assertion
+runner :: FilePath -> Prog2 -> Expected -> Assertion
 runner fp prg exp = do
     _ <- createDirectoryIfMissing True testDir
     fp <- makeAbsolute $ testDir </> fp

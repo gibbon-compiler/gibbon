@@ -1,5 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 -- |
 
@@ -14,29 +13,32 @@ import Test.Tasty.TH
 
 
 -- |
-import Packed.FirstOrder.L4.Syntax hiding (Prog (..), Ty (..))
+import Gibbon.L4.Syntax hiding (Prog (..), Ty (..))
 
-import Packed.FirstOrder.Common (Multiplicity(..))
-import qualified Packed.FirstOrder.L4.Syntax as T
-import qualified Packed.FirstOrder.TargetInterp as TI
+import Gibbon.Common (Multiplicity(..))
+import qualified Gibbon.L4.Syntax as T
+import qualified Gibbon.TargetInterp as TI
 
 -- |
 import RouteEnds
 import InferEffects
 import InferMultiplicity
 import Unariser
-import AddLayout
+import AddRAN
 import Compiler
-import L2.Typecheck
 import L1.Typecheck
+import L1.Interp
+import L2.Typecheck
+import L2.Interp
 import L3.Typecheck
+import L0.Specialize
 import InferLocations
 
 main :: IO ()
 main = defaultMain allTests
   where allTests = testGroup "All"
                    [ tests
-                   , addLayoutTests
+                   , addRANTests
                    , routeEnds2Tests
                    , inferLocations2Tests
                    , inferEffects2Tests
@@ -44,7 +46,10 @@ main = defaultMain allTests
                    , unariser2Tests
                    -- , l2TypecheckerTests
                    , l1TypecheckerTests
+                   , l1InterpTests
+                   , l2InterpTests
                    , l3TypecheckerTests
+                   , specializeTests
                    , compilerTests
                    ]
 
@@ -278,8 +283,8 @@ add1_prog = T.Prog [build_tree, add1]
             (Just $ PrintExp $
              LetPrimCallT [("buf", T.CursorTy)] (T.NewBuffer BigInfinite) [] $
              LetPrimCallT [("buf2", T.CursorTy)] (T.NewBuffer BigInfinite) [] $
-             LetCallT [( "tr", T.PtrTy)] "build_tree" [IntTriv 10, VarTriv "buf"] $
-             LetCallT [("ignored1", T.CursorTy), ("ignored2", T.CursorTy)] "add1"  [VarTriv "tr", VarTriv "buf2"] $
+             LetCallT False [( "tr", T.PtrTy)] "build_tree" [IntTriv 10, VarTriv "buf"] $
+             LetCallT False [("ignored1", T.CursorTy), ("ignored2", T.CursorTy)] "add1"  [VarTriv "tr", VarTriv "buf2"] $
              (RetValsT [])
             )
   where
@@ -298,8 +303,8 @@ add1_prog = T.Prog [build_tree, add1]
         recursive_case =
           LetPrimCallT [("n1",T.IntTy)] SubP [VarTriv "n", IntTriv 1] $
           LetPrimCallT [("tout1",T.CursorTy)] WriteTag [TagTriv 1, VarTriv "tout"] $
-          LetCallT [("tout2",T.CursorTy)] "build_tree" [VarTriv "n1", VarTriv "tout1"] $
-          LetCallT [("tout3",T.CursorTy)] "build_tree" [VarTriv "n1", VarTriv "tout2"] $
+          LetCallT False [("tout2",T.CursorTy)] "build_tree" [VarTriv "n1", VarTriv "tout1"] $
+          LetCallT False [("tout3",T.CursorTy)] "build_tree" [VarTriv "n1", VarTriv "tout2"] $
           RetValsT [VarTriv "tout3"]
 
     add1_tail =
@@ -318,7 +323,7 @@ add1_prog = T.Prog [build_tree, add1]
 
         nodeCase =
           LetPrimCallT [("tout2",T.CursorTy)] WriteTag [TagTriv nodeTag, VarTriv "tout"] $
-          LetCallT [("t3",T.CursorTy),("tout3",T.CursorTy)] "add1" [VarTriv "t2", VarTriv "tout2"] $
+          LetCallT False [("t3",T.CursorTy),("tout3",T.CursorTy)] "add1" [VarTriv "t2", VarTriv "tout2"] $
           TailCall "add1" [VarTriv "t3", VarTriv "tout3"]
 
         leafTag, nodeTag :: Word8

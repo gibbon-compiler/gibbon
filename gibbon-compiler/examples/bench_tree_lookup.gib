@@ -1,0 +1,36 @@
+#lang gibbon
+
+(data Tree
+      [Null]
+      [Leaf Int]
+      [Node Int Tree Tree])
+
+;; (define (buildtree [n : Int]) : Tree
+;;   (helper 0 (- n 1)))
+
+(define (helper [s : Int] [e : Int]) : Tree
+  (if (< e s)
+      (Null)
+      (if (= s e)
+          (Leaf s)
+          (let ([m : Int (+ (div (- e s) 2) s)])
+            (Node m (helper s (- m 1))
+                  (helper (+ m 1) e))))))
+
+(define (tree-lookup [tr : Tree] [n : Int]) : Int
+  (case tr
+    [(Null)        0]
+    [(Leaf n1)     (if (= n1 n) 1 0)]
+    [(Node n1 x y) (if (= n1 n)
+                       1
+                       (if (< n n1)
+                           (tree-lookup x n)
+                           (tree-lookup y n)))]))
+
+(let ([m : Int (size-param)])
+  ;; (2 ^ (n+1)) - 1
+  (let ([total-nodes : Int (- (exp 2 (+ (size-param) 1)) 1)])
+    (let ([tr0 : Tree (helper 0 total-nodes)])
+      (let ([n : Int (iterate (let ([j : Int (mod (rand) total-nodes)])
+                                (tree-lookup tr0 j)))])
+        n))))

@@ -1,0 +1,16 @@
+#lang gibbon
+
+(data List
+      [Nil]
+      [Cons Sym List])
+
+(define (elem [x : Sym] [xs : List]) : Bool
+  (case xs
+    [(Nil) False]
+    [(Cons y ys) (if (eq? y x)
+                     True
+                     (elem x ys))]))
+
+(let ([a : Sym 'abc])
+  (let ([as : List (Cons 'a (Cons 'b (Cons 'abc (Nil))))])
+    (elem a as)))

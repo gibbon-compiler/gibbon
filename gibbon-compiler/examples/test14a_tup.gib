@@ -1,0 +1,9 @@
+#lang gibbon
+
+(data List
+      [Nil]
+      [Cons Int List])
+
+(let ([x : List (Cons 1 (Nil))])
+  (let ([y : List (Cons 2 (Nil))])
+    42))

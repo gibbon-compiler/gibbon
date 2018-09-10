@@ -1,0 +1,15 @@
+#lang gibbon
+
+(data List
+      [Nil]
+      [Cons Int List])
+
+(define (sum-list [xs : List]) : Int
+  (case xs
+    [(Nil) 0]
+    [(Cons y ys) (+ y (sum-list ys))]))
+
+(let ([x : List (Cons 1 (Nil))])
+  (let ([y : List (Cons 2 (Nil))])
+    (let ([z : (Vector List List) (vector x y)])
+      (+ (sum-list (vector-ref z 0)) (sum-list (vector-ref z 1))))))

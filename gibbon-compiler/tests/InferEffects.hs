@@ -1,6 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NamedFieldPuns #-}
 
 -- | Tests for RouteEnds2
 --
@@ -13,18 +11,18 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.TH
 
-import Packed.FirstOrder.Common hiding (FunDef)
-import Packed.FirstOrder.L2.Syntax as L2
-import Packed.FirstOrder.L2.Examples
-import Packed.FirstOrder.Passes.InferEffects
-import qualified Packed.FirstOrder.L1.Syntax as L1
+import Gibbon.Common
+import Gibbon.L2.Syntax as L2
+import Gibbon.L2.Examples
+import Gibbon.Passes.InferEffects
+import Gibbon.L1.Syntax as L1
 
 
-assertInferEffects :: Prog -> Var -> Set Effect -> Assertion
+assertInferEffects :: Prog2 -> Var -> Set Effect -> Assertion
 assertInferEffects prg fnName expected = expected @=? eff
   where -- run inferEffects and get the effect from it's type
-        Prog{fundefs} = fst $ runSyM 0 $ inferEffects prg
-        eff = arrEffs $ funty (fundefs ! fnName)
+        Prog{fundefs} = fst $ defaultPackedRunPassM $ inferEffects prg
+        eff = arrEffs $ funTy (fundefs ! fnName)
 
 
 -- | Add1 function has a traversal effect [Traverse "lin2"]

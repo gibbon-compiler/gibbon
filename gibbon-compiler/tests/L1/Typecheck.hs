@@ -1,6 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NamedFieldPuns #-}
 
 -- | Tests for the L1 typechecker
 module L1.Typecheck where
@@ -14,9 +12,9 @@ import Data.Loc
 import Data.Map as M
 import Data.Set as S
 
-import Packed.FirstOrder.Common hiding (FunDef)
-import Packed.FirstOrder.L1.Syntax
-import Packed.FirstOrder.L1.Typecheck
+import Gibbon.Common hiding (FunDef)
+import Gibbon.L1.Syntax
+import Gibbon.L1.Typecheck
 
 type Exp = L Exp1
 
@@ -118,27 +116,28 @@ t1 = l$  AppE "mul" []
      (l$ MkProdE [l$ LitE 10, l$ AppE "add" [] (l$ MkProdE [l$ LitE 40, l$ LitE 2])])
 
 
-t1Prog :: Prog
+t1Prog :: Prog1
 t1Prog = Prog {ddefs = M.fromList [],
         fundefs = M.fromList
                   [("mul2",
                     FunDef {funName = "mul2",
-                            funArg = ("x_y1", ProdTy [IntTy,IntTy]),
-                            funRetTy = IntTy,
+                            funArg = "x_y1",
+                            funTy = (ProdTy [IntTy,IntTy] , IntTy),
                             funBody = l$ PrimAppE MulP
                                       [l$ ProjE 0 (l$ VarE "x_y1"), l$ ProjE 1 (l$ VarE "x_y1")]}),
                    ("add2",
                     FunDef {funName = "add2",
-                            funArg = ("x_y0", ProdTy [IntTy,IntTy]),
-                            funRetTy = IntTy,
+                            funArg = "x_y0",
+                            funTy = (ProdTy [IntTy,IntTy], IntTy),
                             funBody = l$ PrimAppE AddP
                                       [l$ ProjE 0 (l$ VarE "x_y0"),
                                        l$ ProjE 1 (l$ VarE "x_y0")]})],
-        mainExp = Just $ l$  AppE "mul2"
-                  []
-                  (l$ MkProdE [l$ LitE 10, l$ AppE "add2" [] (l$ MkProdE [l$ LitE 40, l$ LitE 2])])}
+        mainExp = Just
+                  ( l$  AppE "mul2" [] (l$ MkProdE [l$ LitE 10, l$ AppE "add2" [] (l$ MkProdE [l$ LitE 40, l$ LitE 2])])
+                  , IntTy)
+              }
 
 -- | upon successful typechecking, it just returns the same program
 case_run_tcProg :: Assertion
 case_run_tcProg = t1Prog @=? res
-  where res = fst $ runSyM 0 $ tcProg t1Prog
+  where res = fst $ defaultRunPassM $ tcProg t1Prog

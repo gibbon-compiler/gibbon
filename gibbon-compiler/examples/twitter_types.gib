@@ -1,0 +1,14 @@
+#lang gibbon
+
+(provide (all-defined-out))
+
+(data Hashtags
+      [NilHT]
+      [ConsHT Sym Hashtags])
+
+;; TweetMD user_id hash
+(data Tweet [TweetMD Int Hashtags])
+
+(data Tweets
+      [NilTW]
+      [ConsTW Tweet Tweets])

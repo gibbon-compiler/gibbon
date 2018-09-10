@@ -1,0 +1,7 @@
+#lang gibbon
+
+(define (sum [a : Int] [b : Int]) : Int
+  (+ a b))
+
+(let ([tup : (Vector Int Int) (par (sum 10 20) (sum 20 30))])
+  (+ (vector-ref tup 0) (vector-ref tup 1)))

@@ -1,6 +1,4 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE NamedFieldPuns #-}
 
 -- | Tests for Unariser2
 --
@@ -15,15 +13,15 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import Test.Tasty.TH
 
-import Packed.FirstOrder.Common hiding (FunDef, FunDefs)
-import Packed.FirstOrder.L1.Syntax hiding (FunDef, Prog(..), FunDefs)
-import Packed.FirstOrder.L3.Syntax
-import Packed.FirstOrder.GenericOps
-import Packed.FirstOrder.Passes.Unariser
+import Gibbon.Common hiding (FunDef, FunDefs)
+import Gibbon.L1.Syntax hiding (FunDef, Prog, PreProg(..), FunDefs)
+import Gibbon.L3.Syntax
+import Gibbon.GenericOps
+import Gibbon.Passes.Unariser
 
 
 run :: L Exp3 -> L Exp3
-run x = fst $ runSyM 0 $ unariserExp undefined [] (Env2 M.empty M.empty) x
+run x = fst $ defaultRunPassM $ unariserExp undefined [] (Env2 M.empty M.empty) x
 
 case_t1 :: Assertion
 case_t1 = expected @=? actual

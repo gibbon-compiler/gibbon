@@ -17,8 +17,9 @@ addons:
     sources:
     - ubuntu-toolchain-r-test
     packages:
+      - libgc-dev
       - libgmp-dev
-      - gcc-5
+      - gcc-7
 
 env:
   global:
@@ -40,7 +41,7 @@ install:
   - export PATH="${RACKET_DIR}/bin:${PATH}"
 
   # GCC
-  - sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-5 /usr/bin/gcc
+  - sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-7 /usr/bin/gcc
 
 # We have a private submodule, and can't clone it without adding proper keys to Travis
 git:

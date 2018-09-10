@@ -1,0 +1,34 @@
+#lang gibbon
+
+(require "twitter_types.gib")
+
+(provide (all-defined-out))
+
+;; Does the hastag occur in the list ?
+(define (elem-ht [x : Sym] [xs : Hashtags]) : Bool
+  (case xs
+    [(NilHT) False]
+    [(ConsHT y ys) (if (eq? x y)
+                       True
+                       (elem-ht x ys))]))
+
+;; Does the tweet contain a particular hashtag ?
+(define (tweet-has-ht [x : Sym] [t : Tweet]) : Bool
+  (case t
+    [(TweetMD i hs) (elem-ht x hs)]))
+
+;; How many times does a hashtag occur in the dataset ?
+(define (tweets-count-ht-go [acc : Int] [ht : Sym] [xs : Tweets]) : Int
+  (case xs
+    [(NilTW) acc]
+    [(ConsTW y ys) (if (tweet-has-ht ht y)
+                       (tweets-count-ht-go (+ acc 1) ht ys)
+                       (tweets-count-ht-go acc ht ys))]))
+
+(define (tweets-count-ht [ht : Sym] [xs : Tweets]) : Int
+  (tweets-count-ht-go 0 ht xs))
+
+(let ([t1 : Tweet (TweetMD 0 (ConsHT 'cats (ConsHT 'boats (NilHT))))])
+  (let ([t2 : Tweet (TweetMD 1 (ConsHT 'cats (NilHT)))])
+    (let ([tweets : Tweets (ConsTW t1 (ConsTW t2 (NilTW)))])
+      (time (tweets-count-ht 'cats tweets)))))

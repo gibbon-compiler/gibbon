@@ -1,0 +1,247 @@
+## The config file for the Gibbon testsuite.
+## These configuration parameters are only used by TestRunner.hs and
+## have no effect on the unit tests (i.e stack test).
+
+## Configuration that can be added to the entire testsuite (or passed via command line):
+##
+## skip-failing: True    -- ^ Don't run the expected failures. (default: false)
+## verbosity:    Int     -- ^ Controls the summary that's generated at the end. (default: 1)
+## summaryFile:  String  -- ^ File in which to store the test summary. (default: gibbon-test-summary.txt)
+## tempdir:      String  -- ^ Temporary directory to store the build artifacts (default: examples/build_tmp)
+## run-modes:   [String] -- ^ If non-empty, run tests only in the specified modes. (default: [])
+
+## Specifiying an individual test:
+##
+## name: name of the testfile
+## dir : location of the testfile (default: examples)
+## failing: modes in which the test is expected to fail (default: [])
+## skip: whether to skip this test (default: false)
+## run-modes: if non-empty, run this test only in the specified modes.
+##            has higher precendence than the global run-mode parameter (default [])
+
+tests:
+  - name: test00_add.gib
+  - name: test00a_size.gib
+  - name: test00b_printBool.gib
+  - name: test00c_printBool.gib
+  - name: test00d_printData.gib
+  - name: test00e_func.gib
+  - name: test01b_ifif.gib
+  - name: test01_if.gib
+  - name: test02_arith.gib
+  - name: test02b_datacon.gib
+  - name: test02c_case.gib
+  - name: test02d_printPair.gib
+  - name: test02e_printNest.gib
+  - name: test03b_eqs.gib
+  - name: test03c_eqs.gib
+  - name: test03d_eqs.gib
+  - name: test03_let.gib
+  - name: test04b_vector.gib
+  - name: test04d_vecfun.gib
+  - name: test04_vector.gib
+  - name: test05_app.gib
+  - name: test05b_app.gib
+  - name: test05c_arity2.gib
+  - name: test06a_two_cases.gib
+  - name: test06b_case.gib
+  - name: test06_case.gib
+  - name: test06c_nested.gib
+  - name: test06d_rec.gib
+  - name: test06e_rec.gib
+  - name: test06f_rec.gib
+  - name: test06g_rec.gib
+  - name: test07b_iterate.gib
+  - name: test07_time.gib
+  - name: test09_recur.gib
+  - name: test11b_fundata.gib
+  - name: test11c_funrec.gib
+  - name: test11d_funrec.gib
+  - name: test11e_funrec.gib
+  - name: test11f_funrec.gib
+  - name: test11_fundata.gib
+  - name: test12_skip.gib
+  - name: test12b_traverse.gib
+  - name: test12c_traverse.gib
+  - name: test13b_build.gib
+  - name: test13_build.gib
+
+  # Needs manual inspection.
+  - name: test14_repair.gib
+
+  - name: test14a_tup.gib
+  - name: test14b_tup.gib
+  - name: test14c_tail.gib
+  - name: test15a_symsearch.gib
+  - name: test18_badconstraint.gib
+    # This only fails on GCC >= 7 (which we're using to fix certain other tests that use Cilk)
+    failing: [pointer]
+  - name: test18b_tupconstraint.gib
+  - name: test18c_identity1.gib
+  - name: test18d_identity2.gib
+  - name: test18e_identity3.gib
+  - name: test18g_identity4.gib
+  - name: test18h_identity5.gib
+  - name: test19_unarytree.gib
+  - name: test20_bintree.gib
+  - name: test20b_bintree.gib
+  - name: test20c_bintree.gib
+  - name: test20d_bintree.gib
+  - name: test20e_bintree.gib
+  - name: test20f_bintree.gib
+  - name: test20h_idree.gib
+  - name: test25a_withprint.gib
+  - name: test25b_racketcore.gib
+  - name: test25c_racketcore.gib
+  - name: test25e_countnodes.gib
+  - name: test25_rackcore.gib
+  - name: test25f_countnodes.gib
+  - name: test26_treewalk.gib
+  - name: test26a_treewalk.gib
+  - name: test27a_subst.gib
+  - name: test27c_subst.gib
+  - name: test29_list.gib
+  - name: test30_twitter.gib
+  - name: test_buildstree.gib
+  - name: test_buildtree.gib
+  - name: test_buildtwotrees.gib
+  - name: test_ddtree.gib
+  - name: test_stree.gib
+  - name: test_sumstree.gib
+  - name: test_sumtree.gib
+  - name: test_unpacking.gib
+  - name: test24_defs.gib
+
+  ## Benchmarks
+
+  - name: bench_add1.gib
+    bench: true
+
+  - name: bench_buildtree.gib
+    bench: true
+
+  - name: bench_copy.gib
+    bench: true
+
+  - name: bench_sumtree.gib
+    bench: true
+
+  - name: bench_sum_add_build.gib
+    bench: true
+
+  - name: bench_id.gib
+    bench: true
+    more-iters: [pointer, gibbon2]
+
+  - name: bench_leftmost.gib
+    bench: true
+    more-iters: [gibbon1, pointer, gibbon2]
+
+  - name: bench_rightmost.gib
+    bench: true
+    more-iters: [pointer, gibbon2]
+
+  - name: bench_build_searchtree.gib
+    bench: true
+
+  - name: bench_tree_lookup.gib
+    bench: true
+    more-iters: [pointer, gibbon2]
+
+  - name: bench_tree_insert.gib
+    bench: true
+    more-iters: [pointer, gibbon2]
+
+  - name: bench_repmax.gib
+    bench: true
+
+  - name: bench_repconst.gib
+    bench: true
+
+  ## There is no significant difference between compose1 / compose2.
+  ## compose2 should be much faster.
+
+  - name: bench_compose1.gib
+    bench: true
+    more-iters: [pointer, gibbon2]
+
+  - name: bench_compose2.gib
+    bench: true
+    more-iters: [pointer, gibbon2]
+
+  ## Mega benchmarks, which use some dataset
+
+  - name: bench_count_hashtag_occ.gib
+    mega-bench: true
+    bench-fun: bench
+    bench-input: examples/twitter_input.gpkd
+
+  ## Parallel tuple combinator tests
+  ## Some of these tests require GCC >= 7. Older GCC's complain:
+  ##
+  ##    /usr/include/x86_64-linux-gnu/bits/stdio2.h:102:1: error: inlining failed in call to always_inline
+  ##    'printf': function not inlinable
+  ##    printf (const char *__restrict __fmt, ...)
+  ##
+  ## TODO(CSK): I don't really understand this error, and a quick Google search didn't wasn't very helpful.
+  - name: test_par01.gib
+  - name: test_par03.gib
+  - name: test_par04.gib
+  - name: test_par07.gib
+  - name: test_par08.gib
+
+  ## A difficult test for AddTraversals.
+  - name: test_par05.gib
+    failing: [gibbon1]
+
+  ## Failing tests:
+  - name: test00f_and.gib
+    failing: [gibbon2, gibbon1]
+  - name: test04c_ifvector.gib
+    failing: [gibbon2, gibbon1]
+  - name: test06h_rec.gib
+    failing: [gibbon2, gibbon1]
+  - name: test06i_casecase.gib
+    failing: [gibbon2, gibbon1]
+  - name: test08b_dict.gib
+    failing: [gibbon2, gibbon1]
+  - name: test08c_dict.gib
+    failing: [gibbon2, gibbon1]
+  - name: test08_dict.gib
+    failing: [gibbon2, gibbon1]
+  - name: test08d_sharedict.gib
+    failing: [gibbon2, gibbon1]
+  - name: test10b_desugar.gib
+    failing: [gibbon2, gibbon1]
+  - name: test10_desugar.gib
+    failing: [gibbon2, gibbon1]
+  - name: test29a_list.gib
+    failing: [gibbon2]
+  - name: test18f_flip.gib
+    failing: [gibbon2, gibbon1]
+  - name: test_addtrees.gib
+    failing: [gibbon2,gibbon1]
+  - name: test_buildtreesum.gib
+    failing: [gibbon2,gibbon1]
+  - name: test_sumupseteven.gib
+    failing: [gibbon2,gibbon1]
+  - name: test25d_racketcore.gib
+    failing: [gibbon2, gibbon1]
+
+  # This test depends on real symbols, which we don't support atm.
+  - name: test27b_subst.gib
+    failing: [pointer,gibbon2,interp1,gibbon1]
+
+  # No gensym, or real symbols.
+  - name: test28_copyprop.gib
+    failing: [gibbon2,pointer,interp1,gibbon1]
+
+  # sym-append not implemented in the RTS
+  - name: test15b_symappend.gib
+    failing: [gibbon2, pointer, gibbon1]
+
+  # Probably safe to delete these tests permanently
+  - name: test16_forlist.gib
+    skip: true
+  - name: test17_forfold.gib
+    skip: true

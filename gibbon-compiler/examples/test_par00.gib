@@ -1,0 +1,50 @@
+#lang gibbon
+
+(data List
+      [Nil]
+      [Cons Int List])
+
+(define (mklist [n : Int]) : List
+  (if (= n 0)
+      (Nil)
+      (Cons n (mklist (- n 1)))))
+
+(define (sum-list [xs : List]) : Int
+  (case xs
+    [(Nil) 0]
+    [(Cons y ys) (+ y (sum-list ys))]))
+
+(define (lesser [x : Int] [xs : List]) : List
+  (case xs
+    [(Nil) (Nil)]
+    [(Cons y ys) (let ([rst : List (lesser x ys)])
+                   (if (< y x)
+                       (Cons y rst)
+                       rst))]))
+
+(define (greater-eq [x : Int] [xs : List]) : List
+  (case xs
+    [(Nil) (Nil)]
+    [(Cons y ys) (let ([rst : List (greater-eq x ys)])
+                   (if (>= y x)
+                       (Cons y rst)
+                       rst))]))
+
+(define (append-list [xs : List] [ys : List]) : List
+  (case xs
+    [(Nil) ys]
+    [(Cons z zs) (Cons z (append-list zs ys))]))
+
+(define (sort [xs : List]) : List
+  (case xs
+    [(Nil) (Nil)]
+    [(Cons y ys) (let ([part1 : List (sort (lesser y ys))])
+                   (let ([part2 : List (sort (greater-eq y ys))])
+                     (append-list part1 (Cons y part2))))]))
+
+
+(sum-list (sort (mklist 3)))
+
+;; (sum-list (append-list (mklist 3) (mklist 2)))
+
+;; (sum-list (greater-eq 9 (mklist 10)))

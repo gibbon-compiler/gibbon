@@ -1,6 +1,5 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 -- | Tests for RouteEnds2
 --
@@ -14,13 +13,13 @@ import Test.Tasty.HUnit
 import Test.Tasty.TH
 import Test.Tasty
 
-import Packed.FirstOrder.Common hiding (FunDef)
-import Packed.FirstOrder.L2.Syntax as L2
-import Packed.FirstOrder.L2.Examples
-import Packed.FirstOrder.L2.Typecheck
-import Packed.FirstOrder.Passes.RouteEnds
-import Packed.FirstOrder.Passes.InferEffects
-import Packed.FirstOrder.L1.Syntax hiding (Prog, FunDef, ddefs, fundefs, mainExp, add1Prog)
+import Gibbon.Common hiding (FunDef)
+import Gibbon.L2.Syntax as L2
+import Gibbon.L2.Examples
+import Gibbon.L2.Typecheck
+import Gibbon.Passes.RouteEnds
+import Gibbon.Passes.InferEffects
+import Gibbon.L1.Syntax
 
 {-
 
@@ -28,7 +27,7 @@ This is very brittle, and has to be kept in sync by hand. It's safe to comment t
 
 test1 :: L Exp2
 test1 = l$ Ext $ LetRegionE (VarR "r") $ l$ Ext $ LetLocE "ltest" (StartOfLE (VarR "r")) $
-        l$ Ext $ LetLocE "ltest1" (AfterConstantLE 1 "ltest") $
+        l$ Ext $ LetLocE "ltest1" (AfterConstantLE 1 "ltest") $f
         l$ LetE ("x", [], PackedTy "Tree" "ltest1", l$ DataConE "ltest1" "Leaf" [l$ LitE 1]) $
         l$ Ext $ LetLocE "ltest2" (AfterVariableLE "x" "ltest1") $
         l$ LetE ("y", [], PackedTy "Tree" "ltest2", l$ DataConE "ltest2" "Leaf" [l$ LitE 2]) $
@@ -51,18 +50,18 @@ case_add1_test1 =
 
 -}
 
-runT :: Prog -> Prog
-runT prg = fst $ runSyM 0 $ do
+runT :: Prog2 -> Prog2
+runT prg = fst $ defaultPackedRunPassM $ do
   l2 <- inferEffects prg
   l2 <- tcProg l2
   routeEnds l2
 
 
-assertRouteEnds :: Prog -> Var -> [LocRet] -> Assertion
+assertRouteEnds :: Prog2 -> Var -> [LocRet] -> Assertion
 assertRouteEnds prg fnName expected = expected @=? lRets
   where -- runT and get LocRet
         Prog{fundefs} = runT prg
-        lRets = locRets $ funty (fundefs ! fnName)
+        lRets = locRets $ funTy (fundefs ! fnName)
 
 -- | add1 reaches the end of its input
 case_add1_test2 :: Assertion

@@ -40,7 +40,7 @@ stack --version | head
 racket --version
 gcc --version
 
-# Set TREELANGDIR:
+# Set GIBBONDIR:
 source set_env.sh
 
 export PLTADDONDIR=`pwd`/.racket_sandbox/
@@ -91,7 +91,13 @@ set -x
 # raco make -v $top/kdTree-BenchMark/racket/*.rkt
 racket $top/kdTree-BenchMark/racket/traversal.gib
 
-STK="stack --allow-different-user --install-ghc"
+STK="stack --allow-different-user"
+
+if [ "$USE_NIX" == "1" ]; then
+    STK+=" --system-ghc "
+else
+    STK+=" --install-ghc "
+fi
 
 set +x; echo
 echo "  Gibbon Compiler (1/2): build & unit tests"
@@ -109,9 +115,10 @@ fi
 echo "  Gibbon Compiler (2/2): compiler test suite"
 echo "--------------------------------------------"
 
-cd $top/gibbon-compiler/examples
-make test $MKPARARGS
 # Turning of -j for now [2016.11.06]
+cd $top/gibbon-compiler
+# make answers
+$STK exec test-gibbon-examples -- -v2
 
 
 # [2017.04.24] TEMP: Disabling below here while the compiler is under construction.

@@ -1,0 +1,26 @@
+#lang gibbon
+
+(data List
+      [Nil]
+      [Cons Int List])
+
+(define (sum-list [xs : List]) : Int
+  (case xs
+    [(Nil) 0]
+    [(Cons y ys) (+ y (sum-list ys))]))
+
+(define (mklist [n : Int]) : List
+  (if (= n 0)
+      (Nil)
+      (Cons n (mklist (- n 1)))))
+
+(let ([xs : List (mklist (exp 2 (size-param)))])
+  (let ([ys : List (mklist (exp 2 (size-param)))])
+    (time
+     (let ([tup : (Vector Int Int) (par (sum-list xs) (sum-list ys))])
+       (+ (vector-ref tup 0) (vector-ref tup 1))))))
+
+;; This requires more work: the expressions have to be extracted into separate functions.
+;;
+;; (let ([tup : (Vector List List) (par (Cons 1 (Nil)) (Cons 2 (Nil)))])
+;;   (sum-list (vector-ref tup 0)))

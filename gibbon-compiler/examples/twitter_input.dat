@@ -1,0 +1,1 @@
+(ConsTW (TweetMD 0 (ConsHT cats (ConsHT cats (NilHT)))) (ConsTW (TweetMD 1 (ConsHT cats (NilHT))) (NilTW)))

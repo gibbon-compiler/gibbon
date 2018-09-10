@@ -16,7 +16,11 @@ compiled/
 .racket_sandbox/*
 
 gibbon-compiler/.stack-work
+gibbon-compiler/examples/*.c
+gibbon-compiler/examples/*.exe
 gibbon-compiler/examples/build_tmp/*
 gibbon-compiler/.ghc.environment.*
 gibbon-compiler/dist
 gibbon-compiler/dist-newstyle
+gibbon-compiler/.dist-newstyle*
+gibbon-compiler/cabal.project.local

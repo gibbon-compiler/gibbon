@@ -1,0 +1,17 @@
+#lang gibbon
+
+(data List
+      [Nil]
+      [Cons Int List])
+
+(define (sum-list [xs : List]) : Int
+  (case xs
+    [(Nil) 0]
+    [(Cons y ys) (+ y (sum-list ys))]))
+
+(define (foo [x : List]) : List
+  (case x
+    [(Nil) (Nil)]
+    [(Cons y ys) (foo ys)]))
+
+(sum-list (foo (Cons 1 (Cons 2 (Cons 3 (Nil))))))

@@ -7,7 +7,7 @@ set -xe
 HERE=`pwd`
 cd ../; source set_env.sh
 
-cd $TREELANGDIR/gibbon-compiler/examples
+cd $GIBBONDIR/gibbon-compiler/examples
 tc --bench foo test25b_racketcore.sexp -o $HERE/unpack_test.exe
 
 cd $HERE

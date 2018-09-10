@@ -1,0 +1,38 @@
+#lang gibbon
+
+;; In Gibbon2 mode, inspect the generated output to check that only the
+;; Tree data type is updated to have random access nodes. Foo doesn't need it.
+
+(data Tree
+      [Leaf Int]
+      [Node Tree Tree])
+
+(data Foo
+      [Bar Int]
+      [Baz Foo Foo])
+
+(define (build-Tree [n : Int]) : Tree
+  (if (= n 0)
+      (Leaf 1)
+      (Node (build-Tree (- n 1))
+            (build-Tree (- n 1)))))
+
+(define (rightmost-Tree [tr : Tree]) : Int
+  (case tr
+    [(Leaf n) n]
+    [(Node x y) (rightmost-Tree y)]))
+
+(define (build-Foo [n : Int]) : Foo
+  (if (= n 0)
+      (Bar 1)
+      (Baz (build-Foo (- n 1))
+           (build-Foo (- n 1)))))
+
+(define (leftmost-Foo [foo : Foo]) : Int
+  (case foo
+    [(Bar n) n]
+    [(Baz x y) (leftmost-Foo x)]))
+
+(let ([tr : Tree (build-Tree (size-param))])
+  (let ([foo : Foo (build-Foo (size-param))])
+    (+ (rightmost-Tree tr) (leftmost-Foo foo))))
