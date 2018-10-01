@@ -4,7 +4,7 @@
  * Jenkins (somewhat unreliable):
    [![Build Status](http://parfunc-ci.sice.indiana.edu/buildStatus/icon?job=gibbon/master)](http://parfunc-ci.sice.indiana.edu/job/gibbon/job/master/)
 
-Formerly the "tree-velocity" repo, this primarily stores the Gibbon
+This primarily stores the Gibbon
 compiler, an implementation of a high-performance functional language.
 
 This repository also contains a collection of sub-projects related to
@@ -12,6 +12,8 @@ benchmarking tree traversals and performing tree traversals on packed
 representations.  Here is a guide to the subdirectories:
 
  * [gibbon-compiler](gibbon-compiler) - the prototype compiler for the Gibbon language of packed tree traversals.
+
+ * [gibbon](gibbon) - a Racket #lang for Gibbon
 
  * [ASTBenchmarks](ASTBenchmarks) - benchmark of treewalks (compiler passes) on ASTs written with Gibbon.
    Also includes scripts to fetch input datasets.

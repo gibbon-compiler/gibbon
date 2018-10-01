@@ -72,7 +72,7 @@ raco make -v $RACOPARARG \
      $top/ASTBenchmarks/substitution/racket/subst.rkt \
      $top/ASTBenchmarks/rewrite.rkt
 
-racket $top/typecheck-stlc/examples.gib
+racket $top/ASTBenchmarks/typecheck-stlc/examples.gib
 
 # Run class compiler tests
 set +x; echo
@@ -89,7 +89,7 @@ set -x
 
 # [2016.11.08] {Having problems with this -RRN}
 # raco make -v $top/kdTree-BenchMark/racket/*.rkt
-racket $top/kdTree-BenchMark/racket/traversal.gib
+racket $top/ASTBenchmarks/kdTree-BenchMark/racket/traversal.gib
 
 STK="stack --allow-different-user"
 
