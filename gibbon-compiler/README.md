@@ -10,16 +10,18 @@ types, rather than over their natural, pointer-based representations.
 Further reading
 ---------------
 
-Aside from looking at the code documentation, you may want to read
-about the basic intermediate languages that the compiler uses.
+Aside from looking at the code
+[documentation](http://iu-parfunc.github.io/gibbon/haddocks/),
+you may want to read about the basic intermediate languages that the compiler uses.
 
  * [L1](src/Gibbon/L1)
  * [L2](src/Gibbon/L2)
  * [L3](src/Gibbon/L3)
  * [L4](src/Gibbon/L4)
 
-You can also read the ECOOP'17 paper, however it is already
-substantially out of date (as of 2017.08.01).
+You can also read the
+[ECOOP'17 paper](http://drops.dagstuhl.de/opus/volltexte/2017/7273/pdf/LIPIcs-ECOOP-2017-26.pdf),
+however it is already substantially out of date (as of 2017.08.01).
 
 For developers: Coding Style
 ----------------------------

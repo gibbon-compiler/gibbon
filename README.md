@@ -13,7 +13,7 @@ representations.  Here is a guide to the subdirectories:
 
  * [gibbon-compiler](gibbon-compiler) - the prototype compiler for the Gibbon language of packed tree traversals.
 
- * [gibbon](gibbon) - a Racket #lang for Gibbon
+ * [gibbon](gibbon) - a Racket #lang for Gibbon.
 
  * [ASTBenchmarks](ASTBenchmarks) - benchmark of treewalks (compiler passes) on ASTs written with Gibbon.
    Also includes scripts to fetch input datasets.
