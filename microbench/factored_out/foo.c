@@ -18,6 +18,13 @@ Running example:
       | n == 1    = B (mkFoo (n-1)) (mkFoo (n-2))
       | otherwise = C (mkFoo (n-1)) (mkFoo (n-2)) (mkFoo (n-3))
 
+    rightmost :: Foo -> Int
+    rightmost foo =
+      case foo of
+        A i     -> i
+        B _ b   -> rightmost b
+        C _ _ c -> rightmost c
+
  */
 
 #define KB (1 * 1000lu)
@@ -136,31 +143,38 @@ IntTy bump_ref_count(CursorTy end_b, CursorTy end_a) {
 
 CursorTy printFoo(CursorTy cur);
 
+// Returns 'cur+n', but can skip whole chunks if required (as opposed to doing it one byte at a time)
 CursorCursorProd skip_bytes(CursorTy end_reg, CursorTy cur, IntTy n) {
-    /* printf("Need to skip: %lld\n", n); */
+    // Current region's footer.
     RegionFooter footer = *(RegionFooter *) end_reg;
+
+    // Sometimes we eagerly start using a fresh region without fully using the current one, because
+    //     (1) There's not enough space to write all the scalars of the current data constructor *and*
+    //         the redirection nodes after it.
+    // Essentially, #bytes between the last written data, and the start of the region footer.
+    IntTy unused_space = footer.size - footer.data_size;
+
+    // #bytes of data in the current region, serialized *after* the cursor 'cur'
+    IntTy data_after_cur = (end_reg - unused_space) - cur;
 
     if (n == 0) {
         return (CursorCursorProd) {end_reg, cur};
     }
+    // This is the last chunk in the region, the data better be in it.
     if (footer.data_size == 0) {
         return (CursorCursorProd) {end_reg, cur + n};
-    } else if (footer.data_size > n) {
+    }
+    // The current chunk has enough data to skip 'n' bytes.
+    else if (data_after_cur > n) {
         return (CursorCursorProd) {end_reg,cur + n};
-    } else {
+    }
+    // Otherwise, skip whatever #bytes can in the current chunk, and the rest in the next one.
+    else {
         RegionFooter next_footer = *(RegionFooter *) footer.next;
         CursorTy next_end = footer.next;
         IntTy next_size = next_footer.size;
         CursorTy next_start = next_end - next_size;
-
-        IntTy unused_space = footer.size - footer.data_size;
-        IntTy already_skipped = (end_reg - unused_space) - cur;
-
-        /* printf("Unused: %lld\n", unused_space); */
-        /* printf("Already skipped: %lld\n", already_skipped); */
-        /* printf("\n"); */
-
-        return skip_bytes(next_end, next_start, (n-already_skipped));
+        return skip_bytes(next_end, next_start, (n-data_after_cur));
     }
 }
 
@@ -218,7 +232,7 @@ CursorCursorCursorIntProd mkFoo (CursorTy end_reg, CursorTy out, CursorTy ran_re
         out++;
 
         // rec1
-        tmp = mkFoo(end_reg, out, (ran_reg+16), (n-1));
+        tmp = mkFoo(end_reg, out, (ran_reg + OFFSET_SIZE), (n-1));
         CursorTy end_reg1 = tmp.field0;
         CursorTy out1 = tmp.field1;
         CursorTy ran_reg1 = tmp.field2;
@@ -411,9 +425,9 @@ int main () {
     /* } */
 
     CursorCursorCursorIntProd tmp;
-    tmp = mkFoo(end_reg, out, ran_reg, 5);
-    printFoo(out);
-    printf("\n");
+    tmp = mkFoo(end_reg, out, ran_reg, 11);
+    /* printFoo(out); */
+    /* printf("\n"); */
     /* check_footers(end_reg); */
     /* printf("\n"); */
     IntTy n = rightmost(end_reg, out,ran_reg);
@@ -421,8 +435,8 @@ int main () {
 
     printf("------------\n");
     printf("Size: %lld\n", tmp.field3);
-    printf("Offsets: ");
-    printOffsets(ran_reg,tmp.field2);
+    /* printf("Offsets: "); */
+    /* printOffsets(ran_reg,tmp.field2); */
     printf("\n");
 
     return 0;
