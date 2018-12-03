@@ -26,7 +26,6 @@ import           Text.Printf
 import           Data.Monoid
 #endif
 
-import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -163,6 +162,7 @@ readMode s =
         "pointer" -> Pointer
         "interp1" -> Interp1
         "gibbon1" -> Gibbon1
+        _ -> error $ "readMode: " ++ show s
 
 -- Must match the flag expected by Gibbon.
 modeRunOptions :: Mode -> [String]
@@ -456,8 +456,10 @@ runTests tc tr = do
 
 runTest :: TestConfig -> Test -> IO [(Mode,TestVerdict)]
 runTest tc Test{name,dir,expectedResults,runModes} = do
-    -- putStrLn (name t)
-    putStr "."
+    (if (verbosity tc > 1)
+     then hPutStrLn stdout (name ++ "...")
+     else hPutStr stdout ".") >> hFlush stdout
+
     mapM (\(m,e) -> go m e) (M.toList $ M.restrictKeys expectedResults (S.fromList runModes))
   where
     go :: Mode -> Result -> IO (Mode, TestVerdict)
@@ -553,10 +555,14 @@ doNTrials tc mode t@Test{name,dir,numTrials,sizeParam,moreIters,isMegaBench,benc
       createProcess (proc cmd cmd_options) { std_out = CreatePipe
                                            , std_err = CreatePipe }
     toexeExitCode <- waitForProcess phandle
+
+    -- Number of iterations that should get us beyond the 1s threshold.
+    let more_iters = (10 ^ (8 :: Int))
+
     case toexeExitCode of
         ExitSuccess -> do
             let iters = if mode `elem` moreIters
-                        then 10 ^ 8
+                        then more_iters
                         else 1
             first_trial <- if isMegaBench
                            then doMegaBenchmark tc cpath exepath t
@@ -611,7 +617,7 @@ isBenchOutput :: String -> Bool
 isBenchOutput s = isInfixOf "BATCHTIME" s || isInfixOf "SELFTIMED" s
 
 doMegaBenchmark :: TestConfig -> FilePath -> FilePath -> Test -> IO (Either String BenchResult)
-doMegaBenchmark tc cpath exepath Test{name,dir,runModes,benchFun,benchInput} = do
+doMegaBenchmark _tc _cpath exepath Test{benchInput} = do
     compiler_dir <- getCompilerDir
     bench_input_exists <- doesFileExist benchInput
     if not bench_input_exists
@@ -623,7 +629,8 @@ doMegaBenchmark tc cpath exepath Test{name,dir,runModes,benchFun,benchInput} = d
         (_, Just hout, Just herr, phandle) <-
             createProcess (proc exepath cmd_options)
                 { std_out = CreatePipe
-                , std_err = CreatePipe }
+                , std_err = CreatePipe
+                , cwd = Just compiler_dir }
         exitCode <- waitForProcess phandle
         case exitCode of
             ExitSuccess -> do
@@ -637,7 +644,7 @@ summary :: TestConfig -> TestRun -> IO String
 summary tc tr = do
     endTime <- getTime clk
     day <- getZonedTime
-    let timeTaken = quot (toNanoSecs (diffTimeSpec endTime (startTime tr))) (10^9)
+    let timeTaken = quot (toNanoSecs (diffTimeSpec endTime (startTime tr))) (10 ^ (9 :: Int))
     return $ render (go timeTaken day)
   where
     hline x = text "--------------------------------------------------------------------------------" $$ x
@@ -654,7 +661,7 @@ summary tc tr = do
                         else docNameModes name (map fst m_errors)))
                   ls)
 
-    go :: (Num a, Show a) => a -> ZonedTime -> Doc
+    go :: Integer -> ZonedTime -> Doc
     go timeTaken day =
         text "Gibbon testsuite summary: " <+> parens (text $ show day) $$
         text "--------------------------------------------------------------------------------" $$
@@ -716,8 +723,7 @@ test_main tc tests = do
     putStrLn "Executing TestRunner... \n"
 
     compiler_dir <- getCompilerDir
-
-    -- Generate Racket answers
+    putStr "Generating answers using Racket..."
     (_, Just _hout, Just herr, phandle) <-
         createProcess (proc "make" ["answers"])
         { std_out = CreatePipe
@@ -726,9 +732,8 @@ test_main tc tests = do
         }
     exitCode <- waitForProcess phandle
     case exitCode of
-      ExitSuccess -> return ()
+      ExitSuccess -> putStrLn "Done."
       ExitFailure _ -> error <$> hGetContents herr
-
 
     test_run  <- getTestRun tests
     test_run' <- runTests tc test_run

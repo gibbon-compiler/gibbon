@@ -485,6 +485,9 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
         dl = Di <$> L p
 
 
+cursorizeReadPackedFile :: DDefs Ty2 -> FunDefs2 -> DepEnv -> Map Var (UrTy LocVar) -> Bool -> Var
+                        -> Maybe FilePath -> TyCon -> Maybe Var -> Ty2 -> L Exp2
+                        -> PassM (L (PreExp L3.E3Ext () (UrTy ())))
 cursorizeReadPackedFile ddfs fundefs denv tenv isPackedContext v path tyc reg ty2 bod = do
   case reg of
     Nothing -> error $ "cursorizePackedExp: InferLocations did not set the reg for ReadPackedFile."
