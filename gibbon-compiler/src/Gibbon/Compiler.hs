@@ -378,7 +378,9 @@ compilationCmd LLVM _   = "clang-5.0 lib.o "
 compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++(if bumpAlloc then "-DBUMPALLOC " else "")
                           ++(if pointer then "-D_POINTER " else "")
-                          ++"-fcilkplus -lcilkrts"
+                          -- [2018.12.03] CSK: Skip Cilk stuff for now.
+                          -- Eventually, all the Cilk stuff should be behind a flag.
+                          -- ++"-fcilkplus -lcilkrts"
                           ++(optc config)++"  "
                           ++(if warnc then "" else suppress_warnings)
   where dflags = dynflags config

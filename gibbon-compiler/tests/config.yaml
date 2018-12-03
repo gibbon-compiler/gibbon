@@ -183,12 +183,18 @@ tests:
   ##    'printf': function not inlinable
   ##    printf (const char *__restrict __fmt, ...)
   ##
-  ## TODO(CSK): I don't really understand this error, and a quick Google search didn't wasn't very helpful.
+  ## [2018.12.03] CSK: Skip Cilk stuff for now.
+  ## Eventually, all the Cilk stuff should be behind a flag.
   - name: test_par01.gib
+    skip: true
   - name: test_par03.gib
+    skip: true
   - name: test_par04.gib
+    skip: true
   - name: test_par07.gib
+    skip: true
   - name: test_par08.gib
+    skip: true
 
   ## A difficult test for AddTraversals.
   - name: test_par05.gib

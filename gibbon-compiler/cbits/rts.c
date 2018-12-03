@@ -12,7 +12,6 @@
 #include <fcntl.h>
 #include <stdarg.h> // For va_start etc
 #include <errno.h>
-#include <cilk/cilk.h>
 #ifdef _POINTER
 #include <gc.h>
 #endif
