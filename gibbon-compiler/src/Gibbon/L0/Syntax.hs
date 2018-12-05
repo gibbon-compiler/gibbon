@@ -14,6 +14,7 @@ module Gibbon.L0.Syntax
 
          -- * types and operation on types
          Ty0(..), Scheme(..), initFunEnv, initVarEnv, arrIn, arrOut, typeFromScheme,
+         tyVarsInType,
 
          -- * variable definitions
          VarDef(..), VarDefs,
@@ -29,10 +30,10 @@ where
 import Control.DeepSeq (NFData)
 -- import Data.List as L
 import Data.Loc
-import Data.Map as M
-import Data.Set as S
 import GHC.Generics
 import Text.PrettyPrint.GenericPretty
+import qualified Data.Map as M
+import qualified Data.Set as S
 
 import Gibbon.Common as C hiding (FunEnv)
 import Gibbon.GenericOps
@@ -64,7 +65,7 @@ data VarDef a ex = VarDef { varName :: Var
                           , varBody :: ex }
   deriving (Show, Eq, Ord, Generic, NFData)
 
-type VarDefs a ex = Map Var (VarDef a ex)
+type VarDefs a ex = M.Map Var (VarDef a ex)
 
 type FunDefs0 = M.Map Var FunDef0
 
@@ -82,11 +83,11 @@ data PVDef a ex = PVDef { vName :: Var
                         , vBody :: ex }
   deriving (Show, Eq, Ord, Generic, NFData)
 
-type PVDefs a ex = Map Var (PVDef a ex)
+type PVDefs a ex = M.Map Var (PVDef a ex)
 
 -- | for now, using a specialized DDef for L0
 -- this enables the DDefs to have type variables
-type PDDefs a = Map Var (PDDef a)
+type PDDefs a = M.Map Var (PDDef a)
 
 data PDDef a = PDDef { dName :: Var
                      , dCons :: [(DataCon,[(IsBoxed,Scheme a)])] } -- ^ Polymorphic data constructors
@@ -96,7 +97,7 @@ data PDDef a = PDDef { dName :: Var
 -- | for now, using a specialized FunDef for L0
 -- theoretically these should disappear after monomorphization
 -- this enables the FunDefs to have type schemes
-type PFDefs a ex = Map Var (PFDef a ex)
+type PFDefs a ex = M.Map Var (PFDef a ex)
 
 data PFDef a ex  = PFDef { fName :: Var
                          , fArg  :: Var
@@ -163,6 +164,18 @@ arrOut err = error $ "arrOut: Not an arrow type: " ++ show err
 typeFromScheme :: Scheme a -> a
 typeFromScheme (ForAll _ a) = a
 
+tyVarsInType :: Ty0 -> [TyVar]
+tyVarsInType ty =
+  case ty of
+    IntTy   -> []
+    BoolTy  -> []
+    TyVar v -> [v]
+    ProdTy tys    -> concatMap tyVarsInType tys
+    SymDictTy a   -> tyVarsInType a
+    ArrowTy a b   -> tyVarsInType a ++ tyVarsInType b
+    PackedTy _ vs -> vs
+    ListTy a -> tyVarsInType a
+
 -- ^ TEMP : as it is already defined in Common but need to update branch
 type FunEnv a = M.Map Var (a, a)
 
@@ -173,7 +186,7 @@ initFunEnv fds = M.foldr (\fn acc -> let fnTy = typeFromScheme (fTy fn)
                                      in M.insert (fName fn) (fntyin, fntyout) acc)
                  M.empty fds
 
-initVarEnv :: PVDefs Ty0 Exp -> Map Var Ty0
+initVarEnv :: PVDefs Ty0 Exp -> M.Map Var Ty0
 initVarEnv vds = M.foldr (\v acc -> M.insert (vName v) (typeFromScheme (vTy v)) acc)
                  M.empty vds
 

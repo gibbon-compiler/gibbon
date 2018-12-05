@@ -278,11 +278,11 @@ setDebugEnvVar verbosity =
 parseInput :: Input -> FilePath -> IO (IO (L1.Prog1, Int), FilePath)
 parseInput ip fp =
   case ip of
-    Haskell -> return (HS.parseFile fp, fp)
+    Haskell -> HS.parseFile fp >> error ""
     SExpr   -> return (SExp.parseFile fp, fp)
     Unspecified ->
       case takeExtension fp of
-        ".hs" -> return (HS.parseFile fp, fp)
+        ".hs"   -> HS.parseFile fp >> error ""
         ".sexp" -> return (SExp.parseFile fp, fp)
         ".rkt"  -> return (SExp.parseFile fp, fp)
         ".gib"  -> return (SExp.parseFile fp, fp)

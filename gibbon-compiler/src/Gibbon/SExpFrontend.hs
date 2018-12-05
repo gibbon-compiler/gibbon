@@ -226,12 +226,6 @@ parseSExp ses =
                                                  sdoc x++"\nAnd:\n"++prnt ex)
 
 
-tuplizeRefs :: Var -> [Var] -> L Exp1 -> L Exp1
-tuplizeRefs tmp ls  = go (L.zip [0..] ls)
-  where
-   go []          e = e
-   go ((ix,v):vs) e = go vs (subst v (L NoLoc $ ProjE ix (L NoLoc $ VarE tmp)) e)
-
 typ :: Sexp -> Ty1
 typ s = case s of
          (A _ "Int")  -> IntTy

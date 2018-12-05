@@ -25,7 +25,7 @@ module Gibbon.L1.Syntax
       -- * Functions on expressions
     , insertFD, fromListFD, mapExt, mapLocs, mapExprs, visitExp
     , progToEnv, initFunEnv, getFunTy, subst, substE, hasTimeIt, projNonFirst
-    , mkProj, mkProd, mkLets, flatLets
+    , mkProj, mkProd, mkLets, flatLets, tuplizeRefs
 
       -- * Functions on types
     , mkProdTy, projTy , voidTy, isProdTy, isNestedProdTy, isPackedTy, hasPacked
@@ -577,6 +577,12 @@ mkLetE bnd bod = L NoLoc $ LetE bnd bod
 flatLets :: [(Var,[l],d,L (PreExp e l d))] -> L (PreExp e l d) -> L (PreExp e l d)
 flatLets [] bod = bod
 flatLets (b:bs) bod = mkLetE b (flatLets bs bod)
+
+tuplizeRefs :: (Eq d, Eq l, Eq (e l d)) => Var -> [Var] -> L (PreExp e l d) -> L (PreExp e l d)
+tuplizeRefs tmp ls  = go (L.zip [0..] ls)
+  where
+   go []          e = e
+   go ((ix,v):vs) e = go vs (subst v (L NoLoc $ ProjE ix (L NoLoc $ VarE tmp)) e)
 
 -- | Same as mkProd, at the type level
 mkProdTy :: [UrTy a]-> UrTy a
