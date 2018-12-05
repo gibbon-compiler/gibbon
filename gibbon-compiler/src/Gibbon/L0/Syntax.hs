@@ -81,7 +81,7 @@ instance FunctionTy Ty0 where
 data PVDef a ex = PVDef { vName :: Var
                         , vTy   :: Scheme a
                         , vBody :: ex }
-  deriving (Show, Eq, Ord, Generic, NFData)
+  deriving (Show, Read, Eq, Ord, Generic, NFData)
 
 type PVDefs a ex = M.Map Var (PVDef a ex)
 

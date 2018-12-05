@@ -18,13 +18,14 @@ import           Gibbon.Common
 
 data TopLevel
   = HDDef (PDDef Ty0)
+  | HVDef (PVDef Ty0 (L Exp0))
   | HFunDef (PFDef Ty0 (L Exp0))
   | HMain (Maybe (L Exp0))
   deriving (Show, Read, Eq, Ord)
 
 type TyEnv0 = TyEnv (Scheme Ty0)
 
-desugarModule :: (Pretty a) => Module a -> L0.PProg
+desugarModule :: ( Pretty a) => Module a -> L0.PProg
 desugarModule (Module _ head_mb _pragmas _imports decls) =
   let -- Since top-level functions and their types can't be declared in
       -- single top-level declaration we first collect types and then collect
@@ -32,10 +33,10 @@ desugarModule (Module _ head_mb _pragmas _imports decls) =
       funtys = foldr collectTopTy M.empty decls
 
       toplevels = catMaybes $ map (collectTopLevel funtys) decls
-      (defs,funs,main) = foldr classify init_acc toplevels
-  in (PProg defs funs M.empty main)
+      (defs,vars,funs,main) = foldr classify init_acc toplevels
+  in (PProg defs funs vars main)
   where
-    init_acc = (M.empty, M.empty, Nothing)
+    init_acc = (M.empty, M.empty, M.empty, Nothing)
     mod_name = moduleName head_mb
 
     moduleName :: Maybe (ModuleHead a) -> String
@@ -43,13 +44,14 @@ desugarModule (Module _ head_mb _pragmas _imports decls) =
     moduleName (Just (ModuleHead _ mod_name1 _warnings _exports)) =
       let (ModuleName _ name) = mod_name1 in name
 
-    classify thing (defs,funs,main) =
+    classify thing (defs,vars,funs,main) =
       case thing of
-        HDDef d   -> (M.insert (dName d) d defs, funs, main)
-        HFunDef f -> (defs, M.insert (fName f) f funs, main)
+        HDDef d   -> (M.insert (dName d) d defs, vars, funs, main)
+        HVDef v   -> (defs, M.insert (vName v) v vars, funs, main)
+        HFunDef f -> (defs, vars, M.insert (fName f) f funs, main)
         HMain e ->
           case main of
-            Nothing -> (defs, funs, e)
+            Nothing -> (defs, vars, funs, e)
             Just _  -> error $ "A module cannot have two main expressions."
                                ++ show mod_name
 desugarModule m = error $ "desugarModule: " ++ prettyPrint m
@@ -72,6 +74,7 @@ desugarType ty =
                          t2' = desugarType t2
                      in ArrowTy t1' t2'
     TyList _ (H.TyVar _ (Ident _ con))  -> ListTy (L0.TyVar (toVar con))
+    TyParen _ ty1 -> desugarType ty1
     _ -> error $ "desugarType: Unsupported type: " ++ prettyPrint ty
 
 -- Like 'desugarTopType' but understands boxity.
@@ -279,6 +282,13 @@ collectTopLevel env decl =
     PatBind _ (PVar _ (Ident _ "main")) (UnGuardedRhs _ bod) _binds ->
       Just $ HMain $ Just (desugarExp bod)
 
+    PatBind _ (PVar _ (Ident _ v)) (UnGuardedRhs _ bod) _binds ->
+       case M.lookup (toVar v) env of
+         Nothing -> error $ "collectTopLevel: Top-level binding with no type signature: " ++ v
+         Just ty -> Just $ HVDef (PVDef { vName = toVar v
+                                        , vTy   = ty
+                                        , vBody = desugarExp bod })
+
     FunBind _ [Match _ fname hargs (UnGuardedRhs _ bod) _where] ->
       let fname_str = nameToStr fname
           fname_var = toVar (fname_str)
@@ -309,7 +319,8 @@ collectTopLevel env decl =
                         , fBody = bod'' }
 
     FunBind _ _ -> error $ "collectTopLevel: Found a function with multiple RHS."
-    _ -> error (prettyPrint decl)
+    _ -> error $ "collectTopLevel: Unsupported top-level expression: " ++ (prettyPrint decl)
+
 
 nameToStr :: Name a -> String
 nameToStr (Ident _ s)  = s
