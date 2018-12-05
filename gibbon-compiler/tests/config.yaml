@@ -198,6 +198,7 @@ tests:
 
   ## A difficult test for AddTraversals.
   - name: test_par05.gib
+    skip: true
     failing: [gibbon1]
 
   ## Failing tests:
