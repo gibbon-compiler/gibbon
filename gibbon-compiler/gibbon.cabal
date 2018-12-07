@@ -21,7 +21,6 @@ library
                        Gibbon.GenericOps
                        Gibbon.Compiler
                        Gibbon.DynFlags
-                       Gibbon.HaskellFrontend
                        Gibbon.TargetInterp
                        Gibbon.Pretty
                        Gibbon.Interp
@@ -37,8 +36,14 @@ library
                        Gibbon.L3.Syntax
                        Gibbon.L3.Typecheck
                        Gibbon.SExpFrontend
+
+                       -- Polymorphism stuff:
                        Gibbon.L0.Syntax
-                       Gibbon.L0.Specialize
+                       -- Gibbon.HaskellFrontend
+                       -- Gibbon.L0.Specialize
+                       -- Gibbon.L0.Mono
+                       -- This one looks far from done:
+                       -- Gibbon.L0.Interp
 
                        -- compiler passes, roughly in the order they're run
                        Gibbon.Passes.Freshen
@@ -65,11 +70,6 @@ library
                        Gibbon.Passes.FollowRedirects
                        Gibbon.Passes.RearrangeFree
                        Gibbon.Passes.Codegen
-
-  other-modules:
-                Gibbon.L0.Mono
--- This one looks far from done:
---                       Gibbon.L0.Interp
 
   other-extensions:    DeriveDataTypeable CPP
 
@@ -154,7 +154,7 @@ test-suite test-gibbon
                        L2.Typecheck
                        L2.Interp
                        L3.Typecheck
-                       L0.Specialize
+                       -- L0.Specialize
   default-language:    Haskell2010
   ghc-options:         -fdefer-typed-holes
   default-extensions:  OverloadedStrings NamedFieldPuns

@@ -11,9 +11,7 @@
 module Gibbon.SExpFrontend
        ( parseFile
        , parseSExp
-       , primMap
-       -- , main
-       )
+       , primMap )
   where
 
 import Data.List as L
@@ -24,7 +22,6 @@ import Data.Text as T hiding (head)
 import Data.Text.IO (readFile)
 import System.FilePath
 import Text.Parsec
--- import GHC.Generics (Generic)
 import Text.PrettyPrint.GenericPretty
 import Prelude hiding (readFile, exp)
 
@@ -43,7 +40,6 @@ import Data.SCargot.Repr -- (SExpr, RichSExpr, toRich)
 import qualified Data.SCargot.Common as SC
 
 import Gibbon.L1.Syntax
-import qualified Gibbon.L0.Syntax as L0
 import Gibbon.Common
 
 --------------------------------------------------------------------------------
@@ -474,6 +470,6 @@ parseFile file = do
        return $ runSyM 0 $ parseSExp ls'
 
 
--- FINISHME
-parseSExp0 :: [Sexp] -> SyM L0.PProg
-parseSExp0 = undefined
+-- -- FINISHME
+-- parseSExp0 :: [Sexp] -> SyM L0.PProg
+-- parseSExp0 = undefined

@@ -15,7 +15,7 @@ import Test.Tasty.TH
 -- |
 import Gibbon.L4.Syntax hiding (Prog (..), Ty (..))
 
-import Gibbon.Common (Multiplicity(..))
+import Gibbon.L2.Syntax (Multiplicity(..))
 import qualified Gibbon.L4.Syntax as T
 import qualified Gibbon.TargetInterp as TI
 
@@ -31,7 +31,7 @@ import L1.Interp
 import L2.Typecheck
 import L2.Interp
 import L3.Typecheck
-import L0.Specialize
+-- import L0.Specialize
 import InferLocations
 
 main :: IO ()
@@ -49,14 +49,12 @@ main = defaultMain allTests
                    , l1InterpTests
                    , l2InterpTests
                    , l3TypecheckerTests
-                   , specializeTests
+                   -- , specializeTests
                    , compilerTests
                    ]
 
-
 tests :: TestTree
 tests = $(testGroupGenerator)
-
 
 --
 --

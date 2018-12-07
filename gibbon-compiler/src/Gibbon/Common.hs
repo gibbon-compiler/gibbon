@@ -53,7 +53,6 @@ module Gibbon.Common
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
---       , err
        , internalError
 
          -- * Establish conventions for the output of #lang gibbon:
@@ -128,8 +127,6 @@ type TyCon   = String
 
 -- | Abstract location variables.
 type LocVar = Var
--- TODO: add start(r) form.
-
 
 -- See https://github.com/iu-parfunc/gibbon/issues/79 for more details
 -- | Region variants (multiplicities)
@@ -169,7 +166,9 @@ data Region = GlobR Var Multiplicity -- ^ A global region with lifetime equal to
                                      --   memory allocation. It merely ensures that there
                                      --   are no free locations in the program.
   deriving (Read,Show,Eq,Ord, Generic)
+
 instance Out Region
+
 instance NFData Region where
   rnf (GlobR v _) = rnf v
   rnf (DynR v _)  = rnf v
@@ -190,7 +189,9 @@ data LRM = LRM { lrmLoc :: LocVar
                , lrmReg :: Region
                , lrmMode :: Modality }
   deriving (Read,Show,Eq,Ord, Generic)
+
 instance Out LRM
+
 instance NFData LRM where
   rnf (LRM a b c)  = rnf a `seq` rnf b `seq` rnf c
 
@@ -249,7 +250,6 @@ type TyEnv a = M.Map Var a
 emptyTyEnv :: TyEnv a
 emptyTyEnv = M.empty
 
-
 -- | A common currency for a two part environment consisting of
 -- function bindings and regular value bindings.
 data Env2 a = Env2 { vEnv :: TyEnv a
@@ -276,8 +276,8 @@ extendFEnv v t (Env2 ve fe) = Env2 ve (M.insert v t fe)
 
 
 --------------------------------------------------------------------------------
+-- Datatype definitions.
 
--- Primitive for now:
 type DDefs a = Map Var (DDef a)
 
 type IsBoxed = Bool
@@ -299,7 +299,6 @@ data DDef a = DDef { tyName:: Var
   deriving (Read,Show,Eq,Ord, Functor, Generic)
 
 instance NFData a => NFData (DDef a) where
-  -- rnf DDef
 
 instance Out a => Out (DDef a)
 instance (Out k,Out v) => Out (Map k v) where
@@ -316,7 +315,6 @@ lookupDDef mp v =
     case M.lookup v mp of
       Just x -> x
       Nothing -> error $ "lookupDDef failed on symbol: "++ fromVar v ++"\nDDefs: "++sdoc mp
-
 
 -- | Get the canonical ordering for data constructors, currently based
 -- on ordering in the original source code.  Takes a TyCon as argument.
@@ -370,7 +368,6 @@ emptyDD  = M.empty
 fromListDD :: [DDef a] -> DDefs a
 fromListDD = L.foldr insertDD M.empty
 
-
 --------------------------------------------------------------------------------
 -- Some global constants
 
@@ -406,7 +403,6 @@ isIndrDataCon = isSuffixOf "^"
 -- printer.
 truePrinted :: String
 truePrinted = "#t"
--- truePrinted = "true"
 
 falsePrinted :: String
 falsePrinted = "#f"

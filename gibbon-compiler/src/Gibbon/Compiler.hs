@@ -38,7 +38,7 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.Common
 import           Gibbon.Interp
 import           Gibbon.DynFlags
-import qualified Gibbon.HaskellFrontend as HS
+-- import qualified Gibbon.HaskellFrontend as HS
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
 -- import qualified Gibbon.L3.Syntax as L3
@@ -278,11 +278,11 @@ setDebugEnvVar verbosity =
 parseInput :: Input -> FilePath -> IO (IO (L1.Prog1, Int), FilePath)
 parseInput ip fp =
   case ip of
-    Haskell -> HS.parseFile fp >> error ""
+    -- Haskell -> HS.parseFile fp >> error ""
     SExpr   -> return (SExp.parseFile fp, fp)
     Unspecified ->
       case takeExtension fp of
-        ".hs"   -> HS.parseFile fp >> error ""
+        -- ".hs"   -> HS.parseFile fp >> error ""
         ".sexp" -> return (SExp.parseFile fp, fp)
         ".rkt"  -> return (SExp.parseFile fp, fp)
         ".gib"  -> return (SExp.parseFile fp, fp)
