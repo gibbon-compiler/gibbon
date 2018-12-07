@@ -59,7 +59,7 @@ instance FunctionTy Ty2 where
   inTy = arrIn
   outTy = arrOut
 
--- | Extended expressions, L2.  Monomorphic.
+-- | Extended expressions, L2.
 --
 --   By adding a `LocVar` decoration, all data constructors,
 --   applications, and bindings gain a location annotation.
@@ -70,8 +70,7 @@ type Ty2 = L1.UrTy LocVar
 
 --------------------------------------------------------------------------------
 
--- | L1 expressions extended with L2.  This is the polymorphic version.
--- Shorthand for recursions above.
+-- | Shorthand for recursions.
 type E2 l d = PreExp E2Ext l d
 
 -- | The extension that turns L1 into L2.
@@ -86,8 +85,6 @@ data E2Ext loc dec =
 
 -- | Define a location in terms of a different location.
 data PreLocExp loc = StartOfLE Region
-                   -- Can't attach haddocks to data constructor arguments with < GHC 8.4.2
-                   -- See https://github.com/haskell/haddock/pull/709.
                    | AfterConstantLE Int -- Number of bytes after.
                                     loc  -- Location which this location is offset from.
                    | AfterVariableLE Var -- Name of variable v. This loc is size(v) bytes after.
@@ -117,7 +114,7 @@ instance FreeVars (E2Ext l d) where
 
 instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
   type LocOf (E2Ext l d) = l
-  type TyOf (E2Ext l d)  = UrTy l
+  type TyOf (E2Ext l d)  = d
   isTrivial e =
     case e of
       LetRegionE{} -> False
