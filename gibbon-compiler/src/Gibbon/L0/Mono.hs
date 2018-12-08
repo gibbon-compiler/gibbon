@@ -10,7 +10,6 @@ import Data.Loc
 import Control.Monad.State
 
 import Gibbon.Common as C
--- import Gibbon.GenericOps
 
 import Gibbon.L0.Syntax as L0
 import Gibbon.L1.Syntax as L1

@@ -29,8 +29,7 @@ import Debug.Trace
 
 import Gibbon.Common
 import Gibbon.L2.Syntax as L2
-import Gibbon.L1.Syntax
-import qualified Gibbon.L1.Syntax as L1
+-- import qualified Gibbon.L1.Syntax as L1
 
 -- | Constraints on locations.  Used during typechecking.  Roughly analogous to LocExp.
 data LocConstraint = StartOfC LocVar Region -- ^ Location is equal to start of this region.
@@ -175,41 +174,41 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    len0 = checkLen exp pr 0 es
                    len3 = checkLen exp pr 3 es
                case pr of
-                 _ | pr `elem` [L1.AddP, L1.SubP, L1.MulP, L1.DivP, L1.ModP, L1.ExpP] -> do
+                 _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP] -> do
                        len2
                        ensureEqualTy exp IntTy (tys !! 0)
                        ensureEqualTy exp IntTy (tys !! 1)
                        return $ (IntTy,tstate)
 
-                 _ | pr `elem` [L1.EqIntP, L1.LtP, L1.GtP, LtEqP, GtEqP, OrP, AndP] -> do
+                 _ | pr `elem` [EqIntP, LtP, GtP, LtEqP, GtEqP, OrP, AndP] -> do
                        len2
                        ensureEqualTy exp IntTy (tys !! 0)
                        ensureEqualTy exp IntTy (tys !! 1)
                        return $ (BoolTy,tstate)
 
-                 _ | pr `elem` [L1.MkFalse, L1.MkTrue] -> do
+                 _ | pr `elem` [MkFalse, MkTrue] -> do
                        len0
                        return $ (BoolTy,tstate)
 
-                 L1.RandP -> return (IntTy, tstate)
+                 RandP -> return (IntTy, tstate)
 
-                 L1.EqSymP -> do
+                 EqSymP -> do
                    len2
                    ensureEqualTy exp IntTy (tys !! 0)
                    ensureEqualTy exp IntTy (tys !! 1)
                    return $ (BoolTy,tstate)
 
-                 L1.SymAppend  -> do
+                 SymAppend  -> do
                    len2
                    _ <- ensureEqualTy (es !! 0) SymTy (tys !! 0)
                    _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
                    return (SymTy, tstate)
 
-                 L1.DictEmptyP ty -> do
+                 DictEmptyP ty -> do
                    len0
                    return (SymDictTy ty, tstate)
 
-                 L1.DictInsertP ty -> do
+                 DictInsertP ty -> do
                    len3
                    let [d,k,v]  = tys
                    _ <- ensureEqualTy exp (SymDictTy ty) d
@@ -217,34 +216,33 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    _ <- ensureEqualTy exp ty v
                    return (d, tstate)
 
-
-                 L1.DictLookupP ty -> do
+                 DictLookupP ty -> do
                    len2
                    let [d,k]  = tys
                    _ <- ensureEqualTy exp (SymDictTy ty) d
                    _ <- ensureEqualTy exp SymTy k
                    return (ty, tstate)
 
-                 L1.DictHasKeyP ty -> do
+                 DictHasKeyP ty -> do
                    len2
                    let [d,k]  = tys
                    _ <- ensureEqualTy exp (SymDictTy ty) d
                    _ <- ensureEqualTy exp SymTy k
                    return (BoolTy, tstate)
 
-                 L1.SizeParam -> do
+                 SizeParam -> do
                    len0
                    return (IntTy, tstate)
 
-                 L1.ErrorP _str ty -> do
+                 ErrorP _str ty -> do
                    len2
                    return (ty, tstate)
 
-                 L1.ReadPackedFile _fp _tycon _reg ty -> do
+                 ReadPackedFile _fp _tycon _reg ty -> do
                    len0
                    return (ty, tstate)
 
-                 L1.PEndOf -> return (CursorTy, tstate)
+                 PEndOf -> return (CursorTy, tstate)
 
                  oth -> error $ "L2.tcExp : PrimAppE : TODO " ++ sdoc oth
 
@@ -411,7 +409,7 @@ tcCases ddfs env funs constrs regs tstatein lin reg ((dc, vs, e):cases) = do
       genConstrs (((_v1,l1),PackedTy _ _),Just ((v2,l2),PackedTy _ _)) (_lin,lst) =
           (l1,[AfterVariableC v2 l2 l1, InRegionC l1 reg] ++ lst)
       genConstrs (((_v1,l1),PackedTy _ _),Just ((_v2,_l2),IntTy)) (lin,lst) =
-        let sz = fromMaybe 1 (L1.sizeOfTy IntTy)
+        let sz = fromMaybe 1 (sizeOfTy IntTy)
         in (l1, [AfterConstantC sz lin l1, InRegionC l1 reg] ++ lst)
       genConstrs (((_,l1),_),_) (lin,lst) =
         (lin, (InRegionC l1 reg : lst))
@@ -486,7 +484,7 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
 
   where
 
-    fd :: L2.FunDef2 -> PassM ()
+    fd :: FunDef2 -> PassM ()
     fd FunDef{funTy,funArg,funBody} = do
         let env = extendEnv (Env2 M.empty M.empty) funArg (arrIn funTy)
             constrs = funConstrs (locVars funTy)

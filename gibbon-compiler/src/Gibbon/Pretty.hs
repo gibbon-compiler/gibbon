@@ -17,7 +17,6 @@ import Gibbon.L1.Syntax
 import Gibbon.L2.Syntax as L2
 import Gibbon.L3.Syntax as L3
 import Gibbon.Common
-import Gibbon.GenericOps
 import Gibbon.SExpFrontend (primMap)
 import qualified Gibbon.L4.Syntax as L4
 

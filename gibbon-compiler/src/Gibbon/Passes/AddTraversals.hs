@@ -1,7 +1,7 @@
 module Gibbon.Passes.AddTraversals
   (addTraversals, needsTraversal) where
 
-import Control.Monad (forM, when)
+import Control.Monad ( forM, when )
 import Data.List as L
 import Data.Map as M
 import Data.Set as S
@@ -9,10 +9,9 @@ import Data.Loc
 
 import Gibbon.Common
 import Gibbon.DynFlags
-import Gibbon.GenericOps (gTypeExp)
-import Gibbon.Passes.InferEffects (inferExp)
-import Gibbon.L1.Syntax as L1
-import Gibbon.L2.Syntax as L2
+import Gibbon.Passes.InferEffects ( inferExp )
+import Gibbon.L1.Syntax
+import Gibbon.L2.Syntax
 
 --------------------------------------------------------------------------------
 
@@ -202,7 +201,7 @@ needsTraversal ddefs fundefs env2 (dcon,vlocs,rhs) =
                                   else init ls
 
                        -- If the problematic elements are unused, we don't need to add traversals
-                       if not (L2.occurs should_be_unused rhs)
+                       if not (occurs should_be_unused rhs)
                        then Nothing
                        else Just trav
 

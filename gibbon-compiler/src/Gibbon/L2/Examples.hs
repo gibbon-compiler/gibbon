@@ -18,12 +18,11 @@ module Gibbon.L2.Examples
 import Data.Loc
 import Data.Set as S
 import Data.Map as M
--- import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
 import Gibbon.L2.Syntax
-import Gibbon.L1.Syntax hiding (FunDefs)
-import Gibbon.GenericOps
+
+--------------------------------------------------------------------------------
 
 ddtree :: DDefs Ty2
 ddtree = fromListDD [DDef (toVar "Tree")

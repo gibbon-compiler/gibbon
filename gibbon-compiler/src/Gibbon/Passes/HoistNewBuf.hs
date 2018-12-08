@@ -1,5 +1,5 @@
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
--- |  This is really a hack for benchmarking.  Lift global allocations outside of timing loop.s
+-- |  This is really a hack for benchmarking.
+-- Lift global allocations outside of timing loop.s
 
 -- WARNING: seeded with DUPLICATED code from Unariser
 
@@ -9,10 +9,8 @@ module Gibbon.Passes.HoistNewBuf
 import Data.Loc
 import Prelude hiding (exp)
 import qualified Data.List as L
--- import qualified Data.Map as M
 
 import Gibbon.Common
-import Gibbon.L1.Syntax
 import Gibbon.L3.Syntax
 
 
@@ -66,11 +64,11 @@ hoistExp _ ex0 = return $ gocap ex0
     (MkProdE es) -> let (ltss,es') = unzip $ L.map go es in
                     (concat ltss, MkProdE es')
 
-    (CaseE e ls) -> let (lts,e') = go e
-                    in (lts, CaseE e' [ (k,vs, gocap e)
-                                      | (k,vs,e) <- ls ])
+    (CaseE scrt ls) -> let (lts,scrt') = go scrt
+                       in (lts, CaseE scrt' [ (k,vs, gocap e)
+                                            | (k,vs,e) <- ls ])
     (DataConE c loc es) -> let (ltss,es') = unzip $ L.map go es in
-                        (concat ltss, DataConE c loc es')
+                           (concat ltss, DataConE c loc es')
 
     (ParE a b) -> ([], ParE (gocap a) (gocap b))
 

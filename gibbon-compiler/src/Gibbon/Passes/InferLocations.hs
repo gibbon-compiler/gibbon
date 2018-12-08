@@ -1,8 +1,5 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-unused-matches #-}
-{-# OPTIONS_GHC -Wno-unused-imports #-}
 
 -- | Convert from L1 to L2, adding region constructs.
 
@@ -87,7 +84,6 @@ is emitted, where `Type` is the name of the packed data type that must be copied
 -}
 
 import Data.Loc
-import qualified Data.Sequence as Seq
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.List as L
@@ -99,17 +95,15 @@ import Control.Monad.Trans.Except
 import Control.Monad.Trans (lift)
 import Text.PrettyPrint.GenericPretty
 
-import Gibbon.GenericOps (gFreeVars)
-import Gibbon.Common as C hiding (extendVEnv, lookupVEnv) -- (l, LRM(..))
-import Gibbon.Common (Var, Env2, DDefs, LocVar, runPassM, PassM, gensym, toVar)
-import Gibbon.L1.Syntax as L1
-import Gibbon.L2.Syntax as L2
-import Gibbon.L2.Typecheck as T
+import Gibbon.Common
+import Gibbon.L1.Syntax as L1 hiding (extendVEnv, lookupVEnv)
+import Gibbon.L2.Syntax as L2 hiding (extendVEnv, lookupVEnv)
 import Gibbon.Passes.InlineTriv (inlineTriv)
 import Gibbon.Passes.Flatten (flattenL1)
 
+--------------------------------------------------------------------------------
 -- Environments
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 -- | Combine the different kinds of contextual information in-scope.
 data FullEnv = FullEnv
@@ -134,7 +128,7 @@ lookupFEnv v FullEnv{funEnv} = funEnv # v
 -- If we assume output regions are disjoint from input ones, then we
 -- can instantiate an L1 function type into a polymorphic L2 one,
 -- mechanically.
-convertFunTy :: (L1.Ty1,L1.Ty1) -> PassM ArrowTy2
+convertFunTy :: (Ty1,Ty1) -> PassM ArrowTy2
 convertFunTy (from,to) = do
     from' <- convertTy from
     to'   <- convertTy to
@@ -152,10 +146,10 @@ convertFunTy (from,to) = do
                       return $ LRM v (VarR r) md)
             (F.toList ls)
 
-convertTy :: L1.Ty1 -> PassM Ty2
+convertTy :: Ty1 -> PassM Ty2
 convertTy ty = traverse (const (freshLocVar "loc")) ty
 
-convertDDefs :: DDefs L1.Ty1 -> PassM (DDefs Ty2)
+convertDDefs :: DDefs Ty1 -> PassM (DDefs Ty2)
 convertDDefs ddefs = traverse f ddefs
     where f (DDef n dcs) = do
             dcs' <- forM dcs $ \(dc,bnds) -> do
@@ -187,7 +181,7 @@ data UnifyLoc = FixedLoc Var
                 deriving (Show, Eq)
 
 data Failure = FailUnify Ty2 Ty2
-             | FailInfer L1.Exp1
+             | FailInfer Exp1
                deriving (Show, Eq)
 
 ---------------------------------------
@@ -212,12 +206,12 @@ data DCArg = ArgFixed Int
            | ArgVar Var
            | ArgCopy Var Var Var [LocVar]
 
-inferLocs :: L1.Prog1 -> PassM L2.Prog2
+inferLocs :: Prog1 -> PassM L2.Prog2
 inferLocs initPrg = do
-  (L1.Prog dfs fds me) <- addRepairFns initPrg
+  (Prog dfs fds me) <- addRepairFns initPrg
   let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
-          fenv <- forM fds $ \(L1.FunDef _ _ (inty, outty) _) ->
+          fenv <- forM fds $ \(FunDef _ _ (inty, outty) _) ->
                   lift $ lift $ convertFunTy (inty,outty)
           let fe = FullEnv dfs' M.empty fenv
           me' <- case me of
@@ -227,7 +221,7 @@ inferLocs initPrg = do
               (me',ty') <- inferExp' fe me NoDest
               return $ Just (me',ty')
             Nothing -> return Nothing
-          fds' <- forM fds $ \(L1.FunDef fn fa (intty,outty) fbod) -> do
+          fds' <- forM fds $ \(FunDef fn fa (intty,outty) fbod) -> do
                                    let arrty = lookupFEnv fn fe
                                        fe' = extendVEnv fa (arrIn arrty) fe
                                    dest <- destFromType (arrOut arrty)
@@ -284,7 +278,7 @@ fixType_ ty =
       _ -> return ()
 
 -- | Wrap the inferExp procedure, and consume all remaining constraints
-inferExp' :: FullEnv -> (L L1.Exp1) -> Dest -> TiM (L L2.Exp2, L2.Ty2)
+inferExp' :: FullEnv -> (L Exp1) -> Dest -> TiM (L L2.Exp2, L2.Ty2)
 inferExp' env lex0@(L sl1 exp) dest =
   let lc = L sl1
 
@@ -316,7 +310,7 @@ inferExp' env lex0@(L sl1 exp) dest =
 
 -- | We proceed in a destination-passing style given the target region
 -- into which we must produce the resulting value.
-inferExp :: FullEnv -> (L L1.Exp1) -> Dest -> TiM Result
+inferExp :: FullEnv -> (L Exp1) -> Dest -> TiM Result
 inferExp env@FullEnv{dataDefs}
          lex0@(L sl1 ex0) dest =
   let lc = L sl1
@@ -499,7 +493,7 @@ inferExp env@FullEnv{dataDefs}
       -- | To handle a case expression, we need to bind locations
       -- appropriately for all the fields.
       doCase :: DDefs Ty2 -> FullEnv -> LocVar -> Dest
-             -> (DataCon, [(Var,())],     L L1.Exp1) ->
+             -> (DataCon, [(Var,())],     L Exp1) ->
              TiM ((DataCon, [(Var,LocVar)], L L2.Exp2), Ty2, [Constraint])
       doCase ddfs env src dst (con,vars,rhs) = do
         vars' <- forM vars $ \(v,_) -> do lv <- lift $ lift $ freshLocVar "case"
@@ -517,7 +511,7 @@ inferExp env@FullEnv{dataDefs}
 
   in
   case ex0 of
-    L1.VarE v ->
+    VarE v ->
       let e' = lc$ VarE v in
       case dest of
         NoDest -> return (e', lookupVEnv v env, [])
@@ -540,7 +534,7 @@ inferExp env@FullEnv{dataDefs}
                             (return (e',ty',[]))
                             (copy (e',ty,[]) d)
 
-    L1.ProjE i (L p (VarE v)) ->
+    ProjE i (L p (VarE v)) ->
         let ProdTy tys = lookupVEnv v env
             ty = tys !! i
             e' = ProjE i (L p (VarE v))
@@ -558,9 +552,9 @@ inferExp env@FullEnv{dataDefs}
                             (return (l$ e',ty',[]))
                             (copy (l$ e',ty,[]) d)
 
-    L1.ProjE{} -> err$ "Invalid tuple projection: " ++ (show ex0)
+    ProjE{} -> err$ "Invalid tuple projection: " ++ (show ex0)
 
-    L1.MkProdE ls ->
+    MkProdE ls ->
       case dest of
         NoDest -> err $ "Expected destination(s) for expression"
         SingleDest d -> case ls of
@@ -574,15 +568,15 @@ inferExp env@FullEnv{dataDefs}
 
     -- Location inference for the parallel combinator should work exactly like a regular tuple --
     -- except that the result should be a `ParE` instead of a `MkProdE`.
-    L1.ParE a b -> do
+    ParE a b -> do
       (L lc1 (MkProdE [a',b']), ty, cs) <- inferExp env (l$ MkProdE [a,b]) dest
       return (L lc1 (ParE a' b'), ty, cs)
 
-    L1.LitE n -> return (lc$ LitE n, IntTy, [])
+    LitE n -> return (lc$ LitE n, IntTy, [])
 
-    L1.LitSymE s -> return (lc$ LitSymE s, SymTy, [])
+    LitSymE s -> return (lc$ LitSymE s, SymTy, [])
 
-    L1.AppE f ls arg ->
+    AppE f ls arg ->
         do let arrty = lookupFEnv f env
            valTy <- freshTyLocs $ arrOut arrty
            argTy <- freshTyLocs $ arrIn arrty
@@ -606,11 +600,11 @@ inferExp env@FullEnv{dataDefs}
                  [] -> return (lc$ L2.AppE f (locsInTy aty ++ locsInDest dest) arg', valTy, acs)
                  _  -> err$ "(AppE) Cannot unify NoDest with " ++ sdoc valTy
 
-    L1.TimeIt e t b ->
+    TimeIt e t b ->
         do (e',ty',cs') <- inferExp env e dest
            return (lc$ TimeIt e' ty' b, ty', cs')
 
-    L1.DataConE () k [] ->
+    DataConE () k [] ->
         case dest of
           NoDest -> err $ "Expected single location destination for DataConE"
           TupleDest _ds -> err $ "Expected single location destination for DataConE"
@@ -619,7 +613,7 @@ inferExp env@FullEnv{dataDefs}
                  let constrs = [AfterTagL fakeLoc d]
                  return (lc$ DataConE d k [], PackedTy (getTyOfDataCon dataDefs k) d, constrs)
 
-    L1.DataConE () k ls ->
+    DataConE () k ls ->
       case dest of
         NoDest -> do
           -- CSK: Should this really be an error ?
@@ -695,7 +689,7 @@ inferExp env@FullEnv{dataDefs}
                          else return $ lc$ DataConE d k [ e' | (e',_,_)  <- ls'']
                   return (bod, PackedTy (getTyOfDataCon dataDefs k) d, constrs')
 
-    L1.IfE a b c@(L _ ce) -> do
+    IfE a b c@(L _ ce) -> do
        -- Here we blithely assume BoolTy because L1 typechecking has already passed:
        (a',bty,acs) <- inferExp env a NoDest
        assumeEq bty BoolTy
@@ -705,17 +699,17 @@ inferExp env@FullEnv{dataDefs}
        (c',tyc,csc)    <- inferExp env c dest
        return (lc$ IfE a' b' c', tyc, L.nub $ acs ++ csb ++ csc)
 
-    L1.PrimAppE pr es ->
+    PrimAppE pr es ->
       case dest of
         SingleDest _ -> err "Cannot unify primop with destination"
         TupleDest _ -> err "Cannot unify primop with destination"
         NoDest -> do results <- mapM (\e -> inferExp env e NoDest) es
                      -- Assume arguments to PrimAppE are trivial
                      -- so there's no need to deal with constraints or locations
-                     ty <- lift $ lift $ convertTy $ L1.primRetTy pr
+                     ty <- lift $ lift $ convertTy $ primRetTy pr
                      return (lc$ PrimAppE (prim pr) [a | (a,_,_) <- results], ty, [])
 
-    L1.CaseE ex ls -> do
+    CaseE ex ls -> do
       -- Case expressions introduce fresh destinations for the scrutinee:
       loc <- lift $ lift $ freshLocVar "scrut"
       (ex',ty2,cs) <- inferExp env ex (SingleDest loc)
@@ -725,11 +719,11 @@ inferExp env@FullEnv{dataDefs}
               (\(_,b,_)->b) (L.head pairs),
               (concat $ [c | (_,_,c) <- pairs]))
 
-    L1.LetE (vr,locs,bty,L sl2 rhs) bod | [] <- locs ->
+    LetE (vr,locs,bty,L sl2 rhs) bod | [] <- locs ->
       case rhs of
-        L1.VarE{} -> err$ "Unexpected variable aliasing: " ++ (show ex0)
+        VarE{} -> err$ "Unexpected variable aliasing: " ++ (show ex0)
 
-        L1.AppE f [] arg -> do
+        AppE f [] arg -> do
           let arrty = lookupFEnv f env
           valTy <- freshTyLocs $ arrOut arrty
           argTy <- freshTyLocs $ arrIn arrty -- TODO: check for and fail on invalid arguments
@@ -743,23 +737,23 @@ inferExp env@FullEnv{dataDefs}
           res' <- tryBindReg (lc$ L2.LetE (vr,[], valTy, L sl2 $ L2.AppE f (locsInTy aty ++ locsInTy valTy) arg') bod'', ty'', fcs)
           bindImmediateDependentLocs (locsInTy aty ++ locsInTy valTy) res'
 
-        L1.AppE{} -> err$ "Malformed function application: " ++ (show ex0)
+        AppE{} -> err$ "Malformed function application: " ++ (show ex0)
 
-        L1.IfE{} -> err$ "Unexpected conditional in let binding: " ++ (show ex0)
+        IfE{} -> err$ "Unexpected conditional in let binding: " ++ (show ex0)
 
-        L1.LetE{} -> err $ "Expected let spine, encountered nested lets: " ++ (show lex0)
+        LetE{} -> err $ "Expected let spine, encountered nested lets: " ++ (show lex0)
 
-        L1.LitE i -> do
+        LitE i -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr IntTy env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs''
           tryBindReg (lc$ L2.LetE (vr,[],IntTy,L sl2 $ L2.LitE i) bod'', ty'', fcs)
 
         -- TODO: docs
-        L1.PrimAppE (L1.ReadPackedFile fp tycon _ ty) [] -> do
+        PrimAppE (ReadPackedFile fp tycon _ ty) [] -> do
           r <- lift $ lift $ gensym "r"
           loc <- lift $ lift $ freshLocVar "mmap_file"
-          let rhs' = l$ L1.PrimAppE (L1.ReadPackedFile fp tycon (Just r) (PackedTy tycon loc)) []
+          let rhs' = l$ PrimAppE (ReadPackedFile fp tycon (Just r) (PackedTy tycon loc)) []
           (bod',ty',cs') <- inferExp (extendVEnv vr (PackedTy tycon loc) env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs'
@@ -768,9 +762,9 @@ inferExp env@FullEnv{dataDefs}
                      , ty', fcs)
 
         -- Don't process the EndOf operation at all, just recur through it
-        PrimAppE L1.PEndOf [L la (L1.VarE v)] -> do
+        PrimAppE PEndOf [L la (VarE v)] -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
-          return (lc$ L2.LetE (vr,[],CursorTy,L sl2 $ L2.PrimAppE L1.PEndOf [L la (L2.VarE v)]) bod', ty', cs')
+          return (lc$ L2.LetE (vr,[],CursorTy,L sl2 $ L2.PrimAppE PEndOf [L la (L2.VarE v)]) bod', ty', cs')
 
         PrimAppE p ls -> do
           lsrec <- mapM (\e -> inferExp env e NoDest) ls
@@ -851,8 +845,8 @@ inferExp env@FullEnv{dataDefs}
         FoldE{} -> err$ "FoldE unsupported"
         Ext{} -> err$ "Not expecting any Ext in inferLocs"
 
-    L1.LetE{} -> err$ "Malformed let expression: " ++ (show ex0)
-    L1.MapE{} -> err$ "MapE unsupported"
+    LetE{} -> err$ "Malformed let expression: " ++ (show ex0)
+    MapE{} -> err$ "MapE unsupported"
     FoldE{} -> err$ "FoldE unsupported"
     Ext{} -> err$ "Not expecting any Ext in inferLocs"
 
@@ -1214,75 +1208,75 @@ assumeEq a1 a2 =
     else err $ "Expected these to be equal: " ++ (show a1) ++ ", " ++ (show a2)
 
 -- | Convert a prim from L1 to L2
-prim :: L1.Prim L1.Ty1 -> L1.Prim Ty2
+prim :: Prim Ty1 -> Prim Ty2
 prim p = case p of
-           L1.AddP -> L1.AddP
-           L1.SubP -> L1.SubP
-           L1.MulP -> L1.MulP
-           L1.DivP -> L1.DivP
-           L1.ModP -> L1.ModP
-           L1.ExpP -> L1.ExpP
-           L1.RandP-> L1.RandP
-           L1.LtP  -> L1.LtP
-           L1.GtP  -> L1.GtP
-           L1.LtEqP-> L1.LtEqP
-           L1.GtEqP-> L1.GtEqP
-           L1.OrP  -> L1.OrP
-           L1.AndP -> L1.AndP
-           L1.EqSymP -> L1.EqSymP
-           L1.EqIntP -> L1.EqIntP
-           L1.MkTrue -> L1.MkTrue
-           L1.MkFalse -> L1.MkFalse
-           L1.SizeParam -> L1.SizeParam
-           L1.PEndOf    -> L1.PEndOf
+           AddP -> AddP
+           SubP -> SubP
+           MulP -> MulP
+           DivP -> DivP
+           ModP -> ModP
+           ExpP -> ExpP
+           RandP-> RandP
+           LtP  -> LtP
+           GtP  -> GtP
+           LtEqP-> LtEqP
+           GtEqP-> GtEqP
+           OrP  -> OrP
+           AndP -> AndP
+           EqSymP -> EqSymP
+           EqIntP -> EqIntP
+           MkTrue -> MkTrue
+           MkFalse -> MkFalse
+           SizeParam -> SizeParam
+           PEndOf    -> PEndOf
            _ -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
 
 -- | Generate a copy function for a particular data definition.
 -- Note: there will be redundant let bindings in the function body which may need to be inlined.
-genCopyFn :: DDef L1.Ty1 -> PassM L1.FunDef1
+genCopyFn :: DDef Ty1 -> PassM FunDef1
 genCopyFn DDef{tyName, dataCons} = do
   arg <- gensym $ "arg"
   casebod <- forM dataCons $ \(dcon, tys) ->
              do xs <- mapM (\_ -> gensym "x") tys
                 ys <- mapM (\_ -> gensym "y") tys
                 let bod = foldr (\(ty,x,y) acc ->
-                                     if L1.isPackedTy ty
-                                     then l$ LetE (y, [], ty, l$ AppE (mkCopyFunName (L1.tyToDataCon ty)) [] (l$ VarE x)) acc
+                                     if isPackedTy ty
+                                     then l$ LetE (y, [], ty, l$ AppE (mkCopyFunName (tyToDataCon ty)) [] (l$ VarE x)) acc
                                      else l$ LetE (y, [], ty, l$ VarE x) acc)
-                          (l$ L1.DataConE () dcon $ map (l . VarE) ys)
+                          (l$ DataConE () dcon $ map (l . VarE) ys)
                           (zip3 (L.map snd tys) xs ys)
                 return (dcon, L.map (\x -> (x,())) xs, bod)
-  return $ L1.FunDef { L1.funName = mkCopyFunName (fromVar tyName)
-                     , L1.funArg = arg
-                     , L1.funTy  = ( L1.PackedTy (fromVar tyName) ()
-                                   , L1.PackedTy (fromVar tyName) () )
-                     , L1.funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
+  return $ FunDef { funName = mkCopyFunName (fromVar tyName)
+                     , funArg = arg
+                     , funTy  = ( PackedTy (fromVar tyName) ()
+                                   , PackedTy (fromVar tyName) () )
+                     , funBody = l$ CaseE (l$ VarE arg) casebod
                      }
 
 -- | Traverses a packed data type and always returns 42.
-genTravFn :: DDef L1.Ty1 -> PassM L1.FunDef1
+genTravFn :: DDef Ty1 -> PassM FunDef1
 genTravFn DDef{tyName, dataCons} = do
   arg <- gensym $ "arg"
   casebod <- forM dataCons $ \(dcon, tys) ->
              do xs <- mapM (\_ -> gensym "x") tys
                 ys <- mapM (\_ -> gensym "y") tys
                 let bod = L.foldr (\(ty,x,y) acc ->
-                                     if L1.isPackedTy ty
+                                     if isPackedTy ty
                                      then l$ LetE (y, [], IntTy, l$ AppE (mkTravFunName (tyToDataCon ty)) [] (l$ VarE x)) acc
                                      else l$ LetE (y, [], ty, l$ VarE x) acc)
                           (l$ LitE 42)
                           (zip3 (L.map snd tys) xs ys)
                 return (dcon, L.map (\x -> (x,())) xs, bod)
-  return $ L1.FunDef { L1.funName = mkTravFunName (fromVar tyName)
-                     , L1.funArg = arg
-                     , L1.funTy  = ( L1.PackedTy (fromVar tyName) () , IntTy )
-                     , L1.funBody = l$ L1.CaseE (l$ L1.VarE arg) casebod
+  return $ FunDef { funName = mkTravFunName (fromVar tyName)
+                     , funArg = arg
+                     , funTy  = ( PackedTy (fromVar tyName) () , IntTy )
+                     , funBody = l$ CaseE (l$ VarE arg) casebod
                      }
 
 
 -- | Add copy & traversal functions for each data type in a prog
-addRepairFns :: L1.Prog1 -> PassM L1.Prog1
-addRepairFns (L1.Prog dfs fds me) = do
+addRepairFns :: Prog1 -> PassM Prog1
+addRepairFns (Prog dfs fds me) = do
   newFns <- concat <$>
               mapM (\d -> do
                     copy_fn <- genCopyFn d
@@ -1290,11 +1284,11 @@ addRepairFns (L1.Prog dfs fds me) = do
                     return [copy_fn, trav_fn])
               (M.elems dfs)
   let fds' = fds `M.union` (M.fromList $ L.map (\f -> (funName f, f)) newFns)
-  prg <- flattenL1 $ L1.Prog dfs fds' me
+  prg <- flattenL1 $ Prog dfs fds' me
   inlineTriv prg
 
 emptyEnv :: FullEnv
-emptyEnv = FullEnv { dataDefs = C.emptyDD
+emptyEnv = FullEnv { dataDefs = emptyDD
                    , valEnv   = M.empty
                    , funEnv   = M.empty }
 
@@ -1397,7 +1391,7 @@ exadd1Bod = l$
                 , l$ VarE "node2"])))
       ]
 
-treeTy :: L1.Ty1
+treeTy :: Ty1
 treeTy = L1.Packed "Tree"
 
 treeDD :: DDefs (UrTy ())
@@ -1411,7 +1405,7 @@ mkAdd1Prog bod mainExp = L1.Prog treeDD
                                  (M.fromList [("add1",mkAdd1Fun bod)])
                                  mainExp
 
-mkAdd1Fun :: ex -> L1.FunDef L1.Ty1 ex
+mkAdd1Fun :: ex -> L1.FunDef Ty1 ex
 mkAdd1Fun bod = L1.FunDef "add1" ("tr",treeTy) treeTy bod
 
 exadd1 :: L1.Prog
@@ -1422,7 +1416,7 @@ mkIdProg mainExp = L1.Prog treeDD
                            (M.fromList [("id",idFun)])
                            mainExp
 
-idFun :: L1.FunDef L1.Ty1 (L L1.Exp1)
+idFun :: L1.FunDef Ty1 (L L1.Exp1)
 idFun = L1.FunDef "id" ("tr",treeTy) treeTy (l$ VarE "tr")
 
 --}

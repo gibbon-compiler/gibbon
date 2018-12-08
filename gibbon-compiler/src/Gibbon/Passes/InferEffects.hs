@@ -1,7 +1,3 @@
-{-# LANGUAGE DeriveAnyClass #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-{-# OPTIONS_GHC -fno-warn-unused-imports #-}
-
 -- | An intermediate language with an effect system that captures traversals.
 --
 -- ASSUMES that the flatten pass has run, and thus we have trivial AppE operands.
@@ -15,9 +11,8 @@ import Data.List as L
 import Data.Set as S
 import Data.Map as M
 
+import Gibbon.Common
 import Gibbon.L2.Syntax
-import Gibbon.Common hiding (FunEnv)
-import Gibbon.L1.Syntax
 
 --------------------------------------------------------------------------------
 
@@ -25,7 +20,7 @@ import Gibbon.L1.Syntax
 lvl :: Int
 lvl = 5
 
-type FunEnv = M.Map Var ArrowTy2
+type FunEnv2 = M.Map Var ArrowTy2
 
 locsEffect :: [LocVar] -> Set Effect
 locsEffect = S.fromList . L.map Traverse
@@ -33,7 +28,7 @@ locsEffect = S.fromList . L.map Traverse
 -- | We initially populate all functions with MAXIMUM effect signatures.
 --   Subsequently, these monotonically SHRINK until a fixpoint.
 --   We also associate fresh location variables with packed types.
-initialEnv :: FunDefs2 -> FunEnv
+initialEnv :: FunDefs2 -> FunEnv2
 initialEnv mp = M.map go mp
   where
     go :: FunDef2 -> ArrowTy2
@@ -51,7 +46,7 @@ inferEffects prg@Prog{ddefs,fundefs} = do
              fundefs
   return $ prg { fundefs = funs }
   where
-    fixpoint :: Int -> FunDefs2 -> FunEnv -> FunEnv
+    fixpoint :: Int -> FunDefs2 -> FunEnv2 -> FunEnv2
     fixpoint iter funs fenv =
        let funtys = M.map (inferFunDef ddefs fenv) funs
        in
@@ -60,7 +55,7 @@ inferEffects prg@Prog{ddefs,fundefs} = do
          else fixpoint (iter+1) funs funtys
 
 
-inferFunDef :: DDefs Ty2 -> FunEnv -> FunDef2 -> ArrowTy2
+inferFunDef :: DDefs Ty2 -> FunEnv2 -> FunDef2 -> ArrowTy2
 inferFunDef ddfs fenv FunDef{funArg,funBody,funTy} = funTy { arrEffs = S.intersection travs eff }
   where
     env0  = M.singleton funArg (arrIn funTy)
@@ -68,9 +63,9 @@ inferFunDef ddfs fenv FunDef{funArg,funBody,funTy} = funTy { arrEffs = S.interse
     (eff,_outLoc) = inferExp ddfs fenv env0 funBody
 
 
-inferExp :: DDefs Ty2 -> FunEnv -> TyEnv Ty2 -> L Exp2 -> (Set Effect, Maybe LocVar)
-inferExp ddfs fenv env (L _p exp) =
-  case exp of
+inferExp :: DDefs Ty2 -> FunEnv2 -> TyEnv Ty2 -> L Exp2 -> (Set Effect, Maybe LocVar)
+inferExp ddfs fenv env (L _p expr) =
+  case expr of
     -- QUESTION: does a variable reference count as traversing to the end?
     -- If so, the identity function has the traverse effect.
     -- I'd prefer that the identity function get type (Tree_p -{}-> Tree_p).
@@ -159,10 +154,9 @@ inferExp ddfs fenv env (L _p exp) =
     oth -> error $ "FINISHME: inferExp " ++ sdoc oth
 
   where
-
     packedLoc :: Ty2 -> Maybe LocVar
     packedLoc ty = case ty of
-                     PackedTy _ l -> Just l
+                     PackedTy _ loc -> Just loc
                      _ -> Nothing
 
     caserhs :: (DataCon, [(Var,LocVar)], L Exp2) -> (Bool, (Set Effect, Maybe LocVar))

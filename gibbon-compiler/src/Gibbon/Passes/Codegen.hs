@@ -1,21 +1,18 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
-
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE QuasiQuotes        #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell    #-}
 
 -- | The final pass of the compiler: generate C code.
 
 module Gibbon.Passes.Codegen
-  ( codegenProg, harvestStructTys, makeName, rewriteReturns
-  ) where
+  ( codegenProg, harvestStructTys, makeName, rewriteReturns ) where
 
 import           Control.Monad
 import           Data.Bifunctor (first)
 import           Data.Int
-import           Data.Loc -- For SrcLoc
+import           Data.Loc
 import           Data.Maybe
 import           Data.List as L
 import qualified Data.Set as S
@@ -29,7 +26,9 @@ import           Text.PrettyPrint.Mainland
 import           Text.PrettyPrint.Mainland.Class
 
 import           Gibbon.Common
+import qualified Gibbon.Language as GL
 import           Gibbon.DynFlags
+import           Gibbon.L2.Syntax ( Multiplicity(..) )
 import           Gibbon.L4.Syntax
 
 --------------------------------------------------------------------------------
@@ -498,7 +497,7 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_start = $id:new_chunk.start_ptr; |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_end = $id:new_chunk.end_ptr; |]
                              , C.BlockStm  [cstm|  $id:bound = $id:chunk_end; |]
-                             , C.BlockStm  [cstm|  *($ty:(codegenTy TagTyPacked) *) ($id:cur) = ($int:redirectionAlt); |]
+                             , C.BlockStm  [cstm|  *($ty:(codegenTy TagTyPacked) *) ($id:cur) = ($int:(GL.redirectionAlt)); |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) redir =  $id:cur + 1; |]
                              , C.BlockStm  [cstm|  *($ty:(codegenTy CursorTy) *) redir = $id:chunk_start; |]
                              , C.BlockStm  [cstm|  $id:cur = $id:chunk_start; |]
@@ -542,7 +541,7 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                              let filename = case mfile of
                                               Just f  -> [cexp| $string:f |] -- Fixed at compile time.
                                               Nothing -> [cexp| read_benchfile_param() |] -- Will be set by command line arg.
-                                 unpackName = mkUnpackerName tyc
+                                 unpackName = GL.mkUnpackerName tyc
                                  unpackcall = LetCallT False [(outV,PtrTy),(toVar "junk",CursorTy)]
                                                     unpackName [VarTriv (toVar "ptr")] (AssnValsT [] Nothing)
 

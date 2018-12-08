@@ -1,15 +1,11 @@
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ViewPatterns #-}
-
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-{-# OPTIONS_GHC -fdefer-typed-holes #-}
-
 
 -------------------------------------------------------------------------------
 
 -- | Lowering L1 to the target language.
 module Gibbon.Passes.Lower
-  ( lower
+  ( lower, getTagOfDataCon
   ) where
 
 -------------------------------------------------------------------------------
@@ -22,11 +18,9 @@ import Data.List as L hiding (tail)
 import Data.Map as M hiding (foldl, foldr)
 import Data.Int (Int64)
 import Prelude hiding (tail)
+import Text.PrettyPrint.GenericPretty
 import qualified Data.List as L
--- import Data.Word
 
-
-import Gibbon.GenericOps
 import Gibbon.Common
 import Gibbon.DynFlags
 import Gibbon.L1.Syntax hiding (progToEnv)
@@ -270,6 +264,16 @@ addPrintToTail ty tl0 = do
         -- Always print a trailing newline at the end of execution:
         T.LetPrimCallT [] (T.PrintString "\n") [] $
           T.RetValsT []  -- Void return after printing.
+
+-- | Look up the numeric tag for a dataCon
+getTagOfDataCon :: Out a => DDefs a -> DataCon -> Tag
+getTagOfDataCon dds dcon =
+    if isIndirectionTag dcon
+    then indirectionAlt
+    else fromIntegral ix
+  where Just ix = L.elemIndex dcon $ getConOrdering dds (fromVar tycon)
+        (tycon,_) = lkp dds dcon
+
 
 -- The compiler pass
 -------------------------------------------------------------------------------a

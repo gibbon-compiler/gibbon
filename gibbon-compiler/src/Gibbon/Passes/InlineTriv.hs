@@ -1,4 +1,3 @@
-
 -- | Compiler pass to inline trivials.
 module Gibbon.Passes.InlineTriv (inlineTriv, inlineTrivExp) where
 
@@ -7,11 +6,7 @@ import           Prelude hiding (exp)
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
-import           Gibbon.GenericOps (isTrivial)
-import           Gibbon.GenericOps (NoExt)
-import           Gibbon.L1.Syntax as L1 hiding (mkProj)
-
--- import Gibbon.Passes.Flatten (typeExp, TEnv)
+import           Gibbon.L1.Syntax
 
 
 -- | Inline trivial let bindings (binding a var to a var or int), mainly to clean up
@@ -112,6 +107,6 @@ inlineTrivExp _ddefs = go []
 
 -- Helpers which do opportunistic reduction:
 
-mkProj :: Int -> MyExp l -> MyExp l
-mkProj ix (L _ (MkProdE ls)) = ls !! ix
-mkProj ix e@(L p _) = L p $ ProjE ix e
+-- mkProj :: Int -> MyExp l -> MyExp l
+-- mkProj ix (L _ (MkProdE ls)) = ls !! ix
+-- mkProj ix e@(L p _) = L p $ ProjE ix e

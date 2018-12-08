@@ -10,6 +10,8 @@ module Gibbon.L3.Syntax
 
     -- * Functions
   , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim
+
+  , module Gibbon.Language
   )
 where
 
@@ -21,8 +23,7 @@ import Data.List as L
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
-import Gibbon.L1.Syntax
-import Gibbon.GenericOps
+import Gibbon.Language
 import qualified Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
@@ -49,9 +50,9 @@ data E3Ext loc dec =
   | AddCursor Var (L (PreExp E3Ext loc dec)) -- ^ Add a constant offset to a cursor variable
   | ReadTag   Var                  -- ^ One cursor in, (tag,cursor) out
   | WriteTag  DataCon Var          -- ^ Write Tag at Cursor, and return a cursor
-  | NewBuffer Multiplicity         -- ^ Create a new buffer, and return a cursor
-  | ScopedBuffer Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
-  | InitSizeOfBuffer Multiplicity  -- ^ Returns the initial buffer size for a specific multiplicity
+  | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
+  | ScopedBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
+  | InitSizeOfBuffer L2.Multiplicity  -- ^ Returns the initial buffer size for a specific multiplicity
   | MMapFileSize Var
   | SizeOfPacked Var Var           -- ^ Takes in start and end cursors, and returns an Int
                                    --   we'll probably represent (sizeof x) as (end_x - start_x) / INT

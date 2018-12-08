@@ -5,17 +5,16 @@ module Gibbon.Passes.RepairProgram
 
 import Data.Set as S
 
-import Gibbon.Common
 import Gibbon.DynFlags
-import Gibbon.L2.Syntax as L2
-import Gibbon.L1.Syntax as L1
-
+import Gibbon.Common
+import Gibbon.L2.Syntax
+import Gibbon.L1.Syntax
 import Gibbon.Passes.InferLocations (inferLocs)
 import Gibbon.Passes.InferEffects   (inferEffects)
 import Gibbon.Passes.RemoveCopies   (removeCopies)
 import Gibbon.Passes.Flatten        (flattenL2)
 import Gibbon.Passes.AddTraversals  (addTraversals)
-import Gibbon.Passes.AddRAN (addRAN,needsRAN)
+import Gibbon.Passes.AddRAN         (addRAN,needsRAN)
 
 --------------------------------------------------------------------------------
 
@@ -49,7 +48,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
 
 
 -- | Add random access nodes to the program, but only where required
-repairProgram :: Prog1 -> L2.Prog2 -> PassM L2.Prog2
+repairProgram :: Prog1 -> Prog2 -> PassM Prog2
 repairProgram oldl1 prg = do
   isGibbon1 <- gopt Opt_Gibbon1 <$> getDynFlags
 

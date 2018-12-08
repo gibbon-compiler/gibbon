@@ -30,7 +30,6 @@ import qualified Data.ByteString.Lazy.Char8 as B
 
 import           Gibbon.Common
 import           Gibbon.Interp
-import           Gibbon.GenericOps
 import           Gibbon.L1.Syntax as L1
 
 

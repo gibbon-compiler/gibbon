@@ -11,7 +11,6 @@ import Prelude hiding (exp)
 import qualified Data.Map as M
 import qualified Data.Set as S
 
-import Gibbon.GenericOps
 import Gibbon.Common (PassM, dbgTrace)
 import Gibbon.L1.Syntax
 import Gibbon.L3.Syntax

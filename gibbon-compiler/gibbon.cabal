@@ -18,12 +18,17 @@ flag LLVM_ENABLED
 
 library
   exposed-modules:     Gibbon.Common
-                       Gibbon.GenericOps
                        Gibbon.Compiler
                        Gibbon.DynFlags
                        Gibbon.TargetInterp
                        Gibbon.Pretty
                        Gibbon.Interp
+
+                       Gibbon.Language
+                       Gibbon.Language.Syntax
+                       Gibbon.Language.Expr
+                       Gibbon.Language.Constants
+
                        Gibbon.L1.Syntax
                        Gibbon.L1.Typecheck
                        Gibbon.L1.Examples

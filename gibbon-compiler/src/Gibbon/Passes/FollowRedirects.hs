@@ -1,12 +1,12 @@
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
-
 module Gibbon.Passes.FollowRedirects
   ( followRedirects ) where
 
 
+import Prelude hiding (tail)
 import qualified Data.Map as M
 
 import Gibbon.Common
+import Gibbon.Language ( TyEnv, indirectionAlt, redirectionAlt)
 import Gibbon.L4.Syntax as L4
 
 {- [Modifying switch statements to use redirection nodes]

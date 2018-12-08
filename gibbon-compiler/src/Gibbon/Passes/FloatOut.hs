@@ -1,6 +1,5 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE EmptyCase #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
 module Gibbon.Passes.FloatOut
   (floatOut) where
 
@@ -10,7 +9,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 
 import Gibbon.Common
-import Gibbon.GenericOps (gTypeExp, gFreeVars)
+import Gibbon.Language
 import Gibbon.L1.Syntax
 import Gibbon.L2.Syntax  (stripTyLocs)
 

@@ -22,8 +22,10 @@ import           GHC.Generics (Generic)
 import           Prelude hiding (init)
 import           Text.PrettyPrint.GenericPretty (Out (..))
 
+import           Gibbon.Language (Tag, TyCon)
 import           Gibbon.Common
-import qualified Gibbon.L1.Syntax as L1
+import qualified Gibbon.Language  as L
+import qualified Gibbon.L2.Syntax as L2
 import qualified Gibbon.L3.Syntax as L3
 
 
@@ -163,14 +165,14 @@ data Prim
 
     | ReadPackedFile (Maybe FilePath) TyCon
 
-    | NewBuffer Multiplicity
+    | NewBuffer L2.Multiplicity
     -- ^ Allocate a new buffer, return a cursor.
-    | ScopedBuffer Multiplicity
+    | ScopedBuffer L2.Multiplicity
     -- ^ Returns a pointer to a buffer, with the invariant that data written
     -- to this region is no longer used after the enclosing function returns.
     -- I.e. this can be stack allocated data.
 
-    | InitSizeOfBuffer Multiplicity
+    | InitSizeOfBuffer L2.Multiplicity
     -- ^ Returns the initial buffer size for a specific multiplicity
 
     | MMapFileSize Var
@@ -262,8 +264,8 @@ withTail (tl0,retty) fn =
 fromL3Ty :: L3.Ty3 -> Ty
 fromL3Ty ty =
   case ty of
-    L1.IntTy -> IntTy
-    L1.SymTy -> SymTy
-    L1.ProdTy tys -> ProdTy $ map fromL3Ty tys
-    L1.SymDictTy t -> SymDictTy $ fromL3Ty t
+    L.IntTy -> IntTy
+    L.SymTy -> SymTy
+    L.ProdTy tys -> ProdTy $ map fromL3Ty tys
+    L.SymDictTy t -> SymDictTy $ fromL3Ty t
     _ -> IntTy -- FIXME: review this

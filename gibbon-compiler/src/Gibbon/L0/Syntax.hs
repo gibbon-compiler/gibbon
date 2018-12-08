@@ -33,11 +33,11 @@ import Control.DeepSeq (NFData)
 import Data.Loc
 import GHC.Generics
 import Text.PrettyPrint.GenericPretty
-import qualified Data.Map as M
+-- import qualified Data.Map as M
 import qualified Data.Set as S
 
 import Gibbon.Common as C
-import Gibbon.GenericOps
+import Gibbon.Language
 
 import qualified Gibbon.L1.Syntax as L1
 

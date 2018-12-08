@@ -12,7 +12,6 @@ import           Data.Map as M
 
 
 import           Gibbon.Common
--- import           Gibbon.GenericOps(Interp, interpNoLogs, interpWithStdout)
 import           Gibbon.L0.Syntax as L0
 import qualified Gibbon.L1.Syntax as L1
 
@@ -44,7 +43,7 @@ type ValEnv = Map Var Value
 interpProg :: Prog -> Value
 -- for now just call interp
 interpProg Prog {ddefs,fundefs,mainExp=Just e} = interp M.empty e
-  where 
+  where
     interp :: ValEnv -> (L Exp0) -> Value
     interp env (L _ ex) =
       case ex of
@@ -55,16 +54,16 @@ interpProg Prog {ddefs,fundefs,mainExp=Just e} = interp M.empty e
               let rand = interp env d
                   lam  = interp env a
               in case lam of
-                   VLam x b env' -> interp (M.insert x rand env') b 
-                   oth           -> error $ "L0.Interp: cannot apply " ++ show oth  
+                   VLam x b env' -> interp (M.insert x rand env') b
+                   oth           -> error $ "L0.Interp: cannot apply " ++ show oth
         L1.VarE v -> env M.! v
         L1.LitE c -> VInt c
-        L1.LitSymE c     -> VInt (strToInt $ fromVar c) 
+        L1.LitSymE c     -> VInt (strToInt $ fromVar c)
         L1.PrimAppE p ls -> applyPrim p $ L.map (interp env) ls
         L1.MkProdE ls    -> VProd $ L.map (interp env) ls
         L1.ProjE ix x    -> let (VProd ls) = interp env x in ls !! ix
         L1.AppE f _ b    ->
-          let rand = interp env b in 
+          let rand = interp env b in
             case M.lookup f fundefs of
               Just FunDef{funArg=(vr,_),funBody} -> interp (M.insert vr rand env) funBody
               Nothing -> error $ "L0.Interp: unbound function in application: "++ show ex
@@ -72,7 +71,7 @@ interpProg Prog {ddefs,fundefs,mainExp=Just e} = interp M.empty e
           case interp env a of
             VBool p -> if p then interp env b else interp env c
             oth     -> error $ "L0.Interp: expected boolean, got " ++ show oth
-        L1.DataConE _ k ls -> VPacked k $ L.map (interp env) ls 
+        L1.DataConE _ k ls -> VPacked k $ L.map (interp env) ls
         L1.CaseE _ []      -> error $ "L0.Interp: CaseE with empty alternatives list"
         L1.CaseE x alts    ->
           case interp env x of
@@ -80,7 +79,7 @@ interpProg Prog {ddefs,fundefs,mainExp=Just e} = interp M.empty e
                                 (_,prs,rhs) = lookupCons k alts
                                 env' = M.union (M.fromList (zip vs ls)) env
                             in interp env' rhs
-            oth          -> error $ "L1.Interp: type error, expected data constructor, got: "++ show oth                             
+            oth          -> error $ "L1.Interp: type error, expected data constructor, got: "++ show oth
         L1.LetE (v,_,_ty,rhs) bod ->
           let rhs' = interp env rhs
               env' = M.insert v rhs' env
@@ -88,7 +87,7 @@ interpProg Prog {ddefs,fundefs,mainExp=Just e} = interp M.empty e
         L1.TimeIt bod _ _ -> interp env bod
         L1.MapE _ _bod    -> error "L0.Interp: finish MapE"
         L1.FoldE _ _ _bod -> error "L0.Interp: finish FoldE"
-  
+
 applyPrim :: L1.Prim Ty0 -> [Value] -> Value
 applyPrim p vs =
    case (p,vs) of
@@ -115,8 +114,6 @@ lookupCons k ((k1,a1,b1):r)
            | k1 == k   = (k1,a1,b1)
            | otherwise = lookupCons k r
 
-  
+
 strToInt :: String -> Int
 strToInt = product . L.map ord
-
-                         
