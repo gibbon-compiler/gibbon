@@ -243,7 +243,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
                            then Just (e, ty)
                            else if main_ty == ty
                                 then return (e, ty)
-                                else error $ "Expected type " ++ sdoc main_ty ++ " and got type " ++ sdoc ty
+                                else error $ "Expected type " ++ sdoc main_ty ++ " but got " ++ sdoc ty
 
   return prg { mainExp = mainExp' }
 

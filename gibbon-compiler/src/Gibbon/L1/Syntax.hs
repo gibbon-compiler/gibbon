@@ -10,7 +10,7 @@
 module Gibbon.L1.Syntax
     (
       -- * Core types specific to L1
-      Prog1, FunDef1, FunDefs1, Exp1, Ty1, NoExt
+      Prog1, FunDef1, FunDefs1, DDef1, DDefs1, Exp1, Ty1, NoExt
 
     , module Gibbon.Language
     ) where
@@ -37,6 +37,10 @@ type Exp1 = PreExp NoExt () Ty1
 -- | An L1 program.
 type Prog1 = Prog (L Exp1)
 
+-- | Datatypes
+type DDefs1 = DDefs Ty1
+type DDef1  = DDefs Ty1
+
 -- | Function definition used in L1 programs.
 type FunDef1 = FunDef (L Exp1)
 
@@ -44,8 +48,6 @@ type FunDefs1 = FunDefs (L Exp1)
 
 -- | The type rperesentation used in L1.
 type Ty1 = UrTy ()
-
-instance (Generic (L Exp1), Generic (ArrowTy Ty1)) => Out Prog1
 
 --------------------------------------------------------------------------------
 

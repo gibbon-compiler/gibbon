@@ -190,7 +190,7 @@ parseSExp ses =
                             vr <- gensym (toVar (L.concat $ L.intersperse "_" $
                                                  L.map fromVar vs))
                             let ty = ProdTy ts
-                                newbod = tuplizeRefs vr vs bod'
+                                newbod = tuplizeRefs vr vs ts bod'
                             return (vr,ty,newbod)
          -- Here we directly desugar multiple arguments into a tuple
          -- argument.

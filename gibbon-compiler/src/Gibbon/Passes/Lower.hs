@@ -438,7 +438,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
     -- Accordingly, constructor allocation becomes an allocation.
     LetE (v, _, _, L _ (DataConE _ k ls)) bod | not pkd -> L1.assertTrivs ls $ do
       let tycon    = getTyOfDataCon ddefs k
-          all_cons = dataCons (lookupDDef ddefs (toVar tycon))
+          all_cons = dataCons (lookupDDef ddefs tycon)
           tag      = fromJust (L.findIndex ((==) k . fst) all_cons)
 
           field_tys= L.map typ (lookupDataCon ddefs k)

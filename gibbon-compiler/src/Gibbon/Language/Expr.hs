@@ -486,12 +486,10 @@ flatLets :: [(Var,[l],d,L (PreExp e l d))] -> L (PreExp e l d) -> L (PreExp e l 
 flatLets [] bod = bod
 flatLets (b:bs) bod = mkLetE b (flatLets bs bod)
 
-tuplizeRefs :: (Eq d, Eq l, Eq (e l d)) => Var -> [Var] -> L (PreExp e l d) -> L (PreExp e l d)
-tuplizeRefs tmp ls  = go (L.zip [0..] ls)
-  where
-   go []          e = e
-   go ((ix,v):vs) e = go vs (subst v (L NoLoc $ ProjE ix (L NoLoc $ VarE tmp)) e)
-
+tuplizeRefs :: Var -> [Var] -> [d] -> L (PreExp e l d) -> L (PreExp e l d)
+tuplizeRefs ref vars tys =
+  mkLets $
+    L.map (\(v,ty,ix) -> (v,[],ty,mkProj ix (l$ VarE ref))) (L.zip3 vars tys [0..])
 
 --------------------------------------------------------------------------------
 -- Helpers operating on types

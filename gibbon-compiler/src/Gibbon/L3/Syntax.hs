@@ -98,7 +98,6 @@ instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
 -----------------------------------------------------------------------------------------
 -- Do this manually to get prettier formatting: (Issue #90)
 
-instance Out Prog3
 instance (Out l, Out d) => Out (E3Ext l d)
 
 -----------------------------------------------------------------------------------------

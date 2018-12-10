@@ -615,7 +615,7 @@ ensureMatchCases :: DDefs Ty2 -> Exp -> Ty2 -> [(DataCon, [(Var,LocVar)], Exp)] 
 ensureMatchCases ddfs exp ty cs = do
   case ty of
     PackedTy tc _l -> do
-            let cons = S.fromList $ L.map fst $ dataCons $ lookupDDef ddfs $ toVar tc
+            let cons = S.fromList $ L.map fst $ dataCons $ lookupDDef ddfs tc
             forM cs $ \(dc,_,_) ->
                 do if S.member dc cons
                    then return ()

@@ -137,12 +137,15 @@ newtype SyM a = SyM (State Int a)
 gensym :: MonadState Int m => Var -> m Var
 gensym v = state (\n -> (cleanFunName v `varAppend` toVar (show n), n + 1))
 
--- | Generate alphabetic variables 'a','b',...
-genLetter :: SyM Var
+-- | An infinite alphabet generator: 'a','b', ... ,'z','a0', ...
+genLetter :: MonadState Int m => m Var
 genLetter = do
+    let infStream = cycle ['a'..'z']
     n <- get
     modify (+1)
-    return $ toVar $ [chr (n + ord 'a')]
+    -- Well, this won't give us exactly what the docs say, but it's good
+    -- enough and requires no changes to SyM or PassM.
+    return $ toVar (infStream !! n : show n)
 
 runSyM :: Int -> SyM a -> (a,Int)
 runSyM n (SyM a) = runState a n

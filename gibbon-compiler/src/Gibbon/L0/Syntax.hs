@@ -3,76 +3,42 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveAnyClass    #-}
 
--- | The higher-ordered surface language.
-
+-- | A higher-ordered surface language that supports Rank-1 parametric
+-- polymorphism.
 module Gibbon.L0.Syntax
-{-
-       ( -- * extended expressions
-         Exp0, E0Ext(..), PProg(..), MProg(..),
-
-         -- * curried functions vs regular functions
-         CurFun, L0Fun, CCall, FCall,
-
-         -- * types and operation on types
-         Ty0(..), Scheme(..), initFunEnv, initVarEnv, arrIn, arrOut, typeFromScheme,
-         tyVarsInType,
-
-         -- * variable definitions
-         VarDef(..), VarDefs,
-
-         -- * polymorphic versions of definitions (functions,vars,ddefs)
-         PVDef(..), PVDefs, PFDef(..), PFDefs, PDDef(..), PDDefs,
-
-         -- * old function definitions
-         FunDefs0, FunDef0
-       )
--}
+  ( module Gibbon.L0.Syntax,
+    module Gibbon.Language,
+  )
 where
 
-import Control.DeepSeq (NFData)
-import Data.Loc
-import GHC.Generics
-import Text.PrettyPrint.GenericPretty
--- import qualified Data.Map as M
+import           Control.DeepSeq (NFData)
+import           Data.List
+import           Data.Loc
+import           GHC.Generics
+import           Text.PrettyPrint.GenericPretty
 import qualified Data.Set as S
 
-import Gibbon.Common as C
-import Gibbon.Language
+import           Gibbon.Common as C
+import           Gibbon.Language hiding (UrTy(..))
 
-import qualified Gibbon.L1.Syntax as L1
+--------------------------------------------------------------------------------
 
------------------------------------------------------------
+type Exp0     = PreExp E0Ext () Ty0
+type DDefs0   = DDefs Ty0
+type DDef0    = DDef Ty0
+type FunDef0  = FunDef (L Exp0)
+type FunDefs0 = FunDefs (L Exp0)
+type Prog0    = Prog (L Exp0)
 
--- | Extended expressions, L0.
-type Exp0 = E0 () Ty0
+--------------------------------------------------------------------------------
 
--- | The extension that turns L1 into L0.
+-- | The extension point for L0.
 data E0Ext loc dec =
    LambdaE (Var,dec) -- Variable tagged with type
-           (L (E0 loc dec))
- | PolyAppE (L (E0 loc dec)) -- Operator
-            (L (E0 loc dec)) -- Operand
+           (L (PreExp E0Ext loc dec))
+ | PolyAppE (L (PreExp E0Ext loc dec)) -- Operator
+            (L (PreExp E0Ext loc dec)) -- Operand
  deriving (Show, Ord, Eq, Read, Generic, NFData)
-
--- Shorthand for recursions above.
-type E0 l d = L1.PreExp E0Ext l d
-
-type TyVar = Var
-
-data Ty0
- = IntTy
- | BoolTy
- | TyVar TyVar
- | ProdTy [Ty0]
- | SymDictTy Ty0
- | ArrowTy Ty0 Ty0
- | PackedTy TyCon [TyVar] -- Type arguments to the type constructor
- | ListTy Ty0
- deriving (Show, Read, Ord, Eq, Generic, NFData)
-
--- | Straightforward parametric polymorphism.
-data TyScheme a = ForAll [TyVar] a
- deriving (Show, Read, Ord, Eq, Generic, NFData)
 
 instance FreeVars (E0Ext l d) where
   gFreeVars e =
@@ -85,7 +51,11 @@ instance (Out l, Out d, Show l, Show d) => Expression (E0Ext l d) where
   type TyOf (E0Ext l d)  = d
   isTrivial _ = False
 
-instance (Out l, Show l, Typeable (L (E0 l Ty0))) => Typeable (E0Ext l Ty0) where
+instance (Show l, Out l) => Flattenable (E0Ext l Ty0) where
+    gFlattenGatherBinds _ddfs _env ex = return ([], ex)
+    gFlattenExp _ddfs _env ex = return ex
+
+instance (Out l, Show l, Typeable (L (PreExp E0Ext l Ty0))) => Typeable (E0Ext l Ty0) where
   gTypeExp ddfs env2 ex =
     case ex of
       LambdaE (_,t) b -> ArrowTy t $ gTypeExp ddfs env2 b
@@ -98,7 +68,7 @@ instance (Out l, Show l, Typeable (L (E0 l Ty0))) => Typeable (E0Ext l Ty0) wher
           err           -> error $ "typeExp: Not an arrow type: " ++ show err
                                                ++ "\n in " ++ show ex
 
-instance (Out l, Show l, Typeable (L (E0 l Ty0)),
+instance (Out l, Show l, Typeable (L (PreExp E0Ext l Ty0)),
           TyOf (E0Ext l Ty0) ~ TyOf (L (E0Ext l Ty0)),
           Expression (L (E0Ext l Ty0)))
          => Typeable (L (E0Ext l Ty0)) where
@@ -106,6 +76,75 @@ instance (Out l, Show l, Typeable (L (E0 l Ty0)),
 
 instance (Out l, Out d) => Out (E0Ext l d)
 instance Out Ty0
+instance Out TyScheme
+
+data Ty0
+ = IntTy
+ | BoolTy
+ | TyVar TyVar
+ | ProdTy [Ty0]
+ | SymDictTy Ty0
+ | ArrowTy Ty0 Ty0
+ | PackedTy TyCon [Ty0] -- Type arguments to the type constructor
+ | ListTy Ty0
+ deriving (Show, Read, Eq, Ord, Generic, NFData)
+
+instance FunctionTy Ty0 where
+  type ArrowTy Ty0 = TyScheme
+  inTy  = arrIn
+  outTy = arrOut
+
+instance FreeVars Ty0 where
+  gFreeVars ty =
+    case ty of
+      IntTy   -> S.empty
+      BoolTy  -> S.empty
+      TyVar v -> S.singleton v
+      ProdTy tys     -> foldr (S.union . gFreeVars) S.empty tys
+      SymDictTy ty1  -> gFreeVars ty1
+      ArrowTy a b    -> gFreeVars a `S.union` gFreeVars b
+      PackedTy _ tys -> foldr (S.union . gFreeVars) S.empty tys
+      ListTy ty1     -> gFreeVars ty1
+
+-- | Straightforward parametric polymorphism.
+data TyScheme = ForAll [TyVar] Ty0
+ deriving (Show, Read, Eq, Ord, Generic, NFData)
+
+instance FreeVars TyScheme where
+  gFreeVars (ForAll tvs ty) = gFreeVars ty `S.difference` (S.fromList tvs)
+
+arrIn :: TyScheme -> Ty0
+arrIn (ForAll _ (ArrowTy i _)) = i
+arrIn err = error $ "arrIn: Not an arrow type: " ++ show err
+
+arrOut :: TyScheme -> Ty0
+arrOut (ForAll _ (ArrowTy _ o)) = o
+arrOut err = error $ "arrOut: Not an arrow type: " ++ show err
+
+tyFromScheme :: TyScheme -> Ty0
+tyFromScheme (ForAll _ a) = a
+
+--------------------------------------------------------------------------------
+
+tyVarsInType :: Ty0 -> [TyVar]
+tyVarsInType = go []
+  where
+    go acc ty =
+      case ty of
+        IntTy   -> acc
+        BoolTy  -> acc
+        TyVar v -> if elem v acc
+                   then acc
+                   else acc ++ [v]
+        ProdTy tys    -> foldl go acc tys
+        SymDictTy a   -> go acc a
+        ArrowTy a b   -> go (nub $ acc ++ tyVarsInType a) b
+        PackedTy _ vs -> foldl go acc vs
+        ListTy a -> go acc a
+
+-- | Similar to 'voidTy'.
+voidTy' :: Ty0
+voidTy' = ProdTy []
 
 {-
 
@@ -196,18 +235,6 @@ arrOut err = error $ "arrOut: Not an arrow type: " ++ show err
 
 typeFromScheme :: Scheme a -> a
 typeFromScheme (ForAll _ a) = a
-
-tyVarsInType :: Ty0 -> [TyVar]
-tyVarsInType ty =
-  case ty of
-    IntTy   -> []
-    BoolTy  -> []
-    TyVar v -> [v]
-    ProdTy tys    -> concatMap tyVarsInType tys
-    SymDictTy a   -> tyVarsInType a
-    ArrowTy a b   -> tyVarsInType a ++ tyVarsInType b
-    PackedTy _ vs -> vs
-    ListTy a -> tyVarsInType a
 
 initFunEnv :: PFDefs Ty0 Exp -> FunEnv Ty0
 initFunEnv fds = M.foldr (\fn acc -> let fnTy = typeFromScheme (fTy fn)

@@ -38,7 +38,8 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.Common
 import           Gibbon.Interp
 import           Gibbon.DynFlags
--- import qualified Gibbon.HaskellFrontend as HS
+import qualified Gibbon.HaskellFrontend as HS
+import qualified Gibbon.L0.Syntax as L0
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
 -- import qualified Gibbon.L3.Syntax as L3
@@ -48,6 +49,8 @@ import qualified Gibbon.L1.Interp as SI
 import           Gibbon.TargetInterp (Val (..), execProg)
 
 -- Compiler passes
+import qualified Gibbon.L0.Freshen   as L0
+import qualified Gibbon.L0.Typecheck as L0
 import qualified Gibbon.L1.Typecheck as L1
 import qualified Gibbon.L2.Typecheck as L2
 import qualified Gibbon.L3.Typecheck as L3
@@ -198,8 +201,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   setDebugEnvVar verbosity
 
   -- parse the input file
-  (parsed, fp) <- parseInput input fp0
-  (l1, cnt0) <- parsed
+  ((l1, cnt0), fp) <- parseInput input fp0
 
   case mode of
     Interp1 -> runL1 l1
@@ -275,17 +277,17 @@ setDebugEnvVar verbosity =
 
 
 -- |
-parseInput :: Input -> FilePath -> IO (IO (L1.Prog1, Int), FilePath)
+parseInput :: Input -> FilePath -> IO ((L1.Prog1, Int), FilePath)
 parseInput ip fp =
   case ip of
-    -- Haskell -> HS.parseFile fp >> error ""
-    SExpr   -> return (SExp.parseFile fp, fp)
+    Haskell -> (, fp) <$> hs_hack
+    SExpr   -> (, fp) <$> SExp.parseFile fp
     Unspecified ->
       case takeExtension fp of
-        -- ".hs"   -> HS.parseFile fp >> error ""
-        ".sexp" -> return (SExp.parseFile fp, fp)
-        ".rkt"  -> return (SExp.parseFile fp, fp)
-        ".gib"  -> return (SExp.parseFile fp, fp)
+        ".hs"   -> (, fp) <$> hs_hack
+        ".sexp" -> (, fp) <$> SExp.parseFile fp
+        ".rkt"  -> (, fp) <$> SExp.parseFile fp
+        ".gib"  -> (, fp) <$> SExp.parseFile fp
         oth -> do
           -- A silly hack just out of sheer laziness vis-a-vis tab completion:
           let f1 = fp ++ ".gib"
@@ -293,11 +295,21 @@ parseInput ip fp =
           f1' <- doesFileExist f1
           f2' <- doesFileExist f2
           if f1' && oth == ""
-            then return (SExp.parseFile f1, f2)
+            then (,f2) <$> SExp.parseFile f1
             else if f2' && oth == "."
-                   then return (SExp.parseFile f2, f2)
+                   then (,f2) <$> SExp.parseFile f1
                    else error$ "compile: unrecognized file extension: "++
                         show oth++"  Please specify compile input format."
+
+  where hs_hack :: IO (L1.Prog1, Int)
+        hs_hack = do (l0,cnt) <- HS.parseFile fp
+                     -- l0 <- (return $ L0.freshNames l0) :: IO (PassM L0.Prog0)
+                     -- (l0,_i) <- return $ runPassM defaultConfig cnt l0
+                     l0 <- return (L0.tcProg l0)
+                     (l0,_i) <- return $ runPassM defaultConfig cnt l0
+                     putStrLn "Typechecking complete."
+                     error $ "Disabled until the new frontend is ready\n"
+                             ++ sdoc l0
 
 
 -- |

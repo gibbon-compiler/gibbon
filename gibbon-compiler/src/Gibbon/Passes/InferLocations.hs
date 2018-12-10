@@ -109,7 +109,7 @@ import Gibbon.Passes.Flatten (flattenL1)
 data FullEnv = FullEnv
     { dataDefs :: DDefs Ty2 -- ^ Data type definitions
     , valEnv :: TyEnv Ty2   -- ^ Type env for local bindings
-    , funEnv :: FunEnv Ty2  -- ^ Top level fundef types
+    , funEnv :: TyEnv (ArrowTy Ty2)  -- ^ Top level fundef types
     } deriving Show
 
 extendVEnv :: Var -> Ty2 -> FullEnv -> FullEnv

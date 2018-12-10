@@ -21,7 +21,7 @@ module Gibbon.Language.Syntax
   , Typeable(..)
 
     -- * Environments
-  , FunEnv, TyEnv, Env2(..), emptyEnv2
+  , TyEnv, Env2(..), emptyEnv2
   , extendVEnv, extendsVEnv, lookupVEnv, extendFEnv
 
   ) where
@@ -69,17 +69,17 @@ instance NFData a => NFData (DDef a) where
 instance Out a => Out (DDef a)
 
 -- | Lookup a ddef in its entirety
-lookupDDef :: Out a => DDefs a -> Var -> DDef a
-lookupDDef mp v =
-    case M.lookup v mp of
+lookupDDef :: Out a => DDefs a -> TyCon -> DDef a
+lookupDDef mp tycon =
+    case M.lookup (toVar tycon) mp of
       Just x -> x
-      Nothing -> error $ "lookupDDef failed on symbol: "++ fromVar v ++"\nDDefs: "++sdoc mp
+      Nothing -> error $ "lookupDDef failed on symbol: "++ tycon ++"\nDDefs: "++sdoc mp
 
 -- | Get the canonical ordering for data constructors, currently based
 -- on ordering in the original source code.  Takes a TyCon as argument.
 getConOrdering :: Out a => DDefs a -> TyCon -> [DataCon]
 getConOrdering dd tycon = L.map fst dataCons
-  where DDef{dataCons} = lookupDDef dd (toVar tycon)
+  where DDef{dataCons} = lookupDDef dd tycon
 
 -- | Lookup the name of the TyCon that goes with a given DataCon.
 --   Must be unique!
@@ -157,7 +157,7 @@ fromListFD :: [FunDef ex] -> FunDefs ex
 fromListFD = L.foldr insertFD M.empty
 
 -- |
-initFunEnv :: FunDefs a -> FunEnv (TyOf a)
+initFunEnv :: FunDefs a -> TyEnv (ArrowTy (TyOf a))
 initFunEnv fds = M.map funTy fds
 
 --------------------------------------------------------------------------------
@@ -199,14 +199,12 @@ getFunTy fn Prog{fundefs} =
       Just f -> funTy f
       Nothing -> error $ "getFunTy: L1 program does not contain binding for function: "++show fn
 
+instance (Generic (ArrowTy (TyOf ex)), Out (ArrowTy (TyOf ex)),
+          Out (TyOf ex), Out ex) => Out (Prog ex)
 
 --------------------------------------------------------------------------------
 -- Generic Ops
 --------------------------------------------------------------------------------
-
-----------------------------------------
--- Free Variables
-----------------------------------------
 
 -- | Expression and program types which support a notion of free variables.
 class FreeVars a where
@@ -216,9 +214,6 @@ class FreeVars a where
 instance FreeVars e => FreeVars (L e) where
   gFreeVars (L _ e) = gFreeVars e
 
-----------------------------------------
--- Expressions used in multiple phases
-----------------------------------------
 
 -- | A generic interface to expressions found in different phases of
 -- the compiler.
@@ -230,9 +225,6 @@ class (Show e, Out e, FreeVars e) => Expression e where
   -- | Is an expression considered trivial (duplicatable by the compiler)?
   isTrivial :: e -> Bool
 
-----------------------------------------
--- Flatten expressions
-----------------------------------------
 
 -- | IRs amenable to flattening
 class Expression e => Flattenable e where
@@ -247,17 +239,10 @@ class Expression e => Flattenable e where
 
 type Binds e = (Var,[LocOf e],TyOf e, e)
 
-----------------------------------------
--- Simplify expressions
-----------------------------------------
 
 -- | IRs amenable to simplification/inlineTrivs
 class Expression e => Simplifiable e where
   gInlineTrivExp :: DDefs (TyOf e) -> e -> e
-
-----------------------------------------
--- Recover the type of an expression
-----------------------------------------
 
 -- | This is NOT a replacement for any typechecker. This is supposed to be used just to
 -- recover the type of an expression in a type-environment
@@ -271,10 +256,6 @@ class Expression e => Typeable e where
 -- Environments
 --------------------------------------------------------------------------------
 
--- | Type environment for function defs only.  This works with type
--- representations that do not include arrow types.
-type FunEnv a = M.Map Var (ArrowTy a)
-
 -- | A simple type environment
 type TyEnv a = M.Map Var a
 
@@ -284,7 +265,15 @@ emptyTyEnv = M.empty
 -- | A common currency for a two part environment consisting of
 -- function bindings and regular value bindings.
 data Env2 a = Env2 { vEnv :: TyEnv a
-                   , fEnv :: FunEnv a }
+                   , fEnv :: TyEnv (ArrowTy a) }
+
+
+deriving instance (Show (TyOf a), Show a, Show (ArrowTy a)) => Show (Env2 a)
+deriving instance (Read (TyOf a), Read a, Read (ArrowTy a)) => Read (Env2 a)
+deriving instance (Eq (TyOf a), Eq a, Eq (ArrowTy a)) => Eq (Env2 a)
+deriving instance (Ord (TyOf a), Ord a, Ord (ArrowTy a)) => Ord (Env2 a)
+deriving instance Generic (Env2 a)
+instance (Out a, Out (ArrowTy a)) => Out (Env2 a)
 
 emptyEnv2 :: Env2 a
 emptyEnv2 = Env2 { vEnv = emptyTyEnv

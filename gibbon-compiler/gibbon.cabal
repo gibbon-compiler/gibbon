@@ -43,8 +43,11 @@ library
                        Gibbon.SExpFrontend
 
                        -- Polymorphism stuff:
+                       Gibbon.HaskellFrontend
                        Gibbon.L0.Syntax
-                       -- Gibbon.HaskellFrontend
+                       Gibbon.L0.Freshen
+                       Gibbon.L0.Typecheck
+                       Gibbon.L0.Specialize2
                        -- Gibbon.L0.Specialize
                        -- Gibbon.L0.Mono
                        -- This one looks far from done:

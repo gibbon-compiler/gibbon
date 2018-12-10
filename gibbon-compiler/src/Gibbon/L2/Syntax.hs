@@ -275,7 +275,6 @@ instance Out Effect
 instance Out a => Out (Set a) where
   docPrec n x = docPrec n (S.toList x)
   doc x = doc (S.toList x)
-instance Out Prog2
 instance (Out l, Out d) => Out (E2Ext l d)
 instance Out l => Out (PreLocExp l)
 instance Out LocRet
