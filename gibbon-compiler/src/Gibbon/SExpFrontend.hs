@@ -175,7 +175,7 @@ parseSExp ses =
      (Ls0 (A _ "require":_) : rst) -> go rst dds fds cds mn
 
      (Ls0 (A _ "data": A _ tycon : cs) : rst) ->
-         go rst (DDef (textToVar tycon) (L.map docasety cs) : dds) fds cds mn
+         go rst (DDef (textToVar tycon) [] (L.map docasety cs) : dds) fds cds mn
      (Ls0 [A _ "define", funspec, A _ ":", retty, bod] : rst)
         |  RSList (A _ name : args) <- funspec
         -> do

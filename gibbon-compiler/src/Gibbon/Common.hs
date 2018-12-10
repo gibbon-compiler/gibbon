@@ -7,7 +7,7 @@
 module Gibbon.Common
        (
          -- * Variables
-         Var(..), LocVar, fromVar, toVar, varAppend, toEndV, cleanFunName
+         Var(..), LocVar, TyVar, fromVar, toVar, varAppend, toEndV, cleanFunName
 
          -- * Gensym monad
        , SyM, gensym, genLetter, runSyM
@@ -97,6 +97,9 @@ toEndV = varAppend "end_"
 
 -- | Abstract location variables.
 type LocVar = Var
+
+-- | Type variables that enable polymorphism.
+type TyVar = Var
 
 --------------------------------------------------------------------------------
 -- Helper methods to integrate the Data.Loc with Gibbon

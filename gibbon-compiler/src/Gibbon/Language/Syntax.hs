@@ -59,8 +59,8 @@ type IsBoxed = Bool
 -- should be boxed.  We say that a regular, pointer-based datatype has
 -- all-boxed fields, whereas a fully serialized datatype has no boxed
 -- fields.
-data DDef a = DDef { tyName :: Var
-                   -- , tyArgs:: [Var] -- ^ No polymorphism for now!
+data DDef a = DDef { tyName   :: Var
+                   , tyArgs   :: [TyVar]
                    , dataCons :: [(DataCon,[(IsBoxed,a)])] }
   deriving (Read, Show, Eq, Ord, Functor, Generic)
 

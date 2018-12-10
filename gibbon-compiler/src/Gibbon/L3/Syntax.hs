@@ -105,7 +105,7 @@ instance (Out l, Out d) => Out (E3Ext l d)
 
 -- | Erase LocVar markers from the data definition
 eraseLocMarkers :: DDef L2.Ty2 -> DDef Ty3
-eraseLocMarkers (DDef tyname ls) = DDef tyname $ L.map go ls
+eraseLocMarkers (DDef tyargs tyname ls) = DDef tyargs tyname $ L.map go ls
   where go :: (DataCon,[(IsBoxed,L2.Ty2)]) -> (DataCon,[(IsBoxed,Ty3)])
         go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,L2.stripTyLocs ty)) ls')
 

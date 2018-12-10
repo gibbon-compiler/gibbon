@@ -390,9 +390,10 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
                  Just (e,ty) -> Just (revertExp e, stripTyLocs ty)
 
     revertDDef :: DDef Ty2 -> DDef Ty1
-    revertDDef (DDef a b) =
-      DDef a (L.filter (\(dcon,_) -> not $ isIndirectionTag dcon) $
-              L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
+    revertDDef (DDef tyargs a b) =
+      DDef tyargs a
+        (L.filter (\(dcon,_) -> not $ isIndirectionTag dcon) $
+         L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
 
     revertFunDef :: FunDef2 -> FunDef1
     revertFunDef FunDef{funName,funArg,funTy,funBody} =

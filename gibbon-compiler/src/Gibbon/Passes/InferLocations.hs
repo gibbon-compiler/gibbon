@@ -151,13 +151,13 @@ convertTy ty = traverse (const (freshLocVar "loc")) ty
 
 convertDDefs :: DDefs Ty1 -> PassM (DDefs Ty2)
 convertDDefs ddefs = traverse f ddefs
-    where f (DDef n dcs) = do
+    where f (DDef tyargs n dcs) = do
             dcs' <- forM dcs $ \(dc,bnds) -> do
                              bnds' <- forM bnds $ \(isb,ty) -> do
                                                ty' <- convertTy ty
                                                return (isb, ty')
                              return (dc,bnds')
-            return $ DDef n dcs'
+            return $ DDef tyargs n dcs'
 
 -- Inference algorithm
 --------------------------------------------------------------------------------

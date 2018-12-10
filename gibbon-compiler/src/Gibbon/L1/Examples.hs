@@ -12,7 +12,7 @@ treeTy :: Ty1
 treeTy = PackedTy "Tree" ()
 
 treeDD :: DDefs (UrTy ())
-treeDD = (fromListDD [DDef "Tree"
+treeDD = (fromListDD [DDef "Tree" []
                       [ ("Leaf",[(False,IntTy)])
                       , ("Node",[(False,treeTy)
                                 ,(False,treeTy)])]])
