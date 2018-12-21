@@ -47,12 +47,6 @@ install:
 git:
   submodules: false
 
-# blacklist
-branches:
-  except:
-    - indirections
-    - jenkins
-
 script:
   ./run_all_tests.sh
 
