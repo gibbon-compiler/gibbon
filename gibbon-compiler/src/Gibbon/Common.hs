@@ -45,7 +45,7 @@ import Data.Loc
 import Data.Word
 import GHC.Generics
 import Text.PrettyPrint.GenericPretty
-import Text.PrettyPrint.HughesPJ as PP hiding (Mode(..), Style(..))
+import Text.PrettyPrint as PP hiding (Mode(..), Style(..))
 import System.IO
 import System.Environment
 import System.IO.Unsafe (unsafePerformIO)

@@ -23,7 +23,7 @@ import Gibbon.Common (fromVar)
 import GHC.Generics
 import Control.DeepSeq
 import Text.PrettyPrint.GenericPretty
-import Text.PrettyPrint.HughesPJ
+import Text.PrettyPrint
 
 -- import Data.Time.Clock
 import System.Clock
