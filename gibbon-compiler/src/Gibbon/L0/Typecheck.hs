@@ -59,61 +59,15 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
                     Right (_s, ty) -> pure $ Just (e, ty)
   pure prg { mainExp = mainExp' }
 
-{- Note [Respecting foralls]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Consider this function:
-
-    id :: forall a. a -> a
-    id x = 10
-
-This doesn't typecheck in Haskell, but does under this system.
-Should we reject this program ? If we only use unification to match
-the derived type with the given type, it succeeds, with ( a ~ IntTy ).
-We need something stronger than unification but weaker than (==) to
-match the types.
-
--}
-checkForAlls :: Doc -> [TyVar] -> Subst -> TcM ()
--- HACK: FIXME
-checkForAlls msg tyvars (Subst mp) = do
-  -- The tyvars captured by this substitution.
-  let capturedTyVars = filter isCaptured tyvars
-  case capturedTyVars of
-    [] -> pure ()
-    ls -> err $ text "Couldn't satisfy these constraints: "
-                  $$ hsep (map (\v -> case M.lookup v mp of
-                                        Nothing -> empty
-                                        Just t  -> doc v <+> text "~" <+> doc t) ls)
-                  $$ msg
-  where
-    isCaptured x =
-      case M.lookup x mp of
-        Nothing        -> False
-        Just (TyVar _) -> False
-        Just _         -> True
-
 tcFun :: DDefs0 -> Gamma -> FunDef0 -> PassM ()
-tcFun ddefs fenv FunDef{funName,funArg,funTy,funBody} = do
-  let arg_ty = inTy funTy
-      s1 = Subst $ M.singleton funArg arg_ty
-      venv = M.singleton funArg (generalize M.empty arg_ty)
-
-  let tc = do (s2,ty2) <- tcExp ddefs s1 venv fenv funBody
-              s3 <- unify funBody ty2 (outTy funTy)
-
-              -- See Note [Respecting forall]
-              let ForAll tyvars _ = funTy
-                  s4 = s2 <> s3
-                  msg = text "which is bound by:"
-                          $$ text (fromVar funName)
-                          <+> text "::" <+> doc funTy
-              checkForAlls msg tyvars s4
-              --
-
-              pure (s4, substTy s3 ty2)
-
-  res <- runTcM tc
+tcFun ddefs fenv FunDef{funArg,funTy,funBody} = do
+  res <- runTcM $ do
+    let (ForAll tyvars (ArrowTy arg_ty _)) = funTy
+        init_venv = M.singleton funArg (ForAll tyvars arg_ty)
+        init_s    = Subst $ M.singleton funArg arg_ty
+    (_s1,ty1) <- tcExp ddefs init_s init_venv fenv funBody
+    let ty1_gen = ForAll tyvars (ArrowTy arg_ty ty1)
+    unifyTyScheme funBody ty1_gen funTy
   case res of
     Left er -> error $ render er
     Right _ -> pure ()
@@ -171,20 +125,14 @@ tcExp ddefs sbst venv fenv e@(L _ ex) =
     LetE (v, _locs, ty, rhs) bod -> do
       (s1,t1) <- go rhs
       s2 <- unify rhs ty t1
-      let venv' = substTyEnv s2 venv
-          t1'   = generalize venv' t1
-
-      -- See Note [Respecting forall]
-      let s3  = s1 <> s2
-          ty'@(ForAll tyvars _) = generalize venv' ty
-          msg = text "which is bound by:"
-                  $$ text (fromVar v)
-                  <+> text "::" <+> doc ty'
-      checkForAlls msg tyvars s3
-      --
-
-      (s4,t4) <- tcExp ddefs (s1 <> s2) (M.insert v t1' venv') fenv bod
-      pure (s3 <> s4, t4)
+      let s3     = s1 <> s2
+          venv'  = substTyEnv s3 venv
+          t1_gen = generalize venv' t1
+          -- Generalized with old venv.
+          ty_gen = generalize venv ty
+      s4 <- unifyTyScheme rhs t1_gen ty_gen
+      (s5,t5) <- tcExp ddefs (s3 <> s4) (M.insert v t1_gen venv') fenv bod
+      pure (s4 <> s5, t5)
 
     IfE a b c -> do
       (s1,t1) <- go a
@@ -325,6 +273,49 @@ unifyTyVar ex a t
                               $$ text "In the expression: "
                               $$ nest 2 (doc ex)
   | otherwise       = pure $ Subst (M.singleton a t)
+
+
+{- Note [Unifying type schemes]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Consider this function:
+
+    id :: forall a. a -> a
+    id x = 10
+
+This doesn't typecheck in Haskell, but does under this system.
+Should we reject this program ? If we only use unification to match
+the derived type with the given type, it succeeds, with ( a ~ IntTy ).
+We need something stronger than unification but weaker than (==) to
+match the types.
+
+
+Semantics:
+
+    (forall as. t1) ~ (forall bs. t2) under S = { ..., (a -> ty) ,... } iff
+    for each (a -> ty) in S, if a is universally quantified then ty must be
+    a universally quantified tyvar.
+
+-}
+unifyTyScheme :: L Exp0 -> TyScheme -> TyScheme -> TcM Subst
+unifyTyScheme e x@(ForAll as t1) y@(ForAll bs t2) = do
+  s@(Subst mp) <- unify e t1 t2
+  let msg :: TyVar -> Ty0 -> TcM ()
+      msg a b = err $ text "Couldn't unify:" <+> doc a <+> text "and" <+> doc b
+                        $$ text "In the expression: "
+                        $$ nest 2 (doc e)
+                        $$ text "Which are bound by:"
+                        $$ nest 2 (vcat [doc x, doc y])
+  forM_ (M.toList mp) $ \(a,ty) ->
+    if not (elem a as || elem a bs)
+    then pure ()
+    else do
+      case ty of
+        TyVar b -> if (elem b bs) || (elem b as)
+                   then pure ()
+                   else msg a ty
+        _ -> msg a ty
+  pure s
 
 occursCheck :: TyVar -> Ty0 -> Bool
 occursCheck a t = a `S.member` gFreeVars t
