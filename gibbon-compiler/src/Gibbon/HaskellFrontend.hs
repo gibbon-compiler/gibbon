@@ -6,6 +6,7 @@ module Gibbon.HaskellFrontend
 import           Data.Loc as Loc
 import           Data.Maybe (catMaybes)
 import qualified Data.Map as M
+import           Language.Haskell.Exts.Extension
 import           Language.Haskell.Exts.Parser
 import           Language.Haskell.Exts.Syntax as H
 import           Language.Haskell.Exts.Pretty
@@ -18,7 +19,10 @@ import           Gibbon.Common
 
 parseFile :: FilePath -> IO (Prog0, Int)
 parseFile path = do
-  fmap parseModule (readFile path) >>= \case
+  let parse_mode = defaultParseMode { extensions =
+                                        [EnableExtension ScopedTypeVariables]
+                                        ++ (extensions defaultParseMode)}
+  fmap (parseModuleWithMode parse_mode) (readFile path) >>= \case
     ParseOk hs -> do
         return ( desugarModule hs, 0 )
     ParseFailed _ er -> do
@@ -32,7 +36,7 @@ data TopLevel
 
 type TopTyEnv = TyEnv TyScheme
 
-desugarModule :: (Pretty a) => Module a -> Prog0
+desugarModule :: (Show a,  Pretty a) => Module a -> Prog0
 desugarModule (Module _ head_mb _pragmas _imports decls) =
   let -- Since top-level functions and their types can't be declared in
       -- single top-level declaration we first collect types and then collect
@@ -63,13 +67,13 @@ desugarModule (Module _ head_mb _pragmas _imports decls) =
                                ++ show mod_name
 desugarModule m = error $ "desugarModule: " ++ prettyPrint m
 
-desugarTopType :: (Pretty a) => Type a -> TyScheme
+desugarTopType :: (Show a,  Pretty a) => Type a -> TyScheme
 desugarTopType ty =
   let ty' = desugarType ty
       tyvars = tyVarsInType ty'
   in ForAll tyvars ty'
 
-desugarType :: (Pretty a) => Type a -> Ty0
+desugarType :: (Show a,  Pretty a) => Type a -> Ty0
 desugarType ty =
   case ty of
     H.TyVar _ (Ident _ t) -> L0.TyVar (toVar t)
@@ -90,14 +94,14 @@ desugarType ty =
     _ -> error $ "desugarType: Unsupported type: " ++ prettyPrint ty
 
 -- Like 'desugarTopType' but understands boxity.
-desugarTopType' :: (Pretty a) => Type a -> (IsBoxed, TyScheme)
+desugarTopType' :: (Show a,  Pretty a) => Type a -> (IsBoxed, TyScheme)
 desugarTopType' ty =
   let (boxity, ty') = desugarType' ty
       tyvars = tyVarsInType ty'
   in (boxity, ForAll tyvars ty')
 
 -- Like 'desugarType' but understands boxity.
-desugarType' :: (Pretty a) => Type a -> (IsBoxed, Ty0)
+desugarType' :: (Show a,  Pretty a) => Type a -> (IsBoxed, Ty0)
 desugarType' ty =
   case ty of
     TyBang _ _ (NoUnpack _) ty1 -> (True, desugarType ty1)
@@ -146,13 +150,21 @@ primMap = M.fromList
   , ("False", MkFalse)
   ]
 
-desugarExp :: (Pretty a) => Exp a -> L Exp0
+desugarExp :: (Show a, Pretty a) => Exp a -> L Exp0
 desugarExp e = L NoLoc $
   case e of
     Paren _ e2 -> Loc.unLoc (desugarExp e2)
     H.Var _ qv -> VarE (toVar $ qnameToStr qv)
 
     Lit _ lit  -> LitE (litToInt lit)
+
+    Lambda _ [pat] bod ->
+      Ext $ LambdaE (desugarPatWithTy pat) (desugarExp bod)
+
+    Lambda _ pats bod ->
+      let (args, tys) = unzip $ map desugarPatWithTy pats
+          (lam_arg, bod') = multiArgsToOne args tys (desugarExp bod)
+      in Ext $ LambdaE (lam_arg, ProdTy tys) bod'
 
     App _ e1 e2 ->
         case desugarExp e1 of
@@ -209,38 +221,38 @@ desugarExp e = L NoLoc $
 
     _ -> error ("desugarExp: Unsupported expression: " ++ prettyPrint e)
 
-desugarFun :: (Pretty a) => TopTyEnv -> Decl a -> (Var, Var, TyScheme, L Exp0)
+desugarFun :: (Show a,  Pretty a) => TopTyEnv -> Decl a -> (Var, Var, TyScheme, L Exp0)
 desugarFun env decl =
   case decl of
-    FunBind _ [Match _ fname hargs (UnGuardedRhs _ bod) _where] ->
+    FunBind _ [Match _ fname pats (UnGuardedRhs _ bod) _where] ->
       let fname_str = nameToStr fname
           fname_var = toVar (fname_str)
-
-          desugarFnArg :: Pat a -> Var
-          desugarFnArg (PVar _ n) = toVar (nameToStr n)
-          desugarFnArg arg        = error ("desugarFun: Unsupported function arg: " ++ prettyPrint arg)
 
       in case M.lookup fname_var env of
            Nothing -> error $ "desugarFun: Top-level function with no type signature: " ++ fname_str
            Just fun_ty ->
              let bod' = desugarExp bod
                  (arg,ty,bod'') =
-                   case hargs of
+                   case pats of
                      []  -> (toVar "_", fun_ty, bod')
-                     [a] -> (desugarFnArg a, fun_ty, bod')
+                     [a] -> (desugarPat a, fun_ty, bod')
                      -- Here we directly desugar multiple arguments
                      -- into a tuple argument.
                      -- N.B. this prevents curried functions.
-                     _ -> let new_arg = toVar (fname_str ++ "_arg")
-                              args    = map desugarFnArg hargs
-                              fun_ty' = unCurryTopTy fun_ty
+                     _ -> let fun_ty' = unCurryTopTy fun_ty
                               ProdTy tys = inTy fun_ty'
-                              bod'''  = tuplizeRefs new_arg args tys bod'
+                              args = map desugarPat pats
+                              (new_arg, bod''') = multiArgsToOne args tys bod'
                           in (new_arg, fun_ty', bod''')
              in (fname_var, arg, ty, bod'')
     _ -> error $ "desugarFun: Found a function with multiple RHS, " ++ prettyPrint decl
 
-collectTopTy :: (Pretty a) => Decl a -> TopTyEnv -> TopTyEnv
+multiArgsToOne :: [Var] -> [Ty0] -> L Exp0 -> (Var, L Exp0)
+multiArgsToOne args tys ex =
+  let new_arg = toVar "multi_arg"
+  in (new_arg, tuplizeRefs new_arg args tys ex)
+
+collectTopTy :: (Show a,  Pretty a) => Decl a -> TopTyEnv -> TopTyEnv
 collectTopTy d env =
   case d of
     TypeSig _ names ty ->
@@ -248,7 +260,7 @@ collectTopTy d env =
       in foldr (\n acc -> M.insert (toVar $ nameToStr n) ty' acc) env names
     _ -> env
 
-collectTopLevel :: (Pretty a) => TopTyEnv -> Decl a -> Maybe TopLevel
+collectTopLevel :: (Show a,  Pretty a) => TopTyEnv -> Decl a -> Maybe TopLevel
 collectTopLevel env decl =
   case decl of
     -- 'collectTopTy' takes care of this.
@@ -259,25 +271,33 @@ collectTopLevel env decl =
           cons' = map desugarConstr cons
       in Just $ HDDef (DDef ty_name ty_args cons')
 
-    PatBind _ (PVar _ (Ident _ "main")) (UnGuardedRhs _ bod) _binds ->
+    PatBind _ (PVar _ (Ident _ "main")) (UnGuardedRhs _ rhs) _binds ->
       -- Start with a void type. The typechecker will fix it.
-      Just $ HMain $ Just (desugarExp bod, L0.TyVar "a")
+      Just $ HMain $ Just (desugarExp rhs, L0.TyVar "a")
 
-
-{-
-    PatBind _ (PVar _ (Ident _ v)) (UnGuardedRhs _ bod) _binds ->
-       case M.lookup (toVar v) env of
-         Nothing -> error $ "collectTopLevel: Top-level binding with no type signature: " ++ v
-         Just (ForAll tvs t) ->
-             -- This is a variable binding, but we encode it as a function 'f' s.t.:
-             --     f :: () -> ty
-             let fun_ty = ForAll tvs (ArrowTy L0.voidTy t) in
-               Just $ HFunDef (FunDef { funName = toVar v
-                                      , funArg  = "_"
-                                      , funTy   = fun_ty
-                                      , funBody = desugarExp bod })
--}
-
+    PatBind _ (PVar _ (Ident _ fn)) (UnGuardedRhs _ rhs) _binds ->
+       case M.lookup (toVar fn) env of
+         Nothing -> error $ "collectTopLevel: Top-level binding with no type signature: " ++ fn
+         Just fun_ty ->
+             -- This is a function binding of the form:
+             --     f = \x -> ...
+             case rhs of
+               Lambda _ pats bod ->
+                 let bod' = desugarExp bod
+                     (fun_ty'', new_arg, bod'') =
+                       case pats of
+                         [] -> error ""
+                         [pat] -> (fun_ty, desugarPat pat, bod')
+                         _ -> let fun_ty' = unCurryTopTy fun_ty
+                                  ProdTy tys = inTy fun_ty'
+                                  args = map desugarPat pats
+                                  (a,b) = multiArgsToOne args tys bod'
+                              in (fun_ty, a, b)
+                 in  Just $ HFunDef (FunDef { funName = toVar fn
+                                            , funArg  = new_arg
+                                            , funTy   = fun_ty''
+                                            , funBody = bod'' })
+               oth -> error $ "collectTopLevel: Unsupprted top-level expression: " ++ prettyPrint oth
 
     FunBind{} -> let (name,arg,ty,bod) = desugarFun env decl
                  in Just $ HFunDef (FunDef { funName = name
@@ -285,7 +305,7 @@ collectTopLevel env decl =
                                            , funTy   = ty
                                            , funBody = bod })
 
-    _ -> error $ "collectTopLevel: Unsupported top-level expression: " ++ (prettyPrint decl)
+    _ -> error $ "collectTopLevel: Unsupported top-level expression: " ++ prettyPrint decl
 
 litToInt :: Literal a -> Int
 litToInt (Int _ i _) = (fromIntegral i) -- lossy conversion here
@@ -310,7 +330,7 @@ desugarOp qop =
         Nothing -> error $ "desugarExp: Unsupported binary op: " ++ show op
     op -> error $ "desugarExp: Unsupported op: " ++ prettyPrint op
 
-desugarAlt :: (Pretty a) => Alt a -> (DataCon, [(Var,())], L Exp0)
+desugarAlt :: (Show a,  Pretty a) => Alt a -> (DataCon, [(Var,())], L Exp0)
 desugarAlt alt =
   case alt of
     Alt _ (PApp _ qname ps) (UnGuardedRhs _ rhs) Nothing ->
@@ -325,7 +345,7 @@ desugarAlt alt =
     Alt _ _ _ Just{}        -> error "desugarExp: Where clauses not allowed in case."
     Alt _ pat _ _           -> error $ "desugarExp: Unsupported pattern in case: " ++ prettyPrint pat
 
-generateBind :: (Pretty a) => TopTyEnv -> Decl a -> L Exp0 -> L Exp0
+generateBind :: (Show a,  Pretty a) => TopTyEnv -> Decl a -> L Exp0 -> L Exp0
 generateBind env decl exp2 =
   case decl of
     -- 'collectTopTy' takes care of this.
@@ -345,7 +365,7 @@ generateBind env decl exp2 =
     oth -> error ("desugarExp: Unsupported pattern: " ++ prettyPrint oth)
 
 
-desugarConstr :: (Pretty a) => QualConDecl a -> (DataCon,[(IsBoxed, Ty0)])
+desugarConstr :: (Show a,  Pretty a) => QualConDecl a -> (DataCon,[(IsBoxed, Ty0)])
 desugarConstr qdecl =
   case qdecl of
     QualConDecl _ _tyvars _ctx (ConDecl _ name arg_tys) ->
@@ -370,6 +390,14 @@ desugarDeclHead = go []
 desugarTyVarBind :: TyVarBind a -> TyVar
 desugarTyVarBind (UnkindedVar _ name) = toVar (nameToStr name)
 desugarTyVarBind v@KindedVar{} = error $ "desugarTyVarBind: Vars with kinds not supported yet." ++ prettyPrint v
+
+desugarPat :: Pat a -> Var
+desugarPat (PVar _ n) = toVar (nameToStr n)
+desugarPat pat        = error ("desugarPat: Unsupported pattern: " ++ prettyPrint pat)
+
+desugarPatWithTy :: (Show a, Pretty a) => Pat a -> (Var, Ty0)
+desugarPatWithTy (PParen _ (PatTypeSig _ pat ty)) = (desugarPat pat, desugarType ty)
+desugarPatWithTy pat = error ("desugarPatWithTy: Unsupported pattern: " ++ show pat)
 
 nameToStr :: Name a -> String
 nameToStr (Ident _ s)  = s
