@@ -368,8 +368,9 @@ dbgTrace lvl msg val =
     then val
     else trace msg val
 
-dbgTraceIt :: Show a => Int -> String -> a -> a
-dbgTraceIt lvl msg x = dbgTrace lvl (msg++": "++show x) x
+-- | Yo, trace this msg.
+dbgTraceIt :: String -> a -> a
+dbgTraceIt msg x = trace msg x
 
 dbgPrintLn :: Int -> String -> IO ()
 dbgPrintLn lvl str = dbgPrint lvl (str++"\n")
