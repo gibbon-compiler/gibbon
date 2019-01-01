@@ -255,14 +255,14 @@ unify ex ty1 ty2
         (BoolTy, BoolTy) -> pure emptySubst
         (TyVar a, _) -> unifyTyVar ex a ty2
         (_, TyVar b) -> unifyTyVar ex b ty1
-        (ProdTy as, ProdTy bs) -> unifyl ex (zip as bs)
+        (ProdTy as, ProdTy bs) -> unifyl ex as bs
         (ArrowTy a b, ArrowTy c d) -> do
           s1 <- unify ex a c
           s2 <- unify ex (substTy s1 b) (substTy s1 d)
           pure (s2 <> s1)
         (PackedTy tc1 tys1, PackedTy tc2 tys2) ->
           if tc1 == tc2
-          then unifyl ex (zip tys1 tys2)
+          then unifyl ex tys1 tys2
           else err fail_msg
         _ -> err fail_msg
   where fail_msg = text "Couldn't unify:" <+> doc ty1 <+> text "and" <+> doc ty2
@@ -270,9 +270,12 @@ unify ex ty1 ty2
                      $$ nest 2 (doc ex)
 
 
-unifyl :: L Exp0 -> [(Ty0,Ty0)] -> TcM Subst
-unifyl _ [] = pure emptySubst
-unifyl e ((ty1,ty2):cs) = (<>) <$> unify e ty1 ty2 <*> unifyl e cs
+unifyl :: L Exp0 -> [Ty0] -> [Ty0] -> TcM Subst
+unifyl _ [] [] = pure emptySubst
+unifyl e (a:as) (b:bs) = (<>) <$> unify e a b <*> unifyl e as bs
+unifyl e as bs = err $ text "Couldn't unify:" <+> doc as <+> text "and" <+> doc bs
+                         $$ text "In the expression: "
+                         $$ nest 2 (doc e)
 
 unifyTyVar :: L Exp0 -> TyVar -> Ty0 -> TcM Subst
 unifyTyVar ex a t
