@@ -17,6 +17,6 @@ main = let foo :: a -> a
            foo x = if True then x else x
 
            hoo :: Int
-           hoo = ap (\(x :: a) -> x) 10
+           hoo = ap (\(x :: Int) -> x) 10
 
        in foo 10

@@ -50,7 +50,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   mainExp' <- case mainExp of
                 Nothing -> pure Nothing
                 Just (e,main_ty) -> do
-                  let tc = do (s1,ty1) <- tcExp ddefs emptySubst M.empty init_fenv e
+                  let tc = do (s1,ty1) <- tcExp ddefs emptySubst M.empty init_fenv S.empty e
                               s2 <- unify e main_ty ty1
                               pure (s1 <> s2, substTy s2 ty1)
                   res <- runTcM tc
@@ -63,50 +63,52 @@ tcFun :: DDefs0 -> Gamma -> FunDef0 -> PassM ()
 tcFun ddefs fenv FunDef{funArg,funTy,funBody} = do
   res <- runTcM $ do
     let (ForAll tyvars (ArrowTy arg_ty _)) = funTy
-        init_venv = M.singleton funArg (ForAll tyvars arg_ty)
+        -- TODO, note.
+        init_venv = M.singleton funArg (ForAll [] arg_ty)
         init_s    = Subst $ M.singleton funArg arg_ty
-    (_s1,ty1) <- tcExp ddefs init_s init_venv fenv funBody
+    (_s1,ty1) <- tcExp ddefs init_s init_venv fenv (S.fromList tyvars) funBody
     let ty1_gen = ForAll tyvars (ArrowTy arg_ty ty1)
-    unifyTyScheme funBody ty1_gen funTy
+    unifyTyScheme funBody (S.fromList tyvars) ty1_gen funTy
   case res of
     Left er -> error $ render er
     Right _ -> pure ()
 
-tcExps :: DDefs0 -> Subst -> Gamma -> Gamma -> [L Exp0] -> TcM (Subst, [Ty0])
-tcExps ddefs sbst venv fenv ls = do
+tcExps :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> [L Exp0] -> TcM (Subst, [Ty0])
+tcExps ddefs sbst venv fenv bound_tyvars ls = do
   (sbsts,tys) <- unzip <$> mapM go ls
   pure (foldl (<>) sbst sbsts, tys)
   where
-    go = tcExp ddefs sbst venv fenv
+    go = tcExp ddefs sbst venv fenv bound_tyvars
 
 -- | Algorithm W
-tcExp :: DDefs0 -> Subst -> Gamma -> Gamma -> L Exp0 -> TcM (Subst, Ty0)
-tcExp ddefs sbst venv fenv e@(L _ ex) =
+tcExp :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> L Exp0 -> TcM (Subst, Ty0)
+tcExp ddefs sbst venv fenv bound_tyvars e@(L _ ex) =
   case ex of
     VarE x -> case M.lookup x venv of
                 Nothing -> err $ text "Unbound variable " <> doc x
-                Just ty -> (sbst,) <$> instantiate ty
+                Just ty -> do
+                  (sbst,) <$> instantiate ty
 
     LitE{}    -> pure (sbst, IntTy)
     LitSymE{} -> pure (sbst, IntTy)
 
     AppE f _locs arg -> do
       case (M.lookup f venv, M.lookup f fenv) of
-        (Just lam_ty, _) -> do t1 <- instantiate lam_ty
-                               (s2,t2) <- go arg
+        (Just lam_ty, _) -> do (s2,t2) <- go arg
                                tv <- freshTy
-                               s3 <- unify e (substTy s2 t1) (ArrowTy t2 tv)
+                               lam_ty_inst <- instantiate lam_ty
+                               s3 <- unify e (ArrowTy t2 tv) (substTy s2 lam_ty_inst)
                                pure (s2 <> s3, substTy s3 tv)
         -- CHECKME
-        (_, Just fn_ty)  -> do t1 <- instantiate fn_ty
+        (_, Just fn_ty)  -> do fn_ty_inst <- instantiate fn_ty
                                (s2,t2) <- go arg
                                tv <- freshTy
-                               s3 <- unify e (substTy s2 t1) (ArrowTy t2 tv)
+                               s3 <- unify e (substTy s2 fn_ty_inst) (ArrowTy t2 tv)
                                pure (s2 <> s3, substTy s3 tv)
         _ -> err $ text "Unknown function:" <+> doc f
 
     PrimAppE pr args -> do
-      (s1, _tys) <- tcExps ddefs sbst venv fenv args
+      (s1, _tys) <- tcExps ddefs sbst venv fenv bound_tyvars args
       let checkLen :: Int -> TcM ()
           checkLen n =
             if length args == n
@@ -114,7 +116,7 @@ tcExp ddefs sbst venv fenv e@(L _ ex) =
             else err $ text "Wrong number of arguments to " <+> doc pr <+> text "."
                          $$ text "Expected " <+> doc n
                          <+> text ", received " <+> doc (length args)
-                         $$ text "In the expression: " <+> doc ex
+                         $$ exp_doc
           len0 = checkLen 0
       case pr of
         _ | pr `elem` [MkTrue, MkFalse] -> do
@@ -127,11 +129,14 @@ tcExp ddefs sbst venv fenv e@(L _ ex) =
       s2 <- unify rhs ty t1
       let s3     = s1 <> s2
           venv'  = substTyEnv s3 venv
-          t1_gen = generalize venv' t1
+          t1_gen = generalize venv' bound_tyvars t1
           -- Generalized with old venv.
-          ty_gen = generalize venv ty
-      s4 <- unifyTyScheme rhs t1_gen ty_gen
-      (s5,t5) <- tcExp ddefs (s3 <> s4) (M.insert v t1_gen venv') fenv bod
+          ty_gen = generalize venv bound_tyvars ty
+      s4 <- unifyTyScheme rhs bound_tyvars t1_gen ty_gen
+      -- TODO, note.
+      let ForAll bind_rhs _ = ty_gen
+      (s5,t5) <- tcExp ddefs (s3 <> s4) (M.insert v t1_gen venv') fenv
+                   (bound_tyvars <> (S.fromList bind_rhs)) bod
       pure (s4 <> s5, t5)
 
     IfE a b c -> do
@@ -143,7 +148,7 @@ tcExp ddefs sbst venv fenv e@(L _ ex) =
       pure (s1 <> s2 <> s3 <> s4 <> s5, substTy s5 t2)
 
     MkProdE es -> do
-      (s1, tys) <- tcExps ddefs sbst venv fenv es
+      (s1, tys) <- tcExps ddefs sbst venv fenv bound_tyvars es
       pure (s1, ProdTy tys)
 
     ProjE i a -> do
@@ -152,7 +157,7 @@ tcExp ddefs sbst venv fenv e@(L _ ex) =
        ProdTy tys -> pure (s1, tys !! i)
        t1' -> err $ "tcExp: Coulnd't match expected type: ProdTy [...]"
                       <+> "with actual type: " <+> doc t1'
-                      $$ "In the expression: " <+> doc ex
+                      $$ exp_doc
 
     -- CaseE
     -- DataConE
@@ -161,15 +166,17 @@ tcExp ddefs sbst venv fenv e@(L _ ex) =
       t1 <- freshTy
       let venv' = M.insert v (ForAll [] t1) venv
       s2 <- unify (l$ VarE v) ty t1
-      (s3, t3) <- tcExp ddefs s2 venv' fenv bod
+      (s3, t3) <- tcExp ddefs s2 venv' fenv bound_tyvars bod
       return (s3, substTy s3 (ArrowTy t1 t3))
 
     _ -> err $ "tcExp: TODO" <+> doc ex
   where
-    go = tcExp ddefs sbst venv fenv
+    go = tcExp ddefs sbst venv fenv bound_tyvars
+
+    exp_doc = "In the expression: " <+> doc ex
 
     freshTy :: TcM Ty0
-    freshTy = TyVar <$> gensym "b"
+    freshTy = TyVar <$> gensym "x"
 
 
 instantiate :: TyScheme -> TcM Ty0
@@ -179,9 +186,10 @@ instantiate (ForAll as ty) = do
   pure (substTy s1 ty)
 
 
-generalize :: Gamma -> Ty0 -> TyScheme
-generalize env ty =
-  let tvs = S.toList (gFreeVars ty `S.difference` gFreeVars env)
+generalize :: Gamma -> S.Set TyVar -> Ty0 -> TyScheme
+generalize env bound_tyvars ty =
+  let tvs = S.toList $ (gFreeVars ty S.\\ gFreeVars env) S.\\ bound_tyvars
+
   in ForAll tvs ty
 
 --------------------------------------------------------------------------------
@@ -201,7 +209,7 @@ instance FreeVars a => FreeVars (TyEnv a) where
 --------------------------------------------------------------------------------
 
 newtype Subst = Subst (M.Map TyVar Ty0)
-  deriving (Ord, Eq, Read, Show)
+  deriving (Ord, Eq, Read, Show, Generic, Out)
 
 instance Semigroup Subst where
   -- s1 <> s2 == substTy s1 . substTy s2
@@ -297,8 +305,8 @@ Semantics:
     a universally quantified tyvar.
 
 -}
-unifyTyScheme :: L Exp0 -> TyScheme -> TyScheme -> TcM Subst
-unifyTyScheme e x@(ForAll as t1) y@(ForAll bs t2) = do
+unifyTyScheme :: L Exp0 -> S.Set TyVar -> TyScheme -> TyScheme -> TcM Subst
+unifyTyScheme e bound_tyvars x@(ForAll as t1) y@(ForAll bs t2) = do
   s@(Subst mp) <- unify e t1 t2
   let msg :: TyVar -> Ty0 -> TcM ()
       msg a b = err $ text "Couldn't unify:" <+> doc a <+> text "and" <+> doc b
@@ -307,11 +315,13 @@ unifyTyScheme e x@(ForAll as t1) y@(ForAll bs t2) = do
                         $$ text "Which are bound by:"
                         $$ nest 2 (vcat [doc x, doc y])
   forM_ (M.toList mp) $ \(a,ty) ->
-    if not (elem a as || elem a bs)
+    if not (elem a as || elem a bs || elem a bound_tyvars)
     then pure ()
     else do
       case ty of
-        TyVar b -> if (elem b bs) || (elem b as)
+        TyVar b -> if (elem a as && not (elem b as)) ||
+                      (elem a bs && not (elem b bs)) ||
+                      (a `S.member` bound_tyvars && not (b `S.member` bound_tyvars))
                    then pure ()
                    else msg a ty
         _ -> msg a ty
