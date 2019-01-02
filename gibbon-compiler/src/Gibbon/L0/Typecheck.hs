@@ -5,6 +5,8 @@ module Gibbon.L0.Typecheck where
 
 import           Control.Monad.Except
 import           Control.Monad.State ( MonadState )
+import           Data.Foldable ( foldlM )
+import           Data.List
 import           Data.Loc
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -100,6 +102,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L _ ex) =
                                s3 <- unify e (ArrowTy t2 tv) (substTy s2 lam_ty_inst)
                                pure (s2 <> s3, substTy s3 tv)
         -- CHECKME
+        -- TODO: don't instantiate when typechecking top-level fns
         (_, Just fn_ty)  -> do fn_ty_inst <- instantiate fn_ty
                                (s2,t2) <- go arg
                                tv <- freshTy
@@ -159,8 +162,33 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L _ ex) =
                       <+> "with actual type: " <+> doc t1'
                       $$ exp_doc
 
-    -- CaseE
-    -- DataConE
+    CaseE scrt brs -> do
+      (s1,t1) <- go scrt
+      case t1 of
+        (PackedTy tycon drvd_tyargs) -> do
+          let tycons_brs = map (getTyOfDataCon ddefs . (\(a,_,_) -> a)) brs
+          case nub tycons_brs of
+            [one] -> if one == tycon
+                     then do
+                       let ddf = lookupDDef ddefs tycon
+                       ddf' <- substDDef ddf drvd_tyargs
+                       tcCases ddefs s1 venv fenv bound_tyvars ddf' brs e
+                     else err $ text "Couldn't match" <+> doc one
+                                <+> "with:" <+> doc t1
+                                $$ exp_doc
+            oth -> err $ text "Case clause constructors have mismatched types:"
+                          <+> doc oth
+                          $$ exp_doc
+        _ -> err $ text "Couldn't match" <+> doc t1
+                     <+> "with a Packed type."
+                     $$ exp_doc
+
+    DataConE _ dcon args -> do
+      let expected = lookupDataCon ddefs dcon
+      (s1, actual) <- tcExps ddefs sbst venv fenv bound_tyvars args
+      s2 <- unifyl e expected actual
+      ty <- instantiateDDef ddefs dcon actual
+      pure (s1 <> s2, ty)
 
     Ext (LambdaE (v,ty) bod) -> do
       t1 <- freshTy
@@ -172,12 +200,41 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L _ ex) =
     _ -> err $ "tcExp: TODO" <+> doc ex
   where
     go = tcExp ddefs sbst venv fenv bound_tyvars
-
     exp_doc = "In the expression: " <+> doc ex
 
-    freshTy :: TcM Ty0
-    freshTy = TyVar <$> gensym "x"
 
+tcCases :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar
+        -> DDef0 -> [(DataCon, [(Var, ())], L Exp0)] -> L Exp0
+        -> TcM (Subst, Ty0)
+tcCases ddefs sbst venv fenv bound_tyvars ddf brs ex = do
+  (s1,tys) <-
+    foldlM
+      (\(s,acc) (con,vlocs,rhs) -> do
+        let vars = map fst vlocs
+            tys  = lookupDataCon' ddf con
+            tys_gen = map (ForAll (tyArgs ddf \\ (S.toList bound_tyvars))) tys
+            venv' = venv <> (M.fromList $ zip vars tys_gen)
+        (s2,t2) <- tcExp ddefs sbst venv' fenv bound_tyvars rhs
+        pure (s <> s2, acc ++ [t2]))
+      (sbst, [])
+      brs
+  -- FINISHME (run on incorrect fmapMaybe's)
+  let (as,bs) = unzip (pairs tys)
+  s2 <- unifyl ex as bs
+  let s3 = s1 <> s2
+      tys' = map (substTy s3) tys
+  -- dbgTraceIt (sdoc (tys,tys')) (pure())
+  mapM_ (\(a,b) -> ensureEqualTy ex a b) (pairs tys')
+  pure (s3, head tys')
+  where
+    -- pairs [1,2,3,4,5] = [(1,2), (2,3) (4,5)]
+    pairs :: [a] -> [(a,a)]
+    pairs []  = []
+    pairs [_] = []
+    pairs (x:y:xs) = (x,y) : pairs (y:xs)
+
+freshTy :: TcM Ty0
+freshTy = TyVar <$> gensym "x"
 
 instantiate :: TyScheme -> TcM Ty0
 instantiate (ForAll as ty) = do
@@ -185,12 +242,38 @@ instantiate (ForAll as ty) = do
   let s1 = Subst $ M.fromList (zip as bs)
   pure (substTy s1 ty)
 
-
 generalize :: Gamma -> S.Set TyVar -> Ty0 -> TyScheme
 generalize env bound_tyvars ty =
   let tvs = S.toList $ (gFreeVars ty S.\\ gFreeVars env) S.\\ bound_tyvars
-
   in ForAll tvs ty
+
+-- Makes (Nothing :: Maybe a), (Right 10 :: Either a Int) etc. happen
+instantiateDDef :: DDefs0 -> DataCon -> [Ty0] -> TcM Ty0
+instantiateDDef ddefs dcon infrd_tys = do
+  let tycon        = getTyOfDataCon ddefs dcon
+      DDef{tyArgs} = lookupDDef ddefs tycon
+
+      -- Types with which constructor was defined
+      gvn_tys = lookupDataCon ddefs dcon
+
+  -- Given a datatype;
+  --
+  --     data Either a b = Left a | Right b
+  --
+  -- and some constructor, build a substituion;
+  --
+  --     Left  [c] => [ a -> c    , b -> fresh ]
+  --     Right [c] => [ a -> fresh, b -> c     ]
+  --
+  mp <- M.fromList <$> mapM
+          (\tyarg -> (tyarg,) <$>
+            case elemIndex (TyVar tyarg) gvn_tys of
+              Just ix -> pure (infrd_tys !! ix)
+              Nothing -> freshTy)
+          tyArgs
+  let tys = map (mp #) tyArgs
+  pure (PackedTy tycon tys)
+
 
 --------------------------------------------------------------------------------
 -- Type environment
@@ -241,6 +324,25 @@ substTyScheme (Subst mp) (ForAll tvs ty) =
 
 substTyEnv :: Subst -> Gamma -> Gamma
 substTyEnv s env = M.map (substTyScheme s) env
+
+-- Substitute tyvars with types in a ddef.
+substDDef :: DDef0 -> [Ty0] -> TcM DDef0
+substDDef d@DDef{tyArgs,dataCons} tys =
+  if length tyArgs /= length tys
+  then err $ text "substDDef error."
+  else do
+    let mp = M.fromList (zip tyArgs tys)
+        s  = Subst mp
+        dcons' = map
+                   (\(dcon,btys) ->
+                      let (boxity, tys1) = unzip btys
+                          tys1' = map (substTy s) tys1
+                      in (dcon, zip boxity tys1'))
+                   dataCons
+        free_tyvars = concatMap tyVarsInType (M.elems mp)
+    pure d { tyArgs   = free_tyvars
+           , dataCons = dcons' }
+
 
 --------------------------------------------------------------------------------
 -- Unification
@@ -337,8 +439,10 @@ occursCheck a t = a `S.member` gFreeVars t
 -- Other helpers
 --------------------------------------------------------------------------------
 
-_ensureEqualTy :: Ty0 -> Ty0 -> TcM ()
-_ensureEqualTy ty1 ty2
+ensureEqualTy :: L Exp0 -> Ty0 -> Ty0 -> TcM ()
+ensureEqualTy ex ty1 ty2
   | ty1 == ty2 = pure ()
   | otherwise  = err $ text "Couldn't match expected type:" <+> doc ty1
-                         $$ "with actual type: " <+> doc ty2
+                         $$ text "with actual type: " <+> doc ty2
+                         $$ text "In the expression: "
+                         $$ nest 2 (doc ex)

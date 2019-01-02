@@ -8,7 +8,7 @@ module Gibbon.Language.Syntax
     -- * Datatype definitions
     DDefs, DataCon, TyCon, Tag, IsBoxed, DDef(..)
   , lookupDDef, getConOrdering, getTyOfDataCon, lookupDataCon, lkp
-  , insertDD, emptyDD, fromListDD
+  , lookupDataCon', insertDD, emptyDD, fromListDD
 
     -- * Function definitions
   , FunctionTy(..), FunDefs, FunDef(..), insertFD, fromListFD, initFunEnv
@@ -92,6 +92,19 @@ lookupDataCon dds con =
     -- dbgTrace 5 ("lookupDataCon -- "++sdoc(dds,con)) $
     L.map snd $ snd $ snd $ lkp dds con
 
+-- | Like 'lookupDataCon' but lookup arguments to a data contstructor for a
+-- specific instance of a datatype.
+--
+--     lookupDataCon' (Maybe Int) Just = [Int]
+lookupDataCon' :: Out a => DDef a -> DataCon -> [a]
+lookupDataCon' ddf@DDef{dataCons} con =
+   case L.filter ((== con) . fst) dataCons of
+     []    -> error$ "lookupDataCon': could not find constructor " ++ show con
+              ++ ", in datatype:\n  " ++ sdoc ddf
+     [hit] -> L.map snd (snd hit)
+     _     -> error$ "lookupDataCon': found multiple occurences of constructor "++show con
+              ++ ", in datatype:\n  " ++ sdoc ddf
+
 -- | Lookup a Datacon.  Return (TyCon, (DataCon, [flds]))
 lkp :: Out a => DDefs a -> DataCon -> (Var, (DataCon, [(IsBoxed,a)]))
 lkp dds con =
@@ -100,10 +113,10 @@ lkp dds con =
        | (tycon, DDef{dataCons}) <- M.toList dds
        , variant <- L.filter ((==con). fst) dataCons ] of
     [] -> error$ "lookupDataCon: could not find constructor "++show con
-          ++", in datatypes:\n  "++show(doc dds)
+          ++", in datatypes:\n  "++sdoc dds
     [hit] -> hit
     _ -> error$ "lookupDataCon: found multiple occurences of constructor "++show con
-          ++", in datatypes:\n  "++show(doc dds)
+          ++", in datatypes:\n  "++sdoc dds
 
 
 insertDD :: DDef a -> DDefs a -> DDefs a

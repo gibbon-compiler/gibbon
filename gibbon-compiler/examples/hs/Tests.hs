@@ -13,6 +13,20 @@ ap f x = f x
 dot :: (b -> c) -> (a -> b) -> a -> c
 dot f g x = f (g x)
 
+data Maybe a = Nothing | Just a
+
+onlyNothing :: a -> Maybe b
+onlyNothing x = Nothing
+
+pureMaybe :: a -> Maybe a
+pureMaybe x = Just x
+
+fmapMaybe :: (a -> b) -> Maybe a -> Maybe b
+fmapMaybe f mb =
+  case mb of
+    Just x  -> (f x)
+    Nothing -> Nothing
+
 main = let foo :: a -> a
            foo x = if True then x else x
 
