@@ -391,7 +391,15 @@ unify ex ty1 ty2
 
 unifyl :: L Exp0 -> [Ty0] -> [Ty0] -> TcM Subst
 unifyl _ [] [] = pure emptySubst
-unifyl e (a:as) (b:bs) = (<>) <$> unify e a b <*> unifyl e as bs
+unifyl e (a:as) (b:bs) = do
+    -- N.B. We must apply s1 over the rest of the list before unifying it, i.e.
+    --
+    --     (<>) <$> unify e a b <*> unifyl e as bs
+    --
+    -- doesn't work!
+    s1 <- unify e a b
+    s2 <- unifyl e (map (substTy s1) as) (map (substTy s1) bs)
+    pure (s1 <> s2)
 unifyl e as bs = err $ text "Couldn't unify:" <+> doc as <+> text "and" <+> doc bs
                          $$ text "In the expression: "
                          $$ nest 2 (doc e)
