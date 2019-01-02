@@ -116,8 +116,11 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
 
     -- Arguments must have concrete types.
     PrimAppE pr args -> do
-      (s1, _tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
-      let checkLen :: Int -> TcM ()
+      (s1, tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
+
+      let tys' = map (substTy s1) tys
+
+          checkLen :: Int -> TcM ()
           checkLen n =
             if length args == n
             then pure ()
@@ -126,10 +129,17 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
                          <+> text ", received " <+> doc (length args)
                          $$ exp_doc
           len0 = checkLen 0
+          len2 = checkLen 2
       case pr of
         _ | pr `elem` [MkTrue, MkFalse] -> do
             len0
             pure (s1, BoolTy, PrimAppE pr args_tc)
+
+        _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP] -> do
+            len2
+            _ <- ensureEqualTy (args !! 0) IntTy (tys' !! 0)
+            _ <- ensureEqualTy (args !! 1) IntTy (tys' !! 1)
+            pure (s1, IntTy, PrimAppE pr args_tc)
         oth -> err $ text "PrimAppE : TODO " <+> doc oth
 
     LetE (v, tyapps, ty, rhs) bod -> do
