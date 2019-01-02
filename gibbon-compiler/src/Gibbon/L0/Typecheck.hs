@@ -97,13 +97,13 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
     LitE{}    -> pure (sbst, IntTy, ex)
     LitSymE{} -> pure (sbst, IntTy, ex)
 
-    AppE f locs arg -> do
+    AppE f tyapps arg -> do
       case (M.lookup f venv, M.lookup f fenv) of
         (Just lam_ty, _) -> do (s2,t2,arg_tc) <- go arg
                                tv <- freshTy
                                lam_ty_inst <- instantiate lam_ty
                                s3 <- unify e (ArrowTy t2 tv) (substTy s2 lam_ty_inst)
-                               pure (s2 <> s3, substTy s3 tv, AppE f locs arg_tc)
+                               pure (s2 <> s3, substTy s3 tv, AppE f tyapps arg_tc)
         -- CHECKME
         -- TODO: don't instantiate when typechecking top-level fns
         (_, Just fn_ty)  -> do fn_ty_inst <- instantiate fn_ty
@@ -111,7 +111,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
                                tv <- freshTy
                                s3 <- unify e (substTy s2 fn_ty_inst) (ArrowTy t2 tv)
                                -- Specialize this.
-                               pure (s2 <> s3, substTy s3 tv, AppE f locs arg_tc)
+                               pure (s2 <> s3, substTy s3 tv, AppE f tyapps arg_tc)
         _ -> err $ text "Unknown function:" <+> doc f
 
     -- Arguments must have concrete types.
@@ -132,7 +132,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
             pure (s1, BoolTy, PrimAppE pr args_tc)
         oth -> err $ text "PrimAppE : TODO " <+> doc oth
 
-    LetE (v, locs, ty, rhs) bod -> do
+    LetE (v, tyapps, ty, rhs) bod -> do
       (s1,t1,rhs_tc) <- go rhs
       s2 <- unify rhs ty t1
       let s3     = s1 <> s2
@@ -145,7 +145,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
       let ForAll bind_rhs _ = ty_gen
       (s5,t5,bod_tc) <- tcExp ddefs (s3 <> s4) (M.insert v t1_gen venv') fenv
                           (bound_tyvars <> (S.fromList bind_rhs)) bod
-      pure (s4 <> s5, t5, LetE (v, locs, ty, rhs_tc) bod_tc)
+      pure (s4 <> s5, t5, LetE (v, tyapps, ty, rhs_tc) bod_tc)
 
     IfE a b c -> do
       (s1,t1,a_tc) <- go a
@@ -189,13 +189,13 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
                      <+> "with a Packed type."
                      $$ exp_doc
 
-    DataConE loc1 dcon args -> do
+    DataConE tyapps dcon args -> do
       let expected = lookupDataCon ddefs dcon
       (s1, actual, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
       s2 <- unifyl e expected actual
       ty <- instantiateDDef ddefs dcon actual
       -- Specialize this.
-      pure (s1 <> s2, ty, DataConE loc1 dcon args_tc)
+      pure (s1 <> s2, ty, DataConE tyapps dcon args_tc)
 
     Ext (LambdaE (v,ty) bod) -> do
       t1 <- freshTy

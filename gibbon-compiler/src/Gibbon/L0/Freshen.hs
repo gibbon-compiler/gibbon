@@ -109,7 +109,7 @@ freshExp venv tyenv (L sloc exp) = fmap (L sloc) $
       es' <- mapM go es
       return $ PrimAppE p es'
 
-    LetE (v,ls,ty, e1) e2 -> assert ([]==ls) $ do
+    LetE (v,_locs,ty, e1) e2 -> do
       -- Freshen type variables free in 'ty' wrt 'tyenv',
       -- a.k.a. ScopedTypeVariables.
       let free_tyvars = tyVarsInType ty \\ M.keys tyenv
@@ -140,16 +140,16 @@ freshExp venv tyenv (L sloc exp) = fmap (L sloc) $
     CaseE e mp -> do
       e' <- go e
       mp' <- mapM (\(c,prs,ae) -> do
-                     let (args,_) = unzip prs
+                     let (args,locs) = unzip prs
                      args' <- mapM gensym args
                      let venv' = M.fromList (zip args args') `M.union` venv
                      ae' <- freshExp venv' tyenv ae
-                     return (c, map (,()) args', ae')) mp
+                     return (c, zip args' locs, ae')) mp
       return $ CaseE e' mp'
 
-    DataConE () c es -> do
+    DataConE loc c es -> do
       es' <- mapM go es
-      return $ DataConE () c es'
+      return $ DataConE loc c es'
 
     TimeIt e t b -> do
       e' <- go e

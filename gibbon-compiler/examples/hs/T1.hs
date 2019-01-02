@@ -2,7 +2,7 @@
 
 module T1 where
 
-id :: forall a. a -> a
+id :: a -> a
 id x = x
 
 ap :: (a -> b) -> a -> b

@@ -172,10 +172,10 @@ desugarExp e = L NoLoc $
             case M.lookup (fromVar f) primMap of
               Just p  -> PrimAppE p [desugarExp e2]
               Nothing -> AppE f [] (desugarExp e2)
-          L _ (DataConE () c as) ->
+          L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of
               Just p  -> PrimAppE p as
-              Nothing -> DataConE () c (as ++ [desugarExp e2])
+              Nothing -> DataConE tyapp c (as ++ [desugarExp e2])
           L _ (AppE f [] lit) ->
             let e2' = desugarExp e2
             in (AppE f [] (L NoLoc $ MkProdE [lit,e2']))
@@ -206,7 +206,8 @@ desugarExp e = L NoLoc $
       let dcon = qnameToStr qname
       in case M.lookup dcon primMap of
            Just p  -> PrimAppE p []
-           Nothing -> DataConE () dcon []
+           -- Just a placeholder for now.
+           Nothing -> DataConE (L0.TyVar "blah") dcon []
 
     -- TODO: timeit: parsing it's type isn't straightforward.
 
@@ -330,7 +331,7 @@ desugarOp qop =
         Nothing -> error $ "desugarExp: Unsupported binary op: " ++ show op
     op -> error $ "desugarExp: Unsupported op: " ++ prettyPrint op
 
-desugarAlt :: (Show a,  Pretty a) => Alt a -> (DataCon, [(Var,())], L Exp0)
+desugarAlt :: (Show a,  Pretty a) => Alt a -> (DataCon, [(Var,Ty0)], L Exp0)
 desugarAlt alt =
   case alt of
     Alt _ (PApp _ qname ps) (UnGuardedRhs _ rhs) Nothing ->
@@ -340,7 +341,7 @@ desugarAlt alt =
                              _        -> error "desugarExp: Non-variable pattern in case.")
                     ps
           rhs' = desugarExp rhs
-      in (conName, [(v,()) | v <- ps'], rhs')
+      in (conName, [(v,(L0.TyVar "blah")) | v <- ps'], rhs')
     Alt _ _ GuardedRhss{} _ -> error "desugarExp: Guarded RHS not supported in case."
     Alt _ _ _ Just{}        -> error "desugarExp: Where clauses not allowed in case."
     Alt _ pat _ _           -> error $ "desugarExp: Unsupported pattern in case: " ++ prettyPrint pat
