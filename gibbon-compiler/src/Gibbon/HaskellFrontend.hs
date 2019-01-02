@@ -176,6 +176,9 @@ desugarExp e = L NoLoc $
             case M.lookup c primMap of
               Just p  -> PrimAppE p as
               Nothing -> DataConE tyapp c (as ++ [desugarExp e2])
+          L _ (AppE f [] (L _ (MkProdE ls))) ->
+            let e2' = desugarExp e2
+            in (AppE f [] (L NoLoc $ MkProdE (ls ++ [e2'])))
           L _ (AppE f [] lit) ->
             let e2' = desugarExp e2
             in (AppE f [] (L NoLoc $ MkProdE [lit,e2']))
