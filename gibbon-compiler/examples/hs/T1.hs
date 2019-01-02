@@ -1,10 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
--- | A module to test various parts of the HS frontend parser, and other parts
--- of the L0 pipeline.
-module Tests where
+module T1 where
 
-id :: a -> a
+id :: forall a. a -> a
 id x = x
 
 ap :: (a -> b) -> a -> b
@@ -24,8 +22,16 @@ pureMaybe x = Just x
 fmapMaybe :: (a -> b) -> Maybe a -> Maybe b
 fmapMaybe f mb =
   case mb of
-    Just x  -> (f x)
     Nothing -> Nothing
+    Just x  -> Just (f x)
+
+data Either a b = Left a | Right b
+
+fmapEither :: (a -> b) -> Either s a -> Either s b
+fmapEither f eh =
+  case eh of
+    Left  a -> Left a
+    Right b -> Right (f b)
 
 main = let foo :: a -> a
            foo x = if True then x else x
