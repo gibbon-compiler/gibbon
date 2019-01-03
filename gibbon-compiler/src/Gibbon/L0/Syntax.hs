@@ -124,6 +124,9 @@ arrOut err = error $ "arrOut: Not an arrow type: " ++ show err
 tyFromScheme :: TyScheme -> Ty0
 tyFromScheme (ForAll _ a) = a
 
+tyVarsFromScheme :: TyScheme -> [TyVar]
+tyVarsFromScheme (ForAll a _) = a
+
 --------------------------------------------------------------------------------
 
 tyVarsInType :: Ty0 -> [TyVar]
