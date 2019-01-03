@@ -69,10 +69,11 @@ tcFun ddefs fenv fn@FunDef{funArg,funTy,funBody} = do
         -- TODO, note.
         init_venv = M.singleton funArg (ForAll [] arg_ty)
         init_s    = Subst $ M.singleton funArg arg_ty
-    (_s1,ty1,funBody_tc) <- tcExp ddefs init_s init_venv fenv (S.fromList tyvars) funBody
+    (s1,ty1,funBody_tc) <- tcExp ddefs init_s init_venv fenv (S.fromList tyvars) funBody
     let ty1_gen = ForAll tyvars (ArrowTy arg_ty ty1)
-    s <- unifyTyScheme funBody (S.fromList tyvars) ty1_gen funTy
-    pure (s, funBody_tc)
+    -- CSK: Disabled temporarily.
+    -- s <- forallCheck funBody (S.fromList tyvars) ty1_gen funTy
+    pure (s1, funBody_tc)
   case res of
     Left er -> error $ render er
     Right (_,bod) -> pure $ fn { funBody = bod }
@@ -150,7 +151,9 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
           t1_gen = generalize venv' bound_tyvars t1
           -- Generalized with old venv.
           ty_gen = generalize venv bound_tyvars ty
-      s4 <- unifyTyScheme rhs bound_tyvars t1_gen ty_gen
+      -- CSK: Disabled temporarily.
+      -- s4 <- forallCheck rhs bound_tyvars t1_gen ty_gen
+      let s4 = s3
       -- TODO, note.
       let ForAll bind_rhs _ = ty_gen
       (s5,t5,bod_tc) <- tcExp ddefs (s3 <> s4) (M.insert v t1_gen venv') fenv
@@ -435,8 +438,8 @@ Semantics:
     a universally quantified tyvar.
 
 -}
-unifyTyScheme :: L Exp0 -> S.Set TyVar -> TyScheme -> TyScheme -> TcM Subst
-unifyTyScheme e bound_tyvars x@(ForAll as t1) y@(ForAll bs t2) = do
+forallCheck :: L Exp0 -> S.Set TyVar -> TyScheme -> TyScheme -> TcM Subst
+forallCheck e bound_tyvars x@(ForAll as t1) y@(ForAll bs t2) = do
   s@(Subst mp) <- unify e t1 t2
   let msg :: TyVar -> Ty0 -> TcM ()
       msg a b = err $ text "Couldn't unify:" <+> doc a <+> text "and" <+> doc b
