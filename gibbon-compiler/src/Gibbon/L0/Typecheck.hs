@@ -52,7 +52,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   mainExp' <- case mainExp of
                 Nothing -> pure Nothing
                 Just (e,main_ty) -> do
-                  let tc = do (s1,ty1,e_tc) <- tcExp ddefs emptySubst M.empty init_fenv S.empty e
+                  let tc = do (s1,ty1,e_tc) <- tcExp ddefs emptySubst M.empty init_fenv S.empty AfterLetrec e
                               s2 <- unify e main_ty ty1
                               let e_tc' = substExp s1 e_tc
                               pure (s1 <> s2, substTy s2 ty1, e_tc')
@@ -63,6 +63,37 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   pure prg { fundefs = fundefs_tc
            , mainExp = mainExp' }
 
+{-
+
+Consider this program:
+
+    f :: forall a b. a -> b
+    f = ... g ...
+
+    g = forall c d. c -> d
+    g = ... f ...
+
+    main = ... f ... g ...
+
+All the top-level functions are like a giant letrec, which may later
+be used in the 'main' expression too. When typechecking main, we set the
+type of f to some instance of it's principal type, i.e the type of f is,
+
+    f :: forall fresh1 fresh2. fresh1 -> fresh2
+
+However, while typechecking the letrec (fns), all occurences of f within the
+RHS must have the same type. 'TcPhase' allows us to identify which phase of
+the typechecking process we're in. We don't worry about shadowing
+type variables; assume that 'Freshen' has already done it's job.
+
+-}
+data TcPhase = DuringLetrec | AfterLetrec
+  deriving Eq
+
+shouldInstantiate :: TcPhase -> Bool
+shouldInstantiate DuringLetrec = False
+shouldInstantiate AfterLetrec  = True
+
 tcFun :: DDefs0 -> Gamma -> FunDef0 -> PassM FunDef0
 tcFun ddefs fenv fn@FunDef{funArg,funTy,funBody} = do
   res <- runTcM $ do
@@ -70,7 +101,7 @@ tcFun ddefs fenv fn@FunDef{funArg,funTy,funBody} = do
         -- TODO, note.
         init_venv = M.singleton funArg (ForAll [] arg_ty)
         init_s    = Subst $ M.singleton funArg arg_ty
-    (s1,ty1,funBody_tc) <- tcExp ddefs init_s init_venv fenv (S.fromList tyvars) funBody
+    (s1,ty1,funBody_tc) <- tcExp ddefs init_s init_venv fenv (S.fromList tyvars) DuringLetrec funBody
     -- CSK: Disabled temporarily.
     let _ty1_gen = ForAll tyvars (ArrowTy arg_ty ty1)
     -- s <- forallCheck funBody (S.fromList tyvars) ty1_gen funTy
@@ -80,16 +111,16 @@ tcFun ddefs fenv fn@FunDef{funArg,funTy,funBody} = do
     Left er -> error $ render er
     Right (_,bod) -> pure $ fn { funBody = bod }
 
-tcExps :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> [L Exp0] -> TcM (Subst, [Ty0], [L Exp0])
-tcExps ddefs sbst venv fenv bound_tyvars ls = do
+tcExps :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> TcPhase -> [L Exp0] -> TcM (Subst, [Ty0], [L Exp0])
+tcExps ddefs sbst venv fenv bound_tyvars phase ls = do
   (sbsts,tys,exps) <- unzip3 <$> mapM go ls
   pure (foldl (<>) sbst sbsts, tys, exps)
   where
-    go = tcExp ddefs sbst venv fenv bound_tyvars
+    go = tcExp ddefs sbst venv fenv bound_tyvars phase
 
 -- | Algorithm W
-tcExp :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> L Exp0 -> TcM (Subst, Ty0, L Exp0)
-tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L loc c)) $
+tcExp :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> TcPhase -> L Exp0 -> TcM (Subst, Ty0, L Exp0)
+tcExp ddefs sbst venv fenv bound_tyvars phase e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L loc c)) $
   case ex of
     VarE x -> case M.lookup x venv of
                 Nothing -> err $ text "Unbound variable " <> doc x
@@ -105,9 +136,10 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
                  (Just lam_ty, _) -> do
                    lam_ty_inst <- instantiate lam_ty
                    pure (lam_ty, lam_ty_inst)
-                 -- FIXME: don't instantiate when typechecking top-level fns
                  (_, Just fn_ty)  -> do
-                   fn_ty_inst <- instantiate fn_ty
+                   fn_ty_inst <- if shouldInstantiate phase
+                                 then instantiate fn_ty
+                                 else pure (tyFromScheme fn_ty)
                    pure (fn_ty, fn_ty_inst)
                  _ -> err $ text "Unknown function:" <+> doc f
       (s2,t2,arg_tc) <- go arg
@@ -125,7 +157,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
 
     -- Arguments must have concrete types.
     PrimAppE pr args -> do
-      (s1, tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
+      (s1, tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars phase args
 
       let tys' = map (substTy s1) tys
 
@@ -166,7 +198,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
       -- TODO, note.
       let bind_rhs = tyVarsFromScheme ty_gen
       (s5,t5,bod_tc) <- tcExp ddefs (s3 <> s4) (M.insert v t1_gen venv') fenv
-                          (bound_tyvars <> (S.fromList bind_rhs)) bod
+                          (bound_tyvars <> (S.fromList bind_rhs)) phase bod
       pure (s4 <> s5, t5, LetE (v, tyapps, ty, rhs_tc) bod_tc)
 
     IfE a b c -> do
@@ -178,7 +210,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
       pure (s1 <> s2 <> s3 <> s4 <> s5, substTy s5 t2, IfE a_tc b_tc c_tc)
 
     MkProdE es -> do
-      (s1, tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars es
+      (s1, tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars phase es
       pure (s1, ProdTy tys, MkProdE es_tc)
 
     ProjE i a -> do
@@ -199,7 +231,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
                      then do
                        let ddf = lookupDDef ddefs tycon
                        ddf' <- substDDef ddf drvd_tyargs
-                       (s2,t2,brs_tc) <- tcCases ddefs s1 venv fenv bound_tyvars ddf' brs e
+                       (s2,t2,brs_tc) <- tcCases ddefs s1 venv fenv bound_tyvars phase ddf' brs e
                        pure (s2, t2, CaseE scrt_tc brs_tc)
                      else err $ text "Couldn't match" <+> doc one
                                 <+> "with:" <+> doc t1
@@ -213,7 +245,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
 
     DataConE _tyapps dcon args -> do
       let expected_tys = lookupDataCon ddefs dcon
-      (s1, actual_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
+      (s1, actual_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars phase args
       s2 <- unifyl e expected_tys actual_tys
       (tyapps1, ty) <- instantiateDDef ddefs dcon actual_tys
       -- Type applications for specialization...
@@ -229,19 +261,19 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L
       t1 <- freshTy
       let venv' = M.insert v (ForAll [] t1) venv
       s2 <- unify (l$ VarE v) ty t1
-      (s3, t3, bod_tc) <- tcExp ddefs s2 venv' fenv bound_tyvars bod
+      (s3, t3, bod_tc) <- tcExp ddefs s2 venv' fenv bound_tyvars phase bod
       return (s3, substTy s3 (ArrowTy t1 t3), Ext (LambdaE (v,ty) bod_tc))
 
     _ -> err $ "tcExp: TODO" <+> doc ex
   where
-    go = tcExp ddefs sbst venv fenv bound_tyvars
+    go = tcExp ddefs sbst venv fenv bound_tyvars phase
     exp_doc = "In the expression: " <+> doc ex
 
 
-tcCases :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar
+tcCases :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> TcPhase
         -> DDef0 -> [(DataCon, [(Var, l)], L Exp0)] -> L Exp0
         -> TcM (Subst, Ty0, [(DataCon, [(Var, Ty0)], L Exp0)])
-tcCases ddefs sbst venv fenv bound_tyvars ddf brs ex = do
+tcCases ddefs sbst venv fenv bound_tyvars phase ddf brs ex = do
   (s1,tys,exps) <-
     foldlM
       (\(s,acc,ex_acc) (con,vtys,rhs) -> do
@@ -250,7 +282,7 @@ tcCases ddefs sbst venv fenv bound_tyvars ddf brs ex = do
             tys_gen = map (ForAll (tyArgs ddf \\ (S.toList bound_tyvars))) tys
             venv' = venv <> (M.fromList $ zip vars tys_gen)
             vtys' = zip vars tys
-        (s2,t2,rhs_tc) <- tcExp ddefs sbst venv' fenv bound_tyvars rhs
+        (s2,t2,rhs_tc) <- tcExp ddefs sbst venv' fenv bound_tyvars phase rhs
         pure (s <> s2, acc ++ [t2], ex_acc ++ [(con,vtys',rhs_tc)]))
       (sbst, [], [])
       brs
