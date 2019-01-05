@@ -121,6 +121,10 @@ arrOut :: TyScheme -> Ty0
 arrOut (ForAll _ (ArrowTy _ o)) = o
 arrOut err = error $ "arrOut: Not an arrow type: " ++ show err
 
+arrIn' :: Ty0 -> Ty0
+arrIn' (ArrowTy i _) = i
+arrIn' err = error $ "arrIn': Not an arrow type: " ++ show err
+
 tyFromScheme :: TyScheme -> Ty0
 tyFromScheme (ForAll _ a) = a
 

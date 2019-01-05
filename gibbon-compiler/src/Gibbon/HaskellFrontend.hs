@@ -210,7 +210,7 @@ desugarExp e = L NoLoc $
       in case M.lookup dcon primMap of
            Just p  -> PrimAppE p []
            -- Just a placeholder for now.
-           Nothing -> DataConE (L0.TyVar "blah") dcon []
+           Nothing -> DataConE (L0.TyVar "fresh") dcon []
 
     -- TODO: timeit: parsing it's type isn't straightforward.
 
@@ -277,7 +277,7 @@ collectTopLevel env decl =
 
     PatBind _ (PVar _ (Ident _ "main")) (UnGuardedRhs _ rhs) _binds ->
       -- Start with a void type. The typechecker will fix it.
-      Just $ HMain $ Just (desugarExp rhs, L0.TyVar "a")
+      Just $ HMain $ Just (desugarExp rhs, L0.TyVar "fresh")
 
     PatBind _ (PVar _ (Ident _ fn)) (UnGuardedRhs _ rhs) _binds ->
        case M.lookup (toVar fn) env of
@@ -344,7 +344,7 @@ desugarAlt alt =
                              _        -> error "desugarExp: Non-variable pattern in case.")
                     ps
           rhs' = desugarExp rhs
-      in (conName, [(v,(L0.TyVar "blah")) | v <- ps'], rhs')
+      in (conName, [(v,(L0.TyVar "fresh")) | v <- ps'], rhs')
     Alt _ _ GuardedRhss{} _ -> error "desugarExp: Guarded RHS not supported in case."
     Alt _ _ _ Just{}        -> error "desugarExp: Where clauses not allowed in case."
     Alt _ pat _ _           -> error $ "desugarExp: Unsupported pattern in case: " ++ prettyPrint pat

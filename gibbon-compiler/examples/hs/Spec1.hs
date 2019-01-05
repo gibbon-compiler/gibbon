@@ -22,8 +22,8 @@ dot f g x = f (g x)
 
 data Maybe a = Nothing | Just a
 
--- onlyNothing :: a -> Maybe b
--- onlyNothing x = Nothing
+onlyNothing :: a -> Maybe b
+onlyNothing x = Nothing
 
 pureMaybe :: a -> Maybe a
 pureMaybe x = Just x
@@ -64,4 +64,8 @@ main =
 
         v6 :: Maybe Int
         v6 = fmapMaybe (\(x::Int) -> x + 1) v4
-    in 10
+
+        id2 :: a -> a
+        id2 x = x
+
+    in (v1 + id2 10, id2 True)

@@ -1,5 +1,6 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP #-}
 
 module Gibbon.L0.Typecheck where
 
@@ -12,6 +13,10 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import           Text.PrettyPrint hiding ( (<>) )
 import           Text.PrettyPrint.GenericPretty
+
+#if !MIN_VERSION_base(4,11,0)
+import           Data.Semigroup
+#endif
 
 import           Gibbon.L0.Syntax as L0
 import           Gibbon.Common
@@ -46,16 +51,16 @@ tcProg :: Prog0 -> PassM Prog0
 tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   let init_fenv = M.map funTy fundefs
   fundefs_tc <- mapM (tcFun ddefs init_fenv) fundefs
-
   -- Run the typechecker on the expression, and update it's type in the program
   -- (the parser initializes the main expression with the void type).
   mainExp' <- case mainExp of
                 Nothing -> pure Nothing
-                Just (e,main_ty) -> do
-                  let tc = do (s1,ty1,e_tc) <- tcExp ddefs emptySubst M.empty init_fenv S.empty AfterLetrec e
-                              s2 <- unify e main_ty ty1
-                              let e_tc' = substExp s1 e_tc
-                              pure (s1 <> s2, substTy s2 ty1, e_tc')
+                Just (e,gvn_main_ty) -> do
+                  let tc = do (s1, drvd_main_ty, e_tc) <-
+                                tcExp ddefs emptySubst M.empty init_fenv S.empty AfterLetrec e
+                              s2 <- unify e gvn_main_ty drvd_main_ty
+                              let e_tc' = fixTyApps s1 e_tc
+                              pure (s1 <> s2, substTy s2 drvd_main_ty, e_tc')
                   res <- runTcM tc
                   case res of
                     Left er -> error (render er)
@@ -97,21 +102,44 @@ shouldInstantiate AfterLetrec  = True
 tcFun :: DDefs0 -> Gamma -> FunDef0 -> PassM FunDef0
 tcFun ddefs fenv fn@FunDef{funArg,funTy,funBody} = do
   res <- runTcM $ do
-    let (ForAll tyvars (ArrowTy arg_ty _)) = funTy
-        -- TODO, note.
-        init_venv = M.singleton funArg (ForAll [] arg_ty)
-        init_s    = Subst $ M.singleton funArg arg_ty
-    (s1,ty1,funBody_tc) <- tcExp ddefs init_s init_venv fenv (S.fromList tyvars) DuringLetrec funBody
-    -- CSK: Disabled temporarily.
-    let _ty1_gen = ForAll tyvars (ArrowTy arg_ty ty1)
+    let (ForAll tyvars (ArrowTy gvn_arg_ty gvn_retty)) = funTy
+        --
+        --    ($) :: forall a b. ((a -> b), a) -> b
+        --    ($) arg = let f :: (a -> b)
+        --                  f = fst arg
+        --              in ...
+        --
+        -- In this program, we wan't a and b to be bound in the body.
+        -- We do 2 things to achieve this - (1) initialize Gamma with
+        -- (arg :: forall []. a -> b), and, (2) add {a,b} to the bound set.
+        -- Also see Note [Let generalization].
+        init_venv = M.singleton funArg (ForAll [] gvn_arg_ty)
+        init_s    = Subst $ M.singleton funArg gvn_arg_ty
+        bound_tyvars = S.fromList tyvars
+    (s1, drvd_funBody_ty, funBody_tc) <-
+      tcExp ddefs init_s init_venv fenv bound_tyvars DuringLetrec funBody
+    s2 <- unify funBody drvd_funBody_ty gvn_retty
+
+    -- Forall check is disabled.
+    --
+    -- TL;DR - doesn't work properly with ADTs.
+    --
+    -- Right now, Nothing has a type (Nothing :: forall fresh. Maybe fresh).
+    -- We want to be able to typecheck an expression (Nothing :: Maybe Int).
+    -- But the forallCheck won't allow it. FIXME.
+    --
+    -- Also see Note [Forall check].
+    let _ty1_gen = ForAll tyvars (ArrowTy gvn_arg_ty drvd_funBody_ty)
     -- s <- forallCheck funBody (S.fromList tyvars) ty1_gen funTy
-    let funBody_tc' = substExp s1 funBody_tc
-    pure (s1, funBody_tc')
+    --
+    let funBody_tc' = fixTyApps (s1 <> s2) funBody_tc
+    pure (s1 <> s2, funBody_tc')
   case res of
     Left er -> error $ render er
     Right (_,bod) -> pure $ fn { funBody = bod }
 
-tcExps :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> TcPhase -> [L Exp0] -> TcM (Subst, [Ty0], [L Exp0])
+tcExps :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> TcPhase
+       -> [L Exp0] -> TcM (Subst, [Ty0], [L Exp0])
 tcExps ddefs sbst venv fenv bound_tyvars phase ls = do
   (sbsts,tys,exps) <- unzip3 <$> mapM go ls
   pure (foldl (<>) sbst sbsts, tys, exps)
@@ -119,47 +147,49 @@ tcExps ddefs sbst venv fenv bound_tyvars phase ls = do
     go = tcExp ddefs sbst venv fenv bound_tyvars phase
 
 -- | Algorithm W
-tcExp :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> TcPhase -> L Exp0 -> TcM (Subst, Ty0, L Exp0)
-tcExp ddefs sbst venv fenv bound_tyvars phase e@(L loc ex) = fmap (\(a,b,c) -> (a,b, L loc c)) $
+tcExp :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> TcPhase
+      -> L Exp0 -> TcM (Subst, Ty0, L Exp0)
+tcExp ddefs sbst venv fenv bound_tyvars phase e@(L loc ex) = (\(a,b,c) -> (a,b, L loc c)) <$>
   case ex of
     VarE x -> case M.lookup x venv of
                 Nothing -> err $ text "Unbound variable " <> doc x
-                Just ty -> do
-                  ty_inst <- instantiate ty
-                  pure (sbst, ty_inst, ex)
+                Just ty -> (sbst, ,ex) <$> instantiate ty
 
     LitE{}    -> pure (sbst, IntTy, ex)
     LitSymE{} -> pure (sbst, IntTy, ex)
 
     AppE f _tyapps arg -> do
-      (fn_ty, fn_ty_inst) <- case (M.lookup f venv, M.lookup f fenv) of
-                 (Just lam_ty, _) -> do
-                   lam_ty_inst <- instantiate lam_ty
-                   pure (lam_ty, lam_ty_inst)
-                 (_, Just fn_ty)  -> do
-                   fn_ty_inst <- if shouldInstantiate phase
-                                 then instantiate fn_ty
-                                 else pure (tyFromScheme fn_ty)
-                   pure (fn_ty, fn_ty_inst)
-                 _ -> err $ text "Unknown function:" <+> doc f
-      (s2,t2,arg_tc) <- go arg
+      -- (fn_ty_inst) :: (TyScheme, Ty0)
+      fn_ty_inst <- case (M.lookup f venv, M.lookup f fenv) of
+                      (Just lam_ty, _) -> do
+                        lam_ty_inst <- instantiate lam_ty
+                        pure lam_ty_inst
+                      (_, Just fn_ty)  -> do
+                        fn_ty_inst <- if shouldInstantiate phase
+                                      then instantiate fn_ty         -- freshen tyvars
+                                      else pure (tyFromScheme fn_ty) -- return as is
+                        pure fn_ty_inst
+                      _ -> err $ text "Unknown function:" <+> doc f
+      (s2, arg_ty, arg_tc) <- go arg
       fresh <- freshTy
-      s3 <- unify e (ArrowTy t2 fresh) (substTy s2 fn_ty_inst)
+      s3 <- unify e (ArrowTy arg_ty fresh) (substTy s2 fn_ty_inst)
+
       -- Fill in type applications for specialization...
       --     id 10 ===> id [Int] 10
-      s4@(Subst specs) <- unify arg (inTy fn_ty) t2
-      -- If it's a lambda, the ForAll list may be empty on because of STV.
-      -- TODO, note.
-      let tyapps1 = map (\tv -> M.findWithDefault (TyVar tv) tv specs) (tyVarsInType (tyFromScheme fn_ty))
-      --
-      -- CHECKME: don't compose with s3.
-      pure (s2 <> s4, substTy s3 fresh, AppE f tyapps1 arg_tc)
+      s4@(Subst specs) <- unify arg (arrIn' fn_ty_inst) arg_ty
+      -- 'tyVarsInType' has to be used to compute the list of type variables again.
+      -- We can't get it via 'let (ForAll tyvars _) = fn_ty', as this list might be
+      -- empty if f is a lambda. See Note [Let generalization].
+      let tyvars  = tyVarsInType fn_ty_inst
+          tyapps1 = map (\tv -> M.findWithDefault (TyVar tv) tv specs) tyvars
+
+      pure (s2 <> s4 <> s3, substTy (s2 <> s3) fresh, AppE f tyapps1 arg_tc)
 
     -- Arguments must have concrete types.
     PrimAppE pr args -> do
-      (s1, tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars phase args
+      (s1, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars phase args
 
-      let tys' = map (substTy s1) tys
+      let arg_tys' = map (substTy s1) arg_tys
 
           checkLen :: Int -> TcM ()
           checkLen n =
@@ -179,51 +209,50 @@ tcExp ddefs sbst venv fenv bound_tyvars phase e@(L loc ex) = fmap (\(a,b,c) -> (
 
         _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP] -> do
             len2
-            _ <- ensureEqualTy (args !! 0) IntTy (tys' !! 0)
-            _ <- ensureEqualTy (args !! 1) IntTy (tys' !! 1)
+            _ <- ensureEqualTy (args !! 0) IntTy (arg_tys' !! 0)
+            _ <- ensureEqualTy (args !! 1) IntTy (arg_tys' !! 1)
             pure (s1, IntTy, PrimAppE pr args_tc)
         oth -> err $ text "PrimAppE : TODO " <+> doc oth
 
-    LetE (v, tyapps, ty, rhs) bod -> do
-      (s1,t1,rhs_tc) <- go rhs
-      s2 <- unify rhs ty t1
-      let s3     = s1 <> s2
-          venv'  = substTyEnv s3 venv
-          t1_gen = generalize venv' bound_tyvars t1
-          -- Generalized with old venv.
-          ty_gen = generalize venv bound_tyvars ty
-      -- CSK: Disabled temporarily.
-      -- s4 <- forallCheck rhs bound_tyvars t1_gen ty_gen
-      let s4 = s3
-      -- TODO, note.
-      let bind_rhs = tyVarsFromScheme ty_gen
-      (s5,t5,bod_tc) <- tcExp ddefs (s3 <> s4) (M.insert v t1_gen venv') fenv
-                          (bound_tyvars <> (S.fromList bind_rhs)) phase bod
-      pure (s4 <> s5, t5, LetE (v, tyapps, ty, rhs_tc) bod_tc)
+    -- tyapps == [], always.
+    LetE (v, tyapps, gvn_rhs_ty, rhs) bod -> do
+      (s1, drvd_rhs_ty, rhs_tc) <- go rhs
+      s2 <- unify rhs gvn_rhs_ty drvd_rhs_ty
+      let s3         = s1 <> s2
+          venv'      = substTyEnv s3 venv
+          rhs_ty_gen = generalize venv' bound_tyvars drvd_rhs_ty
+          venv''     = M.insert v rhs_ty_gen venv'
+
+      -- Disabled temporarily, see comments in tcFun.
+      -- let ty_gen = generalize venv' bound_tyvars ty
+      -- s4 <- forallCheck rhs bound_tyvars rhs_ty_gen ty_gen
+
+      (s5, bod_ty, bod_tc) <- tcExp ddefs s3 venv'' fenv bound_tyvars phase bod
+      pure (s3 <> s5, bod_ty, LetE (v, tyapps, gvn_rhs_ty, rhs_tc) bod_tc)
 
     IfE a b c -> do
-      (s1,t1,a_tc) <- go a
-      (s2,t2,b_tc) <- go b
-      (s3,t3,c_tc) <- go c
+      (s1, t1, a_tc) <- go a
+      (s2, t2, b_tc) <- go b
+      (s3, t3, c_tc) <- go c
       s4 <- unify a t1 BoolTy
       s5 <- unify e t2 t3
       pure (s1 <> s2 <> s3 <> s4 <> s5, substTy s5 t2, IfE a_tc b_tc c_tc)
 
     MkProdE es -> do
-      (s1, tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars phase es
-      pure (s1, ProdTy tys, MkProdE es_tc)
+      (s1, es_tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars phase es
+      pure (s1, ProdTy es_tys, MkProdE es_tc)
 
     ProjE i a -> do
-     (s1,t1,a_tc) <- go a
-     case substTy s1 t1 of
+     (s1, a_ty, a_tc) <- go a
+     case substTy s1 a_ty of
        ProdTy tys -> pure (s1, tys !! i, ProjE i a_tc)
-       t1' -> err $ "tcExp: Coulnd't match expected type: ProdTy [...]"
-                      <+> "with actual type: " <+> doc t1'
+       a_ty' -> err $ "tcExp: Coulnd't match expected type: ProdTy [...]"
+                      <+> "with actual type: " <+> doc a_ty'
                       $$ exp_doc
 
     CaseE scrt brs -> do
-      (s1,t1,scrt_tc) <- go scrt
-      case t1 of
+      (s1, scrt_ty, scrt_tc) <- go scrt
+      case scrt_ty of
         (PackedTy tycon drvd_tyargs) -> do
           let tycons_brs = map (getTyOfDataCon ddefs . (\(a,_,_) -> a)) brs
           case nub tycons_brs of
@@ -234,12 +263,12 @@ tcExp ddefs sbst venv fenv bound_tyvars phase e@(L loc ex) = fmap (\(a,b,c) -> (
                        (s2,t2,brs_tc) <- tcCases ddefs s1 venv fenv bound_tyvars phase ddf' brs e
                        pure (s2, t2, CaseE scrt_tc brs_tc)
                      else err $ text "Couldn't match" <+> doc one
-                                <+> "with:" <+> doc t1
+                                <+> "with:" <+> doc scrt_ty
                                 $$ exp_doc
             oth -> err $ text "Case clause constructors have mismatched types:"
                           <+> doc oth
                           $$ exp_doc
-        _ -> err $ text "Couldn't match" <+> doc t1
+        _ -> err $ text "Couldn't match" <+> doc scrt_ty
                      <+> "with a Packed type."
                      $$ exp_doc
 
@@ -247,22 +276,19 @@ tcExp ddefs sbst venv fenv bound_tyvars phase e@(L loc ex) = fmap (\(a,b,c) -> (
       let expected_tys = lookupDataCon ddefs dcon
       (s1, actual_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars phase args
       s2 <- unifyl e expected_tys actual_tys
-      (tyapps1, ty) <- instantiateDDef ddefs dcon actual_tys
-      -- Type applications for specialization...
-      -- HACK, DataConE is defined to take a single tyapp (or a loc really),
-      -- but we want a list of tyapps.
-      --
-      -- Doesn't quite work with Either.
-      let tyapps2 = ProdTy (map (substTy (s1 <> s2)) tyapps1)
-      --
-      pure (s1 <> s2, ty, DataConE tyapps2 dcon args_tc)
+      (tyapps1, ty) <- dataconTyApps ddefs dcon actual_tys
+      -- DataConE is defined to take a single tyapp (or a loc really),
+      -- but we want a list of tyapps here; so we use ProdTy.
+      let s3 = s1 <> s2
+          tyapps2 = ProdTy (map (substTy s3) tyapps1)
+      pure (s3, ty, DataConE tyapps2 dcon args_tc)
 
     Ext (LambdaE (v,ty) bod) -> do
-      t1 <- freshTy
-      let venv' = M.insert v (ForAll [] t1) venv
-      s2 <- unify (l$ VarE v) ty t1
-      (s3, t3, bod_tc) <- tcExp ddefs s2 venv' fenv bound_tyvars phase bod
-      return (s3, substTy s3 (ArrowTy t1 t3), Ext (LambdaE (v,ty) bod_tc))
+      fresh <- freshTy
+      let venv' = M.insert v (ForAll [] fresh) venv
+      s2 <- unify (l$ VarE v) ty fresh
+      (s3, bod_ty, bod_tc) <- tcExp ddefs s2 venv' fenv bound_tyvars phase bod
+      return (s3, substTy s3 (ArrowTy fresh bod_ty), Ext (LambdaE (v,ty) bod_tc))
 
     _ -> err $ "tcExp: TODO" <+> doc ex
   where
@@ -282,11 +308,11 @@ tcCases ddefs sbst venv fenv bound_tyvars phase ddf brs ex = do
             tys_gen = map (ForAll (tyArgs ddf \\ (S.toList bound_tyvars))) tys
             venv' = venv <> (M.fromList $ zip vars tys_gen)
             vtys' = zip vars tys
-        (s2,t2,rhs_tc) <- tcExp ddefs sbst venv' fenv bound_tyvars phase rhs
+        (s2, t2, rhs_tc) <- tcExp ddefs sbst venv' fenv bound_tyvars phase rhs
         pure (s <> s2, acc ++ [t2], ex_acc ++ [(con,vtys',rhs_tc)]))
       (sbst, [], [])
       brs
-  -- FINISHME (run on incorrect fmapMaybe's)
+  -- CHECKME (run on incorrect fmapMaybe's)
   let (as,bs) = unzip (pairs tys)
   s2 <- unifyl ex as bs
   let s3 = s1 <> s2
@@ -302,7 +328,7 @@ tcCases ddefs sbst venv fenv bound_tyvars phase ddf brs ex = do
     pairs (x:y:xs) = (x,y) : pairs (y:xs)
 
 freshTy :: TcM Ty0
-freshTy = TyVar <$> gensym "x"
+freshTy = TyVar <$> gensym "fresh"
 
 instantiate :: TyScheme -> TcM Ty0
 instantiate (ForAll as ty) = do
@@ -310,14 +336,30 @@ instantiate (ForAll as ty) = do
   let s1 = Subst $ M.fromList (zip as bs)
   pure (substTy s1 ty)
 
+
+{- Note [Let generalization]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Similar to the usual HM style generalization, but doesn't quantify any
+type variables already in scope.
+
+    ($) :: forall a b. ((a -> b), a) -> b
+    ($) arg = let f :: (a -> b)
+                  f = fst arg
+              in ...
+
+f will be generalized as (f :: forall []. a -> b), since a and b are bound by
+the top-level signature.
+
+-}
 generalize :: Gamma -> S.Set TyVar -> Ty0 -> TyScheme
 generalize env bound_tyvars ty =
   let tvs = S.toList $ (gFreeVars ty S.\\ gFreeVars env) S.\\ bound_tyvars
   in ForAll tvs ty
 
 -- Makes (Nothing :: Maybe a), (Right 10 :: Either a Int) etc. happen
-instantiateDDef :: DDefs0 -> DataCon -> [Ty0] -> TcM ([Ty0], Ty0)
-instantiateDDef ddefs dcon infrd_tys = do
+dataconTyApps :: DDefs0 -> DataCon -> [Ty0] -> TcM ([Ty0], Ty0)
+dataconTyApps ddefs dcon inferred_tys = do
   let tycon        = getTyOfDataCon ddefs dcon
       DDef{tyArgs} = lookupDDef ddefs tycon
 
@@ -336,9 +378,10 @@ instantiateDDef ddefs dcon infrd_tys = do
   mp <- M.fromList <$> mapM
           (\tyarg -> (tyarg,) <$>
             case elemIndex (TyVar tyarg) gvn_tys of
-              Just ix -> pure (infrd_tys !! ix)
+              Just ix -> pure (inferred_tys !! ix)
               Nothing -> freshTy)
           tyArgs
+  -- Type applications for specialization...
   let tys = map (mp #) tyArgs
   pure (tys, PackedTy tycon tys)
 
@@ -411,8 +454,9 @@ substDDef d@DDef{tyArgs,dataCons} tys =
     pure d { tyArgs   = free_tyvars
            , dataCons = dcons' }
 
-substExp :: Subst -> L Exp0 -> L Exp0
-substExp s (L p ex) = L p $
+--
+fixTyApps :: Subst -> L Exp0 -> L Exp0
+fixTyApps s (L p ex) = L p $
   case ex of
     VarE{}    -> ex
     LitE{}    -> ex
@@ -425,14 +469,15 @@ substExp s (L p ex) = L p $
     IfE a b c  -> IfE (go a) (go b) (go c)
     MkProdE ls -> MkProdE (map go ls)
     ProjE i e  -> ProjE i (go e)
-    CaseE scrt brs -> CaseE (go scrt) (map (\(dcon,vlocs,rhs) -> (dcon,vlocs, go rhs)) brs)
+    CaseE scrt brs ->
+      CaseE (go scrt) (map (\(dcon,vtys,rhs) -> (dcon, vtys, go rhs)) brs)
     DataConE (ProdTy tyapps) dcon args ->
       DataConE (ProdTy (map (substTy s) tyapps)) dcon (map go args)
-    TimeIt e ty b -> TimeIt (go e) (substTy s ty) b
+    TimeIt e ty b -> TimeIt (go e) ty b
     Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v,ty) (go bod))
-    _ -> error $ "substExp: TODO, " ++ sdoc ex
+    _ -> error $ "fixTyApps: TODO, " ++ sdoc ex
   where
-    go = substExp s
+    go = fixTyApps s
 
 --------------------------------------------------------------------------------
 -- Unification
@@ -486,8 +531,8 @@ unifyTyVar ex a t
   | otherwise       = pure $ Subst (M.singleton a t)
 
 
-{- Note [Unifying type schemes]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{- Note [Forall check]
+~~~~~~~~~~~~~~~~~~~~~~
 
 Consider this function:
 
@@ -495,17 +540,19 @@ Consider this function:
     id x = 10
 
 This doesn't typecheck in Haskell, but does under this system.
-Should we reject this program ? If we only use unification to match
-the derived type with the given type, it succeeds, with ( a ~ IntTy ).
+Should we reject this program ? If we only use unification,
+( (a -> a) ~ (a -> IntTy) ), it succeeds, with ( a ~ IntTy ).
 We need something stronger than unification but weaker than (==) to
-match the types.
-
+reject such programs.
 
 Semantics:
 
     (forall as. t1) ~ (forall bs. t2) under S = { ..., (a -> ty) ,... } iff
     for each (a -> ty) in S, if a is universally quantified then ty must be
     a universally quantified tyvar.
+
+FIXME: This is probably not the proper way to do it.
+It causes some problems with ADTs, see some comments in tcFun.
 
 -}
 forallCheck :: L Exp0 -> S.Set TyVar -> TyScheme -> TyScheme -> TcM Subst
