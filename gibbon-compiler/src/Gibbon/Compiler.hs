@@ -51,6 +51,7 @@ import           Gibbon.TargetInterp (Val (..), execProg)
 -- Compiler passes
 import qualified Gibbon.L0.Freshen   as L0
 import qualified Gibbon.L0.Typecheck as L0
+import qualified Gibbon.L0.Specialize2 as L0
 import qualified Gibbon.L1.Typecheck as L1
 import qualified Gibbon.L2.Typecheck as L2
 import qualified Gibbon.L3.Typecheck as L3
@@ -308,6 +309,8 @@ parseInput ip fp =
                      l0 <- return (L0.tcProg l0)
                      (l0,_i) <- return $ runPassM defaultConfig cnt l0
                      putStrLn "Typechecking complete."
+                     l0 <- return (L0.specialize l0)
+                     (l0,_i) <- return $ runPassM defaultConfig cnt l0
                      error $ "Disabled until the new frontend is ready\n"
                              ++ sdoc l0
 
