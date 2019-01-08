@@ -56,13 +56,17 @@ Here's a rough plan:
 
 (3) Create specialized versions of all datatypes.
 
-(4) Delete all polymorphic fns and datatypes, which should all just be dead code now.
+(4) After we have all the specialized datatypes, we need to fix TYPEs in (Packed TYPE ..) to
+    have the correct suffix. Actually, this could be done in 'collectSpecs', but we do
+    it in a separate pass for now.
 
-(5) Typecheck monomorphic L0 once more.
+(5) Delete all polymorphic fns and datatypes, which should all just be dead code now.
 
-(6) Lift lambdas.
+(6) Typecheck monomorphic L0 once more.
 
-(7) Convert to L1, which should be pretty straightforward at this point.
+(7) Lift lambdas.
+
+(8) Convert to L1, which should be pretty straightforward at this point.
 
 -}
 
@@ -133,9 +137,14 @@ specialize p@Prog{ddefs,fundefs,mainExp} = do
   (specs', fundefs') <- fixpoint specs fundefs
   -- Step (3)
   ddefs' <- specDDefs (M.toList (datacons specs')) ddefs
+  let p1 = p { ddefs = ddefs', fundefs = fundefs', mainExp =  mainExp' }
   -- Step (4)
-  let p' = p { ddefs = ddefs', fundefs = fundefs', mainExp =  mainExp' }
-  pure (purgePoly p')
+  let p2 = fixTyCons specs' p1
+  -- Step (5)
+  let p3 = purgePoly p2
+  -- Step (6)
+  p4 <- tcProg p3
+  pure p4
   where
     toplevel = M.keysSet fundefs
 
@@ -418,7 +427,72 @@ purgePoly p@Prog{ddefs,fundefs} =
     isMonoDDef DDef{tyArgs} = tyArgs == []
     isMonoFun FunDef{funTy} = (tyVarsFromScheme funTy) == []
 
---------------------------------------------------------------------------------
+-- See Step (6) in the big note. Lot of code duplication :(
+fixTyCons :: SpecState -> Prog0 -> Prog0
+fixTyCons specs1 p@Prog{fundefs,mainExp}=
+  let fundefs' = M.map fixFunDef fundefs
+      mainExp' = case mainExp of
+                   Nothing -> Nothing
+                   Just (e,ty) -> Just (substExp' specs1 e, substTy' specs1 ty)
+  in p { fundefs = fundefs', mainExp = mainExp' }
+  where
+
+    fixFunDef :: FunDef0 -> FunDef0
+    fixFunDef fn@FunDef{funTy, funBody} =
+      let funTy' = ForAll (tyVarsFromScheme funTy) (substTy' specs1 (tyFromScheme funTy))
+          funBody' = substExp' specs1 funBody
+      in fn { funTy = funTy', funBody = funBody' }
+
+    -- Like substExp, but uses substTy' instead of substTy.
+    substExp' :: SpecState -> L Exp0 -> L Exp0
+    substExp' specs (L loc ex) = L loc $
+      case ex of
+        VarE{}    -> ex
+        LitE{}    -> ex
+        LitSymE{} -> ex
+        AppE f tyapps arg -> let tyapps1 = map (substTy' specs) tyapps
+                             in AppE f tyapps1 (go arg)
+        PrimAppE pr args  -> PrimAppE pr (map go args)
+        -- Let doesn't store any tyapps.
+        LetE (v,tyapps,ty,rhs) bod -> LetE (v, tyapps, substTy' specs ty, go rhs) (go bod)
+        IfE a b c  -> IfE (go a) (go b) (go c)
+        MkProdE ls -> MkProdE (map go ls)
+        ProjE i e  -> ProjE i (go e)
+        CaseE scrt brs ->
+          CaseE (go scrt) (map
+                            (\(dcon,vtys,rhs) -> let (vars,tys) = unzip vtys
+                                                     vtys' = zip vars $ map (substTy' specs) tys
+                                                 in (dcon, vtys', go rhs))
+                            brs)
+        DataConE (ProdTy tyapps) dcon args ->
+          DataConE (ProdTy (map (substTy' specs) tyapps)) dcon (map go args)
+        TimeIt e ty b -> TimeIt (go e) (substTy' specs ty) b
+        Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v, substTy' specs ty) (go bod))
+        _ -> error $ "substExp: TODO, " ++ sdoc ex
+      where
+        go = substExp' specs
+
+    -- Like 'substTy', but also updates TyCons if an appropriate
+    -- specialization obligation exists.
+    substTy' :: SpecState -> Ty0 -> Ty0
+    substTy' specs ty =
+      case ty of
+        IntTy   -> IntTy
+        BoolTy  -> BoolTy
+        TyVar{} -> error $ "substTy': " ++ sdoc ty ++ " shouldn't be here."
+        ProdTy tys  -> ProdTy (map go tys)
+        SymDictTy t -> SymDictTy (go t)
+        ArrowTy a b -> ArrowTy (go a) (go b)
+        PackedTy t tys ->
+          let tys' = map go tys
+          in case M.lookup (t,tys') (datacons specs) of
+               Nothing     -> PackedTy t tys'
+               -- Why [] ? The type arguments aren't required as the DDef is monomorphic.
+               Just suffix -> PackedTy (t ++ fromVar suffix) []
+        ListTy t -> ListTy (go t)
+      where
+        go = substTy' specs
+
 
 -- Apply a substitution to an expression i.e substitue all types in it.
 substExp :: Subst -> L Exp0 -> L Exp0
@@ -448,3 +522,5 @@ substExp s (L p ex) = L p $
     _ -> error $ "substExp: TODO, " ++ sdoc ex
   where
     go = substExp s
+
+--------------------------------------------------------------------------------

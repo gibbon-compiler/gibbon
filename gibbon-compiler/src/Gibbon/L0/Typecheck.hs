@@ -442,7 +442,8 @@ substTyEnv s env = M.map (substTyScheme s) env
 substDDef :: DDef0 -> [Ty0] -> TcM DDef0
 substDDef d@DDef{tyArgs,dataCons} tys =
   if length tyArgs /= length tys
-  then err $ text "substDDef error."
+  then err $ text "substDDef: tyArgs don't match the tyapps, in "
+               <+> doc tyArgs <+> text ", " <+> doc tys
   else do
     let mp = M.fromList (zip tyArgs tys)
         s  = Subst mp
