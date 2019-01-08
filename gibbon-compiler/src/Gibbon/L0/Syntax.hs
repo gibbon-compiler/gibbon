@@ -17,6 +17,7 @@ import           Data.Loc
 import           GHC.Generics
 import           Text.PrettyPrint.GenericPretty
 import qualified Data.Set as S
+import qualified Data.Map as M
 
 import           Gibbon.Common as C
 import           Gibbon.Language hiding (UrTy(..))
@@ -152,6 +153,83 @@ tyVarsInType = go []
 -- | Similar to 'voidTy'.
 voidTy' :: Ty0
 voidTy' = ProdTy []
+
+
+
+-- Hack. In the specializer, we'd like to know the type of the scrutinee.
+-- However, there are few things that prevent us from deriving Typeable for L0.
+--
+-- Typeable uses the type 'UrTy' which is shared by the IR's L1, L2 and L3, but not L0.
+-- L0 uses it's own type Ty0, which is not an instance of 'UrTy'.
+-- Can we merge 'Ty0' and 'UrTy' ? Well we can, but we would end up polluting 'UrTy'
+-- with type variables and function types, which should be unused after L0.
+-- Or, we can have a special (Typeable L0), which is what recoverType is.
+-- ¯\_(ツ)_/¯
+--
+recoverType :: DDefs0 -> Env2 Ty0 -> L Exp0 -> Ty0
+recoverType ddfs env2 (L _ ex)=
+  case ex of
+    VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v) v (vEnv env2)
+    LitE _       -> IntTy
+    LitSymE _    -> IntTy
+    AppE v _ _   -> outTy $ fEnv env2 # v
+    PrimAppE p _ -> primRetTy1 p
+    LetE (v,_,t,_) e -> recoverType ddfs (extendVEnv v t env2) e
+    IfE _ e _        -> recoverType ddfs env2 e
+    MkProdE es       -> ProdTy $ map (recoverType ddfs env2) es
+    DataConE (ProdTy locs) c _ -> PackedTy (getTyOfDataCon ddfs c) locs
+    DataConE loc c _ -> PackedTy (getTyOfDataCon ddfs c) [loc]
+    TimeIt e _ _     -> recoverType ddfs env2 e
+    MapE _ e         -> recoverType ddfs env2 e
+    FoldE _ _ e      -> recoverType ddfs env2 e
+    ProjE i e ->
+      case recoverType ddfs env2 e of
+        (ProdTy tys) -> tys !! i
+        oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
+                      ++"\nExpression:\n  "++ sdoc ex
+                      ++"\nEnvironment:\n  "++sdoc (vEnv env2)
+    ParE a b -> ProdTy $ map (recoverType ddfs env2) [a,b]
+    CaseE _ mp ->
+      let (c,args,e) = head mp
+          args' = map fst args
+      in recoverType ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
+    Ext ext ->
+      case ext of
+        LambdaE (v,t) bod ->
+          recoverType ddfs (extendVEnv v t env2) bod
+        PolyAppE{} -> error "recoverTyep: TODO PolyAppE"
+  where
+    -- Return type for a primitive operation.
+    primRetTy1 :: Prim Ty0 -> Ty0
+    primRetTy1 p =
+      case p of
+        AddP -> IntTy
+        SubP -> IntTy
+        MulP -> IntTy
+        DivP -> IntTy
+        ModP -> IntTy
+        ExpP -> IntTy
+        RandP-> IntTy
+        EqSymP  -> BoolTy
+        EqIntP  -> BoolTy
+        LtP  -> BoolTy
+        GtP  -> BoolTy
+        OrP  -> BoolTy
+        LtEqP-> BoolTy
+        GtEqP-> BoolTy
+        AndP -> BoolTy
+        MkTrue  -> BoolTy
+        MkFalse -> BoolTy
+        SymAppend      -> IntTy
+        SizeParam      -> IntTy
+        DictHasKeyP _  -> BoolTy
+        DictEmptyP ty  -> SymDictTy ty
+        DictInsertP ty -> SymDictTy ty
+        DictLookupP ty -> ty
+        (ErrorP _ ty)  -> ty
+        ReadPackedFile _ _ _ ty -> ty
+        PEndOf -> error "primRetTy: PEndOf not handled yet"
+
 
 {-
 

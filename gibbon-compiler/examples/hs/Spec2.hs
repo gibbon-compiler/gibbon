@@ -25,6 +25,9 @@ fmapMaybe f mb =
 succ :: Int -> Int
 succ x = x + 1
 
+not :: Bool -> Bool
+not b = if b then False else True
+
 main =
     let
         v1 :: Int
@@ -36,4 +39,7 @@ main =
         v2 :: Maybe Int
         v2 = Just 10
 
-    in (v1 + id2 10 + baz 10 20, fmapMaybe succ v2, id2 True)
+        v3 :: Maybe Bool
+        v3 = Just True
+
+    in (v1 + id2 10 + baz 10 20, id2 True, fmapMaybe succ v2, fmapMaybe not v3)

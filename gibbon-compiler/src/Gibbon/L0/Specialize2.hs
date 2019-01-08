@@ -42,7 +42,7 @@ Here's a rough plan:
 
 (1) Start with main: walk over it, and collect all specialization obligations:
 
-        { fn_name [(newname,[tyapp])] , lam_name [(newname,[tyapp])] , datacon [(newname,[tyapp])] }
+        { [((fn_name, [tyapp]), newname)] , [((lam_name, [tyapp]), newname)] , [((tycon, [tyapp]), newname)] }
 
     i.e fn_name should be specialized at [tyapp], and it should be named newname.
 
@@ -119,12 +119,13 @@ getLambdaSpecs f SpecState{lambdas} =
 
 specialize :: Prog0 -> PassM Prog0
 specialize p@Prog{ddefs,fundefs,mainExp} = do
+  let env2 = Env2 M.empty (M.map funTy fundefs)
   -- Step (1)
   (specs, mainExp') <-
     case mainExp of
       Nothing -> pure (emptySpecState, Nothing)
       Just (e,ty) -> do
-        (specs', mainExp')  <- collectSpecs ddefs toplevel emptySpecState e
+        (specs', mainExp')  <- collectSpecs ddefs env2 toplevel emptySpecState e
         (specs'',mainExp'') <- specLambdas specs' mainExp'
         assertLambdasSpecialized specs''
         pure (specs'', Just (mainExp'', ty))
@@ -142,18 +143,19 @@ specialize p@Prog{ddefs,fundefs,mainExp} = do
       if M.null (funs_todo specs)
       then pure (specs, fundefs1)
       else do
-        let (((fun_name, tyapps), new_fun_name):rst) = M.toList (funs_todo specs)
-            fn@FunDef{funName, funTy, funBody} = fundefs # fun_name
-            tyvars = tyVarsFromScheme funTy
+        let env21 = Env2 M.empty (M.map funTy fundefs1)
+            (((fun_name, tyapps), new_fun_name):rst) = M.toList (funs_todo specs)
+            fn@FunDef{funName, funBody} = fundefs # fun_name
+            tyvars = tyVarsFromScheme (funTy fn)
         assertSameLength ("While specializing the function: " ++ sdoc funName) tyvars tyapps
         let sbst = Subst $ M.fromList $ zip tyvars tyapps
-            funTy' = ForAll [] (substTy sbst (tyFromScheme funTy))
+            funTy' = ForAll [] (substTy sbst (tyFromScheme (funTy fn)))
             funBody' = substExp sbst funBody
             -- Move this obligation from todo to done.
             specs' = specs { funs_done = M.insert (fun_name, tyapps) new_fun_name (funs_done specs)
                            , funs_todo = M.fromList rst }
         -- Collect any more obligations generated due to the specialization
-        (specs'', funBody'') <- collectSpecs ddefs toplevel specs' funBody'
+        (specs'', funBody'') <- collectSpecs ddefs env21 toplevel specs' funBody'
         dbgTraceIt (sdoc specs'') (pure ())
         (specs''',funBody''') <- specLambdas specs'' funBody''
         let fn' = fn { funName = new_fun_name, funTy = funTy', funBody = funBody''' }
@@ -191,8 +193,8 @@ assertSameLength msg as bs =
   else pure ()
 
 -- | Collect the specializations required to monomorphize this expression.
-collectSpecs :: DDefs0 -> S.Set Var -> SpecState -> L Exp0 -> PassM (SpecState, L Exp0)
-collectSpecs ddefs toplevel specs (L p ex) = fmap (L p) <$>
+collectSpecs :: DDefs0 -> Env2 Ty0 -> S.Set Var -> SpecState -> L Exp0 -> PassM (SpecState, L Exp0)
+collectSpecs ddefs env2 toplevel specs (L p ex) = fmap (L p) <$>
   case ex of
     VarE{}    -> pure (specs, ex)
     LitE{}    -> pure (specs, ex)
@@ -220,27 +222,29 @@ collectSpecs ddefs toplevel specs (L p ex) = fmap (L p) <$>
              (_,Just lam_name) -> pure (specs', AppE lam_name [] arg')
              (Just lam_name,_) -> pure (specs', AppE lam_name [] arg')
     PrimAppE pr args -> do
-      (specs', args') <- collectSpecsl ddefs toplevel specs args
+      (specs', args') <- collectSpecsl ddefs env2 toplevel specs args
       pure (specs', PrimAppE pr args')
     -- A lambda function that's been passed as an argument --
     -- we don't want to specialize it here. It'll be specialized when
     -- the the outer fn is specialized.
     -- To ensure that (AppE v ...) uses the same name, we add it into specs
     -- s.t. it's new name is same as it's old name.
-    LetE (v, [], ty@ArrowTy{}, rhs) bod ->
+    LetE (v, [], ty@ArrowTy{}, rhs) bod ->do
+      let env2' = (extendVEnv v ty env2)
       case unLoc rhs of
         Ext (LambdaE{}) -> do
           (srhs, rhs') <- go specs rhs
-          (sbod, bod') <- go srhs bod
+          (sbod, bod') <- collectSpecs ddefs env2' toplevel srhs bod
           pure (sbod, LetE (v,[],ty,rhs') bod')
         _ -> do
           let specs' = extendLambdas (v,[]) v specs
           (srhs, rhs') <- go specs' rhs
-          (sbod, bod') <- go srhs bod
+          (sbod, bod') <- collectSpecs ddefs env2' toplevel srhs bod
           pure (sbod, LetE (v, [], ty, rhs') bod')
     LetE (v,[],ty,rhs) bod -> do
+      let env2' = (extendVEnv v ty env2)
       (srhs, rhs') <- go specs rhs
-      (sbod, bod') <- go srhs bod
+      (sbod, bod') <- collectSpecs ddefs env2' toplevel srhs bod
       pure (sbod, LetE (v,[],ty,rhs') bod')
     IfE a b c -> do
       (sa, a') <- go specs a
@@ -248,22 +252,36 @@ collectSpecs ddefs toplevel specs (L p ex) = fmap (L p) <$>
       (sc, c') <- go sb c
       pure (sc, IfE a' b' c')
     MkProdE args -> do
-      (sp, args') <- collectSpecsl ddefs toplevel specs args
+      (sp, args') <- collectSpecsl ddefs env2 toplevel specs args
       pure (sp, MkProdE args')
     ProjE i e -> do
       (sp, e') <- go specs e
       pure (sp, ProjE i e')
     CaseE scrt brs -> do
-      (sscrt, scrt') <- go specs scrt
-      (sbrs, brs') <-
-        foldlM
-          (\(sp, acc) (dcon,vlocs,bod) -> do
-            (sbod, bod') <- go sp bod
-            pure (sbod, acc ++ [(dcon,vlocs,bod')]))
-          (sscrt, []) brs
-      pure (sbrs, CaseE scrt' brs')
+      case recoverType ddefs env2 scrt of
+        PackedTy tycon tyapps -> do
+          (suffix, specs'') <-
+            case M.lookup (tycon, tyapps) (datacons specs) of
+              Nothing -> do
+                let DDef{tyArgs} = lookupDDef ddefs tycon
+                assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps
+                suffix <- gensym "_v"
+                let specs' = extendDatacons (tycon, tyapps) suffix specs
+                pure (suffix, specs')
+              Just suffix -> pure (suffix, specs)
+          (sscrt, scrt') <- go specs'' scrt
+          (sbrs, brs') <-
+            foldlM
+              (\(sp, acc) (dcon,vtys,bod) -> do
+                (sbod, bod') <- go sp bod
+                pure (sbod, acc ++ [(dcon ++ fromVar suffix,vtys,bod')]))
+              (sscrt, []) brs
+          pure (sbrs, CaseE scrt' brs')
+
+        ty -> error $ "collectSpecs: Unexpected type for the scrutinee, " ++ sdoc ty ++
+                      ". In the expression: " ++ sdoc ex
     DataConE (ProdTy tyapps) dcon args -> do
-      (sargs, args') <- collectSpecsl ddefs toplevel specs args
+      (sargs, args') <- collectSpecsl ddefs env2 toplevel specs args
       -- Collect datacon instances here.
       let tycon = getTyOfDataCon ddefs dcon
       case M.lookup (tycon, tyapps) (datacons specs) of
@@ -288,13 +306,13 @@ collectSpecs ddefs toplevel specs (L p ex) = fmap (L p) <$>
         _ -> error ("collectSpecs: TODO, "++ sdoc ext)
     _ -> error ("collectSpecs: TODO, " ++ sdoc ex)
   where
-    go = collectSpecs ddefs toplevel
+    go = collectSpecs ddefs env2 toplevel
 
-collectSpecsl :: DDefs0 -> S.Set Var -> SpecState -> [L Exp0] -> PassM (SpecState, [L Exp0])
-collectSpecsl ddefs toplevel specs es = do
+collectSpecsl :: DDefs0 -> Env2 Ty0 -> S.Set Var -> SpecState -> [L Exp0] -> PassM (SpecState, [L Exp0])
+collectSpecsl ddefs env2 toplevel specs es = do
   foldlM
     (\(sp, acc) e -> do
-          (s,e') <- collectSpecs ddefs toplevel sp e
+          (s,e') <- collectSpecs ddefs env2 toplevel sp e
           pure (s, acc ++ [e']))
     (specs, []) es
 
