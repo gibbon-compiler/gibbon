@@ -133,7 +133,9 @@ specialize p@Prog{ddefs,fundefs,mainExp} = do
   (specs', fundefs') <- fixpoint specs fundefs
   -- Step (3)
   ddefs' <- specDDefs (M.toList (datacons specs')) ddefs
-  pure $ p { ddefs = ddefs', fundefs = fundefs', mainExp =  mainExp' }
+  -- Step (4)
+  let p' = p { ddefs = ddefs', fundefs = fundefs', mainExp =  mainExp' }
+  pure (purgePoly p')
   where
     toplevel = M.keysSet fundefs
 
@@ -156,7 +158,6 @@ specialize p@Prog{ddefs,fundefs,mainExp} = do
                            , funs_todo = M.fromList rst }
         -- Collect any more obligations generated due to the specialization
         (specs'', funBody'') <- collectSpecs ddefs env21 toplevel specs' funBody'
-        dbgTraceIt (sdoc specs'') (pure ())
         (specs''',funBody''') <- specLambdas specs'' funBody''
         let fn' = fn { funName = new_fun_name, funTy = funTy', funBody = funBody''' }
         fixpoint specs''' (M.insert new_fun_name fn' fundefs1)
@@ -404,6 +405,18 @@ specLambdasl specs es = do
           (s,e') <- specLambdas sp e
           pure (s, acc ++ [e']))
     (specs, []) es
+
+
+-- | Remove all polymorphic functions and datatypes from a program. 'specLambdas'
+-- already gets rid of polymorphic lambdas.
+purgePoly :: Prog0 -> Prog0
+purgePoly p@Prog{ddefs,fundefs} =
+  let ddefs' = M.filter isMonoDDef ddefs
+      fundefs' = M.filter isMonoFun fundefs
+  in p { ddefs = ddefs', fundefs = fundefs' }
+  where
+    isMonoDDef DDef{tyArgs} = tyArgs == []
+    isMonoFun FunDef{funTy} = (tyVarsFromScheme funTy) == []
 
 --------------------------------------------------------------------------------
 
