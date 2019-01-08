@@ -72,16 +72,19 @@ Here's a rough plan:
 data SpecState = SpecState
   { funs_todo :: M.Map (Var, [Ty0]) Var
   , funs_done :: M.Map (Var, [Ty0]) Var
-  , lambdas   :: M.Map (Var, [Ty0]) Var }
+  , lambdas   :: M.Map (Var, [Ty0]) Var
+  , datacons  :: M.Map (TyCon, [Ty0]) Var -- suffix
+  }
   deriving (Show, Read, Ord, Eq, Generic, Out)
 
 instance Semigroup SpecState where
-  (SpecState f1 d1 l1) <> (SpecState f2 d2 l2) =
-    SpecState  (f1 `M.union` f2) (l1 `M.union` l2) (d1 `M.union` d2)
+  (SpecState f1 fd1 l1 d1) <> (SpecState f2 fd2 l2 d2) =
+    SpecState  (f1 `M.union` f2) (l1 `M.union` l2) (fd1 `M.union` fd2) (d1 `M.union` d2)
 
 emptySpecState :: SpecState
 emptySpecState = SpecState
-  { funs_todo = M.empty, funs_done = M.empty, lambdas = M.empty }
+  { funs_todo = M.empty, funs_done = M.empty
+  , lambdas = M.empty, datacons = M.empty }
 
 extendFuns :: (Var,[Ty0]) -> Var -> SpecState -> SpecState
 extendFuns k v specs@SpecState{funs_todo} =
@@ -90,6 +93,11 @@ extendFuns k v specs@SpecState{funs_todo} =
 extendLambdas :: (Var,[Ty0]) -> Var -> SpecState -> SpecState
 extendLambdas k v specs@SpecState{lambdas} =
   specs { lambdas = M.insert k v lambdas }
+
+extendDatacons :: (TyCon,[Ty0]) -> Var -> SpecState -> SpecState
+extendDatacons k v specs@SpecState{datacons} =
+  specs { datacons = M.insert k v datacons }
+
 
 -- We need this wrapper because of the way these maps are defined.
 --
@@ -110,22 +118,25 @@ getLambdaSpecs f SpecState{lambdas} =
 --------------------------------------------------------------------------------
 
 specialize :: Prog0 -> PassM Prog0
-specialize p@Prog{fundefs,mainExp} = do
+specialize p@Prog{ddefs,fundefs,mainExp} = do
   -- Step (1)
   (specs, mainExp') <-
     case mainExp of
       Nothing -> pure (emptySpecState, Nothing)
       Just (e,ty) -> do
-        (specs', mainExp')  <- collectSpecs toplevel emptySpecState e
+        (specs', mainExp')  <- collectSpecs ddefs toplevel emptySpecState e
         (specs'',mainExp'') <- specLambdas specs' mainExp'
         assertLambdasSpecialized specs''
         pure (specs'', Just (mainExp'', ty))
   -- Step (2)
-  (_specs', fundefs') <- fixpoint specs fundefs
-  pure $ p { mainExp =  mainExp', fundefs = fundefs' }
+  (specs', fundefs') <- fixpoint specs fundefs
+  -- Step (3)
+  ddefs' <- specDDefs (M.toList (datacons specs')) ddefs
+  pure $ p { ddefs = ddefs', fundefs = fundefs', mainExp =  mainExp' }
   where
     toplevel = M.keysSet fundefs
 
+    -- Specialize functions
     fixpoint :: SpecState -> FunDefs0 -> PassM (SpecState, FunDefs0)
     fixpoint specs fundefs1 =
       if M.null (funs_todo specs)
@@ -142,10 +153,28 @@ specialize p@Prog{fundefs,mainExp} = do
             specs' = specs { funs_done = M.insert (fun_name, tyapps) new_fun_name (funs_done specs)
                            , funs_todo = M.fromList rst }
         -- Collect any more obligations generated due to the specialization
-        (specs'', funBody'') <- collectSpecs toplevel specs' funBody'
+        (specs'', funBody'') <- collectSpecs ddefs toplevel specs' funBody'
+        dbgTraceIt (sdoc specs'') (pure ())
         (specs''',funBody''') <- specLambdas specs'' funBody''
         let fn' = fn { funName = new_fun_name, funTy = funTy', funBody = funBody''' }
         fixpoint specs''' (M.insert new_fun_name fn' fundefs1)
+
+    specDDefs :: [((TyCon, [Ty0]), Var)] -> DDefs0 -> PassM DDefs0
+    specDDefs [] ddefs1 = pure ddefs1
+    specDDefs (((tycon, tyapps), suffix):rst) ddefs1 = do
+      let ddf@DDef{tyName,tyArgs,dataCons} = lookupDDef ddefs tycon
+      assertSameLength ("In the datacon: " ++ sdoc tyName) tyArgs tyapps
+      let tyName' = varAppend tyName suffix
+          dataCons' = map
+                        (\(dcon,vtys) ->
+                          let (vars,tys) = unzip vtys
+                              sbst = Subst $ M.fromList (zip tyArgs tyapps)
+                              tys' = map (substTy sbst) tys
+                              vtys' = zip vars tys'
+                          in (dcon ++ fromVar suffix, vtys'))
+                        dataCons
+          ddefs1' = M.insert tyName' (ddf { tyName = tyName', tyArgs = [], dataCons = dataCons' })  ddefs1
+      specDDefs rst ddefs1'
 
 -- After 'specLambdas' runs, (lambdas SpecState) must be empty
 assertLambdasSpecialized :: SpecState -> PassM ()
@@ -162,8 +191,8 @@ assertSameLength msg as bs =
   else pure ()
 
 -- | Collect the specializations required to monomorphize this expression.
-collectSpecs :: S.Set Var -> SpecState -> L Exp0 -> PassM (SpecState, L Exp0)
-collectSpecs toplevel specs (L p ex) = fmap (L p) <$>
+collectSpecs :: DDefs0 -> S.Set Var -> SpecState -> L Exp0 -> PassM (SpecState, L Exp0)
+collectSpecs ddefs toplevel specs (L p ex) = fmap (L p) <$>
   case ex of
     VarE{}    -> pure (specs, ex)
     LitE{}    -> pure (specs, ex)
@@ -181,26 +210,45 @@ collectSpecs toplevel specs (L p ex) = fmap (L p) <$>
                pure (specs'', AppE new_name [] arg')
              (Just fn_name, _) -> pure (specs', AppE fn_name [] arg')
              (_, Just fn_name) -> pure (specs', AppE fn_name [] arg')
-      else case M.lookup (f,tyapps) (lambdas specs) of
-             Nothing -> do
+
+      -- Why (f,[])? See the special case for let below.
+      else case (M.lookup (f,[]) (lambdas specs), M.lookup (f,tyapps) (lambdas specs)) of
+             (Nothing, Nothing) -> do
                new_name <- gensym f
                let specs'' = extendLambdas (f,tyapps) new_name specs'
                pure (specs'', AppE new_name [] arg')
-             Just lam_name -> pure (specs', AppE lam_name [] arg')
+             (_,Just lam_name) -> pure (specs', AppE lam_name [] arg')
+             (Just lam_name,_) -> pure (specs', AppE lam_name [] arg')
     PrimAppE pr args -> do
-      (specs', args') <- collectSpecsl toplevel specs args
+      (specs', args') <- collectSpecsl ddefs toplevel specs args
       pure (specs', PrimAppE pr args')
-    LetE (v,tyapps,ty,rhs) bod -> do
+    -- A lambda function that's been passed as an argument --
+    -- we don't want to specialize it here. It'll be specialized when
+    -- the the outer fn is specialized.
+    -- To ensure that (AppE v ...) uses the same name, we add it into specs
+    -- s.t. it's new name is same as it's old name.
+    LetE (v, [], ty@ArrowTy{}, rhs) bod ->
+      case unLoc rhs of
+        Ext (LambdaE{}) -> do
+          (srhs, rhs') <- go specs rhs
+          (sbod, bod') <- go srhs bod
+          pure (sbod, LetE (v,[],ty,rhs') bod')
+        _ -> do
+          let specs' = extendLambdas (v,[]) v specs
+          (srhs, rhs') <- go specs' rhs
+          (sbod, bod') <- go srhs bod
+          pure (sbod, LetE (v, [], ty, rhs') bod')
+    LetE (v,[],ty,rhs) bod -> do
       (srhs, rhs') <- go specs rhs
       (sbod, bod') <- go srhs bod
-      pure (sbod, LetE (v,tyapps,ty,rhs') bod')
+      pure (sbod, LetE (v,[],ty,rhs') bod')
     IfE a b c -> do
       (sa, a') <- go specs a
       (sb, b') <- go sa b
       (sc, c') <- go sb c
       pure (sc, IfE a' b' c')
     MkProdE args -> do
-      (sp, args') <- collectSpecsl toplevel specs args
+      (sp, args') <- collectSpecsl ddefs toplevel specs args
       pure (sp, MkProdE args')
     ProjE i e -> do
       (sp, e') <- go specs e
@@ -214,10 +262,21 @@ collectSpecs toplevel specs (L p ex) = fmap (L p) <$>
             pure (sbod, acc ++ [(dcon,vlocs,bod')]))
           (sscrt, []) brs
       pure (sbrs, CaseE scrt' brs')
-    DataConE tyapps dcon args -> do
-      (sargs, args') <- collectSpecsl toplevel specs args
+    DataConE (ProdTy tyapps) dcon args -> do
+      (sargs, args') <- collectSpecsl ddefs toplevel specs args
       -- Collect datacon instances here.
-      pure (sargs, DataConE tyapps dcon args')
+      let tycon = getTyOfDataCon ddefs dcon
+      case M.lookup (tycon, tyapps) (datacons specs) of
+        Nothing -> do
+          let DDef{tyArgs} = lookupDDef ddefs tycon
+          assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps
+          suffix <- gensym "_v"
+          let specs' = extendDatacons (tycon, tyapps) suffix sargs
+              dcon' = dcon ++ (fromVar suffix)
+          pure (specs', DataConE (ProdTy []) dcon' args')
+        Just suffix -> do
+          let dcon' = dcon ++ (fromVar suffix)
+          pure (sargs, DataConE (ProdTy []) dcon' args')
     TimeIt e ty b -> do
       (se, e') <- go specs e
       pure (se, TimeIt e' ty b)
@@ -229,13 +288,13 @@ collectSpecs toplevel specs (L p ex) = fmap (L p) <$>
         _ -> error ("collectSpecs: TODO, "++ sdoc ext)
     _ -> error ("collectSpecs: TODO, " ++ sdoc ex)
   where
-    go = collectSpecs toplevel
+    go = collectSpecs ddefs toplevel
 
-collectSpecsl :: S.Set Var -> SpecState -> [L Exp0] -> PassM (SpecState, [L Exp0])
-collectSpecsl toplevel specs es = do
+collectSpecsl :: DDefs0 -> S.Set Var -> SpecState -> [L Exp0] -> PassM (SpecState, [L Exp0])
+collectSpecsl ddefs toplevel specs es = do
   foldlM
     (\(sp, acc) e -> do
-          (s,e') <- collectSpecs toplevel sp e
+          (s,e') <- collectSpecs ddefs toplevel sp e
           pure (s, acc ++ [e']))
     (specs, []) es
 
