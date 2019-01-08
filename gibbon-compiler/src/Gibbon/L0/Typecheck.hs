@@ -173,18 +173,19 @@ tcExp ddefs sbst venv fenv bound_tyvars phase e@(L loc ex) = (\(a,b,c) -> (a,b, 
                       _ -> err $ text "Unknown function:" <+> doc f
       (s2, arg_ty, arg_tc) <- go arg
       fresh <- freshTy
-      s3 <- unify e (ArrowTy arg_ty fresh) (substTy s2 fn_ty_inst)
+      let fn_ty_inst' = substTy s2 fn_ty_inst
+      s3@(Subst specs) <- unify arg (arrIn' fn_ty_inst') arg_ty
+      s4 <- unify e (ArrowTy arg_ty fresh) fn_ty_inst'
 
       -- Fill in type applications for specialization...
       --     id 10 ===> id [Int] 10
-      s4@(Subst specs) <- unify arg (arrIn' fn_ty_inst) arg_ty
       -- 'tyVarsInType' has to be used to compute the list of type variables again.
       -- We can't get it via 'let (ForAll tyvars _) = fn_ty', as this list might be
       -- empty if f is a lambda. See Note [Let generalization].
-      let tyvars  = tyVarsInType fn_ty_inst
+      let tyvars  = tyVarsInType fn_ty_inst'
           tyapps1 = map (\tv -> M.findWithDefault (TyVar tv) tv specs) tyvars
 
-      pure (s2 <> s4 <> s3, substTy (s2 <> s3) fresh, AppE f tyapps1 arg_tc)
+      pure (s2 <> s3 <> s4, substTy (s2 <> s3 <> s4) fresh, AppE f tyapps1 arg_tc)
 
     -- Arguments must have concrete types.
     PrimAppE pr args -> do
@@ -350,7 +351,7 @@ type variables already in scope.
               in ...
 
 f will be generalized as (f :: forall []. a -> b), since a and b are bound by
-the top-level signature.
+the forall at the top.
 
 -}
 generalize :: Gamma -> S.Set TyVar -> Ty0 -> TyScheme
@@ -393,7 +394,7 @@ dataconTyApps ddefs dcon inferred_tys = do
 
 -- We can't directly use Env2 because of the way it's tied together with
 -- PreExp and the Expression class. We want to annotate L0 expressions
--- with 'Ty0' but TEnv should store 'TyScheme's.
+-- with 'Ty0' but Gamma should store 'TyScheme's.
 type Gamma = TyEnv TyScheme
 
 instance FreeVars a => FreeVars (TyEnv a) where
