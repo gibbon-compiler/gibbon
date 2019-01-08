@@ -151,9 +151,10 @@ tcExp :: DDefs0 -> Subst -> Gamma -> Gamma -> S.Set TyVar -> TcPhase
       -> L Exp0 -> TcM (Subst, Ty0, L Exp0)
 tcExp ddefs sbst venv fenv bound_tyvars phase e@(L loc ex) = (\(a,b,c) -> (a,b, L loc c)) <$>
   case ex of
-    VarE x -> case M.lookup x venv of
-                Nothing -> err $ text "Unbound variable " <> doc x
-                Just ty -> (sbst, ,ex) <$> instantiate ty
+    VarE x -> case (M.lookup x venv, M.lookup x fenv) of
+                (Nothing, Nothing) -> err $ text "Unbound variable " <> doc x
+                (Just ty, _) -> (sbst, ,ex) <$> instantiate ty
+                (_, Just ty) -> (sbst, ,ex) <$> instantiate ty
 
     LitE{}    -> pure (sbst, IntTy, ex)
     LitSymE{} -> pure (sbst, IntTy, ex)
