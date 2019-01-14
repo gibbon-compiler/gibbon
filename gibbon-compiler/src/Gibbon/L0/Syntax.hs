@@ -132,7 +132,9 @@ tyFromScheme (ForAll _ a) = a
 tyVarsFromScheme :: TyScheme -> [TyVar]
 tyVarsFromScheme (ForAll a _) = a
 
---------------------------------------------------------------------------------
+isFunTy :: Ty0 -> Bool
+isFunTy ArrowTy{} = True
+isFunTy _ = False
 
 tyVarsInType :: Ty0 -> [TyVar]
 tyVarsInType = go []
@@ -150,10 +152,24 @@ tyVarsInType = go []
         PackedTy _ vs -> foldl go acc vs
         ListTy a -> go acc a
 
+arrowTysInType :: Ty0 -> [Ty0]
+arrowTysInType = go []
+  where
+    go acc ty =
+      case ty of
+        IntTy   -> acc
+        BoolTy  -> acc
+        TyVar{} -> acc
+        ProdTy tys    -> foldl go acc tys
+        SymDictTy a   -> go acc a
+        ArrowTy a b   -> go (go acc a) b ++ [ty]
+        PackedTy _ vs -> foldl go acc vs
+        ListTy a -> go acc a
+
+
 -- | Similar to 'voidTy'.
 voidTy' :: Ty0
 voidTy' = ProdTy []
-
 
 
 -- Hack. In the specializer, we'd like to know the type of the scrutinee.

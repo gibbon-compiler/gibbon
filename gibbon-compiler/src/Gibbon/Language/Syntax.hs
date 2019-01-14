@@ -22,7 +22,7 @@ module Gibbon.Language.Syntax
 
     -- * Environments
   , TyEnv, Env2(..), emptyEnv2
-  , extendVEnv, extendsVEnv, lookupVEnv, extendFEnv
+  , extendVEnv, extendsVEnv, lookupVEnv, extendFEnv, lookupFEnv
 
   ) where
 
@@ -306,3 +306,6 @@ lookupVEnv v env2 = (vEnv env2) # v
 -- | Extend function type environment.
 extendFEnv :: Var -> ArrowTy a -> Env2 a -> Env2 a
 extendFEnv v t (Env2 ve fe) = Env2 ve (M.insert v t fe)
+
+lookupFEnv :: Out (ArrowTy a) => Var -> Env2 a -> ArrowTy a
+lookupFEnv v env2 = (fEnv env2) # v

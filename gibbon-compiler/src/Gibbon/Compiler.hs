@@ -304,13 +304,11 @@ parseInput ip fp =
 
   where hs_hack :: IO (L1.Prog1, Int)
         hs_hack = do (l0,cnt) <- HS.parseFile fp
-                     l0 <- (return $ L0.freshNames l0) :: IO (PassM L0.Prog0)
-                     (l0,_i) <- return $ runPassM defaultConfig cnt l0
-                     l0 <- return (L0.tcProg l0)
-                     (l0,_i) <- return $ runPassM defaultConfig cnt l0
-                     putStrLn "Typechecking complete."
-                     l0 <- return (L0.specialize l0)
-                     (l0,_i) <- return $ runPassM defaultConfig cnt l0
+                     let passes = do l0 <- L0.freshNames l0
+                                     l0 <- L0.tcProg l0
+                                     l0 <- L0.l0ToL1 l0
+                                     pure l0
+                     (l0,_i) <- return $ runPassM defaultConfig cnt passes
                      error $ "Disabled until the new frontend is ready\n"
                              ++ sdoc l0
 

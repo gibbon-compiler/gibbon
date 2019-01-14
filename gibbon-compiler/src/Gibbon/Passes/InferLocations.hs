@@ -96,8 +96,8 @@ import Control.Monad.Trans (lift)
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
-import Gibbon.L1.Syntax as L1 hiding (extendVEnv, lookupVEnv)
-import Gibbon.L2.Syntax as L2 hiding (extendVEnv, lookupVEnv)
+import Gibbon.L1.Syntax as L1 hiding (extendVEnv, lookupVEnv, lookupFEnv)
+import Gibbon.L2.Syntax as L2 hiding (extendVEnv, lookupVEnv, lookupFEnv)
 import Gibbon.Passes.InlineTriv (inlineTriv)
 import Gibbon.Passes.Flatten (flattenL1)
 
