@@ -506,70 +506,56 @@ restrictionsViolation fdefs inner outer =
                              otherwise  -> True
     (p1 || p2)
 
-
-
-                                                
-
-
 transform :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> PassM (L Exp1,  FunDefs1)
 transform  ddefs funDefs bodyin = do
-  rec bodyin [] funDefs where
-   rec (L l body) selectedItems fdefs = do
-      let defTable = buildDefTable body  
-      let potential = findPotential defTable selectedItems 
-      case (potential) of
-        Nothing ->do 
-            -- final clean 
-            let final_clean      = removeUnusedDefs_exp (L l body)
-            
-            -- final tuple
-            (tupledBody, tupleDefs) <- tuple ddefs fdefs  final_clean
-            let new_defs      = M.union   fdefs tupleDefs 
-            
-            return $(tupledBody, new_defs)
-
-
-        Just (inner,outer ) -> if( restrictionsViolation fdefs inner outer) 
-          then
-           rec (L l body)  ((inner,outer):selectedItems) fdefs
-          else
-            do
-               -- fuse
-              (validFused, fNew, fusedDefs) <-  (fuse  ddefs fdefs inner outer )
-              let fused_function = fusedDefs M.! fNew
-              --apply recursivly 
-              (recAppBody, recAppDefs)     <- transform ddefs fusedDefs (funBody fused_function) 
+    rec bodyin [] funDefs
+  where
+    rec (L l body) selectedItems fdefs = do
+        let defTable = buildDefTable body  
+        let potential = findPotential defTable selectedItems 
+        case (potential) of
+            Nothing -> do 
+                let final_clean = removeUnusedDefs_exp (L l body) -- final clean
+                (tupledBody, tupleDefs) <- tuple ddefs fdefs  final_clean  -- final tuple
+                let new_defs      = M.union   fdefs tupleDefs 
+                return $(tupledBody, new_defs)
+            Just (inner,outer ) -> 
+                if( restrictionsViolation fdefs inner outer) 
+                    then rec (L l body)  ((inner,outer):selectedItems) fdefs
+                    else do
+                        -- fuse
+                        (validFused, fNew, fusedDefs) <-  
+                            (fuse  ddefs fdefs inner outer ) 
+                        let fused_function = fusedDefs M.! fNew
+                        (recAppBody, recAppDefs)     <- 
+                            transform ddefs fusedDefs (funBody fused_function) 
         
-              --clean 
-              let cleaned_function = removeUnusedDefs fused_function{funBody = recAppBody}
-              let fdefs_tmp2       = M.union fusedDefs recAppDefs 
-              let fdefs_tmp3       = M.insert  fNew cleaned_function fdefs_tmp2
+                        --clean 
+                        let cleaned_function = removeUnusedDefs fused_function{funBody = recAppBody}
+                        let fdefs_tmp2       = M.union fusedDefs recAppDefs 
+                        let fdefs_tmp3       = M.insert  fNew cleaned_function fdefs_tmp2
                
-               -- tuple
-              (tupledBody, tupleDefs) <- tuple ddefs fdefs_tmp3 (funBody cleaned_function)
-              let tupled_function = cleaned_function{funBody = tupledBody}
-              let fdefs_tmp4      = M.union   fdefs_tmp3 tupleDefs 
-              let fdefs_tmp5      = M.insert  fNew tupled_function fdefs_tmp4
+                         -- tuple
+                        (tupledBody, tupleDefs) <-
+                            tuple ddefs fdefs_tmp3 (funBody cleaned_function)
+                        let tupled_function = cleaned_function{funBody = tupledBody}
+                        let fdefs_tmp4      = M.union   fdefs_tmp3 tupleDefs 
+                        let fdefs_tmp5      = M.insert  fNew tupled_function fdefs_tmp4
+                        let valid = validFused
+                        let newDefs = fdefs_tmp5
+                        if ( valid==True )
+                            then let body' = foldFusedCalls (outer,inner, -1, fNew) (L l body) --`debug`  ("final rewrite" L.++ (show outer )L.++ (show inner )L.++ (show fNew )L.++ (show body)) 
+                                 in rec body' ((inner,outer):selectedItems) (M.union fdefs newDefs)
+                            else  rec (L l body)  ((inner,outer):selectedItems) fdefs
 
-
-              let valid = validFused
-              let newDefs = fdefs_tmp5
-              if ( valid==True )
-                  then
-                    let body' = foldFusedCalls (outer,inner, -1, fNew) (L l body) --`debug`  ("final rewrite" L.++ (show outer )L.++ (show inner )L.++ (show fNew )L.++ (show body)) 
-                    in rec body' ((inner,outer):selectedItems) (M.union fdefs newDefs)
-                  else
-                    rec (L l body)  ((inner,outer):selectedItems) fdefs
-
-        
 fusion2 :: Prog1 -> PassM Prog1
 fusion2 (L1.Prog defs funs main) = do
-  (main', funs') <- case main of 
-                      Nothing   -> return $ (Nothing, M.empty)
-                      Just (m, ty)    -> do
-                             (m', newDefs) <- (transform defs funs m )
-                             return (Just (m',ty), M.union funs newDefs)
-  return $ L1.Prog defs funs' main'
+    (main', funs') <- case main of 
+        Nothing   -> return $ (Nothing, M.empty)
+        Just (m, ty)    -> do
+            (m', newDefs) <- (transform defs funs m )
+            return (Just (m',ty), M.union funs newDefs)
+    return $ L1.Prog defs funs' main'
 
 -- combine ::  DDefs Ty1-> FunDefs Ty1 (L Exp1)-> Var -> Var-> PassM  (Bool, Var,  FunDefs Ty1 (L Exp1) )
 -- combine ddefs fdefs  inner outer  = do
