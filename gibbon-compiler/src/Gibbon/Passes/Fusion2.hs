@@ -156,6 +156,8 @@ buildDefTable ex  =
           DataConE _ _ ls -> L.foldl f table ls where f tbl exp = rec (getExp exp) tbl
 
           TimeIt exp _ _  -> rec (getExp exp) table
+         
+          ProjE index exp -> rec (getExp exp) table
 
           _                -> table ------`debug`  ("Defualt" L.++ show a) 
 
