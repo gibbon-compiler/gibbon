@@ -26,7 +26,6 @@ library
 
                        Gibbon.Language
                        Gibbon.Language.Syntax
-                       Gibbon.Language.Expr
                        Gibbon.Language.Constants
 
                        Gibbon.L1.Syntax
