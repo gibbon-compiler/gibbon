@@ -135,33 +135,5 @@ mapMExprs fn (Prog ddfs fundefs mainExp) =
     (mapM (\ (e,t) -> (,t) <$> fn (Env2 M.empty funEnv) e) mainExp)
   where funEnv = M.map funTy fundefs
 
--- Ugh .. this is bad. Can we remove the identity cases here ?
 toL3Prim :: Prim L2.Ty2 -> Prim Ty3
-toL3Prim pr =
-  case pr of
-    AddP      -> AddP
-    SubP      -> SubP
-    MulP      -> MulP
-    DivP      -> DivP
-    ModP      -> ModP
-    ExpP      -> ExpP
-    RandP     -> RandP
-    EqSymP    -> EqSymP
-    EqIntP    -> EqIntP
-    LtP       -> LtP
-    GtP       -> GtP
-    LtEqP     -> LtEqP
-    GtEqP     -> GtEqP
-    OrP       -> OrP
-    AndP      -> AndP
-    MkTrue    -> MkTrue
-    MkFalse   -> MkFalse
-    SizeParam -> SizeParam
-    SymAppend -> SymAppend
-    DictInsertP ty -> DictInsertP (L2.stripTyLocs ty)
-    DictLookupP ty -> DictLookupP (L2.stripTyLocs ty)
-    DictEmptyP  ty -> DictEmptyP  (L2.stripTyLocs ty)
-    DictHasKeyP ty -> DictHasKeyP (L2.stripTyLocs ty)
-    ErrorP s ty    -> ErrorP s (L2.stripTyLocs ty)
-    ReadPackedFile fp tycon reg ty -> ReadPackedFile fp tycon reg (L2.stripTyLocs ty)
-    PEndOf -> error "Do not use PEndOf after L2."
+toL3Prim pr = fmap L2.stripTyLocs pr

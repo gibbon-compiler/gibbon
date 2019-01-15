@@ -436,34 +436,7 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
     -- Ugh .. this is bad. Can we remove the identity cases here ?
     -- TODO: Get rid of this (and L3.toL3Prim) soon.
     revertPrim :: Prim Ty2 -> Prim Ty1
-    revertPrim pr =
-      case pr of
-        AddP      -> AddP
-        SubP      -> SubP
-        MulP      -> MulP
-        DivP      -> DivP
-        ModP      -> ModP
-        ExpP      -> ExpP
-        RandP     -> RandP
-        EqSymP    -> EqSymP
-        EqIntP    -> EqIntP
-        LtP       -> LtP
-        GtP       -> GtP
-        LtEqP     -> LtEqP
-        GtEqP     -> GtEqP
-        OrP       -> OrP
-        AndP      -> AndP
-        MkTrue    -> MkTrue
-        MkFalse   -> MkFalse
-        SizeParam -> SizeParam
-        SymAppend -> SymAppend
-        DictInsertP ty -> DictInsertP (stripTyLocs ty)
-        DictLookupP ty -> DictLookupP (stripTyLocs ty)
-        DictEmptyP  ty -> DictEmptyP  (stripTyLocs ty)
-        DictHasKeyP ty -> DictHasKeyP (stripTyLocs ty)
-        ErrorP s ty    -> ErrorP s (stripTyLocs ty)
-        ReadPackedFile fp tycon reg ty -> ReadPackedFile fp tycon reg (stripTyLocs ty)
-        PEndOf -> error "Do not use PEndOf after L2."
+    revertPrim pr = fmap stripTyLocs pr
 
     docase :: (DataCon, [(Var,LocVar)], L Exp2) -> (DataCon, [(Var,())], L Exp1)
     docase (dcon,vlocs,rhs) =
