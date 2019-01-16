@@ -52,6 +52,12 @@ genDcons (x:xs) tail fields = case x of
     T.LetPrimCallT [(next, T.CursorTy),(afternext,T.CursorTy)] T.ReadCursor [(T.VarTriv tail)] <$>
       genDcons xs afternext fields
 
+  BoolTy             ->  do
+    val  <- gensym "val"
+    t    <- gensym "tail"
+    T.LetPrimCallT [(val, T.BoolTy), (t, T.CursorTy)] T.ReadBool [(T.VarTriv tail)]
+      <$> genDcons xs t (fields ++ [(T.BoolTy, T.VarTriv val)])
+
   _ -> error $ "genDcons: FIXME " ++ show x
 
 genDcons [] tail fields     = do
@@ -119,6 +125,14 @@ genDconsPrinter (x:xs) tail = case x of
     t    <- gensym "tail"
     T.LetPrimCallT [(val, T.IntTy), (t, T.CursorTy)] T.ReadInt [(T.VarTriv tail)] <$>
       printTy False L1.IntTy [T.VarTriv val] <$>
+       maybeSpace <$>
+        genDconsPrinter xs t
+
+  L1.BoolTy             ->  do
+    val  <- gensym "val"
+    t    <- gensym "tail"
+    T.LetPrimCallT [(val, T.BoolTy), (t, T.CursorTy)] T.ReadBool [(T.VarTriv tail)] <$>
+      printTy False L1.BoolTy [T.VarTriv val] <$>
        maybeSpace <$>
         genDconsPrinter xs t
 
@@ -818,7 +832,7 @@ typ t =
   case t of
     IntTy  -> T.IntTy
     SymTy  -> T.SymTy
-    BoolTy -> T.IntTy
+    BoolTy -> T.BoolTy
     ListTy{} -> error "lower/typ: FinishMe: List types"
     ProdTy xs -> T.ProdTy $ L.map typ xs
     SymDictTy x -> T.SymDictTy $ typ x

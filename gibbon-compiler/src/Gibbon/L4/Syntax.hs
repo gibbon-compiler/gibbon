@@ -126,7 +126,8 @@ data Tail
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data Ty
-    = IntTy
+    = IntTy        -- ^ 8 byte integers.
+    | BoolTy       -- ^ 1 byte integers.
     | TagTyPacked  -- ^ A single byte / Word8.  Used in PACKED mode.
     | TagTyBoxed   -- ^ A tag used in the UNPACKED, boxed, pointer-based, graph-of-structs representation.
                    --   This can usually be the same as TagTy, but needn't necessarily be.
@@ -187,8 +188,11 @@ data Prim
     -- ^ Read an 8 byte Int from the cursor and advance.
     | ReadCursor
     -- ^ Read and return a cursor
-
     | WriteCursor
+
+    | ReadBool
+    | WriteBool
+    -- ^ Read / write 1 byte integers, and advance.
 
     | BoundsCheck
 
