@@ -644,8 +644,10 @@ data LowerState = LowerState
 --     foo :: ((a -> b), a) -> a ; foo = ...
 --     main = ... arg = (fn, thing) ... foo arg ...
 --
+-- type FnRefsEnv = M.Map Var FnRefs
+--
+
 type FnRefs    = [Var]
-type FnRefsEnv = M.Map Var FnRefs
 
 
 liftLam :: Prog0 -> PassM Prog0
@@ -655,7 +657,7 @@ liftLam prg@Prog{ddefs,fundefs,mainExp} = do
     case mainExp of
       Nothing -> pure (emptyLowerState, Nothing)
       Just (e, ty) -> do
-        (low', e') <- liftLamExp ddefs env2 M.empty emptyLowerState e
+        (low', e') <- liftLamExp ddefs env2 emptyLowerState e
         pure (low', Just (e', ty))
   low' <- fixpoint low
   -- Get rid of all higher order functions.
@@ -694,7 +696,7 @@ elimLamFun :: DDefs0 -> LowerState -> Env2 Ty0 -> Var -> FnRefs -> FunDef0 -> Pa
 elimLamFun ddefs low env2 new_fn_name refs fn@FunDef{funArg, funTy} = do
   let fn' = fn { funName = new_fn_name
                , funBody = elimExp drop_projs update_projs (funBody fn) }
-  (low', funBody') <- liftLamExp ddefs env2 M.empty low (funBody fn')
+  (low', funBody') <- liftLamExp ddefs env2 low (funBody fn')
   let fn''  = fn' { funBody = funBody'
                   -- Only update the type after 'liftLamExp' runs!
                   , funTy   = funTy' }
@@ -803,15 +805,15 @@ elimLamFun ddefs low env2 new_fn_name refs fn@FunDef{funArg, funTy} = do
         _ -> error $ "subst': TODO " ++ sdoc ex
 
 
-liftLamExp :: DDefs0 -> Env2 Ty0 -> FnRefsEnv -> LowerState -> L Exp0
+liftLamExp :: DDefs0 -> Env2 Ty0 -> LowerState -> L Exp0
            -> PassM (LowerState, L Exp0)
-liftLamExp ddefs env2 refs_env low (L p ex) = fmap (L p) <$>
+liftLamExp ddefs env2 low (L p ex) = fmap (L p) <$>
   case ex of
     -- TODO, docs.
     AppE f [] arg -> do
       (low', arg') <- go arg
       let arg'' = dropFunRefs f arg'
-      case collectFunRefs refs_env arg [] of
+      case collectFunRefs arg [] of
         []   -> pure (low, AppE f [] arg')
         refs -> do
           case M.lookup (f,refs) (lo_funs_todo low') of
@@ -836,20 +838,20 @@ liftLamExp ddefs env2 refs_env low (L p ex) = fmap (L p) <$>
                    ++ ". TODO: these can become additional arguments."
       else do
         (low', lam_bod') <- go lam_bod
-        let fn_refs = collectFunRefs refs_env lam_bod []
+        let fn_refs = collectFunRefs lam_bod []
             fn = FunDef { funName = v
                         , funArg  = arg
                         , funTy   = ForAll [] ty
                         , funBody = lam_bod' }
             env2' = extendFEnv v (ForAll [] ty) env2
             low'' = low' { lo_fundefs = M.insert v fn (lo_fundefs low') }
-        fmap unLoc <$> liftLamExp ddefs env2' (M.insert v fn_refs refs_env) low'' bod
+        fmap unLoc <$> liftLamExp ddefs env2' low'' bod
 
     LetE (v, [], ty, rhs) bod -> do
-      let fn_refs = collectFunRefs refs_env rhs []
+      let fn_refs = collectFunRefs rhs []
           env2' = (extendVEnv v ty env2)
       (low', rhs') <- go rhs
-      (low'', bod') <- liftLamExp ddefs env2' (M.insert v fn_refs refs_env) low' bod
+      (low'', bod') <- liftLamExp ddefs env2' low' bod
       pure (low'', LetE (v, [], ty, rhs') bod')
 
     -- Straightforward recursion
@@ -871,7 +873,7 @@ liftLamExp ddefs env2 refs_env low (L p ex) = fmap (L p) <$>
     CaseE scrt brs -> do
       let es = map (\(_,_,c) -> c) brs
       (low', scrt') <- go scrt
-      (low'', es') <- liftLamExpl ddefs env2 refs_env low' es
+      (low'', es') <- liftLamExpl ddefs env2 low' es
       pure (low'', CaseE scrt' $ map (\((a,b,_), c) -> (a,b,c)) (zip brs es'))
     DataConE tyapp dcon args -> do
       (low', args') <- gol args
@@ -881,8 +883,8 @@ liftLamExp ddefs env2 refs_env low (L p ex) = fmap (L p) <$>
        pure (low', TimeIt e' ty b)
     _ -> error $ "liftLamExp: TODO " ++ sdoc ex
   where
-    go = liftLamExp ddefs env2 refs_env low
-    gol = liftLamExpl ddefs env2 refs_env low
+    go = liftLamExp ddefs env2 low
+    gol = liftLamExpl ddefs env2 low
 
     isFunRef e =
       case e of
@@ -912,29 +914,27 @@ liftLamExp ddefs env2 refs_env low (L p ex) = fmap (L p) <$>
       where
         ForAll _ (ArrowTy arg_ty _) = lookupFEnv fn_name env2
 
-    collectFunRefs :: FnRefsEnv -> L Exp0 -> [Var] -> [Var]
-    collectFunRefs refs_env1 (L _ e) acc =
+    collectFunRefs :: L Exp0 -> [Var] -> [Var]
+    collectFunRefs (L _ e) acc =
       case e of
-        VarE v -> let v_refs = M.findWithDefault [] v refs_env1
-                      acc' = nub (acc ++ v_refs)
-                  in if isFunRef e
-                     then v : acc'
-                     else acc'
+        VarE v -> if isFunRef e
+                  then v : acc
+                  else acc
         LitE{}     -> acc
         LitSymE{}  -> acc
-        AppE _ _ a -> collectFunRefs refs_env1 a acc
-        PrimAppE _ args -> foldr (collectFunRefs refs_env1) acc args
-        LetE (_,_,_, rhs) bod -> foldr (collectFunRefs refs_env1) acc [bod, rhs]
-        IfE a b c  -> foldr (collectFunRefs refs_env1) acc [c, b, a]
-        MkProdE ls -> foldr (collectFunRefs refs_env1) acc ls
-        ProjE _ a  -> collectFunRefs refs_env1 a acc
-        DataConE _ _ ls -> foldr (collectFunRefs refs_env1) acc ls
-        TimeIt a _ _ -> collectFunRefs refs_env1 a acc
+        AppE _ _ a -> collectFunRefs a acc
+        PrimAppE _ args -> foldr collectFunRefs acc args
+        LetE (_,_,_, rhs) bod -> foldr collectFunRefs acc [bod, rhs]
+        IfE a b c  -> foldr collectFunRefs acc [c, b, a]
+        MkProdE ls -> foldr collectFunRefs acc ls
+        ProjE _ a  -> collectFunRefs a acc
+        DataConE _ _ ls -> foldr collectFunRefs acc ls
+        TimeIt a _ _ -> collectFunRefs a acc
         _ -> error $ "collectFunRefs: TODO " ++ sdoc e
 
-liftLamExpl :: DDefs0 -> Env2 Ty0 -> FnRefsEnv -> LowerState -> [L Exp0]
+liftLamExpl :: DDefs0 -> Env2 Ty0 -> LowerState -> [L Exp0]
             -> PassM (LowerState, [L Exp0])
-liftLamExpl ddefs env2 refs_env low exs =
+liftLamExpl ddefs env2 low exs =
   foldlM
     (\(st, acc) e ->
        do (st', e') <- go st e
@@ -942,4 +942,4 @@ liftLamExpl ddefs env2 refs_env low exs =
     (low, [])
     exs
   where
-    go = liftLamExp ddefs env2 refs_env
+    go = liftLamExp ddefs env2
