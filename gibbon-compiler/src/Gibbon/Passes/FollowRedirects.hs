@@ -77,6 +77,8 @@ followRedirectsExp ttailenv tenv tail =
       let trvty = typeofTriv trv
       case trvty of
         IntTy -> return $ Switch lbl trv alts bod_maybe
+        -- This is OK too - BoolTy is really Int8.
+        BoolTy -> return $ Switch lbl trv alts bod_maybe
         TagTyPacked -> do
           let VarTriv tagv = trv
               tailv = ttailenv # tagv
