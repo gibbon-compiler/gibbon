@@ -214,6 +214,13 @@ tcExp ddefs sbst venv fenv bound_tyvars phase e@(L loc ex) = (\(a,b,c) -> (a,b, 
             _ <- ensureEqualTy (args !! 0) IntTy (arg_tys' !! 0)
             _ <- ensureEqualTy (args !! 1) IntTy (arg_tys' !! 1)
             pure (s1, IntTy, PrimAppE pr args_tc)
+
+        _ | pr `elem` [EqIntP, LtP, GtP, LtEqP, GtEqP, OrP, AndP] -> do
+          len2
+          _ <- ensureEqualTy (args !! 0) IntTy (arg_tys' !! 0)
+          _ <- ensureEqualTy (args !! 1) IntTy (arg_tys' !! 1)
+          pure (s1, BoolTy, PrimAppE pr args_tc)
+
         oth -> err $ text "PrimAppE : TODO " <+> doc oth
 
     -- tyapps == [], always.

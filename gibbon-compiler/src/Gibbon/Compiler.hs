@@ -306,11 +306,9 @@ parseInput ip fp =
         hs_hack = do (l0,cnt) <- HS.parseFile fp
                      let passes = do l0 <- L0.freshNames l0
                                      l0 <- L0.tcProg l0
-                                     l0 <- L0.l0ToL1 l0
-                                     pure l0
-                     (l0,_i) <- return $ runPassM defaultConfig cnt passes
-                     error $ "Disabled until the new frontend is ready\n"
-                             ++ sdoc l0
+                                     l1 <- L0.l0ToL1 l0
+                                     pure l1
+                     pure $ runPassM defaultConfig cnt passes
 
 
 -- |

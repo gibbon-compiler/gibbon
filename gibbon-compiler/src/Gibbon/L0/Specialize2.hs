@@ -23,6 +23,7 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.Common
 import           Gibbon.L0.Syntax
 import           Gibbon.L0.Typecheck
+import qualified Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
 
@@ -102,11 +103,77 @@ Assume that the input program is monomorphic.
 
 -}
 
-l0ToL1 :: Prog0 -> PassM Prog0
+l0ToL1 :: Prog0 -> PassM L1.Prog1
 l0ToL1 p = do
   p1 <- monomorphize p
   p2 <- liftLam p1
-  pure p2
+  dbgTraceIt (sdoc p2) (pure ())
+  pure $ toL1 p2
+
+
+-- Just a mechanical transformation ..
+toL1 :: Prog0 -> L1.Prog1
+toL1 Prog{ddefs, fundefs, mainExp} =
+   Prog (M.map toL1DDef ddefs) (M.map toL1FunDef fundefs) mainExp'
+  where
+    mainExp' = case mainExp of
+                 Nothing -> Nothing
+                 Just (e,ty) -> Just (toL1Exp e, toL1Ty ty)
+
+    toL1DDef :: DDef0 -> L1.DDef1
+    toL1DDef ddf@DDef{dataCons} =
+      ddf { dataCons = map (\(dcon, btys) -> (dcon, map (\(a,b) -> (a, toL1Ty b)) btys)) dataCons }
+
+    toL1FunDef :: FunDef0 -> L1.FunDef1
+    toL1FunDef fn@FunDef{funTy, funBody} =
+      fn { funTy = toL1TyS funTy
+         , funBody = toL1Exp funBody }
+
+    toL1Exp :: L Exp0 -> L L1.Exp1
+    toL1Exp (L p ex) = L p $
+      case ex of
+        VarE v    -> L1.VarE v
+        LitE n    -> L1.LitE n
+        LitSymE v -> L1.LitSymE v
+        AppE f [] arg    -> AppE f [] (toL1Exp arg)
+        PrimAppE pr args -> PrimAppE (toL1Prim pr) (map toL1Exp args)
+        LetE (v,[],ty,rhs) bod -> LetE (v,[], toL1Ty ty, toL1Exp rhs) (toL1Exp bod)
+        IfE a b c  -> IfE (toL1Exp a) (toL1Exp b) (toL1Exp c)
+        MkProdE ls -> MkProdE (map toL1Exp ls)
+        ProjE i a  -> ProjE i (toL1Exp a)
+        CaseE scrt brs -> CaseE (toL1Exp scrt) (map (\(a,b,c) -> (a,
+                                                                  map (\(x,_) -> (x,())) b,
+                                                                  toL1Exp c) )
+                                                    brs)
+        DataConE _ dcon ls -> DataConE () dcon (map toL1Exp ls)
+        TimeIt e ty b -> TimeIt (toL1Exp e) (toL1Ty ty) b
+        ParE a b      -> ParE (toL1Exp a) (toL1Exp b)
+        Ext{} -> err1 (sdoc ex)
+        _ -> error $ "toL1Exp: TODO" ++ sdoc ex
+
+    toL1Prim :: Prim Ty0 -> Prim L1.Ty1
+    toL1Prim = fmap toL1Ty
+
+    toL1Ty :: Ty0 -> L1.Ty1
+    toL1Ty ty =
+      case ty of
+        IntTy   -> L1.IntTy
+        BoolTy  -> L1.BoolTy
+        TyVar{} -> err1 (sdoc ty)
+        ProdTy tys  -> L1.ProdTy $ map toL1Ty tys
+        SymDictTy a -> L1.SymDictTy $ toL1Ty a
+        ArrowTy{} -> err1 (sdoc ty)
+        PackedTy tycon tyapps | tyapps == [] -> L1.PackedTy tycon ()
+                              | otherwise    -> err1 (sdoc ty)
+        ListTy{} -> error $ "toL1Ty: No ListTy in L1."
+
+    toL1TyS :: ArrowTy Ty0 -> ArrowTy L1.Ty1
+    toL1TyS t@(ForAll tyvars (ArrowTy a b))
+      | tyvars == [] = (toL1Ty a, toL1Ty b)
+      | otherwise    = err1 (sdoc t)
+    toL1TyS (ForAll _ t) = error $ "toL1: Not a function type: " ++ sdoc t
+
+    err1 msg = error $ "toL1: Program was not fully monomorphized. Encountered" ++ msg
 
 --------------------------------------------------------------------------------
 
@@ -232,7 +299,7 @@ assertSameLength :: (Out a, Out b, Monad m) => String -> [a] -> [b] -> m ()
 assertSameLength msg as bs =
   if length as /= length bs
   then error $ "assertSameLength: Type applications " ++ sdoc bs ++ " incompatible with the type variables: " ++
-               sdoc as ++ msg
+               sdoc as ++ ".\n " ++ msg
   else pure ()
 
 -- | Collect the specializations required to monomorphize this expression.
@@ -492,11 +559,10 @@ fixTyCons specs1 p@Prog{fundefs,mainExp}=
         VarE{}    -> ex
         LitE{}    -> ex
         LitSymE{} -> ex
-        AppE f tyapps arg -> let tyapps1 = map (substTy' specs) tyapps
-                             in AppE f tyapps1 (go arg)
+        AppE f [] arg -> AppE f [] (go arg)
         PrimAppE pr args  -> PrimAppE pr (map go args)
         -- Let doesn't store any tyapps.
-        LetE (v,tyapps,ty,rhs) bod -> LetE (v, tyapps, substTy' specs ty, go rhs) (go bod)
+        LetE (v,[],ty,rhs) bod -> LetE (v, [], substTy' specs ty, go rhs) (go bod)
         IfE a b c  -> IfE (go a) (go b) (go c)
         MkProdE ls -> MkProdE (map go ls)
         ProjE i e  -> ProjE i (go e)
@@ -510,7 +576,7 @@ fixTyCons specs1 p@Prog{fundefs,mainExp}=
           DataConE (ProdTy (map (substTy' specs) tyapps)) dcon (map go args)
         TimeIt e ty b -> TimeIt (go e) (substTy' specs ty) b
         Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v, substTy' specs ty) (go bod))
-        _ -> error $ "substExp: TODO, " ++ sdoc ex
+        _ -> error $ "substExp': TODO, " ++ sdoc ex
       where
         go = substExp' specs
 
@@ -683,13 +749,13 @@ elimLamFun ddefs low env2 new_fn_name refs fn@FunDef{funArg, funTy} = do
     elimExp :: [L Exp0] -> [(L Exp0, L Exp0)] -> L Exp0 -> L Exp0
     elimExp drop_projs1 update_projs1 (L p ex) = L p $
       case ex of
-        LetE (v, tyapps, ty, rhs) bod ->
+        LetE (v, [], ty, rhs) bod ->
           case rhs `elemIndex` drop_projs1 of
             Nothing ->
               case lookup rhs update_projs1 of
-                 Nothing   -> LetE (v, tyapps, ty, go rhs) (go bod)
+                 Nothing   -> LetE (v, [], ty, go rhs) (go bod)
                  -- Update RHS.
-                 Just rhs' -> LetE (v, tyapps, ty, rhs') (go bod)
+                 Just rhs' -> LetE (v, [], ty, rhs') (go bod)
             -- Drop this let binding.
             Just ix -> let bod' = subst' v (refs !! ix) bod
                        in unLoc (go bod')
@@ -698,7 +764,7 @@ elimLamFun ddefs low env2 new_fn_name refs fn@FunDef{funArg, funTy} = do
         VarE{}    -> ex
         LitE{}    -> ex
         LitSymE{} -> ex
-        AppE f tyapps arg -> AppE f tyapps (go arg)
+        AppE f [] arg -> AppE f [] (go arg)
         PrimAppE pr args -> PrimAppE pr $ map go args
         IfE a b c  -> IfE (go a) (go b) (go c)
         MkProdE ls -> MkProdE $ map go ls
@@ -717,13 +783,13 @@ elimLamFun ddefs low env2 new_fn_name refs fn@FunDef{funArg, funTy} = do
       case ex of
         VarE v | v == old  -> VarE new
                | otherwise -> VarE v
-        AppE f loc e | f == old  -> AppE new loc (go e)
-                     | otherwise -> AppE f loc (go e)
+        AppE f [] e | f == old  -> AppE new [] (go e)
+                     | otherwise -> AppE f [] (go e)
         LitE _             -> ex
         LitSymE _          -> ex
         PrimAppE p ls      -> PrimAppE p $ map go ls
-        LetE (v,loc,t,rhs) bod | v == old  -> LetE (v,loc,t,go rhs) bod
-                               | otherwise -> LetE (v,loc,t,go rhs) (go bod)
+        LetE (v,[],t,rhs) bod | v == old  -> LetE (v,[],t,go rhs) bod
+                               | otherwise -> LetE (v,[],t,go rhs) (go bod)
         ProjE i e  -> ProjE i (go e)
         CaseE e ls -> CaseE (go e) (map f ls)
                           where f (c,vs,er) = if elem old (map fst vs)
@@ -779,12 +845,12 @@ liftLamExp ddefs env2 refs_env low (L p ex) = fmap (L p) <$>
             low'' = low' { lo_fundefs = M.insert v fn (lo_fundefs low') }
         fmap unLoc <$> liftLamExp ddefs env2' (M.insert v fn_refs refs_env) low'' bod
 
-    LetE (v, tyapps, ty, rhs) bod -> do
+    LetE (v, [], ty, rhs) bod -> do
       let fn_refs = collectFunRefs refs_env rhs []
           env2' = (extendVEnv v ty env2)
       (low', rhs') <- go rhs
       (low'', bod') <- liftLamExp ddefs env2' (M.insert v fn_refs refs_env) low' bod
-      pure (low'', LetE (v, tyapps, ty, rhs') bod')
+      pure (low'', LetE (v, [], ty, rhs') bod')
 
     -- Straightforward recursion
     VarE{}    -> pure (low, ex)

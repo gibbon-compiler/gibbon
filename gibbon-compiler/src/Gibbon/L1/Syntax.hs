@@ -39,7 +39,7 @@ type Prog1 = Prog (L Exp1)
 
 -- | Datatypes
 type DDefs1 = DDefs Ty1
-type DDef1  = DDefs Ty1
+type DDef1  = DDef Ty1
 
 -- | Function definition used in L1 programs.
 type FunDef1 = FunDef (L Exp1)
