@@ -10,7 +10,7 @@ module Gibbon.Common
          Var(..), LocVar, TyVar, fromVar, toVar, varAppend, toEndV, cleanFunName
 
          -- * Gensym monad
-       , SyM, gensym, genLetter, runSyM
+       , SyM, gensym, genLetter, newUniq, runSyM, MonadSyM(..)
 
          -- * PassM monad
        , PassM, runPassM, defaultRunPassM, defaultPackedRunPassM
@@ -36,6 +36,7 @@ import Control.DeepSeq (NFData(..), force)
 import Control.Exception (evaluate)
 import Control.Monad.State.Strict
 import Control.Monad.Reader
+import Control.Monad.Except
 import Data.Char
 import Data.List as L
 import Data.Map as M
@@ -130,32 +131,66 @@ instance Out Pos where
 --------------------------------------------------------------------------------
 -- Gensym monad:
 
-newtype SyM a = SyM (State Int a)
- deriving (Functor, Applicative, Monad, MonadState Int)
+-- A hand rolled state monad. This enables us to use SyM *and* some other
+-- (State X) monad in the same stack without having to 'lift' it every time.
+--
+-- Excavated from http://hackage.haskell.org/package/narc.
+newtype SyM a = SyM (Int -> (a, Int))
+ deriving Functor
+
+instance Applicative SyM where
+  pure  = return
+  (<*>) = ap
+
+instance Monad SyM where
+  return v = SyM (\x -> (v,x))
+  m >>= k = SyM (\x ->
+                   let SyM  f  = m
+                       (v, x') = f x
+                       SyM  f' = k v
+                   in f' x')
+
+runSyM :: Int -> SyM a -> (a, Int)
+runSyM n (SyM f) = f n
+
+-- | Serves the same purpose as 'MonadState'.
+class (Monad m) => MonadSyM m where
+  sym_state :: (Int -> (a, Int)) -> m a
+
+instance MonadSyM SyM where
+  sym_state f = SyM f
+
+-- | A fresh int.
+newUniq :: MonadSyM m => m Int
+newUniq = sym_state (\x -> (x, x+1))
 
 -- | Generate a unique symbol by attaching a numeric suffix.
-gensym :: MonadState Int m => Var -> m Var
-gensym v = state (\n -> (cleanFunName v `varAppend` toVar (show n), n + 1))
+gensym :: MonadSyM m => Var -> m Var
+gensym v = sym_state (\n -> (cleanFunName v `varAppend` toVar (show n), n + 1))
 
--- | An infinite alphabet generator: 'a','b', ... ,'z','a0', ...
-genLetter :: MonadState Int m => m Var
+-- | Generate alphabetic variables 'a','b',...
+genLetter :: MonadSyM m => m Var
 genLetter = do
-    let infStream = cycle ['a'..'z']
-    n <- get
-    modify (+1)
-    -- Well, this won't give us exactly what the docs say, but it's good
-    -- enough and requires no changes to SyM or PassM.
-    return $ toVar (infStream !! n : show n)
+  n <- newUniq
+  return $ toVar $ [chr (n + ord 'a')]
 
-runSyM :: Int -> SyM a -> (a,Int)
-runSyM n (SyM a) = runState a n
+instance MonadSyM m => MonadSyM (ReaderT r m) where
+  sym_state = lift . sym_state
+
+instance MonadSyM m => MonadSyM (StateT r m) where
+  sym_state = lift . sym_state
+
+instance MonadSyM m => MonadSyM (ExceptT r m) where
+  sym_state = lift . sym_state
+
+-- Add more instances if you need to use SyM in some other mT.
 
 --------------------------------------------------------------------------------
 -- Pass monad:
 
 -- | The monad used by core Gibbon passes to access 'Config' and other shared state.
 newtype PassM a = PassM (ReaderT Config SyM a)
-  deriving (Functor, Applicative, Monad, MonadReader Config, MonadState Int)
+  deriving (Functor, Applicative, Monad, MonadReader Config, MonadSyM)
 
 runPassM :: Config -> Int -> PassM a -> (a,Int)
 runPassM cfg cnt (PassM pass) = runSyM cnt (runReaderT pass cfg)

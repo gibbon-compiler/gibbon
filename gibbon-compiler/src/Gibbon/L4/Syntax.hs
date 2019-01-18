@@ -233,7 +233,7 @@ voidTy = ProdTy []
 --
 -- WARNING: presently this may invoke the given function more than
 -- once and duplicate code.
-withTail :: MonadState Int m => (Tail,Ty) -> ([Triv] -> Tail) -> m Tail
+withTail :: MonadSyM m => (Tail,Ty) -> ([Triv] -> Tail) -> m Tail
 withTail (tl0,retty) fn =
   let go x = withTail (x,retty) fn in -- Warning: assumes same type.
   case tl0 of

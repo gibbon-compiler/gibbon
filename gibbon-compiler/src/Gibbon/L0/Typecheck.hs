@@ -39,7 +39,7 @@ N.B.
 --------------------------------------------------------------------------------
 
 newtype TcM a = TcM (ExceptT Doc PassM a)
-  deriving (Functor, Applicative, Monad, MonadError Doc, MonadState Int)
+  deriving (Functor, Applicative, Monad, MonadError Doc, MonadSyM)
 
 runTcM :: TcM a -> PassM (Either Doc a)
 runTcM (TcM tc) = runExceptT tc
