@@ -25,6 +25,7 @@ data GeneralFlag
   | Opt_BumpAlloc          -- ^ Use bump-pointer allocation if using the non-packed backend
   | Opt_Warnc              -- ^ Show warnings from the C compiler
   | Opt_DisableGC          -- ^ Don't run the the garbage collector (used by Codegen).
+  | Opt_No_PureAnnot       -- ^ Don't use 'pure' annotations (a GCC optimization)
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -82,7 +83,9 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                                     long "warnc" <>
                                     help "Show warnings from C compiler, normally suppressed") <|>
                    flag' Opt_DisableGC (long "no-gc" <>
-                                        help "Disable the garbage collector (don't use -g when using this flag).")
+                                        help "Disable the garbage collector (don't use -g when using this flag).") <|>
+                   flag' Opt_No_PureAnnot (long "no-pure-annot" <>
+                                           help "Don't use 'pure' annotations (a GCC optimization).")
 
     dflagsParser :: Parser DebugFlag
     dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>

@@ -148,13 +148,10 @@ codegenProg cfg prg@(Prog funs mtal) = do
         dflags <- getDynFlags
         let prot@(C.InitGroup decl_spec _ inits lc) = C.funcProto fn
             purattr = C.Attr (C.Id "pure" noLoc) [] noLoc
-            isPacked = gopt Opt_Packed dflags
-        -- Do not use the *pure* annotation in pointer mode. buildTree was absurdly fast because of this.
-        if not isPacked
-        then return prot
-        else if ispure
-             then return $ C.InitGroup decl_spec [purattr] inits lc
-             else return prot
+            pureAnnotOk = not (gopt Opt_No_PureAnnot dflags)
+        if ispure && pureAnnotOk
+        then return $ C.InitGroup decl_spec [purattr] inits lc
+        else return prot
 
       codegenFun :: FunDecl -> PassM (C.Definition, C.Definition)
       codegenFun fd =
