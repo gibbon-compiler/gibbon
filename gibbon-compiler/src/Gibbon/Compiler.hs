@@ -303,12 +303,17 @@ parseInput ip fp =
                         show oth++"  Please specify compile input format."
 
   where hs_hack :: IO (L1.Prog1, Int)
-        hs_hack = do (l0,cnt) <- HS.parseFile fp
-                     let passes = do l0 <- L0.freshNames l0
-                                     l0 <- L0.tcProg l0
-                                     l1 <- L0.l0ToL1 l0
-                                     pure l1
-                     pure $ runPassM defaultConfig cnt passes
+        hs_hack = do pm_l0 <- HS.parseFile fp
+                     let passes = do
+                           l0 <- pm_l0
+                           -- dbgTraceIt (sdoc l0) (pure ())
+                           l0 <- L0.freshNames l0
+                           -- dbgTraceIt (sdoc l0) (pure ())
+                           l0 <- L0.tcProg l0
+                           -- dbgTraceIt (sdoc l0) (pure ())
+                           l1 <- L0.l0ToL1 l0
+                           pure l1
+                     pure $ runPassM defaultConfig 0 passes
 
 
 -- |

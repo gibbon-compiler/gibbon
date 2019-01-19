@@ -107,7 +107,7 @@ l0ToL1 :: Prog0 -> PassM L1.Prog1
 l0ToL1 p = do
   p1 <- monomorphize p
   p2 <- liftLam p1
-  dbgTraceIt (sdoc p2) (pure ())
+  -- dbgTraceIt (sdoc p2) (pure ())
   pure $ toL1 p2
 
 
@@ -160,6 +160,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         IntTy   -> L1.IntTy
         BoolTy  -> L1.BoolTy
         TyVar{} -> err1 (sdoc ty)
+        MetaTv{} -> err1 (sdoc ty)
         ProdTy tys  -> L1.ProdTy $ map toL1Ty tys
         SymDictTy a -> L1.SymDictTy $ toL1Ty a
         ArrowTy{} -> err1 (sdoc ty)
@@ -259,9 +260,9 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
             fn@FunDef{funName, funBody} = fundefs # fun_name
             tyvars = tyVarsFromScheme (funTy fn)
         assertSameLength ("While specializing the function: " ++ sdoc funName) tyvars tyapps
-        let sbst = Subst $ M.fromList $ zip tyvars tyapps
-            funTy' = ForAll [] (substTy sbst (tyFromScheme (funTy fn)))
-            funBody' = substExp sbst funBody
+        let mp = M.fromList $ zip tyvars tyapps
+            funTy' = ForAll [] (substTyVar mp (tyFromScheme (funTy fn)))
+            funBody' = substTyVarExp mp funBody
             -- Move this obligation from todo to done.
             specs' = specs { sp_funs_done = M.insert (fun_name, tyapps) new_fun_name (sp_funs_done specs)
                            , sp_funs_todo = M.fromList rst }
@@ -280,8 +281,8 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
           dataCons' = map
                         (\(dcon,vtys) ->
                           let (vars,tys) = unzip vtys
-                              sbst = Subst $ M.fromList (zip tyArgs tyapps)
-                              tys' = map (substTy sbst) tys
+                              sbst = M.fromList (zip tyArgs tyapps)
+                              tys' = map (substTyVar sbst) tys
                               vtys' = zip vars tys'
                           in (dcon ++ fromVar suffix, vtys'))
                         dataCons
@@ -354,7 +355,7 @@ collectSpecs ddefs env2 toplevel specs (L p ex) = fmap (L p) <$>
       pure (sbod, LetE (v,[],ty,rhs') bod')
 
     CaseE scrt brs -> do
-      case recoverType ddefs env2 scrt of
+      case recoverTy ddefs env2 scrt of
         PackedTy tycon tyapps -> do
           (suffix, specs'') <-
             case M.lookup (tycon, tyapps) (sp_dcons specs) of
@@ -509,11 +510,11 @@ specLambdas specs (L p ex) = fmap (L p) <$>
         specializedLamBinds :: [(Var,[Ty0])] -> (Ty0, L Exp0) -> PassM [(Var, [Ty0], Ty0, L Exp0)]
         specializedLamBinds [] _ = pure []
         specializedLamBinds ((w, tyapps):rst) (ty,ex1) = do
-          let tyvars = tyVarsInType ty
+          let tyvars = tyVarsInTy ty
           assertSameLength ("In the expression: " ++ sdoc ex1) tyvars tyapps
-          let sbst = Subst $ M.fromList $ zip tyvars tyapps
-              ty'  = substTy sbst ty
-              ex'  = substExp sbst ex1
+          let mp = M.fromList $ zip tyvars tyapps
+              ty'  = substTyVar mp ty
+              ex'  = substTyVarExp mp ex1
           (++ [(w, [], ty', ex')]) <$> specializedLamBinds rst (ty,ex1)
 
 specLambdasl :: SpecState -> [L Exp0] -> PassM (SpecState, [L Exp0])
@@ -542,19 +543,19 @@ fixTyCons specs1 p@Prog{fundefs,mainExp}=
   let fundefs' = M.map fixFunDef fundefs
       mainExp' = case mainExp of
                    Nothing -> Nothing
-                   Just (e,ty) -> Just (substExp' specs1 e, substTy' specs1 ty)
+                   Just (e,ty) -> Just (zonkExp' specs1 e, zonkTy' specs1 ty)
   in p { fundefs = fundefs', mainExp = mainExp' }
   where
 
     fixFunDef :: FunDef0 -> FunDef0
     fixFunDef fn@FunDef{funTy, funBody} =
-      let funTy' = ForAll (tyVarsFromScheme funTy) (substTy' specs1 (tyFromScheme funTy))
-          funBody' = substExp' specs1 funBody
+      let funTy' = ForAll (tyVarsFromScheme funTy) (zonkTy' specs1 (tyFromScheme funTy))
+          funBody' = zonkExp' specs1 funBody
       in fn { funTy = funTy', funBody = funBody' }
 
-    -- Like substExp, but uses substTy' instead of substTy.
-    substExp' :: SpecState -> L Exp0 -> L Exp0
-    substExp' specs (L loc ex) = L loc $
+    -- Like zonkExp, but uses zonkTy' instead of zonkTy.
+    zonkExp' :: SpecState -> L Exp0 -> L Exp0
+    zonkExp' specs (L loc ex) = L loc $
       case ex of
         VarE{}    -> ex
         LitE{}    -> ex
@@ -562,32 +563,33 @@ fixTyCons specs1 p@Prog{fundefs,mainExp}=
         AppE f [] arg -> AppE f [] (go arg)
         PrimAppE pr args  -> PrimAppE pr (map go args)
         -- Let doesn't store any tyapps.
-        LetE (v,[],ty,rhs) bod -> LetE (v, [], substTy' specs ty, go rhs) (go bod)
+        LetE (v,[],ty,rhs) bod -> LetE (v, [], zonkTy' specs ty, go rhs) (go bod)
         IfE a b c  -> IfE (go a) (go b) (go c)
         MkProdE ls -> MkProdE (map go ls)
         ProjE i e  -> ProjE i (go e)
         CaseE scrt brs ->
           CaseE (go scrt) (map
                             (\(dcon,vtys,rhs) -> let (vars,tys) = unzip vtys
-                                                     vtys' = zip vars $ map (substTy' specs) tys
+                                                     vtys' = zip vars $ map (zonkTy' specs) tys
                                                  in (dcon, vtys', go rhs))
                             brs)
         DataConE (ProdTy tyapps) dcon args ->
-          DataConE (ProdTy (map (substTy' specs) tyapps)) dcon (map go args)
-        TimeIt e ty b -> TimeIt (go e) (substTy' specs ty) b
-        Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v, substTy' specs ty) (go bod))
-        _ -> error $ "substExp': TODO, " ++ sdoc ex
+          DataConE (ProdTy (map (zonkTy' specs) tyapps)) dcon (map go args)
+        TimeIt e ty b -> TimeIt (go e) (zonkTy' specs ty) b
+        Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v, zonkTy' specs ty) (go bod))
+        _ -> error $ "zonkExp': TODO, " ++ sdoc ex
       where
-        go = substExp' specs
+        go = zonkExp' specs
 
-    -- Like 'substTy', but also updates TyCons if an appropriate
+    -- Like 'zonkTy', but also updates TyCons if an appropriate
     -- specialization obligation exists.
-    substTy' :: SpecState -> Ty0 -> Ty0
-    substTy' specs ty =
+    zonkTy' :: SpecState -> Ty0 -> Ty0
+    zonkTy' specs ty =
       case ty of
         IntTy   -> IntTy
         BoolTy  -> BoolTy
-        TyVar{} -> error $ "substTy': " ++ sdoc ty ++ " shouldn't be here."
+        TyVar{} -> error $ "zonkTy': " ++ sdoc ty ++ " shouldn't be here."
+        MetaTv{} -> error $ "zonkTy': " ++ sdoc ty ++ " shouldn't be here."
         ProdTy tys  -> ProdTy (map go tys)
         SymDictTy t -> SymDictTy (go t)
         ArrowTy a b -> ArrowTy (go a) (go b)
@@ -599,37 +601,7 @@ fixTyCons specs1 p@Prog{fundefs,mainExp}=
                Just suffix -> PackedTy (t ++ fromVar suffix) []
         ListTy t -> ListTy (go t)
       where
-        go = substTy' specs
-
-
--- Apply a substitution to an expression i.e substitue all types in it.
-substExp :: Subst -> L Exp0 -> L Exp0
-substExp s (L p ex) = L p $
-  case ex of
-    VarE{}    -> ex
-    LitE{}    -> ex
-    LitSymE{} -> ex
-    AppE f tyapps arg -> let tyapps1 = map (substTy s) tyapps
-                         in AppE f tyapps1 (go arg)
-    PrimAppE pr args  -> PrimAppE pr (map go args)
-    -- Let doesn't store any tyapps.
-    LetE (v,tyapps,ty,rhs) bod -> LetE (v, tyapps, substTy s ty, go rhs) (go bod)
-    IfE a b c  -> IfE (go a) (go b) (go c)
-    MkProdE ls -> MkProdE (map go ls)
-    ProjE i e  -> ProjE i (go e)
-    CaseE scrt brs ->
-      CaseE (go scrt) (map
-                        (\(dcon,vtys,rhs) -> let (vars,tys) = unzip vtys
-                                                 vtys' = zip vars $ map (substTy s) tys
-                                             in (dcon, vtys', go rhs))
-                        brs)
-    DataConE (ProdTy tyapps) dcon args ->
-      DataConE (ProdTy (map (substTy s) tyapps)) dcon (map go args)
-    TimeIt e ty b -> TimeIt (go e) (substTy s ty) b
-    Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v, substTy s ty) (go bod))
-    _ -> error $ "substExp: TODO, " ++ sdoc ex
-  where
-    go = substExp s
+        go = zonkTy' specs
 
 --------------------------------------------------------------------------------
 
@@ -687,8 +659,8 @@ liftLam prg@Prog{ddefs,fundefs,mainExp} = do
       where
         isHoFun FunDef{funTy} =
           let ForAll _ (ArrowTy arg_ty ret_ty) = funTy
-          in arrowTysInType arg_ty == [] &&
-             arrowTysInType ret_ty == []
+          in arrowTysInTy arg_ty == [] &&
+             arrowTysInTy ret_ty == []
 
 
 -- Eliminate all lambdas passed in as arguments to a function.
@@ -820,7 +792,7 @@ liftLamExp ddefs env2 low (L p ex) = fmap (L p) <$>
             Nothing -> do
               f' <- gensym f
               let ForAll _ (ArrowTy a _) = lookupFEnv f env2
-                  arrow_tys = arrowTysInType a
+                  arrow_tys = arrowTysInTy a
               -- Check that the # of refs we collected actually matches the #
               -- of functions 'f' expects.
               assertSameLength ("While lowering the expression " ++ sdoc ex) refs arrow_tys

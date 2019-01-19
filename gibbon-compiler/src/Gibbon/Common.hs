@@ -1,4 +1,5 @@
--- {-# LANGUAGE DeriveAnyClass #-} -- Actually breaks Applicative SymM deriving!
+{-# LANGUAGE DeriveAnyClass             #-}
+{-# LANGUAGE DerivingStrategies         #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -7,7 +8,7 @@
 module Gibbon.Common
        (
          -- * Variables
-         Var(..), LocVar, TyVar, fromVar, toVar, varAppend, toEndV, cleanFunName
+         Var(..), LocVar, TyVar(..), fromVar, toVar, varAppend, toEndV, cleanFunName
 
          -- * Gensym monad
        , SyM, gensym, genLetter, newUniq, runSyM, MonadSyM(..)
@@ -100,7 +101,16 @@ toEndV = varAppend "end_"
 type LocVar = Var
 
 -- | Type variables that enable polymorphism.
-type TyVar = Var
+data TyVar = BoundTv Var         -- Type variable bound by a ForAll.
+           | SkolemTv String Int -- Skolem constant, the String is just to improve error messages.
+           | UserTv Var          -- Used by the parser. Freshen must replace all occurences.
+  deriving (Read, Show, Eq, Ord, Generic, NFData)
+instance Out TyVar where
+  doc (BoundTv v) = text "b:" PP.<> doc v
+  doc (SkolemTv s v) = text s <+> text "sk:" PP.<> doc v
+  doc (UserTv v)     = text "u:" PP.<> doc v
+
+  docPrec _ v = doc v
 
 --------------------------------------------------------------------------------
 -- Helper methods to integrate the Data.Loc with Gibbon
@@ -125,7 +135,6 @@ instance Out Loc where
 
 instance Out Pos where
   docPrec _ pos = doc pos
-
   doc (Pos path line col _) = hcat [doc path, colon, doc line, colon, doc col]
 
 --------------------------------------------------------------------------------
@@ -190,7 +199,7 @@ instance MonadSyM m => MonadSyM (ExceptT r m) where
 
 -- | The monad used by core Gibbon passes to access 'Config' and other shared state.
 newtype PassM a = PassM (ReaderT Config SyM a)
-  deriving (Functor, Applicative, Monad, MonadReader Config, MonadSyM)
+  deriving newtype (Functor, Applicative, Monad, MonadReader Config, MonadSyM)
 
 runPassM :: Config -> Int -> PassM a -> (a,Int)
 runPassM cfg cnt (PassM pass) = runSyM cnt (runReaderT pass cfg)

@@ -11,11 +11,13 @@ module Gibbon.L0.Syntax
   )
 where
 
+import           Control.Monad.State ( MonadState )
 import           Control.DeepSeq (NFData)
 import           Data.List
 import           Data.Loc
 import           GHC.Generics
 import           Text.PrettyPrint.GenericPretty
+import           Text.PrettyPrint.HughesPJ as PP
 import qualified Data.Set as S
 import qualified Data.Map as M
 
@@ -79,40 +81,47 @@ instance (Out l, Out d) => Out (E0Ext l d)
 instance Out Ty0
 instance Out TyScheme
 
+--------------------------------------------------------------------------------
+
+data MetaTv = Meta Int
+  deriving (Read, Show, Eq, Ord, Generic, NFData)
+
+instance Out MetaTv where
+  doc (Meta i) = text "$" PP.<> doc i
+  docPrec _ v = doc v
+
+newMetaTv :: MonadSyM m => m MetaTv
+newMetaTv = Meta <$> newUniq
+
+newMetaTy :: MonadSyM m => m Ty0
+newMetaTy = MetaTv <$> newMetaTv
+
+newTyVar :: MonadSyM m => m TyVar
+newTyVar = BoundTv <$> genLetter
+
 data Ty0
  = IntTy
  | BoolTy
- | TyVar TyVar
+ | TyVar TyVar   -- Rigid/skolem type variables
+ | MetaTv MetaTv -- Unification variables
  | ProdTy [Ty0]
  | SymDictTy Ty0
  | ArrowTy Ty0 Ty0
  | PackedTy TyCon [Ty0] -- Type arguments to the type constructor
  | ListTy Ty0
- deriving (Show, Read, Eq, Ord, Generic, NFData)
+  deriving (Show, Read, Eq, Ord, Generic, NFData)
 
 instance FunctionTy Ty0 where
   type ArrowTy Ty0 = TyScheme
   inTy  = arrIn
   outTy = arrOut
 
-instance FreeVars Ty0 where
-  gFreeVars ty =
-    case ty of
-      IntTy   -> S.empty
-      BoolTy  -> S.empty
-      TyVar v -> S.singleton v
-      ProdTy tys     -> foldr (S.union . gFreeVars) S.empty tys
-      SymDictTy ty1  -> gFreeVars ty1
-      ArrowTy a b    -> gFreeVars a `S.union` gFreeVars b
-      PackedTy _ tys -> foldr (S.union . gFreeVars) S.empty tys
-      ListTy ty1     -> gFreeVars ty1
-
 -- | Straightforward parametric polymorphism.
 data TyScheme = ForAll [TyVar] Ty0
  deriving (Show, Read, Eq, Ord, Generic, NFData)
 
-instance FreeVars TyScheme where
-  gFreeVars (ForAll tvs ty) = gFreeVars ty `S.difference` (S.fromList tvs)
+-- instance FreeVars TyScheme where
+--   gFreeVars (ForAll tvs ty) = gFreeVars ty `S.difference` (S.fromList tvs)
 
 arrIn :: TyScheme -> Ty0
 arrIn (ForAll _ (ArrowTy i _)) = i
@@ -136,41 +145,78 @@ isFunTy :: Ty0 -> Bool
 isFunTy ArrowTy{} = True
 isFunTy _ = False
 
-tyVarsInType :: Ty0 -> [TyVar]
-tyVarsInType = go []
-  where
-    go acc ty =
-      case ty of
-        IntTy   -> acc
-        BoolTy  -> acc
-        TyVar v -> if elem v acc
-                   then acc
-                   else acc ++ [v]
-        ProdTy tys    -> foldl go acc tys
-        SymDictTy a   -> go acc a
-        ArrowTy a b   -> go (nub $ acc ++ tyVarsInType a) b
-        PackedTy _ vs -> foldl go acc vs
-        ListTy a -> go acc a
+-- | Get the free TyVars from types; no duplicates in result.
+tyVarsInTy :: Ty0 -> [TyVar]
+tyVarsInTy ty = tyVarsInTys [ty]
 
-arrowTysInType :: Ty0 -> [Ty0]
-arrowTysInType = go []
+-- | Like 'tyVarsInTy'.
+tyVarsInTys :: [Ty0] -> [TyVar]
+tyVarsInTys tys = foldr (go []) [] tys
   where
-    go acc ty =
+    go :: [TyVar] -> Ty0 -> [TyVar] -> [TyVar]
+    go bound ty acc =
       case ty of
+        IntTy  -> acc
+        BoolTy -> acc
+        TyVar tv -> if (tv `elem` bound) || (tv `elem` acc)
+                    then acc
+                    else tv : acc
+        MetaTv _ -> acc
+        ProdTy tys1     -> foldr (go bound) acc tys1
+        SymDictTy ty1   -> go bound ty1 acc
+        ArrowTy a b     -> go bound a (go bound b acc)
+        PackedTy _ tys1 -> foldr (go bound) acc tys1
+        ListTy ty1      -> go bound ty1 acc
+
+-- | Get the MetaTvs from a type; no duplicates in result.
+metaTvsInTy :: Ty0 -> [MetaTv]
+metaTvsInTy ty = metaTvsInTys [ty]
+
+-- | Like 'metaTvsInTy'.
+metaTvsInTys :: [Ty0] -> [MetaTv]
+metaTvsInTys tys = foldr go [] tys
+  where
+    go :: Ty0 -> [MetaTv] -> [MetaTv]
+    go ty acc =
+      case ty of
+        MetaTv tv -> if tv `elem` acc
+                     then acc
+                     else tv : acc
         IntTy   -> acc
         BoolTy  -> acc
         TyVar{} -> acc
+        ProdTy tys1     -> foldr go acc tys1
+        SymDictTy ty1   -> go ty1 acc
+        ArrowTy a b     -> go b (go a acc)
+        PackedTy _ tys1 -> foldr go acc tys1
+        ListTy ty1      -> go ty1 acc
+
+-- | Like 'tyVarsInTy'.
+tyVarsInTyScheme :: TyScheme -> [TyVar]
+tyVarsInTyScheme (ForAll tyvars ty) = tyVarsInTy ty \\ tyvars
+
+-- | Like 'metaTvsInTy'.
+metaTvsInTyScheme :: TyScheme -> [MetaTv]
+metaTvsInTyScheme (ForAll _ ty) = metaTvsInTy ty -- ForAll binds TyVars only
+
+-- | Like 'metaTvsInTys'.
+metaTvsInTySchemes :: [TyScheme] -> [MetaTv]
+metaTvsInTySchemes tys = concatMap metaTvsInTyScheme tys
+
+arrowTysInTy :: Ty0 -> [Ty0]
+arrowTysInTy = go []
+  where
+    go acc ty =
+      case ty of
+        IntTy    -> acc
+        BoolTy   -> acc
+        TyVar{}  -> acc
+        MetaTv{} -> acc
         ProdTy tys    -> foldl go acc tys
         SymDictTy a   -> go acc a
         ArrowTy a b   -> go (go acc a) b ++ [ty]
         PackedTy _ vs -> foldl go acc vs
         ListTy a -> go acc a
-
-
--- | Similar to 'voidTy'.
-voidTy' :: Ty0
-voidTy' = ProdTy []
-
 
 -- Hack. In the specializer, we'd like to know the type of the scrutinee.
 -- However, there are few things that prevent us from deriving Typeable for L0.
@@ -179,40 +225,40 @@ voidTy' = ProdTy []
 -- L0 uses it's own type Ty0, which is not an instance of 'UrTy'.
 -- Can we merge 'Ty0' and 'UrTy' ? Well we can, but we would end up polluting 'UrTy'
 -- with type variables and function types, which should be unused after L0.
--- Or, we can have a special (Typeable L0), which is what recoverType is.
+-- Or, we can have a special (Typeable L0), which is what recoverTy is.
 -- ¯\_(ツ)_/¯
 --
-recoverType :: DDefs0 -> Env2 Ty0 -> L Exp0 -> Ty0
-recoverType ddfs env2 (L _ ex)=
+recoverTy :: DDefs0 -> Env2 Ty0 -> L Exp0 -> Ty0
+recoverTy ddfs env2 (L _ ex)=
   case ex of
     VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v) v (vEnv env2)
     LitE _       -> IntTy
     LitSymE _    -> IntTy
     AppE v _ _   -> outTy $ fEnv env2 # v
     PrimAppE p _ -> primRetTy1 p
-    LetE (v,_,t,_) e -> recoverType ddfs (extendVEnv v t env2) e
-    IfE _ e _        -> recoverType ddfs env2 e
-    MkProdE es       -> ProdTy $ map (recoverType ddfs env2) es
+    LetE (v,_,t,_) e -> recoverTy ddfs (extendVEnv v t env2) e
+    IfE _ e _        -> recoverTy ddfs env2 e
+    MkProdE es       -> ProdTy $ map (recoverTy ddfs env2) es
     DataConE (ProdTy locs) c _ -> PackedTy (getTyOfDataCon ddfs c) locs
     DataConE loc c _ -> PackedTy (getTyOfDataCon ddfs c) [loc]
-    TimeIt e _ _     -> recoverType ddfs env2 e
-    MapE _ e         -> recoverType ddfs env2 e
-    FoldE _ _ e      -> recoverType ddfs env2 e
+    TimeIt e _ _     -> recoverTy ddfs env2 e
+    MapE _ e         -> recoverTy ddfs env2 e
+    FoldE _ _ e      -> recoverTy ddfs env2 e
     ProjE i e ->
-      case recoverType ddfs env2 e of
+      case recoverTy ddfs env2 e of
         (ProdTy tys) -> tys !! i
         oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                       ++"\nExpression:\n  "++ sdoc ex
                       ++"\nEnvironment:\n  "++sdoc (vEnv env2)
-    ParE a b -> ProdTy $ map (recoverType ddfs env2) [a,b]
+    ParE a b -> ProdTy $ map (recoverTy ddfs env2) [a,b]
     CaseE _ mp ->
       let (c,args,e) = head mp
           args' = map fst args
-      in recoverType ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
+      in recoverTy ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
     Ext ext ->
       case ext of
         LambdaE (v,t) bod ->
-          recoverType ddfs (extendVEnv v t env2) bod
+          recoverTy ddfs (extendVEnv v t env2) bod
         PolyAppE{} -> error "recoverTyep: TODO PolyAppE"
   where
     -- Return type for a primitive operation.

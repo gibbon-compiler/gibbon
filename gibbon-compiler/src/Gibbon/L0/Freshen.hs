@@ -3,6 +3,7 @@ module Gibbon.L0.Freshen
   ( freshNames ) where
 
 import           Control.Exception
+import           Data.Foldable ( foldrM )
 import           Data.Loc
 import           Prelude hiding (exp)
 import           Data.List
@@ -14,30 +15,10 @@ import           Gibbon.L0.Syntax
 --------------------------------------------------------------------------------
 
 type VarEnv   = M.Map Var Var
-type TyVarEnv = M.Map TyVar TyVar
+type TyVarEnv = M.Map TyVar Ty0
 
 
-{-|
-
-Freshen term and type variables, and check if tyvars are used properly.
-Support lexically scoped type variables, so that we can give type annotations
-to all let bound terms. Consider this (slightly contrived) program:
-
-    ($) :: (a -> b) -> a -> b
-    ($) f x = let g :: (a -> b)
-                  g = f
-              in g x
-
-is renamed to:
-
-   ($) :: (a0 -> b1) -> a0 -> b1
-   ($) f2 x3 = let g4 :: (a0 -> b1)
-                   g4 = f2
-               in g4 x3
-
-See "L0.Typecheck" for more details.
-
--}
+-- TODO: ScopedTypeVariables.
 freshNames :: Prog0 -> PassM Prog0
 freshNames (Prog defs funs main) =
     do main' <- case main of
@@ -50,45 +31,68 @@ freshNames (Prog defs funs main) =
 
 freshDDef :: DDef Ty0 -> PassM (DDef Ty0)
 freshDDef DDef{tyName,tyArgs,dataCons} = do
-  tyArgs' <- mapM gensym tyArgs
-  let env = M.fromList (zip tyArgs tyArgs')
-      dataCons' = map (\(dcon,vs) -> (dcon, map (go env) vs)) dataCons
-  pure (DDef tyName tyArgs' dataCons')
+  rigid_tyvars <- mapM (\(UserTv v) -> BoundTv <$> gensym v) tyArgs
+  let env = M.fromList $ zip tyArgs (map TyVar rigid_tyvars)
+  dataCons' <- mapM (\(dcon,vs) -> (dcon,) <$> mapM (go (sdoc (dcon,vs)) rigid_tyvars env) vs) dataCons
+  pure (DDef tyName rigid_tyvars dataCons')
   where
-    go env (b, ty) = (b, freshTy env ty)
+    go :: String -> [TyVar] -> TyVarEnv -> (t, Ty0) -> PassM (t, Ty0)
+    go msg bound env (b, ty) = do
+      (_, ty') <- freshTy env ty
+      let free_tvs = tyVarsInTy ty' \\ bound
+      if free_tvs == []
+      then pure (b, ty')
+      else error $ "freshDDef: Unbound type variables " ++ sdoc free_tvs
+                   ++ " in the constructor:\n" ++ msg
 
 freshFun :: FunDef (L Exp0) -> PassM (FunDef (L Exp0))
 freshFun (FunDef nam narg funty bod) =
     do narg' <- gensym narg
-       (tyenv, funty') <- freshTyScheme funty
-       bod' <- freshExp (M.singleton narg narg') tyenv bod
+       (tvenv, funty') <- freshTyScheme funty
+       bod' <- freshExp (M.singleton narg narg') tvenv bod
        let nam' = cleanFunName nam
        pure $ FunDef nam' narg' funty' bod'
 
+--
 freshTyScheme :: TyScheme -> PassM (TyVarEnv, TyScheme)
 freshTyScheme (ForAll tvs ty) = do
-  tvs' <- mapM gensym tvs
-  let env = M.fromList (zip tvs tvs')
-      ty' = freshTy env ty
-  pure (env, ForAll tvs' ty')
+  rigid_tyvars <- mapM (\(UserTv v) -> BoundTv <$> gensym v) tvs
+  let env = M.fromList $ zip tvs (map TyVar rigid_tyvars)
+  (env', ty') <- freshTy env ty
+  pure (env', ForAll rigid_tyvars ty')
 
-freshTy :: TyVarEnv -> Ty0 -> Ty0
+freshTy :: TyVarEnv -> Ty0 -> PassM (TyVarEnv, Ty0)
 freshTy env ty =
   case ty of
-     IntTy  -> IntTy
-     BoolTy -> BoolTy
+     IntTy  -> pure (env, ty)
+     BoolTy -> pure (env, ty)
      TyVar tv -> case M.lookup tv env of
-                   Nothing  -> error $ "freshTy: Unbound type variable " ++ show tv
-                   Just tv' -> TyVar tv'
-     ProdTy tys    -> ProdTy $ map go tys
-     SymDictTy t   -> SymDictTy $ go t
-     ArrowTy t1 t2 -> ArrowTy (go t1) (go t2)
-     PackedTy tycon t -> PackedTy tycon $ map go t
-     ListTy t -> ListTy (go t)
-  where go = freshTy env
+                   Nothing  -> do tv' <- newTyVar
+                                  pure (env, TyVar tv')
+                   Just tv' -> pure (env, tv')
+     MetaTv{} -> pure (env, ty)
+     ProdTy tys    -> do (env', tys') <- freshTys env tys
+                         pure (env', ProdTy tys')
+     SymDictTy t   -> do (env', t') <- freshTy env t
+                         pure (env', SymDictTy t')
+     ArrowTy t1 t2 -> do (env', [t1', t2']) <- freshTys env [t1,t2]
+                         pure (env', ArrowTy t1' t2')
+     PackedTy tycon tys -> do (env', tys') <- freshTys env tys
+                              pure (env', PackedTy tycon tys')
+     ListTy t -> do (env', t') <- freshTy env t
+                    pure (env', ListTy t')
+
+freshTys :: TyVarEnv -> [Ty0] -> PassM (TyVarEnv, [Ty0])
+freshTys env tys =
+  foldrM
+    (\t (env', acc) -> do
+          (env'', t') <- freshTy env' t
+          pure (env' <> env'', t' : acc))
+    (env, [])
+    tys
 
 freshExp :: VarEnv -> TyVarEnv -> L Exp0 -> PassM (L Exp0)
-freshExp venv tyenv (L sloc exp) = fmap (L sloc) $
+freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
   case exp of
     LitE i    -> return $ LitE i
     LitSymE v -> return $ LitSymE v
@@ -110,17 +114,11 @@ freshExp venv tyenv (L sloc exp) = fmap (L sloc) $
       return $ PrimAppE p es'
 
     LetE (v,_locs,ty, e1) e2 -> do
-      -- Freshen type variables free in 'ty' wrt 'tyenv',
-      -- a.k.a. ScopedTypeVariables.
-      let free_tyvars = tyVarsInType ty \\ M.keys tyenv
-      tyenv' <- M.fromList <$> mapM (\x -> (x, ) <$> gensym x) free_tyvars
-      let ty' = freshTy (tyenv <> tyenv') ty
-
+      -- No ScopedTypeVariables.
+      (_tvenv', ty') <- freshTy tvenv ty
+      e1' <- freshExp venv tvenv e1
       v'  <- gensym v
-      -- N.B. If rhs is a lambda, we need to freshen it with a tyenv which
-      -- binds all its free type variables.
-      e1' <- freshExp venv tyenv' e1
-      e2' <- freshExp (M.insert v v' venv) tyenv e2
+      e2' <- freshExp (M.insert v v' venv) tvenv e2
       return $ LetE (v',[],ty',e1') e2'
 
     IfE e1 e2 e3 -> do
@@ -143,7 +141,7 @@ freshExp venv tyenv (L sloc exp) = fmap (L sloc) $
                      let (args,locs) = unzip prs
                      args' <- mapM gensym args
                      let venv' = M.fromList (zip args args') `M.union` venv
-                     ae' <- freshExp venv' tyenv ae
+                     ae' <- freshExp venv' tvenv ae
                      return (c, zip args' locs, ae')) mp
       return $ CaseE e' mp'
 
@@ -174,8 +172,8 @@ freshExp venv tyenv (L sloc exp) = fmap (L sloc) $
         LambdaE (v,ty) bod -> do
           v' <- gensym v
           let venv' = M.insert v v' venv
-              ty'   = freshTy tyenv ty
-          Ext <$> (LambdaE (v',ty') <$> (freshExp venv' tyenv bod))
+          (_tvenv', ty') <- freshTy tvenv ty
+          Ext <$> (LambdaE (v',ty') <$> (freshExp venv' tvenv bod))
         PolyAppE{} -> error "freshExp: TODO, PolyAppE."
 
-  where go = freshExp venv tyenv
+  where go = freshExp venv tvenv

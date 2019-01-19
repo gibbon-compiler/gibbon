@@ -151,7 +151,8 @@ instance Pretty L0.Ty0 where
       case ty of
         L0.IntTy   -> text "Int"
         L0.BoolTy  -> text "Bool"
-        L0.TyVar v -> text (fromVar v)
+        L0.TyVar v -> doc v
+        L0.MetaTv v -> doc v
         L0.ProdTy tys -> parens $ hcat $ punctuate "," $ map pprint tys
         L0.SymDictTy ty -> text "Dict" <+> pprint ty
         L0.ArrowTy a b  -> pprint a <+> text "->" <+> pprint b
@@ -159,7 +160,7 @@ instance Pretty L0.Ty0 where
         L0.ListTy ty -> brackets (pprint ty)
 
 instance Pretty L0.TyScheme where
-  pprint (L0.ForAll tvs ty) = text "forall" <+> hsep (map (text . fromVar) tvs) <+> text "." <+> pprint ty
+  pprint (L0.ForAll tvs ty) = text "forall" <+> hsep (map doc tvs) <+> text "." <+> pprint ty
 
 -- Oh no, all other generic PreExp things are defined over (PreExp e l (UrTy l)).
 instance Pretty (PreExp L0.E0Ext () L0.Ty0) where
