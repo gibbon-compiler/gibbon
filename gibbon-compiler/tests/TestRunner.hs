@@ -94,6 +94,10 @@ data Test = Test
     , moreIters :: [Mode] -- ^ In these modes, this test would require lots of iterations to
                           -- keep it running for measurable amount of time.
 
+    -- Temporary hack until we can generate output in both Racket and Haskell
+    -- syntax. #t => True etc.
+    , mb_anspath :: Maybe String -- ^ Override the default answer file.
+
     -- Used in BenchWithDataset mode
     , isMegaBench :: Bool
     , benchFun    :: String
@@ -112,6 +116,7 @@ defaultTest = Test
     , numTrials = 9
     , sizeParam = 25
     , moreIters = []
+    , mb_anspath = Nothing
     , isMegaBench = False
     , benchFun   = "bench"
     , benchInput = ""
@@ -131,13 +136,14 @@ instance FromJSON Test where
         trials      <- o .:? "trials" .!= (numTrials defaultTest)
         sizeparam   <- o .:? "size-param" .!= (sizeParam defaultTest)
         moreiters   <- o .:? "more-iters" .!= (moreIters defaultTest)
+        mbanspath  <- o .:? "answer-file" .!= (mb_anspath defaultTest)
         megabench   <- o .:? "mega-bench" .!= (isMegaBench defaultTest)
         benchfun    <- o .:? "bench-fun" .!= (benchFun defaultTest)
         benchinput  <- o .:? "bench-input" .!= (benchInput defaultTest)
         let expectedFailures = M.fromList [(mode, Fail) | mode <- failing]
             -- Overlay the expected failures on top of the defaults.
             expected = M.union expectedFailures (expectedResults defaultTest)
-        return $ Test name dir expected skip runmodes isbenchmark trials sizeparam moreiters megabench benchfun benchinput
+        return $ Test name dir expected skip runmodes isbenchmark trials sizeparam moreiters mbanspath megabench benchfun benchinput
     parseJSON oth = error $ "Cannot parse Test: " ++ show oth
 
 data Result = Pass | Fail
@@ -426,6 +432,7 @@ runTests tc tr = do
               putStrLn "Only running performance tests."
               return $ filter isBenchmark (tests tr)
           else return $ filter (not . isMegaBench) (tests tr)
+    putStrLn "Running tests...\n"
     foldlM (\acc t -> go t acc) tr (sort ls)
   where
     go test acc =
@@ -455,7 +462,7 @@ runTests tc tr = do
                 acc results
 
 runTest :: TestConfig -> Test -> IO [(Mode,TestVerdict)]
-runTest tc Test{name,dir,expectedResults,runModes} = do
+runTest tc Test{name,dir,expectedResults,runModes,mb_anspath} = do
     (if (verbosity tc > 1)
      then hPutStrLn stdout (name ++ "...")
      else hPutStr stdout ".") >> hFlush stdout
@@ -468,7 +475,9 @@ runTest tc Test{name,dir,expectedResults,runModes} = do
         let tmppath  = compiler_dir </> tempdir tc </> name
             basename = compiler_dir </> replaceBaseName tmppath (takeBaseName tmppath ++ modeFileSuffix mode)
             outpath  = replaceExtension basename ".out"
-            anspath  = replaceExtension tmppath ".ans"
+            anspath  = case mb_anspath of
+                         Nothing -> tmppath ++ ".ans"
+                         Just p  -> compiler_dir </> p
             cpath    = replaceExtension basename ".c"
             exepath  = replaceExtension basename ".exe"
             cmd = "gibbon"
@@ -723,7 +732,7 @@ test_main tc tests = do
     putStrLn "Executing TestRunner... \n"
 
     compiler_dir <- getCompilerDir
-    putStr "Generating answers using Racket..."
+    putStr "Generating answers..."
     (_, Just _hout, Just herr, phandle) <-
         createProcess (proc "make" ["answers"])
         { std_out = CreatePipe

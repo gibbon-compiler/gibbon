@@ -1,6 +1,6 @@
 ## The config file for the Gibbon testsuite.
 ## These configuration parameters are only used by TestRunner.hs and
-## have no effect on the unit tests (i.e stack test).
+## have no effect on unit tests.
 
 ## Configuration that can be added to the entire testsuite (or passed via command line):
 ##
@@ -195,6 +195,25 @@ tests:
     skip: true
   - name: test_par08.gib
     skip: true
+
+  ## Polymorphic frontend tests
+  - name: HS_One.hs
+    dir: examples/hs
+    answer-file: examples/hs/HS_One.ans
+    failing: [gibbon1, gibbon2]
+
+    ## Shouldn't typecheck
+  - name: Fail1.hs
+    dir: examples/hs/should_fail
+    failing: [gibbon1, gibbon2, pointer, interp1]
+
+  - name: Fail2.hs
+    dir: examples/hs/should_fail
+    failing: [gibbon1, gibbon2, pointer, interp1]
+
+  - name: Fail3.hs
+    dir: examples/hs/should_fail
+    failing: [gibbon1, gibbon2, pointer, interp1]
 
   ## A difficult test for AddTraversals.
   - name: test_par05.gib

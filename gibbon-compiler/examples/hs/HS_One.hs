@@ -1,4 +1,4 @@
-module Main where
+module HS_One where
 
 import Prelude hiding ( Maybe(..), Either (..), succ, not)
 

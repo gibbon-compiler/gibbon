@@ -25,3 +25,5 @@ cabal.project.local~
 examples/*.c
 examples/*.exe
 examples/build_tmp/*
+examples/**/*.hi
+examples/**/*.o
