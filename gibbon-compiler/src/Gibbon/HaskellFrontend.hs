@@ -308,7 +308,11 @@ collectTopLevel env decl =
           cons' = map desugarConstr cons
       pure $ Just $ HDDef (DDef ty_name ty_args cons')
 
-    PatBind _ (PVar _ (Ident _ "main")) (UnGuardedRhs _ rhs) _binds -> do
+    -- Reserved for HS.
+    PatBind _ (PVar _ (Ident _ "main")) (UnGuardedRhs _ _) _binds ->
+      pure Nothing
+
+    PatBind _ (PVar _ (Ident _ "gibbon_main")) (UnGuardedRhs _ rhs) _binds -> do
       rhs' <- desugarExp rhs
       tv <- newMetaTv
       pure $ Just $ HMain $ Just (rhs', MetaTv tv)

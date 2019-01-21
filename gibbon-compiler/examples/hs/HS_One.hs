@@ -1,6 +1,9 @@
-module HS_One where
+module Main where
+
+import Prelude hiding ( Maybe(..), Either (..), succ, not)
 
 data Maybe z = Nothing | Just z
+  deriving Show
 
 pureMaybe :: a -> Maybe a
 pureMaybe x = Just x
@@ -12,6 +15,7 @@ fmapMaybe f mb =
     Just x  -> Just (f x)
 
 data Either a b = Left a | Right b
+  deriving Show
 
 pureEither :: b -> Either a b
 pureEither x = Right x
@@ -48,7 +52,8 @@ test_rec f n = if n == 0
            then n
            else test_rec f (n-1)
 
-main = let
+gibbon_main =
+       let
          -- id :: a -> a
          id2 x = x
 
@@ -72,8 +77,10 @@ main = let
 
          test = (id1 10, id1 True, id2 11, id2 False, foo1 1 2, x, w,
                  v, u, t)
-
        in test
+
+main :: IO ()
+main = print gibbon_main
 
 {-
 
