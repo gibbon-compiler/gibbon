@@ -90,13 +90,13 @@ instance Out MetaTv where
   doc (Meta i) = text "$" PP.<> doc i
   docPrec _ v = doc v
 
-newMetaTv :: MonadSyM m => m MetaTv
+newMetaTv :: MonadState Int m => m MetaTv
 newMetaTv = Meta <$> newUniq
 
-newMetaTy :: MonadSyM m => m Ty0
+newMetaTy :: MonadState Int m => m Ty0
 newMetaTy = MetaTv <$> newMetaTv
 
-newTyVar :: MonadSyM m => m TyVar
+newTyVar :: MonadState Int m => m TyVar
 newTyVar = BoundTv <$> genLetter
 
 data Ty0

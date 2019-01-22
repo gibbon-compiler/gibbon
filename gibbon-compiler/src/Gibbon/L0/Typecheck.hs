@@ -4,6 +4,7 @@
 
 module Gibbon.L0.Typecheck where
 
+import           Control.Monad.State ( MonadState )
 import           Control.Monad.Except
 import           Data.Foldable ( foldlM )
 import           Data.List
@@ -23,7 +24,7 @@ import           Gibbon.Common
 --------------------------------------------------------------------------------
 
 newtype TcM a = TcM (ExceptT Doc PassM a)
-  deriving (Functor, Applicative, Monad, MonadError Doc, MonadSyM)
+  deriving (Functor, Applicative, Monad, MonadError Doc, MonadState Int)
 
 runTcM :: TcM a -> PassM (Either Doc a)
 runTcM (TcM tc) = runExceptT tc
