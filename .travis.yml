@@ -35,7 +35,7 @@ install:
   - echo "Installing Racket...\n"
   - sudo add-apt-repository -y ppa:plt/racket
   - sudo apt-get update
-    # Oh no, Racket binaries don't include version #s in their name.
+  # The Racket package does not include version # in it's name.
   - sudo apt-get install -y racket
   - racket --version
 

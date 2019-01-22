@@ -107,7 +107,6 @@ l0ToL1 :: Prog0 -> PassM L1.Prog1
 l0ToL1 p = do
   p1 <- monomorphize p
   p2 <- liftLam p1
-  -- dbgTraceIt (sdoc p2) (pure ())
   pure $ toL1 p2
 
 
@@ -232,26 +231,26 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
       Just (e,ty) -> do
         (specs', mainExp')  <- collectSpecs ddefs env2 toplevel emptySpecState e
         (specs'',mainExp'') <- specLambdas specs' mainExp'
-        -- assertLambdasSpecialized specs''
+        assertLambdasSpecialized specs''
         pure (specs'', Just (mainExp'', ty))
   -- Step (2)
-  (specs', fundefs') <- fixpoint specs fundefs
+  (specs', fundefs') <- specFunDefs specs fundefs
   -- Step (3)
-  ddefs' <- specDDefs (M.toList (sp_dcons specs')) ddefs
+  ddefs' <- specDDefs specs' ddefs
   let p1 = p { ddefs = ddefs', fundefs = fundefs', mainExp =  mainExp' }
   -- Step (4)
-  let p2 = fixTyCons specs' p1
+  let p2 = purgePolyFuns p1
+      p3 = updateTyCons specs' p2
   -- Step (5)
-  let p3 = purgePoly p2
+  let p4 = purgePolyDDefs p3
   -- Step (6)
-  p4 <- tcProg p3
-  pure p4
+  p5 <- tcProg p4
+  pure p5
   where
     toplevel = M.keysSet fundefs
 
-    -- Specialize functions
-    fixpoint :: SpecState -> FunDefs0 -> PassM (SpecState, FunDefs0)
-    fixpoint specs fundefs1 =
+    specFunDefs :: SpecState -> FunDefs0 -> PassM (SpecState, FunDefs0)
+    specFunDefs specs fundefs1 =
       if M.null (sp_funs_todo specs)
       then pure (specs, fundefs1)
       else do
@@ -270,24 +269,29 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
         (specs'', funBody'') <- collectSpecs ddefs env21 toplevel specs' funBody'
         (specs''',funBody''') <- specLambdas specs'' funBody''
         let fn' = fn { funName = new_fun_name, funTy = funTy', funBody = funBody''' }
-        fixpoint specs''' (M.insert new_fun_name fn' fundefs1)
+        specFunDefs specs''' (M.insert new_fun_name fn' fundefs1)
 
-    specDDefs :: [((TyCon, [Ty0]), Var)] -> DDefs0 -> PassM DDefs0
-    specDDefs [] ddefs1 = pure ddefs1
-    specDDefs (((tycon, tyapps), suffix):rst) ddefs1 = do
-      let ddf@DDef{tyName,tyArgs,dataCons} = lookupDDef ddefs tycon
-      assertSameLength ("In the datacon: " ++ sdoc tyName) tyArgs tyapps
-      let tyName' = varAppend tyName suffix
-          dataCons' = map
-                        (\(dcon,vtys) ->
-                          let (vars,tys) = unzip vtys
-                              sbst = M.fromList (zip tyArgs tyapps)
-                              tys' = map (substTyVar sbst) tys
-                              vtys' = zip vars tys'
-                          in (dcon ++ fromVar suffix, vtys'))
-                        dataCons
-          ddefs1' = M.insert tyName' (ddf { tyName = tyName', tyArgs = [], dataCons = dataCons' })  ddefs1
-      specDDefs rst ddefs1'
+    specDDefs :: SpecState -> DDefs0 -> PassM DDefs0
+    specDDefs specs ddefs1 =
+      if M.null (sp_dcons specs)
+      then pure ddefs1
+      else do
+        let (((tycon, tyapps), suffix):rst) = M.toList (sp_dcons specs)
+            ddf@DDef{tyName,tyArgs,dataCons} = lookupDDef ddefs tycon
+        assertSameLength ("In the datacon: " ++ sdoc tyName) tyArgs tyapps
+        let tyName' = varAppend tyName suffix
+            dataCons' = map
+                          (\(dcon,vtys) ->
+                            let (vars,tys) = unzip vtys
+                                sbst = M.fromList (zip tyArgs tyapps)
+                                tys' = map (substTyVar sbst) tys
+                                tys'' = map (updateTyConsTy ddefs1 specs) tys'
+                                vtys' = zip vars tys''
+                            in (dcon ++ fromVar suffix, vtys'))
+                          dataCons
+            ddefs1' = M.insert tyName' (ddf { tyName = tyName', tyArgs = [], dataCons = dataCons' })  ddefs1
+            specs'  = specs { sp_dcons = M.fromList rst }
+        specDDefs specs' ddefs1'
 
 -- After 'specLambdas' runs, (sp_lams SpecState) must be empty
 assertLambdasSpecialized :: SpecState -> PassM ()
@@ -528,80 +532,86 @@ specLambdasl specs es = do
 
 -- | Remove all polymorphic functions and datatypes from a program. 'specLambdas'
 -- already gets rid of polymorphic sp_lams.
-purgePoly :: Prog0 -> Prog0
-purgePoly p@Prog{ddefs,fundefs} =
-  let ddefs' = M.filter isMonoDDef ddefs
-      fundefs' = M.filter isMonoFun fundefs
-  in p { ddefs = ddefs', fundefs = fundefs' }
+purgePolyFuns :: Prog0 -> Prog0
+purgePolyFuns p@Prog{fundefs} =
+  p { fundefs = M.filter isMonoFun fundefs }
   where
-    isMonoDDef DDef{tyArgs} = tyArgs == []
     isMonoFun FunDef{funTy} = (tyVarsFromScheme funTy) == []
 
+purgePolyDDefs :: Prog0 -> Prog0
+purgePolyDDefs p@Prog{ddefs} =
+  p { ddefs = M.filter isMonoDDef ddefs }
+  where
+    isMonoDDef DDef{tyArgs} = tyArgs == []
+
 -- See Step (4) in the big note. Lot of code duplication :(
-fixTyCons :: SpecState -> Prog0 -> Prog0
-fixTyCons specs1 p@Prog{fundefs,mainExp}=
+updateTyCons :: SpecState -> Prog0 -> Prog0
+updateTyCons specs p@Prog{ddefs, fundefs,mainExp}=
   let fundefs' = M.map fixFunDef fundefs
       mainExp' = case mainExp of
                    Nothing -> Nothing
-                   Just (e,ty) -> Just (zonkExp' specs1 e, zonkTy' specs1 ty)
+                   Just (e,ty) -> Just (updateTyConsExp ddefs specs e, updateTyConsTy ddefs specs ty)
   in p { fundefs = fundefs', mainExp = mainExp' }
   where
-
     fixFunDef :: FunDef0 -> FunDef0
     fixFunDef fn@FunDef{funTy, funBody} =
-      let funTy' = ForAll (tyVarsFromScheme funTy) (zonkTy' specs1 (tyFromScheme funTy))
-          funBody' = zonkExp' specs1 funBody
+      let funTy' = ForAll (tyVarsFromScheme funTy) (updateTyConsTy ddefs specs (tyFromScheme funTy))
+          funBody' = updateTyConsExp ddefs specs funBody
       in fn { funTy = funTy', funBody = funBody' }
 
-    -- Like zonkExp, but uses zonkTy' instead of zonkTy.
-    zonkExp' :: SpecState -> L Exp0 -> L Exp0
-    zonkExp' specs (L loc ex) = L loc $
-      case ex of
-        VarE{}    -> ex
-        LitE{}    -> ex
-        LitSymE{} -> ex
-        AppE f [] arg -> AppE f [] (go arg)
-        PrimAppE pr args  -> PrimAppE pr (map go args)
-        -- Let doesn't store any tyapps.
-        LetE (v,[],ty,rhs) bod -> LetE (v, [], zonkTy' specs ty, go rhs) (go bod)
-        IfE a b c  -> IfE (go a) (go b) (go c)
-        MkProdE ls -> MkProdE (map go ls)
-        ProjE i e  -> ProjE i (go e)
-        CaseE scrt brs ->
-          CaseE (go scrt) (map
-                            (\(dcon,vtys,rhs) -> let (vars,tys) = unzip vtys
-                                                     vtys' = zip vars $ map (zonkTy' specs) tys
-                                                 in (dcon, vtys', go rhs))
-                            brs)
-        DataConE (ProdTy tyapps) dcon args ->
-          DataConE (ProdTy (map (zonkTy' specs) tyapps)) dcon (map go args)
-        TimeIt e ty b -> TimeIt (go e) (zonkTy' specs ty) b
-        Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v, zonkTy' specs ty) (go bod))
-        _ -> error $ "zonkExp': TODO, " ++ sdoc ex
-      where
-        go = zonkExp' specs
+-- |
+updateTyConsExp :: DDefs0 ->  SpecState -> L Exp0 -> L Exp0
+updateTyConsExp ddefs specs (L loc ex) = L loc $
+  case ex of
+    VarE{}    -> ex
+    LitE{}    -> ex
+    LitSymE{} -> ex
+    AppE f [] arg -> AppE f [] (go arg)
+    PrimAppE pr args  -> PrimAppE pr (map go args)
+    LetE (v,[],ty,rhs) bod -> LetE (v, [], updateTyConsTy ddefs specs ty, go rhs) (go bod)
+    IfE a b c  -> IfE (go a) (go b) (go c)
+    MkProdE ls -> MkProdE (map go ls)
+    ProjE i e  -> ProjE i (go e)
+    CaseE scrt brs ->
+      CaseE (go scrt) (map
+                        (\(dcon,vtys,rhs) -> let (vars,tys) = unzip vtys
+                                                 vtys' = zip vars $ map (updateTyConsTy ddefs specs) tys
+                                             in (dcon, vtys', go rhs))
+                        brs)
+    DataConE (ProdTy tyapps) dcon args ->
+      let tyapps' = map (updateTyConsTy ddefs specs) tyapps
+          tycon   = getTyOfDataCon ddefs dcon
+          dcon' = case M.lookup (tycon,tyapps') (sp_dcons specs) of
+                    Nothing     -> dcon
+                    Just suffix -> dcon ++ fromVar suffix
+      -- Why [] ? The type arguments aren't required as the DDef is monomorphic.
+      in DataConE (ProdTy []) dcon' (map go args)
+    TimeIt e ty b -> TimeIt (go e) (updateTyConsTy ddefs specs ty) b
+    Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v, updateTyConsTy ddefs specs ty) (go bod))
+    _ -> error $ "updateTyConsExp: TODO, " ++ sdoc ex
+  where
+    go = updateTyConsExp ddefs specs
 
-    -- Like 'zonkTy', but also updates TyCons if an appropriate
-    -- specialization obligation exists.
-    zonkTy' :: SpecState -> Ty0 -> Ty0
-    zonkTy' specs ty =
-      case ty of
-        IntTy   -> IntTy
-        BoolTy  -> BoolTy
-        TyVar{} -> error $ "zonkTy': " ++ sdoc ty ++ " shouldn't be here."
-        MetaTv{} -> error $ "zonkTy': " ++ sdoc ty ++ " shouldn't be here."
-        ProdTy tys  -> ProdTy (map go tys)
-        SymDictTy t -> SymDictTy (go t)
-        ArrowTy a b -> ArrowTy (go a) (go b)
-        PackedTy t tys ->
-          let tys' = map go tys
-          in case M.lookup (t,tys') (sp_dcons specs) of
-               Nothing     -> PackedTy t tys'
-               -- Why [] ? The type arguments aren't required as the DDef is monomorphic.
-               Just suffix -> PackedTy (t ++ fromVar suffix) []
-        ListTy t -> ListTy (go t)
-      where
-        go = zonkTy' specs
+-- | Update TyCons if an appropriate specialization obligation exists.
+updateTyConsTy :: DDefs0 -> SpecState -> Ty0 -> Ty0
+updateTyConsTy ddefs specs ty =
+  case ty of
+    IntTy   -> IntTy
+    BoolTy  -> BoolTy
+    TyVar{} ->  error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."
+    MetaTv{} -> error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."
+    ProdTy tys  -> ProdTy (map go tys)
+    SymDictTy t -> SymDictTy (go t)
+    ArrowTy a b -> ArrowTy (go a) (go b)
+    PackedTy t tys ->
+      let tys' = map go tys
+      in case M.lookup (t,tys') (sp_dcons specs) of
+           Nothing     -> PackedTy t tys'
+           -- Why [] ? The type arguments aren't required as the DDef is monomorphic.
+           Just suffix -> PackedTy (t ++ fromVar suffix) []
+    ListTy t -> ListTy (go t)
+  where
+    go = updateTyConsTy ddefs specs
 
 --------------------------------------------------------------------------------
 
@@ -633,7 +643,7 @@ liftLam prg@Prog{ddefs,fundefs,mainExp} = do
         pure (low', Just (e', ty))
   low' <- fixpoint low
   -- Get rid of all higher order functions.
-  let fundefs' = purgeHigherOrder (lo_fundefs low')
+  let fundefs' = purgeHO (lo_fundefs low')
       prg' = prg { mainExp = mainExp', fundefs = fundefs' }
   -- Typecheck again.
   tcProg prg'
@@ -654,14 +664,14 @@ liftLam prg@Prog{ddefs,fundefs,mainExp} = do
         let low'' = low' { lo_funs_todo = M.deleteAt 0 (lo_funs_todo low') }
         fixpoint low''
 
-    purgeHigherOrder :: FunDefs0 -> FunDefs0
-    purgeHigherOrder fns = M.filter isHoFun fns
-      where
-        isHoFun FunDef{funTy} =
-          let ForAll _ (ArrowTy arg_ty ret_ty) = funTy
-          in arrowTysInTy arg_ty == [] &&
-             arrowTysInTy ret_ty == []
+    purgeHO :: FunDefs0 -> FunDefs0
+    purgeHO fns = M.filter isHOFun fns
 
+    isHOFun :: FunDef0 -> Bool
+    isHOFun FunDef{funTy} =
+      let ForAll _ (ArrowTy arg_ty ret_ty) = funTy
+      in arrowTysInTy arg_ty == [] &&
+         arrowTysInTy ret_ty == []
 
 -- Eliminate all lambdas passed in as arguments to a function.
 elimLamFun :: DDefs0 -> LowerState -> Env2 Ty0 -> Var -> FnRefs -> FunDef0 -> PassM LowerState
