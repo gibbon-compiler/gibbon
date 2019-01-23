@@ -217,11 +217,6 @@ getLambdaSpecs f SpecState{sp_lams} =
     f_specs = filter (\((v,_), _) -> v == f) (M.toList sp_lams)
 
 
--- Layering multiple State monads is no fun. Do it by hand instead.
---
--- newtype SpecM a = SpecM (StateT SpecState PassM a)
---   deriving (Functor, Applicative, Monad, MonadState SpecState)
-
 --------------------------------------------------------------------------------
 
 monomorphize :: Prog0 -> PassM Prog0
