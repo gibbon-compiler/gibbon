@@ -240,8 +240,9 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
   let mono_funs = M.filter isMonoFun fundefs
   (specs', mono_funs') <-
     foldlM
-      (\(sp, funs) fn@FunDef{funName,funBody} -> do
-            (sp', funBody')  <- collectSpecs ddefs env2 toplevel sp funBody
+      (\(sp, funs) fn@FunDef{funArg,funName,funBody,funTy} -> do
+            let env2' = extendVEnv funArg (inTy funTy) env2
+            (sp', funBody')  <- collectSpecs ddefs env2' toplevel sp funBody
             (sp'',funBody'') <- specLambdas sp' funBody'
             assertLambdasSpecialized sp''
             let fn' = fn { funBody = funBody'' }
@@ -271,9 +272,8 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
       if M.null (sp_funs_todo specs)
       then pure (specs, fundefs1)
       else do
-        let env21 = Env2 M.empty (M.map funTy fundefs1)
-            (((fun_name, tyapps), new_fun_name):rst) = M.toList (sp_funs_todo specs)
-            fn@FunDef{funName, funBody} = fundefs # fun_name
+        let (((fun_name, tyapps), new_fun_name):rst) = M.toList (sp_funs_todo specs)
+            fn@FunDef{funArg, funName, funBody} = fundefs # fun_name
             tyvars = tyVarsFromScheme (funTy fn)
         assertSameLength ("While specializing the function: " ++ sdoc funName) tyvars tyapps
         let mp = M.fromList $ zip tyvars tyapps
@@ -283,6 +283,7 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
             specs' = specs { sp_funs_done = M.insert (fun_name, tyapps) new_fun_name (sp_funs_done specs)
                            , sp_funs_todo = M.fromList rst }
         -- Collect any more obligations generated due to the specialization
+        let env21 = Env2 (M.singleton funArg (inTy funTy')) (M.map funTy fundefs1)
         (specs'', funBody'') <- collectSpecs ddefs env21 toplevel specs' funBody'
         (specs''',funBody''') <- specLambdas specs'' funBody''
         let fn' = fn { funName = new_fun_name, funTy = funTy', funBody = funBody''' }
@@ -379,14 +380,18 @@ collectSpecs ddefs env2 toplevel specs (L p ex) = fmap (L p) <$>
       case recoverTy ddefs env2 scrt of
         PackedTy tycon tyapps -> do
           (suffix, specs'') <-
-            case M.lookup (tycon, tyapps) (sp_dcons specs) of
-              Nothing -> do
-                let DDef{tyArgs} = lookupDDef ddefs tycon
-                assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps
-                suffix <- gensym "_v"
-                let specs' = extendDatacons (tycon, tyapps) suffix specs
-                pure (suffix, specs')
-              Just suffix -> pure (suffix, specs)
+            case tyapps of
+              -- It's a monomorphic datatype.
+              [] -> pure ("", specs)
+              _  -> do
+                case M.lookup (tycon, tyapps) (sp_dcons specs) of
+                  Nothing -> do
+                    let DDef{tyArgs} = lookupDDef ddefs tycon
+                    assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps
+                    suffix <- gensym "_v"
+                    let specs' = extendDatacons (tycon, tyapps) suffix specs
+                    pure (suffix, specs')
+                  Just suffix -> pure (suffix, specs)
           (sscrt, scrt') <- go specs'' scrt
           (sbrs, brs') <-
             foldlM
@@ -401,19 +406,23 @@ collectSpecs ddefs env2 toplevel specs (L p ex) = fmap (L p) <$>
 
     DataConE (ProdTy tyapps) dcon args -> do
       (sargs, args') <- collectSpecsl ddefs env2 toplevel specs args
-      -- Collect datacon instances here.
-      let tycon = getTyOfDataCon ddefs dcon
-      case M.lookup (tycon, tyapps) (sp_dcons sargs) of
-        Nothing -> do
-          let DDef{tyArgs} = lookupDDef ddefs tycon
-          assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps
-          suffix <- gensym "_v"
-          let specs' = extendDatacons (tycon, tyapps) suffix sargs
-              dcon' = dcon ++ (fromVar suffix)
-          pure (specs', DataConE (ProdTy []) dcon' args')
-        Just suffix -> do
-          let dcon' = dcon ++ (fromVar suffix)
-          pure (sargs, DataConE (ProdTy []) dcon' args')
+      case tyapps of
+        -- It's a monomorphic datatype.
+        [] -> pure (sargs, DataConE (ProdTy []) dcon args')
+        _  -> do
+          -- Collect datacon instances here.
+          let tycon = getTyOfDataCon ddefs dcon
+          case M.lookup (tycon, tyapps) (sp_dcons sargs) of
+            Nothing -> do
+              let DDef{tyArgs} = lookupDDef ddefs tycon
+              assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps
+              suffix <- gensym "_v"
+              let specs' = extendDatacons (tycon, tyapps) suffix sargs
+                  dcon' = dcon ++ (fromVar suffix)
+              pure (specs', DataConE (ProdTy []) dcon' args')
+            Just suffix -> do
+              let dcon' = dcon ++ (fromVar suffix)
+              pure (sargs, DataConE (ProdTy []) dcon' args')
 
     PrimAppE pr args -> do
       (specs', args') <- collectSpecsl ddefs env2 toplevel specs args

@@ -231,7 +231,7 @@ arrowTysInTy = go []
 recoverTy :: DDefs0 -> Env2 Ty0 -> L Exp0 -> Ty0
 recoverTy ddfs env2 (L _ ex)=
   case ex of
-    VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v) v (vEnv env2)
+    VarE v       -> M.findWithDefault (error $ "recoverType: Unbound variable " ++ show v) v (vEnv env2)
     LitE _       -> IntTy
     LitSymE _    -> IntTy
     AppE v _ _   -> outTy $ fEnv env2 # v
