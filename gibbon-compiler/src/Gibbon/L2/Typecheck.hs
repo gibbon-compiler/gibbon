@@ -180,10 +180,16 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                        ensureEqualTy exp IntTy (tys !! 1)
                        return $ (IntTy,tstate)
 
-                 _ | pr `elem` [EqIntP, LtP, GtP, LtEqP, GtEqP, OrP, AndP] -> do
+                 _ | pr `elem` [EqIntP, LtP, GtP, LtEqP, GtEqP] -> do
                        len2
                        ensureEqualTy exp IntTy (tys !! 0)
                        ensureEqualTy exp IntTy (tys !! 1)
+                       return $ (BoolTy,tstate)
+
+                 _ | pr `elem` [OrP, AndP] -> do
+                       len2
+                       ensureEqualTy exp BoolTy (tys !! 0)
+                       ensureEqualTy exp BoolTy (tys !! 1)
                        return $ (BoolTy,tstate)
 
                  _ | pr `elem` [MkFalse, MkTrue] -> do

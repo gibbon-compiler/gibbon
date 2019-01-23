@@ -205,7 +205,7 @@ tests:
   - name: HS_Two.hs
     dir: examples/hs
     answer-file: examples/hs/HS_Two.ans
-    # failing: [gibbon1, gibbon2]
+    failing: [gibbon1, gibbon2]
 
     ## Shouldn't typecheck
   - name: Fail1.hs

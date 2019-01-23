@@ -22,8 +22,8 @@ cabal.project.local~
 .ghc.environment.*
 
 **/gibbon-test-summary.txt
-examples/*.c
-examples/*.exe
+examples/**/*.c
+examples/**/*.exe
 examples/build_tmp/*
 examples/**/*.hi
 examples/**/*.o

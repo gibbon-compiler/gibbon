@@ -131,10 +131,16 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
             s3 <- unify (args !! 1) IntTy (arg_tys' !! 1)
             pure (s1 <> s2 <> s3, IntTy, PrimAppE pr args_tc)
 
-        _ | pr `elem` [EqIntP, LtP, GtP, LtEqP, GtEqP, OrP, AndP] -> do
+        _ | pr `elem` [EqIntP, LtP, GtP, LtEqP, GtEqP] -> do
           len2
           s2 <- unify (args !! 0) IntTy (arg_tys' !! 0)
           s3 <- unify (args !! 1) IntTy (arg_tys' !! 1)
+          pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+
+        _ | pr `elem` [OrP, AndP] -> do
+          len2
+          s2 <- unify (args !! 0) BoolTy (arg_tys' !! 0)
+          s3 <- unify (args !! 1) BoolTy (arg_tys' !! 1)
           pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
 
         oth -> err $ text "PrimAppE : TODO " <+> doc oth

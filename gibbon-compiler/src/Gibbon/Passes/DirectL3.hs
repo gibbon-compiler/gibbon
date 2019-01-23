@@ -17,9 +17,7 @@ directL3 (Prog ddfs fndefs mnExp) = do
     let mnExp' = case mnExp of
                    Nothing -> Nothing
                    Just (ex,ty) -> Just (go ex, ty)
-
-        fds = L.map fd $ M.elems fndefs
-        fndefs' = M.fromList $ L.map (\f -> (funName f, f)) fds
+        fndefs' = M.map fd fndefs
     return (Prog ddfs fndefs' mnExp')
   where
     fd :: FunDef1 -> FunDef3
@@ -27,8 +25,7 @@ directL3 (Prog ddfs fndefs mnExp) = do
         FunDef { funName = funName
                , funTy   = funTy
                , funArg  = funArg
-               , funBody = go funBody
-               }
+               , funBody = go funBody }
 
     go :: L Exp1 -> L Exp3
     go (L p ex) = L p $
