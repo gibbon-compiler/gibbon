@@ -32,7 +32,7 @@ import qualified Gibbon.L1.Syntax as L1
 Transforming L0 to L1
 ~~~~~~~~~~~~~~~~~~~~~
 
-(A) Monomorphize
+(A) Monomorphization
 (B) Lambda lifting
 (C) Convert to L1, which should be pretty straightforward at this point.
 
@@ -41,7 +41,7 @@ Transforming L0 to L1
 Monomorphization
 ~~~~~~~~~~~~~~~~
 
-Things that can be polymorphic, and therefore should be specialized:
+Things that can be polymorphic, and therefore should be monormorphized:
 - top-level fn calls
 - lamda functions
 - datacons
@@ -60,7 +60,7 @@ Here's a rough plan:
 (1.2) Also, collect any obligations from all monomorphic functions in the program.
       Why? ... TODO, e.g. sumTree, and mkTree.
 
-(2) Start specializing toplevel functions, and collect any new obligations
+(2) Start monormorphizing toplevel functions, and collect any new obligations
     that may be generated. Repeat (2) until there are no more obls.
 
 (3) Create monomorphic versions of all datatypes.
@@ -273,14 +273,14 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
         let (((fun_name, tyapps), new_fun_name):rst) = M.toList (mono_funs_todo mono_st)
             fn@FunDef{funArg, funName, funBody} = fundefs # fun_name
             tyvars = tyVarsFromScheme (funTy fn)
-        assertSameLength ("While specializing the function: " ++ sdoc funName) tyvars tyapps
+        assertSameLength ("While monormorphizing the function: " ++ sdoc funName) tyvars tyapps
         let mp = M.fromList $ zip tyvars tyapps
             funTy' = ForAll [] (substTyVar mp (tyFromScheme (funTy fn)))
             funBody' = substTyVarExp mp funBody
             -- Move this obligation from todo to done.
             mono_st' = mono_st { mono_funs_done = M.insert (fun_name, tyapps) new_fun_name (mono_funs_done mono_st)
                            , mono_funs_todo = M.fromList rst }
-        -- Collect any more obligations generated due to the specialization
+        -- Collect any more obligations generated due to the monormorphization
         let env21 = Env2 (M.singleton funArg (inTy funTy')) (M.map funTy fundefs1)
         (mono_st'', funBody'') <- collectMonoObls ddefs env21 toplevel mono_st' funBody'
         (mono_st''',funBody''') <- monoLambdas mono_st'' funBody''
@@ -314,7 +314,7 @@ assertLambdasMonomorphized :: MonoState -> PassM ()
 assertLambdasMonomorphized MonoState{mono_lams} =
   if M.null mono_lams
   then pure ()
-  else error $ "Expected 0 lambda specialization obligations. Got " ++ sdoc mono_lams
+  else error $ "Expected 0 lambda monormorphization obligations. Got " ++ sdoc mono_lams
 
 assertSameLength :: (Out a, Out b, Monad m) => String -> [a] -> [b] -> m ()
 assertSameLength msg as bs =
@@ -359,8 +359,8 @@ collectMonoObls ddefs env2 toplevel mono_st (L p ex) = fmap (L p) <$>
           pure (sbod, LetE (v,[],ty,rhs') bod')
         _ -> do
           -- If it's not a lambda defn, it's been passed as an argument --
-          -- we don't want to specialize it here. It'll be specialized when
-          -- the the outer fn is specialized.
+          -- we don't want to monormorphize it here. It'll be handled when
+          -- the the outer fn is processed.
           -- To ensure that (AppE v ...) uses the same name, we add it into
           -- mono_st s.t. it's new name is same as it's old name.
           let mono_st' = extendLambdas (v,[]) v mono_st
@@ -472,7 +472,7 @@ monoLambdas mono_st (L p ex) = fmap (L p) <$>
     LetE (v,[],vty, rhs@(L p1 (Ext (LambdaE (x,xty) lam_bod)))) bod -> do
       let lam_mono_st = getLambdaObls v mono_st
       if M.null lam_mono_st
-      -- This lambda is not polymorphic, don't specialize.
+      -- This lambda is not polymorphic, don't monomorphize.
       then do
         (mono_st1, bod') <- go bod
         (mono_st2, lam_bod') <- monoLambdas mono_st1 lam_bod
@@ -486,8 +486,8 @@ monoLambdas mono_st (L p ex) = fmap (L p) <$>
                               (M.fromList $ map (\(w,wtyapps) -> ((v,wtyapps), w)) (M.toList lam_mono_st))
             mono_st' = mono_st { mono_lams =  new_lam_mono_st }
         (mono_st1, bod') <- monoLambdas mono_st' bod
-        specialized <- monoLamBinds (M.toList lam_mono_st) (vty, rhs)
-        pure (mono_st1, unLoc $ foldl (\acc bind -> l$ LetE bind acc) bod' specialized)
+        monomorphized <- monoLamBinds (M.toList lam_mono_st) (vty, rhs)
+        pure (mono_st1, unLoc $ foldl (\acc bind -> l$ LetE bind acc) bod' monomorphized)
 
     -- Straightforward recursion
     VarE{}    -> pure (mono_st, ex)
@@ -618,7 +618,7 @@ updateTyConsExp ddefs mono_st (L loc ex) = L loc $
   where
     go = updateTyConsExp ddefs mono_st
 
--- | Update TyCons if an appropriate specialization obligation exists.
+-- | Update TyCons if an appropriate monomorphization obligation exists.
 updateTyConsTy :: DDefs0 -> MonoState -> Ty0 -> Ty0
 updateTyConsTy ddefs mono_st ty =
   case ty of

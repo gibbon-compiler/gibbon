@@ -211,7 +211,7 @@ tests:
     dir: examples/hs
     answer-file: examples/hs/MonoTree.ans
 
-  - name: PolTree.hs
+  - name: PolyTree.hs
     dir: examples/hs
     answer-file: examples/hs/PolyTree.ans
     failing: [gibbon1, gibbon2]
