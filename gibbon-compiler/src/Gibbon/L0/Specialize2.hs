@@ -59,6 +59,9 @@ Here's a rough plan:
     specialize lambdas; first to collect the required specializations, and one more
     time to define them.
 
+(1.2) Also, collect any obligations from all monomorphic functions in the program.
+      Why? ... TODO, e.g. sumTree, and mkTree.
+
 (2) Start specializing toplevel functions, and collect any new obligations
     that may be generated. Repeat (2) until there are no more obls.
 
@@ -233,14 +236,28 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
         (specs'',mainExp'') <- specLambdas specs' mainExp'
         assertLambdasSpecialized specs''
         pure (specs'', Just (mainExp'', ty))
+  -- Step (1.2)
+  let mono_funs = M.filter isMonoFun fundefs
+  (specs', mono_funs') <-
+    foldlM
+      (\(sp, funs) fn@FunDef{funName,funBody} -> do
+            (sp', funBody')  <- collectSpecs ddefs env2 toplevel sp funBody
+            (sp'',funBody'') <- specLambdas sp' funBody'
+            assertLambdasSpecialized sp''
+            let fn' = fn { funBody = funBody'' }
+            pure (sp'', M.insert funName fn' funs)
+          )
+      (specs, mono_funs)
+      (M.elems mono_funs)
+  let fundefs' = mono_funs' `M.union` fundefs
   -- Step (2)
-  (specs', fundefs') <- specFunDefs specs fundefs
+  (specs'', fundefs'') <- specFunDefs specs' fundefs'
   -- Step (3)
-  ddefs' <- specDDefs specs' ddefs
-  let p1 = p { ddefs = ddefs', fundefs = fundefs', mainExp =  mainExp' }
+  ddefs' <- specDDefs specs'' ddefs
+  let p1 = p { ddefs = ddefs', fundefs = fundefs'', mainExp =  mainExp' }
   -- Step (4)
   let p2 = purgePolyFuns p1
-      p3 = updateTyCons specs' p2
+      p3 = updateTyCons specs'' p2
   -- Step (5)
   let p4 = purgePolyDDefs p3
   -- Step (6)
@@ -535,8 +552,9 @@ specLambdasl specs es = do
 purgePolyFuns :: Prog0 -> Prog0
 purgePolyFuns p@Prog{fundefs} =
   p { fundefs = M.filter isMonoFun fundefs }
-  where
-    isMonoFun FunDef{funTy} = (tyVarsFromScheme funTy) == []
+
+isMonoFun :: FunDef0 -> Bool
+isMonoFun FunDef{funTy} = (tyVarsFromScheme funTy) == []
 
 purgePolyDDefs :: Prog0 -> Prog0
 purgePolyDDefs p@Prog{ddefs} =
@@ -618,7 +636,7 @@ updateTyConsTy ddefs specs ty =
 data LowerState = LowerState
   { lo_funs_todo :: M.Map (Var, [Var]) Var
   , lo_fundefs   :: FunDefs0 }
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic, Out)
 
 
 -- We track references when we bind variables to account for programs like:
@@ -641,9 +659,24 @@ liftLam prg@Prog{ddefs,fundefs,mainExp} = do
       Just (e, ty) -> do
         (low', e') <- liftLamExp ddefs env2 emptyLowerState e
         pure (low', Just (e', ty))
-  low' <- fixpoint low
+
+  -- Same reason as Step (1.2) in monomorphization.
+  let fo_funs = M.filter isFOFun fundefs
+  low' <-
+    foldlM
+      (\low1 fn@FunDef{funName,funBody} -> do
+            (low1', funBody') <- liftLamExp ddefs env2 low1 funBody
+            let funs   = lo_fundefs low1'
+                fn'    = fn { funBody = funBody' }
+                funs'  = M.insert funName fn' funs
+                low1'' = low1' { lo_fundefs = funs' }
+            pure low1'')
+      low
+      (M.elems fo_funs)
+
+  low'' <- fixpoint low'
   -- Get rid of all higher order functions.
-  let fundefs' = purgeHO (lo_fundefs low')
+  let fundefs' = purgeHO (lo_fundefs low'')
       prg' = prg { mainExp = mainExp', fundefs = fundefs' }
   -- Typecheck again.
   tcProg prg'
@@ -665,10 +698,10 @@ liftLam prg@Prog{ddefs,fundefs,mainExp} = do
         fixpoint low''
 
     purgeHO :: FunDefs0 -> FunDefs0
-    purgeHO fns = M.filter isHOFun fns
+    purgeHO fns = M.filter isFOFun fns
 
-    isHOFun :: FunDef0 -> Bool
-    isHOFun FunDef{funTy} =
+    isFOFun :: FunDef0 -> Bool
+    isFOFun FunDef{funTy} =
       let ForAll _ (ArrowTy arg_ty ret_ty) = funTy
       in arrowTysInTy arg_ty == [] &&
          arrowTysInTy ret_ty == []

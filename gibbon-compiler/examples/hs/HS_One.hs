@@ -83,7 +83,7 @@ gibbon_main =
          id2 x = x
 
          -- foo :: a -> b -> b
-         -- foo2 x y = y
+         foo2 x y = y
 
          x :: Maybe Int
          x = Nothing
@@ -103,8 +103,8 @@ gibbon_main =
          s :: Int
          s = foldr plus 0 (Cons 1 (Cons 2 Nil))
 
-         test = (id1 10, id1 True, id2 11, id2 False, foo1 1 2, x, w,
-                 v, u, t, s)
+         test = (id1 10, id1 True, id2 11, id2 False, foo1 1 2, foo2 3 4,
+                 x, w, v, u, t, s)
        in test
 
 main :: IO ()
