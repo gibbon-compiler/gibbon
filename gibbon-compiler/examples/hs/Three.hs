@@ -1,4 +1,4 @@
-module HS_Three where
+module Three where
 
 data NodeData = NodeDataK Int Int Int Int Int MeasureMode FontStyle
   deriving Show

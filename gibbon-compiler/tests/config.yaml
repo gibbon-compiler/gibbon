@@ -197,14 +197,23 @@ tests:
     skip: true
 
   ## Polymorphic frontend tests
-  - name: HS_One.hs
+  - name: One.hs
     dir: examples/hs
-    answer-file: examples/hs/HS_One.ans
+    answer-file: examples/hs/One.ans
     failing: [gibbon1, gibbon2]
 
-  - name: HS_Two.hs
+  - name: Three.hs
     dir: examples/hs
-    answer-file: examples/hs/HS_Two.ans
+    answer-file: examples/hs/Three.ans
+    failing: [gibbon1, gibbon2]
+
+  - name: MonoTree.hs
+    dir: examples/hs
+    answer-file: examples/hs/MonoTree.ans
+
+  - name: PolTree.hs
+    dir: examples/hs
+    answer-file: examples/hs/PolyTree.ans
     failing: [gibbon1, gibbon2]
 
     ## Shouldn't typecheck

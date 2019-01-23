@@ -1,5 +1,5 @@
 -- test monomorphic things
-module HS_Four where
+module MonoTree where
 
 data Tree = Leaf Int
           | Node Tree Tree

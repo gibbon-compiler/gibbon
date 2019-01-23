@@ -1,4 +1,4 @@
-module HS_Two where
+module Two where
 
 import Prelude hiding (succ, and)
 
