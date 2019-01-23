@@ -306,12 +306,12 @@ parseInput ip fp =
         hs_hack = do pm_l0 <- HS.parseFile fp
                      let passes = do
                            l0 <- pm_l0
-                           -- dbgTraceIt (sdoc l0) (pure ())
                            l0 <- L0.freshNames l0
-                           -- dbgTraceIt (sdoc l0) (pure ())
+                           -- dbgTraceIt ("Freshen:\n" ++ sdoc l0) (pure ())
                            l0 <- L0.tcProg l0
-                           -- dbgTraceIt (sdoc l0) (pure ())
+                           -- dbgTraceIt ("Typechecked:\n" ++ sdoc l0) (pure ())
                            l1 <- L0.l0ToL1 l0
+                           -- dbgTraceIt ("Specialized:\n" ++ sdoc l1) (pure ())
                            pure l1
                      pure $ runPassM defaultConfig 0 passes
 

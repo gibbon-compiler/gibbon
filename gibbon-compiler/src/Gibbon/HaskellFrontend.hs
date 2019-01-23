@@ -24,7 +24,6 @@ parseFile path = do
   let parse_mode = defaultParseMode { extensions =
                                         [EnableExtension ScopedTypeVariables]
                                         ++ (extensions defaultParseMode)}
-
   parsed <- parseModuleWithMode parse_mode <$> (readFile path)
   case parsed of
     ParseOk hs -> pure $ desugarModule hs
@@ -136,8 +135,10 @@ unCurryTopTy (ForAll tyvars ty) = ForAll tyvars (unCurryTy ty)
 unCurryTy :: Ty0 -> Ty0
 unCurryTy ty1 =
   case ty1 of
-    ArrowTy{} -> let (a,b) = go [] ty1
-                 in ArrowTy (ProdTy a) b
+    ArrowTy _ ArrowTy{} ->
+      let (a,b) = go [] ty1
+          a' = map unCurryTy a
+      in ArrowTy (ProdTy a') b
     _ -> ty1
   where
     go :: [Ty0] -> Ty0 -> ([Ty0], Ty0)

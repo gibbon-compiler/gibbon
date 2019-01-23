@@ -386,7 +386,7 @@ collectSpecs ddefs env2 toplevel specs (L p ex) = fmap (L p) <$>
       (sargs, args') <- collectSpecsl ddefs env2 toplevel specs args
       -- Collect datacon instances here.
       let tycon = getTyOfDataCon ddefs dcon
-      case M.lookup (tycon, tyapps) (sp_dcons specs) of
+      case M.lookup (tycon, tyapps) (sp_dcons sargs) of
         Nothing -> do
           let DDef{tyArgs} = lookupDDef ddefs tycon
           assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps

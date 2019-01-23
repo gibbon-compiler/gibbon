@@ -1,6 +1,6 @@
 module HS_One where
 
-import Prelude hiding ( Maybe(..), Either (..), succ, not)
+import Prelude hiding ( Maybe(..), Either (..), succ, not, foldr)
 
 data Maybe z = Nothing | Just z
   deriving Show
@@ -19,6 +19,31 @@ data Either a b = Left a | Right b
 
 pureEither :: b -> Either a b
 pureEither x = Right x
+
+data List a = Nil
+            | Cons a (List a)
+  deriving Show
+
+{-
+
+Bugs:
+
+(1) In the Cons case,
+
+    f x (foldr f acc rst)
+
+.. doesn't work right now. The specializer is not able to lift 'f' out of this expression.
+
+-}
+foldr :: (a -> b -> b) -> b -> List a -> b
+foldr f acc ls =
+  case ls of
+    Nil        -> acc
+    Cons x rst -> let acc' = (foldr f acc rst)
+                  in f x acc'
+
+plus :: Int -> Int -> Int
+plus a b = a + b
 
 id1 :: a -> a
 id1 x = x
@@ -75,8 +100,11 @@ gibbon_main =
          t :: Int
          t = test_rec succ v
 
+         s :: Int
+         s = foldr plus 0 (Cons 1 (Cons 2 Nil))
+
          test = (id1 10, id1 True, id2 11, id2 False, foo1 1 2, x, w,
-                 v, u, t)
+                 v, u, t, s)
        in test
 
 main :: IO ()
