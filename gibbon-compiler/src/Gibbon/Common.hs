@@ -11,7 +11,7 @@ module Gibbon.Common
          Var(..), LocVar, TyVar(..), fromVar, toVar, varAppend, toEndV, cleanFunName
 
          -- * Gensym monad
-       , SyM, gensym, genLetter, newUniq, runSyM
+       , SyM, gensym, gensym_tag, genLetter, newUniq, runSyM
 
          -- * PassM monad
        , PassM, runPassM, defaultRunPassM, defaultPackedRunPassM

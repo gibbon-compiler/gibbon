@@ -369,7 +369,7 @@ tupleListOfFunctions  ddefs ls = do
 
   let inputDef = lookupDDef ddefs typeStr 
         where 
-          typeStr = case traversedType of (PackedTy typeStr _) -> (toVar typeStr) --`debug`  (show traversedType L.++ (show ls)) 
+          typeStr = case traversedType of (PackedTy typeStr _) -> typeStr --`debug`  (show traversedType L.++ (show ls)) 
       dataConsList = dataCons inputDef
       createOutVar index =  (toVar ("f" L.++(show index)L.++"out" )) 
  

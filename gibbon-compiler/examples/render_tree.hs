@@ -1,8 +1,11 @@
-data NodeData = NodeDataK Int Int Int Int Float MeasureMode FontStyle 
---    NodeDataK posX posY height width relWidth mMode fontStyle 
+module RenderTree where
 
-data MeasureMode = Flex | Relative | Absolute 
-data FontStyle = FontStyleK Int Int Int 
+-- We don't have a built-in Float right now.
+data NodeData = NodeDataK Int Int Int Int Int MeasureMode FontStyle
+--    NodeDataK posX posY height width relWidth mMode fontStyle
+
+data MeasureMode = Flex | Relative | Absolute
+data FontStyle = FontStyleK Int Int Int
 data Document = Document PageList NodeData
 data PageList = PageListInner Page PageList  
               | PageListEnd Page 
@@ -16,7 +19,7 @@ data ElementsList  = ElementsListInner  Element ElementsList
 data Element =  ImageCons Int Int StringJ NodeData
               | TextBoxCons Int Int StringJ NodeData
               | VertContainer HorizContainerList NodeData
-data StringJ  = StrChar Char 
+data StringJ  = StrChar Int
              | StrEnd
 
 maxI :: Int -> Int -> Int
@@ -111,6 +114,7 @@ resolveWidthElm ::Element -> Element
 resolveWidthElm element  = case (element) of 
     VertContainer hzList nData -> VertContainer (resolveWidthHzLst hzList) nData
 
-main =  StrEnd
+gibbon_main =  StrEnd
 
-
+main :: IO ()
+main = print gibbon_main
