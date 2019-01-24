@@ -163,10 +163,16 @@ tcExp isPacked ddfs env exp@(L p ex) =
           _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
           return BoolTy
 
-        _ | pr `elem` [EqIntP, LtP, GtP, LtEqP, GtEqP, OrP, AndP] -> do
+        _ | pr `elem` [EqIntP, LtP, GtP, LtEqP, GtEqP] -> do
           len2
           _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
           _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+          return BoolTy
+
+        _ | pr `elem` [OrP, AndP] -> do
+          len2
+          _ <- ensureEqualTy (es !! 0) BoolTy (tys !! 0)
+          _ <- ensureEqualTy (es !! 1) BoolTy (tys !! 1)
           return BoolTy
 
         RandP -> return IntTy

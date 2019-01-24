@@ -4,7 +4,6 @@ import Data.Loc
 import Data.List as L
 import qualified Data.Map as M
 
-import Gibbon.GenericOps
 import Gibbon.Common
 import Gibbon.L1.Syntax
 import Gibbon.L2.Syntax as L2

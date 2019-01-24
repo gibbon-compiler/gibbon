@@ -26,7 +26,6 @@ import           Text.Printf
 import           Data.Monoid
 #endif
 
-import qualified Data.ByteString.Char8 as BS
 import qualified Data.Text as T
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -95,6 +94,10 @@ data Test = Test
     , moreIters :: [Mode] -- ^ In these modes, this test would require lots of iterations to
                           -- keep it running for measurable amount of time.
 
+    -- Temporary hack until we can generate output in both Racket and Haskell
+    -- syntax. #t => True etc.
+    , mb_anspath :: Maybe String -- ^ Override the default answer file.
+
     -- Used in BenchWithDataset mode
     , isMegaBench :: Bool
     , benchFun    :: String
@@ -113,6 +116,7 @@ defaultTest = Test
     , numTrials = 9
     , sizeParam = 25
     , moreIters = []
+    , mb_anspath = Nothing
     , isMegaBench = False
     , benchFun   = "bench"
     , benchInput = ""
@@ -132,13 +136,14 @@ instance FromJSON Test where
         trials      <- o .:? "trials" .!= (numTrials defaultTest)
         sizeparam   <- o .:? "size-param" .!= (sizeParam defaultTest)
         moreiters   <- o .:? "more-iters" .!= (moreIters defaultTest)
+        mbanspath  <- o .:? "answer-file" .!= (mb_anspath defaultTest)
         megabench   <- o .:? "mega-bench" .!= (isMegaBench defaultTest)
         benchfun    <- o .:? "bench-fun" .!= (benchFun defaultTest)
         benchinput  <- o .:? "bench-input" .!= (benchInput defaultTest)
         let expectedFailures = M.fromList [(mode, Fail) | mode <- failing]
             -- Overlay the expected failures on top of the defaults.
             expected = M.union expectedFailures (expectedResults defaultTest)
-        return $ Test name dir expected skip runmodes isbenchmark trials sizeparam moreiters megabench benchfun benchinput
+        return $ Test name dir expected skip runmodes isbenchmark trials sizeparam moreiters mbanspath megabench benchfun benchinput
     parseJSON oth = error $ "Cannot parse Test: " ++ show oth
 
 data Result = Pass | Fail
@@ -163,6 +168,7 @@ readMode s =
         "pointer" -> Pointer
         "interp1" -> Interp1
         "gibbon1" -> Gibbon1
+        _ -> error $ "readMode: " ++ show s
 
 -- Must match the flag expected by Gibbon.
 modeRunOptions :: Mode -> [String]
@@ -426,6 +432,7 @@ runTests tc tr = do
               putStrLn "Only running performance tests."
               return $ filter isBenchmark (tests tr)
           else return $ filter (not . isMegaBench) (tests tr)
+    putStrLn "Running tests...\n"
     foldlM (\acc t -> go t acc) tr (sort ls)
   where
     go test acc =
@@ -455,9 +462,11 @@ runTests tc tr = do
                 acc results
 
 runTest :: TestConfig -> Test -> IO [(Mode,TestVerdict)]
-runTest tc Test{name,dir,expectedResults,runModes} = do
-    -- putStrLn (name t)
-    putStr "."
+runTest tc Test{name,dir,expectedResults,runModes,mb_anspath} = do
+    (if (verbosity tc > 1)
+     then hPutStrLn stdout (name ++ "...")
+     else hPutStr stdout ".") >> hFlush stdout
+
     mapM (\(m,e) -> go m e) (M.toList $ M.restrictKeys expectedResults (S.fromList runModes))
   where
     go :: Mode -> Result -> IO (Mode, TestVerdict)
@@ -466,7 +475,9 @@ runTest tc Test{name,dir,expectedResults,runModes} = do
         let tmppath  = compiler_dir </> tempdir tc </> name
             basename = compiler_dir </> replaceBaseName tmppath (takeBaseName tmppath ++ modeFileSuffix mode)
             outpath  = replaceExtension basename ".out"
-            anspath  = replaceExtension tmppath ".ans"
+            anspath  = case mb_anspath of
+                         Nothing -> tmppath ++ ".ans"
+                         Just p  -> compiler_dir </> p
             cpath    = replaceExtension basename ".c"
             exepath  = replaceExtension basename ".exe"
             cmd = "gibbon"
@@ -553,10 +564,14 @@ doNTrials tc mode t@Test{name,dir,numTrials,sizeParam,moreIters,isMegaBench,benc
       createProcess (proc cmd cmd_options) { std_out = CreatePipe
                                            , std_err = CreatePipe }
     toexeExitCode <- waitForProcess phandle
+
+    -- Number of iterations that should get us beyond the 1s threshold.
+    let more_iters = (10 ^ (8 :: Int))
+
     case toexeExitCode of
         ExitSuccess -> do
             let iters = if mode `elem` moreIters
-                        then 10 ^ 8
+                        then more_iters
                         else 1
             first_trial <- if isMegaBench
                            then doMegaBenchmark tc cpath exepath t
@@ -611,7 +626,7 @@ isBenchOutput :: String -> Bool
 isBenchOutput s = isInfixOf "BATCHTIME" s || isInfixOf "SELFTIMED" s
 
 doMegaBenchmark :: TestConfig -> FilePath -> FilePath -> Test -> IO (Either String BenchResult)
-doMegaBenchmark tc cpath exepath Test{name,dir,runModes,benchFun,benchInput} = do
+doMegaBenchmark _tc _cpath exepath Test{benchInput} = do
     compiler_dir <- getCompilerDir
     bench_input_exists <- doesFileExist benchInput
     if not bench_input_exists
@@ -623,7 +638,8 @@ doMegaBenchmark tc cpath exepath Test{name,dir,runModes,benchFun,benchInput} = d
         (_, Just hout, Just herr, phandle) <-
             createProcess (proc exepath cmd_options)
                 { std_out = CreatePipe
-                , std_err = CreatePipe }
+                , std_err = CreatePipe
+                , cwd = Just compiler_dir }
         exitCode <- waitForProcess phandle
         case exitCode of
             ExitSuccess -> do
@@ -637,7 +653,7 @@ summary :: TestConfig -> TestRun -> IO String
 summary tc tr = do
     endTime <- getTime clk
     day <- getZonedTime
-    let timeTaken = quot (toNanoSecs (diffTimeSpec endTime (startTime tr))) (10^9)
+    let timeTaken = quot (toNanoSecs (diffTimeSpec endTime (startTime tr))) (10 ^ (9 :: Int))
     return $ render (go timeTaken day)
   where
     hline x = text "--------------------------------------------------------------------------------" $$ x
@@ -654,7 +670,7 @@ summary tc tr = do
                         else docNameModes name (map fst m_errors)))
                   ls)
 
-    go :: (Num a, Show a) => a -> ZonedTime -> Doc
+    go :: Integer -> ZonedTime -> Doc
     go timeTaken day =
         text "Gibbon testsuite summary: " <+> parens (text $ show day) $$
         text "--------------------------------------------------------------------------------" $$
@@ -716,8 +732,7 @@ test_main tc tests = do
     putStrLn "Executing TestRunner... \n"
 
     compiler_dir <- getCompilerDir
-
-    -- Generate Racket answers
+    putStr "Generating answers..."
     (_, Just _hout, Just herr, phandle) <-
         createProcess (proc "make" ["answers"])
         { std_out = CreatePipe
@@ -726,9 +741,8 @@ test_main tc tests = do
         }
     exitCode <- waitForProcess phandle
     case exitCode of
-      ExitSuccess -> return ()
+      ExitSuccess -> putStrLn "Done."
       ExitFailure _ -> error <$> hGetContents herr
-
 
     test_run  <- getTestRun tests
     test_run' <- runTests tc test_run

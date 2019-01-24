@@ -1,5 +1,3 @@
-## Based on the travis-simple.yml (https://raw.githubusercontent.com/commercialhaskell/stack/stable/doc/travis-simple.yml)
-
 # To set the default GCC version to 7
 sudo: required
 
@@ -16,42 +14,43 @@ addons:
   apt:
     sources:
     - ubuntu-toolchain-r-test
+    - hvr-ghc
     packages:
       - libgc-dev
       - libgmp-dev
       - gcc-7
-
-env:
-  global:
-    - RACKET_VERSION=6.10
-    - RACKET_DIR=~/racket
+      - ghc-8.4.3
 
 install:
   # Download and unpack the stack executable
+  # The Ubuntu package is only available on >16.04. Travis is using 14.04.
   - echo "Installing Stack...\n"
   - mkdir -p ~/.local/bin
   - export PATH=$HOME/.local/bin:$PATH
   - travis_retry curl -L https://www.stackage.org/stack/linux-x86_64 | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
 
   # Install Racket
-  # Maybe we shouldn't depend on a GitHub repo. But I guess it's ok for v1
+  # 'plt/racket' is not in Travis's safelist (https://github.com/travis-ci/apt-source-safelist)
+  # and they're not accepting requests to add more things into it. Do this the old-fashioned way.
   - echo "Installing Racket...\n"
-  - git clone https://github.com/greghendershott/travis-racket.git
-  - cat travis-racket/install-racket.sh | bash
-  - export PATH="${RACKET_DIR}/bin:${PATH}"
+  - sudo add-apt-repository -y ppa:plt/racket
+  - sudo apt-get update
+  # The Racket package does not include version # in it's name.
+  - sudo apt-get install -y racket
+  - racket --version
 
-  # GCC
+  # Set up PATH for GHC.
+  - export PATH=/opt/ghc/bin/:$PATH
+  - ghc --version
+
+  # GCC version hack.
   - sudo unlink /usr/bin/gcc && sudo ln -s /usr/bin/gcc-7 /usr/bin/gcc
+  - gcc --version
+
 
 # We have a private submodule, and can't clone it without adding proper keys to Travis
 git:
   submodules: false
-
-# blacklist
-branches:
-  except:
-    - indirections
-    - jenkins
 
 script:
   ./run_all_tests.sh

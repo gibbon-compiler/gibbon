@@ -10,7 +10,6 @@ import Data.Loc
 import Control.Monad.State
 
 import Gibbon.Common as C
--- import Gibbon.GenericOps
 
 import Gibbon.L0.Syntax as L0
 import Gibbon.L1.Syntax as L1
@@ -54,7 +53,7 @@ isPolyDef pd@(PDDef n ds) =
    where mds = filterAndMono ds
          allMono = L.length ds == L.length mds
 
-filterAndMono :: [(DataCon,[(IsBoxed,Scheme Ty0)])] -> [(DataCon,[(IsBoxed,Ty0)])]
+filterAndMono :: [(DataCon,[(IsBoxed,TyScheme Ty0)])] -> [(DataCon,[(IsBoxed,Ty0)])]
 filterAndMono ds =
   L.foldr mono [] $ L.filter isMono ds
   where mono = (\ d acc ->

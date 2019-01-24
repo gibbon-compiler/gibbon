@@ -2,7 +2,7 @@
 
 # Responds to environment variables:
 #   * DOCKER
-#   * STACKARGS 
+#   * STACKARGS
 #   * PAR
 #   * LLVM
 
@@ -34,6 +34,7 @@ top=`pwd`
 hostname || echo "No hostname command, env says $HOSTNAME"
 uname -a
 which -a stack
+which -a ghc
 which -a racket
 which -a gcc
 stack --version | head
@@ -56,7 +57,7 @@ echo "----------------------------------------"
 set -x
 
 # First the core #lang implementation:
-cd $top/; make racket 
+cd $top/; make racket
 
 
 set +x; echo
@@ -106,10 +107,10 @@ set -x
 cd $top/gibbon-compiler
 
 if [ "$LLVM_ENABLED" == "1" ]; then
-  echo "Building Gibbon with LLVM enabled"
-  $STK test --flag gibbon:llvm_enabled $STACKARGS $MKPARARGS
+    echo "Building Gibbon with LLVM enabled"
+    $STK test --flag gibbon:llvm_enabled $STACKARGS $MKPARARGS
 else
-  $STK test "$STACKARGS" $MKPARARGS
+    $STK test "$STACKARGS" $MKPARARGS
 fi
 
 echo "  Gibbon Compiler (2/2): compiler test suite"
@@ -124,21 +125,21 @@ $STK exec test-gibbon-examples -- -v2
 # [2017.04.24] TEMP: Disabling below here while the compiler is under construction.
 exit 0
 
-if [ "$NOBINTREE" != "1" ]; then 
-  set +x; echo
-  echo "  Bintree Microbench:"
-  echo "----------------------------------------"
-  set -x
-  cd $top/BintreeBench
-  if [ "$DOCKER" == "1" ]; then
-      echo "Building under Docker, FULL benchmark set."
-      make $MKPARARGS
-      make run_small
-  else
-      echo "Not under Docker. Don't do a full Bintree build, it requires too many toolchains."
-      make c ghc -j
-      make run_small_core
-  fi
+if [ "$NOBINTREE" != "1" ]; then
+    set +x; echo
+    echo "  Bintree Microbench:"
+    echo "----------------------------------------"
+    set -x
+    cd $top/BintreeBench
+    if [ "$DOCKER" == "1" ]; then
+        echo "Building under Docker, FULL benchmark set."
+        make $MKPARARGS
+        make run_small
+    else
+        echo "Not under Docker. Don't do a full Bintree build, it requires too many toolchains."
+        make c ghc -j
+        make run_small_core
+    fi
 fi
 
 
@@ -152,4 +153,3 @@ fi
 # # TODO: Move to common:
 # cd $top/ASTBenchmarks/common/c/
 # make check
-

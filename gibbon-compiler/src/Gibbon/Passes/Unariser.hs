@@ -8,7 +8,6 @@ import qualified Data.List as L
 import Gibbon.Common
 import Gibbon.L1.Syntax
 import Gibbon.L3.Syntax
-import Gibbon.GenericOps
 
 
 -- | This pass gets ready for Lower by converting most uses of

@@ -9,21 +9,21 @@ import qualified Data.Map as M
 import qualified Data.List as L
 
 import Gibbon.Common
-import Gibbon.L1.Syntax as L1
+import Gibbon.L1.Syntax
 
 
 -- FIXME: Naughty to use lists as maps.  Use something with O(N)
 -- lookup.  We should standardize on a fast symbol-map.
 
 -- | Rename all local variables.
-freshNames :: L1.Prog1 -> PassM L1.Prog1
-freshNames (L1.Prog defs funs main) =
+freshNames :: Prog1 -> PassM Prog1
+freshNames (Prog defs funs main) =
     do main' <- case main of
                   Nothing -> return Nothing
                   Just (m,ty) -> do m' <- freshExp [] m
                                     return $ Just (m',ty)
        funs' <- freshFuns funs
-       return $ L1.Prog defs funs' main'
+       return $ Prog defs funs' main'
     where freshFuns m = M.fromList <$> mapM freshFun (M.toList m)
           freshFun (nam, FunDef _ narg (targ,ty) bod) =
               do narg' <- gensym narg
@@ -31,47 +31,47 @@ freshNames (L1.Prog defs funs main) =
                  let nam' = cleanFunName nam
                  return (nam', FunDef nam' narg' (targ,ty) bod')
 
-          freshExp :: [(Var,Var)] -> L Exp1 -> PassM (L L1.Exp1)
+          freshExp :: [(Var,Var)] -> L Exp1 -> PassM (L Exp1)
           freshExp vs (L sloc exp) = fmap (L sloc) $
             case exp of
-              L1.Ext _     -> return exp
-              L1.LitE i    -> return $ L1.LitE i
-              L1.LitSymE v -> return $ L1.LitSymE v
+              Ext _     -> return exp
+              LitE i    -> return $ LitE i
+              LitSymE v -> return $ LitSymE v
 
-              L1.VarE v ->
+              VarE v ->
                 case lookup v vs of
-                  Nothing -> return $ L1.VarE v
-                  Just v' -> return $ L1.VarE v'
+                  Nothing -> return $ VarE v
+                  Just v' -> return $ VarE v'
 
-              L1.AppE v ls e -> assert ([] == ls) $ do
+              AppE v ls e -> assert ([] == ls) $ do
                 e' <- freshExp vs e
-                return $ L1.AppE (cleanFunName v) [] e'
+                return $ AppE (cleanFunName v) [] e'
 
-              L1.PrimAppE p es -> do
+              PrimAppE p es -> do
                 es' <- mapM (freshExp vs) es
-                return $ L1.PrimAppE p es'
+                return $ PrimAppE p es'
 
-              L1.LetE (v,ls,t, e1) e2 -> assert ([]==ls) $ do
+              LetE (v,ls,t, e1) e2 -> assert ([]==ls) $ do
                 e1' <- freshExp vs e1
                 v'  <- gensym v
                 e2' <- freshExp ((v,v'):vs) e2
-                return $ L1.LetE (v',[],t,e1') e2'
+                return $ LetE (v',[],t,e1') e2'
 
-              L1.IfE e1 e2 e3 -> do
+              IfE e1 e2 e3 -> do
                 e1' <- freshExp vs e1
                 e2' <- freshExp vs e2
                 e3' <- freshExp vs e3
-                return $ L1.IfE e1' e2' e3'
+                return $ IfE e1' e2' e3'
 
-              L1.ProjE i e -> do
+              ProjE i e -> do
                 e' <- freshExp vs e
-                return $ L1.ProjE i e'
+                return $ ProjE i e'
 
-              L1.MkProdE es -> do
+              MkProdE es -> do
                 es' <- mapM (freshExp vs) es
-                return $ L1.MkProdE es'
+                return $ MkProdE es'
 
-              L1.CaseE e mp -> do
+              CaseE e mp -> do
                 e' <- freshExp vs e
                 -- Here we freshen locations:
                 mp' <- mapM (\(c,prs,ae) ->
@@ -81,26 +81,26 @@ freshNames (L1.Prog defs funs main) =
                                let vs' = (zip args args') ++ vs
                                ae' <- freshExp vs' ae
                                return (c, L.map (,()) args', ae')) mp
-                return $ L1.CaseE e' mp'
+                return $ CaseE e' mp'
 
-              L1.DataConE () c es -> do
+              DataConE () c es -> do
                 es' <- mapM (freshExp vs) es
-                return $ L1.DataConE () c es'
+                return $ DataConE () c es'
 
-              L1.TimeIt e t b -> do
+              TimeIt e t b -> do
                 e' <- freshExp vs e
-                return $ L1.TimeIt e' t b
+                return $ TimeIt e' t b
 
               ParE a b -> do
                 ParE <$> freshExp vs a <*> freshExp vs b
 
-              L1.MapE (v,t,b) e -> do
+              MapE (v,t,b) e -> do
                 b' <- freshExp vs b
                 e' <- freshExp vs e
-                return $ L1.MapE (v,t,b') e'
+                return $ MapE (v,t,b') e'
 
-              L1.FoldE (v1,t1,e1) (v2,t2,e2) e3 -> do
+              FoldE (v1,t1,e1) (v2,t2,e2) e3 -> do
                 e1' <- freshExp vs e1
                 e2' <- freshExp vs e2
                 e3' <- freshExp vs e3
-                return $ L1.FoldE (v1,t1,e1') (v2,t2,e2') e3'
+                return $ FoldE (v1,t1,e1') (v2,t2,e2') e3'

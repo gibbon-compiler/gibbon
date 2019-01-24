@@ -39,6 +39,7 @@ import           Gibbon.Common
 import           Gibbon.Interp
 import           Gibbon.DynFlags
 import qualified Gibbon.HaskellFrontend as HS
+import qualified Gibbon.L0.Syntax as L0
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
 -- import qualified Gibbon.L3.Syntax as L3
@@ -48,6 +49,9 @@ import qualified Gibbon.L1.Interp as SI
 import           Gibbon.TargetInterp (Val (..), execProg)
 
 -- Compiler passes
+import qualified Gibbon.L0.Freshen   as L0
+import qualified Gibbon.L0.Typecheck as L0
+import qualified Gibbon.L0.Specialize2 as L0
 import qualified Gibbon.L1.Typecheck as L1
 import qualified Gibbon.L2.Typecheck as L2
 import qualified Gibbon.L3.Typecheck as L3
@@ -200,8 +204,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   setDebugEnvVar verbosity
 
   -- parse the input file
-  (parsed, fp) <- parseInput input fp0
-  (l1, cnt0) <- parsed
+  ((l1, cnt0), fp) <- parseInput input fp0
 
   case mode of
     Interp1 -> runL1 l1
@@ -277,17 +280,17 @@ setDebugEnvVar verbosity =
 
 
 -- |
-parseInput :: Input -> FilePath -> IO (IO (L1.Prog1, Int), FilePath)
+parseInput :: Input -> FilePath -> IO ((L1.Prog1, Int), FilePath)
 parseInput ip fp =
   case ip of
-    Haskell -> return (HS.parseFile fp, fp)
-    SExpr   -> return (SExp.parseFile fp, fp)
+    Haskell -> (, fp) <$> hs_hack
+    SExpr   -> (, fp) <$> SExp.parseFile fp
     Unspecified ->
       case takeExtension fp of
-        ".hs"   -> return (HS.parseFile fp, fp)
-        ".sexp" -> return (SExp.parseFile fp, fp)
-        ".rkt"  -> return (SExp.parseFile fp, fp)
-        ".gib"  -> return (SExp.parseFile fp, fp)
+        ".hs"   -> (, fp) <$> hs_hack
+        ".sexp" -> (, fp) <$> SExp.parseFile fp
+        ".rkt"  -> (, fp) <$> SExp.parseFile fp
+        ".gib"  -> (, fp) <$> SExp.parseFile fp
         oth -> do
           -- A silly hack just out of sheer laziness vis-a-vis tab completion:
           let f1 = fp ++ ".gib"
@@ -295,11 +298,24 @@ parseInput ip fp =
           f1' <- doesFileExist f1
           f2' <- doesFileExist f2
           if f1' && oth == ""
-            then return (SExp.parseFile f1, f2)
+            then (,f2) <$> SExp.parseFile f1
             else if f2' && oth == "."
-                   then return (SExp.parseFile f2, f2)
+                   then (,f2) <$> SExp.parseFile f1
                    else error$ "compile: unrecognized file extension: "++
                         show oth++"  Please specify compile input format."
+
+  where hs_hack :: IO (L1.Prog1, Int)
+        hs_hack = do pm_l0 <- HS.parseFile fp
+                     let passes = do
+                           l0 <- pm_l0
+                           l0 <- L0.freshNames l0
+                           -- dbgTraceIt ("Freshen:\n" ++ sdoc l0) (pure ())
+                           l0 <- L0.tcProg l0
+                           -- dbgTraceIt ("Typechecked:\n" ++ sdoc l0) (pure ())
+                           l1 <- L0.l0ToL1 l0
+                           -- dbgTraceIt ("Specialized:\n" ++ sdoc l1) (pure ())
+                           pure l1
+                     pure $ runPassM defaultConfig 0 passes
 
 
 -- |
@@ -380,7 +396,9 @@ compilationCmd LLVM _   = "clang-5.0 lib.o "
 compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++(if bumpAlloc then "-DBUMPALLOC " else "")
                           ++(if pointer then "-D_POINTER " else "")
-                          ++"-fcilkplus -lcilkrts"
+                          -- [2018.12.03] CSK: Skip Cilk stuff for now.
+                          -- Eventually, all the Cilk stuff should be behind a flag.
+                          -- ++"-fcilkplus -lcilkrts"
                           ++(optc config)++"  "
                           ++(if warnc then "" else suppress_warnings)
   where dflags = dynflags config

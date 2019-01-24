@@ -1,21 +1,18 @@
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_GHC -Wno-type-defaults #-}
-
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE QuasiQuotes        #-}
-{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell    #-}
 
 -- | The final pass of the compiler: generate C code.
 
 module Gibbon.Passes.Codegen
-  ( codegenProg, harvestStructTys, makeName, rewriteReturns
-  ) where
+  ( codegenProg, harvestStructTys, makeName, rewriteReturns ) where
 
 import           Control.Monad
 import           Data.Bifunctor (first)
 import           Data.Int
-import           Data.Loc -- For SrcLoc
+import           Data.Loc
 import           Data.Maybe
 import           Data.List as L
 import qualified Data.Set as S
@@ -29,7 +26,9 @@ import           Text.PrettyPrint.Mainland
 import           Text.PrettyPrint.Mainland.Class
 
 import           Gibbon.Common
+import qualified Gibbon.Language as GL
 import           Gibbon.DynFlags
+import           Gibbon.L2.Syntax ( Multiplicity(..) )
 import           Gibbon.L4.Syntax
 
 --------------------------------------------------------------------------------
@@ -459,14 +458,16 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                                  [(TagTriv tag),(VarTriv cur)] = rnds in pure
                              [ C.BlockStm [cstm| *($id:cur) = $tag; |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:cur + 1; |] ]
-                 WriteInt -> let [(outV,CursorTy)] = bnds
-                                 [val,(VarTriv cur)] = rnds in pure
-                             [ C.BlockStm [cstm| *( $ty:(codegenTy IntTy)  *)($id:cur) = $(codegenTriv val); |]
-                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy IntTy) ); |] ]
                  ReadTag -> let [(tagV,TagTyPacked),(curV,CursorTy)] = bnds
                                 [(VarTriv cur)] = rnds in pure
                             [ C.BlockDecl [cdecl| $ty:(codegenTy TagTyPacked) $id:tagV = *($id:cur); |]
                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:curV = $id:cur + 1; |] ]
+
+                 WriteInt -> let [(outV,CursorTy)] = bnds
+                                 [val,(VarTriv cur)] = rnds in pure
+                             [ C.BlockStm [cstm| *( $ty:(codegenTy IntTy)  *)($id:cur) = $(codegenTriv val); |]
+                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy IntTy) ); |] ]
+
                  ReadInt -> let [(valV,valTy),(curV,CursorTy)] = bnds
                                 [(VarTriv cur)] = rnds in pure
                             [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
@@ -483,6 +484,16 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                                  [ C.BlockStm [cstm| *( $ty:(codegenTy CursorTy)  *)($id:cur) = $(codegenTriv val); |]
                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + 8; |] ]
 
+                 ReadBool    -> let [(valV,valTy),(curV,CursorTy)] = bnds
+                                    [(VarTriv cur)] = rnds in pure
+                                [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
+                                , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:curV = ($id:cur) + sizeof( $ty:(codegenTy BoolTy) ); |] ]
+
+                 WriteBool   -> let [(outV,CursorTy)] = bnds
+                                    [val,(VarTriv cur)] = rnds in pure
+                                [ C.BlockStm [cstm| *( $ty:(codegenTy BoolTy)  *)($id:cur) = $(codegenTriv val); |]
+                                , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy BoolTy) ); |] ]
+
                  BumpRefCount -> let [(VarTriv end_r1), (VarTriv end_r2)] = rnds
                                  in pure [ C.BlockStm [cstm| bump_ref_count($id:end_r1, $id:end_r2); |] ]
 
@@ -495,7 +506,7 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_start = $id:new_chunk.start_ptr; |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_end = $id:new_chunk.end_ptr; |]
                              , C.BlockStm  [cstm|  $id:bound = $id:chunk_end; |]
-                             , C.BlockStm  [cstm|  *($ty:(codegenTy TagTyPacked) *) ($id:cur) = ($int:redirectionAlt); |]
+                             , C.BlockStm  [cstm|  *($ty:(codegenTy TagTyPacked) *) ($id:cur) = ($int:(GL.redirectionAlt)); |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) redir =  $id:cur + 1; |]
                              , C.BlockStm  [cstm|  *($ty:(codegenTy CursorTy) *) redir = $id:chunk_start; |]
                              , C.BlockStm  [cstm|  $id:cur = $id:chunk_start; |]
@@ -539,7 +550,7 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                              let filename = case mfile of
                                               Just f  -> [cexp| $string:f |] -- Fixed at compile time.
                                               Nothing -> [cexp| read_benchfile_param() |] -- Will be set by command line arg.
-                                 unpackName = mkUnpackerName tyc
+                                 unpackName = GL.mkUnpackerName tyc
                                  unpackcall = LetCallT False [(outV,PtrTy),(toVar "junk",CursorTy)]
                                                     unpackName [VarTriv (toVar "ptr")] (AssnValsT [] Nothing)
 
@@ -647,6 +658,7 @@ genSwitch lbl tr alts lastE ty =
 --
 codegenTy :: Ty -> C.Type
 codegenTy IntTy = [cty|typename IntTy|]
+codegenTy BoolTy = [cty|typename BoolTy|]
 codegenTy TagTyPacked = [cty|typename TagTyPacked|]
 codegenTy TagTyBoxed  = [cty|typename TagTyBoxed|]
 codegenTy SymTy = [cty|typename SymTy|]
@@ -664,6 +676,7 @@ makeName tys = concatMap makeName' tys ++ "Prod"
 
 makeName' :: Ty -> String
 makeName' IntTy = "Int64"
+makeName' BoolTy = "Bool"
 makeName' CursorTy = "Cursor"
 makeName' TagTyPacked = "Tag"
 -- makeName' TagTyBoxed  = "Btag"

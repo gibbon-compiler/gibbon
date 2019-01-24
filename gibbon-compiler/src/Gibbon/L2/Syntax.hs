@@ -18,8 +18,9 @@ module Gibbon.L2.Syntax
     , Prog2, FunDef2, FunDefs2, Exp2, E2, Ty2
     , Effect(..), ArrowTy2(..) , LocRet(..), LocExp, PreLocExp(..)
 
-    -- * Re-exports
-    , PreExp(..), UrTy(..), pattern SymTy
+    -- * Regions and locations
+    , LocVar, Region(..), Modality(..), LRM(..), dummyLRM
+    , Multiplicity(..), regionToVar
 
     -- * Operations on types
     , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substLoc
@@ -28,6 +29,8 @@ module Gibbon.L2.Syntax
 
     -- * Other helpers
     , revertToL1, occurs, mapPacked, depList
+
+    , module Gibbon.Language
     )
     where
 
@@ -39,39 +42,36 @@ import Data.Map as M
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
-import Gibbon.GenericOps
-import Gibbon.L1.Syntax hiding (mapExprs, progToEnv, fundefs, getFunTy)
-import qualified Gibbon.L1.Syntax as L1
+import Gibbon.Language
+import Text.PrettyPrint.HughesPJ
+import Gibbon.L1.Syntax
 
 --------------------------------------------------------------------------------
 
--- | Here we only change the types of FUNCTIONS:
-type Prog2 = L1.Prog (L Exp2)
+type Prog2 = Prog (L Exp2)
 
--- | A function definition with the function's effects.
-type FunDef2 = L1.FunDef (L Exp2)
+type FunDef2 = FunDef (L Exp2)
 
-type FunDefs2 = L1.FunDefs (L Exp2)
+type FunDefs2 = FunDefs (L Exp2)
 
--- | Function types now have a way to talk about locations and traversal effects.
+-- | Function types know about locations and traversal effects.
 instance FunctionTy Ty2 where
   type ArrowTy Ty2 = ArrowTy2
   inTy = arrIn
   outTy = arrOut
 
--- | Extended expressions, L2.  Monomorphic.
+-- | Extended expressions, L2.
 --
 --   By adding a `LocVar` decoration, all data constructors,
 --   applications, and bindings gain a location annotation.
 type Exp2 = E2 LocVar Ty2
 
 -- | L1 Types extended with abstract Locations.
-type Ty2 = L1.UrTy LocVar
+type Ty2 = UrTy LocVar
 
 --------------------------------------------------------------------------------
 
--- | L1 expressions extended with L2.  This is the polymorphic version.
--- Shorthand for recursions above.
+-- | Shorthand for recursions.
 type E2 l d = PreExp E2Ext l d
 
 -- | The extension that turns L1 into L2.
@@ -86,8 +86,6 @@ data E2Ext loc dec =
 
 -- | Define a location in terms of a different location.
 data PreLocExp loc = StartOfLE Region
-                   -- Can't attach haddocks to data constructor arguments with < GHC 8.4.2
-                   -- See https://github.com/haskell/haddock/pull/709.
                    | AfterConstantLE Int -- Number of bytes after.
                                     loc  -- Location which this location is offset from.
                    | AfterVariableLE Var -- Name of variable v. This loc is size(v) bytes after.
@@ -117,7 +115,7 @@ instance FreeVars (E2Ext l d) where
 
 instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
   type LocOf (E2Ext l d) = l
-  type TyOf (E2Ext l d)  = UrTy l
+  type TyOf (E2Ext l d)  = d
   isTrivial e =
     case e of
       LetRegionE{} -> False
@@ -189,7 +187,87 @@ data Effect = Traverse LocVar
               -- of the value living at this location.
   deriving (Read,Show,Eq,Ord, Generic, NFData)
 
------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+--
+-- See https://github.com/iu-parfunc/gibbon/issues/79 for more details
+-- | Region variants (multiplicities)
+data Multiplicity
+    = Bounded     -- ^ Contain a finite number of values and can be
+                  --   stack-allocated.
+
+    | Infinite    -- ^ Consist of a linked list of buffers, spread
+                  --   throughout memory (though possible constrained
+                  --   to 4GB regions). Writing into these regions requires
+                  --   bounds-checking. The buffers can start very small
+                  --   at the head of the list, but probably grow
+                  --   geometrically in size, making the cost of traversing
+                  --   all of them logarithmic.
+
+    | BigInfinite -- ^ These regions are infinite, but also have the
+                  --   expectation of containing many values. Thus we give
+                  --   them large initial page sizes. This is also could be
+                  --   the appropriate place to use mmap to grow the region
+                  --   and to establish guard places.
+  deriving (Read,Show,Eq,Ord,Generic)
+
+instance Out Multiplicity where
+  doc = text . show
+
+instance NFData Multiplicity where
+  rnf _ = ()
+
+-- | An abstract region identifier.  This is used inside type signatures and elsewhere.
+data Region = GlobR Var Multiplicity -- ^ A global region with lifetime equal to the
+                                     --   whole program.
+            | DynR Var Multiplicity  -- ^ A dynamic region that may be created or
+                                     --   destroyed, tagged by an identifier.
+            | VarR Var               -- ^ A region metavariable that can range over
+                                     --   either global or dynamic regions.
+            | MMapR Var              -- ^ A region that doesn't result in an (explicit)
+                                     --   memory allocation. It merely ensures that there
+                                     --   are no free locations in the program.
+  deriving (Read,Show,Eq,Ord, Generic)
+
+instance Out Region
+
+instance NFData Region where
+  rnf (GlobR v _) = rnf v
+  rnf (DynR v _)  = rnf v
+  rnf (VarR v)    = rnf v
+  rnf (MMapR v)   = rnf v
+
+-- | The modality of locations and cursors: input/output, for reading
+-- and writing, respectively.
+data Modality = Input | Output
+  deriving (Read,Show,Eq,Ord, Generic)
+instance Out Modality
+instance NFData Modality where
+  rnf Input  = ()
+  rnf Output = ()
+
+-- | A location and region, together with modality.
+data LRM = LRM { lrmLoc :: LocVar
+               , lrmReg :: Region
+               , lrmMode :: Modality }
+  deriving (Read,Show,Eq,Ord, Generic)
+
+instance Out LRM
+
+instance NFData LRM where
+  rnf (LRM a b c)  = rnf a `seq` rnf b `seq` rnf c
+
+-- | A designated doesn't-really-exist-anywhere location.
+dummyLRM :: LRM
+dummyLRM = LRM "l_dummy" (VarR "r_dummy") Input
+
+regionToVar :: Region -> Var
+regionToVar r = case r of
+                  GlobR v _ -> v
+                  DynR  v _ -> v
+                  VarR  v   -> v
+                  MMapR v   -> v
+
+--------------------------------------------------------------------------------
 -- Do this manually to get prettier formatting: (Issue #90)
 
 instance Out ArrowTy2
@@ -197,7 +275,6 @@ instance Out Effect
 instance Out a => Out (Set a) where
   docPrec n x = docPrec n (S.toList x)
   doc x = doc (S.toList x)
-instance Out Prog2
 instance (Out l, Out d) => Out (E2Ext l d)
 instance Out l => Out (PreLocExp l)
 instance Out LocRet
@@ -301,9 +378,9 @@ locsInTy ty =
 
 -- Because L2 just adds a bit of metadata and enriched types, it is
 -- possible to strip it back down to L1.
-revertToL1 :: Prog2 -> L1.Prog1
+revertToL1 :: Prog2 -> Prog1
 revertToL1 Prog{ddefs,fundefs,mainExp} =
-  L1.Prog ddefs' funefs' mainExp'
+  Prog ddefs' funefs' mainExp'
   where
     ddefs'   = M.map revertDDef ddefs
     funefs'  = M.map revertFunDef fundefs
@@ -312,19 +389,20 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
                  Just (e,ty) -> Just (revertExp e, stripTyLocs ty)
 
     revertDDef :: DDef Ty2 -> DDef Ty1
-    revertDDef (DDef a b) =
-      DDef a (L.filter (\(dcon,_) -> not $ isIndirectionTag dcon) $
-              L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
+    revertDDef (DDef tyargs a b) =
+      DDef tyargs a
+        (L.filter (\(dcon,_) -> not $ isIndirectionTag dcon) $
+         L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
 
-    revertFunDef :: FunDef2 -> L1.FunDef1
+    revertFunDef :: FunDef2 -> FunDef1
     revertFunDef FunDef{funName,funArg,funTy,funBody} =
-      L1.FunDef { funName = funName
-                , funArg  = funArg
-                , funTy   = (stripTyLocs (arrIn funTy), stripTyLocs (arrOut funTy))
-                , funBody = revertExp funBody
-                }
+      FunDef { funName = funName
+             , funArg  = funArg
+             , funTy   = (stripTyLocs (arrIn funTy), stripTyLocs (arrOut funTy))
+             , funBody = revertExp funBody
+             }
 
-    revertExp :: L Exp2 -> L L1.Exp1
+    revertExp :: L Exp2 -> L Exp1
     revertExp (L p ex) = L p $
       case ex of
         VarE v    -> VarE v
@@ -357,43 +435,15 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
 
     -- Ugh .. this is bad. Can we remove the identity cases here ?
     -- TODO: Get rid of this (and L3.toL3Prim) soon.
-    revertPrim :: Prim Ty2 -> Prim L1.Ty1
-    revertPrim pr =
-      case pr of
-        AddP      -> AddP
-        SubP      -> SubP
-        MulP      -> MulP
-        DivP      -> DivP
-        ModP      -> ModP
-        ExpP      -> ExpP
-        RandP     -> RandP
-        EqSymP    -> EqSymP
-        EqIntP    -> EqIntP
-        LtP       -> LtP
-        GtP       -> GtP
-        LtEqP     -> LtEqP
-        GtEqP     -> GtEqP
-        OrP       -> OrP
-        AndP      -> AndP
-        MkTrue    -> MkTrue
-        MkFalse   -> MkFalse
-        SizeParam -> SizeParam
-        SymAppend -> SymAppend
-        DictInsertP ty -> DictInsertP (stripTyLocs ty)
-        DictLookupP ty -> DictLookupP (stripTyLocs ty)
-        DictEmptyP  ty -> DictEmptyP  (stripTyLocs ty)
-        DictHasKeyP ty -> DictHasKeyP (stripTyLocs ty)
-        ErrorP s ty    -> ErrorP s (stripTyLocs ty)
-        ReadPackedFile fp tycon reg ty -> ReadPackedFile fp tycon reg (stripTyLocs ty)
-        PEndOf -> error "Do not use PEndOf after L2."
+    revertPrim :: Prim Ty2 -> Prim Ty1
+    revertPrim pr = fmap stripTyLocs pr
 
-    docase :: (DataCon, [(Var,LocVar)], L Exp2) -> (DataCon, [(Var,())], L L1.Exp1)
+    docase :: (DataCon, [(Var,LocVar)], L Exp2) -> (DataCon, [(Var,())], L Exp1)
     docase (dcon,vlocs,rhs) =
       let (vars,_) = unzip vlocs
       in (dcon, zip vars (repeat ()), revertExp rhs)
 
-
--- | Does a variable occurs in an expression ?
+-- | Does a variable occur in an expression ?
 occurs :: S.Set Var -> L Exp2 -> Bool
 occurs w (L _ ex) =
   case ex of

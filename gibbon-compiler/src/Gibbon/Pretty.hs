@@ -6,41 +6,41 @@
 
 module Gibbon.Pretty ( Printer(..), Pretty(..)) where
 
-import Prelude hiding ((<>))
-import Data.Loc
-import Data.Text (unpack)
-import Text.PrettyPrint.HughesPJ as PP
-import Text.PrettyPrint.GenericPretty
+import           Prelude hiding ((<>))
+import           Data.Loc
+import           Data.Text (unpack)
+import           Text.PrettyPrint as PP
+import           Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
 
-import Gibbon.L1.Syntax
-import Gibbon.L2.Syntax as L2
-import Gibbon.L3.Syntax as L3
-import Gibbon.Common
-import Gibbon.GenericOps
-import Gibbon.SExpFrontend (primMap)
+import qualified Gibbon.L0.Syntax as L0
+import           Gibbon.L1.Syntax
+import           Gibbon.L2.Syntax as L2
+import           Gibbon.L3.Syntax as L3
+import           Gibbon.Common
+import           Gibbon.SExpFrontend (primMap)
 import qualified Gibbon.L4.Syntax as L4
 
 class Printer a where
     pprinter :: a -> String
 
-instance (Pretty ex, Pretty (ArrowTy (TyOf ex))) => Printer (Prog ex) where
+instance (Pretty ex, Pretty (TyOf ex), Pretty (ArrowTy (TyOf ex))) => Printer (Prog ex) where
     pprinter (Prog _ funs me) =
         let meDoc = case me of
                       Nothing -> empty
-                      Just (e,_) -> renderMain $ pprint e
+                      Just (e,ty) -> renderMain (pprint e) (pprint ty)
             funsDoc = vcat $ map renderfunc $ M.elems funs
         in render $ funsDoc $+$ meDoc
 
 instance Printer L4.Prog where
     pprinter = show -- TODO: implement pretty printing for L4
 
-doubleColon :: Doc
-doubleColon = colon <> colon
+doublecolon :: Doc
+doublecolon = colon <> colon
 
 renderfunc :: forall ex. (Pretty ex, Pretty (ArrowTy (TyOf ex)))
            => FunDef ex -> Doc
-renderfunc FunDef{funName,funArg,funTy,funBody} = text (fromVar funName) <+> doubleColon <+> pprint funTy $$
+renderfunc FunDef{funName,funArg,funTy,funBody} = text (fromVar funName) <+> doublecolon <+> pprint funTy $$
                                                   renderBod <> text "\n"
     where
       renderBod :: Doc
@@ -60,11 +60,12 @@ instance Pretty ArrowTy2 where
 -- renderFnTy :: forall ex. (Pretty ex, Pretty (TyOf ex), FunctionTy (TyOf ex), Pretty (ArrowTy (TyOf ex)))
 --            => FunDef ex -> Doc
 -- renderFnTy FunDef{funTy,funName} =
---     text (fromVar funName) <+> doubleColon <+> pprint (inTy @(TyOf ex) funTy) <+>
+--     text (fromVar funName) <+> doublecolon <+> pprint (inTy @(TyOf ex) funTy) <+>
 --     text "->" <+> pprint (outTy @(TyOf ex) funTy)
 
-renderMain :: Doc -> Doc
-renderMain m = text "main" <+> equals $$ nest 4 m
+renderMain :: Doc -> Doc -> Doc
+renderMain m ty = text "main" <+> doublecolon <+> ty
+                    $$ text "main" <+> equals $$ nest 4 m
 
 class Pretty e where
     pprint :: e -> Doc
@@ -75,7 +76,7 @@ instance Pretty (NoExt l d) where
 instance Pretty (PreExp e l d) => Pretty (L (PreExp e l d)) where
     pprint (L _ e) = pprint e
 
-instance (Show l, Ord l, Out l) => Pretty (Prim (UrTy l)) where
+instance (Out d, Show d, Ord d) => Pretty (Prim d) where
     pprint pr =
         -- We add PEndOf here because it's not exposed to the users, and as a result,
         -- is not defined as a primop in the parser primMap.
@@ -83,8 +84,11 @@ instance (Show l, Ord l, Out l) => Pretty (Prim (UrTy l)) where
                          M.fromList (map (\(a,b) -> (b,a)) (M.toList primMap))
         in text (unpack (renderPrim # pr))
 
-instance (Show l, Out l, Eq l, Ord l, Pretty (e l (UrTy l)), Expression (e l (UrTy l)), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)), Pretty (UrTy l), Pretty l) => Pretty (PreExp e l (UrTy l)) where
-    pprint ex0 =
+instance (Show l, Out l, Ord l, Pretty (e l (UrTy l)), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)), Pretty (UrTy l), Pretty l) => Pretty (PreExp e l (UrTy l)) where
+    pprint ex0 = pprintExp (l$ ex0)
+
+pprintExp :: (Out l, Show l, Show d, Out d, Ord d, Pretty (e l d), Pretty l, Pretty d, Pretty (Prim d)) => L (PreExp e l d) -> Doc
+pprintExp (L _ ex0) =
         case ex0 of
           VarE v -> doc v
           LitE i -> int i
@@ -94,52 +98,80 @@ instance (Show l, Out l, Eq l, Ord l, Pretty (e l (UrTy l)), Expression (e l (Ur
                             (if isEmpty docMoreLocs
                             then empty
                             else brackets docMoreLocs) <+>
-                            (pprint e)
+                            (pprintExp e)
           PrimAppE pr es ->
               case pr of
                   _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP, SymAppend] ->
                       let [a1,a2] = es
-                      in pprint a1 <+> pprint pr <+> pprint a2
+                      in pprintExp a1 <+> pprint pr <+> pprintExp a2
 
                   _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprint pr
 
-                  _ -> pprint pr <> parens (hsep $ map pprint es)
+                  _ -> pprint pr <> parens (hsep $ map pprintExp es)
 
           LetE (v,ls,ty,e1) e2 -> text "let" <+>
-                                  doc v <+> colon <+>
+                                  doc v <+> doublecolon <+>
                                   brackets (hcat (punctuate comma (map doc ls))) <+>
                                   pprint ty <+>
                                   equals <+>
-                                  pprint e1 <+>
+                                  pprintExp e1 <+>
                                   text "in" $+$
-                                  pprint e2
+                                  pprintExp e2
           IfE e1 e2 e3 -> text "if" <+>
-                          pprint e1 $+$
+                          pprintExp e1 $+$
                           text "then" <+>
-                          pprint e2 $+$
+                          pprintExp e2 $+$
                           text "else" <+>
-                          pprint e3
-          MkProdE es -> lparen <> hcat (punctuate (text ",") (map pprint es)) <> rparen
-          ProjE i e -> text "#" <> int i <+> pprint e
-          CaseE e bnds -> text "case" <+> pprint e <+> text "of" $+$
+                          pprintExp e3
+          MkProdE es -> lparen <> hcat (punctuate (text ", ") (map pprintExp es)) <> rparen
+          ProjE i e -> text "#" <> int i <+> pprintExp e
+          CaseE e bnds -> text "case" <+> pprintExp e <+> text "of" $+$
                           nest 4 (vcat $ map dobinds bnds)
           DataConE l dc es -> text dc <+>
                               (if isEmpty (pprint l)
                                then empty
                                else doc l) <+>
-                              lparen <> hcat (punctuate (text ",") (map pprint es)) <> rparen
-          TimeIt e _ty _b -> text "timeit" <+> parens (pprint e)
-          ParE a b -> pprint a <+> text "||" <+> pprint b
+                              lparen <> hcat (punctuate (text ",") (map pprintExp es)) <> rparen
+          TimeIt e _ty _b -> text "timeit" <+> parens (pprintExp e)
+          ParE a b -> pprintExp a <+> text "||" <+> pprintExp b
           Ext ext -> pprint ext
-          MapE{} -> error $ "Unexpected form in program: " ++ show ex0
-          FoldE{} -> error $ "Unexpected form in program: " ++ show ex0
+          MapE{} -> error $ "Unexpected form in program: MapE"
+          FoldE{} -> error $ "Unexpected form in program: FoldE"
         where
           dobinds (dc,vls,e) = text dc <+> hcat (punctuate (text " ")
                                                            (map (\(v,l) -> if isEmpty (pprint l)
                                                                            then doc v
-                                                                           else doc v <> colon <> doc l)
+                                                                           else doc v <> doublecolon <> doc l)
                                                             vls))
-                               <+> text "->" $+$ nest 4 (pprint e)
+                               <+> text "->" $+$ nest 4 (pprintExp e)
+
+
+instance Pretty L0.Ty0 where
+  pprint ty =
+      case ty of
+        L0.IntTy   -> text "Int"
+        L0.BoolTy  -> text "Bool"
+        L0.TyVar v -> doc v
+        L0.MetaTv v -> doc v
+        L0.ProdTy tys -> parens $ hcat $ punctuate "," $ map pprint tys
+        L0.SymDictTy ty -> text "Dict" <+> pprint ty
+        L0.ArrowTy a b  -> pprint a <+> text "->" <+> pprint b
+        L0.PackedTy tc l -> text "Packed" <+> text tc <+> brackets (hcat (map pprint l))
+        L0.ListTy ty -> brackets (pprint ty)
+
+instance Pretty L0.TyScheme where
+  pprint (L0.ForAll tvs ty) = text "forall" <+> hsep (map doc tvs) <+> text "." <+> pprint ty
+
+-- Oh no, all other generic PreExp things are defined over (PreExp e l (UrTy l)).
+instance Pretty (PreExp L0.E0Ext () L0.Ty0) where
+  pprint ex0 = pprintExp (l$ ex0)
+
+instance Pretty (L0.E0Ext () L0.Ty0) where
+  pprint ex0 =
+    case ex0 of
+      L0.LambdaE (v,ty) bod -> parens (text "\\" <+> doc v <+> doublecolon <+> pprint ty <+> text " -> "
+                                         $$ nest 4 (pprint bod))
+      L0.PolyAppE{} -> doc ex0
 
 instance (Show l, Out l, Pretty (L (L2.E2 l (UrTy l)))) => Pretty (L2.E2Ext l (UrTy l)) where
     pprint ex0 =

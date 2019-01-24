@@ -22,8 +22,10 @@ import           GHC.Generics (Generic)
 import           Prelude hiding (init)
 import           Text.PrettyPrint.GenericPretty (Out (..))
 
+import           Gibbon.Language (Tag, TyCon)
 import           Gibbon.Common
-import qualified Gibbon.L1.Syntax as L1
+import qualified Gibbon.Language  as L
+import qualified Gibbon.L2.Syntax as L2
 import qualified Gibbon.L3.Syntax as L3
 
 
@@ -124,7 +126,8 @@ data Tail
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data Ty
-    = IntTy
+    = IntTy        -- ^ 8 byte integers.
+    | BoolTy       -- ^ 1 byte integers.
     | TagTyPacked  -- ^ A single byte / Word8.  Used in PACKED mode.
     | TagTyBoxed   -- ^ A tag used in the UNPACKED, boxed, pointer-based, graph-of-structs representation.
                    --   This can usually be the same as TagTy, but needn't necessarily be.
@@ -163,14 +166,14 @@ data Prim
 
     | ReadPackedFile (Maybe FilePath) TyCon
 
-    | NewBuffer Multiplicity
+    | NewBuffer L2.Multiplicity
     -- ^ Allocate a new buffer, return a cursor.
-    | ScopedBuffer Multiplicity
+    | ScopedBuffer L2.Multiplicity
     -- ^ Returns a pointer to a buffer, with the invariant that data written
     -- to this region is no longer used after the enclosing function returns.
     -- I.e. this can be stack allocated data.
 
-    | InitSizeOfBuffer Multiplicity
+    | InitSizeOfBuffer L2.Multiplicity
     -- ^ Returns the initial buffer size for a specific multiplicity
 
     | MMapFileSize Var
@@ -185,8 +188,11 @@ data Prim
     -- ^ Read an 8 byte Int from the cursor and advance.
     | ReadCursor
     -- ^ Read and return a cursor
-
     | WriteCursor
+
+    | ReadBool
+    | WriteBool
+    -- ^ Read / write 1 byte integers, and advance.
 
     | BoundsCheck
 
@@ -262,8 +268,8 @@ withTail (tl0,retty) fn =
 fromL3Ty :: L3.Ty3 -> Ty
 fromL3Ty ty =
   case ty of
-    L1.IntTy -> IntTy
-    L1.SymTy -> SymTy
-    L1.ProdTy tys -> ProdTy $ map fromL3Ty tys
-    L1.SymDictTy t -> SymDictTy $ fromL3Ty t
+    L.IntTy -> IntTy
+    L.SymTy -> SymTy
+    L.ProdTy tys -> ProdTy $ map fromL3Ty tys
+    L.SymDictTy t -> SymDictTy $ fromL3Ty t
     _ -> IntTy -- FIXME: review this

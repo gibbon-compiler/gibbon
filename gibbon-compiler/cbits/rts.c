@@ -12,7 +12,6 @@
 #include <fcntl.h>
 #include <stdarg.h> // For va_start etc
 #include <errno.h>
-#include <cilk/cilk.h>
 #ifdef _POINTER
 #include <gc.h>
 #endif
@@ -145,6 +144,7 @@ typedef char TagTyPacked;  // Must be consistent with codegen in Target.hs
 typedef char TagTyBoxed;   // Must be consistent with codegen in Target.hs
 typedef long long IntTy;
 typedef IntTy SymTy;
+typedef char BoolTy;
 typedef char* PtrTy;
 typedef char* CursorTy;
 

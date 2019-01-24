@@ -1,12 +1,12 @@
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
-
 module Gibbon.Passes.FollowRedirects
   ( followRedirects ) where
 
 
+import Prelude hiding (tail)
 import qualified Data.Map as M
 
 import Gibbon.Common
+import Gibbon.Language ( TyEnv, indirectionAlt, redirectionAlt)
 import Gibbon.L4.Syntax as L4
 
 {- [Modifying switch statements to use redirection nodes]
@@ -77,6 +77,8 @@ followRedirectsExp ttailenv tenv tail =
       let trvty = typeofTriv trv
       case trvty of
         IntTy -> return $ Switch lbl trv alts bod_maybe
+        -- This is OK too - BoolTy is really Int8.
+        BoolTy -> return $ Switch lbl trv alts bod_maybe
         TagTyPacked -> do
           let VarTriv tagv = trv
               tailv = ttailenv # tagv

@@ -105,7 +105,7 @@ instantiateApp arrty0 loc = do
     let subst = zipTL inT loc
     dbgTrace lvl ("\n  instantiateApp: Came up with subst: "++show subst) $
      return (substEffs subst effs,
-            dbgTraceIt lvl "   instantiate result loc" $ rettyToLoc (substTy subst outT))
+            dbgTraceIt "   instantiate result loc" $ rettyToLoc (substTy subst outT))
   where
    -- Question: when computing the return location, which variables are Fresh?
    -- Conversely, when would we need to use Fixed?

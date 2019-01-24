@@ -1,4 +1,3 @@
-
 -- | Infer region multiplicities
 --
 --   During inference, regions are merely annotated with a region metavariable.
@@ -12,15 +11,14 @@ import Data.Loc
 import Data.Graph
 import qualified Data.Map as M
 
-import Gibbon.Common
 import Gibbon.DynFlags
-import Gibbon.L1.Syntax
-import Gibbon.L2.Syntax as L2
+import Gibbon.Common
+import Gibbon.L2.Syntax
 
 -- All regions are "infinite" right now
 
 -- | Infer multiplicity for a program annotated with regions & locations
-inferRegScope :: L2.Prog2 -> PassM L2.Prog2
+inferRegScope :: Prog2 -> PassM Prog2
 inferRegScope Prog{ddefs,fundefs,mainExp} = do
   fds' <- mapM inferRegScopeFun $ M.elems fundefs
   let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
@@ -29,7 +27,7 @@ inferRegScope Prog{ddefs,fundefs,mainExp} = do
                 Just (mn, ty) -> Just <$> (,ty) <$> inferRegScopeExp mn
   return $ Prog ddefs fundefs' mainExp'
 
-inferRegScopeFun :: L2.FunDef2 -> PassM L2.FunDef2
+inferRegScopeFun :: FunDef2 -> PassM FunDef2
 inferRegScopeFun f@FunDef{funBody} = do
   funBody' <- inferRegScopeExp funBody
   return $ f {funBody = funBody'}
@@ -68,7 +66,7 @@ In fnB, there's no path from `rb` to 1.
 -- | Decide if a region should be global or local (dynamic).
 --
 --  Dynamic regions are stack allocated and automatically freed
-inferRegScopeExp :: L L2.Exp2 -> PassM (L L2.Exp2)
+inferRegScopeExp :: L Exp2 -> PassM (L Exp2)
 inferRegScopeExp (L p ex) = L p <$>
   case ex of
     Ext ext ->

@@ -5,7 +5,6 @@ module BenchRunner
 
 import           Data.List
 import           Data.Yaml as Y
-import           System.Environment
 import           System.FilePath
 import           System.Process
 import           Text.Printf
@@ -23,16 +22,18 @@ main = do
     -- Parse the config file
     compiler_dir <- getCompilerDir
     configstr <- readFile (compiler_dir </> configFile)
-    let tc_mb :: Maybe TestConfig
-        tc_mb = Y.decode (BS.pack configstr)
+    let tc_eth :: Either ParseException TestConfig
+        tc_eth = Y.decodeEither' (BS.pack configstr)
 
-        tests_mb :: Maybe Tests
-        tests_mb = Y.decode (BS.pack configstr)
+        tests_eth :: Either ParseException Tests
+        tests_eth = Y.decodeEither' (BS.pack configstr)
 
-    case (tc_mb, tests_mb) of
-        (Nothing,_) -> error $ "Couldn't parse the configuration in " ++ configFile
-        (_,Nothing) -> error $ "Couldn't parse the tests in " ++ configFile
-        (Just file_tc, Just tests) -> do
+    case (tc_eth, tests_eth) of
+        (Left err,_) -> error ("Couldn't parse the configuration in " ++ configFile
+                               ++ ". " ++ show err)
+        (_,Left err) -> error ("Couldn't parse the tests in " ++ configFile
+                               ++ ". " ++ show err)
+        (Right file_tc, Right tests) -> do
             -- Combine the options read from the config file with the command line
             -- arguments (which have higher precedence).
             let opts = info (configParser file_tc <**> helper)

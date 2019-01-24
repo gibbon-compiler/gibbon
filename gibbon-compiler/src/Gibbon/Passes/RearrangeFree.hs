@@ -1,8 +1,7 @@
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
-
 module Gibbon.Passes.RearrangeFree
   ( rearrangeFree ) where
 
+import Prelude hiding (tail)
 import Gibbon.Common
 import Gibbon.L4.Syntax
 

@@ -10,6 +10,8 @@ module Gibbon.L3.Syntax
 
     -- * Functions
   , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim
+
+  , module Gibbon.Language
   )
 where
 
@@ -21,8 +23,7 @@ import Data.List as L
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
-import Gibbon.L1.Syntax
-import Gibbon.GenericOps
+import Gibbon.Language
 import qualified Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
@@ -49,9 +50,9 @@ data E3Ext loc dec =
   | AddCursor Var (L (PreExp E3Ext loc dec)) -- ^ Add a constant offset to a cursor variable
   | ReadTag   Var                  -- ^ One cursor in, (tag,cursor) out
   | WriteTag  DataCon Var          -- ^ Write Tag at Cursor, and return a cursor
-  | NewBuffer Multiplicity         -- ^ Create a new buffer, and return a cursor
-  | ScopedBuffer Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
-  | InitSizeOfBuffer Multiplicity  -- ^ Returns the initial buffer size for a specific multiplicity
+  | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
+  | ScopedBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
+  | InitSizeOfBuffer L2.Multiplicity  -- ^ Returns the initial buffer size for a specific multiplicity
   | MMapFileSize Var
   | SizeOfPacked Var Var           -- ^ Takes in start and end cursors, and returns an Int
                                    --   we'll probably represent (sizeof x) as (end_x - start_x) / INT
@@ -97,14 +98,13 @@ instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
 -----------------------------------------------------------------------------------------
 -- Do this manually to get prettier formatting: (Issue #90)
 
-instance Out Prog3
 instance (Out l, Out d) => Out (E3Ext l d)
 
 -----------------------------------------------------------------------------------------
 
 -- | Erase LocVar markers from the data definition
 eraseLocMarkers :: DDef L2.Ty2 -> DDef Ty3
-eraseLocMarkers (DDef tyname ls) = DDef tyname $ L.map go ls
+eraseLocMarkers (DDef tyargs tyname ls) = DDef tyargs tyname $ L.map go ls
   where go :: (DataCon,[(IsBoxed,L2.Ty2)]) -> (DataCon,[(IsBoxed,Ty3)])
         go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,L2.stripTyLocs ty)) ls')
 
@@ -135,33 +135,5 @@ mapMExprs fn (Prog ddfs fundefs mainExp) =
     (mapM (\ (e,t) -> (,t) <$> fn (Env2 M.empty funEnv) e) mainExp)
   where funEnv = M.map funTy fundefs
 
--- Ugh .. this is bad. Can we remove the identity cases here ?
 toL3Prim :: Prim L2.Ty2 -> Prim Ty3
-toL3Prim pr =
-  case pr of
-    AddP      -> AddP
-    SubP      -> SubP
-    MulP      -> MulP
-    DivP      -> DivP
-    ModP      -> ModP
-    ExpP      -> ExpP
-    RandP     -> RandP
-    EqSymP    -> EqSymP
-    EqIntP    -> EqIntP
-    LtP       -> LtP
-    GtP       -> GtP
-    LtEqP     -> LtEqP
-    GtEqP     -> GtEqP
-    OrP       -> OrP
-    AndP      -> AndP
-    MkTrue    -> MkTrue
-    MkFalse   -> MkFalse
-    SizeParam -> SizeParam
-    SymAppend -> SymAppend
-    DictInsertP ty -> DictInsertP (L2.stripTyLocs ty)
-    DictLookupP ty -> DictLookupP (L2.stripTyLocs ty)
-    DictEmptyP  ty -> DictEmptyP  (L2.stripTyLocs ty)
-    DictHasKeyP ty -> DictHasKeyP (L2.stripTyLocs ty)
-    ErrorP s ty    -> ErrorP s (L2.stripTyLocs ty)
-    ReadPackedFile fp tycon reg ty -> ReadPackedFile fp tycon reg (L2.stripTyLocs ty)
-    PEndOf -> error "Do not use PEndOf after L2."
+toL3Prim pr = fmap L2.stripTyLocs pr

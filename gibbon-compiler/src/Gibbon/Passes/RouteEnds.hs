@@ -1,7 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE CPP              #-}
+{-# LANGUAGE RecordWildCards  #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 
 -- | Insert end witnesses in an L2 program by changing function types,
@@ -35,7 +34,6 @@ import Data.Map as M
 import Data.Set as S
 import Control.Monad
 
-import Gibbon.GenericOps
 import Gibbon.Common
 import Gibbon.L2.Syntax as L2
 import Gibbon.L1.Syntax as L1

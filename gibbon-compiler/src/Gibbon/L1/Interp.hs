@@ -30,7 +30,6 @@ import qualified Data.ByteString.Lazy.Char8 as B
 
 import           Gibbon.Common
 import           Gibbon.Interp
-import           Gibbon.GenericOps
 import           Gibbon.L1.Syntax as L1
 
 
@@ -197,6 +196,8 @@ applyPrim rc p ls =
    (GtP,[VInt x, VInt y]) -> VBool (x > y)
    (LtEqP,[VInt x, VInt y]) -> VBool (x <= y)
    (GtEqP,[VInt x, VInt y]) -> VBool (x >= y)
+   (AndP, [VBool x, VBool y]) -> VBool (x && y)
+   (OrP, [VBool x, VBool y])  -> VBool (x || y)
    ((DictInsertP _ty),[VDict mp, key, val]) -> VDict (M.insert key val mp)
    ((DictLookupP _),[VDict mp, key])        -> mp # key
    ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)

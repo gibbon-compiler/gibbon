@@ -1,6 +1,6 @@
 ## The config file for the Gibbon testsuite.
 ## These configuration parameters are only used by TestRunner.hs and
-## have no effect on the unit tests (i.e stack test).
+## have no effect on unit tests.
 
 ## Configuration that can be added to the entire testsuite (or passed via command line):
 ##
@@ -183,12 +183,51 @@ tests:
   ##    'printf': function not inlinable
   ##    printf (const char *__restrict __fmt, ...)
   ##
-  ## TODO(CSK): I don't really understand this error, and a quick Google search wasn't very helpful.
+  ## [2018.12.03] CSK: Skip Cilk stuff for now.
+  ## This should be behind a flag.
   - name: test_par01.gib
+    skip: true
   - name: test_par03.gib
+    skip: true
   - name: test_par04.gib
+    skip: true
   - name: test_par07.gib
+    skip: true
   - name: test_par08.gib
+    skip: true
+
+  ## Polymorphic frontend tests
+  - name: One.hs
+    dir: examples/hs
+    answer-file: examples/hs/One.ans
+    failing: [gibbon1, gibbon2]
+
+  - name: Three.hs
+    dir: examples/hs
+    answer-file: examples/hs/Three.ans
+    failing: [gibbon1, gibbon2]
+
+  - name: MonoTree.hs
+    dir: examples/hs
+    answer-file: examples/hs/MonoTree.ans
+
+  - name: PolyTree.hs
+    dir: examples/hs
+    answer-file: examples/hs/PolyTree.ans
+    failing: [gibbon1, gibbon2]
+
+    ## Shouldn't typecheck
+  - name: Fail1.hs
+    dir: examples/hs/should_fail
+    failing: [gibbon1, gibbon2, pointer, interp1]
+
+  - name: Fail2.hs
+    dir: examples/hs/should_fail
+    failing: [gibbon1, gibbon2, pointer, interp1]
+
+  - name: Fail3.hs
+    dir: examples/hs/should_fail
+    failing: [gibbon1, gibbon2, pointer, interp1]
 
   ## Fusion2 tests
   - name: test_sumup_seteven.gib
@@ -196,6 +235,7 @@ tests:
 
   ## A difficult test for AddTraversals.
   - name: test_par05.gib
+    skip: true
     failing: [gibbon1]
 
   ## Failing tests:

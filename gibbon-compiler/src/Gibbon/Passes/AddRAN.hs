@@ -1,20 +1,19 @@
 module Gibbon.Passes.AddRAN
   (addRAN, numRANsDataCon, needsRAN) where
 
-import Control.Monad (when)
+import Control.Monad ( when )
 import Data.Loc
 import Data.List as L
 import Data.Map as M
-import Data.Maybe (fromJust)
+import Data.Maybe ( fromJust )
 import Data.Set as S
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
 import Gibbon.DynFlags
-import Gibbon.GenericOps
-import Gibbon.Passes.AddTraversals (needsTraversal)
-import Gibbon.L1.Syntax as L1
-import Gibbon.L2.Syntax as L2
+import Gibbon.Passes.AddTraversals ( needsTraversal )
+import Gibbon.L1.Syntax
+import Gibbon.L2.Syntax
 
 {-
 
@@ -120,7 +119,7 @@ addRAN tycons prg@Prog{ddefs,fundefs,mainExp} = do
              , mainExp = mainExp'
              }
 
-addRANFun :: S.Set TyCon -> DDefs Ty1 -> L1.FunDef1 -> PassM L1.FunDef1
+addRANFun :: S.Set TyCon -> DDefs Ty1 -> FunDef1 -> PassM FunDef1
 addRANFun tycons ddfs fd@FunDef{funBody} = do
   bod <- addRANExp tycons ddfs M.empty funBody
   return $ fd{funBody = bod}

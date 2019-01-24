@@ -1,22 +1,25 @@
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
+{-|
 
--- | With the new location calculus and `inferLocations`, this pass should've been redundant.
---   But not quite.. We still need it to reorder location variables bound in case expressions.
---
---   For example, after running the add1 program through the pipeline till `RouteEnds`,
---   this is what the `Node` case looks like:
---
---   ("Node",
---    [("x9", "l10"),("y11", "l12")],
---       ...)
---
---   To "unpack" these fields, `Cursorize` just binds `x9` to `l10` and `y11` to `l12`.
---   But, the cursor `l12` is not bound (or known) until we call `(add1 x9)` and
---   get the end_of_read cursor it returns. This happens later in the program.
---   Thus, `y11` refers to an unbound cursor `l12` here.
---   FindWitnesses fixes this by moving the `let y11 = l12` binding to its proper place.
---
---   Another strategy would be to actually handle this properly in Cursorize.
+With the new location calculus and `inferLocations`, this pass should've been
+redundant. But not quite.. We still need it to reorder location variables bound
+in case expressions.
+
+For example, after running the add1 program through the pipeline till `RouteEnds`,
+this is what the `Node` case looks like:
+
+    ("Node",
+     [("x9", "l10"),("y11", "l12")],
+        ...)
+
+To "unpack" these fields, `Cursorize` just binds `x9` to `l10` and `y11` to `l12`.
+But, the cursor `l12` is not bound (or known) until we call `(add1 x9)` and
+get the end_of_read cursor it returns. This happens later in the program.
+Thus, `y11` refers to an unbound cursor `l12` here.
+FindWitnesses fixes this by moving the `let y11 = l12` binding to its proper place.
+
+Another strategy would be to actually handle this properly in Cursorize.
+
+-}
 
 module Gibbon.Passes.FindWitnesses
   (findWitnesses) where
@@ -26,14 +29,11 @@ import Data.Loc
 import Data.Graph
 import qualified Data.Map as Map
 import qualified Data.Set as Set
--- import Data.List as L hiding (tail)
 
-import Gibbon.GenericOps
 import Gibbon.Common
-import Gibbon.L1.Syntax
 import Gibbon.L3.Syntax
--- import Gibbon.L2.Syntax as L2
 
+--------------------------------------------------------------------------------
 
 bigNumber :: Int
 bigNumber = 10 -- limit number of loops
@@ -97,7 +97,7 @@ findWitnesses = mapMExprs fn
         LitE n         -> handle' $ LitE n
         LitSymE v      -> handle' $ LitSymE v
         AppE v locs e  -> handle' $ AppE v locs (goClear e)
-        PrimAppE p ls  -> handle' $ PrimAppE p (map goClear ls)
+        PrimAppE pr ls -> handle' $ PrimAppE pr (map goClear ls)
         ProjE i e      -> handle' $ ProjE i (goClear e)
 
         -- It's ok that we don't go deeper on scrutinees, subexpressions
@@ -108,7 +108,7 @@ findWitnesses = mapMExprs fn
         TimeIt e t b   -> handle' $ TimeIt (goClear e) t b -- prevent pushing work into timeit
 
         -- FIXME: give CaseE a treatment like IfE:
-        CaseE e ls     -> handle' $ CaseE e [ (k,vs,goClear e) | (k,vs,e) <- ls ]
+        CaseE scrt ls  -> handle' $ CaseE scrt [ (k,vs,goClear e) | (k,vs,e) <- ls ]
 
         IfE a b c ->
             -- If we have "succeeded" in accumulating all the bindings
@@ -129,9 +129,9 @@ findWitnesses = mapMExprs fn
 -- TODO: this needs to preserve any bindings that have TimeIt forms (hasTimeIt).
 -- OR we can only match a certain pattern like (Let (_,_,TimeIt _ _) _)
 handle :: Map.Map Var (Var, [()], Ty3, L Exp3) -> L Exp3 -> L Exp3
-handle mp exp =
-    dbgTrace 6 (" [findWitnesses] building lets using vars "++show vs++" for expr: "++ take 80 (show exp)) $
-    buildLets mp vars exp
+handle mp expr =
+    dbgTrace 6 (" [findWitnesses] building lets using vars "++show vs++" for expr: "++ take 80 (show expr)) $
+    buildLets mp vars expr
     where freeInBind v = case Map.lookup (view v) mp of
                            Nothing -> []
                            Just (_v,_locs,_t,e) -> Set.toList $ gFreeVars e

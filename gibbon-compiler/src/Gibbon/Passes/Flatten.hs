@@ -1,13 +1,8 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-
 -- | Put the program in A-normal form where only varrefs and literals are
 -- allowed in operand position.
---
---- GRAMMAR: takes an L1 program and returns an L1 program in
---- restricted form.
-
 module Gibbon.Passes.Flatten
     ( flattenL1, flattenL2, flattenL3 ) where
 
@@ -18,10 +13,9 @@ import Prelude hiding (exp)
 import qualified Data.Map as M
 
 import Gibbon.Common
-import Gibbon.GenericOps
-import Gibbon.L1.Syntax as L1
-import Gibbon.L2.Syntax as L2
-import qualified Gibbon.L3.Syntax as L3
+import Gibbon.L1.Syntax
+import Gibbon.L2.Syntax
+import Gibbon.L3.Syntax
 
 
 -- | Flatten ensures that function operands are "trivial".
@@ -32,13 +26,13 @@ import qualified Gibbon.L3.Syntax as L3
 --   Note that it does not require tail expressions to be trivial.
 --   For example, it allows AppE and PrimAppE in the body of a
 --   let-expression.
-flattenL1 :: L1.Prog1 -> PassM L1.Prog1
-flattenL1 prg@(L1.Prog defs funs main) = do
+flattenL1 :: Prog1 -> PassM Prog1
+flattenL1 prg@(Prog defs funs main) = do
     main' <- case main of
                Just (e,ty) -> Just <$> (,ty) <$> gFlattenExp defs env20 e
                Nothing -> return Nothing
     funs' <- flattenFuns funs
-    return $ L1.Prog defs funs' main'
+    return $ Prog defs funs' main'
   where
     flattenFuns = mapM flattenFun
     flattenFun (FunDef nam narg (targ, ty) bod) = do
@@ -48,7 +42,7 @@ flattenL1 prg@(L1.Prog defs funs main) = do
 
     env20 = progToEnv prg
 
-flattenL2 :: Flattenable (L2.E2Ext Var (UrTy LocVar)) => L2.Prog2 -> PassM L2.Prog2
+flattenL2 :: Flattenable (E2Ext Var (UrTy LocVar)) => Prog2 -> PassM Prog2
 flattenL2 prg@(Prog defs funs main) = do
     main' <-
       case main of
@@ -59,14 +53,14 @@ flattenL2 prg@(Prog defs funs main) = do
   where
     flattenFuns = mapM flattenFun
     flattenFun (FunDef nam narg ty bod) = do
-      let env2 = Env2 (M.singleton narg (L2.arrIn ty)) (fEnv env20)
+      let env2 = Env2 (M.singleton narg (arrIn ty)) (fEnv env20)
       bod' <- gFlattenExp defs env2 bod
       return $ FunDef nam narg ty bod'
 
     env20 = progToEnv prg
 
 
-flattenL3 :: L3.Prog3 -> PassM L3.Prog3
+flattenL3 :: Prog3 -> PassM Prog3
 flattenL3 prg@(Prog defs funs main) = do
     main' <-
       case main of
@@ -92,7 +86,7 @@ flattenL3 prg@(Prog defs funs main) = do
 
 type Exp e l = PreExp e l (UrTy l)
 
-type Binds e = (Var,[LocOf e],TyOf e, e)
+-- type Binds e = (Var,[LocOf e],TyOf e, e)
 
 
 instance (Show l, Out l, Expression (e l (UrTy l)),

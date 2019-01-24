@@ -11,9 +11,7 @@
 module Gibbon.SExpFrontend
        ( parseFile
        , parseSExp
-       , primMap
-       -- , main
-       )
+       , primMap )
   where
 
 import Data.List as L
@@ -24,7 +22,6 @@ import Data.Text as T hiding (head)
 import Data.Text.IO (readFile)
 import System.FilePath
 import Text.Parsec
--- import GHC.Generics (Generic)
 import Text.PrettyPrint.GenericPretty
 import Prelude hiding (readFile, exp)
 
@@ -43,7 +40,6 @@ import Data.SCargot.Repr -- (SExpr, RichSExpr, toRich)
 import qualified Data.SCargot.Common as SC
 
 import Gibbon.L1.Syntax
-import qualified Gibbon.L0.Syntax as L0
 import Gibbon.Common
 
 --------------------------------------------------------------------------------
@@ -179,7 +175,7 @@ parseSExp ses =
      (Ls0 (A _ "require":_) : rst) -> go rst dds fds cds mn
 
      (Ls0 (A _ "data": A _ tycon : cs) : rst) ->
-         go rst (DDef (textToVar tycon) (L.map docasety cs) : dds) fds cds mn
+         go rst (DDef (textToVar tycon) [] (L.map docasety cs) : dds) fds cds mn
      (Ls0 [A _ "define", funspec, A _ ":", retty, bod] : rst)
         |  RSList (A _ name : args) <- funspec
         -> do
@@ -194,7 +190,7 @@ parseSExp ses =
                             vr <- gensym (toVar (L.concat $ L.intersperse "_" $
                                                  L.map fromVar vs))
                             let ty = ProdTy ts
-                                newbod = tuplizeRefs vr vs bod'
+                                newbod = tuplizeRefs vr vs ts bod'
                             return (vr,ty,newbod)
          -- Here we directly desugar multiple arguments into a tuple
          -- argument.
@@ -225,12 +221,6 @@ parseSExp ses =
                                 Just x  -> error$ "Two main expressions: "++
                                                  sdoc x++"\nAnd:\n"++prnt ex)
 
-
-tuplizeRefs :: Var -> [Var] -> L Exp1 -> L Exp1
-tuplizeRefs tmp ls  = go (L.zip [0..] ls)
-  where
-   go []          e = e
-   go ((ix,v):vs) e = go vs (subst v (L NoLoc $ ProjE ix (L NoLoc $ VarE tmp)) e)
 
 typ :: Sexp -> Ty1
 typ s = case s of
@@ -408,7 +398,7 @@ isPrim p = S.member p (M.keysSet primMap)
 
 -- ^ A map between SExp-frontend prefix function names, and Gibbon
 -- abstract Primops.
-primMap :: Map Text (Prim (UrTy l))
+primMap :: Map Text (Prim d)
 primMap = M.fromList
   [ ("+", AddP)
   , ("-", SubP)
@@ -480,6 +470,6 @@ parseFile file = do
        return $ runSyM 0 $ parseSExp ls'
 
 
--- FINISHME
-parseSExp0 :: [Sexp] -> SyM L0.PProg
-parseSExp0 = undefined
+-- -- FINISHME
+-- parseSExp0 :: [Sexp] -> SyM L0.PProg
+-- parseSExp0 = undefined

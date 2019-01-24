@@ -1,15 +1,11 @@
-{-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE ViewPatterns #-}
-
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-{-# OPTIONS_GHC -fdefer-typed-holes #-}
-
 
 -------------------------------------------------------------------------------
 
 -- | Lowering L1 to the target language.
 module Gibbon.Passes.Lower
-  ( lower
+  ( lower, getTagOfDataCon
   ) where
 
 -------------------------------------------------------------------------------
@@ -22,11 +18,9 @@ import Data.List as L hiding (tail)
 import Data.Map as M hiding (foldl, foldr)
 import Data.Int (Int64)
 import Prelude hiding (tail)
+import Text.PrettyPrint.GenericPretty
 import qualified Data.List as L
--- import Data.Word
 
-
-import Gibbon.GenericOps
 import Gibbon.Common
 import Gibbon.DynFlags
 import Gibbon.L1.Syntax hiding (progToEnv)
@@ -57,6 +51,12 @@ genDcons (x:xs) tail fields = case x of
     afternext <- gensym "afternext"
     T.LetPrimCallT [(next, T.CursorTy),(afternext,T.CursorTy)] T.ReadCursor [(T.VarTriv tail)] <$>
       genDcons xs afternext fields
+
+  BoolTy             ->  do
+    val  <- gensym "val"
+    t    <- gensym "tail"
+    T.LetPrimCallT [(val, T.BoolTy), (t, T.CursorTy)] T.ReadBool [(T.VarTriv tail)]
+      <$> genDcons xs t (fields ++ [(T.BoolTy, T.VarTriv val)])
 
   _ -> error $ "genDcons: FIXME " ++ show x
 
@@ -125,6 +125,14 @@ genDconsPrinter (x:xs) tail = case x of
     t    <- gensym "tail"
     T.LetPrimCallT [(val, T.IntTy), (t, T.CursorTy)] T.ReadInt [(T.VarTriv tail)] <$>
       printTy False L1.IntTy [T.VarTriv val] <$>
+       maybeSpace <$>
+        genDconsPrinter xs t
+
+  L1.BoolTy             ->  do
+    val  <- gensym "val"
+    t    <- gensym "tail"
+    T.LetPrimCallT [(val, T.BoolTy), (t, T.CursorTy)] T.ReadBool [(T.VarTriv tail)] <$>
+      printTy False L1.BoolTy [T.VarTriv val] <$>
        maybeSpace <$>
         genDconsPrinter xs t
 
@@ -270,6 +278,16 @@ addPrintToTail ty tl0 = do
         -- Always print a trailing newline at the end of execution:
         T.LetPrimCallT [] (T.PrintString "\n") [] $
           T.RetValsT []  -- Void return after printing.
+
+-- | Look up the numeric tag for a dataCon
+getTagOfDataCon :: Out a => DDefs a -> DataCon -> Tag
+getTagOfDataCon dds dcon =
+    if isIndirectionTag dcon
+    then indirectionAlt
+    else fromIntegral ix
+  where Just ix = L.elemIndex dcon $ getConOrdering dds (fromVar tycon)
+        (tycon,_) = lkp dds dcon
+
 
 -- The compiler pass
 -------------------------------------------------------------------------------a
@@ -434,7 +452,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
     -- Accordingly, constructor allocation becomes an allocation.
     LetE (v, _, _, L _ (DataConE _ k ls)) bod | not pkd -> L1.assertTrivs ls $ do
       let tycon    = getTyOfDataCon ddefs k
-          all_cons = dataCons (lookupDDef ddefs (toVar tycon))
+          all_cons = dataCons (lookupDDef ddefs tycon)
           tag      = fromJust (L.findIndex ((==) k . fst) all_cons)
 
           field_tys= L.map typ (lookupDataCon ddefs k)
@@ -814,7 +832,7 @@ typ t =
   case t of
     IntTy  -> T.IntTy
     SymTy  -> T.SymTy
-    BoolTy -> T.IntTy
+    BoolTy -> T.BoolTy
     ListTy{} -> error "lower/typ: FinishMe: List types"
     ProdTy xs -> T.ProdTy $ L.map typ xs
     SymDictTy x -> T.SymDictTy $ typ x

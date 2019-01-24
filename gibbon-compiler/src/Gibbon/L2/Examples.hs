@@ -18,15 +18,14 @@ module Gibbon.L2.Examples
 import Data.Loc
 import Data.Set as S
 import Data.Map as M
--- import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
 import Gibbon.L2.Syntax
-import Gibbon.L1.Syntax hiding (FunDefs)
-import Gibbon.GenericOps
+
+--------------------------------------------------------------------------------
 
 ddtree :: DDefs Ty2
-ddtree = fromListDD [DDef (toVar "Tree")
+ddtree = fromListDD [DDef (toVar "Tree") []
                       [ ("Leaf",[(False,IntTy)])
                       , ("Node",[ (False,PackedTy "Tree" "l")
                                 , (False,PackedTy "Tree" "l")])
@@ -771,7 +770,7 @@ testFlattenProg = Prog M.empty (M.fromList [("intAdd",intAddFun)]) $ Just (testF
 -- gensym starts at 500
 
 stree :: DDefs Ty2
-stree = fromListDD [DDef (toVar "STree")
+stree = fromListDD [DDef (toVar "STree") []
                     [ ("Leaf",[(False,IntTy)])
                     , ("Inner",[ (False, IntTy)
                                , (False, IntTy) -- this should be a boolean.
@@ -1165,7 +1164,7 @@ sumUpSetEvenProg = Prog stree (M.fromList [("sumUpSetEven", sumUpSetEvenFun)
 
 
 ddexpr :: DDefs Ty2
-ddexpr = fromListDD [DDef (toVar "Expr")
+ddexpr = fromListDD [DDef (toVar "Expr") []
                       [ ("VARREF", [(False,IntTy)])
                       , ("INTLIT", [(False,IntTy)])
                       , ("LETE"  , [(False,IntTy),
@@ -1285,7 +1284,7 @@ substProg = Prog ddexpr (M.fromList [("subst", substFun),
 --------------------------------------------------------------------------------
 
 ddtree' :: DDefs Ty2
-ddtree' = fromListDD [DDef (toVar "Tree")
+ddtree' = fromListDD [DDef (toVar "Tree") []
                        [ ("Leaf",[(False,IntTy)])
                        , ("Node",[ (False,PackedTy "Tree" "l")
                                  , (False,PackedTy "Tree" "l")])
@@ -1445,7 +1444,7 @@ indrIDSumProg = Prog ddtree' (M.fromList [("buildTree", buildTreeFun)
 --------------------------------------------------------------------------------
 
 ddsnoclist :: DDefs Ty2
-ddsnoclist = fromListDD [DDef (toVar "SnocList")
+ddsnoclist = fromListDD [DDef (toVar "SnocList") []
                          [ ("Nil"  , [])
                          , ("Snoc" , [(False,PackedTy "SnocList" "l"),
                                       (False,IntTy)])

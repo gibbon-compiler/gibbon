@@ -1,39 +1,17 @@
-{-# LANGUAGE DeriveTraversable #-}
--- {-# LANGUAGE DeriveAnyClass #-} -- Actually breaks Applicative SymM deriving!
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE DeriveAnyClass             #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- | Utilities and common types.
-
 module Gibbon.Common
        (
-         -- * Global constants or conventions
---         cPackedTagSize, cPointerTagSize -- FINISHME
-         mkUnpackerName
-       , mkPrinterName
-       , redirectionSize, redirectionTag, redirectionAlt
-       , toIndrDataCon, fromIndrDataCon, isIndrDataCon, indirectionTag, indirectionAlt
-       , isIndirectionTag
-       , mkCopyFunName, isCopyFunName, mkTravFunName
+         -- * Variables
+         Var(..), LocVar, TyVar(..), fromVar, toVar, varAppend, toEndV, cleanFunName
 
-         -- * Type and Data constructors
-       , DataCon, TyCon, IsBoxed
-
-         -- * Variables and gensyms
-       , Var(..), fromVar, toVar, varAppend, toEndV
-       , SyM, gensym, genLetter, gensym_tag, runSyM
-       , cleanFunName
-
-         -- * Regions and locations
-       , LocVar, Region(..), Modality(..), LRM(..), dummyLRM
-       , Multiplicity(..), regionToVar
-
-         -- * Environment and helpers
-       , Env2(..) -- TODO: hide constructor
-       , FunctionTy(..), TyEnv, FunEnv
-       , emptyTyEnv, emptyEnv2, extendVEnv, extendsVEnv, extendFEnv, lookupVEnv
+         -- * Gensym monad
+       , SyM, gensym, genLetter, newUniq, runSyM
 
          -- * PassM monad
        , PassM, runPassM, defaultRunPassM, defaultPackedRunPassM
@@ -43,22 +21,17 @@ module Gibbon.Common
        , Config(..), Input(..), Mode(..), Backend(..), defaultConfig
        , RunConfig(..), getRunConfig, defaultRunConfig
 
-         -- * Data definitions
-       , DDef(..), DDefs, fromListDD, emptyDD, insertDD
-       , lookupDDef, lookupDataCon, getConOrdering, getTyOfDataCon, getTagOfDataCon
-       , Tag
-
          -- * Misc helpers
        , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv, l
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
---       , err
        , internalError
 
          -- * Establish conventions for the output of #lang gibbon:
        , truePrinted, falsePrinted
-       ) where
+       )
+where
 
 import Control.DeepSeq (NFData(..), force)
 import Control.Exception (evaluate)
@@ -73,7 +46,7 @@ import Data.Loc
 import Data.Word
 import GHC.Generics
 import Text.PrettyPrint.GenericPretty
-import Text.PrettyPrint.HughesPJ as PP hiding (Mode(..), Style(..))
+import Text.PrettyPrint as PP hiding (Mode(..), Style(..))
 import System.IO
 import System.Environment
 import System.IO.Unsafe (unsafePerformIO)
@@ -123,87 +96,20 @@ cleanFunName f =
 toEndV :: Var -> Var
 toEndV = varAppend "end_"
 
-type DataCon = String
-type TyCon   = String
-
 -- | Abstract location variables.
 type LocVar = Var
--- TODO: add start(r) form.
 
+-- | Type variables that enable polymorphism.
+data TyVar = BoundTv Var         -- Type variable bound by a ForAll.
+           | SkolemTv String Int -- Skolem constant, the String is just to improve error messages.
+           | UserTv Var          -- Used by the parser. Freshen must replace all occurences.
+  deriving (Read, Show, Eq, Ord, Generic, NFData)
+instance Out TyVar where
+  doc (BoundTv v) = text "b:" PP.<> doc v
+  doc (SkolemTv s v) = text s <+> text "sk:" PP.<> doc v
+  doc (UserTv v)     = text "u:" PP.<> doc v
 
--- See https://github.com/iu-parfunc/gibbon/issues/79 for more details
--- | Region variants (multiplicities)
-data Multiplicity
-    = Bounded     -- ^ Contain a finite number of values and can be
-                  --   stack-allocated.
-
-    | Infinite    -- ^ Consist of a linked list of buffers, spread
-                  --   throughout memory (though possible constrained
-                  --   to 4GB regions). Writing into these regions requires
-                  --   bounds-checking. The buffers can start very small
-                  --   at the head of the list, but probably grow
-                  --   geometrically in size, making the cost of traversing
-                  --   all of them logarithmic.
-
-    | BigInfinite -- ^ These regions are infinite, but also have the
-                  --   expectation of containing many values. Thus we give
-                  --   them large initial page sizes. This is also could be
-                  --   the appropriate place to use mmap to grow the region
-                  --   and to establish guard places.
-  deriving (Read,Show,Eq,Ord,Generic)
-
-instance Out Multiplicity where
-  doc = text . show
-
-instance NFData Multiplicity where
-  rnf _ = ()
-
--- | An abstract region identifier.  This is used inside type signatures and elsewhere.
-data Region = GlobR Var Multiplicity -- ^ A global region with lifetime equal to the
-                                     --   whole program.
-            | DynR Var Multiplicity  -- ^ A dynamic region that may be created or
-                                     --   destroyed, tagged by an identifier.
-            | VarR Var               -- ^ A region metavariable that can range over
-                                     --   either global or dynamic regions.
-            | MMapR Var              -- ^ A region that doesn't result in an (explicit)
-                                     --   memory allocation. It merely ensures that there
-                                     --   are no free locations in the program.
-  deriving (Read,Show,Eq,Ord, Generic)
-instance Out Region
-instance NFData Region where
-  rnf (GlobR v _) = rnf v
-  rnf (DynR v _)  = rnf v
-  rnf (VarR v)    = rnf v
-  rnf (MMapR v)   = rnf v
-
--- | The modality of locations and cursors: input/output, for reading
--- and writing, respectively.
-data Modality = Input | Output
-  deriving (Read,Show,Eq,Ord, Generic)
-instance Out Modality
-instance NFData Modality where
-  rnf Input  = ()
-  rnf Output = ()
-
--- | A location and region, together with modality.
-data LRM = LRM { lrmLoc :: LocVar
-               , lrmReg :: Region
-               , lrmMode :: Modality }
-  deriving (Read,Show,Eq,Ord, Generic)
-instance Out LRM
-instance NFData LRM where
-  rnf (LRM a b c)  = rnf a `seq` rnf b `seq` rnf c
-
--- | A designated doesn't-really-exist-anywhere location.
-dummyLRM :: LRM
-dummyLRM = LRM "l_dummy" (VarR "r_dummy") Input
-
-regionToVar :: Region -> Var
-regionToVar r = case r of
-                  GlobR v _ -> v
-                  DynR  v _ -> v
-                  VarR  v   -> v
-                  MMapR v   -> v
+  docPrec _ v = doc v
 
 --------------------------------------------------------------------------------
 -- Helper methods to integrate the Data.Loc with Gibbon
@@ -228,238 +134,43 @@ instance Out Loc where
 
 instance Out Pos where
   docPrec _ pos = doc pos
-
   doc (Pos path line col _) = hcat [doc path, colon, doc line, colon, doc col]
 
 --------------------------------------------------------------------------------
-
--- | A type family describing function types.
-class (Out (ArrowTy ty), Show (ArrowTy ty)) => FunctionTy ty where
-  type ArrowTy ty
-  inTy  :: ArrowTy ty -> ty
-  outTy :: ArrowTy ty -> ty
-
--- | Type environment for function defs only.  This works with type
--- representations that do not include arrow types.
-type FunEnv a = M.Map Var (ArrowTy a)
-
--- | A simple type environment
-type TyEnv a = M.Map Var a
-
-emptyTyEnv :: TyEnv a
-emptyTyEnv = M.empty
-
-
--- | A common currency for a two part environment consisting of
--- function bindings and regular value bindings.
-data Env2 a = Env2 { vEnv :: TyEnv a
-                   , fEnv :: FunEnv a }
-
-emptyEnv2 :: Env2 a
-emptyEnv2 = Env2 { vEnv = emptyTyEnv
-                 , fEnv = M.empty }
-
--- | Extend non-function value environment.
-extendVEnv :: Var -> a -> Env2 a -> Env2 a
-extendVEnv v t (Env2 ve fe) = Env2 (M.insert v t ve) fe
-
--- | Extend multiple times in one go.
-extendsVEnv :: M.Map Var a -> Env2 a -> Env2 a
-extendsVEnv mp (Env2 ve fe) = Env2 (M.union mp ve) fe
-
-lookupVEnv :: Out a => Var -> Env2 a -> a
-lookupVEnv v env2 = (vEnv env2) # v
-
--- | Extend function type environment.
-extendFEnv :: Var -> ArrowTy a -> Env2 a -> Env2 a
-extendFEnv v t (Env2 ve fe) = Env2 ve (M.insert v t fe)
-
-
---------------------------------------------------------------------------------
-
--- Primitive for now:
-type DDefs a = Map Var (DDef a)
-
-type IsBoxed = Bool
-
--- | Data type definitions.
---
--- Monomorphism: In the extreme case we can strip packed datatypes of
--- all type parameters, or we can allow them to retain type params but
--- require that they always be fully instantiated to monomorphic types
--- in the context of our monomorphic programs.
---
--- Here we allow individual to be marked with whether or not they
--- should be boxed.  We say that a regular, pointer-based datatype has
--- all-boxed fields, whereas a fully serialized datatype has no boxed
--- fields.
-data DDef a = DDef { tyName:: Var
-                   -- , tyArgs:: [Var] -- ^ No polymorphism for now!
-                   , dataCons :: [(DataCon,[(IsBoxed,a)])] }
-  deriving (Read,Show,Eq,Ord, Functor, Generic)
-
-instance NFData a => NFData (DDef a) where
-  -- rnf DDef
-
-instance Out a => Out (DDef a)
-instance (Out k,Out v) => Out (Map k v) where
-  doc         = doc . M.toList
-  docPrec n v = docPrec n (M.toList v)
-
-type Tag = Word8
-
--- DDef utilities:
-
--- | Lookup a ddef in its entirety
-lookupDDef :: Out a => DDefs a -> Var -> DDef a
-lookupDDef mp v =
-    case M.lookup v mp of
-      Just x -> x
-      Nothing -> error $ "lookupDDef failed on symbol: "++ fromVar v ++"\nDDefs: "++sdoc mp
-
-
--- | Get the canonical ordering for data constructors, currently based
--- on ordering in the original source code.  Takes a TyCon as argument.
-getConOrdering :: Out a => DDefs a -> TyCon -> [DataCon]
-getConOrdering dd tycon = L.map fst dataCons
-  where DDef{dataCons} = lookupDDef dd (toVar tycon)
-
--- | Lookup the name of the TyCon that goes with a given DataCon.
---   Must be unique!
-getTyOfDataCon :: Out a => DDefs a -> DataCon -> TyCon
-getTyOfDataCon dds con = (fromVar . fst) $ lkp dds con
-
--- | Look up the numeric tag for a dataCon
-getTagOfDataCon :: Out a => DDefs a -> DataCon -> Word8
-getTagOfDataCon dds dcon =
-    if isIndirectionTag dcon
-    then indirectionAlt
-    else fromIntegral ix
-  where Just ix = L.elemIndex dcon $ getConOrdering dds (fromVar tycon)
-        (tycon,_) = lkp dds dcon
-
--- | Lookup the arguments to a data contstructor.
-lookupDataCon :: Out a => DDefs a -> DataCon -> [a]
-lookupDataCon dds con =
-    -- dbgTrace 5 ("lookupDataCon -- "++sdoc(dds,con)) $
-    L.map snd $ snd $ snd $ lkp dds con
-
--- | Lookup a Datacon.  Return (TyCon, (DataCon, [flds]))
-lkp :: Out a => DDefs a -> DataCon -> (Var, (DataCon, [(IsBoxed,a)]))
-lkp dds con =
-   -- Here we try to lookup in ALL datatypes, assuming unique datacons:
-  case [ (tycon,variant)
-       | (tycon, DDef{dataCons}) <- M.toList dds
-       , variant <- L.filter ((==con). fst) dataCons ] of
-    [] -> error$ "lookupDataCon: could not find constructor "++show con
-          ++", in datatypes:\n  "++show(doc dds)
-    [hit] -> hit
-    _ -> error$ "lookupDataCon: found multiple occurences of constructor "++show con
-          ++", in datatypes:\n  "++show(doc dds)
-
-
-
-insertDD :: DDef a -> DDefs a -> DDefs a
-insertDD d = M.insertWith err' (tyName d) d
-  where
-   err' = error $ "insertDD: data definition with duplicate name: "++show (tyName d)
-
-emptyDD :: DDefs a
-emptyDD  = M.empty
-
-fromListDD :: [DDef a] -> DDefs a
-fromListDD = L.foldr insertDD M.empty
-
-
---------------------------------------------------------------------------------
--- Some global constants
-
-redirectionSize :: Int
-redirectionSize = 9
-
-redirectionTag :: DataCon
-redirectionTag = "REDIRECTION"
-
-redirectionAlt :: Num a => a
-redirectionAlt = 100
-
-indirectionTag :: DataCon
-indirectionTag = "INDIRECTION"
-
-isIndirectionTag :: DataCon -> Bool
-isIndirectionTag = isPrefixOf indirectionTag
-
-indirectionAlt :: Num a => a
-indirectionAlt = 90
-
-toIndrDataCon :: DataCon -> DataCon
-toIndrDataCon dcon = dcon ++ "^"
-
-fromIndrDataCon :: DataCon -> DataCon
-fromIndrDataCon = init
-
-isIndrDataCon :: DataCon -> Bool
-isIndrDataCon = isSuffixOf "^"
-
--- | For now this is designed to match the Racket output of "#lang
--- gibbon" which itself should change once we implement a custom
--- printer.
-truePrinted :: String
-truePrinted = "#t"
--- truePrinted = "true"
-
-falsePrinted :: String
-falsePrinted = "#f"
-
--- | Map a DataCon onto the name of the generated unpack function.
-mkUnpackerName :: TyCon -> Var
-mkUnpackerName tyCons = toVar $ "unpack_" ++ tyCons
-
--- | Map a DataCon onto the name of the generated print function.
-mkPrinterName :: DataCon -> Var
-mkPrinterName tyCons = toVar $ "print_" ++ tyCons
-
-mkCopyFunName :: DataCon -> Var
-mkCopyFunName dcon = "copy_" `varAppend` (toVar dcon)
-
-isCopyFunName :: Var -> Bool
-isCopyFunName = isPrefixOf "copy_" . fromVar
-
-mkTravFunName :: DataCon -> Var
-mkTravFunName dcon = "_traverse_" `varAppend` (toVar dcon)
-
-
 -- Gensym monad:
-----------------------------------------
 
 newtype SyM a = SyM (State Int a)
- deriving (Functor, Applicative, Monad, MonadState Int)
+ deriving newtype (Functor, Applicative, Monad, MonadState Int)
+
+-- | A fresh int.
+newUniq :: MonadState Int m => m Int
+newUniq = state (\x -> (x, x+1))
 
 -- | Generate a unique symbol by attaching a numeric suffix.
 gensym :: MonadState Int m => Var -> m Var
 gensym v = state (\n -> (cleanFunName v `varAppend` toVar (show n), n + 1))
 
-
-
 gensym_tag :: MonadState Int m => Var -> String -> m Var
 gensym_tag v str = state (\n -> (cleanFunName v `varAppend` toVar ((show n)++ str) , n + 1))
 
--- | Generate alphabetic variables 'a','b',...
-genLetter :: SyM Var
+-- | An infinite alphabet generator: 'a','b', ... ,'z','a0', ...
+genLetter :: MonadState Int m => m Var
 genLetter = do
-    n <- get
-    modify (+1)
-    return $ toVar $ [chr (n + ord 'a')]
+    let infStream = cycle ['a'..'z']
+    n <- newUniq
+    -- Well, this won't give us exactly what the docs say, but it's good
+    -- enough and requires no changes to SyM or PassM.
+    return $ toVar (infStream !! n : show n)
 
 runSyM :: Int -> SyM a -> (a,Int)
 runSyM n (SyM a) = runState a n
 
+--------------------------------------------------------------------------------
 -- Pass monad:
-----------------------------------------
 
 -- | The monad used by core Gibbon passes to access 'Config' and other shared state.
 newtype PassM a = PassM (ReaderT Config SyM a)
-  deriving (Functor, Applicative, Monad, MonadReader Config, MonadState Int)
+  deriving newtype (Functor, Applicative, Monad, MonadReader Config, MonadState Int)
 
 runPassM :: Config -> Int -> PassM a -> (a,Int)
 runPassM cfg cnt (PassM pass) = runSyM cnt (runReaderT pass cfg)
@@ -476,8 +187,8 @@ defaultPackedRunPassM = runPassM (defaultConfig { dynflags = dflags}) 0
 getDynFlags :: MonadReader Config m => m DynFlags
 getDynFlags = dynflags <$> ask
 
+--------------------------------------------------------------------------------
 -- Gibbon config:
-----------------------------------------
 
 -- | Overall configuration of the compiler, as determined by command
 -- line arguments and possible environment variables.
@@ -564,8 +275,7 @@ getRunConfig ls =
      return $ RunConfig { rcSize=read sz, rcIters=read iters, rcDbg= dbgLvl, rcCursors= False }
    _ -> error $ "getRunConfig: too many command line args, expected <size> <iters> at most: "++show ls
 
-
-----------------------------------------
+--------------------------------------------------------------------------------
 
 -- | An alias for the error function we want to use throughout this project.
 {-# INLINE err #-}
@@ -576,12 +286,15 @@ err = error
 internalError :: String -> a
 internalError s = error ("internal error: "++s)
 
+instance (Out k,Out v) => Out (Map k v) where
+  doc         = doc . M.toList
+  docPrec n v = docPrec n (M.toList v)
 
 (#) :: (Ord a, Out a, Out b, Show a) => Map a b -> a -> b
 m # k = case M.lookup k m of
           Just x  -> x
           Nothing -> err $ "Map lookup failed on key: "++show k
-                     ++ " in map:\n "++ show (doc m)
+                     ++ " in map:\n "++ sdoc m
 
 
 (!!!) :: (Out a) => [a] -> Int -> a
@@ -627,9 +340,9 @@ abbrv n x =
        then str
        else L.take (n-3) str ++ "..."
 
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 -- DEBUGGING
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 theEnv :: [(String, String)]
 theEnv = unsafePerformIO getEnvironment
@@ -662,10 +375,6 @@ dbgPrint :: Int -> String -> IO ()
 dbgPrint lvl str = if dbgLvl < lvl then return () else do
     _ <- evaluate (force str) -- Force it first to squeeze out any dbgTrace msgs.
     hPutStrLn stderr str
-    -- hPrintf stderr str
-    -- hFlush stderr
-    -- printf str
-    -- hFlush stdout
 
 -- | Conditional version of Debug.Trace.trace
 dbgTrace :: Int -> String -> a -> a
@@ -674,8 +383,21 @@ dbgTrace lvl msg val =
     then val
     else trace msg val
 
-dbgTraceIt :: Show a => Int -> String -> a -> a
-dbgTraceIt lvl msg x = dbgTrace lvl (msg++": "++show x) x
+-- | Yo, trace this msg.
+dbgTraceIt :: String -> a -> a
+dbgTraceIt msg x = trace msg x
 
 dbgPrintLn :: Int -> String -> IO ()
 dbgPrintLn lvl str = dbgPrint lvl (str++"\n")
+
+--------------------------------------------------------------------------------
+-- Some global constants
+
+-- | For now this is designed to match the Racket output of "#lang
+-- gibbon" which itself should change once we implement a custom
+-- printer.
+truePrinted :: String
+truePrinted = "#t"
+
+falsePrinted :: String
+falsePrinted = "#f"
