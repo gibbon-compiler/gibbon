@@ -1,4 +1,4 @@
-module Two where
+module PolyTree where
 
 import Prelude hiding (succ, and)
 

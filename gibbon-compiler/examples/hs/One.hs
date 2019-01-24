@@ -20,6 +20,12 @@ data Either a b = Left a | Right b
 pureEither :: b -> Either a b
 pureEither x = Right x
 
+fmapEither :: (a -> b) -> Either x a -> Either x b
+fmapEither f e =
+  case e of
+    Left x -> Left x
+    Right y  -> Right (f y)
+
 data List a = Nil
             | Cons a (List a)
   deriving Show
@@ -60,6 +66,9 @@ baz x y = x + y
 succ :: Int -> Int
 succ x = x + 1
 
+isEven :: Int -> Bool
+isEven i = (mod i 2) == 0
+
 minus :: Int -> Int
 minus x = x - 1
 
@@ -91,6 +100,9 @@ gibbon_main =
          w :: Either Int Int
          w = pureEither 20
 
+         w1 :: Either Int Bool
+         w1 = fmapEither isEven w
+
          v :: Int
          v = dot succ succ 10
 
@@ -104,7 +116,7 @@ gibbon_main =
          s = foldr plus 0 (Cons 1 (Cons 2 Nil))
 
          test = (id1 10, id1 True, id2 11, id2 False, foo1 1 2, foo2 3 4,
-                 x, w, v, u, t, s)
+                 x, w, w1, v, u, t, s)
        in test
 
 main :: IO ()
