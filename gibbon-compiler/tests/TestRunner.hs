@@ -482,7 +482,7 @@ runTest tc Test{name,dir,expectedResults,runModes,mb_anspath} = do
             exepath  = replaceExtension basename ".exe"
             cmd = "gibbon"
             options =
-                modeRunOptions mode ++ [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , dir </> name ]
+                modeRunOptions mode ++ [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , compiler_dir </> dir </> name ]
         (_, Just hout, Just herr, phandle) <-
             createProcess (proc cmd options) { std_out = CreatePipe
                                              , std_err = CreatePipe }
@@ -549,7 +549,7 @@ doNTrials tc mode t@Test{name,dir,numTrials,sizeParam,moreIters,isMegaBench,benc
         cpath    = replaceExtension basename ".c"
         exepath  = replaceExtension basename ".exe"
 
-        common_options = [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , dir </> name ]
+        common_options = [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , compiler_dir </> dir </> name ]
 
         toexe_options = modeExeOptions mode ++ common_options
 
