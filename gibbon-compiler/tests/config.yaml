@@ -266,6 +266,7 @@ tests:
   - name: test_addtrees.gib
     failing: [gibbon2,gibbon1]
   - name: test_buildtreesum.gib
+    failing: [gibbon2,gibbon1]
 
     ## Fusion2 makes it work for some reason.
     # failing: [gibbon2,gibbon1]

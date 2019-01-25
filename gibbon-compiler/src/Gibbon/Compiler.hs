@@ -460,6 +460,7 @@ passes config@Config{dynflags} l1 = do
           biginf     = gopt Opt_BigInfiniteRegions dynflags
           gibbon1    = gopt Opt_Gibbon1 dynflags
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
+          should_fuse = gopt Opt_Fusion dynflags
       l1 <- goE "typecheck"  L1.tcProg                  l1
       l1 <- goE "freshNames" freshNames                 l1
 
@@ -471,7 +472,9 @@ passes config@Config{dynflags} l1 = do
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    inlineTriv              l1
       l1 <- goE "typecheck"     L1.tcProg               l1
-      l1 <- goE  "fusion2"      fusion2                 l1
+      l1 <- if should_fuse
+          then goE  "fusion2"   fusion2                 l1
+          else return l1
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- goE "floatOut"      floatOut                l1
       l1 <- goE "typecheck"     L1.tcProg               l1

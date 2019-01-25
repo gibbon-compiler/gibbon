@@ -581,7 +581,7 @@ transform  ddefs funDefs  exp fusedFunctions_= do
 fusion2 :: Prog1 -> PassM Prog1
 fusion2 (L1.Prog defs funs main) = do
     (main', funs') <- case main of 
-        Nothing   -> return $ (Nothing, M.empty)
+        Nothing   -> return $ (Nothing, funs)
         Just (m, ty)    -> do
             (m', newDefs, _) <- (transform defs funs m [] )
             return (Just (m',ty), M.union funs newDefs)
