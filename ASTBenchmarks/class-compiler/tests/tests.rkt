@@ -1,5 +1,6 @@
 #lang racket
 
+(require racket/runtime-path)
 (require "test-uniqify.rkt")
 (require "test-flatten.rkt")
 (require "test-compiler.rkt")
@@ -18,42 +19,41 @@
         compiler-tests))
 
 (define (run-tests)
-  (let* ([test-results (flatten (map run-test tests))]
+  (let* ([test-results (append-map run-test tests)]
          [num-test-results (length test-results)]
-         [failures (map test-result-test-case-name
-                        (filter (compose not test-success?) test-results))])
+         [failures (map test-result-test-case-name (filter-not test-success? test-results))])
     (inspect-results failures num-test-results "tests")))
 
 ;; run examples
-(define examples-dir "tests/examples")
+(define-runtime-path examples-dir "examples")
 
 ;; no support for (read) yet ..
-(define ignored-examples (set "r0_1.rkt" "r0_2.rkt" "r0_3.rkt" "r1_9.rkt" "r1_10.rkt" "r1_19.rkt"
-                              "r1_13.rkt" "r1_15.rkt" "r1a_4.rkt" "r1a_5.rkt" "r1a_6.rkt"
-                              ;; actual failure
-                              "r1a_8.rkt"))
+(define ignored-examples
+  (for/set ([p '("r0_1.rkt" "r0_2.rkt" "r0_3.rkt" "r1_9.rkt" "r1_10.rkt" "r1_19.rkt"
+                 "r1_13.rkt" "r1_15.rkt" "r1a_4.rkt" "r1a_5.rkt" "r1a_6.rkt"
+                  ;; actual failure
+                 "r1a_8.rkt")])
+    (build-path examples-dir p)))
 
 (define (run-example e)
-  (let* ([parsed (parse (build-path examples-dir (path->string e)))]
-         [out-path (build-path examples-dir (path-replace-extension e ".out"))]
+  (let* ([parsed (parse e)]
+         [out-path (path-replace-extension e ".out")]
          [expected (if (file-exists? out-path)
-                       (call-with-input-file out-path (lambda (f) (read f)))
+                       (file->value out-path)
                        42)]
          [actual (compile parsed)])
-    (if (equal? actual expected)
-        ""
-        (file-name-from-path e))))
+    (and (equal? actual expected)
+         (file-name-from-path e))))
 
 (define (run-examples)
-  (let* ([files (directory-list examples-dir)]
-         [rkt-files (filter (lambda (p)
-                              (and (equal? (path-get-extension p) #".rkt")
-                                   (not (set-member? ignored-examples (path->string p)))))
-                            files)]
-         [test-results (map run-example rkt-files)]
-         [num-test-results (length test-results)]
-         [failures (map path->string (filter (lambda (x) (not (equal? x ""))) test-results))])
-    (inspect-results failures num-test-results "examples")))
+  (define test-results
+    (for/list ([f (in-directory examples-dir)]
+               #:when (equal? (path-get-extension f) #".rkt")
+               #:unless (set-member? ignored-examples f))
+              (run-example f)))
+  (define num-test-results (length test-results))
+  (define failures (map path->string (filter-not values test-results)))
+  (inspect-results failures num-test-results "examples"))
 
 (define (inspect-results xs num-test-results type)
   (if (empty? xs)
@@ -65,5 +65,6 @@
                      (string-join xs "\n"))
              (exit 1))))
 
-(run-tests)
-(run-examples)
+(module+ main
+  (run-tests)
+  (run-examples))
