@@ -1,10 +1,20 @@
 # This file must be sourced with ". set_env.sh" or "source set_env.sh"
+#
+# Responds to env var DOCKER=1 when this script is sourced.
+
+if ! [ -d ./gibbon-compiler ]; then
+    echo "Error: please source this handy set_env script from the directory that contains it.";
+    return 1
+fi
 
 export GIBBONDIR=`pwd`
-
 export PLTADDONDIR=$GIBBONDIR/.racket_sandbox/
 
-STK="stack"
+if [ "$DOCKER" == "1" ]; then
+    STK="stack --docker "
+else
+    STK="stack"
+fi
 BUILD_ARGS=" --install-ghc build "
 
 # A shortcut to make things easier:

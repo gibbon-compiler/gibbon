@@ -312,7 +312,7 @@ exp se =
      -- Here, we remove the outermost NoLoc and tag with original src location
      (loc l) $ unLoc $ mkLets (L.map letbind bnds) (exp bod)
 
-   Ls3 l "let*" (Ls []) bod -> exp bod
+   Ls3 _ "let*" (Ls []) bod -> exp bod
 
    Ls3 l "let*" (Ls (bnd:bnds)) bod ->
         -- just like the `let` case above

@@ -33,4 +33,6 @@ docker:
   enable: false
   auto-pull: true
   repo: "fpco/stack-build:lts-12.5"
+  run-args: ["--env","GIBBONDIR"]
+
 #  image: "fpco/stack-build:lts-6.23"
