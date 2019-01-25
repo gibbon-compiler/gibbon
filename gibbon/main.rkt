@@ -2,7 +2,7 @@
 
 (provide Int Sym Bool Float SymDict data empty-dict lookup insert delete
          has-key? case
-         define let  if :
+         define let let* if :
          for/list for/fold or and
          Vector vector vector-ref
          list and empty? error
@@ -66,6 +66,7 @@ e := var | lit
 | (K e ...)
 | (case e [(K v ...) e] ...)
 | (let ([v : t e] ...) e)        :: CHANGED THIS, note the :
+| (let* ([v : t e] ...) e)
 | (if e e e)
 | primapp
 | (for/list ([v : t e])  e)      ;; not enforced that only loops over single list

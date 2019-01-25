@@ -171,12 +171,12 @@ parseSExp ses =
            Prog (fromListDD dds) (fromListFD fds) mn
 
      -- IGNORED!:
-     (Ls0 (A _ "provide":_) : rst) -> go rst dds fds cds mn
-     (Ls0 (A _ "require":_) : rst) -> go rst dds fds cds mn
+     (Ls (A _ "provide":_) : rst) -> go rst dds fds cds mn
+     (Ls (A _ "require":_) : rst) -> go rst dds fds cds mn
 
-     (Ls0 (A _ "data": A _ tycon : cs) : rst) ->
+     (Ls (A _ "data": A _ tycon : cs) : rst) ->
          go rst (DDef (textToVar tycon) [] (L.map docasety cs) : dds) fds cds mn
-     (Ls0 [A _ "define", funspec, A _ ":", retty, bod] : rst)
+     (Ls [A _ "define", funspec, A _ ":", retty, bod] : rst)
         |  RSList (A _ name : args) <- funspec
         -> do
          let bod' = exp bod
@@ -202,13 +202,13 @@ parseSExp ses =
             cds mn
 
      -- Top-level definition instead of a function.
-     (Ls0 [A _ "define", A _ topid, A _ ":", ty, bod] : rst) ->
+     (Ls [A _ "define", A _ topid, A _ ":", ty, bod] : rst) ->
          go rst dds fds ((textToVar topid,ty,exp bod) : cds) mn
 
-     (Ls0 [A _ "define", _args, _bod] : _) -> error$ "Function is missing return type:\n  "++prnt (head xs)
-     (Ls0 (A _ "define" : _) : _) -> error$ "Badly formed function:\n  "++prnt (head xs)
+     (Ls [A _ "define", _args, _bod] : _) -> error$ "Function is missing return type:\n  "++prnt (head xs)
+     (Ls (A _ "define" : _) : _) -> error$ "Badly formed function:\n  "++prnt (head xs)
 
-     (Ls0 (A _ "data" : _) : _) -> error$ "Badly formed data definition:\n  "++prnt (head xs)
+     (Ls (A _ "data" : _) : _) -> error$ "Badly formed data definition:\n  "++prnt (head xs)
 
      (Ls3 _ "module+" _ bod : rst) -> go (bod:rst) dds fds cds mn
 
@@ -245,7 +245,7 @@ docasety s =
 
 pattern A loc s = RSAtom (SC.At loc (HSIdent s))
 pattern G loc s = RSAtom (SC.At loc s)
-pattern Ls0 a             = RSList a
+pattern Ls a              = RSList a
 pattern Ls1 a             = RSList [a]
 pattern Ls2 loc a b       = RSList [A loc a, b]
 pattern Ls3 loc a b c     = RSList [A loc a, b, c]
@@ -264,7 +264,7 @@ falseE = PrimAppE MkFalse []
 
 keywords :: S.Set Text
 keywords = S.fromList $ L.map pack $
-           [ "quote", "if", "or", "and", "time", "let"
+           [ "quote", "if", "or", "and", "time", "let", "let*"
            , "case", "vector-ref", "for/fold", "for/list"
            , "insert", "empty-dict", "lookup", "error", "ann"
            , "div", "mod", "exp", "rand"
@@ -279,13 +279,13 @@ exp se =
    A l "True"  -> L (toLoc l) trueE
    A l "False" -> L (toLoc l) falseE
 
-   Ls0 ((A l "and") : args)  -> go args
+   Ls ((A l "and") : args)  -> go args
      where
        go :: [Sexp] -> L Exp1
        go [] = loc l trueE
        go (x:xs) = loc l $ IfE (exp x) (go xs) (L NoLoc falseE)
 
-   Ls0 ((A l "or") : args)  -> go args
+   Ls ((A l "or") : args)  -> go args
      where
        go :: [Sexp] -> L Exp1
        go [] = loc l falseE
@@ -307,15 +307,21 @@ exp se =
    -- argument on the command line.
    Ls2 l "iterate" arg -> loc l $ TimeIt (exp arg) (PackedTy "DUMMY_TY" ()) True
 
-   Ls3 l "let" (Ls0 bnds) bod ->
+   Ls3 l "let" (Ls bnds) bod ->
      -- mkLets tacks on NoLoc's for every expression.
      -- Here, we remove the outermost NoLoc and tag with original src location
      (loc l) $ unLoc $ mkLets (L.map letbind bnds) (exp bod)
 
-   Ls0 (A l "case": scrut: cases) ->
+   Ls3 l "let*" (Ls []) bod -> exp bod
+
+   Ls3 l "let*" (Ls (bnd:bnds)) bod ->
+        -- just like the `let` case above
+        (loc l) $ unLoc $ mkLets [(letbind bnd)] $ exp $ Ls3 l "let*" (Ls bnds) bod
+
+   Ls (A l "case": scrut: cases) ->
      loc l $ CaseE (exp scrut) (L.map docase cases)
 
-   Ls0 (A l p : ls) | isPrim p -> loc l $ PrimAppE (prim p) $ L.map exp ls
+   Ls (A l p : ls) | isPrim p -> loc l $ PrimAppE (prim p) $ L.map exp ls
 
    Ls3 l "for/list" (Ls1 (Ls4 _ v ":" t e)) bod ->
      loc l $ MapE (textToVar v, typ t, exp e) (exp bod)
@@ -334,7 +340,7 @@ exp se =
 
    Ls3 l "par" a b -> loc l $ ParE (exp a) (exp b)
 
-   Ls0 (A l "vector" : es) -> loc l $ MkProdE $ L.map exp es
+   Ls (A l "vector" : es) -> loc l $ MkProdE $ L.map exp es
 
    -- Dictionaries require type annotations for now.  No inference!
    Ls3 l "ann" (Ls1 (A _ "empty-dict")) (Ls2 _ "SymDict" ty) ->
@@ -358,12 +364,12 @@ exp se =
    -- Other annotations are dropped:
    Ls3 _ "ann" e _ty -> exp e
 
-   Ls0 (A _ kwd : _args) | isKeyword kwd ->
+   Ls (A _ kwd : _args) | isKeyword kwd ->
       error $ "Error reading treelang. " ++ show kwd ++ "is a keyword:\n "++prnt se
 
    ----------------------------------------
    -- If NOTHING else matches, we are an application.  Be careful we didn't miss anything:
-   Ls0 (A l rator : rands) ->
+   Ls (A l rator : rands) ->
      let app = (loc l) . AppE (textToVar rator) []
      in case rands of
          [] -> app (L NoLoc $ MkProdE [])
