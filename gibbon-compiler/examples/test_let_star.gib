@@ -1,0 +1,5 @@
+#lang gibbon
+
+(let* ([x : Int 40]
+       [y : Int 2])
+  (+ x y))
