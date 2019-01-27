@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# The major environment variables this uses are:
+#  * COARSE_DOCKER=1 : coarse-grained, "build/run everything inside Docker"
+#  * COARSE_NIX=1    : same for Nix
+
 set -xe
 
 echo "Running on machine: "`hostname -a || echo env says $HOSTNAME`
@@ -12,10 +16,10 @@ echo "Git commit depth: "
 
 top=`pwd`
 
-# This testing mode assumes that nix/docker integration is OFF by default:
+# This testing mode assumes that stack's own nix/docker integration is OFF by default:
 export STACKARGS="--no-system-ghc"
 
-if [ "$DOCKER" == "1" ]; then
+if [ "$COARSE_DOCKER" == "1" ]; then
     # Make bintree-bench image:
     cd $top/BintreeBench
     make docker
@@ -24,10 +28,10 @@ if [ "$DOCKER" == "1" ]; then
     cd $top/
     docker build -t tree-velocity .
 
-elif [ "$USE_NIX" == "1" ]; then
+elif [ "$COARSE_NIX" == "1" ]; then
 
     # Here by default we use a pinned version of the software ecosystem:
-    nix-shell --pure --command  "USE_NIX=1 ./run_all_tests.sh $@"
+    nix-shell --pure --command  "COARSE_NIX=1 ./run_all_tests.sh $@"
 
 else
     # HACK to get Jenkins to use proper Racket and GCC versions

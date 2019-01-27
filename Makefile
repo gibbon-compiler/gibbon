@@ -10,10 +10,6 @@ all: racket subst
 deps:
 	cd deps/sexpr-1.3 && ./configure && $(MAKE)
 
-subst:
-# RRN: This makefile is gone.  Was it ever there?
-# 	cd ASTBenchmarks/substitution && $(MAKE) 
-
 racket: gibbon-lang
 
 SANDBOX=.racket_sandbox
@@ -29,6 +25,7 @@ gibbon-lang: $(SANDBOX)
 $(SANDBOX):
 	mkdir -p $@
 
+# -------------------------- NIX ----------------------------------
 # Bring up a shell using a fixed, known-good software image.
 #  - 51a83266d164195698f04468d90d2c6238ed3491 is a snapshot of nixos-17.03 channel on [2017.08.16]
 #  - 09b9f7e7c496813f3ecd01c39a976ae3637e41e6 is a snapshot of nixos-17.03 on [2017.10.03]
@@ -46,6 +43,8 @@ pure:
 head: head-shell
 head-shell:
 	nix-shell --arg pkgs 'import <nixpkgs> {}'
+# -------------------------- /NIX ----------------------------------
+
 
 # Aggressive clean of the working copy:
 clean:

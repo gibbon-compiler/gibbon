@@ -3,6 +3,7 @@ sudo: required
 
 # Do not choose a language; we provide our own build tools.
 language: generic
+# language: nix
 
 # Caching so the next build will be fast too.
 cache:
@@ -25,14 +26,14 @@ addons:
 # Docker code 
 env:
   - 
-  - DOCKER=1
-  - USE_NIX=1
+  - STACK_DOCKER=1
+#  - STACK_NIX=1
 
 # Temporary:
 matrix:
   allow_failures:
-    - env: DOCKER=1
-    - env: USE_NIX=1
+    - env: STACK_DOCKER=1
+#    - env: STACK_NIX=1
   
 install:
   # Download and unpack the stack executable

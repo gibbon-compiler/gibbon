@@ -1,6 +1,4 @@
 # This file must be sourced with ". set_env.sh" or "source set_env.sh"
-#
-# Responds to env var DOCKER=1 when this script is sourced.
 
 if ! [ -d ./gibbon-compiler ]; then
     echo "Error: please source this handy set_env script from the directory that contains it.";
@@ -10,15 +8,11 @@ fi
 export GIBBONDIR=`pwd`
 export PLTADDONDIR=$GIBBONDIR/.racket_sandbox/
 
-if [ "$DOCKER" == "1" ]; then
-    STK="stack --docker "
-else
-    STK="stack"
-fi
+STK="stack"
 BUILD_ARGS=" --install-ghc build "
 
 # A shortcut to make things easier:
-function tc() {
+function gib() {
     cur=`pwd`
     cd $GIBBONDIR/gibbon-compiler/
     $STK $BUILD_ARGS
@@ -42,24 +36,23 @@ function tc() {
 # WARNING: as of stack 1.2 you need to stack-clean between using
 # tc/tcd.  It is not smart enough to rebuild automatically and keep
 # the build artifacts separate.
-function tcd() {    
-    BUILD_ARGS="$BUILD_ARGS --trace" tc $@
+function gib_dbg() {
+    BUILD_ARGS="$BUILD_ARGS --trace" gib $@
 }
 
 # Nix version
 function gibn() {    
-    STK="stack --nix" tc $@
+    STK="stack --nix" gib $@
 }
 
 function gibd() {
     # --docker-auto-pull isn't working:
     (cd $GIBBONDIR/gibbon-compiler/ && stack docker pull 2> /dev/null) && \
-     STK="stack --docker " tc $@
+     STK="stack --docker " gib $@
 }
 
-
 # A quick verison that doesn't check for recompile.
-function tcq() {    
+function gibq() {    
     cur=`pwd`
     cd $GIBBONDIR/gibbon-compiler/
     CMD=`stack exec -- which gibbon`

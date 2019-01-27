@@ -94,7 +94,22 @@ racket $top/ASTBenchmarks/kdTree-BenchMark/racket/traversal.gib
 
 STK="stack --allow-different-user"
 
-if [ "$USE_NIX" == "1" ]; then
+if [ "$STACK_DOCKER" == "1" ]; then
+    if [ "$COARSE_DOCKER" == "1" ]; then
+        echo "ERROR: cannot use stack --docker when already running in COARSE_DOCKER=1"
+        exit 1
+    fi
+    STK+=" --docker "
+
+elif [ "$STACK_NIX" == "1" ]; then
+    if [ "$COARSE_NIX" == "1" ]; then
+        echo "ERROR: should not use stack --nix when already running in COARSE_NIX=1"
+        exit 1
+    fi
+    STK+=" --nix "
+fi
+    
+if [ "$COARSE_NIX" == "1" ]; then
     STK+=" --system-ghc "
 else
     STK+=" --install-ghc "
@@ -116,7 +131,7 @@ fi
 echo "  Gibbon Compiler (2/2): compiler test suite"
 echo "--------------------------------------------"
 
-# Turning of -j for now [2016.11.06]
+# Turning off -j for now [2016.11.06]
 cd $top/gibbon-compiler
 # make answers
 $STK exec test-gibbon-examples -- -v2
