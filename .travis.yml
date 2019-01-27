@@ -21,6 +21,19 @@ addons:
       - gcc-7
       - ghc-8.4.3
 
+# Build in three modes, varying ONLY the environment used to build
+# Docker code 
+env:
+  - 
+  - DOCKER=1
+  - USE_NIX=1
+
+# Temporary:
+matrix:
+  allow_failures:
+    - env: DOCKER=1
+    - env: USE_NIX=1
+  
 install:
   # Download and unpack the stack executable
   # The Ubuntu package is only available on >16.04. Travis is using 14.04.
