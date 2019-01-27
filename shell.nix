@@ -4,7 +4,7 @@
 # Currently using a snapshot of the nixos-18.03 channel.
 # Default GHC should match the current LTS in stack.yaml:
 { pkgs ? import (fetchTarball (import ./.nix_default_environment.txt)) {}
-, ghc ? pkgs.haskell.compiler.ghc822 }:
+, ghc ? pkgs.haskell.compiler.ghc843 }:
 
 with pkgs;
 

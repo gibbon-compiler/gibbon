@@ -9,7 +9,7 @@
 # whatever nixpkgs your user account is currently pointing at.
 { pkgs ? import (fetchTarball (import ../.nix_default_environment.txt)) {}
  # Default should match the current LTS in stack.yaml:
-, ghc ? pkgs.haskell.compiler.ghc822 }:
+, ghc ? pkgs.haskell.compiler.ghc843 }:
 
 with pkgs;
 
