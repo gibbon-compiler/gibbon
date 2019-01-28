@@ -18,7 +18,7 @@ data ElementsList  = ElementsListInner  Element ElementsList
                    | ElementsListEnd Element 
 data Element =  ImageCons Int Int StringJ NodeData
               | TextBoxCons Int Int StringJ NodeData
-              | VertContainer HorizContainerList NodeData
+              | VertContainer HorizContainerList 
 data StringJ  = StrChar Int
              | StrEnd
 
@@ -36,16 +36,32 @@ getWidth :: NodeData -> Int
 getWidth nData  = case (nData) of 
     NodeDataK posX posY height width relWidth mMode fontStyle -> width
 
+getHeight :: NodeData -> Int  
+getHeight nData  = case (nData) of 
+    NodeDataK posX posY height width relWidth mMode fontStyle -> height
+    
 getWidthElement :: Element -> Int  
 getWidthElement e  = case (e) of 
     ImageCons a b s nData  -> getWidth nData
     TextBoxCons  a b s nData -> getWidth nData
-    VertContainer hzList nData -> getWidth nData
+    VertContainer hzList  -> getMaxWidthHzList hzList
  
+getHeightElement :: Element -> Int  
+getHeightElement e  = case (e) of 
+    ImageCons a b s nData  -> getHeight nData
+    TextBoxCons  a b s nData -> getHeight nData
+    VertContainer hzList  -> getSumHeights hzList
+
 updateWidth :: NodeData -> Int -> NodeData  
 updateWidth nData newWidth = case (nData) of 
     NodeDataK posX posY height width relWidth mMode fontStyle -> 
         NodeDataK posX posY height newWidth relWidth mMode fontStyle
+
+updateHeight :: NodeData -> Int -> NodeData  
+updateHeight nData newHeight = case (nData) of 
+    NodeDataK posX posY height width relWidth mMode fontStyle -> 
+        NodeDataK posX posY newHeight width relWidth mMode fontStyle
+
 
 -- We might need to rewrite this into two functions .. duh thats alot of work 
 -- and maybe performance reduction 
@@ -63,14 +79,17 @@ getMaxWidthHzList hzList = case (hzList) of
         maxI (sumWidthsElmList elmList) ( getMaxWidthHzList remList)
     HorizContainerListEnd elmList -> sumWidthsElmList elmList
 
+
+
 sumWidthsElmList :: ElementsList -> Int
 sumWidthsElmList elmList = case (elmList) of 
     ElementsListInner e remList -> addI (getWidthElement e ) (sumWidthsElmList remList)
     ElementsListEnd e  -> getWidthElement e 
------ 
+
+    -- compute width 
 -- This traversal compute the width of the page which consists of nested 
--- horizontal and vertical containers with leaf elements 
--- TODO : remove the widthMode and assume one mode for that
+-- horizontal and vertical containers with leaf elements, it calls other 
+-- traversals (getMaxWidth and sumWidths)
 
 resolveWidthDoc :: Document -> Document 
 resolveWidthDoc doc  = case (doc) of
@@ -102,7 +121,7 @@ resolveWidthHzLst hzList  = case (hzList) of
     HorizContainerListEnd elmList -> 
         HorizContainerListEnd (resolveWidthElmList elmList) 
 
-resolveWidthElmList ::ElementsList -> ElementsList
+resolveWidthElmList :: ElementsList -> ElementsList
 resolveWidthElmList elemList  = case (elemList) of 
     ElementsListInner element remList  ->
         ElementsListInner (resolveWidthElm element) 
@@ -110,11 +129,65 @@ resolveWidthElmList elemList  = case (elemList) of
     ElementsListEnd element -> 
         ElementsListEnd (resolveWidthElm element) 
 
-resolveWidthElm ::Element -> Element
+resolveWidthElm :: Element -> Element
 resolveWidthElm element  = case (element) of 
-    VertContainer hzList nData -> VertContainer (resolveWidthHzLst hzList) nData
+    VertContainer hzList  -> VertContainer (resolveWidthHzLst hzList) 
 
 gibbon_main =  StrEnd
+
+-- computeWidth a traversal that computes the width of each element 
+-- in the render tree this traversal depend on computing the width
+
+computeHeightDoc :: Document -> Document
+computeHeightDoc doc = case (doc) of 
+    Document pList nData -> Document (computeHeightPList pList) nData 
+    
+computeHeightPList :: PageList -> PageList
+computeHeightPList pList = case (pList) of 
+    PageListInner page remList -> PageListInner (computeHeightPage page)
+        (computeHeightPList remList)
+    PageListEnd page ->PageListEnd ( computeHeightPage page)
+
+getSumHeights :: HorizContainerList -> Int
+getSumHeights hzList = case (hzList) of 
+    HorizContainerListInner elmList remList -> 
+        let maxH = getMaxHeight elmList 
+        in addI maxH (getSumHeights remList)
+    HorizContainerListEnd elmList -> getMaxHeight elmList 
+
+getMaxHeight :: ElementsList -> Int
+getMaxHeight elmList = case (elmList) of 
+    ElementsListInner element remList -> 
+        let h1 = getMaxHeight remList 
+            h2 = getHeightElement element 
+        in maxI h1 h2         
+
+computeHeightPage :: Page -> Page
+computeHeightPage p = case (p) of
+    Page hzList nData -> 
+        let hzList'=   computeHeightHzList hzList
+        in let newHeight = getSumHeights hzList'
+           in Page hzList' (updateHeight nData newHeight )
+
+computeHeightHzList :: HorizContainerList -> HorizContainerList
+computeHeightHzList hzList = case (hzList) of 
+    HorizContainerListInner elmList remList ->
+        let elmList' = computeHeightElmList elmList 
+            remList' = computeHeightHzList remList
+        in HorizContainerListInner elmList' remList'
+    HorizContainerListEnd elmList -> 
+        HorizContainerListEnd (computeHeightElmList elmList)
+
+computeHeightElmList :: ElementsList -> ElementsList
+computeHeightElmList elmList = case (elmList) of 
+    ElementsListInner element remList -> 
+        ElementsListInner (computeHeightElement element)
+           (computeHeightElmList remList)
+    ElementsListEnd element -> ElementsListEnd (computeHeightElement  element)
+
+computeHeightElement :: Element -> Element
+computeHeightElement element = case (element) of 
+    VertContainer hzList -> VertContainer (computeHeightHzList hzList)
 
 main :: IO ()
 main = print gibbon_main
