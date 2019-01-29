@@ -94,6 +94,9 @@ data Test = Test
     , moreIters :: [Mode] -- ^ In these modes, this test would require lots of iterations to
                           -- keep it running for measurable amount of time.
 
+    , test_flags :: [String]   -- ^ We don't parse the flags here but instead pass them onto
+                               -- Gibbon as is.
+
     -- Temporary hack until we can generate output in both Racket and Haskell
     -- syntax. #t => True etc.
     , mb_anspath :: Maybe String -- ^ Override the default answer file.
@@ -116,6 +119,7 @@ defaultTest = Test
     , numTrials = 9
     , sizeParam = 25
     , moreIters = []
+    , test_flags = []
     , mb_anspath = Nothing
     , isMegaBench = False
     , benchFun   = "bench"
@@ -136,14 +140,15 @@ instance FromJSON Test where
         trials      <- o .:? "trials" .!= (numTrials defaultTest)
         sizeparam   <- o .:? "size-param" .!= (sizeParam defaultTest)
         moreiters   <- o .:? "more-iters" .!= (moreIters defaultTest)
-        mbanspath  <- o .:? "answer-file" .!= (mb_anspath defaultTest)
+        test_flags  <- o .:? "test-flags" .!= (test_flags defaultTest)
+        mbanspath   <- o .:? "answer-file" .!= (mb_anspath defaultTest)
         megabench   <- o .:? "mega-bench" .!= (isMegaBench defaultTest)
         benchfun    <- o .:? "bench-fun" .!= (benchFun defaultTest)
         benchinput  <- o .:? "bench-input" .!= (benchInput defaultTest)
         let expectedFailures = M.fromList [(mode, Fail) | mode <- failing]
             -- Overlay the expected failures on top of the defaults.
             expected = M.union expectedFailures (expectedResults defaultTest)
-        return $ Test name dir expected skip runmodes isbenchmark trials sizeparam moreiters mbanspath megabench benchfun benchinput
+        return $ Test name dir expected skip runmodes isbenchmark trials sizeparam moreiters test_flags mbanspath megabench benchfun benchinput
     parseJSON oth = error $ "Cannot parse Test: " ++ show oth
 
 data Result = Pass | Fail
@@ -171,18 +176,18 @@ readMode s =
         _ -> error $ "readMode: " ++ show s
 
 -- Must match the flag expected by Gibbon.
-modeRunOptions :: Mode -> [String]
-modeRunOptions Gibbon2  = ["--run", "--packed"]
-modeRunOptions Pointer = ["--run", "--pointer"]
-modeRunOptions Interp1 = ["--interp1"]
-modeRunOptions Gibbon1 = ["--run", "--packed", "--gibbon1"]
+modeRunFlags :: Mode -> [String]
+modeRunFlags Gibbon2  = ["--run", "--packed"]
+modeRunFlags Pointer = ["--run", "--pointer"]
+modeRunFlags Interp1 = ["--interp1"]
+modeRunFlags Gibbon1 = ["--run", "--packed", "--gibbon1"]
 
 -- Must match the flag expected by Gibbon.
-modeExeOptions :: Mode -> [String]
-modeExeOptions Gibbon2 = ["--to-exe", "--packed"]
-modeExeOptions Pointer = ["--to-exe", "--pointer"]
-modeExeOptions Interp1 = error "Cannot compile in Interp1 mode."
-modeExeOptions Gibbon1 = ["--to-exe", "--packed", "--gibbon1"]
+modeExeFlags :: Mode -> [String]
+modeExeFlags Gibbon2 = ["--to-exe", "--packed"]
+modeExeFlags Pointer = ["--to-exe", "--pointer"]
+modeExeFlags Interp1 = error "Cannot compile in Interp1 mode."
+modeExeFlags Gibbon1 = ["--to-exe", "--packed", "--gibbon1"]
 
 modeFileSuffix :: Mode -> String
 modeFileSuffix Gibbon2  = "_gibbon2"
@@ -462,11 +467,8 @@ runTests tc tr = do
                 acc results
 
 runTest :: TestConfig -> Test -> IO [(Mode,TestVerdict)]
-runTest tc Test{name,dir,expectedResults,runModes,mb_anspath} = do
-    (if (verbosity tc > 1)
-     then hPutStrLn stdout (name ++ "...")
-     else hPutStr stdout ".") >> hFlush stdout
-
+runTest tc Test{name,dir,expectedResults,runModes,mb_anspath,test_flags} = do
+    dbgFlushIt tc 2 (name ++ "...\n") (".")
     mapM (\(m,e) -> go m e) (M.toList $ M.restrictKeys expectedResults (S.fromList runModes))
   where
     go :: Mode -> Result -> IO (Mode, TestVerdict)
@@ -481,11 +483,15 @@ runTest tc Test{name,dir,expectedResults,runModes,mb_anspath} = do
             cpath    = replaceExtension basename ".c"
             exepath  = replaceExtension basename ".exe"
             cmd = "gibbon"
-            options =
-                modeRunOptions mode ++ [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , compiler_dir </> dir </> name ]
+            -- The order of (++) is important. The PATH to the test file must always be at the end.
+            cmd_flags = modeRunFlags mode ++ test_flags ++
+                        [ "--cfile=" ++ cpath ,
+                          "--exefile=" ++ exepath ,
+                          compiler_dir </> dir </> name ]
         (_, Just hout, Just herr, phandle) <-
-            createProcess (proc cmd options) { std_out = CreatePipe
-                                             , std_err = CreatePipe }
+            createProcess (proc cmd cmd_flags) { std_out = CreatePipe
+                                               , std_err = CreatePipe }
+        dbgFlushIt tc 3 ("CMD: " ++ cmd ++ " " ++ (intercalate " " cmd_flags) ++ "\n") ("")
         exitCode <- waitForProcess phandle
         case exitCode of
             ExitSuccess -> do
@@ -542,27 +548,28 @@ runBenchmark tc t@Test{name,dir,expectedResults,runModes,numTrials} = do
 
 --
 doNTrials :: TestConfig -> Mode -> Test -> IO (Either String [BenchResult])
-doNTrials tc mode t@Test{name,dir,numTrials,sizeParam,moreIters,isMegaBench,benchFun} = do
+doNTrials tc mode t@Test{name,dir,numTrials,sizeParam,moreIters,isMegaBench,benchFun,test_flags} = do
     compiler_dir <- getCompilerDir
     let tmppath  = compiler_dir </> tempdir tc </> name
         basename = compiler_dir </> replaceBaseName tmppath (takeBaseName tmppath ++ modeFileSuffix mode)
         cpath    = replaceExtension basename ".c"
         exepath  = replaceExtension basename ".exe"
 
-        common_options = [ "--cfile=" ++ cpath , "--exefile=" ++ exepath , compiler_dir </> dir </> name ]
 
-        toexe_options = modeExeOptions mode ++ common_options
-
+        -- The order of (++) is important. The PATH to the test file must always be at the end.
+        cmd_flags = modeExeFlags mode ++ test_flags ++
+                      [ "--cfile=" ++ cpath ,
+                        "--exefile=" ++ exepath ,
+                        compiler_dir </> dir </> name ]
         cmd = "gibbon"
-        cmd_options = if isMegaBench
-                      then ["--bench-print","--bench-fun=" ++ benchFun] ++ common_options
-                      else toexe_options
+        bench_cmd_flags = if isMegaBench
+                          then ["--bench-print","--bench-fun=" ++ benchFun] ++ cmd_flags
+                          else cmd_flags
 
-    when (verbosity tc > 1) $
-        putStrLn $ "Executing: " ++ cmd ++ (intercalate " " cmd_options)
     (_, Just _hout, Just herr, phandle) <-
-      createProcess (proc cmd cmd_options) { std_out = CreatePipe
-                                           , std_err = CreatePipe }
+      createProcess (proc cmd bench_cmd_flags) { std_out = CreatePipe
+                                               , std_err = CreatePipe }
+    dbgFlushIt tc 1 ("CMD: " ++ cmd ++ " " ++ (intercalate " " bench_cmd_flags) ++ "\n") ("")
     toexeExitCode <- waitForProcess phandle
 
     -- Number of iterations that should get us beyond the 1s threshold.
@@ -710,6 +717,12 @@ fromRight_ oth  = error $ "fromRight_: Unexpected value " ++ show oth
 
 configFile :: String
 configFile = "tests/config.yaml"
+
+-- Flush @msg1@ if the versosity level is >= @n@. Otherwise, flush msg2.
+-- The caller is responsible for controlling newlines.
+dbgFlushIt :: TestConfig -> Int -> String -> String -> IO ()
+dbgFlushIt tc n msg1 msg2 =
+  (if (verbosity tc >= n) then hPutStr stdout msg1 else hPutStr stdout msg2) >> hFlush stdout
 
 getCompilerDir :: IO String
 getCompilerDir = do

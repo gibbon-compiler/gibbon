@@ -19,6 +19,9 @@
 ## run-modes: if non-empty, run this test only in the specified modes.
 ##            has higher precendence than the global run-mode parameter (default [])
 
+
+## CSK: The documentation is out of date as of [2019.01.29]. I should fix it soon.
+
 tests:
   - name: test00_add.gib
   - name: test00a_size.gib
@@ -232,6 +235,7 @@ tests:
   ## Fusion2 tests
   - name: test_sumup_seteven.gib
     failing: [gibbon1, gibbon2]
+    test-flags: ["--fusion"]
 
   ## A difficult test for AddTraversals.
   - name: test_par05.gib
