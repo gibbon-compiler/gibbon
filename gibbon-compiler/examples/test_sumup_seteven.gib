@@ -1,0 +1,46 @@
+#lang gibbon
+
+
+(data Tree
+      [Leaf Int]
+      [Inner Int Int Tree Tree])
+
+(define (sum-up [tr : Tree]) : Tree
+  (case tr
+    [(Leaf n) (Leaf n)]
+    [(Inner sum x left right)
+     (let  ([l : Tree (sum-up left)]
+            [r : Tree ( sum-up right)])
+        	
+        	(Inner (+ (value l) (value r)) x  l r ))]))
+
+(define (set-even [tr : Tree]) : Tree
+  (case tr
+    [(Leaf n) (Leaf n)]
+    [(Inner sum x left right)
+     (let  ([l : Tree (set-even left)]
+            [r : Tree (set-even right)])
+          
+           (Inner sum (even sum)  l r )
+      )
+    ]
+  )
+)
+
+;; need to add the  mod operaion to gibbon % 
+(define (even [n : Int]) : Int
+  (if (= (+ n 2) 0) 1 0 ) )
+ 
+
+(define (value [tr : Tree]) : Int
+  (case tr
+    [(Leaf n)  n]
+    [(Inner sum x left right) sum ] ))
+
+
+( define (generateTree [n : Int]) : Tree
+ ( if (= n 0 ) (Leaf 2) (Inner 0 0 (generateTree (- n 1 ) ) (generateTree (- n 1) ) ) ) )
+
+;;(iterate (set-even (sum-up ( Inner 0 0 (Leaf 2)(Leaf 2)))) );
+
+(iterate (set-even ( sum-up (generateTree 10) ) ) );;

@@ -78,7 +78,9 @@ import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.FollowRedirects(followRedirects)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
+import           Gibbon.Passes.Fusion2        (fusion2)
 import           Gibbon.Pretty
+
 #ifdef LLVM_ENABLED
 import qualified Gibbon.Passes.LLVM.Codegen as LLVM
 #endif
@@ -458,6 +460,7 @@ passes config@Config{dynflags} l1 = do
           biginf     = gopt Opt_BigInfiniteRegions dynflags
           gibbon1    = gopt Opt_Gibbon1 dynflags
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
+          should_fuse = gopt Opt_Fusion dynflags
       l1 <- goE "typecheck"  L1.tcProg                  l1
       l1 <- goE "freshNames" freshNames                 l1
 
@@ -468,6 +471,10 @@ passes config@Config{dynflags} l1 = do
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    inlineTriv              l1
+      l1 <- goE "typecheck"     L1.tcProg               l1
+      l1 <- if should_fuse
+          then goE  "fusion2"   fusion2                 l1
+          else return l1
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- goE "floatOut"      floatOut                l1
       l1 <- goE "typecheck"     L1.tcProg               l1

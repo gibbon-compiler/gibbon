@@ -19,6 +19,9 @@
 ## run-modes: if non-empty, run this test only in the specified modes.
 ##            has higher precendence than the global run-mode parameter (default [])
 
+
+## CSK: The documentation is out of date as of [2019.01.29]. I should fix it soon.
+
 tests:
   - name: test00_add.gib
   - name: test00a_size.gib
@@ -184,7 +187,7 @@ tests:
   ##    printf (const char *__restrict __fmt, ...)
   ##
   ## [2018.12.03] CSK: Skip Cilk stuff for now.
-  ## Eventually, all the Cilk stuff should be behind a flag.
+  ## This should be behind a flag.
   - name: test_par01.gib
     skip: true
   - name: test_par03.gib
@@ -229,6 +232,11 @@ tests:
     dir: examples/hs/should_fail
     failing: [gibbon1, gibbon2, pointer, interp1]
 
+  ## Fusion2 tests
+  - name: test_sumup_seteven.gib
+    failing: [gibbon1, gibbon2]
+    test-flags: ["--fusion"]
+
   ## A difficult test for AddTraversals.
   - name: test_par05.gib
     skip: true
@@ -262,8 +270,6 @@ tests:
   - name: test_addtrees.gib
     failing: [gibbon2,gibbon1]
   - name: test_buildtreesum.gib
-    failing: [gibbon2,gibbon1]
-  - name: test_sumupseteven.gib
     failing: [gibbon2,gibbon1]
   - name: test25d_racketcore.gib
     failing: [gibbon2, gibbon1]

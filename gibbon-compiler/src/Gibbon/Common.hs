@@ -11,7 +11,7 @@ module Gibbon.Common
          Var(..), LocVar, TyVar(..), fromVar, toVar, varAppend, toEndV, cleanFunName
 
          -- * Gensym monad
-       , SyM, gensym, genLetter, newUniq, runSyM
+       , SyM, gensym, gensym_tag, genLetter, newUniq, runSyM
 
          -- * PassM monad
        , PassM, runPassM, defaultRunPassM, defaultPackedRunPassM
@@ -149,6 +149,9 @@ newUniq = state (\x -> (x, x+1))
 -- | Generate a unique symbol by attaching a numeric suffix.
 gensym :: MonadState Int m => Var -> m Var
 gensym v = state (\n -> (cleanFunName v `varAppend` toVar (show n), n + 1))
+
+gensym_tag :: MonadState Int m => Var -> String -> m Var
+gensym_tag v str = state (\n -> (cleanFunName v `varAppend` toVar ((show n)++ str) , n + 1))
 
 -- | An infinite alphabet generator: 'a','b', ... ,'z','a0', ...
 genLetter :: MonadState Int m => m Var

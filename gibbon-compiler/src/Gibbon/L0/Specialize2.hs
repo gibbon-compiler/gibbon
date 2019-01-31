@@ -394,7 +394,8 @@ collectMonoObls ddefs env2 toplevel mono_st (L p ex) = fmap (L p) <$>
           (sbrs, brs') <-
             foldlM
               (\(sp, acc) (dcon,vtys,bod) -> do
-                (sbod, bod') <- go sp bod
+                let env2' = extendsVEnv (M.fromList vtys) env2
+                (sbod, bod') <- collectMonoObls ddefs env2' toplevel sp bod
                 pure (sbod, acc ++ [(dcon ++ fromVar suffix,vtys,bod')]))
               (sscrt, []) brs
           pure (sbrs, CaseE scrt' brs')
@@ -894,10 +895,15 @@ elimFunRefsExp ddefs env2 low (L p ex) = fmap (L p) <$>
       (low',a') <- go a
       pure (low', ProjE i a')
     CaseE scrt brs -> do
-      let es = map (\(_,_,c) -> c) brs
       (low', scrt') <- go scrt
-      (low'', es') <- elimFunRefsExpl ddefs env2 low' es
-      pure (low'', CaseE scrt' $ map (\((a,b,_), c) -> (a,b,c)) (zip brs es'))
+      (low'', brs') <- foldlM
+                        (\(lo, acc) (dcon,vtys,rhs) -> do
+                          let env2' = extendsVEnv (M.fromList vtys) env2
+                          (lo', e') <- elimFunRefsExp ddefs env2' lo rhs
+                          pure (lo', acc ++ [(dcon,vtys,e')]))
+                        (low', [])
+                        brs
+      pure (low'', CaseE scrt' brs')
     DataConE tyapp dcon args -> do
       (low', args') <- gol args
       pure (low', DataConE tyapp dcon args')
