@@ -237,6 +237,11 @@ tests:
     failing: [gibbon1, gibbon2]
     test-flags: ["--fusion"]
 
+  - name: render_tree.hs
+    failing: [gibbon1, gibbon2]
+    test-flags: ["--fusion"]
+    answer-file: examples/render_tree.ans
+
   ## A difficult test for AddTraversals.
   - name: test_par05.gib
     skip: true
