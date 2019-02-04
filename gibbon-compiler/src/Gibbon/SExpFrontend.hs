@@ -18,7 +18,7 @@ import Data.List as L
 import Data.Loc
 import Data.Map as M
 import Data.Set as S
-import Data.Text as T hiding (head)
+import Data.Text as T hiding (head, init, last, length)
 import Data.Text.IO (readFile)
 import System.FilePath
 import Text.Parsec
@@ -39,15 +39,15 @@ import Data.SCargot.Print
 import Data.SCargot.Repr -- (SExpr, RichSExpr, toRich)
 import qualified Data.SCargot.Common as SC
 
-import Gibbon.L1.Syntax
+import Gibbon.L0.Syntax
 import Gibbon.Common
+import Gibbon.HaskellFrontend ( multiArgsToOne )
 
 --------------------------------------------------------------------------------
 
 -- | Baseline chatter level for this module:
 lvl :: Int
 lvl = 5
-
 
 deriving instance Generic (SExpr a)
 deriving instance Generic (RichSExpr a)
@@ -60,7 +60,6 @@ instance Out Text where
   docPrec n t = docPrec n (T.unpack t)
 
 type Sexp = RichSExpr (SC.Located HaskLikeAtom)
-
 
 prnt :: Sexp -> String
 prnt = T.unpack . encodeOne locatedHaskLikePrinter . fromRich
@@ -113,48 +112,56 @@ bracketHacks = T.map $ \case '[' -> '('
                              x   -> x
 
 -- | Change regular applications into data constructor syntax.
-tagDataCons :: DDefs Ty1 -> L Exp1 -> L Exp1
+tagDataCons :: DDefs Ty0 -> L Exp0 -> PassM (L Exp0)
 tagDataCons ddefs = go allCons
   where
    allCons = S.fromList [ (toVar con)
                         | DDef{dataCons} <- M.elems ddefs
                         , (con,_tys) <- dataCons ]
 
-   go :: Set Var -> L Exp1 -> L Exp1
-   go cons (L p ex) = L p $
+   go :: Set Var -> L Exp0 -> PassM (L Exp0)
+   go cons (L p ex) = L p <$>
      case ex of
-       Ext _ -> ex
+       Ext _ -> pure ex
+       -- [2019.02.01] CSK: Do we need this special case ?
        AppE v _ (L _ (MkProdE ls))
-                  -- FIXME: check the type to determine if this is packed/unpacked:
-                  | S.member v cons -> DataConE () (fromVar v) (L.map (go cons) ls)
-       AppE v l e | S.member v cons -> DataConE () (fromVar v) [go cons e]
-                  | otherwise       -> AppE v l (go cons e)
-       LetE (v,l,t,rhs) bod ->
+                  | S.member v cons -> do
+                      ty <- newMetaTy
+                      DataConE ty (fromVar v) <$> (mapM (go cons) ls)
+       AppE v l e | S.member v cons -> do ty <- newMetaTy
+                                          DataConE ty (fromVar v) <$> mapM (go cons) [e]
+                  | otherwise       -> AppE v l <$> (go cons e)
+       LetE (v,l,t,rhs) bod -> do
          let go' = if S.member v cons
                       then go (S.delete v cons)
                       else go cons
-         in LetE (v,l,t,go' rhs) (go' bod)
+         LetE <$> (v,l,t,) <$> go' rhs <*> (go' bod)
        ------------boilerplate------------
-       VarE v          -> VarE v
-       LitSymE v       -> LitSymE v
-       LitE _          -> ex
-       PrimAppE p ls   -> PrimAppE p $ L.map (go cons) ls
-       ProjE i e  -> ProjE i (go cons e)
-       CaseE e ls -> CaseE (go cons e) (L.map (\(c,vs,er) -> (c,vs,go cons er)) ls)
-       MkProdE ls     -> MkProdE $ L.map (go cons) ls
-       DataConE loc k ls -> DataConE loc k $ L.map (go cons) ls
-       TimeIt e t b -> TimeIt (go cons e) t b
-       ParE a b  -> ParE (go cons a) (go cons b)
-       IfE a b c -> IfE (go cons a) (go cons b) (go cons c)
+       VarE{}          -> pure ex
+       LitSymE{}       -> pure ex
+       LitE _          -> pure ex
+       PrimAppE p ls   -> PrimAppE p <$> mapM (go cons) ls
+       ProjE i e  -> ProjE i <$> (go cons e)
+       CaseE e ls -> CaseE <$> (go cons e) <*> (mapM (\(c,vs,er) -> (c,vs,) <$> go cons er) ls)
+       MkProdE ls     -> MkProdE <$> mapM (go cons) ls
+       DataConE loc k ls -> DataConE loc k <$> mapM (go cons) ls
+       TimeIt e t b -> do e' <- (go cons e)
+                          pure $ TimeIt e' t b
+       ParE a b  -> ParE <$> (go cons a) <*> (go cons b)
+       IfE a b c -> IfE <$> (go cons a) <*> (go cons b) <*> (go cons c)
 
-       MapE  (v,t,e) bod -> MapE (v,t, go cons e) (go cons bod)
-       FoldE (v1,t1,e1) (v2,t2,e2) b -> FoldE (v1,t1,go cons e1) (v2,t2,go cons e2) (go cons b)
+       MapE  (v,t,e) bod -> MapE <$> (v,t, ) <$> go cons e <*> (go cons bod)
+       FoldE (v1,t1,e1) (v2,t2,e2) b -> do
+         e1' <- go cons e1
+         e2' <- go cons e2
+         b'  <- go cons b
+         pure $ FoldE (v1,t1,e1') (v2,t2,e2') b'
 
 -- | Convert from raw, unstructured S-Expression into the L1 program datatype we expect.
-parseSExp :: [Sexp] -> SyM Prog1
-parseSExp ses =
-  do prog@Prog {ddefs} <- go ses [] [] [] Nothing
-     return $ mapExprs (tagDataCons ddefs) prog
+parseSExp :: [Sexp] -> PassM Prog0
+parseSExp ses = do
+  prog@Prog {ddefs} <- go ses [] [] [] Nothing
+  mapMExprs (tagDataCons ddefs) prog
  where
 
    -- WARNING: top-level constant definitions are INLINED everywhere.
@@ -174,17 +181,25 @@ parseSExp ses =
      (Ls (A _ "provide":_) : rst) -> go rst dds fds cds mn
      (Ls (A _ "require":_) : rst) -> go rst dds fds cds mn
 
+     (Ls (A _ "data": A _ tycon : (Ls as)  : cs) : rst) -> do
+       let tyargs = L.map (UserTv . getSym) as
+       go rst (DDef (textToVar tycon) tyargs (L.map docasety cs) : dds) fds cds mn
+
+     -- We support a special case so that we don't have to rewrite every
+     -- existing monomorphic program.
      (Ls (A _ "data": A _ tycon : cs) : rst) ->
          go rst (DDef (textToVar tycon) [] (L.map docasety cs) : dds) fds cds mn
+
      (Ls [A _ "define", funspec, A _ ":", retty, bod] : rst)
-        |  RSList (A _ name : args) <- funspec
+         |  RSList (A _ name : args) <- funspec
         -> do
-         let bod' = exp bod
-             args' = L.map (\(RSList [id, A _ ":",t]) -> (getSym id, typ t))
+         bod' <- exp bod
+         let args' = L.map (\(RSList [id, A _ ":",t]) -> (getSym id, typ t))
                                args
          (arg,ty,bod'') <-
                case args' of
-                 []   -> (,voidTy,bod') <$> gensym (toVar "void")
+                 []      -> do ty <- newMetaTy
+                               (,ty,bod') <$> gensym (toVar "void")
                  [(a,t)] -> pure (a,t,bod')
                  _    -> do let (vs,ts) = unzip args'
                             vr <- gensym (toVar (L.concat $ L.intersperse "_" $
@@ -194,50 +209,62 @@ parseSExp ses =
                             return (vr,ty,newbod)
          -- Here we directly desugar multiple arguments into a tuple
          -- argument.
+         let fun_ty = ArrowTy ty (typ retty)
          go rst dds (FunDef { funName = textToVar name
                             , funArg  = arg
-                            , funTy   = (ty, typ retty)
+                            , funTy   = ForAll (tyVarsInTy fun_ty) fun_ty
                             , funBody = bod''
                             } : fds)
             cds mn
 
      -- Top-level definition instead of a function.
-     (Ls [A _ "define", A _ topid, A _ ":", ty, bod] : rst) ->
-         go rst dds fds ((textToVar topid,ty,exp bod) : cds) mn
+     (Ls [A _ "define", A _ topid, A _ ":", ty, bod] : rst) -> do
+       bod' <- exp bod
+       go rst dds fds ((textToVar topid,ty,bod') : cds) mn
 
      (Ls [A _ "define", _args, _bod] : _) -> error$ "Function is missing return type:\n  "++prnt (head xs)
-     (Ls (A _ "define" : _) : _) -> error$ "Badly formed function:\n  "++prnt (head xs)
+     (Ls (A _ "define" : _) : _) -> error$ "Badly formed function:\n  "++show (head xs)
 
      (Ls (A _ "data" : _) : _) -> error$ "Badly formed data definition:\n  "++prnt (head xs)
 
      (Ls3 _ "module+" _ bod : rst) -> go (bod:rst) dds fds cds mn
 
-     (ex : rst) ->
-       let ex' = exp ex
-       in go rst dds fds cds (case mn of
+     (ex : rst) -> do
+       ex' <- exp ex
+       ty  <- newMetaTy
+       go rst dds fds cds (case mn of
                                 -- Initialize the main expression with a void type.
                                 -- The typechecker will fix it later.
-                                Nothing -> Just (ex', voidTy)
+                                Nothing -> Just (ex', ty)
                                 Just x  -> error$ "Two main expressions: "++
                                                  sdoc x++"\nAnd:\n"++prnt ex)
 
 
-typ :: Sexp -> Ty1
+typ :: Sexp -> Ty0
 typ s = case s of
          (A _ "Int")  -> IntTy
-         (A _ "Sym")  -> SymTy
+         (A _ "Sym")  -> SymTy0
          (A _ "Bool") -> BoolTy
-         (A _ other)  -> PackedTy (textToDataCon other) ()
-         (RSList (A _ "Vector"  : rst)) -> ProdTy $ L.map typ rst
+         (A _ con)    -> TyVar $ UserTv (textToVar con)
+         -- See https://github.com/aisamanra/s-cargot/issues/14.
+         (Ls (A _ "-" : A _ ">" : tys)) ->
+             let ret_ty = typ (last tys)
+                 in_tys = L.map typ (init tys)
+             in case in_tys of
+                  []  -> error "TODO: Should this be a top-level value?"
+                  [a] -> ArrowTy a ret_ty
+                  _   -> ArrowTy (ProdTy in_tys) ret_ty
+         (Ls ((A _ tycon) : tyargs))  -> PackedTy (textToDataCon tycon) (L.map typ tyargs)
+         (Ls (A _ "Vector"  : rst)) -> ProdTy $ L.map typ rst
          (RSList [A _ "SymDict", t]) -> SymDictTy $ typ t
          (RSList [A _ "Listof", t])  -> ListTy $ typ t
-         _ -> error$ "SExpression encodes invalid type:\n "++prnt s
+         _ -> error$ "SExpression encodes invalid type:\n "++ show s
 
 getSym :: Sexp -> Var
 getSym (A _ id) = textToVar id
 getSym s = error $ "expected identifier sexpr, got: "++prnt s
 
-docasety :: Sexp -> (DataCon,[(IsBoxed,Ty1)])
+docasety :: Sexp -> (DataCon,[(IsBoxed,Ty0)])
 docasety s =
   case s of
     (RSList ((A _ id) : tys)) -> (textToDataCon id, L.map ((False,) . typ) tys)
@@ -252,10 +279,10 @@ pattern Ls3 loc a b c     = RSList [A loc a, b, c]
 pattern Ls4 loc a b c d   = RSList [A loc a, b, c, d]
 -- pattern L5 a b c d e = RSList [A a, b, c, d, e]
 
-trueE :: Exp1
+trueE :: Exp0
 trueE = PrimAppE MkTrue []
 
-falseE :: Exp1
+falseE :: Exp0
 falseE = PrimAppE MkFalse []
 
 -- -- FIXME: we cannot intern strings until runtime.
@@ -273,93 +300,140 @@ keywords = S.fromList $ L.map pack $
 isKeyword :: Text -> Bool
 isKeyword s = s `S.member` keywords
 
-exp :: Sexp -> L Exp1
+exp :: Sexp -> PassM (L Exp0)
 exp se =
  case se of
-   A l "True"  -> L (toLoc l) trueE
-   A l "False" -> L (toLoc l) falseE
+   A l "True"  -> pure $ L (toLoc l) trueE
+   A l "False" -> pure $ L (toLoc l) falseE
 
    Ls ((A l "and") : args)  -> go args
      where
-       go :: [Sexp] -> L Exp1
-       go [] = loc l trueE
-       go (x:xs) = loc l $ IfE (exp x) (go xs) (L NoLoc falseE)
+       go :: [Sexp] -> PassM (L Exp0)
+       go [] = pure $ loc l trueE
+       go (x:xs) = do
+         x'  <- exp x
+         xs' <- go xs
+         pure $ loc l $ IfE x' xs' (L NoLoc falseE)
 
    Ls ((A l "or") : args)  -> go args
      where
-       go :: [Sexp] -> L Exp1
-       go [] = loc l falseE
-       go (x:xs) = loc l $ IfE (exp x) (loc l trueE) (go xs)
+       go :: [Sexp] -> PassM (L Exp0)
+       go [] = pure $ loc l falseE
+       go (x:xs) = do
+         x'  <- exp x
+         xs' <- go xs
+         pure $ loc l $ IfE x' (L NoLoc trueE) xs'
 
-   Ls4 l "if" test conseq altern ->
-     loc l $ IfE (exp test) (exp conseq) (exp altern)
+   Ls4 l "if" test conseq altern -> do
+     e' <- IfE <$> (exp test) <*> (exp conseq) <*> (exp altern)
+     pure $ loc l $ e'
 
-   Ls2 l "quote" (A _ v) -> loc l $ LitSymE (textToVar v)
+   Ls2 l "quote" (A _ v) -> pure $ loc l $ LitSymE (textToVar v)
 
    -- Any other naked symbol is a variable:
-   A loc v          -> L (toLoc loc) $ VarE (textToVar v)
-   G loc (HSInt n)  -> L (toLoc loc) $ LitE (fromIntegral n)
+   A l v          -> pure $ loc l $ VarE (textToVar v)
+   G l (HSInt n)  -> pure $ loc l $ LitE (fromIntegral n)
 
    -- This type gets replaced later in flatten:
-   Ls2 l "time" arg -> loc l $ TimeIt (exp arg) (PackedTy "DUMMY_TY" ()) False
+   Ls2 l "time" arg -> do
+     ty <- newMetaTy
+     arg' <- exp arg
+     pure $ loc l $ TimeIt arg' ty False
 
    -- This variant inserts a loop, controlled by the iters
    -- argument on the command line.
-   Ls2 l "iterate" arg -> loc l $ TimeIt (exp arg) (PackedTy "DUMMY_TY" ()) True
+   Ls2 l "iterate" arg -> do
+     ty <- newMetaTy
+     arg' <- exp arg
+     pure $ loc l $ TimeIt arg' ty True
 
    Ls3 l "let" (Ls bnds) bod ->
      -- mkLets tacks on NoLoc's for every expression.
      -- Here, we remove the outermost NoLoc and tag with original src location
-     (loc l) $ unLoc $ mkLets (L.map letbind bnds) (exp bod)
+     (loc l . unLoc) <$> (mkLets <$> (mapM letbind bnds) <*> (exp bod))
 
    Ls3 _ "let*" (Ls []) bod -> exp bod
 
-   Ls3 l "let*" (Ls (bnd:bnds)) bod ->
-        -- just like the `let` case above
-        (loc l) $ unLoc $ mkLets [(letbind bnd)] $ exp $ Ls3 l "let*" (Ls bnds) bod
+   Ls3 l "let*" (Ls (bnd:bnds)) bod -> do
+     bnd'  <- letbind bnd
+     bnds' <- exp $ Ls3 l "let*" (Ls bnds) bod
+      -- just like the `let` case above
+     pure $ loc l $ unLoc $ mkLets [bnd'] bnds'
 
-   Ls (A l "case": scrut: cases) ->
-     loc l $ CaseE (exp scrut) (L.map docase cases)
+   Ls (A l "case": scrut: cases) -> do
+     e' <- CaseE <$> (exp scrut) <*> (mapM docase cases)
+     pure $ loc l e'
 
-   Ls (A l p : ls) | isPrim p -> loc l $ PrimAppE (prim p) $ L.map exp ls
+   Ls (A l p : ls) | isPrim p -> loc l . PrimAppE (prim p) <$> mapM exp ls
 
-   Ls3 l "for/list" (Ls1 (Ls4 _ v ":" t e)) bod ->
-     loc l $ MapE (textToVar v, typ t, exp e) (exp bod)
+   Ls (A l "lambda" : Ls args : [bod]) -> do
+     -- POLICY DECISION:
+     -- Should we require type annotations on the arguments to a lambda ?
+     -- Right now, we don't and initialize them with meta type variables.
+     let args' = L.map getSym args
+     bod' <- exp bod
+     case args' of
+       []    -> error "TODO: Should this be a top-level value?"
+       [one] -> do
+           ty <- newMetaTy
+           pure $ loc l $ Ext $ LambdaE (one,ty) bod'
+       _ -> do
+         arg_tys <- mapM (\_ -> newMetaTy) args
+         let (new_arg, bod'') = multiArgsToOne args' arg_tys bod'
+         pure $ loc l $ Ext $ LambdaE (new_arg, ProdTy arg_tys) bod''
+
+   Ls3 l "for/list" (Ls1 (Ls4 _ v ":" t e)) bod -> do
+     e'   <- exp e
+     bod' <- exp bod
+     pure $ loc l $ MapE (textToVar v, typ t, e') bod'
 
    -- I don't see why we need the extra type annotation:
    Ls4 l "for/fold"
           (Ls1 (Ls4 _ v1 ":" t1 e1))
           (Ls1 (Ls4 _ v2 ":" t2 e2))
-          bod ->
-     loc l $ FoldE (textToVar v1, typ t1, exp e1)
-             (textToVar v2, typ t2, exp e2)
-             (exp bod)
+          bod -> do
+     e1'  <- exp e1
+     e2'  <- exp e2
+     bod' <- exp bod
+     pure $ loc l $ FoldE (textToVar v1, typ t1, e1')
+                          (textToVar v2, typ t2, e2')
+                          bod'
 
    Ls3 l "vector-ref" evec (G _ (HSInt ind)) ->
-       loc l $ ProjE (fromIntegral ind) (exp evec)
+       loc l . ProjE (fromIntegral ind) <$> (exp evec)
 
-   Ls3 l "par" a b -> loc l $ ParE (exp a) (exp b)
+   Ls3 l "par" a b -> do
+     a' <- exp a
+     b' <- exp b
+     pure $ loc l $ ParE a' b'
 
-   Ls (A l "vector" : es) -> loc l $ MkProdE $ L.map exp es
+   Ls (A l "vector" : es) -> loc l . MkProdE <$> mapM exp es
 
    -- Dictionaries require type annotations for now.  No inference!
    Ls3 l "ann" (Ls1 (A _ "empty-dict")) (Ls2 _ "SymDict" ty) ->
-       loc l $ PrimAppE (DictEmptyP $ typ ty) []
+     pure $ loc l $ PrimAppE (DictEmptyP $ typ ty) []
 
-   Ls4 l "insert" d k (Ls3 _ "ann" v ty) ->
-       loc l $ PrimAppE (DictInsertP $ typ ty) [(exp d),(exp k),(exp v)]
+   Ls4 l "insert" d k (Ls3 _ "ann" v ty) -> do
+     d' <- exp d
+     k' <- exp k
+     v' <- exp v
+     pure $ loc l $ PrimAppE (DictInsertP $ typ ty) [d',k',v']
 
-   Ls3 l "ann" (Ls3 _ "lookup" d k) ty ->
-       loc l $ PrimAppE (DictLookupP $ typ ty) [(exp d),(exp k)]
+   Ls3 l "ann" (Ls3 _ "lookup" d k) ty -> do
+     d' <- exp d
+     k' <- exp k
+     pure $ loc l $ PrimAppE (DictLookupP $ typ ty) [d', k']
 
-   Ls3 l "ann" (Ls3  _ "has-key?" d k) ty ->
-     loc l $ PrimAppE (DictHasKeyP $ typ ty) [(exp d),(exp k)]
+   Ls3 l "ann" (Ls3  _ "has-key?" d k) ty -> do
+     d' <- exp d
+     k' <- exp k
+     pure $ loc l $ PrimAppE (DictHasKeyP $ typ ty) [d', k']
 
    -- L [A "error",arg] ->
    Ls3 l "ann" (Ls2 _ "error" arg) ty ->
-      case arg of
-        G _ (HSString str) -> loc l $ PrimAppE (ErrorP (T.unpack str) (typ ty)) []
-        _ -> error$ "bad argument to 'error' primitive: "++prnt arg
+     case arg of
+       G _ (HSString str) -> pure $ loc l $ PrimAppE (ErrorP (T.unpack str) (typ ty)) []
+       _ -> error$ "bad argument to 'error' primitive: "++prnt arg
 
    -- Other annotations are dropped:
    Ls3 _ "ann" e _ty -> exp e
@@ -372,31 +446,37 @@ exp se =
    Ls (A l rator : rands) ->
      let app = (loc l) . AppE (textToVar rator) []
      in case rands of
-         [] -> app (L NoLoc $ MkProdE [])
-         [rand] -> app (exp rand)
-         _ -> app (L NoLoc $ MkProdE (L.map exp rands))
+         [] -> pure $ app (L NoLoc $ MkProdE [])
+         [rand] -> app <$> (exp rand)
+         _ -> do
+          es' <- MkProdE <$> (mapM exp rands)
+          pure $ app (L NoLoc es')
 
    _ -> error $ "Expression form not handled (yet):\n  "++
                show se ++ "\nMore concisely:\n  "++ prnt se
 
 
 -- | One case of a case expression
-docase :: Sexp -> (DataCon,[(Var,())], L Exp1)
+docase :: Sexp -> PassM (DataCon,[(Var,Ty0)], L Exp0)
 docase s =
   case s of
     RSList [ RSList (A _ con : args)
            , rhs ]
-      -> (textToDataCon con, L.map f args, exp rhs)
+      -> do args' <- mapM f args
+            rhs'  <- exp rhs
+            pure (textToDataCon con, args', rhs')
     _ -> error$ "bad clause in case expression\n  "++prnt s
  where
-   f x  = (getSym x, ())
+   f x  = (getSym x, ) <$> newMetaTy
 
-letbind :: Sexp -> (Var,[l],Ty1, L Exp1)
+letbind :: Sexp -> PassM (Var,[l],Ty0, L Exp0)
 letbind s =
   case s of
-   RSList [A _ vr, A _ ":",
-           ty, rhs]
-     -> (textToVar vr, [], typ ty, exp rhs)
+   RSList [A _ vr, A _ ":", ty, rhs] ->
+     (textToVar vr, [], typ ty, ) <$> exp rhs
+   -- A let binding without a type annotation.
+   RSList [A _ vr, rhs] ->
+     (textToVar vr, [], , ) <$> newMetaTy <*> exp rhs
    _ -> error $ "Badly formed let binding:\n  "++prnt s
 
 isPrim :: Text -> Bool
@@ -427,7 +507,7 @@ primMap = M.fromList
   , ("False", MkFalse)
   ]
 
-prim :: Text -> Prim Ty1
+prim :: Text -> Prim Ty0
 prim t = case M.lookup t primMap of
            Just x -> x
            Nothing -> error$ "Internal error, this is not a primitive: "++show t
@@ -459,7 +539,7 @@ handleRequire baseFile (l:ls) =
       return $ l:ls'
 
 -- ^ Parse a file to an L1 program.  Return also the gensym counter.
-parseFile :: FilePath -> IO (Prog1, Int)
+parseFile :: FilePath -> IO (PassM Prog0)
 parseFile file = do
   txt    <- fmap bracketHacks $
             -- fmap stripHashLang $
@@ -473,9 +553,4 @@ parseFile file = do
      Left err -> error err
      Right ls -> do
        ls' <- handleRequire file ls
-       return $ runSyM 0 $ parseSExp ls'
-
-
--- -- FINISHME
--- parseSExp0 :: [Sexp] -> SyM L0.PProg
--- parseSExp0 = undefined
+       return $ parseSExp ls'

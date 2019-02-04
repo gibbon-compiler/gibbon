@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module Gibbon.HaskellFrontend
-  ( parseFile, primMap ) where
+  ( parseFile, primMap, multiArgsToOne ) where
 
 import           Data.Foldable ( foldrM )
 import           Data.Loc as Loc
@@ -235,8 +235,8 @@ desugarExp e = L NoLoc <$>
         Just p  -> pure $ PrimAppE p []
         Nothing -> do
           -- Just a placeholder for now, the typechecker will fill this hole.
-          tv <- newMetaTv
-          pure $ DataConE (MetaTv tv) dcon []
+          ty <- newMetaTy
+          pure $ DataConE ty dcon []
 
     -- TODO: timeit: parsing it's type isn't straightforward.
 
@@ -315,8 +315,8 @@ collectTopLevel env decl =
 
     PatBind _ (PVar _ (Ident _ "gibbon_main")) (UnGuardedRhs _ rhs) _binds -> do
       rhs' <- desugarExp rhs
-      tv <- newMetaTv
-      pure $ Just $ HMain $ Just (rhs', MetaTv tv)
+      ty <- newMetaTy
+      pure $ Just $ HMain $ Just (rhs', ty)
 
     PatBind _ (PVar _ (Ident _ fn)) (UnGuardedRhs _ rhs) _binds ->
        case M.lookup (toVar fn) env of
@@ -383,8 +383,8 @@ desugarAlt alt =
                              _        -> error "desugarExp: Non-variable pattern in case.")
                     ps
       rhs' <- desugarExp rhs
-      tv <- newMetaTv
-      pure (conName, [(v,(MetaTv tv)) | v <- ps'], rhs')
+      ps'' <- mapM (\v -> (v,) <$> newMetaTy) ps'
+      pure (conName, ps'', rhs')
     Alt _ _ GuardedRhss{} _ -> error "desugarExp: Guarded RHS not supported in case."
     Alt _ _ _ Just{}        -> error "desugarExp: Where clauses not allowed in case."
     Alt _ pat _ _           -> error $ "desugarExp: Unsupported pattern in case: " ++ prettyPrint pat

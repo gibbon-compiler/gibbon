@@ -69,8 +69,8 @@ succ x = x + 1
 isEven :: Int -> Bool
 isEven i = (mod i 2) == 0
 
-minus :: Int -> Int
-minus x = x - 1
+minus1 :: Int -> Int
+minus1 x = x - 1
 
 not :: Bool -> Bool
 not b = if b then False else True
