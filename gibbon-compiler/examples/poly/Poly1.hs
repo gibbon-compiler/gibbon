@@ -1,4 +1,4 @@
-module One where
+module Poly1 where
 
 import Prelude hiding ( Maybe(..), Either (..), succ, not, foldr)
 

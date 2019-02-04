@@ -1,4 +1,4 @@
-module Three where
+module MeasureMode where
 
 data NodeData = NodeDataK Int Int Int Int Int MeasureMode FontStyle
   deriving Show
