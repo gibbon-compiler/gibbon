@@ -164,6 +164,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
     toL1Ty ty =
       case ty of
         IntTy   -> L1.IntTy
+        SymTy0  -> L1.SymTy
         BoolTy  -> L1.BoolTy
         TyVar{} -> err1 (sdoc ty)
         MetaTv{} -> err1 (sdoc ty)
@@ -624,6 +625,7 @@ updateTyConsTy :: DDefs0 -> MonoState -> Ty0 -> Ty0
 updateTyConsTy ddefs mono_st ty =
   case ty of
     IntTy   -> IntTy
+    SymTy0  -> SymTy0
     BoolTy  -> BoolTy
     TyVar{} ->  error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."
     MetaTv{} -> error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."

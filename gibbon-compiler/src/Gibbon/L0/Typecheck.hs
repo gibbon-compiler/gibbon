@@ -343,6 +343,7 @@ zonkTy :: Subst -> Ty0 -> Ty0
 zonkTy s@(Subst mp) ty =
   case ty of
     IntTy   -> ty
+    SymTy0  -> ty
     BoolTy  -> ty
     TyVar{} -> ty
     MetaTv v -> case M.lookup v mp of
@@ -444,6 +445,7 @@ substTyVar :: M.Map TyVar Ty0 -> Ty0 -> Ty0
 substTyVar mp ty =
   case ty of
     IntTy    -> ty
+    SymTy0   -> ty
     BoolTy   -> ty
     TyVar v  -> M.findWithDefault ty v mp
     MetaTv{} -> ty
@@ -473,6 +475,7 @@ tyVarToMetaTy = go M.empty
     go env ty =
      case ty of
        IntTy    -> pure (env, ty)
+       SymTy0   -> pure (env, ty)
        BoolTy   -> pure (env, ty)
        TyVar v  -> do mty <- newMetaTy
                       pure (M.insert v mty env, mty)

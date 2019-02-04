@@ -101,6 +101,7 @@ newTyVar = BoundTv <$> genLetter
 
 data Ty0
  = IntTy
+ | SymTy0
  | BoolTy
  | TyVar TyVar   -- Rigid/skolem type variables
  | MetaTv MetaTv -- Unification variables
@@ -157,6 +158,7 @@ tyVarsInTys tys = foldr (go []) [] tys
     go bound ty acc =
       case ty of
         IntTy  -> acc
+        SymTy0 -> acc
         BoolTy -> acc
         TyVar tv -> if (tv `elem` bound) || (tv `elem` acc)
                     then acc
@@ -183,6 +185,7 @@ metaTvsInTys tys = foldr go [] tys
                      then acc
                      else tv : acc
         IntTy   -> acc
+        SymTy0  -> acc
         BoolTy  -> acc
         TyVar{} -> acc
         ProdTy tys1     -> foldr go acc tys1
@@ -209,6 +212,7 @@ arrowTysInTy = go []
     go acc ty =
       case ty of
         IntTy    -> acc
+        SymTy0   -> acc
         BoolTy   -> acc
         TyVar{}  -> acc
         MetaTv{} -> acc
