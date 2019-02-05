@@ -1,5 +1,6 @@
 #lang gibbon
 
+;; Temporary:
 (pdata Maybe (a)
        [Nothing]
        [Just a])
@@ -13,9 +14,9 @@
     [(Nothing) (Nothing)]
     [(Just x)  (Just (f x))]))
 
-(data Either (a b)
-      [Left a]
-      [Right b])
+(pdata Either (a b)
+       [Left a]
+       [Right b])
 
 (define (pure-either [x : b]) : (Either a b)
   (Right x))
@@ -25,9 +26,9 @@
     [(Left x)  (Left x)]
     [(Right y) (Right (f y))]))
 
-(data List (a)
-      [Nil]
-      [Cons a (List a)])
+(pdata List (a)
+       [Nil]
+       [Cons a (List a)])
 
 
 (define (foldr [f : (-> a b b)] [acc : b] [ls : (List a)]) : b

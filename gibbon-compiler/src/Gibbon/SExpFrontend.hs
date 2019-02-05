@@ -14,11 +14,13 @@ module Gibbon.SExpFrontend
        , primMap )
   where
 
+import Data.Char ( isLower, isAlpha )
 import Data.List as L
 import Data.Loc
 import Data.Map as M
 import Data.Set as S
-import Data.Text as T hiding (head, init, last, length)
+import Data.Text hiding (head, init, last, length)
+import qualified Data.Text as T
 import Data.Text.IO (readFile)
 import System.FilePath
 import Text.Parsec
@@ -181,9 +183,36 @@ parseSExp ses = do
      (Ls (A _ "provide":_) : rst) -> go rst dds fds cds mn
      (Ls (A _ "require":_) : rst) -> go rst dds fds cds mn
 
-     (Ls (A _ "data": A _ tycon : (Ls as)  : cs) : rst) -> do
+{-
+
+CSK: 'pdata' is a temporary hack to maintain backwards compatibility.
+The syntax for datatypes which don't use type variables should not change.
+We should still be able to write a monomorphic datatype as:
+
+    (data MonoD [K1 ...] [K2 ...])
+
+vs
+
+    (data MonoD () [K1 ...] [K2 ...])
+
+to indicate absence of type variables. However, this makes parsing datatypes
+*with* type variables ambiguious. E.g.
+
+    (data PolyD (a b) [K3 ... a b ...])
+
+The parser cannot tell if (a b) is a constructor or a type variable. Maybe
+we say that these are type variables b/c the first thing, 'a', is lowercase ?
+That should work. We're already using 'isLower' to parse types (see typ ::).
+For now I chose to use a separate keyword, 'pdata', to write a polymorphic datatype.
+
+-}
+     (Ls (A _ "pdata": A _ tycon : (Ls as)  : cs) : rst) -> do
        let tyargs = L.map (UserTv . getSym) as
        go rst (DDef (textToVar tycon) tyargs (L.map docasety cs) : dds) fds cds mn
+
+     -- A data definition without any type variables.
+     (Ls (A _ "data": A _ tycon  : cs) : rst) -> do
+       go rst (DDef (textToVar tycon) [] (L.map docasety cs) : dds) fds cds mn
 
      -- We support a special case so that we don't have to rewrite every
      -- existing monomorphic program.
@@ -239,13 +268,17 @@ parseSExp ses = do
                                 Just x  -> error$ "Two main expressions: "++
                                                  sdoc x++"\nAnd:\n"++prnt ex)
 
-
 typ :: Sexp -> Ty0
 typ s = case s of
          (A _ "Int")  -> IntTy
          (A _ "Sym")  -> SymTy0
          (A _ "Bool") -> BoolTy
-         (A _ con)    -> TyVar $ UserTv (textToVar con)
+         -- If it's lowercase, it's a type variable. Otherwise, a Packed type.
+         (A _ con)    -> if isTyVar con
+                         then TyVar $ UserTv (textToVar con)
+                         else PackedTy (textToDataCon con) []
+         (Ls2 _ "SymDict" t) -> SymDictTy $ typ t
+         (Ls2 _ "Listof" t)  -> ListTy $ typ t
          -- See https://github.com/aisamanra/s-cargot/issues/14.
          (Ls (A _ "-" : A _ ">" : tys)) ->
              let ret_ty = typ (last tys)
@@ -254,11 +287,14 @@ typ s = case s of
                   []  -> error "TODO: Should this be a top-level value?"
                   [a] -> ArrowTy a ret_ty
                   _   -> ArrowTy (ProdTy in_tys) ret_ty
-         (Ls ((A _ tycon) : tyargs))  -> PackedTy (textToDataCon tycon) (L.map typ tyargs)
          (Ls (A _ "Vector"  : rst)) -> ProdTy $ L.map typ rst
-         (RSList [A _ "SymDict", t]) -> SymDictTy $ typ t
-         (RSList [A _ "Listof", t])  -> ListTy $ typ t
+         (Ls (A _ tycon : tyargs))  -> PackedTy (textToDataCon tycon) (L.map typ tyargs)
          _ -> error$ "SExpression encodes invalid type:\n "++ show s
+
+-- Some text is a tyvar if it starts with a lowercase alphabet.
+isTyVar :: Text -> Bool
+isTyVar t = isLower h && isAlpha h
+  where h = T.head t
 
 getSym :: Sexp -> Var
 getSym (A _ id) = textToVar id

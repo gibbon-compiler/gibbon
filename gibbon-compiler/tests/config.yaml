@@ -212,8 +212,7 @@ tests:
     failing: [gibbon1, gibbon2]
 
   - name: measure_mode.hs
-    dir: examples/poly
-    answer-file: examples/poly/measure_mode.ans
+    answer-file: examples/measure_mode.ans
     failing: [gibbon1, gibbon2]
 
   - name: MonoTree.hs

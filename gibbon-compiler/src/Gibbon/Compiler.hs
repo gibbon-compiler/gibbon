@@ -311,6 +311,7 @@ parseInput ip fp = do
   where lower :: PassM L0.Prog0 -> IO (PassM L1.Prog1)
         lower pm_l0 = let passes = do
                            l0 <- pm_l0
+                           -- dbgTraceIt ("Parsed:\n" ++ sdoc l0) (pure ())
                            l0 <- L0.freshNames l0
                            -- dbgTraceIt ("Freshen:\n" ++ sdoc l0) (pure ())
                            l0 <- L0.tcProg l0

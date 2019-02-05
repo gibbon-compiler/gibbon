@@ -87,7 +87,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
                 (_, Just ty) -> (sbst, ,ex) <$> snd <$> instantiate ty
 
     LitE{}    -> pure (sbst, IntTy, ex)
-    LitSymE{} -> pure (sbst, IntTy, ex)
+    LitSymE{} -> pure (sbst, SymTy0, ex)
 
     AppE f _tyapps arg -> do
       (metas, fn_ty_inst) <-
@@ -120,6 +120,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
                          $$ exp_doc
           len0 = checkLen 0
           len2 = checkLen 2
+          len3 = checkLen 3
       case pr of
         _ | pr `elem` [MkTrue, MkFalse] -> do
             len0
@@ -142,6 +143,60 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
           s2 <- unify (args !! 0) BoolTy (arg_tys' !! 0)
           s3 <- unify (args !! 1) BoolTy (arg_tys' !! 1)
           pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+
+        EqSymP -> do
+          len2
+          s2 <- unify (args !! 0) SymTy0 (arg_tys' !! 0)
+          s3 <- unify (args !! 1) SymTy0 (arg_tys' !! 1)
+          pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+
+        RandP -> pure (s1, IntTy, PrimAppE pr args_tc)
+
+        SymAppend -> do
+          len2
+          s2 <- unify (args !! 0) SymTy0 (arg_tys' !! 0)
+          s3 <- unify (args !! 1) IntTy (arg_tys' !! 1)
+          pure (s1 <> s2 <> s3, SymTy0, PrimAppE pr args_tc)
+
+        DictEmptyP ty -> do
+          len0
+          pure (s1, SymDictTy ty, PrimAppE pr args_tc)
+
+        DictInsertP ty -> do
+          len3
+          let [d,k,v] = arg_tys'
+          s2 <- unify (args !! 0) (SymDictTy ty) d
+          s3 <- unify (args !! 1) SymTy0 k
+          s4 <- unify (args !! 2) ty v
+          pure (s1 <> s2 <> s3 <> s4, d, PrimAppE pr args_tc)
+
+        DictLookupP ty -> do
+          len2
+          let [d,k] = arg_tys'
+          s2 <- unify (args !! 0) (SymDictTy ty) d
+          s3 <- unify (args !! 1) SymTy0 k
+          pure (s1 <> s2 <> s3, ty, PrimAppE pr args_tc)
+
+        DictHasKeyP ty -> do
+          len2
+          let [d,k] = arg_tys'
+          s2 <- unify (args !! 0) (SymDictTy ty) d
+          s3 <- unify (args !! 1) SymTy0 k
+          pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+
+        ErrorP _str ty -> do
+          len2
+          pure (s1, ty, PrimAppE pr args_tc)
+
+        SizeParam -> do
+          len0
+          pure (s1, IntTy, PrimAppE pr args_tc)
+
+        ReadPackedFile _fp _tycon _reg ty -> do
+          len0
+          pure (s1, ty, PrimAppE pr args_tc)
+
+        -- PEndOf -> pure (s1, CursorTy, PrimAppE pr args_tc)
 
         oth -> err $ text "PrimAppE : TODO " <+> doc oth
 
@@ -220,6 +275,12 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
       (s4, bod_ty, bod_tc) <- tcExp ddefs s3 venv' fenv bound_tyvars bod
       return (s4, zonkTy s4 (ArrowTy fresh bod_ty),
               Ext (LambdaE (v, zonkTy s4 ty) (zonkExp s4 bod_tc)))
+
+    TimeIt a ty b -> do
+      (s1, ty', a') <- go a
+      s2 <- unify e ty ty'
+      let s3 = s1 <> s2
+      pure (s3, zonkTy s3 ty', TimeIt (zonkExp s3 a') (zonkTy s3 ty') b)
 
     _ -> err $ "tcExp: TODO" <+> doc ex
   where
