@@ -345,8 +345,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
 
   tail :: L Exp3 -> PassM T.Tail
-  tail (L _ ex0) =
-   dbgTrace 7 ("\n [lower] processing tail:\n  "++sdoc ex0) $ do
+  tail (L _ ex0) = do
    dflags <- getDynFlags
    let pkd = gopt Opt_Packed dflags
    case ex0 of
@@ -696,7 +695,7 @@ See [Hacky substitution to encode ParE].
 
 
     -- Tail calls are just an optimization, if we have a Proj/App it cannot be tail:
-    ProjE ix (L _ (AppE f _ e)) -> do
+    ProjE ix (L _ (AppE f _ e)) -> dbgTrace 1 "ProjE" $ do
         tmp <- gensym $ toVar "prjapp"
         let (ProdTy inTs, _) = funTy (fundefs # f)
         tail $ l$ LetE ( tmp
