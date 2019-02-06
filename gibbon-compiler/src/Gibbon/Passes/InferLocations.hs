@@ -776,6 +776,7 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion cs'''
           tryBindReg (lc$ L2.LetE (vr,[],ty,L sl2 $ L2.PrimAppE (prim p) ls') bod'',
                     ty'', fcs)
+
         DataConE _loc k ls  -> do
           loc <- lift $ lift $ freshLocVar "datacon"
           (rhs',rty,rcs) <- inferExp env (L sl2 $ DataConE () k ls) $ SingleDest loc
@@ -784,11 +785,13 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion cs''
           tryBindReg (lc$ L2.LetE (vr,[],PackedTy (getTyOfDataCon dataDefs k) loc,rhs') bod'',
                     ty', fcs)
-        LitSymE x     -> do
+
+        LitSymE x       -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr IntTy env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs''
           tryBindReg (lc$ L2.LetE (vr,[],IntTy,L sl2 $ L2.LitSymE x) bod'', ty'', fcs)
+
         ProjE i arg     -> do
           (e,ProdTy tys,cs) <- inferExp env arg NoDest
           (bod',ty',cs') <- inferExp (extendVEnv vr (tys !! i) env) bod dest
@@ -796,6 +799,7 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion cs''
           tryBindReg (lc$ L2.LetE (vr,[],tys !! i,L sl2 $ L2.ProjE i e) bod'',
                              ty'', fcs)
+
         CaseE ex ls    -> do
           loc <- lift $ lift $ freshLocVar "scrut"
           (ex',ty2,cs) <- inferExp env ex (SingleDest loc)
@@ -808,6 +812,7 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion cs''
           tryBindReg (lc$ L2.LetE (vr,locsInTy rhsTy,rhsTy, L sl2 $ L2.CaseE ex' ([a | (a,_,_) <- pairs])) bod'',
                         ty'', L.nub $ cs ++ fcs)
+
         MkProdE ls    -> do
           lsrec <- mapM (\e -> inferExp env e NoDest) ls
           ty <- lift $ lift $ convertTy bty
@@ -875,11 +880,7 @@ finishExp (L i e) =
              e1' <- finishExp e1
              e2' <- finishExp e2
              ls' <- mapM finalLocVar ls
-             t' <- case t of
-               PackedTy tc lv ->
-                   do lv' <- finalLocVar lv
-                      return $ PackedTy tc lv'
-               _ -> return t
+             t' <- finishTy t
              return $ l$ LetE (v,ls',t',e1') e2'
       IfE e1 e2 e3 -> do
              e1' <- finishExp e1
@@ -937,6 +938,18 @@ finishExp (L i e) =
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
+
+finishTy :: Ty2 -> TiM Ty2
+finishTy t =
+    case t of
+      PackedTy tc lv ->
+          do lv' <- finalLocVar lv
+             return $ PackedTy tc lv'
+      ProdTy pls ->
+           do pls' <- mapM finishTy pls
+              return $ ProdTy pls'
+      _ -> return t
+
 
 -- | Remove unused location bindings
 -- Returns pair of (new exp, set of free locations)

@@ -19,6 +19,5 @@
           (let ([prg4 : X86 (patch-instructions prg3)])
             (interp-x86 prg4)))))))
 
-#;
 (compile (ProgramR (LetER (vector 'x (LitER 40))
                           (AddER (VarER 'x) (LitER 2)))))
