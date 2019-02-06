@@ -30,13 +30,11 @@ import Gibbon.L3.Syntax
 
 unariser :: Prog3 -> PassM Prog3
 unariser Prog{ddefs,fundefs,mainExp} = do
-  fds <- mapM unariserFun $ M.elems fundefs
   mn <- case mainExp of
           Just (m,t) -> do m' <- unariserExp ddefs [] (Env2 M.empty funEnv) m
                            return $ Just (m', flattenTy t)
           Nothing -> return Nothing
-
-  let fds' = M.fromList $ L.map (\f -> (funName f,f)) fds
+  fds' <- mapM unariserFun fundefs
   dbgTrace 5 (sdoc fds') $ return $ Prog ddefs fds' mn
 
 
@@ -47,17 +45,18 @@ unariser Prog{ddefs,fundefs,mainExp} = do
 
     unariserFun :: FunDef3 -> PassM FunDef3
     unariserFun f@FunDef{funTy,funArg,funBody} = do
-      let (inT, outT) = funTy
-          fn = case inT of
-                 ProdTy _ ->
-                   let ty  = flattenTy inT
-                       bod =  flattenExp funArg inT funBody
-                   in f{funBody = bod, funTy = (ty, flattenTy outT)}
-                 _ -> f
-          env2 = Env2 (M.singleton funArg inT) funEnv
-
+      let in_ty   = inTy funTy
+          in_ty'  = flattenTy in_ty
+          out_ty' = flattenTy (outTy funTy)
+          fn = case in_ty of
+                 ProdTy{} ->
+                   f { funBody = flattenExp funArg in_ty funBody,
+                       funTy = (in_ty', out_ty') }
+                 _ ->
+                   f { funTy = (in_ty', out_ty') }
+          env2 = Env2 (M.singleton funArg in_ty) funEnv
       bod <- unariserExp ddefs [] env2 funBody
-      return $ fn { funBody = bod}
+      return $ fn { funBody = bod }
 
 
 -- | A projection stack can be viewed as a list of ProjE operations to
