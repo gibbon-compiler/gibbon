@@ -219,6 +219,10 @@ tests:
     answer-file: examples/hs/PolyTree.ans
     failing: [gibbon1, gibbon2]
 
+  - name: unariser_bug1.hs
+    answer-file: examples/unariser_bug1.ans
+    skip: true
+
     ## Shouldn't typecheck
   - name: Fail1.hs
     dir: examples/hs/should_fail
