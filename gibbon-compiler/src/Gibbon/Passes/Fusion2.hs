@@ -19,7 +19,8 @@ import GHC.Generics (Generic, Generic1)
 import Gibbon.Common
 import Data.Tuple.All
 import Data.Vector as V
-                                             
+import Control.Monad
+
 freshExp :: [(Var,Var)] -> L Exp1 -> PassM (L L1.Exp1)
 freshExp vs (L sloc exp) = fmap (L sloc) $
     case exp of
@@ -335,44 +336,89 @@ foldFusedCalls rule@(outerName, innerName, argPos,newName ) body =
           otherwise -> L l ex --`debug` ("here6  ") 
   in rec body
 
-foldTupledFunctions_f :: ( FunDef1) ->[Var] ->( FunDef1)
-foldTupledFunctions_f funDef ls = funDef {funBody =
-  (foldTupledFunctions (funBody funDef ) funDef ls )}
+foldTupledFunctions_f :: ( FunDef1) ->[Var] ->PassM (FunDef1)
+foldTupledFunctions_f funDef ls =
+  do 
+    body <- (foldTupledFunctions (funBody funDef ) funDef ls )
+    return funDef {funBody =body}
 
-foldTupledFunctions ::   L Exp1 -> ( FunDef1) -> [Var] -> L Exp1
-foldTupledFunctions body newFun oldCalls = (rec  body  M.empty)  
+foldTupledFunctions ::   L Exp1 -> ( FunDef1) -> [Var] -> PassM (L Exp1)
+foldTupledFunctions body newFun oldCalls =
+  do
+     x <- (rec  body  M.empty) 
+     return x 
   where
-    rec (L l ex) mp = case (ex) of 
-      p@(LetE (Var y, loc, t,rhs@(L _ (AppE f _ (L l (VarE x) )) )) body) ->
-        case (L.elemIndex f oldCalls ) of 
-          Nothing -> L l $ LetE (Var y, loc, t, (rec rhs mp))  (rec body mp) 
-          Just i  -> case (M.lookup x mp) of
-            Nothing  -> let newVar =toVar ((fromVar x) L.++ "_unq_")
-              in let newMp = M.insert x newVar mp
-              in L l $ LetE (newVar, [], (outTy (funTy newFun)),(L l  (AppE
-                (funName newFun) [] ( L l (VarE x) )))) (rec (L l p) newMp) 
+    rec (L l ex) mp =  
+      do
+      case (ex) of 
+        p@(LetE (Var y, loc, t,rhs@(L _ (AppE f _ (L l (VarE input) )) )) body) ->
+          do
+            case (L.elemIndex f oldCalls ) of 
+              Nothing ->
+                do 
+                  rhs' <- (rec rhs mp)
+                  body' <- (rec body mp)
+                  return ( L l $ LetE (Var y, loc, t, rhs')  body' )
+              Just i  -> 
+                do
+                  case (M.lookup input mp) of --
+                    Nothing  -> 
+                      do 
+                        newVar <- gensym (toVar ((fromVar input) L.++ "_unq_"))
+                        let newMp = M.insert input newVar mp
+                        body' <- (rec (L l p) newMp)
+                        return ( L l $ LetE (newVar, [], (outTy (funTy newFun)),
+                          (L l  (AppE (funName newFun) [] ( L l (VarE input) ))))
+                             body') 
                                              
-            Just k   ->  L l $ LetE (Var y, loc, t,
-              L l (ProjE i  (L l $ VarE k))) ( rec body mp)
+                    Just k   -> 
+                      do 
+                        body' <- ( rec body mp)
+                        return( L l $ LetE (Var y, loc, t, L l (ProjE i  
+                          (L l $ VarE k))) body')
 
-      AppE name loc e          ->  L l $ AppE name loc (rec e mp)  
-      PrimAppE x ls            ->  L l $ PrimAppE x (L.map f ls) 
-        where
-          f item = (rec item mp)
-      LetE (v,loc,t,rhs) bod   ->  L l $
-         LetE (v,loc,t, (rec rhs mp)) (rec bod mp) 
-      IfE e1 e2 e3             ->  L l $ 
-        IfE (rec e1 mp) ( rec e2 mp) ( rec e3 mp)
-      MkProdE ls               ->  L l $ MkProdE (L.map (\x-> (rec x mp)) ls) 
-      ProjE index exp          ->  L l $ ProjE index (rec exp mp)
-      CaseE e1 ls1             ->  L l $ CaseE ( rec e1  mp) (L.map f ls1)
-        where
-          f (dataCon,x,exp) = (dataCon, x, (rec exp mp))  
-      DataConE loc datacons ls ->  L l $
-        DataConE loc datacons (L.map (\x-> (rec x mp)) ls)
-      TimeIt e d b             ->  L l $ TimeIt ( rec e mp) d b 
-      otherwise                -> L l ex
-
+        AppE name loc e          -> do
+             e'<- (rec e mp)
+             return $ L l $ AppE name loc   e'
+        PrimAppE x ls            -> do 
+            ls' <- (Prelude.mapM (\item -> (rec item mp)) ls)
+            return $ L l $ PrimAppE x ls'
+       
+        LetE (v,loc,t,rhs) bod   -> do 
+            body' <- (rec bod mp)
+            rhs' <- (rec rhs mp)
+            return $L l $LetE (v,loc,t, rhs') body'  
+        IfE e1 e2 e3             -> do 
+          e1' <- (rec e1 mp)
+          e2' <- (rec e2 mp)
+          e3' <- (rec e3 mp)
+          return$ L l $ IfE e1' e2' e3'
+       
+        MkProdE ls               -> do 
+          ls' <- (Prelude.mapM (\item -> (rec item mp)) ls)
+          return $  L l $ MkProdE ls' 
+        ProjE index exp          -> do 
+          exp' <- (rec exp mp)
+          return $ L l $ ProjE index exp' 
+        CaseE e1 ls1 ->  do
+          e1' <- ( rec e1  mp)
+          ls' <- (Prelude.mapM (\(dataCon,x,exp)->
+            do 
+              exp' <- (rec exp mp)
+              return (dataCon, x, exp')  
+              ) ls1)
+          return  $ L l $ CaseE e1'  ls'
+         
+               
+        DataConE loc datacons ls -> do
+          ls' <- (Prelude.mapM (\x-> (rec x mp)) ls)
+          return $ L l $ DataConE loc datacons ls'
+        TimeIt e d b             -> do 
+          e'<-  rec e mp
+          return $L l $ TimeIt e'  d b 
+        otherwise                -> do 
+          return $ L l ex
+      
 removeUnusedDefs :: FunDef1 -> FunDef1
 removeUnusedDefs f = f{funBody = removeUnusedDefs_exp (funBody f)}
 
@@ -532,13 +578,11 @@ tuple :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [(Var, Var, Int, Var)] ->
    PassM (L Exp1,  FunDefs1)
 tuple ddefs fdefs oldExp fusedFunctions = do
   let useTable         = buildUseTable oldExp
-      useTableFiltered = M.filter check1 useTable 
-                        where 
-                         check1 entry = (L.length entry >1) -- need to be extended and checked on a case where length>2 
-      candidates = L.nub (L.map proccessEntry (M.toList useTableFiltered) ) 
-                where  
-                  proccessEntry (_, ls) = L.sort (L.map extractFuncName ls) 
+      candidates = L.filter checkLength (L.nub (L.map processEntry (M.toList useTable) ))
+                where
+                  processEntry (_, ls) = L.nub (L.sort (L.map extractFuncName ls))
                   extractFuncName (_,(AppE fName _ _ )) = fName
+                  checkLength entry = (L.length entry >1)
 
       functionsToTuple = L.map (\ls -> L.map getFunDef ls) candidates 
                         where
@@ -565,14 +609,36 @@ tuple ddefs fdefs oldExp fusedFunctions = do
       foldedTupledFunctions   = L.map ( \(funDef,ls) ->
         ((L.foldr (\entry fdef -> foldFusedCalls_f entry fdef) funDef 
           fusedFunctions),ls))  unfoldedTupledFunctions    
-      foldedTupledFunctions2   = L.map ( \(funDef,ls) ->
-        ((foldTupledFunctions_f funDef ls) ,ls) )  foldedTupledFunctions
 
-      newExp = L.foldr (\(funDef, ls) ex' ->
-        ( foldTupledFunctions ex' funDef ls)) oldExp  foldedTupledFunctions2
-      newDefs = L.foldr (\(funDef,_) mp -> M.insert (funName funDef) funDef mp )  
-                  M.empty foldedTupledFunctions2
-  return (newExp, newDefs)
+  foldedTupledFunctions2   <-  (Prelude.mapM (\(funDef,ls) ->  
+          do 
+            foldedFunc <-  foldTupledFunctions_f funDef ls
+            return ((foldedFunc) ,ls))
+          foldedTupledFunctions)
+  
+  let newDefs = L.foldr (\(funDef,_) mp -> M.insert (funName funDef) funDef mp )
+        M.empty foldedTupledFunctions2
+
+  foldedTupledFunctions3WithFDefs <-
+        Prelude.mapM ( (\((funDef, ls)) ->
+          do
+           (newBody, newFunctions) <- tuple ddefs  (M.union fdefs newDefs) (funBody funDef) fusedFunctions
+           return ((funDef{funBody = newBody }, ls), newFunctions)
+        )) (foldedTupledFunctions2)
+
+  let foldedTupledFunctions3 = L.map (fst) foldedTupledFunctions3WithFDefs
+
+  let  recGeneratedDefs = L.foldr (\item mp -> M.union item mp) M.empty
+         (L.map (snd) (foldedTupledFunctions3WithFDefs))
+
+  newExp <- Control.Monad.foldM (\ex' (funDef, ls)->
+        ( foldTupledFunctions ex' funDef ls)) oldExp  foldedTupledFunctions3
+  
+  let newDefsFinal = L.foldr (\(funDef,_) mp -> M.insert (funName funDef) funDef mp )
+        M.empty foldedTupledFunctions3
+
+  return (newExp,M.union newDefsFinal recGeneratedDefs )
+
 
 fuse :: DDefs Ty1 -> FunDefs1 -> Var -> Var-> PassM  (Bool, Var,  FunDefs1)
 fuse ddefs fdefs  innerVar  outerVar = do
