@@ -401,7 +401,7 @@ tupleListOfFunctions :: DDefs Ty1 -> [FunDef1] -> (FunDef1, [Var] )
 tupleListOfFunctions  ddefs ls = do
   let newName = L.foldl  appendName "" ls 
        where
-        appendName tmp function = (tmp  L.++ "___" L.++ (fromVar (funName function)))  
+        appendName tmp function = (tmp  L.++ "_t_" L.++ (fromVar (funName function)))  
   let lsVector    = V.fromList ls 
       retTypes    = V.map (\f -> (outTy (funTy f))) lsVector
       newRetType  = ProdTy (V.toList retTypes)  
@@ -456,7 +456,7 @@ tupleListOfFunctions  ddefs ls = do
                       (Nothing) -> error "ooopsa1"
 
       funNames = L.map (\f -> funName f ) ls                                                                                          
-  (FunDef (toVar ("tupled__" L.++ newName) ) newArgs (traversedType, newRetType)
+  (FunDef (toVar ("_TUP_" L.++ newName L.++ "_TUP_") ) newArgs (traversedType, newRetType)
     (l reduceStep) , funNames)
 
 renameFunction :: FunDef1 -> Var -> FunDef1
@@ -578,9 +578,9 @@ fuse :: DDefs Ty1 -> FunDefs1 -> Var -> Var-> PassM  (Bool, Var,  FunDefs1)
 fuse ddefs fdefs  innerVar  outerVar = do
   let innerFunc =  fdefs M.! innerVar
       outerFunc =  fdefs M.! outerVar
-      newVar    = toVar ( (fromVar outerVar) L.++ "_" L.++(fromVar innerVar ))
-  newName   <-  gensym_tag (newVar) "inline" 
-
+      newVar    = toVar ("_FUS_f_" L.++ (fromVar outerVar) L.++ "_f_" L.++(fromVar innerVar ) L.++ "_FUS_")
+  --newName   <-  gensym_tag (newVar) "inline" 
+  let newName  = newVar
   innerFreshBody <- freshExp []  (funBody innerFunc)
   outerFreshBody <- freshExp []  (funBody outerFunc)
   let setp1 = inline innerFunc{funBody =innerFreshBody}
