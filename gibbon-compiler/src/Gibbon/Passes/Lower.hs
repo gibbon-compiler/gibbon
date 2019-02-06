@@ -695,7 +695,7 @@ See [Hacky substitution to encode ParE].
 
 
     -- Tail calls are just an optimization, if we have a Proj/App it cannot be tail:
-    ProjE ix (L _ (AppE f _ e)) -> dbgTrace 1 "ProjE" $ do
+    ProjE ix (L _ (AppE f _ e)) -> dbgTrace 5 "ProjE" $ do
         tmp <- gensym $ toVar "prjapp"
         let (ProdTy inTs, _) = funTy (fundefs # f)
         tail $ l$ LetE ( tmp

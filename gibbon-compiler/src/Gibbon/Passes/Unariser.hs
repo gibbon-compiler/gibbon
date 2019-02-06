@@ -37,7 +37,7 @@ unariser Prog{ddefs,fundefs,mainExp} = do
           Nothing -> return Nothing
 
   let fds' = M.fromList $ L.map (\f -> (funName f,f)) fds
-  dbgTraceIt (sdoc fds') $ return $ Prog ddefs fds' mn
+  dbgTrace 5 (sdoc fds') $ return $ Prog ddefs fds' mn
 
 
   -- Modifies function to satisfy output invariant (1)
