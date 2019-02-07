@@ -3,13 +3,14 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ConstraintKinds #-}
 
-module Gibbon.Pretty ( Printer(..), Pretty(..)) where
+module Gibbon.Pretty ( Pretty(..) ) where
 
 import           Prelude hiding ((<>))
 import           Data.Loc
 import           Data.Text (unpack)
-import           Text.PrettyPrint as PP
+import           Text.PrettyPrint
 import           Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
 
@@ -21,133 +22,227 @@ import           Gibbon.Common
 import           Gibbon.SExpFrontend (primMap)
 import qualified Gibbon.L4.Syntax as L4
 
-class Printer a where
-    pprinter :: a -> String
+--------------------------------------------------------------------------------
 
-instance (Pretty ex, Pretty (TyOf ex), Pretty (ArrowTy (TyOf ex))) => Printer (Prog ex) where
-    pprinter (Prog _ funs me) =
-        let meDoc = case me of
-                      Nothing -> empty
-                      Just (e,ty) -> renderMain (pprint e) (pprint ty)
-            funsDoc = vcat $ map renderfunc $ M.elems funs
-        in render $ funsDoc $+$ meDoc
+-- | Rendering style.
+data PPStyle
+    = Haskell  -- ^ Prefer compatibility with GHC over anything else.
+    | Internal -- ^ Noisiest, useful for Gibbon developers.
+    deriving (Ord, Eq, Show, Read)
 
-instance Printer L4.Prog where
-    pprinter = show -- TODO: implement pretty printing for L4
+
+class Pretty e where
+    pprintWithStyle :: PPStyle -> e -> Doc
+
+    pprint :: e -> Doc
+    pprint = pprintWithStyle Internal
+
+    pprender :: e -> String
+    pprender = render . pprint
+
+    {-# MINIMAL pprintWithStyle  #-}
+
 
 doublecolon :: Doc
 doublecolon = colon <> colon
 
-renderfunc :: forall ex. (Pretty ex, Pretty (ArrowTy (TyOf ex)))
-           => FunDef ex -> Doc
-renderfunc FunDef{funName,funArg,funTy,funBody} = text (fromVar funName) <+> doublecolon <+> pprint funTy $$
-                                                  renderBod <> text "\n"
-    where
-      renderBod :: Doc
-      renderBod = text (fromVar funName) <+> text (fromVar funArg) <+> equals $$ nest 4 (pprint funBody)
+--------------------------------------------------------------------------------
 
--- Function type for L1 and L3
-instance Pretty (UrTy (), UrTy ()) where
-    pprint (a,b) = pprint a <+> text "->" <+> pprint b
+-- A convenience wrapper over some of the constraints.
+type HasPretty ex = (Pretty ex, Pretty (TyOf ex), Pretty (ArrowTy (TyOf ex)))
 
-instance Pretty ArrowTy2 where
-    -- TODO: start metadata at column 0 instead of aligning it with the type
-    pprint fnty = pprint (arrIn fnty) <+> text "->" <+> pprint (arrOut fnty) $$
-                  braces (text "locvars" <+> doc (locVars fnty) <> comma $$
-                          text "effs: " <+> doc (arrEffs fnty) <> comma $$
-                          text "locrets: " <+> doc (locRets fnty))
-
--- renderFnTy :: forall ex. (Pretty ex, Pretty (TyOf ex), FunctionTy (TyOf ex), Pretty (ArrowTy (TyOf ex)))
---            => FunDef ex -> Doc
--- renderFnTy FunDef{funTy,funName} =
---     text (fromVar funName) <+> doublecolon <+> pprint (inTy @(TyOf ex) funTy) <+>
---     text "->" <+> pprint (outTy @(TyOf ex) funTy)
+-- Program:
+instance HasPretty ex => Pretty (Prog ex) where
+    pprintWithStyle _ (Prog _ funs me) =
+        let meDoc = case me of
+                      Nothing -> empty
+                      Just (e,ty) -> renderMain (pprint e) (pprint ty)
+            funsDoc = vcat $ map pprint $ M.elems funs
+        in funsDoc $+$ meDoc
 
 renderMain :: Doc -> Doc -> Doc
 renderMain m ty = text "main" <+> doublecolon <+> ty
                     $$ text "main" <+> equals $$ nest 4 m
 
-class Pretty e where
-    pprint :: e -> Doc
+-- Functions:
+instance HasPretty ex => Pretty (FunDef ex) where
+    pprintWithStyle _ FunDef{funName,funArg,funTy,funBody} =
+        text (fromVar funName) <+> doublecolon <+> pprint funTy
+          $$ renderBod <> text "\n"
+      where
+        renderBod :: Doc
+        renderBod = text (fromVar funName) <+> text (fromVar funArg) <+> equals $$ nest 4 (pprint funBody)
 
-instance Pretty (NoExt l d) where
-    pprint _ = empty
+-- TODO: datatypes
 
-instance Pretty (PreExp e l d) => Pretty (L (PreExp e l d)) where
-    pprint (L _ e) = pprint e
+--------------------------------------------------------------------------------
 
-instance (Out d, Show d, Ord d) => Pretty (Prim d) where
-    pprint pr =
+-- Primitives
+instance Ord d => Pretty (Prim d) where
+    pprintWithStyle _ pr =
         -- We add PEndOf here because it's not exposed to the users, and as a result,
         -- is not defined as a primop in the parser primMap.
+        -- TODO: Dictionaries!!!
         let renderPrim = M.union (M.singleton PEndOf "pendof") $
                          M.fromList (map (\(a,b) -> (b,a)) (M.toList primMap))
-        in text (unpack (renderPrim # pr))
+        in case M.lookup pr renderPrim of
+              Nothing  -> error $ "pprint: Unknown primitive: " ++ render (pprint pr)
+              Just txt -> text (unpack txt)
 
-instance (Show l, Out l, Ord l, Pretty (e l (UrTy l)), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)), Pretty (UrTy l), Pretty l) => Pretty (PreExp e l (UrTy l)) where
-    pprint ex0 = pprintExp (l$ ex0)
 
-pprintExp :: (Out l, Show l, Show d, Out d, Ord d, Pretty (e l d), Pretty l, Pretty d, Pretty (Prim d)) => L (PreExp e l d) -> Doc
-pprintExp (L _ ex0) =
+--------------------------------------------------------------------------------
+
+-- Types:
+instance Pretty () where
+    pprintWithStyle _ _ = empty
+
+instance Pretty Var where
+    pprintWithStyle _ v = text (fromVar v)
+
+instance (Pretty l) => Pretty (UrTy l) where
+    pprintWithStyle _ ty =
+        case ty of
+          IntTy  -> text "Int"
+          BoolTy -> text "Bool"
+          ProdTy tys    -> parens $ hcat $ punctuate "," $ map pprint tys
+          SymDictTy ty  -> text "Dict" <+> pprint ty
+          PackedTy tc l -> text "Packed" <+> text tc <+> pprint l
+          ListTy ty -> text "List" <+> pprint ty
+          PtrTy     -> text "Ptr"
+          CursorTy  -> text "Cursor"
+
+-- Function type for L1 and L3
+instance Pretty (UrTy (), UrTy ()) where
+    pprintWithStyle _ (a,b) = pprint a <+> text "->" <+> pprint b
+
+instance Pretty ArrowTy2 where
+    -- TODO: start metadata at column 0 instead of aligning it with the type
+    pprintWithStyle _ fnty =
+                  pprint (arrIn fnty) <+> text "->" <+> pprint (arrOut fnty) $$
+                  braces (text "locvars" <+> doc (locVars fnty) <> comma $$
+                          text "effs: " <+> doc (arrEffs fnty) <> comma $$
+                          text "locrets: " <+> doc (locRets fnty))
+
+--------------------------------------------------------------------------------
+
+-- Expressions
+
+instance Pretty (PreExp e l d) => Pretty (L (PreExp e l d)) where
+    pprintWithStyle _ (L _ e) = pprint e
+
+-- CSK: Needs a better name.
+type HasPrettyToo e l d = (Pretty l, Pretty (UrTy l), Pretty (e l (UrTy l)))
+
+instance (Ord l, HasPrettyToo e l d) => Pretty (PreExp e l (UrTy l)) where
+    pprintWithStyle _ ex0 =
         case ex0 of
-          VarE v -> doc v
+          VarE v -> pprint v
           LitE i -> int i
-          LitSymE v -> doc v
-          AppE v ls e -> let docMoreLocs = hcat (punctuate "," (map doc ls))
-                         in doc v <+>
-                            (if isEmpty docMoreLocs
-                            then empty
-                            else brackets docMoreLocs) <+>
-                            (pprintExp e)
+          LitSymE v -> pprint v
+          AppE v ls e -> pprint v <+>
+                         (if null ls
+                          then empty
+                          else brackets $ hcat (punctuate "," (map pprint ls))) <+>
+                         (pprint e)
           PrimAppE pr es ->
               case pr of
                   _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP, SymAppend] ->
                       let [a1,a2] = es
-                      in pprintExp a1 <+> pprint pr <+> pprintExp a2
+                      in pprint a1 <+> pprint pr <+> pprint a2
 
                   _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprint pr
 
-                  _ -> pprint pr <> parens (hsep $ map pprintExp es)
+                  _ -> pprint pr <> parens (hsep $ map pprint es)
 
           LetE (v,ls,ty,e1) e2 -> text "let" <+>
-                                  doc v <+> doublecolon <+>
-                                  brackets (hcat (punctuate comma (map doc ls))) <+>
+                                  pprint v <+> doublecolon <+>
+                                  (if null ls
+                                   then empty
+                                   else brackets (hcat (punctuate comma (map pprint ls)))) <+>
                                   pprint ty <+>
                                   equals <+>
-                                  pprintExp e1 <+>
+                                  pprint e1 <+>
                                   text "in" $+$
-                                  pprintExp e2
+                                  pprint e2
           IfE e1 e2 e3 -> text "if" <+>
-                          pprintExp e1 $+$
+                          pprint e1 $+$
                           text "then" <+>
-                          pprintExp e2 $+$
+                          pprint e2 $+$
                           text "else" <+>
-                          pprintExp e3
-          MkProdE es -> lparen <> hcat (punctuate (text ", ") (map pprintExp es)) <> rparen
-          ProjE i e -> text "#" <> int i <+> pprintExp e
-          CaseE e bnds -> text "case" <+> pprintExp e <+> text "of" $+$
+                          pprint e3
+          MkProdE es -> lparen <> hcat (punctuate (text ", ") (map pprint es)) <> rparen
+          ProjE i e -> text "#" <> int i <+> pprint e
+          CaseE e bnds -> text "case" <+> pprint e <+> text "of" $+$
                           nest 4 (vcat $ map dobinds bnds)
           DataConE l dc es -> text dc <+>
                               (if isEmpty (pprint l)
                                then empty
-                               else doc l) <+>
-                              lparen <> hcat (punctuate (text ",") (map pprintExp es)) <> rparen
-          TimeIt e _ty _b -> text "timeit" <+> parens (pprintExp e)
-          ParE a b -> pprintExp a <+> text "||" <+> pprintExp b
+                               else pprint l) <+>
+                              lparen <> hcat (punctuate (text ",") (map pprint es)) <> rparen
+          TimeIt e _ty _b -> text "timeit" <+> parens (pprint e)
+          ParE a b -> pprint a <+> text "||" <+> pprint b
           Ext ext -> pprint ext
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{} -> error $ "Unexpected form in program: FoldE"
         where
           dobinds (dc,vls,e) = text dc <+> hcat (punctuate (text " ")
                                                            (map (\(v,l) -> if isEmpty (pprint l)
-                                                                           then doc v
-                                                                           else doc v <> doublecolon <> doc l)
+                                                                           then pprint v
+                                                                           else pprint v <> doublecolon <> pprint l)
                                                             vls))
-                               <+> text "->" $+$ nest 4 (pprintExp e)
+                               <+> text "->" $+$ nest 4 (pprint e)
+-- L1
+instance Pretty (NoExt l d) where
+    pprintWithStyle _ _ = empty
 
+-- L2
+instance Pretty l => Pretty (L2.PreLocExp l) where
+    pprintWithStyle _ le =
+        case le of
+          StartOfLE r -> lparen <> text "startof" <+> text (show r) <> rparen
+          AfterConstantLE i l -> lparen <> pprint l <+> text "+" <+> int i <> rparen
+          AfterVariableLE v l -> lparen <> pprint l <+> text "+" <+> doc v <> rparen
+          InRegionLE r -> lparen <> text "inregion" <+> text (show r) <> rparen
+          FromEndLE l -> lparen <> text "fromend" <+> pprint l <> rparen
+
+instance (Show l, Pretty l, Pretty (L (L2.E2 l (UrTy l)))) => Pretty (L2.E2Ext l (UrTy l)) where
+    pprintWithStyle _ ex0 =
+        case ex0 of
+          LetRegionE r e -> text "letregion" <+>
+                               doc r <+> text "in" $+$ pprint e
+          LetLocE l le e -> text "letloc" <+>
+                               pprint l <+> equals <+> pprint le <+> text "in" $+$ pprint e
+          RetE ls v -> text "return" <+>
+                          lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
+                          doc v
+          FromEndE l -> text "fromend" <+> pprint l
+          L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> text (show l2)
+          IndirectionE tc dc (l1,v1) (l2,v2) e -> text "indirection" <+>
+                                                     doc tc <+>
+                                                     doc dc <+>
+                                                     lparen <>
+                                                     hcat (punctuate (text ",") [pprint l1,text (fromVar v1)]) <>
+                                                     rparen <+>
+                                                     lparen <>
+                                                     hcat (punctuate (text ",") [pprint l2,text (fromVar v2)]) <>
+                                                     rparen <+>
+                                                     pprint e
+
+-- L3
+instance (Out l) => Pretty (L3.E3Ext l (UrTy l)) where
+    pprintWithStyle _ = doc -- TODO: replace this with actual pretty printing for L3 forms
+
+-- L4
+instance Pretty L4.Prog where
+   pprintWithStyle _ = doc -- TODO: replace this with actual pretty printing for L4 forms
+
+--------------------------------------------------------------------------------
+
+-- Oh no, all other generic PreExp things are defined over (PreExp e l (UrTy l)).
+-- We have to redefine this for L0 (which doesn't use UrTy).
 
 instance Pretty L0.Ty0 where
-  pprint ty =
+  pprintWithStyle _ ty =
       case ty of
         L0.IntTy   -> text "Int"
         L0.BoolTy  -> text "Bool"
@@ -160,68 +255,14 @@ instance Pretty L0.Ty0 where
         L0.ListTy ty -> brackets (pprint ty)
 
 instance Pretty L0.TyScheme where
-  pprint (L0.ForAll tvs ty) = text "forall" <+> hsep (map doc tvs) <+> text "." <+> pprint ty
+  pprintWithStyle _ (L0.ForAll tvs ty) = text "forall" <+> hsep (map doc tvs) <+> text "." <+> pprint ty
 
--- Oh no, all other generic PreExp things are defined over (PreExp e l (UrTy l)).
 instance Pretty (PreExp L0.E0Ext () L0.Ty0) where
-  pprint ex0 = pprintExp (l$ ex0)
+  pprintWithStyle _ ex0 = pprint (l$ ex0)
 
 instance Pretty (L0.E0Ext () L0.Ty0) where
-  pprint ex0 =
+  pprintWithStyle _ ex0 =
     case ex0 of
       L0.LambdaE (v,ty) bod -> parens (text "\\" <+> doc v <+> doublecolon <+> pprint ty <+> text " -> "
                                          $$ nest 4 (pprint bod))
       L0.PolyAppE{} -> doc ex0
-
-instance (Show l, Out l, Pretty (L (L2.E2 l (UrTy l)))) => Pretty (L2.E2Ext l (UrTy l)) where
-    pprint ex0 =
-        case ex0 of
-          L2.LetRegionE r e -> text "letregion" <+>
-                               doc r <+> text "in" $+$ pprint e
-          L2.LetLocE l le e -> text "letloc" <+>
-                               doc l <+> equals <+> pprint le <+> text "in" $+$ pprint e
-          L2.RetE ls v -> text "return" <+>
-                          lbrack <> hcat (punctuate (text ",") (map doc ls)) <> rbrack <+>
-                          doc v
-          L2.FromEndE l -> text "fromend" <+> doc l
-          L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> doc l1 <+> text (show l2)
-          L2.IndirectionE tc dc (l1,v1) (l2,v2) e -> text "indirection" <+>
-                                                     doc tc <+>
-                                                     doc dc <+>
-                                                     lparen <>
-                                                     hcat (punctuate (text ",") [doc l1,text (fromVar v1)]) <>
-                                                     rparen <+>
-                                                     lparen <>
-                                                     hcat (punctuate (text ",") [doc l2,text (fromVar v2)]) <>
-                                                     rparen <+>
-                                                     pprint e
-
-instance (Out l) => Pretty (L3.E3Ext l (UrTy l)) where
-    pprint = doc -- TODO: replace this with actual pretty printing for L3 forms
-
-instance (Out l) => Pretty (L2.PreLocExp l) where
-    pprint le =
-        case le of
-          L2.StartOfLE r -> lparen <> text "startof" <+> text (show r) <> rparen
-          L2.AfterConstantLE i l -> lparen <> doc l <+> text "+" <+> int i <> rparen
-          L2.AfterVariableLE v l -> lparen <> doc l <+> text "+" <+> doc v <> rparen
-          L2.InRegionLE r -> lparen <> text "inregion" <+> text (show r) <> rparen
-          L2.FromEndLE l -> lparen <> text "fromend" <+> doc l <> rparen
-
-instance Pretty () where
-    pprint _ = empty
-
-instance Pretty LocVar where
-    pprint v = text "@" <+> text (fromVar v)
-
-instance (Show l, Out l, Pretty l) => Pretty (UrTy l) where
-    pprint ty =
-        case ty of
-          IntTy -> text "Int"
-          BoolTy -> text "Bool"
-          ProdTy tys -> parens $ hcat $ punctuate "," $ map pprint tys
-          SymDictTy ty -> text "Dict" <+> pprint ty
-          PackedTy tc l -> text "Packed" <+> text tc <+> pprint l
-          ListTy ty -> text "List" <+> pprint ty
-          PtrTy -> text "Ptr"
-          CursorTy -> text "Cursor"

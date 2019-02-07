@@ -39,7 +39,7 @@ import           Gibbon.Common
 import           Gibbon.Interp
 import           Gibbon.DynFlags
 import qualified Gibbon.HaskellFrontend as HS
-import qualified Gibbon.L0.Syntax as L0
+-- import qualified Gibbon.L0.Syntax as L0
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
 -- import qualified Gibbon.L3.Syntax as L3
@@ -214,7 +214,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
       dbgPrintLn passChatterLvl $
           " [compiler] pipeline starting, parsed program: "++
             if dbgLvl >= passChatterLvl+1
-            then "\n"++sepline ++ "\n" ++ pprinter l1
+            then "\n"++sepline ++ "\n" ++ (pprender l1)
             else show (length (sdoc l1)) ++ " characters."
 
       -- (Stage 1) Run the program through the interpreter
@@ -550,8 +550,8 @@ passes config@Config{dynflags} l1 = do
       goE :: (Interp b) => PassRunner a b
       goE = passE config
 
-type PassRunner a b = (Printer b, Out b, NFData a, NFData b) =>
-                      String -> (a -> PassM b) -> a -> StateT CompileState IO b
+type PassRunner a b = (Pretty b, Out b, NFData a, NFData b) =>
+                       String -> (a -> PassM b) -> a -> StateT CompileState IO b
 
 
 -- | Run a pass and return the result
@@ -570,7 +570,7 @@ pass config who fn x = do
         then lift $ evaluate $ force y
         else return y
   if dbgLvl >= passChatterLvl+1
-     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++pprinter y'
+     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++ (pprender y')
      -- TODO: Switch to a node-count for size output (add to GenericOps):
      else lift$ dbgPrintLn passChatterLvl $ "   => "++ show (length (sdoc y')) ++ " characters output."
   return y'
@@ -596,7 +596,7 @@ passF config = pass config
 
 -- | Wrapper to enable running a pass AND interpreting the result.
 --
-wrapInterp :: (NFData p1, NFData p2, Interp p2, Out p2, Printer p2) =>
+wrapInterp :: (NFData p1, NFData p2, Interp p2, Out p2, Pretty p2) =>
               Mode -> PassRunner p1 p2 -> String -> (p1 -> PassM p2) -> p1 ->
               StateT CompileState IO p2
 wrapInterp mode pass who fn x =
