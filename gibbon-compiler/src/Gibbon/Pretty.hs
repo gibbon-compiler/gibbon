@@ -131,9 +131,9 @@ instance Pretty (PreExp e l d) => Pretty (L (PreExp e l d)) where
     pprintWithStyle _ (L _ e) = pprint e
 
 -- CSK: Needs a better name.
-type HasPrettyToo e l d = (Pretty l, Pretty (UrTy l), Pretty (e l (UrTy l)))
+type HasPrettyToo e l d = (Ord d, Eq d, Pretty d, Pretty l, Pretty (e l d))
 
-instance (Ord l, HasPrettyToo e l d) => Pretty (PreExp e l (UrTy l)) where
+instance HasPrettyToo e l d => Pretty (PreExp e l d) where
     pprintWithStyle _ ex0 =
         case ex0 of
           VarE v -> pprint v
@@ -205,7 +205,7 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
           InRegionLE r -> lparen <> text "inregion" <+> text (show r) <> rparen
           FromEndLE l -> lparen <> text "fromend" <+> pprint l <> rparen
 
-instance (Show l, Pretty l, Pretty (L (L2.E2 l (UrTy l)))) => Pretty (L2.E2Ext l (UrTy l)) where
+instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
     pprintWithStyle _ ex0 =
         case ex0 of
           LetRegionE r e -> text "letregion" <+>
@@ -216,7 +216,7 @@ instance (Show l, Pretty l, Pretty (L (L2.E2 l (UrTy l)))) => Pretty (L2.E2Ext l
                           lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
                           doc v
           FromEndE l -> text "fromend" <+> pprint l
-          L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> text (show l2)
+          L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> pprint l2
           IndirectionE tc dc (l1,v1) (l2,v2) e -> text "indirection" <+>
                                                      doc tc <+>
                                                      doc dc <+>
@@ -256,9 +256,6 @@ instance Pretty L0.Ty0 where
 
 instance Pretty L0.TyScheme where
   pprintWithStyle _ (L0.ForAll tvs ty) = text "forall" <+> hsep (map doc tvs) <+> text "." <+> pprint ty
-
-instance Pretty (PreExp L0.E0Ext () L0.Ty0) where
-  pprintWithStyle _ ex0 = pprint (l$ ex0)
 
 instance Pretty (L0.E0Ext () L0.Ty0) where
   pprintWithStyle _ ex0 =
