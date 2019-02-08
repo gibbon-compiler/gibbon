@@ -21,14 +21,14 @@
      (let  ([l : Tree (set-even left)]
             [r : Tree (set-even right)])
           
-           (Inner sum (even sum)  l r )
+           (Inner sum (is-even sum)  l r )
       )
     ]
   )
 )
 
 ;; need to add the  mod operaion to gibbon % 
-(define (even [n : Int]) : Int
+(define (is-even [n : Int]) : Int
   (if (= (+ n 2) 0) 1 0 ) )
  
 
