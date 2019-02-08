@@ -12,6 +12,7 @@ import qualified Data.List as L
 import qualified  Data.Set as S
 import qualified Data.Vector as V
 import Data.Symbol
+import Data.Char ( toLower )
 import Gibbon.L1.Syntax as L1
 import Debug.Trace
 import Control.DeepSeq
@@ -460,7 +461,7 @@ tupleListOfFunctions  ddefs ls = do
            where 
             subsVars ex = V.ifoldr subsVar ex (V.fromList varls) 
             subsVar index v ex   = substE  (l (VarE (fst v) )) 
-              (l (VarE (toVar (dataCons L.++ (show index))))) ex  
+              (l (VarE (toVar (L.map toLower (dataCons L.++ (show index)))))) ex
 
   let inputDef = lookupDDef ddefs typeStr 
         where 
@@ -484,7 +485,7 @@ tupleListOfFunctions  ddefs ls = do
            consBody = (dataCons, newVarsList, combinedBodies) 
              where
               newVarsList = V.toList( V.imap 
-                (\index _ -> ( toVar (dataCons L.++ (show index)) ,() ) )
+                (\index _ -> ( toVar (L.map toLower (dataCons L.++ (show index))) ,() ) )
                   (V.fromList varls) ) 
               combinedBodies  =  V.ifoldr (\index body res  ->
                 l (LetE ((createOutVar index),[],(unsafeIndex retTypes index),
