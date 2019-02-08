@@ -64,8 +64,9 @@ instance HasPretty ex => Pretty (Prog ex) where
 
         -- Things we need to make this a valid compilation unit for GHC:
         ghc_compat_prefix = text "{-# LANGUAGE ScopedTypeVariables #-}\n" $+$
-                            text "module Main where\n"
-
+                            text "module Main where\n" $+$
+                            -- Need a better stub for 'TimeIt' in GHC.
+                            text "timeit = id\n"
         ghc_compat_suffix = text "\nmain = print gibbon_main"
 
 -- Functions:
@@ -198,7 +199,15 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                           text "else" <+>
                           pprintWithStyle sty e3
           MkProdE es -> lparen <> hcat (punctuate (text ", ") (map (pprintWithStyle sty) es)) <> rparen
-          ProjE i e -> text "#" <> int i <+> pprintWithStyle sty e
+          ProjE i e ->
+              let edoc = pprintWithStyle sty e
+              in case sty of
+                PPInternal ->  text "#" <> int i <+> edoc
+                PPHaskell  ->
+                    case i of
+                      0 -> text "fst" <+> edoc
+                      1 -> text "snd" <+> edoc
+                      _ -> error (render $ pprintWithStyle PPInternal ex0) -- text "#" <> int i <+> edoc
           CaseE e bnds -> text "case" <+> pprintWithStyle sty e <+> text "of" $+$
                           nest 4 (vcat $ map dobinds bnds)
           DataConE l dc es -> text dc <+>
