@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+
 -- | Flags à la GHC
 module Gibbon.DynFlags
   ( DynFlags(..), GeneralFlag(..), DebugFlag(..)
@@ -32,7 +33,9 @@ data GeneralFlag
 -- | Exactly like GHC's ddump flags.
 data DebugFlag
   = Opt_D_Dump_Repair
-  deriving (Show,Read,Eq,Ord)
+  | Opt_D_DumpToFile
+  | Opt_D_Dump_Hs
+  deriving (Show, Read, Eq, Ord)
 
 -- Coming soon ...
 -- data WarningFlag
@@ -92,4 +95,8 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
 
     dflagsParser :: Parser DebugFlag
     dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>
-                                            help "Dump some information while running RepairProgram")
+                                            help "Dump some information while running RepairProgram") <|>
+                   flag' Opt_D_DumpToFile (long "ddump-to-file" <>
+                                           help "Dump output to files instead of stdout.") <|>
+                   flag' Opt_D_Dump_Hs (long "ddump-hs" <>
+                                        help "Dump GHC compliant source code after all the L1 passes are done.")

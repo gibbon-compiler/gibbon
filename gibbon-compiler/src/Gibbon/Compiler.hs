@@ -135,6 +135,7 @@ configParser = Config <$> inputParser
                            <|> pure (exefile defaultConfig))
                       <*> backendParser
                       <*> dynflagsParser
+                      <*> (Just <$> strOption hidden <|> pure Nothing)
  where
   inputParser :: Parser Input
                 -- I'd like to display a separator and some more info.  How?
@@ -205,6 +206,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
 
   -- parse the input file
   ((l1, cnt0), fp) <- parseInput input fp0
+  let config' = config { srcFile = Just fp }
 
   case mode of
     Interp1 -> runL1 l1
@@ -214,7 +216,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
       dbgPrintLn passChatterLvl $
           " [compiler] pipeline starting, parsed program: "++
             if dbgLvl >= passChatterLvl+1
-            then "\n"++sepline ++ "\n" ++ (pprender l1)
+            then "\n"++sepline ++ "\n" ++ (render $ pprint l1)
             else show (length (sdoc l1)) ++ " characters."
 
       -- (Stage 1) Run the program through the interpreter
@@ -224,7 +226,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
       let outfile = getOutfile backend fp cfile
 
       -- run the initial program through the compiler pipeline
-      stM <- return $ passes config l1
+      stM <- return $ passes config' l1
       l4  <- evalStateT stM (CompileState {cnt=cnt0, result=initResult})
 
       if mode == Interp2
@@ -234,7 +236,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
         exitSuccess
       else do
         str <- case backend of
-                 C    -> codegenProg config l4
+                 C    -> codegenProg config' l4
 #ifdef LLVM_ENABLED
                  LLVM -> LLVM.codegenProg True l4
 #endif
@@ -479,6 +481,9 @@ passes config@Config{dynflags} l1 = do
       l1 <- goE "floatOut"      floatOut                l1
       l1 <- goE "typecheck"     L1.tcProg               l1
 
+      -- Minimal haskell "backend".
+      lift $ dumpIfSet config Opt_D_Dump_Hs (render $ pprintWithStyle PPHaskell l1)
+
       -- TODO: Write interpreters for L2 and L3
       l3 <- if isPacked
             then do
@@ -570,7 +575,7 @@ pass config who fn x = do
         then lift $ evaluate $ force y
         else return y
   if dbgLvl >= passChatterLvl+1
-     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++ (pprender y')
+     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++ (render $ pprint y')
      -- TODO: Switch to a node-count for size output (add to GenericOps):
      else lift$ dbgPrintLn passChatterLvl $ "   => "++ show (length (sdoc y')) ++ " characters output."
   return y'

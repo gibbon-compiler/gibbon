@@ -26,7 +26,7 @@ module Gibbon.Common
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
-       , internalError
+       , internalError, dumpIfSet
 
          -- * Establish conventions for the output of #lang gibbon:
        , truePrinted, falsePrinted
@@ -49,7 +49,9 @@ import Text.PrettyPrint.GenericPretty
 import Text.PrettyPrint as PP hiding (Mode(..), Style(..))
 import System.IO
 import System.Environment
-import System.IO.Unsafe (unsafePerformIO)
+import System.FilePath  ( replaceExtension )
+import System.IO.Unsafe ( unsafePerformIO )
+import System.Random    ( randomIO )
 import Debug.Trace
 import Language.C.Quote.CUDA (ToIdent, toIdent)
 
@@ -203,8 +205,9 @@ data Config = Config
   , exefile    :: Maybe FilePath -- ^ Optional override to destination binary file.
   , backend    :: Backend        -- ^ Compilation backend used
   , dynflags   :: DynFlags
+  , srcFile    :: Maybe FilePath -- ^ The file being compiled by Gibbon.
   }
-  deriving (Show,Read,Eq,Ord)
+  deriving (Show, Read, Eq, Ord)
 
 -- | What input format to expect on disk.
 data Input = Haskell
@@ -221,7 +224,7 @@ data Mode = ToParse  -- ^ Parse and then stop
           | Interp1  -- ^ Interp early.
           | Bench Var -- ^ Benchmark a particular function applied to the packed data within an input file.
           | BenchInput FilePath -- ^ Hardcode the input file to the benchmark in the C code.
-  deriving (Show,Read,Eq,Ord)
+  deriving (Show, Read, Eq, Ord)
 
 -- | Compilation backend used
 data Backend = C | LLVM
@@ -239,6 +242,7 @@ defaultConfig =
          , exefile = Nothing
          , backend = C
          , dynflags = defaultDynFlags
+         , srcFile = Nothing
          }
 
 -- | Runtime configuration for executing interpreters.
@@ -376,6 +380,9 @@ dbgPrint lvl str = if dbgLvl < lvl then return () else do
     _ <- evaluate (force str) -- Force it first to squeeze out any dbgTrace msgs.
     hPutStrLn stderr str
 
+dbgPrintLn :: Int -> String -> IO ()
+dbgPrintLn lvl str = dbgPrint lvl (str++"\n")
+
 -- | Conditional version of Debug.Trace.trace
 dbgTrace :: Int -> String -> a -> a
 dbgTrace lvl msg val =
@@ -385,10 +392,35 @@ dbgTrace lvl msg val =
 
 -- | Yo, trace this msg.
 dbgTraceIt :: String -> a -> a
-dbgTraceIt msg x = trace msg x
+dbgTraceIt = trace
 
-dbgPrintLn :: Int -> String -> IO ()
-dbgPrintLn lvl str = dbgPrint lvl (str++"\n")
+-- | Dump some output if the flag is set. Otherwise, do nothing.
+dumpIfSet :: Config -> DebugFlag -> String -> IO ()
+dumpIfSet cfg flag msg =
+  when (dopt flag dflags) $ do
+    if not dump_to_file
+    then putStrLn msg
+    else do
+      fp <- case src_file of
+              Just fp -> pure $ replaceExtension fp suffix
+              Nothing -> do
+                n <- randomIO :: IO Int
+                let fp = "gibbon-" ++ show n ++ "." ++ suffix
+                dbgTraceIt ("dumpIfSet: Got -ddump-to-file, but 'srcFile' is not set in config. Dumping output to " ++ fp) (pure fp)
+      withFile fp WriteMode (\h -> hPutStrLn h msg)
+  where
+    src_file     = srcFile cfg
+    dflags       = dynflags cfg
+    dump_to_file = dopt Opt_D_DumpToFile dflags
+    suffix       = debugFlagSuffix flag
+
+-- A nice filename suffix for each flag.
+debugFlagSuffix :: DebugFlag -> String
+debugFlagSuffix f =
+  case f of
+    Opt_D_Dump_Repair -> "dump-repair"
+    Opt_D_DumpToFile  -> "dump-to-file" -- This would never be used.
+    Opt_D_Dump_Hs     -> "dump-hs"
 
 --------------------------------------------------------------------------------
 -- Some global constants
