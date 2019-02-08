@@ -862,7 +862,7 @@ elimFunRefsExp ddefs env2 low (L p ex) = fmap (L p) <$>
                    ++ ". TODO: these can become additional arguments."
       else do
         (low', lam_bod') <- go lam_bod
-        let fn_refs = collectFunRefs lam_bod []
+        let _fn_refs = collectFunRefs lam_bod []
             fn = FunDef { funName = v
                         , funArg  = arg
                         , funTy   = ForAll [] ty
@@ -872,7 +872,7 @@ elimFunRefsExp ddefs env2 low (L p ex) = fmap (L p) <$>
         fmap unLoc <$> elimFunRefsExp ddefs env2' low'' bod
 
     LetE (v, [], ty, rhs) bod -> do
-      let fn_refs = collectFunRefs rhs []
+      let _fn_refs = collectFunRefs rhs []
           env2' = (extendVEnv v ty env2)
       (low', rhs') <- go rhs
       (low'', bod') <- elimFunRefsExp ddefs env2' low' bod

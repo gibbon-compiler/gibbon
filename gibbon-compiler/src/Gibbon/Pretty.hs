@@ -1,11 +1,10 @@
-{-# LANGUAGE TypeApplications #-}
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ConstraintKinds #-}
 
-module Gibbon.Pretty ( Pretty(..) ) where
+module Gibbon.Pretty
+  ( Pretty(..), PPStyle(..), render ) where
 
 import           Prelude hiding ((<>))
 import           Data.Loc
@@ -18,7 +17,7 @@ import qualified Gibbon.L0.Syntax as L0
 import           Gibbon.L1.Syntax
 import           Gibbon.L2.Syntax as L2
 import           Gibbon.L3.Syntax as L3
-import           Gibbon.Common
+import           Gibbon.Common hiding (l)
 import           Gibbon.SExpFrontend (primMap)
 import qualified Gibbon.L4.Syntax as L4
 
@@ -26,8 +25,8 @@ import qualified Gibbon.L4.Syntax as L4
 
 -- | Rendering style.
 data PPStyle
-    = Haskell  -- ^ Prefer compatibility with GHC over anything else.
-    | Internal -- ^ Noisiest, useful for Gibbon developers.
+    = PPHaskell  -- ^ Prefer compatibility with GHC over anything else.
+    | PPInternal -- ^ Noisiest, useful for Gibbon developers.
     deriving (Ord, Eq, Show, Read)
 
 
@@ -35,10 +34,7 @@ class Pretty e where
     pprintWithStyle :: PPStyle -> e -> Doc
 
     pprint :: e -> Doc
-    pprint = pprintWithStyle Internal
-
-    pprender :: e -> String
-    pprender = render . pprint
+    pprint = pprintWithStyle PPInternal
 
     {-# MINIMAL pprintWithStyle  #-}
 
@@ -105,9 +101,9 @@ instance (Pretty l) => Pretty (UrTy l) where
           IntTy  -> text "Int"
           BoolTy -> text "Bool"
           ProdTy tys    -> parens $ hcat $ punctuate "," $ map pprint tys
-          SymDictTy ty  -> text "Dict" <+> pprint ty
+          SymDictTy ty1 -> text "Dict" <+> pprint ty1
           PackedTy tc l -> text "Packed" <+> text tc <+> pprint l
-          ListTy ty -> text "List" <+> pprint ty
+          ListTy ty1 -> text "List" <+> pprint ty1
           PtrTy     -> text "Ptr"
           CursorTy  -> text "Cursor"
 
@@ -244,15 +240,15 @@ instance Pretty L4.Prog where
 instance Pretty L0.Ty0 where
   pprintWithStyle _ ty =
       case ty of
-        L0.IntTy   -> text "Int"
-        L0.BoolTy  -> text "Bool"
-        L0.TyVar v -> doc v
-        L0.MetaTv v -> doc v
+        L0.IntTy      -> text "Int"
+        L0.BoolTy     -> text "Bool"
+        L0.TyVar v    -> doc v
+        L0.MetaTv v   -> doc v
         L0.ProdTy tys -> parens $ hcat $ punctuate "," $ map pprint tys
-        L0.SymDictTy ty -> text "Dict" <+> pprint ty
-        L0.ArrowTy a b  -> pprint a <+> text "->" <+> pprint b
+        L0.SymDictTy ty1 -> text "Dict" <+> pprint ty1
+        L0.ArrowTy a b   -> pprint a <+> text "->" <+> pprint b
         L0.PackedTy tc l -> text "Packed" <+> text tc <+> brackets (hcat (map pprint l))
-        L0.ListTy ty -> brackets (pprint ty)
+        L0.ListTy ty1 -> brackets (pprint ty1)
 
 instance Pretty L0.TyScheme where
   pprintWithStyle _ (L0.ForAll tvs ty) = text "forall" <+> hsep (map doc tvs) <+> text "." <+> pprint ty
