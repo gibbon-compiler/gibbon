@@ -8,7 +8,6 @@ module Gibbon.Pretty
 
 import           Prelude hiding ((<>))
 import           Data.Loc
-import           Data.Text (unpack)
 import           Text.PrettyPrint
 import           Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
@@ -18,7 +17,7 @@ import           Gibbon.L1.Syntax
 import           Gibbon.L2.Syntax as L2
 import           Gibbon.L3.Syntax as L3
 import           Gibbon.Common hiding (l)
-import           Gibbon.SExpFrontend (primMap)
+import           Gibbon.HaskellFrontend ( primMap )
 import qualified Gibbon.L4.Syntax as L4
 
 --------------------------------------------------------------------------------
@@ -49,29 +48,48 @@ type HasPretty ex = (Pretty ex, Pretty (TyOf ex), Pretty (ArrowTy (TyOf ex)))
 
 -- Program:
 instance HasPretty ex => Pretty (Prog ex) where
-    pprintWithStyle _ (Prog _ funs me) =
+    pprintWithStyle sty (Prog ddefs funs me) =
         let meDoc = case me of
                       Nothing -> empty
-                      Just (e,ty) -> renderMain (pprint e) (pprint ty)
-            funsDoc = vcat $ map pprint $ M.elems funs
-        in funsDoc $+$ meDoc
+                      Just (e,ty) -> renderMain (pprintWithStyle sty e) (pprintWithStyle sty ty)
+            ddefsDoc = vcat $ map (pprintWithStyle sty) $ M.elems ddefs
+            funsDoc = vcat $ map (pprintWithStyle sty) $ M.elems funs
+        in case sty of
+             PPInternal -> ddefsDoc $+$ funsDoc $+$ meDoc
+             PPHaskell  -> ghc_compat_prefix $+$ ddefsDoc $+$ funsDoc $+$ meDoc $+$ ghc_compat_suffix
+      where
+        renderMain :: Doc -> Doc -> Doc
+        renderMain m ty = text "gibbon_main" <+> doublecolon <+> ty
+                            $$ text "gibbon_main" <+> equals $$ nest 4 m
 
-renderMain :: Doc -> Doc -> Doc
-renderMain m ty = text "main" <+> doublecolon <+> ty
-                    $$ text "main" <+> equals $$ nest 4 m
+        -- Things we need to make this a valid compilation unit for GHC:
+        ghc_compat_prefix = text "{-# LANGUAGE ScopedTypeVariables #-}\n" $+$
+                            text "module Main where\n"
+
+        ghc_compat_suffix = text "\nmain = print gibbon_main"
 
 -- Functions:
 instance HasPretty ex => Pretty (FunDef ex) where
-    pprintWithStyle _ FunDef{funName,funArg,funTy,funBody} =
-        text (fromVar funName) <+> doublecolon <+> pprint funTy
+    pprintWithStyle sty FunDef{funName,funArg,funTy,funBody} =
+        text (fromVar funName) <+> doublecolon <+> pprintWithStyle sty funTy
           $$ renderBod <> text "\n"
       where
         renderBod :: Doc
-        renderBod = text (fromVar funName) <+> text (fromVar funArg) <+> equals $$ nest 4 (pprint funBody)
+        renderBod = text (fromVar funName) <+> text (fromVar funArg) <+> equals
+                      $$ nest 4 (pprintWithStyle sty funBody)
 
--- TODO: datatypes
+-- Datatypes
+instance Pretty ex => Pretty (DDef ex) where
+    pprintWithStyle sty DDef{tyName,tyArgs,dataCons} =
+        text "data" <+> pprintWithStyle sty tyName <+> hsep (map (pprintWithStyle sty) tyArgs)
+          <+> equals <+> vcat (punctuate " | " $
+                                 map (\(d,args) ->
+                                        text d <+> hsep (map (\(_,b) -> pprintWithStyle sty b) args))
+                                   dataCons)
+          <+> (if sty == PPHaskell
+               then text "\n  deriving Show \n"
+               else empty)
 
---------------------------------------------------------------------------------
 
 -- Primitives
 instance Ord d => Pretty (Prim d) where
@@ -83,10 +101,8 @@ instance Ord d => Pretty (Prim d) where
                          M.fromList (map (\(a,b) -> (b,a)) (M.toList primMap))
         in case M.lookup pr renderPrim of
               Nothing  -> error $ "pprint: Unknown primitive: " ++ render (pprint pr)
-              Just txt -> text (unpack txt)
+              Just str -> text str
 
-
---------------------------------------------------------------------------------
 
 -- Types:
 instance Pretty () where
@@ -95,98 +111,114 @@ instance Pretty () where
 instance Pretty Var where
     pprintWithStyle _ v = text (fromVar v)
 
+instance Pretty TyVar where
+    pprintWithStyle sty tyvar =
+      case sty of
+        PPHaskell -> case tyvar of
+                       BoundTv v  -> text $ fromVar v
+                       SkolemTv{} -> doc tyvar
+                       UserTv v   -> text $ fromVar v
+        PPInternal -> doc tyvar
+
 instance (Pretty l) => Pretty (UrTy l) where
-    pprintWithStyle _ ty =
+    pprintWithStyle sty ty =
         case ty of
           IntTy  -> text "Int"
           BoolTy -> text "Bool"
-          ProdTy tys    -> parens $ hcat $ punctuate "," $ map pprint tys
-          SymDictTy ty1 -> text "Dict" <+> pprint ty1
-          PackedTy tc l -> text "Packed" <+> text tc <+> pprint l
-          ListTy ty1 -> text "List" <+> pprint ty1
+          ProdTy tys    -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
+          SymDictTy ty1 -> text "Dict" <+> pprintWithStyle sty ty1
+          PackedTy tc l ->
+              case sty of
+                PPHaskell  -> text tc
+                PPInternal -> text "Packed" <+> text tc <+> pprintWithStyle sty l
+          ListTy ty1 -> text "List" <+> pprintWithStyle sty ty1
           PtrTy     -> text "Ptr"
           CursorTy  -> text "Cursor"
 
 -- Function type for L1 and L3
 instance Pretty (UrTy (), UrTy ()) where
-    pprintWithStyle _ (a,b) = pprint a <+> text "->" <+> pprint b
+    pprintWithStyle sty (a,b) = pprintWithStyle sty a <+> text "->" <+> pprintWithStyle sty b
 
 instance Pretty ArrowTy2 where
     -- TODO: start metadata at column 0 instead of aligning it with the type
-    pprintWithStyle _ fnty =
-                  pprint (arrIn fnty) <+> text "->" <+> pprint (arrOut fnty) $$
-                  braces (text "locvars" <+> doc (locVars fnty) <> comma $$
-                          text "effs: " <+> doc (arrEffs fnty) <> comma $$
-                          text "locrets: " <+> doc (locRets fnty))
+    pprintWithStyle sty fnty =
+        case sty of
+          PPHaskell ->
+            pprintWithStyle sty (arrIn fnty) <+> text "->" <+> pprintWithStyle sty (arrOut fnty)
+          PPInternal ->
+            pprintWithStyle PPHaskell fnty $$
+              braces (text "locvars" <+> doc (locVars fnty) <> comma $$
+                      text "effs: " <+> doc (arrEffs fnty) <> comma $$
+                      text "locrets: " <+> doc (locRets fnty))
 
---------------------------------------------------------------------------------
 
 -- Expressions
 
 instance Pretty (PreExp e l d) => Pretty (L (PreExp e l d)) where
-    pprintWithStyle _ (L _ e) = pprint e
+    pprintWithStyle sty (L _ e) = pprintWithStyle sty e
 
 -- CSK: Needs a better name.
-type HasPrettyToo e l d = (Ord d, Eq d, Pretty d, Pretty l, Pretty (e l d))
+type HasPrettyToo e l d = (Ord d, Eq d, Pretty d, Pretty l, Pretty (e l d), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)))
 
 instance HasPrettyToo e l d => Pretty (PreExp e l d) where
-    pprintWithStyle _ ex0 =
+    pprintWithStyle sty ex0 =
         case ex0 of
-          VarE v -> pprint v
+          VarE v -> pprintWithStyle sty v
           LitE i -> int i
-          LitSymE v -> pprint v
-          AppE v ls e -> pprint v <+>
+          LitSymE v -> pprintWithStyle sty v
+          AppE v ls e -> pprintWithStyle sty v <+>
                          (if null ls
                           then empty
                           else brackets $ hcat (punctuate "," (map pprint ls))) <+>
-                         (pprint e)
+                         (pprintWithStyle sty e)
           PrimAppE pr es ->
               case pr of
                   _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP, SymAppend] ->
                       let [a1,a2] = es
-                      in pprint a1 <+> pprint pr <+> pprint a2
+                      in pprintWithStyle sty a1 <+> pprintWithStyle sty pr <+> pprintWithStyle sty a2
 
-                  _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprint pr
+                  _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprintWithStyle sty pr
 
-                  _ -> pprint pr <> parens (hsep $ map pprint es)
+                  _ -> pprintWithStyle sty pr <> parens (hsep $ map (pprintWithStyle sty) es)
 
-          LetE (v,ls,ty,e1) e2 -> text "let" <+>
-                                  pprint v <+> doublecolon <+>
+          LetE (v,ls,ty,e1) e2 -> (text "let") <+>
+                                  pprintWithStyle sty v <+> doublecolon <+>
                                   (if null ls
                                    then empty
-                                   else brackets (hcat (punctuate comma (map pprint ls)))) <+>
-                                  pprint ty <+>
+                                   else brackets (hcat (punctuate comma (map (pprintWithStyle sty) ls)))) <+>
+                                  pprintWithStyle sty ty <+>
                                   equals <+>
-                                  pprint e1 <+>
+                                  pprintWithStyle sty e1 <+>
                                   text "in" $+$
-                                  pprint e2
+                                  pprintWithStyle sty e2
           IfE e1 e2 e3 -> text "if" <+>
-                          pprint e1 $+$
+                          pprintWithStyle sty e1 $+$
                           text "then" <+>
-                          pprint e2 $+$
+                          pprintWithStyle sty e2 $+$
                           text "else" <+>
-                          pprint e3
-          MkProdE es -> lparen <> hcat (punctuate (text ", ") (map pprint es)) <> rparen
-          ProjE i e -> text "#" <> int i <+> pprint e
-          CaseE e bnds -> text "case" <+> pprint e <+> text "of" $+$
+                          pprintWithStyle sty e3
+          MkProdE es -> lparen <> hcat (punctuate (text ", ") (map (pprintWithStyle sty) es)) <> rparen
+          ProjE i e -> text "#" <> int i <+> pprintWithStyle sty e
+          CaseE e bnds -> text "case" <+> pprintWithStyle sty e <+> text "of" $+$
                           nest 4 (vcat $ map dobinds bnds)
           DataConE l dc es -> text dc <+>
-                              (if isEmpty (pprint l)
+                              (if isEmpty (pprintWithStyle sty l)
                                then empty
-                               else pprint l) <+>
-                              lparen <> hcat (punctuate (text ",") (map pprint es)) <> rparen
-          TimeIt e _ty _b -> text "timeit" <+> parens (pprint e)
-          ParE a b -> pprint a <+> text "||" <+> pprint b
-          Ext ext -> pprint ext
+                               else pprintWithStyle sty l) <+>
+                              hsep (map (pprintWithStyle sty) es)
+                              -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
+          TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
+          ParE a b -> pprintWithStyle sty a <+> text "||" <+> pprintWithStyle sty b
+          Ext ext -> pprintWithStyle sty ext
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{} -> error $ "Unexpected form in program: FoldE"
         where
           dobinds (dc,vls,e) = text dc <+> hcat (punctuate (text " ")
-                                                           (map (\(v,l) -> if isEmpty (pprint l)
-                                                                           then pprint v
-                                                                           else pprint v <> doublecolon <> pprint l)
+                                                           (map (\(v,l) -> if isEmpty (pprintWithStyle sty l)
+                                                                           then pprintWithStyle sty v
+                                                                           else pprintWithStyle sty v <> doublecolon <> pprintWithStyle sty l)
                                                             vls))
-                               <+> text "->" $+$ nest 4 (pprint e)
+                               <+> text "->" $+$ nest 4 (pprintWithStyle sty e)
 -- L1
 instance Pretty (NoExt l d) where
     pprintWithStyle _ _ = empty
