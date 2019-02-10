@@ -114,6 +114,9 @@ tests:
   - name: test_sumtree.gib
   - name: test_unpacking.gib
   - name: test24_defs.gib
+  - name: void_type.gib
+  - name: void_type.hs
+    answer-file: examples/void_type.ans
 
   ## Benchmarks
 

@@ -10,21 +10,21 @@ module Gibbon.Passes.Lower
 
 -------------------------------------------------------------------------------
 
-import Control.Monad
-import Data.Char
-import Data.Maybe
-import Data.Loc
-import Data.List as L hiding (tail)
-import Data.Map as M hiding (foldl, foldr)
-import Data.Int (Int64)
-import Prelude hiding (tail)
-import Text.PrettyPrint.GenericPretty
+import           Control.Monad
+import           Data.Char
+import           Data.Maybe
+import           Data.Loc
+import           Data.List as L hiding (tail)
+import qualified Data.Map as M hiding (foldl, foldr)
+import           Data.Int (Int64)
+import           Prelude hiding (tail)
+import           Text.PrettyPrint.GenericPretty
 import qualified Data.List as L
 
-import Gibbon.Common
-import Gibbon.DynFlags
-import Gibbon.L1.Syntax hiding (progToEnv)
-import Gibbon.L3.Syntax
+import           Gibbon.Common
+import           Gibbon.DynFlags
+import           Gibbon.L1.Syntax hiding (progToEnv)
+import           Gibbon.L3.Syntax
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L4.Syntax as T
 
@@ -307,8 +307,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
           Just (x,mty) -> (Just . T.PrintExp) <$> (addPrintToTail mty =<< tail x)
 
   funs       <- mapM fund (M.elems fundefs)
-  unpackers  <- mapM genUnpacker (M.elems ddefs)
-  printers   <- mapM genPrinter (M.elems ddefs)
+  unpackers  <- mapM genUnpacker (L.filter (not . isVoidDDef) (M.elems ddefs))
+  printers   <- mapM genPrinter (L.filter (not . isVoidDDef) (M.elems ddefs))
   T.Prog <$> pure (funs ++ unpackers ++ printers) <*> pure mn
 
 --  T.Prog <$> mapM fund (M.elems fundefs) <*> pure mn
