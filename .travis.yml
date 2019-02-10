@@ -1,14 +1,15 @@
-# To set the default GCC version to 7
 sudo: required
 
-# Do not choose a language; we provide our own build tools.
-language: generic
-# language: nix
+# Install some Nix tools.
+# See https://docs.travis-ci.com/user/languages/nix.
+language: nix
 
-# Caching so the next build will be fast too.
 cache:
   directories:
   - $HOME/.stack
+
+# TODO: after the Nix jobs start working on Travis we should look into
+# caching Nix things too: https://nixos.wiki/wiki/Nix_on_Travis.
 
 # Ensure necessary system libraries are present
 addons:
@@ -23,21 +24,38 @@ addons:
       - ghc-8.4.3
 
 # Build in three modes, varying ONLY the environment used to build
-# Docker code 
-env:
-  - 
-  - STACK_DOCKER=1
-#  - STACK_NIX=1
-
-# Temporary:
+# Docker code.
 matrix:
+  include:
+    - name: Default
+
+    - name: stack_docker
+      env: STACK_DOCKER=1
+
+    # Travis fails with "No space left on device" while trying to install
+    # Gibbon's dependencies (the Haskell ones, via Stack) :(
+    - name: coarse_nix
+      env: COARSE_NIX=1
+      install: skip
+      addons: skip
+      script:
+        - df -h
+        - nix-shell shell.nix --run "COARSE_NIX=1 ./run_all_tests.sh"
+
+    - name: stack_nix
+      env: STACK_NIX=1
+
+  # Temporary:
   allow_failures:
-    - env: STACK_DOCKER=1
-#    - env: STACK_NIX=1
-  
+    - name: stack_docker
+    - name: coarse_nix
+    - name: stack_nix
+
 install:
   # Download and unpack the stack executable
   # The Ubuntu package is only available on >16.04. Travis is using 14.04.
+  # Update: Travis supports Ubuntu 16.04 since Nov 2018. We should start
+  # using that.
   - echo "Installing Stack...\n"
   - mkdir -p ~/.local/bin
   - export PATH=$HOME/.local/bin:$PATH
@@ -66,6 +84,7 @@ install:
 git:
   submodules: false
 
+# Default.
 script:
   ./run_all_tests.sh
 
