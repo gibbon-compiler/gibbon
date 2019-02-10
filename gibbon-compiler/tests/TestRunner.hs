@@ -718,7 +718,7 @@ fromRight_ oth  = error $ "fromRight_: Unexpected value " ++ show oth
 configFile :: String
 configFile = "tests/config.yaml"
 
--- Flush @msg1@ if the versosity level is >= @n@. Otherwise, flush msg2.
+-- Flush @msg1@ if the versosity level is >= @n@. Otherwise, flush @msg2@.
 -- The caller is responsible for controlling newlines.
 dbgFlushIt :: TestConfig -> Int -> String -> String -> IO ()
 dbgFlushIt tc n msg1 msg2 =
@@ -745,7 +745,7 @@ test_main tc tests = do
     putStrLn "Executing TestRunner... \n"
 
     compiler_dir <- getCompilerDir
-    putStr "Generating answers..."
+    dbgFlushIt tc 1 ("Generating answers...") ("")
     (_, Just _hout, Just herr, phandle) <-
         createProcess (proc "make" ["answers"])
         { std_out = CreatePipe

@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module Gibbon.HaskellFrontend
-  ( parseFile ) where
+  ( parseFile, primMap ) where
 
 import           Data.Foldable ( foldrM )
 import           Data.Loc as Loc
@@ -149,7 +149,7 @@ unCurryTy ty1 =
 
 -- ^ A map between SExp-frontend prefix function names, and Gibbon
 -- abstract Primops.
-primMap :: M.Map String (Prim Ty0)
+primMap :: M.Map String (Prim a)
 primMap = M.fromList
   [ ("+", AddP)
   , ("-", SubP)
