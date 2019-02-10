@@ -199,20 +199,18 @@ extractAppEName (AppE var _ _ ) = var
 -- returns ((innerFun, outerFun), symbol defined by the outer)
 findPotential :: DefTable -> [(Var, Var)] -> Maybe ((Var, Var), Maybe Symbol)
 findPotential table skipList = 
- ( case (L.find predicate  (M.toList table)) of
+  ( case (L.find predicate  (M.toList table)) of
     Nothing       -> Nothing --`debug`  (show skipList) 
     Just (_, (DefTableEntry def fun_uses use_count ) ) -> 
         Just ( ( (extractAppEName def),
                  (extractAppEName(sel1 (L.head fun_uses)))), 
-                   (sel3 (L.head fun_uses)) ) )--`debug` (show( L.filter predicate (L.reverse (M.toList table)) ) L.++ 
-                   -- "selected is " L.++ show (L.find predicate (L.reverse (M.toList table)))
-                 --     L.++ (show table ))
+                   (sel3 (L.head fun_uses)) ) )
+                --   `debug` ("selected is " L.++ show (L.find predicate (L.reverse (M.toList table))))
    where 
-         predicate (_,DefTableEntry def fun_uses use_count )  =
-          (L.length fun_uses == 1) && (L.notElem  ((extractAppEName def),
-            (extractAppEName(sel1 (L.head fun_uses))) ) skipList ) 
-
-
+    predicate (_,DefTableEntry def fun_uses use_count )  =
+      (L.length fun_uses >= 1) && (L.notElem ( (extractAppEName def),
+        (extractAppEName(sel1 (L.head fun_uses))) ) skipList ) 
+            
 isPotential :: DefTable -> Maybe Symbol -> [(Var, Var)] -> Bool
 isPotential table symbol skipList =
   case symbol of 
@@ -292,8 +290,7 @@ simplifyCases function = function {funBody = rec ( funBody function) }
       _                        -> L l ex
 
 -- this one as well assumes that one arg  (outer and inner )
--- it also assumes that there is no variables shadowing "imprtant!! "
- -- > can be chnaged not to by carrying the deftable around 
+ -- > can be changed not to by carrying the deftable around 
 foldFusedCalls_f :: (Var, Var, Int, Var) -> FunDef1 -> FunDef1
 foldFusedCalls_f rule function = function{funBody= 
   foldFusedCalls rule (funBody function)}
@@ -310,7 +307,6 @@ foldFusedCalls rule@(outerName, innerName, argPos,newName ) body =
                     if( innerName == getDefiningFuntion sym)  
                       then L l  $AppE  newName loc (getArgs sym) 
                       else ignore -- the outer has only one argument
-                                  -- which is the tree itself so 
                    where
                       getDefiningFuntion x = case (M.lookup x defTable) of
                         Nothing    -> (toVar "")
@@ -422,7 +418,6 @@ foldTupledFunctions body newFun oldCalls =
 removeUnusedDefs :: FunDef1 -> FunDef1
 removeUnusedDefs f = f{funBody = removeUnusedDefs_exp (funBody f)}
 
-
 removeUnusedDefs_exp :: L Exp1 ->  L Exp1 
 removeUnusedDefs_exp exp =
   let defTable = buildDefTable (getExp exp)  
@@ -502,8 +497,8 @@ tupleListOfFunctions  ddefs ls = do
                       (Nothing) -> error "ooopsa1"
 
       funNames = L.map (\f -> funName f ) ls                                                                                          
-  (FunDef (toVar ("_TUP_" L.++ newName L.++ "_TUP_") ) newArgs (traversedType, newRetType)
-    (l reduceStep) , funNames)
+  (FunDef (toVar ("_TUP_" L.++ newName L.++ "_TUP_") ) newArgs (traversedType,
+    newRetType) (l reduceStep) , funNames)
 
 renameFunction :: FunDef1 -> Var -> FunDef1
 renameFunction function newName =
@@ -536,11 +531,13 @@ buildUseTable ex  =
       PrimAppE _ _             -> tb
       LetE (v,_,_,(L _ callexp@(AppE _ _ (L _ (VarE par )) ) )) body ->  
           M.alter f par (rec body tb) 
-         where -- add a check to make sure that the call exp represent a traversal
+        where -- add a check to make sure that the call exp represent a traversal
                -- and is not a simple functions call
            f Nothing   = Just [(v,callexp)]
            f (Just ls) = Just ((v,callexp):ls) 
-      LetE (v,_,_,rhs) body    -> let t1 = rec rhs tb in rec body t1  
+      LetE (v,_,_,rhs) body    ->
+        let t1 = rec rhs tb
+          in rec body t1  
       IfE e1 e2 e3             -> let t1 = rec e1 tb 
                                       t2 = rec e2 t1
                                   in rec e3 t2 
@@ -548,12 +545,12 @@ buildUseTable ex  =
       ProjE index exp          -> tb
       CaseE e1 ls1             ->  
           let t1 = rec e1 tb in 
-          L.foldl f t1 ls1 
+          L.foldl f t1 ls1 -- `debug` ("\nhandling in case \n" L.++ (show ls1 ))
          where 
-          f table (_ ,_ ,exp) = rec exp tb 
-      DataConE loc datacons ls -> L.foldl f tb ls where f table exp = rec exp tb 
+          f table (_ ,_ ,exp) = rec exp table --`debug` ("\nhandling subecpr of case \n" L.++ (show exp ))
+      DataConE loc datacons ls -> L.foldl f tb ls where f table exp = rec exp table 
       TimeIt exp _ _           -> rec exp tb  
-      otherwise                -> tb
+      otherwise                -> tb --`debug` ("noooo" L.++ (show x))
 
 -- In each set of a functions to be tupled we want them to all start with a case
 -- on the input tree or all start with an If such that e1 is the same for all of them !
@@ -575,23 +572,28 @@ check2 (x:(y:xs)) = (hasCommonIfBody (funArg x) (funArg y)(funBody x)(funBody y)
     hasCommonCaseBody _ _ _ _ = False
 
 tuple :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [(Var, Var, Int, Var)] ->
-   PassM (L Exp1,  FunDefs1)
-tuple ddefs fdefs oldExp fusedFunctions = do
-  let useTable         = buildUseTable oldExp
+    (M.Map [Var] FunDef1 ) ->  PassM (L Exp1,  FunDefs1)
+tuple ddefs fdefs oldExpIn fusedFunctions prevTupledFunctions = do
+  -- we folded previously tupled functions here 
+  oldExp <- Control.Monad.foldM (\ex' (funDef, ls)->
+    ( foldTupledFunctions ex' funDef ls)) oldExpIn  (L.map (\(a,b)-> (b,a)) 
+      (M.toList prevTupledFunctions))
+
+  let useTable         = buildUseTable oldExp --`debug` (show oldExpIn L.++ "\n------\n"L.++ (show oldExp))
       candidates = L.filter checkLength (L.nub (L.map processEntry (M.toList useTable) ))
                 where
                   processEntry (_, ls) = L.nub (L.sort (L.map extractFuncName ls))
                   extractFuncName (_,(AppE fName _ _ )) = fName
                   checkLength entry = (L.length entry >1)
 
-      functionsToTuple = L.map (\ls -> L.map getFunDef ls) candidates 
+      functionsToTuple = L.map (\ls -> L.map getFunDef ls) candidates --`debug` ( (show oldExp)L.++"candidates for tupling:"L.++ (show candidates)L.++ "from :\n"L.++ (show useTable) )
                         where
                          getFunDef fName  = case ( M.lookup fName fdefs ) of 
                            Nothing     ->error ("not expected" L.++ (show fName))
                            Just funDef -> funDef
       functionsToTuple_filtered = 
-        L.filter traversePackedType  functionsToTuple  -- filter out functions that does not traverse a packed type
-          where
+        L.filter traversePackedType functionsToTuple  -- filter out functions that does not traverse a packed type
+          where  -- wee need to add more checks here TODO: ... also exclude previously fused ones 
             traversePackedType entry = 
               case ((fst(funTy(L.head entry)))) of
                 (PackedTy typeStr _)->True  
@@ -613,18 +615,24 @@ tuple ddefs fdefs oldExp fusedFunctions = do
   foldedTupledFunctions2   <-  (Prelude.mapM (\(funDef,ls) ->  
           do 
             foldedFunc <-  foldTupledFunctions_f funDef ls
-            return ((foldedFunc) ,ls))
-          foldedTupledFunctions)
+            return ((foldedFunc) ,ls)) 
+          foldedTupledFunctions  )
   
   let newDefs = L.foldr (\(funDef,_) mp -> M.insert (funName funDef) funDef mp )
         M.empty foldedTupledFunctions2
 
   foldedTupledFunctions3WithFDefs <-
-        Prelude.mapM ( (\((funDef, ls)) ->
-          do
-           (newBody, newFunctions) <- tuple ddefs  (M.union fdefs newDefs) (funBody funDef) fusedFunctions
-           return ((funDef{funBody = newBody }, ls), newFunctions)
-        )) (foldedTupledFunctions2)
+        Prelude.mapM  ( \(funDef, ls) ->
+            do
+                let preFusedPar = M.union prevTupledFunctions (M.fromList 
+                      (L.map (\(a,b)->(b,a)) foldedTupledFunctions2))
+
+                (newBody, newFunctions) <- tuple ddefs  (M.union fdefs newDefs) 
+                    (funBody funDef) fusedFunctions preFusedPar 
+
+                return ((funDef{funBody = newBody }, ls), newFunctions)
+          
+           ) foldedTupledFunctions2
 
   let foldedTupledFunctions3 = L.map (fst) foldedTupledFunctions3WithFDefs
 
@@ -639,9 +647,9 @@ tuple ddefs fdefs oldExp fusedFunctions = do
 
   return (newExp,M.union newDefsFinal recGeneratedDefs )
 
-
-fuse :: DDefs Ty1 -> FunDefs1 -> Var -> Var-> PassM  (Bool, Var,  FunDefs1)
-fuse ddefs fdefs  innerVar  outerVar = do
+fuse :: DDefs Ty1 -> FunDefs1 -> Var -> Var -> [(Var, Var, Int, Var)]
+ -> PassM  (Bool, Var,  FunDefs1)
+fuse ddefs fdefs  innerVar  outerVar fusedFunctions_ = do
   let innerFunc =  fdefs M.! innerVar
       outerFunc =  fdefs M.! outerVar
       newVar    = toVar ("_FUS_f_" L.++ (fromVar outerVar) L.++ "_f_" L.++(fromVar innerVar ) L.++ "_FUS_")
@@ -653,8 +661,12 @@ fuse ddefs fdefs  innerVar  outerVar = do
                outerFunc{funBody = outerFreshBody}  (-1)
       step2 =  (simplifyCases setp1 ){funName = newName}
       step3 =  foldFusedCalls_f (outerVar, innerVar, -1, newName)  step2
-      step4 =  removeUnusedDefs step3
-  return $(True, newName, M.insert  newName step4 fdefs ); 
+      -- fold upper level fused functions
+      step4 = L.foldl (\f e -> foldFusedCalls_f e f ) step3 
+       fusedFunctions_
+
+      step5 =  removeUnusedDefs step4 
+  return $(True, newName, M.insert  newName step5 fdefs ); 
 
 violateRestrictions :: FunDefs1 -> Var -> Var -> Bool
 violateRestrictions fdefs inner outer =
@@ -670,36 +682,39 @@ violateRestrictions fdefs inner outer =
     (p1 || p2)
 
 transform :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [(Var, Var, Int, Var)] -> 
-  Bool ->   PassM (L Exp1,  FunDefs1, [(Var, Var, Int, Var)])
-transform  ddefs funDefs  exp fusedFunctions_ doTupling= do
-  rec exp [] funDefs fusedFunctions_
+  Bool -> [(Var, Var)] ->  PassM (L Exp1,  FunDefs1, [(Var, Var, Int, Var)])
+transform  ddefs funDefs  exp fusedFunctions_ doTupling processedCandidates= do
+  rec exp processedCandidates funDefs fusedFunctions_
  where
   rec (L l body) processed fdefs  fusedFunctions = do
     let defTable = buildDefTable body  
-        potential = findPotential defTable processed --`debug` ("find potential in" L.++ (show body) )
+        potential = findPotential defTable processed 
     case (potential) of
       Nothing -> do 
         -- final clean and tuple
-        let final_clean = removeUnusedDefs_exp (L l body) 
-       -- let (tupledBody, tupleDefs) = (final_clean, M.empty)
+        let final_clean = removeUnusedDefs_exp (L l body)
+        -- let (tupledBody, tupleDefs) = (final_clean, M.empty)
         (tupledBody, tupleDefs) <- do
           if (doTupling)
-            then tuple ddefs fdefs  final_clean  fusedFunctions
+            then tuple ddefs fdefs  final_clean  fusedFunctions (M.fromList []) 
             else return (final_clean, M.empty)
-        return $(tupledBody, M.union   fdefs tupleDefs, fusedFunctions)
+        return $(tupledBody, M.union fdefs tupleDefs, fusedFunctions) 
 
       Just ((inner,outer), outerDefVarSymbol) -> 
         if( violateRestrictions fdefs inner outer) 
           then rec (L l body)  ((inner,outer):processed) fdefs fusedFunctions
           else do
              -- fuse
-            (validFused, fNew, fusedDefs) <-  (fuse  ddefs fdefs inner outer ) 
-            let fused_function = fusedDefs M.! fNew
+            (validFused, fNew, fusedDefs) <-  (fuse  ddefs fdefs inner outer 
+               fusedFunctions_ )  
+            let fused_function = fusedDefs M.! fNew 
             let newFusedEntry = (outer,inner, -1, fNew)
            
             (recAppBody, recAppDefs, retFusedFunctions) <- transform
-              ddefs fusedDefs (funBody fused_function) (newFusedEntry : fusedFunctions) 
-              (not (isPotential defTable outerDefVarSymbol ((inner,outer):processed)) )
+              ddefs fusedDefs (funBody fused_function) 
+                (newFusedEntry : fusedFunctions) (not (isPotential defTable
+                   outerDefVarSymbol ((inner,outer):processed)) ) 
+                     ((inner,outer):processed)
             --clean 
             let newFusedFunctions =  (newFusedEntry : fusedFunctions) L.++ retFusedFunctions
             let cleaned_function = removeUnusedDefs fused_function{funBody = recAppBody} 
@@ -725,6 +740,6 @@ fusion2 (L1.Prog defs funs main) = do
     (main', funs') <- case main of 
         Nothing   -> return $ (Nothing, funs)
         Just (m, ty)    -> do
-            (m', newDefs, _) <- (transform defs funs m [] True)
+            (m', newDefs, _) <- (transform defs funs m [] True [])
             return (Just (m',ty), M.union funs newDefs)
     return $ L1.Prog defs funs' main'
