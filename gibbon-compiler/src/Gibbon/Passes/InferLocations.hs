@@ -1295,7 +1295,7 @@ addRepairFns (Prog dfs fds me) = do
                     copy_fn <- genCopyFn d
                     trav_fn <- genTravFn d
                     return [copy_fn, trav_fn])
-              (M.elems dfs)
+              (filter (not . isVoidDDef) (M.elems dfs))
   let fds' = fds `M.union` (M.fromList $ L.map (\f -> (funName f, f)) newFns)
   prg <- flattenL1 $ Prog dfs fds' me
   inlineTriv prg
