@@ -4,6 +4,9 @@ sudo: required
 # See https://docs.travis-ci.com/user/languages/nix.
 language: nix
 
+# Ubuntu 16.04.
+dist: xenial
+
 cache:
   directories:
   - $HOME/.stack
@@ -27,7 +30,7 @@ addons:
 # Docker code.
 matrix:
   include:
-    - name: Default
+    - name: default
 
     - name: stack_docker
       env: STACK_DOCKER=1
