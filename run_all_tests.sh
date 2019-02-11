@@ -106,14 +106,11 @@ elif [ "$STACK_NIX" == "1" ]; then
         echo "ERROR: should not use stack --nix when already running in COARSE_NIX=1"
         exit 1
     fi
-    ## [2019.02.11] Ryan Scott's advice: Travis isn't good at handling parallel builds, try -j2.
-    STK+=" -j1 "
     STK+=" --nix "
 fi
 
 if [ "$COARSE_NIX" == "1" ]; then
     STK+=" --system-ghc "
-    STK+=" -j1 "
 else
     STK+=" --install-ghc "
 fi
@@ -125,6 +122,8 @@ set -x
 cd $top/gibbon-compiler
 df -h
 
+## See https://github.com/commercialhaskell/stack/issues/996 and
+## https://github.com/iu-parfunc/gibbon/issues/108 for details.
 TMP="$HOME/tmp/"
 mkdir $TMP
 

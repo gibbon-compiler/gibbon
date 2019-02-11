@@ -48,7 +48,6 @@ matrix:
   # Temporary:
   allow_failures:
     - name: stack_docker
-    - name: coarse_nix
     - name: stack_nix
 
 install:
