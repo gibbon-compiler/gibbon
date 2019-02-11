@@ -185,39 +185,28 @@ parseSExp ses = do
 
 {-
 
-CSK: 'pdata' is a temporary hack to maintain backwards compatibility.
-The syntax for datatypes which don't use type variables should not change.
-We should still be able to write a monomorphic datatype as:
-
-    (data MonoD [K1 ...] [K2 ...])
-
-vs
-
-    (data MonoD () [K1 ...] [K2 ...])
-
-to indicate absence of type variables. However, this makes parsing datatypes
-*with* type variables ambiguious. E.g.
+Polymorphic datatypes:
 
     (data PolyD (a b) [K3 ... a b ...])
 
-The parser cannot tell if (a b) is a constructor or a type variable. Maybe
-we say that these are type variables b/c the first thing, 'a', is lowercase ?
-That should work. We're already using 'isLower' to parse types (see typ ::).
-For now I chose to use a separate keyword, 'pdata', to write a polymorphic datatype.
+While parsing datatypes with type variables, 'isTyVar' decides
+if a thing is a type variable or a data constructor.
 
 -}
-     (Ls (A _ "pdata": A _ tycon : (Ls as)  : cs) : rst) -> do
-       let tyargs = L.map (UserTv . getSym) as
-       go rst (DDef (textToVar tycon) tyargs (L.map docasety cs) : dds) fds cds mn
-
-     -- A data definition without any type variables.
      (Ls (A _ "data": A _ tycon  : cs) : rst) -> do
-       go rst (DDef (textToVar tycon) [] (L.map docasety cs) : dds) fds cds mn
-
-     -- We support a special case so that we don't have to rewrite every
-     -- existing monomorphic program.
-     (Ls (A _ "data": A _ tycon : cs) : rst) ->
-         go rst (DDef (textToVar tycon) [] (L.map docasety cs) : dds) fds cds mn
+       let tycon' = textToVar tycon
+       case cs of
+         [] -> go rst ((DDef tycon' [] []) : dds) fds cds mn
+         (Ls k) : ks ->
+           case k of
+             [] -> go rst ((DDef tycon' [] (L.map docasety cs)) : dds) fds cds mn
+             (A _ tyvar_or_constr : _) ->
+               if isTyVar tyvar_or_constr
+               then do let tyargs = L.map (UserTv . getSym) k
+                       go rst (DDef (textToVar tycon) tyargs (L.map docasety ks) : dds) fds cds mn
+               else go rst (DDef (textToVar tycon) [] (L.map docasety cs) : dds) fds cds mn
+             _ -> error $ "Unexpected constructor while parsing data: " ++ show k
+         _ -> error $ "Unexpected constructors while parsing data: " ++ show cs
 
      (Ls [A _ "define", funspec, A _ ":", retty, bod] : rst)
          |  RSList (A _ name : args) <- funspec
