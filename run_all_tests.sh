@@ -106,11 +106,14 @@ elif [ "$STACK_NIX" == "1" ]; then
         echo "ERROR: should not use stack --nix when already running in COARSE_NIX=1"
         exit 1
     fi
+    ## [2019.02.11] Ryan Scott's advice: Travis isn't good at handling parallel builds, try -j2.
+    STK+=" -j1 "
     STK+=" --nix "
 fi
-    
+
 if [ "$COARSE_NIX" == "1" ]; then
     STK+=" --system-ghc "
+    STK+=" -j1 "
 else
     STK+=" --install-ghc "
 fi
@@ -120,6 +123,7 @@ echo "  Gibbon Compiler (1/2): build & unit tests"
 echo "-------------------------------------------"
 set -x
 cd $top/gibbon-compiler
+df -h
 
 if [ "$LLVM_ENABLED" == "1" ]; then
     echo "Building Gibbon with LLVM enabled"
@@ -134,6 +138,18 @@ echo "--------------------------------------------"
 # Turning off -j for now [2016.11.06]
 cd $top/gibbon-compiler
 # make answers
+
+## CSK: nix-shell sets an environment variable, SIZE=size. I've not been able
+## track down what specific package (or something in our config) is responsible
+## for this. I tried to write another minimal shell.nix script and that shell
+## had this environment variable too.
+##
+## This leads to the "Prelude.read no parse" error that RRN reported in #108.
+## Gibbon tries to parse "size" as an Int (in Gibbon.Common.getRunConfig) and
+## that doesn't work out very well. Until we figure out the source of this
+## rogue variable, we *unset* it here.
+unset SIZE ITERS
+
 $STK exec test-gibbon-examples -- -v2
 
 

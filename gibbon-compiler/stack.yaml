@@ -5,7 +5,6 @@ packages:
 
 extra-deps:
 - s-cargot-0.1.4.0
-- haskell-src-exts-simple-1.20.0.0
 
 flags: {}
 extra-package-dbs: []
@@ -16,19 +15,12 @@ extra-package-dbs: []
 # If you want to pin things for reproducible builds
 nix:
   enable: false
-  packages: [gcc, which]
+  # packages: [gcc, which]
   # path: ["https://github.com/NixOS/nixpkgs-channels/archive/nixos-17.03.tar.gz"]
   # nixos-unstable snapshot:
   # path: ["nixpkgs=https://github.com/NixOS/nixpkgs-channels/archive/1e1472ed93e1256dfdac4908ae8edcb90ceff21c.tar.gz"]
-  # shell-file: shell.nix
+  shell-file: shell.nix
   path: ["nixpkgs=https://github.com/NixOS/nixpkgs-channels/archive/nixos-18.09.tar.gz"]
-
-# [2018.05.23] (chai):
-# Ugh, Stack fails to construct a build plan with my system GHC, even though it's pinned to 8.2.2,
-# which is the same version that it expects. It tries to build deepseq-1.4.4.0 which is not even released yet.
-# Pinning a particular version of deepseq leads to further errors. Disabling this for now.
-#
-# system-ghc: true
 
 docker:
   enable: false

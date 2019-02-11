@@ -11,7 +11,7 @@ module Gibbon.Language.Syntax
     -- * Datatype definitions
     DDefs, DataCon, TyCon, Tag, IsBoxed, DDef(..)
   , lookupDDef, getConOrdering, getTyOfDataCon, lookupDataCon, lkp
-  , lookupDataCon', insertDD, emptyDD, fromListDD
+  , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef
 
     -- * Function definitions
   , FunctionTy(..), FunDefs, FunDef(..), insertFD, fromListFD, initFunEnv
@@ -45,21 +45,21 @@ module Gibbon.Language.Syntax
 
   ) where
 
-import Control.DeepSeq
-import Data.Map as M
-import Data.List as L
-import Data.Loc
-import Data.Set as S
-import Data.Word ( Word8 )
-import Text.PrettyPrint.GenericPretty
+import           Control.DeepSeq
+import qualified Data.Map as M
+import           Data.List as L
+import           Data.Loc
+import qualified Data.Set as S
+import           Data.Word ( Word8 )
+import           Text.PrettyPrint.GenericPretty
 
-import Gibbon.Common
+import           Gibbon.Common
 
 --------------------------------------------------------------------------------
 -- Data type definitions
 --------------------------------------------------------------------------------
 
-type DDefs a = Map Var (DDef a)
+type DDefs a = M.Map Var (DDef a)
 
 type DataCon = String
 type TyCon   = String
@@ -149,6 +149,10 @@ emptyDD  = M.empty
 fromListDD :: [DDef a] -> DDefs a
 fromListDD = L.foldr insertDD M.empty
 
+-- | Is this an empty type (like 'data Void' in Haskell) ?
+isVoidDDef :: DDef a -> Bool
+isVoidDDef DDef{dataCons} = L.null dataCons
+
 --------------------------------------------------------------------------------
 -- Function definitions
 --------------------------------------------------------------------------------
@@ -160,7 +164,7 @@ class (Out (ArrowTy ty), Show (ArrowTy ty)) => FunctionTy ty where
   outTy :: ArrowTy ty -> ty
 
 -- | A set of top-level recursive function definitions.
-type FunDefs ex = Map Var (FunDef ex)
+type FunDefs ex = M.Map Var (FunDef ex)
 
 -- | A function definiton indexed by a type and expression.
 data FunDef ex = FunDef { funName  :: Var
