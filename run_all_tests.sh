@@ -125,11 +125,14 @@ set -x
 cd $top/gibbon-compiler
 df -h
 
+TMP="$HOME/tmp/"
+mkdir $TMP
+
 if [ "$LLVM_ENABLED" == "1" ]; then
     echo "Building Gibbon with LLVM enabled"
-    $STK test --flag gibbon:llvm_enabled $STACKARGS $MKPARARGS
+    TMPDIR=$TMP $STK test --flag gibbon:llvm_enabled $STACKARGS $MKPARARGS
 else
-    $STK test "$STACKARGS" $MKPARARGS
+    TMPDIR=$TMP $STK test "$STACKARGS" $MKPARARGS
 fi
 
 echo "  Gibbon Compiler (2/2): compiler test suite"
@@ -150,7 +153,7 @@ cd $top/gibbon-compiler
 ## rogue variable, we *unset* it here.
 unset SIZE ITERS
 
-$STK exec test-gibbon-examples -- -v2
+TMPDIR=$TMP $STK exec test-gibbon-examples -- -v2
 
 
 # [2017.04.24] TEMP: Disabling below here while the compiler is under construction.
