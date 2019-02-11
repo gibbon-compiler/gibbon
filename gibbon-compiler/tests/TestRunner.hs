@@ -616,7 +616,7 @@ diff :: FilePath -> FilePath -> IO (Maybe String)
 diff a b = do
     (_, Just hout, _, phandle) <-
         -- Ignore whitespace
-        createProcess (proc "diff" ["-w", a, b])
+        createProcess (proc "diff" ["-B", "-w", a, b])
             { std_out = CreatePipe
             , std_err = CreatePipe }
     exitCode <- waitForProcess phandle
