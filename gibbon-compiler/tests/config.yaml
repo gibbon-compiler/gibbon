@@ -77,8 +77,11 @@ tests:
   - name: test14c_tail.gib
   - name: test15a_symsearch.gib
   - name: test18_badconstraint.gib
-    # This only fails on GCC >= 7 (which we're using to fix certain other tests that use Cilk)
-    failing: [pointer]
+    # This only fails on GCC >= 7 (which we're using to run some other tests that use Cilk)
+    # failing: [pointer]
+    # [2019.02.11] CSK: This is not deterministic, (On Travis) it compiles with gcc-7.3.0 and
+    # does not compile with gcc-7.4.0. We need to debug this properly. Skip for now.
+    skip: true
   - name: test18b_tupconstraint.gib
   - name: test18c_identity1.gib
   - name: test18d_identity2.gib

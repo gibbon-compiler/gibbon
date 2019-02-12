@@ -106,14 +106,11 @@ elif [ "$STACK_NIX" == "1" ]; then
         echo "ERROR: should not use stack --nix when already running in COARSE_NIX=1"
         exit 1
     fi
-    ## [2019.02.11] Ryan Scott's advice: Travis isn't good at handling parallel builds, try -j2.
-    STK+=" -j1 "
     STK+=" --nix "
 fi
 
 if [ "$COARSE_NIX" == "1" ]; then
     STK+=" --system-ghc "
-    STK+=" -j1 "
 else
     STK+=" --install-ghc "
 fi
@@ -125,11 +122,16 @@ set -x
 cd $top/gibbon-compiler
 df -h
 
+## See https://github.com/commercialhaskell/stack/issues/996 and
+## https://github.com/iu-parfunc/gibbon/issues/108 for details.
+TMP="$HOME/tmp/"
+mkdir $TMP
+
 if [ "$LLVM_ENABLED" == "1" ]; then
     echo "Building Gibbon with LLVM enabled"
-    $STK test --flag gibbon:llvm_enabled $STACKARGS $MKPARARGS
+    TMPDIR=$TMP $STK test --flag gibbon:llvm_enabled $STACKARGS $MKPARARGS
 else
-    $STK test "$STACKARGS" $MKPARARGS
+    TMPDIR=$TMP $STK test "$STACKARGS" $MKPARARGS
 fi
 
 echo "  Gibbon Compiler (2/2): compiler test suite"
@@ -150,7 +152,7 @@ cd $top/gibbon-compiler
 ## rogue variable, we *unset* it here.
 unset SIZE ITERS
 
-$STK exec test-gibbon-examples -- -v2
+TMPDIR=$TMP $STK exec test-gibbon-examples -- -v2
 
 
 # [2017.04.24] TEMP: Disabling below here while the compiler is under construction.
