@@ -97,7 +97,12 @@ getExp  (L  _ exp) = exp
 
 data DefTableEntry = DefTableEntry 
   { def :: !Exp1 -- ^ defining expression 
-  , fun_uses :: ![(Exp1,Int,Maybe Symbol)] -- ^ functions calls that uses the definition
+  {- each entry consist of
+    1)The function application expression.
+    2)The index at which the definition  appears at in the argument list.  
+    3)The defined symbol, if the the consuming expression of the form let x=App.
+  -}
+  , fun_uses :: ![(Exp1,Int,Maybe Symbol)] 
   , all_use_count:: !Int -- ^ total number of uses (calls and not calls)
   } deriving (Show , Generic)
   
@@ -105,79 +110,67 @@ type DefTable = M.Map Symbol DefTableEntry
 type PotentialPair = (Symbol, Symbol)
 type PotentialsList = [DefTableEntry] 
 
+{- 
+This functions collect the following information for each defined variable: 
+  1) The defining expression. (stored in DefTableEntry::def)
+  2) The consumer of the definition that are candidates for fusion;the function
+  is consumed in the first argument. (stored in DefTableEntry::fun_uses)
+  not: uses mutual exclusive paths are counted by adding them (each is 
+  considered  a use).
+  3) Total number of uses (references) of the defined variable.
+-} 
 buildDefTable:: Exp1 -> DefTable
-buildDefTable ex  = rec ex M.empty 
+buildDefTable ex  = rec ex Nothing M.empty 
  where 
-  rec ex table = case (ex) of
+  rec ex definingSymbol table = case (ex) of
     VarE (Var sym) ->  M.update incrUses sym table     
-  
-    letExpr@(LetE ((Var symLet),_,_,bind) body) ->
-      case (getExp bind) of 
-          callExp@(AppE _ _ (L _  (VarE (Var sym ))))  -> 
-              let table' = M.update (addFunctionUse (callExp,-1, Just symLet))
-                     sym table      
-              in let table'' = M.insert symLet (DefTableEntry {def=(getExp bind), 
-                      fun_uses=[], all_use_count = 0} ) table'
-              in rec (getExp body) table''
-        
-          callExp@(AppE _ _ (L _  (MkProdE argsList))) ->
-              let table' = 
-                    buildDefTable_args callExp argsList table 0
-                      where
-                        buildDefTable_args _ [] table _ = table
-                        buildDefTable_args callExp (h:tail)  table index = 
-                           case (getExp h)  of 
-                              VarE (Var sym) -> buildDefTable_args callExp tail
-                                 (M.update (addFunctionUse (callExp, index, 
-                                   Just symLet))  sym table) (index+1)
-                     
-                              otherwise    -> buildDefTable_args callExp 
-                                  tail  table (index+1)
-              in rec (getExp body) table' 
-
-          otherwise -> 
-            let table' =  (rec (getExp bind) table) 
-            in let table'' = 
-                    case (getExp bind) of
-                      AppE _ _ _  -> M.insert symLet 
-                          (DefTableEntry {def=(getExp bind), fun_uses=[],
-                            all_use_count = 0} ) table' 
-                      otherwise            ->  table'  
-            in rec (getExp body) table''
-
-    callExp@(AppE _ _ (L _  (MkProdE argsList))) -> buildDefTable_args callExp
-        argsList table 0
-       where
-        buildDefTable_args _ [] table _ = table
-        buildDefTable_args callExp (h:tail)  table index = case getExp h  of 
-            VarE (Var sym) -> buildDefTable_args callExp tail
-                (M.update f sym table) (index+1)
-              where  f = addFunctionUse (callExp,index, Nothing)
-            otherwise       -> buildDefTable_args callExp tail  table (index+1)
-
-    callExp@(AppE _ _ (L _  (VarE (Var sym ))))  -> M.update f sym table 
-        where  f = addFunctionUse (callExp,-1, Nothing)
-             -- -1 means there is no ProdE ( only one argument)
-            
-    PrimAppE _ ls ->  L.foldl f table ls
-            where  f tbl exp = rec (getExp exp) tbl
+    
+    LetE ((Var symLet),_,_,bind) body ->
+      let table' = M.insert symLet (DefTableEntry {def=(getExp bind),
+                    fun_uses=[], all_use_count = 0} ) table
+          table'' = rec (getExp bind) (Just symLet) table'
+      in rec (getExp body) definingSymbol table''
  
-    IfE cond thenBody elseBody      -> let table' = rec (getExp cond) table 
-        in let table'' = rec ( getExp thenBody) table'
-        in rec (getExp elseBody) table''
-    CaseE e ls      -> let table' = rec ( getExp e) table 
-          in L.foldl f table' ls
+
+    callExp@( AppE fName _ args) -> 
+      -- add function uses of interest
+      let table' = case (getExp args) of 
+            VarE (Var sym) ->  M.update (addFunctionUse (callExp,-1,
+                   definingSymbol)) sym table
+            otherwise -> table
+            
+      in rec (getExp args) Nothing table'  
+       where 
+        addFunctionUse newUse ( DefTableEntry  def fun_uses c )=  
+          Just $ DefTableEntry def (newUse:fun_uses) (c+1) 
+    
+    MkProdE argsList -> buildDefTable_args  argsList table
         where
-          f tbl (_, _, exp ) = rec (getExp exp) tbl
+          buildDefTable_args [] tb  = tb
+          buildDefTable_args  (h:tail)  table  = buildDefTable_args
+            tail (rec (getExp h) Nothing table)
+
+    PrimAppE _ ls ->  L.foldl f table ls
+            where  f tbl exp = rec (getExp exp) Nothing tbl
+ 
+    IfE cond thenBody elseBody      -> let table' = rec (getExp cond) Nothing table 
+        in let table'' = rec ( getExp thenBody) definingSymbol table'
+        in rec (getExp elseBody) definingSymbol table''
+    
+    CaseE e ls      ->
+        let table' = rec (getExp e) Nothing table 
+        in L.foldl f table' ls
+      where
+        f tbl (_, _, exp) = rec (getExp exp) definingSymbol tbl
    
-    DataConE _ _ ls -> L.foldl f table ls where f tbl exp = rec (getExp exp) tbl
-    TimeIt exp _ _  -> rec (getExp exp) table   
-    ProjE index exp -> rec (getExp exp) table
-    otherwise       -> table
+    DataConE _ _ ls -> L.foldl f table ls
+     where 
+       f tbl exp = rec (getExp exp) Nothing tbl
+    TimeIt exp _ _  -> rec (getExp exp) definingSymbol table   
+    ProjE index exp -> rec (getExp exp) Nothing table 
+    LitE _ -> table
+    x       -> table `debug`( "\nPlease handle:" L.++ ( show x) L.++ "in buildDefTable\n")
    where 
-      addFunctionUse newUse ( DefTableEntry  def fun_uses c )=  Just $
-         DefTableEntry def (newUse:fun_uses) (c+1) 
-     
       incrUses (DefTableEntry  def fun_uses c) = Just $
           DefTableEntry def fun_uses (c+1)
 
@@ -189,6 +182,7 @@ extractLetSymbolFromLet (LetE ((Var symLet),_,_,L _ (AppE var _ _ )) _)  = symLe
 
 extractAppEName ::  Exp1 -> Var
 extractAppEName (AppE var _ _ ) = var
+extractAppEName  x = error(show x)
 
 -- isInList :: (Var, Var) -> [(Var, Var)] ->Bool
 -- isInList (outer, inner ) [] = False;
@@ -208,10 +202,12 @@ findPotential table skipList =
                    (sel3 (L.head fun_uses)) ) )
                 --   `debug` ("selected is " L.++ show (L.find predicate (L.reverse (M.toList table))))
    where 
-    predicate (_,DefTableEntry def fun_uses use_count )  =
-      (L.length fun_uses >= 1) && (L.notElem ( (extractAppEName def),
-        (extractAppEName(sel1 (L.head fun_uses))) ) skipList ) 
-            
+    predicate (_,DefTableEntry def fun_uses use_count )  = case (def) of 
+      AppE var _ _  -> (L.length fun_uses >= 1) && (L.notElem (extractAppEName
+         def, extractAppEName(sel1 (L.head fun_uses))) skipList) 
+      _ -> False
+      
+      
 isPotential :: DefTable -> Maybe Symbol -> [(Var, Var)] -> Bool
 isPotential table symbol skipList =
   case symbol of 
@@ -305,16 +301,16 @@ foldFusedCalls rule@(outerName, innerName, argPos,newName ) body =
             in if(v ==  outerName) 
                 then case (getExp argList ) of 
                   VarE (Var sym) ->
-                    if( innerName == getDefiningFuntion sym)  
+                    if( innerName == getDefiningFunction sym)  
                       then L l  $AppE  newName loc (getArgs sym) 
                       else ignore -- the outer has only one argument
                    where
-                      getDefiningFuntion x = case (M.lookup x defTable) of
-                        Nothing    -> (toVar "")
+                      getDefiningFunction x = case (M.lookup x defTable) of
+                        Nothing    -> (toVar "-1not-used-vars")
                          --`debug`  ("defined by constructor !!!")
                         Just entry -> case (def  entry) of 
                           AppE v _ _   -> v
-                          _            -> error  ("ops" L.++ (show(def  entry)))
+                          _            -> (toVar "-1not-used-var") -- ("warning" L.++ (show(def  entry)))
                       getArgs x  = case (M.lookup x defTable) of
                         Nothing    -> error  "error in foldFusedCalls"
                         Just entry -> case (def  entry) of 
@@ -689,7 +685,7 @@ transform  ddefs funDefs  exp fusedFunctions_ doTupling processedCandidates= do
  where
   rec (L l body) processed fdefs  fusedFunctions = do
     let defTable = buildDefTable body  
-        potential = findPotential defTable processed 
+        potential = findPotential defTable processed --`debug`(show defTable)
     case (potential) of
       Nothing -> do 
         -- final clean and tuple
