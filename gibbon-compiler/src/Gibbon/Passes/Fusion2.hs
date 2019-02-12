@@ -130,19 +130,21 @@ buildDefTable ex  = rec ex Nothing M.empty
                     fun_uses=[], all_use_count = 0} ) table
           table'' = rec (getExp bind) (Just symLet) table'
       in rec (getExp body) definingSymbol table''
- 
 
     callExp@( AppE fName _ args) -> 
       -- add function uses of interest
+      --[functions calls traversing tree in first argument]
       let table' = case (getExp args) of 
             VarE (Var sym) ->  M.update (addFunctionUse (callExp,-1,
                    definingSymbol)) sym table
-            otherwise -> table
+            MkProdE ((L _ (VarE (Var sym) )):tail) -> M.update (addFunctionUse
+             (callExp, 0, definingSymbol)) sym table
+            _   -> table
             
       in rec (getExp args) Nothing table'  
        where 
         addFunctionUse newUse ( DefTableEntry  def fun_uses c )=  
-          Just $ DefTableEntry def (newUse:fun_uses) (c+1) 
+          Just $ DefTableEntry def (newUse:fun_uses) (c) 
     
     MkProdE argsList -> buildDefTable_args  argsList table
         where
@@ -217,37 +219,72 @@ isPotential table symbol skipList =
          Nothing       -> False --`debug`  (show skipList) 
          Just (DefTableEntry def fun_uses use_count)  ->
              (L.length fun_uses == 1) && (L.notElem  ((extractAppEName def),
-                (extractAppEName(sel1 (L.head fun_uses))) ) skipList ) 
+                (extractAppEName(sel1 (L.head fun_uses))) ) skipList )
+ 
+-- There is an implicit assumption that those function A->A .. !
+inline :: FunDef1 -> FunDef1 -> Int  ->  PassM FunDef1
+inline inlined_fun outer_fun arg_pos  =  do 
+  newArgVar <- gensym(toVar("inputTree"))
 
-inline :: FunDef1 -> FunDef1 -> Int  ->  FunDef1
-inline inlined_fun outer_fun arg_pos  =  
-  -- right now i am only handling when the outer function have one argument 
-  -- which is the tree prodcued by the inlined function 
-  -- in the future i shoul allow multiple arguments ...
-  -- why dont we always make the type prod for simplification !
-  -- also right now we assume that the inlined fuction takes one argument which 
-  -- is the input tree
-  let old_exp  = l $ case (fst (funTy outer_fun)) of
-       ProdTy _      ->  error "not handled yet"  
-        -- ProjE arg_pos (l (VarE (fst (funArg outer_fun) )) )
-       _             ->  VarE (funArg outer_fun)
+  let argType_outer = fst (funTy outer_fun)
+      retType_outer = snd (funTy outer_fun)
+      argVar_outer = funArg outer_fun
+      argType_inlined= fst (funTy inlined_fun)
+      argVar_inlined = funArg inlined_fun
 
-  in let newFunArg = case  argType_outer  of 
-          ProdTy ls -> error "not supported yet"
-           -- (argVar, ProdTy (take arg_pos ls  L.++ drop (1 + arg_pos) ls) )
-          _         -> case  argType_inlined  of 
-              ProdTy ls -> error "not supported yet" 
-              -- (argVar, ProdTy (take arg_pos ls  L.++ drop (1 + arg_pos) ls) )
-              _         ->  funArg inlined_fun
-          where
-            argType_outer = fst (funTy outer_fun)
-            argVar_outer = funArg outer_fun
-            argType_inlined= fst (funTy inlined_fun)
-            argVar_inlined = funArg inlined_fun
+  -- get it as item in list
+  let traversedTypeInner = case (argType_inlined) of
+        ProdTy (h:_) -> h:[]
+        exp@(PackedTy _ _) -> exp:[]
+        _ -> error ("not expected type")
 
-  in outer_fun { funArg  = newFunArg ,
-                 funBody = substE old_exp (funBody inlined_fun) 
-                  (funBody outer_fun) }
+  let sideArgsTypesInlined = getSideArgsTypes argType_outer
+      sidArgsTypesOuter    = getSideArgsTypes argType_inlined
+  
+  let newType = (ProdTy (traversedTypeInner L.++ sideArgsTypesInlined L.++ 
+        sidArgsTypesOuter), retType_outer)
+  let inlinedFunBody = case (argType_inlined) of
+        PackedTy _ _ -> let oldExp  = l $ VarE argVar_inlined
+                            newExp  = l $ ProjE 0 (l (VarE newArgVar) )
+                    in substE oldExp newExp (funBody inlined_fun) 
+        ProdTy ls  ->
+           let argsLength = L.length ls
+           in loop 0 argsLength (funBody inlined_fun)
+            where loop i n exp =  if(i==n)
+                    then 
+                      exp
+                    else
+                     loop (i+1) n (replaceProj i argVar_inlined i newArgVar exp) `debug` ("\nat index "L.++ (show i))
+  let outerFunBody = case(argType_outer) of
+        PackedTy _ _ -> funBody outer_fun
+        ProdTy ls  ->
+           let argsLength =  L.length ls
+               shift' = L.length (getSideArgsTypes (argType_inlined))
+           in loop 1 argsLength (funBody outer_fun) shift'
+            where loop i n exp shift = if(i==n)
+                   then 
+                     exp 
+                   else
+                     loop (i+1) n (replaceProj i argVar_outer (i+shift) newArgVar exp) shift     
+  let newBody = 
+        let oldExp = l $ case (argType_outer) of 
+              ProdTy _    ->  ProjE 0 (l (VarE argVar_outer) )
+              _             ->  VarE argVar_outer
+        in substE oldExp inlinedFunBody outerFunBody
+
+  return outer_fun { funArg  = newArgVar, 
+                     funTy = newType,
+                     funBody = newBody
+                    }
+ where
+  getSideArgsTypes (ProdTy (h:tail)) = tail
+  getSideArgsTypes _  = []
+  replaceProj i1 argVar1 i2 argvar2 exp= 
+    let oldExp = l $ ProjE i1 (l (VarE argVar1))
+        newExp = l $ ProjE i2 (l (VarE argvar2))
+    in substE oldExp newExp exp
+  
+
 
 --  THERE IS AN ASSUMPTION THAT DataConstE takes only list of 
 -- variable references ( no nested pattern matching) 
@@ -286,7 +323,7 @@ simplifyCases function = function {funBody = rec ( funBody function) }
       TimeIt e d b             ->  L l $ TimeIt ( rec e) d b 
       _                        -> L l ex
 
--- this one as well assumes that one arg  (outer and inner )
+-- this one as well assumes that one arg  (outer and inner ) 
  -- > can be changed not to by carrying the deftable around 
 foldFusedCalls_f :: (Var, Var, Int, Var) -> FunDef1 -> FunDef1
 foldFusedCalls_f rule function = function{funBody= 
@@ -296,14 +333,14 @@ foldFusedCalls :: (Var, Var, Int,Var ) -> L Exp1  ->(L Exp1)
 foldFusedCalls rule@(outerName, innerName, argPos,newName ) body = 
   let defTable = buildDefTable (getExp body)  
   in let rec (L l ex ) = case (ex) of 
-          AppE v loc argList -> 
-            let ignore = L l $ AppE v loc (rec argList) 
-            in if(v ==  outerName) 
+          AppE fName loc argList -> 
+            let notFolded = L l $ AppE fName loc (rec argList) 
+            in if(fName ==  outerName) 
                 then case (getExp argList ) of 
-                  VarE (Var sym) ->
+                  VarE (Var sym) -> -- not will be always like that mm
                     if( innerName == getDefiningFunction sym)  
                       then L l  $AppE  newName loc (getArgs sym) 
-                      else ignore -- the outer has only one argument
+                      else notFolded -- the outer has only one argument
                    where
                       getDefiningFunction x = case (M.lookup x defTable) of
                         Nothing    -> (toVar "-1not-used-vars")
@@ -317,7 +354,7 @@ foldFusedCalls rule@(outerName, innerName, argPos,newName ) body =
                           AppE _ _ args-> args
                           _            -> error  ("ops" L.++ (show(def  entry)))
                 else
-                  ignore 
+                  notFolded 
 
           LetE (v,loc,t,lhs) bod   ->  L l $ LetE (v,loc,t, (rec lhs)) (rec bod) 
           IfE e1 e2 e3             ->  L l $ IfE (rec e1) ( rec e2) ( rec e3)     
@@ -654,9 +691,9 @@ fuse ddefs fdefs  innerVar  outerVar fusedFunctions_ = do
   let newName  = newVar
   innerFreshBody <- freshExp []  (funBody innerFunc)
   outerFreshBody <- freshExp []  (funBody outerFunc)
-  let setp1 = inline innerFunc{funBody =innerFreshBody}
+  setp1 <- inline innerFunc{funBody =innerFreshBody}
                outerFunc{funBody = outerFreshBody}  (-1)
-      step2 =  (simplifyCases setp1 ){funName = newName}
+  let step2 =  (simplifyCases setp1 ){funName = newName}
       step3 =  foldFusedCalls_f (outerVar, innerVar, -1, newName)  step2
       -- fold upper level fused functions
       step4 = L.foldl (\f e -> foldFusedCalls_f e f ) step3 
@@ -672,10 +709,12 @@ violateRestrictions fdefs inner outer =
         outerDef = case (M.lookup outer fdefs) of (Just v) ->v
         p1 = case (fst (funTy innerDef) ) of
             (PackedTy _ _ ) -> False 
-            otherwise  -> True
+            (ProdTy ( (PackedTy _ _ ):_)) -> False
+            x  -> True `debug` ("ops "L.++ (show x))
         p2 = case (fst (funTy outerDef) ) of
             (PackedTy _ _) -> False 
-            otherwise  -> True
+            (ProdTy ( (PackedTy _ _ ):_)) -> False
+            x  -> True `debug` ("ops "L.++ (show x))
     (p1 || p2)
 
 transform :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [(Var, Var, Int, Var)] -> 
@@ -685,7 +724,7 @@ transform  ddefs funDefs  exp fusedFunctions_ doTupling processedCandidates= do
  where
   rec (L l body) processed fdefs  fusedFunctions = do
     let defTable = buildDefTable body  
-        potential = findPotential defTable processed --`debug`(show defTable)
+        potential = findPotential defTable processed `debug`(show defTable)
     case (potential) of
       Nothing -> do 
         -- final clean and tuple
@@ -699,7 +738,7 @@ transform  ddefs funDefs  exp fusedFunctions_ doTupling processedCandidates= do
 
       Just ((inner,outer), outerDefVarSymbol) -> 
         if( violateRestrictions fdefs inner outer) 
-          then rec (L l body)  ((inner,outer):processed) fdefs fusedFunctions
+          then rec (L l body)  ((inner,outer):processed) fdefs fusedFunctions `debug` ("here" L.++ (show(inner,outer) ))
           else do
              -- fuse
             (validFused, fNew, fusedDefs) <-  (fuse  ddefs fdefs inner outer 
