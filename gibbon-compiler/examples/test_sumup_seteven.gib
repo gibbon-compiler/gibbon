@@ -43,4 +43,4 @@
 
 ;;(iterate (set-even (sum-up ( Inner 0 0 (Leaf 2)(Leaf 2)))) );
 
-(iterate (set-even ( sum-up (generateTree 10) ) ) );;
+(iterate (set-even ( sum-up (generateTree 1) ) ) );;
