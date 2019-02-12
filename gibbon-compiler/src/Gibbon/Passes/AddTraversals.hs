@@ -83,7 +83,7 @@ to one of them. There are 2 assumptions that we make about such tuples:
 -}
     LetE (v,locs,ty, rhs@(L _ (ParE a b))) bod -> do
       let appArgTy :: L Exp2 -> (L Exp2, Ty2)
-          appArgTy (L _ (AppE _ _ arg)) = (arg, gTypeExp ddefs env2 arg)
+          appArgTy (L _ (AppE _ _ arg)) = (arg, gRecoverType ddefs env2 arg)
           appArgTy oth = error $ "appArgTy: Cannot handle " ++ sdoc oth
 
           (arg1, argty1) = appArgTy a

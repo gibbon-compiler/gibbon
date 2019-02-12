@@ -126,13 +126,13 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       IndirectionE{} -> False
 
 instance (Out l, Show l, Typeable (L (E2 l (UrTy l)))) => Typeable (E2Ext l (UrTy l)) where
-  gTypeExp ddfs env2 ex =
+  gRecoverType ddfs env2 ex =
     case ex of
-      LetRegionE _r bod   -> gTypeExp ddfs env2 bod
-      LetLocE _l _rhs bod -> gTypeExp ddfs env2 bod
+      LetRegionE _r bod   -> gRecoverType ddfs env2 bod
+      LetLocE _l _rhs bod -> gRecoverType ddfs env2 bod
       RetE _loc var       -> case M.lookup var (vEnv env2) of
                                Just ty -> ty
-                               Nothing -> error $ "gTypeExp: unbound variable " ++ sdoc var
+                               Nothing -> error $ "gRecoverType: unbound variable " ++ sdoc var
       FromEndE _loc       -> error $ "Shouldn't enconter FromEndE in tail position"
       BoundsCheck{}       -> error $ "Shouldn't enconter BoundsCheck in tail position"
       IndirectionE tycon _ _ (to,_) _ -> PackedTy tycon to
@@ -142,7 +142,7 @@ instance (Out l, Show l, Typeable (L (E2 l (UrTy l))),
           TyOf (E2Ext l (UrTy l)) ~ TyOf (L (E2Ext l (UrTy l))),
           Expression (L (E2Ext l (UrTy l))))
          => Typeable (L (E2Ext l (UrTy l))) where
-  gTypeExp ddfs env2 (L _ ex) = gTypeExp ddfs env2 ex
+  gRecoverType ddfs env2 (L _ ex) = gRecoverType ddfs env2 ex
 
 
 instance (Typeable (E2Ext l (UrTy l)),

@@ -58,25 +58,6 @@ instance (Show l, Out l) => Flattenable (E0Ext l Ty0) where
     gFlattenGatherBinds _ddfs _env ex = return ([], ex)
     gFlattenExp _ddfs _env ex = return ex
 
-instance (Out l, Show l, Typeable (L (PreExp E0Ext l Ty0))) => Typeable (E0Ext l Ty0) where
-  gTypeExp ddfs env2 ex =
-    case ex of
-      LambdaE (_,t) b -> ArrowTy t $ gTypeExp ddfs env2 b
-      PolyAppE f d ->
-        case gTypeExp ddfs env2 f of
-          ArrowTy t1 t2 -> let dt = gTypeExp ddfs env2 d in
-                           if t1 == dt then t2 else
-                             error $ "typeExp: PolyApp: Expected " ++ show t1
-                             ++ "\n Actual " ++ show dt ++ "\n in " ++ show ex
-          err           -> error $ "typeExp: Not an arrow type: " ++ show err
-                                               ++ "\n in " ++ show ex
-
-instance (Out l, Show l, Typeable (L (PreExp E0Ext l Ty0)),
-          TyOf (E0Ext l Ty0) ~ TyOf (L (E0Ext l Ty0)),
-          Expression (L (E0Ext l Ty0)))
-         => Typeable (L (E0Ext l Ty0)) where
-  gTypeExp ddfs env2 (L _ ex) = gTypeExp ddfs env2 ex
-
 instance (Out l, Out d) => Out (E0Ext l d)
 instance Out Ty0
 instance Out TyScheme
@@ -229,41 +210,41 @@ arrowTysInTy = go []
 -- L0 uses it's own type Ty0, which is not an instance of 'UrTy'.
 -- Can we merge 'Ty0' and 'UrTy' ? Well we can, but we would end up polluting 'UrTy'
 -- with type variables and function types, which should be unused after L0.
--- Or, we can have a special (Typeable L0), which is what recoverTy is.
+-- Or, we can have a special (Typeable L0), which is what recoverType is.
 -- ¯\_(ツ)_/¯
 --
-recoverTy :: DDefs0 -> Env2 Ty0 -> L Exp0 -> Ty0
-recoverTy ddfs env2 (L _ ex)=
+recoverType :: DDefs0 -> Env2 Ty0 -> L Exp0 -> Ty0
+recoverType ddfs env2 (L _ ex)=
   case ex of
     VarE v       -> M.findWithDefault (error $ "recoverType: Unbound variable " ++ show v) v (vEnv env2)
     LitE _       -> IntTy
     LitSymE _    -> IntTy
     AppE v _ _   -> outTy $ fEnv env2 # v
     PrimAppE p _ -> primRetTy1 p
-    LetE (v,_,t,_) e -> recoverTy ddfs (extendVEnv v t env2) e
-    IfE _ e _        -> recoverTy ddfs env2 e
-    MkProdE es       -> ProdTy $ map (recoverTy ddfs env2) es
+    LetE (v,_,t,_) e -> recoverType ddfs (extendVEnv v t env2) e
+    IfE _ e _        -> recoverType ddfs env2 e
+    MkProdE es       -> ProdTy $ map (recoverType ddfs env2) es
     DataConE (ProdTy locs) c _ -> PackedTy (getTyOfDataCon ddfs c) locs
     DataConE loc c _ -> PackedTy (getTyOfDataCon ddfs c) [loc]
-    TimeIt e _ _     -> recoverTy ddfs env2 e
-    MapE _ e         -> recoverTy ddfs env2 e
-    FoldE _ _ e      -> recoverTy ddfs env2 e
+    TimeIt e _ _     -> recoverType ddfs env2 e
+    MapE _ e         -> recoverType ddfs env2 e
+    FoldE _ _ e      -> recoverType ddfs env2 e
     ProjE i e ->
-      case recoverTy ddfs env2 e of
+      case recoverType ddfs env2 e of
         (ProdTy tys) -> tys !! i
         oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                       ++"\nExpression:\n  "++ sdoc ex
                       ++"\nEnvironment:\n  "++sdoc (vEnv env2)
-    ParE a b -> ProdTy $ map (recoverTy ddfs env2) [a,b]
+    ParE a b -> ProdTy $ map (recoverType ddfs env2) [a,b]
     CaseE _ mp ->
       let (c,args,e) = head mp
           args' = map fst args
-      in recoverTy ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
+      in recoverType ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
     Ext ext ->
       case ext of
         LambdaE (v,t) bod ->
-          recoverTy ddfs (extendVEnv v t env2) bod
-        PolyAppE{} -> error "recoverTyep: TODO PolyAppE"
+          recoverType ddfs (extendVEnv v t env2) bod
+        PolyAppE{} -> error "recoverTypeep: TODO PolyAppE"
   where
     -- Return type for a primitive operation.
     primRetTy1 :: Prim Ty0 -> Ty0

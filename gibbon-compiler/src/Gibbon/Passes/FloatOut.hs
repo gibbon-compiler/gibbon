@@ -90,7 +90,7 @@ floatOutExp ddefs env2 (L p ex) = (L p) <$>
         _ -> do
           let free_vars = S.toList (gFreeVars e)
               intys = map (\v -> lookupVEnv v env2) free_vars
-              retty = gTypeExp ddefs env2 (L p e)
+              retty = gRecoverType ddefs env2 (L p e)
           var <- lift $ gensym "float_out_arg"
           funarg <- lift $ gensym "arg"
           funname <- lift $ gensym "float_out_fn"

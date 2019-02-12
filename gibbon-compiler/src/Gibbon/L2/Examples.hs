@@ -39,7 +39,7 @@ tTypeable =  l$ Ext $ LetRegionE (VarR "r500") $
              l$ (VarE "v502")
 
 testTypeable :: UrTy LocVar
-testTypeable = gTypeExp ddtree emptyEnv2 tTypeable
+testTypeable = gRecoverType ddtree emptyEnv2 tTypeable
 
 --------------------------------------------------------------------------------
 -- Add1

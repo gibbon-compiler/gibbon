@@ -259,7 +259,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
 
           CaseE complex brs -> do
-            let ty = gTypeExp ddefs env2 complex
+            let ty = gRecoverType ddefs env2 complex
             v <- gensym "flt_RE"
             let ex = L1.mkLets [(v,[],ty,complex)] (l$ CaseE (l$ VarE v) brs)
             unLoc <$> exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) ex
@@ -335,7 +335,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  return $ IfE e1 e2' e3'
 
           MkProdE ls -> do
-            let tys = L.map (gTypeExp ddefs env2) ls
+            let tys = L.map (gRecoverType ddefs env2) ls
                 prodty = ProdTy tys
             v <- gensym "flt_RE"
             let ex = L1.mkLets [(v,[],prodty,(l$ MkProdE ls))] (l$ VarE v)
@@ -343,7 +343,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
           ProjE{} -> do
             v <- gensym "flt_RE"
-            let ty = gTypeExp ddefs env2 e
+            let ty = gRecoverType ddefs env2 e
                 lenv' = case ty of
                           PackedTy _ loc -> M.insert v loc lenv
                           _ -> lenv

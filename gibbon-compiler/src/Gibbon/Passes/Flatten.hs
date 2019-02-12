@@ -118,7 +118,7 @@ exp ddfs env2 (L sloc e0) =
         if isTrivial e
         then return ([],e)
         else do tmp <- gensym $ toVar $ "flt" ++ m
-                let ty = gTypeExp ddfs env2 e
+                let ty = gRecoverType ddfs env2 e
                 (bnds,e') <- exp ddfs env2 e
                 return ( bnds++[(tmp,[],ty,e')]
                        , L NoLoc $ VarE tmp)
@@ -181,7 +181,7 @@ exp ddfs env2 (L sloc e0) =
     -- TimeIt is treated like a conditional.  Don't lift out of it:
     TimeIt e _t b -> do
       (bnd,e') <- go e
-      return ([], TimeIt (flatLets bnd e') (gTypeExp ddfs env2 e) b)
+      return ([], TimeIt (flatLets bnd e') (gRecoverType ddfs env2 e) b)
 
     ParE a b -> do
       (bnd ,a') <- go a

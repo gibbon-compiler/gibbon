@@ -87,4 +87,4 @@ instance Simplifiable (NoExt l d) where
 
 -- | A dummy instance for "no-extension" extension point.
 instance Typeable (NoExt l d) where
-  gTypeExp _ _ _ = error "<NoExt: It should be impossible to recover type of this>"
+  gRecoverType _ _ _ = error "<NoExt: It should be impossible to recover type of this>"

@@ -355,7 +355,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
 
 
     MkProdE ls -> do
-      let tys = L.map (gTypeExp ddfs (Env2 tenv M.empty)) ls
+      let tys = L.map (gRecoverType ddfs (Env2 tenv M.empty)) ls
       es <- forM (zip tys ls) $ \(ty,e) -> do
               case ty of
                   _ | isPackedTy ty -> fromDi <$> cursorizePackedExp ddfs fundefs denv tenv e
@@ -580,7 +580,7 @@ cursorizeAppE ddfs fundefs denv tenv (L _ ex) =
           numRegs = length (outRegVars fnTy) + length (inRegVars fnTy)
           -- Drop input locations, but keep everything else
           outs   = (L.take numRegs locs) ++  (L.drop numRegs $ L.drop (length inLocs) $ locs)
-          argTy  = gTypeExp ddfs (Env2 tenv M.empty) arg
+          argTy  = gRecoverType ddfs (Env2 tenv M.empty) arg
       arg' <- if hasPacked inT
               then fromDi <$> cursorizePackedExp ddfs fundefs denv tenv arg
               else cursorizeExp ddfs fundefs denv tenv arg
@@ -613,7 +613,7 @@ cursorizeProj isPackedContext ddfs fundefs denv tenv ex =
   case ex of
     LetE (v,_locs,ty, rhs@(L _ ProjE{})) bod | isPackedTy ty -> do
       rhs' <- go tenv rhs
-      let ty'  = gTypeExp ddfs (Env2 tenv M.empty) rhs
+      let ty'  = gRecoverType ddfs (Env2 tenv M.empty) rhs
           ty'' = cursorizeTy ty'
           bnds = if isPackedTy ty'
                  then [ (v       ,[], projValTy ty'' , mkProj 0 rhs')
@@ -639,7 +639,7 @@ cursorizeProj isPackedContext ddfs fundefs denv tenv ex =
 As per the dilated representation, all packed values are (start,end) tuples.
 Except fn arguments and pattern matched vars (which are just start cursors).
 So instead of using the type from the AST, which will always be `Packed`,
-we recover type of RHS in the current type environment using gTypeExp.
+we recover type of RHS in the current type environment using gRecoverType.
 If it's just `CursorTy`, this packed value doesn't have an end cursor,
 otherwise, the type is `PackedTy{}`, and it also has an end cursor.
 
@@ -654,7 +654,7 @@ cursorizeProd isPackedContext ddfs fundefs denv tenv ex =
                   _ | hasPacked ty  -> error $ "cursorizePackedExp: nested tuples" ++ sdoc rhs
                   _ -> cursorizeExp ddfs fundefs denv tenv e
       let rhs' = l$ MkProdE es
-          ty   = gTypeExp ddfs (Env2 tenv M.empty) rhs
+          ty   = gRecoverType ddfs (Env2 tenv M.empty) rhs
           ty'  = cursorizeTy ty
           tenv' = M.insert v ty tenv
       bod' <- go tenv' bod
@@ -681,7 +681,7 @@ How is it cursorized ?
 
     If the functions in the parallel tuple return any end-witnesses;
 
-    Then (1) Update the type of the let bound variable using gTypeExp
+    Then (1) Update the type of the let bound variable using gRecoverType
              (probably RouteEnds should do this step).
          (2) Bind the end-witnesses
          (3) Use projections and products to recover the original value

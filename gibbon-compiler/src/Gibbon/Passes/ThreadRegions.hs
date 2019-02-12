@@ -37,8 +37,8 @@ threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> Bool -> RegEnv -> Env2 Ty2 -> L L2.
 threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
   case ex of
     AppE f applocs arg -> do
-      let ty = gTypeExp ddefs env2 ex
-          argty = gTypeExp ddefs env2 arg
+      let ty = gRecoverType ddefs env2 ex
+          argty = gRecoverType ddefs env2 arg
           argtylocs = locsInTy argty
           argregs = foldr (\x acc -> case M.lookup x renv of
                                        Just r -> r:acc
@@ -48,7 +48,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
         _ | hasPacked ty -> do
           let fnty = funTy $ fundefs # f
               arrOutMp = M.fromList $ zip (allLocVars fnty) applocs
-              -- TODO: Fix this in gTypeExp
+              -- TODO: Fix this in gRecoverType
               outT'  = substLoc arrOutMp ty
               tylocs = locsInTy outT'
               regs   = map (renv #) tylocs
@@ -59,7 +59,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
           return $ AppE f newapplocs arg
 
     LetE (v,locs,ty, (L _ (AppE f applocs arg))) bod -> do
-      let argty = gTypeExp ddefs env2 arg
+      let argty = gRecoverType ddefs env2 arg
           argtylocs = locsInTy argty
           argregs = foldr (\x acc -> case M.lookup x renv of
                                        Just r -> r:acc

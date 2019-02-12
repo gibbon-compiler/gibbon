@@ -47,7 +47,7 @@ removeCopiesExp :: DDefs Ty2 -> FunDefs2 -> LocEnv -> Env2 Ty2 -> L Exp2 -> Pass
 removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
   case ex of
     AppE f [lin,lout] arg | isCopyFunName f -> do
-      let (PackedTy tycon _) = gTypeExp ddefs env2 ex
+      let (PackedTy tycon _) = gRecoverType ddefs env2 ex
       indirection <- gensym "indirection"
       -- Get the indirection datacon for this type
       let indrDcon = filter isIndirectionTag $ getConOrdering ddefs tycon

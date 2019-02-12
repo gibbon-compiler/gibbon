@@ -376,7 +376,7 @@ collectMonoObls ddefs env2 toplevel mono_st (L p ex) = fmap (L p) <$>
       pure (sbod, LetE (v,[],ty,rhs') bod')
 
     CaseE scrt brs -> do
-      case recoverTy ddefs env2 scrt of
+      case recoverType ddefs env2 scrt of
         PackedTy tycon tyapps -> do
           (suffix, mono_st'') <-
             case tyapps of
