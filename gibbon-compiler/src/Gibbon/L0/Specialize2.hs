@@ -741,9 +741,10 @@ elimFunRefsFun ddefs low env2 new_fn_name refs fn@FunDef{funArg, funTy} = do
         --    foo :: (a -> b)
         --    foo f = _
         --
-        -- Since functions must take atleast one argument, we make it an int.
-        -- The type we use here must match the expression used in 'dropFunRefs'.
-        ArrowTy{} -> IntTy
+        -- Functions must have atleast one argument -- this is a makeshift
+        -- void type. It must also match the fake argument we generate in
+        -- 'dropFunRefs'.
+        ArrowTy{} -> ProdTy []
         -- We just drop all ArrowTy's.
         ProdTy tys -> ProdTy $ filter (not . isFunTy) tys
         _ -> t
@@ -940,7 +941,7 @@ elimFunRefsExp ddefs env2 low (L p ex) = fmap (L p) <$>
                                        ++ " does not match " ++ sdoc arg_ty
             _ -> error $ "dropFunRefs: TODO " ++ sdoc arg
         -- See 'first_order_ty' for details.
-        ArrowTy{} -> LitE 1
+        ArrowTy{} -> MkProdE []
         _ -> arg
       where
         ForAll _ (ArrowTy arg_ty _) = lookupFEnv fn_name env2

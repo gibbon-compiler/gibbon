@@ -39,7 +39,7 @@ import           Gibbon.Common
 import           Gibbon.Interp
 import           Gibbon.DynFlags
 import qualified Gibbon.HaskellFrontend as HS
--- import qualified Gibbon.L0.Syntax as L0
+import qualified Gibbon.L0.Syntax as L0
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
 -- import qualified Gibbon.L3.Syntax as L3

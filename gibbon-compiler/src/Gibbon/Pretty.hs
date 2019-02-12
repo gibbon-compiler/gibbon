@@ -282,6 +282,7 @@ instance Pretty L0.Ty0 where
   pprintWithStyle _ ty =
       case ty of
         L0.IntTy      -> text "Int"
+        L0.SymTy0     -> text "Sym"
         L0.BoolTy     -> text "Bool"
         L0.TyVar v    -> doc v
         L0.MetaTv v   -> doc v

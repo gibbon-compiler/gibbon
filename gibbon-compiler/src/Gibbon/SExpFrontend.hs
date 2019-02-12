@@ -216,7 +216,10 @@ if a thing is a type variable or a data constructor.
                                args
          (arg,ty,bod'') <-
                case args' of
-                 []      -> do ty <- newMetaTy
+                 []      -> do -- Functions must have atleast one argument --
+                               -- this is a makeshift void type. It must also
+                               -- match the fake argument we generate.
+                               let ty = ProdTy []
                                (,ty,bod') <$> gensym (toVar "void")
                  [(a,t)] -> pure (a,t,bod')
                  _    -> do let (vs,ts) = unzip args'

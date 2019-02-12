@@ -231,6 +231,9 @@ tests:
     ## We don't have a way to specify different answers for different modes.
     failing: [interp1, gibbon1, gibbon2]
 
+  - name: toplevel_value.hs
+    answer-file: examples/toplevel_value.ans
+
     ## Shouldn't typecheck
   - name: Fail1.hs
     dir: examples/should_fail

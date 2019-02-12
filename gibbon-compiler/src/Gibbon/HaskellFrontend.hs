@@ -8,6 +8,7 @@ import           Data.Foldable ( foldrM )
 import           Data.Loc as Loc
 import           Data.Maybe (catMaybes)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import           Language.Haskell.Exts.Extension
 import           Language.Haskell.Exts.Parser
 import           Language.Haskell.Exts.Syntax as H
@@ -172,62 +173,73 @@ primMap = M.fromList
   , ("False", MkFalse)
   ]
 
-desugarExp :: (Show a, Pretty a) => Exp a -> PassM (L Exp0)
-desugarExp e = L NoLoc <$>
+desugarExp :: (Show a, Pretty a) => TopTyEnv -> Exp a -> PassM (L Exp0)
+desugarExp toplevel e = L NoLoc <$>
   case e of
-    Paren _ e2 -> Loc.unLoc <$> desugarExp e2
-    H.Var _ qv -> pure $ VarE (toVar $ qnameToStr qv)
-
+    Paren _ e2 -> Loc.unLoc <$> desugarExp toplevel e2
+    H.Var _ qv -> do
+      let v = (toVar $ qnameToStr qv)
+      case M.lookup v toplevel of
+        Just sigma ->
+          case tyFromScheme sigma of
+            ArrowTy{} ->
+              -- Functions with >0 args must be VarE's here -- the 'App _ e1 e2'
+              -- case below depends on it.
+              pure $ VarE v
+            -- Otherwise, 'v' is a top-level value binding, which we
+            -- encode as a function which takes an Int.
+            _ -> pure $ AppE v [] (l$ LitE 200)
+        Nothing -> pure $ VarE v
     Lit _ lit  -> pure $ LitE (litToInt lit)
 
     Lambda _ [pat] bod -> do
-      bod' <- desugarExp bod
+      bod' <- desugarExp toplevel bod
       pure $ Ext $ LambdaE (desugarPatWithTy pat) bod'
 
     Lambda _ pats bod -> do
-      bod' <- desugarExp bod
+      bod' <- desugarExp toplevel bod
       let (args, tys) = unzip $ map desugarPatWithTy pats
           (lam_arg, bod'') = multiArgsToOne args tys bod'
       pure $ Ext $ LambdaE (lam_arg, ProdTy tys) bod''
 
     App _ e1 e2 -> do
-        desugarExp e1 >>= \case
+        desugarExp toplevel e1 >>= \case
           L _ (VarE f) ->
             case M.lookup (fromVar f) primMap of
-              Just p  -> (\e2' -> PrimAppE p [e2']) <$> desugarExp e2
-              Nothing -> AppE f [] <$> desugarExp e2
+              Just p  -> (\e2' -> PrimAppE p [e2']) <$> desugarExp toplevel e2
+              Nothing -> AppE f [] <$> desugarExp toplevel e2
           L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of
               Just p  -> pure $ PrimAppE p as
-              Nothing -> (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp e2
+              Nothing -> (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
           L _ (AppE f [] (L _ (MkProdE ls))) -> do
-            e2' <- desugarExp e2
+            e2' <- desugarExp toplevel e2
             pure $ AppE f [] (L NoLoc $ MkProdE (ls ++ [e2']))
           L _ (AppE f [] lit) -> do
-            e2' <- desugarExp e2
+            e2' <- desugarExp toplevel e2
             pure $ AppE f [] (L NoLoc $ MkProdE [lit,e2'])
           L _ (PrimAppE p lit) -> do
-            e2' <- desugarExp e2
+            e2' <- desugarExp toplevel e2
             pure $ PrimAppE p (lit ++ [e2'])
           f -> error ("desugarExp: Only variables allowed in operator position in function applications. (found: " ++ show f ++ ")")
 
     Let _ (BDecls _ decls) rhs -> do
-      rhs' <- desugarExp rhs
+      rhs' <- desugarExp toplevel rhs
       let funtys = foldr collectTopTy M.empty decls
-      Loc.unLoc <$> foldrM (generateBind funtys) rhs' decls
+      Loc.unLoc <$> foldrM (generateBind toplevel funtys) rhs' decls
 
     If _ a b c -> do
-      a' <- desugarExp a
-      b' <- desugarExp b
-      c' <- desugarExp c
+      a' <- desugarExp toplevel a
+      b' <- desugarExp toplevel b
+      c' <- desugarExp toplevel c
       pure $ IfE a' b' c'
 
     Tuple _ Unboxed _ -> error $ "desugarExp: Only boxed tuples are allowed: " ++ prettyPrint e
-    Tuple _ Boxed es  -> MkProdE <$> mapM desugarExp es
+    Tuple _ Boxed es  -> MkProdE <$> mapM (desugarExp toplevel) es
 
     Case _ scrt alts -> do
-      scrt' <- desugarExp scrt
-      CaseE scrt' <$> mapM desugarAlt alts
+      scrt' <- desugarExp toplevel scrt
+      CaseE scrt' <$> mapM (desugarAlt toplevel) alts
 
     Con _ qname -> do
       let dcon = qnameToStr qname
@@ -241,18 +253,18 @@ desugarExp e = L NoLoc <$>
     -- TODO: timeit: parsing it's type isn't straightforward.
 
     InfixApp _ e1 (QVarOp _ (UnQual _ (Symbol _ ".||."))) e2 ->
-      ParE <$> desugarExp e1 <*> desugarExp e2
+      ParE <$> desugarExp toplevel e1 <*> desugarExp toplevel e2
 
     InfixApp _ e1 op e2 -> do
-      e1' <- desugarExp e1
-      e2' <- desugarExp e2
+      e1' <- desugarExp toplevel e1
+      e2' <- desugarExp toplevel e2
       let op' = desugarOp  op
       pure $ PrimAppE op' [e1', e2']
 
     _ -> error ("desugarExp: Unsupported expression: " ++ prettyPrint e)
 
-desugarFun :: (Show a,  Pretty a) => TopTyEnv -> Decl a -> PassM (Var, Var, TyScheme, L Exp0)
-desugarFun env decl =
+desugarFun :: (Show a,  Pretty a) => TopTyEnv -> TopTyEnv -> Decl a -> PassM (Var, Var, TyScheme, L Exp0)
+desugarFun toplevel env decl =
   case decl of
     FunBind _ [Match _ fname pats (UnGuardedRhs _ bod) _where] -> do
       let fname_str = nameToStr fname
@@ -270,7 +282,7 @@ desugarFun env decl =
                            let curried_ty = foldr ArrowTy ret_ty ls
                            pure $ ForAll [] curried_ty
                   Just ty -> pure ty
-      bod' <- desugarExp bod
+      bod' <- desugarExp toplevel bod
       let (arg,ty,bod'') =
             case pats of
               []  -> (toVar "_", fun_ty, bod')
@@ -300,6 +312,7 @@ collectTopTy d env =
 
 collectTopLevel :: (Show a,  Pretty a) => TopTyEnv -> Decl a -> PassM (Maybe TopLevel)
 collectTopLevel env decl =
+  let toplevel = env in
   case decl of
     -- 'collectTopTy' takes care of this.
     TypeSig{} -> pure Nothing
@@ -314,7 +327,7 @@ collectTopLevel env decl =
       pure Nothing
 
     PatBind _ (PVar _ (Ident _ "gibbon_main")) (UnGuardedRhs _ rhs) _binds -> do
-      rhs' <- desugarExp rhs
+      rhs' <- desugarExp toplevel rhs
       ty <- newMetaTy
       pure $ Just $ HMain $ Just (rhs', ty)
 
@@ -326,7 +339,7 @@ collectTopLevel env decl =
              --     f = \x -> ...
              case rhs of
                Lambda _ pats bod -> do
-                 bod' <- desugarExp bod
+                 bod' <- desugarExp toplevel bod
                  let (fun_ty'', new_arg, bod'') =
                        case pats of
                          [] -> error ""
@@ -340,9 +353,21 @@ collectTopLevel env decl =
                                                , funArg  = new_arg
                                                , funTy   = fun_ty''
                                                , funBody = bod'' })
-               oth -> error $ "collectTopLevel: Unsupprted top-level expression: " ++ prettyPrint oth
 
-    FunBind{} -> do (name,arg,ty,bod) <- desugarFun env decl
+               -- This is a top-level function that doesn't take any arguments.
+               _ -> do
+                 rhs' <- desugarExp toplevel rhs
+                 arg <- gensym "void"
+                 let fun_ty'  = ArrowTy IntTy (tyFromScheme fun_ty)
+                     fun_ty'' = ForAll (tyVarsInTy fun_ty') fun_ty'
+                 pure $ Just $ HFunDef (FunDef { funName = toVar fn
+                                               , funArg  = arg
+                                               , funTy   = fun_ty''
+                                               , funBody = rhs' })
+
+               -- oth -> error $ "collectTopLevel: Unsupported top-level expression: " ++ prettyPrint oth
+
+    FunBind{} -> do (name,arg,ty,bod) <- desugarFun toplevel env decl
                     pure $ Just $ HFunDef (FunDef { funName = name
                                                   , funArg  = arg
                                                   , funTy   = ty
@@ -373,8 +398,8 @@ desugarOp qop =
         Nothing -> error $ "desugarExp: Unsupported binary op: " ++ show op
     op -> error $ "desugarExp: Unsupported op: " ++ prettyPrint op
 
-desugarAlt :: (Show a,  Pretty a) => Alt a -> PassM (DataCon, [(Var,Ty0)], L Exp0)
-desugarAlt alt =
+desugarAlt :: (Show a,  Pretty a) => TopTyEnv -> Alt a -> PassM (DataCon, [(Var,Ty0)], L Exp0)
+desugarAlt toplevel alt =
   case alt of
     Alt _ (PApp _ qname ps) (UnGuardedRhs _ rhs) Nothing -> do
       let conName = qnameToStr qname
@@ -382,22 +407,22 @@ desugarAlt alt =
                              PVar _ v -> (toVar . nameToStr) v
                              _        -> error "desugarExp: Non-variable pattern in case.")
                     ps
-      rhs' <- desugarExp rhs
+      rhs' <- desugarExp toplevel rhs
       ps'' <- mapM (\v -> (v,) <$> newMetaTy) ps'
       pure (conName, ps'', rhs')
     Alt _ _ GuardedRhss{} _ -> error "desugarExp: Guarded RHS not supported in case."
     Alt _ _ _ Just{}        -> error "desugarExp: Where clauses not allowed in case."
     Alt _ pat _ _           -> error $ "desugarExp: Unsupported pattern in case: " ++ prettyPrint pat
 
-generateBind :: (Show a,  Pretty a) => TopTyEnv -> Decl a -> L Exp0 -> PassM (L Exp0)
-generateBind env decl exp2 =
+generateBind :: (Show a,  Pretty a) => TopTyEnv -> TopTyEnv -> Decl a -> L Exp0 -> PassM (L Exp0)
+generateBind toplevel env decl exp2 =
   case decl of
     -- 'collectTopTy' takes care of this.
     TypeSig{} -> pure exp2
     PatBind _ _ _ Just{}        -> error "desugarExp: where clauses not allowed"
     PatBind _ _ GuardedRhss{} _ -> error "desugarExp: Guarded right hand side not supported."
     PatBind _ (PVar _ v) (UnGuardedRhs _ rhs) Nothing -> do
-      rhs' <- desugarExp rhs
+      rhs' <- desugarExp toplevel rhs
       let w = toVar (nameToStr v)
       ty' <- case M.lookup w env of
                 Nothing -> newMetaTy
@@ -405,7 +430,7 @@ generateBind env decl exp2 =
       pure $ l$ LetE (w, [], ty', rhs') exp2
     PatBind _ not_var _ _ -> error $ "desugarExp: Only variable bindings are allowed in let."
                                      ++ "(found: "++ prettyPrint not_var ++ ")"
-    FunBind{} -> do (name,arg,ty,bod) <- desugarFun env decl
+    FunBind{} -> do (name,arg,ty,bod) <- desugarFun toplevel env decl
                     pure $ l$ LetE (name,[], tyFromScheme ty, l$ Ext $ LambdaE (arg, inTy ty) bod) exp2
     oth -> error ("desugarExp: Unsupported pattern: " ++ prettyPrint oth)
 
