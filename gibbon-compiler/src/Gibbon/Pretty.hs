@@ -64,11 +64,48 @@ renderMain m ty = text "gibbon_main" <+> doublecolon <+> ty
 
 -- Things we need to make this a valid compilation unit for GHC:
 ghc_compat_prefix, ghc_compat_suffix :: Doc
-ghc_compat_prefix = text "{-# LANGUAGE ScopedTypeVariables #-}\n" $+$
-                    text "module Main where\n" $+$
-                    -- Need a better stub for 'TimeIt' in GHC.
-                    text "timeit = id\n" $+$
-                    text "sizeParam = 4"
+ghc_compat_prefix =
+  text "{-# LANGUAGE ScopedTypeVariables #-}" $+$
+  text "" $+$
+  text "-- Gibbon Prelude --" $+$
+  text "" $+$
+  text "import Prelude as P ( (==), id, print" $+$
+  text "                    , Int, (+), (-), (*), quot, (<), (>), (<=), (>=), (^), mod" $+$
+  text "                    , Bool(..), (||), (&&)" $+$
+  text "                    , Show)" $+$
+  text "" $+$
+  text "" $+$
+  text "type Sym = Int" $+$
+  text "" $+$
+  text "timeit :: a -> a" $+$
+  text "timeit = id" $+$
+  text "" $+$
+  text "rand :: Int" $+$
+  text "rand = 10" $+$
+  text "" $+$
+  text "(/) :: Int -> Int -> Int" $+$
+  text "(/) = quot" $+$
+  text "" $+$
+  text "eqsym :: Sym -> Sym -> Bool" $+$
+  text "eqsym = (==)" $+$
+  text "" $+$
+  text "mod :: Int -> Int -> Int" $+$
+  text "mod = P.mod" $+$
+  text "" $+$
+  text "-- We don't have a symbol table yet." $+$
+  text "symAppend :: Sym -> Sym -> Sym" $+$
+  text "symAppend = (+)" $+$
+  text "" $+$
+  text "sizeParam :: Int" $+$
+  text "sizeParam = 4" $+$
+  text "" $+$
+  text "-- Gibbon Prelude ends --" $+$
+  text ""
+
+    -- text "{-# LANGUAGE ScopedTypeVariables #-}\n" $+$
+    --                 text "module Main where\n" $+$
+    --                 text "timeit = id\n" $+$
+    --                 text "sizeParam = 4"
 
 ghc_compat_suffix = text "\nmain = print gibbon_main"
 
