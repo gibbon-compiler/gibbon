@@ -259,7 +259,7 @@ inline inlined_fun outer_fun arg_pos  =  do
                     then 
                       exp
                     else
-                     loop (i+1) n (replaceProj i argVar_inlined i newArgVar exp) `debug` ("\nat index "L.++ (show i))
+                     loop (i+1) n (replaceProj i argVar_inlined i newArgVar exp) --`debug` ("\nat index "L.++ (show i))
   let outerFunBody = case(argType_outer) of
         PackedTy _ _ -> funBody outer_fun
         ProdTy ls  ->
@@ -779,8 +779,8 @@ fuse ddefs fdefs  innerVar  outerVar fusedFunctions_ = do
       newVar    = toVar ("_FUS_f_" L.++ (fromVar outerVar) L.++ "_f_" L.++(fromVar innerVar ) L.++ "_FUS_")
   --newName   <-  gensym_tag (newVar) "inline" 
   let newName  = newVar
-  innerFreshBody <- freshExp []  (funBody innerFunc) `debug` ("inner:\n"L.++ (show innerFunc))
-  outerFreshBody <- freshExp []  (funBody outerFunc) `debug`  ("inner:\n"L.++ (show outerFunc))
+  innerFreshBody <- freshExp []  (funBody innerFunc) --`debug` ("inner:\n"L.++ (show innerFunc))
+  outerFreshBody <- freshExp []  (funBody outerFunc)-- `debug`  ("inner:\n"L.++ (show outerFunc))
   setp1 <- inline innerFunc{funBody =innerFreshBody}
                outerFunc{funBody = outerFreshBody}  (-1)
   let step2 =  (simplifyCases setp1 ){funName = newName}
@@ -800,11 +800,11 @@ violateRestrictions fdefs inner outer =
         p1 = case (fst (funTy innerDef) ) of
             (PackedTy _ _ ) -> False 
             (ProdTy ( (PackedTy _ _ ):_)) -> False
-            x  -> True `debug` ("ops "L.++ (show x))
+            x  -> True --`debug` ("ops "L.++ (show x))
         p2 = case (fst (funTy outerDef) ) of
             (PackedTy _ _) -> False 
             (ProdTy ( (PackedTy _ _ ):_)) -> False
-            x  -> True `debug` ("ops "L.++ (show x))
+            x  -> True --`debug` ("ops "L.++ (show x))
     (p1 || p2)
 
 transform :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [(Var, Var, Int, Var)] -> 
@@ -814,7 +814,7 @@ transform  ddefs funDefs  exp fusedFunctions_ doTupling processedCandidates= do
  where
   rec (L l body) processed fdefs  fusedFunctions = do
     let defTable = buildDefTable body  
-        potential = findPotential defTable processed `debug`(show defTable)
+        potential = findPotential defTable processed --`debug`(show defTable)
     case (potential) of
       Nothing -> do 
         -- final clean and tuple
@@ -828,7 +828,7 @@ transform  ddefs funDefs  exp fusedFunctions_ doTupling processedCandidates= do
 
       Just ((inner,outer), outerDefVarSymbol) -> 
         if( violateRestrictions fdefs inner outer) 
-          then rec (L l body)  ((inner,outer):processed) fdefs fusedFunctions `debug` ("here" L.++ (show(inner,outer) ))
+          then rec (L l body)  ((inner,outer):processed) fdefs fusedFunctions-- `debug` ("here" L.++ (show(inner,outer) ))
           else do
              -- fuse
             (validFused, fNew, fusedDefs) <-  (fuse  ddefs fdefs inner outer 
