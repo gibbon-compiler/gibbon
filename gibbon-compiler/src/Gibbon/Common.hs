@@ -420,7 +420,7 @@ debugFlagSuffix f =
   case f of
     Opt_D_Dump_Repair -> "dump-repair"
     Opt_D_DumpToFile  -> "dump-to-file" -- This would never be used.
-    Opt_D_Dump_Hs     -> "hs"
+    Opt_D_Dump_Hs     -> "gibbon_hs.hs"
 
 --------------------------------------------------------------------------------
 -- Some global constants

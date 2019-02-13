@@ -67,6 +67,8 @@ ghc_compat_prefix, ghc_compat_suffix :: Doc
 ghc_compat_prefix =
   text "{-# LANGUAGE ScopedTypeVariables #-}" $+$
   text "" $+$
+  text "module Main where" $+$
+  text "" $+$
   text "-- Gibbon Prelude --" $+$
   text "" $+$
   text "import Prelude as P ( (==), id, print" $+$
