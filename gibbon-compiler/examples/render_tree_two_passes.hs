@@ -5,7 +5,7 @@ data NodeData = NodeDataK Int Int Int Int Int  FontStyle
 --    NodeDataK posX posY height width relWidth mMode fontStyle
 
 data FontStyle = FontStyleK Int Int Int
-data Document = Document PageList 
+data Document = Document PageList NodeData
 data PageList = PageListInner Page PageList  
               | PageListEnd Page 
 data Page     = Page HorizContainerList NodeData
@@ -36,8 +36,8 @@ getWidth nData  = case (nData) of
 
 getHeight :: NodeData -> Int  
 getHeight nData  = case (nData) of 
-    NodeDataK posX posY height width relWidth  fontStyle -> height
-    
+  NodeDataK posX posY height width relWidth  fontStyle -> height
+  
 getWidthElement :: Element -> Int  
 getWidthElement e  = case (e) of 
     ImageCons a b s nData  -> getWidth nData
@@ -59,16 +59,6 @@ updateHeight :: NodeData -> Int -> NodeData
 updateHeight nData newHeight = case (nData) of 
     NodeDataK posX posY height width relWidth  fontStyle -> 
         NodeDataK posX posY newHeight width relWidth  fontStyle
-
-updatePosX :: NodeData -> Int -> NodeData  
-updatePosX nData x = case (nData) of 
-    NodeDataK posX posY height width relWidth  fontStyle -> 
-        NodeDataK x posY height width relWidth  fontStyle
-
-updatePosY :: NodeData -> Int -> NodeData  
-updatePosY nData y = case (nData) of 
-    NodeDataK posX posY height width relWidth  fontStyle -> 
-        NodeDataK posX y height width relWidth  fontStyle
 
 -- We might need to rewrite this into two functions .. duh thats alot of work 
 -- and maybe performance reduction 
@@ -97,7 +87,7 @@ sumWidthsElmList elmList = case (elmList) of
 -- traversals (getMaxWidth and sumWidths)
 resolveWidthDoc :: Document -> Document 
 resolveWidthDoc doc  = case (doc) of
-     Document pgList  -> Document (resolveWidthPList pgList) 
+     Document pgList nData -> Document (resolveWidthPList pgList) nData
 
 resolveWidthPList :: PageList -> PageList 
 resolveWidthPList pgList  = case (pgList) of
@@ -143,8 +133,8 @@ resolveWidthElm element  = case (element) of
     ImageCons a b c d ->   ImageCons a b c d
     TextBoxCons a b c d ->TextBoxCons a b c d
 
-gibbon_main =setPositionsElm( computeHeightElement( resolveWidthElm  (
-     TextBoxCons 1 1 StrEnd (NodeDataK 1 1 1 1 1  (FontStyleK 1 1 1))))) 10 20
+gibbon_main = computeHeightElement( resolveWidthElm  (
+     TextBoxCons 1 1 StrEnd (NodeDataK 1 1 1 1 1  (FontStyleK 1 1 1))))
 
 
 -- computeWidth a traversal that computes the width of each element 
@@ -152,7 +142,7 @@ gibbon_main =setPositionsElm( computeHeightElement( resolveWidthElm  (
 
 computeHeightDoc :: Document -> Document
 computeHeightDoc doc = case (doc) of 
-    Document pList  -> Document (computeHeightPList pList)  
+    Document pList nData -> Document (computeHeightPList pList) nData 
     
 computeHeightPList :: PageList -> PageList
 computeHeightPList pList = case (pList) of 
@@ -209,61 +199,11 @@ computeHeightElement element = case (element) of
     ImageCons a b c d ->   ImageCons a b c d
     TextBoxCons a b c d ->TextBoxCons a b c d
 
---A pass that computer the initial x,y position for each element in the 
--- document (within each page)
 
-setPositionsDoc :: Document -> Document
-setPositionsDoc doc = case (doc) of
-    Document pList  -> Document  (setPositionsPList pList) 
-
-setPositionsPList :: PageList -> PageList
-setPositionsPList pList = case (pList) of
-    PageListInner page remList -> PageListInner (setPositionsPage page)
-      (setPositionsPList remList) 
-    PageListEnd page -> PageListEnd (setPositionsPage page)
-
-setPositionsPage :: Page -> Page
-setPositionsPage page = case page of
-    Page hzList nData -> 
-        let   nData' = updatePosX (updatePosY  nData 0)  0  
-        in Page (setPositionsHzList hzList 0 0) nData' 
-
-setPositionsHzList :: HorizContainerList -> Int -> Int -> HorizContainerList
-setPositionsHzList hzList curX  curY = case (hzList) of
-    HorizContainerListInner elmList remList ->
-        let  elmList' = setPositionsElmList elmList curX curY 
-          in let elmListMaxHeight = getMaxHeight elmList
-             in let remList' = setPositionsHzList remList curX 
-                     (addI curY elmListMaxHeight)
-                 in HorizContainerListInner elmList' remList'
-    HorizContainerListEnd elmList -> 
-        HorizContainerListEnd ( setPositionsElmList elmList curX curY) 
-
-setPositionsElmList :: ElementsList -> Int -> Int -> ElementsList
-setPositionsElmList elmList curX curY = case (elmList) of
-    ElementsListInner element remList -> 
-        let element' = setPositionsElm element curX curY
-          in let elementWidth = getWidthElement element
-            in let remList' = setPositionsElmList remList (addI curX elementWidth) curY
-              in ElementsListInner element'    remList'
-    ElementsListEnd element ->
-        ElementsListEnd (setPositionsElm element curX curY)
-
-setPositionsElm:: Element -> Int -> Int -> Element 
-setPositionsElm element curX curY = case (element) of
-    VertContainer hzList nData->   
-        let hzList'=   setPositionsHzList hzList  curX curY
-            in let nData' =  updatePosX (updatePosY nData curY )  curX  
-              in   VertContainer  hzList' nData'
-
-    ImageCons a b c nData -> ImageCons a b c  
-      (updatePosX (updatePosY nData curY )   curX)
-    TextBoxCons a b c nData -> TextBoxCons a b c 
-      (updatePosX (updatePosY nData curY )  curX)
-main :: IO () 
+main :: IO ()
 main = 
     do
       let d = (NodeDataK 1 1 1 1 1  (FontStyleK 1 1 1))
       let input = TextBoxCons 1 1 StrEnd d
-      let x =setPositionsElm ( computeHeightElement( resolveWidthElm  (input)))
+      let x = computeHeightElement( resolveWidthElm  (input))
       return $ print x
