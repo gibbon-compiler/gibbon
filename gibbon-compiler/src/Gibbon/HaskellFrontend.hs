@@ -8,7 +8,6 @@ import           Data.Foldable ( foldrM )
 import           Data.Loc as Loc
 import           Data.Maybe (catMaybes)
 import qualified Data.Map as M
-import qualified Data.Set as S
 import           Language.Haskell.Exts.Extension
 import           Language.Haskell.Exts.Parser
 import           Language.Haskell.Exts.Syntax as H

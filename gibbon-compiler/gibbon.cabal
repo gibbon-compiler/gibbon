@@ -176,8 +176,9 @@ executable test-gibbon-examples
   build-depends:       gibbon,
                        base, containers, mtl, transformers,
                        process, filepath, directory,
-                       time, clock, pretty, text, bytestring,
-                       yaml, optparse-applicative, scientific
+                       time, clock, text, bytestring,
+                       yaml, optparse-applicative, scientific,
+                       prettyprinter, prettyprinter-ansi-terminal
 
   default-language:    Haskell2010
   other-modules:       TestRunner
