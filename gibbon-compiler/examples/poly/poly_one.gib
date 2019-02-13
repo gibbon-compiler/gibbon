@@ -1,0 +1,97 @@
+#lang gibbon
+
+(data Maybe (a)
+      [Nothing]
+      [Just a])
+
+(define (pure-maybe [x : a]) : (Maybe a)
+  (Just x))
+
+
+(define (fmap-maybe [f : (-> a b)] [mb : (Maybe a)]) : (Maybe b)
+  (case mb
+    [(Nothing) (Nothing)]
+    [(Just x)  (Just (f x))]))
+
+(data Either (a b)
+      [Left a]
+      [Right b])
+
+(define (pure-either [x : b]) : (Either a b)
+  (Right x))
+
+(define (fmap-either [f : (-> a b)] [e : (Either x a)]) : (Either x b)
+  (case e
+    [(Left x)  (Left x)]
+    [(Right y) (Right (f y))]))
+
+(data List (a)
+      [Nil]
+      [Cons a (List a)])
+
+
+(define (foldr [f : (-> a b b)] [acc : b] [ls : (List a)]) : b
+  (case ls
+    [(Nil)        acc]
+    [(Cons x rst) (let ([acc1 : b (foldr f acc rst)])
+                    (f x acc1))]))
+
+(define (plus [a : Int] [b : Int]) : Int
+  (+ a b))
+
+(define (id1 [x : a]) : a
+  x)
+
+(define (foo1 [x : a] [y : b]) : b
+  y)
+
+(define (bar [x : a] [y : b]) : a
+  x)
+
+(define (baz [x : Int] [y : Int]) : Int
+  (+ x y))
+
+(define (succ [x : Int]) : Int
+  (+ x 1))
+
+(define (is-even [i : Int]) : Bool
+  (= (mod i 2) 0))
+
+(define (minus1 [i : Int]) : Int
+  (- i 1))
+
+(define (not [b : Bool]) : Bool
+  (if b False True))
+
+(define (dot [f : (-> b c)] [g : (-> a b)] [x : a]) : c
+  (f (g x)))
+
+(define (ap [f : (-> a b)] [x : a]) : b
+  (f x))
+
+(define (test-rec [f : (-> a b)] [n : Int]) : Int
+  (if (= n 0)
+      n
+      (test-rec f (- n 1))))
+
+(let* ([id2 (lambda (x) x)]
+       [foo2 (lambda (x y) y)]
+
+       [x : (Maybe Int) (Nothing)]
+
+       [w : (Either Int Int) (pure-either 20)]
+
+       [w1 : (Either Int Bool) (fmap-either is-even w)]
+
+       [v : Int (dot succ succ 10)]
+
+       [u : Bool (ap not True)]
+
+       [t : Int (test_rec succ v)]
+
+       [s : Int (foldr plus 0 (Cons 1 (Cons 2 (Nil))))]
+
+       [test (vector
+              (id1 10) (id1 True) (id2 11) (id2 False) (foo1 1 2) (foo2 3 4)
+              x w w1 v u t s)])
+  test)

@@ -164,6 +164,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
     toL1Ty ty =
       case ty of
         IntTy   -> L1.IntTy
+        SymTy0  -> L1.SymTy
         BoolTy  -> L1.BoolTy
         TyVar{} -> err1 (sdoc ty)
         MetaTv{} -> err1 (sdoc ty)
@@ -624,6 +625,7 @@ updateTyConsTy :: DDefs0 -> MonoState -> Ty0 -> Ty0
 updateTyConsTy ddefs mono_st ty =
   case ty of
     IntTy   -> IntTy
+    SymTy0  -> SymTy0
     BoolTy  -> BoolTy
     TyVar{} ->  error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."
     MetaTv{} -> error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."
@@ -739,9 +741,10 @@ elimFunRefsFun ddefs low env2 new_fn_name refs fn@FunDef{funArg, funTy} = do
         --    foo :: (a -> b)
         --    foo f = _
         --
-        -- Since functions must take atleast one argument, we make it an int.
-        -- The type we use here must match the expression used in 'dropFunRefs'.
-        ArrowTy{} -> IntTy
+        -- Functions must have atleast one argument -- this is a makeshift
+        -- void type. It must also match the fake argument we generate in
+        -- 'dropFunRefs'.
+        ArrowTy{} -> ProdTy []
         -- We just drop all ArrowTy's.
         ProdTy tys -> ProdTy $ filter (not . isFunTy) tys
         _ -> t
@@ -938,7 +941,7 @@ elimFunRefsExp ddefs env2 low (L p ex) = fmap (L p) <$>
                                        ++ " does not match " ++ sdoc arg_ty
             _ -> error $ "dropFunRefs: TODO " ++ sdoc arg
         -- See 'first_order_ty' for details.
-        ArrowTy{} -> LitE 1
+        ArrowTy{} -> MkProdE []
         _ -> arg
       where
         ForAll _ (ArrowTy arg_ty _) = lookupFEnv fn_name env2

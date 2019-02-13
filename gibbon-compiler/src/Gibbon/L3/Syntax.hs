@@ -23,7 +23,7 @@ import Data.List as L
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
-import Gibbon.Language
+import Gibbon.Language hiding (mapMExprs)
 import qualified Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------

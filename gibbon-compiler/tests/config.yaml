@@ -206,23 +206,21 @@ tests:
     skip: true
 
   ## Polymorphic frontend tests
-  - name: One.hs
-    dir: examples/hs
-    answer-file: examples/hs/One.ans
+  - name: Poly1.hs
+    dir: examples/poly
+    answer-file: examples/poly/Poly1.ans
     failing: [gibbon1, gibbon2]
 
-  - name: Three.hs
-    dir: examples/hs
-    answer-file: examples/hs/Three.ans
+  - name: measure_mode.hs
+    answer-file: examples/measure_mode.ans
     failing: [gibbon1, gibbon2]
 
   - name: MonoTree.hs
-    dir: examples/hs
-    answer-file: examples/hs/MonoTree.ans
+    answer-file: examples/MonoTree.ans
 
   - name: PolyTree.hs
-    dir: examples/hs
-    answer-file: examples/hs/PolyTree.ans
+    dir: examples/poly
+    answer-file: examples/poly/PolyTree.ans
     failing: [gibbon1, gibbon2]
 
   - name: unariser_bug1.hs
@@ -233,17 +231,20 @@ tests:
     ## We don't have a way to specify different answers for different modes.
     failing: [interp1, gibbon1, gibbon2]
 
+  - name: toplevel_value.hs
+    answer-file: examples/toplevel_value.ans
+
     ## Shouldn't typecheck
   - name: Fail1.hs
-    dir: examples/hs/should_fail
+    dir: examples/should_fail
     failing: [gibbon1, gibbon2, pointer, interp1]
 
   - name: Fail2.hs
-    dir: examples/hs/should_fail
+    dir: examples/should_fail
     failing: [gibbon1, gibbon2, pointer, interp1]
 
   - name: Fail3.hs
-    dir: examples/hs/should_fail
+    dir: examples/should_fail
     failing: [gibbon1, gibbon2, pointer, interp1]
 
   ## Fusion2 tests

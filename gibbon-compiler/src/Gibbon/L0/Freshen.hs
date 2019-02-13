@@ -26,7 +26,7 @@ freshNames (Prog defs funs main) =
                   Just (m,ty) -> do m' <- freshExp M.empty M.empty m
                                     return $ Just (m',ty)
        defs' <- traverse freshDDef defs
-       funs' <- traverse freshFun funs
+       funs' <- M.mapKeys cleanFunName <$> traverse freshFun funs
        return $ Prog defs' funs' main'
 
 freshDDef :: DDef Ty0 -> PassM (DDef Ty0)
@@ -65,6 +65,7 @@ freshTy :: TyVarEnv -> Ty0 -> PassM (TyVarEnv, Ty0)
 freshTy env ty =
   case ty of
      IntTy  -> pure (env, ty)
+     SymTy0 -> pure (env, ty)
      BoolTy -> pure (env, ty)
      TyVar tv -> case M.lookup tv env of
                    Nothing  -> do tv' <- newTyVar
@@ -99,15 +100,15 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
 
     VarE v ->
       case M.lookup v venv of
-        Nothing -> return $ VarE v
-        Just v' -> return $ VarE v'
+        Nothing -> return $ VarE (cleanFunName v)
+        Just v' -> return $ VarE (cleanFunName v')
 
     AppE v ls e -> assert ([] == ls) $ do
       e' <- go e
       -- If this is a call site of a let bound lambda, we need to update it.
       case M.lookup v venv of
         Nothing -> return $ AppE (cleanFunName v) [] e'
-        Just v' -> return $ AppE v' [] e'
+        Just v' -> return $ AppE (cleanFunName v') [] e'
 
     PrimAppE p es -> do
       es' <- mapM go es
@@ -117,7 +118,7 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
       -- No ScopedTypeVariables.
       (_tvenv', ty') <- freshTy tvenv ty
       e1' <- freshExp venv tvenv e1
-      v'  <- gensym v
+      v'  <- gensym (cleanFunName v)
       e2' <- freshExp (M.insert v v' venv) tvenv e2
       return $ LetE (v',[],ty',e1') e2'
 

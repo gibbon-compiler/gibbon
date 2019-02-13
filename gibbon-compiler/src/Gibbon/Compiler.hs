@@ -39,7 +39,7 @@ import           Gibbon.Common
 import           Gibbon.Interp
 import           Gibbon.DynFlags
 import qualified Gibbon.HaskellFrontend as HS
--- import qualified Gibbon.L0.Syntax as L0
+import qualified Gibbon.L0.Syntax as L0
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
 -- import qualified Gibbon.L3.Syntax as L3
@@ -281,35 +281,37 @@ setDebugEnvVar verbosity =
     hPutStrLn stderr$ " ! We set DEBUG based on command-line verbose arg: "++show l
 
 
--- |
 parseInput :: Input -> FilePath -> IO ((L1.Prog1, Int), FilePath)
-parseInput ip fp =
-  case ip of
-    Haskell -> (, fp) <$> hs_hack
-    SExpr   -> (, fp) <$> SExp.parseFile fp
-    Unspecified ->
-      case takeExtension fp of
-        ".hs"   -> (, fp) <$> hs_hack
-        ".sexp" -> (, fp) <$> SExp.parseFile fp
-        ".rkt"  -> (, fp) <$> SExp.parseFile fp
-        ".gib"  -> (, fp) <$> SExp.parseFile fp
-        oth -> do
-          -- A silly hack just out of sheer laziness vis-a-vis tab completion:
-          let f1 = fp ++ ".gib"
-              f2 = fp ++ "gib"
-          f1' <- doesFileExist f1
-          f2' <- doesFileExist f2
-          if f1' && oth == ""
-            then (,f2) <$> SExp.parseFile f1
-            else if f2' && oth == "."
-                   then (,f2) <$> SExp.parseFile f1
-                   else error$ "compile: unrecognized file extension: "++
-                        show oth++"  Please specify compile input format."
-
-  where hs_hack :: IO (L1.Prog1, Int)
-        hs_hack = do pm_l0 <- HS.parseFile fp
-                     let passes = do
+parseInput ip fp = do
+  (l0, f) <-
+    case ip of
+      Haskell -> (, fp) <$> HS.parseFile fp
+      SExpr   -> (, fp) <$> SExp.parseFile fp
+      Unspecified ->
+        case takeExtension fp of
+          ".hs"   -> (, fp) <$> HS.parseFile fp
+          ".sexp" -> (, fp) <$> SExp.parseFile fp
+          ".rkt"  -> (, fp) <$> SExp.parseFile fp
+          ".gib"  -> (, fp) <$> SExp.parseFile fp
+          oth -> do
+            -- A silly hack just out of sheer laziness vis-a-vis tab completion:
+            let f1 = fp ++ ".gib"
+                f2 = fp ++ "gib"
+            f1' <- doesFileExist f1
+            f2' <- doesFileExist f2
+            if f1' && oth == ""
+              then (,f2) <$> SExp.parseFile f1
+              else if f2' && oth == "."
+                     then (,f2) <$> SExp.parseFile f1
+                     else error$ "compile: unrecognized file extension: "++
+                          show oth++"  Please specify compile input format."
+  l1 <- lower l0
+  (l1, cnt) <- pure $ runPassM defaultConfig 0 l1
+  pure ((l1, cnt), f)
+  where lower :: PassM L0.Prog0 -> IO (PassM L1.Prog1)
+        lower pm_l0 = let passes = do
                            l0 <- pm_l0
+                           -- dbgTraceIt ("Parsed:\n" ++ sdoc l0) (pure ())
                            l0 <- L0.freshNames l0
                            -- dbgTraceIt ("Freshen:\n" ++ sdoc l0) (pure ())
                            l0 <- L0.tcProg l0
@@ -317,7 +319,7 @@ parseInput ip fp =
                            l1 <- L0.l0ToL1 l0
                            -- dbgTraceIt ("Specialized:\n" ++ sdoc l1) (pure ())
                            pure l1
-                     pure $ runPassM defaultConfig 0 passes
+                   in pure passes
 
 
 -- |

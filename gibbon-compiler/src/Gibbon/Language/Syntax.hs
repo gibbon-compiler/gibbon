@@ -32,7 +32,7 @@ module Gibbon.Language.Syntax
   , pattern SymTy
 
     -- * Helpers operating on expressions
-  , mapExt, mapLocs, mapExprs, visitExp
+  , mapExt, mapLocs, mapExprs, mapMExprs, visitExp
   , subst, substE, hasTimeIt, projNonFirst
   , mkProj, mkProd, mkLets, flatLets, tuplizeRefs
 
@@ -644,6 +644,19 @@ mapExprs fn prg@Prog{fundefs,mainExp} =
   in
   prg{ fundefs = M.map (\g -> g {funBody = fn (funBody g)}) fundefs
      , mainExp =  mainExp' }
+
+-- | Monadic 'mapExprs'.
+mapMExprs :: Monad m => (e -> m e) -> Prog e -> m (Prog e)
+mapMExprs fn prg@Prog{fundefs,mainExp} = do
+  mainExp' <- case mainExp of
+                Nothing -> pure Nothing
+                Just (ex,ty) -> do ex' <- fn ex
+                                   pure $ Just (ex', ty)
+  fundefs' <- traverse (\g -> do funBody' <- fn (funBody g)
+                                 pure $ g {funBody = funBody'})
+                       fundefs
+  pure $ prg { fundefs = fundefs', mainExp = mainExp' }
+
 
 -- | Apply a function to the locations, extensions, and
 -- binder-decorations, respectively.
