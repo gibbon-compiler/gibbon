@@ -729,7 +729,8 @@ inferExp env@FullEnv{dataDefs}
           argTy <- freshTyLocs $ arrIn arrty -- TODO: check for and fail on invalid arguments
           argDest <- destFromType' argTy
           (arg',aty,acs) <- inferExp env arg argDest
-          res <- inferExp (extendVEnv vr valTy env) bod dest
+          tupBod <- projTups valTy (l$ VarE vr) bod
+          res <- inferExp (extendVEnv vr valTy env) tupBod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr res
           vcs <- tryNeedRegion (locsInTy valTy) ty'' $ acs ++ cs''
           fcs <- tryInRegion vcs
@@ -1006,6 +1007,67 @@ cleanExp (L i e) =
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 
+projTups :: Ty2 -> L Exp1 -> L Exp1 -> TiM (L Exp1)
+projTups t proj e =
+    case t of
+      ProdTy ts -> foldM (\e (t,i) ->
+                   case t of
+                     ProdTy ts ->
+                          do v <- lift $ lift $ gensym (toVar "proj")
+                             e' <- projTups t (l$ ProjE i proj) e
+                             let ty = stripTyLocs $ ProdTy ts
+                             return $ l$ LetE (v,[],ty,l$ ProjE i proj) e'
+                     PackedTy tc lv ->
+                          do v <- lift $ lift $ gensym (toVar "proj")
+                             let ty = stripTyLocs $ PackedTy tc lv
+                             return $ l$ LetE (v,[],ty,l$ ProjE i proj) $ fixProj M.empty v (l$ ProjE i proj) e
+                     _ -> return e) e $ zip ts [0..]
+      _ -> return e
+
+fixProj :: M.Map Var Var -> Var -> L Exp1 -> L Exp1 -> L Exp1
+fixProj renam pvar proj (L i e) =
+    let l e = L i e
+        eEq (L _ e1) (L _ e2) = e1 == e2
+    in
+    case e of
+      VarE v -> case M.lookup v renam of
+                  Nothing -> l$ VarE v
+                  Just v' -> l$ VarE v'
+      LitE v -> l$ LitE v
+      LitSymE v -> l$ LitSymE v
+      AppE v ls e -> let e' = fixProj renam pvar proj e
+                     in l$ AppE v ls e'
+      PrimAppE pr es -> let es' = map (fixProj renam pvar proj) es
+                        in l$ PrimAppE pr es'
+      LetE (v,ls,t,e1) e2 ->
+          if e1 `eEq` proj
+          then fixProj (M.insert v pvar renam) pvar proj e2
+          else let e1' = fixProj renam pvar proj e1
+                   e2' = fixProj renam pvar proj e2
+               in l$ LetE (v,ls,t,e1') e2'
+      IfE e1 e2 e3 -> let e1' = fixProj renam pvar proj e1
+                          e2' = fixProj renam pvar proj e2
+                          e3' = fixProj renam pvar proj e3
+                      in l$ IfE e1' e2' e3'
+      MkProdE es -> let es' = map (fixProj renam pvar proj) es
+                    in l$ MkProdE es'
+      ProjE i e1 -> if (l e) `eEq` proj then l$ VarE pvar else
+                        let e1' = fixProj renam pvar proj e1
+                        in l$ ProjE i e1'
+      CaseE e1 prs -> let e1' = fixProj renam pvar proj e1
+                          prs' = map (\(dc,lvs,e2) ->
+                                          (dc,lvs,fixProj renam pvar proj e2)) prs
+                      in l$ CaseE e1' prs'
+      DataConE lv dc es -> let es' = map (fixProj renam pvar proj) es
+                           in l$ DataConE lv dc es'
+      TimeIt e1 d b -> let e1' = fixProj renam pvar proj e1
+                       in l$ TimeIt e1' d b
+      ParE e1 e2 -> let e1' = fixProj renam pvar proj e1
+                        e2' = fixProj renam pvar proj e2
+                    in l$ ParE e1' e2'
+      Ext{} -> err$ "Unexpected Ext: " ++ (show e)
+      MapE{} -> err$ "MapE not supported"
+      FoldE{} -> err$ "FoldE not supported"
 
 
 -- | Checks that there are no constraints specifying a location

@@ -110,6 +110,7 @@ tests:
   - name: test30_twitter.gib
   - name: test_buildstree.gib
   - name: test_buildtree.gib
+  - name: test_buildtreesum.gib
   - name: test_buildtwotrees.gib
   - name: test_ddtree.gib
   - name: test_stree.gib
@@ -293,8 +294,6 @@ tests:
   - name: test18f_flip.gib
     failing: [gibbon2, gibbon1]
   - name: test_addtrees.gib
-    failing: [gibbon2,gibbon1]
-  - name: test_buildtreesum.gib
     failing: [gibbon2,gibbon1]
   - name: test25d_racketcore.gib
     failing: [gibbon2, gibbon1]

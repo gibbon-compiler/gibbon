@@ -15,4 +15,5 @@
                     (vector total (Node tr1 tr2)))))))))))
 
 
-;; (buildtreesum 2)
+(let ([v : (Vector Int Tree) (buildtreesum 2)])
+  (vector-ref v 0))
