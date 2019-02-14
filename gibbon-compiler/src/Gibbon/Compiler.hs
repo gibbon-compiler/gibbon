@@ -484,7 +484,7 @@ passes config@Config{dynflags} l1 = do
       l1 <- goE "typecheck"     L1.tcProg               l1
 
       -- Minimal haskell "backend".
-      lift $ dumpIfSet config Opt_D_Dump_Hs (render $ pprintWithStyle PPHaskell l1)
+      lift $ dumpIfSet config Opt_D_Dump_Hs (render $ pprintHsWithEnv l1)
 
       -- TODO: Write interpreters for L2 and L3
       l3 <- if isPacked

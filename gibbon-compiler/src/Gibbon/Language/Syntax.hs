@@ -285,7 +285,7 @@ class Expression e => Simplifiable e where
 -- Without this, we cannot have truly generic implementation of the Flattenable class,
 -- since we need to know the type of an expression before we discharge it with a LetE
 class Expression e => Typeable e where
-  gTypeExp :: DDefs (TyOf e) -> Env2 (TyOf e) -> e -> TyOf e
+  gRecoverType :: DDefs (TyOf e) -> Env2 (TyOf e) -> e -> TyOf e
 
 
 --------------------------------------------------------------------------------
@@ -495,7 +495,7 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
           TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)),
           FunctionTy (UrTy l), Typeable (e l (UrTy l)))
        => Typeable (PreExp e l (UrTy l)) where
-  gTypeExp ddfs env2 ex =
+  gRecoverType ddfs env2 ex =
     case ex of
       VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v) v (vEnv env2)
       LitE _       -> IntTy
@@ -503,31 +503,31 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
       AppE v _ _   -> outTy $ fEnv env2 # v
       PrimAppE p _ -> primRetTy p
 
-      LetE (v,_,t,_) e -> gTypeExp ddfs (extendVEnv v t env2) e
-      IfE _ e _        -> gTypeExp ddfs env2 e
-      MkProdE es       -> ProdTy $ L.map (gTypeExp ddfs env2) es
+      LetE (v,_,t,_) e -> gRecoverType ddfs (extendVEnv v t env2) e
+      IfE _ e _        -> gRecoverType ddfs env2 e
+      MkProdE es       -> ProdTy $ L.map (gRecoverType ddfs env2) es
       DataConE loc c _ -> PackedTy (getTyOfDataCon ddfs c) loc
-      TimeIt e _ _     -> gTypeExp ddfs env2 e
-      MapE _ e         -> gTypeExp ddfs env2 e
-      FoldE _ _ e      -> gTypeExp ddfs env2 e
-      Ext ext          -> gTypeExp ddfs env2 ext
+      TimeIt e _ _     -> gRecoverType ddfs env2 e
+      MapE _ e         -> gRecoverType ddfs env2 e
+      FoldE _ _ e      -> gRecoverType ddfs env2 e
+      Ext ext          -> gRecoverType ddfs env2 ext
 
       ProjE i e ->
-        case gTypeExp ddfs env2 e of
+        case gRecoverType ddfs env2 e of
           (ProdTy tys) -> tys !! i
           oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                         ++"\nExpression:\n  "++ sdoc ex
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
 
-      ParE a b -> ProdTy $ L.map (gTypeExp ddfs env2) [a,b]
+      ParE a b -> ProdTy $ L.map (gRecoverType ddfs env2) [a,b]
 
       CaseE _ mp ->
         let (c,args,e) = head mp
             args' = L.map fst args
-        in gTypeExp ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
+        in gRecoverType ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
 
 instance Typeable (PreExp e l (UrTy l)) => Typeable (L (PreExp e l (UrTy l))) where
-  gTypeExp ddfs env2 (L _ ex) = gTypeExp ddfs env2 ex
+  gRecoverType ddfs env2 (L _ ex) = gRecoverType ddfs env2 ex
 
 --------------------------------------------------------------------------------
 -- Primitives

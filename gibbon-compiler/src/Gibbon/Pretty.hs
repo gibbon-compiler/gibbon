@@ -4,7 +4,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 module Gibbon.Pretty
-  ( Pretty(..), PPStyle(..), render ) where
+  ( Pretty(..), PPStyle(..), render, pprintHsWithEnv ) where
 
 import           Prelude hiding ((<>))
 import           Data.Loc
@@ -57,17 +57,59 @@ instance HasPretty ex => Pretty (Prog ex) where
         in case sty of
              PPInternal -> ddefsDoc $+$ funsDoc $+$ meDoc
              PPHaskell  -> ghc_compat_prefix $+$ ddefsDoc $+$ funsDoc $+$ meDoc $+$ ghc_compat_suffix
-      where
-        renderMain :: Doc -> Doc -> Doc
-        renderMain m ty = text "gibbon_main" <+> doublecolon <+> ty
-                            $$ text "gibbon_main" <+> equals $$ nest 4 m
 
-        -- Things we need to make this a valid compilation unit for GHC:
-        ghc_compat_prefix = text "{-# LANGUAGE ScopedTypeVariables #-}\n" $+$
-                            text "module Main where\n" $+$
-                            -- Need a better stub for 'TimeIt' in GHC.
-                            text "timeit = id\n"
-        ghc_compat_suffix = text "\nmain = print gibbon_main"
+renderMain :: Doc -> Doc -> Doc
+renderMain m ty = text "gibbon_main" <+> doublecolon <+> ty
+                    $$ text "gibbon_main" <+> equals $$ nest 4 m
+
+-- Things we need to make this a valid compilation unit for GHC:
+ghc_compat_prefix, ghc_compat_suffix :: Doc
+ghc_compat_prefix =
+  text "{-# LANGUAGE ScopedTypeVariables #-}" $+$
+  text "" $+$
+  text "module Main where" $+$
+  text "" $+$
+  text "-- Gibbon Prelude --" $+$
+  text "" $+$
+  text "import Prelude as P ( (==), id, print" $+$
+  text "                    , Int, (+), (-), (*), quot, (<), (>), (<=), (>=), (^), mod" $+$
+  text "                    , Bool(..), (||), (&&)" $+$
+  text "                    , Show)" $+$
+  text "" $+$
+  text "" $+$
+  text "type Sym = Int" $+$
+  text "" $+$
+  text "timeit :: a -> a" $+$
+  text "timeit = id" $+$
+  text "" $+$
+  text "rand :: Int" $+$
+  text "rand = 10" $+$
+  text "" $+$
+  text "(/) :: Int -> Int -> Int" $+$
+  text "(/) = quot" $+$
+  text "" $+$
+  text "eqsym :: Sym -> Sym -> Bool" $+$
+  text "eqsym = (==)" $+$
+  text "" $+$
+  text "mod :: Int -> Int -> Int" $+$
+  text "mod = P.mod" $+$
+  text "" $+$
+  text "-- We don't have a symbol table yet." $+$
+  text "symAppend :: Sym -> Sym -> Sym" $+$
+  text "symAppend = (+)" $+$
+  text "" $+$
+  text "sizeParam :: Int" $+$
+  text "sizeParam = 4" $+$
+  text "" $+$
+  text "-- Gibbon Prelude ends --" $+$
+  text ""
+
+    -- text "{-# LANGUAGE ScopedTypeVariables #-}\n" $+$
+    --                 text "module Main where\n" $+$
+    --                 text "timeit = id\n" $+$
+    --                 text "sizeParam = 4"
+
+ghc_compat_suffix = text "\nmain = print gibbon_main"
 
 -- Functions:
 instance HasPretty ex => Pretty (FunDef ex) where
@@ -301,3 +343,117 @@ instance Pretty (L0.E0Ext () L0.Ty0) where
       L0.LambdaE (v,ty) bod -> parens (text "\\" <+> doc v <+> doublecolon <+> pprint ty <+> text " -> "
                                          $$ nest 4 (pprint bod))
       L0.PolyAppE{} -> doc ex0
+
+
+--------------------------------------------------------------------------------
+
+{-
+
+'pprintWithStyle' does not have enough information to translate 'ProjE' to
+valid Haskell. In Gibbon, 'ProjE' can project a value out of an *arbitrary*
+tuple. It works like the Haskell list index op (!!), rather than tuples. In
+Haskell, we must pattern match on a tuple to extract elements out of it. And
+we need to know the size of the tuple in order to generate a proper pattern.
+'pprintHsWithEnv' carries a type environemt around for this purpose.
+
+Another way to solve this would be to update Gibbon's AST to store this info:
+
+    ... | ProjE (Int, Int) EXP | ...
+
+But that would be  a big refactor.
+
+-}
+
+pprintHsWithEnv :: Prog1 -> Doc
+pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
+  let env2     = progToEnv p
+      meDoc    = case mainExp of
+                   Nothing     -> empty
+                   Just (e,ty) -> renderMain (ppExp env2 e) (pprintWithStyle sty ty)
+      ddefsDoc = vcat $ map (pprintWithStyle sty) $ M.elems ddefs
+      funsDoc  = vcat $ map (ppFun env2) $ M.elems fundefs
+  in ghc_compat_prefix $+$ ddefsDoc $+$ funsDoc $+$ meDoc $+$ ghc_compat_suffix
+  where
+    sty = PPHaskell
+
+    ppFun :: Env2 Ty1 -> FunDef1 -> Doc
+    ppFun env2 FunDef{funName, funArg, funTy, funBody} =
+      text (fromVar funName) <+> doublecolon <+> pprintWithStyle sty funTy
+          $$ renderBod <> text "\n"
+      where
+        env2' = extendVEnv funArg (inTy funTy) env2
+        renderBod :: Doc
+        renderBod = text (fromVar funName) <+> text (fromVar funArg) <+> equals
+                      $$ nest 4 (ppExp env2' funBody)
+
+    ppExp :: Env2 Ty1 -> L Exp1 -> Doc
+    ppExp env2 (L _ ex0) =
+      case ex0 of
+          VarE v -> pprintWithStyle sty v
+          LitE i -> int i
+          LitSymE v -> pprintWithStyle sty v
+          AppE v ls e -> pprintWithStyle sty v <+>
+                         (if null ls
+                          then empty
+                          else brackets $ hcat (punctuate "," (map pprint ls))) <+>
+                         (ppExp env2 e)
+          PrimAppE pr es ->
+              case pr of
+                  _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP, SymAppend] ->
+                      let [a1,a2] = es
+                      in pprintWithStyle sty a1 <+> pprintWithStyle sty pr <+> pprintWithStyle sty a2
+
+                  _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprintWithStyle sty pr
+
+                  _ -> pprintWithStyle sty pr <> parens (hsep $ map (ppExp env2) es)
+
+          LetE (v,ls,ty,e1) e2 -> (text "let") <+>
+                                  pprintWithStyle sty v <+> doublecolon <+>
+                                  (if null ls
+                                   then empty
+                                   else brackets (hcat (punctuate comma (map (pprintWithStyle sty) ls)))) <+>
+                                  pprintWithStyle sty ty <+>
+                                  equals <+>
+                                  ppExp env2 e1 <+>
+                                  text "in" $+$
+                                  ppExp (extendVEnv v ty env2) e2
+          IfE e1 e2 e3 -> text "if" <+>
+                          ppExp env2 e1 $+$
+                          text "then" <+>
+                          ppExp env2 e2 $+$
+                          text "else" <+>
+                          ppExp env2 e3
+          MkProdE es -> lparen <> hcat (punctuate (text ", ") (map (pprintWithStyle sty) es)) <> rparen
+          ProjE i e ->
+              case gRecoverType ddefs env2 e of
+                ProdTy tys -> let edoc = ppExp env2 e
+                                  n    = length tys
+                                  -- Gosh, do we also need a gensym here...
+                                  v    = ("tup_proj_" ++ show i)
+                                  pat  = parens $ hcat $
+                                           punctuate (text ",") ([if i == j then text v else text "_" | j <- [0..n-1]])
+                              in text "let " <+> pat <+> text "=" <+> edoc <+> text "in" <+> text v
+                ty -> error $ "pprintHsWithEnv: " ++ sdoc ty ++ "is not a product. In " ++ sdoc ex0
+          CaseE e bnds -> text "case" <+> ppExp env2 e <+> text "of" $+$
+                          nest 4 (vcat $ map (dobinds env2) bnds)
+          DataConE l dc es -> text dc <+>
+                              (if isEmpty (pprintWithStyle sty l)
+                               then empty
+                               else pprintWithStyle sty l) <+>
+                              hsep (map (pprintWithStyle sty) es)
+          TimeIt e _ty _b -> text "timeit" <+> parens (ppExp env2 e)
+          ParE a b -> ppExp env2 a <+> text "||" <+> ppExp env2 b
+          Ext{}  -> empty -- L1 doesn't have an extension.
+          MapE{} -> error $ "Unexpected form in program: MapE"
+          FoldE{}-> error $ "Unexpected form in program: FoldE"
+        where
+          dobinds env21 (dc,vls,e) =
+                           let tys    = lookupDataCon ddefs dc
+                               vars   = map fst vls
+                               env21' = extendsVEnv (M.fromList $ zip vars tys) env21
+                           in  text dc <+> hcat (punctuate (text " ")
+                                                           (map (\(v,l) -> if isEmpty (pprintWithStyle sty l)
+                                                                           then pprintWithStyle sty v
+                                                                           else pprintWithStyle sty v <> doublecolon <> pprintWithStyle sty l)
+                                                            vls))
+                               <+> text "->" $+$ nest 4 (ppExp env21' e)

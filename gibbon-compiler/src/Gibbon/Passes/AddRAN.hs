@@ -327,5 +327,5 @@ needsRANExp ddefs fundefs env2 renv (L _p ex) =
       let fn (PackedTy dcon loc) = [(loc, dcon)]
           fn (ProdTy tys) = L.concatMap fn tys
           fn _ = []
-      in M.fromList (fn $ gTypeExp ddefs env21 arg)
+      in M.fromList (fn $ gRecoverType ddefs env21 arg)
     parAppLoc _ oth = error $ "parAppLoc: Cannot handle "  ++ sdoc oth

@@ -89,7 +89,7 @@ instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
   isTrivial _ = False
 
 instance (Out l, Show l) => Typeable (E3Ext l (UrTy l)) where
-    gTypeExp = error "L3.gTypeExp"
+    gRecoverType = error "L3.gRecoverType"
 
 instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
     gFlattenGatherBinds _ddfs _env ex = return ([], ex)

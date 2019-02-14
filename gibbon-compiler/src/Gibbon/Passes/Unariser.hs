@@ -98,7 +98,7 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
       case unLoc e of
         MkProdE ls -> unLoc <$> go env2 (ls ! i)
         _ -> do
-          let ety = gTypeExp ddfs env2 e
+          let ety = gRecoverType ddfs env2 e
               j   = flatProjIdx i ety
               ity = projTy i ety
               fty = flattenTy ity
@@ -177,7 +177,7 @@ flattenProd ddfs stk env2 ex =
   case unLoc ex of
     MkProdE{} -> do
       let flat1 = go ex
-          tys = L.map (flattenTy . gTypeExp ddfs env2) flat1
+          tys = L.map (flattenTy . gRecoverType ddfs env2) flat1
       MkProdE <$> go2 tys flat1
 
     oth -> error $ "flattenProd: Unexpected expression: " ++ sdoc oth

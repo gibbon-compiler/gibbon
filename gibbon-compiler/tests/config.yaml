@@ -268,7 +268,7 @@ tests:
     skip: true
     failing: [gibbon1]
 
-  ## Failing tests:
+  ## Tests that only work with Pointer backend:
   - name: test00f_and.gib
     failing: [gibbon2, gibbon1]
   - name: test04c_ifvector.gib
@@ -297,6 +297,8 @@ tests:
     failing: [gibbon2,gibbon1]
   - name: test25d_racketcore.gib
     failing: [gibbon2, gibbon1]
+  - name: pp_projs.gib
+    failing: [gibbon1, gibbon2]
 
   # This test depends on real symbols, which we don't support atm.
   - name: test27b_subst.gib

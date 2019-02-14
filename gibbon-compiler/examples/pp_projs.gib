@@ -1,0 +1,18 @@
+;; Test if Gibbon's Haskell pretty printer can handle arbitrary tuples
+;; and projections.
+
+#lang gibbon
+
+(define (foo [x : (Vector Int Int Bool Bool)]) : (Vector Int Int Bool (Vector Int Int Bool))
+  (let* ([a : Int  (vector-ref x 0)]
+         [b : Int  (vector-ref x 1)]
+         [c : Bool (vector-ref x 2)]
+         [d : Bool (vector-ref x 3)])
+    (vector a b c (vector (+ 1 a) (+ 1 b) d))))
+
+
+(let* ([y : (Vector Int Int Bool (Vector Int Int Bool)) (foo (vector 1 2 True False))]
+       [p : Int  (vector-ref (vector-ref y 3) 0)]
+       [q : Int  (vector-ref (vector-ref y 3) 1)]
+       [r : Bool (vector-ref (vector-ref y 3) 2)])
+  (vector p q r))

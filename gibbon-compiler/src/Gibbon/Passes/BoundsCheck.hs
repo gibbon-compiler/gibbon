@@ -189,7 +189,7 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
                           locVertex = case vtxF loc of
                                         Just x  -> x
                                         Nothing -> error $ "No vertex for:" ++ sdoc loc
-                          retType = gTypeExp ddfs env2 bod
+                          retType = gRecoverType ddfs env2 bod
                       in if hasPacked retType
                           then
                             let  retLocs = locsInTy retType
