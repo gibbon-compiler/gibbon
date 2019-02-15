@@ -401,7 +401,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
               case pr of
                   _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP, SymAppend] ->
                       let [a1,a2] = es
-                      in pprintWithStyle sty a1 <+> pprintWithStyle sty pr <+> pprintWithStyle sty a2
+                      in ppExp env2 a1 <+> pprintWithStyle sty pr <+> ppExp env2 a2
 
                   _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprintWithStyle sty pr
 
@@ -423,7 +423,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                           ppExp env2 e2 $+$
                           text "else" <+>
                           ppExp env2 e3
-          MkProdE es -> lparen <> hcat (punctuate (text ", ") (map (pprintWithStyle sty) es)) <> rparen
+          MkProdE es -> lparen <> hcat (punctuate (text ", ") (map (ppExp env2) es)) <> rparen
           ProjE i e ->
               case gRecoverType ddefs env2 e of
                 ProdTy tys -> let edoc = ppExp env2 e
@@ -440,7 +440,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                               (if isEmpty (pprintWithStyle sty l)
                                then empty
                                else pprintWithStyle sty l) <+>
-                              hsep (map (pprintWithStyle sty) es)
+                              hsep (map (ppExp env2) es)
           TimeIt e _ty _b -> text "timeit" <+> parens (ppExp env2 e)
           ParE a b -> ppExp env2 a <+> text "||" <+> ppExp env2 b
           Ext{}  -> empty -- L1 doesn't have an extension.
