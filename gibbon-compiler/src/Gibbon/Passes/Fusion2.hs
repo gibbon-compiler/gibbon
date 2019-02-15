@@ -22,13 +22,27 @@ import Data.Tuple.All
 import Data.Vector as V
 import Control.Monad
 
+-- this can be made faster --- we are rushing though
+removeCommonExpressions::  L Exp1->  L Exp1
+removeCommonExpressions exp = rec  exp 
+   where 
+    rec exp  = case (getExp exp) of
+      LetE (v, ls, t, bind) body ->
+        let oldExp = bind
+            newExp = l $ VarE v
+            body' = substE oldExp newExp body --`debug` ("removing duplicates of "L.++ (show oldExp))
+        in l$ LetE (v, ls, t, bind) (rec body') 
 
--- getLeafExp:: L Exp1 ->L Exp1 
--- getLeafExp exp =
---   case (getExp exp) of 
---     L1.LetE (v,ls,t, e1) e2 ->getLeafExp(e2)
---     x ->   l x
-  
+      IfE cond thenBody elseBody -> 
+        l $ IfE (rec cond) (rec thenBody) (rec elseBody)
+      
+      CaseE e ls      -> let ls' = L.map (\(x, y, exp) -> (x, y, rec exp)) ls
+          in  l$ CaseE e ls'    
+       
+      TimeIt exp x y  ->l $   TimeIt (rec exp) x y 
+      x       -> l $x
+        
+
 replaceLeafWithBind:: L Exp1-> Var -> Ty1 -> L Exp1 -> L Exp1
 replaceLeafWithBind exp newVar varType tailExp =
   rec exp 
@@ -772,10 +786,11 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions  = do
                         (AppE fName _ _) -> case (M.lookup fName fdefs) of
                              Just fdef -> fdef
             tupledFunction <- tupleListOfFunctions ddefs  functionsToTuple
-                 tupledFName
+               tupledFName
 
             let tupledFunction' = L.foldr f tupledFunction fusedFunctions
-                    where f entry fdef = foldFusedCalls_f entry fdef 
+                 where
+                   f entry fdef = foldFusedCalls_f entry fdef 
 
             let fdefs' = M.insert tupledFName tupledFunction'  fdefs
               
@@ -784,7 +799,9 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions  = do
                   --`debug`("\ntupling:" L.++ (show tupledFName))
             
             let tupledFunction'' =tupledFunction'{funBody=recTupledBody } 
-            let fdefs'' = M.insert tupledFName tupledFunction'' newDefs
+            let tupledFunction''' =tupledFunction''{funBody= removeCommonExpressions(funBody tupledFunction'') } 
+
+            let fdefs'' = M.insert tupledFName tupledFunction''' newDefs
 
             exp' <- foldTupledFunctions exp  tupledFunction callExpressions
                firstCall
