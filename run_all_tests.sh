@@ -150,7 +150,10 @@ cd $top/gibbon-compiler
 ## Gibbon tries to parse "size" as an Int (in Gibbon.Common.getRunConfig) and
 ## that doesn't work out very well. Until we figure out the source of this
 ## rogue variable, we *unset* it here.
-unset SIZE ITERS
+##
+## [2019.02.15] Gibbon now uses qualified env vars (GIBBON_SIZE, GIBBON_...),
+## but we still unset those here.
+unset GIBBON_SIZE GIBBON_ITERS GIBBON_DEBUG
 
 TMPDIR=$TMP $STK exec test-gibbon-examples -- -v2
 
