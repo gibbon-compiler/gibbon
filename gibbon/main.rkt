@@ -262,17 +262,18 @@ lit := int | #t | #f
     [(Node x y) (Node (add1 x) (add1 y))]))
 |#
 
-
-(match (current-command-line-arguments)
-  [(vector s i) (size-param  (cast (string->number s) Int))
-                (iters-param (cast (string->number i) Integer))
-                ;(printf "SIZE: ~a\n" (size-param))
-                #;(printf "ITERS: ~a\n" (iters-param))]
-  [(vector s)   (size-param  (cast (string->number s) Int))
-                #;(printf "SIZE: ~a\n" (size-param))]
-  [(vector)     (void)]
-  [args (error (format "Usage error.\nExpected 0-2 optional command line arguments <size> <iters>, got ~a:\n  ~a"
-                       (vector-length args) args))])
+;; [2019.02.17] CSK: This breaks countnodes_racket.rkt. Temporary, I don't know how to fix this atm.
+;;
+;; (match (current-command-line-arguments)
+;;   [(vector s i) (size-param  (cast (string->number s) Int))
+;;                 (iters-param (cast (string->number i) Integer))
+;;                 ;(printf "SIZE: ~a\n" (size-param))
+;;                 #;(printf "ITERS: ~a\n" (iters-param))]
+;;   [(vector s)   (size-param  (cast (string->number s) Int))
+;;                 #;(printf "SIZE: ~a\n" (size-param))]
+;;   [(vector)     (void)]
+;;   [args (error (format "Usage error.\nExpected 0-2 optional command line arguments <size> <iters>, got ~a:\n  ~a"
+;;                        (vector-length args) args))])
 
 (module reader syntax/module-reader
   gibbon)
