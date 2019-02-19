@@ -22,6 +22,7 @@ import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
 import Gibbon.L1.Syntax as L1
+import Gibbon.DynFlags
 import Prelude hiding (exp)
 
 --------------------------------------------------------------------------------
@@ -229,6 +230,9 @@ tcExp ddfs env exp@(L p ex) =
 tcProg :: Prog1 -> PassM Prog1
 tcProg prg@Prog{ddefs,fundefs,mainExp} = do
 
+  -- Get flags to check if we're in packed mode
+  flags <- getDynFlags
+
   -- Handle functions
   mapM_ fd $ M.elems fundefs
 
@@ -248,7 +252,10 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
                            if main_ty == voidTy
                            then Just (e, ty) 
                            else if main_ty == ty
-                                then if not $ hasPacked ty then return (e, ty) else error $ "Main expression has type " ++ sdoc ty ++ ", but it must be a simple (non-packed) type, such as " ++ (sdoc (IntTy :: Ty1)) ++ "."
+                                -- Fail if the main expression is packed and we're in packed mode
+                                then if (not $ hasPacked ty) || (not $ gopt Opt_Packed flags)
+                                     then return (e, ty)
+                                     else error $ "Main expression has type " ++ sdoc ty ++ ", but it must be a simple (non-packed) type, such as " ++ (sdoc (IntTy :: Ty1)) ++ "."
                                 else error $ "Expected type " ++ sdoc main_ty ++ " but got " ++ sdoc ty
 
   return prg { mainExp = mainExp' }
