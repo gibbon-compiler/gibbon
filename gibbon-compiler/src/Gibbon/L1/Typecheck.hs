@@ -246,9 +246,9 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
                            -- expression must be *inferred*.
                            -- Otherwise, fail if the types don't match.
                            if main_ty == voidTy
-                           then Just (e, ty)
+                           then Just (e, ty) 
                            else if main_ty == ty
-                                then return (e, ty)
+                                then if not $ hasPacked ty then return (e, ty) else error $ "Main expression has type " ++ sdoc ty ++ ", but it must be a simple (non-packed) type, such as " ++ (sdoc (IntTy :: Ty1)) ++ "."
                                 else error $ "Expected type " ++ sdoc main_ty ++ " but got " ++ sdoc ty
 
   return prg { mainExp = mainExp' }
