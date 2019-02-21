@@ -25,6 +25,9 @@ static long long global_init_biginf_buf_size = (5 * GB);
 // Initial size of Infinite buffers
 static long long global_init_inf_buf_size = 64 * KB;
 
+// Maximum size of a chunk, see GitHub #110.
+long long global_inf_buf_max_chunk_size = 1 * GB;
+
 static long long global_size_param = 1;
 static long long global_iters_param = 1;
 
@@ -320,6 +323,10 @@ inline ChunkTy alloc_chunk(CursorTy end_ptr) {
     // Get size from current footer
     RegionFooter* footer = (RegionFooter *) end_ptr;
     IntTy newsize = footer->size * 2;
+    // See GitHub #110.
+    if (newsize > global_inf_buf_max_chunk_size) {
+        newsize = global_inf_buf_max_chunk_size;
+    }
     IntTy total_size = newsize + sizeof(RegionFooter);
 
     // Allocate
