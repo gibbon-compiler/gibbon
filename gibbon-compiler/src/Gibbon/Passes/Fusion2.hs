@@ -1,6 +1,6 @@
-
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# OPTIONS_GHC -Wno-all #-}
 
 module Gibbon.Passes.Fusion2 (fusion2) where
 import Prelude hiding (exp)
