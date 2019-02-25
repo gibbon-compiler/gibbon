@@ -417,11 +417,13 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                 bind_rhs :: Doc -> Doc -> Doc
                 bind_rhs d rhs = d <+> doublecolon <+> pprintWithStyle sty ty <+> equals <+> rhs
 
+                env2' = foldr (\((_,w),t) acc -> extendVEnv w t acc) env2 (zip indexed_vars tys)
+
             in (text "let") <+>
                vcat [bind_rhs (pprintWithStyle sty v) (ppExp env2 e1),
                      bind_rhs (parens $ hcat $ punctuate (text ",") (map (pprintWithStyle sty . snd) indexed_vars)) (ppExp env2 (l$ VarE v))] <+>
                text "in" $+$
-               ppExp (extendVEnv v ty env2) e2'
+               ppExp (extendVEnv v ty env2') e2'
 
           LetE (v,_,ty,e1) e2  -> (text "let") <+>
                                   pprintWithStyle sty v <+> doublecolon <+>
