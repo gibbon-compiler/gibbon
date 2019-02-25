@@ -407,11 +407,25 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
 
                   _ -> pprintWithStyle sty pr <> parens (hsep $ map (ppExp env2) es)
 
-          LetE (v,ls,ty,e1) e2 -> (text "let") <+>
+          -- See #111.
+          LetE (v,_, ty@(ProdTy tys),e1) e2 ->
+            let -- Still avoiding 'PassM'.
+                indexed_vars = map (\i -> (i, varAppend v (toVar $ "_proj_" ++ show i))) [0..(length tys - 1)]
+                -- Substitute projections with variables bound by the pattern match.
+                e2' = foldr (\(i,w) acc -> substE (l$ ProjE i (l$ VarE v)) (l$ VarE w) acc) e2 indexed_vars
+
+                bind_rhs :: Doc -> Doc -> Doc
+                bind_rhs d rhs = d <+> doublecolon <+> pprintWithStyle sty ty <+> equals <+> rhs
+
+            in (text "let") <+>
+               vcat [bind_rhs (pprintWithStyle sty v) (ppExp env2 e1),
+                     bind_rhs (parens $ hcat $ punctuate (text ",") (map (pprintWithStyle sty . snd) indexed_vars)) (ppExp env2 (l$ VarE v))] <+>
+               text "in" $+$
+               ppExp (extendVEnv v ty env2) e2'
+
+          LetE (v,_,ty,e1) e2  -> (text "let") <+>
                                   pprintWithStyle sty v <+> doublecolon <+>
-                                  (if null ls
-                                   then empty
-                                   else brackets (hcat (punctuate comma (map (pprintWithStyle sty) ls)))) <+>
+                                  empty <+>
                                   pprintWithStyle sty ty <+>
                                   equals <+>
                                   ppExp env2 e1 <+>
