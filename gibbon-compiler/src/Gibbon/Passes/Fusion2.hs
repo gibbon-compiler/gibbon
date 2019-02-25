@@ -842,9 +842,9 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions  = do
                   --`debug`("\ntupling:" L.++ (show tupledFName))
             
             let tupledFunction'' =tupledFunction'{funBody=recTupledBody } 
-            -- let tupledFunction''' =tupledFunction''{funBody= removeCommonExpressions(funBody tupledFunction'') } 
+            let tupledFunction''' =tupledFunction''{funBody= removeCommonExpressions(funBody tupledFunction'') } 
 
-            let fdefs'' = M.insert tupledFName tupledFunction'' newDefs
+            let fdefs'' = M.insert tupledFName tupledFunction''' newDefs
 
             exp' <- foldTupledFunctions exp  tupledFunction callExpressions
                firstCall
