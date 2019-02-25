@@ -44,7 +44,6 @@ removeCommonExpressions exp = rec  exp
                   newExp = l $ VarE v
                   body' = substE oldExp newExp body --`debug` ("removing duplicates of "L.++ (show oldExp))
               in l$ LetE (v, ls, t, bind) (rec body') 
-
       IfE cond thenBody elseBody -> 
         l $ IfE (rec cond) (rec thenBody) (rec elseBody)
       
@@ -864,9 +863,9 @@ fuse ddefs fdefs  innerVar  outerVar fusedFunctions_ = do
   outerFreshBody <- freshExp []  (funBody outerFunc)
   setp1 <- inline innerFunc{funBody =innerFreshBody}
                outerFunc{funBody = outerFreshBody}  (-1)
-  let step2 =  (simplifyCases setp1 ){funName = newName} 
-      step3 =  foldFusedCalls_f (outerVar, innerVar, -1, newName)  step2 --`debug` ((show newName )L.++"\n")
-      -- fold upper level fused functions
+  let step2 =  dbgTrace 3 (show setp1) (simplifyCases setp1 ){funName = newName}
+      step3 =  dbgTrace 3 ((show newName )L.++"\n") (foldFusedCalls_f (outerVar, innerVar, -1, newName)  step2)
+    -- fold upper level fused functions
       step4 = L.foldl (\f e -> foldFusedCalls_f e f ) step3 
        fusedFunctions_
 

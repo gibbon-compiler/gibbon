@@ -16,7 +16,7 @@ import qualified Gibbon.L0.Syntax as L0
 import           Gibbon.L1.Syntax
 import           Gibbon.L2.Syntax as L2
 import           Gibbon.L3.Syntax as L3
-import           Gibbon.Common hiding (l)
+import           Gibbon.Common
 import           Gibbon.HaskellFrontend ( primMap )
 import qualified Gibbon.L4.Syntax as L4
 
@@ -170,10 +170,10 @@ instance (Pretty l) => Pretty (UrTy l) where
           BoolTy -> text "Bool"
           ProdTy tys    -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
           SymDictTy ty1 -> text "Dict" <+> pprintWithStyle sty ty1
-          PackedTy tc l ->
+          PackedTy tc loc ->
               case sty of
                 PPHaskell  -> text tc
-                PPInternal -> text "Packed" <+> text tc <+> pprintWithStyle sty l
+                PPInternal -> text "Packed" <+> text tc <+> pprintWithStyle sty loc
           ListTy ty1 -> text "List" <+> pprintWithStyle sty ty1
           PtrTy     -> text "Ptr"
           CursorTy  -> text "Cursor"
@@ -252,11 +252,11 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                       _ -> error (render $ pprintWithStyle PPInternal ex0) -- text "#" <> int i <+> edoc
           CaseE e bnds -> text "case" <+> pprintWithStyle sty e <+> text "of" $+$
                           nest 4 (vcat $ map dobinds bnds)
-          DataConE l dc es -> text dc <+>
-                              (if isEmpty (pprintWithStyle sty l)
-                               then empty
-                               else pprintWithStyle sty l) <+>
-                              hsep (map (pprintWithStyle sty) es)
+          DataConE loc dc es -> text dc <+>
+                                (if isEmpty (pprintWithStyle sty loc)
+                                 then empty
+                                 else pprintWithStyle sty loc) <+>
+                                hsep (map (pprintWithStyle sty) es)
                               -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
           TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
           ParE a b -> pprintWithStyle sty a <+> text "||" <+> pprintWithStyle sty b
@@ -265,9 +265,9 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
           FoldE{} -> error $ "Unexpected form in program: FoldE"
         where
           dobinds (dc,vls,e) = text dc <+> hcat (punctuate (text " ")
-                                                           (map (\(v,l) -> if isEmpty (pprintWithStyle sty l)
-                                                                           then pprintWithStyle sty v
-                                                                           else pprintWithStyle sty v <> doublecolon <> pprintWithStyle sty l)
+                                                           (map (\(v,loc) -> if isEmpty (pprintWithStyle sty loc)
+                                                                             then pprintWithStyle sty v
+                                                                             else pprintWithStyle sty v <> doublecolon <> pprintWithStyle sty loc)
                                                             vls))
                                <+> text "->" $+$ nest 4 (pprintWithStyle sty e)
 -- L1
@@ -279,22 +279,22 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
     pprintWithStyle _ le =
         case le of
           StartOfLE r -> lparen <> text "startof" <+> text (show r) <> rparen
-          AfterConstantLE i l -> lparen <> pprint l <+> text "+" <+> int i <> rparen
-          AfterVariableLE v l -> lparen <> pprint l <+> text "+" <+> doc v <> rparen
-          InRegionLE r -> lparen <> text "inregion" <+> text (show r) <> rparen
-          FromEndLE l -> lparen <> text "fromend" <+> pprint l <> rparen
+          AfterConstantLE i loc -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
+          AfterVariableLE v loc -> lparen <> pprint loc <+> text "+" <+> doc v <> rparen
+          InRegionLE r  -> lparen <> text "inregion" <+> text (show r) <> rparen
+          FromEndLE loc -> lparen <> text "fromend" <+> pprint loc <> rparen
 
 instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
     pprintWithStyle _ ex0 =
         case ex0 of
           LetRegionE r e -> text "letregion" <+>
                                doc r <+> text "in" $+$ pprint e
-          LetLocE l le e -> text "letloc" <+>
-                               pprint l <+> equals <+> pprint le <+> text "in" $+$ pprint e
+          LetLocE loc le e -> text "letloc" <+>
+                                pprint loc <+> equals <+> pprint le <+> text "in" $+$ pprint e
           RetE ls v -> text "return" <+>
                           lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
                           doc v
-          FromEndE l -> text "fromend" <+> pprint l
+          FromEndE loc -> text "fromend" <+> pprint loc
           L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> pprint l2
           IndirectionE tc dc (l1,v1) (l2,v2) e -> text "indirection" <+>
                                                      doc tc <+>
@@ -329,9 +329,9 @@ instance Pretty L0.Ty0 where
         L0.TyVar v    -> doc v
         L0.MetaTv v   -> doc v
         L0.ProdTy tys -> parens $ hcat $ punctuate "," $ map pprint tys
-        L0.SymDictTy ty1 -> text "Dict" <+> pprint ty1
-        L0.ArrowTy a b   -> pprint a <+> text "->" <+> pprint b
-        L0.PackedTy tc l -> text "Packed" <+> text tc <+> brackets (hcat (map pprint l))
+        L0.SymDictTy ty1   -> text "Dict" <+> pprint ty1
+        L0.ArrowTy a b     -> pprint a <+> text "->" <+> pprint b
+        L0.PackedTy tc loc -> text "Packed" <+> text tc <+> brackets (hcat (map pprint loc))
         L0.ListTy ty1 -> brackets (pprint ty1)
 
 instance Pretty L0.TyScheme where
@@ -379,7 +379,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
     ppFun :: Env2 Ty1 -> FunDef1 -> Doc
     ppFun env2 FunDef{funName, funArg, funTy, funBody} =
       text (fromVar funName) <+> doublecolon <+> pprintWithStyle sty funTy
-          $$ renderBod <> text "\n"
+             $$ renderBod <> text "\n"
       where
         env2' = extendVEnv funArg (inTy funTy) env2
         renderBod :: Doc
@@ -407,11 +407,25 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
 
                   _ -> pprintWithStyle sty pr <> parens (hsep $ map (ppExp env2) es)
 
-          LetE (v,ls,ty,e1) e2 -> (text "let") <+>
+          -- See #111.
+          LetE (v,_, ty@(ProdTy tys),e1) e2 ->
+            let -- Still avoiding 'PassM'.
+                indexed_vars = map (\i -> (i, varAppend v (toVar $ "_proj_" ++ show i))) [0..(length tys - 1)]
+                -- Substitute projections with variables bound by the pattern match.
+                e2' = foldr (\(i,w) acc -> substE (l$ ProjE i (l$ VarE v)) (l$ VarE w) acc) e2 indexed_vars
+
+                bind_rhs :: Doc -> Doc -> Doc
+                bind_rhs d rhs = d <+> doublecolon <+> pprintWithStyle sty ty <+> equals <+> rhs
+
+            in (text "let") <+>
+               vcat [bind_rhs (pprintWithStyle sty v) (ppExp env2 e1),
+                     bind_rhs (parens $ hcat $ punctuate (text ",") (map (pprintWithStyle sty . snd) indexed_vars)) (ppExp env2 (l$ VarE v))] <+>
+               text "in" $+$
+               ppExp (extendVEnv v ty env2) e2'
+
+          LetE (v,_,ty,e1) e2  -> (text "let") <+>
                                   pprintWithStyle sty v <+> doublecolon <+>
-                                  (if null ls
-                                   then empty
-                                   else brackets (hcat (punctuate comma (map (pprintWithStyle sty) ls)))) <+>
+                                  empty <+>
                                   pprintWithStyle sty ty <+>
                                   equals <+>
                                   ppExp env2 e1 <+>
@@ -432,14 +446,15 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                                   v    = ("tup_proj_" ++ show i)
                                   pat  = parens $ hcat $
                                            punctuate (text ",") ([if i == j then text v else text "_" | j <- [0..n-1]])
-                              in text "let " <+> pat <+> text "=" <+> edoc <+> text "in" <+> text v
+                              in parens $ text "let " <+> pat <+> text "=" <+> edoc <+> text "in" <+> text v
                 ty -> error $ "pprintHsWithEnv: " ++ sdoc ty ++ "is not a product. In " ++ sdoc ex0
           CaseE e bnds -> text "case" <+> ppExp env2 e <+> text "of" $+$
                           nest 4 (vcat $ map (dobinds env2) bnds)
-          DataConE l dc es -> text dc <+>
-                              (if isEmpty (pprintWithStyle sty l)
+          DataConE loc dc es ->
+                              text dc <+>
+                              (if isEmpty (pprintWithStyle sty loc)
                                then empty
-                               else pprintWithStyle sty l) <+>
+                               else pprintWithStyle sty loc) <+>
                               hsep (map (ppExp env2) es)
           TimeIt e _ty _b -> text "timeit" <+> parens (ppExp env2 e)
           ParE a b -> ppExp env2 a <+> text "||" <+> ppExp env2 b
@@ -452,8 +467,8 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                                vars   = map fst vls
                                env21' = extendsVEnv (M.fromList $ zip vars tys) env21
                            in  text dc <+> hcat (punctuate (text " ")
-                                                           (map (\(v,l) -> if isEmpty (pprintWithStyle sty l)
-                                                                           then pprintWithStyle sty v
-                                                                           else pprintWithStyle sty v <> doublecolon <> pprintWithStyle sty l)
+                                                           (map (\(v,loc) -> if isEmpty (pprintWithStyle sty loc)
+                                                                             then pprintWithStyle sty v
+                                                                             else pprintWithStyle sty v <> doublecolon <> pprintWithStyle sty loc)
                                                             vls))
                                <+> text "->" $+$ nest 4 (ppExp env21' e)
