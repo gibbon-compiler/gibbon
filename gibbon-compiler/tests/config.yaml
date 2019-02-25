@@ -168,16 +168,21 @@ tests:
   - name: bench_repconst.gib
     bench: true
 
+  - name: bench_findmax.gib
+    bench: true
+
   ## There is no significant difference between compose1 / compose2.
   ## compose2 should be much faster.
 
   - name: bench_compose1.gib
     bench: true
     more-iters: [pointer, gibbon2]
+    skip: true
 
   - name: bench_compose2.gib
     bench: true
     more-iters: [pointer, gibbon2]
+    skip: true
 
   ## Mega benchmarks, which use some dataset
 

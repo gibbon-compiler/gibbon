@@ -269,10 +269,10 @@ defaultRunConfig = RunConfig { rcSize  = 1
 getRunConfig :: [String] -> IO RunConfig
 getRunConfig ls =
  case ls of
-   [] -> case L.lookup "SIZE" theEnv of
+   [] -> case L.lookup "GIBBON_SIZE" theEnv of
            Nothing -> getRunConfig ["1"]
            Just n  -> getRunConfig [n]
-   [sz] -> case L.lookup "ITERS" theEnv  of
+   [sz] -> case L.lookup "GIBBON_ITERS" theEnv  of
              Nothing -> getRunConfig [sz,"1"]
              Just i  -> getRunConfig [sz,i]
    [sz,iters] ->
@@ -354,7 +354,7 @@ theEnv = unsafePerformIO getEnvironment
 -- | Debugging flag shared by all modules.
 --   This is activated by setting the environment variable DEBUG=1..5
 dbgLvl :: Int
-dbgLvl = case L.lookup "DEBUG" theEnv of
+dbgLvl = case L.lookup "GIBBON_DEBUG" theEnv of
        Nothing  -> defaultDbg
        Just ""  -> defaultDbg
        Just "0" -> defaultDbg
@@ -362,9 +362,9 @@ dbgLvl = case L.lookup "DEBUG" theEnv of
          case reads s of
            ((n,_):_) ->
                if n >= minChatLvl
-               then trace (" ! Responding to env Var: DEBUG="++s) n
+               then trace (" ! Responding to env Var: GIBBON_DEBUG="++s) n
                else n
-           [] -> error$"Attempt to parse DEBUG env var as Int failed: "++show s
+           [] -> error$"Attempt to parse GIBBON_DEBUG env var as Int failed: "++show s
 
 -- | We should not create chatter below this level.  DEBUG=1 is used
 -- for assertions only, not chatter.

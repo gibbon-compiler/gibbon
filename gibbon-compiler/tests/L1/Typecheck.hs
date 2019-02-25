@@ -43,10 +43,12 @@ ddfs :: DDefs Ty1
 ddfs = M.fromList
         [("Foo",
           DDef {tyName = "Foo",
+                tyArgs = [],
                 dataCons = [("A", [(False, IntTy)]),
                             ("B", [(False, IntTy),(False, IntTy)])]}),
          ("Nat",
            DDef {tyName = "Nat",
+                 tyArgs = [],
                  dataCons = [("Zero", []),("Suc", [(False, PackedTy "Nat" ())])]})]
 
 l1TypecheckerTests :: TestTree

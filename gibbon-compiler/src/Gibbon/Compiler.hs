@@ -276,7 +276,7 @@ runL2 l2 = runL1 (L2.revertToL1 l2)
 setDebugEnvVar :: Int -> IO ()
 setDebugEnvVar verbosity =
   when (verbosity > 1) $ do
-    setEnv "DEBUG" (show verbosity)
+    setEnv "GIBBON_DEBUG" (show verbosity)
     l <- evaluate dbgLvl
     hPutStrLn stderr$ " ! We set DEBUG based on command-line verbose arg: "++show l
 
