@@ -40,8 +40,8 @@ runFloatOutM :: FunDefs1 -> FloatOutM a -> PassM (a, FunDefs1)
 runFloatOutM fdefs a = runStateT a fdefs
 
 floatOutFn :: DDefs Ty1 -> Env2 Ty1 -> FunDef1 -> FloatOutM FunDef1
-floatOutFn ddefs env2 f@FunDef{funArg,funTy,funBody} = do
-  let env2' = extendVEnv funArg (inTy funTy) env2
+floatOutFn ddefs env2 f@FunDef{funArgs,funTy,funBody} = do
+  let env2' = extendsVEnv (M.fromList $ zip funArgs (inTys funTy)) env2
   bod' <- floatOutExp ddefs env2' funBody
   return $ f { funBody = bod' }
 
@@ -95,8 +95,9 @@ floatOutExp ddefs env2 (L p ex) = (L p) <$>
           funarg <- lift $ gensym "arg"
           funname <- lift $ gensym "float_out_fn"
           let fn = FunDef { funName = funname
-                          , funArg  = funarg
-                          , funTy   = (ProdTy intys, retty)
+                          -- TODO:CSK Check this
+                          , funArgs = [funarg]
+                          , funTy   = ([ProdTy intys], retty)
                           , funBody = mkLets [ (v,[],ty,mkProj idx (l$ VarE funarg))
                                              | ((v,ty), idx) <- (zip (zip free_vars intys) [0..])]
                                       (L p e)
@@ -104,4 +105,4 @@ floatOutExp ddefs env2 (L p ex) = (L p) <$>
           fdefs <- get
           put (M.insert funname fn fdefs)
           return ([(var,[],ProdTy intys,l$ MkProdE [ (l$ VarE v) | v <- free_vars])],
-                  L p1 $ AppE funname [] (l$ VarE var))
+                  L p1 $ AppE funname [] [l$ VarE var])

@@ -73,11 +73,11 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
         -- value as well. Also, since we're storing regions in the value
         -- environment anyways, we probably don't need an additional store.
         --
-        AppE f locs arg ->
+        AppE f locs args ->
           case M.lookup f fenv of
             Nothing -> error $ "L2.Interp: unbound function: "++sdoc ex
-            Just FunDef{funArg,funBody,funTy} -> do
-              (rand,sz) <- go env sizeEnv arg
+            Just FunDef{funArgs,funBody,funTy} -> do
+              (rands,szs) <- unzip <$> mapM (go env sizeEnv) args
               let inLocs  = inLocVars funTy
                   outLocs = outLocVars funTy
                   -- ASSUMPTION: Ordering is important in `locs`, and we assume
@@ -87,7 +87,9 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
                               M.insert fnLoc (acc M.! callSiteLoc)  acc)
                            env
                            (zip (inLocs ++ outLocs) locs)
-              go (M.insert funArg rand env') (M.insert funArg sz sizeEnv) funBody
+              go (M.union (M.fromList $ zip funArgs rands) env')
+                 (M.union (M.fromList $ zip funArgs szs) sizeEnv)
+                 funBody
 
         CaseE{} -> error $ "TODO: L2.Interp: " ++ sdoc ex
 

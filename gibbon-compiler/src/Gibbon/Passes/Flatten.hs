@@ -36,7 +36,7 @@ flattenL1 prg@(Prog defs funs main) = do
   where
     flattenFuns = mapM flattenFun
     flattenFun (FunDef nam narg (targ, ty) bod) = do
-      let env2 = Env2 (M.singleton narg targ) (fEnv env20)
+      let env2 = Env2 (M.fromList $ zip narg targ) (fEnv env20)
       bod' <- gFlattenExp defs env2 bod
       return $ FunDef nam narg (targ, ty) bod'
 
@@ -53,7 +53,7 @@ flattenL2 prg@(Prog defs funs main) = do
   where
     flattenFuns = mapM flattenFun
     flattenFun (FunDef nam narg ty bod) = do
-      let env2 = Env2 (M.singleton narg (arrIn ty)) (fEnv env20)
+      let env2 = Env2 (M.fromList $ zip narg (arrIns ty)) (fEnv env20)
       bod' <- gFlattenExp defs env2 bod
       return $ FunDef nam narg ty bod'
 
@@ -71,7 +71,7 @@ flattenL3 prg@(Prog defs funs main) = do
   where
     flattenFuns = mapM flattenFun
     flattenFun (FunDef nam narg ty bod) = do
-      let env2 = Env2 (M.singleton narg (fst ty)) (fEnv env20)
+      let env2 = Env2 (M.fromList $ zip narg (fst ty)) (fEnv env20)
       bod' <- gFlattenExp defs env2 bod
       return $ FunDef nam narg ty bod'
 
@@ -138,9 +138,7 @@ exp ddfs env2 (L sloc e0) =
     VarE    _ -> return ([],e0)
     LitSymE _ -> return ([],e0)
 
-    AppE f lvs arg    -> do (b1,arg') <- triv "Ap" arg
-                            return (b1, AppE f lvs arg')
-
+    AppE f lvs ls     -> gols (AppE f lvs)  ls "AppE"
     PrimAppE p ls     -> gols (PrimAppE p)  ls "Prm"
     MkProdE ls        -> gols  MkProdE      ls "Prd"
     DataConE loc k ls -> gols (DataConE loc k) ls "Pkd"

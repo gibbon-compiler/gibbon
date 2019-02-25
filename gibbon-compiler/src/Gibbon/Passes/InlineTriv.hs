@@ -59,7 +59,7 @@ inlineTrivExp _ddefs = go []
       LitE i -> LitE i
       LitSymE v -> LitSymE v
 
-      AppE v lvs e -> AppE v lvs $ go env e
+      AppE v lvs es -> AppE v lvs $ map (go env) es
       PrimAppE p es -> PrimAppE p $ map (go env) es
 
       LetE (v,lvs,t,e') e ->

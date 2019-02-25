@@ -93,14 +93,13 @@ desugarType ty =
     TyCon _ (UnQual _ (Ident _ con))    -> PackedTy con []
     TyFun _ t1 t2 -> let t1' = desugarType t1
                          t2' = desugarType t2
-                     in ArrowTy t1' t2'
+                     in ArrowTy [t1'] t2'
     TyList _ (H.TyVar _ (Ident _ con))  -> ListTy (L0.TyVar $ UserTv (toVar con))
     TyParen _ ty1 -> desugarType ty1
     TyApp _ tycon arg ->
       case desugarType tycon of
         PackedTy con tyargs -> PackedTy con (tyargs ++ [desugarType arg])
         _ -> error $ "desugarType: Unexpected type arguments: " ++ prettyPrint ty
-
     _ -> error $ "desugarType: Unsupported type: " ++ prettyPrint ty
 
 
@@ -138,13 +137,13 @@ unCurryTy ty1 =
     ArrowTy _ ArrowTy{} ->
       let (a,b) = go [] ty1
           a' = map unCurryTy a
-      in ArrowTy (ProdTy a') b
+      in ArrowTy a' b
     _ -> ty1
   where
     go :: [Ty0] -> Ty0 -> ([Ty0], Ty0)
     go acc ty =
       case ty of
-        ArrowTy a b -> (go (acc++[a]) b)
+        ArrowTy as b -> (go (acc++as) b)
         _ -> (acc,ty)
 
 -- ^ A map between SExp-frontend prefix function names, and Gibbon
@@ -186,40 +185,31 @@ desugarExp toplevel e = L NoLoc <$>
               -- case below depends on it.
               pure $ VarE v
             -- Otherwise, 'v' is a top-level value binding, which we
-            -- encode as a function which takes an Int.
-            _ -> pure $ AppE v [] (l$ LitE 200)
+            -- encode as a function which takes no arguments.
+            _ -> pure $ AppE v [] []
         Nothing -> pure $ VarE v
     Lit _ lit  -> pure $ LitE (litToInt lit)
 
-    Lambda _ [pat] bod -> do
-      bod' <- desugarExp toplevel bod
-      pure $ Ext $ LambdaE (desugarPatWithTy pat) bod'
-
     Lambda _ pats bod -> do
       bod' <- desugarExp toplevel bod
-      let (args, tys) = unzip $ map desugarPatWithTy pats
-          (lam_arg, bod'') = multiArgsToOne args tys bod'
-      pure $ Ext $ LambdaE (lam_arg, ProdTy tys) bod''
+      pure $ Ext $ LambdaE (map desugarPatWithTy pats) bod'
 
     App _ e1 e2 -> do
         desugarExp toplevel e1 >>= \case
           L _ (VarE f) ->
             case M.lookup (fromVar f) primMap of
               Just p  -> (\e2' -> PrimAppE p [e2']) <$> desugarExp toplevel e2
-              Nothing -> AppE f [] <$> desugarExp toplevel e2
+              Nothing -> AppE f [] <$> (: []) <$> desugarExp toplevel e2
           L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of
               Just p  -> pure $ PrimAppE p as
               Nothing -> (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
-          L _ (AppE f [] (L _ (MkProdE ls))) -> do
+          L _ (AppE f [] ls) -> do
             e2' <- desugarExp toplevel e2
-            pure $ AppE f [] (L NoLoc $ MkProdE (ls ++ [e2']))
-          L _ (AppE f [] lit) -> do
+            pure $ AppE f [] (ls ++ [e2'])
+          L _ (PrimAppE p ls) -> do
             e2' <- desugarExp toplevel e2
-            pure $ AppE f [] (L NoLoc $ MkProdE [lit,e2'])
-          L _ (PrimAppE p lit) -> do
-            e2' <- desugarExp toplevel e2
-            pure $ PrimAppE p (lit ++ [e2'])
+            pure $ PrimAppE p (ls ++ [e2'])
           f -> error ("desugarExp: Only variables allowed in operator position in function applications. (found: " ++ show f ++ ")")
 
     Let _ (BDecls _ decls) rhs -> do
@@ -262,38 +252,22 @@ desugarExp toplevel e = L NoLoc <$>
 
     _ -> error ("desugarExp: Unsupported expression: " ++ prettyPrint e)
 
-desugarFun :: (Show a,  Pretty a) => TopTyEnv -> TopTyEnv -> Decl a -> PassM (Var, Var, TyScheme, L Exp0)
+desugarFun :: (Show a,  Pretty a) => TopTyEnv -> TopTyEnv -> Decl a -> PassM (Var, [Var], TyScheme, L Exp0)
 desugarFun toplevel env decl =
   case decl of
     FunBind _ [Match _ fname pats (UnGuardedRhs _ bod) _where] -> do
       let fname_str = nameToStr fname
           fname_var = toVar (fname_str)
           args = map desugarPat pats
-
       fun_ty <- case M.lookup fname_var env of
                   Nothing -> do
-                     fresh_tvs <- mapM (\_ -> newMetaTy) args
-                     ret_ty <- newMetaTy
-                     case fresh_tvs of
-                       []  -> error $ "desugarFun: fn with 0 arguments: " ++ fname_str
-                       [a] -> pure $ ForAll [] (ArrowTy a ret_ty)
-                       ls  -> do
-                           let curried_ty = foldr ArrowTy ret_ty ls
-                           pure $ ForAll [] curried_ty
+                     arg_tys <- mapM (\_ -> newMetaTy) args
+                     ret_ty  <- newMetaTy
+                     let funty = ArrowTy arg_tys ret_ty
+                     pure $ (ForAll [] funty)
                   Just ty -> pure ty
       bod' <- desugarExp toplevel bod
-      let (arg,ty,bod'') =
-            case pats of
-              []  -> (toVar "_", fun_ty, bod')
-              [a] -> (desugarPat a, fun_ty, bod')
-              -- Here we directly desugar multiple arguments
-              -- into a tuple argument.
-              -- N.B. this prevents curried functions.
-              _ -> let fun_ty' = unCurryTopTy fun_ty
-                       ProdTy tys = inTy fun_ty'
-                       (new_arg, bod''') = multiArgsToOne args tys bod'
-                   in (new_arg, fun_ty', bod''')
-      pure $ (fname_var, arg, ty, bod'')
+      pure $ (fname_var, args, unCurryTopTy fun_ty, bod')
     _ -> error $ "desugarFun: Found a function with multiple RHS, " ++ prettyPrint decl
 
 multiArgsToOne :: [Var] -> [Ty0] -> L Exp0 -> (Var, L Exp0)
@@ -334,41 +308,34 @@ collectTopLevel env decl =
        case M.lookup (toVar fn) env of
          Nothing -> error $ "collectTopLevel: Top-level binding with no type signature: " ++ fn
          Just fun_ty ->
-             -- This is a function binding of the form:
+             -- This is a top-level function binding of the form:
              --     f = \x -> ...
              case rhs of
                Lambda _ pats bod -> do
                  bod' <- desugarExp toplevel bod
-                 let (fun_ty'', new_arg, bod'') =
-                       case pats of
-                         [] -> error ""
-                         [pat] -> (fun_ty, desugarPat pat, bod')
-                         _ -> let fun_ty' = unCurryTopTy fun_ty
-                                  ProdTy tys = inTy fun_ty'
-                                  args = map desugarPat pats
-                                  (a,b) = multiArgsToOne args tys bod'
-                              in (fun_ty, a, b)
-                 pure $ Just $ HFunDef (FunDef { funName = toVar fn
-                                               , funArg  = new_arg
-                                               , funTy   = fun_ty''
-                                               , funBody = bod'' })
+                 case pats of
+                   [] -> error "Impossible"
+                   _  -> do
+                     let args = map desugarPat pats
+                     pure $ Just $ HFunDef (FunDef { funName = toVar fn
+                                                   , funArgs = args
+                                                   , funTy   = fun_ty
+                                                   , funBody = bod' })
 
                -- This is a top-level function that doesn't take any arguments.
                _ -> do
                  rhs' <- desugarExp toplevel rhs
-                 arg <- gensym "void"
-                 let fun_ty'  = ArrowTy IntTy (tyFromScheme fun_ty)
+                 let fun_ty'  = ArrowTy [] (tyFromScheme fun_ty)
                      fun_ty'' = ForAll (tyVarsInTy fun_ty') fun_ty'
                  pure $ Just $ HFunDef (FunDef { funName = toVar fn
-                                               , funArg  = arg
+                                               , funArgs = []
                                                , funTy   = fun_ty''
                                                , funBody = rhs' })
 
-               -- oth -> error $ "collectTopLevel: Unsupported top-level expression: " ++ prettyPrint oth
 
-    FunBind{} -> do (name,arg,ty,bod) <- desugarFun toplevel env decl
+    FunBind{} -> do (name,args,ty,bod) <- desugarFun toplevel env decl
                     pure $ Just $ HFunDef (FunDef { funName = name
-                                                  , funArg  = arg
+                                                  , funArgs = args
                                                   , funTy   = ty
                                                   , funBody = bod })
 
@@ -429,8 +396,8 @@ generateBind toplevel env decl exp2 =
       pure $ l$ LetE (w, [], ty', rhs') exp2
     PatBind _ not_var _ _ -> error $ "desugarExp: Only variable bindings are allowed in let."
                                      ++ "(found: "++ prettyPrint not_var ++ ")"
-    FunBind{} -> do (name,arg,ty,bod) <- desugarFun toplevel env decl
-                    pure $ l$ LetE (name,[], tyFromScheme ty, l$ Ext $ LambdaE (arg, inTy ty) bod) exp2
+    FunBind{} -> do (name,args,ty,bod) <- desugarFun toplevel env decl
+                    pure $ l$ LetE (name,[], tyFromScheme ty, l$ Ext $ LambdaE (zip args (inTys ty)) bod) exp2
     oth -> error ("desugarExp: Unsupported pattern: " ++ prettyPrint oth)
 
 

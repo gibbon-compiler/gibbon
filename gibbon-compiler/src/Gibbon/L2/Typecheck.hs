@@ -17,18 +17,19 @@ module Gibbon.L2.Typecheck
     , Aliased, TcM )
     where
 
-import Control.DeepSeq
-import Control.Monad.Except
-import Data.Set as S
-import Data.List as L
-import Data.Loc
-import Data.Map as M
-import Data.Maybe
-import Text.PrettyPrint.GenericPretty
-import Debug.Trace
+import           Control.DeepSeq
+import           Control.Monad.Except
+import           Data.Foldable ( foldlM )
+import qualified Data.Set as S
+import           Data.List as L
+import           Data.Loc
+import qualified Data.Map as M
+import           Data.Maybe
+import           Text.PrettyPrint.GenericPretty
+import           Debug.Trace
 
-import Gibbon.Common
-import Gibbon.L2.Syntax as L2
+import           Gibbon.Common
+import           Gibbon.L2.Syntax as L2
 -- import qualified Gibbon.L1.Syntax as L1
 
 -- | Constraints on locations.  Used during typechecking.  Roughly analogous to LocExp.
@@ -126,43 +127,49 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
 
       LitSymE _v -> return (IntTy, tstatein) -- SymTy
 
-      AppE v ls e ->
+      AppE v ls args ->
           -- Checking function application involves a few steps:
-          --  * We need to make sure the inputs/ouptuts line up with the expected
-          --    types for the function.
-          --  * We need to update the location state map with information about what output
-          --    locations have been written to by the called function and must now be input
-          --    locations.
-          --  * We need to make sure that if we pass a packed structure as an argument, its
-          --    location is among the passed-in locations.
-          do let (ArrowTy2 locVars arrIn _arrEffs arrOut _locRets) =
+          --  (1) We need to make sure the inputs/ouptuts line up with the expected
+          --      types for the function.
+          --  (2) We need to update the location state map with information about what output
+          --      locations have been written to by the called function and must now be input
+          --      locations.
+          --  (3) We need to make sure that if we pass a packed structure as an argument, its
+          --      location is among the passed-in locations.
+          do let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets) =
                      case M.lookup v funs of
                        Just f -> funTy f
                        Nothing -> error $ "tcExp: Unbound function: " ++ sdoc v
 
-             -- Check argument
-             (ty,tstate) <- recur tstatein e
+             -- Check arguments.
+             (in_tys, tstate) <- foldlM
+                                   (\(tys, st) a -> do
+                                         (ty, st') <- recur st a
+                                         pure (tys ++ [ty], st'))
+                                   ([],tstatein) args
 
-             -- Check location of argument
-             case ty of
-               PackedTy _ tyl ->
-                 if S.member tyl $ S.fromList ls
-                 then return ()
-                 else throwError $ GenericTC ("Packed argument location expected: "
-                                              ++ show tyl)
-                                   exp
-               _ -> return () -- TODO: handle tuples with some packed data
+             -- (1)
+             mapM (uncurry $ ensureEqualTyNoLoc exp) (zip in_tys arrIns)
 
-             ensureEqualTyNoLoc exp ty arrIn
-             let handleTS ts (l,Output) =  switchOutLoc exp ts l
-                 handleTS ts _ = return ts
-             tstate' <- foldM handleTS tstate $ zip ls $ L.map (\(LRM _ _ m) -> m) locVars
+             if not (any hasPacked in_tys)
+             then return (arrOut, tstate)
+             else do
+                 -- (3) Check location of argument
+                 let tyls = concatMap locsInTy in_tys
+                 case find (\loc -> not $ S.member loc (S.fromList ls)) tyls of
+                   Nothing -> return ()
+                   Just not_in_ls -> throwError $ GenericTC ("Packed argument location expected: " ++ show not_in_ls) exp
 
-             -- Use locVars used at call-site in the returned type
-             -- TODO: check this
-             let arrOutMp = M.fromList $ zip (L.map (\(LRM l _ _) -> l) locVars) ls
-                 arrOut'  = substLoc arrOutMp arrOut
-             return (arrOut',tstate')
+                 let handleTS ts (l,Output) =  switchOutLoc exp ts l
+                     handleTS ts _ = return ts
+
+                 -- (2)
+                 tstate' <- foldM handleTS tstate $ zip ls $ L.map (\(LRM _ _ m) -> m) locVars
+                 -- Use locVars used at call-site in the returned type
+                 let arrOutMp = M.fromList $ zip (L.map (\(LRM l _ _) -> l) locVars) ls
+                     arrOut'  = substLoc arrOutMp arrOut
+
+                 return (arrOut',tstate')
 
       PrimAppE pr es -> do
 
@@ -258,7 +265,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                -- We get the type and new location state from e1
                (ty1,tstate1) <- recur tstatein e1
                ensureEqualTyNoLoc exp ty1 ty
-               let env' = extendEnv env v ty
+               let env' = extendVEnv v ty env
 
                -- Then we check e1 with that location state
                tcExp ddfs env' funs constrs regs tstate1 e2
@@ -423,8 +430,8 @@ tcCases ddfs env funs constrs regs tstatein lin reg ((dc, vs, e):cases) = do
       -- Generate the new location state map to check this branch
       genTS ((_v,l),PackedTy _ _) ts = extendTS l (Input,False) ts
       genTS _ ts = ts
-      genEnv ((v,l),PackedTy dc _l') env = extendEnv env v $ PackedTy dc l
-      genEnv ((v,_l),ty) env = extendEnv env v ty
+      genEnv ((v,l),PackedTy dc _l') env = extendVEnv v (PackedTy dc l) env
+      genEnv ((v,_l),ty) env = extendVEnv v ty env
 
       -- Remove the pattern-bound location variables from the location state map
       remTS ((_v,l),PackedTy _ _) ts = removeTS l ts
@@ -491,8 +498,8 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
   where
 
     fd :: FunDef2 -> PassM ()
-    fd FunDef{funTy,funArg,funBody} = do
-        let env = extendEnv (Env2 M.empty M.empty) funArg (arrIn funTy)
+    fd FunDef{funTy,funArgs,funBody} = do
+        let env = extendsVEnv (M.fromList $ zip funArgs (arrIns funTy)) emptyEnv2
             constrs = funConstrs (locVars funTy)
             regs = funRegs (locVars funTy)
             tstate = funTState (locVars funTy)
@@ -681,9 +688,6 @@ ensureAfterPacked  exp (ConstraintSet cs) l1 l2 =
     where f (AfterVariableC _v l1' l2') = l1' == l1 && l2' == l2
           f _ = False
 
-
-extendEnv :: Env2 Ty2 -> Var -> Ty2 -> Env2 Ty2
-extendEnv (Env2 vEnv fEnv) v ty = Env2 (M.insert v ty vEnv) fEnv
 
 extendTS
   :: LocVar

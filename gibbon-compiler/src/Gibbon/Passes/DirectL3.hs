@@ -1,13 +1,13 @@
 module Gibbon.Passes.DirectL3
     (directL3) where
 
-import Data.Loc
-import Data.List as L
-import Data.Map as M
+import           Data.Loc
+import           Data.List as L
+import qualified Data.Map as M
 
-import Gibbon.Common
-import Gibbon.L1.Syntax
-import Gibbon.L3.Syntax
+import           Gibbon.Common
+import           Gibbon.L1.Syntax
+import           Gibbon.L3.Syntax
 
 
 -- | Directly convert the source program to L3. Used in the pointer mode
@@ -21,10 +21,10 @@ directL3 (Prog ddfs fndefs mnExp) = do
     return (Prog ddfs fndefs' mnExp')
   where
     fd :: FunDef1 -> FunDef3
-    fd FunDef{funName,funArg,funTy,funBody} =
+    fd FunDef{funName,funArgs,funTy,funBody} =
         FunDef { funName = funName
                , funTy   = funTy
-               , funArg  = funArg
+               , funArgs = funArgs
                , funBody = go funBody }
 
     go :: L Exp1 -> L Exp3
@@ -33,7 +33,7 @@ directL3 (Prog ddfs fndefs mnExp) = do
         VarE v    -> VarE v
         LitE n    -> LitE n
         LitSymE v -> LitSymE v
-        AppE v locs arg  -> AppE v locs $ go arg
+        AppE v locs ls   -> AppE v locs $ map go ls
         PrimAppE pr args -> PrimAppE pr $ L.map go args
         LetE (v,locs,ty,rhs) bod -> LetE (v, locs, ty, go rhs) $ go bod
         IfE a b c   -> IfE (go a) (go b) (go c)

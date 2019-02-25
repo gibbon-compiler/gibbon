@@ -125,8 +125,8 @@ cursorizeTy ty =
 mapMExprs :: Monad m => (Env2 Ty3 -> L Exp3 -> m (L Exp3)) -> Prog3 -> m Prog3
 mapMExprs fn (Prog ddfs fundefs mainExp) =
   Prog ddfs <$>
-    (mapM (\f@FunDef{funArg,funTy,funBody} ->
-              let env = Env2 (M.singleton funArg (fst funTy)) funEnv
+    (mapM (\f@FunDef{funArgs,funTy,funBody} ->
+              let env = Env2 (M.fromList $ zip funArgs (fst funTy)) funEnv
               in do
                 bod' <- fn env funBody
                 return $ f { funBody =  bod' })

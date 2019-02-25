@@ -1,24 +1,24 @@
 module Gibbon.Passes.AddRAN
   (addRAN, numRANsDataCon, needsRAN) where
 
-import Control.Monad ( when )
-import Data.Loc
-import Data.List as L
-import Data.Map as M
-import Data.Maybe ( fromJust )
-import Data.Set as S
-import Text.PrettyPrint.GenericPretty
+import           Control.Monad ( when )
+import           Data.Loc
+import           Data.List as L
+import qualified Data.Map as M
+import           Data.Maybe ( fromJust )
+import qualified Data.Set as S
+import           Text.PrettyPrint.GenericPretty
 
-import Gibbon.Common
-import Gibbon.DynFlags
-import Gibbon.Passes.AddTraversals ( needsTraversal )
-import Gibbon.L1.Syntax
-import Gibbon.L2.Syntax
+import           Gibbon.Common
+import           Gibbon.DynFlags
+import           Gibbon.Passes.AddTraversals ( needsTraversal )
+import           Gibbon.L1.Syntax
+import           Gibbon.L2.Syntax
 
 {-
 
-Note [Adding random access nodes]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Adding random access nodes
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We cannot add RAN's to an L2 program, as it would distort the locations
 inferred by the previous analysis. Instead, (1) we use the old L1 program and
@@ -57,8 +57,8 @@ becomes,
     random access nodes too.
 
 
-Note [Reusing RAN's in case expressions]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Reusing RAN's in case expressions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If a data constructor occurs inside a case expression, we might already have a
 random access node for a variable that was bound in the pattern. In that case, we don't want
@@ -72,8 +72,8 @@ to request yet another one using PEndOf. Consider this example:
 Here, we don't want to fill the HOLE with (PEndOf x). Instead, we should reuse indr_y.
 
 
-Note [When does a type 'needsRAN']
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+When does a type 'needsRAN'
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 (1) If any pattern 'needsTraversal' so that we can unpack it, we mark the type of the
     scrutinee as something that needs RAN's.
@@ -159,8 +159,8 @@ addRANExp tycons ddfs ienv (L p ex) = L p <$>
     VarE{}    -> return ex
     LitE{}    -> return ex
     LitSymE{} -> return ex
-    AppE f locs arg -> AppE f locs <$> go arg
-    PrimAppE f args -> PrimAppE f <$> mapM go args
+    AppE f locs args -> AppE f locs <$> mapM go args
+    PrimAppE f args  -> PrimAppE f <$> mapM go args
     LetE (v,loc,ty,rhs) bod -> do
       LetE <$> (v,loc,ty,) <$> go rhs <*> go bod
     IfE a b c  -> IfE <$> go a <*> go b <*> go c
@@ -199,7 +199,7 @@ addRANExp tycons ddfs ienv (L p ex) = L p <$>
           (toIndrDataCon dcon, (L.map (,()) ranVars) ++ vs,) <$> addRANExp tycons ddfs ienv' bod
 
 -- | Update data type definitions to include random access nodes.
-withRANDDefs :: Out a => S.Set TyCon -> DDefs (UrTy a) -> Map Var (DDef (UrTy a))
+withRANDDefs :: Out a => S.Set TyCon -> DDefs (UrTy a) -> M.Map Var (DDef (UrTy a))
 withRANDDefs tycons ddfs = M.map go ddfs
   where
     -- go :: DDef a -> DDef b
@@ -235,8 +235,8 @@ numRANsDataCon ddfs dcon =
 needsRAN :: Prog2 -> S.Set TyCon
 needsRAN Prog{ddefs,fundefs,mainExp} =
   let funenv = initFunEnv fundefs
-      dofun FunDef{funArg,funTy,funBody} =
-        let tyenv = M.singleton funArg (inTy funTy)
+      dofun FunDef{funArgs,funTy,funBody} =
+        let tyenv = M.fromList $ zip funArgs (inTys funTy)
             env2 = Env2 tyenv funenv
             renv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm)))
                                       (locVars funTy)
@@ -276,6 +276,7 @@ needsRANExp ddefs fundefs env2 renv (L _p ex) =
     ProjE{}    -> S.empty
     DataConE{} -> S.empty
     TimeIt{}   -> S.empty
+
     -- See (2) in Note [When does a type 'needsLRAN].
     ParE a b   -> let mp1 = parAppLoc env2 a
                       mp2 = parAppLoc env2 b
@@ -323,9 +324,11 @@ needsRANExp ddefs fundefs env2 renv (L _p ex) =
 
     -- Return the location and tycon of an argument to a function call.
     parAppLoc :: Env2 Ty2 -> L Exp2 -> M.Map LocVar TyCon
-    parAppLoc env21 (L _ (AppE _ _ arg)) =
+    parAppLoc env21 (L _ (AppE _ _ args)) =
       let fn (PackedTy dcon loc) = [(loc, dcon)]
-          fn (ProdTy tys) = L.concatMap fn tys
+          fn (ProdTy tys1) = L.concatMap fn tys1
           fn _ = []
-      in M.fromList (fn $ gRecoverType ddefs env21 arg)
+
+          tys = map (gRecoverType ddefs env21) args
+      in M.fromList (concatMap fn tys)
     parAppLoc _ oth = error $ "parAppLoc: Cannot handle "  ++ sdoc oth

@@ -36,9 +36,9 @@ removeCopies Prog{ddefs,fundefs,mainExp} = do
   return $ Prog ddefs' fundefs' mainExp'
 
 removeCopiesFn :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef2
-removeCopiesFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
+removeCopiesFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
   let initLocEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
-      initTyEnv  = M.singleton funArg (arrIn funTy)
+      initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
   bod' <- removeCopiesExp ddefs fundefs initLocEnv env2 funBody
   return $ f {funBody = bod'}
@@ -46,7 +46,9 @@ removeCopiesFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
 removeCopiesExp :: DDefs Ty2 -> FunDefs2 -> LocEnv -> Env2 Ty2 -> L Exp2 -> PassM (L Exp2)
 removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
   case ex of
-    AppE f [lin,lout] arg | isCopyFunName f -> do
+
+    -- ASSUMPTION: copy functions would always be called on a single argument.
+    AppE f [lin,lout] [arg] | isCopyFunName f -> do
       let (PackedTy tycon _) = gRecoverType ddefs env2 ex
       indirection <- gensym "indirection"
       -- Get the indirection datacon for this type
@@ -60,7 +62,7 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
             (l$ VarE indirection)
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
-    LetE (v,locs,ty@(PackedTy tycon _), (L _ (AppE f [lin,lout] arg))) bod | isCopyFunName f -> do
+    LetE (v,locs,ty@(PackedTy tycon _), (L _ (AppE f [lin,lout] [arg]))) bod | isCopyFunName f -> do
       -- Get the indirection datacon for this type
       let indrDcon = filter isIndirectionTag $ getConOrdering ddefs tycon
       case indrDcon of

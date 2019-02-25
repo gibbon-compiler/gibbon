@@ -121,7 +121,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
     LitE _    -> return IntTy
     LitSymE _ -> return IntTy
 
-    AppE v locs e -> do
+    AppE v locs ls -> do
       let funty =
             case (M.lookup v (fEnv env)) of
               Just ty -> ty
@@ -136,8 +136,8 @@ tcExp isPacked ddfs env exp@(L p ex) =
                            exp
 
       -- Check argument type
-      argTy <- go e
-      _     <- ensureEqualTy exp (inTy funty) argTy
+      argTys <- mapM go ls
+      _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (zip (inTys funty) argTys)
       return (outTy funty)
 
     PrimAppE pr es -> do
@@ -345,15 +345,16 @@ tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
         _ -> ty1 == ty2
 
     -- fd :: forall e l . FunDef Ty1 Exp -> PassM ()
-    fd FunDef{funArg,funTy,funBody} = do
-      let env' = Env2 (M.singleton funArg inT) (fEnv env)
+    fd FunDef{funArgs,funTy,funBody} = do
+      let (intys, outty) = funTy
+          venv = M.fromList (zip funArgs intys)
+          env' = Env2 venv (fEnv env)
           res = runExcept $ tcExp isPacked ddefs env' funBody
-          (inT, outT) = funTy
       case res of
         Left err -> error $ sdoc err
-        Right ty -> if ty == outT
+        Right ty -> if ty == outty
                     then return ()
-                    else error $ "Expected type " ++ (sdoc outT)
+                    else error $ "Expected type " ++ (sdoc outty)
                          ++ " and got type " ++ (sdoc ty)
 
       return ()

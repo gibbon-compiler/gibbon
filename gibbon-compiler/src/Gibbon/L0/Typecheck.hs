@@ -54,10 +54,10 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
            , mainExp = mainExp' }
 
 tcFun :: DDefs0 -> Gamma -> FunDef0 -> PassM FunDef0
-tcFun ddefs fenv fn@FunDef{funArg,funTy,funBody} = do
+tcFun ddefs fenv fn@FunDef{funArgs,funTy,funBody} = do
   res <- runTcM $ do
-    let (ForAll tyvars (ArrowTy gvn_arg_ty gvn_retty)) = funTy
-        init_venv = M.singleton funArg (ForAll [] gvn_arg_ty)
+    let (ForAll tyvars (ArrowTy gvn_arg_tys gvn_retty)) = funTy
+        init_venv = M.fromList $ zip funArgs $ map (ForAll []) gvn_arg_tys
         init_s = emptySubst
     (s1, drvd_funBody_ty, funBody_tc) <-
       tcExp ddefs init_s init_venv fenv tyvars funBody
@@ -89,22 +89,22 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
     LitE{}    -> pure (sbst, IntTy, ex)
     LitSymE{} -> pure (sbst, SymTy0, ex)
 
-    AppE f _tyapps arg -> do
+    AppE f _tyapps args -> do
       (metas, fn_ty_inst) <-
         case (M.lookup f venv, M.lookup f fenv) of
           (Just lam_ty, _) -> instantiate lam_ty
           (_, Just fn_ty)  -> instantiate fn_ty
           _ -> err $ text "Unknown function:" <+> doc f
-      (s2, arg_ty, arg_tc) <- go arg
+      (s2, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
       let fn_ty_inst' = zonkTy s2 fn_ty_inst
-      s3 <- unify arg (arrIn' fn_ty_inst') arg_ty
+      s3 <- unifyl e (arrIns' fn_ty_inst') arg_tys
       fresh <- newMetaTy
-      s4 <- unify e (ArrowTy arg_ty fresh) fn_ty_inst'
+      s4 <- unify e (ArrowTy arg_tys fresh) fn_ty_inst'
       -- Fill in type applications for specialization...
       --     id 10 ===> id [Int] 10
       let tyapps = map (zonkTy s3) metas
           s5 = s2 <> s3 <> s4
-      pure (s5, zonkTy s5 fresh, AppE f tyapps (zonkExp s5 arg_tc))
+      pure (s5, zonkTy s5 fresh, AppE f tyapps (map (zonkExp s5) args_tc))
 
     PrimAppE pr args -> do
       (s1, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
@@ -202,7 +202,6 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
 
     LetE (v, [], gvn_rhs_ty, rhs) bod -> do
       (s1, drvd_rhs_ty, rhs_tc) <- go rhs
-      --dbgTraceIt (sdoc (s1, gvn_rhs_ty, drvd_rhs_ty)) (pure ())
       s2 <- unify rhs gvn_rhs_ty drvd_rhs_ty
       let s3         = s1 <> s2
           venv'      = zonkTyEnv s3 venv
@@ -267,14 +266,18 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
       pure (s3, zonkTy s3 ret_ty_inst,
             DataConE tyapps dcon (map (zonkExp s3) args_tc))
 
-    Ext (LambdaE (v,ty) bod) -> do
-      fresh <- newMetaTy
-      let venv' = M.insert v (ForAll [] fresh) venv
-      s2 <- unify (l$ VarE v) ty fresh
-      let s3 = sbst <> s2
+    Ext (LambdaE args bod) -> do
+      (freshs, venv', s3) <- foldlM
+                               (\(fs,env,s) (v,ty) -> do
+                                 fresh <- newMetaTy
+                                 let env' = M.insert v (ForAll [] fresh) env
+                                 s1 <- unify (l$ VarE v) ty fresh
+                                 pure (fs ++ [fresh], env', s1 <> s))
+                               ([],venv, sbst)
+                               args
       (s4, bod_ty, bod_tc) <- tcExp ddefs s3 venv' fenv bound_tyvars bod
-      return (s4, zonkTy s4 (ArrowTy fresh bod_ty),
-              Ext (LambdaE (v, zonkTy s4 ty) (zonkExp s4 bod_tc)))
+      return (s4, zonkTy s4 (ArrowTy freshs bod_ty),
+              Ext (LambdaE (map (\(v,ty) -> (v, zonkTy s4 ty)) args) (zonkExp s4 bod_tc)))
 
     TimeIt a ty b -> do
       (s1, ty', a') <- go a
@@ -412,7 +415,7 @@ zonkTy s@(Subst mp) ty =
                   Just t  -> zonkTy s t
     ProdTy tys  -> ProdTy (map go tys)
     SymDictTy t -> SymDictTy (go t)
-    ArrowTy a b -> ArrowTy (go a) (go b)
+    ArrowTy tys b  -> ArrowTy (map go tys) (go b)
     PackedTy t tys -> PackedTy t (map go tys)
     ListTy t -> ListTy (go t)
   where
@@ -431,8 +434,8 @@ zonkExp s (L p ex) = L p $
     VarE{}    -> ex
     LitE{}    -> ex
     LitSymE{} -> ex
-    AppE f tyapps arg -> let tyapps1 = map (zonkTy s) tyapps
-                         in AppE f tyapps1 (go arg)
+    AppE f tyapps args -> let tyapps1 = map (zonkTy s) tyapps
+                          in AppE f tyapps1 (map go args)
     PrimAppE pr args  -> PrimAppE pr (map go args)
     -- Let doesn't store any tyapps.
     LetE (v,tyapps,ty,rhs) bod -> LetE (v, tyapps, zonkTy s ty, go rhs) (go bod)
@@ -448,7 +451,7 @@ zonkExp s (L p ex) = L p $
     DataConE (ProdTy tyapps) dcon args ->
       DataConE (ProdTy (map (zonkTy s) tyapps)) dcon (map go args)
     TimeIt e ty b -> TimeIt (go e) (zonkTy s ty) b
-    Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v, zonkTy s ty) (go bod))
+    Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, zonkTy s ty)) args) (go bod))
     _ -> error $ "zonkExp: TODO, " ++ sdoc ex
   where
     go = zonkExp s
@@ -479,7 +482,7 @@ substTyVarExp s (L p ex) = L p $
     LitE{}    -> ex
     LitSymE{} -> ex
     AppE f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
-                         in AppE f tyapps1 (go arg)
+                         in AppE f tyapps1 (map go arg)
     PrimAppE pr args  -> PrimAppE pr (map go args)
     -- Let doesn't store any tyapps.
     LetE (v,tyapps,ty,rhs) bod -> LetE (v, tyapps, substTyVar s ty, go rhs) (go bod)
@@ -495,7 +498,7 @@ substTyVarExp s (L p ex) = L p $
     DataConE (ProdTy tyapps) dcon args ->
       DataConE (ProdTy (map (substTyVar s) tyapps)) dcon (map go args)
     TimeIt e ty b -> TimeIt (go e) (substTyVar s ty) b
-    Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v, substTyVar s ty) (go bod))
+    Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, substTyVar s ty)) args) (go bod))
     _ -> error $ "substTyVarExp: TODO, " ++ sdoc ex
   where
     go = substTyVarExp s
@@ -512,7 +515,7 @@ substTyVar mp ty =
     MetaTv{} -> ty
     ProdTy tys  -> ProdTy (map go tys)
     SymDictTy t -> SymDictTy (go t)
-    ArrowTy a b -> ArrowTy (go a) (go b)
+    ArrowTy tys b  -> ArrowTy (map go tys) (go b)
     PackedTy t tys -> PackedTy t (map go tys)
     ListTy t -> ListTy (go t)
   where
@@ -545,8 +548,9 @@ tyVarToMetaTy = go M.empty
                         pure (env', ProdTy tys')
        SymDictTy t -> do (env', t') <- go env t
                          pure (env', SymDictTy t')
-       ArrowTy a b -> do (env', [a',b']) <- gol env [a,b]
-                         pure (env', ArrowTy a' b')
+       ArrowTy as b -> do (env', as') <- gol env as
+                          (env'', b') <- go env' b
+                          pure (env'', ArrowTy as' b')
        PackedTy t tys -> do (env', tys') <- gol env tys
                             pure (env', PackedTy t tys')
        ListTy t -> do (env', t') <- go env t
@@ -559,31 +563,6 @@ tyVarToMetaTy = go M.empty
                          pure (env'', acc ++ [ty']))
                      (env, [])
                      tys
-
--- --
--- fixTyApps :: Subst -> L Exp0 -> L Exp0
--- fixTyApps s (L p ex) = L p $
---   case ex of
---     VarE{}    -> ex
---     LitE{}    -> ex
---     LitSymE{} -> ex
---     AppE f tyapps arg -> let tyapps1 = map (zonkTy s) tyapps
---                          in AppE f tyapps1 (go arg)
---     PrimAppE pr args  -> PrimAppE pr (map go args)
---     -- Let doesn't store any tyapps.
---     LetE (v,tyapps,ty,rhs) bod -> LetE (v, tyapps,ty, go rhs) (go bod)
---     IfE a b c  -> IfE (go a) (go b) (go c)
---     MkProdE ls -> MkProdE (map go ls)
---     ProjE i e  -> ProjE i (go e)
---     CaseE scrt brs ->
---       CaseE (go scrt) (map (\(dcon,vtys,rhs) -> (dcon, vtys, go rhs)) brs)
---     DataConE (ProdTy tyapps) dcon args ->
---       DataConE (ProdTy (map (zonkTy s) tyapps)) dcon (map go args)
---     TimeIt e ty b -> TimeIt (go e) ty b
---     Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v,ty) (go bod))
---     _ -> error $ "fixTyApps: TODO, " ++ sdoc ex
---   where
---     go = fixTyApps s
 
 --------------------------------------------------------------------------------
 -- Unification
@@ -603,8 +582,8 @@ unify ex ty1 ty2
         (MetaTv a, _) -> unifyVar ex a ty2
         (_, MetaTv b) -> unifyVar ex b ty1
         (ProdTy as, ProdTy bs) -> unifyl ex as bs
-        (ArrowTy a b, ArrowTy c d) -> do
-          s1 <- unify ex a c
+        (ArrowTy as b, ArrowTy cs d) -> do
+          s1 <- unifyl ex as cs
           s2 <- unify ex (zonkTy s1 b) (zonkTy s1 d)
           pure (s2 <> s1)
         (PackedTy tc1 tys1, PackedTy tc2 tys2) ->

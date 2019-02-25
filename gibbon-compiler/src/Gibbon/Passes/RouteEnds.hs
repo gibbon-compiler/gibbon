@@ -126,27 +126,28 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
     -- | Process function types (but don't handle bodies)
     fdty :: L2.FunDef2 -> PassM L2.FunDef2
-    fdty FunDef{funName,funTy,funArg,funBody} =
+    fdty FunDef{funName,funTy,funArgs,funBody} =
         do let (ArrowTy2 locin tyin eff tyout _locout) = funTy
                handleLoc (LRM l r m) ls = if S.member (Traverse l) eff then (LRM l r m):ls else ls
                locout' = L.map EndOf $ L.foldr handleLoc [] locin
-           return FunDef{funName,funTy=(ArrowTy2 locin tyin eff tyout locout'),funArg,funBody}
+           return FunDef{funName,funTy=(ArrowTy2 locin tyin eff tyout locout'),funArgs,funBody}
 
 
     -- | Process function bodies
     fd :: FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
-    fd fns FunDef{funName,funTy,funArg,funBody} =
-        do let (ArrowTy2 locin tyin eff _tyout _locout) = funTy
+    fd fns FunDef{funName,funTy,funArgs,funBody} =
+        do let (ArrowTy2 locin tyins eff _tyout _locout) = funTy
                handleLoc (LRM l _r _m) ls = if S.member (Traverse l) eff then l:ls else ls
                retlocs = L.foldr handleLoc [] locin
-               lenv = case tyin of
-                        PackedTy _n l -> M.insert funArg l $ M.empty
-                        ProdTy _tys -> M.empty
-                        _ -> M.empty
-               initVEnv = M.singleton funArg (arrIn funTy)
+               lenv = L.foldr
+                        (\(a,t) acc -> case t of
+                                         PackedTy _ loc -> M.insert a loc acc
+                                         _ -> acc)
+                        M.empty (zip funArgs tyins)
+               initVEnv = M.fromList $ zip funArgs tyins
                env2 = Env2 initVEnv (initFunEnv fundefs)
            funBody' <- exp fns retlocs emptyRel lenv M.empty env2 funBody
-           return FunDef{funName,funTy,funArg,funBody=funBody'}
+           return FunDef{funName,funTy,funArgs,funBody=funBody'}
 
 
     -- | Process expressions.

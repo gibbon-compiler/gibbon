@@ -47,8 +47,8 @@ shakeTreeExp = go
     (VarE v)           -> VarE v
     (LitE i)           -> LitE i
     (LitSymE v)        -> LitSymE v
-    (AppE f locs e)    -> AppE f locs $ go e
-    (PrimAppE pr es)   -> PrimAppE pr $ map (go) es
+    (AppE f locs es)   -> AppE f locs $ map go es
+    (PrimAppE pr es)   -> PrimAppE pr $ map go es
     (IfE e1 e2 e3)     -> IfE (go e1) (go e2) (go e3)
 
     (ProjE i e)  -> ProjE i $ go e

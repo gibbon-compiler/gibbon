@@ -49,7 +49,6 @@ import qualified Gibbon.L1.Interp as SI
 import           Gibbon.TargetInterp (Val (..), execProg)
 
 -- Compiler passes
-import qualified Gibbon.L0.Freshen   as L0
 import qualified Gibbon.L0.Typecheck as L0
 import qualified Gibbon.L0.Specialize2 as L0
 import qualified Gibbon.L1.Typecheck as L1
@@ -64,21 +63,21 @@ import           Gibbon.Passes.DirectL3       (directL3)
 import           Gibbon.Passes.InferLocations (inferLocs)
 import           Gibbon.Passes.RepairProgram  (repairProgram)
 import           Gibbon.Passes.RemoveCopies   (removeCopies)
+import           Gibbon.Passes.InferEffects   (inferEffects)
 import           Gibbon.Passes.InferMultiplicity (inferRegScope)
+import           Gibbon.Passes.RouteEnds      (routeEnds)
 import           Gibbon.Passes.BoundsCheck    (boundsCheck)
 import           Gibbon.Passes.ThreadRegions  (threadRegions)
-import           Gibbon.Passes.InferEffects   (inferEffects)
-import           Gibbon.Passes.RouteEnds      (routeEnds)
 import           Gibbon.Passes.Cursorize      (cursorize)
--- import           Gibbon.Passes.FindWitnesses  (findWitnesses)
--- import           Gibbon.Passes.ShakeTree      (shakeTree)
+-- -- import           Gibbon.Passes.FindWitnesses  (findWitnesses)
+-- -- import           Gibbon.Passes.ShakeTree      (shakeTree)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
 import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.FollowRedirects(followRedirects)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
-import           Gibbon.Passes.Fusion2        (fusion2)
+-- -- import           Gibbon.Passes.Fusion2        (fusion2)
 import           Gibbon.Pretty
 
 #ifdef LLVM_ENABLED
@@ -305,22 +304,21 @@ parseInput ip fp = do
                      then (,f2) <$> SExp.parseFile f1
                      else error$ "compile: unrecognized file extension: "++
                           show oth++"  Please specify compile input format."
-  l1 <- lower l0
+  l1 <- mono_and_spec l0
   (l1, cnt) <- pure $ runPassM defaultConfig 0 l1
   pure ((l1, cnt), f)
-  where lower :: PassM L0.Prog0 -> IO (PassM L1.Prog1)
-        lower pm_l0 = let passes = do
-                           l0 <- pm_l0
-                           -- dbgTraceIt ("Parsed:\n" ++ sdoc l0) (pure ())
-                           l0 <- L0.freshNames l0
-                           -- dbgTraceIt ("Freshen:\n" ++ sdoc l0) (pure ())
-                           l0 <- L0.tcProg l0
-                           -- dbgTraceIt ("Typechecked:\n" ++ sdoc l0) (pure ())
-                           l1 <- L0.l0ToL1 l0
-                           -- dbgTraceIt ("Specialized:\n" ++ sdoc l1) (pure ())
-                           pure l1
-                   in pure passes
-
+  where mono_and_spec :: PassM L0.Prog0 -> IO (PassM L1.Prog1)
+        mono_and_spec pm_l0 = let passes = do
+                                    l0 <- pm_l0
+                                    dbgTrace 5 ("\n\nParsed:\n" ++ (render $ pprint l0)) (pure ())
+                                    l0 <- freshNames l0
+                                    dbgTrace 5 ("\n\nFreshen:\n" ++ (render $ pprint l0)) (pure ())
+                                    l0 <- L0.tcProg l0
+                                    dbgTrace 5 ("\n\nTypechecked:\n" ++ (render $ pprint l0)) (pure ())
+                                    l1 <- L0.l0ToL1 l0
+                                    dbgTrace 5 ("\n\nLowered toL1:\n" ++ (render $ pprint l1)) (pure ())
+                                    pure l1
+                              in pure passes
 
 -- |
 withPrintInterpProg :: L1.Prog1 -> IO (Maybe Value)
@@ -436,7 +434,7 @@ benchMainExp l1 = do
   case mode of
     Bench fnname -> do
       let tmp = "bnch"
-          (arg@(L1.PackedTy tyc _),ret) = L1.getFunTy fnname l1
+          ([arg@(L1.PackedTy tyc _)], ret) = L1.getFunTy fnname l1
           -- At L1, we assume ReadPackedFile has a single return value:
           newExp = L1.TimeIt (
                         l$ (L1.LetE (toVar tmp, [],
@@ -445,7 +443,7 @@ benchMainExp l1 = do
                                  (L1.ReadPackedFile benchInput tyc Nothing arg) [])
                         $ l$ L1.LetE (toVar "benchres", [],
                                       ret,
-                                      (l$ L1.AppE fnname [] (l$ L1.VarE (toVar tmp))))
+                                      (l$ L1.AppE fnname [] [l$ L1.VarE (toVar tmp)]))
                         $
                         -- FIXME: should actually return the result,
                         -- as soon as we are able to print it.
@@ -466,7 +464,6 @@ passes config@Config{dynflags} l1 = do
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
           should_fuse = gopt Opt_Fusion dynflags
       l1 <- goE "typecheck"  L1.tcProg                  l1
-      l1 <- goE "freshNames" freshNames                 l1
 
       -- If we are executing a benchmark, then we
       -- replace the main function with benchmark code:
@@ -477,7 +474,8 @@ passes config@Config{dynflags} l1 = do
       l1 <- goE "inlineTriv"    inlineTriv              l1
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- if should_fuse
-          then goE  "fusion2"   fusion2                 l1
+          then dbgTraceIt "WIP: Multiarg functions, Fusion2 not done yet." (pure l1)
+               -- goE  "fusion2"   fusion2                 l1
           else return l1
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- goE "floatOut"      floatOut                l1
@@ -486,7 +484,7 @@ passes config@Config{dynflags} l1 = do
       -- Minimal haskell "backend".
       lift $ dumpIfSet config Opt_D_Dump_Hs (render $ pprintHsWithEnv l1)
 
-      -- TODO: Write interpreters for L2 and L3
+      -- -- TODO: Write interpreters for L2 and L3
       l3 <- if isPacked
             then do
               -- TODO: push data contstructors under conditional
@@ -502,7 +500,6 @@ passes config@Config{dynflags} l1 = do
               l2 <- if gibbon1 || no_rcopies
                     then return l2
                     else go "removeCopies" removeCopies l2
-
               l2 <- go "L2.typecheck"     L2.tcProg     l2
 
               l2 <- go "inferEffects"     inferEffects  l2
@@ -519,8 +516,13 @@ passes config@Config{dynflags} l1 = do
               l2 <- if gibbon1 || biginf
                     then return l2
                     else go "boundsCheck" boundsCheck   l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
 
+              -- N.B ThreadRegions doesn't produce a type-correct L2 program --
+              -- it adds regions to 'locs' in AppE and LetE which the
+              -- typechecker doesn't know how to handle.
               l2 <- go "threadRegions"    threadRegions l2
+
 
               -- Note: L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
@@ -528,12 +530,13 @@ passes config@Config{dynflags} l1 = do
               l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck" (L3.tcProg isPacked) l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
+              l3 <- go "L3.typecheck" (L3.tcProg isPacked) l3
               return l3
             else do
               l3 <- go "directL3"         directL3      l1
+              l3 <- go "L3.typecheck" (L3.tcProg isPacked) l3
               return l3
 
-      l3 <- go "L3.typecheck"   (L3.tcProg isPacked)    l3
       l3 <- go "unariser"       unariser                l3
       l3 <- go "L3.typecheck"   (L3.tcProg isPacked)    l3
       l3 <- go "L3.flatten"     flattenL3               l3
@@ -548,7 +551,6 @@ passes config@Config{dynflags} l1 = do
               -- These additional case branches cause some tests in pointer mode to fail.
               l4 <- go "followRedirects" followRedirects l4
               go "rearrangeFree" rearrangeFree l4
-
       return l4
   where
       go :: PassRunner a b

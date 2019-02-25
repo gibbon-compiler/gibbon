@@ -44,13 +44,12 @@ library
                        -- Polymorphism stuff:
                        Gibbon.HaskellFrontend
                        Gibbon.L0.Syntax
-                       Gibbon.L0.Freshen
                        Gibbon.L0.Typecheck
                        Gibbon.L0.Specialize2
-                       -- Gibbon.L0.Specialize
-                       -- Gibbon.L0.Mono
-                       -- This one looks far from done:
-                       -- Gibbon.L0.Interp
+                       -- -- Gibbon.L0.Specialize
+                       -- -- Gibbon.L0.Mono
+                       -- -- This one looks far from done:
+                       -- -- Gibbon.L0.Interp
 
                        -- compiler passes, roughly in the order they're run
                        Gibbon.Passes.Freshen
@@ -58,6 +57,8 @@ library
                        Gibbon.Passes.InlineTriv
                        Gibbon.Passes.DirectL3
                        Gibbon.Passes.FloatOut
+                       -- Multiarg functions, FINISHME:
+                       -- -- Gibbon.Passes.Fusion2
                        Gibbon.Passes.RepairProgram
                        Gibbon.Passes.AddRAN
                        Gibbon.Passes.AddTraversals
@@ -69,9 +70,8 @@ library
                        Gibbon.Passes.BoundsCheck
                        Gibbon.Passes.ThreadRegions
                        Gibbon.Passes.Cursorize
-                       Gibbon.Passes.FindWitnesses
-                       Gibbon.Passes.Fusion2
-                       Gibbon.Passes.ShakeTree
+                       -- Gibbon.Passes.FindWitnesses
+                       -- Gibbon.Passes.ShakeTree
                        Gibbon.Passes.HoistNewBuf
                        Gibbon.Passes.Unariser
                        Gibbon.Passes.Lower

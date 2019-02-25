@@ -160,7 +160,7 @@ isVoidDDef DDef{dataCons} = L.null dataCons
 -- | A type family describing function types.
 class (Out (ArrowTy ty), Show (ArrowTy ty)) => FunctionTy ty where
   type ArrowTy ty
-  inTy  :: ArrowTy ty -> ty
+  inTys :: ArrowTy ty -> [ty]
   outTy :: ArrowTy ty -> ty
 
 -- | A set of top-level recursive function definitions.
@@ -168,10 +168,9 @@ type FunDefs ex = M.Map Var (FunDef ex)
 
 -- | A function definiton indexed by a type and expression.
 data FunDef ex = FunDef { funName  :: Var
-                        , funArg   :: Var
+                        , funArgs  :: [Var]
                         , funTy    :: ArrowTy (TyOf ex)
-                        , funBody  :: ex
-                        }
+                        , funBody  :: ex }
 
 deriving instance (Read ex, Read (ArrowTy (TyOf ex))) => Read (FunDef ex)
 deriving instance (Show ex, Show (ArrowTy (TyOf ex))) => Show (FunDef ex)
@@ -354,7 +353,7 @@ data PreExp (ext :: * -> * -> *) loc dec =
      VarE Var              -- ^ Variable reference
    | LitE Int              -- ^ Numeric literal
    | LitSymE Var           -- ^ A quoted symbol literal.
-   | AppE Var [loc] EXP
+   | AppE Var [loc] [EXP]
      -- ^ Apply a top-level / first-order function.  Instantiate
      -- its type schema by providing location-variable arguments,
      -- if applicable.
@@ -470,7 +469,7 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
       LitSymE _ -> S.empty
       ProjE _ e -> gFreeVars e
       IfE a b c -> gFreeVars a `S.union` gFreeVars b `S.union` gFreeVars c
-      AppE _v _ e          -> gFreeVars e  -- S.insert v (gFreeVars e)
+      AppE _v _ ls         -> S.unions (L.map gFreeVars ls)
       PrimAppE _ ls        -> S.unions (L.map gFreeVars ls)
       LetE (v,_,_,rhs) bod -> gFreeVars rhs `S.union`
                               S.delete v (gFreeVars bod)
@@ -683,7 +682,7 @@ subst old new (L p0 ex) = L p0 $
            | otherwise -> VarE v
     LitE _             -> ex
     LitSymE _          -> ex
-    AppE v loc e       -> AppE v loc (go e)
+    AppE v loc ls      -> AppE v loc (map go ls)
     PrimAppE p ls      -> PrimAppE p $ L.map go ls
     LetE (v,loc,t,rhs) bod | v == old  -> LetE (v,loc,t,go rhs) bod
                            | otherwise -> LetE (v,loc,t,go rhs) (go bod)
@@ -720,7 +719,7 @@ substE old new (L p0 ex) = L p0 $
     VarE v          -> VarE v
     LitE _          -> ex
     LitSymE _       -> ex
-    AppE v loc e    -> AppE v loc (go e)
+    AppE v loc ls   -> AppE v loc (map go ls)
     PrimAppE p ls   -> PrimAppE p $ L.map go ls
     LetE (v,loc,t,rhs) bod | (VarE v) == unLoc old  -> LetE (v,loc,t,go rhs) bod
                            | otherwise -> LetE (v,loc,t,go rhs) (go bod)
