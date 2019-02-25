@@ -22,16 +22,28 @@ import Data.Tuple.All
 import Data.Vector as V
 import Control.Monad
 
--- this can be made faster --- we are rushing though
+-- this can be made faster 
 removeCommonExpressions::  L Exp1->  L Exp1
 removeCommonExpressions exp = rec  exp 
    where 
     rec exp  = case (getExp exp) of
       LetE (v, ls, t, bind) body ->
-        let oldExp = bind
-            newExp = l $ VarE v
-            body' = substE oldExp newExp body `debug` ("removing duplicates of "L.++ (show oldExp))
-        in l$ LetE (v, ls, t, bind) (rec body') 
+        case (getExp bind) of 
+            ProjE i e ->  
+              let oldExp = l $ VarE v  
+                  newExp = l $ ProjE i e  
+                  body' = substE oldExp newExp body
+              in rec (body')
+            VarE v' -> 
+              let oldExp = l $ VarE v  
+                  newExp = l $ VarE v'  
+                  body' = substE oldExp newExp body
+              in rec (body')
+            otherwise -> 
+              let oldExp = bind
+                  newExp = l $ VarE v
+                  body' = substE oldExp newExp body --`debug` ("removing duplicates of "L.++ (show oldExp))
+              in l$ LetE (v, ls, t, bind) (rec body') 
 
       IfE cond thenBody elseBody -> 
         l $ IfE (rec cond) (rec thenBody) (rec elseBody)
@@ -852,8 +864,8 @@ fuse ddefs fdefs  innerVar  outerVar fusedFunctions_ = do
   outerFreshBody <- freshExp []  (funBody outerFunc)
   setp1 <- inline innerFunc{funBody =innerFreshBody}
                outerFunc{funBody = outerFreshBody}  (-1)
-  let step2 =  (simplifyCases setp1 ){funName = newName} `debug` (show setp1)
-      step3 =  foldFusedCalls_f (outerVar, innerVar, -1, newName)  step2 `debug` ((show newName )L.++"\n")
+  let step2 =  (simplifyCases setp1 ){funName = newName} 
+      step3 =  foldFusedCalls_f (outerVar, innerVar, -1, newName)  step2 --`debug` ((show newName )L.++"\n")
       -- fold upper level fused functions
       step4 = L.foldl (\f e -> foldFusedCalls_f e f ) step3 
        fusedFunctions_
