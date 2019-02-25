@@ -30,7 +30,7 @@ removeCommonExpressions exp = rec  exp
       LetE (v, ls, t, bind) body ->
         let oldExp = bind
             newExp = l $ VarE v
-            body' = substE oldExp newExp body --`debug` ("removing duplicates of "L.++ (show oldExp))
+            body' = substE oldExp newExp body `debug` ("removing duplicates of "L.++ (show oldExp))
         in l$ LetE (v, ls, t, bind) (rec body') 
 
       IfE cond thenBody elseBody -> 
@@ -264,6 +264,14 @@ inline inlined_fun outer_fun arg_pos  =  do
         ProdTy (h:_) -> h:[]
         exp@(PackedTy _ _) -> exp:[]
         _ -> error ("not expected type")
+  
+  let inlinedCallArgs = 
+         case (argType_inlined) of
+                  ProdTy (ls) ->
+                    MkProdE (V.ifoldl (\ls i _   -> (l (ProjE i (l (VarE newArgVar)))):ls )  []   (V.fromList ls))
+                  exp@(PackedTy _ _) ->  ProjE 0 (l (VarE newArgVar))
+                  _ -> error ("not expected type")
+
 
   let sideArgsTypesInlined = getSideArgsTypes argType_outer
       sidArgsTypesOuter    = getSideArgsTypes argType_inlined
@@ -294,11 +302,35 @@ inline inlined_fun outer_fun arg_pos  =  do
                    else
                      loop (i+1) n (replaceProj i argVar_outer (i+shift)
                          newArgVar exp) shift     
-  let newBody = 
-        let oldExp = l $ case (argType_outer) of 
-              ProdTy _    ->  ProjE 0 (l (VarE argVar_outer) )
-              _             ->  VarE argVar_outer
-        in substE oldExp inlinedFunBody outerFunBody
+
+
+  newBody <-  do
+          let oldExp = l $ case (argType_outer) of 
+                ProdTy _    ->  ProjE 0 (l (VarE argVar_outer) )
+                _             ->  VarE argVar_outer
+          ret <-do
+                case (getExp outerFunBody) of
+                    CaseE e1 ls -> do 
+                        ls' <-  
+                          (Prelude.mapM 
+                            (\(dataCon, x, exp) -> 
+                              do 
+                                  newVar <- gensym (toVar "innerCall")
+                                  let rhs =l $  AppE (funName inlined_fun) [] (l inlinedCallArgs)
+                                      body = substE oldExp (l (VarE newVar)) exp
+                                      newInnerExp = l $ LetE (newVar,[],(outTy (funTy inlined_fun)), rhs) body
+                                  return  (dataCon, x, newInnerExp)
+                          ) ls)
+                                 
+                        return $l (CaseE (substE oldExp inlinedFunBody e1) ls')
+                    x -> 
+                      do 
+                        newVar <- gensym (toVar "innerCall") 
+                        let rhs =l $  AppE (funName inlined_fun) [] (l inlinedCallArgs)
+                            body = substE oldExp (l (VarE newVar)) (l x)
+                            newInnerExp = l $ LetE (newVar,[],(outTy (funTy inlined_fun)), rhs) body
+                        return newInnerExp
+          return ret
 
   return outer_fun { funArg  = newArgVar, 
                      funTy = newType,
@@ -649,7 +681,7 @@ tupleListOfFunctions  ddefs funcList newName = do
             
   return (FunDef newName newArgVar (newFuncInputType,newRetType) (l extendedCase))
  where 
-  replaceProj i1 argVar1 i2 argvar2 exp= 
+  replaceProj i1 argVar1 i2 argvar2 exp = 
     let oldExp = l $ ProjE i1 (l (VarE argVar1))
         newExp = l $ ProjE i2 (l (VarE argvar2))
     in substE oldExp newExp exp
@@ -794,14 +826,14 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions  = do
 
             let fdefs' = M.insert tupledFName tupledFunction'  fdefs
               
-            (recTupledBody, newDefs) <- tuple ddefs fdefs' (funBody tupledFunction') 
+            (recTupledBody, newDefs) <- tuple ddefs fdefs' (removeCommonExpressions (funBody tupledFunction')) 
                 (Just (funArg tupledFunction')) fusedFunctions 
                   --`debug`("\ntupling:" L.++ (show tupledFName))
             
             let tupledFunction'' =tupledFunction'{funBody=recTupledBody } 
-            let tupledFunction''' =tupledFunction''{funBody= removeCommonExpressions(funBody tupledFunction'') } 
+            -- let tupledFunction''' =tupledFunction''{funBody= removeCommonExpressions(funBody tupledFunction'') } 
 
-            let fdefs'' = M.insert tupledFName tupledFunction''' newDefs
+            let fdefs'' = M.insert tupledFName tupledFunction'' newDefs
 
             exp' <- foldTupledFunctions exp  tupledFunction callExpressions
                firstCall
@@ -815,13 +847,13 @@ fuse ddefs fdefs  innerVar  outerVar fusedFunctions_ = do
       newVar    = toVar ("_FUS_f_" L.++ (fromVar outerVar) L.++
          "_f_" L.++(fromVar innerVar ) L.++ "_FUS_")
   --newName   <-  gensym_tag (newVar) "inline" 
-  let newName  = newVar
+  let newName  = newVar 
   innerFreshBody <- freshExp []  (funBody innerFunc) 
   outerFreshBody <- freshExp []  (funBody outerFunc)
   setp1 <- inline innerFunc{funBody =innerFreshBody}
                outerFunc{funBody = outerFreshBody}  (-1)
-  let step2 =  (simplifyCases setp1 ){funName = newName}
-      step3 =  foldFusedCalls_f (outerVar, innerVar, -1, newName)  step2
+  let step2 =  (simplifyCases setp1 ){funName = newName} `debug` (show setp1)
+      step3 =  foldFusedCalls_f (outerVar, innerVar, -1, newName)  step2 `debug` ((show newName )L.++"\n")
       -- fold upper level fused functions
       step4 = L.foldl (\f e -> foldFusedCalls_f e f ) step3 
        fusedFunctions_
