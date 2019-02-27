@@ -33,7 +33,7 @@ removeCommonExpressions exp = rec  exp
               let oldExp = l $ VarE v  
                   newExp = l $ ProjE i e  
                   body' = substE oldExp newExp body
-              in rec (body')
+              in rec (body')-- `debug` ("replace ::"L.++ (show oldExp) L.++ "with" L.++ (show newExp))
             VarE v' -> 
               let oldExp = l $ VarE v  
                   newExp = l $ VarE v'  
@@ -54,13 +54,25 @@ removeCommonExpressions exp = rec  exp
       x       -> l $x
         
 
-replaceLeafWithBind:: L Exp1-> Var -> Ty1 -> L Exp1 -> L Exp1
-replaceLeafWithBind exp newVar varType tailExp =
+replaceLeafWithBind:: L Exp1-> (Int-> Var) -> Ty1 -> L Exp1 -> L Exp1
+replaceLeafWithBind exp genVar varType tailExp =
   rec exp 
    where 
-     rec ex = case (getExp ex) of 
+     rec ex = 
+      case (getExp ex) of 
           L1.LetE (v,ls,t, e1) e2 -> l $ L1.LetE (v,ls,t, e1)  (rec e2)
-          x ->   l $L1.LetE (newVar,[],varType, l (x)) tailExp
+          x -> case (varType) of
+              ProdTy ls2 ->
+                  let xDestructed = V.fromList (case  x of MkProdE ls -> ls)
+                      newExp = V.ifoldl 
+                              (\tExp subscript ty -> 
+                                let newVar = genVar subscript 
+                                in l $L1.LetE (newVar,[],ty, (xDestructed ! subscript)) tExp
+                              ) tailExp (V.fromList ls2)
+                  in newExp
+              otherwise -> 
+                let newVar = genVar 0
+                in  l $L1.LetE (newVar,[],varType, l (x)) tailExp
   
 freshExp :: [(Var,Var)] -> L Exp1 -> PassM (L L1.Exp1)
 freshExp vs (L sloc exp) = fmap (L sloc) $
@@ -508,8 +520,11 @@ foldTupledFunctions body newFun oldCalls firstCall =
                   body' <- (rec body newVar)
                   return ( L l $ LetE (Var y, loc, t, rhs')  body' )
               Just i ->  
-              
                 do
+                  -- replace the call with the call to the tupled function
+                  -- then replace each usage of the result of the old call with 
+                  -- something mhmm ok 
+
                   if (firstCall == (getExp rhs))
                     then
                       do
@@ -525,15 +540,28 @@ foldTupledFunctions body newFun oldCalls firstCall =
                              where 
                               getFirstArg (L _ ( AppE _ _ (L _  (MkProdE (h:_)))))= h
 
-                        let rhs' = L l $AppE (funName newFun) [] args'
+                        let rhs' =  L l $AppE (funName newFun) [] args'
                         let bindType = (outTy (funTy newFun))
-                        let rhs'' =  L l $ ProjE i (L l $ VarE newVar)
-                        let body'' =  L l $ LetE (Var y, loc, t, rhs'') body'
-                        return ( L l $LetE (newVar, [], bindType, rhs') body'') 
+                        let rhs'' =  case t of
+                              ProdTy ls -> L l ( MkProdE ( 
+                                V.toList ( V.imap (\index _ ->
+                                    L l $ ProjE (i+index) ( L l $ VarE newVar) ) 
+                                      (V.fromList ls))))
+
+                              otherwise ->  L l  $ ProjE i ( L l $ VarE newVar)
+
+                        let body'' =   L l $ LetE (Var y, loc, t, rhs'') body'
+                        return ( L  l $LetE (newVar, [], bindType, rhs') body'') 
                     else
                       do
                         body' <- ( rec body newVar) --`debug` ("\nhere\n")
-                        let rhs' =  L l $ ProjE i (L l $ VarE newVar)
+                        let rhs' =  case t of
+                              ProdTy ls -> L l ( MkProdE ( 
+                                V.toList ( V.imap (\index _ ->
+                                    L l $ ProjE (i+index) ( L l $ VarE newVar) ) 
+                                       (V.fromList ls))))
+
+                              otherwise ->  L l $ ProjE i ( L l $ VarE newVar)
                         return( L l $ LetE (Var y, loc, t, rhs') body')
 
         AppE name loc e          -> do
@@ -600,14 +628,24 @@ removeUnusedDefs_exp exp =
         TimeIt exp a b           ->  L l $ TimeIt (rec exp dTable) a b 
         otherwise -> L l ex 
                     
--- need to convert this to monand PassM and generate unique variable names later.
-tupleListOfFunctions :: DDefs Ty1 -> [FunDef1] ->Var -> PassM(FunDef1)
+
+ -- the out of this is the tupled functions and a list of mapping between the 
+ -- the index of the output of each functions with its location in the tupled
+ -- output       
+tupleListOfFunctions :: DDefs Ty1 -> [FunDef1] ->Var -> PassM(FunDef1) --, [Map Int Int])
 tupleListOfFunctions  ddefs funcList newName = do
   ls <- Prelude.mapM freshBody  funcList
                                             
   let lsVector    = V.fromList ls 
       retTypes    = V.map (\f -> (outTy (funTy f))) lsVector
-      newRetType  = ProdTy (V.toList retTypes)  
+  --    newRetType  = ProdTy (V.toList retTypes)  
+      newRetType  = ProdTy (V.foldl 
+        (\ls ty -> 
+          case ty of
+            ProdTy ls2 -> ls L.++ ls2
+            otherwise -> ty:ls
+         ) [] retTypes )
+
       newFuncInputType = ProdTy (V.ifoldl f [] lsVector)
         where 
           f ls i fdef = 
@@ -646,8 +684,10 @@ tupleListOfFunctions  ddefs funcList newName = do
                         then  exp 
                         else  loop (i+1) n (replaceProj i oldArgVar (i+shift) 
                           newArgVar exp)                     
-            in  replaceProj 0 oldArgVar 0 newArgVar body2                              
-      
+            in  replaceProj 0 oldArgVar 0 newArgVar body2
+
+  -- write a comment about each step in this functions
+  -- it sort of complicated function
   let step2 = L.foldl mapAndSplit M.empty functionsBodies  
         where 
           mapAndSplit mp (L _(CaseE e lsCase))  = L.foldl f mp lsCase
@@ -669,10 +709,25 @@ tupleListOfFunctions  ddefs funcList newName = do
           typeStr = case traversedType of
               (PackedTy typeStr _) -> typeStr
               x -> error "not expected "`debug`  (show x )
-      createOutVar index =  (toVar ("f" L.++(show index)L.++"out" )) 
- 
-  let tailExpr = MkProdE $( V.toList ( V.imap (\index _ ->l (VarE
-       (createOutVar index))) lsVector ))
+  
+  let createOutVar index subscript=  
+          (toVar ("f" L.++(show index)L.++"out" L.++ (show subscript) )) 
+  
+  -- this is changed now 
+  let tailExpr = MkProdE ( ( V.ifoldl 
+       (\ls index ty  ->
+           case ty of 
+             ProdTy ls2 -> 
+              let newElements =V.toList( 
+                   V.imap (\subscript _ -> l $VarE  (createOutVar index subscript))
+                      (V.fromList ls2))
+              in (ls L.++ newElements)
+             
+             otherwise -> 
+                let newElement =  l $VarE  (createOutVar index 0 )
+                in ls L.++ [newElement]
+       
+       ) [] retTypes ))
 
   let topLevelExpr = (CaseE (l (ProjE 0 (l (VarE newArgVar))))[])
   let extendedCase = L.foldr addConstructorBody topLevelExpr (dataCons inputDef) 
@@ -815,6 +870,7 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions  = do
   (oldExp, fdefs) <- Control.Monad.foldM f  (oldExpIn, fdefs)  candidates2 
  
   return $(oldExp,fdefs) --`debug`("tuple candidates" L.++ (show candidates1))
+ 
  where
     f (exp, fdefs) (tupledFName, callExpressions, firstCall) = do 
       case (M.lookup tupledFName fdefs) of
@@ -847,8 +903,9 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions  = do
             let fdefs'' = M.insert tupledFName tupledFunction''' newDefs
 
             exp' <- foldTupledFunctions exp  tupledFunction callExpressions
-               firstCall
+                 firstCall
             return (exp', fdefs'')
+     --       return (exp, fdefs'')
 
 fuse :: DDefs Ty1 -> FunDefs1 -> Var -> Var -> [(Var, Var, Int, Var)]
  -> PassM  (Bool, Var,  FunDefs1)
