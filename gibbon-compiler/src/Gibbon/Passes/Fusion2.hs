@@ -22,6 +22,27 @@ import Data.Tuple.All
 import Data.Vector as V
 import Control.Monad
 
+
+debug = flip trace
+getExp:: L Exp1-> Exp1 
+getExp  (L  _ exp) = exp
+
+data DefTableEntry = DefTableEntry 
+  { def :: !Exp1 -- ^ defining expression 
+{- each entry consist of
+    1)The function application expression.
+    2)The index at which the definition  appears at in the argument list.  
+    3)The defined symbol, if the the consuming expression of the form let x=App.
+-}
+  , fun_uses :: ![(Exp1,Int,Maybe Symbol)] 
+  , all_use_count:: !Int -- ^ total number of uses (calls and not calls)
+  } deriving (Show , Generic)
+  
+type DefTable = M.Map Symbol DefTableEntry 
+type PotentialPair = (Symbol, Symbol)
+type PotentialsList = [DefTableEntry] 
+
+
 -- this can be made faster 
 removeCommonExpressions::  L Exp1->  L Exp1
 removeCommonExpressions exp = rec  exp 
@@ -185,24 +206,7 @@ freshExp vs (L sloc exp) = fmap (L sloc) $
             e3' <- freshExp vs e3
             return $ L1.FoldE (v1,t1,e1') (v2,t2,e2') e3'
 
-debug = flip trace
-getExp:: L Exp1-> Exp1 
-getExp  (L  _ exp) = exp
 
-data DefTableEntry = DefTableEntry 
-  { def :: !Exp1 -- ^ defining expression 
-{- each entry consist of
-    1)The function application expression.
-    2)The index at which the definition  appears at in the argument list.  
-    3)The defined symbol, if the the consuming expression of the form let x=App.
--}
-  , fun_uses :: ![(Exp1,Int,Maybe Symbol)] 
-  , all_use_count:: !Int -- ^ total number of uses (calls and not calls)
-  } deriving (Show , Generic)
-  
-type DefTable = M.Map Symbol DefTableEntry 
-type PotentialPair = (Symbol, Symbol)
-type PotentialsList = [DefTableEntry] 
 
 {- 
 This functions collect the following information for each defined variable: 
