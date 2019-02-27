@@ -54,6 +54,48 @@ removeCommonExpressions exp = rec  exp
       x       -> l $x
         
 
+
+-- this can be made faster 
+simplifyProjectionsOfProducts:: L Exp1->  L Exp1
+simplifyProjectionsOfProducts exp = rec  exp M.empty  
+   where 
+    rec exp  mp = case (getExp exp) of
+      LetE (v, ls, t, bind) body ->
+        case (getExp bind) of 
+            MkProdE prodList -> 
+              let bind' = rec bind mp 
+                  mp' = M.insert v (V.fromList prodList) mp 
+                  body' = rec body mp' 
+              in l $  LetE (v, ls, t, bind')  body'
+            otherwise -> 
+              let bind' = rec bind mp 
+                  body' = rec body mp 
+              in  l $  LetE (v, ls, t, bind')  body'
+      
+      IfE cond thenBody elseBody -> 
+        l $ IfE (rec cond mp ) (rec thenBody mp ) (rec elseBody mp)
+      
+      CaseE e ls      -> let ls' = L.map (\(x, y, exp) -> (x, y, rec exp mp)) ls
+          in  l$ CaseE (rec e mp) ls'    
+       
+      PrimAppE p ls -> 
+        let ls' = L.map (\exp -> rec exp mp) ls
+        in l $ PrimAppE p ls'
+
+      TimeIt exp x y  ->l $   TimeIt (rec exp mp) x y 
+
+
+      L1.ProjE i e ->
+        case (getExp e ) of 
+          VarE v -> 
+            case(M.lookup v mp ) of 
+               Nothing ->  l $ L1.ProjE i e
+               Just ls -> ls V.! i  
+          otherwise -> l $ L1.ProjE i (rec e mp)
+
+      x       -> l $x
+        
+      
 replaceLeafWithBind:: L Exp1-> (Int-> Var) -> Ty1 -> L Exp1 -> L Exp1
 replaceLeafWithBind exp genVar varType tailExp =
   rec exp 
@@ -876,7 +918,8 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions  = do
       case (M.lookup tupledFName fdefs) of
           Just fdef -> do 
            exp' <-foldTupledFunctions exp fdef callExpressions firstCall 
-           return (exp', fdefs)
+           let exp'' =   removeCommonExpressions  exp' 
+           return (exp'', fdefs)
 
           Nothing -> do 
             let functionsToTuple = L.map getCalledFunDef  callExpressions
@@ -898,7 +941,10 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions  = do
                   --`debug`("\ntupling:" L.++ (show tupledFName))
             
             let tupledFunction'' =tupledFunction'{funBody=recTupledBody } 
-            let tupledFunction''' =tupledFunction''{funBody= removeCommonExpressions(funBody tupledFunction'') } 
+            let tupledFunction''' =tupledFunction''{
+              funBody= removeUnusedDefs_exp (
+                simplifyProjectionsOfProducts 
+                   (removeCommonExpressions(funBody tupledFunction''))) } 
 
             let fdefs'' = M.insert tupledFName tupledFunction''' newDefs
 
