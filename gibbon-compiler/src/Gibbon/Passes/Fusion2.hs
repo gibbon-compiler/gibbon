@@ -21,6 +21,7 @@ import Gibbon.Common
 import Data.Tuple.All
 import Data.Vector as V
 import Control.Monad
+--import Data.Matrix as Matrix
 
 
 debug = flip trace
@@ -42,8 +43,6 @@ type DefTable = M.Map Symbol DefTableEntry
 type PotentialPair = (Symbol, Symbol)
 type PotentialsList = [DefTableEntry] 
 
-
--- this can be made faster 
 removeCommonExpressions::  L Exp1->  L Exp1
 removeCommonExpressions exp = rec  exp 
    where 
@@ -74,9 +73,6 @@ removeCommonExpressions exp = rec  exp
       TimeIt exp x y  ->l $   TimeIt (rec exp) x y 
       x       -> l $x
         
-
-
--- this can be made faster 
 simplifyProjectionsOfProducts:: L Exp1->  L Exp1
 simplifyProjectionsOfProducts exp = rec  exp M.empty  
    where 
@@ -104,8 +100,7 @@ simplifyProjectionsOfProducts exp = rec  exp M.empty
         in l $ PrimAppE p ls'
 
       TimeIt exp x y  ->l $   TimeIt (rec exp mp) x y 
-
-
+      
       L1.ProjE i e ->
         case (getExp e ) of 
           VarE v -> 
@@ -115,8 +110,33 @@ simplifyProjectionsOfProducts exp = rec  exp M.empty
           otherwise -> l $ L1.ProjE i (rec e mp)
 
       x       -> l $x
-        
-      
+
+-- This function optimizes the tupled function by removing redundant output 
+-- parameters and their computation 
+-- The function optimized function is a single case expression, the pass will 
+-- look at the leaf expression for each possible match, those are tuples of the
+-- same size (prev optimizations guarantee that )
+-- if all two position are the same in all of them 
+-- -- (X1, X2, X3, X4 = X1, X5) if X1= X4 for all of them then eliminate X4.
+-- removeRedundantOutput :: FunDef1 -> (FunDef1, Map Int Int)
+-- removeRedundantOutput fdef = 
+--     let outputTuples = Matrix.fromList (collectOutputs (funBody fdef)) in 
+--     let firstTuple = Matrix.getRow outputTuples in --return vecto
+--     let 
+
+--  where 
+--   collectOutputs exp = case (getExp exp) of 
+--     CaseE e ls ->
+--          L.map (\(x, y, subBody) = extractLeafTuple subBody) ls
+--      where 
+--         extractLeafTuple exp =
+--            case (getExp exp) of 
+--               LetE (v, ls, t, bind) body -> extractLeafTuple(body)
+--               MkProdE ls -> ls
+--               otherwise -> error ("not expected expression")
+  
+    -- otherwise -> error("should be case expression")
+
 replaceLeafWithBind:: L Exp1-> (Int-> Var) -> Ty1 -> L Exp1 -> L Exp1
 replaceLeafWithBind exp genVar varType tailExp =
   rec exp 
@@ -206,10 +226,7 @@ freshExp vs (L sloc exp) = fmap (L sloc) $
             e3' <- freshExp vs e3
             return $ L1.FoldE (v1,t1,e1') (v2,t2,e2') e3'
 
-
-
-{- 
-This functions collect the following information for each defined variable: 
+{- This functions collect the following information for each defined variable: 
   1) The defining expression. (stored in DefTableEntry::def)
   2) The consumer of the definition that are candidates for fusion;the function
   is consumed in the first argument. (stored in DefTableEntry::fun_uses)
@@ -284,7 +301,6 @@ extractAppEName ::  Exp1 -> Var
 extractAppEName (AppE var _ _ ) = var
 extractAppEName  x = error(show x)
 
-
 -- returns ((innerFun, outerFun), symbol defined by the outer)
 findPotential :: DefTable -> [(Var, Var)] -> Maybe ((Var, Var), Maybe Symbol)
 findPotential table skipList = 
@@ -337,7 +353,8 @@ inline inlined_fun outer_fun arg_pos  =  do
   let inlinedCallArgs = 
          case (argType_inlined) of
                   ProdTy (ls) ->
-                    MkProdE (V.ifoldl (\ls i _   -> (l (ProjE i (l (VarE newArgVar)))):ls )  []   (V.fromList ls))
+                    MkProdE (V.ifoldl (\ls i _   -> 
+                      (l (ProjE i (l (VarE newArgVar)))):ls) [] (V.fromList ls))
                   exp@(PackedTy _ _) ->  ProjE 0 (l (VarE newArgVar))
                   _ -> error ("not expected type")
 
@@ -548,6 +565,10 @@ foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
 --     body <- (foldTupledFunctions (funBody funDef ) funDef ls )
 --     return funDef {funBody =body}
 
+-- ok wait what !!? this list is re ordered do ge the canonical representation 
+-- we cared originally about which one is first ,, omg what are you talking about
+-- how did i used to resolve ths projection then !!
+
 foldTupledFunctions ::   L Exp1 -> (FunDef1) -> [Exp1] -> Exp1 -> PassM (L Exp1)
 foldTupledFunctions body newFun oldCalls firstCall = 
   do
@@ -594,8 +615,7 @@ foldTupledFunctions body newFun oldCalls firstCall =
                                     L l $ ProjE (i+index) ( L l $ VarE newVar) ) 
                                       (V.fromList ls))))
 
-                              otherwise ->  L l  $ ProjE i ( L l $ VarE newVar)
-
+                              otherwise ->  L l  $ ProjE i ( L l $ VarE newVar) -- not complete buggy (i +eps) 
                         let body'' =   L l $ LetE (Var y, loc, t, rhs'') body'
                         return ( L  l $LetE (newVar, [], bindType, rhs') body'') 
                     else
@@ -607,7 +627,7 @@ foldTupledFunctions body newFun oldCalls firstCall =
                                     L l $ ProjE (i+index) ( L l $ VarE newVar) ) 
                                        (V.fromList ls))))
 
-                              otherwise ->  L l $ ProjE i ( L l $ VarE newVar)
+                              otherwise ->  L l $ ProjE i ( L l $ VarE newVar) -- not complete buggy (i +eps) 
                         return( L l $ LetE (Var y, loc, t, rhs') body')
 
         AppE name loc e          -> do
@@ -689,7 +709,7 @@ tupleListOfFunctions  ddefs funcList newName = do
         (\ls ty -> 
           case ty of
             ProdTy ls2 -> ls L.++ ls2
-            otherwise -> ty:ls
+            otherwise -> ls L.++ [ty]
          ) [] retTypes )
 
       newFuncInputType = ProdTy (V.ifoldl f [] lsVector)
@@ -947,8 +967,9 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions  = do
             let tupledFunction'' =tupledFunction'{funBody=recTupledBody } 
             let tupledFunction''' =tupledFunction''{
               funBody= removeUnusedDefs_exp (
-                simplifyProjectionsOfProducts 
-                   (removeCommonExpressions(funBody tupledFunction''))) } 
+                  simplifyProjectionsOfProducts( 
+                     removeCommonExpressions(
+                     funBody tupledFunction'')))} 
 
             let fdefs'' = M.insert tupledFName tupledFunction''' newDefs
 
