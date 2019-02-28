@@ -259,12 +259,12 @@ tests:
     test-flags: ["--fusion"]
 
   - name: render_tree.hs
-    failing: [gibbon1, gibbon2]
+    failing: [gibbon1, gibbon2, pointer]
     test-flags: ["--fusion"]
     answer-file: examples/render_tree.ans
 
   - name: render_tree_two_passes.hs
-    failing: [gibbon1, gibbon2]
+    failing: [gibbon1, gibbon2, pointer]
     test-flags: ["--fusion"]
     answer-file: examples/render_tree_two_passes.ans
 
