@@ -1,6 +1,6 @@
 -- | Unique names.
 
-module Gibbon.Passes.Freshen (freshNames) where
+module Gibbon.Passes.Freshen (freshNames, freshExp, freshExp1) where
 
 import           Control.Exception
 import           Data.Foldable ( foldrM )
@@ -11,6 +11,7 @@ import qualified Data.Map as M
 
 import           Gibbon.Common
 import           Gibbon.L0.Syntax
+import qualified Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
 
@@ -92,6 +93,10 @@ freshTys env tys =
           pure (env' <> env'', t' : acc))
     (env, [])
     tys
+
+
+freshExp1 :: VarEnv -> L Exp0 -> PassM (L L1.Exp1)
+freshExp1 = _
 
 freshExp :: VarEnv -> TyVarEnv -> L Exp0 -> PassM (L Exp0)
 freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
