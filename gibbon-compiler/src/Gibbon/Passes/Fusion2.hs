@@ -403,12 +403,16 @@ isPotential table symbol skipList =
              (L.length fun_uses == 1) && (L.notElem  ((extractAppEName def),
                 (extractAppEName(sel1 (L.head fun_uses))) ) skipList )
 
-{-Note** The type of the new function is defined as the following :
-let innerType = TreeX Args1...RetType1
-let outerType = RetType Args2 RetType2
+{-
+  The type of the new function is defined as the following :
+   if 
+     innerType = TreeX-> Args1... -> RetType1
+     outerType = RetType Args2... -> RetType2
+  then 
+     inlinedType = TreeX -> Args1... ->  Args2... -> RetType2
 
-inlinedType = fusedType = ProdTy[ TreeX Args1 Args2] -> RetType2
 -}
+
 inline :: FunDef1 -> FunDef1 -> Int  ->  PassM FunDef1
 inline inlined_fun outer_fun arg_pos  =  do
   newArgVar <- gensym(toVar("inputTree"))
@@ -418,19 +422,12 @@ inline inlined_fun outer_fun arg_pos  =  do
       argVar_outer    = head $ funArgs outer_fun
       argTypes_inlined = fst (funTy inlined_fun)
       argVar_inlined  = head $ funArgs inlined_fun
+      retTypeInlined = snd (funTy inlined_fun)
 
       -- get it as item in list
       traversedType = head argTypes_inlined
 
-      -- inlinedCallArgs =
-      --    case argType_inlined of
-      --             ProdTy (ls) ->
-      --               MkProdE (V.ifoldl (\ls i _   ->
-      --                 (l (ProjE i (l (VarE newArgVar)))):ls) [] (V.fromList ls))
-      --             exp@(PackedTy _ _) ->  ProjE 0 (l (VarE newArgVar))
-      --             _ -> error ("not expected type")
-
-
+    
       -- All arguments except the one that's traversed.
       sideArgsTypesInlined = tail argTypes_outer
       sidArgsTypesOuter    = tail argTypes_inlined
@@ -442,58 +439,34 @@ inline inlined_fun outer_fun arg_pos  =  do
                            newExp  = l$ VarE newArgVar
                        in substE oldExp newExp (funBody inlined_fun)
 
-      -- LS, CK: Continue here.
-      outerFunBody = case(argType_outer) of
-        PackedTy _ _ -> funBody outer_fun
-        ProdTy ls  ->
-           let argsLength =  L.length ls
-               shift' = L.length (getSideArgsTypes (argType_inlined))
-           in loop 1 argsLength (funBody outer_fun) shift'
-            where loop i n exp shift = if(i==n)
-                   then
-                     exp
-                   else
-                     loop (i+1) n (replaceProj i argVar_outer (i+shift)
-                         newArgVar exp) shift
+  
+  let oldExp =  VarE argVar_outer
+  let replaceWithCall exp =
+        do 
+          newVar <- gensym (toVar "innerCall")
+          let rhs = l $ AppE (funName inlined_fun) [] inlinedCallArgs
+              body = substE oldExp (l (VarE newVar)) exp
+          return $ l $ LetE (newVar, [], retTypeInlined, rhs) body
+                     
+  newBody <- do
+     -- we inline the body of the inlined function in the e1 otherwise if it
+     -- appears anywhere else we create a call to the inlined function. 
+     case (unLoc outerFunBody) of
+         CaseE e1 ls -> do
+            ls' <- Prelude.mapM (\(dataCon, vars, exp) ->
+                     do
+                       newInnerExp <- replaceWithCall exp
+                       return  (dataCon, vars, newInnerExp)
+                    ) ls
 
+            return $ l $ CaseE (substE oldExp inlinedFunBody e1) ls'
+          otherewise ->
+                  do
+                    newInnerExp <- replaceWithCall otherwise
+                    return newInnerExp
+  
 
-  newBody <-  do
-          let oldExp = l $ case (argType_outer) of
-                ProdTy _    ->  ProjE 0 (l (VarE argVar_outer) )
-                _           ->  VarE argVar_outer
-          ret <-do
-                case (unLoc outerFunBody) of
-                    CaseE e1 ls -> do
-                        ls' <-
-                          (Prelude.mapM
-                            (\(dataCon, x, exp) ->
-                              do
-                                  newVar <- gensym (toVar "innerCall")
-                                  let rhs =l $  AppE (funName inlined_fun) [] (l inlinedCallArgs)
-                                      body = substE oldExp (l (VarE newVar)) exp
-                                      newInnerExp = l $ LetE (newVar,[],(outTy (funTy inlined_fun)), rhs) body
-                                  return  (dataCon, x, newInnerExp)
-                          ) ls)
-
-                        return $l (CaseE (substE oldExp inlinedFunBody e1) ls')
-                    x ->
-                      do
-                        newVar <- gensym (toVar "innerCall")
-                        let rhs =l $  AppE (funName inlined_fun) [] (l inlinedCallArgs)
-                            body = substE oldExp (l (VarE newVar)) (l x)
-                            newInnerExp = l $ LetE (newVar,[],(outTy (funTy inlined_fun)), rhs) body
-                        return newInnerExp
-          return ret
-
-  return outer_fun { funArgs = [newArgVar],
-                     funTy   = newType,
-                     funBody = newBody
-                    }
- where
-  replaceProj i1 argVar1 i2 argvar2 exp=
-    let oldExp = l $ ProjE i1 (l (VarE argVar1))
-        newExp = l $ ProjE i2 (l (VarE argvar2))
-    in substE oldExp newExp exp
+  return outer_fun {funArgs = [newArgVar], funTy = newType, funBody = newBody}
 
 inlineArgumentProjections :: FunDef1 -> FunDef1
 inlineArgumentProjections function = case (fst(funTy function)) of
