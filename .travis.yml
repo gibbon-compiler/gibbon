@@ -90,6 +90,10 @@ git:
 script:
   ./run_all_tests.sh
 
+branches:
+  except:
+  - multiarg-functions
+
 notifications:
   email: false
   slack:
