@@ -21,7 +21,8 @@ import Gibbon.Common
 import Data.Tuple.All
 import Data.Vector as V
 import Control.Monad
-
+import Data.Set as S
+import Gibbon.Pretty 
 --import Data.Matrix as Matrix
 
 
@@ -1062,7 +1063,7 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions redirectMaps = do
           Just fdef -> do 
             let redirectMap = M.lookup tupledFName redirectMaps --`debug` ((show tupledFName)L.++ (show redirectMaps))
             exp' <-foldTupledFunctions exp fdef callExpressions firstCall 
-                 (V.fromList (getOutputStartPositions fdefs callExpressions redirectMap ))redirectMap
+                 (V.fromList (getOutputStartPositions fdefs callExpressions redirectMap ))redirectMap  -- TODO move getOutputStartPositions inside the fold function and also make it complete ! 
            
             let exp'' =  simplifyProjectionsOfProducts(exp')
             return (exp'', fdefs, redirectMaps)
@@ -1093,9 +1094,11 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions redirectMaps = do
                  simplifyProjectionsOfProducts( 
                      removeCommonExpressions(
                      funBody tupledFunction'')))}
+            
             let (tupledFunction4, redirectMap, removedPositions) = 
                   removeRedundantOutput  tupledFunction'''
-            
+            let x = inlineAllButAppE (funBody tupledFunction4)
+
             let tupledFunction5 = tupledFunction4{
               funBody = 
                 removeUnusedDefs_exp (
@@ -1112,7 +1115,7 @@ tuple ddefs fdefs oldExpIn traversedTree fusedFunctions redirectMaps = do
                   callExpressions (Just redirectMap))) (Just redirectMap)
             let exp'' = 
                   simplifyProjectionsOfProducts(exp')
-            return (exp'', fdefs'',  M.insert  tupledFName redirectMap redirectMaps) 
+            return (exp'', fdefs'',  M.insert  tupledFName redirectMap redirectMaps) `debug` (render $ pprint x)
      --       return (exp, fdefs'')
 
 fixCalls :: L Exp1 -> FunDef1 -> M.Map Int Int -> [Int] -> L Exp1 
@@ -1262,3 +1265,47 @@ fusion2 (L1.Prog defs funs main) = do
             (m', newDefs, _) <- (transform defs funs m Nothing [] True [])
             return (Just (m',ty), M.union funs newDefs)
     return $ L1.Prog defs funs' main'
+
+
+
+-- Those  functions are used for the redundancy analysis 
+
+-- parametrize an expression around the input set of vars, 
+-- using variables _p0_ _p1_ _p2_ ..etx (we assumes those are not going to
+-- appear anywhere else in the program we need a better way maybe)
+parametrizeExp :: L Exp1 -> S.Set Var -> (L Exp1)
+parametrizeExp exp vars  = rec exp M.empty []
+ -- the map tracks the already mapped projections (deal with ProjE i xi as a variable )
+ -- the list returns the argument os the expression in it in the order they where discovered  (for the first time )   
+  where 
+    rec ex = case (getExp ex) of
+      LetE (v, ls, t, bind) body -> error("let not expected in parametrizeExp")
+      CaseE e ls    -> error("CaseE not expected in parametrizeExp")
+      AppE v loc e -> error("AppE not expected in parametrizeExp")
+      ProjE i e -> 
+           case e of 
+              VarE v ->
+                   if (S.member v vars) 
+                    then
+                    
+                    else
+                      l$ ProjE i e
+              otherwise -> l$ ProjE i e
+
+
+inlineAllButAppE:: L Exp1 -> L Exp1
+inlineAllButAppE ex  = rec ex 
+ where 
+  rec ex = case (getExp ex) of
+    LetE (v, ls, t, bind) body ->
+      case (getExp bind) of 
+          AppE _ _ _ ->  l$  LetE (v, ls, t, bind) (rec body)
+          otherwise -> 
+            let oldExp = l $ VarE v  
+                newExp = bind
+                body' = substE oldExp newExp body
+            in rec (body') 
+    CaseE e ls    -> 
+      let ls' = L.map (\(x, y, exp) -> (x, y, rec exp)) ls
+      in  l$ CaseE e ls'    
+    otherwise ->  l$ otherwise
