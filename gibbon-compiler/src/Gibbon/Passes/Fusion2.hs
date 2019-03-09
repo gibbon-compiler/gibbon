@@ -440,18 +440,19 @@ inline inlined_fun outer_fun arg_pos  =  do
                        in substE oldExp newExp (funBody inlined_fun)
 
   
-  let oldExp =  VarE argVar_outer
+  let oldExp = l $ VarE argVar_outer
   let replaceWithCall exp =
         do 
           newVar <- gensym (toVar "innerCall")
-          let rhs = l $ AppE (funName inlined_fun) [] inlinedCallArgs
+          let rhs = l (AppE (funName inlined_fun) [] 
+                        (L.map (\var -> (l (VarE var))) (funArgs inlined_fun)))
               body = substE oldExp (l (VarE newVar)) exp
           return $ l $ LetE (newVar, [], retTypeInlined, rhs) body
                      
   newBody <- do
      -- we inline the body of the inlined function in the e1 otherwise if it
      -- appears anywhere else we create a call to the inlined function. 
-     case (unLoc outerFunBody) of
+     case (unLoc (funBody outer_fun)) of
          CaseE e1 ls -> do
             ls' <- Prelude.mapM (\(dataCon, vars, exp) ->
                      do
@@ -459,78 +460,84 @@ inline inlined_fun outer_fun arg_pos  =  do
                        return  (dataCon, vars, newInnerExp)
                     ) ls
 
-            return $ l $ CaseE (substE oldExp inlinedFunBody e1) ls'
-          otherewise ->
+            return $ l ( CaseE (substE oldExp inlinedFunBody e1) ls')
+         exp ->
                   do
-                    newInnerExp <- replaceWithCall otherwise
+                    newInnerExp <- replaceWithCall (l exp)
                     return newInnerExp
   
 
   return outer_fun {funArgs = [newArgVar], funTy = newType, funBody = newBody}
 
-inlineArgumentProjections :: FunDef1 -> FunDef1
-inlineArgumentProjections function = case (fst(funTy function)) of
-    ProdTy _->   function {funBody = go (funBody function)}
-      where
-        go (L l ex)  = case  ex of
-          LetE (v,loc,t,rhs) body ->
-              case (unLoc rhs) of
-                proj@(ProjE i (L _ (VarE v1))) ->
-                  if (v1 == (funArg function))
-                    then
-                      let oldEx  =  L l $ VarE v
-                          newExp =  L l $ proj
-                      in substE oldEx newExp (go body)
-                    else
-                     L l $ LetE (v,loc,t,(go rhs)) (go body)
-                _ ->
-                    L l $LetE (v,loc,t,(go rhs)) (go body)
-          CaseE e1 ls1  ->
-               L l$ CaseE e1 (L.map f ls1)
-             where
-               f (dataCon, x, exp) = (dataCon, x, go exp)
-          AppE v loc e             ->  L l $ AppE v loc $ go e
-          IfE e1 e2 e3             ->  L l $ IfE (go e1) ( go e2) ( go e3)
-          TimeIt e d b             ->  L l $ TimeIt ( go e) d b
-          _                        -> L l ex
+-- inlineArgumentProjections :: FunDef1 -> FunDef1
+-- inlineArgumentProjections function = case (fst(funTy function)) of
+--     ProdTy _->   function {funBody = go (funBody function)}
+--       where
+--         go (L l ex)  = case  ex of
+--           LetE (v,loc,t,rhs) body ->
+--               case (unLoc rhs) of
+--                 proj@(ProjE i (L _ (VarE v1))) ->
+--                   if (v1 == (funArg function))
+--                     then
+--                       let oldEx  =  L l $ VarE v
+--                           newExp =  L l $ proj
+--                       in substE oldEx newExp (go body)
+--                     else
+--                      L l $ LetE (v,loc,t,(go rhs)) (go body)
+--                 _ ->
+--                     L l $LetE (v,loc,t,(go rhs)) (go body)
+--           CaseE e1 ls1  ->
+--                L l$ CaseE e1 (L.map f ls1)
+--              where
+--                f (dataCon, x, exp) = (dataCon, x, go exp)
+--           AppE v loc e             ->  L l $ AppE v loc $ go e
+--           IfE e1 e2 e3             ->  L l $ IfE (go e1) ( go e2) ( go e3)
+--           TimeIt e d b             ->  L l $ TimeIt ( go e) d b
+--           _                        -> L l ex
 
-    _ -> function
+--     _ -> function
+
+-- This function simplify the case expression when the matched expression 
+-- is it self another case expression. In the same way wadler to it.
 
 simplifyCases :: FunDef1 -> FunDef1
 simplifyCases function = function {funBody = go ( funBody function) }
   where
-    go (L l ex)  = case  ex of
+    go ex  = case (unLoc ex) of
 
-      CaseE e1@(L l (CaseE e2 ls2)) ls1 -> go $ L l $ CaseE e2 (L.map f ls2)
+      CaseE e1@(L _  (CaseE e2 ls2)) ls1 -> 
+          go (l (CaseE e2 (L.map f ls2)))
         where
-          f oldItem = (upd3 newMember oldItem)
-            where
-              newMember = L l (CaseE (sel3 oldItem) ls1)
-
-      CaseE e1@(L l (DataConE loc k ls)) ls1 ->
-        let newBody = L.find predicate ls1
-             where
-              predicate item = if(sel1 item == k) then True else False
-              in case newBody of
-                Nothing -> error "unmatched construcotor!"
-                Just (k, vars, exp)  -> go $case_subst ls vars exp
+          f oldItem = upd3 (l (CaseE (sel3 oldItem) ls1)) oldItem
+     
+      CaseE e1@(L l (DataConE loc k constructorVars)) caseList ->
+          let newBody = L.find (\item-> sel1 item ==k) caseList
+          in case newBody of
+               Nothing -> error "unmatched constructor!"
+               Just (k, caseVars, caseExp)  ->
+                    go $case_subst constructorVars caseVars caseExp
                   where
-                    case_subst (x1:l1) (x2:l2) exp = subst (fst x2)
-                      ( x1)(case_subst l1 l2 exp)
+                    case_subst (x1:l1) (x2:l2) exp = 
+                        subst (fst x2) (x1) (case_subst l1 l2 exp)
                     case_subst [] [] exp = exp
 
-      CaseE (L l' (IfE e1 e2 e3) ) ls          -> go $
-        L l (IfE e1 ( L l' $CaseE e2 ls) ( L l' $CaseE e3 ls) )
-      CaseE e1@(L l' (LetE bind body )  ) ls1  -> L l' $
-        LetE bind (go $ L l $ CaseE body (ls1) )
-      CaseE e1 ls1                              ->  L l$ CaseE e1 (L.map f ls1)
-        where
-          f item = (upd3 (go (sel3 item)) item)
-      LetE (v,loc,t,rhs) bod   ->  L l $ LetE (v,loc,t, (go rhs)) (go bod)
-      AppE v loc e             ->  L l $ AppE v loc $ go e
-      IfE e1 e2 e3             ->  L l $ IfE (go e1) ( go e2) ( go e3)
-      TimeIt e d b             ->  L l $ TimeIt ( go e) d b
-      _                        -> L l ex
+      CaseE (L _ (IfE e1 e2 e3) ) ls          -> go $
+         l $ IfE e1 (l (CaseE e2 ls)) (l (CaseE e3 ls) )
+
+      -- CaseE e1@(L _  (LetE bind body )  ) ls1  ->  
+      --   let body' = l $ go (l (CaseE body (ls1))) 
+      --   in l $ LetE bind body'
+      
+      -- CaseE e1 ls1                              -> 
+      --    l $ CaseE e1 (L.map f ls1)
+      --   where
+      --     f item = (upd3 (go (sel3 item)) item)
+      LetE (v, loc, t, rhs) bod   ->  l  $ LetE (v,loc,t, (go rhs)) (go bod)
+      AppE v loc expList          ->
+          l  $ AppE v loc  (L.map (\ex -> go ex) expList) 
+      IfE e1 e2 e3             ->  l  $ IfE (go e1) ( go e2) ( go e3)
+      TimeIt e d b             ->  l  $ TimeIt ( go e) d b
+      ex                       ->  l ex
 
 
 foldFusedCalls_f :: (Var, Var, Int, Var) -> FunDef1 -> FunDef1
@@ -1101,26 +1108,29 @@ getOutputStartPositions fdefs callExpressions redirectMap =
                 ProdTy ls -> L.length ls
                 otherwise -> 1
 
+-- the last argument is a set of already fused fuction in the form of 
+-- [(outer, inner, 0, fusedFun)]
 
 fuse :: DDefs Ty1 -> FunDefs1 -> Var -> Var -> [(Var, Var, Int, Var)]
      -> PassM (Bool, Var,  FunDefs1)
-fuse ddefs fdefs  innerVar  outerVar fusedFunctions_ = do
-  config <- getGibbonConfig
-  newVar <- if (verbosity config >= 4)
-            then pure $ toVar ("_FUS_f_" ++ (fromVar outerVar) ++ "_f_" ++(fromVar innerVar ) ++ "_FUS_")
-            else gensym "fuse_"
-  innerFreshBody <- freshExp1 M.empty (funBody innerFunc)
-  outerFreshBody <- freshExp1 M.empty (funBody outerFunc)
-  setp1 <- inline innerFunc{funBody = innerFreshBody}
-               outerFunc{funBody    = outerFreshBody}  (-1)
-  let step2 = (simplifyCases setp1 ){funName = newVar} --`debug`(show setp1)
-      step3 = (foldFusedCalls_f (outerVar, innerVar, -1, newVar)  step2) --`debug` ((show newName )L.++"\n")
-    -- fold upper level fused functions
-      step4 = L.foldl (\f e -> foldFusedCalls_f e f ) step3
-       fusedFunctions_
 
-      step5 =   step4 {funBody = removeUnusedDefs_exp  (funBody step4)}
-  return $(True, newVar, M.insert newVar step5 fdefs );
+fuse ddefs fdefs  innerVar  outerVar fusedFunctions_ = do
+    config <- getGibbonConfig
+    newVar <- if (verbosity config >= 4)
+            then pure (toVar ("_FUS_f_" ++ (fromVar outerVar) ++ "_f_" ++ 
+                   (fromVar innerVar ) ++ "_FUS_"))
+            else gensym "fuse_"
+    innerFreshBody <- freshExp1 M.empty (funBody innerFunc)
+    outerFreshBody <- freshExp1 M.empty (funBody outerFunc)
+    setp1 <- inline innerFunc{funBody = innerFreshBody} 
+                 outerFunc{funBody = outerFreshBody}  (-1)
+    let step2 = (simplifyCases setp1 ){funName = newVar} --`debug`(show setp1)
+        step3 = (foldFusedCalls_f (outerVar, innerVar, -1, newVar)  step2) --`debug` ((show newName )L.++"\n")
+         -- fold upper already fused functions
+        step4 = L.foldl (\f e -> foldFusedCalls_f e f ) step3 fusedFunctions_
+        step5 = step4 {funBody = removeUnusedDefs_exp  (funBody step4)}
+    
+    return $(True, newVar, M.insert newVar step5 fdefs )
 
 -- Check if a function conforms to restrictions we impose.
 violateRestrictions :: FunDefs1 -> Var -> Var -> Bool
