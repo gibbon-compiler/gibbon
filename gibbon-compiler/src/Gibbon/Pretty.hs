@@ -41,6 +41,9 @@ class Pretty e where
 doublecolon :: Doc
 doublecolon = colon <> colon
 
+indentLevel :: Int
+indentLevel = 4
+
 --------------------------------------------------------------------------------
 
 -- A convenience wrapper over some of the constraints.
@@ -60,7 +63,7 @@ instance HasPretty ex => Pretty (Prog ex) where
 
 renderMain :: Doc -> Doc -> Doc
 renderMain m ty = text "gibbon_main" <+> doublecolon <+> ty
-                    $$ text "gibbon_main" <+> equals $$ nest 4 m
+                    $$ text "gibbon_main" <+> equals $$ nest indentLevel m
 
 -- Things we need to make this a valid compilation unit for GHC:
 ghc_compat_prefix, ghc_compat_suffix :: Doc
@@ -119,7 +122,7 @@ instance HasPretty ex => Pretty (FunDef ex) where
       where
         renderBod :: Doc
         renderBod = text (fromVar funName) <+> (pprintWithStyle sty funArgs) <+> equals
-                      $$ nest 4 (pprintWithStyle sty funBody)
+                      $$ nest indentLevel (pprintWithStyle sty funBody)
 
 -- Datatypes
 instance Pretty ex => Pretty (DDef ex) where
@@ -260,8 +263,8 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                       1 -> text "snd" <+> edoc
                       _ -> error (render $ pprintWithStyle PPInternal ex0) -- text "#" <> int i <+> edoc
           CaseE e bnds -> text "case" <+> pprintWithStyle sty e <+> text "of" $+$
-                          nest 4 (vcat $ map dobinds bnds)
-          DataConE loc dc es -> text dc <+>
+                          nest indentLevel (vcat $ map dobinds bnds)
+          DataConE loc dc es -> parens $ text dc <+>
                                 (if isEmpty (pprintWithStyle sty loc)
                                  then empty
                                  else pprintWithStyle sty loc) <+>
@@ -278,7 +281,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                                                              then pprintWithStyle sty v
                                                                              else pprintWithStyle sty v <> doublecolon <> pprintWithStyle sty loc)
                                                             vls))
-                               <+> text "->" $+$ nest 4 (pprintWithStyle sty e)
+                               <+> text "->" $+$ nest indentLevel (pprintWithStyle sty e)
 -- L1
 instance Pretty (NoExt l d) where
     pprintWithStyle _ _ = empty
@@ -339,7 +342,7 @@ instance Pretty L0.Ty0 where
         L0.MetaTv v   -> doc v
         L0.ProdTy tys -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
         L0.SymDictTy ty1 -> text "Dict" <+> pprint ty1
-        L0.ArrowTy as b  -> (hsep $ map (<+> "->") $ map (pprintWithStyle sty) as) <+> pprint b
+        L0.ArrowTy as b  -> parens $ (hsep $ map (<+> "->") $ map (pprintWithStyle sty) as) <+> pprint b
         L0.PackedTy tc loc -> text "Packed" <+> text tc <+> brackets (hcat (map (pprintWithStyle sty) loc))
         L0.ListTy ty1 -> brackets (pprintWithStyle sty ty1)
 
@@ -350,8 +353,8 @@ instance Pretty L0.TyScheme where
 instance (Out a, Pretty a) => Pretty (L0.E0Ext a L0.Ty0) where
   pprintWithStyle _ ex0 =
     case ex0 of
-      L0.LambdaE args bod -> parens (text "\\" <+> (foldl (\acc (v,ty) -> acc <+> doc v <+> doublecolon <+> pprint ty) empty args) <+> text " -> "
-                                         $$ nest 4 (pprint bod))
+      L0.LambdaE args bod -> parens (text "\\" <> parens (hsep (punctuate comma (map (\(v,ty) -> doc v <+> doublecolon <+> pprint ty) args))) <+> text "->"
+                                         $$ nest indentLevel (pprint bod))
       L0.PolyAppE{} -> doc ex0
 
 
@@ -394,7 +397,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         env2' = extendsVEnv (M.fromList $ zip funArgs (inTys funTy)) env2
         renderBod :: Doc
         renderBod = text (fromVar funName) <+> (hsep $ map (text . fromVar) funArgs) <+> equals
-                      $$ nest 4 (ppExp env2' funBody)
+                      $$ nest indentLevel (ppExp env2' funBody)
 
     ppExp :: Env2 Ty1 -> L Exp1 -> Doc
     ppExp env2 (L _ ex0) =
@@ -461,9 +464,9 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                               in parens $ text "let " <+> pat <+> text "=" <+> edoc <+> text "in" <+> text v
                 ty -> error $ "pprintHsWithEnv: " ++ sdoc ty ++ "is not a product. In " ++ sdoc ex0
           CaseE e bnds -> text "case" <+> ppExp env2 e <+> text "of" $+$
-                          nest 4 (vcat $ map (dobinds env2) bnds)
+                          nest indentLevel (vcat $ map (dobinds env2) bnds)
           DataConE loc dc es ->
-                              text dc <+>
+                              parens $ text dc <+>
                               (if isEmpty (pprintWithStyle sty loc)
                                then empty
                                else pprintWithStyle sty loc) <+>
@@ -483,4 +486,4 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                                                                              then pprintWithStyle sty v
                                                                              else pprintWithStyle sty v <> doublecolon <> pprintWithStyle sty loc)
                                                             vls))
-                               <+> text "->" $+$ nest 4 (ppExp env21' e)
+                               <+> text "->" $+$ nest indentLevel (ppExp env21' e)
