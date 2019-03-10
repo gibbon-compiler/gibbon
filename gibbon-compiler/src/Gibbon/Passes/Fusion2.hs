@@ -545,63 +545,47 @@ foldFusedCalls_f rule function = function{funBody=
   foldFusedCalls rule (funBody function)}
 
 -- check note** just above the inline function
-foldFusedCalls :: (Var, Var, Int,Var ) -> L Exp1  ->(L Exp1)
+foldFusedCalls :: (Var, Var, Int, Var) -> L Exp1 -> (L Exp1)
 foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
-  let defTable = buildDefTable (unLoc body)
-  in let go (L l ex ) = case (ex) of
+  let defTable = buildDefTable (unLoc body)  
+      go ex = case (unLoc ex) of
           AppE fName loc argList ->
-            let notFolded = L l $ AppE fName loc (go argList)
-            in if(fName ==  outerName)
+            let notFolded = l $ AppE fName loc argList
+            in if (fName == outerName)
                 then
-                  case (unLoc argList ) of
+                  case (unLoc (head argList) ) of
                     VarE (Var symInner) ->
                       if(innerName == getDefiningFunction symInner defTable)
                         then
-                            let innerArgs = getArgs  symInner defTable
-                            in let outerArgs =   [argList]
-                               in let newCallArgs= L l (MkProdE (innerArgs
-                                        L.++ (L.drop 1 outerArgs)))
-                                  in L l  $AppE  newName loc newCallArgs
-                        else notFolded
-
-                    MkProdE ls@(L _ (VarE (Var sym)):tail)->
-                      if(innerName == getDefiningFunction sym defTable)
-                        then
-                          let innerArgs = getArgs sym defTable
-                          in let outerArgs =  ls
-                              in let newCallArgs= L l( MkProdE (innerArgs
-                                             L.++ (L.drop 1 outerArgs)))
-                                 in L l  $AppE  newName loc newCallArgs
-                        else notFolded
-                    _ -> notFolded
-
-                else
-                  notFolded
-
-
-          LetE (v,loc,t,lhs) bod   ->  L l $ LetE (v,loc,t, (go lhs)) (go bod)
-          IfE e1 e2 e3             ->  L l $ IfE (go e1) ( go e2) ( go e3)
-          CaseE e1 ls1             ->  L l $ CaseE e1 (L.map f ls1)
+                            let innerArgs = getArgs symInner defTable
+                                outerArgs = argList
+                                newCallArgs= (innerArgs L.++ (tail argList))
+                            in  l $ AppE newName loc newCallArgs
+                        else 
+                            notFolded
+                else 
+                    notFolded  
+          LetE (v,loc,t,lhs) bod   ->  l $ LetE (v,loc,t, (go lhs)) (go bod)
+          IfE e1 e2 e3             ->  l $ IfE (go e1) ( go e2) ( go e3)
+          CaseE e1 ls1             ->  l $ CaseE e1 (L.map f ls1)
             where
               f (dataCon,x,exp) = (dataCon, x, (go exp))
-          TimeIt e d b             ->  L l $ TimeIt ( go e) d b
-          DataConE loc datacons ls ->  L l $ DataConE loc datacons
+          TimeIt e d b             ->  l $ TimeIt (go e) d b
+          DataConE loc dataCons ls ->  l $ DataConE loc dataCons
             (L.map (\x-> go x) ls)
-          otherwise -> L l ex
+          otherwise ->  ex
 
   in go body
       where
         getDefiningFunction x defTable = case (M.lookup x defTable) of
-            Nothing    -> (toVar "-1not-used-vars")
+            Nothing    -> error("def table does not include the symbol")
             Just entry -> case (def  entry) of
                   AppE v _ _   -> v
-                  _            -> (toVar "-1not-used-var")
+                  _            -> (toVar "dummy")
         getArgs x defTable = case (M.lookup x defTable) of
              Nothing    -> error  "error in foldFusedCalls"
              Just entry -> case (def  entry) of
-                  AppE _ _ args-> case (unLoc (args)) of
-                      MkProdE ls -> ls
-                      x          -> [l x]
+                  AppE _ _ args-> args
                   _            -> error  ("ops" L.++ (show(def  entry)))
 
 -- foldTupledFunctions_f :: ( FunDef1) ->[Var] ->PassM (FunDef1)
@@ -1108,23 +1092,26 @@ getOutputStartPositions fdefs callExpressions redirectMap =
                 ProdTy ls -> L.length ls
                 otherwise -> 1
 
--- the last argument is a set of already fused fuction in the form of 
+-- the last argument is a set of already fused functions in the form of 
 -- [(outer, inner, 0, fusedFun)]
 
 fuse :: DDefs Ty1 -> FunDefs1 -> Var -> Var -> [(Var, Var, Int, Var)]
      -> PassM (Bool, Var,  FunDefs1)
-
 fuse ddefs fdefs  innerVar  outerVar fusedFunctions_ = do
     config <- getGibbonConfig
     newVar <- if (verbosity config >= 4)
             then pure (toVar ("_FUS_f_" ++ (fromVar outerVar) ++ "_f_" ++ 
                    (fromVar innerVar ) ++ "_FUS_"))
             else gensym "fuse_"
-    innerFreshBody <- freshExp1 M.empty (funBody innerFunc)
-    outerFreshBody <- freshExp1 M.empty (funBody outerFunc)
-    setp1 <- inline innerFunc{funBody = innerFreshBody} 
-                 outerFunc{funBody = outerFreshBody}  (-1)
-    let step2 = (simplifyCases setp1 ){funName = newVar} --`debug`(show setp1)
+
+    -- freshen the functions
+    --innerFreshBody <- freshExp1 M.empty (funBody innerFunc)
+    --outerFreshBody <- freshExp1 M.empty (funBody outerFunc)
+    step1 <- inline innerFunc-- {funBody = innerFreshBody} 
+                 outerFunc -- {funBody = outerFreshBody}  
+                 (-1)
+
+    let step2 = (simplifyCases step1 ){funName = newVar} --`debug`(show step1)
         step3 = (foldFusedCalls_f (outerVar, innerVar, -1, newVar)  step2) --`debug` ((show newName )L.++"\n")
          -- fold upper already fused functions
         step4 = L.foldl (\f e -> foldFusedCalls_f e f ) step3 fusedFunctions_
