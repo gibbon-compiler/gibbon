@@ -597,7 +597,7 @@ simplifyCases function = function {funBody = rec ( funBody function) }
 
 foldFusedCalls_f :: (Var, Var, Int, Var) -> FunDef1 -> FunDef1
 foldFusedCalls_f rule function = function{funBody= 
-  foldFusedCalls rule (funBody function)}
+    foldFusedCalls rule (funBody function)}
 
 -- check note** just above the inline function 
 foldFusedCalls :: (Var, Var, Int,Var ) -> L Exp1  ->(L Exp1) 
@@ -644,7 +644,7 @@ foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
             (L.map (\x-> rec x) ls)
           otherwise -> L l ex 
 
-  in rec body
+  in removeUnusedDefs_exp (rec body)
       where
         getDefiningFunction x defTable = case (M.lookup x defTable) of
             Nothing    -> (toVar "-1not-used-vars")
