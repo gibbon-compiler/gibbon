@@ -58,7 +58,7 @@ library
                        Gibbon.Passes.DirectL3
                        Gibbon.Passes.FloatOut
                        -- Multiarg functions, FINISHME:
-                       -- -- Gibbon.Passes.Fusion2
+                       Gibbon.Passes.Fusion2
                        Gibbon.Passes.RepairProgram
                        Gibbon.Passes.AddRAN
                        Gibbon.Passes.AddTraversals

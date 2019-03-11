@@ -77,7 +77,7 @@ import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.FollowRedirects(followRedirects)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
--- -- import           Gibbon.Passes.Fusion2        (fusion2)
+import           Gibbon.Passes.Fusion2        (fusion2)
 import           Gibbon.Pretty
 
 #ifdef LLVM_ENABLED
@@ -474,8 +474,7 @@ passes config@Config{dynflags} l1 = do
       l1 <- goE "inlineTriv"    inlineTriv              l1
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- if should_fuse
-          then dbgTraceIt "WIP: Multiarg functions, Fusion2 not done yet." (pure l1)
-               -- goE  "fusion2"   fusion2                 l1
+          then goE  "fusion2"   fusion2                 l1
           else return l1
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- goE "floatOut"      floatOut                l1
