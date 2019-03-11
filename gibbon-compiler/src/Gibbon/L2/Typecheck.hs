@@ -151,25 +151,19 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
              -- (1)
              mapM (uncurry $ ensureEqualTyNoLoc exp) (zip in_tys arrIns)
 
-             if not (any hasPacked in_tys)
-             then return (arrOut, tstate)
-             else do
-                 -- (3) Check location of argument
-                 let tyls = concatMap locsInTy in_tys
-                 case find (\loc -> not $ S.member loc (S.fromList ls)) tyls of
-                   Nothing -> return ()
-                   Just not_in_ls -> throwError $ GenericTC ("Packed argument location expected: " ++ show not_in_ls) exp
-
-                 let handleTS ts (l,Output) =  switchOutLoc exp ts l
-                     handleTS ts _ = return ts
-
-                 -- (2)
-                 tstate' <- foldM handleTS tstate $ zip ls $ L.map (\(LRM _ _ m) -> m) locVars
-                 -- Use locVars used at call-site in the returned type
-                 let arrOutMp = M.fromList $ zip (L.map (\(LRM l _ _) -> l) locVars) ls
-                     arrOut'  = substLoc arrOutMp arrOut
-
-                 return (arrOut',tstate')
+             -- (3) Check location of argument
+             let tyls = concatMap locsInTy in_tys
+             case find (\loc -> not $ S.member loc (S.fromList ls)) tyls of
+               Nothing -> return ()
+               Just not_in_ls -> throwError $ GenericTC ("Packed argument location expected: " ++ show not_in_ls) exp
+             let handleTS ts (l,Output) =  switchOutLoc exp ts l
+                 handleTS ts _ = return ts
+             -- (2)
+             tstate' <- foldM handleTS tstate $ zip ls $ L.map (\(LRM _ _ m) -> m) locVars
+             -- Use locVars used at call-site in the returned type
+             let arrOutMp = M.fromList $ zip (L.map (\(LRM l _ _) -> l) locVars) ls
+                 arrOut'  = substLoc arrOutMp arrOut
+             return (arrOut',tstate')
 
       PrimAppE pr es -> do
 

@@ -147,8 +147,8 @@ case_printtup = runner "printtup.c" printTupProg "'#(42 (Leaf 1))"
 case_printtup2 :: Assertion
 case_printtup2 = runner "printtup2.c" printTupProg2 "'#((Node (Node (Leaf 1) (Leaf 1)) (Node (Leaf 1) (Leaf 1))) (Node (Leaf 1) (Leaf 1)))"
 
-case_addtrees :: Assertion
-case_addtrees = runner "addtrees.c" addTreesProg "(Node (Node (Leaf 2) (Leaf 2)) (Node (Leaf 2) (Leaf 2)))"
+-- case_addtrees :: Assertion
+-- case_addtrees = runner "addtrees.c" addTreesProg "(Node (Node (Leaf 2) (Leaf 2)) (Node (Leaf 2) (Leaf 2)))"
 
 case_sumtree :: Assertion
 case_sumtree = runner "sumtree.c" sumTreeProg "8"
@@ -167,8 +167,8 @@ See https://github.com/iu-parfunc/gibbon/issues/86.
 case_sumupseteven :: Assertion
 case_sumupseteven = runner "sumupseteven.c" sumUpSetEvenProg "'#((Inner 8 1 (Inner 4 1 (Inner 2 1 (Leaf 1) (Leaf 1)) (Inner 2 1 (Leaf 1) (Leaf 1))) (Inner 4 1 (Inner 2 1 (Leaf 1) (Leaf 1)) (Inner 2 1 (Leaf 1) (Leaf 1)))) 8)"
 
-case_subst :: Assertion
-case_subst = runner "subst.c" substProg "(LETE 1 (VARREF 42) (VARREF 10))"
+-- case_subst :: Assertion
+-- case_subst = runner "subst.c" substProg "(LETE 1 (VARREF 42) (VARREF 10))"
 
 case_buildstree :: Assertion
 case_buildstree = runner "buildstree.c" buildSTreeProg "(Inner 0 0 (Inner 0 0 (Inner 0 0 (Leaf 1) (Leaf 1)) (Inner 0 0 (Leaf 1) (Leaf 1))) (Inner 0 0 (Inner 0 0 (Leaf 1) (Leaf 1)) (Inner 0 0 (Leaf 1) (Leaf 1))))"
