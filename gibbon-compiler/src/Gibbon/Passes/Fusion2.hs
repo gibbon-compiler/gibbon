@@ -20,6 +20,7 @@ import           Data.Tuple.All
 import qualified Data.Vector as V
 import           Control.Monad
 --import Data.Matrix as Matrix
+import Gibbon.Pretty 
 
 
 import Gibbon.Common
@@ -28,7 +29,7 @@ import Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
 
-debug =  flip (dbgTrace 3)
+debug =  flip (dbgTrace 5)
 
 {-
 
@@ -465,9 +466,9 @@ inline inlined_fun outer_fun arg_pos  =  do
                   do
                     newInnerExp <- replaceWithCall (l exp)
                     return newInnerExp
-  
-
-  return outer_fun {funArgs = [traversedTreeArg], funTy = newType, funBody = newBody}
+  let newArgs = [traversedTreeArg] L.++ (L.tail (funArgs inlined_fun)) L.++ 
+        (L.tail (funArgs outer_fun)) 
+  return outer_fun {funArgs =newArgs, funTy = newType, funBody = newBody}
 
 -- inlineArgumentProjections :: FunDef1 -> FunDef1
 -- inlineArgumentProjections function = case (fst(funTy function)) of
@@ -542,7 +543,7 @@ simplifyCases function = function {funBody = go ( funBody function) }
 
 foldFusedCalls_f :: (Var, Var, Int, Var) -> FunDef1 -> FunDef1
 foldFusedCalls_f rule function = function{funBody=
-  foldFusedCalls rule (funBody function)}
+  removeUnusedDefs_exp( foldFusedCalls rule (funBody function))}
 
 -- check note** just above the inline function
 foldFusedCalls :: (Var, Var, Int, Var) -> L Exp1 -> (L Exp1)
@@ -575,10 +576,10 @@ foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
             (L.map (\x-> go x) ls)
           otherwise ->  ex
 
-  in go body
+  in removeUnusedDefs_exp (go body)
       where
         getDefiningFunction x defTable = case (M.lookup x defTable) of
-            Nothing    -> error("def table does not include the symbol")
+            Nothing    -> (toVar "dummy") 
             Just entry -> case (def  entry) of
                   AppE v _ _   -> v
                   _            -> (toVar "dummy")
@@ -940,12 +941,12 @@ buildTupleCandidatesTable fDefs exp traversedTree =
 
 tuple :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> Maybe Var -> [(Var, Var, Int, Var)] 
   -> (M.Map Var (M.Map Int Int)) ->  PassM (L Exp1,  FunDefs1)
-tuple ddefs fdefs oldExp traversedTree prevFusedFuncs redirectMaps = do
-
+tuple ddefs fdefs oldExp_ traversedTree prevFusedFuncs redirectMaps = do
+  let oldExp = oldExp_ --removeUnusedDefs_exp oldExp_
   -- candidates1 : a list of [(fName, CallExpressions)] functions that traverse
   -- same input 
   let candidates1 = L.filter f (M.toList (buildTupleCandidatesTable
-        fdefs oldExp traversedTree) ) where f (_, ls) = (L.length ls)> 1
+        fdefs  oldExp traversedTree) ) where f (_, ls) = (L.length ls)> 1
 
   --candidates2: a list  [(tupleName, calls, firstCall)]
   let candidates2 = L.map
@@ -954,16 +955,16 @@ tuple ddefs fdefs oldExp traversedTree prevFusedFuncs redirectMaps = do
               sortedCalls = L.sortOn f ls
                  where f exp@(AppE fName _ _) = (fName,exp)
            in (constructName sortedCalls, sortedCalls, firstCall)
-        ) candidates1       
+        ) candidates1      `debug` ("finding candidtates in " L.++ (render $ pprint oldExp))
 
-  (newExp, fdefs, redirectMaps) <-
+  (newExp, fdefs', redirectMaps) <-
       Control.Monad.foldM go (oldExp, fdefs, redirectMaps)  candidates2
 
   let newExp' = removeUnusedDefs_exp 
                    (simplifyProjectionsOfProducts
                         (removeCommonExpressions
                             (removeCommonExpressions  newExp )))
-  return (newExp', fdefs)
+  return (newExp', fdefs')
 
  where
     constructName ls = toVar( "_TUP_" L.++ (L.foldl  appendName "" ls)
@@ -987,16 +988,16 @@ tuple ddefs fdefs oldExp traversedTree prevFusedFuncs redirectMaps = do
                   where
                     getCalledFunDef callExpr = case (callExpr) of
                         (AppE fName _ _) -> case (M.lookup fName fdefs) of
-                             Just fdef -> fdef
+                             Just fdef -> fdef --`debug` ((show "ok /.") L.++ (render $ pprint fdef))
             
-            tupledFunction <- tupleListOfFunctions ddefs  functionsToTuple
+            tupledFunction <-  tupleListOfFunctions ddefs  functionsToTuple
                tupledFName
 
             let tupledFunction' = L.foldr f tupledFunction prevFusedFuncs
                  where
                    f entry fdef = foldFusedCalls_f entry fdef
 
-            let fdefs' = M.insert tupledFName tupledFunction'  fdefs
+            let fdefs' = M.insert tupledFName  tupledFunction'  fdefs
             let traversedArg = Just (L.head (funArgs tupledFunction'))
            
             (recTupledBody, newDefs) <- tuple ddefs fdefs' 
@@ -1122,12 +1123,12 @@ violateRestrictions fdefs inner outer =
                x  -> True --`debug` ("ops "L.++ (show x))
     (p1 || p2)
 
-transform :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> Maybe Var->  [(Var, Var, Int, Var)] ->
+transform :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> Maybe Var ->  [(Var, Var, Int, Var)] ->
   Bool -> [(Var, Var)] ->  PassM (L Exp1,  FunDefs1, [(Var, Var, Int, Var)])
 transform  ddefs funDefs  exp traversedTree prevFusedFuncs_ doTupling processedCandidates = do
   go (unLoc exp) processedCandidates funDefs prevFusedFuncs_
  where
-  go  body processed fdefs prevFusedFuncs = do
+  go body processed fdefs prevFusedFuncs = do
     let defTable = buildDefTable body
         potential = findPotential defTable processed
     case (potential) of
@@ -1136,7 +1137,7 @@ transform  ddefs funDefs  exp traversedTree prevFusedFuncs_ doTupling processedC
         (tupledBody, tupleDefs) <- do
           if (doTupling)
             then tuple ddefs fdefs final_clean traversedTree prevFusedFuncs
-               M.empty
+               M.empty  `debug` ("calling tuple on \n" L.++ (show fdefs))
             else return (final_clean, M.empty)
         return $ (tupledBody, M.union fdefs tupleDefs, prevFusedFuncs)
 
@@ -1150,7 +1151,7 @@ transform  ddefs funDefs  exp traversedTree prevFusedFuncs_ doTupling processedC
                 fuse  ddefs fdefs inner outer prevFusedFuncs 
             
             let fusedFunction = fusedDefs M.! fNew
-                newFusedEntry = (outer,inner, -1, fNew)
+                newFusedEntry = (outer,inner, -1, fNew) 
                
             let processedCandidates' = (inner,outer):processed
                 performTupling = not (isPotential defTable outerDefVarSymbol 
@@ -1161,13 +1162,13 @@ transform  ddefs funDefs  exp traversedTree prevFusedFuncs_ doTupling processedC
             -- to be fused with a  another function  
             (recAppBody, recAppDefs, retFusedFunctions) <- transform  ddefs 
               fusedDefs  (funBody fusedFunction) (Just $ head (funArgs fusedFunction))
-                (newFusedEntry : prevFusedFuncs) performTupling processedCandidates'
+                (newFusedEntry : prevFusedFuncs) performTupling processedCandidates' 
             
             --clean
             let newFusedFunctions = (newFusedEntry : prevFusedFuncs) L.++ retFusedFunctions
             let cleanedFunction = removeUnusedDefs fusedFunction{funBody = recAppBody}
                 fdefs_tmp2       = M.union fusedDefs recAppDefs -- is this needed ??
-                fdefs_tmp3       = M.insert  fNew cleanedFunction fdefs_tmp2
+                fdefs_tmp3       = M.insert  fNew cleanedFunction fdefs_tmp2 -- `debug` (render $ pprint cleanedFunction)
             
             let  newDefs = fdefs_tmp3
 
