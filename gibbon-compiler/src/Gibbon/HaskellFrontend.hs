@@ -192,7 +192,8 @@ desugarExp toplevel e = L NoLoc <$>
 
     Lambda _ pats bod -> do
       bod' <- desugarExp toplevel bod
-      pure $ Ext $ LambdaE (map desugarPatWithTy pats) bod'
+      args <- mapM desugarPatWithTy pats
+      pure $ Ext $ LambdaE args bod'
 
     App _ e1 e2 -> do
         desugarExp toplevel e1 >>= \case
@@ -258,7 +259,7 @@ desugarFun toplevel env decl =
     FunBind _ [Match _ fname pats (UnGuardedRhs _ bod) _where] -> do
       let fname_str = nameToStr fname
           fname_var = toVar (fname_str)
-          args = map desugarPat pats
+      args <- mapM (\p -> desugarPatWithTy p >>= pure . fst) pats
       fun_ty <- case M.lookup fname_var env of
                   Nothing -> do
                      arg_tys <- mapM (\_ -> newMetaTy) args
@@ -316,7 +317,7 @@ collectTopLevel env decl =
                  case pats of
                    [] -> error "Impossible"
                    _  -> do
-                     let args = map desugarPat pats
+                     args <- mapM (\p -> desugarPatWithTy p >>= pure . fst) pats
                      pure $ Just $ HFunDef (FunDef { funName = toVar fn
                                                    , funArgs = args
                                                    , funTy   = fun_ty
@@ -427,13 +428,14 @@ desugarTyVarBind :: TyVarBind a -> TyVar
 desugarTyVarBind (UnkindedVar _ name) = UserTv (toVar (nameToStr name))
 desugarTyVarBind v@KindedVar{} = error $ "desugarTyVarBind: Vars with kinds not supported yet." ++ prettyPrint v
 
-desugarPat :: Pat a -> Var
-desugarPat (PVar _ n) = toVar (nameToStr n)
-desugarPat pat        = error ("desugarPat: Unsupported pattern: " ++ prettyPrint pat)
-
-desugarPatWithTy :: (Show a, Pretty a) => Pat a -> (Var, Ty0)
-desugarPatWithTy (PParen _ (PatTypeSig _ pat ty)) = (desugarPat pat, desugarType ty)
-desugarPatWithTy pat = error ("desugarPatWithTy: Unsupported pattern: " ++ show pat)
+desugarPatWithTy :: (Show a, Pretty a) => Pat a -> PassM (Var, Ty0)
+desugarPatWithTy pat =
+  case pat of
+    (PParen _ p)        -> desugarPatWithTy p
+    (PatTypeSig _ p ty) -> do (v,_ty) <- desugarPatWithTy p
+                              pure (v, desugarType ty)
+    (PVar _ n)          -> (toVar $ nameToStr n, ) <$> newMetaTy
+    _ -> error ("desugarPatWithTy: Unsupported pattern: " ++ show pat)
 
 nameToStr :: Name a -> String
 nameToStr (Ident _ s)  = s
