@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts  #-}
+
 -- | Unique names.
 
 module Gibbon.Passes.Freshen (freshNames, freshExp, freshExp1) where
@@ -15,9 +18,59 @@ import qualified Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
 
-type VarEnv   = M.Map Var Var
-type TyVarEnv = M.Map TyVar Ty0
+type VarEnv     = M.Map Var Var
+type TyVarEnv t = M.Map TyVar t
 
+{-
+
+CSK: I defined this so that we could have a 'freshExp1 :: L1 -> L1' (used in Fusion2),
+but abandoned it in favor of code duplication.
+
+class Expression e => Freshenable e where
+  gFreshenExp :: VarEnv -> TyVarEnv (TyOf e) -> e -> PassM e
+  gFreshenTy  :: e -> TyVarEnv (TyOf e) -> (TyOf e) -> PassM (TyVarEnv (TyOf e), (TyOf e))
+
+instance Freshenable (L L1.Exp1) where
+  gFreshenExp = freshExp
+  -- L1 types don't need to be freshened.
+  gFreshenTy _ _ ty = pure (M.empty, ty)
+
+instance Freshenable L1.Exp1 where
+  gFreshenExp v tvenv e = unLoc <$> freshExp v tvenv (l$ e)
+  gFreshenTy _ _ ty     = pure (M.empty, ty)
+
+instance Freshenable (L1.NoExt () L1.Ty1) where
+  gFreshenExp _ _ _ = error "gFreshenExp NoExt: impossible"
+  gFreshenTy _ _ _  = error "gFreshenTy NoExt: impossible"
+
+instance Freshenable (L Exp0) where
+  gFreshenExp = freshExp
+  gFreshenTy  = freshTy
+
+instance Freshenable Exp0 where
+  gFreshenExp v tvenv e = unLoc <$> freshExp v tvenv (l$ e)
+  gFreshenTy e tvenv ty = freshTy (l$ e) tvenv ty
+
+instance Freshenable (E0Ext Ty0 Ty0) where
+  gFreshenExp venv tvenv ext =
+    case ext of
+      LambdaE args bod -> do
+        (venv', vs, ts) <- foldrM
+                             (\(v,t) (acc1, acc2, acc3) -> do
+                                   v' <- gensym v
+                                   let acc1' = M.insert v v' acc1
+                                   (_tvenv', t') <- freshTy _ tvenv t
+                                   pure (acc1', v':acc2, t': acc3))
+                             (venv,[],[]) args
+        (LambdaE (zip vs ts) <$> (freshExp venv' tvenv bod))
+      PolyAppE{} -> error "freshExp: TODO, PolyAppE."
+
+  gFreshenTy = error "gFreshenTy: E0Ext."
+
+freshExp1 :: VarEnv -> L L1.Exp1 -> PassM (L L1.Exp1)
+freshExp1 venv e = gFreshenExp venv M.empty e
+
+-}
 
 -- TODO: ScopedTypeVariables.
 freshNames :: Prog0 -> PassM Prog0
@@ -33,13 +86,14 @@ freshNames (Prog defs funs main) =
 freshDDef :: DDef Ty0 -> PassM (DDef Ty0)
 freshDDef DDef{tyName,tyArgs,dataCons} = do
   rigid_tyvars <- mapM (\(UserTv v) -> BoundTv <$> gensym v) tyArgs
-  let env = M.fromList $ zip tyArgs (map TyVar rigid_tyvars)
+  let env :: TyVarEnv Ty0
+      env = M.fromList $ zip tyArgs (map TyVar rigid_tyvars)
   dataCons' <- mapM (\(dcon,vs) -> (dcon,) <$> mapM (go (sdoc (dcon,vs)) rigid_tyvars env) vs) dataCons
   pure (DDef tyName rigid_tyvars dataCons')
   where
-    go :: String -> [TyVar] -> TyVarEnv -> (t, Ty0) -> PassM (t, Ty0)
+    go :: String -> [TyVar] -> TyVarEnv Ty0 -> (t, Ty0) -> PassM (t, Ty0)
     go msg bound env (b, ty) = do
-      (_, ty') <- freshTy env ty
+      (_, ty') <- freshTy _ env ty
       let free_tvs = tyVarsInTy ty' \\ bound
       if free_tvs == []
       then pure (b, ty')
@@ -55,15 +109,17 @@ freshFun (FunDef nam nargs funty bod) =
        pure $ FunDef nam' nargs' funty' bod'
 
 --
-freshTyScheme :: TyScheme -> PassM (TyVarEnv, TyScheme)
+freshTyScheme :: TyScheme -> PassM (TyVarEnv Ty0, TyScheme)
 freshTyScheme (ForAll tvs ty) = do
   rigid_tyvars <- mapM (\(UserTv v) -> BoundTv <$> gensym v) tvs
   let env = M.fromList $ zip tvs (map TyVar rigid_tyvars)
-  (env', ty') <- freshTy env ty
+  (env', ty') <- freshTy _ env ty
   pure (env', ForAll rigid_tyvars ty')
 
-freshTy :: TyVarEnv -> Ty0 -> PassM (TyVarEnv, Ty0)
-freshTy env ty =
+-- This takes an expression to disambiguate 'e' in gFreshenTy,
+-- which isn't used anymore.
+freshTy :: L Exp0 -> TyVarEnv Ty0 -> Ty0 -> PassM (TyVarEnv Ty0, Ty0)
+freshTy _ env ty =
   case ty of
      IntTy  -> pure (env, ty)
      SymTy0 -> pure (env, ty)
@@ -75,30 +131,26 @@ freshTy env ty =
      MetaTv{} -> pure (env, ty)
      ProdTy tys    -> do (env', tys') <- freshTys env tys
                          pure (env', ProdTy tys')
-     SymDictTy t   -> do (env', t') <- freshTy env t
+     SymDictTy t   -> do (env', t') <- freshTy _ env t
                          pure (env', SymDictTy t')
      ArrowTy tys t -> do (env', tys') <- freshTys env tys
                          (env'', [t'])  <- freshTys env' [t]
                          pure (env'', ArrowTy tys' t')
      PackedTy tycon tys -> do (env', tys') <- freshTys env tys
                               pure (env', PackedTy tycon tys')
-     ListTy t -> do (env', t') <- freshTy env t
+     ListTy t -> do (env', t') <- freshTy _ env t
                     pure (env', ListTy t')
 
-freshTys :: TyVarEnv -> [Ty0] -> PassM (TyVarEnv, [Ty0])
+freshTys :: TyVarEnv (TyOf (L Exp0)) -> [Ty0] -> PassM (TyVarEnv (TyOf (L Exp0)), [Ty0])
 freshTys env tys =
   foldrM
     (\t (env', acc) -> do
-          (env'', t') <- freshTy env' t
+          (env'', t') <- freshTy _ env' t
           pure (env' <> env'', t' : acc))
     (env, [])
     tys
 
-
-freshExp1 :: VarEnv -> L Exp0 -> PassM (L L1.Exp1)
-freshExp1 = _
-
-freshExp :: VarEnv -> TyVarEnv -> L Exp0 -> PassM (L Exp0)
+freshExp :: VarEnv -> TyVarEnv Ty0 -> L Exp0 -> PassM (L Exp0)
 freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
   case exp of
     LitE i    -> return $ LitE i
@@ -122,7 +174,7 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
 
     LetE (v,_locs,ty, e1) e2 -> do
       -- No ScopedTypeVariables.
-      (_tvenv', ty') <- freshTy tvenv ty
+      (_tvenv', ty') <- freshTy _ tvenv ty
       e1' <- freshExp venv tvenv e1
       v'  <- gensym (cleanFunName v)
       e2' <- freshExp (M.insert v v' venv) tvenv e2
@@ -174,6 +226,8 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
       e3' <- go e3
       return $ FoldE (v1,t1,e1') (v2,t2,e2') e3'
 
+    -- Ext ext -> Ext <$> gFreshenExp venv tvenv ext
+
     Ext ext ->
       case ext of
         LambdaE args bod -> do
@@ -181,10 +235,86 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
                                (\(v,t) (acc1, acc2, acc3) -> do
                                      v' <- gensym v
                                      let acc1' = M.insert v v' acc1
-                                     (_tvenv', t') <- freshTy tvenv t
+                                     (_tvenv', t') <- freshTy _ tvenv t
                                      pure (acc1', v':acc2, t': acc3))
                                (venv,[],[]) args
           Ext <$> (LambdaE (zip vs ts) <$> (freshExp venv' tvenv bod))
         PolyAppE{} -> error "freshExp: TODO, PolyAppE."
 
   where go = freshExp venv tvenv
+
+
+-- copy-paste.
+freshExp1 :: VarEnv -> L L1.Exp1 -> PassM (L L1.Exp1)
+freshExp1 vs (L sloc exp) = fmap (L sloc) $
+  case exp of
+    Ext _     -> return exp
+    LitE i    -> return $ LitE i
+    LitSymE v -> return $ LitSymE v
+
+    VarE v ->
+      case M.lookup v vs of
+        Nothing -> return $ VarE v
+        Just v' -> return $ VarE v'
+
+    AppE v locs ls -> assert ([] == locs) $ do
+      ls' <- mapM (freshExp1 vs) ls
+      return $ AppE (cleanFunName v) [] ls'
+
+    PrimAppE p es -> do
+      es' <- mapM (freshExp1 vs) es
+      return $ PrimAppE p es'
+
+    LetE (v,locs,t, e1) e2 -> assert ([]==locs) $ do
+     e1' <- freshExp1 vs e1
+     v'  <- gensym v
+     e2' <- freshExp1 (M.insert v v' vs) e2
+     return $ LetE (v',[],t,e1') e2'
+
+    IfE e1 e2 e3 -> do
+      e1' <- freshExp1 vs e1
+      e2' <- freshExp1 vs e2
+      e3' <- freshExp1 vs e3
+      return $ IfE e1' e2' e3'
+
+    ProjE i e -> do
+      e' <- freshExp1 vs e
+      return $ ProjE i e'
+
+    MkProdE es -> do
+      es' <- mapM (freshExp1 vs) es
+      return $ MkProdE es'
+
+    CaseE e mp -> do
+      e' <- freshExp1 vs e
+      -- Here we freshen locations:
+      mp' <- mapM (\(c,prs,ae) ->
+                   let (args,_) = unzip prs in
+                   do
+                     args' <- mapM gensym args
+                     let vs' = (M.fromList $ zip args args') `M.union` vs
+                     ae' <- freshExp1 vs' ae
+                     return (c, map (,()) args', ae')) mp
+      return $ CaseE e' mp'
+
+    DataConE () c es -> do
+      es' <- mapM (freshExp1 vs) es
+      return $ DataConE () c es'
+
+    TimeIt e t b -> do
+      e' <- freshExp1 vs e
+      return $ TimeIt e' t b
+
+    ParE a b -> do
+      ParE <$> freshExp1 vs a <*> freshExp1 vs b
+
+    MapE (v,t,b) e -> do
+      b' <- freshExp1 vs b
+      e' <- freshExp1 vs e
+      return $ MapE (v,t,b') e'
+
+    FoldE (v1,t1,e1) (v2,t2,e2) e3 -> do
+      e1' <- freshExp1 vs e1
+      e2' <- freshExp1 vs e2
+      e3' <- freshExp1 vs e3
+      return $ FoldE (v1,t1,e1') (v2,t2,e2') e3'
