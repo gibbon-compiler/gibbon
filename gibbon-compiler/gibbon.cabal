@@ -57,7 +57,6 @@ library
                        Gibbon.Passes.InlineTriv
                        Gibbon.Passes.DirectL3
                        Gibbon.Passes.FloatOut
-                       -- Multiarg functions, FINISHME:
                        Gibbon.Passes.Fusion2
                        Gibbon.Passes.RepairProgram
                        Gibbon.Passes.AddRAN
@@ -70,8 +69,8 @@ library
                        Gibbon.Passes.BoundsCheck
                        Gibbon.Passes.ThreadRegions
                        Gibbon.Passes.Cursorize
-                       -- Gibbon.Passes.FindWitnesses
-                       -- Gibbon.Passes.ShakeTree
+                       Gibbon.Passes.FindWitnesses
+                       Gibbon.Passes.ShakeTree
                        Gibbon.Passes.HoistNewBuf
                        Gibbon.Passes.Unariser
                        Gibbon.Passes.Lower
