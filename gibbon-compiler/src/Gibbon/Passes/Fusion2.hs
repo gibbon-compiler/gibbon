@@ -19,10 +19,7 @@ import           GHC.Generics (Generic, Generic1)
 import           Data.Tuple.All
 import qualified Data.Vector as V
 import           Control.Monad
---import Data.Matrix as Matrix
 import Gibbon.Pretty 
-
-
 import Gibbon.Common
 import Gibbon.Passes.Freshen (freshExp1)
 import Gibbon.L1.Syntax as L1
@@ -438,11 +435,8 @@ inline inlined_fun outer_fun arg_pos  =  do
       argTypes_inlined = fst (funTy inlined_fun)
       argVar_inlined  = head $ funArgs inlined_fun
       retTypeInlined = snd (funTy inlined_fun)
-
-      -- get it as item in list
       traversedType = head argTypes_inlined
 
-    
       -- All arguments except the one that's traversed.
       sideArgsTypesInlined = tail argTypes_outer
       sidArgsTypesOuter    = tail argTypes_inlined
@@ -454,9 +448,10 @@ inline inlined_fun outer_fun arg_pos  =  do
                            newExp  = l$ VarE traversedTreeArg
                        in substE oldExp newExp (funBody inlined_fun)
 
-  
-  let oldExp = l $ VarE argVar_outer
-  let replaceWithCall exp =
+  -- the traversed tree in the outer is replaced with either a call to the inner
+  -- or the body of the inner
+  let oldExp = l $ VarE argVar_outer 
+  let replaceWithCall exp = 
         do 
           newVar <- gensym (toVar "innerCall")
           let rhs = l (AppE (funName inlined_fun) [] 
@@ -465,18 +460,16 @@ inline inlined_fun outer_fun arg_pos  =  do
           return $ l $ LetE (newVar, [], retTypeInlined, rhs) body
                      
   newBody <- do
-     -- we inline the body of the inlined function in the e1 otherwise if it
-     -- appears anywhere else we create a call to the inlined function. 
+
      case (unLoc (funBody outer_fun)) of
-         CaseE e1 ls -> do
+        CaseE e1 ls -> do
             ls' <- Prelude.mapM (\(dataCon, vars, exp) ->
                      do
                        newInnerExp <- replaceWithCall exp
                        return  (dataCon, vars, newInnerExp)
                     ) ls
-
             return $ l ( CaseE (substE oldExp inlinedFunBody e1) ls')
-         exp ->
+        exp ->
                   do
                     newInnerExp <- replaceWithCall (l exp)
                     return newInnerExp
@@ -484,37 +477,8 @@ inline inlined_fun outer_fun arg_pos  =  do
         (L.tail (funArgs outer_fun)) 
   return outer_fun {funArgs =newArgs, funTy = newType, funBody = newBody}
 
--- inlineArgumentProjections :: FunDef1 -> FunDef1
--- inlineArgumentProjections function = case (fst(funTy function)) of
---     ProdTy _->   function {funBody = go (funBody function)}
---       where
---         go (L l ex)  = case  ex of
---           LetE (v,loc,t,rhs) body ->
---               case (unLoc rhs) of
---                 proj@(ProjE i (L _ (VarE v1))) ->
---                   if (v1 == (funArg function))
---                     then
---                       let oldEx  =  L l $ VarE v
---                           newExp =  L l $ proj
---                       in substE oldEx newExp (go body)
---                     else
---                      L l $ LetE (v,loc,t,(go rhs)) (go body)
---                 _ ->
---                     L l $LetE (v,loc,t,(go rhs)) (go body)
---           CaseE e1 ls1  ->
---                L l$ CaseE e1 (L.map f ls1)
---              where
---                f (dataCon, x, exp) = (dataCon, x, go exp)
---           AppE v loc e             ->  L l $ AppE v loc $ go e
---           IfE e1 e2 e3             ->  L l $ IfE (go e1) ( go e2) ( go e3)
---           TimeIt e d b             ->  L l $ TimeIt ( go e) d b
---           _                        -> L l ex
-
---     _ -> function
-
 -- This function simplify the case expression when the matched expression 
--- is it self another case expression. In the same way wadler to it.
-
+-- is it self another case expression. In the same way Wadler do it.
 simplifyCases :: FunDef1 -> FunDef1
 simplifyCases function = function {funBody = go ( funBody function) }
   where
@@ -557,9 +521,8 @@ simplifyCases function = function {funBody = go ( funBody function) }
 
 foldFusedCalls_f :: (Var, Var, Int, Var) -> FunDef1 -> FunDef1
 foldFusedCalls_f rule function = function{funBody=
-  removeUnusedDefs_exp( foldFusedCalls rule (funBody function))}
+  foldFusedCalls rule (funBody function)}
 
--- check note** just above the inline function
 foldFusedCalls :: (Var, Var, Int, Var) -> L Exp1 -> (L Exp1)
 foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
   let defTable = buildDefTable (unLoc body)  
@@ -592,6 +555,7 @@ foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
           otherwise ->  ex
 
   in removeUnusedDefs_exp (go body)
+
       where
         getDefiningFunction x defTable = case (M.lookup x defTable) of
             Nothing    -> (toVar "dummy") 
@@ -603,12 +567,6 @@ foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
              Just entry -> case (def  entry) of
                   AppE _ _ args-> args
                   _            -> error  ("ops" L.++ (show(def  entry)))
-
--- foldTupledFunctions_f :: ( FunDef1) ->[Var] ->PassM (FunDef1)
--- foldTupledFunctions_f funDef ls =
---   do
---     body <- (foldTupledFunctions (funBody funDef ) funDef ls )
---     return funDef {funBody =body}
 
 foldTupledFunctions ::   L Exp1 -> (FunDef1) -> [Exp1] -> Exp1 -> V.Vector Int ->
   Maybe (M.Map Int Int) -> PassM (L Exp1)
@@ -680,7 +638,7 @@ foldTupledFunctions body newFun oldCalls firstCall outputPositions redirectMap =
                                   let idx = case redirectMap of
                                          Nothing -> (outputPositions V.! i )
                                          Just mp -> mp M.! (outputPositions V.! i )
-                                  in  l $ ProjE (idx) (l $ VarE newVar) -- not complete buggy (i +eps) `de
+                                  in  l $ ProjE (idx) (l $ VarE newVar) -- not complete buggy (i +eps) 
                         return(l $ LetE (Var y, loc, t, rhs') body')
 
         AppE name loc argList         -> 
@@ -716,7 +674,6 @@ foldTupledFunctions body newFun oldCalls firstCall outputPositions redirectMap =
               ) ls1)
           return  $  l $ CaseE e1'  ls'
 
-
         DataConE loc datacons ls -> do
           ls' <- (Prelude.mapM (\x-> (go x newVar)) ls)
           return $  l $ DataConE loc datacons ls'
@@ -750,11 +707,9 @@ removeUnusedDefs_exp exp =
         TimeIt exp a b           ->   l $ TimeIt (go exp dTable) a b
         otherwise ->  ex
 
-
- -- the output of this is the tupled functions 
 tupleListOfFunctions :: DDefs Ty1 -> [FunDef1] ->Var -> PassM(FunDef1) 
 tupleListOfFunctions  ddefs funcList newName = do
-  funcBodies <- Prelude.mapM freshFunction funcList -- want to freshen the whole function (wait for chai)
+  funcBodies <- Prelude.mapM freshFunction funcList 
   let funcBodiesV = V.fromList funcBodies
       retTypes    = V.map (\f -> (snd (funTy f))) funcBodiesV
       newRetType  = ProdTy (V.foldl
@@ -781,6 +736,7 @@ tupleListOfFunctions  ddefs funcList newName = do
   traversedTreeArg <- gensym (toVar "input")
   let newArgs = traversedTreeArg:(
         L.foldl (\ls f -> ls L.++ (L.tail (funArgs f))) [] funcBodies)
+
   -- replace the traversed tree variable with the new common one
   let functionsBodies' = V.toList (V.imap getBody funcBodiesV)
        where
@@ -790,8 +746,7 @@ tupleListOfFunctions  ddefs funcList newName = do
             in substE  oldExp newExp (funBody func)
 
   -- output of this is a map from dataCons -> [exp'] which are the portions 
-  -- from each functions that for that constructor
-  
+  -- from each functions that map to the constructor
   let step2 = L.foldl mapAndSplit M.empty functionsBodies'
         where
           mapAndSplit mp (L _(CaseE e lsCase))  = L.foldl f mp lsCase
@@ -848,7 +803,7 @@ tupleListOfFunctions  ddefs funcList newName = do
                     
                     let pos = (V.length funcBodiesV) - index  -1
                         newVar   = createOutVar pos
-                        newVarType = snd (funTy  (funcBodiesV V.!pos)) -- the return type of function at index
+                        newVarType = snd (funTy  (funcBodiesV V.!pos))
                     in (replaceLeafWithBind exp newVar newVarType tailExp)
             in (CaseE e1 ((dataCons, newVarsList, combinedBodies):caseList))
 
@@ -857,9 +812,6 @@ tupleListOfFunctions  ddefs funcList newName = do
   createOutVar index subscript=
           (toVar ("f" L.++(show index)L.++"out" L.++ (show subscript) ))
 
-  -- freshBody func = do
-  --     b' <- freshExp1 M.empty (funBody func)
-  --     return (func{funBody =b'})
 
 renameFunction :: FunDef1 -> Var -> FunDef1
 renameFunction function newName =
@@ -871,7 +823,7 @@ renameFunction function newName =
           AppE name loc argList          ->   l $
             AppE (if name==oldName then newName else name) loc argList
           PrimAppE x ls            ->   l $ PrimAppE x (L.map f ls)
-            where f item = (go item)--`debug`  ("so2")
+            where f item = (go item)
           LetE (v,loc,t,rhs) bod   ->   l $ LetE (v,loc,t, (go rhs)) (go bod)
           MkProdE ls               ->   l $ MkProdE (L.map (\x-> go x) ls)
           ProjE index exp          ->   l $ ProjE index (go exp)
@@ -882,17 +834,14 @@ renameFunction function newName =
           TimeIt e d b             ->   l $ TimeIt (go e) d b
           otherwise                ->   ex
 
-{- Output of this is no longer from a variable to its uses we want to search for
+{- We want to search for
 the following:
   f1 (x1, v1,v2 ...vn)
   f2 (x1, k1,k2 ...kn)
  such that
 body (f1) = case (x1) of {}
 body (f2) = case (x1) of {}
-this function will look for the first condition and another function will filer
-out the results based on the second condition , Var in the resulted map is X1
-in the above example, this only works this way because we know how we perform the
-tupling previously.
+and k1..k2 and not dependent on the results of f1
 -}
 buildTupleCandidatesTable::   FunDefs1 -> L Exp1 -> [ Var] -> M.Map Var [Exp1]
 buildTupleCandidatesTable fDefs exp argsVars =
@@ -941,7 +890,6 @@ buildTupleCandidatesTable fDefs exp argsVars =
             _ -> False
         _ -> False 
     
-    -- haveIndependentArgs args  traversedTree = True 
     haveIndependentArgs args  argsVars = L.foldl f True args
      where
       f b arg  = b &&
@@ -954,7 +902,7 @@ buildTupleCandidatesTable fDefs exp argsVars =
 tuple :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [Var] -> [(Var, Var, Int, Var)] 
   -> (M.Map Var (M.Map Int Int)) ->  PassM (L Exp1,  FunDefs1)
 tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
-  let oldExp = oldExp_ --removeUnusedDefs_exp oldExp_
+  let oldExp = oldExp_
   -- candidates1 : a list of [(fName, CallExpressions)] functions that traverse
   -- same input 
   let candidates1 = L.filter f (M.toList (buildTupleCandidatesTable
@@ -967,7 +915,7 @@ tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
               sortedCalls = L.sortOn f ls
                  where f exp@(AppE fName _ _) = (fName,exp)
            in (constructName sortedCalls, sortedCalls, firstCall)
-        ) candidates1    --  `debug` ("finding candidtates in " L.++ (render $ pprint oldExp))
+        ) candidates1  
 
   (newExp, fdefs', redirectMaps) <-
       Control.Monad.foldM go (oldExp, fdefs, redirectMaps)  candidates2
@@ -979,19 +927,14 @@ tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
   return (newExp', fdefs')
 
  where
-    constructName ls = toVar( "_TUP_" L.++ (L.foldl  appendName "" ls)
-            L.++  "_TUP_" )
-    
-    appendName str (AppE fName _ _) = (str L.++ "_t_" L.++ (fromVar fName))
-
     go (exp, fdefs, redirectMaps) (tupledFName, callExpressions, firstCall) = do
       case (M.lookup tupledFName fdefs) of
-          -- if the tupled function already exists
         Just fdef -> do
             let redirectMap = M.lookup tupledFName redirectMaps 
             exp' <-foldTupledFunctions exp fdef callExpressions firstCall
                  (V.fromList (getOutputStartPositions fdefs callExpressions redirectMap ))
                  redirectMap
+
 
             let exp'' =  simplifyProjectionsOfProducts(exp')
             return (exp'', fdefs, redirectMaps)
@@ -1001,7 +944,7 @@ tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
                   where
                     getCalledFunDef callExpr = case (callExpr) of
                         (AppE fName _ _) -> case (M.lookup fName fdefs) of
-                             Just fdef -> fdef --`debug` ((show "ok /.") L.++ (render $ pprint fdef))
+                             Just fdef -> fdef
             
             tupledFunction <-  tupleListOfFunctions ddefs  functionsToTuple
                tupledFName
@@ -1031,8 +974,11 @@ tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
                 removeUnusedDefs_exp (
                   simplifyProjectionsOfProducts(
                     removeCommonExpressions (funBody tupledFunction''')
-                      --fixCalls (funBody tupledFunction4) tupledFunction4  redirectMap removedPositions)
-                      )) } -- fix calls to the first in the body of the second for completeness need to be called on each function in newDefs
+                      --fixCalls (funBody tupledFunction4) tupledFunction4
+                      --  redirectMap removedPositions)
+                      )) } 
+                      -- fix calls to the first in the body of the second for
+                      -- completeness need to be called on each function in newDefs
 
             let fdefs'' = M.insert tupledFName tupledFunction5  newDefs
 
@@ -1046,12 +992,15 @@ tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
            -- return (exp'', fdefs'',  M.insert  tupledFName redirectMap redirectMaps)
             return (exp'', fdefs'',   redirectMaps)
 
+    constructName ls = 
+       toVar( "_TUP_" L.++ (L.foldl  appendName "" ls) L.++  "_TUP_" )
+    appendName str (AppE fName _ _) =
+       (str L.++ "_t_" L.++ (fromVar fName))
 
 fixCalls :: L Exp1 -> FunDef1 -> M.Map Int Int -> [Int] -> L Exp1
 fixCalls exp fdef redirectMap removedPositions = go exp
     where
       go exp = case (unLoc exp) of
-
         CaseE e ls ->
           let ls' = L.map (\(x, y, ex)-> (x, y, go ex)) ls
           in  l $ CaseE e ls'
@@ -1060,8 +1009,6 @@ fixCalls exp fdef redirectMap removedPositions = go exp
             AppE v ls e ->
               if (v == (funName fdef ))
                 then
-                  -- here is the main work
-                  -- change the type t
                   let t' = snd (funTy fdef) in
                   let body' = L.foldl
                         (\ex (i, j )->
@@ -1085,7 +1032,6 @@ getOutputStartPositions fdefs callExpressions redirectMap =
      let ls = L.foldl (\ls i -> ls L.++ [i+ (L.last ls)]  ) [0]
           functionsArgsLengths
      in  ls
-
    where
      getCalledFunDef callExpr = case (callExpr) of
           (AppE fName _ _) ->
@@ -1094,9 +1040,8 @@ getOutputStartPositions fdefs callExpressions redirectMap =
                 ProdTy ls -> L.length ls
                 otherwise -> 1
 
--- the last argument is a set of already fused functions in the form of 
--- [(outer, inner, 0, fusedFun)]
-
+-- the last input argument is a set of already fused functions in the form of 
+-- [(outer, inner, 0, fusedFunName)]
 fuse :: DDefs Ty1 -> FunDefs1 -> Var -> Var -> [(Var, Var, Int, Var)]
      -> PassM (Bool, Var,  FunDefs1)
 fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
@@ -1108,20 +1053,16 @@ fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
             then pure (toVar ("_FUS_f_" ++ (fromVar outerVar) ++ "_f_" ++ 
                    (fromVar innerVar ) ++ "_FUS_"))
             else gensym "fuse_"
-
-    -- freshen the functions
-    --innerFreshBody <- freshExp1 M.empty (funBody innerFunc)
-    --outerFreshBody <- freshExp1 M.empty (funBody outerFunc)
+   
     step1 <- inline innerFunc  outerFunc (-1)
 
-    let step2 = (simplifyCases step1 ){funName = newName} `debug` ((render $ pprint innerFunc ) L.++(render $ pprint outerFunc) L.++ (render $ pprint step1))
+    let step2 = (simplifyCases step1 ){funName = newName} 
         step3 = (foldFusedCalls_f (outerVar, innerVar, -1, newName)  step2) 
         step4 = L.foldl (\f e -> foldFusedCalls_f e f ) step3 prevFusedFuncs
         step5 = step4 {funBody = removeUnusedDefs_exp  (funBody step4)}
     
     return (True, newName, M.insert newName step5 fdefs)
 
--- Check if a function conforms to restrictions we impose.
 violateRestrictions :: FunDefs1 -> Var -> Var -> Bool
 violateRestrictions fdefs inner outer =
   do
@@ -1129,10 +1070,10 @@ violateRestrictions fdefs inner outer =
         outerDef = case (M.lookup outer fdefs) of (Just v) -> v
         p1 = case head (fst (funTy innerDef)) of
                (PackedTy _ _ ) -> False
-               x  -> True --`debug` ("ops "L.++ (show x))
+               x  -> True 
         p2 = case head (fst (funTy outerDef) ) of
                (PackedTy _ _) -> False
-               x  -> True --`debug` ("ops "L.++ (show x))
+               x  -> True 
     (p1 || p2)
 
 transform :: DDefs Ty1 -> FunDefs1 -> L Exp1 ->  [Var] ->  [(Var, Var, Int, Var)] ->
@@ -1149,7 +1090,7 @@ transform  ddefs funDefs  exp argsVars prevFusedFuncs_ doTupling processedCandid
         (tupledBody, tupleDefs) <- do
           if (doTupling)
             then tuple ddefs fdefs final_clean argsVars prevFusedFuncs
-               M.empty  --`debug` ("calling tuple on \n" L.++ (show fdefs))
+               M.empty  
             else return (final_clean, M.empty)
         return $ (tupledBody, M.union fdefs tupleDefs, prevFusedFuncs)
 
@@ -1179,8 +1120,8 @@ transform  ddefs funDefs  exp argsVars prevFusedFuncs_ doTupling processedCandid
             --clean
             let newFusedFunctions = (newFusedEntry : prevFusedFuncs) L.++ retFusedFunctions
             let cleanedFunction = removeUnusedDefs fusedFunction{funBody = recAppBody}
-                fdefs_tmp2       = M.union fusedDefs recAppDefs -- is this needed ??
-                fdefs_tmp3       = M.insert  fNew cleanedFunction fdefs_tmp2 -- `debug` (render $ pprint cleanedFunction)
+                fdefs_tmp2       = M.union fusedDefs recAppDefs 
+                fdefs_tmp3       = M.insert  fNew cleanedFunction fdefs_tmp2 
             
             let  newDefs = fdefs_tmp3
 
@@ -1201,3 +1142,48 @@ fusion2 (L1.Prog defs funs main) = do
             (m', newDefs, _) <- (transform defs funs m []  [] True [])
             return (Just (m',ty), M.union funs newDefs)
     return $ L1.Prog defs funs' main'
+
+
+
+{-- Those  functions are used for the redundancy analysis 
+
+parametrize an expression around the input set of vars, 
+using variables _p0_ _p1_ _p2_ ..etx (we assumes those are not going to
+appear anywhere else in the program we need a better way maybe)
+parametrizeExp :: L Exp1 -> S.Set Var -> (L Exp1)
+parametrizeExp exp vars  = rec exp M.empty []
+ -- the map tracks the already mapped projections (deal with ProjE i xi as a variable )
+ -- the list returns the argument os the expression in it in the order they where discovered  (for the first time )   
+  where 
+    rec ex = case (getExp ex) of
+      LetE (v, ls, t, bind) body -> error("let not expected in parametrizeExp")
+      CaseE e ls    -> error("CaseE not expected in parametrizeExp")
+      AppE v loc e -> error("AppE not expected in parametrizeExp")
+      ProjE i e -> 
+           case e of 
+              VarE v ->
+                   if (S.member v vars) 
+                    then
+                    
+                    else
+                      l$ ProjE i e
+              otherwise -> l$ ProjE i e
+
+
+inlineAllButAppE:: L Exp1 -> L Exp1
+inlineAllButAppE ex  = rec ex 
+ where 
+  rec ex = case (getExp ex) of
+    LetE (v, ls, t, bind) body ->
+      case (getExp bind) of 
+          AppE _ _ _ ->  l$  LetE (v, ls, t, bind) (rec body)
+          otherwise -> 
+            let oldExp = l $ VarE v  
+                newExp = bind
+                body' = substE oldExp newExp body
+            in rec (body') 
+    CaseE e ls    -> 
+      let ls' = L.map (\(x, y, exp) -> (x, y, rec exp)) ls
+      in  l$ CaseE e ls'    
+    otherwise ->  l$ otherwise
+-}
