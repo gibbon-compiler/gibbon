@@ -1273,24 +1273,24 @@ fusion2 (L1.Prog defs funs main) = do
 -- parametrize an expression around the input set of vars, 
 -- using variables _p0_ _p1_ _p2_ ..etx (we assumes those are not going to
 -- appear anywhere else in the program we need a better way maybe)
-parametrizeExp :: L Exp1 -> S.Set Var -> (L Exp1)
-parametrizeExp exp vars  = rec exp M.empty []
- -- the map tracks the already mapped projections (deal with ProjE i xi as a variable )
- -- the list returns the argument os the expression in it in the order they where discovered  (for the first time )   
-  where 
-    rec ex = case (getExp ex) of
-      LetE (v, ls, t, bind) body -> error("let not expected in parametrizeExp")
-      CaseE e ls    -> error("CaseE not expected in parametrizeExp")
-      AppE v loc e -> error("AppE not expected in parametrizeExp")
-      ProjE i e -> 
-           case e of 
-              VarE v ->
-                   if (S.member v vars) 
-                    then
+-- parametrizeExp :: L Exp1 -> S.Set Var -> (L Exp1)
+-- parametrizeExp exp vars  = rec exp M.empty []
+--  -- the map tracks the already mapped projections (deal with ProjE i xi as a variable )
+--  -- the list returns the argument os the expression in it in the order they where discovered  (for the first time )   
+--   where 
+--     rec ex = case (getExp ex) of
+--       LetE (v, ls, t, bind) body -> error("let not expected in parametrizeExp")
+--       CaseE e ls    -> error("CaseE not expected in parametrizeExp")
+--       AppE v loc e -> error("AppE not expected in parametrizeExp")
+--       ProjE i e -> 
+--            case e of 
+--               VarE v ->
+--                    if (S.member v vars) 
+--                     then
                     
-                    else
-                      l$ ProjE i e
-              otherwise -> l$ ProjE i e
+--                     else
+--                       l$ ProjE i e
+--               otherwise -> l$ ProjE i e
 
 
 inlineAllButAppE:: L Exp1 -> L Exp1
