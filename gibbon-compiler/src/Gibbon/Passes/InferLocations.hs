@@ -699,6 +699,53 @@ inferExp env@FullEnv{dataDefs}
        (c',tyc,csc)    <- inferExp env c dest
        return (lc$ IfE a' b' c', tyc, L.nub $ acs ++ csb ++ csc)
 
+    PrimAppE (DictInsertP dty) [d,k,v] ->
+      case dest of
+        SingleDest _ -> err "Cannot unify DictInsert with destination"
+        TupleDest _ -> err "Cannot unify DictInsert with destination"
+        NoDest -> do (d',SymDictTy dty',_dcs) <- inferExp env d NoDest
+                     (k',_,_kcs) <- inferExp env k NoDest
+                     dty'' <- lift $ lift $ convertTy dty
+                     r <- lift $ lift $ freshRegVar
+                     loc <- lift $ lift $ freshLocVar "ins"
+                     -- _ <- fixLoc loc
+                     (v',vty,vcs) <- inferExp env v $ SingleDest loc
+                     let cs = vcs -- (StartRegionL loc r) : vcs
+                     return (lc$ PrimAppE (DictInsertP dty') [d',k',v'], SymDictTy dty'', cs)
+
+    PrimAppE (DictLookupP dty) [d,k] ->
+      case dest of
+        SingleDest loc -> do (d',SymDictTy dty',_dcs) <- inferExp env d NoDest
+                             (k',_,_kcs) <- inferExp env k NoDest
+                             loc' <- lift $ lift $ freshLocVar "lookup"
+                             _ <- fixLoc loc'
+                             let e' = lc$ PrimAppE (DictLookupP dty') [d',k']
+                                 ty = SymDictTy dty'
+                             unify loc loc'
+                                   (return (e',ty,[]))
+                                   (copy (e',ty,[]) loc)
+        TupleDest _ -> err "Cannot unify DictLookup with tuple destination"
+        NoDest -> err "Cannot unify DictLookup with no destination"
+
+    PrimAppE (DictEmptyP dty) [] ->
+      case dest of
+        SingleDest _ -> err "Cannot unify DictEmpty with destination"
+        TupleDest _ -> err "Cannot unify DictEmpty with destination"
+        NoDest -> do dty' <- lift $ lift $ convertTy dty
+                     let loc = locOfTy dty'
+                     _ <- fixLoc loc
+                     r <- lift $ lift $ freshRegVar
+                     let cs = [StartRegionL loc r]
+                     return (lc$ PrimAppE (DictEmptyP dty') [], SymDictTy dty', cs)
+
+    PrimAppE (DictHasKeyP dty) [d,k] ->
+      case dest of
+        SingleDest _ -> err "Cannot unify DictEmpty with destination"
+        TupleDest _ -> err "Cannot unify DictEmpty with destination"
+        NoDest -> do (d',SymDictTy dty',_dcs) <- inferExp env d NoDest
+                     (k',_,_kcs) <- inferExp env k NoDest
+                     return (lc$ PrimAppE (DictHasKeyP dty') [d',k'], BoolTy, [])
+
     PrimAppE pr es ->
       case dest of
         SingleDest _ -> err "Cannot unify primop with destination"
@@ -707,7 +754,8 @@ inferExp env@FullEnv{dataDefs}
                      -- Assume arguments to PrimAppE are trivial
                      -- so there's no need to deal with constraints or locations
                      ty <- lift $ lift $ convertTy $ primRetTy pr
-                     return (lc$ PrimAppE (prim pr) [a | (a,_,_) <- results], ty, [])
+                     pr' <- lift $ lift $ prim pr
+                     return (lc$ PrimAppE pr' [a | (a,_,_) <- results], ty, [])
 
     CaseE ex ls -> do
       -- Case expressions introduce fresh destinations for the scrutinee:
@@ -767,6 +815,35 @@ inferExp env@FullEnv{dataDefs}
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
           return (lc$ L2.LetE (vr,[],CursorTy,L sl2 $ L2.PrimAppE PEndOf [L la (L2.VarE v)]) bod', ty', cs')
 
+        PrimAppE (DictInsertP dty) ls -> do
+          (e,ty,cs) <- inferExp env (L sl2 $ PrimAppE (DictInsertP dty) ls) NoDest
+          (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
+          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod',ty',L.nub $ cs' ++ cs)
+          fcs <- tryInRegion cs'''
+          tryBindReg (lc$ L2.LetE (vr,[],ty,e) bod'', ty'', fcs)
+
+        PrimAppE (DictLookupP dty) ls -> do
+          loc <- lift $ lift $ freshLocVar "dict"
+          (e,ty,cs) <- inferExp env (L sl2 $ PrimAppE (DictLookupP dty) ls) $ SingleDest loc
+          (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
+          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs ++ cs')
+          fcs <- tryInRegion cs'''
+          tryBindReg (lc$ L2.LetE (vr,[],ty,e) bod'',ty'', fcs)
+
+        PrimAppE (DictEmptyP dty) ls -> do
+          (e,ty,cs) <- inferExp env (L sl2 $ PrimAppE (DictEmptyP dty) ls) NoDest
+          (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
+          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod',ty',L.nub $ cs' ++ cs)
+          fcs <- tryInRegion cs'''
+          tryBindReg (lc$ L2.LetE (vr,[],ty,e) bod'', ty'', fcs)
+
+        PrimAppE (DictHasKeyP dty) ls -> do
+          (e,ty,cs) <- inferExp env (L sl2 $ PrimAppE (DictHasKeyP dty) ls) NoDest
+          (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
+          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod',ty',L.nub $ cs' ++ cs)
+          fcs <- tryInRegion cs'''
+          tryBindReg (lc$ L2.LetE (vr,[],ty,e) bod'', ty'', fcs)
+
         PrimAppE p ls -> do
           lsrec <- mapM (\e -> inferExp env e NoDest) ls
           ty <- lift $ lift $ convertTy bty
@@ -775,7 +852,8 @@ inferExp env@FullEnv{dataDefs}
               cs'' = concat $ [c | (_,_,c) <- lsrec]
           (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ cs'')
           fcs <- tryInRegion cs'''
-          tryBindReg (lc$ L2.LetE (vr,[],ty,L sl2 $ L2.PrimAppE (prim p) ls') bod'',
+          p' <- lift $ lift $ prim p
+          tryBindReg (lc$ L2.LetE (vr,[],ty,L sl2 $ L2.PrimAppE p' ls') bod'',
                     ty'', fcs)
 
         DataConE _loc k ls  -> do
@@ -876,7 +954,8 @@ finishExp (L i e) =
              return $ l$ AppE v ls' e1'
       PrimAppE pr es -> do
              es' <- mapM finishExp es
-             return $ l$ PrimAppE pr es'
+             pr' <- finishPr pr
+             return $ l$ PrimAppE pr' es'
       LetE (v,ls,t,e1) e2 -> do
              e1' <- finishExp e1
              e2' <- finishExp e2
@@ -951,6 +1030,14 @@ finishTy t =
               return $ ProdTy pls'
       _ -> return t
 
+finishPr :: Prim Ty2 -> TiM (Prim Ty2)
+finishPr pr =
+    case pr of
+      DictInsertP bty -> finishTy bty >>= return . DictInsertP
+      DictLookupP bty -> finishTy bty >>= return . DictLookupP
+      DictEmptyP bty  -> finishTy bty >>= return . DictEmptyP
+      DictHasKeyP bty -> finishTy bty >>= return . DictHasKeyP
+      _ -> return pr
 
 -- | Remove unused location bindings
 -- Returns pair of (new exp, set of free locations)
@@ -965,6 +1052,18 @@ cleanExp (L i e) =
       LitSymE v -> (l$ LitSymE v, S.empty)
       AppE v ls e -> let (e',s') = cleanExp e
                      in (l$ AppE v ls e', S.union s' (S.fromList ls))
+      PrimAppE (DictInsertP ty) es -> let (es',ls') = unzip $ L.map cleanExp es
+                        in (l$ PrimAppE (DictInsertP ty) es',
+                             S.union (S.unions ls') (S.fromList $ locsInTy ty))
+      PrimAppE (DictLookupP ty) es -> let (es',ls') = unzip $ L.map cleanExp es
+                        in (l$ PrimAppE (DictLookupP ty) es',
+                             S.union (S.unions ls') (S.fromList $ locsInTy ty))
+      PrimAppE (DictEmptyP ty) es -> let (es',ls') = unzip $ L.map cleanExp es
+                        in (l$ PrimAppE (DictEmptyP ty) es',
+                             S.union (S.unions ls') (S.fromList $ locsInTy ty))
+      PrimAppE (DictHasKeyP ty) es -> let (es',ls') = unzip $ L.map cleanExp es
+                        in (l$ PrimAppE (DictHasKeyP ty) es',
+                             S.union (S.unions ls') (S.fromList $ locsInTy ty))
       PrimAppE pr es -> let (es',ls') = unzip $ L.map cleanExp es
                         in (l$ PrimAppE pr es', S.unions ls')
       LetE (v,ls,t,e1) e2 -> let (e1', s1') = cleanExp e1
@@ -1283,27 +1382,31 @@ assumeEq a1 a2 =
     else err $ "Expected these to be equal: " ++ (show a1) ++ ", " ++ (show a2)
 
 -- | Convert a prim from L1 to L2
-prim :: Prim Ty1 -> Prim Ty2
+prim :: Prim Ty1 -> PassM (Prim Ty2)
 prim p = case p of
-           AddP -> AddP
-           SubP -> SubP
-           MulP -> MulP
-           DivP -> DivP
-           ModP -> ModP
-           ExpP -> ExpP
-           RandP-> RandP
-           LtP  -> LtP
-           GtP  -> GtP
-           LtEqP-> LtEqP
-           GtEqP-> GtEqP
-           OrP  -> OrP
-           AndP -> AndP
-           EqSymP -> EqSymP
-           EqIntP -> EqIntP
-           MkTrue -> MkTrue
-           MkFalse -> MkFalse
-           SizeParam -> SizeParam
-           PEndOf    -> PEndOf
+           AddP -> return AddP
+           SubP -> return SubP
+           MulP -> return MulP
+           DivP -> return DivP
+           ModP -> return ModP
+           ExpP -> return ExpP
+           RandP-> return RandP
+           LtP  -> return LtP
+           GtP  -> return GtP
+           LtEqP-> return LtEqP
+           GtEqP-> return GtEqP
+           OrP  -> return OrP
+           AndP -> return AndP
+           EqSymP -> return EqSymP
+           EqIntP -> return EqIntP
+           MkTrue -> return MkTrue
+           MkFalse -> return MkFalse
+           SizeParam -> return SizeParam
+           PEndOf    -> return PEndOf
+           DictEmptyP dty -> convertTy dty >>= return . DictEmptyP
+           DictInsertP dty -> convertTy dty >>= return . DictInsertP
+           DictLookupP dty -> convertTy dty >>= return . DictLookupP
+           DictHasKeyP dty -> convertTy dty >>= return . DictHasKeyP
            _ -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
 
 -- | Generate a copy function for a particular data definition.

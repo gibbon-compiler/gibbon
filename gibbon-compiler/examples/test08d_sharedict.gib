@@ -1,8 +1,13 @@
 #lang gibbon
 
-(let ([d : (SymDict Int) (ann (empty-dict) (SymDict Int))])
-  (let ([d2 : (SymDict Int) (insert d (quote x) (ann 2 Int))])
-    (let ([d3 : (SymDict Int) (insert d2 (quote y) (ann 5 Int))])
-      (let ([d4 : (SymDict Int) (insert d2 (quote y) (ann 10 Int))])
-        (+ (ann (lookup d4 (quote y)) Int)
-           (ann (lookup d3 (quote y)) Int))))))
+(data Foo (MkFoo Int))
+
+(let ([v : Int
+  (let ([d : (SymDict Foo) (ann (empty-dict) (SymDict Foo))])
+    (let ([d2 : (SymDict Foo) (insert d (quote x) (ann (MkFoo 2) Foo))])
+      (let ([d3 : (SymDict Foo) (insert d2 (quote y) (ann (MkFoo 5) Foo))])
+        (let ([d4 : (SymDict Foo) (insert d2 (quote y) (ann (MkFoo 10) Foo))])
+         (case (ann (lookup d3 (quote y)) Foo)
+	   [(MkFoo i) (case (ann (lookup d4 (quote y)) Foo)
+	     [(MkFoo j) (+ i j)])])))))])
+  v)

@@ -1,4 +1,6 @@
 #lang gibbon
 
-(let ([x : (SymDict Int) (ann (empty-dict) (SymDict Int))])
+(data Foo (MkFoo Int))
+
+(let ([x : (SymDict Foo) (ann (empty-dict) (SymDict Foo))])
   44)
