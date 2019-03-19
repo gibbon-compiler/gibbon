@@ -44,17 +44,20 @@ unariser Prog{ddefs,fundefs,mainExp} = do
     funEnv = M.map funTy fundefs
 
     unariserFun :: FunDef3 -> PassM FunDef3
-    unariserFun f@FunDef{funTy,funArg,funBody} = do
-      let in_ty   = inTy funTy
-          in_ty'  = flattenTy in_ty
+    unariserFun f@FunDef{funTy,funArgs,funBody} = do
+      let in_tys  = inTys funTy
+          in_tys' = map flattenTy in_tys
           out_ty' = flattenTy (outTy funTy)
-          fn = case in_ty of
-                 ProdTy{} ->
-                   f { funBody = flattenExp funArg in_ty funBody,
-                       funTy = (in_ty', out_ty') }
-                 _ ->
-                   f { funTy = (in_ty', out_ty') }
-          env2 = Env2 (M.singleton funArg in_ty) funEnv
+          fun_body =
+               foldr
+                 (\(a,t) acc ->
+                    case t of
+                      ProdTy{} -> flattenExp a t acc
+                      _ -> acc)
+                 funBody (zip funArgs in_tys)
+          fn = f { funTy = (in_tys', out_ty')
+                 , funBody = fun_body }
+          env2 = Env2 (M.fromList $ zip  funArgs in_tys) funEnv
       bod <- unariserExp ddefs [] env2 funBody
       return $ fn { funBody = bod }
 
@@ -127,8 +130,8 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
         [] -> return ex
         _  -> error $ "Impossible. Non-empty projection stack on LitSymE "++show stk
 
-    AppE v locs arg  -> unLoc <$> discharge stk <$>
-                        (L p <$> AppE v locs <$> go env2 arg)
+    AppE v locs args -> unLoc <$> discharge stk <$>
+                        (L p <$> AppE v locs <$> mapM (go env2) args)
 
     PrimAppE pr args -> unLoc <$> discharge stk <$>
                         (L p <$> PrimAppE pr <$> mapM (go env2) args)

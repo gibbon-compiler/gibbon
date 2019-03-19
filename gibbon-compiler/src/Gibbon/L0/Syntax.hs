@@ -37,7 +37,7 @@ type Prog0    = Prog (L Exp0)
 
 -- | The extension point for L0.
 data E0Ext loc dec =
-   LambdaE (Var,dec) -- Variable tagged with type
+   LambdaE [(Var,dec)] -- Variable tagged with type
            (L (PreExp E0Ext loc dec))
  | PolyAppE (L (PreExp E0Ext loc dec)) -- Operator
             (L (PreExp E0Ext loc dec)) -- Operand
@@ -46,8 +46,8 @@ data E0Ext loc dec =
 instance FreeVars (E0Ext l d) where
   gFreeVars e =
     case e of
-      LambdaE (x,_) bod -> S.delete x $ gFreeVars bod
-      PolyAppE f d  -> gFreeVars f `S.union` gFreeVars d
+      LambdaE args bod -> foldr S.delete (gFreeVars bod) (map fst args)
+      PolyAppE f d     -> gFreeVars f `S.union` gFreeVars d
 
 instance (Out l, Out d, Show l, Show d) => Expression (E0Ext l d) where
   type LocOf (E0Ext l d) = l
@@ -88,15 +88,15 @@ data Ty0
  | MetaTv MetaTv -- Unification variables
  | ProdTy [Ty0]
  | SymDictTy Ty0
- | ArrowTy Ty0 Ty0
+ | ArrowTy [Ty0] Ty0
  | PackedTy TyCon [Ty0] -- Type arguments to the type constructor
  | ListTy Ty0
   deriving (Show, Read, Eq, Ord, Generic, NFData)
 
 instance FunctionTy Ty0 where
   type ArrowTy Ty0 = TyScheme
-  inTy  = arrIn
-  outTy = arrOut
+  inTys  = arrIns
+  outTy  = arrOut
 
 -- | Straightforward parametric polymorphism.
 data TyScheme = ForAll [TyVar] Ty0
@@ -105,17 +105,17 @@ data TyScheme = ForAll [TyVar] Ty0
 -- instance FreeVars TyScheme where
 --   gFreeVars (ForAll tvs ty) = gFreeVars ty `S.difference` (S.fromList tvs)
 
-arrIn :: TyScheme -> Ty0
-arrIn (ForAll _ (ArrowTy i _)) = i
-arrIn err = error $ "arrIn: Not an arrow type: " ++ show err
+arrIns :: TyScheme -> [Ty0]
+arrIns (ForAll _ (ArrowTy i _)) = i
+arrIns err = error $ "arrIns: Not an arrow type: " ++ show err
 
 arrOut :: TyScheme -> Ty0
 arrOut (ForAll _ (ArrowTy _ o)) = o
 arrOut err = error $ "arrOut: Not an arrow type: " ++ show err
 
-arrIn' :: Ty0 -> Ty0
-arrIn' (ArrowTy i _) = i
-arrIn' err = error $ "arrIn': Not an arrow type: " ++ show err
+arrIns' :: Ty0 -> [Ty0]
+arrIns' (ArrowTy i _) = i
+arrIns' err = error $ "arrIns': Not an arrow type: " ++ show err
 
 tyFromScheme :: TyScheme -> Ty0
 tyFromScheme (ForAll _ a) = a
@@ -147,7 +147,7 @@ tyVarsInTys tys = foldr (go []) [] tys
         MetaTv _ -> acc
         ProdTy tys1     -> foldr (go bound) acc tys1
         SymDictTy ty1   -> go bound ty1 acc
-        ArrowTy a b     -> go bound a (go bound b acc)
+        ArrowTy tys1 b  -> foldr (go bound) (go bound b acc) tys1
         PackedTy _ tys1 -> foldr (go bound) acc tys1
         ListTy ty1      -> go bound ty1 acc
 
@@ -171,7 +171,7 @@ metaTvsInTys tys = foldr go [] tys
         TyVar{} -> acc
         ProdTy tys1     -> foldr go acc tys1
         SymDictTy ty1   -> go ty1 acc
-        ArrowTy a b     -> go b (go a acc)
+        ArrowTy tys1 b  -> go b (foldr go acc tys1)
         PackedTy _ tys1 -> foldr go acc tys1
         ListTy ty1      -> go ty1 acc
 
@@ -199,12 +199,12 @@ arrowTysInTy = go []
         MetaTv{} -> acc
         ProdTy tys    -> foldl go acc tys
         SymDictTy a   -> go acc a
-        ArrowTy a b   -> go (go acc a) b ++ [ty]
+        ArrowTy tys b -> go (foldl go acc tys) b ++ [ty]
         PackedTy _ vs -> foldl go acc vs
         ListTy a -> go acc a
 
 -- Hack. In the specializer, we'd like to know the type of the scrutinee.
--- However, there are few things that prevent us from deriving Typeable for L0.
+-- However, we cannot derive Typeable for L0.
 --
 -- Typeable uses the type 'UrTy' which is shared by the IR's L1, L2 and L3, but not L0.
 -- L0 uses it's own type Ty0, which is not an instance of 'UrTy'.
@@ -242,8 +242,8 @@ recoverType ddfs env2 (L _ ex)=
       in recoverType ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
     Ext ext ->
       case ext of
-        LambdaE (v,t) bod ->
-          recoverType ddfs (extendVEnv v t env2) bod
+        LambdaE args bod ->
+          recoverType ddfs (extendsVEnv (M.fromList args) env2) bod
         PolyAppE{} -> error "recoverTypeep: TODO PolyAppE"
   where
     -- Return type for a primitive operation.

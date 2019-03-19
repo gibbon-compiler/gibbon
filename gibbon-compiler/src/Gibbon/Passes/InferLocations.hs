@@ -96,8 +96,8 @@ import Control.Monad.Trans (lift)
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
-import Gibbon.L1.Syntax as L1 hiding (extendVEnv, lookupVEnv, lookupFEnv)
-import Gibbon.L2.Syntax as L2 hiding (extendVEnv, lookupVEnv, lookupFEnv)
+import Gibbon.L1.Syntax as L1 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
+import Gibbon.L2.Syntax as L2 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
 import Gibbon.Passes.InlineTriv (inlineTriv)
 import Gibbon.Passes.Flatten (flattenL1)
 
@@ -115,6 +115,9 @@ data FullEnv = FullEnv
 extendVEnv :: Var -> Ty2 -> FullEnv -> FullEnv
 extendVEnv v ty fe@FullEnv{valEnv} = fe { valEnv = M.insert v ty valEnv }
 
+extendsVEnv :: TyEnv Ty2 -> FullEnv -> FullEnv
+extendsVEnv env fe@FullEnv{valEnv} = fe { valEnv = valEnv <> env }
+
 lookupVEnv :: Var -> FullEnv -> Ty2
 lookupVEnv v FullEnv{valEnv} = valEnv # v
 
@@ -128,20 +131,20 @@ lookupFEnv v FullEnv{funEnv} = funEnv # v
 -- If we assume output regions are disjoint from input ones, then we
 -- can instantiate an L1 function type into a polymorphic L2 one,
 -- mechanically.
-convertFunTy :: (Ty1,Ty1) -> PassM ArrowTy2
+convertFunTy :: ([Ty1],Ty1) -> PassM ArrowTy2
 convertFunTy (from,to) = do
-    from' <- convertTy from
+    from' <- mapM convertTy from
     to'   <- convertTy to
     -- For this simple version, we assume every location is in a separate region:
-    lrm1 <- toLRM from' Input
-    lrm2 <- toLRM to'   Output
+    lrm1 <- concat <$> mapM (toLRM Input) from'
+    lrm2 <- toLRM Output to'
     return $ ArrowTy2 { locVars = lrm1 ++ lrm2
-                     , arrIn   = from'
+                     , arrIns  = from'
                      , arrEffs = S.empty
                      , arrOut  = to'
                      , locRets = [] }
  where
-   toLRM ls md =
+   toLRM md ls =
        mapM (\v -> do r <- freshLocVar "r"
                       return $ LRM v (VarR r) md)
             (F.toList ls)
@@ -211,8 +214,8 @@ inferLocs initPrg = do
   (Prog dfs fds me) <- addRepairFns initPrg
   let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
-          fenv <- forM fds $ \(FunDef _ _ (inty, outty) _) ->
-                  lift $ lift $ convertFunTy (inty,outty)
+          fenv <- forM fds $ \(FunDef _ _ (intys, outty) _) ->
+                  lift $ lift $ convertFunTy (intys,outty)
           let fe = FullEnv dfs' M.empty fenv
           me' <- case me of
             -- We ignore the type of the main expression inferred in L1..
@@ -223,9 +226,9 @@ inferLocs initPrg = do
             Nothing -> return Nothing
           fds' <- forM fds $ \(FunDef fn fa (intty,outty) fbod) -> do
                                    let arrty = lookupFEnv fn fe
-                                       fe' = extendVEnv fa (arrIn arrty) fe
+                                       fe' = extendsVEnv (M.fromList $ fragileZip fa (arrIns arrty)) fe
                                    dest <- destFromType (arrOut arrty)
-                                   fixType_ (arrIn arrty)
+                                   mapM_ fixType_ (arrIns arrty)
                                    (fbod',_) <- inferExp' fe' fbod dest
                                    return $ FunDef fn fa arrty fbod'
           return $ Prog dfs' fds' me'
@@ -299,7 +302,7 @@ inferExp' env lex0@(L sl1 exp) dest =
                             -- Substitute the location occurring at the call site
                             -- in place of the one in the function's return type
                             copyRetTy = substLoc' lv2 arrty
-                        in lc$ LetE (v',[],copyRetTy, lc$ AppE f lvs (lc$ VarE v1)) $
+                        in lc$ LetE (v',[],copyRetTy, lc$ AppE f lvs [lc$ VarE v1]) $
                            lc$ Ext (LetLocE lv1 (AfterVariableLE v' lv2) a)
 
   in do res <- inferExp env lex0 dest
@@ -446,7 +449,7 @@ inferExp env@FullEnv{dataDefs}
                             -- Substitute the location occurring at the call site
                             -- in place of the one in the function's return type
                             copyRetTy = substLoc' lv2 (arrOut arrty)
-                        return (lc$ LetE (v',[],copyRetTy,l$ AppE f lvs (l$ VarE v1)) $
+                        return (lc$ LetE (v',[],copyRetTy,l$ AppE f lvs [l$ VarE v1]) $
                                 lc$ Ext (LetLocE lv1' (AfterVariableLE v' lv2') e), ty, cs)
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
                         return (e',ty',c:cs')
@@ -576,28 +579,30 @@ inferExp env@FullEnv{dataDefs}
 
     LitSymE s -> return (lc$ LitSymE s, SymTy, [])
 
-    AppE f ls arg ->
+    AppE f _ args ->
         do let arrty = lookupFEnv f env
-           valTy <- freshTyLocs $ arrOut arrty
-           argTy <- freshTyLocs $ arrIn arrty
-           argDest <- destFromType' argTy
-           (arg',aty,acs) <- inferExp env arg argDest
+           valTy    <- freshTyLocs $ arrOut arrty
+           -- /cc @vollmerm
+           argTys   <- mapM freshTyLocs $ arrIns arrty
+           argDests <- mapM destFromType' argTys
+           (args', atys, acss) <- L.unzip3 <$> mapM (uncurry $ inferExp env) (zip args argDests)
+           let acs = concat acss
            case dest of
              SingleDest d -> do
                case locsInTy valTy of
                  [outloc] -> unify d outloc
-                               (return (lc$ L2.AppE f (locsInTy aty ++ locsInDest dest) arg', valTy, acs))
+                               (return (lc$ L2.AppE f (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs))
                                (err$ "(AppE) Cannot unify" ++ sdoc d ++ " and " ++ sdoc outloc)
                  _ -> err$ "AppE expected a single output location in type: " ++ sdoc valTy
              TupleDest ds ->
                case valTy of
                  ProdTy tys -> unifyAll ds tys
-                                 (return (lc$ L2.AppE f (locsInTy aty ++ locsInDest dest) arg', valTy, acs))
+                                 (return (lc$ L2.AppE f (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs))
                                  (err$ "(AppE) Cannot unify" ++ sdoc ds ++ " and " ++ sdoc tys)
                  _ -> err$ "(AppE) Cannot unify" ++ sdoc dest ++ " and " ++ sdoc valTy
              NoDest ->
                case locsInTy valTy of
-                 [] -> return (lc$ L2.AppE f (locsInTy aty ++ locsInDest dest) arg', valTy, acs)
+                 [] -> return (lc$ L2.AppE f (concatMap locsInTy atys ++ locsInDest dest) args', valTy, acs)
                  _  -> err$ "(AppE) Cannot unify NoDest with " ++ sdoc valTy ++ ". This might be caused by a main expression having a packed type."
 
     TimeIt e t b ->
@@ -641,7 +646,7 @@ inferExp env@FullEnv{dataDefs}
                                                _ -> return $ ArgVar v
                              L _ (LitE _) -> return $ ArgFixed 8
                              L _ (LitSymE _) -> return $ ArgFixed 8
-                             L _ (AppE f lvs (L _ (VarE v))) -> do v' <- lift $ lift $ freshLocVar "cpy"
+                             L _ (AppE f lvs [L _ (VarE v)]) -> do v' <- lift $ lift $ freshLocVar "cpy"
                                                                    return $ ArgCopy v v' f lvs
                              _ -> err $ "Expected argument to be trivial, got " ++ (show arg)
                   newLocs <- mapM finalLocVar locs
@@ -771,20 +776,22 @@ inferExp env@FullEnv{dataDefs}
       case rhs of
         VarE{} -> err$ "Unexpected variable aliasing: " ++ (show ex0)
 
-        AppE f [] arg -> do
+        AppE f [] args -> do
           let arrty = lookupFEnv f env
           valTy <- freshTyLocs $ arrOut arrty
-          argTy <- freshTyLocs $ arrIn arrty -- TODO: check for and fail on invalid arguments
-          argDest <- destFromType' argTy
-          (arg',aty,acs) <- inferExp env arg argDest
+          -- /cc @vollmerm
+          argTys   <- mapM freshTyLocs $ arrIns arrty
+          argDests <- mapM destFromType' argTys
+          (args', atys, acss) <- L.unzip3 <$> mapM (uncurry $ inferExp env) (zip args argDests)
+          let acs = concat acss
           tupBod <- projTups valTy (l$ VarE vr) bod
           res <- inferExp (extendVEnv vr valTy env) tupBod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr res
           vcs <- tryNeedRegion (locsInTy valTy) ty'' $ acs ++ cs''
           fcs <- tryInRegion vcs
           -- fcs <- tryInRegion $ acs ++ cs''
-          res' <- tryBindReg (lc$ L2.LetE (vr,[], valTy, L sl2 $ L2.AppE f (locsInTy aty ++ locsInTy valTy) arg') bod'', ty'', fcs)
-          bindImmediateDependentLocs (locsInTy aty ++ locsInTy valTy) res'
+          res' <- tryBindReg (lc$ L2.LetE (vr,[], valTy, L sl2 $ L2.AppE f (concatMap locsInTy atys ++ locsInTy valTy) args') bod'', ty'', fcs)
+          bindImmediateDependentLocs (concatMap locsInTy atys ++ locsInTy valTy) res'
 
         AppE{} -> err$ "Malformed function application: " ++ (show ex0)
 
@@ -948,10 +955,10 @@ finishExp (L i e) =
       VarE v -> return $ l$ VarE v
       LitE i -> return $ l$ LitE i
       LitSymE v -> return $ l$ LitSymE v
-      AppE v ls e1 -> do
-             e1' <- finishExp e1
+      AppE v ls es -> do
+             es' <- mapM finishExp es
              ls' <- mapM finalLocVar ls
-             return $ l$ AppE v ls' e1'
+             return $ l$ AppE v ls' es'
       PrimAppE pr es -> do
              es' <- mapM finishExp es
              pr' <- finishPr pr
@@ -1050,8 +1057,8 @@ cleanExp (L i e) =
       VarE v -> (l$ VarE v, S.empty)
       LitE v -> (l$ LitE v, S.empty)
       LitSymE v -> (l$ LitSymE v, S.empty)
-      AppE v ls e -> let (e',s') = cleanExp e
-                     in (l$ AppE v ls e', S.union s' (S.fromList ls))
+      AppE v ls e -> let (e',s') = unzip $ map cleanExp e
+                     in (l$ AppE v ls e', (S.unions s') `S.union` (S.fromList ls))
       PrimAppE (DictInsertP ty) es -> let (es',ls') = unzip $ L.map cleanExp es
                         in (l$ PrimAppE (DictInsertP ty) es',
                              S.union (S.unions ls') (S.fromList $ locsInTy ty))
@@ -1134,8 +1141,8 @@ fixProj renam pvar proj (L i e) =
                   Just v' -> l$ VarE v'
       LitE v -> l$ LitE v
       LitSymE v -> l$ LitSymE v
-      AppE v ls e -> let e' = fixProj renam pvar proj e
-                     in l$ AppE v ls e'
+      AppE v ls es -> let es' = map (fixProj renam pvar proj) es
+                      in l$ AppE v ls es'
       PrimAppE pr es -> let es' = map (fixProj renam pvar proj) es
                         in l$ PrimAppE pr es'
       LetE (v,ls,t,e1) e2 ->
@@ -1332,7 +1339,7 @@ copy (e,ty,cs) lv1 =
     case ty of
       PackedTy tc lv2 -> do
           let copyName = mkCopyFunName tc -- assume a copy function with this name
-              eapp = l$ AppE copyName [lv2,lv1] e
+              eapp = l$ AppE copyName [lv2,lv1] [e]
           return (eapp, PackedTy tc lv1, [])
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
 
@@ -1419,17 +1426,17 @@ genCopyFn DDef{tyName, dataCons} = do
                 ys <- mapM (\_ -> gensym "y") tys
                 let bod = foldr (\(ty,x,y) acc ->
                                      if isPackedTy ty
-                                     then l$ LetE (y, [], ty, l$ AppE (mkCopyFunName (tyToDataCon ty)) [] (l$ VarE x)) acc
+                                     then l$ LetE (y, [], ty, l$ AppE (mkCopyFunName (tyToDataCon ty)) [] [l$ VarE x]) acc
                                      else l$ LetE (y, [], ty, l$ VarE x) acc)
                           (l$ DataConE () dcon $ map (l . VarE) ys)
                           (zip3 (L.map snd tys) xs ys)
                 return (dcon, L.map (\x -> (x,())) xs, bod)
   return $ FunDef { funName = mkCopyFunName (fromVar tyName)
-                     , funArg = arg
-                     , funTy  = ( PackedTy (fromVar tyName) ()
-                                   , PackedTy (fromVar tyName) () )
-                     , funBody = l$ CaseE (l$ VarE arg) casebod
-                     }
+                  , funArgs = [arg]
+                  , funTy   = ( [PackedTy (fromVar tyName) ()]
+                              , PackedTy (fromVar tyName) () )
+                  , funBody = l$ CaseE (l$ VarE arg) casebod
+                  }
 
 -- | Traverses a packed data type and always returns 42.
 genTravFn :: DDef Ty1 -> PassM FunDef1
@@ -1440,16 +1447,16 @@ genTravFn DDef{tyName, dataCons} = do
                 ys <- mapM (\_ -> gensym "y") tys
                 let bod = L.foldr (\(ty,x,y) acc ->
                                      if isPackedTy ty
-                                     then l$ LetE (y, [], IntTy, l$ AppE (mkTravFunName (tyToDataCon ty)) [] (l$ VarE x)) acc
+                                     then l$ LetE (y, [], IntTy, l$ AppE (mkTravFunName (tyToDataCon ty)) [] [l$ VarE x]) acc
                                      else l$ LetE (y, [], ty, l$ VarE x) acc)
                           (l$ LitE 42)
                           (zip3 (L.map snd tys) xs ys)
                 return (dcon, L.map (\x -> (x,())) xs, bod)
   return $ FunDef { funName = mkTravFunName (fromVar tyName)
-                     , funArg = arg
-                     , funTy  = ( PackedTy (fromVar tyName) () , IntTy )
-                     , funBody = l$ CaseE (l$ VarE arg) casebod
-                     }
+                  , funArgs = [arg]
+                  , funTy   = ( [PackedTy (fromVar tyName) ()] , IntTy )
+                  , funBody = l$ CaseE (l$ VarE arg) casebod
+                  }
 
 
 -- | Add copy & traversal functions for each data type in a prog

@@ -41,6 +41,9 @@ class Pretty e where
 doublecolon :: Doc
 doublecolon = colon <> colon
 
+indentLevel :: Int
+indentLevel = 4
+
 --------------------------------------------------------------------------------
 
 -- A convenience wrapper over some of the constraints.
@@ -60,7 +63,7 @@ instance HasPretty ex => Pretty (Prog ex) where
 
 renderMain :: Doc -> Doc -> Doc
 renderMain m ty = text "gibbon_main" <+> doublecolon <+> ty
-                    $$ text "gibbon_main" <+> equals $$ nest 4 m
+                    $$ text "gibbon_main" <+> equals $$ nest indentLevel m
 
 -- Things we need to make this a valid compilation unit for GHC:
 ghc_compat_prefix, ghc_compat_suffix :: Doc
@@ -113,13 +116,13 @@ ghc_compat_suffix = text "\nmain = print gibbon_main"
 
 -- Functions:
 instance HasPretty ex => Pretty (FunDef ex) where
-    pprintWithStyle sty FunDef{funName,funArg,funTy,funBody} =
+    pprintWithStyle sty FunDef{funName,funArgs,funTy,funBody} =
         text (fromVar funName) <+> doublecolon <+> pprintWithStyle sty funTy
           $$ renderBod <> text "\n"
       where
         renderBod :: Doc
-        renderBod = text (fromVar funName) <+> text (fromVar funArg) <+> equals
-                      $$ nest 4 (pprintWithStyle sty funBody)
+        renderBod = text (fromVar funName) <+> (pprintWithStyle sty funArgs) <+> equals
+                      $$ nest indentLevel (pprintWithStyle sty funBody)
 
 -- Datatypes
 instance Pretty ex => Pretty (DDef ex) where
@@ -159,6 +162,9 @@ instance Pretty () where
 instance Pretty Var where
     pprintWithStyle _ v = text (fromVar v)
 
+instance Pretty [Var] where
+    pprintWithStyle _ ls = hsep $ map (text . fromVar) ls
+
 instance Pretty TyVar where
     pprintWithStyle sty tyvar =
       case sty of
@@ -179,20 +185,20 @@ instance (Pretty l) => Pretty (UrTy l) where
               case sty of
                 PPHaskell  -> text tc
                 PPInternal -> text "Packed" <+> text tc <+> pprintWithStyle sty loc
-          ListTy ty1 -> text "List" <+> pprintWithStyle sty ty1
+          ListTy ty1 -> brackets $ pprintWithStyle sty ty1
           PtrTy     -> text "Ptr"
           CursorTy  -> text "Cursor"
 
 -- Function type for L1 and L3
-instance Pretty (UrTy (), UrTy ()) where
-    pprintWithStyle sty (a,b) = pprintWithStyle sty a <+> text "->" <+> pprintWithStyle sty b
+instance Pretty ([UrTy ()], UrTy ()) where
+    pprintWithStyle sty (as,b) = hsep $ punctuate " ->" $ map (pprintWithStyle sty) (as ++ [b])
 
 instance Pretty ArrowTy2 where
     -- TODO: start metadata at column 0 instead of aligning it with the type
     pprintWithStyle sty fnty =
         case sty of
           PPHaskell ->
-            pprintWithStyle sty (arrIn fnty) <+> text "->" <+> pprintWithStyle sty (arrOut fnty)
+            (hsep $ punctuate " ->" $ map (pprintWithStyle sty) (arrIns fnty)) <+> text "->" <+> pprintWithStyle sty (arrOut fnty)
           PPInternal ->
             pprintWithStyle PPHaskell fnty $$
               braces (text "locvars" <+> doc (locVars fnty) <> comma $$
@@ -202,11 +208,17 @@ instance Pretty ArrowTy2 where
 
 -- Expressions
 
+-- CSK: Needs a better name.
+type HasPrettyToo e l d = (Ord d, Eq d, Pretty d, Pretty l, Pretty (e l d), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)))
+
 instance Pretty (PreExp e l d) => Pretty (L (PreExp e l d)) where
     pprintWithStyle sty (L _ e) = pprintWithStyle sty e
 
--- CSK: Needs a better name.
-type HasPrettyToo e l d = (Ord d, Eq d, Pretty d, Pretty l, Pretty (e l d), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)))
+instance Pretty (PreExp e l d) => Pretty [(PreExp e l d)] where
+    pprintWithStyle sty ls = hsep $ map (pprintWithStyle sty) ls
+
+instance Pretty (L (PreExp e l d)) => Pretty [(L (PreExp e l d))] where
+    pprintWithStyle sty ls = hsep $ map (pprintWithStyle sty) ls
 
 instance HasPrettyToo e l d => Pretty (PreExp e l d) where
     pprintWithStyle sty ex0 =
@@ -214,11 +226,11 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
           LitSymE v -> pprintWithStyle sty v
-          AppE v ls e -> pprintWithStyle sty v <+>
-                         (if null ls
-                          then empty
-                          else brackets $ hcat (punctuate "," (map pprint ls))) <+>
-                         (pprintWithStyle sty e)
+          AppE v locs ls -> pprintWithStyle sty v <+>
+                            (if null locs
+                             then empty
+                             else brackets $ hcat (punctuate "," (map pprint locs))) <+>
+                            (pprintWithStyle sty ls)
           PrimAppE pr es ->
               case pr of
                   _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP, SymAppend] ->
@@ -256,8 +268,8 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                       1 -> text "snd" <+> edoc
                       _ -> error (render $ pprintWithStyle PPInternal ex0) -- text "#" <> int i <+> edoc
           CaseE e bnds -> text "case" <+> pprintWithStyle sty e <+> text "of" $+$
-                          nest 4 (vcat $ map dobinds bnds)
-          DataConE loc dc es -> text dc <+>
+                          nest indentLevel (vcat $ map dobinds bnds)
+          DataConE loc dc es -> parens $ text dc <+>
                                 (if isEmpty (pprintWithStyle sty loc)
                                  then empty
                                  else pprintWithStyle sty loc) <+>
@@ -274,7 +286,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                                                              then pprintWithStyle sty v
                                                                              else pprintWithStyle sty v <> doublecolon <> pprintWithStyle sty loc)
                                                             vls))
-                               <+> text "->" $+$ nest 4 (pprintWithStyle sty e)
+                               <+> text "->" $+$ nest indentLevel (pprintWithStyle sty e)
 -- L1
 instance Pretty (NoExt l d) where
     pprintWithStyle _ _ = empty
@@ -326,27 +338,28 @@ instance Pretty L4.Prog where
 -- We have to redefine this for L0 (which doesn't use UrTy).
 
 instance Pretty L0.Ty0 where
-  pprintWithStyle _ ty =
+  pprintWithStyle sty ty =
       case ty of
         L0.IntTy      -> text "Int"
         L0.SymTy0     -> text "Sym"
         L0.BoolTy     -> text "Bool"
         L0.TyVar v    -> doc v
         L0.MetaTv v   -> doc v
-        L0.ProdTy tys -> parens $ hcat $ punctuate "," $ map pprint tys
-        L0.SymDictTy ty1   -> text "Dict" <+> pprint ty1
-        L0.ArrowTy a b     -> pprint a <+> text "->" <+> pprint b
-        L0.PackedTy tc loc -> text "Packed" <+> text tc <+> brackets (hcat (map pprint loc))
-        L0.ListTy ty1 -> brackets (pprint ty1)
+        L0.ProdTy tys -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
+        L0.SymDictTy ty1 -> text "Dict" <+> pprint ty1
+        L0.ArrowTy as b  -> parens $ (hsep $ map (<+> "->") $ map (pprintWithStyle sty) as) <+> pprint b
+        L0.PackedTy tc loc -> text "Packed" <+> text tc <+> brackets (hcat (map (pprintWithStyle sty) loc))
+        L0.ListTy ty1 -> brackets (pprintWithStyle sty ty1)
+
 
 instance Pretty L0.TyScheme where
-  pprintWithStyle _ (L0.ForAll tvs ty) = text "forall" <+> hsep (map doc tvs) <+> text "." <+> pprint ty
+  pprintWithStyle _ (L0.ForAll tvs ty) = text "forall" <+> hsep (map doc tvs) <> text "." <+> pprint ty
 
-instance Pretty (L0.E0Ext () L0.Ty0) where
+instance (Out a, Pretty a) => Pretty (L0.E0Ext a L0.Ty0) where
   pprintWithStyle _ ex0 =
     case ex0 of
-      L0.LambdaE (v,ty) bod -> parens (text "\\" <+> doc v <+> doublecolon <+> pprint ty <+> text " -> "
-                                         $$ nest 4 (pprint bod))
+      L0.LambdaE args bod -> parens (text "\\" <> parens (hsep (punctuate comma (map (\(v,ty) -> doc v <+> doublecolon <+> pprint ty) args))) <+> text "->"
+                                         $$ nest indentLevel (pprint bod))
       L0.PolyAppE{} -> doc ex0
 
 
@@ -382,14 +395,14 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
     sty = PPHaskell
 
     ppFun :: Env2 Ty1 -> FunDef1 -> Doc
-    ppFun env2 FunDef{funName, funArg, funTy, funBody} =
+    ppFun env2 FunDef{funName, funArgs, funTy, funBody} =
       text (fromVar funName) <+> doublecolon <+> pprintWithStyle sty funTy
              $$ renderBod <> text "\n"
       where
-        env2' = extendVEnv funArg (inTy funTy) env2
+        env2' = extendsVEnv (M.fromList $ zip funArgs (inTys funTy)) env2
         renderBod :: Doc
-        renderBod = text (fromVar funName) <+> text (fromVar funArg) <+> equals
-                      $$ nest 4 (ppExp env2' funBody)
+        renderBod = text (fromVar funName) <+> (hsep $ map (text . fromVar) funArgs) <+> equals
+                      $$ nest indentLevel (ppExp env2' funBody)
 
     ppExp :: Env2 Ty1 -> L Exp1 -> Doc
     ppExp env2 (L _ ex0) =
@@ -397,11 +410,11 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
           LitSymE v -> pprintWithStyle sty v
-          AppE v ls e -> pprintWithStyle sty v <+>
-                         (if null ls
-                          then empty
-                          else brackets $ hcat (punctuate "," (map pprint ls))) <+>
-                         (ppExp env2 e)
+          AppE v locs ls -> pprintWithStyle sty v <+>
+                            (if null locs
+                             then empty
+                             else brackets $ hcat (punctuate "," (map pprint locs))) <+>
+                            (hsep $ map (ppExp env2) ls)
           PrimAppE pr es ->
               case pr of
                   _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP, SymAppend] ->
@@ -456,9 +469,9 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                               in parens $ text "let " <+> pat <+> text "=" <+> edoc <+> text "in" <+> text v
                 ty -> error $ "pprintHsWithEnv: " ++ sdoc ty ++ "is not a product. In " ++ sdoc ex0
           CaseE e bnds -> text "case" <+> ppExp env2 e <+> text "of" $+$
-                          nest 4 (vcat $ map (dobinds env2) bnds)
+                          nest indentLevel (vcat $ map (dobinds env2) bnds)
           DataConE loc dc es ->
-                              text dc <+>
+                              parens $ text dc <+>
                               (if isEmpty (pprintWithStyle sty loc)
                                then empty
                                else pprintWithStyle sty loc) <+>
@@ -478,4 +491,4 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                                                                              then pprintWithStyle sty v
                                                                              else pprintWithStyle sty v <> doublecolon <> pprintWithStyle sty loc)
                                                             vls))
-                               <+> text "->" $+$ nest 4 (ppExp env21' e)
+                               <+> text "->" $+$ nest indentLevel (ppExp env21' e)

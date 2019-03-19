@@ -29,7 +29,7 @@ import Prelude hiding (exp)
 
 -- | Typecheck a L1 expression
 --
-tcExp :: (Eq l, Out l, Out (e l (UrTy l)), FunctionTy (UrTy l)) =>
+tcExp :: (Eq l, Show l, Out l, Out (e l (UrTy l)), FunctionTy (UrTy l)) =>
          DDefs (UrTy l) -> Env2 (UrTy l) -> (L (PreExp e l (UrTy l))) ->
          TcM (UrTy l) (L (PreExp e l (UrTy l)))
 tcExp ddfs env exp@(L p ex) =
@@ -38,7 +38,7 @@ tcExp ddfs env exp@(L p ex) =
     LitE _    -> return IntTy
     LitSymE _ -> return IntTy
 
-    AppE v locs e -> do
+    AppE v locs ls -> do
       let funty =
             case (M.lookup v (fEnv env)) of
               Just ty -> ty
@@ -52,8 +52,8 @@ tcExp ddfs env exp@(L p ex) =
                            exp
 
       -- Check argument type
-      argTy <- go e
-      _     <- ensureEqualTy exp (inTy funty) argTy
+      argTys <- mapM go ls
+      _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (fragileZip (inTys funty) argTys)
       return (outTy funty)
 
     PrimAppE pr es -> do
@@ -250,7 +250,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
                            -- expression must be *inferred*.
                            -- Otherwise, fail if the types don't match.
                            if main_ty == voidTy
-                           then Just (e, ty) 
+                           then Just (e, ty)
                            else if main_ty == ty
                                 -- Fail if the main expression is packed and we're in packed mode
                                 then if (not $ hasPacked ty) || (not $ gopt Opt_Packed flags)
@@ -264,9 +264,10 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
     env = L1.progToEnv prg
 
     -- fd :: forall e l . FunDef Ty1 Exp -> SyM ()
-    fd FunDef{funArg,funTy,funBody} = do
-      let (argTy,retty) = funTy
-          env' = Env2 (M.singleton funArg argTy) (fEnv env)
+    fd FunDef{funArgs,funTy,funBody} = do
+      let (argTys,retty) = funTy
+          venv = M.fromList (zip funArgs argTys)
+          env' = Env2 venv (fEnv env)
           res = runExcept $ tcExp ddefs env' funBody
       case res of
         Left err -> error $ sdoc err
@@ -274,7 +275,6 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
                     then return ()
                     else error $ "Expected type " ++ (sdoc retty)
                          ++ " and got type " ++ (sdoc ty)
-
       return ()
 
 --------------------------------------------------------------------------------
@@ -316,7 +316,7 @@ tcProj _ i (ProdTy tys) = return $ tys !! i
 tcProj e _i ty = throwError $ GenericTC ("Projection from non-tuple type " ++ (sdoc ty)) e
 
 
-tcCases :: (Out l, Eq l, Out (e l (UrTy l)), FunctionTy (UrTy l))
+tcCases :: (Out l, Show l, Eq l, Out (e l (UrTy l)), FunctionTy (UrTy l))
         => DDefs (UrTy l) -> Env2 (UrTy l) ->
            [(DataCon, [(Var, l)], L (PreExp e l (UrTy l)))] ->
            TcM (UrTy l) (L (PreExp e l (UrTy l)))

@@ -283,13 +283,13 @@ tests:
   - name: test06i_casecase.gib
     failing: [gibbon2, gibbon1]
   - name: test08b_dict.gib
-    failing: [gibbon2, gibbon1]
+    failing: [pointer, gibbon2, gibbon1]
   - name: test08c_dict.gib
-    failing: [gibbon2, gibbon1]
+    failing: [pointer, gibbon2, gibbon1]
   - name: test08_dict.gib
     failing: [gibbon2, gibbon1]
   - name: test08d_sharedict.gib
-    failing: [gibbon2, gibbon1]
+    failing: [pointer, gibbon2, gibbon1]
   - name: test10b_desugar.gib
     failing: [gibbon2, gibbon1]
   - name: test10_desugar.gib
@@ -297,13 +297,13 @@ tests:
   - name: test29a_list.gib
     failing: [gibbon2]
   - name: test18f_flip.gib
-    failing: [gibbon2, gibbon1]
+    failing: [pointer, gibbon2, gibbon1]
   - name: test_addtrees.gib
     failing: [gibbon2,gibbon1]
   - name: test25d_racketcore.gib
     failing: [gibbon2, gibbon1]
   - name: pp_projs.gib
-    failing: [gibbon1, gibbon2]
+    failing: [pointer, gibbon1, gibbon2]
 
   # This test depends on real symbols, which we don't support atm.
   - name: test27b_subst.gib

@@ -10,8 +10,10 @@ import qualified Data.Set as S
 import Gibbon.Common
 import Gibbon.L2.Syntax
 
-{- Note [Infinite regions]
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+{-
+
+Infinite regions
+~~~~~~~~~~~~~~~~
 
 Instead of allocating a single global region (4GB right now), the compiler would
 use a linked list of small regions which are allocated as required. Such regions
@@ -21,7 +23,7 @@ allocations double the size everytime (upto a certain limit).
 For more details, refer https://github.com/iu-parfunc/gibbon/issues/79.
 
 Since every region now has a boundary (an end), we have to ensure that we don't
-cross that. This "bounds-check" has to be done before every write op (almost).
+cross that. This "bounds check" has to be done before every write op (almost).
 
 
 Bounds-check: When?
@@ -57,8 +59,9 @@ Current policy for adding a bounds check node:
 Bounds-check: How?
 ~~~~~~~~~~~~~~~~~~
 
-To implement this, we have to tweak the cursor passing style a bit.
-
+This is close to the code we generate for bounds checking. In practice it's
+a side effect, and instead of returning (reg1, end_reg1, lout1) it'll
+update the values of those cursors in C.
 
     -- char*
     type Cursor = Ptr Char
@@ -85,36 +88,17 @@ To implement this, we have to tweak the cursor passing style a bit.
            redirect cur new_reg
            return (new_reg, new_reg + new_reg_size, new_reg)
 
+The end-of-region cursors are used to check if the current write cursor is
+within the region boundary. If it is, we just continue using the current
+region. Otherwise, we allocate a new region, write a "redirection" at the current
+cursor location and use new fresh region for subsequent writes. Most of the
+actual work is done by the RTS. This pass just inserts bounds_check nodes.
 
-Every function takes in an additional (reg_start, reg_end) for every packed type
-in the return value (i.e 1 pair per output cursor). The reg_end is used to
-check if the current write cursor is within the region boundary. If it is,
-we just continue using the current region. Otherwise, we allocate a new region,
-write a "redirection" at the current cursor location and use new fresh region
-for subsequent writes. The reg_start is used to calculate the size of the current
-region, where `size_region = end_reg - start_reg`. Most of the work will be done
-during codegen. This pass just inserts the `BoundsCheck` with correct args.
+N.B.
 
+bounds_check nodes refer to end-of-region cursors, which don't exist yet.
+'threadRegions' takes care of adding those.
 
-To thread through the region arguments:
-
-(1) Region vars are prepended to the locations that AppE forms accept,
-    and the corresponding let bindings are updated to accept region return values.
-
-        LetE (x,[endof_lin], Packed, AppE "add1" [lin,lout] arg)
-
-    becomes
-
-        LetE (x,[reg2, end_reg2, endof_lin], Packed, AppE "add1" [reg1, reg2, lin, lout] arg)
-
-(2) RetE forms returning packed values are modified to return region arguments,
-    in addition to the "endof" locations.
-
-        RetE [endof1] arg
-
-    becomes
-
-        RetE [reg2, end_reg2, endof1] arg
 
 -}
 
@@ -134,9 +118,9 @@ boundsCheck Prog{ddefs,fundefs,mainExp} = do
   return $ Prog ddefs fundefs' mainExp
 
 boundsCheckFn :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef2
-boundsCheckFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
+boundsCheckFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
   let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
-      initTyEnv  = M.singleton funArg (arrIn funTy)
+      initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
       deps = [(lc, lc, []) | lc <- outLocVars funTy] ++ depList funBody
   bod' <- boundsCheckExp ddefs fundefs initRegEnv env2 deps S.empty funBody

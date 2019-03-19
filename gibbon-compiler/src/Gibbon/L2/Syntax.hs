@@ -24,7 +24,7 @@ module Gibbon.L2.Syntax
 
     -- * Operations on types
     , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substLoc
-    , substLoc', substLocs, substLocs', substEffs, prependArgs, stripTyLocs
+    , substLoc', substLocs, substLocs', substEffs, stripTyLocs
     , locsInTy
 
     -- * Other helpers
@@ -57,7 +57,7 @@ type FunDefs2 = FunDefs (L Exp2)
 -- | Function types know about locations and traversal effects.
 instance FunctionTy Ty2 where
   type ArrowTy Ty2 = ArrowTy2
-  inTy = arrIn
+  inTys = arrIns
   outTy = arrOut
 
 -- | Extended expressions, L2.
@@ -171,13 +171,13 @@ instance (Typeable (E2Ext l (UrTy l)),
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
 data ArrowTy2 = ArrowTy2
-    { locVars :: [LRM]       -- ^ Universally-quantified location params.
-                             -- Only these should be referenced in arrIn/arrOut.
-    , arrIn :: Ty2           -- ^ Input type for the function.
-    , arrEffs:: (Set Effect) -- ^ These are present-but-empty initially,
-                             -- and the populated by InferEffects.
-    , arrOut:: Ty2           -- ^ Output type for the function.
-    , locRets :: [LocRet]    -- ^ L2B feature: multi-valued returns.
+    { locVars :: [LRM]        -- ^ Universally-quantified location params.
+                              -- Only these should be referenced in arrIn/arrOut.
+    , arrIns  :: [Ty2]        -- ^ Input type for the function.
+    , arrEffs :: (Set Effect) -- ^ These are present-but-empty initially,
+                              -- and the populated by InferEffects.
+    , arrOut  :: Ty2          -- ^ Output type for the function.
+    , locRets :: [LocRet]     -- ^ L2B feature: multi-valued returns.
     }
   deriving (Read,Show,Eq,Ord, Generic, NFData)
 
@@ -350,11 +350,6 @@ substEffs mp ef =
                  Just v2 -> Traverse v2
                  Nothing -> Traverse v) ef
 
--- | Injected cursor args go first in input and output:
-prependArgs :: [UrTy l] -> UrTy l -> UrTy l
-prependArgs [] t = t
-prependArgs ls t = ProdTy $ ls ++ [t]
-
 -- | Remove the extra location annotations.
 stripTyLocs :: UrTy a -> UrTy ()
 stripTyLocs ty =
@@ -395,10 +390,10 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
          L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
 
     revertFunDef :: FunDef2 -> FunDef1
-    revertFunDef FunDef{funName,funArg,funTy,funBody} =
+    revertFunDef FunDef{funName,funArgs,funTy,funBody} =
       FunDef { funName = funName
-             , funArg  = funArg
-             , funTy   = (stripTyLocs (arrIn funTy), stripTyLocs (arrOut funTy))
+             , funArgs = funArgs
+             , funTy   = (L.map stripTyLocs (arrIns funTy), stripTyLocs (arrOut funTy))
              , funBody = revertExp funBody
              }
 
@@ -408,11 +403,11 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         VarE v    -> VarE v
         LitE n    -> LitE n
         LitSymE v -> LitSymE v
-        AppE v _ arg    -> AppE v [] (revertExp arg)
+        AppE v _ args   -> AppE v [] (L.map revertExp args)
         PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
         LetE (v,_,ty, L _ (Ext (IndirectionE _ _ _ _ arg))) bod ->
           let PackedTy tycon _ =  ty in
-          LetE (v,[],(stripTyLocs ty), l$ AppE (mkCopyFunName tycon) [] (revertExp arg)) (revertExp bod)
+          LetE (v,[],(stripTyLocs ty), l$ AppE (mkCopyFunName tycon) [] [revertExp arg]) (revertExp bod)
         LetE (v,_,ty,rhs) bod ->
           LetE (v,[], stripTyLocs ty, revertExp rhs) (revertExp bod)
         IfE a b c  -> IfE (revertExp a) (revertExp b) (revertExp c)
@@ -450,7 +445,7 @@ occurs w (L _ ex) =
     VarE v -> v `S.member` w
     LitE{}    -> False
     LitSymE{} -> False
-    AppE _ _ arg -> occurs w arg
+    AppE _ _ ls   -> any (occurs w) ls
     PrimAppE _ ls -> any (occurs w) ls
     LetE (_,_,_,rhs) bod -> occurs w rhs || occurs w bod
     IfE a b c -> occurs w a || occurs w b || occurs w c

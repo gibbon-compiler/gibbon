@@ -12,6 +12,7 @@ module Gibbon.Passes.Lower
 
 import           Control.Monad
 import           Data.Char
+import           Data.Foldable
 import           Data.Maybe
 import           Data.Loc
 import           Data.List as L hiding (tail)
@@ -310,27 +311,31 @@ lower Prog{fundefs,ddefs,mainExp} = do
   unpackers  <- mapM genUnpacker (L.filter (not . isVoidDDef) (M.elems ddefs))
   printers   <- mapM genPrinter (L.filter (not . isVoidDDef) (M.elems ddefs))
   T.Prog <$> pure (funs ++ unpackers ++ printers) <*> pure mn
-
---  T.Prog <$> mapM fund (M.elems fundefs) <*> pure mn
-
  where
   fund :: FunDef3 -> PassM T.FunDecl
-  fund FunDef{funName,funTy=(inty, outty),funArg,funBody} = do
-      (args,bod) <- case inty of
-                      -- ASSUMPTION: no nested tuples after unariser:
-                      ProdTy ls -> do let tys'  = L.map (fmap (const ())) ls
-                                          tys'' = L.map typ ls
-                                      (vs,e') <- eliminateProjs funArg tys' funBody
-                                      return $
-                                        dbgTrace 5 (" [lower] unzipping funArg "++show funArg++" to "++show vs) $
-                                        (zip vs tys'', e')
-                      _ -> return ([(funArg, typ inty)], funBody)
-      tl <- tail bod
-      return T.FunDecl{ T.funName = funName
-                      , T.funArgs = args
+  fund FunDef{funName,funTy,funArgs,funBody} = do
+      let (intys, outty) = funTy
+      (args,bod) <- foldlM
+                      (\(acc, b) (arg, ty) ->
+                         case ty of
+                           -- ASSUMPTION: no nested tuples after unariser:
+                           ProdTy ls -> do let tys'  = L.map (fmap (const ())) ls
+                                               tys'' = L.map typ ls
+                                           (vs,e') <- eliminateProjs arg tys' b
+                                           return $
+                                             dbgTrace 5 (" [lower] unzipping funArg "++show arg++" to "++show vs) $
+                                             (acc ++ (zip vs tys''), e')
+                           _ -> return (acc ++ [(arg, typ ty)], b))
+                      ([], funBody)
+                      (zip funArgs intys)
+      -- dbgTraceIt (render $ pprint bod) (pure ())
+      -- let bod = funBody
+      bod' <- tail bod
+      return T.FunDecl{ T.funName  = funName
+                      , T.funArgs  = args -- (zip funArgs $ map typ intys)
                       , T.funRetTy = typ outty
-                      , T.funBody = tl
-                      , T.isPure  = ispure funBody
+                      , T.funBody  = bod'
+                      , T.isPure   = ispure funBody
                       }
 
   -- TimeIt forms are impure because they have print statements after codegen
@@ -485,8 +490,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
       -- Finally reprocess teh whole thing
       tail (go (zip3 tmps tys ls) bod')
 
-{- Note [Lowering the parallel tuple combinator]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+{-
+
+Lowering the parallel tuple combinator
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 ASSUMPTION: Sub-expressions are function calls.
 
@@ -690,14 +697,12 @@ See [Hacky substitution to encode ParE].
              (tail bod)
     --------------------------------End PrimApps----------------------------------
 
-    AppE v _ (L _ (MkProdE ls)) -> return $ T.TailCall ( v) (L.map (triv "operands") ls)
-    AppE v _ e            -> return $ T.TailCall ( v) [triv "operand" e]
-
+    AppE v _ ls -> return $ T.TailCall v (map (triv "operand") ls)
 
     -- Tail calls are just an optimization, if we have a Proj/App it cannot be tail:
     ProjE ix (L _ (AppE f _ e)) -> dbgTrace 5 "ProjE" $ do
         tmp <- gensym $ toVar "prjapp"
-        let (ProdTy inTs, _) = funTy (fundefs # f)
+        let (inTs, _) = funTy (fundefs # f)
         tail $ l$ LetE ( tmp
                        , []
                        , fmap (const ()) (inTs !! ix)
@@ -708,7 +713,7 @@ See [Hacky substitution to encode ParE].
         | M.notMember f fundefs -> error $ "Application of unbound function: "++show f
 
     -- Non-tail call:
-    LetE (vr, _,t, projOf -> (stk, (L _ (L1.AppE f _ arg)))) bod -> do
+    LetE (vr, _,t, projOf -> (stk, (L _ (L1.AppE f _ ls)))) bod -> do
         let (_ , outTy) = funTy (fundefs # f)
         let f' = cleanFunName f
         (vsts,bod') <- case outTy of
@@ -726,10 +731,7 @@ See [Hacky substitution to encode ParE].
                                               , bod)
                             oth -> error $ "lower.tail.LetE: unexpected pattern" ++ show oth
                         _ -> return ([(vr,typ t)], bod)
-        case unLoc arg of
-          MkProdE es ->
-               T.LetCallT False vsts f' (L.map (triv "one of app rands") es) <$> (tail bod')
-          _ -> T.LetCallT False vsts f' [(triv "app rand") arg]       <$> (tail bod')
+        T.LetCallT False vsts f' (L.map (triv "one of app rands") ls) <$> (tail bod')
 
 
     LetE (v, _, t, L _ (IfE a b c)) bod -> do
@@ -757,29 +759,6 @@ projOf (L _ (ProjE ix e)) = let (stk,e') = projOf e
 projOf e = ([],e)
 
 
-
-{- Commented out in the older one too.
-
--- | Go under bindings and transform the very last return point.
-chainTail :: T.Tail -> (T.Tail -> T.Tail) -> T.Tail
-chainTail tl fn =
-  case tl of
-    T.LetCallT   bnd rat rnds bod -> T.LetCallT   bnd rat rnds (chainTail bod fn)
-    T.LetPrimCallT bnd p rnds bod -> T.LetPrimCallT bnd p rnds (chainTail bod fn)
-    T.LetTrivT  bnd           bod -> T.LetTrivT           bnd  (chainTail bod fn)
-    T.LetIfT bnd pr bod           -> T.LetIfT           bnd pr (chainTail bod fn)
-    T.LetAllocT lhs vals bod      -> T.LetAllocT     lhs vals  (chainTail bod fn)
-    -- Question here is whether we plan to go under Ifs and Cases...
-    -- T.IfE a b c -> T.IfE a (chainTail b fn) (chainTail c fn)
-    oth -> fn oth
-
--- | Create the right kind of Target let binding based on the form of the RHS:a
-mkLetTail :: (Var,L2.Ty, T.Tail) -> T.Tail -> T.Tail
-mkLetTail (vr,ty,rhs) =
-  case rhs of
-    RetValsT [one] -> __
-    _ -> __
--}
 
 -- | Eliminate projections from a given tuple variable.  INEFFICIENT!
 eliminateProjs :: Var -> [Ty3] -> L Exp3 -> PassM ([Var],L Exp3)
@@ -820,7 +799,7 @@ triv msg (L _ e0) =
     -- Heck, let's map Unit onto Int too:
     (MkProdE []) -> T.IntTriv 0
 --      (ProjE x1 x2) -> __
---      (MkProdE x) -> __
+    -- (MkProdE ls) ->
     _ | isTrivial e0 -> error $ "lower/triv: this function is written wrong.  "++
                          "It won't handle the following, which satisfies 'isTriv':\n "++sdoc e0++
                          "\nMessage: "++msg

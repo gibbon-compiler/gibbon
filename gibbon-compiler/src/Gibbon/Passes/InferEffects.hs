@@ -56,9 +56,9 @@ inferEffects prg@Prog{ddefs,fundefs} = do
 
 
 inferFunDef :: DDefs Ty2 -> FunEnv2 -> FunDef2 -> ArrowTy2
-inferFunDef ddfs fenv FunDef{funArg,funBody,funTy} = funTy { arrEffs = S.intersection travs eff }
+inferFunDef ddfs fenv FunDef{funArgs,funBody,funTy} = funTy { arrEffs = S.intersection travs eff }
   where
-    env0  = M.singleton funArg (arrIn funTy)
+    env0  = M.fromList $ zip funArgs (arrIns funTy)
     travs = S.fromList $ L.map Traverse $ inLocVars funTy
     (eff,_outLoc) = inferExp ddfs fenv env0 funBody
 

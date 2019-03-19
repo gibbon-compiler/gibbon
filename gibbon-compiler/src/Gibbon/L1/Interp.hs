@@ -86,9 +86,9 @@ interp rc _ddefs fenv = go M.empty
           ProjE ix ex   -> do VProd ls <- go env ex
                               return $ ls !! ix
 
-          AppE f _ b ->  do rand <- go env b
+          AppE f _ ls -> do ls' <- mapM (go env) ls
                             case M.lookup f fenv of
-                             Just fn -> go (M.insert (funArg fn) rand env) (funBody fn)
+                             Just fn -> go (M.union (M.fromList (zip (funArgs fn) ls')) env) (funBody fn)
                              Nothing -> error $ "L1.Interp: unbound function in application: "++ndoc x0
 
           CaseE _ [] -> error$ "L1.Interp: CaseE with empty alternatives list: "++ndoc x0

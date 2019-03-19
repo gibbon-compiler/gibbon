@@ -38,9 +38,9 @@ addTraversals prg@Prog{ddefs,fundefs,mainExp} = do
              }
 
 addTraversalsFn :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef2
-addTraversalsFn ddefs fundefs f@FunDef{funName, funArg, funTy, funBody} = do
+addTraversalsFn ddefs fundefs f@FunDef{funName, funArgs, funTy, funBody} = do
     let funenv = initFunEnv fundefs
-        tyenv = M.singleton funArg (inTy funTy)
+        tyenv = M.fromList $ fragileZip funArgs (inTys funTy)
         env2 = Env2 tyenv funenv
         renv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm)))
                                   (locVars funTy)
@@ -62,8 +62,8 @@ addTraversalsExp ddefs fundefs env2 renv context (L p ex) = L p <$>
     VarE{}    -> return ex
     LitE{}    -> return ex
     LitSymE{} -> return ex
-    AppE f locs arg -> AppE f locs <$> go arg
-    PrimAppE f args -> PrimAppE f <$> mapM go args
+    AppE f locs args -> AppE f locs <$> mapM go args
+    PrimAppE f args  -> PrimAppE f <$> mapM go args
 
 {-
 Also see (2) of Note [When does a type 'needsRAN'] in Gibbon.Passes.AddRAN.
@@ -80,7 +80,9 @@ to one of them. There are 2 assumptions that we make about such tuples:
 
 ..TODO.. This looks like a band-aid and parallel tuples need to be handled
          properly in the pass.
--}
+
+[2019.03.03]: Disabled by the multiarg functions patch.
+
     LetE (v,locs,ty, rhs@(L _ (ParE a b))) bod -> do
       let appArgTy :: L Exp2 -> (L Exp2, Ty2)
           appArgTy (L _ (AppE _ _ arg)) = (arg, gRecoverType ddefs env2 arg)
@@ -106,6 +108,8 @@ to one of them. There are 2 assumptions that we make about such tuples:
         rhs' <- go rhs
         bod' <- addTraversalsExp ddefs fundefs (extendVEnv v ty env2) renv context bod
         return $ unLoc (mkLets (trav_binds ++ [(v,locs,ty,rhs')]) bod')
+-}
+
     LetE (v,loc,ty,rhs) bod -> do
       LetE <$> (v,loc,ty,) <$> go rhs <*>
         addTraversalsExp ddefs fundefs (extendVEnv v ty env2) renv context bod
@@ -212,7 +216,7 @@ genTravBinds ls = concat <$>
         PackedTy tycon loc1 -> do
           w <- gensym "trav"
           let fn_name = mkTravFunName tycon
-          return [(w,[],IntTy, l$ AppE fn_name [loc1] e)]
+          return [(w,[],IntTy, l$ AppE fn_name [loc1] [e])]
         -- TODO: Write a testcase for this path.
         ProdTy tys -> do
           -- So that we don't have to make assumptions about the 'e' being a VarE

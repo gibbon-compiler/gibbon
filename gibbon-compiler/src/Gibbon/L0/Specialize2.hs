@@ -13,14 +13,15 @@ This module is the first attempt to do that.
 
 module Gibbon.L0.Specialize2 where
 
+import           Control.Monad.State
 import           Data.Loc
-import           Data.List
 import           Data.Foldable ( foldlM )
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
+import           Gibbon.Pretty
 import           Gibbon.L0.Syntax
 import           Gibbon.L0.Typecheck
 import qualified Gibbon.L1.Syntax as L1
@@ -113,7 +114,9 @@ Assume that the input program is monomorphic.
 l0ToL1 :: Prog0 -> PassM L1.Prog1
 l0ToL1 p = do
   p1 <- monomorphize p
-  p2 <- elimFunRefs p1
+  dbgTrace 5 ("\n\nMonomorphized:\n" ++ (render $ pprint p1)) (pure ())
+  p2 <- spec p1
+  dbgTrace 5 ("\n\nSpecialized:\n" ++ (render $ pprint p2)) (pure ())
   pure $ toL1 p2
 
 
@@ -141,7 +144,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         VarE v    -> L1.VarE v
         LitE n    -> L1.LitE n
         LitSymE v -> L1.LitSymE v
-        AppE f [] arg    -> AppE f [] (toL1Exp arg)
+        AppE f [] args   -> AppE f [] (map toL1Exp args)
         PrimAppE pr args -> PrimAppE (toL1Prim pr) (map toL1Exp args)
         LetE (v,[],ty,rhs) bod -> LetE (v,[], toL1Ty ty, toL1Exp rhs) (toL1Exp bod)
         IfE a b c  -> IfE (toL1Exp a) (toL1Exp b) (toL1Exp c)
@@ -176,14 +179,17 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         ListTy{} -> error $ "toL1Ty: No ListTy in L1."
 
     toL1TyS :: ArrowTy Ty0 -> ArrowTy L1.Ty1
-    toL1TyS t@(ForAll tyvars (ArrowTy a b))
-      | tyvars == [] = (toL1Ty a, toL1Ty b)
+    toL1TyS t@(ForAll tyvars (ArrowTy as b))
+      | tyvars == [] = (map toL1Ty as, toL1Ty b)
       | otherwise    = err1 (sdoc t)
     toL1TyS (ForAll _ t) = error $ "toL1: Not a function type: " ++ sdoc t
 
     err1 msg = error $ "toL1: Program was not fully monomorphized. Encountered" ++ msg
 
 --------------------------------------------------------------------------------
+
+-- The monomorphization monad.
+type MonoM a = StateT MonoState PassM a
 
 data MonoState = MonoState
   { mono_funs_todo :: M.Map (Var, [Ty0]) Var
@@ -226,53 +232,64 @@ getLambdaObls f MonoState{mono_lams} =
 monomorphize :: Prog0 -> PassM Prog0
 monomorphize p@Prog{ddefs,fundefs,mainExp} = do
   let env2 = Env2 M.empty (M.map funTy fundefs)
-  -- Step (1)
-  (mono_st, mainExp') <-
-    case mainExp of
-      Nothing -> pure (emptyMonoState, Nothing)
-      Just (e,ty) -> do
-        (mono_st', mainExp')  <- collectMonoObls ddefs env2 toplevel emptyMonoState e
-        (mono_st'',mainExp'') <- monoLambdas mono_st' mainExp'
-        assertLambdasMonomorphized mono_st''
-        pure (mono_st'', Just (mainExp'', ty))
-  -- Step (1.2)
-  let mono_funs = M.filter isMonoFun fundefs
-  (mono_st', mono_funs') <-
-    foldlM
-      (\(sp, funs) fn@FunDef{funArg,funName,funBody,funTy} -> do
-            let env2' = extendVEnv funArg (inTy funTy) env2
-            (sp', funBody')  <- collectMonoObls ddefs env2' toplevel sp funBody
-            (sp'',funBody'') <- monoLambdas sp' funBody'
-            assertLambdasMonomorphized sp''
-            let fn' = fn { funBody = funBody'' }
-            pure (sp'', M.insert funName fn' funs)
-          )
-      (mono_st, mono_funs)
-      (M.elems mono_funs)
-  let fundefs' = mono_funs' `M.union` fundefs
-  -- Step (2)
-  (mono_st'', fundefs'') <- monoFunDefs mono_st' fundefs'
-  -- Step (3)
-  ddefs' <- monoDDefs mono_st'' ddefs
-  let p1 = p { ddefs = ddefs', fundefs = fundefs'', mainExp =  mainExp' }
-  -- Step (4)
-  let p2 = purgePolyFuns p1
-      p3 = updateTyCons mono_st'' p2
+
+  let mono_m = do
+        -- Step (1)
+        mainExp' <-
+          case mainExp of
+            Nothing -> pure Nothing
+            Just (e,ty) -> do
+              mainExp'  <- collectMonoObls ddefs env2 toplevel e
+              mainExp'' <- monoLambdas mainExp'
+              mono_st   <- get
+              assertLambdasMonomorphized mono_st
+              pure $ Just (mainExp'', ty)
+        -- Step (1.2)
+        let mono_funs = M.filter isMonoFun fundefs
+        mono_funs' <-
+          foldlM
+            (\funs fn@FunDef{funArgs,funName,funBody,funTy} -> do
+                  let env2' = extendsVEnv (M.fromList $ zip funArgs (inTys funTy)) env2
+                  funBody'  <- collectMonoObls ddefs env2' toplevel funBody
+                  funBody'' <- monoLambdas funBody'
+                  mono_st <- get
+                  assertLambdasMonomorphized mono_st
+                  let fn' = fn { funBody = funBody'' }
+                  pure $ M.insert funName fn' funs)
+            mono_funs
+            (M.elems mono_funs)
+        let fundefs' = mono_funs' `M.union` fundefs
+        -- Step (2)
+        fundefs'' <- monoFunDefs fundefs'
+        -- N.B. Important to fetch the state before we run 'monoDDefs' which
+        -- clears everything in 'mono_dcons'.
+        mono_st <- get
+        -- Step (3)
+        ddefs' <- monoDDefs ddefs
+        let p3 = p { ddefs = ddefs', fundefs = fundefs'', mainExp = mainExp' }
+        -- Step (4)
+            p4 = updateTyCons mono_st p3
+        pure p4
+
+  (p4,_) <- runStateT mono_m emptyMonoState
+
   -- Step (5)
-  let p4 = purgePolyDDefs p3
+  let p5  = purgePolyDDefs p4
+  let p5' = purgePolyFuns p5
   -- Step (6)
-  p5 <- tcProg p4
-  pure p5
+  p6 <- tcProg p5'
+  pure p6
   where
     toplevel = M.keysSet fundefs
 
-    monoFunDefs :: MonoState -> FunDefs0 -> PassM (MonoState, FunDefs0)
-    monoFunDefs mono_st fundefs1 =
+    monoFunDefs :: FunDefs0 -> MonoM FunDefs0
+    monoFunDefs fundefs1 = do
+      mono_st <- get
       if M.null (mono_funs_todo mono_st)
-      then pure (mono_st, fundefs1)
+      then pure fundefs1
       else do
         let (((fun_name, tyapps), new_fun_name):rst) = M.toList (mono_funs_todo mono_st)
-            fn@FunDef{funArg, funName, funBody} = fundefs # fun_name
+            fn@FunDef{funArgs, funName, funBody} = fundefs # fun_name
             tyvars = tyVarsFromScheme (funTy fn)
         assertSameLength ("While monormorphizing the function: " ++ sdoc funName) tyvars tyapps
         let mp = M.fromList $ zip tyvars tyapps
@@ -280,16 +297,18 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
             funBody' = substTyVarExp mp funBody
             -- Move this obligation from todo to done.
             mono_st' = mono_st { mono_funs_done = M.insert (fun_name, tyapps) new_fun_name (mono_funs_done mono_st)
-                           , mono_funs_todo = M.fromList rst }
+                               , mono_funs_todo = M.fromList rst }
+        put mono_st'
         -- Collect any more obligations generated due to the monormorphization
-        let env21 = Env2 (M.singleton funArg (inTy funTy')) (M.map funTy fundefs1)
-        (mono_st'', funBody'') <- collectMonoObls ddefs env21 toplevel mono_st' funBody'
-        (mono_st''',funBody''') <- monoLambdas mono_st'' funBody''
+        let env21 = Env2 (M.fromList $ zip funArgs (inTys funTy')) (M.map funTy fundefs1)
+        funBody'' <- collectMonoObls ddefs env21 toplevel funBody'
+        funBody''' <- monoLambdas funBody''
         let fn' = fn { funName = new_fun_name, funTy = funTy', funBody = funBody''' }
-        monoFunDefs mono_st''' (M.insert new_fun_name fn' fundefs1)
+        monoFunDefs (M.insert new_fun_name fn' fundefs1)
 
-    monoDDefs :: MonoState -> DDefs0 -> PassM DDefs0
-    monoDDefs mono_st ddefs1 =
+    monoDDefs :: DDefs0 -> MonoM DDefs0
+    monoDDefs ddefs1 = do
+      mono_st <- get
       if M.null (mono_dcons mono_st)
       then pure ddefs1
       else do
@@ -308,10 +327,11 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
                           dataCons
             ddefs1' = M.insert tyName' (ddf { tyName = tyName', tyArgs = [], dataCons = dataCons' })  ddefs1
             mono_st'  = mono_st { mono_dcons = M.fromList rst }
-        monoDDefs mono_st' ddefs1'
+        put mono_st'
+        monoDDefs ddefs1'
 
 -- After 'monoLambdas' runs, (mono_lams MonoState) must be empty
-assertLambdasMonomorphized :: MonoState -> PassM ()
+assertLambdasMonomorphized :: Monad m => MonoState -> m ()
 assertLambdasMonomorphized MonoState{mono_lams} =
   if M.null mono_lams
   then pure ()
@@ -325,59 +345,62 @@ assertSameLength msg as bs =
   else pure ()
 
 -- | Collect monomorphization obligations.
-collectMonoObls :: DDefs0 -> Env2 Ty0 -> S.Set Var -> MonoState -> L Exp0 -> PassM (MonoState, L Exp0)
-collectMonoObls ddefs env2 toplevel mono_st (L p ex) = fmap (L p) <$>
+collectMonoObls :: DDefs0 -> Env2 Ty0 -> S.Set Var -> L Exp0 -> MonoM (L Exp0)
+collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
   case ex of
-    AppE f [] arg -> do
-      (mono_st', arg') <- go mono_st arg
-      pure (mono_st', AppE f [] arg')
-    AppE f tyapps arg -> do
-      (mono_st', arg') <- go mono_st arg
+    AppE f [] args -> do
+      args' <- mapM (collectMonoObls ddefs env2 toplevel) args
+      pure $ AppE f [] args'
+    AppE f tyapps args -> do
+      mono_st <- get
+      args'   <- mapM (collectMonoObls ddefs env2 toplevel) args
       if f `S.member` toplevel
       then case (M.lookup (f,tyapps) (mono_funs_done mono_st), M.lookup (f,tyapps) (mono_funs_todo mono_st)) of
              (Nothing, Nothing) -> do
-               new_name <- gensym f
-               let mono_st'' = extendFuns (f,tyapps) new_name mono_st'
-               pure (mono_st'', AppE new_name [] arg')
-             (Just fn_name, _) -> pure (mono_st', AppE fn_name [] arg')
-             (_, Just fn_name) -> pure (mono_st', AppE fn_name [] arg')
+               new_name <- lift $ gensym f
+               state (\st -> ((), extendFuns (f,tyapps) new_name st))
+               pure $ AppE new_name [] args'
+             (Just fn_name, _) -> pure $ AppE fn_name [] args'
+             (_, Just fn_name) -> pure $ AppE fn_name [] args'
 
       -- Why (f,[])? See the special case for let below.
       else case (M.lookup (f,[]) (mono_lams mono_st), M.lookup (f,tyapps) (mono_lams mono_st)) of
              (Nothing, Nothing) -> do
-               new_name <- gensym f
-               let mono_st'' = extendLambdas (f,tyapps) new_name mono_st'
-               pure (mono_st'', AppE new_name [] arg')
-             (_,Just lam_name) -> pure (mono_st', AppE lam_name [] arg')
-             (Just lam_name,_) -> pure (mono_st', AppE lam_name [] arg')
+               new_name <- lift $ gensym f
+               state (\st -> ((),extendLambdas (f,tyapps) new_name st))
+               pure $ AppE new_name [] args'
+             (_,Just lam_name) -> pure $ AppE lam_name [] args'
+             (Just lam_name,_) -> pure $ AppE lam_name [] args'
 
     LetE (v, [], ty@ArrowTy{}, rhs) bod ->do
       let env2' = (extendVEnv v ty env2)
       case unLoc rhs of
         Ext (LambdaE{}) -> do
-          (srhs, rhs') <- go mono_st rhs
-          (sbod, bod') <- collectMonoObls ddefs env2' toplevel srhs bod
-          pure (sbod, LetE (v,[],ty,rhs') bod')
+          rhs' <- go rhs
+          bod' <- collectMonoObls ddefs env2' toplevel bod
+          pure $ LetE (v,[],ty,rhs') bod'
         _ -> do
-          -- If it's not a lambda defn, it's been passed as an argument --
-          -- we don't want to monormorphize it here. It'll be handled when
-          -- the the outer fn is processed.
-          -- To ensure that (AppE v ...) uses the same name, we add it into
-          -- mono_st s.t. it's new name is same as it's old name.
-          let mono_st' = extendLambdas (v,[]) v mono_st
-          (srhs, rhs') <- go mono_st' rhs
-          (sbod, bod') <- collectMonoObls ddefs env2' toplevel srhs bod
-          pure (sbod, LetE (v, [], ty, rhs') bod')
+          -- 'v' is an ArrowTy, but not a lambda defn -- this let binding must
+          -- be in a function body, and 'v' must be a lambda that's
+          -- passed in as an argument. We don't want to monormorphize it here.
+          -- It'll be handled when the the outer fn is processed.
+          -- To ensure that (AppE v ...) stays the same, we add 'v' into
+          -- mono_st s.t. it's new name would be same as it's old name.
+          state (\st -> ((), extendLambdas (v,[]) v st))
+          rhs' <- go rhs
+          bod' <- collectMonoObls ddefs env2' toplevel bod
+          pure $ LetE (v, [], ty, rhs') bod'
 
     LetE (v,[],ty,rhs) bod -> do
       let env2' = (extendVEnv v ty env2)
-      (srhs, rhs') <- go mono_st rhs
-      (sbod, bod') <- collectMonoObls ddefs env2' toplevel srhs bod
-      pure (sbod, LetE (v,[],ty,rhs') bod')
+      rhs' <- go rhs
+      bod' <- collectMonoObls ddefs env2' toplevel bod
+      pure $ LetE (v,[],ty,rhs') bod'
 
     CaseE scrt brs -> do
       case recoverType ddefs env2 scrt of
         PackedTy tycon tyapps -> do
+          mono_st <- get
           (suffix, mono_st'') <-
             case tyapps of
               -- It's a monomorphic datatype.
@@ -387,98 +410,94 @@ collectMonoObls ddefs env2 toplevel mono_st (L p ex) = fmap (L p) <$>
                   Nothing -> do
                     let DDef{tyArgs} = lookupDDef ddefs tycon
                     assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps
-                    suffix <- gensym "_v"
+                    suffix <- lift $ gensym "_v"
                     let mono_st' = extendDatacons (tycon, tyapps) suffix mono_st
                     pure (suffix, mono_st')
                   Just suffix -> pure (suffix, mono_st)
-          (sscrt, scrt') <- go mono_st'' scrt
-          (sbrs, brs') <-
+          put mono_st''
+          scrt' <- go scrt
+          brs' <-
             foldlM
-              (\(sp, acc) (dcon,vtys,bod) -> do
+              (\acc (dcon,vtys,bod) -> do
                 let env2' = extendsVEnv (M.fromList vtys) env2
-                (sbod, bod') <- collectMonoObls ddefs env2' toplevel sp bod
-                pure (sbod, acc ++ [(dcon ++ fromVar suffix,vtys,bod')]))
-              (sscrt, []) brs
-          pure (sbrs, CaseE scrt' brs')
+                bod' <- collectMonoObls ddefs env2' toplevel bod
+                pure $ acc ++ [(dcon ++ fromVar suffix,vtys,bod')])
+              [] brs
+          pure $ CaseE scrt' brs'
 
         ty -> error $ "collectMonoObls: Unexpected type for the scrutinee, " ++ sdoc ty ++
                       ". In the expression: " ++ sdoc ex
 
     DataConE (ProdTy tyapps) dcon args -> do
-      (sargs, args') <- collectMonoOblsl ddefs env2 toplevel mono_st args
+      args' <- mapM (collectMonoObls ddefs env2 toplevel) args
       case tyapps of
         -- It's a monomorphic datatype.
-        [] -> pure (sargs, DataConE (ProdTy []) dcon args')
+        [] -> pure $ DataConE (ProdTy []) dcon args'
         _  -> do
+          sargs <- get
           -- Collect datacon instances here.
           let tycon = getTyOfDataCon ddefs dcon
           case M.lookup (tycon, tyapps) (mono_dcons sargs) of
             Nothing -> do
               let DDef{tyArgs} = lookupDDef ddefs tycon
               assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps
-              suffix <- gensym "_v"
+              suffix <- lift $ gensym "_v"
               let mono_st' = extendDatacons (tycon, tyapps) suffix sargs
                   dcon' = dcon ++ (fromVar suffix)
-              pure (mono_st', DataConE (ProdTy []) dcon' args')
+              put mono_st'
+              pure $ DataConE (ProdTy []) dcon' args'
             Just suffix -> do
               let dcon' = dcon ++ (fromVar suffix)
-              pure (sargs, DataConE (ProdTy []) dcon' args')
+              pure $ DataConE (ProdTy []) dcon' args'
 
     PrimAppE pr args -> do
-      (mono_st', args') <- collectMonoOblsl ddefs env2 toplevel mono_st args
-      pure (mono_st', PrimAppE pr args')
+      args' <- mapM (collectMonoObls ddefs env2 toplevel) args
+      pure $ PrimAppE pr args'
 
     -- Straightforward recursion
-    VarE{}    -> pure (mono_st, ex)
-    LitE{}    -> pure (mono_st, ex)
-    LitSymE{} -> pure (mono_st, ex)
+    VarE{}    -> pure ex
+    LitE{}    -> pure ex
+    LitSymE{} -> pure ex
     IfE a b c -> do
-      (sa, a') <- go mono_st a
-      (sb, b') <- go sa b
-      (sc, c') <- go sb c
-      pure (sc, IfE a' b' c')
+      a' <- go a
+      b' <- go b
+      c' <- go c
+      pure $ IfE a' b' c'
     MkProdE args -> do
-      (sp, args') <- collectMonoOblsl ddefs env2 toplevel mono_st args
-      pure (sp, MkProdE args')
+      args' <- mapM (collectMonoObls ddefs env2 toplevel) args
+      pure $ MkProdE args'
     ProjE i e -> do
-      (sp, e') <- go mono_st e
-      pure (sp, ProjE i e')
+      e' <- go e
+      pure $ ProjE i e'
     TimeIt e ty b -> do
-      (se, e') <- go mono_st e
-      pure (se, TimeIt e' ty b)
+      e' <- go e
+      pure $ TimeIt e' ty b
     Ext ext ->
       case ext of
-        LambdaE (v,ty) bod -> do
-          (sbod, bod') <- go mono_st bod
-          pure (sbod, Ext $ LambdaE (v,ty) bod')
+        LambdaE args bod -> do
+          bod' <- go bod
+          pure $ Ext $ LambdaE args bod'
         _ -> error ("collectMonoObls: TODO, "++ sdoc ext)
     _ -> error ("collectMonoObls: TODO, " ++ sdoc ex)
   where
     go = collectMonoObls ddefs env2 toplevel
 
-collectMonoOblsl :: DDefs0 -> Env2 Ty0 -> S.Set Var -> MonoState -> [L Exp0] -> PassM (MonoState, [L Exp0])
-collectMonoOblsl ddefs env2 toplevel mono_st es = do
-  foldlM
-    (\(sp, acc) e -> do
-          (s,e') <- collectMonoObls ddefs env2 toplevel sp e
-          pure (s, acc ++ [e']))
-    (mono_st, []) es
-
 
 -- | Create monomorphic versions of lambdas bound in this expression.
 -- This does not float out the lambda definitions.
-monoLambdas :: MonoState -> L Exp0 -> PassM (MonoState, L Exp0)
+monoLambdas :: L Exp0 -> MonoM (L Exp0)
 -- Assummption: lambdas only appear as RHS in a let.
-monoLambdas mono_st (L p ex) = fmap (L p) <$>
+monoLambdas (L p ex) = (L p) <$>
   case ex of
-    LetE (v,[],vty, rhs@(L p1 (Ext (LambdaE (x,xty) lam_bod)))) bod -> do
+    LetE (v,[],vty, rhs@(L p1 (Ext (LambdaE args lam_bod)))) bod -> do
+      mono_st <- get
       let lam_mono_st = getLambdaObls v mono_st
       if M.null lam_mono_st
       -- This lambda is not polymorphic, don't monomorphize.
       then do
-        (mono_st1, bod') <- go bod
-        (mono_st2, lam_bod') <- monoLambdas mono_st1 lam_bod
-        pure (mono_st2, LetE (v, [], vty, L p1 (Ext (LambdaE (x,xty) lam_bod'))) bod')
+        bod' <- go bod
+        lam_bod' <- monoLambdas lam_bod
+        pure $ LetE (v, [], vty, L p1 (Ext (LambdaE args lam_bod'))) bod'
       -- Monomorphize and only bind those, drop the polymorphic defn.
       -- Also drop the obligation that we applied from MonoState.
       -- So after 'monoLambdas' is done, (mono_lams MonoState) should be [].
@@ -487,58 +506,41 @@ monoLambdas mono_st (L p ex) = fmap (L p) <$>
         let new_lam_mono_st = (mono_lams mono_st) `M.difference`
                               (M.fromList $ map (\(w,wtyapps) -> ((v,wtyapps), w)) (M.toList lam_mono_st))
             mono_st' = mono_st { mono_lams =  new_lam_mono_st }
-        (mono_st1, bod') <- monoLambdas mono_st' bod
+        put mono_st'
+        bod' <- monoLambdas bod
         monomorphized <- monoLamBinds (M.toList lam_mono_st) (vty, rhs)
-        pure (mono_st1, unLoc $ foldl (\acc bind -> l$ LetE bind acc) bod' monomorphized)
+        pure $ unLoc $ foldl (\acc bind -> l$ LetE bind acc) bod' monomorphized
 
     -- Straightforward recursion
-    VarE{}    -> pure (mono_st, ex)
-    LitE{}    -> pure (mono_st, ex)
-    LitSymE{} -> pure (mono_st, ex)
-    AppE f tyapps arg ->
+    VarE{}    -> pure ex
+    LitE{}    -> pure ex
+    LitSymE{} -> pure ex
+    AppE f tyapps args ->
       case tyapps of
-        [] -> do (mono_st1, arg') <- go arg
-                 pure (mono_st1, AppE f [] arg')
+        [] -> do args' <- mapM monoLambdas args
+                 pure $ AppE f [] args'
         _  -> error $ "monoLambdas: Expression probably not processed by collectMonoObls: " ++ sdoc ex
-    PrimAppE pr args -> do (mono_st1, args') <- monoLambdasl mono_st args
-                           pure (mono_st1, PrimAppE pr args')
+    PrimAppE pr args -> do args' <- mapM monoLambdas args
+                           pure $ PrimAppE pr args'
     LetE (v,[],ty,rhs) bod -> do
-      (mono_st1, rhs') <- go rhs
-      (mono_st2, bod') <- monoLambdas mono_st1 bod
-      pure (mono_st2, LetE (v, [], ty, rhs') bod')
-    IfE a b c -> do
-      (mono_st1, a') <- go a
-      (mono_st2, b') <- monoLambdas mono_st1 b
-      (mono_st3, c') <- monoLambdas mono_st2 c
-      pure (mono_st3, IfE a' b' c')
-    MkProdE ls -> do
-      (mono_st1, ls') <- monoLambdasl mono_st ls
-      pure (mono_st1, MkProdE ls')
-    ProjE i a  -> do
-      (mono_st1, a') <- go a
-      pure (mono_st1, ProjE i a')
+      rhs' <- go rhs
+      bod' <- monoLambdas bod
+      pure $ LetE (v, [], ty, rhs') bod'
+    IfE a b c  -> IfE <$> go a <*> go b <*> go c
+    MkProdE ls -> MkProdE <$> mapM monoLambdas ls
+    ProjE i a  -> (ProjE i) <$> go a
     CaseE scrt brs -> do
-      (mono_st1, scrt') <- go scrt
-      (mono_st2, brs') <-
-        foldlM
-          (\(sp, acc) (dcon,vlocs,bod) -> do
-            (sbod, bod') <- monoLambdas sp bod
-            pure (sbod, acc ++ [(dcon,vlocs,bod')]))
-          (mono_st1, []) brs
-      pure (mono_st2, CaseE scrt' brs')
-    DataConE tyapp dcon args -> do
-      (mono_st1, args') <- monoLambdasl mono_st args
-      pure (mono_st1, DataConE tyapp dcon args')
-    TimeIt e ty b -> do
-      (mono_st1, e') <- go e
-      pure (mono_st1, TimeIt e' ty b)
-    Ext (LambdaE (v,ty) bod) -> do
-      (mono_st1, bod') <- go bod
-      pure (mono_st1, Ext (LambdaE (v,ty) bod'))
+      scrt' <- go scrt
+      brs'  <- mapM (\(a,b,c) -> (a,b,) <$> go c) brs
+      pure $ CaseE scrt' brs'
+    DataConE tyapp dcon args ->
+      (DataConE tyapp dcon) <$> mapM monoLambdas args
+    TimeIt e ty b -> (\e' -> TimeIt e' ty b) <$> go e
+    Ext (LambdaE args bod) -> (\bod' -> Ext (LambdaE args bod')) <$> go bod
     _ -> error $ "monoLambdas: TODO " ++ sdoc ex
-  where go = monoLambdas mono_st
+  where go = monoLambdas
 
-        monoLamBinds :: [(Var,[Ty0])] -> (Ty0, L Exp0) -> PassM [(Var, [Ty0], Ty0, L Exp0)]
+        monoLamBinds :: [(Var,[Ty0])] -> (Ty0, L Exp0) -> MonoM [(Var, [Ty0], Ty0, L Exp0)]
         monoLamBinds [] _ = pure []
         monoLamBinds ((w, tyapps):rst) (ty,ex1) = do
           let tyvars = tyVarsInTy ty
@@ -547,14 +549,6 @@ monoLambdas mono_st (L p ex) = fmap (L p) <$>
               ty'  = substTyVar mp ty
               ex'  = substTyVarExp mp ex1
           (++ [(w, [], ty', ex')]) <$> monoLamBinds rst (ty,ex1)
-
-monoLambdasl :: MonoState -> [L Exp0] -> PassM (MonoState, [L Exp0])
-monoLambdasl mono_st es = do
-  foldlM
-    (\(sp, acc) e -> do
-          (s,e') <- monoLambdas sp e
-          pure (s, acc ++ [e']))
-    (mono_st, []) es
 
 
 -- | Remove all polymorphic functions and datatypes from a program. 'monoLambdas'
@@ -594,7 +588,7 @@ updateTyConsExp ddefs mono_st (L loc ex) = L loc $
     VarE{}    -> ex
     LitE{}    -> ex
     LitSymE{} -> ex
-    AppE f [] arg -> AppE f [] (go arg)
+    AppE f [] args    -> AppE f [] (map go args)
     PrimAppE pr args  -> PrimAppE pr (map go args)
     LetE (v,[],ty,rhs) bod -> LetE (v, [], updateTyConsTy ddefs mono_st ty, go rhs) (go bod)
     IfE a b c  -> IfE (go a) (go b) (go c)
@@ -615,7 +609,7 @@ updateTyConsExp ddefs mono_st (L loc ex) = L loc $
       -- Why [] ? The type arguments aren't required as the DDef is monomorphic.
       in DataConE (ProdTy []) dcon' (map go args)
     TimeIt e ty b -> TimeIt (go e) (updateTyConsTy ddefs mono_st ty) b
-    Ext (LambdaE (v,ty) bod) -> Ext (LambdaE (v, updateTyConsTy ddefs mono_st ty) (go bod))
+    Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, updateTyConsTy ddefs mono_st ty)) args) (go bod))
     _ -> error $ "updateTyConsExp: TODO, " ++ sdoc ex
   where
     go = updateTyConsExp ddefs mono_st
@@ -631,7 +625,7 @@ updateTyConsTy ddefs mono_st ty =
     MetaTv{} -> error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."
     ProdTy tys  -> ProdTy (map go tys)
     SymDictTy t -> SymDictTy (go t)
-    ArrowTy a b -> ArrowTy (go a) (go b)
+    ArrowTy as b   -> ArrowTy (map go as) (go b)
     PackedTy t tys ->
       let tys' = map go tys
       in case M.lookup (t,tys') (mono_dcons mono_st) of
@@ -644,166 +638,131 @@ updateTyConsTy ddefs mono_st ty =
 
 --------------------------------------------------------------------------------
 
-data LowerState = LowerState
-  { lo_funs_todo :: M.Map (Var, [Var]) Var
-  , lo_fundefs   :: FunDefs0 }
-  deriving (Show, Eq, Generic, Out)
+-- The specialization monad.
+type SpecM a = StateT SpecState PassM a
 
+
+data SpecState = SpecState
+  { sp_funs_todo :: M.Map (Var, FunRefs) Var
+  , sp_fundefs   :: FunDefs0 }
+  deriving (Show, Eq, Generic, Out)
 
 -- We track references when we bind variables to account for programs like:
 --
 --     foo :: ((a -> b), a) -> a ; foo = ...
 --     main = ... arg = (fn, thing) ... foo arg ...
 --
--- type FnRefsEnv = M.Map Var FnRefs
+-- type FunRefsEnv = M.Map Var FunRefs
 --
 
-type FnRefs    = [Var]
+type FunRefs    = [Var]
 
 
-elimFunRefs :: Prog0 -> PassM Prog0
-elimFunRefs prg@Prog{ddefs,fundefs,mainExp} = do
-  let env2 = progToEnv prg
-  (low, mainExp') <-
-    case mainExp of
-      Nothing -> pure (emptyLowerState, Nothing)
-      Just (e, ty) -> do
-        (low', e') <- elimFunRefsExp ddefs env2 emptyLowerState e
-        pure (low', Just (e', ty))
+spec :: Prog0 -> PassM Prog0
+spec prg@Prog{ddefs,fundefs,mainExp} = do
+  let spec_m = do
+        let env2 = progToEnv prg
+        mainExp' <-
+          case mainExp of
+            Nothing -> pure Nothing
+            Just (e, ty) -> do
+              e' <- specExp ddefs env2 e
+              pure $ Just (e', ty)
+        -- Same reason as Step (1.2) in monomorphization.
+        let fo_funs = M.filter isFOFun fundefs
+        mapM_
+          (\fn@FunDef{funName,funBody} -> do
+                funBody' <- specExp ddefs env2 funBody
+                low <- get
+                let funs   = sp_fundefs low
+                    fn'    = fn { funBody = funBody' }
+                    funs'  = M.insert funName fn' funs
+                    low' = low { sp_fundefs = funs' }
+                put low'
+                pure ())
+          (M.elems fo_funs)
+        fixpoint
+        pure mainExp'
 
-  -- Same reason as Step (1.2) in monomorphization.
-  let fo_funs = M.filter isFOFun fundefs
-  low' <-
-    foldlM
-      (\low1 fn@FunDef{funName,funBody} -> do
-            (low1', funBody') <- elimFunRefsExp ddefs env2 low1 funBody
-            let funs   = lo_fundefs low1'
-                fn'    = fn { funBody = funBody' }
-                funs'  = M.insert funName fn' funs
-                low1'' = low1' { lo_fundefs = funs' }
-            pure low1'')
-      low
-      (M.elems fo_funs)
-
-  low'' <- fixpoint low'
+  (mainExp',low'') <- runStateT spec_m emptySpecState
   -- Get rid of all higher order functions.
-  let fundefs' = purgeHO (lo_fundefs low'')
+  let fundefs' = purgeHO (sp_fundefs low'')
       prg' = prg { mainExp = mainExp', fundefs = fundefs' }
   -- Typecheck again.
   tcProg prg'
   where
-    emptyLowerState :: LowerState
-    emptyLowerState = LowerState M.empty fundefs
+    emptySpecState :: SpecState
+    emptySpecState = SpecState M.empty fundefs
 
     -- Lower functions
-    fixpoint :: LowerState -> PassM LowerState
-    fixpoint low = do
-      if M.null (lo_funs_todo low)
-      then pure low
+    fixpoint :: SpecM ()
+    fixpoint = do
+      low <- get
+      if M.null (sp_funs_todo low)
+      then pure ()
       else do
-        let fns = lo_fundefs low
+        let fns = sp_fundefs low
             fn = fns # fn_name
-            ((fn_name, refs), new_fn_name) = M.elemAt 0 (lo_funs_todo low)
-        low' <- elimFunRefsFun ddefs low (progToEnv prg) new_fn_name refs fn
-        let low'' = low' { lo_funs_todo = M.deleteAt 0 (lo_funs_todo low') }
-        fixpoint low''
+            ((fn_name, refs), new_fn_name) = M.elemAt 0 (sp_funs_todo low)
+        specFun ddefs (progToEnv prg) new_fn_name refs fn
+        state (\st -> ((), st { sp_funs_todo = M.deleteAt 0 (sp_funs_todo st) }))
+        fixpoint
 
     purgeHO :: FunDefs0 -> FunDefs0
     purgeHO fns = M.filter isFOFun fns
 
     isFOFun :: FunDef0 -> Bool
     isFOFun FunDef{funTy} =
-      let ForAll _ (ArrowTy arg_ty ret_ty) = funTy
-      in arrowTysInTy arg_ty == [] &&
+      let ForAll _ (ArrowTy arg_tys ret_ty) = funTy
+      in all (null . arrowTysInTy) arg_tys &&
          arrowTysInTy ret_ty == []
 
 -- Eliminate all functions passed in as arguments to this function.
-elimFunRefsFun :: DDefs0 -> LowerState -> Env2 Ty0 -> Var -> FnRefs -> FunDef0 -> PassM LowerState
-elimFunRefsFun ddefs low env2 new_fn_name refs fn@FunDef{funArg, funTy} = do
-  let fn' = fn { funName = new_fn_name
-               , funBody = elimExp drop_projs update_projs (funBody fn) }
-  (low', funBody') <- elimFunRefsExp ddefs env2 low (funBody fn')
+specFun :: DDefs0 -> Env2 Ty0 -> Var -> FunRefs -> FunDef0 -> SpecM ()
+specFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
+  let
+      -- lamda args
+      funArgs'  = map fst $ filter (isFunTy . snd) $ zip funArgs (inTys funTy)
+      specs     = fragileZip funArgs' refs
+      -- non-lambda args
+      funArgs'' = map fst $ filter (not . isFunTy . snd) $ zip funArgs (inTys funTy)
+      fn' = fn { funName = new_fn_name
+               , funBody = do_spec specs (funBody fn) }
+  funBody' <- specExp ddefs env2 (funBody fn')
   let fn''  = fn' { funBody = funBody'
-                  -- Only update the type after 'elimFunRefsExp' runs!
+                  , funArgs = funArgs''
+                  -- N.B. Only update the type after 'specExp' runs.
                   , funTy   = funTy' }
-      low'' = low' { lo_fundefs = M.insert new_fn_name fn'' (lo_fundefs low') }
-  pure low''
+  state (\st -> ((), st { sp_fundefs = M.insert new_fn_name fn'' (sp_fundefs st) }))
   where
-    ForAll tyvars (ArrowTy arg_ty ret_ty) = funTy
+    ForAll tyvars (ArrowTy arg_tys ret_ty) = funTy
+
+    -- TODO: What if the function returns another function ? Not handled yet.
     -- First order type
-    funTy' = ForAll tyvars (ArrowTy (first_order_ty arg_ty) (first_order_ty ret_ty))
+    funTy' = ForAll tyvars (ArrowTy (filter (not . isFunTy) arg_tys) ret_ty)
 
-    first_order_ty :: Ty0 -> Ty0
-    first_order_ty t =
-      case t of
-        -- we only hit this case in a function which takes a single lambda argument:
-        --
-        --    foo :: (a -> b)
-        --    foo f = _
-        --
-        -- Functions must have atleast one argument -- this is a makeshift
-        -- void type. It must also match the fake argument we generate in
-        -- 'dropFunRefs'.
-        ArrowTy{} -> ProdTy []
-        -- We just drop all ArrowTy's.
-        ProdTy tys -> ProdTy $ filter (not . isFunTy) tys
-        _ -> t
+{-
 
-    (drop_projs, update_projs, _) =
-      splitProjs (l$ VarE funArg) (l$ VarE funArg) (inTy funTy)
+Specialization, only lambdas for now. E.g.
 
-    -- Some tuple surgery code.
-    -- Assume flat tuples. TODO: Write a L0 pass that ensures this.
-    --
-    -- ( projections_to_eliminate, projection_substitutions )
-    --
-    --     splitProjs arg (a, fn_ty, a)
-    -- ==> ([arg !! 1], [(arg !! 0, arg !! 0), (arg !! 2, arg !! 1)])
-    splitProjs :: L Exp0 -> L Exp0 -> Ty0 -> ([L Exp0], [(L Exp0, L Exp0)], Int)
-    splitProjs = go ([], [], 0)
-      where
-        go (elim, sbst, offset) e1 e2 ty =
-         -- TODO, docs.
-         -- e2 always trails behind e1 by offset.
-          case ty of
-            ArrowTy{} -> (elim ++ [e1], sbst, offset-1)
-            ProdTy tys ->
-              foldl
-                (\(elim', sbst', offset') (ty',n) ->
-                   go (elim', sbst', offset') (mkProj n e1) (mkProj (n+offset') e2) ty')
-                (elim, sbst, offset)
-                (zip tys [0..])
-            _ -> (elim, sbst ++ [(e1, e2)], offset)
+    foo :: (a -> b) -> a -> b
+    foo f1 a = f1 a
 
-    elimExp :: [L Exp0] -> [(L Exp0, L Exp0)] -> L Exp0 -> L Exp0
-    elimExp drop_projs1 update_projs1 (L p ex) = L p $
-      case ex of
-        LetE (v, [], ty, rhs) bod ->
-          case rhs `elemIndex` drop_projs1 of
-            Nothing ->
-              case lookup rhs update_projs1 of
-                 Nothing   -> LetE (v, [], ty, go rhs) (go bod)
-                 -- Update RHS.
-                 Just rhs' -> LetE (v, [], ty, rhs') (go bod)
-            -- Drop this let binding.
-            Just ix -> let bod' = subst' v (refs !! ix) bod
-                       in unLoc (go bod')
+    ... foo top1 x ...
 
-        -- straightforward recursion.
-        VarE{}    -> ex
-        LitE{}    -> ex
-        LitSymE{} -> ex
-        AppE f [] arg -> AppE f [] (go arg)
-        PrimAppE pr args -> PrimAppE pr $ map go args
-        IfE a b c  -> IfE (go a) (go b) (go c)
-        MkProdE ls -> MkProdE $ map go ls
-        ProjE i a  -> ProjE i (go a)
-        CaseE scrt brs -> CaseE (go scrt) (map (\(a,b,c) -> (a,b,) $ go c) brs)
-        DataConE tyapp dcon args -> DataConE tyapp dcon $ map go args
-        TimeIt e ty b -> TimeIt (go e) ty b
-        _ -> error $ "eliminate: TODO " ++ sdoc ex
-      where
-        go = elimExp drop_projs1 update_projs1
+becomes
+
+    foo f1 a = ...
+
+    foo2 :: a -> b
+    foo2 a = top1 a
+
+    ... foo2 x ...
+
+-}
+    do_spec :: [(Var,Var)] -> L Exp0 -> L Exp0
+    do_spec lams e = foldr (uncurry subst') e lams
+
 
     -- | Update a function name.
     subst' :: Var -> Var -> L Exp0 -> L Exp0
@@ -812,8 +771,8 @@ elimFunRefsFun ddefs low env2 new_fn_name refs fn@FunDef{funArg, funTy} = do
       case ex of
         VarE v | v == old  -> VarE new
                | otherwise -> VarE v
-        AppE f [] e | f == old  -> AppE new [] (go e)
-                     | otherwise -> AppE f [] (go e)
+        AppE f [] ls | f == old  -> AppE new [] (map go ls)
+                     | otherwise -> AppE f [] (map go ls)
         LitE _             -> ex
         LitSymE _          -> ex
         PrimAppE p ls      -> PrimAppE p $ map go ls
@@ -832,91 +791,83 @@ elimFunRefsFun ddefs low env2 new_fn_name refs fn@FunDef{funArg, funTy} = do
         _ -> error $ "subst': TODO " ++ sdoc ex
 
 
-elimFunRefsExp :: DDefs0 -> Env2 Ty0 -> LowerState -> L Exp0
-               -> PassM (LowerState, L Exp0)
-elimFunRefsExp ddefs env2 low (L p ex) = fmap (L p) <$>
+specExp :: DDefs0 -> Env2 Ty0 -> L Exp0 -> SpecM (L Exp0)
+specExp ddefs env2 (L p ex) = (L p) <$>
   case ex of
     -- TODO, docs.
-    AppE f [] arg -> do
-      (low', arg') <- go arg
-      let arg'' = dropFunRefs f arg'
-      case collectFunRefs arg [] of
-        []   -> pure (low, AppE f [] arg')
-        refs -> do
-          case M.lookup (f,refs) (lo_funs_todo low') of
+    AppE f [] args -> do
+      args' <- mapM (specExp ddefs env2) args
+      let args'' = dropFunRefs f args'
+          refs   = foldr collectFunRefs [] args
+      case refs of
+        [] -> pure $ AppE f [] args'
+        _  -> do
+          low' <- get
+          case M.lookup (f,refs) (sp_funs_todo low') of
             Nothing -> do
-              f' <- gensym f
-              let ForAll _ (ArrowTy a _) = lookupFEnv f env2
-                  arrow_tys = arrowTysInTy a
+              f' <- lift $ gensym f
+              let ForAll _ (ArrowTy as _) = lookupFEnv f env2
+                  arrow_tys = concatMap arrowTysInTy as
               -- Check that the # of refs we collected actually matches the #
               -- of functions 'f' expects.
               assertSameLength ("While lowering the expression " ++ sdoc ex) refs arrow_tys
               -- We have a new lowering obligation.
-              let low'' = low' { lo_funs_todo = M.insert (f,refs) f' (lo_funs_todo low') }
-              pure (low'', AppE f' [] arg'')
-            Just f' -> pure (low', AppE f' [] arg'')
+              let low'' = low' { sp_funs_todo = M.insert (f,refs) f' (sp_funs_todo low') }
+              put low''
+              pure $ AppE f' [] args''
+            Just f' -> pure $ AppE f' [] args''
 
     -- Float out a lambda fun to the top-level.
-    LetE (v, [], ty, L _ (Ext (LambdaE (arg, _arg_ty) lam_bod))) bod -> do
-      let captured_vars = gFreeVars lam_bod `S.difference` (S.singleton arg)
+    LetE (v, [], ty, L _ (Ext (LambdaE args lam_bod))) bod -> do
+      let arg_vars = map fst args
+          captured_vars = gFreeVars lam_bod `S.difference` (S.fromList arg_vars)
       if not (S.null captured_vars)
-      then error $ "elimFunRefsExp: LamdaE captures variables: "
+      then error $ "specExp: LamdaE captures variables: "
                    ++ show captured_vars
                    ++ ". TODO: these can become additional arguments."
       else do
-        (low', lam_bod') <- go lam_bod
+        lam_bod' <- go lam_bod
         let _fn_refs = collectFunRefs lam_bod []
             fn = FunDef { funName = v
-                        , funArg  = arg
+                        , funArgs = arg_vars
                         , funTy   = ForAll [] ty
                         , funBody = lam_bod' }
             env2' = extendFEnv v (ForAll [] ty) env2
-            low'' = low' { lo_fundefs = M.insert v fn (lo_fundefs low') }
-        fmap unLoc <$> elimFunRefsExp ddefs env2' low'' bod
+        state (\st -> ((), st { sp_fundefs = M.insert v fn (sp_fundefs st) }))
+        unLoc <$> specExp ddefs env2' bod
 
     LetE (v, [], ty, rhs) bod -> do
       let _fn_refs = collectFunRefs rhs []
           env2' = (extendVEnv v ty env2)
-      (low', rhs') <- go rhs
-      (low'', bod') <- elimFunRefsExp ddefs env2' low' bod
-      pure (low'', LetE (v, [], ty, rhs') bod')
+      rhs' <- go rhs
+      bod' <- specExp ddefs env2' bod
+      pure $ LetE (v, [], ty, rhs') bod'
 
     -- Straightforward recursion
-    VarE{}    -> pure (low, ex)
-    LitE{}    -> pure (low, ex)
-    LitSymE{} -> pure (low, ex)
+    VarE{}    -> pure ex
+    LitE{}    -> pure ex
+    LitSymE{} -> pure ex
     PrimAppE pr args -> do
-      (low', args') <- gol args
-      pure (low', PrimAppE pr args')
-    IfE a b c -> do
-      (low', [a',b',c']) <- gol [a,b,c]
-      pure (low', IfE a' b' c')
-    MkProdE ls -> do
-      (low', ls') <- gol ls
-      pure (low', MkProdE ls')
-    ProjE i a -> do
-      (low',a') <- go a
-      pure (low', ProjE i a')
+      args' <- mapM go args
+      pure $ PrimAppE pr args'
+    IfE a b c -> IfE <$> go a <*> go b <*> go c
+    MkProdE ls -> MkProdE <$> mapM go ls
+    ProjE i a -> (ProjE i) <$> go a
     CaseE scrt brs -> do
-      (low', scrt') <- go scrt
-      (low'', brs') <- foldlM
-                        (\(lo, acc) (dcon,vtys,rhs) -> do
-                          let env2' = extendsVEnv (M.fromList vtys) env2
-                          (lo', e') <- elimFunRefsExp ddefs env2' lo rhs
-                          pure (lo', acc ++ [(dcon,vtys,e')]))
-                        (low', [])
-                        brs
-      pure (low'', CaseE scrt' brs')
-    DataConE tyapp dcon args -> do
-      (low', args') <- gol args
-      pure (low', DataConE tyapp dcon args')
+      scrt' <- go scrt
+      brs' <- mapM
+                (\(dcon,vtys,rhs) -> do
+                  let env2' = extendsVEnv (M.fromList vtys) env2
+                  (dcon,vtys,) <$> specExp ddefs env2' rhs)
+                brs
+      pure $ CaseE scrt' brs'
+    DataConE tyapp dcon args -> (DataConE tyapp dcon) <$> mapM go args
     TimeIt e ty b -> do
-       (low', e') <- go e
-       pure (low', TimeIt e' ty b)
-    _ -> error $ "elimFunRefsExp: TODO " ++ sdoc ex
+       e' <- go e
+       pure $ TimeIt e' ty b
+    _ -> error $ "specExp: TODO " ++ sdoc ex
   where
-    go = elimFunRefsExp ddefs env2 low
-    gol = elimFunRefsExpl ddefs env2 low
+    go = specExp ddefs env2
 
     isFunRef e =
       case e of
@@ -924,29 +875,13 @@ elimFunRefsExp ddefs env2 low (L p ex) = fmap (L p) <$>
         _ -> False
 
     -- fn_0 (fn_1, thing, fn_2) => fn_0 (thing)
-    dropFunRefs :: Var -> L Exp0 -> L Exp0
-    dropFunRefs fn_name (L p1 arg) = L p1 $
-      case arg_ty of
-        ProdTy tys ->
-          case arg of
-            -- The simple case.
-            MkProdE ls -> if length ls == length tys
-                          then MkProdE $ foldr
-                                           (\(a,t) acc ->
-                                             if isFunTy t
-                                             then acc
-                                             else a : acc)
-                                           [] (zip ls tys)
-                          else error $ "dropFunRefs: " ++ sdoc arg
-                                       ++ " does not match " ++ sdoc arg_ty
-            _ -> error $ "dropFunRefs: TODO " ++ sdoc arg
-        -- See 'first_order_ty' for details.
-        ArrowTy{} -> MkProdE []
-        _ -> arg
+    dropFunRefs :: Var -> [L Exp0] -> [L Exp0]
+    dropFunRefs fn_name args =
+      foldr (\(a,t) acc -> if isFunTy t then acc else a:acc) [] (zip args arg_tys)
       where
-        ForAll _ (ArrowTy arg_ty _) = lookupFEnv fn_name env2
+        ForAll _ (ArrowTy arg_tys _) = lookupFEnv fn_name env2
 
-    collectFunRefs :: L Exp0 -> [Var] -> [Var]
+    collectFunRefs :: L Exp0 -> FunRefs -> FunRefs
     collectFunRefs (L _ e) acc =
       case e of
         VarE v -> if isFunRef e
@@ -954,7 +889,7 @@ elimFunRefsExp ddefs env2 low (L p ex) = fmap (L p) <$>
                   else acc
         LitE{}     -> acc
         LitSymE{}  -> acc
-        AppE _ _ a -> collectFunRefs a acc
+        AppE _ _ args   -> foldr collectFunRefs acc args
         PrimAppE _ args -> foldr collectFunRefs acc args
         LetE (_,_,_, rhs) bod -> foldr collectFunRefs acc [bod, rhs]
         IfE a b c  -> foldr collectFunRefs acc [c, b, a]
@@ -963,15 +898,3 @@ elimFunRefsExp ddefs env2 low (L p ex) = fmap (L p) <$>
         DataConE _ _ ls -> foldr collectFunRefs acc ls
         TimeIt a _ _ -> collectFunRefs a acc
         _ -> error $ "collectFunRefs: TODO " ++ sdoc e
-
-elimFunRefsExpl :: DDefs0 -> Env2 Ty0 -> LowerState -> [L Exp0]
-            -> PassM (LowerState, [L Exp0])
-elimFunRefsExpl ddefs env2 low exs =
-  foldlM
-    (\(st, acc) e ->
-       do (st', e') <- go st e
-          pure (st', acc ++ [e']))
-    (low, [])
-    exs
-  where
-    go = elimFunRefsExp ddefs env2

@@ -36,8 +36,8 @@ assertError exp expected =
 tester :: Exp -> Either (TCError Exp) Ty1
 tester = runExcept . (tcExp ddfs env)
   where env = Env2 M.empty funEnv
-        funEnv = M.fromList [ ("add", (ProdTy [IntTy, IntTy], IntTy))
-                            , ("mul", (ProdTy [IntTy, IntTy], IntTy))]
+        funEnv = M.fromList [ ("add", ([IntTy, IntTy], IntTy))
+                            , ("mul", ([IntTy, IntTy], IntTy))]
 
 ddfs :: DDefs Ty1
 ddfs = M.fromList
@@ -115,7 +115,7 @@ case_test_1 = assertValue t1 IntTy
 
 t1 :: Exp
 t1 = l$  AppE "mul" []
-     (l$ MkProdE [l$ LitE 10, l$ AppE "add" [] (l$ MkProdE [l$ LitE 40, l$ LitE 2])])
+     [l$ LitE 10, l$ AppE "add" [] [l$ LitE 40, l$ LitE 2]]
 
 
 t1Prog :: Prog1
@@ -123,19 +123,19 @@ t1Prog = Prog {ddefs = M.fromList [],
         fundefs = M.fromList
                   [("mul2",
                     FunDef {funName = "mul2",
-                            funArg = "x_y1",
-                            funTy = (ProdTy [IntTy,IntTy] , IntTy),
+                            funArgs = ["x_y1"],
+                            funTy = ([IntTy,IntTy] , IntTy),
                             funBody = l$ PrimAppE MulP
-                                      [l$ ProjE 0 (l$ VarE "x_y1"), l$ ProjE 1 (l$ VarE "x_y1")]}),
+                                      [(l$ VarE "x_y1"), (l$ VarE "x_y1")]}),
                    ("add2",
                     FunDef {funName = "add2",
-                            funArg = "x_y0",
-                            funTy = (ProdTy [IntTy,IntTy], IntTy),
+                            funArgs = ["x_y0"],
+                            funTy = ([IntTy,IntTy], IntTy),
                             funBody = l$ PrimAppE AddP
-                                      [l$ ProjE 0 (l$ VarE "x_y0"),
-                                       l$ ProjE 1 (l$ VarE "x_y0")]})],
+                                      [(l$ VarE "x_y0"),
+                                       (l$ VarE "x_y0")]})],
         mainExp = Just
-                  ( l$  AppE "mul2" [] (l$ MkProdE [l$ LitE 10, l$ AppE "add2" [] (l$ MkProdE [l$ LitE 40, l$ LitE 2])])
+                  ( l$  AppE "mul2" [] [l$ LitE 10, l$ AppE "add2" [] [l$ LitE 40, l$ LitE 2]]
                   , IntTy)
               }
 

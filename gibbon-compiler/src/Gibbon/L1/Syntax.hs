@@ -27,8 +27,8 @@ import Gibbon.Language
 
 instance FunctionTy Ty1 where
   -- | At this stage, function types are just (in , out) tuples.
-  type ArrowTy Ty1 = (Ty1 , Ty1)
-  inTy = fst
+  type ArrowTy Ty1 = ([Ty1] , Ty1)
+  inTys = fst
   outTy = snd
 
 -- | A convenient, default instantiation of the L1 expression type.

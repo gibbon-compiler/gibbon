@@ -10,6 +10,37 @@ import Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
+{-
+
+Threading regions
+~~~~~~~~~~~~~~~~~
+
+Also see [Infinite regions] in 'Gibbon.Passes.BoundsCheck'. Bounds checking
+requires having end-of-region cursors around, and in this pass we "thread"
+those through functions. Every function takes in an additional (reg_start, reg_end)
+for every packed type in the return value (i.e 1 pair per output cursor).
+
+(1) Region vars are prepended to the locations that AppE forms accept,
+    and the corresponding let bindings are updated to accept region return values.
+
+        LetE (x,[endof_lin], Packed, AppE "add1" [lin,lout] arg)
+
+    becomes
+
+        LetE (x,[reg2, end_reg2, endof_lin], Packed, AppE "add1" [reg1, reg2, lin, lout] arg)
+
+(2) RetE forms returning packed values are modified to return region arguments,
+    in addition to the "endof" locations.
+
+        RetE [endof1] arg
+
+    becomes
+
+        RetE [reg2, end_reg2, endof1] arg
+
+-}
+
+
 -- Maps a location to a region
 type RegEnv = M.Map LocVar Var
 
@@ -25,21 +56,21 @@ threadRegions Prog{ddefs,fundefs,mainExp} = do
   return $ Prog ddefs fundefs' mainExp'
 
 threadRegionsFn :: DDefs Ty2 -> FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
-threadRegionsFn ddefs fundefs f@FunDef{funArg,funTy,funBody} = do
+threadRegionsFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
   let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
-      initTyEnv  = M.singleton funArg (arrIn funTy)
+      initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
   bod' <- threadRegionsExp ddefs fundefs False initRegEnv env2 funBody
   return $ f {funBody = bod'}
 
 threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> Bool -> RegEnv -> Env2 Ty2 -> L L2.Exp2
-              -> PassM (L L2.Exp2)
+                 -> PassM (L L2.Exp2)
 threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
   case ex of
-    AppE f applocs arg -> do
+    AppE f applocs args -> do
       let ty = gRecoverType ddefs env2 ex
-          argty = gRecoverType ddefs env2 arg
-          argtylocs = locsInTy argty
+          argtys = map (gRecoverType ddefs env2) args
+          argtylocs = concatMap locsInTy argtys
           argregs = foldr (\x acc -> case M.lookup x renv of
                                        Just r -> r:acc
                                        Nothing -> acc)
@@ -53,14 +84,14 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
               tylocs = locsInTy outT'
               regs   = map (renv #) tylocs
           let newapplocs = nub $ (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
-          return $ AppE f newapplocs arg
+          return $ AppE f newapplocs args
         _ -> do
           let newapplocs = nub $ (map toEndV argregs) ++ applocs
-          return $ AppE f newapplocs arg
+          return $ AppE f newapplocs args
 
-    LetE (v,locs,ty, (L _ (AppE f applocs arg))) bod -> do
-      let argty = gRecoverType ddefs env2 arg
-          argtylocs = locsInTy argty
+    LetE (v,locs,ty, (L _ (AppE f applocs args))) bod -> do
+      let argtys = map (gRecoverType ddefs env2) args
+          argtylocs = concatMap locsInTy argtys
           argregs = foldr (\x acc -> case M.lookup x renv of
                                        Just r -> r:acc
                                        Nothing -> acc)
@@ -72,7 +103,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
         _ | hasPacked ty -> do
           let tylocs = locsInTy ty
               regs   = map (renv #) tylocs
-          regs' <- mapM gensym regs
+          regs' <- mapM (\r -> gensym $ varAppend r "_") regs
           -- Update all locations to point to the fresh region
           let renv'' = foldr (\(lc,r,r') acc ->
                                M.insert lc r' $
@@ -81,12 +112,12 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
                       (L.zip3 tylocs regs regs')
               newlocs    = (map toEndV regs') ++ locs
               newapplocs = nub $ (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
-          LetE (v, newlocs, ty, l$ AppE f newapplocs arg) <$>
+          LetE (v, newlocs, ty, l$ AppE f newapplocs args) <$>
             threadRegionsExp ddefs fundefs isMain renv'' (extendVEnv v ty env2) bod
 
         _ -> do
           let newapplocs = nub $ (map toEndV argregs) ++ applocs
-          LetE (v,locs,ty, l$ AppE f newapplocs arg) <$>
+          LetE (v,locs,ty, l$ AppE f newapplocs args) <$>
             threadRegionsExp ddefs fundefs isMain renv' (extendVEnv v ty env2) bod
 
     LetE (v,locs,ty, rhs) bod ->

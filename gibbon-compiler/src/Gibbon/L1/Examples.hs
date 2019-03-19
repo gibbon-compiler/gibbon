@@ -23,7 +23,7 @@ mkAdd1Prog bod mainExp = Prog treeDD
                               mainExp
 
 mkAdd1Fun :: L Exp1 -> FunDef1
-mkAdd1Fun bod = FunDef "add1" "tr" (treeTy,treeTy) bod
+mkAdd1Fun bod = FunDef "add1" ["tr"] ([treeTy],treeTy) bod
 
 ----------------
 
@@ -39,8 +39,8 @@ exadd1Bod = l$
          l$ PrimAppE AddP [l$ VarE "n", l$ LitE 1])
       , ("Node", [("x",()),("y",())],
          l$ DataConE () "Node"
-          [ l$ AppE "add1" [] (l$ VarE "x")
-          , l$ AppE "add1" [] (l$ VarE "y")])
+          [ l$ AppE "add1" [] [l$ VarE "x"]
+          , l$ AppE "add1" [] [l$ VarE "y"]])
       ]
 
 exadd1BodLetLeft :: L Exp1
@@ -48,8 +48,8 @@ exadd1BodLetLeft = l$
     CaseE (l$ VarE "tr") $
       [ ("Leaf", [("n",())], l$ PrimAppE AddP [l$ VarE "n", l$ LitE 1])
       , ("Node", [("x",()),("y",())],
-         l$ LetE ("x2",[], treeTy, l$ AppE "add1" [] (l$ VarE "x")) $
-         l$ LetE ("y2",[], treeTy, l$ AppE "add1" [] (l$ VarE "y")) $
+         l$ LetE ("x2",[], treeTy, l$ AppE "add1" [] [l$ VarE "x"]) $
+         l$ LetE ("y2",[], treeTy, l$ AppE "add1" [] [l$ VarE "y"]) $
          l$ DataConE () "Node"
           [ l$ VarE "x2", l$ VarE "y2"])
       ]
@@ -60,8 +60,8 @@ exadd1BodLetRight = l$
     CaseE (l$ VarE "tr") $
       [ ("Leaf", [("n",())], l$ PrimAppE AddP [l$ VarE "n", l$ LitE 1])
       , ("Node", [("x",()),("y",())],
-         l$ LetE ("y2",[], treeTy, l$ AppE "add1" [] (l$ VarE "y")) $
-         l$ LetE ("x2",[], treeTy, l$ AppE "add1" [] (l$ VarE "x")) $
+         l$ LetE ("y2",[], treeTy, l$ AppE "add1" [] [l$ VarE "y"]) $
+         l$ LetE ("x2",[], treeTy, l$ AppE "add1" [] [l$ VarE "x"]) $
          l$ DataConE () "Node"
           [ l$ VarE "x2", l$ VarE "y2"])
       ]
@@ -81,7 +81,7 @@ add1ProgChallenge :: Prog1
 add1ProgChallenge =
     Prog treeDD
          (M.fromList [ ("add1",mkAdd1Fun bod)
-                     , ("pred", FunDef "pred" "tr" (treeTy, BoolTy)
+                     , ("pred", FunDef "pred" ["tr"] ([treeTy], BoolTy)
                         (l$ CaseE (l$ VarE "tr") $
                          [ ("Leaf", [("n",())], l$ PrimAppE MkTrue [])
                          , ("Node", [("x",()),("y",())], l$ PrimAppE MkFalse [])]))])
@@ -91,11 +91,11 @@ add1ProgChallenge =
     CaseE (l$ VarE "tr") $
       [ ("Leaf", [("n",())], l$ PrimAppE AddP [l$ VarE "n", l$ LitE 1])
       , ("Node", [("x",()),("y",())],
-         l$ LetE ("y2",[], treeTy, l$ AppE "add1" [] (l$ VarE "y")) $
+         l$ LetE ("y2",[], treeTy, l$ AppE "add1" [] [l$ VarE "y"]) $
          l$ LetE ("x2",[], treeTy,
-              (l$ IfE (l$ AppE "pred" [] (l$ VarE "y2"))
-                   (l$ AppE "add1" [] (l$ VarE "x"))
-                   (l$ AppE "add1" [] (l$ VarE "x")))) $
+              (l$ IfE (l$ AppE "pred" [] [l$ VarE "y2"])
+                   (l$ AppE "add1" [] [l$ VarE "x"])
+                   (l$ AppE "add1" [] [l$ VarE "x"]))) $
          l$ DataConE () "Node" [ l$ VarE "x2", l$ VarE "y2"])
       ]
 
@@ -107,6 +107,6 @@ add1ProgSharing = Prog treeDD (M.fromList [("add1",mkAdd1Fun bod)]) Nothing
     CaseE (l$ VarE "tr") $
       [ ("Leaf", [("n",())], l$ PrimAppE AddP [l$ VarE "n", l$ LitE 1])
       , ("Node", [("x",()),("y",())],
-         l$ LetE ("x2",[], treeTy, l$ AppE "add1" [] (l$ VarE "x")) $
+         l$ LetE ("x2",[], treeTy, l$ AppE "add1" [] [l$ VarE "x"]) $
          l$ DataConE () "Node" [ l$ VarE "x2", l$ VarE "x2"])
       ]

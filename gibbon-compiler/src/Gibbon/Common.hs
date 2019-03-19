@@ -19,7 +19,7 @@ module Gibbon.Common
 
          -- * Gibbon configuration
        , Config(..), Input(..), Mode(..), Backend(..), defaultConfig
-       , RunConfig(..), getRunConfig, defaultRunConfig
+       , RunConfig(..), getRunConfig, defaultRunConfig, getGibbonConfig
 
          -- * Misc helpers
        , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv, l
@@ -188,6 +188,9 @@ defaultPackedRunPassM = runPassM (defaultConfig { dynflags = dflags}) 0
 
 getDynFlags :: MonadReader Config m => m DynFlags
 getDynFlags = dynflags <$> ask
+
+getGibbonConfig :: MonadReader Config m => m Config
+getGibbonConfig = ask
 
 --------------------------------------------------------------------------------
 -- Gibbon config:

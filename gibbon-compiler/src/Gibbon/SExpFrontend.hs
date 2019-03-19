@@ -17,9 +17,9 @@ module Gibbon.SExpFrontend
 import Data.Char ( isLower, isAlpha )
 import Data.List as L
 import Data.Loc
-import Data.Map as M
-import Data.Set as S
-import Data.Text hiding (head, init, last, length)
+import qualified Data.Map as M
+import qualified Data.Set as S
+import Data.Text hiding (map, head, init, last, length, zip)
 import qualified Data.Text as T
 import Data.Text.IO (readFile)
 import System.FilePath
@@ -43,7 +43,6 @@ import qualified Data.SCargot.Common as SC
 
 import Gibbon.L0.Syntax
 import Gibbon.Common
-import Gibbon.HaskellFrontend ( multiArgsToOne )
 
 --------------------------------------------------------------------------------
 
@@ -121,18 +120,18 @@ tagDataCons ddefs = go allCons
                         | DDef{dataCons} <- M.elems ddefs
                         , (con,_tys) <- dataCons ]
 
-   go :: Set Var -> L Exp0 -> PassM (L Exp0)
+   go :: S.Set Var -> L Exp0 -> PassM (L Exp0)
    go cons (L p ex) = L p <$>
      case ex of
        Ext _ -> pure ex
        -- [2019.02.01] CSK: Do we need this special case ?
-       AppE v _ (L _ (MkProdE ls))
+       AppE v _ ls
                   | S.member v cons -> do
                       ty <- newMetaTy
                       DataConE ty (fromVar v) <$> (mapM (go cons) ls)
-       AppE v l e | S.member v cons -> do ty <- newMetaTy
-                                          DataConE ty (fromVar v) <$> mapM (go cons) [e]
-                  | otherwise       -> AppE v l <$> (go cons e)
+       AppE v l ls | S.member v cons -> do ty <- newMetaTy
+                                           DataConE ty (fromVar v) <$> mapM (go cons) ls
+                   | otherwise       -> AppE v l <$> mapM (go cons) ls
        LetE (v,l,t,rhs) bod -> do
          let go' = if S.member v cons
                       then go (S.delete v cons)
@@ -212,29 +211,13 @@ if a thing is a type variable or a data constructor.
          |  RSList (A _ name : args) <- funspec
         -> do
          bod' <- exp bod
-         let args' = L.map (\(RSList [id, A _ ":",t]) -> (getSym id, typ t))
-                               args
-         (arg,ty,bod'') <-
-               case args' of
-                 []      -> do -- Functions must have atleast one argument --
-                               -- this is a makeshift void type. It must also
-                               -- match the fake argument we generate.
-                               let ty = ProdTy []
-                               (,ty,bod') <$> gensym (toVar "void")
-                 [(a,t)] -> pure (a,t,bod')
-                 _    -> do let (vs,ts) = unzip args'
-                            vr <- gensym (toVar (L.concat $ L.intersperse "_" $
-                                                 L.map fromVar vs))
-                            let ty = ProdTy ts
-                                newbod = tuplizeRefs vr vs ts bod'
-                            return (vr,ty,newbod)
-         -- Here we directly desugar multiple arguments into a tuple
-         -- argument.
-         let fun_ty = ArrowTy ty (typ retty)
+         let args' = L.map (\(RSList [id, A _ ":",t]) -> (getSym id, typ t)) args
+             (args'', arg_tys) = unzip args'
+         let fun_ty = ArrowTy arg_tys (typ retty)
          go rst dds (FunDef { funName = textToVar name
-                            , funArg  = arg
+                            , funArgs = args''
                             , funTy   = ForAll (tyVarsInTy fun_ty) fun_ty
-                            , funBody = bod''
+                            , funBody = bod'
                             } : fds)
             cds mn
 
@@ -273,12 +256,8 @@ typ s = case s of
          (Ls2 _ "Listof" t)  -> ListTy $ typ t
          -- See https://github.com/aisamanra/s-cargot/issues/14.
          (Ls (A _ "-" : A _ ">" : tys)) ->
-             let ret_ty = typ (last tys)
-                 in_tys = L.map typ (init tys)
-             in case in_tys of
-                  []  -> error "TODO: Should this be a top-level value?"
-                  [a] -> ArrowTy a ret_ty
-                  _   -> ArrowTy (ProdTy in_tys) ret_ty
+             let tys'   = L.map typ tys
+             in ArrowTy (init tys') (last tys')
          (Ls (A _ "Vector"  : rst)) -> ProdTy $ L.map typ rst
          (Ls (A _ tycon : tyargs))  -> PackedTy (textToDataCon tycon) (L.map typ tyargs)
          _ -> error$ "SExpression encodes invalid type:\n "++ show s
@@ -400,15 +379,8 @@ exp se =
      -- Right now, we don't and initialize them with meta type variables.
      let args' = L.map getSym args
      bod' <- exp bod
-     case args' of
-       []    -> error "TODO: Should this be a top-level value?"
-       [one] -> do
-           ty <- newMetaTy
-           pure $ loc l $ Ext $ LambdaE (one,ty) bod'
-       _ -> do
-         arg_tys <- mapM (\_ -> newMetaTy) args
-         let (new_arg, bod'') = multiArgsToOne args' arg_tys bod'
-         pure $ loc l $ Ext $ LambdaE (new_arg, ProdTy arg_tys) bod''
+     tys <- mapM  (\_ -> newMetaTy) args'
+     pure $ loc l $ Ext $ LambdaE (zip args' tys) bod'
 
    Ls3 l "for/list" (Ls1 (Ls4 _ v ":" t e)) bod -> do
      e'   <- exp e
@@ -473,12 +445,7 @@ exp se =
    -- If NOTHING else matches, we are an application.  Be careful we didn't miss anything:
    Ls (A l rator : rands) ->
      let app = (loc l) . AppE (textToVar rator) []
-     in case rands of
-         [] -> pure $ app (L NoLoc $ MkProdE [])
-         [rand] -> app <$> (exp rand)
-         _ -> do
-          es' <- MkProdE <$> (mapM exp rands)
-          pure $ app (L NoLoc es')
+     in app <$> mapM exp rands
 
    _ -> error $ "Expression form not handled (yet):\n  "++
                show se ++ "\nMore concisely:\n  "++ prnt se
@@ -512,7 +479,7 @@ isPrim p = S.member p (M.keysSet primMap)
 
 -- ^ A map between SExp-frontend prefix function names, and Gibbon
 -- abstract Primops.
-primMap :: Map Text (Prim d)
+primMap :: M.Map Text (Prim d)
 primMap = M.fromList
   [ ("+", AddP)
   , ("-", SubP)
