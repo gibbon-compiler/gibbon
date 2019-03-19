@@ -123,7 +123,7 @@ case_t1 = t1 @=? (l$ LitE 3)
 case_t2 :: Assertion
 case_t2 = t2 @=? (l$ LetE ("x",[],IntTy,l$ LitE 1) $
                   l$ LetE ("y",[],IntTy,l$ LitE 2) $
-                  l$ LetE ("z",[],IntTy,l$ PrimAppE (prim L1.AddP) [l$ VarE "x", l$ VarE "y"]) $
+                  l$ LetE ("z",[],IntTy,l$ PrimAppE L2.AddP [l$ VarE "x", l$ VarE "y"]) $
                   l$ VarE "z")
 
 
