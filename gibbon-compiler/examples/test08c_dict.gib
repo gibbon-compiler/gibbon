@@ -1,5 +1,7 @@
 #lang gibbon
 
-(let ([d : (SymDict Int) (ann (empty-dict) (SymDict Int))])
-  (let ([d2 : (SymDict Int) (insert d (quote x) (ann 2 Int))])
-    (ann (lookup d2 (quote x)) Int)))
+(data Foo (MkFoo Int))
+
+(let ([d : (SymDict Foo) (ann (empty-dict) (SymDict Foo))])
+  (let ([d2 : (SymDict Foo) (insert d (quote x) (ann (MkFoo 2) Foo))])
+    (ann (lookup d2 (quote x)) Foo)))

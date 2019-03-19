@@ -138,15 +138,20 @@ instance Pretty ex => Pretty (DDef ex) where
 
 
 -- Primitives
-instance Ord d => Pretty (Prim d) where
-    pprintWithStyle _ pr =
+instance (Pretty d, Ord d) => Pretty (Prim d) where
+    pprintWithStyle sty pr =
         -- We add PEndOf here because it's not exposed to the users, and as a result,
         -- is not defined as a primop in the parser primMap.
-        -- TODO: Dictionaries!!!
         let renderPrim = M.union (M.singleton PEndOf "pendof") $
                          M.fromList (map (\(a,b) -> (b,a)) (M.toList primMap))
         in case M.lookup pr renderPrim of
-              Nothing  -> error $ "pprint: Unknown primitive: " ++ render (pprint pr)
+              Nothing  ->
+                  case pr of
+                    DictEmptyP ty -> text "empty" <+> pprintWithStyle sty ty
+                    DictHasKeyP ty -> text "haskey" <+> pprintWithStyle sty ty
+                    DictInsertP ty -> text "insert" <+> pprintWithStyle sty ty
+                    DictLookupP ty -> text "lookup" <+> pprintWithStyle sty ty
+                    _ -> error $ "pprint: Unknown primitive"
               Just str -> text str
 
 
