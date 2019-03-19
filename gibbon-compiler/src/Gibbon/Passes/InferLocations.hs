@@ -1057,8 +1057,8 @@ cleanExp (L i e) =
       VarE v -> (l$ VarE v, S.empty)
       LitE v -> (l$ LitE v, S.empty)
       LitSymE v -> (l$ LitSymE v, S.empty)
-      AppE v ls e -> let (e',s') = cleanExp e
-                     in (l$ AppE v ls e', S.union s' (S.fromList ls))
+      AppE v ls e -> let (e',s') = unzip $ map cleanExp e
+                     in (l$ AppE v ls e', (S.unions s') `S.union` (S.fromList ls))
       PrimAppE (DictInsertP ty) es -> let (es',ls') = unzip $ L.map cleanExp es
                         in (l$ PrimAppE (DictInsertP ty) es',
                              S.union (S.unions ls') (S.fromList $ locsInTy ty))

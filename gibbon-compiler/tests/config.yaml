@@ -283,13 +283,13 @@ tests:
   - name: test06i_casecase.gib
     failing: [gibbon2, gibbon1]
   - name: test08b_dict.gib
-    failing: [gibbon2, gibbon1]
+    failing: [pointer, gibbon2, gibbon1]
   - name: test08c_dict.gib
-    failing: [gibbon2, gibbon1]
+    failing: [pointer, gibbon2, gibbon1]
   - name: test08_dict.gib
     failing: [gibbon2, gibbon1]
   - name: test08d_sharedict.gib
-    failing: [gibbon2, gibbon1]
+    failing: [pointer, gibbon2, gibbon1]
   - name: test10b_desugar.gib
     failing: [gibbon2, gibbon1]
   - name: test10_desugar.gib
