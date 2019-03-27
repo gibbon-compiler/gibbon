@@ -316,7 +316,7 @@ parseInput ip fp = do
                                     l0 <- L0.tcProg l0
                                     dbgTrace 5 ("\n\nTypechecked:\n" ++ (render $ pprint l0)) (pure ())
                                     l1 <- L0.l0ToL1 l0
-                                    dbgTrace 5 ("\n\nLowered toL1:\n" ++ (render $ pprint l1)) (pure ())
+                                    dbgTrace 5 ("\n\nLowered to L1:\n" ++ (render $ pprint l1)) (pure ())
                                     pure l1
                               in pure passes
 

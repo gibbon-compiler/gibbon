@@ -58,8 +58,9 @@ Here's a rough plan:
     While collecting these obligations, just replace all polymorphic things with their
     corresponding new names.
 
-(1.2) Also, collect any obligations from all monomorphic functions in the program.
-      Why? ... TODO, e.g. sumTree, and mkTree.
+(1.2) 'main' can transitively call a polymorphic function via a monomorphic one.
+      To collect those obligations, we walk over all the monomorphic functions in
+      the program as well.
 
 (2) Start monormorphizing toplevel functions, and collect any new obligations
     that may be generated. Repeat (2) until there are no more obls.
