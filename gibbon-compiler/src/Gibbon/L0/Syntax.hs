@@ -41,6 +41,8 @@ data E0Ext loc dec =
            (L (PreExp E0Ext loc dec))
  | PolyAppE (L (PreExp E0Ext loc dec)) -- Operator
             (L (PreExp E0Ext loc dec)) -- Operand
+ | FunRefE [loc] Var -- Reference to a function (toplevel or lambda),
+                     -- along with its tyapps.
  deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 instance FreeVars (E0Ext l d) where
@@ -48,6 +50,7 @@ instance FreeVars (E0Ext l d) where
     case e of
       LambdaE args bod -> foldr S.delete (gFreeVars bod) (map fst args)
       PolyAppE f d     -> gFreeVars f `S.union` gFreeVars d
+      FunRefE _ f      -> S.singleton f
 
 instance (Out l, Out d, Show l, Show d) => Expression (E0Ext l d) where
   type LocOf (E0Ext l d) = l
@@ -244,7 +247,12 @@ recoverType ddfs env2 (L _ ex)=
       case ext of
         LambdaE args bod ->
           recoverType ddfs (extendsVEnv (M.fromList args) env2) bod
-        PolyAppE{} -> error "recoverTypeep: TODO PolyAppE"
+        FunRefE _ f ->
+          case (M.lookup f (vEnv env2), M.lookup f (fEnv env2)) of
+            (Nothing, Nothing) -> error $ "recoverType: Unbound function " ++ show f
+            (Just ty, _) -> ty
+            (_, Just ty) -> tyFromScheme ty -- CSK: Not sure if this is what we want?
+        PolyAppE{}  -> error "recoverTypeep: TODO PolyAppE"
   where
     -- Return type for a primitive operation.
     primRetTy1 :: Prim Ty0 -> Ty0

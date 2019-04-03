@@ -1,6 +1,6 @@
 module Poly1 where
 
-import Prelude hiding ( Maybe(..), Either (..), succ, not, foldr)
+import Prelude hiding ( Maybe(..), Either (..), succ, not, foldr, map)
 
 data Maybe z = Nothing | Just z
   deriving Show
@@ -47,6 +47,13 @@ foldr f acc ls =
     Nil        -> acc
     Cons x rst -> let acc' = (foldr f acc rst)
                   in f x acc'
+
+
+map :: (a -> b) -> List a -> List b
+map f ls =
+  case ls of
+    Nil        -> Nil
+    Cons x rst -> Cons (f x) (map f rst)
 
 plus :: Int -> Int -> Int
 plus a b = a + b
@@ -115,8 +122,14 @@ gibbon_main =
          s :: Int
          s = foldr plus 0 (Cons 1 (Cons 2 Nil))
 
+         r :: List Int
+         r = map id1 (Cons 1 (Cons 2 Nil))
+
+         q :: Either Int Bool
+         q = ap id2 w1
+
          test = (id1 10, id1 True, id2 11, id2 False, foo1 1 2, foo2 3 4,
-                 x, w, w1, v, u, t, s)
+                 x, w, w1, v, u, t, s, r, q)
        in test
 
 main :: IO ()

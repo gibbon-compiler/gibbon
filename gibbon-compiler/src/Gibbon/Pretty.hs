@@ -226,11 +226,10 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
           LitSymE v -> pprintWithStyle sty v
-          AppE v locs ls -> pprintWithStyle sty v <+>
-                            (if null locs
-                             then empty
-                             else brackets $ hcat (punctuate "," (map pprint locs))) <+>
-                            (pprintWithStyle sty ls)
+          AppE v locs ls -> parens $
+                             pprintWithStyle sty v <+>
+                             (brackets $ hcat (punctuate "," (map pprint locs))) <+>
+                             (pprintWithStyle sty ls)
           PrimAppE pr es ->
               case pr of
                   _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP, SymAppend] ->
@@ -356,10 +355,11 @@ instance Pretty L0.TyScheme where
   pprintWithStyle _ (L0.ForAll tvs ty) = text "forall" <+> hsep (map doc tvs) <> text "." <+> pprint ty
 
 instance (Out a, Pretty a) => Pretty (L0.E0Ext a L0.Ty0) where
-  pprintWithStyle _ ex0 =
+  pprintWithStyle sty ex0 =
     case ex0 of
       L0.LambdaE args bod -> parens (text "\\" <> parens (hsep (punctuate comma (map (\(v,ty) -> doc v <+> doublecolon <+> pprint ty) args))) <+> text "->"
                                          $$ nest indentLevel (pprint bod))
+      L0.FunRefE tyapps f -> parens $ text "fn:" <> pprintWithStyle sty f <+> (brackets $ hcat (punctuate "," (map pprint tyapps)))
       L0.PolyAppE{} -> doc ex0
 
 

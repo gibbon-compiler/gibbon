@@ -81,10 +81,15 @@ tcExp :: DDefs0 -> Subst -> Gamma -> Gamma -> [TyVar]
       -> L Exp0 -> TcM (Subst, Ty0, L Exp0)
 tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc c)) <$>
   case ex of
-    VarE x -> case (M.lookup x venv, M.lookup x fenv) of
-                (Nothing, Nothing) -> err $ text "Unbound variable " <> doc x
-                (Just ty, _) -> (sbst, ,ex) <$> snd <$> instantiate ty
-                (_, Just ty) -> (sbst, ,ex) <$> snd <$> instantiate ty
+    VarE x -> do
+      (metas, ty) <-
+        case (M.lookup x venv, M.lookup x fenv) of
+          (Nothing, Nothing) -> err $ text "Unbound variable " <> doc x
+          (Just t, _) -> instantiate t
+          (_, Just t) -> instantiate t
+      if isFunTy ty
+      then pure (sbst, ty, Ext $ FunRefE metas x)
+      else pure (sbst, ty, VarE x)
 
     LitE{}    -> pure (sbst, IntTy, ex)
     LitSymE{} -> pure (sbst, SymTy0, ex)
@@ -213,6 +218,8 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
       pure (s5, bod_ty,
             LetE (v, [], zonkTy s4 gvn_rhs_ty, zonkExp s4 rhs_tc) (zonkExp s5 bod_tc))
 
+    LetE (_, (_:_), _, _) _ -> err $ text "Unexpected LetE: " <+> exp_doc
+
     IfE a b c -> do
       (s1, t1, a_tc) <- go a
       (s2, t2, b_tc) <- tcExp ddefs s1 venv fenv bound_tyvars b
@@ -278,6 +285,15 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
       (s4, bod_ty, bod_tc) <- tcExp ddefs s3 venv' fenv bound_tyvars bod
       return (s4, zonkTy s4 (ArrowTy freshs bod_ty),
               Ext (LambdaE (map (\(v,ty) -> (v, zonkTy s4 ty)) args) (zonkExp s4 bod_tc)))
+    Ext (PolyAppE{}) -> err $ text "TODO" <+> exp_doc
+
+    Ext (FunRefE tyapps f) -> do
+      (_metas, ty) <-
+        case (M.lookup f venv, M.lookup f fenv) of
+          (Nothing, Nothing) -> err $ text "Unbound function " <> doc f
+          (Just t, _) -> instantiate t
+          (_, Just t) -> instantiate t
+      pure (sbst, ty, Ext $ FunRefE tyapps f)
 
     TimeIt a ty b -> do
       (s1, ty', a') <- go a
@@ -285,7 +301,9 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
       let s3 = s1 <> s2
       pure (s3, zonkTy s3 ty', TimeIt (zonkExp s3 a') (zonkTy s3 ty') b)
 
-    _ -> err $ "tcExp: TODO" <+> doc ex
+    ParE{}  -> err $ text "TODO" <+> exp_doc
+    MapE{}  -> err $ text "TODO" <+> exp_doc
+    FoldE{} -> err $ text "TODO" <+> exp_doc
   where
     go = tcExp ddefs sbst venv fenv bound_tyvars
     exp_doc = "In the expression: " <+> doc ex
@@ -412,7 +430,8 @@ zonkTy s@(Subst mp) ty =
     TyVar{} -> ty
     MetaTv v -> case M.lookup v mp of
                   Nothing -> MetaTv v
-                  Just t  -> zonkTy s t
+                  Just t@(MetaTv w) -> if v == w then MetaTv v else zonkTy s t
+                  Just t -> zonkTy s t
     ProdTy tys  -> ProdTy (map go tys)
     SymDictTy t -> SymDictTy (go t)
     ArrowTy tys b  -> ArrowTy (map go tys) (go b)
@@ -450,9 +469,16 @@ zonkExp s (L p ex) = L p $
                         brs)
     DataConE (ProdTy tyapps) dcon args ->
       DataConE (ProdTy (map (zonkTy s) tyapps)) dcon (map go args)
+    DataConE{} -> error $ "zonkExp: Expected (ProdTy tyapps), got: " ++ sdoc ex
     TimeIt e ty b -> TimeIt (go e) (zonkTy s ty) b
     Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, zonkTy s ty)) args) (go bod))
-    _ -> error $ "zonkExp: TODO, " ++ sdoc ex
+    Ext (PolyAppE rator rand) -> Ext (PolyAppE (go rator) (go rand))
+    Ext (FunRefE tyapps f)    -> let tyapps1 = map (zonkTy s) tyapps
+                                 in Ext (FunRefE tyapps1 f)
+    ParE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
+    MapE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
+    FoldE{} -> error $ "zonkExp: TODO, " ++ sdoc ex
+
   where
     go = zonkExp s
 
@@ -497,9 +523,15 @@ substTyVarExp s (L p ex) = L p $
                         brs)
     DataConE (ProdTy tyapps) dcon args ->
       DataConE (ProdTy (map (substTyVar s) tyapps)) dcon (map go args)
+    DataConE{} -> error $ "substTyVarExp: Expected (ProdTy tyapps), got: " ++ sdoc ex
     TimeIt e ty b -> TimeIt (go e) (substTyVar s ty) b
     Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, substTyVar s ty)) args) (go bod))
-    _ -> error $ "substTyVarExp: TODO, " ++ sdoc ex
+    Ext (PolyAppE rator rand) -> Ext (PolyAppE (go rator) (go rand))
+    Ext (FunRefE tyapps f) -> let tyapps1 = map (substTyVar s) tyapps
+                              in Ext $ FunRefE tyapps1 f
+    ParE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
+    MapE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
+    FoldE{} -> error $ "zonkExp: TODO, " ++ sdoc ex
   where
     go = substTyVarExp s
 
@@ -590,7 +622,7 @@ unify ex ty1 ty2
           if tc1 == tc2
           then unifyl ex tys1 tys2
           else fail_
-        _ -> fail_
+        _ -> dbgTrace 1 ("unify: Catch-all _; failed to unify " ++ sdoc ty1 ++ " with " ++ sdoc ty2) fail_
   where fail_ = err $  text "Couldn't match type" <+> quotes (doc ty2)
                     <+> text "with" <+> quotes (doc ty1)
                     $$ text "Expected type:" <+> doc ty1

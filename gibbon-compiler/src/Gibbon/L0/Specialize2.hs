@@ -146,8 +146,10 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         LitE n    -> L1.LitE n
         LitSymE v -> L1.LitSymE v
         AppE f [] args   -> AppE f [] (map toL1Exp args)
+        AppE _ (_:_) _   -> err1 (sdoc ex)
         PrimAppE pr args -> PrimAppE (toL1Prim pr) (map toL1Exp args)
         LetE (v,[],ty,rhs) bod -> LetE (v,[], toL1Ty ty, toL1Exp rhs) (toL1Exp bod)
+        LetE (_,(_:_),_,_) _ -> err1 (sdoc ex)
         IfE a b c  -> IfE (toL1Exp a) (toL1Exp b) (toL1Exp c)
         MkProdE ls -> MkProdE (map toL1Exp ls)
         ProjE i a  -> ProjE i (toL1Exp a)
@@ -158,8 +160,13 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         DataConE _ dcon ls -> DataConE () dcon (map toL1Exp ls)
         TimeIt e ty b -> TimeIt (toL1Exp e) (toL1Ty ty) b
         ParE a b      -> ParE (toL1Exp a) (toL1Exp b)
-        Ext{} -> err1 (sdoc ex)
-        _ -> error $ "toL1Exp: TODO" ++ sdoc ex
+        MapE{}  -> err1 (sdoc ex)
+        FoldE{} -> err1 (sdoc ex)
+        Ext ext ->
+          case ext of
+            LambdaE{}  -> err1 (sdoc ex)
+            PolyAppE{} -> err1 (sdoc ex)
+            FunRefE{}  -> err1 (sdoc ex)
 
     toL1Prim :: Prim Ty0 -> Prim L1.Ty1
     toL1Prim = fmap toL1Ty
@@ -353,25 +360,9 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
       args' <- mapM (collectMonoObls ddefs env2 toplevel) args
       pure $ AppE f [] args'
     AppE f tyapps args -> do
-      mono_st <- get
       args'   <- mapM (collectMonoObls ddefs env2 toplevel) args
-      if f `S.member` toplevel
-      then case (M.lookup (f,tyapps) (mono_funs_done mono_st), M.lookup (f,tyapps) (mono_funs_todo mono_st)) of
-             (Nothing, Nothing) -> do
-               new_name <- lift $ gensym f
-               state (\st -> ((), extendFuns (f,tyapps) new_name st))
-               pure $ AppE new_name [] args'
-             (Just fn_name, _) -> pure $ AppE fn_name [] args'
-             (_, Just fn_name) -> pure $ AppE fn_name [] args'
-
-      -- Why (f,[])? See the special case for let below.
-      else case (M.lookup (f,[]) (mono_lams mono_st), M.lookup (f,tyapps) (mono_lams mono_st)) of
-             (Nothing, Nothing) -> do
-               new_name <- lift $ gensym f
-               state (\st -> ((),extendLambdas (f,tyapps) new_name st))
-               pure $ AppE new_name [] args'
-             (_,Just lam_name) -> pure $ AppE lam_name [] args'
-             (Just lam_name,_) -> pure $ AppE lam_name [] args'
+      f' <- addFnObl f tyapps
+      pure $ AppE f' [] args'
 
     LetE (v, [], ty@ArrowTy{}, rhs) bod ->do
       let env2' = (extendVEnv v ty env2)
@@ -397,6 +388,8 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
       rhs' <- go rhs
       bod' <- collectMonoObls ddefs env2' toplevel bod
       pure $ LetE (v,[],ty,rhs') bod'
+
+    LetE (_, (_:_), _, _) _ -> error $ "collectMonoObls: Let not monomorphized: " ++ sdoc ex
 
     CaseE scrt brs -> do
       case recoverType ddefs env2 scrt of
@@ -451,6 +444,8 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
               let dcon' = dcon ++ (fromVar suffix)
               pure $ DataConE (ProdTy []) dcon' args'
 
+    DataConE{} -> error $ "collectMonoObls: DataConE expected ProdTy tyapps, got " ++ sdoc ex
+
     PrimAppE pr args -> do
       args' <- mapM (collectMonoObls ddefs env2 toplevel) args
       pure $ PrimAppE pr args'
@@ -478,10 +473,40 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
         LambdaE args bod -> do
           bod' <- go bod
           pure $ Ext $ LambdaE args bod'
-        _ -> error ("collectMonoObls: TODO, "++ sdoc ext)
-    _ -> error ("collectMonoObls: TODO, " ++ sdoc ex)
+        PolyAppE{} -> error ("collectMonoObls: TODO, "++ sdoc ext)
+        FunRefE tyapps f ->
+          case tyapps of
+            [] -> pure $ Ext $ FunRefE [] f
+            _  -> do
+              f' <- addFnObl f tyapps
+              pure $ Ext $ FunRefE [] f'
+    ParE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    MapE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    FoldE{} -> error $ "monoLambdas: TODO: " ++ sdoc ex
   where
     go = collectMonoObls ddefs env2 toplevel
+
+    -- 'fn' Could be either a lambda, or toplevel
+    addFnObl :: Var -> [Ty0] -> MonoM Var
+    addFnObl f tyapps = do
+      mono_st <- get
+      if f `S.member` toplevel
+      then case (M.lookup (f,tyapps) (mono_funs_done mono_st), M.lookup (f,tyapps) (mono_funs_todo mono_st)) of
+             (Nothing, Nothing) -> do
+               new_name <- lift $ gensym f
+               state (\st -> ((), extendFuns (f,tyapps) new_name st))
+               pure new_name
+             (Just fn_name, _) -> pure fn_name
+             (_, Just fn_name) -> pure fn_name
+
+      -- Why (f,[])? See "Special case for lambda bindings passed in as function arguments".
+      else case (M.lookup (f,[]) (mono_lams mono_st), M.lookup (f,tyapps) (mono_lams mono_st)) of
+             (Nothing, Nothing) -> do
+               new_name <- lift $ gensym f
+               state (\st -> ((),extendLambdas (f,tyapps) new_name st))
+               pure new_name
+             (_,Just lam_name) -> pure lam_name
+             (Just lam_name,_) -> pure lam_name
 
 
 -- | Create monomorphic versions of lambdas bound in this expression.
@@ -512,6 +537,8 @@ monoLambdas (L p ex) = (L p) <$>
         monomorphized <- monoLamBinds (M.toList lam_mono_st) (vty, rhs)
         pure $ unLoc $ foldl (\acc bind -> l$ LetE bind acc) bod' monomorphized
 
+    LetE (_,(_:_),_,_) _ -> error $ "monoLambdas: Let not monomorphized: " ++ sdoc ex
+
     -- Straightforward recursion
     VarE{}    -> pure ex
     LitE{}    -> pure ex
@@ -538,7 +565,11 @@ monoLambdas (L p ex) = (L p) <$>
       (DataConE tyapp dcon) <$> mapM monoLambdas args
     TimeIt e ty b -> (\e' -> TimeIt e' ty b) <$> go e
     Ext (LambdaE args bod) -> (\bod' -> Ext (LambdaE args bod')) <$> go bod
-    _ -> error $ "monoLambdas: TODO " ++ sdoc ex
+    Ext (PolyAppE{}) -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    Ext (FunRefE{})  -> pure ex
+    ParE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    MapE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    FoldE{} -> error $ "monoLambdas: TODO: " ++ sdoc ex
   where go = monoLambdas
 
         monoLamBinds :: [(Var,[Ty0])] -> (Ty0, L Exp0) -> MonoM [(Var, [Ty0], Ty0, L Exp0)]
@@ -590,8 +621,10 @@ updateTyConsExp ddefs mono_st (L loc ex) = L loc $
     LitE{}    -> ex
     LitSymE{} -> ex
     AppE f [] args    -> AppE f [] (map go args)
+    AppE _ (_:_) _ -> error $ "updateTyConsExp: Call-site not monomorphized: " ++ sdoc ex
     PrimAppE pr args  -> PrimAppE pr (map go args)
     LetE (v,[],ty,rhs) bod -> LetE (v, [], updateTyConsTy ddefs mono_st ty, go rhs) (go bod)
+    LetE (_,(_:_),_,_) _ -> error $ "updateTyConsExp: Let not monomorphized: " ++ sdoc ex
     IfE a b c  -> IfE (go a) (go b) (go c)
     MkProdE ls -> MkProdE (map go ls)
     ProjE i e  -> ProjE i (go e)
@@ -609,9 +642,14 @@ updateTyConsExp ddefs mono_st (L loc ex) = L loc $
                     Just suffix -> dcon ++ fromVar suffix
       -- Why [] ? The type arguments aren't required as the DDef is monomorphic.
       in DataConE (ProdTy []) dcon' (map go args)
+    DataConE{} -> error $ "updateTyConsExp: DataConE expected ProdTy tyapps, got: " ++ sdoc ex
     TimeIt e ty b -> TimeIt (go e) (updateTyConsTy ddefs mono_st ty) b
+    ParE{}  -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
+    MapE{}  -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
+    FoldE{} -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, updateTyConsTy ddefs mono_st ty)) args) (go bod))
-    _ -> error $ "updateTyConsExp: TODO, " ++ sdoc ex
+    Ext (PolyAppE a b) -> Ext (PolyAppE (go a) (go b))
+    Ext (FunRefE{})    -> ex
   where
     go = updateTyConsExp ddefs mono_st
 
@@ -642,9 +680,10 @@ updateTyConsTy ddefs mono_st ty =
 -- The specialization monad.
 type SpecM a = StateT SpecState PassM a
 
+type FunRef = Var
 
 data SpecState = SpecState
-  { sp_funs_todo :: M.Map (Var, FunRefs) Var
+  { sp_funs_todo :: M.Map (Var, [FunRef]) Var
   , sp_fundefs   :: FunDefs0 }
   deriving (Show, Eq, Generic, Out)
 
@@ -655,8 +694,6 @@ data SpecState = SpecState
 --
 -- type FunRefsEnv = M.Map Var FunRefs
 --
-
-type FunRefs    = [Var]
 
 
 spec :: Prog0 -> PassM Prog0
@@ -719,7 +756,7 @@ spec prg@Prog{ddefs,fundefs,mainExp} = do
          arrowTysInTy ret_ty == []
 
 -- Eliminate all functions passed in as arguments to this function.
-specFun :: DDefs0 -> Env2 Ty0 -> Var -> FunRefs -> FunDef0 -> SpecM ()
+specFun :: DDefs0 -> Env2 Ty0 -> Var -> [FunRef] -> FunDef0 -> SpecM ()
 specFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
   let
       -- lamda args
@@ -774,11 +811,13 @@ becomes
                | otherwise -> VarE v
         AppE f [] ls | f == old  -> AppE new [] (map go ls)
                      | otherwise -> AppE f [] (map go ls)
+        AppE _ (_:_) _ -> error $ "specExp: Call-site not monomorphized: " ++ sdoc ex
         LitE _             -> ex
         LitSymE _          -> ex
         PrimAppE p ls      -> PrimAppE p $ map go ls
         LetE (v,[],t,rhs) bod | v == old  -> LetE (v,[],t,go rhs) bod
-                               | otherwise -> LetE (v,[],t,go rhs) (go bod)
+                              | otherwise -> LetE (v,[],t,go rhs) (go bod)
+        LetE (_,(_:_),_,_) _ -> error $ "specExp: Let not monomorphized: " ++ sdoc ex
         ProjE i e  -> ProjE i (go e)
         CaseE e ls -> CaseE (go e) (map f ls)
                           where f (c,vs,er) = if elem old (map fst vs)
@@ -789,8 +828,15 @@ becomes
         TimeIt e t b      -> TimeIt (go e) t b
         IfE a b c         -> IfE (go a) (go b) (go c)
         ParE a b          -> ParE (go a) (go b)
-        _ -> error $ "subst': TODO " ++ sdoc ex
+        MapE{} -> error $ "specExp: TODO: " ++ sdoc ex
+        FoldE{} -> error $ "specExp: TODO: " ++ sdoc ex
 
+        Ext ext ->
+          case ext of
+            LambdaE args bod    -> Ext $ LambdaE args (go bod)
+            PolyAppE rator rand -> Ext $ PolyAppE (go rator) (go rand)
+            FunRefE tyapps f | f == old  -> Ext $ FunRefE tyapps new
+                             | otherwise -> Ext $ FunRefE tyapps f
 
 specExp :: DDefs0 -> Env2 Ty0 -> L Exp0 -> SpecM (L Exp0)
 specExp ddefs env2 (L p ex) = (L p) <$>
@@ -817,6 +863,7 @@ specExp ddefs env2 (L p ex) = (L p) <$>
               put low''
               pure $ AppE f' [] args''
             Just f' -> pure $ AppE f' [] args''
+    AppE _ (_:_) _ -> error $ "specExp: Call-site not monomorphized: " ++ sdoc ex
 
     -- Float out a lambda fun to the top-level.
     LetE (v, [], ty, L _ (Ext (LambdaE args lam_bod))) bod -> do
@@ -844,6 +891,8 @@ specExp ddefs env2 (L p ex) = (L p) <$>
       bod' <- specExp ddefs env2' bod
       pure $ LetE (v, [], ty, rhs') bod'
 
+    LetE (_, (_:_),_,_) _ -> error $ "specExp: Binding not monomorphized: " ++ sdoc ex
+
     -- Straightforward recursion
     VarE{}    -> pure ex
     LitE{}    -> pure ex
@@ -866,11 +915,19 @@ specExp ddefs env2 (L p ex) = (L p) <$>
     TimeIt e ty b -> do
        e' <- go e
        pure $ TimeIt e' ty b
-    _ -> error $ "specExp: TODO " ++ sdoc ex
+    ParE{}  -> error $ "specExp: TODO: " ++ sdoc ex
+    MapE{}  -> error $ "specExp: TODO: " ++ sdoc ex
+    FoldE{} -> error $ "specExp: TODO: " ++ sdoc ex
+
+    Ext ext ->
+      case ext of
+        LambdaE{}  -> error $ "specExp: Should reach a LambdaE. It should be floated out by the Let case." ++ sdoc ex
+        PolyAppE{} -> error $ "specExp: TODO: " ++ sdoc ex
+        FunRefE{}  -> pure ex
   where
     go = specExp ddefs env2
 
-    isFunRef e =
+    _isFunRef e =
       case e of
         VarE v -> M.member v (fEnv env2)
         _ -> False
@@ -882,14 +939,12 @@ specExp ddefs env2 (L p ex) = (L p) <$>
       where
         ForAll _ (ArrowTy arg_tys _) = lookupFEnv fn_name env2
 
-    collectFunRefs :: L Exp0 -> FunRefs -> FunRefs
+    collectFunRefs :: L Exp0 -> [FunRef] -> [FunRef]
     collectFunRefs (L _ e) acc =
       case e of
-        VarE v -> if isFunRef e
-                  then v : acc
-                  else acc
-        LitE{}     -> acc
-        LitSymE{}  -> acc
+        VarE{}    -> acc
+        LitE{}    -> acc
+        LitSymE{} -> acc
         AppE _ _ args   -> foldr collectFunRefs acc args
         PrimAppE _ args -> foldr collectFunRefs acc args
         LetE (_,_,_, rhs) bod -> foldr collectFunRefs acc [bod, rhs]
@@ -897,5 +952,16 @@ specExp ddefs env2 (L p ex) = (L p) <$>
         MkProdE ls -> foldr collectFunRefs acc ls
         ProjE _ a  -> collectFunRefs a acc
         DataConE _ _ ls -> foldr collectFunRefs acc ls
-        TimeIt a _ _ -> collectFunRefs a acc
-        _ -> error $ "collectFunRefs: TODO " ++ sdoc e
+        TimeIt a _ _   -> collectFunRefs a acc
+        CaseE scrt brs -> foldr
+                            (\(_,_,b) acc2 -> collectFunRefs b acc2)
+                            (collectFunRefs scrt acc)
+                            brs
+        ParE{}  -> error $ "collectFunRefs: TODO: " ++ sdoc e
+        MapE{}  -> error $ "collectFunRefs: TODO: " ++ sdoc e
+        FoldE{} -> error $ "collectFunRefs: TODO: " ++ sdoc e
+        Ext ext ->
+          case ext of
+            LambdaE _ bod       -> collectFunRefs bod acc
+            PolyAppE rator rand -> collectFunRefs rand (collectFunRefs rator acc)
+            FunRefE _ f         -> f : acc

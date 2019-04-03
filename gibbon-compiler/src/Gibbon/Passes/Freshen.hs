@@ -163,7 +163,6 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
 
     AppE v locs ls -> assert ([] == locs) $ do
       ls' <- mapM go ls
-      -- If this is a call site of a let bound lambda, we need to update it.
       case M.lookup v venv of
         Nothing -> return $ AppE (cleanFunName v) [] ls'
         Just v' -> return $ AppE (cleanFunName v') [] ls'
@@ -239,6 +238,10 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
                                      pure (acc1', v':acc2, t': acc3))
                                (venv,[],[]) args
           Ext <$> (LambdaE (zip vs ts) <$> (freshExp venv' tvenv bod))
+        FunRefE tyapps f ->
+          case M.lookup f venv of
+            Nothing -> pure $ Ext $ FunRefE tyapps (cleanFunName f)
+            Just f' -> pure $ Ext $ FunRefE tyapps (cleanFunName f')
         PolyAppE{} -> error "freshExp: TODO, PolyAppE."
 
   where go = freshExp venv tvenv
