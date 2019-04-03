@@ -1,5 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 -- | Put the program in A-normal form where only varrefs and literals are
 -- allowed in operand position.
@@ -41,6 +43,7 @@ flattenL1 prg@(Prog defs funs main) = do
       return $ FunDef nam narg (targ, ty) bod'
 
     env20 = progToEnv prg
+
 
 flattenL2 :: Flattenable (E2Ext Var (UrTy LocVar)) => Prog2 -> PassM Prog2
 flattenL2 prg@(Prog defs funs main) = do
@@ -84,36 +87,30 @@ flattenL3 prg@(Prog defs funs main) = do
 -- go in there too.  Everything would be simpler. We would simply have to
 -- use other means to remember that L1 programs are first order.
 
-type Exp e l = PreExp e l (UrTy l)
-
 -- type Binds e = (Var,[LocOf e],TyOf e, e)
 
 
-instance (Show l, Out l, Expression (e l (UrTy l)),
-          TyOf (e l (UrTy l)) ~ TyOf (Exp e l),
-          FunctionTy (UrTy l),
-          Typeable (e l (UrTy l)),
-          Flattenable (e l (UrTy l)))
-       => Flattenable (L (Exp e l)) where
+-- Constraints we need to write a generic Flatten.
+type FlattenDeps e l d = (Show l, Out l, Show d, Out d,
+                          Expression (e l d),
+                          TyOf (e l d) ~ TyOf (PreExp e l d),
+                          Typeable (L (PreExp e l d)),
+                          Flattenable (e l d))
 
+instance FlattenDeps e l d => Flattenable (L (PreExp e l d)) where
+
+  gFlattenExp ddfs env ex = do (b,e') <- gFlattenGatherBinds ddfs env ex
+                               return $ flatLets b e'
   gFlattenGatherBinds = exp
 
-  gFlattenExp ddfs env ex = do (b,e') <- exp ddfs env ex
-                               return $ flatLets b e'
 
-
-exp :: forall l e .
-       (Show l, Out l,
-       TyOf (e l (UrTy l)) ~ TyOf (Exp e l),
-       FunctionTy (UrTy l),
-       Typeable (e l (UrTy l)),
-       Flattenable (e l (UrTy l)))
-    => DDefs (TyOf (L (Exp e l)))
-    -> Env2 (TyOf (L (Exp e l)))
-    -> L (Exp e l)
-    -> PassM ([Binds (L (Exp e l))], L (Exp e l))
+exp :: forall e l d. FlattenDeps e l d
+    => DDefs (TyOf (L (PreExp e l d)))
+    -> Env2 (TyOf (L (PreExp e l d)))
+    -> L (PreExp e l d)
+    -> PassM ([Binds (L (PreExp e l d))], L (PreExp e l d))
 exp ddfs env2 (L sloc e0) =
-  let triv :: String -> L (Exp e l) -> PassM ([Binds (L (Exp e l))], L (Exp e l))
+  let triv :: String -> L (PreExp e l d) -> PassM ([Binds (L (PreExp e l d))], L (PreExp e l d))
       triv m e = -- Force something to be trivial
         if isTrivial e
         then return ([],e)
@@ -123,7 +120,7 @@ exp ddfs env2 (L sloc e0) =
                 return ( bnds++[(tmp,[],ty,e')]
                        , L NoLoc $ VarE tmp)
 
-      go :: L (Exp e l) -> PassM ([Binds (L (Exp e l))], L (Exp e l))
+      go :: L (PreExp e l d) -> PassM ([Binds (L (PreExp e l d))], L (PreExp e l d))
       go = exp ddfs env2
 
       gols f ls m = do (bndss,ls') <- unzip <$> mapM (triv m) ls
