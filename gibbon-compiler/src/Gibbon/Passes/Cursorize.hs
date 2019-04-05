@@ -149,7 +149,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
         PtrTy -> PtrTy
         CursorTy -> CursorTy
 
-{-|
+{-
 
 Build projections for packed values in the input type
 This is used to create bindings for input location variables.

@@ -114,7 +114,13 @@ Assume that the input program is monomorphic.
 
 l0ToL1 :: Prog0 -> PassM L1.Prog1
 l0ToL1 p = do
-  p1 <- monomorphize p
+  p0  <- hoistLambdas p
+  dbgTrace 5 ("\n\nHoist Lambdas:\n" ++ (render $ pprint p0)) (pure ())
+  -- Typecheck again so that all the meta type variables introduced by
+  -- hoistLambdas (to bind lambdas) get zonked.
+  p0' <- tcProg p0
+  dbgTrace 5 ("\n\nTypechecked:\n" ++ (render $ pprint p0')) (pure ())
+  p1 <- monomorphize p0'
   dbgTrace 5 ("\n\nMonomorphized:\n" ++ (render $ pprint p1)) (pure ())
   p2 <- spec p1
   dbgTrace 5 ("\n\nSpecialized:\n" ++ (render $ pprint p2)) (pure ())
@@ -965,3 +971,97 @@ specExp ddefs env2 (L p ex) = (L p) <$>
             LambdaE _ bod       -> collectFunRefs bod acc
             PolyAppE rator rand -> collectFunRefs rand (collectFunRefs rator acc)
             FunRefE _ f         -> f : acc
+
+--------------------------------------------------------------------------------
+
+{-|
+
+Strip out the lambdas up until the point where control flow diverges,
+exactly like HoistNewBuf. This is a quick way to support anonymous
+lambdas. For example,
+
+    map (\x -> x + 1) [1,2,3]
+
+becomes
+
+   let lam_1 = (\x -> x + 1)
+   in map lam_1 [1,2,3]
+
+-}
+
+hoistLambdas :: Prog0 -> PassM Prog0
+hoistLambdas prg@Prog{fundefs,mainExp} = do
+  mainExp' <- case mainExp of
+                Nothing      -> pure Nothing
+                Just (a, ty) -> Just <$> (,ty) <$> hoistExp a
+  fundefs' <- mapM
+                (\fn@FunDef{funBody} -> hoistExp funBody >>=
+                                        \b' -> pure $ fn {funBody = b'})
+                fundefs
+  pure $ prg { fundefs = fundefs'
+             , mainExp = mainExp' }
+  where
+    hoistExp :: L Exp0 -> PassM (L Exp0)
+    hoistExp ex0 = gocap ex0
+      where
+
+      gocap ex = do (lets,ex') <- go ex
+                    pure $ mkLets lets ex'
+
+      go :: L Exp0 -> PassM ([(Var,[Ty0],Ty0,L Exp0)], L Exp0)
+      go (L p e0) = fmap (L p) <$>
+       case e0 of
+        (AppE f locs args) -> do
+          (ltss,args') <- unzip <$> mapM go args
+          pure (concat ltss, AppE f locs args')
+
+        (Ext LambdaE{}) -> do
+          v  <- gensym "lam_"
+          ty <- newMetaTy
+          pure ([(v,[],ty,L p e0)], VarE v)
+
+        (Ext _) -> pure ([], e0)
+
+        -- boilerplate
+
+        (LitE _)      -> pure ([], e0)
+        (LitSymE _)   -> pure ([], e0)
+        (VarE _)      -> pure ([], e0)
+        (PrimAppE{})  -> pure ([], e0)
+        (MapE _ _)    -> error "hoistExp.go: FINISHME MapE"
+        (FoldE _ _ _) -> error "hoistExp.go: FINISHME FoldE"
+
+        -- This lambda is already let bound. We shouldn't hoist this again..
+        (LetE (v,locs,t,rhs@(L _ (Ext LambdaE{}))) bod) -> do
+            (lts2, bod') <- go bod
+            pure  (lts2, LetE (v,locs,t,rhs) bod')
+
+        (LetE (v,locs,t,rhs) bod) -> do
+            (lts1, rhs') <- go rhs
+            (lts2, bod') <- go bod
+            pure  (lts1++lts2, LetE (v,locs,t,rhs') bod')
+
+        (IfE e1 e2 e3) -> do
+             (lts1, e1') <- go e1
+             e2' <- gocap e2
+             e3' <- gocap e3
+             pure  (lts1, IfE e1' e2' e3')
+
+        (ProjE i e)  -> do (lts,e') <- go e
+                           pure  (lts, ProjE i e')
+        (MkProdE es) -> do (ltss,es') <- unzip <$> mapM go es
+                           pure (concat ltss, MkProdE es')
+
+        (CaseE scrt ls) -> do (lts,scrt') <- go scrt
+                              ls' <- mapM (\(a,b,c) -> (a,b,) <$> gocap c) ls
+                              pure (lts, CaseE scrt' ls')
+        (DataConE c loc es) -> do (ltss,es') <- unzip <$> mapM go es
+                                  pure (concat ltss, DataConE c loc es')
+
+        (ParE a b) -> do
+          a' <- (gocap a)
+          b' <- (gocap b)
+          pure ([], ParE a' b')
+
+        (TimeIt e t b) -> do (lts,e') <- go e
+                             pure (lts, TimeIt e' t b)

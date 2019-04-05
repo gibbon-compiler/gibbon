@@ -229,6 +229,11 @@ tests:
     answer-file: examples/poly/PolyTree.ans
     failing: [gibbon1, gibbon2]
 
+  - name: AnonLambdas.hs
+    dir: examples/poly
+    answer-file: examples/poly/AnonLambdas.ans
+    failing: [gibbon1, gibbon2]
+
   - name: unariser_bug1.hs
     answer-file: examples/unariser_bug1.ans
     ## It fails in 'interp1' because the answer actually changes later in the pipeline.
