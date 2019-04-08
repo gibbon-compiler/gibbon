@@ -8,7 +8,8 @@
 module Gibbon.Common
        (
          -- * Variables
-         Var(..), LocVar, TyVar(..), fromVar, toVar, varAppend, toEndV, cleanFunName
+         Var(..), LocVar, fromVar, toVar, varAppend, toEndV, cleanFunName
+       , TyVar(..), isUserTv
 
          -- * Gensym monad
        , SyM, gensym, gensym_tag, genLetter, newUniq, runSyM
@@ -112,6 +113,12 @@ instance Out TyVar where
   doc (UserTv v)     = text "u:" PP.<> doc v
 
   docPrec _ v = doc v
+
+isUserTv :: TyVar -> Bool
+isUserTv tv =
+  case tv of
+    UserTv{} -> True
+    _        -> False
 
 --------------------------------------------------------------------------------
 -- Helper methods to integrate the Data.Loc with Gibbon

@@ -55,6 +55,9 @@ map f ls =
     Nil        -> Nil
     Cons x rst -> Cons (f x) (map f rst)
 
+map2 :: (a -> b) -> List a -> List b
+map2 f ls = foldr (\x acc -> Cons (f x) acc) Nil ls
+
 plus :: Int -> Int -> Int
 plus a b = a + b
 
@@ -95,10 +98,10 @@ test_rec f n = if n == 0
 
 gibbon_main =
        let
-         -- id :: a -> a
+         id2 :: a -> a
          id2 x = x
 
-         -- foo :: a -> b -> b
+         -- foo2 :: a -> b -> b
          foo2 x y = y
 
          x :: Maybe Int
@@ -125,11 +128,14 @@ gibbon_main =
          r :: List Int
          r = map id1 (Cons 1 (Cons 2 Nil))
 
-         q :: Either Int Bool
-         q = ap id2 w1
+         q :: List Int
+         q = map2 id1 (Cons 1 (Cons 2 Nil))
+
+         p :: Either Int Bool
+         p = ap id2 w1
 
          test = (id1 10, id1 True, id2 11, id2 False, foo1 1 2, foo2 3 4,
-                 x, w, w1, v, u, t, s, r, q)
+                 x, w, w1, v, u, t, s, r, q, p)
        in test
 
 main :: IO ()

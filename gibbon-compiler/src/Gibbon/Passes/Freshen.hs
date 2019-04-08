@@ -93,7 +93,7 @@ freshDDef DDef{tyName,tyArgs,dataCons} = do
   where
     go :: String -> [TyVar] -> TyVarEnv Ty0 -> (t, Ty0) -> PassM (t, Ty0)
     go msg bound env (b, ty) = do
-      (_, ty') <- freshTy _ env ty
+      (_, ty') <- freshTy env ty
       let free_tvs = tyVarsInTy ty' \\ bound
       if free_tvs == []
       then pure (b, ty')
@@ -113,13 +113,11 @@ freshTyScheme :: TyScheme -> PassM (TyVarEnv Ty0, TyScheme)
 freshTyScheme (ForAll tvs ty) = do
   rigid_tyvars <- mapM (\(UserTv v) -> BoundTv <$> gensym v) tvs
   let env = M.fromList $ zip tvs (map TyVar rigid_tyvars)
-  (env', ty') <- freshTy _ env ty
+  (env', ty') <- freshTy env ty
   pure (env', ForAll rigid_tyvars ty')
 
--- This takes an expression to disambiguate 'e' in gFreshenTy,
--- which isn't used anymore.
-freshTy :: L Exp0 -> TyVarEnv Ty0 -> Ty0 -> PassM (TyVarEnv Ty0, Ty0)
-freshTy _ env ty =
+freshTy :: TyVarEnv Ty0 -> Ty0 -> PassM (TyVarEnv Ty0, Ty0)
+freshTy env ty =
   case ty of
      IntTy  -> pure (env, ty)
      SymTy0 -> pure (env, ty)
@@ -131,21 +129,21 @@ freshTy _ env ty =
      MetaTv{} -> pure (env, ty)
      ProdTy tys    -> do (env', tys') <- freshTys env tys
                          pure (env', ProdTy tys')
-     SymDictTy t   -> do (env', t') <- freshTy _ env t
+     SymDictTy t   -> do (env', t') <- freshTy env t
                          pure (env', SymDictTy t')
      ArrowTy tys t -> do (env', tys') <- freshTys env tys
                          (env'', [t'])  <- freshTys env' [t]
                          pure (env'', ArrowTy tys' t')
      PackedTy tycon tys -> do (env', tys') <- freshTys env tys
                               pure (env', PackedTy tycon tys')
-     ListTy t -> do (env', t') <- freshTy _ env t
+     ListTy t -> do (env', t') <- freshTy env t
                     pure (env', ListTy t')
 
 freshTys :: TyVarEnv (TyOf (L Exp0)) -> [Ty0] -> PassM (TyVarEnv (TyOf (L Exp0)), [Ty0])
 freshTys env tys =
   foldrM
     (\t (env', acc) -> do
-          (env'', t') <- freshTy _ env' t
+          (env'', t') <- freshTy env' t
           pure (env' <> env'', t' : acc))
     (env, [])
     tys
@@ -172,9 +170,13 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
       return $ PrimAppE p es'
 
     LetE (v,_locs,ty, e1) e2 -> do
-      -- No ScopedTypeVariables.
-      (_tvenv', ty') <- freshTy _ tvenv ty
-      e1' <- freshExp venv tvenv e1
+      let user_tvs  = filter isUserTv $ tyVarsInTy ty
+      rigid_tyvars <- mapM (\(UserTv w) -> BoundTv <$> gensym w) user_tvs
+      let env = M.fromList $ zip user_tvs (map TyVar rigid_tyvars)
+          tvenv' = env <> tvenv
+
+      (_tvenv'', ty') <- freshTy tvenv' ty
+      e1' <- freshExp venv tvenv' e1
       v'  <- gensym (cleanFunName v)
       e2' <- freshExp (M.insert v v' venv) tvenv e2
       return $ LetE (v',[],ty',e1') e2'
@@ -234,7 +236,7 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
                                (\(v,t) (acc1, acc2, acc3) -> do
                                      v' <- gensym v
                                      let acc1' = M.insert v v' acc1
-                                     (_tvenv', t') <- freshTy _ tvenv t
+                                     (_tvenv', t') <- freshTy tvenv t
                                      pure (acc1', v':acc2, t': acc3))
                                (venv,[],[]) args
           Ext <$> (LambdaE (zip vs ts) <$> (freshExp venv' tvenv bod))

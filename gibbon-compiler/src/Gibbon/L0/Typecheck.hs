@@ -212,7 +212,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
           venv'      = zonkTyEnv s3 venv
           -- Added b/c Nothing :: Just Int
           drvd_rhs_ty' = zonkTy s3 drvd_rhs_ty
-      (s4, rhs_ty_gen) <- generalize venv' s3 drvd_rhs_ty'
+      (s4, rhs_ty_gen) <- generalize venv' s3 bound_tyvars drvd_rhs_ty'
       let venv''     = M.insert v rhs_ty_gen venv'
       (s5, bod_ty, bod_tc) <- tcExp ddefs s4 venv'' fenv bound_tyvars bod
       pure (s5, bod_ty,
@@ -348,17 +348,20 @@ instantiate (ForAll tvs ty) = do
   let ty' = substTyVar (M.fromList $ zip tvs tvs') ty
   pure (tvs', ty')
 
--- TODO: ScopedTypeVariables.
-generalize :: Gamma -> Subst -> Ty0 -> TcM (Subst, TyScheme)
-generalize env s ty = do
+generalize :: Gamma -> Subst -> [TyVar] -> Ty0 -> TcM (Subst, TyScheme)
+generalize env s bound_tyvars ty = do
   new_bndrs <- mapM
                  (\(Meta i) -> do
                        v' <- varAppend <$> genLetter <*> pure (toVar $ "_" ++ show i)
                        pure $ BoundTv v')
                  meta_tvs
-  let s2 = Subst $ M.fromList (zip meta_tvs (map TyVar new_bndrs))
+  let s2  = Subst $ M.fromList (zip meta_tvs (map TyVar new_bndrs))
       ty' = zonkTy (s <> s2) ty
-  pure (s <> s2, ForAll new_bndrs ty')
+
+      -- Generalize over BoundTv's too.
+      free_tvs = (tyVarsInTy ty) \\ bound_tyvars
+
+  pure (s <> s2, ForAll (new_bndrs ++ free_tvs) ty')
   where
     env_tvs = metaTvsInTySchemes (M.elems env)
     res_tvs = metaTvsInTy ty

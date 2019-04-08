@@ -378,6 +378,8 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
           bod' <- collectMonoObls ddefs env2' toplevel bod
           pure $ LetE (v,[],ty,rhs') bod'
         _ -> do
+          -- Special case for lambda bindings passed in as function arguments:
+          --
           -- 'v' is an ArrowTy, but not a lambda defn -- this let binding must
           -- be in a function body, and 'v' must be a lambda that's
           -- passed in as an argument. We don't want to monormorphize it here.
