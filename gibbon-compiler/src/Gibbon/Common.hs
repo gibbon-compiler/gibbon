@@ -46,6 +46,7 @@ import Data.Symbol
 import Data.Loc
 import Data.Word
 import GHC.Generics
+import GHC.Stack (HasCallStack)
 import Text.PrettyPrint.GenericPretty
 import Text.PrettyPrint as PP hiding (Mode(..), Style(..))
 import System.IO
@@ -293,25 +294,25 @@ getRunConfig ls =
 
 -- | An alias for the error function we want to use throughout this project.
 {-# INLINE err #-}
-err :: String -> a
+err :: HasCallStack => String -> a
 err = error
 
 -- | An error that is OUR FAULT, i.e. an internal bug in the compiler.
-internalError :: String -> a
+internalError :: HasCallStack => String -> a
 internalError s = error ("internal error: "++s)
 
 instance (Out k,Out v) => Out (Map k v) where
   doc         = doc . M.toList
   docPrec n v = docPrec n (M.toList v)
 
-(#) :: (Ord a, Out a, Out b, Show a) => Map a b -> a -> b
+(#) :: (Ord a, Out a, Out b, Show a, HasCallStack) => Map a b -> a -> b
 m # k = case M.lookup k m of
           Just x  -> x
           Nothing -> err $ "Map lookup failed on key: "++show k
                      ++ " in map:\n "++ sdoc m
 
 
-(!!!) :: (Out a) => [a] -> Int -> a
+(!!!) :: (Out a, HasCallStack) => [a] -> Int -> a
 ls0 !!! ix0 = go ls0 ix0
  where
    go [] _ = err $ "Not enough elements in list to retrieve "++show ix0
@@ -320,7 +321,7 @@ ls0 !!! ix0 = go ls0 ix0
    go (_:xs) n = go xs (n-1)
 
 
-fragileZip :: (Show a, Show b) => [a] -> [b] -> [(a, b)]
+fragileZip :: (Show a, Show b, HasCallStack) => [a] -> [b] -> [(a, b)]
 fragileZip [] [] = []
 fragileZip (a:as) (b:bs) = (a,b) : fragileZip as bs
 fragileZip as [] = err$ "fragileZip: right ran out, while left still has: "++show as
@@ -328,7 +329,7 @@ fragileZip [] bs = err$ "fragileZip: left ran out, while right still has: "++sho
 
 
 -- | Like fragileZip, but takes a custom error message.
-fragileZip' :: (Show a, Show b) => [a] -> [b] -> String -> [(a, b)]
+fragileZip' :: (Show a, Show b, HasCallStack) => [a] -> [b] -> String -> [(a, b)]
 fragileZip' [] [] _ = []
 fragileZip' (a:as) (b:bs) m = (a,b) : fragileZip' as bs m
 fragileZip' _ [] m = error m

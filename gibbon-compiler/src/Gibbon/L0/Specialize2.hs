@@ -18,6 +18,7 @@ import           Data.Loc
 import           Data.Foldable ( foldlM )
 import qualified Data.Map as M
 import qualified Data.Set as S
+import           GHC.Stack (HasCallStack)
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
@@ -345,13 +346,13 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
         monoDDefs ddefs1'
 
 -- After 'monoLambdas' runs, (mono_lams MonoState) must be empty
-assertLambdasMonomorphized :: Monad m => MonoState -> m ()
+assertLambdasMonomorphized :: (Monad m, HasCallStack) => MonoState -> m ()
 assertLambdasMonomorphized MonoState{mono_lams} =
   if M.null mono_lams
   then pure ()
   else error $ "Expected 0 lambda monormorphization obligations. Got " ++ sdoc mono_lams
 
-assertSameLength :: (Out a, Out b, Monad m) => String -> [a] -> [b] -> m ()
+assertSameLength :: (Out a, Out b, Monad m, HasCallStack) => String -> [a] -> [b] -> m ()
 assertSameLength msg as bs =
   if length as /= length bs
   then error $ "assertSameLength: Type applications " ++ sdoc bs ++ " incompatible with the type variables: " ++
