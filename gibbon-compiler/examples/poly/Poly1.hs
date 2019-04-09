@@ -114,13 +114,13 @@ gibbon_main =
          w1 = fmapEither isEven w
 
          v :: Int
-         v = dot succ succ 10
+         v = dot (plus 1) (plus 1) 10
 
          u :: Bool
          u = ap not True
 
          t :: Int
-         t = test_rec succ v
+         t = test_rec (plus 1) v
 
          s :: Int
          s = foldr plus 0 (Cons 1 (Cons 2 Nil))
@@ -134,8 +134,10 @@ gibbon_main =
          p :: Either Int Bool
          p = ap id2 w1
 
+         o = map (plus 10) (Cons 1 (Cons 2 Nil))
+
          test = (id1 10, id1 True, id2 11, id2 False, foo1 1 2, foo2 3 4,
-                 x, w, w1, v, u, t, s, r, q, p)
+                 x, w, w1, v, u, t, s, r, q, p, o)
        in test
 
 main :: IO ()

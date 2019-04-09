@@ -130,6 +130,25 @@ isFunTy :: Ty0 -> Bool
 isFunTy ArrowTy{} = True
 isFunTy _ = False
 
+isCallUnsaturated :: TyScheme -> [L Exp0] -> Bool
+isCallUnsaturated sigma args = length args < length (arrIns sigma)
+
+saturateCall :: MonadState Int m => TyScheme -> L Exp0 -> m (L Exp0)
+saturateCall sigma (L loc ex) =
+  case ex of
+    AppE f [] args -> do
+      -- # args needed to saturate this call-site.
+      let args_wanted = length (arrIns sigma) - length args
+      new_args <- mapM (\_ -> gensym "sat_arg_") [0..(args_wanted-1)]
+      new_tys  <- mapM (\_ -> newMetaTy) new_args
+      pure $ L loc $
+        Ext (LambdaE (zip new_args new_tys)
+               (l$ AppE f [] (args ++ (map (l . VarE) new_args))))
+
+    AppE _ tyapps _ ->
+      error $ "unCurryCall: Expected tyapps to be [], got: " ++ sdoc tyapps
+    _ -> error $ "unCurryCall: " ++ sdoc ex ++ " is not a call-site."
+
 -- | Get the free TyVars from types; no duplicates in result.
 tyVarsInTy :: Ty0 -> [TyVar]
 tyVarsInTy ty = tyVarsInTys [ty]

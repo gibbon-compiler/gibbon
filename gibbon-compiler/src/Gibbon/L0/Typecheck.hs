@@ -95,21 +95,28 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
     LitSymE{} -> pure (sbst, SymTy0, ex)
 
     AppE f _tyapps args -> do
-      (metas, fn_ty_inst) <-
+      (sigma, (metas, fn_ty_inst)) <-
         case (M.lookup f venv, M.lookup f fenv) of
-          (Just lam_ty, _) -> instantiate lam_ty
-          (_, Just fn_ty)  -> instantiate fn_ty
+          (Just lam_ty, _) -> (lam_ty,) <$> instantiate lam_ty
+          (_, Just fn_ty)  -> (fn_ty,) <$> instantiate fn_ty
           _ -> err $ text "Unknown function:" <+> doc f
-      (s2, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
-      let fn_ty_inst' = zonkTy s2 fn_ty_inst
-      s3 <- unifyl e (arrIns' fn_ty_inst') arg_tys
-      fresh <- newMetaTy
-      s4 <- unify e (ArrowTy arg_tys fresh) fn_ty_inst'
-      -- Fill in type applications for specialization...
-      --     id 10 ===> id [Int] 10
-      let tyapps = map (zonkTy s3) metas
-          s5 = s2 <> s3 <> s4
-      pure (s5, zonkTy s5 fresh, AppE f tyapps (map (zonkExp s5) args_tc))
+
+      if isCallUnsaturated sigma args
+      then do
+        e' <- saturateCall sigma e
+        (s1, e_ty, e'') <- tcExp ddefs sbst venv fenv bound_tyvars e'
+        pure (s1, e_ty, unLoc e'')
+      else do
+        (s2, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
+        let fn_ty_inst' = zonkTy s2 fn_ty_inst
+        s3 <- unifyl e (arrIns' fn_ty_inst') arg_tys
+        fresh <- newMetaTy
+        s4 <- unify e (ArrowTy arg_tys fresh) fn_ty_inst'
+        -- Fill in type applications for specialization...
+        --     id 10 ===> id [Int] 10
+        let tyapps = map (zonkTy s3) metas
+            s5 = s2 <> s3 <> s4
+        pure (s5, zonkTy s5 fresh, AppE f tyapps (map (zonkExp s5) args_tc))
 
     PrimAppE pr args -> do
       (s1, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
