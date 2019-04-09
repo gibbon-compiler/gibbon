@@ -752,7 +752,7 @@ spec prg@Prog{ddefs,fundefs,mainExp} = do
             fn = fns # fn_name
             ((fn_name, refs), new_fn_name) = M.elemAt 0 (sp_funs_todo low)
         specFun ddefs (progToEnv prg) new_fn_name refs fn
-        state (\st -> ((), st { sp_funs_todo = M.deleteAt 0 (sp_funs_todo st) }))
+        state (\st -> ((), st { sp_funs_todo = M.delete (fn_name, refs) (sp_funs_todo st) }))
         fixpoint
 
     purgeHO :: FunDefs0 -> FunDefs0
@@ -820,13 +820,13 @@ becomes
                | otherwise -> VarE v
         AppE f [] ls | f == old  -> AppE new [] (map go ls)
                      | otherwise -> AppE f [] (map go ls)
-        AppE _ (_:_) _ -> error $ "specExp: Call-site not monomorphized: " ++ sdoc ex
+        AppE _ (_:_) _ -> error $ "subst': Call-site not monomorphized: " ++ sdoc ex
         LitE _             -> ex
         LitSymE _          -> ex
         PrimAppE p ls      -> PrimAppE p $ map go ls
         LetE (v,[],t,rhs) bod | v == old  -> LetE (v,[],t,go rhs) bod
                               | otherwise -> LetE (v,[],t,go rhs) (go bod)
-        LetE (_,(_:_),_,_) _ -> error $ "specExp: Let not monomorphized: " ++ sdoc ex
+        LetE (_,(_:_),_,_) _ -> error $ "subst': Let not monomorphized: " ++ sdoc ex
         ProjE i e  -> ProjE i (go e)
         CaseE e ls -> CaseE (go e) (map f ls)
                           where f (c,vs,er) = if elem old (map fst vs)
@@ -837,8 +837,8 @@ becomes
         TimeIt e t b      -> TimeIt (go e) t b
         IfE a b c         -> IfE (go a) (go b) (go c)
         ParE a b          -> ParE (go a) (go b)
-        MapE{} -> error $ "specExp: TODO: " ++ sdoc ex
-        FoldE{} -> error $ "specExp: TODO: " ++ sdoc ex
+        MapE{} -> error $ "subst': TODO: " ++ sdoc ex
+        FoldE{} -> error $ "subst': TODO: " ++ sdoc ex
 
         Ext ext ->
           case ext of
