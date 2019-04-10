@@ -97,10 +97,18 @@ type Exp = L Exp2
 data TCError = GenericTC String Exp
              | VarNotFoundTC Var Exp
              | UnsupportedExpTC Exp
-             | DivergingEffectsTC Exp LocationTypeState LocationTypeState
              | LocationTC String Exp LocVar LocVar
              | ModalityTC String Exp LocVar LocationTypeState
-               deriving (Read,Show,Eq,Ord, Generic, NFData)
+               deriving (Read,Eq,Ord,Generic,NFData)
+
+instance Show TCError where
+    show (GenericTC str e) = "Error typechecking L2 Program\nIn the expression:\n" ++ (sdoc e) ++ "\n" ++ str ++ "\n"
+    show (VarNotFoundTC v e) = "Variable not found: " ++ (show v) ++ "\nIn the expression:\n" ++ (sdoc e) ++ "\n"
+    show (UnsupportedExpTC e) = "Unsupported expression:\n" ++ (sdoc e) ++ "\n"
+    show (LocationTC str e lv1 lv2) = "Location typechecking error: " ++ str ++ "\nIn the expression:\n" ++ (sdoc e)
+                                      ++ "\nLocations: " ++ (show lv1) ++ ", " ++ (show lv2) ++ "\n"
+    show (ModalityTC str e lv lts) = "Modality typechecking error: " ++ str ++ "\nIn the expression:\n" ++ (sdoc e)
+                                     ++ "\nLocation: " ++ (show lv) ++ "\nLocation type state: " ++ (show lts) ++ "\n"
 
 -- | The type checking monad. Just for throwing errors, but could in the future be parameterized
 -- by whatever other logging, etc, monad we want the compiler to use.
@@ -218,22 +226,22 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                  DictInsertP ty -> do
                    len3
                    let [d,k,v]  = tys
-                   _ <- ensureEqualTy exp (SymDictTy ty) d
+                   _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
                    _ <- ensureEqualTy exp SymTy k
-                   _ <- ensureEqualTy exp ty v
+                   _ <- ensureEqualTyNoLoc exp ty v
                    return (d, tstate)
 
                  DictLookupP ty -> do
                    len2
                    let [d,k]  = tys
-                   _ <- ensureEqualTy exp (SymDictTy ty) d
+                   _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
                    _ <- ensureEqualTy exp SymTy k
                    return (ty, tstate)
 
                  DictHasKeyP ty -> do
                    len2
                    let [d,k]  = tys
-                   _ <- ensureEqualTy exp (SymDictTy ty) d
+                   _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
                    _ <- ensureEqualTy exp SymTy k
                    return (BoolTy, tstate)
 
@@ -601,6 +609,7 @@ ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
 ensureEqualTyNoLoc :: Exp -> Ty2 -> Ty2 -> TcM Ty2
 ensureEqualTyNoLoc exp ty1 ty2 =
   case (ty1,ty2) of
+    (SymDictTy ty1, SymDictTy ty2) -> ensureEqualTyNoLoc exp ty1 ty2
     (PackedTy dc1 _, PackedTy dc2 _) -> if dc1 == dc2
                                         then return ty1
                                         else ensureEqualTy exp ty1 ty2

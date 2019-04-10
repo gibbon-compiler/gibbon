@@ -336,7 +336,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
 
     AppE{} -> dl <$> cursorizeAppE ddfs fundefs denv tenv (L p ex)
 
-    PrimAppE _ _ -> error $ "cursorizePackedExp: unexpected PrimAppE in packed context" ++ sdoc ex
+    PrimAppE _ _ -> error $ "cursorizePackedExp: unexpected PrimAppE in packed context:" ++ sdoc ex
 
     -- The only primitive that returns packed data is ReadPackedFile:
     -- This is simpler than TimeIt below.  While it's out-of-line,

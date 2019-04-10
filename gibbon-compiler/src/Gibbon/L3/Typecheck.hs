@@ -9,6 +9,7 @@ module Gibbon.L3.Typecheck
 
 import Control.Monad.Except
 import Data.Loc
+import Data.Functor.Identity
 import Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
 import qualified Data.List as L
@@ -194,22 +195,22 @@ tcExp isPacked ddfs env exp@(L p ex) =
         DictInsertP ty -> do
           len3
           let [d,k,v] = tys
-          _ <- ensureEqualTy exp (SymDictTy ty) d
+          _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
           _ <- ensureEqualTy exp SymTy k
-          _ <- ensureEqualTy exp ty v
+          _ <- ensureEqualTy exp CursorTy v
           return d
 
         DictLookupP ty -> do
           len2
           let [d,k] = tys
-          _ <- ensureEqualTy exp (SymDictTy ty) d
+          _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
           _ <- ensureEqualTy exp SymTy k
-          return ty
+          return CursorTy
 
         DictHasKeyP ty -> do
           len2
           let [d,k] = tys
-          _ <- ensureEqualTy exp (SymDictTy ty) d
+          _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
           _ <- ensureEqualTy exp SymTy k
           return BoolTy
 
@@ -376,3 +377,21 @@ tcCases isPacked ddfs env cs = do
                                          ++ sdoc acc ++ ", " ++ sdoc ty) ex)
          (head tys) (zipWith (\ty (_,_,ex) -> (ex,ty)) tys cs)
   return $ head tys
+
+ensureEqualTyNoLoc :: (Eq l, Out l) => L (PreExp e l (UrTy l)) -> UrTy l -> UrTy l ->
+                      ExceptT (TCError (L (PreExp e l (UrTy l)))) Identity (UrTy l)
+ensureEqualTyNoLoc exp t1 t2 =
+  case (t1,t2) of
+    (SymDictTy ty1, SymDictTy ty2) -> ensureEqualTyNoLoc exp ty1 ty2
+    (PackedTy dc1 _, PackedTy dc2 _) -> if dc1 == dc2
+                                        then return t1
+                                        else ensureEqualTy exp t1 t2
+    (ProdTy tys1, ProdTy tys2) -> do
+        checks <- return $ L.map (\(ty1,ty2) -> ensureEqualTyNoLoc exp ty1 ty2) (zip tys1 tys2)
+        forM_ checks $ \c -> do
+            let c' = runExcept c
+            case c' of
+              Left err -> throwError err
+              Right _  -> return ()
+        return t1
+    _ -> ensureEqualTy exp t1 t2

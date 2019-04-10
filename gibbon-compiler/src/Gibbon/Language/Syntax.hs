@@ -844,7 +844,7 @@ hasPacked t =
     SymTy          -> False
     BoolTy         -> False
     IntTy          -> False
-    SymDictTy ty   -> hasPacked ty
+    SymDictTy _ty  -> False -- hasPacked ty
     ListTy _       -> error "FINISHLISTS"
     PtrTy          -> False
     CursorTy       -> False

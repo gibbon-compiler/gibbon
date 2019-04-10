@@ -146,12 +146,14 @@ instance (Pretty d, Ord d) => Pretty (Prim d) where
                          M.fromList (map (\(a,b) -> (b,a)) (M.toList primMap))
         in case M.lookup pr renderPrim of
               Nothing  ->
-                  case pr of
-                    DictEmptyP ty -> text "empty" <+> pprintWithStyle sty ty
-                    DictHasKeyP ty -> text "haskey" <+> pprintWithStyle sty ty
-                    DictInsertP ty -> text "insert" <+> pprintWithStyle sty ty
-                    DictLookupP ty -> text "lookup" <+> pprintWithStyle sty ty
-                    _ -> error $ "pprint: Unknown primitive"
+                  let wty ty = text "<" <> pprintWithStyle sty ty <> text ">"
+                  in 
+                    case pr of
+                      DictEmptyP ty  -> text "DictEmpty"  <> wty ty
+                      DictHasKeyP ty -> text "DictHasKey" <> wty ty
+                      DictInsertP ty -> text "DictInsert" <> wty ty
+                      DictLookupP ty -> text "DictLookup" <> wty ty
+                      _ -> error $ "pprint: Unknown primitive"
               Just str -> text str
 
 
@@ -238,7 +240,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
 
                   _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprintWithStyle sty pr
 
-                  _ -> pprintWithStyle sty pr <> parens (hsep $ map (pprintWithStyle sty) es)
+                  _ -> pprintWithStyle sty pr <> parens (hsep $ punctuate "," $ map (pprintWithStyle sty) es)
 
           LetE (v,ls,ty,e1) e2 -> (text "let") <+>
                                   pprintWithStyle sty v <+> doublecolon <+>

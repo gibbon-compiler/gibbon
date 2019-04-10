@@ -737,11 +737,7 @@ inferExp env@FullEnv{dataDefs}
         SingleDest _ -> err "Cannot unify DictEmpty with destination"
         TupleDest _ -> err "Cannot unify DictEmpty with destination"
         NoDest -> do dty' <- lift $ lift $ convertTy dty
-                     let loc = locOfTy dty'
-                     _ <- fixLoc loc
-                     r <- lift $ lift $ freshRegVar
-                     let cs = [StartRegionL loc r]
-                     return (lc$ PrimAppE (DictEmptyP dty') [], SymDictTy dty', cs)
+                     return (lc$ PrimAppE (DictEmptyP dty') [], SymDictTy dty', [])
 
     PrimAppE (DictHasKeyP dty) [d,k] ->
       case dest of
