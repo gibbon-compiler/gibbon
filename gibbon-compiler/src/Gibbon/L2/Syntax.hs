@@ -91,6 +91,7 @@ data PreLocExp loc = StartOfLE Region
                    | AfterVariableLE Var -- Name of variable v. This loc is size(v) bytes after.
                                     loc  -- Location which this location is offset from.
                    | InRegionLE Region
+                   | FreeLE
                    | FromEndLE  loc
                      deriving (Read, Show, Eq, Ord, Generic, NFData)
 

@@ -401,6 +401,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
           Ext (IndirectionE{}) -> return e
 
+          Ext (LetLocE v FreeLE e) -> do
+                 e' <- go e
+                 return $ Ext (LetLocE v FreeLE e')
+
           Ext ext -> error $ "RouteEnds: Shouldn't encounter " ++ sdoc ext
 
           MapE{} -> error "RouteEnds: todo MapE"

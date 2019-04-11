@@ -390,6 +390,11 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    (ty,tstate1) <- tcExp ddfs env funs constrs regs tstatein e
                    return (ty,tstate1)
 
+                 FreeLE -> do
+                   let constrs1 = extendConstrs (InRegionC v globalReg) $ constrs
+                   (ty,tstate1) <- tcExp ddfs env funs constrs1 regs tstatein e
+                   return (ty,tstate1)
+
                  _ -> throwError $ GenericTC "Invalid letloc form" exp
 
       Ext (RetE _ls v) -> do
@@ -554,6 +559,9 @@ funRegs ((LRM _l r _m):lrms) =
     let (RegionSet rs) = funRegs lrms
     in RegionSet $ S.insert (regionToVar r) rs
 funRegs [] = RegionSet $ S.empty
+
+globalReg :: Region
+globalReg = GlobR "GLOBAL" BigInfinite
 
 -- | Get the constraints from the location bindings in a function type.
 funConstrs :: [LRM] -> ConstraintSet

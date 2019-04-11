@@ -154,28 +154,25 @@ typedef char* CursorTy;
 typedef struct dict_item {
   struct dict_item * next;
   int key;
-  union {
-    int intval;
-    void * ptrval;
-  };
+  void * ptrval;
 } dict_item_t;
 
 dict_item_t * dict_alloc() {
   return ALLOC(sizeof(dict_item_t));
 }
 
-dict_item_t *dict_insert_int(dict_item_t *ptr, SymTy key, IntTy val) {
+dict_item_t *dict_insert_ptr(dict_item_t *ptr, SymTy key, PtrTy val) {
   dict_item_t *ret = dict_alloc();
   ret->key = key;
-  ret->intval = val;
+  ret->ptrval = val;
   ret->next = ptr;
   return ret;
 }
 
-IntTy dict_lookup_int(dict_item_t *ptr, SymTy key) {
+PtrTy dict_lookup_int(dict_item_t *ptr, SymTy key) {
   while (ptr != 0) {
     if (ptr->key == key) {
-      return ptr->intval;
+      return ptr->ptrval;
     } else {
       ptr = ptr->next;
     }

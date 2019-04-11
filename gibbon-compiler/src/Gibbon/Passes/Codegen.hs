@@ -405,28 +405,19 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                  AndP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) && $(codegenTriv pright)); |]]
-                 DictInsertP IntTy -> let [(outV,ty)] = bnds
+                 DictInsertP PtrTy -> let [(outV,ty)] = bnds
                                           [(VarTriv dict),keyTriv,valTriv] = rnds in pure
-                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_int($id:dict, $(codegenTriv keyTriv), $(codegenTriv valTriv)); |] ]
-                 DictInsertP SymTy -> let [(outV,ty)] = bnds
-                                          [(VarTriv dict),keyTriv,valTriv] = rnds in pure
-                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_int($id:dict, $(codegenTriv keyTriv), $(codegenTriv valTriv)); |] ]
-                 DictInsertP ty -> error $ "DictInsertP not implemented for type " ++ (show ty)
-                 DictLookupP IntTy -> let [(outV,IntTy)] = bnds
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_ptr($id:dict, $(codegenTriv keyTriv), $(codegenTriv valTriv)); |] ]
+                 DictInsertP ty -> error $ "DictInsertP codegen unavailable for " ++ (show ty)
+                 DictLookupP PtrTy -> let [(outV,PtrTy)] = bnds
                                           [(VarTriv dict),keyTriv] = rnds in pure
-                    [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = dict_lookup_int($id:dict, $(codegenTriv keyTriv)); |] ]
-                 DictLookupP SymTy -> let [(outV,IntTy)] = bnds
-                                          [(VarTriv dict),keyTriv] = rnds in pure
-                    [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = dict_lookup_int($id:dict, $(codegenTriv keyTriv)); |] ]
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy PtrTy) $id:outV = dict_lookup_ptr($id:dict, $(codegenTriv keyTriv)); |] ]
                  DictLookupP ty -> error $ "DictLookupP not implemented for type " ++ (show ty)
                  DictEmptyP _ty -> let [(outV,ty)] = bnds
                                    in pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = 0; |] ]
-                 DictHasKeyP IntTy -> let [(outV,IntTy)] = bnds
+                 DictHasKeyP PtrTy -> let [(outV,IntTy)] = bnds
                                           [(VarTriv dict)] = rnds in pure
-                    [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = dict_has_key_int($id:dict); |] ]
-                 DictHasKeyP SymTy -> let [(outV,IntTy)] = bnds
-                                          [(VarTriv dict)] = rnds in pure
-                    [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = dict_has_key_int($id:dict); |] ]
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = dict_has_key_ptr($id:dict); |] ]
 
                  NewBuffer mul -> do
                    let [(reg, CursorTy),(outV,CursorTy)] = bnds

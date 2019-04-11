@@ -197,6 +197,7 @@ data Constraint = AfterConstantL LocVar Int LocVar
                 | AfterTagL LocVar LocVar
                 | StartRegionL LocVar Region
                 | AfterCopyL LocVar Var Var LocVar Var [LocVar]
+                | FreeL LocVar
                   deriving (Show, Eq, Generic)
 
 instance Out Constraint
@@ -297,6 +298,7 @@ inferExp' env lex0@(L sl1 exp) dest =
                       AfterVariableL lv1 v lv2 -> lc$ Ext (LetLocE lv1 (AfterVariableLE v lv2) a)
                       StartRegionL lv r -> lc$ Ext (LetRegionE r (lc $ Ext (LetLocE lv (StartOfLE r) a)))
                       AfterTagL lv1 lv2 -> lc$ Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
+                      FreeL lv -> lc$ Ext (LetLocE lv FreeLE a)
                       AfterCopyL lv1 v1 v' lv2 f lvs ->
                         let arrty = arrOut $ lookupFEnv f env
                             -- Substitute the location occurring at the call site
@@ -720,15 +722,16 @@ inferExp env@FullEnv{dataDefs}
 
     PrimAppE (DictLookupP dty) [d,k] ->
       case dest of
-        SingleDest loc -> do (d',SymDictTy dty',_dcs) <- inferExp env d NoDest
+        SingleDest loc -> do (d',SymDictTy _dty,_dcs) <- inferExp env d NoDest
                              (k',_,_kcs) <- inferExp env k NoDest
-                             loc' <- lift $ lift $ freshLocVar "lookup"
+                             dty' <- lift $ lift $ convertTy dty
+                             let loc' = locOfTy dty'
                              _ <- fixLoc loc'
                              let e' = lc$ PrimAppE (DictLookupP dty') [d',k']
-                                 ty = SymDictTy dty'
+                                 cs = [FreeL loc']
                              unify loc loc'
-                                   (return (e',ty,[]))
-                                   (copy (e',ty,[]) loc)
+                                   (return (e',dty',cs))
+                                   (copy (e',dty',cs) loc)
         TupleDest _ -> err "Cannot unify DictLookup with tuple destination"
         NoDest -> err "Cannot unify DictLookup with no destination"
 
@@ -1096,6 +1099,8 @@ cleanExp (L i e) =
 
       Ext (LetRegionE r e) -> let (e',s') = cleanExp e
                               in (l$ Ext (LetRegionE r e'), s')
+      Ext (LetLocE loc FreeLE e) -> let (e', s) = cleanExp e
+                                    in (l$ Ext (LetLocE loc FreeLE e'), s)
       Ext (LetLocE loc lex e) -> let (e',s') = cleanExp e
                                  in if S.member loc s'
                                     then let ls = case lex of

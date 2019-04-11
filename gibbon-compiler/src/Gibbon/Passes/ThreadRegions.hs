@@ -126,6 +126,10 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
 
     Ext ext ->
       case ext of
+        LetLocE loc FreeLE bod ->
+          Ext <$> LetLocE loc FreeLE <$>
+            threadRegionsExp ddefs fundefs isMain renv env2 bod
+                             
         -- Update renv with a binding for loc
         LetLocE loc rhs bod -> do
           let reg = case rhs of
@@ -134,6 +138,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
                       AfterConstantLE _ lc -> renv # lc
                       AfterVariableLE _ lc -> renv # lc
                       FromEndLE lc         -> renv # lc -- TODO: This needs to be fixed
+                      FreeLE -> undefined
           Ext <$> LetLocE loc rhs <$>
             threadRegionsExp ddefs fundefs isMain (M.insert loc reg renv) env2 bod
 

@@ -79,6 +79,10 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
 
     Ext ext ->
       case ext of
+        LetLocE loc FreeLE bod ->
+          Ext <$> LetLocE loc FreeLE <$>
+            removeCopiesExp ddefs fundefs lenv env2 bod
+
         -- Update lenv with a binding for loc
         LetLocE loc rhs bod -> do
           let reg = case rhs of

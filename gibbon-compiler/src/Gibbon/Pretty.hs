@@ -301,6 +301,7 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
           AfterVariableLE v loc -> lparen <> pprint loc <+> text "+" <+> doc v <> rparen
           InRegionLE r  -> lparen <> text "inregion" <+> text (show r) <> rparen
           FromEndLE loc -> lparen <> text "fromend" <+> pprint loc <> rparen
+          FreeLE -> lparen <> text "free" <> rparen
 
 instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
     pprintWithStyle _ ex0 =
