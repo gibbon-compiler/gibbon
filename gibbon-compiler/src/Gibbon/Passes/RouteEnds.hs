@@ -313,6 +313,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           LetE (v,ls,ty,e1@(L _ MkProdE{})) e2 -> do
             LetE (v,ls,ty,e1) <$> go e2
 
+          LetE (v,ls,ty,e1@(L _ (PrimAppE (DictLookupP _) _))) e2 -> do
+            LetE (v,ls,ty,e1) <$> go e2
+
           --
 
           LetE (v,ls,ty@(PackedTy n l),e1) e2 -> do
@@ -402,10 +405,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           Ext (IndirectionE{}) -> return e
 
           -- For some reason this pass goes into an infinite loop if this is uncommented:
-                                  
-          -- Ext (LetLocE v FreeLE e) -> do
-          --        e' <- go e
-          --        return $ Ext (LetLocE v FreeLE e')
+
+          Ext (LetLocE v FreeLE e) -> do
+                 e' <- go e
+                 return $ Ext (LetLocE v FreeLE e')
 
           Ext ext -> error $ "RouteEnds: Shouldn't encounter " ++ sdoc ext
 
