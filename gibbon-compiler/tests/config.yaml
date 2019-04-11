@@ -56,6 +56,7 @@ tests:
   - name: test06g_rec.gib
   - name: test07b_iterate.gib
   - name: test07_time.gib
+  - name: test08_dict.gib
   - name: test09_recur.gib
   - name: test11b_fundata.gib
   - name: test11c_funrec.gib
@@ -293,11 +294,9 @@ tests:
   - name: test06i_casecase.gib
     failing: [gibbon2, gibbon1]
   - name: test08b_dict.gib
-    failing: [pointer, gibbon2, gibbon1]
+    failing: [pointer]
   - name: test08c_dict.gib
     failing: [pointer, gibbon2, gibbon1]
-  - name: test08_dict.gib
-    failing: [gibbon2, gibbon1]
   - name: test08d_sharedict.gib
     failing: [pointer, gibbon2, gibbon1]
   - name: test10b_desugar.gib
