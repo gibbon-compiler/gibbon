@@ -401,9 +401,11 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
           Ext (IndirectionE{}) -> return e
 
-          Ext (LetLocE v FreeLE e) -> do
-                 e' <- go e
-                 return $ Ext (LetLocE v FreeLE e')
+          -- For some reason this pass goes into an infinite loop if this is uncommented:
+                                  
+          -- Ext (LetLocE v FreeLE e) -> do
+          --        e' <- go e
+          --        return $ Ext (LetLocE v FreeLE e')
 
           Ext ext -> error $ "RouteEnds: Shouldn't encounter " ++ sdoc ext
 
