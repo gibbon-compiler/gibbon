@@ -886,11 +886,12 @@ buildTupleCandidatesTable fDefs exp argsVars =
 tuple :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [Var] -> [(Var, Var, Int, Var)]
   -> M.Map Var (M.Map Int Int) ->  PassM (L Exp1,  FunDefs1)
 tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
-  let oldExp = oldExp_
+  let oldExp = removeCommonExpressions (removeUnusedDefsExp oldExp_ )
   -- candidates1 : a list of [(fName, CallExpressions)] functions that traverse
   -- same input 
   let candidates1 = L.filter f (M.toList (buildTupleCandidatesTable
-        fdefs  oldExp argsVars) ) where f (_, ls) = L.length ls> 1
+        fdefs  oldExp argsVars) )`debug`( "exp body:" L.++ render (pprint oldExp))
+        where f (_, ls) = L.length ls> 1 
 
   --candidates2: a list  [(tupleName, calls, firstCall)]
   let candidates2 = L.map
@@ -944,7 +945,7 @@ tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
                 traversedArg  prevFusedFuncs redirectMaps
                   `debug`("\ntupling:" L.++ show tupledFName)
 
-            let tupledFunction'' = tupledFunction'{funBody=recTupledBody }
+            let tupledFunction'' = tupledFunction'{funBody=recTupledBody} --`debug` ("res" L.++ (render (pprint recTupledBody)))
             let tupledFunction''' =tupledFunction''{
               funBody= removeUnusedDefsExp (
                  simplifyProjectionsOfProducts(
@@ -973,8 +974,9 @@ tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
             let exp'' =
                   simplifyProjectionsOfProducts exp'
            -- return (exp'', fdefs'',  M.insert  tupledFName redirectMap redirectMaps)
-            return (exp'', fdefs'',   redirectMaps)
-
+            return (exp'', fdefs'',   redirectMaps) 
+              -- `debug` render (pprint  (testPositions 0 0 exp'')))
+              `debug`    show (testPositions 0 0 (funBody tupledFunction5))
     constructName ls =
        toVar( "_TUP_" L.++ L.foldl  appendName "" ls L.++  "_TUP_" )
     appendName str (AppE fName _ _) =
@@ -1073,7 +1075,7 @@ transform  ddefs funDefs  exp argsVars prevFusedFuncs_ doTupling processedCandid
         (tupledBody, tupleDefs) <-
           if doTupling
             then tuple ddefs fdefs final_clean argsVars prevFusedFuncs
-               M.empty
+               M.empty `debug` ("tupling top level expr")
             else return (final_clean, M.empty)
         return (tupledBody, M.union fdefs tupleDefs, prevFusedFuncs)
 
@@ -1129,44 +1131,93 @@ fusion2 (L1.Prog defs funs main) = do
 
 
 {-- Those  functions are used for the redundancy analysis 
-
 parametrize an expression around the input set of vars, 
 using variables _p0_ _p1_ _p2_ ..etx (we assumes those are not going to
 appear anywhere else in the program we need a better way maybe)
-parametrizeExp :: L Exp1 -> S.Set Var -> (L Exp1)
-parametrizeExp exp vars  = rec exp M.empty []
- -- the map tracks the already mapped projections (deal with ProjE i xi as a variable )
- -- the list returns the argument os the expression in it in the order they where discovered  (for the first time )   
-  where 
-    rec ex = case (getExp ex) of
-      LetE (v, ls, t, bind) body -> error("let not expected in parametrizeExp")
-      CaseE e ls    -> error("CaseE not expected in parametrizeExp")
-      AppE v loc e -> error("AppE not expected in parametrizeExp")
-      ProjE i e -> 
-           case e of 
-              VarE v ->
-                   if (S.member v vars) 
-                    then
-                    
-                    else
-                      l$ ProjE i e
-              otherwise -> l$ ProjE i e
+-}
 
+testPositions :: Int -> Int -> L Exp1 -> Bool
+testPositions i j exp = 
+ let inlinedContent = inlineAllButAppE exp 
+ in case unLoc inlinedContent of 
+      CaseE e ls -> L.foldl check True ls 
+        where check b (_, _, subExp) = 
+               let vars = collectVars subExp
+                   leafProd = getLeafProd subExp
+                   prametrizedExpressions = case unLoc leafProd of 
+                         (MkProdE ls) -> L.map  (parametrizeExp  vars) ls
+                   (expi, parsi)=  prametrizedExpressions L.!! i
+                   (expj, parsj) = prametrizedExpressions L.!! j
+               in ((expi==expj) && b) `debug` ("ok deb:" L.++ show (vars, expi, parsi))
+                   
 
-inlineAllButAppE:: L Exp1 -> L Exp1
-inlineAllButAppE ex  = rec ex 
+getLeafProd :: L Exp1 -> L Exp1 
+getLeafProd = rec
  where 
-  rec ex = case (getExp ex) of
+   rec ex = 
+     case unLoc ex of
+       LetE (v, ls, t, L _ AppE{}) body -> rec body 
+       leaf@MkProdE{} -> l leaf 
+       x-> error (show x)
+
+
+collectVars :: L Exp1 -> S.Set Var
+collectVars = rec 
+ where 
+   rec ex = case unLoc ex of
+     LetE (v, ls, t, L _ AppE{}) body ->
+        S.insert v (rec body)
+     MkProdE{} -> S.empty  
+
+parametrizeExp ::  S.Set Var -> L Exp1 -> (L Exp1, [(Int, Var)])
+parametrizeExp vars exp   = rec exp [] 
+  where 
+    rec ex ls = case unLoc ex of
+      LetE{} -> error "let not expected in parametrizeExp"
+      CaseE{}-> error "CaseE not expected in parametrizeExp"
+      AppE v loc args -> 
+        let (args', pList) = L.foldl f ([], ls) args 
+             where
+               f (expList, projList) exp = 
+                  let (exp' , ls') = rec exp projList 
+                  in (expList L.++ [exp'], projList L.++ ls')
+        in (l (AppE v loc args'), pList)
+
+      DataConE loc dataCons expList->
+        let (expList', pList) = L.foldl f ([], ls) expList 
+             where
+               f (expList, projList) exp = 
+                 let (exp' , ls') = rec exp projList 
+                 in (expList L.++ [exp'], projList L.++ ls')
+        in (l (DataConE loc dataCons expList'), pList)
+
+      x@(ProjE i (L _ (VarE v))) -> 
+          if S.member v vars 
+              then
+                let exp' = VarE (toVar ("par" L.++ show (L.length ls)))
+                    ls' = ls L.++ [(i, v)]
+                in (l exp', ls')
+              else
+                (l x, ls)
+      otherwise -> (l otherwise, ls)
+
+
+-- this function inline all expressions except function application 
+-- that returns tuples 
+inlineAllButAppE::L Exp1 -> L Exp1
+inlineAllButAppE = rec 
+ where 
+  rec ex = case unLoc ex of
     LetE (v, ls, t, bind) body ->
-      case (getExp bind) of 
-          AppE _ _ _ ->  l$  LetE (v, ls, t, bind) (rec body)
-          otherwise -> 
-            let oldExp = l $ VarE v  
-                newExp = bind
-                body' = substE oldExp newExp body
-            in rec (body') 
+     let oldExp = l $ VarE v  
+         newExp = bind
+         body' = substE oldExp newExp body
+     in case unLoc bind of 
+          AppE{} -> case t  of 
+               ProdTy{} -> l$  LetE (v, ls, t, bind) (rec body)
+               _ ->  rec body' 
+          _      ->  rec body' 
     CaseE e ls    -> 
       let ls' = L.map (\(x, y, exp) -> (x, y, rec exp)) ls
       in  l$ CaseE e ls'    
-    otherwise ->  l$ otherwise
--}
+    otherwise ->  l otherwise
