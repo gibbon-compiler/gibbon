@@ -1266,12 +1266,8 @@ inlineAllButAppE = rec
 
 
 -- This function optimizes the tupled function by removing redundant output
--- parameters and their computation
--- The function optimized function is a single case expression, the pass will
--- look at the leaf expression for each possible match, those are tuples of the
--- same size (prev optimizations guarantee that )
--- if all two position are the same in all of them
--- (X1, X2, X3, X4 = X1, X5) if X1= X4 for all of them then eliminate X4.
+-- parameters and their computation.
+-- redundant positions are pr-computed and stored in testedPositions. 
 removeRedundantOutput :: FunDef1 -> M.Map (Var,Int,Int) Bool  -> (FunDef1, M.Map Int Int, [Int])
 removeRedundantOutput  fdef testedPositions =
     let outputTuples = V.fromList  (collectOutputs (funBody fdef)) in
