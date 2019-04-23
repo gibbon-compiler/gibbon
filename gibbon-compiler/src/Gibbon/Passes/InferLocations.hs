@@ -290,7 +290,7 @@ inferExp' env lex0@(L sl1 exp) dest =
 
       bindAllLocations :: Result -> TiM Result
       bindAllLocations (expr,ty,constrs) = return $ (expr',ty,[])
-          where constrs' = L.nub constrs
+          where constrs' = L.nub $ constrs
                 expr' = foldr addLetLoc expr constrs'
                 addLetLoc i a =
                     case i of
@@ -824,7 +824,7 @@ inferExp env@FullEnv{dataDefs}
         PrimAppE (DictInsertP dty) ls -> do
           (e,ty,cs) <- inferExp env (L sl2 $ PrimAppE (DictInsertP dty) ls) NoDest
           (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
-          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod',ty',L.nub $ cs' ++ cs)
+          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod',ty', L.nub $ cs' ++ cs)
           fcs <- tryInRegion cs'''
           tryBindReg (lc$ L2.LetE (vr,[],ty,e) bod'', ty'', fcs)
 
@@ -895,8 +895,10 @@ inferExp env@FullEnv{dataDefs}
           (bod',ty',cs') <- inferExp (extendVEnv vr rhsTy env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs''
-          tryBindReg (lc$ L2.LetE (vr,locsInTy rhsTy,rhsTy, L sl2 $ L2.CaseE ex' ([a | (a,_,_) <- pairs])) bod'',
-                        ty'', L.nub $ cs ++ fcs)
+          let ccs  = L.nub $ cs ++ fcs ++ (concat $ [c | (_,_,c) <- pairs])
+              cexp = L sl2 $ L2.CaseE ex' ([a | (a,_,_) <- pairs])
+          tryBindReg (lc$ L2.LetE (vr,locsInTy rhsTy,rhsTy, cexp) bod'',
+                        ty'', ccs)
 
         MkProdE ls    -> do
           lsrec <- mapM (\e -> inferExp env e NoDest) ls
