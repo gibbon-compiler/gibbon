@@ -296,7 +296,7 @@ tests:
   - name: test08b_dict.gib
     failing: [pointer]
   - name: test08c_dict.gib
-    failing: [pointer, gibbon2, gibbon1]
+    failing: [pointer]
   - name: test08d_sharedict.gib
     failing: [pointer, gibbon2, gibbon1]
   - name: test10b_desugar.gib

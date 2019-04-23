@@ -87,7 +87,6 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
            <$> go env2 rhs
            <*> go (extendVEnv v ty env2) bod
 
-
     MkProdE es ->
       case stk of
         [] -> flattenProd ddfs stk env2 (l$ ex)
@@ -244,7 +243,6 @@ flattenTy ty =
   where go :: Ty3 -> [Ty3]
         go (ProdTy tys) = concatMap go tys
         go ty' = [ty']
-
 
 -- | Flatten nested tuples in a type-safe way
 --

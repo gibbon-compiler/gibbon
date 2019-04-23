@@ -143,7 +143,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
         IntTy     -> IntTy
         BoolTy    -> BoolTy
         ProdTy ls -> ProdTy $ L.map cursorizeInTy ls
-        SymDictTy ty' -> SymDictTy $ cursorizeInTy ty'
+        SymDictTy _ty -> SymDictTy CursorTy -- $ cursorizeInTy ty'
         PackedTy{}    -> CursorTy
         ListTy ty'    -> ListTy $ cursorizeInTy ty'
         PtrTy -> PtrTy
@@ -336,9 +336,14 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
 
     AppE{} -> dl <$> cursorizeAppE ddfs fundefs denv tenv (L p ex)
 
+    -- DictLookup returns a packed value bound to a free location.
+    PrimAppE (DictLookupP _dty) vs ->
+        do vs' <- forM vs $ \v -> cursorizeExp ddfs fundefs denv tenv v
+           return $ mkDi (l$ PrimAppE (DictLookupP CursorTy) vs') [ l$ Ext NullCursor ]
+
     PrimAppE _ _ -> error $ "cursorizePackedExp: unexpected PrimAppE in packed context:" ++ sdoc ex
 
-    -- The only primitive that returns packed data is ReadPackedFile:
+    -- The only (other) primitive that returns packed data is ReadPackedFile:
     -- This is simpler than TimeIt below.  While it's out-of-line,
     -- it doesn't need memory allocation (NewBuffer/ScopedBuffer).
     -- This is more like the witness case below.
@@ -554,6 +559,9 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                        DynR v _  -> Right$ l$ VarE v
                        -- TODO: docs
                        MMapR _v   -> Left$ denv
+
+    FreeLE -> Left$ denv -- AUDIT: should we just throw away this information?
+
     InRegionLE{}  -> error $ "cursorizeExp: TODO InRegionLE"
   where
     isBound x = case M.lookup x tenv of
@@ -801,7 +809,7 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv (v,locs,ty,rhs) bod
                       [(v, ty),(fresh, ty'),(toEndV v, projTy 1 ty')] ++ [(loc,CursorTy) | loc <- locs]
 
             -- TyEnv Ty2 and L3 expresssions are tagged with different types
-            ty''  = stripTyLocs ty'
+            ty''  = curDict $ stripTyLocs ty'
             rhs'' = l$ VarE fresh
 
             bnds = case locs of
@@ -845,7 +853,7 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv (v,locs,ty,rhs) bod
     | otherwise = do
         rhs' <- cursorizeExp ddfs fundefs denv tenv rhs
         case locs of
-            [] -> LetE (v,[],stripTyLocs ty, rhs') <$>
+            [] -> LetE (v,[],curDict $ stripTyLocs ty, rhs') <$>
                     go (M.insert v ty tenv) bod
 {-
 
@@ -1149,6 +1157,10 @@ projVal (Di e) = mkProj 0 e
 -- | Constructor that combines a regular expression with a list of
 -- corresponding end cursors.
 mkDi :: (L Exp3) -> [(L Exp3)] -> DiExp (L Exp3)
-mkDi x []  = Di $ l$ MkProdE [x, l$ MkProdE []]
-mkDi x [o] = Di $ l$  MkProdE [x, o]
+mkDi x []  = Di $ l$ MkProdE [x,l$ MkProdE []]
+mkDi x [o] = Di $ l$ MkProdE [x, o]
 mkDi x ls  = Di $ l$ MkProdE [x, l$ MkProdE ls]
+
+curDict :: UrTy a -> UrTy a
+curDict (SymDictTy _ty) = SymDictTy CursorTy
+curDict ty = ty

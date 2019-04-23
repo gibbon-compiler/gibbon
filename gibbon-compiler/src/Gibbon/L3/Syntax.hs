@@ -62,6 +62,9 @@ data E3Ext loc dec =
   | WriteCursor Var (L (PreExp E3Ext loc dec)) -- ^ Write a cursor, and return a cursor
   | BumpRefCount Var Var           -- ^ Given an end-of-region ptr, bump it's refcount.
                                    --   Return the updated count (optional).
+  | NullCursor                     -- ^ Constant null cursor value (hack?).
+                                   --   Used for dict lookup, which returns a packed value but
+                                   --   no end witness.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 instance FreeVars (E3Ext l d) where
@@ -82,6 +85,7 @@ instance FreeVars (E3Ext l d) where
       ReadCursor v       -> S.singleton v
       WriteCursor c ex   -> S.insert c (gFreeVars ex)
       BumpRefCount r1 r2 -> S.fromList [r1, r2]
+      NullCursor         -> S.empty
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
   type LocOf (E3Ext l d) = l
@@ -89,7 +93,8 @@ instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
   isTrivial _ = False
 
 instance (Out l, Show l) => Typeable (E3Ext l (UrTy l)) where
-    gRecoverType = error "L3.gRecoverType"
+    gRecoverType ddfs env2 NullCursor = CursorTy
+    gRecoverType _ _ _ = error "L3.gRecoverType"
 
 instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
     gFlattenGatherBinds _ddfs _env ex = return ([], ex)
@@ -114,7 +119,7 @@ cursorizeTy ty =
     IntTy     -> IntTy
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map cursorizeTy ls
-    SymDictTy ty' -> SymDictTy $ cursorizeTy ty'
+    SymDictTy _ty -> SymDictTy CursorTy -- $ cursorizeTy ty'
     PackedTy{}    -> ProdTy [CursorTy, CursorTy]
     ListTy ty'    -> ListTy $ cursorizeTy ty'
     PtrTy    -> PtrTy
@@ -136,4 +141,8 @@ mapMExprs fn (Prog ddfs fundefs mainExp) =
   where funEnv = M.map funTy fundefs
 
 toL3Prim :: Prim L2.Ty2 -> Prim Ty3
+toL3Prim (DictEmptyP  _ty) = DictEmptyP  CursorTy
+toL3Prim (DictInsertP _ty) = DictInsertP CursorTy
+toL3Prim (DictLookupP _ty) = DictLookupP CursorTy
+toL3Prim (DictHasKeyP _ty) = DictHasKeyP CursorTy
 toL3Prim pr = fmap L2.stripTyLocs pr
