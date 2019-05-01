@@ -436,6 +436,7 @@ data PreExp (ext :: * -> * -> *) loc dec =
    | ParE EXP EXP
     -- ^ Parallel tuple combitor.
 
+   | WithArenaE Var EXP
 
    -- Limited list handling:
    -- TODO: RENAME to "Array".
@@ -501,6 +502,7 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         AppE  {}   -> False
         TimeIt {}  -> False
         ParE{}     -> False
+        WithArenaE{} -> False
         Ext ext -> isTrivial ext
 
 
@@ -536,6 +538,8 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
 
       ParE a b -> gFreeVars a `S.union` gFreeVars b
 
+      WithArenaE v e -> S.delete v $ gFreeVars e
+
       Ext q -> gFreeVars q
 
 
@@ -569,6 +573,8 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
 
       ParE a b -> ProdTy $ L.map (gRecoverType ddfs env2) [a,b]
+
+      WithArenaE _v e -> gRecoverType ddfs e
 
       CaseE _ mp ->
         let (c,args,e) = head mp
@@ -692,6 +698,8 @@ data UrTy a =
 
         | ListTy (UrTy a)  -- ^ These are not fully first class.  They are only
                            -- allowed as the fields of data constructors.
+
+        | ArenaTy -- ^ Collection of allocated, non-packed values
 
         ---------- These are not used initially ----------------
         -- (They could be added by a later IR instead:)
@@ -945,6 +953,7 @@ hasPacked t =
     ListTy _       -> error "FINISHLISTS"
     PtrTy          -> False
     CursorTy       -> False
+    ArenaTy        -> False
 
 -- | Provide a size in bytes, if it is statically known.
 sizeOfTy :: UrTy a -> Maybe Int
@@ -958,6 +967,7 @@ sizeOfTy t =
     ListTy _    -> error "FINISHLISTS"
     PtrTy{}     -> Just 8 -- Assuming 64 bit
     CursorTy{}  -> Just 8
+    ArenaTy     -> Just 8
 
 -- | Type of the arguments for a primitive operation.
 primArgsTy :: Prim (UrTy a) -> [UrTy a]
