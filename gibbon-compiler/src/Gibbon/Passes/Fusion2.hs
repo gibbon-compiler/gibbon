@@ -122,8 +122,8 @@ removeCommonExpressions = go
       TimeIt exp x y  ->l $   TimeIt (go exp) x y
       x       -> l $x
 
-simplifyProjectionsOfProducts :: L Exp1->  L Exp1
-simplifyProjectionsOfProducts exp = go exp M.empty
+simplifyProjections :: L Exp1->  L Exp1
+simplifyProjections exp = removeCommonExpressions (go exp M.empty)
    where
     go exp mp = case unLoc exp of
       LetE (v, ls, t, bind) body ->
@@ -449,9 +449,9 @@ foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
                   AppE _ _ args-> args
                   _            -> error  ("ops" L.++ show(def  entry))
 
-foldTupledFunctions ::   L Exp1 -> FunDef1 -> [Exp1] -> Exp1 -> V.Vector Int ->
-  Maybe (M.Map Int Int) -> PassM (L Exp1)
-foldTupledFunctions body newFun oldCalls firstCall outputPositions redirectMap =
+foldTupledFunctions ::   L Exp1 -> FunDef1 -> [Exp1] -> Exp1 -> V.Vector Int 
+   -> PassM (L Exp1)
+foldTupledFunctions body newFun oldCalls firstCall outputPositions  =
   do
      newVar <- gensym (toVar "tupled_output")
      go body newVar True
@@ -484,17 +484,14 @@ foldTupledFunctions body newFun oldCalls firstCall outputPositions redirectMap =
                         let rhs'' =  case t of
                               ProdTy ls ->  l ( MkProdE (
                                 V.toList ( V.imap (\index _ ->
-                                  let idx = case redirectMap of
-                                        Nothing -> (outputPositions V.! i)+index
-                                        Just mp -> mp M.! ((outputPositions V.! i)+index)
+                                  let idx =(outputPositions V.! i) +index
 
                                   in  l $ ProjE idx (l $ VarE newVar) )
                                       (V.fromList ls)  ))  )
 
                               otherwise ->
-                                  let idx = case redirectMap of
-                                         Nothing -> outputPositions V.! i
-                                         Just mp -> mp M.! (outputPositions V.! i )
+                                  let idx = outputPositions V.! i
+                                       
                                   in  l  $ ProjE idx (l $ VarE newVar)-- not complete buggy (i +eps)
                         let body'' =    l $ LetE (Var y, loc, t, rhs'') body'
                             body3  =  l $LetE (newVar, [], bindType, rhs') body''
@@ -507,17 +504,14 @@ foldTupledFunctions body newFun oldCalls firstCall outputPositions redirectMap =
                         let rhs' =  case t of
                               ProdTy ls ->  l ( MkProdE (
                                 V.toList ( V.imap (\index _ ->
-                                  let idx = case redirectMap of
-                                        Nothing -> (outputPositions V.! i )+index
-                                        Just mp -> mp M.! ((outputPositions V.! i )+index)
+                                  let idx =  (outputPositions V.! i )+index
 
                                   in  l $ ProjE idx (l $ VarE newVar) )
                                       (V.fromList ls)  )))
 
                               _ ->
-                                  let idx = case redirectMap of
-                                         Nothing -> outputPositions V.! i
-                                         Just mp -> mp M.! (outputPositions V.! i )
+                                  let idx =  outputPositions V.! i
+                                         
                                   in  l $ ProjE idx (l $ VarE newVar) -- not complete buggy (i +eps) 
                         return(l $ LetE (Var y, loc, t, rhs') body')
 
@@ -812,26 +806,17 @@ buildTupleCandidatesTable fDefs exp argsVars =
        LitE _ -> S.empty
        x       -> error ( "please handle me explicitly" L.++ (show x))
       
- 
-    -- --   
-    -- haveIndependentArgs args  argsVars = L.foldl f True args
-    --  where
-    --   f b arg  = b &&
-    --      (case unLoc arg of
-    --          LitE _ -> True
-    --          VarE v -> v `elem` argsVars
-    --          x -> False )
+cleanExp ::  L Exp1 -> L Exp1
+cleanExp exp = removeCommonExpressions (removeUnusedDefsExp exp)
 
-
-tuple :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [Var] -> [(Var, Var, Int, Var)]
-  -> M.Map Var (M.Map Int Int) ->  PassM (L Exp1,  FunDefs1)
-tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
+tuple :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [Var] -> PassM (L Exp1,  FunDefs1)
+tuple ddefs fdefs oldExp_ argsVars  = do
   let oldExp = removeCommonExpressions (removeUnusedDefsExp oldExp_ )
-  -- candidates1 : a list of [(fName, CallExpressions)] functions that traverse
+  -- candidates1 : a list of [(fName, CallExpressions)] functions that traverses
   -- same input 
   let candidates1 = L.filter f (M.toList (buildTupleCandidatesTable
-        fdefs  oldExp argsVars) )--`debug`( "exp body:" L.++ render (pprint oldExp))
-        where f (_, ls) = L.length ls> 1 
+        fdefs  oldExp argsVars) )
+       where f (_, ls) = L.length ls> 1 
 
   --candidates2: a list  [(tupleName, calls, firstCall)]
   let candidates2 = L.map
@@ -842,31 +827,21 @@ tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
            in (constructName sortedCalls, sortedCalls, firstCall)
         ) candidates1
 
-  (newExp, fdefs', redirectMaps) <-
-      Control.Monad.foldM go (oldExp, fdefs, redirectMaps)  candidates2
+  (newExp, fdefs') <-  Control.Monad.foldM go (oldExp, fdefs)  candidates2
 
-  let newExp' = removeUnusedDefsExp
-                   (simplifyProjectionsOfProducts
-                        (removeCommonExpressions
-                            (removeCommonExpressions  newExp )))
+  let newExp' = removeUnusedDefsExp (simplifyProjections newExp )
   return (newExp', fdefs')
 
  where
-    go (exp, fdefs, redirectMaps) (tupledFName, callExpressions, firstCall) =
+    go (exp, fdefs) (tupledFName, callExpressions, firstCall) =
       case M.lookup tupledFName fdefs of
         Just fdef -> do 
-            let redirectMap = M.lookup tupledFName redirectMaps
+            let redirectMap = M.lookup tupledFName 
             exp' <-foldTupledFunctions exp fdef callExpressions firstCall
-                 (V.fromList (getOutputStartPositions fdefs callExpressions redirectMap ))
-                 redirectMap
-
-
-            let exp'' =  removeCommonExpressions 
-                 (simplifyProjectionsOfProducts exp')
-                 `debug` ("after  folding :\n" L.++ (show tupledFName) 
-                          L.++ "before:" L.++ (render (pprint exp))
-                            L.++ "after:" L.++ (render (pprint exp')))
-            return (exp'', fdefs, redirectMaps)
+                 (getOutputStartPositions fdefs callExpressions)
+                 
+            let exp'' =  simplifyProjections exp'
+            return (exp'', fdefs)
 
         Nothing -> do
             let functionsToTuple = L.map getCalledFunDef  callExpressions
@@ -875,55 +850,41 @@ tuple ddefs fdefs oldExp_ argsVars prevFusedFuncs redirectMaps = do
                         (AppE fName _ _) -> case M.lookup fName fdefs of
                              Just fdef -> fdef
 
-            tupledFunction <-  tupleListOfFunctions ddefs  functionsToTuple
-               tupledFName  `debug` ("funcs to tuple" L.++ (show functionsToTuple))
+            tupledFunction <-  
+              tupleListOfFunctions ddefs  functionsToTuple  tupledFName  
+              -- `debug` ("funcs to tuple" L.++ (show functionsToTuple))
 
             let tupledFunction' = 
-                  tupledFunction {funBody = removeCommonExpressions 
-                    (removeUnusedDefsExp (funBody tupledFunction))}
-                  -- L.foldr foldFusedCallsF tupledFunction prevFusedFuncs
+                  tupledFunction {funBody = cleanExp (funBody tupledFunction)}
                  
             let fdefs' = M.insert tupledFName  tupledFunction'  fdefs
             let traversedArg =  funArgs tupledFunction'
 
-            (recTupledBody, newDefs) <- tuple ddefs fdefs'
-              (removeCommonExpressions (funBody tupledFunction'))
-                traversedArg  prevFusedFuncs redirectMaps
-                  `debug`("\ntupling:" L.++ show tupledFName L.++ (render (pprint (funBody tupledFunction) )))
+            (recTupledBody, newDefs) <-
+               tuple ddefs fdefs' (funBody tupledFunction')  traversedArg  
+                --  `debug`("\ntupling:" L.++ show tupledFName L.++ 
+                -- (render (pprint (funBody tupledFunction) )))
 
-            let tupledFunction'' = tupledFunction'{funBody=recTupledBody} --`debug` ("res" L.++ (render (pprint recTupledBody)))
-            let tupledFunction''' =tupledFunction''{
-              funBody= removeUnusedDefsExp (
-                 simplifyProjectionsOfProducts(
-                     removeCommonExpressions(
-                       funBody tupledFunction'')))}
+            let tupledFunction'' = tupledFunction'{funBody=recTupledBody} 
+            let tupledFunction''' =
+                  tupledFunction''{funBody= removeUnusedDefsExp 
+                    (simplifyProjections (funBody tupledFunction''))}
 
-            let tupledFunction5 =  tupledFunction'''{
-              funBody =
-                removeUnusedDefsExp (
-                  simplifyProjectionsOfProducts(
-                    removeCommonExpressions (funBody tupledFunction''')
-                    --fixCalls (funBody tupledFunction4) tupledFunction4
-                    --   redirectMap removedPositions))
-                      )) }
-                      -- fix calls to the first in the body of the second for
-                      -- completeness need to be called on each function in newDefs
-
+            let tupledFunction5 =  
+                 tupledFunction''' {funBody = removeUnusedDefsExp(
+                    simplifyProjections (funBody tupledFunction''' )) }
+                 
             let fdefs'' = M.insert tupledFName tupledFunction5  newDefs
 
-            exp' <- foldTupledFunctions exp  tupledFunction5 callExpressions
-                 firstCall
-                 (V.fromList (getOutputStartPositions fdefs''
-                   callExpressions-- (Just redirectMap))) (Just redirectMap)
-                    Nothing)) Nothing
-            let exp'' = removeCommonExpressions (
-                  simplifyProjectionsOfProducts exp')
-                    `debug` ("after  folding :\n" L.++ (show tupledFName) 
-                          L.++ "before:" L.++ (render (pprint exp))
-                            L.++ "after:" L.++ (render (pprint exp')))
-           -- return (exp'', fdefs'',  M.insert  tupledFName redirectMap redirectMaps)
-            return (exp'', fdefs'',   redirectMaps) 
-              -- `debug` render (pprint  (testPositions 0 0 exp'')))
+            exp' <- 
+              foldTupledFunctions exp  tupledFunction5 callExpressions
+                 firstCall  (getOutputStartPositions fdefs''
+                   callExpressions )
+           
+            let exp'' = simplifyProjections exp'
+              
+            return (exp'', fdefs'') 
+
     constructName ls =
        toVar( "_TUP_" L.++ L.foldl  appendName "" ls L.++  "_TUP_" )
     appendName str (AppE fName _ _) =
@@ -958,12 +919,12 @@ fixCalls exp fdef redirectMap removedPositions = go exp
               l $  LetE (Var y, loc, t, rhs) (go body)
         otherwise -> l otherwise
 
-getOutputStartPositions:: FunDefs1 -> [Exp1] -> Maybe (M.Map Int Int) -> [Int]
-getOutputStartPositions fdefs callExpressions redirectMap =
+getOutputStartPositions:: FunDefs1 -> [Exp1]  -> V.Vector Int
+getOutputStartPositions fdefs callExpressions =
      let functionsArgsLengths = L.map getCalledFunDef  callExpressions in
      let ls = L.foldl (\ls i -> ls L.++ [i+ L.last ls]  ) [0]
           functionsArgsLengths
-     in  ls
+     in  V.fromList ls
    where
      getCalledFunDef callExpr = case callExpr of
           (AppE fName _ _) ->
@@ -984,7 +945,7 @@ fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
     newName <- if verbosity config >= 4
             then pure (toVar ("_FUS_f_" ++ fromVar outerVar ++ "_f_" ++
                    fromVar innerVar ++ "_FUS_"))
-            else gensym "fuse_"
+            else gensym "_FUSE_"
 
     step1 <- inline innerFunc  outerFunc (-1)
 
@@ -1022,18 +983,35 @@ type TransformReturn =
    [FusedElement] -- list of functions that are fused during the transformation
   )
 
-data TransformParms =  TransformParms
+data FusePassParams =  FusePassParams
  { exp             :: L Exp1, -- expression to transform 
    args            :: [Var], -- arguments of the function that the transformed 
                             -- expression belongs to 
    fusedFunctions :: [FusedElement], -- already fused functions 
-   doTupling      :: Bool, -- indicates of tupling should be call after fusion 
    skipList       :: [(Var, Var)] -- functions to skip for fusion purposes
   } deriving (Show , Generic)
 
 
-fuse_pass ::  DDefs Ty1 -> FunDefs1 -> TransformParms  ->  PassM TransformReturn
-fuse_pass ddefs funDefs (TransformParms exp argsVars fusedFunctions doTupling skipList) =
+
+tuple_pass :: DDefs Ty1 -> FunDefs1 -> PassM (FunDefs1) 
+tuple_pass ddefs fdefs =
+    foldM tupleFunction fdefs fdefs
+  where
+   tupleFunction defs' f  = 
+    do    
+      let fName = funName f 
+      if L.isPrefixOf "_FUS"  (fromVar fName) 
+        then do
+          (tupledBody, tupleDefs) <- tuple ddefs fdefs (funBody f) (funArgs f)    
+          let defs'' = M.insert fName f{funBody = tupledBody} defs'
+          return (M.union  defs'' tupleDefs)
+
+        else 
+          return defs'
+
+
+fuse_pass ::  DDefs Ty1 -> FunDefs1 -> FusePassParams  ->  PassM TransformReturn
+fuse_pass ddefs funDefs (FusePassParams exp argsVars fusedFunctions skipList) =
   go (unLoc exp) skipList funDefs fusedFunctions
  where
   go body processed fdefs prevFusedFuncs = do
@@ -1052,108 +1030,35 @@ fuse_pass ddefs funDefs (TransformParms exp argsVars fusedFunctions doTupling sk
           else do
              -- fuse
             (validFused, fNew, fusedDefs) <-
-                fuse  ddefs fdefs inner outer prevFusedFuncs 
-                 --   `debug` (show "fusing" L.++ show (fdefs))
+               fuse  ddefs fdefs inner outer prevFusedFuncs 
 
             let fusedFunction = fusedDefs M.! fNew
                 newFusedEntry = (outer,inner, -1, fNew)
+                newFusedFunctions =  newFusedEntry : prevFusedFuncs
+                newProcessed = (inner,outer):processed
 
-            let processedCandidates' = (inner,outer):processed
-                performTupling = not (isPotential defTable outerDefVarSymbol
-                   processedCandidates')
-
-            -- transform the body of the fused function and perform tupling only 
-            -- if the the result of the fused function is not a potential 
-            -- to be fused with a  another function  
-            (recAppBody, recAppDefs, retFusedFunctions) <- fuse_pass  ddefs
-              fusedDefs  (TransformParms (funBody fusedFunction)  (funArgs fusedFunction)
-                (newFusedEntry : prevFusedFuncs) False processedCandidates')
+            (retFuncBody, retFunDefs, retFusedFunctions) <- fuse_pass  ddefs
+              fusedDefs  (FusePassParams (funBody fusedFunction)  (funArgs fusedFunction)
+                newFusedFunctions newProcessed)
 
             --clean
-            let newFusedFunctions = (newFusedEntry : prevFusedFuncs) L.++ retFusedFunctions
-            let cleanedFunction = removeUnusedDefs fusedFunction{funBody = recAppBody}
-                fdefs_tmp2       = M.union fusedDefs recAppDefs
+            let newFusedFunctions = 
+                 (newFusedEntry : prevFusedFuncs) L.++ retFusedFunctions 
+                cleanedFunction = 
+                    removeUnusedDefs fusedFunction{funBody = retFuncBody}
+                fdefs_tmp2       = M.union fusedDefs retFunDefs
                 fdefs_tmp3       = M.insert  fNew cleanedFunction fdefs_tmp2
+                newDefs =  (M.union fdefs fdefs_tmp3)
 
-            let  newDefs = fdefs_tmp3
-
+            let foldedBody = foldFusedCalls (outer,inner, -1, fNew) (l body)
             if validFused
               then
-                let body' = removeUnusedDefsExp (foldFusedCalls
-                         (outer,inner, -1, fNew) (l body) )
-                in go (unLoc body') processedCandidates' (M.union fdefs newDefs)  -- is the union needed?
-                    newFusedFunctions
+                let body' = removeUnusedDefsExp foldedBody
+                in go (unLoc body') newProcessed  newDefs  newFusedFunctions
               else
-                 go body  processedCandidates' fdefs prevFusedFuncs
-
-transform :: DDefs Ty1 -> FunDefs1 -> TransformParms  ->  PassM TransformReturn
-transform ddefs funDefs (TransformParms exp argsVars fusedFunctions doTupling skipList) =
-  go (unLoc exp) skipList funDefs fusedFunctions
- where
-  go body processed fdefs prevFusedFuncs = do
-    let defTable = buildDefTable body
-        potential = findPotential defTable processed
-    case potential of
-      Nothing -> do
-        let final_clean = removeUnusedDefsExp (l body)
-        (tupledBody, tupleDefs) <-
-          if doTupling
-            then tuple ddefs fdefs final_clean argsVars prevFusedFuncs
-               M.empty `debug` ("tupling top level expr")
-            else return (final_clean, M.empty)
-        return (tupledBody, M.union fdefs tupleDefs, prevFusedFuncs)
-
-      Just ((inner,outer), outerDefVarSymbol) ->
-       do
-        if violateRestrictions fdefs inner outer
-          then
-               go  body ((inner,outer):processed) fdefs prevFusedFuncs
-          else do
-             -- fuse
-            (validFused, fNew, fusedDefs) <-
-                fuse  ddefs fdefs inner outer prevFusedFuncs 
-                 --   `debug` (show "fusing" L.++ show (fdefs))
-
-            let fusedFunction = fusedDefs M.! fNew
-                newFusedEntry = (outer,inner, -1, fNew)
-
-            let processedCandidates' = (inner,outer):processed
-                performTupling = not (isPotential defTable outerDefVarSymbol
-                   processedCandidates')
-
-            -- transform the body of the fused function and perform tupling only 
-            -- if the the result of the fused function is not a potential 
-            -- to be fused with a  another function  
-            (recAppBody, recAppDefs, retFusedFunctions) <- transform  ddefs
-              fusedDefs  (TransformParms (funBody fusedFunction)  (funArgs fusedFunction)
-                (newFusedEntry : prevFusedFuncs) performTupling processedCandidates')
-
-            --clean
-            let newFusedFunctions = (newFusedEntry : prevFusedFuncs) L.++ retFusedFunctions
-            let cleanedFunction = removeUnusedDefs fusedFunction{funBody = recAppBody}
-                fdefs_tmp2       = M.union fusedDefs recAppDefs
-                fdefs_tmp3       = M.insert  fNew cleanedFunction fdefs_tmp2
-
-            let  newDefs = fdefs_tmp3
-
-            if validFused
-              then
-                let body' = removeUnusedDefsExp (foldFusedCalls
-                         (outer,inner, -1, fNew) (l body) )
-                in go (unLoc body') processedCandidates' (M.union fdefs newDefs)  -- is the union needed?
-                    newFusedFunctions
-              else
-                 go body  processedCandidates' fdefs prevFusedFuncs
+                 go body  newProcessed fdefs prevFusedFuncs
 
 
--- transform_f :: DDefs Ty1 -> FunDefs1 -> Var -> [(Var, Var)] -> PassM (FunDefs1)
--- transform_f defs funs fName  processed = 
---  do 
---    let f = funs M.! fName 
---    let t_params = TransformParms (funBody f) [] [] True [] 
---    (fbody', defs', _) <- transform defs funs  t_params
---    let defs'' = M.insert (funName f) f{funBody=fbody'} defs'
---    return defs''   `debug` (show "fusing" L.++ show (funs))
 
 
 fusion2 :: Prog1 -> PassM Prog1
@@ -1161,8 +1066,9 @@ fusion2 (L1.Prog defs funs main) = do
     (main', funs') <- case main of
         Nothing   -> return (Nothing, funs)
         Just (m, ty)    -> do
-            (m', newDefs, _) <- fuse_pass defs funs (TransformParms m []  [] True [])
-            return (Just (m',ty), redundantPass (M.union funs newDefs)) 
+            (m', newDefs, _) <- fuse_pass defs funs (FusePassParams m [] [] [])
+            newDefs'         <- tuple_pass defs  newDefs 
+            return (Just (m',ty), redundancy_pass (M.union funs  newDefs' )) 
     return $ L1.Prog defs funs' main'
 
 
@@ -1173,8 +1079,8 @@ using variables _p0_ _p1_ _p2_ ..etx (we assumes those are not going to
 appear anywhere else in the program we need a better way maybe)
 -}
 
-redundantPass:: FunDefs1 -> FunDefs1
-redundantPass fdefs = 
+redundancy_pass:: FunDefs1 -> FunDefs1
+redundancy_pass fdefs = 
    let (fdefs', rules) =  M.foldl (pass1F fdefs) (fdefs, M.empty) fdefs
        fdefs'' = M.foldlWithKey pass2F fdefs' rules --`debug` (show rules)
   in fdefs''
@@ -1184,7 +1090,7 @@ redundantPass fdefs =
 
   pass2Fsub fdefs fName (redirectMap, removedPositions) f =
          f{ funBody = removeUnusedDefsExp (
-              simplifyProjectionsOfProducts(
+              simplifyProjections(
                    removeCommonExpressions (
                        fixCalls (funBody f) (fdefs M.! fName)  redirectMap removedPositions)))}
      
