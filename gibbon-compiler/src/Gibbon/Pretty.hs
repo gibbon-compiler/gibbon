@@ -296,10 +296,10 @@ instance Pretty (NoExt l d) where
 instance Pretty l => Pretty (L2.PreLocExp l) where
     pprintWithStyle _ le =
         case le of
-          StartOfLE r -> lparen <> text "startof" <+> text (show r) <> rparen
+          StartOfLE r -> lparen <> text "startof" <+> text (sdoc r) <> rparen
           AfterConstantLE i loc -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
           AfterVariableLE v loc -> lparen <> pprint loc <+> text "+" <+> doc v <> rparen
-          InRegionLE r  -> lparen <> text "inregion" <+> text (show r) <> rparen
+          InRegionLE r  -> lparen <> text "inregion" <+> text (sdoc r) <> rparen
           FromEndLE loc -> lparen <> text "fromend" <+> pprint loc <> rparen
           FreeLE -> lparen <> text "free" <> rparen
 

@@ -116,6 +116,8 @@ tcExp isPacked ddfs env exp@(L p ex) =
           ensureEqualTy exp end_r2_ty CursorTy
           return IntTy
 
+        NullCursor -> return CursorTy
+
     -- All the other cases are exactly same as L1.Typecheck
 
     VarE v    -> lookupVar env v exp
@@ -188,29 +190,29 @@ tcExp isPacked ddfs env exp@(L p ex) =
           _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
           return SymTy
 
-        DictEmptyP ty -> do
+        DictEmptyP _ty -> do
           len0
-          return $ SymDictTy ty
+          return $ SymDictTy CursorTy -- $ SymDictTy ty
 
-        DictInsertP ty -> do
+        DictInsertP _ty -> do
           len3
           let [d,k,v] = tys
-          _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
+          -- _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
           _ <- ensureEqualTy exp SymTy k
           _ <- ensureEqualTy exp CursorTy v
           return d
 
-        DictLookupP ty -> do
+        DictLookupP _ty -> do
           len2
-          let [d,k] = tys
-          _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
+          let [_d,k] = tys
+          -- _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
           _ <- ensureEqualTy exp SymTy k
           return CursorTy
 
-        DictHasKeyP ty -> do
+        DictHasKeyP _ty -> do
           len2
-          let [d,k] = tys
-          _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
+          let [_d,k] = tys
+          -- _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
           _ <- ensureEqualTy exp SymTy k
           return BoolTy
 
@@ -257,6 +259,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
       else throwError $ GenericTC ("If branches have mismatched types:"
                                    ++ sdoc tyConsq ++ ", " ++ sdoc tyAlt) exp
 
+    MkProdE [] -> return CursorTy -- AUDIT: null is a cursor?
 
     MkProdE es -> do
       tys <- mapM go es

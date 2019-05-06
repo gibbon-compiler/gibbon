@@ -169,7 +169,7 @@ dict_item_t *dict_insert_ptr(dict_item_t *ptr, SymTy key, PtrTy val) {
   return ret;
 }
 
-PtrTy dict_lookup_int(dict_item_t *ptr, SymTy key) {
+PtrTy dict_lookup_ptr(dict_item_t *ptr, SymTy key) {
   while (ptr != 0) {
     if (ptr->key == key) {
       return ptr->ptrval;

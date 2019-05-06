@@ -685,6 +685,9 @@ See [Hacky substitution to encode ParE].
       T.LetPrimCallT [] T.BumpRefCount [T.VarTriv end_r1, T.VarTriv end_r2] <$>
         tail bod
 
+    LetE (v, _, _, L _ (Ext NullCursor)) bod ->
+      T.LetTrivT (v,T.CursorTy,T.IntTriv 0) <$> tail bod
+
     Ext _ -> error $ "lower: unexpected extension" ++ sdoc ex0
 
     ---------------------
