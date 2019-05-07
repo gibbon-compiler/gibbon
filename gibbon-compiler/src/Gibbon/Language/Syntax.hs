@@ -525,7 +525,7 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
 
       ParE a b -> ProdTy $ L.map (gRecoverType ddfs env2) [a,b]
 
-      WithArenaE _v e -> gRecoverType ddfs e
+      WithArenaE _v e -> gRecoverType ddfs env2 e
 
       CaseE _ mp ->
         let (c,args,e) = head mp
