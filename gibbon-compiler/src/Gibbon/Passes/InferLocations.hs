@@ -561,7 +561,12 @@ inferExp env@FullEnv{dataDefs}
 
     MkProdE ls ->
       case dest of
-        NoDest -> err $ "Expected destination(s) for expression"
+        NoDest -> do results <- mapM (\e -> inferExp env e NoDest) ls
+                     let pty = case results of
+                                 [(_,ty,_)] -> ty
+                                 _ -> ProdTy ([b | (_,b,_) <- results])
+                     return (lc$ MkProdE ([a | (a,_,_) <- results]), pty,
+                               concat $ [c | (_,_,c) <- results])
         SingleDest d -> case ls of
                           [e] -> do (e',ty,les) <- inferExp env e dest
                                     return (lc$ MkProdE [e'], ty, les)
@@ -794,7 +799,16 @@ inferExp env@FullEnv{dataDefs}
 
         AppE{} -> err$ "Malformed function application: " ++ (show ex0)
 
-        IfE{} -> err$ "Unexpected conditional in let binding: " ++ (show ex0)
+        -- IfE{} -> err$ "Unexpected conditional in let binding: " ++ (show ex0)
+
+        IfE a b c -> do
+          (boda,tya,csa) <- inferExp env a NoDest
+           -- just assuming tyb == tyc
+          (bodb,tyb,csb) <- inferExp env b NoDest
+          (bodc,tyc,csc) <- inferExp env c NoDest
+          (bod',ty',cs') <- inferExp (extendVEnv vr tyc env) bod dest
+          let cs = L.nub $ csa ++ csb ++ csc ++ cs'
+          return (lc$ L2.LetE (vr,[],tyc,L sl2 $ L2.IfE boda bodb bodc) bod', ty', cs)
 
         LetE{} -> err $ "Expected let spine, encountered nested lets: " ++ (show lex0)
 

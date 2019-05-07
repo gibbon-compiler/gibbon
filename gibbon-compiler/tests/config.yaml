@@ -29,6 +29,7 @@ tests:
   - name: test00c_printBool.gib
   - name: test00d_printData.gib
   - name: test00e_func.gib
+  - name: test00f_and.gib
   - name: test01b_ifif.gib
   - name: test01_if.gib
   - name: test02_arith.gib
@@ -41,6 +42,7 @@ tests:
   - name: test03d_eqs.gib
   - name: test03_let.gib
   - name: test04b_vector.gib
+  - name: test04c_ifvector.gib
   - name: test04d_vecfun.gib
   - name: test04_vector.gib
   - name: test05_app.gib
@@ -57,6 +59,8 @@ tests:
   - name: test07b_iterate.gib
   - name: test07_time.gib
   - name: test09_recur.gib
+  - name: test10b_desugar.gib
+  - name: test10_desugar.gib
   - name: test11b_fundata.gib
   - name: test11c_funrec.gib
   - name: test11d_funrec.gib
@@ -284,10 +288,6 @@ tests:
     failing: [gibbon1]
 
   ## Tests that only work with some backend:
-  - name: test00f_and.gib
-    failing: [gibbon2, gibbon1]
-  - name: test04c_ifvector.gib
-    failing: [gibbon2, gibbon1]
   - name: test06h_rec.gib
     failing: [gibbon2, gibbon1]
   - name: test06i_casecase.gib
@@ -300,10 +300,6 @@ tests:
     failing: [pointer]
   - name: test08d_sharedict.gib
     failing: [pointer]
-  - name: test10b_desugar.gib
-    failing: [gibbon2, gibbon1]
-  - name: test10_desugar.gib
-    failing: [gibbon2, gibbon1]
   - name: test29a_list.gib
     failing: [gibbon2]
   - name: test18f_flip.gib
