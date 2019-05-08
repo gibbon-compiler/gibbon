@@ -988,7 +988,8 @@ data FusePassParams =  FusePassParams
    args            :: [Var], -- arguments of the function that the transformed 
                             -- expression belongs to 
    fusedFunctions :: [FusedElement], -- already fused functions 
-   skipList       :: [(Var, Var)] -- functions to skip for fusion purposes
+   skipList       :: [(Var, Var)], -- functions to skip for fusion purposes
+   depth          :: Int 
   } deriving (Show , Generic)
 
 
@@ -1011,8 +1012,11 @@ tuple_pass ddefs fdefs =
 
 
 fuse_pass ::  DDefs Ty1 -> FunDefs1 -> FusePassParams  ->  PassM TransformReturn
-fuse_pass ddefs funDefs (FusePassParams exp argsVars fusedFunctions skipList) =
-  go (unLoc exp) skipList funDefs fusedFunctions
+fuse_pass ddefs funDefs 
+   (FusePassParams exp argsVars fusedFunctions skipList depth) =
+  if depth >3
+   then  return (exp, funDefs, fusedFunctions)  
+   else go (unLoc exp) skipList funDefs fusedFunctions
  where
   go body processed fdefs prevFusedFuncs = do
     let defTable = buildDefTable body
@@ -1039,11 +1043,11 @@ fuse_pass ddefs funDefs (FusePassParams exp argsVars fusedFunctions skipList) =
 
             (retFuncBody, retFunDefs, retFusedFunctions) <- fuse_pass  ddefs
               fusedDefs  (FusePassParams (funBody fusedFunction)  (funArgs fusedFunction)
-                newFusedFunctions newProcessed)
+                newFusedFunctions newProcessed (depth+1)) 
 
             --clean
-            let newFusedFunctions = 
-                 (newFusedEntry : prevFusedFuncs) L.++ retFusedFunctions 
+            let newFusedFunctions = retFusedFunctions
+              --   (newFusedEntry : prevFusedFuncs) L.++ retFusedFunctions 
                 cleanedFunction = 
                     removeUnusedDefs fusedFunction{funBody = retFuncBody}
                 fdefs_tmp2       = M.union fusedDefs retFunDefs
@@ -1066,8 +1070,8 @@ fusion2 (L1.Prog defs funs main) = do
     (main', funs') <- case main of
         Nothing   -> return (Nothing, funs)
         Just (m, ty)    -> do
-            (m', newDefs, _) <- fuse_pass defs funs (FusePassParams m [] [] [])
-            newDefs'         <- tuple_pass defs  newDefs 
+            (m', newDefs, _) <- fuse_pass defs funs (FusePassParams m [] [] [] 0)
+            newDefs'         <- tuple_pass defs  newDefs `debug` "done fusing"
             return (Just (m',ty), redundancy_pass (M.union funs  newDefs' )) 
     return $ L1.Prog defs funs' main'
 
