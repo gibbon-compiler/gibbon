@@ -147,8 +147,9 @@ data Ty
 --    | StructPtrTy { fields :: [Ty] } -- ^ A pointer to a struct containing the given fields.
 
     | ProdTy [Ty]
-    | SymDictTy Ty
-      -- ^ We allow built-in dictionaries from symbols to a value type.
+    | SymDictTy Var Ty
+      -- ^ We allow built-in dictionaries from symbols to a value type.      
+    | ArenaTy
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data Prim
@@ -271,5 +272,5 @@ fromL3Ty ty =
     L.IntTy -> IntTy
     L.SymTy -> SymTy
     L.ProdTy tys -> ProdTy $ map fromL3Ty tys
-    L.SymDictTy t -> SymDictTy $ fromL3Ty t
+    L.SymDictTy (Just var) t -> SymDictTy var $ fromL3Ty t
     _ -> IntTy -- FIXME: review this

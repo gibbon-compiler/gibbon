@@ -309,7 +309,7 @@ inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) $
 substLoc :: Map LocVar LocVar -> Ty2 -> Ty2
 substLoc mp ty =
   case ty of
-   SymDictTy te -> SymDictTy (go te)
+   SymDictTy v te -> SymDictTy v (go te)
    ProdTy    ts -> ProdTy (L.map go ts)
    PackedTy k l ->
        case M.lookup l mp of
@@ -358,7 +358,7 @@ stripTyLocs ty =
     IntTy     -> IntTy
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map stripTyLocs ls
-    SymDictTy ty'    -> SymDictTy $ stripTyLocs ty'
+    SymDictTy v ty'  -> SymDictTy v $ stripTyLocs ty'
     PackedTy tycon _ -> PackedTy tycon ()
     ListTy ty'       -> ListTy $ stripTyLocs ty'
     PtrTy    -> PtrTy
@@ -471,10 +471,11 @@ mapPacked fn t =
     BoolTy -> BoolTy
     SymTy  -> SymTy
     (ProdTy x)    -> ProdTy $ L.map (mapPacked fn) x
-    (SymDictTy x) -> SymDictTy $ mapPacked fn x
+    (SymDictTy v x) -> SymDictTy v $ mapPacked fn x
     PackedTy k l  -> fn (toVar k) l
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
+    ArenaTy  -> ArenaTy
     ListTy{} -> error "FINISHLISTS"
 
 -- | Build a dependency list which can be later converted to a graph

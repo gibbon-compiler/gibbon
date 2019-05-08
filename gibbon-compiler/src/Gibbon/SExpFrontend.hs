@@ -150,6 +150,7 @@ tagDataCons ddefs = go allCons
                           pure $ TimeIt e' t b
        ParE a b  -> ParE <$> (go cons a) <*> (go cons b)
        IfE a b c -> IfE <$> (go cons a) <*> (go cons b) <*> (go cons c)
+       WithArenaE v e -> WithArenaE v <$> (go cons e)
 
        MapE  (v,t,e) bod -> MapE <$> (v,t, ) <$> go cons e <*> (go cons bod)
        FoldE (v1,t1,e1) (v2,t2,e2) b -> do
@@ -406,6 +407,11 @@ exp se =
      a' <- exp a
      b' <- exp b
      pure $ loc l $ ParE a' b'
+
+   Ls3 l "arena" v e -> do
+     e' <- exp e
+     let v' = getSym v
+     pure $ loc l $ WithArenaE v' e'
 
    Ls (A l "vector" : es) -> loc l . MkProdE <$> mapM exp es
 

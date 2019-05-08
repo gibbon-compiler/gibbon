@@ -198,7 +198,7 @@ printTy :: Bool -> Ty3 -> [T.Triv] -> (T.Tail -> T.Tail)
 printTy pkd ty trvs =
   case (ty, trvs) of
     (IntTy, [_one])             -> T.LetPrimCallT [] T.PrintInt trvs
-    (SymDictTy ty', [_one])     -> sandwich (printTy pkd ty' trvs) "Dict"
+    (SymDictTy _ ty', [_one])     -> sandwich (printTy pkd ty' trvs) "Dict"
     (PackedTy constr _, [one]) -> -- HACK: Using varAppend here was the simplest way to get
                                   -- unique names without using the PassM monad.
                                   -- ASSUMPTION: Argument (one) is always a variable reference.
@@ -816,11 +816,13 @@ typ t =
     BoolTy -> T.BoolTy
     ListTy{} -> error "lower/typ: FinishMe: List types"
     ProdTy xs -> T.ProdTy $ L.map typ xs
-    SymDictTy x -> T.SymDictTy $ typ x
+    SymDictTy (Just var) x -> T.SymDictTy var $ typ x
+    SymDictTy Nothing _ -> error "lower/typ: Expected arena annotation"
     -- t | isCursorTy t -> T.CursorTy
     PackedTy{} -> T.PtrTy
     CursorTy -> T.CursorTy -- Audit me
     PtrTy -> T.PtrTy
+    ArenaTy -> T.ArenaTy
 
 prim :: Prim Ty3 -> T.Prim
 prim p =

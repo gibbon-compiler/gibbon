@@ -16,6 +16,7 @@ where
 import Control.Monad.Except
 import Data.Loc
 import Data.Map as M
+import Data.Set as S
 import Data.List as L
 import Text.PrettyPrint
 import Text.PrettyPrint.GenericPretty
@@ -58,8 +59,10 @@ tcExp ddfs env exp@(L p ex) =
 
     PrimAppE pr es -> do
       let len0 = checkLen exp pr 0 es
+          len1 = checkLen exp pr 1 es
           len2 = checkLen exp pr 2 es
           len3 = checkLen exp pr 3 es
+          len4 = checkLen exp pr 4 es
 
       tys <- mapM go es
       case pr of
@@ -100,30 +103,48 @@ tcExp ddfs env exp@(L p ex) =
           return SymTy
 
         DictEmptyP ty -> do
-          len0
-          return $ SymDictTy ty
+          len1
+          let [a] = tys
+          _ <- ensureEqualTy exp ArenaTy a
+          case es !! 0 of
+            L _ (VarE var) -> do ensureArenaScope exp env $ Just var
+                                 return $ SymDictTy (Just var) ty
+            _ -> throwError $ GenericTC "Expected arena variable argument" exp
 
         DictInsertP ty -> do
-          len3
-          let [d,k,v] = tys
-          _ <- ensureEqualTy exp (SymDictTy ty) d
-          _ <- ensureEqualTy exp SymTy k
-          _ <- ensureEqualTy exp ty v
-          return d
+          len4
+          let [a,d,k,v] = tys
+          _ <- ensureEqualTy exp ArenaTy a
+          case d of
+            SymDictTy ar dty -> do _ <- ensureEqualTy exp SymTy k
+                                   _ <- ensureEqualTy exp ty v
+                                   _ <- ensureEqualTy exp ty dty
+                                   ensureArenaScope exp env ar
+                                   case es !! 0 of
+                                     L _ (VarE var) -> do ensureArenaScope exp env $ Just var
+                                                          return $ SymDictTy (Just var) ty
+                                     _ -> throwError $ GenericTC "Expected arena variable argument" exp
+            _ -> throwError $ GenericTC "Expected SymDictTy" exp
 
         DictLookupP ty -> do
           len2
           let [d,k] = tys
-          _ <- ensureEqualTy exp (SymDictTy ty) d
-          _ <- ensureEqualTy exp SymTy k
-          return ty
-
+          case d of
+            SymDictTy ar dty -> do _ <- ensureEqualTy exp SymTy k
+                                   _ <- ensureEqualTy exp ty dty
+                                   ensureArenaScope exp env ar
+                                   return ty
+            _ -> throwError $ GenericTC "Expected SymDictTy" exp
+                          
         DictHasKeyP ty -> do
           len2
           let [d,k] = tys
-          _ <- ensureEqualTy exp (SymDictTy ty) d
-          _ <- ensureEqualTy exp SymTy k
-          return BoolTy
+          case d of
+            SymDictTy ar dty -> do _ <- ensureEqualTy exp SymTy k
+                                   _ <- ensureEqualTy exp ty dty
+                                   ensureArenaScope exp env ar
+                                   return BoolTy
+            _ -> throwError $ GenericTC "Expected SymDictTy" exp
 
         ErrorP _str ty -> do
           len2
@@ -217,6 +238,10 @@ tcExp ddfs env exp@(L p ex) =
       bty <- go b
       return (ProdTy [aty, bty])
 
+    WithArenaE v e -> do
+      let env' = extendEnv env [(v,ArenaTy)]
+      tcExp ddfs env' e
+
     Ext{} -> error $ "L1.Typecheck: Unexpected " ++ sdoc ex
     MapE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc ex
     FoldE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc ex
@@ -239,24 +264,24 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   -- Handle main expression.
   -- Run the typechecker on the expression, and update it's type in the program
   -- (the parser initializes the main expression with the void type).
-  let mainExp' = case mainExp of
-                   Nothing -> Nothing
-                   Just (e,main_ty)  ->
-                     let res = runExcept $ tcExp ddefs env e
-                     in case res of
-                         Left err -> error $ sdoc err
-                         Right ty ->
-                           -- The program was just parsed, the type of the
-                           -- expression must be *inferred*.
-                           -- Otherwise, fail if the types don't match.
-                           if main_ty == voidTy
-                           then Just (e, ty)
-                           else if main_ty == ty
-                                -- Fail if the main expression is packed and we're in packed mode
-                                then if (not $ hasPacked ty) || (not $ gopt Opt_Packed flags)
-                                     then return (e, ty)
-                                     else error $ "Main expression has type " ++ sdoc ty ++ ", but it must be a simple (non-packed) type, such as " ++ (sdoc (IntTy :: Ty1)) ++ "."
-                                else error $ "Expected type " ++ sdoc main_ty ++ " but got " ++ sdoc ty
+  mainExp' <- case mainExp of
+                Nothing -> return Nothing
+                Just (e,main_ty) -> do
+                  let res = runExcept $ tcExp ddefs env e
+                  case res of
+                    Left err -> error $ sdoc err
+                    Right ty ->
+                      -- The program was just parsed, the type of the
+                      -- expression must be *inferred*.
+                      -- Otherwise, fail if the types don't match.
+                      if main_ty == voidTy
+                      then return $ Just (e, ty)
+                      else if main_ty == ty
+                           -- Fail if the main expression is packed and we're in packed mode
+                           then if (not $ hasPacked ty) || (not $ gopt Opt_Packed flags)
+                                then return $ Just (e, ty)
+                                else error $ "Main expression has type " ++ sdoc ty ++ ", but it must be a simple (non-packed) type, such as " ++ (sdoc (IntTy :: Ty1)) ++ "."
+                           else error $ "Expected type " ++ sdoc main_ty ++ " but got " ++ sdoc ty
 
   return prg { mainExp = mainExp' }
 
@@ -274,7 +299,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
         Right ty -> if ty == retty
                     then return ()
                     else error $ "Expected type " ++ (sdoc retty)
-                         ++ " and got type " ++ (sdoc ty)
+                              ++ " and got type " ++ (sdoc ty)
       return ()
 
 --------------------------------------------------------------------------------
@@ -295,9 +320,8 @@ instance (Out exp, Out (L exp)) => Out (TCError (L exp)) where
       UnsupportedExpTC (L p ex) -> text "Unsupported expression:" $$
                                    doc p <+> colon <+> doc ex
 
-type TcM a exp = Except (TCError exp) a
-
-
+type TcM a exp =  Except (TCError exp) a
+    
 extendEnv :: Env2 (UrTy l) -> [(Var, (UrTy l))] -> Env2 (UrTy l)
 extendEnv (Env2 vEnv fEnv) ((v,ty):rest) = extendEnv (Env2 (M.insert v ty vEnv) fEnv) rest
 extendEnv env [] = env
@@ -309,6 +333,7 @@ lookupVar env var exp =
     case M.lookup var $ vEnv env of
       Nothing -> throwError $ VarNotFoundTC var exp
       Just ty -> return ty
+
 
 tcProj :: (Out l) => (L (PreExp e l (UrTy l))) -> Int -> (UrTy l) ->
           TcM (UrTy l) (L (PreExp e l (UrTy l)))
@@ -360,3 +385,10 @@ ensureEqualTy :: (Eq l, Out l) => (L (PreExp e l (UrTy l))) -> (UrTy l) -> (UrTy
                  TcM (UrTy l) (L (PreExp e l (UrTy l)))
 ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
                                          ++ (sdoc a) ++ ", " ++ (sdoc b)) a b
+
+ensureArenaScope :: MonadError (TCError exp) m => exp -> Env2 a -> Maybe Var -> m ()
+ensureArenaScope exp env ar =
+    case ar of
+      Nothing -> throwError $ GenericTC "Expected arena annotation" exp
+      Just var -> unless (S.member var . M.keysSet . vEnv $ env) $
+                  throwError $ GenericTC ("Expected arena in scope: " ++ sdoc var) exp
