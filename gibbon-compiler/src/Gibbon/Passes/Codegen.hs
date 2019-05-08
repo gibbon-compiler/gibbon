@@ -658,8 +658,9 @@ codegenTy ChunkTy = [cty|typename ChunkTy|]
 codegenTy (ProdTy []) = [cty|void*|]
 codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
     where nam = makeName ts
-codegenTy (SymDictTy _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
-
+codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
+codegenTy ArenaTy = error "codegenTy, arenas not handled"
+                             
 makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"
 
@@ -671,7 +672,7 @@ makeName' TagTyPacked = "Tag"
 -- makeName' TagTyBoxed  = "Btag"
 makeName' TagTyBoxed  = makeName' IntTy
 makeName' PtrTy = "Ptr"
-makeName' (SymDictTy _ty) = "Dict"
+makeName' (SymDictTy _ _ty) = "Dict"
 makeName' RegionTy = "Region"
 makeName' ChunkTy = "Chunk"
 makeName' x = error $ "makeName', not handled: " ++ show x

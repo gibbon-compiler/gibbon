@@ -691,7 +691,7 @@ data UrTy a =
 --                --   It's an alias for Int, an index into a symbol table.
         | BoolTy
         | ProdTy [UrTy a]     -- ^ An N-ary tuple
-        | SymDictTy (UrTy a)  -- ^ A map from SymTy to Ty
+        | SymDictTy (Maybe Var) (UrTy a)  -- ^ A map from SymTy to Ty, maybe in arena
           -- ^ We allow built-in dictionaries from symbols to a value type.
 
         | PackedTy TyCon a -- ^ No type arguments to TyCons for now.  (No polymorphism.)
@@ -704,7 +704,7 @@ data UrTy a =
         ---------- These are not used initially ----------------
         -- (They could be added by a later IR instead:)
 
-        | PtrTy -- ^ A machine pointer to a complete value in memory.
+        | PtrTy -- ^ A machine pointer tvo a complete value in memory.
                 -- This is decorated with the region it points into, which
                 -- may affect the memory layout.
 
@@ -812,6 +812,9 @@ subst old new (L p0 ex) = L p0 $
 
     Ext ext -> Ext (gSubstExt old new ext)
 
+    WithArenaE v e | v == old  -> WithArenaE v e
+                   | otherwise -> WithArenaE v (go e)
+
 -- | Expensive 'subst' that looks for a whole matching sub-EXPRESSION.
 -- If the old expression is a variable, this still avoids going under binder.
 substE :: HasSubstitutable e l d
@@ -845,6 +848,9 @@ substE old new (L p0 ex) = L p0 $
 
     Ext ext -> Ext (gSubstEExt old new ext)
 
+    WithArenaE v e | (VarE v) == unLoc old -> WithArenaE v e
+                   | otherwise -> WithArenaE v (go e)
+
 -- | Does the expression contain a TimeIt form?
 hasTimeIt :: L (PreExp e l d) -> Bool
 hasTimeIt (L _ rhs) =
@@ -865,6 +871,7 @@ hasTimeIt (L _ rhs) =
       MapE (_,_,e1) e2   -> hasTimeIt e1 || hasTimeIt e2
       FoldE (_,_,e1) (_,_,e2) e3 -> hasTimeIt e1 || hasTimeIt e2 || hasTimeIt e3
       Ext _ -> False
+      WithArenaE _ e -> hasTimeIt e
 
 -- | Project something which had better not be the first thing in a tuple.
 projNonFirst :: (Out l, Out d, Out (e l d)) => Int -> L (PreExp e l d) -> L (PreExp e l d)
@@ -949,7 +956,7 @@ hasPacked t =
     SymTy          -> False
     BoolTy         -> False
     IntTy          -> False
-    SymDictTy _ty  -> False -- hasPacked ty
+    SymDictTy _ _  -> False -- hasPacked ty
     ListTy _       -> error "FINISHLISTS"
     PtrTy          -> False
     CursorTy       -> False
@@ -959,15 +966,15 @@ hasPacked t =
 sizeOfTy :: UrTy a -> Maybe Int
 sizeOfTy t =
   case t of
-    PackedTy{}  -> Nothing
-    ProdTy ls   -> sum <$> mapM sizeOfTy ls
-    SymDictTy _ -> Just 8 -- Always a pointer.
-    IntTy       -> Just 8
-    BoolTy      -> sizeOfTy IntTy
-    ListTy _    -> error "FINISHLISTS"
-    PtrTy{}     -> Just 8 -- Assuming 64 bit
-    CursorTy{}  -> Just 8
-    ArenaTy     -> Just 8
+    PackedTy{}    -> Nothing
+    ProdTy ls     -> sum <$> mapM sizeOfTy ls
+    SymDictTy _ _ -> Just 8 -- Always a pointer.
+    IntTy         -> Just 8
+    BoolTy        -> sizeOfTy IntTy
+    ListTy _      -> error "FINISHLISTS"
+    PtrTy{}       -> Just 8 -- Assuming 64 bit
+    CursorTy{}    -> Just 8
+    ArenaTy       -> Just 8
 
 -- | Type of the arguments for a primitive operation.
 primArgsTy :: Prim (UrTy a) -> [UrTy a]
@@ -1024,8 +1031,8 @@ primRetTy p =
     SymAppend      -> SymTy
     SizeParam      -> IntTy
     DictHasKeyP _  -> BoolTy
-    DictEmptyP ty  -> SymDictTy ty
-    DictInsertP ty -> SymDictTy ty
+    DictEmptyP ty  -> SymDictTy Nothing ty
+    DictInsertP ty -> SymDictTy Nothing ty
     DictLookupP ty -> ty
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty

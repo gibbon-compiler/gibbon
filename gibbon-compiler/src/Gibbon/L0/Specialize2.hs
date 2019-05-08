@@ -187,7 +187,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         TyVar{} -> err1 (sdoc ty)
         MetaTv{} -> err1 (sdoc ty)
         ProdTy tys  -> L1.ProdTy $ map toL1Ty tys
-        SymDictTy a -> L1.SymDictTy $ toL1Ty a
+        SymDictTy a -> L1.SymDictTy Nothing $ toL1Ty a
         ArrowTy{} -> err1 (sdoc ty)
         PackedTy tycon tyapps | tyapps == [] -> L1.PackedTy tycon ()
                               | otherwise    -> err1 (sdoc ty)

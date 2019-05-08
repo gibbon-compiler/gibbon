@@ -182,7 +182,8 @@ instance (Pretty l) => Pretty (UrTy l) where
           IntTy  -> text "Int"
           BoolTy -> text "Bool"
           ProdTy tys    -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
-          SymDictTy ty1 -> text "Dict" <+> pprintWithStyle sty ty1
+          SymDictTy (Just var) ty1 -> text "Dict" <+> pprintWithStyle sty var <+> pprintWithStyle sty ty1
+          SymDictTy Nothing ty1 -> text "Dict" <+> text "_" <+> pprintWithStyle sty ty1
           PackedTy tc loc ->
               case sty of
                 PPHaskell  -> text tc
@@ -190,6 +191,7 @@ instance (Pretty l) => Pretty (UrTy l) where
           ListTy ty1 -> brackets $ pprintWithStyle sty ty1
           PtrTy     -> text "Ptr"
           CursorTy  -> text "Cursor"
+          ArenaTy   -> text "Arena"
 
 -- Function type for L1 and L3
 instance Pretty ([UrTy ()], UrTy ()) where

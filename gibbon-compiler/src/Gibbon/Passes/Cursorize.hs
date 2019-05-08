@@ -143,7 +143,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
         IntTy     -> IntTy
         BoolTy    -> BoolTy
         ProdTy ls -> ProdTy $ L.map cursorizeInTy ls
-        SymDictTy _ty -> SymDictTy CursorTy -- $ cursorizeInTy ty'
+        SymDictTy ar _ty -> SymDictTy ar CursorTy -- $ cursorizeInTy ty'
         PackedTy{}    -> CursorTy
         ListTy ty'    -> ListTy $ cursorizeInTy ty'
         PtrTy -> PtrTy
@@ -1162,5 +1162,5 @@ mkDi x [o] = Di $ l$ MkProdE [x, o]
 mkDi x ls  = Di $ l$ MkProdE [x, l$ MkProdE ls]
 
 curDict :: UrTy a -> UrTy a
-curDict (SymDictTy _ty) = SymDictTy CursorTy
+curDict (SymDictTy ar _ty) = SymDictTy ar CursorTy
 curDict ty = ty

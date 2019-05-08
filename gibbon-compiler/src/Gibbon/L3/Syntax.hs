@@ -168,11 +168,12 @@ cursorizeTy ty =
     IntTy     -> IntTy
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map cursorizeTy ls
-    SymDictTy _ty -> SymDictTy CursorTy -- $ cursorizeTy ty'
+    SymDictTy v _ -> SymDictTy v CursorTy -- $ cursorizeTy ty'
     PackedTy{}    -> ProdTy [CursorTy, CursorTy]
     ListTy ty'    -> ListTy $ cursorizeTy ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
+    ArenaTy  -> ArenaTy
 
 -- | Map exprs with an initial type environment:
 -- Exactly the same function that was in L2 before

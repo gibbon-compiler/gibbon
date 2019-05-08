@@ -145,8 +145,10 @@ tcExp isPacked ddfs env exp@(L p ex) =
 
     PrimAppE pr es -> do
       let len0 = checkLen exp pr 0 es
+          len1 = checkLen exp pr 1 es
           len2 = checkLen exp pr 2 es
           len3 = checkLen exp pr 3 es
+          len4 = checkLen exp pr 4 es
 
       tys <- mapM go es
       case pr of
@@ -191,21 +193,24 @@ tcExp isPacked ddfs env exp@(L p ex) =
           return SymTy
 
         DictEmptyP _ty -> do
-          len0
-          return $ SymDictTy CursorTy -- $ SymDictTy ty
+          len1
+          let [a] = tys
+          _ <- ensureEqualTy exp ArenaTy a
+          let (L _ (VarE var)) = es !! 0
+          return $ SymDictTy (Just var) CursorTy
 
         DictInsertP _ty -> do
-          len3
-          let [d,k,v] = tys
-          -- _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
+          len4
+          let [a,_d,k,v] = tys
+          let (L _ (VarE var)) = es !! 0
+          _ <- ensureEqualTy exp ArenaTy a
           _ <- ensureEqualTy exp SymTy k
           _ <- ensureEqualTy exp CursorTy v
-          return d
+          return $ SymDictTy (Just var) CursorTy
 
         DictLookupP _ty -> do
           len2
           let [_d,k] = tys
-          -- _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
           _ <- ensureEqualTy exp SymTy k
           return CursorTy
 
@@ -385,7 +390,7 @@ ensureEqualTyNoLoc :: (Eq l, Out l) => L (PreExp e l (UrTy l)) -> UrTy l -> UrTy
                       ExceptT (TCError (L (PreExp e l (UrTy l)))) Identity (UrTy l)
 ensureEqualTyNoLoc exp t1 t2 =
   case (t1,t2) of
-    (SymDictTy ty1, SymDictTy ty2) -> ensureEqualTyNoLoc exp ty1 ty2
+    (SymDictTy _ ty1, SymDictTy _ ty2) -> ensureEqualTyNoLoc exp ty1 ty2
     (PackedTy dc1 _, PackedTy dc2 _) -> if dc1 == dc2
                                         then return t1
                                         else ensureEqualTy exp t1 t2
