@@ -118,6 +118,7 @@ data Ty0
  | ArrowTy [Ty0] Ty0
  | PackedTy TyCon [Ty0] -- Type arguments to the type constructor
  | ListTy Ty0
+ | ArenaTy
   deriving (Show, Read, Eq, Ord, Generic, NFData)
 
 instance FunctionTy Ty0 where
@@ -220,6 +221,7 @@ tyVarsInTys tys = foldr (go []) [] tys
         ArrowTy tys1 b  -> foldr (go bound) (go bound b acc) tys1
         PackedTy _ tys1 -> foldr (go bound) acc tys1
         ListTy ty1      -> go bound ty1 acc
+        ArenaTy -> acc
 
 -- | Get the MetaTvs from a type; no duplicates in result.
 metaTvsInTy :: Ty0 -> [MetaTv]
@@ -244,6 +246,7 @@ metaTvsInTys tys = foldr go [] tys
         ArrowTy tys1 b  -> go b (foldr go acc tys1)
         PackedTy _ tys1 -> foldr go acc tys1
         ListTy ty1      -> go ty1 acc
+        ArenaTy -> acc
 
 -- | Like 'tyVarsInTy'.
 tyVarsInTyScheme :: TyScheme -> [TyVar]

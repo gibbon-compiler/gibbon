@@ -285,6 +285,7 @@ pattern Ls1 a             = RSList [a]
 pattern Ls2 loc a b       = RSList [A loc a, b]
 pattern Ls3 loc a b c     = RSList [A loc a, b, c]
 pattern Ls4 loc a b c d   = RSList [A loc a, b, c, d]
+pattern Ls5 loc a b c d e = RSList [A loc a, b, c, d, e]
 -- pattern L5 a b c d e = RSList [A a, b, c, d, e]
 
 trueE :: Exp0
@@ -408,7 +409,7 @@ exp se =
      b' <- exp b
      pure $ loc l $ ParE a' b'
 
-   Ls3 l "arena" v e -> do
+   Ls3 l "letarena" v e -> do
      e' <- exp e
      let v' = getSym v
      pure $ loc l $ WithArenaE v' e'
@@ -416,14 +417,16 @@ exp se =
    Ls (A l "vector" : es) -> loc l . MkProdE <$> mapM exp es
 
    -- Dictionaries require type annotations for now.  No inference!
-   Ls3 l "ann" (Ls1 (A _ "empty-dict")) (Ls2 _ "SymDict" ty) ->
-     pure $ loc l $ PrimAppE (DictEmptyP $ typ ty) []
+   Ls3 l "ann" (Ls2 _ "empty-dict" a) (Ls2 _ "SymDict" ty) -> do
+     a' <- exp a
+     pure $ loc l $ PrimAppE (DictEmptyP $ typ ty) [a']
 
-   Ls4 l "insert" d k (Ls3 _ "ann" v ty) -> do
+   Ls5 l "insert" a d k (Ls3 _ "ann" v ty) -> do
+     a' <- exp a
      d' <- exp d
      k' <- exp k
      v' <- exp v
-     pure $ loc l $ PrimAppE (DictInsertP $ typ ty) [d',k',v']
+     pure $ loc l $ PrimAppE (DictInsertP $ typ ty) [a',d',k',v']
 
    Ls3 l "ann" (Ls3 _ "lookup" d k) ty -> do
      d' <- exp d

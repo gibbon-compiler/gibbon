@@ -167,6 +167,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         DataConE _ dcon ls -> DataConE () dcon (map toL1Exp ls)
         TimeIt e ty b -> TimeIt (toL1Exp e) (toL1Ty ty) b
         ParE a b      -> ParE (toL1Exp a) (toL1Exp b)
+        WithArenaE v e -> WithArenaE v (toL1Exp e)
         MapE{}  -> err1 (sdoc ex)
         FoldE{} -> err1 (sdoc ex)
         Ext ext ->
@@ -191,6 +192,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         ArrowTy{} -> err1 (sdoc ty)
         PackedTy tycon tyapps | tyapps == [] -> L1.PackedTy tycon ()
                               | otherwise    -> err1 (sdoc ty)
+        ArenaTy -> L1.ArenaTy
         ListTy{} -> error $ "toL1Ty: No ListTy in L1."
 
     toL1TyS :: ArrowTy Ty0 -> ArrowTy L1.Ty1
@@ -477,6 +479,9 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
     TimeIt e ty b -> do
       e' <- go e
       pure $ TimeIt e' ty b
+    WithArenaE v e -> do
+      e' <- go e
+      pure $ WithArenaE v e'
     Ext ext ->
       case ext of
         LambdaE args bod -> do
@@ -573,6 +578,7 @@ monoLambdas (L p ex) = (L p) <$>
     DataConE tyapp dcon args ->
       (DataConE tyapp dcon) <$> mapM monoLambdas args
     TimeIt e ty b -> (\e' -> TimeIt e' ty b) <$> go e
+    WithArenaE v e -> (\e' -> WithArenaE v e') <$> go e
     Ext (LambdaE args bod) -> (\bod' -> Ext (LambdaE args bod')) <$> go bod
     Ext (PolyAppE{}) -> error $ "monoLambdas: TODO: " ++ sdoc ex
     Ext (FunRefE{})  -> pure ex
@@ -653,6 +659,7 @@ updateTyConsExp ddefs mono_st (L loc ex) = L loc $
       in DataConE (ProdTy []) dcon' (map go args)
     DataConE{} -> error $ "updateTyConsExp: DataConE expected ProdTy tyapps, got: " ++ sdoc ex
     TimeIt e ty b -> TimeIt (go e) (updateTyConsTy ddefs mono_st ty) b
+    WithArenaE v e -> WithArenaE v (go e)
     ParE{}  -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     MapE{}  -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     FoldE{} -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
@@ -681,6 +688,7 @@ updateTyConsTy ddefs mono_st ty =
            -- Why [] ? The type arguments aren't required as the DDef is monomorphic.
            Just suffix -> PackedTy (t ++ fromVar suffix) []
     ListTy t -> ListTy (go t)
+    ArenaTy -> ArenaTy
   where
     go = updateTyConsTy ddefs mono_st
 
@@ -812,6 +820,42 @@ becomes
 
     subst' old new ex = gRename (M.singleton old new) ex
 
+    -- | Update a function name.
+    subst' :: Var -> Var -> L Exp0 -> L Exp0
+    subst' old new (L p0 ex) = L p0 $
+      let go = subst' old new in
+      case ex of
+        VarE v | v == old  -> VarE new
+               | otherwise -> VarE v
+        AppE f [] ls | f == old  -> AppE new [] (map go ls)
+                     | otherwise -> AppE f [] (map go ls)
+        AppE _ (_:_) _ -> error $ "subst': Call-site not monomorphized: " ++ sdoc ex
+        LitE _             -> ex
+        LitSymE _          -> ex
+        PrimAppE p ls      -> PrimAppE p $ map go ls
+        LetE (v,[],t,rhs) bod | v == old  -> LetE (v,[],t,go rhs) bod
+                              | otherwise -> LetE (v,[],t,go rhs) (go bod)
+        LetE (_,(_:_),_,_) _ -> error $ "subst': Let not monomorphized: " ++ sdoc ex
+        ProjE i e  -> ProjE i (go e)
+        CaseE e ls -> CaseE (go e) (map f ls)
+                          where f (c,vs,er) = if elem old (map fst vs)
+                                              then (c,vs,er)
+                                              else (c,vs,go er)
+        MkProdE ls        -> MkProdE $ map go ls
+        DataConE loc k ls -> DataConE loc k $ map go ls
+        TimeIt e t b      -> TimeIt (go e) t b
+        IfE a b c         -> IfE (go a) (go b) (go c)
+        ParE a b          -> ParE (go a) (go b)
+        WithArenaE v e    -> WithArenaE v (go e)
+        MapE{} -> error $ "subst': TODO: " ++ sdoc ex
+        FoldE{} -> error $ "subst': TODO: " ++ sdoc ex
+
+        Ext ext ->
+          case ext of
+            LambdaE args bod    -> Ext $ LambdaE args (go bod)
+            PolyAppE rator rand -> Ext $ PolyAppE (go rator) (go rand)
+            FunRefE tyapps f | f == old  -> Ext $ FunRefE tyapps new
+                             | otherwise -> Ext $ FunRefE tyapps f
 
 specExp :: DDefs0 -> Env2 Ty0 -> L Exp0 -> SpecM (L Exp0)
 specExp ddefs env2 (L p ex) = (L p) <$>
@@ -890,6 +934,9 @@ specExp ddefs env2 (L p ex) = (L p) <$>
     TimeIt e ty b -> do
        e' <- go e
        pure $ TimeIt e' ty b
+    WithArenaE v e -> do
+       e' <- specExp ddefs (extendVEnv v ArenaTy env2) e
+       pure $ WithArenaE v e'
     ParE{}  -> error $ "specExp: TODO: " ++ sdoc ex
     MapE{}  -> error $ "specExp: TODO: " ++ sdoc ex
     FoldE{} -> error $ "specExp: TODO: " ++ sdoc ex
@@ -928,6 +975,7 @@ specExp ddefs env2 (L p ex) = (L p) <$>
         ProjE _ a  -> collectFunRefs a acc
         DataConE _ _ ls -> foldr collectFunRefs acc ls
         TimeIt a _ _   -> collectFunRefs a acc
+        WithArenaE _ e -> collectFunRefs e acc
         CaseE scrt brs -> foldr
                             (\(_,_,b) acc2 -> collectFunRefs b acc2)
                             (collectFunRefs scrt acc)
@@ -1031,6 +1079,10 @@ hoistLambdas prg@Prog{fundefs,mainExp} = do
           a' <- (gocap a)
           b' <- (gocap b)
           pure ([], ParE a' b')
+
+        (WithArenaE v e) -> do
+          e' <- (gocap e)
+          pure ([], WithArenaE v e')
 
         (TimeIt e t b) -> do (lts,e') <- go e
                              pure (lts, TimeIt e' t b)

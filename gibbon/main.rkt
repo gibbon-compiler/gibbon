@@ -6,7 +6,7 @@
          for/list for/fold or and
          Vector vector vector-ref
          list and empty? error
-         par
+         par letarena
          eq? = Listof True False
          sym-append
 
@@ -114,13 +114,13 @@ lit := int | #t | #f
 
 
 ;;(insert e e e)
-(define-syntax-rule (insert ht key v)
+(define-syntax-rule (insert a ht key v)
   (hash-set ht key v))
 
 (define-syntax-rule (lookup ht key)
   (hash-ref ht key))
 
-(define-syntax-rule (empty-dict)
+(define-syntax-rule (empty-dict a)
   (hash))
 
 (define-syntax-rule (delete ht key)
@@ -128,6 +128,9 @@ lit := int | #t | #f
 
 (define-syntax-rule (has-key? ht key)
   (hash-has-key? ht key))
+
+(define-syntax-rule (letarena v e)
+  (let ([v (void)]) e))
 
 (define-syntax-rule (time e)
   (let-values ([(ls cpu real gc) (time-apply (lambda () e) '())])

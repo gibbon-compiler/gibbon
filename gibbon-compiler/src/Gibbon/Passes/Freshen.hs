@@ -213,6 +213,11 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
       e' <- go e
       return $ TimeIt e' t b
 
+    WithArenaE v e -> do
+      v' <- gensym v
+      e' <- freshExp (M.insert v v' venv) tvenv e
+      return $ WithArenaE v' e'
+
     ParE a b -> do
       ParE <$> go a <*> go b
 
