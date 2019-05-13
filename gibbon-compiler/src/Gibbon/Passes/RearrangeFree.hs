@@ -73,6 +73,8 @@ rearrangeFreeExp frees tail =
     LetTimedT isIter binds timed bod ->
       LetTimedT isIter binds timed <$>
         go bod
+    LetArenaT v bod ->
+      LetArenaT v <$> go bod
     TailCall{} -> return tail
 
   where go = rearrangeFreeExp frees

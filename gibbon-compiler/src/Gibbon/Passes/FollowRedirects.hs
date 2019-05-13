@@ -140,6 +140,7 @@ followRedirectsExp ttailenv tenv tail =
     LetTimedT isIter binds timed bod ->
       LetTimedT isIter binds timed <$>
         go (M.union tenv (M.fromList binds)) bod
+    LetArenaT lhs bod -> LetArenaT lhs <$> go (M.insert lhs ArenaTy tenv) bod
     TailCall{} -> return tail
 
   where go = followRedirectsExp ttailenv

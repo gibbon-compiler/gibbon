@@ -178,6 +178,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
       e' <- go e
       return $ TimeIt e' ty b
     ParE a b -> ParE <$> go a <*> go b
+    WithArenaE v e -> WithArenaE v <$> go e
     MapE{}  -> error $ "go: TODO MapE"
     FoldE{} -> error $ "go: TODO FoldE"
 

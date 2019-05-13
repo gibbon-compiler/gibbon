@@ -184,6 +184,10 @@ exp ddfs env2 (L sloc e0) =
       (bnd2,b') <- go b
       return ([], ParE (flatLets bnd a') (flatLets bnd2 b'))
 
+    WithArenaE v e -> do
+      (bnd, e') <- go e
+      return ([], WithArenaE v (flatLets bnd e'))
+
     MapE _ _      -> error "FINISHLISTS"
     FoldE _ _ _   -> error "FINISHLISTS"
 

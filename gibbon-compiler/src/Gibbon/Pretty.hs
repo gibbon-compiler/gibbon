@@ -280,6 +280,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                               -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
           TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
           ParE a b -> pprintWithStyle sty a <+> text "||" <+> pprintWithStyle sty b
+          WithArenaE v e -> text "letarena" <+> pprint v <+> text "in" $+$ pprint e
           Ext ext -> pprintWithStyle sty ext
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{} -> error $ "Unexpected form in program: FoldE"
@@ -354,6 +355,7 @@ instance Pretty L0.Ty0 where
         L0.ArrowTy as b  -> parens $ (hsep $ map (<+> "->") $ map (pprintWithStyle sty) as) <+> pprint b
         L0.PackedTy tc loc -> text "Packed" <+> text tc <+> brackets (hcat (map (pprintWithStyle sty) loc))
         L0.ListTy ty1 -> brackets (pprintWithStyle sty ty1)
+        L0.ArenaTy    -> text "Arena"
 
 
 instance Pretty L0.TyScheme where
@@ -483,6 +485,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                               hsep (map (ppExp env2) es)
           TimeIt e _ty _b -> text "timeit" <+> parens (ppExp env2 e)
           ParE a b -> ppExp env2 a <+> text "||" <+> ppExp env2 b
+          WithArenaE v e -> text "letarena" <+> pprint v <+> text "in" $+$ ppExp env2 e
           Ext{}  -> empty -- L1 doesn't have an extension.
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{}-> error $ "Unexpected form in program: FoldE"
