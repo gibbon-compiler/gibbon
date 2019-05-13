@@ -310,6 +310,10 @@ tcExp isPacked ddfs env exp@(L p ex) =
       bty <- go b
       return (ProdTy [aty, bty])
 
+    WithArenaE v e -> do
+      let env' = extendVEnv v ArenaTy env
+      tcExp isPacked ddfs env' e
+
     MapE{}  -> throwError $ UnsupportedExpTC exp
     FoldE{} -> throwError $ UnsupportedExpTC exp
 

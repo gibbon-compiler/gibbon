@@ -490,6 +490,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
       -- Finally reprocess teh whole thing
       tail (go (zip3 tmps tys ls) bod')
 
+    WithArenaE v e -> do
+      e' <- tail e
+      return $ T.LetArenaT v e'
+
 {-
 
 Lowering the parallel tuple combinator
@@ -882,6 +886,7 @@ hackyParSubst i p binds (L loc ex) = L loc $
     DataConE{} -> ex
     TimeIt{} -> ex
     ParE{} -> ex
+    WithArenaE{} -> ex
     Ext{} -> ex
     MapE{} -> ex
     FoldE{} -> ex

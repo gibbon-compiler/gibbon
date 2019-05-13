@@ -70,6 +70,7 @@ floatOutExp ddefs env2 (L p ex) = (L p) <$>
     TimeIt e ty b -> do
       e' <- go e
       return (TimeIt e' ty b)
+    WithArenaE v e -> WithArenaE v <$> go e
     Ext ext -> case ext of {}
     MapE{}  -> error "floatOutExp: TODO MapE"
     FoldE{} -> error "floatOutExp: TODO MapE"

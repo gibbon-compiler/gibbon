@@ -18,6 +18,7 @@ import Data.Loc
 import Data.Map as M
 import Data.Set as S
 import Data.List as L
+import Data.Maybe
 import Text.PrettyPrint
 import Text.PrettyPrint.GenericPretty
 
@@ -161,6 +162,16 @@ tcExp ddfs env exp@(L p ex) =
         PEndOf -> return CursorTy
 
         oth -> error $ "L1.tcExp : PrimAppE : TODO " ++ sdoc oth
+
+    LetE (v,[],SymDictTy _ pty, rhs) e -> do
+      tyRhs <- go rhs
+      case tyRhs of
+        SymDictTy ar pty' ->
+            do  _ <- ensureEqualTy exp pty pty'
+                unless (isJust ar) $ throwError $ GenericTC "Expected arena variable annotation" rhs
+                let env' = extendEnv env [(v,SymDictTy ar pty')]
+                tcExp ddfs env' e   
+        _ -> throwError $ GenericTC ("Expected expression to be SymDict type:" ++ sdoc rhs) exp
 
     LetE (v,locs,ty,rhs) e -> do
       -- Check that the expression does not have any locations

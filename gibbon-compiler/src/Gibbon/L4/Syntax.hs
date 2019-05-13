@@ -123,6 +123,11 @@ data Tail
     -- ^ For casing on numeric tags or integers.
     | TailCall Var [Triv]
     | Goto Label
+
+    -- Allocate an arena for non-packed data 
+    | LetArenaT { lhs :: Var
+                , bod  :: Tail
+                }
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data Ty
@@ -249,6 +254,7 @@ withTail (tl0,retty) fn =
     (LetUnpackT { binds, ptr, bod })           -> LetUnpackT binds ptr          <$> go bod
     (LetAllocT { lhs, vals, bod })             -> LetAllocT  lhs   vals         <$> go bod
     (LetTimedT { isIter, binds, timed, bod })  -> LetTimedT isIter binds timed  <$> go bod
+    (LetArenaT { lhs, bod })                   -> LetArenaT lhs                 <$> go bod
 
     -- We could DUPLICATE code in both branches or just let-bind the result instead:
     (IfT { tst, con, els }) -> IfT tst <$> go con <*> go els

@@ -166,6 +166,8 @@ interp rc _ddefs fenv = go M.empty
             b' <- go env b
             return $ VProd [a', b']
 
+          WithArenaE _v e -> go env e
+                            
           IfE a b c -> do v <- go env a
                           case v of
                            VBool flg -> if flg

@@ -372,6 +372,8 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
           ParE a b -> ParE <$> go a <*> go b
 
+          WithArenaE v e -> WithArenaE v <$> go e
+
           Ext (LetRegionE r (L _ (LitE n))) -> do
                  tmp <- gensym "fltLitTail"
                  let e = l$ Ext (LetRegionE r (l$ LetE (tmp,[],IntTy,l$ LitE n) (l$ VarE tmp)))

@@ -148,6 +148,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
         ListTy ty'    -> ListTy $ cursorizeInTy ty'
         PtrTy -> PtrTy
         CursorTy -> CursorTy
+        ArenaTy -> ArenaTy
 
 {-
 
@@ -259,6 +260,8 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
     TimeIt e ty b -> TimeIt <$> go e <*> pure (stripTyLocs ty) <*> pure b
 
     ParE a b -> ParE <$> go a <*> go b
+
+    WithArenaE v e -> WithArenaE v <$> go e
 
     -- Eg. leftmost
     Ext ext ->
@@ -429,6 +432,10 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
     TimeIt e t b -> do
       Di e' <- go tenv e
       return $ dl$ TimeIt e' (cursorizeTy t) b
+
+    WithArenaE v e -> do
+      Di e' <- go tenv e
+      return $ dl$ WithArenaE v e'
 
     ParE a b -> do
        Di a' <- go tenv a

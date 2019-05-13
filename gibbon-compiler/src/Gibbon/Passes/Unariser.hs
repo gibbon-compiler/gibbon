@@ -155,6 +155,8 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
 
     ParE a b -> ParE <$> go env2 a <*> go env2 b
 
+    WithArenaE v e -> WithArenaE v <$> go env2 e
+
     Ext{}  -> return ex
     MapE{}  -> error "unariserExp: MapE TODO"
     FoldE{} -> error "unariserExp: FoldE TODO"

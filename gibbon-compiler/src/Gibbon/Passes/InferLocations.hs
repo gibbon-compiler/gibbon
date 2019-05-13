@@ -616,7 +616,9 @@ inferExp env@FullEnv{dataDefs}
         do (e',ty',cs') <- inferExp env e dest
            return (lc$ TimeIt e' ty' b, ty', cs')
 
-    WithArenaE v e -> inferExp (extendVEnv v ArenaTy env) e dest 
+    WithArenaE v e ->
+        do (e',ty',cs') <- inferExp (extendVEnv v ArenaTy env) e dest
+           return (lc$ WithArenaE v e', ty', cs')
 
     DataConE () k [] ->
         case dest of
@@ -713,7 +715,7 @@ inferExp env@FullEnv{dataDefs}
        (c',tyc,csc)    <- inferExp env c dest
        return (lc$ IfE a' b' c', tyc, L.nub $ acs ++ csb ++ csc)
 
-    PrimAppE (DictInsertP dty) [L _ (VarE var),d,k,v] ->
+    PrimAppE (DictInsertP dty) [L sl (VarE var),d,k,v] ->
       case dest of
         SingleDest _ -> err "Cannot unify DictInsert with destination"
         TupleDest _ -> err "Cannot unify DictInsert with destination"
@@ -725,7 +727,7 @@ inferExp env@FullEnv{dataDefs}
                      -- _ <- fixLoc loc
                      (v',vty,vcs) <- inferExp env v $ SingleDest loc
                      let cs = vcs -- (StartRegionL loc r) : vcs
-                     return (lc$ PrimAppE (DictInsertP dty') [d',k',v'], SymDictTy (Just var) dty'', cs)
+                     return (lc$ PrimAppE (DictInsertP dty') [L sl (VarE var),d',k',v'], SymDictTy (Just var) dty'', cs)
 
     PrimAppE (DictLookupP dty) [d,k] ->
       case dest of
@@ -742,12 +744,12 @@ inferExp env@FullEnv{dataDefs}
         TupleDest _ -> err "Cannot unify DictLookup with tuple destination"
         NoDest -> err "Cannot unify DictLookup with no destination"
 
-    PrimAppE (DictEmptyP dty) [L _ (VarE var)] ->
+    PrimAppE (DictEmptyP dty) [L sl (VarE var)] ->
       case dest of
         SingleDest _ -> err "Cannot unify DictEmpty with destination"
         TupleDest _ -> err "Cannot unify DictEmpty with destination"
         NoDest -> do dty' <- lift $ lift $ convertTy dty
-                     return (lc$ PrimAppE (DictEmptyP dty') [], SymDictTy (Just var) dty', [])
+                     return (lc$ PrimAppE (DictEmptyP dty') [L sl (VarE var)], SymDictTy (Just var) dty', [])
 
     PrimAppE (DictHasKeyP dty) [d,k] ->
       case dest of
@@ -1033,6 +1035,10 @@ finishExp (L i e) =
           b' <- finishExp b
           return (l$ ParE a' b')
 
+      WithArenaE v e -> do
+             e' <- finishExp e
+             return $ l$ WithArenaE v e'
+
       Ext (LetRegionE r e1) -> do
              e1' <- finishExp e1
              return $ l$ Ext (LetRegionE r e1')
@@ -1124,6 +1130,9 @@ cleanExp (L i e) =
                       (b', s2) = cleanExp b
                   in (l$ ParE a' b', s1 `S.union` s2)
 
+      WithArenaE v e -> let (e',s) = cleanExp e
+                        in (l$ WithArenaE v e', s)
+
       Ext (LetRegionE r e) -> let (e',s') = cleanExp e
                               in (l$ Ext (LetRegionE r e'), s')
       Ext (LetLocE loc FreeLE e) -> let (e', s) = cleanExp e
@@ -1199,6 +1208,7 @@ fixProj renam pvar proj (L i e) =
       ParE e1 e2 -> let e1' = fixProj renam pvar proj e1
                         e2' = fixProj renam pvar proj e2
                     in l$ ParE e1' e2'
+      WithArenaE v e -> l$ WithArenaE v $ fixProj renam pvar proj e
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
