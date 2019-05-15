@@ -157,7 +157,7 @@ typedef char* CursorTy;
 
 typedef struct mem_arena {
   int ind;
-  char* mem;
+  char* mem; // TODO: make this a list of chunks?
   void* reflist;
 } mem_arena_t;
 
@@ -172,12 +172,15 @@ ArenaTy alloc_arena() {
 }
 
 void free_arena(ArenaTy ar) {
-  // TODO
+  free(ar->mem);
+  // TODO: free everything in ar->reflist
+  free(ar);
 }
 
 CursorTy extend_arena(ArenaTy ar, int size) {
-  // TODO
-  return 0;
+  CursorTy ret = ar->mem + ar->ind;
+  ar->ind += size;
+  return ret;
 }
 
 typedef struct dict_item {
@@ -186,12 +189,12 @@ typedef struct dict_item {
   void * ptrval;
 } dict_item_t;
 
-dict_item_t * dict_alloc() {
-  return ALLOC(sizeof(dict_item_t));
+dict_item_t * dict_alloc(ArenaTy ar) {
+  return (dict_item_t *) extend_arena(ar, sizeof(dict_item_t)); // ALLOC(sizeof(dict_item_t));
 }
 
 dict_item_t *dict_insert_ptr(ArenaTy ar, dict_item_t *ptr, SymTy key, PtrTy val) {
-  dict_item_t *ret = dict_alloc();
+  dict_item_t *ret = dict_alloc(ar);
   ret->key = key;
   ret->ptrval = val;
   ret->next = ptr;

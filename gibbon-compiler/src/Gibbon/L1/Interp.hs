@@ -166,7 +166,8 @@ interp rc _ddefs fenv = go M.empty
             b' <- go env b
             return $ VProd [a', b']
 
-          WithArenaE _v e -> go env e
+          WithArenaE v e -> let env' = M.insert v (VInt 0) env
+                            in go env' e
                             
           IfE a b c -> do v <- go env a
                           case v of
@@ -200,10 +201,10 @@ applyPrim rc p ls =
    (GtEqP,[VInt x, VInt y]) -> VBool (x >= y)
    (AndP, [VBool x, VBool y]) -> VBool (x && y)
    (OrP, [VBool x, VBool y])  -> VBool (x || y)
-   ((DictInsertP _ty),[VDict mp, key, val]) -> VDict (M.insert key val mp)
+   ((DictInsertP _ty),[_, VDict mp, key, val]) -> VDict (M.insert key val mp)
    ((DictLookupP _),[VDict mp, key])        -> mp # key
    ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)
-   ((DictEmptyP _),[])                      -> VDict M.empty
+   ((DictEmptyP _),[_])                      -> VDict M.empty
    ((ErrorP msg _ty),[]) -> error msg
    (SizeParam,[]) -> VInt (rcSize rc)
    (ReadPackedFile file _ _ ty,[]) ->
