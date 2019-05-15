@@ -691,7 +691,7 @@ data UrTy a =
 --                --   It's an alias for Int, an index into a symbol table.
         | BoolTy
         | ProdTy [UrTy a]     -- ^ An N-ary tuple
-        | SymDictTy (Maybe Var) (UrTy a)  -- ^ A map from SymTy to Ty, maybe in arena
+        | SymDictTy (Maybe Var) (UrTy a)  -- ^ A map from SymTy to Ty
           -- ^ We allow built-in dictionaries from symbols to a value type.
 
         | PackedTy TyCon a -- ^ No type arguments to TyCons for now.  (No polymorphism.)

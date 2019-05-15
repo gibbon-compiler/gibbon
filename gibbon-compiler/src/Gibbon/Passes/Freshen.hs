@@ -129,8 +129,8 @@ freshTy env ty =
      MetaTv{} -> pure (env, ty)
      ProdTy tys    -> do (env', tys') <- freshTys env tys
                          pure (env', ProdTy tys')
-     SymDictTy t   -> do (env', t') <- freshTy env t
-                         pure (env', SymDictTy t')
+     SymDictTy v t   -> do (env', t') <- freshTy env t
+                           pure (env', SymDictTy v t')
      ArrowTy tys t -> do (env', tys') <- freshTys env tys
                          (env'', [t'])  <- freshTys env' [t]
                          pure (env'', ArrowTy tys' t')

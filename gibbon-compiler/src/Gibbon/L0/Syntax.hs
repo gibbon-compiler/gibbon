@@ -114,7 +114,7 @@ data Ty0
  | TyVar TyVar   -- Rigid/skolem type variables
  | MetaTv MetaTv -- Unification variables
  | ProdTy [Ty0]
- | SymDictTy Ty0
+ | SymDictTy (Maybe Var) Ty0
  | ArrowTy [Ty0] Ty0
  | PackedTy TyCon [Ty0] -- Type arguments to the type constructor
  | ListTy Ty0
@@ -217,7 +217,7 @@ tyVarsInTys tys = foldr (go []) [] tys
                     else tv : acc
         MetaTv _ -> acc
         ProdTy tys1     -> foldr (go bound) acc tys1
-        SymDictTy ty1   -> go bound ty1 acc
+        SymDictTy _ ty1   -> go bound ty1 acc
         ArrowTy tys1 b  -> foldr (go bound) (go bound b acc) tys1
         PackedTy _ tys1 -> foldr (go bound) acc tys1
         ListTy ty1      -> go bound ty1 acc
@@ -242,7 +242,7 @@ metaTvsInTys tys = foldr go [] tys
         BoolTy  -> acc
         TyVar{} -> acc
         ProdTy tys1     -> foldr go acc tys1
-        SymDictTy ty1   -> go ty1 acc
+        SymDictTy _ ty1   -> go ty1 acc
         ArrowTy tys1 b  -> go b (foldr go acc tys1)
         PackedTy _ tys1 -> foldr go acc tys1
         ListTy ty1      -> go ty1 acc
@@ -271,7 +271,7 @@ arrowTysInTy = go []
         TyVar{}  -> acc
         MetaTv{} -> acc
         ProdTy tys    -> foldl go acc tys
-        SymDictTy a   -> go acc a
+        SymDictTy _ a   -> go acc a
         ArrowTy tys b -> go (foldl go acc tys) b ++ [ty]
         PackedTy _ vs -> foldl go acc vs
         ListTy a -> go acc a
@@ -348,8 +348,8 @@ recoverType ddfs env2 (L _ ex)=
         SymAppend      -> IntTy
         SizeParam      -> IntTy
         DictHasKeyP _  -> BoolTy
-        DictEmptyP ty  -> SymDictTy ty
-        DictInsertP ty -> SymDictTy ty
+        DictEmptyP ty  -> SymDictTy Nothing ty
+        DictInsertP ty -> SymDictTy Nothing ty
         DictLookupP ty -> ty
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty

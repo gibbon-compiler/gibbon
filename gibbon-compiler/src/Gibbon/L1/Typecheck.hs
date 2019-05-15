@@ -41,7 +41,7 @@ tcExp ddfs env exp@(L p ex) =
     LitSymE _ -> return IntTy
 
     AppE v locs ls -> do
-      let funty =
+      let funty' =
             case (M.lookup v (fEnv env)) of
               Just ty -> ty
               Nothing -> error $ "Function not found: " ++ sdoc v ++ " while checking " ++
@@ -55,8 +55,17 @@ tcExp ddfs env exp@(L p ex) =
 
       -- Check argument type
       argTys <- mapM go ls
-      _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (fragileZip (inTys funty) argTys)
-      return (outTy funty)
+      let isArTy (_, ArenaTy) = True
+          isArTy _ = False
+          arvs  = Prelude.map (\(L _ (VarE v),_) -> v) $
+                  Prelude.filter isArTy (zip ls argTys)
+
+          subArenaVars arvs (tys,rty) = (tys,rty) -- TODO: implement
+                                        
+          (subArgTys,subRetTy) = subArenaVars arvs (inTys funty', outTy funty')
+
+      _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (fragileZip subArgTys argTys)
+      return subRetTy
 
     PrimAppE pr es -> do
       let len0 = checkLen exp pr 0 es

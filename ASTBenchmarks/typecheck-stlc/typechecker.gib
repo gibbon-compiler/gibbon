@@ -21,7 +21,8 @@
       [Int_]
       [Bool_]
       [NullT]
-      [Lamt ListType Type])
+      [Lamt ListType Type]
+      [Fail])
 
 (data Param
       [P Expr Type])
@@ -35,11 +36,11 @@
       [Lam ListParam Expr]
       [App Expr ListExpr])
 
-(define (extend-env [e : (SymDict Type)] [sym : Sym] [type : Type]) : (SymDict Type)
-  (insert e sym type))
+(define (extend-env [a : Arena] [e : (SymDict Type)] [sym : Sym] [type : Type]) : (SymDict Type)
+  (insert a e sym (ann type Type)))
 
 (define (lookup-env [e : (SymDict Type)] [sym : Sym]) : Type
-  (lookup e sym))
+  (ann (lookup e sym) Type))
 
 (define (typecheck-begin [exprs : ListExpr] [env : (SymDict Type)]) : Type
   (case exprs
@@ -51,17 +52,17 @@
       [(NULLEXPR)
        (typecheck e env)])]
     [(NULLEXPR)
-     (error "Should never get here: ~a\n" exprs)]))
+     (Fail)]))
 
-(define (lam-extend-env [params : ListParam] [env : (SymDict Type)]) : (SymDict Type)
+(define (lam-extend-env [params : ListParam] [a : Arena] [env : (SymDict Type)]) : (SymDict Type)
   (case params
     [(CONSPARAM param rest)
      (let ([nenv : (SymDict Type) (case param
        	  	            	    [(P e t)
         		  	     (case e
 	 		 	       [(S sym)
-      		          	        (extend-env env sym t)])])])
-       (lam-extend-env rest nenv))]
+      		          	        (extend-env a env sym t)])])])
+       (lam-extend-env rest a nenv))]
     [(NULLPARAM)
      env]))
      
@@ -72,56 +73,56 @@
        [(CONSTYPE t2 rest2)
         (if (type-equal? t1 t2)
 	    (type-equal-list? rest1 rest2)
-	    #f)]
-       [(NULLTYPE) #f])]
+	    False)]
+       [(NULLTYPE) False])]
     [(NULLTYPE)
      (case l2
-       [(CONSTYPE t2 rest2) #f]
-       [(NULLTYPE)          #t])]))
+       [(CONSTYPE t2 rest2) False]
+       [(NULLTYPE)          True])]))
     
 (define (type-equal? [t1 : Type] [t2 : Type]) : Bool
   (case t1
     [(NullT)
      (case t2
-       [(NullT) #t]
-       [(Int_) #f]
-       [(Bool_) #f]
-       [(Lamt pt bt) #f])]
+       [(NullT) True]
+       [(Int_) False]
+       [(Bool_) False]
+       [(Lamt pt bt) False])]
     [(Int_)
      (case t2
-       [(Int_) #t]
-       [(Bool_) #f]
-       [(NullT) #f]
-       [(Lamt pt bt) #f])]
+       [(Int_) True]
+       [(Bool_) False]
+       [(NullT) False]
+       [(Lamt pt bt) False])]
     [(Bool_)
      (case t2
-       [(Bool_) #t]
-       [(Int_) #f]
-       [(NullT) #f]
-       [(Lamt pt bt) #f])]
+       [(Bool_) True]
+       [(Int_) False]
+       [(NullT) False]
+       [(Lamt pt bt) False])]
     [(Lamt pt bt)
      (case t2
        [(Lamt pt2 bt2)
         (and
          (type-equal-list? pt pt2)
          (type-equal? bt bt2))]
-       [(Int_) #f]
-       [(Bool_) #f]
-       [(NullT) #f])]))
+       [(Int_) False]
+       [(Bool_) False]
+       [(NullT) False])]))
         
 (define (params-args-equal? [ptypes : ListType] [args : ListExpr] [env : (SymDict Type)]) : Bool
   (case ptypes
     [(NULLTYPE)
      (case args
-      [(CONSEXPR e rest) (error "Args and Params not same length.")]
-      [(NULLEXPR) #t])]
+      [(CONSEXPR e rest) False]
+      [(NULLEXPR) True])]
     [(CONSTYPE t rest)
      (case args
        [(CONSEXPR e rest2)
         (if (type-equal? t (typecheck e env))
 	    (params-args-equal? rest rest2 env)
-	    #f)]
-       [(NULLEXPR) (error "Args and Params not same length.")])]))
+	    False)]
+       [(NULLEXPR) False])]))
 
 (define (getParamTypes [params : ListParam]) : ListType
   (case params
@@ -131,7 +132,7 @@
     [(NULLPARAM)
      (NULLTYPE)]))
 
-(define (typecheck [expr : Expr] [env : (SymDict Type)] ): Type
+(define (typecheck [expr : Expr] [a : Arena] [env : (SymDict Type)] ): Type
   (case expr
     [(Null)
      (NullT)]
@@ -145,14 +146,14 @@
      (typecheck-begin ls env)]
     [(Lam params body)
      (Lamt (getParamTypes params)
-     	   (typecheck body (lam-extend-env params env)))]
+     	   (typecheck body (lam-extend-env params a env)))]
     [(App lam args)
      (case (typecheck lam env)
        [(Lamt ptypes btype)
         (if (params-args-equal? ptypes args env)
             btype
-            (error "no type"))])]))
+            (Fail))])]))
 
 (define (typecheck-expr [expr : Expr]) : Type
-  (typecheck expr (empty-dict)))
+  (letarena a (typecheck expr a (ann (empty-dict a) (SymDict Type)))))
 

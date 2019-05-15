@@ -3,7 +3,7 @@
 (data Foo (MkFoo Int))
 
 (letarena a
-  (let ([d : (SymDict Foo) (ann (empty-dict a) (SymDict Foo))])
-    (let ([d2 : (SymDict Foo) (insert a d (quote x) (ann (MkFoo 2) Foo))])
+  (let ([d : (SymDict a Foo) (ann (empty-dict a) (SymDict a Foo))])
+    (let ([d2 : (SymDict a Foo) (insert a d (quote x) (ann (MkFoo 2) Foo))])
       (case (ann (lookup d2 (quote x)) Foo)
         [(MkFoo i) i]))))

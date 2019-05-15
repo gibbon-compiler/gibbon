@@ -188,7 +188,8 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         TyVar{} -> err1 (sdoc ty)
         MetaTv{} -> err1 (sdoc ty)
         ProdTy tys  -> L1.ProdTy $ map toL1Ty tys
-        SymDictTy a -> L1.SymDictTy Nothing $ toL1Ty a
+        SymDictTy (Just v) a -> L1.SymDictTy (Just v) $ toL1Ty a
+        SymDictTy Nothing  a -> L1.SymDictTy Nothing $ toL1Ty a
         ArrowTy{} -> err1 (sdoc ty)
         PackedTy tycon tyapps | tyapps == [] -> L1.PackedTy tycon ()
                               | otherwise    -> err1 (sdoc ty)
@@ -679,7 +680,7 @@ updateTyConsTy ddefs mono_st ty =
     TyVar{} ->  error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."
     MetaTv{} -> error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."
     ProdTy tys  -> ProdTy (map go tys)
-    SymDictTy t -> SymDictTy (go t)
+    SymDictTy v t -> SymDictTy v (go t)
     ArrowTy as b   -> ArrowTy (map go as) (go b)
     PackedTy t tys ->
       let tys' = map go tys

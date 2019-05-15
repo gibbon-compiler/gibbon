@@ -14,6 +14,7 @@ module Gibbon.SExpFrontend
        , primMap )
   where
 
+import Control.Monad
 import Data.Char ( isLower, isAlpha )
 import Data.List as L
 import Data.Loc
@@ -249,11 +250,12 @@ typ s = case s of
          (A _ "Int")  -> IntTy
          (A _ "Sym")  -> SymTy0
          (A _ "Bool") -> BoolTy
+         (A _ "Arena") -> ArenaTy
          -- If it's lowercase, it's a type variable. Otherwise, a Packed type.
          (A _ con)    -> if isTyVar con
                          then TyVar $ UserTv (textToVar con)
                          else PackedTy (textToDataCon con) []
-         (Ls2 _ "SymDict" t) -> SymDictTy $ typ t
+         (Ls3 _ "SymDict" (A _ v) t) -> SymDictTy (Just (textToVar v)) (typ t)
          (Ls2 _ "Listof" t)  -> ListTy $ typ t
          -- See https://github.com/aisamanra/s-cargot/issues/14.
          (Ls (A _ "-" : A _ ">" : tys)) ->
@@ -417,8 +419,10 @@ exp se =
    Ls (A l "vector" : es) -> loc l . MkProdE <$> mapM exp es
 
    -- Dictionaries require type annotations for now.  No inference!
-   Ls3 l "ann" (Ls2 _ "empty-dict" a) (Ls2 _ "SymDict" ty) -> do
+   Ls3 l "ann" (Ls2 _ "empty-dict" a) (Ls3 _ "SymDict" b ty) -> do
      a' <- exp a
+     b' <- exp b
+     unless (a' == b') $ error $ "Expected annotation on SymDict:" ++ show a'
      pure $ loc l $ PrimAppE (DictEmptyP $ typ ty) [a']
 
    Ls5 l "insert" a d k (Ls3 _ "ann" v ty) -> do
