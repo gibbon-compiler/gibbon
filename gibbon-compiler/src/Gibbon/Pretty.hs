@@ -351,7 +351,8 @@ instance Pretty L0.Ty0 where
         L0.TyVar v    -> doc v
         L0.MetaTv v   -> doc v
         L0.ProdTy tys -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
-        L0.SymDictTy ty1 -> text "Dict" <+> pprint ty1
+        L0.SymDictTy (Just v) ty1 -> text "Dict" <+> pprint v <+> pprint ty1
+        L0.SymDictTy Nothing  ty1 -> text "Dict" <+> pprint ty1
         L0.ArrowTy as b  -> parens $ (hsep $ map (<+> "->") $ map (pprintWithStyle sty) as) <+> pprint b
         L0.PackedTy tc loc -> text "Packed" <+> text tc <+> brackets (hcat (map (pprintWithStyle sty) loc))
         L0.ListTy ty1 -> brackets (pprintWithStyle sty ty1)

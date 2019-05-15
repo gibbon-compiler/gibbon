@@ -4,10 +4,10 @@
 
 (letarena a
   (let ([v : Int
-    (let ([d : (SymDict Foo) (ann (empty-dict a) (SymDict Foo))])
-      (let ([d2 : (SymDict Foo) (insert a d (quote x) (ann (MkFoo 2) Foo))])
-        (let ([d3 : (SymDict Foo) (insert a d2 (quote y) (ann (MkFoo 5) Foo))])
-          (let ([d4 : (SymDict Foo) (insert a d2 (quote y) (ann (MkFoo 10) Foo))])
+    (let ([d : (SymDict a Foo) (ann (empty-dict a) (SymDict a Foo))])
+      (let ([d2 : (SymDict a Foo) (insert a d (quote x) (ann (MkFoo 2) Foo))])
+        (let ([d3 : (SymDict a Foo) (insert a d2 (quote y) (ann (MkFoo 5) Foo))])
+          (let ([d4 : (SymDict a Foo) (insert a d2 (quote y) (ann (MkFoo 10) Foo))])
            (case (ann (lookup d3 (quote y)) Foo)
 	     [(MkFoo i) (case (ann (lookup d4 (quote y)) Foo)
 	       [(MkFoo j) (+ i j)])])))))])
