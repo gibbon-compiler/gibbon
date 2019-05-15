@@ -255,7 +255,10 @@ codegenTail (LetTrivT (vr,rty,rhs) body) ty =
                 ++ tal
 
 -- TODO: extend rts with arena primitives, and invoke them here
-codegenTail (LetArenaT _v body) ty = codegenTail body ty
+codegenTail (LetArenaT vr body) ty =
+    do tal <- codegenTail body ty
+       return $ [ C.BlockDecl [cdecl| $ty:(codegenTy ArenaTy) $id:vr = alloc_arena();|] ]
+              ++ tal
 
 codegenTail (LetAllocT lhs vals body) ty =
     do let structTy = codegenTy (ProdTy (map fst vals))
@@ -411,8 +414,8 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                              [pleft,pright] = rnds in pure
                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) && $(codegenTriv pright)); |]]
                  DictInsertP _ -> let [(outV,ty)] = bnds
-                                      [_,(VarTriv dict),keyTriv,valTriv] = rnds in pure
-                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_ptr($id:dict, $(codegenTriv keyTriv), $(codegenTriv valTriv)); |] ]
+                                      [(VarTriv arena),(VarTriv dict),keyTriv,valTriv] = rnds in pure
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_ptr($id:arena, $id:dict, $(codegenTriv keyTriv), $(codegenTriv valTriv)); |] ]
                  DictLookupP _ -> let [(outV,ty)] = bnds
                                       [(VarTriv dict),keyTriv] = rnds in pure
                     [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_lookup_ptr($id:dict, $(codegenTriv keyTriv)); |] ]
