@@ -316,11 +316,11 @@ typedef struct ChunkTy_struct {
     CursorTy end_ptr;
 } ChunkTy;
 
-inline ChunkTy alloc_chunk(CursorTy end_ptr) {
+ChunkTy alloc_chunk(CursorTy end_ptr) {
     // Get size from current footer
     RegionFooter* footer = (RegionFooter *) end_ptr;
     IntTy newsize = footer->size * 2;
-    // See GitHub #110.
+    // See #110.
     if (newsize > global_inf_buf_max_chunk_size) {
         newsize = global_inf_buf_max_chunk_size;
     }
@@ -352,7 +352,8 @@ int get_ref_count(CursorTy end_ptr) {
     return *(footer.refcount_ptr);
 }
 
-// If B -> A, bump A's refcount, and update B's offset ptr
+// B is the pointer, and A is the pointee (i.e B -> A) --
+// bump A's refcount, and update B's outset ptr.
 IntTy bump_ref_count(CursorTy end_b, CursorTy end_a) {
     // Bump refcount
     RegionFooter footer_a = *(RegionFooter *) end_a;

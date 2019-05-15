@@ -1348,10 +1348,10 @@ assocLoc lv ul = do
   m <- lift $ St.get
   lift $ St.put $ M.insert lv ul m
 
--- TODO: If operating in Gibbon2 mode, we can just add an IndirectionE here, and
--- get rid of RemoveCopies.
 -- | The copy repair tactic:
 copy :: Result -> LocVar -> TiM Result
+-- CSK: If operating in Gibbon2 mode, can we add an IndirectionE here, and
+-- get rid of RemoveCopies?
 copy (e,ty,cs) lv1 =
     case ty of
       PackedTy tc lv2 -> do
@@ -1359,16 +1359,6 @@ copy (e,ty,cs) lv1 =
               eapp = l$ AppE copyName [lv2,lv1] [e]
           return (eapp, PackedTy tc lv1, [])
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
-
--- copy :: Result -> LocVar -> TiM Result
--- copy (e,ty,cs) lv1 =
---     case ty of
---       PackedTy tc lv2 -> do
---           let copyName = mkCopyFunName tc -- assume a copy function with this name
---               eapp = l$ AppE copyName [lv2,lv1] e
---           newx <- lift $ lift $ freshLocVar "cpy"
---           return (l$ LetE (newx,[],PackedTy tc lv1, eapp) (l$ VarE newx), PackedTy tc lv1, [])
---       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
 
 unNestLet :: Result -> Result
 unNestLet (L _ (LetE _ e),ty,cs) = (e,ty,cs)

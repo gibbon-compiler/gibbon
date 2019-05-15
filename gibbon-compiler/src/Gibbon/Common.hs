@@ -109,7 +109,7 @@ data TyVar = BoundTv Var         -- Type variable bound by a ForAll.
            | UserTv Var          -- Used by the parser. Freshen must replace all occurences.
   deriving (Read, Show, Eq, Ord, Generic, NFData)
 instance Out TyVar where
-  doc (BoundTv v) = text "b:" PP.<> doc v
+  doc (BoundTv v)    = text "b:" PP.<> doc v
   doc (SkolemTv s v) = text s <+> text "sk:" PP.<> doc v
   doc (UserTv v)     = text "u:" PP.<> doc v
 

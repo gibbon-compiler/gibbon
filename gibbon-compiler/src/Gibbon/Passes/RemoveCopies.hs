@@ -14,10 +14,9 @@ type LocEnv = M.Map LocVar Var
 
 removeCopies :: Prog2 -> PassM Prog2
 removeCopies Prog{ddefs,fundefs,mainExp} = do
-
   ddefs' <- mapM (\ddf@DDef{dataCons} -> do
                     dcon <- fromVar <$> gensym (toVar indirectionTag)
-                    -- RemoveCopies might run more than once (b.c repairProgram), so
+                    -- RemoveCopies might run more than once (b/c repairProgram), so
                     -- we ensure that we add the Indirection constructor only once.
                     let datacons = filter (not . isIndirectionTag . fst) dataCons
                     return ddf {dataCons = datacons ++ [(dcon, [(False, CursorTy)])]} )
@@ -43,16 +42,17 @@ removeCopiesFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
   bod' <- removeCopiesExp ddefs fundefs initLocEnv env2 funBody
   return $ f {funBody = bod'}
 
+-- ASSUMPTION: copy functions would always be called on a single argument.
 removeCopiesExp :: DDefs Ty2 -> FunDefs2 -> LocEnv -> Env2 Ty2 -> L Exp2 -> PassM (L Exp2)
 removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
   case ex of
-
-    -- ASSUMPTION: copy functions would always be called on a single argument.
+    -- This AppE copies data from 'lin' to 'lout'. When this becomes an
+    -- indirection node, 'lout' is the _pointer_, and 'lin' the _pointee_.
     AppE f [lin,lout] [arg] | isCopyFunName f -> do
-      let (PackedTy tycon _) = gRecoverType ddefs env2 ex
       indirection <- gensym "indirection"
-      -- Get the indirection datacon for this type
-      let indrDcon = filter isIndirectionTag $ getConOrdering ddefs tycon
+      let (PackedTy tycon _) = gRecoverType ddefs env2 ex
+          -- the indirection datacon for this type
+          indrDcon = filter isIndirectionTag $ getConOrdering ddefs tycon
       case indrDcon of
         [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
         [dcon] -> do
@@ -72,17 +72,11 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
             removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
-    LetE (v,locs,ty, rhs) bod ->
-      -- trace (sdoc (v,rhs))
-      (LetE <$> (v,locs,ty,) <$> go rhs <*>
-        removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod)
-
     Ext ext ->
       case ext of
         LetLocE loc FreeLE bod ->
           Ext <$> LetLocE loc FreeLE <$>
             removeCopiesExp ddefs fundefs lenv env2 bod
-
         -- Update lenv with a binding for loc
         LetLocE loc rhs bod -> do
           let reg = case rhs of
@@ -91,14 +85,16 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
                       AfterConstantLE _ lc -> lenv # lc
                       AfterVariableLE _ lc -> lenv # lc
                       FromEndLE lc         -> lenv # lc -- TODO: This needs to be fixed
+                      FreeLE               -> error "removeCopies: Don't know the region of FreeLE."
           Ext <$> LetLocE loc rhs <$>
             removeCopiesExp ddefs fundefs (M.insert loc reg lenv) env2 bod
        -- Straightforward recursion
         RetE{} -> return ex
         LetRegionE r bod -> Ext <$> LetRegionE r <$> go bod
-        FromEndE{}    -> return ex
-        BoundsCheck{} -> return ex
-        IndirectionE{} -> return ex
+        FromEndE{}       -> return ex
+        BoundsCheck{}    -> return ex
+        IndirectionE{}   -> return ex
+
     -- Straightforward recursion
     VarE{}     -> return ex
     LitE{}     -> return ex
@@ -109,6 +105,9 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
     ProjE i e  -> ProjE i <$> go e
     IfE a b c  -> IfE <$> go a <*> go b <*> go c
     MkProdE ls -> MkProdE <$> mapM go ls
+    LetE (v,locs,ty, rhs) bod ->
+      LetE <$> (v,locs,ty,) <$> go rhs <*>
+        removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
     CaseE scrt mp -> do
       let L _ (VarE v) = scrt
           PackedTy _ tyloc = lookupVEnv v env2

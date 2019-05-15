@@ -473,13 +473,13 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
 
         BoundsCheck i bound cur -> return <$> dl <$> Ext $ L3.BoundsCheck i bound cur
 
-        IndirectionE _ dcon (at,r1) (to,r2) _ -> do
+        IndirectionE _ dcon (pointer,r1) (pointee,r2) _ -> do
           dflags <- getDynFlags
           if gopt Opt_DisableGC dflags
-          then go tenv (l$ DataConE at dcon [l$ VarE to])
+          then go tenv (l$ DataConE pointer dcon [l$ VarE pointee])
           else
             onDi (mkLets [("_",[],IntTy, l$ Ext (BumpRefCount (toEndV r1) (toEndV r2)))]) <$>
-              go tenv (l$ DataConE at dcon [l$ VarE to])
+              go tenv (l$ DataConE pointer dcon [l$ VarE pointee])
 
     MapE{}  -> error $ "TODO: cursorizePackedExp MapE"
     FoldE{} -> error $ "TODO: cursorizePackedExp FoldE"

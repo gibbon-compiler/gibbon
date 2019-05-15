@@ -29,24 +29,7 @@ cross that. This "bounds check" has to be done before every write op (almost).
 Bounds-check: When?
 ~~~~~~~~~~~~~~~~~~~~
 
-When checking a DataConE, a bounds check is required only when it has 1
-scalar value. Eg. `(Leaf 10)` or `(A 10 20 (B ...))`. But not for datatypes like
-`(Node (Leaf ..) (Node ..))`. The reason is that constructing a `Node` just involves
-writing a tag *before* it's children. So it's OK to assume that this write will
-be safe.
-
-This policy of inserting BoundsChecks is not perfect. It needs to be
-inserted before *any* location arithmetic is performed on the output
-cursor. For example, for buildSTreeProg this doesn't always work out.
-But this comes with it's own problems. It's difficult to reliably infer
-the exact number of bytes needed for a write op when we're just
-performing some location arithmetic on the write cursor. The program
-analysis needs to be modified to return this information. That is,
-when we're looking at a location, we should be able to look-ahead
-and return the `DataConE` (if any) that it's used in. That's a
-TODO for now.
-
-Current policy for adding a bounds check node:
+[2019.05.15] CSK: This looks strange to me now. Audit + fix.
 
 (1) If the return type is "complex" i.e it has some nodes which have both
     scalar and packed fields, the bounds check is inserted before
@@ -59,11 +42,11 @@ Current policy for adding a bounds check node:
 Bounds-check: How?
 ~~~~~~~~~~~~~~~~~~
 
-This is close to the code we generate for bounds checking. In practice it's
-a side effect, and instead of returning (reg1, end_reg1, lout1) it'll
-update the values of those cursors in C.
+This is very much like the code we generate. After codegen however,
+'bounds_check' is a side effect -- instead of returning new cursors it
+updates the existing ones in place.
 
-    -- char*
+
     type Cursor = Ptr Char
     type Region = Cursor
 
@@ -88,16 +71,17 @@ update the values of those cursors in C.
            redirect cur new_reg
            return (new_reg, new_reg + new_reg_size, new_reg)
 
+
 The end-of-region cursors are used to check if the current write cursor is
 within the region boundary. If it is, we just continue using the current
 region. Otherwise, we allocate a new region, write a "redirection" at the current
 cursor location and use new fresh region for subsequent writes. Most of the
-actual work is done by the RTS. This pass just inserts bounds_check nodes.
+actual work is done by the RTS. This pass just inserts appropriate AST nodes.
 
 N.B.
 
-bounds_check nodes refer to end-of-region cursors, which don't exist yet.
-'threadRegions' takes care of adding those.
+After boundsCheck runs, the AST contains unbound end-of-region cursors --
+threadRegions binds those later.
 
 
 -}
@@ -135,8 +119,8 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
       if needsBoundsCheck ddfs dcon && reg `S.notMember` checked
       then do
         let sz  = redirectionSize + sizeOfScalars ddfs dcon
-        -- IMPORTANT: Mutates the region/cursor bindings
-        -- IntTy is a placeholder. BoundsCheck is a side-effect
+        -- IMPORTANT: BoundsCheck is a side-effect and it mutates the
+        -- region/cursor bindings -- the IntTy is just a placeholder.
         unLoc <$>
           mkLets [ ("_", []  , IntTy, l$ Ext$ BoundsCheck sz (toEndV reg) lc)
                  , (v  , locs, ty   , rhs)] <$>
@@ -160,39 +144,40 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
                       -- HACK: LetE form doesn't extend the RegEnv with the
                       -- the endof locations returned by the RHS.
                       FromEndLE _         -> renv # loc
-              dontcheck = ("DUMMY",False)
+                      FreeLE -> error "boundsCheck: Don't know the region of FreeLE."
+              dont_check = ("DUMMY",False)
               (outloc, needsCheck) =
                 if reg `S.member` checked
-                then dontcheck
+                then dont_check
                 else
                   case deps of
-                    [] -> dontcheck
+                    [] -> dont_check
                     _  ->
                       let (g,nodeF,vtxF) = graphFromEdges deps
                           -- Vertex of the location variable
                           locVertex = case vtxF loc of
                                         Just x  -> x
                                         Nothing -> error $ "No vertex for:" ++ sdoc loc
-                          retType = gRecoverType ddfs env2 bod
-                      in if hasPacked retType
+                          bod_ty = gRecoverType ddfs env2 bod
+                      in if hasPacked bod_ty
                           then
-                            let  retLocs = locsInTy retType
-                                 retVertices = map (fromJust . vtxF) retLocs
-                                 paths = map (\ret -> (ret, path g locVertex ret)) retVertices
+                            let  bod_locs = locsInTy bod_ty
+                                 bod_vertices = map (fromJust . vtxF) bod_locs
+                                 paths = map (\ret -> (ret, path g locVertex ret)) bod_vertices
                                  connected = filter snd paths
                             in case connected of
-                                 [] -> dontcheck
+                                 [] -> dont_check
                                  (vert,_):_ ->
                                    let fst3 (a,_,_) = a
                                        outloc' = fst3 (nodeF vert)
-                                       tycon'  = fromJust $ getTyconLoc outloc' retType
+                                       tycon'  = fromJust $ getTyconLoc outloc' bod_ty
                                        iscomplex = hasComplexDataCon ddfs tycon'
                                    in (outloc', iscomplex)
-                          else dontcheck
+                          else dont_check
           if needsCheck
           then
             unLoc <$>
-              mkLets [ ("_", []  , IntTy, l$ Ext$ BoundsCheck conservativeSizeScalars (toEndV reg) outloc) ] <$> l <$>
+              mkLets [ ("_", [], IntTy, l$ Ext$ BoundsCheck conservativeSizeScalars (toEndV reg) outloc) ] <$> l <$>
               Ext <$> LetLocE loc rhs <$>
               boundsCheckExp ddfs fundefs (M.insert loc reg renv) env2 deps (S.insert reg checked) bod
           else

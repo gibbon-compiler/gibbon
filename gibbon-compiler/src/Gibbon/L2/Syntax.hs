@@ -34,17 +34,17 @@ module Gibbon.L2.Syntax
     )
     where
 
-import Control.DeepSeq
-import Data.List as L
-import Data.Loc
-import Data.Set as S
-import Data.Map as M
-import Text.PrettyPrint.GenericPretty
+import           Control.DeepSeq
+import           Data.List as L
+import           Data.Loc
+import qualified Data.Set as S
+import qualified Data.Map as M
+import           Text.PrettyPrint.GenericPretty
 
-import Gibbon.Common
-import Gibbon.Language
-import Text.PrettyPrint.HughesPJ
-import Gibbon.L1.Syntax
+import           Gibbon.Common
+import           Gibbon.Language
+import           Text.PrettyPrint.HughesPJ
+import           Gibbon.L1.Syntax
 
 --------------------------------------------------------------------------------
 
@@ -75,14 +75,21 @@ type Ty2 = UrTy LocVar
 type E2 l d = PreExp E2Ext l d
 
 -- | The extension that turns L1 into L2.
-data E2Ext loc dec =
-    LetRegionE Region                 (L (E2 loc dec)) -- ^ Not used until later on.
+data E2Ext loc dec
+  = LetRegionE Region                 (L (E2 loc dec)) -- ^ Allocate a new region.
   | LetLocE    loc    (PreLocExp loc) (L (E2 loc dec)) -- ^ Bind a new location.
-  | RetE [loc] Var     -- ^ Return a value together with extra loc values.
-  | FromEndE loc -- ^ Bind a location from an EndOf location (for RouteEnds and after)
-  | BoundsCheck Int loc loc  -- ^ Bytes required, region, write cursor
-  | IndirectionE TyCon DataCon (loc,Var) (loc,Var) (L (E2 loc dec)) -- ^ An tagged indirection node
- deriving (Show, Ord, Eq, Read, Generic, NFData)
+  | RetE [loc] Var          -- ^ Return a value together with extra loc values.
+  | FromEndE loc            -- ^ Bind a location from an EndOf location (for RouteEnds and after).
+  | BoundsCheck Int -- Bytes required
+                loc -- Region
+                loc -- Write cursor
+  | IndirectionE TyCon
+                 DataCon
+                 (loc,Var) -- Pointer
+                 (loc,Var) -- Pointee (the thing that the pointer points to)
+                 (L (E2 loc dec)) -- [2019.05.16] CSK: why do we need this expression here ? Audit + remove.
+    -- ^ A tagged indirection node.
+  deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 -- | Define a location in terms of a different location.
 data PreLocExp loc = StartOfLE Region
@@ -93,7 +100,7 @@ data PreLocExp loc = StartOfLE Region
                    | InRegionLE Region
                    | FreeLE
                    | FromEndLE  loc
-                     deriving (Read, Show, Eq, Ord, Generic, NFData)
+  deriving (Read, Show, Eq, Ord, Generic, NFData)
 
 type LocExp = PreLocExp LocVar
 
@@ -172,13 +179,13 @@ instance (Typeable (E2Ext l (UrTy l)),
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
 data ArrowTy2 = ArrowTy2
-    { locVars :: [LRM]        -- ^ Universally-quantified location params.
-                              -- Only these should be referenced in arrIn/arrOut.
-    , arrIns  :: [Ty2]        -- ^ Input type for the function.
-    , arrEffs :: (Set Effect) -- ^ These are present-but-empty initially,
-                              -- and the populated by InferEffects.
-    , arrOut  :: Ty2          -- ^ Output type for the function.
-    , locRets :: [LocRet]     -- ^ L2B feature: multi-valued returns.
+    { locVars :: [LRM]          -- ^ Universally-quantified location params.
+                                -- Only these should be referenced in arrIn/arrOut.
+    , arrIns  :: [Ty2]          -- ^ Input type for the function.
+    , arrEffs :: (S.Set Effect) -- ^ These are present-but-empty initially,
+                                -- and the populated by InferEffects.
+    , arrOut  :: Ty2            -- ^ Output type for the function.
+    , locRets :: [LocRet]       -- ^ L2B feature: multi-valued returns.
     }
   deriving (Read,Show,Eq,Ord, Generic, NFData)
 
@@ -273,7 +280,7 @@ regionToVar r = case r of
 
 instance Out ArrowTy2
 instance Out Effect
-instance Out a => Out (Set a) where
+instance Out a => Out (S.Set a) where
   docPrec n x = docPrec n (S.toList x)
   doc x = doc (S.toList x)
 instance (Out l, Out d) => Out (E2Ext l d)
@@ -306,7 +313,7 @@ inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) $
 -- TODO: error handling in these subst* functions.
 
 -- | Apply a location substitution to a type.
-substLoc :: Map LocVar LocVar -> Ty2 -> Ty2
+substLoc :: M.Map LocVar LocVar -> Ty2 -> Ty2
 substLoc mp ty =
   case ty of
    SymDictTy te -> SymDictTy (go te)
@@ -326,7 +333,7 @@ substLoc' loc ty =
     _ -> substLoc M.empty ty
 
 -- | List version of 'substLoc'.
-substLocs :: Map LocVar LocVar -> [Ty2] -> [Ty2]
+substLocs :: M.Map LocVar LocVar -> [Ty2] -> [Ty2]
 substLocs mp tys = L.map (substLoc mp) tys
 
 -- | Like 'substLocs', but constructs the map for you.
@@ -344,7 +351,7 @@ substLocs' locs tys = substLocs (M.fromList $ go tys locs) tys
         (_,_) -> error $ "substLocs': Unexpected args, " ++ sdoc (tys,locs)
 
 -- | Apply a substitution to an effect set.
-substEffs :: Map LocVar LocVar -> Set Effect -> Set Effect
+substEffs :: M.Map LocVar LocVar -> S.Set Effect -> S.Set Effect
 substEffs mp ef =
     S.map (\(Traverse v) ->
                case M.lookup v mp of
@@ -479,38 +486,42 @@ mapPacked fn t =
 
 -- | Build a dependency list which can be later converted to a graph
 depList :: L Exp2 -> [(Var, Var, [Var])]
--- The `acc` is a map so that all dependencies are properly grouped, without any
--- duplicate keys. But we later convert it into a form expected by `graphFromEdges`.
--- The `reverse` makes it easy to peek at the return value of this AST.
-depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
+-- The helper function, go, works with a map rather than list so that all
+-- dependencies are properly grouped, without any duplicate keys. But we
+-- convert it back to a list so that we can hand it off to 'graphFromEdges'.
+-- Reversing the list makes it easy to peek at the return value of this AST later.
+depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
     where
+      go :: M.Map Var [Var] -> L Exp2 -> M.Map Var [Var]
       go acc (L _ ex) =
         case ex of
+          VarE v    -> M.insertWith (++) v [v] acc
+          LitE{}    -> acc
+          LitSymE{} -> acc
+          AppE _ _ args   -> foldl go acc args
+          PrimAppE _ args -> foldl go acc args
           LetE (v,_,_,rhs) bod ->
-              let acc_rhs = go acc rhs
-              in go (M.insertWith (++) v (allFreeVars rhs) acc_rhs) bod
+            let acc_rhs = go acc rhs
+            in go (M.insertWith (++) v (allFreeVars rhs) acc_rhs) bod
+          IfE _ b c  -> go (go acc b) c
+          MkProdE ls -> foldl go acc ls
+          ProjE _ e  -> go acc e
           CaseE _ mp -> L.foldr (\(_,_,e) acc' -> go acc' e) acc mp
+          DataConE _ _ args -> foldl go acc args
+          TimeIt e _ _ -> go acc e
+          ParE{}  -> acc
+          MapE{}  -> acc
+          FoldE{} -> acc
           Ext ext ->
             case ext of
               LetRegionE r rhs ->
-                let v = regionToVar r
-                in go (M.insertWith (++) v (allFreeVars rhs) acc) rhs
+                go (M.insertWith (++) (regionToVar r) (allFreeVars rhs) acc) rhs
               LetLocE loc phs rhs  ->
                 go (M.insertWith (++) loc (dep phs ++ allFreeVars rhs) acc) rhs
-              RetE{}     -> acc
-              FromEndE{} -> acc
-              BoundsCheck{} -> acc
+              RetE{}         -> acc
+              FromEndE{}     -> acc
+              BoundsCheck{}  -> acc
               IndirectionE{} -> acc
-          VarE v -> M.insertWith (++) v [v] acc
-          IfE _ b c -> go (go acc b) c
-          -- The "dummy" annotation is a small trick to properly handle AST's with a
-          -- trivial expression at the end. The first element of `acc` (after it's
-          -- converted to a list and reversed) marks the return value of the AST.
-          -- If we just return `acc` here, the last thing added to `acc` becomes
-          -- the return value, which is incorrect. The "dummy" is just a placeholder
-          -- to mark trivial expressions. There will never be a path from any region
-          -- variable to "dummy".
-          _ -> M.insertWith (++) "dummy" [] acc
 
       dep :: PreLocExp LocVar -> [Var]
       dep ex =
@@ -520,6 +531,7 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           AfterVariableLE v loc -> [v,loc]
           InRegionLE r  -> [regionToVar r]
           FromEndLE loc -> [loc]
+          FreeLE        -> []
 
       -- gFreeVars ++ locations ++ region variables
       allFreeVars :: L Exp2 -> [Var]
