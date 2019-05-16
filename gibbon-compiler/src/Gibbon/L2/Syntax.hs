@@ -176,6 +176,46 @@ instance (Typeable (E2Ext l (UrTy l)),
   gFlattenExp ddfs env ex = do (_b,e') <- gFlattenGatherBinds ddfs env ex
                                return e'
 
+instance HasSimplifiableExt E2Ext l d => SimplifiableExt (L (PreExp E2Ext l d)) (E2Ext l d) where
+  gInlineTrivExt env ext =
+    case ext of
+      LetRegionE r bod   -> LetRegionE r (gInlineTrivExp env bod)
+      LetLocE loc le bod -> LetLocE loc le (gInlineTrivExp env bod)
+      RetE{}         -> ext
+      FromEndE{}     -> ext
+      BoundsCheck{}  -> ext
+      IndirectionE{} -> ext
+
+
+instance HasSubstitutableExt E2Ext l d => SubstitutableExt (L (PreExp E2Ext l d)) (E2Ext l d) where
+  gSubstExt old new ext =
+    case ext of
+      LetRegionE r bod -> LetRegionE r (gSubst old new bod)
+      LetLocE l le bod -> LetLocE l le (gSubst old new bod)
+      RetE{}           -> ext
+      FromEndE{}       -> ext
+      BoundsCheck{}    -> ext
+      IndirectionE{}   -> ext
+
+  gSubstEExt old new ext =
+    case ext of
+      LetRegionE r bod -> LetRegionE r (gSubstE old new bod)
+      LetLocE l le bod -> LetLocE l le (gSubstE old new bod)
+      RetE{}           -> ext
+      FromEndE{}       -> ext
+      BoundsCheck{}    -> ext
+      IndirectionE{}   -> ext
+
+instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
+  gRename env ext =
+    case ext of
+      LetRegionE r bod -> LetRegionE r (gRename env bod)
+      LetLocE l le bod -> LetLocE l le (gRename env bod)
+      RetE{}           -> ext
+      FromEndE{}       -> ext
+      BoundsCheck{}    -> ext
+      IndirectionE{}   -> ext
+
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
 data ArrowTy2 = ArrowTy2
@@ -310,20 +350,9 @@ inRegVars :: ArrowTy2 -> [LocVar]
 inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) $
                L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
--- TODO: error handling in these subst* functions.
-
 -- | Apply a location substitution to a type.
 substLoc :: M.Map LocVar LocVar -> Ty2 -> Ty2
-substLoc mp ty =
-  case ty of
-   SymDictTy te -> SymDictTy (go te)
-   ProdTy    ts -> ProdTy (L.map go ts)
-   PackedTy k l ->
-       case M.lookup l mp of
-             Just v  -> PackedTy k v
-             Nothing -> PackedTy k l
-   _ -> ty
-  where go = substLoc mp
+substLoc = gRename
 
 -- | Like 'substLoc', but constructs the map for you..
 substLoc' :: LocVar -> Ty2 -> Ty2

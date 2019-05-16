@@ -1,6 +1,7 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts  #-}
-{-# LANGUAGE DeriveAnyClass    #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 -- | The source language for recursive tree traversals.
 --   This is a first-order language for the "closed world" scenario:
@@ -66,7 +67,6 @@ instance Eq (NoExt l d) where
   _ == _ = True
 instance Ord (NoExt l d) where
   compare _ _ = EQ
-
 instance FreeVars (NoExt l d) where
   gFreeVars _ = S.empty
 
@@ -86,5 +86,18 @@ instance Simplifiable (NoExt l d) where
   gInlineTrivExp _ impossible = impossible
 
 -- | A dummy instance for "no-extension" extension point.
+instance HasSimplifiableExt NoExt l d => SimplifiableExt (L (PreExp NoExt l d)) (NoExt l d) where
+  gInlineTrivExt _ impossible = impossible
+
+-- | A dummy instance for "no-extension" extension point.
+instance HasSubstitutableExt NoExt l d => SubstitutableExt (L (PreExp NoExt l d)) (NoExt l d) where
+  gSubstExt _ _ impossible  = impossible
+  gSubstEExt _ _ impossible = impossible
+
+-- | A dummy instance for "no-extension" extension point.
 instance Typeable (NoExt l d) where
   gRecoverType _ _ _ = error "<NoExt: It should be impossible to recover type of this>"
+
+-- | A dummy instance for "no-extension" extension point.
+instance Renamable (NoExt l d) where
+  gRename _ impossible = impossible

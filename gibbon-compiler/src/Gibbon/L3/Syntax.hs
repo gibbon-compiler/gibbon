@@ -1,5 +1,8 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 -- | An intermediate language which makes cursors explicit
 
@@ -93,12 +96,59 @@ instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
   isTrivial _ = False
 
 instance (Out l, Show l) => Typeable (E3Ext l (UrTy l)) where
-    gRecoverType ddfs env2 NullCursor = CursorTy
+    gRecoverType _ddfs _env2 NullCursor = CursorTy
     gRecoverType _ _ _ = error "L3.gRecoverType"
 
 instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
     gFlattenGatherBinds _ddfs _env ex = return ([], ex)
     gFlattenExp _ddfs _env ex = return ex
+
+instance HasSimplifiableExt E3Ext l d => SimplifiableExt (L (PreExp E3Ext l d)) (E3Ext l d) where
+  gInlineTrivExt env ext =
+    case ext of
+      WriteInt v bod    -> WriteInt v (gInlineTrivExp env bod)
+      WriteCursor v bod -> WriteCursor v (gInlineTrivExp env bod)
+      AddCursor v bod   -> AddCursor v (gInlineTrivExp env bod)
+      _ -> ext
+
+
+instance HasSubstitutableExt E3Ext l d => SubstitutableExt (L (PreExp E3Ext l d)) (E3Ext l d) where
+  gSubstExt old new ext =
+    case ext of
+      WriteInt v bod    -> WriteInt v (gSubst old new bod)
+      WriteCursor v bod -> WriteCursor v (gSubst old new bod)
+      AddCursor v bod   -> AddCursor v (gSubst old new bod)
+      _ -> ext
+
+  gSubstEExt old new ext =
+    case ext of
+      WriteInt v bod    -> WriteInt v (gSubstE old new bod)
+      WriteCursor v bod -> WriteCursor v (gSubstE old new bod)
+      AddCursor v bod   -> AddCursor v (gSubstE old new bod)
+      _ -> ext
+
+instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
+  gRename env ext =
+    case ext of
+      ReadInt v          -> ReadInt (go v)
+      WriteInt v bod     -> WriteInt (go v) (go bod)
+      AddCursor v bod    -> AddCursor (go v) (go bod)
+      ReadTag v          -> ReadTag (go v)
+      WriteTag dcon v    -> WriteTag dcon (go v)
+      NewBuffer{}        -> ext
+      ScopedBuffer{}     -> ext
+      InitSizeOfBuffer{} -> ext
+      MMapFileSize v     -> MMapFileSize (go v)
+      SizeOfPacked a b   -> SizeOfPacked (go a) (go b)
+      SizeOfScalar v     -> SizeOfScalar (go v)
+      BoundsCheck i a b  -> BoundsCheck i (go a) (go b)
+      ReadCursor v       -> ReadCursor (go v)
+      WriteCursor v bod  -> WriteCursor (go v) (go bod)
+      BumpRefCount a b   -> BumpRefCount (go a) (go b)
+      NullCursor         -> ext
+    where
+      go :: forall a. Renamable a => a -> a
+      go = gRename env
 
 -----------------------------------------------------------------------------------------
 -- Do this manually to get prettier formatting: (Issue #90)

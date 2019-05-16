@@ -1,10 +1,12 @@
-{-# LANGUAGE StandaloneDeriving   #-}
-{-# LANGUAGE DeriveTraversable    #-}
-{-# LANGUAGE DeriveAnyClass       #-}
-{-# LANGUAGE FlexibleContexts     #-}
-{-# LANGUAGE FlexibleInstances    #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE CPP                  #-}
+{-# LANGUAGE StandaloneDeriving    #-}
+{-# LANGUAGE DeriveTraversable     #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE CPP                   #-}
+{-# LANGUAGE ConstraintKinds       #-}
 
 module Gibbon.Language.Syntax
   (
@@ -20,8 +22,13 @@ module Gibbon.Language.Syntax
   , Prog(..), progToEnv, getFunTy
 
     -- * Generic operations
-  , FreeVars(..), Expression(..), Binds, Flattenable(..), Simplifiable(..)
-  , Typeable(..)
+  , FreeVars(..), Expression(..), Binds, Flattenable(..)
+  , Simplifiable(..), SimplifiableExt(..), Typeable(..)
+  , Substitutable(..), SubstitutableExt(..), Renamable(..)
+
+    -- * Helpers for writing instances
+  , HasSimplifiable, HasSimplifiableExt, HasSubstitutable, HasSubstitutableExt
+  , HasRenamable
 
     -- * Environments
   , TyEnv, Env2(..), emptyEnv2
@@ -275,17 +282,59 @@ class Expression e => Flattenable e where
 type Binds e = (Var,[LocOf e],TyOf e, e)
 
 
--- | IRs amenable to simplification/inlineTrivs
+-- | IRs amenable to simplification/inlineTrivs. Note that there's a
+-- separate 'SimplifiableExt' for simplifying extensions. 'Simplifiable' is
+-- the only class which makes such a distinction -- b/c when it's simplifying
+-- an extension point, the type of the environment would still be 'M.Map Var e',
+-- where e is a top-level IR. Right now we don't have a class (and probably
+-- don't want to have one as well) which ties an extension point with an IR.
+-- Keeping these classes separate works out nicely.
 class Expression e => Simplifiable e where
-  gInlineTrivExp :: DDefs (TyOf e) -> e -> e
+  gInlineTrivExp :: M.Map Var e -> e -> e
+
+class Expression e => SimplifiableExt e ext where
+  gInlineTrivExt :: M.Map Var e -> ext -> ext
+
+type HasSimplifiable e l d = ( Show l, Out l, Show d, Out d
+                             , Expression (e l d)
+                             , SimplifiableExt (L (PreExp e l d)) (e l d)
+                             )
+
+type HasSimplifiableExt e l d = ( Show l, Out l, Show d, Out d
+                                , Simplifiable (L (PreExp e l d))
+                                )
+
 
 -- | This is NOT a replacement for any typechecker. This is supposed to be used just to
 -- recover the type of an expression in a type-environment
--- Without this, we cannot have truly generic implementation of the Flattenable class,
--- since we need to know the type of an expression before we discharge it with a LetE
+-- Without this, we cannot have truly generic Flattenable,
+-- b/c we need to know the type of an expression before we bind it with a LetE.
 class Expression e => Typeable e where
   gRecoverType :: DDefs (TyOf e) -> Env2 (TyOf e) -> e -> TyOf e
 
+-- | Generic substitution over expressions.
+class Expression e => Substitutable e where
+  gSubst  :: Var -> e -> e -> e
+  gSubstE :: e   -> e -> e -> e
+
+class Expression e => SubstitutableExt e ext where
+  gSubstExt  :: Var -> e -> ext -> ext
+  gSubstEExt :: e   -> e -> ext -> ext
+
+type HasSubstitutable e l d = ( Expression (e l d)
+                              , SubstitutableExt (L (PreExp e l d)) (e l d)
+                              , Eq d, Show d, Out d, Eq l, Show l, Out l
+                              , Eq (e l d) )
+
+type HasSubstitutableExt e l d = ( Eq d, Show d, Out d, Eq l, Show l, Out l
+                                 , Substitutable (L (PreExp e l d)) )
+
+-- | Alpha renaming, without worrying about name capture -- assuming that Freshen
+-- has run before!
+class Renamable e where
+  gRename :: M.Map Var Var -> e -> e
+
+type HasRenamable e l d = (Renamable l, Renamable d, Renamable (e l d))
 
 --------------------------------------------------------------------------------
 -- Environments
@@ -386,6 +435,7 @@ data PreExp (ext :: * -> * -> *) loc dec =
 
    | ParE EXP EXP
     -- ^ Parallel tuple combitor.
+
 
    -- Limited list handling:
    -- TODO: RENAME to "Array".
@@ -528,6 +578,40 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
 instance Typeable (PreExp e l (UrTy l)) => Typeable (L (PreExp e l (UrTy l))) where
   gRecoverType ddfs env2 (L _ ex) = gRecoverType ddfs env2 ex
 
+instance HasSubstitutable e l d => Substitutable (L (PreExp e l d)) where
+  gSubst  = subst
+  gSubstE = substE
+
+instance Renamable Var where
+  gRename env v = M.findWithDefault v v env
+
+instance HasRenamable e l d => Renamable (L (PreExp e l d)) where
+  gRename env (L p ex) = L p $
+    case ex of
+      VarE v -> VarE (go v)
+      LitE{}    -> ex
+      LitSymE{} -> ex
+      AppE f locs args -> AppE (go f) (gol locs) (gol args)
+      PrimAppE pr args -> PrimAppE pr (gol args)
+      LetE (v,locs,ty,rhs) bod -> LetE (go v, gol locs, go ty, go rhs) (go bod)
+      IfE a b c  -> IfE (go a) (go b) (go c)
+      MkProdE ls -> MkProdE (gol ls)
+      ProjE i e  -> ProjE i (go e)
+      CaseE scrt ls ->
+        CaseE (go scrt) (map (\(a,b,c) -> (a, map (\(d,e) -> (go d, go e)) b, go c)) ls)
+      DataConE loc dcon ls -> DataConE (go loc) dcon (gol ls)
+      TimeIt e ty b -> TimeIt (go e) (go ty) b
+      ParE a b      -> ParE (go a) (go b)
+      Ext ext       -> Ext (go ext)
+      MapE{}        -> ex
+      FoldE{}       -> ex
+     where
+       go :: forall a. Renamable a => a -> a
+       go = gRename env
+
+       gol :: forall a. Renamable a => [a] -> [a]
+       gol ls = map go ls
+
 --------------------------------------------------------------------------------
 -- Primitives
 --------------------------------------------------------------------------------
@@ -622,6 +706,18 @@ data UrTy a =
 
   deriving (Show, Read, Ord, Eq, Generic, NFData, Functor, Foldable, Traversable)
 
+instance Renamable a => Renamable (UrTy a) where
+  gRename env ty =
+    case ty of
+      IntTy       -> IntTy
+      BoolTy      -> BoolTy
+      ProdTy ls   -> ProdTy (map (gRename env) ls)
+      SymDictTy t -> SymDictTy (gRename env t)
+      PackedTy tycon loc -> PackedTy tycon (gRename env loc)
+      ListTy loc -> ListTy (gRename env loc)
+      PtrTy      -> PtrTy
+      CursorTy   -> CursorTy
+
 --------------------------------------------------------------------------------
 -- Helpers operating on expressions
 --------------------------------------------------------------------------------
@@ -672,9 +768,10 @@ visitExp _fl fe _fd exp0 = fin
        Ext  x        -> Ext (fe x)
        _ -> _finishme
 
+
 -- | Substitute an expression in place of a variable.
-subst :: (Eq d, Eq l, Eq (e l d)) => Var -> L (PreExp e l d) -> L (PreExp e l d)
-      -> L (PreExp e l d)
+subst :: HasSubstitutable e l d
+      => Var -> L (PreExp e l d) -> L (PreExp e l d) -> L (PreExp e l d)
 subst old new (L p0 ex) = L p0 $
   let go = subst old new in
   case ex of
@@ -705,12 +802,12 @@ subst old new (L p0 ex) = L p0 $
             r2' = if v2 == old then r2 else go r2
         in FoldE (v1,t1,r1') (v2,t2,r2') (go bod)
 
-    Ext _ -> ex
+    Ext ext -> Ext (gSubstExt old new ext)
 
 -- | Expensive 'subst' that looks for a whole matching sub-EXPRESSION.
 -- If the old expression is a variable, this still avoids going under binder.
-substE :: (Eq d, Eq l, Eq (e l d)) => L (PreExp e l d) -> L (PreExp e l d) -> L (PreExp e l d)
-       -> L (PreExp e l d)
+substE :: HasSubstitutable e l d
+       => L (PreExp e l d) -> L (PreExp e l d) -> L (PreExp e l d) -> L (PreExp e l d)
 substE old new (L p0 ex) = L p0 $
   let go = substE old new in
   case ex of
@@ -738,7 +835,7 @@ substE old new (L p0 ex) = L p0 $
             r2' = if VarE v2 == unLoc old then r2 else go r2
         in FoldE (v1,t1,r1') (v2,t2,r2') (go bod)
 
-    Ext _ -> ex
+    Ext ext -> Ext (gSubstEExt old new ext)
 
 -- | Does the expression contain a TimeIt form?
 hasTimeIt :: L (PreExp e l d) -> Bool

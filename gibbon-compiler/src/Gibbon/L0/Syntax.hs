@@ -1,7 +1,8 @@
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE DeriveAnyClass    #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableInstances  #-}
 
 -- | A higher-ordered surface language that supports Rank-1 parametric
 -- polymorphism.
@@ -61,6 +62,29 @@ instance (Show l, Out l) => Flattenable (E0Ext l Ty0) where
     gFlattenGatherBinds _ddfs _env ex = return ([], ex)
     gFlattenExp _ddfs _env ex = return ex
 
+instance HasSubstitutableExt E0Ext l d => SubstitutableExt (L (PreExp E0Ext l d)) (E0Ext l d) where
+  gSubstExt old new ext =
+    case ext of
+      LambdaE args bod -> LambdaE args (gSubst old new bod)
+      PolyAppE a b     -> PolyAppE (gSubst old new a) (gSubst old new b)
+      FunRefE{}        -> ext
+
+  gSubstEExt old new ext =
+    case ext of
+      LambdaE args bod -> LambdaE args (gSubstE old new bod)
+      PolyAppE a b     -> PolyAppE (gSubstE old new a) (gSubstE old new b)
+      FunRefE{}        -> ext
+
+instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
+  gRename env ext =
+    case ext of
+      LambdaE args bod -> LambdaE (map (\(a,b) -> (go a, go b)) args) (go bod)
+      PolyAppE a b     -> PolyAppE (go a) (go b)
+      FunRefE tyapps a -> FunRefE (map go tyapps) (go a)
+    where
+      go :: forall a. Renamable a => a -> a
+      go = gRename env
+
 instance (Out l, Out d) => Out (E0Ext l d)
 instance Out Ty0
 instance Out TyScheme
@@ -100,6 +124,30 @@ instance FunctionTy Ty0 where
   type ArrowTy Ty0 = TyScheme
   inTys  = arrIns
   outTy  = arrOut
+
+instance Renamable TyVar where
+  gRename env tv =
+    case tv of
+      BoundTv v  -> BoundTv (gRename env v)
+      SkolemTv{} -> tv
+      UserTv v   -> UserTv (gRename env v)
+
+instance Renamable Ty0 where
+  gRename env ty =
+    case ty of
+      IntTy  -> IntTy
+      SymTy0 -> SymTy0
+      BoolTy -> BoolTy
+      TyVar tv  -> TyVar (go tv)
+      MetaTv{}  -> ty
+      ProdTy ls -> ProdTy (map go ls)
+      SymDictTy a       -> SymDictTy (go a)
+      ArrowTy args ret  -> ArrowTy (map go args) ret
+      PackedTy tycon ls -> PackedTy tycon (map go ls)
+      ListTy a          -> ListTy (go a)
+    where
+      go :: forall a. Renamable a => a -> a
+      go = gRename env
 
 -- | Straightforward parametric polymorphism.
 data TyScheme = ForAll [TyVar] Ty0
