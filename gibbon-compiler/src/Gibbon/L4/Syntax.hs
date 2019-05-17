@@ -10,13 +10,14 @@ module Gibbon.L4.Syntax
     ( Var, Tag, Tail(..), Triv(..), Ty(..), Prim(..), FunDecl(..)
     , Alts(..), Prog(..), MainExp(..), Label
     -- * Utility functions
-    , withTail, fromL3Ty, voidTy
+    , withTail, fromL3Ty, voidTy, inlineTrivL4
     ) where
 
 import           Control.DeepSeq
 import           Control.Monad.State.Strict
 import           Data.Int
 import           Data.Maybe
+import qualified Data.Map as M
 import           Data.Word (Word8)
 import           GHC.Generics (Generic)
 import           Prelude hiding (init)
@@ -273,3 +274,59 @@ fromL3Ty ty =
     L.ProdTy tys -> ProdTy $ map fromL3Ty tys
     L.SymDictTy t -> SymDictTy $ fromL3Ty t
     _ -> IntTy -- FIXME: review this
+
+
+inlineTrivL4 :: Prog -> Prog
+inlineTrivL4 (Prog fundefs mb_main) =
+  Prog (map inline_fun fundefs) (inline_main <$> mb_main)
+
+  where
+    inline_fun fn@FunDecl{funBody} = fn { funBody = inline_tail M.empty funBody }
+
+    inline_main (PrintExp bod) = PrintExp (inline_tail M.empty bod)
+
+    inline_tail :: M.Map Var Triv -> Tail -> Tail
+    inline_tail env tl =
+      case tl of
+        RetValsT trvs            -> RetValsT (map (inline env) trvs)
+        AssnValsT assns mb_bod   -> AssnValsT
+                                      (map (\(v,ty,trv) -> (v,ty,inline env trv)) assns)
+                                      (go <$> mb_bod)
+        LetCallT{rands,bod}      -> tl { rands = map (inline env) rands
+                                       , bod   = go bod }
+        LetPrimCallT{rands,bod}  -> tl { rands = map (inline env) rands
+                                       , bod   = go bod }
+        LetTrivT (v,_ty,trv) bod ->
+          case trv of
+            VarTriv w -> case M.lookup w env of
+                           Nothing -> inline_tail (M.insert v trv env) bod
+                           Just pr -> inline_tail (M.insert v pr env) bod
+            _         -> inline_tail (M.insert v trv env) bod
+        LetIfT{ife,bod} -> tl { ife = (\(a,b,c) -> (inline env a,
+                                                    go b,
+                                                    go c))
+                                      ife
+                              , bod = go bod }
+        LetUnpackT{bod} -> tl { bod = go bod }
+        LetAllocT{vals,bod} -> tl { vals = map (\(a,b) -> (a, inline env b)) vals
+                                  , bod  = go bod }
+        IfT{tst,con,els} -> IfT (inline env tst) (go con) (go els)
+        ErrT{} -> tl
+        LetTimedT{timed,bod} -> tl { timed = go timed
+                                   , bod = go bod }
+        Switch lbl trv alts mb_tail ->
+          let alts' = case alts of
+                        TagAlts as -> TagAlts $ map (\(a,b) -> (a, go b)) as
+                        IntAlts as -> IntAlts $ map (\(a,b) -> (a, go b)) as
+          in Switch lbl (inline env trv) alts' (go <$> mb_tail)
+        TailCall v trvs -> TailCall v (map (inline env) trvs)
+        Goto{}          -> tl
+      where
+        go = inline_tail env
+
+    inline env trv =
+      case trv of
+        VarTriv v -> case M.lookup v env of
+                       Just trv' -> trv'
+                       _ -> trv
+        _         -> trv

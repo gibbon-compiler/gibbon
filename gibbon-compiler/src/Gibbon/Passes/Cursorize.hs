@@ -13,6 +13,7 @@ import           Gibbon.L2.Syntax
 import           Gibbon.L3.Syntax hiding ( BoundsCheck )
 import qualified Gibbon.L3.Syntax as L3
 import           Gibbon.Passes.AddRAN ( numRANsDataCon )
+import           Gibbon.Passes.InlineTriv ( inlineTriv )
 
 {-
 
@@ -90,7 +91,7 @@ cursorize Prog{ddefs,fundefs,mainExp} = do
                          fromDi <$> cursorizePackedExp ddefs fundefs M.empty M.empty e
                   else Just . (,stripTyLocs ty) <$>
                          cursorizeExp ddefs fundefs M.empty M.empty e
-  return $ Prog ddefs' fundefs' mainExp'
+  inlineTriv (Prog ddefs' fundefs' mainExp')
 
 -- |
 cursorizeFunDef :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef3

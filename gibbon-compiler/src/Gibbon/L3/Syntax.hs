@@ -106,10 +106,26 @@ instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
 instance HasSimplifiableExt E3Ext l d => SimplifiableExt (L (PreExp E3Ext l d)) (E3Ext l d) where
   gInlineTrivExt env ext =
     case ext of
-      WriteInt v bod    -> WriteInt v (gInlineTrivExp env bod)
-      WriteCursor v bod -> WriteCursor v (gInlineTrivExp env bod)
-      AddCursor v bod   -> AddCursor v (gInlineTrivExp env bod)
-      _ -> ext
+      ReadInt v          -> ReadInt (mb_rn v)
+      WriteInt v bod     -> WriteInt (mb_rn v) (gInlineTrivExp env bod)
+      AddCursor v bod    -> AddCursor (mb_rn v) (gInlineTrivExp env bod)
+      ReadTag v          -> ReadTag (mb_rn v)
+      WriteTag dcon v    -> WriteTag dcon (mb_rn v)
+      NewBuffer{}        -> ext
+      ScopedBuffer{}     -> ext
+      InitSizeOfBuffer{} -> ext
+      MMapFileSize v     -> MMapFileSize (mb_rn v)
+      SizeOfPacked a b   -> SizeOfPacked (mb_rn a) (mb_rn b)
+      SizeOfScalar v     -> SizeOfScalar (mb_rn v)
+      BoundsCheck i a b  -> BoundsCheck i (mb_rn a) (mb_rn b)
+      ReadCursor v       -> ReadCursor (mb_rn v)
+      WriteCursor v bod  -> WriteCursor (mb_rn v) (gInlineTrivExp env bod)
+      BumpRefCount a b   -> BumpRefCount (mb_rn a) (mb_rn b)
+      NullCursor         -> ext
+    where
+      mb_rn v = case M.lookup v env of
+                  Just (L _ (VarE w)) -> w
+                  _ -> v
 
 
 instance HasSubstitutableExt E3Ext l d => SubstitutableExt (L (PreExp E3Ext l d)) (E3Ext l d) where
