@@ -82,10 +82,6 @@ instance Flattenable (NoExt l d) where
   gFlattenGatherBinds  _ _ impossible = return ([],impossible)
 
 -- | A dummy instance for "no-extension" extension point.
-instance Simplifiable (NoExt l d) where
-  gInlineTrivExp _ impossible = impossible
-
--- | A dummy instance for "no-extension" extension point.
 instance HasSimplifiableExt NoExt l d => SimplifiableExt (L (PreExp NoExt l d)) (NoExt l d) where
   gInlineTrivExt _ impossible = impossible
 
