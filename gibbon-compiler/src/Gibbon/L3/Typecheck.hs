@@ -16,8 +16,9 @@ import qualified Data.List as L
 import Prelude hiding (exp)
 
 import Gibbon.Common
-import Gibbon.L1.Typecheck hiding (tcProg, tcExp)
+import Gibbon.L1.Typecheck hiding (tcProg, tcExp, ensureEqual, ensureEqualTy)
 import Gibbon.L1.Syntax
+import qualified Gibbon.L2.Syntax as L2
 import Gibbon.L3.Syntax
 
 -- | Typecheck a L1 expression
@@ -390,11 +391,27 @@ tcCases isPacked ddfs env cs = do
          (head tys) (zipWith (\ty (_,_,ex) -> (ex,ty)) tys cs)
   return $ head tys
 
-ensureEqualTyNoLoc :: (Eq l, Out l) => L (PreExp e l (UrTy l)) -> UrTy l -> UrTy l ->
-                      ExceptT (TCError (L (PreExp e l (UrTy l)))) Identity (UrTy l)
+-- | Ensure that two things are equal.
+-- Includes an expression for error reporting.
+ensureEqual exp str a b = if a == b
+                          then return a
+                          else throwError $ GenericTC str exp
+
+
+-- | Ensure that two types are equal.
+-- Includes an expression for error reporting.
+-- ensureEqualTy :: (Eq l, Out l) => (L (PreExp e l (UrTy l))) -> (UrTy l) -> (UrTy l) ->
+--                  TcM (UrTy l) (L (PreExp e l (UrTy l)))
+ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
+                                         ++ (sdoc a) ++ ", " ++ (sdoc b)) a b
+
+
 ensureEqualTyNoLoc exp t1 t2 =
   case (t1,t2) of
-    (SymDictTy _ ty1, SymDictTy _ ty2) -> ensureEqualTyNoLoc exp ty1 ty2
+    (SymDictTy _ ty1, SymDictTy _ ty2) ->
+        do ty1' <- L2.dummyTyLocs ty1
+           ty2' <- L2.dummyTyLocs ty2
+           ensureEqualTyNoLoc exp ty1' ty2'
     (PackedTy dc1 _, PackedTy dc2 _) -> if dc1 == dc2
                                         then return t1
                                         else ensureEqualTy exp t1 t2

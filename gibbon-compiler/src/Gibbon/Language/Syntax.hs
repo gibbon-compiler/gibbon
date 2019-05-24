@@ -420,9 +420,10 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         VarE _    -> True
         LitE _    -> True
         LitSymE _ -> True
-        -- These should really turn to literalS:
-        PrimAppE MkTrue  [] -> True
-        PrimAppE MkFalse [] -> True
+        -- -- These should really turn to literalS:
+        -- -- Commenting out for now because it confuses inference (!)
+        -- PrimAppE MkTrue  [] -> True
+        -- PrimAppE MkFalse [] -> True
         PrimAppE _ _        -> False
 
         ----------------- POLICY DECISION ---------------
@@ -608,7 +609,7 @@ data UrTy a =
 --                --   It's an alias for Int, an index into a symbol table.
         | BoolTy
         | ProdTy [UrTy a]     -- ^ An N-ary tuple
-        | SymDictTy (Maybe Var) (UrTy a)  -- ^ A map from SymTy to Ty
+        | SymDictTy (Maybe Var) (UrTy ())  -- ^ A map from SymTy to Ty
           -- ^ We allow built-in dictionaries from symbols to a value type.
 
         | PackedTy TyCon a -- ^ No type arguments to TyCons for now.  (No polymorphism.)
@@ -935,8 +936,8 @@ primRetTy p =
     SymAppend      -> SymTy
     SizeParam      -> IntTy
     DictHasKeyP _  -> BoolTy
-    DictEmptyP ty  -> SymDictTy Nothing ty
-    DictInsertP ty -> SymDictTy Nothing ty
+    DictEmptyP ty  -> SymDictTy Nothing $ stripTyLocs ty
+    DictInsertP ty -> SymDictTy Nothing $ stripTyLocs ty
     DictLookupP ty -> ty
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
@@ -944,6 +945,19 @@ primRetTy p =
 
 dummyCursorTy :: UrTy a
 dummyCursorTy = CursorTy
+
+stripTyLocs :: UrTy a -> UrTy ()
+stripTyLocs ty =
+  case ty of
+    IntTy     -> IntTy
+    BoolTy    -> BoolTy
+    ProdTy ls -> ProdTy $ L.map stripTyLocs ls
+    SymDictTy v ty'  -> SymDictTy v $ stripTyLocs ty'
+    PackedTy tycon _ -> PackedTy tycon ()
+    ListTy ty'       -> ListTy $ stripTyLocs ty'
+    PtrTy    -> PtrTy
+    CursorTy -> CursorTy
+
 
 -- | Get the data constructor type from a type, failing if it's not packed
 tyToDataCon :: Show a => UrTy a -> DataCon

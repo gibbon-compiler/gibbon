@@ -49,6 +49,7 @@ type FunDefs1 = FunDefs (L Exp1)
 -- | The type rperesentation used in L1.
 type Ty1 = UrTy ()
 
+
 --------------------------------------------------------------------------------
 
 -- | An uninhabidited type indicating that the base grammar is not extended with any

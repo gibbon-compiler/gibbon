@@ -132,7 +132,7 @@ exp ddfs env2 (L sloc e0) =
     Ext ext   -> do (_bnds,e) <- gFlattenGatherBinds ddfs env2 ext
                     return  ([], Ext e)
 
-    LitE _    -> return ([], e0)
+    LitE _    -> return ([],e0)
     VarE    _ -> return ([],e0)
     LitSymE _ -> return ([],e0)
 
