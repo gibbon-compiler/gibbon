@@ -57,12 +57,6 @@ tcExp ddfs env exp@(L p ex) =
       argTys <- mapM go ls
       let (funInTys,funRetTy) = (inTys funty, outTy funty)
 
-          -- isDict (SymDictTy _ _) = True
-          -- isDict _ = False
-          
-          -- argDicts = L.filter isDict argTys
-          -- funDicts = L.filter isDict funInTys
-
           combAr (SymDictTy (Just v1) _, SymDictTy (Just v2) _) m = M.insert v2 v1 m
           combAr _ m = m
           arMap = L.foldr combAr M.empty $ zip argTys funInTys

@@ -74,9 +74,6 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
 
     Ext ext ->
       case ext of
-        LetLocE loc FreeLE bod ->
-          Ext <$> LetLocE loc FreeLE <$>
-            removeCopiesExp ddefs fundefs lenv env2 bod
         -- Update lenv with a binding for loc
         LetLocE loc rhs bod -> do
           let reg = case rhs of
@@ -85,7 +82,7 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
                       AfterConstantLE _ lc -> lenv # lc
                       AfterVariableLE _ lc -> lenv # lc
                       FromEndLE lc         -> lenv # lc -- TODO: This needs to be fixed
-                      FreeLE               -> error "removeCopies: Don't know the region of FreeLE."
+                      FreeLE -> toVar "dummy"
           Ext <$> LetLocE loc rhs <$>
             removeCopiesExp ddefs fundefs (M.insert loc reg lenv) env2 bod
        -- Straightforward recursion

@@ -13,6 +13,7 @@ import Data.Functor.Identity
 import Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
 import qualified Data.List as L
+import Data.Maybe
 import Prelude hiding (exp)
 
 import Gibbon.Common
@@ -141,8 +142,22 @@ tcExp isPacked ddfs env exp@(L p ex) =
 
       -- Check argument type
       argTys <- mapM go ls
-      _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (zip (inTys funty) argTys)
-      return (outTy funty)
+      let (funInTys,funRetTy) = (inTys funty, outTy funty)
+
+          combAr (SymDictTy (Just v1) _, SymDictTy (Just v2) _) m = M.insert v2 v1 m
+          combAr _ m = m
+          arMap = L.foldr combAr M.empty $ zip argTys funInTys
+
+          subDictTy m (SymDictTy (Just v) ty) =
+              case M.lookup v m of
+                Just v' -> SymDictTy (Just v') ty
+                Nothing -> error $ ("Cannot match up arena for dictionary in function application: " ++ sdoc exp)
+          subDictTy _ ty = ty
+                  
+          subFunInTys = L.map (subDictTy arMap) funInTys
+          subFunOutTy = subDictTy arMap funRetTy
+      _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (zip subFunInTys argTys)
+      return subFunOutTy
 
     PrimAppE pr es -> do
       let len0 = checkLen exp pr 0 es
@@ -235,6 +250,15 @@ tcExp isPacked ddfs env exp@(L p ex) =
         PEndOf -> error "Do not use PEndOf after L2."
 
         oth -> error $ "L3.tcExp : PrimAppE : TODO " ++ sdoc oth
+
+    LetE (v,[],SymDictTy _ pty, rhs) e -> do
+      tyRhs <- go rhs
+      case tyRhs of
+        SymDictTy ar _ ->
+            do  unless (isJust ar) $ throwError $ GenericTC "Expected arena variable annotation" rhs
+                let env' = extendEnv env [(v,SymDictTy ar CursorTy)]
+                tcExp isPacked ddfs env' e
+        _ -> throwError $ GenericTC ("Expected expression to be SymDict type:" ++ sdoc rhs) exp
 
     LetE (v,locs,ty,rhs) e -> do
       -- Check that the expression does not have any locations
@@ -393,6 +417,10 @@ tcCases isPacked ddfs env cs = do
 
 -- | Ensure that two things are equal.
 -- Includes an expression for error reporting.
+ensureEqual exp str (SymDictTy ar1 _) (SymDictTy ar2 _) =
+    if ar1 == ar2
+    then return $ SymDictTy ar1 CursorTy
+    else throwError $ GenericTC str exp
 ensureEqual exp str a b = if a == b
                           then return a
                           else throwError $ GenericTC str exp

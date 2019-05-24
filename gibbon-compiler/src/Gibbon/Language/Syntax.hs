@@ -551,7 +551,7 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
        => Typeable (PreExp e l (UrTy l)) where
   gRecoverType ddfs env2 ex =
     case ex of
-      VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v) v (vEnv env2)
+      VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) v (vEnv env2)
       LitE _       -> IntTy
       LitSymE _    -> SymTy
       AppE v _ _   -> outTy $ fEnv env2 # v

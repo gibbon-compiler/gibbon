@@ -223,7 +223,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                    e' = l$ Ext $ LetLocE l2 (AfterConstantLE 1 l1) e
                                e'' <- exp fns retlocs eor' lenv (M.insert l1 l2 lenv) env2 e'
                                return (dc, vls, e'')
-                             Nothing -> error $ "Failed to find " ++ sdoc x
+                             Nothing -> error $ "Failed to find " ++ sdoc x ++ " in " ++ sdoc lenv
                          _ -> do
                            let need = snd $ last vls
                                argtys = lookupDataCon ddefs dc
@@ -251,9 +251,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
                                vars = L.map fst vls
                                env2' = extendsVEnv (M.fromList (zip vars argtys)) env2
+                               lenv' = M.union lenv $ M.fromList vls
 
                            (eor'',e') <- foldM handleLoc (eor',e) $ zip (L.map snd vls) argtys
-                           e'' <- exp fns retlocs eor'' lenv afterenv' env2' e'
+                           e'' <- exp fns retlocs eor'' lenv' afterenv' env2' e'
                            return (dc, vls, e'')
                  return $ CaseE (l$ VarE x) brs'
 
@@ -282,7 +283,14 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  -- we fmap location at the top-level case expression
                  fmap unLoc $ go (l$ e')
 
-          -- Same as above. This could just fail, instead of trying to repair
+          PrimAppE (DictInsertP dty) [L sl (VarE a),d,k,v] -> do
+                 v' <- gensym "tailprim"
+                 let e' = LetE (v',[],SymDictTy (Just a) $ stripTyLocs dty, l$ PrimAppE (DictInsertP dty) [L sl (VarE a),d,k,v]) (l$ VarE v')
+                 -- we fmap location at the top-level case expression
+                 fmap unLoc $ go (l$ e')
+                 
+
+          -- Same AppE as above. This could just fail, instead of trying to repair
           -- the program.
           PrimAppE pr es -> do
                  v' <- gensym "tailprim"
