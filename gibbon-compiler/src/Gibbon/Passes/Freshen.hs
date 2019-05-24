@@ -119,9 +119,10 @@ freshTyScheme (ForAll tvs ty) = do
 freshTy :: TyVarEnv Ty0 -> Ty0 -> PassM (TyVarEnv Ty0, Ty0)
 freshTy env ty =
   case ty of
-     IntTy  -> pure (env, ty)
-     SymTy0 -> pure (env, ty)
-     BoolTy -> pure (env, ty)
+     IntTy    -> pure (env, ty)
+     SymTy0   -> pure (env, ty)
+     BoolTy   -> pure (env, ty)
+     ArenaTy  -> pure (env, ty)
      TyVar tv -> case M.lookup tv env of
                    Nothing  -> do tv' <- newTyVar
                                   pure (env, TyVar tv')
