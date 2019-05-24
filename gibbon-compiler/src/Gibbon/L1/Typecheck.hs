@@ -41,7 +41,7 @@ tcExp ddfs env exp@(L p ex) =
     LitSymE _ -> return IntTy
 
     AppE v locs ls -> do
-      let funty' =
+      let funty =
             case (M.lookup v (fEnv env)) of
               Just ty -> ty
               Nothing -> error $ "Function not found: " ++ sdoc v ++ " while checking " ++
@@ -55,17 +55,29 @@ tcExp ddfs env exp@(L p ex) =
 
       -- Check argument type
       argTys <- mapM go ls
-      let isArTy (_, ArenaTy) = True
-          isArTy _ = False
-          arvs  = Prelude.map (\(L _ (VarE v),_) -> v) $
-                  Prelude.filter isArTy (zip ls argTys)
+      let (funInTys,funRetTy) = (inTys funty, outTy funty)
 
-          subArenaVars arvs (tys,rty) = (tys,rty) -- TODO: implement
-                                        
-          (subArgTys,subRetTy) = subArenaVars arvs (inTys funty', outTy funty')
+          -- isDict (SymDictTy _ _) = True
+          -- isDict _ = False
+          
+          -- argDicts = L.filter isDict argTys
+          -- funDicts = L.filter isDict funInTys
 
-      _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (fragileZip subArgTys argTys)
-      return subRetTy
+          combAr (SymDictTy (Just v1) _, SymDictTy (Just v2) _) m = M.insert v2 v1 m
+          combAr _ m = m
+          arMap = L.foldr combAr M.empty $ zip argTys funInTys
+
+          subDictTy m (SymDictTy (Just v) ty) =
+              case M.lookup v m of
+                Just v' -> SymDictTy (Just v') ty
+                Nothing -> error $ ("Cannot match up arena for dictionary in function application: " ++ sdoc exp)
+          subDictTy _ ty = ty
+                  
+          subFunInTys = L.map (subDictTy arMap) funInTys
+          subFunOutTy = subDictTy arMap funRetTy
+
+      _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (fragileZip subFunInTys argTys)
+      return subFunOutTy
 
     PrimAppE pr es -> do
       let len0 = checkLen exp pr 0 es
@@ -142,6 +154,7 @@ tcExp ddfs env exp@(L p ex) =
           case d of
             SymDictTy ar dty -> do _ <- ensureEqualTy exp SymTy k
                                    _ <- ensureEqualTy exp ty dty
+                                   -- dbgTrace 3 (show $ vEnv env) $ return ()
                                    ensureArenaScope exp env ar
                                    return ty
             _ -> throwError $ GenericTC "Expected SymDictTy" exp

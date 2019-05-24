@@ -39,7 +39,7 @@
 (define (extend-env [a : Arena] [e : (SymDict a Type)] [sym : Sym] [type : Type]) : (SymDict a Type)
   (insert a e sym (ann type Type)))
 
-(define (lookup-env [e : (SymDict a Type)] [sym : Sym]) : Type
+(define (lookup-env [a : Arena] [e : (SymDict a Type)] [sym : Sym]) : Type
   (ann (lookup e sym) Type))
 
 (define (typecheck-begin [exprs : ListExpr] [a : Arena] [env : (SymDict a Type)]) : Type
@@ -87,19 +87,22 @@
        [(NullT) True]
        [(Int_) False]
        [(Bool_) False]
-       [(Lamt pt bt) False])]
+       [(Lamt pt bt) False]
+       [(Fail) False])]
     [(Int_)
      (case t2
        [(Int_) True]
        [(Bool_) False]
        [(NullT) False]
-       [(Lamt pt bt) False])]
+       [(Lamt pt bt) False]
+       [(Fail) False])]
     [(Bool_)
      (case t2
        [(Bool_) True]
        [(Int_) False]
        [(NullT) False]
-       [(Lamt pt bt) False])]
+       [(Lamt pt bt) False]
+       [(Fail) False])]
     [(Lamt pt bt)
      (case t2
        [(Lamt pt2 bt2)
@@ -108,7 +111,9 @@
          (type-equal? bt bt2))]
        [(Int_) False]
        [(Bool_) False]
-       [(NullT) False])]))
+       [(NullT) False]
+       [(Fail) False])]
+    [(Fail) False]))
         
 (define (params-args-equal? [ptypes : ListType] [args : ListExpr] [a : Arena] [env : (SymDict a Type)]) : Bool
   (case ptypes
@@ -137,7 +142,7 @@
     [(Null)
      (NullT)]
     [(S sym)
-     (lookup-env env sym)]
+     (lookup-env a env sym)]
     [(N n)
      (Int_)]
     [(B b)
@@ -156,4 +161,13 @@
 
 (define (typecheck-expr [expr : Expr]) : Type
   (letarena a (typecheck expr a (ann (empty-dict a) (SymDict a Type)))))
+
+(let ([e : Expr (Lam (CONSPARAM (P (S 'g) (Bool_)) (NULLPARAM)) (B True))])
+  (case (typecheck-expr e)
+    [(Int_) 0]
+    [(Bool_) 1]
+    [(NullT) 2]
+    [(Lamt lt t) 3]
+    [(Fail) 4]))
+    
 
