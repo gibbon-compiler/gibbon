@@ -149,8 +149,6 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                        Just f -> funTy f
                        Nothing -> error $ "tcExp: Unbound function: " ++ sdoc v
 
-             dbgTrace 4 ("AppE of "++sdoc v++" ls: "++sdoc ls) $ return ()
-                      
              -- Check arguments.
              (in_tys, tstate) <- foldlM
                                    (\(tys, st) a -> do
@@ -174,10 +172,6 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
              let arrOutMp = M.fromList $ zip (L.map (\(LRM l _ _) -> l) locVars) ls
                  arrOut'  = substLoc arrOutMp arrOut
                             
-             dbgTrace 4 ("AppE of "++sdoc v++" arrOutMp: "++sdoc arrOutMp) $ return ()
-             dbgTrace 4 ("AppE of "++sdoc v++" arrOut: "++sdoc arrOut) $ return ()
-             dbgTrace 4 ("AppE of "++sdoc v++" arrOut': "++sdoc arrOut') $ return ()
-                      
              return (arrOut',tstate')
 
       PrimAppE pr es -> do
@@ -336,8 +330,6 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                reg <- getRegion e constrs lin
                ensureMatchCases ddfs exp ty brs
                (tys,tstate') <- tcCases ddfs env funs constrs regs tstate lin reg brs
-               dbgTrace 4 ("After tcCases of "++sdoc e) $ return ()
-               dbgTrace 4 ("Case types:\n"++sdoc tys) $ return ()
                foldM_ (ensureEqualTy exp) (tys !! 0) (tail tys)
                return (tys !! 0,tstate')
 
@@ -539,7 +531,7 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
   where
 
     fd :: FunDef2 -> PassM ()
-    fd FunDef{funTy,funArgs,funBody} = do
+    fd func@FunDef{funTy,funArgs,funBody} = do
         let env = extendsVEnv (M.fromList $ zip funArgs (arrIns funTy)) emptyEnv2
             constrs = funConstrs (locVars funTy)
             regs = funRegs (locVars funTy)
@@ -549,8 +541,9 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
           Left err -> error $ show err
           Right (ty,_) -> if ty == (arrOut funTy)
                           then return ()
-                          else error $ "Expected type " ++ (show (arrOut funTy))
-                                    ++ " and got type " ++ (show ty)
+                          else error $ "Expected type " ++ (sdoc (arrOut funTy))
+                                    ++ " and got type " ++ (sdoc ty)
+                                    ++ " in\n" ++ (sdoc func)
 
 
 

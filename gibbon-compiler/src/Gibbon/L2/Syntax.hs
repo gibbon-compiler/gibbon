@@ -525,6 +525,7 @@ depList = reverse . L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           AfterVariableLE v loc -> [v,loc]
           InRegionLE r  -> [regionToVar r]
           FromEndLE loc -> [loc]
+          FreeLE -> []
 
       -- gFreeVars ++ locations ++ region variables
       allFreeVars :: L Exp2 -> [Var]

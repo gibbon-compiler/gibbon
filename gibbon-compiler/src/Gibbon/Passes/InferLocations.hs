@@ -1380,7 +1380,7 @@ copy (e,ty,cs) lv1 =
       PackedTy tc lv2 -> do
           let copyName = mkCopyFunName tc -- assume a copy function with this name
               eapp = l$ AppE copyName [lv2,lv1] [e]
-          return (eapp, PackedTy tc lv1, [])
+          return (eapp, PackedTy tc lv1, cs)
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
 
 -- copy :: Result -> LocVar -> TiM Result
