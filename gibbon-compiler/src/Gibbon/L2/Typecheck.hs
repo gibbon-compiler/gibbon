@@ -149,6 +149,8 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                        Just f -> funTy f
                        Nothing -> error $ "tcExp: Unbound function: " ++ sdoc v
 
+             dbgTrace 4 ("AppE of "++sdoc v++" ls: "++sdoc ls) $ return ()
+                      
              -- Check arguments.
              (in_tys, tstate) <- foldlM
                                    (\(tys, st) a -> do
@@ -171,6 +173,11 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
              -- Use locVars used at call-site in the returned type
              let arrOutMp = M.fromList $ zip (L.map (\(LRM l _ _) -> l) locVars) ls
                  arrOut'  = substLoc arrOutMp arrOut
+                            
+             dbgTrace 4 ("AppE of "++sdoc v++" arrOutMp: "++sdoc arrOutMp) $ return ()
+             dbgTrace 4 ("AppE of "++sdoc v++" arrOut: "++sdoc arrOut) $ return ()
+             dbgTrace 4 ("AppE of "++sdoc v++" arrOut': "++sdoc arrOut') $ return ()
+                      
              return (arrOut',tstate')
 
       PrimAppE pr es -> do
@@ -228,7 +235,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    case es !! 0 of
                      L _ (VarE var) ->
                          do ensureArenaScope exp env (Just var)
-                            return (SymDictTy (Just var) ty, tstate)
+                            return (SymDictTy (Just var) (stripTyLocs ty), tstate)
                      _ -> throwError $ GenericTC "Expected arena variable argument" exp
 
                  DictInsertP ty -> do
@@ -243,7 +250,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                            L _ (VarE var) ->
                                do ensureArenaScope exp env ar
                                   ensureArenaScope exp env (Just var)
-                                  return (SymDictTy (Just var) ty, tstate)
+                                  return (SymDictTy (Just var) (stripTyLocs ty), tstate)
                            _ -> throwError $ GenericTC "Expected arena variable argument" exp
                      _ -> throwError $ GenericTC "Expected SymDictTy" exp
 
@@ -329,6 +336,8 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                reg <- getRegion e constrs lin
                ensureMatchCases ddfs exp ty brs
                (tys,tstate') <- tcCases ddfs env funs constrs regs tstate lin reg brs
+               dbgTrace 4 ("After tcCases of "++sdoc e) $ return ()
+               dbgTrace 4 ("Case types:\n"++sdoc tys) $ return ()
                foldM_ (ensureEqualTy exp) (tys !! 0) (tail tys)
                return (tys !! 0,tstate')
 
@@ -642,7 +651,10 @@ ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
 ensureEqualTyNoLoc :: Exp -> Ty2 -> Ty2 -> TcM Ty2
 ensureEqualTyNoLoc exp ty1 ty2 =
   case (ty1,ty2) of
-    (SymDictTy _ar1 ty1, SymDictTy _ar2 ty2) -> ensureEqualTyNoLoc exp ty1 ty2
+    (SymDictTy _ar1 ty1, SymDictTy _ar2 ty2) ->
+        do ty1' <- dummyTyLocs ty1
+           ty2' <- dummyTyLocs ty2
+           ensureEqualTyNoLoc exp ty1' ty2'
     (PackedTy dc1 _, PackedTy dc2 _) -> if dc1 == dc2
                                         then return ty1
                                         else ensureEqualTy exp ty1 ty2

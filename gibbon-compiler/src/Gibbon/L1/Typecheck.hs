@@ -31,9 +31,9 @@ import Prelude hiding (exp)
 
 -- | Typecheck a L1 expression
 --
-tcExp :: (Eq l, Show l, Out l, Out (e l (UrTy l)), FunctionTy (UrTy l)) =>
-         DDefs (UrTy l) -> Env2 (UrTy l) -> (L (PreExp e l (UrTy l))) ->
-         TcM (UrTy l) (L (PreExp e l (UrTy l)))
+-- tcExp :: (Eq l, Show l, Out l, Out (e l (UrTy l)), FunctionTy (UrTy l)) =>
+--          DDefs (UrTy l) -> Env2 (UrTy l) -> (L (PreExp e l (UrTy l))) ->
+--          TcM (UrTy l) (L (PreExp e l (UrTy l)))
 tcExp ddfs env exp@(L p ex) =
   case ex of
     VarE v    -> lookupVar env v exp
@@ -374,10 +374,9 @@ tcProj _ i (ProdTy tys) = return $ tys !! i
 tcProj e _i ty = throwError $ GenericTC ("Projection from non-tuple type " ++ (sdoc ty)) e
 
 
-tcCases :: (Out l, Show l, Eq l, Out (e l (UrTy l)), FunctionTy (UrTy l))
-        => DDefs (UrTy l) -> Env2 (UrTy l) ->
-           [(DataCon, [(Var, l)], L (PreExp e l (UrTy l)))] ->
-           TcM (UrTy l) (L (PreExp e l (UrTy l)))
+tcCases :: DDefs (UrTy ()) -> Env2 (UrTy ()) ->
+           [(DataCon, [(Var, ())], L (PreExp NoExt () (UrTy ())))] ->
+           TcM (UrTy ()) (L (PreExp NoExt () (UrTy ())))
 tcCases ddfs env cs = do
   tys <- forM cs $ \(c,args',rhs) -> do
            let args  = L.map fst args'
@@ -414,8 +413,9 @@ ensureEqual exp str a b = if a == b
 
 -- | Ensure that two types are equal.
 -- Includes an expression for error reporting.
-ensureEqualTy :: (Eq l, Out l) => (L (PreExp e l (UrTy l))) -> (UrTy l) -> (UrTy l) ->
-                 TcM (UrTy l) (L (PreExp e l (UrTy l)))
+-- ensureEqualTy :: (Eq l, Out l) => (L (PreExp e l (UrTy l))) -> (UrTy l) -> (UrTy l) ->
+--                  TcM (UrTy l) (L (PreExp e l (UrTy l)))
+ensureEqualTy :: (L Exp1) -> Ty1 -> Ty1 -> TcM Ty1 (L Exp1)
 ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
                                          ++ (sdoc a) ++ ", " ++ (sdoc b)) a b
 

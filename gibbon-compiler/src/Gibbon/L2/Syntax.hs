@@ -25,7 +25,7 @@ module Gibbon.L2.Syntax
     -- * Operations on types
     , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substLoc
     , substLoc', substLocs, substLocs', substEffs, stripTyLocs
-    , locsInTy
+    , locsInTy, dummyTyLocs
 
     -- * Other helpers
     , revertToL1, occurs, mapPacked, depList
@@ -354,7 +354,7 @@ inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) $
 substLoc :: Map LocVar LocVar -> Ty2 -> Ty2
 substLoc mp ty =
   case ty of
-   SymDictTy v te -> SymDictTy v (go te)
+   SymDictTy v te -> SymDictTy v te -- (go te)
    ProdTy    ts -> ProdTy (L.map go ts)
    PackedTy k l ->
        case M.lookup l mp of
@@ -408,6 +408,10 @@ stripTyLocs ty =
     ListTy ty'       -> ListTy $ stripTyLocs ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
+    ArenaTy  -> ArenaTy
+
+dummyTyLocs :: Applicative f => UrTy () -> f (UrTy LocVar)
+dummyTyLocs ty = traverse (const (pure (toVar "dummy"))) ty 
 
 -- | Collect all the locations mentioned in a type.
 locsInTy :: Ty2 -> [LocVar]
@@ -516,7 +520,7 @@ mapPacked fn t =
     BoolTy -> BoolTy
     SymTy  -> SymTy
     (ProdTy x)    -> ProdTy $ L.map (mapPacked fn) x
-    (SymDictTy v x) -> SymDictTy v $ mapPacked fn x
+    (SymDictTy v x) -> SymDictTy v x -- $ mapPacked fn x
     PackedTy k l  -> fn (toVar k) l
     PtrTy    -> PtrTy
     CursorTy -> CursorTy

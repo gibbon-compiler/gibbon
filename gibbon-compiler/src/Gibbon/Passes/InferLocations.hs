@@ -727,7 +727,8 @@ inferExp env@FullEnv{dataDefs}
                      -- _ <- fixLoc loc
                      (v',vty,vcs) <- inferExp env v $ SingleDest loc
                      let cs = vcs -- (StartRegionL loc r) : vcs
-                     return (lc$ PrimAppE (DictInsertP dty') [L sl (VarE var),d',k',v'], SymDictTy (Just var) dty'', cs)
+                     dummyDty <- dummyTyLocs dty'
+                     return (lc$ PrimAppE (DictInsertP dummyDty) [L sl (VarE var),d',k',v'], SymDictTy (Just var) $ stripTyLocs dty'', cs)
 
     PrimAppE (DictLookupP dty) [d,k] ->
       case dest of
@@ -749,7 +750,7 @@ inferExp env@FullEnv{dataDefs}
         SingleDest _ -> err "Cannot unify DictEmpty with destination"
         TupleDest _ -> err "Cannot unify DictEmpty with destination"
         NoDest -> do dty' <- lift $ lift $ convertTy dty
-                     return (lc$ PrimAppE (DictEmptyP dty') [L sl (VarE var)], SymDictTy (Just var) dty', [])
+                     return (lc$ PrimAppE (DictEmptyP dty') [L sl (VarE var)], SymDictTy (Just var) $ stripTyLocs dty', [])
 
     PrimAppE (DictHasKeyP dty) [d,k] ->
       case dest of
@@ -757,12 +758,13 @@ inferExp env@FullEnv{dataDefs}
         TupleDest _ -> err "Cannot unify DictEmpty with destination"
         NoDest -> do (d',SymDictTy _ dty',_dcs) <- inferExp env d NoDest
                      (k',_,_kcs) <- inferExp env k NoDest
-                     return (lc$ PrimAppE (DictHasKeyP dty') [d',k'], BoolTy, [])
+                     dummyDty <- dummyTyLocs dty'
+                     return (lc$ PrimAppE (DictHasKeyP dummyDty) [d',k'], BoolTy, [])
 
     PrimAppE pr es ->
       case dest of
-        SingleDest _ -> err "Cannot unify primop with destination"
-        TupleDest _ -> err "Cannot unify primop with destination"
+        SingleDest d -> err $ "Cannot unify primop " ++ sdoc pr ++ " with destination " ++ sdoc d ++ " at " ++ show sl1
+        TupleDest  d -> err $ "Cannot unify primop " ++ sdoc pr ++ " with destination " ++ sdoc d ++ " at " ++ show sl1
         NoDest -> do results <- mapM (\e -> inferExp env e NoDest) es
                      -- Assume arguments to PrimAppE are trivial
                      -- so there's no need to deal with constraints or locations
