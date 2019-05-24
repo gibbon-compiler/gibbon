@@ -500,6 +500,7 @@ zonkExp s (L p ex) = L p $
       DataConE (ProdTy (map (zonkTy s) tyapps)) dcon (map go args)
     DataConE{} -> error $ "zonkExp: Expected (ProdTy tyapps), got: " ++ sdoc ex
     TimeIt e ty b -> TimeIt (go e) (zonkTy s ty) b
+    WithArenaE v e -> WithArenaE v (go e)
     Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, zonkTy s ty)) args) (go bod))
     Ext (PolyAppE rator rand) -> Ext (PolyAppE (go rator) (go rand))
     Ext (FunRefE tyapps f)    -> let tyapps1 = map (zonkTy s) tyapps

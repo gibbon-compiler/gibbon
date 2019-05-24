@@ -268,6 +268,7 @@ arrowTysInTy = go []
         IntTy    -> acc
         SymTy0   -> acc
         BoolTy   -> acc
+        ArenaTy  -> acc
         TyVar{}  -> acc
         MetaTv{} -> acc
         ProdTy tys    -> foldl go acc tys
