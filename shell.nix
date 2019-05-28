@@ -1,4 +1,3 @@
-
 # This Nix environment contains everything needed to run the tests.
 
 # Currently using a snapshot of the nixos-18.03 channel.
@@ -12,6 +11,6 @@ haskell.lib.buildStackProject {
   inherit ghc;
   name = "basicGibbonEnv";
   buildInputs = [ stdenv ghc stack which racket
-                  ncurses boehmgc
+                  ncurses boehmgc uthash
                 ];
 }
