@@ -40,6 +40,9 @@ static const int num_workers = 1;
 #define REDIRECTION_NODE_SIZE 9
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
+// A region with this refcount has already been garbage collected.
+#define REG_FREED -100
+
 // Helpers and debugging:
 //--------------------------------------------------------------------------------
 
@@ -292,10 +295,14 @@ typedef struct RegionTy_struct {
 } RegionTy;
 
 typedef struct RegionFooter_struct {
+    // This sequence number is not strictly required, but helps with debugging
+    // and error messages.
+    int seq_no;
     IntTy size;
     int *refcount_ptr;
     Outset_elem *outset_ptr;
     CursorTy next;
+    CursorTy prev;
 } RegionFooter;
 
 RegionTy *alloc_region(IntTy size) {
@@ -311,10 +318,12 @@ RegionTy *alloc_region(IntTy size) {
 
     // Write the footer
     RegionFooter* footer = (RegionFooter *) end;
+    footer->seq_no = 1;
     footer->size = size;
     footer->refcount_ptr = &(reg->refcount);
     footer->outset_ptr = reg->outset;
-    footer-> next = NULL;
+    footer->next = NULL;
+    footer->prev = NULL;
     *(RegionFooter *) end = *footer;
 
     return reg;
@@ -325,9 +334,9 @@ typedef struct ChunkTy_struct {
     CursorTy end_ptr;
 } ChunkTy;
 
-ChunkTy alloc_chunk(CursorTy end_ptr) {
+ChunkTy alloc_chunk(CursorTy end_old_chunk) {
     // Get size from current footer
-    RegionFooter* footer = (RegionFooter *) end_ptr;
+    RegionFooter *footer = (RegionFooter *) end_old_chunk;
     IntTy newsize = footer->size * 2;
     // See #110.
     if (newsize > global_inf_buf_max_chunk_size) {
@@ -348,12 +357,25 @@ ChunkTy alloc_chunk(CursorTy end_ptr) {
 
     // Write the footer
     RegionFooter* new_footer = (RegionFooter *) end;
+    new_footer->seq_no = footer->seq_no + 1;
     new_footer->size = newsize;
     new_footer->refcount_ptr = footer->refcount_ptr;
     new_footer->outset_ptr = footer->outset_ptr;
     new_footer->next = NULL;
+    new_footer->prev = end_old_chunk;
 
     return (ChunkTy) {start , end};
+}
+
+RegionFooter* trav_to_first_chunk(RegionFooter *footer) {
+    if (footer->seq_no == 1) {
+        return footer;
+    } else if (footer->prev == NULL) {
+        fprintf(stderr, "No previous chunk found at seq_no: %d", footer->seq_no);
+        return NULL;
+    } else {
+        trav_to_first_chunk(footer->prev);
+    }
 }
 
 int get_ref_count(CursorTy end_ptr) {
@@ -363,9 +385,6 @@ int get_ref_count(CursorTy end_ptr) {
 
 // B is the pointer, and A is the pointee (i.e B -> A) --
 // bump A's refcount, and update B's outset ptr.
-//
-// WIP: callers of bump_ref_count, must make sure that end_a
-// is the end-of-region, not end-of-chunk ...?
 IntTy bump_ref_count(CursorTy end_b, CursorTy end_a) {
     // Bump refcount
     RegionFooter *footer_a = (RegionFooter *) end_a;
@@ -424,10 +443,21 @@ void free_region(CursorTy end_reg) {
         printf("free_region: outset-len: %d\n", count);
         #endif
 
-        // Decrement refcounts, and free the outset elements themselves.
+        // Decrement refcounts, free regions with refcount==0 and also free
+        // elements of the outset.
         DL_FOREACH_SAFE(head,elt,tmp) {
             RegionFooter *elt_footer = (RegionFooter *) elt->ref;
             *(elt_footer->refcount_ptr) = *(elt_footer->refcount_ptr) - 1;
+            if (*(elt_footer->refcount_ptr) == 0) {
+                // Due to way that bounds-checking works, elt->ref may actually
+                // point to any arbitrary chunk in the chain. However, we want
+                // call free_region on the first one to ensure that all of them
+                // are GC'd. trav_to_first_chunk accomplishes that.
+                RegionFooter *first_chunk = trav_to_first_chunk(elt_footer);
+                if (first_chunk != NULL) {
+                    free_region(first_chunk);
+                }
+            }
             DL_DELETE(head,elt);
             free(elt);
         }
@@ -441,6 +471,9 @@ void free_region(CursorTy end_reg) {
         int num_chunks = 1;
         IntTy total_bytesize = footer.size;
         #endif
+
+        // Indicate that this region has been garbage collected.
+        *(footer.refcount_ptr) = REG_FREED;
 
         // Free the first chunk
         free(first_chunk);
