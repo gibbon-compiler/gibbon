@@ -23,6 +23,7 @@ addons:
     packages:
       - libgc-dev
       - libgmp-dev
+      - uthash-dev
       - gcc-7
       - ghc-8.4.3
 

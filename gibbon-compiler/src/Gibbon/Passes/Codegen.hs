@@ -437,9 +437,9 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                  FreeBuffer -> if noGC
                                then pure []
                                else
-                                 let [(VarTriv reg),(VarTriv rcur),(VarTriv endr_cur)] = rnds
+                                 let [(VarTriv reg),(VarTriv _rcur),(VarTriv endr_cur)] = rnds
                                  in pure
-                                 [ C.BlockStm [cstm| free_region($id:rcur, $id:endr_cur); |],
+                                 [ C.BlockStm [cstm| free_region($id:endr_cur); |],
                                    C.BlockStm [cstm| free($id:reg); |]
                                  ]
 

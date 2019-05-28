@@ -15,6 +15,7 @@
 #ifdef _POINTER
 #include <gc.h>
 #endif
+#include <utlist.h>
 #define KB (1 * 1000lu)
 #define MB (KB * 1000lu)
 #define GB (MB * 1000lu)
@@ -278,33 +279,41 @@ IntTy expll(IntTy base, IntTy pow) {
 
  */
 
+typedef struct Outset_elem {
+    CursorTy ref;
+    struct Outset_elem *prev;
+    struct Outset_elem *next;
+} Outset_elem;
+
 typedef struct RegionTy_struct {
     int refcount;
     CursorTy start_ptr;
+    Outset_elem *outset;
 } RegionTy;
 
 typedef struct RegionFooter_struct {
     IntTy size;
-    CursorTy refcount_ptr;
-    CursorTy outset_ptr;
+    int *refcount_ptr;
+    Outset_elem *outset_ptr;
     CursorTy next;
 } RegionFooter;
 
-RegionTy* alloc_region(IntTy size) {
+RegionTy *alloc_region(IntTy size) {
     // Allocate the first chunk
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy start = ALLOC_PACKED(total_size);
     CursorTy end = start + size;
 
-    RegionTy* reg = malloc(sizeof(RegionTy));
+    RegionTy *reg = malloc(sizeof(RegionTy));
     reg->refcount = 0;
     reg->start_ptr = start;
+    reg->outset = NULL;
 
     // Write the footer
     RegionFooter* footer = (RegionFooter *) end;
     footer->size = size;
     footer->refcount_ptr = &(reg->refcount);
-    footer->outset_ptr = NULL;
+    footer->outset_ptr = reg->outset;
     footer-> next = NULL;
     *(RegionFooter *) end = *footer;
 
@@ -341,7 +350,7 @@ ChunkTy alloc_chunk(CursorTy end_ptr) {
     RegionFooter* new_footer = (RegionFooter *) end;
     new_footer->size = newsize;
     new_footer->refcount_ptr = footer->refcount_ptr;
-    new_footer->outset_ptr = NULL;
+    new_footer->outset_ptr = footer->outset_ptr;
     new_footer->next = NULL;
 
     return (ChunkTy) {start , end};
@@ -354,34 +363,77 @@ int get_ref_count(CursorTy end_ptr) {
 
 // B is the pointer, and A is the pointee (i.e B -> A) --
 // bump A's refcount, and update B's outset ptr.
+//
+// WIP: callers of bump_ref_count, must make sure that end_a
+// is the end-of-region, not end-of-chunk ...?
 IntTy bump_ref_count(CursorTy end_b, CursorTy end_a) {
     // Bump refcount
-    RegionFooter footer_a = *(RegionFooter *) end_a;
-    int refcount = *(footer_a.refcount_ptr);
-    *(int *) footer_a.refcount_ptr = refcount + 1;
+    RegionFooter *footer_a = (RegionFooter *) end_a;
+    int refcount = *(footer_a->refcount_ptr);
+    int new_refcount = refcount + 1;
+    *(footer_a->refcount_ptr) = new_refcount;
+
+    // Grab B's outset
+    RegionFooter *footer_b = (RegionFooter *) end_b;
+    Outset_elem *head = footer_b->outset_ptr;
+
+    #ifdef DEBUG
+    Outset_elem *elt;
+    int count;
+    DL_COUNT(head, elt, count);
+    printf("bump_ref_count: old-refcount=%d, old-outset-len=%d:\n", refcount, count);
+    assert(refcount == count);
+    #endif
 
     // Add A to B's outset
-    RegionFooter* footer_b = (RegionFooter *) end_b;
-    if (footer_b->outset_ptr == NULL) {
-        footer_b->outset_ptr = end_a;
-    } else if (footer_b->outset_ptr != end_a) {
-        printf("Outset isn't a real set yet..\n");
-    }
+    Outset_elem *add = malloc(sizeof(Outset_elem));
+    add->ref = end_a;
+    add->next = NULL;
+    add->prev = NULL;
+    DL_APPEND(head, add);
+
+    // As far as I can tell, DL_APPEND updates "head" after an append. Or maybe
+    // only after the first one, possibly to change NULL to some struct.
+    // In any case, we update outset_ptr here.
+    footer_b->outset_ptr = head;
+
+    #ifdef DEBUG
+    int new_count;
+    DL_COUNT(head, elt, new_count);
+    printf("bump_ref_count: new-refcount=%d, new-outset-len=%d:\n", new_refcount, new_count);
+    assert(new_refcount == new_count);
+    #endif
 
     return refcount;
 }
 
-void free_region(CursorTy reg_start, CursorTy reg_end) {
+void free_region(CursorTy reg_end) {
     RegionFooter footer = *(RegionFooter *) reg_end;
     CursorTy next_chunk = footer.next;
+    CursorTy reg_start = reg_end - footer.size;
 
     int num_chunks = 0;
     IntTy total_bytesize = footer.size;
 
     // Decrement refcounts of all regions `reg` points to
     if (footer.outset_ptr != NULL) {
-        RegionFooter* xyz = (RegionFooter *) footer.outset_ptr;
-        *(xyz->refcount_ptr) = *(xyz->refcount_ptr) - 1;
+        // Grab the outset, and decrement refcounts.
+        Outset_elem *elt, *tmp;
+        Outset_elem *head = (footer.outset_ptr);
+
+        #ifdef DEBUG
+        int count;
+        DL_COUNT(head, elt, count);
+        printf("free_region: outset-len: %d\n", count);
+        #endif
+
+        // Decrement refcounts, and free the outset elements themselves.
+        DL_FOREACH_SAFE(head,elt,tmp) {
+            RegionFooter *elt_footer = (RegionFooter *) elt->ref;
+            *(elt_footer->refcount_ptr) = *(elt_footer->refcount_ptr) - 1;
+            DL_DELETE(head,elt);
+            free(elt);
+        }
     }
 
     // Free all chunks if recount is 0
@@ -397,6 +449,7 @@ void free_region(CursorTy reg_start, CursorTy reg_end) {
         }
         num_chunks++;
         total_bytesize = total_bytesize + footer.size;
+
         #ifdef DEBUG
         printf("GC: Freed %lld bytes across %d chunks.\n",total_bytesize,num_chunks);
         #endif
@@ -404,7 +457,7 @@ void free_region(CursorTy reg_start, CursorTy reg_end) {
         free(reg_start);
     } else {
         #ifdef DEBUG
-        printf("free_region: refcount non-zero.\n");
+        printf("free_region: non-zero refcount: %d.\n", *(footer.refcount_ptr));
         #endif
     }
 }
