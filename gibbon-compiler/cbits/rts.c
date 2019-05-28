@@ -407,13 +407,10 @@ IntTy bump_ref_count(CursorTy end_b, CursorTy end_a) {
     return refcount;
 }
 
-void free_region(CursorTy reg_end) {
-    RegionFooter footer = *(RegionFooter *) reg_end;
+void free_region(CursorTy end_reg) {
+    RegionFooter footer = *(RegionFooter *) end_reg;
+    CursorTy first_chunk = end_reg - footer.size;
     CursorTy next_chunk = footer.next;
-    CursorTy reg_start = reg_end - footer.size;
-
-    int num_chunks = 0;
-    IntTy total_bytesize = footer.size;
 
     // Decrement refcounts of all regions `reg` points to
     if (footer.outset_ptr != NULL) {
@@ -438,23 +435,31 @@ void free_region(CursorTy reg_end) {
 
     // Free all chunks if recount is 0
     if (*(footer.refcount_ptr) == 0) {
-        while (next_chunk != NULL) {
-            // Bookkeeping
-            num_chunks++;
-            total_bytesize = total_bytesize + footer.size;
 
+        #ifdef DEBUG
+        // Bookkeeping
+        int num_chunks = 1;
+        IntTy total_bytesize = footer.size;
+        #endif
+
+        // Free the first chunk
+        free(first_chunk);
+
+        // Now, all the others
+        while (next_chunk != NULL) {
             footer = *(RegionFooter *) next_chunk;
             free(next_chunk - footer.size);
             next_chunk = footer.next;
+
+            #ifdef DEBUG
+            num_chunks++;
+            total_bytesize = total_bytesize + footer.size;
+            #endif
         }
-        num_chunks++;
-        total_bytesize = total_bytesize + footer.size;
 
         #ifdef DEBUG
         printf("GC: Freed %lld bytes across %d chunks.\n",total_bytesize,num_chunks);
         #endif
-
-        free(reg_start);
     } else {
         #ifdef DEBUG
         printf("free_region: non-zero refcount: %d.\n", *(footer.refcount_ptr));
