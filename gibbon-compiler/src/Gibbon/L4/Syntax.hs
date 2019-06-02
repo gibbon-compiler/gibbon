@@ -327,6 +327,7 @@ inlineTrivL4 (Prog fundefs mb_main) =
                         IntAlts as -> IntAlts $ map (\(a,b) -> (a, go b)) as
           in Switch lbl (inline env trv) alts' (go <$> mb_tail)
         TailCall v trvs -> TailCall v (map (inline env) trvs)
+        LetArenaT{bod}  -> tl { bod = go bod }
         Goto{}          -> tl
       where
         go = inline_tail env

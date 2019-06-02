@@ -552,6 +552,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           CaseE _ mp -> L.foldr (\(_,_,e) acc' -> go acc' e) acc mp
           DataConE _ _ args -> foldl go acc args
           TimeIt e _ _ -> go acc e
+          WithArenaE _ e -> go acc e
           ParE{}  -> acc
           MapE{}  -> acc
           FoldE{} -> acc

@@ -64,6 +64,7 @@ addTraversalsExp ddefs fundefs env2 renv context (L p ex) = L p <$>
     LitSymE{} -> return ex
     AppE f locs args -> AppE f locs <$> mapM go args
     PrimAppE f args  -> PrimAppE f <$> mapM go args
+    WithArenaE v e -> WithArenaE v <$> addTraversalsExp ddefs fundefs (extendVEnv v ArenaTy env2) renv context e
 
 {-
 Also see (2) of Note [When does a type 'needsRAN'] in Gibbon.Passes.AddRAN.
