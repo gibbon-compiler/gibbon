@@ -541,7 +541,7 @@ See [Hacky substitution to encode ParE].
 
 
     -- We could eliminate these ahead of time:
-    LetE (v,_,t,rhs) bod | isTrivial rhs ->
+    LetE (v,_,t,rhs) bod | isTrivial' rhs ->
       T.LetTrivT (v,typ t, triv "<internal error2>" rhs) <$> tail bod
 
     -- TWO OPTIONS HERE: we could push equality prims into the target lang.
@@ -892,3 +892,10 @@ hackyParSubst i p binds (L loc ex) = L loc $
     FoldE{} -> ex
   where
     go = hackyParSubst i p binds
+
+isTrivial' :: L Exp3 -> Bool
+isTrivial' (L sl e) =
+    case e of
+      (PrimAppE L1.MkTrue []) -> True
+      (PrimAppE L1.MkFalse []) -> True
+      _ -> isTrivial (L sl e)
