@@ -821,43 +821,6 @@ becomes
 
     subst' old new ex = gRename (M.singleton old new) ex
 
-    -- | Update a function name.
-    subst' :: Var -> Var -> L Exp0 -> L Exp0
-    subst' old new (L p0 ex) = L p0 $
-      let go = subst' old new in
-      case ex of
-        VarE v | v == old  -> VarE new
-               | otherwise -> VarE v
-        AppE f [] ls | f == old  -> AppE new [] (map go ls)
-                     | otherwise -> AppE f [] (map go ls)
-        AppE _ (_:_) _ -> error $ "subst': Call-site not monomorphized: " ++ sdoc ex
-        LitE _             -> ex
-        LitSymE _          -> ex
-        PrimAppE p ls      -> PrimAppE p $ map go ls
-        LetE (v,[],t,rhs) bod | v == old  -> LetE (v,[],t,go rhs) bod
-                              | otherwise -> LetE (v,[],t,go rhs) (go bod)
-        LetE (_,(_:_),_,_) _ -> error $ "subst': Let not monomorphized: " ++ sdoc ex
-        ProjE i e  -> ProjE i (go e)
-        CaseE e ls -> CaseE (go e) (map f ls)
-                          where f (c,vs,er) = if elem old (map fst vs)
-                                              then (c,vs,er)
-                                              else (c,vs,go er)
-        MkProdE ls        -> MkProdE $ map go ls
-        DataConE loc k ls -> DataConE loc k $ map go ls
-        TimeIt e t b      -> TimeIt (go e) t b
-        IfE a b c         -> IfE (go a) (go b) (go c)
-        ParE a b          -> ParE (go a) (go b)
-        WithArenaE v e    -> WithArenaE v (go e)
-        MapE{} -> error $ "subst': TODO: " ++ sdoc ex
-        FoldE{} -> error $ "subst': TODO: " ++ sdoc ex
-
-        Ext ext ->
-          case ext of
-            LambdaE args bod    -> Ext $ LambdaE args (go bod)
-            PolyAppE rator rand -> Ext $ PolyAppE (go rator) (go rand)
-            FunRefE tyapps f | f == old  -> Ext $ FunRefE tyapps new
-                             | otherwise -> Ext $ FunRefE tyapps f
-
 specExp :: DDefs0 -> Env2 Ty0 -> L Exp0 -> SpecM (L Exp0)
 specExp ddefs env2 (L p ex) = (L p) <$>
   case ex of

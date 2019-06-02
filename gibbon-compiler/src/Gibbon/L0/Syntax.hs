@@ -142,7 +142,7 @@ instance Renamable Ty0 where
       TyVar tv  -> TyVar (go tv)
       MetaTv{}  -> ty
       ProdTy ls -> ProdTy (map go ls)
-      SymDictTy a       -> SymDictTy (go a)
+      SymDictTy a t     -> SymDictTy a t
       ArrowTy args ret  -> ArrowTy (map go args) ret
       PackedTy tycon ls -> PackedTy tycon (map go ls)
       ListTy a          -> ListTy (go a)

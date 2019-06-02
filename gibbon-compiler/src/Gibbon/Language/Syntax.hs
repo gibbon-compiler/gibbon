@@ -721,7 +721,7 @@ instance Renamable a => Renamable (UrTy a) where
       IntTy       -> IntTy
       BoolTy      -> BoolTy
       ProdTy ls   -> ProdTy (map (gRename env) ls)
-      SymDictTy t -> SymDictTy (gRename env t)
+      SymDictTy a t -> SymDictTy a t
       PackedTy tycon loc -> PackedTy tycon (gRename env loc)
       ListTy loc -> ListTy (gRename env loc)
       PtrTy      -> PtrTy

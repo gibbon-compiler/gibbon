@@ -145,7 +145,7 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
                       -- the endof locations returned by the RHS.
                       FromEndLE _         -> renv # loc
                       FreeLE -> "DUMMY"
-              dontcheck = ("DUMMY",False)
+              dont_check = ("DUMMY",False)
               (outloc, needsCheck) =
                 if reg `S.member` checked
                 then dont_check

@@ -351,7 +351,7 @@ inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) $
                L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
 -- | Apply a location substitution to a type.
-substLoc :: Map LocVar LocVar -> Ty2 -> Ty2
+substLoc :: M.Map LocVar LocVar -> Ty2 -> Ty2
 substLoc mp ty =
   case ty of
    SymDictTy v te -> SymDictTy v te -- (go te)
