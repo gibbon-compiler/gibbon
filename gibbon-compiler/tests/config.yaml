@@ -103,6 +103,7 @@ tests:
   - name: test25a_withprint.gib
   - name: test25b_racketcore.gib
   - name: test25c_racketcore.gib
+  - name: test25d_racketcore.gib  
   - name: test25e_countnodes.gib
   - name: test25_rackcore.gib
   - name: test25f_countnodes.gib
@@ -306,8 +307,6 @@ tests:
     failing: [pointer, gibbon2, gibbon1]
   - name: test_addtrees.gib
     failing: [gibbon2,gibbon1]
-  - name: test25d_racketcore.gib
-    failing: [gibbon2, gibbon1]
   - name: pp_projs.gib
     failing: [pointer, gibbon1, gibbon2]
 
