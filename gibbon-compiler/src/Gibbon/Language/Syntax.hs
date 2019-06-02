@@ -816,6 +816,9 @@ subst old new (L p0 ex) = L p0 $
     WithArenaE v e | v == old  -> WithArenaE v e
                    | otherwise -> WithArenaE v (go e)
 
+    WithArenaE v e | v == old  -> WithArenaE v e
+                   | otherwise -> WithArenaE v (go e)
+
 -- | Expensive 'subst' that looks for a whole matching sub-EXPRESSION.
 -- If the old expression is a variable, this still avoids going under binder.
 substE :: HasSubstitutable e l d
@@ -848,6 +851,9 @@ substE old new (L p0 ex) = L p0 $
         in FoldE (v1,t1,r1') (v2,t2,r2') (go bod)
 
     Ext ext -> Ext (gSubstEExt old new ext)
+
+    WithArenaE v e | (VarE v) == unLoc old -> WithArenaE v e
+                   | otherwise -> WithArenaE v (go e)
 
     WithArenaE v e | (VarE v) == unLoc old -> WithArenaE v e
                    | otherwise -> WithArenaE v (go e)
