@@ -175,7 +175,7 @@ lit := int | #t | #f
 (define-type Sym Symbol)
 (define-type Bool Boolean)
 (define-type Float Flonum)
-(define-type (SymDict t) (HashTable Symbol t))
+(define-type (SymDict a t) (HashTable Symbol t))
 
 (define-values (prop:pack pack? pack-ref) (make-struct-type-property 'pack))
 
