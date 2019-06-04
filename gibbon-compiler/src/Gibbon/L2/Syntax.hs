@@ -87,7 +87,10 @@ data E2Ext loc dec
                  DataCon
                  (loc,Var) -- Pointer
                  (loc,Var) -- Pointee (the thing that the pointer points to)
-                 (L (E2 loc dec)) -- [2019.05.16] CSK: why do we need this expression here ? Audit + remove.
+                 (L (E2 loc dec)) -- If this indirection was added to get rid
+                                  -- of a copy_Foo call, we keep the fn call
+                                  -- around in case we want to go back to using
+                                  -- it. E.g. reverting from L2 to L1.
     -- ^ A tagged indirection node.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
@@ -489,29 +492,47 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
       in (dcon, zip vars (repeat ()), revertExp rhs)
 
 -- | Does a variable occur in an expression ?
+--
+-- N.B. it only looks for actual variables, not LocVar's or RegionVar's.
 occurs :: S.Set Var -> L Exp2 -> Bool
 occurs w (L _ ex) =
   case ex of
     VarE v -> v `S.member` w
     LitE{}    -> False
     LitSymE{} -> False
-    AppE _ _ ls   -> any (occurs w) ls
-    PrimAppE _ ls -> any (occurs w) ls
-    LetE (_,_,_,rhs) bod -> occurs w rhs || occurs w bod
-    IfE a b c -> occurs w a || occurs w b || occurs w c
-    MkProdE ls -> any (occurs w) ls
-    ProjE _ e  -> occurs w e
-    CaseE e brs -> occurs w e || any (\(_,_,bod) -> occurs w bod) brs
-    DataConE _ _ ls -> any (occurs w) ls
-    TimeIt e _ _ -> occurs w e
-    ParE a b -> occurs w a || occurs w b
+    AppE _ _ ls   -> any go ls
+    PrimAppE _ ls -> any go ls
+    LetE (_,_,_,rhs) bod -> go rhs || go bod
+    IfE a b c   -> go a || go b || go c
+    MkProdE ls  -> any go ls
+    ProjE _ e   -> go e
+    CaseE e brs -> go e || any (\(_,_,bod) -> go bod) brs
+    DataConE _ _ ls  -> any go ls
+    TimeIt e _ _     -> go e
+    ParE a b         -> go a || go b
+    WithArenaE v rhs -> v `S.member` w || go rhs
     Ext ext ->
       case ext of
-        LetRegionE _ bod -> occurs w bod
-        LetLocE _ _ bod  -> occurs w bod
-        _ -> False
-    MapE{} -> error "occurs: TODO MapE"
+        LetRegionE _ bod  -> go bod
+        LetLocE _ le bod  ->
+          let oc_bod = go bod in
+          case le of
+            AfterVariableLE v _ -> v `S.member` w || oc_bod
+            StartOfLE{}         -> oc_bod
+            AfterConstantLE{}   -> oc_bod
+            InRegionLE{}        -> oc_bod
+            FreeLE{}            -> oc_bod
+            FromEndLE{}         -> oc_bod
+        RetE _ v      -> v `S.member` w
+        FromEndE{}    -> False
+        BoundsCheck{} -> False
+        IndirectionE _ _ (_,v1) (_,v2) ib ->
+          v1 `S.member` w  || v2 `S.member` w || go ib
+    MapE{}  -> error "occurs: TODO MapE"
     FoldE{} -> error "occurs: TODO FoldE"
+  where
+    go = occurs w
+
 
 mapPacked :: (Var -> l -> UrTy l) -> UrTy l -> UrTy l
 mapPacked fn t =

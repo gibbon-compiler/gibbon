@@ -142,7 +142,7 @@ addRANExp tycons ddfs ienv (L p ex) = L p <$>
               needIndrsFor = L.take n $ L.drop firstPacked args
 
           rans <- mapM (\arg -> do
-                           i <- gensym "indr"
+                           i <- gensym "ran"
                            -- See Note [Reusing RAN's in case expressions]
                            let rhs = case unLoc arg of
                                        VarE x -> case M.lookup x ienv of
