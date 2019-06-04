@@ -28,7 +28,7 @@ module Gibbon.L2.Syntax
     , locsInTy, dummyTyLocs
 
     -- * Other helpers
-    , revertToL1, occurs, mapPacked, depList
+    , revertToL1, occurs, mapPacked, constPacked, depList
 
     , module Gibbon.Language
     )
@@ -520,8 +520,22 @@ mapPacked fn t =
     BoolTy -> BoolTy
     SymTy  -> SymTy
     (ProdTy x)    -> ProdTy $ L.map (mapPacked fn) x
-    (SymDictTy v x) -> SymDictTy v x -- $ mapPacked fn x
+    (SymDictTy v x) -> SymDictTy v x
     PackedTy k l  -> fn (toVar k) l
+    PtrTy    -> PtrTy
+    CursorTy -> CursorTy
+    ArenaTy  -> ArenaTy
+    ListTy{} -> error "FINISHLISTS"
+
+constPacked :: UrTy a1 -> UrTy a2 -> UrTy a1
+constPacked c t = 
+  case t of
+    IntTy  -> IntTy
+    BoolTy -> BoolTy
+    SymTy  -> SymTy
+    (ProdTy x)    -> ProdTy $ L.map (constPacked c) x
+    (SymDictTy v _x) -> SymDictTy v $ stripTyLocs c
+    PackedTy _k _l  -> c
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy

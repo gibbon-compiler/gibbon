@@ -42,7 +42,12 @@ tcExp isPacked ddfs env exp@(L p ex) =
           vty  <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
           vrhs <- go rhs
-          ensureEqualTy exp vrhs IntTy
+          -- ensureEqualTy exp vrhs IntTy
+          case vrhs of
+            BoolTy -> return ()
+            IntTy -> return ()
+            _ -> throwError $ GenericTC ("Expected int or bool argument to WriteInt") exp
+
           return CursorTy
 
         -- Add a constant offset to a cursor variable
@@ -393,7 +398,7 @@ tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
         Right ty -> if ty == outty
                     then return ()
                     else error $ "Expected type " ++ (sdoc outty)
-                         ++ " and got type " ++ (sdoc ty)
+                         ++ " and got type " ++ (sdoc ty) ++ "\n" ++ (sdoc funBody)
 
       return ()
 
@@ -436,10 +441,10 @@ ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
 
 ensureEqualTyNoLoc exp t1 t2 =
   case (t1,t2) of
-    (SymDictTy _ ty1, SymDictTy _ ty2) ->
-        do ty1' <- L2.dummyTyLocs ty1
-           ty2' <- L2.dummyTyLocs ty2
-           ensureEqualTyNoLoc exp ty1' ty2'
+    (SymDictTy _ _ty1, SymDictTy _ _ty2) -> return t1
+        -- do ty1' <- L2.dummyTyLocs ty1
+        --    ty2' <- L2.dummyTyLocs ty2
+        --    ensureEqualTyNoLoc exp ty1' ty2'
     (PackedTy dc1 _, PackedTy dc2 _) -> if dc1 == dc2
                                         then return t1
                                         else ensureEqualTy exp t1 t2

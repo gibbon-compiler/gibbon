@@ -199,6 +199,10 @@ This is used to create bindings for input location variables.
           -- Packed types in the output then become end-cursors for those same destinations.
           newOut = mapPacked (\_ _ -> ProdTy [CursorTy, CursorTy]) out_ty
 
+          newOut' = case newOut of
+                      SymDictTy a _ -> SymDictTy a CursorTy
+                      _ -> newOut
+
           -- Adding additional input arguments for the destination cursors to which outputs
           -- are written.
           outCurs   = filter (\(LRM _ _ m) -> m == Output) locVars
@@ -207,9 +211,9 @@ This is used to create bindings for input location variables.
           in_tys    = inRegs ++ outRegs ++ outCurTys ++ arrIns
 
           -- Packed types in the input now become (read-only) cursors.
-          newIns    = map (mapPacked (\_ _ -> CursorTy)) in_tys
+          newIns    = map (constPacked CursorTy) in_tys
 
-      in (map stripTyLocs newIns, stripTyLocs newOut)
+      in (map stripTyLocs newIns, stripTyLocs newOut')
 
 
 -- | Cursorize expressions NOT producing `Packed` values
@@ -340,9 +344,9 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
     AppE{} -> dl <$> cursorizeAppE ddfs fundefs denv tenv (L p ex)
 
     -- DictLookup returns a packed value bound to a free location.
-    PrimAppE (DictLookupP _dty) vs ->
-        do vs' <- forM vs $ \v -> cursorizeExp ddfs fundefs denv tenv v
-           return $ mkDi (l$ PrimAppE (DictLookupP CursorTy) vs') [ l$ Ext NullCursor ]
+    -- PrimAppE (DictLookupP (PackedTy _ ploc)) vs ->
+    --     do vs' <- forM vs $ \v -> cursorizeExp ddfs fundefs denv tenv v
+    --        return $ mkDi (l$ PrimAppE (DictLookupP CursorTy) vs') [ l$ Ext NullCursor ]
 
     PrimAppE _ _ -> error $ "cursorizePackedExp: unexpected PrimAppE in packed context:" ++ sdoc ex
 
@@ -353,6 +357,12 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
     LetE (v,_locs, _ty, L _ (PrimAppE (ReadPackedFile path tyc reg ty2) [])) bod ->
        Di <$> cursorizeReadPackedFile ddfs fundefs denv tenv True v path tyc reg ty2 bod
 
+    LetE (v,_locs,_ty, L sl (PrimAppE (DictLookupP (PackedTy _ ploc)) vs)) bod ->
+        do vs' <- forM vs $ \v -> cursorizeExp ddfs fundefs denv tenv v
+           let bnd = mkLets [(ploc, [], CursorTy, L sl (PrimAppE (DictLookupP CursorTy) vs'))
+                            ,(v, [], CursorTy, l$ VarE ploc)]
+               tenv' = M.insert ploc CursorTy $ M.insert v CursorTy tenv
+           onDi bnd <$> go tenv' bod
 
     LetE (_v,_locs,_ty, (L _ (MkProdE _ls))) _bod ->
       dl <$> cursorizeProd True ddfs fundefs denv tenv ex
@@ -482,7 +492,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
 
         IndirectionE _ dcon (pointer,r1) (pointee,r2) _ -> do
           dflags <- getDynFlags
-          if gopt Opt_DisableGC dflags
+          if gopt Opt_DisableGC dflags || (r1 == "dummy" || r2 == "dummy") -- HACK!!! 
           then go tenv (l$ DataConE pointer dcon [l$ VarE pointee])
           else
             onDi (mkLets [("_",[],IntTy, l$ Ext (BumpRefCount (toEndV r1) (toEndV r2)))]) <$>

@@ -110,6 +110,7 @@ harvestStructTys (Prog funs mtal) =
 codegenProg :: Config -> Prog -> IO String
 codegenProg cfg prg@(Prog funs mtal) = do
       env <- getEnvironment
+      dbgTrace 1 (show (uniqueDicts $ S.toList $ harvestStructTys prg)) $ return ()
       let rtsPath = case lookup "GIBBONDIR" env of
                       Just p -> p ++"/gibbon-compiler/cbits/rts.c"
                       Nothing -> "cbits/rts.c" -- Assume we're running from the compiler dir!
@@ -122,7 +123,7 @@ codegenProg cfg prg@(Prog funs mtal) = do
       defs = fst $ runPassM cfg 0 $ do
         (prots,funs') <- unzip <$> mapM codegenFun funs
         main_expr' <- main_expr
-        return (makeStructs (S.toList $ harvestStructTys prg) ++ prots ++ funs' ++ [main_expr'])
+        return ((L.nub $ makeStructs (uniqueDicts $ S.toList $ harvestStructTys prg)) ++ prots ++ funs' ++ [main_expr'])
 
       main_expr :: PassM C.Definition
       main_expr =
@@ -166,6 +167,12 @@ makeStructs (ts : ts') = d : makeStructs ts'
           d = [cedecl| typedef struct $id:(strName ++ "_struct") { $sdecls:decls } $id:strName; |]
           decls = zipWith (\t n -> [csdecl| $ty:(codegenTy t) $id:("field"++(show n)); |])
                   ts [0 :: Int ..]
+
+uniqueDicts :: [[Ty]] -> [[Ty]]
+uniqueDicts [] = []
+uniqueDicts (ts : ts') = (map f ts) : uniqueDicts ts'
+    where f (SymDictTy _ t) = SymDictTy "_" t
+          f t = t
 
 -- | Replace returns with assignments to a given set of destinations.
 rewriteReturns :: Tail -> [(Var,Ty)] -> Tail

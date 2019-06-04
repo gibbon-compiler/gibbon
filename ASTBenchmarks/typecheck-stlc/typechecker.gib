@@ -132,10 +132,14 @@
 (define (getParamTypes [params : ListParam]) : ListType
   (case params
     [(CONSPARAM param rest)
-     (case param
-       [(P e t) (CONSTYPE t (getParamTypes rest))])]
+      (let ([t : Type (getInnerParamType param)])
+        (CONSTYPE t (getParamTypes rest)))]
     [(NULLPARAM)
      (NULLTYPE)]))
+
+(define (getInnerParamType [param : Param]) : Type
+  (case param
+    [(P e t) t]))
 
 (define (typecheck [expr : Expr] [a : Arena] [env : (SymDict a Type)] ): Type
   (case expr
