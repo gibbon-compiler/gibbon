@@ -293,14 +293,6 @@ tests:
     failing: [gibbon2, gibbon1]
   - name: test06i_casecase.gib
     failing: [gibbon2, gibbon1]
-  - name: test08_dict.gib
-    failing: [pointer]
-  - name: test08b_dict.gib
-    failing: [pointer]
-  - name: test08c_dict.gib
-    failing: [pointer]
-  - name: test08d_sharedict.gib
-    failing: [pointer]
   - name: test29a_list.gib
     failing: [gibbon2]
   - name: test18f_flip.gib
@@ -309,6 +301,16 @@ tests:
     failing: [gibbon2,gibbon1]
   - name: pp_projs.gib
     failing: [pointer, gibbon1, gibbon2]
+
+  # Tests that actually work but we can't generate answers with Racket
+  - name: test08_dict.gib
+    failing: [interp1,pointer,gibbon1,gibbon2]
+  - name: test08b_dict.gib
+    failing: [interp1,pointer,gibbon1,gibbon2]
+  - name: test08c_dict.gib
+    failing: [interp1,pointer,gibbon1,gibbon2]
+  - name: test08d_sharedict.gib
+    failing: [interp1,pointer,gibbon1,gibbon2]
 
   # This test depends on real symbols, which we don't support atm.
   - name: test27b_subst.gib
