@@ -56,19 +56,19 @@ l1TypecheckerTests = $(testGroupGenerator)
 
 --------------------------------------------------------------------------------
 
-t6 :: Exp
-t6 = l$ LetE ("d0",
-              [],
-              SymDictTy IntTy,
-              l$ PrimAppE (DictEmptyP IntTy) [])
-     (l$ LetE ("d21",
-               [],
-               SymDictTy IntTy,
-               l$ PrimAppE (DictInsertP IntTy) [l$ VarE "d0",l$ LitSymE "hi",l$ LitE 200])
-      (l$ LitE 44))
+-- t6 :: Exp
+-- t6 = l$ LetE ("d0",
+--               [],
+--               SymDictTy IntTy,
+--               l$ PrimAppE (DictEmptyP IntTy) [])
+--      (l$ LetE ("d21",
+--                [],
+--                SymDictTy IntTy,
+--                l$ PrimAppE (DictInsertP IntTy) [l$ VarE "d0",l$ LitSymE "hi",l$ LitE 200])
+--       (l$ LitE 44))
 
-case_test_6 :: Assertion
-case_test_6 = assertValue t6 IntTy
+-- case_test_6 :: Assertion
+-- case_test_6 = assertValue t6 IntTy
 
 t5 :: Exp
 t5 = l$  CaseE (l$ DataConE () "B" [l$  LitE 2, l$ LitE 4])

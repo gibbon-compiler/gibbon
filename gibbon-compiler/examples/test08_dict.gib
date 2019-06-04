@@ -2,5 +2,6 @@
 
 (data Foo (MkFoo Int))
 
-(let ([x : (SymDict Foo) (ann (empty-dict) (SymDict Foo))])
-  44)
+(letarena a
+  (let ([x : (SymDict a Foo) (ann (empty-dict a) (SymDict a Foo))])
+    44))

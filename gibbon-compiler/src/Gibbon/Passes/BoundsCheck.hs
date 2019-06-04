@@ -144,7 +144,7 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
                       -- HACK: LetE form doesn't extend the RegEnv with the
                       -- the endof locations returned by the RHS.
                       FromEndLE _         -> renv # loc
-                      FreeLE -> error "boundsCheck: Don't know the region of FreeLE."
+                      FreeLE -> "DUMMY"
               dont_check = ("DUMMY",False)
               (outloc, needsCheck) =
                 if reg `S.member` checked
@@ -208,6 +208,9 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
+    WithArenaE v e -> do
+      e' <- go e
+      return $ WithArenaE v e'
     ParE a b -> ParE <$> (go a) <*> (go b)
     MapE{}  -> error $ "go: TODO MapE"
     FoldE{} -> error $ "go: TODO FoldE"

@@ -616,6 +616,10 @@ inferExp env@FullEnv{dataDefs}
         do (e',ty',cs') <- inferExp env e dest
            return (lc$ TimeIt e' ty' b, ty', cs')
 
+    WithArenaE v e ->
+        do (e',ty',cs') <- inferExp (extendVEnv v ArenaTy env) e dest
+           return (lc$ WithArenaE v e', ty', cs')
+
     DataConE () k [] ->
         case dest of
           NoDest -> err $ "Expected single location destination for DataConE"
@@ -711,11 +715,11 @@ inferExp env@FullEnv{dataDefs}
        (c',tyc,csc)    <- inferExp env c dest
        return (lc$ IfE a' b' c', tyc, L.nub $ acs ++ csb ++ csc)
 
-    PrimAppE (DictInsertP dty) [d,k,v] ->
+    PrimAppE (DictInsertP dty) [L sl (VarE var),d,k,v] ->
       case dest of
         SingleDest _ -> err "Cannot unify DictInsert with destination"
         TupleDest _ -> err "Cannot unify DictInsert with destination"
-        NoDest -> do (d',SymDictTy dty',_dcs) <- inferExp env d NoDest
+        NoDest -> do (d',SymDictTy ar dty',_dcs) <- inferExp env d NoDest
                      (k',_,_kcs) <- inferExp env k NoDest
                      dty'' <- lift $ lift $ convertTy dty
                      r <- lift $ lift $ freshRegVar
@@ -723,11 +727,12 @@ inferExp env@FullEnv{dataDefs}
                      -- _ <- fixLoc loc
                      (v',vty,vcs) <- inferExp env v $ SingleDest loc
                      let cs = vcs -- (StartRegionL loc r) : vcs
-                     return (lc$ PrimAppE (DictInsertP dty') [d',k',v'], SymDictTy dty'', cs)
+                     dummyDty <- dummyTyLocs dty'
+                     return (lc$ PrimAppE (DictInsertP dummyDty) [L sl (VarE var),d',k',v'], SymDictTy (Just var) $ stripTyLocs dty'', cs)
 
     PrimAppE (DictLookupP dty) [d,k] ->
       case dest of
-        SingleDest loc -> do (d',SymDictTy _dty,_dcs) <- inferExp env d NoDest
+        SingleDest loc -> do (d',SymDictTy _ _dty,_dcs) <- inferExp env d NoDest
                              (k',_,_kcs) <- inferExp env k NoDest
                              dty' <- lift $ lift $ convertTy dty
                              let loc' = locOfTy dty'
@@ -740,25 +745,26 @@ inferExp env@FullEnv{dataDefs}
         TupleDest _ -> err "Cannot unify DictLookup with tuple destination"
         NoDest -> err "Cannot unify DictLookup with no destination"
 
-    PrimAppE (DictEmptyP dty) [] ->
+    PrimAppE (DictEmptyP dty) [L sl (VarE var)] ->
       case dest of
         SingleDest _ -> err "Cannot unify DictEmpty with destination"
         TupleDest _ -> err "Cannot unify DictEmpty with destination"
         NoDest -> do dty' <- lift $ lift $ convertTy dty
-                     return (lc$ PrimAppE (DictEmptyP dty') [], SymDictTy dty', [])
+                     return (lc$ PrimAppE (DictEmptyP dty') [L sl (VarE var)], SymDictTy (Just var) $ stripTyLocs dty', [])
 
     PrimAppE (DictHasKeyP dty) [d,k] ->
       case dest of
         SingleDest _ -> err "Cannot unify DictEmpty with destination"
         TupleDest _ -> err "Cannot unify DictEmpty with destination"
-        NoDest -> do (d',SymDictTy dty',_dcs) <- inferExp env d NoDest
+        NoDest -> do (d',SymDictTy _ dty',_dcs) <- inferExp env d NoDest
                      (k',_,_kcs) <- inferExp env k NoDest
-                     return (lc$ PrimAppE (DictHasKeyP dty') [d',k'], BoolTy, [])
+                     dummyDty <- dummyTyLocs dty'
+                     return (lc$ PrimAppE (DictHasKeyP dummyDty) [d',k'], BoolTy, [])
 
     PrimAppE pr es ->
       case dest of
-        SingleDest _ -> err "Cannot unify primop with destination"
-        TupleDest _ -> err "Cannot unify primop with destination"
+        SingleDest d -> err $ "Cannot unify primop " ++ sdoc pr ++ " with destination " ++ sdoc d ++ " at " ++ show sl1
+        TupleDest  d -> err $ "Cannot unify primop " ++ sdoc pr ++ " with destination " ++ sdoc d ++ " at " ++ show sl1
         NoDest -> do results <- mapM (\e -> inferExp env e NoDest) es
                      -- Assume arguments to PrimAppE are trivial
                      -- so there's no need to deal with constraints or locations
@@ -934,6 +940,15 @@ inferExp env@FullEnv{dataDefs}
                return (L lc1 (LetE (vr',locs', ty', L lc2 (ParE a' b')) bod), ty'', cs'')
              _  -> err$ "ParE -- unexpected result: " ++ sdoc res
 
+        WithArenaE v e -> do
+          (e',ty,cs) <- inferExp (extendVEnv v ArenaTy env) e NoDest
+          (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
+          (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs ++ cs')
+          vcs <- tryNeedRegion (locsInTy ty) ty'' cs''
+          fcs <- tryInRegion vcs
+          tryBindReg (lc$ L2.LetE (vr,[],ty,L sl2 $ WithArenaE v e') bod'',
+                        ty'', fcs)
+
         TimeIt e t b       -> do
           lv <- lift $ lift $ freshLocVar "timeit"
           let subdest = case bty of
@@ -1021,6 +1036,10 @@ finishExp (L i e) =
           a' <- finishExp a
           b' <- finishExp b
           return (l$ ParE a' b')
+
+      WithArenaE v e -> do
+             e' <- finishExp e
+             return $ l$ WithArenaE v e'
 
       Ext (LetRegionE r e1) -> do
              e1' <- finishExp e1
@@ -1113,6 +1132,9 @@ cleanExp (L i e) =
                       (b', s2) = cleanExp b
                   in (l$ ParE a' b', s1 `S.union` s2)
 
+      WithArenaE v e -> let (e',s) = cleanExp e
+                        in (l$ WithArenaE v e', s)
+
       Ext (LetRegionE r e) -> let (e',s') = cleanExp e
                               in (l$ Ext (LetRegionE r e'), s')
       Ext (LetLocE loc FreeLE e) -> let (e', s) = cleanExp e
@@ -1188,6 +1210,7 @@ fixProj renam pvar proj (L i e) =
       ParE e1 e2 -> let e1' = fixProj renam pvar proj e1
                         e2' = fixProj renam pvar proj e2
                     in l$ ParE e1' e2'
+      WithArenaE v e -> l$ WithArenaE v $ fixProj renam pvar proj e
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
@@ -1357,7 +1380,7 @@ copy (e,ty,cs) lv1 =
       PackedTy tc lv2 -> do
           let copyName = mkCopyFunName tc -- assume a copy function with this name
               eapp = l$ AppE copyName [lv2,lv1] [e]
-          return (eapp, PackedTy tc lv1, [])
+          return (eapp, PackedTy tc lv1, cs)
       _ -> err $ "Did not expect to need to copy non-packed type: " ++ show ty
 
 unNestLet :: Result -> Result

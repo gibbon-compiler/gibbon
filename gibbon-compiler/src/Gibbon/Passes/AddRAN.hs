@@ -170,6 +170,9 @@ addRANExp tycons ddfs ienv (L p ex) = L p <$>
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
+    WithArenaE v e -> do
+      e' <- go e
+      return $ WithArenaE v e'
     ParE a b -> ParE <$> (go a) <*> go b
     Ext _ -> return ex
     MapE{}  -> error "addRANExp: TODO MapE"
@@ -276,6 +279,7 @@ needsRANExp ddefs fundefs env2 renv (L _p ex) =
     ProjE{}    -> S.empty
     DataConE{} -> S.empty
     TimeIt{}   -> S.empty
+    WithArenaE{} -> S.empty
 
     -- See (2) in Note [When does a type 'needsLRAN].
     ParE a b   -> let mp1 = parAppLoc env2 a

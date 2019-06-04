@@ -436,6 +436,7 @@ data PreExp (ext :: * -> * -> *) loc dec =
    | ParE EXP EXP
     -- ^ Parallel tuple combitor.
 
+   | WithArenaE Var EXP
 
    -- Limited list handling:
    -- TODO: RENAME to "Array".
@@ -468,9 +469,10 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         VarE _    -> True
         LitE _    -> True
         LitSymE _ -> True
-        -- These should really turn to literalS:
-        PrimAppE MkTrue  [] -> True
-        PrimAppE MkFalse [] -> True
+        -- -- These should really turn to literalS:
+        -- -- Commenting out for now because it confuses inference (!)
+        -- PrimAppE MkTrue  [] -> True
+        -- PrimAppE MkFalse [] -> True
         PrimAppE _ _        -> False
 
         ----------------- POLICY DECISION ---------------
@@ -501,6 +503,7 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         AppE  {}   -> False
         TimeIt {}  -> False
         ParE{}     -> False
+        WithArenaE{} -> False
         Ext ext -> isTrivial ext
 
 
@@ -536,6 +539,8 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
 
       ParE a b -> gFreeVars a `S.union` gFreeVars b
 
+      WithArenaE v e -> S.delete v $ gFreeVars e
+
       Ext q -> gFreeVars q
 
 
@@ -546,7 +551,7 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
        => Typeable (PreExp e l (UrTy l)) where
   gRecoverType ddfs env2 ex =
     case ex of
-      VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v) v (vEnv env2)
+      VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) v (vEnv env2)
       LitE _       -> IntTy
       LitSymE _    -> SymTy
       AppE v _ _   -> outTy $ fEnv env2 # v
@@ -569,6 +574,8 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
 
       ParE a b -> ProdTy $ L.map (gRecoverType ddfs env2) [a,b]
+
+      WithArenaE _v e -> gRecoverType ddfs env2 e
 
       CaseE _ mp ->
         let (c,args,e) = head mp
@@ -685,7 +692,7 @@ data UrTy a =
 --                --   It's an alias for Int, an index into a symbol table.
         | BoolTy
         | ProdTy [UrTy a]     -- ^ An N-ary tuple
-        | SymDictTy (UrTy a)  -- ^ A map from SymTy to Ty
+        | SymDictTy (Maybe Var) (UrTy ())  -- ^ A map from SymTy to Ty
           -- ^ We allow built-in dictionaries from symbols to a value type.
 
         | PackedTy TyCon a -- ^ No type arguments to TyCons for now.  (No polymorphism.)
@@ -693,10 +700,12 @@ data UrTy a =
         | ListTy (UrTy a)  -- ^ These are not fully first class.  They are only
                            -- allowed as the fields of data constructors.
 
+        | ArenaTy -- ^ Collection of allocated, non-packed values
+
         ---------- These are not used initially ----------------
         -- (They could be added by a later IR instead:)
 
-        | PtrTy -- ^ A machine pointer to a complete value in memory.
+        | PtrTy -- ^ A machine pointer tvo a complete value in memory.
                 -- This is decorated with the region it points into, which
                 -- may affect the memory layout.
 
@@ -712,7 +721,7 @@ instance Renamable a => Renamable (UrTy a) where
       IntTy       -> IntTy
       BoolTy      -> BoolTy
       ProdTy ls   -> ProdTy (map (gRename env) ls)
-      SymDictTy t -> SymDictTy (gRename env t)
+      SymDictTy a t -> SymDictTy a t
       PackedTy tycon loc -> PackedTy tycon (gRename env loc)
       ListTy loc -> ListTy (gRename env loc)
       PtrTy      -> PtrTy
@@ -804,6 +813,12 @@ subst old new (L p0 ex) = L p0 $
 
     Ext ext -> Ext (gSubstExt old new ext)
 
+    WithArenaE v e | v == old  -> WithArenaE v e
+                   | otherwise -> WithArenaE v (go e)
+
+    WithArenaE v e | v == old  -> WithArenaE v e
+                   | otherwise -> WithArenaE v (go e)
+
 -- | Expensive 'subst' that looks for a whole matching sub-EXPRESSION.
 -- If the old expression is a variable, this still avoids going under binder.
 substE :: HasSubstitutable e l d
@@ -837,6 +852,12 @@ substE old new (L p0 ex) = L p0 $
 
     Ext ext -> Ext (gSubstEExt old new ext)
 
+    WithArenaE v e | (VarE v) == unLoc old -> WithArenaE v e
+                   | otherwise -> WithArenaE v (go e)
+
+    WithArenaE v e | (VarE v) == unLoc old -> WithArenaE v e
+                   | otherwise -> WithArenaE v (go e)
+
 -- | Does the expression contain a TimeIt form?
 hasTimeIt :: L (PreExp e l d) -> Bool
 hasTimeIt (L _ rhs) =
@@ -857,6 +878,7 @@ hasTimeIt (L _ rhs) =
       MapE (_,_,e1) e2   -> hasTimeIt e1 || hasTimeIt e2
       FoldE (_,_,e1) (_,_,e2) e3 -> hasTimeIt e1 || hasTimeIt e2 || hasTimeIt e3
       Ext _ -> False
+      WithArenaE _ e -> hasTimeIt e
 
 -- | Project something which had better not be the first thing in a tuple.
 projNonFirst :: (Out l, Out d, Out (e l d)) => Int -> L (PreExp e l d) -> L (PreExp e l d)
@@ -941,23 +963,25 @@ hasPacked t =
     SymTy          -> False
     BoolTy         -> False
     IntTy          -> False
-    SymDictTy _ty  -> False -- hasPacked ty
+    SymDictTy _ _  -> False -- hasPacked ty
     ListTy _       -> error "FINISHLISTS"
     PtrTy          -> False
     CursorTy       -> False
+    ArenaTy        -> False
 
 -- | Provide a size in bytes, if it is statically known.
 sizeOfTy :: UrTy a -> Maybe Int
 sizeOfTy t =
   case t of
-    PackedTy{}  -> Nothing
-    ProdTy ls   -> sum <$> mapM sizeOfTy ls
-    SymDictTy _ -> Just 8 -- Always a pointer.
-    IntTy       -> Just 8
-    BoolTy      -> sizeOfTy IntTy
-    ListTy _    -> error "FINISHLISTS"
-    PtrTy{}     -> Just 8 -- Assuming 64 bit
-    CursorTy{}  -> Just 8
+    PackedTy{}    -> Nothing
+    ProdTy ls     -> sum <$> mapM sizeOfTy ls
+    SymDictTy _ _ -> Just 8 -- Always a pointer.
+    IntTy         -> Just 8
+    BoolTy        -> sizeOfTy IntTy
+    ListTy _      -> error "FINISHLISTS"
+    PtrTy{}       -> Just 8 -- Assuming 64 bit
+    CursorTy{}    -> Just 8
+    ArenaTy       -> Just 8
 
 -- | Type of the arguments for a primitive operation.
 primArgsTy :: Prim (UrTy a) -> [UrTy a]
@@ -1014,8 +1038,8 @@ primRetTy p =
     SymAppend      -> SymTy
     SizeParam      -> IntTy
     DictHasKeyP _  -> BoolTy
-    DictEmptyP ty  -> SymDictTy ty
-    DictInsertP ty -> SymDictTy ty
+    DictEmptyP ty  -> SymDictTy Nothing $ stripTyLocs ty
+    DictInsertP ty -> SymDictTy Nothing $ stripTyLocs ty
     DictLookupP ty -> ty
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
@@ -1023,6 +1047,19 @@ primRetTy p =
 
 dummyCursorTy :: UrTy a
 dummyCursorTy = CursorTy
+
+stripTyLocs :: UrTy a -> UrTy ()
+stripTyLocs ty =
+  case ty of
+    IntTy     -> IntTy
+    BoolTy    -> BoolTy
+    ProdTy ls -> ProdTy $ L.map stripTyLocs ls
+    SymDictTy v ty'  -> SymDictTy v $ stripTyLocs ty'
+    PackedTy tycon _ -> PackedTy tycon ()
+    ListTy ty'       -> ListTy $ stripTyLocs ty'
+    PtrTy    -> PtrTy
+    CursorTy -> CursorTy
+
 
 -- | Get the data constructor type from a type, failing if it's not packed
 tyToDataCon :: Show a => UrTy a -> DataCon

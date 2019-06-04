@@ -87,6 +87,7 @@ harvestStructTys (Prog funs mtal) =
        -- This should not create a struct.  Again, we add it just for the heck of it:
        (LetIfT binds (_,a,b) bod)  -> ProdTy (map snd binds) : go a ++ go b ++ go bod
        (LetTimedT _ binds rhs bod) -> ProdTy (map snd binds) : go rhs ++ go bod
+       (LetArenaT _ bod)          -> ProdTy [ArenaTy] : go bod
 
        -- These are precisely for operating on structs:
        (LetUnpackT binds _ bod)    -> ProdTy (map snd binds) : go bod
@@ -184,6 +185,7 @@ rewriteReturns tl bnds =
    -- tail with respect to our redex:
    (LetIfT bnd (a,b,c) bod) -> LetIfT bnd (a,b,c) (go bod)
    (LetTimedT flg bnd rhs bod) -> LetTimedT flg bnd rhs (go bod)
+   (LetArenaT v bod) -> LetArenaT v (go bod)
    (LetUnpackT bs scrt body) -> LetUnpackT bs scrt (go body)
    (LetAllocT lhs vals body) -> LetAllocT lhs vals (go body)
    (IfT a b c) -> IfT a (go b) (go c)
@@ -251,6 +253,12 @@ codegenTail (LetTrivT (vr,rty,rhs) body) ty =
     do tal <- codegenTail body ty
        return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv rhs); |] ]
                 ++ tal
+
+-- TODO: extend rts with arena primitives, and invoke them here
+codegenTail (LetArenaT vr body) ty =
+    do tal <- codegenTail body ty
+       return $ [ C.BlockDecl [cdecl| $ty:(codegenTy ArenaTy) $id:vr = alloc_arena();|] ]
+              ++ tal
 
 codegenTail (LetAllocT lhs vals body) ty =
     do let structTy = codegenTy (ProdTy (map fst vals))
@@ -406,8 +414,8 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                              [pleft,pright] = rnds in pure
                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) && $(codegenTriv pright)); |]]
                  DictInsertP _ -> let [(outV,ty)] = bnds
-                                      [(VarTriv dict),keyTriv,valTriv] = rnds in pure
-                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_ptr($id:dict, $(codegenTriv keyTriv), $(codegenTriv valTriv)); |] ]
+                                      [(VarTriv arena),(VarTriv dict),keyTriv,valTriv] = rnds in pure
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_ptr($id:arena, $id:dict, $(codegenTriv keyTriv), $(codegenTriv valTriv)); |] ]
                  DictLookupP _ -> let [(outV,ty)] = bnds
                                       [(VarTriv dict),keyTriv] = rnds in pure
                     [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_lookup_ptr($id:dict, $(codegenTriv keyTriv)); |] ]
@@ -658,8 +666,9 @@ codegenTy ChunkTy = [cty|typename ChunkTy|]
 codegenTy (ProdTy []) = [cty|void*|]
 codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
     where nam = makeName ts
-codegenTy (SymDictTy _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
-
+codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
+codegenTy ArenaTy = [cty|typename ArenaTy|]
+                             
 makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"
 
@@ -671,9 +680,10 @@ makeName' TagTyPacked = "Tag"
 -- makeName' TagTyBoxed  = "Btag"
 makeName' TagTyBoxed  = makeName' IntTy
 makeName' PtrTy = "Ptr"
-makeName' (SymDictTy _ty) = "Dict"
+makeName' (SymDictTy _ _ty) = "Dict"
 makeName' RegionTy = "Region"
 makeName' ChunkTy = "Chunk"
+makeName' ArenaTy = "Arena"
 makeName' x = error $ "makeName', not handled: " ++ show x
 
 mkBlock :: [C.BlockItem] -> C.Stm

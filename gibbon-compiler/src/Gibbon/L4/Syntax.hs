@@ -124,6 +124,11 @@ data Tail
     -- ^ For casing on numeric tags or integers.
     | TailCall Var [Triv]
     | Goto Label
+
+    -- Allocate an arena for non-packed data 
+    | LetArenaT { lhs :: Var
+                , bod  :: Tail
+                }
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data Ty
@@ -148,8 +153,9 @@ data Ty
 --    | StructPtrTy { fields :: [Ty] } -- ^ A pointer to a struct containing the given fields.
 
     | ProdTy [Ty]
-    | SymDictTy Ty
-      -- ^ We allow built-in dictionaries from symbols to a value type.
+    | SymDictTy Var Ty
+      -- ^ We allow built-in dictionaries from symbols to a value type.      
+    | ArenaTy
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data Prim
@@ -249,6 +255,7 @@ withTail (tl0,retty) fn =
     (LetUnpackT { binds, ptr, bod })           -> LetUnpackT binds ptr          <$> go bod
     (LetAllocT { lhs, vals, bod })             -> LetAllocT  lhs   vals         <$> go bod
     (LetTimedT { isIter, binds, timed, bod })  -> LetTimedT isIter binds timed  <$> go bod
+    (LetArenaT { lhs, bod })                   -> LetArenaT lhs                 <$> go bod
 
     -- We could DUPLICATE code in both branches or just let-bind the result instead:
     (IfT { tst, con, els }) -> IfT tst <$> go con <*> go els
@@ -272,7 +279,7 @@ fromL3Ty ty =
     L.IntTy -> IntTy
     L.SymTy -> SymTy
     L.ProdTy tys -> ProdTy $ map fromL3Ty tys
-    L.SymDictTy t -> SymDictTy $ fromL3Ty t
+    L.SymDictTy (Just var) t -> SymDictTy var $ fromL3Ty t
     _ -> IntTy -- FIXME: review this
 
 
@@ -320,6 +327,7 @@ inlineTrivL4 (Prog fundefs mb_main) =
                         IntAlts as -> IntAlts $ map (\(a,b) -> (a, go b)) as
           in Switch lbl (inline env trv) alts' (go <$> mb_tail)
         TailCall v trvs -> TailCall v (map (inline env) trvs)
+        LetArenaT{bod}  -> tl { bod = go bod }
         Goto{}          -> tl
       where
         go = inline_tail env

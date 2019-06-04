@@ -111,14 +111,14 @@ instance Show TCError where
                                      ++ "\nLocation: " ++ (show lv) ++ "\nLocation type state: " ++ (show lts) ++ "\n"
 
 -- | The type checking monad. Just for throwing errors, but could in the future be parameterized
--- by whatever other logging, etc, monad we want the compiler to use.
-type TcM a = Except TCError a
+--   by whatever other logging, etc, monad we want the compiler to use.
+type TcM a = (Except TCError) a
 
 
 
 -- | Check an expression. Given the data definitions, an general type environment, a function map,
--- a constraint set, a region set, an (input) location state map, and the expression, this function
--- will either throw an error, or return a pair of expression type and new location state map.
+--   a constraint set, a region set, an (input) location state map, and the expression, this function
+--   will either throw an error, or return a pair of expression type and new location state map.
 tcExp :: DDefs Ty2 -> Env2 Ty2 -> FunDefs2
       -> ConstraintSet -> RegionSet -> LocationTypeState -> Exp
       -> TcM (Ty2, LocationTypeState)
@@ -171,6 +171,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
              -- Use locVars used at call-site in the returned type
              let arrOutMp = M.fromList $ zip (L.map (\(LRM l _ _) -> l) locVars) ls
                  arrOut'  = substLoc arrOutMp arrOut
+                            
              return (arrOut',tstate')
 
       PrimAppE pr es -> do
@@ -180,8 +181,10 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                -- Pattern matches would be one way to check length safely, but then the
                -- error would not go through our monad:
                let len2 = checkLen exp pr 2 es
+                   len1 = checkLen exp pr 1 es
                    len0 = checkLen exp pr 0 es
                    len3 = checkLen exp pr 3 es
+                   len4 = checkLen exp pr 4 es
                case pr of
                  _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP] -> do
                        len2
@@ -220,30 +223,49 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    return (SymTy, tstate)
 
                  DictEmptyP ty -> do
-                   len0
-                   return (SymDictTy ty, tstate)
+                   len1
+                   let [a] = tys
+                   _ <- ensureEqualTy exp ArenaTy a
+                   case es !! 0 of
+                     L _ (VarE var) ->
+                         do ensureArenaScope exp env (Just var)
+                            return (SymDictTy (Just var) (stripTyLocs ty), tstate)
+                     _ -> throwError $ GenericTC "Expected arena variable argument" exp
 
                  DictInsertP ty -> do
-                   len3
-                   let [d,k,v]  = tys
-                   _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
+                   len4
+                   let [a,d,k,v]  = tys
+                   _ <- ensureEqualTy exp ArenaTy a
                    _ <- ensureEqualTy exp SymTy k
                    _ <- ensureEqualTyNoLoc exp ty v
-                   return (d, tstate)
+                   case d of
+                     SymDictTy ar _ty ->
+                         case es !! 0 of
+                           L _ (VarE var) ->
+                               do ensureArenaScope exp env ar
+                                  ensureArenaScope exp env (Just var)
+                                  return (SymDictTy (Just var) (stripTyLocs ty), tstate)
+                           _ -> throwError $ GenericTC "Expected arena variable argument" exp
+                     _ -> throwError $ GenericTC "Expected SymDictTy" exp
 
                  DictLookupP ty -> do
                    len2
                    let [d,k]  = tys
-                   _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
-                   _ <- ensureEqualTy exp SymTy k
-                   return (ty, tstate)
+                   case d of
+                     SymDictTy ar _ty ->
+                         do _ <- ensureEqualTy exp SymTy k
+                            ensureArenaScope exp env ar
+                            return (ty, tstate)
+                     _ -> throwError $ GenericTC "Expected SymDictTy" exp
 
-                 DictHasKeyP ty -> do
+                 DictHasKeyP _ty -> do
                    len2
                    let [d,k]  = tys
-                   _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
-                   _ <- ensureEqualTy exp SymTy k
-                   return (BoolTy, tstate)
+                   case d of
+                     SymDictTy ar _ty -> do _ <- ensureEqualTy exp SymTy k
+                                            ensureArenaScope exp env ar
+                                            return (BoolTy, tstate)
+                     _ -> throwError $ GenericTC "Expected SymDictTy" exp
 
                  SizeParam -> do
                    len0
@@ -333,9 +355,13 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                return (ty1,tstate1)
 
       ParE a b -> do
-        (aty, tstate1) <- recur tstatein a
-        (bty, tstate2) <- recur tstate1 b
-        return (ProdTy [aty, bty], tstate2)
+              (aty, tstate1) <- recur tstatein a
+              (bty, tstate2) <- recur tstate1 b
+              return (ProdTy [aty, bty], tstate2)
+
+      WithArenaE v e -> do
+              let env' = extendVEnv v ArenaTy env
+              tcExp ddfs env' funs constrs regs tstatein e
 
       MapE _ _ -> throwError $ UnsupportedExpTC exp
 
@@ -505,7 +531,7 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
   where
 
     fd :: FunDef2 -> PassM ()
-    fd FunDef{funTy,funArgs,funBody} = do
+    fd func@FunDef{funTy,funArgs,funBody} = do
         let env = extendsVEnv (M.fromList $ zip funArgs (arrIns funTy)) emptyEnv2
             constrs = funConstrs (locVars funTy)
             regs = funRegs (locVars funTy)
@@ -515,8 +541,9 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
           Left err -> error $ show err
           Right (ty,_) -> if ty == (arrOut funTy)
                           then return ()
-                          else error $ "Expected type " ++ (show (arrOut funTy))
-                                    ++ " and got type " ++ (show ty)
+                          else error $ "Expected type " ++ (sdoc (arrOut funTy))
+                                    ++ " and got type " ++ (sdoc ty)
+                                    ++ " in\n" ++ (sdoc func)
 
 
 
@@ -617,7 +644,10 @@ ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
 ensureEqualTyNoLoc :: Exp -> Ty2 -> Ty2 -> TcM Ty2
 ensureEqualTyNoLoc exp ty1 ty2 =
   case (ty1,ty2) of
-    (SymDictTy ty1, SymDictTy ty2) -> ensureEqualTyNoLoc exp ty1 ty2
+    (SymDictTy _ar1 ty1, SymDictTy _ar2 ty2) ->
+        do ty1' <- dummyTyLocs ty1
+           ty2' <- dummyTyLocs ty2
+           ensureEqualTyNoLoc exp ty1' ty2'
     (PackedTy dc1 _, PackedTy dc2 _) -> if dc1 == dc2
                                         then return ty1
                                         else ensureEqualTy exp ty1 ty2
@@ -751,3 +781,10 @@ removeLoc exp (LocationTypeState ls) l =
     if M.member l ls
     then return $ LocationTypeState $ M.delete l ls
     else throwError $ GenericTC ("Cannot remove location " ++ (show l)) exp
+
+ensureArenaScope :: MonadError TCError m => Exp -> Env2 a -> Maybe Var -> m ()
+ensureArenaScope exp env ar =
+    case ar of
+      Nothing -> throwError $ GenericTC "Expected arena annotation" exp
+      Just var -> unless (S.member var . M.keysSet . vEnv $ env) $
+                  throwError $ GenericTC ("Expected arena in scope: " ++ sdoc var) exp

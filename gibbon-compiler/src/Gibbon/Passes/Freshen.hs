@@ -103,10 +103,12 @@ freshDDef DDef{tyName,tyArgs,dataCons} = do
 freshFun :: FunDef (L Exp0) -> PassM (FunDef (L Exp0))
 freshFun (FunDef nam nargs funty bod) =
     do nargs' <- mapM gensym nargs
+       let msubst = (M.fromList $ zip nargs nargs')
        (tvenv, funty') <- freshTyScheme funty
-       bod' <- freshExp (M.fromList $ zip nargs nargs') tvenv bod
+       funty'' <- freshDictTyScheme msubst funty'
+       bod' <- freshExp msubst tvenv bod
        let nam' = cleanFunName nam
-       pure $ FunDef nam' nargs' funty' bod'
+       pure $ FunDef nam' nargs' funty'' bod'
 
 --
 freshTyScheme :: TyScheme -> PassM (TyVarEnv Ty0, TyScheme)
@@ -119,9 +121,10 @@ freshTyScheme (ForAll tvs ty) = do
 freshTy :: TyVarEnv Ty0 -> Ty0 -> PassM (TyVarEnv Ty0, Ty0)
 freshTy env ty =
   case ty of
-     IntTy  -> pure (env, ty)
-     SymTy0 -> pure (env, ty)
-     BoolTy -> pure (env, ty)
+     IntTy    -> pure (env, ty)
+     SymTy0   -> pure (env, ty)
+     BoolTy   -> pure (env, ty)
+     ArenaTy  -> pure (env, ty)
      TyVar tv -> case M.lookup tv env of
                    Nothing  -> do tv' <- newTyVar
                                   pure (env, TyVar tv')
@@ -129,8 +132,8 @@ freshTy env ty =
      MetaTv{} -> pure (env, ty)
      ProdTy tys    -> do (env', tys') <- freshTys env tys
                          pure (env', ProdTy tys')
-     SymDictTy t   -> do (env', t') <- freshTy env t
-                         pure (env', SymDictTy t')
+     SymDictTy v t   -> do (env', t') <- freshTy env t
+                           pure (env', SymDictTy v t')
      ArrowTy tys t -> do (env', tys') <- freshTys env tys
                          (env'', [t'])  <- freshTys env' [t]
                          pure (env'', ArrowTy tys' t')
@@ -147,6 +150,43 @@ freshTys env tys =
           pure (env' <> env'', t' : acc))
     (env, [])
     tys
+
+freshDictTy :: Monad m => M.Map Var Var -> Ty0 -> m Ty0
+freshDictTy m ty =
+    case ty of
+     IntTy    -> pure ty
+     SymTy0   -> pure ty
+     BoolTy   -> pure ty
+     ArenaTy  -> pure ty
+     TyVar _tv -> pure ty
+     MetaTv{}  -> pure ty
+     ProdTy tys ->
+         do tys' <- mapM (freshDictTy m) tys
+            pure (ProdTy tys')
+     SymDictTy (Just v) t   ->
+         do t' <- freshDictTy m t
+            case M.lookup v m of
+              Just v' -> pure $ SymDictTy (Just v') t'
+              Nothing -> pure ty
+     SymDictTy Nothing t ->
+         do t' <- freshDictTy m t
+            pure $ SymDictTy Nothing t'
+     ArrowTy tys t ->
+         do tys' <- mapM (freshDictTy m) tys
+            t' <- freshDictTy m t
+            pure $ ArrowTy tys' t'
+     PackedTy tycon tys ->
+         do tys' <- mapM (freshDictTy m) tys
+            pure $ PackedTy tycon tys'
+     ListTy t ->
+         do t' <- freshDictTy m t
+            pure $ ListTy t'
+
+freshDictTyScheme :: Monad m =>
+                     M.Map Var Var -> TyScheme -> m TyScheme
+freshDictTyScheme m (ForAll tvs ty) =
+    do ty' <- freshDictTy m ty
+       pure $ ForAll tvs ty'
 
 freshExp :: VarEnv -> TyVarEnv Ty0 -> L Exp0 -> PassM (L Exp0)
 freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
@@ -212,6 +252,11 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
     TimeIt e t b -> do
       e' <- go e
       return $ TimeIt e' t b
+
+    WithArenaE v e -> do
+      v' <- gensym v
+      e' <- freshExp (M.insert v v' venv) tvenv e
+      return $ WithArenaE v' e'
 
     ParE a b -> do
       ParE <$> go a <*> go b

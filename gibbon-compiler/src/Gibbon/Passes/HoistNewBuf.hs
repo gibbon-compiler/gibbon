@@ -72,6 +72,9 @@ hoistExp _ ex0 = return $ gocap ex0
 
     (ParE a b) -> ([], ParE (gocap a) (gocap b))
 
+    (WithArenaE v e) -> let (lts,e') = go e in
+                        (lts, WithArenaE v e')
+
     (Ext _) -> ([], e0)
 
     -- (MapE (v,t,e') e) ->

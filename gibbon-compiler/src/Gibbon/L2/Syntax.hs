@@ -25,7 +25,7 @@ module Gibbon.L2.Syntax
     -- * Operations on types
     , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substLoc
     , substLoc', substLocs, substLocs', substEffs, stripTyLocs
-    , locsInTy
+    , locsInTy, dummyTyLocs
 
     -- * Other helpers
     , revertToL1, occurs, mapPacked, depList
@@ -352,7 +352,16 @@ inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) $
 
 -- | Apply a location substitution to a type.
 substLoc :: M.Map LocVar LocVar -> Ty2 -> Ty2
-substLoc = gRename
+substLoc mp ty =
+  case ty of
+   SymDictTy v te -> SymDictTy v te -- (go te)
+   ProdTy    ts -> ProdTy (L.map go ts)
+   PackedTy k l ->
+       case M.lookup l mp of
+             Just v  -> PackedTy k v
+             Nothing -> PackedTy k l
+   _ -> ty
+  where go = substLoc mp
 
 -- | Like 'substLoc', but constructs the map for you..
 substLoc' :: LocVar -> Ty2 -> Ty2
@@ -394,11 +403,15 @@ stripTyLocs ty =
     IntTy     -> IntTy
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map stripTyLocs ls
-    SymDictTy ty'    -> SymDictTy $ stripTyLocs ty'
+    SymDictTy v ty'  -> SymDictTy v $ stripTyLocs ty'
     PackedTy tycon _ -> PackedTy tycon ()
     ListTy ty'       -> ListTy $ stripTyLocs ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
+    ArenaTy  -> ArenaTy
+
+dummyTyLocs :: Applicative f => UrTy () -> f (UrTy LocVar)
+dummyTyLocs ty = traverse (const (pure (toVar "dummy"))) ty 
 
 -- | Collect all the locations mentioned in a type.
 locsInTy :: Ty2 -> [LocVar]
@@ -507,10 +520,11 @@ mapPacked fn t =
     BoolTy -> BoolTy
     SymTy  -> SymTy
     (ProdTy x)    -> ProdTy $ L.map (mapPacked fn) x
-    (SymDictTy x) -> SymDictTy $ mapPacked fn x
+    (SymDictTy v x) -> SymDictTy v x -- $ mapPacked fn x
     PackedTy k l  -> fn (toVar k) l
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
+    ArenaTy  -> ArenaTy
     ListTy{} -> error "FINISHLISTS"
 
 -- | Build a dependency list which can be later converted to a graph
@@ -538,6 +552,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           CaseE _ mp -> L.foldr (\(_,_,e) acc' -> go acc' e) acc mp
           DataConE _ _ args -> foldl go acc args
           TimeIt e _ _ -> go acc e
+          WithArenaE _ e -> go acc e
           ParE{}  -> acc
           MapE{}  -> acc
           FoldE{} -> acc
@@ -560,7 +575,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           AfterVariableLE v loc -> [v,loc]
           InRegionLE r  -> [regionToVar r]
           FromEndLE loc -> [loc]
-          FreeLE        -> []
+          FreeLE -> []
 
       -- gFreeVars ++ locations ++ region variables
       allFreeVars :: L Exp2 -> [Var]

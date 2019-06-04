@@ -131,8 +131,10 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
                          <+> text ", received " <+> doc (length args)
                          $$ exp_doc
           len0 = checkLen 0
+          len1 = checkLen 1
           len2 = checkLen 2
           len3 = checkLen 3
+          len4 = checkLen 4
       case pr of
         _ | pr `elem` [MkTrue, MkFalse] -> do
             len0
@@ -171,28 +173,39 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
           pure (s1 <> s2 <> s3, SymTy0, PrimAppE pr args_tc)
 
         DictEmptyP ty -> do
-          len0
-          pure (s1, SymDictTy ty, PrimAppE pr args_tc)
+          len1
+          let [a] = arg_tys'
+          s2 <- unify (args !! 0) ArenaTy a
+          case args !! 0 of
+            L _ (VarE var) ->
+                pure (s1 <> s2, SymDictTy (Just var) ty,
+                         PrimAppE pr args_tc)
+            _ -> err $ text "Expected arena variable argument in: " <+> exp_doc
 
         DictInsertP ty -> do
-          len3
-          let [d,k,v] = arg_tys'
-          s2 <- unify (args !! 0) (SymDictTy ty) d
-          s3 <- unify (args !! 1) SymTy0 k
-          s4 <- unify (args !! 2) ty v
-          pure (s1 <> s2 <> s3 <> s4, d, PrimAppE pr args_tc)
+          len4
+          let [a,d,k,v] = arg_tys'
+          s2 <- unify (args !! 1) (SymDictTy Nothing ty) d
+          s3 <- unify (args !! 2) SymTy0 k
+          s4 <- unify (args !! 3) ty v
+          s5 <- unify (args !! 0) ArenaTy a
+          case args !! 0 of
+            L _ (VarE var) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
+                                       SymDictTy (Just var) ty,
+                                       PrimAppE pr args_tc)
+            _ -> err $ text "Expected arena variable argument in: " <+> exp_doc
 
         DictLookupP ty -> do
           len2
           let [d,k] = arg_tys'
-          s2 <- unify (args !! 0) (SymDictTy ty) d
+          s2 <- unify (args !! 0) (SymDictTy Nothing ty) d
           s3 <- unify (args !! 1) SymTy0 k
           pure (s1 <> s2 <> s3, ty, PrimAppE pr args_tc)
 
         DictHasKeyP ty -> do
           len2
           let [d,k] = arg_tys'
-          s2 <- unify (args !! 0) (SymDictTy ty) d
+          s2 <- unify (args !! 0) (SymDictTy Nothing ty) d
           s3 <- unify (args !! 1) SymTy0 k
           pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
 
@@ -307,6 +320,11 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
       s2 <- unify e ty ty'
       let s3 = s1 <> s2
       pure (s3, zonkTy s3 ty', TimeIt (zonkExp s3 a') (zonkTy s3 ty') b)
+
+    WithArenaE v e1 -> do
+      let venv' = M.insert v (ForAll [] ArenaTy) venv
+      (s1, ty', e1') <- tcExp ddefs sbst venv' fenv bound_tyvars e1
+      pure (s1, ty', WithArenaE v e1')
 
     ParE{}  -> err $ text "TODO" <+> exp_doc
     MapE{}  -> err $ text "TODO" <+> exp_doc
@@ -443,10 +461,11 @@ zonkTy s@(Subst mp) ty =
                   Just t@(MetaTv w) -> if v == w then MetaTv v else zonkTy s t
                   Just t -> zonkTy s t
     ProdTy tys  -> ProdTy (map go tys)
-    SymDictTy t -> SymDictTy (go t)
+    SymDictTy v t -> SymDictTy v (go t)
     ArrowTy tys b  -> ArrowTy (map go tys) (go b)
     PackedTy t tys -> PackedTy t (map go tys)
     ListTy t -> ListTy (go t)
+    ArenaTy  -> ty
   where
     go = zonkTy s
 
@@ -481,6 +500,7 @@ zonkExp s (L p ex) = L p $
       DataConE (ProdTy (map (zonkTy s) tyapps)) dcon (map go args)
     DataConE{} -> error $ "zonkExp: Expected (ProdTy tyapps), got: " ++ sdoc ex
     TimeIt e ty b -> TimeIt (go e) (zonkTy s ty) b
+    WithArenaE v e -> WithArenaE v (go e)
     Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, zonkTy s ty)) args) (go bod))
     Ext (PolyAppE rator rand) -> Ext (PolyAppE (go rator) (go rand))
     Ext (FunRefE tyapps f)    -> let tyapps1 = map (zonkTy s) tyapps
@@ -556,10 +576,11 @@ substTyVar mp ty =
     TyVar v  -> M.findWithDefault ty v mp
     MetaTv{} -> ty
     ProdTy tys  -> ProdTy (map go tys)
-    SymDictTy t -> SymDictTy (go t)
+    SymDictTy v t -> SymDictTy v (go t)
     ArrowTy tys b  -> ArrowTy (map go tys) (go b)
     PackedTy t tys -> PackedTy t (map go tys)
     ListTy t -> ListTy (go t)
+    ArenaTy -> ty
   where
     go = substTyVar mp
 
@@ -588,8 +609,8 @@ tyVarToMetaTy = go M.empty
        MetaTv{} -> pure (env, ty)
        ProdTy tys -> do (env', tys') <- gol env tys
                         pure (env', ProdTy tys')
-       SymDictTy t -> do (env', t') <- go env t
-                         pure (env', SymDictTy t')
+       SymDictTy v t -> do (env', t') <- go env t
+                           pure (env', SymDictTy v t')
        ArrowTy as b -> do (env', as') <- gol env as
                           (env'', b') <- go env' b
                           pure (env'', ArrowTy as' b')
@@ -597,6 +618,7 @@ tyVarToMetaTy = go M.empty
                             pure (env', PackedTy t tys')
        ListTy t -> do (env', t') <- go env t
                       pure (env', ListTy t')
+       ArenaTy  -> pure (env, ty)
 
     gol :: M.Map TyVar Ty0 -> [Ty0] -> TcM (M.Map TyVar Ty0, [Ty0])
     gol env tys = foldlM
@@ -632,6 +654,7 @@ unify ex ty1 ty2
           if tc1 == tc2
           then unifyl ex tys1 tys2
           else fail_
+        (SymDictTy _ ty1, SymDictTy _ ty2) -> unify ex ty1 ty2
         _ -> dbgTrace 1 ("unify: Catch-all _; failed to unify " ++ sdoc ty1 ++ " with " ++ sdoc ty2) fail_
   where fail_ = err $  text "Couldn't match type" <+> quotes (doc ty2)
                     <+> text "with" <+> quotes (doc ty1)

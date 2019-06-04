@@ -145,6 +145,8 @@ inferExp ddfs fenv env (L _p expr) =
 
     TimeIt e _ _ -> inferExp ddfs fenv env e
 
+    WithArenaE v e -> inferExp ddfs fenv env e
+
     Ext (LetRegionE _ rhs) -> inferExp ddfs fenv env rhs
     Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env rhs
     Ext (RetE _ _)         -> (S.empty, Nothing)

@@ -182,7 +182,8 @@ instance (Pretty l) => Pretty (UrTy l) where
           IntTy  -> text "Int"
           BoolTy -> text "Bool"
           ProdTy tys    -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
-          SymDictTy ty1 -> text "Dict" <+> pprintWithStyle sty ty1
+          SymDictTy (Just var) ty1 -> text "Dict" <+> pprintWithStyle sty var <+> pprintWithStyle sty ty1
+          SymDictTy Nothing ty1 -> text "Dict" <+> text "_" <+> pprintWithStyle sty ty1
           PackedTy tc loc ->
               case sty of
                 PPHaskell  -> text tc
@@ -190,6 +191,7 @@ instance (Pretty l) => Pretty (UrTy l) where
           ListTy ty1 -> brackets $ pprintWithStyle sty ty1
           PtrTy     -> text "Ptr"
           CursorTy  -> text "Cursor"
+          ArenaTy   -> text "Arena"
 
 -- Function type for L1 and L3
 instance Pretty ([UrTy ()], UrTy ()) where
@@ -278,6 +280,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                               -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
           TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
           ParE a b -> pprintWithStyle sty a <+> text "||" <+> pprintWithStyle sty b
+          WithArenaE v e -> text "letarena" <+> pprint v <+> text "in" $+$ pprint e
           Ext ext -> pprintWithStyle sty ext
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{} -> error $ "Unexpected form in program: FoldE"
@@ -348,10 +351,12 @@ instance Pretty L0.Ty0 where
         L0.TyVar v    -> doc v
         L0.MetaTv v   -> doc v
         L0.ProdTy tys -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
-        L0.SymDictTy ty1 -> text "Dict" <+> pprint ty1
+        L0.SymDictTy (Just v) ty1 -> text "Dict" <+> pprint v <+> pprint ty1
+        L0.SymDictTy Nothing  ty1 -> text "Dict" <+> pprint ty1
         L0.ArrowTy as b  -> parens $ (hsep $ map (<+> "->") $ map (pprintWithStyle sty) as) <+> pprint b
         L0.PackedTy tc loc -> text "Packed" <+> text tc <+> brackets (hcat (map (pprintWithStyle sty) loc))
         L0.ListTy ty1 -> brackets (pprintWithStyle sty ty1)
+        L0.ArenaTy    -> text "Arena"
 
 
 instance Pretty L0.TyScheme where
@@ -481,6 +486,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                               hsep (map (ppExp env2) es)
           TimeIt e _ty _b -> text "timeit" <+> parens (ppExp env2 e)
           ParE a b -> ppExp env2 a <+> text "||" <+> ppExp env2 b
+          WithArenaE v e -> text "letarena" <+> pprint v <+> text "in" $+$ ppExp env2 e
           Ext{}  -> empty -- L1 doesn't have an extension.
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{}-> error $ "Unexpected form in program: FoldE"

@@ -14,6 +14,7 @@ module Gibbon.SExpFrontend
        , primMap )
   where
 
+import Control.Monad
 import Data.Char ( isLower, isAlpha )
 import Data.List as L
 import Data.Loc
@@ -150,6 +151,7 @@ tagDataCons ddefs = go allCons
                           pure $ TimeIt e' t b
        ParE a b  -> ParE <$> (go cons a) <*> (go cons b)
        IfE a b c -> IfE <$> (go cons a) <*> (go cons b) <*> (go cons c)
+       WithArenaE v e -> WithArenaE v <$> (go cons e)
 
        MapE  (v,t,e) bod -> MapE <$> (v,t, ) <$> go cons e <*> (go cons bod)
        FoldE (v1,t1,e1) (v2,t2,e2) b -> do
@@ -248,11 +250,12 @@ typ s = case s of
          (A _ "Int")  -> IntTy
          (A _ "Sym")  -> SymTy0
          (A _ "Bool") -> BoolTy
+         (A _ "Arena") -> ArenaTy
          -- If it's lowercase, it's a type variable. Otherwise, a Packed type.
          (A _ con)    -> if isTyVar con
                          then TyVar $ UserTv (textToVar con)
                          else PackedTy (textToDataCon con) []
-         (Ls2 _ "SymDict" t) -> SymDictTy $ typ t
+         (Ls3 _ "SymDict" (A _ v) t) -> SymDictTy (Just (textToVar v)) (typ t)
          (Ls2 _ "Listof" t)  -> ListTy $ typ t
          -- See https://github.com/aisamanra/s-cargot/issues/14.
          (Ls (A _ "-" : A _ ">" : tys)) ->
@@ -284,6 +287,7 @@ pattern Ls1 a             = RSList [a]
 pattern Ls2 loc a b       = RSList [A loc a, b]
 pattern Ls3 loc a b c     = RSList [A loc a, b, c]
 pattern Ls4 loc a b c d   = RSList [A loc a, b, c, d]
+pattern Ls5 loc a b c d e = RSList [A loc a, b, c, d, e]
 -- pattern L5 a b c d e = RSList [A a, b, c, d, e]
 
 trueE :: Exp0
@@ -407,17 +411,26 @@ exp se =
      b' <- exp b
      pure $ loc l $ ParE a' b'
 
+   Ls3 l "letarena" v e -> do
+     e' <- exp e
+     let v' = getSym v
+     pure $ loc l $ WithArenaE v' e'
+
    Ls (A l "vector" : es) -> loc l . MkProdE <$> mapM exp es
 
    -- Dictionaries require type annotations for now.  No inference!
-   Ls3 l "ann" (Ls1 (A _ "empty-dict")) (Ls2 _ "SymDict" ty) ->
-     pure $ loc l $ PrimAppE (DictEmptyP $ typ ty) []
+   Ls3 l "ann" (Ls2 _ "empty-dict" a) (Ls3 _ "SymDict" b ty) -> do
+     a' <- exp a
+     b' <- exp b
+     unless (a' == b') $ error $ "Expected annotation on SymDict:" ++ show a'
+     pure $ loc l $ PrimAppE (DictEmptyP $ typ ty) [a']
 
-   Ls4 l "insert" d k (Ls3 _ "ann" v ty) -> do
+   Ls5 l "insert" a d k (Ls3 _ "ann" v ty) -> do
+     a' <- exp a
      d' <- exp d
      k' <- exp k
      v' <- exp v
-     pure $ loc l $ PrimAppE (DictInsertP $ typ ty) [d',k',v']
+     pure $ loc l $ PrimAppE (DictInsertP $ typ ty) [a',d',k',v']
 
    Ls3 l "ann" (Ls3 _ "lookup" d k) ty -> do
      d' <- exp d

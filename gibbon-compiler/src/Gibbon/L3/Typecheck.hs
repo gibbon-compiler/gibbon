@@ -13,11 +13,13 @@ import Data.Functor.Identity
 import Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
 import qualified Data.List as L
+import Data.Maybe
 import Prelude hiding (exp)
 
 import Gibbon.Common
-import Gibbon.L1.Typecheck hiding (tcProg, tcExp)
+import Gibbon.L1.Typecheck hiding (tcProg, tcExp, ensureEqual, ensureEqualTy)
 import Gibbon.L1.Syntax
+import qualified Gibbon.L2.Syntax as L2
 import Gibbon.L3.Syntax
 
 -- | Typecheck a L1 expression
@@ -140,13 +142,29 @@ tcExp isPacked ddfs env exp@(L p ex) =
 
       -- Check argument type
       argTys <- mapM go ls
-      _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (zip (inTys funty) argTys)
-      return (outTy funty)
+      let (funInTys,funRetTy) = (inTys funty, outTy funty)
+
+          combAr (SymDictTy (Just v1) _, SymDictTy (Just v2) _) m = M.insert v2 v1 m
+          combAr _ m = m
+          arMap = L.foldr combAr M.empty $ zip argTys funInTys
+
+          subDictTy m (SymDictTy (Just v) ty) =
+              case M.lookup v m of
+                Just v' -> SymDictTy (Just v') ty
+                Nothing -> error $ ("Cannot match up arena for dictionary in function application: " ++ sdoc exp)
+          subDictTy _ ty = ty
+                  
+          subFunInTys = L.map (subDictTy arMap) funInTys
+          subFunOutTy = subDictTy arMap funRetTy
+      _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (zip subFunInTys argTys)
+      return subFunOutTy
 
     PrimAppE pr es -> do
       let len0 = checkLen exp pr 0 es
+          len1 = checkLen exp pr 1 es
           len2 = checkLen exp pr 2 es
           len3 = checkLen exp pr 3 es
+          len4 = checkLen exp pr 4 es
 
       tys <- mapM go es
       case pr of
@@ -191,21 +209,24 @@ tcExp isPacked ddfs env exp@(L p ex) =
           return SymTy
 
         DictEmptyP _ty -> do
-          len0
-          return $ SymDictTy CursorTy -- $ SymDictTy ty
+          len1
+          let [a] = tys
+          _ <- ensureEqualTy exp ArenaTy a
+          let (L _ (VarE var)) = es !! 0
+          return $ SymDictTy (Just var) CursorTy
 
         DictInsertP _ty -> do
-          len3
-          let [d,k,v] = tys
-          -- _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
+          len4
+          let [a,_d,k,v] = tys
+          let (L _ (VarE var)) = es !! 0
+          _ <- ensureEqualTy exp ArenaTy a
           _ <- ensureEqualTy exp SymTy k
           _ <- ensureEqualTy exp CursorTy v
-          return d
+          return $ SymDictTy (Just var) CursorTy
 
         DictLookupP _ty -> do
           len2
           let [_d,k] = tys
-          -- _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
           _ <- ensureEqualTy exp SymTy k
           return CursorTy
 
@@ -229,6 +250,15 @@ tcExp isPacked ddfs env exp@(L p ex) =
         PEndOf -> error "Do not use PEndOf after L2."
 
         oth -> error $ "L3.tcExp : PrimAppE : TODO " ++ sdoc oth
+
+    LetE (v,[],SymDictTy _ pty, rhs) e -> do
+      tyRhs <- go rhs
+      case tyRhs of
+        SymDictTy ar _ ->
+            do  unless (isJust ar) $ throwError $ GenericTC "Expected arena variable annotation" rhs
+                let env' = extendEnv env [(v,SymDictTy ar CursorTy)]
+                tcExp isPacked ddfs env' e
+        _ -> throwError $ GenericTC ("Expected expression to be SymDict type:" ++ sdoc rhs) exp
 
     LetE (v,locs,ty,rhs) e -> do
       -- Check that the expression does not have any locations
@@ -304,6 +334,10 @@ tcExp isPacked ddfs env exp@(L p ex) =
       aty <- go a
       bty <- go b
       return (ProdTy [aty, bty])
+
+    WithArenaE v e -> do
+      let env' = extendVEnv v ArenaTy env
+      tcExp isPacked ddfs env' e
 
     MapE{}  -> throwError $ UnsupportedExpTC exp
     FoldE{} -> throwError $ UnsupportedExpTC exp
@@ -381,11 +415,31 @@ tcCases isPacked ddfs env cs = do
          (head tys) (zipWith (\ty (_,_,ex) -> (ex,ty)) tys cs)
   return $ head tys
 
-ensureEqualTyNoLoc :: (Eq l, Out l) => L (PreExp e l (UrTy l)) -> UrTy l -> UrTy l ->
-                      ExceptT (TCError (L (PreExp e l (UrTy l)))) Identity (UrTy l)
+-- | Ensure that two things are equal.
+-- Includes an expression for error reporting.
+ensureEqual exp str (SymDictTy ar1 _) (SymDictTy ar2 _) =
+    if ar1 == ar2
+    then return $ SymDictTy ar1 CursorTy
+    else throwError $ GenericTC str exp
+ensureEqual exp str a b = if a == b
+                          then return a
+                          else throwError $ GenericTC str exp
+
+
+-- | Ensure that two types are equal.
+-- Includes an expression for error reporting.
+-- ensureEqualTy :: (Eq l, Out l) => (L (PreExp e l (UrTy l))) -> (UrTy l) -> (UrTy l) ->
+--                  TcM (UrTy l) (L (PreExp e l (UrTy l)))
+ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
+                                         ++ (sdoc a) ++ ", " ++ (sdoc b)) a b
+
+
 ensureEqualTyNoLoc exp t1 t2 =
   case (t1,t2) of
-    (SymDictTy ty1, SymDictTy ty2) -> ensureEqualTyNoLoc exp ty1 ty2
+    (SymDictTy _ ty1, SymDictTy _ ty2) ->
+        do ty1' <- L2.dummyTyLocs ty1
+           ty2' <- L2.dummyTyLocs ty2
+           ensureEqualTyNoLoc exp ty1' ty2'
     (PackedTy dc1 _, PackedTy dc2 _) -> if dc1 == dc2
                                         then return t1
                                         else ensureEqualTy exp t1 t2

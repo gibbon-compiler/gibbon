@@ -114,10 +114,11 @@ data Ty0
  | TyVar TyVar   -- Rigid/skolem type variables
  | MetaTv MetaTv -- Unification variables
  | ProdTy [Ty0]
- | SymDictTy Ty0
+ | SymDictTy (Maybe Var) Ty0
  | ArrowTy [Ty0] Ty0
  | PackedTy TyCon [Ty0] -- Type arguments to the type constructor
  | ListTy Ty0
+ | ArenaTy
   deriving (Show, Read, Eq, Ord, Generic, NFData)
 
 instance FunctionTy Ty0 where
@@ -141,7 +142,7 @@ instance Renamable Ty0 where
       TyVar tv  -> TyVar (go tv)
       MetaTv{}  -> ty
       ProdTy ls -> ProdTy (map go ls)
-      SymDictTy a       -> SymDictTy (go a)
+      SymDictTy a t     -> SymDictTy a t
       ArrowTy args ret  -> ArrowTy (map go args) ret
       PackedTy tycon ls -> PackedTy tycon (map go ls)
       ListTy a          -> ListTy (go a)
@@ -216,10 +217,11 @@ tyVarsInTys tys = foldr (go []) [] tys
                     else tv : acc
         MetaTv _ -> acc
         ProdTy tys1     -> foldr (go bound) acc tys1
-        SymDictTy ty1   -> go bound ty1 acc
+        SymDictTy _ ty1   -> go bound ty1 acc
         ArrowTy tys1 b  -> foldr (go bound) (go bound b acc) tys1
         PackedTy _ tys1 -> foldr (go bound) acc tys1
         ListTy ty1      -> go bound ty1 acc
+        ArenaTy -> acc
 
 -- | Get the MetaTvs from a type; no duplicates in result.
 metaTvsInTy :: Ty0 -> [MetaTv]
@@ -240,10 +242,11 @@ metaTvsInTys tys = foldr go [] tys
         BoolTy  -> acc
         TyVar{} -> acc
         ProdTy tys1     -> foldr go acc tys1
-        SymDictTy ty1   -> go ty1 acc
+        SymDictTy _ ty1   -> go ty1 acc
         ArrowTy tys1 b  -> go b (foldr go acc tys1)
         PackedTy _ tys1 -> foldr go acc tys1
         ListTy ty1      -> go ty1 acc
+        ArenaTy -> acc
 
 -- | Like 'tyVarsInTy'.
 tyVarsInTyScheme :: TyScheme -> [TyVar]
@@ -265,10 +268,11 @@ arrowTysInTy = go []
         IntTy    -> acc
         SymTy0   -> acc
         BoolTy   -> acc
+        ArenaTy  -> acc
         TyVar{}  -> acc
         MetaTv{} -> acc
         ProdTy tys    -> foldl go acc tys
-        SymDictTy a   -> go acc a
+        SymDictTy _ a   -> go acc a
         ArrowTy tys b -> go (foldl go acc tys) b ++ [ty]
         PackedTy _ vs -> foldl go acc vs
         ListTy a -> go acc a
@@ -345,8 +349,8 @@ recoverType ddfs env2 (L _ ex)=
         SymAppend      -> IntTy
         SizeParam      -> IntTy
         DictHasKeyP _  -> BoolTy
-        DictEmptyP ty  -> SymDictTy ty
-        DictInsertP ty -> SymDictTy ty
+        DictEmptyP ty  -> SymDictTy Nothing ty
+        DictInsertP ty -> SymDictTy Nothing ty
         DictLookupP ty -> ty
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty

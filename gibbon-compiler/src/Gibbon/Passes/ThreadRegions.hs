@@ -124,6 +124,8 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
       LetE <$> (v,locs,ty,) <$> go rhs <*>
         threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) bod
 
+    WithArenaE v e -> WithArenaE v <$> threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ArenaTy env2) e
+
     Ext ext ->
       case ext of
         LetLocE loc FreeLE bod ->

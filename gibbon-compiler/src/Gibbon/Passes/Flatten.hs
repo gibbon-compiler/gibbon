@@ -132,7 +132,7 @@ exp ddfs env2 (L sloc e0) =
     Ext ext   -> do (_bnds,e) <- gFlattenGatherBinds ddfs env2 ext
                     return  ([], Ext e)
 
-    LitE _    -> return ([], e0)
+    LitE _    -> return ([],e0)
     VarE    _ -> return ([],e0)
     LitSymE _ -> return ([],e0)
 
@@ -183,6 +183,10 @@ exp ddfs env2 (L sloc e0) =
       (bnd ,a') <- go a
       (bnd2,b') <- go b
       return ([], ParE (flatLets bnd a') (flatLets bnd2 b'))
+
+    WithArenaE v e -> do
+      (bnd, e') <- go e
+      return ([], WithArenaE v (flatLets bnd e'))
 
     MapE _ _      -> error "FINISHLISTS"
     FoldE _ _ _   -> error "FINISHLISTS"

@@ -198,7 +198,7 @@ printTy :: Bool -> Ty3 -> [T.Triv] -> (T.Tail -> T.Tail)
 printTy pkd ty trvs =
   case (ty, trvs) of
     (IntTy, [_one])             -> T.LetPrimCallT [] T.PrintInt trvs
-    (SymDictTy ty', [_one])     -> sandwich (printTy pkd ty' trvs) "Dict"
+    (SymDictTy _ ty', [_one])     -> sandwich (printTy pkd ty' trvs) "Dict"
     (PackedTy constr _, [one]) -> -- HACK: Using varAppend here was the simplest way to get
                                   -- unique names without using the PassM monad.
                                   -- ASSUMPTION: Argument (one) is always a variable reference.
@@ -490,6 +490,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
       -- Finally reprocess teh whole thing
       tail (go (zip3 tmps tys ls) bod')
 
+    WithArenaE v e -> do
+      e' <- tail e
+      return $ T.LetArenaT v e'
+
 {-
 
 Lowering the parallel tuple combinator
@@ -537,7 +541,7 @@ See [Hacky substitution to encode ParE].
 
 
     -- We could eliminate these ahead of time:
-    LetE (v,_,t,rhs) bod | isTrivial rhs ->
+    LetE (v,_,t,rhs) bod | isTrivial' rhs ->
       T.LetTrivT (v,typ t, triv "<internal error2>" rhs) <$> tail bod
 
     -- TWO OPTIONS HERE: we could push equality prims into the target lang.
@@ -816,11 +820,13 @@ typ t =
     BoolTy -> T.BoolTy
     ListTy{} -> error "lower/typ: FinishMe: List types"
     ProdTy xs -> T.ProdTy $ L.map typ xs
-    SymDictTy x -> T.SymDictTy $ typ x
+    SymDictTy (Just var) x -> T.SymDictTy var $ typ x
+    SymDictTy Nothing _ -> error "lower/typ: Expected arena annotation"
     -- t | isCursorTy t -> T.CursorTy
     PackedTy{} -> T.PtrTy
     CursorTy -> T.CursorTy -- Audit me
     PtrTy -> T.PtrTy
+    ArenaTy -> T.ArenaTy
 
 prim :: Prim Ty3 -> T.Prim
 prim p =
@@ -880,8 +886,16 @@ hackyParSubst i p binds (L loc ex) = L loc $
     DataConE{} -> ex
     TimeIt{} -> ex
     ParE{} -> ex
+    WithArenaE{} -> ex
     Ext{} -> ex
     MapE{} -> ex
     FoldE{} -> ex
   where
     go = hackyParSubst i p binds
+
+isTrivial' :: L Exp3 -> Bool
+isTrivial' (L sl e) =
+    case e of
+      (PrimAppE L1.MkTrue []) -> True
+      (PrimAppE L1.MkFalse []) -> True
+      _ -> isTrivial (L sl e)

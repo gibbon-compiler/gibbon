@@ -143,11 +143,12 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
         IntTy     -> IntTy
         BoolTy    -> BoolTy
         ProdTy ls -> ProdTy $ L.map cursorizeInTy ls
-        SymDictTy _ty -> SymDictTy CursorTy -- $ cursorizeInTy ty'
+        SymDictTy ar _ty -> SymDictTy ar CursorTy -- $ cursorizeInTy ty'
         PackedTy{}    -> CursorTy
         ListTy ty'    -> ListTy $ cursorizeInTy ty'
         PtrTy -> PtrTy
         CursorTy -> CursorTy
+        ArenaTy -> ArenaTy
 
 {-
 
@@ -259,6 +260,8 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
     TimeIt e ty b -> TimeIt <$> go e <*> pure (stripTyLocs ty) <*> pure b
 
     ParE a b -> ParE <$> go a <*> go b
+
+    WithArenaE v e -> WithArenaE v <$> go e
 
     -- Eg. leftmost
     Ext ext ->
@@ -410,7 +413,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
                  LetE (d',[], CursorTy, projEnds rnd') <$> l <$>
                    go2 d' rst
 
-              IntTy -> do
+              imty | isInt imty -> do
                 rnd' <- cursorizeExp ddfs fundefs denv tenv rnd
                 LetE (d',[], CursorTy, l$ Ext $ WriteInt d rnd') <$> l <$>
                   go2 d' rst
@@ -419,7 +422,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
                 rnd' <- cursorizeExp ddfs fundefs denv tenv rnd
                 LetE (d',[], CursorTy, l$ Ext $ WriteCursor d rnd') <$> l <$>
                   go2 d' rst
-              _ -> error "Unknown type encounterred while cursorizing DataConE."
+              _ -> error $ "Unknown type encounterred while cursorizing DataConE. Type was " ++ show ty
 
       writetag <- gensym "writetag"
       dl <$>
@@ -429,6 +432,10 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
     TimeIt e t b -> do
       Di e' <- go tenv e
       return $ dl$ TimeIt e' (cursorizeTy t) b
+
+    WithArenaE v e -> do
+      Di e' <- go (M.insert v ArenaTy tenv) e
+      return $ dl$ WithArenaE v e'
 
     ParE a b -> do
        Di a' <- go tenv a
@@ -953,7 +960,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
             ([],[]) -> processRhs denv tenv
             ((v,loc):rst_vlocs, ty:rst_tys) ->
               case ty of
-                IntTy -> do
+                imty | isInt imty -> do
                   (tenv', binds) <- intBinds v loc tenv
                   if canBind
                   then do
@@ -1162,5 +1169,10 @@ mkDi x [o] = Di $ l$ MkProdE [x, o]
 mkDi x ls  = Di $ l$ MkProdE [x, l$ MkProdE ls]
 
 curDict :: UrTy a -> UrTy a
-curDict (SymDictTy _ty) = SymDictTy CursorTy
+curDict (SymDictTy ar _ty) = SymDictTy ar CursorTy
 curDict ty = ty
+
+isInt :: UrTy a -> Bool
+isInt IntTy = True
+isInt BoolTy = True
+isInt _ = False
