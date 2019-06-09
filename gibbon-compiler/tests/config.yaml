@@ -80,6 +80,7 @@ tests:
   - name: test14b_tup.gib
   - name: test14c_tail.gib
   - name: test15a_symsearch.gib
+  - name: test15c_printsym.gib
   - name: test18_badconstraint.gib
     # This only fails on GCC >= 7 (which we're using to run some other tests that use Cilk)
     # failing: [pointer]
@@ -103,7 +104,7 @@ tests:
   - name: test25a_withprint.gib
   - name: test25b_racketcore.gib
   - name: test25c_racketcore.gib
-  - name: test25d_racketcore.gib  
+  - name: test25d_racketcore.gib
   - name: test25e_countnodes.gib
   - name: test25_rackcore.gib
   - name: test25f_countnodes.gib
@@ -232,7 +233,6 @@ tests:
   - name: PolyTree.hs
     dir: examples/poly
     answer-file: examples/poly/PolyTree.ans
-    failing: [gibbon1, gibbon2]
 
   - name: AnonLambdas.hs
     dir: examples/poly
@@ -322,7 +322,7 @@ tests:
 
   # sym-append not implemented in the RTS
   - name: test15b_symappend.gib
-    failing: [gibbon2, pointer, gibbon1]
+    skip: true
 
   # Probably safe to delete these tests permanently
   - name: test16_forlist.gib

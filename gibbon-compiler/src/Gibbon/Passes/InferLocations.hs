@@ -651,12 +651,14 @@ inferExp env@FullEnv{dataDefs}
                            case arg of
                              L _ (VarE v) -> case lookupVEnv v env of
                                                CursorTy -> return $ ArgFixed 8
-                                               IntTy -> return $ ArgFixed 8
-                                               SymTy -> return $ ArgFixed 8
-                                               BoolTy -> return $ ArgFixed 8
+                                               IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                                               SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                                               BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
                                                _ -> return $ ArgVar v
-                             L _ (LitE _) -> return $ ArgFixed 8
-                             L _ (LitSymE _) -> return $ ArgFixed 8
+                             L _ (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                             L _ (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
+                             L _ (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
+                             L _ (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
                              L _ (AppE f lvs [L _ (VarE v)]) -> do v' <- lift $ lift $ freshLocVar "cpy"
                                                                    return $ ArgCopy v v' f lvs
                              _ -> err $ "Expected argument to be trivial, got " ++ (show arg)

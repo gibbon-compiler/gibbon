@@ -11,7 +11,7 @@
 (define (count-hashtag-occ-in-tweet-go [acc : Int] [ht : Sym] [xs : Hashtags]) : Int
   (case xs
     [(NilHT) acc]
-    [(ConsHT y ys) (if (eq? y ht)
+    [(ConsHT y ys) (if (eqsym y ht)
                        (count-hashtag-occ-in-tweet-go (+ acc 1) ht ys)
                        (count-hashtag-occ-in-tweet-go acc ht ys))]))
 

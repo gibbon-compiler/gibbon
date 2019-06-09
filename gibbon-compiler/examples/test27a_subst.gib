@@ -5,7 +5,7 @@
 
 (define (memq [v : Sym] [ls : ListSym]) : Bool
   (case ls
-    [(CONSSYM s ls) (or (eq? v s) (memq v ls))]
+    [(CONSSYM s ls) (or (eqsym v s) (memq v ls))]
     [(NULLSYM) False]))
 
 (memq (quote hi)

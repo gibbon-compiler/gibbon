@@ -36,7 +36,6 @@ module Gibbon.Language.Syntax
 
     -- * Expresssions and thier types
   , PreExp(..), Prim(..), UrTy(..)
-  , pattern SymTy
 
     -- * Helpers operating on expressions
   , mapExt, mapLocs, mapExprs, mapMExprs, visitExp
@@ -44,8 +43,8 @@ module Gibbon.Language.Syntax
   , mkProj, mkProd, mkLets, flatLets, tuplizeRefs
 
     -- * Helpers operating on types
-  , mkProdTy, projTy , voidTy, isProdTy, isNestedProdTy, isPackedTy, hasPacked
-  , sizeOfTy, primArgsTy, primRetTy, dummyCursorTy, tyToDataCon
+  , mkProdTy, projTy , voidTy, isProdTy, isNestedProdTy, isPackedTy, isScalarTy
+  , hasPacked, sizeOfTy, primArgsTy, primRetTy, dummyCursorTy, tyToDataCon
 
     -- * Misc
   , assertTriv, assertTrivs
@@ -680,16 +679,12 @@ instance Out a => Out (UrTy a)
 -- Types
 --------------------------------------------------------------------------------
 
-pattern SymTy :: forall a. UrTy a
-pattern SymTy = IntTy
-
 -- | Types include boxed/pointer-based products as well as unpacked
 -- algebraic datatypes.  This data is parameterized to allow
 -- annotation on Packed types later on.
 data UrTy a =
           IntTy
---        | SymTy -- ^ Symbols used in writing compiler passes.
---                --   It's an alias for Int, an index into a symbol table.
+        | SymTy -- ^ Symbols used in writing compiler passes.
         | BoolTy
         | ProdTy [UrTy a]     -- ^ An N-ary tuple
         | SymDictTy (Maybe Var) (UrTy ())  -- ^ A map from SymTy to Ty
@@ -719,6 +714,7 @@ instance Renamable a => Renamable (UrTy a) where
   gRename env ty =
     case ty of
       IntTy       -> IntTy
+      SymTy       -> SymTy
       BoolTy      -> BoolTy
       ProdTy ls   -> ProdTy (map (gRename env) ls)
       SymDictTy a t -> SymDictTy a t
@@ -816,8 +812,6 @@ subst old new (L p0 ex) = L p0 $
     WithArenaE v e | v == old  -> WithArenaE v e
                    | otherwise -> WithArenaE v (go e)
 
-    WithArenaE v e | v == old  -> WithArenaE v e
-                   | otherwise -> WithArenaE v (go e)
 
 -- | Expensive 'subst' that looks for a whole matching sub-EXPRESSION.
 -- If the old expression is a variable, this still avoids going under binder.
@@ -855,8 +849,6 @@ substE old new (L p0 ex) = L p0 $
     WithArenaE v e | (VarE v) == unLoc old -> WithArenaE v e
                    | otherwise -> WithArenaE v (go e)
 
-    WithArenaE v e | (VarE v) == unLoc old -> WithArenaE v e
-                   | otherwise -> WithArenaE v (go e)
 
 -- | Does the expression contain a TimeIt form?
 hasTimeIt :: L (PreExp e l d) -> Bool
@@ -954,6 +946,13 @@ isPackedTy :: UrTy a -> Bool
 isPackedTy PackedTy{} = True
 isPackedTy _ = False
 
+isScalarTy :: UrTy a -> Bool
+isScalarTy IntTy  = True
+isScalarTy SymTy  = True
+isScalarTy BoolTy = True
+isScalarTy _      = False
+
+
 -- | Do values of this type contain packed data?
 hasPacked :: Show a => UrTy a -> Bool
 hasPacked t =
@@ -977,7 +976,8 @@ sizeOfTy t =
     ProdTy ls     -> sum <$> mapM sizeOfTy ls
     SymDictTy _ _ -> Just 8 -- Always a pointer.
     IntTy         -> Just 8
-    BoolTy        -> sizeOfTy IntTy
+    SymTy         -> Just 4
+    BoolTy        -> Just 1
     ListTy _      -> error "FINISHLISTS"
     PtrTy{}       -> Just 8 -- Assuming 64 bit
     CursorTy{}    -> Just 8
@@ -1052,6 +1052,7 @@ stripTyLocs :: UrTy a -> UrTy ()
 stripTyLocs ty =
   case ty of
     IntTy     -> IntTy
+    SymTy     -> SymTy
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map stripTyLocs ls
     SymDictTy v ty'  -> SymDictTy v $ stripTyLocs ty'

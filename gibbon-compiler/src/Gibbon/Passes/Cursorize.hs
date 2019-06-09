@@ -141,6 +141,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
     cursorizeInTy ty =
       case ty of
         IntTy     -> IntTy
+        SymTy     -> SymTy
         BoolTy    -> BoolTy
         ProdTy ls -> ProdTy $ L.map cursorizeInTy ls
         SymDictTy ar _ty -> SymDictTy ar CursorTy -- $ cursorizeInTy ty'
@@ -423,9 +424,10 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
                  LetE (d',[], CursorTy, projEnds rnd') <$> l <$>
                    go2 d' rst
 
-              imty | isInt imty -> do
+              -- Int, Sym, or Bool
+              _ | isScalarTy ty -> do
                 rnd' <- cursorizeExp ddfs fundefs denv tenv rnd
-                LetE (d',[], CursorTy, l$ Ext $ WriteInt d rnd') <$> l <$>
+                LetE (d',[], CursorTy, l$ Ext $ WriteScalar (mkScalar ty) d rnd') <$> l <$>
                   go2 d' rst
 
               CursorTy -> do
@@ -492,7 +494,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
 
         IndirectionE _ dcon (pointer,r1) (pointee,r2) _ -> do
           dflags <- getDynFlags
-          if gopt Opt_DisableGC dflags || (r1 == "dummy" || r2 == "dummy") -- HACK!!! 
+          if gopt Opt_DisableGC dflags || (r1 == "dummy" || r2 == "dummy") -- HACK!!!
           then go tenv (l$ DataConE pointer dcon [l$ VarE pointee])
           else
             onDi (mkLets [("_",[],IntTy, l$ Ext (BumpRefCount (toEndV r1) (toEndV r2)))]) <$>
@@ -970,8 +972,9 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
             ([],[]) -> processRhs denv tenv
             ((v,loc):rst_vlocs, ty:rst_tys) ->
               case ty of
-                imty | isInt imty -> do
-                  (tenv', binds) <- intBinds v loc tenv
+                -- Int, Sym, or Bool
+                _ | isScalarTy ty -> do
+                  (tenv', binds) <- scalarBinds ty v loc tenv
                   if canBind
                   then do
                     -- If the location exists in the environment, it indicates that the
@@ -1054,8 +1057,9 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv'
                   return $ mkLets binds bod
 
-                IntTy -> do
-                  (tenv', binds) <- intBinds v loc tenv
+                -- Int, Sym, or Bool
+                _ | isScalarTy ty -> do
+                  (tenv', binds) <- scalarBinds ty v loc tenv
                   let loc_bind = case M.lookup v indirections_env of
                                    -- This appears before the first packed field. Unpack it
                                    -- in the usual way.
@@ -1088,22 +1092,24 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
             _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
 
     -- Generate bindings for unpacking int fields. A convenient
-    intBinds :: Var -> LocVar -> TyEnv Ty2 -> PassM (TyEnv Ty2, [(Var, [()], Ty3, L Exp3)])
-    intBinds v loc tenv = do
-      tmp <- gensym "readint_tuple"
+    scalarBinds :: Ty2 -> Var -> LocVar -> TyEnv Ty2 -> PassM (TyEnv Ty2, [(Var, [()], Ty3, L Exp3)])
+    scalarBinds ty v loc tenv = do
+      tmp <- gensym "read_scalar_tuple"
       -- Note that the location is not added to the type environment here.
       -- The caller of this fn will do that later, depending on whether we're
       -- binding the location now or later via DepEnv.
-      let tenv' = M.union (M.fromList [(tmp     , ProdTy [IntTy, CursorTy]),
-                                       (v       , IntTy),
+      let s     = mkScalar ty
+          tenv' = M.union (M.fromList [(tmp     , ProdTy [ty, CursorTy]),
+                                       (v       , ty),
                                        (toEndV v, CursorTy)])
                   tenv
 
-          binds = [(tmp     , [], ProdTy [IntTy, CursorTy], l$ Ext $ ReadInt loc),
-                   (v       , [], IntTy   , l$ ProjE 0 (l$ VarE tmp)),
+          ty'   = stripTyLocs ty
+
+          binds = [(tmp     , [], ProdTy [ty', CursorTy], l$ Ext $ ReadScalar s loc),
+                   (v       , [], ty'     , l$ ProjE 0 (l$ VarE tmp)),
                    (toEndV v, [], CursorTy, l$ ProjE 1 (l$ VarE tmp))]
       return (tenv', binds)
-
 
 giveStarts :: Ty2 -> L Exp3 -> L Exp3
 giveStarts ty e =
@@ -1181,8 +1187,3 @@ mkDi x ls  = Di $ l$ MkProdE [x, l$ MkProdE ls]
 curDict :: UrTy a -> UrTy a
 curDict (SymDictTy ar _ty) = SymDictTy ar CursorTy
 curDict ty = ty
-
-isInt :: UrTy a -> Bool
-isInt IntTy = True
-isInt BoolTy = True
-isInt _ = False

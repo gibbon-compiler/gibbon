@@ -404,6 +404,7 @@ stripTyLocs :: UrTy a -> UrTy ()
 stripTyLocs ty =
   case ty of
     IntTy     -> IntTy
+    SymTy     -> SymTy
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map stripTyLocs ls
     SymDictTy v ty'  -> SymDictTy v $ stripTyLocs ty'

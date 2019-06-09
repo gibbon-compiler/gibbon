@@ -13,6 +13,7 @@ import           Control.Monad
 import           Data.Bifunctor (first)
 import           Data.Int
 import           Data.Loc
+import qualified Data.Map as M
 import           Data.Maybe
 import           Data.List as L
 import qualified Data.Set as S
@@ -36,7 +37,7 @@ import           Gibbon.L4.Syntax
 
 -- | Harvest all struct tys.  All product types used anywhere in the program.
 harvestStructTys :: Prog -> S.Set [Ty]
-harvestStructTys (Prog funs mtal) =
+harvestStructTys (Prog _ funs mtal) =
     -- if S.null (S.difference tys0 tys1)
     S.delete [] (S.union tys0 tys1)
   where
@@ -108,7 +109,7 @@ harvestStructTys (Prog funs mtal) =
 --
 --  The boolean flag is true when we are compiling in "Packed" mode.
 codegenProg :: Config -> Prog -> IO String
-codegenProg cfg prg@(Prog funs mtal) = do
+codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       env <- getEnvironment
       dbgTrace 1 (show (uniqueDicts $ S.toList $ harvestStructTys prg)) $ return ()
       let rtsPath = case lookup "GIBBONDIR" env of
@@ -130,7 +131,8 @@ codegenProg cfg prg@(Prog funs mtal) = do
         case mtal of
           Just (PrintExp t) -> do
             t' <- codegenTail t (codegenTy IntTy)
-            return $ C.FuncDef [cfun| void __main_expr() { $items:t' } |] noLoc
+            let t'' = makeSymTable ++ t'
+            return $ C.FuncDef [cfun| void __main_expr() { $items:t'' } |] noLoc
           _ ->
             return $ C.FuncDef [cfun| void __main_expr() { return; } |] noLoc
 
@@ -159,6 +161,14 @@ codegenProg cfg prg@(Prog funs mtal) = do
           do fun <- codegenFun' fd
              prot <- makeProt fun (isPure fd)
              return (C.DecDef prot noLoc, C.FuncDef fun noLoc)
+
+      makeSymTable :: [C.BlockItem]
+      makeSymTable =
+        map
+          (\(k,v) -> C.BlockStm [cstm| add_symbol($k, $v); |])
+          (M.toList sym_tbl)
+
+      -- C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < global_iters_param; $id:iters ++) { $items:body } |]
 
 makeStructs :: [[Ty]] -> [C.Definition]
 makeStructs [] = []
@@ -214,6 +224,7 @@ rewriteReturns tl bnds =
 codegenTriv :: Triv -> C.Exp
 codegenTriv (VarTriv v) = C.Var (C.toIdent v noLoc) noLoc
 codegenTriv (IntTriv i) = [cexp| ( $ty:(codegenTy IntTy) ) $int:i |]
+codegenTriv (SymTriv i) = [cexp| ( $ty:(codegenTy SymTy) )$i |]
 codegenTriv (TagTriv i) = [cexp| ( $ty:(codegenTy TagTyPacked) )$i |]
 
 
@@ -467,15 +478,15 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                             [ C.BlockDecl [cdecl| $ty:(codegenTy TagTyPacked) $id:tagV = *($id:cur); |]
                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:curV = $id:cur + 1; |] ]
 
-                 WriteInt -> let [(outV,CursorTy)] = bnds
-                                 [val,(VarTriv cur)] = rnds in pure
-                             [ C.BlockStm [cstm| *( $ty:(codegenTy IntTy)  *)($id:cur) = $(codegenTriv val); |]
-                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy IntTy) ); |] ]
+                 WriteScalar s -> let [(outV,CursorTy)] = bnds
+                                      [val,(VarTriv cur)] = rnds in pure
+                                  [ C.BlockStm [cstm| *( $ty:(codegenTy (scalarToTy s))  *)($id:cur) = $(codegenTriv val); |]
+                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy (scalarToTy s)) ); |] ]
 
-                 ReadInt -> let [(valV,valTy),(curV,CursorTy)] = bnds
-                                [(VarTriv cur)] = rnds in pure
-                            [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
-                            , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:curV = ($id:cur) + sizeof( $ty:(codegenTy IntTy) ); |] ]
+                 ReadScalar s -> let [(valV,valTy),(curV,CursorTy)] = bnds
+                                     [(VarTriv cur)] = rnds in pure
+                                     [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
+                                     , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:curV = ($id:cur) + sizeof( $ty:(codegenTy (scalarToTy s))); |] ]
 
                  ReadCursor -> let [(next,CursorTy),(afternext,CursorTy)] = bnds
                                    [(VarTriv cur)] = rnds in pure
@@ -487,16 +498,6 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                                     [val,(VarTriv cur)] = rnds in pure
                                  [ C.BlockStm [cstm| *( $ty:(codegenTy CursorTy)  *)($id:cur) = $(codegenTriv val); |]
                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + 8; |] ]
-
-                 ReadBool    -> let [(valV,valTy),(curV,CursorTy)] = bnds
-                                    [(VarTriv cur)] = rnds in pure
-                                [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
-                                , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:curV = ($id:cur) + sizeof( $ty:(codegenTy BoolTy) ); |] ]
-
-                 WriteBool   -> let [(outV,CursorTy)] = bnds
-                                    [val,(VarTriv cur)] = rnds in pure
-                                [ C.BlockStm [cstm| *( $ty:(codegenTy BoolTy)  *)($id:cur) = $(codegenTriv val); |]
-                                , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy BoolTy) ); |] ]
 
                  BumpRefCount -> let [(VarTriv end_r1), (VarTriv end_r2)] = rnds
                                  in pure [ C.BlockStm [cstm| bump_ref_count($id:end_r1, $id:end_r2); |] ]
@@ -542,6 +543,10 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
 
                  PrintInt | [] <- bnds -> let [arg] = rnds in pure
                                           [ C.BlockStm [cstm| printf("%lld", $(codegenTriv arg)); |] ]
+                          | otherwise -> error$ "wrong number of return values expected from PrintInt prim: "++show bnds
+
+                 PrintSym | [] <- bnds -> let [arg] = rnds in pure
+                                          [ C.BlockStm [cstm| print_symbol($(codegenTriv arg)); |] ]
                           | otherwise -> error$ "wrong number of return values expected from PrintInt prim: "++show bnds
 
                  PrintString str
@@ -675,23 +680,23 @@ codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] n
     where nam = makeName ts
 codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
 codegenTy ArenaTy = [cty|typename ArenaTy|]
-                             
+
 makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"
 
 makeName' :: Ty -> String
-makeName' IntTy = "Int64"
-makeName' BoolTy = "Bool"
-makeName' CursorTy = "Cursor"
+makeName' IntTy       = "Int64"
+makeName' SymTy       = "Sym"
+makeName' BoolTy      = "Bool"
+makeName' CursorTy    = "Cursor"
 makeName' TagTyPacked = "Tag"
--- makeName' TagTyBoxed  = "Btag"
 makeName' TagTyBoxed  = makeName' IntTy
 makeName' PtrTy = "Ptr"
 makeName' (SymDictTy _ _ty) = "Dict"
 makeName' RegionTy = "Region"
-makeName' ChunkTy = "Chunk"
-makeName' ArenaTy = "Arena"
-makeName' x = error $ "makeName', not handled: " ++ show x
+makeName' ChunkTy  = "Chunk"
+makeName' ArenaTy  = "Arena"
+makeName' (ProdTy tys) = "ProdTy: " ++ concatMap makeName' tys
 
 mkBlock :: [C.BlockItem] -> C.Stm
 mkBlock ss = C.Block ss noLoc

@@ -8,7 +8,7 @@
 (define (elem-ht [x : Sym] [xs : Hashtags]) : Bool
   (case xs
     [(NilHT) False]
-    [(ConsHT y ys) (if (eq? x y)
+    [(ConsHT y ys) (if (eqsym x y)
                        True
                        (elem-ht x ys))]))
 

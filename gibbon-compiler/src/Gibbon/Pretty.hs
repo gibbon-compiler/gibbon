@@ -147,7 +147,7 @@ instance (Pretty d, Ord d) => Pretty (Prim d) where
         in case M.lookup pr renderPrim of
               Nothing  ->
                   let wty ty = text "<" <> pprintWithStyle sty ty <> text ">"
-                  in 
+                  in
                     case pr of
                       DictEmptyP ty  -> text "DictEmpty"  <> wty ty
                       DictHasKeyP ty -> text "DictHasKey" <> wty ty
@@ -180,6 +180,7 @@ instance (Pretty l) => Pretty (UrTy l) where
     pprintWithStyle sty ty =
         case ty of
           IntTy  -> text "Int"
+          SymTy  -> text "Sym"
           BoolTy -> text "Bool"
           ProdTy tys    -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
           SymDictTy (Just var) ty1 -> text "Dict" <+> pprintWithStyle sty var <+> pprintWithStyle sty ty1

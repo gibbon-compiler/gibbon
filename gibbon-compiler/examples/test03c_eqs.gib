@@ -1,6 +1,6 @@
 #lang gibbon
 
-(let ([x : Bool (eq? (quote hi) (quote there))])
+(let ([x : Bool (eqsym (quote hi) (quote there))])
   (let ([y : Bool (= 3 4)])
     (if x
         (if y 1 2)

@@ -9,13 +9,13 @@ import Gibbon.L4.Syntax
 -- TODO: We should figure out a way to do this in Lower. Also `withTail`
 -- _does_ end up duplicating some calls to `free`. Need to fix that.
 rearrangeFree :: Prog -> PassM Prog
-rearrangeFree (Prog fundefs mainExp) = do
+rearrangeFree (Prog sym_tbl fundefs mainExp) = do
   fundefs' <- mapM rearrangeFreeFn fundefs
   mainExp' <- case mainExp of
                 Just (PrintExp tail) -> do
                   Just <$> PrintExp <$> rearrangeFreeExp Nothing tail
                 Nothing -> return Nothing
-  return $ Prog fundefs' mainExp'
+  return $ Prog sym_tbl fundefs' mainExp'
 
 rearrangeFreeFn :: FunDecl -> PassM FunDecl
 rearrangeFreeFn f@FunDecl{funBody} = do

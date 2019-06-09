@@ -1,7 +1,8 @@
 #include <assert.h>
 #include <stdio.h>
-// #include <stdint.h>
 #include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <time.h>
 #include <alloca.h>
@@ -12,11 +13,13 @@
 #include <fcntl.h>
 #include <stdarg.h> // For va_start etc
 #include <errno.h>
+#include <utlist.h>
+#include <uthash.h>
 #ifdef _POINTER
 #include <gc.h>
 #endif
-#include <utlist.h>
-#define KB (1 * 1000lu)
+
+#define KB 1000lu
 #define MB (KB * 1000lu)
 #define GB (MB * 1000lu)
 
@@ -32,7 +35,7 @@ long long global_inf_buf_max_chunk_size = 1 * GB;
 static long long global_size_param = 1;
 static long long global_iters_param = 1;
 
-static char*     global_benchfile_param = NULL;
+static char* global_benchfile_param = NULL;
 
 // Sequential for now:
 static const int num_workers = 1;
@@ -43,10 +46,11 @@ static const int num_workers = 1;
 // A region with this refcount has already been garbage collected.
 #define REG_FREED -100
 
-// Helpers and debugging:
-//--------------------------------------------------------------------------------
 
-//--------------------------------------------------------------------------------
+// -------------------------------------
+// Allocators
+// -------------------------------------
+
 
 #ifdef BUMPALLOC
 // #define DEBUG
@@ -145,15 +149,42 @@ static const int num_workers = 1;
 
 #define ALLOC_PACKED(n) ALLOC(n)
 
-// --------------------------------------------------------------------------------
 
-typedef char TagTyPacked;  // Must be consistent with codegen in Target.hs
-typedef char TagTyBoxed;   // Must be consistent with codegen in Target.hs
-typedef long long IntTy;
-typedef IntTy SymTy;
-typedef char BoolTy;
+// Could try alloca() here.  Better yet, we could keep our own,
+// separate stack and insert our own code to restore the pointer
+// before any function that (may have) called ALLOC_SCOPED returns.
+
+// #define ALLOC_SCOPED() alloca(1024)
+#define ALLOC_SCOPED(n) alloca(n)
+// #define ALLOC_SCOPED() alloc_scoped()
+
+// Stack allocation is either too small or blows our stack.
+// We need a way to make a giant stack if we want to use alloca.
+// #define ALLOC_SCOPED() ALLOC(global_init_biginf_buf_size)
+
+// Our global pointer.  No parallelism.
+// static char* stack_scoped_region;
+// char* alloc_scoped() { return stack_scoped_region; }
+
+
+
+// -------------------------------------
+// Basic types
+// -------------------------------------
+
+typedef char TagTyPacked;   // Must be consistent with codegen in Target.hs
+typedef char TagTyBoxed;    // Must be consistent with codegen in Target.hs
+typedef long long IntTy;    // Int64 in Haskell
+typedef int SymTy;          // Word16 in Haskell. This could actually be a
+                            // uint16_t. However, uthash's HASH_*_INT macros
+                            // only work with proper int's.
+typedef bool BoolTy;
 typedef char* PtrTy;
 typedef char* CursorTy;
+
+// -------------------------------------
+// Arenas and dictionaries
+// -------------------------------------
 
 typedef struct mem_arena {
   int ind;
@@ -209,9 +240,13 @@ PtrTy dict_lookup_ptr(dict_item_t *ptr, SymTy key) {
       ptr = ptr->next;
     }
   }
-  printf("Error, key %lld not found!\n",key);
+  printf("Error, key %d not found!\n",key);
   exit(1);
 }
+
+// -------------------------------------
+// Helpers
+// -------------------------------------
 
 char* read_benchfile_param() {
   if (global_benchfile_param == NULL) {
@@ -220,23 +255,6 @@ char* read_benchfile_param() {
   } else
     return global_benchfile_param;
 }
-
-// Could try alloca() here.  Better yet, we could keep our own,
-// separate stack and insert our own code to restore the pointer
-// before any function that (may have) called ALLOC_SCOPED returns.
-
-// #define ALLOC_SCOPED() alloca(1024)
-#define ALLOC_SCOPED(n) alloca(n)
-// #define ALLOC_SCOPED() alloc_scoped()
-
-// Stack allocation is either too small or blows our stack.
-// We need a way to make a giant stack if we want to use alloca.
-// #define ALLOC_SCOPED() ALLOC(global_init_biginf_buf_size)
-
-
-// Our global pointer.  No parallelism.
-// static char* stack_scoped_region;
-// char* alloc_scoped() { return stack_scoped_region; }
 
 
 // fun fact: __ prefix is actually reserved and this is an undefined behavior.
@@ -290,6 +308,38 @@ IntTy expll(IntTy base, IntTy pow) {
         return result;
     }
  }
+
+// -------------------------------------
+// Symbol table
+// -------------------------------------
+
+typedef struct SymTable_elem {
+    SymTy idx;                 /* key */
+    char value[50];
+    UT_hash_handle hh;         /* makes this structure hashable */
+} SymTable_elem;
+
+// important! initialize to NULL
+SymTable_elem *global_sym_table = NULL;
+
+void add_symbol(SymTy idx, char *value) {
+    struct SymTable_elem *s;
+    s = malloc(sizeof(struct SymTable_elem));
+    s->idx = idx;
+    strcpy(s->value, value);
+    HASH_ADD_INT( global_sym_table, idx, s );
+
+}
+
+void print_symbol(SymTy idx) {
+    struct SymTable_elem *s;
+    HASH_FIND_INT( global_sym_table, &idx, s );
+    printf("'%s", s->value);
+}
+
+// -------------------------------------
+// Garbage collection
+// -------------------------------------
 
 /* Representation of regions at runtime:
 

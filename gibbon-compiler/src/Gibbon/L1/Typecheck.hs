@@ -38,7 +38,7 @@ tcExp ddfs env exp@(L p ex) =
   case ex of
     VarE v    -> lookupVar env v exp
     LitE _    -> return IntTy
-    LitSymE _ -> return IntTy
+    LitSymE _ -> return SymTy
 
     AppE v locs ls -> do
       let funty =

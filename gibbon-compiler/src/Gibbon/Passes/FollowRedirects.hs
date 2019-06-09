@@ -56,13 +56,13 @@ now becomes:
 type TagTailEnv = M.Map Var Var
 
 followRedirects :: Prog -> PassM Prog
-followRedirects (Prog fundefs mainExp) = do
+followRedirects (Prog sym_tbl fundefs mainExp) = do
   fundefs' <- mapM followRedirectsFn fundefs
   mainExp' <- case mainExp of
                 Just (PrintExp tail) ->
                   Just <$> PrintExp <$> followRedirectsExp M.empty M.empty tail
                 Nothing -> return Nothing
-  return $ Prog fundefs' mainExp'
+  return $ Prog sym_tbl fundefs' mainExp'
 
 followRedirectsFn :: FunDecl -> PassM FunDecl
 followRedirectsFn f@FunDecl{funArgs,funBody} = do
@@ -77,7 +77,9 @@ followRedirectsExp ttailenv tenv tail =
       let trvty = typeofTriv trv
       case trvty of
         IntTy -> return $ Switch lbl trv alts bod_maybe
-        -- This is OK too - BoolTy is really Int8.
+        -- OK, SymTy is Int64.
+        SymTy -> return $ Switch lbl trv alts bod_maybe
+        -- This is OK too - BoolTy is Int8.
         BoolTy -> return $ Switch lbl trv alts bod_maybe
         TagTyPacked -> do
           let VarTriv tagv = trv
@@ -149,3 +151,4 @@ followRedirectsExp ttailenv tenv tail =
                            IntTriv{} -> IntTy
                            TagTriv{} -> TagTyPacked
                            VarTriv v -> tenv # v
+                           SymTriv{} -> SymTy

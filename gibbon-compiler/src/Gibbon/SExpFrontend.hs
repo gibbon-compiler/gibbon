@@ -501,7 +501,7 @@ primMap = M.fromList
   , ("mod", ModP)
   , ("exp", ExpP)
   , ("rand", RandP)
-  , ("eq?", EqSymP)
+  , ("eqsym", EqSymP)
   , ("=", EqIntP)
   , ("<", LtP)
   , (">", GtP)

@@ -10,6 +10,7 @@ module Gibbon.L3.Syntax
   (
     -- * Extended language
     E3Ext(..), Prog3, FunDef3, FunDefs3 , Exp3, Ty3
+  , Scalar(..), mkScalar, scalarToTy
 
     -- * Functions
   , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim
@@ -48,8 +49,8 @@ type Ty3 = UrTy ()
 
 -- | The extension that turns L1 into L3.
 data E3Ext loc dec =
-    ReadInt   Var                  -- ^ One cursor in, (int, cursor') out
-  | WriteInt  Var (L (PreExp E3Ext loc dec)) -- ^ Write int at cursor, and return a cursor
+    ReadScalar  Scalar Var                            -- ^ One cursor in, (int, cursor') out
+  | WriteScalar Scalar Var (L (PreExp E3Ext loc dec)) -- ^ Write int at cursor, and return a cursor
   | AddCursor Var (L (PreExp E3Ext loc dec)) -- ^ Add a constant offset to a cursor variable
   | ReadTag   Var                  -- ^ One cursor in, (tag,cursor) out
   | WriteTag  DataCon Var          -- ^ Write Tag at Cursor, and return a cursor
@@ -73,8 +74,8 @@ data E3Ext loc dec =
 instance FreeVars (E3Ext l d) where
   gFreeVars  e =
     case e of
-      ReadInt  v     -> S.singleton v
-      WriteInt v ex  -> S.insert v (gFreeVars ex)
+      ReadScalar _  v     -> S.singleton v
+      WriteScalar _ v ex  -> S.insert v (gFreeVars ex)
       AddCursor v ex -> S.insert v (gFreeVars ex)
       ReadTag v      -> S.singleton v
       WriteTag _ v   -> S.singleton v
@@ -114,14 +115,14 @@ instance HasSimplifiableExt E3Ext l d => SimplifiableExt (L (PreExp E3Ext l d)) 
 instance HasSubstitutableExt E3Ext l d => SubstitutableExt (L (PreExp E3Ext l d)) (E3Ext l d) where
   gSubstExt old new ext =
     case ext of
-      WriteInt v bod    -> WriteInt v (gSubst old new bod)
-      WriteCursor v bod -> WriteCursor v (gSubst old new bod)
-      AddCursor v bod   -> AddCursor v (gSubst old new bod)
+      WriteScalar s v bod  -> WriteScalar s v (gSubst old new bod)
+      WriteCursor v bod    -> WriteCursor v (gSubst old new bod)
+      AddCursor v bod      -> AddCursor v (gSubst old new bod)
       _ -> ext
 
   gSubstEExt old new ext =
     case ext of
-      WriteInt v bod    -> WriteInt v (gSubstE old new bod)
+      WriteScalar s v bod    -> WriteScalar s v (gSubstE old new bod)
       WriteCursor v bod -> WriteCursor v (gSubstE old new bod)
       AddCursor v bod   -> AddCursor v (gSubstE old new bod)
       _ -> ext
@@ -129,8 +130,8 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (L (PreExp E3Ext l d)
 instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
   gRename env ext =
     case ext of
-      ReadInt v          -> ReadInt (go v)
-      WriteInt v bod     -> WriteInt (go v) (go bod)
+      ReadScalar s v     -> ReadScalar s (go v)
+      WriteScalar s v bod-> WriteScalar s (go v) (go bod)
       AddCursor v bod    -> AddCursor (go v) (go bod)
       ReadTag v          -> ReadTag (go v)
       WriteTag dcon v    -> WriteTag dcon (go v)
@@ -149,6 +150,20 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       go :: forall a. Renamable a => a -> a
       go = gRename env
 
+data Scalar = IntS | SymS | BoolS
+  deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
+
+mkScalar :: Out a => UrTy a -> Scalar
+mkScalar IntTy  = IntS
+mkScalar SymTy  = SymS
+mkScalar BoolTy = BoolS
+mkScalar ty = error $ "mkScalar: Not a scalar type: " ++ sdoc ty
+
+scalarToTy :: Scalar -> UrTy a
+scalarToTy IntS  = IntTy
+scalarToTy SymS  = SymTy
+scalarToTy BoolS = BoolTy
+
 -----------------------------------------------------------------------------------------
 -- Do this manually to get prettier formatting: (Issue #90)
 
@@ -166,6 +181,7 @@ cursorizeTy :: UrTy a -> UrTy b
 cursorizeTy ty =
   case ty of
     IntTy     -> IntTy
+    SymTy     -> SymTy
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map cursorizeTy ls
     SymDictTy v _ -> SymDictTy v CursorTy -- $ cursorizeTy ty'

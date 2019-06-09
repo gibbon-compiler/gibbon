@@ -8,7 +8,9 @@
 
 module Gibbon.L4.Syntax
     ( Var, Tag, Tail(..), Triv(..), Ty(..), Prim(..), FunDecl(..)
-    , Alts(..), Prog(..), MainExp(..), Label
+    , Alts(..), Prog(..), MainExp(..), Label, SymTable
+    , L3.Scalar(..), mkScalar, scalarToTy
+
     -- * Utility functions
     , withTail, fromL3Ty, voidTy, inlineTrivL4
     ) where
@@ -18,7 +20,7 @@ import           Control.Monad.State.Strict
 import           Data.Int
 import           Data.Maybe
 import qualified Data.Map as M
-import           Data.Word (Word8)
+import           Data.Word (Word8, Word16)
 import           GHC.Generics (Generic)
 import           Prelude hiding (init)
 import           Text.PrettyPrint.GenericPretty (Out (..))
@@ -34,8 +36,9 @@ import qualified Gibbon.L3.Syntax as L3
 -- * AST definition
 
 data Prog = Prog
-  { fundefs :: [FunDecl]
-  , mainExp :: Maybe MainExp
+  { symbolTable :: SymTable
+  , fundefs     :: [FunDecl]
+  , mainExp     :: Maybe MainExp
   } deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data MainExp
@@ -50,6 +53,7 @@ data Triv
     = VarTriv Var
     | IntTriv Int64
     | TagTriv Tag
+    | SymTriv Word16 -- ^ An index into the symbol table.
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 -- | Switch alternatives.
@@ -68,7 +72,13 @@ instance Out Word8 where
   doc w = doc (fromIntegral w :: Integer)
   docPrec n w = docPrec n (fromIntegral w :: Integer)
 
+instance Out Word16 where
+  doc w = doc (fromIntegral w :: Integer)
+  docPrec n w = docPrec n (fromIntegral w :: Integer)
+
 type Label = Var
+
+type SymTable = M.Map Word16 String
 
 data Tail
     = RetValsT [Triv] -- ^ Only in tail position, for returning from a function.
@@ -125,7 +135,7 @@ data Tail
     | TailCall Var [Triv]
     | Goto Label
 
-    -- Allocate an arena for non-packed data 
+    -- Allocate an arena for non-packed data
     | LetArenaT { lhs :: Var
                 , bod  :: Tail
                 }
@@ -154,7 +164,7 @@ data Ty
 
     | ProdTy [Ty]
     | SymDictTy Var Ty
-      -- ^ We allow built-in dictionaries from symbols to a value type.      
+      -- ^ We allow built-in dictionaries from symbols to a value type.
     | ArenaTy
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
@@ -185,21 +195,18 @@ data Prim
 
     | MMapFileSize Var
 
-    | WriteTag
-    -- ^ Write a static tag value, takes a cursor to target.
-    | WriteInt
-    -- ^ Write (leaf) data, takes cursor,int
     | ReadTag
     -- ^ Read one byte from the cursor and advance it.
-    | ReadInt
-    -- ^ Read an 8 byte Int from the cursor and advance.
+
+    | WriteTag
+    -- ^ Write a static tag value, takes a cursor to target.
+
     | ReadCursor
     -- ^ Read and return a cursor
     | WriteCursor
 
-    | ReadBool
-    | WriteBool
-    -- ^ Read / write 1 byte integers, and advance.
+    | ReadScalar L3.Scalar
+    | WriteScalar L3.Scalar
 
     | BoundsCheck
 
@@ -219,6 +226,7 @@ data Prim
     | GetFirstWord -- ^ takes a PtrTy, returns IntTy containing the (first) word pointed to.
 
     | PrintInt    -- ^ Print an integer to stdout.
+    | PrintSym    -- ^ Fetch a symbol from the symbol table, and print it.
     | PrintString String -- ^ Print a constant string to stdout.
                          -- TODO: add string values to the language.
 
@@ -236,6 +244,17 @@ data FunDecl = FunDecl
 
 voidTy :: Ty
 voidTy = ProdTy []
+
+mkScalar :: Ty -> L3.Scalar
+mkScalar IntTy  = L3.IntS
+mkScalar SymTy  = L3.SymS
+mkScalar BoolTy = L3.BoolS
+mkScalar ty = error $ "mkScalar: Not a scalar type: " ++ sdoc ty
+
+scalarToTy :: L3.Scalar -> Ty
+scalarToTy L3.IntS  = IntTy
+scalarToTy L3.SymS  = SymTy
+scalarToTy L3.BoolS = BoolTy
 
 -- | Extend the tail of a Tail.  Take the return values from a Tail
 -- expression and do some more computation.
@@ -274,20 +293,25 @@ withTail (tl0,retty) fn =
    genTmps (ProdTy ls) = flip zip ls <$> sequence (replicate (length ls) (gensym $ toVar "tctmp"))
    genTmps ty          = do t <- gensym (toVar "tctmp"); return [(t,ty)]
 
-
 fromL3Ty :: L3.Ty3 -> Ty
 fromL3Ty ty =
   case ty of
     L.IntTy -> IntTy
     L.SymTy -> SymTy
+    L.BoolTy -> BoolTy
     L.ProdTy tys -> ProdTy $ map fromL3Ty tys
     L.SymDictTy (Just var) t -> SymDictTy var $ fromL3Ty t
-    _ -> IntTy -- FIXME: review this
+    L.ArenaTy    -> ArenaTy
+    L.PtrTy      -> PtrTy
+    L.CursorTy   -> CursorTy
+    -- L.PackedTy{} -> error "fromL3Ty: Cannot convert PackedTy"
+    -- L.ListTy{}   -> error "fromL3Ty: Cannot convert ListTy"
+    _ -> IntTy -- [2019.06.10]: CSK, Why do we need this?
 
 
 inlineTrivL4 :: Prog -> Prog
-inlineTrivL4 (Prog fundefs mb_main) =
-  Prog (map inline_fun fundefs) (inline_main <$> mb_main)
+inlineTrivL4 (Prog sym_tbl fundefs mb_main) =
+  Prog sym_tbl (map inline_fun fundefs) (inline_main <$> mb_main)
 
   where
     inline_fun fn@FunDecl{funBody} = fn { funBody = inline_tail M.empty funBody }

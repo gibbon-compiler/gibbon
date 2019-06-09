@@ -625,5 +625,5 @@ wrapInterp mode pass who fn x =
        unless (show res1 == res2') $
          error $ "After pass "++who++", evaluating the program yielded the wrong answer.\nReceived:  "
          ++show res2'++"\nExpected:  "++show res1
-       dbgPrintLn 5 $ " [interp] answer was: "++sdoc res2'
+       dbgPrintLn 5 $ " [interp] answer was: "++ res2'
      return p2

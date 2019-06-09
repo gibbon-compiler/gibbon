@@ -4,12 +4,15 @@
       [Nil]
       [Cons Sym List])
 
-(define (elem [x : Sym] [xs : List]) : Bool
+(define (elem-go [n : Int] [x : Sym] [xs : List]) : Int
   (case xs
-    [(Nil) False]
-    [(Cons y ys) (if (eq? y x)
-                     True
-                     (elem x ys))]))
+    [(Nil) -1]
+    [(Cons y ys) (if (eqsym y x)
+                     n
+                     (elem-go (+ n 1) x ys))]))
+
+(define (elem [x : Sym] [xs : List]) : Int
+  (elem-go 0 x xs))
 
 (let ([a : Sym 'abc])
   (let ([as : List (Cons 'a (Cons 'b (Cons 'abc (Nil))))])

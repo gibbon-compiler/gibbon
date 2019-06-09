@@ -84,7 +84,7 @@ findWitnesses = mapMExprs fn
             handle' $ LetE (v,locs,t, (go Map.empty (l$ Ext ext)))
             (goE (Set.insert v (bound `Set.union` Map.keysSet mp)) Map.empty bod)
 
-        LetE (v,locs,t, L _p2 (Ext ext@WriteInt{})) bod ->
+        LetE (v,locs,t, L _p2 (Ext ext@WriteScalar{})) bod ->
             handle' $ LetE (v,locs,t, (go Map.empty (l$ Ext ext)))
             (goE (Set.insert v (bound `Set.union` Map.keysSet mp)) Map.empty bod)
 

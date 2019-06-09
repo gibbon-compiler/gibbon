@@ -78,7 +78,7 @@ interp rc _ddefs fenv = go M.empty
           Ext{} -> error "Cannot interpret NoExt"
 
           LitE c    -> return $ VInt c
-          LitSymE s -> return $ VInt (strToInt $ fromVar s)
+          LitSymE s -> return $ VSym (fromVar s)
           VarE v    -> return $ env # v
 
           PrimAppE p ls -> do args <- mapM (go env) ls
@@ -168,7 +168,7 @@ interp rc _ddefs fenv = go M.empty
 
           WithArenaE v e -> let env' = M.insert v (VInt 0) env
                             in go env' e
-                            
+
           IfE a b c -> do v <- go env a
                           case v of
                            VBool flg -> if flg
@@ -193,7 +193,7 @@ applyPrim rc p ls =
    -- Constrained to the value of RAND_MAX (in C) on my laptop: 2147483647 (2^31 − 1)
    (RandP,[]) -> VInt $ (unsafePerformIO randomIO) `mod` 2147483647
    (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
-   (EqSymP,[VInt x, VInt y]) -> VBool (x==y)
+   (EqSymP,[VSym x, VSym y]) -> VBool (x==y)
    (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
    (LtP,[VInt x, VInt y]) -> VBool (x < y)
    (GtP,[VInt x, VInt y]) -> VBool (x > y)

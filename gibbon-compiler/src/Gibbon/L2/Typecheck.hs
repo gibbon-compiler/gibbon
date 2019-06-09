@@ -133,7 +133,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
 
       LitE _i -> return (IntTy, tstatein)
 
-      LitSymE _v -> return (IntTy, tstatein) -- SymTy
+      LitSymE _v -> return (SymTy, tstatein)
 
       AppE v ls args ->
           -- Checking function application involves a few steps:
@@ -171,7 +171,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
              -- Use locVars used at call-site in the returned type
              let arrOutMp = M.fromList $ zip (L.map (\(LRM l _ _) -> l) locVars) ls
                  arrOut'  = substLoc arrOutMp arrOut
-                            
+
              return (arrOut',tstate')
 
       PrimAppE pr es -> do
@@ -212,8 +212,8 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
 
                  EqSymP -> do
                    len2
-                   ensureEqualTy exp IntTy (tys !! 0)
-                   ensureEqualTy exp IntTy (tys !! 1)
+                   ensureEqualTy exp SymTy (tys !! 0)
+                   ensureEqualTy exp SymTy (tys !! 1)
                    return $ (BoolTy,tstate)
 
                  SymAppend  -> do

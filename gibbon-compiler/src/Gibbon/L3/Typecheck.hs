@@ -32,22 +32,17 @@ tcExp isPacked ddfs env exp@(L p ex) =
     Ext ext ->
       case ext of
         -- One cursor in, (int, cursor') out
-        ReadInt v -> do
+        ReadScalar s v -> do
           vty <- lookupVar env v exp
           ensureEqualTy exp vty CursorTy
-          return $ ProdTy [IntTy, CursorTy]
+          return $ ProdTy [scalarToTy s, CursorTy]
 
         -- Write int at cursor, and return a cursor
-        WriteInt v rhs -> do
+        WriteScalar s v rhs -> do
           vty  <- lookupVar env v exp
-          ensureEqualTy exp vty CursorTy
           vrhs <- go rhs
-          -- ensureEqualTy exp vrhs IntTy
-          case vrhs of
-            BoolTy -> return ()
-            IntTy -> return ()
-            _ -> throwError $ GenericTC ("Expected int or bool argument to WriteInt") exp
-
+          ensureEqualTy exp vty CursorTy
+          ensureEqualTy exp vrhs (scalarToTy s)
           return CursorTy
 
         -- Add a constant offset to a cursor variable
@@ -129,7 +124,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
 
     VarE v    -> lookupVar env v exp
     LitE _    -> return IntTy
-    LitSymE _ -> return IntTy
+    LitSymE _ -> return SymTy
 
     AppE v locs ls -> do
       let funty =
@@ -158,7 +153,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
                 Just v' -> SymDictTy (Just v') ty
                 Nothing -> error $ ("Cannot match up arena for dictionary in function application: " ++ sdoc exp)
           subDictTy _ ty = ty
-                  
+
           subFunInTys = L.map (subDictTy arMap) funInTys
           subFunOutTy = subDictTy arMap funRetTy
       _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (zip subFunInTys argTys)

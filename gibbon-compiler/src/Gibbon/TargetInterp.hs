@@ -56,8 +56,8 @@ instance Out (Seq Int) where
     docPrec _ s = text (show s)
 
 execProg :: Prog -> IO [Val]
-execProg (Prog _ Nothing) = error "Can't evaluate program: No expression given"
-execProg (Prog funs (Just (PrintExp expr))) = exec env expr
+execProg (Prog _ _ Nothing) = error "Can't evaluate program: No expression given"
+execProg (Prog _ funs (Just (PrintExp expr))) = exec env expr
   where
     env = M.fromList (map (\f -> (funName f, FunVal f)) funs)
 
@@ -196,15 +196,16 @@ applyPrim EqP  [IntVal i1, IntVal i2] = pure [IntVal (if i1 == i2 then 1 else 0)
 applyPrim NewBuffer{} [] = pure [BufVal Seq.empty]
 
 applyPrim WriteTag [TagVal tag, BufVal is] = pure [BufVal (is |> fromIntegral tag)]
-applyPrim WriteInt [IntVal i,   BufVal is] = pure [BufVal (is |> i)]
 
 applyPrim ReadTag [BufVal is] = case Seq.viewl is of
                                 Seq.EmptyL -> error "ReadTag: Empty buffer"
                                 t :< is'   -> pure [TagVal (fromIntegral t), BufVal is']
 
-applyPrim ReadInt [BufVal is] = case Seq.viewl is of
-                                Seq.EmptyL -> error "ReadInt: Empty buffer"
-                                i :< is'   -> pure  [IntVal i, BufVal is']
+-- [2019.06.10] CSK: Implement this later.
+-- applyPrim (WriteScalar s) [IntVal i, BufVal is] = pure [BufVal (is |> i)]
+-- applyPrim (ReadScalar s) [BufVal is] = case Seq.viewl is of
+--                                          Seq.EmptyL -> error "ReadInt: Empty buffer"
+--                                          i :< is'   -> pure  [IntVal i, BufVal is']
 
 applyPrim PrintInt [IntVal i] = do print i; return []
 applyPrim (PrintString st) [] = do putStrLn st; return []

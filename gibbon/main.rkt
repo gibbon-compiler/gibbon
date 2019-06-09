@@ -5,9 +5,9 @@
          define let let* if :
          for/list for/fold or and
          Vector vector vector-ref
-         list and empty? error
+         eqsym list and empty? error
          par letarena
-         eq? = Listof True False
+         = Listof True False
          sym-append
 
          time + * - div mod < > <= >= rand exp
@@ -233,7 +233,7 @@ lit := int | #t | #f
   (define (div [a : Int] [b : Int]) : Int
     (unsafe-fxquotient a b))
 
-  (define (eq? [a : Sym] [b : Sym]) : Bool
+  (define (eqsym [a : Sym] [b : Sym]) : Bool
     (req? a b))
 
   (define (= [a : Int] [b : Int]) : Bool
