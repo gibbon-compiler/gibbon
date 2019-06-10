@@ -166,12 +166,11 @@
 (define (typecheck-expr [expr : Expr]) : Type
   (letarena a (typecheck expr a (ann (empty-dict a) (SymDict a Type)))))
 
-(let ([e : Expr (Lam (CONSPARAM (P (S 'g) (Bool_)) (NULLPARAM)) (B True))])
+(define (test-typecheck [e : Expr]) : Int
   (case (typecheck-expr e)
     [(Int_) 0]
     [(Bool_) 1]
     [(NullT) 2]
     [(Lamt lt t) 3]
     [(Fail) 4]))
-    
 

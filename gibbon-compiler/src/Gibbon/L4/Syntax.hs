@@ -205,6 +205,8 @@ data Prim
 
     | BumpRefCount
 
+    | BumpArenaRefCount
+
     | FreeBuffer
 
     | SizeOfPacked
