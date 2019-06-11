@@ -1446,7 +1446,9 @@ prim p = case p of
            DictInsertP dty -> convertTy dty >>= return . DictInsertP
            DictLookupP dty -> convertTy dty >>= return . DictLookupP
            DictHasKeyP dty -> convertTy dty >>= return . DictHasKeyP
-           _ -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
+           SymAppend{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
+           ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
+           ErrorP{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
 
 -- | Generate a copy function for a particular data definition.
 -- Note: there will be redundant let bindings in the function body which may need to be inlined.

@@ -66,7 +66,7 @@ tcExp ddfs env exp@(L p ex) =
                 Just v' -> SymDictTy (Just v') ty
                 Nothing -> error $ ("Cannot match up arena for dictionary in function application: " ++ sdoc exp)
           subDictTy _ ty = ty
-                  
+
           subFunInTys = L.map (subDictTy arMap) funInTys
           subFunOutTy = subDictTy arMap funRetTy
 
@@ -74,40 +74,57 @@ tcExp ddfs env exp@(L p ex) =
       return subFunOutTy
 
     PrimAppE pr es -> do
+      tys <- mapM go es
+
       let len0 = checkLen exp pr 0 es
           len1 = checkLen exp pr 1 es
           len2 = checkLen exp pr 2 es
           len3 = checkLen exp pr 3 es
           len4 = checkLen exp pr 4 es
 
-      tys <- mapM go es
-      case pr of
-        _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP]  -> do
-          len2
-          _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
-          _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
-          return IntTy
+          mk_bools = do
+            len0
+            pure BoolTy
 
-        _ | pr `elem` [MkTrue, MkFalse] -> do
-          len0
-          return BoolTy
+          bool_ops = do
+            len2
+            _ <- ensureEqualTy (es !! 0) BoolTy (tys !! 0)
+            _ <- ensureEqualTy (es !! 1) BoolTy (tys !! 1)
+            pure BoolTy
+
+          int_ops = do
+            len2
+            _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
+            _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+            pure IntTy
+
+          int_cmps = do
+            len2
+            _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
+            _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+            pure BoolTy
+
+      case pr of
+        MkTrue  -> mk_bools
+        MkFalse -> mk_bools
+        AddP    -> int_ops
+        SubP    -> int_ops
+        MulP    -> int_ops
+        DivP    -> int_ops
+        ModP    -> int_ops
+        ExpP    -> int_ops
+        EqIntP  -> int_cmps
+        LtP     -> int_cmps
+        GtP     -> int_cmps
+        LtEqP   -> int_cmps
+        GtEqP   -> int_cmps
+        OrP     -> bool_ops
+        AndP    -> bool_ops
 
         EqSymP -> do
           len2
           _ <- ensureEqualTy (es !! 0) SymTy (tys !! 0)
           _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
-          return BoolTy
-
-        _ | pr `elem` [EqIntP, LtP, GtP, LtEqP, GtEqP] -> do
-          len2
-          _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
-          _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
-          return BoolTy
-
-        _ | pr `elem` [OrP, AndP] -> do
-          len2
-          _ <- ensureEqualTy (es !! 0) BoolTy (tys !! 0)
-          _ <- ensureEqualTy (es !! 1) BoolTy (tys !! 1)
           return BoolTy
 
         RandP -> return IntTy
@@ -152,7 +169,7 @@ tcExp ddfs env exp@(L p ex) =
                                    ensureArenaScope exp env ar
                                    return ty
             _ -> throwError $ GenericTC "Expected SymDictTy" exp
-                          
+
         DictHasKeyP ty -> do
           len2
           let [d,k] = tys
@@ -177,7 +194,6 @@ tcExp ddfs env exp@(L p ex) =
 
         PEndOf -> return CursorTy
 
-        oth -> error $ "L1.tcExp : PrimAppE : TODO " ++ sdoc oth
 
     LetE (v,[],SymDictTy _ pty, rhs) e -> do
       tyRhs <- go rhs
@@ -186,7 +202,7 @@ tcExp ddfs env exp@(L p ex) =
             do  _ <- ensureEqualTy exp pty pty'
                 unless (isJust ar) $ throwError $ GenericTC "Expected arena variable annotation" rhs
                 let env' = extendEnv env [(v,SymDictTy ar pty')]
-                tcExp ddfs env' e   
+                tcExp ddfs env' e
         _ -> throwError $ GenericTC ("Expected expression to be SymDict type:" ++ sdoc rhs) exp
 
     LetE (v,locs,ty,rhs) e -> do
@@ -348,7 +364,7 @@ instance (Out exp, Out (L exp)) => Out (TCError (L exp)) where
                                    doc p <+> colon <+> doc ex
 
 type TcM a exp =  Except (TCError exp) a
-    
+
 extendEnv :: Env2 (UrTy l) -> [(Var, (UrTy l))] -> Env2 (UrTy l)
 extendEnv (Env2 vEnv fEnv) ((v,ty):rest) = extendEnv (Env2 (M.insert v ty vEnv) fEnv) rest
 extendEnv env [] = env

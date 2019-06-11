@@ -185,28 +185,45 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    len0 = checkLen exp pr 0 es
                    len3 = checkLen exp pr 3 es
                    len4 = checkLen exp pr 4 es
+
+                   mk_bools = do
+                     len0
+                     pure (BoolTy, tstate)
+
+                   bool_ops = do
+                     len2
+                     _ <- ensureEqualTy (es !! 0) BoolTy (tys !! 0)
+                     _ <- ensureEqualTy (es !! 1) BoolTy (tys !! 1)
+                     pure (BoolTy, tstate)
+
+                   int_ops = do
+                     len2
+                     _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
+                     _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+                     pure (IntTy, tstate)
+
+                   int_cmps = do
+                     len2
+                     _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
+                     _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+                     pure (BoolTy, tstate)
+
                case pr of
-                 _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP] -> do
-                       len2
-                       ensureEqualTy exp IntTy (tys !! 0)
-                       ensureEqualTy exp IntTy (tys !! 1)
-                       return $ (IntTy,tstate)
-
-                 _ | pr `elem` [EqIntP, LtP, GtP, LtEqP, GtEqP] -> do
-                       len2
-                       ensureEqualTy exp IntTy (tys !! 0)
-                       ensureEqualTy exp IntTy (tys !! 1)
-                       return $ (BoolTy,tstate)
-
-                 _ | pr `elem` [OrP, AndP] -> do
-                       len2
-                       ensureEqualTy exp BoolTy (tys !! 0)
-                       ensureEqualTy exp BoolTy (tys !! 1)
-                       return $ (BoolTy,tstate)
-
-                 _ | pr `elem` [MkFalse, MkTrue] -> do
-                       len0
-                       return $ (BoolTy,tstate)
+                 MkTrue  -> mk_bools
+                 MkFalse -> mk_bools
+                 AddP    -> int_ops
+                 SubP    -> int_ops
+                 MulP    -> int_ops
+                 DivP    -> int_ops
+                 ModP    -> int_ops
+                 ExpP    -> int_ops
+                 EqIntP  -> int_cmps
+                 LtP     -> int_cmps
+                 GtP     -> int_cmps
+                 LtEqP   -> int_cmps
+                 GtEqP   -> int_cmps
+                 OrP     -> bool_ops
+                 AndP    -> bool_ops
 
                  RandP -> return (IntTy, tstate)
 
@@ -214,7 +231,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    len2
                    ensureEqualTy exp SymTy (tys !! 0)
                    ensureEqualTy exp SymTy (tys !! 1)
-                   return $ (BoolTy,tstate)
+                   return (BoolTy,tstate)
 
                  SymAppend  -> do
                    len2
@@ -280,8 +297,6 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    return (ty, tstate)
 
                  PEndOf -> return (CursorTy, tstate)
-
-                 oth -> error $ "L2.tcExp : PrimAppE : TODO " ++ sdoc oth
 
 
       LetE (v,_ls,ty,e1) e2 -> do

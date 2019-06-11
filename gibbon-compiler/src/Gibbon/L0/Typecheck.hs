@@ -135,28 +135,45 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
           len2 = checkLen 2
           len3 = checkLen 3
           len4 = checkLen 4
-      case pr of
-        _ | pr `elem` [MkTrue, MkFalse] -> do
+
+          mk_bools = do
             len0
             pure (s1, BoolTy, PrimAppE pr args_tc)
 
-        _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP] -> do
+          bool_ops = do
+            len2
+            s2 <- unify (args !! 0) BoolTy (arg_tys' !! 0)
+            s3 <- unify (args !! 1) BoolTy (arg_tys' !! 1)
+            pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+
+          int_ops = do
             len2
             s2 <- unify (args !! 0) IntTy (arg_tys' !! 0)
             s3 <- unify (args !! 1) IntTy (arg_tys' !! 1)
             pure (s1 <> s2 <> s3, IntTy, PrimAppE pr args_tc)
 
-        _ | pr `elem` [EqIntP, LtP, GtP, LtEqP, GtEqP] -> do
-          len2
-          s2 <- unify (args !! 0) IntTy (arg_tys' !! 0)
-          s3 <- unify (args !! 1) IntTy (arg_tys' !! 1)
-          pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+          int_cmps = do
+            len2
+            s2 <- unify (args !! 0) IntTy (arg_tys' !! 0)
+            s3 <- unify (args !! 1) IntTy (arg_tys' !! 1)
+            pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
 
-        _ | pr `elem` [OrP, AndP] -> do
-          len2
-          s2 <- unify (args !! 0) BoolTy (arg_tys' !! 0)
-          s3 <- unify (args !! 1) BoolTy (arg_tys' !! 1)
-          pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+      case pr of
+        MkTrue  -> mk_bools
+        MkFalse -> mk_bools
+        AddP    -> int_ops
+        SubP    -> int_ops
+        MulP    -> int_ops
+        DivP    -> int_ops
+        ModP    -> int_ops
+        ExpP    -> int_ops
+        EqIntP  -> int_cmps
+        LtP     -> int_cmps
+        GtP     -> int_cmps
+        LtEqP   -> int_cmps
+        GtEqP   -> int_cmps
+        OrP     -> bool_ops
+        AndP    -> bool_ops
 
         EqSymP -> do
           len2
@@ -221,9 +238,9 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
           len0
           pure (s1, ty, PrimAppE pr args_tc)
 
-        -- PEndOf -> pure (s1, CursorTy, PrimAppE pr args_tc)
+        PEndOf -> err $ text "Unexpected PEndOf in L0: " <+> exp_doc
+          -- pure (s1, CursorTy, PrimAppE pr args_tc)
 
-        oth -> err $ text "PrimAppE : TODO " <+> doc oth
 
     LetE (v, [], gvn_rhs_ty, rhs) bod -> do
       (s1, drvd_rhs_ty, rhs_tc) <- go rhs
