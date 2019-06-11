@@ -90,6 +90,7 @@ desugarType ty =
     TyTuple _ Boxed tys   -> ProdTy (map desugarType tys)
     TyCon _ (UnQual _ (Ident _ "Int"))  -> IntTy
     TyCon _ (UnQual _ (Ident _ "Bool")) -> BoolTy
+    TyCon _ (UnQual _ (Ident _ "Sym"))  -> SymTy0
     TyCon _ (UnQual _ (Ident _ con))    -> PackedTy con []
     TyFun _ t1 t2 -> let t1' = desugarType t1
                          t2' = desugarType t2
@@ -200,18 +201,28 @@ desugarExp toplevel e = L NoLoc <$>
           L _ (VarE f) ->
             case M.lookup (fromVar f) primMap of
               Just p  -> (\e2' -> PrimAppE p [e2']) <$> desugarExp toplevel e2
-              Nothing -> AppE f [] <$> (: []) <$> desugarExp toplevel e2
+              Nothing ->
+                  if f == "quote"
+                  then case e2 of
+                         Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
+                         _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
+                  else AppE f [] <$> (: []) <$> desugarExp toplevel e2
           L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of
               Just p  -> pure $ PrimAppE p as
-              Nothing -> (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
+              Nothing ->
+                  if c == "quote"
+                  then case e2 of
+                         Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
+                         _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
+                  else (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
           L _ (AppE f [] ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ AppE f [] (ls ++ [e2'])
           L _ (PrimAppE p ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ PrimAppE p (ls ++ [e2'])
-          f -> error ("desugarExp: Only variables allowed in operator position in function applications. (found: " ++ show f ++ ")")
+          f -> error ("desugarExp: Couldn't parse function application: (: " ++ show f ++ ")")
 
     Let _ (BDecls _ decls) rhs -> do
       rhs' <- desugarExp toplevel rhs
@@ -250,6 +261,10 @@ desugarExp toplevel e = L NoLoc <$>
       e2' <- desugarExp toplevel e2
       let op' = desugarOp  op
       pure $ PrimAppE op' [e1', e2']
+
+    NegApp _ e1 -> do
+      e1' <- desugarExp toplevel e1
+      pure $ PrimAppE SubP [l$ LitE 0, e1']
 
     _ -> error ("desugarExp: Unsupported expression: " ++ prettyPrint e)
 
@@ -344,7 +359,11 @@ collectTopLevel env decl =
 
 litToInt :: Literal a -> Int
 litToInt (Int _ i _) = (fromIntegral i) -- lossy conversion here
-litToInt lit         = error ("desugarExp: Literal not supported: " ++ prettyPrint lit)
+litToInt lit         = error ("desugarExp: Only integer litrals are allowed: " ++ prettyPrint lit)
+
+litToString :: Literal a -> String
+litToString (String _ a _) = a
+litToString lit            = error ("desugarExp: Expected a String, got: " ++ prettyPrint lit)
 
 qnameToStr :: H.QName a -> String
 qnameToStr qname =
