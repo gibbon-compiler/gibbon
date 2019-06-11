@@ -14,7 +14,7 @@
 
 (define (memq [v : Sym] [ls : ListSym]) : Bool
   (case ls
-    [(CONSSYM s ls) (or (eq? v s) (memq v ls))]
+    [(CONSSYM s ls) (or (eqsym v s) (memq v ls))]
     [(NULLSYM) False]))
 
 (define (bound? [old : Sym] [ls : LVBIND]) : Bool
@@ -55,30 +55,30 @@
      (CONSLVBIND (sym-ls syms) (expr old new e) (subst-lvbind old new rest))]))
 
 (define (subst-lambdacase [old : Sym] [new : Sym] [lc : LAMBDACASE]) : LAMBDACASE
-       (case lc
-         [(NULLLAMBDACASE) lc]
-         [(CONSLAMBDACASE formals exprs rest)
-          (if (bound-in? old formals)
-              (CONSLAMBDACASE (walk-formals formals) (copy-exprs exprs)      (subst-lambdacase old new rest))
-              (CONSLAMBDACASE (walk-formals formals) (expr-ls old new exprs) (subst-lambdacase old new rest)))]))
+  (case lc
+    [(NULLLAMBDACASE) lc]
+    [(CONSLAMBDACASE formals exprs rest)
+     (if (bound-in? old formals)
+         (CONSLAMBDACASE (walk-formals formals) (copy-exprs exprs)      (subst-lambdacase old new rest))
+         (CONSLAMBDACASE (walk-formals formals) (expr-ls old new exprs) (subst-lambdacase old new rest)))]))
 
 (define (expr [old : Sym] [new : Sym] [e0 : Expr]) : Expr
   (case e0
     ;; Variable references:
     [(VARREF s)
-     (if (eq? old s)
+     (if (eqsym old s)
          (VARREF new)
          (VARREF s))]
     [(Top s)
-     (if (eq? old s)
+     (if (eqsym old s)
          (Top new)
          (Top s))]
     [(VariableReference s)   ; #%variable-reference
-     (if (eq? old s)
+     (if (eqsym old s)
          (VariableReference new)
          (VariableReference s))]
     [(VariableReferenceTop s)   ; #%variable-reference (#%top . id)
-     (if (eq? old s)
+     (if (eqsym old s)
          (VariableReferenceTop new)
          (VariableReferenceTop s))]
 
@@ -123,11 +123,11 @@
     [(F1 syms)
      (memq sym syms)]
     [(F2 syms s)
-     (if (eq? sym s)
+     (if (eqsym sym s)
          True
          (memq sym syms))]
     [(F3 s)
-     (eq? sym s)]))
+     (eqsym sym s)]))
 
 ;; Identity treewalks that could be replaced with sharing:
 ;;--------------------------------------------------------
@@ -153,5 +153,3 @@
 
 (define (copy-binds [lv : LVBIND]) : LVBIND
   (subst-lvbind (quote ignored) (quote ignored) lv))
-
-
