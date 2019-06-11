@@ -227,6 +227,8 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
 
                  RandP -> return (IntTy, tstate)
 
+                 Gensym -> len0 >>= \_ -> pure (SymTy, tstate)
+
                  EqSymP -> do
                    len2
                    ensureEqualTy exp SymTy (tys !! 0)

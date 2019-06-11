@@ -345,6 +345,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
   ispure (L _ ex) =
     case ex of
       TimeIt{} -> False
+      PrimAppE Gensym [] -> False
+      PrimAppE RandP []  -> False
       LetE (_,_,_,rhs) bod -> ispure rhs && ispure bod
       IfE _ b c   -> ispure b && ispure c
       CaseE _ brs -> all id $ L.map (\(_,_,rhs) -> ispure rhs) brs
@@ -901,6 +903,7 @@ prim p =
     ModP -> T.ModP
     ExpP -> T.ExpP
     RandP -> T.RandP
+    Gensym -> T.Gensym
     EqSymP -> T.EqP
     EqIntP -> T.EqP
     LtP    -> T.LtP
@@ -912,7 +915,7 @@ prim p =
     SizeParam -> T.SizeParam
     DictInsertP ty -> T.DictInsertP $ typ ty
     DictLookupP ty -> T.DictLookupP $ typ ty
-    DictEmptyP ty -> T.DictEmptyP $ typ ty
+    DictEmptyP ty  -> T.DictEmptyP $ typ ty
     DictHasKeyP ty -> T.DictHasKeyP $ typ ty
 
     ReadPackedFile mf tyc _ _ -> T.ReadPackedFile mf tyc

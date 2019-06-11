@@ -175,6 +175,8 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
         OrP     -> bool_ops
         AndP    -> bool_ops
 
+        Gensym -> len0 >>= \_ -> pure (sbst, SymTy0, PrimAppE pr args_tc)
+
         EqSymP -> do
           len2
           s2 <- unify (args !! 0) SymTy0 (arg_tys' !! 0)
@@ -671,7 +673,7 @@ unify ex ty1 ty2
           if tc1 == tc2
           then unifyl ex tys1 tys2
           else fail_
-        (SymDictTy _ ty1, SymDictTy _ ty2) -> unify ex ty1 ty2
+        (SymDictTy _ t1, SymDictTy _ t2) -> unify ex t1 t2
         _ -> dbgTrace 1 ("unify: Catch-all _; failed to unify " ++ sdoc ty1 ++ " with " ++ sdoc ty2) fail_
   where fail_ = err $  text "Couldn't match type" <+> quotes (doc ty2)
                     <+> text "with" <+> quotes (doc ty1)

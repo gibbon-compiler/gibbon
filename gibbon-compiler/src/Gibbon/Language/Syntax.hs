@@ -660,6 +660,8 @@ data Prim ty
           -- ^ Returns the end-of cursor for some packed value. These pointers
           -- serve as random access nodes to the value that is packed after this one.
 
+          | Gensym
+
   deriving (Read, Show, Eq, Ord, Generic, NFData, Functor, Foldable, Traversable)
 
 --------------------------------------------------------------------------------
@@ -1025,6 +1027,7 @@ primRetTy p =
     ModP -> IntTy
     ExpP -> IntTy
     RandP-> IntTy
+    Gensym  -> SymTy
     EqSymP  -> BoolTy
     EqIntP  -> BoolTy
     LtP  -> BoolTy

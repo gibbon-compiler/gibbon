@@ -1440,6 +1440,7 @@ prim p = case p of
            EqIntP -> return EqIntP
            MkTrue -> return MkTrue
            MkFalse -> return MkFalse
+           Gensym  -> return Gensym
            SizeParam -> return SizeParam
            PEndOf    -> return PEndOf
            DictEmptyP dty -> convertTy dty >>= return . DictEmptyP

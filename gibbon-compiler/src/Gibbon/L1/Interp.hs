@@ -184,6 +184,8 @@ applyPrim rc p ls =
  case (p,ls) of
    (MkTrue,[])             -> VBool True
    (MkFalse,[])            -> VBool False
+   -- FIXME: randomIO does not guarentee unique numbers every time.
+   (Gensym, [])            -> VSym $ "gensym_" ++ (show $ (unsafePerformIO randomIO :: Int) `mod` 1000)
    (AddP,[VInt x, VInt y]) -> VInt (x+y)
    (SubP,[VInt x, VInt y]) -> VInt (x-y)
    (MulP,[VInt x, VInt y]) -> VInt (x*y)

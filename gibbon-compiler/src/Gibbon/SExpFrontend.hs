@@ -513,6 +513,7 @@ primMap = M.fromList
   , ("sym-append", SymAppend)
   , ("True", MkTrue)
   , ("False", MkFalse)
+  , ("gensym", Gensym)
   ]
 
 prim :: Text -> Prim Ty0

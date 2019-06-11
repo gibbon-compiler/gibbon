@@ -313,9 +313,14 @@ IntTy expll(IntTy base, IntTy pow) {
 // Symbol table
 // -------------------------------------
 
+#define global_max_symbol_len 50
+
+// Invariant: should always be equal to max(sym_table_keys)
+static SymTy global_gensym_counter = 0;
+
 typedef struct SymTable_elem {
     SymTy idx;                 /* key */
-    char value[50];
+    char value[global_max_symbol_len];
     UT_hash_handle hh;         /* makes this structure hashable */
 } SymTable_elem;
 
@@ -328,13 +333,24 @@ void add_symbol(SymTy idx, char *value) {
     s->idx = idx;
     strcpy(s->value, value);
     HASH_ADD_INT( global_sym_table, idx, s );
-
+    if (idx > global_gensym_counter) {
+        global_gensym_counter = idx;
+    }
 }
 
 void print_symbol(SymTy idx) {
     struct SymTable_elem *s;
     HASH_FIND_INT( global_sym_table, &idx, s );
     printf("'%s", s->value);
+}
+
+SymTy gensym() {
+    global_gensym_counter += 1;
+    SymTy idx = global_gensym_counter;
+    char value[global_max_symbol_len];
+    sprintf(value, "gensym_%d",idx);
+    add_symbol(idx, value);
+    return idx;
 }
 
 // -------------------------------------

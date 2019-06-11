@@ -121,6 +121,8 @@ tcExp ddfs env exp@(L p ex) =
         OrP     -> bool_ops
         AndP    -> bool_ops
 
+        Gensym -> len0 >>= \_ -> pure SymTy
+
         EqSymP -> do
           len2
           _ <- ensureEqualTy (es !! 0) SymTy (tys !! 0)

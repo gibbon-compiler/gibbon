@@ -590,6 +590,10 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
 
                  ParSync -> return [ C.BlockStm [cstm| $exp:(C.EscExp "cilk_sync" noLoc); |] ]
 
+                 Gensym  -> do
+                   let [(outV,SymTy)] = bnds
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy SymTy) $id:outV = gensym(); |] ]
+
                  oth -> error$ "FIXME: codegen needs to handle primitive: "++show oth
        return $ pre ++ bod'
 

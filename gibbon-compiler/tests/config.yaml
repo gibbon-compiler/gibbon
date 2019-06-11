@@ -80,9 +80,14 @@ tests:
   - name: test14b_tup.gib
   - name: test14c_tail.gib
   - name: test15a_symsearch.gib
+  - name: test15c_printsym.gib
   - name: test15d_symsearch.hs
     answer-file: examples/test15d_symsearch.ans
-  - name: test15c_printsym.gib
+  - name: test15e_gensym.hs
+    answer-file: examples/test15e_gensym.ans
+    # Gensym is broken in the interpreter.
+    failing: [interp1]
+
   - name: test18_badconstraint.gib
     # This only fails on GCC >= 7 (which we're using to run some other tests that use Cilk)
     # failing: [pointer]

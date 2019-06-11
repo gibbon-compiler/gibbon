@@ -232,6 +232,8 @@ data Prim
 
     | ParSync -- ^ cilk_sync
 
+    | Gensym
+
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data FunDecl = FunDecl

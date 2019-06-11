@@ -170,6 +170,7 @@ primMap = M.fromList
   , ("symAppend", SymAppend)
   , ("True", MkTrue)
   , ("False", MkFalse)
+  , ("gensym", Gensym)
   ]
 
 desugarExp :: (Show a, Pretty a) => TopTyEnv -> Exp a -> PassM (L Exp0)
@@ -178,17 +179,19 @@ desugarExp toplevel e = L NoLoc <$>
     Paren _ e2 -> Loc.unLoc <$> desugarExp toplevel e2
     H.Var _ qv -> do
       let v = (toVar $ qnameToStr qv)
-      case M.lookup v toplevel of
-        Just sigma ->
-          case tyFromScheme sigma of
-            ArrowTy{} ->
-              -- Functions with >0 args must be VarE's here -- the 'App _ e1 e2'
-              -- case below depends on it.
-              pure $ VarE v
-            -- Otherwise, 'v' is a top-level value binding, which we
-            -- encode as a function which takes no arguments.
-            _ -> pure $ AppE v [] []
-        Nothing -> pure $ VarE v
+      if v == "gensym"
+      then pure $ PrimAppE Gensym []
+      else case M.lookup v toplevel of
+             Just sigma ->
+               case tyFromScheme sigma of
+                 ArrowTy{} ->
+                   -- Functions with >0 args must be VarE's here -- the 'App _ e1 e2'
+                   -- case below depends on it.
+                   pure $ VarE v
+                 -- Otherwise, 'v' is a top-level value binding, which we
+                 -- encode as a function which takes no arguments.
+                 _ -> pure $ AppE v [] []
+             Nothing -> pure $ VarE v
     Lit _ lit  -> pure $ LitE (litToInt lit)
 
     Lambda _ pats bod -> do
