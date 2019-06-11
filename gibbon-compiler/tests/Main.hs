@@ -12,9 +12,9 @@ import Test.Tasty.HUnit
 import Test.Tasty.TH
 
 
--- |
-import Gibbon.L4.Syntax hiding (Prog (..), Ty (..))
+import qualified Data.Map as M
 
+import Gibbon.L4.Syntax hiding (Prog (..), Ty (..))
 import Gibbon.L2.Syntax (Multiplicity(..))
 import qualified Gibbon.L4.Syntax as T
 import qualified Gibbon.TargetInterp as TI
@@ -277,7 +277,7 @@ _case_copy =
 -- add1 example encoded as AST by hand
 
 add1_prog :: T.Prog
-add1_prog = T.Prog [build_tree, add1]
+add1_prog = T.Prog M.empty [build_tree, add1]
             (Just $ PrintExp $
              LetPrimCallT [("buf", T.CursorTy)] (T.NewBuffer BigInfinite) [] $
              LetPrimCallT [("buf2", T.CursorTy)] (T.NewBuffer BigInfinite) [] $
@@ -295,7 +295,7 @@ add1_prog = T.Prog [build_tree, add1]
         base_case, recursive_case :: Tail
 
         base_case =
-          LetPrimCallT [("tout1", T.CursorTy)] T.WriteInt [IntTriv 0, VarTriv "tout"] $
+          LetPrimCallT [("tout1", T.CursorTy)] (T.WriteScalar IntS) [IntTriv 0, VarTriv "tout"] $
           RetValsT [VarTriv "tout1"]
 
         recursive_case =
@@ -314,9 +314,9 @@ add1_prog = T.Prog [build_tree, add1]
       where
         leafCase =
           LetPrimCallT [("tout2",T.CursorTy)] WriteTag [TagTriv leafTag, VarTriv "tout"] $
-          LetPrimCallT [("n",T.IntTy),("t3",T.CursorTy)] T.ReadInt [VarTriv "t2"] $
+          LetPrimCallT [("n",T.IntTy),("t3",T.CursorTy)] (T.ReadScalar IntS) [VarTriv "t2"] $
           LetPrimCallT [("n1",T.IntTy)] AddP [VarTriv "n", IntTriv 1] $
-          LetPrimCallT [("tout3",T.CursorTy)] T.WriteInt [VarTriv "n1", VarTriv "tout2"] $
+          LetPrimCallT [("tout3",T.CursorTy)] (T.WriteScalar IntS) [VarTriv "n1", VarTriv "tout2"] $
           RetValsT [VarTriv "t3", VarTriv "tout3"]
 
         nodeCase =
