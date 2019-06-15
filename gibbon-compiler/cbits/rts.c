@@ -353,26 +353,71 @@ SymTy gensym() {
     return idx;
 }
 
-// -------------------------------------
-// Garbage collection
-// -------------------------------------
+void free_symtable() {
+    struct SymTable_elem *elt, *tmp;
+    HASH_ITER(hh, global_sym_table, elt, tmp) {
+        HASH_DEL(global_sym_table,elt);
+        free(elt);
+    }
+}
 
-/* Representation of regions at runtime:
+/*
 
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   | serialized data ...... | size (int) | refcount (int/ptr) | outset (ptr) |
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+----------------------------------------
+Garbage collection
+----------------------------------------
+
+   Gibbon has "growing regions" i.e each logical region is backed by a doubly linked-list
+   of smaller chunks which grows as required. In addition to actual data, each chunk
+   stores some additional metadata (RegionFooter) -- to chain the chunks together in a list
+   and also for garbage collection. Representation of a footer at runtime:
+
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   serialized data | seq_no | size | refcount_ptr | outset_ptr | next_ptr | prev_ptr
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
    The metadata after the serialized data serves various purposes:
 
-   - size: Used during bounds checking to calculate the size of the next region in the linked list.
+   - next_ptr / prev_ptr: Point to the next and previous chunk respectively.
+
+   - seq_no: The index of this particular chunk in the list.
+
+   - size: Used during bounds checking to calculate the size of the next region in
+     the linked list.
 
    - refcount and outset: Whenever an inter-region indirection is created, we record that information
-     using these two fields. Consier an example where we create an indirection from region A that points to
-     something in region B. Then A's outset will have that pointer in it, and B's refcount will be bumped
-     by 1. Note that the refcount doesn't necessarily have to be an `int` for every chunk of the region
-     (when using "infinite-regions"). The first chunk in the chain has the actual refcount, and every other
-     chunk has a reference to it.
+     using these two fields. Suppose we have an indirection from region A that points to some chunk
+     in region B. Then A's outset will store a pointer to that chunk's footer, and B's refcount will
+     be bumped by 1. Note that all there's only 1 refcount cell, and 1 outset per logical region,
+     and chunks only store a pointer to them.
+
+
+There are two ways in which a region may be freed:
+
+(1) Whenever it goes out of scope
+
+  The RTS tries to free a region whenever it goes out of scope. But this doesn't always succeed as
+  regions sometimes contain values that "escape". One reason why this'll happen is if there's an
+  indirection from A->B, and A lives longer than B. (CSK: do we have a program to test this?).
+  In such a case, when B goes out of scope it's refcount won't be 0, and the RTS won't free it.
+  This brings us to (2).
+
+(2)
+
+  When the RTS successfully frees a region, it decrements the refcounts of all the regions it
+  points to (via the outset). At the same time, if it encounters a region in the outset whoose
+  refcount becomes 0 after the decrement, it calls free_region on that. This way we can be sure
+  that all regions will eventually be garbage collected before the program exits.
+
+
+
+Why is it a doubly linked-list?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Due to way that bounds-checking works, the pointers in the outset may actually point to any
+arbitrary chunk in the chain. However, we want call free_region on the first one to ensure that
+all of them are GC'd. So we need pointers to traverse backward get to the first one.
+'trav_to_first_chunk' accomplishes this.
 
  */
 
@@ -543,10 +588,7 @@ void free_region(CursorTy end_reg) {
             RegionFooter *elt_footer = (RegionFooter *) elt->ref;
             *(elt_footer->refcount_ptr) = *(elt_footer->refcount_ptr) - 1;
             if (*(elt_footer->refcount_ptr) == 0) {
-                // Due to way that bounds-checking works, elt->ref may actually
-                // point to any arbitrary chunk in the chain. However, we want
-                // call free_region on the first one to ensure that all of them
-                // are GC'd. trav_to_first_chunk accomplishes that.
+                // See [Why is it a doubly linked-list?] above
                 RegionFooter *first_chunk = trav_to_first_chunk(elt_footer);
                 if (first_chunk != NULL) {
                     free_region(first_chunk);
