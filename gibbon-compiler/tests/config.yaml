@@ -241,10 +241,13 @@ tests:
     dir: examples/poly
     answer-file: examples/poly/PolyTree.ans
 
+- name: TupleTest.hs
+    dir: examples/poly
+    answer-file: examples/poly/TupleTest.ans
+
   - name: AnonLambdas.hs
     dir: examples/poly
     answer-file: examples/poly/AnonLambdas.ans
-    failing: [gibbon1, gibbon2]
 
   - name: CurriedFns.hs
     dir: examples/poly
