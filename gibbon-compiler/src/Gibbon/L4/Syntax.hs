@@ -234,6 +234,7 @@ data Prim
 
     | Gensym
 
+    | FreeSymTable
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data FunDecl = FunDecl

@@ -417,12 +417,28 @@ generateBind toplevel env decl exp2 =
                 Nothing -> newMetaTy
                 Just (ForAll _ ty) -> pure ty
       pure $ l$ LetE (w, [], ty', rhs') exp2
-    PatBind _ not_var _ _ -> error $ "desugarExp: Only variable bindings are allowed in let."
-                                     ++ "(found: "++ prettyPrint not_var ++ ")"
+    PatBind _ (PTuple _ Boxed pats) (UnGuardedRhs _ rhs) Nothing -> do
+      rhs' <- desugarExp toplevel rhs
+      w <- gensym "tup"
+      ty' <- newMetaTy
+      let tupexp e = l$ LetE (w,[],ty',rhs') e
+      prjexp <- generateTupleProjs toplevel env (zip pats [0..]) (l$ VarE w) exp2
+      pure $ tupexp prjexp
     FunBind{} -> do (name,args,ty,bod) <- desugarFun toplevel env decl
                     pure $ l$ LetE (name,[], tyFromScheme ty, l$ Ext $ LambdaE (zip args (inTys ty)) bod) exp2
     oth -> error ("desugarExp: Unsupported pattern: " ++ prettyPrint oth)
 
+generateTupleProjs :: (Show a, Pretty a) => TopTyEnv -> TopTyEnv -> [(Pat a,Int)] -> L Exp0 -> L Exp0 -> PassM (L Exp0)
+generateTupleProjs toplevel env ((PVar _ v,n):pats) tup exp2 = do
+    let w = toVar (nameToStr v)
+    ty' <- case M.lookup w env of
+             Nothing -> newMetaTy
+             Just (ForAll _ ty) -> pure ty
+    let prjexp = l$ LetE (w,[],ty',l$ ProjE n tup) exp2
+    generateTupleProjs toplevel env pats tup prjexp
+generateTupleProjs _toplevel _env [] _tup exp2 =
+    pure exp2
+generateTupleProjs _ _ _ _ _ = error "generateTupleProjs: Pattern not handled."
 
 desugarConstr :: (Show a,  Pretty a) => QualConDecl a -> (DataCon,[(IsBoxed, Ty0)])
 desugarConstr qdecl =

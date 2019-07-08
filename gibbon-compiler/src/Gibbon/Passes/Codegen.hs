@@ -127,14 +127,13 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
         return ((L.nub $ makeStructs (uniqueDicts $ S.toList $ harvestStructTys prg)) ++ prots ++ funs' ++ [main_expr'])
 
       main_expr :: PassM C.Definition
-      main_expr =
-        case mtal of
-          Just (PrintExp t) -> do
-            t' <- codegenTail t (codegenTy IntTy)
-            let t'' = makeSymTable ++ t'
-            return $ C.FuncDef [cfun| void __main_expr() { $items:t'' } |] noLoc
-          _ ->
-            return $ C.FuncDef [cfun| void __main_expr() { return; } |] noLoc
+      main_expr = do
+        e <- case mtal of
+               -- [2019.06.13]: CSK, Why is codegenTail always called with IntTy?
+               Just (PrintExp t) -> codegenTail t (codegenTy IntTy)
+               _ -> pure []
+        let bod = mkSymTable ++ e
+        pure $ C.FuncDef [cfun| void __main_expr() { $items:bod } |] noLoc
 
       codegenFun' :: FunDecl -> PassM C.Func
       codegenFun' (FunDecl nam args ty tal _) =
@@ -162,8 +161,8 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
              prot <- makeProt fun (isPure fd)
              return (C.DecDef prot noLoc, C.FuncDef fun noLoc)
 
-      makeSymTable :: [C.BlockItem]
-      makeSymTable =
+      mkSymTable :: [C.BlockItem]
+      mkSymTable =
         map
           (\(k,v) -> C.BlockStm [cstm| add_symbol($k, $v); |])
           (M.toList sym_tbl)
@@ -593,6 +592,8 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                  Gensym  -> do
                    let [(outV,SymTy)] = bnds
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy SymTy) $id:outV = gensym(); |] ]
+
+                 FreeSymTable -> return [C.BlockStm [cstm| free_symtable(); |]]
 
                  oth -> error$ "FIXME: codegen needs to handle primitive: "++show oth
        return $ pre ++ bod'
