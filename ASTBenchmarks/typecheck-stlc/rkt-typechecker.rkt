@@ -1,7 +1,7 @@
 #lang gibbon
 
 ;; use structs/data instead of sexp
-(provide typecheck-expr
+(provide typecheck-expr test-typecheck Expr
          Int_ Bool_ Lamt NullT P S N B Begin Lam App Null
 	 CONSEXPR NULLEXPR CONSPARAM NULLPARAM CONSTYPE NULLTYPE)
 
@@ -36,36 +36,33 @@
       [Lam ListParam Expr]
       [App Expr ListExpr])
 
-(define (extend-env [a : Arena] [e : (SymDict a Type)] [sym : Sym] [type : Type]) : (SymDict a Type)
+(define (extend-env [a : Arena] [e : (SymDict Type)] [sym : Sym] [type : Type]) : (SymDict Type)
   (insert a e sym (ann type Type)))
 
-(define (lookup-env [a : Arena] [e : (SymDict a Type)] [sym : Sym]) : Type
+(define (lookup-env [a : Arena] [e : (SymDict Type)] [sym : Sym]) : Type
   (ann (lookup e sym) Type))
 
-(define (typecheck-begin [exprs : ListExpr] [a : Arena] [env : (SymDict a Type)]) : Type
+(define (typecheck-begin [exprs : ListExpr] [a : Arena] [env : (SymDict Type)]) : Type
   (case exprs
     [(CONSEXPR e rest)
      (case rest
-    [(CONSEXPR e2 rest2)
-     (let ([t : Type (typecheck e a env)])
-      (inner-begin-check t rest a env))]
-    [(NULLEXPR)
-      (typecheck e a env)])]
+      [(CONSEXPR e2 rest2)
+       (let ([t : Type (typecheck e a env)])
+	 (case t
+	   [(NullT) (typecheck-begin rest a env)]
+	   [(Int_) (typecheck-begin rest a env)]
+	   [(Bool_) (typecheck-begin rest a env)]
+	   [(Lamt pt bt) (typecheck-begin rest a env)]
+	   [(Fail) (Fail)]))]
+      [(NULLEXPR)
+       (typecheck e a env)])]
     [(NULLEXPR)
      (Fail)]))
 
-(define (inner-begin-check [t : Type] [rest : ListExpr] [a : Arena] [env : (SymDict a Type)]) : Type
-   (case t
-     [(NullT) (typecheck-begin rest a env)]
-     [(Int_) (typecheck-begin rest a env)]
-     [(Bool_) (typecheck-begin rest a env)]
-     [(Lamt pt bt) (typecheck-begin rest a env)]
-     [(Fail) (Fail)]))
-
-(define (lam-extend-env [params : ListParam] [a : Arena] [env : (SymDict a Type)]) : (SymDict a Type)
+(define (lam-extend-env [params : ListParam] [a : Arena] [env : (SymDict Type)]) : (SymDict Type)
   (case params
     [(CONSPARAM param rest)
-     (let ([nenv : (SymDict a Type) (case param
+     (let ([nenv : (SymDict Type) (case param
        	  	            	    [(P e t)
         		  	     (case e
 	 		 	       [(S sym)
@@ -123,7 +120,7 @@
        [(Fail) False])]
     [(Fail) False]))
         
-(define (params-args-equal? [ptypes : ListType] [args : ListExpr] [a : Arena] [env : (SymDict a Type)]) : Bool
+(define (params-args-equal? [ptypes : ListType] [args : ListExpr] [a : Arena] [env : (SymDict Type)]) : Bool
   (case ptypes
     [(NULLTYPE)
      (case args
@@ -149,7 +146,7 @@
   (case param
     [(P e t) t]))
 
-(define (typecheck [expr : Expr] [a : Arena] [env : (SymDict a Type)] ): Type
+(define (typecheck [expr : Expr] [a : Arena] [env : (SymDict Type)] ): Type
   (case expr
     [(Null)
      (NullT)]
@@ -172,7 +169,7 @@
             (Fail))])]))
 
 (define (typecheck-expr [expr : Expr]) : Type
-  (letarena a (typecheck expr a (ann (empty-dict a) (SymDict a Type)))))
+  (letarena a (typecheck expr a (ann (empty-dict a) (SymDict Type)))))
 
 (define (test-typecheck [e : Expr]) : Int
   (case (typecheck-expr e)

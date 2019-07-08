@@ -6,7 +6,7 @@
          for/list for/fold or and
          Vector vector vector-ref
          eqsym list and empty? error
-         par letarena
+         par letarena Arena
          = Listof True False
          sym-append
 
@@ -130,7 +130,7 @@ lit := int | #t | #f
   (hash-has-key? ht key))
 
 (define-syntax-rule (letarena v e)
-  (let ([v (void)]) e))
+  (let ([v 0]) e))
 
 (define-syntax-rule (time e)
   (let-values ([(ls cpu real gc) (time-apply (lambda () e) '())])
@@ -175,6 +175,7 @@ lit := int | #t | #f
 (define-type Sym Symbol)
 (define-type Bool Boolean)
 (define-type Float Flonum)
+(define-type Arena Int)
 (define-type (SymDict t) (HashTable Symbol t))
 
 (define-values (prop:pack pack? pack-ref) (make-struct-type-property 'pack))
@@ -267,16 +268,16 @@ lit := int | #t | #f
 
 ;; [2019.02.17] CSK: This breaks countnodes_racket.rkt. Temporary, I don't know how to fix this atm.
 ;;
-;; (match (current-command-line-arguments)
-;;   [(vector s i) (size-param  (cast (string->number s) Int))
-;;                 (iters-param (cast (string->number i) Integer))
-;;                 ;(printf "SIZE: ~a\n" (size-param))
-;;                 #;(printf "ITERS: ~a\n" (iters-param))]
-;;   [(vector s)   (size-param  (cast (string->number s) Int))
-;;                 #;(printf "SIZE: ~a\n" (size-param))]
-;;   [(vector)     (void)]
-;;   [args (error (format "Usage error.\nExpected 0-2 optional command line arguments <size> <iters>, got ~a:\n  ~a"
-;;                        (vector-length args) args))])
+ (match (current-command-line-arguments)
+   [(vector s i) (size-param  (cast (string->number s) Int))
+                 (iters-param (cast (string->number i) Integer))
+                 ;(printf "SIZE: ~a\n" (size-param))
+                 #;(printf "ITERS: ~a\n" (iters-param))]
+   [(vector s)   (size-param  (cast (string->number s) Int))
+                 #;(printf "SIZE: ~a\n" (size-param))]
+   [(vector)     (void)]
+   [args (error (format "Usage error.\nExpected 0-2 optional command line arguments <size> <iters>, got ~a:\n  ~a"
+                        (vector-length args) args))])
 
 (module reader syntax/module-reader
   gibbon)

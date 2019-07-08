@@ -66,6 +66,8 @@ data E3Ext loc dec =
   | WriteCursor Var (L (PreExp E3Ext loc dec)) -- ^ Write a cursor, and return a cursor
   | BumpRefCount Var Var           -- ^ Given an end-of-region ptr, bump it's refcount.
                                    --   Return the updated count (optional).
+  | BumpArenaRefCount Var Var      -- ^ Given an arena and end-of-region ptr, add a
+                                   --   reference from the arena to the region
   | NullCursor                     -- ^ Constant null cursor value (hack?).
                                    --   Used for dict lookup, which returns a packed value but
                                    --   no end witness.

@@ -749,6 +749,10 @@ See [Hacky substitution to encode ParE].
       T.LetPrimCallT [] T.BumpRefCount [T.VarTriv end_r1, T.VarTriv end_r2] <$>
         tail sym_tbl bod
 
+    LetE (_, _, _, L _ (Ext (BumpArenaRefCount ar end_r))) bod ->
+      T.LetPrimCallT [] T.BumpArenaRefCount [T.VarTriv ar, T.VarTriv end_r] <$>
+        tail sym_tbl bod
+
     LetE (v, _, _, L _ (Ext NullCursor)) bod ->
       T.LetTrivT (v,T.CursorTy,T.IntTriv 0) <$> tail sym_tbl bod
 

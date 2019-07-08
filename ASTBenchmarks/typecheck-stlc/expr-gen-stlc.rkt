@@ -1,7 +1,7 @@
 #lang racket
 
 (require "s-exp-stlc.rkt"
-	 (except-in "typechecker.gib" typecheck-expr)
+	 (except-in "rkt-typechecker.rkt" typecheck-expr)
          racket/random)
 
 (provide gen-well-formed-sexp)
