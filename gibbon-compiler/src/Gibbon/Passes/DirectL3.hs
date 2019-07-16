@@ -23,7 +23,7 @@ directL3 (Prog ddfs fndefs mnExp) = do
     fd :: FunDef1 -> FunDef3
     fd FunDef{funName,funArgs,funTy,funBody} =
         FunDef { funName = funName
-               , funTy   = funTy
+               , funTy   = (map goTy $ fst funTy, goTy $ snd funTy)
                , funArgs = funArgs
                , funBody = go funBody }
 
@@ -35,7 +35,7 @@ directL3 (Prog ddfs fndefs mnExp) = do
         LitSymE v -> LitSymE v
         AppE v locs ls   -> AppE v locs $ map go ls
         PrimAppE pr args -> PrimAppE pr $ L.map go args
-        LetE (v,locs,ty,rhs) bod -> LetE (v, locs, ty, go rhs) $ go bod
+        LetE (v,locs,ty,rhs) bod -> LetE (v, locs, goTy ty, go rhs) $ go bod
         IfE a b c   -> IfE (go a) (go b) (go c)
         MkProdE ls  -> MkProdE $ L.map go ls
         ProjE i arg -> ProjE i $ go arg
@@ -47,3 +47,17 @@ directL3 (Prog ddfs fndefs mnExp) = do
         Ext _   -> error "directL3: Ext"
         MapE{}  -> error "directL3: todo MapE"
         FoldE{} -> error "directL3: todo FoldE"
+
+    goTy :: Ty1 -> Ty3
+    goTy ty =
+      case ty of
+        IntTy -> IntTy
+        SymTy -> SymTy
+        BoolTy -> BoolTy
+        ProdTy tys -> ProdTy $ map goTy tys
+        SymDictTy mv _ty -> SymDictTy mv CursorTy
+        PackedTy _ _ -> CursorTy
+        ArenaTy -> ArenaTy
+        ListTy _ -> error "directL3: todo ListTy"
+        PtrTy -> PtrTy
+        CursorTy -> CursorTy

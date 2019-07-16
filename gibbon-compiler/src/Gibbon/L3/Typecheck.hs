@@ -156,7 +156,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
 
           subFunInTys = L.map (subDictTy arMap) funInTys
           subFunOutTy = subDictTy arMap funRetTy
-      _ <- mapM (\(a,b) -> ensureEqualTy exp a b) (zip subFunInTys argTys)
+      _ <- mapM (\(a,b) -> ensureEqualTyModCursor exp a b) (zip subFunInTys argTys)
       return subFunOutTy
 
     PrimAppE pr es -> do
@@ -300,10 +300,11 @@ tcExp isPacked ddfs env exp@(L p ex) =
       tyAlt   <- go alt
 
       -- _ <- ensureEqualTy exp tyConsq tyAlt
-      if tyConsq == tyAlt
-      then return tyConsq
-      else throwError $ GenericTC ("If branches have mismatched types:"
-                                   ++ sdoc tyConsq ++ ", " ++ sdoc tyAlt) exp
+      -- if tyConsq == tyAlt
+      -- then return tyConsq
+      -- else throwError $ GenericTC ("If branches have mismatched types:"
+      --                              ++ sdoc tyConsq ++ ", " ++ sdoc tyAlt) exp
+      ensureEqualTyModCursor exp tyConsq tyAlt
 
     MkProdE [] -> return CursorTy -- AUDIT: null is a cursor?
 
@@ -336,7 +337,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
       then throwError $ GenericTC ("Invalid argument length: " ++ sdoc es) exp
       else do
         -- Check if arguments match with expected datacon types
-        sequence_ [ ensureEqualTy e ty1 ty2
+        sequence_ [ ensureEqualTyModCursor e ty1 ty2
                   | (ty1,ty2,e) <- zip3 args tys es]
         return $ PackedTy dcTy loc
 
@@ -406,7 +407,7 @@ tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
           res = runExcept $ tcExp isPacked ddefs env' funBody
       case res of
         Left err -> error $ sdoc err
-        Right ty -> if ty == outty
+        Right ty -> if ty `compareModCursor` outty
                     then return ()
                     else error $ "Expected type " ++ (sdoc outty)
                          ++ " and got type " ++ (sdoc ty) ++ "\n" ++ (sdoc funBody)
@@ -420,14 +421,14 @@ tcCases :: (Eq l, Out l, FunctionTy (UrTy l)) => Bool -> DDefs (UrTy l) -> Env2 
 tcCases isPacked ddfs env cs = do
   tys <- forM cs $ \(c,args',rhs) -> do
            let args  = L.map fst args'
-               targs = lookupDataCon ddfs c
+               targs = map packedToCursor $ lookupDataCon ddfs c
                env'  = extendEnv env (zip args targs)
            tcExp isPacked ddfs env' rhs
-  foldM_ (\acc (ex,ty) ->
-            if ty == acc
-            then return acc
-            else throwError $ GenericTC ("Case branches have mismatched types: "
-                                         ++ sdoc acc ++ ", " ++ sdoc ty) ex)
+  foldM_ (\acc (ex,ty) -> ensureEqualTyModCursor ex ty acc)
+            -- if ty == acc
+            -- then return acc
+            -- else throwError $ GenericTC ("Case branches have mismatched types: "
+            --                              ++ sdoc acc ++ ", " ++ sdoc ty) ex)
          (head tys) (zipWith (\ty (_,_,ex) -> (ex,ty)) tys cs)
   return $ head tys
 
@@ -449,7 +450,18 @@ ensureEqual exp str a b = if a == b
 ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
                                          ++ (sdoc a) ++ ", " ++ (sdoc b)) a b
 
+ensureEqualTyModCursor _exp CursorTy (PackedTy _ _) = return CursorTy
+ensureEqualTyModCursor _exp (PackedTy _ _) CursorTy = return CursorTy
+ensureEqualTyModCursor exp a b = ensureEqualTy exp a b
 
+packedToCursor (PackedTy _ _) = CursorTy
+packedToCursor (ProdTy tys) = ProdTy $ map packedToCursor tys
+packedToCursor ty = ty
+
+compareModCursor CursorTy (PackedTy _ _) = True
+compareModCursor (PackedTy _ _) CursorTy = True
+compareModCursor ty1 ty2 = ty1 == ty2
+                                 
 ensureEqualTyNoLoc exp t1 t2 =
   case (t1,t2) of
     (SymDictTy _ _ty1, SymDictTy _ _ty2) -> return t1

@@ -219,7 +219,12 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
       e1' <- freshExp venv tvenv' e1
       v'  <- gensym (cleanFunName v)
       e2' <- freshExp (M.insert v v' venv) tvenv e2
-      return $ LetE (v',[],ty',e1') e2'
+      ty'' <- case ty' of
+                SymDictTy (Just v) ty -> case M.lookup v venv of
+                                           Nothing -> return ty'
+                                           Just v' -> return $ SymDictTy (Just v') ty
+                _ -> return ty'
+      return $ LetE (v',[],ty'',e1') e2'
 
     IfE e1 e2 e3 -> do
       e1' <- go e1

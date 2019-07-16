@@ -638,6 +638,14 @@ See [Hacky substitution to encode ParE].
       pure $ T.ErrT str
 
     -- Whatever... a little just-in-time flattening.  Should obsolete this:
+    PrimAppE (DictEmptyP ty) ((L sl (VarE v)):ls) -> do
+      tmp <- gensym $ toVar "flt"
+      tail sym_tbl (l$ LetE (tmp, [], SymDictTy (Just v) ty, l$ PrimAppE (DictEmptyP ty) ((L sl (VarE v)):ls)) (l$ VarE tmp))
+
+    PrimAppE (DictInsertP ty) ((L sl (VarE v)):ls) -> do
+      tmp <- gensym $ toVar "flt"
+      tail sym_tbl (l$ LetE (tmp, [], SymDictTy (Just v) ty, l$ PrimAppE (DictInsertP ty) ((L sl (VarE v)):ls)) (l$ VarE tmp))
+           
     PrimAppE p ls -> do
       tmp <- gensym $ toVar "flt"
       tail sym_tbl (l$ LetE (tmp, [], primRetTy p, l$ PrimAppE p ls) (l$ VarE tmp))
@@ -761,7 +769,7 @@ See [Hacky substitution to encode ParE].
 
     ---------------------
     -- (3) Proper primapps.
-    LetE (v,_,t, L _ (PrimAppE p ls)) bod ->
+    LetE (v,_,t, L _ (PrimAppE p ls)) bod -> dbgTraceIt ("lower: " ++ show v ++ " : " ++ show t) $
         -- No tuple-valued prims here:
         T.LetPrimCallT [(v,typ t)]
              (prim p)
@@ -882,7 +890,7 @@ triv sym_tbl msg (L _ e0) =
                          "\nMessage: "++msg
     _ -> error $ "lower/triv, expected trivial in "++msg++", got "++sdoc e0
 
-typ :: UrTy a -> T.Ty
+typ :: UrTy () -> T.Ty
 typ t =
   case t of
     IntTy  -> T.IntTy
@@ -891,12 +899,14 @@ typ t =
     ListTy{} -> error "lower/typ: FinishMe: List types"
     ProdTy xs -> T.ProdTy $ L.map typ xs
     SymDictTy (Just var) x -> T.SymDictTy var $ typ x
-    SymDictTy Nothing _ -> error "lower/typ: Expected arena annotation"
+    SymDictTy Nothing _ty -> error $ "lower/typ: Expected arena annotation on type: " ++ (sdoc t)
     -- t | isCursorTy t -> T.CursorTy
     PackedTy{} -> T.PtrTy
     CursorTy -> T.CursorTy -- Audit me
     PtrTy -> T.PtrTy
     ArenaTy -> T.ArenaTy
+
+typ' str t = dbgTraceIt str $ typ t
 
 prim :: Prim Ty3 -> T.Prim
 prim p =

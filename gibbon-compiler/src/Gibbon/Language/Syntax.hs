@@ -554,6 +554,8 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
       LitE _       -> IntTy
       LitSymE _    -> SymTy
       AppE v _ _   -> outTy $ fEnv env2 # v
+      PrimAppE (DictInsertP ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) $ stripTyLocs ty
+      PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) $ stripTyLocs ty                      
       PrimAppE p _ -> primRetTy p
 
       LetE (v,_,t,_) e -> gRecoverType ddfs (extendVEnv v t env2) e

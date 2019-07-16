@@ -45,15 +45,18 @@
 (define (typecheck-begin [exprs : ListExpr] [a : Arena] [env : (SymDict a Type)]) : Type
   (case exprs
     [(CONSEXPR e rest)
-     (case rest
+     (inner-begin-cons e rest a env)]
+    [(NULLEXPR)
+     (Fail)]))
+
+(define (inner-begin-cons [e : Expr] [rest : ListExpr] [a : Arena] [env : (SymDict a Type)]) : Type
+  (case rest
     [(CONSEXPR e2 rest2)
      (let ([t : Type (typecheck e a env)])
       (inner-begin-check t rest a env))]
     [(NULLEXPR)
-      (typecheck e a env)])]
-    [(NULLEXPR)
-     (Fail)]))
-
+      (typecheck e a env)]))
+     
 (define (inner-begin-check [t : Type] [rest : ListExpr] [a : Arena] [env : (SymDict a Type)]) : Type
    (case t
      [(NullT) (typecheck-begin rest a env)]
@@ -126,16 +129,22 @@
 (define (params-args-equal? [ptypes : ListType] [args : ListExpr] [a : Arena] [env : (SymDict a Type)]) : Bool
   (case ptypes
     [(NULLTYPE)
-     (case args
-      [(CONSEXPR e rest) False]
-      [(NULLEXPR) True])]
+     (params-args-inner-null args)]
     [(CONSTYPE t rest)
-     (case args
-       [(CONSEXPR e rest2)
-        (if (type-equal? t (typecheck e a env))
-	    (params-args-equal? rest rest2 a env)
-	    False)]
-       [(NULLEXPR) False])]))
+     (params-args-inner-cons args t rest a env)]))
+
+(define (params-args-inner-cons [args : ListExpr] [t : Type] [rest : ListType] [a : Arena] [env : (SymDict a Type)]) : Bool
+  (case args
+    [(CONSEXPR e rest2)
+      (if (type-equal? t (typecheck e a env))
+          (params-args-equal? rest rest2 a env)
+          False)]
+    [(NULLEXPR) False]))
+
+(define (params-args-inner-null [args : ListExpr]) : Bool
+  (case args
+    [(CONSEXPR e rest) False]
+    [(NULLEXPR) True]))
 
 (define (getParamTypes [params : ListParam]) : ListType
   (case params

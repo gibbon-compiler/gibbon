@@ -288,13 +288,15 @@ arrowTysInTy = go []
 -- ¯\_(ツ)_/¯
 --
 recoverType :: DDefs0 -> Env2 Ty0 -> L Exp0 -> Ty0
-recoverType ddfs env2 (L _ ex)=
+recoverType ddfs env2 (L _ ex) = 
   case ex of
     VarE v       -> M.findWithDefault (error $ "recoverType: Unbound variable " ++ show v) v (vEnv env2)
     LitE _       -> IntTy
     LitSymE _    -> IntTy
     AppE v _ _   -> outTy $ fEnv env2 # v
-    PrimAppE p _ -> primRetTy1 p
+    -- PrimAppE (DictInsertP ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty
+    -- PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty
+    PrimAppE p exs -> dbgTraceIt ("recovertype/primapp: " ++ show p ++ " " ++ show exs) $ primRetTy1 p
     LetE (v,_,t,_) e -> recoverType ddfs (extendVEnv v t env2) e
     IfE _ e _        -> recoverType ddfs env2 e
     MkProdE es       -> ProdTy $ map (recoverType ddfs env2) es
