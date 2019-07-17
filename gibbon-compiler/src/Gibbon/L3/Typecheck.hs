@@ -34,36 +34,36 @@ tcExp isPacked ddfs env exp@(L p ex) =
         -- One cursor in, (int, cursor') out
         ReadScalar s v -> do
           vty <- lookupVar env v exp
-          ensureEqualTy exp vty CursorTy
+          ensureEqualTyModCursor exp vty CursorTy
           return $ ProdTy [scalarToTy s, CursorTy]
 
         -- Write int at cursor, and return a cursor
         WriteScalar s v rhs -> do
           vty  <- lookupVar env v exp
           vrhs <- go rhs
-          ensureEqualTy exp vty CursorTy
-          ensureEqualTy exp vrhs (scalarToTy s)
+          ensureEqualTyModCursor exp vty CursorTy
+          ensureEqualTyModCursor exp vrhs (scalarToTy s)
           return CursorTy
 
         -- Add a constant offset to a cursor variable
         AddCursor v rhs -> do
           vty  <- lookupVar env v exp
-          ensureEqualTy exp vty CursorTy
+          ensureEqualTyModCursor exp vty CursorTy
           vrhs <- go rhs
-          ensureEqualTy exp vrhs IntTy
+          ensureEqualTyModCursor exp vrhs IntTy
           return CursorTy
 
         -- One cursor in, (tag,cursor) out
         -- QUESTION: what should be the type of the tag ?  It's just an Int for now
         ReadTag v -> do
           vty  <- lookupVar env v exp
-          ensureEqualTy exp vty CursorTy
+          ensureEqualTyModCursor exp vty CursorTy
           return $ ProdTy [IntTy, CursorTy]
 
         -- Write Tag at Cursor, and return a cursor
         WriteTag _dcon v -> do
           vty  <- lookupVar env v exp
-          ensureEqualTy exp vty CursorTy
+          ensureEqualTyModCursor exp vty CursorTy
           return CursorTy
 
         -- Create a new buffer, and return a cursor
@@ -79,43 +79,43 @@ tcExp isPacked ddfs env exp@(L p ex) =
         -- Takes in start and end cursors, and returns an Int
         SizeOfPacked start end -> do
           sty  <- lookupVar env start exp
-          ensureEqualTy exp sty CursorTy
+          ensureEqualTyModCursor exp sty CursorTy
           ety  <- lookupVar env end exp
-          ensureEqualTy exp ety CursorTy
+          ensureEqualTyModCursor exp ety CursorTy
           return IntTy
 
         -- Takes in a variable, and returns an Int
         SizeOfScalar v -> do
           sty <- lookupVar env v exp
           -- ASSUMPTION: Int is the only scalar value right now
-          ensureEqualTy exp sty IntTy
+          ensureEqualTyModCursor exp sty IntTy
           return IntTy
 
         -- The IntTy is just a placeholder. BoundsCheck is a side-effect
         BoundsCheck _ bound cur -> do
           rty <- lookupVar env bound exp
-          ensureEqualTy exp rty CursorTy
+          ensureEqualTyModCursor exp rty CursorTy
           cty <- lookupVar env cur exp
-          ensureEqualTy exp cty CursorTy
+          ensureEqualTyModCursor exp cty CursorTy
           return IntTy
 
         ReadCursor v -> do
           vty <- lookupVar env v exp
-          ensureEqualTy exp vty CursorTy
+          ensureEqualTyModCursor exp vty CursorTy
           return $ ProdTy [CursorTy, CursorTy]
 
         WriteCursor cur val -> do
           curty  <- lookupVar env cur exp
-          ensureEqualTy exp curty CursorTy
+          ensureEqualTyModCursor exp curty CursorTy
           valty <- go val
-          ensureEqualTy exp valty CursorTy
+          ensureEqualTyModCursor exp valty CursorTy
           return CursorTy
 
         BumpRefCount end_r1 end_r2 -> do
           end_r1_ty  <- lookupVar env end_r1 exp
-          ensureEqualTy exp end_r1_ty CursorTy
+          ensureEqualTyModCursor exp end_r1_ty CursorTy
           end_r2_ty  <- lookupVar env end_r2 exp
-          ensureEqualTy exp end_r2_ty CursorTy
+          ensureEqualTyModCursor exp end_r2_ty CursorTy
           return IntTy
 
         NullCursor -> return CursorTy
@@ -173,20 +173,20 @@ tcExp isPacked ddfs env exp@(L p ex) =
 
           bool_ops = do
             len2
-            _ <- ensureEqualTy (es !! 0) BoolTy (tys !! 0)
-            _ <- ensureEqualTy (es !! 1) BoolTy (tys !! 1)
+            _ <- ensureEqualTyModCursor (es !! 0) BoolTy (tys !! 0)
+            _ <- ensureEqualTyModCursor (es !! 1) BoolTy (tys !! 1)
             pure BoolTy
 
           int_ops = do
             len2
-            _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
-            _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+            _ <- ensureEqualTyModCursor (es !! 0) IntTy (tys !! 0)
+            _ <- ensureEqualTyModCursor (es !! 1) IntTy (tys !! 1)
             pure IntTy
 
           int_cmps = do
             len2
-            _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
-            _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+            _ <- ensureEqualTyModCursor (es !! 0) IntTy (tys !! 0)
+            _ <- ensureEqualTyModCursor (es !! 1) IntTy (tys !! 1)
             pure BoolTy
       case pr of
         MkTrue  -> mk_bools
@@ -209,8 +209,8 @@ tcExp isPacked ddfs env exp@(L p ex) =
 
         EqSymP -> do
           len2
-          _ <- ensureEqualTy (es !! 0) SymTy (tys !! 0)
-          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
+          _ <- ensureEqualTyModCursor (es !! 0) SymTy (tys !! 0)
+          _ <- ensureEqualTyModCursor (es !! 1) SymTy (tys !! 1)
           return BoolTy
 
         RandP -> return IntTy
@@ -221,14 +221,14 @@ tcExp isPacked ddfs env exp@(L p ex) =
 
         SymAppend -> do
           len2
-          _ <- ensureEqualTy (es !! 0) SymTy (tys !! 0)
-          _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+          _ <- ensureEqualTyModCursor (es !! 0) SymTy (tys !! 0)
+          _ <- ensureEqualTyModCursor (es !! 1) IntTy (tys !! 1)
           return SymTy
 
         DictEmptyP _ty -> do
           len1
           let [a] = tys
-          _ <- ensureEqualTy exp ArenaTy a
+          _ <- ensureEqualTyModCursor exp ArenaTy a
           let (L _ (VarE var)) = es !! 0
           return $ SymDictTy (Just var) CursorTy
 
@@ -236,22 +236,22 @@ tcExp isPacked ddfs env exp@(L p ex) =
           len4
           let [a,_d,k,v] = tys
           let (L _ (VarE var)) = es !! 0
-          _ <- ensureEqualTy exp ArenaTy a
-          _ <- ensureEqualTy exp SymTy k
-          _ <- ensureEqualTy exp CursorTy v
+          _ <- ensureEqualTyModCursor exp ArenaTy a
+          _ <- ensureEqualTyModCursor exp SymTy k
+          _ <- ensureEqualTyModCursor exp CursorTy v
           return $ SymDictTy (Just var) CursorTy
 
         DictLookupP _ty -> do
           len2
           let [_d,k] = tys
-          _ <- ensureEqualTy exp SymTy k
+          _ <- ensureEqualTyModCursor exp SymTy k
           return CursorTy
 
         DictHasKeyP _ty -> do
           len2
           let [_d,k] = tys
           -- _ <- ensureEqualTyNoLoc exp (SymDictTy ty) d
-          _ <- ensureEqualTy exp SymTy k
+          _ <- ensureEqualTyModCursor exp SymTy k
           return BoolTy
 
         ErrorP _str ty -> do
@@ -285,7 +285,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
                            exp
       -- Check RHS
       tyRhs <- go rhs
-      _ <- ensureEqualTy exp tyRhs ty
+      _ <- ensureEqualTyModCursor exp tyRhs ty
       let env' = extendEnv env [(v,ty)]
       -- Check body
       tcExp isPacked ddfs env' e
@@ -293,13 +293,13 @@ tcExp isPacked ddfs env exp@(L p ex) =
     IfE tst consq alt -> do
       -- Check if the test is a boolean
       tyTst <- go tst
-      _ <- ensureEqualTy exp tyTst BoolTy
+      _ <- ensureEqualTyModCursor exp tyTst BoolTy
 
       -- Check if both branches match
       tyConsq <- go consq
       tyAlt   <- go alt
 
-      -- _ <- ensureEqualTy exp tyConsq tyAlt
+      -- _ <- ensureEqualTyModCursor exp tyConsq tyAlt
       -- if tyConsq == tyAlt
       -- then return tyConsq
       -- else throwError $ GenericTC ("If branches have mismatched types:"
@@ -445,7 +445,7 @@ ensureEqual exp str a b = if a == b
 
 -- | Ensure that two types are equal.
 -- Includes an expression for error reporting.
--- ensureEqualTy :: (Eq l, Out l) => (L (PreExp e l (UrTy l))) -> (UrTy l) -> (UrTy l) ->
+-- ensureEqualTyModCursor :: (Eq l, Out l) => (L (PreExp e l (UrTy l))) -> (UrTy l) -> (UrTy l) ->
 --                  TcM (UrTy l) (L (PreExp e l (UrTy l)))
 ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
                                          ++ (sdoc a) ++ ", " ++ (sdoc b)) a b
