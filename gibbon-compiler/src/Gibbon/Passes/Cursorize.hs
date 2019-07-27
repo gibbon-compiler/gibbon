@@ -266,7 +266,9 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
 
     ParE a b -> ParE <$> go a <*> go b
 
-    WithArenaE v e -> WithArenaE v <$> go e
+    WithArenaE v e -> do
+      e' <- cursorizeExp ddfs fundefs denv (M.insert v ArenaTy tenv) e
+      return $ WithArenaE v e'
 
     -- Eg. leftmost
     Ext ext ->
@@ -606,7 +608,7 @@ cursorizeAppE ddfs fundefs denv tenv (L _ ex) =
           numRegs = length (outRegVars fnTy) + length (inRegVars fnTy)
           -- Drop input locations, but keep everything else
           outs    = (L.take numRegs locs) ++  (L.drop numRegs $ L.drop (length inLocs) $ locs)
-          argTys  = map (gRecoverType ddfs (Env2 tenv M.empty)) args
+          argTys  = dbgTraceIt (unlines $ map show $ M.toList tenv) $ map (gRecoverType ddfs (Env2 tenv M.empty)) args
       args' <- mapM
                  (\(t,a) -> if hasPacked t
                             then fromDi <$> cursorizePackedExp ddfs fundefs denv tenv a

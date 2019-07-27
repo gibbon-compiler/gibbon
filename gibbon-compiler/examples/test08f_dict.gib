@@ -1,0 +1,15 @@
+#lang gibbon
+
+(data Foo (MkFoo Int))
+
+(define (look [s : Sym] [a : Arena] [d : (SymDict a Foo)]) : Foo
+  (ann (lookup d s) Foo))
+
+(letarena a
+  (let ([v : Int
+    (let ([d : (SymDict a Foo) (ann (empty-dict a) (SymDict a Foo))])
+      (let ([d2 : (SymDict a Foo) (insert a d (quote x) (ann (MkFoo 2) Foo))])
+        (let ([d3 : (SymDict a Foo) (insert a d2 (quote y) (ann (MkFoo 5) Foo))])
+          (case (look (quote y) a d3)
+	   [(MkFoo i) i]))))])
+  v))
