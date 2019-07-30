@@ -74,13 +74,18 @@ ghc_compat_prefix =
   text "" $+$
   text "-- Gibbon Prelude --" $+$
   text "" $+$
-  text "import Prelude as P ( (==), id, print" $+$
+  text "import Prelude as P ( (==), id, print, lookup, ($)" $+$
   text "                    , Int, (+), (-), (*), quot, (<), (>), (<=), (>=), (^), mod" $+$
   text "                    , Bool(..), (||), (&&)" $+$
+  text "                    , String, (++)" $+$
   text "                    , Show)" $+$
   text "" $+$
+  text "import Data.Maybe (fromJust, isJust)" $+$
   text "" $+$
-  text "type Sym = Int" $+$
+  text "" $+$
+  text "type Sym = String" $+$
+  text "" $+$
+  text "type Dict a = [(Sym,a)]" $+$
   text "" $+$
   text "timeit :: a -> a" $+$
   text "timeit = id" $+$
@@ -97,12 +102,19 @@ ghc_compat_prefix =
   text "mod :: Int -> Int -> Int" $+$
   text "mod = P.mod" $+$
   text "" $+$
-  text "-- We don't have a symbol table yet." $+$
   text "symAppend :: Sym -> Sym -> Sym" $+$
-  text "symAppend = (+)" $+$
+  text "symAppend = (++)" $+$
   text "" $+$
   text "sizeParam :: Int" $+$
   text "sizeParam = 4" $+$
+  text "" $+$
+  text "dictEmpty _a = []" $+$
+  text "" $+$
+  text "dictInsert _a d x v = (x,v):d" $+$
+  text "" $+$
+  text "dictLookup d k = fromJust $ lookup k d" $+$
+  text "" $+$
+  text "dictHaskey d k = isJust $ lookup k d" $+$
   text "" $+$
   text "-- Gibbon Prelude ends --" $+$
   text ""
@@ -148,12 +160,19 @@ instance (Pretty d, Ord d) => Pretty (Prim d) where
               Nothing  ->
                   let wty ty = text "<" <> pprintWithStyle sty ty <> text ">"
                   in
-                    case pr of
-                      DictEmptyP ty  -> text "DictEmpty"  <> wty ty
-                      DictHasKeyP ty -> text "DictHasKey" <> wty ty
-                      DictInsertP ty -> text "DictInsert" <> wty ty
-                      DictLookupP ty -> text "DictLookup" <> wty ty
-                      _ -> error $ "pprint: Unknown primitive"
+                    case sty of
+                      PPInternal -> case pr of
+                                      DictEmptyP ty  -> text "DictEmpty"  <> wty ty
+                                      DictHasKeyP ty -> text "DictHasKey" <> wty ty
+                                      DictInsertP ty -> text "DictInsert" <> wty ty
+                                      DictLookupP ty -> text "DictLookup" <> wty ty
+                                      _ -> error $ "pprint: Unknown primitive"
+                      PPHaskell  -> case pr of
+                                      DictEmptyP _ty  -> text "dictEmpty"
+                                      DictHasKeyP _ty -> text "dictHasKey"
+                                      DictInsertP _ty -> text "dictInsert"
+                                      DictLookupP _ty -> text "dictLookup"
+                                      _ -> error $ "pprint: Unknown primitive"                                      
               Just str -> text str
 
 
@@ -183,8 +202,12 @@ instance (Pretty l) => Pretty (UrTy l) where
           SymTy  -> text "Sym"
           BoolTy -> text "Bool"
           ProdTy tys    -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
-          SymDictTy (Just var) ty1 -> text "Dict" <+> pprintWithStyle sty var <+> pprintWithStyle sty ty1
-          SymDictTy Nothing ty1 -> text "Dict" <+> text "_" <+> pprintWithStyle sty ty1
+          SymDictTy (Just var) ty1 -> case sty of
+                                        PPHaskell  -> text "Dict" <+> pprintWithStyle sty ty1
+                                        PPInternal -> text "Dict" <+> pprintWithStyle sty var <+> pprintWithStyle sty ty1
+          SymDictTy Nothing ty1 -> case sty of
+                                     PPHaskell  ->text "Dict" <+> pprintWithStyle sty ty1
+                                     PPInternal -> text "Dict" <+> text "_" <+> pprintWithStyle sty ty1
           PackedTy tc loc ->
               case sty of
                 PPHaskell  -> text tc
@@ -192,7 +215,9 @@ instance (Pretty l) => Pretty (UrTy l) where
           ListTy ty1 -> brackets $ pprintWithStyle sty ty1
           PtrTy     -> text "Ptr"
           CursorTy  -> text "Cursor"
-          ArenaTy   -> text "Arena"
+          ArenaTy   -> case sty of
+                         PPHaskell  -> text "()"
+                         PPInternal -> text "Arena"
 
 -- Function type for L1 and L3
 instance Pretty ([UrTy ()], UrTy ()) where
@@ -230,7 +255,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
         case ex0 of
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
-          LitSymE v -> pprintWithStyle sty v
+          LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
           AppE v locs ls -> parens $
                              pprintWithStyle sty v <+>
                              (brackets $ hcat (punctuate "," (map pprint locs))) <+>
@@ -243,7 +268,9 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
 
                   _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprintWithStyle sty pr
 
-                  _ -> pprintWithStyle sty pr <> parens (hsep $ punctuate "," $ map (pprintWithStyle sty) es)
+                  _ -> case sty of
+                         PPHaskell  -> pprintWithStyle sty pr <+> hsep (punctuate " " $ map (pprintWithStyle sty) es)
+                         PPInternal -> pprintWithStyle sty pr <> parens (hsep $ punctuate "," $ map (pprintWithStyle sty) es)
 
           LetE (v,ls,ty,e1) e2 -> (text "let") <+>
                                   pprintWithStyle sty v <+> doublecolon <+>
@@ -281,7 +308,14 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                               -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
           TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
           ParE a b -> pprintWithStyle sty a <+> text "||" <+> pprintWithStyle sty b
-          WithArenaE v e -> text "letarena" <+> pprint v <+> text "in" $+$ pprint e
+          WithArenaE v e -> case sty of
+                              PPHaskell  -> (text "let") <+>
+                                            pprintWithStyle sty v <+> 
+                                            equals <+>
+                                            text "()" <+>
+                                            text "in" $+$
+                                            pprintWithStyle sty e
+                              PPInternal -> text "letarena" <+> pprint v <+> text "in" $+$ pprint e
           Ext ext -> pprintWithStyle sty ext
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{} -> error $ "Unexpected form in program: FoldE"
@@ -418,7 +452,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
       case ex0 of
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
-          LitSymE v -> pprintWithStyle sty v
+          LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
           AppE v locs ls -> pprintWithStyle sty v <+>
                             (if null locs
                              then empty
@@ -432,7 +466,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
 
                   _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprintWithStyle sty pr
 
-                  _ -> pprintWithStyle sty pr <> parens (hsep $ map (ppExp env2) es)
+                  _ -> pprintWithStyle sty pr <+> hsep (map (ppExp env2) es)
 
           -- See #111.
           LetE (v,_, ty@(ProdTy tys),e1) e2 ->
@@ -487,7 +521,13 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                               hsep (map (ppExp env2) es)
           TimeIt e _ty _b -> text "timeit" <+> parens (ppExp env2 e)
           ParE a b -> ppExp env2 a <+> text "||" <+> ppExp env2 b
-          WithArenaE v e -> text "letarena" <+> pprint v <+> text "in" $+$ ppExp env2 e
+          WithArenaE v e -> (text "let") <+>
+                            pprintWithStyle sty v <+>
+                            equals <+>
+                            text "()" <+>
+                            text "in" $+$
+                            ppExp env2 e
+          -- text "letarena" <+> pprint v <+> text "in" $+$ ppExp env2 e
           Ext{}  -> empty -- L1 doesn't have an extension.
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{}-> error $ "Unexpected form in program: FoldE"
