@@ -36,6 +36,7 @@ where
 
 import Control.DeepSeq (NFData(..), force)
 import Control.Exception (evaluate)
+import Control.Monad.Fail
 import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Data.Char
@@ -150,7 +151,10 @@ instance Out Pos where
 -- Gensym monad:
 
 newtype SyM a = SyM (State Int a)
- deriving newtype (Functor, Applicative, Monad, MonadState Int)
+  deriving newtype (Functor, Applicative, Monad, MonadState Int)
+
+instance MonadFail SyM where
+  fail = error
 
 -- | A fresh int.
 newUniq :: MonadState Int m => m Int
@@ -181,6 +185,9 @@ runSyM n (SyM a) = runState a n
 -- | The monad used by core Gibbon passes to access 'Config' and other shared state.
 newtype PassM a = PassM (ReaderT Config SyM a)
   deriving newtype (Functor, Applicative, Monad, MonadReader Config, MonadState Int)
+
+instance MonadFail PassM where
+  fail = error
 
 runPassM :: Config -> Int -> PassM a -> (a,Int)
 runPassM cfg cnt (PassM pass) = runSyM cnt (runReaderT pass cfg)
