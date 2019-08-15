@@ -1,4 +1,4 @@
-# The Gibbon Language and Compiler
+# The Gibbon Compiler
 
 [![Build Status](https://travis-ci.org/iu-parfunc/gibbon.svg?branch=master)](https://travis-ci.org/iu-parfunc/gibbon)
 
@@ -48,6 +48,22 @@ Gibbon from source:
 At this point you can run the Gibbon executable:
 
     $ stack exec -- gibbon -h
+
+## Using Gibbon
+
+Gibbon can be run in multiple modes. The `-r` flag indicates that you want to
+compile and run a program:
+
+    $ gibbon -r ./demo/Add1.hs
+
+If the extension is `*.hs`, it is assumed to be a Haskell source file, and if it
+is `*.gib` it is a Racket source file starting with `#lang gibbon`. 
+
+Just the `-r` flag by itself will apply the high-level specialization optimizations
+but will not use packed data. The `-p` flag instructs Gibbon to use
+a packed representation whenever possible. These can be combined:
+
+    $ gibbon -rp ./demo/PolyTree.hs
 
 ## About this repository 
 

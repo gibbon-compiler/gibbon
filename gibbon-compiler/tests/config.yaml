@@ -230,9 +230,9 @@ tests:
     answer-file: examples/poly/Poly1.ans
     failing: [gibbon1, gibbon2]
 
-  - name: measure_mode.hs
-    answer-file: examples/measure_mode.ans
-    failing: [gibbon1, gibbon2]
+  # - name: measure_mode.hs
+  #   answer-file: examples/measure_mode.ans
+  #   failing: [gibbon1, gibbon2]
 
   - name: MonoTree.hs
     answer-file: examples/MonoTree.ans
@@ -328,7 +328,7 @@ tests:
 
   # This test depends on real symbols, which we don't support atm.
   - name: test27b_subst.gib
-    failing: [pointer,gibbon2,gibbon1]
+    failing: [gibbon2,gibbon1]
 
   # No gensym, or real symbols.
   - name: test28_copyprop.gib
