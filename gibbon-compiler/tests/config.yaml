@@ -322,13 +322,13 @@ tests:
   - name: test08d_sharedict.gib
     failing: [interp1,pointer,gibbon1,gibbon2]
 
-  - name: test08f_dict.gib
-  - name: test08f2_dict.gib
-    failing: [gibbon1,gibbon2]
+  # - name: test08f_dict.gib
+  # - name: test08f2_dict.gib
+  #   failing: [pointer,gibbon1,gibbon2]
 
   # This test depends on real symbols, which we don't support atm.
   - name: test27b_subst.gib
-    failing: [pointer,gibbon2,interp1,gibbon1]
+    failing: [pointer,gibbon2,gibbon1]
 
   # No gensym, or real symbols.
   - name: test28_copyprop.gib

@@ -769,7 +769,7 @@ See [Hacky substitution to encode ParE].
 
     ---------------------
     -- (3) Proper primapps.
-    LetE (v,_,t, L _ (PrimAppE p ls)) bod -> dbgTraceIt ("lower: " ++ show v ++ " : " ++ show t) $
+    LetE (v,_,t, L _ (PrimAppE p ls)) bod -> dbgTrace 3 ("lower: " ++ show v ++ " : " ++ show t) $
         -- No tuple-valued prims here:
         T.LetPrimCallT [(v,typ t)]
              (prim p)

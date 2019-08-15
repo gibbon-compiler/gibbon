@@ -426,7 +426,7 @@ inferExp env@FullEnv{dataDefs}
       handleTrailingBindLoc v res =
           do (e,ty,cs) <- bindAfterLoc v res
              case e of
-               (L _ (Ext (LetLocE lv1 (AfterVariableLE v lv2) e))) ->
+               (L _ (Ext (LetLocE lv1 (AfterVariableLE v lv2) e))) -> 
                    do (e',ty',cs') <- bindTrivialAfterLoc lv1 (e,ty,cs)
                       return (l$ Ext (LetLocE lv1 (AfterVariableLE v lv2) e'), ty', cs')
                _ -> return (e,ty,cs) -- Should this signal an error instead of silently returning?
@@ -434,7 +434,7 @@ inferExp env@FullEnv{dataDefs}
       -- | Transforms a result by adding a location binding derived from an AfterVariable constraint
       -- associated with the passed-in variable.
       bindAfterLoc :: Var -> Result -> TiM Result
-      bindAfterLoc v (e,ty,c:cs) =
+      bindAfterLoc v (e,ty,c:cs) = 
           case c of
             AfterVariableL lv1 v' lv2 ->
                 if v == v'
@@ -620,7 +620,7 @@ inferExp env@FullEnv{dataDefs}
         do (e',ty',cs') <- inferExp (extendVEnv v ArenaTy env) e dest
            return (lc$ WithArenaE v e', ty', cs')
 
-    DataConE () k [] ->
+    DataConE () k [] -> do
         case dest of
           NoDest -> err $ "Expected single location destination for DataConE"
           TupleDest _ds -> err $ "Expected single location destination for DataConE"

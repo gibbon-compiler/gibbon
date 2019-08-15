@@ -392,6 +392,8 @@ tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
 
   where
     env = progToEnv prg
+    tyEq CursorTy PackedTy{} = True
+    tyEq PackedTy{} CursorTy = True
     tyEq ty1 ty2 =
       case ty1 of
         PackedTy{}  -> ty2 == ProdTy [CursorTy,CursorTy] || ty1 == ty2
