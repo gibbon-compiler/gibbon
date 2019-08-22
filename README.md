@@ -29,10 +29,12 @@ Gibbon is implemented in Haskell, and is set up to be built with
 [Stack](https://docs.haskellstack.org/en/stable/README/). After you
 install Stack, proceed to installing Gibbon's dependencies.
 
-- On Ubuntu, you can install them with:
+- Ubuntu:
 
-    $ sudo apt-get install libgc-dev libgmp-dev gcc-7 uthash-dev
-    $ sudo add-apt-repository ppa:plt/racket && sudo apt update && sudo apt install racket
+```
+ $ sudo apt-get install libgc-dev libgmp-dev gcc-7 uthash-dev
+ $ sudo add-apt-repository ppa:plt/racket && sudo apt update && sudo apt install racket
+```
 
 
 - OSX:
@@ -43,13 +45,9 @@ You can install some of the dependencies using [Homebrew](https://brew.sh/):
 
 Others require a few extra steps:
 
-    1. Racket
+1. Racket: Follow the instructions on it's [website](https://download.racket-lang.org/)
 
-       Follow the instructions on it's [website](https://download.racket-lang.org/)
-
-    2. [uthash](https://github.com/troydhanson/uthash)
-
-       Clone the [repository](https://github.com/troydhanson/uthash) and copy all the `.h` files in `src` to `/usr/local/include`
+2. [uthash](https://github.com/troydhanson/uthash): Clone the [repository](https://github.com/troydhanson/uthash) and copy all the `.h` files in `src` to `/usr/local/include`
 
 
 After you have both Stack and all the dependencies installed, you can build
