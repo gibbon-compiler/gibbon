@@ -29,25 +29,38 @@ Gibbon is implemented in Haskell, and is set up to be built with
 [Stack](https://docs.haskellstack.org/en/stable/README/). After you
 install Stack, proceed to installing Gibbon's dependencies.
 
-On Ubuntu, you can install them with:
+- Ubuntu:
 
-    $ sudo apt-get install libgc-dev libgmp-dev gcc-7
+    $ sudo apt-get install libgc-dev libgmp-dev gcc-7 uthash-dev
+    $ sudo add-apt-repository ppa:plt/racket && sudo apt update && sudo apt install racket
 
+- OSX:
 
-On OSX, install them using [Homebrew](https://brew.sh/):
+You can install some of the dependencies using [Homebrew](https://brew.sh/):
 
     $ brew install libgc gmp
+
+Others require a few extra steps:
+
+    1. Racket: Follow the instructions on it's [website](https://download.racket-lang.org/)
+    2. [uthash](https://github.com/troydhanson/uthash): Clone the [repository](https://github.com/troydhanson/uthash)
+       and copy all the `.h` files in `src` to `/usr/local/include`
 
 
 After you have both Stack and all the dependencies installed, you can build
 Gibbon from source:
 
-    $ git clone https://github.com/iu-parfunc/gibbon && cd gibbon/gibbon-compiler
-    $ stack setup && stack build
+    $ git clone https://github.com/iu-parfunc/gibbon
+    $ cd gibbon && source set_env.sh
+    $ cd gibbon-compiler && stack setup && stack build
 
 At this point you can run the Gibbon executable:
 
     $ stack exec -- gibbon -h
+
+If you'd like to run the testsuite, you can do so with:
+
+    $ cd $GIBBONDIR && ./run_all_tests.sh
 
 ## Using Gibbon
 

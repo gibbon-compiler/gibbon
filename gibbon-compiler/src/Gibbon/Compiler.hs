@@ -110,7 +110,7 @@ lowerCopiesAndTraversals p = pure p
 --------------------------------------------------------------------------------
 
 suppress_warnings :: String
-suppress_warnings = " -Wno-incompatible-pointer-types -Wno-int-conversion -Wno-int-to-pointer-cast "
+suppress_warnings = " -Wno-incompatible-pointer-types -Wno-int-conversion -Wno-int-to-pointer-cast -Wno-switch-bool -Wno-return-type "
 
 configParser :: Parser Config
 configParser = Config <$> inputParser
