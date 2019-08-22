@@ -20,6 +20,7 @@ cabal.project.local
 cabal.project.local~
 .HTF/
 .ghc.environment.*
+stack*.yaml.lock
 
 **/gibbon-test-summary.txt
 examples/**/*.c
@@ -27,3 +28,5 @@ examples/**/*.exe
 examples/build_tmp/*
 examples/**/*.hi
 examples/**/*.o
+demo/*.c
+demo/*.exe
