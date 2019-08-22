@@ -125,7 +125,7 @@ df -h
 ## See https://github.com/commercialhaskell/stack/issues/996 and
 ## https://github.com/iu-parfunc/gibbon/issues/108 for details.
 TMP="$HOME/tmp/"
-mkdir $TMP
+mkdir -p $TMP
 
 if [ "$LLVM_ENABLED" == "1" ]; then
     echo "Building Gibbon with LLVM enabled"
