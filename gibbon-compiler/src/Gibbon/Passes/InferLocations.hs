@@ -222,15 +222,16 @@ inferLocs initPrg = do
             -- We ignore the type of the main expression inferred in L1..
             -- Probably should add a small check here
             Just (me,_ty) -> do
-              (me',ty') <- inferExp' fe me NoDest
+              (me',ty') <- inferExp' fe me [] NoDest
               return $ Just (me',ty')
             Nothing -> return Nothing
           fds' <- forM fds $ \(FunDef fn fa (intty,outty) fbod) -> do
                                    let arrty = lookupFEnv fn fe
                                        fe' = extendsVEnv (M.fromList $ fragileZip fa (arrIns arrty)) fe
+                                       boundLocs = concat $ map locsInTy (arrIns arrty ++ [arrOut arrty])
                                    dest <- destFromType (arrOut arrty)
                                    mapM_ fixType_ (arrIns arrty)
-                                   (fbod',_) <- inferExp' fe' fbod dest
+                                   (fbod',_) <- inferExp' fe' fbod boundLocs dest
                                    return $ FunDef fn fa arrty fbod'
           return $ Prog dfs' fds' me'
   prg <- St.runStateT (runExceptT m) M.empty
@@ -282,11 +283,18 @@ fixType_ ty =
       _ -> return ()
 
 -- | Wrap the inferExp procedure, and consume all remaining constraints
-inferExp' :: FullEnv -> (L Exp1) -> Dest -> TiM (L L2.Exp2, L2.Ty2)
-inferExp' env lex0@(L sl1 exp) dest =
+inferExp' :: FullEnv -> (L Exp1) -> [LocVar] -> Dest -> TiM (L L2.Exp2, L2.Ty2)
+inferExp' env lex0@(L sl1 exp) bound dest =
   let lc = L sl1
 
       -- TODO: These should not be necessary, eventually
+
+      bindAllUnbound :: L L2.Exp2 -> [LocVar] -> TiM (L L2.Exp2)
+      bindAllUnbound e (lv:ls) = do
+        r <- lift $ lift $ freshRegVar
+        e' <- bindAllUnbound e ls
+        return $ lc$ Ext (LetRegionE r (lc$ Ext (LetLocE lv (StartOfLE r) e')))
+      bindAllUnbound e _ = return e
 
       bindAllLocations :: Result -> TiM Result
       bindAllLocations (expr,ty,constrs) = return $ (expr',ty,[])
@@ -310,8 +318,11 @@ inferExp' env lex0@(L sl1 exp) dest =
   in do res <- inferExp env lex0 dest
         (e,ty,cs) <- bindAllLocations res
         e' <- finishExp e
-        let (e'',_s) = cleanExp e'
-        return (e'',ty)
+        let (e'',s) = cleanExp e'
+            unbound = (s S.\\ S.fromList bound)        
+        e''' <- bindAllUnbound e'' (S.toList unbound)
+        -- dbgTrace 4 (show (s S.\\ S.fromList bound)) $ return ()
+        return (e''',ty)
 
 -- | We proceed in a destination-passing style given the target region
 -- into which we must produce the resulting value.
@@ -1123,7 +1134,7 @@ cleanExp (L i e) =
       CaseE e1 prs -> let (e1',s1') = cleanExp e1
                           (prs', ls2') = unzip $ L.map
                                          (\(dc,lvs,e2) -> let (e2', s2) = cleanExp e2
-                                                          in ((dc,lvs,e2'), s2)) prs
+                                                          in ((dc,lvs,e2'), s2 S.\\ S.fromList (map snd lvs))) prs
                       in (l$ CaseE e1' prs', S.union s1' $ S.unions ls2')
       DataConE lv dc es -> let (es',ls') = unzip $ L.map cleanExp es
                            in (l$ DataConE lv dc es', S.union (S.singleton lv) $ S.unions ls')
@@ -1139,8 +1150,10 @@ cleanExp (L i e) =
 
       Ext (LetRegionE r e) -> let (e',s') = cleanExp e
                               in (l$ Ext (LetRegionE r e'), s')
-      Ext (LetLocE loc FreeLE e) -> let (e', s) = cleanExp e
-                                    in (l$ Ext (LetLocE loc FreeLE e'), s)
+      Ext (LetLocE loc FreeLE e) -> let (e', s') = cleanExp e
+                                    in if S.member loc s'
+                                       then (l$ Ext (LetLocE loc FreeLE e'), S.delete loc s')
+                                       else (e',s')
       Ext (LetLocE loc lex e) -> let (e',s') = cleanExp e
                                  in if S.member loc s'
                                     then let ls = case lex of
