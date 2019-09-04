@@ -1,0 +1,202 @@
+#lang gibbon
+
+;; use structs/data instead of sexp
+(provide typecheck-expr
+         Int_ Bool_ Lamt NullT P S N B Begin Lam App Null
+	 CONSEXPR NULLEXPR CONSPARAM NULLPARAM CONSTYPE NULLTYPE)
+
+(data ListExpr
+      [CONSEXPR Expr ListExpr]
+      [NULLEXPR])
+
+(data ListParam
+      [CONSPARAM Param ListParam]
+      [NULLPARAM])
+
+(data ListType
+      [CONSTYPE Type ListType]
+      [NULLTYPE])      
+
+(data Type
+      [Int_]
+      [Bool_]
+      [NullT]
+      [Lamt ListType Type]
+      [Fail])
+
+(data DictType
+      [CONSDICT Sym Type DictType]
+      [NULLDICT])
+
+(data Param
+      [P Expr Type])
+
+(data Expr
+      [Null]
+      [S Sym]
+      [N Int]
+      [B Bool] ;; leaving out null for now
+      [Begin ListExpr]
+      [Lam ListParam Expr]
+      [App Expr ListExpr])
+
+(define (extend-env [e : DictType] [sym : Sym] [type : Type]) : DictType
+  (CONSDICT sym type e))
+
+(define (lookup-env [e : DictType] [sym : Sym]) : Type
+  (case e
+    [(CONSDICT sym1 type1 e1)
+      (if (eqsym sym sym1)
+        type1
+	(lookup-env e1 sym))]
+    [(NULLDICT) (Fail)]))
+
+(define (typecheck-begin [exprs : ListExpr] [env : DictType]) : Type
+  (case exprs
+    [(CONSEXPR e rest)
+     (inner-begin-cons e rest env)]
+    [(NULLEXPR)
+     (Fail)]))
+
+(define (inner-begin-cons [e : Expr] [rest : ListExpr] [env : DictType]) : Type
+  (case rest
+    [(CONSEXPR e2 rest2)
+     (let ([t : Type (typecheck e env)])
+      (inner-begin-check t rest env))]
+    [(NULLEXPR)
+      (typecheck e env)]))
+     
+(define (inner-begin-check [t : Type] [rest : ListExpr] [env : DictType]) : Type
+   (case t
+     [(NullT) (typecheck-begin rest env)]
+     [(Int_) (typecheck-begin rest env)]
+     [(Bool_) (typecheck-begin rest env)]
+     [(Lamt pt bt) (typecheck-begin rest env)]
+     [(Fail) (Fail)]))
+
+(define (lam-extend-env [params : ListParam] [env : DictType]) : DictType
+  (case params
+    [(CONSPARAM param rest)
+     (let ([nenv : DictType (case param
+       	  	            	    [(P e t)
+        		  	     (case e
+	 		 	       [(S sym)
+      		          	        (extend-env env sym t)])])])
+       (lam-extend-env rest nenv))]
+    [(NULLPARAM)
+     env]))
+     
+(define (type-equal-list? [l1 : ListType] [l2 : ListType]) : Bool
+  (case l1
+    [(CONSTYPE t1 rest1)
+     (case l2
+       [(CONSTYPE t2 rest2)
+        (if (type-equal? t1 t2)
+	    (type-equal-list? rest1 rest2)
+	    False)]
+       [(NULLTYPE) False])]
+    [(NULLTYPE)
+     (case l2
+       [(CONSTYPE t2 rest2) False]
+       [(NULLTYPE)          True])]))
+    
+(define (type-equal? [t1 : Type] [t2 : Type]) : Bool
+  (case t1
+    [(NullT)
+     (case t2
+       [(NullT) True]
+       [(Int_) False]
+       [(Bool_) False]
+       [(Lamt pt bt) False]
+       [(Fail) False])]
+    [(Int_)
+     (case t2
+       [(Int_) True]
+       [(Bool_) False]
+       [(NullT) False]
+       [(Lamt pt bt) False]
+       [(Fail) False])]
+    [(Bool_)
+     (case t2
+       [(Bool_) True]
+       [(Int_) False]
+       [(NullT) False]
+       [(Lamt pt bt) False]
+       [(Fail) False])]
+    [(Lamt pt bt)
+     (case t2
+       [(Lamt pt2 bt2)
+        (and
+         (type-equal-list? pt pt2)
+         (type-equal? bt bt2))]
+       [(Int_) False]
+       [(Bool_) False]
+       [(NullT) False]
+       [(Fail) False])]
+    [(Fail) False]))
+        
+(define (params-args-equal? [ptypes : ListType] [args : ListExpr] [env : DictType]) : Bool
+  (case ptypes
+    [(NULLTYPE)
+     (params-args-inner-null args)]
+    [(CONSTYPE t rest)
+     (params-args-inner-cons args t rest env)]))
+
+(define (params-args-inner-cons [args : ListExpr] [t : Type] [rest : ListType] [env : DictType]) : Bool
+  (case args
+    [(CONSEXPR e rest2)
+      (if (type-equal? t (typecheck e env))
+          (params-args-equal? rest rest2 env)
+          False)]
+    [(NULLEXPR) False]))
+
+(define (params-args-inner-null [args : ListExpr]) : Bool
+  (case args
+    [(CONSEXPR e rest) False]
+    [(NULLEXPR) True]))
+
+(define (getParamTypes [params : ListParam]) : ListType
+  (case params
+    [(CONSPARAM param rest)
+      (let ([t : Type (getInnerParamType param)])
+        (CONSTYPE t (getParamTypes rest)))]
+    [(NULLPARAM)
+     (NULLTYPE)]))
+
+(define (getInnerParamType [param : Param]) : Type
+  (case param
+    [(P e t) t]))
+
+(define (typecheck [expr : Expr] [env : DictType] ): Type
+  (case expr
+    [(Null)
+     (NullT)]
+    [(S sym)
+     (lookup-env env sym)]
+    [(N n)
+     (Int_)]
+    [(B b)
+     (Bool_)]
+    [(Begin ls)
+     (typecheck-begin ls env)]
+    [(Lam params body)
+     (Lamt (getParamTypes params)
+     	   (typecheck body (lam-extend-env params env)))]
+    [(App lam args)
+     (case (typecheck lam env)
+       [(Lamt ptypes btype)
+        (if (params-args-equal? ptypes args env)
+            btype
+            (Fail))])]))
+
+(define (typecheck-expr [expr : Expr]) : Type
+  (typecheck expr (NULLDICT)))
+
+(define (test-typecheck [e : Expr]) : Int
+  (case (typecheck-expr e)
+    [(Int_) 0]
+    [(Bool_) 1]
+    [(NullT) 2]
+    [(Lamt lt t) 3]
+    [(Fail) 4]))
+
