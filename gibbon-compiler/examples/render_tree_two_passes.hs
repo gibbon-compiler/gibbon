@@ -1,27 +1,35 @@
 module RenderTree where
 
 -- We don't have a built-in Float right now.
-data NodeData = NodeDataK Int Int Int Int Int  FontStyle
---    NodeDataK posX posY height width relWidth mMode fontStyle
+data DisplayData = DisplayDataK Int Int Int Int FontStyle
+--DisplayDataK posX posY height width fontStyle
 
 data FontStyle = FontStyleK Int Int Int
-data Document = Document PageList NodeData
+-- FontStyleK size fontType color
+
+data Document = Document PageList 
+
 data PageList = PageListInner Page PageList  
               | PageListEnd Page 
-data Page     = Page HorizContainerList NodeData
 
-data HorizContainerList = HorizContainerListInner ElementsList HorizContainerList  
-                        | HorizContainerListEnd ElementsList  
+data Page     = Page HorizContainerList DisplayData
+
+data HorizContainerList = HorizContainerListInner HrzContainer HorizContainerList  
+                        | HorizContainerListEnd HrzContainer  
+
+data HrzContainer = HrzContainer ElementsList DisplayData
 
 data ElementsList  = ElementsListInner  Element ElementsList 
                    | ElementsListEnd Element 
 
-data Element =  ImageCons Int Int StringJ NodeData
-              | TextBoxCons Int Int StringJ NodeData
-              | VertContainer HorizContainerList NodeData
+data Element =  ImageCons Int Int StringJ DisplayData
+              | TextBoxCons Int  StringJ DisplayData
+              | VertContainer HorizContainerList DisplayData
 
-data StringJ  = StrChar Int
-             | StrEnd
+data StringJ  = StrChar Int StringJ
+              | StrEnd
+
+-- Those functions are basic that sets/gets a field
 
 maxI :: Int -> Int -> Int
 maxI a b = if (a>b) then a else b 
@@ -29,158 +37,157 @@ maxI a b = if (a>b) then a else b
 addI :: Int -> Int -> Int 
 addI a b = a + b 
 
+getDisplayDataOfHrzContainer :: HrzContainer -> DisplayData
+getDisplayDataOfHrzContainer container = case (container) of
+    HrzContainer elmList displayData -> displayData
 
-getWidth :: NodeData -> Int  
-getWidth nData  = case (nData) of 
-    NodeDataK posX posY height width relWidth  fontStyle -> width
+getDisplayDataOfElement :: Element -> DisplayData
+getDisplayDataOfElement element = case (element) of
+    ImageCons imgWFixed ratio imgUrl displayData -> displayData
+    TextBoxCons  txtWFixed txtContent displayData -> displayData 
+    VertContainer hzList displayData -> displayData
 
-getHeight :: NodeData -> Int  
-getHeight nData  = case (nData) of 
-  NodeDataK posX posY height width relWidth  fontStyle -> height
-  
-getWidthElement :: Element -> Int  
-getWidthElement e  = case (e) of 
-    ImageCons a b s nData  -> getWidth nData
-    TextBoxCons  a b s nData -> getWidth nData
-    VertContainer hzList x -> getMaxWidthHzList hzList
- 
-getHeightElement :: Element -> Int  
-getHeightElement e  = case (e) of 
-    ImageCons a b s nData  -> getHeight nData
-    TextBoxCons  a b s nData -> getHeight nData
-    VertContainer hzList  x-> getSumHeights hzList
+getDisplayWidth :: DisplayData -> Int  
+getDisplayWidth displayData  = case (displayData) of 
+    DisplayDataK posX posY height width fontStyle -> width
 
-updateWidth :: NodeData -> Int -> NodeData  
-updateWidth nData newWidth = case (nData) of 
-    NodeDataK posX posY height width relWidth  fontStyle -> 
-        NodeDataK posX posY height newWidth relWidth  fontStyle
+getDisplayHeight :: DisplayData -> Int  
+getDisplayHeight displayData  = case (displayData) of 
+    DisplayDataK posX posY height width fontStyle -> height
 
-updateHeight :: NodeData -> Int -> NodeData  
-updateHeight nData newHeight = case (nData) of 
-    NodeDataK posX posY height width relWidth  fontStyle -> 
-        NodeDataK posX posY newHeight width relWidth  fontStyle
+setDisplayWidth :: DisplayData -> Int -> DisplayData  
+setDisplayWidth displayData newWidth = case (displayData) of 
+    DisplayDataK posX posY height width fontStyle -> 
+        DisplayDataK posX posY height newWidth fontStyle
 
--- We might need to rewrite this into two functions .. duh thats alot of work 
--- and maybe performance reduction 
--- updateWidthIfFlex :: NodeData -> Int -> NodeData  
--- updateWidthIfFlex nData newWidth = case (nData) of 
---     NodeDataK posX posY height width relWidth mMode fontStyle -> 
---         case (mMode) of
---             Flex ->  updateWidth nData newWidth
---             Absolute -> nData
---             Relative -> nData
+setDisplayHeight :: DisplayData -> Int -> DisplayData  
+setDisplayHeight displayData newHeight = case (displayData) of 
+    DisplayDataK posX posY height width fontStyle -> 
+        DisplayDataK posX posY newHeight width fontStyle
 
-getMaxWidthHzList :: HorizContainerList -> Int
-getMaxWidthHzList hzList = case (hzList) of
-    HorizContainerListInner elmList remList -> 
-        maxI (sumWidthsElmList elmList) ( getMaxWidthHzList remList)
-    HorizContainerListEnd elmList -> sumWidthsElmList elmList
+setDisplayPosX :: DisplayData -> Int -> DisplayData  
+setDisplayPosX displayData x = case (displayData) of 
+    DisplayDataK posX posY height width fontStyle -> 
+        DisplayDataK x posY height width fontStyle
 
-sumWidthsElmList :: ElementsList -> Int
-sumWidthsElmList elmList = case (elmList) of 
-    ElementsListInner e remList -> addI (getWidthElement e ) (sumWidthsElmList remList)
-    ElementsListEnd e  -> getWidthElement e 
+setDisplayPosY :: DisplayData -> Int -> DisplayData  
+setDisplayPosY displayData y = case (displayData) of 
+    DisplayDataK posX posY height width fontStyle -> 
+        DisplayDataK posX y height width fontStyle
 
-    -- compute width 
--- This traversal compute the width of the page which consists of nested 
--- horizontal and vertical containers with leaf elements, it calls other 
--- traversals (getMaxWidth and sumWidths)
-resolveWidthDoc :: Document -> Document 
-resolveWidthDoc doc  = case (doc) of
-     Document pgList nData -> Document (resolveWidthPList pgList) nData
+-- end of basic functions
 
-resolveWidthPList :: PageList -> PageList 
-resolveWidthPList pgList  = case (pgList) of
+-- helper functions ends
+-- ** computeDisplayWidth traversal**
+-- A traversal that computes the width of each visible element in the render tree
+-- and updates displayData accordingly 
+computeDisplayWidthDoc :: Document -> Document 
+computeDisplayWidthDoc doc  = case (doc) of
+     Document pgList  -> Document (computeDisplayWidthPList pgList) 
+
+computeDisplayWidthPList :: PageList -> PageList 
+computeDisplayWidthPList pgList  = case (pgList) of
     PageListInner page remList  ->
-        PageListInner (resolveWidthP page) (resolveWidthPList remList) 
+        PageListInner (computeDisplayWidthP page) (computeDisplayWidthPList remList) 
     PageListEnd page  -> 
-        PageListEnd (resolveWidthP page) 
+        PageListEnd (computeDisplayWidthP page)
 
--- This is different than treefuser implementation where maxWidth was explicitly 
--- computing maxWidth during resolveWidth and store it on the stack .
--- we hope that tupling would that for us here.
-resolveWidthP :: Page -> Page
-resolveWidthP p  = case (p) of
-    Page hzList nData-> 
-        let  hzList' = resolveWidthHzLst hzList 
-         in let maxWidth = getMaxWidthHzList hzList' 
-            in let nData' = updateWidth nData maxWidth    
-               in Page hzList' nData'
+computeDisplayWidthP :: Page -> Page
+computeDisplayWidthP p  = case (p) of
+    Page hzList displayData-> 
+        let  hzList' = computeDisplayWidthHzLst hzList 
+         in let maxWidth = getMaxDisplayWidth hzList' 
+            in let displayData' = setDisplayWidth displayData maxWidth    
+               in Page hzList' displayData'
 
-resolveWidthHzLst :: HorizContainerList -> HorizContainerList
-resolveWidthHzLst hzList  = case (hzList) of 
-    HorizContainerListInner  elmList remList ->
-        HorizContainerListInner (resolveWidthElmList elmList)  
-           (resolveWidthHzLst remList) 
-    HorizContainerListEnd elmList -> 
-        HorizContainerListEnd (resolveWidthElmList elmList) 
+computeDisplayWidthHzLst :: HorizContainerList -> HorizContainerList
+computeDisplayWidthHzLst hzList  = case (hzList) of 
+    HorizContainerListInner  hzContainer remList ->
+        HorizContainerListInner (computeDisplayWidthHzContainer hzContainer)  
+           (computeDisplayWidthHzLst remList) 
+    HorizContainerListEnd hzContainer -> 
+        HorizContainerListEnd (computeDisplayWidthHzContainer hzContainer) 
 
-resolveWidthElmList :: ElementsList -> ElementsList
-resolveWidthElmList elemList  = case (elemList) of 
+computeDisplayWidthHzContainer :: HrzContainer -> HrzContainer
+computeDisplayWidthHzContainer container = case (container) of 
+    HrzContainer elmList displayData -> 
+        let elmList'  = computeDisplayWidthElmList elmList in 
+        let sumWidths = sumDisplayWidths elmList' in
+        HrzContainer (elmList') (setDisplayWidth displayData sumWidths)
+
+computeDisplayWidthElmList :: ElementsList -> ElementsList
+computeDisplayWidthElmList elemList  = case (elemList) of 
     ElementsListInner element remList  ->
-        ElementsListInner (resolveWidthElm element) 
-            (resolveWidthElmList remList) 
+        ElementsListInner (computeDisplayWidthElm element) 
+            (computeDisplayWidthElmList remList) 
     ElementsListEnd element -> 
-        ElementsListEnd (resolveWidthElm element) 
+        ElementsListEnd (computeDisplayWidthElm element) 
 
-resolveWidthElm :: Element -> Element
-resolveWidthElm element  = case (element) of 
-    VertContainer hzList  nData-> 
-        let  hzList' = resolveWidthHzLst hzList 
-        in let maxWidth = getMaxWidthHzList hzList' 
-           in let nData' = updateWidth nData maxWidth    
-              in VertContainer hzList' nData' 
-    ImageCons a b c d ->   ImageCons a b c d
-    TextBoxCons a b c d ->TextBoxCons a b c d
+computeDisplayWidthElm :: Element -> Element
+computeDisplayWidthElm element  = case (element) of 
+    VertContainer hzList  displayData-> 
+        let hzList' = computeDisplayWidthHzLst hzList in
+        let maxWidth = getMaxDisplayWidth hzList' in
+        let displayData' = setDisplayWidth displayData maxWidth   in
+        VertContainer hzList' displayData' 
+    ImageCons imgWFixed ratio imgUrl displayData  ->
+        ImageCons imgWFixed ratio imgUrl (setDisplayWidth displayData imgWFixed)
+    TextBoxCons txtWFixed txtContent displayData  -> 
+     TextBoxCons txtWFixed txtContent (setDisplayWidth displayData txtWFixed)
 
-gibbon_main = computeHeightElement( resolveWidthElm  (
-     TextBoxCons 1 1 StrEnd (NodeDataK 1 1 1 1 1  (FontStyleK 1 1 1))))
+sumDisplayWidths :: ElementsList -> Int
+sumDisplayWidths elmList = case (elmList) of 
+    ElementsListInner elem remList -> 
+                        addI (getDisplayWidth (getDisplayDataOfElement elem)) 
+                             (sumDisplayWidths remList)
+    ElementsListEnd elem  -> (getDisplayWidth (getDisplayDataOfElement elem)) 
 
 
--- computeWidth a traversal that computes the width of each element 
+getMaxDisplayWidth :: HorizContainerList -> Int
+getMaxDisplayWidth hzList = case (hzList) of
+    HorizContainerListInner hzContainer remList -> 
+        maxI (getDisplayWidth ( getDisplayDataOfHrzContainer hzContainer))
+             (getMaxDisplayWidth remList)
+    HorizContainerListEnd hzContainer ->
+        (getDisplayWidth ( getDisplayDataOfHrzContainer hzContainer))
+
+
+-- **computeHeight** a traversal that computes the height of each element 
 -- in the render tree this traversal depend on computing the width
 
 computeHeightDoc :: Document -> Document
 computeHeightDoc doc = case (doc) of 
-    Document pList nData -> Document (computeHeightPList pList) nData 
+    Document pList  -> Document (computeHeightPList pList)  
     
 computeHeightPList :: PageList -> PageList
 computeHeightPList pList = case (pList) of 
     PageListInner page remList -> PageListInner (computeHeightPage page)
         (computeHeightPList remList)
-    PageListEnd page ->PageListEnd ( computeHeightPage page)
-
-getSumHeights :: HorizContainerList -> Int
-getSumHeights hzList = case (hzList) of 
-    HorizContainerListInner elmList remList -> 
-        let maxH = getMaxHeight elmList 
-        in addI maxH (getSumHeights remList)
-    HorizContainerListEnd elmList -> getMaxHeight elmList 
-
-getMaxHeight :: ElementsList -> Int
-getMaxHeight elmList = case (elmList) of 
-    ElementsListInner element remList -> 
-        let h1 = getMaxHeight remList 
-            h2 = getHeightElement element 
-        in maxI h1 h2   
-    ElementsListEnd element -> 
-        getHeightElement element      
+    PageListEnd page -> PageListEnd (computeHeightPage page)
 
 computeHeightPage :: Page -> Page
 computeHeightPage p = case (p) of
-    Page hzList nData -> 
-        let hzList'=   computeHeightHzList hzList
+    Page hzList displayData -> 
+        let hzList' = computeHeightHzList hzList
         in let newHeight = getSumHeights hzList'
-           in Page hzList' (updateHeight nData newHeight )
+           in Page hzList' (setDisplayHeight displayData newHeight )
 
 computeHeightHzList :: HorizContainerList -> HorizContainerList
 computeHeightHzList hzList = case (hzList) of 
-    HorizContainerListInner elmList remList ->
-        let elmList' = computeHeightElmList elmList 
+    HorizContainerListInner container remList ->
+        let container' = computeHeightHzContainer container 
             remList' = computeHeightHzList remList
-        in HorizContainerListInner elmList' remList'
-    HorizContainerListEnd elmList -> 
-        HorizContainerListEnd (computeHeightElmList elmList)
+        in HorizContainerListInner container'  remList'
+    HorizContainerListEnd container -> 
+        HorizContainerListEnd (computeHeightHzContainer container)
+
+computeHeightHzContainer :: HrzContainer -> HrzContainer
+computeHeightHzContainer container =  case (container) of 
+        HrzContainer elmList displayData ->
+            let elmList' = computeHeightElmList elmList in 
+            let maxHeight = getMaxHeight elmList' in 
+            let displayData' = setDisplayHeight displayData maxHeight in 
+            HrzContainer elmList' displayData'
 
 computeHeightElmList :: ElementsList -> ElementsList
 computeHeightElmList elmList = case (elmList) of 
@@ -191,19 +198,88 @@ computeHeightElmList elmList = case (elmList) of
 
 computeHeightElement :: Element -> Element
 computeHeightElement element = case (element) of 
-    VertContainer hzList nData->   
-        let hzList'=   computeHeightHzList hzList
-          in let newHeight = getSumHeights hzList'
-            in   VertContainer  hzList' (updateHeight nData newHeight )
+    VertContainer hzList displayData->   
+        let hzList'=   computeHeightHzList hzList in
+        let newHeight = getSumHeights hzList' in
+        VertContainer  hzList' (setDisplayHeight displayData newHeight)
+    ImageCons imgWFixed ratio imgUrl displayData -> 
+        let w = getDisplayWidth displayData in 
+        let newH = ratio * w in --todo : not the correct computation 
+        ImageCons imgWFixed ratio imgUrl (setDisplayHeight displayData newH)
+    TextBoxCons txtWFixed txtContent displayData -> 
+        let newH = txtWFixed in    --todo : not the correct computation 
+        TextBoxCons txtWFixed txtContent (setDisplayHeight displayData newH) 
 
-    ImageCons a b c d ->   ImageCons a b c d
-    TextBoxCons a b c d ->TextBoxCons a b c d
+getSumHeights :: HorizContainerList -> Int
+getSumHeights hzList = case (hzList) of 
+    HorizContainerListInner container remList -> 
+        addI (getDisplayHeight (getDisplayDataOfHrzContainer container)) 
+                (getSumHeights remList)
+    HorizContainerListEnd container -> 
+        getDisplayHeight (getDisplayDataOfHrzContainer container)
+
+getMaxHeight :: ElementsList -> Int
+getMaxHeight elmList = case (elmList) of 
+    ElementsListInner element remList -> 
+        let h1 = getMaxHeight remList 
+            h2 = getDisplayHeight (getDisplayDataOfElement element) 
+        in maxI h1 h2   
+    ElementsListEnd element -> 
+        getDisplayHeight (getDisplayDataOfElement element)
 
 
-main :: IO ()
-main = 
-    do
-      let d = (NodeDataK 1 1 1 1 1  (FontStyleK 1 1 1))
-      let input = TextBoxCons 1 1 StrEnd d
-      let x = computeHeightElement( resolveWidthElm  (input))
-      return $ print x
+-- --A pass that computer the initial x,y position for each element in the 
+-- -- document (within each page)
+-- setPositionsDoc :: Document -> Document
+-- setPositionsDoc doc = case (doc) of
+--     Document pList  -> Document  (setPositionsPList pList) 
+
+-- setPositionsPList :: PageList -> PageList
+-- setPositionsPList pList = case (pList) of
+--     PageListInner page remList -> PageListInner (setPositionsPage page)
+--       (setPositionsPList remList) 
+--     PageListEnd page -> PageListEnd (setPositionsPage page)
+
+-- setPositionsPage :: Page -> Page
+-- setPositionsPage page = case page of
+--     Page hzList displayData -> 
+--         let   displayData' = setDisplayPosX (setDisplayPosY  displayData 0)  0  
+--         in Page (setPositionsHzList hzList 0 0) displayData' 
+
+-- setPositionsHzList :: HorizContainerList -> Int -> Int -> HorizContainerList
+-- setPositionsHzList hzList curX  curY = case (hzList) of
+--     HorizContainerListInner elmList remList ->
+--         let  elmList' = setPositionsElmList elmList curX curY 
+--           in let elmListMaxHeight = getMaxHeight elmList
+--              in let remList' = setPositionsHzList remList curX 
+--                      (addI curY elmListMaxHeight)
+--                  in HorizContainerListInner elmList' remList'
+--     HorizContainerListEnd elmList -> 
+--         HorizContainerListEnd ( setPositionsElmList elmList curX curY) 
+
+-- setPositionsElmList :: ElementsList -> Int -> Int -> ElementsList
+-- setPositionsElmList elmList curX curY = case (elmList) of
+--     ElementsListInner element remList -> 
+--         let element' = setPositionsElm element curX curY
+--           in let elementWidth = getDisplayWidthElement element
+--             in let remList' = setPositionsElmList remList (addI curX elementWidth) curY
+--               in ElementsListInner element'    remList'
+--     ElementsListEnd element ->
+--         ElementsListEnd (setPositionsElm element curX curY)
+
+-- setPositionsElm:: Element -> Int -> Int -> Element 
+-- setPositionsElm element curX curY = case (element) of
+--     VertContainer hzList displayData->   
+--         let hzList'=   setPositionsHzList hzList  curX curY
+--             in let displayData' =  setDisplayPosX (setDisplayPosY displayData curY )  curX  
+--               in   VertContainer  hzList' displayData'
+
+--     ImageCons a b c displayData -> ImageCons a b c  
+--       (setDisplayPosX (setDisplayPosY displayData curY )   curX)
+--     TextBoxCons a b c displayData -> TextBoxCons a b c 
+--       (setDisplayPosX (setDisplayPosY displayData curY )  curX)
+      
+
+gibbon_main =( computeHeightElement( computeDisplayWidthElm  (
+     TextBoxCons 1 StrEnd (DisplayDataK 1 1 1 1  (FontStyleK 1 1 1))))) 
+
