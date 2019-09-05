@@ -1088,8 +1088,6 @@ fuse_pass ddefs funDefs
               else
                  go body  newProcessed fdefs prevFusedFuncs
 
-
-
 fusion2 :: Prog1 -> PassM Prog1
 fusion2 (L1.Prog defs funs main) = do
   (main', funs') <-
@@ -1097,14 +1095,11 @@ fusion2 (L1.Prog defs funs main) = do
       Nothing -> return (Nothing, funs)
       Just (m, ty) -> do
         (m', newDefs, _) <- fuse_pass defs funs (FusePassParams m [] [] [] 0)
-         newDefs' <- tuple_pass defs newDefs
+        newDefs' <- tuple_pass defs newDefs
         return (Just (m', ty), redundancy_pass (M.union funs newDefs'))
   return $ L1.Prog defs funs' main'
 
-{-- Those  functions are used for the redundancy analysis
-
--}
-
+-- Those  functions are used for the redundancy analysis
 redundancy_pass:: FunDefs1 -> FunDefs1
 redundancy_pass fdefs =
    let (fdefs', rules) =  M.foldl (pass1F fdefs) (fdefs, M.empty) fdefs
