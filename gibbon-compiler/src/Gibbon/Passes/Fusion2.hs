@@ -198,65 +198,71 @@ replaceLeafWithBind exp genVar varType tailExp =
   3) Total number of uses (references) of the defined variable.
 -}
 buildDefTable :: Exp1 -> DefTable
-buildDefTable ex  = go ex Nothing M.empty
- where
-  go ex definingSymbol table = case ex of
-    VarE (Var sym) ->  M.update incrUses sym table
-
-    LetE (Var symLet, _, t, bind) body ->
-      let table' = M.insert symLet (DefTableEntry {def=unLoc bind,
-                    fun_uses=[], all_use_count = 0, varType = t} ) table
-          table'' = go (unLoc bind) (Just symLet) table'
-      in go (unLoc body) definingSymbol table''
+buildDefTable ex = go ex Nothing M.empty
+  where
+    go ex definingSymbol table =
+      case ex of
+        VarE (Var sym) -> M.update incrUses sym table
+        LetE (Var symLet, _, t, bind) body ->
+          let table' =
+                M.insert
+                  symLet
+                  (DefTableEntry
+                     { def = unLoc bind
+                     , fun_uses = []
+                     , all_use_count = 0
+                     , varType = t
+                     })
+                  table
+              table'' = go (unLoc bind) (Just symLet) table'
+           in go (unLoc body) definingSymbol table''
 
     -- The thing that is traversed is always the first argument.
     -- Here, we record a function use for the first argument
     -- in the DefTable.
-    --
     -- add function uses of interest
     -- [functions calls traversing tree in first argument]
-    AppE fName _ args ->
-      let addFunctionUse newUse (DefTableEntry def fun_uses c t) =
-            Just $ DefTableEntry def (newUse:fun_uses) c t
-
-          table' = case unLoc (head args) of
-                     VarE (Var sym) ->
-                       M.update (addFunctionUse (ex, 0, definingSymbol))
-                                sym table
-                     -- If it's anything else, it's not a candidate for fusion, and
-                     -- we can ignore it.
-                     _   -> table
-      in foldl (\acc a -> go (unLoc a) Nothing acc) table' args
-
-    MkProdE argsList -> buildDefTable_args  argsList table
-        where
-          buildDefTable_args [] tb  = tb
-          buildDefTable_args  (h:tail)  table  = buildDefTable_args
-            tail (go (unLoc h) Nothing table)
-
-    PrimAppE _ ls ->  L.foldl f table ls
-            where  f tbl exp = go (unLoc exp) Nothing tbl
-
-    IfE cond thenBody elseBody      -> let table' = go (unLoc cond) Nothing table
-        in let table'' = go ( unLoc thenBody) definingSymbol table'
-        in go (unLoc elseBody) definingSymbol table''
-
-    CaseE e ls      ->
-        let table' = go (unLoc e) Nothing table
-        in L.foldl f table' ls
+        AppE fName _ args ->
+          let addFunctionUse newUse (DefTableEntry def fun_uses c t) =
+                Just $ DefTableEntry def (newUse : fun_uses) c t
+              table' =
+                if ((length args) > 0)
+                  then case unLoc (head args) of
+                         VarE (Var sym) ->
+                           M.update
+                             (addFunctionUse (ex, 0, definingSymbol))
+                             sym
+                             table
+                              -- If it's anything else, it's not a candidate for fusion, and
+                             -- we can ignore it.
+                         _ -> table
+                  else table
+           in foldl (\acc a -> go (unLoc a) Nothing acc) table' args
+        MkProdE argsList -> buildDefTable_args argsList table
+          where buildDefTable_args [] tb = tb
+                buildDefTable_args (h:tail) table =
+                  buildDefTable_args tail (go (unLoc h) Nothing table)
+        PrimAppE _ ls -> L.foldl f table ls
+          where f tbl exp = go (unLoc exp) Nothing tbl
+        IfE cond thenBody elseBody ->
+          let table' = go (unLoc cond) Nothing table
+           in let table'' = go (unLoc thenBody) definingSymbol table'
+               in go (unLoc elseBody) definingSymbol table''
+        CaseE e ls ->
+          let table' = go (unLoc e) Nothing table
+           in L.foldl f table' ls
+          where f tbl (_, _, exp) = go (unLoc exp) definingSymbol tbl
+        DataConE _ _ ls -> L.foldl f table ls
+          where f tbl exp = go (unLoc exp) Nothing tbl
+        TimeIt exp _ _ -> go (unLoc exp) definingSymbol table
+        ProjE index exp -> go (unLoc exp) Nothing table
+        LitE _ -> table
+        x ->
+          table `debug`
+          ("please handle:" L.++ show x L.++ "in buildDefTable\n")
       where
-        f tbl (_, _, exp) = go (unLoc exp) definingSymbol tbl
-
-    DataConE _ _ ls -> L.foldl f table ls
-     where
-       f tbl exp = go (unLoc exp) Nothing tbl
-    TimeIt exp _ _  -> go (unLoc exp) definingSymbol table
-    ProjE index exp -> go (unLoc exp) Nothing table
-    LitE _ -> table
-    x       -> table `debug`( "\nPlease handle:" L.++ show x L.++ "in buildDefTable\n")
-   where
-      incrUses (DefTableEntry  def fun_uses c t) = Just $
-          DefTableEntry def fun_uses (c+1) t
+        incrUses (DefTableEntry def fun_uses c t) =
+          Just $ DefTableEntry def fun_uses (c + 1) t
 
 
 extractAppNameFromLet ::  Exp1 -> Var
@@ -275,18 +281,21 @@ extractAppEName  x = error(show x)
 -- returns ((innerFun, outerFun), symbol defined by the outer)
 findPotential :: DefTable -> [(Var, Var)] -> Maybe ((Var, Var), Maybe Symbol)
 findPotential table skipList =
-  case L.find predicate  (M.toList table) of
-    Nothing       -> Nothing --`debug`  (show skipList)
+  case L.find predicate (M.toList table) of
+    Nothing -> Nothing
     Just (_, DefTableEntry def fun_uses use_count t) ->
-      Just ( ( extractAppEName def,
-               extractAppEName(sel1 (L.head fun_uses))),
-                 sel3 (L.head fun_uses) )
-   where
-    predicate (_,DefTableEntry def fun_uses use_count t)  = case def of
-      AppE var _ _  -> not (null fun_uses) &&
-                       L.notElem (extractAppEName def, extractAppEName(sel1 (L.head fun_uses))) skipList
-      _ -> False
-
+      Just
+        ( (extractAppEName def, extractAppEName (sel1 (L.head fun_uses)))
+        , sel3 (L.head fun_uses))
+  where
+    predicate (_, DefTableEntry def fun_uses use_count t) =
+      case def of
+        AppE var _ _ ->
+          not (null fun_uses) &&
+          L.notElem
+            (extractAppEName def, extractAppEName (sel1 (L.head fun_uses)))
+            skipList
+        _ -> False
 
 isPotential :: DefTable -> Maybe Symbol -> [(Var, Var)] -> Bool
 isPotential table symbol skipList =
@@ -867,7 +876,7 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
             (recTupledBody, newDefs) <-
                tuple ddefs fdefs' (funBody tupledFunction')  traversedArg  (depth+1)
                   `debug` ("\n tupling :" L.++ show tupledFName
-                     L.++ (show (funBody tupledFunction) )
+                --     L.++ (show (funBody tupledFunction) )
                     )
 
             let tupledFunction'' = tupledFunction'{funBody=recTupledBody}
@@ -962,19 +971,29 @@ fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
     return (True, newName, M.insert newName step5 fdefs)
 
 violateRestrictions :: FunDefs1 -> Var -> Var -> Bool
-violateRestrictions fdefs inner outer =
-  do
-    let innerDef = case M.lookup inner fdefs of (Just v) -> v
-        outerDef = case M.lookup outer fdefs of (Just v) -> v
-        p1 = case head (fst (funTy innerDef)) of
-               (PackedTy _ _ ) -> False
-               x  -> True
-        p2 = case head (fst (funTy outerDef) ) of
-               (PackedTy _ _) -> False
-               x  -> True
-        -- check that the inner call does not end with tail call
+violateRestrictions fdefs inner outer = do
+  let innerDef =
+        case M.lookup inner fdefs of
+          (Just v) -> v
+      outerDef =
+        case M.lookup outer fdefs of
+          (Just v) -> v
+      p1 =
+        if (length (fst (funTy innerDef)) > 0)
+          then case head (fst (funTy innerDef)) of
+                 (PackedTy _ _) -> False
+                 x -> True
+          else True
+      p2 =
+        if (length (fst (funTy innerDef)) > 0)
+          then case head (fst (funTy outerDef)) of
+                 (PackedTy _ _) -> False
+                 x -> True
+          else True
+      -- check that the inner call does not end with tail call ()
       --  p3 = hasTailCall(funBody innerDef)
-    p1 || p2
+  p1 || p2
+
 
 
 type FusedElement =
@@ -1021,7 +1040,7 @@ tuple_pass ddefs fdefs =
 fuse_pass ::  DDefs Ty1 -> FunDefs1 -> FusePassParams  ->  PassM TransformReturn
 fuse_pass ddefs funDefs
    (FusePassParams exp argsVars fusedFunctions skipList depth) =
-  if depth >3
+  if depth >1000
    then  return (exp, funDefs, fusedFunctions)
    else go (unLoc exp) skipList funDefs fusedFunctions
  where
@@ -1071,18 +1090,16 @@ fuse_pass ddefs funDefs
 
 
 
-
 fusion2 :: Prog1 -> PassM Prog1
 fusion2 (L1.Prog defs funs main) = do
-    (main', funs') <- case main of
-        Nothing   -> return (Nothing, funs)
-        Just (m, ty)    -> do
-            (m', newDefs, _) <- fuse_pass defs funs (FusePassParams m [] [] [] 0)
-            newDefs'         <- tuple_pass defs  newDefs `debug` "done fusing"
-            return (Just (m',ty), redundancy_pass (M.union funs  newDefs' ))
-    return $ L1.Prog defs funs' main'
-
-
+  (main', funs') <-
+    case main of
+      Nothing -> return (Nothing, funs)
+      Just (m, ty) -> do
+        (m', newDefs, _) <- fuse_pass defs funs (FusePassParams m [] [] [] 0)
+         newDefs' <- tuple_pass defs newDefs
+        return (Just (m', ty), redundancy_pass (M.union funs newDefs'))
+  return $ L1.Prog defs funs' main'
 
 {-- Those  functions are used for the redundancy analysis
 
