@@ -317,148 +317,137 @@ isPotential table symbol skipList =
      inlinedType = TreeX -> Args1... ->  Args2... -> RetType2
 
 -}
-
-inline :: FunDef1 -> FunDef1 -> Int  ->  PassM FunDef1
-inline inlined_fun outer_fun arg_pos  =  do
-  traversedTreeArg <- gensym(toVar"inputTree")
-
-  let argTypes_outer  = fst (funTy outer_fun)
-      retType_outer   = snd (funTy outer_fun)
-      argVar_outer    = head $ funArgs outer_fun
+inline :: FunDef1 -> FunDef1 -> Int -> PassM FunDef1
+inline inlined_fun outer_fun arg_pos = do
+  newTraversedTreeArg <- gensym (toVar "inputTree")
+  let argTypes_outer = fst (funTy outer_fun)
+      retType_outer = snd (funTy outer_fun)
+      argVar_outer = head $ funArgs outer_fun
       argTypes_inlined = fst (funTy inlined_fun)
-      argVar_inlined  = head $ funArgs inlined_fun
+      argVar_inlined = head $ funArgs inlined_fun
       retTypeInlined = snd (funTy inlined_fun)
       traversedType = head argTypes_inlined
-
       -- All arguments except the one that's traversed.
       sideArgsTypesInlined = tail argTypes_outer
-      sidArgsTypesOuter    = tail argTypes_inlined
-
-      newType = ([traversedType] ++ sideArgsTypesInlined ++ sidArgsTypesOuter,
-                 retType_outer)
-
-      inlinedFunBody = let oldExp  = l$ VarE argVar_inlined
-                           newExp  = l$ VarE traversedTreeArg
-                       in substE oldExp newExp (funBody inlined_fun)
+      sidArgsTypesOuter = tail argTypes_inlined
+      newType =
+        ( [traversedType] ++ sideArgsTypesInlined ++ sidArgsTypesOuter
+        , retType_outer)
+      inlinedFunBody =
+        let oldExp = l $ VarE argVar_inlined
+            newExp = l $ VarE newTraversedTreeArg
+         in substE oldExp newExp (funBody inlined_fun)
 
   -- the traversed tree in the outer is replaced with either a call to the inner
   -- or the body of the inner
   let oldExp = l $ VarE argVar_outer
-
-  let replaceWithCall exp =
-        do
-          newVar <- gensym (toVar "innerCall")
-          let rhs = l (AppE (funName inlined_fun) []
-                        (L.map (l . VarE) (funArgs inlined_fun)))
-              body = substE oldExp (l (VarE newVar)) exp
-          return $ l $ LetE (newVar, [], retTypeInlined, rhs) body
-
+  let replaceWithCall exp = do
+        newVar <- gensym (toVar "innerCall")
+        let rhs =
+              l
+                (AppE
+                   (funName inlined_fun)
+                   []
+                   (L.map (l . VarE) (funArgs inlined_fun)))
+            body = substE oldExp (l (VarE newVar)) exp
+        return $ l $ LetE (newVar, [], retTypeInlined, rhs) body
   newBody <-
-     case unLoc (funBody outer_fun) of
-        CaseE e1 ls -> do
-            ls' <- Prelude.mapM (\(dataCon, vars, exp) ->
-                     do
-                       newInnerExp <- replaceWithCall
-                         (substE oldExp inlinedFunBody exp)
-                       return  (dataCon, vars, newInnerExp)
-                    ) ls
-            return $ l (CaseE (substE oldExp inlinedFunBody e1) ls')
-        exp ->
-               replaceWithCall  (substE oldExp inlinedFunBody (l exp))
-
-  let newArgs = [traversedTreeArg] L.++ L.tail (funArgs inlined_fun) L.++
+    case unLoc (funBody outer_fun) of
+      CaseE e1 ls -> do
+        ls' <-
+          Prelude.mapM
+            (\(dataCon, vars, exp) -> do
+               newInnerExp <- replaceWithCall (substE oldExp inlinedFunBody exp)
+               return (dataCon, vars, newInnerExp))
+            ls
+        return $ l (CaseE (substE oldExp inlinedFunBody e1) ls')
+      exp -> replaceWithCall (substE oldExp inlinedFunBody (l exp))
+  let newArgs =
+        [newTraversedTreeArg] L.++ L.tail (funArgs inlined_fun) L.++
         L.tail (funArgs outer_fun)
-  return outer_fun {funArgs =newArgs, funTy = newType, funBody = newBody}
+  return outer_fun {funArgs = newArgs, funTy = newType, funBody = newBody}
 
 -- This function simplify the case expression when the matched expression
--- is it self another case expression. In the same way Wadler do it.
+-- is it self another case expression.
+-- In the same way Wadler do it [nested case rule]
+-- We only need to simplify the top level case
 simplifyCases :: FunDef1 -> FunDef1
-simplifyCases function = function {funBody = go ( funBody function) }
+simplifyCases function = function {funBody = go (funBody function)}
   where
-    go ex  = case unLoc ex of
+    go ex =
+      case unLoc ex of
+        CaseE e1@(L _ (CaseE e2 ls2)) ls1 -> go (l (CaseE e2 (L.map f ls2))) `debug` (show "original input was \n" L.++ (show (l (CaseE e2 (L.map f ls2)))))
+          where f oldItem = upd3 (l (CaseE (sel3 oldItem) ls1)) oldItem
+        CaseE e1@(L l (DataConE loc k constructorVars)) caseList ->
+          let newBody = L.find (\item -> sel1 item == k) caseList
+           in case newBody of
+                Nothing -> error "unmatched constructor!"
+                Just (k, caseVars, caseExp) ->
+                  go $case_subst constructorVars caseVars caseExp
+                  where case_subst (x1:l1) (x2:l2) exp =
+                          subst (fst x2) x1 (case_subst l1 l2 exp)
+                        case_subst [] [] exp = exp
+        CaseE (L _ (IfE e1 e2 e3)) ls ->
+          go $ l $ IfE e1 (l (CaseE e2 ls)) (l (CaseE e3 ls))
+        CaseE e1@(L _ (LetE bind body)) ls1 ->
+          let body' = go (l (CaseE body ls1))
+           in l $ LetE bind body'
+        CaseE e1 ls1 -> l $ CaseE e1 (L.map f ls1)
+          where f item = upd3 (go (sel3 item)) item
+        LetE (v, loc, t, rhs) bod -> l $ LetE (v, loc, t, go rhs) (go bod)
+        AppE v loc expList -> l $ AppE v loc (L.map go expList)
+        IfE e1 e2 e3 -> l $ IfE (go e1) (go e2) (go e3)
+        TimeIt e d b -> l $ TimeIt (go e) d b
+        ex -> l ex
 
-      CaseE e1@(L _  (CaseE e2 ls2)) ls1 ->
-          go (l (CaseE e2 (L.map f ls2)))
-        where
-          f oldItem = upd3 (l (CaseE (sel3 oldItem) ls1)) oldItem
-
-      CaseE e1@(L l (DataConE loc k constructorVars)) caseList ->
-          let newBody = L.find (\item-> sel1 item ==k) caseList
-          in case newBody of
-               Nothing -> error "unmatched constructor!"
-               Just (k, caseVars, caseExp)  ->
-                    go $case_subst constructorVars caseVars caseExp
-                  where
-                    case_subst (x1:l1) (x2:l2) exp =
-                        subst (fst x2) x1 (case_subst l1 l2 exp)
-                    case_subst [] [] exp = exp
-
-      CaseE (L _ (IfE e1 e2 e3) ) ls          -> go $
-         l $ IfE e1 (l (CaseE e2 ls)) (l (CaseE e3 ls) )
-
-      CaseE e1@(L _  (LetE bind body )  ) ls1  ->
-        let body' = go (l (CaseE body ls1))
-        in l $ LetE bind body'
-
-      CaseE e1 ls1                              ->
-         l $ CaseE e1 (L.map f ls1)
-        where
-          f item = upd3 (go (sel3 item)) item
-      LetE (v, loc, t, rhs) bod   ->  l  $ LetE (v,loc,t, go rhs) (go bod)
-      AppE v loc expList          ->
-          l  $ AppE v loc  (L.map go expList)
-      IfE e1 e2 e3             ->  l  $ IfE (go e1) ( go e2) ( go e3)
-      TimeIt e d b             ->  l  $ TimeIt ( go e) d b
-      ex                       ->  l ex
 
 foldFusedCallsF :: (Var, Var, Int, Var) -> FunDef1 -> FunDef1
-foldFusedCallsF rule function = function{funBody=
-  foldFusedCalls rule (funBody function)}
+foldFusedCallsF rule function =
+  function {funBody = foldFusedCalls rule (funBody function)}
 
 foldFusedCalls :: (Var, Var, Int, Var) -> L Exp1 -> L Exp1
 foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
   let defTable = buildDefTable (unLoc body)
-      go ex = case unLoc ex of
+      go ex =
+        case unLoc ex of
           AppE fName loc argList ->
             let notFolded = l $ AppE fName loc argList
-            in if fName == outerName
-                then
-                  case unLoc (head argList) of
-                    VarE (Var symInner) ->
-                      if innerName == getDefiningFunction symInner defTable
-                        then
-                            let innerArgs = getArgs symInner defTable
-                                outerArgs = argList
-                                newCallArgs= (innerArgs L.++ tail argList)
-                            in  l $ AppE newName loc newCallArgs
-                        else
-                            notFolded
-                    _ -> notFolded
-                else
-                    notFolded
-          LetE (v,loc,t,lhs) bod   ->  l $ LetE (v,loc,t, go lhs) (go bod)
-          IfE e1 e2 e3             ->  l $ IfE (go e1) ( go e2) ( go e3)
-          CaseE e1 ls1             ->  l $ CaseE e1 (L.map f ls1)
-            where
-              f (dataCon,x,exp) = (dataCon, x, go exp)
-          TimeIt e d b             ->  l $ TimeIt (go e) d b
-          DataConE loc dataCons ls ->  l $ DataConE loc dataCons
-            (L.map go ls)
-          _ ->  ex
+             in if fName == outerName
+                  then case unLoc (head argList) of
+                         VarE (Var symInner) ->
+                           if innerName == getDefiningFunction symInner defTable
+                             then let innerArgs = getArgs symInner defTable
+                                      outerArgs = argList
+                                      newCallArgs =
+                                        (innerArgs L.++ tail argList)
+                                   in l $ AppE newName loc newCallArgs
+                             else notFolded
+                         _ -> notFolded
+                  else notFolded
+          LetE (v, loc, t, lhs) bod -> l $ LetE (v, loc, t, go lhs) (go bod)
+          IfE e1 e2 e3 -> l $ IfE (go e1) (go e2) (go e3)
+          CaseE e1 ls1 -> l $ CaseE e1 (L.map f ls1)
+            where f (dataCon, x, exp) = (dataCon, x, go exp)
+          TimeIt e d b -> l $ TimeIt (go e) d b
+          DataConE loc dataCons ls -> l $ DataConE loc dataCons (L.map go ls)
+          _ -> ex
+   in removeUnusedDefsExp (go body)
+  where
+    getDefiningFunction x defTable =
+      case M.lookup x defTable of
+        Nothing -> toVar "dummy"
+        Just entry ->
+          case def entry of
+            AppE v _ _ -> v
+            _ -> toVar "dummy"
+    getArgs x defTable =
+      case M.lookup x defTable of
+        Nothing -> error "error in foldFusedCalls"
+        Just entry ->
+          case def entry of
+            AppE _ _ args -> args
+            _ -> error ("ops" L.++ show (def entry))
 
-  in removeUnusedDefsExp (go body)
-
-      where
-        getDefiningFunction x defTable = case M.lookup x defTable of
-            Nothing    -> toVar "dummy"
-            Just entry -> case def  entry of
-                  AppE v _ _   -> v
-                  _            -> toVar "dummy"
-        getArgs x defTable = case M.lookup x defTable of
-             Nothing    -> error  "error in foldFusedCalls"
-             Just entry -> case def  entry of
-                  AppE _ _ args-> args
-                  _            -> error  ("ops" L.++ show(def  entry))
 
 foldTupledFunctions ::   L Exp1 -> FunDef1 -> [Exp1] -> Exp1 -> V.Vector Int
    -> PassM (L Exp1)
@@ -964,12 +953,11 @@ fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
     step1 <- inline innerFunc outerFunc (-1)
 
     let step2 = (simplifyCases step1 ){funName = newName}
-        step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)  step2
-        step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs
-        step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)}
+        step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)  step2 `debug` render (pprint step1)
+        step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs `debug`   render (pprint step3)
+        step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)} `debug` render (pprint step4)
 
     return (True, newName, M.insert newName step5 fdefs)
-
 violateRestrictions :: FunDefs1 -> Var -> Var -> Bool
 violateRestrictions fdefs inner outer = do
   let innerDef =
@@ -990,9 +978,25 @@ violateRestrictions fdefs inner outer = do
                  (PackedTy _ _) -> False
                  x -> True
           else True
+      p3 =
+        case (unLoc (funBody innerDef)) of
+          CaseE _ _ -> False
+          _ -> True
+      p4 =
+        case (unLoc (funBody outerDef)) of
+          CaseE _ _ -> False
+          _ -> True
+      p5 =
+        case (unLoc (funBody innerDef)) of
+          CaseE _ ls ->
+            L.foldr (\(_, _, exp) res -> res && (isLeafCaseExpr exp)) True ls
+      -- p6 =
+      --   case (unLoc (funBody outerDef)) of
+      --     CaseE _ ls ->
+      --       L.foldr (\(_, _, exp) res -> res && (isLeafCaseExpr exp)) True ls
       -- check that the inner call does not end with tail call ()
       --  p3 = hasTailCall(funBody innerDef)
-  p1 || p2
+  p1 || p2 || p4 || (not p5)
 
 
 
@@ -1062,7 +1066,7 @@ fuse_pass ddefs funDefs
             (validFused, fNew, fusedDefs) <-
                fuse  ddefs fdefs inner outer prevFusedFuncs
 
-            let fusedFunction = fusedDefs M.! fNew `debug` ( render (pprint (funBody ( fusedDefs M.! fNew ))))
+            let fusedFunction = fusedDefs M.! fNew  `debug` ( render (pprint ( fusedDefs M.! fNew  )))
                 newFusedEntry = (outer,inner, -1, fNew)
                 newFusedFunctions =  newFusedEntry : prevFusedFuncs
                 newProcessed = (inner,outer):processed
@@ -1272,6 +1276,14 @@ getLeafProd = rec
        leaf@MkProdE{} -> l leaf
        x-> error (show x)
 
+isLeafCaseExpr :: L Exp1 -> Bool
+isLeafCaseExpr = rec
+  where
+    rec ex =
+      case unLoc ex of
+        LetE (v, ls, t, L _ AppE {}) body -> rec body
+        DataConE _ _ _ -> True
+        _ -> False
 
 collectVars :: L Exp1 -> S.Set Var
 collectVars = rec
