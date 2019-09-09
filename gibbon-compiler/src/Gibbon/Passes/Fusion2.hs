@@ -956,10 +956,10 @@ fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
         step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)  step2 `debug` render (pprint step1)
         step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs `debug`   render (pprint step3)
         step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)} `debug` render (pprint step4)
-
     return (True, newName, M.insert newName step5 fdefs)
+
 violateRestrictions :: FunDefs1 -> Var -> Var -> Bool
-violateRestrictions fdefs inner outer = do
+violateRestrictions fdefs inner outer =
   let innerDef =
         case M.lookup inner fdefs of
           (Just v) -> v
@@ -970,35 +970,25 @@ violateRestrictions fdefs inner outer = do
         if (length (fst (funTy innerDef)) > 0)
           then case head (fst (funTy innerDef)) of
                  (PackedTy _ _) -> False
-                 x -> True
+                 x              -> True
           else True
       p2 =
         if (length (fst (funTy innerDef)) > 0)
           then case head (fst (funTy outerDef)) of
                  (PackedTy _ _) -> False
-                 x -> True
+                 x              -> True
           else True
       p3 =
         case (unLoc (funBody innerDef)) of
-          CaseE _ _ -> False
+          CaseE _ ls ->
+            not
+              (L.foldr (\(_, _, exp) res -> res && (isLeafCaseExpr exp)) True ls)
           _ -> True
       p4 =
         case (unLoc (funBody outerDef)) of
           CaseE _ _ -> False
-          _ -> True
-      p5 =
-        case (unLoc (funBody innerDef)) of
-          CaseE _ ls ->
-            L.foldr (\(_, _, exp) res -> res && (isLeafCaseExpr exp)) True ls
-      -- p6 =
-      --   case (unLoc (funBody outerDef)) of
-      --     CaseE _ ls ->
-      --       L.foldr (\(_, _, exp) res -> res && (isLeafCaseExpr exp)) True ls
-      -- check that the inner call does not end with tail call ()
-      --  p3 = hasTailCall(funBody innerDef)
-  p1 || p2 || p4 || (not p5)
-
-
+          _         -> True
+   in (p1 || p2 || p3 || p4)
 
 type FusedElement =
   (Var, -- outer fused function
@@ -1041,7 +1031,7 @@ tuple_pass ddefs fdefs =
           return defs'
 
 
-fuse_pass ::  DDefs Ty1 -> FunDefs1 -> FusePassParams  ->  PassM TransformReturn
+fuse_pass ::  DDefs Ty1 -> FunDefs1 -> FusePassParams  -> PassM TransformReturn
 fuse_pass ddefs funDefs
    (FusePassParams exp argsVars fusedFunctions skipList depth) =
   if depth >1000
@@ -1060,11 +1050,11 @@ fuse_pass ddefs funDefs
        do
         if violateRestrictions fdefs inner outer
           then
-               go  body ((inner,outer):processed) fdefs prevFusedFuncs
+               go  body ((inner,outer):processed) fdefs prevFusedFuncs `debug` ("here")
           else do
              -- fuse
             (validFused, fNew, fusedDefs) <-
-               fuse  ddefs fdefs inner outer prevFusedFuncs
+               fuse ddefs fdefs inner outer prevFusedFuncs `debug` ("here2")
 
             let fusedFunction = fusedDefs M.! fNew  `debug` ( render (pprint ( fusedDefs M.! fNew  )))
                 newFusedEntry = (outer,inner, -1, fNew)
@@ -1281,9 +1271,9 @@ isLeafCaseExpr = rec
   where
     rec ex =
       case unLoc ex of
-        LetE (v, ls, t, L _ AppE {}) body -> rec body
+        LetE _ body -> rec body
         DataConE _ _ _ -> True
-        _ -> False
+        x -> False
 
 collectVars :: L Exp1 -> S.Set Var
 collectVars = rec
