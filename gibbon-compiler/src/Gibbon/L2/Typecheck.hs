@@ -149,15 +149,21 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                        Just f -> funTy f
                        Nothing -> error $ "tcExp: Unbound function: " ++ sdoc v
 
-             -- Check arguments.
+             -- Get types of arguments
              (in_tys, tstate) <- foldlM
                                    (\(tys, st) a -> do
                                          (ty, st') <- recur st a
                                          pure (tys ++ [ty], st'))
                                    ([],tstatein) args
 
+             -- Check arity
+             if (length args) /= (length in_tys)
+             then throwError $ GenericTC ("Arity mismatch. Expected:" ++ show (length in_tys) ++
+                                          " Got:" ++ show (length args)) exp
+             else pure ()
+
              -- (1)
-             mapM (uncurry $ ensureEqualTyNoLoc exp) (zip in_tys arrIns)
+             mapM (uncurry $ ensureEqualTyNoLoc exp) (fragileZip in_tys arrIns)
 
              -- (3) Check location of argument
              let tyls = concatMap locsInTy in_tys
@@ -183,7 +189,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                let len2 = checkLen exp pr 2 es
                    len1 = checkLen exp pr 1 es
                    len0 = checkLen exp pr 0 es
-                   len3 = checkLen exp pr 3 es
+                   _len3 = checkLen exp pr 3 es
                    len4 = checkLen exp pr 4 es
 
                    mk_bools = do

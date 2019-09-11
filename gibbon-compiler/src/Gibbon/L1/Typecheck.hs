@@ -53,13 +53,20 @@ tcExp ddfs env exp@(L p ex) =
                                       ++ sdoc locs)
                            exp
 
-      -- Check argument type
+      -- Get argument types
       argTys <- mapM go ls
+
+      -- Check arity
+      if (length ls) /= (length argTys)
+      then throwError $ GenericTC ("Arity mismatch. Expected:" ++ show (length argTys) ++
+                                   " Got:" ++ show (length ls)) exp
+      else pure ()
+
       let (funInTys,funRetTy) = (inTys funty, outTy funty)
 
           combAr (SymDictTy (Just v1) _, SymDictTy (Just v2) _) m = M.insert v2 v1 m
           combAr _ m = m
-          arMap = L.foldr combAr M.empty $ zip argTys funInTys
+          arMap = L.foldr combAr M.empty $ fragileZip argTys funInTys
 
           subDictTy m (SymDictTy (Just v) ty) =
               case M.lookup v m of
@@ -79,7 +86,7 @@ tcExp ddfs env exp@(L p ex) =
       let len0 = checkLen exp pr 0 es
           len1 = checkLen exp pr 1 es
           len2 = checkLen exp pr 2 es
-          len3 = checkLen exp pr 3 es
+          _len3 = checkLen exp pr 3 es
           len4 = checkLen exp pr 4 es
 
           mk_bools = do
