@@ -9,5 +9,11 @@
     [(Nil) 0]
     [(Cons y ys) (+ y (sum-list ys))]))
 
+(define (reverse [xs : List] [ys : List]) : List
+  (case xs
+    [(Nil) ys]
+    [(Cons z zs) (reverse zs (Cons z ys))]))
+
 (let ([xs : List (Cons 1 (Cons 2 (Cons 3 (Nil))))])
-  (sum-list xs))
+  (let ([ys : List (reverse xs (Nil))])
+    (sum-list ys)))

@@ -9,5 +9,7 @@
     [(Nil) 0]
     [(Cons y ys) (+ y (sum-list ys))]))
 
-(let ([xs : List (Cons 1 (Cons 2 (Cons 3 (Nil))))])
-  (sum-list xs))
+(define (ins [x : Int] [xs : List]) : List
+  (Cons x xs))
+
+(sum-list (ins 1 (ins 2 (Nil))))

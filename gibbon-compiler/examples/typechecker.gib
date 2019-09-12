@@ -1,8 +1,8 @@
 #lang gibbon
 
 ;; use structs/data instead of sexp
-(provide typecheck-expr
-         Int_ Bool_ Lamt NullT P S N B Begin Lam App Null
+(provide typecheck-expr test-typecheck
+         Expr Int_ Bool_ Lamt NullT P S N B Begin Lam App Null
 	 CONSEXPR NULLEXPR CONSPARAM NULLPARAM CONSTYPE NULLTYPE)
 
 (data ListExpr
