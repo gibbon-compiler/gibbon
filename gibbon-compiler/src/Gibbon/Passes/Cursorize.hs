@@ -144,7 +144,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
         SymTy     -> SymTy
         BoolTy    -> BoolTy
         ProdTy ls -> ProdTy $ L.map cursorizeInTy ls
-        SymDictTy ar _ty -> SymDictTy ar CursorTy -- $ cursorizeInTy ty'
+        SymDictTy ar _ty -> SymDictTy ar CursorTy
         PackedTy{}    -> CursorTy
         ListTy ty'    -> ListTy $ cursorizeInTy ty'
         PtrTy -> PtrTy

@@ -186,7 +186,7 @@ cursorizeTy ty =
     SymTy     -> SymTy
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map cursorizeTy ls
-    SymDictTy v _ -> SymDictTy v CursorTy -- $ cursorizeTy ty'
+    SymDictTy v _ -> SymDictTy v CursorTy
     PackedTy{}    -> ProdTy [CursorTy, CursorTy]
     ListTy ty'    -> ListTy $ cursorizeTy ty'
     PtrTy    -> PtrTy
