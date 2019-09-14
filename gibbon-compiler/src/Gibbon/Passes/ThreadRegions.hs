@@ -15,28 +15,40 @@ import Gibbon.L2.Syntax as L2
 Threading regions
 ~~~~~~~~~~~~~~~~~
 
-Also see [Infinite regions] in 'Gibbon.Passes.BoundsCheck'. Bounds checking
-requires having end-of-region cursors around, and in this pass we "thread"
-those through functions. Every function takes in an additional (reg_start, reg_end)
-for every packed type in the return value (i.e 1 pair per output cursor).
+Functions need end-of-regions cursors for various purposes. The output region
+cursors are used for bounds checking (See [Infinite regions] in BoundsCheck).
+The input region cursors are useful for garbage collection -- if there's an
+indirection from R1 to R2 (input), we need to bump R2's refcount and therefore
+need R2's cursor. This pass updates all call-sites to also pass region cursors.
+They are prepended to the locations that AppE forms accept.
+N.B. for output regions, we actually use end-of-chunk cursors, not
+end-of-region cursors.
 
-(1) Region vars are prepended to the locations that AppE forms accept,
-    and the corresponding let bindings are updated to accept region return values.
+    AppE add1 [lin, lout] arg
 
-        LetE (x,[endof_lin], Packed, AppE "add1" [lin,lout] arg)
+becomes
 
-    becomes
+    AppE add1 [regin, regout, lin, lout] arg
 
-        LetE (x,[reg2, end_reg2, endof_lin], Packed, AppE "add1" [reg1, reg2, lin, lout] arg)
 
-(2) RetE forms returning packed values are modified to return region arguments,
-    in addition to the "endof" locations.
+Moreover, functions must also return region cursors, at least for the output
+regions. Consider this example:
 
-        RetE [endof1] arg
+    ...
+    let (x, lout1) = AppE add1 [regin1, regout, lin1, lout] a1 in
+    let (y, lout2) = AppE add1 [regin2, regout, lin2, lout1] a2 in
+    ...
 
-    becomes
+This is not correct. Because of bounds checking, the first call to add1 might
+start using a new output chunk. And we shouldn't use regout in the second call
+to add1 -- 'regout' is already full! So we have to thread these output regions,
+just like we do the output locations.
 
-        RetE [reg2, end_reg2, endof1] arg
+    ...
+    let (x, lout1, regout1) = AppE add1 [regin1, regout, lin1, lout] a1 in
+    let (y, lout2, regout2) = AppE add1 [regin2, regout1, lin2, lout1] a2 in
+    ...
+
 
 -}
 
@@ -75,19 +87,18 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
                                        Just r -> r:acc
                                        Nothing -> acc)
                     [] argtylocs
-      case ty of
-        _ | hasPacked ty -> do
-          let fnty = funTy $ fundefs # f
-              arrOutMp = M.fromList $ zip (allLocVars fnty) applocs
-              -- TODO: Fix this in gRecoverType
-              outT'  = substLoc arrOutMp ty
-              tylocs = locsInTy outT'
-              regs   = map (renv #) tylocs
-          let newapplocs = nub $ (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
-          return $ AppE f newapplocs args
-        _ -> do
-          let newapplocs = nub $ (map toEndV argregs) ++ applocs
-          return $ AppE f newapplocs args
+      -- If this function returns a Packed type, it'll have input and output
+      -- locations and therefore, input and output regions.
+      if hasPacked ty
+      then do
+        let tylocs = locsInTy ty
+            regs   = map (renv #) tylocs
+        let newapplocs = nub $ (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
+        return $ AppE f newapplocs args
+      -- Otherwise, only input regions.
+      else do
+        let newapplocs = nub $ (map toEndV argregs) ++ applocs
+        return $ AppE f newapplocs args
 
     LetE (v,locs,ty, (L _ (AppE f applocs args))) bod -> do
       let argtys = map (gRecoverType ddefs env2) args
@@ -99,23 +110,25 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
           -- Map EndOf locations to input regions
           renv' = M.union renv (M.fromList $ zip locs argregs)
 
-      case ty of
-        _ | hasPacked ty -> do
-          let tylocs = locsInTy ty
-              regs   = map (renv #) tylocs
-          regs' <- mapM (\r -> gensym $ varAppend r "_") regs
-          -- Update all locations to point to the fresh region
-          let renv'' = foldr (\(lc,r,r') acc ->
-                               M.insert lc r' $
-                               M.map (\tyl -> if tyl == r then r' else tyl) acc)
-                      renv'
-                      (L.zip3 tylocs regs regs')
-              newlocs    = (map toEndV regs') ++ locs
-              newapplocs = nub $ (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
-          LetE (v, newlocs, ty, l$ AppE f newapplocs args) <$>
-            threadRegionsExp ddefs fundefs isMain renv'' (extendVEnv v ty env2) bod
-
-        _ -> do
+      -- Similar to the AppE case above, this one would have input and
+      -- output regions.
+      if hasPacked ty
+      then do
+        let tylocs = locsInTy ty
+            regs   = map (renv #) tylocs
+        regs' <- mapM (\r -> gensym $ varAppend r "_") regs
+        -- Update all locations to point to the fresh region
+        let renv'' = foldr (\(lc,r,r') acc ->
+                             M.insert lc r' $
+                             M.map (\tyl -> if tyl == r then r' else tyl) acc)
+                    renv'
+                    (L.zip3 tylocs regs regs')
+            newlocs    = (map toEndV regs') ++ locs
+            newapplocs = nub $ (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
+        LetE (v, newlocs, ty, l$ AppE f newapplocs args) <$>
+          threadRegionsExp ddefs fundefs isMain renv'' (extendVEnv v ty env2) bod
+      -- Only input regions.
+      else do
           let newapplocs = nub $ (map toEndV argregs) ++ applocs
           LetE (v,locs,ty, l$ AppE f newapplocs args) <$>
             threadRegionsExp ddefs fundefs isMain renv' (extendVEnv v ty env2) bod
@@ -131,7 +144,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
         LetLocE loc FreeLE bod ->
           Ext <$> LetLocE loc FreeLE <$>
             threadRegionsExp ddefs fundefs isMain renv env2 bod
-                             
+
         -- Update renv with a binding for loc
         LetLocE loc rhs bod -> do
           let reg = case rhs of
@@ -144,7 +157,6 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
           Ext <$> LetLocE loc rhs <$>
             threadRegionsExp ddefs fundefs isMain (M.insert loc reg renv) env2 bod
 
-        -- Implements (2)
         RetE locs v -> do
           let ty = lookupVEnv v env2
           if not isMain && hasPacked ty

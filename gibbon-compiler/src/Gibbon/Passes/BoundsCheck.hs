@@ -15,15 +15,19 @@ import Gibbon.L2.Syntax
 Infinite regions
 ~~~~~~~~~~~~~~~~
 
-Instead of allocating a single global region (4GB right now), the compiler would
-use a linked list of small regions which are allocated as required. Such regions
+Instead of allocating a single global region (4GB right now), the compiler
+uses a linked list of small regions which are allocated as required. Such regions
 are referred to as "Infinite" in Gibbon. And the old regions are now "BigInfinite".
 The size of the first region in the chain would typically be small. And subsequent
 allocations double the size everytime (upto a certain limit).
 For more details, refer https://github.com/iu-parfunc/gibbon/issues/79.
 
 Since every region now has a boundary (an end), we have to ensure that we don't
-cross that. This "bounds check" has to be done before every write op (almost).
+cross that while writing to it. This bounds check has to be done before every
+write op.
+
+We refer to these small regions as "chunks", and the whole linked-list is as
+one single "region".
 
 
 Bounds-check: When?
@@ -42,7 +46,6 @@ Bounds-check: When?
 Bounds-check: How?
 ~~~~~~~~~~~~~~~~~~
 
-This is very much like the code we generate. After codegen however,
 'bounds_check' is a side effect -- instead of returning new cursors it
 updates the existing ones in place.
 
@@ -56,7 +59,7 @@ updates the existing ones in place.
       let tag = readTag lin
       in case tag of
            Leaf -> let n  = readInt tag
-                       (reg1, end_reg1, lout1) = bounds_check reg end_reg lout 9
+                       _  = bounds_check reg end_reg lout 9
                        wt = writeTag lout1 Leaf
                        wi = writeInt wt   (n+1)
                    in (reg1, end_reg1, lin + 8, (lout1, wi))
