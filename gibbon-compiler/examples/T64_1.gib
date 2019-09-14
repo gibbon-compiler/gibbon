@@ -1,0 +1,18 @@
+#lang gibbon
+
+(data A [MkA1 A A] [MkA2])
+
+(data B [MkB1 Int] [MkB2])
+
+(define (foo [a1 : A] [a2 : A]) : B
+  (case a2
+    [(MkA1 a3 a4) (MkB2)]
+    [(MkA2)       (MkB2)]))
+
+(define (bar [a : A]) : B
+  (case a
+    [(MkA1 a1 a2) (foo a1 a2)]
+    [(MkA2)       (foo a  (MkA2))]))
+
+(let [(x : B (bar (MkA2)))]
+  10)

@@ -136,6 +136,12 @@ tests:
   - name: void_type.gib
   - name: void_type.hs
     answer-file: examples/void_type.ans
+  - name: T64_1.gib
+
+  # There's still a bug somewhere. Uncomment the main expression to reproduce.
+  # Plus, #lang gibbon is having some problems with dictionaries.
+  - name: T64_2.gib
+    skip: true
 
   ## Benchmarks
 

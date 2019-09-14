@@ -93,11 +93,11 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
       then do
         let tylocs = locsInTy ty
             regs   = map (renv #) tylocs
-        let newapplocs = nub $ (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
+        let newapplocs = (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
         return $ AppE f newapplocs args
       -- Otherwise, only input regions.
       else do
-        let newapplocs = nub $ (map toEndV argregs) ++ applocs
+        let newapplocs = (map toEndV argregs) ++ applocs
         return $ AppE f newapplocs args
 
     LetE (v,locs,ty, (L _ (AppE f applocs args))) bod -> do
@@ -124,12 +124,12 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
                     renv'
                     (L.zip3 tylocs regs regs')
             newlocs    = (map toEndV regs') ++ locs
-            newapplocs = nub $ (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
+            newapplocs = (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
         LetE (v, newlocs, ty, l$ AppE f newapplocs args) <$>
           threadRegionsExp ddefs fundefs isMain renv'' (extendVEnv v ty env2) bod
       -- Only input regions.
       else do
-          let newapplocs = nub $ (map toEndV argregs) ++ applocs
+          let newapplocs = (map toEndV argregs) ++ applocs
           LetE (v,locs,ty, l$ AppE f newapplocs args) <$>
             threadRegionsExp ddefs fundefs isMain renv' (extendVEnv v ty env2) bod
 
