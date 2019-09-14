@@ -318,13 +318,11 @@ needsRANExp ddefs fundefs env2 renv (L _p ex) =
     docase tycon reg env21 renv1 br@(dcon,vlocs,bod) =
       let (vars,locs) = unzip vlocs
           renv' = L.foldr (\lc acc -> M.insert lc reg acc) renv1 locs
-          tys = lookupDataCon ddefs dcon
-          tys' = substLocs' locs tys
-          env2' = extendsVEnv (M.fromList $ zip vars tys') env21
+          env21' = extendPatternMatchEnv dcon ddefs vars locs env21
           ran_for_scrt = if L.null (needsTraversal ddefs fundefs env2 br)
                             then S.empty
                             else S.singleton tycon
-      in ran_for_scrt `S.union` needsRANExp ddefs fundefs env2' renv' bod
+      in ran_for_scrt `S.union` needsRANExp ddefs fundefs env21' renv' bod
 
     -- Return the location and tycon of an argument to a function call.
     parAppLoc :: Env2 Ty2 -> L Exp2 -> M.Map LocVar TyCon

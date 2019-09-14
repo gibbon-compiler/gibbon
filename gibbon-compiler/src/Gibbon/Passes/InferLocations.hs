@@ -311,7 +311,9 @@ inferExp' env lex0@(L sl1 exp) bound dest =
                         let arrty = arrOut $ lookupFEnv f env
                             -- Substitute the location occurring at the call site
                             -- in place of the one in the function's return type
-                            copyRetTy = substLoc' lv2 arrty
+                            copyRetTy = case arrty of
+                                          PackedTy _ loc -> substLoc (M.singleton loc lv2) arrty
+                                          _ -> error "bindAllLocations: Not a packed type"
                             a' = subst v1 (lc$ VarE v') a
                         in lc$ LetE (v',[],copyRetTy, lc$ AppE f lvs [lc$ VarE v1]) $
                            lc$ Ext (LetLocE lv1 (AfterVariableLE v' lv2) a')
@@ -462,7 +464,9 @@ inferExp env@FullEnv{dataDefs}
                         let arrty = lookupFEnv f env
                             -- Substitute the location occurring at the call site
                             -- in place of the one in the function's return type
-                            copyRetTy = substLoc' lv2 (arrOut arrty)
+                            copyRetTy = case arrOut arrty of
+                                          PackedTy _ loc -> substLoc (M.singleton loc lv2) (arrOut arrty)
+                                          _ -> error "bindAfterLoc: Not a packed type"
                         _ <- dbgTraceIt (show v' ++ " " ++ show v1) $ return ()
                         return (lc$ LetE (v',[],copyRetTy,l$ AppE f lvs [l$ VarE v1]) $
                                 lc$ Ext (LetLocE lv1' (AfterVariableLE v' lv2') e), ty, cs)
@@ -713,7 +717,9 @@ inferExp env@FullEnv{dataDefs}
                                         -- Substitute the location occurring at the call site
                                         -- in place of the one in the function's return type
                                         -- re:last because we want the output location.
-                                        copyRetTy = substLoc' (last copy_locs) arrty
+                                        copyRetTy = case arrty of
+                                          PackedTy _ loc -> substLoc (M.singleton loc (last copy_locs)) arrty
+                                          _ -> error "inferExp: Not a packed type"
                                     in return $ lc$ LetE (v',[],copyRetTy, lc$ AppE f lvs e) $
                                        lc$ DataConE d k [ e' | (e',_,_) <- ls'']
                                 _ -> error "inferExp: Unexpected pattern <error1>"

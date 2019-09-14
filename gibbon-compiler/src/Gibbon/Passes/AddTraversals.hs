@@ -143,8 +143,7 @@ to one of them. There are 2 assumptions that we make about such tuples:
 
     docase reg (dcon,vlocs,rhs) = do
       let (vars,locs) = unzip vlocs
-          tys   = substLocs' locs (lookupDataCon ddefs dcon)
-          env21 = extendsVEnv (M.fromList (zip vars tys)) env2
+          env21 = extendPatternMatchEnv dcon ddefs vars locs env2
           renv1 = L.foldr (\lc acc -> M.insert lc reg acc) renv locs
           needs_traversal = needsTraversal ddefs fundefs env21 (dcon,vlocs,rhs)
       case needs_traversal of

@@ -191,7 +191,5 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
       -- The locations point to the same region as the scrutinee.
       let (vars,locs) = unzip vlocs
           renv1' = foldr (\lc acc -> M.insert lc reg acc) renv1 locs
-          tys = lookupDataCon ddefs dcon
-          tys' = substLocs' locs tys
-          env2' = extendsVEnv (M.fromList $ zip vars tys') env21
-      (dcon,vlocs,) <$> (threadRegionsExp ddefs fundefs isMain renv1' env2' bod)
+          env21' = extendPatternMatchEnv dcon ddefs vars locs env21
+      (dcon,vlocs,) <$> (threadRegionsExp ddefs fundefs isMain renv1' env21' bod)
