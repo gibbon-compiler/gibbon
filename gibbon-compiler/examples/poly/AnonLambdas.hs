@@ -15,15 +15,15 @@ map f ls =
     Nil        -> Nil
     Cons x rst -> Cons (f x) (map f rst)
 
-compute :: List Int
-compute =
-  let x = map (\x -> x + 1) (Cons 1 (Cons 2 Nil))
-      y = map (\x -> 42) x
+compute :: Int -> List Int
+compute _ =
+  let x = map (\a -> a + 1) (Cons 1 (Cons 2 Nil))
+      y = map (\_ -> 42) x
       z = map id y
   in z
 
 gibbon_main =
-  let z = compute
+  let z = compute 10
   in case z of
-       Nil        -> 0
-       Cons x rst -> x
+       Nil      -> 0
+       Cons x _ -> x
