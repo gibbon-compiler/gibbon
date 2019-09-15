@@ -959,7 +959,7 @@ specExp ddefs env2 (L p ex) = (L p) <$>
 
 {-|
 
-Strip out the lambdas up until the point where control flow diverges,
+Hoist lambdas up until the point where control flow diverges,
 exactly like HoistNewBuf. This is a quick way to support anonymous
 lambdas. For example,
 
@@ -969,6 +969,8 @@ becomes
 
    let lam_1 = (\x -> x + 1)
    in map lam_1 [1,2,3]
+
+Then the specializer can take care of turning lam_1 into a top-level function.
 
 -}
 
@@ -998,10 +1000,17 @@ hoistLambdas prg@Prog{fundefs,mainExp} = do
           (ltss,args') <- unzip <$> mapM go args
           pure (concat ltss, AppE f locs args')
 
-        (Ext LambdaE{}) -> do
-          v  <- gensym "lam_"
-          ty <- newMetaTy
-          pure ([(v,[],ty,L p e0)], VarE v)
+        (Ext (LambdaE args bod)) -> do
+          let arg_vars = map fst args
+              captured_vars = gFreeVars bod `S.difference` (S.fromList arg_vars)
+          if S.null captured_vars
+          then do
+            v  <- gensym "lam_"
+            ty <- newMetaTy
+            pure ([(v,[],ty,L p e0)], VarE v)
+          else
+             error $ "hoistExp: LambdaE captures variables: "
+                     ++ show captured_vars ++ "\nin\n" ++ sdoc e0
 
         (Ext _) -> pure ([], e0)
 
