@@ -12,7 +12,7 @@ import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
 import           Gibbon.DynFlags
-import           Gibbon.Passes.AddTraversals ( needsTraversal )
+import           Gibbon.Passes.AddTraversals ( needsTraversalCase )
 import           Gibbon.L1.Syntax
 import           Gibbon.L2.Syntax
 
@@ -76,24 +76,37 @@ Here, we don't want to fill the HOLE with (RequestEndOf x). Instead, we should r
 When does a type 'needsRAN'
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-(1) If any pattern 'needsTraversal' so that we can unpack it, we mark the type of the
-    scrutinee as something that needs RAN's.
+If any pattern 'needsTraversal' so that we can unpack it, we mark the type of the
+scrutinee as something that needs RAN's.
 
--OR-
 
-(2) Consider the following prgram which uses the parallel tuple combinator to
-    parallelize the 'sumtree' function:
+Keeping old case clauses around
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-        sumtree :: Tree -> Int
-        sumtree tr = case tr of
-                       Leaf n   -> n
-                       Node l r -> let tup : (Int, Int) = (sumtree l) || (sumtree r)
-                                   in (#0 tup) + (#1 tup)
+Consider this example datatype.
 
-   To execute sumtree on both sub-trees in parallel, the program should be able
-   access them simultaneously (which is not possbile without RAN's). In general,
-   if the tuple combinator functions operate on values that reside in the same
-   region, RAN's are required for those values.
+    data Foo = A Foo Foo | B
+
+Suppose that we want to add random access nodes to Foo. Before [2019.09.15],
+step (3) above was a destructive operation. Specifically, addRAN would update
+a pattern match on 'A' in place.
+
+    case foo of
+      A x y -> ...
+
+would become
+
+    case foo of
+      A^ ran x y -> ...
+
+
+As described in this [Evernote], we'd like to amortize the cost of adding
+random access nodes to a datatype i.e below a certain threshold, we'd rather
+perform dummy traversals. It's clear that if we want to support this, we
+cannot get rid of the old case clause. After [2019.09.15], that's what
+addRAN does.
+
+Evernote: https://www.evernote.com/l/AF-jUPTw2lZDS440RgWbgj9RMNkttTaKd3Y
 
 -}
 
@@ -104,7 +117,7 @@ type RANEnv = M.Map Var Var
 
 -- | Operates on an L1 program, and updates it to have random access nodes.
 --
--- Previous analysis determines which data types require it ('needsLRAN).
+-- Previous analysis determines which data types require it (needsLRAN).
 addRAN :: S.Set TyCon -> Prog1 -> PassM Prog1
 addRAN needRANsTyCons prg@Prog{ddefs,fundefs,mainExp} = do
   dump_op <- dopt Opt_D_Dump_Repair <$> getDynFlags
@@ -158,7 +171,7 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
     IfE a b c  -> IfE <$> go a <*> go b <*> go c
     MkProdE xs -> MkProdE <$> mapM go xs
     ProjE i e  -> ProjE i <$> go e
-    CaseE scrt mp -> CaseE scrt <$> mapM docase mp
+    CaseE scrt mp -> CaseE scrt <$> concat <$> mapM docase mp
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
@@ -173,25 +186,27 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
   where
     go = addRANExp needRANsTyCons ddfs ienv
 
-    docase :: (DataCon, [(Var,())], L Exp1) -> PassM (DataCon, [(Var,())], L Exp1)
+    docase :: (DataCon, [(Var,())], L Exp1) -> PassM [(DataCon, [(Var,())], L Exp1)]
     docase (dcon,vs,bod) = do
+      old_pat <- pure (dcon,vs,bod)
       case numRANsDataCon ddfs dcon of
-        0 -> (dcon,vs,) <$> go bod
-        n ->
+        0 -> pure [old_pat]
+        n -> do
           let tycon = getTyOfDataCon ddfs dcon
           -- Not all types have random access nodes.
-          in if not (tycon `S.member` needRANsTyCons)
-             then (dcon,vs,) <$> go bod
-             else do
-          ranVars <- mapM (\_ -> gensym "ran") [1..n]
-          let tys = lookupDataCon ddfs dcon
-              -- See Note [Reusing RAN's in case expressions]
-              -- We update the environment to track RAN's of the
-              -- variables bound by this pattern.
-              firstPacked = fromJust $ L.findIndex isPackedTy tys
-              haveRANsFor = L.take n $ L.drop firstPacked $ L.map fst vs
-              ienv' = M.union ienv (M.fromList $ zip haveRANsFor ranVars)
-          (toRANDataCon dcon, (L.map (,()) ranVars) ++ vs,) <$> addRANExp needRANsTyCons ddfs ienv' bod
+          if not (tycon `S.member` needRANsTyCons)
+          then pure [old_pat]
+          else do
+            ranVars <- mapM (\_ -> gensym "ran") [1..n]
+            let tys = lookupDataCon ddfs dcon
+                -- See Note [Reusing RAN's in case expressions]
+                -- We update the environment to track RAN's of the
+                -- variables bound by this pattern.
+                firstPacked = fromJust $ L.findIndex isPackedTy tys
+                haveRANsFor = L.take n $ L.drop firstPacked $ L.map fst vs
+                ienv' = M.union ienv (M.fromList $ zip haveRANsFor ranVars)
+            (:[old_pat]) <$>
+              (toRANDataCon dcon, (L.map (,()) ranVars) ++ vs,) <$> addRANExp needRANsTyCons ddfs ienv' bod
 
 -- | Update data type definitions to include random access nodes.
 withRANDDefs :: Out a => S.Set TyCon -> DDefs (UrTy a) -> M.Map Var (DDef (UrTy a))
@@ -263,7 +278,7 @@ mkRANs ienv needRANsExp =
 
 --------------------------------------------------------------------------------
 
--- See Note [When does a type 'needsLRAN]
+-- See Note [When does a type needsLRAN]
 -- | Collect all types that need random access nodes to be compiled.
 needsRAN :: Prog2 -> S.Set TyCon
 needsRAN Prog{ddefs,fundefs,mainExp} =
@@ -349,7 +364,7 @@ needsRANExp ddefs fundefs env2 renv (L _p ex) =
       let (vars,locs) = unzip vlocs
           renv' = L.foldr (\lc acc -> M.insert lc reg acc) renv1 locs
           env21' = extendPatternMatchEnv dcon ddefs vars locs env21
-          ran_for_scrt = if L.null (needsTraversal ddefs fundefs env2 br)
+          ran_for_scrt = if L.null (needsTraversalCase ddefs fundefs env2 br)
                             then S.empty
                             else S.singleton tycon
       in ran_for_scrt `S.union` needsRANExp ddefs fundefs env21' renv' bod

@@ -1,5 +1,5 @@
 module Gibbon.Passes.AddTraversals
-  (addTraversals, needsTraversal) where
+  (addTraversals, needsTraversalCase) where
 
 import Control.Monad ( forM, when )
 import Data.List as L
@@ -145,7 +145,7 @@ to one of them. There are 2 assumptions that we make about such tuples:
       let (vars,locs) = unzip vlocs
           env21 = extendPatternMatchEnv dcon ddefs vars locs env2
           renv1 = L.foldr (\lc acc -> M.insert lc reg acc) renv locs
-          needs_traversal = needsTraversal ddefs fundefs env21 (dcon,vlocs,rhs)
+          needs_traversal = needsTraversalCase ddefs fundefs env21 (dcon,vlocs,rhs)
       case needs_traversal of
         Nothing -> (dcon, vlocs,) <$> addTraversalsExp ddefs fundefs env21 renv1 context rhs
         Just ls -> do
@@ -165,8 +165,8 @@ to one of them. There are 2 assumptions that we make about such tuples:
 -- If we cannot unpack all the pattern matched variables:
 -- (1) Everything after the first packed element should be unused in the RHS
 -- (2) Otherwise, we must traverse the first (n-1) packed elements
-needsTraversal :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> (DataCon, [(Var, LocVar)], L Exp2) -> Maybe [(Var, LocVar)]
-needsTraversal ddefs fundefs env2 (dcon,vlocs,rhs) =
+needsTraversalCase :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> (DataCon, [(Var, LocVar)], L Exp2) -> Maybe [(Var, LocVar)]
+needsTraversalCase ddefs fundefs env2 (dcon,vlocs,rhs) =
   let (vars, _locs) = unzip vlocs
       tys     = lookupDataCon ddefs dcon
       tyenv   = M.fromList (zip vars tys)
