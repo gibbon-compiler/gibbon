@@ -939,7 +939,7 @@ prim p =
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."
     MkFalse      -> error "lower/prim: internal error. MkFalse should not get here."
     SymAppend    -> error "lower/prim: internal error. SymAppend should not get here."
-    PEndOf       -> error "lower/prim: internal error. PEndOf shouldn't be here."
+    RequestEndOf -> error "lower/prim: internal error. RequestEndOf shouldn't be here."
 
 {- Note [Hacky substitution to encode ParE]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

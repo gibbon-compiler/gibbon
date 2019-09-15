@@ -23,6 +23,7 @@ import GHC.Generics
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Language
+import Gibbon.Common
 
 --------------------------------------------------------------------------------
 

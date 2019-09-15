@@ -270,9 +270,9 @@ ddefsWithRedir ddfs = M.map (\d@DDef{dataCons} -> d {dataCons = dataCons ++ [red
 hasComplexDataCon :: DDefs Ty2 -> TyCon -> Bool
 hasComplexDataCon ddfs tycon =
   let dcons = getConOrdering ddfs tycon
-      hasIndrs = any isIndrDataCon dcons
+      hasRANs = any isRANDataCon dcons
       tys = map (lookupDataCon ddfs) dcons
-  in hasIndrs || hasComplex tys
+  in hasRANs || hasComplex tys
 
 hasComplex :: [[Ty2]] -> Bool
 hasComplex tys = any id $ map (\t -> any hasPacked t && any (not . hasPacked) t) tys

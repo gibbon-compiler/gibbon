@@ -240,7 +240,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
           len0
           pure (s1, ty, PrimAppE pr args_tc)
 
-        PEndOf -> err $ text "Unexpected PEndOf in L0: " <+> exp_doc
+        RequestEndOf -> err $ text "Unexpected RequestEndOf in L0: " <+> exp_doc
           -- pure (s1, CursorTy, PrimAppE pr args_tc)
 
 

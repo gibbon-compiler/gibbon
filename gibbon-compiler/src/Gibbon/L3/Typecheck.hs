@@ -9,7 +9,6 @@ module Gibbon.L3.Typecheck
 
 import Control.Monad.Except
 import Data.Loc
-import Data.Functor.Identity
 import Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
 import qualified Data.List as L
@@ -18,8 +17,6 @@ import Prelude hiding (exp)
 
 import Gibbon.Common
 import Gibbon.L1.Typecheck hiding (tcProg, tcExp, ensureEqual, ensureEqualTy)
-import Gibbon.L1.Syntax
-import qualified Gibbon.L2.Syntax as L2
 import Gibbon.L3.Syntax
 
 -- | Typecheck a L1 expression
@@ -271,7 +268,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
           then return CursorTy
           else return ty
 
-        PEndOf -> error "Do not use PEndOf after L2."
+        RequestEndOf -> error "RequestEndOf shouldn't occur in a L3 program."
 
 
     LetE (v,[],SymDictTy _ _pty, rhs) e -> do

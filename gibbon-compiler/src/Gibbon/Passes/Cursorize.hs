@@ -227,7 +227,7 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
 
     AppE{} -> cursorizeAppE ddfs fundefs denv tenv (L p ex)
 
-    PrimAppE PEndOf [arg] -> do
+    PrimAppE RequestEndOf [arg] -> do
       let (L _ (VarE v)) = arg
       return $ VarE (toEndV v)
 
@@ -943,7 +943,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
   (dcon, [],)
     -- Advance the cursor by 1 byte so that it points to the first field
     <$> mkLets [(field_cur,[],CursorTy, l$ Ext $ AddCursor scrtCur (l$ LitE 1))]
-    <$> (if isIndrDataCon dcon
+    <$> (if isRANDataCon dcon
          then unpackWithRAN field_cur
          else unpackRegularDataCon field_cur)
 
@@ -1025,7 +1025,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
         --
         --     (y3 -> (loc_y3, ind_y3))
         let ran_mp =
-              case numRANsDataCon ddfs (fromIndrDataCon dcon) of
+              case numRANsDataCon ddfs (fromRANDataCon dcon) of
                 0 -> M.empty
                 n -> let -- Random access nodes occur immediately after the tag
                          ind_vars = L.map fst $ L.take n vlocs1

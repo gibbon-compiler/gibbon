@@ -304,7 +304,13 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    len0
                    return (ty, tstate)
 
-                 PEndOf -> return (CursorTy, tstate)
+                 RequestEndOf -> do
+                   len1
+                   case (es !! 0) of
+                     L _ VarE{} -> if isPackedTy (tys !! 0)
+                                   then return (CursorTy, tstate)
+                                   else throwError $ GenericTC "Expected PackedTy" exp
+                     _ -> throwError $ GenericTC "Expected a variable argument" exp
 
 
       LetE (v,_ls,ty,e1) e2 -> do

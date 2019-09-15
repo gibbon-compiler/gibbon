@@ -322,7 +322,7 @@ inferExp' env lex0@(L sl1 exp) bound dest =
         (e,ty,cs) <- bindAllLocations res
         e' <- finishExp e
         let (e'',s) = cleanExp e'
-            unbound = (s S.\\ S.fromList bound)        
+            unbound = (s S.\\ S.fromList bound)
         e''' <- bindAllUnbound e'' (S.toList unbound)
         -- dbgTrace 4 (show (s S.\\ S.fromList bound)) $ return ()
         return (e''',ty)
@@ -440,7 +440,7 @@ inferExp env@FullEnv{dataDefs}
       handleTrailingBindLoc v res =
           do (e,ty,cs) <- bindAfterLoc v res
              case e of
-               (L _ (Ext (LetLocE lv1 (AfterVariableLE v lv2) e))) -> 
+               (L _ (Ext (LetLocE lv1 (AfterVariableLE v lv2) e))) ->
                    do (e',ty',cs') <- bindTrivialAfterLoc lv1 (e,ty,cs)
                       return (l$ Ext (LetLocE lv1 (AfterVariableLE v lv2) e'), ty', cs')
                _ -> return (e,ty,cs) -- Should this signal an error instead of silently returning?
@@ -448,7 +448,7 @@ inferExp env@FullEnv{dataDefs}
       -- | Transforms a result by adding a location binding derived from an AfterVariable constraint
       -- associated with the passed-in variable.
       bindAfterLoc :: Var -> Result -> TiM Result
-      bindAfterLoc v (e,ty,c:cs) = 
+      bindAfterLoc v (e,ty,c:cs) =
           case c of
             AfterVariableL lv1 v' lv2 ->
                 if v == v'
@@ -858,9 +858,9 @@ inferExp env@FullEnv{dataDefs}
                      , ty', fcs)
 
         -- Don't process the EndOf operation at all, just recur through it
-        PrimAppE PEndOf [L la (VarE v)] -> do
+        PrimAppE RequestEndOf [L la (VarE v)] -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
-          return (lc$ L2.LetE (vr,[],CursorTy,L sl2 $ L2.PrimAppE PEndOf [L la (L2.VarE v)]) bod', ty', cs')
+          return (lc$ L2.LetE (vr,[],CursorTy,L sl2 $ L2.PrimAppE RequestEndOf [L la (L2.VarE v)]) bod', ty', cs')
 
         PrimAppE (DictInsertP dty) ls -> do
           (e,ty,cs) <- inferExp env (L sl2 $ PrimAppE (DictInsertP dty) ls) NoDest
@@ -985,12 +985,15 @@ inferExp env@FullEnv{dataDefs}
 
         MapE{} -> err$ "MapE unsupported"
         FoldE{} -> err$ "FoldE unsupported"
-        Ext{} -> err$ "Not expecting any Ext in inferLocs"
+
+        -- Ext (AddCursor cur i) -> do
+        --   (bod',ty',cs') <- inferExp env bod dest
+        --   tryBindReg (lc$ Ext $ LetLocE vr (AfterConstantLE i cur) bod', ty', cs')
 
     LetE{} -> err$ "Malformed let expression: " ++ (show ex0)
     MapE{} -> err$ "MapE unsupported"
     FoldE{} -> err$ "FoldE unsupported"
-    Ext{} -> err$ "Not expecting any Ext in inferLocs"
+    Ext{} -> err$ "Not expecting an Ext here: " ++ sdoc ex0
 
 
 -- TODO: Should eventually allow src and dest regions to be the same
@@ -1463,8 +1466,8 @@ prim p = case p of
            MkFalse -> return MkFalse
            Gensym  -> return Gensym
            SizeParam -> return SizeParam
-           PEndOf    -> return PEndOf
-           DictEmptyP dty -> convertTy dty >>= return . DictEmptyP
+           RequestEndOf    -> return RequestEndOf
+           DictEmptyP dty  -> convertTy dty >>= return . DictEmptyP
            DictInsertP dty -> convertTy dty >>= return . DictInsertP
            DictLookupP dty -> convertTy dty >>= return . DictLookupP
            DictHasKeyP dty -> convertTy dty >>= return . DictHasKeyP

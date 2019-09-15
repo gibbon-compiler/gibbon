@@ -25,14 +25,14 @@ isIndirectionTag = isPrefixOf indirectionTag
 indirectionAlt :: Num a => a
 indirectionAlt = 90
 
-toIndrDataCon :: DataCon -> DataCon
-toIndrDataCon dcon = dcon ++ "^"
+toRANDataCon :: DataCon -> DataCon
+toRANDataCon dcon = dcon ++ "^"
 
-fromIndrDataCon :: DataCon -> DataCon
-fromIndrDataCon = init
+fromRANDataCon :: DataCon -> DataCon
+fromRANDataCon = init
 
-isIndrDataCon :: DataCon -> Bool
-isIndrDataCon = isSuffixOf "^"
+isRANDataCon :: DataCon -> Bool
+isRANDataCon = isSuffixOf "^"
 
 -- | Map a DataCon onto the name of the generated unpack function.
 mkUnpackerName :: TyCon -> Var

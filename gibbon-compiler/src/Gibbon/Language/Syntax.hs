@@ -654,9 +654,11 @@ data Prim ty
             -- (first PackedTy then CursorTy).  The TyCon tracks the original type name.
             -- The variable represents the region that this file will be mapped to, and is
             -- set by InferLocations.
-          | PEndOf
-          -- ^ Returns the end-of cursor for some packed value. These pointers
-          -- serve as random access nodes to the value that is packed after this one.
+
+          | RequestEndOf
+          -- ^ Conveys a demand for the "end of" some packed value, which is
+          -- fulfilled by Cursorize. N.B. the argument must be a VarE that
+          -- refers to a packed value.
 
           | Gensym
 
@@ -1002,6 +1004,7 @@ primArgsTy p =
     GtEqP-> [IntTy, IntTy]
     OrP  -> [BoolTy, BoolTy]
     AndP -> [BoolTy, BoolTy]
+    Gensym  -> []
     MkTrue  -> []
     MkFalse -> []
     SymAppend        -> [SymTy, IntTy]
@@ -1012,7 +1015,7 @@ primArgsTy p =
     DictHasKeyP _ty  -> error "primArgsTy: dicts not handled yet"
     ReadPackedFile{} -> []
     (ErrorP _ _) -> []
-    PEndOf -> error "primArgsTy: PEndOf not handled yet"
+    RequestEndOf      -> error "primArgsTy: RequestEndOf not handled yet"
 
 -- | Return type for a primitive operation.
 primRetTy :: Prim (UrTy a) -> (UrTy a)
@@ -1044,7 +1047,8 @@ primRetTy p =
     DictLookupP ty -> ty
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
-    PEndOf -> error "primRetTy: PEndOf not handled yet"
+    RequestEndOf      -> error "primRetTy: RequestEndOf not handled yet"
+
 
 dummyCursorTy :: UrTy a
 dummyCursorTy = CursorTy

@@ -201,7 +201,13 @@ tcExp ddfs env exp@(L p ex) =
           len0
           return ty
 
-        PEndOf -> return CursorTy
+        RequestEndOf -> do
+          len1
+          case (es !! 0) of
+            L _ VarE{} -> if isPackedTy (tys !! 0)
+                          then return CursorTy
+                          else throwError $ GenericTC "Expected PackedTy" exp
+            _ -> throwError $ GenericTC "Expected a variable argument" exp
 
 
     LetE (v,[],SymDictTy _ pty, rhs) e -> do
