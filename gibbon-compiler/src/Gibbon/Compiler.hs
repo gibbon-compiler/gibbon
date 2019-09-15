@@ -203,8 +203,11 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   -- set the env var DEBUG, to verbosity, when > 1
   setDebugEnvVar verbosity
 
-  -- parse the input file
-  ((l1, cnt0), fp) <- parseInput input fp0
+  -- Use absolute path
+  dir <- getCurrentDirectory
+  let fp1 = dir </> fp0
+  -- Parse the input file
+  ((l1, cnt0), fp) <- parseInput input fp1
   let config' = config { srcFile = Just fp }
 
   case mode of
