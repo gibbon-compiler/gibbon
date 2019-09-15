@@ -580,9 +580,9 @@ monoLambdas (L p ex) = (L p) <$>
       pure $ CaseE scrt' brs'
     DataConE tyapp dcon args ->
       (DataConE tyapp dcon) <$> mapM monoLambdas args
-    TimeIt e ty b -> (\e' -> TimeIt e' ty b) <$> go e
+    TimeIt e ty b  -> (\e' -> TimeIt e' ty b) <$> go e
     WithArenaE v e -> (\e' -> WithArenaE v e') <$> go e
-    Ext (LambdaE args bod) -> (\bod' -> Ext (LambdaE args bod')) <$> go bod
+    Ext (LambdaE{})  -> error $ "monoLambdas: Encountered a LambdaE outside a let binding. In\n" ++ sdoc ex
     Ext (PolyAppE{}) -> error $ "monoLambdas: TODO: " ++ sdoc ex
     Ext (FunRefE{})  -> pure ex
     ParE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
