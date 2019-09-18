@@ -19,6 +19,7 @@ import           Data.Foldable ( foldlM )
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           GHC.Stack (HasCallStack)
+import           GHC.List (zip3)
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
@@ -35,7 +36,7 @@ Transforming L0 to L1
 ~~~~~~~~~~~~~~~~~~~~~
 
 (A) Monomorphization
-(B) Lambda lifting
+(B) Lambda lifting (via specialization)
 (C) Convert to L1, which should be pretty straightforward at this point.
 
 
@@ -165,8 +166,8 @@ toL1 Prog{ddefs, fundefs, mainExp} =
                                                                   toL1Exp c) )
                                                     brs)
         DataConE _ dcon ls -> DataConE () dcon (map toL1Exp ls)
-        TimeIt e ty b -> TimeIt (toL1Exp e) (toL1Ty ty) b
-        ParE a b      -> ParE (toL1Exp a) (toL1Exp b)
+        TimeIt e ty b  -> TimeIt (toL1Exp e) (toL1Ty ty) b
+        ParE a b       -> ParE (toL1Exp a) (toL1Exp b)
         WithArenaE v e -> WithArenaE v (toL1Exp e)
         MapE{}  -> err1 (sdoc ex)
         FoldE{} -> err1 (sdoc ex)
@@ -497,7 +498,10 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
             _  -> do
               f' <- addFnObl f tyapps
               pure $ Ext $ FunRefE [] f'
-    ParE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    ParE a b -> do
+      a' <- collectMonoObls ddefs env2 toplevel a
+      b' <- collectMonoObls ddefs env2 toplevel b
+      pure $ ParE a' b'
     MapE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
     FoldE{} -> error $ "monoLambdas: TODO: " ++ sdoc ex
   where
@@ -585,7 +589,7 @@ monoLambdas (L p ex) = (L p) <$>
     Ext (LambdaE{})  -> error $ "monoLambdas: Encountered a LambdaE outside a let binding. In\n" ++ sdoc ex
     Ext (PolyAppE{}) -> error $ "monoLambdas: TODO: " ++ sdoc ex
     Ext (FunRefE{})  -> pure ex
-    ParE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    ParE a b-> ParE <$> monoLambdas a <*> monoLambdas b
     MapE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
     FoldE{} -> error $ "monoLambdas: TODO: " ++ sdoc ex
   where go = monoLambdas
@@ -663,7 +667,7 @@ updateTyConsExp ddefs mono_st (L loc ex) = L loc $
     DataConE{} -> error $ "updateTyConsExp: DataConE expected ProdTy tyapps, got: " ++ sdoc ex
     TimeIt e ty b -> TimeIt (go e) (updateTyConsTy ddefs mono_st ty) b
     WithArenaE v e -> WithArenaE v (go e)
-    ParE{}  -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
+    ParE a b-> ParE (go a) (go b)
     MapE{}  -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     FoldE{} -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, updateTyConsTy ddefs mono_st ty)) args) (go bod))
@@ -878,6 +882,32 @@ specExp ddefs env2 (L p ex) = (L p) <$>
 
     LetE (_, (_:_),_,_) _ -> error $ "specExp: Binding not monomorphized: " ++ sdoc ex
 
+    ParE a b -> do
+      let mk_fn e0 = do
+            let vars = S.toList $ gFreeVars e0
+            args <- mapM (\v -> lift $ gensym v) vars
+            let e0' = foldr (\(old,new) acc ->
+                              gSubst old (l$ VarE new) acc)
+                            e0
+                            (zip vars args)
+            -- let bind args = vars before call_a
+            fnname <- lift $ gensym "fn"
+            let binds  = mkLets (map (\(v,w,ty) -> (v,[],ty,l$ VarE w)) (zip3 args vars argtys))
+                retty  = recoverType ddefs env2 e0
+                argtys = map (\v -> lookupVEnv v env2) vars
+                fn = FunDef { funName = fnname
+                            , funArgs = args
+                            , funTy   = ForAll [] (ArrowTy argtys retty)
+                            , funBody = e0'
+                            }
+            pure (fn, binds, l$ AppE fnname [] (map (l . VarE) args))
+      (fna, bindsa, call_a) <- mk_fn a
+      (fnb, bindsb, call_b) <- mk_fn b
+      state (\st -> ((), st { sp_fundefs = M.insert (funName fna) fna $
+                                           M.insert (funName fnb) fnb $
+                                           (sp_fundefs st)}))
+      pure $ unLoc $ bindsa $ bindsb (l$ ParE call_a call_b)
+
     -- Straightforward recursion
     VarE{}    -> pure ex
     LitE{}    -> pure ex
@@ -903,7 +933,6 @@ specExp ddefs env2 (L p ex) = (L p) <$>
     WithArenaE v e -> do
        e' <- specExp ddefs (extendVEnv v ArenaTy env2) e
        pure $ WithArenaE v e'
-    ParE{}  -> error $ "specExp: TODO: " ++ sdoc ex
     MapE{}  -> error $ "specExp: TODO: " ++ sdoc ex
     FoldE{} -> error $ "specExp: TODO: " ++ sdoc ex
 

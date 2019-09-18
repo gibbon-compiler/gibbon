@@ -291,7 +291,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
           ProjE i e ->
               let edoc = pprintWithStyle sty e
               in case sty of
-                PPInternal ->  text "#" <> int i <+> edoc
+                PPInternal -> parens $ text "#" <> int i <+> edoc
                 PPHaskell  ->
                     case i of
                       0 -> text "fst" <+> edoc
@@ -306,7 +306,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                 hsep (map (pprintWithStyle sty) es)
                               -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
           TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
-          ParE a b -> pprintWithStyle sty a <+> text "||" <+> pprintWithStyle sty b
+          ParE a b -> pprintWithStyle sty a <+> text ".||." <+> pprintWithStyle sty b
           WithArenaE v e -> case sty of
                               PPHaskell  -> (text "let") <+>
                                             pprintWithStyle sty v <+>
@@ -519,7 +519,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                                else pprintWithStyle sty loc) <+>
                               hsep (map (ppExp env2) es)
           TimeIt e _ty _b -> text "timeit" <+> parens (ppExp env2 e)
-          ParE a b -> ppExp env2 a <+> text "||" <+> ppExp env2 b
+          ParE a b -> ppExp env2 a <+> text ".||." <+> ppExp env2 b
           WithArenaE v e -> (text "let") <+>
                             pprintWithStyle sty v <+>
                             equals <+>

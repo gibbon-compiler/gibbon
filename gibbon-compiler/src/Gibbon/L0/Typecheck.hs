@@ -6,6 +6,7 @@ module Gibbon.L0.Typecheck where
 
 import           Control.Monad.State ( MonadState )
 import           Control.Monad.Except
+import           Control.Monad.Fail
 import           Data.Foldable ( foldlM )
 import           Data.List
 import           Data.Loc
@@ -25,6 +26,9 @@ import           Gibbon.Common
 
 newtype TcM a = TcM (ExceptT Doc PassM a)
   deriving (Functor, Applicative, Monad, MonadError Doc, MonadState Int)
+
+instance MonadFail TcM where
+  fail = error
 
 runTcM :: TcM a -> PassM (Either Doc a)
 runTcM (TcM tc) = runExceptT tc
@@ -345,7 +349,12 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
       (s1, ty', e1') <- tcExp ddefs sbst venv' fenv bound_tyvars e1
       pure (s1, ty', WithArenaE v e1')
 
-    ParE{}  -> err $ text "TODO" <+> exp_doc
+    ParE a b  -> do
+      (s1, es_tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars [a,b]
+      case es_tc of
+        [a',b'] -> pure (s1, ProdTy es_tys, ParE a' b')
+        _ -> err $ text "ParE: expected list of two things, got: " <+> doc es_tc
+
     MapE{}  -> err $ text "TODO" <+> exp_doc
     FoldE{} -> err $ text "TODO" <+> exp_doc
   where
@@ -524,9 +533,9 @@ zonkExp s (L p ex) = L p $
     Ext (PolyAppE rator rand) -> Ext (PolyAppE (go rator) (go rand))
     Ext (FunRefE tyapps f)    -> let tyapps1 = map (zonkTy s) tyapps
                                  in Ext (FunRefE tyapps1 f)
-    ParE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
-    MapE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
-    FoldE{} -> error $ "zonkExp: TODO, " ++ sdoc ex
+    ParE a b -> ParE (go a) (go b)
+    MapE{}   -> error $ "zonkExp: TODO, " ++ sdoc ex
+    FoldE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
 
   where
     go = zonkExp s
@@ -578,9 +587,9 @@ substTyVarExp s (L p ex) = L p $
     Ext (PolyAppE rator rand) -> Ext (PolyAppE (go rator) (go rand))
     Ext (FunRefE tyapps f) -> let tyapps1 = map (substTyVar s) tyapps
                               in Ext $ FunRefE tyapps1 f
-    ParE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
-    MapE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
-    FoldE{} -> error $ "zonkExp: TODO, " ++ sdoc ex
+    ParE a b -> ParE (go a) (go b)
+    MapE{}   -> error $ "substTyVarExp: TODO, " ++ sdoc ex
+    FoldE{}  -> error $ "substTyVarExp: TODO, " ++ sdoc ex
   where
     go = substTyVarExp s
 

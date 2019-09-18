@@ -233,7 +233,7 @@ flattenExp0 ddfs env2 (L sloc e0) =
                        return (concat bndss, f ls')
 
   in fmap (\(a,b) -> (a, L sloc b)) $
-  case dbgTraceIt (sdoc e0) e0 of
+  case e0 of
     LitE _    -> return ([],e0)
     VarE    _ -> return ([],e0)
     LitSymE _ -> return ([],e0)
