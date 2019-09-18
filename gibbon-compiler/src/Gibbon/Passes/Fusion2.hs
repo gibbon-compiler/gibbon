@@ -759,6 +759,8 @@ renameFunction function newName =
           TimeIt e d b             ->   l $ TimeIt (go e) d b
           _                ->   ex
 
+
+
 {- We want to search for
 the following:
   f1 (x1, v1,v2 ...vn)
@@ -784,7 +786,7 @@ buildTupleCandidatesTable fDefs exp argsVars =
                 let otherCalls = if M.member inputTree  tb'
                                  then (tb'  M.! inputTree)
                                  else [] in
-                if isTupleable (fDefs M.! fName) &&
+                if not  (isTrivial (fDefs M.! fName)) &&
                     (haveIndependentArgsNew tail otherCalls)
 
                 then
@@ -817,6 +819,24 @@ buildTupleCandidatesTable fDefs exp argsVars =
             VarE v -> v == L.head (funArgs f)
             _ -> False
         _ -> False
+
+    isTrivial f =
+      if not (isTupleable f )
+        then True
+        else
+          case unLoc (funBody f) of
+            CaseE e ls ->
+              L.foldl (\res (_ ,_ ,exp) -> res && (go exp )) True ls
+               where
+                go exp =
+                  case unLoc exp of
+                    LetE (boundedVar,_,_,rhs) body  ->
+                      case unLoc rhs of
+                           AppE{} -> False
+                           otherwise -> go body
+                    AppE{} -> False
+                    otherwise -> True
+
 
 
     -- we want to make sure that args are independent on "other calls"
@@ -855,7 +875,7 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
  if depth> 10 then return (oldExp_, fdefs)
  else
   do
-    let oldExp = removeCommonExpressions (removeUnusedDefsExp oldExp_ )
+    let oldExp = cleanExp oldExp_
   -- candidates1 : a list of [(fName, CallExpressions)] functions that traverses
   -- same input
     let candidates1 = L.filter f (M.toList (buildTupleCandidatesTable
