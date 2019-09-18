@@ -116,15 +116,15 @@ Assume that the input program is monomorphic.
 
 l0ToL1 :: Prog0 -> PassM L1.Prog1
 l0ToL1 p = do
-  p0  <- hoistLambdas p
-  dbgTrace 5 ("\n\nHoist Lambdas:\n" ++ (render $ pprint p0)) (pure ())
+  p0  <- bindLambdas p
+  dbgTrace 5 ("\n\nBind Lambdas:\n" ++ (render $ pprint p0)) (pure ())
   -- Typecheck again so that all the meta type variables introduced by
-  -- hoistLambdas (to bind lambdas) get zonked.
+  -- bindLambdas (to bind lambdas) get zonked.
   p0' <- tcProg p0
   dbgTrace 5 ("\n\nTypechecked:\n" ++ (render $ pprint p0')) (pure ())
   p1 <- monomorphize p0'
   dbgTrace 5 ("\n\nMonomorphized:\n" ++ (render $ pprint p1)) (pure ())
-  p2 <- spec p1
+  p2 <- specLambdas p1
   dbgTrace 5 ("\n\nSpecialized:\n" ++ (render $ pprint p2)) (pure ())
   pure $ toL1 p2
 
@@ -711,30 +711,40 @@ data SpecState = SpecState
   , sp_fundefs   :: FunDefs0 }
   deriving (Show, Eq, Generic, Out)
 
--- We track references when we bind variables to account for programs like:
---
---     foo :: ((a -> b), a) -> a ; foo = ...
---     main = ... arg = (fn, thing) ... foo arg ...
---
--- type FunRefsEnv = M.Map Var FunRefs
---
+{-|
 
+Specialization, only lambdas for now. E.g.
 
-spec :: Prog0 -> PassM Prog0
-spec prg@Prog{ddefs,fundefs,mainExp} = do
+    foo :: (a -> b) -> a -> b
+    foo f1 a = f1 a
+
+    ... foo top1 x ...
+
+becomes
+
+    foo f1 a = ...
+
+    foo2 :: a -> b
+    foo2 a = top1 a
+
+    ... foo2 x ...
+
+-}
+specLambdas :: Prog0 -> PassM Prog0
+specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
   let spec_m = do
         let env2 = progToEnv prg
         mainExp' <-
           case mainExp of
             Nothing -> pure Nothing
             Just (e, ty) -> do
-              e' <- specExp ddefs env2 e
+              e' <- specLambdasExp ddefs env2 e
               pure $ Just (e', ty)
         -- Same reason as Step (1.2) in monomorphization.
         let fo_funs = M.filter isFOFun fundefs
         mapM_
           (\fn@FunDef{funName,funBody} -> do
-                funBody' <- specExp ddefs env2 funBody
+                funBody' <- specLambdasExp ddefs env2 funBody
                 low <- get
                 let funs   = sp_fundefs low
                     fn'    = fn { funBody = funBody' }
@@ -766,7 +776,7 @@ spec prg@Prog{ddefs,fundefs,mainExp} = do
         let fns = sp_fundefs low
             fn = fns # fn_name
             ((fn_name, refs), new_fn_name) = M.elemAt 0 (sp_funs_todo low)
-        specFun ddefs (progToEnv prg) new_fn_name refs fn
+        specLambdasFun ddefs (progToEnv prg) new_fn_name refs fn
         state (\st -> ((), st { sp_funs_todo = M.delete (fn_name, refs) (sp_funs_todo st) }))
         fixpoint
 
@@ -780,8 +790,8 @@ spec prg@Prog{ddefs,fundefs,mainExp} = do
          arrowTysInTy ret_ty == []
 
 -- Eliminate all functions passed in as arguments to this function.
-specFun :: DDefs0 -> Env2 Ty0 -> Var -> [FunRef] -> FunDef0 -> SpecM ()
-specFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
+specLambdasFun :: DDefs0 -> Env2 Ty0 -> Var -> [FunRef] -> FunDef0 -> SpecM ()
+specLambdasFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
   let
       -- lamda args
       funArgs'  = map fst $ filter (isFunTy . snd) $ zip funArgs (inTys funTy)
@@ -790,7 +800,7 @@ specFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
       funArgs'' = map fst $ filter (not . isFunTy . snd) $ zip funArgs (inTys funTy)
       fn' = fn { funName = new_fn_name
                , funBody = do_spec specs (funBody fn) }
-  funBody' <- specExp ddefs env2 (funBody fn')
+  funBody' <- specLambdasExp ddefs env2 (funBody fn')
   let fn''  = fn' { funBody = funBody'
                   , funArgs = funArgs''
                   -- N.B. Only update the type after 'specExp' runs.
@@ -803,36 +813,17 @@ specFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
     -- First order type
     funTy' = ForAll tyvars (ArrowTy (filter (not . isFunTy) arg_tys) ret_ty)
 
-{-
-
-Specialization, only lambdas for now. E.g.
-
-    foo :: (a -> b) -> a -> b
-    foo f1 a = f1 a
-
-    ... foo top1 x ...
-
-becomes
-
-    foo f1 a = ...
-
-    foo2 :: a -> b
-    foo2 a = top1 a
-
-    ... foo2 x ...
-
--}
     do_spec :: [(Var,Var)] -> L Exp0 -> L Exp0
     do_spec lams e = foldr (uncurry subst') e lams
 
     subst' old new ex = gRename (M.singleton old new) ex
 
-specExp :: DDefs0 -> Env2 Ty0 -> L Exp0 -> SpecM (L Exp0)
-specExp ddefs env2 (L p ex) = (L p) <$>
+specLambdasExp :: DDefs0 -> Env2 Ty0 -> L Exp0 -> SpecM (L Exp0)
+specLambdasExp ddefs env2 (L p ex) = (L p) <$>
   case ex of
     -- TODO, docs.
     AppE f [] args -> do
-      args' <- mapM (specExp ddefs env2) args
+      args' <- mapM go args
       let args'' = dropFunRefs f args'
           refs   = foldr collectFunRefs [] args
       case refs of
@@ -852,14 +843,14 @@ specExp ddefs env2 (L p ex) = (L p) <$>
               put low''
               pure $ AppE f' [] args''
             Just f' -> pure $ AppE f' [] args''
-    AppE _ (_:_) _ -> error $ "specExp: Call-site not monomorphized: " ++ sdoc ex
+    AppE _ (_:_) _ -> error $ "specLambdasExp: Call-site not monomorphized: " ++ sdoc ex
 
     -- Float out a lambda fun to the top-level.
     LetE (v, [], ty, L _ (Ext (LambdaE args lam_bod))) bod -> do
       let arg_vars = map fst args
           captured_vars = gFreeVars lam_bod `S.difference` (S.fromList arg_vars)
       if not (S.null captured_vars)
-      then error $ "specExp: LamdaE captures variables: "
+      then error $ "specLambdasExp: LamdaE captures variables: "
                    ++ show captured_vars
                    ++ ". TODO: these can become additional arguments."
       else do
@@ -871,13 +862,13 @@ specExp ddefs env2 (L p ex) = (L p) <$>
                         , funBody = lam_bod' }
             env2' = extendFEnv v (ForAll [] ty) env2
         state (\st -> ((), st { sp_fundefs = M.insert v fn (sp_fundefs st) }))
-        unLoc <$> specExp ddefs env2' bod
+        unLoc <$> specLambdasExp ddefs env2' bod
 
     LetE (v, [], ty, rhs) bod -> do
       let _fn_refs = collectFunRefs rhs []
           env2' = (extendVEnv v ty env2)
       rhs' <- go rhs
-      bod' <- specExp ddefs env2' bod
+      bod' <- specLambdasExp ddefs env2' bod
       pure $ LetE (v, [], ty, rhs') bod'
 
     LetE (_, (_:_),_,_) _ -> error $ "specExp: Binding not monomorphized: " ++ sdoc ex
@@ -923,7 +914,7 @@ specExp ddefs env2 (L p ex) = (L p) <$>
       brs' <- mapM
                 (\(dcon,vtys,rhs) -> do
                   let env2' = extendsVEnv (M.fromList vtys) env2
-                  (dcon,vtys,) <$> specExp ddefs env2' rhs)
+                  (dcon,vtys,) <$> specLambdasExp ddefs env2' rhs)
                 brs
       pure $ CaseE scrt' brs'
     DataConE tyapp dcon args -> (DataConE tyapp dcon) <$> mapM go args
@@ -931,18 +922,18 @@ specExp ddefs env2 (L p ex) = (L p) <$>
        e' <- go e
        pure $ TimeIt e' ty b
     WithArenaE v e -> do
-       e' <- specExp ddefs (extendVEnv v ArenaTy env2) e
+       e' <- specLambdasExp ddefs (extendVEnv v ArenaTy env2) e
        pure $ WithArenaE v e'
-    MapE{}  -> error $ "specExp: TODO: " ++ sdoc ex
-    FoldE{} -> error $ "specExp: TODO: " ++ sdoc ex
+    MapE{}  -> error $ "specLambdasExp: TODO: " ++ sdoc ex
+    FoldE{} -> error $ "specLambdasExp: TODO: " ++ sdoc ex
 
     Ext ext ->
       case ext of
-        LambdaE{}  -> error $ "specExp: Should reach a LambdaE. It should be floated out by the Let case." ++ sdoc ex
-        PolyAppE{} -> error $ "specExp: TODO: " ++ sdoc ex
+        LambdaE{}  -> error $ "specLambdasExp: Should reach a LambdaE. It should be floated out by the Let case." ++ sdoc ex
+        PolyAppE{} -> error $ "specLambdasExp: TODO: " ++ sdoc ex
         FunRefE{}  -> pure ex
   where
-    go = specExp ddefs env2
+    go = specLambdasExp ddefs env2
 
     _isFunRef e =
       case e of
@@ -988,9 +979,7 @@ specExp ddefs env2 (L p ex) = (L p) <$>
 
 {-|
 
-Hoist lambdas up until the point where control flow diverges,
-exactly like HoistNewBuf. This is a quick way to support anonymous
-lambdas. For example,
+Let bind all anonymous lambdas.
 
     map (\x -> x + 1) [1,2,3]
 
@@ -999,12 +988,12 @@ becomes
    let lam_1 = (\x -> x + 1)
    in map lam_1 [1,2,3]
 
-Then the specializer can take care of turning lam_1 into a top-level function.
+This is an intermediate step before the specializer turns the let bound
+lambdas into top-level functions.
 
 -}
-
-hoistLambdas :: Prog0 -> PassM Prog0
-hoistLambdas prg@Prog{fundefs,mainExp} = do
+bindLambdas :: Prog0 -> PassM Prog0
+bindLambdas prg@Prog{fundefs,mainExp} = do
   mainExp' <- case mainExp of
                 Nothing      -> pure Nothing
                 Just (a, ty) -> Just <$> (,ty) <$> hoistExp a
