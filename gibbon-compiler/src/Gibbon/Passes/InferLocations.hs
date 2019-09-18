@@ -595,9 +595,10 @@ inferExp env@FullEnv{dataDefs}
 
     -- Location inference for the parallel combinator should work exactly like a regular tuple --
     -- except that the result should be a `ParE` instead of a `MkProdE`.
-    ParE a b -> do
-      (L lc1 (MkProdE [a',b']), ty, cs) <- inferExp env (l$ MkProdE [a,b]) dest
-      return (L lc1 (ParE a' b'), ty, cs)
+    -- ParE a b -> do
+    --   (L lc1 (MkProdE [a',b']), ty, cs) <- inferExp env (l$ MkProdE [a,b]) dest
+    --   return (L lc1 (ParE a' b'), ty, cs)
+    ParE{} -> error "inferLocations: TODO ParE"
 
     LitE n -> return (lc$ LitE n, IntTy, [])
 
@@ -954,12 +955,13 @@ inferExp env@FullEnv{dataDefs}
 
         -- Location inference for the parallel combinator should work exactly like a regular tuple --
         -- except that the result should be a `ParE` instead of a `MkProdE`.
-        ParE a b -> do
-           res <- inferExp env (l$ LetE (vr,locs,bty, l$ MkProdE [a,b]) bod) dest
-           case res of
-             (L lc1 (LetE (vr',locs', ty', L lc2 (MkProdE [a',b'])) bod), ty'', cs'') ->
-               return (L lc1 (LetE (vr',locs', ty', L lc2 (ParE a' b')) bod), ty'', cs'')
-             _  -> err$ "ParE -- unexpected result: " ++ sdoc res
+        -- ParE a b -> do
+        --    res <- inferExp env (l$ LetE (vr,locs,bty, l$ MkProdE [a,b]) bod) dest
+        --    case res of
+        --      (L lc1 (LetE (vr',locs', ty', L lc2 (MkProdE [a',b'])) bod), ty'', cs'') ->
+        --        return (L lc1 (LetE (vr',locs', ty', L lc2 (ParE a' b')) bod), ty'', cs'')
+        --      _  -> err$ "ParE -- unexpected result: " ++ sdoc res
+        ParE{} -> error "inferLocations: TODO ParE"
 
         WithArenaE v e -> do
           (e',ty,cs) <- inferExp (extendVEnv v ArenaTy env) e NoDest
@@ -1056,10 +1058,11 @@ finishExp (L i e) =
                      _ -> return t
              return $ l$ TimeIt e1' t' b
 
-      ParE a b -> do
-          a' <- finishExp a
-          b' <- finishExp b
-          return (l$ ParE a' b')
+      -- ParE a b -> do
+      --     a' <- finishExp a
+      --     b' <- finishExp b
+      --     return (l$ ParE a' b')
+      ParE{} -> error "finishExp: TODO ParE"
 
       WithArenaE v e -> do
              e' <- finishExp e
@@ -1152,9 +1155,10 @@ cleanExp (L i e) =
       TimeIt e d b -> let (e',s') = cleanExp e
                       in (l$ TimeIt e' d b, s')
 
-      ParE a b -> let (a', s1) = cleanExp a
-                      (b', s2) = cleanExp b
-                  in (l$ ParE a' b', s1 `S.union` s2)
+      -- ParE a b -> let (a', s1) = cleanExp a
+      --                 (b', s2) = cleanExp b
+      --             in (l$ ParE a' b', s1 `S.union` s2)
+      ParE{} -> error "cleanExp: TODO ParE"
 
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (l$ WithArenaE v e', s)
@@ -1233,9 +1237,10 @@ fixProj renam pvar proj (L i e) =
                            in l$ DataConE lv dc es'
       TimeIt e1 d b -> let e1' = fixProj renam pvar proj e1
                        in l$ TimeIt e1' d b
-      ParE e1 e2 -> let e1' = fixProj renam pvar proj e1
-                        e2' = fixProj renam pvar proj e2
-                    in l$ ParE e1' e2'
+      -- ParE e1 e2 -> let e1' = fixProj renam pvar proj e1
+      --                   e2' = fixProj renam pvar proj e2
+      --               in l$ ParE e1' e2'
+      ParE{} -> error "fixProj: TODO ParE"
       WithArenaE v e -> l$ WithArenaE v $ fixProj renam pvar proj e
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"

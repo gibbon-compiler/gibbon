@@ -121,7 +121,8 @@ to one of them. There are 2 assumptions that we make about such tuples:
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
-    ParE a b -> ParE <$> go a <*> go b
+    -- ParE a b -> ParE <$> go a <*> go b
+    ParE{} -> error "addTraversals: TODO ParE"
     Ext ext ->
       case ext of
         LetRegionE reg bod -> Ext <$> LetRegionE reg <$> go bod

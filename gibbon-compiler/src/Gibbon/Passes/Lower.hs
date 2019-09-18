@@ -584,7 +584,7 @@ input program. So, we use hackyParSubst to get rid of the "flT" binding altogeth
 See [Hacky substitution to encode ParE].
 
 -}
-
+{-
     LetE (v,_, ProdTy [tya, tyb], L _ (ParE a b)) bod -> do
       let doParExp idx ty e b = do
             tmp <- gensym "tmp_par"
@@ -600,6 +600,9 @@ See [Hacky substitution to encode ParE].
       return $ a' { T.bod = b' { T.bod = bod'
                                , T.async = True } }
 
+-}
+    LetE (_,_, ProdTy [_, _], L _ (ParE _ _)) _ -> do
+      error "lower: TODO ParE"
 
     -- We could eliminate these ahead of time:
     LetE (v,_,t,rhs) bod | isTrivial' rhs ->
@@ -645,7 +648,7 @@ See [Hacky substitution to encode ParE].
     PrimAppE (DictInsertP ty) ((L sl (VarE v)):ls) -> do
       tmp <- gensym $ toVar "flt"
       tail sym_tbl (l$ LetE (tmp, [], SymDictTy (Just v) ty, l$ PrimAppE (DictInsertP ty) ((L sl (VarE v)):ls)) (l$ VarE tmp))
-           
+
     PrimAppE p ls -> do
       tmp <- gensym $ toVar "flt"
       tail sym_tbl (l$ LetE (tmp, [], primRetTy p, l$ PrimAppE p ls) (l$ VarE tmp))

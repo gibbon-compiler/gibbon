@@ -467,7 +467,7 @@ stripTyLocs ty =
     ArenaTy  -> ArenaTy
 
 dummyTyLocs :: Applicative f => UrTy () -> f (UrTy LocVar)
-dummyTyLocs ty = traverse (const (pure (toVar "dummy"))) ty 
+dummyTyLocs ty = traverse (const (pure (toVar "dummy"))) ty
 
 -- | Collect all the locations mentioned in a type.
 locsInTy :: Ty2 -> [LocVar]
@@ -602,7 +602,7 @@ mapPacked fn t =
     ListTy{} -> error "FINISHLISTS"
 
 constPacked :: UrTy a1 -> UrTy a2 -> UrTy a1
-constPacked c t = 
+constPacked c t =
   case t of
     IntTy  -> IntTy
     BoolTy -> BoolTy
@@ -641,7 +641,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           DataConE _ _ args -> foldl go acc args
           TimeIt e _ _ -> go acc e
           WithArenaE _ e -> go acc e
-          ParE{}  -> acc
+          -- ParE{}  -> acc
+          ParE{}  -> error "depList: TODO ParE"
           MapE{}  -> acc
           FoldE{} -> acc
           Ext ext ->

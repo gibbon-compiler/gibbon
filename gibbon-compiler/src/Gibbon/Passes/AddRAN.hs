@@ -178,7 +178,8 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
     WithArenaE v e -> do
       e' <- go e
       return $ WithArenaE v e'
-    ParE a b -> ParE <$> (go a) <*> go b
+    -- ParE a b -> ParE <$> (go a) <*> go b
+    ParE{} -> error "addRANExp: TODO ParE"
     Ext _ -> return ex
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{} -> error "addRANExp: TODO FoldE"
@@ -325,7 +326,7 @@ needsRANExp ddefs fundefs env2 renv (L _p ex) =
     DataConE{} -> S.empty
     TimeIt{}   -> S.empty
     WithArenaE{} -> S.empty
-
+{-
     -- See (2) in Note [When does a type 'needsLRAN].
     ParE a b   -> let mp1 = parAppLoc env2 a
                       mp2 = parAppLoc env2 b
@@ -342,6 +343,9 @@ needsRANExp ddefs fundefs env2 renv (L _p ex) =
                               want_ran_locs = L.filter (\lc -> (renv # lc) `S.member` common_regs) (locs1 ++ locs2)
                               common_mp = mp1 `M.union` mp2
                           in S.fromList $ L.map (\lc -> common_mp # lc) want_ran_locs
+
+-}
+    ParE{} -> error "needsRANExp: TODO ParE"
     Ext ext ->
       case ext of
         LetRegionE _ bod -> go bod

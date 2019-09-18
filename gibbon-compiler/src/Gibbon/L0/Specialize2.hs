@@ -966,7 +966,7 @@ specLambdasExp ddefs env2 (L p ex) = (L p) <$>
                             (\(_,_,b) acc2 -> collectFunRefs b acc2)
                             (collectFunRefs scrt acc)
                             brs
-        ParE{}  -> error $ "collectFunRefs: TODO: " ++ sdoc e
+        ParE a b-> foldr collectFunRefs acc [a, b]
         MapE{}  -> error $ "collectFunRefs: TODO: " ++ sdoc e
         FoldE{} -> error $ "collectFunRefs: TODO: " ++ sdoc e
         Ext ext ->

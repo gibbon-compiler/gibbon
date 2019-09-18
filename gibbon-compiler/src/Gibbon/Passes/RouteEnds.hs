@@ -195,6 +195,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                (wrapBody e2' newls)
 
           --
+          {-
           LetE (v,_ls,ty, rhs@(L _ (ParE a b))) bod -> do
             (outlocs1,newls1,eor1) <- doBoundApp a
             (outlocs2,newls2,eor2) <- doBoundApp b
@@ -208,6 +209,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
             bod' <- exp fns retlocs eor' lenv afterenv (extendVEnv v ty env2) bod
             return $ LetE (v,outlocs',ty,rhs)
                           (wrapBody bod' newls')
+          -}
+          LetE (v,_ls,ty, rhs@(L _ (ParE a b))) bod -> do
+            error "routeEnds: TODO: ParE "
 
           CaseE (L _ (VarE x)) brs -> do
                  -- We will need to gensym while processing the case clauses, so
@@ -374,7 +378,8 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  e' <- go e
                  return $ TimeIt e' ty b
 
-          ParE a b -> ParE <$> go a <*> go b
+          -- ParE a b -> ParE <$> go a <*> go b
+          ParE{} -> error "routeEnds: TODO: ParE "
 
           WithArenaE v e -> WithArenaE v <$> go e
 
