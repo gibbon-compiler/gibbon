@@ -179,11 +179,8 @@ exp ddfs env2 (L sloc e0) =
       (bnd,e') <- go e
       return ([], TimeIt (flatLets bnd e') (gRecoverType ddfs env2 e) b)
 
-    -- ParE a b -> do
-    --   (bnd ,a') <- go a
-    --   (bnd2,b') <- go b
-    --   return ([], ParE (flatLets bnd a') (flatLets bnd2 b'))
-    ParE{} -> error "flatten: TODO ParE"
+    -- It's a pair of function calls, don't flatten anyting.
+    ParE{} -> return ([], e0)
 
     WithArenaE v e -> do
       (bnd, e') <- go e

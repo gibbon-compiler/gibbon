@@ -43,10 +43,10 @@ mkPrinterName :: DataCon -> Var
 mkPrinterName tyCons = toVar $ "print_" ++ tyCons
 
 mkCopyFunName :: DataCon -> Var
-mkCopyFunName dcon = "copy_" `varAppend` (toVar dcon)
+mkCopyFunName dcon = "_copy_" `varAppend` (toVar dcon)
 
 isCopyFunName :: Var -> Bool
-isCopyFunName = isPrefixOf "copy_" . fromVar
+isCopyFunName = isPrefixOf "_copy_" . fromVar
 
 mkTravFunName :: DataCon -> Var
 mkTravFunName dcon = "_traverse_" `varAppend` (toVar dcon)

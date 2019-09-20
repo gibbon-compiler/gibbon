@@ -294,7 +294,10 @@ tcExp ddfs env exp@(L p ex) =
     ParE a b -> do
       aty <- go a
       bty <- go b
-      return (ProdTy [aty, bty])
+      if isScalarTy aty && isScalarTy bty
+      then return (ProdTy [aty, bty])
+      else error $ "Gibbon-TODO: Only scalar types allowed in ParE for now. Got: " ++
+                   sdoc (ProdTy [aty, bty])
 
     WithArenaE v e -> do
       let env' = extendEnv env [(v,ArenaTy)]
@@ -351,7 +354,14 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
       let (argTys,retty) = funTy
           venv = M.fromList (zip funArgs argTys)
           env' = Env2 venv (fEnv env)
-          res = runExcept $ tcExp ddefs env' funBody
+          res  = runExcept $ tcExp ddefs env' funBody
+      case retty of
+        ProdTy tys -> do
+          let packed_outs = L.filter (not . isScalarTy) tys
+          case packed_outs of
+            [_one] -> pure ()
+            _      -> error $ "Gibbon-TODO: Only one packed typed allowed in a return value. Got: " ++ sdoc retty
+        _ -> pure ()
       case res of
         Left err -> error $ sdoc err
         Right ty -> if ty == retty

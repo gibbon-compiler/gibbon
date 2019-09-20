@@ -883,7 +883,7 @@ specLambdasExp ddefs env2 (L p ex) = (L p) <$>
                             (zip vars args)
             -- let bind args = vars before call_a
             fnname <- lift $ gensym "fn"
-            let binds  = mkLets (map (\(v,w,ty) -> (v,[],ty,l$ VarE w)) (zip3 args vars argtys))
+            let binds  = map (\(v,w,ty) -> (v,[],ty,l$ VarE w)) (zip3 args vars argtys)
                 retty  = recoverType ddefs env2 e0
                 argtys = map (\v -> lookupVEnv v env2) vars
                 fn = FunDef { funName = fnname
@@ -891,13 +891,18 @@ specLambdasExp ddefs env2 (L p ex) = (L p) <$>
                             , funTy   = ForAll [] (ArrowTy argtys retty)
                             , funBody = e0'
                             }
-            pure (fn, binds, l$ AppE fnname [] (map (l . VarE) args))
-      (fna, bindsa, call_a) <- mk_fn a
-      (fnb, bindsb, call_b) <- mk_fn b
-      state (\st -> ((), st { sp_fundefs = M.insert (funName fna) fna $
-                                           M.insert (funName fnb) fnb $
-                                           (sp_fundefs st)}))
-      pure $ unLoc $ bindsa $ bindsb (l$ ParE call_a call_b)
+            pure (Just fn, binds, l$ AppE fnname [] (map (l . VarE) args))
+      (mb_fna, bindsa, call_a) <- case unLoc a of
+                                    AppE{} -> pure (Nothing, [], a)
+                                    _ -> mk_fn a
+      (mb_fnb, bindsb, call_b) <- case unLoc b of
+                                    AppE{} -> pure (Nothing, [], b)
+                                    _ -> mk_fn b
+      let mb_insert mb_fn mp = case mb_fn of
+                                 Just fn -> M.insert (funName fn) fn mp
+                                 Nothing -> mp
+      state (\st -> ((), st { sp_fundefs = mb_insert mb_fna $ mb_insert mb_fnb (sp_fundefs st) }))
+      pure $ unLoc $ mkLets (bindsa ++ bindsb) (l$ ParE call_a call_b)
 
     -- Straightforward recursion
     VarE{}    -> pure ex

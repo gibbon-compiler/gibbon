@@ -104,7 +104,8 @@ As described in this [Evernote], we'd like to amortize the cost of adding
 random access nodes to a datatype i.e below a certain threshold, we'd rather
 perform dummy traversals. It's clear that if we want to support this, we
 cannot get rid of the old case clause. After [2019.09.15], that's what
-addRAN does.
+addRAN does. And we run addTraversals later in the pipeline so that the
+case clause is compilable.
 
 Evernote: https://www.evernote.com/l/AF-jUPTw2lZDS440RgWbgj9RMNkttTaKd3Y
 
@@ -210,7 +211,7 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
               (toRANDataCon dcon, (L.map (,()) ranVars) ++ vs,) <$> addRANExp needRANsTyCons ddfs ienv' bod
 
 -- | Update data type definitions to include random access nodes.
-withRANDDefs :: Out a => S.Set TyCon -> DDefs (UrTy a) -> M.Map Var (DDef (UrTy a))
+withRANDDefs :: Out a => S.Set TyCon -> DDefs (UrTy a) -> DDefs (UrTy a)
 withRANDDefs needRANsTyCons ddfs = M.map go ddfs
   where
     -- go :: DDef a -> DDef b
