@@ -4,6 +4,7 @@
 #include <string.h>
 #include <utlist.h>
 #include <uthash.h>
+#include <time.h>
 #include <cilk/cilk.h>
 
 /* -------------------------------------------------------------------------- */
@@ -251,6 +252,29 @@ void free_region(CursorTy end_reg) {
     }
 }
 
+int compare(const void *a, const void *b) {
+    if (*(double*)a > *(double*)b) {
+        return 1;
+    }
+    else if (*(double*)a < *(double*)b) {
+        return -1;
+    }
+    else {
+        return 0;
+    }
+}
+
+double difftimespecs(struct timespec* t0, struct timespec* t1)
+{
+    return (double)(t1->tv_sec - t0->tv_sec)
+      + ((double)(t1->tv_nsec - t0->tv_nsec) / 1000000000.0);
+}
+
+double median(int len, double *nums) {
+    qsort(nums, len, sizeof(double), compare);
+    return nums[len/2];
+}
+
 /* --------------------------------------------------------------------------
 
 data Foo = A Int
@@ -341,7 +365,7 @@ CursorTy printFoo(CursorTy cur) {
 }
 
 // Data over this threshold will be processed in parallel
-#define PAR_SIZE_THRESHOLD 4000
+#define PAR_SIZE_THRESHOLD 1 * KB
 
 CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
     CursorCursorIntProd tmp;
@@ -378,6 +402,7 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
         CursorTy out2 = tmp.field1;
         IntTy size2 = tmp.field2;
 
+#ifdef PARALLEL
         // Conditionally write a BIG node
         if ((size1 + size2 + 1) > PAR_SIZE_THRESHOLD) {
             *out = 3;
@@ -386,6 +411,10 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
         } else {
             *out = 1;
         }
+#else
+        *out = 1;
+#endif
+
         return (CursorCursorIntProd) {end_chunk2, out2, (size1 + size2 + 1)};
     } else {
         CursorTy left = out + 17;
@@ -408,6 +437,7 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
         CursorTy out3 = tmp.field1;
         IntTy size3 = tmp.field2;
 
+#ifdef PARALLEL
         // Conditionally write a BIG node
         if ((size1 + size2 + size3 + 1) > PAR_SIZE_THRESHOLD) {
             *out = 4;
@@ -418,6 +448,9 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
         } else {
             *out = 2;
         }
+#else
+        *out = 2;
+#endif
 
         return (CursorCursorIntProd) {end_chunk3, out3, (size1 + size2 + size3 + 1)};
     }
@@ -467,7 +500,7 @@ CursorIntProd sumFoo(CursorTy in) {
         CursorTy ran1 = *(CursorTy *) next;
         next += 8;
 
-        CursorIntProd tmp1 = cilk_spawn sumFoo(next);
+        CursorIntProd tmp1 = sumFoo(next);
         CursorTy next1 = tmp1.field0;
         IntTy n = tmp1.field1;
 
@@ -486,7 +519,7 @@ CursorIntProd sumFoo(CursorTy in) {
         CursorTy ran2 = *(CursorTy *) next;
         next += 8;
 
-        CursorIntProd tmp1 = cilk_spawn sumFoo(next);
+        CursorIntProd tmp1 = sumFoo(next);
         CursorTy next1 = tmp1.field0;
         IntTy n = tmp1.field1;
 
@@ -527,9 +560,14 @@ CursorIntProd sumFoo(CursorTy in) {
 
 }
 
-
 int main (int argc, char** argv) {
-    int reg_size = 100;
+    int reg_size = 1 * MB;
+
+    if (argc < 1) {
+        printf("USAGE: sumtree.exe SIZE");
+        exit(1);
+    }
+
     IntTy tree_size = atoll(argv[1]);
 
     RegionTy *region1 = alloc_region(reg_size);
@@ -540,7 +578,29 @@ int main (int argc, char** argv) {
     foo = mkFoo(end_r1, r1, tree_size);
     printFoo(r1);
     printf("\n");
-    printf("Foo size: %lld\n", foo.field2);
-    CursorIntProd sum = sumFoo(r1);
-    printf("Sum: %lld\n", sum.field1);
+    printf("Total size: %lld bytes\n", foo.field2);
+
+    int iters = 9;
+    double nums[iters];
+    double selftimed;
+    CursorIntProd sum;
+
+    IntTy total_sum = 0;
+
+    for (int i = 0; i < iters; i++) {
+        struct timespec begin_timed;
+        clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed);
+        sum = sumFoo(r1);
+        total_sum += sum.field1;
+        struct timespec end_timed;
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end_timed);
+        selftimed = difftimespecs(&begin_timed, &end_timed);
+        nums[i] = selftimed;
+    }
+
+    double n = median(iters, nums);
+
+    printf("SIZE: %lld\n", tree_size);
+    printf("Sum: %lld\n", total_sum / iters);
+    printf("Median of 9: %lf\n", n);
 }
