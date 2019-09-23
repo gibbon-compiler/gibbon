@@ -124,6 +124,7 @@ removeCommonExpressions = go
 
 simplifyProjections :: L Exp1->  L Exp1
 simplifyProjections exp = removeCommonExpressions (go exp M.empty)
+ --   `debug` ("before the death" L.++ render (pprint go exp M.emptyZZZZzzzz) )
    where
     go exp mp = case unLoc exp of
       LetE (v, ls, t, bind) body ->
@@ -381,7 +382,7 @@ inline2 inlined_fun outer_fun  =
                 (AppE
                    (funName inlined_fun)
                    []
-                   (L.map (l . VarE) (funArgs inlined_fun)))
+                   (L.map (l . VarE) ( newTraversedTreeArg:tail (funArgs inlined_fun))))
             body = substE oldExp (l (VarE newVar)) exp
         return $ l $ LetE (newVar, [], retTypeInlined, rhs) body
 
@@ -390,7 +391,7 @@ inline2 inlined_fun outer_fun  =
            CaseE e1 ls -> ls
 
   newBody <-
-    case unLoc (funBody inlined_fun) of
+    case unLoc (inlinedFunBody) of
       CaseE e1 ls -> do
         ls' <-
           Prelude.mapM
@@ -565,10 +566,10 @@ foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
 
 foldTupledFunctions ::   L Exp1 -> FunDef1 -> [Exp1] ->
  V.Vector Int->   M.Map (Int, Int) (Int, Int)  -> PassM (L Exp1)
-foldTupledFunctions body newFun oldCalls  outputPositions syncedArgs  =
+foldTupledFunctions bodyM newFun oldCalls  outputPositions syncedArgs  =
   do
      newVar <- gensym (toVar "tupled_output")
-     go body newVar True
+     go bodyM newVar True
   where
     go ex newVar first =
       case unLoc ex of
@@ -594,7 +595,8 @@ foldTupledFunctions body newFun oldCalls  outputPositions syncedArgs  =
 
                         let args' = getFirstArg rhs:args
                              where
-                              getFirstArg (L _ (AppE _ _ (h:_)))= h
+                              getFirstArg (L _ (AppE _ _ (h:_)))= h `debug` ("oldCalls" L.++ (show oldCalls) L.++
+                                 (render( pprint bodyM)))
 
                         let rhs' =  l $AppE (funName newFun) [] args'
                                `debug` ("new call" L.++ (show (AppE (funName newFun) [] args')))
@@ -667,7 +669,7 @@ foldTupledFunctions body newFun oldCalls  outputPositions syncedArgs  =
         _                ->
           return ex
 
-    defTable = buildDefTable (unLoc body)
+    defTable = buildDefTable (unLoc bodyM)
     collectRec leafExp exp  =
       case unLoc exp of
         VarE v@(Var symbol) ->
@@ -984,13 +986,13 @@ cleanExp ::  L Exp1 -> L Exp1
 cleanExp exp = removeCommonExpressions (removeUnusedDefsExp exp)
 
 
-
 -- argsVars represents the arguments of the function that contains oldExp
 tuple :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [Var] -> Int -> PassM (L Exp1,  FunDefs1)
 tuple ddefs fdefs oldExp_ argsVars depth= do
  if depth> 10 then return (oldExp_, fdefs)
  else
   do
+--lets pic one at a time only !!
     let oldExp = cleanExp oldExp_
   -- candidates1 : a list of [(fName, CallExpressions)] functions that traverses
   -- same input
@@ -1011,11 +1013,16 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
                --`debug` ("orgArgs:" L.++ (render (pprint sortedCalls)) L.++ "\nargs" L.++ (show syncArgsLocs))
                 ) candidates1
 
-    (newExp, fdefs') <-  Control.Monad.foldM go (oldExp, fdefs)  candidates2
-
-    let newExp' = removeUnusedDefsExp (simplifyProjections newExp )
-    return (newExp', fdefs')
-
+    --(newExp, fdefs') <-  Control.Monad.foldM go (oldExp, fdefs)  candidates2
+    if L.length candidates2 > 0
+      then
+        do
+           (newExp, fdefs') <- go (oldExp, fdefs) (L.head candidates2)
+           let newExp' = removeUnusedDefsExp (simplifyProjections newExp )
+           (newExp'', fdefs'') <- tuple ddefs fdefs'  newExp' argsVars depth
+           return (newExp'', fdefs'')
+      else
+         return (oldExp, fdefs)
    where
     go (exp, fdefs) (tupledFName, callExpressions, syncArgsLocs) =
       case M.lookup tupledFName fdefs of
@@ -1024,7 +1031,7 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
                  (getOutputStartPositions fdefs callExpressions) syncArgsLocs
 
             let exp'' =  simplifyProjections exp'
-            return (exp'', fdefs)
+            return (exp'', fdefs) `debug` ("fold1" L.++ render (pprint exp''))
 
         Nothing -> do
             let functionsToTuple = L.map getCalledFunDef  callExpressions
@@ -1036,10 +1043,11 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
             tupledFunction <-
               tupleListOfFunctions
                  ddefs functionsToTuple tupledFName syncArgsLocs
-               --  `debug` ("funcs to tuple" L.++ (show functionsToTuple))
+                 --   `debug` ("funcs to tuple" L.++ (show functionsToTuple))
 
             let tupledFunction' =
                   tupledFunction {funBody = cleanExp (funBody tupledFunction)}
+                    `debug` ("tupled f is :" L.++ (render(pprint tupledFunction)))
 
             let fdefs' = M.insert tupledFName  tupledFunction'  fdefs
             let traversedArg =  funArgs tupledFunction'
@@ -1068,7 +1076,7 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
 
             let exp'' = simplifyProjections exp'
 
-            return (exp'', fdefs'')
+            return (exp'', fdefs'')  `debug` ("fold1" L.++ render (pprint exp''))
 
 
     constructName ls syncArgsLocs =
@@ -1169,11 +1177,13 @@ fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
             else gensym "_FUSE_"
 
     step1 <- inline2 innerFunc outerFunc
+     `debug`
+         ("inner: " L.++ (render (pprint innerFunc)) L.++ "outer: " L.++ (render (pprint outerFunc)))
 
-    let step2 = (simplifyCases step1 ){funName = newName}
-        step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)  step2 -- `debug` render (pprint step1)
-        step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs --`debug`   render (pprint step3)
-        step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)} --`debug` render (pprint step4)
+    let step2 = (simplifyCases step1 ){funName = newName} `debug` render (pprint step1)
+        step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)  step2 `debug` render (pprint step2)
+        step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs `debug`   render (pprint step3)
+        step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)} `debug` render (pprint step4)
     return (True, newName, M.insert newName step5 fdefs)
 
 violateRestrictions :: FunDefs1 -> Var -> Var -> Bool
@@ -1274,7 +1284,8 @@ fuse_pass ddefs funDefs
             (validFused, fNew, fusedDefs) <-
                fuse ddefs fdefs inner outer prevFusedFuncs
 
-            let fusedFunction = fusedDefs M.! fNew  --`debug` ( render (pprint ( fusedDefs M.! fNew  )))
+            let fusedFunction = fusedDefs M.! fNew  `debug` ("new fused:" L.++ (
+                 render (pprint ( fusedDefs M.! fNew  ))))
                 newFusedEntry = (outer,inner, -1, fNew)
                 newFusedFunctions =  newFusedEntry : prevFusedFuncs
                 newProcessed = (inner,outer):processed
@@ -1309,9 +1320,9 @@ fusion2 (L1.Prog defs funs main) = do
         (mainBody', newDefs, _) <-
           fuse_pass defs funs (FusePassParams mainBody [] [] [] 0)
         newDefs' <- tuple_pass defs newDefs
-        return (Just (mainBody', ty), newDefs')
-      --  return
-      --     (Just (mainBody', ty), redundancy_output_pass (M.union funs newDefs'))
+       -- return (Just (mainBody', ty), newDefs')
+        return
+          (Just (mainBody', ty), redundancy_output_pass (M.union funs newDefs'))
   return $ L1.Prog defs funs' main'
 
 -- Those  functions are used for the redundancy analysis
