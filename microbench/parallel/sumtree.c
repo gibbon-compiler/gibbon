@@ -4,6 +4,7 @@
 #include <string.h>
 #include <utlist.h>
 #include <uthash.h>
+#include <cilk/cilk.h>
 
 /* -------------------------------------------------------------------------- */
 
@@ -463,33 +464,41 @@ CursorIntProd sumFoo(CursorTy in) {
 
     } else if (tag == 3) {
         // B_big
+        CursorTy ran1 = *(CursorTy *) next;
         next += 8;
 
-        CursorIntProd tmp1 = sumFoo(next);
+        CursorIntProd tmp1 = cilk_spawn sumFoo(next);
         CursorTy next1 = tmp1.field0;
         IntTy n = tmp1.field1;
 
-        CursorIntProd tmp2 = sumFoo(next1);
+        CursorIntProd tmp2 = cilk_spawn sumFoo(ran1);
         CursorTy next2 = tmp2.field0;
         IntTy m = tmp2.field1;
+
+        cilk_sync;
 
         return (CursorIntProd) {next2, (n+m)};
 
     } else if (tag == 4) {
         // C_big
-        next += 16;
+        CursorTy ran1 = *(CursorTy *) next;
+        next += 8;
+        CursorTy ran2 = *(CursorTy *) next;
+        next += 8;
 
-        CursorIntProd tmp1 = sumFoo(next);
+        CursorIntProd tmp1 = cilk_spawn sumFoo(next);
         CursorTy next1 = tmp1.field0;
         IntTy n = tmp1.field1;
 
-        CursorIntProd tmp2 = sumFoo(next1);
+        CursorIntProd tmp2 = cilk_spawn sumFoo(ran1);
         CursorTy next2 = tmp2.field0;
         IntTy m = tmp2.field1;
 
-        CursorIntProd tmp3 = sumFoo(next2);
+        CursorIntProd tmp3 = cilk_spawn sumFoo(ran2);
         CursorTy next3 = tmp3.field0;
         IntTy o = tmp3.field1;
+
+        cilk_sync;
 
         return (CursorIntProd) {next3, (n+m+o)};
 
