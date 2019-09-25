@@ -275,6 +275,14 @@ double median(int len, double *nums) {
     return nums[len/2];
 }
 
+double mean(int len, double *nums) {
+    double sum = 0;
+    for (int i = 0; i < len ; i++) {
+        sum += nums[i];
+    }
+    return (double) (sum / len);
+}
+
 /* --------------------------------------------------------------------------
 
 data Foo = A Int
@@ -565,17 +573,25 @@ int main (int argc, char** argv) {
         exit(1);
     }
 
-    IntTy tree_size = atoll(argv[1]);
+    IntTy tree_depth = atoll(argv[1]);
 
     RegionTy *region1 = alloc_region(reg_size);
     CursorTy r1 = region1->start_ptr;
     CursorTy end_r1 = r1 + reg_size;
 
     CursorCursorIntProd foo;
-    foo = mkFoo(end_r1, r1, tree_size);
-    printFoo(r1);
-    printf("\n");
-    printf("Total size: %lld bytes\n", foo.field2);
+    foo = mkFoo(end_r1, r1, tree_depth);
+    // printFoo(r1);
+    // printf("\n");
+    double tree_size = foo.field2;
+    if (tree_size > (1 * MB)) {
+        printf("Total size: %.0lfM\n", (double) (tree_size / (1 * MB)));
+    } else if (tree_size > (1 * KB)) {
+        printf("Total size: %.0lfK\n", (double) (tree_size / (1 * KB)));
+    } else {
+        printf("Total size: %.0lf bytes\n", tree_size);
+    }
+
 
     int iters = 9;
     double nums[iters];
@@ -583,7 +599,6 @@ int main (int argc, char** argv) {
     CursorIntProd sum;
 
     IntTy total_sum = 0;
-
     for (int i = 0; i < iters; i++) {
         struct timespec begin_timed;
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed);
@@ -594,10 +609,10 @@ int main (int argc, char** argv) {
         selftimed = difftimespecs(&begin_timed, &end_timed);
         nums[i] = selftimed;
     }
-
-    double n = median(iters, nums);
-
-    printf("SIZE: %lld\n", tree_size);
+    printf("\nSumtree\n");
+    printf("=======\n");
+    printf("Tree Depth: %lld\n", tree_depth);
     printf("Sum: %lld\n", total_sum / iters);
-    printf("Median of 9: %lf\n", n);
+    printf("Median of 9: %lf\n", median(iters, nums));
+    printf("Mean of 9: %lf\n", mean(iters, nums));
 }
