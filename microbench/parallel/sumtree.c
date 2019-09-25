@@ -37,6 +37,11 @@ typedef struct CursorIntProd_struct {
     IntTy    field1;
 } CursorIntProd;
 
+typedef struct CursorCursorProd_struct {
+    CursorTy field0;
+    CursorTy field1;
+} CursorCursorProd;
+
 typedef struct Outset_elem {
     CursorTy ref;
     struct Outset_elem *prev;
@@ -129,7 +134,7 @@ RegionFooter* trav_to_first_chunk(RegionFooter *footer) {
         fprintf(stderr, "No previous chunk found at seq_no: %d", footer->seq_no);
         return NULL;
     } else {
-        trav_to_first_chunk(footer->prev);
+        trav_to_first_chunk((RegionFooter*) footer->prev);
     }
 }
 
@@ -207,7 +212,7 @@ void free_region(CursorTy end_reg) {
                 // See [Why is it a doubly linked-list?] above
                 RegionFooter *first_chunk = trav_to_first_chunk(elt_footer);
                 if (first_chunk != NULL) {
-                    free_region(first_chunk);
+                    free_region((CursorTy) first_chunk);
                 }
             }
             DL_DELETE(head,elt);
@@ -334,7 +339,7 @@ CursorTy printFoo(CursorTy cur) {
         return cur;
     } else if (*cur == 2) {
         printf("(C _ _ ");
-        cur += 17;
+        cur += 9;
         cur = printFoo(cur);
         cur = printFoo(cur);
         cur = printFoo(cur);
@@ -349,7 +354,7 @@ CursorTy printFoo(CursorTy cur) {
         return cur;
     }  else if (*cur == 4) {
         printf("(C_big PTR PTR ");
-        cur += 17;
+        cur += 9;
         cur = printFoo(cur);
         cur = printFoo(cur);
         cur = printFoo(cur);
@@ -372,12 +377,20 @@ CursorTy printFoo(CursorTy cur) {
     }
 }
 
+// // 'in' is always ahead of 'out'.
+// CursorCursorProd shave_bytes(CursorTy end_chunk, CursorTy out, CursorTy in, IntTy n) {
+//     TagTyPacked tag = *in;
+//     CursorTy next = in + 1;
+// }
+
 // Data over this threshold will be processed in parallel
 #define PAR_SIZE_THRESHOLD 1 * KB
 
 CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
     CursorCursorIntProd tmp;
     if (n <= 0) {
+        // A
+
         // start bounds check
         if ((end_chunk - out) <= 20) {
             ChunkTy new_chunk    = alloc_chunk(end_chunk);
@@ -397,6 +410,8 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
         out += 8;
         return (CursorCursorIntProd) {end_chunk, out, 9};
     } else if (n == 1) {
+        // B
+
         // rec1
         CursorTy left_out = out + 9;
         tmp = mkFoo(end_chunk, left_out, (n-1));
@@ -425,7 +440,8 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
 
         return (CursorCursorIntProd) {end_chunk2, out2, (size1 + size2 + 1)};
     } else {
-        CursorTy left = out + 17;
+        // C
+        CursorTy left = out + 9;
 
         // rec1
         tmp = mkFoo(end_chunk, left, (n-1));
@@ -450,9 +466,19 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
         if ((size1 + size2 + size3 + 1) > PAR_SIZE_THRESHOLD) {
             *out = 4;
             out++;
-            *(CursorTy *) out = out1;
-            out += 8;
-            *(CursorTy *) out = out2;
+
+            // Will leak memory...
+            CursorTy ran_storage = malloc(16);
+            if (ran_storage == NULL) {
+                printf("Couldn't malloc.\n");
+                exit(1);
+            }
+
+            *(CursorTy *) out = ran_storage;
+
+            *(CursorTy *) ran_storage = out1;
+            ran_storage += 8;
+            *(CursorTy *) ran_storage = out2;
         } else {
             *out = 2;
         }
@@ -488,7 +514,7 @@ CursorIntProd sumFoo(CursorTy in) {
         return (CursorIntProd) {next2, (n+m)};
     } else if (tag == 2) {
         // C
-        next += 16;
+        next += 8;
         CursorIntProd tmp1 = sumFoo(next);
         CursorTy next1 = tmp1.field0;
         IntTy n = tmp1.field1;
@@ -521,10 +547,14 @@ CursorIntProd sumFoo(CursorTy in) {
 
     } else if (tag == 4) {
         // C_big
-        CursorTy ran1 = *(CursorTy *) next;
+
+        CursorTy ran_storage = *(CursorTy *) next;
         next += 8;
-        CursorTy ran2 = *(CursorTy *) next;
-        next += 8;
+
+        CursorTy ran1 = *(CursorTy *) ran_storage;
+        ran_storage += 8;
+        CursorTy ran2 = *(CursorTy *) ran_storage;
+        ran_storage += 8;
 
         CursorIntProd tmp1 = sumFoo(next);
         CursorIntProd tmp2 = cilk_spawn sumFoo(ran1);
@@ -575,14 +605,34 @@ int main (int argc, char** argv) {
 
     IntTy tree_depth = atoll(argv[1]);
 
+    // Things for benchmarking.
+    int iters = 9;
+    double nums[iters];
+    double selftimed;
+    struct timespec begin_timed;
+    struct timespec end_timed;
+
+    // Allocate region for mkFoo.
     RegionTy *region1 = alloc_region(reg_size);
     CursorTy r1 = region1->start_ptr;
     CursorTy end_r1 = r1 + reg_size;
 
     CursorCursorIntProd foo;
-    foo = mkFoo(end_r1, r1, tree_depth);
+    for (int i = 0; i < iters; i++) {
+        clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed);
+        foo = mkFoo(end_r1, r1, tree_depth);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end_timed);
+        selftimed = difftimespecs(&begin_timed, &end_timed);
+        nums[i] = selftimed;
+    }
+    printf("mkFoo\n");
+    printf("=====\n");
+    printf("Tree Depth: %lld\n", tree_depth);
+    printf("Median of 9: %lf\n", median(iters, nums));
+    printf("Mean of 9: %lf\n", mean(iters, nums));
     // printFoo(r1);
     // printf("\n");
+
     double tree_size = foo.field2;
     if (tree_size > (1 * MB)) {
         printf("Total size: %.0lfM\n", (double) (tree_size / (1 * MB)));
@@ -592,27 +642,21 @@ int main (int argc, char** argv) {
         printf("Total size: %.0lf bytes\n", tree_size);
     }
 
-
-    int iters = 9;
-    double nums[iters];
-    double selftimed;
     CursorIntProd sum;
 
     IntTy total_sum = 0;
     for (int i = 0; i < iters; i++) {
-        struct timespec begin_timed;
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed);
         sum = sumFoo(r1);
-        total_sum += sum.field1;
-        struct timespec end_timed;
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_timed);
+        total_sum += sum.field1;
         selftimed = difftimespecs(&begin_timed, &end_timed);
         nums[i] = selftimed;
     }
-    printf("\nSumtree\n");
+    printf("\nsumFoo\n");
     printf("=======\n");
     printf("Tree Depth: %lld\n", tree_depth);
-    printf("Sum: %lld\n", total_sum / iters);
     printf("Median of 9: %lf\n", median(iters, nums));
     printf("Mean of 9: %lf\n", mean(iters, nums));
+    printf("Sum: %lld\n", total_sum / iters);
 }
