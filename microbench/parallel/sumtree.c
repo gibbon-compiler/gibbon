@@ -331,15 +331,15 @@ CursorTy printFoo(CursorTy cur) {
         printf(") ");
         return cur;
     } else if (*cur == 1) {
-        printf("(B _ ");
-        cur += 9;
+        printf("(B ");
+        cur++;
         cur = printFoo(cur);
         cur = printFoo(cur);
         printf(") ");
         return cur;
     } else if (*cur == 2) {
-        printf("(C _ _ ");
-        cur += 9;
+        printf("(C ");
+        cur++;
         cur = printFoo(cur);
         cur = printFoo(cur);
         cur = printFoo(cur);
@@ -360,6 +360,20 @@ CursorTy printFoo(CursorTy cur) {
         cur = printFoo(cur);
         printf(") ");
         return cur;
+    } else if (*cur == 5) {
+        printf("(B_tmp _ ");
+        cur += 9;
+        cur = printFoo(cur);
+        cur = printFoo(cur);
+        printf(") ");
+        return cur;
+    } else if (*cur == 6) {
+        printf("(C_tmp _ _ ");
+        cur += 9;
+        cur = printFoo(cur);
+        cur = printFoo(cur);
+        cur = printFoo(cur);
+        printf(") ");
     } else if (*cur == 100) {
         // redirection
         printf("R -> ");
@@ -432,10 +446,10 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
             out++;
             *(CursorTy *) out = out1;
         } else {
-            *out = 1;
+            *out = 5;
         }
 #else
-        *out = 1;
+        *out = 5;
 #endif
 
         return (CursorCursorIntProd) {end_chunk2, out2, (size1 + size2 + 1)};
@@ -480,10 +494,10 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
             ran_storage += 8;
             *(CursorTy *) ran_storage = out2;
         } else {
-            *out = 2;
+            *out = 6;
         }
 #else
-        *out = 2;
+        *out = 6;
 #endif
 
         return (CursorCursorIntProd) {end_chunk3, out3, (size1 + size2 + size3 + 1)};
@@ -500,8 +514,8 @@ CursorIntProd sumFoo(CursorTy in) {
         IntTy n = *(IntTy *) next;
         CursorTy next1 = next + 8;
         return (CursorIntProd) {next1, n};
-    } else if (tag == 1) {
-        // B
+    } else if (tag == 5) {
+        // B_tmp
         next += 8;
         CursorIntProd tmp1 = sumFoo(next);
         CursorTy next1 = tmp1.field0;
@@ -512,8 +526,8 @@ CursorIntProd sumFoo(CursorTy in) {
         IntTy m = tmp2.field1;
 
         return (CursorIntProd) {next2, (n+m)};
-    } else if (tag == 2) {
-        // C
+    } else if (tag == 6) {
+        // C_tmp
         next += 8;
         CursorIntProd tmp1 = sumFoo(next);
         CursorTy next1 = tmp1.field0;
