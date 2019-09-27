@@ -25,7 +25,7 @@ import Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
 
-debug =  flip (dbgTrace 5)
+debug =  flip (dbgTrace 3)
 
 {-
 
@@ -595,8 +595,8 @@ foldTupledFunctions bodyM newFun oldCalls  outputPositions syncedArgs  =
 
                         let args' = getFirstArg rhs:args
                              where
-                              getFirstArg (L _ (AppE _ _ (h:_)))= h `debug` ("oldCalls" L.++ (show oldCalls) L.++
-                                 (render( pprint bodyM)))
+                              getFirstArg (L _ (AppE _ _ (h:_)))= h --`debug` ("oldCalls" L.++ (show oldCalls) L.++
+                                 --(render( pprint bodyM)))
 
                         let rhs' =  l $AppE (funName newFun) [] args'
                                `debug` ("new call" L.++ (show (AppE (funName newFun) [] args')))
@@ -848,7 +848,7 @@ tupleListOfFunctions  ddefs funcList newName syncedArgs = do
   return (FunDef newName newArgs (newFuncInputType,newRetType) finalBody)
  where
   createOutVar index subscript=
-          toVar ("f" L.++ show index L.++"out" L.++ show subscript )
+          toVar ("f" L.++ show index L.++"out" L.++ show subscript)
 
 
 renameFunction :: FunDef1 -> Var -> FunDef1
@@ -1022,7 +1022,7 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
            (newExp'', fdefs'') <- tuple ddefs fdefs'  newExp' argsVars depth
            return (newExp'', fdefs'')
       else
-         return (oldExp, fdefs)
+         return (oldExp, fdefs) `debug` (show "no candidates")
    where
     go (exp, fdefs) (tupledFName, callExpressions, syncArgsLocs) =
       case M.lookup tupledFName fdefs of
@@ -1031,7 +1031,7 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
                  (getOutputStartPositions fdefs callExpressions) syncArgsLocs
 
             let exp'' =  simplifyProjections exp'
-            return (exp'', fdefs) `debug` ("fold1" L.++ render (pprint exp''))
+            return (exp'', fdefs) --`debug` ("fold1" L.++ render (pprint exp''))
 
         Nothing -> do
             let functionsToTuple = L.map getCalledFunDef  callExpressions
@@ -1047,7 +1047,7 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
 
             let tupledFunction' =
                   tupledFunction {funBody = cleanExp (funBody tupledFunction)}
-                    `debug` ("tupled f is :" L.++ (render(pprint tupledFunction)))
+                   -- `debug` ("tupled f is :" L.++ (render(pprint tupledFunction)))
 
             let fdefs' = M.insert tupledFName  tupledFunction'  fdefs
             let traversedArg =  funArgs tupledFunction'
@@ -1076,7 +1076,7 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
 
             let exp'' = simplifyProjections exp'
 
-            return (exp'', fdefs'')  `debug` ("fold1" L.++ render (pprint exp''))
+            return (exp'', fdefs'')  --`debug` ("fold1" L.++ render (pprint exp''))
 
 
     constructName ls syncArgsLocs =
@@ -1119,8 +1119,8 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
 
        in snd redundantPositions
 
-fixCalls :: L Exp1 -> FunDef1 -> M.Map Int Int -> [Int] -> L Exp1
-fixCalls exp fdef redirectMap removedPositions = go exp
+fixCalls :: L Exp1 -> FunDef1 -> M.Map Int Int  -> M.Map Int Int -> L Exp1
+fixCalls exp fdef redirectMap outputFromInput = go exp
     where
       go exp = case unLoc exp of
         CaseE e ls ->
@@ -1128,25 +1128,37 @@ fixCalls exp fdef redirectMap removedPositions = go exp
           in  l $ CaseE e ls'
         LetE (Var y, loc, t, rhs) body->
           case unLoc rhs of
-            AppE v ls e ->
+            AppE v ls args ->
               if v == funName fdef
                 then
                   let t' = snd (funTy fdef) in
-                  let body' = L.foldl
+                  let
+                    body'=  L.foldl
+                        (\ex (i, j )->
+                              let oldExp = l $ProjE i ( l (VarE (Var y)) )
+                                  newExp = getExpAtIndex args j
+                              in  substE oldExp newExp ex  `debug` ("replacing" L.++ (show oldExp) L.++"with" L.++ ( show newExp)L.++ (show outputFromInput ))
+                        ) body (M.toList outputFromInput)
+
+                    body'' = L.foldl
                         (\ex (i, j )->
                          if i==j
                              then ex
                            else
                               let oldExp = l $ProjE i ( l (VarE (Var y)) )
                                   newExp = l $ProjE j ( l (VarE (Var y)) )
-                              in  substE oldExp newExp ex
-                        ) body (M.toList redirectMap)
-                  in l $ LetE (Var y, loc, t', rhs) (go body')
+                              in  substE oldExp newExp ex `debug` ("replacing" L.++ (show oldExp) L.++"with" L.++ ( show newExp))
+                        ) body' (M.toList redirectMap)-- in
+
+                  in l $ LetE (Var y, loc, t', rhs) (go  body'')
                 else
                   l $  LetE (Var y, loc, t, rhs) (go body)
             _ ->
               l $  LetE (Var y, loc, t, rhs) (go body)
         otherwise -> l otherwise
+
+getExpAtIndex ::  [L Exp1] -> Int -> L Exp1
+getExpAtIndex ls id = ls L.!! id
 
 getOutputStartPositions:: FunDefs1 -> [Exp1]  -> V.Vector Int
 getOutputStartPositions fdefs callExpressions =
@@ -1177,13 +1189,13 @@ fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
             else gensym "_FUSE_"
 
     step1 <- inline2 innerFunc outerFunc
-     `debug`
-         ("inner: " L.++ (render (pprint innerFunc)) L.++ "outer: " L.++ (render (pprint outerFunc)))
+    -- `debug`
+        -- ("inner: " L.++ (render (pprint innerFunc)) L.++ "outer: " L.++ (render (pprint outerFunc)))
 
-    let step2 = (simplifyCases step1 ){funName = newName} `debug` render (pprint step1)
-        step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)  step2 `debug` render (pprint step2)
-        step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs `debug`   render (pprint step3)
-        step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)} `debug` render (pprint step4)
+    let step2 = (simplifyCases step1 ){funName = newName} --`debug` render (pprint step1)
+        step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)  step2 --`debug` render (pprint step2)
+        step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs --`debug`   render (pprint step3)
+        step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)} --`debug` render (pprint step4)
     return (True, newName, M.insert newName step5 fdefs)
 
 violateRestrictions :: FunDefs1 -> Var -> Var -> Bool
@@ -1249,7 +1261,7 @@ tuple_pass ddefs fdefs =
    tupleFunction defs' f  =
     do
       let fName = funName f
-      if L.isPrefixOf "_FUS"  (fromVar fName)
+      if L.isPrefixOf "_FUS"  (fromVar fName) ||  L.isPrefixOf "_TUP"  (fromVar fName)
         then do
           (tupledBody, tupleDefs) <- tuple ddefs fdefs (funBody f) (funArgs f) 0
           let defs'' = M.insert fName f{funBody = tupledBody} defs'
@@ -1284,8 +1296,8 @@ fuse_pass ddefs funDefs
             (validFused, fNew, fusedDefs) <-
                fuse ddefs fdefs inner outer prevFusedFuncs
 
-            let fusedFunction = fusedDefs M.! fNew  `debug` ("new fused:" L.++ (
-                 render (pprint ( fusedDefs M.! fNew  ))))
+            let fusedFunction = fusedDefs M.! fNew  --`debug` ("new fused:" L.++ (
+               --  render (pprint ( fusedDefs M.! fNew  ))))
                 newFusedEntry = (outer,inner, -1, fNew)
                 newFusedFunctions =  newFusedEntry : prevFusedFuncs
                 newProcessed = (inner,outer):processed
@@ -1311,6 +1323,14 @@ fuse_pass ddefs funDefs
               else
                  go body  newProcessed fdefs prevFusedFuncs
 
+tupleAndOptimize :: DDefs Ty1 -> FunDefs1 -> PassM (FunDefs1)
+tupleAndOptimize ddefs fdefs =
+  do
+    newDefs <- tuple_pass ddefs fdefs
+    if newDefs == fdefs
+      then return newDefs
+      else  tupleAndOptimize ddefs (redundancy_output_pass newDefs) `debug` "run new tuple round"
+
 fusion2 :: Prog1 -> PassM Prog1
 fusion2 (L1.Prog defs funs main) = do
   (main', funs') <-
@@ -1319,11 +1339,13 @@ fusion2 (L1.Prog defs funs main) = do
       Just (mainBody, ty) -> do
         (mainBody', newDefs, _) <-
           fuse_pass defs funs (FusePassParams mainBody [] [] [] 0)
-        newDefs' <- tuple_pass defs newDefs
-       -- return (Just (mainBody', ty), newDefs')
-        return
-          (Just (mainBody', ty), redundancy_output_pass (M.union funs newDefs'))
+        newDefs' <- tupleAndOptimize defs (M.union funs newDefs)
+        return (Just (mainBody', ty), newDefs')
+
   return $ L1.Prog defs funs' main'
+
+
+
 
 -- Those  functions are used for the redundancy analysis
 redundancy_output_pass :: FunDefs1 -> FunDefs1
@@ -1334,10 +1356,10 @@ redundancy_output_pass fdefs =
         then fdefs''
         else redundancy_input_pass fdefs''
   where
-    pass2F fdefs fName (redirectMap, removedPositions) =
-      M.map (pass2Fsub fdefs fName (redirectMap, removedPositions)) fdefs
+    pass2F fdefs fName (redirectMap, outPutFromInput) =
+      M.map (pass2Fsub fdefs fName (redirectMap, outPutFromInput)) fdefs
 
-    pass2Fsub fdefs fName (redirectMap, removedPositions) f =
+    pass2Fsub fdefs fName (redirectMap, outPutFromInput) f =
       f
         { funBody =
             removeUnusedDefsExp
@@ -1347,20 +1369,23 @@ redundancy_output_pass fdefs =
                        (funBody f)
                        (fdefs M.! fName)
                        redirectMap
-                       removedPositions)))
+                       outPutFromInput
+                       )))
         }
 
     pass1F orgFdefs (fdefs, rules) f =
       let fName = funName f
        in if L.isPrefixOf "_TUP" (fromVar fName)
-            then let testedPositions =
-                       testAllOutputPositions orgFdefs fName M.empty
-                     (fNew, redirectMap, removedPositions) =
-                       removeRedundantOutput
-                         f
-                         testedPositions --`debug` ("testing" L.++ (show fName))
+            then let  testedPositions =
+                            testAllOutputPositions orgFdefs fName M.empty
+                      (fNew, redirectMap, outPutFromInput) =
+                         removeRedundantOutput
+                           f
+                           testedPositions --`debug` ("testing" L.++ (show fName))
+
                   in ( M.insert fName fNew fdefs
-                     , M.insert fName (redirectMap, removedPositions) rules)
+                     , M.insert fName (redirectMap, outPutFromInput) rules)
+                      --  `debug` ((show fName) L.++ "new things" L.++  (show (getOutputsFromInput f)))
             else (fdefs, rules)
 
 
@@ -1595,8 +1620,9 @@ inlineAllButAppE = rec
 -- This function optimizes the tupled function by removing redundant output
 -- parameters and their computation.
 -- redundant positions are pr-computed and stored in testedPositions.
-removeRedundantOutput :: FunDef1 -> M.Map (Var,Int,Int) Bool  -> (FunDef1, M.Map Int Int, [Int])
+removeRedundantOutput :: FunDef1 -> M.Map (Var,Int,Int) Bool  -> (FunDef1, M.Map Int Int, M.Map Int Int)
 removeRedundantOutput  fdef testedPositions =
+    let outputsFromInputs = getOutputsFromInput fdef in
     let outputTuples = V.fromList  (collectOutputs (funBody fdef)) in
     let firstTuple = outputTuples V.! 0   in --return vector
 
@@ -1642,13 +1668,17 @@ removeRedundantOutput  fdef testedPositions =
                   else M.insert k ((mp' M.! k) L.++ [j] ) mp'
             ) initialMap candidates
 
-        removedPositions = L.foldl
+        removedPositions_ = L.foldl
            (\ls i ->
             case M.lookup i finalMap of
               Nothing -> ls L.++[i]
               otherwise -> ls
           ) [] [0..(ncols-1)]
 
+        removedPositions =
+           S.toList (S.union
+               (S.fromList removedPositions_)
+               (S.fromList (L.map (\(x,y)->x )  (M.toList outputsFromInputs) )))
         newFunType =
           let oldOutTypesList = V.fromList (
                 case snd(funTy fdef) of ProdTy ls->ls)
@@ -1677,14 +1707,22 @@ removeRedundantOutput  fdef testedPositions =
                         in (x, y, exp')) (V.fromList ls))
               in  l$ CaseE e ls'
         fdef' = fdef{funBody = newFunBody, funTy = newFunType}
+
         redirectMap = V.ifoldl
-            (\mp idx (i,ls)->
-                let mp' = M.insert i idx mp
+            (\mp idx (i, ls)->
+                let mp'  = M.insert i idx mp
                     mp'' = L.foldl (\m j -> M.insert j idx m) mp' ls
                 in mp''
             ) M.empty (V.fromList (M.toList finalMap))
 
-    in (fdef', redirectMap, removedPositions)
+        removedUnhandled = L.map (\(a, b)->a) (M.toList outputsFromInputs)
+        redirectMap'  = L.foldl (\mp i->M.delete i mp) redirectMap removedUnhandled
+        redirectMap''  = M.map (\v -> v- (countLess v)) redirectMap'
+          where
+            countLess v = L.foldl (\res a-> if (a<v) then 1+res else res)
+               0 removedUnhandled
+
+    in (fdef',  redirectMap'', outputsFromInputs) `debug` ("summer for " L.++ (show (funName fdef')) L.++ (show  outputsFromInputs ))
 
  where
   replaceLeafExp exp replacement =
@@ -1707,7 +1745,7 @@ removeRedundantOutput  fdef testedPositions =
 
 eliminateInputArgs :: FunDefs1 -> Var -> M.Map Int Int -> (Var, FunDefs1)
 eliminateInputArgs fdefs fNameOld syncedArgs =
-  let newName = toVar (M.foldlWithKey buildName (fromVar fNameOld) syncedArgs)
+  let newName = toVar ((M.foldlWithKey buildName ((fromVar fNameOld) L.++ "elimpass_") syncedArgs)L.++"_elimpass")
       fdefs' =
             if M.member newName fdefs
               then fdefs
@@ -1731,9 +1769,14 @@ eliminateInputArgs fdefs fNameOld syncedArgs =
                        newBody =
                          M.foldlWithKey
                            (\exp k v ->
-                              let oldExp = l $ VarE ((V.fromList oldArgs) V.! k)
-                                  newExp = l $ VarE ((V.fromList oldArgs) V.! v)
-                               in substE oldExp newExp exp)
+                              if (v<1000)
+                              then
+                                let oldExp = l $ VarE ((V.fromList oldArgs) V.! k)
+                                    newExp = l $ VarE ((V.fromList oldArgs) V.! v)
+                                 in substE oldExp newExp exp
+                              else
+                                exp
+                              )
                            (oldBody)
                            syncedArgs
                        newFdef =
@@ -1749,39 +1792,82 @@ eliminateInputArgs fdefs fNameOld syncedArgs =
     buildName name i j =
       name L.++ "_sync" L.++ (show i) L.++ "_fr_" L.++ (show j) L.++ "sync_"
 
-removeRedundantInputExp :: FunDefs1 -> L Exp1 -> (FunDefs1,L Exp1)
-removeRedundantInputExp fdefs exp =
+-- simplest version for single functions
+getOutputsFromInput ::FunDef1 -> M.Map Int Int
+getOutputsFromInput func  =
+  let body = funBody func
+      leafProducts = case unLoc body of
+            CaseE e ls ->
+               L.map (\(_,_,exp) -> getLeafProdExpressions exp) ls
+      inputVars = funArgs func
+      candidatesList =
+
+       L.map(\exprList->
+          V.ifoldl f M.empty (V.fromList exprList)) leafProducts
+         where f out idx outExp =
+                case unLoc outExp of
+                    VarE v ->
+                      case L.elemIndex v inputVars of
+                        Nothing -> out
+                        Just argIdx -> M.insert idx argIdx out
+                    otherwise -> out
+      candidatesListSets = L.map (\mp-> S.fromList (M.toList mp)) candidatesList
+      intersectionsSet = L.foldl S.intersection (L.head candidatesListSets) candidatesListSets
+      in M.fromList (S.toList intersectionsSet)
+
+getLeafProdExpressions :: L Exp1 -> [L Exp1]
+getLeafProdExpressions = rec
+ where
+   rec ex =
+     case unLoc ex of
+       LetE (v, ls, t, L _ AppE{}) body -> rec body
+       MkProdE ls -> ls
+       x-> []
+
+
+removeRedundantInputExp :: FunDefs1 -> L Exp1 ->Bool -> (FunDefs1,L Exp1)
+removeRedundantInputExp fdefs exp  mode =
   case unLoc exp of
     CaseE e ls ->
-      let (fdefs', e') = removeRedundantInputExp fdefs e
+      let (fdefs', e') = removeRedundantInputExp fdefs e mode
           (fdefs'', ls') = L.foldl f (fdefs', []) ls
             where
               f (fdefsInner, lsInner) (dataCon, vars, exp) =
-                let (fdefsInner', exp') = removeRedundantInputExp fdefsInner exp
+                let (fdefsInner', exp') = removeRedundantInputExp fdefsInner exp mode
                  in (fdefsInner', lsInner L.++ [(dataCon, vars, exp')])
        in (fdefs'', l $ CaseE e' ls')
 
     LetE rhs@(var, ls, t, bind) body ->
-      let (fdefs', body') = removeRedundantInputExp fdefs body
+
+      let (fdefs', body') = removeRedundantInputExp fdefs body mode
           boringCase =  (fdefs', l (LetE rhs  body'))
       in case unLoc bind of
           x@( AppE fName loc args) ->
             if (L.isPrefixOf "_TUP"  (fromVar fName) ||
-                L.isPrefixOf "_FUSE" (fromVar fName))
+                L.isPrefixOf "_FUS" (fromVar fName) )
                 then
-                  let (_, redundantPositions) =
-                         V.ifoldl findRedundantPos (M.empty, M.empty) (V.fromList args) in
-                  if M.null redundantPositions
+
+                  let redundantPositions =
+                       if(mode)
+                        then
+                          snd( V.ifoldl findRedundantPos (M.empty, M.empty) (V.fromList args))
+                        else
+                           V.ifoldl (findRedundantPos_UnusedArgs fName) M.empty (V.fromList args)
+                        --        redundantPositions3 = M.union redundantPositions2 redundantPositions `debug`
+                        -- ("checking call to :" L.++ (show fName) L.++ "opppaaaa" L.++ show redundantPositions2)
+                  in
+                   if M.null redundantPositions
                     then
                       boringCase
                     else
+
                       let (fNameNew, fdefsNew) =
-                            eliminateInputArgs  fdefs' fName redundantPositions
+                            eliminateInputArgs  fdefs' fName  redundantPositions
                           newCall =
                             AppE fNameNew loc
                               (V.toList
                                 (V.ifilter
-                                  (\idx _ -> M.notMember idx redundantPositions )
+                                  (\idx _ -> M.notMember idx  redundantPositions )
                                      (V.fromList args)))
                       in (fdefsNew,l (LetE (var, ls, t, (l newCall)) body' ))
                 else
@@ -1797,11 +1883,48 @@ removeRedundantInputExp fdefs exp =
                 else
                   (M.insert arg argIdx firstAppear, redundant)
 
+        findRedundantPos_UnusedArgs fName mp argIdx arg =
+           let callee = fdefs M.! fName in
+           if (isUsedArg (funBody callee)  ((V.fromList (funArgs callee)) V.! argIdx ))
+              then mp
+              else M.insert argIdx 100000 mp
+
+        isUsedArg exp var =
+          case unLoc exp of
+            ProjE i e  ->
+              isUsedArg e var
+
+            VarE v'    ->
+              v' == var
+
+            CaseE e ls ->
+              let b1 = isUsedArg e var
+                  b2 =
+                    L.foldl (\res (dataCon, vars, ex)->
+                                (res || isUsedArg ex var ))
+                            False ls
+              in b1 || b2
+
+
+            AppE fName loc args ->
+                L.foldl (\res ex -> (res || isUsedArg ex var )) False args
+
+            LetE (v, ls, t, bind) body -> (isUsedArg bind var)|| (isUsedArg  body var)
+            PrimAppE p ls ->  L.foldl (\res ex -> (res || isUsedArg ex var )) False ls
+            MkProdE ls    ->  L.foldl (\res ex -> (res || isUsedArg ex var )) False ls
+            DataConE _ _ ls-> L.foldl (\res ex -> (res || isUsedArg ex var )) False ls
+
+            x       -> False `debug` ("not handled is "L.++ (show x))
+
+
+
+
 removeRedundantInputFunc :: FunDefs1 -> FunDef1 -> FunDefs1
 removeRedundantInputFunc fdefs fdef =
-  let (fdefs', exp) = removeRedundantInputExp fdefs (funBody fdef)
-      fdef' = fdef {funBody = exp}
-  in M.insert (funName fdef) fdef'  fdefs'
+  let (fdefs', exp) = removeRedundantInputExp fdefs (funBody fdef) True `debug` ("Dowing "L.++ (show funName fdef ))
+      (fdefs'', exp') = removeRedundantInputExp fdefs' exp False
+      fdef' = fdef {funBody = exp'}
+  in M.insert (funName fdef) fdef'  fdefs''
 
 redundancy_input_pass :: FunDefs1 -> FunDefs1
 redundancy_input_pass fdefs =
