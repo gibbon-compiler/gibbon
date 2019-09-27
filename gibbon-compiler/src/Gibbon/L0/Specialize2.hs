@@ -172,9 +172,9 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         FoldE{} -> err1 (sdoc ex)
         Ext ext ->
           case ext of
-            LambdaE{}  -> err1 (sdoc ex)
-            PolyAppE{} -> err1 (sdoc ex)
-            FunRefE{}  -> err1 (sdoc ex)
+            LambdaE{}  -> err2 (sdoc ex)
+            PolyAppE{} -> err2 (sdoc ex)
+            FunRefE{}  -> err2 (sdoc ex)
 
     toL1Prim :: Prim Ty0 -> Prim L1.Ty1
     toL1Prim = fmap toL1Ty
@@ -190,7 +190,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         ProdTy tys  -> L1.ProdTy $ map toL1Ty tys
         SymDictTy (Just v) a -> L1.SymDictTy (Just v) $ toL1Ty a
         SymDictTy Nothing  a -> L1.SymDictTy Nothing $ toL1Ty a
-        ArrowTy{} -> err1 (sdoc ty)
+        ArrowTy{} -> err2 (sdoc ty)
         PackedTy tycon tyapps | tyapps == [] -> L1.PackedTy tycon ()
                               | otherwise    -> err1 (sdoc ty)
         ArenaTy -> L1.ArenaTy
@@ -202,7 +202,9 @@ toL1 Prog{ddefs, fundefs, mainExp} =
       | otherwise    = err1 (sdoc t)
     toL1TyS (ForAll _ t) = error $ "toL1: Not a function type: " ++ sdoc t
 
-    err1 msg = error $ "toL1: Program was not fully monomorphized. Encountered" ++ msg
+    err1 msg = error $ "toL1: Program was not fully monomorphized. Encountered: " ++ msg
+
+    err2 msg = error $ "toL1: Could not lift all lambdas. Encountered: " ++ msg
 
 --------------------------------------------------------------------------------
 

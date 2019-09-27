@@ -1,0 +1,26 @@
+#lang gibbon
+
+(data BoxInt
+      [B Int])
+
+(data List
+      [Nil]
+      [Cons BoxInt List])
+
+(define (box-add [x : BoxInt] [y : BoxInt]) : BoxInt
+  (case x
+    [(B i)
+      (case y
+        [(B j)
+	  (B (+ i j))])]))
+
+(define (sum-list [xs : List]) : BoxInt
+  (case xs
+    [(Nil) (B 0)]
+    [(Cons y ys) (box-add y (sum-list ys))]))
+
+(define (ins [x : BoxInt] [xs : List]) : List
+  (Cons x xs))
+
+(case (sum-list (ins (B 1) (ins (B 2) (Nil))))
+  [(B i) i])
