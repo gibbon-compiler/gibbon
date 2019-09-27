@@ -1119,8 +1119,8 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
 
        in snd redundantPositions
 
-fixCalls :: L Exp1 -> FunDef1 -> M.Map Int Int  -> M.Map Int Int -> Var->L Exp1
-fixCalls exp fdef redirectMap outputFromInput newName = go exp
+fixCalls :: L Exp1 -> FunDef1 -> FunDef1 -> M.Map Int Int  -> M.Map Int Int -> Var->L Exp1
+fixCalls exp fdefOld fdefNew redirectMap outputFromInput newName = go exp
     where
       go exp = case unLoc exp of
         CaseE e ls ->
@@ -1129,16 +1129,16 @@ fixCalls exp fdef redirectMap outputFromInput newName = go exp
         LetE (Var y, loc, t, rhs) body->
           case unLoc rhs of
             AppE v ls args ->
-              if v == funName fdef
+              if v == funName fdefOld
                 then
-                  let t' = snd (funTy fdef) in
+                  let t' = snd (funTy fdefNew) in
                   let rhs' = l $ AppE newName ls args in
                   let
                     body'=  L.foldl
                         (\ex (i, j )->
                               let oldExp = l $ProjE i ( l (VarE (Var y)) )
                                   newExp = getExpAtIndex args j
-                              in  substE oldExp newExp ex  `debug` ("replacing" L.++ (show oldExp) L.++"with" L.++ ( show newExp)L.++ (show outputFromInput ))
+                              in  substE oldExp newExp ex  `debug` ("replacing1" L.++ (show oldExp) L.++"with" L.++ ( show newExp)L.++ (show outputFromInput ))
                         ) body (M.toList outputFromInput)
 
                     body'' = L.foldl
@@ -1148,7 +1148,7 @@ fixCalls exp fdef redirectMap outputFromInput newName = go exp
                            else
                               let oldExp = l $ProjE i ( l (VarE (Var y)) )
                                   newExp = l $ProjE j ( l (VarE (Var y)) )
-                              in  substE oldExp newExp ex `debug` ("replacing" L.++ (show oldExp) L.++"with" L.++ ( show newExp))
+                              in  substE oldExp newExp ex `debug` ("replacing2" L.++ (show oldExp) L.++"with" L.++ ( show newExp))
                         ) body' (M.toList redirectMap)-- in
 
                   in l $ LetE (Var y, loc, t',  rhs') (go  body'')
@@ -1366,6 +1366,7 @@ redundancy_output_pass fdefs =
                     (fixCalls
                        (funBody f)
                        (fdefs M.! fName)
+                       (fdefs M.! newName)
                        redirectMap
                        outPutFromInput
                        newName
