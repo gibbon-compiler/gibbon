@@ -91,6 +91,10 @@ git:
 script:
   ./run_all_tests.sh
 
+branches:
+  except:
+  - ckoparkar/par-build-tree
+
 notifications:
   email: false
   slack:

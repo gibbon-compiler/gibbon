@@ -311,15 +311,18 @@ inferExp' env lex0@(L sl1 exp) bound dest =
                         let arrty = arrOut $ lookupFEnv f env
                             -- Substitute the location occurring at the call site
                             -- in place of the one in the function's return type
-                            copyRetTy = substLoc' lv2 arrty
+                            copyRetTy = case arrty of
+                                          PackedTy _ loc -> substLoc (M.singleton loc lv2) arrty
+                                          _ -> error "bindAllLocations: Not a packed type"
+                            a' = subst v1 (lc$ VarE v') a
                         in lc$ LetE (v',[],copyRetTy, lc$ AppE f lvs [lc$ VarE v1]) $
-                           lc$ Ext (LetLocE lv1 (AfterVariableLE v' lv2) a)
+                           lc$ Ext (LetLocE lv1 (AfterVariableLE v' lv2) a')
 
   in do res <- inferExp env lex0 dest
         (e,ty,cs) <- bindAllLocations res
         e' <- finishExp e
         let (e'',s) = cleanExp e'
-            unbound = (s S.\\ S.fromList bound)        
+            unbound = (s S.\\ S.fromList bound)
         e''' <- bindAllUnbound e'' (S.toList unbound)
         -- dbgTrace 4 (show (s S.\\ S.fromList bound)) $ return ()
         return (e''',ty)
@@ -437,7 +440,7 @@ inferExp env@FullEnv{dataDefs}
       handleTrailingBindLoc v res =
           do (e,ty,cs) <- bindAfterLoc v res
              case e of
-               (L _ (Ext (LetLocE lv1 (AfterVariableLE v lv2) e))) -> 
+               (L _ (Ext (LetLocE lv1 (AfterVariableLE v lv2) e))) ->
                    do (e',ty',cs') <- bindTrivialAfterLoc lv1 (e,ty,cs)
                       return (l$ Ext (LetLocE lv1 (AfterVariableLE v lv2) e'), ty', cs')
                _ -> return (e,ty,cs) -- Should this signal an error instead of silently returning?
@@ -445,7 +448,7 @@ inferExp env@FullEnv{dataDefs}
       -- | Transforms a result by adding a location binding derived from an AfterVariable constraint
       -- associated with the passed-in variable.
       bindAfterLoc :: Var -> Result -> TiM Result
-      bindAfterLoc v (e,ty,c:cs) = 
+      bindAfterLoc v (e,ty,c:cs) =
           case c of
             AfterVariableL lv1 v' lv2 ->
                 if v == v'
@@ -461,7 +464,10 @@ inferExp env@FullEnv{dataDefs}
                         let arrty = lookupFEnv f env
                             -- Substitute the location occurring at the call site
                             -- in place of the one in the function's return type
-                            copyRetTy = substLoc' lv2 (arrOut arrty)
+                            copyRetTy = case arrOut arrty of
+                                          PackedTy _ loc -> substLoc (M.singleton loc lv2) (arrOut arrty)
+                                          _ -> error "bindAfterLoc: Not a packed type"
+                        _ <- dbgTraceIt (show v' ++ " " ++ show v1) $ return ()
                         return (lc$ LetE (v',[],copyRetTy,l$ AppE f lvs [l$ VarE v1]) $
                                 lc$ Ext (LetLocE lv1' (AfterVariableLE v' lv2') e), ty, cs)
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
@@ -589,9 +595,10 @@ inferExp env@FullEnv{dataDefs}
 
     -- Location inference for the parallel combinator should work exactly like a regular tuple --
     -- except that the result should be a `ParE` instead of a `MkProdE`.
-    ParE a b -> do
-      (L lc1 (MkProdE [a',b']), ty, cs) <- inferExp env (l$ MkProdE [a,b]) dest
-      return (L lc1 (ParE a' b'), ty, cs)
+    -- ParE a b -> do
+    --   (L lc1 (MkProdE [a',b']), ty, cs) <- inferExp env (l$ MkProdE [a,b]) dest
+    --   return (L lc1 (ParE a' b'), ty, cs)
+    ParE{} -> error "inferLocations: TODO ParE"
 
     LitE n -> return (lc$ LitE n, IntTy, [])
 
@@ -711,7 +718,9 @@ inferExp env@FullEnv{dataDefs}
                                         -- Substitute the location occurring at the call site
                                         -- in place of the one in the function's return type
                                         -- re:last because we want the output location.
-                                        copyRetTy = substLoc' (last copy_locs) arrty
+                                        copyRetTy = case arrty of
+                                          PackedTy _ loc -> substLoc (M.singleton loc (last copy_locs)) arrty
+                                          _ -> error "inferExp: Not a packed type"
                                     in return $ lc$ LetE (v',[],copyRetTy, lc$ AppE f lvs e) $
                                        lc$ DataConE d k [ e' | (e',_,_) <- ls'']
                                 _ -> error "inferExp: Unexpected pattern <error1>"
@@ -850,9 +859,9 @@ inferExp env@FullEnv{dataDefs}
                      , ty', fcs)
 
         -- Don't process the EndOf operation at all, just recur through it
-        PrimAppE PEndOf [L la (VarE v)] -> do
+        PrimAppE RequestEndOf [L la (VarE v)] -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
-          return (lc$ L2.LetE (vr,[],CursorTy,L sl2 $ L2.PrimAppE PEndOf [L la (L2.VarE v)]) bod', ty', cs')
+          return (lc$ L2.LetE (vr,[],CursorTy,L sl2 $ L2.PrimAppE RequestEndOf [L la (L2.VarE v)]) bod', ty', cs')
 
         PrimAppE (DictInsertP dty) ls -> do
           (e,ty,cs) <- inferExp env (L sl2 $ PrimAppE (DictInsertP dty) ls) NoDest
@@ -946,12 +955,13 @@ inferExp env@FullEnv{dataDefs}
 
         -- Location inference for the parallel combinator should work exactly like a regular tuple --
         -- except that the result should be a `ParE` instead of a `MkProdE`.
-        ParE a b -> do
-           res <- inferExp env (l$ LetE (vr,locs,bty, l$ MkProdE [a,b]) bod) dest
-           case res of
-             (L lc1 (LetE (vr',locs', ty', L lc2 (MkProdE [a',b'])) bod), ty'', cs'') ->
-               return (L lc1 (LetE (vr',locs', ty', L lc2 (ParE a' b')) bod), ty'', cs'')
-             _  -> err$ "ParE -- unexpected result: " ++ sdoc res
+        -- ParE a b -> do
+        --    res <- inferExp env (l$ LetE (vr,locs,bty, l$ MkProdE [a,b]) bod) dest
+        --    case res of
+        --      (L lc1 (LetE (vr',locs', ty', L lc2 (MkProdE [a',b'])) bod), ty'', cs'') ->
+        --        return (L lc1 (LetE (vr',locs', ty', L lc2 (ParE a' b')) bod), ty'', cs'')
+        --      _  -> err$ "ParE -- unexpected result: " ++ sdoc res
+        ParE{} -> error "inferLocations: TODO ParE"
 
         WithArenaE v e -> do
           (e',ty,cs) <- inferExp (extendVEnv v ArenaTy env) e NoDest
@@ -977,12 +987,15 @@ inferExp env@FullEnv{dataDefs}
 
         MapE{} -> err$ "MapE unsupported"
         FoldE{} -> err$ "FoldE unsupported"
-        Ext{} -> err$ "Not expecting any Ext in inferLocs"
+
+        -- Ext (AddCursor cur i) -> do
+        --   (bod',ty',cs') <- inferExp env bod dest
+        --   tryBindReg (lc$ Ext $ LetLocE vr (AfterConstantLE i cur) bod', ty', cs')
 
     LetE{} -> err$ "Malformed let expression: " ++ (show ex0)
     MapE{} -> err$ "MapE unsupported"
     FoldE{} -> err$ "FoldE unsupported"
-    Ext{} -> err$ "Not expecting any Ext in inferLocs"
+    Ext{} -> err$ "Not expecting an Ext here: " ++ sdoc ex0
 
 
 -- TODO: Should eventually allow src and dest regions to be the same
@@ -1045,10 +1058,11 @@ finishExp (L i e) =
                      _ -> return t
              return $ l$ TimeIt e1' t' b
 
-      ParE a b -> do
-          a' <- finishExp a
-          b' <- finishExp b
-          return (l$ ParE a' b')
+      -- ParE a b -> do
+      --     a' <- finishExp a
+      --     b' <- finishExp b
+      --     return (l$ ParE a' b')
+      ParE{} -> error "finishExp: TODO ParE"
 
       WithArenaE v e -> do
              e' <- finishExp e
@@ -1141,9 +1155,10 @@ cleanExp (L i e) =
       TimeIt e d b -> let (e',s') = cleanExp e
                       in (l$ TimeIt e' d b, s')
 
-      ParE a b -> let (a', s1) = cleanExp a
-                      (b', s2) = cleanExp b
-                  in (l$ ParE a' b', s1 `S.union` s2)
+      -- ParE a b -> let (a', s1) = cleanExp a
+      --                 (b', s2) = cleanExp b
+      --             in (l$ ParE a' b', s1 `S.union` s2)
+      ParE{} -> error "cleanExp: TODO ParE"
 
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (l$ WithArenaE v e', s)
@@ -1222,9 +1237,10 @@ fixProj renam pvar proj (L i e) =
                            in l$ DataConE lv dc es'
       TimeIt e1 d b -> let e1' = fixProj renam pvar proj e1
                        in l$ TimeIt e1' d b
-      ParE e1 e2 -> let e1' = fixProj renam pvar proj e1
-                        e2' = fixProj renam pvar proj e2
-                    in l$ ParE e1' e2'
+      -- ParE e1 e2 -> let e1' = fixProj renam pvar proj e1
+      --                   e2' = fixProj renam pvar proj e2
+      --               in l$ ParE e1' e2'
+      ParE{} -> error "fixProj: TODO ParE"
       WithArenaE v e -> l$ WithArenaE v $ fixProj renam pvar proj e
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
@@ -1455,8 +1471,8 @@ prim p = case p of
            MkFalse -> return MkFalse
            Gensym  -> return Gensym
            SizeParam -> return SizeParam
-           PEndOf    -> return PEndOf
-           DictEmptyP dty -> convertTy dty >>= return . DictEmptyP
+           RequestEndOf    -> return RequestEndOf
+           DictEmptyP dty  -> convertTy dty >>= return . DictEmptyP
            DictInsertP dty -> convertTy dty >>= return . DictInsertP
            DictLookupP dty -> convertTy dty >>= return . DictLookupP
            DictHasKeyP dty -> convertTy dty >>= return . DictHasKeyP

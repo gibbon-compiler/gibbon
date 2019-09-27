@@ -127,7 +127,8 @@ inferRegScopeExp (L p ex) = L p <$>
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
-    ParE a b -> ParE <$> go a <*> go b
+    -- ParE a b -> ParE <$> go a <*> go b
+    ParE{} -> error "inferRegScopeExp: TODO ParE"
     WithArenaE v e -> WithArenaE v <$> go e
     MapE{}  -> error $ "inferRegScopeExp: TODO MapE"
     FoldE{} -> error $ "inferRegScopeExp: TODO FoldE"

@@ -195,6 +195,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                (wrapBody e2' newls)
 
           --
+          {-
           LetE (v,_ls,ty, rhs@(L _ (ParE a b))) bod -> do
             (outlocs1,newls1,eor1) <- doBoundApp a
             (outlocs2,newls2,eor2) <- doBoundApp b
@@ -208,6 +209,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
             bod' <- exp fns retlocs eor' lenv afterenv (extendVEnv v ty env2) bod
             return $ LetE (v,outlocs',ty,rhs)
                           (wrapBody bod' newls')
+          -}
+          LetE (v,_ls,ty, rhs@(L _ (ParE a b))) bod -> do
+            error "routeEnds: TODO: ParE "
 
           CaseE (L _ (VarE x)) brs -> do
                  -- We will need to gensym while processing the case clauses, so
@@ -273,14 +277,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- This shouldn't happen, but as a convenience we can ANF-ify this AppE
           -- by gensyming a new variable, sticking the AppE in a LetE, and recuring.
           -- Question: should this fail instead? I'm not sure.
-          AppE v args e -> do
+          AppE v args arg -> do
                  v' <- gensym "tailapp"
-                 let ty = funtype v
-                     -- use locVars used at call-site in the type
-                     arrOutMp = M.fromList $ zip (allLocVars ty) args
-                     outT     = substLoc arrOutMp (arrOut ty)
-                     e' = LetE (v',[], outT, l$ AppE v args e) (l$ VarE v')
-                 -- we fmap location at the top-level case expression
+                 let ty = gRecoverType ddefs env2 e
+                     e' = LetE (v',[], ty, l$ AppE v args arg) (l$ VarE v')
                  fmap unLoc $ go (l$ e')
 
           PrimAppE (DictInsertP dty) [L sl (VarE a),d,k,v] -> do
@@ -288,7 +288,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  let e' = LetE (v',[],SymDictTy (Just a) $ stripTyLocs dty, l$ PrimAppE (DictInsertP dty) [L sl (VarE a),d,k,v]) (l$ VarE v')
                  -- we fmap location at the top-level case expression
                  fmap unLoc $ go (l$ e')
-                 
+
 
           -- Same AppE as above. This could just fail, instead of trying to repair
           -- the program.
@@ -378,7 +378,8 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  e' <- go e
                  return $ TimeIt e' ty b
 
-          ParE a b -> ParE <$> go a <*> go b
+          -- ParE a b -> ParE <$> go a <*> go b
+          ParE{} -> error "routeEnds: TODO: ParE "
 
           WithArenaE v e -> WithArenaE v <$> go e
 

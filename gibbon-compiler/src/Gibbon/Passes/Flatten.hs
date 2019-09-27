@@ -179,10 +179,8 @@ exp ddfs env2 (L sloc e0) =
       (bnd,e') <- go e
       return ([], TimeIt (flatLets bnd e') (gRecoverType ddfs env2 e) b)
 
-    ParE a b -> do
-      (bnd ,a') <- go a
-      (bnd2,b') <- go b
-      return ([], ParE (flatLets bnd a') (flatLets bnd2 b'))
+    -- It's a pair of function calls, don't flatten anyting.
+    ParE{} -> return ([], e0)
 
     WithArenaE v e -> do
       (bnd, e') <- go e
@@ -233,7 +231,7 @@ flattenExp0 ddfs env2 (L sloc e0) =
                        return (concat bndss, f ls')
 
   in fmap (\(a,b) -> (a, L sloc b)) $
-  case dbgTraceIt (sdoc e0) e0 of
+  case e0 of
     LitE _    -> return ([],e0)
     VarE    _ -> return ([],e0)
     LitSymE _ -> return ([],e0)
@@ -281,10 +279,11 @@ flattenExp0 ddfs env2 (L sloc e0) =
       (bnd,e') <- go e
       return ([], TimeIt (flatLets bnd e') (L0.recoverType ddfs env2 e) b)
 
-    ParE a b -> do
-      (bnd ,a') <- go a
-      (bnd2,b') <- go b
-      return ([], ParE (flatLets bnd a') (flatLets bnd2 b'))
+    -- ParE a b -> do
+    --   (bnd ,a') <- go a
+    --   (bnd2,b') <- go b
+    --   return ([], ParE (flatLets bnd a') (flatLets bnd2 b'))
+    ParE{} -> error "flattenL0: TODO ParE"
 
     MapE _ _      -> error "FINISHLISTS"
     FoldE _ _ _   -> error "FINISHLISTS"

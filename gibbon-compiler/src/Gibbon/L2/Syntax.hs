@@ -24,7 +24,7 @@ module Gibbon.L2.Syntax
 
     -- * Operations on types
     , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substLoc
-    , substLoc', substLocs, substLocs', substEffs, stripTyLocs
+    , substLocs, substEffs, stripTyLocs, extendPatternMatchEnv
     , locsInTy, dummyTyLocs
 
     -- * Other helpers
@@ -39,6 +39,7 @@ import           Data.List as L
 import           Data.Loc
 import qualified Data.Set as S
 import qualified Data.Map as M
+import           GHC.Stack (HasCallStack)
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
@@ -318,6 +319,57 @@ regionToVar r = case r of
                   VarR  v   -> v
                   MMapR v   -> v
 
+
+-- | The 'gRecoverType' instance defined in Language.Syntax is incorrect for L2.
+-- For the AppE case, it'll just return the type with with the function was
+-- defined. However, we want the recovered type to have the locations actually
+-- used at the callsites! For example,
+--
+--     add1 :: Tree @ a -> Tree @ b
+--     add1 = _
+--
+--     ... (add1 [loc1, loc2] tr1) ..
+--
+-- in this case, we want the type of (add1 tr1) to be (Tree @ loc2)
+-- and NOT (Tree @ b). We have to do something similar for variables bound by
+-- a pattern match.
+instance Typeable (PreExp E2Ext LocVar (UrTy LocVar)) where
+  gRecoverType ddfs env2 ex =
+    case ex of
+      VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) v (vEnv env2)
+      LitE _       -> IntTy
+      LitSymE _    -> SymTy
+      AppE v locs _ -> let fnty  = fEnv env2 # v
+                           outty = arrOut fnty
+                           mp = M.fromList $ zip (allLocVars fnty) locs
+                       in substLoc mp outty
+
+      PrimAppE (DictInsertP ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) $ stripTyLocs ty
+      PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) $ stripTyLocs ty
+      PrimAppE p _ -> primRetTy p
+
+      LetE (v,_,t,_) e -> gRecoverType ddfs (extendVEnv v t env2) e
+      IfE _ e _        -> gRecoverType ddfs env2 e
+      MkProdE es       -> ProdTy $ L.map (gRecoverType ddfs env2) es
+      DataConE loc c _ -> PackedTy (getTyOfDataCon ddfs c) loc
+      TimeIt e _ _     -> gRecoverType ddfs env2 e
+      MapE _ e         -> gRecoverType ddfs env2 e
+      FoldE _ _ e      -> gRecoverType ddfs env2 e
+      Ext ext          -> gRecoverType ddfs env2 ext
+      ProjE i e ->
+        case gRecoverType ddfs env2 e of
+          (ProdTy tys) -> tys !! i
+          oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
+                        ++"\nExpression:\n  "++ sdoc ex
+                        ++"\nEnvironment:\n  "++sdoc (vEnv env2)
+      ParE a b -> ProdTy $ L.map (gRecoverType ddfs env2) [a,b]
+      WithArenaE _v e -> gRecoverType ddfs env2 e
+      CaseE _ mp ->
+        let (c,vlocs,e) = head mp
+            (vars,locs) = unzip vlocs
+            env2' = extendPatternMatchEnv c ddfs vars locs env2
+        in gRecoverType ddfs env2' e
+
 --------------------------------------------------------------------------------
 -- Do this manually to get prettier formatting: (Issue #90)
 
@@ -366,30 +418,30 @@ substLoc mp ty =
    _ -> ty
   where go = substLoc mp
 
--- | Like 'substLoc', but constructs the map for you..
-substLoc' :: LocVar -> Ty2 -> Ty2
-substLoc' loc ty =
-  case locsInTy ty of
-    [loc2] -> substLoc (M.singleton loc2 loc) ty
-    _ -> substLoc M.empty ty
-
 -- | List version of 'substLoc'.
 substLocs :: M.Map LocVar LocVar -> [Ty2] -> [Ty2]
 substLocs mp tys = L.map (substLoc mp) tys
 
--- | Like 'substLocs', but constructs the map for you.
-substLocs' :: [LocVar] -> [Ty2] -> [Ty2]
-substLocs' locs tys = substLocs (M.fromList $ go tys locs) tys
-  where
-    go tys locs =
-      case (tys, locs) of
-        ([],[]) -> []
-        (ty:rtys, lc:rlocs) ->
-           case ty of
-             PackedTy _ loc -> [(loc,lc)] ++ go rtys rlocs
-             ProdTy{} -> error $ "substLocs': Unexpected type " ++ sdoc ty
-             _ -> go rtys rlocs
-        (_,_) -> error $ "substLocs': Unexpected args, " ++ sdoc (tys,locs)
+-- | Extend an environment for a pattern match. E.g.
+--
+--     data Foo = MkFoo Int Foo | ...
+--
+--     case foo1 of
+--        MkFoo (i:loc1) (f:loc2) ->
+--          new_env2 = extendPatternMatchEnv [loc1,loc2] old_env2
+extendPatternMatchEnv :: HasCallStack => DataCon -> DDefs Ty2 -> [Var] -> [LocVar]
+                      -> Env2 Ty2 -> Env2 Ty2
+extendPatternMatchEnv dcon ddefs vars locs env2 =
+  let tys  = lookupDataCon ddefs dcon
+      tys' = foldr
+               (\(loc,ty) acc ->
+                  case locsInTy ty of
+                    []     -> ty:acc
+                    [loc2] -> (substLoc (M.singleton loc2 loc) ty) : acc
+                    _  -> error $ "extendPatternMatchEnv': Found more than 1 location in type: " ++ sdoc ty)
+               []
+               (fragileZip locs tys)
+  in extendsVEnv (M.fromList $ fragileZip vars tys') env2
 
 -- | Apply a substitution to an effect set.
 substEffs :: M.Map LocVar LocVar -> S.Set Effect -> S.Set Effect
@@ -415,7 +467,7 @@ stripTyLocs ty =
     ArenaTy  -> ArenaTy
 
 dummyTyLocs :: Applicative f => UrTy () -> f (UrTy LocVar)
-dummyTyLocs ty = traverse (const (pure (toVar "dummy"))) ty 
+dummyTyLocs ty = traverse (const (pure (toVar "dummy"))) ty
 
 -- | Collect all the locations mentioned in a type.
 locsInTy :: Ty2 -> [LocVar]
@@ -550,7 +602,7 @@ mapPacked fn t =
     ListTy{} -> error "FINISHLISTS"
 
 constPacked :: UrTy a1 -> UrTy a2 -> UrTy a1
-constPacked c t = 
+constPacked c t =
   case t of
     IntTy  -> IntTy
     BoolTy -> BoolTy
@@ -589,7 +641,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           DataConE _ _ args -> foldl go acc args
           TimeIt e _ _ -> go acc e
           WithArenaE _ e -> go acc e
-          ParE{}  -> acc
+          -- ParE{}  -> acc
+          ParE{}  -> error "depList: TODO ParE"
           MapE{}  -> acc
           FoldE{} -> acc
           Ext ext ->

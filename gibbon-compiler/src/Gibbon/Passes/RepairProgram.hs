@@ -74,4 +74,6 @@ repairProgram oldl1 prg = do
         l2 <- flattenL2 l2
         l2 <- removeCopies l2
         l2 <- inferEffects l2
+        -- See [Keeping old case clauses around] in AddRAN
+        l2 <- addTraversals l2
         return l2

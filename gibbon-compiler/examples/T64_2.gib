@@ -1,0 +1,46 @@
+#lang gibbon
+
+(data ListExpr
+      [CONSEXPR Expr ListExpr]
+      [NULLEXPR])
+
+(data ListParam
+      [CONSPARAM Param ListParam]
+      [NULLPARAM])
+
+(data ListType
+      [CONSTYPE Type ListType]
+      [NULLTYPE])
+
+(data Type
+      [Int_]
+      [Bool_]
+      [NullT]
+      [Lamt ListType Type]
+      [Fail])
+
+(data Param
+      [P Expr Type])
+
+(data Expr
+      [Null]
+      [S Sym]
+      [N Int]
+      [B Bool] ;; leaving out null for now
+      [Begin ListExpr]
+      [Lam ListParam Expr]
+      [App Expr ListExpr])
+
+(define (typecheck-begin [exprs : ListExpr] [a : Arena] [env : (SymDict a Type)]) : Type
+  (case exprs
+    [(CONSEXPR e rest) (inner-begin-cons e rest a env)]
+    [(NULLEXPR) (Fail)]))
+
+(define (inner-begin-cons [e : Expr] [rest : ListExpr] [a : Arena] [env : (SymDict a Type)]) : Type
+  (case rest
+    [(CONSEXPR e2 rest2) (NullT)]
+    [(NULLEXPR) (NullT)]))
+
+;; fails
+;; (let ([x : Type (letarena a (typecheck-begin (CONSEXPR (N 10) (NULLEXPR)) a (ann (empty-dict a) (SymDict a Type))))])
+;;   10)

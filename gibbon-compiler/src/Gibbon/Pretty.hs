@@ -13,7 +13,7 @@ import           Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
 
 import qualified Gibbon.L0.Syntax as L0
-import           Gibbon.L1.Syntax
+import           Gibbon.L1.Syntax as L1
 import           Gibbon.L2.Syntax as L2
 import           Gibbon.L3.Syntax as L3
 import           Gibbon.Common
@@ -152,10 +152,7 @@ instance Pretty ex => Pretty (DDef ex) where
 -- Primitives
 instance (Pretty d, Ord d) => Pretty (Prim d) where
     pprintWithStyle sty pr =
-        -- We add PEndOf here because it's not exposed to the users, and as a result,
-        -- is not defined as a primop in the parser primMap.
-        let renderPrim = M.union (M.singleton PEndOf "pendof") $
-                         M.fromList (map (\(a,b) -> (b,a)) (M.toList primMap))
+        let renderPrim = M.fromList (map (\(a,b) -> (b,a)) (M.toList primMap))
         in case M.lookup pr renderPrim of
               Nothing  ->
                   let wty ty = text "<" <> pprintWithStyle sty ty <> text ">"
@@ -166,13 +163,15 @@ instance (Pretty d, Ord d) => Pretty (Prim d) where
                                       DictHasKeyP ty -> text "DictHasKey" <> wty ty
                                       DictInsertP ty -> text "DictInsert" <> wty ty
                                       DictLookupP ty -> text "DictLookup" <> wty ty
+                                      RequestEndOf   -> text "RequestEndOf"
                                       _ -> error $ "pprint: Unknown primitive"
                       PPHaskell  -> case pr of
                                       DictEmptyP _ty  -> text "dictEmpty"
                                       DictHasKeyP _ty -> text "dictHasKey"
                                       DictInsertP _ty -> text "dictInsert"
                                       DictLookupP _ty -> text "dictLookup"
-                                      _ -> error $ "pprint: Unknown primitive"                                      
+                                      RequestEndOf   -> text "RequestEndOf"
+                                      _ -> error $ "pprint: Unknown primitive"
               Just str -> text str
 
 
@@ -211,7 +210,7 @@ instance (Pretty l) => Pretty (UrTy l) where
           PackedTy tc loc ->
               case sty of
                 PPHaskell  -> text tc
-                PPInternal -> text "Packed" <+> text tc <+> pprintWithStyle sty loc
+                PPInternal -> parens $ text "Packed" <+> text tc <+> pprintWithStyle sty loc
           ListTy ty1 -> brackets $ pprintWithStyle sty ty1
           PtrTy     -> text "Ptr"
           CursorTy  -> text "Cursor"
@@ -292,7 +291,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
           ProjE i e ->
               let edoc = pprintWithStyle sty e
               in case sty of
-                PPInternal ->  text "#" <> int i <+> edoc
+                PPInternal -> parens $ text "#" <> int i <+> edoc
                 PPHaskell  ->
                     case i of
                       0 -> text "fst" <+> edoc
@@ -307,10 +306,10 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                 hsep (map (pprintWithStyle sty) es)
                               -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
           TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
-          ParE a b -> pprintWithStyle sty a <+> text "||" <+> pprintWithStyle sty b
+          ParE a b -> pprintWithStyle sty a <+> text ".||." <+> pprintWithStyle sty b
           WithArenaE v e -> case sty of
                               PPHaskell  -> (text "let") <+>
-                                            pprintWithStyle sty v <+> 
+                                            pprintWithStyle sty v <+>
                                             equals <+>
                                             text "()" <+>
                                             text "in" $+$
@@ -328,7 +327,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                <+> text "->" $+$ nest indentLevel (pprintWithStyle sty e)
 -- L1
 instance Pretty (NoExt l d) where
-    pprintWithStyle _ _ = empty
+    pprintWithStyle _ _ = error "impossible"
 
 -- L2
 instance Pretty l => Pretty (L2.PreLocExp l) where
@@ -520,7 +519,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                                else pprintWithStyle sty loc) <+>
                               hsep (map (ppExp env2) es)
           TimeIt e _ty _b -> text "timeit" <+> parens (ppExp env2 e)
-          ParE a b -> ppExp env2 a <+> text "||" <+> ppExp env2 b
+          ParE a b -> ppExp env2 a <+> text ".||." <+> ppExp env2 b
           WithArenaE v e -> (text "let") <+>
                             pprintWithStyle sty v <+>
                             equals <+>

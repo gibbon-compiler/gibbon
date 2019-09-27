@@ -126,7 +126,5 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
       -- The locations point to the same region as the scrutinee.
       let (vars,locs) = unzip vlocs
           lenv1' = foldr (\lc acc -> M.insert lc reg acc) lenv1 locs
-          tys = lookupDataCon ddefs dcon
-          tys' = substLocs' locs tys
-          env2' = extendsVEnv (M.fromList $ zip vars tys') env21
-      (dcon,vlocs,) <$> (removeCopiesExp ddefs fundefs lenv1' env2' bod)
+          env21' = extendPatternMatchEnv dcon ddefs vars locs env21
+      (dcon,vlocs,) <$> (removeCopiesExp ddefs fundefs lenv1' env21' bod)

@@ -45,6 +45,10 @@ run_answers:
 	@echo "-----------------------------------------"
 	$(MAKE) answers
 
-answers: $(GIB_ANSWERS) $(HS_ANSWERS)
+build:
+	cd .. && make racket
+	mkdir -p $(GIB_BLD)
+
+answers: build $(GIB_ANSWERS) $(HS_ANSWERS)
 
 .PHONY: answers debug

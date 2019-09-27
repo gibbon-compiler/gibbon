@@ -57,7 +57,6 @@ import qualified Gibbon.L3.Typecheck as L3
 import           Gibbon.Passes.Freshen        (freshNames)
 import           Gibbon.Passes.Flatten        (flattenL1, flattenL2, flattenL3)
 import           Gibbon.Passes.InlineTriv     (inlineTriv)
-import           Gibbon.Passes.FloatOut       (floatOut)
 
 import           Gibbon.Passes.DirectL3       (directL3)
 import           Gibbon.Passes.InferLocations (inferLocs)
@@ -203,8 +202,11 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   -- set the env var DEBUG, to verbosity, when > 1
   setDebugEnvVar verbosity
 
-  -- parse the input file
-  ((l1, cnt0), fp) <- parseInput input fp0
+  -- Use absolute path
+  dir <- getCurrentDirectory
+  let fp1 = dir </> fp0
+  -- Parse the input file
+  ((l1, cnt0), fp) <- parseInput input fp1
   let config' = config { srcFile = Just fp }
 
   case mode of
@@ -476,8 +478,6 @@ passes config@Config{dynflags} l1 = do
       l1 <- if should_fuse
           then goE  "fusion2"   fusion2                 l1
           else return l1
-      l1 <- goE "typecheck"     L1.tcProg               l1
-      l1 <- goE "floatOut"      floatOut                l1
       l1 <- goE "typecheck"     L1.tcProg               l1
 
       -- Minimal haskell "backend".

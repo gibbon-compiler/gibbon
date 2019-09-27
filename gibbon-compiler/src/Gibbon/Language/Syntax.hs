@@ -304,10 +304,10 @@ type HasSimplifiableExt e l d = ( Show l, Out l, Show d, Out d
                                 )
 
 
--- | This is NOT a replacement for any typechecker. This is supposed to be used just to
--- recover the type of an expression in a type-environment
--- Without this, we cannot have truly generic Flattenable,
--- b/c we need to know the type of an expression before we bind it with a LetE.
+-- | This is NOT a replacement for any typechecker. This only recover type of
+-- an expression given a type-environment. Without this, we cannot have truly
+-- generic Flattenable, b/c we need to know the type of an expression before we
+-- bind it with a LetE.
 class Expression e => Typeable e where
   gRecoverType :: DDefs (TyOf e) -> Env2 (TyOf e) -> e -> TyOf e
 
@@ -543,11 +543,11 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
       Ext q -> gFreeVars q
 
 
--- Recover type of an expression given a type-expression
-instance (Show l, Out l, Expression (e l (UrTy l)),
-          TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)),
-          FunctionTy (UrTy l), Typeable (e l (UrTy l)))
-       => Typeable (PreExp e l (UrTy l)) where
+-- | A Typeable instance for L1 and L3 (L2 defines it's own)
+instance (Show (), Out (), Expression (e () (UrTy ())),
+          TyOf (e () (UrTy ())) ~ TyOf (PreExp e () (UrTy ())),
+          FunctionTy (UrTy ()), Typeable (e () (UrTy ())))
+       => Typeable (PreExp e () (UrTy ())) where
   gRecoverType ddfs env2 ex =
     case ex of
       VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) v (vEnv env2)
@@ -555,7 +555,7 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
       LitSymE _    -> SymTy
       AppE v _ _   -> outTy $ fEnv env2 # v
       PrimAppE (DictInsertP ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) $ stripTyLocs ty
-      PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) $ stripTyLocs ty                      
+      PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) $ stripTyLocs ty
       PrimAppE p _ -> primRetTy p
 
       LetE (v,_,t,_) e -> gRecoverType ddfs (extendVEnv v t env2) e
@@ -566,18 +566,14 @@ instance (Show l, Out l, Expression (e l (UrTy l)),
       MapE _ e         -> gRecoverType ddfs env2 e
       FoldE _ _ e      -> gRecoverType ddfs env2 e
       Ext ext          -> gRecoverType ddfs env2 ext
-
       ProjE i e ->
         case gRecoverType ddfs env2 e of
           (ProdTy tys) -> tys !! i
           oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                         ++"\nExpression:\n  "++ sdoc ex
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
-
       ParE a b -> ProdTy $ L.map (gRecoverType ddfs env2) [a,b]
-
       WithArenaE _v e -> gRecoverType ddfs env2 e
-
       CaseE _ mp ->
         let (c,args,e) = head mp
             args' = L.map fst args
@@ -658,9 +654,11 @@ data Prim ty
             -- (first PackedTy then CursorTy).  The TyCon tracks the original type name.
             -- The variable represents the region that this file will be mapped to, and is
             -- set by InferLocations.
-          | PEndOf
-          -- ^ Returns the end-of cursor for some packed value. These pointers
-          -- serve as random access nodes to the value that is packed after this one.
+
+          | RequestEndOf
+          -- ^ Conveys a demand for the "end of" some packed value, which is
+          -- fulfilled by Cursorize. N.B. the argument must be a VarE that
+          -- refers to a packed value.
 
           | Gensym
 
@@ -1006,6 +1004,7 @@ primArgsTy p =
     GtEqP-> [IntTy, IntTy]
     OrP  -> [BoolTy, BoolTy]
     AndP -> [BoolTy, BoolTy]
+    Gensym  -> []
     MkTrue  -> []
     MkFalse -> []
     SymAppend        -> [SymTy, IntTy]
@@ -1016,7 +1015,7 @@ primArgsTy p =
     DictHasKeyP _ty  -> error "primArgsTy: dicts not handled yet"
     ReadPackedFile{} -> []
     (ErrorP _ _) -> []
-    PEndOf -> error "primArgsTy: PEndOf not handled yet"
+    RequestEndOf      -> error "primArgsTy: RequestEndOf not handled yet"
 
 -- | Return type for a primitive operation.
 primRetTy :: Prim (UrTy a) -> (UrTy a)
@@ -1048,7 +1047,8 @@ primRetTy p =
     DictLookupP ty -> ty
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
-    PEndOf -> error "primRetTy: PEndOf not handled yet"
+    RequestEndOf      -> error "primRetTy: RequestEndOf not handled yet"
+
 
 dummyCursorTy :: UrTy a
 dummyCursorTy = CursorTy

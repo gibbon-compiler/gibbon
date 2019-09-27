@@ -53,13 +53,20 @@ tcExp ddfs env exp@(L p ex) =
                                       ++ sdoc locs)
                            exp
 
-      -- Check argument type
+      -- Get argument types
       argTys <- mapM go ls
+
+      -- Check arity
+      if (length ls) /= (length argTys)
+      then throwError $ GenericTC ("Arity mismatch. Expected:" ++ show (length argTys) ++
+                                   " Got:" ++ show (length ls)) exp
+      else pure ()
+
       let (funInTys,funRetTy) = (inTys funty, outTy funty)
 
           combAr (SymDictTy (Just v1) _, SymDictTy (Just v2) _) m = M.insert v2 v1 m
           combAr _ m = m
-          arMap = L.foldr combAr M.empty $ zip argTys funInTys
+          arMap = L.foldr combAr M.empty $ fragileZip argTys funInTys
 
           subDictTy m (SymDictTy (Just v) ty) =
               case M.lookup v m of
@@ -79,7 +86,7 @@ tcExp ddfs env exp@(L p ex) =
       let len0 = checkLen exp pr 0 es
           len1 = checkLen exp pr 1 es
           len2 = checkLen exp pr 2 es
-          len3 = checkLen exp pr 3 es
+          _len3 = checkLen exp pr 3 es
           len4 = checkLen exp pr 4 es
 
           mk_bools = do
@@ -194,7 +201,13 @@ tcExp ddfs env exp@(L p ex) =
           len0
           return ty
 
-        PEndOf -> return CursorTy
+        RequestEndOf -> do
+          len1
+          case (es !! 0) of
+            L _ VarE{} -> if isPackedTy (tys !! 0)
+                          then return CursorTy
+                          else throwError $ GenericTC "Expected PackedTy" exp
+            _ -> throwError $ GenericTC "Expected a variable argument" exp
 
 
     LetE (v,[],SymDictTy _ pty, rhs) e -> do
@@ -281,7 +294,10 @@ tcExp ddfs env exp@(L p ex) =
     ParE a b -> do
       aty <- go a
       bty <- go b
-      return (ProdTy [aty, bty])
+      if isScalarTy aty && isScalarTy bty
+      then return (ProdTy [aty, bty])
+      else error $ "Gibbon-TODO: Only scalar types allowed in ParE for now. Got: " ++
+                   sdoc (ProdTy [aty, bty])
 
     WithArenaE v e -> do
       let env' = extendEnv env [(v,ArenaTy)]
@@ -338,7 +354,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
       let (argTys,retty) = funTy
           venv = M.fromList (zip funArgs argTys)
           env' = Env2 venv (fEnv env)
-          res = runExcept $ tcExp ddefs env' funBody
+          res  = runExcept $ tcExp ddefs env' funBody
       case res of
         Left err -> error $ sdoc err
         Right ty -> if ty == retty

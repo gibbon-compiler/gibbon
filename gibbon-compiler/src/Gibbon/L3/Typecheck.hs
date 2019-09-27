@@ -9,7 +9,6 @@ module Gibbon.L3.Typecheck
 
 import Control.Monad.Except
 import Data.Loc
-import Data.Functor.Identity
 import Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
 import qualified Data.List as L
@@ -18,13 +17,11 @@ import Prelude hiding (exp)
 
 import Gibbon.Common
 import Gibbon.L1.Typecheck hiding (tcProg, tcExp, ensureEqual, ensureEqualTy)
-import Gibbon.L1.Syntax
-import qualified Gibbon.L2.Syntax as L2
 import Gibbon.L3.Syntax
 
 -- | Typecheck a L1 expression
 --
-tcExp :: (Out l, Eq l, FunctionTy (UrTy l)) =>
+tcExp :: (Show l, Out l, Eq l, FunctionTy (UrTy l)) =>
          Bool -> DDefs (UrTy l) -> Env2 (UrTy l) -> (L (PreExp E3Ext l (UrTy l))) ->
          TcM (UrTy l) (L (PreExp E3Ext l (UrTy l)))
 tcExp isPacked ddfs env exp@(L p ex) =
@@ -133,6 +130,8 @@ tcExp isPacked ddfs env exp@(L p ex) =
               Nothing -> error $ "Function not found: " ++ sdoc v ++ " while checking " ++
                                  sdoc exp ++ " at " ++ show p
 
+          (funInTys,funRetTy) = (inTys funty, outTy funty)
+
       -- Check that the expression does not have any locations
       case locs of
         [] -> return ()
@@ -140,13 +139,18 @@ tcExp isPacked ddfs env exp@(L p ex) =
                                       ++ sdoc locs)
                            exp
 
+      -- Check arity
+      if (length ls) /= (length funInTys)
+      then throwError $ GenericTC ("Arity mismatch. Expected:" ++ show (length funInTys) ++
+                                   " Got:" ++ show (length ls)) exp
+      else pure ()
+
       -- Check argument type
       argTys <- mapM go ls
-      let (funInTys,funRetTy) = (inTys funty, outTy funty)
 
-          combAr (SymDictTy (Just v1) _, SymDictTy (Just v2) _) m = M.insert v2 v1 m
+      let combAr (SymDictTy (Just v1) _, SymDictTy (Just v2) _) m = M.insert v2 v1 m
           combAr _ m = m
-          arMap = L.foldr combAr M.empty $ zip argTys funInTys
+          arMap = L.foldr combAr M.empty $ fragileZip argTys funInTys
 
           subDictTy m (SymDictTy (Just v) ty) =
               case M.lookup v m of
@@ -164,7 +168,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
       let len0 = checkLen exp pr 0 es
           len1 = checkLen exp pr 1 es
           len2 = checkLen exp pr 2 es
-          len3 = checkLen exp pr 3 es
+          _len3 = checkLen exp pr 3 es
           len4 = checkLen exp pr 4 es
 
           mk_bools = do
@@ -264,7 +268,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
           then return CursorTy
           else return ty
 
-        PEndOf -> error "Do not use PEndOf after L2."
+        RequestEndOf -> error "RequestEndOf shouldn't occur in a L3 program."
 
 
     LetE (v,[],SymDictTy _ _pty, rhs) e -> do
@@ -417,7 +421,7 @@ tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
       return ()
 
 
-tcCases :: (Eq l, Out l, FunctionTy (UrTy l)) => Bool -> DDefs (UrTy l) -> Env2 (UrTy l) ->
+tcCases :: (Show l, Eq l, Out l, FunctionTy (UrTy l)) => Bool -> DDefs (UrTy l) -> Env2 (UrTy l) ->
            [(DataCon, [(Var, l)], L (PreExp E3Ext l (UrTy l)))] ->
            TcM (UrTy l) (L (PreExp E3Ext l (UrTy l)))
 tcCases isPacked ddfs env cs = do
@@ -463,7 +467,7 @@ packedToCursor ty = ty
 compareModCursor CursorTy (PackedTy _ _) = True
 compareModCursor (PackedTy _ _) CursorTy = True
 compareModCursor ty1 ty2 = ty1 == ty2
-                                 
+
 ensureEqualTyNoLoc exp t1 t2 =
   case (t1,t2) of
     (SymDictTy _ _ty1, SymDictTy _ _ty2) -> return t1

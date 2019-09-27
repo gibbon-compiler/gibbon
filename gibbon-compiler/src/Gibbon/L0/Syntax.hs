@@ -356,7 +356,7 @@ recoverType ddfs env2 (L _ ex) =
         DictLookupP ty -> ty
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty
-        PEndOf -> error "primRetTy: PEndOf not handled yet"
+        RequestEndOf -> error "primRetTy: PEndOf not handled yet"
 
 
 {-

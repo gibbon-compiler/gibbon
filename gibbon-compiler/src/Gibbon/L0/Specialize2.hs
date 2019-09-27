@@ -19,6 +19,7 @@ import           Data.Foldable ( foldlM )
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           GHC.Stack (HasCallStack)
+import           GHC.List (zip3)
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
@@ -35,7 +36,7 @@ Transforming L0 to L1
 ~~~~~~~~~~~~~~~~~~~~~
 
 (A) Monomorphization
-(B) Lambda lifting
+(B) Lambda lifting (via specialization)
 (C) Convert to L1, which should be pretty straightforward at this point.
 
 
@@ -115,15 +116,15 @@ Assume that the input program is monomorphic.
 
 l0ToL1 :: Prog0 -> PassM L1.Prog1
 l0ToL1 p = do
-  p0  <- hoistLambdas p
-  dbgTrace 5 ("\n\nHoist Lambdas:\n" ++ (render $ pprint p0)) (pure ())
+  p0  <- bindLambdas p
+  dbgTrace 5 ("\n\nBind Lambdas:\n" ++ (render $ pprint p0)) (pure ())
   -- Typecheck again so that all the meta type variables introduced by
-  -- hoistLambdas (to bind lambdas) get zonked.
+  -- bindLambdas (to bind lambdas) get zonked.
   p0' <- tcProg p0
   dbgTrace 5 ("\n\nTypechecked:\n" ++ (render $ pprint p0')) (pure ())
   p1 <- monomorphize p0'
   dbgTrace 5 ("\n\nMonomorphized:\n" ++ (render $ pprint p1)) (pure ())
-  p2 <- spec p1
+  p2 <- specLambdas p1
   dbgTrace 5 ("\n\nSpecialized:\n" ++ (render $ pprint p2)) (pure ())
   pure $ toL1 p2
 
@@ -165,16 +166,16 @@ toL1 Prog{ddefs, fundefs, mainExp} =
                                                                   toL1Exp c) )
                                                     brs)
         DataConE _ dcon ls -> DataConE () dcon (map toL1Exp ls)
-        TimeIt e ty b -> TimeIt (toL1Exp e) (toL1Ty ty) b
-        ParE a b      -> ParE (toL1Exp a) (toL1Exp b)
+        TimeIt e ty b  -> TimeIt (toL1Exp e) (toL1Ty ty) b
+        ParE a b       -> ParE (toL1Exp a) (toL1Exp b)
         WithArenaE v e -> WithArenaE v (toL1Exp e)
         MapE{}  -> err1 (sdoc ex)
         FoldE{} -> err1 (sdoc ex)
         Ext ext ->
           case ext of
-            LambdaE{}  -> err1 (sdoc ex)
-            PolyAppE{} -> err1 (sdoc ex)
-            FunRefE{}  -> err1 (sdoc ex)
+            LambdaE{}  -> err2 (sdoc ex)
+            PolyAppE{} -> err2 (sdoc ex)
+            FunRefE{}  -> err2 (sdoc ex)
 
     toL1Prim :: Prim Ty0 -> Prim L1.Ty1
     toL1Prim = fmap toL1Ty
@@ -190,7 +191,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         ProdTy tys  -> L1.ProdTy $ map toL1Ty tys
         SymDictTy (Just v) a -> L1.SymDictTy (Just v) $ toL1Ty a
         SymDictTy Nothing  a -> L1.SymDictTy Nothing $ toL1Ty a
-        ArrowTy{} -> err1 (sdoc ty)
+        ArrowTy{} -> err2 (sdoc ty)
         PackedTy tycon tyapps | tyapps == [] -> L1.PackedTy tycon ()
                               | otherwise    -> err1 (sdoc ty)
         ArenaTy -> L1.ArenaTy
@@ -202,7 +203,9 @@ toL1 Prog{ddefs, fundefs, mainExp} =
       | otherwise    = err1 (sdoc t)
     toL1TyS (ForAll _ t) = error $ "toL1: Not a function type: " ++ sdoc t
 
-    err1 msg = error $ "toL1: Program was not fully monomorphized. Encountered" ++ msg
+    err1 msg = error $ "toL1: Program was not fully monomorphized. Encountered: " ++ msg
+
+    err2 msg = error $ "toL1: Could not lift all lambdas. Encountered: " ++ msg
 
 --------------------------------------------------------------------------------
 
@@ -495,7 +498,10 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
             _  -> do
               f' <- addFnObl f tyapps
               pure $ Ext $ FunRefE [] f'
-    ParE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    ParE a b -> do
+      a' <- collectMonoObls ddefs env2 toplevel a
+      b' <- collectMonoObls ddefs env2 toplevel b
+      pure $ ParE a' b'
     MapE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
     FoldE{} -> error $ "monoLambdas: TODO: " ++ sdoc ex
   where
@@ -578,12 +584,12 @@ monoLambdas (L p ex) = (L p) <$>
       pure $ CaseE scrt' brs'
     DataConE tyapp dcon args ->
       (DataConE tyapp dcon) <$> mapM monoLambdas args
-    TimeIt e ty b -> (\e' -> TimeIt e' ty b) <$> go e
+    TimeIt e ty b  -> (\e' -> TimeIt e' ty b) <$> go e
     WithArenaE v e -> (\e' -> WithArenaE v e') <$> go e
-    Ext (LambdaE args bod) -> (\bod' -> Ext (LambdaE args bod')) <$> go bod
+    Ext (LambdaE{})  -> error $ "monoLambdas: Encountered a LambdaE outside a let binding. In\n" ++ sdoc ex
     Ext (PolyAppE{}) -> error $ "monoLambdas: TODO: " ++ sdoc ex
     Ext (FunRefE{})  -> pure ex
-    ParE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    ParE a b-> ParE <$> monoLambdas a <*> monoLambdas b
     MapE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
     FoldE{} -> error $ "monoLambdas: TODO: " ++ sdoc ex
   where go = monoLambdas
@@ -661,7 +667,7 @@ updateTyConsExp ddefs mono_st (L loc ex) = L loc $
     DataConE{} -> error $ "updateTyConsExp: DataConE expected ProdTy tyapps, got: " ++ sdoc ex
     TimeIt e ty b -> TimeIt (go e) (updateTyConsTy ddefs mono_st ty) b
     WithArenaE v e -> WithArenaE v (go e)
-    ParE{}  -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
+    ParE a b-> ParE (go a) (go b)
     MapE{}  -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     FoldE{} -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, updateTyConsTy ddefs mono_st ty)) args) (go bod))
@@ -705,30 +711,40 @@ data SpecState = SpecState
   , sp_fundefs   :: FunDefs0 }
   deriving (Show, Eq, Generic, Out)
 
--- We track references when we bind variables to account for programs like:
---
---     foo :: ((a -> b), a) -> a ; foo = ...
---     main = ... arg = (fn, thing) ... foo arg ...
---
--- type FunRefsEnv = M.Map Var FunRefs
---
+{-|
 
+Specialization, only lambdas for now. E.g.
 
-spec :: Prog0 -> PassM Prog0
-spec prg@Prog{ddefs,fundefs,mainExp} = do
+    foo :: (a -> b) -> a -> b
+    foo f1 a = f1 a
+
+    ... foo top1 x ...
+
+becomes
+
+    foo f1 a = ...
+
+    foo2 :: a -> b
+    foo2 a = top1 a
+
+    ... foo2 x ...
+
+-}
+specLambdas :: Prog0 -> PassM Prog0
+specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
   let spec_m = do
         let env2 = progToEnv prg
         mainExp' <-
           case mainExp of
             Nothing -> pure Nothing
             Just (e, ty) -> do
-              e' <- specExp ddefs env2 e
+              e' <- specLambdasExp ddefs env2 e
               pure $ Just (e', ty)
         -- Same reason as Step (1.2) in monomorphization.
         let fo_funs = M.filter isFOFun fundefs
         mapM_
           (\fn@FunDef{funName,funBody} -> do
-                funBody' <- specExp ddefs env2 funBody
+                funBody' <- specLambdasExp ddefs env2 funBody
                 low <- get
                 let funs   = sp_fundefs low
                     fn'    = fn { funBody = funBody' }
@@ -760,7 +776,7 @@ spec prg@Prog{ddefs,fundefs,mainExp} = do
         let fns = sp_fundefs low
             fn = fns # fn_name
             ((fn_name, refs), new_fn_name) = M.elemAt 0 (sp_funs_todo low)
-        specFun ddefs (progToEnv prg) new_fn_name refs fn
+        specLambdasFun ddefs (progToEnv prg) new_fn_name refs fn
         state (\st -> ((), st { sp_funs_todo = M.delete (fn_name, refs) (sp_funs_todo st) }))
         fixpoint
 
@@ -774,8 +790,8 @@ spec prg@Prog{ddefs,fundefs,mainExp} = do
          arrowTysInTy ret_ty == []
 
 -- Eliminate all functions passed in as arguments to this function.
-specFun :: DDefs0 -> Env2 Ty0 -> Var -> [FunRef] -> FunDef0 -> SpecM ()
-specFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
+specLambdasFun :: DDefs0 -> Env2 Ty0 -> Var -> [FunRef] -> FunDef0 -> SpecM ()
+specLambdasFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
   let
       -- lamda args
       funArgs'  = map fst $ filter (isFunTy . snd) $ zip funArgs (inTys funTy)
@@ -784,7 +800,7 @@ specFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
       funArgs'' = map fst $ filter (not . isFunTy . snd) $ zip funArgs (inTys funTy)
       fn' = fn { funName = new_fn_name
                , funBody = do_spec specs (funBody fn) }
-  funBody' <- specExp ddefs env2 (funBody fn')
+  funBody' <- specLambdasExp ddefs env2 (funBody fn')
   let fn''  = fn' { funBody = funBody'
                   , funArgs = funArgs''
                   -- N.B. Only update the type after 'specExp' runs.
@@ -797,36 +813,17 @@ specFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
     -- First order type
     funTy' = ForAll tyvars (ArrowTy (filter (not . isFunTy) arg_tys) ret_ty)
 
-{-
-
-Specialization, only lambdas for now. E.g.
-
-    foo :: (a -> b) -> a -> b
-    foo f1 a = f1 a
-
-    ... foo top1 x ...
-
-becomes
-
-    foo f1 a = ...
-
-    foo2 :: a -> b
-    foo2 a = top1 a
-
-    ... foo2 x ...
-
--}
     do_spec :: [(Var,Var)] -> L Exp0 -> L Exp0
     do_spec lams e = foldr (uncurry subst') e lams
 
     subst' old new ex = gRename (M.singleton old new) ex
 
-specExp :: DDefs0 -> Env2 Ty0 -> L Exp0 -> SpecM (L Exp0)
-specExp ddefs env2 (L p ex) = (L p) <$>
+specLambdasExp :: DDefs0 -> Env2 Ty0 -> L Exp0 -> SpecM (L Exp0)
+specLambdasExp ddefs env2 (L p ex) = (L p) <$>
   case ex of
     -- TODO, docs.
     AppE f [] args -> do
-      args' <- mapM (specExp ddefs env2) args
+      args' <- mapM go args
       let args'' = dropFunRefs f args'
           refs   = foldr collectFunRefs [] args
       case refs of
@@ -846,14 +843,14 @@ specExp ddefs env2 (L p ex) = (L p) <$>
               put low''
               pure $ AppE f' [] args''
             Just f' -> pure $ AppE f' [] args''
-    AppE _ (_:_) _ -> error $ "specExp: Call-site not monomorphized: " ++ sdoc ex
+    AppE _ (_:_) _ -> error $ "specLambdasExp: Call-site not monomorphized: " ++ sdoc ex
 
     -- Float out a lambda fun to the top-level.
     LetE (v, [], ty, L _ (Ext (LambdaE args lam_bod))) bod -> do
       let arg_vars = map fst args
           captured_vars = gFreeVars lam_bod `S.difference` (S.fromList arg_vars)
       if not (S.null captured_vars)
-      then error $ "specExp: LamdaE captures variables: "
+      then error $ "specLambdasExp: LamdaE captures variables: "
                    ++ show captured_vars
                    ++ ". TODO: these can become additional arguments."
       else do
@@ -865,16 +862,47 @@ specExp ddefs env2 (L p ex) = (L p) <$>
                         , funBody = lam_bod' }
             env2' = extendFEnv v (ForAll [] ty) env2
         state (\st -> ((), st { sp_fundefs = M.insert v fn (sp_fundefs st) }))
-        unLoc <$> specExp ddefs env2' bod
+        unLoc <$> specLambdasExp ddefs env2' bod
 
     LetE (v, [], ty, rhs) bod -> do
       let _fn_refs = collectFunRefs rhs []
           env2' = (extendVEnv v ty env2)
       rhs' <- go rhs
-      bod' <- specExp ddefs env2' bod
+      bod' <- specLambdasExp ddefs env2' bod
       pure $ LetE (v, [], ty, rhs') bod'
 
     LetE (_, (_:_),_,_) _ -> error $ "specExp: Binding not monomorphized: " ++ sdoc ex
+
+    ParE a b -> do
+      let mk_fn e0 = do
+            let vars = S.toList $ gFreeVars e0
+            args <- mapM (\v -> lift $ gensym v) vars
+            let e0' = foldr (\(old,new) acc ->
+                              gSubst old (l$ VarE new) acc)
+                            e0
+                            (zip vars args)
+            -- let bind args = vars before call_a
+            fnname <- lift $ gensym "fn"
+            let binds  = map (\(v,w,ty) -> (v,[],ty,l$ VarE w)) (zip3 args vars argtys)
+                retty  = recoverType ddefs env2 e0
+                argtys = map (\v -> lookupVEnv v env2) vars
+                fn = FunDef { funName = fnname
+                            , funArgs = args
+                            , funTy   = ForAll [] (ArrowTy argtys retty)
+                            , funBody = e0'
+                            }
+            pure (Just fn, binds, l$ AppE fnname [] (map (l . VarE) args))
+      (mb_fna, bindsa, call_a) <- case unLoc a of
+                                    AppE{} -> pure (Nothing, [], a)
+                                    _ -> mk_fn a
+      (mb_fnb, bindsb, call_b) <- case unLoc b of
+                                    AppE{} -> pure (Nothing, [], b)
+                                    _ -> mk_fn b
+      let mb_insert mb_fn mp = case mb_fn of
+                                 Just fn -> M.insert (funName fn) fn mp
+                                 Nothing -> mp
+      state (\st -> ((), st { sp_fundefs = mb_insert mb_fna $ mb_insert mb_fnb (sp_fundefs st) }))
+      pure $ unLoc $ mkLets (bindsa ++ bindsb) (l$ ParE call_a call_b)
 
     -- Straightforward recursion
     VarE{}    -> pure ex
@@ -891,7 +919,7 @@ specExp ddefs env2 (L p ex) = (L p) <$>
       brs' <- mapM
                 (\(dcon,vtys,rhs) -> do
                   let env2' = extendsVEnv (M.fromList vtys) env2
-                  (dcon,vtys,) <$> specExp ddefs env2' rhs)
+                  (dcon,vtys,) <$> specLambdasExp ddefs env2' rhs)
                 brs
       pure $ CaseE scrt' brs'
     DataConE tyapp dcon args -> (DataConE tyapp dcon) <$> mapM go args
@@ -899,19 +927,18 @@ specExp ddefs env2 (L p ex) = (L p) <$>
        e' <- go e
        pure $ TimeIt e' ty b
     WithArenaE v e -> do
-       e' <- specExp ddefs (extendVEnv v ArenaTy env2) e
+       e' <- specLambdasExp ddefs (extendVEnv v ArenaTy env2) e
        pure $ WithArenaE v e'
-    ParE{}  -> error $ "specExp: TODO: " ++ sdoc ex
-    MapE{}  -> error $ "specExp: TODO: " ++ sdoc ex
-    FoldE{} -> error $ "specExp: TODO: " ++ sdoc ex
+    MapE{}  -> error $ "specLambdasExp: TODO: " ++ sdoc ex
+    FoldE{} -> error $ "specLambdasExp: TODO: " ++ sdoc ex
 
     Ext ext ->
       case ext of
-        LambdaE{}  -> error $ "specExp: Should reach a LambdaE. It should be floated out by the Let case." ++ sdoc ex
-        PolyAppE{} -> error $ "specExp: TODO: " ++ sdoc ex
+        LambdaE{}  -> error $ "specLambdasExp: Should reach a LambdaE. It should be floated out by the Let case." ++ sdoc ex
+        PolyAppE{} -> error $ "specLambdasExp: TODO: " ++ sdoc ex
         FunRefE{}  -> pure ex
   where
-    go = specExp ddefs env2
+    go = specLambdasExp ddefs env2
 
     _isFunRef e =
       case e of
@@ -944,7 +971,7 @@ specExp ddefs env2 (L p ex) = (L p) <$>
                             (\(_,_,b) acc2 -> collectFunRefs b acc2)
                             (collectFunRefs scrt acc)
                             brs
-        ParE{}  -> error $ "collectFunRefs: TODO: " ++ sdoc e
+        ParE a b-> foldr collectFunRefs acc [a, b]
         MapE{}  -> error $ "collectFunRefs: TODO: " ++ sdoc e
         FoldE{} -> error $ "collectFunRefs: TODO: " ++ sdoc e
         Ext ext ->
@@ -957,9 +984,7 @@ specExp ddefs env2 (L p ex) = (L p) <$>
 
 {-|
 
-Strip out the lambdas up until the point where control flow diverges,
-exactly like HoistNewBuf. This is a quick way to support anonymous
-lambdas. For example,
+Let bind all anonymous lambdas.
 
     map (\x -> x + 1) [1,2,3]
 
@@ -968,10 +993,12 @@ becomes
    let lam_1 = (\x -> x + 1)
    in map lam_1 [1,2,3]
 
--}
+This is an intermediate step before the specializer turns the let bound
+lambdas into top-level functions.
 
-hoistLambdas :: Prog0 -> PassM Prog0
-hoistLambdas prg@Prog{fundefs,mainExp} = do
+-}
+bindLambdas :: Prog0 -> PassM Prog0
+bindLambdas prg@Prog{fundefs,mainExp} = do
   mainExp' <- case mainExp of
                 Nothing      -> pure Nothing
                 Just (a, ty) -> Just <$> (,ty) <$> hoistExp a
@@ -996,10 +1023,17 @@ hoistLambdas prg@Prog{fundefs,mainExp} = do
           (ltss,args') <- unzip <$> mapM go args
           pure (concat ltss, AppE f locs args')
 
-        (Ext LambdaE{}) -> do
-          v  <- gensym "lam_"
-          ty <- newMetaTy
-          pure ([(v,[],ty,L p e0)], VarE v)
+        (Ext (LambdaE args bod)) -> do
+          let arg_vars = map fst args
+              captured_vars = gFreeVars bod `S.difference` (S.fromList arg_vars)
+          if S.null captured_vars
+          then do
+            v  <- gensym "lam_"
+            ty <- newMetaTy
+            pure ([(v,[],ty,L p e0)], VarE v)
+          else
+             error $ "hoistExp: LambdaE captures variables: "
+                     ++ show captured_vars ++ "\nin\n" ++ sdoc e0
 
         (Ext _) -> pure ([], e0)
 

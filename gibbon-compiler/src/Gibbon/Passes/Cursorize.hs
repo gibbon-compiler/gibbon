@@ -144,7 +144,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
         SymTy     -> SymTy
         BoolTy    -> BoolTy
         ProdTy ls -> ProdTy $ L.map cursorizeInTy ls
-        SymDictTy ar _ty -> SymDictTy ar CursorTy -- $ cursorizeInTy ty'
+        SymDictTy ar _ty -> SymDictTy ar CursorTy
         PackedTy{}    -> CursorTy
         ListTy ty'    -> ListTy $ cursorizeInTy ty'
         PtrTy -> PtrTy
@@ -227,7 +227,7 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
 
     AppE{} -> cursorizeAppE ddfs fundefs denv tenv (L p ex)
 
-    PrimAppE PEndOf [arg] -> do
+    PrimAppE RequestEndOf [arg] -> do
       let (L _ (VarE v)) = arg
       return $ VarE (toEndV v)
 
@@ -242,8 +242,10 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
     LetE (_v,_locs, ty, (L _ ProjE{})) _bod | isPackedTy ty ->
        cursorizeProj False ddfs fundefs denv tenv ex
 
+    -- LetE (_v,_locs,_ty, (L _ (ParE{}))) _bod ->
+    --   cursorizePar False ddfs fundefs denv tenv ex
     LetE (_v,_locs,_ty, (L _ (ParE{}))) _bod ->
-      cursorizePar False ddfs fundefs denv tenv ex
+      error "cursorizeExp: TODO ParE"
 
     LetE bnd bod -> cursorizeLet False ddfs fundefs denv tenv bnd bod
 
@@ -264,7 +266,8 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
 
     TimeIt e ty b -> TimeIt <$> go e <*> pure (stripTyLocs ty) <*> pure b
 
-    ParE a b -> ParE <$> go a <*> go b
+    -- ParE a b -> ParE <$> go a <*> go b
+    ParE{} -> error "cursorizeExp: TODO ParE"
 
     WithArenaE v e -> do
       e' <- cursorizeExp ddfs fundefs denv (M.insert v ArenaTy tenv) e
@@ -383,8 +386,10 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
       let rhs' = l$ MkProdE es
       return $ Di rhs'
 
+    -- LetE (_v,_locs,_ty, (L _ (ParE{}))) _bod ->
+    --   dl <$> cursorizePar False ddfs fundefs denv tenv ex
     LetE (_v,_locs,_ty, (L _ (ParE{}))) _bod ->
-      dl <$> cursorizePar False ddfs fundefs denv tenv ex
+      error "cursorizePackedExp: TODO ParE"
 
     LetE bnd bod -> dl <$> cursorizeLet True ddfs fundefs denv tenv bnd bod
 
@@ -451,10 +456,11 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
       Di e' <- go (M.insert v ArenaTy tenv) e
       return $ dl$ WithArenaE v e'
 
-    ParE a b -> do
-       Di a' <- go tenv a
-       Di b' <- go tenv b
-       return $ dl$ ParE a' b'
+    -- ParE a b -> do
+    --    Di a' <- go tenv a
+    --    Di b' <- go tenv b
+    --    return $ dl$ ParE a' b'
+    ParE{} -> error "cursorizePackedExp: TODO ParE"
 
     Ext ext ->
       case ext of
@@ -739,8 +745,8 @@ TLDR: Because of the way Flatten, Unariser and Lower deal with parallel tuples.
 ..TODO (finish this note)..
 
 -}
-cursorizePar :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Exp2 -> PassM L3.Exp3
-cursorizePar isPackedContext ddfs fundefs denv tenv ex =
+_cursorizePar :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Exp2 -> PassM L3.Exp3
+_cursorizePar isPackedContext ddfs fundefs denv tenv ex =
   case ex of
     LetE (v,locs, ProdTy [tya, tyb], rhs@(L _ (ParE a b))) bod ->
       case (a,b) of
@@ -943,7 +949,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
   (dcon, [],)
     -- Advance the cursor by 1 byte so that it points to the first field
     <$> mkLets [(field_cur,[],CursorTy, l$ Ext $ AddCursor scrtCur (l$ LitE 1))]
-    <$> (if isIndrDataCon dcon
+    <$> (if isRANDataCon dcon
          then unpackWithRAN field_cur
          else unpackRegularDataCon field_cur)
 
@@ -1025,7 +1031,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
         --
         --     (y3 -> (loc_y3, ind_y3))
         let ran_mp =
-              case numRANsDataCon ddfs (fromIndrDataCon dcon) of
+              case numRANsDataCon ddfs (fromRANDataCon dcon) of
                 0 -> M.empty
                 n -> let -- Random access nodes occur immediately after the tag
                          ind_vars = L.map fst $ L.take n vlocs1
