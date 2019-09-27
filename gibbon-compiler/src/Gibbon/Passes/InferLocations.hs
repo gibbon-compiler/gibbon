@@ -312,8 +312,9 @@ inferExp' env lex0@(L sl1 exp) bound dest =
                             -- Substitute the location occurring at the call site
                             -- in place of the one in the function's return type
                             copyRetTy = substLoc' lv2 arrty
+                            a' = subst v1 (lc$ VarE v') a
                         in lc$ LetE (v',[],copyRetTy, lc$ AppE f lvs [lc$ VarE v1]) $
-                           lc$ Ext (LetLocE lv1 (AfterVariableLE v' lv2) a)
+                           lc$ Ext (LetLocE lv1 (AfterVariableLE v' lv2) a')
 
   in do res <- inferExp env lex0 dest
         (e,ty,cs) <- bindAllLocations res
@@ -462,6 +463,7 @@ inferExp env@FullEnv{dataDefs}
                             -- Substitute the location occurring at the call site
                             -- in place of the one in the function's return type
                             copyRetTy = substLoc' lv2 (arrOut arrty)
+                        _ <- dbgTraceIt (show v' ++ " " ++ show v1) $ return ()
                         return (lc$ LetE (v',[],copyRetTy,l$ AppE f lvs [l$ VarE v1]) $
                                 lc$ Ext (LetLocE lv1' (AfterVariableLE v' lv2') e), ty, cs)
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
