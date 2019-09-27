@@ -355,13 +355,6 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
           venv = M.fromList (zip funArgs argTys)
           env' = Env2 venv (fEnv env)
           res  = runExcept $ tcExp ddefs env' funBody
-      case retty of
-        ProdTy tys -> do
-          let packed_outs = L.filter (not . isScalarTy) tys
-          case packed_outs of
-            [_one] -> pure ()
-            _      -> error $ "Gibbon-TODO: Only one packed typed allowed in a return value. Got: " ++ sdoc retty
-        _ -> pure ()
       case res of
         Left err -> error $ sdoc err
         Right ty -> if ty == retty
