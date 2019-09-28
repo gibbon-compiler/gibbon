@@ -413,7 +413,7 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
 
         // n
         CursorTy out0 = out + 1;
-        *(IntTy *) out0 = 0;
+        *(IntTy *) out0 = n;
         out0 += 8;
 
         // rec1
@@ -449,7 +449,7 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
 
         // n
         CursorTy out0 = out + 1;
-        *(IntTy *) out0 = 0;
+        *(IntTy *) out0 = n;
         out0 += 8;
 
         // rec1

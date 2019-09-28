@@ -353,17 +353,7 @@ CursorTy printFoo(CursorTy cur) {
         printf(") ");
         return cur;
     } else if (*cur == 3) {
-        printf("(B_big PTR ");
-        cur += 9;
-        IntTy val = *(IntTy *) cur;
-        cur += 8;
-        printf("%lld", val);
-        cur = printFoo(cur);
-        cur = printFoo(cur);
-        printf(") ");
-        return cur;
-    }  else if (*cur == 4) {
-        printf("(C_big PTR PTR ");
+        printf("(C_big PTR ");
         cur += 9;
         IntTy val = *(IntTy *) cur;
         cur += 8;
@@ -373,18 +363,8 @@ CursorTy printFoo(CursorTy cur) {
         cur = printFoo(cur);
         printf(") ");
         return cur;
-    } else if (*cur == 5) {
-        printf("(B_tmp _ ");
-        cur += 9;
-        IntTy val = *(IntTy *) cur;
-        cur += 8;
-        printf("%lld ", val);
-        cur = printFoo(cur);
-        cur = printFoo(cur);
-        printf(") ");
-        return cur;
-    } else if (*cur == 6) {
-        printf("(C_tmp _ _ ");
+    } else if (*cur == 4) {
+        printf("(C_tmp _ ");
         cur += 9;
         IntTy val = *(IntTy *) cur;
         cur += 8;
@@ -411,7 +391,7 @@ CursorTy printFoo(CursorTy cur) {
 }
 
 // Data over this threshold will be processed in parallel
-#define PAR_SIZE_THRESHOLD 16 * KB
+#define PAR_SIZE_THRESHOLD 8 * KB
 
 CursorCursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, CursorTy out_ran, IntTy n) {
     CursorCursorCursorIntProd tmp;
@@ -437,7 +417,7 @@ CursorCursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, CursorTy out_
         out += 8;
         return (CursorCursorCursorIntProd) {end_chunk, out, out_ran, 9};
     } else if (n == 1) {
-        // B_tmp
+        // B
 
         // start bounds check
         if ((end_chunk - out) <= 30) {
@@ -453,8 +433,8 @@ CursorCursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, CursorTy out_
         }
 
         // n
-        CursorTy out0 = out + 9;
-        *(IntTy *) out0 = 0;
+        CursorTy out0 = out + 1;
+        *(IntTy *) out0 = n;
         out0 += 8;
 
         // rec1
@@ -471,14 +451,7 @@ CursorCursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, CursorTy out_
         CursorTy out_ran2 = tmp.field2;
         IntTy size2 = tmp.field3;
 
-        // Conditionally write a BIG node
-        if ((size1 + size2 + 1) > PAR_SIZE_THRESHOLD) {
-            *out = 3;
-            out++;
-            *(CursorTy *) out = out1;
-        } else {
-            *out = 5;
-        }
+        *out = 1;
 
         return (CursorCursorCursorIntProd) {end_chunk2, out2, out_ran2, (size1 + size2 + 1)};
     } else {
@@ -499,7 +472,7 @@ CursorCursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, CursorTy out_
 
         // n
         CursorTy out0 = out + 9;
-        *(IntTy *) out0 = 0;
+        *(IntTy *) out0 = n;
         out0 += 8;
 
         // rec1
@@ -525,7 +498,7 @@ CursorCursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, CursorTy out_
 
         // Conditionally write a BIG node
         if ((size1 + size2 + size3 + 1) > PAR_SIZE_THRESHOLD) {
-            *out = 4;
+            *out = 3;
             out++;
             *(CursorTy *) out = out_ran3;
             *(CursorTy *) out_ran3 = out1;
@@ -533,11 +506,81 @@ CursorCursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, CursorTy out_
             *(CursorTy *) out_ran3 = out2;
             out_ran3 += 8;
         } else {
-            *out = 6;
+            *out = 4;
         }
 
         return (CursorCursorCursorIntProd) {end_chunk3, out3, out_ran3, (size1 + size2 + size3 + 1)};
     }
+}
+
+CursorIntProd sumFoo_seq(CursorTy in) {
+    TagTyPacked tag = *in;
+    CursorTy next = in + 1;
+
+    sumFoo_switch:
+    if (tag == 0) {
+        // A
+        IntTy n = *(IntTy *) next;
+        CursorTy next1 = next + 8;
+        return (CursorIntProd) {next1, n};
+    } else if (tag == 1) {
+        // B
+        IntTy p = *(IntTy *) next;
+        next += 8;
+
+        CursorIntProd tmp1 = sumFoo_seq(next);
+        CursorTy next1 = tmp1.field0;
+        IntTy n = tmp1.field1;
+
+        CursorIntProd tmp2 = sumFoo_seq(next1);
+        CursorTy next2 = tmp2.field0;
+        IntTy m = tmp2.field1;
+
+        return (CursorIntProd) {next2, n+m+p};
+    } else if (tag == 4) {
+        // C_tmp
+        next += 8;
+
+        IntTy p = *(IntTy *) next;
+        next += 8;
+
+        CursorIntProd tmp1 = sumFoo_seq(next);
+        CursorTy next1 = tmp1.field0;
+        IntTy n = tmp1.field1;
+
+        CursorIntProd tmp2 = sumFoo_seq(next1);
+        CursorTy next2 = tmp2.field0;
+        IntTy m = tmp2.field1;
+
+        CursorIntProd tmp3 = sumFoo_seq(next2);
+        CursorTy next3 = tmp3.field0;
+        IntTy o = tmp3.field1;
+
+        return (CursorIntProd) {next3, (p+n+m+o)};
+
+    } else if (tag == 90) {
+        CursorTy tmpcur = *(CursorTy *) next;
+        TagTyPacked new_tag = *tmpcur;
+        CursorTy new_next = tmpcur + 1;
+
+        tag = new_tag;
+        next = new_next;
+        goto sumFoo_switch;
+
+    } else if (tag == 100) {
+        CursorTy tmpcur = *(CursorTy *) next;
+        TagTyPacked new_tag = *tmpcur;
+        CursorTy new_next = tmpcur + 1;
+
+        tag = new_tag;
+        next = new_next;
+        goto sumFoo_switch;
+
+    } else {
+        printf("sumFoo: couldn't match tag: %c", tag);
+        exit(1);
+    }
+
 }
 
 CursorIntProd sumFoo(CursorTy in) {
@@ -550,10 +593,8 @@ CursorIntProd sumFoo(CursorTy in) {
         IntTy n = *(IntTy *) next;
         CursorTy next1 = next + 8;
         return (CursorIntProd) {next1, n};
-    } else if (tag == 5) {
-        // B_tmp
-        next += 8;
-
+    } else if (tag == 1) {
+        // B
         IntTy p = *(IntTy *) next;
         next += 8;
 
@@ -565,48 +606,8 @@ CursorIntProd sumFoo(CursorTy in) {
         CursorTy next2 = tmp2.field0;
         IntTy m = tmp2.field1;
 
-        return (CursorIntProd) {next2, (p+n+m)};
-    } else if (tag == 6) {
-        // C_tmp
-        next += 8;
-
-        IntTy p = *(IntTy *) next;
-        next += 8;
-
-        CursorIntProd tmp1 = sumFoo(next);
-        CursorTy next1 = tmp1.field0;
-        IntTy n = tmp1.field1;
-
-        CursorIntProd tmp2 = sumFoo(next1);
-        CursorTy next2 = tmp2.field0;
-        IntTy m = tmp2.field1;
-
-        CursorIntProd tmp3 = sumFoo(next2);
-        CursorTy next3 = tmp3.field0;
-        IntTy o = tmp3.field1;
-
-        return (CursorIntProd) {next3, (p+n+m+o)};
-
+        return (CursorIntProd) {next2, n+m+p};
     } else if (tag == 3) {
-        // B_big
-        CursorTy ran1 = *(CursorTy *) next;
-        next += 8;
-
-        IntTy p = *(IntTy *) next;
-        next += 8;
-
-        CursorIntProd tmp1 = sumFoo(next);
-        CursorIntProd tmp2 = cilk_spawn sumFoo(ran1);
-        cilk_sync;
-
-        CursorTy next1 = tmp1.field0;
-        IntTy n = tmp1.field1;
-        CursorTy next2 = tmp2.field0;
-        IntTy m = tmp2.field1;
-
-        return (CursorIntProd) {next2, (p+n+m)};
-
-    } else if (tag == 4) {
         // C_big
 
         CursorTy ran_storage = *(CursorTy *) next;
@@ -633,6 +634,10 @@ CursorIntProd sumFoo(CursorTy in) {
         IntTy o = tmp3.field1;
 
         return (CursorIntProd) {next3, (p+n+m+o)};
+
+    } else if (tag == 4) {
+
+        return sumFoo_seq(in);
 
     } else if (tag == 90) {
         CursorTy tmpcur = *(CursorTy *) next;
