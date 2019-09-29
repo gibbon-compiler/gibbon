@@ -430,7 +430,7 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
 
         *out = 1;
 
-        return (CursorCursorIntProd) {end_chunk2, out2, (size1 + size2 + 1)};
+        return (CursorCursorIntProd) {end_chunk2, out2, (size1 + size2 + 9)};
     } else {
         // C
 
@@ -472,7 +472,7 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
 
         *out = 2;
 
-        return (CursorCursorIntProd) {end_chunk3, out3, (size1 + size2 + size3 + 1)};
+        return (CursorCursorIntProd) {end_chunk3, out3, (size1 + size2 + size3 + 9)};
     }
 }
 

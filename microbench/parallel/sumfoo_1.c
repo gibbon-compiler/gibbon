@@ -453,7 +453,7 @@ CursorCursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, CursorTy out_
 
         *out = 1;
 
-        return (CursorCursorCursorIntProd) {end_chunk2, out2, out_ran2, (size1 + size2 + 1)};
+        return (CursorCursorCursorIntProd) {end_chunk2, out2, out_ran2, (size1 + size2 + 9)};
     } else {
         // C_tmp
 
@@ -509,7 +509,7 @@ CursorCursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, CursorTy out_
             *out = 4;
         }
 
-        return (CursorCursorCursorIntProd) {end_chunk3, out3, out_ran3, (size1 + size2 + size3 + 1)};
+        return (CursorCursorCursorIntProd) {end_chunk3, out3, out_ran3, (size1 + size2 + size3 + 17)};
     }
 }
 
