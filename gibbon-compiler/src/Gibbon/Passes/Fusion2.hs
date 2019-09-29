@@ -599,7 +599,7 @@ foldTupledFunctions bodyM newFun oldCalls  outputPositions syncedArgs  =
                                  --(render( pprint bodyM)))
 
                         let rhs' =  l $AppE (funName newFun) [] args'
-                               `debug` ("new call" L.++ (show (AppE (funName newFun) [] args')))
+                            --   `debug` ("new call" L.++ (show (AppE (funName newFun) [] args')))
                         let bindType = outTy (funTy newFun)
                         let rhs'' =  case t of
                               ProdTy ls ->  l ( MkProdE (
@@ -768,7 +768,7 @@ tupleListOfFunctions  ddefs funcList newName syncedArgs = do
           ) M.empty funcBodiesV
 
   -- replace the traversed tree variable with the new common one
-  let functionsBodies' = V.toList (V.imap getBody funcBodiesV)
+  let functionsBodies' =  V.toList (V.imap getBody funcBodiesV)
        where
           getBody i func =
             let oldExp = l $ VarE (L.head (funArgs func ))
@@ -916,11 +916,7 @@ buildTupleCandidatesTable fDefs exp argsVars =
                                   in go e3 t2
       MkProdE ls               -> tb
       ProjE index exp          -> tb
-      CaseE e1 ls1             ->
-          let t1 = go e1 tb in
-          L.foldl f t1 ls1
-         where
-          f table (_ ,_ ,exp) = go exp table
+      CaseE e1 ls1             -> error ("not expected in here ")
       DataConE loc datacons ls ->
          L.foldl f tb ls where f table exp = go exp table
       TimeIt exp _ _           -> go exp tb
@@ -986,6 +982,22 @@ cleanExp ::  L Exp1 -> L Exp1
 cleanExp exp = removeCommonExpressions (removeUnusedDefsExp exp)
 
 
+tuple_entry :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [Var] -> Int -> PassM (L Exp1,  FunDefs1)
+tuple_entry ddefs fdefs oldExp_ argsVars depth = do
+  case unLoc  oldExp_ of
+    CaseE e ls  ->
+      do
+        res <- Prelude.mapM
+                (\(x, y, ex) ->
+                  do
+                    (ex', defs) <- tuple ddefs fdefs ex argsVars depth
+                    return ((x, y , ex'),defs))
+                ls
+        let ls' = L.map fst res
+        return (l (CaseE e ls') , fdefs)
+    otherwise -> error( show oldExp_ )
+
+
 -- argsVars represents the arguments of the function that contains oldExp
 tuple :: DDefs Ty1 -> FunDefs1 -> L Exp1 -> [Var] -> Int -> PassM (L Exp1,  FunDefs1)
 tuple ddefs fdefs oldExp_ argsVars depth= do
@@ -998,7 +1010,9 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
   -- same input
     let candidates1 = L.filter f (M.toList (buildTupleCandidatesTable
            fdefs  oldExp argsVars) )
+             `debug` ("looking for candidates for " L.++ render (pprint oldExp))
          where f (_, ls) = L.length ls> 1
+
 
   -- candidates2: a list  [(tupleName, calls, syncedArgsLocs)]
   -- syncedArgsLocs = [((1,2),(3,4)),..] this means args 4 in f3 is the same as
@@ -1019,8 +1033,8 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
         do
            (newExp, fdefs') <- go (oldExp, fdefs) (L.head candidates2)
            let newExp' = removeUnusedDefsExp (simplifyProjections newExp )
-           (newExp'', fdefs'') <- tuple ddefs fdefs'  newExp' argsVars depth
-           return (newExp'', fdefs'')
+           (newExp'', fdefs'') <- tuple_entry ddefs fdefs'  newExp' argsVars depth
+           return (newExp'', fdefs'') `debug` (show "done one  candidate")
       else
          return (oldExp, fdefs) `debug` (show "no candidates")
    where
@@ -1040,28 +1054,33 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
                         (AppE fName _ _) -> case M.lookup fName fdefs of
                              Just fdef -> fdef
 
-            tupledFunction <-
+            tupledFunction_ <-
               tupleListOfFunctions
                  ddefs functionsToTuple tupledFName syncArgsLocs
-                 --   `debug` ("funcs to tuple" L.++ (show functionsToTuple))
+               --   `debug` ("funcs to tuple" L.++ (show functionsToTuple))
+            tupledFunction <- freshFunction tupledFunction_
 
             let tupledFunction' =
                   tupledFunction {funBody = cleanExp (funBody tupledFunction)}
-                   -- `debug` ("tupled f is :" L.++ (render(pprint tupledFunction)))
+                   `debug` ("tupled f is :" L.++ (render(pprint tupledFunction)))
 
             let fdefs' = M.insert tupledFName  tupledFunction'  fdefs
             let traversedArg =  funArgs tupledFunction'
 
             (recTupledBody, newDefs) <-
-               tuple ddefs fdefs' (funBody tupledFunction')  traversedArg  (depth+1)
-                 -- `debug` ("\n tupling :" L.++ (show tupledFName)
-                  --    L.++ (render (pprint  tupledFunction')  )
-                --    )
+               tuple_entry ddefs fdefs' (funBody tupledFunction')  traversedArg  (depth+1)
+                 `debug` ("\n done tupling :" L.++ (show tupledFName)
+                    L.++ (render (pprint  tupledFunction')  )
+                   )
 
             let tupledFunction'' = tupledFunction'{funBody=recTupledBody}
+
             let tupledFunction''' =
                   tupledFunction''{funBody= removeUnusedDefsExp
                     (simplifyProjections (funBody tupledFunction''))}
+                     `debug` ("\n res of  tupling  is :" L.++ (show tupledFName)
+                         L.++ (render (pprint  tupledFunction'')  )
+                       )
 
             let tupledFunction5 =
                  tupledFunction''' {funBody = removeUnusedDefsExp(
@@ -1073,8 +1092,11 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
               foldTupledFunctions exp  tupledFunction5 callExpressions
                    (getOutputStartPositions fdefs''
                    callExpressions ) syncArgsLocs
+                     `debug` ("fold2 before folding" L.++ render (pprint exp))
 
             let exp'' = simplifyProjections exp'
+                                     `debug` ("fold2 after folding" L.++ render (pprint exp'))
+
 
             return (exp'', fdefs'')  `debug` ("fold2" L.++ render (pprint exp''))
 
@@ -1263,7 +1285,7 @@ tuple_pass ddefs fdefs =
       let fName = funName f
       if L.isPrefixOf "_FUS"  (fromVar fName) ||  L.isPrefixOf "_TUP"  (fromVar fName)
         then do
-          (tupledBody, tupleDefs) <- tuple ddefs fdefs (funBody f) (funArgs f) 0
+          (tupledBody, tupleDefs) <- tuple_entry ddefs fdefs (funBody f) (funArgs f) 0 `debug` ("run tuple for" L.++ (show (funName f)))
           let defs'' = M.insert fName f{funBody = tupledBody} defs'
           return (M.union  defs'' tupleDefs)
 
@@ -1329,7 +1351,9 @@ tupleAndOptimize ddefs fdefs =
     newDefs <- tuple_pass ddefs fdefs
     if newDefs == fdefs
       then return newDefs
-      else  tupleAndOptimize ddefs (redundancy_output_pass newDefs) `debug` "run new tuple round"
+      else  return newDefs
+      -- tupleAndOptimize ddefs
+          -- return (redundancy_output_pass newDefs) `debug` "run new tuple round"
 
 fusion2 :: Prog1 -> PassM Prog1
 fusion2 (L1.Prog defs funs main) = do
