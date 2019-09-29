@@ -994,8 +994,9 @@ tuple_entry ddefs fdefs oldExp_ argsVars depth = do
                     return ((x, y , ex'),defs))
                 ls
         let ls' = L.map fst res
-        return (l (CaseE e ls') , fdefs)
-    otherwise -> error( show oldExp_ )
+        let fdefs' = M.unions (L.map snd res)
+        return (l (CaseE e ls') , fdefs')
+    otherwise -> error( render (pprint oldExp_ ))
 
 
 -- argsVars represents the arguments of the function that contains oldExp
@@ -1020,20 +1021,20 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
     let candidates2 = L.map  ( \(traversedVar, ls) ->
             let sortedCalls = L.sortOn f ls
                    where f exp@(AppE fName _ _) = (fName, exp)
-                syncArgsLocs = computeSyncedArgs sortedCalls
+                syncArgsLocs = computeSyncedArgs sortedCalls `debug` ("done1")
 
             in (constructName sortedCalls (M.toList syncArgsLocs), sortedCalls,
-                 syncArgsLocs)
+                 syncArgsLocs)`debug` ("done2")
                --`debug` ("orgArgs:" L.++ (render (pprint sortedCalls)) L.++ "\nargs" L.++ (show syncArgsLocs))
                 ) candidates1
-
+         `debug` ("filter candidates for " L.++ render (pprint oldExp))
     --(newExp, fdefs') <-  Control.Monad.foldM go (oldExp, fdefs)  candidates2
     if L.length candidates2 > 0
       then
         do
            (newExp, fdefs') <- go (oldExp, fdefs) (L.head candidates2)
            let newExp' = removeUnusedDefsExp (simplifyProjections newExp )
-           (newExp'', fdefs'') <- tuple_entry ddefs fdefs'  newExp' argsVars depth
+           (newExp'', fdefs'') <- tuple ddefs fdefs'  newExp' argsVars depth
            return (newExp'', fdefs'') `debug` (show "done one  candidate")
       else
          return (oldExp, fdefs) `debug` (show "no candidates")
