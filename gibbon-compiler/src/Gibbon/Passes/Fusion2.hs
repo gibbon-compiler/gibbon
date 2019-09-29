@@ -1351,9 +1351,9 @@ tupleAndOptimize ddefs fdefs =
     newDefs <- tuple_pass ddefs fdefs
     if newDefs == fdefs
       then return newDefs
-      else  return newDefs
-      -- tupleAndOptimize ddefs
-          -- return (redundancy_output_pass newDefs) `debug` "run new tuple round"
+      else  --return newDefs
+        tupleAndOptimize ddefs
+             (redundancy_output_pass newDefs) `debug` "run new tuple round"
 
 fusion2 :: Prog1 -> PassM Prog1
 fusion2 (L1.Prog defs funs main) = do
