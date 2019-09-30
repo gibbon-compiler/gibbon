@@ -157,15 +157,69 @@ multTwoPolys p1 p2 init= case p1 of
      PolyEnd --return 0 polynomial to be added to the final result
 
 
+buildOne :: Int -> Int -> Int -> Node
+buildOne n st end =
+  if (n == 0)
+    then Leaf st end (PolyInner 1 PolyEnd )
+    else
+     let mid = (st+end) / 2 in
+     Inner st end (buildOne (n-1) st mid) (buildOne (n-1)  mid end)
+
+
+builUnitStepAtX :: Int -> Int ->Int -> Int -> Node
+builUnitStepAtX n x st end =
+  if (n == 0)
+    then
+         let val = if (st>x) then 1 else 0 in
+         Leaf st end (PolyInner val PolyEnd)
+    else
+     let mid = (st+end) / 2 in
+     Inner st end (builUnitStepAtX (n-1) x st mid) (builUnitStepAtX (n-1)  x  mid end)
+
+buildX ::  Int ->Int -> Int -> Node
+buildX n  st end =
+  if (n == 0)
+    then
+         Leaf st end (PolyInner 0  (PolyInner 0  PolyEnd))
+    else
+     let mid = (st+end) / 2 in
+     Inner st end (buildX (n-1) st mid) (buildX (n-1)  mid end)
+
+-- multXNode :: Node  -> Node
+-- multXNode n = case n of
+--    Inner s e left right ->
+--        Inner s e  (multXNode left) (multXNode right c)
+--    Leaf s e poly ->
+--        Leaf s e (multXPoly poly)
+--    ErrorNode ->
+--        ErrorNode
+
+-- --basically we want to shift the poly to the right one step
+-- multXPoly :: Poly -> Poly
+-- multXPoly p = case p of
+-- PolyInner v1 rem1 ->
 
 -- f4 = (f3+ f2)*f5
 -- ((f1+f2)+1)*f3
 gibbon_main =
-  let x =  Leaf 1 1 PolyEnd in
-  let f1 = Leaf 1 1 PolyEnd in
-  let f2 = Leaf 1 1 PolyEnd in
-  let f3 = Leaf 1 1 PolyEnd in
-  multTwoFunction (scaleConstNode (multTwoFunction (addConstNode (addTwoFunctions f1 f2) 1) f3)100) x
+  let depth =10 in
+  let st = -10000 in
+  let end = 10000 in
+   --f(x) = 1
+  let one = buildOne depth st end in
+
+  -- f(x) = u(x)
+  let ux = builUnitStepAtX  depth  0 st end in
+
+  -- f(x) = x
+  let x =buildX  depth st end in
+
+
+  let f3 = addTwoFunctions  (addTwoFunctions (multTwoFunction (multTwoFunction x x) x)
+                              (multTwoFunction x x)) x
+  in f3
+
+--   multTwoFunction (scaleConstNode (multTwoFunction (addConstNode (addTwoFunctions f1 f2) 1) f3)100)
 
 -- gibbon_main =   (multTwoPolys  (PolyInner 1 (PolyInner 1 (PolyInner 1 PolyEnd))) (PolyInner 1 (PolyInner 1 PolyEnd)) PolyEnd)
 
