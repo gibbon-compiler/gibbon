@@ -289,6 +289,16 @@ double mean(int len, double *nums) {
     return (double) (sum / len);
 }
 
+void print_size(char* msg, double size) {
+    if (size > (1 * MB)) {
+        printf("%s %.0lfM\n", msg, (double) (size / (1 * MB)));
+    } else if (size > (1 * KB)) {
+        printf("%s %.0lfK\n", msg, (double) (size / (1 * KB)));
+    } else {
+        printf("%s %.0lf bytes\n", msg, size);
+    }
+}
+
 /* --------------------------------------------------------------------------
 
 data Foo = A Int
@@ -693,7 +703,6 @@ int main (int argc, char** argv) {
     CursorTy r2 = region2->start_ptr;
     CursorTy end_r2 = r2 + (1 * GB);
 
-
     CursorCursorCursorIntProd foo;
     for (int i = 0; i < iters; i++) {
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed);
@@ -711,13 +720,8 @@ int main (int argc, char** argv) {
     // printf("\n");
 
     IntTy tree_size = foo.field3;
-    if (tree_size > (1 * MB)) {
-        printf("Total size: %.0lfM\n", (double) (tree_size / (1 * MB)));
-    } else if (tree_size > (1 * KB)) {
-        printf("Total size: %.0lfK\n", (double) (tree_size / (1 * KB)));
-    } else {
-        printf("Total size: %.0lld bytes\n", tree_size);
-    }
+    print_size("Total size:", tree_size);
+    print_size("Size of scratchpad (Data + RAN's):", (foo.field2 - r2));
 
     CursorIntProd sum;
 
