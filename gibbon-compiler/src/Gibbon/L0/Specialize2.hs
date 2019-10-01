@@ -176,6 +176,10 @@ toL1 Prog{ddefs, fundefs, mainExp} =
             LambdaE{}  -> err2 (sdoc ex)
             PolyAppE{} -> err2 (sdoc ex)
             FunRefE{}  -> err2 (sdoc ex)
+            BenchE fn tyapps args b ->
+              case tyapps of
+                [] -> Ext $ L1.BenchE fn [] (map toL1Exp args) b
+                _  -> error "toL1: Polymorphic 'bench' not supported yet."
 
     toL1Prim :: Prim Ty0 -> Prim L1.Ty1
     toL1Prim = fmap toL1Ty
@@ -498,12 +502,16 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
             _  -> do
               f' <- addFnObl f tyapps
               pure $ Ext $ FunRefE [] f'
+        BenchE _fn tyapps _args _b ->
+          case tyapps of
+            [] -> pure ex
+            _  -> error $ "collectMonoObls: Polymorphic bench not supported yet. In: " ++ sdoc ex
     ParE a b -> do
       a' <- collectMonoObls ddefs env2 toplevel a
       b' <- collectMonoObls ddefs env2 toplevel b
       pure $ ParE a' b'
-    MapE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
-    FoldE{} -> error $ "monoLambdas: TODO: " ++ sdoc ex
+    MapE{}  -> error $ "collectMonoObls: TODO: " ++ sdoc ex
+    FoldE{} -> error $ "collectMonoObls: TODO: " ++ sdoc ex
   where
     go = collectMonoObls ddefs env2 toplevel
 
@@ -589,6 +597,7 @@ monoLambdas (L p ex) = (L p) <$>
     Ext (LambdaE{})  -> error $ "monoLambdas: Encountered a LambdaE outside a let binding. In\n" ++ sdoc ex
     Ext (PolyAppE{}) -> error $ "monoLambdas: TODO: " ++ sdoc ex
     Ext (FunRefE{})  -> pure ex
+    Ext (BenchE{})   -> pure ex
     ParE a b-> ParE <$> monoLambdas a <*> monoLambdas b
     MapE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
     FoldE{} -> error $ "monoLambdas: TODO: " ++ sdoc ex
@@ -673,6 +682,7 @@ updateTyConsExp ddefs mono_st (L loc ex) = L loc $
     Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, updateTyConsTy ddefs mono_st ty)) args) (go bod))
     Ext (PolyAppE a b) -> Ext (PolyAppE (go a) (go b))
     Ext (FunRefE{})    -> ex
+    Ext (BenchE{})     -> ex
   where
     go = updateTyConsExp ddefs mono_st
 
@@ -931,12 +941,12 @@ specLambdasExp ddefs env2 (L p ex) = (L p) <$>
        pure $ WithArenaE v e'
     MapE{}  -> error $ "specLambdasExp: TODO: " ++ sdoc ex
     FoldE{} -> error $ "specLambdasExp: TODO: " ++ sdoc ex
-
     Ext ext ->
       case ext of
         LambdaE{}  -> error $ "specLambdasExp: Should reach a LambdaE. It should be floated out by the Let case." ++ sdoc ex
         PolyAppE{} -> error $ "specLambdasExp: TODO: " ++ sdoc ex
         FunRefE{}  -> pure ex
+        BenchE{}   -> pure ex
   where
     go = specLambdasExp ddefs env2
 
@@ -979,6 +989,7 @@ specLambdasExp ddefs env2 (L p ex) = (L p) <$>
             LambdaE _ bod       -> collectFunRefs bod acc
             PolyAppE rator rand -> collectFunRefs rand (collectFunRefs rator acc)
             FunRefE _ f         -> f : acc
+            BenchE{}            -> acc
 
 --------------------------------------------------------------------------------
 

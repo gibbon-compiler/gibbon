@@ -298,3 +298,6 @@ flattenExp0 ddfs env2 (L sloc e0) =
           (bb,b') <- go b
           pure ([], Ext $ L0.PolyAppE (flatLets ba a') (flatLets bb b'))
         L0.FunRefE{} -> pure ([], e0)
+        L0.BenchE fn tyapps args b -> do
+          (bnds, args') <- unzip <$> mapM go args
+          pure (concat bnds, Ext $ L0.BenchE fn tyapps args' b)

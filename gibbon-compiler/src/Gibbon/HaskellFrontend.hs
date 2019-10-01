@@ -209,7 +209,11 @@ desugarExp toplevel e = L NoLoc <$>
                   then case e2 of
                          Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
-                  else AppE f [] <$> (: []) <$> desugarExp toplevel e2
+                  else if f == "bench"
+                       then do
+                         e2' <- desugarExp toplevel e2
+                         pure $ Ext $ BenchE "HOLE" [] [e2'] False
+                       else AppE f [] <$> (: []) <$> desugarExp toplevel e2
           L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of
               Just p  -> pure $ PrimAppE p as
@@ -222,9 +226,15 @@ desugarExp toplevel e = L NoLoc <$>
           L _ (AppE f [] ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ AppE f [] (ls ++ [e2'])
+
+          L _ (Ext (BenchE fn [] ls b)) -> do
+            e2' <- desugarExp toplevel e2
+            pure $ Ext $ BenchE fn [] (ls ++ [e2']) b
+
           L _ (PrimAppE p ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ PrimAppE p (ls ++ [e2'])
+
           f -> error ("desugarExp: Couldn't parse function application: (: " ++ show f ++ ")")
 
     Let _ (BDecls _ decls) rhs -> do
@@ -319,7 +329,7 @@ collectTopLevel env decl =
       pure Nothing
 
     PatBind _ (PVar _ (Ident _ "gibbon_main")) (UnGuardedRhs _ rhs) _binds -> do
-      rhs' <- desugarExp toplevel rhs
+      rhs' <- verifyBenchEAssumptions True <$> desugarExp toplevel rhs
       ty <- newMetaTy
       pure $ Just $ HMain $ Just (rhs', ty)
 
@@ -482,3 +492,37 @@ nameToStr (Ident _ s)  = s
 nameToStr (Symbol _ s) = s
 
 instance Pretty SrcSpanInfo where
+
+-- | Verify some assumptions about BenchE.
+verifyBenchEAssumptions :: Bool -> L Exp0 -> L Exp0
+verifyBenchEAssumptions bench_allowed (L p ex) = L p $
+  case ex of
+    Ext (LambdaE vars bod) -> Ext (LambdaE vars (not_allowed bod))
+    Ext (PolyAppE a b)     -> Ext (PolyAppE (not_allowed a) (not_allowed b))
+    Ext (FunRefE{})        -> ex
+    Ext (BenchE _ tyapps args b) ->
+      if bench_allowed then
+        case args of
+          (L _ (VarE fn) : oth) -> Ext (BenchE fn tyapps oth b)
+          _ -> error $ "desugarModule: bench is a reserved keyword. Usage: bench fn_name args. Got: " ++ sdoc args
+      else error $ "verifyBenchEAssumptions: 'bench' can only be used as a tail of the main expression, but it was used in a function. In: " ++ sdoc ex
+    -- Straightforward recursion ...
+    VarE{}     -> ex
+    LitE{}     -> ex
+    LitSymE{}  -> ex
+    AppE fn tyapps args -> AppE fn tyapps (map not_allowed args)
+    PrimAppE pr args -> PrimAppE pr (map not_allowed args)
+    DataConE dcon tyapps args -> DataConE dcon tyapps (map not_allowed args)
+    ProjE i e  -> ProjE i $ not_allowed e
+    IfE a b c  -> IfE (not_allowed a) (go b) (go c)
+    MkProdE ls -> MkProdE $ map not_allowed ls
+    -- Only allow BenchE in tail position
+    LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty, not_allowed rhs) (go bod)
+    CaseE scrt mp -> CaseE (go scrt) $ map (\(a,b,c) -> (a,b, go c)) mp
+    TimeIt e ty b -> TimeIt (not_allowed e) ty b
+    ParE{} -> error "verifyBenchEAssumptions: TODO ParE"
+    WithArenaE v e -> WithArenaE v (go e)
+    MapE{}  -> error $ "verifyBenchEAssumptions: TODO MapE"
+    FoldE{} -> error $ "verifyBenchEAssumptions: TODO FoldE"
+  where go = verifyBenchEAssumptions bench_allowed
+        not_allowed = verifyBenchEAssumptions False

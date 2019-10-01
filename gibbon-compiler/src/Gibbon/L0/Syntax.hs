@@ -44,6 +44,7 @@ data E0Ext loc dec =
             (L (PreExp E0Ext loc dec)) -- Operand
  | FunRefE [loc] Var -- Reference to a function (toplevel or lambda),
                      -- along with its tyapps.
+ | BenchE Var [loc] [(L (PreExp E0Ext loc dec))] Bool
  deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 instance FreeVars (E0Ext l d) where
@@ -52,6 +53,7 @@ instance FreeVars (E0Ext l d) where
       LambdaE args bod -> foldr S.delete (gFreeVars bod) (map fst args)
       PolyAppE f d     -> gFreeVars f `S.union` gFreeVars d
       FunRefE _ f      -> S.singleton f
+      BenchE _ _ args _-> S.unions (map gFreeVars args)
 
 instance (Out l, Out d, Show l, Show d) => Expression (E0Ext l d) where
   type LocOf (E0Ext l d) = l
@@ -68,12 +70,14 @@ instance HasSubstitutableExt E0Ext l d => SubstitutableExt (L (PreExp E0Ext l d)
       LambdaE args bod -> LambdaE args (gSubst old new bod)
       PolyAppE a b     -> PolyAppE (gSubst old new a) (gSubst old new b)
       FunRefE{}        -> ext
+      BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubst old new) args) b
 
   gSubstEExt old new ext =
     case ext of
       LambdaE args bod -> LambdaE args (gSubstE old new bod)
       PolyAppE a b     -> PolyAppE (gSubstE old new a) (gSubstE old new b)
       FunRefE{}        -> ext
+      BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubstE old new) args) b
 
 instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
   gRename env ext =
@@ -81,6 +85,7 @@ instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
       LambdaE args bod -> LambdaE (map (\(a,b) -> (go a, go b)) args) (go bod)
       PolyAppE a b     -> PolyAppE (go a) (go b)
       FunRefE tyapps a -> FunRefE (map go tyapps) (go a)
+      BenchE fn tyapps args b -> BenchE fn (map go tyapps) (map go args) b
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
@@ -146,6 +151,7 @@ instance Renamable Ty0 where
       ArrowTy args ret  -> ArrowTy (map go args) ret
       PackedTy tycon ls -> PackedTy tycon (map go ls)
       ListTy a          -> ListTy (go a)
+      ArenaTy           -> ArenaTy
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
@@ -288,7 +294,7 @@ arrowTysInTy = go []
 -- ¯\_(ツ)_/¯
 --
 recoverType :: DDefs0 -> Env2 Ty0 -> L Exp0 -> Ty0
-recoverType ddfs env2 (L _ ex) = 
+recoverType ddfs env2 (L _ ex) =
   case ex of
     VarE v       -> M.findWithDefault (error $ "recoverType: Unbound variable " ++ show v) v (vEnv env2)
     LitE _       -> IntTy
@@ -326,6 +332,7 @@ recoverType ddfs env2 (L _ ex) =
             (Just ty, _) -> ty
             (_, Just ty) -> tyFromScheme ty -- CSK: Not sure if this is what we want?
         PolyAppE{}  -> error "recoverTypeep: TODO PolyAppE"
+        BenchE fn _ _ _ -> outTy $ fEnv env2 # fn
   where
     -- Return type for a primitive operation.
     primRetTy1 :: Prim Ty0 -> Ty0
@@ -348,6 +355,7 @@ recoverType ddfs env2 (L _ ex) =
         AndP -> BoolTy
         MkTrue  -> BoolTy
         MkFalse -> BoolTy
+        Gensym  -> SymTy0
         SymAppend      -> IntTy
         SizeParam      -> IntTy
         DictHasKeyP _  -> BoolTy

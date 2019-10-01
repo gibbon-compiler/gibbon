@@ -303,7 +303,9 @@ tcExp ddfs env exp@(L p ex) =
       let env' = extendEnv env [(v,ArenaTy)]
       tcExp ddfs env' e
 
-    Ext{} -> error $ "L1.Typecheck: Unexpected " ++ sdoc ex
+    Ext (BenchE fn tyapps args _b) -> do
+      go (l$ AppE fn tyapps args)
+
     MapE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc ex
     FoldE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc ex
 
@@ -403,8 +405,8 @@ tcProj e _i ty = throwError $ GenericTC ("Projection from non-tuple type " ++ (s
 
 
 tcCases :: DDefs (UrTy ()) -> Env2 (UrTy ()) ->
-           [(DataCon, [(Var, ())], L (PreExp NoExt () (UrTy ())))] ->
-           TcM (UrTy ()) (L (PreExp NoExt () (UrTy ())))
+           [(DataCon, [(Var, ())], L (PreExp E1Ext () (UrTy ())))] ->
+           TcM (UrTy ()) (L (PreExp E1Ext () (UrTy ())))
 tcCases ddfs env cs = do
   tys <- forM cs $ \(c,args',rhs) -> do
            let args  = L.map fst args'

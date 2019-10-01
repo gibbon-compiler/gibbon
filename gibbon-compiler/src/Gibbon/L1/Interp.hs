@@ -61,21 +61,21 @@ interpProg1 rc Prog{ddefs,fundefs,mainExp} =
       return (res, toLazyByteString logs)
 
 
-interp :: forall l e. ( Out l, Show l, Expression (e l (UrTy l)) )
+interp :: forall l. ( Out l, Show l, Expression (E1Ext l (UrTy l)) )
        => RunConfig
-       -> DDefs (TyOf (L (PreExp e l (UrTy l))))
-       -> M.Map Var (FunDef (L (PreExp e l (UrTy l))))
-       -> L (PreExp e l (UrTy l))
+       -> DDefs (TyOf (L (PreExp E1Ext l (UrTy l))))
+       -> M.Map Var (FunDef (L (PreExp E1Ext l (UrTy l))))
+       -> L (PreExp E1Ext l (UrTy l))
        -> WriterT Log (StateT Store IO) Value
 interp rc _ddefs fenv = go M.empty
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env ex = go env ex
 
-    go :: ValEnv -> L (PreExp e l (UrTy l)) -> WriterT Log (StateT Store IO) Value
+    go :: ValEnv -> L (PreExp E1Ext l (UrTy l)) -> WriterT Log (StateT Store IO) Value
     go env (L _ x0) =
         case x0 of
-          Ext{} -> error "Cannot interpret NoExt"
+          Ext (BenchE fn locs args b) -> go env (l$ AppE fn locs args)
 
           LitE c    -> return $ VInt c
           LitSymE s -> return $ VSym (fromVar s)
