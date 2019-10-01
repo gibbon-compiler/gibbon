@@ -1346,15 +1346,16 @@ fuse_pass ddefs funDefs
               else
                  go body  newProcessed fdefs prevFusedFuncs
 
-tupleAndOptimize :: DDefs Ty1 -> FunDefs1 -> PassM (FunDefs1)
-tupleAndOptimize ddefs fdefs =
+tupleAndOptimize :: DDefs Ty1 -> FunDefs1 ->L Exp1 -> Bool-> PassM (L Exp1, FunDefs1)
+tupleAndOptimize ddefs fdefs mainExp firstTime =
   do
     newDefs <- tuple_pass ddefs fdefs
-    if newDefs == fdefs
-      then return newDefs
+    if not firstTime && (newDefs == fdefs)
+      then return (mainExp, newDefs)
       else  --return newDefs
-        tupleAndOptimize ddefs
-             (redundancy_output_pass newDefs) `debug` "run new tuple round"
+        let (mainExp', fdefs') = (redundancy_output_pass newDefs mainExp firstTime ) in
+        tupleAndOptimize ddefs fdefs' mainExp' False
+              `debug` "run new tuple round"
 
 fusion2 :: Prog1 -> PassM Prog1
 fusion2 (L1.Prog defs funs main) = do
@@ -1364,20 +1365,20 @@ fusion2 (L1.Prog defs funs main) = do
       Just (mainBody, ty) -> do
         (mainBody', newDefs, _) <-
           fuse_pass defs funs (FusePassParams mainBody [] [] [] 0)
-        newDefs' <- tupleAndOptimize defs (M.union funs newDefs)
-        return (Just (mainBody', ty), newDefs')
+        (mainBody'', newDefs') <- tupleAndOptimize defs (M.union funs newDefs) mainBody' True
+        return (Just (mainBody'', ty), newDefs')
 
   return $ L1.Prog defs funs' main'
 
 
 -- Those  functions are used for the redundancy analysis
-redundancy_output_pass :: FunDefs1 -> FunDefs1
-redundancy_output_pass fdefs =
+redundancy_output_pass :: FunDefs1 -> L Exp1 ->Bool ->(L Exp1 ,FunDefs1)
+redundancy_output_pass fdefs mainExp firstTime=
   let (fdefs', rules) = M.foldl (pass1F fdefs) (fdefs, M.empty) fdefs
       fdefs'' = M.foldlWithKey pass2F fdefs' rules
-   in if fdefs'' == fdefs
-        then fdefs''
-        else redundancy_input_pass fdefs''
+   in if (not firstTime && (fdefs'' == fdefs))
+        then (mainExp, fdefs'')
+        else redundancy_input_pass fdefs'' mainExp
   where
     pass2F fdefs fName (redirectMap, outPutFromInput, newName) =
       M.map (pass2Fsub fdefs fName (redirectMap, outPutFromInput, newName)) fdefs
@@ -1863,7 +1864,7 @@ getLeafProdExpressions = rec
        x-> []
 
 
-removeRedundantInputExp :: FunDefs1 -> L Exp1 ->Bool -> (FunDefs1,L Exp1)
+removeRedundantInputExp :: FunDefs1 -> L Exp1 -> Bool -> (FunDefs1,L Exp1)
 removeRedundantInputExp fdefs exp  mode =
   case unLoc exp of
     CaseE e ls ->
@@ -1879,7 +1880,7 @@ removeRedundantInputExp fdefs exp  mode =
 
       let (fdefs', body') = removeRedundantInputExp fdefs body mode
           boringCase =  (fdefs', l (LetE rhs  body'))
-      in case unLoc bind of
+      in (case unLoc bind of
           x@( AppE fName loc args) ->
             if (L.isPrefixOf "_TUP"  (fromVar fName) ||
                 L.isPrefixOf "_FUS" (fromVar fName) )
@@ -1910,9 +1911,37 @@ removeRedundantInputExp fdefs exp  mode =
                       in (fdefsNew,l (LetE (var, ls, t, (l newCall)) body' ))
                 else
                   boringCase
-          otherwise -> boringCase
-    otherwise ->  (fdefs, l otherwise)
+          otherwise -> boringCase)  `debug` ("let:--- " L.++ (show bind))
 
+    x@(AppE fName loc args) ->
+            if (L.isPrefixOf "_TUP"  (fromVar fName) ||
+                L.isPrefixOf "_FUS" (fromVar fName) )
+                then
+                  let redundantPositions =
+                       if(mode)
+                        then
+                          snd( V.ifoldl findRedundantPos (M.empty, M.empty) (V.fromList args))
+                        else
+                           V.ifoldl (findRedundantPos_UnusedArgs fName) M.empty (V.fromList args)
+                        --        redundantPositions3 = M.union redundantPositions2 redundantPositions `debug`
+                        -- ("checking call to :" L.++ (show fName) L.++ "opppaaaa" L.++ show redundantPositions2)
+                  in
+                   if M.null redundantPositions
+                    then
+                      (fdefs, l x)
+                    else
+                      let (fNameNew, fdefsNew) =
+                            eliminateInputArgs  fdefs fName  redundantPositions
+                          newCall =
+                            AppE fNameNew loc
+                              (V.toList
+                                (V.ifilter
+                                  (\idx _ -> M.notMember idx  redundantPositions )
+                                     (V.fromList args)))
+                      in (fdefsNew,l newCall)
+                else
+                   (fdefs, l x)
+    otherwise ->  (fdefs, l otherwise)
    where
         findRedundantPos (firstAppear, redundant) argIdx arg =
             if M.member arg firstAppear
@@ -1955,12 +1984,19 @@ removeRedundantInputExp fdefs exp  mode =
             x       -> False `debug` ("not handled is "L.++ (show x))
 
 
+removeRedundantInputsMainExp :: FunDefs1 -> L Exp1 -> (FunDefs1, L Exp1)
+removeRedundantInputsMainExp fdefs expInput =
 
+  let (fdefs', exp) = removeRedundantInputExp fdefs expInput True
+    --   `debug` ("Dowing1"L.++ (render (pprint expInput)))
+      (fdefs'', exp') = removeRedundantInputExp fdefs' exp False
+
+  in (fdefs'', exp')
 
 removeRedundantInputFunc :: FunDefs1 -> FunDef1 -> FunDefs1
 removeRedundantInputFunc fdefs fdef =
   let (fdefs', exp) = removeRedundantInputExp fdefs (funBody fdef) True
-    --    `debug` ("Dowing1"L.++ (render (pprint fdef)))
+        `debug` ("Dowing1"L.++ (show (funName fdef)))
       fdef' = fdef {funBody = exp}
       (fdefs'', exp') = removeRedundantInputExp (M.insert (funName fdef) fdef' fdefs')
                           exp False
@@ -1968,13 +2004,21 @@ removeRedundantInputFunc fdefs fdef =
 
   in (M.insert (funName fdef) fdef'' fdefs'')
 
-redundancy_input_pass :: FunDefs1 -> FunDefs1
-redundancy_input_pass fdefs =
+redundancy_input_pass_rec :: FunDefs1 -> L Exp1-> (L Exp1, FunDefs1)
+redundancy_input_pass_rec fdefs  mainExp=
   let fdefs' =
         M.foldl
           (\fDefsInner fdef -> removeRedundantInputFunc fDefsInner fdef)
           fdefs
           fdefs
-   in if fdefs' == fdefs
-        then fdefs'
-        else redundancy_output_pass fdefs'
+  in let (fdefs'', mainExp') = removeRedundantInputsMainExp fdefs' mainExp
+  in if (fdefs'' == fdefs && mainExp'== mainExp)
+        then ( mainExp', fdefs'')`debug` ("no repeeat")
+        else redundancy_input_pass_rec fdefs'' mainExp' `debug` ("repeeat")
+
+redundancy_input_pass :: FunDefs1 -> L Exp1-> (L Exp1, FunDefs1)
+redundancy_input_pass fdefs  mainExp=
+  let (mainExp' , fdefs'') = redundancy_input_pass_rec fdefs mainExp
+  in if (fdefs'' == fdefs && mainExp'== mainExp)
+        then (mainExp', fdefs'')
+        else redundancy_output_pass fdefs'' mainExp' False
