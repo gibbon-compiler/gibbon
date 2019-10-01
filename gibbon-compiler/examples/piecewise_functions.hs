@@ -37,7 +37,39 @@ getRight n =
      Inner s e left right -> left
      Leaf a b c -> ErrorNode
      ErrorNode -> ErrorNode
+----------------------------------------
+square :: Node -> Node
+square n = case n of
+    Inner s e left right ->
+       Inner s e  (square left) (square right)
+    Leaf s e poly ->
+       Leaf s e (squarePoly poly)
+    ErrorNode ->
+       ErrorNode
 
+squarePoly :: Poly -> Poly
+squarePoly p = case p of
+ PolyInner p2 rem -> multTwoPolys p p PolyEnd
+ PolyEnd  -> PolyEnd
+
+-------------------------------------------
+multXNode :: Node  -> Node
+multXNode n = case n of
+   Inner s e left right ->
+       Inner s e  (multXNode left) (multXNode right)
+   Leaf s e poly ->
+       Leaf s e (multXPoly poly)
+   ErrorNode ->
+       ErrorNode
+
+--basically we want to shift the poly to the right one step
+multXPoly :: Poly -> Poly
+multXPoly p = case p of
+  PolyInner p2 rem ->
+      PolyInner 0 p
+  PolyEnd  -> PolyEnd
+
+----------------------------------------
 addConstNode :: Node -> Int ->  Node
 addConstNode tr c = case tr of
    Inner s e left right -> Inner s e  (addConstNode left c) (addConstNode right c)
@@ -47,7 +79,7 @@ addConstNode tr c = case tr of
 addConstPoly :: Poly -> Int -> Poly
 addConstPoly poly c = case poly of
    PolyInner v rem -> PolyInner (v+c)  rem
-   PolyEnd -> PolyEnd
+   PolyEnd ->  PolyInner c  PolyEnd
 
 ----------------------------------
 scaleConstNode :: Node -> Int ->  Node
@@ -65,7 +97,7 @@ scaleConstPoly poly c = case poly of
 
 --return -1000000 if there is error we do not support if !
 f :: Int -> Int -> Int
-f a b = if( a==b ) then a else -100000000
+f a b = if( a==b ) then a else -10000000000
 
 addTwoFunctions :: Node -> Node -> Node
 addTwoFunctions tree1 tree2 =
@@ -155,73 +187,81 @@ multTwoPolys p1 p2 init= case p1 of
        addTwoPolys (appendPoly init (scaleConstPoly p2 v1))   (multTwoPolys rem1 p2 init')
     PolyEnd  ->
      PolyEnd --return 0 polynomial to be added to the final result
+------------------------------------------
 
 
-buildOne :: Int -> Int -> Int -> Node
-buildOne n st end =
+buildZeros :: Int -> Int -> Int -> Node
+buildZeros n st end =
   if (n == 0)
-    then Leaf st end (PolyInner 1 PolyEnd )
+    then Leaf st end PolyEnd
     else
      let mid = (st+end) / 2 in
-     Inner st end (buildOne (n-1) st mid) (buildOne (n-1)  mid end)
+     Inner st end (buildZeros (n-1) st mid) (buildZeros (n-1)  mid end)
 
 
-builUnitStepAtX :: Int -> Int ->Int -> Int -> Node
-builUnitStepAtX n x st end =
-  if (n == 0)
-    then
-         let val = if (st>x) then 1 else 0 in
-         Leaf st end (PolyInner val PolyEnd)
-    else
-     let mid = (st+end) / 2 in
-     Inner st end (builUnitStepAtX (n-1) x st mid) (builUnitStepAtX (n-1)  x  mid end)
 
-buildX ::  Int ->Int -> Int -> Node
-buildX n  st end =
-  if (n == 0)
-    then
-         Leaf st end (PolyInner 0  (PolyInner 0  PolyEnd))
-    else
-     let mid = (st+end) / 2 in
-     Inner st end (buildX (n-1) st mid) (buildX (n-1)  mid end)
 
--- multXNode :: Node  -> Node
--- multXNode n = case n of
---    Inner s e left right ->
---        Inner s e  (multXNode left) (multXNode right c)
---    Leaf s e poly ->
---        Leaf s e (multXPoly poly)
---    ErrorNode ->
---        ErrorNode
-
--- --basically we want to shift the poly to the right one step
--- multXPoly :: Poly -> Poly
--- multXPoly p = case p of
--- PolyInner v1 rem1 ->
-
--- f4 = (f3+ f2)*f5
--- ((f1+f2)+1)*f3
 gibbon_main =
-  let depth =10 in
+  let depth =1 in
   let st = -10000 in
   let end = 10000 in
-   --f(x) = 1
-  let one = buildOne depth st end in
 
-  -- f(x) = u(x)
-  let ux = builUnitStepAtX  depth  0 st end in
+  -- f(x) =0
+  let zero = buildZeros depth st end in
 
-  -- f(x) = x
-  let x =buildX  depth st end in
+  -- f(x) =1
+  let one = addConstNode zero 1 in
 
+  -- f1(x) = x^3 +x^2 + x +1
+  let f1 = addConstNode (multXNode( addConstNode (multXNode(addConstNode (multXNode one )1 ) ) 1)) 1 in
 
-  let f3 = addTwoFunctions  (addTwoFunctions (multTwoFunction (multTwoFunction x x) x)
-                              (multTwoFunction x x)) x
+  -- f2(x) = x^2 + x
+  let f2 =(multXNode(addConstNode (multXNode one )1 )) in
+
+  -- f3 = (f1^2)*f2
+  let f3 = addTwoFunctions (square f1) f2
   in f3
 
---   multTwoFunction (scaleConstNode (multTwoFunction (addConstNode (addTwoFunctions f1 f2) 1) f3)100)
 
--- gibbon_main =   (multTwoPolys  (PolyInner 1 (PolyInner 1 (PolyInner 1 PolyEnd))) (PolyInner 1 (PolyInner 1 PolyEnd)) PolyEnd)
+--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+
+-- buildOne :: Int -> Int -> Int -> Node
+-- buildOne n st end =
+--   if (n == 0)
+--     then Leaf st end (PolyInner 1 PolyEnd )
+--     else
+--      let mid = (st+end) / 2 in
+--      Inner st end (buildOne (n-1) st mid) (buildOne (n-1)  mid end)
+-- builUnitStepAtX :: Int -> Int ->Int -> Int -> Node
+-- builUnitStepAtX n x st end =
+--   if (n == 0)
+--     then
+--          let val = if (st>x) then 1 else 0 in
+--          Leaf st end (PolyInner val PolyEnd)
+--     else
+--      let mid = (st+end) / 2 in
+--      Inner st end (builUnitStepAtX (n-1) x st mid) (builUnitStepAtX (n-1)  x  mid end)
+
+--multTwoFunction (scaleConstNode (multTwoFunction (addConstNode (addTwoFunctions f1 f2) 1) f3)100)
+
+-- buildX ::  Int ->Int -> Int -> Node
+-- buildX n  st end =
+--   if (n == 0)
+--     then
+--          Leaf st end (PolyInner 0  (PolyInner 0  PolyEnd))
+--     else
+--      let mid = (st+end) / 2 in
+--      Inner st end (buildX (n-1) st mid) (buildX (n-1)  mid end)
+
+-- gibbon_main =
+--   let depth =1 in
+--   let st = -10000 in
+--   let end = 10000 in
+
+--  let f2 =buildZeros depth st end in
+--  multTwoFunction (addTwoFunctions (multTwoFunction  f2 f2)  f2) f2
 
 -- gibbon_main =  appendPoly (PolyInner 0 PolyEnd) (scaleConstPoly  (PolyInner 1 (PolyInner 1 (PolyInner 1 PolyEnd))) 1)
 
