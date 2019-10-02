@@ -1297,7 +1297,7 @@ tuple_pass ddefs fdefs =
 fuse_pass ::  DDefs Ty1 -> FunDefs1 -> FusePassParams  -> PassM TransformReturn
 fuse_pass ddefs funDefs
    (FusePassParams exp argsVars fusedFunctions skipList depth) =
-  if depth >1000
+  if depth >10
    then  return (exp, funDefs, fusedFunctions)
    else go (unLoc exp) skipList funDefs fusedFunctions
  where
@@ -1319,7 +1319,9 @@ fuse_pass ddefs funDefs
             (validFused, fNew, fusedDefs) <-
                fuse ddefs fdefs inner outer prevFusedFuncs
 
-            let fusedFunction = fusedDefs M.! fNew  --`debug` ("new fused:" L.++ (
+            let fusedFunction = fusedDefs M.! fNew `debug` ("new fused:" L.++ (show fNew))
+
+             --`debug` ("new fused:" L.++ (
                --  render (pprint ( fusedDefs M.! fNew  ))))
                 newFusedEntry = (outer,inner, -1, fNew)
                 newFusedFunctions =  newFusedEntry : prevFusedFuncs
