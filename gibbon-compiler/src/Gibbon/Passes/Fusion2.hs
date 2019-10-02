@@ -1316,7 +1316,7 @@ tuple_pass ddefs fdefs =
 fuse_pass ::  DDefs Ty1 -> FunDefs1 -> FusePassParams  -> PassM TransformReturn
 fuse_pass ddefs funDefs
    (FusePassParams exp argsVars fusedFunctions skipList depth) =
-  if depth >2
+  if depth >5
    then  return (exp, funDefs, fusedFunctions)
    else go (unLoc exp) skipList funDefs fusedFunctions
  where
@@ -1386,9 +1386,9 @@ fusion2 (L1.Prog defs funs main) = do
       Just (mainBody, ty) -> do
         (mainBody', newDefs, _) <-
           fuse_pass defs funs (FusePassParams mainBody [] [] [] 0)
-     --   (mainBody'', newDefs') <- tupleAndOptimize defs (M.union funs newDefs) mainBody' True
-      --  return (Just (mainBody'', ty), newDefs')
-        return (Just (mainBody', ty), newDefs)
+        (mainBody'', newDefs') <- tupleAndOptimize defs (M.union funs newDefs) mainBody' True
+        return (Just (mainBody'', ty), newDefs')
+        --return (Just (mainBody', ty), newDefs)
 
   return $ L1.Prog defs funs' main'
 
