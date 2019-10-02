@@ -306,6 +306,11 @@ tests:
     dir: examples/ast
     failing: [interp1,gibbon1, gibbon2, pointer]
 
+  - name: LC.hs
+    dir: examples/ast
+    failing: [gibbon2] # segfaults in free_region
+    answer-file: examples/ast/LC.ans
+
   ## A difficult test for AddTraversals.
   - name: test_par05.gib
     skip: true
