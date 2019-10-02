@@ -301,6 +301,11 @@ tests:
     test-flags: ["--fusion"]
     answer-file: examples/render_tree_two_passes.ans
 
+  ## AST benchmarks
+  - name: C1.hs
+    dir: examples/ast
+    failing: [interp1,gibbon1, gibbon2, pointer]
+
   ## A difficult test for AddTraversals.
   - name: test_par05.gib
     skip: true
