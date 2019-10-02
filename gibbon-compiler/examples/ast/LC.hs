@@ -25,22 +25,22 @@ interpExp :: Exp -> Val
 interpExp e =
     case e of
       LamE s e -> LamV s e
-      AppE e1 e2 -> interpApp e1 e2
+      AppE e1 e2 -> interpApp (interpExp e1) e2
       VarE s -> ErrorV
       LitE i -> IntV i
-      PlusE e1 e2 -> interpPlus e1 e2
+      PlusE e1 e2 -> interpPlus  (interpExp e1) e2
       LetE s e1 e2 -> interpExp (substExp s e1 e2)
 
-interpApp :: Exp -> Exp -> Val
-interpApp e1 e2 =
-    case interpExp e1 of
+interpApp :: Val -> Exp -> Val
+interpApp v e2 =
+    case v of
       IntV i -> ErrorV
       LamV s e -> interpExp (substExp s e2 e)
       ErrorV -> ErrorV
 
-interpPlus :: Exp -> Exp -> Val
-interpPlus e1 e2 =
-    case interpExp e1 of
+interpPlus :: Val -> Exp -> Val
+interpPlus v e2 =
+    case v of
       LamV s e -> ErrorV
       IntV i -> addN i e2
       ErrorV -> ErrorV
@@ -114,7 +114,7 @@ ptPlus e1 e2 =
       LetE s el1 el2 -> PlusE (LetE s el1 el2) e2
 
 plPlusInner :: Int -> Exp -> Exp
-plPlusInner i e2 = 
+plPlusInner i e2 =
     case e2 of
       LamE sl el1 -> PlusE (LitE i) (LamE sl el1)
       AppE ea1 ea2 -> PlusE (LitE i) (AppE ea1 ea2)
@@ -131,15 +131,16 @@ ex1 = (LetE (quote "x.1") (LitE 30)
                       (AppE (VarE (quote "f.1"))
                             (PlusE (VarE (quote "x.1")) (LitE 2)))))
 
-eval :: Exp -> Int
-eval e =
-    case interpExp e of
+eval :: Val -> Int
+eval v =
+    case v of
       IntV i -> i
       LamV s e -> -1
       ErrorV -> -2
 
-gibbon_main = eval (ptExp (constProp ex1))
+
+gibbon_main = (eval (interpExp (ptExp (constProp ex1))))
 
 main :: IO ()
 main = do
-  print (eval (ptExp (constProp ex1)))
+  print (eval (interpExp (ptExp (constProp ex1))))
