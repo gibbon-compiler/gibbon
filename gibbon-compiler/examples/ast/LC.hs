@@ -29,42 +29,42 @@ interpExp e =
       VarE s -> ErrorV
       LitE i -> IntV i
       PlusE e1 e2 -> interpPlus  (interpExp e1) e2
-      LetE s e1 e2 -> interpExp (substExp s e1 e2)
+      LetE s e1 e2 -> interpExp (substExp e2 s e1 )
 
 interpApp :: Val -> Exp -> Val
 interpApp v e2 =
     case v of
       IntV i -> ErrorV
-      LamV s e -> interpExp (substExp s e2 e)
+      LamV s e -> interpExp (substExp e s e2 )
       ErrorV -> ErrorV
 
 interpPlus :: Val -> Exp -> Val
 interpPlus v e2 =
     case v of
       LamV s e -> ErrorV
-      IntV i -> addN i e2
+      IntV i -> addN (interpExp e2) i
       ErrorV -> ErrorV
 
-substExp :: Sym -> Exp -> Exp -> Exp
-substExp from to e =
+substExp :: Exp -> Sym -> Exp -> Exp
+substExp e from to  =
     case e of
       LamE s e1 ->
           if eqsym from s
           then LamE s e1
-          else LamE s (substExp from to e1)
-      AppE e1 e2 -> AppE (substExp from to e1) (substExp from to e2)
+          else LamE s (substExp  e1 from to )
+      AppE e1 e2 -> AppE (substExp e1 from to ) (substExp e2 from to )
       VarE s -> if eqsym from s
                 then to
                 else VarE s
       LitE i -> LitE i
-      PlusE e1 e2 -> PlusE (substExp from to e1) (substExp from to e2)
+      PlusE e1 e2 -> PlusE (substExp e1 from to ) (substExp e2 from to )
       LetE s e1 e2 -> if eqsym from s
-                      then LetE s (substExp from to e1) e2
-                      else LetE s (substExp from to e1) (substExp from to e2)
+                      then LetE s (substExp  e1 from to ) e2
+                      else LetE s (substExp  e1 from to ) (substExp e2 from to )
 
-addN :: Int -> Exp -> Val
-addN i1 e =
-    case interpExp e of
+addN :: Val ->Int  -> Val
+addN v i1  =
+    case v of
       LamV s e1 -> ErrorV
       IntV i2 -> IntV (i1 + i2)
       ErrorV -> ErrorV
@@ -86,8 +86,8 @@ constPropLet s e1 e2 =
     case e1 of
       LamE sl el -> LetE s (LamE sl (constProp el)) (constProp e2)
       AppE ea1 ea2 -> LetE s (AppE (constProp ea1) (constProp ea2)) (constProp e2)
-      VarE sv -> substExp s (VarE sv) e2
-      LitE i -> substExp s (LitE i) e2
+      VarE sv -> substExp  e2 s (VarE sv)
+      LitE i -> substExp e2 s (LitE i)
       PlusE e1 e2 -> PlusE (constProp e1) (constProp e2)
       LetE sl el1 el2 -> LetE s (constPropLet sl el1 el2) (constProp e2)
 
@@ -131,6 +131,16 @@ ex1 = (LetE (quote "x.1") (LitE 30)
                       (AppE (VarE (quote "f.1"))
                             (PlusE (VarE (quote "x.1")) (LitE 2)))))
 
+buildLargeExp :: Int -> Exp
+buildLargeExp n =
+  if (n== 0 )
+    then
+       ex1
+    else
+      LetE (quote "xxxx") ex1 (buildLargeExp (n-1))
+
+
+
 eval :: Val -> Int
 eval v =
     case v of
@@ -139,8 +149,8 @@ eval v =
       ErrorV -> -2
 
 
-gibbon_main = (eval (interpExp (ptExp (constProp ex1))))
+gibbon_main = (eval (interpExp (ptExp (constProp (buildLargeExp 100)))))
 
-main :: IO ()
-main = do
-  print (eval (interpExp (ptExp (constProp ex1))))
+-- main :: IO ()
+-- main = do
+--   print (eval (interpExp (ptExp (constProp ex1))))
