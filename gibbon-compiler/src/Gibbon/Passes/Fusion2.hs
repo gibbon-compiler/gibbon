@@ -22,11 +22,18 @@ import Gibbon.Pretty
 import Gibbon.Common
 import Gibbon.Passes.Freshen (freshExp1)
 import Gibbon.L1.Syntax as L1
-
+import Data.Text  (breakOnAll, pack)
 --------------------------------------------------------------------------------
 
-debug =  flip (dbgTrace 3)
+countFUS :: String -> Int
+countFUS str =  length $ breakOnAll (pack "FUS")  (pack str)
+      --  `debug1` ("opppa" L.++
+      --      (show str) L.++"\nress:\n"
+      --      L.++ (show (breakOnAll (pack str) (pack "FUS") ))
+      --       )
 
+debug =  flip (dbgTrace 5)
+debug1 = flip (dbgTrace 2)
 {-
 
 E.g.
@@ -77,6 +84,7 @@ type FunctionUses =
 
 type PotentialPair = (Symbol, Symbol)
 type PotentialsList = [DefTableEntry]
+
 
 freshFunction :: FunDef1 -> PassM FunDef1
 freshFunction f = do
@@ -532,6 +540,49 @@ foldFusedCalls_Entry rule@(outerName, innerName, argPos, newName) body =
              let ls' = L.map (\(a, b, exp) ->(a, b, foldFusedCalls rule exp )) ls in
              l $  CaseE x ls'
           otherwise -> foldFusedCalls rule body
+
+
+optimizeConsumedConstructor :: L Exp1 -> Exp1
+optimizeConsumedConstructor exp =
+  let defTable = buildDefTable (unLoc body)
+     case unLoc ex of
+          AppE fName loc argList ->
+            let notFolded = l $ AppE fName loc argList
+             in if fName == outerName
+                  then case unLoc (head argList) of
+                         VarE (Var symInner) ->
+                           if innerName == getDefiningFunction symInner defTable
+                             then let innerArgs = getArgs symInner defTable
+                                      outerArgs = argList
+                                      newCallArgs =
+                                        (innerArgs L.++ tail argList)
+                                   in l $ AppE newName loc newCallArgs
+                             else notFolded
+                         _ -> notFolded
+                  else notFolded
+          LetE (v, loc, t, lhs) bod -> l $ LetE (v, loc, t, go lhs) (go bod)
+          IfE e1 e2 e3 -> l $ IfE (go e1) (go e2) (go e3)
+          CaseE e1 ls1 -> l $ CaseE e1 (L.map f ls1)
+            where f (dataCon, x, exp) = (dataCon, x, go exp)
+          TimeIt e d b -> l $ TimeIt (go e) d b
+          DataConE loc dataCons ls -> l $ DataConE loc dataCons (L.map go ls)
+          _ -> ex
+   in removeUnusedDefsExp (go body)
+  where
+    getDefiningFunction x defTable =
+      case M.lookup x defTable of
+        Nothing -> toVar "dummy"
+        Just entry ->
+          case def entry of
+            AppE v _ _ -> v
+            _ -> toVar "dummy"
+    getArgs x defTable =
+      case M.lookup x defTable of
+        Nothing -> error "error in foldFusedCalls"
+        Just entry ->
+          case def entry of
+            AppE _ _ args -> args
+            _ -> error ("ops" L.++ show (def entry))
 
 foldFusedCalls :: (Var, Var, Int, Var) -> L Exp1 -> L Exp1
 foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
@@ -1229,16 +1280,19 @@ fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
 
     step1 <- inline2 innerFunc outerFunc
       `debug`
-        ("inner: " L.++ (render (pprint innerFunc)) L.++ "outer: " L.++ (render (pprint      outerFunc)))
+        ("newName is :" L.++ (show newName)  L.++ "\ninner: " L.++ (render (pprint innerFunc)) L.++ "outer: " L.++ (render (pprint outerFunc)) )
 
-    let step2 = (simplifyCases step1 ){funName = newName} `debug` render (pprint step1)
-        step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)  step2 `debug` render (pprint step2)
-        step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs `debug`   render (pprint step3)
-        step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)} `debug` render (pprint step4)
+    let step2 = (simplifyCases step1 ){funName = newName} `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint step1))
+        step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)  step2 `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint step2))
+        step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs `debug`   ("newName is :" L.++ (show newName)   L.++ render (pprint step3))
+        step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)} `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint step4))
     return (True, newName, M.insert newName step5 fdefs)
 
-violateRestrictions :: FunDefs1 -> Var -> Var -> Bool
-violateRestrictions fdefs inner outer =
+violateRestrictions :: FunDefs1 -> Var -> Var ->Int -> Bool
+violateRestrictions fdefs inner outer depth=
+  let n =  quot (countFUS (fromVar inner)) 2 + quot (countFUS (fromVar outer)) 2 + 2
+    in -- should be configurable
+  let p0 = (n>4) `debug1` ( "n is " L.++ (show n)) in
   let innerDef =
         case M.lookup inner fdefs of
           (Just v) -> v
@@ -1271,7 +1325,7 @@ violateRestrictions fdefs inner outer =
         case (unLoc (funBody innerDef)) of
           CaseE _ _ -> False
           _         -> True
-   in (p1 || p2 || p4 || p5)
+   in (p0 || p1 || p2 || p4 || p5)
 
 type FusedElement =
   (Var, -- outer fused function
@@ -1316,7 +1370,7 @@ tuple_pass ddefs fdefs =
 fuse_pass ::  DDefs Ty1 -> FunDefs1 -> FusePassParams  -> PassM TransformReturn
 fuse_pass ddefs funDefs
    (FusePassParams exp argsVars fusedFunctions skipList depth) =
-  if depth >5
+  if depth >1000-- then first fold before going back
    then  return (exp, funDefs, fusedFunctions)
    else go (unLoc exp) skipList funDefs fusedFunctions
  where
@@ -1330,15 +1384,15 @@ fuse_pass ddefs funDefs
 
       Just ((inner,outer), outerDefVarSymbol) ->
        do
-        if violateRestrictions fdefs inner outer
+        if violateRestrictions fdefs inner outer depth
           then
-               go  body ((inner,outer):processed) fdefs prevFusedFuncs
+               go  body ((inner,outer):processed) fdefs prevFusedFuncs `debug1` ("cant fuse "L.++ (show (inner,outer)))
           else do
              -- fuse
             (validFused, fNew, fusedDefs) <-
                fuse ddefs fdefs inner outer prevFusedFuncs
 
-            let fusedFunction = fusedDefs M.! fNew `debug` ("new fused:" L.++ (show fNew))
+            let fusedFunction = fusedDefs M.! fNew `debug1` ("new fused function generated at depth " L.++ (show depth) L.++ (show fNew))
 
              --`debug` ("new fused:" L.++ (
                --  render (pprint ( fusedDefs M.! fNew  ))))
@@ -1351,7 +1405,7 @@ fuse_pass ddefs funDefs
                 newFusedFunctions newProcessed (depth+1))
 
             --clean
-            let newFusedFunctions = retFusedFunctions
+            let newFusedFunctions2 = retFusedFunctions
               --   (newFusedEntry : prevFusedFuncs) L.++ retFusedFunctions
                 cleanedFunction =
                     removeUnusedDefs fusedFunction{funBody = retFuncBody}
@@ -1363,7 +1417,7 @@ fuse_pass ddefs funDefs
             if validFused
               then
                 let body' = removeUnusedDefsExp foldedBody
-                in go (unLoc body') newProcessed  newDefs  newFusedFunctions
+                in go (unLoc body') newProcessed  newDefs  newFusedFunctions2
               else
                  go body  newProcessed fdefs prevFusedFuncs
 
@@ -1384,12 +1438,16 @@ fusion2 (L1.Prog defs funs main) = do
     case main of
       Nothing -> return (Nothing, funs)
       Just (mainBody, ty) -> do
-        (mainBody', newDefs, _) <-
+        (mainBody', newDefs, fuseInfo) <-
           fuse_pass defs funs (FusePassParams mainBody [] [] [] 0)
-        (mainBody'', newDefs') <- tupleAndOptimize defs (M.union funs newDefs) mainBody' True
-        return (Just (mainBody'', ty), newDefs')
-        --return (Just (mainBody', ty), newDefs)
-
+        let newDefs' = M.map
+               (\fdef -> if L.isPrefixOf "_FUS" (fromVar (funName fdef))
+                          then    L.foldl (flip foldFusedCallsF ) fdef fuseInfo
+                          else fdef
+               ) newDefs
+    --    (mainBody'', newDefs') <- tupleAndOptimize defs (M.union funs newDefs) mainBody' True
+     --   return (Just (mainBody'', ty), newDefs')
+        return (Just (mainBody', ty), newDefs')
   return $ L1.Prog defs funs' main'
 
 
