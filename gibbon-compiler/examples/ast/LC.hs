@@ -217,14 +217,23 @@ ex1 = (LetE (varA) (LitE 30)
                       (AppE (VarE (varB))
                             (PlusE (VarE (varA)) (LitE 2)))))
 
-buildLargeExp :: Int -> Exp
-buildLargeExp n =
-  if (n== 0 )
-    then
-       ex1
-    else
-      LetE (ZeroJ) ex1 (buildLargeExp (n-1))
+-- buildLargeExp :: Int -> Exp
+-- buildLargeExp n =
+--   if (n== 0 )
+--     then
+--        ex1
+--     else
+--       LetE (ZeroJ) ex1 (buildLargeExp (n-1))
 
+buildLargeExp :: Int -> Exp
+buildLargeExp n225 =
+    let fltIf598 :: Bool = n225 == 0 in
+    if fltIf598
+    then ex1
+    else    let fltPkd600 :: Exp = ex1 in
+            let fltAppE602 :: Int = n225 - 1 in
+            let fltPkd601 :: Exp = buildLargeExp fltAppE602 in
+            (PlusE fltPkd601 fltPkd601 )
 
 
 eval :: Val -> Int
