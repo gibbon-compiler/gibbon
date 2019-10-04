@@ -212,10 +212,10 @@ varF :: IntJ
 varF =  SuccJ varE
 
 ex1 :: Exp
-ex1 = (LetE (ZeroJ) (LitE 30)
-                (LetE ( varE) (LamE (ZeroJ) (PlusE (LitE 10) (VarE (ZeroJ))))
-                      (AppE (VarE (ZeroJ))
-                            (PlusE (VarE (ZeroJ)) (LitE 2)))))
+ex1 = (LetE (varA) (LitE 30)
+                (LetE (varB) (LamE (varC) (PlusE (LitE 10) (VarE (varC))))
+                      (AppE (VarE (varB))
+                            (PlusE (VarE (varA)) (LitE 2)))))
 
 buildLargeExp :: Int -> Exp
 buildLargeExp n =
