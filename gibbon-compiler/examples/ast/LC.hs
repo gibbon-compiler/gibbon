@@ -10,7 +10,6 @@ module LC where
 
 -- Lambda calculus with inteter arithmetic
 
-data ConstructingCall = KConstruct
 
 data Val = IntV Int
          | LamV IntJ Exp
@@ -124,19 +123,11 @@ constProp e =
       LetE s e1 e2 -> constPropLet  e1 e2 s
 
 
-createAppE :: ConstructingCall ->  Exp -> Exp -> Exp
-createAppE c v1 v2  = case c of
-  KConstruct -> AppE v1 v2
-
-createLamE :: ConstructingCall -> IntJ -> Exp -> Exp
-createLamE c v1 v2  = case c of
-  KConstruct -> LamE v1 v2
-
 constPropLet :: Exp -> Exp -> IntJ-> Exp
 constPropLet e1 e2 s  =
     case e1 of
-      LamE sl el -> LetE s (createLamE KConstruct sl (constProp el)) (constProp e2)
-      AppE ea1 ea2 -> LetE s (createAppE KConstruct (constProp ea1) (constProp ea2)) (constProp e2)
+      LamE sl el -> LetE s (LamE  sl (constProp el)) (constProp e2)
+      AppE ea1 ea2 -> LetE s (AppE  (constProp ea1) (constProp ea2)) (constProp e2)
       VarE sv -> substExp  e2 s (VarE sv)
       LitE i -> substExp e2 s (LitE i)
       PlusE e1 e2 -> PlusE (constProp e1) (constProp e2)
@@ -154,43 +145,25 @@ ptExp e =
       LetE s e1 e2 -> LetE s (ptExp e1) (ptExp e2)
 
 
-createVarE :: ConstructingCall -> IntJ -> Exp
-createVarE c v1  = case c of
-  KConstruct -> VarE v1
-
-
-createPlusE:: ConstructingCall -> Exp -> Exp->Exp
-createPlusE c v1 v2  = case c of
-  KConstruct -> PlusE v1 v2
-
-createLetE:: ConstructingCall -> IntJ -> Exp->Exp->Exp
-createLetE c v1 v2 v3 = case c of
-  KConstruct -> LetE v1 v2 v3
-
-
-createLitE:: ConstructingCall -> Int ->Exp
-createLitE c v1 = case c of
-  KConstruct -> LitE v1
-
 ptPlus :: Exp -> Exp -> Exp
 ptPlus e1 e2 =
     case e1 of
-      LamE sl el1 -> PlusE (createLamE KConstruct  sl el1) e2
-      AppE ea1 ea2 -> PlusE (createAppE KConstruct ea1 ea2) e2
-      VarE s -> PlusE (createVarE KConstruct  s) e2
+      LamE sl el1 -> PlusE (LamE   sl el1) e2
+      AppE ea1 ea2 -> PlusE (AppE  ea1 ea2) e2
+      VarE s -> PlusE (VarE    s) e2
       LitE i -> plPlusInner  e2 i
-      PlusE ep1 ep2 -> PlusE (createPlusE KConstruct  ep1 ep2) e2
-      LetE s el1 el2 -> PlusE (createLetE KConstruct  s el1 el2) e2
+      PlusE ep1 ep2 -> PlusE (PlusE   ep1 ep2) e2
+      LetE s el1 el2 -> PlusE (LetE   s el1 el2) e2
 
 plPlusInner ::   Exp ->Int-> Exp
 plPlusInner e2 i =
     case e2 of
-      LamE sl el1 -> PlusE (createLitE KConstruct i) (LamE sl el1)
-      AppE ea1 ea2 -> PlusE (createLitE KConstruct i) (AppE ea1 ea2)
-      VarE s -> PlusE (createLitE KConstruct i) (VarE s)
+      LamE sl el1 -> PlusE (LitE  i) (LamE sl el1)
+      AppE ea1 ea2 -> PlusE (LitE  i) (AppE ea1 ea2)
+      VarE s -> PlusE (LitE  i) (VarE s)
       LitE i2 -> LitE (i + i2)
-      PlusE ep1 ep2 -> PlusE (createLitE KConstruct i) (PlusE ep1 ep2)
-      LetE s el1 el2 -> PlusE (createLitE KConstruct i) (LetE s el1 el2)
+      PlusE ep1 ep2 -> PlusE (LitE  i) (PlusE ep1 ep2)
+      LetE s el1 el2 -> PlusE (LitE  i) (LetE s el1 el2)
 
 -- Example term
 varA :: IntJ
@@ -227,12 +200,12 @@ ex1 = (LetE (varA) (LitE 30)
 
 buildLargeExp :: Int -> Exp
 buildLargeExp n225 =
-    let fltIf598 :: Bool = n225 == 0 in
+    let fltIf598 = n225 == 0 in
     if fltIf598
     then ex1
-    else    let fltPkd600 :: Exp = ex1 in
-            let fltAppE602 :: Int = n225 - 1 in
-            let fltPkd601 :: Exp = buildLargeExp fltAppE602 in
+    else    let fltPkd600   = ex1 in
+            let fltAppE602 = n225 - 1 in
+            let fltPkd601 = buildLargeExp fltAppE602 in
             (PlusE fltPkd601 fltPkd601 )
 
 
@@ -244,7 +217,14 @@ eval v =
       ErrorV -> -2
 
 
-gibbon_main = (eval (interpExp (ptExp (constProp (buildLargeExp 100)))))
+main =
+ do
+  let fltAppE507 :: Exp = buildLargeExp 23
+  t1 <- fltAppE507  `deepseq` getCurrentTime
+  t2 <-  (gibbon_main fltAppE507) `deepseq` getCurrentTime
+  print $ diffUTCTime t2 t1
+
+gibbon_main = (eval (interpExp (ptExp (constProp (buildLargeExp 1)))))
 --  gibbon_main =  (interpExp (ptExp (constProp (buildLargeExp 100))))
 
 -- main :: IO ()
