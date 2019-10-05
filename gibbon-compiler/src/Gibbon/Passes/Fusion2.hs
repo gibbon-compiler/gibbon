@@ -177,6 +177,15 @@ simplifyProjections exp = removeCommonExpressions (go exp M.empty)
 
       x       -> l $x
 
+replaceLeafWithExp :: L Exp1 ->  L Exp1  -> L Exp1
+replaceLeafWithExp exp  newTail  =
+  go exp
+   where
+     go ex =
+      case unLoc ex of
+            L1.LetE (v,ls,t, e1) e2 -> l $ L1.LetE (v,ls,t, e1)  (go e2)
+            x -> newTail
+
 replaceLeafWithBind :: L Exp1 -> (Int -> Var) -> Ty1 -> L Exp1 -> L Exp1
 replaceLeafWithBind exp genVar varType tailExp =
   go exp
@@ -542,47 +551,87 @@ foldFusedCalls_Entry rule@(outerName, innerName, argPos, newName) body =
           otherwise -> foldFusedCalls rule body
 
 
-optimizeConsumedConstructor :: L Exp1 -> Exp1
-optimizeConsumedConstructor exp =
-  let defTable = buildDefTable (unLoc body)
-     case unLoc ex of
-          AppE fName loc argList ->
-            let notFolded = l $ AppE fName loc argList
-             in if fName == outerName
-                  then case unLoc (head argList) of
-                         VarE (Var symInner) ->
-                           if innerName == getDefiningFunction symInner defTable
-                             then let innerArgs = getArgs symInner defTable
-                                      outerArgs = argList
-                                      newCallArgs =
-                                        (innerArgs L.++ tail argList)
-                                   in l $ AppE newName loc newCallArgs
-                             else notFolded
-                         _ -> notFolded
-                  else notFolded
-          LetE (v, loc, t, lhs) bod -> l $ LetE (v, loc, t, go lhs) (go bod)
-          IfE e1 e2 e3 -> l $ IfE (go e1) (go e2) (go e3)
-          CaseE e1 ls1 -> l $ CaseE e1 (L.map f ls1)
-            where f (dataCon, x, exp) = (dataCon, x, go exp)
-          TimeIt e d b -> l $ TimeIt (go e) d b
-          DataConE loc dataCons ls -> l $ DataConE loc dataCons (L.map go ls)
-          _ -> ex
-   in removeUnusedDefsExp (go body)
+inlineConstructorConsumers :: FunDefs1-> L Exp1 -> PassM (L Exp1)
+inlineConstructorConsumers fdefs exp =
+   do
+    let defTable = buildDefTable (unLoc exp)
+    let exp2 = removeUnusedDefsExp (go defTable exp)
+    if(exp2 == exp)
+      then return exp2
+      else
+        do
+         exp2' <- freshExp1 M.empty exp2
+         inlineConstructorConsumers fdefs  exp2'
   where
-    getDefiningFunction x defTable =
+    go defTable ex  =
+       case unLoc ex of
+          original@(AppE fName loc parList) ->
+                   case unLoc (head parList) of
+                         VarE (Var symInner) ->
+                             case (getDefiningConstructor symInner defTable) of
+                                Just (DataConE loc dataCons args)->
+                                  let calleeBody = funBody (fdefs M.!  fName)
+                                      calleeArgs = funArgs (fdefs M.!  fName)
+                                      calleeBody' = replaceArgs calleeBody calleeArgs parList
+                                      calleeBody'' =  let oldExp = head parList
+                                                          newExp =l (DataConE loc dataCons args)
+                                                      in substE oldExp newExp   calleeBody'
+
+                                      calleeBody''' = simplifyCases2 calleeBody''
+                                  in ( calleeBody''') `debug1` ( "here we are" L.++show (DataConE loc dataCons args ))
+                                Nothing -> l  original `debug1` ( "norm exit1" L.++show (AppE fName loc parList))
+                         _ -> l original `debug1` ( "norm exit2" L.++show (AppE fName loc parList))
+          LetE (v, loc, t, lhs) bod ->
+              let normal = l $ LetE (v, loc, t, go defTable lhs) (go  defTable bod) in
+               case unLoc lhs of
+                  original@(AppE fName loc parList) ->
+                    case unLoc (head parList) of
+                          VarE (Var symInner) ->
+                             case (getDefiningConstructor symInner defTable) of
+                                Just (DataConE loc dataCons args)-> do
+                                  let calleeBody = funBody (fdefs M.!  fName)
+                                      calleeArgs = funArgs (fdefs M.!  fName)
+                                      calleeBody' = replaceArgs calleeBody calleeArgs parList
+                                      calleeBody'' =  let oldExp = head parList
+                                                          newExp =l (DataConE loc dataCons args)
+                                                      in substE oldExp newExp   calleeBody' `debug1` ( "2here we are" L.++show ((DataConE loc dataCons args)))
+
+                                      calleeBody''' =   (simplifyCases2 calleeBody'')
+                                      leafExp = getLeafExpr calleeBody'''
+                                      newTail = l $ LetE (v, [], t, leafExp) (go defTable bod)
+                                  go defTable  (replaceLeafWithExp calleeBody'''  newTail)
+
+                                Nothing -> normal `debug1` ( "2norm exit1" L.++show (AppE fName loc   parList))
+                          _ -> normal `debug1` ( "2norm exit2" L.++show (AppE fName loc parList))
+                  _ ->normal
+          IfE e1 e2 e3 -> l $ IfE (go defTable e1) (go defTable e2) (go defTable e3)
+          CaseE e1 ls1 -> l $ CaseE e1 (L.map f ls1)
+            where f (dataCon, x, exp) = (dataCon, x, go defTable exp)
+          TimeIt e d b -> l $ TimeIt (go defTable e) d b
+          DataConE loc dataCons ls -> l $ DataConE loc dataCons (L.map (go defTable) ls)
+          _ ->   ex
+
+    getDefiningConstructor x defTable =
       case M.lookup x defTable of
-        Nothing -> toVar "dummy"
+        Nothing -> Nothing `debug1` ("not found" L.++ (show x))
         Just entry ->
           case def entry of
-            AppE v _ _ -> v
-            _ -> toVar "dummy"
-    getArgs x defTable =
-      case M.lookup x defTable of
-        Nothing -> error "error in foldFusedCalls"
-        Just entry ->
-          case def entry of
-            AppE _ _ args -> args
-            _ -> error ("ops" L.++ show (def entry))
+            cons@(DataConE{})-> Just cons
+            _ -> Nothing `debug1` ("defined not as constr" L.++ (show x))
+
+    replaceArgs exp (h1:tailarg) (h2:tailPar) =
+              let oldExp = l $ VarE h1
+                  newExp = h2
+                  exp'=  substE oldExp newExp exp
+              in replaceArgs exp' tailarg tailPar
+    replaceArgs exp [] [] = exp
+    -- getArgs x defTable =
+    --   case M.lookup x defTable of
+    --     Nothing -> error "error in foldFusedCalls"
+    --     Just entry ->
+    --       case def entry of
+    --         AppE _ _ args -> args
+    --         _ -> error ("ops" L.++ show (def entry))
 
 foldFusedCalls :: (Var, Var, Int, Var) -> L Exp1 -> L Exp1
 foldFusedCalls rule@(outerName, innerName, argPos, newName) body =
@@ -1282,17 +1331,22 @@ fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
       `debug`
         ("newName is :" L.++ (show newName)  L.++ "\ninner: " L.++ (render (pprint innerFunc)) L.++ "outer: " L.++ (render (pprint outerFunc)) )
 
-    let step2 = (simplifyCases step1 ){funName = newName} `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint step1))
-        step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)  step2 `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint step2))
-        step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs `debug`   ("newName is :" L.++ (show newName)   L.++ render (pprint step3))
-        step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)} `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint step4))
+    step2 <- freshFunction (simplifyCases step1 ){funName = newName} `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint step1))
+    newBody <-  inlineConstructorConsumers  fdefs (funBody step2 )
+    let step2' = step2{ funBody = newBody }
+                         `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint   step2))
+    let step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)    step2' `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint   step2'))
+    let step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs `debug`   ("newName is :" L.++ (show newName)   L.++ render (pprint step3))
+    let step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)} `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint step4))
     return (True, newName, M.insert newName step5 fdefs)
 
 violateRestrictions :: FunDefs1 -> Var -> Var ->Int -> Bool
 violateRestrictions fdefs inner outer depth=
   let n =  quot (countFUS (fromVar inner)) 2 + quot (countFUS (fromVar outer)) 2 + 2
     in -- should be configurable
-  let p0 = (n>4) `debug1` ( "n is " L.++ (show n)) in
+  let p0 = (n >4)
+     -- &&  (n>5)
+        `debug1` ( "n is " L.++ (show n) L.++ "for" L.++ (show inner ) L.++ (show outer)) in
   let innerDef =
         case M.lookup inner fdefs of
           (Just v) -> v
@@ -1368,8 +1422,8 @@ tuple_pass ddefs fdefs =
 
 
 fuse_pass ::  DDefs Ty1 -> FunDefs1 -> FusePassParams  -> PassM TransformReturn
-fuse_pass ddefs funDefs
-   (FusePassParams exp argsVars fusedFunctions skipList depth) =
+fuse_pass ddefs funDefs (FusePassParams exp argsVars fusedFunctions skipList depth) =
+
   if depth >1000-- then first fold before going back
    then  return (exp, funDefs, fusedFunctions)
    else go (unLoc exp) skipList funDefs fusedFunctions
@@ -1637,6 +1691,15 @@ testTwoOutputPositions fdefs (fName, i, j) testedPositions =
             sNext
           else
             S.insert (f, idx1, idx2) sNext
+
+
+getLeafExpr :: L Exp1 -> L Exp1
+getLeafExpr = rec
+ where
+   rec ex =
+     case unLoc ex of
+       LetE (v, ls, t, L _ AppE{}) body -> rec body
+       x-> l x
 
 getLeafProd :: L Exp1 -> L Exp1
 getLeafProd = rec
