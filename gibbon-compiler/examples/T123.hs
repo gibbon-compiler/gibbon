@@ -14,6 +14,5 @@ getDepth foo =
     MkFoo2      -> 0
     MkFoo1 foo1 -> 1 + (getDepth foo1)
 
-gibbon_main = bench mkfoo 10
-
-main = print gibbon_main
+gibbon_main = let foo = mkfoo 10
+              in bench getDepth foo
