@@ -34,7 +34,7 @@ gibbon_main =
  let list1 = buildList 100 in
  -- accumulation as consumer
  let ex1 = reverseB (reverseB list1) in
- let ex2 =reverseA (reverseA  list1 ListEnd) in
+ let ex2 =reverseA (reverseA  list1 ListEnd ) ListEnd in
  -- accumulation as producer, two types:
     --when the accumulators are used as context parameters to hold auxiliary values that are eventually used in the final
 
