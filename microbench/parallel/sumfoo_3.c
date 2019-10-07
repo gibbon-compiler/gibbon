@@ -26,11 +26,12 @@ typedef long long IntTy;
 typedef char* CursorTy;
 typedef char TagTyPacked;
 
-typedef struct CursorCursorIntProd_struct {
+typedef struct CursorCursorCursorIntProd_struct {
     CursorTy field0;
     CursorTy field1;
-    IntTy    field2;
-} CursorCursorIntProd;
+    CursorTy field2;
+    IntTy    field3;
+} CursorCursorCursorIntProd;
 
 typedef struct CursorIntProd_struct {
     CursorTy field0;
@@ -288,6 +289,16 @@ double mean(int len, double *nums) {
     return (double) (sum / len);
 }
 
+void print_size(char* msg, double size) {
+    if (size > (1 * MB)) {
+        printf("%s %.0lfM\n", msg, (double) (size / (1 * MB)));
+    } else if (size > (1 * KB)) {
+        printf("%s %.0lfK\n", msg, (double) (size / (1 * KB)));
+    } else {
+        printf("%s %.0lf bytes\n", msg, size);
+    }
+}
+
 /* --------------------------------------------------------------------------
 
 data Foo = A Int
@@ -302,21 +313,21 @@ data Foo = A Int
 mkFoo :: Int -> Foo
 mkFoo n
   | n < 0     = A 10
-  | n == 1    = B (mkFoo (n-1)) (mkFoo (n-2))
-  | otherwise = C (mkFoo (n-1)) (mkFoo (n-2)) (mkFoo (n-3))
+  | n == 1    = B n (mkFoo (n-1)) (mkFoo (n-2))
+  | otherwise = C n (mkFoo (n-1)) (mkFoo (n-2)) (mkFoo (n-3))
 
 
 sumFoo :: Foo -> Int
 sumFoo foo =
   case foo of
-    A i        -> i
-    B f1 f2    -> sumFoo f1 + sumFoo f2
-    C f1 f2 f3 -> sumFoo f1 + sumFoo f2 + sumFoo f3
+    A i          -> i
+    B n f1 f2    -> n + sumFoo f1 + sumFoo f2
+    C n f1 f2 f3 -> n + sumFoo f1 + sumFoo f2 + sumFoo f3
 
     B_big _ f1 f2 -> let p = sumFoo f1 .||. sumFoo f2
                      in fst p + snd p
 
-    C_big _ _ f1 f2 f3 -> let t = sumFoo f1 .||. (sumFoo f2 .||. sumFoo f3)
+    C_big _ f1 f2 f3 -> let t = sumFoo f1 .||. (sumFoo f2 .||. sumFoo f3)
                           in fst3 t + snd3 t + thd3 t
 
 -------------------------------------------------------------------------- */
@@ -333,6 +344,9 @@ CursorTy printFoo(CursorTy cur) {
     } else if (*cur == 1) {
         printf("(B ");
         cur++;
+        IntTy val = *(IntTy *) cur;
+        cur += 8;
+        printf("%lld ", val);
         cur = printFoo(cur);
         cur = printFoo(cur);
         printf(") ");
@@ -340,40 +354,27 @@ CursorTy printFoo(CursorTy cur) {
     } else if (*cur == 2) {
         printf("(C ");
         cur++;
+        IntTy val = *(IntTy *) cur;
+        cur += 8;
+        printf("%lld ", val);
         cur = printFoo(cur);
         cur = printFoo(cur);
         cur = printFoo(cur);
         printf(") ");
         return cur;
     } else if (*cur == 3) {
-        printf("(B_big PTR ");
-        cur += 9;
-        cur = printFoo(cur);
-        cur = printFoo(cur);
-        printf(") ");
-        return cur;
-    }  else if (*cur == 4) {
-        printf("(C_big PTR PTR ");
-        cur += 9;
+        printf("(C_big ");
+        cur ++;
+        IntTy val = *(IntTy *) cur;
+        cur += 8;
+        printf("%lld ", val);
+        printf("PTR PTR ");
+        cur += 16;
         cur = printFoo(cur);
         cur = printFoo(cur);
         cur = printFoo(cur);
         printf(") ");
         return cur;
-    } else if (*cur == 5) {
-        printf("(B_tmp _ ");
-        cur += 9;
-        cur = printFoo(cur);
-        cur = printFoo(cur);
-        printf(") ");
-        return cur;
-    } else if (*cur == 6) {
-        printf("(C_tmp _ _ ");
-        cur += 9;
-        cur = printFoo(cur);
-        cur = printFoo(cur);
-        cur = printFoo(cur);
-        printf(") ");
     } else if (*cur == 100) {
         // redirection
         printf("R -> ");
@@ -391,22 +392,16 @@ CursorTy printFoo(CursorTy cur) {
     }
 }
 
-// // 'in' is always ahead of 'out'.
-// CursorCursorProd shave_bytes(CursorTy end_chunk, CursorTy out, CursorTy in, IntTy n) {
-//     TagTyPacked tag = *in;
-//     CursorTy next = in + 1;
-// }
-
 // Data over this threshold will be processed in parallel
-#define PAR_SIZE_THRESHOLD 1 * KB
+#define PAR_SIZE_THRESHOLD 8 * KB
 
-CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
-    CursorCursorIntProd tmp;
+CursorCursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, CursorTy out_scratch, IntTy n) {
+    CursorCursorCursorIntProd tmp;
     if (n <= 0) {
         // A
 
         // start bounds check
-        if ((end_chunk - out) <= 20) {
+        if ((end_chunk - out) <= 30) {
             ChunkTy new_chunk    = alloc_chunk(end_chunk);
             CursorTy chunk_start = new_chunk.start_ptr;
             CursorTy chunk_end   = new_chunk.end_ptr;
@@ -422,86 +417,187 @@ CursorCursorIntProd mkFoo (CursorTy end_chunk, CursorTy out, IntTy n) {
         out++;
         *(IntTy *) out = 10;
         out += 8;
-        return (CursorCursorIntProd) {end_chunk, out, 9};
+        return (CursorCursorCursorIntProd) {end_chunk, out, out_scratch, 9};
     } else if (n == 1) {
         // B
 
+        // start bounds check
+        if ((end_chunk - out) <= 30) {
+            ChunkTy new_chunk    = alloc_chunk(end_chunk);
+            CursorTy chunk_start = new_chunk.start_ptr;
+            CursorTy chunk_end   = new_chunk.end_ptr;
+
+            end_chunk = chunk_end;
+            *(TagTyPacked *) out = 100;
+            CursorTy redir = out + 1;
+            *(CursorTy *) redir = chunk_start;
+            out = chunk_start;
+        }
+
+        *out = 1;
+
+        // n
+        CursorTy out0 = out + 1;
+        *(IntTy *) out0 = n;
+        out0 += 8;
+
         // rec1
-        CursorTy left_out = out + 9;
-        tmp = mkFoo(end_chunk, left_out, (n-1));
+        tmp = mkFoo(end_chunk, out0, out_scratch, (n-1));
         CursorTy end_chunk1 = tmp.field0;
         CursorTy out1 = tmp.field1;
-        IntTy size1 = tmp.field2;
+        CursorTy out_scratch1 = tmp.field2;
+        IntTy size1 = tmp.field3;
 
         // rec2
-        tmp = mkFoo(end_chunk1, out1, (n-2));
+        tmp = mkFoo(end_chunk1, out1, out_scratch1, (n-2));
         CursorTy end_chunk2 = tmp.field0;
         CursorTy out2 = tmp.field1;
-        IntTy size2 = tmp.field2;
+        CursorTy out_scratch2 = tmp.field2;
+        IntTy size2 = tmp.field3;
 
-#ifdef PARALLEL
-        // Conditionally write a BIG node
-        if ((size1 + size2 + 1) > PAR_SIZE_THRESHOLD) {
-            *out = 3;
-            out++;
-            *(CursorTy *) out = out1;
-        } else {
-            *out = 5;
-        }
-#else
-        *out = 5;
-#endif
-
-        return (CursorCursorIntProd) {end_chunk2, out2, (size1 + size2 + 1)};
+        return (CursorCursorCursorIntProd) {end_chunk2, out2, out_scratch2, (size1 + size2 + 9)};
     } else {
         // C
-        CursorTy left = out + 9;
+
+        // start bounds check
+        if ((end_chunk - out) <= 30) {
+            ChunkTy new_chunk    = alloc_chunk(end_chunk);
+            CursorTy chunk_start = new_chunk.start_ptr;
+            CursorTy chunk_end   = new_chunk.end_ptr;
+
+            end_chunk = chunk_end;
+            *(TagTyPacked *) out = 100;
+            CursorTy redir = out + 1;
+            *(CursorTy *) redir = chunk_start;
+            out = chunk_start;
+        }
+
+        *out = 2;
+
+        // n
+        CursorTy out0 = out + 1;
+        *(IntTy *) out0 = n;
+        out0 += 8;
 
         // rec1
-        tmp = mkFoo(end_chunk, left, (n-1));
+        tmp = mkFoo(end_chunk, out0, out_scratch, (n-1));
         CursorTy end_chunk1 = tmp.field0;
         CursorTy out1 = tmp.field1;
-        IntTy size1 = tmp.field2;
+        CursorTy out_scratch1 = tmp.field2;
+        IntTy size1 = tmp.field3;
 
         // rec2
-        tmp = mkFoo(end_chunk1, out1, (n-2));
+        tmp = mkFoo(end_chunk1, out1, out_scratch1, (n-2));
         CursorTy end_chunk2 = tmp.field0;
         CursorTy out2 = tmp.field1;
-        IntTy size2 = tmp.field2;
+        CursorTy out_scratch2 = tmp.field2;
+        IntTy size2 = tmp.field3;
 
         // rec3
-        tmp = mkFoo(end_chunk2, out2, (n-3));
+        tmp = mkFoo(end_chunk2, out2, out_scratch2, (n-3));
         CursorTy end_chunk3 = tmp.field0;
         CursorTy out3 = tmp.field1;
-        IntTy size3 = tmp.field2;
+        CursorTy out_scratch3 = tmp.field2;
+        IntTy size3 = tmp.field3;
 
-#ifdef PARALLEL
-        // Conditionally write a BIG node
+        // Oops, this should've been a big node. Move things over,
+        // and make this a C_big.
         if ((size1 + size2 + size3 + 1) > PAR_SIZE_THRESHOLD) {
-            *out = 4;
+            // Write the old data here
+            memcpy(out_scratch3, out, 9);
+
+            // Redirect to scratch
+            *out = 100;
             out++;
+            *(CursorTy *) out = out_scratch3;
 
-            // Will leak memory...
-            CursorTy ran_storage = malloc(16);
-            if (ran_storage == NULL) {
-                printf("Couldn't malloc.\n");
-                exit(1);
-            }
+            // Make out_scratch3 a C_big
+            *out_scratch3 = 3;
+            out_scratch3 += 9;
 
-            *(CursorTy *) out = ran_storage;
+            // Write shortcuts to subtrees nodes
+            *(CursorTy *) out_scratch3 = out1;
+            out_scratch3 += 8;
+            *(CursorTy *) out_scratch3 = out2;
+            out_scratch3 += 8;
 
-            *(CursorTy *) ran_storage = out1;
-            ran_storage += 8;
-            *(CursorTy *) ran_storage = out2;
-        } else {
-            *out = 6;
+            // Redirect back to original buffer
+            *out_scratch3 = 100;
+            out_scratch3++;
+            *(CursorTy *) out_scratch3 = out + 8;
+            out_scratch3 += 8;
         }
-#else
-        *out = 6;
-#endif
 
-        return (CursorCursorIntProd) {end_chunk3, out3, (size1 + size2 + size3 + 1)};
+        return (CursorCursorCursorIntProd) {end_chunk3, out3, out_scratch3, (size1 + size2 + size3 + 17)};
     }
+}
+
+CursorIntProd sumFoo_seq(CursorTy in) {
+    TagTyPacked tag = *in;
+    CursorTy next = in + 1;
+
+    sumFoo_switch:
+    if (tag == 0) {
+        // A
+        IntTy n = *(IntTy *) next;
+        CursorTy next1 = next + 8;
+        return (CursorIntProd) {next1, n};
+    } else if (tag == 1) {
+        // B
+        IntTy p = *(IntTy *) next;
+        next += 8;
+
+        CursorIntProd tmp1 = sumFoo_seq(next);
+        CursorTy next1 = tmp1.field0;
+        IntTy n = tmp1.field1;
+
+        CursorIntProd tmp2 = sumFoo_seq(next1);
+        CursorTy next2 = tmp2.field0;
+        IntTy m = tmp2.field1;
+
+        return (CursorIntProd) {next2, n+m+p};
+    } else if (tag == 2) {
+        // C
+        IntTy p = *(IntTy *) next;
+        next += 8;
+
+        CursorIntProd tmp1 = sumFoo_seq(next);
+        CursorTy next1 = tmp1.field0;
+        IntTy n = tmp1.field1;
+
+        CursorIntProd tmp2 = sumFoo_seq(next1);
+        CursorTy next2 = tmp2.field0;
+        IntTy m = tmp2.field1;
+
+        CursorIntProd tmp3 = sumFoo_seq(next2);
+        CursorTy next3 = tmp3.field0;
+        IntTy o = tmp3.field1;
+
+        return (CursorIntProd) {next3, (p+n+m+o)};
+
+    } else if (tag == 90) {
+        CursorTy tmpcur = *(CursorTy *) next;
+        TagTyPacked new_tag = *tmpcur;
+        CursorTy new_next = tmpcur + 1;
+
+        tag = new_tag;
+        next = new_next;
+        goto sumFoo_switch;
+
+    } else if (tag == 100) {
+        CursorTy tmpcur = *(CursorTy *) next;
+        TagTyPacked new_tag = *tmpcur;
+        CursorTy new_next = tmpcur + 1;
+
+        tag = new_tag;
+        next = new_next;
+        goto sumFoo_switch;
+
+    } else {
+        printf("sumFoo: couldn't match tag: %c", tag);
+        exit(1);
+    }
+
 }
 
 CursorIntProd sumFoo(CursorTy in) {
@@ -514,9 +610,11 @@ CursorIntProd sumFoo(CursorTy in) {
         IntTy n = *(IntTy *) next;
         CursorTy next1 = next + 8;
         return (CursorIntProd) {next1, n};
-    } else if (tag == 5) {
-        // B_tmp
+    } else if (tag == 1) {
+        // B
+        IntTy p = *(IntTy *) next;
         next += 8;
+
         CursorIntProd tmp1 = sumFoo(next);
         CursorTy next1 = tmp1.field0;
         IntTy n = tmp1.field1;
@@ -525,50 +623,21 @@ CursorIntProd sumFoo(CursorTy in) {
         CursorTy next2 = tmp2.field0;
         IntTy m = tmp2.field1;
 
-        return (CursorIntProd) {next2, (n+m)};
-    } else if (tag == 6) {
-        // C_tmp
-        next += 8;
-        CursorIntProd tmp1 = sumFoo(next);
-        CursorTy next1 = tmp1.field0;
-        IntTy n = tmp1.field1;
-
-        CursorIntProd tmp2 = sumFoo(next1);
-        CursorTy next2 = tmp2.field0;
-        IntTy m = tmp2.field1;
-
-        CursorIntProd tmp3 = sumFoo(next2);
-        CursorTy next3 = tmp3.field0;
-        IntTy o = tmp3.field1;
-
-        return (CursorIntProd) {next3, (n+m+o)};
+        return (CursorIntProd) {next2, n+m+p};
+    } else if (tag == 2) {
+        // C
+        return sumFoo_seq(in);
 
     } else if (tag == 3) {
-        // B_big
-        CursorTy ran1 = *(CursorTy *) next;
-        next += 8;
-
-        CursorIntProd tmp1 = sumFoo(next);
-        CursorIntProd tmp2 = cilk_spawn sumFoo(ran1);
-        cilk_sync;
-
-        CursorTy next1 = tmp1.field0;
-        IntTy n = tmp1.field1;
-        CursorTy next2 = tmp2.field0;
-        IntTy m = tmp2.field1;
-
-        return (CursorIntProd) {next2, (n+m)};
-
-    } else if (tag == 4) {
         // C_big
 
-        CursorTy ran_storage = *(CursorTy *) next;
+        IntTy p = *(IntTy *) next;
         next += 8;
 
-        CursorTy ran1 = *(CursorTy *) ran_storage;
-        ran_storage += 8;
-        CursorTy ran2 = *(CursorTy *) ran_storage;
-        ran_storage += 8;
+        CursorTy ran1 = *(CursorTy *) next;
+        next += 8;
+        CursorTy ran2 = *(CursorTy *) next;
+        next += 8;
 
         CursorIntProd tmp1 = sumFoo(next);
         CursorIntProd tmp2 = cilk_spawn sumFoo(ran1);
@@ -582,7 +651,7 @@ CursorIntProd sumFoo(CursorTy in) {
         CursorTy next3 = tmp3.field0;
         IntTy o = tmp3.field1;
 
-        return (CursorIntProd) {next3, (n+m+o)};
+        return (CursorIntProd) {next3, (p+n+m+o)};
 
     } else if (tag == 90) {
         CursorTy tmpcur = *(CursorTy *) next;
@@ -610,7 +679,6 @@ CursorIntProd sumFoo(CursorTy in) {
 }
 
 int main (int argc, char** argv) {
-    int reg_size = 1 * MB;
 
     if (argc < 1) {
         printf("USAGE: sumtree.exe SIZE");
@@ -627,14 +695,18 @@ int main (int argc, char** argv) {
     struct timespec end_timed;
 
     // Allocate region for mkFoo.
-    RegionTy *region1 = alloc_region(reg_size);
+    RegionTy *region1 = alloc_region(1 * MB);
     CursorTy r1 = region1->start_ptr;
-    CursorTy end_r1 = r1 + reg_size;
+    CursorTy end_r1 = r1 + (1 * MB);
+    // For the offset table.
+    RegionTy *region2 = alloc_region(2 * GB);
+    CursorTy r2 = region2->start_ptr;
+    CursorTy end_r2 = r2 + (1 * GB);
 
-    CursorCursorIntProd foo;
+    CursorCursorCursorIntProd foo;
     for (int i = 0; i < iters; i++) {
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed);
-        foo = mkFoo(end_r1, r1, tree_depth);
+        foo = mkFoo(end_r1, r1, r2, tree_depth);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_timed);
         selftimed = difftimespecs(&begin_timed, &end_timed);
         nums[i] = selftimed;
@@ -647,14 +719,9 @@ int main (int argc, char** argv) {
     // printFoo(r1);
     // printf("\n");
 
-    double tree_size = foo.field2;
-    if (tree_size > (1 * MB)) {
-        printf("Total size: %.0lfM\n", (double) (tree_size / (1 * MB)));
-    } else if (tree_size > (1 * KB)) {
-        printf("Total size: %.0lfK\n", (double) (tree_size / (1 * KB)));
-    } else {
-        printf("Total size: %.0lf bytes\n", tree_size);
-    }
+    IntTy tree_size = foo.field3;
+    print_size("Total size:", tree_size);
+    print_size("Size of scratchpad (Data + RAN's):", (foo.field2 - r2));
 
     CursorIntProd sum;
 

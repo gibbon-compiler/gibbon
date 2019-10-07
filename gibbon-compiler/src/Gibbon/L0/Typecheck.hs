@@ -46,7 +46,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
                 Nothing -> pure Nothing
                 Just (e,gvn_main_ty) -> do
                   let tc = do (s1, drvd_main_ty, e_tc) <-
-                                tcExp ddefs emptySubst M.empty init_fenv [] e
+                                tcExp ddefs emptySubst M.empty init_fenv [] True e
                               s2 <- unify e gvn_main_ty drvd_main_ty
                               -- let e_tc' = fixTyApps s1 e_tc
                               pure (s1 <> s2, zonkTy s2 drvd_main_ty, e_tc)
@@ -64,7 +64,7 @@ tcFun ddefs fenv fn@FunDef{funArgs,funTy,funBody} = do
         init_venv = M.fromList $ zip funArgs $ map (ForAll []) gvn_arg_tys
         init_s = emptySubst
     (s1, drvd_funBody_ty, funBody_tc) <-
-      tcExp ddefs init_s init_venv fenv tyvars funBody
+      tcExp ddefs init_s init_venv fenv tyvars False funBody
     s2 <- unify funBody drvd_funBody_ty gvn_retty
     pure $ fn { funTy   = zonkTyScheme (s1 <> s2) funTy
               , funBody = zonkExp (s1 <> s2) funBody_tc }
@@ -73,17 +73,17 @@ tcFun ddefs fenv fn@FunDef{funArgs,funTy,funBody} = do
     Right fn1 -> pure fn1
 
 tcExps :: DDefs0 -> Subst -> Gamma -> Gamma -> [TyVar]
-       -> [L Exp0] -> TcM (Subst, [Ty0], [L Exp0])
+       -> [(Bool, L Exp0)] -> TcM (Subst, [Ty0], [L Exp0])
 tcExps ddefs sbst venv fenv bound_tyvars ls = do
   (sbsts,tys,exps) <- unzip3 <$> mapM go ls
   pure (foldl (<>) sbst sbsts, tys, exps)
   where
-    go = tcExp ddefs sbst venv fenv bound_tyvars
+    go (is_main, e) = tcExp ddefs sbst venv fenv bound_tyvars is_main e
 
 --
 tcExp :: DDefs0 -> Subst -> Gamma -> Gamma -> [TyVar]
-      -> L Exp0 -> TcM (Subst, Ty0, L Exp0)
-tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc c)) <$>
+      -> Bool -> L Exp0 -> TcM (Subst, Ty0, L Exp0)
+tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b, L loc c)) <$>
   case ex of
     VarE x -> do
       (metas, ty) <-
@@ -108,10 +108,10 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
       if isCallUnsaturated sigma args
       then do
         e' <- saturateCall sigma e
-        (s1, e_ty, e'') <- tcExp ddefs sbst venv fenv bound_tyvars e'
+        (s1, e_ty, e'') <- tcExp ddefs sbst venv fenv bound_tyvars is_main e'
         pure (s1, e_ty, unLoc e'')
       else do
-        (s2, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
+        (s2, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) args)
         let fn_ty_inst' = zonkTy s2 fn_ty_inst
         s3 <- unifyl e (arrIns' fn_ty_inst') arg_tys
         fresh <- newMetaTy
@@ -123,7 +123,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
         pure (s5, zonkTy s5 fresh, AppE f tyapps (map (zonkExp s5) args_tc))
 
     PrimAppE pr args -> do
-      (s1, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
+      (s1, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) args)
 
       let arg_tys' = map (zonkTy s1) arg_tys
           checkLen :: Int -> TcM ()
@@ -137,7 +137,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
           len0 = checkLen 0
           len1 = checkLen 1
           len2 = checkLen 2
-          len3 = checkLen 3
+          _len3 = checkLen 3
           len4 = checkLen 4
 
           mk_bools = do
@@ -257,7 +257,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
           drvd_rhs_ty' = zonkTy s3 drvd_rhs_ty
       (s4, rhs_ty_gen) <- generalize venv' s3 bound_tyvars drvd_rhs_ty'
       let venv''     = M.insert v rhs_ty_gen venv'
-      (s5, bod_ty, bod_tc) <- tcExp ddefs s4 venv'' fenv bound_tyvars bod
+      (s5, bod_ty, bod_tc) <- tcExp ddefs s4 venv'' fenv bound_tyvars is_main bod
       pure (s5, bod_ty,
             LetE (v, [], zonkTy s4 gvn_rhs_ty, zonkExp s4 rhs_tc) (zonkExp s5 bod_tc))
 
@@ -265,8 +265,8 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
 
     IfE a b c -> do
       (s1, t1, a_tc) <- go a
-      (s2, t2, b_tc) <- tcExp ddefs s1 venv fenv bound_tyvars b
-      (s3, t3, c_tc) <- tcExp ddefs s2 venv fenv bound_tyvars c
+      (s2, t2, b_tc) <- tcExp ddefs s1 venv fenv bound_tyvars is_main b
+      (s3, t3, c_tc) <- tcExp ddefs s2 venv fenv bound_tyvars is_main c
       s4 <- unify a t1 BoolTy
       s5 <- unify e t2 t3
       let s6 = s3 <> s4 <> s5
@@ -274,7 +274,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
             IfE (zonkExp s6 a_tc) (zonkExp s6 b_tc) (zonkExp s6 c_tc))
 
     MkProdE es -> do
-      (s1, es_tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars es
+      (s1, es_tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) es)
       pure (s1, ProdTy es_tys, MkProdE es_tc)
 
     ProjE i a -> do
@@ -295,7 +295,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
                      then do
                        let ddf = lookupDDef ddefs tycon
                        ddf' <- substTyVarDDef ddf drvd_tyargs
-                       (s2,t2,brs_tc) <- tcCases ddefs s1 venv fenv bound_tyvars ddf' brs e
+                       (s2,t2,brs_tc) <- tcCases ddefs s1 venv fenv bound_tyvars ddf' brs is_main e
                        pure (s2, t2, CaseE scrt_tc brs_tc)
                      else err $ text "Couldn't match" <+> doc one
                                 <+> "with:" <+> doc scrt_ty
@@ -309,7 +309,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
 
     DataConE _tyapps dcon args -> do
       (metas, arg_tys_inst, ret_ty_inst) <- instDataConTy ddefs dcon
-      (s1, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars args
+      (s1, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) args)
       s2 <- unifyl e arg_tys_inst arg_tys
       let s3 = s1 <> s2
           tyapps = ProdTy (map (zonkTy s3) metas)
@@ -325,7 +325,7 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
                                  pure (fs ++ [fresh], env', s1 <> s))
                                ([],venv, sbst)
                                args
-      (s4, bod_ty, bod_tc) <- tcExp ddefs s3 venv' fenv bound_tyvars bod
+      (s4, bod_ty, bod_tc) <- tcExp ddefs s3 venv' fenv bound_tyvars is_main bod
       return (s4, zonkTy s4 (ArrowTy freshs bod_ty),
               Ext (LambdaE (map (\(v,ty) -> (v, zonkTy s4 ty)) args) (zonkExp s4 bod_tc)))
     Ext (PolyAppE{}) -> err $ text "TODO" <+> exp_doc
@@ -338,6 +338,16 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
           (_, Just t) -> instantiate t
       pure (sbst, ty, Ext $ FunRefE tyapps f)
 
+    Ext (BenchE fn tyapps args b) ->
+      if is_main
+      then do
+        (s1, ty, e') <- go (l$ AppE fn tyapps args)
+        case unLoc e' of
+          AppE fn' tyapps' args' ->
+            pure (s1, zonkTy s1 ty, Ext (BenchE fn' tyapps' args' b))
+          _ -> err $ text "BenchE"
+      else err $ text "'bench' can only be used as a tail of the main expression." <+> exp_doc
+
     TimeIt a ty b -> do
       (s1, ty', a') <- go a
       s2 <- unify e ty ty'
@@ -346,11 +356,11 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
 
     WithArenaE v e1 -> do
       let venv' = M.insert v (ForAll [] ArenaTy) venv
-      (s1, ty', e1') <- tcExp ddefs sbst venv' fenv bound_tyvars e1
+      (s1, ty', e1') <- tcExp ddefs sbst venv' fenv bound_tyvars is_main e1
       pure (s1, ty', WithArenaE v e1')
 
     ParE a b  -> do
-      (s1, es_tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars [a,b]
+      (s1, es_tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) [a,b])
       case es_tc of
         [a',b'] -> pure (s1, ProdTy es_tys, ParE a' b')
         _ -> err $ text "ParE: expected list of two things, got: " <+> doc es_tc
@@ -358,14 +368,14 @@ tcExp ddefs sbst venv fenv bound_tyvars e@(L loc ex) = (\(a,b,c) -> (a,b, L loc 
     MapE{}  -> err $ text "TODO" <+> exp_doc
     FoldE{} -> err $ text "TODO" <+> exp_doc
   where
-    go = tcExp ddefs sbst venv fenv bound_tyvars
+    go = tcExp ddefs sbst venv fenv bound_tyvars is_main
     exp_doc = "In the expression: " <+> doc ex
 
 
 tcCases :: DDefs0 -> Subst -> Gamma -> Gamma -> [TyVar]
-        -> DDef0 -> [(DataCon, [(Var, Ty0)], L Exp0)] -> L Exp0
+        -> DDef0 -> [(DataCon, [(Var, Ty0)], L Exp0)] -> Bool -> L Exp0
         -> TcM (Subst, Ty0, [(DataCon, [(Var, Ty0)], L Exp0)])
-tcCases ddefs sbst venv fenv bound_tyvars ddf brs ex = do
+tcCases ddefs sbst venv fenv bound_tyvars ddf brs is_main ex = do
   (s1,tys,exps) <-
     foldlM
       (\(s,acc,ex_acc) (con,vtys,rhs) -> do
@@ -374,7 +384,7 @@ tcCases ddefs sbst venv fenv bound_tyvars ddf brs ex = do
             tys_gen = map (ForAll (tyArgs ddf \\ bound_tyvars)) tys
             venv' = venv <> (M.fromList $ zip vars tys_gen)
             vtys' = zip vars tys
-        (s', rhs_ty, rhs_tc) <- tcExp ddefs s venv' fenv bound_tyvars rhs
+        (s', rhs_ty, rhs_tc) <- tcExp ddefs s venv' fenv bound_tyvars is_main rhs
         let rhs_ty' = zonkTy s' rhs_ty
             rhs_tc' = zonkExp s' rhs_tc
         pure (s', acc ++ [rhs_ty'], ex_acc ++ [(con,vtys',rhs_tc')]))
@@ -533,6 +543,8 @@ zonkExp s (L p ex) = L p $
     Ext (PolyAppE rator rand) -> Ext (PolyAppE (go rator) (go rand))
     Ext (FunRefE tyapps f)    -> let tyapps1 = map (zonkTy s) tyapps
                                  in Ext (FunRefE tyapps1 f)
+    Ext (BenchE fn tyapps args b) -> let tyapps1 = map (zonkTy s) tyapps
+                                     in Ext (BenchE fn tyapps1 (map go args) b)
     ParE a b -> ParE (go a) (go b)
     MapE{}   -> error $ "zonkExp: TODO, " ++ sdoc ex
     FoldE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
@@ -587,6 +599,8 @@ substTyVarExp s (L p ex) = L p $
     Ext (PolyAppE rator rand) -> Ext (PolyAppE (go rator) (go rand))
     Ext (FunRefE tyapps f) -> let tyapps1 = map (substTyVar s) tyapps
                               in Ext $ FunRefE tyapps1 f
+    Ext (BenchE fn tyapps args b) -> let tyapps1 = map (substTyVar s) tyapps
+                                     in Ext (BenchE fn tyapps1 (map go args) b)
     ParE a b -> ParE (go a) (go b)
     MapE{}   -> error $ "substTyVarExp: TODO, " ++ sdoc ex
     FoldE{}  -> error $ "substTyVarExp: TODO, " ++ sdoc ex

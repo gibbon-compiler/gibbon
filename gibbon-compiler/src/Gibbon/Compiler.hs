@@ -312,7 +312,7 @@ parseInput ip fp = do
   where mono_and_spec :: PassM L0.Prog0 -> IO (PassM L1.Prog1)
         mono_and_spec pm_l0 = let passes = do
                                     l0 <- pm_l0
-                                    dbgTrace 5 ("\n\nParsed:\n" ++ (render $ pprint l0)) (pure ())
+                                    dbgTrace 5 ("\n\nParsed:\n" ++ (sdoc l0)) (pure ())
                                     l0 <- freshNames l0
                                     dbgTrace 5 ("\n\nFreshen:\n" ++ (render $ pprint l0)) (pure ())
                                     l0 <- L0.tcProg l0

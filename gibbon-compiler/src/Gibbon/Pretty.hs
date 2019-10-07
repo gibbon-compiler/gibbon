@@ -54,21 +54,29 @@ instance HasPretty ex => Pretty (Prog ex) where
     pprintWithStyle sty (Prog ddefs funs me) =
         let meDoc = case me of
                       Nothing -> empty
-                      Just (e,ty) -> renderMain (pprintWithStyle sty e) (pprintWithStyle sty ty)
+                      -- Uh, we need versions of hasBenchE for L0, L2 and L3 too :
+                      -- Assume False for now.
+                      Just (e,ty) -> renderMain False (pprintWithStyle sty e) (pprintWithStyle sty ty)
             ddefsDoc = vcat $ map (pprintWithStyle sty) $ M.elems ddefs
             funsDoc = vcat $ map (pprintWithStyle sty) $ M.elems funs
         in case sty of
              PPInternal -> ddefsDoc $+$ funsDoc $+$ meDoc
-             PPHaskell  -> ghc_compat_prefix $+$ ddefsDoc $+$ funsDoc $+$ meDoc $+$ ghc_compat_suffix
+             PPHaskell  -> ghc_compat_prefix False $+$ ddefsDoc $+$ funsDoc $+$ meDoc $+$ ghc_compat_suffix False
 
-renderMain :: Doc -> Doc -> Doc
-renderMain m ty = text "gibbon_main" <+> doublecolon <+> ty
-                    $$ text "gibbon_main" <+> equals $$ nest indentLevel m
+renderMain :: Bool -> Doc -> Doc -> Doc
+renderMain has_bench m ty =
+  (if has_bench
+   then text "gibbon_main" <+> doublecolon <+> "IO ()"
+   else text "gibbon_main" <+> doublecolon <+> ty) $+$
+  text "gibbon_main" <+> equals $$ nest indentLevel m
 
 -- Things we need to make this a valid compilation unit for GHC:
-ghc_compat_prefix, ghc_compat_suffix :: Doc
-ghc_compat_prefix =
+ghc_compat_prefix, ghc_compat_suffix :: Bool -> Doc
+ghc_compat_prefix has_bench =
   text "{-# LANGUAGE ScopedTypeVariables #-}" $+$
+  text "{-# LANGUAGE DeriveGeneric       #-}" $+$
+  text "{-# LANGUAGE DeriveAnyClass      #-}" $+$
+  text "{-# LANGUAGE DerivingStrategies  #-}" $+$
   text "" $+$
   text "module Main where" $+$
   text "" $+$
@@ -78,11 +86,22 @@ ghc_compat_prefix =
   text "                    , Int, (+), (-), (*), quot, (<), (>), (<=), (>=), (^), mod" $+$
   text "                    , Bool(..), (||), (&&)" $+$
   text "                    , String, (++)" $+$
-  text "                    , Show)" $+$
+  text "                    , Show, IO)" $+$
   text "" $+$
   text "import Data.Maybe (fromJust, isJust)" $+$
   text "" $+$
   text "" $+$
+  (if has_bench
+   then (text "import Criterion (nf, benchmark, bench)" $+$
+         text "import Control.DeepSeq (force, NFData)" $+$
+         text "import GHC.Generics" $+$
+         text "" $+$
+         text "gibbon_bench :: (NFData a, NFData b) => String -> (a -> b) -> a -> IO ()" $+$
+         text "gibbon_bench str fn arg = benchmark (nf fn (force arg))" $+$
+         text "" $+$
+         text "")
+   else (text "gibbon_bench :: String -> (a -> b) -> a -> IO ()" $+$
+         text "gibbon_bench _str fn arg = fn arg")) $+$
   text "type Sym = String" $+$
   text "" $+$
   text "type Dict a = [(Sym,a)]" $+$
@@ -124,7 +143,10 @@ ghc_compat_prefix =
     --                 text "timeit = id\n" $+$
     --                 text "sizeParam = 4"
 
-ghc_compat_suffix = text "\nmain = print gibbon_main"
+ghc_compat_suffix has_bench =
+  if has_bench
+  then "\nmain = gibbon_main"
+  else text "\nmain = print gibbon_main"
 
 -- Functions:
 instance HasPretty ex => Pretty (FunDef ex) where
@@ -145,7 +167,7 @@ instance Pretty ex => Pretty (DDef ex) where
                                         text d <+> hsep (map (\(_,b) -> pprintWithStyle sty b) args))
                                    dataCons)
           <+> (if sty == PPHaskell
-               then text "\n  deriving Show \n"
+               then text "\n  deriving Show"
                else empty)
 
 
@@ -326,8 +348,12 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                                             vls))
                                <+> text "->" $+$ nest indentLevel (pprintWithStyle sty e)
 -- L1
-instance Pretty (NoExt l d) where
-    pprintWithStyle _ _ = error "impossible"
+instance (Pretty l, Pretty d, Ord d) => Pretty (E1Ext l d) where
+    pprintWithStyle sty ext =
+      case ext of
+        BenchE fn tyapps args b -> text "gibbon_bench" <+> (doubleQuotes $ text "") <+> text (fromVar fn) <+>
+                                   (brackets $ hcat (punctuate "," (map pprint tyapps))) <+>
+                                   (pprintWithStyle sty args) <+> text (if b then "true" else "false")
 
 -- L2
 instance Pretty l => Pretty (L2.PreLocExp l) where
@@ -403,6 +429,9 @@ instance (Out a, Pretty a) => Pretty (L0.E0Ext a L0.Ty0) where
                                          $$ nest indentLevel (pprint bod))
       L0.FunRefE tyapps f -> parens $ text "fn:" <> pprintWithStyle sty f <+> (brackets $ hcat (punctuate "," (map pprint tyapps)))
       L0.PolyAppE{} -> doc ex0
+      L0.BenchE fn tyapps args b -> text "bench" <+> text (fromVar fn) <+>
+                                    (brackets $ hcat (punctuate "," (map pprint tyapps))) <+>
+                                    (pprintWithStyle sty args) <+> text (if b then "true" else "false")
 
 
 --------------------------------------------------------------------------------
@@ -426,14 +455,45 @@ But that would be  a big refactor.
 
 pprintHsWithEnv :: Prog1 -> Doc
 pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
-  let env2     = progToEnv p
-      meDoc    = case mainExp of
-                   Nothing     -> empty
-                   Just (e,ty) -> renderMain (ppExp env2 e) (pprintWithStyle sty ty)
-      ddefsDoc = vcat $ map (pprintWithStyle sty) $ M.elems ddefs
+  let env2 = progToEnv p
+      (meDoc,sfx, main_has_bench) =
+        case mainExp of
+          Nothing     -> (empty, empty, False)
+          Just (e,ty) -> let main_has_bench1 = hasBenchE e in
+                         ( renderMain main_has_bench1 (ppExp env2 e) (pprintWithStyle sty ty)
+                         , ghc_compat_suffix main_has_bench1
+                         , main_has_bench1)
+      mb_derive_more d = if main_has_bench
+                         then d $$ (text "  deriving (Generic, NFData)" $$ text "")
+                         else d
+      ddefsDoc = vcat $ map (mb_derive_more . pprintWithStyle sty) $ M.elems ddefs
       funsDoc  = vcat $ map (ppFun env2) $ M.elems fundefs
-  in ghc_compat_prefix $+$ ddefsDoc $+$ funsDoc $+$ meDoc $+$ ghc_compat_suffix
+  in (ghc_compat_prefix main_has_bench) $+$ ddefsDoc $+$ funsDoc $+$ meDoc $+$ sfx
   where
+    -- | Verify some assumptions about BenchE.
+    hasBenchE :: L Exp1 -> Bool
+    hasBenchE (L _ ex) =
+      case ex of
+        Ext (BenchE{}) -> True
+        -- Straightforward recursion ...
+        VarE{}     -> False
+        LitE{}     -> False
+        LitSymE{}  -> False
+        AppE{}     -> False
+        PrimAppE{} -> False
+        DataConE{} -> False
+        ProjE _ _  -> False
+        IfE _ b c  -> (go b) || (go c)
+        MkProdE _  -> False
+        LetE _ bod -> go bod
+        CaseE _ mp -> any (== True) $ map (\(_,_,c) -> go c) mp
+        TimeIt{}   -> False
+        ParE{} -> error "hasBenchE: TODO ParE"
+        WithArenaE _ e -> (go e)
+        MapE{}  -> error $ "hasBenchE: TODO MapE"
+        FoldE{} -> error $ "hasBenchE: TODO FoldE"
+      where go = hasBenchE
+
     sty = PPHaskell
 
     ppFun :: Env2 Ty1 -> FunDef1 -> Doc
@@ -452,10 +512,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
           LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
-          AppE v locs ls -> pprintWithStyle sty v <+>
-                            (if null locs
-                             then empty
-                             else brackets $ hcat (punctuate "," (map pprint locs))) <+>
+          AppE v _locs ls -> pprintWithStyle sty v <+>
                             (hsep $ map (ppExp env2) ls)
           PrimAppE pr es ->
               case pr of
@@ -512,11 +569,8 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                 ty -> error $ "pprintHsWithEnv: " ++ sdoc ty ++ "is not a product. In " ++ sdoc ex0
           CaseE e bnds -> text "case" <+> ppExp env2 e <+> text "of" $+$
                           nest indentLevel (vcat $ map (dobinds env2) bnds)
-          DataConE loc dc es ->
+          DataConE _loc dc es ->
                               parens $ text dc <+>
-                              (if isEmpty (pprintWithStyle sty loc)
-                               then empty
-                               else pprintWithStyle sty loc) <+>
                               hsep (map (ppExp env2) es)
           TimeIt e _ty _b -> text "timeit" <+> parens (ppExp env2 e)
           ParE a b -> ppExp env2 a <+> text ".||." <+> ppExp env2 b
@@ -527,7 +581,9 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                             text "in" $+$
                             ppExp env2 e
           -- text "letarena" <+> pprint v <+> text "in" $+$ ppExp env2 e
-          Ext{}  -> empty -- L1 doesn't have an extension.
+          Ext (BenchE fn _locs args _b) ->
+            let args_doc = hsep $ map (ppExp env2) args
+            in text "gibbon_bench" <+> (doubleQuotes (text (fromVar fn) <+> args_doc)) <+> text (fromVar fn) <+> args_doc
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{}-> error $ "Unexpected form in program: FoldE"
         where

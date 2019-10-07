@@ -296,6 +296,10 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
             Just f' -> pure $ Ext $ FunRefE tyapps (cleanFunName f')
         PolyAppE{} -> error "freshExp: TODO, PolyAppE."
 
+        BenchE fn tyapps args b -> do
+          args' <- mapM go args
+          pure $ Ext (BenchE (cleanFunName fn) tyapps args' b)
+
   where go = freshExp venv tvenv
 
 
@@ -303,7 +307,6 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
 freshExp1 :: VarEnv -> L L1.Exp1 -> PassM (L L1.Exp1)
 freshExp1 vs (L sloc exp) = fmap (L sloc) $
   case exp of
-    Ext _     -> return exp
     LitE i    -> return $ LitE i
     LitSymE v -> return $ LitSymE v
 
@@ -373,3 +376,7 @@ freshExp1 vs (L sloc exp) = fmap (L sloc) $
       e2' <- freshExp1 vs e2
       e3' <- freshExp1 vs e3
       return $ FoldE (v1,t1,e1') (v2,t2,e2') e3'
+
+    Ext (L1.BenchE fn tyapps args b) -> do
+      args' <- mapM (freshExp1 vs) args
+      pure $ Ext (L1.BenchE (cleanFunName fn) tyapps args' b)

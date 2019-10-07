@@ -13,38 +13,47 @@ import           Gibbon.L3.Syntax
 -- | Directly convert the source program to L3. Used in the pointer mode
 --
 directL3 :: Prog1 -> PassM Prog3
-directL3 (Prog ddfs fndefs mnExp) = do
+directL3 prg@(Prog ddfs fndefs mnExp) = do
     let mnExp' = case mnExp of
                    Nothing -> Nothing
-                   Just (ex,ty) -> Just (go ex, ty)
+                   Just (ex,ty) -> Just (go init_fun_env ex, ty)
         fndefs' = M.map fd fndefs
     return (Prog ddfs fndefs' mnExp')
   where
+    init_fun_env = progToEnv prg
+
     fd :: FunDef1 -> FunDef3
     fd FunDef{funName,funArgs,funTy,funBody} =
+        let env2 = extendsVEnv (M.fromList $ zip funArgs (fst funTy)) init_fun_env in
         FunDef { funName = funName
                , funTy   = (map goTy $ fst funTy, goTy $ snd funTy)
                , funArgs = funArgs
-               , funBody = go funBody }
+               , funBody = go env2 funBody }
 
-    go :: L Exp1 -> L Exp3
-    go (L p ex) = L p $
+    go :: Env2 Ty1 -> L Exp1 -> L Exp3
+    go env2 (L p ex) = L p $
       case ex of
         VarE v    -> VarE v
         LitE n    -> LitE n
         LitSymE v -> LitSymE v
-        AppE v locs ls   -> AppE v locs $ map go ls
-        PrimAppE pr args -> PrimAppE pr $ L.map go args
-        LetE (v,locs,ty,rhs) bod -> LetE (v, locs, goTy ty, go rhs) $ go bod
-        IfE a b c   -> IfE (go a) (go b) (go c)
-        MkProdE ls  -> MkProdE $ L.map go ls
-        ProjE i arg -> ProjE i $ go arg
-        CaseE scrt ls -> CaseE (go scrt) $ L.map (\(dcon,vs,rhs) -> (dcon,vs,go rhs)) ls
-        DataConE loc dcon args -> DataConE loc dcon $ L.map go args
-        TimeIt arg ty b -> TimeIt (go arg) ty b
-        ParE a b -> ParE (go a) (go b)
-        WithArenaE a e -> WithArenaE a $ go e
-        Ext _   -> error "directL3: Ext"
+        AppE v locs ls   -> AppE v locs $ map (go env2) ls
+        PrimAppE pr args -> PrimAppE pr $ L.map (go env2) args
+        LetE (v,locs,ty,rhs) bod -> LetE (v, locs, goTy ty, go env2 rhs) $
+                                      go (extendVEnv v ty env2) bod
+        IfE a b c   -> IfE (go env2 a) (go env2 b) (go env2 c)
+        MkProdE ls  -> MkProdE $ L.map (go env2) ls
+        ProjE i arg -> ProjE i $ go env2 arg
+        CaseE scrt ls -> CaseE (go env2 scrt) $
+                           L.map (\(dcon,vs,rhs) -> (dcon,vs,go env2 rhs)) ls
+        DataConE loc dcon args -> DataConE loc dcon $ L.map (go env2) args
+        TimeIt arg ty b -> TimeIt (go env2 arg) ty b
+        ParE a b -> ParE (go env2 a) (go env2 b)
+        WithArenaE a e -> WithArenaE a $ go env2 e
+        Ext (BenchE fn _locs args b) ->
+          let fn_ty  = lookupFEnv fn env2
+              ret_ty = snd fn_ty
+              ex'    = l$ TimeIt (l$ AppE fn [] args) ret_ty b
+          in unLoc $ go env2 ex'
         MapE{}  -> error "directL3: todo MapE"
         FoldE{} -> error "directL3: todo FoldE"
 

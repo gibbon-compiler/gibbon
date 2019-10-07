@@ -995,7 +995,13 @@ inferExp env@FullEnv{dataDefs}
     LetE{} -> err$ "Malformed let expression: " ++ (show ex0)
     MapE{} -> err$ "MapE unsupported"
     FoldE{} -> err$ "FoldE unsupported"
-    Ext{} -> err$ "Not expecting an Ext here: " ++ sdoc ex0
+    -- Just-in-time convert this to TimeIt
+    Ext (BenchE fn locs args b) ->
+      let fn_ty = lookupFEnv fn env
+          retty :: Ty2
+          retty = outTy fn_ty
+          e' = l$ TimeIt (l$ AppE fn locs args) (stripTyLocs retty) b
+      in inferExp env e' dest
 
 
 -- TODO: Should eventually allow src and dest regions to be the same
