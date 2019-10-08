@@ -308,7 +308,7 @@ tests:
 
   - name: LC.hs
     dir: examples/ast
-    failing: [pointer, gibbon1, gibbon2]
+    failing: [gibbon1, gibbon2]
     # gibbon2: segfaults in free_region
     answer-file: examples/ast/LC.ans
 
