@@ -1338,15 +1338,19 @@ fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
     let step3 = foldFusedCallsF (outerVar, innerVar, -1, newName)    step2' `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint   step2'))
     let step4 = L.foldl (flip foldFusedCallsF ) step3 prevFusedFuncs `debug`   ("newName is :" L.++ (show newName)   L.++ render (pprint step3))
     let step5 = step4 {funBody = removeUnusedDefsExp  (funBody step4)} `debug` ("newName is :" L.++ (show newName)   L.++ render (pprint step4))
-    return (True, newName, M.insert newName step5 fdefs)
+    if( M.member newName fdefs)
+       then return  (True, newName, fdefs) `debug1` ("WE ARE FASTER")
+       else return (True, newName, M.insert newName step5 fdefs)
 
 violateRestrictions :: FunDefs1 -> Var -> Var ->Int -> Bool
 violateRestrictions fdefs inner outer depth=
   let n =  quot (countFUS (fromVar inner)) 2 + quot (countFUS (fromVar outer)) 2 + 2
     in -- should be configurable
-  let p0 = (n >4)
+  let p0 =
+  -- (depth>6) &&
+       (n >10)
      -- &&  (n>5)
-        `debug1` ( "n is " L.++ (show n) L.++ "for" L.++ (show inner ) L.++ (show outer)) in
+        `debug` ( "n is " L.++ (show n) L.++ "for" L.++ (show inner ) L.++ (show outer)) in
   let innerDef =
         case M.lookup inner fdefs of
           (Just v) -> v
@@ -1494,14 +1498,14 @@ fusion2 (L1.Prog defs funs main) = do
       Just (mainBody, ty) -> do
         (mainBody', newDefs, fuseInfo) <-
           fuse_pass defs funs (FusePassParams mainBody [] [] [] 0)
-        let newDefs' = M.map
-               (\fdef -> if L.isPrefixOf "_FUS" (fromVar (funName fdef))
-                          then    L.foldl (flip foldFusedCallsF ) fdef fuseInfo
-                          else fdef
-               ) newDefs
-    --    (mainBody'', newDefs') <- tupleAndOptimize defs (M.union funs newDefs) mainBody' True
-     --   return (Just (mainBody'', ty), newDefs')
-        return (Just (mainBody', ty), newDefs')
+        -- let newDefs' = M.map
+        --        (\fdef -> if L.isPrefixOf "_FUS" (fromVar (funName fdef))
+        --                   then    L.foldl (flip foldFusedCallsF ) fdef fuseInfo
+        --                   else fdef
+        --        ) newDefs
+        (mainBody'', newDefs') <- tupleAndOptimize defs (M.union funs newDefs) mainBody' True
+        return (Just (mainBody'', ty), newDefs')
+       -- return (Just (mainBody', ty), newDefs')
   return $ L1.Prog defs funs' main'
 
 
