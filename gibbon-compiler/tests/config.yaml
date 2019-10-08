@@ -308,7 +308,8 @@ tests:
 
   - name: LC.hs
     dir: examples/ast
-    failing: [gibbon2] # segfaults in free_region
+    failing: [pointer, gibbon1, gibbon2]
+    # gibbon2: segfaults in free_region
     answer-file: examples/ast/LC.ans
 
   ## A difficult test for AddTraversals.

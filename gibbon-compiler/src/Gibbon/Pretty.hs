@@ -68,7 +68,7 @@ renderMain has_bench m ty =
   (if has_bench
    then text "gibbon_main" <+> doublecolon <+> "IO ()"
    else text "gibbon_main" <+> doublecolon <+> ty) $+$
-  text "gibbon_main" <+> equals $$ nest indentLevel m
+  text "gibbon_main" <+> equals <+> text "do" $$ nest indentLevel m
 
 -- Things we need to make this a valid compilation unit for GHC:
 ghc_compat_prefix, ghc_compat_suffix :: Bool -> Doc
@@ -95,6 +95,8 @@ ghc_compat_prefix has_bench =
    then (text "import Criterion (nf, benchmark, bench)" $+$
          text "import Control.DeepSeq (force, NFData)" $+$
          text "import GHC.Generics" $+$
+         text "import System.Mem (performMajorGC)" $+$
+         text "import Data.Time.Clock (getCurrentTime, diffUTCTime)" $+$
          text "" $+$
          text "gibbon_bench :: (NFData a, NFData b) => String -> (a -> b) -> a -> IO ()" $+$
          text "gibbon_bench str fn arg = benchmark (nf fn (force arg))" $+$
@@ -460,7 +462,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         case mainExp of
           Nothing     -> (empty, empty, False)
           Just (e,ty) -> let main_has_bench1 = hasBenchE e in
-                         ( renderMain main_has_bench1 (ppExp env2 e) (pprintWithStyle sty ty)
+                         (renderMain main_has_bench1 (ppExp main_has_bench1 env2 e) (pprintWithStyle sty ty)
                          , ghc_compat_suffix main_has_bench1
                          , main_has_bench1)
       mb_derive_more d = if main_has_bench
@@ -504,25 +506,25 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         env2' = extendsVEnv (M.fromList $ zip funArgs (inTys funTy)) env2
         renderBod :: Doc
         renderBod = text (fromVar funName) <+> (hsep $ map (text . fromVar) funArgs) <+> equals
-                      $$ nest indentLevel (ppExp env2' funBody)
+                      $$ nest indentLevel (ppExp False env2' funBody)
 
-    ppExp :: Env2 Ty1 -> L Exp1 -> Doc
-    ppExp env2 (L _ ex0) =
+    ppExp :: Bool -> Env2 Ty1 -> L Exp1 -> Doc
+    ppExp monadic env2 (L _ ex0) =
       case ex0 of
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
           LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
           AppE v _locs ls -> pprintWithStyle sty v <+>
-                            (hsep $ map (ppExp env2) ls)
+                            (hsep $ map (ppExp monadic env2) ls)
           PrimAppE pr es ->
               case pr of
                   _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP, SymAppend] ->
                       let [a1,a2] = es
-                      in ppExp env2 a1 <+> pprintWithStyle sty pr <+> ppExp env2 a2
+                      in ppExp monadic env2 a1 <+> pprintWithStyle sty pr <+> ppExp monadic env2 a2
 
                   _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprintWithStyle sty pr
 
-                  _ -> pprintWithStyle sty pr <+> hsep (map (ppExp env2) es)
+                  _ -> pprintWithStyle sty pr <+> hsep (map (ppExp monadic env2) es)
 
           -- See #111.
           LetE (v,_, ty@(ProdTy tys),e1) e2 ->
@@ -537,29 +539,33 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                 env2' = foldr (\((_,w),t) acc -> extendVEnv w t acc) env2 (zip indexed_vars tys)
 
             in (text "let") <+>
-               vcat [bind_rhs (pprintWithStyle sty v) (ppExp env2 e1),
-                     bind_rhs (parens $ hcat $ punctuate (text ",") (map (pprintWithStyle sty . snd) indexed_vars)) (ppExp env2 (l$ VarE v))] <+>
-               text "in" $+$
-               ppExp (extendVEnv v ty env2') e2'
+               vcat [bind_rhs (pprintWithStyle sty v) (ppExp monadic env2 e1),
+                     bind_rhs (parens $ hcat $ punctuate (text ",") (map (pprintWithStyle sty . snd) indexed_vars)) (ppExp monadic env2 (l$ VarE v))] <+>
+               (if monadic
+                then empty
+                else text "in") $+$
+               ppExp monadic (extendVEnv v ty env2') e2'
 
           LetE (v,_,ty,e1) e2  -> (text "let") <+>
                                   pprintWithStyle sty v <+> doublecolon <+>
                                   empty <+>
                                   pprintWithStyle sty ty <+>
                                   equals <+>
-                                  ppExp env2 e1 <+>
-                                  text "in" $+$
-                                  ppExp (extendVEnv v ty env2) e2
+                                  ppExp monadic env2 e1 <+>
+                                  (if monadic
+                                   then empty
+                                   else text "in") $+$
+                                  ppExp monadic (extendVEnv v ty env2) e2
           IfE e1 e2 e3 -> text "if" <+>
-                          ppExp env2 e1 $+$
+                          ppExp monadic env2 e1 $+$
                           text "then" <+>
-                          ppExp env2 e2 $+$
+                          ppExp monadic env2 e2 $+$
                           text "else" <+>
-                          ppExp env2 e3
-          MkProdE es -> lparen <> hcat (punctuate (text ", ") (map (ppExp env2) es)) <> rparen
+                          ppExp monadic env2 e3
+          MkProdE es -> lparen <> hcat (punctuate (text ", ") (map (ppExp monadic env2) es)) <> rparen
           ProjE i e ->
               case gRecoverType ddefs env2 e of
-                ProdTy tys -> let edoc = ppExp env2 e
+                ProdTy tys -> let edoc = ppExp monadic env2 e
                                   n    = length tys
                                   -- Gosh, do we also need a gensym here...
                                   v    = ("tup_proj_" ++ show i)
@@ -567,23 +573,31 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                                            punctuate (text ",") ([if i == j then text v else text "_" | j <- [0..n-1]])
                               in parens $ text "let " <+> pat <+> text "=" <+> edoc <+> text "in" <+> text v
                 ty -> error $ "pprintHsWithEnv: " ++ sdoc ty ++ "is not a product. In " ++ sdoc ex0
-          CaseE e bnds -> text "case" <+> ppExp env2 e <+> text "of" $+$
+          CaseE e bnds -> text "case" <+> ppExp monadic env2 e <+> text "of" $+$
                           nest indentLevel (vcat $ map (dobinds env2) bnds)
           DataConE _loc dc es ->
                               parens $ text dc <+>
-                              hsep (map (ppExp env2) es)
-          TimeIt e _ty _b -> text "timeit" <+> parens (ppExp env2 e)
-          ParE a b -> ppExp env2 a <+> text ".||." <+> ppExp env2 b
+                              hsep (map (ppExp monadic env2) es)
+          TimeIt e _ty _b -> text "timeit" <+> parens (ppExp monadic env2 e)
+          ParE a b -> ppExp monadic env2 a <+> text ".||." <+> ppExp monadic env2 b
           WithArenaE v e -> (text "let") <+>
                             pprintWithStyle sty v <+>
                             equals <+>
                             text "()" <+>
                             text "in" $+$
-                            ppExp env2 e
+                            ppExp monadic env2 e
           -- text "letarena" <+> pprint v <+> text "in" $+$ ppExp env2 e
           Ext (BenchE fn _locs args _b) ->
-            let args_doc = hsep $ map (ppExp env2) args
-            in text "gibbon_bench" <+> (doubleQuotes (text (fromVar fn) <+> args_doc)) <+> text (fromVar fn) <+> args_doc
+             --  -- Criterion
+             -- let args_doc = hsep $ map (ppExp env2) args
+             -- in text "gibbon_bench" <+> (doubleQuotes (text (fromVar fn) <+> args_doc)) <+> text (fromVar fn) <+> args_doc
+            let args_doc = hsep $ map ((\x -> parens $ text "force" <+> x) . ppExp monadic env2) args
+            in text "performMajorGC" $+$
+               text "t1 <- getCurrentTime" $+$
+               text "let x" <+> equals <+> text (fromVar fn) <+> args_doc $+$
+               text "t2 <- getCurrentTime" $+$
+               text "print (diffUTCTime t2 t1)" $+$
+               text "print x"
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{}-> error $ "Unexpected form in program: FoldE"
         where
@@ -596,4 +610,4 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                                                                              then pprintWithStyle sty v
                                                                              else pprintWithStyle sty v <> doublecolon <> pprintWithStyle sty loc)
                                                             vls))
-                               <+> text "->" $+$ nest indentLevel (ppExp env21' e)
+                               <+> text "->" $+$ nest indentLevel (ppExp monadic env21' e)
