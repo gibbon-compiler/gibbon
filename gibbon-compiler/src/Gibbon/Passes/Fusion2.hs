@@ -1348,7 +1348,7 @@ violateRestrictions fdefs inner outer depth=
     in -- should be configurable
   let p0 =
   -- (depth>6) &&
-       (n >10)
+       (n >5)
      -- &&  (n>5)
         `debug` ( "n is " L.++ (show n) L.++ "for" L.++ (show inner ) L.++ (show outer)) in
   let innerDef =
