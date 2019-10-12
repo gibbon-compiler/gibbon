@@ -24,13 +24,13 @@ sumFoo foo =
 
 ```
 
-<object data="sumfoo_time.pdf" type="application/pdf">
-    <embed src="sumfoo_time.pdf">
-        <p>This browser does not support PDFs. Please open sumfoo_time.pdf</p>
-    </embed>
-</object>
+Plots:
+- [sumfoo_time](./sumfoo_time.pdf)
+- [mkfoo_time](./mkfoo_time.pdf)
+- [sizes](./sizes.pdf)
 
-For (1) and (2), the threshold for parallelism was `size >= 64KB`. For the
+There are two variants of packed parallel sumFoo which are described below.
+For both these variants, the threshold for parallelism was `size >= 64KB`. For the
 pointer variant, it was `depth > 12`.
 These benchmarks we run on Swarm (Ubuntu 18.04 / GCC-7 / 64GB RAM / 18 cores?) and used Cilk for
 parallel processing.
