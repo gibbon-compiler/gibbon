@@ -438,6 +438,7 @@ instDataConTy ddefs dcon = do
   let tycon = getTyOfDataCon ddefs dcon
       ddf   = lookupDDef ddefs tycon
       arg_tys = lookupDataCon ddefs dcon
+      tyvars  = tyVarsInTys arg_tys
   -- Given a datatype;
   --
   --     data Either a b = Left a | Right b
@@ -448,7 +449,7 @@ instDataConTy ddefs dcon = do
   --     Right [c] => [ a -> fresh, b -> c     ]
   --
   tyArgs' <- mapM (\tyarg ->
-                if (TyVar tyarg) `elem` arg_tys
+                if tyarg `elem` tyvars
                 then pure (TyVar tyarg)
                 else newMetaTy)
              (tyArgs ddf)

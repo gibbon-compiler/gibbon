@@ -51,6 +51,10 @@ Things that can be polymorphic, and therefore should be monormorphized:
 
 Here's a rough plan:
 
+(0) Walk over all datatypes and collect monomorphization obligations:
+    See T127. It will generate an obligation for Foo at type Int.
+
+
 (1) Start with main: walk over it, and collect all monomorphization obligations:
 
         { [((fn_name, [tyapp]), newname)] , [((lam_name, [tyapp]), newname)] , [((tycon, [tyapp]), newname)] }
@@ -259,12 +263,15 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
   let env2 = Env2 M.empty (M.map funTy fundefs)
 
   let mono_m = do
+        -- Step (0)
+        (ddfs0 :: [DDef0]) <- mapM (collectMonoOblsDDef ddefs) (M.elems ddefs)
+        let ddefs' = M.fromList $ map (\a -> (tyName a,a)) ddfs0
         -- Step (1)
         mainExp' <-
           case mainExp of
             Nothing -> pure Nothing
             Just (e,ty) -> do
-              mainExp'  <- collectMonoObls ddefs env2 toplevel e
+              mainExp'  <- collectMonoObls ddefs' env2 toplevel e
               mainExp'' <- monoLambdas mainExp'
               mono_st   <- get
               assertLambdasMonomorphized mono_st
@@ -275,7 +282,7 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
           foldlM
             (\funs fn@FunDef{funArgs,funName,funBody,funTy} -> do
                   let env2' = extendsVEnv (M.fromList $ zip funArgs (inTys funTy)) env2
-                  funBody'  <- collectMonoObls ddefs env2' toplevel funBody
+                  funBody'  <- collectMonoObls ddefs' env2' toplevel funBody
                   funBody'' <- monoLambdas funBody'
                   mono_st <- get
                   assertLambdasMonomorphized mono_st
@@ -290,8 +297,8 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
         -- clears everything in 'mono_dcons'.
         mono_st <- get
         -- Step (3)
-        ddefs' <- monoDDefs ddefs
-        let p3 = p { ddefs = ddefs', fundefs = fundefs'', mainExp = mainExp' }
+        ddefs'' <- monoDDefs ddefs'
+        let p3 = p { ddefs = ddefs'', fundefs = fundefs'', mainExp = mainExp' }
         -- Step (4)
             p4 = updateTyCons mono_st p3
         pure p4
@@ -331,6 +338,7 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
         let fn' = fn { funName = new_fun_name, funTy = funTy', funBody = funBody''' }
         monoFunDefs (M.insert new_fun_name fn' fundefs1)
 
+    -- Create monomorphic versions of all polymorphic datatypes.
     monoDDefs :: DDefs0 -> MonoM DDefs0
     monoDDefs ddefs1 = do
       mono_st <- get
@@ -354,6 +362,47 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
             mono_st'  = mono_st { mono_dcons = M.fromList rst }
         put mono_st'
         monoDDefs ddefs1'
+
+    -- See examples/T127. Bar is monomorphic, but uses a monomorphized-by-hand
+    -- Foo. We must update Bar to use the correct Foo.
+    collectMonoOblsDDef :: DDefs0 -> DDef0 -> MonoM DDef0
+    collectMonoOblsDDef ddefs d@DDef{dataCons} = do
+
+      let go :: Ty0 -> MonoM Ty0
+          go t = do
+            mono_st <- get
+            case t of
+              IntTy     -> pure t
+              SymTy0    -> pure t
+              BoolTy    -> pure t
+              TyVar{}   -> pure t
+              MetaTv{}  -> pure t
+              ProdTy ls -> ProdTy <$> mapM go ls
+              SymDictTy{}  -> pure t
+              ArrowTy as b -> do
+                as' <- mapM go as
+                b' <- go b
+                pure $ ArrowTy as' b'
+              PackedTy tycon tyapps ->
+                case tyapps of
+                  [] -> pure t
+                  -- Only looking for fully monomorphized datatypes
+                  _  -> case tyVarsInTys tyapps of
+                          [] -> do
+                            let DDef{tyArgs} = lookupDDef ddefs tycon
+                            assertSameLength ("In the datatype: " ++ sdoc d) tyArgs tyapps
+                            suffix <- lift $ gensym "_v"
+                            let mono_st' = extendDatacons (tycon, tyapps) suffix mono_st
+                                tycon' = tycon ++ (fromVar suffix)
+                            put mono_st'
+                            pure $ PackedTy tycon' []
+                          _  -> pure t
+              ListTy ty -> pure t
+              ArenaTy   -> pure t
+
+      dataCons' <- mapM (\(dcon, args) -> (dcon,) <$> mapM (\(a,ty) -> (a,) <$> go ty) args) dataCons
+      pure $ d{ dataCons = dataCons' }
+
 
 -- After 'monoLambdas' runs, (mono_lams MonoState) must be empty
 assertLambdasMonomorphized :: (Monad m, HasCallStack) => MonoState -> m ()
