@@ -9,8 +9,8 @@ data Foo = A Int
 mkFoo :: Int -> Foo
 mkFoo n
   | n <= 0    = A 10
-  | n == 1    = B n (mkFoo (n-1)) (mkFoo (n-2))
-  | otherwise = C n (mkFoo (n-1)) (mkFoo (n-2)) (mkFoo (n-3))
+  | n == 1    = B n (mkFoo (n-1)) (mkFoo (n-1))
+  | otherwise = C n (mkFoo (n-1)) (mkFoo (n-1)) (mkFoo (n-1))
 
 
 sumFoo :: Foo -> Int
@@ -24,14 +24,11 @@ sumFoo foo =
 
 ```
 
-| Variant | mkFoo (median of 9) | sumFoo (median of 9) |
-| :---:   |        :---:        |         :---:        |
-| Packed (1) | 100ms | 5.11ms |
-| Packed (2) | 95.17ms | 6.03ms |
-| Packed Sequential | 100ms | 24.51ms |
-| Pointer Parallel | 0.24s | 9.96ms |
-| Pointer Sequential | 0.24s | 33ms |
-
+<object data="sumfoo_time.pdf" type="application/pdf">
+    <embed src="sumfoo_time.pdf">
+        <p>This browser does not support PDFs. Please open sumfoo_time.pdf</p>
+    </embed>
+</object>
 
 For (1) and (2), the threshold for parallelism was `size >= 64KB`. For the
 pointer variant, it was `depth > 12`.
