@@ -25,9 +25,9 @@ sumFoo foo =
 ```
 
 Plots:
-- [sumfoo_time](./sumfoo_time.pdf)
-- [mkfoo_time](./mkfoo_time.pdf)
-- [sizes](./sizes.pdf)
+- [sumfoo_time](./measurements/sumfoo_time.pdf)
+- [mkfoo_time](./measurements/mkfoo_time.pdf)
+- [sizes](./measurements/sizes.pdf)
 
 There are two variants of packed parallel sumFoo which are described below.
 For both these variants, the threshold for parallelism was `size >= 64KB`. For the
