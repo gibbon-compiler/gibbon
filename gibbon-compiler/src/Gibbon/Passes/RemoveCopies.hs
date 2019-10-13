@@ -116,7 +116,7 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
     WithArenaE v e -> do
       e' <- go e
       return $ WithArenaE v e'
-    ParE a b -> ParE <$> go a <*> go b
+    ParE ls -> ParE <$> mapM go ls
     MapE{}  -> error $ "go: TODO MapE"
     FoldE{} -> error $ "go: TODO FoldE"
   where

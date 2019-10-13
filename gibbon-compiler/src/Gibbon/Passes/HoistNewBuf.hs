@@ -70,7 +70,7 @@ hoistExp _ ex0 = return $ gocap ex0
     (DataConE c loc es) -> let (ltss,es') = unzip $ L.map go es in
                            (concat ltss, DataConE c loc es')
 
-    (ParE a b) -> ([], ParE (gocap a) (gocap b))
+    (ParE ls) -> ([], ParE $ map gocap ls)
 
     (WithArenaE v e) -> let (lts,e') = go e in
                         (lts, WithArenaE v e')

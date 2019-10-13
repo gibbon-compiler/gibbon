@@ -338,7 +338,7 @@ recoverType ddfs env2 (L _ ex) =
         oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                       ++"\nExpression:\n  "++ sdoc ex
                       ++"\nEnvironment:\n  "++sdoc (vEnv env2)
-    ParE a b -> ProdTy $ map (recoverType ddfs env2) [a,b]
+    ParE ls -> ProdTy $ map (recoverType ddfs env2) ls
     CaseE _ mp ->
       let (c,args,e) = head mp
           args' = map fst args

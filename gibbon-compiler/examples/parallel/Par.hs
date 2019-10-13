@@ -19,14 +19,13 @@ sumFoo foo =
   case foo of
     A i     -> i
     B a b   ->
-      let tup = (sumFoo a) .||. (sumFoo b)
+      let tup = par (sumFoo a) (sumFoo b)
           x = tup !!! 0
           y = tup !!! 1
       in x + y
     C a b c ->
-      let trp = (sumFoo a) .||. ((sumFoo b) .||. (sumFoo c))
+      let trp = par (sumFoo a) (sumFoo b) (sumFoo c)
           x = trp !!! 0
-          tup = trp !!! 1
-          y = tup !!! 0
-          z = tup !!! 1
+          y = trp !!! 1
+          z = trp !!! 2
       in x + y + z

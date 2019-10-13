@@ -362,7 +362,7 @@ instance Typeable (PreExp E2Ext LocVar (UrTy LocVar)) where
           oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                         ++"\nExpression:\n  "++ sdoc ex
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
-      ParE a b -> ProdTy $ L.map (gRecoverType ddfs env2) [a,b]
+      ParE ls -> ProdTy $ L.map (gRecoverType ddfs env2) ls
       WithArenaE _v e -> gRecoverType ddfs env2 e
       CaseE _ mp ->
         let (c,vlocs,e) = head mp
@@ -522,7 +522,7 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         CaseE scrt brs     -> CaseE (revertExp scrt) (L.map docase brs)
         DataConE _ dcon ls -> DataConE () dcon $ L.map revertExp ls
         TimeIt e ty b -> TimeIt (revertExp e) (stripTyLocs ty) b
-        ParE a b -> ParE (revertExp a) (revertExp b)
+        ParE ls -> ParE $ L.map revertExp ls
         Ext ext ->
           case ext of
             LetRegionE _ bod -> unLoc $ revertExp bod
@@ -562,7 +562,7 @@ occurs w (L _ ex) =
     CaseE e brs -> go e || any (\(_,_,bod) -> go bod) brs
     DataConE _ _ ls  -> any go ls
     TimeIt e _ _     -> go e
-    ParE a b         -> go a || go b
+    ParE ls          -> any go ls
     WithArenaE v rhs -> v `S.member` w || go rhs
     Ext ext ->
       case ext of

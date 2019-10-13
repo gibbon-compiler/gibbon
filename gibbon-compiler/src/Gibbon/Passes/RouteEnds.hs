@@ -210,7 +210,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
             return $ LetE (v,outlocs',ty,rhs)
                           (wrapBody bod' newls')
           -}
-          LetE (v,_ls,ty, rhs@(L _ (ParE a b))) bod -> do
+          LetE (v,_ls,ty, rhs@(L _ (ParE ls))) bod -> do
             error "routeEnds: TODO: ParE "
 
           CaseE (L _ (VarE x)) brs -> do

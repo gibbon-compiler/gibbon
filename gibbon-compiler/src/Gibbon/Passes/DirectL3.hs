@@ -47,7 +47,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
                            L.map (\(dcon,vs,rhs) -> (dcon,vs,go env2 rhs)) ls
         DataConE loc dcon args -> DataConE loc dcon $ L.map (go env2) args
         TimeIt arg ty b -> TimeIt (go env2 arg) ty b
-        ParE a b -> ParE (go env2 a) (go env2 b)
+        ParE ls -> ParE $ map (go env2) ls
         WithArenaE a e -> WithArenaE a $ go env2 e
         Ext (BenchE fn _locs args b) ->
           let fn_ty  = lookupFEnv fn env2

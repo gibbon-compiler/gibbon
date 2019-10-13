@@ -332,7 +332,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                 hsep (map (pprintWithStyle sty) es)
                               -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
           TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
-          ParE a b -> pprintWithStyle sty a <+> text ".||." <+> pprintWithStyle sty b
+          ParE ls -> text "par" <+> lparen <> hcat (punctuate (text ", ") (map (pprintWithStyle sty) ls)) <> rparen
           WithArenaE v e -> case sty of
                               PPHaskell  -> (text "let") <+>
                                             pprintWithStyle sty v <+>
@@ -581,7 +581,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                               parens $ text dc <+>
                               hsep (map (ppExp monadic env2) es)
           TimeIt e _ty _b -> text "timeit" <+> parens (ppExp monadic env2 e)
-          ParE a b -> ppExp monadic env2 a <+> text ".||." <+> ppExp monadic env2 b
+          ParE ls -> lparen <> hcat (punctuate (text ", ") (map (ppExp monadic env2) ls)) <> rparen
           WithArenaE v e -> (text "let") <+>
                             pprintWithStyle sty v <+>
                             equals <+>

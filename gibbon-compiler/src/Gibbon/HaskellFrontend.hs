@@ -223,7 +223,11 @@ desugarExp toplevel e = L NoLoc <$>
                             then case e2 of
                                    Lit _ lit -> pure $ PrimAppE (ErrorP (litToString lit) IntTy) [] -- assume int (!)
                                    _ -> error "desugarExp: error expects String literal."
-                            else AppE f [] <$> (: []) <$> desugarExp toplevel e2
+                            else if f == "par"
+                                 then do
+                                   e2' <- desugarExp toplevel e2
+                                   pure $ ParE [e2']
+                                 else AppE f [] <$> (: []) <$> desugarExp toplevel e2
           L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of
               Just p  -> pure $ PrimAppE p as
@@ -233,6 +237,9 @@ desugarExp toplevel e = L NoLoc <$>
                          Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
                   else (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
+          L _ (ParE ls) -> do
+            e2' <- desugarExp toplevel e2
+            pure $ ParE (ls ++ [e2'])
           L _ (AppE f [] ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ AppE f [] (ls ++ [e2'])
@@ -275,9 +282,6 @@ desugarExp toplevel e = L NoLoc <$>
           pure $ DataConE ty dcon []
 
     -- TODO: timeit: parsing it's type isn't straightforward.
-
-    InfixApp _ e1 (QVarOp _ (UnQual _ (Symbol _ ".||."))) e2 ->
-      ParE <$> desugarExp toplevel e1 <*> desugarExp toplevel e2
 
     InfixApp _ e1 (QVarOp _ (UnQual _ (Symbol _ "!!!"))) e2 -> do
       e1' <- desugarExp toplevel e1
