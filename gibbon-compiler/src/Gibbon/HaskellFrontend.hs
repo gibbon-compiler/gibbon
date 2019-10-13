@@ -34,6 +34,7 @@ data TopLevel
   = HDDef (DDef Ty0)
   | HFunDef (FunDef (L Exp0))
   | HMain (Maybe (L Exp0, Ty0))
+  | HAnnotation (Var, [Int])
   deriving (Show, Eq)
 
 type TopTyEnv = TyEnv TyScheme
@@ -67,6 +68,7 @@ desugarModule (Module _ head_mb _pragmas _imports decls) = do
             Nothing -> (defs, vars, funs, m)
             Just _  -> error $ "A module cannot have two main expressions."
                                ++ show mod_name
+        HAnnotation _a -> (defs, vars, funs, main)
 desugarModule m = error $ "desugarModule: " ++ prettyPrint m
 
 desugarTopType :: (Show a,  Pretty a) => Type a -> TyScheme
@@ -277,10 +279,18 @@ desugarExp toplevel e = L NoLoc <$>
     InfixApp _ e1 (QVarOp _ (UnQual _ (Symbol _ ".||."))) e2 ->
       ParE <$> desugarExp toplevel e1 <*> desugarExp toplevel e2
 
+    InfixApp _ e1 (QVarOp _ (UnQual _ (Symbol _ "!!!"))) e2 -> do
+      e1' <- desugarExp toplevel e1
+      case e2 of
+        Lit _ lit -> do
+          let i = litToInt lit
+          pure $ ProjE i e1'
+        _ -> error $ "desugarExp: !!! expects a integer. Got: " ++ prettyPrint e2
+
     InfixApp _ e1 op e2 -> do
       e1' <- desugarExp toplevel e1
       e2' <- desugarExp toplevel e2
-      let op' = desugarOp  op
+      let op' = desugarOp op
       pure $ PrimAppE op' [e1', e2']
 
     NegApp _ e1 -> do
@@ -376,7 +386,17 @@ collectTopLevel env decl =
                                                   , funTy   = ty
                                                   , funBody = bod })
 
-    _ -> error $ "collectTopLevel: Unsupported top-level expression: " ++ prettyPrint decl
+    AnnPragma _ a -> do
+      case a of
+        Ann _ (Ident _ fn_name) (Tuple _ Boxed [H.Var _ (UnQual _ (Ident _ "gibbon_payload")), List _ ps]) -> do
+          let payloads = foldr (\e acc -> case e of
+                                            Lit _ lit -> litToInt lit : acc
+                                            _ -> acc)
+                               []
+                               ps
+          pure $ Just $ HAnnotation (toVar fn_name, payloads)
+        _ -> pure Nothing
+    _ -> error $ "collectTopLevel: Unsupported top-level expression: " ++ show decl
 
 litToInt :: Literal a -> Int
 litToInt (Int _ i _) = (fromIntegral i) -- lossy conversion here
