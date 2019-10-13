@@ -51,8 +51,10 @@ Things that can be polymorphic, and therefore should be monormorphized:
 
 Here's a rough plan:
 
-(0) Walk over all datatypes and collect monomorphization obligations:
-    See T127. It will generate an obligation for Foo at type Int.
+(0) Walk over all datatypes and functions to collect obligations for
+    polymorphic types which have been fully applied to monomorphic types in the
+    source program. For example, in a function 'f :: Int -> Maybe Int', we must
+    replace 'Maybe Int' with an appropriate monomorphic alternative.
 
 
 (1) Start with main: walk over it, and collect all monomorphization obligations:
@@ -264,7 +266,7 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
 
   let mono_m = do
         -- Step (0)
-        (ddfs0 :: [DDef0]) <- mapM (collectMonoOblsDDef ddefs) (M.elems ddefs)
+        (ddfs0 :: [DDef0]) <- mapM (monoOblsDDef ddefs) (M.elems ddefs)
         let ddefs' = M.fromList $ map (\a -> (tyName a,a)) ddfs0
         -- Step (1)
         mainExp' <-
@@ -282,11 +284,14 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
           foldlM
             (\funs fn@FunDef{funArgs,funName,funBody,funTy} -> do
                   let env2' = extendsVEnv (M.fromList $ zip funArgs (inTys funTy)) env2
+                  let (ForAll tyvars (ArrowTy as b)) = funTy
+                  as' <- mapM (monoOblsTy ddefs) as
+                  b'  <- monoOblsTy ddefs b
                   funBody'  <- collectMonoObls ddefs' env2' toplevel funBody
                   funBody'' <- monoLambdas funBody'
                   mono_st <- get
                   assertLambdasMonomorphized mono_st
-                  let fn' = fn { funBody = funBody'' }
+                  let fn' = fn { funBody = funBody'', funTy = (ForAll tyvars (ArrowTy as' b'))}
                   pure $ M.insert funName fn' funs)
             mono_funs
             (M.elems mono_funs)
@@ -300,7 +305,7 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
         ddefs'' <- monoDDefs ddefs'
         let p3 = p { ddefs = ddefs'', fundefs = fundefs'', mainExp = mainExp' }
         -- Step (4)
-            p4 = updateTyCons mono_st p3
+        let p4 = updateTyCons mono_st p3
         pure p4
 
   (p4,_) <- runStateT mono_m emptyMonoState
@@ -314,6 +319,7 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
   where
     toplevel = M.keysSet fundefs
 
+    -- Create monomorphic versions of all polymorphic functions.
     monoFunDefs :: FunDefs0 -> MonoM FunDefs0
     monoFunDefs fundefs1 = do
       mono_st <- get
@@ -365,42 +371,9 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
 
     -- See examples/T127. Bar is monomorphic, but uses a monomorphized-by-hand
     -- Foo. We must update Bar to use the correct Foo.
-    collectMonoOblsDDef :: DDefs0 -> DDef0 -> MonoM DDef0
-    collectMonoOblsDDef ddefs d@DDef{dataCons} = do
-
-      let go :: Ty0 -> MonoM Ty0
-          go t = do
-            mono_st <- get
-            case t of
-              IntTy     -> pure t
-              SymTy0    -> pure t
-              BoolTy    -> pure t
-              TyVar{}   -> pure t
-              MetaTv{}  -> pure t
-              ProdTy ls -> ProdTy <$> mapM go ls
-              SymDictTy{}  -> pure t
-              ArrowTy as b -> do
-                as' <- mapM go as
-                b' <- go b
-                pure $ ArrowTy as' b'
-              PackedTy tycon tyapps ->
-                case tyapps of
-                  [] -> pure t
-                  -- Only looking for fully monomorphized datatypes
-                  _  -> case tyVarsInTys tyapps of
-                          [] -> do
-                            let DDef{tyArgs} = lookupDDef ddefs tycon
-                            assertSameLength ("In the datatype: " ++ sdoc d) tyArgs tyapps
-                            suffix <- lift $ gensym "_v"
-                            let mono_st' = extendDatacons (tycon, tyapps) suffix mono_st
-                                tycon' = tycon ++ (fromVar suffix)
-                            put mono_st'
-                            pure $ PackedTy tycon' []
-                          _  -> pure t
-              ListTy ty -> pure t
-              ArenaTy   -> pure t
-
-      dataCons' <- mapM (\(dcon, args) -> (dcon,) <$> mapM (\(a,ty) -> (a,) <$> go ty) args) dataCons
+    monoOblsDDef :: DDefs0 -> DDef0 -> MonoM DDef0
+    monoOblsDDef ddefs1 d@DDef{dataCons} = do
+      dataCons' <- mapM (\(dcon, args) -> (dcon,) <$> mapM (\(a,ty) -> (a,) <$> monoOblsTy ddefs1 ty) args) dataCons
       pure $ d{ dataCons = dataCons' }
 
 
@@ -418,6 +391,44 @@ assertSameLength msg as bs =
                sdoc as ++ ".\n " ++ msg
   else pure ()
 
+
+monoOblsTy :: DDefs0 -> Ty0 -> MonoM Ty0
+monoOblsTy ddefs1 t = do
+  case t of
+    IntTy     -> pure t
+    SymTy0    -> pure t
+    BoolTy    -> pure t
+    TyVar{}   -> pure t
+    MetaTv{}  -> pure t
+    ProdTy ls -> ProdTy <$> mapM (monoOblsTy ddefs1) ls
+    SymDictTy{}  -> pure t
+    ArrowTy as b -> do
+      as' <- mapM (monoOblsTy ddefs1) as
+      b' <- monoOblsTy ddefs1 b
+      pure $ ArrowTy as' b'
+    PackedTy tycon tyapps ->
+      case tyapps of
+        [] -> pure t
+        -- We're only looking for fully monomorphized datatypes here
+        _  -> case tyVarsInTys tyapps of
+                [] -> do
+                  tyapps' <- mapM (monoOblsTy ddefs1) tyapps
+                  mono_st <- get
+                  case M.lookup (tycon, tyapps') (mono_dcons mono_st) of
+                    Nothing -> do
+                      let DDef{tyArgs} = lookupDDef ddefs1 tycon
+                      assertSameLength ("In the type: " ++ sdoc t) tyArgs tyapps'
+                      suffix <- lift $ gensym "_v"
+                      let mono_st' = extendDatacons (tycon, tyapps') suffix mono_st
+                          tycon' = tycon ++ (fromVar suffix)
+                      put mono_st'
+                      pure $ PackedTy tycon' []
+                    Just suffix -> pure $ PackedTy (tycon ++ (fromVar suffix)) []
+                _  -> pure t
+    ListTy{} -> pure t
+    ArenaTy  -> pure t
+
+
 -- | Collect monomorphization obligations.
 collectMonoObls :: DDefs0 -> Env2 Ty0 -> S.Set Var -> L Exp0 -> MonoM (L Exp0)
 collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
@@ -427,7 +438,8 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
       pure $ AppE f [] args'
     AppE f tyapps args -> do
       args'   <- mapM (collectMonoObls ddefs env2 toplevel) args
-      f' <- addFnObl f tyapps
+      tyapps' <- mapM (monoOblsTy ddefs) tyapps
+      f' <- addFnObl f tyapps'
       pure $ AppE f' [] args'
 
     LetE (v, [], ty@ArrowTy{}, rhs) bod ->do
@@ -468,12 +480,13 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
               -- It's a monomorphic datatype.
               [] -> pure ("", mono_st)
               _  -> do
-                case M.lookup (tycon, tyapps) (mono_dcons mono_st) of
+                tyapps' <- mapM (monoOblsTy ddefs) tyapps
+                case M.lookup (tycon, tyapps') (mono_dcons mono_st) of
                   Nothing -> do
                     let DDef{tyArgs} = lookupDDef ddefs tycon
-                    assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps
+                    assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps'
                     suffix <- lift $ gensym "_v"
-                    let mono_st' = extendDatacons (tycon, tyapps) suffix mono_st
+                    let mono_st' = extendDatacons (tycon, tyapps') suffix mono_st
                     pure (suffix, mono_st')
                   Just suffix -> pure (suffix, mono_st)
           put mono_st''
@@ -496,15 +509,16 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
         -- It's a monomorphic datatype.
         [] -> pure $ DataConE (ProdTy []) dcon args'
         _  -> do
-          sargs <- get
+          mono_st <- get
           -- Collect datacon instances here.
           let tycon = getTyOfDataCon ddefs dcon
-          case M.lookup (tycon, tyapps) (mono_dcons sargs) of
+          tyapps' <- mapM (monoOblsTy ddefs) tyapps
+          case M.lookup (tycon, tyapps') (mono_dcons mono_st) of
             Nothing -> do
               let DDef{tyArgs} = lookupDDef ddefs tycon
-              assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps
+              assertSameLength ("In the expression: " ++ sdoc ex) tyArgs tyapps'
               suffix <- lift $ gensym "_v"
-              let mono_st' = extendDatacons (tycon, tyapps) suffix sargs
+              let mono_st' = extendDatacons (tycon, tyapps) suffix mono_st
                   dcon' = dcon ++ (fromVar suffix)
               put mono_st'
               pure $ DataConE (ProdTy []) dcon' args'
@@ -549,7 +563,8 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
           case tyapps of
             [] -> pure $ Ext $ FunRefE [] f
             _  -> do
-              f' <- addFnObl f tyapps
+              tyapps' <- mapM (monoOblsTy ddefs) tyapps
+              f' <- addFnObl f tyapps'
               pure $ Ext $ FunRefE [] f'
         BenchE _fn tyapps _args _b ->
           case tyapps of

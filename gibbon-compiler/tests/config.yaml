@@ -274,6 +274,10 @@ tests:
     dir: examples/poly
     answer-file: examples/poly/T127b.ans
 
+  - name: T127c.hs
+    dir: examples/poly
+    answer-file: examples/poly/T127c.ans
+
   - name: unariser_bug1.hs
     answer-file: examples/unariser_bug1.ans
     ## It fails in 'interp1' because the answer actually changes later in the pipeline.

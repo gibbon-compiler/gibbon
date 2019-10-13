@@ -283,6 +283,26 @@ arrowTysInTy = go []
         PackedTy _ vs -> foldl go acc vs
         ListTy a -> go acc a
 
+-- | Replace the specified quantified type variables by
+-- given meta type variables.
+substTyVar :: M.Map TyVar Ty0 -> Ty0 -> Ty0
+substTyVar mp ty =
+  case ty of
+    IntTy    -> ty
+    SymTy0   -> ty
+    BoolTy   -> ty
+    TyVar v  -> M.findWithDefault ty v mp
+    MetaTv{} -> ty
+    ProdTy tys  -> ProdTy (map go tys)
+    SymDictTy v t -> SymDictTy v (go t)
+    ArrowTy tys b  -> ArrowTy (map go tys) (go b)
+    PackedTy t tys -> PackedTy t (map go tys)
+    ListTy t -> ListTy (go t)
+    ArenaTy -> ty
+  where
+    go = substTyVar mp
+
+
 -- Hack. In the specializer, we'd like to know the type of the scrutinee.
 -- However, we cannot derive Typeable for L0.
 --
@@ -299,7 +319,8 @@ recoverType ddfs env2 (L _ ex) =
     VarE v       -> M.findWithDefault (error $ "recoverType: Unbound variable " ++ show v) v (vEnv env2)
     LitE _       -> IntTy
     LitSymE _    -> IntTy
-    AppE v _ _   -> outTy $ fEnv env2 # v
+    AppE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
+                       in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
     -- PrimAppE (DictInsertP ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty
     -- PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty
     PrimAppE p exs -> dbgTraceIt ("recovertype/primapp: " ++ show p ++ " " ++ show exs) $ primRetTy1 p

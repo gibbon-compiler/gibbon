@@ -608,25 +608,6 @@ substTyVarExp s (L p ex) = L p $
   where
     go = substTyVarExp s
 
--- | Replace the specified quantified type variables by
--- given meta type variables.
-substTyVar :: M.Map TyVar Ty0 -> Ty0 -> Ty0
-substTyVar mp ty =
-  case ty of
-    IntTy    -> ty
-    SymTy0   -> ty
-    BoolTy   -> ty
-    TyVar v  -> M.findWithDefault ty v mp
-    MetaTv{} -> ty
-    ProdTy tys  -> ProdTy (map go tys)
-    SymDictTy v t -> SymDictTy v (go t)
-    ArrowTy tys b  -> ArrowTy (map go tys) (go b)
-    PackedTy t tys -> PackedTy t (map go tys)
-    ListTy t -> ListTy (go t)
-    ArenaTy -> ty
-  where
-    go = substTyVar mp
-
 tyVarToMetaTyl :: [Ty0] -> TcM (M.Map TyVar Ty0, [Ty0])
 tyVarToMetaTyl tys =
   foldlM
