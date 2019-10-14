@@ -587,7 +587,7 @@ inferExp env@FullEnv{dataDefs}
         SingleDest d -> case ls of
                           [e] -> do (e',ty,les) <- inferExp env e dest
                                     return (lc$ MkProdE [e'], ty, les)
-                          _ -> err $ "Cannot match single destination to tuple"
+                          _ -> err $ "Cannot match single destination to tuple: " ++ show ex0
         TupleDest ds -> do results <- mapM (\(e,d) -> inferExp env e d) $ zip ls ds
                            return (lc$ MkProdE ([a | (a,_,_) <- results]),
                                      ProdTy ([b | (_,b,_) <- results]),

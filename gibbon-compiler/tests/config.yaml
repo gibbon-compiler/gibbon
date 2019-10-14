@@ -320,7 +320,7 @@ tests:
   ## AST benchmarks
   - name: C1.hs
     dir: examples/ast
-    failing: [interp1,gibbon1, gibbon2, pointer]
+    failing: [gibbon1, gibbon2]
 
   - name: LC.hs
     dir: examples/ast

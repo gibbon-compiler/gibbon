@@ -1,19 +1,10 @@
 -- Benchmark for doing simple optimizations on a CFG.
 -- Based on the C1 language from Essentials of Compilation (Fall19)
---
--- Three passes:
---  * optimize jumps
---    if we have a block like
---        block1: goto block2
---    then we replace all jumps to block1 with jumps to block2
---  * simple dead code elimination
---    remove all blocks that are never jumped to
---  * interpreter
---    evaluate the program with an environment for variable assignments
+
 module C1 where
 
 import Helpers
-import Prelude hiding ( Maybe(..), appepnd, foldr, lookup )
+import Prelude hiding ( List(..), Maybe(..), appepnd, foldr, lookup )
 
 data List a = Nil | Cons a (List a)
               deriving Show
@@ -32,24 +23,33 @@ foldr f acc ls =
 append :: List a -> List a -> List a
 append xs ys = foldr (\ a b -> Cons a b) ys xs
 
-contains :: (a -> a -> Bool) -> a -> List a -> Bool
-contains eqp elm lst =
+containsSym :: Sym -> List Sym -> Bool
+containsSym elm lst =
     case lst of
       Nil -> False
       Cons a rst ->
-          if eqp a elm
+          if eqsym a elm
           then True
-          else contains eqp elm rst
+          else containsSym elm rst
 
-lookup :: (a -> a -> Bool) -> a -> List (a,b) -> Maybe b
-lookup eqp elm lst =
+lookupBlock :: Sym -> Blk -> Maybe Tal
+lookupBlock elm lst =
     case lst of
-      Nil -> Nothing
-      Cons tup rst ->
-          let (k,v) = tup
-          in if eqp k elm
-             then Just v
-             else lookup eqp elm rst
+      BlockNil -> Nothing
+      BlockCons k v rst ->
+          if eqsym k elm
+          then Just v
+          else lookupBlock elm rst
+
+lookupInt :: Sym -> Env -> Maybe Int
+lookupInt elm lst =
+    case lst of
+      EnvNil -> Nothing
+      EnvCons k v rst ->
+          if eqsym k elm
+          then Just v
+          else lookupInt elm rst
+               
 
 strEq :: Sym -> Sym -> Bool
 strEq a b = eqsym a b
@@ -72,15 +72,25 @@ data Stm = AssignC Sym Exp
 data Tal = RetC Exp | SeqC Stm Tal | GotoC Sym | IfC Cmp Arg Arg Sym Sym
            deriving Show
 
-data Prg = ProgramC (List (Sym, Tal))
+data Prg = ProgramC Blk
            deriving Show
 
 data Val = IntV Int | ErrorV
            deriving Show
 
+data Env = EnvCons Sym Int Env
+         | EnvNil
+
+data Blk = BlockCons Sym Tal Blk
+         | BlockNil
+           deriving Show
+
 
 
 -- Optimize Jumps
+
+data Alias = AliasCons Sym Sym Alias
+           | AliasNil
 
 optimizeJumps :: Prg -> Prg
 optimizeJumps p =
@@ -88,31 +98,29 @@ optimizeJumps p =
       ProgramC ls -> let ss = collectTrivial ls
                      in ProgramC (replaceJumps ls ss)
 
-collectTrivial :: List (Sym, Tal) -> List (Sym, Sym)
+collectTrivial :: Blk -> Alias
 collectTrivial ls =
     case ls of
-      Nil -> Nil
-      Cons tup b ->
-          let (s,t) = tup
-          in consIfTrivial s t (collectTrivial b)
+      BlockNil -> AliasNil
+      BlockCons s t b ->
+          consIfTrivial s t (collectTrivial b)
 
-consIfTrivial :: Sym -> Tal -> List (Sym, Sym) -> List (Sym, Sym)
+consIfTrivial :: Sym -> Tal -> Alias -> Alias
 consIfTrivial s t b =
     case t of
       RetC e -> b
       SeqC s t -> b
-      GotoC str -> Cons (s,str) b
+      GotoC str -> AliasCons s str b
       IfC c a1 a2 s1 s2 -> b
 
-replaceJumps :: List (Sym, Tal) -> List (Sym, Sym) -> List (Sym, Tal)
+replaceJumps :: Blk -> Alias -> Blk
 replaceJumps ts ss =
     case ts of
-      Nil -> Nil
-      Cons tup b ->
-          let (s,t) = tup
-          in Cons (s, replaceJumpsInner t ss) (replaceJumps b ss)
+      BlockNil -> BlockNil
+      BlockCons s t b ->
+          BlockCons s (replaceJumpsInner t ss) (replaceJumps b ss)
 
-replaceJumpsInner :: Tal -> List (Sym, Sym) -> Tal
+replaceJumpsInner :: Tal -> Alias -> Tal
 replaceJumpsInner t ss =
     case t of
       RetC e -> RetC e
@@ -121,15 +129,14 @@ replaceJumpsInner t ss =
       IfC c a1 a2 s1 s2 -> 
           IfC c a1 a2 (replaceLabel s1 ss) (replaceLabel s2 ss)
 
-replaceLabel :: Sym -> List (Sym, Sym) -> Sym
+replaceLabel :: Sym -> Alias -> Sym
 replaceLabel str ss =
     case ss of
-      Nil -> str
-      Cons tup rst ->
-          let (s1,s2) = tup
-          in if eqsym s1 str
-             then s2
-             else replaceLabel str rst
+      AliasNil -> str
+      AliasCons s1 s2 rst ->
+          if eqsym s1 str
+          then s2
+          else replaceLabel str rst
 
 
 -- Eliminate Dead Code
@@ -141,13 +148,12 @@ eliminateDeadcode p =
           let jmps = collectJumps ls
           in ProgramC (removeBlocks ls (Cons (quote "start") jmps))
 
-collectJumps :: List (Sym,Tal) -> List Sym
+collectJumps :: Blk -> List Sym
 collectJumps ts =
     case ts of
-      Nil -> Nil
-      Cons tup rst ->
-          let (s,t) = tup
-          in append (collectJumpsTal t) (collectJumps rst)
+      BlockNil -> Nil
+      BlockCons s t rst ->
+          append (collectJumpsTal t) (collectJumps rst)
 
 collectJumpsTal :: Tal -> List Sym
 collectJumpsTal t =
@@ -158,15 +164,14 @@ collectJumpsTal t =
       IfC c a1 a2 s1 s2 -> Cons s1 (Cons s2 Nil)
 
 
-removeBlocks :: List (Sym,Tal) -> List Sym -> List (Sym,Tal)
+removeBlocks :: Blk -> List Sym -> Blk
 removeBlocks ts ss =
     case ts of
-      Nil -> Nil
-      Cons tup rst ->
-          let (s,t) = tup
-          in if contains strEq s ss
-             then Cons (s,t) (removeBlocks rst ss)
-             else removeBlocks rst ss
+      BlockNil -> BlockNil
+      BlockCons s t rst ->
+          if containsSym s ss
+          then BlockCons s t (removeBlocks rst ss)
+          else removeBlocks rst ss
 
 
 -- C1 Interp
@@ -174,43 +179,44 @@ removeBlocks ts ss =
 interpPrg :: Prg -> Val
 interpPrg p =
     case p of
-      ProgramC ls -> case lookup strEq (quote "start") ls of
-                       Just t -> interpBlock t ls Nil
+      ProgramC ls -> case lookupBlock (quote "start") ls of
+                       Just t -> interpBlock t ls EnvNil
                        Nothing -> ErrorV
 
-interpBlock :: Tal -> List (Sym,Tal) -> List (Sym,Int) -> Val
+interpBlock :: Tal -> Blk -> Env -> Val
 interpBlock t ls vs =
     case t of
       RetC e -> interpExp e vs
-      SeqC s t1 -> case interpStm s vs of
-                     Nothing -> ErrorV
-                     Just vs1 -> interpBlock t1 ls vs1
-      GotoC str -> case lookup strEq str ls of
+      SeqC s t1 -> let vs1 = interpStm s vs
+                   in case vs1 of
+                        EnvNil -> ErrorV
+                        EnvCons _k _v _rst -> interpBlock t1 ls vs1
+      GotoC str -> case lookupBlock str ls of
                      Just t1 -> interpBlock t1 ls vs
                      Nothing -> ErrorV
       IfC c a1 a2 s1 s2 -> interpIf c a1 a2 s1 s2 ls vs
 
 interpIf :: Cmp -> Arg -> Arg -> Sym -> Sym ->
-            List (Sym,Tal) -> List (Sym,Int) -> Val
+            Blk -> Env -> Val
 interpIf c a1 a2 s1 s2 ls vs =
     case interpExp (CmpC c a1 a2) vs of
       ErrorV -> ErrorV
       IntV i -> if i == 0
-                then case lookup strEq s2 ls of
+                then case lookupBlock s2 ls of
                        Just t -> interpBlock t ls vs
                        Nothing -> ErrorV
-                else case lookup strEq s1 ls of
+                else case lookupBlock s1 ls of
                        Just t -> interpBlock t ls vs
                        Nothing -> ErrorV
 
-interpStm :: Stm -> List (Sym,Int) -> Maybe (List (Sym,Int))
+interpStm :: Stm -> Env -> Env -- Maybe (List (Sym,Int))
 interpStm s vs =
     case s of
       AssignC str exp -> case interpExp exp vs of
-                           ErrorV -> Nothing
-                           IntV i -> Just (Cons (str,i) vs)
+                           ErrorV -> EnvNil
+                           IntV i -> EnvCons str i vs
 
-interpExp :: Exp -> List (Sym,Int) -> Val
+interpExp :: Exp -> Env -> Val
 interpExp e vs =
     case e of
       ArgC a -> interpArg a vs
@@ -243,11 +249,11 @@ interpExp e vs =
                                                           then IntV 1
                                                           else IntV 0
 
-interpArg :: Arg -> List (Sym,Int) -> Val
+interpArg :: Arg -> Env -> Val
 interpArg a vs =
     case a of
       IntC i -> IntV i
-      VarC s -> case lookup strEq s vs of
+      VarC s -> case lookupInt s vs of
                   Just v -> IntV v
                   Nothing -> ErrorV
       TrueC -> IntV 1
@@ -258,22 +264,22 @@ interpArg a vs =
 -- C1 term
 
 ex1 :: Prg
-ex1 = ProgramC (Cons (quote "block1", RetC (ArgC (IntC 0)))
-                (Cons (quote "block2", GotoC (quote "block1"))
-                 (Cons (quote "block3", RetC (ArgC (IntC 42)))
-                  (Cons (quote "start", (SeqC (AssignC (quote "y") ReadC)
+ex1 = ProgramC (BlockCons (quote "block1") (RetC (ArgC (IntC 0)))
+                (BlockCons (quote "block2") (GotoC (quote "block1"))
+                 (BlockCons (quote "block3") (RetC (ArgC (IntC 42)))
+                  (BlockCons (quote "start") ((SeqC (AssignC (quote "y") ReadC)
                                    (IfC EqpC (VarC (quote "y")) (IntC 1) (quote "block2") (quote "block3"))))
-                   Nil))))
+                   BlockNil))))
 
 -- runners
 
 eval :: Prg -> Int
 eval p =
-    case (interpPrg (eliminateDeadcode (optimizeJumps p))) of
+    case (interpPrg p) of
       IntV i -> i
       ErrorV -> (-1)
       
 main :: IO ()
-main = do print (eval ex1)
+main = do print (eval (optimizeJumps ex1))
 
-gibbon_main = eval ex1
+gibbon_main = eval (optimizeJumps ex1)
