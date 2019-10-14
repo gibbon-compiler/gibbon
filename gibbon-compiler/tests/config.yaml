@@ -321,6 +321,7 @@ tests:
   - name: C1.hs
     dir: examples/ast
     failing: [gibbon1, gibbon2]
+    answer-file: examples/ast/C1.ans
 
   - name: LC.hs
     dir: examples/ast
