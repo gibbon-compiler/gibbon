@@ -20,7 +20,7 @@ import Gibbon.L1.Syntax hiding (FunDef, Prog, add1Prog)
 import Gibbon.L2.Syntax as L2
 import Gibbon.L2.Typecheck
 import Gibbon.L2.Examples
-import Gibbon.Passes.InferMultiplicity
+import Gibbon.Passes.InferRegionScope
 import Gibbon.Passes.InferEffects
 import Gibbon.Passes.RouteEnds
 import Gibbon.Passes.ThreadRegions

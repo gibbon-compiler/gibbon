@@ -2,7 +2,7 @@
 
 -- | Tests for RouteEnds2
 --
-module InferMultiplicity where
+module InferRegionScope where
 
 import Data.Loc
 import Data.Set as S
@@ -15,7 +15,7 @@ import Test.Tasty.TH
 import Gibbon.Common hiding (FunDef)
 import Gibbon.L2.Syntax as L2
 import Gibbon.L2.Examples
-import Gibbon.Passes.InferMultiplicity
+import Gibbon.Passes.InferRegionScope
 import qualified Gibbon.L1.Syntax as L1
 
 

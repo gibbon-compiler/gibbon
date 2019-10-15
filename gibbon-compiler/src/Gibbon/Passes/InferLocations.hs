@@ -214,7 +214,6 @@ data DCArg = ArgFixed Int
 inferLocs :: Prog1 -> PassM L2.Prog2
 inferLocs initPrg = do
   p@(Prog dfs fds me) <- addRepairFns initPrg
-  dbgTraceIt (render $ pprint p) (pure ())
   let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
           fenv <- forM fds $ \(FunDef _ _ (intys, outty) _) ->

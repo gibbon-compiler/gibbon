@@ -154,7 +154,7 @@ test-suite test-gibbon
                        InferEffects
                        InferLocations
                        Unariser
-                       InferMultiplicity
+                       InferRegionScope
                        AddRAN
                        Compiler
                        L1.Typecheck

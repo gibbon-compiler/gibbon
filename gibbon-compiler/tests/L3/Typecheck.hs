@@ -3,7 +3,7 @@
 module L3.Typecheck where
 
 import Gibbon.Passes.InferEffects
-import Gibbon.Passes.InferMultiplicity
+import Gibbon.Passes.InferRegionScope
 import Gibbon.Passes.RouteEnds
 import Gibbon.Passes.BoundsCheck
 import Gibbon.Passes.ThreadRegions
