@@ -557,8 +557,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
 {-
 
-Lowering the parallel tuple combinator
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Lowering ParE
+~~~~~~~~~~~~~
 
 ASSUMPTION: Sub-expressions are function calls.
 

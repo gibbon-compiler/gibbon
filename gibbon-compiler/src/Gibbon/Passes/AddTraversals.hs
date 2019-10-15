@@ -65,52 +65,6 @@ addTraversalsExp ddefs fundefs env2 renv context (L p ex) = L p <$>
     AppE f locs args -> AppE f locs <$> mapM go args
     PrimAppE f args  -> PrimAppE f <$> mapM go args
     WithArenaE v e -> WithArenaE v <$> addTraversalsExp ddefs fundefs (extendVEnv v ArenaTy env2) renv context e
-
-{-
-Also see (2) of Note [When does a type 'needsRAN'] in Gibbon.Passes.AddRAN.
-
-The program has a tuple (a,b) and needs access to both 'a' and 'b' simultaneously.
-When 'a' and 'b' both live in the same region, most likely we'll only have access
-to one of them. There are 2 assumptions that we make about such tuples:
-
-(1) 'a' and 'b' live right next to each other in a region.
-    (CSK: This is arbitrary and needs proper review.)
-
-(2) 'a' occurs before 'b'. This is complete garbage and we need to find out
-    which value actually occurs first, and have to traverse that.
-
-..TODO.. This looks like a band-aid and parallel tuples need to be handled
-         properly in the pass.
-
-[2019.03.03]: Disabled by the multiarg functions patch.
-
-    LetE (v,locs,ty, rhs@(L _ (ParE a b))) bod -> do
-      let appArgTy :: L Exp2 -> (L Exp2, Ty2)
-          appArgTy (L _ (AppE _ _ arg)) = (arg, gRecoverType ddefs env2 arg)
-          appArgTy oth = error $ "appArgTy: Cannot handle " ++ sdoc oth
-
-          (arg1, argty1) = appArgTy a
-          (_arg2, argty2) = appArgTy b
-          locs1 = locsInTy argty1
-          locs2 = locsInTy argty2
-
-          regs1 = S.fromList (L.map (renv #) locs1)
-          regs2 = S.fromList (L.map (renv #) locs2)
-          -- The regions used in BOTH parts of the tuple combinator --
-          -- all values residing in these regions would need RAN's.
-          common_regs = S.intersection regs1 regs2
-
-      if S.null common_regs
-      then LetE <$> (v,locs,ty,) <$> go rhs <*>
-             addTraversalsExp ddefs fundefs (extendVEnv v ty env2) renv context bod
-      else do
-        -- Only traversing arg1. See ASSUMPTION above.
-        trav_binds <- genTravBinds [(arg1,argty1)]
-        rhs' <- go rhs
-        bod' <- addTraversalsExp ddefs fundefs (extendVEnv v ty env2) renv context bod
-        return $ unLoc (mkLets (trav_binds ++ [(v,locs,ty,rhs')]) bod')
--}
-
     LetE (v,loc,ty,rhs) bod -> do
       LetE <$> (v,loc,ty,) <$> go rhs <*>
         addTraversalsExp ddefs fundefs (extendVEnv v ty env2) renv context bod
@@ -121,8 +75,7 @@ to one of them. There are 2 assumptions that we make about such tuples:
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
-    -- ParE a b -> ParE <$> go a <*> go b
-    ParE{} -> error "addTraversals: TODO ParE"
+    ParE ls -> pure $ ParE ls
     Ext ext ->
       case ext of
         LetRegionE reg bod -> Ext <$> LetRegionE reg <$> go bod

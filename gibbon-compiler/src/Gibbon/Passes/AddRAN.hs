@@ -76,8 +76,9 @@ Here, we don't want to fill the HOLE with (RequestEndOf x). Instead, we should r
 When does a type 'needsRAN'
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If any pattern 'needsTraversal' so that we can unpack it, we mark the type of the
-scrutinee as something that needs RAN's.
+If any pattern 'needsTraversalCase' to be able to unpack it, we mark the type of
+scrutinee as something that needs RAN's. Also, types of all packed values flowing
+into a ParE that live in the same region would need random access.
 
 
 Keeping old case clauses around
@@ -130,10 +131,10 @@ addRAN needRANsTyCons prg@Prog{ddefs,fundefs,mainExp} = do
     case mainExp of
       Just (ex,ty) -> Just <$> (,ty) <$> addRANExp needRANsTyCons iddefs M.empty ex
       Nothing -> return Nothing
-  return prg { ddefs = iddefs
-             , fundefs = M.fromList funs
-             , mainExp = mainExp'
-             }
+  return $ prg { ddefs = iddefs
+               , fundefs = M.fromList funs
+               , mainExp = mainExp'
+               }
 
 addRANFun :: S.Set TyCon -> DDefs Ty1 -> FunDef1 -> PassM FunDef1
 addRANFun needRANsTyCons ddfs fd@FunDef{funBody} = do
@@ -179,18 +180,39 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
     WithArenaE v e -> do
       e' <- go e
       return $ WithArenaE v e'
-    -- ParE a b -> ParE <$> (go a) <*> go b
-    ParE{} -> error "addRANExp: TODO ParE"
-    Ext _ -> return ex
+    ParE{} -> return ex
+    Ext _  -> return ex
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{} -> error "addRANExp: TODO FoldE"
 
   where
     go = addRANExp needRANsTyCons ddfs ienv
 
+    changeParToSeq :: L Exp1 -> L Exp1
+    changeParToSeq (L p1 ex1) = L p1 $
+      case ex1 of
+        ParE ls -> MkProdE ls
+        VarE{}    -> ex1
+        LitE{}    -> ex1
+        LitSymE{} -> ex1
+        AppE f locs args -> AppE f locs $ map changeParToSeq args
+        PrimAppE f args  -> PrimAppE f $ map changeParToSeq args
+        LetE (v,loc,ty,rhs) bod -> do
+          LetE (v,loc,ty, changeParToSeq rhs) (changeParToSeq bod)
+        IfE a b c  -> IfE (changeParToSeq a) (changeParToSeq b) (changeParToSeq c)
+        MkProdE xs -> MkProdE $ map changeParToSeq xs
+        ProjE i e  -> ProjE i $ changeParToSeq e
+        DataConE loc dcon args -> DataConE loc dcon $ map changeParToSeq args
+        CaseE scrt mp -> CaseE (changeParToSeq scrt) $ map (\(a,b,c) -> (a,b, changeParToSeq c)) mp
+        TimeIt e ty b  -> TimeIt (changeParToSeq e) ty b
+        WithArenaE v e -> WithArenaE v (changeParToSeq e)
+        Ext _  -> ex1
+        MapE{}  -> error "addRANExp: TODO MapE"
+        FoldE{} -> error "addRANExp: TODO FoldE"
+
     docase :: (DataCon, [(Var,())], L Exp1) -> PassM [(DataCon, [(Var,())], L Exp1)]
     docase (dcon,vs,bod) = do
-      old_pat <- pure (dcon,vs,bod)
+      let old_pat = (dcon,vs, changeParToSeq bod)
       case numRANsDataCon ddfs dcon of
         0 -> pure [old_pat]
         n -> do
@@ -207,7 +229,9 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
                 firstPacked = fromJust $ L.findIndex isPackedTy tys
                 haveRANsFor = L.take n $ L.drop firstPacked $ L.map fst vs
                 ienv' = M.union ienv (M.fromList $ zip haveRANsFor ranVars)
-            (:[old_pat]) <$>
+            -- [2019.10.15]: ckoparkar: don't include the old pattern for now.
+            -- (:[old_pat]) <$>
+            (:[]) <$>
               (toRANDataCon dcon, (L.map (,()) ranVars) ++ vs,) <$> addRANExp needRANsTyCons ddfs ienv' bod
 
 -- | Update data type definitions to include random access nodes.
@@ -259,7 +283,6 @@ hacky L1 primop, AddCursorP for this purpose.
 mkRANs :: RANEnv -> [L Exp1] -> PassM [(Var, [()], Ty1, L Exp1)]
 mkRANs ienv needRANsExp =
   snd <$> foldlM (\(mb_most_recent_ran, acc) arg -> do
-          dbgTraceIt (sdoc arg) (pure ())
           i <- gensym "ran"
           -- See Note [Reusing RAN's in case expressions]
           let rhs = case unLoc arg of
@@ -328,25 +351,43 @@ needsRANExp ddefs fundefs env2 renv (L _p ex) =
     TimeIt{}   -> S.empty
     WithArenaE{} -> S.empty
 {-
-    -- See (2) in Note [When does a type 'needsLRAN].
-    ParE a b   -> let mp1 = parAppLoc env2 a
-                      mp2 = parAppLoc env2 b
-                      locs1 = M.keys mp1
-                      locs2 = M.keys mp2
-                      regs1 = S.fromList (L.map (renv #) locs1)
-                      regs2 = S.fromList (L.map (renv #) locs2)
-                      -- The regions used in BOTH parts of the tuple combinator --
-                      -- all values residing in these regions would need RAN's.
-                      common_regs = S.intersection regs1 regs2
-                  in if S.null common_regs
-                     then S.empty
-                     else let -- Get all the locations in 'common_regs'.
-                              want_ran_locs = L.filter (\lc -> (renv # lc) `S.member` common_regs) (locs1 ++ locs2)
-                              common_mp = mp1 `M.union` mp2
-                          in S.fromList $ L.map (\lc -> common_mp # lc) want_ran_locs
+
+If we have an expression:
+
+    case blah of
+      C x y z -> par (foo x) (foo y) (foo z)
+
+we need to be able to access x, y and z in parallel, and thus need random access
+for the type 'blah'. To spot these cases, we look at the regions in which
+x, y and z live. In this case expression, they would all be in 1 single region.
+So we say that if there are any region that is shared among the things in 'par',
+we need random access for that type.
 
 -}
-    ParE{} -> error "needsRANExp: TODO ParE"
+    ParE ls ->
+      let mps   = map (parAppLoc env2) ls
+          locss = map M.keys mps
+          regss = map (map (renv #)) locss
+          deleteAt idx xs = let (lft, (_:rgt)) = splitAt idx xs
+                            in lft ++ rgt
+          common_regs = S.unions $ map
+                          (\(i,rs) -> let all_other_regs = concat (deleteAt i regss)
+                                      in S.intersection (S.fromList rs) (S.fromList all_other_regs))
+                          (zip [0..] regss)
+          common_locs  = S.unions $ map
+                           (\(i,rs) -> let all_other_locs = concat (deleteAt i locss)
+                                       in S.intersection (S.fromList rs) (S.fromList all_other_locs))
+                           (zip [0..] locss)
+      in if not (S.null common_locs)
+         -- ckoparkar: I think the typesystem would already guarantees this,
+         -- and we can just drop this check.
+         then error $ "Expected no location sharing. Found " ++ sdoc common_locs ++ " shared in: " ++ sdoc ex
+         else if S.null common_regs
+         then S.empty
+         else let want_ran_locs = L.filter (\lc -> (renv # lc) `S.member` common_regs) (concat locss)
+                  common_mp = M.unions mps
+              in S.fromList $ map (common_mp #) want_ran_locs
+
     Ext ext ->
       case ext of
         LetRegionE _ bod -> go bod

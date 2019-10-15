@@ -15,6 +15,7 @@ import Gibbon.Passes.RemoveCopies   (removeCopies)
 import Gibbon.Passes.Flatten        (flattenL2)
 import Gibbon.Passes.AddTraversals  (addTraversals)
 import Gibbon.Passes.AddRAN         (addRAN,needsRAN)
+import Gibbon.Pretty (render, pprint)
 
 --------------------------------------------------------------------------------
 

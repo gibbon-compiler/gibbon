@@ -62,7 +62,7 @@ library
                        Gibbon.Passes.AddTraversals
                        Gibbon.Passes.InferLocations
                        Gibbon.Passes.RemoveCopies
-                       Gibbon.Passes.InferMultiplicity
+                       Gibbon.Passes.InferRegionScope
                        Gibbon.Passes.InferEffects
                        Gibbon.Passes.RouteEnds
                        Gibbon.Passes.BoundsCheck

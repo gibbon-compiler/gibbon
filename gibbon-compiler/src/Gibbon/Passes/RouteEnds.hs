@@ -194,24 +194,32 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  return $ LetE (v,outlocs,ty, l$ AppE f lsin e1)
                                (wrapBody e2' newls)
 
-          --
-          {-
-          LetE (v,_ls,ty, rhs@(L _ (ParE a b))) bod -> do
-            (outlocs1,newls1,eor1) <- doBoundApp a
-            (outlocs2,newls2,eor2) <- doBoundApp b
-            let eor' = eor1 <> eor2
-                newls' = newls1 <> newls2
-                outlocs' = outlocs1 <> outlocs2
-                -- TODO: How to handle tuples in lenv ?
-                -- lenv' = if hasPacked ty
-                --         then M.insert v (locsInTy ty) lenv
-                --         else lenv
-            bod' <- exp fns retlocs eor' lenv afterenv (extendVEnv v ty env2) bod
-            return $ LetE (v,outlocs',ty,rhs)
-                          (wrapBody bod' newls')
-          -}
-          LetE (v,_ls,ty, rhs@(L _ (ParE ls))) bod -> do
-            error "routeEnds: TODO: ParE "
+          LetE (v,_ls, ty, rhs@(L _ (ParE ls))) bod -> do
+            (outlocs, newls, eors) <- unzip3 <$> mapM doBoundApp ls
+            -- Later, we should be able to tell which end-witness came from which
+            -- function call in the list. Since functions might return arbitrary
+            -- number of end-witnesses (or none), we can't just concat them together.
+            -- So we use a special encoding to put them in a list which Cursorize
+            -- can decode. For example, given this list: par (FN a, FN b, FN c):
+            --
+            -- (1) All of them return 1 end-witness:
+            --     outlocs' = [w_a, #, w_b, #, w_c]
+            --
+            -- (2) FN b doesn't return a end-witness:
+            --     outlocs' = [w_a, #, #, w_c]
+            --
+            -- (3) FN a returns multiple end-witnesses:
+            --
+            --     outlocs' = [w_a1, w_a2, #, w_b, #, w_c]
+            let outlocs' = intercalate [Var "#"] outlocs
+                newls'   = L.foldr (<>) (head newls) newls
+                eor'     = L.foldr (<>) (head eors) eors
+                lenv'    = if hasPacked ty
+                           then error $ "Gibbon-TODO: Only scalar types allowed in ParE for now. Got: " ++ sdoc ty
+                           else lenv
+            -- error (show (newls', eor'))
+            bod' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) bod
+            return $ LetE (v,outlocs',ty,rhs) (wrapBody bod' newls')
 
           CaseE (L _ (VarE x)) brs -> do
                  -- We will need to gensym while processing the case clauses, so
@@ -378,8 +386,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  e' <- go e
                  return $ TimeIt e' ty b
 
-          -- ParE a b -> ParE <$> go a <*> go b
-          ParE{} -> error "routeEnds: TODO: ParE "
+          ParE{} -> error "routeEnds:  ParE must always be let-bound."
 
           WithArenaE v e -> WithArenaE v <$> go e
 

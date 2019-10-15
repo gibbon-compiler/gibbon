@@ -19,9 +19,8 @@ sumFoo foo =
   case foo of
     A i     -> i
     B a b   ->
-      let tup = par (sumFoo a) (sumFoo b)
-          x = tup !!! 0
-          y = tup !!! 1
+      let x = sumFoo a
+          y = sumFoo b
       in x + y
     C a b c ->
       let trp = par (sumFoo a) (sumFoo b) (sumFoo c)

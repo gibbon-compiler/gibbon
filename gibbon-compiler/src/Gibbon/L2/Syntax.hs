@@ -641,8 +641,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           DataConE _ _ args -> foldl go acc args
           TimeIt e _ _ -> go acc e
           WithArenaE _ e -> go acc e
-          -- ParE{}  -> acc
-          ParE{}  -> error "depList: TODO ParE"
+          ParE ls -> foldl go acc ls
           MapE{}  -> acc
           FoldE{} -> acc
           Ext ext ->
