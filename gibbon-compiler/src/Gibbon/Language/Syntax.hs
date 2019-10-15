@@ -648,6 +648,10 @@ data Prim ty
           | MkTrue  -- ^ Zero argument constructor.
           | MkFalse -- ^ Zero argument constructor.
 
+          | PrintInt -- ^ Print an integer to standard out
+          | PrintSym -- ^ Print a symbol to standard out
+          | ReadInt  -- ^ Read an int from standard in
+
           | ReadPackedFile (Maybe FilePath) TyCon (Maybe Var) ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
             -- type of the file being read.  The `Ty` tracks the type as the program evolvels
@@ -1035,6 +1039,9 @@ primArgsTy p =
     DictInsertP _ty  -> error "primArgsTy: dicts not handled yet"
     DictLookupP _ty  -> error "primArgsTy: dicts not handled yet"
     DictHasKeyP _ty  -> error "primArgsTy: dicts not handled yet"
+    PrintInt -> [IntTy]
+    PrintSym -> [SymTy]
+    ReadInt  -> []
     ReadPackedFile{} -> []
     (ErrorP _ _) -> []
     RequestEndOf      -> error "primArgsTy: RequestEndOf not handled yet"
@@ -1067,6 +1074,9 @@ primRetTy p =
     DictEmptyP ty  -> SymDictTy Nothing $ stripTyLocs ty
     DictInsertP ty -> SymDictTy Nothing $ stripTyLocs ty
     DictLookupP ty -> ty
+    PrintInt -> IntTy
+    PrintSym -> SymTy
+    ReadInt  -> IntTy
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
     RequestEndOf      -> error "primRetTy: RequestEndOf not handled yet"

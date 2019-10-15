@@ -195,6 +195,20 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
           s3 <- unify (args !! 1) IntTy (arg_tys' !! 1)
           pure (s1 <> s2 <> s3, SymTy0, PrimAppE pr args_tc)
 
+        PrintInt -> do
+          len1
+          s2 <- unify (args !! 0) IntTy (arg_tys' !! 0)
+          pure (s1 <> s2, IntTy, PrimAppE pr args_tc)
+
+        PrintSym -> do
+          len1
+          s2 <- unify (args !! 0) SymTy0 (arg_tys' !! 0)
+          pure (s1 <> s2, IntTy, PrimAppE pr args_tc)
+
+        ReadInt -> do
+          len0
+          pure (s1, IntTy, PrimAppE pr args_tc)
+
         DictEmptyP ty -> do
           len1
           let [a] = arg_tys'

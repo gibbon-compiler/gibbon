@@ -173,6 +173,9 @@ primMap = M.fromList
   , ("True", MkTrue)
   , ("False", MkFalse)
   , ("gensym", Gensym)
+  , ("printint", PrintInt)
+  , ("printsym", PrintSym)
+  , ("readint", ReadInt)
   ]
 
 desugarExp :: (Show a, Pretty a) => TopTyEnv -> Exp a -> PassM (L Exp0)
