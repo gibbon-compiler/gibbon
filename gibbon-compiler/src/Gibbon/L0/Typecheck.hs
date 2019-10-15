@@ -203,7 +203,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
         PrintSym -> do
           len1
           s2 <- unify (args !! 0) SymTy0 (arg_tys' !! 0)
-          pure (s1 <> s2, IntTy0, PrimAppE pr args_tc)
+          pure (s1 <> s2, IntTy, PrimAppE pr args_tc)
 
         ReadInt -> do
           len0
