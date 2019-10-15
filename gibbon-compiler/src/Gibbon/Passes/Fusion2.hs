@@ -131,8 +131,7 @@ removeCommonExpressions = go
       x       -> l $x
 
 simplifyProjections :: L Exp1->  L Exp1
-simplifyProjections exp = removeCommonExpressions (go exp M.empty)
- --   `debug` ("before the death" L.++ render (pprint go exp M.emptyZZZZzzzz) )
+simplifyProjections expin = removeCommonExpressions (go expin M.empty)
    where
     go exp mp = case unLoc exp of
       LetE (v, ls, t, bind) body ->
@@ -141,7 +140,8 @@ simplifyProjections exp = removeCommonExpressions (go exp M.empty)
               let bind' = go bind mp
                   mp' = M.insert v (V.fromList prodList) mp
                   body' = go body mp'
-              in l $  LetE (v, ls, t, bind')  body'
+              in l $  LetE (v, ls, t, bind')  body'  `debug1` ("here is one lol" L.++ render (pprint expin) )
+
             otherwise ->
               let bind' = go bind mp
                   body' = go body mp
@@ -439,6 +439,10 @@ inline2 inlined_fun outer_fun  =
   return outer_fun {funArgs = newArgs, funTy = newType, funBody = newBody}
 
 {-
+case (case c of D1-> K ,.. -> f)
+
+case c of D1 ->
+          D2 ->  f1 (f)
   The type of the new function is defined as the following :
    if
      innerType = TreeX-> Args1... -> RetType1
@@ -1194,24 +1198,19 @@ tuple ddefs fdefs oldExp_ argsVars depth= do
             let tupledFunction''' =
                   tupledFunction''{funBody= removeUnusedDefsExp
                     (simplifyProjections (funBody tupledFunction''))}
-                     `debug` ("\n res of  tupling  is :" L.++ (show tupledFName)
-                         L.++ (render (pprint  tupledFunction'')  )
-                       )
+                     `debug1` ("\n ggg1")
 
-            let tupledFunction5 =
-                 tupledFunction''' {funBody = removeUnusedDefsExp(
-                    simplifyProjections (funBody tupledFunction''' )) }
 
-            let fdefs'' = M.insert tupledFName tupledFunction5  newDefs
+            let fdefs'' = M.insert tupledFName  tupledFunction'''  newDefs
 
             exp' <-
-              foldTupledFunctions exp  tupledFunction5 callExpressions
+              foldTupledFunctions exp  tupledFunction''' callExpressions
                    (getOutputStartPositions fdefs''
                    callExpressions ) syncArgsLocs
                      `debug` ("fold2 before folding" L.++ render (pprint exp))
 
             let exp'' = simplifyProjections exp'
-                                     `debug` ("fold2 after folding" L.++ render (pprint exp'))
+                                       `debug1` ("\n ggg2")
 
 
             return (exp'', fdefs'')  `debug` ("fold2" L.++ render (pprint exp''))
@@ -1348,7 +1347,7 @@ violateRestrictions fdefs inner outer depth=
     in -- should be configurable
   let p0 =
   -- (depth>6) &&
-       (n >5)
+       (n >10)
      -- &&  (n>5)
         `debug` ( "n is " L.++ (show n) L.++ "for" L.++ (show inner ) L.++ (show outer)) in
   let innerDef =
@@ -1504,8 +1503,14 @@ fusion2 (L1.Prog defs funs main) = do
         --                   else fdef
         --        ) newDefs
         (mainBody'', newDefs') <- tupleAndOptimize defs (M.union funs newDefs) mainBody' True
-        return (Just (mainBody'', ty), newDefs')
-       -- return (Just (mainBody', ty), newDefs')
+        let newDefs'' = M.filter
+              (\f ->
+                  case snd (funTy f) of
+                      ProdTy [] -> False
+                      _ -> True
+                  ) newDefs'
+        return (Just (mainBody'', ty), newDefs'')
+  --      return (Just (mainBody', ty), newDefs)
   return $ L1.Prog defs funs' main'
 
 
@@ -1534,7 +1539,7 @@ redundancy_output_pass fdefs mainExp firstTime=
                        redirectMap
                        outPutFromInput
                        newName
-                       )))
+                       )))     `debug1` ("\n ggg3")
         }
 
     pass1F orgFdefs (fdefs, rules) f =
