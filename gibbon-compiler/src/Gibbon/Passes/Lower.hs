@@ -386,7 +386,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
             go scrt <> foldl (\acc (_,_,c) -> collect_syms acc c) syms ls
           DataConE _ _ ls -> gol ls
           TimeIt e _ _   -> go e
-          ParE a b       -> go a <> go b
+          ParE ls        -> gol ls
           WithArenaE _ e -> go e
           Ext ext        ->
             case ext of
@@ -557,8 +557,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
 {-
 
-Lowering the parallel tuple combinator
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Lowering ParE
+~~~~~~~~~~~~~
 
 ASSUMPTION: Sub-expressions are function calls.
 
@@ -601,7 +601,7 @@ See [Hacky substitution to encode ParE].
                                , T.async = True } }
 
 -}
-    LetE (_,_, ProdTy [_, _], L _ (ParE _ _)) _ -> do
+    LetE (_,_, ProdTy [_, _], L _ (ParE{})) _ -> do
       error "lower: TODO ParE"
 
     -- We could eliminate these ahead of time:

@@ -22,7 +22,7 @@ import qualified Gibbon.TargetInterp as TI
 -- |
 import RouteEnds
 import InferEffects
-import InferMultiplicity
+import InferRegionScope
 import Unariser
 import AddRAN
 import Compiler

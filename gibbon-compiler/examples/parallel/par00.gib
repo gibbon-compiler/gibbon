@@ -43,7 +43,7 @@
                      (append-list part1 (Cons y part2))))]))
 
 
-(sum-list (sort (mklist 3)))
+(sum-list (iterate (sort (mklist (size-param)))))
 
 ;; (sum-list (append-list (mklist 3) (mklist 2)))
 

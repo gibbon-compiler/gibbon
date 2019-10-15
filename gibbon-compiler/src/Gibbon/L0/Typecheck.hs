@@ -373,11 +373,9 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
       (s1, ty', e1') <- tcExp ddefs sbst venv' fenv bound_tyvars is_main e1
       pure (s1, ty', WithArenaE v e1')
 
-    ParE a b  -> do
-      (s1, es_tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) [a,b])
-      case es_tc of
-        [a',b'] -> pure (s1, ProdTy es_tys, ParE a' b')
-        _ -> err $ text "ParE: expected list of two things, got: " <+> doc es_tc
+    ParE es  -> do
+      (s1, es_tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) es)
+      pure (s1, ProdTy es_tys, ParE es_tc)
 
     MapE{}  -> err $ text "TODO" <+> exp_doc
     FoldE{} -> err $ text "TODO" <+> exp_doc
@@ -560,7 +558,7 @@ zonkExp s (L p ex) = L p $
                                  in Ext (FunRefE tyapps1 f)
     Ext (BenchE fn tyapps args b) -> let tyapps1 = map (zonkTy s) tyapps
                                      in Ext (BenchE fn tyapps1 (map go args) b)
-    ParE a b -> ParE (go a) (go b)
+    ParE ls  -> ParE $ map go ls
     MapE{}   -> error $ "zonkExp: TODO, " ++ sdoc ex
     FoldE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
 
@@ -616,7 +614,7 @@ substTyVarExp s (L p ex) = L p $
                               in Ext $ FunRefE tyapps1 f
     Ext (BenchE fn tyapps args b) -> let tyapps1 = map (substTyVar s) tyapps
                                      in Ext (BenchE fn tyapps1 (map go args) b)
-    ParE a b -> ParE (go a) (go b)
+    ParE ls  -> ParE  $ map go ls
     MapE{}   -> error $ "substTyVarExp: TODO, " ++ sdoc ex
     FoldE{}  -> error $ "substTyVarExp: TODO, " ++ sdoc ex
   where

@@ -15,6 +15,7 @@ import Gibbon.Passes.RemoveCopies   (removeCopies)
 import Gibbon.Passes.Flatten        (flattenL2)
 import Gibbon.Passes.AddTraversals  (addTraversals)
 import Gibbon.Passes.AddRAN         (addRAN,needsRAN)
+import Gibbon.Pretty (render, pprint)
 
 --------------------------------------------------------------------------------
 
@@ -74,6 +75,6 @@ repairProgram oldl1 prg = do
         l2 <- flattenL2 l2
         l2 <- removeCopies l2
         l2 <- inferEffects l2
-        -- See [Keeping old case clauses around] in AddRAN
-        l2 <- addTraversals l2
+        -- -- See [Keeping old case clauses around] in AddRAN
+        -- l2 <- addTraversals l2
         return l2

@@ -4,7 +4,7 @@
 --   InferMultiplicity takes the next step and decides the region scope (global/dynamic)
 --   and also assigns it a multiplicity.
 
-module Gibbon.Passes.InferMultiplicity
+module Gibbon.Passes.InferRegionScope
   (inferRegScope, inferRegScopeExp) where
 
 import Data.Loc
@@ -127,8 +127,7 @@ inferRegScopeExp (L p ex) = L p <$>
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
-    -- ParE a b -> ParE <$> go a <*> go b
-    ParE{} -> error "inferRegScopeExp: TODO ParE"
+    ParE ls -> ParE <$> mapM go ls
     WithArenaE v e -> WithArenaE v <$> go e
     MapE{}  -> error $ "inferRegScopeExp: TODO MapE"
     FoldE{} -> error $ "inferRegScopeExp: TODO FoldE"

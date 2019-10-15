@@ -212,26 +212,6 @@ tests:
     bench-fun: bench
     bench-input: examples/twitter_input.gpkd
 
-  ## Parallel tuple combinator tests
-  ## Some of these tests require GCC >= 7. Older GCC's complain:
-  ##
-  ##    /usr/include/x86_64-linux-gnu/bits/stdio2.h:102:1: error: inlining failed in call to always_inline
-  ##    'printf': function not inlinable
-  ##    printf (const char *__restrict __fmt, ...)
-  ##
-  ## [2018.12.03] CSK: Skip Cilk stuff for now.
-  ## This should be behind a flag.
-  - name: test_par01.gib
-    skip: true
-  - name: test_par03.gib
-    skip: true
-  - name: test_par04.gib
-    skip: true
-  - name: test_par07.gib
-    skip: true
-  - name: test_par08.gib
-    skip: true
-
   ## Polymorphic frontend tests
   - name: Poly1.hs
     dir: examples/poly
@@ -331,11 +311,6 @@ tests:
     failing: [gibbon1, gibbon2]
     # gibbon2: segfaults in free_region
     answer-file: examples/ast/LC.ans
-
-  ## A difficult test for AddTraversals.
-  - name: test_par05.gib
-    skip: true
-    failing: [gibbon1]
 
   ## Tests that only work with some backend:
   - name: test06h_rec.gib

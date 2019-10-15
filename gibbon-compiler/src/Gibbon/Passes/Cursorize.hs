@@ -746,9 +746,11 @@ TLDR: Because of the way Flatten, Unariser and Lower deal with parallel tuples.
 
 -}
 _cursorizePar :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Exp2 -> PassM L3.Exp3
-_cursorizePar isPackedContext ddfs fundefs denv tenv ex =
+_cursorizePar = _
+{-
+_cursorizePar isPackedContext ddfs fundefs denv tenv ex = _
   case ex of
-    LetE (v,locs, ProdTy [tya, tyb], rhs@(L _ (ParE a b))) bod ->
+    LetE (v,locs, ProdTy [tya, tyb], rhs@(L _ (ParE ls))) bod ->
       case (a,b) of
         (L _ (AppE f _ _), L _ (AppE g _ _)) -> do
           tup   <- gensym "par_tup"
@@ -763,11 +765,9 @@ _cursorizePar isPackedContext ddfs fundefs denv tenv ex =
           let tenv' = M.union (M.fromList []) tenv
           bod' <- go tenv' bod
           return $ unLoc $ mkLets bnds bod'
-
         _ -> error $ "cursorizePar: Expected function calls, got: " ++ sdoc rhs
 
     _ -> error $ "cursorizePar: Unexpected expression: " ++ sdoc ex
-
   where
     -- After Cursorize, a function might return some end-witnesses along with the value.
     -- "doapp" ensures that "part" contains the return *value* which "cursorizePar" uses
@@ -798,7 +798,7 @@ _cursorizePar isPackedContext ddfs fundefs denv tenv ex =
     go t x = if isPackedContext
              then fromDi <$> cursorizePackedExp ddfs fundefs denv t x
              else cursorizeExp ddfs fundefs denv t x
-
+-}
 
 {-
 

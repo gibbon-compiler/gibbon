@@ -173,7 +173,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
                                                     brs)
         DataConE _ dcon ls -> DataConE () dcon (map toL1Exp ls)
         TimeIt e ty b  -> TimeIt (toL1Exp e) (toL1Ty ty) b
-        ParE a b       -> ParE (toL1Exp a) (toL1Exp b)
+        ParE ls        -> ParE (map toL1Exp ls)
         WithArenaE v e -> WithArenaE v (toL1Exp e)
         MapE{}  -> err1 (sdoc ex)
         FoldE{} -> err1 (sdoc ex)
@@ -570,10 +570,9 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
           case tyapps of
             [] -> pure ex
             _  -> error $ "collectMonoObls: Polymorphic bench not supported yet. In: " ++ sdoc ex
-    ParE a b -> do
-      a' <- collectMonoObls ddefs env2 toplevel a
-      b' <- collectMonoObls ddefs env2 toplevel b
-      pure $ ParE a' b'
+    ParE ls -> do
+      ls' <- mapM (collectMonoObls ddefs env2 toplevel) ls
+      pure $ ParE ls'
     MapE{}  -> error $ "collectMonoObls: TODO: " ++ sdoc ex
     FoldE{} -> error $ "collectMonoObls: TODO: " ++ sdoc ex
   where
@@ -662,7 +661,7 @@ monoLambdas (L p ex) = (L p) <$>
     Ext (PolyAppE{}) -> error $ "monoLambdas: TODO: " ++ sdoc ex
     Ext (FunRefE{})  -> pure ex
     Ext (BenchE{})   -> pure ex
-    ParE a b-> ParE <$> monoLambdas a <*> monoLambdas b
+    ParE ls -> ParE <$> mapM monoLambdas ls
     MapE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
     FoldE{} -> error $ "monoLambdas: TODO: " ++ sdoc ex
   where go = monoLambdas
@@ -740,7 +739,7 @@ updateTyConsExp ddefs mono_st (L loc ex) = L loc $
     DataConE{} -> error $ "updateTyConsExp: DataConE expected ProdTy tyapps, got: " ++ sdoc ex
     TimeIt e ty b -> TimeIt (go e) (updateTyConsTy ddefs mono_st ty) b
     WithArenaE v e -> WithArenaE v (go e)
-    ParE a b-> ParE (go a) (go b)
+    ParE ls -> ParE $ map go ls
     MapE{}  -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     FoldE{} -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, updateTyConsTy ddefs mono_st ty)) args) (go bod))
@@ -947,8 +946,9 @@ specLambdasExp ddefs env2 (L p ex) = (L p) <$>
 
     LetE (_, (_:_),_,_) _ -> error $ "specExp: Binding not monomorphized: " ++ sdoc ex
 
-    ParE a b -> do
-      let mk_fn e0 = do
+    ParE ls -> do
+      let mk_fn :: L Exp0 -> SpecM (Maybe FunDef0, [(Var, [Ty0], Ty0, L (PreExp E0Ext Ty0 Ty0))], L Exp0)
+          mk_fn e0 = do
             let vars = S.toList $ gFreeVars e0
             args <- mapM (\v -> lift $ gensym v) vars
             let e0' = foldr (\(old,new) acc ->
@@ -966,17 +966,15 @@ specLambdasExp ddefs env2 (L p ex) = (L p) <$>
                             , funBody = e0'
                             }
             pure (Just fn, binds, l$ AppE fnname [] (map (l . VarE) args))
-      (mb_fna, bindsa, call_a) <- case unLoc a of
-                                    AppE{} -> pure (Nothing, [], a)
-                                    _ -> mk_fn a
-      (mb_fnb, bindsb, call_b) <- case unLoc b of
-                                    AppE{} -> pure (Nothing, [], b)
-                                    _ -> mk_fn b
       let mb_insert mb_fn mp = case mb_fn of
                                  Just fn -> M.insert (funName fn) fn mp
                                  Nothing -> mp
-      state (\st -> ((), st { sp_fundefs = mb_insert mb_fna $ mb_insert mb_fnb (sp_fundefs st) }))
-      pure $ unLoc $ mkLets (bindsa ++ bindsb) (l$ ParE call_a call_b)
+      (mb_fns, binds, calls) <- unzip3 <$> mapM (\a -> case unLoc a of
+                                              AppE{} -> pure (Nothing, [], a)
+                                              _ -> mk_fn a)
+                                     ls
+      state (\st -> ((), st { sp_fundefs = foldr mb_insert (sp_fundefs st) mb_fns }))
+      pure $ unLoc $ mkLets (concat binds) (l$ ParE calls)
 
     -- Straightforward recursion
     VarE{}    -> pure ex
@@ -1045,7 +1043,7 @@ specLambdasExp ddefs env2 (L p ex) = (L p) <$>
                             (\(_,_,b) acc2 -> collectFunRefs b acc2)
                             (collectFunRefs scrt acc)
                             brs
-        ParE a b-> foldr collectFunRefs acc [a, b]
+        ParE ls -> foldr collectFunRefs acc ls
         MapE{}  -> error $ "collectFunRefs: TODO: " ++ sdoc e
         FoldE{} -> error $ "collectFunRefs: TODO: " ++ sdoc e
         Ext ext ->
@@ -1148,10 +1146,9 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
         (DataConE c loc es) -> do (ltss,es') <- unzip <$> mapM go es
                                   pure (concat ltss, DataConE c loc es')
 
-        (ParE a b) -> do
-          a' <- (gocap a)
-          b' <- (gocap b)
-          pure ([], ParE a' b')
+        (ParE ls) -> do
+          ls' <- mapM gocap ls
+          pure ([], ParE ls')
 
         (WithArenaE v e) -> do
           e' <- (gocap e)

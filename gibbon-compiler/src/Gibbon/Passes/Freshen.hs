@@ -263,8 +263,7 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
       e' <- freshExp (M.insert v v' venv) tvenv e
       return $ WithArenaE v' e'
 
-    ParE a b -> do
-      ParE <$> go a <*> go b
+    ParE ls -> ParE <$> mapM go ls
 
     MapE (v,t,b) e -> do
       b' <- go b
@@ -363,8 +362,7 @@ freshExp1 vs (L sloc exp) = fmap (L sloc) $
       e' <- freshExp1 vs e
       return $ TimeIt e' t b
 
-    ParE a b -> do
-      ParE <$> freshExp1 vs a <*> freshExp1 vs b
+    ParE ls -> ParE <$> mapM (freshExp1 vs) ls
 
     MapE (v,t,b) e -> do
       b' <- freshExp1 vs b

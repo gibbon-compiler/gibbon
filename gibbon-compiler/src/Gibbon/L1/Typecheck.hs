@@ -291,13 +291,12 @@ tcExp ddfs env exp@(L p ex) =
       ty <- go e
       return ty
 
-    ParE a b -> do
-      aty <- go a
-      bty <- go b
-      if isScalarTy aty && isScalarTy bty
-      then return (ProdTy [aty, bty])
+    ParE ls -> do
+      tys <- mapM go ls
+      if all isScalarTy tys
+      then return (ProdTy tys)
       else error $ "Gibbon-TODO: Only scalar types allowed in ParE for now. Got: " ++
-                   sdoc (ProdTy [aty, bty])
+                   sdoc (ProdTy tys)
 
     WithArenaE v e -> do
       let env' = extendEnv env [(v,ArenaTy)]

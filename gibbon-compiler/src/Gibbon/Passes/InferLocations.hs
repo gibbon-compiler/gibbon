@@ -96,6 +96,7 @@ import Control.Monad.Trans (lift)
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
+import Gibbon.Pretty (render, pprint)
 import Gibbon.L1.Syntax as L1 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
 import Gibbon.L2.Syntax as L2 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
 import Gibbon.Passes.InlineTriv (inlineTriv)
@@ -212,7 +213,7 @@ data DCArg = ArgFixed Int
 
 inferLocs :: Prog1 -> PassM L2.Prog2
 inferLocs initPrg = do
-  (Prog dfs fds me) <- addRepairFns initPrg
+  p@(Prog dfs fds me) <- addRepairFns initPrg
   let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
           fenv <- forM fds $ \(FunDef _ _ (intys, outty) _) ->
@@ -593,12 +594,16 @@ inferExp env@FullEnv{dataDefs}
                                      ProdTy ([b | (_,b,_) <- results]),
                                      concat $ [c | (_,_,c) <- results])
 
-    -- Location inference for the parallel combinator should work exactly like a regular tuple --
-    -- except that the result should be a `ParE` instead of a `MkProdE`.
-    -- ParE a b -> do
-    --   (L lc1 (MkProdE [a',b']), ty, cs) <- inferExp env (l$ MkProdE [a,b]) dest
-    --   return (L lc1 (ParE a' b'), ty, cs)
-    ParE{} -> error "inferLocations: TODO ParE"
+    -- [2019.10.14]: Things in a ParE cannot *write* anything at the moment.
+    -- So we can infer things without having a destination for them, and reuse
+    -- the existing MkProdE machinery.
+    ParE ls ->
+      case dest of
+        NoDest -> do
+          ((L _ (MkProdE ls')), ty, res) <- inferExp env (l$ MkProdE ls) NoDest
+          pure (l$ ParE ls', ty, res)
+        _ -> err $ "Gibbon-TODO: Only scalar types allowed in ParE for now. " ++
+                   "But got a destination: " ++ sdoc dest
 
     LitE n -> return (lc$ LitE n, IntTy, [])
 
@@ -943,6 +948,12 @@ inferExp env@FullEnv{dataDefs}
                         ty'', ccs)
 
         MkProdE ls    -> do
+          -- ckoparkar: Shouldn't this check the types of things in ls
+          -- before recurring with a NoDest ? Some things in this list may
+          -- need fresh destinations. I think it's set up this way because
+          -- there's an assumption that things in a MkProdE will always be a
+          -- variable reference (because of ANF), and the AppE/DataConE cases
+          -- above will do the right thing.
           lsrec <- mapM (\e -> inferExp env e NoDest) ls
           ty <- lift $ lift $ convertTy bty
           (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
@@ -953,15 +964,15 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion cs'''
           tryBindReg (lc$ L2.LetE (vr,[], ProdTy aty, L sl2 $ L2.MkProdE als) bod'', ty'', fcs)
 
-        -- Location inference for the parallel combinator should work exactly like a regular tuple --
-        -- except that the result should be a `ParE` instead of a `MkProdE`.
-        -- ParE a b -> do
-        --    res <- inferExp env (l$ LetE (vr,locs,bty, l$ MkProdE [a,b]) bod) dest
-        --    case res of
-        --      (L lc1 (LetE (vr',locs', ty', L lc2 (MkProdE [a',b'])) bod), ty'', cs'') ->
-        --        return (L lc1 (LetE (vr',locs', ty', L lc2 (ParE a' b')) bod), ty'', cs'')
-        --      _  -> err$ "ParE -- unexpected result: " ++ sdoc res
-        ParE{} -> error "inferLocations: TODO ParE"
+        -- [2019.10.14]: Things in a ParE cannot *write* anything at the moment.
+        -- So we can infer things without having a destination for them, and reuse
+        -- the existing MkProdE machinery. See comment in the MkProdE case above.
+        ParE ls -> do
+           res <- inferExp env (l$ LetE (vr,locs,bty, l$ MkProdE ls) bod) NoDest
+           case res of
+             (L lc1 (LetE (vr',locs', ty', L lc2 (MkProdE ls')) bod), ty'', cs'') ->
+               return (L lc1 (LetE (vr',locs', ty', L lc2 (ParE ls')) bod), ty'', cs'')
+             _  -> err$ "ParE -- unexpected result: " ++ sdoc res
 
         WithArenaE v e -> do
           (e',ty,cs) <- inferExp (extendVEnv v ArenaTy env) e NoDest
@@ -1064,11 +1075,9 @@ finishExp (L i e) =
                      _ -> return t
              return $ l$ TimeIt e1' t' b
 
-      -- ParE a b -> do
-      --     a' <- finishExp a
-      --     b' <- finishExp b
-      --     return (l$ ParE a' b')
-      ParE{} -> error "finishExp: TODO ParE"
+      ParE es -> do
+          es' <- mapM finishExp es
+          return (l$ ParE es')
 
       WithArenaE v e -> do
              e' <- finishExp e
@@ -1161,10 +1170,8 @@ cleanExp (L i e) =
       TimeIt e d b -> let (e',s') = cleanExp e
                       in (l$ TimeIt e' d b, s')
 
-      -- ParE a b -> let (a', s1) = cleanExp a
-      --                 (b', s2) = cleanExp b
-      --             in (l$ ParE a' b', s1 `S.union` s2)
-      ParE{} -> error "cleanExp: TODO ParE"
+      ParE es -> let (es',ls') = unzip $ L.map cleanExp es
+                 in (l$ ParE es', S.unions ls')
 
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (l$ WithArenaE v e', s)
