@@ -212,7 +212,9 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
 
     docase :: (DataCon, [(Var,())], L Exp1) -> PassM [(DataCon, [(Var,())], L Exp1)]
     docase (dcon,vs,bod) = do
-      let old_pat = (dcon,vs, changeParToSeq bod)
+      -- See [2019.10.15].
+      -- let old_pat = (dcon,vs, changeParToSeq bod)
+      old_pat <- (dcon, vs,) <$> go bod
       case numRANsDataCon ddfs dcon of
         0 -> pure [old_pat]
         n -> do
@@ -229,7 +231,9 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
                 firstPacked = fromJust $ L.findIndex isPackedTy tys
                 haveRANsFor = L.take n $ L.drop firstPacked $ L.map fst vs
                 ienv' = M.union ienv (M.fromList $ zip haveRANsFor ranVars)
-            -- [2019.10.15]: ckoparkar: don't include the old pattern for now.
+            -- [2019.10.15]: ckoparkar: don't include the old pattern for now. It
+            -- causes subsequent passes (flatten+inlineTriv) to create variable
+            -- aliases which InferLocations is not happy with.
             -- (:[old_pat]) <$>
             (:[]) <$>
               (toRANDataCon dcon, (L.map (,()) ranVars) ++ vs,) <$> addRANExp needRANsTyCons ddfs ienv' bod
