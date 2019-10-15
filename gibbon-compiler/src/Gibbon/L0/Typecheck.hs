@@ -233,7 +233,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
           pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
 
         ErrorP _str ty -> do
-          len2
+          len0
           pure (s1, ty, PrimAppE pr args_tc)
 
         SizeParam -> do

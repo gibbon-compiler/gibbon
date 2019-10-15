@@ -1477,14 +1477,14 @@ prim p = case p of
            MkFalse -> return MkFalse
            Gensym  -> return Gensym
            SizeParam -> return SizeParam
-           RequestEndOf    -> return RequestEndOf
+           RequestEndOf -> return RequestEndOf
+           ErrorP sty ty -> convertTy ty >>= \ty -> return (ErrorP sty ty)
            DictEmptyP dty  -> convertTy dty >>= return . DictEmptyP
            DictInsertP dty -> convertTy dty >>= return . DictInsertP
            DictLookupP dty -> convertTy dty >>= return . DictLookupP
            DictHasKeyP dty -> convertTy dty >>= return . DictHasKeyP
            SymAppend{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
-           ErrorP{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
 
 -- | Generate a copy function for a particular data definition.
 -- Note: there will be redundant let bindings in the function body which may need to be inlined.

@@ -289,6 +289,9 @@ tests:
   - name: toplevel_value.hs
     answer-file: examples/toplevel_value.ans
 
+  - name: Error.hs
+    answer-file: examples/Error.ans
+
     ## Shouldn't typecheck
   - name: Fail1.hs
     dir: examples/should_fail

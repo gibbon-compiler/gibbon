@@ -259,7 +259,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
           return BoolTy
 
         ErrorP _str ty -> do
-          len2
+          len0
           return ty
 
         ReadPackedFile _fp _tycon _reg ty -> do

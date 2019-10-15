@@ -190,7 +190,7 @@ tcExp ddfs env exp@(L p ex) =
             _ -> throwError $ GenericTC "Expected SymDictTy" exp
 
         ErrorP _str ty -> do
-          len2
+          len0
           return ty
 
         SizeParam -> do

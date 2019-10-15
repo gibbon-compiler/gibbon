@@ -297,7 +297,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    return (IntTy, tstate)
 
                  ErrorP _str ty -> do
-                   len2
+                   len0
                    return (ty, tstate)
 
                  ReadPackedFile _fp _tycon _reg ty -> do

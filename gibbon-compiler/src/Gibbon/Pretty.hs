@@ -188,6 +188,7 @@ instance (Pretty d, Ord d) => Pretty (Prim d) where
                                       DictInsertP ty -> text "DictInsert" <> wty ty
                                       DictLookupP ty -> text "DictLookup" <> wty ty
                                       RequestEndOf   -> text "RequestEndOf"
+                                      ErrorP str ty  -> text "ErrorP" <> wty ty <+> doubleQuotes (text str) <> space
                                       _ -> error $ "pprint: Unknown primitive"
                       PPHaskell  -> case pr of
                                       DictEmptyP _ty  -> text "dictEmpty"
@@ -195,6 +196,7 @@ instance (Pretty d, Ord d) => Pretty (Prim d) where
                                       DictInsertP _ty -> text "dictInsert"
                                       DictLookupP _ty -> text "dictLookup"
                                       RequestEndOf   -> text "RequestEndOf"
+                                      ErrorP str _ty -> text "error" <> doubleQuotes (text str)
                                       _ -> error $ "pprint: Unknown primitive"
               Just str -> text str
 

@@ -176,6 +176,10 @@ primMap = M.fromList
 desugarExp :: (Show a, Pretty a) => TopTyEnv -> Exp a -> PassM (L Exp0)
 desugarExp toplevel e = L NoLoc <$>
   case e of
+    Paren _ (ExpTypeSig _ (App _ (H.Var _ f) (Lit _ lit)) tyc)
+        | (qnameToStr f) == "error" -> pure $ PrimAppE (ErrorP (litToString lit) (desugarType tyc)) []
+    -- Paren _ (App _ (H.Var _ f) (Lit _ lit))
+    --     | (qnameToStr f) == "error" -> pure $ PrimAppE (ErrorP (litToString lit
     Paren _ e2 -> Loc.unLoc <$> desugarExp toplevel e2
     H.Var _ qv -> do
       let v = (toVar $ qnameToStr qv)
@@ -213,7 +217,11 @@ desugarExp toplevel e = L NoLoc <$>
                        then do
                          e2' <- desugarExp toplevel e2
                          pure $ Ext $ BenchE "HOLE" [] [e2'] False
-                       else AppE f [] <$> (: []) <$> desugarExp toplevel e2
+                       else if f == "error"
+                            then case e2 of
+                                   Lit _ lit -> pure $ PrimAppE (ErrorP (litToString lit) IntTy) [] -- assume int (!)
+                                   _ -> error "desugarExp: error expects String literal."
+                            else AppE f [] <$> (: []) <$> desugarExp toplevel e2
           L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of
               Just p  -> pure $ PrimAppE p as
