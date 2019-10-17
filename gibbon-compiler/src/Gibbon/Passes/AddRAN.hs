@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
+
 module Gibbon.Passes.AddRAN
   (addRAN, numRANsDataCon, needsRAN) where
 
@@ -15,6 +17,8 @@ import           Gibbon.DynFlags
 import           Gibbon.Passes.AddTraversals ( needsTraversalCase )
 import           Gibbon.L1.Syntax
 import           Gibbon.L2.Syntax
+import           Gibbon.Passes.Flatten    (flattenL1)
+import           Gibbon.Passes.InlineTriv (inlineTriv)
 
 {-
 
@@ -131,10 +135,20 @@ addRAN needRANsTyCons prg@Prog{ddefs,fundefs,mainExp} = do
     case mainExp of
       Just (ex,ty) -> Just <$> (,ty) <$> addRANExp needRANsTyCons iddefs M.empty ex
       Nothing -> return Nothing
-  return $ prg { ddefs = iddefs
+  let l1 = prg { ddefs = iddefs
                , fundefs = M.fromList funs
                , mainExp = mainExp'
                }
+  -- If a function has case clauses without RAN's, the ParE's in them must
+  -- be changed to usual MkProdE's. But InferLocations only has a special case
+  -- for ParE's, everything else must be in ANF. So we flatten+inlineTriv the
+  -- AST here. Running inlineTriv once doesn't eliminate variable aliasing. This
+  -- is no good because InferLocations doesn't allow variable aliasing.
+  -- So we run inlineTriv one more time to get rid of it.
+  l1 <- flattenL1 l1
+  l1 <- inlineTriv l1
+  l1 <- inlineTriv l1
+  pure l1
 
 addRANFun :: S.Set TyCon -> DDefs Ty1 -> FunDef1 -> PassM FunDef1
 addRANFun needRANsTyCons ddfs fd@FunDef{funBody} = do
@@ -212,9 +226,7 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
 
     docase :: (DataCon, [(Var,())], L Exp1) -> PassM [(DataCon, [(Var,())], L Exp1)]
     docase (dcon,vs,bod) = do
-      -- See [2019.10.15].
-      -- let old_pat = (dcon,vs, changeParToSeq bod)
-      old_pat <- (dcon, vs,) <$> go bod
+      let old_pat = (dcon,vs, changeParToSeq bod)
       case numRANsDataCon ddfs dcon of
         0 -> pure [old_pat]
         n -> do
@@ -231,11 +243,7 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
                 firstPacked = fromJust $ L.findIndex isPackedTy tys
                 haveRANsFor = L.take n $ L.drop firstPacked $ L.map fst vs
                 ienv' = M.union ienv (M.fromList $ zip haveRANsFor ranVars)
-            -- [2019.10.15]: ckoparkar: don't include the old pattern for now. It
-            -- causes subsequent passes (flatten+inlineTriv) to create variable
-            -- aliases which InferLocations is not happy with.
-            -- (:[old_pat]) <$>
-            (:[]) <$>
+            (:[old_pat]) <$>
               (toRANDataCon dcon, (L.map (,()) ranVars) ++ vs,) <$> addRANExp needRANsTyCons ddfs ienv' bod
 
 -- | Update data type definitions to include random access nodes.
