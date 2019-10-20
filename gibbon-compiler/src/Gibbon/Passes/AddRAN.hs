@@ -17,8 +17,6 @@ import           Gibbon.DynFlags
 import           Gibbon.Passes.AddTraversals ( needsTraversalCase )
 import           Gibbon.L1.Syntax
 import           Gibbon.L2.Syntax
-import           Gibbon.Passes.Flatten    (flattenL1)
-import           Gibbon.Passes.InlineTriv (inlineTriv)
 
 {-
 
@@ -82,7 +80,7 @@ When does a type 'needsRAN'
 
 If any pattern 'needsTraversalCase' to be able to unpack it, we mark the type of
 scrutinee as something that needs RAN's. Also, types of all packed values flowing
-into a ParE that live in the same region would need random access.
+into a SpawnE that live in the same region would need random access.
 
 
 Keeping old case clauses around
@@ -139,15 +137,6 @@ addRAN needRANsTyCons prg@Prog{ddefs,fundefs,mainExp} = do
                , fundefs = M.fromList funs
                , mainExp = mainExp'
                }
-  -- If a function has case clauses without RAN's, the ParE's in them must
-  -- be changed to usual MkProdE's. But InferLocations only has a special case
-  -- for ParE's, everything else must be in ANF. So we flatten+inlineTriv the
-  -- AST here. Running inlineTriv once doesn't eliminate variable aliasing. This
-  -- is no good because InferLocations doesn't allow variable aliasing.
-  -- So we run inlineTriv one more time to get rid of it.
-  l1 <- flattenL1 l1
-  l1 <- inlineTriv l1
-  l1 <- inlineTriv l1
   pure l1
 
 addRANFun :: S.Set TyCon -> DDefs Ty1 -> FunDef1 -> PassM FunDef1
@@ -194,39 +183,43 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
     WithArenaE v e -> do
       e' <- go e
       return $ WithArenaE v e'
-    ParE{} -> return ex
-    Ext _  -> return ex
+    SpawnE f locs args -> SpawnE f locs <$> mapM go args
+    SyncE   -> pure SyncE
+    Ext _   -> return ex
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{} -> error "addRANExp: TODO FoldE"
 
   where
     go = addRANExp needRANsTyCons ddfs ienv
 
-    changeParToSeq :: L Exp1 -> L Exp1
-    changeParToSeq (L p1 ex1) = L p1 $
+    changeSpawnToApp :: L Exp1 -> L Exp1
+    changeSpawnToApp (L p1 ex1) = L p1 $
       case ex1 of
-        ParE ls -> MkProdE ls
         VarE{}    -> ex1
         LitE{}    -> ex1
         LitSymE{} -> ex1
-        AppE f locs args -> AppE f locs $ map changeParToSeq args
-        PrimAppE f args  -> PrimAppE f $ map changeParToSeq args
+        AppE f locs args -> AppE f locs $ map changeSpawnToApp args
+        PrimAppE f args  -> PrimAppE f $ map changeSpawnToApp args
+        LetE (_,_,_,L _ SyncE) bod -> unLoc $ changeSpawnToApp bod
         LetE (v,loc,ty,rhs) bod -> do
-          LetE (v,loc,ty, changeParToSeq rhs) (changeParToSeq bod)
-        IfE a b c  -> IfE (changeParToSeq a) (changeParToSeq b) (changeParToSeq c)
-        MkProdE xs -> MkProdE $ map changeParToSeq xs
-        ProjE i e  -> ProjE i $ changeParToSeq e
-        DataConE loc dcon args -> DataConE loc dcon $ map changeParToSeq args
-        CaseE scrt mp -> CaseE (changeParToSeq scrt) $ map (\(a,b,c) -> (a,b, changeParToSeq c)) mp
-        TimeIt e ty b  -> TimeIt (changeParToSeq e) ty b
-        WithArenaE v e -> WithArenaE v (changeParToSeq e)
-        Ext _  -> ex1
+          LetE (v,loc,ty, changeSpawnToApp rhs) (changeSpawnToApp bod)
+        IfE a b c  -> IfE (changeSpawnToApp a) (changeSpawnToApp b) (changeSpawnToApp c)
+        MkProdE xs -> MkProdE $ map changeSpawnToApp xs
+        ProjE i e  -> ProjE i $ changeSpawnToApp e
+        DataConE loc dcon args -> DataConE loc dcon $ map changeSpawnToApp args
+        CaseE scrt mp ->
+          CaseE (changeSpawnToApp scrt) $ map (\(a,b,c) -> (a,b, changeSpawnToApp c)) mp
+        TimeIt e ty b  -> TimeIt (changeSpawnToApp e) ty b
+        WithArenaE v e -> WithArenaE v (changeSpawnToApp e)
+        SpawnE f locs args -> AppE f locs $ map changeSpawnToApp args
+        SyncE   -> SyncE
+        Ext{}   -> ex1
         MapE{}  -> error "addRANExp: TODO MapE"
         FoldE{} -> error "addRANExp: TODO FoldE"
 
     docase :: (DataCon, [(Var,())], L Exp1) -> PassM [(DataCon, [(Var,())], L Exp1)]
     docase (dcon,vs,bod) = do
-      let old_pat = (dcon,vs, changeParToSeq bod)
+      let old_pat = (dcon,vs, changeSpawnToApp bod)
       case numRANsDataCon ddfs dcon of
         0 -> pure [old_pat]
         n -> do
@@ -325,25 +318,26 @@ needsRAN Prog{ddefs,fundefs,mainExp} =
             env2 = Env2 tyenv funenv
             renv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm)))
                                       (locVars funTy)
-        in needsRANExp ddefs fundefs env2 renv funBody
+        in needsRANExp ddefs fundefs env2 renv M.empty [] funBody
 
       funs = M.foldr (\f acc -> acc `S.union` dofun f) S.empty fundefs
 
       mn   = case mainExp of
                Nothing -> S.empty
                Just (e,_ty) -> let env2 = Env2 M.empty funenv
-                               in needsRANExp ddefs fundefs env2 M.empty e
+                               in needsRANExp ddefs fundefs env2 M.empty M.empty [] e
   in S.union funs mn
 
 -- Maps a location to a region
 type RegEnv = M.Map LocVar Var
+type TyConEnv = M.Map LocVar TyCon
 
-needsRANExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> L Exp2 -> S.Set TyCon
-needsRANExp ddefs fundefs env2 renv (L _p ex) =
+needsRANExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> TyConEnv -> [[LocVar]] -> L Exp2 -> S.Set TyCon
+needsRANExp ddefs fundefs env2 renv tcenv parlocss (L _p ex) =
   case ex of
     CaseE (L _ (VarE scrt)) brs -> let PackedTy tycon tyloc = lookupVEnv scrt env2
                                        reg = renv # tyloc
-                                   in S.unions $ L.map (docase tycon reg env2 renv) brs
+                                   in S.unions $ L.map (docase tycon reg env2 renv tcenv parlocss) brs
 
     CaseE scrt _ -> error $ "needsRANExp: Scrutinee is not flat " ++ sdoc scrt
 
@@ -354,20 +348,18 @@ needsRANExp ddefs fundefs env2 renv (L _p ex) =
     -- We do not process the function body here, assuming that the main analysis does it.
     AppE{}     -> S.empty
     PrimAppE{} -> S.empty
-    LetE(v,_,ty,rhs) bod -> go rhs `S.union`
-                            needsRANExp ddefs fundefs (extendVEnv v ty env2) renv bod
-    IfE _a b c -> go b `S.union` go c
-    MkProdE{}  -> S.empty
-    ProjE{}    -> S.empty
-    DataConE{} -> S.empty
-    TimeIt{}   -> S.empty
-    WithArenaE{} -> S.empty
+
 {-
 
 If we have an expression:
 
     case blah of
-      C x y z -> par (foo x) (foo y) (foo z)
+      C x y z ->
+        a = spawn (foo x)
+        b = spawn (foo y)
+        c = spawn (foo z)
+        sync
+        ...
 
 we need to be able to access x, y and z in parallel, and thus need random access
 for the type 'blah'. To spot these cases, we look at the regions in which
@@ -376,29 +368,37 @@ So we say that if there are any region that is shared among the things in 'par',
 we need random access for that type.
 
 -}
-    ParE ls ->
-      let mps   = map (parAppLoc env2) ls
-          locss = map M.keys mps
-          regss = map (map (renv #)) locss
+    LetE (v,_,ty,rhs@(L _ (SpawnE{}))) bod ->
+      let mp   = parAppLoc env2 rhs
+          locs = M.keys mp
+          parlocss' = locs : parlocss
+      in needsRANExp ddefs fundefs (extendVEnv v ty env2) renv (mp `M.union` tcenv) parlocss' bod
+
+    LetE (v,_,ty,(L _ SyncE)) bod ->
+      let s_bod = needsRANExp ddefs fundefs (extendVEnv v ty env2) renv tcenv [] bod
+          regss = map (map (renv #)) parlocss
           deleteAt idx xs = let (lft, (_:rgt)) = splitAt idx xs
                             in lft ++ rgt
           common_regs = S.unions $ map
                           (\(i,rs) -> let all_other_regs = concat (deleteAt i regss)
                                       in S.intersection (S.fromList rs) (S.fromList all_other_regs))
                           (zip [0..] regss)
-          common_locs  = S.unions $ map
-                           (\(i,rs) -> let all_other_locs = concat (deleteAt i locss)
-                                       in S.intersection (S.fromList rs) (S.fromList all_other_locs))
-                           (zip [0..] locss)
-      in if not (S.null common_locs)
-         -- ckoparkar: I think the typesystem would already guarantees this,
-         -- and we can just drop this check.
-         then error $ "Expected no location sharing. Found " ++ sdoc common_locs ++ " shared in: " ++ sdoc ex
-         else if S.null common_regs
+      in if S.null common_regs
          then S.empty
-         else let want_ran_locs = L.filter (\lc -> (renv # lc) `S.member` common_regs) (concat locss)
-                  common_mp = M.unions mps
-              in S.fromList $ map (common_mp #) want_ran_locs
+         else let want_ran_locs = L.filter (\lc -> (renv # lc) `S.member` common_regs) (concat parlocss)
+              in s_bod `S.union` (S.fromList $ map (tcenv #) want_ran_locs)
+
+    SpawnE{} -> error "needsRANExp: Unbound SpawnE"
+    SyncE    -> error "needsRANExp: Unbound SyncE"
+
+    LetE(v,_,ty,rhs) bod -> go rhs `S.union`
+                            needsRANExp ddefs fundefs (extendVEnv v ty env2) renv tcenv parlocss bod
+    IfE _a b c -> go b `S.union` go c
+    MkProdE{}  -> S.empty
+    ProjE{}    -> S.empty
+    DataConE{} -> S.empty
+    TimeIt{}   -> S.empty
+    WithArenaE{} -> S.empty
 
     Ext ext ->
       case ext of
@@ -410,26 +410,26 @@ we need random access for that type.
                         AfterConstantLE _ lc -> renv # lc
                         AfterVariableLE _ lc -> renv # lc
                         FromEndLE lc         -> renv # lc -- TODO: This needs to be fixed
-            in needsRANExp ddefs fundefs env2 (M.insert loc reg renv) bod
+            in needsRANExp ddefs fundefs env2 (M.insert loc reg renv) tcenv parlocss bod
         _ -> S.empty
     MapE{}     -> S.empty
     FoldE{}    -> S.empty
   where
-    go = needsRANExp ddefs fundefs env2 renv
+    go = needsRANExp ddefs fundefs env2 renv tcenv parlocss
 
     -- Collect all the 'Tycon's which might random access nodes
-    docase tycon reg env21 renv1 br@(dcon,vlocs,bod) =
+    docase tycon reg env21 renv1 tcenv1 parlocss1 br@(dcon,vlocs,bod) =
       let (vars,locs) = unzip vlocs
           renv' = L.foldr (\lc acc -> M.insert lc reg acc) renv1 locs
           env21' = extendPatternMatchEnv dcon ddefs vars locs env21
           ran_for_scrt = if L.null (needsTraversalCase ddefs fundefs env2 br)
                             then S.empty
                             else S.singleton tycon
-      in ran_for_scrt `S.union` needsRANExp ddefs fundefs env21' renv' bod
+      in ran_for_scrt `S.union` needsRANExp ddefs fundefs env21' renv' tcenv1 parlocss1 bod
 
     -- Return the location and tycon of an argument to a function call.
     parAppLoc :: Env2 Ty2 -> L Exp2 -> M.Map LocVar TyCon
-    parAppLoc env21 (L _ (AppE _ _ args)) =
+    parAppLoc env21 (L _ (SpawnE _ _ args)) =
       let fn (PackedTy dcon loc) = [(loc, dcon)]
           fn (ProdTy tys1) = L.concatMap fn tys1
           fn _ = []

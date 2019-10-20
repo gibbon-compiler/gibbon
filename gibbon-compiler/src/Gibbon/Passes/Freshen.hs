@@ -265,7 +265,8 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
       e' <- freshExp (M.insert v v' venv) tvenv e
       return $ WithArenaE v' e'
 
-    ParE ls -> ParE <$> mapM go ls
+    SpawnE{} -> error "freshExp: SpawnE in L0"
+    SyncE    -> error "freshExp: SyncE in L0"
 
     MapE (v,t,b) e -> do
       b' <- go b
@@ -301,6 +302,8 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
           args' <- mapM go args
           pure $ Ext (BenchE (cleanFunName fn) tyapps args' b)
 
+        ParE0 ls -> Ext <$> ParE0 <$> mapM go ls
+
   where go = freshExp venv tvenv
 
 
@@ -318,7 +321,9 @@ freshExp1 vs (L sloc exp) = fmap (L sloc) $
 
     AppE v locs ls -> assert ([] == locs) $ do
       ls' <- mapM (freshExp1 vs) ls
-      return $ AppE (cleanFunName v) [] ls'
+      case M.lookup v vs of
+        Nothing -> return $ AppE (cleanFunName v) [] ls'
+        Just v' -> return $ AppE (cleanFunName v') [] ls'
 
     PrimAppE p es -> do
       es' <- mapM (freshExp1 vs) es
@@ -364,7 +369,13 @@ freshExp1 vs (L sloc exp) = fmap (L sloc) $
       e' <- freshExp1 vs e
       return $ TimeIt e' t b
 
-    ParE ls -> ParE <$> mapM (freshExp1 vs) ls
+    SpawnE v locs ls -> assert ([] == locs) $ do
+      ls' <- mapM (freshExp1 vs) ls
+      case M.lookup v vs of
+        Nothing -> return $ SpawnE (cleanFunName v) [] ls'
+        Just v' -> return $ SpawnE (cleanFunName v') [] ls'
+
+    SyncE -> pure SyncE
 
     MapE (v,t,b) e -> do
       b' <- freshExp1 vs b

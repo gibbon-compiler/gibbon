@@ -21,7 +21,7 @@ import           Gibbon.Language.Syntax
 inlineTriv :: (HasSimplifiable e l d)
            => Prog (L (PreExp e l d)) -> PassM (Prog (L (PreExp e l d)))
 inlineTriv (Prog ddefs funs main) =
-    return (Prog ddefs (fmap inlineTrivFun funs) main')
+    return (Prog ddefs (fmap (inlineTrivFun . inlineTrivFun) funs) main')
   where
     inlineTrivFun (FunDef nam narg ty bod) =
       FunDef nam narg ty (inlineTrivExp M.empty bod)
@@ -74,7 +74,8 @@ inlineTrivExp = go
 
       DataConE loc c es -> DataConE loc c $ map (go env) es
       TimeIt e t b -> TimeIt (go env e) t b
-      ParE ls -> ParE $ map (go env) ls
+      SpawnE fn locs args -> SpawnE fn locs $ map (go env) args
+      SyncE               -> SyncE
       WithArenaE v e -> WithArenaE v (go env e)
       MapE (v,t,e') e -> MapE (v,t,go env e') (go env e)
       FoldE (v1,t1,e1) (v2,t2,e2) e3 ->

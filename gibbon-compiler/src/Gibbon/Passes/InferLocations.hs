@@ -594,16 +594,14 @@ inferExp env@FullEnv{dataDefs}
                                      ProdTy ([b | (_,b,_) <- results]),
                                      concat $ [c | (_,_,c) <- results])
 
-    -- [2019.10.14]: Things in a ParE cannot *write* anything at the moment.
-    -- So we can infer things without having a destination for them, and reuse
-    -- the existing MkProdE machinery.
-    ParE ls ->
-      case dest of
-        NoDest -> do
-          ((L _ (MkProdE ls')), ty, res) <- inferExp env (l$ MkProdE ls) NoDest
-          pure (l$ ParE ls', ty, res)
-        _ -> err $ "Gibbon-TODO: Only scalar types allowed in ParE for now. " ++
-                   "But got a destination: " ++ sdoc dest
+
+    SpawnE f _ args -> do
+      (ex0', ty, acs) <- inferExp env (l$ AppE f [] args) dest
+      case unLoc ex0' of
+        AppE f' locs args' -> pure (lc$ SpawnE f' locs args', ty, acs)
+        oth -> err $ "SpawnE: " ++ sdoc oth
+
+    SyncE -> pure (lc$ SyncE, ProdTy [], [])
 
     LitE n -> return (lc$ LitE n, IntTy, [])
 
@@ -830,6 +828,15 @@ inferExp env@FullEnv{dataDefs}
           res' <- tryBindReg (lc$ L2.LetE (vr,[], valTy, L sl2 $ L2.AppE f (concatMap locsInTy atys ++ locsInTy valTy) args') bod'', ty'', fcs)
           bindImmediateDependentLocs (concatMap locsInTy atys ++ locsInTy valTy) res'
 
+        SpawnE f _ args -> do
+          (ex0', ty, cs) <- inferExp env (l$ LetE (vr,locs,bty,L sl2 (AppE f [] args)) bod) dest
+          -- ASSUMPTION: There's only 1 AppE in ex0'
+          pure (changeAppToSpawn ex0', ty, cs)
+
+        SyncE -> do
+          (bod',ty,cs) <- inferExp env bod dest
+          pure (lc$ LetE (vr,[],ProdTy [],L sl2 $ SyncE) bod', ty, cs)
+
         AppE{} -> err$ "Malformed function application: " ++ (show ex0)
 
         -- IfE{} -> err$ "Unexpected conditional in let binding: " ++ (show ex0)
@@ -964,16 +971,6 @@ inferExp env@FullEnv{dataDefs}
           fcs <- tryInRegion cs'''
           tryBindReg (lc$ L2.LetE (vr,[], ProdTy aty, L sl2 $ L2.MkProdE als) bod'', ty'', fcs)
 
-        -- [2019.10.14]: Things in a ParE cannot *write* anything at the moment.
-        -- So we can infer things without having a destination for them, and reuse
-        -- the existing MkProdE machinery. See comment in the MkProdE case above.
-        ParE ls -> do
-           res <- inferExp env (l$ LetE (vr,locs,bty, l$ MkProdE ls) bod) NoDest
-           case res of
-             (L lc1 (LetE (vr',locs', ty', L lc2 (MkProdE ls')) bod), ty'', cs'') ->
-               return (L lc1 (LetE (vr',locs', ty', L lc2 (ParE ls')) bod), ty'', cs'')
-             _  -> err$ "ParE -- unexpected result: " ++ sdoc res
-
         WithArenaE v e -> do
           (e',ty,cs) <- inferExp (extendVEnv v ArenaTy env) e NoDest
           (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
@@ -1075,9 +1072,12 @@ finishExp (L i e) =
                      _ -> return t
              return $ l$ TimeIt e1' t' b
 
-      ParE es -> do
-          es' <- mapM finishExp es
-          return (l$ ParE es')
+      SpawnE v ls es -> do
+        es' <- mapM finishExp es
+        ls' <- mapM finalLocVar ls
+        return $ l$ SpawnE v ls' es'
+
+      SyncE -> pure $ l$ SyncE
 
       WithArenaE v e -> do
              e' <- finishExp e
@@ -1170,8 +1170,10 @@ cleanExp (L i e) =
       TimeIt e d b -> let (e',s') = cleanExp e
                       in (l$ TimeIt e' d b, s')
 
-      ParE es -> let (es',ls') = unzip $ L.map cleanExp es
-                 in (l$ ParE es', S.unions ls')
+      SpawnE v ls e -> let (e',s') = unzip $ map cleanExp e
+                       in (l$ SpawnE v ls e', (S.unions s') `S.union` (S.fromList ls))
+
+      SyncE -> (l$ SyncE, S.empty)
 
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (l$ WithArenaE v e', s)
@@ -1250,10 +1252,9 @@ fixProj renam pvar proj (L i e) =
                            in l$ DataConE lv dc es'
       TimeIt e1 d b -> let e1' = fixProj renam pvar proj e1
                        in l$ TimeIt e1' d b
-      -- ParE e1 e2 -> let e1' = fixProj renam pvar proj e1
-      --                   e2' = fixProj renam pvar proj e2
-      --               in l$ ParE e1' e2'
-      ParE{} -> error "fixProj: TODO ParE"
+      SpawnE v ls es -> let es' = map (fixProj renam pvar proj) es
+                        in l$ SpawnE v ls es'
+      SyncE -> l$ SyncE
       WithArenaE v e -> l$ WithArenaE v $ fixProj renam pvar proj e
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
@@ -1556,6 +1557,7 @@ emptyEnv :: FullEnv
 emptyEnv = FullEnv { dataDefs = emptyDD
                    , valEnv   = M.empty
                    , funEnv   = M.empty }
+
 
 {--
 

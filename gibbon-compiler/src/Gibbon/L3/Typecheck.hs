@@ -398,9 +398,8 @@ tcExp isPacked ddfs env exp@(L p ex) =
       ty <- go e
       return ty
 
-    ParE ls -> do
-      tys <- mapM go ls
-      return (ProdTy tys)
+    SpawnE fn locs args -> go (l$ AppE fn locs args)
+    SyncE -> pure voidTy
 
     WithArenaE v e -> do
       let env' = extendVEnv v ArenaTy env

@@ -149,7 +149,6 @@ tagDataCons ddefs = go allCons
        DataConE loc k ls -> DataConE loc k <$> mapM (go cons) ls
        TimeIt e t b -> do e' <- (go cons e)
                           pure $ TimeIt e' t b
-       ParE ls   -> ParE <$> mapM (go cons) ls
        IfE a b c -> IfE <$> (go cons a) <*> (go cons b) <*> (go cons c)
        WithArenaE v e -> WithArenaE v <$> (go cons e)
 
@@ -408,7 +407,7 @@ exp se =
    Ls3 l "vector-ref" evec (G _ (HSInt ind)) ->
        loc l . ProjE (fromIntegral ind) <$> (exp evec)
 
-   Ls (A l "par" : es) -> loc l . ParE <$> mapM exp es
+   Ls (A l "par" : es) -> loc l . Ext <$> ParE0 <$> mapM exp es
 
    Ls3 l "letarena" v e -> do
      e' <- exp e

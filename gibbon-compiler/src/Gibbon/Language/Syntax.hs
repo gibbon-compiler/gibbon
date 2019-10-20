@@ -39,7 +39,7 @@ module Gibbon.Language.Syntax
 
     -- * Helpers operating on expressions
   , mapExt, mapLocs, mapExprs, mapMExprs, visitExp
-  , subst, substE, hasTimeIt, hasParE, projNonFirst
+  , subst, substE, hasTimeIt, hasSpawns, hasSpawnsProg, projNonFirst
   , mkProj, mkProd, mkLets, flatLets, tuplizeRefs
 
     -- * Helpers operating on types
@@ -432,10 +432,10 @@ data PreExp (ext :: * -> * -> *) loc dec =
     -- ^ The boolean being true indicates this TimeIt is really (iterate _)
     -- This iterate form is used for criterion-style benchmarking.
 
-   | ParE [EXP]
-    -- ^ Parallel expressions.
-
    | WithArenaE Var EXP
+
+   | SpawnE Var [loc] [EXP]
+   | SyncE
 
    -- Limited list handling:
    -- TODO: RENAME to "Array".
@@ -501,8 +501,9 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         FoldE {}   -> False
         AppE  {}   -> False
         TimeIt {}  -> False
-        ParE{}     -> False
         WithArenaE{} -> False
+        SpawnE{}   -> False
+        SyncE      -> False
         Ext ext -> isTrivial ext
 
 
@@ -536,9 +537,10 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
           gFreeVars r1 `S.union` gFreeVars r2 `S.union`
           (S.delete v1 $ S.delete v2 $ gFreeVars bod)
 
-      ParE ls -> S.unions (L.map gFreeVars ls)
-
       WithArenaE v e -> S.delete v $ gFreeVars e
+
+      SpawnE _ _ ls -> S.unions (L.map gFreeVars ls)
+      SyncE -> S.empty
 
       Ext q -> gFreeVars q
 
@@ -572,8 +574,9 @@ instance (Show (), Out (), Expression (e () (UrTy ())),
           oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                         ++"\nExpression:\n  "++ sdoc ex
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
-      ParE ls -> ProdTy $ L.map (gRecoverType ddfs env2) ls
       WithArenaE _v e -> gRecoverType ddfs env2 e
+      SpawnE v _ _    -> outTy $ fEnv env2 # v
+      SyncE           -> voidTy
       CaseE _ mp ->
         let (c,args,e) = head mp
             args' = L.map fst args
@@ -605,10 +608,11 @@ instance HasRenamable e l d => Renamable (L (PreExp e l d)) where
         CaseE (go scrt) (map (\(a,b,c) -> (a, map (\(d,e) -> (go d, go e)) b, go c)) ls)
       DataConE loc dcon ls -> DataConE (go loc) dcon (gol ls)
       TimeIt e ty b -> TimeIt (go e) (go ty) b
-      ParE ls       -> ParE (gol ls)
-      Ext ext       -> Ext (go ext)
-      MapE{}        -> ex
-      FoldE{}       -> ex
+      SpawnE f locs args -> SpawnE (go f) (gol locs) (gol args)
+      SyncE   -> SyncE
+      Ext ext -> Ext (go ext)
+      MapE{}  -> ex
+      FoldE{} -> ex
      where
        go :: forall a. Renamable a => a -> a
        go = gRename env
@@ -820,7 +824,9 @@ subst old new (L p0 ex) = L p0 $
     DataConE loc k ls -> DataConE loc k $ L.map go ls
     TimeIt e t b      -> TimeIt (go e) t b
     IfE a b c         -> IfE (go a) (go b) (go c)
-    ParE ls           -> ParE (map go ls)
+
+    SpawnE v loc ls   -> SpawnE v loc (map go ls)
+    SyncE             -> SyncE
 
     MapE (v,t,rhs) bod | v == old  -> MapE (v,t, rhs)    (go bod)
                        | otherwise -> MapE (v,t, go rhs) (go bod)
@@ -858,7 +864,8 @@ substE old new (L p0 ex) = L p0 $
     DataConE loc k ls -> DataConE loc k $ L.map go ls
     TimeIt e t b      -> TimeIt (go e) t b
     IfE a b c         -> IfE (go a) (go b) (go c)
-    ParE ls           -> ParE (map go ls)
+    SpawnE v loc ls   -> SpawnE v loc (map go ls)
+    SyncE             -> SyncE
     MapE (v,t,rhs) bod | VarE v == unLoc old  -> MapE (v,t, rhs)    (go bod)
                        | otherwise -> MapE (v,t, go rhs) (go bod)
     FoldE (v1,t1,r1) (v2,t2,r2) bod ->
@@ -888,33 +895,43 @@ hasTimeIt (L _ rhs) =
       IfE a b c    -> hasTimeIt a || hasTimeIt b || hasTimeIt c
       CaseE _ ls   -> any hasTimeIt [ e | (_,_,e) <- ls ]
       LetE (_,_,_,e1) e2 -> hasTimeIt e1 || hasTimeIt e2
-      ParE ls      -> any hasTimeIt ls
+      SpawnE _ _ _       -> False
+      SyncE              -> False
       MapE (_,_,e1) e2   -> hasTimeIt e1 || hasTimeIt e2
       FoldE (_,_,e1) (_,_,e2) e3 -> hasTimeIt e1 || hasTimeIt e2 || hasTimeIt e3
       Ext _ -> False
       WithArenaE _ e -> hasTimeIt e
 
--- | Does the expression contain a ParE form?
-hasParE :: L (PreExp e l d) -> Bool
-hasParE (L _ rhs) =
+hasSpawnsProg :: Prog (L (PreExp e l d)) -> Bool
+hasSpawnsProg (Prog _ fundefs mainExp) =
+  any (\FunDef{funBody} -> hasSpawns funBody) (M.elems fundefs) ||
+    case mainExp of
+      Nothing      -> False
+      Just (e,_ty) -> hasSpawns e
+
+-- | Does the expression contain a TimeIt form?
+hasSpawns :: L (PreExp e l d) -> Bool
+hasSpawns (L _ rhs) =
     case rhs of
-      ParE{}       -> True
       DataConE{}   -> False
-      VarE _       -> False
-      LitE _       -> False
-      LitSymE _    -> False
-      AppE _ _ _   -> False
-      PrimAppE _ _ -> False
-      ProjE _ e    -> hasParE e
-      MkProdE ls   -> any hasParE ls
-      IfE a b c    -> hasParE a || hasParE b || hasParE c
-      CaseE _ ls   -> any hasParE [ e | (_,_,e) <- ls ]
-      LetE (_,_,_,e1) e2 -> hasParE e1 || hasParE e2
-      TimeIt _ _ _ -> False
-      MapE (_,_,e1) e2   -> hasParE e1 || hasParE e2
-      FoldE (_,_,e1) (_,_,e2) e3 -> hasParE e1 || hasParE e2 || hasParE e3
+      VarE{}       -> False
+      LitE{}       -> False
+      LitSymE{}    -> False
+      AppE{}       -> False
+      PrimAppE{}   -> False
+      ProjE _ e    -> hasSpawns e
+      MkProdE ls   -> any hasSpawns ls
+      IfE a b c    -> hasSpawns a || hasSpawns b || hasSpawns c
+      CaseE _ ls   -> any hasSpawns [ e | (_,_,e) <- ls ]
+      LetE (_,_,_,e1) e2 -> hasSpawns e1 || hasSpawns e2
+      SpawnE{}     -> True
+      SyncE        -> True
+      TimeIt{}     -> False
+      MapE (_,_,e1) e2   -> hasSpawns e1 || hasSpawns e2
+      FoldE (_,_,e1) (_,_,e2) e3 ->
+        hasSpawns e1 || hasSpawns e2 || hasSpawns e3
       Ext _ -> False
-      WithArenaE _ e -> hasTimeIt e
+      WithArenaE _ e -> hasSpawns e
 
 -- | Project something which had better not be the first thing in a tuple.
 projNonFirst :: (Out l, Out d, Out (e l d)) => Int -> L (PreExp e l d) -> L (PreExp e l d)

@@ -221,6 +221,10 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
             then "\n"++sepline ++ "\n" ++ (render $ pprint l1)
             else show (length (sdoc l1)) ++ " characters."
 
+      let parallel = gopt Opt_Parallel (dynflags config)
+      when (L1.hasSpawnsProg l1 && not parallel) $
+        error "To compile a program with parallelism, use -parallel."
+
       -- (Stage 1) Run the program through the interpreter
       initResult <- withPrintInterpProg l1
 
@@ -401,15 +405,14 @@ compilationCmd LLVM _   = "clang-5.0 lib.o "
 compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++(if bumpAlloc then "-DBUMPALLOC " else "")
                           ++(if pointer then "-D_POINTER " else "")
-                          -- [2018.12.03] CSK: Skip Cilk stuff for now.
-                          -- Eventually, all the Cilk stuff should be behind a flag.
-                          -- ++"-fcilkplus -lcilkrts"
+                          ++(if parallel then "-fcilkplus -D_PARALLEL" else "")
                           ++(optc config)++"  "
                           ++(if warnc then "" else suppress_warnings)
   where dflags = dynflags config
         bumpAlloc = gopt Opt_BumpAlloc dflags
         pointer = gopt Opt_Pointer dflags
         warnc = gopt Opt_Warnc dflags
+        parallel = gopt Opt_Parallel dflags
 
 -- |
 isBench :: Mode -> Bool

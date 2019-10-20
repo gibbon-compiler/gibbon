@@ -332,7 +332,11 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                 hsep (map (pprintWithStyle sty) es)
                               -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
           TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
-          ParE ls -> text "par" <+> lparen <> hcat (punctuate (text ", ") (map (pprintWithStyle sty) ls)) <> rparen
+          SpawnE v locs ls -> text "spawn" <+>
+                                parens (pprintWithStyle sty v <+>
+                                         (brackets $ hcat (punctuate "," (map pprint locs))) <+>
+                                         (pprintWithStyle sty ls))
+          SyncE -> text "sync"
           WithArenaE v e -> case sty of
                               PPHaskell  -> (text "let") <+>
                                             pprintWithStyle sty v <+>
@@ -436,6 +440,7 @@ instance (Out a, Pretty a) => Pretty (L0.E0Ext a L0.Ty0) where
       L0.BenchE fn tyapps args b -> text "bench" <+> text (fromVar fn) <+>
                                     (brackets $ hcat (punctuate "," (map pprint tyapps))) <+>
                                     (pprintWithStyle sty args) <+> text (if b then "true" else "false")
+      L0.ParE0 ls -> text "par" <+> lparen <> hcat (punctuate (text ", ") (map (pprintWithStyle sty) ls)) <> rparen
 
 
 --------------------------------------------------------------------------------
@@ -492,8 +497,9 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         LetE _ bod -> go bod
         CaseE _ mp -> any (== True) $ map (\(_,_,c) -> go c) mp
         TimeIt{}   -> False
-        ParE{} -> error "hasBenchE: TODO ParE"
         WithArenaE _ e -> (go e)
+        SpawnE{}-> False
+        SyncE   -> False
         MapE{}  -> error $ "hasBenchE: TODO MapE"
         FoldE{} -> error $ "hasBenchE: TODO FoldE"
       where go = hasBenchE
@@ -581,7 +587,6 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                               parens $ text dc <+>
                               hsep (map (ppExp monadic env2) es)
           TimeIt e _ty _b -> text "timeit" <+> parens (ppExp monadic env2 e)
-          ParE ls -> lparen <> hcat (punctuate (text ", ") (map (ppExp monadic env2) ls)) <> rparen
           WithArenaE v e -> (text "let") <+>
                             pprintWithStyle sty v <+>
                             equals <+>

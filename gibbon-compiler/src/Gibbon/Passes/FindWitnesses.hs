@@ -120,7 +120,6 @@ findWitnesses = mapMExprs fn
                              (go mp b)
                              (go mp c)
         -- Like MkProdE
-        ParE ls -> handle' $ ParE $ map goClear ls
         MapE  (v,t,rhs) bod -> handle' $ MapE (v,t,rhs) (goClear bod)
         FoldE (v1,t1,r1) (v2,t2,r2) bod -> handle' $ FoldE (v1,t1,r1) (v2,t2,r2) (goClear bod)
 

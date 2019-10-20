@@ -28,6 +28,7 @@ data GeneralFlag
   | Opt_DisableGC          -- ^ Don't run the the garbage collector (used by Codegen).
   | Opt_No_PureAnnot       -- ^ Don't use 'pure' annotations (a GCC optimization)
   | Opt_Fusion             -- ^ Enable fusion.
+  | Opt_Parallel           -- ^ Fork/join parallelism.
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -91,7 +92,8 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                    flag' Opt_No_PureAnnot (long "no-pure-annot" <>
                                            help "Don't use 'pure' annotations (a GCC optimization).") <|>
                    flag' Opt_Fusion (long "fusion" <>
-                                     help "Enable fusion.")
+                                     help "Enable fusion.") <|>
+                   flag' Opt_Parallel (long "parallel" <> help "Enable parallelism")
 
     dflagsParser :: Parser DebugFlag
     dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>

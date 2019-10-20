@@ -76,6 +76,10 @@ if the functions "traverses" it's input (more details in the paer).
 --   See `FindWitnesses.hs` for why that is needed.
 type DepEnv = M.Map LocVar [(Var,[()],Ty3,L Exp3)]
 
+-- | Things we cannt define until we see a join point. There's a Ty2 to so that
+-- we can extend the environment.
+type SyncDeps = [(Var,[()],Ty3,Ty2,L Exp3)]
+
 -- |
 cursorize :: Prog2 -> PassM Prog3
 cursorize Prog{ddefs,fundefs,mainExp} = do
@@ -87,9 +91,9 @@ cursorize Prog{ddefs,fundefs,mainExp} = do
                 Just (e,ty) -> do
                   if hasPacked ty
                   then Just . (, stripTyLocs ty) <$>
-                         fromDi <$> cursorizePackedExp ddefs fundefs M.empty M.empty e
+                         fromDi <$> cursorizePackedExp ddefs fundefs M.empty M.empty [] e
                   else Just . (,stripTyLocs ty) <$>
-                         cursorizeExp ddefs fundefs M.empty M.empty e
+                         cursorizeExp ddefs fundefs M.empty M.empty [] e
   pure (Prog ddefs' fundefs' mainExp')
 
 -- |
@@ -126,8 +130,8 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
       funargs = regBinds ++ outCurBinds ++ funArgs
 
   bod <- if hasPacked out_ty
-         then fromDi <$> cursorizePackedExp ddefs fundefs M.empty initTyEnv funBody
-         else cursorizeExp ddefs fundefs M.empty initTyEnv funBody
+         then fromDi <$> cursorizePackedExp ddefs fundefs M.empty initTyEnv [] funBody
+         else cursorizeExp ddefs fundefs M.empty initTyEnv [] funBody
   let bod' = inCurBinds bod
       fn = FunDef funName funargs funTy' bod'
   return fn
@@ -218,14 +222,15 @@ This is used to create bindings for input location variables.
 
 
 -- | Cursorize expressions NOT producing `Packed` values
-cursorizeExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> L Exp2 -> PassM (L Exp3)
-cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
+cursorizeExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps -> L Exp2
+             -> PassM (L Exp3)
+cursorizeExp ddfs fundefs denv tenv sdeps (L p ex) = L p <$>
   case ex of
     VarE v    -> return $ VarE v
     LitE n    -> return $ LitE n
     LitSymE n -> return $ LitSymE n
 
-    AppE{} -> cursorizeAppE ddfs fundefs denv tenv (L p ex)
+    AppE{} -> cursorizeAppE ddfs fundefs denv tenv sdeps (L p ex)
 
     PrimAppE RequestEndOf [arg] -> do
       let (L _ (VarE v)) = arg
@@ -234,20 +239,21 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
     PrimAppE pr args -> PrimAppE (toL3Prim pr) <$> mapM go args
 
     LetE (v,_locs, _ty, L _ (PrimAppE (ReadPackedFile path tyc reg ty2) [])) bod ->
-      unLoc <$> cursorizeReadPackedFile ddfs fundefs denv tenv True v path tyc reg ty2 bod
+      unLoc <$> cursorizeReadPackedFile ddfs fundefs denv tenv sdeps True v path tyc reg ty2 bod
 
     LetE (_v,_locs,_ty, (L _ (MkProdE _ls))) _bod ->
-      cursorizeProd False ddfs fundefs denv tenv ex
+      cursorizeProd False ddfs fundefs denv tenv sdeps ex
 
     LetE (_v,_locs, ty, (L _ ProjE{})) _bod | isPackedTy ty ->
-       cursorizeProj False ddfs fundefs denv tenv ex
+       cursorizeProj False ddfs fundefs denv tenv sdeps ex
 
-    -- LetE (_v,_locs,_ty, (L _ (ParE{}))) _bod ->
-    --   cursorizePar False ddfs fundefs denv tenv ex
-    LetE (_v,_locs,_ty, (L _ (ParE{}))) _bod ->
-      error "cursorizeExp: TODO ParE"
+    LetE (_v,_locs, _ty, (L _ SpawnE{})) _bod ->
+      cursorizeSpawn False ddfs fundefs denv tenv sdeps (L p ex)
 
-    LetE bnd bod -> cursorizeLet False ddfs fundefs denv tenv bnd bod
+    LetE (_v,_locs, _ty, (L _ SyncE)) _bod ->
+      cursorizeSync False ddfs fundefs denv tenv sdeps (L p ex)
+
+    LetE bnd bod -> cursorizeLet False ddfs fundefs denv tenv sdeps bnd bod
 
     IfE a b c  -> IfE <$> go a <*> go b <*> go c
 
@@ -260,17 +266,14 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
       -- ASSUMPTION: scrt is flat
       let (L _ (VarE  v)) = scrt
       CaseE (l$ VarE $ v) <$>
-        mapM (unpackDataCon ddfs fundefs denv tenv False v) brs
+        mapM (unpackDataCon ddfs fundefs denv tenv sdeps False v) brs
 
     DataConE _ _ _ -> error $ "cursorizeExp: Should not have encountered DataConE if type is not packed: "++ndoc ex
 
     TimeIt e ty b -> TimeIt <$> go e <*> pure (stripTyLocs ty) <*> pure b
 
-    -- ParE a b -> ParE <$> go a <*> go b
-    ParE{} -> error "cursorizeExp: TODO ParE"
-
     WithArenaE v e -> do
-      e' <- cursorizeExp ddfs fundefs denv (M.insert v ArenaTy tenv) e
+      e' <- cursorizeExp ddfs fundefs denv (M.insert v ArenaTy tenv) sdeps e
       return $ WithArenaE v e'
 
     -- Eg. leftmost
@@ -307,9 +310,9 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
             Right rhs' ->
               case M.lookup loc tenv of
                 Nothing ->  unLoc . mkLets ((loc,[],CursorTy,rhs') : bnds) <$>
-                              cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') bod
-                Just _  -> unLoc <$> cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') bod
-            Left denv' -> unLoc <$> cursorizeExp ddfs fundefs denv' tenv' bod
+                              cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') sdeps bod
+                Just _  -> unLoc <$> cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') sdeps bod
+            Left denv' -> unLoc <$> cursorizeExp ddfs fundefs denv' tenv' sdeps bod
 
         -- Exactly same as cursorizePackedExp
         LetRegionE reg bod -> do
@@ -325,13 +328,13 @@ cursorizeExp ddfs fundefs denv tenv (L p ex) = L p <$>
     FoldE{} -> error $ "TODO: cursorizeExp FoldE"
 
   where
-    go = cursorizeExp ddfs fundefs denv tenv
+    go = cursorizeExp ddfs fundefs denv tenv sdeps
 
 
 -- Cursorize expressions producing `Packed` values
-cursorizePackedExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> L Exp2
+cursorizePackedExp :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps -> L Exp2
                    -> PassM (DiExp (L Exp3))
-cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
+cursorizePackedExp ddfs fundefs denv tenv sdeps (L p ex) =
   case ex of
     -- Here the allocation has already been performed:
     -- To follow the calling convention, we are reponsible for tagging on the
@@ -347,7 +350,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
     LitE _n    -> error $ "Shouldn't encounter LitE in packed context:" ++ sdoc ex
     LitSymE _n -> error $ "Shouldn't encounter LitSymE in packed context:" ++ sdoc ex
 
-    AppE{} -> dl <$> cursorizeAppE ddfs fundefs denv tenv (L p ex)
+    AppE{} -> dl <$> cursorizeAppE ddfs fundefs denv tenv sdeps (L p ex)
 
     -- DictLookup returns a packed value bound to a free location.
     -- PrimAppE (DictLookupP (PackedTy _ ploc)) vs ->
@@ -361,48 +364,49 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
     -- it doesn't need memory allocation (NewBuffer/ScopedBuffer).
     -- This is more like the witness case below.
     LetE (v,_locs, _ty, L _ (PrimAppE (ReadPackedFile path tyc reg ty2) [])) bod ->
-       Di <$> cursorizeReadPackedFile ddfs fundefs denv tenv True v path tyc reg ty2 bod
+       Di <$> cursorizeReadPackedFile ddfs fundefs denv tenv sdeps True v path tyc reg ty2 bod
 
     LetE (v,_locs,_ty, L sl (PrimAppE (DictLookupP (PackedTy _ ploc)) vs)) bod ->
-        do vs' <- forM vs $ \v -> cursorizeExp ddfs fundefs denv tenv v
+        do vs' <- forM vs $ \v -> cursorizeExp ddfs fundefs denv tenv sdeps v
            let bnd = mkLets [(ploc, [], CursorTy, L sl (PrimAppE (DictLookupP CursorTy) vs'))
                             ,(v, [], CursorTy, l$ VarE ploc)]
                tenv' = M.insert ploc CursorTy $ M.insert v CursorTy tenv
-           onDi bnd <$> go tenv' bod
+           onDi bnd <$> go tenv' sdeps bod
 
     LetE (_v,_locs,_ty, (L _ (MkProdE _ls))) _bod ->
-      dl <$> cursorizeProd True ddfs fundefs denv tenv ex
+      dl <$> cursorizeProd True ddfs fundefs denv tenv sdeps ex
 
     LetE (_v,_locs,ty, (L _ ProjE{})) _bod | isPackedTy ty ->
-      dl <$> cursorizeProj True ddfs fundefs denv tenv ex
+      dl <$> cursorizeProj True ddfs fundefs denv tenv sdeps ex
 
 
     MkProdE ls -> do
       let tys = L.map (gRecoverType ddfs (Env2 tenv M.empty)) ls
       es <- forM (zip tys ls) $ \(ty,e) -> do
               case ty of
-                  _ | isPackedTy ty -> fromDi <$> cursorizePackedExp ddfs fundefs denv tenv e
-                  _ -> cursorizeExp ddfs fundefs denv tenv e
+                  _ | isPackedTy ty -> fromDi <$> cursorizePackedExp ddfs fundefs denv tenv sdeps e
+                  _ -> cursorizeExp ddfs fundefs denv tenv sdeps e
       let rhs' = l$ MkProdE es
       return $ Di rhs'
 
-    -- LetE (_v,_locs,_ty, (L _ (ParE{}))) _bod ->
-    --   dl <$> cursorizePar False ddfs fundefs denv tenv ex
-    LetE (_v,_locs,_ty, (L _ (ParE{}))) _bod ->
-      error "cursorizePackedExp: TODO ParE"
+    -- Not sure if we need to replicate all the checks from Cursorize1
+    ProjE i e -> dl <$> ProjE i <$> fromDi <$> go tenv sdeps e
 
-    LetE bnd bod -> dl <$> cursorizeLet True ddfs fundefs denv tenv bnd bod
+    LetE (_v,_locs, _ty, (L _ SpawnE{})) _bod ->
+      dl <$> cursorizeSpawn True ddfs fundefs denv tenv sdeps (L p ex)
+
+    LetE (_v,_locs, _ty, (L _ SyncE)) _bod ->
+      dl <$> cursorizeSync True ddfs fundefs denv tenv sdeps (L p ex)
+
+    LetE bnd bod -> dl <$> cursorizeLet True ddfs fundefs denv tenv sdeps bnd bod
 
     -- Here we route the dest cursor to both braches.  We switch
     -- back to the other mode for the (non-packed) test condition.
     IfE a b c -> do
-      Di b' <- go tenv b
-      Di c' <- go tenv c
-      a'    <- cursorizeExp ddfs fundefs denv tenv a
+      Di b' <- go tenv sdeps b
+      Di c' <- go tenv sdeps c
+      a'    <- cursorizeExp ddfs fundefs denv tenv sdeps a
       return $ Di $ l $ IfE a' b' c'
-
-    -- Not sure if we need to replicate all the checks from Cursorize1
-    ProjE i e -> dl <$> ProjE i <$> fromDi <$> go tenv e
 
     -- A case expression is eventually transformed into a ReadTag + switch stmt.
     -- We first retrieve the cursor referred to by the scrutinee, and unpack
@@ -414,7 +418,7 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
       let (L _ (VarE v)) = scrt
       dl <$>
         CaseE (l$ VarE $ v) <$>
-          mapM (unpackDataCon ddfs fundefs denv tenv True v) brs
+          mapM (unpackDataCon ddfs fundefs denv tenv sdeps True v) brs
 
     DataConE sloc dcon args -> do
       let
@@ -427,18 +431,18 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
             d' <- gensym "writecur"
             case ty of
               _ | isPackedTy ty -> do
-                 rnd' <- go tenv rnd
+                 rnd' <- go tenv sdeps rnd
                  LetE (d',[], CursorTy, projEnds rnd') <$> l <$>
                    go2 d' rst
 
               -- Int, Sym, or Bool
               _ | isScalarTy ty -> do
-                rnd' <- cursorizeExp ddfs fundefs denv tenv rnd
+                rnd' <- cursorizeExp ddfs fundefs denv tenv sdeps rnd
                 LetE (d',[], CursorTy, l$ Ext $ WriteScalar (mkScalar ty) d rnd') <$> l <$>
                   go2 d' rst
 
               CursorTy -> do
-                rnd' <- cursorizeExp ddfs fundefs denv tenv rnd
+                rnd' <- cursorizeExp ddfs fundefs denv tenv sdeps rnd
                 LetE (d',[], CursorTy, l$ Ext $ WriteCursor d rnd') <$> l <$>
                   go2 d' rst
               _ -> error $ "Unknown type encounterred while cursorizing DataConE. Type was " ++ show ty
@@ -449,18 +453,12 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
           go2 writetag (zip args (lookupDataCon ddfs dcon))
 
     TimeIt e t b -> do
-      Di e' <- go tenv e
+      Di e' <- go tenv sdeps e
       return $ dl$ TimeIt e' (cursorizeTy t) b
 
     WithArenaE v e -> do
-      Di e' <- go (M.insert v ArenaTy tenv) e
+      Di e' <- go (M.insert v ArenaTy tenv) sdeps e
       return $ dl$ WithArenaE v e'
-
-    -- ParE a b -> do
-    --    Di a' <- go tenv a
-    --    Di b' <- go tenv b
-    --    return $ dl$ ParE a' b'
-    ParE{} -> error "cursorizePackedExp: TODO ParE"
 
     Ext ext ->
       case ext of
@@ -478,23 +476,23 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
             Right rhs' ->
               case M.lookup loc tenv of
                 Nothing ->  onDi (mkLets ((loc,[],CursorTy,rhs') : bnds)) <$>
-                              go (M.insert loc CursorTy tenv') bod
-                Just _  -> go (M.insert loc CursorTy tenv') bod
+                              go (M.insert loc CursorTy tenv') sdeps bod
+                Just _  -> go (M.insert loc CursorTy tenv') sdeps bod
             Left denv' -> onDi (mkLets bnds) <$>
-                            cursorizePackedExp ddfs fundefs denv' tenv' bod
+                            cursorizePackedExp ddfs fundefs denv' tenv' sdeps bod
                             --
 
         -- ASSUMPTION: RetE forms are inserted at the tail position of functions,
         -- and we safely just return ends-witnesses & ends of the dilated expressions
         RetE locs v -> do
-          v' <- go tenv (l$ VarE v)
+          v' <- go tenv sdeps (l$ VarE v)
           case locs of
             []    -> return v'
             [loc] -> return $ mkDi (l$ VarE loc) [ fromDi v' ]
             _ -> return $ Di $ l$ MkProdE $ L.foldr (\loc acc -> (l$ VarE loc):acc) [fromDi v'] locs
 
         LetRegionE r bod -> do
-          onDi (mkLets (regionToBinds r)) <$> go tenv bod
+          onDi (mkLets (regionToBinds r)) <$> go tenv sdeps bod
 
         FromEndE{} -> error $ "cursorizePackedExp: TODO " ++ sdoc ext
 
@@ -503,10 +501,10 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
         IndirectionE _ dcon (pointer,r1) (pointee,r2) _ -> do
           dflags <- getDynFlags
           if gopt Opt_DisableGC dflags || (r1 == "dummy" || r2 == "dummy") -- HACK!!!
-          then go tenv (l$ DataConE pointer dcon [l$ VarE pointee])
+          then go tenv sdeps (l$ DataConE pointer dcon [l$ VarE pointee])
           else
             onDi (mkLets [("_",[],IntTy, l$ Ext (BumpRefCount (toEndV r1) (toEndV r2)))]) <$>
-              go tenv (l$ DataConE pointer dcon [l$ VarE pointee])
+              go tenv sdeps (l$ DataConE pointer dcon [l$ VarE pointee])
 
     MapE{}  -> error $ "TODO: cursorizePackedExp MapE"
     FoldE{} -> error $ "TODO: cursorizePackedExp FoldE"
@@ -515,10 +513,10 @@ cursorizePackedExp ddfs fundefs denv tenv (L p ex) =
         dl = Di <$> L p
 
 
-cursorizeReadPackedFile :: DDefs Ty2 -> FunDefs2 -> DepEnv -> M.Map Var (UrTy LocVar) -> Bool -> Var
+cursorizeReadPackedFile :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps -> Bool -> Var
                         -> Maybe FilePath -> TyCon -> Maybe Var -> Ty2 -> L Exp2
                         -> PassM (L (PreExp E3Ext () (UrTy ())))
-cursorizeReadPackedFile ddfs fundefs denv tenv isPackedContext v path tyc reg ty2 bod = do
+cursorizeReadPackedFile ddfs fundefs denv tenv sdeps isPackedContext v path tyc reg ty2 bod = do
   case reg of
     Nothing -> error $ "cursorizePackedExp: InferLocations did not set the reg for ReadPackedFile."
     Just reg_var ->
@@ -529,8 +527,8 @@ cursorizeReadPackedFile ddfs fundefs denv tenv isPackedContext v path tyc reg ty
 
   where
     go t e = if isPackedContext
-             then fromDi <$> cursorizePackedExp ddfs fundefs denv t e
-             else cursorizeExp ddfs fundefs denv t e
+             then fromDi <$> cursorizePackedExp ddfs fundefs denv t sdeps e
+             else cursorizeExp ddfs fundefs denv t sdeps e
 
 -- We may sometimes encounter a letloc which uses an unbound location.
 --
@@ -602,8 +600,8 @@ But Infinite regions do not support sizes yet. Re-enable this later.
 --     safely drop them from `locs`.
 --
 -- (2) We update `arg` so that all packed values in it only have start cursors.
-cursorizeAppE :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> L Exp2 -> PassM Exp3
-cursorizeAppE ddfs fundefs denv tenv (L _ ex) =
+cursorizeAppE :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps -> L Exp2 -> PassM Exp3
+cursorizeAppE ddfs fundefs denv tenv sdeps (L _ ex) =
   case ex of
     AppE f locs args -> do
       let fnTy   = case M.lookup f fundefs of
@@ -617,8 +615,8 @@ cursorizeAppE ddfs fundefs denv tenv (L _ ex) =
           argTys  = map (gRecoverType ddfs (Env2 tenv M.empty)) args
       args' <- mapM
                  (\(t,a) -> if hasPacked t
-                            then fromDi <$> cursorizePackedExp ddfs fundefs denv tenv a
-                            else cursorizeExp ddfs fundefs denv tenv a)
+                            then fromDi <$> cursorizePackedExp ddfs fundefs denv tenv sdeps a
+                            else cursorizeExp ddfs fundefs denv tenv sdeps a)
                  (zip in_tys args)
       starts <- pure $ map (uncurry giveStarts) (zip argTys args')
       case locs of
@@ -646,8 +644,8 @@ There are two ways in which projections can be cursorized:
 `cursorizeLet` creates the former, while the special case here outputs the latter.
 Reason: unariser can only eliminate direct projections of this form.
 -}
-cursorizeProj :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Exp2 -> PassM Exp3
-cursorizeProj isPackedContext ddfs fundefs denv tenv ex =
+cursorizeProj :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps -> Exp2 -> PassM Exp3
+cursorizeProj isPackedContext ddfs fundefs denv tenv sdeps ex =
   case ex of
     LetE (v,_locs,ty, rhs@(L _ ProjE{})) bod | isPackedTy ty -> do
       rhs' <- go tenv rhs
@@ -667,8 +665,8 @@ cursorizeProj isPackedContext ddfs fundefs denv tenv ex =
 
   where
     go t x = if isPackedContext
-             then fromDi <$> cursorizePackedExp ddfs fundefs denv t x
-             else cursorizeExp ddfs fundefs denv t x
+             then fromDi <$> cursorizePackedExp ddfs fundefs denv t sdeps x
+             else cursorizeExp ddfs fundefs denv t sdeps x
 
 
 {-
@@ -684,15 +682,15 @@ If it's just `CursorTy`, this packed value doesn't have an end cursor,
 otherwise, the type is `PackedTy{}`, and it also has an end cursor.
 
 -}
-cursorizeProd :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Exp2 -> PassM Exp3
-cursorizeProd isPackedContext ddfs fundefs denv tenv ex =
+cursorizeProd :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps -> Exp2 -> PassM Exp3
+cursorizeProd isPackedContext ddfs fundefs denv tenv sdeps ex =
   case ex of
     LetE (v,_locs,ProdTy tys, rhs@(L _ (MkProdE ls))) bod -> do
       es <- forM (zip tys ls) $ \(ty,e) -> do
               case ty of
-                  _ | isPackedTy ty -> fromDi <$> cursorizePackedExp ddfs fundefs denv tenv e
+                  _ | isPackedTy ty -> fromDi <$> cursorizePackedExp ddfs fundefs denv tenv sdeps e
                   _ | hasPacked ty  -> error $ "cursorizePackedExp: nested tuples" ++ sdoc rhs
-                  _ -> cursorizeExp ddfs fundefs denv tenv e
+                  _ -> cursorizeExp ddfs fundefs denv tenv sdeps e
       let rhs' = l$ MkProdE es
           ty   = gRecoverType ddfs (Env2 tenv M.empty) rhs
           ty'  = cursorizeTy ty
@@ -704,101 +702,88 @@ cursorizeProd isPackedContext ddfs fundefs denv tenv ex =
 
   where
     go t x = if isPackedContext
-             then fromDi <$> cursorizePackedExp ddfs fundefs denv t x
-             else cursorizeExp ddfs fundefs denv t x
+             then fromDi <$> cursorizePackedExp ddfs fundefs denv t sdeps x
+             else cursorizeExp ddfs fundefs denv t sdeps x
+
 
 {-
 
-Cursorizing the parallel tuple combinator
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-ASSUMPTIONS:
-    (1) ParE only has function calls as sub expressions.
-    (2) It's OK if we don't bind the end-witnesses returned by these fns.
-        (Most likely, this is a garbage assumption but OK for now.)
-
-How is it cursorized ?
-
-    If the functions in the parallel tuple return any end-witnesses;
-
-    Then (1) Update the type of the let bound variable using gRecoverType
-             (probably RouteEnds should do this step).
-         (2) Bind the end-witnesses
-         (3) Use projections and products to recover the original value
-             (which doesn't include end-witnesses)
-
-    Else Nothing special happens.
-
-
-Projections off of parallel tuples
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Why don't we cursorize these projections like Note [Cursorizing projections] ?
-
-i.e instead of direct projections like (#0 #1 tup), we generate
-
-    let tmp = #1 tup
-    in #0 tmp
-
-TLDR: Because of the way Flatten, Unariser and Lower deal with parallel tuples.
-
-..TODO (finish this note)..
+Spawn and sync
+~~~~~~~~~~~~~~
 
 -}
-_cursorizePar :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Exp2 -> PassM L3.Exp3
-_cursorizePar = _
-{-
-_cursorizePar isPackedContext ddfs fundefs denv tenv ex = _
+cursorizeSpawn :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps -> L Exp2 -> PassM Exp3
+cursorizeSpawn isPackedContext ddfs fundefs denv tenv sdeps (L _ ex) = do
   case ex of
-    LetE (v,locs, ProdTy [tya, tyb], rhs@(L _ (ParE ls))) bod ->
-      case (a,b) of
-        (L _ (AppE f _ _), L _ (AppE g _ _)) -> do
-          tup   <- gensym "par_tup"
-          (tya', bnds1, left, idx1) <- doapp tup locs f tya 0
-          (tyb', bnds2, right, _)  <- doapp tup (L.drop idx1 locs) g tya 1
-          rhs'  <- go tenv rhs
-          let bnds = [ (tup,   [], ProdTy [tya', tyb'], rhs') ]
-                     ++ bnds1 ++ bnds2 ++
-                     [ (v,     [], ProdTy [stripTyLocs tya, stripTyLocs tyb],
-                       l$ MkProdE [(l$ VarE left), (l$ VarE right)]) ]
-          --TODO: Extend it with proper types of the bindings created before.
-          let tenv' = M.union (M.fromList []) tenv
-          bod' <- go tenv' bod
-          return $ unLoc $ mkLets bnds bod'
-        _ -> error $ "cursorizePar: Expected function calls, got: " ++ sdoc rhs
+    LetE (v, locs, ty, L p (SpawnE fn applocs args)) bod
+      | hasPacked ty -> error "Gibbon-TODO: Only scalar types allowed in SpawnE for now. Got: "
 
-    _ -> error $ "cursorizePar: Unexpected expression: " ++ sdoc ex
-  where
-    -- After Cursorize, a function might return some end-witnesses along with the value.
-    -- "doapp" ensures that "part" contains the return *value* which "cursorizePar" uses
-    -- to stitch together the original tuple.
-    doapp par_tup locs1 f ty idx = do
-      let fnty = funTy (fundefs # f)
-          retlocs = locVars fnty
-          ty' = stripTyLocs ty
-      part <- gensym "par_part"
-      case retlocs of
-        [] -> return (ty', [(part,[], ty', mkProj idx (l$ VarE par_tup))], part, 0)
-        _  -> do
-          -- See Note [Projections off of parallel tuples]
-          tmp <- gensym "par_tmp"
-          let (ty'', idx1) = tyWithWitnesses f ty
-              bnds = [(tmp,  [], ty'', mkProj idx (l$ VarE par_tup))
-                     ,(part, [], ty' , mkProj idx1 (l$ VarE tmp))] ++
-                     [ (loc,[],CursorTy, mkProj i (l$ VarE tmp))
-                     | (loc, i) <- zip (L.take idx1 locs1) [0..]]
-          return (ty'', bnds, part, idx1)
+      | otherwise -> do
+          rhs' <- cursorizeExp ddfs fundefs denv tenv sdeps (L p (AppE fn applocs args))
+          let rhs'' = case unLoc rhs' of
+                        AppE fn' applocs' args' -> L p $ SpawnE fn' applocs' args'
+                        _ -> error "cursorizeSpawn"
+          case locs of
+            [] -> LetE (v,[],curDict $ stripTyLocs ty, rhs'') <$>
+                    go (M.insert v ty tenv) sdeps bod
 
-    -- The *value* is after all the end-witnesses (length fnrets).
-    tyWithWitnesses f oldty =
-      let fnty = funTy (fundefs # f)
-          fnrets = L.map (\_ -> CursorTy) (locRets fnty)
-      in (stripTyLocs (ProdTy (fnrets ++ [oldty])), length fnrets)
 
-    go t x = if isPackedContext
-             then fromDi <$> cursorizePackedExp ddfs fundefs denv t x
-             else cursorizeExp ddfs fundefs denv t x
+{-
+
+(This is almost identical to a cursorizeLet case below)
+
+This was a scalar binding before, but now has been transformed to
+also return an end_read cursor. So the type of the binding now
+becomes:
+
+    ProdTy [CursorTy, old_ty]
+
+Also, the binding itself now changes to:
+
+    end_read -> ProjE 0 RHS'
+    v        -> ProjE 1 RHS'
+
+However, because this is an asynchronous call, we cannot bind the projections
+until we see a SyncE. So we add these bindings to SyncDeps and process the body.
+
 -}
+            [loc] -> do
+              fresh <- gensym "par_tup_scalar"
+              let ty' :: Ty2
+                  ty'  = ProdTy ([CursorTy | _ <- locs] ++ [cursorizeTy ty])
+                  tenv' = M.union (M.fromList [(fresh, ty')]) tenv
+                  ty'' :: Ty3
+                  ty'' = stripTyLocs ty'
+                  rhs''' = dl$ VarE fresh
+                  pending_bnds = [ (loc   ,[] , projTy 0 ty'', projTy 0 ty' , projVal rhs''')
+                                 , (v     ,[] , projTy 1 ty'', projTy 0 ty' , projEnds rhs''')]
+                  sdeps' = sdeps ++ pending_bnds
+              bod' <- go tenv' sdeps' bod
+              return $ unLoc $ mkLets [(fresh,[] , ty'', rhs'')] bod'
+
+            _ -> error "TODO: cursorizeSpawn"
+
+    _ -> error "cursorizeSpawn: Unbound SpawnE"
+
+  where go t s x = if isPackedContext
+                   then fromDi <$> cursorizePackedExp ddfs fundefs denv t s x
+                   else cursorizeExp ddfs fundefs denv t s x
+        dl = Di <$> L NoLoc
+
+cursorizeSync :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps -> L Exp2 -> PassM Exp3
+cursorizeSync isPackedContext ddfs fundefs denv tenv sdeps (L _ ex) = do
+  case ex of
+    LetE (v, _locs, ty, L _ SyncE) bod -> do
+      let tenv' = foldr (\(v1,_,_,ty2,_) env -> M.insert v1 ty2 env) tenv sdeps
+          bnds  = map (\(a,b,c,_,e) -> (a,b,c,e)) sdeps
+          bnds' = (v,[],stripTyLocs ty, l$ SyncE) : bnds
+      bod' <- go tenv' bod
+      return $ unLoc $ mkLets bnds' bod'
+    _ -> error "cursorizeSpawn: Unbound SyncE"
+  where go t x = if isPackedContext
+                 then fromDi <$> cursorizePackedExp ddfs fundefs denv t [] x
+                 else cursorizeExp ddfs fundefs denv t [] x
+
 
 {-
 
@@ -822,11 +807,11 @@ we can take a shortcut here and directly bind `v` to the tagged location.
 Other bindings are straightforward projections of the processed RHS.
 
 -}
-cursorizeLet :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2
+cursorizeLet :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps
              -> (Var, [Var], Ty2, L Exp2) -> L Exp2 -> PassM Exp3
-cursorizeLet isPackedContext ddfs fundefs denv tenv (v,locs,ty,rhs) bod
+cursorizeLet isPackedContext ddfs fundefs denv tenv sdeps (v,locs,ty,rhs) bod
     | isPackedTy ty = do
-        rhs' <- fromDi <$> cursorizePackedExp ddfs fundefs denv tenv rhs
+        rhs' <- fromDi <$> cursorizePackedExp ddfs fundefs denv tenv sdeps rhs
         fresh <- gensym "tup_packed"
         let ty' = case locs of
                     [] -> cursorizeTy ty
@@ -858,7 +843,7 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv (v,locs,ty,rhs) bod
         return $ unLoc $ mkLets bnds bod'
 
     | hasPacked ty = do
-        rhs' <- fromDi <$> cursorizePackedExp ddfs fundefs denv tenv rhs
+        rhs' <- fromDi <$> cursorizePackedExp ddfs fundefs denv tenv sdeps rhs
         fresh <- gensym "tup_haspacked"
         let ty' = case locs of
                     [] -> cursorizeTy ty
@@ -878,7 +863,7 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv (v,locs,ty,rhs) bod
             unLoc . mkLets bnds <$> go tenv'' bod
 
     | otherwise = do
-        rhs' <- cursorizeExp ddfs fundefs denv tenv rhs
+        rhs' <- cursorizeExp ddfs fundefs denv tenv sdeps rhs
         case locs of
             [] -> LetE (v,[],curDict $ stripTyLocs ty, rhs') <$>
                     go (M.insert v ty tenv) bod
@@ -918,8 +903,8 @@ Also, the binding itself now changes to:
             _ -> error "cursorizeLet: packed tuples error2"
 
   where go t x = if isPackedContext
-                 then fromDi <$> cursorizePackedExp ddfs fundefs denv t x
-                 else cursorizeExp ddfs fundefs denv t x
+                 then fromDi <$> cursorizePackedExp ddfs fundefs denv t sdeps x
+                 else cursorizeExp ddfs fundefs denv t sdeps x
         dl = Di <$> L NoLoc
 
 {-
@@ -941,9 +926,9 @@ Consider an example of unpacking of a Node^ pattern:
 ..TODO..
 
 -}
-unpackDataCon :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> Bool -> Var
+unpackDataCon :: DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps -> Bool -> Var
               -> (DataCon, [(Var, Var)], L Exp2) -> PassM (DataCon, [t], L Exp3)
-unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
+unpackDataCon ddfs fundefs denv1 tenv1 sdeps isPacked scrtCur (dcon,vlocs1,rhs) = do
   field_cur <- gensym "field_cur"
 
   (dcon, [],)
@@ -956,8 +941,8 @@ unpackDataCon ddfs fundefs denv1 tenv1 isPacked scrtCur (dcon,vlocs1,rhs) = do
   where
     tys1 = lookupDataCon ddfs dcon
     processRhs denv env = if isPacked
-                          then fromDi <$> cursorizePackedExp ddfs fundefs denv env rhs
-                          else cursorizeExp ddfs fundefs denv env rhs
+                          then fromDi <$> cursorizePackedExp ddfs fundefs denv env sdeps rhs
+                          else cursorizeExp ddfs fundefs denv env sdeps rhs
 
     -- Since this constructor does not have random access nodes, we may not be able
     -- to unpack all the fields. Basically, anything after the first packed

@@ -382,9 +382,10 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                -- ensureEqualTy exp ty ty1
                return (ty1,tstate1)
 
-      ParE ls -> do
-              (tys,tstate) <- tcExps ddfs env funs constrs regs tstatein ls
-              return (ProdTy tys,tstate)
+      SpawnE f locs args ->
+        tcExp ddfs env funs constrs regs tstatein (l$ AppE f locs args)
+
+      SyncE -> pure (ProdTy [], tstatein)
 
       WithArenaE v e -> do
               let env' = extendVEnv v ArenaTy env

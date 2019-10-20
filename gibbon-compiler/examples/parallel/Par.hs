@@ -7,7 +7,7 @@ data Foo = A Int
 mkFoo :: Int -> Foo
 mkFoo i =
   if i <= 0
-  then A 10
+  then A 1
   else if i == 1
        then B (mkFoo (i-1)) (mkFoo (i-1))
        else C (mkFoo (i-1)) (mkFoo (i-1)) (mkFoo (i-1))
@@ -28,3 +28,8 @@ sumFoo foo =
           y = trp !!! 1
           z = trp !!! 2
       in x + y + z
+
+
+gibbon_main =
+  let x = mkFoo 2
+  in sumFoo x

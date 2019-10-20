@@ -229,7 +229,7 @@ desugarExp toplevel e = L NoLoc <$>
                             else if f == "par"
                                  then do
                                    e2' <- desugarExp toplevel e2
-                                   pure $ ParE [e2']
+                                   pure $ Ext $ ParE0 [e2']
                                  else AppE f [] <$> (: []) <$> desugarExp toplevel e2
           L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of
@@ -240,9 +240,9 @@ desugarExp toplevel e = L NoLoc <$>
                          Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
                   else (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
-          L _ (ParE ls) -> do
+          L _ (Ext (ParE0 ls)) -> do
             e2' <- desugarExp toplevel e2
-            pure $ ParE (ls ++ [e2'])
+            pure $ Ext $ ParE0 (ls ++ [e2'])
           L _ (AppE f [] ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ AppE f [] (ls ++ [e2'])
@@ -555,7 +555,6 @@ verifyBenchEAssumptions bench_allowed (L p ex) = L p $
     LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty, not_allowed rhs) (go bod)
     CaseE scrt mp -> CaseE (go scrt) $ map (\(a,b,c) -> (a,b, go c)) mp
     TimeIt e ty b -> TimeIt (not_allowed e) ty b
-    ParE{} -> error "verifyBenchEAssumptions: TODO ParE"
     WithArenaE v e -> WithArenaE v (go e)
     MapE{}  -> error $ "verifyBenchEAssumptions: TODO MapE"
     FoldE{} -> error $ "verifyBenchEAssumptions: TODO FoldE"
