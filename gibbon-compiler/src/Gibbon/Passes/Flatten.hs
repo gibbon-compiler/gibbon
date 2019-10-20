@@ -179,8 +179,8 @@ exp ddfs env2 (L sloc e0) =
       (bnd,e') <- go e
       return ([], TimeIt (flatLets bnd e') (gRecoverType ddfs env2 e) b)
 
-    -- It's a pair of function calls, don't flatten anyting.
-    ParE{} -> return ([], e0)
+    SpawnE f lvs ls -> gols (SpawnE f lvs)  ls "SpawnE"
+    SyncE -> pure ([], SyncE)
 
     WithArenaE v e -> do
       (bnd, e') <- go e
@@ -279,11 +279,8 @@ flattenExp0 ddfs env2 (L sloc e0) =
       (bnd,e') <- go e
       return ([], TimeIt (flatLets bnd e') (L0.recoverType ddfs env2 e) b)
 
-    -- ParE a b -> do
-    --   (bnd ,a') <- go a
-    --   (bnd2,b') <- go b
-    --   return ([], ParE (flatLets bnd a') (flatLets bnd2 b'))
-    ParE{} -> error "flattenL0: TODO ParE"
+    SpawnE f lvs ls -> gols (SpawnE f lvs)  ls "AppE"
+    SyncE -> pure ([], SyncE)
 
     MapE _ _      -> error "FINISHLISTS"
     FoldE _ _ _   -> error "FINISHLISTS"

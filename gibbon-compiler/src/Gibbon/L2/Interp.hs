@@ -217,9 +217,8 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
                else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
               return $! (val, sz)
 
-        ParE ls -> do
-          (ls',szs) <- unzip <$> mapM (go env sizeEnv) ls
-          return (VProd ls', SMany szs)
+        SpawnE f locs args -> go env sizeEnv (l$ AppE f locs args)
+        SyncE -> pure $ (VInt (-1), SOne 8)
 
         MapE{} -> error $ "L2.Interp: TODO " ++ sdoc ex
         FoldE{} -> error $ "L2.Interp: TODO " ++ sdoc ex

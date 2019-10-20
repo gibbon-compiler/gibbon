@@ -45,6 +45,7 @@ data E0Ext loc dec =
  | FunRefE [loc] Var -- Reference to a function (toplevel or lambda),
                      -- along with its tyapps.
  | BenchE Var [loc] [(L (PreExp E0Ext loc dec))] Bool
+ | ParE0 [(L (PreExp E0Ext loc dec))]
  deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 instance FreeVars (E0Ext l d) where
@@ -54,6 +55,7 @@ instance FreeVars (E0Ext l d) where
       PolyAppE f d     -> gFreeVars f `S.union` gFreeVars d
       FunRefE _ f      -> S.singleton f
       BenchE _ _ args _-> S.unions (map gFreeVars args)
+      ParE0 ls         -> S.unions (map gFreeVars ls)
 
 instance (Out l, Out d, Show l, Show d) => Expression (E0Ext l d) where
   type LocOf (E0Ext l d) = l
@@ -71,6 +73,7 @@ instance HasSubstitutableExt E0Ext l d => SubstitutableExt (L (PreExp E0Ext l d)
       PolyAppE a b     -> PolyAppE (gSubst old new a) (gSubst old new b)
       FunRefE{}        -> ext
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubst old new) args) b
+      ParE0 ls -> ParE0 $ map (gSubst old new) ls
 
   gSubstEExt old new ext =
     case ext of
@@ -78,6 +81,7 @@ instance HasSubstitutableExt E0Ext l d => SubstitutableExt (L (PreExp E0Ext l d)
       PolyAppE a b     -> PolyAppE (gSubstE old new a) (gSubstE old new b)
       FunRefE{}        -> ext
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubstE old new) args) b
+      ParE0 ls -> ParE0 $ map (gSubstE old new) ls
 
 instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
   gRename env ext =
@@ -86,6 +90,7 @@ instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
       PolyAppE a b     -> PolyAppE (go a) (go b)
       FunRefE tyapps a -> FunRefE (map go tyapps) (go a)
       BenchE fn tyapps args b -> BenchE fn (map go tyapps) (map go args) b
+      ParE0 ls -> ParE0 $ map (gRename env) ls
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
@@ -347,7 +352,9 @@ recoverType ddfs env2 (L _ ex) =
         oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                       ++"\nExpression:\n  "++ sdoc ex
                       ++"\nEnvironment:\n  "++sdoc (vEnv env2)
-    ParE ls -> ProdTy $ map (recoverType ddfs env2) ls
+    SpawnE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
+                         in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
+    SyncE -> ProdTy []
     CaseE _ mp ->
       let (c,args,e) = head mp
           args' = map fst args
@@ -363,6 +370,7 @@ recoverType ddfs env2 (L _ ex) =
             (_, Just ty) -> tyFromScheme ty -- CSK: Not sure if this is what we want?
         PolyAppE{}  -> error "recoverTypeep: TODO PolyAppE"
         BenchE fn _ _ _ -> outTy $ fEnv env2 # fn
+        ParE0 ls -> ProdTy $ map (recoverType ddfs env2) ls
   where
     -- Return type for a primitive operation.
     primRetTy1 :: Prim Ty0 -> Ty0

@@ -184,42 +184,28 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- This is the most interesting case: a let bound function application.
           -- We need to update the let binding's extra location binding list with
           -- the end witnesses returned from the function.
-          LetE (v,_ls,ty,rhs@(L _ (AppE f lsin e1))) e2 -> do
+          LetE (v,_ls,ty,(L _ (AppE f lsin e1))) e2 -> do
                  let lenv' = case ty of
                                PackedTy _n l -> M.insert v l lenv
                                _ -> lenv
 
-                 (outlocs,newls,eor') <- doBoundApp rhs
+                 (outlocs,newls,eor') <- doBoundApp f lsin
                  e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) e2
                  return $ LetE (v,outlocs,ty, l$ AppE f lsin e1)
                                (wrapBody e2' newls)
 
-          LetE (v,_ls, ty, rhs@(L _ (ParE ls))) bod -> do
-            (outlocs, newls, eors) <- unzip3 <$> mapM doBoundApp ls
-            -- Later, we should be able to tell which end-witness came from which
-            -- function call in the list. Since functions might return arbitrary
-            -- number of end-witnesses (or none), we can't just concat them together.
-            -- So we use a special encoding to put them in a list which Cursorize
-            -- can decode. For example, given this list: par (FN a, FN b, FN c):
-            --
-            -- (1) All of them return 1 end-witness:
-            --     outlocs' = [w_a, #, w_b, #, w_c]
-            --
-            -- (2) FN b doesn't return a end-witness:
-            --     outlocs' = [w_a, #, #, w_c]
-            --
-            -- (3) FN a returns multiple end-witnesses:
-            --
-            --     outlocs' = [w_a1, w_a2, #, w_b, #, w_c]
-            let outlocs' = intercalate [Var "#"] outlocs
-                newls'   = L.foldr (<>) (head newls) newls
-                eor'     = L.foldr (<>) (head eors) eors
-                lenv'    = if hasPacked ty
-                           then error $ "Gibbon-TODO: Only scalar types allowed in ParE for now. Got: " ++ sdoc ty
-                           else lenv
-            -- error (show (newls', eor'))
-            bod' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) bod
-            return $ LetE (v,outlocs',ty,rhs) (wrapBody bod' newls')
+          -- Exactly like AppE.
+          LetE (v,_ls,ty,(L _ (SpawnE f lsin e1))) e2 -> do
+                 let lenv' = case ty of
+                               PackedTy _n l -> M.insert v l lenv
+                               _ -> lenv
+                 (outlocs,newls,eor') <- doBoundApp f lsin
+                 e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) e2
+                 return $ LetE (v,outlocs,ty, l$ SpawnE f lsin e1)
+                               (wrapBody e2' newls)
+
+          SpawnE{} -> error "routeEnds: Unbound SpawnE"
+          SyncE    -> pure e
 
           CaseE (L _ (VarE x)) brs -> do
                  -- We will need to gensym while processing the case clauses, so
@@ -386,8 +372,6 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  e' <- go e
                  return $ TimeIt e' ty b
 
-          ParE{} -> error "routeEnds:  ParE must always be let-bound."
-
           WithArenaE v e -> WithArenaE v <$> go e
 
           Ext (LetRegionE r (L _ (LitE n))) -> do
@@ -457,8 +441,8 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                wrapBody e [] = e
 
                -- Process a let bound fn app.
-               doBoundApp :: L Exp2 -> PassM ([LocVar], [(LocVar, Var)], EndOfRel)
-               doBoundApp (L _ (AppE f lsin _e1)) = do
+               doBoundApp :: Var -> [LocVar] -> PassM ([LocVar], [(LocVar, Var)], EndOfRel)
+               doBoundApp f lsin = do
                  let fty = funtype f
                      rets = S.fromList $ locRets fty
                      -- The travlist is a list of pair (location, bool) where the bool is
@@ -480,4 +464,3 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  let eor' = L.foldr mkEor eor newls
                  let outlocs = L.map snd newls
                  return (outlocs, newls, eor')
-               doBoundApp oth = error $ "RouteEnds.doBoundApp: Got " ++ sdoc oth

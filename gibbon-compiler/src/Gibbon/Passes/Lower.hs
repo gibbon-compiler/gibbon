@@ -386,8 +386,9 @@ lower Prog{fundefs,ddefs,mainExp} = do
             go scrt <> foldl (\acc (_,_,c) -> collect_syms acc c) syms ls
           DataConE _ _ ls -> gol ls
           TimeIt e _ _   -> go e
-          ParE ls        -> gol ls
           WithArenaE _ e -> go e
+          SpawnE _ _ ls  -> gol ls
+          SyncE -> S.empty
           Ext ext        ->
             case ext of
               WriteScalar _ _ ex -> go ex
@@ -554,55 +555,6 @@ lower Prog{fundefs,ddefs,mainExp} = do
     WithArenaE v e -> do
       e' <- tail sym_tbl e
       return $ T.LetArenaT v e'
-
-{-
-
-Lowering ParE
-~~~~~~~~~~~~~
-
-ASSUMPTION: Sub-expressions are function calls.
-
-The tuple combinator case is somewhat tricky to get right. Lower assumes
-fully flattened product types. However, Unariser does not flatten the tuple
-combinator since we need the original type to lower it properly.
-Therefore, if any of the subexpressions (a or b) does have a product type
-(tya or tyb), we have to handle it here. Consider this example:
-
-    let tup : ((Cursor, Int), Int) = sumtree (end_r, tr00) || ...
-    let fltT : (Cursor, Int) = #0 tup
-    let end_x : Int = #0 fltT
-    let x : Int = #1 fltT
-    ...
-
-After Lower runs, a function returning a product type is encoded as to return
-*multiple* values, instead of a tuple. So, the sumtree call is lowered as:
-
-    T.LetCallT [(pvrtmp0, Cursor), (pvrtmp1, Int)] sumtree [VarE end_r, VarE tr00] BOD
-
-This is a problem because we have "let flT : (Cursor, Int) = #0 tup" in the
-input program. So, we use hackyParSubst to get rid of the "flT" binding altogether.
-See [Hacky substitution to encode ParE].
-
--}
-{-
-    LetE (v,_, ProdTy [tya, tyb], L _ (ParE a b)) bod -> do
-      let doParExp idx ty e b = do
-            tmp <- gensym "tmp_par"
-            e' <- tail sym_tbl (l$ LetE (tmp,[],ty,e) (l$ LitE 42))
-            if isProdTy ty
-            then return (e', hackyParSubst idx v (L.map fst (T.binds e')) b)
-            else return (e', substE (l$ ProjE idx (l$ VarE v))
-                                    (l$ VarE (fst (head (T.binds e'))))
-                                    b)
-      (a', bod1) <- doParExp 0 tya a bod
-      (b', bod2) <- doParExp 1 tyb b bod1
-      bod' <- tail sym_tbl bod2
-      return $ a' { T.bod = b' { T.bod = bod'
-                               , T.async = True } }
-
--}
-    LetE (_,_, ProdTy [_, _], L _ (ParE{})) _ -> do
-      error "lower: TODO ParE"
 
     -- We could eliminate these ahead of time:
     LetE (v,_,t,rhs) bod | isTrivial' rhs ->
@@ -782,6 +734,9 @@ See [Hacky substitution to encode ParE].
 
     AppE v _ ls -> return $ T.TailCall v (map (triv sym_tbl "operand") ls)
 
+    SpawnE{} -> error "lower: Unbound SpanwnE"
+    SyncE    -> error "lower: Unbound SpanwnE"
+
     -- Tail calls are just an optimization, if we have a Proj/App it cannot be tail:
     ProjE ix (L _ (AppE f _ e)) -> dbgTrace 5 "ProjE" $ do
         tmp <- gensym $ toVar "prjapp"
@@ -817,6 +772,14 @@ See [Hacky substitution to encode ParE].
                         _ -> return ([(vr,typ t)], bod)
         T.LetCallT False vsts f' (L.map (triv sym_tbl "one of app rands") ls) <$> (tail sym_tbl bod')
 
+    LetE (v, _,ty, (L _ (L3.SpawnE fn locs args))) bod -> do
+      tl <- tail sym_tbl (l$ LetE (v,_,ty, l$ AppE fn locs args) bod)
+      -- This is going to be a LetCallT.
+      pure $ tl { T.async = True }
+
+    LetE (_,_,_, L _ SyncE) bod -> do
+      bod' <- tail sym_tbl bod
+      pure $ T.LetPrimCallT [] T.ParSync [] bod'
 
     LetE (v, _, t, L _ (IfE a b c)) bod -> do
       let a' = triv sym_tbl "if test" a
@@ -946,39 +909,6 @@ prim p =
     MkFalse      -> error "lower/prim: internal error. MkFalse should not get here."
     SymAppend    -> error "lower/prim: internal error. SymAppend should not get here."
     RequestEndOf -> error "lower/prim: internal error. RequestEndOf shouldn't be here."
-
-{- Note [Hacky substitution to encode ParE]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-(1) find w s.t `w = proje i p`
-(2) map (\b -> subst (proje idx w) b) binds
--}
-hackyParSubst :: Int -> Var -> [Var] -> L Exp3 -> L Exp3
-hackyParSubst i p binds (L loc ex) = L loc $
-  case ex of
-    VarE{} -> ex
-    LitE{} -> ex
-    LitSymE{} -> ex
-    AppE{} -> ex
-    PrimAppE{} -> ex
-    LetE (w,locs,ty, rhs@(L _ (ProjE j (L _ (VarE q))))) bod ->
-      if q == p && j == i
-      then unLoc $ L.foldr (\(v, i) acc -> substE (l$ ProjE i (l$ VarE w)) (l$ VarE v) acc) bod (zip binds [0..])
-      else LetE (w,locs,ty,rhs) (go bod)
-    LetE (v,locs,ty,rhs) bod ->
-      LetE (v,locs,ty,rhs) (go bod)
-    IfE a b c -> IfE a (go b) (go c)
-    MkProdE{} -> ex
-    ProjE{} -> ex
-    CaseE scrt brs -> CaseE scrt (L.map (\(br,vls,e) -> (br,vls, go e)) brs)
-    DataConE{} -> ex
-    TimeIt{} -> ex
-    ParE{} -> ex
-    WithArenaE{} -> ex
-    Ext{} -> ex
-    MapE{} -> ex
-    FoldE{} -> ex
-  where
-    go = hackyParSubst i p binds
 
 isTrivial' :: L Exp3 -> Bool
 isTrivial' (L sl e) =

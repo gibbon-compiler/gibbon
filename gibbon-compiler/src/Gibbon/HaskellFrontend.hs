@@ -190,6 +190,8 @@ desugarExp toplevel e = L NoLoc <$>
       let v = (toVar $ qnameToStr qv)
       if v == "gensym"
       then pure $ PrimAppE Gensym []
+      else if v == "sync"
+      then pure SyncE
       else case M.lookup v toplevel of
              Just sigma ->
                case tyFromScheme sigma of
@@ -219,18 +221,22 @@ desugarExp toplevel e = L NoLoc <$>
                          Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
                   else if f == "bench"
-                       then do
-                         e2' <- desugarExp toplevel e2
-                         pure $ Ext $ BenchE "HOLE" [] [e2'] False
-                       else if f == "error"
-                            then case e2 of
-                                   Lit _ lit -> pure $ PrimAppE (ErrorP (litToString lit) IntTy) [] -- assume int (!)
-                                   _ -> error "desugarExp: error expects String literal."
-                            else if f == "par"
-                                 then do
-                                   e2' <- desugarExp toplevel e2
-                                   pure $ ParE [e2']
-                                 else AppE f [] <$> (: []) <$> desugarExp toplevel e2
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    pure $ Ext $ BenchE "HOLE" [] [e2'] False
+                  else if f == "error"
+                  then case e2 of
+                         Lit _ lit -> pure $ PrimAppE (ErrorP (litToString lit) IntTy) [] -- assume int (!)
+                         _ -> error "desugarExp: error expects String literal."
+                  else if f == "par"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    pure $ Ext $ ParE0 [e2']
+                  else if f == "spawn"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    pure $ SpawnE "HOLE" [] [e2']
+                  else AppE f [] <$> (: []) <$> desugarExp toplevel e2
           L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of
               Just p  -> pure $ PrimAppE p as
@@ -240,9 +246,9 @@ desugarExp toplevel e = L NoLoc <$>
                          Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
                   else (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
-          L _ (ParE ls) -> do
+          L _ (Ext (ParE0 ls)) -> do
             e2' <- desugarExp toplevel e2
-            pure $ ParE (ls ++ [e2'])
+            pure $ Ext $ ParE0 (ls ++ [e2'])
           L _ (AppE f [] ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ AppE f [] (ls ++ [e2'])
@@ -250,6 +256,10 @@ desugarExp toplevel e = L NoLoc <$>
           L _ (Ext (BenchE fn [] ls b)) -> do
             e2' <- desugarExp toplevel e2
             pure $ Ext $ BenchE fn [] (ls ++ [e2']) b
+
+          L _ (SpawnE fn [] ls) -> do
+            e2' <- desugarExp toplevel e2
+            pure $ SpawnE fn [] (ls ++ [e2'])
 
           L _ (PrimAppE p ls) -> do
             e2' <- desugarExp toplevel e2
@@ -354,7 +364,7 @@ collectTopLevel env decl =
       pure Nothing
 
     PatBind _ (PVar _ (Ident _ "gibbon_main")) (UnGuardedRhs _ rhs) _binds -> do
-      rhs' <- verifyBenchEAssumptions True <$> desugarExp toplevel rhs
+      rhs' <- fixupSpawn <$> verifyBenchEAssumptions True <$> desugarExp toplevel rhs
       ty <- newMetaTy
       pure $ Just $ HMain $ Just (rhs', ty)
 
@@ -374,7 +384,7 @@ collectTopLevel env decl =
                      pure $ Just $ HFunDef (FunDef { funName = toVar fn
                                                    , funArgs = args
                                                    , funTy   = fun_ty
-                                                   , funBody = bod' })
+                                                   , funBody = fixupSpawn bod' })
 
                -- This is a top-level function that doesn't take any arguments.
                _ -> do
@@ -384,14 +394,14 @@ collectTopLevel env decl =
                  pure $ Just $ HFunDef (FunDef { funName = toVar fn
                                                , funArgs = []
                                                , funTy   = fun_ty''
-                                               , funBody = rhs' })
+                                               , funBody = fixupSpawn rhs' })
 
 
     FunBind{} -> do (name,args,ty,bod) <- desugarFun toplevel env decl
                     pure $ Just $ HFunDef (FunDef { funName = name
                                                   , funArgs = args
                                                   , funTy   = ty
-                                                  , funBody = bod })
+                                                  , funBody = fixupSpawn bod })
 
     AnnPragma _ a -> do
       case a of
@@ -454,15 +464,8 @@ generateBind toplevel env decl exp2 =
   case decl of
     -- 'collectTopTy' takes care of this.
     TypeSig{} -> pure exp2
-    PatBind _ _ _ Just{}        -> error "desugarExp: where clauses not allowed"
-    PatBind _ _ GuardedRhss{} _ -> error "desugarExp: Guarded right hand side not supported."
-    PatBind _ (PVar _ v) (UnGuardedRhs _ rhs) Nothing -> do
-      rhs' <- desugarExp toplevel rhs
-      let w = toVar (nameToStr v)
-      ty' <- case M.lookup w env of
-                Nothing -> newMetaTy
-                Just (ForAll _ ty) -> pure ty
-      pure $ l$ LetE (w, [], ty', rhs') exp2
+    PatBind _ _ _ Just{}        -> error "generateBind: where clauses not allowed"
+    PatBind _ _ GuardedRhss{} _ -> error "generateBind: Guarded right hand side not supported."
     PatBind _ (PTuple _ Boxed pats) (UnGuardedRhs _ rhs) Nothing -> do
       rhs' <- desugarExp toplevel rhs
       w <- gensym "tup"
@@ -470,9 +473,19 @@ generateBind toplevel env decl exp2 =
       let tupexp e = l$ LetE (w,[],ty',rhs') e
       prjexp <- generateTupleProjs toplevel env (zip pats [0..]) (l$ VarE w) exp2
       pure $ tupexp prjexp
+    PatBind _ pat (UnGuardedRhs _ rhs) Nothing -> do
+      rhs' <- desugarExp toplevel rhs
+      w <- case pat of
+             PVar _ v    -> pure $ toVar (nameToStr v)
+             PWildCard _ -> gensym "wildcar_"
+             _           -> error "generateBind: "
+      ty' <- case M.lookup w env of
+                Nothing -> newMetaTy
+                Just (ForAll _ ty) -> pure ty
+      pure $ l$ LetE (w, [], ty', rhs') exp2
     FunBind{} -> do (name,args,ty,bod) <- desugarFun toplevel env decl
                     pure $ l$ LetE (name,[], tyFromScheme ty, l$ Ext $ LambdaE (zip args (inTys ty)) bod) exp2
-    oth -> error ("desugarExp: Unsupported pattern: " ++ prettyPrint oth)
+    oth -> error ("generateBind: Unsupported pattern: " ++ prettyPrint oth)
 
 generateTupleProjs :: (Show a, Pretty a) => TopTyEnv -> TopTyEnv -> [(Pat a,Int)] -> L Exp0 -> L Exp0 -> PassM (L Exp0)
 generateTupleProjs toplevel env ((PVar _ v,n):pats) tup exp2 = do
@@ -528,6 +541,38 @@ nameToStr (Symbol _ s) = s
 
 instance Pretty SrcSpanInfo where
 
+fixupSpawn :: L Exp0 -> L Exp0
+fixupSpawn (L p ex) = L p $
+  case ex of
+    Ext (LambdaE vars bod) -> Ext (LambdaE vars (go bod))
+    Ext (PolyAppE a b)     -> Ext (PolyAppE (go a) (go b))
+    Ext (FunRefE{})        -> ex
+    Ext (BenchE fn tyapps args b) -> Ext (BenchE fn tyapps (map go args) b)
+    Ext (ParE0 ls) -> Ext (ParE0 (map go ls))
+    -- Straightforward recursion ...
+    VarE{}     -> ex
+    LitE{}     -> ex
+    LitSymE{}  -> ex
+    AppE fn tyapps args -> AppE fn tyapps (map go args)
+    PrimAppE pr args -> PrimAppE pr (map go args)
+    DataConE dcon tyapps args -> DataConE dcon tyapps (map go args)
+    ProjE i e  -> ProjE i $ go e
+    IfE a b c  -> IfE (go a) (go b) (go c)
+    MkProdE ls -> MkProdE $ map go ls
+    -- Only allow BenchE in tail position
+    LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty, go rhs) (go bod)
+    CaseE scrt mp -> CaseE (go scrt) $ map (\(a,b,c) -> (a,b, go c)) mp
+    TimeIt e ty b -> TimeIt (go e) ty b
+    WithArenaE v e -> WithArenaE v (go e)
+    SpawnE _ _ args ->
+      case args of
+          [L _ (AppE fn tyapps ls)] -> SpawnE fn tyapps ls
+          _ -> error $ "fixupSpawn: incorrect use of spawn: " ++ sdoc ex
+    SyncE   -> SyncE
+    MapE{}  -> error $ "fixupSpawn: TODO MapE"
+    FoldE{} -> error $ "fixupSpawn: TODO FoldE"
+  where go = fixupSpawn
+
 -- | Verify some assumptions about BenchE.
 verifyBenchEAssumptions :: Bool -> L Exp0 -> L Exp0
 verifyBenchEAssumptions bench_allowed (L p ex) = L p $
@@ -541,6 +586,7 @@ verifyBenchEAssumptions bench_allowed (L p ex) = L p $
           (L _ (VarE fn) : oth) -> Ext (BenchE fn tyapps oth b)
           _ -> error $ "desugarModule: bench is a reserved keyword. Usage: bench fn_name args. Got: " ++ sdoc args
       else error $ "verifyBenchEAssumptions: 'bench' can only be used as a tail of the main expression, but it was used in a function. In: " ++ sdoc ex
+    Ext (ParE0 ls) -> Ext (ParE0 (map not_allowed ls))
     -- Straightforward recursion ...
     VarE{}     -> ex
     LitE{}     -> ex
@@ -551,12 +597,12 @@ verifyBenchEAssumptions bench_allowed (L p ex) = L p $
     ProjE i e  -> ProjE i $ not_allowed e
     IfE a b c  -> IfE (not_allowed a) (go b) (go c)
     MkProdE ls -> MkProdE $ map not_allowed ls
-    -- Only allow BenchE in tail position
     LetE (v,locs,ty,rhs) bod -> LetE (v,locs,ty, not_allowed rhs) (go bod)
     CaseE scrt mp -> CaseE (go scrt) $ map (\(a,b,c) -> (a,b, go c)) mp
     TimeIt e ty b -> TimeIt (not_allowed e) ty b
-    ParE{} -> error "verifyBenchEAssumptions: TODO ParE"
     WithArenaE v e -> WithArenaE v (go e)
+    SpawnE fn tyapps args -> SpawnE fn tyapps (map not_allowed args)
+    SyncE    -> SyncE
     MapE{}  -> error $ "verifyBenchEAssumptions: TODO MapE"
     FoldE{} -> error $ "verifyBenchEAssumptions: TODO FoldE"
   where go = verifyBenchEAssumptions bench_allowed

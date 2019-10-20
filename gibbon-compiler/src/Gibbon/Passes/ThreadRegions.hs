@@ -133,6 +133,11 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
           LetE (v,locs,ty, l$ AppE f newapplocs args) <$>
             threadRegionsExp ddefs fundefs isMain renv' (extendVEnv v ty env2) bod
 
+    LetE (v,locs,ty, (L _ (SpawnE f applocs args))) bod -> do
+      let e' = l$ LetE (v,locs,ty, (L _ (AppE f applocs args))) bod
+      e'' <- threadRegionsExp ddefs fundefs isMain renv env2 e'
+      pure $ unLoc $ changeAppToSpawn e''
+
     LetE (v,locs,ty, rhs) bod ->
       LetE <$> (v,locs,ty,) <$> go rhs <*>
         threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) bod
@@ -191,9 +196,10 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
-    ParE ls -> ParE <$> mapM go ls
-    MapE{}  -> error $ "go: TODO MapE"
-    FoldE{} -> error $ "go: TODO FoldE"
+    SpawnE{} -> error "threadRegionsExp: Unbound SpawnE"
+    SyncE    -> pure ex
+    MapE{}  -> error $ "threadRegionsExp: TODO MapE"
+    FoldE{} -> error $ "threadRegionsExp: TODO FoldE"
 
   where
     go = threadRegionsExp ddefs fundefs isMain renv env2

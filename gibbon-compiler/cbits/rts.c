@@ -18,6 +18,9 @@
 #ifdef _POINTER
 #include <gc.h>
 #endif
+#ifdef _PARALLEL
+#include <cilk/cilk.h>
+#endif
 
 #define KB 1000lu
 #define MB (KB * 1000lu)

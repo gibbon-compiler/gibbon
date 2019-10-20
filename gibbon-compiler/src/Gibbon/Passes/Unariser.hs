@@ -35,7 +35,7 @@ unariser Prog{ddefs,fundefs,mainExp} = do
                            return $ Just (m', flattenTy t)
           Nothing -> return Nothing
   fds' <- mapM unariserFun fundefs
-  dbgTrace 5 (sdoc fds') $ return $ Prog ddefs fds' mn
+  return $ Prog ddefs fds' mn
 
 
   -- Modifies function to satisfy output invariant (1)
@@ -69,24 +69,6 @@ type ProjStack = [Int]
 unariserExp :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> L Exp3 -> PassM (L Exp3)
 unariserExp ddfs stk env2 (L p ex) = L p <$>
   case ex of
-{-
-    -- We do NOT unarise the parallel tuple combinator. Lower has a special
-    -- case which can handle it properly. See [Lowering the parallel tuple combinator].
-    LetE (v,locs, ty@(ProdTy [tya, tyb]), L _ (ParE a b)) bod -> do
-      a' <- go env2 a
-      b' <- go env2 b
-      let ty' = ProdTy [flattenTy tya, flattenTy tyb]
-          -- This is not the correct type of `v`, but we extend the environment
-          -- with it to make it look like a flattened tuple. Otherwise,
-          -- any projection off this tuple tries to flatten it, which results
-          -- in an ill typed program.
-          env2' = extendVEnv v (flattenTy ty) env2
-      LetE (v,locs, ty', l$ ParE a' b') <$> go env2' bod
--}
-    LetE (_,_, (ProdTy [_, _]), L _ (ParE{})) _ ->
-      error "unariserExp: TODO ParE"
-
-
     LetE (v,locs,ty,rhs) bod ->
       LetE <$> (v,locs,flattenTy ty,)
            <$> go env2 rhs
@@ -158,10 +140,12 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
       e'  <- go env2 e
       return $ LetE (tmp,[],ty, l$ TimeIt e' ty b) (l$ VarE tmp)
 
-    -- ParE a b -> ParE <$> go env2 a <*> go env2 b
-    ParE{} -> error "unariserExp: TODO ParE"
-
     WithArenaE v e -> WithArenaE v <$> go env2 e
+
+    SpawnE v locs args -> unLoc <$> discharge stk <$>
+                            (L p <$> SpawnE v locs <$> mapM (go env2) args)
+
+    SyncE -> pure SyncE
 
     Ext{}  -> return ex
     MapE{}  -> error "unariserExp: MapE TODO"

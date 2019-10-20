@@ -28,7 +28,7 @@ module Gibbon.L2.Syntax
     , locsInTy, dummyTyLocs
 
     -- * Other helpers
-    , revertToL1, occurs, mapPacked, constPacked, depList
+    , revertToL1, occurs, mapPacked, constPacked, depList, changeAppToSpawn
 
     , module Gibbon.Language
     )
@@ -362,7 +362,11 @@ instance Typeable (PreExp E2Ext LocVar (UrTy LocVar)) where
           oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                         ++"\nExpression:\n  "++ sdoc ex
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
-      ParE ls -> ProdTy $ L.map (gRecoverType ddfs env2) ls
+      SpawnE v locs _ -> let fnty  = fEnv env2 # v
+                             outty = arrOut fnty
+                             mp = M.fromList $ zip (allLocVars fnty) locs
+                         in substLoc mp outty
+      SyncE -> voidTy
       WithArenaE _v e -> gRecoverType ddfs env2 e
       CaseE _ mp ->
         let (c,vlocs,e) = head mp
@@ -522,7 +526,8 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         CaseE scrt brs     -> CaseE (revertExp scrt) (L.map docase brs)
         DataConE _ dcon ls -> DataConE () dcon $ L.map revertExp ls
         TimeIt e ty b -> TimeIt (revertExp e) (stripTyLocs ty) b
-        ParE ls -> ParE $ L.map revertExp ls
+        SpawnE v _ args -> SpawnE v [] (L.map revertExp args)
+        SyncE -> SyncE
         Ext ext ->
           case ext of
             LetRegionE _ bod -> unLoc $ revertExp bod
@@ -562,7 +567,8 @@ occurs w (L _ ex) =
     CaseE e brs -> go e || any (\(_,_,bod) -> go bod) brs
     DataConE _ _ ls  -> any go ls
     TimeIt e _ _     -> go e
-    ParE ls          -> any go ls
+    SpawnE _ _ ls    -> any go ls
+    SyncE            -> False
     WithArenaE v rhs -> v `S.member` w || go rhs
     Ext ext ->
       case ext of
@@ -641,7 +647,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           DataConE _ _ args -> foldl go acc args
           TimeIt e _ _ -> go acc e
           WithArenaE _ e -> go acc e
-          ParE ls -> foldl go acc ls
+          SpawnE _ _ ls  -> foldl go acc ls
+          SyncE          -> acc
           MapE{}  -> acc
           FoldE{} -> acc
           Ext ext ->
@@ -681,3 +688,35 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               BoundsCheck _ reg cur -> S.fromList [reg,cur]
               IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
           _ -> gFreeVars ex
+
+
+changeAppToSpawn :: L Exp2 -> L Exp2
+changeAppToSpawn (L p1 ex1) = L p1 $
+  case ex1 of
+    VarE{}    -> ex1
+    LitE{}    -> ex1
+    LitSymE{} -> ex1
+    AppE f locs args -> SpawnE f locs $ map changeAppToSpawn args
+    PrimAppE f args  -> PrimAppE f $ map changeAppToSpawn args
+    LetE (v,loc,ty,rhs) bod -> do
+      LetE (v,loc,ty, changeAppToSpawn rhs) (changeAppToSpawn bod)
+    IfE a b c  -> IfE (changeAppToSpawn a) (changeAppToSpawn b) (changeAppToSpawn c)
+    MkProdE xs -> MkProdE $ map changeAppToSpawn xs
+    ProjE i e  -> ProjE i $ changeAppToSpawn e
+    DataConE loc dcon args -> DataConE loc dcon $ map changeAppToSpawn args
+    CaseE scrt mp ->
+      CaseE (changeAppToSpawn scrt) $ map (\(a,b,c) -> (a,b, changeAppToSpawn c)) mp
+    TimeIt e ty b  -> TimeIt (changeAppToSpawn e) ty b
+    WithArenaE v e -> WithArenaE v (changeAppToSpawn e)
+    SpawnE{} -> ex1
+    SyncE{}  -> ex1
+    Ext ext ->
+      case ext of
+        LetRegionE r rhs  -> Ext $ LetRegionE r (changeAppToSpawn rhs)
+        LetLocE l lhs rhs -> Ext $ LetLocE l lhs (changeAppToSpawn rhs)
+        RetE{}            -> ex1
+        FromEndE{}        -> ex1
+        BoundsCheck{}     -> ex1
+        IndirectionE{}    -> ex1
+    MapE{}  -> error "addRANExp: TODO MapE"
+    FoldE{}  -> error "addRANExp: TODO FoldE"
