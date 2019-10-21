@@ -137,7 +137,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
           len0 = checkLen 0
           len1 = checkLen 1
           len2 = checkLen 2
-          _len3 = checkLen 3
+          len3 = checkLen 3
           len4 = checkLen 4
 
           mk_bools = do
@@ -208,6 +208,39 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
         ReadInt -> do
           len0
           pure (s1, IntTy, PrimAppE pr args_tc)
+
+        SymSetEmpty -> do
+          len0
+          pure (s1, SymSetTy, PrimAppE pr args_tc)
+
+        SymSetInsert -> do
+          len2
+          s2 <- unify (args !! 0) SymSetTy (arg_tys' !! 0)
+          s3 <- unify (args !! 1) SymTy0 (arg_tys' !! 1)
+          pure (s1 <> s2 <> s3, SymSetTy, PrimAppE pr args_tc)
+
+        SymSetContains -> do
+          len2
+          s2 <- unify (args !! 0) SymSetTy (arg_tys' !! 0)
+          s3 <- unify (args !! 1) SymTy0 (arg_tys' !! 1)
+          pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+
+        SymHashEmpty -> do
+          len0
+          pure (s1, SymHashTy, PrimAppE pr args_tc)
+
+        SymHashInsert -> do
+          len3
+          s2 <- unify (args !! 0) SymHashTy (arg_tys' !! 0)
+          s3 <- unify (args !! 1) SymTy0 (arg_tys' !! 1)
+          s4 <- unify (args !! 2) SymTy0 (arg_tys' !! 2)
+          pure (s1 <> s2 <> s3 <> s4, SymHashTy, PrimAppE pr args_tc)
+
+        SymHashLookup -> do
+          len2
+          s2 <- unify (args !! 0) SymHashTy (arg_tys' !! 0)
+          s3 <- unify (args !! 1) SymTy0 (arg_tys' !! 1)
+          pure (s1 <> s2 <> s3, SymTy0, PrimAppE pr args_tc)
 
         DictEmptyP ty -> do
           len1
@@ -517,6 +550,8 @@ zonkTy s@(Subst mp) ty =
     PackedTy t tys -> PackedTy t (map go tys)
     ListTy t -> ListTy (go t)
     ArenaTy  -> ty
+    SymSetTy -> ty
+    SymHashTy -> ty
   where
     go = zonkTy s
 

@@ -205,6 +205,8 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         PackedTy tycon tyapps | tyapps == [] -> L1.PackedTy tycon ()
                               | otherwise    -> err1 (sdoc ty)
         ArenaTy -> L1.ArenaTy
+        SymSetTy -> L1.SymSetTy
+        SymHashTy -> L1.SymHashTy
         ListTy{} -> error $ "toL1Ty: No ListTy in L1."
 
     toL1TyS :: ArrowTy Ty0 -> ArrowTy L1.Ty1
@@ -769,6 +771,8 @@ updateTyConsTy ddefs mono_st ty =
            Just suffix -> PackedTy (t ++ fromVar suffix) []
     ListTy t -> ListTy (go t)
     ArenaTy -> ArenaTy
+    SymSetTy -> SymSetTy
+    SymHashTy -> SymHashTy
   where
     go = updateTyConsTy ddefs mono_st
 

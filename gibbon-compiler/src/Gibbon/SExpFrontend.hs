@@ -249,6 +249,8 @@ typ :: Sexp -> Ty0
 typ s = case s of
          (A _ "Int")  -> IntTy
          (A _ "Sym")  -> SymTy0
+         (A _ "SymSet") -> SymSetTy
+         (A _ "SymHash") -> SymHashTy
          (A _ "Bool") -> BoolTy
          (A _ "Arena") -> ArenaTy
          -- If it's lowercase, it's a type variable. Otherwise, a Packed type.

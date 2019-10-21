@@ -125,6 +125,8 @@ freshTy env ty =
      SymTy0   -> pure (env, ty)
      BoolTy   -> pure (env, ty)
      ArenaTy  -> pure (env, ty)
+     SymSetTy -> pure (env, ty)
+     SymHashTy -> pure (env, ty)
      TyVar tv -> case M.lookup tv env of
                    Nothing  -> do tv' <- newTyVar
                                   pure (env, TyVar tv')

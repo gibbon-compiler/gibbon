@@ -120,6 +120,9 @@ data Ty0
  | MetaTv MetaTv -- Unification variables
  | ProdTy [Ty0]
  | SymDictTy (Maybe Var) Ty0
+ | SymSetTy
+ | SymHashTy
+ | IntHashTy
  | ArrowTy [Ty0] Ty0
  | PackedTy TyCon [Ty0] -- Type arguments to the type constructor
  | ListTy Ty0
@@ -228,6 +231,8 @@ tyVarsInTys tys = foldr (go []) [] tys
         PackedTy _ tys1 -> foldr (go bound) acc tys1
         ListTy ty1      -> go bound ty1 acc
         ArenaTy -> acc
+        SymSetTy -> acc
+        SymHashTy -> acc
 
 -- | Get the MetaTvs from a type; no duplicates in result.
 metaTvsInTy :: Ty0 -> [MetaTv]
@@ -253,6 +258,8 @@ metaTvsInTys tys = foldr go [] tys
         PackedTy _ tys1 -> foldr go acc tys1
         ListTy ty1      -> go ty1 acc
         ArenaTy -> acc
+        SymSetTy -> acc
+        SymHashTy -> acc
 
 -- | Like 'tyVarsInTy'.
 tyVarsInTyScheme :: TyScheme -> [TyVar]
@@ -299,6 +306,8 @@ substTyVar mp ty =
     PackedTy t tys -> PackedTy t (map go tys)
     ListTy t -> ListTy (go t)
     ArenaTy -> ty
+    SymSetTy -> ty
+    SymHashTy -> ty
   where
     go = substTyVar mp
 
