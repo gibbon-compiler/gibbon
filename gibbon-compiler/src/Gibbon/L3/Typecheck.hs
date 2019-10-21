@@ -168,7 +168,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
       let len0 = checkLen exp pr 0 es
           len1 = checkLen exp pr 1 es
           len2 = checkLen exp pr 2 es
-          _len3 = checkLen exp pr 3 es
+          len3 = checkLen exp pr 3 es
           len4 = checkLen exp pr 4 es
 
           mk_bools = do
@@ -242,6 +242,39 @@ tcExp isPacked ddfs env exp@(L p ex) =
         ReadInt -> do
           len0
           return IntTy
+
+        SymSetEmpty -> do
+          len0
+          return SymSetTy
+
+        SymSetInsert -> do
+          len2
+          _ <- ensureEqualTy (es !! 0) SymSetTy (tys !! 0)
+          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
+          return SymSetTy
+
+        SymSetContains -> do
+          len2
+          _ <- ensureEqualTy (es !! 0) SymSetTy (tys !! 0)
+          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
+          return BoolTy
+
+        SymHashEmpty -> do
+          len0
+          return SymHashTy
+
+        SymHashInsert -> do
+          len3
+          _ <- ensureEqualTy (es !! 0) SymHashTy (tys !! 0)
+          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
+          _ <- ensureEqualTy (es !! 2) SymTy (tys !! 2)
+          return SymHashTy
+
+        SymHashLookup -> do
+          len2
+          _ <- ensureEqualTy (es !! 0) SymHashTy (tys !! 0)
+          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
+          return SymTy
 
         DictEmptyP _ty -> do
           len1

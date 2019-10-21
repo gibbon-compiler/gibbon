@@ -514,6 +514,12 @@ primMap = M.fromList
   , ("printint", PrintInt)
   , ("printsym", PrintSym)
   , ("readint", ReadInt)
+  , ("sym-set-empty", SymSetEmpty)
+  , ("sym-set-insert", SymSetInsert)
+  , ("sym-set-contains", SymSetContains)
+  , ("sym-hash-empty", SymHashEmpty)
+  , ("sym-hash-insert", SymHashInsert)
+  , ("sym-hash-lookup", SymHashLookup)
   ]
 
 prim :: Text -> Prim Ty0

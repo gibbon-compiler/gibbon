@@ -652,6 +652,18 @@ data Prim ty
           | PrintSym -- ^ Print a symbol to standard out
           | ReadInt  -- ^ Read an int from standard in
 
+          | SymSetEmpty    -- ^ Creates an empty set
+          | SymSetInsert   -- ^ Inserts a symbol into a set of symbols
+          | SymSetContains -- ^ Queries if a symbol is in a set
+
+          | SymHashEmpty   -- ^ Create empty hash table of symbols
+          | SymHashInsert  -- ^ Insert a symbol into a hash table
+          | SymHashLookup  -- ^ Look up a symbol in a hash table (takes default symbol)
+
+          | IntHashEmpty   -- ^ Create empty hash table of integers
+          | IntHashInsert  -- ^ Insert an integer into a hash table
+          | IntHashLookup  -- ^ Look up a integer in a hash table (takes default integer)
+
           | ReadPackedFile (Maybe FilePath) TyCon (Maybe Var) ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
             -- type of the file being read.  The `Ty` tracks the type as the program evolvels
@@ -702,6 +714,10 @@ data UrTy a =
                            -- allowed as the fields of data constructors.
 
         | ArenaTy -- ^ Collection of allocated, non-packed values
+
+        | SymSetTy -- ^ Set of symbols
+
+        | SymHashTy  -- ^ Hash table of symbols
 
         ---------- These are not used initially ----------------
         -- (They could be added by a later IR instead:)
@@ -1042,6 +1058,12 @@ primArgsTy p =
     PrintInt -> [IntTy]
     PrintSym -> [SymTy]
     ReadInt  -> []
+    SymSetEmpty -> []
+    SymSetInsert -> [SymSetTy, SymTy]
+    SymSetContains -> [SymSetTy, SymTy]
+    SymHashEmpty -> []
+    SymHashInsert -> [SymHashTy,SymTy,SymTy]
+    SymHashLookup -> [SymHashTy,SymTy]
     ReadPackedFile{} -> []
     (ErrorP _ _) -> []
     RequestEndOf      -> error "primArgsTy: RequestEndOf not handled yet"
@@ -1077,6 +1099,12 @@ primRetTy p =
     PrintInt -> IntTy
     PrintSym -> SymTy
     ReadInt  -> IntTy
+    SymSetEmpty -> SymSetTy
+    SymSetInsert -> SymSetTy
+    SymSetContains -> BoolTy
+    SymHashEmpty -> SymHashTy
+    SymHashInsert -> SymHashTy
+    SymHashLookup -> SymTy
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
     RequestEndOf      -> error "primRetTy: RequestEndOf not handled yet"
@@ -1097,6 +1125,8 @@ stripTyLocs ty =
     ListTy ty'       -> ListTy $ stripTyLocs ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
+    SymSetTy -> SymSetTy
+    SymHashTy -> SymHashTy
 
 
 -- | Get the data constructor type from a type, failing if it's not packed
