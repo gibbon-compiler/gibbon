@@ -1484,6 +1484,9 @@ prim p = case p of
            MkFalse -> return MkFalse
            Gensym  -> return Gensym
            SizeParam -> return SizeParam
+           PrintInt -> return PrintInt
+           PrintSym -> return PrintSym
+           ReadInt  -> return PrintInt
            RequestEndOf -> return RequestEndOf
            ErrorP sty ty -> convertTy ty >>= \ty -> return (ErrorP sty ty)
            DictEmptyP dty  -> convertTy dty >>= return . DictEmptyP

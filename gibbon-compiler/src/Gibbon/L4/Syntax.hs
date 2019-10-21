@@ -230,6 +230,8 @@ data Prim
     | PrintString String -- ^ Print a constant string to stdout.
                          -- TODO: add string values to the language.
 
+    | ReadInt
+
     | ParSync -- ^ cilk_sync
 
     | Gensym

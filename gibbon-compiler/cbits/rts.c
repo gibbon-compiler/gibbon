@@ -338,10 +338,10 @@ void add_symbol(SymTy idx, char *value) {
     }
 }
 
-void print_symbol(SymTy idx) {
+IntTy print_symbol(SymTy idx) {
     struct SymTable_elem *s;
     HASH_FIND_INT( global_sym_table, &idx, s );
-    printf("'%s", s->value);
+    return printf("'%s", s->value);
 }
 
 SymTy gensym() {

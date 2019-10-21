@@ -540,13 +540,19 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                  SizeParam -> let [(outV,IntTy)] = bnds in pure
                       [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = global_size_param; |] ]
 
-                 PrintInt | [] <- bnds -> let [arg] = rnds in pure
-                                          [ C.BlockStm [cstm| printf("%lld", $(codegenTriv arg)); |] ]
-                          | otherwise -> error$ "wrong number of return values expected from PrintInt prim: "++show bnds
+                 PrintInt ->
+                     let [arg] = rnds in
+                     case bnds of
+                       [(outV,IntTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = printf("%lld", $(codegenTriv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| printf("%lld", $(codegenTriv arg)); |] ]
+                       _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
-                 PrintSym | [] <- bnds -> let [arg] = rnds in pure
-                                          [ C.BlockStm [cstm| print_symbol($(codegenTriv arg)); |] ]
-                          | otherwise -> error$ "wrong number of return values expected from PrintInt prim: "++show bnds
+                 PrintSym ->
+                     let [arg] = rnds in
+                     case bnds of
+                       [(outV,IntTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = print_symbol($(codegenTriv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| print_symbol($(codegenTriv arg)); |] ]
+                       _ -> error $ "wrong number of return bindings from PrintSym: "++show bnds
 
                  PrintString str
                      | [] <- bnds, [] <- rnds -> pure [ C.BlockStm [cstm| fputs( $string:str, stdout ); |] ]

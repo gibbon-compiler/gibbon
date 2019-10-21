@@ -229,6 +229,20 @@ tcExp isPacked ddfs env exp@(L p ex) =
           _ <- ensureEqualTyModCursor (es !! 1) IntTy (tys !! 1)
           return SymTy
 
+        PrintInt -> do
+          len1
+          _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
+          return IntTy
+
+        PrintSym -> do
+          len1
+          _ <- ensureEqualTy (es !! 0) SymTy (tys !! 0)
+          return IntTy
+
+        ReadInt -> do
+          len0
+          return IntTy
+
         DictEmptyP _ty -> do
           len1
           let [a] = tys

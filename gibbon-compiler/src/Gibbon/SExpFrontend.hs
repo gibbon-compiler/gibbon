@@ -511,6 +511,9 @@ primMap = M.fromList
   , ("True", MkTrue)
   , ("False", MkFalse)
   , ("gensym", Gensym)
+  , ("printint", PrintInt)
+  , ("printsym", PrintSym)
+  , ("readint", ReadInt)
   ]
 
 prim :: Text -> Prim Ty0

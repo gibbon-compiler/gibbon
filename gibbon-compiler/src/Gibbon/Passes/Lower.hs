@@ -931,6 +931,9 @@ prim p =
     OrP    -> T.OrP
     AndP   -> T.AndP
     SizeParam -> T.SizeParam
+    PrintInt -> T.PrintInt
+    PrintSym -> T.PrintSym
+    ReadInt  -> T.ReadInt
     DictInsertP ty -> T.DictInsertP $ typ ty
     DictLookupP ty -> T.DictLookupP $ typ ty
     DictEmptyP ty  -> T.DictEmptyP $ typ ty
