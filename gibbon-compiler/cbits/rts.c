@@ -321,6 +321,8 @@ static SymTy global_gensym_counter = 0;
 static SymTy newline_symbol = -1;
 static SymTy space_symbol = -1;
 static SymTy comma_symbol = -1;
+static SymTy leftparen_symbol = -1;
+static SymTy rightparen_symbol = -1;
 
 typedef struct SymTable_elem {
     SymTy idx;                 /* key */
@@ -357,6 +359,16 @@ void set_comma(SymTy idx) {
   add_symbol(idx,"COMMA");
 }
 
+void set_leftparen(SymTy idx) {
+  leftparen_symbol = idx;
+  add_symbol(idx,"LEFTPAREN");
+}
+
+void set_rightparen(SymTy idx) {
+  rightparen_symbol = idx;
+  add_symbol(idx,"RIGHTPAREN");
+}
+
 IntTy print_symbol(SymTy idx) {
   if (idx == comma_symbol) {
     return printf(",");
@@ -364,6 +376,10 @@ IntTy print_symbol(SymTy idx) {
     return printf("\n");
   } else if (idx == space_symbol) {
     return printf(" ");
+  } else if (idx == leftparen_symbol) {
+    return printf("(");
+  } else if (idx == rightparen_symbol) {
+    return printf(")");    
   } else {
     struct SymTable_elem *s;
     HASH_FIND_INT( global_sym_table, &idx, s );

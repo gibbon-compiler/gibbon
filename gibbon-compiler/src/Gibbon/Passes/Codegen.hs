@@ -169,6 +169,8 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
                        "NEWLINE" -> C.BlockStm [cstm| set_newline($k); |]
                        "COMMA" -> C.BlockStm [cstm| set_comma($k); |]
                        "SPACE" -> C.BlockStm [cstm| set_space($k); |]
+                       "LEFTPAREN" -> C.BlockStm [cstm| set_leftparen($k); |]
+                       "RIGHTPAREN" -> C.BlockStm [cstm| set_rightparen($k); |]
                        -- Normal symbols just get added to the table
                        _ -> C.BlockStm [cstm| add_symbol($k, $v); |]
           )
