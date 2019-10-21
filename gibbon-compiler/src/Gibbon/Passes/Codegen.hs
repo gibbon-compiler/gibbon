@@ -164,7 +164,14 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       mkSymTable :: [C.BlockItem]
       mkSymTable =
         map
-          (\(k,v) -> C.BlockStm [cstm| add_symbol($k, $v); |])
+          (\(k,v) -> case v of
+                       -- Special symbols that get handled differently
+                       "NEWLINE" -> C.BlockStm [cstm| set_newline($k); |]
+                       "COMMA" -> C.BlockStm [cstm| set_comma($k); |]
+                       "SPACE" -> C.BlockStm [cstm| set_space($k); |]
+                       -- Normal symbols just get added to the table
+                       _ -> C.BlockStm [cstm| add_symbol($k, $v); |]
+          )
           (M.toList sym_tbl)
 
       -- C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < global_iters_param; $id:iters ++) { $items:body } |]
