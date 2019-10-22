@@ -47,6 +47,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
 
 -}
 
+import Gibbon.Pretty
 
 -- | Add random access nodes to the program, but only where required
 repairProgram :: Prog1 -> Prog2 -> PassM Prog2
@@ -75,6 +76,8 @@ repairProgram oldl1 prg = do
         l2 <- flattenL2 l2
         l2 <- removeCopies l2
         l2 <- inferEffects l2
+        dbgTraceIt (render $ pprint l2) (pure ())
+        -- error "todo"
         -- See [Keeping old case clauses around] in AddRAN
         l2 <- addTraversals l2
         return l2

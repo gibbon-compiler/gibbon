@@ -265,8 +265,15 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
       e' <- freshExp (M.insert v v' venv) tvenv e
       return $ WithArenaE v' e'
 
-    SpawnE{} -> error "freshExp: SpawnE in L0"
-    SyncE    -> error "freshExp: SyncE in L0"
+    SpawnE v locs ls -> assert ([] == locs) $ do
+      ls' <- mapM go ls
+      case M.lookup v venv of
+        Nothing -> return $ SpawnE (cleanFunName v) [] ls'
+        Just v' -> return $ SpawnE (cleanFunName v') [] ls'
+
+    SyncE -> pure SyncE
+
+    IsBigE e -> IsBigE <$> go e
 
     MapE (v,t,b) e -> do
       b' <- go b
@@ -376,6 +383,8 @@ freshExp1 vs (L sloc exp) = fmap (L sloc) $
         Just v' -> return $ SpawnE (cleanFunName v') [] ls'
 
     SyncE -> pure SyncE
+
+    IsBigE e -> IsBigE <$> freshExp1 vs e
 
     MapE (v,t,b) e -> do
       b' <- freshExp1 vs b

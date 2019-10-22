@@ -129,6 +129,7 @@ inferRegScopeExp (L p ex) = L p <$>
       return $ TimeIt e' ty b
     SpawnE{} -> pure ex
     SyncE{}  -> pure ex
+    IsBigE{} -> pure ex
     WithArenaE v e -> WithArenaE v <$> go e
     MapE{}  -> error $ "inferRegScopeExp: TODO MapE"
     FoldE{} -> error $ "inferRegScopeExp: TODO FoldE"

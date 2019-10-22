@@ -75,8 +75,9 @@ addTraversalsExp ddefs fundefs env2 renv context (L p ex) = L p <$>
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
-    SpawnE{} -> error "addTraversalsExp: Cannot compile SpawnE"
-    SyncE    -> error "addTraversalsExp: Cannot compile SyncE"
+    SpawnE{} -> pure ex -- error "addTraversalsExp: Cannot compile SpawnE"
+    SyncE    -> pure ex -- error "addTraversalsExp: Cannot compile SyncE"
+    IsBigE e -> IsBigE <$> go e
     Ext ext ->
       case ext of
         LetRegionE reg bod -> Ext <$> LetRegionE reg <$> go bod

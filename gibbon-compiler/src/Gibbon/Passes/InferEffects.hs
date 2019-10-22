@@ -116,6 +116,8 @@ inferExp ddfs fenv env (L _p expr) =
 
     SyncE -> (S.empty, Nothing)
 
+    IsBigE{} -> (S.empty, Nothing)
+
     ProjE _n e ->
       let (eff, _loc) = inferExp ddfs fenv env e
       in (eff, Nothing)
@@ -152,8 +154,7 @@ inferExp ddfs fenv env (L _p expr) =
     Ext (RetE _ _)         -> (S.empty, Nothing)
     Ext (FromEndE _ )      -> (S.empty, Nothing)
     Ext (IndirectionE{})   -> (S.empty, Nothing)
-
-    oth -> error $ "FINISHME: inferExp " ++ sdoc oth
+    Ext (BoundsCheck{})    -> (S.empty, Nothing)
 
   where
     packedLoc :: Ty2 -> Maybe LocVar

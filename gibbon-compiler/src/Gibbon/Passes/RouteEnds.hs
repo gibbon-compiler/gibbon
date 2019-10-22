@@ -206,6 +206,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
           SpawnE{} -> error "routeEnds: Unbound SpawnE"
           SyncE    -> pure e
+          IsBigE{} -> pure e
 
           CaseE (L _ (VarE x)) brs -> do
                  -- We will need to gensym while processing the case clauses, so

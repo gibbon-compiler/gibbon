@@ -163,6 +163,7 @@ interp rc _ddefs fenv = go M.empty
 
           SpawnE f locs args -> go env (l$ AppE f locs args)
           SyncE -> pure $ VInt (-1)
+          IsBigE{} -> pure $ VBool False
 
           WithArenaE v e -> let env' = M.insert v (VInt 0) env
                             in go env' e

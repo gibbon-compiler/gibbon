@@ -503,8 +503,8 @@ passes config@Config{dynflags} l1 = do
 
               l2 <- if gibbon1 || no_rcopies
                     then return l2
-                    else go "removeCopies" removeCopies l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
+                    else do x <- go "removeCopies" removeCopies l2
+                            go "L2.typecheck"     L2.tcProg     x
 
               l2 <- go "inferEffects"     inferEffects  l2
 
@@ -519,8 +519,8 @@ passes config@Config{dynflags} l1 = do
 
               l2 <- if gibbon1 || biginf
                     then return l2
-                    else go "boundsCheck" boundsCheck   l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
+                    else do x <- go "boundsCheck" boundsCheck   l2
+                            go "L2.typecheck"     L2.tcProg     x
 
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the

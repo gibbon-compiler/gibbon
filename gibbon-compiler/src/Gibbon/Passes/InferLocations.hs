@@ -828,6 +828,8 @@ inferExp env@FullEnv{dataDefs}
           res' <- tryBindReg (lc$ L2.LetE (vr,[], valTy, L sl2 $ L2.AppE f (concatMap locsInTy atys ++ locsInTy valTy) args') bod'', ty'', fcs)
           bindImmediateDependentLocs (concatMap locsInTy atys ++ locsInTy valTy) res'
 
+        AppE{} -> err$ "Malformed function application: " ++ (show ex0)
+
         SpawnE f _ args -> do
           (ex0', ty, cs) <- inferExp env (l$ LetE (vr,locs,bty,L sl2 (AppE f [] args)) bod) dest
           -- ASSUMPTION: There's only 1 AppE in ex0'
@@ -837,7 +839,11 @@ inferExp env@FullEnv{dataDefs}
           (bod',ty,cs) <- inferExp env bod dest
           pure (lc$ LetE (vr,[],ProdTy [],L sl2 $ SyncE) bod', ty, cs)
 
-        AppE{} -> err$ "Malformed function application: " ++ (show ex0)
+        IsBigE e -> do
+          (e',ty,csa) <- inferExp env e NoDest
+          (bod',bod_ty,csb) <- inferExp (extendVEnv vr BoolTy env) bod dest
+          let cs = L.nub $ csa ++ csb
+          pure (lc$ LetE (vr,[],BoolTy,L sl2 $ IsBigE e') bod', ty, cs)
 
         -- IfE{} -> err$ "Unexpected conditional in let binding: " ++ (show ex0)
 
@@ -1079,6 +1085,10 @@ finishExp (L i e) =
 
       SyncE -> pure $ l$ SyncE
 
+      IsBigE e -> do
+        e' <- finishExp e
+        pure $ l$ IsBigE e'
+
       WithArenaE v e -> do
              e' <- finishExp e
              return $ l$ WithArenaE v e'
@@ -1174,6 +1184,9 @@ cleanExp (L i e) =
                        in (l$ SpawnE v ls e', (S.unions s') `S.union` (S.fromList ls))
 
       SyncE -> (l$ SyncE, S.empty)
+
+      IsBigE e -> let (e',s') = cleanExp e
+                  in (l$ IsBigE e', s')
 
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (l$ WithArenaE v e', s)

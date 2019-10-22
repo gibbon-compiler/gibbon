@@ -345,6 +345,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                             text "in" $+$
                                             pprintWithStyle sty e
                               PPInternal -> text "letarena" <+> pprint v <+> text "in" $+$ pprint e
+          IsBigE e -> text "is_big" <+> pprintWithStyle sty e
           Ext ext -> pprintWithStyle sty ext
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{} -> error $ "Unexpected form in program: FoldE"
@@ -499,6 +500,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         TimeIt{}   -> False
         WithArenaE _ e -> (go e)
         SpawnE{}-> False
+        IsBigE e-> go e
         SyncE   -> False
         MapE{}  -> error $ "hasBenchE: TODO MapE"
         FoldE{} -> error $ "hasBenchE: TODO FoldE"

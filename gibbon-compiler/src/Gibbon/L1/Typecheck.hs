@@ -346,6 +346,10 @@ tcExp ddfs env exp@(L p ex) =
 
     SyncE -> pure voidTy
 
+    IsBigE e -> do
+      _ty <- go e
+      pure BoolTy
+
     WithArenaE v e -> do
       let env' = extendEnv env [(v,ArenaTy)]
       tcExp ddfs env' e

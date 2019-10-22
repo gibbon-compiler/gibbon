@@ -185,6 +185,7 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
       return $ WithArenaE v e'
     SpawnE f locs args -> SpawnE f locs <$> mapM go args
     SyncE   -> pure SyncE
+    IsBigE e-> IsBigE <$> go e
     Ext _   -> return ex
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{} -> error "addRANExp: TODO FoldE"
@@ -213,6 +214,7 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
         WithArenaE v e -> WithArenaE v (changeSpawnToApp e)
         SpawnE f locs args -> AppE f locs $ map changeSpawnToApp args
         SyncE   -> SyncE
+        IsBigE e-> IsBigE $ changeSpawnToApp e
         Ext{}   -> ex1
         MapE{}  -> error "addRANExp: TODO MapE"
         FoldE{} -> error "addRANExp: TODO FoldE"
@@ -390,6 +392,7 @@ we need random access for that type.
 
     SpawnE{} -> error "needsRANExp: Unbound SpawnE"
     SyncE    -> error "needsRANExp: Unbound SyncE"
+    IsBigE{} -> S.empty
 
     LetE(v,_,ty,rhs) bod -> go rhs `S.union`
                             needsRANExp ddefs fundefs (extendVEnv v ty env2) renv tcenv parlocss bod

@@ -216,6 +216,7 @@ boundsCheckExp ddfs fundefs renv env2 deps checked (L p ex) = L p <$>
       return $ WithArenaE v e'
     SpawnE{}-> pure ex
     SyncE   -> pure ex
+    IsBigE{}-> pure ex
     MapE{}  -> error $ "go: TODO MapE"
     FoldE{} -> error $ "go: TODO FoldE"
 

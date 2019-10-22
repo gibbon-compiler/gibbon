@@ -198,6 +198,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
       return $ TimeIt e' ty b
     SpawnE{} -> error "threadRegionsExp: Unbound SpawnE"
     SyncE    -> pure ex
+    IsBigE e -> IsBigE <$> go e
     MapE{}  -> error $ "threadRegionsExp: TODO MapE"
     FoldE{} -> error $ "threadRegionsExp: TODO FoldE"
 

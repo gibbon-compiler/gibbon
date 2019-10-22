@@ -387,6 +387,10 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
 
       SyncE -> pure (ProdTy [], tstatein)
 
+      IsBigE e -> do
+        (ty, tstate1) <- recur tstatein e
+        pure (BoolTy, tstate1)
+
       WithArenaE v e -> do
               let env' = extendVEnv v ArenaTy env
               tcExp ddfs env' funs constrs regs tstatein e
@@ -460,8 +464,6 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
       Ext (BoundsCheck{}) -> return (IntTy,tstatein)
 
       Ext (IndirectionE tycon _ (a,_) _ _) -> return (PackedTy tycon a, tstatein)
-
-      hole -> error $ "FINISHME: L2.tcExp " ++ show hole
 
     where recur ts e = tcExp ddfs env funs constrs regs ts e
 
