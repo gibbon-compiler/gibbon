@@ -176,9 +176,9 @@ toL1 Prog{ddefs, fundefs, mainExp} =
                                                     brs)
         DataConE _ dcon ls -> DataConE () dcon (map toL1Exp ls)
         TimeIt e ty b    -> TimeIt (toL1Exp e) (toL1Ty ty) b
-        SpawnE _ (_:_) _ -> err1 (sdoc ex)
-        SpawnE f [] args -> SpawnE f [] (map toL1Exp args)
-        SyncE            -> SyncE
+        SpawnE _ _ (_:_) _ -> err1 (sdoc ex)
+        SpawnE w f [] args -> SpawnE w f [] (map toL1Exp args)
+        SyncE              -> SyncE
         WithArenaE v e -> WithArenaE v (toL1Exp e)
         MapE{}  -> err1 (sdoc ex)
         FoldE{} -> err1 (sdoc ex)
@@ -561,14 +561,14 @@ collectMonoObls ddefs env2 toplevel (L p ex) = (L p) <$>
     WithArenaE v e -> do
       e' <- go e
       pure $ WithArenaE v e'
-    SpawnE f [] args -> do
+    SpawnE w f [] args -> do
       args' <- mapM (collectMonoObls ddefs env2 toplevel) args
-      pure $ SpawnE f [] args'
-    SpawnE f tyapps args -> do
+      pure $ SpawnE w f [] args'
+    SpawnE w f tyapps args -> do
       args'   <- mapM (collectMonoObls ddefs env2 toplevel) args
       tyapps' <- mapM (monoOblsTy ddefs) tyapps
       f' <- addFnObl f tyapps'
-      pure $ SpawnE f' [] args'
+      pure $ SpawnE w f' [] args'
     SyncE    -> pure SyncE
     Ext ext ->
       case ext of
@@ -674,10 +674,10 @@ monoLambdas (L p ex) = (L p) <$>
       (DataConE tyapp dcon) <$> mapM monoLambdas args
     TimeIt e ty b  -> (\e' -> TimeIt e' ty b) <$> go e
     WithArenaE v e -> (\e' -> WithArenaE v e') <$> go e
-    SpawnE f tyapps args ->
+    SpawnE w f tyapps args ->
       case tyapps of
         [] -> do args' <- mapM monoLambdas args
-                 pure $ SpawnE f [] args'
+                 pure $ SpawnE w f [] args'
         _  -> error $ "monoLambdas: Expression probably not processed by collectMonoObls: " ++ sdoc ex
     SyncE   -> pure SyncE
     Ext (LambdaE{})  -> error $ "monoLambdas: Encountered a LambdaE outside a let binding. In\n" ++ sdoc ex
@@ -762,7 +762,7 @@ updateTyConsExp ddefs mono_st (L loc ex) = L loc $
     DataConE{} -> error $ "updateTyConsExp: DataConE expected ProdTy tyapps, got: " ++ sdoc ex
     TimeIt e ty b -> TimeIt (go e) (updateTyConsTy ddefs mono_st ty) b
     WithArenaE v e -> WithArenaE v (go e)
-    SpawnE fn tyapps args -> SpawnE fn tyapps (map go args)
+    SpawnE w fn tyapps args -> SpawnE w fn tyapps (map go args)
     SyncE   -> SyncE
     MapE{}  -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     FoldE{} -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
@@ -998,10 +998,10 @@ specLambdasExp ddefs env2 (L p ex) = (L p) <$>
     WithArenaE v e -> do
        e' <- specLambdasExp ddefs (extendVEnv v ArenaTy env2) e
        pure $ WithArenaE v e'
-    SpawnE fn tyapps args -> do
+    SpawnE w fn tyapps args -> do
       e' <- specLambdasExp ddefs env2 (l$ AppE fn tyapps args)
       case unLoc e' of
-        AppE fn' tyapps' args' -> pure $ SpawnE fn' tyapps' args'
+        AppE fn' tyapps' args' -> pure $ SpawnE w fn' tyapps' args'
         _ -> error "specLambdasExp: SpawnE"
     SyncE   -> pure SyncE
     MapE{}  -> error $ "specLambdasExp: TODO: " ++ sdoc ex
@@ -1075,8 +1075,8 @@ specLambdasExp ddefs env2 (L p ex) = (L p) <$>
                             (\(_,_,b) acc2 -> collectFunRefs b acc2)
                             (collectFunRefs scrt acc)
                             brs
-        SpawnE _ _ args -> foldr collectFunRefs acc args
-        SyncE     -> acc
+        SpawnE _ _ _ args -> foldr collectFunRefs acc args
+        SyncE   -> acc
         MapE{}  -> error $ "collectFunRefs: TODO: " ++ sdoc e
         FoldE{} -> error $ "collectFunRefs: TODO: " ++ sdoc e
         Ext ext ->
@@ -1186,9 +1186,9 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
         (DataConE c loc es) -> do (ltss,es') <- unzip <$> mapM go es
                                   pure (concat ltss, DataConE c loc es')
 
-        (SpawnE f locs args) -> do
+        (SpawnE w f locs args) -> do
           (ltss,args') <- unzip <$> mapM go args
-          pure (concat ltss, SpawnE f locs args')
+          pure (concat ltss, SpawnE w f locs args')
 
         (SyncE)    -> pure ([], SyncE)
 
@@ -1221,7 +1221,7 @@ elimParE0 prg@Prog{fundefs} = do
           vs <- mapM (\_ -> gensym "par_") ls
           let ls' = foldr
                       (\(w,ty1,(L _ (AppE fn tyapps1 args))) acc ->
-                         (w,[],ty1,l$ (SpawnE fn tyapps1 args)) : acc)
+                         (w,[],ty1,l$ (SpawnE w fn tyapps1 args)) : acc)
                       []
                       (zip3 vs tys ls)
               ls'' = ls' ++ [("_", [], ProdTy [], l$ SyncE), (v,tyapps,ty, l$ MkProdE (map (l . VarE) vs))]

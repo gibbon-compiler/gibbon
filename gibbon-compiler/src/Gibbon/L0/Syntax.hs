@@ -352,8 +352,8 @@ recoverType ddfs env2 (L _ ex) =
         oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                       ++"\nExpression:\n  "++ sdoc ex
                       ++"\nEnvironment:\n  "++sdoc (vEnv env2)
-    SpawnE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
-                         in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
+    SpawnE _ v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
+                           in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
     SyncE -> ProdTy []
     CaseE _ mp ->
       let (c,args,e) = head mp

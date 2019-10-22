@@ -595,10 +595,10 @@ inferExp env@FullEnv{dataDefs}
                                      concat $ [c | (_,_,c) <- results])
 
 
-    SpawnE f _ args -> do
+    SpawnE w f _ args -> do
       (ex0', ty, acs) <- inferExp env (l$ AppE f [] args) dest
       case unLoc ex0' of
-        AppE f' locs args' -> pure (lc$ SpawnE f' locs args', ty, acs)
+        AppE f' locs args' -> pure (lc$ SpawnE w f' locs args', ty, acs)
         oth -> err $ "SpawnE: " ++ sdoc oth
 
     SyncE -> pure (lc$ SyncE, ProdTy [], [])
@@ -828,10 +828,10 @@ inferExp env@FullEnv{dataDefs}
           res' <- tryBindReg (lc$ L2.LetE (vr,[], valTy, L sl2 $ L2.AppE f (concatMap locsInTy atys ++ locsInTy valTy) args') bod'', ty'', fcs)
           bindImmediateDependentLocs (concatMap locsInTy atys ++ locsInTy valTy) res'
 
-        SpawnE f _ args -> do
+        SpawnE w f _ args -> do
           (ex0', ty, cs) <- inferExp env (l$ LetE (vr,locs,bty,L sl2 (AppE f [] args)) bod) dest
           -- ASSUMPTION: There's only 1 AppE in ex0'
-          pure (changeAppToSpawn ex0', ty, cs)
+          pure (changeAppToSpawn w ex0', ty, cs)
 
         SyncE -> do
           (bod',ty,cs) <- inferExp env bod dest
@@ -1072,10 +1072,10 @@ finishExp (L i e) =
                      _ -> return t
              return $ l$ TimeIt e1' t' b
 
-      SpawnE v ls es -> do
+      SpawnE w v ls es -> do
         es' <- mapM finishExp es
         ls' <- mapM finalLocVar ls
-        return $ l$ SpawnE v ls' es'
+        return $ l$ SpawnE w v ls' es'
 
       SyncE -> pure $ l$ SyncE
 
@@ -1170,8 +1170,8 @@ cleanExp (L i e) =
       TimeIt e d b -> let (e',s') = cleanExp e
                       in (l$ TimeIt e' d b, s')
 
-      SpawnE v ls e -> let (e',s') = unzip $ map cleanExp e
-                       in (l$ SpawnE v ls e', (S.unions s') `S.union` (S.fromList ls))
+      SpawnE w v ls e -> let (e',s') = unzip $ map cleanExp e
+                         in (l$ SpawnE w v ls e', (S.unions s') `S.union` (S.fromList ls))
 
       SyncE -> (l$ SyncE, S.empty)
 
@@ -1252,8 +1252,8 @@ fixProj renam pvar proj (L i e) =
                            in l$ DataConE lv dc es'
       TimeIt e1 d b -> let e1' = fixProj renam pvar proj e1
                        in l$ TimeIt e1' d b
-      SpawnE v ls es -> let es' = map (fixProj renam pvar proj) es
-                        in l$ SpawnE v ls es'
+      SpawnE w v ls es -> let es' = map (fixProj renam pvar proj) es
+                          in l$ SpawnE w v ls es'
       SyncE -> l$ SyncE
       WithArenaE v e -> l$ WithArenaE v $ fixProj renam pvar proj e
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)

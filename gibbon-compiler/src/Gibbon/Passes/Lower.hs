@@ -326,7 +326,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                                                tys'' = L.map typ ls
                                            (vs,e') <- eliminateProjs arg tys' b
                                            return $
-                                             dbgTrace 5 (" [lower] unzipping funArg "++show arg++" to "++show vs) $
+                                             dbgTrace 7 (" [lower] unzipping funArg "++show arg++" to "++show vs) $
                                              (acc ++ (zip vs tys''), e')
                            _ -> return (acc ++ [(arg, typ ty)], b))
                       ([], funBody)
@@ -387,7 +387,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
           DataConE _ _ ls -> gol ls
           TimeIt e _ _   -> go e
           WithArenaE _ e -> go e
-          SpawnE _ _ ls  -> gol ls
+          SpawnE _ _ _ ls  -> gol ls
           SyncE -> S.empty
           Ext ext        ->
             case ext of
@@ -617,7 +617,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                  L3.substE (l$ ProjE 1 (l$ VarE v)) (l$ VarE ctmp)
                  bod
 
-      dbgTrace 5 (" [lower] ReadInt, after substing references to "
+      dbgTrace 7 (" [lower] ReadInt, after substing references to "
                   ++(fromVar v)++":\n  "++sdoc bod') <$>
         T.LetPrimCallT [(vtmp, T.scalarToTy s),(ctmp,T.CursorTy)] (T.ReadScalar s) [T.VarTriv cur] <$>
           tail sym_tbl bod'
@@ -656,7 +656,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                  L3.substE (l$ ProjE 1 (l$ VarE v)) (l$ VarE ctmp)
                  bod
 
-      dbgTrace 5 (" [lower] ReadTag, after substing references to "
+      dbgTrace 7 (" [lower] ReadTag, after substing references to "
                   ++(fromVar v)++":\n  "++sdoc bod') <$>
         T.LetPrimCallT [(vtmp,T.TagTyPacked),(ctmp,T.CursorTy)] T.ReadTag [T.VarTriv cur] <$>
           tail sym_tbl bod'
@@ -772,10 +772,9 @@ lower Prog{fundefs,ddefs,mainExp} = do
                         _ -> return ([(vr,typ t)], bod)
         T.LetCallT False vsts f' (L.map (triv sym_tbl "one of app rands") ls) <$> (tail sym_tbl bod')
 
-    LetE (v, _,ty, (L _ (L3.SpawnE fn locs args))) bod -> do
-      tl <- tail sym_tbl (l$ LetE (v,_,ty, l$ AppE fn locs args) bod)
-      -- This is going to be a LetCallT.
-      pure $ tl { T.async = True }
+    LetE (v, _,ty, (L _ (L3.SpawnE w fn locs args))) bod -> do
+      call <- tail sym_tbl (l$ LetE (v,_,ty, l$ AppE fn locs args) bod)
+      pure $ call { T.async = True, T.rands = (T.VarTriv w) : (T.rands call) }
 
     LetE (_,_,_, L _ SyncE) bod -> do
       bod' <- tail sym_tbl bod
@@ -810,7 +809,7 @@ projOf e = ([],e)
 -- | Eliminate projections from a given tuple variable.  INEFFICIENT!
 eliminateProjs :: Var -> [Ty3] -> L Exp3 -> PassM ([Var],L Exp3)
 eliminateProjs vr tys bod =
- dbgTrace 5 (" [lower] eliminating "++show (length tys)++
+ dbgTrace 7 (" [lower] eliminating "++show (length tys)++
              " projections on variable "++show vr++" in expr with types "
                                         ++show tys++":\n   "++sdoc bod) $
  do tmps <- mapM (\_ -> gensym "pvrtmp") [1.. (length tys)]

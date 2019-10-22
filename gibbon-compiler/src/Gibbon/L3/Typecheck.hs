@@ -398,7 +398,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
       ty <- go e
       return ty
 
-    SpawnE fn locs args -> go (l$ AppE fn locs args)
+    SpawnE w fn locs args -> go (l$ AppE fn locs args)
     SyncE -> pure voidTy
 
     WithArenaE v e -> do

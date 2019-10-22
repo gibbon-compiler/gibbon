@@ -410,10 +410,10 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
       (s1, ty', e1') <- tcExp ddefs sbst venv' fenv bound_tyvars is_main e1
       pure (s1, ty', WithArenaE v e1')
 
-    SpawnE fn tyapps args -> do
+    SpawnE w fn tyapps args -> do
       (s1, ty, e') <- tcExp ddefs sbst venv fenv bound_tyvars is_main (l$ AppE fn tyapps args)
       case unLoc e' of
-        AppE fn' tyapps' args' -> pure (s1, ty, SpawnE fn' tyapps' args')
+        AppE fn' tyapps' args' -> pure (s1, ty, SpawnE w fn' tyapps' args')
         _ -> err $ text "SpawnE"
 
     SyncE   -> pure (sbst, ProdTy [], SyncE)
@@ -602,8 +602,8 @@ zonkExp s (L p ex) = L p $
     Ext (BenchE fn tyapps args b) -> let tyapps1 = map (zonkTy s) tyapps
                                      in Ext (BenchE fn tyapps1 (map go args) b)
     Ext (ParE0 ls) -> Ext $ ParE0 (map go ls)
-    SpawnE fn tyapps args -> let tyapps1 = map (zonkTy s) tyapps
-                             in SpawnE fn tyapps1 (map go args)
+    SpawnE w fn tyapps args -> let tyapps1 = map (zonkTy s) tyapps
+                               in SpawnE w fn tyapps1 (map go args)
     SyncE    -> SyncE
     MapE{}   -> error $ "zonkExp: TODO, " ++ sdoc ex
     FoldE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
@@ -660,8 +660,8 @@ substTyVarExp s (L p ex) = L p $
     Ext (BenchE fn tyapps args b) -> let tyapps1 = map (substTyVar s) tyapps
                                      in Ext (BenchE fn tyapps1 (map go args) b)
     Ext (ParE0 ls) -> Ext $ ParE0 (map go ls)
-    SpawnE f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
-                           in SpawnE f tyapps1 (map go arg)
+    SpawnE w f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
+                             in SpawnE w f tyapps1 (map go arg)
     SyncE    -> SyncE
     MapE{}   -> error $ "substTyVarExp: TODO, " ++ sdoc ex
     FoldE{}  -> error $ "substTyVarExp: TODO, " ++ sdoc ex

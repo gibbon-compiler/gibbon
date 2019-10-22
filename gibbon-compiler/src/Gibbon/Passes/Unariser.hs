@@ -142,8 +142,8 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
 
     WithArenaE v e -> WithArenaE v <$> go env2 e
 
-    SpawnE v locs args -> unLoc <$> discharge stk <$>
-                            (L p <$> SpawnE v locs <$> mapM (go env2) args)
+    SpawnE w v locs args -> unLoc <$> discharge stk <$>
+                              (L p <$> SpawnE w v locs <$> mapM (go env2) args)
 
     SyncE -> pure SyncE
 

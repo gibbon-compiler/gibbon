@@ -715,13 +715,13 @@ Spawn and sync
 cursorizeSpawn :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps -> L Exp2 -> PassM Exp3
 cursorizeSpawn isPackedContext ddfs fundefs denv tenv sdeps (L _ ex) = do
   case ex of
-    LetE (v, locs, ty, L p (SpawnE fn applocs args)) bod
+    LetE (v, locs, ty, L p (SpawnE w fn applocs args)) bod
       | hasPacked ty -> error "Gibbon-TODO: Only scalar types allowed in SpawnE for now. Got: "
 
       | otherwise -> do
           rhs' <- cursorizeExp ddfs fundefs denv tenv sdeps (L p (AppE fn applocs args))
           let rhs'' = case unLoc rhs' of
-                        AppE fn' applocs' args' -> L p $ SpawnE fn' applocs' args'
+                        AppE fn' applocs' args' -> L p $ SpawnE w fn' applocs' args'
                         _ -> error "cursorizeSpawn"
           case locs of
             [] -> LetE (v,[],curDict $ stripTyLocs ty, rhs'') <$>

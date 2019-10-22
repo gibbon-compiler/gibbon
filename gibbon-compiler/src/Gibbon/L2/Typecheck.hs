@@ -382,7 +382,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                -- ensureEqualTy exp ty ty1
                return (ty1,tstate1)
 
-      SpawnE f locs args ->
+      SpawnE w f locs args ->
         tcExp ddfs env funs constrs regs tstatein (l$ AppE f locs args)
 
       SyncE -> pure (ProdTy [], tstatein)

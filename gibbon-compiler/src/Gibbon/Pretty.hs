@@ -332,10 +332,10 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                 hsep (map (pprintWithStyle sty) es)
                               -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
           TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
-          SpawnE v locs ls -> text "spawn" <+>
-                                parens (pprintWithStyle sty v <+>
-                                         (brackets $ hcat (punctuate "," (map pprint locs))) <+>
-                                         (pprintWithStyle sty ls))
+          SpawnE w v locs ls -> text "spawn" <+> pprintWithStyle sty w <+>
+                                  parens (pprintWithStyle sty v <+>
+                                           (brackets $ hcat (punctuate "," (map pprint locs))) <+>
+                                           (pprintWithStyle sty ls))
           SyncE -> text "sync"
           WithArenaE v e -> case sty of
                               PPHaskell  -> (text "let") <+>

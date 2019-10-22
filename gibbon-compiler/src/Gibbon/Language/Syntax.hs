@@ -434,7 +434,7 @@ data PreExp (ext :: * -> * -> *) loc dec =
 
    | WithArenaE Var EXP
 
-   | SpawnE Var [loc] [EXP]
+   | SpawnE Var Var [loc] [EXP]
    | SyncE
 
    -- Limited list handling:
@@ -539,7 +539,7 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
 
       WithArenaE v e -> S.delete v $ gFreeVars e
 
-      SpawnE _ _ ls -> S.unions (L.map gFreeVars ls)
+      SpawnE _ _ _ ls -> S.unions (L.map gFreeVars ls)
       SyncE -> S.empty
 
       Ext q -> gFreeVars q
@@ -575,7 +575,7 @@ instance (Show (), Out (), Expression (e () (UrTy ())),
                         ++"\nExpression:\n  "++ sdoc ex
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
       WithArenaE _v e -> gRecoverType ddfs env2 e
-      SpawnE v _ _    -> outTy $ fEnv env2 # v
+      SpawnE _ v _ _  -> outTy $ fEnv env2 # v
       SyncE           -> voidTy
       CaseE _ mp ->
         let (c,args,e) = head mp
@@ -608,7 +608,7 @@ instance HasRenamable e l d => Renamable (L (PreExp e l d)) where
         CaseE (go scrt) (map (\(a,b,c) -> (a, map (\(d,e) -> (go d, go e)) b, go c)) ls)
       DataConE loc dcon ls -> DataConE (go loc) dcon (gol ls)
       TimeIt e ty b -> TimeIt (go e) (go ty) b
-      SpawnE f locs args -> SpawnE (go f) (gol locs) (gol args)
+      SpawnE w f locs args -> SpawnE (go w) (go f) (gol locs) (gol args)
       SyncE   -> SyncE
       Ext ext -> Ext (go ext)
       MapE{}  -> ex
@@ -825,8 +825,8 @@ subst old new (L p0 ex) = L p0 $
     TimeIt e t b      -> TimeIt (go e) t b
     IfE a b c         -> IfE (go a) (go b) (go c)
 
-    SpawnE v loc ls   -> SpawnE v loc (map go ls)
-    SyncE             -> SyncE
+    SpawnE w v loc ls   -> SpawnE w v loc (map go ls)
+    SyncE               -> SyncE
 
     MapE (v,t,rhs) bod | v == old  -> MapE (v,t, rhs)    (go bod)
                        | otherwise -> MapE (v,t, go rhs) (go bod)
@@ -864,7 +864,7 @@ substE old new (L p0 ex) = L p0 $
     DataConE loc k ls -> DataConE loc k $ L.map go ls
     TimeIt e t b      -> TimeIt (go e) t b
     IfE a b c         -> IfE (go a) (go b) (go c)
-    SpawnE v loc ls   -> SpawnE v loc (map go ls)
+    SpawnE w v loc ls -> SpawnE w v loc (map go ls)
     SyncE             -> SyncE
     MapE (v,t,rhs) bod | VarE v == unLoc old  -> MapE (v,t, rhs)    (go bod)
                        | otherwise -> MapE (v,t, go rhs) (go bod)
@@ -895,7 +895,7 @@ hasTimeIt (L _ rhs) =
       IfE a b c    -> hasTimeIt a || hasTimeIt b || hasTimeIt c
       CaseE _ ls   -> any hasTimeIt [ e | (_,_,e) <- ls ]
       LetE (_,_,_,e1) e2 -> hasTimeIt e1 || hasTimeIt e2
-      SpawnE _ _ _       -> False
+      SpawnE _ _ _ _     -> False
       SyncE              -> False
       MapE (_,_,e1) e2   -> hasTimeIt e1 || hasTimeIt e2
       FoldE (_,_,e1) (_,_,e2) e3 -> hasTimeIt e1 || hasTimeIt e2 || hasTimeIt e3

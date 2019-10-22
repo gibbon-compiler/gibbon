@@ -235,7 +235,7 @@ desugarExp toplevel e = L NoLoc <$>
                   else if f == "spawn"
                   then do
                     e2' <- desugarExp toplevel e2
-                    pure $ SpawnE "HOLE" [] [e2']
+                    pure $ SpawnE "HOLE" "HOLE" [] [e2']
                   else AppE f [] <$> (: []) <$> desugarExp toplevel e2
           L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of
@@ -257,9 +257,9 @@ desugarExp toplevel e = L NoLoc <$>
             e2' <- desugarExp toplevel e2
             pure $ Ext $ BenchE fn [] (ls ++ [e2']) b
 
-          L _ (SpawnE fn [] ls) -> do
+          L _ (SpawnE w fn [] ls) -> do
             e2' <- desugarExp toplevel e2
-            pure $ SpawnE fn [] (ls ++ [e2'])
+            pure $ SpawnE w fn [] (ls ++ [e2'])
 
           L _ (PrimAppE p ls) -> do
             e2' <- desugarExp toplevel e2
@@ -564,9 +564,9 @@ fixupSpawn (L p ex) = L p $
     CaseE scrt mp -> CaseE (go scrt) $ map (\(a,b,c) -> (a,b, go c)) mp
     TimeIt e ty b -> TimeIt (go e) ty b
     WithArenaE v e -> WithArenaE v (go e)
-    SpawnE _ _ args ->
+    SpawnE _ _ _ args ->
       case args of
-          [L _ (AppE fn tyapps ls)] -> SpawnE fn tyapps ls
+          [L _ (VarE v), L _ (AppE fn tyapps ls)] -> SpawnE v fn tyapps ls
           _ -> error $ "fixupSpawn: incorrect use of spawn: " ++ sdoc ex
     SyncE   -> SyncE
     MapE{}  -> error $ "fixupSpawn: TODO MapE"
@@ -601,8 +601,8 @@ verifyBenchEAssumptions bench_allowed (L p ex) = L p $
     CaseE scrt mp -> CaseE (go scrt) $ map (\(a,b,c) -> (a,b, go c)) mp
     TimeIt e ty b -> TimeIt (not_allowed e) ty b
     WithArenaE v e -> WithArenaE v (go e)
-    SpawnE fn tyapps args -> SpawnE fn tyapps (map not_allowed args)
-    SyncE    -> SyncE
+    SpawnE w fn tyapps args -> SpawnE w fn tyapps (map not_allowed args)
+    SyncE   -> SyncE
     MapE{}  -> error $ "verifyBenchEAssumptions: TODO MapE"
     FoldE{} -> error $ "verifyBenchEAssumptions: TODO FoldE"
   where go = verifyBenchEAssumptions bench_allowed

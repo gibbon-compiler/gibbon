@@ -338,7 +338,7 @@ tcExp ddfs env exp@(L p ex) =
       ty <- go e
       return ty
 
-    SpawnE v locs ls -> do
+    SpawnE _ v locs ls -> do
       ty <- go (l$ AppE v locs ls)
       if isScalarTy ty
       then pure ty

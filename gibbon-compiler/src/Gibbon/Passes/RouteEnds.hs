@@ -195,13 +195,13 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                (wrapBody e2' newls)
 
           -- Exactly like AppE.
-          LetE (v,_ls,ty,(L _ (SpawnE f lsin e1))) e2 -> do
+          LetE (v,_ls,ty,(L _ (SpawnE w f lsin e1))) e2 -> do
                  let lenv' = case ty of
                                PackedTy _n l -> M.insert v l lenv
                                _ -> lenv
                  (outlocs,newls,eor') <- doBoundApp f lsin
                  e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) e2
-                 return $ LetE (v,outlocs,ty, l$ SpawnE f lsin e1)
+                 return $ LetE (v,outlocs,ty, l$ SpawnE w f lsin e1)
                                (wrapBody e2' newls)
 
           SpawnE{} -> error "routeEnds: Unbound SpawnE"

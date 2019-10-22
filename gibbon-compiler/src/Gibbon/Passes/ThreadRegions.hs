@@ -133,10 +133,10 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
           LetE (v,locs,ty, l$ AppE f newapplocs args) <$>
             threadRegionsExp ddefs fundefs isMain renv' (extendVEnv v ty env2) bod
 
-    LetE (v,locs,ty, (L _ (SpawnE f applocs args))) bod -> do
+    LetE (v,locs,ty, (L _ (SpawnE w f applocs args))) bod -> do
       let e' = l$ LetE (v,locs,ty, (L _ (AppE f applocs args))) bod
       e'' <- threadRegionsExp ddefs fundefs isMain renv env2 e'
-      pure $ unLoc $ changeAppToSpawn e''
+      pure $ unLoc $ changeAppToSpawn w e''
 
     LetE (v,locs,ty, rhs) bod ->
       LetE <$> (v,locs,ty,) <$> go rhs <*>

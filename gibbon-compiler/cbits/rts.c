@@ -382,7 +382,7 @@ IntTy print_symbol(SymTy idx) {
   } else if (idx == leftparen_symbol) {
     return printf("(");
   } else if (idx == rightparen_symbol) {
-    return printf(")");    
+    return printf(")");
   } else {
     struct SymTable_elem *s;
     HASH_FIND_INT( global_sym_table, &idx, s );
@@ -680,6 +680,10 @@ void free_region(CursorTy end_reg) {
         printf("free_region: non-zero refcount: %d.\n", *(footer.refcount_ptr));
         #endif
     }
+}
+
+BoolTy is_big(CursorTy cur) {
+    return false;
 }
 
 /* -------------------------------------------------------------------------------- */

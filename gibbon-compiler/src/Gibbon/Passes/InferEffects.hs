@@ -112,7 +112,7 @@ inferExp ddfs fenv env (L _p expr) =
       let (effs, _locs) = unzip $ L.map (inferExp ddfs fenv env) ls
       in (S.unions effs, Nothing)
 
-    SpawnE fn locs args -> inferExp ddfs fenv env (l$ AppE fn locs args)
+    SpawnE _ fn locs args -> inferExp ddfs fenv env (l$ AppE fn locs args)
 
     SyncE -> (S.empty, Nothing)
 

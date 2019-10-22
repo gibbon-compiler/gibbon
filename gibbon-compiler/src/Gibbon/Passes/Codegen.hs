@@ -367,7 +367,7 @@ codegenTail (LetTimedT flg bnds rhs body) ty sync_deps =
        return $ decls ++ withPrnt ++ tal
 
 
-codegenTail (LetCallT async bnds ratr rnds body) ty sync_deps
+codegenTail (LetCallT False bnds ratr rnds body) ty sync_deps
     | [] <- bnds = do tal <- codegenTail body ty sync_deps
                       return $ [toStmt fnexp] ++ tal
     | [bnd] <- bnds  = do tal <- codegenTail body ty sync_deps
@@ -379,20 +379,34 @@ codegenTail (LetCallT async bnds ratr rnds body) ty sync_deps
            fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
            ty0 = ProdTy $ map snd bnds
            init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(fnexp); |] ]
-       if async
-       then do
-         let bind_after_sync = zipWith bind bnds fields
-         tal <- codegenTail body ty (sync_deps ++ bind_after_sync)
-         return $ init ++  tal
-       else do
-         tal <- codegenTail body ty sync_deps
-         return $ init ++ zipWith bind bnds fields ++ tal
+       tal <- codegenTail body ty sync_deps
+       return $ init ++ zipWith bind bnds fields ++ tal
   where
-    dospawn = if async
-              then text "cilk_spawn"
-              else empty
     fncall = C.FnCall (cid ratr) (map codegenTriv rnds) noLoc
-    fnexp = C.EscExp (prettyCompact (dospawn <> space <> ppr fncall)) noLoc
+    fnexp = C.EscExp (prettyCompact (space <> ppr fncall)) noLoc
+
+codegenTail (LetCallT True bnds ratr rnds body) ty sync_deps
+    | [] <- bnds = do tal <- codegenTail body ty sync_deps
+                      return $ [toStmt spawnexp] ++ tal
+    | [bnd] <- bnds  = do tal <- codegenTail body ty sync_deps
+                          let call = assn (codegenTy (snd bnd)) (fst bnd) (spawnexp)
+                          return $ [call] ++ tal
+    | otherwise = do
+       nam <- gensym $ toVar "tmp_struct"
+       let bind (v,t) f = assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
+           fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
+           ty0 = ProdTy $ map snd bnds
+           init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam; |] ] ++
+                  [ C.BlockStm [cstm| if (is_big($(codegenTriv is_big_rnd))) { $id:nam = $(spawnexp); } else { $id:nam = $(seqexp); }  |]]
+
+       let bind_after_sync = zipWith bind bnds fields
+       tal <- codegenTail body ty (sync_deps ++ bind_after_sync)
+       return $ init ++  tal
+  where
+    (is_big_rnd:oth_rands) = rnds
+    fncall = C.FnCall (cid ratr) (map codegenTriv oth_rands) noLoc
+    spawnexp = C.EscExp (prettyCompact (text "cilk_spawn" <> space <> ppr fncall)) noLoc
+    seqexp = C.EscExp (prettyCompact (ppr fncall)) noLoc
 
 codegenTail (LetPrimCallT bnds prm rnds body) ty sync_deps =
     do bod' <- case prm of

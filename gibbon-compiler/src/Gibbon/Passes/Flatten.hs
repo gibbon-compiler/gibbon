@@ -179,7 +179,7 @@ exp ddfs env2 (L sloc e0) =
       (bnd,e') <- go e
       return ([], TimeIt (flatLets bnd e') (gRecoverType ddfs env2 e) b)
 
-    SpawnE f lvs ls -> gols (SpawnE f lvs)  ls "SpawnE"
+    SpawnE w f lvs ls -> gols (SpawnE w f lvs)  ls "SpawnE"
     SyncE -> pure ([], SyncE)
 
     WithArenaE v e -> do
@@ -279,7 +279,7 @@ flattenExp0 ddfs env2 (L sloc e0) =
       (bnd,e') <- go e
       return ([], TimeIt (flatLets bnd e') (L0.recoverType ddfs env2 e) b)
 
-    SpawnE f lvs ls -> gols (SpawnE f lvs)  ls "AppE"
+    SpawnE w f lvs ls -> gols (SpawnE w f lvs)  ls "AppE"
     SyncE -> pure ([], SyncE)
 
     MapE _ _      -> error "FINISHLISTS"
