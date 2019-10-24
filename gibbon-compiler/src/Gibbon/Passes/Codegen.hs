@@ -559,7 +559,7 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty =
                  PrintSym ->
                      let [arg] = rnds in
                      case bnds of
-                       [(outV,IntTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = print_symbol($(codegenTriv arg)); |] ]
+                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = print_symbol($(codegenTriv arg)); |] ]
                        [] -> pure [ C.BlockStm [cstm| print_symbol($(codegenTriv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintSym: "++show bnds
 

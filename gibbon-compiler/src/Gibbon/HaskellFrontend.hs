@@ -169,7 +169,7 @@ primMap = M.fromList
   , ("eqsym", EqSymP)
   , ("rand", RandP)
   , ("sizeParam", SizeParam)
-  , ("symAppend", SymAppend)
+  , ("symappend", SymAppend)
   , ("True", MkTrue)
   , ("False", MkFalse)
   , ("gensym", Gensym)
