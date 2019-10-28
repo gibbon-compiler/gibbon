@@ -699,7 +699,6 @@ codegenTy CursorTy = [cty|typename CursorTy|]
 codegenTy RegionTy = [cty|typename RegionTy|]
 codegenTy ChunkTy = [cty|typename ChunkTy|]
 codegenTy (ProdTy []) = [cty|void*|]
-codegenTy (ProdTy [t]) = codegenTy t -- MV: Is this safe?
 codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
     where nam = makeName ts
 codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
