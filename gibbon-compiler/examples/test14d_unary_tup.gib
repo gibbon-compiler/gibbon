@@ -1,0 +1,8 @@
+#lang gibbon
+
+(define (foo) : (Vector Int)
+  (vector 2))
+
+(define (bar) : Int
+  (let ([x : (Vector Int) (foo)])
+    10))

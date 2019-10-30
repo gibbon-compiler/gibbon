@@ -121,6 +121,8 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       rts <- readFile rtsPath -- TODO (maybe): We can read this in in compile time using TH
       return (rts ++ '\n' : pretty 80 (stack (map ppr defs)))
     where
+      init_fun_env = foldr (\fn acc -> M.insert (funName fn) (map snd (funArgs fn), funRetTy fn) acc) M.empty funs
+
       defs = fst $ runPassM cfg 0 $ do
         (prots,funs') <- unzip <$> mapM codegenFun funs
         main_expr' <- main_expr
@@ -130,7 +132,7 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       main_expr = do
         e <- case mtal of
                -- [2019.06.13]: CSK, Why is codegenTail always called with IntTy?
-               Just (PrintExp t) -> codegenTail t (codegenTy IntTy) []
+               Just (PrintExp t) -> codegenTail init_fun_env t IntTy []
                _ -> pure []
         let bod = mkSymTable ++ e
         pure $ C.FuncDef [cfun| void __main_expr() { $items:bod } |] noLoc
@@ -139,7 +141,7 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       codegenFun' (FunDecl nam args ty tal _) =
           do let retTy   = codegenTy ty
                  params  = map (\(v,t) -> [cparam| $ty:(codegenTy t) $id:v |]) args
-             body <- codegenTail tal retTy []
+             body <- codegenTail init_fun_env tal ty []
              let fun     = [cfun| $ty:retTy $id:nam ($params:params) {
                             $items:body
                      } |]
@@ -235,67 +237,77 @@ codegenTriv (IntTriv i) = [cexp| ( $ty:(codegenTy IntTy) ) $int:i |]
 codegenTriv (SymTriv i) = [cexp| ( $ty:(codegenTy SymTy) )$i |]
 codegenTriv (TagTriv i) = [cexp| ( $ty:(codegenTy TagTyPacked) )$i |]
 
+-- A type environment for L4 functions
+type Env = M.Map Var ([Ty], Ty)
 
 -- | The central codegen function.
-codegenTail :: Tail -> C.Type -> [C.BlockItem] -> PassM [C.BlockItem]
+codegenTail :: Env -> Tail -> Ty -> [C.BlockItem] -> PassM [C.BlockItem]
 
 -- Void type:
-codegenTail (RetValsT []) _ty _   = return [ C.BlockStm [cstm| return; |] ]
+codegenTail _ (RetValsT []) _ty _   = return [ C.BlockStm [cstm| return; |] ]
 -- Single return:
-codegenTail (RetValsT [tr]) _ty _ = return [ C.BlockStm [cstm| return $(codegenTriv tr); |] ]
+codegenTail _ (RetValsT [tr]) ty _ =
+    case ty of
+      ProdTy [_one] -> do
+          let arg = [(Nothing,C.ExpInitializer (codegenTriv tr) noLoc)]
+              ty' = codegenTy ty
+          return $ [ C.BlockStm [cstm| return $(C.CompoundLit ty' arg noLoc); |] ]
+      ProdTy _ -> error $ "codegenTail: " ++ sdoc ty
+      _ -> return [ C.BlockStm [cstm| return $(codegenTriv tr); |] ]
 -- Multiple return:
-codegenTail (RetValsT ts) ty _ =
-    return $ [ C.BlockStm [cstm| return $(C.CompoundLit ty args noLoc); |] ]
+codegenTail _ (RetValsT ts) ty _ =
+    return $ [ C.BlockStm [cstm| return $(C.CompoundLit ty' args noLoc); |] ]
     where args = map (\a -> (Nothing,C.ExpInitializer (codegenTriv a) noLoc)) ts
+          ty' = codegenTy ty
 
-codegenTail (AssnValsT ls bod_maybe) ty sync_deps = do
+codegenTail env (AssnValsT ls bod_maybe) ty sync_deps = do
     case bod_maybe of
       Just bod -> do
-        bod' <- codegenTail bod ty sync_deps
+        bod' <- codegenTail env bod ty sync_deps
         return $ [ mut (codegenTy ty) vr (codegenTriv triv) | (vr,ty,triv) <- ls ] ++ bod'
       Nothing  ->
         return $ [ mut (codegenTy ty) vr (codegenTriv triv) | (vr,ty,triv) <- ls ]
 
-codegenTail (Switch lbl tr alts def) ty sync_deps =
+codegenTail env (Switch lbl tr alts def) ty sync_deps =
     case def of
       Nothing  -> let (rest,lastone) = splitAlts alts in
-                  genSwitch lbl tr rest (altTail lastone) ty sync_deps
-      Just def -> genSwitch lbl tr alts def ty sync_deps
+                  genSwitch env lbl tr rest (altTail lastone) ty sync_deps
+      Just def -> genSwitch env lbl tr alts def ty sync_deps
 
-codegenTail (TailCall v ts) _ty _ =
+codegenTail _ (TailCall v ts) _ty _ =
     return $ [ C.BlockStm [cstm| return $( C.FnCall (cid v) (map codegenTriv ts) noLoc ); |] ]
 
-codegenTail (IfT e0 e1 e2) ty sync_deps = do
-    e1' <- codegenTail e1 ty sync_deps
-    e2' <- codegenTail e2 ty sync_deps
+codegenTail env (IfT e0 e1 e2) ty sync_deps = do
+    e1' <- codegenTail env e1 ty sync_deps
+    e2' <- codegenTail env e2 ty sync_deps
     return $ [ C.BlockStm [cstm| if ($(codegenTriv e0)) { $items:e1' } else { $items:e2' } |] ]
 
-codegenTail (ErrT s) _ty _ = return $ [ C.BlockStm [cstm| printf("%s\n", $s); |]
-                                      , C.BlockStm [cstm| exit(1); |] ]
+codegenTail _ (ErrT s) _ty _ = return $ [ C.BlockStm [cstm| printf("%s\n", $s); |]
+                                        , C.BlockStm [cstm| exit(1); |] ]
 
 
 -- We could eliminate these earlier
-codegenTail (LetTrivT (vr,rty,rhs) body) ty sync_deps =
-    do tal <- codegenTail body ty sync_deps
+codegenTail env (LetTrivT (vr,rty,rhs) body) ty sync_deps =
+    do tal <- codegenTail env body ty sync_deps
        return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv rhs); |] ]
                 ++ tal
 
 -- TODO: extend rts with arena primitives, and invoke them here
-codegenTail (LetArenaT vr body) ty sync_deps =
-    do tal <- codegenTail body ty sync_deps
+codegenTail env (LetArenaT vr body) ty sync_deps =
+    do tal <- codegenTail env body ty sync_deps
        return $ [ C.BlockDecl [cdecl| $ty:(codegenTy ArenaTy) $id:vr = alloc_arena();|] ]
               ++ tal
 
-codegenTail (LetAllocT lhs vals body) ty sync_deps =
+codegenTail env (LetAllocT lhs vals body) ty sync_deps =
     do let structTy = codegenTy (ProdTy (map fst vals))
            size = [cexp| sizeof($ty:structTy) |]
-       tal <- codegenTail body ty sync_deps
+       tal <- codegenTail env body ty sync_deps
        return$ assn (codegenTy PtrTy) lhs [cexp| ( $ty:structTy *)ALLOC( $size ) |] :
                [ C.BlockStm [cstm| (($ty:structTy *)  $id:lhs)->$id:fld = $(codegenTriv trv); |]
                | (ix,(_ty,trv)) <- zip [0 :: Int ..] vals
                , let fld = "field"++show ix] ++ tal
 
-codegenTail (LetUnpackT bs scrt body) ty sync_deps =
+codegenTail env (LetUnpackT bs scrt body) ty sync_deps =
     do let mkFld :: Int -> C.Id
            mkFld i = C.toIdent ("field" ++ show i) noLoc
 
@@ -308,29 +320,29 @@ codegenTail (LetUnpackT bs scrt body) ty sync_deps =
 
            binds = zipWith mk_bind [0..] bs
 
-       body' <- codegenTail body ty sync_deps
+       body' <- codegenTail env body ty sync_deps
        return (map C.BlockDecl binds ++ body')
 
 -- Here we unzip the tuple into assignments to local variables.
-codegenTail (LetIfT bnds (e0,e1,e2) body) ty sync_deps =
+codegenTail env (LetIfT bnds (e0,e1,e2) body) ty sync_deps =
 
     do let decls = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:vr0; |]
                    | (vr0,ty0) <- bnds ]
        let e1' = rewriteReturns e1 bnds
            e2' = rewriteReturns e2 bnds
-       e1'' <- codegenTail e1' ty sync_deps
-       e2'' <- codegenTail e2' ty sync_deps
+       e1'' <- codegenTail env e1' ty sync_deps
+       e2'' <- codegenTail env e2' ty sync_deps
        -- Int 1 is Boolean true:
        let ifbod = [ C.BlockStm [cstm| if ($(codegenTriv e0)) { $items:e1'' } else { $items:e2'' } |] ]
-       tal <- codegenTail body ty sync_deps
+       tal <- codegenTail env body ty sync_deps
        return $ decls ++ ifbod ++ tal
 
-codegenTail (LetTimedT flg bnds rhs body) ty sync_deps =
+codegenTail env (LetTimedT flg bnds rhs body) ty sync_deps =
 
     do let decls = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:vr0; |]
                    | (vr0,ty0) <- bnds ]
        let rhs' = rewriteReturns rhs bnds
-       rhs'' <- codegenTail rhs' ty sync_deps
+       rhs'' <- codegenTail env rhs' ty sync_deps
        batchtime <- gensym "batchtime"
        selftimed <- gensym "selftimed"
        let ident = case bnds of
@@ -363,34 +375,60 @@ codegenTail (LetTimedT flg bnds rhs body) ty sync_deps =
                             ]
                        else [ C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ]
-       tal <- codegenTail body ty sync_deps
+       tal <- codegenTail env body ty sync_deps
        return $ decls ++ withPrnt ++ tal
 
 
-codegenTail (LetCallT False bnds ratr rnds body) ty sync_deps
-    | [] <- bnds = do tal <- codegenTail body ty sync_deps
+codegenTail env (LetCallT False bnds ratr rnds body) ty sync_deps
+    | [] <- bnds = do tal <- codegenTail env body ty sync_deps
                       return $ [toStmt fnexp] ++ tal
-    | [bnd] <- bnds  = do tal <- codegenTail body ty sync_deps
-                          let call = assn (codegenTy (snd bnd)) (fst bnd) (fnexp)
-                          return $ [call] ++ tal
+    | [bnd] <- bnds  = let fn_ret_ty = snd (env M.! ratr) in
+                       case fn_ret_ty of
+                         -- Copied from the otherwise case below.
+                         ProdTy [_one] -> do
+                           nam <- gensym $ toVar "tmp_struct"
+                           let bind (v,t) f = assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
+                               fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
+                               ty0 = ProdTy $ map snd bnds
+                               init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(fnexp); |] ]
+                           tal <- codegenTail env body ty sync_deps
+                           return $ init ++ zipWith bind bnds fields ++ tal
+                         ProdTy _ -> error $ "codegenTail: LetCallT" ++ fromVar ratr
+                         _ -> do
+                           tal <- codegenTail env body ty sync_deps
+                           let call = assn (codegenTy (snd bnd)) (fst bnd) (fnexp)
+                           return $ [call] ++ tal
     | otherwise = do
        nam <- gensym $ toVar "tmp_struct"
        let bind (v,t) f = assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
            fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
            ty0 = ProdTy $ map snd bnds
            init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(fnexp); |] ]
-       tal <- codegenTail body ty sync_deps
+       tal <- codegenTail env body ty sync_deps
        return $ init ++ zipWith bind bnds fields ++ tal
   where
     fncall = C.FnCall (cid ratr) (map codegenTriv rnds) noLoc
     fnexp = C.EscExp (prettyCompact (space <> ppr fncall)) noLoc
 
-codegenTail (LetCallT True bnds ratr rnds body) ty sync_deps
-    | [] <- bnds = do tal <- codegenTail body ty sync_deps
+codegenTail env (LetCallT True bnds ratr rnds body) ty sync_deps
+    | [] <- bnds = do tal <- codegenTail env body ty sync_deps
                       return $ [toStmt spawnexp] ++ tal
-    | [bnd] <- bnds  = do tal <- codegenTail body ty sync_deps
-                          let call = assn (codegenTy (snd bnd)) (fst bnd) (spawnexp)
-                          return $ [call] ++ tal
+    | [bnd] <- bnds  = let fn_ret_ty = snd (env M.! ratr) in
+                       case fn_ret_ty of
+                         -- Copied from the otherwise case below.
+                         ProdTy [_one] -> do
+                           nam <- gensym $ toVar "tmp_struct"
+                           let bind (v,t) f = assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
+                               fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
+                               ty0 = ProdTy $ map snd bnds
+                               init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(spawnexp); |] ]
+                           tal <- codegenTail env body ty sync_deps
+                           return $ init ++ zipWith bind bnds fields ++ tal
+                         ProdTy _ -> error $ "codegenTail: LetCallT" ++ fromVar ratr
+                         _ -> do
+                           tal <- codegenTail env body ty sync_deps
+                           let call = assn (codegenTy (snd bnd)) (fst bnd) (spawnexp)
+                           return $ [call] ++ tal
     | otherwise = do
        nam <- gensym $ toVar "tmp_struct"
        let bind (v,t) f = assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
@@ -400,7 +438,7 @@ codegenTail (LetCallT True bnds ratr rnds body) ty sync_deps
                   [ C.BlockStm [cstm| if (is_big($(codegenTriv is_big_rnd))) { $id:nam = $(spawnexp); } else { $id:nam = $(seqexp); }  |]]
 
        let bind_after_sync = zipWith bind bnds fields
-       tal <- codegenTail body ty (sync_deps ++ bind_after_sync)
+       tal <- codegenTail env body ty (sync_deps ++ bind_after_sync)
        return $ init ++  tal
   where
     (is_big_rnd:oth_rands) = rnds
@@ -408,10 +446,10 @@ codegenTail (LetCallT True bnds ratr rnds body) ty sync_deps
     spawnexp = C.EscExp (prettyCompact (text "cilk_spawn" <> space <> ppr fncall)) noLoc
     seqexp = C.EscExp (prettyCompact (ppr fncall)) noLoc
 
-codegenTail (LetPrimCallT bnds prm rnds body) ty sync_deps =
+codegenTail env (LetPrimCallT bnds prm rnds body) ty sync_deps =
     do bod' <- case prm of
-                 ParSync -> codegenTail body ty []
-                 _       -> codegenTail body ty sync_deps
+                 ParSync -> codegenTail env body ty []
+                 _       -> codegenTail env body ty sync_deps
        dflags <- getDynFlags
        let isPacked = gopt Opt_Packed dflags
            noGC = gopt Opt_DisableGC dflags
@@ -611,7 +649,7 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                        -- In packed mode we eagerly FORCE the IO to happen before we start benchmarking:
                                        then pure [ C.BlockStm [cstm| { int sum=0; for(int i=0; i < st.st_size; i++) sum += ptr[i]; } |]
                                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ptr; |]]
-                                       else codegenTail unpackcall (codegenTy voidTy) sync_deps
+                                       else codegenTail env unpackcall voidTy sync_deps
                              return $ mmapCode ++ docall
                      | otherwise -> error $ "ReadPackedFile, wrong arguments "++show rnds++", or expected bindings "++show bnds
 
@@ -632,7 +670,7 @@ codegenTail (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  oth -> error$ "FIXME: codegen needs to handle primitive: "++show oth
        return $ pre ++ bod'
 
-codegenTail (Goto lbl) _ty _ = do
+codegenTail _ (Goto lbl) _ty _ = do
   return [ C.BlockStm [cstm| goto $id:lbl; |] ]
 
 -- | The sizes for all mulitplicities are defined as globals in the RTS.
@@ -670,13 +708,13 @@ normalizeAlts alts =
       IntAlts as -> map (first mk_int_lhs) as
 
 -- | Generate a proper switch expression instead.
-genSwitch :: Label -> Triv -> Alts -> Tail -> C.Type -> [C.BlockItem] -> PassM [C.BlockItem]
-genSwitch lbl tr alts lastE ty sync_deps =
+genSwitch :: Env -> Label -> Triv -> Alts -> Tail -> Ty -> [C.BlockItem] -> PassM [C.BlockItem]
+genSwitch env lbl tr alts lastE ty sync_deps =
     do let go :: [(C.Exp,Tail)] -> PassM [C.Stm]
-           go [] = do tal <- codegenTail lastE ty sync_deps
+           go [] = do tal <- codegenTail env lastE ty sync_deps
                       return [[cstm| default: $stm:(mkBlock tal) |]]
            go ((ex,tl):rst) =
-               do tal <- codegenTail tl ty sync_deps
+               do tal <- codegenTail env tl ty sync_deps
                   let tal2 = tal ++ [ C.BlockStm [cstm| break; |] ]
                   let this = [cstm| case $exp:ex : $stm:(mkBlock tal2) |]
                   rst' <- go rst
