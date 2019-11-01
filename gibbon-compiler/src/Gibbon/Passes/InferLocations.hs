@@ -996,9 +996,9 @@ inferExp env@FullEnv{dataDefs}
         MapE{} -> err$ "MapE unsupported"
         FoldE{} -> err$ "FoldE unsupported"
 
-        -- Ext (AddCursor cur i) -> do
-        --   (bod',ty',cs') <- inferExp env bod dest
-        --   tryBindReg (lc$ Ext $ LetLocE vr (AfterConstantLE i cur) bod', ty', cs')
+        Ext (L1.AddFixed cur i) -> do
+          (bod',ty',cs') <- inferExp env bod dest
+          tryBindReg (lc$ Ext $ LetLocE vr (AfterConstantLE i cur) bod', ty', cs')
 
     LetE{} -> err$ "Malformed let expression: " ++ (show ex0)
     MapE{} -> err$ "MapE unsupported"
