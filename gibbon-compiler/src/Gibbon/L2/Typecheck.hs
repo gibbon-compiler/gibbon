@@ -309,7 +309,12 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    case (es !! 0) of
                      L _ VarE{} -> if isPackedTy (tys !! 0)
                                    then return (CursorTy, tstate)
-                                   else throwError $ GenericTC "Expected PackedTy" exp
+                                   else case (tys !! 0) of
+                                          SymTy -> return (CursorTy, tstate)
+                                          IntTy -> return (CursorTy, tstate)
+                                          _ -> throwError $ GenericTC "Expected PackedTy" exp
+                     -- L _ LitSymE{} -> return (CursorTy, tstate)
+                     -- L _ LitE{} -> return (CursorTy, tstate)
                      _ -> throwError $ GenericTC "Expected a variable argument" exp
 
 

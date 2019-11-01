@@ -929,7 +929,7 @@ inferExp env@FullEnv{dataDefs}
           (bod',ty',cs') <- inferExp (extendVEnv vr IntTy env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs''
-          tryBindReg (lc$ L2.LetE (vr,[],IntTy,L sl2 $ L2.LitSymE x) bod'', ty'', fcs)
+          tryBindReg (lc$ L2.LetE (vr,[],SymTy,L sl2 $ L2.LitSymE x) bod'', ty'', fcs)
 
         ProjE i arg     -> do
           (e,ProdTy tys,cs) <- inferExp env arg NoDest

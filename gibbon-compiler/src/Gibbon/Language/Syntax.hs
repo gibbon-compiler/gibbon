@@ -467,7 +467,7 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
        case e of
         VarE _    -> True
         LitE _    -> True
-        LitSymE _ -> True
+        LitSymE _ -> False
         -- -- These should really turn to literalS:
         -- -- Commenting out for now because it confuses inference (!)
         -- PrimAppE MkTrue  [] -> True

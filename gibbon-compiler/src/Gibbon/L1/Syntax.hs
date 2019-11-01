@@ -56,12 +56,14 @@ type Ty1 = UrTy ()
 --------------------------------------------------------------------------------
 
 data E1Ext loc dec = BenchE Var [loc] [(L (PreExp E1Ext loc dec))] Bool
+                   | AddFixed Var Int
   deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
 instance FreeVars (E1Ext l d) where
   gFreeVars e =
     case e of
       BenchE _ _ args _-> S.unions (map gFreeVars args)
+      AddFixed v _ -> S.singleton v
 
 instance (Show l, Show d, Out l, Out d) => Expression (E1Ext l d) where
   type TyOf  (E1Ext l d) = d
@@ -79,10 +81,16 @@ instance HasSubstitutableExt E1Ext l d => SubstitutableExt (L (PreExp E1Ext l d)
   gSubstExt old new ext =
     case ext of
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubst old new) args) b
+      AddFixed v i -> if v == old
+                      then case new of
+                             L _ (VarE v') -> AddFixed v' i
+                             _oth -> error "Could not substitute non-variable in AddFixed"
+                      else AddFixed v i
 
   gSubstEExt old new ext =
     case ext of
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubstE old new) args) b
+      AddFixed v i -> AddFixed v i
 
 instance (Show l, Show d, Out l, Out d, FunctionTy d) => Typeable (E1Ext l d) where
   gRecoverType _ddefs env2 ext =
@@ -93,6 +101,7 @@ instance HasRenamable E1Ext l d => Renamable (E1Ext l d) where
   gRename env ext =
     case ext of
       BenchE fn tyapps args b -> BenchE fn tyapps (map go args) b
+      AddFixed v i -> AddFixed (go v) i
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
