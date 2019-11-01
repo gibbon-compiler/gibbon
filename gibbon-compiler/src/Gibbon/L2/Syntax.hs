@@ -45,7 +45,7 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.Common
 import           Gibbon.Language
 import           Text.PrettyPrint.HughesPJ
-import           Gibbon.L1.Syntax
+import           Gibbon.L1.Syntax hiding (AddFixed)
 
 --------------------------------------------------------------------------------
 
@@ -84,6 +84,7 @@ data E2Ext loc dec
   | BoundsCheck Int -- Bytes required
                 loc -- Region
                 loc -- Write cursor
+  | AddFixed Var Int
   | IndirectionE TyCon
                  DataCon
                  (loc,Var) -- Pointer
@@ -174,6 +175,7 @@ instance (Typeable (E2Ext l (UrTy l)),
           FromEndE{}    -> return ([],ex)
           BoundsCheck{} -> return ([],ex)
           IndirectionE{}-> return ([],ex)
+          AddFixed{}    -> return ([],ex)
 
     where go = gFlattenGatherBinds ddfs env
 
@@ -189,6 +191,7 @@ instance HasSimplifiableExt E2Ext l d => SimplifiableExt (L (PreExp E2Ext l d)) 
       FromEndE{}     -> ext
       BoundsCheck{}  -> ext
       IndirectionE{} -> ext
+      AddFixed{}     -> ext
 
 
 instance HasSubstitutableExt E2Ext l d => SubstitutableExt (L (PreExp E2Ext l d)) (E2Ext l d) where
@@ -200,6 +203,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (L (PreExp E2Ext l d)
       FromEndE{}       -> ext
       BoundsCheck{}    -> ext
       IndirectionE{}   -> ext
+      AddFixed{}       -> ext
 
   gSubstEExt old new ext =
     case ext of
@@ -209,6 +213,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (L (PreExp E2Ext l d)
       FromEndE{}       -> ext
       BoundsCheck{}    -> ext
       IndirectionE{}   -> ext
+      AddFixed{}       -> ext
 
 instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
   gRename env ext =
@@ -219,6 +224,7 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
       FromEndE{}       -> ext
       BoundsCheck{}    -> ext
       IndirectionE{}   -> ext
+      AddFixed{}       -> ext
 
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
@@ -661,6 +667,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               FromEndE{}     -> acc
               BoundsCheck{}  -> acc
               IndirectionE{} -> acc
+              AddFixed v _   -> M.insertWith (++) v [v] acc
 
       dep :: PreLocExp LocVar -> [Var]
       dep ex =
@@ -687,6 +694,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               FromEndE loc    -> S.singleton loc
               BoundsCheck _ reg cur -> S.fromList [reg,cur]
               IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
+              AddFixed v _    -> S.singleton v
           _ -> gFreeVars ex
 
 
@@ -718,6 +726,7 @@ changeAppToSpawn w (L p1 ex1) = L p1 $
         FromEndE{}        -> ex1
         BoundsCheck{}     -> ex1
         IndirectionE{}    -> ex1
+        AddFixed{}        -> ex1
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{}  -> error "addRANExp: TODO FoldE"
   where go = changeAppToSpawn w

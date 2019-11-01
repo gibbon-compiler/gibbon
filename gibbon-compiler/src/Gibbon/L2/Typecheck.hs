@@ -332,7 +332,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
 
                -- Handle condition
                (ty1,tstate1) <- recur tstatein e1
-               ensureEqualTy exp ty1 BoolTy
+               ensureEqualTyModCursor exp ty1 BoolTy
 
                -- Check both branches
                (ty2,tstate2) <- recur tstate1 e2
@@ -341,7 +341,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                -- Combine the type states somehow (TODO: audit this)
                tstate <- combineTStates exp tstate2 tstate3
 
-               ensureEqualTy exp ty2 ty3
+               ensureEqualTyModCursor exp ty2 ty3
                return (ty2,tstate)
 
       MkProdE es -> do
@@ -357,14 +357,16 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
       CaseE e brs -> do
 
                (ty,tstate) <- recur tstatein e
-               let PackedTy _dc lin = ty
-               -- We need to know the "region" of all the vars (and locations) pattern matched by this case expresssion.
-               -- The "region" is the same as that of the case scrutinee.
-               reg <- getRegion e constrs lin
-               ensureMatchCases ddfs exp ty brs
-               (tys,tstate') <- tcCases ddfs env funs constrs regs tstate lin reg brs
-               foldM_ (ensureEqualTy exp) (tys !! 0) (tail tys)
-               return (tys !! 0,tstate')
+               case ty of
+                 PackedTy _dc lin -> do
+                         -- We need to know the "region" of all the vars (and locations) pattern matched by this case expresssion.
+                         -- The "region" is the same as that of the case scrutinee.
+                         reg <- getRegion e constrs lin
+                         ensureMatchCases ddfs exp ty brs
+                         (tys,tstate') <- tcCases ddfs env funs constrs regs tstate lin reg brs
+                         foldM_ (ensureEqualTyModCursor exp) (tys !! 0) (tail tys)
+                         return (tys !! 0,tstate')
+                 _ -> error ("Expected packed type, got " ++ show ty)
 
       DataConE l dc es -> do
                let dcty = getTyOfDataCon ddfs dc
@@ -407,54 +409,43 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                return (ty,tstate)
 
       Ext (LetLocE v c e) -> do
-
-               case c of
-                 StartOfLE r -> do
-
-                          ensureRegion exp r regs
-                          absentStart exp constrs r
-                          let tstate1 = extendTS v (Output,False) tstatein
-                          let constrs1 = extendConstrs (StartOfC v r) $
-                                         extendConstrs (InRegionC v r) constrs
-                          (ty,tstate2) <- tcExp ddfs env funs constrs1 regs tstate1 e
-                          tstate3 <- removeLoc exp tstate2 v
-                          return (ty,tstate3)
-
-                 AfterConstantLE i l1 -> do
-
-                          r <- getRegion exp constrs l1
-                          let tstate1 = extendTS v (Output,True) $ setAfter l1 tstatein
-                          let constrs1 = extendConstrs (InRegionC v r) $
-                                         extendConstrs (AfterConstantC i l1 v) constrs
-                          (ty,tstate2) <- tcExp ddfs env funs constrs1 regs tstate1 e
-                          tstate3 <- removeLoc exp tstate2 v
-                          return (ty,tstate3)
-
-                 AfterVariableLE x l1 -> do
-
-                          r <- getRegion exp constrs l1
-                          (_xty,tstate1) <- tcExp ddfs env funs constrs regs tstatein $ L NoLoc $ VarE x
-                          -- NOTE: We now allow aliases (offsets) from scalar vars too. So we can leave out this check
-                          -- ensurePackedLoc exp xty l1
-                          let tstate2 = extendTS v (Output,True) $ setAfter l1 tstate1
-                          let constrs1 = extendConstrs (InRegionC v r) $
-                                         extendConstrs (AfterVariableC x l1 v) constrs
-                          (ty,tstate3) <- tcExp ddfs env funs constrs1 regs tstate2 e
-                          tstate4 <- removeLoc exp tstate3 v
-                          return (ty,tstate4)
-
-                 FromEndLE _l1 -> do
-                   -- TODO: This is the bare minimum which gets the examples typechecking again.
-                   -- Need to figure out if we need to check more things here
-                   (ty,tstate1) <- tcExp ddfs env funs constrs regs tstatein e
-                   return (ty,tstate1)
-
-                 FreeLE -> do
-                   let constrs1 = extendConstrs (InRegionC v globalReg) $ constrs
-                   (ty,tstate1) <- tcExp ddfs env funs constrs1 regs tstatein e
-                   return (ty,tstate1)
-
-                 _ -> throwError $ GenericTC "Invalid letloc form" exp
+              let env' = extendVEnv v CursorTy env
+              case c of
+                StartOfLE r ->
+                    do ensureRegion exp r regs
+                       absentStart exp constrs r
+                       let tstate1 = extendTS v (Output,False) tstatein
+                       let constrs1 = extendConstrs (StartOfC v r) $ extendConstrs (InRegionC v r) constrs
+                       (ty,tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
+                       tstate3 <- removeLoc exp tstate2 v
+                       return (ty,tstate3)
+                AfterConstantLE i l1 ->
+                     do r <- getRegion exp constrs l1
+                        let tstate1 = extendTS v (Output,True) $ setAfter l1 tstatein
+                        let constrs1 = extendConstrs (InRegionC v r) $ extendConstrs (AfterConstantC i l1 v) constrs
+                        (ty,tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
+                        tstate3 <- removeLoc exp tstate2 v
+                        return (ty,tstate3)
+                AfterVariableLE x l1 ->
+                    do r <- getRegion exp constrs l1
+                       (_xty,tstate1) <- tcExp ddfs env funs constrs regs tstatein $ L NoLoc $ VarE x
+                       -- NOTE: We now allow aliases (offsets) from scalar vars too. So we can leave out this check
+                       -- ensurePackedLoc exp xty l1
+                       let tstate2 = extendTS v (Output,True) $ setAfter l1 tstate1
+                       let constrs1 = extendConstrs (InRegionC v r) $ extendConstrs (AfterVariableC x l1 v) constrs
+                       (ty,tstate3) <- tcExp ddfs env' funs constrs1 regs tstate2 e
+                       tstate4 <- removeLoc exp tstate3 v
+                       return (ty,tstate4)
+                FromEndLE _l1 ->
+                    do -- TODO: This is the bare minimum which gets the examples typechecking again.
+                       -- Need to figure out if we need to check more things here
+                      (ty,tstate1) <- tcExp ddfs env' funs constrs regs tstatein e
+                      return (ty,tstate1)
+                FreeLE ->
+                    do let constrs1 = extendConstrs (InRegionC v globalReg) $ constrs
+                       (ty,tstate1) <- tcExp ddfs env' funs constrs1 regs tstatein e
+                       return (ty,tstate1)
+                _ -> throwError $ GenericTC "Invalid letloc form" exp
 
       Ext (RetE _ls v) -> do
 
@@ -672,6 +663,11 @@ ensureEqualTy :: Exp -> Ty2 -> Ty2 -> TcM Ty2
 ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
                                          ++ (show a) ++ ", " ++ (show b)) a b
 
+ensureEqualTyModCursor :: Exp -> Ty2 -> Ty2 -> TcM Ty2
+ensureEqualTyModCursor _exp CursorTy (PackedTy _ _) = return CursorTy
+ensureEqualTyModCursor _exp (PackedTy _ _) CursorTy = return CursorTy
+ensureEqualTyModCursor exp a b = ensureEqualTy exp a b
+
 -- | Ensure that two types are equal, ignoring the locations if they are packed.
 -- Includes an expression for error reporting.
 ensureEqualTyNoLoc :: Exp -> Ty2 -> Ty2 -> TcM Ty2
@@ -693,7 +689,7 @@ ensureEqualTyNoLoc exp ty1 ty2 =
               Left err -> throwError err
               Right _  -> return ()
         return ty1
-    _ -> ensureEqualTy exp ty1 ty2
+    _ -> ensureEqualTyModCursor exp ty1 ty2
 
 
 -- | Ensure that match cases make sense.
