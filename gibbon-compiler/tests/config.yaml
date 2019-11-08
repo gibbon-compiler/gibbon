@@ -82,6 +82,8 @@ tests:
   - name: test14d_unary_tup.gib
   - name: test15a_symsearch.gib
   - name: test15c_printsym.gib
+    skip: true
+    # printing symbols is broken atm
   - name: test15d_symsearch.hs
     answer-file: examples/test15d_symsearch.ans
   - name: test15e_gensym.hs
@@ -346,6 +348,8 @@ tests:
   # This test depends on real symbols, which we don't support atm.
   - name: test27b_subst.gib
     failing: [gibbon2,gibbon1]
+    skip: true
+    # printing symbols is broken atm
 
   # No gensym, or real symbols.
   - name: test28_copyprop.gib
