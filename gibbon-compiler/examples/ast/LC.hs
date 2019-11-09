@@ -14,6 +14,8 @@ module LC where
 
 -- Lambda calculus with inteter arithmetic
 
+--------------------------------------------------------------------------------
+-- Grammar
 
 data Val = IntV Int
          | LamV IntJ Exp
@@ -54,16 +56,51 @@ isEquelHelper  b a'  =
     ZeroJ -> FBool
     SuccJ b' -> isEquel a' b'
 
-isTrue :: BoolJ -> Bool
-isTrue b =
-  case b of
-    TBool -> True
-    FBool -> False
+plusJ :: IntJ -> IntJ -> IntJ
+plusJ i j =
+  case i of
+    ZeroJ   -> j
+    SuccJ k -> SuccJ (plusJ k j)
 
 data Symbol = A| B| C| D |E |F |G
 
 
+data Vars = ConsVars IntJ Vars | NilVars
+  deriving Show
 
+removeVar :: Vars -> IntJ -> Vars
+removeVar ls i =
+  case ls of
+    NilVars        -> NilVars
+    ConsVars j rst ->
+      let rst' = removeVar rst i
+      in removeVarHelper (isEquel i j) j rst'
+
+removeVarHelper :: BoolJ -> IntJ -> Vars -> Vars
+removeVarHelper b j ls =
+  case b of
+    TBool -> ls
+    FBool -> ConsVars j ls
+
+memqVar :: Vars -> IntJ -> BoolJ
+memqVar ls i =
+  case ls of
+    NilVars -> FBool
+    ConsVars j rst -> memqVarHelper (isEquel i j) rst i
+
+memqVarHelper :: BoolJ -> Vars -> IntJ -> BoolJ
+memqVarHelper b ls i =
+  case b of
+    TBool -> TBool
+    FBool -> memqVar ls i
+
+appendVars :: Vars -> Vars -> Vars
+appendVars xs ys =
+  case xs of
+    NilVars -> ys
+    ConsVars x rst -> ConsVars x (appendVars rst ys)
+
+--------------------------------------------------------------------------------
 -- Interpreter
 
 interpExp :: Exp -> Val
@@ -90,33 +127,102 @@ interpPlus v e2 =
       IntV i -> addN (interpExp e2) i
       ErrorV -> ErrorV
 
-substExpHelper1 :: BoolJ -> IntJ -> IntJ -> Exp -> Exp -> Exp
-substExpHelper1  b s from e1 to =
-  case (b) of
-    TBool -> LamE s e1
-    FBool -> LamE s (substExp  e1 from to )
+--------------------------------------------------------------------------------
+-- Substitution
+
+freeVars' :: Exp -> Vars -> Vars
+freeVars' e acc =
+  case e of
+    LamE s e1  ->
+      let fv_e1 = freeVars' e1 acc
+      in appendVars (removeVar fv_e1 s) acc
+    AppE e1 e2 ->
+      let fv_e1 = freeVars' e1 acc
+          fv_e2 = freeVars' e2 acc
+      in appendVars (appendVars fv_e1 fv_e2) acc
+    VarE s -> ConsVars s acc
+    LitE _ -> acc
+    PlusE e1 e2 ->
+      let fv_e1 = freeVars' e1 acc
+          fv_e2 = freeVars' e2 acc
+      in appendVars (appendVars fv_e1 fv_e2) acc
+    LetE s e1 e2 ->
+      let fv_e1 = freeVars' e1 acc
+          fv_e2 = freeVars' e2 acc
+      in appendVars (appendVars fv_e1 (removeVar fv_e2 s)) acc
+
+freeVars :: Exp -> Vars
+freeVars e = freeVars' e NilVars
+
+-- A lame gensym which walks over an expression and returns a variable which
+-- is *fresh* in that expression.
+gensym' :: Exp -> IntJ -> IntJ
+gensym' e acc =
+  case e of
+    -- SuccJ works around 0+0=0
+    LamE s e1  -> gensym' e1 (SuccJ (plusJ s acc))
+    AppE e1 e2 ->
+      let w = gensym' e1 acc
+      in gensym' e2 w
+    VarE s -> SuccJ (plusJ s acc)
+    LitE _ -> acc
+    PlusE e1 e2 ->
+      let w = gensym' e1 acc
+      in gensym' e2 w
+    LetE s e1 e2 ->
+      let w = gensym' e1 acc
+      in gensym' e2 (SuccJ (plusJ s w))
+
+substLamExp1 :: BoolJ -> IntJ -> IntJ -> Exp -> Exp -> Exp
+substLamExp1 b y from e1 to =
+  case b of
+    TBool -> LamE y e1
+    FBool -> substLamExp2 (memqVar (freeVars to) y) y from e1 to
+
+substLamExp2 :: BoolJ -> IntJ -> IntJ -> Exp -> Exp -> Exp
+substLamExp2 b y from e1 to =
+  case b of
+    FBool -> LamE y (substExp e1 from to)
+    -- alpha rename the lambda expression before substituting
+    TBool ->
+      let z  = gensym' to ZeroJ
+          z1 = gensym' e1 z
+      in substExp (LamE z1 (substExp e1 y (VarE z1))) from to
 
 substExpHelper2 :: BoolJ -> Exp -> IntJ -> Exp
 substExpHelper2 b to s  =
-  case (b) of
+  case b of
       TBool -> to
       FBool -> VarE s
 
-substExpHelper3 :: BoolJ -> IntJ -> IntJ -> Exp -> Exp ->Exp->Exp
-substExpHelper3 b s from to e1 e2 =
-  case (b) of
-      TBool-> LetE s (substExp  e1 from to ) e2
-      FBool -> LetE s (substExp  e1 from to ) (substExp e2 from to )
+substLetExp1 :: BoolJ -> IntJ -> IntJ -> Exp -> Exp ->Exp->Exp
+substLetExp1 b y from to e1 e2 =
+  case b of
+      TBool -> LetE y (substExp e1 from to) e2
+      FBool ->
+        let e1' = (substExp e1 from to)
+        in substLetExp2 (memqVar (freeVars to) y) y from to e1' e2
 
+substLetExp2 :: BoolJ -> IntJ -> IntJ -> Exp -> Exp ->Exp->Exp
+substLetExp2 b y from to e1' e2 =
+  case b of
+    FBool -> LetE y e1' (substExp e2 from to)
+    -- alpha rename the let expression before substituting
+    TBool ->
+      let z  = gensym' to ZeroJ
+          z1 = gensym' e2 z
+      in substExp (LetE z1 e1' (substExp e2 y (VarE z1))) from to
+
+-- Substitute an expression in place of a variable
 substExp :: Exp -> IntJ -> Exp -> Exp
 substExp e from to  =
     case e of
-      LamE s e1 -> substExpHelper1 (isEquel from s) s from e1 to
+      LamE y e1 -> substLamExp1 (isEquel from y) y from e1 to
       AppE e1 e2 -> AppE (substExp e1 from to ) (substExp e2 from to )
       VarE s -> substExpHelper2 (isEquel from s) to s
       LitE i -> LitE i
       PlusE e1 e2 -> PlusE (substExp e1 from to ) (substExp e2 from to )
-      LetE s e1 e2 ->  substExpHelper3  (isEquel from s) s from to e1 e2
+      LetE y e1 e2 -> substLetExp1 (isEquel from y) y from to e1 e2
 
 addN :: Val ->Int  -> Val
 addN v i1  =
@@ -124,6 +230,18 @@ addN v i1  =
       LamV s e1 -> ErrorV
       IntV i2 -> IntV (i1 + i2)
       ErrorV -> ErrorV
+{-
+
+testSubst1 :: Exp
+testSubst1 = substExp (LamE varA (VarE varC)) varC (VarE varA)
+
+testSubst2 :: Exp
+testSubst2 = substExp (LamE varA (VarE varA)) varC (VarE varB)
+
+testSubst3 :: Exp
+testSubst3 = substExp (LetE varA (LitE 10) (VarE varC)) varC (VarE varA)
+
+-}
 
 --------------------------------------------------------------------------------
 -- Constant propogation
@@ -184,41 +302,6 @@ plPlusInner e2 i =
 
 --------------------------------------------------------------------------------
 -- Dead code elimination
-
-data Vars = ConsVars IntJ Vars | NilVars
-  deriving Show
-
-removeVar :: Vars -> IntJ -> Vars
-removeVar ls i =
-  case ls of
-    NilVars        -> NilVars
-    ConsVars j rst ->
-      let rst' = removeVar rst i
-      in removeVarHelper (isEquel i j) j rst'
-
-removeVarHelper :: BoolJ -> IntJ -> Vars -> Vars
-removeVarHelper b j ls =
-  case b of
-    TBool -> ls
-    FBool -> ConsVars j ls
-
-memqVar :: Vars -> IntJ -> BoolJ
-memqVar ls i =
-  case ls of
-    NilVars -> FBool
-    ConsVars j rst -> memqVarHelper (isEquel i j) rst i
-
-memqVarHelper :: BoolJ -> Vars -> IntJ -> BoolJ
-memqVarHelper b ls i =
-  case b of
-    TBool -> TBool
-    FBool -> memqVar ls i
-
-appendVars :: Vars -> Vars -> Vars
-appendVars xs ys =
-  case xs of
-    NilVars -> ys
-    ConsVars x rst -> ConsVars x (appendVars rst ys)
 
 data ExpVars = ExpVars Exp Vars
   deriving Show
@@ -290,7 +373,7 @@ elimDeadBindings e =
 {-
 
 testElimDeadBindings :: Exp
-testElimDeadBindings =
+testElimDeadBindings = elimDeadBindings $
   LetE varA (LamE varC (PlusE (VarE varC) (LitE 10))) $
   LetE varB (AppE (VarE varA) (LitE 20)) $
   LetE varD (LamE varC (PlusE (VarE varC) (LitE 100))) $
