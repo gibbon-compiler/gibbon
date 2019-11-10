@@ -364,11 +364,33 @@ elimDeadBindingsLet' b v rhs vs bod ws acc =
     FBool -> ExpVars bod (appendVars ws acc)
     TBool -> ExpVars (LetE v rhs bod) (appendVars (appendVars vs ws) acc)
 
+elimDeadBindings_helper :: ExpVars -> Exp
+elimDeadBindings_helper evs =
+ case evs of
+        ExpVars e2 vs -> e2
+
 elimDeadBindings :: Exp -> Exp
 elimDeadBindings e =
-  let evs = elimDeadBindings' e NilVars in
-  case evs of
-    ExpVars e2 vs -> e2
+ case e of
+    LamE v bod ->
+     let evs = elimDeadBindings' e NilVars in
+     elimDeadBindings_helper evs
+    AppE a b ->
+      let evs = elimDeadBindings' e NilVars in
+      elimDeadBindings_helper evs
+    VarE v ->
+      let evs = elimDeadBindings' e NilVars in
+      elimDeadBindings_helper evs
+    LitE i ->
+      let evs = elimDeadBindings' e NilVars in
+      elimDeadBindings_helper evs
+    PlusE a b ->
+      let evs = elimDeadBindings' e NilVars in
+      elimDeadBindings_helper evs
+    LetE v rhs bod ->
+      let evs = elimDeadBindings' e NilVars in
+      elimDeadBindings_helper evs
+
 
 {-
 
