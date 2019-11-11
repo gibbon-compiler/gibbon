@@ -22,6 +22,8 @@ lvl = 5
 
 type FunEnv2 = M.Map Var ArrowTy2
 
+type Deps = M.Map LocVar LocVar
+
 locsEffect :: [LocVar] -> Set Effect
 locsEffect = S.fromList . L.map Traverse
 
@@ -51,7 +53,7 @@ inferEffects prg@Prog{ddefs,fundefs} = do
        let funtys = M.map (inferFunDef ddefs fenv) funs
        in
          if fenv == funtys
-         then dbgTrace 4 ("\n<== Fixpoint completed after iteration "++show iter++" ==>") $ fenv
+         then dbgTrace lvl ("\n<== Fixpoint completed after iteration "++show iter++" ==>") $ fenv
          else fixpoint (iter+1) funs funtys
 
 
@@ -60,11 +62,11 @@ inferFunDef ddfs fenv FunDef{funArgs,funBody,funTy} = funTy { arrEffs = S.inters
   where
     env0  = M.fromList $ zip funArgs (arrIns funTy)
     travs = S.fromList $ L.map Traverse $ inLocVars funTy
-    (eff,_outLoc) = inferExp ddfs fenv env0 funBody
+    (eff,_outLoc) = inferExp ddfs fenv env0 M.empty funBody
 
 
-inferExp :: DDefs Ty2 -> FunEnv2 -> TyEnv Ty2 -> L Exp2 -> (Set Effect, Maybe LocVar)
-inferExp ddfs fenv env (L _p expr) =
+inferExp :: DDefs Ty2 -> FunEnv2 -> TyEnv Ty2 -> Deps -> L Exp2 -> (Set Effect, Maybe LocVar)
+inferExp ddfs fenv env dps (L _p expr) =
   case expr of
     -- QUESTION: does a variable reference count as traversing to the end?
     -- If so, the identity function has the traverse effect.
@@ -90,16 +92,16 @@ inferExp ddfs fenv env (L _p expr) =
 
     -- TODO: what would _locs have here ?
     LetE (v,_locs,ty,rhs) bod ->
-      let (effRhs,_rhsLoc) = inferExp ddfs fenv env rhs
+      let (effRhs,_rhsLoc) = inferExp ddfs fenv env dps rhs
           -- TODO: extend env with rhsLoc ? or _locs ?
-          (effBod,bLoc) = inferExp ddfs fenv (M.insert v ty env) bod
+          (effBod,bLoc) = inferExp ddfs fenv (M.insert v ty env) dps bod
       in (S.union effRhs effBod, bLoc)
 
     -- TODO: do we need to join locC and locA
     IfE tst consq alt ->
-      let (effT,_locT) = inferExp ddfs fenv env tst
-          (effC,locC) = inferExp ddfs fenv env consq
-          (effA,locA) = inferExp ddfs fenv env alt
+      let (effT,_locT) = inferExp ddfs fenv env dps tst
+          (effC,locC) = inferExp ddfs fenv env dps consq
+          (effA,locA) = inferExp ddfs fenv env dps alt
           loc = case (locC,locA) of
                   (Nothing,Nothing)  -> Nothing
                   (Just l', Nothing) -> Just l'
@@ -109,19 +111,19 @@ inferExp ddfs fenv env (L _p expr) =
 
     -- ignore locations, won't have any effect on the generated effects. ??
     MkProdE ls ->
-      let (effs, _locs) = unzip $ L.map (inferExp ddfs fenv env) ls
+      let (effs, _locs) = unzip $ L.map (inferExp ddfs fenv env dps) ls
       in (S.unions effs, Nothing)
 
-    SpawnE _ fn locs args -> inferExp ddfs fenv env (l$ AppE fn locs args)
+    SpawnE _ fn locs args -> inferExp ddfs fenv env dps (l$ AppE fn locs args)
 
     SyncE -> (S.empty, Nothing)
 
     ProjE _n e ->
-      let (eff, _loc) = inferExp ddfs fenv env e
+      let (eff, _loc) = inferExp ddfs fenv env dps e
       in (eff, Nothing)
 
     CaseE e mp ->
-      let (eff,loc1) = inferExp ddfs fenv env e
+      let (eff,loc1) = inferExp ddfs fenv env dps e
           (bools,effsLocs) = unzip $ L.map caserhs mp
           (effs,_) = unzip effsLocs
 
@@ -143,12 +145,12 @@ inferExp ddfs fenv env (L _p expr) =
     -- output values, so they are not interesting for this effect analysis.
     DataConE _loc _dcon es -> assertTrivs es (S.empty, Nothing)
 
-    TimeIt e _ _ -> inferExp ddfs fenv env e
+    TimeIt e _ _ -> inferExp ddfs fenv env dps e
 
-    WithArenaE v e -> inferExp ddfs fenv env e
+    WithArenaE _v e -> inferExp ddfs fenv env dps e
 
-    Ext (LetRegionE _ rhs) -> inferExp ddfs fenv env rhs
-    Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env rhs
+    Ext (LetRegionE _ rhs) -> inferExp ddfs fenv env dps rhs
+    Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env dps rhs
     Ext (RetE _ _)         -> (S.empty, Nothing)
     Ext (FromEndE _ )      -> (S.empty, Nothing)
     Ext (IndirectionE{})   -> (S.empty, Nothing)
@@ -163,7 +165,7 @@ inferExp ddfs fenv env (L _p expr) =
 
     caserhs :: (DataCon, [(Var,LocVar)], L Exp2) -> (Bool, (Set Effect, Maybe LocVar))
     -- We've gotten "to the end" of a nullary constructor just by matching it:
-    caserhs (_dcon,[],e) = ( True , inferExp ddfs fenv env e )
+    caserhs (_dcon,[],e) = ( True , inferExp ddfs fenv env dps e )
     caserhs (dcon,patVs,e) =
       let (vars,locs) = L.unzip patVs
           tys    = lookupDataCon ddfs dcon
@@ -176,7 +178,13 @@ inferExp ddfs fenv env (L _p expr) =
 
           packedOnly = L.filter (\(_,t) -> hasPacked t) zipped
 
-          (eff,_) = inferExp ddfs fenv env' e
+          makeDps [] = dps
+          makeDps [_] = dps
+          makeDps (v:v':vs) = M.insert v v' (makeDps vs)
+
+          dps' = makeDps (reverse $ L.map snd patVs)
+
+          (eff,_) = inferExp ddfs fenv env' dps' e
           winner = -- If there is NO packed child data, then our object has static size:
                    (L.all (not . hasPacked) tys) ||
 
