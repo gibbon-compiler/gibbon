@@ -290,30 +290,45 @@ tests:
 
   ## Fusion2 tests
   - name: test_sumup_seteven.gib
+    dir: examples/fusion-benchmarks
     failing: [gibbon1, gibbon2]
     test-flags: ["--fusion"]
 
   - name: render_tree.hs
+    dir: examples/fusion-benchmarks
     failing: [gibbon1, gibbon2]
     test-flags: ["--fusion"]
-    answer-file: examples/render_tree.ans
+    answer-file: examples/fusion-benchmarks/render_tree.ans
 
   - name: render_tree_two_passes.hs
-    skip: true
+    dir: examples/fusion-benchmarks
+    failing: [gibbon1, gibbon2]
     test-flags: ["--fusion"]
-    answer-file: examples/render_tree_two_passes.ans
+    answer-file: examples/fusion-benchmarks/render_tree_two_passes.ans
+
+  - name: render_tree_four_passes.hs
+    dir: examples/fusion-benchmarks
+    failing: [gibbon1, gibbon2]
+    test-flags: ["--fusion"]
+    answer-file: examples/fusion-benchmarks/render_tree_four_passes.ans
+
+  - name: render_tree_five_passes.hs
+    dir: examples/fusion-benchmarks
+    failing: [gibbon1, gibbon2]
+    test-flags: ["--fusion"]
+    answer-file: examples/fusion-benchmarks/render_tree_five_passes.ans
+
+  - name: LC.hs
+    dir: examples/fusion-benchmarks
+    failing: [gibbon1, gibbon2]
+    # gibbon2: segfaults in free_region
+    answer-file: examples/fusion-benchmarks/LC.ans
 
   ## AST benchmarks
   - name: C1.hs
     dir: examples/ast
     failing: [gibbon1, gibbon2]
     answer-file: examples/ast/C1.ans
-
-  - name: LC.hs
-    dir: examples/ast
-    failing: [gibbon1, gibbon2]
-    # gibbon2: segfaults in free_region
-    answer-file: examples/ast/LC.ans
 
   ## Tests that only work with some backend:
   - name: test06h_rec.gib
