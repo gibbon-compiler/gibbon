@@ -151,9 +151,6 @@ freeVars' e acc =
           fv_e2 = freeVars' e2 acc
       in appendVars (appendVars fv_e1 (removeVar fv_e2 s)) acc
 
-freeVars :: Exp -> Vars
-freeVars e = freeVars' e NilVars
-
 -- A lame gensym which walks over an expression and returns a variable which
 -- is *fresh* in that expression.
 gensym' :: Exp -> IntJ -> IntJ
@@ -177,7 +174,7 @@ substLamExp1 :: BoolJ -> IntJ -> IntJ -> Exp -> Exp -> Exp
 substLamExp1 b y from e1 to =
   case b of
     TBool -> LamE y e1
-    FBool -> substLamExp2 (memqVar (freeVars to) y) y from e1 to
+    FBool -> substLamExp2 (memqVar (freeVars' to NilVars) y) y from e1 to
 
 substLamExp2 :: BoolJ -> IntJ -> IntJ -> Exp -> Exp -> Exp
 substLamExp2 b y from e1 to =
@@ -201,7 +198,7 @@ substLetExp1 b y from to e1 e2 =
       TBool -> LetE y (substExp e1 from to) e2
       FBool ->
         let e1' = (substExp e1 from to)
-        in substLetExp2 (memqVar (freeVars to) y) y from to e1' e2
+        in substLetExp2 (memqVar (freeVars' to NilVars) y) y from to e1' e2
 
 substLetExp2 :: BoolJ -> IntJ -> IntJ -> Exp -> Exp ->Exp->Exp
 substLetExp2 b y from to e1' e2 =
@@ -364,6 +361,11 @@ elimDeadBindingsLet' b v rhs vs bod ws acc =
     FBool -> ExpVars bod (appendVars ws acc)
     TBool -> ExpVars (LetE v rhs bod) (appendVars (appendVars vs ws) acc)
 
+{-
+
+CK: Instead of writing elimDeadBindings like this, we could use elimDeadBindings'
+directly; `getExp (elimDeadBindings' e NilVars)`. Would this confuse the fusion analysis?
+
 elimDeadBindings_helper :: ExpVars -> Exp
 elimDeadBindings_helper evs =
  case evs of
@@ -391,6 +393,7 @@ elimDeadBindings e =
       let evs = elimDeadBindings' e NilVars in
       elimDeadBindings_helper evs
 
+-}
 
 {-
 
@@ -410,12 +413,12 @@ testElimDeadBindings = elimDeadBindings $
 desugarExp :: Exp -> Exp
 desugarExp e =
   case e of
-    LamE s e1 -> LamE s (ptExp e1)
-    AppE e1 e2 -> AppE (ptExp e1) (ptExp e2)
+    LamE s e1 -> LamE s (desugarExp e1)
+    AppE e1 e2 -> AppE (desugarExp e1) (desugarExp e2)
     VarE s -> VarE s
     LitE i -> LitE i
-    PlusE e1 e2 -> ptPlus (ptExp e1) (ptExp e2)
-    LetE s e1 e2 -> LetE s (ptExp e1) (ptExp e2)
+    PlusE e1 e2 -> ptPlus (desugarExp e1) (desugarExp e2)
+    LetE s e1 e2 -> LetE s (desugarExp e1) (desugarExp e2)
 
 
 --------------------------------------------------------------------------------
@@ -481,8 +484,8 @@ main =
   print $ diffUTCTime t2 t1
 -}
 
-gibbon_main = (eval (interpExp (elimDeadBindings (ptExp (constProp (buildLargeExp 1))))))
---  gibbon_main =  (interpExp (ptExp (constProp (buildLargeExp 100))))
+gibbon_main = (eval (interpExp (getExp (elimDeadBindings' (ptExp (constProp (buildLargeExp 1))) NilVars))))
+-- gibbon_main = (eval (interpExp (elimDeadBindings (ptExp (constProp (buildLargeExp 1))))))
 
 -- main :: IO ()
 -- main = do
