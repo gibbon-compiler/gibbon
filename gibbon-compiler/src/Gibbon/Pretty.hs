@@ -65,10 +65,12 @@ instance HasPretty ex => Pretty (Prog ex) where
 
 renderMain :: Bool -> Doc -> Doc -> Doc
 renderMain has_bench m ty =
-  (if has_bench
-   then text "gibbon_main" <+> doublecolon <+> "IO ()"
-   else text "gibbon_main" <+> doublecolon <+> ty) $+$
-  text "gibbon_main" <+> equals <+> text "do" $$ nest indentLevel m
+  if has_bench
+  then (text "gibbon_main" <+> doublecolon <+> "IO ()" $+$
+        text "gibbon_main" <+> equals <+> text "do" $$ nest indentLevel m)
+  else (text "gibbon_main" <+> doublecolon <+> ty $+$
+        text "gibbon_main" <+> equals <+> nest indentLevel m)
+
 
 -- Things we need to make this a valid compilation unit for GHC:
 ghc_compat_prefix, ghc_compat_suffix :: Bool -> Doc
@@ -97,13 +99,15 @@ ghc_compat_prefix has_bench =
          text "import GHC.Generics" $+$
          text "import System.Mem (performMajorGC)" $+$
          text "import Data.Time.Clock (getCurrentTime, diffUTCTime)" $+$
+         text "import Prelude as P ( (.), return )" $+$
          text "" $+$
          text "gibbon_bench :: (NFData a, NFData b) => String -> (a -> b) -> a -> IO ()" $+$
          text "gibbon_bench str fn arg = benchmark (nf fn (force arg))" $+$
          text "" $+$
          text "")
-   else (text "gibbon_bench :: String -> (a -> b) -> a -> IO ()" $+$
-         text "gibbon_bench _str fn arg = fn arg")) $+$
+   else (text "gibbon_bench :: String -> (a -> b) -> a -> b" $+$
+         text "gibbon_bench _str fn arg = fn arg" $+$
+         text "" $+$ empty)) $+$
   text "type Sym = String" $+$
   text "" $+$
   text "type Dict a = [(Sym,a)]" $+$

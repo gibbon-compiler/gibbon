@@ -11,7 +11,7 @@
          sym-append
 
          time + * - div mod < > <= >= rand exp
-         size-param iterate
+         size-param iterate bench
 
          fl- fl+ fl* fl/ flsqrt fl> fl< flsqrt
 
@@ -137,6 +137,14 @@ lit := int | #t | #f
     ;; RRN: This causes problems, and it only really makes sense if
     ;; time is the "iterate" function as well.
     ; (printf "BATCHTIME: ~a\n" (/ (exact->inexact real) 1000.0))
+    (printf "SELFTIMED: ~a\n" (/ (exact->inexact real) 1000.0))
+    (match ls
+      [(list x) x])))
+
+;; [2019.11.12] CK: This could be wrong. But it's sufficient for now;
+;; 'bench' isn't used that much.
+(define-syntax-rule (bench fn e)
+  (let-values ([(ls cpu real gc) (time-apply (lambda () (fn e)) '())])
     (printf "SELFTIMED: ~a\n" (/ (exact->inexact real) 1000.0))
     (match ls
       [(list x) x])))
@@ -268,16 +276,16 @@ lit := int | #t | #f
 
 ;; [2019.02.17] CSK: This breaks countnodes_racket.rkt. Temporary, I don't know how to fix this atm.
 ;;
- (match (current-command-line-arguments)
-   [(vector s i) (size-param  (cast (string->number s) Int))
-                 (iters-param (cast (string->number i) Integer))
-                 ;(printf "SIZE: ~a\n" (size-param))
-                 #;(printf "ITERS: ~a\n" (iters-param))]
-   [(vector s)   (size-param  (cast (string->number s) Int))
-                 #;(printf "SIZE: ~a\n" (size-param))]
-   [(vector)     (void)]
-   [args (error (format "Usage error.\nExpected 0-2 optional command line arguments <size> <iters>, got ~a:\n  ~a"
-                        (vector-length args) args))])
+(match (current-command-line-arguments)
+  [(vector s i) (size-param  (cast (string->number s) Int))
+                (iters-param (cast (string->number i) Integer))
+                ;(printf "SIZE: ~a\n" (size-param))
+                #;(printf "ITERS: ~a\n" (iters-param))]
+  [(vector s)   (size-param  (cast (string->number s) Int))
+                #;(printf "SIZE: ~a\n" (size-param))]
+  [(vector)     (void)]
+  [args (error (format "Usage error.\nExpected 0-2 optional command line arguments <size> <iters>, got ~a:\n  ~a"
+                       (vector-length args) args))])
 
 (module reader syntax/module-reader
   gibbon)
