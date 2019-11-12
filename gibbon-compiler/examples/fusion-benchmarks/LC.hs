@@ -28,9 +28,12 @@ data Exp = LamE IntJ Exp
          | LitE Int
          | PlusE Exp Exp
          | LetE IntJ Exp Exp
+         -- So that we can write a fake desugaring pass
+         | IncrE Exp
+         | LetStarE Binds Exp
   deriving Show
 
-data Binds = NilBinds | ConsBinds Int Exp Binds
+data Binds = NilBinds | ConsBinds IntJ Exp Binds
   deriving Show
 
 data IntJ = ZeroJ | SuccJ IntJ
@@ -112,6 +115,9 @@ interpExp e =
       LitE i -> IntV i
       PlusE e1 e2 -> interpPlus  (interpExp e1) e2
       LetE s e1 e2 -> interpExp (substExp e2 s e1)
+      -- Should be desugared into simple expressions
+      IncrE _ -> ErrorV
+      LetStarE _ _ -> ErrorV
 
 interpApp :: Val -> Exp -> Val
 interpApp v e2 =
@@ -150,6 +156,9 @@ freeVars' e acc =
       let fv_e1 = freeVars' e1 acc
           fv_e2 = freeVars' e2 acc
       in appendVars (appendVars fv_e1 (removeVar fv_e2 s)) acc
+    -- Should be desugared into simple expressions
+    IncrE _ -> acc
+    LetStarE _ _ -> acc
 
 -- A lame gensym which walks over an expression and returns a variable which
 -- is *fresh* in that expression.
@@ -169,6 +178,9 @@ gensym' e acc =
     LetE s e1 e2 ->
       let w = gensym' e1 acc
       in gensym' e2 (SuccJ (plusJ s w))
+    -- Should be desugared into simple expressions
+    IncrE _ -> acc
+    LetStarE _ _ -> acc
 
 substLamExp1 :: BoolJ -> IntJ -> IntJ -> Exp -> Exp -> Exp
 substLamExp1 b y from e1 to =
@@ -220,6 +232,9 @@ substExp e from to  =
       LitE i -> LitE i
       PlusE e1 e2 -> PlusE (substExp e1 from to ) (substExp e2 from to )
       LetE y e1 e2 -> substLetExp1 (isEquel from y) y from to e1 e2
+      -- Should be desugared into simple expressions
+      IncrE _ -> e
+      LetStarE _ _ -> e
 
 addN :: Val ->Int  -> Val
 addN v i1  =
@@ -252,6 +267,9 @@ constProp e =
       LitE i -> LitE i
       PlusE e1 e2 -> PlusE (constProp e1) (constProp e2)
       LetE s e1 e2 -> constPropLet  e1 e2 s
+      -- Should be desugared into simple expressions
+      IncrE _ -> e
+      LetStarE _ _ -> e
 
 
 constPropLet :: Exp -> Exp -> IntJ-> Exp
@@ -263,6 +281,9 @@ constPropLet e1 e2 s  =
       LitE i -> substExp e2 s (LitE i)
       PlusE e1 e2 -> PlusE (constProp e1) (constProp e2)
       LetE sl el1 el2 -> LetE s (constPropLet  el1 el2 sl) (constProp e2)
+      -- Should be desugared into simple expressions
+      IncrE _ -> e1
+      LetStarE _ _ -> e1
 
 --------------------------------------------------------------------------------
 -- Partial evaluation of plus
@@ -275,6 +296,9 @@ ptExp e =
       LitE i -> LitE i
       PlusE e1 e2 -> ptPlus (ptExp e1) (ptExp e2)
       LetE s e1 e2 -> LetE s (ptExp e1) (ptExp e2)
+      -- Should be desugared into simple expressions
+      IncrE _ -> e
+      LetStarE _ _ -> e
 
 
 ptPlus :: Exp -> Exp -> Exp
@@ -286,6 +310,9 @@ ptPlus e1 e2 =
       LitE i -> plPlusInner  e2 i
       PlusE ep1 ep2 -> PlusE (PlusE   ep1 ep2) e2
       LetE s el1 el2 -> PlusE (LetE   s el1 el2) e2
+      -- Should be desugared into simple expressions
+      IncrE _ -> e1
+      LetStarE _ _ -> e1
 
 plPlusInner ::   Exp ->Int-> Exp
 plPlusInner e2 i =
@@ -296,6 +323,9 @@ plPlusInner e2 i =
       LitE i2 -> LitE (i + i2)
       PlusE ep1 ep2 -> PlusE (LitE  i) (PlusE ep1 ep2)
       LetE s el1 el2 -> PlusE (LitE  i) (LetE s el1 el2)
+      -- Should be desugared into simple expressions
+      IncrE _ -> e2
+      LetStarE _ _ -> e2
 
 --------------------------------------------------------------------------------
 -- Dead code elimination
@@ -353,6 +383,10 @@ elimDeadBindings' e acc =
           ws     = getVars wsbod'
           bod'   = getExp wsbod'
       in elimDeadBindingsLet' (memqVar ws v) v rhs' vs bod' ws acc
+
+    -- Should be desugared into simple expressions
+    IncrE _ -> ExpVars e acc
+    LetStarE _ _ -> ExpVars e acc
 
 elimDeadBindingsLet' :: BoolJ -> IntJ -> Exp -> Vars -> Exp -> Vars -> Vars -> ExpVars
 elimDeadBindingsLet' b v rhs vs bod ws acc =
@@ -419,7 +453,24 @@ desugarExp e =
     LitE i -> LitE i
     PlusE e1 e2 -> ptPlus (desugarExp e1) (desugarExp e2)
     LetE s e1 e2 -> LetE s (desugarExp e1) (desugarExp e2)
+    -- Should be desugared into simple expressions
+    IncrE e1 -> PlusE (LitE 1) e1
+    LetStarE bnds bod -> desugarLetStar bnds bod
 
+desugarLetStar :: Binds -> Exp -> Exp
+desugarLetStar bnds bod =
+  case bnds of
+    NilBinds -> desugarExp bod
+    ConsBinds v rhs rst ->
+      LetE v (desugarExp rhs) (desugarLetStar rst bod)
+
+{-
+
+testDesugar :: Exp
+testDesugar = desugarExp $
+  LetStarE (ConsBinds varA (LitE 10) (ConsBinds varB (LitE 20) NilBinds)) (VarE varA)
+
+-}
 
 --------------------------------------------------------------------------------
 

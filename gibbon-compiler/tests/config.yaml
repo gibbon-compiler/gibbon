@@ -321,6 +321,7 @@ tests:
   - name: LC.hs
     dir: examples/fusion-benchmarks
     failing: [gibbon1, gibbon2]
+    test-flags: ["--fusion"]
     # gibbon2: segfaults in free_region
     answer-file: examples/fusion-benchmarks/LC.ans
 
