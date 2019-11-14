@@ -535,7 +535,7 @@ main =
   print $ diffUTCTime t2 t1
 -}
 
-gibbon_main = (eval (interpExp (getExp (elimDeadBindings' (ptExp (constProp (buildLargeExp 1))) NilVars))))
+gibbon_main = (eval (interpExp (getExp (elimDeadBindings' (ptExp (constProp  (desugarExp(buildLargeExp 1)))) NilVars))))
 -- gibbon_main = (eval (interpExp (elimDeadBindings (ptExp (constProp (buildLargeExp 1))))))
 
 -- main :: IO ()
