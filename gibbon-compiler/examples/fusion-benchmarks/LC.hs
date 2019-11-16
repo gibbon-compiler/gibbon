@@ -1,10 +1,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 -- Substitution-based lambda calculus benchmark
 module LC where
 
 -- import Control.DeepSeq
 -- import Data.Time.Clock
+import System.Random
+
 --import Helpers
 
 -- anything thing other than the last constuctor should be in a function call
@@ -37,7 +40,7 @@ data Binds = NilBinds | ConsBinds IntJ Exp Binds
   deriving Show
 
 data IntJ = ZeroJ | SuccJ IntJ
-  deriving Show
+  deriving (Show, Eq)
 
 data BoolJ = TBool | FBool
   deriving Show
@@ -132,6 +135,13 @@ interpPlus v e2 =
       LamV s e -> ErrorV
       IntV i -> addN (interpExp e2) i
       ErrorV -> ErrorV
+
+eval :: Val -> Int
+eval v =
+    case v of
+      IntV i -> i
+      LamV s e -> -1
+      ErrorV -> -2
 
 --------------------------------------------------------------------------------
 -- Substitution
@@ -500,44 +510,129 @@ ex1 = (LetE (varA) (LitE 30)
                       (AppE (VarE (varB))
                             (PlusE (VarE (varA)) (LitE 2)))))
 
--- buildLargeExp :: Int -> Exp
--- buildLargeExp n =
---   if (n== 0 )
---     then
---        ex1
---     else
---       LetE (ZeroJ) ex1 (buildLargeExp (n-1))
-
 buildLargeExp :: Int -> Exp
 buildLargeExp n225 =
     let fltIf598 = n225 == 0 in
     if fltIf598
     then ex1
-    else    let fltPkd600   = ex1 in
+    else    let fltPkd600  = ex1 in
             let fltAppE602 = n225 - 1 in
             let fltPkd601 = buildLargeExp fltAppE602 in
             (PlusE fltPkd601 fltPkd601 )
 
+{-
 
-eval :: Val -> Int
-eval v =
-    case v of
-      IntV i -> i
-      LamV s e -> -1
-      ErrorV -> -2
+-- CK: This is in a comment because we don't want Gibbon to process it. After fusion runs,
+-- uncomment this and use it to run the benchmark.
+
+genRandomExp :: Int -> Exp
+genRandomExp max_depth =
+  fst $ genRandomExp' (mkStdGen max_depth) (fromIntegral max_depth) [] 0
+
+
+genRandomExp' :: RandomGen g => g -> Float -> [IntJ] -> Float -> (Exp, g)
+genRandomExp' g max_depth vars depth =
+   -- We've generated a big enough expression, terminate with a LitE or VarE
+  if depth > max_depth
+  then if vars == []
+       then (LitE 10, g)
+       else
+         let (m, g1) = randomR (0, length vars) g
+         in (VarE (vars !! m), g1)
+  else
+  -- The expression is too small. Generate a lot more LetE's and LetStarE's each with 0.5 probability
+  if depth <= max_depth * 0.8
+  then
+      let (m, g1) :: (Int, _) = randomR (0, 10) g in
+      if m < 6
+      then let (v, g2)  = gen_var g1
+               (rhs, g3) = genRandomExp' g2 max_depth vars (depth + 1)
+               (bod, g4) = genRandomExp' g3 max_depth vars (depth + 1)
+           in (LetE v rhs bod, g4)
+      else let (binds, vars1, g2) = gen_binds g1 max_depth vars depth
+               (bod, g3) = genRandomExp' g2 max_depth vars1 (depth + 1)
+           in (LetStarE binds bod, g3)
+  -- A distribution over different constructors of Exp
+  else
+    let (n, g1) :: (Int, _) = randomR (0, 50) g in
+    -- VarE
+    if n == 0
+    then (if vars == []
+          then (LitE 10, g1)
+          else (let (m, g2) = randomR (0, length vars) g1
+                in (VarE (vars !! m), g2)))
+    -- LitE
+    else if n == 1
+    then gen_ints g1
+    -- LetE
+    else if n > 1 && n < 20
+    then (let (v, g2) = gen_var g1
+              (rhs, g3) = genRandomExp' g2 max_depth vars (depth+1)
+              (bod, g4) = genRandomExp' g3 max_depth vars (depth+1)
+          in (LetE v rhs bod, g4))
+    -- LamE
+    else if n >= 20 && n < 30
+    then (let (v, g2) = gen_var g1
+              (bod, g3) = genRandomExp' g2 max_depth vars (depth+1)
+          in (LamE v bod, g3))
+    -- PlusE
+    else if n >= 30 && n < 35
+    then (let (a, g2) = gen_ints g1
+              (b, g3) = gen_ints g2
+          in (PlusE a b, g3))
+    -- IncrE
+    else if n >= 35 && n < 40
+    then (let (a, g2) = gen_ints g1
+          in (IncrE a, g2))
+    -- LetStarE
+    else (let (binds, vars1, g2) = gen_binds g1 max_depth vars depth
+              (bod, g3) = genRandomExp' g2 max_depth vars1 (depth + 1)
+          in (LetStarE binds bod, g3))
+  where
+    -- Generate small IntJ's
+    gen_var :: RandomGen g => g -> (IntJ, g)
+    gen_var g =
+        let (m, g1) = randomR (0, 15) g
+        in (int_to_intj m, g1)
+
+    gen_binds :: RandomGen g => g -> Float -> [IntJ] -> Float -> (Binds, [IntJ], g)
+    gen_binds g1 max_depth1 vars1 depth1 =
+        let (m, g2) :: (Int, _) = randomR (0, 10) g1 in
+        if m > 1 && m < 7
+        then
+            let (v, g3) = gen_var g2
+                (binds, vars2, g4) = gen_binds g3 max_depth1 vars1 (depth1+1)
+                (e, g5) = genRandomExp' g4 max_depth vars (depth1+1)
+            in (ConsBinds v e binds, (vars++vars2), g5)
+        else (NilBinds, vars, g1)
+
+    gen_ints :: RandomGen g => g -> (Exp, g)
+    gen_ints g =
+        let (m, g1) :: (Int, _) = randomR (0, 10) g
+            (n, g2) = randomR (0, 100) g1
+        in if (m < 6)
+           then (LitE n, g2)
+           else let (a, g3) = gen_ints g2
+                    (b, g4) = gen_ints g3
+                in (PlusE a b, g4)
+
+    int_to_intj :: Int -> IntJ
+    int_to_intj 0 = ZeroJ
+    int_to_intj n = SuccJ (int_to_intj (n-1))
+
+-}
+
+gibbon_main =
+    let e = buildLargeExp 1
+    in eval $ interpExp (getExp (elimDeadBindings' (ptExp (constProp (desugarExp e))) NilVars))
 
 {-
+
 main =
  do
   let fltAppE507 :: Exp = buildLargeExp 23
   t1 <- fltAppE507  `deepseq` getCurrentTime
   t2 <-  (gibbon_main fltAppE507) `deepseq` getCurrentTime
   print $ diffUTCTime t2 t1
+
 -}
-
-gibbon_main = (eval (interpExp (getExp (elimDeadBindings' (ptExp (constProp  (desugarExp(buildLargeExp 1)))) NilVars))))
--- gibbon_main = (eval (interpExp (elimDeadBindings (ptExp (constProp (buildLargeExp 1))))))
-
--- main :: IO ()
--- main = do
---   print (eval (interpExp (ptExp (constProp ex1))))

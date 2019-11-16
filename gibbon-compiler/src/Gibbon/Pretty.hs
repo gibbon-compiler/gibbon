@@ -88,7 +88,7 @@ ghc_compat_prefix has_bench =
   text "                    , Int, (+), (-), (*), quot, (<), (>), (<=), (>=), (^), mod" $+$
   text "                    , Bool(..), (||), (&&)" $+$
   text "                    , String, (++)" $+$
-  text "                    , Show, IO)" $+$
+  text "                    , Show, Eq, IO)" $+$
   text "" $+$
   text "import Data.Maybe (fromJust, isJust)" $+$
   text "" $+$
@@ -178,7 +178,7 @@ instance Pretty ex => Pretty (DDef ex) where
 
 
 -- Primitives
-instance (Pretty d, Ord d) => Pretty (Prim d) where
+instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
     pprintWithStyle sty pr =
         let renderPrim = M.fromList (map (\(a,b) -> (b,a)) (M.toList primMap))
         in case M.lookup pr renderPrim of
@@ -193,7 +193,9 @@ instance (Pretty d, Ord d) => Pretty (Prim d) where
                                       DictLookupP ty -> text "DictLookup" <> wty ty
                                       RequestEndOf   -> text "RequestEndOf"
                                       ErrorP str ty  -> text "ErrorP" <> wty ty <+> doubleQuotes (text str) <> space
-                                      _ -> error $ "pprint: Unknown primitive"
+                                      ReadPackedFile mb_fp tycon _ _ ->
+                                        text "readFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
+                                      _ -> error $ "pprint: Unknown primitive: " ++ show pr
                       PPHaskell  -> case pr of
                                       DictEmptyP _ty  -> text "dictEmpty"
                                       DictHasKeyP _ty -> text "dictHasKey"
@@ -201,7 +203,9 @@ instance (Pretty d, Ord d) => Pretty (Prim d) where
                                       DictLookupP _ty -> text "dictLookup"
                                       RequestEndOf   -> text "RequestEndOf"
                                       ErrorP str _ty -> text "error" <> doubleQuotes (text str)
-                                      _ -> error $ "pprint: Unknown primitive"
+                                      ReadPackedFile mb_fp tycon _ _ ->
+                                        text "readFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
+                                      _ -> error $ "pprint: Unknown primitive: " ++ show pr
               Just str -> text str
 
 
@@ -268,7 +272,7 @@ instance Pretty ArrowTy2 where
 -- Expressions
 
 -- CSK: Needs a better name.
-type HasPrettyToo e l d = (Ord d, Eq d, Pretty d, Pretty l, Pretty (e l d), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)))
+type HasPrettyToo e l d = (Show d, Ord d, Eq d, Pretty d, Pretty l, Pretty (e l d), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)))
 
 instance Pretty (PreExp e l d) => Pretty (L (PreExp e l d)) where
     pprintWithStyle sty (L _ e) = pprintWithStyle sty e
@@ -360,7 +364,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                                             vls))
                                <+> text "->" $+$ nest indentLevel (pprintWithStyle sty e)
 -- L1
-instance (Pretty l, Pretty d, Ord d) => Pretty (E1Ext l d) where
+instance (Pretty l, Pretty d, Ord d, Show d) => Pretty (E1Ext l d) where
     pprintWithStyle sty ext =
       case ext of
         BenchE fn tyapps args b -> text "gibbon_bench" <+> (doubleQuotes $ text "") <+> text (fromVar fn) <+>
