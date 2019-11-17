@@ -624,7 +624,7 @@ genRandomExp' g max_depth vars depth =
 
 gibbon_main =
     let e = buildLargeExp 1
-    in eval $ interpExp (getExp (elimDeadBindings' (ptExp (constProp (desugarExp e))) NilVars))
+    in eval (interpExp (getExp (elimDeadBindings' (ptExp (constProp (desugarExp e))) NilVars)))
 
 {-
 
