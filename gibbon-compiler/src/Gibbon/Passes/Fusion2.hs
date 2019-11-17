@@ -4,6 +4,7 @@
 
 module Gibbon.Passes.Fusion2 (fusion2) where
 import Prelude hiding (exp)
+import Control.Arrow ((&&&))
 
 import           Control.Exception
 import           Data.Loc
@@ -22,15 +23,31 @@ import Gibbon.Pretty
 import Gibbon.Common
 import Gibbon.Passes.Freshen (freshExp1)
 import Gibbon.L1.Syntax as L1
-import Data.Text  (breakOnAll, pack)
+import Data.Text  (breakOnAll, pack, splitOn)
 --------------------------------------------------------------------------------
 
-countFUS :: String -> Int
-countFUS str =  length $ breakOnAll (pack "FUS")  (pack str)
-      --  `debug1` ("opppa" L.++
-      --      (show str) L.++"\nress:\n"
-      --      L.++ (show (breakOnAll (pack str) (pack "FUS") ))
-      --       )
+-- countFUS :: String -> Int
+-- countFUS str =  length $ breakOnAll (pack "FUS")  (pack str)
+--       --  `debug1` ("opppa" L.++
+--       --      (show str) L.++"\nress:\n"
+--       --      L.++ (show (breakOnAll (pack str) (pack "FUS") ))
+--       --       )
+
+
+wordCount :: String -> [(String, Int)]
+wordCount = map (L.head &&& L.length) . L.group . L.sort . L.words . L.map toLower
+
+countFUS :: String -> (Int, Int)
+countFUS str = let ls1= splitOn "_f_"  (pack str) in
+               let ls2 = L.concatMap (\txt -> splitOn "_FUS" txt ) ls1 in
+               let ls3 = L.filter (\txt -> (txt/= "") && (txt /= "_")  ) ls2 in
+               let ls4 = L.group (L.sort ls3) in
+               let ls5 = L.map (\ls ->L.length ls) ls4 in
+               let mx =maximum ls5 in
+               (mx, L.length ls3)
+                  `debug1` ((show mx) L.++ "opppa" L.++ ( show ls5) L.++ (show ls3) L.++ (show str))
+
+
 
 debug =  flip (dbgTrace 5)
 debug1 = flip (dbgTrace 2)
@@ -1349,12 +1366,14 @@ fuse ddefs fdefs  innerVar  outerVar prevFusedFuncs = do
 
 violateRestrictions :: FunDefs1 -> Var -> Var ->Int -> Bool
 violateRestrictions fdefs inner outer depth=
-  let n =  quot (countFUS (fromVar inner)) 2 + quot (countFUS (fromVar outer)) 2 + 2
+  let (n, m) =  countFUS ((fromVar inner) L.++ "_FUS"  L.++ (fromVar outer))
     in -- should be configurable
-  let p0 =
+  let p0 = --False
+       (n>1 || m>7 || depth>7)
+      -- n>1 || depth>10
   -- (depth>6) &&
-       (depth >4  && n>4)
-     -- &&  (n>5)
+
+
     --    `debug` ( "n is " L.++ (show n) L.++ "for" L.++ (show inner ) L.++ (show outer))
      in
   let innerDef =
@@ -1433,7 +1452,7 @@ tuple_pass ddefs fdefs =
 
 fuse_pass ::  DDefs Ty1 -> FunDefs1 -> FusePassParams  -> PassM TransformReturn
 fuse_pass ddefs funDefs (FusePassParams exp argsVars fusedFunctions skipList depth) =
-  if depth >10-- then first fold before going back
+  if depth >10000-- then first fold before going back
    then  return (exp, funDefs, fusedFunctions)
    else go (unLoc exp) skipList funDefs fusedFunctions
  where
@@ -1450,14 +1469,14 @@ fuse_pass ddefs funDefs (FusePassParams exp argsVars fusedFunctions skipList dep
         if violateRestrictions fdefs inner outer depth
           then
                go  body ((inner,outer):processed) fdefs prevFusedFuncs
-                `debug1` ("cant fuse "L.++ (show (inner,outer)))
+             --   `debug1` ("cant fuse "L.++ (show (inner,outer)))
           else do
              -- fuse
             (validFused, fNew, fusedDefs) <-
                fuse ddefs fdefs inner outer prevFusedFuncs
 
             let fusedFunction = fusedDefs M.! fNew
-                 `debug1` ("new fused function generated at depth " L.++ (show depth) L.++ (render (pprint (fusedDefs M.! fNew ))))
+              --   `debug1` ("new fused function generated at depth " L.++ (show depth) L.++ (render (pprint (fusedDefs M.! fNew ))))
 
              --`debug` ("new fused:" L.++ (
                --  render (pprint ( fusedDefs M.! fNew  ))))
@@ -1490,7 +1509,7 @@ tupleAndOptimize :: DDefs Ty1 -> FunDefs1 ->L Exp1 -> Bool->Int-> PassM (L Exp1,
 tupleAndOptimize ddefs fdefs mainExp firstTime  depth =
   do
     newDefs <- tuple_pass ddefs fdefs
-    if (not firstTime && (newDefs == fdefs)) || depth>2
+    if depth>0 ||(not firstTime && (newDefs == fdefs))
       then return (mainExp, newDefs)
       else  --return newDefs
         let (mainExp', fdefs') = (redundancy_output_pass newDefs mainExp firstTime 0) in
@@ -1527,7 +1546,7 @@ redundancy_output_pass :: FunDefs1 -> L Exp1 ->Bool ->Int ->(L Exp1 ,FunDefs1)
 redundancy_output_pass fdefs mainExp firstTime depth =
   let (fdefs', rules) = M.foldl (pass1F fdefs) (fdefs, M.empty) fdefs
       fdefs'' = M.foldlWithKey pass2F fdefs' rules
-   in if (not firstTime && (fdefs'' == fdefs)) || depth>4
+   in if  depth>0 || (not firstTime && (fdefs'' == fdefs))
         then (mainExp, fdefs'')
         else redundancy_input_pass fdefs'' mainExp depth
   where
@@ -2174,7 +2193,7 @@ redundancy_input_pass_rec fdefs  mainExp depth=
   in let (fdefs'', mainExp') = removeRedundantInputsMainExp fdefs' mainExp
   in if (fdefs'' == fdefs && mainExp'== mainExp) || depth> 5
         then ( mainExp', fdefs'')`debug` ("no repeeat")
-        else redundancy_input_pass_rec fdefs'' mainExp' (depth +1) `debug` ("repeeat")
+        else redundancy_input_pass_rec fdefs'' mainExp' (depth + 1) `debug` ("repeeat")
 
 redundancy_input_pass :: FunDefs1 -> L Exp1-> Int-> (L Exp1, FunDefs1)
 redundancy_input_pass fdefs  mainExp depth=
