@@ -30,7 +30,7 @@
   (case tr
     [(Leaf n) (Leaf (+ n 1))]
     [(Inner sum  x left right)
-     (Inner (+ sum 1) x right left)
+     (Inner (+ sum 1) x  (add1 left) (add1 right))
     ]
   )
 )
@@ -39,7 +39,7 @@
   (case tr
     [(Leaf n) (Leaf n)]
     [(Inner sum x left right)
-     (Inner sum x right left)
+     (Inner sum x (swap right) (swap left))
     ]
   )
 )
@@ -59,4 +59,4 @@
 
 ;;(iterate (set-even (sum-up ( Inner 0 0 (Leaf 2)(Leaf 2)))) );
 
-(iterate (sum-up(add1 (swap (set-even ( sum-up (generateTree 3) ) )))));;
+ ( sum-up (add1 (swap (set-even ( sum-up (generateTree 3) ) ))));;

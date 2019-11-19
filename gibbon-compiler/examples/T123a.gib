@@ -1,0 +1,18 @@
+#lang gibbon
+
+(data Foo
+      [MkFoo1 Foo]
+      [MkFoo2])
+
+(define (mkFoo [n : Int]) : Foo
+  (if (= n 0)
+      (MkFoo2)
+      (MkFoo1 (mkFoo (- n 1)))))
+
+(define (getDepth [foo : Foo]) : Int
+  (case foo
+    [(MkFoo2) 0]
+    [(MkFoo1 x) (+ 1 (getDepth x))]))
+
+(let ([foo : Foo (mkFoo 10)])
+  (bench getDepth foo))

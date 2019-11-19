@@ -65,10 +65,12 @@ instance HasPretty ex => Pretty (Prog ex) where
 
 renderMain :: Bool -> Doc -> Doc -> Doc
 renderMain has_bench m ty =
-  (if has_bench
-   then text "gibbon_main" <+> doublecolon <+> "IO ()"
-   else text "gibbon_main" <+> doublecolon <+> ty) $+$
-  text "gibbon_main" <+> equals <+> text "do" $$ nest indentLevel m
+  if has_bench
+  then (text "gibbon_main" <+> doublecolon <+> "IO ()" $+$
+        text "gibbon_main" <+> equals <+> text "do" $$ nest indentLevel m)
+  else (text "gibbon_main" <+> doublecolon <+> ty $+$
+        text "gibbon_main" <+> equals <+> nest indentLevel m)
+
 
 -- Things we need to make this a valid compilation unit for GHC:
 ghc_compat_prefix, ghc_compat_suffix :: Bool -> Doc
@@ -86,7 +88,7 @@ ghc_compat_prefix has_bench =
   text "                    , Int, (+), (-), (*), quot, (<), (>), (<=), (>=), (^), mod" $+$
   text "                    , Bool(..), (||), (&&)" $+$
   text "                    , String, (++)" $+$
-  text "                    , Show, IO)" $+$
+  text "                    , Show, Eq, IO)" $+$
   text "" $+$
   text "import Data.Maybe (fromJust, isJust)" $+$
   text "" $+$
@@ -97,13 +99,15 @@ ghc_compat_prefix has_bench =
          text "import GHC.Generics" $+$
          text "import System.Mem (performMajorGC)" $+$
          text "import Data.Time.Clock (getCurrentTime, diffUTCTime)" $+$
+         text "import Prelude as P ( (.), return )" $+$
          text "" $+$
          text "gibbon_bench :: (NFData a, NFData b) => String -> (a -> b) -> a -> IO ()" $+$
          text "gibbon_bench str fn arg = benchmark (nf fn (force arg))" $+$
          text "" $+$
          text "")
-   else (text "gibbon_bench :: String -> (a -> b) -> a -> IO ()" $+$
-         text "gibbon_bench _str fn arg = fn arg")) $+$
+   else (text "gibbon_bench :: String -> (a -> b) -> a -> b" $+$
+         text "gibbon_bench _str fn arg = fn arg" $+$
+         text "" $+$ empty)) $+$
   text "type Sym = String" $+$
   text "" $+$
   text "type Dict a = [(Sym,a)]" $+$
@@ -174,7 +178,7 @@ instance Pretty ex => Pretty (DDef ex) where
 
 
 -- Primitives
-instance (Pretty d, Ord d) => Pretty (Prim d) where
+instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
     pprintWithStyle sty pr =
         let renderPrim = M.fromList (map (\(a,b) -> (b,a)) (M.toList primMap))
         in case M.lookup pr renderPrim of
@@ -189,7 +193,9 @@ instance (Pretty d, Ord d) => Pretty (Prim d) where
                                       DictLookupP ty -> text "DictLookup" <> wty ty
                                       RequestEndOf   -> text "RequestEndOf"
                                       ErrorP str ty  -> text "ErrorP" <> wty ty <+> doubleQuotes (text str) <> space
-                                      _ -> error $ "pprint: Unknown primitive"
+                                      ReadPackedFile mb_fp tycon _ _ ->
+                                        text "readFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
+                                      _ -> error $ "pprint: Unknown primitive: " ++ show pr
                       PPHaskell  -> case pr of
                                       DictEmptyP _ty  -> text "dictEmpty"
                                       DictHasKeyP _ty -> text "dictHasKey"
@@ -197,7 +203,9 @@ instance (Pretty d, Ord d) => Pretty (Prim d) where
                                       DictLookupP _ty -> text "dictLookup"
                                       RequestEndOf   -> text "RequestEndOf"
                                       ErrorP str _ty -> text "error" <> doubleQuotes (text str)
-                                      _ -> error $ "pprint: Unknown primitive"
+                                      ReadPackedFile mb_fp tycon _ _ ->
+                                        text "readFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
+                                      _ -> error $ "pprint: Unknown primitive: " ++ show pr
               Just str -> text str
 
 
@@ -264,7 +272,7 @@ instance Pretty ArrowTy2 where
 -- Expressions
 
 -- CSK: Needs a better name.
-type HasPrettyToo e l d = (Ord d, Eq d, Pretty d, Pretty l, Pretty (e l d), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)))
+type HasPrettyToo e l d = (Show d, Ord d, Eq d, Pretty d, Pretty l, Pretty (e l d), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)))
 
 instance Pretty (PreExp e l d) => Pretty (L (PreExp e l d)) where
     pprintWithStyle sty (L _ e) = pprintWithStyle sty e
@@ -356,7 +364,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                                             vls))
                                <+> text "->" $+$ nest indentLevel (pprintWithStyle sty e)
 -- L1
-instance (Pretty l, Pretty d, Ord d) => Pretty (E1Ext l d) where
+instance (Pretty l, Pretty d, Ord d, Show d) => Pretty (E1Ext l d) where
     pprintWithStyle sty ext =
       case ext of
         BenchE fn tyapps args b -> text "gibbon_bench" <+> (doubleQuotes $ text "") <+> text (fromVar fn) <+>

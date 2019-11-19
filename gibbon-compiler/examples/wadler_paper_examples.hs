@@ -59,7 +59,7 @@ flattenTree tree = case tree of
 -- tree less form flatten [ no need we want things that done work right?]
 -- flatten_2 :: ListOfList -> List
 -- flatten_1 lss = case lss of
---   LListInner ls rem ->flatten_3
+--   LListInner ls rem ->flatten_3å
 --   LListEnd -> LListEnd
 
 
@@ -68,7 +68,6 @@ flattenTree tree = case tree of
 -- flatten_1 lss = case lss of
 --   LListInner ls rem -> flatten_3 ls rem
 --   LListEnd -> LListEnd
-
 
 
 genTree :: Int -> Tree
@@ -87,7 +86,7 @@ gibbon_main =
 
  let ex1 = sumList (square list1) in
  let ex2 =  flipTreeAcc (flipTreeAcc tree) in -- actual non termination
- let ex3 =  flipTreeReg (flipTreeReg tree) in -- non treeless by terminates
+ let ex3 =  flipTreeReg (flipTreeReg tree) in -- non treeless but terminates
  -- issue
  let ex4 = append (append list1 list2) list3 in
  let ex5 = sumList (flatten_1 lss) in
