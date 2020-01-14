@@ -24,6 +24,14 @@ type FunEnv2 = M.Map Var ArrowTy2
 
 type Deps = M.Map LocVar LocVar
 
+updateDeps :: S.Set Effect -> Deps -> Deps
+updateDeps _ dps = dps -- TODO: implement this, update dep map with effects
+-- idea: remove entries in map when they are satisfied by effect
+
+metDep :: Deps -> S.Set Effect -> S.Set Effect
+metDep _ s = s -- TODO: implement this, check if deps are met for effect
+-- idea: remove effects that have (unmet) entries in map
+
 locsEffect :: [LocVar] -> Set Effect
 locsEffect = S.fromList . L.map Traverse
 
@@ -84,7 +92,7 @@ inferExp ddfs fenv env dps (L _p expr) =
       let orgLocs = allLocVars (fenv # v)
           locMap  = M.fromList $ zip orgLocs locs
           eff     = arrEffs (fenv # v)
-      in (substEffs locMap eff, Nothing)
+      in (metDep dps $ substEffs locMap eff, Nothing)
 
     -- If rands are already trivial, no traversal effects can occur here.
     -- All primitives operate on non-packed data.
@@ -93,8 +101,9 @@ inferExp ddfs fenv env dps (L _p expr) =
     -- TODO: what would _locs have here ?
     LetE (v,_locs,ty,rhs) bod ->
       let (effRhs,_rhsLoc) = inferExp ddfs fenv env dps rhs
+          dps' = updateDeps effRhs dps
           -- TODO: extend env with rhsLoc ? or _locs ?
-          (effBod,bLoc) = inferExp ddfs fenv (M.insert v ty env) dps bod
+          (effBod,bLoc) = inferExp ddfs fenv (M.insert v ty env) dps' bod
       in (S.union effRhs effBod, bLoc)
 
     -- TODO: do we need to join locC and locA
@@ -180,9 +189,12 @@ inferExp ddfs fenv env dps (L _p expr) =
 
           makeDps [] = dps
           makeDps [_] = dps
-          makeDps (v:v':vs) = M.insert v v' (makeDps vs)
+          makeDps ((l,_t):(l',t'):lts) =
+              if hasPacked t'
+              then M.insert l l' (makeDps lts) -- TODO: need to encode *all* prior elements, or just one?
+              else makeDps lts
 
-          dps' = makeDps (reverse $ L.map snd patVs)
+          dps' = makeDps (reverse $ zip locs tys)
 
           (eff,_) = inferExp ddfs fenv env' dps' e
           winner = -- If there is NO packed child data, then our object has static size:
