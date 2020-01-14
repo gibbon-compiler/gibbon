@@ -189,10 +189,10 @@ inferExp ddfs fenv env dps (L _p expr) =
 
           makeDps [] = dps
           makeDps [_] = dps
-          makeDps ((l,_t):(l',t'):lts) =
-              if hasPacked t'
-              then M.insert l l' (makeDps lts) -- TODO: need to encode *all* prior elements, or just one?
-              else makeDps lts
+          makeDps ((loc,ty):lts)
+            | hasPacked ty = let prevDep = fst $ head $ L.filter (hasPacked . snd) lts
+                             in M.insert loc prevDep $ makeDps lts
+            | otherwise = makeDps lts
 
           dps' = makeDps (reverse $ zip locs tys)
 
