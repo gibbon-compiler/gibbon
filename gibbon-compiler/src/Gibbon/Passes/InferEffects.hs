@@ -25,7 +25,9 @@ type FunEnv2 = M.Map Var ArrowTy2
 type Deps = M.Map LocVar LocVar
 
 updateDeps :: S.Set Effect -> Deps -> Deps
-updateDeps _ dps = dps -- TODO: implement this, update dep map with effects
+updateDeps s dps = dps -- M.mapMaybe (\lv -> _) dps
+  where ls = L.map (\(Traverse lv) -> lv) $ S.toList s
+-- TODO: implement this, update dep map with effects
 -- idea: remove entries in map when they are satisfied by effect
 
 metDep :: Deps -> S.Set Effect -> S.Set Effect
