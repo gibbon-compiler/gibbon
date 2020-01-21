@@ -37,18 +37,19 @@ sumFoo foo =
       --         else sumFoo c
       --     t = sync
       -- in x + y + z
-      if is_big a
-      then
-        let x = spawn (sumFoo a)
-            y = spawn (sumFoo b)
-            z = spawn (sumFoo c)
-            a = sync
-        in x + y + z
-      else
-        let x = (sumFoo a)
-            y = (sumFoo b)
-            z = (sumFoo c)
-        in x + y + z
+
+      -- if is_big a
+      -- then
+      --   let x = spawn (sumFoo a)
+      --       y = spawn (sumFoo b)
+      --       z = spawn (sumFoo c)
+      --       a = sync
+      --   in x + y + z
+      -- else
+      --   let x = (sumFoo a)
+      --       y = (sumFoo b)
+      --       z = (sumFoo c)
+      --   in x + y + z
 
         -- let trp = par (sumFoo a) (sumFoo b) (sumFoo c)
         --     x = trp !!! 0
@@ -68,6 +69,11 @@ sumFoo foo =
       --            z = sumFoo c
       --        in x + y + z
 
+      let x = spawn (sumFoo a)
+          y = spawn (sumFoo b)
+          z = spawn (sumFoo c)
+          a = sync
+      in x + y + z
 
 gibbon_main =
   let x = mkFoo 2
