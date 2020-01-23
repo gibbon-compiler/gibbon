@@ -192,6 +192,7 @@ inferExp ddfs fenv env dps (L _p expr) =
           makeDps ((l,_t):(l',t'):lts) =
               if hasPacked t'
               then M.insert l l' (makeDps lts) -- TODO: need to encode *all* prior elements, or just one?
+              -- basically, we want to ensure the *last packed thing* is in the map
               else makeDps lts
 
           dps' = makeDps (reverse $ zip locs tys)
