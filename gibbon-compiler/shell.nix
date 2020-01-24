@@ -9,13 +9,13 @@
 # whatever nixpkgs your user account is currently pointing at.
 { pkgs ? import (fetchTarball (import ../.nix_default_environment.txt)) {}
  # Default should match the current LTS in stack.yaml:
-, ghc ? pkgs.haskell.compiler.ghc843 }:
+, ghc ? pkgs.haskell.compiler.ghc865 }:
 
 with pkgs;
 
 haskell.lib.buildStackProject {
   inherit ghc;
   name = "basicGibbonEnv";
-  buildInputs = [ gcc which boehmgc uthash
+  buildInputs = [ gcc which boehmgc uthash racket cabal-install
                 ];
 }
