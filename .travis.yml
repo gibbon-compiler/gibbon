@@ -93,7 +93,7 @@ script:
 
 branches:
   except:
-  - ckoparkar/par-build-tree
+  - parallel-local
 
 notifications:
   email: false
