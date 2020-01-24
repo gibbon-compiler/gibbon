@@ -1517,15 +1517,25 @@ prim p = case p of
 genCopyFn :: DDef Ty1 -> PassM FunDef1
 genCopyFn DDef{tyName, dataCons} = do
   arg <- gensym $ "arg"
-  casebod <- forM dataCons $ \(dcon, tys) ->
-             do xs <- mapM (\_ -> gensym "x") tys
+  casebod <- forM dataCons $ \(dcon, dtys) ->
+             do let tys = L.map snd dtys
+                xs <- mapM (\_ -> gensym "x") tys
                 ys <- mapM (\_ -> gensym "y") tys
-                let bod = foldr (\(ty,x,y) acc ->
+                let packed_vars = map fst $ filter (\(x,ty) -> isPackedTy ty) (zip ys tys)
+                    bod_with_ran_nodes = foldr (\(ty,x,y,idx) acc ->
+                                                  if ty == CursorTy
+                                                  then l$ LetE (y, [], ty, l$ PrimAppE RequestEndOf [l$ VarE (packed_vars !! idx)]) acc
+                                                  else acc)
+                                           (l$ DataConE () dcon $ map (l . VarE) ys) (L.zip4 tys xs ys [0..])
+                    bod = foldr (\(ty,x,y,idx) acc ->
                                      if isPackedTy ty
                                      then l$ LetE (y, [], ty, l$ AppE (mkCopyFunName (tyToDataCon ty)) [] [l$ VarE x]) acc
+                                     -- We've already constructed all the random access nodes above.
+                                     else if ty == CursorTy
+                                     then acc
                                      else l$ LetE (y, [], ty, l$ VarE x) acc)
-                          (l$ DataConE () dcon $ map (l . VarE) ys)
-                          (zip3 (L.map snd tys) xs ys)
+
+                            bod_with_ran_nodes (L.zip4 tys xs ys [0..])
                 return (dcon, L.map (\x -> (x,())) xs, bod)
   return $ FunDef { funName = mkCopyFunName (fromVar tyName)
                   , funArgs = [arg]
