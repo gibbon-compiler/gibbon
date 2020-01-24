@@ -71,3 +71,5 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
         ListTy _ -> error "directL3: todo ListTy"
         PtrTy -> PtrTy
         CursorTy -> CursorTy
+        SymSetTy -> SymSetTy
+        SymHashTy -> SymHashTy

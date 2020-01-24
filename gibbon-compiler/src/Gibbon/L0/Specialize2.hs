@@ -26,6 +26,7 @@ import           Gibbon.Common
 import           Gibbon.Pretty
 import           Gibbon.L0.Syntax
 import           Gibbon.L0.Typecheck
+import           Gibbon.Passes.InlineTriv
 import qualified Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------

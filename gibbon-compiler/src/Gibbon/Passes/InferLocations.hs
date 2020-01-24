@@ -325,7 +325,6 @@ inferExp' env lex0@(L sl1 exp) bound dest =
         let (e'',s) = cleanExp e'
             unbound = (s S.\\ S.fromList bound)
         e''' <- bindAllUnbound e'' (S.toList unbound)
-        -- dbgTrace 4 (show (s S.\\ S.fromList bound)) $ return ()
         return (e''',ty)
 
 -- | We proceed in a destination-passing style given the target region
@@ -468,7 +467,6 @@ inferExp env@FullEnv{dataDefs}
                             copyRetTy = case arrOut arrty of
                                           PackedTy _ loc -> substLoc (M.singleton loc lv2) (arrOut arrty)
                                           _ -> error "bindAfterLoc: Not a packed type"
-                        _ <- dbgTraceIt (show v' ++ " " ++ show v1) $ return ()
                         return (lc$ LetE (v',[],copyRetTy,l$ AppE f lvs [l$ VarE v1]) $
                                 lc$ Ext (LetLocE lv1' (AfterVariableLE v' lv2') e), ty, cs)
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
@@ -807,6 +805,8 @@ inferExp env@FullEnv{dataDefs}
               (\(_,b,_)->b) (L.head pairs),
               (concat $ [c | (_,_,c) <- pairs]))
 
+    Ext (L1.AddFixed cur i) -> pure (lc$ L2.Ext (L2.AddFixed cur i), CursorTy, [])
+
     LetE (vr,locs,bty,L sl2 rhs) bod | [] <- locs ->
       case rhs of
         VarE{} -> err$ "Unexpected variable aliasing: " ++ (show ex0)
@@ -935,7 +935,7 @@ inferExp env@FullEnv{dataDefs}
           (bod',ty',cs') <- inferExp (extendVEnv vr IntTy env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs''
-          tryBindReg (lc$ L2.LetE (vr,[],IntTy,L sl2 $ L2.LitSymE x) bod'', ty'', fcs)
+          tryBindReg (lc$ L2.LetE (vr,[],SymTy,L sl2 $ L2.LitSymE x) bod'', ty'', fcs)
 
         ProjE i arg     -> do
           (e,ProdTy tys,cs) <- inferExp env arg NoDest
@@ -1002,9 +1002,9 @@ inferExp env@FullEnv{dataDefs}
         MapE{} -> err$ "MapE unsupported"
         FoldE{} -> err$ "FoldE unsupported"
 
-        -- Ext (AddCursor cur i) -> do
-        --   (bod',ty',cs') <- inferExp env bod dest
-        --   tryBindReg (lc$ Ext $ LetLocE vr (AfterConstantLE i cur) bod', ty', cs')
+        Ext (L1.AddFixed cur i) -> do
+          (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
+          return (lc$ L2.LetE (vr,[],L2.CursorTy,L sl2 $ L2.Ext (L2.AddFixed cur i)) bod', ty', cs')
 
     LetE{} -> err$ "Malformed let expression: " ++ (show ex0)
     MapE{} -> err$ "MapE unsupported"
@@ -1108,6 +1108,7 @@ finishExp (L i e) =
                                     return $ AfterVariableLE v lv'
                        oth -> return oth
              return $ l$ Ext (LetLocE loc' lex' e1')
+      Ext (L2.AddFixed cur i) -> pure $ l$ Ext (L2.AddFixed cur i)
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
@@ -1206,6 +1207,7 @@ cleanExp (L i e) =
                                          in (l$ Ext (LetLocE loc lex e'),
                                               S.delete loc $ S.union s' $ S.fromList ls)
                                     else (e',s')
+      Ext (L2.AddFixed cur i) -> (l$ Ext (L2.AddFixed cur i), S.singleton cur)
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"

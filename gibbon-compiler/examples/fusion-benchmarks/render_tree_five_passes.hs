@@ -436,8 +436,8 @@ propagateContainerFontHrzContainer container strongestFont   = case (container) 
         let strengthCur =  getFontStyleStrength (getDisplayFontStyle displayData) in
         let flag =  isSmaller  strengthCur  strengthMax  in
         let strongestFont' = retFirstIfTrue  flag strongestFont (getDisplayFontStyle displayData)  in
-        let elmList' = propagateContainerFontElmList elmList  strongestFont in
-      HrzContainer  elmList' (setDisplayFontStyle displayData strongestFont)
+        let elmList' = propagateContainerFontElmList elmList  strongestFont' in
+      HrzContainer  elmList' (setDisplayFontStyle displayData strongestFont')
 
 propagateContainerFontElmList :: ElementsList -> FontStyle -> ElementsList
 propagateContainerFontElmList  elmList strongestFont  = case (elmList) of
@@ -455,15 +455,15 @@ propagateContainerFontElm element strongestFont  = case (element) of
       let strengthCur =  getFontStyleStrength (getDisplayFontStyle displayData) in
       let flag =  isSmaller    strengthCur strengthMax  in
       let strongestFont' = retFirstIfTrue  flag strongestFont (getDisplayFontStyle displayData)  in
-      let  hzList' = propagateContainerFontHzList hzList strongestFont in
-      VertContainer marginH bWidth  hzList' (setDisplayFontStyle displayData strongestFont)
+      let  hzList' = propagateContainerFontHzList hzList strongestFont' in
+      VertContainer marginH bWidth  hzList' (setDisplayFontStyle displayData strongestFont')
 
     ImageCons imgWFixed ratio imgUrl displayData ->
       let strengthMax  = getFontStyleStrength strongestFont in
       let strengthCur =  getFontStyleStrength (getDisplayFontStyle displayData) in
       let flag =  isSmaller    strengthCur strengthMax  in
       let strongestFont' = retFirstIfTrue  flag strongestFont (getDisplayFontStyle displayData)  in
-      ImageCons imgWFixed ratio imgUrl (setDisplayFontStyle displayData strongestFont)
+      ImageCons imgWFixed ratio imgUrl (setDisplayFontStyle displayData strongestFont')
 
 
     TextBoxCons txtWFixed txtContent displayData ->
@@ -471,7 +471,7 @@ propagateContainerFontElm element strongestFont  = case (element) of
       let strengthCur =  getFontStyleStrength (getDisplayFontStyle displayData) in
       let flag =  isSmaller    strengthCur strengthMax  in
       let strongestFont' = retFirstIfTrue  flag strongestFont (getDisplayFontStyle displayData)  in
-      TextBoxCons txtWFixed txtContent (setDisplayFontStyle displayData strongestFont)
+      TextBoxCons txtWFixed txtContent (setDisplayFontStyle displayData strongestFont')
 
 buildElmList:: Int -> ElementsList
 buildElmList n =
@@ -522,7 +522,12 @@ buildHrzContainer n =
 -- render doc =
 -- gibbon_main =  propagateContainerFontDoc (computeHeightDoc( computeDisplayWidthDoc buildDoc1))
 
+-- gibbon_main =   (computeHeightDoc( computeDisplayWidthDoc buildDoc1))
+
+-- gibbon_main = setPositionYDoc (setPositionXDoc (computeHeightDoc( computeDisplayWidthDoc buildDoc1)))
+
 
 gibbon_main = (setPositionYDoc (setPositionXDoc (computeHeightDoc(
                  propagateContainerFontDoc( computeDisplayWidthDoc buildDoc1) (FontStyleK (SucJ ZeroJ) 1 1 1) ))))
--- gibbon_main =  (computeHeightHzContainer( computeDisplayWidthHzContainer  (Document (buildHrzContainer 1))))
+
+-- -- gibbon_main =  (computeHeightHzContainer( computeDisplayWidthHzContainer  (Document (buildHrzContainer 1))))

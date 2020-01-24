@@ -79,8 +79,11 @@ tests:
   - name: test14a_tup.gib
   - name: test14b_tup.gib
   - name: test14c_tail.gib
+  - name: test14d_unary_tup.gib
   - name: test15a_symsearch.gib
   - name: test15c_printsym.gib
+    skip: true
+    # printing symbols is broken atm
   - name: test15d_symsearch.hs
     answer-file: examples/test15d_symsearch.ans
   - name: test15e_gensym.hs
@@ -287,30 +290,46 @@ tests:
 
   ## Fusion2 tests
   - name: test_sumup_seteven.gib
+    dir: examples/fusion-benchmarks
     failing: [gibbon1, gibbon2]
     test-flags: ["--fusion"]
 
   - name: render_tree.hs
+    dir: examples/fusion-benchmarks
     failing: [gibbon1, gibbon2]
     test-flags: ["--fusion"]
-    answer-file: examples/render_tree.ans
+    answer-file: examples/fusion-benchmarks/render_tree.ans
 
   - name: render_tree_two_passes.hs
-    skip: true
+    dir: examples/fusion-benchmarks
+    failing: [gibbon1, gibbon2]
     test-flags: ["--fusion"]
-    answer-file: examples/render_tree_two_passes.ans
+    answer-file: examples/fusion-benchmarks/render_tree_two_passes.ans
+
+  - name: render_tree_four_passes.hs
+    dir: examples/fusion-benchmarks
+    failing: [gibbon1, gibbon2]
+    test-flags: ["--fusion"]
+    answer-file: examples/fusion-benchmarks/render_tree_four_passes.ans
+
+  - name: render_tree_five_passes.hs
+    dir: examples/fusion-benchmarks
+    failing: [gibbon1, gibbon2]
+    test-flags: ["--fusion"]
+    answer-file: examples/fusion-benchmarks/render_tree_five_passes.ans
+
+  - name: LC.hs
+    dir: examples/fusion-benchmarks
+    failing: [gibbon1, gibbon2]
+    test-flags: ["--fusion"]
+    # gibbon2: segfaults in free_region
+    answer-file: examples/fusion-benchmarks/LC.ans
 
   ## AST benchmarks
   - name: C1.hs
     dir: examples/ast
     failing: [gibbon1, gibbon2]
     answer-file: examples/ast/C1.ans
-
-  - name: LC.hs
-    dir: examples/ast
-    failing: [gibbon1, gibbon2]
-    # gibbon2: segfaults in free_region
-    answer-file: examples/ast/LC.ans
 
   ## Tests that only work with some backend:
   - name: test06h_rec.gib
@@ -345,6 +364,8 @@ tests:
   # This test depends on real symbols, which we don't support atm.
   - name: test27b_subst.gib
     failing: [gibbon2,gibbon1]
+    skip: true
+    # printing symbols is broken atm
 
   # No gensym, or real symbols.
   - name: test28_copyprop.gib

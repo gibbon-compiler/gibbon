@@ -524,7 +524,7 @@ buildHrzContainer n =
 
 -- gibbon_main =   (computeHeightDoc( computeDisplayWidthDoc buildDoc1))
 
-gibbon_main = setPositionYDoc (setPositionXDoc (computeHeightDoc( computeDisplayWidthDoc buildDoc1)))
+gibbon_main =  (setPositionXDoc (computeHeightDoc( computeDisplayWidthDoc buildDoc1)))
 
 
 -- gibbon_main = (setPositionYDoc (setPositionXDoc (computeHeightDoc(

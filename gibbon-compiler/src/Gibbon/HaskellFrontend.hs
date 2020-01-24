@@ -169,7 +169,7 @@ primMap = M.fromList
   , ("eqsym", EqSymP)
   , ("rand", RandP)
   , ("sizeParam", SizeParam)
-  , ("symAppend", SymAppend)
+  , ("symappend", SymAppend)
   , ("True", MkTrue)
   , ("False", MkFalse)
   , ("gensym", Gensym)
@@ -468,15 +468,8 @@ generateBind toplevel env decl exp2 =
   case decl of
     -- 'collectTopTy' takes care of this.
     TypeSig{} -> pure exp2
-    PatBind _ _ _ Just{}        -> error "desugarExp: where clauses not allowed"
-    PatBind _ _ GuardedRhss{} _ -> error "desugarExp: Guarded right hand side not supported."
-    PatBind _ (PVar _ v) (UnGuardedRhs _ rhs) Nothing -> do
-      rhs' <- desugarExp toplevel rhs
-      let w = toVar (nameToStr v)
-      ty' <- case M.lookup w env of
-                Nothing -> newMetaTy
-                Just (ForAll _ ty) -> pure ty
-      pure $ l$ LetE (w, [], ty', rhs') exp2
+    PatBind _ _ _ Just{}        -> error "generateBind: where clauses not allowed"
+    PatBind _ _ GuardedRhss{} _ -> error "generateBind: Guarded right hand side not supported."
     PatBind _ (PTuple _ Boxed pats) (UnGuardedRhs _ rhs) Nothing -> do
       rhs' <- desugarExp toplevel rhs
       w <- gensym "tup"
@@ -484,9 +477,19 @@ generateBind toplevel env decl exp2 =
       let tupexp e = l$ LetE (w,[],ty',rhs') e
       prjexp <- generateTupleProjs toplevel env (zip pats [0..]) (l$ VarE w) exp2
       pure $ tupexp prjexp
+    PatBind _ pat (UnGuardedRhs _ rhs) Nothing -> do
+      rhs' <- desugarExp toplevel rhs
+      w <- case pat of
+             PVar _ v    -> pure $ toVar (nameToStr v)
+             PWildCard _ -> gensym "wildcar_"
+             _           -> error "generateBind: "
+      ty' <- case M.lookup w env of
+                Nothing -> newMetaTy
+                Just (ForAll _ ty) -> pure ty
+      pure $ l$ LetE (w, [], ty', rhs') exp2
     FunBind{} -> do (name,args,ty,bod) <- desugarFun toplevel env decl
                     pure $ l$ LetE (name,[], tyFromScheme ty, l$ Ext $ LambdaE (zip args (inTys ty)) bod) exp2
-    oth -> error ("desugarExp: Unsupported pattern: " ++ prettyPrint oth)
+    oth -> error ("generateBind: Unsupported pattern: " ++ prettyPrint oth)
 
 generateTupleProjs :: (Show a, Pretty a) => TopTyEnv -> TopTyEnv -> [(Pat a,Int)] -> L Exp0 -> L Exp0 -> PassM (L Exp0)
 generateTupleProjs toplevel env ((PVar _ v,n):pats) tup exp2 = do

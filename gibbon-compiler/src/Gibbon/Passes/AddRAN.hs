@@ -15,7 +15,7 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.Common
 import           Gibbon.DynFlags
 import           Gibbon.Passes.AddTraversals ( needsTraversalCase )
-import           Gibbon.L1.Syntax
+import           Gibbon.L1.Syntax as L1
 import           Gibbon.L2.Syntax
 
 {-
@@ -300,10 +300,10 @@ mkRANs ienv needRANsExp =
                       -- request a RAN for a literal iff it occurs after a
                       -- packed datatype. So there has to be random access
                       -- node that's generated before this.
-                      -- LitE{}    -> Ext (AddCursor (fromJust mb_most_recent_ran) (fromJust (sizeOfTy IntTy)))
-                      -- LitSymE{} -> Ext (AddCursor (fromJust mb_most_recent_ran) (fromJust (sizeOfTy SymTy)))
-                      LitE{}    -> PrimAppE RequestEndOf [arg]
-                      LitSymE{} -> PrimAppE RequestEndOf [arg]
+                      LitE{}    -> Ext (L1.AddFixed (fromJust mb_most_recent_ran) (fromJust (sizeOfTy IntTy)))
+                      LitSymE{} -> Ext (L1.AddFixed (fromJust mb_most_recent_ran) (fromJust (sizeOfTy SymTy)))
+                      -- LitE{}    -> PrimAppE RequestEndOf [arg]
+                      -- LitSymE{} -> PrimAppE RequestEndOf [arg]
                       oth -> error $ "addRANExp: Expected trivial expression, got: " ++ sdoc oth
           return (Just i, acc ++ [(i,[],CursorTy, l$ rhs)]))
   (Nothing, []) needRANsExp

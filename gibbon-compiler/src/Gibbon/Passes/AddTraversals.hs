@@ -22,6 +22,8 @@ import Gibbon.L2.Syntax
 
 -}
 
+type Deps = M.Map LocVar LocVar
+
 -- Maps a location to a region
 type RegEnv = M.Map LocVar Var
 
@@ -127,9 +129,14 @@ needsTraversalCase ddefs fundefs env2 (dcon,vlocs,rhs) =
       tys     = lookupDataCon ddefs dcon
       tyenv   = M.fromList (zip vars tys)
       funenv  = M.map funTy fundefs
-      (eff,_) = inferExp ddefs funenv (M.union tyenv (vEnv env2)) rhs
+      dps     = makeDps (reverse $ L.map snd vlocs)
+      (eff,_) = inferExp ddefs funenv (M.union tyenv (vEnv env2)) dps rhs
       -- Note: Do not use Data.Map.filter. It changes the order sometimes.
       packedOnly = L.filter (\(_,b) -> hasPacked b) (zip vars tys)
+
+      makeDps [] = M.empty
+      makeDps [_] = M.empty
+      makeDps (v:v':vs) = M.insert v v' (makeDps vs)
 
       effToLoc (Traverse loc_var) = loc_var
 

@@ -352,6 +352,10 @@ exp se =
      arg' <- exp arg
      pure $ loc l $ TimeIt arg' ty False
 
+   Ls3 l "bench" (A _ fn) arg -> do
+     arg' <- exp arg
+     pure $ loc l $ Ext $ BenchE (textToVar fn) [] [arg'] False
+
    -- This variant inserts a loop, controlled by the iters
    -- argument on the command line.
    Ls2 l "iterate" arg -> do

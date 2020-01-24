@@ -200,7 +200,10 @@ buildZeros n st end =
 
 
 
+integrate ::
 
+
+-- cant express trim, project, and some important stuff
 gibbon_main =
   let depth =1 in
   let st = -10000 in

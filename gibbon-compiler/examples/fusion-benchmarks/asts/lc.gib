@@ -1,0 +1,21 @@
+#lang gibbon
+
+(provide (all-defined-out))
+
+(data Exp
+      [LamE IntJ Exp]
+      [AppE Exp Exp]
+      [VarE IntJ]
+      [LitE Int]
+      [PlusE Exp Exp]
+      [LetE IntJ Exp Exp]
+      [IncrE Exp]
+      [LetStarE Binds Exp])
+
+(data Binds
+      [NilBinds]
+      [ConsBinds IntJ Exp Binds])
+
+(data IntJ
+      [ZeroJ]
+      [SuccJ IntJ])

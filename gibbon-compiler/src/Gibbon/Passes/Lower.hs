@@ -326,7 +326,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                                                tys'' = L.map typ ls
                                            (vs,e') <- eliminateProjs arg tys' b
                                            return $
-                                             dbgTrace 5 (" [lower] unzipping funArg "++show arg++" to "++show vs) $
+                                             dbgTrace 7 (" [lower] unzipping funArg "++show arg++" to "++show vs) $
                                              (acc ++ (zip vs tys''), e')
                            _ -> return (acc ++ [(arg, typ ty)], b))
                       ([], funBody)
@@ -617,7 +617,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                  L3.substE (l$ ProjE 1 (l$ VarE v)) (l$ VarE ctmp)
                  bod
 
-      dbgTrace 5 (" [lower] ReadInt, after substing references to "
+      dbgTrace 7 (" [lower] ReadInt, after substing references to "
                   ++(fromVar v)++":\n  "++sdoc bod') <$>
         T.LetPrimCallT [(vtmp, T.scalarToTy s),(ctmp,T.CursorTy)] (T.ReadScalar s) [T.VarTriv cur] <$>
           tail sym_tbl bod'
@@ -656,7 +656,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                  L3.substE (l$ ProjE 1 (l$ VarE v)) (l$ VarE ctmp)
                  bod
 
-      dbgTrace 5 (" [lower] ReadTag, after substing references to "
+      dbgTrace 7 (" [lower] ReadTag, after substing references to "
                   ++(fromVar v)++":\n  "++sdoc bod') <$>
         T.LetPrimCallT [(vtmp,T.TagTyPacked),(ctmp,T.CursorTy)] T.ReadTag [T.VarTriv cur] <$>
           tail sym_tbl bod'
@@ -810,7 +810,7 @@ projOf e = ([],e)
 -- | Eliminate projections from a given tuple variable.  INEFFICIENT!
 eliminateProjs :: Var -> [Ty3] -> L Exp3 -> PassM ([Var],L Exp3)
 eliminateProjs vr tys bod =
- dbgTrace 5 (" [lower] eliminating "++show (length tys)++
+ dbgTrace 7 (" [lower] eliminating "++show (length tys)++
              " projections on variable "++show vr++" in expr with types "
                                         ++show tys++":\n   "++sdoc bod) $
  do tmps <- mapM (\_ -> gensym "pvrtmp") [1.. (length tys)]

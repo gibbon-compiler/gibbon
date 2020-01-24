@@ -8,7 +8,7 @@
 module Gibbon.Common
        (
          -- * Variables
-         Var(..), LocVar, fromVar, toVar, varAppend, toEndV, cleanFunName
+         Var(..), LocVar, fromVar, toVar, varAppend, toEndV, toSeqV, cleanFunName
        , TyVar(..), isUserTv
 
          -- * Gensym monad
@@ -100,6 +100,9 @@ cleanFunName f =
         | c <- (fromVar f) ]
 toEndV :: Var -> Var
 toEndV = varAppend "end_"
+
+toSeqV :: Var -> Var
+toSeqV v = varAppend v (toVar "_seq")
 
 -- | Abstract location variables.
 type LocVar = Var
