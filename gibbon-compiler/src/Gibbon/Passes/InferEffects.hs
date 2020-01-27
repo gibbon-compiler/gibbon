@@ -25,7 +25,9 @@ type FunEnv2 = M.Map Var ArrowTy2
 type Deps = M.Map LocVar LocVar
 
 updateDeps :: S.Set Effect -> Deps -> Deps
-updateDeps _ dps = dps -- TODO: implement this, update dep map with effects
+updateDeps s dps = dps -- M.mapMaybe (\lv -> _) dps
+  where ls = L.map (\(Traverse lv) -> lv) $ S.toList s
+-- TODO: implement this, update dep map with effects
 -- idea: remove entries in map when they are satisfied by effect
 
 metDep :: Deps -> S.Set Effect -> S.Set Effect
@@ -189,11 +191,10 @@ inferExp ddfs fenv env dps (L _p expr) =
 
           makeDps [] = dps
           makeDps [_] = dps
-          makeDps ((l,_t):(l',t'):lts) =
-              if hasPacked t'
-              then M.insert l l' (makeDps lts) -- TODO: need to encode *all* prior elements, or just one?
-              -- basically, we want to ensure the *last packed thing* is in the map
-              else makeDps lts
+          makeDps ((loc,ty):lts)
+            | hasPacked ty = let prevDep = fst $ head $ L.filter (hasPacked . snd) lts
+                             in M.insert loc prevDep $ makeDps lts
+            | otherwise = makeDps lts
 
           dps' = makeDps (reverse $ zip locs tys)
 
