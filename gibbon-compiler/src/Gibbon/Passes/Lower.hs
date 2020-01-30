@@ -331,7 +331,6 @@ lower Prog{fundefs,ddefs,mainExp} = do
                            _ -> return (acc ++ [(arg, typ ty)], b))
                       ([], funBody)
                       (zip funArgs intys)
-      -- dbgTraceIt (render $ pprint bod) (pure ())
       -- let bod = funBody
       bod' <- tail sym_tbl bod
       return T.FunDecl{ T.funName  = funName

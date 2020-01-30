@@ -45,7 +45,7 @@ import qualified Gibbon.L2.Syntax as L2
 -- import qualified Gibbon.L3.Syntax as L3
 import qualified Gibbon.L4.Syntax as L4
 import qualified Gibbon.SExpFrontend as SExp
-import qualified Gibbon.L1.Interp as SI
+import qualified Gibbon.L1.Interp as L1
 import           Gibbon.TargetInterp (Val (..), execProg)
 
 -- Compiler passes
@@ -218,7 +218,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
       dbgPrintLn passChatterLvl $
           " [compiler] pipeline starting, parsed program: "++
             if dbgLvl >= passChatterLvl+1
-            then "\n"++sepline ++ "\n" ++ (render $ pprint l1)
+            then "\n"++sepline ++ "\n" ++ (pprender l1)
             else show (length (sdoc l1)) ++ " characters."
 
       let parallel = gopt Opt_Parallel (dynflags config)
@@ -268,7 +268,7 @@ runL1 l1 = do
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
     dbgPrintLn 2 $ "Running the following through L1.Interp:\n "++sepline ++ "\n" ++ sdoc l1
-    SI.execAndPrint runConf l1
+    L1.execAndPrint runConf l1
     exitSuccess
 
 -- | The compiler's policy for running/printing L2 programs.
@@ -319,11 +319,11 @@ parseInput ip fp = do
                                     l0 <- pm_l0
                                     dbgTrace 5 ("\n\nParsed:\n" ++ (sdoc l0)) (pure ())
                                     l0 <- freshNames l0
-                                    dbgTrace 5 ("\n\nFreshen:\n" ++ (render $ pprint l0)) (pure ())
+                                    dbgTrace 5 ("\n\nFreshen:\n" ++ (pprender l0)) (pure ())
                                     l0 <- L0.tcProg l0
-                                    dbgTrace 5 ("\n\nTypechecked:\n" ++ (render $ pprint l0)) (pure ())
+                                    dbgTrace 5 ("\n\nTypechecked:\n" ++ (pprender l0)) (pure ())
                                     l1 <- L0.l0ToL1 l0
-                                    dbgTrace 5 ("\n\nLowered to L1:\n" ++ (render $ pprint l1)) (pure ())
+                                    dbgTrace 5 ("\n\nLowered to L1:\n" ++ (pprender l1)) (pure ())
                                     pure l1
                               in pure passes
 
@@ -585,7 +585,7 @@ pass config who fn x = do
         then lift $ evaluate $ force y
         else return y
   if dbgLvl >= passChatterLvl+1
-     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++ (render $ pprint y')
+     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++ (pprender y')
      -- TODO: Switch to a node-count for size output (add to GenericOps):
      else lift$ dbgPrintLn passChatterLvl $ "   => "++ show (length (sdoc y')) ++ " characters output."
   return y'

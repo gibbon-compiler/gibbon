@@ -545,6 +545,9 @@ nameToStr (Symbol _ s) = s
 
 instance Pretty SrcSpanInfo where
 
+-- | SpawnE's are parsed in a strange way. If we see a 'spawn (f x1 x2)',
+-- we parse it as 'SpawnE HOLE [] [(f x1 x2)]'. This function patches it
+-- to 'SpawnE f [] [x1 x2]'.
 fixupSpawn :: L Exp0 -> L Exp0
 fixupSpawn (L p ex) = L p $
   case ex of

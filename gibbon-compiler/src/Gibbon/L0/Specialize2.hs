@@ -124,17 +124,17 @@ Assume that the input program is monomorphic.
 l0ToL1 :: Prog0 -> PassM L1.Prog1
 l0ToL1 p = do
   p0  <- bindLambdas p
-  dbgTrace 5 ("\n\nBind Lambdas:\n" ++ (render $ pprint p0)) (pure ())
+  dbgTrace 5 ("\n\nBind Lambdas:\n" ++ (pprender p0)) (pure ())
   -- Typecheck again so that all the meta type variables introduced by
   -- bindLambdas (to bind lambdas) get zonked.
   p0' <- tcProg p0
-  dbgTrace 5 ("\n\nTypechecked:\n" ++ (render $ pprint p0')) (pure ())
+  dbgTrace 5 ("\n\nTypechecked:\n" ++ (pprender p0')) (pure ())
   p1 <- monomorphize p0'
-  dbgTrace 5 ("\n\nMonomorphized:\n" ++ (render $ pprint p1)) (pure ())
+  dbgTrace 5 ("\n\nMonomorphized:\n" ++ (pprender p1)) (pure ())
   p2 <- specLambdas p1
-  dbgTrace 5 ("\n\nSpecialized:\n" ++ (render $ pprint p2)) (pure ())
+  dbgTrace 5 ("\n\nSpecialized:\n" ++ (pprender p2)) (pure ())
   p3 <- elimParE0 p2
-  dbgTrace 5 ("\n\nEliminateParE0:\n" ++ (render $ pprint p3)) (pure ())
+  dbgTrace 5 ("\n\nEliminateParE0:\n" ++ (pprender p3)) (pure ())
   pure $ toL1 p3
 
 

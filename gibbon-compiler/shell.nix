@@ -9,6 +9,6 @@ with pkgs;
 
 stdenv.mkDerivation {
   name = "basicGibbonEnv";
-  buildInputs = [ ghc gcc7 which boehmgc uthash racket cabal-install
+  buildInputs = [ ghc gcc7 which boehmgc uthash racket cabal-install ghcid
                 ];
 }

@@ -15,7 +15,7 @@ module Gibbon.L2.Syntax
     (
     -- * Extended language L2 with location types.
       E2Ext(..)
-    , Prog2, FunDef2, FunDefs2, Exp2, E2, Ty2
+    , Prog2, DDefs2, DDef2, FunDef2, FunDefs2, Exp2, E2, Ty2
     , Effect(..), ArrowTy2(..) , LocRet(..), LocExp, PreLocExp(..)
 
     -- * Regions and locations
@@ -49,10 +49,10 @@ import           Gibbon.L1.Syntax hiding (AddFixed)
 
 --------------------------------------------------------------------------------
 
-type Prog2 = Prog (L Exp2)
-
-type FunDef2 = FunDef (L Exp2)
-
+type Prog2    = Prog (L Exp2)
+type DDef2    = DDef Ty2
+type DDefs2   = DDefs Ty2
+type FunDef2  = FunDef (L Exp2)
 type FunDefs2 = FunDefs (L Exp2)
 
 -- | Function types know about locations and traversal effects.
@@ -91,8 +91,8 @@ data E2Ext loc dec
                  (loc,Var) -- Pointee (the thing that the pointer points to)
                  (L (E2 loc dec)) -- If this indirection was added to get rid
                                   -- of a copy_Foo call, we keep the fn call
-                                  -- around in case we want to go back to using
-                                  -- it. E.g. reverting from L2 to L1.
+                                  -- around in case we want to go back to it.
+                                  -- E.g. reverting from L2 to L1.
     -- ^ A tagged indirection node.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 

@@ -4,7 +4,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 module Gibbon.Pretty
-  ( Pretty(..), PPStyle(..), render, pprintHsWithEnv ) where
+  ( Pretty(..), PPStyle(..), render, pprintHsWithEnv, pprender ) where
 
 import           Prelude hiding ((<>))
 import           Data.Loc
@@ -37,6 +37,8 @@ class Pretty e where
 
     {-# MINIMAL pprintWithStyle  #-}
 
+pprender :: Pretty e => e -> String
+pprender = render . pprint
 
 doublecolon :: Doc
 doublecolon = colon <> colon
@@ -380,7 +382,7 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
           AfterConstantLE i loc -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
           AfterVariableLE v loc -> lparen <> pprint loc <+> text "+" <+> doc v <> rparen
           InRegionLE r  -> lparen <> text "inregion" <+> text (sdoc r) <> rparen
-          FromEndLE loc -> lparen <> text "fromend" <+> pprint loc <> rparen
+          FromEndLE loc -> lparen <> text "fromendle" <+> pprint loc <> rparen
           FreeLE -> lparen <> text "free" <> rparen
 
 instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
@@ -393,7 +395,7 @@ instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
           RetE ls v -> text "return" <+>
                           lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
                           doc v
-          FromEndE loc -> text "fromend" <+> pprint loc
+          FromEndE loc -> text "fromende" <+> pprint loc
           L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> pprint l2
           IndirectionE tc dc (l1,v1) (l2,v2) e -> text "indirection" <+>
                                                      doc tc <+>
