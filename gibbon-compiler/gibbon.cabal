@@ -67,7 +67,6 @@ library
                        Gibbon.Passes.ParAlloc
                        Gibbon.Passes.InferRegionScope
                        Gibbon.Passes.RouteEnds
-                       Gibbon.Passes.BoundsCheck
                        Gibbon.Passes.ThreadRegions
                        Gibbon.Passes.Cursorize
                        Gibbon.Passes.FindWitnesses

@@ -5,6 +5,7 @@ import Data.List as L
 import qualified Data.Map as M
 
 import Gibbon.Common
+import Gibbon.DynFlags
 import Gibbon.L1.Syntax
 import Gibbon.L2.Syntax as L2
 
@@ -79,7 +80,20 @@ threadRegionsFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
       initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
   bod' <- threadRegionsExp ddefs fundefs False initRegEnv env2 M.empty funBody
-  return $ f {funBody = bod'}
+  -- Boundschecking
+  dflags <- getDynFlags
+  let bod'' = if gopt Opt_BigInfiniteRegions dflags
+              then bod'
+              else
+                foldr
+                  (\(LRM loc reg mode) acc ->
+                     let rv = toEndV $ regionToVar reg in
+                     if mode == Output
+                     then l$ LetE ("_",[],IntTy,l$ Ext$ BoundsCheck 9 rv loc) acc
+                     else acc)
+                  bod'
+                  (locVars funTy)
+  return $ f {funBody = bod''}
 
 threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> Bool -> RegEnv -> Env2 Ty2
                  -> LastFieldRegEnv -> L L2.Exp2 -> PassM (L L2.Exp2)
@@ -240,4 +254,4 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv (L p ex) = L p <$>
       let (vars,locs) = unzip vlocs
           renv1' = foldr (\lc acc -> M.insert lc reg acc) renv1 locs
           env21' = extendPatternMatchEnv dcon ddefs vars locs env21
-      (dcon,vlocs,) <$> (threadRegionsExp ddefs fundefs isMain renv1' env21' lfenv bod)
+      (dcon,vlocs,) <$> (threadRegionsExp ddefs fundefs isMain renv1' env21' lfenv1 bod)

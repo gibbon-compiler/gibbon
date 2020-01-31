@@ -67,7 +67,6 @@ import           Gibbon.Passes.InferEffects   (inferEffects)
 import           Gibbon.Passes.ParAlloc       (parAlloc)
 import           Gibbon.Passes.InferRegionScope (inferRegScope)
 import           Gibbon.Passes.RouteEnds      (routeEnds)
-import           Gibbon.Passes.BoundsCheck    (boundsCheck)
 import           Gibbon.Passes.ThreadRegions  (threadRegions)
 import           Gibbon.Passes.Cursorize      (cursorize)
 -- -- import           Gibbon.Passes.FindWitnesses  (findWitnesses)
@@ -520,16 +519,10 @@ passes config@Config{dynflags} l1 = do
               l2 <- go "routeEnds"        routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
 
-              l2 <- if gibbon1 || biginf
-                    then return l2
-                    else do x <- go "boundsCheck" boundsCheck   l2
-                            go "L2.typecheck"     L2.tcProg     x
-
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
               l2 <- go "threadRegions"    threadRegions l2
-
 
               -- Note: L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
