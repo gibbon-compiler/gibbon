@@ -132,8 +132,8 @@ lookupFEnv v FullEnv{funEnv} = funEnv # v
 -- If we assume output regions are disjoint from input ones, then we
 -- can instantiate an L1 function type into a polymorphic L2 one,
 -- mechanically.
-convertFunTy :: ([Ty1],Ty1) -> PassM ArrowTy2
-convertFunTy (from,to) = do
+convertFunTy :: ([Ty1],Ty1,Bool) -> PassM ArrowTy2
+convertFunTy (from,to,isPar) = do
     from' <- mapM convertTy from
     to'   <- convertTy to
     -- For this simple version, we assume every location is in a separate region:
@@ -143,7 +143,8 @@ convertFunTy (from,to) = do
                      , arrIns  = from'
                      , arrEffs = S.empty
                      , arrOut  = to'
-                     , locRets = [] }
+                     , locRets = []
+                     , hasParallelism = isPar }
  where
    toLRM md ls =
        mapM (\v -> do r <- freshLocVar "r"
@@ -216,8 +217,9 @@ inferLocs initPrg = do
   p@(Prog dfs fds me) <- addRepairFns initPrg
   let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
-          fenv <- forM fds $ \(FunDef _ _ (intys, outty) _) ->
-                  lift $ lift $ convertFunTy (intys,outty)
+          fenv <- forM fds $ \(FunDef _ _ (intys, outty) bod) -> do
+                  let has_par = hasSpawns bod
+                  lift $ lift $ convertFunTy (intys,outty,has_par)
           let fe = FullEnv dfs' M.empty fenv
           me' <- case me of
             -- We ignore the type of the main expression inferred in L1..

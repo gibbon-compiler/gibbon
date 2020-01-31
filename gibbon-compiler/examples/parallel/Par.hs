@@ -48,6 +48,6 @@ copy foo =
       in C i x y z
 
 gibbon_main =
-  let x = mkFoo 8
+  let x = mkFoo 7
       y = copy x
   in sumFoo y

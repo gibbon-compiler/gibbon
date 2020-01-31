@@ -236,6 +236,7 @@ data ArrowTy2 = ArrowTy2
                                 -- and the populated by InferEffects.
     , arrOut  :: Ty2            -- ^ Output type for the function.
     , locRets :: [LocRet]       -- ^ L2B feature: multi-valued returns.
+    , hasParallelism :: Bool        -- ^ Does this function have parallelism
     }
   deriving (Read,Show,Eq,Ord, Generic, NFData)
 

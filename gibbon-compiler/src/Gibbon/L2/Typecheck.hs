@@ -144,7 +144,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
           --      locations.
           --  (3) We need to make sure that if we pass a packed structure as an argument, its
           --      location is among the passed-in locations.
-          do let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets) =
+          do let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) =
                      case M.lookup v funs of
                        Just f -> funTy f
                        Nothing -> error $ "tcExp: Unbound function: " ++ sdoc v

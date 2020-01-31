@@ -59,12 +59,15 @@ parAlloc Prog{ddefs,fundefs,mainExp} = do
   pure $ Prog ddefs fundefs' mainExp'
   where
     parAllocFn :: FunDef2 -> PassM FunDef2
-    parAllocFn f@FunDef{funArgs,funTy,funBody} = do
-      let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
-          initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
-          env2 = Env2 initTyEnv (initFunEnv fundefs)
-      bod' <- parAllocExp ddefs env2 initRegEnv M.empty [] S.empty funBody
-      pure $ f {funBody = bod'}
+    parAllocFn f@FunDef{funArgs,funTy,funBody} =
+      if hasParallelism funTy && isPackedTy (arrOut funTy)
+      then do
+        let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
+            initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
+            env2 = Env2 initTyEnv (initFunEnv fundefs)
+        bod' <- parAllocExp ddefs env2 initRegEnv M.empty [] S.empty funBody
+        pure $ f {funBody = bod'}
+      else pure f
 
 parAllocExp :: DDefs2 -> Env2 Ty2 -> RegEnv -> AfterEnv -> LetLocAfters -> S.Set Var -> L Exp2 -> PassM (L Exp2)
 parAllocExp ddefs env2 reg_env after_env afters spawned (L p ex) = L p <$>
