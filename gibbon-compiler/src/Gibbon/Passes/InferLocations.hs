@@ -831,9 +831,15 @@ inferExp env@FullEnv{dataDefs}
         AppE{} -> err$ "Malformed function application: " ++ (show ex0)
 
         SpawnE f _ args -> do
-          (ex0', ty, cs) <- inferExp env (l$ LetE (vr,locs,bty,L sl2 (AppE f [] args)) bod) dest
-          -- ASSUMPTION: There's only 1 AppE in ex0'
-          pure (changeAppToSpawn ex0', ty, cs)
+          let ret_ty = arrOut $ lookupFEnv f env
+          if isScalarTy ret_ty || isPackedTy ret_ty
+          then do
+            (ex0', ty, cs) <- inferExp env (l$ LetE (vr,locs,bty,L sl2 (AppE f [] args)) bod) dest
+            -- Assume that all args are VarE's
+            let arg_vars = map (\(L _ (VarE v)) -> v) args
+                args2 = map (l . VarE) arg_vars
+            pure (changeAppToSpawn f args2 ex0', ty, cs)
+          else err $ "Gibbon-TODO: Product types not allowed in SpawnE. Got: " ++ sdoc ret_ty
 
         SyncE -> do
           (bod',ty,cs) <- inferExp env bod dest
@@ -844,8 +850,6 @@ inferExp env@FullEnv{dataDefs}
           (bod',bod_ty,csb) <- inferExp (extendVEnv vr BoolTy env) bod dest
           let cs = L.nub $ csa ++ csb
           pure (lc$ LetE (vr,[],BoolTy,L sl2 $ IsBigE e') bod', ty, cs)
-
-        -- IfE{} -> err$ "Unexpected conditional in let binding: " ++ (show ex0)
 
         IfE a b c -> do
           (boda,tya,csa) <- inferExp env a NoDest

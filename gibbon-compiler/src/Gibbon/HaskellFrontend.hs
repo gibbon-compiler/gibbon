@@ -481,7 +481,7 @@ generateBind toplevel env decl exp2 =
       rhs' <- desugarExp toplevel rhs
       w <- case pat of
              PVar _ v    -> pure $ toVar (nameToStr v)
-             PWildCard _ -> gensym "wildcar_"
+             PWildCard _ -> gensym "wildcard_"
              _           -> error "generateBind: "
       ty' <- case M.lookup w env of
                 Nothing -> newMetaTy

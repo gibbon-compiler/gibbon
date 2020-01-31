@@ -917,7 +917,7 @@ hasSpawnsProg (Prog _ fundefs mainExp) =
       Nothing      -> False
       Just (e,_ty) -> hasSpawns e
 
--- | Does the expression contain a TimeIt form?
+-- | Does the expression contain a SpawnE form?
 hasSpawns :: L (PreExp e l d) -> Bool
 hasSpawns (L _ rhs) =
     case rhs of
@@ -933,7 +933,7 @@ hasSpawns (L _ rhs) =
       CaseE _ ls   -> any hasSpawns [ e | (_,_,e) <- ls ]
       LetE (_,_,_,e1) e2 -> hasSpawns e1 || hasSpawns e2
       SpawnE{}     -> True
-      SyncE        -> True
+      SyncE        -> False
       IsBigE e     -> hasSpawns e
       TimeIt e _ _ -> hasSpawns e
       MapE (_,_,e1) e2   -> hasSpawns e1 || hasSpawns e2

@@ -702,31 +702,32 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           _ -> gFreeVars ex
 
 
-changeAppToSpawn :: L Exp2 -> L Exp2
-changeAppToSpawn (L p1 ex1) = L p1 $
+changeAppToSpawn :: Var -> [L Exp2] -> L Exp2 -> L Exp2
+changeAppToSpawn v args2 (L p1 ex1) = L p1 $
   case ex1 of
     VarE{}    -> ex1
     LitE{}    -> ex1
     LitSymE{} -> ex1
-    AppE f locs args -> SpawnE f locs $ map changeAppToSpawn args
-    PrimAppE f args  -> PrimAppE f $ map changeAppToSpawn args
+    AppE f locs args | v == f && args == args2 -> SpawnE f locs $ map go args
+    AppE f locs args -> AppE f locs $ map go args
+    PrimAppE f args  -> PrimAppE f $ map go args
     LetE (v,loc,ty,rhs) bod -> do
-      LetE (v,loc,ty, changeAppToSpawn rhs) (changeAppToSpawn bod)
-    IfE a b c  -> IfE (changeAppToSpawn a) (changeAppToSpawn b) (changeAppToSpawn c)
-    MkProdE xs -> MkProdE $ map changeAppToSpawn xs
-    ProjE i e  -> ProjE i $ changeAppToSpawn e
-    DataConE loc dcon args -> DataConE loc dcon $ map changeAppToSpawn args
+      LetE (v,loc,ty, go rhs) (go bod)
+    IfE a b c  -> IfE (go a) (go b) (go c)
+    MkProdE xs -> MkProdE $ map go xs
+    ProjE i e  -> ProjE i $ go e
+    DataConE loc dcon args -> DataConE loc dcon $ map go args
     CaseE scrt mp ->
-      CaseE (changeAppToSpawn scrt) $ map (\(a,b,c) -> (a,b, changeAppToSpawn c)) mp
-    TimeIt e ty b  -> TimeIt (changeAppToSpawn e) ty b
-    WithArenaE v e -> WithArenaE v (changeAppToSpawn e)
+      CaseE (go scrt) $ map (\(a,b,c) -> (a,b, go c)) mp
+    TimeIt e ty b  -> TimeIt (go e) ty b
+    WithArenaE v e -> WithArenaE v (go e)
     SpawnE{} -> ex1
     SyncE{}  -> ex1
-    IsBigE e -> IsBigE (changeAppToSpawn e)
+    IsBigE e -> IsBigE (go e)
     Ext ext ->
       case ext of
-        LetRegionE r rhs  -> Ext $ LetRegionE r (changeAppToSpawn rhs)
-        LetLocE l lhs rhs -> Ext $ LetLocE l lhs (changeAppToSpawn rhs)
+        LetRegionE r rhs  -> Ext $ LetRegionE r (go rhs)
+        LetLocE l lhs rhs -> Ext $ LetLocE l lhs (go rhs)
         RetE{}            -> ex1
         FromEndE{}        -> ex1
         BoundsCheck{}     -> ex1
@@ -734,3 +735,5 @@ changeAppToSpawn (L p1 ex1) = L p1 $
         AddFixed{}        -> ex1
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{}  -> error "addRANExp: TODO FoldE"
+
+  where go = changeAppToSpawn v args2

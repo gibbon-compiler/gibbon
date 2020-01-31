@@ -64,6 +64,7 @@ import           Gibbon.Passes.InferLocations (inferLocs)
 import           Gibbon.Passes.RepairProgram  (repairProgram)
 import           Gibbon.Passes.RemoveCopies   (removeCopies)
 import           Gibbon.Passes.InferEffects   (inferEffects)
+import           Gibbon.Passes.ParAlloc       (parAlloc)
 import           Gibbon.Passes.InferRegionScope (inferRegScope)
 import           Gibbon.Passes.RouteEnds      (routeEnds)
 import           Gibbon.Passes.BoundsCheck    (boundsCheck)
@@ -474,7 +475,6 @@ passes config@Config{dynflags} l1 = do
       -- If we are executing a benchmark, then we
       -- replace the main function with benchmark code:
       l1 <- goE "benchMainExp" benchMainExp             l1
-
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    inlineTriv              l1
@@ -509,6 +509,9 @@ passes config@Config{dynflags} l1 = do
               l2 <- go "inferEffects"     inferEffects  l2
 
               l2 <- go "repairProgram"(repairProgram l1) l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
+
+              l2 <- go "parAlloc"         parAlloc      l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
 
               l2 <- go "inferRegScope"    inferRegScope l2
