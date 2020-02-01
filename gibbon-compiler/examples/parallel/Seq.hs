@@ -11,11 +11,12 @@ mkFoo i =
   else if i == 1
        then B i (mkFoo (i-1)) (mkFoo (i-1))
        else
-           let x = spawn (mkFoo (i-1))
-               y = spawn (mkFoo (i-1))
+           let x = mkFoo (i-1)
+               y = mkFoo (i-1)
                z = mkFoo (i-1)
-               _ = sync
            in C i x y z
+
+{-
 
 mkFoo2 :: Int -> (Int, Foo)
 mkFoo2 i =
@@ -36,6 +37,8 @@ mkFoo2 i =
                y = q !!! 1
                z = r !!! 1
            in (i, C i x y z)
+
+-}
 
 sumFoo :: Foo -> Int
 sumFoo foo =
