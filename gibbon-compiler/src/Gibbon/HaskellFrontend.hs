@@ -192,6 +192,8 @@ desugarExp toplevel e = L NoLoc <$>
       then pure $ PrimAppE Gensym []
       else if v == "sync"
       then pure SyncE
+      else if v == "sizeParam"
+      then pure $ PrimAppE SizeParam []
       else case M.lookup v toplevel of
              Just sigma ->
                case tyFromScheme sigma of

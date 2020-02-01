@@ -6,7 +6,6 @@ import qualified Data.Map as M
 
 import Gibbon.Common
 import Gibbon.DynFlags
-import Gibbon.L1.Syntax
 import Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
@@ -171,6 +170,15 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv (L p ex) = L p <$>
       LetE <$> (v,locs,ty,) <$> go rhs <*>
         threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv' bod
 
+    -- Sometimes, this expression can have RetE forms. We should collect and update
+    -- the locs here appropriately.
+    LetE (v,locs,ty, rhs@(L _ TimeIt{})) bod -> do
+       rhs' <- go rhs
+       let retlocs = findRetLocs rhs'
+           newlocs = retlocs ++ locs
+       LetE (v, newlocs,ty, rhs') <$>
+         threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv bod
+
     LetE (v,locs,ty, rhs) bod ->
       LetE <$> (v,locs,ty,) <$> go rhs <*>
         threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv bod
@@ -255,3 +263,40 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv (L p ex) = L p <$>
           renv1' = foldr (\lc acc -> M.insert lc reg acc) renv1 locs
           env21' = extendPatternMatchEnv dcon ddefs vars locs env21
       (dcon,vlocs,) <$> (threadRegionsExp ddefs fundefs isMain renv1' env21' lfenv1 bod)
+
+-- Inspect an AST and return locations in a RetE form.
+findRetLocs :: L Exp2 -> [LocVar]
+findRetLocs ex = go ex []
+  where
+    go :: L Exp2 -> [LocVar] -> [LocVar]
+    go (L _ ex) acc =
+      case ex of
+        VarE{}    -> acc
+        LitE{}    -> acc
+        LitSymE{} -> acc
+        AppE f locs args -> foldr go acc args
+        PrimAppE f args  -> foldr go acc args
+        LetE (v,loc,ty,rhs) bod -> do
+          foldr go acc [rhs,bod]
+        IfE a b c  -> foldr go acc [a,b,c]
+        MkProdE xs -> foldr go acc xs
+        ProjE i e  -> go e acc
+        DataConE loc dcon args -> foldr go acc args
+        CaseE scrt mp ->
+          foldr (\(_,_,c) acc2 -> go c acc2) acc mp
+        TimeIt e ty b  -> go e acc
+        WithArenaE v e -> go e acc
+        SpawnE{} -> acc
+        SyncE{}  -> acc
+        IsBigE e -> go e acc
+        Ext ext ->
+          case ext of
+            LetRegionE r bod  -> go bod acc
+            LetLocE l lhs bod -> go bod acc
+            RetE locs _       -> locs ++ acc
+            FromEndE{}        -> acc
+            BoundsCheck{}     -> acc
+            IndirectionE{}    -> acc
+            AddFixed{}        -> acc
+        MapE{}  -> error "findRetLocs: TODO MapE"
+        FoldE{}  -> error "findRetLocs: TODO FoldE"

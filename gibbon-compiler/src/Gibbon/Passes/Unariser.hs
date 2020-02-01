@@ -138,7 +138,7 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
     TimeIt e ty b -> do
       tmp <- gensym $ toVar "timed"
       e'  <- go env2 e
-      return $ LetE (tmp,[],ty, l$ TimeIt e' ty b) (l$ VarE tmp)
+      return $ LetE (tmp,[],flattenTy ty, l$ TimeIt e' ty b) (l$ VarE tmp)
 
     WithArenaE v e -> WithArenaE v <$> go env2 e
 

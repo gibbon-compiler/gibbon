@@ -65,14 +65,11 @@ copy foo =
           z = copy c
       in C i x y z
 
-foo :: Int -> Int
-foo n =
-  let -- x = mkFoo 7
+gibbon_main =
+  let -- a = mkFoo2 sizeParam
+      -- x = a !!! 1
 
-      a = (mkFoo2 n)
-      x = a !!! 1
-
-      y = (copy x)
-  in sumFoo y
-
-gibbon_main = iterate (foo 4)
+      n = sizeParam
+      x = iterate (mkFoo n)
+      y = iterate (copy x)
+  in iterate (sumFoo y)

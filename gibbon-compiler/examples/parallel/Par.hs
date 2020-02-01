@@ -4,6 +4,19 @@ data Foo = A Int
          | B Int Foo Foo
          | C Int Foo Foo Foo
 
+mkFoo_seq :: Int -> Foo
+mkFoo_seq i =
+  if i <= 0
+  then A 1
+  else if i == 1
+       then B i (mkFoo_seq (i-1)) (mkFoo_seq (i-1))
+       else
+           let x = mkFoo_seq (i-1)
+               y = mkFoo_seq (i-1)
+               z = mkFoo_seq (i-1)
+           in C i x y z
+
+
 mkFoo :: Int -> Foo
 mkFoo i =
   if i <= 0
@@ -11,11 +24,14 @@ mkFoo i =
   else if i == 1
        then B i (mkFoo (i-1)) (mkFoo (i-1))
        else
-           let x = spawn (mkFoo (i-1))
-               y = spawn (mkFoo (i-1))
-               z = mkFoo (i-1)
-               _ = sync
-           in C i x y z
+           if i < 10
+           then mkFoo_seq i
+           else let x = spawn (mkFoo (i-1))
+                    y = spawn (mkFoo (i-1))
+                    z = mkFoo (i-1)
+                    _ = sync
+                in C i x y z
+{-
 
 mkFoo2_seq :: Int -> (Int, Foo)
 mkFoo2_seq i =
@@ -60,6 +76,7 @@ mkFoo2 i =
                    y = q !!! 1
                    z = r !!! 1
                in (i, C i x y z)
+-}
 
 sumFoo_seq :: Foo -> Int
 sumFoo_seq foo =
@@ -125,12 +142,11 @@ copy foo =
               _ = sync
           in C i x y z
 
-
 gibbon_main =
-  let -- x = mkFoo 7
+  let -- a = mkFoo2 sizeParam
+      -- x = a !!! 1
 
-      a = (mkFoo2 4)
-      x = a !!! 1
-
-      y = (copy x)
-  in sumFoo y
+      n = sizeParam
+      x = iterate (mkFoo n)
+      y = iterate (copy x)
+  in iterate (sumFoo y)
