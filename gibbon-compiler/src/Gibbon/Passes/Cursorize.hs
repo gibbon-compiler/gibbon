@@ -729,7 +729,7 @@ cursorizeSpawn isPackedContext ddfs fundefs denv tenv sdeps (L _ ex) = do
     LetE (v, locs, ty, L p (SpawnE fn applocs args)) bod
 
       | isPackedTy ty -> do
-          rhs' <- cursorizeExp ddfs fundefs denv tenv sdeps (L p (AppE fn applocs args))
+          rhs' <- fromDi <$> cursorizePackedExp ddfs fundefs denv tenv sdeps (L p (AppE fn applocs args))
           let rhs'' = case unLoc rhs' of
                         AppE fn' applocs' args' -> L p $ SpawnE fn' applocs' args'
                         _ -> error "cursorizeSpawn"
@@ -763,7 +763,26 @@ cursorizeSpawn isPackedContext ddfs fundefs denv tenv sdeps (L _ ex) = do
           bod' <- go tenv' sdeps' bod
           return $ unLoc $ mkLets bnds bod'
 
-      | hasPacked ty -> error "Gibbon-TODO: Product types not allowed in SpawnE. Got: "
+      | hasPacked ty -> do
+          rhs' <- fromDi <$> cursorizePackedExp ddfs fundefs denv tenv sdeps (L p (AppE fn applocs args))
+          let rhs'' = case unLoc rhs' of
+                        AppE fn' applocs' args' -> L p $ SpawnE fn' applocs' args'
+          fresh <- gensym "tup_haspacked"
+          let ty' = case locs of
+                      [] -> cursorizeTy ty
+                      xs -> ProdTy ([CursorTy | _ <- xs] ++ [cursorizeTy ty])
+              ty''  = stripTyLocs ty'
+              tenv' = M.insert v ty tenv
+          case locs of
+            [] -> LetE (v,[], ty'', rhs'') <$>
+                    go tenv' sdeps bod
+            _  -> do
+              let (bnds, pending_bnds) =
+                    ([(fresh, [], ty'', rhs'')],
+                     [(loc,[],CursorTy, CursorTy, l$ ProjE n (l$ VarE fresh)) | (loc,n) <- (zip locs [0..])] ++
+                     [(v,[], projTy (length locs) ty'', ty, l$ ProjE (length locs) (l$ VarE fresh))])
+                  sdeps' = sdeps ++ pending_bnds
+              unLoc . mkLets bnds <$> go tenv' sdeps' bod
 
       | otherwise -> do
           rhs' <- cursorizeExp ddfs fundefs denv tenv sdeps (L p (AppE fn applocs args))

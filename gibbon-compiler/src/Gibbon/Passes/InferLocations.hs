@@ -834,14 +834,15 @@ inferExp env@FullEnv{dataDefs}
 
         SpawnE f _ args -> do
           let ret_ty = arrOut $ lookupFEnv f env
-          if isScalarTy ret_ty || isPackedTy ret_ty
-          then do
-            (ex0', ty, cs) <- inferExp env (l$ LetE (vr,locs,bty,L sl2 (AppE f [] args)) bod) dest
-            -- Assume that all args are VarE's
-            let arg_vars = map (\(L _ (VarE v)) -> v) args
-                args2 = map (l . VarE) arg_vars
-            pure (changeAppToSpawn f args2 ex0', ty, cs)
-          else err $ "Gibbon-TODO: Product types not allowed in SpawnE. Got: " ++ sdoc ret_ty
+          -- if isScalarTy ret_ty || isPackedTy ret_ty
+          -- then do
+          (ex0', ty, cs) <- inferExp env (l$ LetE (vr,locs,bty,L sl2 (AppE f [] args)) bod) dest
+          -- Assume that all args are VarE's
+          let arg_vars = map (\(L _ (VarE v)) -> v) args
+              args2 = map (l . VarE) arg_vars
+              ex0'' = changeAppToSpawn f args2 ex0'
+          -- pure (moveProjsAfterSync vr ex0'', ty, cs)
+          pure (ex0'', ty, cs)
 
         SyncE -> do
           (bod',ty,cs) <- inferExp env bod dest
@@ -1280,6 +1281,43 @@ fixProj renam pvar proj (L i e) =
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
+
+
+-- Runs after projTups in the SpawnE case in inferExp.
+moveProjsAfterSync :: Var -> L Exp2 -> L Exp2
+moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
+  where
+    go :: [Binds (L Exp2)] -> S.Set Var -> L Exp2 -> L Exp2
+    go acc1 pending (L p ex) = L p $
+      case ex of
+        VarE{}    -> ex
+        LitE{}    -> ex
+        LitSymE{} -> ex
+        AppE v locs ls   -> ex
+        PrimAppE pr args -> ex
+        LetE (v,locs,ty,L p SyncE) bod ->
+          let bod' = go [] S.empty bod
+          in LetE (v,locs,ty,L p SyncE) (mkLets acc1 bod')
+        LetE (v,locs,ty,rhs) bod ->
+          let vars = S.fromList $ allFreeVars rhs
+          in if S.null (S.intersection vars pending)
+             then LetE (v, locs, ty, rhs) (go acc1 pending bod)
+             else unLoc $ go ((v, locs, ty, rhs):acc1) (S.insert v pending) bod
+        IfE a b c   -> IfE (go acc1 pending a) (go acc1 pending b) (go acc1 pending c)
+        MkProdE ls  -> MkProdE $ L.map (go acc1 pending) ls
+        ProjE i arg -> ProjE i $ go acc1 pending arg
+        CaseE scrt ls -> CaseE (go acc1 pending scrt) $
+                           L.map (\(dcon,vs,rhs) -> (dcon,vs,go acc1 pending rhs)) ls
+        DataConE loc dcon args -> DataConE loc dcon $ L.map (go acc1 pending) args
+        TimeIt arg ty b -> TimeIt (go acc1 pending arg) ty b
+        WithArenaE a e  -> WithArenaE a $ go acc1 pending e
+        SpawnE fn locs ls -> error "moveProjsAfterSync: unbound SpawnE"
+        SyncE   -> error "moveProjsAfterSync: unbound SyncE"
+        Ext ext -> case ext of
+                     LetRegionE r bod -> Ext $ LetRegionE r $ go acc1 pending bod
+                     LetLocE a b bod -> Ext $ LetLocE a b $ go acc1 pending bod
+        MapE{}  -> error "moveProjsAfterSync: todo MapE"
+        FoldE{} -> error "moveProjsAfterSync: todo FoldE"
 
 
 -- | Checks that there are no constraints specifying a location

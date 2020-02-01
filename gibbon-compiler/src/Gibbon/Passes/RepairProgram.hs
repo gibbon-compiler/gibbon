@@ -17,6 +17,7 @@ import Gibbon.Passes.AddTraversals  (addTraversals)
 import Gibbon.Passes.AddRAN         (addRAN,needsRAN)
 import qualified Gibbon.L2.Typecheck as L2
 import qualified Gibbon.L1.Typecheck as L1
+import Gibbon.Pretty
 
 --------------------------------------------------------------------------------
 

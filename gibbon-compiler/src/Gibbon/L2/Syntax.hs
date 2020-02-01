@@ -25,7 +25,7 @@ module Gibbon.L2.Syntax
     -- * Operations on types
     , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substLoc
     , substLocs, substEffs, stripTyLocs, extendPatternMatchEnv
-    , locsInTy, dummyTyLocs
+    , locsInTy, dummyTyLocs, allFreeVars
 
     -- * Other helpers
     , revertToL1, occurs, mapPacked, constPacked, depList, changeAppToSpawn
@@ -684,23 +684,23 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           FromEndLE loc -> [loc]
           FreeLE -> []
 
-      -- gFreeVars ++ locations ++ region variables
-      allFreeVars :: L Exp2 -> [Var]
-      allFreeVars (L _ ex) = S.toList $
-        case ex of
-          AppE _ locs _       -> S.fromList locs `S.union` gFreeVars ex
-          LetE (_,locs,_,_) _ -> S.fromList locs `S.union` gFreeVars ex
-          DataConE loc _ _    -> S.singleton loc `S.union` gFreeVars ex
-          Ext ext ->
-            case ext of
-              LetRegionE r _  -> S.singleton (regionToVar r) `S.union` gFreeVars ex
-              LetLocE loc _ _ -> S.singleton loc `S.union` gFreeVars ex
-              RetE locs _     -> S.fromList locs `S.union` gFreeVars ex
-              FromEndE loc    -> S.singleton loc
-              BoundsCheck _ reg cur -> S.fromList [reg,cur]
-              IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
-              AddFixed v _    -> S.singleton v
-          _ -> gFreeVars ex
+-- gFreeVars ++ locations ++ region variables
+allFreeVars :: L Exp2 -> [Var]
+allFreeVars (L _ ex) = S.toList $
+  case ex of
+    AppE _ locs _       -> S.fromList locs `S.union` gFreeVars ex
+    LetE (_,locs,_,_) _ -> S.fromList locs `S.union` gFreeVars ex
+    DataConE loc _ _    -> S.singleton loc `S.union` gFreeVars ex
+    Ext ext ->
+      case ext of
+        LetRegionE r _  -> S.singleton (regionToVar r) `S.union` gFreeVars ex
+        LetLocE loc _ _ -> S.singleton loc `S.union` gFreeVars ex
+        RetE locs _     -> S.fromList locs `S.union` gFreeVars ex
+        FromEndE loc    -> S.singleton loc
+        BoundsCheck _ reg cur -> S.fromList [reg,cur]
+        IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
+        AddFixed v _    -> S.singleton v
+    _ -> gFreeVars ex
 
 
 changeAppToSpawn :: Var -> [L Exp2] -> L Exp2 -> L Exp2

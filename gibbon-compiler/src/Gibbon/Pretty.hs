@@ -268,7 +268,8 @@ instance Pretty ArrowTy2 where
             pprintWithStyle PPHaskell fnty $$
               braces (text "locvars" <+> doc (locVars fnty) <> comma $$
                       text "effs: " <+> doc (arrEffs fnty) <> comma $$
-                      text "locrets: " <+> doc (locRets fnty))
+                      text "locrets: " <+> doc (locRets fnty) <> comma $$
+                      text "parallel: " <+> doc (hasParallelism fnty))
 
 
 -- Expressions

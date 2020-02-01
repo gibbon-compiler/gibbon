@@ -478,7 +478,7 @@ passes config@Config{dynflags} l1 = do
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    inlineTriv              l1
       l1 <- goE "typecheck"     L1.tcProg               l1
-      l1 <- goE "sequentialize" sequentialize           l1
+      -- l1 <- goE "sequentialize" sequentialize           l1
       l1 <- if should_fuse
           then goE  "fusion2"   fusion2                 l1
           else return l1

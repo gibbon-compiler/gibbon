@@ -224,6 +224,16 @@ desugarExp toplevel e = L NoLoc <$>
                   then do
                     e2' <- desugarExp toplevel e2
                     pure $ Ext $ BenchE "HOLE" [] [e2'] False
+                  else if f == "timeit"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty <- newMetaTy
+                    pure $ TimeIt e2' ty False
+                  else if f == "iterate"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty <- newMetaTy
+                    pure $ TimeIt e2' ty True
                   else if f == "error"
                   then case e2 of
                          Lit _ lit -> pure $ PrimAppE (ErrorP (litToString lit) IntTy) [] -- assume int (!)
@@ -268,6 +278,9 @@ desugarExp toplevel e = L NoLoc <$>
           L _ (PrimAppE p ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ PrimAppE p (ls ++ [e2'])
+
+          L _ TimeIt{} ->
+            error "desugarExp: TimeIt can only accept 1 expression."
 
           f -> error ("desugarExp: Couldn't parse function application: (: " ++ show f ++ ")")
 

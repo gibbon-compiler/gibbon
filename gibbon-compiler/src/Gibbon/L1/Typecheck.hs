@@ -342,7 +342,13 @@ tcExp ddfs env exp@(L p ex) =
       ty <- go (l$ AppE v locs ls)
       if isScalarTy ty || isPackedTy ty
       then pure ty
-      else error $ "Gibbon-TODO: Product types not allowed in SpawnE. Got: " ++ sdoc ty
+      else case ty of
+             ProdTy tys ->
+               case L.filter isPackedTy tys of
+                 []    -> pure ty
+                 [one] -> pure ty
+                 _     -> error $ "Gibbon-TODO: Product types not allowed in SpawnE. Got: " ++ sdoc ty
+             _ -> error "L1.Typecheck: SpawnE; type shouldn't be anything else."
 
     SyncE -> pure voidTy
 
