@@ -159,14 +159,17 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv (L p ex) = L p <$>
 
     LetE (v,locs,ty@(PackedTy _ loc), rhs@(L _ (DataConE _ _ args))) bod -> do
       let reg_of_tag = renv M.! loc
-          last_ty   = gRecoverType ddefs env2 (last args)
-          lfenv' = case last_ty of
-                     PackedTy _ last_loc -> do
-                       let reg_of_last_arg = renv M.! last_loc
-                       if reg_of_tag /= reg_of_last_arg
-                       then M.insert v reg_of_last_arg lfenv
-                       else lfenv
-                     _ -> lfenv
+          lfenv' = case args of
+                     [] -> lfenv
+                     _  ->
+                       let last_ty = gRecoverType ddefs env2 (last args) in
+                       case last_ty of
+                          PackedTy _ last_loc -> do
+                            let reg_of_last_arg = renv M.! last_loc
+                            if reg_of_tag /= reg_of_last_arg
+                            then M.insert v reg_of_last_arg lfenv
+                            else lfenv
+                          _ -> lfenv
       LetE <$> (v,locs,ty,) <$> go rhs <*>
         threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv' bod
 

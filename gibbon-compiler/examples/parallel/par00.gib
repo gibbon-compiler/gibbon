@@ -7,7 +7,7 @@
 (define (mklist [n : Int]) : List
   (if (= n 0)
       (Nil)
-      (Cons n (mklist (- n 1)))))
+      (Cons (rand) (mklist (- n 1)))))
 
 (define (sum-list [xs : List]) : Int
   (case xs
@@ -34,6 +34,13 @@
   (case xs
     [(Nil) ys]
     [(Cons z zs) (Cons z (append-list zs ys))]))
+
+(define (sort [xs : List]) : List
+  (case xs
+    [(Nil) (Nil)]
+    [(Cons y ys) (let ([part1 : List (sort (lesser y ys))])
+                   (let ([part2 : List (sort (greater-eq y ys))])
+                     (append-list part1 (Cons y part2))))]))
 
 (define (sort [xs : List]) : List
   (case xs
