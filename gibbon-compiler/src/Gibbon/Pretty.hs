@@ -4,7 +4,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 module Gibbon.Pretty
-  ( Pretty(..), PPStyle(..), render, pprintHsWithEnv ) where
+  ( Pretty(..), PPStyle(..), render, pprintHsWithEnv, pprender ) where
 
 import           Prelude hiding ((<>))
 import           Data.Loc
@@ -37,6 +37,8 @@ class Pretty e where
 
     {-# MINIMAL pprintWithStyle  #-}
 
+pprender :: Pretty e => e -> String
+pprender = render . pprint
 
 doublecolon :: Doc
 doublecolon = colon <> colon
@@ -266,7 +268,8 @@ instance Pretty ArrowTy2 where
             pprintWithStyle PPHaskell fnty $$
               braces (text "locvars" <+> doc (locVars fnty) <> comma $$
                       text "effs: " <+> doc (arrEffs fnty) <> comma $$
-                      text "locrets: " <+> doc (locRets fnty))
+                      text "locrets: " <+> doc (locRets fnty) <> comma $$
+                      text "parallel: " <+> doc (hasParallelism fnty))
 
 
 -- Expressions
@@ -340,10 +343,10 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                 hsep (map (pprintWithStyle sty) es)
                               -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
           TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
-          SpawnE w v locs ls -> text "spawn" <+> pprintWithStyle sty w <+>
-                                  parens (pprintWithStyle sty v <+>
-                                           (brackets $ hcat (punctuate "," (map pprint locs))) <+>
-                                           (pprintWithStyle sty ls))
+          SpawnE v locs ls -> text "spawn" <+>
+                                parens (pprintWithStyle sty v <+>
+                                         (brackets $ hcat (punctuate "," (map pprint locs))) <+>
+                                         (pprintWithStyle sty ls))
           SyncE -> text "sync"
           WithArenaE v e -> case sty of
                               PPHaskell  -> (text "let") <+>
@@ -353,6 +356,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                             text "in" $+$
                                             pprintWithStyle sty e
                               PPInternal -> text "letarena" <+> pprint v <+> text "in" $+$ pprint e
+          IsBigE e -> text "is_big" <+> pprintWithStyle sty e
           Ext ext -> pprintWithStyle sty ext
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{} -> error $ "Unexpected form in program: FoldE"
@@ -379,7 +383,7 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
           AfterConstantLE i loc -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
           AfterVariableLE v loc -> lparen <> pprint loc <+> text "+" <+> doc v <> rparen
           InRegionLE r  -> lparen <> text "inregion" <+> text (sdoc r) <> rparen
-          FromEndLE loc -> lparen <> text "fromend" <+> pprint loc <> rparen
+          FromEndLE loc -> lparen <> text "fromendle" <+> pprint loc <> rparen
           FreeLE -> lparen <> text "free" <> rparen
 
 instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
@@ -392,7 +396,7 @@ instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
           RetE ls v -> text "return" <+>
                           lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
                           doc v
-          FromEndE loc -> text "fromend" <+> pprint loc
+          FromEndE loc -> text "fromende" <+> pprint loc
           L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> pprint l2
           IndirectionE tc dc (l1,v1) (l2,v2) e -> text "indirection" <+>
                                                      doc tc <+>
@@ -507,6 +511,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         TimeIt{}   -> False
         WithArenaE _ e -> (go e)
         SpawnE{}-> False
+        IsBigE e-> go e
         SyncE   -> False
         MapE{}  -> error $ "hasBenchE: TODO MapE"
         FoldE{} -> error $ "hasBenchE: TODO FoldE"

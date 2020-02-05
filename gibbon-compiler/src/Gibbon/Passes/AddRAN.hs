@@ -183,8 +183,9 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
     WithArenaE v e -> do
       e' <- go e
       return $ WithArenaE v e'
-    SpawnE w f locs args -> SpawnE w f locs <$> mapM go args
+    SpawnE f locs args -> SpawnE f locs <$> mapM go args
     SyncE   -> pure SyncE
+    IsBigE e-> IsBigE <$> go e
     Ext _   -> return ex
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{} -> error "addRANExp: TODO FoldE"
@@ -211,8 +212,9 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
           CaseE (changeSpawnToApp scrt) $ map (\(a,b,c) -> (a,b, changeSpawnToApp c)) mp
         TimeIt e ty b  -> TimeIt (changeSpawnToApp e) ty b
         WithArenaE v e -> WithArenaE v (changeSpawnToApp e)
-        SpawnE w f locs args -> AppE f locs $ map changeSpawnToApp args
+        SpawnE f locs args -> AppE f locs $ map changeSpawnToApp args
         SyncE   -> SyncE
+        IsBigE e-> IsBigE $ changeSpawnToApp e
         Ext{}   -> ex1
         MapE{}  -> error "addRANExp: TODO MapE"
         FoldE{} -> error "addRANExp: TODO FoldE"
@@ -390,6 +392,7 @@ we need random access for that type.
 
     SpawnE{} -> error "needsRANExp: Unbound SpawnE"
     SyncE    -> error "needsRANExp: Unbound SyncE"
+    IsBigE{} -> S.empty
 
     LetE(v,_,ty,rhs) bod -> go rhs `S.union`
                             needsRANExp ddefs fundefs (extendVEnv v ty env2) renv tcenv parlocss bod
@@ -429,7 +432,7 @@ we need random access for that type.
 
     -- Return the location and tycon of an argument to a function call.
     parAppLoc :: Env2 Ty2 -> L Exp2 -> M.Map LocVar TyCon
-    parAppLoc env21 (L _ (SpawnE _ _ _ args)) =
+    parAppLoc env21 (L _ (SpawnE _ _ args)) =
       let fn (PackedTy dcon loc) = [(loc, dcon)]
           fn (ProdTy tys1) = L.concatMap fn tys1
           fn _ = []

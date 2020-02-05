@@ -5,7 +5,7 @@ import Data.List as L
 import qualified Data.Map as M
 
 import Gibbon.Common
-import Gibbon.L1.Syntax
+import Gibbon.DynFlags
 import Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
@@ -56,6 +56,12 @@ just like we do the output locations.
 -- Maps a location to a region
 type RegEnv = M.Map LocVar Var
 
+-- Maps the LHS of a constructor to the region of it's last field. Because of
+-- parallelism the last field of constructor may not be in the same region as
+-- it's tag. The region of the last field represents the "finished writing
+-- output here region", so that's the region that should be threaded.
+type LastFieldRegEnv = M.Map Var Var
+
 threadRegions :: L2.Prog2 -> PassM L2.Prog2
 threadRegions Prog{ddefs,fundefs,mainExp} = do
   fds' <- mapM (threadRegionsFn ddefs fundefs) $ M.elems fundefs
@@ -64,7 +70,7 @@ threadRegions Prog{ddefs,fundefs,mainExp} = do
   mainExp' <- case mainExp of
                 Nothing -> return Nothing
                 Just (mn, ty) -> Just . (,ty) <$>
-                  threadRegionsExp ddefs fundefs True M.empty env2 mn
+                  threadRegionsExp ddefs fundefs True M.empty env2 M.empty mn
   return $ Prog ddefs fundefs' mainExp'
 
 threadRegionsFn :: DDefs Ty2 -> FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
@@ -72,12 +78,25 @@ threadRegionsFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
   let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
       initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
-  bod' <- threadRegionsExp ddefs fundefs False initRegEnv env2 funBody
-  return $ f {funBody = bod'}
+  bod' <- threadRegionsExp ddefs fundefs False initRegEnv env2 M.empty funBody
+  -- Boundschecking
+  dflags <- getDynFlags
+  let bod'' = if gopt Opt_BigInfiniteRegions dflags
+              then bod'
+              else
+                foldr
+                  (\(LRM loc reg mode) acc ->
+                     let rv = toEndV $ regionToVar reg in
+                     if mode == Output
+                     then l$ LetE ("_",[],IntTy,l$ Ext$ BoundsCheck 9 rv loc) acc
+                     else acc)
+                  bod'
+                  (locVars funTy)
+  return $ f {funBody = bod''}
 
-threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> Bool -> RegEnv -> Env2 Ty2 -> L L2.Exp2
-                 -> PassM (L L2.Exp2)
-threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
+threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> Bool -> RegEnv -> Env2 Ty2
+                 -> LastFieldRegEnv -> L L2.Exp2 -> PassM (L L2.Exp2)
+threadRegionsExp ddefs fundefs isMain renv env2 lfenv (L p ex) = L p <$>
   case ex of
     AppE f applocs args -> do
       let ty = gRecoverType ddefs env2 ex
@@ -126,29 +145,55 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
             newlocs    = (map toEndV regs') ++ locs
             newapplocs = (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
         LetE (v, newlocs, ty, l$ AppE f newapplocs args) <$>
-          threadRegionsExp ddefs fundefs isMain renv'' (extendVEnv v ty env2) bod
+          threadRegionsExp ddefs fundefs isMain renv'' (extendVEnv v ty env2) lfenv bod
       -- Only input regions.
       else do
           let newapplocs = (map toEndV argregs) ++ applocs
           LetE (v,locs,ty, l$ AppE f newapplocs args) <$>
-            threadRegionsExp ddefs fundefs isMain renv' (extendVEnv v ty env2) bod
+            threadRegionsExp ddefs fundefs isMain renv' (extendVEnv v ty env2) lfenv bod
 
-    LetE (v,locs,ty, (L _ (SpawnE w f applocs args))) bod -> do
+    LetE (v,locs,ty, (L _ (SpawnE f applocs args))) bod -> do
       let e' = l$ LetE (v,locs,ty, (L _ (AppE f applocs args))) bod
-      e'' <- threadRegionsExp ddefs fundefs isMain renv env2 e'
-      pure $ unLoc $ changeAppToSpawn w e''
+      e'' <- threadRegionsExp ddefs fundefs isMain renv env2 lfenv e'
+      pure $ unLoc $ changeAppToSpawn f args e''
+
+    LetE (v,locs,ty@(PackedTy _ loc), rhs@(L _ (DataConE _ _ args))) bod -> do
+      let reg_of_tag = renv M.! loc
+          lfenv' = case args of
+                     [] -> lfenv
+                     _  ->
+                       let last_ty = gRecoverType ddefs env2 (last args) in
+                       case last_ty of
+                          PackedTy _ last_loc -> do
+                            let reg_of_last_arg = renv M.! last_loc
+                            if reg_of_tag /= reg_of_last_arg
+                            then M.insert v reg_of_last_arg lfenv
+                            else lfenv
+                          _ -> lfenv
+      LetE <$> (v,locs,ty,) <$> go rhs <*>
+        threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv' bod
+
+    -- Sometimes, this expression can have RetE forms. We should collect and update
+    -- the locs here appropriately.
+    LetE (v,locs,ty, rhs@(L _ TimeIt{})) bod -> do
+       rhs' <- go rhs
+       let retlocs = findRetLocs rhs'
+           newlocs = retlocs ++ locs
+       LetE (v, newlocs,ty, rhs') <$>
+         threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv bod
 
     LetE (v,locs,ty, rhs) bod ->
       LetE <$> (v,locs,ty,) <$> go rhs <*>
-        threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) bod
+        threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv bod
 
-    WithArenaE v e -> WithArenaE v <$> threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ArenaTy env2) e
+    WithArenaE v e ->
+      WithArenaE v <$> threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ArenaTy env2) lfenv e
 
     Ext ext ->
       case ext of
         LetLocE loc FreeLE bod ->
           Ext <$> LetLocE loc FreeLE <$>
-            threadRegionsExp ddefs fundefs isMain renv env2 bod
+            threadRegionsExp ddefs fundefs isMain renv env2 lfenv bod
 
         -- Update renv with a binding for loc
         LetLocE loc rhs bod -> do
@@ -160,11 +205,20 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
                       FromEndLE lc         -> renv # lc -- TODO: This needs to be fixed
                       FreeLE -> undefined
           Ext <$> LetLocE loc rhs <$>
-            threadRegionsExp ddefs fundefs isMain (M.insert loc reg renv) env2 bod
+            threadRegionsExp ddefs fundefs isMain (M.insert loc reg renv) env2 lfenv bod
 
         RetE locs v -> do
           let ty = lookupVEnv v env2
-          if not isMain && hasPacked ty
+          if not isMain && isPackedTy ty
+          then
+            case M.lookup v lfenv of
+              Nothing -> do
+                let tylocs  = locsInTy ty
+                    regs    = map (renv #) tylocs
+                    newlocs = map toEndV regs
+                return $ Ext $ RetE (newlocs ++ locs) v
+              Just r  -> return $ Ext $ RetE (toEndV r : locs) v
+          else if hasPacked ty
           then do
             let tylocs  = locsInTy ty
                 regs    = map (renv #) tylocs
@@ -192,22 +246,60 @@ threadRegionsExp ddefs fundefs isMain renv env2 (L p ex) = L p <$>
       let L _ (VarE v) = scrt
           PackedTy _ tyloc = lookupVEnv v env2
           reg = renv M.! tyloc
-      CaseE scrt <$> mapM (docase reg renv env2) mp
+      CaseE scrt <$> mapM (docase reg renv env2 lfenv) mp
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
     SpawnE{} -> error "threadRegionsExp: Unbound SpawnE"
     SyncE    -> pure ex
+    IsBigE e -> IsBigE <$> go e
     MapE{}  -> error $ "threadRegionsExp: TODO MapE"
     FoldE{} -> error $ "threadRegionsExp: TODO FoldE"
 
   where
-    go = threadRegionsExp ddefs fundefs isMain renv env2
+    go = threadRegionsExp ddefs fundefs isMain renv env2 lfenv
 
-    docase reg renv1 env21 (dcon,vlocs,bod) = do
+    docase reg renv1 env21 lfenv1 (dcon,vlocs,bod) = do
       -- Update the envs with bindings for pattern matched variables and locations.
       -- The locations point to the same region as the scrutinee.
       let (vars,locs) = unzip vlocs
           renv1' = foldr (\lc acc -> M.insert lc reg acc) renv1 locs
           env21' = extendPatternMatchEnv dcon ddefs vars locs env21
-      (dcon,vlocs,) <$> (threadRegionsExp ddefs fundefs isMain renv1' env21' bod)
+      (dcon,vlocs,) <$> (threadRegionsExp ddefs fundefs isMain renv1' env21' lfenv1 bod)
+
+-- Inspect an AST and return locations in a RetE form.
+findRetLocs :: L Exp2 -> [LocVar]
+findRetLocs ex = go ex []
+  where
+    go :: L Exp2 -> [LocVar] -> [LocVar]
+    go (L _ ex) acc =
+      case ex of
+        VarE{}    -> acc
+        LitE{}    -> acc
+        LitSymE{} -> acc
+        AppE f locs args -> foldr go acc args
+        PrimAppE f args  -> foldr go acc args
+        LetE (v,loc,ty,rhs) bod -> do
+          foldr go acc [rhs,bod]
+        IfE a b c  -> foldr go acc [a,b,c]
+        MkProdE xs -> foldr go acc xs
+        ProjE i e  -> go e acc
+        DataConE loc dcon args -> foldr go acc args
+        CaseE scrt mp ->
+          foldr (\(_,_,c) acc2 -> go c acc2) acc mp
+        TimeIt e ty b  -> go e acc
+        WithArenaE v e -> go e acc
+        SpawnE{} -> acc
+        SyncE{}  -> acc
+        IsBigE e -> go e acc
+        Ext ext ->
+          case ext of
+            LetRegionE r bod  -> go bod acc
+            LetLocE l lhs bod -> go bod acc
+            RetE locs _       -> locs ++ acc
+            FromEndE{}        -> acc
+            BoundsCheck{}     -> acc
+            IndirectionE{}    -> acc
+            AddFixed{}        -> acc
+        MapE{}  -> error "findRetLocs: TODO MapE"
+        FoldE{}  -> error "findRetLocs: TODO FoldE"

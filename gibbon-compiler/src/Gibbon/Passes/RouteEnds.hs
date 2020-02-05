@@ -127,16 +127,16 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
     -- | Process function types (but don't handle bodies)
     fdty :: L2.FunDef2 -> PassM L2.FunDef2
     fdty FunDef{funName,funTy,funArgs,funBody} =
-        do let (ArrowTy2 locin tyin eff tyout _locout) = funTy
+        do let (ArrowTy2 locin tyin eff tyout _locout isPar) = funTy
                handleLoc (LRM l r m) ls = if S.member (Traverse l) eff then (LRM l r m):ls else ls
                locout' = L.map EndOf $ L.foldr handleLoc [] locin
-           return FunDef{funName,funTy=(ArrowTy2 locin tyin eff tyout locout'),funArgs,funBody}
+           return FunDef{funName,funTy=(ArrowTy2 locin tyin eff tyout locout' isPar),funArgs,funBody}
 
 
     -- | Process function bodies
     fd :: FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
     fd fns FunDef{funName,funTy,funArgs,funBody} =
-        do let (ArrowTy2 locin tyins eff _tyout _locout) = funTy
+        do let (ArrowTy2 locin tyins eff _tyout _locout _isPar) = funTy
                handleLoc (LRM l _r _m) ls = if S.member (Traverse l) eff then l:ls else ls
                retlocs = L.foldr handleLoc [] locin
                lenv = L.foldr
@@ -195,17 +195,18 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                                (wrapBody e2' newls)
 
           -- Exactly like AppE.
-          LetE (v,_ls,ty,(L _ (SpawnE w f lsin e1))) e2 -> do
+          LetE (v,_ls,ty,(L _ (SpawnE f lsin e1))) e2 -> do
                  let lenv' = case ty of
                                PackedTy _n l -> M.insert v l lenv
                                _ -> lenv
                  (outlocs,newls,eor') <- doBoundApp f lsin
                  e2' <- exp fns retlocs eor' lenv' afterenv (extendVEnv v ty env2) e2
-                 return $ LetE (v,outlocs,ty, l$ SpawnE w f lsin e1)
+                 return $ LetE (v,outlocs,ty, l$ SpawnE f lsin e1)
                                (wrapBody e2' newls)
 
           SpawnE{} -> error "routeEnds: Unbound SpawnE"
           SyncE    -> pure e
+          IsBigE{} -> pure e
 
           CaseE (L _ (VarE x)) brs -> do
                  -- We will need to gensym while processing the case clauses, so

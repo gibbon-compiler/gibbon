@@ -434,8 +434,9 @@ data PreExp (ext :: * -> * -> *) loc dec =
 
    | WithArenaE Var EXP
 
-   | SpawnE Var Var [loc] [EXP]
+   | SpawnE Var [loc] [EXP]
    | SyncE
+   | IsBigE EXP
 
    -- Limited list handling:
    -- TODO: RENAME to "Array".
@@ -504,6 +505,7 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         WithArenaE{} -> False
         SpawnE{}   -> False
         SyncE      -> False
+        IsBigE{}   -> False
         Ext ext -> isTrivial ext
 
 
@@ -539,8 +541,9 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
 
       WithArenaE v e -> S.delete v $ gFreeVars e
 
-      SpawnE _ _ _ ls -> S.unions (L.map gFreeVars ls)
+      SpawnE _ _ ls -> S.unions (L.map gFreeVars ls)
       SyncE -> S.empty
+      IsBigE e -> gFreeVars e
 
       Ext q -> gFreeVars q
 
@@ -575,8 +578,9 @@ instance (Show (), Out (), Expression (e () (UrTy ())),
                         ++"\nExpression:\n  "++ sdoc ex
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
       WithArenaE _v e -> gRecoverType ddfs env2 e
-      SpawnE _ v _ _  -> outTy $ fEnv env2 # v
+      SpawnE v _ _    -> outTy $ fEnv env2 # v
       SyncE           -> voidTy
+      IsBigE _e       -> BoolTy
       CaseE _ mp ->
         let (c,args,e) = head mp
             args' = L.map fst args
@@ -608,8 +612,9 @@ instance HasRenamable e l d => Renamable (L (PreExp e l d)) where
         CaseE (go scrt) (map (\(a,b,c) -> (a, map (\(d,e) -> (go d, go e)) b, go c)) ls)
       DataConE loc dcon ls -> DataConE (go loc) dcon (gol ls)
       TimeIt e ty b -> TimeIt (go e) (go ty) b
-      SpawnE w f locs args -> SpawnE (go w) (go f) (gol locs) (gol args)
+      SpawnE f locs args -> SpawnE (go f) (gol locs) (gol args)
       SyncE   -> SyncE
+      IsBigE e-> IsBigE (go e)
       Ext ext -> Ext (go ext)
       MapE{}  -> ex
       FoldE{} -> ex
@@ -825,8 +830,9 @@ subst old new (L p0 ex) = L p0 $
     TimeIt e t b      -> TimeIt (go e) t b
     IfE a b c         -> IfE (go a) (go b) (go c)
 
-    SpawnE w v loc ls   -> SpawnE w v loc (map go ls)
-    SyncE               -> SyncE
+    SpawnE v loc ls   -> SpawnE v loc (map go ls)
+    SyncE             -> SyncE
+    IsBigE e          -> IsBigE (go e)
 
     MapE (v,t,rhs) bod | v == old  -> MapE (v,t, rhs)    (go bod)
                        | otherwise -> MapE (v,t, go rhs) (go bod)
@@ -864,8 +870,9 @@ substE old new (L p0 ex) = L p0 $
     DataConE loc k ls -> DataConE loc k $ L.map go ls
     TimeIt e t b      -> TimeIt (go e) t b
     IfE a b c         -> IfE (go a) (go b) (go c)
-    SpawnE w v loc ls -> SpawnE w v loc (map go ls)
+    SpawnE v loc ls   -> SpawnE v loc (map go ls)
     SyncE             -> SyncE
+    IsBigE e          -> IsBigE (go e)
     MapE (v,t,rhs) bod | VarE v == unLoc old  -> MapE (v,t, rhs)    (go bod)
                        | otherwise -> MapE (v,t, go rhs) (go bod)
     FoldE (v1,t1,r1) (v2,t2,r2) bod ->
@@ -895,7 +902,8 @@ hasTimeIt (L _ rhs) =
       IfE a b c    -> hasTimeIt a || hasTimeIt b || hasTimeIt c
       CaseE _ ls   -> any hasTimeIt [ e | (_,_,e) <- ls ]
       LetE (_,_,_,e1) e2 -> hasTimeIt e1 || hasTimeIt e2
-      SpawnE _ _ _ _     -> False
+      SpawnE _ _ _       -> False
+      IsBigE e           -> hasTimeIt e
       SyncE              -> False
       MapE (_,_,e1) e2   -> hasTimeIt e1 || hasTimeIt e2
       FoldE (_,_,e1) (_,_,e2) e3 -> hasTimeIt e1 || hasTimeIt e2 || hasTimeIt e3
@@ -909,7 +917,7 @@ hasSpawnsProg (Prog _ fundefs mainExp) =
       Nothing      -> False
       Just (e,_ty) -> hasSpawns e
 
--- | Does the expression contain a TimeIt form?
+-- | Does the expression contain a SpawnE form?
 hasSpawns :: L (PreExp e l d) -> Bool
 hasSpawns (L _ rhs) =
     case rhs of
@@ -925,8 +933,9 @@ hasSpawns (L _ rhs) =
       CaseE _ ls   -> any hasSpawns [ e | (_,_,e) <- ls ]
       LetE (_,_,_,e1) e2 -> hasSpawns e1 || hasSpawns e2
       SpawnE{}     -> True
-      SyncE        -> True
-      TimeIt{}     -> False
+      SyncE        -> False
+      IsBigE e     -> hasSpawns e
+      TimeIt e _ _ -> hasSpawns e
       MapE (_,_,e1) e2   -> hasSpawns e1 || hasSpawns e2
       FoldE (_,_,e1) (_,_,e2) e3 ->
         hasSpawns e1 || hasSpawns e2 || hasSpawns e3

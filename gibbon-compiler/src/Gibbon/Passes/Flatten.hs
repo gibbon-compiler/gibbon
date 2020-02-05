@@ -179,8 +179,10 @@ exp ddfs env2 (L sloc e0) =
       (bnd,e') <- go e
       return ([], TimeIt (flatLets bnd e') (gRecoverType ddfs env2 e) b)
 
-    SpawnE w f lvs ls -> gols (SpawnE w f lvs)  ls "SpawnE"
+    SpawnE f lvs ls -> gols (SpawnE f lvs)  ls "SpawnE"
     SyncE -> pure ([], SyncE)
+    IsBigE e -> do (b,e') <- triv "IsBig" e
+                   return (b, IsBigE e')
 
     WithArenaE v e -> do
       (bnd, e') <- go e
@@ -279,8 +281,10 @@ flattenExp0 ddfs env2 (L sloc e0) =
       (bnd,e') <- go e
       return ([], TimeIt (flatLets bnd e') (L0.recoverType ddfs env2 e) b)
 
-    SpawnE w f lvs ls -> gols (SpawnE w f lvs)  ls "AppE"
+    SpawnE f lvs ls -> gols (SpawnE f lvs)  ls "AppE"
     SyncE -> pure ([], SyncE)
+    IsBigE e -> do (b,e') <- triv "IsBig" e
+                   return (b, IsBigE e')
 
     MapE _ _      -> error "FINISHLISTS"
     FoldE _ _ _   -> error "FINISHLISTS"
@@ -298,3 +302,5 @@ flattenExp0 ddfs env2 (L sloc e0) =
         L0.BenchE fn tyapps args b -> do
           (bnds, args') <- unzip <$> mapM go args
           pure (concat bnds, Ext $ L0.BenchE fn tyapps args' b)
+        L0.ParE0 _ls -> do
+          error "flattenL0: ParE0"

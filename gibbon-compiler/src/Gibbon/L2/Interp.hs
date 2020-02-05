@@ -217,7 +217,7 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
                else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
               return $! (val, sz)
 
-        SpawnE w f locs args -> go env sizeEnv (l$ AppE f locs args)
+        SpawnE f locs args -> go env sizeEnv (l$ AppE f locs args)
         SyncE -> pure $ (VInt (-1), SOne 8)
 
         MapE{} -> error $ "L2.Interp: TODO " ++ sdoc ex

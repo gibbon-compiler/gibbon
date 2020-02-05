@@ -45,7 +45,7 @@ import qualified Gibbon.L2.Syntax as L2
 -- import qualified Gibbon.L3.Syntax as L3
 import qualified Gibbon.L4.Syntax as L4
 import qualified Gibbon.SExpFrontend as SExp
-import qualified Gibbon.L1.Interp as SI
+import qualified Gibbon.L1.Interp as L1
 import           Gibbon.TargetInterp (Val (..), execProg)
 
 -- Compiler passes
@@ -64,9 +64,9 @@ import           Gibbon.Passes.InferLocations (inferLocs)
 import           Gibbon.Passes.RepairProgram  (repairProgram)
 import           Gibbon.Passes.RemoveCopies   (removeCopies)
 import           Gibbon.Passes.InferEffects   (inferEffects)
+import           Gibbon.Passes.ParAlloc       (parAlloc)
 import           Gibbon.Passes.InferRegionScope (inferRegScope)
 import           Gibbon.Passes.RouteEnds      (routeEnds)
-import           Gibbon.Passes.BoundsCheck    (boundsCheck)
 import           Gibbon.Passes.ThreadRegions  (threadRegions)
 import           Gibbon.Passes.Cursorize      (cursorize)
 -- -- import           Gibbon.Passes.FindWitnesses  (findWitnesses)
@@ -218,7 +218,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
       dbgPrintLn passChatterLvl $
           " [compiler] pipeline starting, parsed program: "++
             if dbgLvl >= passChatterLvl+1
-            then "\n"++sepline ++ "\n" ++ (render $ pprint l1)
+            then "\n"++sepline ++ "\n" ++ (pprender l1)
             else show (length (sdoc l1)) ++ " characters."
 
       let parallel = gopt Opt_Parallel (dynflags config)
@@ -268,7 +268,7 @@ runL1 l1 = do
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
     dbgPrintLn 2 $ "Running the following through L1.Interp:\n "++sepline ++ "\n" ++ sdoc l1
-    SI.execAndPrint runConf l1
+    L1.execAndPrint runConf l1
     exitSuccess
 
 -- | The compiler's policy for running/printing L2 programs.
@@ -319,11 +319,11 @@ parseInput ip fp = do
                                     l0 <- pm_l0
                                     dbgTrace 5 ("\n\nParsed:\n" ++ (sdoc l0)) (pure ())
                                     l0 <- freshNames l0
-                                    dbgTrace 5 ("\n\nFreshen:\n" ++ (render $ pprint l0)) (pure ())
+                                    dbgTrace 5 ("\n\nFreshen:\n" ++ (pprender l0)) (pure ())
                                     l0 <- L0.tcProg l0
-                                    dbgTrace 5 ("\n\nTypechecked:\n" ++ (render $ pprint l0)) (pure ())
+                                    dbgTrace 5 ("\n\nTypechecked:\n" ++ (pprender l0)) (pure ())
                                     l1 <- L0.l0ToL1 l0
-                                    dbgTrace 5 ("\n\nLowered to L1:\n" ++ (render $ pprint l1)) (pure ())
+                                    dbgTrace 5 ("\n\nLowered to L1:\n" ++ (pprender l1)) (pure ())
                                     pure l1
                               in pure passes
 
@@ -474,12 +474,11 @@ passes config@Config{dynflags} l1 = do
       -- If we are executing a benchmark, then we
       -- replace the main function with benchmark code:
       l1 <- goE "benchMainExp" benchMainExp             l1
-
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    inlineTriv              l1
       l1 <- goE "typecheck"     L1.tcProg               l1
-      l1 <- goE "sequentialize" sequentialize           l1
+      -- l1 <- goE "sequentialize" sequentialize           l1
       l1 <- if should_fuse
           then goE  "fusion2"   fusion2                 l1
           else return l1
@@ -503,13 +502,21 @@ passes config@Config{dynflags} l1 = do
 
               l2 <- if gibbon1 || no_rcopies
                     then return l2
-                    else go "removeCopies" removeCopies l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
+                    else do x <- go "removeCopies" removeCopies l2
+                            go "L2.typecheck"     L2.tcProg     x
 
               l2 <- go "inferEffects"     inferEffects  l2
 
               l2 <- go "repairProgram"(repairProgram l1) l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
+
+              l2 <- if gopt Opt_Parallel dynflags
+                    then do
+                      l2 <- go "parAlloc"     parAlloc   l2
+                      l2 <- go "L2.typecheck" L2.tcProg  l2
+                      pure l2
+                    else (pure l2)
+
 
               l2 <- go "inferRegScope"    inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
@@ -517,16 +524,10 @@ passes config@Config{dynflags} l1 = do
               l2 <- go "routeEnds"        routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
 
-              l2 <- if gibbon1 || biginf
-                    then return l2
-                    else go "boundsCheck" boundsCheck   l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
-
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
               l2 <- go "threadRegions"    threadRegions l2
-
 
               -- Note: L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
@@ -585,7 +586,7 @@ pass config who fn x = do
         then lift $ evaluate $ force y
         else return y
   if dbgLvl >= passChatterLvl+1
-     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++ (render $ pprint y')
+     then lift$ dbgPrintLn (passChatterLvl+1) $ "Pass output:\n"++sepline++"\n"++ (pprender y')
      -- TODO: Switch to a node-count for size output (add to GenericOps):
      else lift$ dbgPrintLn passChatterLvl $ "   => "++ show (length (sdoc y')) ++ " characters output."
   return y'

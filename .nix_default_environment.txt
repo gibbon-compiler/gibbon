@@ -1,1 +1,1 @@
-https://github.com/NixOS/nixpkgs-channels/archive/nixos-18.09.tar.gz
+https://github.com/NixOS/nixpkgs-channels/archive/nixos-19.09.tar.gz

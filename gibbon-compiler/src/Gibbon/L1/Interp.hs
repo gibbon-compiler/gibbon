@@ -161,8 +161,9 @@ interp rc _ddefs fenv = go M.empty
                else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
               return $! val
 
-          SpawnE _ f locs args -> go env (l$ AppE f locs args)
+          SpawnE f locs args -> go env (l$ AppE f locs args)
           SyncE -> pure $ VInt (-1)
+          IsBigE{} -> pure $ VBool False
 
           WithArenaE v e -> let env' = M.insert v (VInt 0) env
                             in go env' e

@@ -124,9 +124,11 @@ inferExp ddfs fenv env dps (L _p expr) =
       let (effs, _locs) = unzip $ L.map (inferExp ddfs fenv env dps) ls
       in (S.unions effs, Nothing)
 
-    SpawnE _ fn locs args -> inferExp ddfs fenv env dps (l$ AppE fn locs args)
+    SpawnE fn locs args -> inferExp ddfs fenv env dps (l$ AppE fn locs args)
 
     SyncE -> (S.empty, Nothing)
+
+    IsBigE{} -> (S.empty, Nothing)
 
     ProjE _n e ->
       let (eff, _loc) = inferExp ddfs fenv env dps e
@@ -164,8 +166,7 @@ inferExp ddfs fenv env dps (L _p expr) =
     Ext (RetE _ _)         -> (S.empty, Nothing)
     Ext (FromEndE _ )      -> (S.empty, Nothing)
     Ext (IndirectionE{})   -> (S.empty, Nothing)
-
-    oth -> error $ "FINISHME: inferExp " ++ sdoc oth
+    Ext (BoundsCheck{})    -> (S.empty, Nothing)
 
   where
     packedLoc :: Ty2 -> Maybe LocVar

@@ -144,7 +144,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
           --      locations.
           --  (3) We need to make sure that if we pass a packed structure as an argument, its
           --      location is among the passed-in locations.
-          do let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets) =
+          do let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) =
                      case M.lookup v funs of
                        Just f -> funTy f
                        Nothing -> error $ "tcExp: Unbound function: " ++ sdoc v
@@ -389,10 +389,14 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                -- ensureEqualTy exp ty ty1
                return (ty1,tstate1)
 
-      SpawnE w f locs args ->
+      SpawnE f locs args ->
         tcExp ddfs env funs constrs regs tstatein (l$ AppE f locs args)
 
       SyncE -> pure (ProdTy [], tstatein)
+
+      IsBigE e -> do
+        (ty, tstate1) <- recur tstatein e
+        pure (BoolTy, tstate1)
 
       WithArenaE v e -> do
               let env' = extendVEnv v ArenaTy env
@@ -456,8 +460,6 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
       Ext (BoundsCheck{}) -> return (IntTy,tstatein)
 
       Ext (IndirectionE tycon _ (a,_) _ _) -> return (PackedTy tycon a, tstatein)
-
-      hole -> error $ "FINISHME: L2.tcExp " ++ show hole
 
     where recur ts e = tcExp ddfs env funs constrs regs ts e
 

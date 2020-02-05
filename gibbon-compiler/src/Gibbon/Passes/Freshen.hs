@@ -265,16 +265,15 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
       e' <- freshExp (M.insert v v' venv) tvenv e
       return $ WithArenaE v' e'
 
-    SpawnE w v _locs ls -> do
+    SpawnE v locs ls -> assert ([] == locs) $ do
       ls' <- mapM go ls
-      let w' = case M.lookup w venv of
-                 Nothing -> v
-                 Just v' -> v'
       case M.lookup v venv of
-        Nothing -> return $ SpawnE w' (cleanFunName v) [] ls'
-        Just v' -> return $ SpawnE w' (cleanFunName v') [] ls'
+        Nothing -> return $ SpawnE (cleanFunName v) [] ls'
+        Just v' -> return $ SpawnE (cleanFunName v') [] ls'
 
     SyncE -> pure SyncE
+
+    IsBigE e -> IsBigE <$> go e
 
     MapE (v,t,b) e -> do
       b' <- go b
@@ -377,16 +376,15 @@ freshExp1 vs (L sloc exp) = fmap (L sloc) $
       e' <- freshExp1 vs e
       return $ TimeIt e' t b
 
-    SpawnE w v locs ls -> assert ([] == locs) $ do
+    SpawnE v locs ls -> assert ([] == locs) $ do
       ls' <- mapM (freshExp1 vs) ls
-      let w' = case M.lookup w vs of
-                 Nothing -> v
-                 Just v' -> v'
       case M.lookup v vs of
-        Nothing -> return $ SpawnE w' (cleanFunName v) [] ls'
-        Just v' -> return $ SpawnE w' (cleanFunName v') [] ls'
+        Nothing -> return $ SpawnE (cleanFunName v) [] ls'
+        Just v' -> return $ SpawnE (cleanFunName v') [] ls'
 
     SyncE -> pure SyncE
+
+    IsBigE e -> IsBigE <$> freshExp1 vs e
 
     MapE (v,t,b) e -> do
       b' <- freshExp1 vs b

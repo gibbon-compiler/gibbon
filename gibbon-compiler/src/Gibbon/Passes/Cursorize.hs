@@ -308,10 +308,14 @@ cursorizeExp ddfs fundefs denv tenv sdeps (L p ex) = L p <$>
             -- We just ignore the second binding for now.
             --
             Right rhs' ->
-              case M.lookup loc tenv of
-                Nothing ->  unLoc . mkLets ((loc,[],CursorTy,rhs') : bnds) <$>
-                              cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') sdeps bod
-                Just _  -> unLoc <$> cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') sdeps bod
+              case rhs of
+                FromEndLE{} ->
+                  case M.lookup loc tenv of
+                    Nothing ->  unLoc . mkLets ((loc,[],CursorTy,rhs') : bnds) <$>
+                                  cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') sdeps bod
+                    Just _  -> unLoc <$> cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') sdeps bod
+                _ -> unLoc . mkLets ((loc,[],CursorTy,rhs') : bnds) <$>
+                       cursorizeExp ddfs fundefs denv (M.insert loc CursorTy tenv') sdeps bod
             Left denv' -> unLoc <$> cursorizeExp ddfs fundefs denv' tenv' sdeps bod
 
         -- Exactly same as cursorizePackedExp
@@ -474,13 +478,16 @@ cursorizePackedExp ddfs fundefs denv tenv sdeps (L p ex) =
                                           in (vs, M.union extended tenv)
           case rhs_either of
             Right rhs' ->
-              case M.lookup loc tenv of
-                Nothing ->  onDi (mkLets ((loc,[],CursorTy,rhs') : bnds)) <$>
-                              go (M.insert loc CursorTy tenv') sdeps bod
-                Just _  -> go (M.insert loc CursorTy tenv') sdeps bod
+              case rhs of
+                FromEndLE{} ->
+                  case M.lookup loc tenv of
+                    Nothing -> onDi (mkLets ((loc,[],CursorTy,rhs') : bnds)) <$>
+                                 go (M.insert loc CursorTy tenv') sdeps bod
+                    Just _  -> go (M.insert loc CursorTy tenv') sdeps bod
+                _ -> onDi (mkLets ((loc,[],CursorTy,rhs') : bnds)) <$>
+                       go (M.insert loc CursorTy tenv') sdeps bod
             Left denv' -> onDi (mkLets bnds) <$>
                             cursorizePackedExp ddfs fundefs denv' tenv' sdeps bod
-                            --
 
         -- ASSUMPTION: RetE forms are inserted at the tail position of functions,
         -- and we safely just return ends-witnesses & ends of the dilated expressions
@@ -711,42 +718,80 @@ cursorizeProd isPackedContext ddfs fundefs denv tenv sdeps ex =
 Spawn and sync
 ~~~~~~~~~~~~~~
 
+This is almost identical to a cursorizeLet case below. Except we bind fewer things
+and add fewer things to the type environemnt because we have to wait until the
+join point.
+
 -}
 cursorizeSpawn :: Bool -> DDefs Ty2 -> FunDefs2 -> DepEnv -> TyEnv Ty2 -> SyncDeps -> L Exp2 -> PassM Exp3
 cursorizeSpawn isPackedContext ddfs fundefs denv tenv sdeps (L _ ex) = do
   case ex of
-    LetE (v, locs, ty, L p (SpawnE w fn applocs args)) bod
-      | hasPacked ty -> error "Gibbon-TODO: Only scalar types allowed in SpawnE for now. Got: "
+    LetE (v, locs, ty, L p (SpawnE fn applocs args)) bod
+
+      | isPackedTy ty -> do
+          rhs' <- fromDi <$> cursorizePackedExp ddfs fundefs denv tenv sdeps (L p (AppE fn applocs args))
+          let rhs'' = case unLoc rhs' of
+                        AppE fn' applocs' args' -> L p $ SpawnE fn' applocs' args'
+                        _ -> error "cursorizeSpawn"
+          fresh <- gensym "tup_packed"
+          let ty' = case locs of
+                      [] -> cursorizeTy ty
+                      xs -> ProdTy ([CursorTy | _ <- xs] ++ [cursorizeTy ty])
+              tenv' = M.union (M.fromList [(fresh, ty')]) tenv
+                      -- L.foldr (\(a,b) acc -> M.insert a b acc) tenv $
+                      --   [(v, ty),(fresh, ty'),(toEndV v, projTy 1 ty')] ++ [(loc,CursorTy) | loc <- locs]
+              -- TyEnv Ty2 and L3 expresssions are tagged with different types
+              ty''  = curDict $ stripTyLocs ty'
+              fresh_rhs = l$ VarE fresh
+              (bnds, pending_bnds) =
+                      case locs of
+                        []    -> ([ (fresh   , [], ty''          , rhs'' ) ],
+                                  [ (v       , [], projTy 0 ty'', ty,           mkProj 0 fresh_rhs)
+                                  , (toEndV v, [], projTy 1 ty'', projTy 1 ty', mkProj 1 fresh_rhs)])
+                        _ -> let nLocs = length locs
+                                 locBnds = [(loc  ,[], CursorTy, CursorTy, mkProj n fresh_rhs)
+                                           | (loc,n) <- zip locs [0..]]
+                                 bnds' = [(fresh ,[], ty'', rhs'') ]
+                                 pending_bnds' = [(v       ,[], projTy 0 $ projTy nLocs ty'', ty,                          mkProj 0 $ mkProj nLocs fresh_rhs)
+                                                 ,(toEndV v,[], projTy 1 $ projTy nLocs ty'', projTy 0 $ projTy nLocs ty', mkProj 1 $ mkProj nLocs fresh_rhs)]
+                                                 ++ locBnds
+                             in (bnds', pending_bnds')
+          case M.lookup (toEndV v) denv of
+            Just xs -> error $ "cursorizeSpawn todo: " ++ sdoc xs
+            Nothing -> return ()
+          let sdeps' = sdeps ++ pending_bnds
+          bod' <- go tenv' sdeps' bod
+          return $ unLoc $ mkLets bnds bod'
+
+      | hasPacked ty -> do
+          rhs' <- fromDi <$> cursorizePackedExp ddfs fundefs denv tenv sdeps (L p (AppE fn applocs args))
+          let rhs'' = case unLoc rhs' of
+                        AppE fn' applocs' args' -> L p $ SpawnE fn' applocs' args'
+          fresh <- gensym "tup_haspacked"
+          let ty' = case locs of
+                      [] -> cursorizeTy ty
+                      xs -> ProdTy ([CursorTy | _ <- xs] ++ [cursorizeTy ty])
+              ty''  = stripTyLocs ty'
+              tenv' = M.insert v ty tenv
+          case locs of
+            [] -> LetE (v,[], ty'', rhs'') <$>
+                    go tenv' sdeps bod
+            _  -> do
+              let (bnds, pending_bnds) =
+                    ([(fresh, [], ty'', rhs'')],
+                     [(loc,[],CursorTy, CursorTy, l$ ProjE n (l$ VarE fresh)) | (loc,n) <- (zip locs [0..])] ++
+                     [(v,[], projTy (length locs) ty'', ty, l$ ProjE (length locs) (l$ VarE fresh))])
+                  sdeps' = sdeps ++ pending_bnds
+              unLoc . mkLets bnds <$> go tenv' sdeps' bod
 
       | otherwise -> do
           rhs' <- cursorizeExp ddfs fundefs denv tenv sdeps (L p (AppE fn applocs args))
           let rhs'' = case unLoc rhs' of
-                        AppE fn' applocs' args' -> L p $ SpawnE w fn' applocs' args'
+                        AppE fn' applocs' args' -> L p $ SpawnE fn' applocs' args'
                         _ -> error "cursorizeSpawn"
           case locs of
             [] -> LetE (v,[],curDict $ stripTyLocs ty, rhs'') <$>
                     go (M.insert v ty tenv) sdeps bod
-
-
-{-
-
-(This is almost identical to a cursorizeLet case below)
-
-This was a scalar binding before, but now has been transformed to
-also return an end_read cursor. So the type of the binding now
-becomes:
-
-    ProdTy [CursorTy, old_ty]
-
-Also, the binding itself now changes to:
-
-    end_read -> ProjE 0 RHS'
-    v        -> ProjE 1 RHS'
-
-However, because this is an asynchronous call, we cannot bind the projections
-until we see a SyncE. So we add these bindings to SyncDeps and process the body.
-
--}
             [loc] -> do
               fresh <- gensym "par_tup_scalar"
               let ty' :: Ty2

@@ -59,7 +59,8 @@ add1FunTy = (ArrowTy2
              [PackedTy "Tree" "lin2"]
              (S.empty)
              (PackedTy "Tree" "lout4")
-             [])
+             []
+             False)
 
 
 add1FunBod :: L Exp2
@@ -151,7 +152,8 @@ id1Fun = FunDef "id1" ["tr18"] idFunTy idFunBod
                [PackedTy "Tree" "lin19"]
                (S.empty)
                (PackedTy "Tree" "lout21")
-               [])
+               []
+               False)
 
 
 id1Prog :: Prog2
@@ -167,7 +169,8 @@ copyTreeFun = FunDef "copyTree" ["tr22"] copyFunTy copyBod
                  [PackedTy "Tree" "lin23"]
                  S.empty
                  (PackedTy "Tree" "lout25")
-                 [])
+                 []
+                 False)
 
     copyBod = l$ CaseE (l$ VarE "tr22") $
                  [ ("Leaf", [("n27","lin26")],
@@ -217,7 +220,8 @@ id2Fun = FunDef "id2" ["tr41"] id2Ty id2Bod
              [PackedTy "Tree" "lin37"]
              (S.empty)
              (PackedTy "Tree" "lout39")
-             [])
+             []
+             False)
 
     id2Bod = l$ IfE (l$ PrimAppE EqIntP [l$ LitE 20, l$ LitE 20])
              (l$ (VarE "tr41"))
@@ -268,7 +272,8 @@ id3Fun = FunDef "id3" ["i42"] id3Ty id3Bod
              [IntTy]
              (S.empty)
              (IntTy)
-             [])
+             []
+             False)
     id3Bod = l$ VarE "i42"
 
 id3MainExp :: L Exp2
@@ -289,7 +294,8 @@ intAddFun = FunDef "intAdd" ["i109"] intAddTy id3Bod
                 [ProdTy [IntTy, IntTy]]
                 (S.empty)
                 (IntTy)
-                [])
+                []
+                False)
     id3Bod = l$ PrimAppE AddP [l$ ProjE 0 (l$ VarE "i109"), l$ ProjE 1 (l$ VarE "i109")]
 
 intAddMainExp :: L Exp2
@@ -312,7 +318,8 @@ leftmostFun = FunDef "leftmost" ["t111"] leftmostTy leftmostBod
                  [PackedTy "Tree" "lin112"]
                  (S.empty)
                  (IntTy)
-                 [])
+                 []
+                 False)
 
 leftmostBod :: L Exp2
 leftmostBod = l$ CaseE (l$ VarE "t111")
@@ -352,7 +359,8 @@ rightmostFun = FunDef "rightmost" ["t242"] rightmostTy rightmostBod
                    [PackedTy "Tree" "lin241"]
                    (S.empty)
                    (IntTy)
-                   [])
+                   []
+                   False)
 
 rightmostBod :: L Exp2
 rightmostBod = l$ CaseE (l$ VarE "t242")
@@ -397,7 +405,8 @@ buildLeafFun = FunDef "buildLeaf" ["i125"] buildLeafTy buildLeafBod
                    [IntTy]
                    (S.empty)
                    (PackedTy "Tree" "lout126")
-                   [])
+                   []
+                   False)
 
     buildLeafBod :: L Exp2
     buildLeafBod = l$ DataConE "lout126" "Leaf" [l$ VarE "i125"]
@@ -423,7 +432,8 @@ buildTreeFun = FunDef "buildTree" ["i270"] buildTreeTy buildTreeBod
                    [IntTy]
                    (S.empty)
                    (PackedTy "Tree" "lout272")
-                   [])
+                   []
+                   False)
 
     buildTreeBod :: L Exp2
     buildTreeBod = l$ LetE ("b279",[], BoolTy, l$ PrimAppE EqIntP [l$ VarE "i270", l$ LitE 0]) $
@@ -462,7 +472,8 @@ buildTwoTreesFun = FunDef "buildTwoTrees" ["i750"] buildTreeTy buildTreeBod
                    [IntTy]
                    (S.empty)
                    (ProdTy [PackedTy "Tree" "lout752", PackedTy "Tree" "lout754"])
-                   [])
+                   []
+                   False)
 
     buildTreeBod :: L Exp2
     buildTreeBod = l$ LetE ("tree1",[],PackedTy "Tree" "lout752",
@@ -498,7 +509,8 @@ buildTreeSumFun = FunDef "buildTreeSum" ["i302"] buildTreeSumTy buildTreeSumBod
                       [IntTy]
                       (S.empty)
                       (ProdTy [IntTy, PackedTy "Tree" "lout301"])
-                      [])
+                      []
+                      False)
 
     buildTreeSumBod :: L Exp2
     buildTreeSumBod = l$ LetE ("b303",[], BoolTy, l$ PrimAppE EqIntP [l$ VarE "i302", l$ LitE 0]) $
@@ -549,7 +561,8 @@ sumTreeFun = FunDef "sumTree" ["tr762"] sumTreeTy sumTreeBod
                       [PackedTy "Tree" "lin761"]
                       (S.empty)
                       (IntTy)
-                      [])
+                      []
+                      False)
 
     sumTreeBod :: L Exp2
     sumTreeBod = l$ CaseE (l$ VarE "tr762")
@@ -640,7 +653,8 @@ addTreesFun = FunDef "addTrees" ["trees354"] addTreesTy addTreesBod
                   [ProdTy [PackedTy "Tree" "lin351", PackedTy "Tree" "lin352"]]
                   (S.empty)
                   (PackedTy "Tree" "lout353")
-                  [])
+                  []
+                  False)
 
     addTreesBod :: L Exp2
     addTreesBod = l$ LetE ("tree1",[],PackedTy "Tree" "lin351",
@@ -711,7 +725,8 @@ testProdFun = FunDef "testprod" ["tup130"] testprodTy testprodBod
                   [ProdTy [(PackedTy "Tree" "lin131"), IntTy]]
                   (S.empty)
                   (ProdTy [(PackedTy "Tree" "lout133"), IntTy])
-                  [])
+                  []
+                  False)
     testprodBod = l$ LetE ("t134",[], PackedTy "Tree" "lin131", l$ ProjE 0 (l$ VarE "tup130")) $
                   l$ LetE ("i135",[], IntTy, l$ ProjE 1 (l$ VarE "tup130")) $
                   l$ CaseE (l$ VarE "t134")
@@ -804,7 +819,8 @@ sumUpFun = FunDef "sumUp" ["tr1"] sumUpFunTy sumUpFunBod
                   [PackedTy "STree" "lin501"]
                   (S.empty)
                   (PackedTy "STree" "lout502")
-                  [])
+                  []
+                  False)
 
 
     sumUpFunBod :: L Exp2
@@ -842,7 +858,8 @@ valueSTreeFun = FunDef "valueSTree" ["tr522"] valueSTreeFunTy valueSTreeFunBod
                        [PackedTy "STree" "lin524"]
                        (S.empty)
                        (IntTy)
-                       [])
+                       []
+                       False)
 
     valueSTreeFunBod :: L Exp2
     valueSTreeFunBod = l$ CaseE (l$ VarE "tr522") $
@@ -863,7 +880,8 @@ buildSTreeFun = FunDef "buildSTree" ["i543"] buildSTreeTy buildSTreeBod
                     [IntTy]
                     (S.empty)
                     (PackedTy "STree" "lout541")
-                    [])
+                    []
+                    False)
 
     buildSTreeBod :: L Exp2
     buildSTreeBod = l$ LetE ("b542",[], BoolTy, l$ PrimAppE EqIntP [l$ VarE "i543", l$ LitE 0]) $
@@ -910,7 +928,8 @@ sumSTreeFun = FunDef "sumSTree" ["tr762"] sumSTreeTy sumSTreeBod
                       [PackedTy "STree" "lin761"]
                       (S.empty)
                       (IntTy)
-                      [])
+                      []
+                      False)
 
     sumSTreeBod :: L Exp2
     sumSTreeBod = l$ CaseE (l$ VarE "tr762")
@@ -972,7 +991,8 @@ evenFun = FunDef "even" ["i560"] evenFunTy evenFunBod
                  [IntTy]
                  (S.empty)
                  (IntTy)
-                 [])
+                 []
+                 False)
 
     evenFunBod :: L Exp2
     evenFunBod = l$ LetE ("i561",[],IntTy, l$ PrimAppE ModP [l$ VarE "i560", l$ LitE 2]) $
@@ -1007,7 +1027,8 @@ setEvenFun = FunDef "setEven" ["tr570"] setEvenFunTy setEvenFunBod
                     [PackedTy "STree" "lin571"]
                     (S.empty)
                     (PackedTy "STree" "lout572")
-                    [])
+                    []
+                    False)
 
 
     setEvenFunBod :: L Exp2
@@ -1089,7 +1110,8 @@ sumUpSetEvenFun = FunDef "sumUpSetEven" ["tr600"] sumUpSetEvenFunTy sumUpSetEven
                          [PackedTy "STree" "lin601"]
                          (S.empty)
                          (ProdTy [PackedTy "STree" "lout602", IntTy])
-                         [])
+                         []
+                         False)
 
 
     sumUpSetEvenFunBod :: L Exp2
@@ -1182,7 +1204,8 @@ copyExprFun = FunDef "copyExpr" ["e700"] copyExprFunTy copyExprFunBod
                      [PackedTy "Expr" "lin702"]
                      (S.empty)
                      (PackedTy "Expr" "lout703")
-                     [])
+                     []
+                     False)
 
     copyExprFunBod :: L Exp2
     copyExprFunBod = l$ CaseE (l$ VarE "e700")
@@ -1216,7 +1239,8 @@ substFun = FunDef "subst" ["tr653"] substFunTy substFunBod
                            PackedTy "Expr" "lin652"]]
                   (S.empty)
                   (PackedTy "Expr" "lout653")
-                  [])
+                  []
+                  False)
 
     substFunBod :: L Exp2
     substFunBod = l$ LetE ("old654",[],IntTy, l$ ProjE 0 (l$ VarE "tr653")) $
@@ -1306,7 +1330,8 @@ indrBuildTreeFun = FunDef "indrBuildTree" ["i270"] indrBuildTreeTy indrBuildTree
                    [IntTy]
                    (S.empty)
                    (PackedTy "Tree" "lout272")
-                   [])
+                   []
+                   False)
 
     indrBuildTreeBod :: L Exp2
     indrBuildTreeBod = l$ LetE ("b279",[], BoolTy, l$ PrimAppE EqIntP [l$ VarE "i270", l$ LitE 0]) $
@@ -1351,7 +1376,8 @@ indrRightmostFun = FunDef "indrRightmost" ["t742"] indrRightmostTy indrRightmost
                        [PackedTy "Tree" "lin741"]
                        (S.empty)
                        (IntTy)
-                       [])
+                       []
+                       False)
 
 indrRightmostBod :: L Exp2
 indrRightmostBod = l$ CaseE (l$ VarE "t742")
@@ -1386,7 +1412,8 @@ indrIDFun = FunDef "indrID" ["tr800"] indrIDTy indrIDBod
                 [PackedTy "Tree" "lin802"]
                 (S.empty)
                 (PackedTy "Tree" "lout803")
-                [])
+                []
+                False)
 
     indrIDBod :: L Exp2
     indrIDBod = l$ LetE ("a804",[], PackedTy "Tree" "lout803",

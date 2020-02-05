@@ -434,15 +434,15 @@ codegenTail env (LetCallT True bnds ratr rnds body) ty sync_deps
        let bind (v,t) f = assn (codegenTy t) v (C.Member (cid nam) (C.toIdent f noLoc) noLoc)
            fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
            ty0 = ProdTy $ map snd bnds
-           init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam; |] ] ++
-                  [ C.BlockStm [cstm| if (is_big($(codegenTriv is_big_rnd))) { $id:nam = $(spawnexp); } else { $id:nam = $(seqexp); }  |]]
+           init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(spawnexp); |] ]
+                  -- [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam; |] ] ++
+                  -- [ C.BlockStm [cstm| if (is_big($(codegenTriv is_big_rnd))) { $id:nam = $(spawnexp); } else { $id:nam = $(seqexp); }  |]]
 
        let bind_after_sync = zipWith bind bnds fields
        tal <- codegenTail env body ty (sync_deps ++ bind_after_sync)
        return $ init ++  tal
   where
-    (is_big_rnd:oth_rands) = rnds
-    fncall = C.FnCall (cid ratr) (map codegenTriv oth_rands) noLoc
+    fncall = C.FnCall (cid ratr) (map codegenTriv rnds) noLoc
     spawnexp = C.EscExp (prettyCompact (text "cilk_spawn" <> space <> ppr fncall)) noLoc
     seqexp = C.EscExp (prettyCompact (ppr fncall)) noLoc
 

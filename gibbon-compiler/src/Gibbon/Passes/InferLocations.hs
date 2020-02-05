@@ -132,8 +132,8 @@ lookupFEnv v FullEnv{funEnv} = funEnv # v
 -- If we assume output regions are disjoint from input ones, then we
 -- can instantiate an L1 function type into a polymorphic L2 one,
 -- mechanically.
-convertFunTy :: ([Ty1],Ty1) -> PassM ArrowTy2
-convertFunTy (from,to) = do
+convertFunTy :: ([Ty1],Ty1,Bool) -> PassM ArrowTy2
+convertFunTy (from,to,isPar) = do
     from' <- mapM convertTy from
     to'   <- convertTy to
     -- For this simple version, we assume every location is in a separate region:
@@ -143,7 +143,8 @@ convertFunTy (from,to) = do
                      , arrIns  = from'
                      , arrEffs = S.empty
                      , arrOut  = to'
-                     , locRets = [] }
+                     , locRets = []
+                     , hasParallelism = isPar }
  where
    toLRM md ls =
        mapM (\v -> do r <- freshLocVar "r"
@@ -216,8 +217,9 @@ inferLocs initPrg = do
   p@(Prog dfs fds me) <- addRepairFns initPrg
   let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
-          fenv <- forM fds $ \(FunDef _ _ (intys, outty) _) ->
-                  lift $ lift $ convertFunTy (intys,outty)
+          fenv <- forM fds $ \(FunDef _ _ (intys, outty) bod) -> do
+                  let has_par = hasSpawns bod
+                  lift $ lift $ convertFunTy (intys,outty,has_par)
           let fe = FullEnv dfs' M.empty fenv
           me' <- case me of
             -- We ignore the type of the main expression inferred in L1..
@@ -285,7 +287,7 @@ fixType_ ty =
 
 -- | Wrap the inferExp procedure, and consume all remaining constraints
 inferExp' :: FullEnv -> (L Exp1) -> [LocVar] -> Dest -> TiM (L L2.Exp2, L2.Ty2)
-inferExp' env lex0@(L sl1 exp) bound dest = 
+inferExp' env lex0@(L sl1 exp) bound dest =
   let lc = L sl1
 
       -- TODO: These should not be necessary, eventually
@@ -593,10 +595,10 @@ inferExp env@FullEnv{dataDefs}
                                      concat $ [c | (_,_,c) <- results])
 
 
-    SpawnE w f _ args -> do
+    SpawnE f _ args -> do
       (ex0', ty, acs) <- inferExp env (l$ AppE f [] args) dest
       case unLoc ex0' of
-        AppE f' locs args' -> pure (lc$ SpawnE w f' locs args', ty, acs)
+        AppE f' locs args' -> pure (lc$ SpawnE f' locs args', ty, acs)
         oth -> err $ "SpawnE: " ++ sdoc oth
 
     SyncE -> pure (lc$ SyncE, ProdTy [], [])
@@ -828,18 +830,29 @@ inferExp env@FullEnv{dataDefs}
           res' <- tryBindReg (lc$ L2.LetE (vr,[], valTy, L sl2 $ L2.AppE f (concatMap locsInTy atys ++ locsInTy valTy) args') bod'', ty'', fcs)
           bindImmediateDependentLocs (concatMap locsInTy atys ++ locsInTy valTy) res'
 
-        SpawnE w f _ args -> do
+        AppE{} -> err$ "Malformed function application: " ++ (show ex0)
+
+        SpawnE f _ args -> do
+          let ret_ty = arrOut $ lookupFEnv f env
+          -- if isScalarTy ret_ty || isPackedTy ret_ty
+          -- then do
           (ex0', ty, cs) <- inferExp env (l$ LetE (vr,locs,bty,L sl2 (AppE f [] args)) bod) dest
-          -- ASSUMPTION: There's only 1 AppE in ex0'
-          pure (changeAppToSpawn w ex0', ty, cs)
+          -- Assume that all args are VarE's
+          let arg_vars = map (\(L _ (VarE v)) -> v) args
+              args2 = map (l . VarE) arg_vars
+              ex0'' = changeAppToSpawn f args2 ex0'
+          -- pure (moveProjsAfterSync vr ex0'', ty, cs)
+          pure (ex0'', ty, cs)
 
         SyncE -> do
           (bod',ty,cs) <- inferExp env bod dest
           pure (lc$ LetE (vr,[],ProdTy [],L sl2 $ SyncE) bod', ty, cs)
 
-        AppE{} -> err$ "Malformed function application: " ++ (show ex0)
-
-        -- IfE{} -> err$ "Unexpected conditional in let binding: " ++ (show ex0)
+        IsBigE e -> do
+          (e',ty,csa) <- inferExp env e NoDest
+          (bod',bod_ty,csb) <- inferExp (extendVEnv vr BoolTy env) bod dest
+          let cs = L.nub $ csa ++ csb
+          pure (lc$ LetE (vr,[],BoolTy,L sl2 $ IsBigE e') bod', ty, cs)
 
         IfE a b c -> do
           (boda,tya,csa) <- inferExp env a NoDest
@@ -1072,12 +1085,16 @@ finishExp (L i e) =
                      _ -> return t
              return $ l$ TimeIt e1' t' b
 
-      SpawnE w v ls es -> do
+      SpawnE v ls es -> do
         es' <- mapM finishExp es
         ls' <- mapM finalLocVar ls
-        return $ l$ SpawnE w v ls' es'
+        return $ l$ SpawnE v ls' es'
 
       SyncE -> pure $ l$ SyncE
+
+      IsBigE e -> do
+        e' <- finishExp e
+        pure $ l$ IsBigE e'
 
       WithArenaE v e -> do
              e' <- finishExp e
@@ -1171,10 +1188,13 @@ cleanExp (L i e) =
       TimeIt e d b -> let (e',s') = cleanExp e
                       in (l$ TimeIt e' d b, s')
 
-      SpawnE w v ls e -> let (e',s') = unzip $ map cleanExp e
-                         in (l$ SpawnE w v ls e', (S.unions s') `S.union` (S.fromList ls))
+      SpawnE v ls e -> let (e',s') = unzip $ map cleanExp e
+                       in (l$ SpawnE v ls e', (S.unions s') `S.union` (S.fromList ls))
 
       SyncE -> (l$ SyncE, S.empty)
+
+      IsBigE e -> let (e',s') = cleanExp e
+                  in (l$ IsBigE e', s')
 
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (l$ WithArenaE v e', s)
@@ -1254,13 +1274,50 @@ fixProj renam pvar proj (L i e) =
                            in l$ DataConE lv dc es'
       TimeIt e1 d b -> let e1' = fixProj renam pvar proj e1
                        in l$ TimeIt e1' d b
-      SpawnE w v ls es -> let es' = map (fixProj renam pvar proj) es
-                          in l$ SpawnE w v ls es'
+      SpawnE v ls es -> let es' = map (fixProj renam pvar proj) es
+                        in l$ SpawnE v ls es'
       SyncE -> l$ SyncE
       WithArenaE v e -> l$ WithArenaE v $ fixProj renam pvar proj e
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
+
+
+-- Runs after projTups in the SpawnE case in inferExp.
+moveProjsAfterSync :: Var -> L Exp2 -> L Exp2
+moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
+  where
+    go :: [Binds (L Exp2)] -> S.Set Var -> L Exp2 -> L Exp2
+    go acc1 pending (L p ex) = L p $
+      case ex of
+        VarE{}    -> ex
+        LitE{}    -> ex
+        LitSymE{} -> ex
+        AppE v locs ls   -> ex
+        PrimAppE pr args -> ex
+        LetE (v,locs,ty,L p SyncE) bod ->
+          let bod' = go [] S.empty bod
+          in LetE (v,locs,ty,L p SyncE) (mkLets acc1 bod')
+        LetE (v,locs,ty,rhs) bod ->
+          let vars = S.fromList $ allFreeVars rhs
+          in if S.null (S.intersection vars pending)
+             then LetE (v, locs, ty, rhs) (go acc1 pending bod)
+             else unLoc $ go ((v, locs, ty, rhs):acc1) (S.insert v pending) bod
+        IfE a b c   -> IfE (go acc1 pending a) (go acc1 pending b) (go acc1 pending c)
+        MkProdE ls  -> MkProdE $ L.map (go acc1 pending) ls
+        ProjE i arg -> ProjE i $ go acc1 pending arg
+        CaseE scrt ls -> CaseE (go acc1 pending scrt) $
+                           L.map (\(dcon,vs,rhs) -> (dcon,vs,go acc1 pending rhs)) ls
+        DataConE loc dcon args -> DataConE loc dcon $ L.map (go acc1 pending) args
+        TimeIt arg ty b -> TimeIt (go acc1 pending arg) ty b
+        WithArenaE a e  -> WithArenaE a $ go acc1 pending e
+        SpawnE fn locs ls -> error "moveProjsAfterSync: unbound SpawnE"
+        SyncE   -> error "moveProjsAfterSync: unbound SyncE"
+        Ext ext -> case ext of
+                     LetRegionE r bod -> Ext $ LetRegionE r $ go acc1 pending bod
+                     LetLocE a b bod -> Ext $ LetLocE a b $ go acc1 pending bod
+        MapE{}  -> error "moveProjsAfterSync: todo MapE"
+        FoldE{} -> error "moveProjsAfterSync: todo FoldE"
 
 
 -- | Checks that there are no constraints specifying a location
@@ -1504,15 +1561,25 @@ prim p = case p of
 genCopyFn :: DDef Ty1 -> PassM FunDef1
 genCopyFn DDef{tyName, dataCons} = do
   arg <- gensym $ "arg"
-  casebod <- forM dataCons $ \(dcon, tys) ->
-             do xs <- mapM (\_ -> gensym "x") tys
+  casebod <- forM dataCons $ \(dcon, dtys) ->
+             do let tys = L.map snd dtys
+                xs <- mapM (\_ -> gensym "x") tys
                 ys <- mapM (\_ -> gensym "y") tys
-                let bod = foldr (\(ty,x,y) acc ->
+                let packed_vars = map fst $ filter (\(x,ty) -> isPackedTy ty) (zip ys tys)
+                    bod_with_ran_nodes = foldr (\(ty,x,y,idx) acc ->
+                                                  if ty == CursorTy
+                                                  then l$ LetE (y, [], ty, l$ PrimAppE RequestEndOf [l$ VarE (packed_vars !! idx)]) acc
+                                                  else acc)
+                                           (l$ DataConE () dcon $ map (l . VarE) ys) (L.zip4 tys xs ys [0..])
+                    bod = foldr (\(ty,x,y,idx) acc ->
                                      if isPackedTy ty
                                      then l$ LetE (y, [], ty, l$ AppE (mkCopyFunName (tyToDataCon ty)) [] [l$ VarE x]) acc
+                                     -- We've already constructed all the random access nodes above.
+                                     else if ty == CursorTy
+                                     then acc
                                      else l$ LetE (y, [], ty, l$ VarE x) acc)
-                          (l$ DataConE () dcon $ map (l . VarE) ys)
-                          (zip3 (L.map snd tys) xs ys)
+
+                            bod_with_ran_nodes (L.zip4 tys xs ys [0..])
                 return (dcon, L.map (\x -> (x,())) xs, bod)
   return $ FunDef { funName = mkCopyFunName (fromVar tyName)
                   , funArgs = [arg]

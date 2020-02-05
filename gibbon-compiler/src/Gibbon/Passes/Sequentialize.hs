@@ -45,10 +45,12 @@ case (C_big a b c) could be a special case of how we check big.
 
 sequentializeFn :: S.Set Var -> FunDef1 -> PassM FunDef1
 sequentializeFn parallel_fn_names fn@FunDef{funName,funBody} = do
-  let new_fn_name = toSeqV funName
+  let new_fn_name = to_seq funName
   funBody' <- go funBody
   pure $ fn { funName = new_fn_name, funBody = funBody' }
   where
+    to_seq v = varAppend v (toVar "_seq")
+
     go :: L Exp1 -> PassM (L Exp1)
     go (L p ex) = L p <$>
       case ex of
@@ -56,11 +58,11 @@ sequentializeFn parallel_fn_names fn@FunDef{funName,funBody} = do
         LitE{} -> pure ex
         LitSymE{} -> pure ex
         AppE f locs args
-          | f `S.member` parallel_fn_names -> (AppE (toSeqV f) locs) <$> (mapM go args)
+          | f `S.member` parallel_fn_names -> (AppE (to_seq f) locs) <$> (mapM go args)
           | otherwise                      -> (AppE f locs) <$> (mapM go args)
         PrimAppE pr args -> (PrimAppE pr) <$> (mapM go args)
-        LetE (v,locs,ty,L p1 (SpawnE _ f locs1 args)) bod ->
-          LetE <$> (v,locs,ty,) <$> (L p1) <$> AppE (toSeqV f) locs1 <$> mapM go args <*> go bod
+        LetE (v,locs,ty,L p1 (SpawnE f locs1 args)) bod ->
+          LetE <$> (v,locs,ty,) <$> (L p1) <$> AppE (to_seq f) locs1 <$> mapM go args <*> go bod
         LetE (_,_,_,L _ SyncE) bod -> unLoc <$> go bod
         LetE (v,locs,ty,rhs) bod -> LetE <$> (v,locs,ty,) <$> go rhs <*> go bod
         IfE a b c  -> IfE <$> go a <*> go b <*> go c
@@ -71,8 +73,9 @@ sequentializeFn parallel_fn_names fn@FunDef{funName,funBody} = do
         TimeIt e ty b -> do
           e' <- go e
           pure $ TimeIt e' ty b
-        SpawnE{} -> error "sequentializeFn: Unbounb SpawnE"
-        SyncE    -> error "sequentializeFn: Unbounb SyncE"
+        SpawnE{} -> error "sequentializeFn: Unbound SpawnE"
+        SyncE    -> error "sequentializeFn: Unbound SyncE"
+        IsBigE e -> IsBigE <$> go e
         WithArenaE v e -> WithArenaE v <$> (go e)
         Ext{}   -> pure ex
         MapE{}  -> error "MapE"

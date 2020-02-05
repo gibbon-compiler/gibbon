@@ -192,6 +192,8 @@ desugarExp toplevel e = L NoLoc <$>
       then pure $ PrimAppE Gensym []
       else if v == "sync"
       then pure SyncE
+      else if v == "sizeParam"
+      then pure $ PrimAppE SizeParam []
       else case M.lookup v toplevel of
              Just sigma ->
                case tyFromScheme sigma of
@@ -224,6 +226,16 @@ desugarExp toplevel e = L NoLoc <$>
                   then do
                     e2' <- desugarExp toplevel e2
                     pure $ Ext $ BenchE "HOLE" [] [e2'] False
+                  else if f == "timeit"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty <- newMetaTy
+                    pure $ TimeIt e2' ty False
+                  else if f == "iterate"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty <- newMetaTy
+                    pure $ TimeIt e2' ty True
                   else if f == "error"
                   then case e2 of
                          Lit _ lit -> pure $ PrimAppE (ErrorP (litToString lit) IntTy) [] -- assume int (!)
@@ -235,7 +247,11 @@ desugarExp toplevel e = L NoLoc <$>
                   else if f == "spawn"
                   then do
                     e2' <- desugarExp toplevel e2
-                    pure $ SpawnE "HOLE" "HOLE" [] [e2']
+                    pure $ SpawnE "HOLE" [] [e2']
+                  else if f == "is_big"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    pure $ IsBigE e2'
                   else AppE f [] <$> (: []) <$> desugarExp toplevel e2
           L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of
@@ -257,13 +273,16 @@ desugarExp toplevel e = L NoLoc <$>
             e2' <- desugarExp toplevel e2
             pure $ Ext $ BenchE fn [] (ls ++ [e2']) b
 
-          L _ (SpawnE w fn [] ls) -> do
+          L _ (SpawnE fn [] ls) -> do
             e2' <- desugarExp toplevel e2
-            pure $ SpawnE w fn [] (ls ++ [e2'])
+            pure $ SpawnE fn [] (ls ++ [e2'])
 
           L _ (PrimAppE p ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ PrimAppE p (ls ++ [e2'])
+
+          L _ TimeIt{} ->
+            error "desugarExp: TimeIt can only accept 1 expression."
 
           f -> error ("desugarExp: Couldn't parse function application: (: " ++ show f ++ ")")
 
@@ -477,7 +496,7 @@ generateBind toplevel env decl exp2 =
       rhs' <- desugarExp toplevel rhs
       w <- case pat of
              PVar _ v    -> pure $ toVar (nameToStr v)
-             PWildCard _ -> gensym "wildcar_"
+             PWildCard _ -> gensym "wildcard_"
              _           -> error "generateBind: "
       ty' <- case M.lookup w env of
                 Nothing -> newMetaTy
@@ -541,6 +560,9 @@ nameToStr (Symbol _ s) = s
 
 instance Pretty SrcSpanInfo where
 
+-- | SpawnE's are parsed in a strange way. If we see a 'spawn (f x1 x2)',
+-- we parse it as 'SpawnE HOLE [] [(f x1 x2)]'. This function patches it
+-- to 'SpawnE f [] [x1 x2]'.
 fixupSpawn :: L Exp0 -> L Exp0
 fixupSpawn (L p ex) = L p $
   case ex of
@@ -564,11 +586,12 @@ fixupSpawn (L p ex) = L p $
     CaseE scrt mp -> CaseE (go scrt) $ map (\(a,b,c) -> (a,b, go c)) mp
     TimeIt e ty b -> TimeIt (go e) ty b
     WithArenaE v e -> WithArenaE v (go e)
-    SpawnE _ _ _ args ->
+    SpawnE _ _ args ->
       case args of
-          [L _ (VarE v), L _ (AppE fn tyapps ls)] -> SpawnE v fn tyapps ls
+          [L _ (AppE fn tyapps ls)] -> SpawnE fn tyapps ls
           _ -> error $ "fixupSpawn: incorrect use of spawn: " ++ sdoc ex
     SyncE   -> SyncE
+    IsBigE e-> IsBigE (go e)
     MapE{}  -> error $ "fixupSpawn: TODO MapE"
     FoldE{} -> error $ "fixupSpawn: TODO FoldE"
   where go = fixupSpawn
@@ -601,8 +624,9 @@ verifyBenchEAssumptions bench_allowed (L p ex) = L p $
     CaseE scrt mp -> CaseE (go scrt) $ map (\(a,b,c) -> (a,b, go c)) mp
     TimeIt e ty b -> TimeIt (not_allowed e) ty b
     WithArenaE v e -> WithArenaE v (go e)
-    SpawnE w fn tyapps args -> SpawnE w fn tyapps (map not_allowed args)
-    SyncE   -> SyncE
+    SpawnE fn tyapps args -> SpawnE fn tyapps (map not_allowed args)
+    IsBigE e -> IsBigE (not_allowed e)
+    SyncE    -> SyncE
     MapE{}  -> error $ "verifyBenchEAssumptions: TODO MapE"
     FoldE{} -> error $ "verifyBenchEAssumptions: TODO FoldE"
   where go = verifyBenchEAssumptions bench_allowed
