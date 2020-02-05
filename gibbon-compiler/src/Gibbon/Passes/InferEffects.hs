@@ -192,8 +192,9 @@ inferExp ddfs fenv env dps (L _p expr) =
           makeDps [] = dps
           makeDps [_] = dps
           makeDps ((loc,ty):lts)
-            | hasPacked ty = let prevDep = fst $ head $ L.filter (hasPacked . snd) lts
-                             in M.insert loc prevDep $ makeDps lts
+            | hasPacked ty = case L.filter (hasPacked . snd) lts of
+                               (x,_):_ -> M.insert loc x $ makeDps lts
+                               _ -> makeDps lts
             | otherwise = makeDps lts
 
           dps' = makeDps (reverse $ zip locs tys)
