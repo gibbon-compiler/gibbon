@@ -157,6 +157,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv (L p ex) = L p <$>
       e'' <- threadRegionsExp ddefs fundefs isMain renv env2 lfenv e'
       pure $ unLoc $ changeAppToSpawn f args e''
 
+    -- AUDITME: this causes all all DataConE's to return an additional cursor.
     LetE (v,locs,ty@(PackedTy _ loc), rhs@(L _ (DataConE _ _ args))) bod -> do
       let reg_of_tag = renv M.! loc
           lfenv' = case args of

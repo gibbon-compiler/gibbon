@@ -24,7 +24,6 @@ import Gibbon.Passes.InferRegionScope
 import Gibbon.Passes.InferEffects
 import Gibbon.Passes.RouteEnds
 import Gibbon.Passes.ThreadRegions
-import Gibbon.Passes.BoundsCheck
 import Gibbon.Passes.Cursorize
 import Gibbon.Passes.Unariser
 import Gibbon.Passes.ShakeTree
@@ -58,7 +57,6 @@ runT prg = fst $ defaultPackedRunPassM $ do
     l2 <- tcProg l2
     l2 <- routeEnds l2
     l2 <- tcProg l2
-    l2 <- boundsCheck l2
     l2 <- threadRegions l2
     l2 <- flattenL2 l2
     l3 <- cursorize l2

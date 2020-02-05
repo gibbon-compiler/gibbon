@@ -48,9 +48,11 @@ main = defaultMain allTests
                    , l1TypecheckerTests
                    , l1InterpTests
                    , l2InterpTests
-                   , l3TypecheckerTests
                    -- , specializeTests
-                   , compilerTests
+
+                   -- [2020.02.05]: CSK, disabled temporarily
+                   -- , l3TypecheckerTests
+                   -- , compilerTests
                    ]
 
 tests :: TestTree
