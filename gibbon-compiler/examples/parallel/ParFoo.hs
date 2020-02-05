@@ -1,4 +1,4 @@
-module Par where
+module ParFoo where
 
 data Foo = A Int
          | B Int Foo Foo

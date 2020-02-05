@@ -1,4 +1,4 @@
-module Seq where
+module SeqFoo where
 
 data Foo = A Int
          | B Int Foo Foo

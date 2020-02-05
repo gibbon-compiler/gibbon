@@ -1,4 +1,4 @@
-module Par where
+module ParTree where
 
 data Tree = Leaf Int
           | Node Int Tree Tree

@@ -1,4 +1,4 @@
-module Par where
+module SeqTree where
 
 data Tree = Leaf Int
           | Node Int Tree Tree
