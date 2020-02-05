@@ -25,6 +25,7 @@ Need a better name for this pass.
 
 module Gibbon.Passes.ParAlloc (parAlloc) where
 
+import           Control.Monad ( when )
 import           Data.Foldable ( foldrM )
 import           Data.Loc
 import qualified Data.Map as M
@@ -32,6 +33,7 @@ import qualified Data.Set as S
 
 import           Gibbon.L2.Syntax
 import           Gibbon.Common
+import           Gibbon.DynFlags
 
 --------------------------------------------------------------------------------
 
@@ -62,6 +64,11 @@ parAlloc Prog{ddefs,fundefs,mainExp} = do
     parAllocFn f@FunDef{funArgs,funTy,funBody} =
       if hasParallelism funTy
       then do
+        dflags <- getDynFlags
+        let ret_ty = arrOut funTy
+        when (hasPacked ret_ty && gopt Opt_Gibbon1 dflags) $
+          error "gibbon: Cannot compile parallel allocations in Gibbon1 mode."
+
         let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
             initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
             env2 = Env2 initTyEnv (initFunEnv fundefs)
