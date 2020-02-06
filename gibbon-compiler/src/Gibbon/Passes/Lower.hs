@@ -117,30 +117,45 @@ sandwich mid s end = openParen s $ mid $ closeParen end
 
 -- Generate printing functions
 genDconsPrinter :: [Ty3] -> Var -> PassM T.Tail
-genDconsPrinter (x:xs) tail = case x of
-  _ | isScalarTy x ->  do
-    val  <- gensym "val"
-    t    <- gensym "tail"
-    let l4_ty = T.fromL3Ty x
-    T.LetPrimCallT [(val, l4_ty), (t, T.CursorTy)] (T.ReadScalar (mkScalar x)) [(T.VarTriv tail)] <$>
-      printTy False x [T.VarTriv val] <$>
-       maybeSpace <$>
-        genDconsPrinter xs t
+genDconsPrinter (x:xs) tail =
+  case x of
+    L3.PackedTy tyCons _ -> do
+      dflags <- getDynFlags
+      if gopt Opt_Packed dflags
+      then do
+        val  <- gensym "val"
+        t    <- gensym "tail"
+        T.LetCallT False [(t, T.CursorTy)] (mkPrinterName tyCons) [(T.VarTriv tail)] <$>
+           maybeSpace <$> genDconsPrinter xs t
+      else do
+        val  <- gensym "val"
+        t    <- gensym "tail"
+        tmp  <- gensym "temp"
+        valc <- gensym "valcur"
+        T.LetPrimCallT [(val, T.IntTy), (t, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv tail)] <$>
+          T.LetTrivT (valc, T.CursorTy, T.VarTriv val) <$>
+          T.LetCallT False [(tmp, T.PtrTy)] (mkPrinterName tyCons) [(T.VarTriv valc)] <$>
+            maybeSpace <$> genDconsPrinter xs t
 
-  L3.PackedTy tyCons _ -> do
-    val  <- gensym "val"
-    t    <- gensym "tail"
-    tmp  <- gensym "temp"
-    valc <- gensym "valcur"
-    T.LetPrimCallT [(val, T.IntTy), (t, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv tail)] <$>
-      T.LetTrivT (valc, T.CursorTy, T.VarTriv val) <$>
-      T.LetCallT False [(tmp, T.PtrTy)] (mkPrinterName tyCons) [(T.VarTriv valc)] <$>
-       maybeSpace <$>
-         genDconsPrinter xs t
+    L3.CursorTy -> do
+      dflags <- getDynFlags
+      if gopt Opt_Packed dflags
+      then do
+        tail2 <- gensym "tail"
+        T.LetPrimCallT [(tail2, T.CursorTy)] T.AddP [T.VarTriv tail, T.IntTriv 8] <$>
+          genDconsPrinter xs tail2
+      else genDconsPrinter xs tail
 
-  L3.CursorTy -> genDconsPrinter xs tail
+    _ | isScalarTy x ->  do
+      val  <- gensym "val"
+      t    <- gensym "tail"
+      let l4_ty = T.fromL3Ty x
+      T.LetPrimCallT [(val, l4_ty), (t, T.CursorTy)] (T.ReadScalar (mkScalar x)) [(T.VarTriv tail)] <$>
+        printTy False x [T.VarTriv val] <$>
+         maybeSpace <$>
+          genDconsPrinter xs t
 
-  _ -> error "FINISHME: genDconsPrinter"
+    _ -> error "FINISHME: genDconsPrinter"
 
  where
   maybeSpace = if L.null xs
@@ -174,9 +189,12 @@ genPrinter DDef{tyName, dataCons} = do
   tail <- gensym "tail"
   alts <- genAltPrinter dataCons tail 0
   lbl  <- gensym "switch"
-  -- CSK: Why is this ReadInt ?
-  bod  <- return $ T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv p)] $
-            T.Switch lbl (T.VarTriv tag) alts Nothing
+  dflags <- getDynFlags
+  let bod = if gopt Opt_Packed dflags
+            then T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadTag) [(T.VarTriv p)] $
+                 T.Switch lbl (T.VarTriv tag) alts Nothing
+            else T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv p)] $
+                 T.Switch lbl (T.VarTriv tag) alts Nothing
   return T.FunDecl{ T.funName  = mkPrinterName (fromVar tyName),
                     T.funArgs  = [(p, T.CursorTy)],
                     T.funRetTy = T.PtrTy,
