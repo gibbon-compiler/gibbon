@@ -907,12 +907,7 @@ cursorizeLet isPackedContext ddfs fundefs denv tenv sdeps (v,locs,ty,rhs) bod
                         ++ [(v,[], projTy (length locs) ty'', l$ ProjE (length locs) (l$ VarE fresh))]
             unLoc . mkLets bnds <$> go tenv'' bod
 
-    | otherwise = do
-        rhs' <- cursorizeExp ddfs fundefs denv tenv sdeps rhs
-        case locs of
-            [] -> LetE (v,[],curDict $ stripTyLocs ty, rhs') <$>
-                    go (M.insert v ty tenv) bod
-{-
+  {-
 
 This was a scalar binding before, but now has been transformed to
 also return an end_read cursor. So the type of the binding now
@@ -928,24 +923,26 @@ Also, the binding itself now changes to:
 `rightmost` is an example of a program that does this.
 
 -}
-            [loc] -> do
+
+    | otherwise = do
+        rhs' <- cursorizeExp ddfs fundefs denv tenv sdeps rhs
+        case locs of
+            [] -> LetE (v,[],curDict $ stripTyLocs ty, rhs') <$>
+                    go (M.insert v ty tenv) bod
+            _ -> do
               fresh <- gensym "tup_scalar"
-              let ty'  = ProdTy ([CursorTy | _ <- locs] ++ [cursorizeTy ty])
+              let rhs'' = dl$ VarE fresh
+                  ty'  = ProdTy ([CursorTy | _ <- locs] ++ [cursorizeTy ty])
                   -- We cannot resuse ty' here because TyEnv Ty2 and expresssions are
                   -- tagged with different
                   ty'' = stripTyLocs ty'
-                  tenv' = M.union (M.fromList [(fresh, ty'),
-                                               (loc, projTy 0 ty'),
-                                               (v, projTy 1 ty')])
-                          tenv
-                  rhs'' = dl$ VarE fresh
-                  bnds  = [ (fresh, [] , ty''          , rhs')
-                          , (loc   ,[] , projTy 0 ty'' , projVal rhs'')
-                          , (v     ,[] , projTy 1 ty'' , projEnds rhs'')
-                          ]
+                  tenv' =  M.union (M.insert v ty tenv) $
+                           M.fromList [(loc,CursorTy) | loc <- locs]
+                  bnds  = [ (fresh, [] , ty''          , rhs') ] ++
+                          [ (loc,[],CursorTy, l$ ProjE n (l$ VarE fresh)) | (loc,n) <- (zip locs [0..]) ] ++
+                          [ (v,[], projTy (length locs) ty'', l$ ProjE (length locs) (l$ VarE fresh)) ]
               bod' <- go tenv' bod
               return $ unLoc $ mkLets bnds bod'
-            _ -> error "cursorizeLet: packed tuples error2"
 
   where go t x = if isPackedContext
                  then fromDi <$> cursorizePackedExp ddfs fundefs denv t sdeps x

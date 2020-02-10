@@ -8,6 +8,7 @@ import           Data.Foldable ( foldrM )
 import           Data.Loc as Loc
 import           Data.Maybe (catMaybes)
 import qualified Data.Map as M
+import qualified Data.Set as S
 import           Language.Haskell.Exts.Extension
 import           Language.Haskell.Exts.Parser
 import           Language.Haskell.Exts.Syntax as H
@@ -61,7 +62,6 @@ desugarModule (Module _ head_mb _pragmas _imports decls) = do
     classify thing (defs,vars,funs,main) =
       case thing of
         HDDef d   -> (M.insert (tyName d) d defs, vars, funs, main)
-        -- HVDef v   -> (defs, M.insert (vName v) v vars, funs, main)
         HFunDef f -> (defs, vars, M.insert (funName f) f funs, main)
         HMain m ->
           case main of
@@ -70,6 +70,17 @@ desugarModule (Module _ head_mb _pragmas _imports decls) = do
                                ++ show mod_name
         HAnnotation _a -> (defs, vars, funs, main)
 desugarModule m = error $ "desugarModule: " ++ prettyPrint m
+
+builtinTys :: S.Set Var
+builtinTys = S.fromList $
+    [ "Int", "Bool", "Sym", "SymHash", "SymSet", "SymDict", "Arena", "Vector" ]
+
+keywords :: S.Set Var
+keywords = S.fromList $ map toVar $
+    [ "quote", "bench", "error", "par", "spawn", "is_big"
+    -- operations on vectors
+    , "vempty", "vnth", "vlength", "vupdate"
+    ] ++ M.keys primMap
 
 desugarTopType :: (Show a,  Pretty a) => Type a -> TyScheme
 desugarTopType ty =
@@ -97,7 +108,7 @@ desugarType ty =
     TyFun _ t1 t2 -> let t1' = desugarType t1
                          t2' = desugarType t2
                      in ArrowTy [t1'] t2'
-    TyList _ (H.TyVar _ (Ident _ con))  -> ListTy (L0.TyVar $ UserTv (toVar con))
+    TyList _ ty1  -> ListTy (desugarType ty1)
     TyParen _ ty1 -> desugarType ty1
     TyApp _ tycon arg ->
       case desugarType tycon of
@@ -157,6 +168,7 @@ primMap = M.fromList
   , ("-", SubP)
   , ("*", MulP)
   , ("/", DivP)
+  , ("div", DivP)
   , ("==", EqIntP)
   , ("<", LtP)
   , (">", GtP)
@@ -376,7 +388,9 @@ collectTopLevel env decl =
     DataDecl _ (DataType _) _ctx decl_head cons _deriving_binds -> do
       let (ty_name,  ty_args) = desugarDeclHead decl_head
           cons' = map desugarConstr cons
-      pure $ Just $ HDDef (DDef ty_name ty_args cons')
+      if ty_name `S.member` builtinTys
+      then error $ sdoc ty_name ++ " is a built-in type."
+      else pure $ Just $ HDDef (DDef ty_name ty_args cons')
 
     -- Reserved for HS.
     PatBind _ (PVar _ (Ident _ "main")) (UnGuardedRhs _ _) _binds ->
