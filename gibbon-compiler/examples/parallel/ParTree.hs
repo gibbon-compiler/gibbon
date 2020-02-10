@@ -3,10 +3,35 @@ module ParTree where
 data Tree = Leaf Int
           | Node Int Tree Tree
 
+fib_seq :: Int -> Int
+fib_seq n =
+    if n == 0
+    then 0
+    else if n == 1
+    then 1
+    else
+        let x = fib_seq (n - 1)
+            y = fib_seq (n - 2)
+        in x + y
+
+fib :: Int -> Int
+fib n =
+    if n == 0
+    then 0
+    else if n == 1
+    then 1
+    else if n < 19
+    then fib_seq n
+    else
+        let x = spawn (fib (n - 1))
+            y = fib (n - 2)
+            _ = sync
+        in x + y
+
 mkTree_seq :: Int -> Tree
 mkTree_seq i =
   if i <= 0
-  then Leaf 1
+  then Leaf (fib 40)
   else
       let x = mkTree_seq (i-1)
           y = mkTree_seq (i-1)
@@ -16,7 +41,7 @@ mkTree_seq i =
 mkTree :: Int -> Tree
 mkTree i =
   if i <= 0
-  then Leaf 1
+  then Leaf (fib 40)
   else
       if i < 19
       then mkTree_seq i
@@ -71,6 +96,6 @@ copy foo =
 
 gibbon_main =
   let n = sizeParam
-      x = mkTree_seq n
+      x = iterate (mkTree n)
       -- y = iterate (copy x)
-  in iterate (sumTree x)
+  in (sumTree_seq x)
