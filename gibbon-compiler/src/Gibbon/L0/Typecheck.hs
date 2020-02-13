@@ -279,6 +279,10 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
           s3 <- unify (args !! 1) SymTy0 k
           pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
 
+        IntHashEmpty{} -> err $ text "IntHashEmpty not handled."
+        IntHashInsert{} -> err $ text "IntHashInsert not handled."
+        IntHashLookup{} -> err $ text "IntHashLookup not handled."
+
         ErrorP _str ty -> do
           len0
           pure (s1, ty, PrimAppE pr args_tc)
@@ -564,6 +568,7 @@ zonkTy s@(Subst mp) ty =
     ArenaTy  -> ty
     SymSetTy -> ty
     SymHashTy -> ty
+    IntHashTy -> ty
   where
     go = zonkTy s
 
@@ -665,6 +670,7 @@ substTyVarExp s (L p ex) = L p $
     Ext (BenchE fn tyapps args b) -> let tyapps1 = map (substTyVar s) tyapps
                                      in Ext (BenchE fn tyapps1 (map go args) b)
     Ext (ParE0 ls) -> Ext $ ParE0 (map go ls)
+    WithArenaE{} -> error "substTyVarExp: WithArenaE not handled."
     SpawnE f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
                            in SpawnE f tyapps1 (map go arg)
     SyncE    -> SyncE
@@ -709,6 +715,9 @@ tyVarToMetaTy = go M.empty
        ListTy t -> do (env', t') <- go env t
                       pure (env', ListTy t')
        ArenaTy  -> pure (env, ty)
+       SymSetTy -> pure (env, ty)
+       SymHashTy-> pure (env, ty)
+       IntHashTy-> pure (env, ty)
 
     gol :: M.Map TyVar Ty0 -> [Ty0] -> TcM (M.Map TyVar Ty0, [Ty0])
     gol env tys = foldlM

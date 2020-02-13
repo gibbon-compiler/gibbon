@@ -55,6 +55,8 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
               ret_ty = snd fn_ty
               ex'    = l$ TimeIt (l$ AppE fn [] args) ret_ty b
           in unLoc $ go env2 ex'
+        Ext (AddFixed{}) -> error "directL3: AddFixed not handled."
+        IsBigE{}-> error "directL3: IsBigE not handled."
         MapE{}  -> error "directL3: todo MapE"
         FoldE{} -> error "directL3: todo FoldE"
 

@@ -18,7 +18,7 @@ fib_seq n =
 mkTree_seq :: Int -> Tree
 mkTree_seq i =
   if i <= 0
-  then Leaf (fib_seq 40)
+  then Leaf (fib_seq 10)
   else
       let x = mkTree_seq (i-1)
           y = mkTree_seq (i-1)

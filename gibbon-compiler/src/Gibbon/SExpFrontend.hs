@@ -158,6 +158,9 @@ tagDataCons ddefs = go allCons
          e2' <- go cons e2
          b'  <- go cons b
          pure $ FoldE (v1,t1,e1') (v2,t2,e2') b'
+       SpawnE{} -> error "tagDataCons: SpawnE not handled"
+       SyncE{} -> error "tagDataCons: SyncE not handled"
+       IsBigE{} -> error "tagDataCons: IsBigE not handled"
 
 -- | Convert from raw, unstructured S-Expression into the L1 program datatype we expect.
 parseSExp :: [Sexp] -> PassM Prog0

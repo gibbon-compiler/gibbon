@@ -145,6 +145,7 @@ tests:
   - name: void_type.hs
     answer-file: examples/void_type.ans
   - name: T64_1.gib
+  - name: test_addtrees.gib
 
   # There's still a bug somewhere. Uncomment the main expression to reproduce.
   # Plus, #lang gibbon is having some problems with dictionaries.
@@ -353,7 +354,7 @@ tests:
     failing: ["gibbon1"]
     answer-file: examples/parallel/ParTree.hs.ans
 
-  - name: SeqFoo.hs
+  - name: SeqTree.hs
     dir: examples/parallel
     answer-file: examples/parallel/ParTree.hs.ans
 
@@ -380,8 +381,6 @@ tests:
     failing: [gibbon1,gibbon2]
   - name: test18f_flip.gib
     failing: [pointer, gibbon2, gibbon1]
-  - name: test_addtrees.gib
-    failing: [gibbon2,gibbon1]
   - name: pp_projs.gib
     failing: [pointer, gibbon1, gibbon2]
 

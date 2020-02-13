@@ -253,6 +253,8 @@ instance (Pretty l) => Pretty (UrTy l) where
           ArenaTy   -> case sty of
                          PPHaskell  -> text "()"
                          PPInternal -> text "Arena"
+          SymSetTy  -> text "SymSet"
+          SymHashTy -> text "SymHash"
 
 -- Function type for L1 and L3
 instance Pretty ([UrTy ()], UrTy ()) where
@@ -371,6 +373,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
 instance (Pretty l, Pretty d, Ord d, Show d) => Pretty (E1Ext l d) where
     pprintWithStyle sty ext =
       case ext of
+        L1.AddFixed v i -> text "addFixed" <+> pprintWithStyle sty v <+> int i
         BenchE fn tyapps args b -> text "gibbon_bench" <+> (doubleQuotes $ text "") <+> text (fromVar fn) <+>
                                    (brackets $ hcat (punctuate "," (map pprint tyapps))) <+>
                                    (pprintWithStyle sty args) <+> text (if b then "true" else "false")
@@ -389,6 +392,7 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
 instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
     pprintWithStyle _ ex0 =
         case ex0 of
+          L2.AddFixed{} -> error "pprintWithStyle: L2.AddFixed not handled."
           LetRegionE r e -> text "letregion" <+>
                                doc r <+> text "in" $+$ pprint e
           LetLocE loc le e -> text "letloc" <+>
@@ -437,6 +441,9 @@ instance Pretty L0.Ty0 where
         L0.PackedTy tc loc -> text "Packed" <+> text tc <+> brackets (hcat (map (pprintWithStyle sty) loc))
         L0.ListTy ty1 -> brackets (pprintWithStyle sty ty1)
         L0.ArenaTy    -> text "Arena"
+        L0.SymSetTy   -> text "SymSet"
+        L0.SymHashTy  -> text "SymHash"
+        L0.IntHashTy  -> text "IntHash"
 
 
 instance Pretty L0.TyScheme where
@@ -495,7 +502,8 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
     hasBenchE :: L Exp1 -> Bool
     hasBenchE (L _ ex) =
       case ex of
-        Ext (BenchE{}) -> True
+        Ext (BenchE{})   -> True
+        Ext (L1.AddFixed{}) -> False
         -- Straightforward recursion ...
         VarE{}     -> False
         LitE{}     -> False
@@ -606,7 +614,11 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                             text "()" <+>
                             text "in" $+$
                             ppExp monadic env2 e
-          -- text "letarena" <+> pprint v <+> text "in" $+$ ppExp env2 e
+
+          SpawnE{} -> error "ppHsWithEnv: SpawnE not handled."
+          SyncE{}  -> error "ppHsWithEnv: SyncE not handled."
+          IsBigE{} -> error "ppHsWithEnv: IsBigE not handled."
+          Ext(L1.AddFixed{}) -> error "ppHsWithEnv: AddFixed not handled."
           Ext (BenchE fn _locs args _b) ->
              --  -- Criterion
              -- let args_doc = hsep $ map (ppExp env2) args

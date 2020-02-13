@@ -51,6 +51,8 @@ matrix:
 
   # Temporary:
   allow_failures:
+    # [02.13.2020]: CSK: need to figure out why stack fails under a Nix environment
+    - name: coarse_nix
     - name: stack_docker
     - name: stack_nix
 

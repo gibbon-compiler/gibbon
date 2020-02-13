@@ -102,10 +102,10 @@ parAllocExp ddefs env2 reg_env after_env afters pending_binds spawned (L p ex) =
       bod2 <- foldrM
                  (\(from, to) acc -> do
                     indr <- gensym "pindr"
-                    let Just tycon = foldr (\ty acc ->
-                                                case ty of
-                                                  PackedTy tycon loc | loc == from -> Just tycon
-                                                  _ -> acc)
+                    let Just tycon = foldr (\ty2 acc2 ->
+                                                case ty2 of
+                                                  PackedTy tycon2 loc | loc == from -> Just tycon2
+                                                  _ -> acc2)
                                        Nothing (M.elems (vEnv env2))
                         indr_dcon = head $ filter isIndirectionTag $ getConOrdering ddefs tycon
                         rhs = l$ Ext $ IndirectionE tycon indr_dcon (from, reg_env M.! from) (to, reg_env M.! to) (l$ AppE "nocopy" [] [])

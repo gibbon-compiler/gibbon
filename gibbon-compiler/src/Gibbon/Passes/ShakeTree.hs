@@ -67,6 +67,11 @@ shakeTreeExp = go
          FoldE (v1,t1,go e1) (v2,t2,go e2)
                (go e3)
 
+    (WithArenaE{}) -> error "shakeTreExp: WithArenaE not handled."
+    (SpawnE{}) -> error "shakeTreExp: SpawnE not handled."
+    (SyncE{}) -> error "shakeTreExp: SyncE not handled."
+    (IsBigE{}) -> error "shakeTreExp: IsBigE not handled."
+
     -- Assume that these are trivial, and always have effects
     Ext _ext -> e0
 
@@ -109,6 +114,11 @@ hasEffect (L _ rhs) =
 
       MapE _ _ -> error "hasEffect: FIXME MapE"
       FoldE _ _ _ -> error "hasEffect: FIXME FoldE"
+
+      WithArenaE{} -> error "hasEffect: WithArenaE not handled."
+      SpawnE{} -> error "hasEffect: SpawnE not handled."
+      SyncE{} -> error "hasEffect: SyncE not handled."
+      IsBigE{} -> error "hasEffect: IsBigE not handled."
 
       -- always have effects
       Ext _ -> True

@@ -57,7 +57,7 @@ import qualified Gibbon.L3.Typecheck as L3
 import           Gibbon.Passes.Freshen        (freshNames)
 import           Gibbon.Passes.Flatten        (flattenL1, flattenL2, flattenL3)
 import           Gibbon.Passes.InlineTriv     (inlineTriv)
-import           Gibbon.Passes.Sequentialize  (sequentialize)
+-- import           Gibbon.Passes.Sequentialize  (sequentialize)
 
 import           Gibbon.Passes.DirectL3       (directL3)
 import           Gibbon.Passes.InferLocations (inferLocs)

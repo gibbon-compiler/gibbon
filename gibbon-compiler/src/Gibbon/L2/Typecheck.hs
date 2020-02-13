@@ -317,6 +317,19 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                      -- L _ LitE{} -> return (CursorTy, tstate)
                      _ -> throwError $ GenericTC "Expected a variable argument" exp
 
+                 PrintInt -> throwError $ GenericTC "PrintInt not handled" exp
+                 PrintSym -> throwError $ GenericTC "PrintSym not handled" exp
+                 ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp
+                 SymSetEmpty -> throwError $ GenericTC "SymSetEmpty not handled" exp
+                 SymSetInsert -> throwError $ GenericTC "SymSetInsert not handled" exp
+                 SymSetContains -> throwError $ GenericTC "SymSetContains not handled" exp
+                 SymHashEmpty -> throwError $ GenericTC "SymHashEmpty not handled" exp
+                 SymHashInsert -> throwError $ GenericTC "SymHashInsert not handled" exp
+                 SymHashLookup -> throwError $ GenericTC "SymHashLookup not handled" exp
+                 IntHashEmpty -> throwError $ GenericTC "IntHashEmpty not handled" exp
+                 IntHashInsert -> throwError $ GenericTC "IntHashInsert not handled" exp
+                 IntHashLookup -> throwError $ GenericTC "IntHashLookup not handled" exp
+
 
       LetE (v,_ls,ty,e1) e2 -> do
 
@@ -395,7 +408,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
       SyncE -> pure (ProdTy [], tstatein)
 
       IsBigE e -> do
-        (ty, tstate1) <- recur tstatein e
+        (_ty, tstate1) <- recur tstatein e
         pure (BoolTy, tstate1)
 
       WithArenaE v e -> do
@@ -450,6 +463,9 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                        (ty,tstate1) <- tcExp ddfs env' funs constrs1 regs tstatein e
                        return (ty,tstate1)
                 _ -> throwError $ GenericTC "Invalid letloc form" exp
+
+      Ext (FromEndE{}) -> throwError $ GenericTC "FromEndE not handled" exp
+      Ext (AddFixed{}) -> throwError $ GenericTC "AddFixed not handled" exp
 
       Ext (RetE _ls v) -> do
 

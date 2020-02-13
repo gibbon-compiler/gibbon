@@ -156,7 +156,7 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
             -- --no-pure-annot flag is not passed.
             pureAnnotOk = not (gopt Opt_No_PureAnnot dflags || gopt Opt_Packed dflags)
         if ispure && pureAnnotOk
-        then return return $ C.InitGroup decl_spec [purattr] inits lc
+        then return $ C.InitGroup decl_spec [purattr] inits lc
         else return prot
 
       codegenFun :: FunDecl -> PassM (C.Definition, C.Definition)
@@ -446,7 +446,7 @@ codegenTail env (LetCallT True bnds ratr rnds body) ty sync_deps
   where
     fncall = C.FnCall (cid ratr) (map codegenTriv rnds) noLoc
     spawnexp = C.EscExp (prettyCompact (text "cilk_spawn" <> space <> ppr fncall)) noLoc
-    seqexp = C.EscExp (prettyCompact (ppr fncall)) noLoc
+    _seqexp = C.EscExp (prettyCompact (ppr fncall)) noLoc
 
 codegenTail env (LetPrimCallT bnds prm rnds body) ty sync_deps =
     do bod' <- case prm of

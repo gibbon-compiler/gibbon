@@ -220,6 +220,9 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
         SpawnE f locs args -> go env sizeEnv (l$ AppE f locs args)
         SyncE -> pure $ (VInt (-1), SOne 8)
 
+        WithArenaE{} -> error "L2.Interp: WithArenE not handled"
+        IsBigE{}    -> error "L2.Interp: IsBigE not handled"
+
         MapE{} -> error $ "L2.Interp: TODO " ++ sdoc ex
         FoldE{} -> error $ "L2.Interp: TODO " ++ sdoc ex
 

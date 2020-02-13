@@ -143,6 +143,7 @@ freshTy env ty =
                               pure (env', PackedTy tycon tys')
      ListTy t -> do (env', t') <- freshTy env t
                     pure (env', ListTy t')
+     IntHashTy -> pure (env, ty)
 
 freshTys :: TyVarEnv (TyOf (L Exp0)) -> [Ty0] -> PassM (TyVarEnv (TyOf (L Exp0)), [Ty0])
 freshTys env tys =
@@ -183,6 +184,9 @@ freshDictTy m ty =
      ListTy t ->
          do t' <- freshDictTy m t
             pure $ ListTy t'
+     SymSetTy  -> error "freshDictTy: SymSetTy not handled."
+     SymHashTy -> error "freshDictTy: SymHashTy not handled."
+     IntHashTy -> error "freshDictTy: IntHashTy not handled."
 
 freshDictTyScheme :: Monad m =>
                      M.Map Var Var -> TyScheme -> m TyScheme
@@ -222,9 +226,9 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
       v'  <- gensym (cleanFunName v)
       e2' <- freshExp (M.insert v v' venv) tvenv e2
       ty'' <- case ty' of
-                SymDictTy (Just v) ty -> case M.lookup v venv of
-                                           Nothing -> return ty'
-                                           Just v' -> return $ SymDictTy (Just v') ty
+                SymDictTy (Just w) ty2 -> case M.lookup w venv of
+                                            Nothing -> return ty'
+                                            Just w' -> return $ SymDictTy (Just w') ty2
                 _ -> return ty'
       return $ LetE (v',[],ty'',e1') e2'
 
@@ -397,6 +401,10 @@ freshExp1 vs (L sloc exp) = fmap (L sloc) $
       e3' <- freshExp1 vs e3
       return $ FoldE (v1,t1,e1') (v2,t2,e2') e3'
 
+    WithArenaE{} -> error "freshExp1: WithArenaE not handled."
+
     Ext (L1.BenchE fn tyapps args b) -> do
       args' <- mapM (freshExp1 vs) args
       pure $ Ext (L1.BenchE (cleanFunName fn) tyapps args' b)
+
+    Ext (L1.AddFixed{}) -> error "freshExp1: AddFixed not handled."

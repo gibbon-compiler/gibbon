@@ -122,6 +122,7 @@ instance FreeVars (E2Ext l d) where
                            gFreeVars bod
      RetE _ vr          -> S.singleton vr
      FromEndE _         -> S.empty
+     AddFixed vr _      -> S.singleton vr
      BoundsCheck{}      -> S.empty
      IndirectionE{}     -> S.empty
 
@@ -135,7 +136,8 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       LetLocE{}    -> False
       RetE{}       -> False -- Umm... this one could be potentially.
       FromEndE{}   -> True
-      BoundsCheck{}-> False
+      AddFixed{}     -> True
+      BoundsCheck{}  -> False
       IndirectionE{} -> False
 
 instance (Out l, Show l, Typeable (L (E2 l (UrTy l)))) => Typeable (E2Ext l (UrTy l)) where
@@ -149,6 +151,7 @@ instance (Out l, Show l, Typeable (L (E2 l (UrTy l)))) => Typeable (E2Ext l (UrT
       FromEndE _loc       -> error $ "Shouldn't enconter FromEndE in tail position"
       BoundsCheck{}       -> error $ "Shouldn't enconter BoundsCheck in tail position"
       IndirectionE tycon _ _ (to,_) _ -> PackedTy tycon to
+      AddFixed{}          -> error $ "Shouldn't enconter AddFixed in tail position"
 
 
 instance (Out l, Show l, Typeable (L (E2 l (UrTy l))),
@@ -173,9 +176,9 @@ instance (Typeable (E2Ext l (UrTy l)),
 
           RetE{}        -> return ([],ex)
           FromEndE{}    -> return ([],ex)
+          AddFixed{}    -> return ([],ex)
           BoundsCheck{} -> return ([],ex)
           IndirectionE{}-> return ([],ex)
-          AddFixed{}    -> return ([],ex)
 
     where go = gFlattenGatherBinds ddfs env
 
@@ -477,6 +480,8 @@ stripTyLocs ty =
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy
+    SymSetTy -> SymSetTy
+    SymHashTy-> SymHashTy
 
 dummyTyLocs :: Applicative f => UrTy () -> f (UrTy LocVar)
 dummyTyLocs ty = traverse (const (pure (toVar "dummy"))) ty
@@ -537,11 +542,13 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         SpawnE v _ args -> SpawnE v [] (L.map revertExp args)
         SyncE -> SyncE
         IsBigE e -> IsBigE (revertExp e)
+        WithArenaE v e -> WithArenaE v (revertExp e)
         Ext ext ->
           case ext of
             LetRegionE _ bod -> unLoc $ revertExp bod
             LetLocE _ _ bod  -> unLoc $ revertExp bod
             RetE _ v -> VarE v
+            AddFixed{} -> error "revertExp: AddFixed not handled."
             FromEndE{} -> error "revertExp: TODO FromEndLE"
             BoundsCheck{} -> error "revertExp: TODO BoundsCheck"
             IndirectionE{} -> error "revertExp: TODO IndirectionE"
@@ -595,6 +602,7 @@ occurs w (L _ ex) =
         RetE _ v      -> v `S.member` w
         FromEndE{}    -> False
         BoundsCheck{} -> False
+        AddFixed v _  -> v `S.member` w
         IndirectionE _ _ (_,v1) (_,v2) ib ->
           v1 `S.member` w  || v2 `S.member` w || go ib
     MapE{}  -> error "occurs: TODO MapE"
@@ -616,6 +624,8 @@ mapPacked fn t =
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy
     ListTy{} -> error "FINISHLISTS"
+    SymSetTy -> SymSetTy
+    SymHashTy-> SymHashTy
 
 constPacked :: UrTy a1 -> UrTy a2 -> UrTy a1
 constPacked c t =
@@ -630,6 +640,8 @@ constPacked c t =
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy
     ListTy{} -> error "FINISHLISTS"
+    SymSetTy -> SymSetTy
+    SymHashTy-> SymHashTy
 
 -- | Build a dependency list which can be later converted to a graph
 depList :: L Exp2 -> [(Var, Var, [Var])]

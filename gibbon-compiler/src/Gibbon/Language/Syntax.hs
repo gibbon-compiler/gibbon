@@ -615,6 +615,7 @@ instance HasRenamable e l d => Renamable (L (PreExp e l d)) where
       SpawnE f locs args -> SpawnE (go f) (gol locs) (gol args)
       SyncE   -> SyncE
       IsBigE e-> IsBigE (go e)
+      WithArenaE v e -> WithArenaE (go v) (go e)
       Ext ext -> Ext (go ext)
       MapE{}  -> ex
       FoldE{} -> ex
@@ -753,6 +754,9 @@ instance Renamable a => Renamable (UrTy a) where
       ListTy loc -> ListTy (gRename env loc)
       PtrTy      -> PtrTy
       CursorTy   -> CursorTy
+      ArenaTy    -> ArenaTy
+      SymSetTy   -> SymSetTy
+      SymHashTy  -> SymHashTy
 
 --------------------------------------------------------------------------------
 -- Helpers operating on expressions
@@ -1037,6 +1041,8 @@ hasPacked t =
     PtrTy          -> False
     CursorTy       -> False
     ArenaTy        -> False
+    SymSetTy       -> False
+    SymHashTy      -> False
 
 -- | Provide a size in bytes, if it is statically known.
 sizeOfTy :: UrTy a -> Maybe Int
@@ -1052,6 +1058,8 @@ sizeOfTy t =
     PtrTy{}       -> Just 8 -- Assuming 64 bit
     CursorTy{}    -> Just 8
     ArenaTy       -> Just 8
+    SymSetTy      -> error "sizeOfTy: SymSetTy not handled."
+    SymHashTy     -> error "sizeOfTy: SymHashTy not handled."
 
 -- | Type of the arguments for a primitive operation.
 primArgsTy :: Prim (UrTy a) -> [UrTy a]
@@ -1092,7 +1100,10 @@ primArgsTy p =
     SymHashLookup -> [SymHashTy,SymTy]
     ReadPackedFile{} -> []
     (ErrorP _ _) -> []
-    RequestEndOf      -> error "primArgsTy: RequestEndOf not handled yet"
+    RequestEndOf  -> error "primArgsTy: RequestEndOf not handled yet"
+    IntHashEmpty  -> error "primArgsTy: IntHashEmpty not handled yet"
+    IntHashInsert -> error "primArgsTy: IntHashInsert not handled yet"
+    IntHashLookup -> error "primArgsTy: IntHashLookup not handled yet"
 
 -- | Return type for a primitive operation.
 primRetTy :: Prim (UrTy a) -> (UrTy a)
@@ -1133,7 +1144,10 @@ primRetTy p =
     SymHashLookup -> SymTy
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
-    RequestEndOf      -> error "primRetTy: RequestEndOf not handled yet"
+    RequestEndOf  -> error "primRetTy: RequestEndOf not handled yet"
+    IntHashEmpty  -> error "primRetTy: IntHashEmpty not handled yet"
+    IntHashInsert -> error "primRetTy: IntHashInsert not handled yet"
+    IntHashLookup -> error "primRetTy: IntHashLookup not handled yet"
 
 
 dummyCursorTy :: UrTy a
@@ -1153,6 +1167,7 @@ stripTyLocs ty =
     CursorTy -> CursorTy
     SymSetTy -> SymSetTy
     SymHashTy -> SymHashTy
+    ArenaTy   -> ArenaTy
 
 
 -- | Get the data constructor type from a type, failing if it's not packed

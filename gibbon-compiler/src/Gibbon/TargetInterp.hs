@@ -74,6 +74,7 @@ eval :: Env -> Triv -> Val
 eval env (VarTriv v) = M.findWithDefault (error ("Unbound var: " ++ (fromVar v))) v env
 eval _   (IntTriv i) = IntVal (fromIntegral i) -- TODO: Change L1 to Int64 too.
 eval _   (TagTriv t) = TagVal t
+eval _   (SymTriv _) = error "eval: SymTriv not handled"
 
 
 exec :: Env -> Tail -> IO [Val]

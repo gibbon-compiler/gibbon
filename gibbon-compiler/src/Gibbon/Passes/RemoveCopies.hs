@@ -86,7 +86,8 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
           Ext <$> LetLocE loc rhs <$>
             removeCopiesExp ddefs fundefs (M.insert loc reg lenv) env2 bod
        -- Straightforward recursion
-        RetE{} -> return ex
+        AddFixed{} -> return ex
+        RetE{}     -> return ex
         LetRegionE r bod -> Ext <$> LetRegionE r <$> go bod
         FromEndE{}       -> return ex
         BoundsCheck{}    -> return ex

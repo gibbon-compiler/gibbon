@@ -152,8 +152,10 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
         PackedTy{}    -> CursorTy
         ListTy ty'    -> ListTy $ cursorizeInTy ty'
         PtrTy -> PtrTy
-        CursorTy -> CursorTy
-        ArenaTy -> ArenaTy
+        CursorTy  -> CursorTy
+        ArenaTy   -> ArenaTy
+        SymSetTy  -> SymSetTy
+        SymHashTy -> SymHashTy
 
 {-
 
@@ -276,9 +278,14 @@ cursorizeExp ddfs fundefs denv tenv sdeps (L p ex) = L p <$>
       e' <- cursorizeExp ddfs fundefs denv (M.insert v ArenaTy tenv) sdeps e
       return $ WithArenaE v e'
 
+    SpawnE{} -> error "cursorizeExp: Unbound SpawnE"
+    SyncE{}  -> error "cursorizeExp: Unbound SyncE"
+    IsBigE{} -> error "cursorizeExp: Unbound IsBigE"
+
     -- Eg. leftmost
     Ext ext ->
       case ext of
+        AddFixed{} -> error "cursorizeExp: AddFixed not handled."
         RetE locs v ->
           case locs of
               [] -> return (VarE v)
@@ -371,7 +378,7 @@ cursorizePackedExp ddfs fundefs denv tenv sdeps (L p ex) =
        Di <$> cursorizeReadPackedFile ddfs fundefs denv tenv sdeps True v path tyc reg ty2 bod
 
     LetE (v,_locs,_ty, L sl (PrimAppE (DictLookupP (PackedTy _ ploc)) vs)) bod ->
-        do vs' <- forM vs $ \v -> cursorizeExp ddfs fundefs denv tenv sdeps v
+        do vs' <- forM vs $ \w -> cursorizeExp ddfs fundefs denv tenv sdeps w
            let bnd = mkLets [(ploc, [], CursorTy, L sl (PrimAppE (DictLookupP CursorTy) vs'))
                             ,(v, [], CursorTy, l$ VarE ploc)]
                tenv' = M.insert ploc CursorTy $ M.insert v CursorTy tenv
@@ -464,6 +471,10 @@ cursorizePackedExp ddfs fundefs denv tenv sdeps (L p ex) =
       Di e' <- go (M.insert v ArenaTy tenv) sdeps e
       return $ dl$ WithArenaE v e'
 
+    SpawnE{} -> error "cursorizePackedExp: Unbound SpawnE"
+    SyncE{}  -> error "cursorizePackedExp: Unbound SyncE"
+    IsBigE{} -> error "cursorizePackedExp: Unbound IsBigE"
+
     Ext ext ->
       case ext of
 
@@ -512,6 +523,8 @@ cursorizePackedExp ddfs fundefs denv tenv sdeps (L p ex) =
           else
             onDi (mkLets [("_",[],IntTy, l$ Ext (BumpRefCount (toEndV r1) (toEndV r2)))]) <$>
               go tenv sdeps (l$ DataConE pointer dcon [l$ VarE pointee])
+
+        AddFixed{} -> error "cursorizePackedExp: AddFixed not handled."
 
     MapE{}  -> error $ "TODO: cursorizePackedExp MapE"
     FoldE{} -> error $ "TODO: cursorizePackedExp FoldE"
@@ -767,6 +780,7 @@ cursorizeSpawn isPackedContext ddfs fundefs denv tenv sdeps (L _ ex) = do
           rhs' <- fromDi <$> cursorizePackedExp ddfs fundefs denv tenv sdeps (L p (AppE fn applocs args))
           let rhs'' = case unLoc rhs' of
                         AppE fn' applocs' args' -> L p $ SpawnE fn' applocs' args'
+                        _ -> error $ "cursorizeSpawn: this should've been an AppE. Got" ++ sdoc rhs'
           fresh <- gensym "tup_haspacked"
           let ty' = case locs of
                       [] -> cursorizeTy ty
@@ -931,7 +945,7 @@ Also, the binding itself now changes to:
                     go (M.insert v ty tenv) bod
             _ -> do
               fresh <- gensym "tup_scalar"
-              let rhs'' = dl$ VarE fresh
+              let rhs'' = l$ VarE fresh
                   ty'  = ProdTy ([CursorTy | _ <- locs] ++ [cursorizeTy ty])
                   -- We cannot resuse ty' here because TyEnv Ty2 and expresssions are
                   -- tagged with different
@@ -939,15 +953,14 @@ Also, the binding itself now changes to:
                   tenv' =  M.union (M.insert v ty tenv) $
                            M.fromList [(loc,CursorTy) | loc <- locs]
                   bnds  = [ (fresh, [] , ty''          , rhs') ] ++
-                          [ (loc,[],CursorTy, l$ ProjE n (l$ VarE fresh)) | (loc,n) <- (zip locs [0..]) ] ++
-                          [ (v,[], projTy (length locs) ty'', l$ ProjE (length locs) (l$ VarE fresh)) ]
+                          [ (loc,[],CursorTy, l$ ProjE n rhs'') | (loc,n) <- (zip locs [0..]) ] ++
+                          [ (v,[], projTy (length locs) ty'', l$ ProjE (length locs) rhs'') ]
               bod' <- go tenv' bod
               return $ unLoc $ mkLets bnds bod'
 
   where go t x = if isPackedContext
                  then fromDi <$> cursorizePackedExp ddfs fundefs denv t sdeps x
                  else cursorizeExp ddfs fundefs denv t sdeps x
-        dl = Di <$> L NoLoc
 
 {-
 

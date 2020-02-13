@@ -160,6 +160,9 @@ instance Renamable Ty0 where
       PackedTy tycon ls -> PackedTy tycon (map go ls)
       ListTy a          -> ListTy (go a)
       ArenaTy           -> ArenaTy
+      SymSetTy          -> SymSetTy
+      SymHashTy         -> SymHashTy
+      IntHashTy         -> IntHashTy
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
@@ -238,6 +241,7 @@ tyVarsInTys tys = foldr (go []) [] tys
         ArenaTy -> acc
         SymSetTy -> acc
         SymHashTy -> acc
+        IntHashTy -> acc
 
 -- | Get the MetaTvs from a type; no duplicates in result.
 metaTvsInTy :: Ty0 -> [MetaTv]
@@ -265,6 +269,7 @@ metaTvsInTys tys = foldr go [] tys
         ArenaTy -> acc
         SymSetTy -> acc
         SymHashTy -> acc
+        IntHashTy -> acc
 
 -- | Like 'tyVarsInTy'.
 tyVarsInTyScheme :: TyScheme -> [TyVar]
@@ -294,6 +299,9 @@ arrowTysInTy = go []
         ArrowTy tys b -> go (foldl go acc tys) b ++ [ty]
         PackedTy _ vs -> foldl go acc vs
         ListTy a -> go acc a
+        SymSetTy  -> acc
+        SymHashTy -> acc
+        IntHashTy -> acc
 
 -- | Replace the specified quantified type variables by
 -- given meta type variables.
@@ -313,6 +321,7 @@ substTyVar mp ty =
     ArenaTy -> ty
     SymSetTy -> ty
     SymHashTy -> ty
+    IntHashTy -> ty
   where
     go = substTyVar mp
 
@@ -360,6 +369,7 @@ recoverType ddfs env2 (L _ ex) =
       let (c,args,e) = head mp
           args' = map fst args
       in recoverType ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
+    WithArenaE{} -> error "recoverType: WithArenaE not handled."
     Ext ext ->
       case ext of
         LambdaE args bod ->
@@ -403,7 +413,19 @@ recoverType ddfs env2 (L _ ex) =
         DictLookupP ty -> ty
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty
-        RequestEndOf -> error "primRetTy: PEndOf not handled yet"
+        RequestEndOf -> error "primRetTy1: RequestEndOf not handled yet"
+        PrintInt     -> error "primRetTy1: PrintInt not handled yet"
+        PrintSym     -> error "primRetTy1: PrintSym not handled yet"
+        ReadInt      -> error "primRetTy1: ReadInt not handled yet"
+        SymSetEmpty  -> error "primRetTy1: SymSetEmpty not handled yet"
+        SymSetContains-> error "primRetTy1: SymSetContains not handled yet"
+        SymSetInsert -> error "primRetTy1: SymSetInsert not handled yet"
+        SymHashEmpty -> error "primRetTy1: SymHashEmpty not handled yet"
+        SymHashInsert-> error "primRetTy1: SymHashInsert not handled yet"
+        SymHashLookup-> error "primRetTy1: SymHashLookup not handled yet"
+        IntHashEmpty -> error "primRetTy1: IntHashEmpty not handled yet"
+        IntHashInsert-> error "primRetTy1: IntHashInsert not handled yet"
+        IntHashLookup-> error "primRetTy1: IntHashLookup not handled yet"
 
 
 {-

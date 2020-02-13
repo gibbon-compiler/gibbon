@@ -75,7 +75,8 @@ interp rc _ddefs fenv = go M.empty
     go :: ValEnv -> L (PreExp E1Ext l (UrTy l)) -> WriterT Log (StateT Store IO) Value
     go env (L _ x0) =
         case x0 of
-          Ext (BenchE fn locs args b) -> go env (l$ AppE fn locs args)
+          Ext (BenchE fn locs args _b) -> go env (l$ AppE fn locs args)
+          Ext (AddFixed{}) -> error "L1.Interp: AddFixed not handled."
 
           LitE c    -> return $ VInt c
           LitSymE s -> return $ VSym (fromVar s)
@@ -186,7 +187,9 @@ applyPrim rc p ls =
    -- FIXME: randomIO does not guarentee unique numbers every time.
    (Gensym, [])            -> VSym $ "gensym_" ++ (show $ (unsafePerformIO randomIO :: Int) `mod` 1000)
    (AddP,[VInt x, VInt y]) -> VInt (x+y)
-   (SubP,[VInt x, VInt y]) -> VInt (x-y)
+   (SubP,[VInt x, VInt y]) -> if x == 0
+                              then error "L1.Interp: Can't run (0 - y)."
+                              else VInt (x-y)
    (MulP,[VInt x, VInt y]) -> VInt (x*y)
    (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
    (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)

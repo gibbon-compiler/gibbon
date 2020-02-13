@@ -146,6 +146,7 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
                             (L p <$> SpawnE v locs <$> mapM (go env2) args)
 
     SyncE -> pure SyncE
+    IsBigE{}-> error "unariserExp: IsBigE not handled."
 
     Ext{}  -> return ex
     MapE{}  -> error "unariserExp: MapE TODO"

@@ -96,7 +96,6 @@ import Control.Monad.Trans (lift)
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
-import Gibbon.Pretty (render, pprint)
 import Gibbon.L1.Syntax as L1 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
 import Gibbon.L2.Syntax as L2 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
 import Gibbon.Passes.InlineTriv (inlineTriv)
@@ -603,6 +602,8 @@ inferExp env@FullEnv{dataDefs}
 
     SyncE -> pure (lc$ SyncE, ProdTy [], [])
 
+    IsBigE{} -> error "inferExp: IsBigE not handled."
+
     LitE n -> return (lc$ LitE n, IntTy, [])
 
     LitSymE s -> return (lc$ LitSymE s, SymTy, [])
@@ -833,7 +834,7 @@ inferExp env@FullEnv{dataDefs}
         AppE{} -> err$ "Malformed function application: " ++ (show ex0)
 
         SpawnE f _ args -> do
-          let ret_ty = arrOut $ lookupFEnv f env
+          let _ret_ty = arrOut $ lookupFEnv f env
           -- if isScalarTy ret_ty || isPackedTy ret_ty
           -- then do
           (ex0', ty, cs) <- inferExp env (l$ LetE (vr,locs,bty,L sl2 (AppE f [] args)) bod) dest
@@ -1012,6 +1013,8 @@ inferExp env@FullEnv{dataDefs}
         Ext (L1.AddFixed cur i) -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
           return (lc$ L2.LetE (vr,[],L2.CursorTy,L sl2 $ L2.Ext (L2.AddFixed cur i)) bod', ty', cs')
+
+        Ext(BenchE{}) -> error "inferExp: BenchE not handled."
 
     LetE{} -> err$ "Malformed let expression: " ++ (show ex0)
     MapE{} -> err$ "MapE unsupported"
@@ -1277,6 +1280,7 @@ fixProj renam pvar proj (L i e) =
       SpawnE v ls es -> let es' = map (fixProj renam pvar proj) es
                         in l$ SpawnE v ls es'
       SyncE -> l$ SyncE
+      IsBigE{} -> error "fixProj: IsBigE not handled."
       WithArenaE v e -> l$ WithArenaE v $ fixProj renam pvar proj e
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
@@ -1313,9 +1317,11 @@ moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
         WithArenaE a e  -> WithArenaE a $ go acc1 pending e
         SpawnE fn locs ls -> error "moveProjsAfterSync: unbound SpawnE"
         SyncE   -> error "moveProjsAfterSync: unbound SyncE"
+        IsBigE{} -> error "moveProjsAfterSync: IsBigE not handled."
         Ext ext -> case ext of
                      LetRegionE r bod -> Ext $ LetRegionE r $ go acc1 pending bod
                      LetLocE a b bod -> Ext $ LetLocE a b $ go acc1 pending bod
+                     oth -> error $ "moveProjsAfterSync: extension not handled." ++ sdoc oth
         MapE{}  -> error "moveProjsAfterSync: todo MapE"
         FoldE{} -> error "moveProjsAfterSync: todo FoldE"
 
@@ -1555,6 +1561,15 @@ prim p = case p of
            DictHasKeyP dty -> convertTy dty >>= return . DictHasKeyP
            SymAppend{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
+           SymSetEmpty{} -> err $ "prim: SymSetEmpty not handled."
+           SymSetInsert{} -> err $ "prim: SymSetInsert not handled."
+           SymSetContains{} -> err $ "prim: SymSetContains not handled."
+           SymHashEmpty{} -> err $ "prim: SymHashEmpty not handled."
+           SymHashInsert{} -> err $ "prim: SymHashInsert not handled."
+           SymHashLookup{} -> err $ "prim: SymHashLookup not handled."
+           IntHashEmpty{} -> err $ "prim: IntHashEmpty not handled."
+           IntHashInsert{} -> err $ "prim: IntHashInsert not handled."
+           IntHashLookup{} -> err $ "prim: IntHashLookup not handled."
 
 -- | Generate a copy function for a particular data definition.
 -- Note: there will be redundant let bindings in the function body which may need to be inlined.
@@ -1570,7 +1585,7 @@ genCopyFn DDef{tyName, dataCons} = do
                                                   if ty == CursorTy
                                                   then l$ LetE (y, [], ty, l$ PrimAppE RequestEndOf [l$ VarE (packed_vars !! idx)]) acc
                                                   else acc)
-                                           (l$ DataConE () dcon $ map (l . VarE) ys) (L.zip4 tys xs ys [0..])
+                                           (l$ DataConE () dcon $ map (l . VarE) ys) (L.zip4 tys xs ys ([0..] :: [Int]))
                     bod = foldr (\(ty,x,y,idx) acc ->
                                      if isPackedTy ty
                                      then l$ LetE (y, [], ty, l$ AppE (mkCopyFunName (tyToDataCon ty)) [] [l$ VarE x]) acc
@@ -1579,7 +1594,7 @@ genCopyFn DDef{tyName, dataCons} = do
                                      then acc
                                      else l$ LetE (y, [], ty, l$ VarE x) acc)
 
-                            bod_with_ran_nodes (L.zip4 tys xs ys [0..])
+                            bod_with_ran_nodes (L.zip4 tys xs ys ([0..] :: [Int]))
                 return (dcon, L.map (\x -> (x,())) xs, bod)
   return $ FunDef { funName = mkCopyFunName (fromVar tyName)
                   , funArgs = [arg]

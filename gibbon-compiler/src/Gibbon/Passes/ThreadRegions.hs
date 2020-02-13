@@ -192,6 +192,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv (L p ex) = L p <$>
 
     Ext ext ->
       case ext of
+        AddFixed{} -> error "threadRegionsExp: AddFixed not handled."
         LetLocE loc FreeLE bod ->
           Ext <$> LetLocE loc FreeLE <$>
             threadRegionsExp ddefs fundefs isMain renv env2 lfenv bod
@@ -270,7 +271,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv (L p ex) = L p <$>
 
 -- Inspect an AST and return locations in a RetE form.
 findRetLocs :: L Exp2 -> [LocVar]
-findRetLocs ex = go ex []
+findRetLocs e0 = go e0 []
   where
     go :: L Exp2 -> [LocVar] -> [LocVar]
     go (L _ ex) acc =
@@ -278,25 +279,25 @@ findRetLocs ex = go ex []
         VarE{}    -> acc
         LitE{}    -> acc
         LitSymE{} -> acc
-        AppE f locs args -> foldr go acc args
-        PrimAppE f args  -> foldr go acc args
-        LetE (v,loc,ty,rhs) bod -> do
+        AppE _ _ args   -> foldr go acc args
+        PrimAppE _ args -> foldr go acc args
+        LetE (_,_,_,rhs) bod -> do
           foldr go acc [rhs,bod]
         IfE a b c  -> foldr go acc [a,b,c]
         MkProdE xs -> foldr go acc xs
-        ProjE i e  -> go e acc
-        DataConE loc dcon args -> foldr go acc args
-        CaseE scrt mp ->
+        ProjE _ e  -> go e acc
+        DataConE _ _ args -> foldr go acc args
+        CaseE _ mp ->
           foldr (\(_,_,c) acc2 -> go c acc2) acc mp
-        TimeIt e ty b  -> go e acc
-        WithArenaE v e -> go e acc
+        TimeIt e _ty _b  -> go e acc
+        WithArenaE _v e -> go e acc
         SpawnE{} -> acc
         SyncE{}  -> acc
         IsBigE e -> go e acc
         Ext ext ->
           case ext of
-            LetRegionE r bod  -> go bod acc
-            LetLocE l lhs bod -> go bod acc
+            LetRegionE _ bod  -> go bod acc
+            LetLocE _ _ bod   -> go bod acc
             RetE locs _       -> locs ++ acc
             FromEndE{}        -> acc
             BoundsCheck{}     -> acc

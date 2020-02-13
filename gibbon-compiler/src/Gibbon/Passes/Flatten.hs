@@ -285,7 +285,7 @@ flattenExp0 ddfs env2 (L sloc e0) =
     SyncE -> pure ([], SyncE)
     IsBigE e -> do (b,e') <- triv "IsBig" e
                    return (b, IsBigE e')
-
+    WithArenaE{}  -> error "flattenL0: WitnArenaE not handled."
     MapE _ _      -> error "FINISHLISTS"
     FoldE _ _ _   -> error "FINISHLISTS"
 

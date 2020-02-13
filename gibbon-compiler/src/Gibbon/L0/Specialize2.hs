@@ -26,7 +26,6 @@ import           Gibbon.Common
 import           Gibbon.Pretty
 import           Gibbon.L0.Syntax
 import           Gibbon.L0.Typecheck
-import           Gibbon.Passes.InlineTriv
 import qualified Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
@@ -214,6 +213,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         ArenaTy -> L1.ArenaTy
         SymSetTy -> L1.SymSetTy
         SymHashTy -> L1.SymHashTy
+        IntHashTy -> error "toL1Ty: IntHashTy not handled."
         ListTy{} -> error $ "toL1Ty: No ListTy in L1."
 
     toL1TyS :: ArrowTy Ty0 -> ArrowTy L1.Ty1
@@ -436,6 +436,9 @@ monoOblsTy ddefs1 t = do
                 _  -> pure t
     ListTy{} -> pure t
     ArenaTy  -> pure t
+    SymSetTy -> error "monoOblsTy: SymSetTy not handled."
+    SymHashTy-> error "monoOblsTy: SymHashTy not handled."
+    IntHashTy-> error "monoOblsTy: IntHashTy not handled."
 
 
 -- | Collect monomorphization obligations.
@@ -799,6 +802,7 @@ updateTyConsTy ddefs mono_st ty =
     ArenaTy -> ArenaTy
     SymSetTy -> SymSetTy
     SymHashTy -> SymHashTy
+    IntHashTy -> IntHashTy
   where
     go = updateTyConsTy ddefs mono_st
 
@@ -1074,7 +1078,7 @@ specLambdasExp ddefs env2 (L p ex) = (L p) <$>
         ProjE _ a  -> collectFunRefs a acc
         DataConE _ _ ls -> foldr collectFunRefs acc ls
         TimeIt a _ _   -> collectFunRefs a acc
-        WithArenaE _ e -> collectFunRefs e acc
+        WithArenaE _ e1-> collectFunRefs e1 acc
         CaseE scrt brs -> foldr
                             (\(_,_,b) acc2 -> collectFunRefs b acc2)
                             (collectFunRefs scrt acc)

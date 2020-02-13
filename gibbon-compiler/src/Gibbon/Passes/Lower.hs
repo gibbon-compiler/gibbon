@@ -123,7 +123,6 @@ genDconsPrinter (x:xs) tail =
       dflags <- getDynFlags
       if gopt Opt_Packed dflags
       then do
-        val  <- gensym "val"
         t    <- gensym "tail"
         T.LetCallT False [(t, T.CursorTy)] (mkPrinterName tyCons) [(T.VarTriv tail)] <$>
            maybeSpace <$> genDconsPrinter xs t
@@ -406,6 +405,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
           WithArenaE _ e -> go e
           SpawnE _ _ ls  -> gol ls
           SyncE -> S.empty
+          IsBigE{} -> error "collect_syms: IsBigE not handled."
           Ext ext        ->
             case ext of
               WriteScalar _ _ ex -> go ex
@@ -424,6 +424,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               ReadCursor{}       -> syms
               BumpRefCount{}     -> syms
               NullCursor         -> syms
+              BumpArenaRefCount{}-> error "collect_syms: BumpArenaRefCount not handled."
           MapE{}         -> syms
           FoldE{}        -> syms
 
@@ -887,8 +888,11 @@ typ t =
     PackedTy{} -> T.PtrTy
     CursorTy -> T.CursorTy -- Audit me
     PtrTy -> T.PtrTy
-    ArenaTy -> T.ArenaTy
+    ArenaTy   -> T.ArenaTy
+    SymSetTy  -> error "lower/typ: SymSetTy not handled."
+    SymHashTy -> error "lower/typ: SymHashTy not handled."
 
+typ' :: String -> Ty3 -> T.Ty
 typ' str t = dbgTraceIt str $ typ t
 
 prim :: Prim Ty3 -> T.Prim
@@ -918,8 +922,16 @@ prim p =
     DictLookupP ty -> T.DictLookupP $ typ ty
     DictEmptyP ty  -> T.DictEmptyP $ typ ty
     DictHasKeyP ty -> T.DictHasKeyP $ typ ty
-
     ReadPackedFile mf tyc _ _ -> T.ReadPackedFile mf tyc
+    SymSetEmpty   -> error "lower/prim: SymSetEmpty not handled"
+    SymSetInsert  -> error "lower/prim: SymSetInsert not handled"
+    SymSetContains-> error "lower/prim: SymSetContains not handled"
+    SymHashEmpty  -> error "lower/prim: SymHashEmpty not handled"
+    SymHashInsert  -> error "lower/prim: SymHashInsert not handled"
+    SymHashLookup  -> error "lower/prim: SymHashLookup not handled"
+    IntHashEmpty  -> error "lower/prim: IntHashEmpty not handled"
+    IntHashInsert  -> error "lower/prim: IntHashInsert not handled"
+    IntHashLookup  -> error "lower/prim: IntHashLookup not handled"
 
     ErrorP{}     -> error$ "lower/prim: internal error, should not have got to here: "++show p
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."

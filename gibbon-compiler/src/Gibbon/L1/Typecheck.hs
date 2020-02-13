@@ -31,9 +31,7 @@ import Prelude hiding (exp)
 
 -- | Typecheck a L1 expression
 --
--- tcExp :: (Eq l, Show l, Out l, Out (e l (UrTy l)), FunctionTy (UrTy l)) =>
---          DDefs (UrTy l) -> Env2 (UrTy l) -> (L (PreExp e l (UrTy l))) ->
---          TcM (UrTy l) (L (PreExp e l (UrTy l)))
+tcExp :: DDefs1 -> Env2 Ty1 -> L Exp1 -> TcM Ty1 (L Exp1)
 tcExp ddfs env exp@(L p ex) =
   case ex of
     VarE v    -> lookupVar env v exp
@@ -68,9 +66,9 @@ tcExp ddfs env exp@(L p ex) =
           combAr _ m = m
           arMap = L.foldr combAr M.empty $ fragileZip argTys funInTys
 
-          subDictTy m (SymDictTy (Just v) ty) =
-              case M.lookup v m of
-                Just v' -> SymDictTy (Just v') ty
+          subDictTy m (SymDictTy (Just w) ty) =
+              case M.lookup w m of
+                Just w' -> SymDictTy (Just w') ty
                 Nothing -> error $ ("Cannot match up arena for dictionary in function application: " ++ sdoc exp)
           subDictTy _ ty = ty
 
@@ -256,6 +254,10 @@ tcExp ddfs env exp@(L p ex) =
                           else throwError $ GenericTC "Expected PackedTy" exp
             _ -> throwError $ GenericTC "Expected a variable argument" exp
 
+        IntHashEmpty  -> throwError $ GenericTC "IntHashEmpty not handled." exp
+        IntHashInsert -> throwError $ GenericTC "IntHashEmpty not handled." exp
+        IntHashLookup -> throwError $ GenericTC "IntHashEmpty not handled." exp
+
 
     LetE (v,[],SymDictTy _ pty, rhs) e -> do
       tyRhs <- go rhs
@@ -346,7 +348,7 @@ tcExp ddfs env exp@(L p ex) =
              ProdTy tys ->
                case L.filter isPackedTy tys of
                  []    -> pure ty
-                 [one] -> pure ty
+                 [_one]-> pure ty
                  _     -> error $ "Gibbon-TODO: Product types not allowed in SpawnE. Got: " ++ sdoc ty
              _ -> error "L1.Typecheck: SpawnE; type shouldn't be anything else."
 
@@ -362,6 +364,8 @@ tcExp ddfs env exp@(L p ex) =
 
     Ext (BenchE fn tyapps args _b) -> do
       go (l$ AppE fn tyapps args)
+
+    Ext (AddFixed{})-> throwError $ GenericTC "AddFixed not handled." exp
 
     MapE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc ex
     FoldE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc ex

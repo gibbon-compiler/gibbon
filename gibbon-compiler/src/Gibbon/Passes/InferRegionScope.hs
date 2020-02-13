@@ -72,6 +72,7 @@ inferRegScopeExp (L p ex) = L p <$>
   case ex of
     Ext ext ->
       case ext of
+        AddFixed{} -> error "inferRegScopeExp: AddFixed not handled"
         LetRegionE r rhs ->
           case r of
             MMapR{} -> Ext <$> LetRegionE r <$> (go rhs)

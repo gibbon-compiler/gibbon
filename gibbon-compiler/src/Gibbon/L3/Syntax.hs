@@ -9,7 +9,7 @@
 module Gibbon.L3.Syntax
   (
     -- * Extended language
-    E3Ext(..), Prog3, FunDef3, FunDefs3 , Exp3, Ty3
+    E3Ext(..), Prog3, DDef3, DDefs3, FunDef3, FunDefs3 , Exp3, Ty3
   , Scalar(..), mkScalar, scalarToTy
 
     -- * Functions
@@ -33,6 +33,9 @@ import qualified Gibbon.L2.Syntax as L2
 --------------------------------------------------------------------------------
 
 type Prog3 = Prog (L Exp3)
+
+type DDef3  = DDef Ty3
+type DDefs3 = DDefs Ty3
 
 type FunDefs3 = FunDefs (L Exp3)
 
@@ -92,6 +95,7 @@ instance FreeVars (E3Ext l d) where
       WriteCursor c ex   -> S.insert c (gFreeVars ex)
       BumpRefCount r1 r2 -> S.fromList [r1, r2]
       NullCursor         -> S.empty
+      BumpArenaRefCount v w -> S.fromList [v, w]
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
   type LocOf (E3Ext l d) = l
@@ -147,6 +151,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       ReadCursor v       -> ReadCursor (go v)
       WriteCursor v bod  -> WriteCursor (go v) (go bod)
       BumpRefCount a b   -> BumpRefCount (go a) (go b)
+      BumpArenaRefCount v w -> BumpArenaRefCount (go v) (go w)
       NullCursor         -> ext
     where
       go :: forall a. Renamable a => a -> a
@@ -192,6 +197,8 @@ cursorizeTy ty =
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy
+    SymSetTy -> SymSetTy
+    SymHashTy-> SymHashTy
 
 -- | Map exprs with an initial type environment:
 -- Exactly the same function that was in L2 before

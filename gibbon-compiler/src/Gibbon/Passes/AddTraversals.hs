@@ -90,6 +90,7 @@ addTraversalsExp ddefs fundefs env2 renv context (L p ex) = L p <$>
                       AfterConstantLE _ lc -> renv # lc
                       AfterVariableLE _ lc -> renv # lc
                       FromEndLE lc         -> renv # lc -- TODO: This needs to be fixed
+                      FreeLE -> error "addTraversalsExp: FreeLE not handled"
           in Ext <$> LetLocE loc locexp <$>
                addTraversalsExp ddefs fundefs env2 (M.insert loc reg renv) context bod
         _ -> return ex

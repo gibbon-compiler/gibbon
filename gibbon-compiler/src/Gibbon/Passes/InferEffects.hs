@@ -161,12 +161,16 @@ inferExp ddfs fenv env dps (L _p expr) =
 
     WithArenaE _v e -> inferExp ddfs fenv env dps e
 
+    MapE{} -> error "inferEffects: MapE not handled."
+    FoldE{} -> error "inferEffects: FoldE not handled."
+
     Ext (LetRegionE _ rhs) -> inferExp ddfs fenv env dps rhs
     Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env dps rhs
     Ext (RetE _ _)         -> (S.empty, Nothing)
     Ext (FromEndE _ )      -> (S.empty, Nothing)
     Ext (IndirectionE{})   -> (S.empty, Nothing)
     Ext (BoundsCheck{})    -> (S.empty, Nothing)
+    Ext (AddFixed{})       -> error "inferEffects: AddFixed not handled."
 
   where
     packedLoc :: Ty2 -> Maybe LocVar
