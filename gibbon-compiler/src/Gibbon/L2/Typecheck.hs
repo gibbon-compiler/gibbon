@@ -317,6 +317,29 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                      -- L _ LitE{} -> return (CursorTy, tstate)
                      _ -> throwError $ GenericTC "Expected a variable argument" exp
 
+                 VEmptyP ty  -> do
+                   len0
+                   pure (ListTy ty, tstate)
+                 VNthP ty    -> do
+                   let [i,ls] = tys
+                   _ <- ensureEqualTy exp IntTy i
+                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   pure (ty, tstate)
+                 VLengthP ty -> do
+                   let [ls] = tys
+                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   pure (IntTy, tstate)
+                 VUpdateP ty -> do
+                   let [ls,i,val] = tys
+                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   _ <- ensureEqualTy exp IntTy i
+                   _ <- ensureEqualTy exp ty val
+                   pure (ListTy ty, tstate)
+                 VSnocP ty   -> do
+                   let [ls,val] = tys
+                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   _ <- ensureEqualTy exp ty val
+                   pure (ListTy ty, tstate)
                  PrintInt -> throwError $ GenericTC "PrintInt not handled" exp
                  PrintSym -> throwError $ GenericTC "PrintSym not handled" exp
                  ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp

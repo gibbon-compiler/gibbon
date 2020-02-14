@@ -166,6 +166,7 @@ data Ty
     | SymDictTy Var Ty
       -- ^ We allow built-in dictionaries from symbols to a value type.
     | ArenaTy
+    | ListTy Ty
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data Prim
@@ -180,6 +181,11 @@ data Prim
     | DictLookupP Ty -- ^ takes k,dict, errors if absent
     | DictEmptyP Ty
     | DictHasKeyP Ty
+    | VEmptyP Ty
+    | VNthP Ty
+    | VLengthP Ty
+    | VUpdateP Ty
+    | VSnocP Ty
 
     | ReadPackedFile (Maybe FilePath) TyCon
 

@@ -317,6 +317,38 @@ tcExp isPacked ddfs env exp@(L p ex) =
 
         RequestEndOf -> error "RequestEndOf shouldn't occur in a L3 program."
 
+        VEmptyP ty -> do
+          len0
+          pure (ListTy ty)
+
+        VNthP ty -> do
+          len2
+          let [i,ls] = tys
+          _ <- ensureEqualTy (es !! 0) IntTy i
+          _ <- ensureEqualTy (es !! 1) (ListTy ty) ls
+          pure ty
+
+        VLengthP ty -> do
+          len1
+          let [ls] = tys
+          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          pure IntTy
+
+        VUpdateP ty -> do
+          len3
+          let [ls,i,val] = tys
+          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 1) IntTy i
+          _ <- ensureEqualTy (es !! 2) ty val
+          pure (ListTy ty)
+
+        VSnocP ty -> do
+          len2
+          let [ls,val] = tys
+          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 1) ty val
+          pure (ListTy ty)
+
         IntHashEmpty  -> error "L3.Typecheck: IntHashEmpty not handled."
         IntHashInsert -> error "L3.Typecheck: IntHashInsert not handled."
         IntHashLookup -> error "L3.Typecheck: IntHashLookup not handled."

@@ -113,6 +113,7 @@ data Value = VInt Int
            | VBool Bool
            | VDict (M.Map Value Value)
            | VProd [Value]
+           | VList [Value]
            | VPacked DataCon [Value]
            | VLoc { bufID :: Var, offset :: Int }
            | VCursor { bufID :: Var, offset :: Int }
@@ -133,6 +134,7 @@ instance Show Value where
 --    VProd ls -> "("++ concat(intersperse ", " (L.map show ls)) ++")"
 -- For now match Gibbon's Racket backend
    VProd ls -> "'#("++ concat(intersperse " " (L.map show ls)) ++")"
+   VList ls -> show ls
    VDict m      -> show (M.toList m)
 
    -- F(x) style.  Maybe we'll switch to sweet-exps to keep everything in sync:

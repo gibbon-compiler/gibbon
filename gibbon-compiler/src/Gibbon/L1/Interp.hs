@@ -213,8 +213,21 @@ applyPrim rc p ls =
    (SizeParam,[]) -> VInt (rcSize rc)
    (ReadPackedFile file _ _ ty,[]) ->
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
+   (VEmptyP _,[]) -> VList []
+   (VNthP _,[VInt n, VList ls]) -> ls !! n
+   (VLengthP _,[VList ls]) -> VInt (length ls)
+   (VUpdateP _,[VList ls, VInt i, v]) -> if length ls < i
+                                         then error $ "L1.Interp: VUpdate"
+                                         else VList (replaceNth i v ls)
+   (VSnocP _,[VList ls, v]) -> VList (ls ++ [v])
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
+  where
+     replaceNth :: Int -> a -> [a] -> [a]
+     replaceNth _ _ [] = []
+     replaceNth n newVal (x:xs)
+       | n == 0 = newVal:xs
+       | otherwise = x:replaceNth (n-1) newVal xs
 
 clk :: Clock
 clk = Monotonic

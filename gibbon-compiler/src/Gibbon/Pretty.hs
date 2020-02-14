@@ -197,6 +197,11 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       ErrorP str ty  -> text "ErrorP" <> wty ty <+> doubleQuotes (text str) <> space
                                       ReadPackedFile mb_fp tycon _ _ ->
                                         text "readFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
+                                      VEmptyP ty -> parens $ text "vempty" <+> doublecolon <+> brackets (pprintWithStyle sty ty)
+                                      VNthP{}    -> text "vnth"
+                                      VLengthP{} -> text "vlength"
+                                      VUpdateP{} -> text "vupdate"
+                                      VSnocP{}   -> text "vsnoc"
                                       _ -> error $ "pprint: Unknown primitive: " ++ show pr
                       PPHaskell  -> case pr of
                                       DictEmptyP _ty  -> text "dictEmpty"

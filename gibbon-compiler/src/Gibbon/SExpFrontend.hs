@@ -260,7 +260,7 @@ typ s = case s of
                          then TyVar $ UserTv (textToVar con)
                          else PackedTy (textToDataCon con) []
          (Ls3 _ "SymDict" (A _ v) t) -> SymDictTy (Just (textToVar v)) (typ t)
-         (Ls2 _ "Listof" t)  -> ListTy $ typ t
+         (Ls2 _ "ListOf" t)  -> ListTy $ typ t
          -- See https://github.com/aisamanra/s-cargot/issues/14.
          (Ls (A _ "-" : A _ ">" : tys)) ->
              let tys'   = L.map typ tys

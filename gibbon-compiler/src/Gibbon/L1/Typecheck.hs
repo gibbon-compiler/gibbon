@@ -254,6 +254,48 @@ tcExp ddfs env exp@(L p ex) =
                           else throwError $ GenericTC "Expected PackedTy" exp
             _ -> throwError $ GenericTC "Expected a variable argument" exp
 
+        VEmptyP ty -> do
+          len0
+          if isValidListTy ty
+          then pure (ListTy ty)
+          else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc ty) exp
+
+        VNthP ty -> do
+          len2
+          let [i,ls] = tys
+          _ <- ensureEqualTy (es !! 0) IntTy i
+          _ <- ensureEqualTy (es !! 1) (ListTy ty) ls
+          if isValidListTy ty
+          then pure ty
+          else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc ty) exp
+
+        VLengthP ty -> do
+          len1
+          let [ls] = tys
+          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          if isValidListTy ty
+          then pure IntTy
+          else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc ty) exp
+
+        VUpdateP ty -> do
+          len3
+          let [ls,i,val] = tys
+          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 1) IntTy i
+          _ <- ensureEqualTy (es !! 2) ty val
+          if isValidListTy ty
+          then pure (ListTy ty)
+          else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc ty) exp
+
+        VSnocP ty -> do
+          len2
+          let [ls,val] = tys
+          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 1) ty val
+          if isValidListTy ty
+          then pure (ListTy ty)
+          else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc ty) exp
+
         IntHashEmpty  -> throwError $ GenericTC "IntHashEmpty not handled." exp
         IntHashInsert -> throwError $ GenericTC "IntHashEmpty not handled." exp
         IntHashLookup -> throwError $ GenericTC "IntHashEmpty not handled." exp

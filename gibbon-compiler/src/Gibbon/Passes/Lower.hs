@@ -742,7 +742,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     ---------------------
     -- (3) Proper primapps.
-    LetE (v,_,t, L _ (PrimAppE p ls)) bod -> dbgTrace 3 ("lower: " ++ show v ++ " : " ++ show t) $
+    LetE (v,_,t, L _ (PrimAppE p ls)) bod -> dbgTrace 7 ("lower: " ++ show v ++ " : " ++ show t) $
         -- No tuple-valued prims here:
         T.LetPrimCallT [(v,typ t)]
              (prim p)
@@ -880,7 +880,7 @@ typ t =
     IntTy  -> T.IntTy
     SymTy  -> T.SymTy
     BoolTy -> T.BoolTy
-    ListTy{} -> error "lower/typ: FinishMe: List types"
+    ListTy ty -> T.ListTy (typ ty)
     ProdTy xs -> T.ProdTy $ L.map typ xs
     SymDictTy (Just var) x -> T.SymDictTy var $ typ x
     SymDictTy Nothing _ty -> error $ "lower/typ: Expected arena annotation on type: " ++ (sdoc t)
@@ -923,6 +923,11 @@ prim p =
     DictEmptyP ty  -> T.DictEmptyP $ typ ty
     DictHasKeyP ty -> T.DictHasKeyP $ typ ty
     ReadPackedFile mf tyc _ _ -> T.ReadPackedFile mf tyc
+    VEmptyP ty    -> T.VEmptyP (typ ty)
+    VNthP ty      -> T.VNthP (typ ty)
+    VLengthP ty   -> T.VLengthP (typ ty)
+    VUpdateP ty   -> T.VUpdateP (typ ty)
+    VSnocP ty     -> T.VSnocP (typ ty)
     SymSetEmpty   -> error "lower/prim: SymSetEmpty not handled"
     SymSetInsert  -> error "lower/prim: SymSetInsert not handled"
     SymSetContains-> error "lower/prim: SymSetContains not handled"

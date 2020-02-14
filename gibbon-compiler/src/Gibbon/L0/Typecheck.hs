@@ -283,6 +283,38 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
         IntHashInsert{} -> err $ text "IntHashInsert not handled."
         IntHashLookup{} -> err $ text "IntHashLookup not handled."
 
+        VEmptyP ty -> do
+          len0
+          pure (sbst, ListTy ty, PrimAppE pr [])
+
+        VNthP ty -> do
+          len2
+          let [i,ls] = arg_tys'
+          s2 <- unify (args !! 0) IntTy i
+          s3 <- unify (args !! 1) (ListTy ty) ls
+          pure (s1 <> s2 <> s3, ty, PrimAppE pr args_tc)
+
+        VLengthP ty -> do
+          len1
+          let [ls] = arg_tys'
+          s2 <- unify (args !! 0) (ListTy ty) ls
+          pure (s1 <> s2, IntTy, PrimAppE pr args_tc)
+
+        VUpdateP ty -> do
+          len3
+          let [ls,i,val] = arg_tys'
+          s2 <- unify (args !! 0) (ListTy ty) ls
+          s3 <- unify (args !! 1) IntTy i
+          s4 <- unify (args !! 2) ty val
+          pure (s1 <> s2 <> s3 <> s4, ListTy ty, PrimAppE pr args_tc)
+
+        VSnocP ty -> do
+          len2
+          let [ls,val] = arg_tys'
+          s2 <- unify (args !! 0) (ListTy ty) ls
+          s3 <- unify (args !! 1) ty val
+          pure (s1 <> s2 <> s3, ListTy ty, PrimAppE pr args_tc)
+
         ErrorP _str ty -> do
           len0
           pure (s1, ty, PrimAppE pr args_tc)
@@ -296,7 +328,6 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
           pure (s1, ty, PrimAppE pr args_tc)
 
         RequestEndOf -> err $ text "Unexpected RequestEndOf in L0: " <+> exp_doc
-          -- pure (s1, CursorTy, PrimAppE pr args_tc)
 
 
     LetE (v, [], gvn_rhs_ty, rhs) bod -> do
@@ -587,7 +618,15 @@ zonkExp s (L p ex) = L p $
     LitSymE{} -> ex
     AppE f tyapps args -> let tyapps1 = map (zonkTy s) tyapps
                           in AppE f tyapps1 (map go args)
-    PrimAppE pr args  -> PrimAppE pr (map go args)
+    PrimAppE pr args  ->
+      let pr' = case pr of
+                  VEmptyP  ty -> VEmptyP  (zonkTy s ty)
+                  VNthP    ty -> VNthP    (zonkTy s ty)
+                  VLengthP ty -> VLengthP (zonkTy s ty)
+                  VUpdateP ty -> VUpdateP (zonkTy s ty)
+                  VSnocP ty   -> VSnocP (zonkTy s ty)
+                  _ -> pr
+      in PrimAppE pr' (map go args)
     -- Let doesn't store any tyapps.
     LetE (v,tyapps,ty,rhs) bod -> LetE (v, tyapps, zonkTy s ty, go rhs) (go bod)
     IfE a b c  -> IfE (go a) (go b) (go c)
@@ -739,9 +778,9 @@ unify ex ty1 ty2
       case (ty1,ty2) of
         (IntTy, IntTy)     -> pure emptySubst
         (BoolTy, BoolTy)   -> pure emptySubst
-        (TyVar _, TyVar _)   -> fail_
-        -- CHECKME:
-        -- (MetaTv _, MetaTv _) -> fail_
+        (TyVar _, TyVar _) -> fail_
+        -- -- CHECKME
+        -- (MetaTv a, MetaTv b) -> unifyVar ex a (MetaTv b)
         (MetaTv a, _) -> unifyVar ex a ty2
         (_, MetaTv b) -> unifyVar ex b ty1
         (ProdTy as, ProdTy bs) -> unifyl ex as bs
@@ -754,6 +793,7 @@ unify ex ty1 ty2
           then unifyl ex tys1 tys2
           else fail_
         (SymDictTy _ t1, SymDictTy _ t2) -> unify ex t1 t2
+        (ListTy t1, ListTy t2) -> unify ex t1 t2
         _ -> dbgTrace 1 ("unify: Catch-all _; failed to unify " ++ sdoc ty1 ++ " with " ++ sdoc ty2) fail_
   where fail_ = err $  text "Couldn't match type" <+> quotes (doc ty2)
                     <+> text "with" <+> quotes (doc ty1)

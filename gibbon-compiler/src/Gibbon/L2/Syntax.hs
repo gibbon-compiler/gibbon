@@ -24,7 +24,7 @@ module Gibbon.L2.Syntax
 
     -- * Operations on types
     , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substLoc
-    , substLocs, substEffs, stripTyLocs, extendPatternMatchEnv
+    , substLocs, substEffs, extendPatternMatchEnv
     , locsInTy, dummyTyLocs, allFreeVars
 
     -- * Other helpers
@@ -466,23 +466,6 @@ substEffs mp ef =
                  Just v2 -> Traverse v2
                  Nothing -> Traverse v) ef
 
--- | Remove the extra location annotations.
-stripTyLocs :: UrTy a -> UrTy ()
-stripTyLocs ty =
-  case ty of
-    IntTy     -> IntTy
-    SymTy     -> SymTy
-    BoolTy    -> BoolTy
-    ProdTy ls -> ProdTy $ L.map stripTyLocs ls
-    SymDictTy v ty'  -> SymDictTy v $ stripTyLocs ty'
-    PackedTy tycon _ -> PackedTy tycon ()
-    ListTy ty'       -> ListTy $ stripTyLocs ty'
-    PtrTy    -> PtrTy
-    CursorTy -> CursorTy
-    ArenaTy  -> ArenaTy
-    SymSetTy -> SymSetTy
-    SymHashTy-> SymHashTy
-
 dummyTyLocs :: Applicative f => UrTy () -> f (UrTy LocVar)
 dummyTyLocs ty = traverse (const (pure (toVar "dummy"))) ty
 
@@ -623,7 +606,7 @@ mapPacked fn t =
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy
-    ListTy{} -> error "FINISHLISTS"
+    ListTy ty-> ListTy ty
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy
 
@@ -639,7 +622,7 @@ constPacked c t =
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy
-    ListTy{} -> error "FINISHLISTS"
+    ListTy ty-> ListTy (constPacked c ty)
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy
 

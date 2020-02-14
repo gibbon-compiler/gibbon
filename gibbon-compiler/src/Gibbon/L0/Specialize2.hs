@@ -214,7 +214,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         SymSetTy -> L1.SymSetTy
         SymHashTy -> L1.SymHashTy
         IntHashTy -> error "toL1Ty: IntHashTy not handled."
-        ListTy{} -> error $ "toL1Ty: No ListTy in L1."
+        ListTy a  -> L1.ListTy (toL1Ty a)
 
     toL1TyS :: ArrowTy Ty0 -> ArrowTy L1.Ty1
     toL1TyS t@(ForAll tyvars (ArrowTy as b))

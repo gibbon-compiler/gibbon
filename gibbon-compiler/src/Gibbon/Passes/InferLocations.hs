@@ -1559,6 +1559,11 @@ prim p = case p of
            DictInsertP dty -> convertTy dty >>= return . DictInsertP
            DictLookupP dty -> convertTy dty >>= return . DictLookupP
            DictHasKeyP dty -> convertTy dty >>= return . DictHasKeyP
+           VEmptyP dty  -> convertTy dty >>= return . VEmptyP
+           VNthP dty    -> convertTy dty >>= return . VNthP
+           VLengthP dty -> convertTy dty >>= return . VLengthP
+           VUpdateP dty -> convertTy dty >>= return . VUpdateP
+           VSnocP dty   -> convertTy dty >>= return . VSnocP
            SymAppend{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            SymSetEmpty{} -> err $ "prim: SymSetEmpty not handled."

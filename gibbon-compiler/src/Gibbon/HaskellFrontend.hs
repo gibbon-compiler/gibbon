@@ -79,7 +79,7 @@ keywords :: S.Set Var
 keywords = S.fromList $ map toVar $
     [ "quote", "bench", "error", "par", "spawn", "is_big"
     -- operations on vectors
-    , "vempty", "vnth", "vlength", "vupdate"
+    , "vempty", "vnth", "vlength", "vupdate", "vsnoc"
     ] ++ M.keys primMap
 
 desugarTopType :: (Show a,  Pretty a) => Type a -> TyScheme
@@ -206,6 +206,10 @@ desugarExp toplevel e = L NoLoc <$>
       then pure SyncE
       else if v == "sizeParam"
       then pure $ PrimAppE SizeParam []
+      else if v == "vempty"
+      then do
+        ty <- newMetaTy
+        pure $ PrimAppE (VEmptyP ty) []
       else case M.lookup v toplevel of
              Just sigma ->
                case tyFromScheme sigma of
@@ -264,6 +268,31 @@ desugarExp toplevel e = L NoLoc <$>
                   then do
                     e2' <- desugarExp toplevel e2
                     pure $ IsBigE e2'
+                  else if f == "vempty"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (VEmptyP ty) [e2']
+                  else if f == "vnth"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (VNthP ty) [e2']
+                  else if f == "vlength"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (VLengthP ty) [e2']
+                  else if f == "vupdate"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (VUpdateP ty) [e2']
+                  else if f == "vsnoc"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (VSnocP ty) [e2']
                   else AppE f [] <$> (: []) <$> desugarExp toplevel e2
           L _ (DataConE tyapp c as) ->
             case M.lookup c primMap of

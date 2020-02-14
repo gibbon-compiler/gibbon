@@ -45,6 +45,7 @@ module Gibbon.Language.Syntax
     -- * Helpers operating on types
   , mkProdTy, projTy , voidTy, isProdTy, isNestedProdTy, isPackedTy, isScalarTy
   , hasPacked, sizeOfTy, primArgsTy, primRetTy, dummyCursorTy, tyToDataCon
+  , stripTyLocs, isValidListTy
 
     -- * Misc
   , assertTriv, assertTrivs
@@ -674,6 +675,13 @@ data Prim ty
           | IntHashInsert  -- ^ Insert an integer into a hash table
           | IntHashLookup  -- ^ Look up a integer in a hash table (takes default integer)
 
+          -- Operations on vectors
+          | VEmptyP ty  -- ^ Creates an empty vector
+          | VNthP ty    -- ^ Fetch the nth element
+          | VLengthP ty -- ^ Length of the vector
+          | VUpdateP ty -- ^ Update ith element of the vector
+          | VSnocP ty   -- ^ Append an element to the end of the vector
+
           | ReadPackedFile (Maybe FilePath) TyCon (Maybe Var) ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
             -- type of the file being read.  The `Ty` tracks the type as the program evolvels
@@ -1026,6 +1034,14 @@ isScalarTy SymTy  = True
 isScalarTy BoolTy = True
 isScalarTy _      = False
 
+-- | Lists of scalars or flat products of scalars are allowed.
+isValidListTy :: UrTy a -> Bool
+isValidListTy ty
+  | isScalarTy ty = True
+  | otherwise = case ty of
+                  ProdTy tys -> all isScalarTy tys
+                  _ -> False
+
 
 -- | Do values of this type contain packed data?
 hasPacked :: Show a => UrTy a -> Bool
@@ -1037,7 +1053,7 @@ hasPacked t =
     BoolTy         -> False
     IntTy          -> False
     SymDictTy _ _  -> False -- hasPacked ty
-    ListTy _       -> error "FINISHLISTS"
+    ListTy ty      -> hasPacked ty
     PtrTy          -> False
     CursorTy       -> False
     ArenaTy        -> False
@@ -1089,6 +1105,11 @@ primArgsTy p =
     DictInsertP _ty  -> error "primArgsTy: dicts not handled yet"
     DictLookupP _ty  -> error "primArgsTy: dicts not handled yet"
     DictHasKeyP _ty  -> error "primArgsTy: dicts not handled yet"
+    VEmptyP{}   -> []
+    VNthP ty    -> [IntTy, ListTy ty]
+    VLengthP ty -> [ListTy ty]
+    VUpdateP ty -> [ListTy ty, IntTy, ty]
+    VSnocP ty   -> [ListTy ty, ty]
     PrintInt -> [IntTy]
     PrintSym -> [SymTy]
     ReadInt  -> []
@@ -1133,6 +1154,11 @@ primRetTy p =
     DictEmptyP ty  -> SymDictTy Nothing $ stripTyLocs ty
     DictInsertP ty -> SymDictTy Nothing $ stripTyLocs ty
     DictLookupP ty -> ty
+    VEmptyP ty  -> ListTy ty
+    VNthP ty    -> ty
+    VLengthP{}  -> IntTy
+    VUpdateP ty -> ListTy ty
+    VSnocP ty   -> ListTy ty
     PrintInt -> IntTy
     PrintSym -> SymTy
     ReadInt  -> IntTy
