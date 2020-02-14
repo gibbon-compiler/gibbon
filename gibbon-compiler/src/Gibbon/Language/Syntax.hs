@@ -467,30 +467,15 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
       f :: (PreExp e l d) -> Bool
       f e =
        case e of
-        VarE _    -> True
-        LitE _    -> True
-        LitSymE _ -> True
-        -- -- These should really turn to literalS:
-        -- -- Commenting out for now because it confuses inference (!)
-        -- PrimAppE MkTrue  [] -> True
-        -- PrimAppE MkFalse [] -> True
-        PrimAppE _ _        -> False
+        VarE _     -> True
+        LitE _     -> True
+        LitSymE _  -> True
+        PrimAppE{} -> False
 
         ----------------- POLICY DECISION ---------------
-        -- Leave these tuple ops as trivial for now:
-        -- See https://github.com/iu-parfunc/gibbon/issues/86
-        --
-        -- ProjE _ (L _ et) | f et -> True
-        --                  | otherwise -> False
-        --
-        -- [2018.04.13]:
-        -- Turning this off to make tree_lookup go through InferLocs.
-        -- The sumUpSetEven examples seems to be working. Maybe we could
-        -- hack inferLocs to work around this though.
-        -- Double check everything else before merging into master!!!
-        ProjE{} -> False
-        --
-        MkProdE ls -> all (\(L _ x) -> f x) ls
+        -- Tuples and projections are NOT trivial!
+        ProjE{}    -> False
+        MkProdE ls -> False
 
         -- DataCon's are a bit tricky.  May want to inline them at
         -- some point if it avoids region conflicts.
