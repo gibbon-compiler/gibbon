@@ -10,7 +10,7 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.DynFlags
 import           Gibbon.Common
 import           Gibbon.L2.Syntax
-import           Gibbon.L3.Syntax hiding ( BoundsCheck )
+import           Gibbon.L3.Syntax hiding ( BoundsCheck, RetE )
 import qualified Gibbon.L3.Syntax as L3
 import           Gibbon.Passes.AddRAN ( numRANsDataCon )
 
@@ -289,7 +289,7 @@ cursorizeExp ddfs fundefs denv tenv sdeps (L p ex) = L p <$>
         RetE locs v ->
           case locs of
               [] -> return (VarE v)
-              _  -> return $ MkProdE $ [l$ VarE loc | loc <- locs] ++ [l$ VarE v]
+              _  -> return $ Ext $ L3.RetE $ [l$ VarE loc | loc <- locs] ++ [l$ VarE v]
 
         -- All locations are transformed into cursors here. Location arithmetic
         -- is expressed in terms of corresponding cursor operations.
@@ -507,7 +507,7 @@ cursorizePackedExp ddfs fundefs denv tenv sdeps (L p ex) =
           case locs of
             []    -> return v'
             [loc] -> return $ mkDi (l$ VarE loc) [ fromDi v' ]
-            _ -> return $ Di $ l$ MkProdE $ L.foldr (\loc acc -> (l$ VarE loc):acc) [fromDi v'] locs
+            _ -> return $ Di $ l$ Ext $ L3.RetE $ L.foldr (\loc acc -> (l$ VarE loc):acc) [fromDi v'] locs
 
         LetRegionE r bod -> do
           onDi (mkLets (regionToBinds r)) <$> go tenv sdeps bod

@@ -425,6 +425,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               BumpRefCount{}     -> syms
               NullCursor         -> syms
               BumpArenaRefCount{}-> error "collect_syms: BumpArenaRefCount not handled."
+              RetE ls -> gol ls
           MapE{}         -> syms
           FoldE{}        -> syms
 
@@ -556,8 +557,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     --------------------------------------------------------------------------------
 
---    L3.LitE n       -> pure$ T.RetValsT [triv "literal in tail" (LitE n)]
-    MkProdE ls   -> pure$ T.RetValsT (L.map (triv sym_tbl "returned element of tuple") ls)
+    Ext (RetE ls)   -> pure$ T.RetValsT (L.map (triv sym_tbl "returned element of tuple") ls)
     e | isTrivial e -> pure$ T.RetValsT [triv sym_tbl "<internal error1>" (l$ e)]
 
     -- We could eliminate these ahead of time (unariser):

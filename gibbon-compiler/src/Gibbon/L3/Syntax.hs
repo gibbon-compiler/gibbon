@@ -74,6 +74,7 @@ data E3Ext loc dec =
   | NullCursor                     -- ^ Constant null cursor value (hack?).
                                    --   Used for dict lookup, which returns a packed value but
                                    --   no end witness.
+  | RetE [(L (PreExp E3Ext loc dec))]-- ^ Analogous to L2's RetE
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 instance FreeVars (E3Ext l d) where
@@ -96,6 +97,7 @@ instance FreeVars (E3Ext l d) where
       BumpRefCount r1 r2 -> S.fromList [r1, r2]
       NullCursor         -> S.empty
       BumpArenaRefCount v w -> S.fromList [v, w]
+      RetE ls -> S.unions (L.map gFreeVars ls)
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
   type LocOf (E3Ext l d) = l
@@ -153,6 +155,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       BumpRefCount a b   -> BumpRefCount (go a) (go b)
       BumpArenaRefCount v w -> BumpArenaRefCount (go v) (go w)
       NullCursor         -> ext
+      RetE ls            -> RetE (L.map go ls)
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env

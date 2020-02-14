@@ -115,6 +115,10 @@ tcExp isPacked ddfs env exp@(L p ex) =
         BumpArenaRefCount{} ->
           throwError $ GenericTC ("BumpArenaRefCount not handled.") exp
 
+        RetE ls -> do
+          tys <- mapM go ls
+          pure (ProdTy tys)
+
         NullCursor -> return CursorTy
 
     -- All the other cases are exactly same as L1.Typecheck

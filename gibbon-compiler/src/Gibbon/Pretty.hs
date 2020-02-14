@@ -402,8 +402,8 @@ instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
                                doc r <+> text "in" $+$ pprint e
           LetLocE loc le e -> text "letloc" <+>
                                 pprint loc <+> equals <+> pprint le <+> text "in" $+$ pprint e
-          RetE ls v -> text "return" <+>
-                          lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
+          L2.RetE ls v -> text "return" <+>
+                            lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
                           doc v
           FromEndE loc -> text "fromende" <+> pprint loc
           L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> pprint l2
