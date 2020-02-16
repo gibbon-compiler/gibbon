@@ -104,8 +104,9 @@ instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
   type TyOf  (E3Ext l d) = UrTy l
   isTrivial _ = False
 
-instance (Out l, Show l) => Typeable (E3Ext l (UrTy l)) where
+instance (Out l, Show l, Typeable (L (PreExp E3Ext l (UrTy l)))) => Typeable (E3Ext l (UrTy l)) where
     gRecoverType _ddfs _env2 NullCursor = CursorTy
+    gRecoverType ddfs env2 (RetE ls)    = ProdTy $ L.map (gRecoverType ddfs env2) ls
     gRecoverType _ _ _ = error "L3.gRecoverType"
 
 instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where

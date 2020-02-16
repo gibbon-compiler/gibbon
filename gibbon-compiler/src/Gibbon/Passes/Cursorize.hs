@@ -289,7 +289,7 @@ cursorizeExp ddfs fundefs denv tenv sdeps (L p ex) = L p <$>
         RetE locs v ->
           case locs of
               [] -> return (VarE v)
-              _  -> return $ Ext $ L3.RetE $ [l$ VarE loc | loc <- locs] ++ [l$ VarE v]
+              _  -> return $ L3.MkProdE $ [l$ VarE loc | loc <- locs] ++ [l$ VarE v]
 
         -- All locations are transformed into cursors here. Location arithmetic
         -- is expressed in terms of corresponding cursor operations.
@@ -506,8 +506,8 @@ cursorizePackedExp ddfs fundefs denv tenv sdeps (L p ex) =
           v' <- go tenv sdeps (l$ VarE v)
           case locs of
             []    -> return v'
-            [loc] -> return $ mkDi (l$ VarE loc) [ fromDi v' ]
-            _ -> return $ Di $ l$ Ext $ L3.RetE $ L.foldr (\loc acc -> (l$ VarE loc):acc) [fromDi v'] locs
+            [loc] ->  pure $ mkDi (l$ VarE loc) [ fromDi v' ]
+            _ -> return $ Di $ l$ L3.MkProdE $ L.foldr (\loc acc -> (l$ VarE loc):acc) [fromDi v'] locs
 
         LetRegionE r bod -> do
           onDi (mkLets (regionToBinds r)) <$> go tenv sdeps bod

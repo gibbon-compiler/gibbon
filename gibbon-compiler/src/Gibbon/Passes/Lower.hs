@@ -557,7 +557,9 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     --------------------------------------------------------------------------------
 
-    Ext (RetE ls)   -> pure$ T.RetValsT (L.map (triv sym_tbl "returned element of tuple") ls)
+    -- Ext (RetE ls)   -> pure$ T.RetValsT (L.map (triv sym_tbl "returned element of tuple") ls)
+    --
+    MkProdE ls      -> pure$ T.RetValsT (L.map (triv sym_tbl "returned element of tuple") ls)
     e | isTrivial e -> pure$ T.RetValsT [triv sym_tbl "<internal error1>" (l$ e)]
 
     -- We could eliminate these ahead of time (unariser):

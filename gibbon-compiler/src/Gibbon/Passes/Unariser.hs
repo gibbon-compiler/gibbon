@@ -148,6 +148,10 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
     SyncE -> pure SyncE
     IsBigE{}-> error "unariserExp: IsBigE not handled."
 
+    Ext (RetE ls) -> do
+      (L _ (MkProdE ls1)) <- go env2 (L _ (MkProdE ls))
+      pure $ Ext $ RetE ls1
+
     Ext{}  -> return ex
     MapE{}  -> error "unariserExp: MapE TODO"
     FoldE{} -> error "unariserExp: FoldE TODO"
