@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <utlist.h>
 #include <uthash.h>
+#include <utarray.h>
 #ifdef _POINTER
 #include <gc.h>
 #endif
@@ -685,6 +686,12 @@ void free_region(CursorTy end_reg) {
 BoolTy is_big(CursorTy cur) {
     return false;
 }
+
+// -------------------------------------
+// Dynamic Arrays
+// -------------------------------------
+
+
 
 /* -------------------------------------------------------------------------------- */
 

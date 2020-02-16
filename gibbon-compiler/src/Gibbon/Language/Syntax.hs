@@ -475,7 +475,7 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         ----------------- POLICY DECISION ---------------
         -- Tuples and projections are NOT trivial!
         ProjE{}    -> False
-        MkProdE ls -> False
+        MkProdE{}  -> False
 
         -- DataCon's are a bit tricky.  May want to inline them at
         -- some point if it avoids region conflicts.

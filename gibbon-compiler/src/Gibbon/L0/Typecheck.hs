@@ -624,7 +624,7 @@ zonkExp s (L p ex) = L p $
                   VNthP    ty -> VNthP    (zonkTy s ty)
                   VLengthP ty -> VLengthP (zonkTy s ty)
                   VUpdateP ty -> VUpdateP (zonkTy s ty)
-                  VSnocP ty   -> VSnocP (zonkTy s ty)
+                  VSnocP   ty -> VSnocP   (zonkTy s ty)
                   _ -> pr
       in PrimAppE pr' (map go args)
     -- Let doesn't store any tyapps.

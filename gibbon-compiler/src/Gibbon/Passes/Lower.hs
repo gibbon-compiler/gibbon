@@ -570,6 +570,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
       -- Finally reprocess the whole thing
       tail sym_tbl (go (zip3 tmps tys ls) bod')
 
+    LetE (v, _, ty, rhs@(L _ (ProjE{}))) bod -> do
+      let trv = triv sym_tbl "ProjE" rhs
+      bod' <- tail sym_tbl bod
+      pure $ T.LetTrivT (v,typ ty,trv) bod'
+
     WithArenaE v e -> do
       e' <- tail sym_tbl e
       return $ T.LetArenaT v e'
@@ -866,9 +871,8 @@ triv sym_tbl msg (L _ e0) =
     (PrimAppE L3.MkFalse []) -> T.IntTriv 0
     -- Heck, let's map Unit onto Int too:
     (MkProdE []) -> T.IntTriv 0
-    -- TODO: I think we should allow tuples and projection in trivials:
-    -- (ProjE x1 x2) -> __
-    -- (MkProdE ls) ->
+    (MkProdE ls) -> T.ProdTriv (map (\x -> triv sym_tbl (show x) x) ls)
+    (ProjE ix e) -> T.ProjTriv ix (triv sym_tbl "proje argument" e)
     _ | isTrivial e0 -> error $ "lower/triv: this function is written wrong.  "++
                          "It won't handle the following, which satisfies 'isTriv':\n "++sdoc e0++
                          "\nMessage: "++msg

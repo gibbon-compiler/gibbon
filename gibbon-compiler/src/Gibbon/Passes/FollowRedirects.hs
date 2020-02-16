@@ -74,7 +74,7 @@ followRedirectsExp :: TagTailEnv -> TyEnv L4.Ty -> Tail -> PassM Tail
 followRedirectsExp ttailenv tenv tail =
   case tail of
     Switch lbl trv alts bod_maybe -> do
-      let trvty = typeofTriv trv
+      let trvty = typeOfTriv tenv trv
       case trvty of
         IntTy -> return $ Switch lbl trv alts bod_maybe
         -- OK, SymTy is Int64.
@@ -146,9 +146,3 @@ followRedirectsExp ttailenv tenv tail =
     TailCall{} -> return tail
 
   where go = followRedirectsExp ttailenv
-        typeofTriv :: Triv -> Ty
-        typeofTriv trv = case trv of
-                           IntTriv{} -> IntTy
-                           TagTriv{} -> TagTyPacked
-                           VarTriv v -> tenv # v
-                           SymTriv{} -> SymTy

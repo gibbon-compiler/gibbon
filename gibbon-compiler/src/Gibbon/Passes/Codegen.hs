@@ -38,11 +38,12 @@ import           Gibbon.L4.Syntax
 -- | Harvest all struct tys.  All product types used anywhere in the program.
 harvestStructTys :: Prog -> S.Set [Ty]
 harvestStructTys (Prog _ funs mtal) =
-    -- if S.null (S.difference tys0 tys1)
     S.delete [] (S.union tys0 tys1)
   where
+  tys00 = concatMap allTypes allTails
+
   tys0 :: S.Set [Ty]
-  tys0 = findAllProds $ concatMap allTypes allTails
+  tys0 = findAllProds tys00
 
   tys1 :: S.Set [Ty]
   -- All types mentioned in function arguments and returns:
@@ -65,7 +66,8 @@ harvestStructTys (Prog _ funs mtal) =
       go (t:ts) =
        case t of
          ProdTy ls -> S.insert ls $ S.union (go ls) (go ts)
-         _ -> go ts -- S.empty
+         ListTy ty -> S.insert [ListTy ty] $ S.union (go [ty])(go ts)
+         _ -> go ts
 
   -- This finds all types that maybe grouped together as a ProdTy:
   allTypes :: Tail -> [Ty]
@@ -83,7 +85,15 @@ harvestStructTys (Prog _ funs mtal) =
        (LetCallT _ binds _ _  bod) -> ProdTy (map snd binds) : go bod
        -- INVARIANT: This does not create a struct:
        -- But just in case it does in the future, we add it:
-       (LetPrimCallT binds _ _ bod)-> ProdTy (map snd binds) : go bod
+       (LetPrimCallT binds prm _ bod) ->
+         let rst = go bod in
+         case prm of
+           VEmptyP ty  -> ListTy ty : rst
+           VNthP   ty  -> ListTy ty : rst
+           VLengthP ty -> ListTy ty : rst
+           VUpdateP ty -> ListTy ty : rst
+           VSnocP ty   -> ListTy ty : rst
+           _ -> ProdTy (map snd binds) : rst
        (LetTrivT (_,ty,_) bod)     -> ty : go bod
        -- This should not create a struct.  Again, we add it just for the heck of it:
        (LetIfT binds (_,a,b) bod)  -> ProdTy (map snd binds) : go a ++ go b ++ go bod
@@ -111,7 +121,6 @@ harvestStructTys (Prog _ funs mtal) =
 codegenProg :: Config -> Prog -> IO String
 codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       env <- getEnvironment
-      dbgTrace 1 (show (uniqueDicts $ S.toList $ harvestStructTys prg)) $ return ()
       let rtsPath = case lookup "GIBBONDIR" env of
                       Just p -> p ++"/gibbon-compiler/cbits/rts.c"
                       Nothing -> "cbits/rts.c" -- Assume we're running from the compiler dir!
@@ -126,13 +135,14 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       defs = fst $ runPassM cfg 0 $ do
         (prots,funs') <- unzip <$> mapM codegenFun funs
         main_expr' <- main_expr
-        return ((L.nub $ makeStructs (uniqueDicts $ S.toList $ harvestStructTys prg)) ++ prots ++ funs' ++ [main_expr'])
+        let struct_tys = uniqueDicts $ S.toList $ harvestStructTys prg
+        return ((L.nub $ makeStructs struct_tys) ++ prots ++ funs' ++ [main_expr'])
 
       main_expr :: PassM C.Definition
       main_expr = do
         e <- case mtal of
                -- [2019.06.13]: CSK, Why is codegenTail always called with IntTy?
-               Just (PrintExp t) -> codegenTail init_fun_env t IntTy []
+               Just (PrintExp t) -> codegenTail M.empty init_fun_env t IntTy []
                _ -> pure []
         let bod = mkSymTable ++ e
         pure $ C.FuncDef [cfun| void __main_expr() { $items:bod } |] noLoc
@@ -141,7 +151,8 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       codegenFun' (FunDecl nam args ty tal _) =
           do let retTy   = codegenTy ty
                  params  = map (\(v,t) -> [cparam| $ty:(codegenTy t) $id:v |]) args
-             body <- codegenTail init_fun_env tal ty []
+                 init_venv = M.fromList args
+             body <- codegenTail init_venv init_fun_env tal ty []
              let fun     = [cfun| $ty:retTy $id:nam ($params:params) {
                             $items:body
                      } |]
@@ -180,15 +191,28 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
           )
           (M.toList sym_tbl)
 
-      -- C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < global_iters_param; $id:iters ++) { $items:body } |]
+-- S.filter (\x -> case x of
+--                       [ListTy{}] -> False
+--                       _          -> True) $
 
 makeStructs :: [[Ty]] -> [C.Definition]
 makeStructs [] = []
-makeStructs (ts : ts') = d : makeStructs ts'
-    where strName = makeName ts
+makeStructs (ts : ts') =
+  case ts of
+    [ListTy ty] ->
+        let ty_name  = case ty of
+                         IntTy      -> makeName' ty
+                         ProdTy tys -> makeName tys
+                         _ -> "makeStructs: Lists of type " ++ sdoc ty ++ " not allowed."
+            icd_name = ty_name ++ "_icd"
+            icd_ty   = [cty|typename UT_icd|]
+            icd      = [cedecl| $ty:icd_ty $id:icd_name = {sizeof($id:ty_name),NULL, NULL, NULL} ;|]
+        in icd : makeStructs ([ty]:ts')
+    _ ->
+      let strName = makeName ts
+          decls = zipWith (\t n -> [csdecl| $ty:(codegenTy t) $id:("field"++(show n)); |]) ts [0 :: Int ..]
           d = [cedecl| typedef struct $id:(strName ++ "_struct") { $sdecls:decls } $id:strName; |]
-          decls = zipWith (\t n -> [csdecl| $ty:(codegenTy t) $id:("field"++(show n)); |])
-                  ts [0 :: Int ..]
+      in d : makeStructs ts'
 
 uniqueDicts :: [[Ty]] -> [[Ty]]
 uniqueDicts [] = []
@@ -233,83 +257,95 @@ rewriteReturns tl bnds =
 -- dummyLoc :: SrcLoc
 -- dummyLoc = (SrcLoc (Loc (Pos "" 0 0 0) (Pos "" 0 0 0)))
 
-codegenTriv :: Triv -> C.Exp
-codegenTriv (VarTriv v) = C.Var (C.toIdent v noLoc) noLoc
-codegenTriv (IntTriv i) = [cexp| ( $ty:(codegenTy IntTy) ) $int:i |]
-codegenTriv (SymTriv i) = [cexp| ( $ty:(codegenTy SymTy) )$i |]
-codegenTriv (TagTriv i) = [cexp| ( $ty:(codegenTy TagTyPacked) )$i |]
+codegenTriv :: VEnv -> Triv -> C.Exp
+codegenTriv _ (VarTriv v) = C.Var (C.toIdent v noLoc) noLoc
+codegenTriv _ (IntTriv i) = [cexp| $int:i |]
+codegenTriv _ (SymTriv i) = [cexp| $i |]
+codegenTriv _ (TagTriv i) = [cexp| $i |]
+codegenTriv venv (ProdTriv ls) =
+  let ty = codegenTy $ typeOfTriv venv (ProdTriv ls)
+      args = map (\a -> (Nothing,C.ExpInitializer (codegenTriv venv a) noLoc)) ls
+  in [cexp| $(C.CompoundLit ty args noLoc) |]
+codegenTriv venv (ProjTriv i trv) =
+  let field = "field" ++ show i
+  in [cexp| $(codegenTriv venv trv).$id:field |]
 
--- A type environment for L4 functions
-type Env = M.Map Var ([Ty], Ty)
+-- Type environment
+type FEnv = M.Map Var ([Ty], Ty)
+type VEnv = M.Map Var Ty
 
 -- | The central codegen function.
-codegenTail :: Env -> Tail -> Ty -> [C.BlockItem] -> PassM [C.BlockItem]
+codegenTail :: VEnv -> FEnv -> Tail -> Ty -> [C.BlockItem] -> PassM [C.BlockItem]
 
 -- Void type:
-codegenTail _ (RetValsT []) _ty _   = return [ C.BlockStm [cstm| return; |] ]
+codegenTail _ _ (RetValsT []) _ty _   = return [ C.BlockStm [cstm| return; |] ]
 -- Single return:
-codegenTail _ (RetValsT [tr]) ty _ =
+codegenTail venv _ (RetValsT [tr]) ty _ =
     case ty of
       ProdTy [_one] -> do
-          let arg = [(Nothing,C.ExpInitializer (codegenTriv tr) noLoc)]
+          let arg = [(Nothing,C.ExpInitializer (codegenTriv venv tr) noLoc)]
               ty' = codegenTy ty
           return $ [ C.BlockStm [cstm| return $(C.CompoundLit ty' arg noLoc); |] ]
       ProdTy _ -> error $ "codegenTail: " ++ sdoc ty
-      _ -> return [ C.BlockStm [cstm| return $(codegenTriv tr); |] ]
+      _ -> return [ C.BlockStm [cstm| return $(codegenTriv venv tr); |] ]
 -- Multiple return:
-codegenTail _ (RetValsT ts) ty _ =
+codegenTail venv _ (RetValsT ts) ty _ =
     return $ [ C.BlockStm [cstm| return $(C.CompoundLit ty' args noLoc); |] ]
-    where args = map (\a -> (Nothing,C.ExpInitializer (codegenTriv a) noLoc)) ts
+    where args = map (\a -> (Nothing,C.ExpInitializer (codegenTriv venv a) noLoc)) ts
           ty' = codegenTy ty
 
-codegenTail env (AssnValsT ls bod_maybe) ty sync_deps = do
+codegenTail venv fenv (AssnValsT ls bod_maybe) ty sync_deps = do
     case bod_maybe of
       Just bod -> do
-        bod' <- codegenTail env bod ty sync_deps
-        return $ [ mut (codegenTy ty) vr (codegenTriv triv) | (vr,ty,triv) <- ls ] ++ bod'
+        let venv' = (M.fromList $ map (\(a,b,_) -> (a,b)) ls)
+                    `M.union` venv
+        bod' <- codegenTail venv' fenv bod ty sync_deps
+        return $ [ mut (codegenTy ty) vr (codegenTriv venv triv) | (vr,ty,triv) <- ls ] ++ bod'
       Nothing  ->
-        return $ [ mut (codegenTy ty) vr (codegenTriv triv) | (vr,ty,triv) <- ls ]
+        return $ [ mut (codegenTy ty) vr (codegenTriv venv triv) | (vr,ty,triv) <- ls ]
 
-codegenTail env (Switch lbl tr alts def) ty sync_deps =
+codegenTail venv fenv (Switch lbl tr alts def) ty sync_deps =
     case def of
       Nothing  -> let (rest,lastone) = splitAlts alts in
-                  genSwitch env lbl tr rest (altTail lastone) ty sync_deps
-      Just def -> genSwitch env lbl tr alts def ty sync_deps
+                  genSwitch venv fenv lbl tr rest (altTail lastone) ty sync_deps
+      Just def -> genSwitch venv fenv lbl tr alts def ty sync_deps
 
-codegenTail _ (TailCall v ts) _ty _ =
-    return $ [ C.BlockStm [cstm| return $( C.FnCall (cid v) (map codegenTriv ts) noLoc ); |] ]
+codegenTail venv _ (TailCall v ts) _ty _ =
+    return $ [ C.BlockStm [cstm| return $( C.FnCall (cid v) (map (codegenTriv venv) ts) noLoc ); |] ]
 
-codegenTail env (IfT e0 e1 e2) ty sync_deps = do
-    e1' <- codegenTail env e1 ty sync_deps
-    e2' <- codegenTail env e2 ty sync_deps
-    return $ [ C.BlockStm [cstm| if ($(codegenTriv e0)) { $items:e1' } else { $items:e2' } |] ]
+codegenTail venv fenv (IfT e0 e1 e2) ty sync_deps = do
+    e1' <- codegenTail venv fenv e1 ty sync_deps
+    e2' <- codegenTail venv fenv e2 ty sync_deps
+    return $ [ C.BlockStm [cstm| if ($(codegenTriv venv e0)) { $items:e1' } else { $items:e2' } |] ]
 
-codegenTail _ (ErrT s) _ty _ = return $ [ C.BlockStm [cstm| printf("%s\n", $s); |]
-                                        , C.BlockStm [cstm| exit(1); |] ]
+codegenTail _ _ (ErrT s) _ty _ = return $ [ C.BlockStm [cstm| printf("%s\n", $s); |]
+                                          , C.BlockStm [cstm| exit(1); |] ]
 
 
 -- We could eliminate these earlier
-codegenTail env (LetTrivT (vr,rty,rhs) body) ty sync_deps =
-    do tal <- codegenTail env body ty sync_deps
-       return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv rhs); |] ]
+codegenTail venv fenv (LetTrivT (vr,rty,rhs) body) ty sync_deps =
+    do let venv' = M.insert vr rty venv
+       tal <- codegenTail venv' fenv body ty sync_deps
+       return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv venv rhs); |] ]
                 ++ tal
 
 -- TODO: extend rts with arena primitives, and invoke them here
-codegenTail env (LetArenaT vr body) ty sync_deps =
-    do tal <- codegenTail env body ty sync_deps
+codegenTail venv fenv (LetArenaT vr body) ty sync_deps =
+    do tal <- codegenTail venv fenv body ty sync_deps
        return $ [ C.BlockDecl [cdecl| $ty:(codegenTy ArenaTy) $id:vr = alloc_arena();|] ]
               ++ tal
 
-codegenTail env (LetAllocT lhs vals body) ty sync_deps =
+codegenTail venv fenv (LetAllocT lhs vals body) ty sync_deps =
     do let structTy = codegenTy (ProdTy (map fst vals))
            size = [cexp| sizeof($ty:structTy) |]
-       tal <- codegenTail env body ty sync_deps
+           venv' = M.insert lhs PtrTy venv
+       tal <- codegenTail venv' fenv body ty sync_deps
        return$ assn (codegenTy PtrTy) lhs [cexp| ( $ty:structTy *)ALLOC( $size ) |] :
-               [ C.BlockStm [cstm| (($ty:structTy *)  $id:lhs)->$id:fld = $(codegenTriv trv); |]
+               [ C.BlockStm [cstm| (($ty:structTy *)  $id:lhs)->$id:fld = $(codegenTriv venv trv); |]
                | (ix,(_ty,trv)) <- zip [0 :: Int ..] vals
                , let fld = "field"++show ix] ++ tal
 
-codegenTail env (LetUnpackT bs scrt body) ty sync_deps =
+codegenTail venv fenv (LetUnpackT bs scrt body) ty sync_deps =
     do let mkFld :: Int -> C.Id
            mkFld i = C.toIdent ("field" ++ show i) noLoc
 
@@ -321,30 +357,34 @@ codegenTail env (LetUnpackT bs scrt body) ty sync_deps =
            |]
 
            binds = zipWith mk_bind [0..] bs
+           venv' = (M.fromList bs) `M.union` venv
 
-       body' <- codegenTail env body ty sync_deps
+       body' <- codegenTail venv' fenv body ty sync_deps
        return (map C.BlockDecl binds ++ body')
 
 -- Here we unzip the tuple into assignments to local variables.
-codegenTail env (LetIfT bnds (e0,e1,e2) body) ty sync_deps =
+codegenTail venv fenv (LetIfT bnds (e0,e1,e2) body) ty sync_deps =
 
     do let decls = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:vr0; |]
                    | (vr0,ty0) <- bnds ]
        let e1' = rewriteReturns e1 bnds
            e2' = rewriteReturns e2 bnds
-       e1'' <- codegenTail env e1' ty sync_deps
-       e2'' <- codegenTail env e2' ty sync_deps
+
+           venv' = (M.fromList bnds) `M.union` venv
+
+       e1'' <- codegenTail venv' fenv e1' ty sync_deps
+       e2'' <- codegenTail venv' fenv e2' ty sync_deps
        -- Int 1 is Boolean true:
-       let ifbod = [ C.BlockStm [cstm| if ($(codegenTriv e0)) { $items:e1'' } else { $items:e2'' } |] ]
-       tal <- codegenTail env body ty sync_deps
+       let ifbod = [ C.BlockStm [cstm| if ($(codegenTriv venv e0)) { $items:e1'' } else { $items:e2'' } |] ]
+       tal <- codegenTail venv' fenv body ty sync_deps
        return $ decls ++ ifbod ++ tal
 
-codegenTail env (LetTimedT flg bnds rhs body) ty sync_deps =
+codegenTail venv fenv (LetTimedT flg bnds rhs body) ty sync_deps =
 
     do let decls = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:vr0; |]
                    | (vr0,ty0) <- bnds ]
        let rhs' = rewriteReturns rhs bnds
-       rhs'' <- codegenTail env rhs' ty sync_deps
+       rhs'' <- codegenTail venv fenv rhs' ty sync_deps
        batchtime <- gensym "batchtime"
        selftimed <- gensym "selftimed"
        let ident = case bnds of
@@ -377,14 +417,16 @@ codegenTail env (LetTimedT flg bnds rhs body) ty sync_deps =
                             ]
                        else [ C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ]
-       tal <- codegenTail env body ty sync_deps
+       let venv' = (M.fromList bnds) `M.union` venv
+       tal <- codegenTail venv' fenv body ty sync_deps
        return $ decls ++ withPrnt ++ tal
 
 
-codegenTail env (LetCallT False bnds ratr rnds body) ty sync_deps
-    | [] <- bnds = do tal <- codegenTail env body ty sync_deps
+codegenTail venv fenv (LetCallT False bnds ratr rnds body) ty sync_deps
+    | [] <- bnds = do tal <- codegenTail venv fenv body ty sync_deps
                       return $ [toStmt fnexp] ++ tal
-    | [bnd] <- bnds  = let fn_ret_ty = snd (env M.! ratr) in
+    | [bnd] <- bnds  = let fn_ret_ty = snd (fenv M.! ratr)
+                           venv' = (M.fromList bnds) `M.union` venv in
                        case fn_ret_ty of
                          -- Copied from the otherwise case below.
                          ProdTy [_one] -> do
@@ -393,11 +435,11 @@ codegenTail env (LetCallT False bnds ratr rnds body) ty sync_deps
                                fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
                                ty0 = ProdTy $ map snd bnds
                                init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(fnexp); |] ]
-                           tal <- codegenTail env body ty sync_deps
+                           tal <- codegenTail venv' fenv body ty sync_deps
                            return $ init ++ zipWith bind bnds fields ++ tal
                          ProdTy _ -> error $ "codegenTail: LetCallT" ++ fromVar ratr
                          _ -> do
-                           tal <- codegenTail env body ty sync_deps
+                           tal <- codegenTail venv' fenv body ty sync_deps
                            let call = assn (codegenTy (snd bnd)) (fst bnd) (fnexp)
                            return $ [call] ++ tal
     | otherwise = do
@@ -406,16 +448,18 @@ codegenTail env (LetCallT False bnds ratr rnds body) ty sync_deps
            fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
            ty0 = ProdTy $ map snd bnds
            init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(fnexp); |] ]
-       tal <- codegenTail env body ty sync_deps
+           venv' = (M.fromList bnds) `M.union` venv
+       tal <- codegenTail venv' fenv body ty sync_deps
        return $ init ++ zipWith bind bnds fields ++ tal
   where
-    fncall = C.FnCall (cid ratr) (map codegenTriv rnds) noLoc
+    fncall = C.FnCall (cid ratr) (map (codegenTriv venv) rnds) noLoc
     fnexp = C.EscExp (prettyCompact (space <> ppr fncall)) noLoc
 
-codegenTail env (LetCallT True bnds ratr rnds body) ty sync_deps
-    | [] <- bnds = do tal <- codegenTail env body ty sync_deps
+codegenTail venv fenv (LetCallT True bnds ratr rnds body) ty sync_deps
+    | [] <- bnds = do tal <- codegenTail venv fenv body ty sync_deps
                       return $ [toStmt spawnexp] ++ tal
-    | [bnd] <- bnds  = let fn_ret_ty = snd (env M.! ratr) in
+    | [bnd] <- bnds  = let fn_ret_ty = snd (fenv M.! ratr)
+                           venv' = (M.fromList bnds) `M.union` venv in
                        case fn_ret_ty of
                          -- Copied from the otherwise case below.
                          ProdTy [_one] -> do
@@ -424,11 +468,11 @@ codegenTail env (LetCallT True bnds ratr rnds body) ty sync_deps
                                fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
                                ty0 = ProdTy $ map snd bnds
                                init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(spawnexp); |] ]
-                           tal <- codegenTail env body ty sync_deps
+                           tal <- codegenTail venv' fenv body ty sync_deps
                            return $ init ++ zipWith bind bnds fields ++ tal
                          ProdTy _ -> error $ "codegenTail: LetCallT" ++ fromVar ratr
                          _ -> do
-                           tal <- codegenTail env body ty sync_deps
+                           tal <- codegenTail venv' fenv body ty sync_deps
                            let call = assn (codegenTy (snd bnd)) (fst bnd) (spawnexp)
                            return $ [call] ++ tal
     | otherwise = do
@@ -438,20 +482,22 @@ codegenTail env (LetCallT True bnds ratr rnds body) ty sync_deps
            ty0 = ProdTy $ map snd bnds
            init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(spawnexp); |] ]
                   -- [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam; |] ] ++
-                  -- [ C.BlockStm [cstm| if (is_big($(codegenTriv is_big_rnd))) { $id:nam = $(spawnexp); } else { $id:nam = $(seqexp); }  |]]
+                  -- [ C.BlockStm [cstm| if (is_big($(codegenTriv venv is_big_rnd))) { $id:nam = $(spawnexp); } else { $id:nam = $(seqexp); }  |]]
 
        let bind_after_sync = zipWith bind bnds fields
-       tal <- codegenTail env body ty (sync_deps ++ bind_after_sync)
+           venv' = (M.fromList bnds) `M.union` venv
+       tal <- codegenTail venv' fenv body ty (sync_deps ++ bind_after_sync)
        return $ init ++  tal
   where
-    fncall = C.FnCall (cid ratr) (map codegenTriv rnds) noLoc
+    fncall = C.FnCall (cid ratr) (map (codegenTriv venv) rnds) noLoc
     spawnexp = C.EscExp (prettyCompact (text "cilk_spawn" <> space <> ppr fncall)) noLoc
     _seqexp = C.EscExp (prettyCompact (ppr fncall)) noLoc
 
-codegenTail env (LetPrimCallT bnds prm rnds body) ty sync_deps =
-    do bod' <- case prm of
-                 ParSync -> codegenTail env body ty []
-                 _       -> codegenTail env body ty sync_deps
+codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
+    do let venv' = (M.fromList bnds) `M.union` venv
+       bod' <- case prm of
+                 ParSync -> codegenTail venv' fenv body ty []
+                 _       -> codegenTail venv' fenv body ty sync_deps
        dflags <- getDynFlags
        let isPacked = gopt Opt_Packed dflags
            noGC = gopt Opt_DisableGC dflags
@@ -459,56 +505,57 @@ codegenTail env (LetPrimCallT bnds prm rnds body) ty sync_deps =
        pre <- case prm of
                  AddP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
-                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv pleft) + $(codegenTriv pright); |] ]
+                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) + $(codegenTriv venv pright); |] ]
                  SubP -> let (outV,outT) = head bnds
                              [pleft,pright] = rnds in pure
-                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv pleft) - $(codegenTriv pright); |] ]
+                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) - $(codegenTriv venv pright); |] ]
                  MulP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
-                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv pleft) * $(codegenTriv pright); |]]
+                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) * $(codegenTriv venv pright); |]]
                  DivP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
-                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv pleft) / $(codegenTriv pright); |]]
+                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) / $(codegenTriv venv pright); |]]
                  ModP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
-                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv pleft) % $(codegenTriv pright); |]]
+                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) % $(codegenTriv venv pright); |]]
                  ExpP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
-                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = expll($(codegenTriv pleft), $(codegenTriv pright)); |]]
+                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = expll($(codegenTriv venv pleft), $(codegenTriv venv pright)); |]]
                  RandP -> let [(outV,outT)] = bnds in pure
                           [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = rand(); |]]
                  EqP -> let [(outV,outT)] = bnds
                             [pleft,pright] = rnds in pure
-                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) == $(codegenTriv pright)); |]]
+                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv venv pleft) == $(codegenTriv venv pright)); |]]
                  LtP -> let [(outV,outT)] = bnds
                             [pleft,pright] = rnds in pure
-                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) < $(codegenTriv pright)); |]]
+                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv venv pleft) < $(codegenTriv venv pright)); |]]
                  GtP -> let [(outV,outT)] = bnds
                             [pleft,pright] = rnds in pure
-                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) > $(codegenTriv pright)); |]]
+                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv venv pleft) > $(codegenTriv venv pright)); |]]
                  LtEqP -> let [(outV,outT)] = bnds
                               [pleft,pright] = rnds in pure
-                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) <= $(codegenTriv pright)); |]]
+                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv venv pleft) <= $(codegenTriv venv pright)); |]]
                  GtEqP -> let [(outV,outT)] = bnds
                               [pleft,pright] = rnds in pure
-                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) >= $(codegenTriv pright)); |]]
+                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv venv pleft) >= $(codegenTriv venv pright)); |]]
                  OrP -> let [(outV,outT)] = bnds
                             [pleft,pright] = rnds in pure
-                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) || $(codegenTriv pright)); |]]
+                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv venv pleft) || $(codegenTriv venv pright)); |]]
                  AndP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
-                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv pleft) && $(codegenTriv pright)); |]]
+                        [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv venv pleft) && $(codegenTriv venv pright)); |]]
                  DictInsertP _ -> let [(outV,ty)] = bnds
                                       [(VarTriv arena),(VarTriv dict),keyTriv,valTriv] = rnds in pure
-                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_ptr($id:arena, $id:dict, $(codegenTriv keyTriv), $(codegenTriv valTriv)); |] ]
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_ptr($id:arena, $id:dict, $(codegenTriv venv keyTriv), $(codegenTriv venv valTriv)); |] ]
                  DictLookupP _ -> let [(outV,ty)] = bnds
                                       [(VarTriv dict),keyTriv] = rnds in pure
-                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_lookup_ptr($id:dict, $(codegenTriv keyTriv)); |] ]
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_lookup_ptr($id:dict, $(codegenTriv venv keyTriv)); |] ]
                  DictEmptyP _ty -> let [(outV,ty)] = bnds
                                    in pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = 0; |] ]
                  DictHasKeyP PtrTy -> let [(outV,IntTy)] = bnds
                                           [(VarTriv dict)] = rnds in pure
                     [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = dict_has_key_ptr($id:dict); |] ]
+                 DictHasKeyP _ -> error $ "codegen: " ++ show prm ++ "unhandled."
 
                  NewBuffer mul -> do
                    let [(reg, CursorTy),(outV,CursorTy)] = bnds
@@ -547,7 +594,7 @@ codegenTail env (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  WriteScalar s -> let [(outV,CursorTy)] = bnds
                                       [val,(VarTriv cur)] = rnds in pure
-                                  [ C.BlockStm [cstm| *( $ty:(codegenTy (scalarToTy s))  *)($id:cur) = $(codegenTriv val); |]
+                                  [ C.BlockStm [cstm| *( $ty:(codegenTy (scalarToTy s))  *)($id:cur) = $(codegenTriv venv val); |]
                                   , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy (scalarToTy s)) ); |] ]
 
                  ReadScalar s -> let [(valV,valTy),(curV,CursorTy)] = bnds
@@ -563,7 +610,7 @@ codegenTail env (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  WriteCursor -> let [(outV,CursorTy)] = bnds
                                     [val,(VarTriv cur)] = rnds in pure
-                                 [ C.BlockStm [cstm| *( $ty:(codegenTy CursorTy)  *)($id:cur) = $(codegenTriv val); |]
+                                 [ C.BlockStm [cstm| *( $ty:(codegenTy CursorTy)  *)($id:cur) = $(codegenTriv venv val); |]
                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + 8; |] ]
 
                  BumpRefCount -> let [(VarTriv end_r1), (VarTriv end_r2)] = rnds
@@ -601,7 +648,7 @@ codegenTail env (LetPrimCallT bnds prm rnds body) ty sync_deps =
                     [(outV,outTy)] -> pure
                      [ C.BlockDecl [cdecl|
                             $ty:(codegenTy outTy) $id:outV =
-                              * (( $ty:(codegenTy outTy) *) $(codegenTriv ptr));
+                              * (( $ty:(codegenTy outTy) *) $(codegenTriv venv ptr));
                           |] ]
                     _ -> error $ "wrong number of return bindings from GetFirstWord: "++show bnds
 
@@ -611,15 +658,15 @@ codegenTail env (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  PrintInt ->
                      let [arg] = rnds in
                      case bnds of
-                       [(outV,IntTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = printf("%lld", $(codegenTriv arg)); |] ]
-                       [] -> pure [ C.BlockStm [cstm| printf("%lld", $(codegenTriv arg)); |] ]
+                       [(outV,IntTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = printf("%lld", $(codegenTriv venv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| printf("%lld", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
                  PrintSym ->
                      let [arg] = rnds in
                      case bnds of
-                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = print_symbol($(codegenTriv arg)); |] ]
-                       [] -> pure [ C.BlockStm [cstm| print_symbol($(codegenTriv arg)); |] ]
+                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = print_symbol($(codegenTriv venv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| print_symbol($(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintSym: "++show bnds
 
                  PrintString str
@@ -651,7 +698,7 @@ codegenTail env (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                        -- In packed mode we eagerly FORCE the IO to happen before we start benchmarking:
                                        then pure [ C.BlockStm [cstm| { int sum=0; for(int i=0; i < st.st_size; i++) sum += ptr[i]; } |]
                                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ptr; |]]
-                                       else codegenTail env unpackcall voidTy sync_deps
+                                       else codegenTail venv fenv unpackcall voidTy sync_deps
                              return $ mmapCode ++ docall
                      | otherwise -> error $ "ReadPackedFile, wrong arguments "++show rnds++", or expected bindings "++show bnds
 
@@ -669,10 +716,52 @@ codegenTail env (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  FreeSymTable -> return [C.BlockStm [cstm| free_symtable(); |]]
 
-                 oth -> error$ "FIXME: codegen needs to handle primitive: "++show oth
+                 VEmptyP ty  -> do
+                   let ty_name  = case ty of
+                         IntTy      -> makeName' ty
+                         ProdTy tys -> makeName tys
+                         _ -> "makeStructs: Lists of type " ++ sdoc ty ++ " not allowed."
+                       icd_name = ty_name ++ "_icd"
+                       list_ty  = [cty|typename UT_array|]
+                       [(outV,_)]  = bnds
+                   return [ C.BlockDecl [cdecl| $ty:list_ty *($id:outV); |]
+                          , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |] ]
+
+                 VNthP ty    -> do
+                   let ty1 = codegenTy ty
+                       [(outV,_)] = bnds
+                       [i, VarTriv ls] = rnds
+                   tmp <- gensym "tmp"
+                   return [ C.BlockDecl [cdecl| $ty:ty1 *($id:tmp); |]
+                          , C.BlockStm  [cstm| $id:tmp = ($ty:ty1 *) utarray_eltptr($id:ls,$(codegenTriv venv i)); |]
+                          , C.BlockDecl [cdecl| $ty:ty1 $id:outV = *($id:tmp); |]
+                          ]
+
+                 VLengthP{} -> do
+                   let [(v,IntTy)] = bnds
+                       [VarTriv ls] = rnds
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:v = ($ty:(codegenTy IntTy)) utarray_len($id:ls); |] ]
+
+                 VUpdateP{} -> return []
+
+                 VSnocP ty   -> do
+                   let [(outV,_)] = bnds
+                       [(VarTriv old_ls), val] = rnds
+                       trv = codegenTriv venv val
+                       ty1 = codegenTy ty
+                       list_ty  = [cty|typename UT_array|]
+                   tmp <- gensym "tmp"
+                   return [ C.BlockDecl [cdecl| $ty:list_ty *($id:outV) = $id:old_ls; |]
+                          , C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
+                          , C.BlockStm  [cstm| utarray_push_back($id:outV, &($id:tmp)); |]
+                          ]
+
+                 BumpArenaRefCount{} -> error "codegen: BumpArenaRefCount not handled."
+                 ReadInt{} -> error "codegen: ReadInt not handled."
+
        return $ pre ++ bod'
 
-codegenTail _ (Goto lbl) _ty _ = do
+codegenTail _ _ (Goto lbl) _ty _ = do
   return [ C.BlockStm [cstm| goto $id:lbl; |] ]
 
 -- | The sizes for all mulitplicities are defined as globals in the RTS.
@@ -710,13 +799,13 @@ normalizeAlts alts =
       IntAlts as -> map (first mk_int_lhs) as
 
 -- | Generate a proper switch expression instead.
-genSwitch :: Env -> Label -> Triv -> Alts -> Tail -> Ty -> [C.BlockItem] -> PassM [C.BlockItem]
-genSwitch env lbl tr alts lastE ty sync_deps =
+genSwitch :: VEnv -> FEnv -> Label -> Triv -> Alts -> Tail -> Ty -> [C.BlockItem] -> PassM [C.BlockItem]
+genSwitch venv fenv lbl tr alts lastE ty sync_deps =
     do let go :: [(C.Exp,Tail)] -> PassM [C.Stm]
-           go [] = do tal <- codegenTail env lastE ty sync_deps
+           go [] = do tal <- codegenTail venv fenv lastE ty sync_deps
                       return [[cstm| default: $stm:(mkBlock tal) |]]
            go ((ex,tl):rst) =
-               do tal <- codegenTail env tl ty sync_deps
+               do tal <- codegenTail venv fenv tl ty sync_deps
                   let tal2 = tal ++ [ C.BlockStm [cstm| break; |] ]
                   let this = [cstm| case $exp:ex : $stm:(mkBlock tal2) |]
                   rst' <- go rst
@@ -724,7 +813,7 @@ genSwitch env lbl tr alts lastE ty sync_deps =
        alts' <- go (normalizeAlts alts)
        let body = mkBlock [ C.BlockStm a | a <- alts' ]
        return $ [ C.BlockStm [cstm| $id:lbl: ; |]
-                , C.BlockStm [cstm| switch ( $exp:(codegenTriv tr) ) $stm:body |]]
+                , C.BlockStm [cstm| switch ( $exp:(codegenTriv venv tr) ) $stm:body |]]
 
 -- | The identifier after typename refers to typedefs defined in rts.c
 --
@@ -743,6 +832,7 @@ codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] n
     where nam = makeName ts
 codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
 codegenTy ArenaTy = [cty|typename ArenaTy|]
+codegenTy ListTy{} = [cty|typename UT_array|]
 
 makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"
@@ -759,7 +849,8 @@ makeName' (SymDictTy _ _ty) = "Dict"
 makeName' RegionTy = "Region"
 makeName' ChunkTy  = "Chunk"
 makeName' ArenaTy  = "Arena"
-makeName' (ProdTy tys) = "ProdTy: " ++ concatMap makeName' tys
+makeName' ListTy{} = "Vector"
+makeName' (ProdTy tys) = "Prod" ++ concatMap makeName' tys
 
 mkBlock :: [C.BlockItem] -> C.Stm
 mkBlock ss = C.Block ss noLoc

@@ -75,6 +75,8 @@ eval env (VarTriv v) = M.findWithDefault (error ("Unbound var: " ++ (fromVar v))
 eval _   (IntTriv i) = IntVal (fromIntegral i) -- TODO: Change L1 to Int64 too.
 eval _   (TagTriv t) = TagVal t
 eval _   (SymTriv _) = error "eval: SymTriv not handled"
+eval _   (ProdTriv{}) = error "eval: ProdTriv not handled"
+eval _   (ProjTriv{}) = error "eval: ProjTriv not handled"
 
 
 exec :: Env -> Tail -> IO [Val]
