@@ -421,6 +421,16 @@ tcExp ddfs env exp@(L p ex) =
 tcProg :: Prog1 -> PassM Prog1
 tcProg prg@Prog{ddefs,fundefs,mainExp} = do
 
+  _ <- forM ddefs $ \ddf ->
+    forM (dataCons ddf) $ \(_,tys) -> do
+      let tys1 = L.map snd tys
+          islistty t = case t of
+                         ListTy{} -> True
+                         _ -> False
+      if any islistty tys1
+      then error $ "Gibbon-TODO: Datatypes cannot have lists as fields. Check " ++ sdoc (tyName ddf)
+      else pure ()
+
   -- Get flags to check if we're in packed mode
   flags <- getDynFlags
 

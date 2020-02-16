@@ -286,7 +286,6 @@ codegenTail venv _ (RetValsT [tr]) ty _ =
           let arg = [(Nothing,C.ExpInitializer (codegenTriv venv tr) noLoc)]
               ty' = codegenTy ty
           return $ [ C.BlockStm [cstm| return $(C.CompoundLit ty' arg noLoc); |] ]
-      ProdTy _ -> error $ "codegenTail: " ++ sdoc ty
       _ -> return [ C.BlockStm [cstm| return $(codegenTriv venv tr); |] ]
 -- Multiple return:
 codegenTail venv _ (RetValsT ts) ty _ =
@@ -722,9 +721,8 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                          ProdTy tys -> makeName tys
                          _ -> "makeStructs: Lists of type " ++ sdoc ty ++ " not allowed."
                        icd_name = ty_name ++ "_icd"
-                       list_ty  = [cty|typename UT_array|]
                        [(outV,_)]  = bnds
-                   return [ C.BlockDecl [cdecl| $ty:list_ty *($id:outV); |]
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
                           , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |] ]
 
                  VNthP ty    -> do
@@ -749,9 +747,8 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        [(VarTriv old_ls), val] = rnds
                        trv = codegenTriv venv val
                        ty1 = codegenTy ty
-                       list_ty  = [cty|typename UT_array|]
                    tmp <- gensym "tmp"
-                   return [ C.BlockDecl [cdecl| $ty:list_ty *($id:outV) = $id:old_ls; |]
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV) = $id:old_ls; |]
                           , C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
                           , C.BlockStm  [cstm| utarray_push_back($id:outV, &($id:tmp)); |]
                           ]
@@ -832,7 +829,7 @@ codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] n
     where nam = makeName ts
 codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
 codegenTy ArenaTy = [cty|typename ArenaTy|]
-codegenTy ListTy{} = [cty|typename UT_array|]
+codegenTy ListTy{} = [cty|typename UT_array*|]
 
 makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"
