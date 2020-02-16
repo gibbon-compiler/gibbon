@@ -85,7 +85,7 @@ psort0 ls acc =
 
            acc4 :: [(Int,Int)]
            acc4 = vempty
-           ls4  = spawn (psort0 ls3 acc4)
+           ls4  = psort0 ls3 acc4
 
            _    = sync
 
@@ -107,8 +107,8 @@ mkList0 :: Int -> [(Int, Int)] -> [(Int, Int)]
 mkList0 n acc=
   if n == 0
   then acc
-  else let i = mod rand 50
-           j = mod rand 50
+  else let i = mod rand n
+           j = mod rand n
        in mkList0 (n-1) (vsnoc acc (i,j))
 
 mkList :: Int -> [(Int, Int)]

@@ -95,7 +95,7 @@ psort0 axis ls acc =
 
            acc4 :: [(Int,Int)]
            acc4 = vempty
-           ls4  = spawn (psort0 axis ls3 acc4)
+           ls4  = psort0 axis ls3 acc4
 
            _    = sync
 
@@ -175,7 +175,7 @@ pFromListWithAxis axis pts =
           right_pts  = slice (pivot_idx+1) len sorted_pts
           next_axis  = getNextAxis_2D axis
           left_tr    = spawn (pFromListWithAxis next_axis left_pts)
-          right_tr   = spawn (pFromListWithAxis next_axis right_pts)
+          right_tr   = pFromListWithAxis next_axis right_pts
           _          = sync
       in KdNode axis (pivot !!! 0) (pivot !!! 1) left_tr right_tr
 
