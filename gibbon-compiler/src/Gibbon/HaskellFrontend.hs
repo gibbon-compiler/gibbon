@@ -202,6 +202,8 @@ desugarExp toplevel e = L NoLoc <$>
       let v = (toVar $ qnameToStr qv)
       if v == "gensym"
       then pure $ PrimAppE Gensym []
+      else if v == "rand"
+      then pure $ PrimAppE RandP []
       else if v == "sync"
       then pure SyncE
       else if v == "sizeParam"

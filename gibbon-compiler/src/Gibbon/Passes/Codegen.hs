@@ -742,13 +742,21 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  VUpdateP{} -> return []
 
+                 -- This is not a side effect. It creates a copy of the old list.
                  VSnocP ty   -> do
                    let [(outV,_)] = bnds
                        [(VarTriv old_ls), val] = rnds
                        trv = codegenTriv venv val
                        ty1 = codegenTy ty
+                       ty_name  = case ty of
+                         IntTy      -> makeName' ty
+                         ProdTy tys -> makeName tys
+                         _ -> "makeStructs: Lists of type " ++ sdoc ty ++ " not allowed."
+                       icd_name = ty_name ++ "_icd"
                    tmp <- gensym "tmp"
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV) = $id:old_ls; |]
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
+                          , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |]
+                          , C.BlockStm  [cstm| utarray_concat($id:outV,$id:old_ls); |]
                           , C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
                           , C.BlockStm  [cstm| utarray_push_back($id:outV, &($id:tmp)); |]
                           ]
@@ -829,7 +837,7 @@ codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] n
     where nam = makeName ts
 codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
 codegenTy ArenaTy = [cty|typename ArenaTy|]
-codegenTy ListTy{} = [cty|typename UT_array*|]
+codegenTy ListTy{} = [cty|typename UT_array* |]
 
 makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"

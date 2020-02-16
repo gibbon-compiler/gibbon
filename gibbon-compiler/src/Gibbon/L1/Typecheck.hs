@@ -392,6 +392,7 @@ tcExp ddfs env exp@(L p ex) =
                  []    -> pure ty
                  [_one]-> pure ty
                  _     -> error $ "Gibbon-TODO: Product types not allowed in SpawnE. Got: " ++ sdoc ty
+             ListTy{} -> pure ty
              _ -> error "L1.Typecheck: SpawnE; type shouldn't be anything else."
 
     SyncE -> pure voidTy
