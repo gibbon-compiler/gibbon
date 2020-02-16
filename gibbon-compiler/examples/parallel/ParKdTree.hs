@@ -179,6 +179,48 @@ pFromListWithAxis axis pts =
           _          = sync
       in KdNode axis (pivot !!! 0) (pivot !!! 1) left_tr right_tr
 
+dist :: Int -> Int -> Int -> Int -> Int
+dist a_x a_y b_x b_y = ((a_x - b_x) ^ 2) + ((a_y - b_y) ^ 2)
+
+least_dist :: Int -> Int -> Int -> Int -> Int -> Int -> (Int, Int)
+least_dist a_x a_y b_x b_y c_x c_y =
+  let d1 = dist a_x a_y b_x b_y
+      d2 = dist a_x a_y c_x c_y
+  in if d1 < d2
+     then (b_x, b_y)
+     else (c_x, c_y)
+
+nearest :: KdTree -> Int -> Int -> (Int, Int)
+nearest tr probe_x probe_y =
+  case tr of
+    KdEmpty -> (-100,-100)
+    KdNode axis pivot_x pivot_y left right ->
+      let tst_probe = coord axis probe_x probe_y
+          tst_pivot = coord axis pivot_x pivot_y
+      in
+      if tst_probe < tst_pivot
+      then find_nearest pivot_x pivot_y probe_x probe_y tst_pivot tst_probe left right
+      else find_nearest pivot_x pivot_y probe_x probe_y tst_pivot tst_probe right left
+
+find_nearest :: Int -> Int -> Int -> Int -> Int -> Int -> KdTree -> KdTree -> (Int, Int)
+find_nearest pivot_x pivot_y probe_x probe_y tst_pivot tst_probe tr1 tr2 =
+  let best0 = nearest tr1 probe_x probe_y
+      best0_x = best0 !!! 0
+      best0_y = best0 !!! 1
+      candidate1 = least_dist probe_x probe_y best0_x best0_y pivot_x pivot_y
+      candidate1_x = candidate1 !!! 0
+      candidate1_y = candidate1 !!! 1
+      -- whether the difference between the splitting coordinate of the search point and current node
+      -- is less than the distance (overall coordinates) from the search point to the current best.
+  in if ((tst_probe - tst_pivot) ^ 2) <= dist probe_x probe_y candidate1_x candidate1_y
+     then let candidate2   = nearest tr2 probe_x probe_y
+              candidate2_x = candidate2 !!! 0
+              candidate2_y = candidate2 !!! 1
+              best1 = least_dist probe_x probe_y candidate1_x candidate1_y candidate2_x candidate2_y
+          in best1
+     else candidate1
+
+
 sumKdTree :: KdTree -> Int
 sumKdTree tr =
   case tr of
@@ -196,8 +238,8 @@ mkList0 :: Int -> [(Int, Int)] -> [(Int, Int)]
 mkList0 n acc=
   if n == 0
   then acc
-  else let i = mod rand 50
-           j = mod rand 50
+  else let i = mod rand n
+           j = mod rand n
        in mkList0 (n-1) (vsnoc acc (i,j))
 
 mkList :: Int -> [(Int, Int)]
@@ -225,4 +267,8 @@ gibbon_main =
         -- ls2 = iterate (sort 0 ls)
     -- in sumList ls
         tr = iterate (pFromList ls)
-    in (sumKdTree tr, sumList ls)
+        m  = (div n 2)
+        p  = nearest tr m m
+        d  = dist (p !!! 0) (p !!! 1) m m
+    -- in (sumKdTree tr, sumList ls)
+    in (m, m, p)
