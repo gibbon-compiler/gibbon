@@ -101,32 +101,36 @@ data KdTree  = KdNode Int     -- ^ axis
   deriving Show
 
 fromList :: [(Int, Int)] -> KdTree
-fromList pts = fromListWithAxis 0 pts
+fromList pts = fromListWithAxis 0 0 pts
 
-fromListWithAxis :: Int -> [(Int, Int)] -> KdTree
-fromListWithAxis axis pts =
-    if vlength pts == 0
+fromListWithAxis :: Int -> Int -> [(Int, Int)] -> KdTree
+fromListWithAxis depth axis pts =
+    if depth > 10
+    then pFromListWithAxis depth axis pts
+    else let len = vlength pts in
+    if len == 0
     then KdEmpty
     else
       let sorted_pts = sort axis pts
-          len        = vlength pts
           pivot_idx  = div len 2
           pivot      = vnth pivot_idx sorted_pts
           left_pts   = slice 0 pivot_idx sorted_pts
           right_pts  = slice (pivot_idx+1) len sorted_pts
           next_axis  = getNextAxis_2D axis
-          left_tr    = fromListWithAxis next_axis left_pts
-          right_tr   = fromListWithAxis next_axis right_pts
+          left_tr    = fromListWithAxis (depth+1) next_axis left_pts
+          right_tr   = fromListWithAxis (depth+1) next_axis right_pts
       in KdNode axis (pivot !!! 0) (pivot !!! 1) left_tr right_tr
 
 pFromList :: [(Int, Int)] -> KdTree
-pFromList pts = pFromListWithAxis 0 pts
+pFromList pts = pFromListWithAxis 0 0 pts
 
-pFromListWithAxis :: Int -> [(Int, Int)] -> KdTree
-pFromListWithAxis axis pts =
-    let len = vlength pts in
-    if len <= 500
-    then fromListWithAxis axis pts
+pFromListWithAxis :: Int -> Int -> [(Int, Int)] -> KdTree
+pFromListWithAxis depth axis pts =
+    if depth < 10
+    then fromListWithAxis depth axis pts
+    else let len = vlength pts in
+    if len == 0
+    then KdEmpty
     else
       let sorted_pts = sort axis pts
           pivot_idx  = div len 2
@@ -134,8 +138,8 @@ pFromListWithAxis axis pts =
           left_pts   = slice 0 pivot_idx sorted_pts
           right_pts  = slice (pivot_idx+1) len sorted_pts
           next_axis  = getNextAxis_2D axis
-          left_tr    = spawn (pFromListWithAxis next_axis left_pts)
-          right_tr   = pFromListWithAxis next_axis right_pts
+          left_tr    = spawn (pFromListWithAxis (depth+1) next_axis left_pts)
+          right_tr   = pFromListWithAxis (depth+1) next_axis right_pts
           _          = sync
       in KdNode axis (pivot !!! 0) (pivot !!! 1) left_tr right_tr
 
@@ -224,9 +228,8 @@ sumList ls =
 gibbon_main =
     let n   = sizeParam
         ls  = mkList n
-        -- ls2 = iterate (sort 0 ls)
-    -- in sumList ls
-        tr = iterate (pFromList ls)
+        -- Start out sequential, and if depth > 100, switch to parallel
+        tr = iterate (fromList ls)
         m  = (div n 2)
         p  = nearest tr m m
         d  = dist (p !!! 0) (p !!! 1) m m

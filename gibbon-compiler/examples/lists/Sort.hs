@@ -7,7 +7,7 @@ lesser i n elt0 elt1 ls acc =
   then acc
   else  let x   = vnth i ls
             rst = lesser (i+1) n elt0 elt1 ls acc
-        in if (x !!! 0) < elt0 && (x !!! 1) < elt1
+        in if (x !!! 0) < elt0
            then vsnoc rst x
            else rst
 
@@ -18,7 +18,7 @@ greater_eq i n elt0 elt1 ls acc =
   then acc
   else  let x   = vnth i ls
             rst = greater_eq (i+1) n elt0 elt1 ls acc
-        in if (x !!! 0) >= elt0 && (x !!! 1) >= elt1
+        in if (x !!! 0) >= elt0
            then vsnoc rst x
            else rst
 
@@ -58,18 +58,43 @@ sort ls acc =
 
        in ls6
 
+sort0 :: [(Int, Int)] -> [(Int, Int)]
+sort0 ls =
+  let acc :: [(Int, Int)]
+      acc = vempty
+  in sort ls acc
+
+--------------------------------------------------------------------------------
+
+mkList0 :: Int -> [(Int, Int)] -> [(Int, Int)]
+mkList0 n acc=
+  if n == 0
+  then acc
+  else let i = mod rand n
+           j = mod rand n
+       in mkList0 (n-1) (vsnoc acc (i,j))
+
+mkList :: Int -> [(Int, Int)]
+mkList n =
+  let acc :: [(Int, Int)]
+      acc = vempty
+  in mkList0 n acc
+
+sumList0 :: Int -> Int -> [(Int, Int)] -> Int -> Int
+sumList0 i n ls acc =
+  if i == n
+  then acc
+  else let p = vnth i ls
+       in sumList0 (i+1) n ls (acc + (p !!! 0) + (p !!! 1))
+
+sumList :: [(Int, Int)] -> Int
+sumList ls =
+  sumList0 0 (vlength ls) ls 0
+
+--------------------------------------------------------------------------------
+
 gibbon_main =
-    let ls0 :: [(Int, Int)]
-        ls0 = vempty
-
-        ls1 = vsnoc ls0 (10, 5)
-        ls2 = vsnoc ls1 (2, 3)
-
-        acc :: [(Int,Int)]
-        acc = vempty
-
-        ls3 = sort ls2 acc
-        x = vnth 0 ls3
-        y = vnth 1 ls3
-
-    in (x!!!0, x !!! 1, y !!! 0, y !!! 1)
+    let n   = sizeParam
+        ls  = mkList n
+        ls2 = iterate (sort0 ls)
+    in (sumList ls, sumList ls2)
