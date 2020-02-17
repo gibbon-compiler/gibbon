@@ -1,7 +1,4 @@
--- -- | It's a 3D tree right now
--- module KdTree where
-
-module Sort where
+module SeqKdTree where
 
 coord :: Int -> Int -> Int -> Int
 coord axis x y =

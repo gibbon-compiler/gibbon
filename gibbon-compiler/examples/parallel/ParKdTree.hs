@@ -1,7 +1,4 @@
--- -- | It's a 3D tree right now
--- module KdTree where
-
-module Sort where
+module ParKdTree where
 
 coord :: Int -> Int -> Int -> Int
 coord axis x y =
@@ -73,48 +70,11 @@ sort0 axis ls acc =
 
        in ls6
 
-psort0 :: Int -> [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
-psort0 axis ls acc =
-  let n = vlength ls in
-  if n < 500
-  then sort0 axis ls acc
-  else let pivot = vnth (n-1) ls
-           elt   = coord axis (pivot !!! 0) (pivot !!! 1)
-
-           acc1 :: [(Int,Int)]
-           acc1 = vempty
-           ls1  = lesser 0 ((vlength ls) - 1) axis elt ls acc1
-
-           acc2 :: [(Int,Int)]
-           acc2 = vempty
-           ls2  = spawn (psort0 axis ls1 acc2)
-
-           acc3 :: [(Int,Int)]
-           acc3 = vempty
-           ls3  = greater_eq 0 ((vlength ls) - 1) axis elt ls acc3
-
-           acc4 :: [(Int,Int)]
-           acc4 = vempty
-           ls4  = psort0 axis ls3 acc4
-
-           _    = sync
-
-           ls5  = vsnoc ls2 pivot
-           ls6  = append 0 ls5 ls4
-
-       in ls6
-
 sort :: Int -> [(Int, Int)] -> [(Int, Int)]
 sort axis ls =
     let acc :: [(Int, Int)]
         acc = vempty
     in sort0 axis ls acc
-
-psort :: Int -> [(Int, Int)] -> [(Int, Int)]
-psort axis ls =
-    let acc :: [(Int, Int)]
-        acc = vempty
-    in psort0 axis ls acc
 
 slice0 :: Int -> Int -> [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
 slice0 i n ls acc =
@@ -168,7 +128,7 @@ pFromListWithAxis axis pts =
     if len <= 500
     then fromListWithAxis axis pts
     else
-      let sorted_pts = psort axis pts
+      let sorted_pts = sort axis pts
           pivot_idx  = div len 2
           pivot      = vnth pivot_idx sorted_pts
           left_pts   = slice 0 pivot_idx sorted_pts

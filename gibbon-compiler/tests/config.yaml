@@ -378,17 +378,6 @@ tests:
     answer-file: examples/parallel/SeqKdTree.hs.ans
     failing: ["gibbon1", "pointer", "interp1"]
 
-  - name: SeqSort.hs
-    dir: examples/parallel
-    answer-file: examples/parallel/SeqSort.hs.ans
-    failing: ["pointer", "interp1"]
-
-  - name: ParSort.hs
-    dir: examples/parallel
-    test-flags: ["--parallel"]
-    answer-file: examples/parallel/SeqSort.hs.ans
-    failing: ["pointer"]
-
   ## Vector operations
   - name: List.hs
     dir: examples/lists
