@@ -45,7 +45,7 @@ module Gibbon.Language.Syntax
     -- * Helpers operating on types
   , mkProdTy, projTy , voidTy, isProdTy, isNestedProdTy, isPackedTy, isScalarTy
   , hasPacked, sizeOfTy, primArgsTy, primRetTy, dummyCursorTy, tyToDataCon
-  , stripTyLocs, isValidListTy
+  , stripTyLocs, isValidListTy, getPackedTys
 
     -- * Misc
   , assertTriv, assertTrivs
@@ -1044,6 +1044,23 @@ hasPacked t =
     ArenaTy        -> False
     SymSetTy       -> False
     SymHashTy      -> False
+
+-- | Get all packed types in a type.
+getPackedTys :: Show a => UrTy a -> [UrTy a]
+getPackedTys t =
+  case t of
+    PackedTy{}     -> [t]
+    ProdTy ls      -> concatMap getPackedTys ls
+    SymTy          -> []
+    BoolTy         -> []
+    IntTy          -> []
+    SymDictTy _ _  -> [] -- getPackedTys ty
+    ListTy ty      -> getPackedTys ty
+    PtrTy          -> []
+    CursorTy       -> []
+    ArenaTy        -> []
+    SymSetTy       -> []
+    SymHashTy      -> []
 
 -- | Provide a size in bytes, if it is statically known.
 sizeOfTy :: UrTy a -> Maybe Int

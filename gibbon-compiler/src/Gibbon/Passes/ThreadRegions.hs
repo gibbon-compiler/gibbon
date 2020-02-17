@@ -2,6 +2,7 @@ module Gibbon.Passes.ThreadRegions where
 
 import Data.Loc
 import Data.List as L
+import Data.Maybe ( fromJust )
 import qualified Data.Map as M
 
 import Gibbon.Common
@@ -84,14 +85,23 @@ threadRegionsFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
   let bod'' = if gopt Opt_BigInfiniteRegions dflags
               then bod'
               else
-                foldr
-                  (\(LRM loc reg mode) acc ->
-                     let rv = toEndV $ regionToVar reg in
-                     if mode == Output
-                     then l$ LetE ("_",[],IntTy,l$ Ext$ BoundsCheck 9 rv loc) acc
-                     else acc)
-                  bod'
-                  (locVars funTy)
+                let packed_outs = getPackedTys (arrOut funTy)
+                    locs_tycons = foldr
+                                    (\ty acc ->
+                                         case ty of
+                                           PackedTy t loc ->  M.insert loc t acc
+                                           _ -> acc)
+                                    M.empty
+                                    packed_outs
+                in foldr
+                     (\(LRM loc reg mode) acc ->
+                        if mode == Output
+                        then let rv = toEndV $ regionToVar reg
+                                 bc = boundsCheck ddefs (locs_tycons M.! loc)
+                             in l$ LetE ("_",[],IntTy,l$ Ext$ BoundsCheck (bc+9) rv loc) acc
+                        else acc)
+                     bod'
+                     (locVars funTy)
   return $ f {funBody = bod''}
 
 threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> Bool -> RegEnv -> Env2 Ty2
@@ -305,3 +315,25 @@ findRetLocs e0 = go e0 []
             AddFixed{}        -> acc
         MapE{}  -> error "findRetLocs: TODO MapE"
         FoldE{}  -> error "findRetLocs: TODO FoldE"
+
+----------------------------------------
+
+-- Maximal sum of sizes of scalars before the first packed thing in the
+-- constructors of this type. The assumption is that whatever writes
+-- that packed value will do a bounds check again. Note that only AppE's
+-- do boundschecking, DataConE's dont. We should fix this.
+boundsCheck :: DDefs2 -> TyCon -> Int
+boundsCheck ddefs tycon =
+  let dcons = getConOrdering ddefs tycon
+      spaceReqd tys = foldl (\(bytes, seen_packed) ty ->
+                               if seen_packed
+                               then ( bytes, seen_packed )
+                               else if hasPacked ty
+                               then ( bytes, True )
+                               else ( bytes + (fromJust $ sizeOfTy ty), False ))
+                        (0, False)
+                        tys
+      tyss = map (lookupDataCon ddefs) dcons
+      vals = map (fst . spaceReqd) tyss
+  -- Add a byte for the tag.
+  in 1 + maximum vals
