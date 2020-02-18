@@ -36,7 +36,6 @@ module Gibbon.L2.Syntax
 
 import           Control.DeepSeq
 import           Data.List as L
-import           Data.Loc
 import qualified Data.Set as S
 import qualified Data.Map as M
 import           GHC.Stack (HasCallStack)
@@ -49,11 +48,11 @@ import           Gibbon.L1.Syntax hiding (AddFixed)
 
 --------------------------------------------------------------------------------
 
-type Prog2    = Prog (L Exp2)
+type Prog2    = Prog Exp2
 type DDef2    = DDef Ty2
 type DDefs2   = DDefs Ty2
-type FunDef2  = FunDef (L Exp2)
-type FunDefs2 = FunDefs (L Exp2)
+type FunDef2  = FunDef Exp2
+type FunDefs2 = FunDefs Exp2
 
 -- | Function types know about locations and traversal effects.
 instance FunctionTy Ty2 where
@@ -77,8 +76,8 @@ type E2 l d = PreExp E2Ext l d
 
 -- | The extension that turns L1 into L2.
 data E2Ext loc dec
-  = LetRegionE Region                 (L (E2 loc dec)) -- ^ Allocate a new region.
-  | LetLocE    loc    (PreLocExp loc) (L (E2 loc dec)) -- ^ Bind a new location.
+  = LetRegionE Region                 (E2 loc dec) -- ^ Allocate a new region.
+  | LetLocE    loc    (PreLocExp loc) (E2 loc dec) -- ^ Bind a new location.
   | RetE [loc] Var          -- ^ Return a value together with extra loc values.
   | FromEndE loc            -- ^ Bind a location from an EndOf location (for RouteEnds and after).
   | BoundsCheck Int -- Bytes required
@@ -89,7 +88,7 @@ data E2Ext loc dec
                  DataCon
                  (loc,Var) -- Pointer
                  (loc,Var) -- Pointee (the thing that the pointer points to)
-                 (L (E2 loc dec)) -- If this indirection was added to get rid
+                 (E2 loc dec) -- If this indirection was added to get rid
                                   -- of a copy_Foo call, we keep the fn call
                                   -- around in case we want to go back to it.
                                   -- E.g. reverting from L2 to L1.
@@ -140,7 +139,7 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       BoundsCheck{}  -> False
       IndirectionE{} -> False
 
-instance (Out l, Show l, Typeable (L (E2 l (UrTy l)))) => Typeable (E2Ext l (UrTy l)) where
+instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)) where
   gRecoverType ddfs env2 ex =
     case ex of
       LetRegionE _r bod   -> gRecoverType ddfs env2 bod
@@ -154,16 +153,9 @@ instance (Out l, Show l, Typeable (L (E2 l (UrTy l)))) => Typeable (E2Ext l (UrT
       AddFixed{}          -> error $ "Shouldn't enconter AddFixed in tail position"
 
 
-instance (Out l, Show l, Typeable (L (E2 l (UrTy l))),
-          TyOf (E2Ext l (UrTy l)) ~ TyOf (L (E2Ext l (UrTy l))),
-          Expression (L (E2Ext l (UrTy l))))
-         => Typeable (L (E2Ext l (UrTy l))) where
-  gRecoverType ddfs env2 (L _ ex) = gRecoverType ddfs env2 ex
-
-
 instance (Typeable (E2Ext l (UrTy l)),
           Expression (E2Ext l (UrTy l)),
-          Flattenable (L (E2 l (UrTy l))))
+          Flattenable (E2 l (UrTy l)))
       => Flattenable (E2Ext l (UrTy l)) where
 
   gFlattenGatherBinds ddfs env ex =
@@ -185,7 +177,7 @@ instance (Typeable (E2Ext l (UrTy l)),
   gFlattenExp ddfs env ex = do (_b,e') <- gFlattenGatherBinds ddfs env ex
                                return e'
 
-instance HasSimplifiableExt E2Ext l d => SimplifiableExt (L (PreExp E2Ext l d)) (E2Ext l d) where
+instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2Ext l d) where
   gInlineTrivExt env ext =
     case ext of
       LetRegionE r bod   -> LetRegionE r (gInlineTrivExp env bod)
@@ -197,7 +189,7 @@ instance HasSimplifiableExt E2Ext l d => SimplifiableExt (L (PreExp E2Ext l d)) 
       AddFixed{}     -> ext
 
 
-instance HasSubstitutableExt E2Ext l d => SubstitutableExt (L (PreExp E2Ext l d)) (E2Ext l d) where
+instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E2Ext l d) where
   gSubstExt old new ext =
     case ext of
       LetRegionE r bod -> LetRegionE r (gSubst old new bod)
@@ -354,8 +346,8 @@ instance Typeable (PreExp E2Ext LocVar (UrTy LocVar)) where
                            mp = M.fromList $ zip (allLocVars fnty) locs
                        in substLoc mp outty
 
-      PrimAppE (DictInsertP ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) $ stripTyLocs ty
-      PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) $ stripTyLocs ty
+      PrimAppE (DictInsertP ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
+      PrimAppE (DictEmptyP  ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
       PrimAppE p _ -> primRetTy p
 
       LetE (v,_,t,_) e -> gRecoverType ddfs (extendVEnv v t env2) e
@@ -503,17 +495,17 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
              , funBody = revertExp funBody
              }
 
-    revertExp :: L Exp2 -> L Exp1
-    revertExp (L p ex) = L p $
+    revertExp :: Exp2 -> Exp1
+    revertExp ex =
       case ex of
         VarE v    -> VarE v
         LitE n    -> LitE n
         LitSymE v -> LitSymE v
         AppE v _ args   -> AppE v [] (L.map revertExp args)
         PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
-        LetE (v,_,ty, L _ (Ext (IndirectionE _ _ _ _ arg))) bod ->
+        LetE (v,_,ty, (Ext (IndirectionE _ _ _ _ arg))) bod ->
           let PackedTy tycon _ =  ty in
-          LetE (v,[],(stripTyLocs ty), l$ AppE (mkCopyFunName tycon) [] [revertExp arg]) (revertExp bod)
+          LetE (v,[],(stripTyLocs ty), AppE (mkCopyFunName tycon) [] [revertExp arg]) (revertExp bod)
         LetE (v,_,ty,rhs) bod ->
           LetE (v,[], stripTyLocs ty, revertExp rhs) (revertExp bod)
         IfE a b c  -> IfE (revertExp a) (revertExp b) (revertExp c)
@@ -528,8 +520,8 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         WithArenaE v e -> WithArenaE v (revertExp e)
         Ext ext ->
           case ext of
-            LetRegionE _ bod -> unLoc $ revertExp bod
-            LetLocE _ _ bod  -> unLoc $ revertExp bod
+            LetRegionE _ bod -> revertExp bod
+            LetLocE _ _ bod  -> revertExp bod
             RetE _ v -> VarE v
             AddFixed{} -> error "revertExp: AddFixed not handled."
             FromEndE{} -> error "revertExp: TODO FromEndLE"
@@ -543,7 +535,7 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
     revertPrim :: Prim Ty2 -> Prim Ty1
     revertPrim pr = fmap stripTyLocs pr
 
-    docase :: (DataCon, [(Var,LocVar)], L Exp2) -> (DataCon, [(Var,())], L Exp1)
+    docase :: (DataCon, [(Var,LocVar)], Exp2) -> (DataCon, [(Var,())], Exp1)
     docase (dcon,vlocs,rhs) =
       let (vars,_) = unzip vlocs
       in (dcon, zip vars (repeat ()), revertExp rhs)
@@ -551,8 +543,8 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
 -- | Does a variable occur in an expression ?
 --
 -- N.B. it only looks for actual variables, not LocVar's or RegionVar's.
-occurs :: S.Set Var -> L Exp2 -> Bool
-occurs w (L _ ex) =
+occurs :: S.Set Var -> Exp2 -> Bool
+occurs w ex =
   case ex of
     VarE v -> v `S.member` w
     LitE{}    -> False
@@ -627,15 +619,15 @@ constPacked c t =
     SymHashTy-> SymHashTy
 
 -- | Build a dependency list which can be later converted to a graph
-depList :: L Exp2 -> [(Var, Var, [Var])]
+depList :: Exp2 -> [(Var, Var, [Var])]
 -- The helper function, go, works with a map rather than list so that all
 -- dependencies are properly grouped, without any duplicate keys. But we
 -- convert it back to a list so that we can hand it off to 'graphFromEdges'.
 -- Reversing the list makes it easy to peek at the return value of this AST later.
 depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
     where
-      go :: M.Map Var [Var] -> L Exp2 -> M.Map Var [Var]
-      go acc (L _ ex) =
+      go :: M.Map Var [Var] -> Exp2 -> M.Map Var [Var]
+      go acc ex =
         case ex of
           VarE v    -> M.insertWith (++) v [v] acc
           LitE{}    -> acc
@@ -680,8 +672,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           FreeLE -> []
 
 -- gFreeVars ++ locations ++ region variables
-allFreeVars :: L Exp2 -> [Var]
-allFreeVars (L _ ex) = S.toList $
+allFreeVars :: Exp2 -> [Var]
+allFreeVars ex = S.toList $
   case ex of
     AppE _ locs _       -> S.fromList locs `S.union` gFreeVars ex
     LetE (_,locs,_,_) _ -> S.fromList locs `S.union` gFreeVars ex
@@ -698,8 +690,8 @@ allFreeVars (L _ ex) = S.toList $
     _ -> gFreeVars ex
 
 
-changeAppToSpawn :: Var -> [L Exp2] -> L Exp2 -> L Exp2
-changeAppToSpawn v args2 (L p1 ex1) = L p1 $
+changeAppToSpawn :: Var -> [Exp2] -> Exp2 -> Exp2
+changeAppToSpawn v args2 ex1 =
   case ex1 of
     VarE{}    -> ex1
     LitE{}    -> ex1

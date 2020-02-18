@@ -1,7 +1,6 @@
 -- | Replace calls to copy functions with tagged indirection nodes
 module Gibbon.Passes.RemoveCopies where
 
-import Data.Loc
 import qualified Data.Map as M
 
 import Gibbon.Common
@@ -43,8 +42,8 @@ removeCopiesFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
   return $ f {funBody = bod'}
 
 -- ASSUMPTION: copy functions would always be called on a single argument.
-removeCopiesExp :: DDefs Ty2 -> FunDefs2 -> LocEnv -> Env2 Ty2 -> L Exp2 -> PassM (L Exp2)
-removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
+removeCopiesExp :: DDefs Ty2 -> FunDefs2 -> LocEnv -> Env2 Ty2 -> Exp2 -> PassM Exp2
+removeCopiesExp ddefs fundefs lenv env2 ex =
   case ex of
     -- This AppE copies data from 'lin' to 'lout'. When this becomes an
     -- indirection node, 'lout' is the _pointer_, and 'lin' the _pointee_.
@@ -56,19 +55,19 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
       case indrDcon of
         [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
         [dcon] -> do
-          return $ unLoc $
+          return $
             mkLets ([(indirection,[],PackedTy tycon lout,
-                      l$ Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin) arg)])
-            (l$ VarE indirection)
+                      Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin) arg)])
+            (VarE indirection)
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
-    LetE (v,locs,ty@(PackedTy tycon _), (L _ (AppE f [lin,lout] [arg]))) bod | isCopyFunName f -> do
+    LetE (v,locs,ty@(PackedTy tycon _), (AppE f [lin,lout] [arg])) bod | isCopyFunName f -> do
       -- Get the indirection datacon for this type
       let indrDcon = filter isIndirectionTag $ getConOrdering ddefs tycon
       case indrDcon of
         [] -> error $ "removeCopies: No indirection constructor found for: " ++ sdoc tycon
         [dcon] -> do
-          LetE (v,locs,ty, l$ Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin) arg) <$>
+          LetE (v,locs,ty, Ext $ IndirectionE tycon dcon (lout , lenv # lout) (lin, lenv # lin) arg) <$>
             removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
@@ -107,7 +106,7 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
       LetE <$> (v,locs,ty,) <$> go rhs <*>
         removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
     CaseE scrt mp -> do
-      let L _ (VarE v) = scrt
+      let (VarE v) = scrt
           PackedTy _ tyloc = lookupVEnv v env2
           reg = lenv M.! tyloc
       CaseE scrt <$> mapM (docase reg lenv env2) mp

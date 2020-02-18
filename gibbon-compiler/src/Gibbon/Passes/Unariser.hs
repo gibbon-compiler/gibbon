@@ -1,7 +1,6 @@
 module Gibbon.Passes.Unariser
   (unariser, unariserExp) where
 
-import Data.Loc
 import qualified Data.Map as M
 import qualified Data.List as L
 
@@ -66,8 +65,8 @@ unariser Prog{ddefs,fundefs,mainExp} = do
 -- perform, from left to right.
 type ProjStack = [Int]
 
-unariserExp :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> L Exp3 -> PassM (L Exp3)
-unariserExp ddfs stk env2 (L p ex) = L p <$>
+unariserExp :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> Exp3 -> PassM Exp3
+unariserExp ddfs stk env2 ex =
   case ex of
     LetE (v,locs,ty,rhs) bod ->
       LetE <$> (v,locs,flattenTy ty,)
@@ -76,35 +75,35 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
 
     MkProdE es ->
       case stk of
-        [] -> flattenProd ddfs stk env2 (l$ ex)
-        (ix:s') -> unLoc <$> unariserExp ddfs s' env2 (es ! ix)
+        [] -> flattenProd ddfs stk env2 ex
+        (ix:s') -> unariserExp ddfs s' env2 (es ! ix)
 
     -- When projecting a value out of a nested tuple, we have to update the index
     -- to match the flattened representation. And if the ith projection was a
     -- product before, we have to reconstruct it here, since it will be flattened
     -- after this pass.
     ProjE i e ->
-      case unLoc e of
-        MkProdE ls -> unLoc <$> go env2 (ls ! i)
+      case e of
+        MkProdE ls -> go env2 (ls ! i)
         _ -> do
           let ety = gRecoverType ddfs env2 e
               j   = flatProjIdx i ety
               ity = projTy i ety
               fty = flattenTy ity
           e' <- go env2 e
-          case unLoc e' of
-            MkProdE xs -> return $ unLoc (xs ! j)
+          case e' of
+            MkProdE xs -> return $ (xs ! j)
             _ ->
              case fty of
                -- reconstruct
                ProdTy tys -> do
-                 return $ MkProdE (map (\k -> l$ ProjE k e') [j..(j+(length tys)-1)])
+                 return $ MkProdE (map (\k -> ProjE k e') [j..(j+(length tys)-1)])
                _ -> return $ ProjE j e'
 
 
     -- Straightforward recursion
     --
-    VarE{} -> return $ unLoc $ discharge stk (L p ex)
+    VarE{} -> return $ discharge stk ex
 
     LitE{} ->
       case stk of
@@ -116,11 +115,11 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
         [] -> return ex
         _  -> error $ "Impossible. Non-empty projection stack on LitSymE "++show stk
 
-    AppE v locs args -> unLoc <$> discharge stk <$>
-                        (L p <$> AppE v locs <$> mapM (go env2) args)
+    AppE v locs args -> discharge stk <$>
+                        (AppE v locs <$> mapM (go env2) args)
 
-    PrimAppE pr args -> unLoc <$> discharge stk <$>
-                        (L p <$> PrimAppE pr <$> mapM (go env2) args)
+    PrimAppE pr args -> discharge stk <$>
+                        (PrimAppE pr <$> mapM (go env2) args)
 
     IfE a b c  -> IfE <$> go env2 a <*> go env2 b <*> go env2 c
 
@@ -131,25 +130,25 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
 
     DataConE loc dcon args ->
       case stk of
-        [] -> unLoc <$> discharge stk <$>
-              (L p <$> DataConE loc dcon <$> mapM (go env2) args)
+        [] -> discharge stk <$>
+              (DataConE loc dcon <$> mapM (go env2) args)
         _  -> error $ "Impossible. Non-empty projection stack on DataConE "++show stk
 
     TimeIt e ty b -> do
       tmp <- gensym $ toVar "timed"
       e'  <- go env2 e
-      return $ LetE (tmp,[],flattenTy ty, l$ TimeIt e' ty b) (l$ VarE tmp)
+      return $ LetE (tmp,[],flattenTy ty, TimeIt e' ty b) (VarE tmp)
 
     WithArenaE v e -> WithArenaE v <$> go env2 e
 
-    SpawnE v locs args -> unLoc <$> discharge stk <$>
-                            (L p <$> SpawnE v locs <$> mapM (go env2) args)
+    SpawnE v locs args -> discharge stk <$>
+                            (SpawnE v locs <$> mapM (go env2) args)
 
     SyncE -> pure SyncE
     IsBigE{}-> error "unariserExp: IsBigE not handled."
 
     Ext (RetE ls) -> do
-      (L _ (MkProdE ls1)) <- go env2 (L _ (MkProdE ls))
+      (MkProdE ls1) <- go env2 (MkProdE ls)
       pure $ Ext $ RetE ls1
 
     Ext{}  -> return ex
@@ -160,10 +159,10 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
     go = unariserExp ddfs stk
 
     -- | Reify a stack of projections.
-    discharge :: [Int] -> L Exp3 -> L Exp3
+    discharge :: [Int] -> Exp3 -> Exp3
     discharge [] e = e
-    discharge (ix:rst) (L _ (MkProdE ls)) = discharge rst (ls ! ix)
-    discharge (ix:rst) e = discharge rst (l$ ProjE ix e)
+    discharge (ix:rst) ((MkProdE ls)) = discharge rst (ls ! ix)
+    discharge (ix:rst) e = discharge rst (ProjE ix e)
 
     ls ! i = if i <= length ls
              then ls!!i
@@ -171,9 +170,9 @@ unariserExp ddfs stk env2 (L p ex) = L p <$>
 
 
 -- | Flatten nested tuples
-flattenProd :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> L Exp3 -> PassM (Exp3)
+flattenProd :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> Exp3 -> PassM (Exp3)
 flattenProd ddfs stk env2 ex =
-  case unLoc ex of
+  case ex of
     MkProdE{} -> do
       let flat1 = go ex
           tys = L.map (flattenTy . gRecoverType ddfs env2) flat1
@@ -182,8 +181,8 @@ flattenProd ddfs stk env2 ex =
     oth -> error $ "flattenProd: Unexpected expression: " ++ sdoc oth
   where
     -- Structural flattening. Just flattens nested MkProdE's
-    go :: L Exp3 -> [L Exp3]
-    go (L _ (MkProdE js)) = concatMap go js
+    go :: Exp3 -> [Exp3]
+    go ((MkProdE js)) = concatMap go js
     go e = [e]
 
     -- Structural flattening might leave behind some nested tuples.
@@ -197,15 +196,15 @@ flattenProd ddfs stk env2 ex =
     -- let v = [1,2,3]
     --     w = [proj 0 v, proj 1 v, proj 2 v, 4]
     --
-    go2 :: [Ty3] -> [L Exp3] -> PassM [L Exp3]
+    go2 :: [Ty3] -> [Exp3] -> PassM [Exp3]
     go2 [] [] = return []
     go2 (t:ts) (e:es) =
       case (t,e) of
-        (ProdTy tys, L _ VarE{}) -> do
-          let fs = [l$ ProjE n e | (_ty,n) <- zip tys [0..]]
+        (ProdTy tys, VarE{}) -> do
+          let fs = [ProjE n e | (_ty,n) <- zip tys [0..]]
           es' <- go2 ts es
           return $ fs ++ es'
-        (_ty, L _ ProjE{}) -> do
+        (_ty, ProjE{}) -> do
           e' <- unariserExp ddfs stk env2 e
           es' <- go2 ts es
           return $ [e'] ++ es'
@@ -243,7 +242,7 @@ flattenTy ty =
 
 -- | Flatten nested tuples in a type-safe way
 --
-flattenExp :: Var -> Ty3 -> L Exp3 -> L Exp3
+flattenExp :: Var -> Ty3 -> Exp3 -> Exp3
 flattenExp v ty bod =
   case ty of
     ProdTy _ ->
@@ -263,8 +262,8 @@ flattenExp v ty bod =
           projections _ acc = [acc]
 
           projs = projections ty []
-          substs = map (\ps -> (foldr (\i acc -> l$ ProjE i acc) (l$ VarE v) ps,
-                                l$ ProjE (sum ps) (l$ VarE v)))
+          substs = map (\ps -> (foldr (\i acc -> ProjE i acc) (VarE v) ps,
+                                ProjE (sum ps) (VarE v)))
                    projs
           -- FIXME: This is in-efficient because of the substE ?
       in foldr (\(from,to) acc -> substE from to acc) bod substs

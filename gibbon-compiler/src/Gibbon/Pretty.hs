@@ -7,7 +7,6 @@ module Gibbon.Pretty
   ( Pretty(..), PPStyle(..), render, pprintHsWithEnv, pprender ) where
 
 import           Prelude hiding ((<>))
-import           Data.Loc
 import           Text.PrettyPrint
 import           Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
@@ -284,13 +283,8 @@ instance Pretty ArrowTy2 where
 -- CSK: Needs a better name.
 type HasPrettyToo e l d = (Show d, Ord d, Eq d, Pretty d, Pretty l, Pretty (e l d), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)))
 
-instance Pretty (PreExp e l d) => Pretty (L (PreExp e l d)) where
-    pprintWithStyle sty (L _ e) = pprintWithStyle sty e
 
 instance Pretty (PreExp e l d) => Pretty [(PreExp e l d)] where
-    pprintWithStyle sty ls = hsep $ map (pprintWithStyle sty) ls
-
-instance Pretty (L (PreExp e l d)) => Pretty [(L (PreExp e l d))] where
     pprintWithStyle sty ls = hsep $ map (pprintWithStyle sty) ls
 
 instance HasPrettyToo e l d => Pretty (PreExp e l d) where
@@ -465,6 +459,7 @@ instance (Out a, Pretty a) => Pretty (L0.E0Ext a L0.Ty0) where
                                     (brackets $ hcat (punctuate "," (map pprint tyapps))) <+>
                                     (pprintWithStyle sty args) <+> text (if b then "true" else "false")
       L0.ParE0 ls -> text "par" <+> lparen <> hcat (punctuate (text ", ") (map (pprintWithStyle sty) ls)) <> rparen
+      L0.L _ e    -> pprintWithStyle sty e
 
 
 --------------------------------------------------------------------------------
@@ -504,8 +499,8 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
   in (ghc_compat_prefix main_has_bench) $+$ ddefsDoc $+$ funsDoc $+$ meDoc $+$ sfx
   where
     -- | Verify some assumptions about BenchE.
-    hasBenchE :: L Exp1 -> Bool
-    hasBenchE (L _ ex) =
+    hasBenchE :: Exp1 -> Bool
+    hasBenchE ex =
       case ex of
         Ext (BenchE{})   -> True
         Ext (L1.AddFixed{}) -> False
@@ -542,8 +537,8 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         renderBod = text (fromVar funName) <+> (hsep $ map (text . fromVar) funArgs) <+> equals
                       $$ nest indentLevel (ppExp False env2' funBody)
 
-    ppExp :: Bool -> Env2 Ty1 -> L Exp1 -> Doc
-    ppExp monadic env2 (L _ ex0) =
+    ppExp :: Bool -> Env2 Ty1 -> Exp1 -> Doc
+    ppExp monadic env2 ex0 =
       case ex0 of
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
@@ -565,7 +560,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
             let -- Still avoiding 'PassM'.
                 indexed_vars = map (\i -> (i, varAppend v (toVar $ "_proj_" ++ show i))) [0..(length tys - 1)]
                 -- Substitute projections with variables bound by the pattern match.
-                e2' = foldr (\(i,w) acc -> substE (l$ ProjE i (l$ VarE v)) (l$ VarE w) acc) e2 indexed_vars
+                e2' = foldr (\(i,w) acc -> substE (ProjE i (VarE v)) (VarE w) acc) e2 indexed_vars
 
                 bind_rhs :: Doc -> Doc -> Doc
                 bind_rhs d rhs = d <+> doublecolon <+> pprintWithStyle sty ty <+> equals <+> rhs
@@ -574,7 +569,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
 
             in (text "let") <+>
                vcat [bind_rhs (pprintWithStyle sty v) (ppExp monadic env2 e1),
-                     bind_rhs (parens $ hcat $ punctuate (text ",") (map (pprintWithStyle sty . snd) indexed_vars)) (ppExp monadic env2 (l$ VarE v))] <+>
+                     bind_rhs (parens $ hcat $ punctuate (text ",") (map (pprintWithStyle sty . snd) indexed_vars)) (ppExp monadic env2 (VarE v))] <+>
                (if monadic
                 then empty
                 else text "in") $+$

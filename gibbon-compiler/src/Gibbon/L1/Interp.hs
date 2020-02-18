@@ -20,7 +20,6 @@ import           Control.Monad
 import           Control.Monad.Writer
 import           Control.Monad.State
 import           Data.List as L
-import           Data.Loc
 import           Data.Map as M
 import           System.Clock
 import           System.IO.Unsafe
@@ -63,19 +62,19 @@ interpProg1 rc Prog{ddefs,fundefs,mainExp} =
 
 interp :: forall l. ( Out l, Show l, Expression (E1Ext l (UrTy l)) )
        => RunConfig
-       -> DDefs (TyOf (L (PreExp E1Ext l (UrTy l))))
-       -> M.Map Var (FunDef (L (PreExp E1Ext l (UrTy l))))
-       -> L (PreExp E1Ext l (UrTy l))
+       -> DDefs (TyOf (PreExp E1Ext l (UrTy l)))
+       -> M.Map Var (FunDef (PreExp E1Ext l (UrTy l)))
+       -> (PreExp E1Ext l (UrTy l))
        -> WriterT Log (StateT Store IO) Value
 interp rc _ddefs fenv = go M.empty
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env ex = go env ex
 
-    go :: ValEnv -> L (PreExp E1Ext l (UrTy l)) -> WriterT Log (StateT Store IO) Value
-    go env (L _ x0) =
+    go :: ValEnv -> (PreExp E1Ext l (UrTy l)) -> WriterT Log (StateT Store IO) Value
+    go env x0 =
         case x0 of
-          Ext (BenchE fn locs args _b) -> go env (l$ AppE fn locs args)
+          Ext (BenchE fn locs args _b) -> go env ( AppE fn locs args)
           Ext (AddFixed{}) -> error "L1.Interp: AddFixed not handled."
 
           LitE c    -> return $ VInt c
@@ -162,7 +161,7 @@ interp rc _ddefs fenv = go M.empty
                else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
               return $! val
 
-          SpawnE f locs args -> go env (l$ AppE f locs args)
+          SpawnE f locs args -> go env (AppE f locs args)
           SyncE -> pure $ VInt (-1)
           IsBigE{} -> pure $ VBool False
 

@@ -4,7 +4,6 @@ module Gibbon.Passes.AddRAN
   (addRAN, numRANsDataCon, needsRAN) where
 
 import           Control.Monad ( when )
-import           Data.Loc
 import           Data.Foldable
 import           Data.List as L
 import qualified Data.Map as M
@@ -144,8 +143,8 @@ addRANFun needRANsTyCons ddfs fd@FunDef{funBody} = do
   bod <- addRANExp needRANsTyCons ddfs M.empty funBody
   return $ fd{funBody = bod}
 
-addRANExp :: S.Set TyCon -> DDefs Ty1 -> RANEnv -> L Exp1 -> PassM (L Exp1)
-addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
+addRANExp :: S.Set TyCon -> DDefs Ty1 -> RANEnv -> Exp1 -> PassM Exp1
+addRANExp needRANsTyCons ddfs ienv ex =
   case ex of
     DataConE loc dcon args ->
       case numRANsDataCon ddfs dcon of
@@ -162,8 +161,8 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
               needRANsExp = L.take n $ L.drop firstPacked args
 
           rans <- mkRANs ienv needRANsExp
-          let ranArgs = L.map (\(v,_,_,_) -> l$ VarE v) rans
-          return $ unLoc $ mkLets rans (l$ DataConE loc (toRANDataCon dcon) (ranArgs ++ args))
+          let ranArgs = L.map (\(v,_,_,_) -> VarE v) rans
+          return $ mkLets rans (DataConE loc (toRANDataCon dcon) (ranArgs ++ args))
 
     -- standard recursion here
     VarE{}    -> return ex
@@ -193,15 +192,15 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
   where
     go = addRANExp needRANsTyCons ddfs ienv
 
-    changeSpawnToApp :: L Exp1 -> L Exp1
-    changeSpawnToApp (L p1 ex1) = L p1 $
+    changeSpawnToApp :: Exp1 -> Exp1
+    changeSpawnToApp ex1 =
       case ex1 of
         VarE{}    -> ex1
         LitE{}    -> ex1
         LitSymE{} -> ex1
         AppE f locs args -> AppE f locs $ map changeSpawnToApp args
         PrimAppE f args  -> PrimAppE f $ map changeSpawnToApp args
-        LetE (_,_,_,L _ SyncE) bod -> unLoc $ changeSpawnToApp bod
+        LetE (_,_,_,SyncE) bod -> changeSpawnToApp bod
         LetE (v,loc,ty,rhs) bod -> do
           LetE (v,loc,ty, changeSpawnToApp rhs) (changeSpawnToApp bod)
         IfE a b c  -> IfE (changeSpawnToApp a) (changeSpawnToApp b) (changeSpawnToApp c)
@@ -219,7 +218,7 @@ addRANExp needRANsTyCons ddfs ienv (L p ex) = L p <$>
         MapE{}  -> error "addRANExp: TODO MapE"
         FoldE{} -> error "addRANExp: TODO FoldE"
 
-    docase :: (DataCon, [(Var,())], L Exp1) -> PassM [(DataCon, [(Var,())], L Exp1)]
+    docase :: (DataCon, [(Var,())], Exp1) -> PassM [(DataCon, [(Var,())], Exp1)]
     docase (dcon,vs,bod) = do
       let old_pat = (dcon,vs, changeSpawnToApp bod)
       case numRANsDataCon ddfs dcon of
@@ -287,12 +286,12 @@ hacky L1 primop, AddCursorP for this purpose.
 'mb_most_recent_ran' in the fold below tracks most recent random access nodes.
 
 -}
-mkRANs :: RANEnv -> [L Exp1] -> PassM [(Var, [()], Ty1, L Exp1)]
+mkRANs :: RANEnv -> [Exp1] -> PassM [(Var, [()], Ty1, Exp1)]
 mkRANs ienv needRANsExp =
   snd <$> foldlM (\(mb_most_recent_ran, acc) arg -> do
           i <- gensym "ran"
           -- See Note [Reusing RAN's in case expressions]
-          let rhs = case unLoc arg of
+          let rhs = case arg of
                       VarE x -> case M.lookup x ienv of
                                   Just v  -> VarE v
                                   Nothing -> PrimAppE RequestEndOf [arg]
@@ -305,7 +304,7 @@ mkRANs ienv needRANsExp =
                       -- LitE{}    -> PrimAppE RequestEndOf [arg]
                       -- LitSymE{} -> PrimAppE RequestEndOf [arg]
                       oth -> error $ "addRANExp: Expected trivial expression, got: " ++ sdoc oth
-          return (Just i, acc ++ [(i,[],CursorTy, l$ rhs)]))
+          return (Just i, acc ++ [(i,[],CursorTy, rhs)]))
   (Nothing, []) needRANsExp
 
 --------------------------------------------------------------------------------
@@ -334,12 +333,12 @@ needsRAN Prog{ddefs,fundefs,mainExp} =
 type RegEnv = M.Map LocVar Var
 type TyConEnv = M.Map LocVar TyCon
 
-needsRANExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> TyConEnv -> [[LocVar]] -> L Exp2 -> S.Set TyCon
-needsRANExp ddefs fundefs env2 renv tcenv parlocss (L _p ex) =
+needsRANExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> TyConEnv -> [[LocVar]] -> Exp2 -> S.Set TyCon
+needsRANExp ddefs fundefs env2 renv tcenv parlocss ex =
   case ex of
-    CaseE (L _ (VarE scrt)) brs -> let PackedTy tycon tyloc = lookupVEnv scrt env2
-                                       reg = renv # tyloc
-                                   in S.unions $ L.map (docase tycon reg env2 renv tcenv parlocss) brs
+    CaseE (VarE scrt) brs -> let PackedTy tycon tyloc = lookupVEnv scrt env2
+                                 reg = renv # tyloc
+                             in S.unions $ L.map (docase tycon reg env2 renv tcenv parlocss) brs
 
     CaseE scrt _ -> error $ "needsRANExp: Scrutinee is not flat " ++ sdoc scrt
 
@@ -370,13 +369,13 @@ So we say that if there are any region that is shared among the things in 'par',
 we need random access for that type.
 
 -}
-    LetE (v,_,ty,rhs@(L _ (SpawnE{}))) bod ->
+    LetE (v,_,ty,rhs@(SpawnE{})) bod ->
       let mp   = parAppLoc env2 rhs
           locs = M.keys mp
           parlocss' = locs : parlocss
       in needsRANExp ddefs fundefs (extendVEnv v ty env2) renv (mp `M.union` tcenv) parlocss' bod
 
-    LetE (v,_,ty,(L _ SyncE)) bod ->
+    LetE (v,_,ty,SyncE) bod ->
       let s_bod = needsRANExp ddefs fundefs (extendVEnv v ty env2) renv tcenv [] bod
           regss = map (map (renv #)) parlocss
           deleteAt idx xs = let (lft, (_:rgt)) = splitAt idx xs
@@ -432,8 +431,8 @@ we need random access for that type.
       in ran_for_scrt `S.union` needsRANExp ddefs fundefs env21' renv' tcenv1 parlocss1 bod
 
     -- Return the location and tycon of an argument to a function call.
-    parAppLoc :: Env2 Ty2 -> L Exp2 -> M.Map LocVar TyCon
-    parAppLoc env21 (L _ (SpawnE _ _ args)) =
+    parAppLoc :: Env2 Ty2 -> Exp2 -> M.Map LocVar TyCon
+    parAppLoc env21 (SpawnE _ _ args) =
       let fn (PackedTy dcon loc) = [(loc, dcon)]
           fn (ProdTy tys1) = L.concatMap fn tys1
           fn _ = []

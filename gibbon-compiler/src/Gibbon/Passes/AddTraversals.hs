@@ -5,7 +5,6 @@ import Control.Monad ( forM, when )
 import Data.List as L
 import Data.Map as M
 import Data.Set as S
-import Data.Loc
 
 import Gibbon.Common
 import Gibbon.DynFlags
@@ -50,10 +49,10 @@ addTraversalsFn ddefs fundefs f@FunDef{funName, funArgs, funTy, funBody} = do
     return $ f {funBody = bod'}
 
 -- Generate traversals for the first (n-1) packed elements
-addTraversalsExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> String -> L Exp2 -> PassM (L Exp2)
-addTraversalsExp ddefs fundefs env2 renv context (L p ex) = L p <$>
+addTraversalsExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> String -> Exp2 -> PassM Exp2
+addTraversalsExp ddefs fundefs env2 renv context ex =
   case ex of
-    CaseE scrt@(L _ (VarE sv)) brs -> do
+    CaseE scrt@(VarE sv) brs -> do
         let PackedTy _tycon tyloc = lookupVEnv sv env2
             reg = renv # tyloc
         CaseE scrt <$> mapM (docase reg) brs
@@ -114,7 +113,7 @@ addTraversalsExp ddefs fundefs env2 renv context (L p ex) = L p <$>
             dbgTrace 2 ("Adding traversals: " ++ sdoc context) (return ())
           -- Generate traversals: assuming that InferLocs has already generated
           -- the traversal functions, we only use it here.
-          trav_binds <- genTravBinds (L.map (\(p_var, _p_loc) -> (l$ VarE p_var, lookupVEnv p_var env21)) ls)
+          trav_binds <- genTravBinds (L.map (\(p_var, _p_loc) -> (VarE p_var, lookupVEnv p_var env21)) ls)
           (dcon,vlocs,) <$> mkLets trav_binds <$>
             addTraversalsExp ddefs fundefs env21 renv1 context rhs
 
@@ -124,7 +123,7 @@ addTraversalsExp ddefs fundefs env2 renv context (L p ex) = L p <$>
 -- If we cannot unpack all the pattern matched variables:
 -- (1) Everything after the first packed element should be unused in the RHS
 -- (2) Otherwise, we must traverse the first (n-1) packed elements
-needsTraversalCase :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> (DataCon, [(Var, LocVar)], L Exp2) -> Maybe [(Var, LocVar)]
+needsTraversalCase :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> (DataCon, [(Var, LocVar)], Exp2) -> Maybe [(Var, LocVar)]
 needsTraversalCase ddefs fundefs env2 (dcon,vlocs,rhs) =
   let (vars, _locs) = unzip vlocs
       tys     = lookupDataCon ddefs dcon
@@ -173,14 +172,14 @@ needsTraversalCase ddefs fundefs env2 (dcon,vlocs,rhs) =
                        then Nothing
                        else Just trav
 
-genTravBinds :: [(L Exp2, Ty2)] -> PassM [(Var, [LocVar], Ty2, L Exp2)]
+genTravBinds :: [(Exp2, Ty2)] -> PassM [(Var, [LocVar], Ty2, Exp2)]
 genTravBinds ls = concat <$>
   (forM ls $ \(e,ty) ->
       case ty of
         PackedTy tycon loc1 -> do
           w <- gensym "trav"
           let fn_name = mkTravFunName tycon
-          return [(w,[],IntTy, l$ AppE fn_name [loc1] [e])]
+          return [(w,[],IntTy, AppE fn_name [loc1] [e])]
         -- TODO: Write a testcase for this path.
         ProdTy tys -> do
           -- So that we don't have to make assumptions about the 'e' being a VarE
@@ -188,7 +187,7 @@ genTravBinds ls = concat <$>
           proj_binds <-
             genTravBinds (L.foldl (\acc (ty1,idx) ->
                                    if isPackedTy ty1
-                                   then (mkProj idx (l$ VarE tmp), ty1) : acc
+                                   then (mkProj idx (VarE tmp), ty1) : acc
                                    else acc)
                                   []
                                   (zip tys [0..]))

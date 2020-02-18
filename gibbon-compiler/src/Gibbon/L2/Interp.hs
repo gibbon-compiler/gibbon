@@ -12,7 +12,6 @@ import           Control.DeepSeq
 import           Control.Monad.Writer
 import           Control.Monad.State
 import           Data.ByteString.Builder (toLazyByteString, string8)
-import           Data.Loc
 import           Data.Foldable (foldlM)
 import           System.Clock
 import           Text.PrettyPrint.GenericPretty
@@ -52,15 +51,15 @@ interpProg2 rc Prog{ddefs,fundefs,mainExp} =
                  _ -> x
       return (res, toLazyByteString logs)
 
-interp :: RunConfig -> DDefs Ty2 -> M.Map Var (FunDef (L Exp2)) -> L Exp2
+interp :: RunConfig -> DDefs Ty2 -> M.Map Var (FunDef Exp2) -> Exp2
        -> WriterT Log (StateT Store IO) Value
 interp rc ddefs fenv e = fst <$> go M.empty M.empty e
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env sizeEnv ex = go env sizeEnv ex
 
-    go :: ValEnv -> SizeEnv -> L Exp2 -> WriterT Log (StateT Store IO) (Value, Size)
-    go env sizeEnv (L _ ex) =
+    go :: ValEnv -> SizeEnv -> Exp2 -> WriterT Log (StateT Store IO) (Value, Size)
+    go env sizeEnv ex =
       case ex of
         -- We interpret a function application by substituting the operand (at
         -- the call-site) for the function argument in the environment. Since
@@ -217,7 +216,7 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
                else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
               return $! (val, sz)
 
-        SpawnE f locs args -> go env sizeEnv (l$ AppE f locs args)
+        SpawnE f locs args -> go env sizeEnv (AppE f locs args)
         SyncE -> pure $ (VInt (-1), SOne 8)
 
         WithArenaE{} -> error "L2.Interp: WithArenE not handled"

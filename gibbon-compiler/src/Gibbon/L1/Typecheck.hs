@@ -14,7 +14,6 @@ where
 
 
 import Control.Monad.Except
-import Data.Loc
 import Data.Map as M
 import Data.Set as S
 import Data.List as L
@@ -31,9 +30,9 @@ import Prelude hiding (exp)
 
 -- | Typecheck a L1 expression
 --
-tcExp :: DDefs1 -> Env2 Ty1 -> L Exp1 -> TcM Ty1 (L Exp1)
-tcExp ddfs env exp@(L p ex) =
-  case ex of
+tcExp :: DDefs1 -> Env2 Ty1 -> Exp1 -> TcM Ty1 Exp1
+tcExp ddfs env exp =
+  case exp of
     VarE v    -> lookupVar env v exp
     LitE _    -> return IntTy
     LitSymE _ -> return SymTy
@@ -43,7 +42,7 @@ tcExp ddfs env exp@(L p ex) =
             case (M.lookup v (fEnv env)) of
               Just ty -> ty
               Nothing -> error $ "Function not found: " ++ sdoc v ++ " while checking " ++
-                                 sdoc exp ++ "\nat " ++ sdoc p
+                                 sdoc exp ++ "\nat "
       -- Check that the expression does not have any locations
       case locs of
         [] -> return ()
@@ -194,8 +193,8 @@ tcExp ddfs env exp@(L p ex) =
           let [a] = tys
           _ <- ensureEqualTy exp ArenaTy a
           case es !! 0 of
-            L _ (VarE var) -> do ensureArenaScope exp env $ Just var
-                                 return $ SymDictTy (Just var) ty
+            (VarE var) -> do ensureArenaScope exp env $ Just var
+                             return $ SymDictTy (Just var) ty
             _ -> throwError $ GenericTC "Expected arena variable argument" exp
 
         DictInsertP ty -> do
@@ -208,8 +207,8 @@ tcExp ddfs env exp@(L p ex) =
                                    _ <- ensureEqualTy exp ty dty
                                    ensureArenaScope exp env ar
                                    case es !! 0 of
-                                     L _ (VarE var) -> do ensureArenaScope exp env $ Just var
-                                                          return $ SymDictTy (Just var) ty
+                                     (VarE var) -> do ensureArenaScope exp env $ Just var
+                                                      return $ SymDictTy (Just var) ty
                                      _ -> throwError $ GenericTC "Expected arena variable argument" exp
             _ -> throwError $ GenericTC "Expected SymDictTy" exp
 
@@ -249,9 +248,9 @@ tcExp ddfs env exp@(L p ex) =
         RequestEndOf -> do
           len1
           case (es !! 0) of
-            L _ VarE{} -> if isPackedTy (tys !! 0)
-                          then return CursorTy
-                          else throwError $ GenericTC "Expected PackedTy" exp
+            VarE{} -> if isPackedTy (tys !! 0)
+                      then return CursorTy
+                      else throwError $ GenericTC "Expected PackedTy" exp
             _ -> throwError $ GenericTC "Expected a variable argument" exp
 
         VEmptyP ty -> do
@@ -383,7 +382,7 @@ tcExp ddfs env exp@(L p ex) =
       return ty
 
     SpawnE v locs ls -> do
-      ty <- go (l$ AppE v locs ls)
+      ty <- go (AppE v locs ls)
       if isScalarTy ty || isPackedTy ty
       then pure ty
       else case ty of
@@ -406,12 +405,12 @@ tcExp ddfs env exp@(L p ex) =
       tcExp ddfs env' e
 
     Ext (BenchE fn tyapps args _b) -> do
-      go (l$ AppE fn tyapps args)
+      go (AppE fn tyapps args)
 
     Ext (AddFixed{})-> throwError $ GenericTC "AddFixed not handled." exp
 
-    MapE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc ex
-    FoldE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc ex
+    MapE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc exp
+    FoldE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc exp
 
   where
     go = tcExp ddfs env
@@ -488,14 +487,14 @@ data TCError exp = GenericTC String  exp
   deriving (Show, Eq, Ord, Generic)
 
 
-instance (Out exp, Out (L exp)) => Out (TCError (L exp)) where
+instance (Out exp) => Out (TCError exp) where
   doc tce =
     case tce of
-      GenericTC str (L p ex)    -> text str $$ doc p <+> colon <+> doc ex
-      VarNotFoundTC v (L p ex)  -> text "Var" <+> doc v <+> text "not found. Checking: " $$
-                                   doc p <+> colon <+> doc ex
-      UnsupportedExpTC (L p ex) -> text "Unsupported expression:" $$
-                                   doc p <+> colon <+> doc ex
+      GenericTC str ex    -> text str $$ colon <+> doc ex
+      VarNotFoundTC v ex  -> text "Var" <+> doc v <+> text "not found. Checking: " $$
+                             colon <+> doc ex
+      UnsupportedExpTC ex -> text "Unsupported expression:" $$
+                             colon <+> doc ex
 
 type TcM a exp =  Except (TCError exp) a
 
@@ -504,23 +503,19 @@ extendEnv (Env2 vEnv fEnv) ((v,ty):rest) = extendEnv (Env2 (M.insert v ty vEnv) 
 extendEnv env [] = env
 
 
-lookupVar :: Env2 (UrTy l) -> Var -> L (PreExp e l (UrTy l)) ->
-             TcM (UrTy l) (L (PreExp e l (UrTy l)))
+lookupVar :: Env2 (UrTy l) -> Var -> PreExp e () (UrTy ()) -> TcM (UrTy l) (PreExp e () (UrTy ()))
 lookupVar env var exp =
     case M.lookup var $ vEnv env of
       Nothing -> throwError $ VarNotFoundTC var exp
       Just ty -> return ty
 
 
-tcProj :: (Out l) => (L (PreExp e l (UrTy l))) -> Int -> (UrTy l) ->
-          TcM (UrTy l) (L (PreExp e l (UrTy l)))
+tcProj :: (Out l) => PreExp e () (UrTy ()) -> Int -> (UrTy l) -> TcM (UrTy l) (PreExp e () (UrTy ()))
 tcProj _ i (ProdTy tys) = return $ tys !! i
 tcProj e _i ty = throwError $ GenericTC ("Projection from non-tuple type " ++ (sdoc ty)) e
 
 
-tcCases :: DDefs (UrTy ()) -> Env2 (UrTy ()) ->
-           [(DataCon, [(Var, ())], L (PreExp E1Ext () (UrTy ())))] ->
-           TcM (UrTy ()) (L (PreExp E1Ext () (UrTy ())))
+tcCases :: DDefs Ty1 -> Env2 Ty1 -> [(DataCon, [(Var, ())], Exp1)] -> TcM Ty1 Exp1
 tcCases ddfs env cs = do
   tys <- forM cs $ \(c,args',rhs) -> do
            let args  = L.map fst args'
@@ -536,8 +531,8 @@ tcCases ddfs env cs = do
   return $ head tys
 
 
-checkLen :: (Out op, Out arg) => (L (PreExp e l (UrTy l))) -> op -> Int -> [arg] ->
-            TcM () (L (PreExp e l (UrTy l)))
+checkLen :: (Out op, Out arg) => PreExp e () (UrTy ()) -> op -> Int -> [arg] ->
+            TcM () (PreExp e () (UrTy ()))
 checkLen expr pr n ls =
   if length ls == n
   then return ()
@@ -548,8 +543,8 @@ checkLen expr pr n ls =
 
 -- | Ensure that two things are equal.
 -- Includes an expression for error reporting.
-ensureEqual :: (Eq l) => (L (PreExp e l (UrTy l))) -> String -> (UrTy l) ->
-               (UrTy l) -> TcM (UrTy l) (L (PreExp e l (UrTy l)))
+ensureEqual :: (Eq l) => PreExp e () (UrTy ()) -> String -> (UrTy l) ->
+               (UrTy l) -> TcM (UrTy l) (PreExp e () (UrTy ()))
 ensureEqual exp str a b = if a == b
                           then return a
                           else throwError $ GenericTC str exp
@@ -557,9 +552,9 @@ ensureEqual exp str a b = if a == b
 
 -- | Ensure that two types are equal.
 -- Includes an expression for error reporting.
--- ensureEqualTy :: (Eq l, Out l) => (L (PreExp e l (UrTy l))) -> (UrTy l) -> (UrTy l) ->
---                  TcM (UrTy l) (L (PreExp e l (UrTy l)))
-ensureEqualTy :: (L Exp1) -> Ty1 -> Ty1 -> TcM Ty1 (L Exp1)
+-- ensureEqualTy :: (Eq l, Out l) => PreExp e () (UrTy ()) -> (UrTy l) -> (UrTy l) ->
+--                  TcM (UrTy l) PreExp e () (UrTy ())
+ensureEqualTy :: PreExp e () (UrTy ()) -> Ty1 -> Ty1 -> TcM Ty1 (PreExp e () (UrTy ()))
 ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
                                          ++ (sdoc a) ++ ", " ++ (sdoc b)) a b
 

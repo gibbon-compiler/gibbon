@@ -3,7 +3,6 @@
 -- | Make sequential versions of parallel functions
 module Gibbon.Passes.Sequentialize where
 
-import           Data.Loc
 import qualified Data.Map as M
 import qualified Data.Set as S
 
@@ -51,8 +50,8 @@ sequentializeFn parallel_fn_names fn@FunDef{funName,funBody} = do
   where
     to_seq v = varAppend v (toVar "_seq")
 
-    go :: L Exp1 -> PassM (L Exp1)
-    go (L p ex) = L p <$>
+    go :: Exp1 -> PassM Exp1
+    go ex =
       case ex of
         VarE{} -> pure ex
         LitE{} -> pure ex
@@ -61,9 +60,9 @@ sequentializeFn parallel_fn_names fn@FunDef{funName,funBody} = do
           | f `S.member` parallel_fn_names -> (AppE (to_seq f) locs) <$> (mapM go args)
           | otherwise                      -> (AppE f locs) <$> (mapM go args)
         PrimAppE pr args -> (PrimAppE pr) <$> (mapM go args)
-        LetE (v,locs,ty,L p1 (SpawnE f locs1 args)) bod ->
-          LetE <$> (v,locs,ty,) <$> (L p1) <$> AppE (to_seq f) locs1 <$> mapM go args <*> go bod
-        LetE (_,_,_,L _ SyncE) bod -> unLoc <$> go bod
+        LetE (v,locs,ty,(SpawnE f locs1 args)) bod ->
+          LetE <$> (v,locs,ty,) <$> AppE (to_seq f) locs1 <$> mapM go args <*> go bod
+        LetE (_,_,_,SyncE) bod -> go bod
         LetE (v,locs,ty,rhs) bod -> LetE <$> (v,locs,ty,) <$> go rhs <*> go bod
         IfE a b c  -> IfE <$> go a <*> go b <*> go c
         MkProdE ls -> MkProdE <$> mapM go ls

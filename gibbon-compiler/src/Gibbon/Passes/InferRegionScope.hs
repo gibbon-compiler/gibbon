@@ -7,7 +7,6 @@
 module Gibbon.Passes.InferRegionScope
   (inferRegScope, inferRegScopeExp) where
 
-import Data.Loc
 import Data.Graph
 import qualified Data.Map as M
 
@@ -67,8 +66,8 @@ In fnB, there's no path from `rb` to 1.
 -- | Decide if a region should be global or local (dynamic).
 --
 --  Dynamic regions are stack allocated and automatically freed
-inferRegScopeExp :: L Exp2 -> PassM (L Exp2)
-inferRegScopeExp (L p ex) = L p <$>
+inferRegScopeExp :: Exp2 -> PassM Exp2
+inferRegScopeExp ex =
   case ex of
     Ext ext ->
       case ext of
@@ -77,7 +76,7 @@ inferRegScopeExp (L p ex) = L p <$>
           case r of
             MMapR{} -> Ext <$> LetRegionE r <$> (go rhs)
             _ ->
-              let deps = depList (L p ex)
+              let deps = depList ex
               in case deps of
                    ((retVar,_,_):_) ->
                      let (g,_,vtxF) = graphFromEdges deps

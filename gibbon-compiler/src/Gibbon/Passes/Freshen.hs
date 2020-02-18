@@ -7,7 +7,6 @@ module Gibbon.Passes.Freshen (freshNames, freshExp, freshExp1) where
 
 import           Control.Exception
 import           Data.Foldable ( foldrM )
-import           Data.Loc
 import           Prelude hiding (exp)
 import           Data.List
 import qualified Data.Map as M
@@ -21,58 +20,6 @@ import qualified Gibbon.L1.Syntax as L1
 type VarEnv     = M.Map Var Var
 type TyVarEnv t = M.Map TyVar t
 
-{-
-
-CSK: I defined this so that we could have a 'freshExp1 :: L1 -> L1' (used in Fusion2),
-but abandoned it in favor of code duplication.
-
-class Expression e => Freshenable e where
-  gFreshenExp :: VarEnv -> TyVarEnv (TyOf e) -> e -> PassM e
-  gFreshenTy  :: e -> TyVarEnv (TyOf e) -> (TyOf e) -> PassM (TyVarEnv (TyOf e), (TyOf e))
-
-instance Freshenable (L L1.Exp1) where
-  gFreshenExp = freshExp
-  -- L1 types don't need to be freshened.
-  gFreshenTy _ _ ty = pure (M.empty, ty)
-
-instance Freshenable L1.Exp1 where
-  gFreshenExp v tvenv e = unLoc <$> freshExp v tvenv (l$ e)
-  gFreshenTy _ _ ty     = pure (M.empty, ty)
-
-instance Freshenable (L1.NoExt () L1.Ty1) where
-  gFreshenExp _ _ _ = error "gFreshenExp NoExt: impossible"
-  gFreshenTy _ _ _  = error "gFreshenTy NoExt: impossible"
-
-instance Freshenable (L Exp0) where
-  gFreshenExp = freshExp
-  gFreshenTy  = freshTy
-
-instance Freshenable Exp0 where
-  gFreshenExp v tvenv e = unLoc <$> freshExp v tvenv (l$ e)
-  gFreshenTy e tvenv ty = freshTy (l$ e) tvenv ty
-
-instance Freshenable (E0Ext Ty0 Ty0) where
-  gFreshenExp venv tvenv ext =
-    case ext of
-      LambdaE args bod -> do
-        (venv', vs, ts) <- foldrM
-                             (\(v,t) (acc1, acc2, acc3) -> do
-                                   v' <- gensym v
-                                   let acc1' = M.insert v v' acc1
-                                   (_tvenv', t') <- freshTy _ tvenv t
-                                   pure (acc1', v':acc2, t': acc3))
-                             (venv,[],[]) args
-        (LambdaE (zip vs ts) <$> (freshExp venv' tvenv bod))
-      PolyAppE{} -> error "freshExp: TODO, PolyAppE."
-
-  gFreshenTy = error "gFreshenTy: E0Ext."
-
-freshExp1 :: VarEnv -> L L1.Exp1 -> PassM (L L1.Exp1)
-freshExp1 venv e = gFreshenExp venv M.empty e
-
--}
-
--- TODO: ScopedTypeVariables.
 freshNames :: Prog0 -> PassM Prog0
 freshNames (Prog defs funs main) =
     do main' <- case main of
@@ -100,7 +47,7 @@ freshDDef DDef{tyName,tyArgs,dataCons} = do
       else error $ "freshDDef: Unbound type variables " ++ sdoc free_tvs
                    ++ " in the constructor:\n" ++ msg
 
-freshFun :: FunDef (L Exp0) -> PassM (FunDef (L Exp0))
+freshFun :: FunDef Exp0 -> PassM (FunDef Exp0)
 freshFun (FunDef nam nargs funty bod) =
     do nargs' <- mapM gensym nargs
        let msubst = (M.fromList $ zip nargs nargs')
@@ -145,7 +92,7 @@ freshTy env ty =
                     pure (env', ListTy t')
      IntHashTy -> pure (env, ty)
 
-freshTys :: TyVarEnv (TyOf (L Exp0)) -> [Ty0] -> PassM (TyVarEnv (TyOf (L Exp0)), [Ty0])
+freshTys :: TyVarEnv (TyOf Exp0) -> [Ty0] -> PassM (TyVarEnv (TyOf Exp0), [Ty0])
 freshTys env tys =
   foldrM
     (\t (env', acc) -> do
@@ -194,8 +141,8 @@ freshDictTyScheme m (ForAll tvs ty) =
     do ty' <- freshDictTy m ty
        pure $ ForAll tvs ty'
 
-freshExp :: VarEnv -> TyVarEnv Ty0 -> L Exp0 -> PassM (L Exp0)
-freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
+freshExp :: VarEnv -> TyVarEnv Ty0 -> Exp0 -> PassM Exp0
+freshExp venv tvenv exp =
   case exp of
     LitE i    -> return $ LitE i
     LitSymE v -> return $ LitSymE v
@@ -314,13 +261,14 @@ freshExp venv tvenv (L sloc exp) = fmap (L sloc) $
           pure $ Ext (BenchE (cleanFunName fn) tyapps args' b)
 
         ParE0 ls -> Ext <$> ParE0 <$> mapM go ls
+        L p e    -> Ext <$> (L p) <$> go e
 
   where go = freshExp venv tvenv
 
 
 -- copy-paste.
-freshExp1 :: VarEnv -> L L1.Exp1 -> PassM (L L1.Exp1)
-freshExp1 vs (L sloc exp) = fmap (L sloc) $
+freshExp1 :: VarEnv -> L1.Exp1 -> PassM L1.Exp1
+freshExp1 vs exp =
   case exp of
     LitE i    -> return $ LitE i
     LitSymE v -> return $ LitSymE v

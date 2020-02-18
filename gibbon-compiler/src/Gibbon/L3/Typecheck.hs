@@ -8,7 +8,6 @@ module Gibbon.L3.Typecheck
 
 
 import Control.Monad.Except
-import Data.Loc
 import qualified Data.Map as M
 import qualified Data.List as L
 import Data.Maybe
@@ -20,9 +19,9 @@ import Gibbon.L3.Syntax
 
 -- | Typecheck a L1 expression
 --
-tcExp :: Bool -> DDefs3 -> Env2 Ty3 -> L Exp3 -> TcM Ty3 (L Exp3)
-tcExp isPacked ddfs env exp@(L p ex) =
-  case ex of
+tcExp :: Bool -> DDefs3 -> Env2 Ty3 -> Exp3 -> TcM Ty3 Exp3
+tcExp isPacked ddfs env exp =
+  case exp of
     Ext ext ->
       case ext of
         -- One cursor in, (int, cursor') out
@@ -132,7 +131,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
             case (M.lookup v (fEnv env)) of
               Just ty -> ty
               Nothing -> error $ "Function not found: " ++ sdoc v ++ " while checking " ++
-                                 sdoc exp ++ " at " ++ show p
+                                 sdoc exp
 
           (funInTys,funRetTy) = (inTys funty, outTy funty)
 
@@ -284,13 +283,13 @@ tcExp isPacked ddfs env exp@(L p ex) =
           len1
           let [a] = tys
           _ <- ensureEqualTyModCursor exp ArenaTy a
-          let (L _ (VarE var)) = es !! 0
+          let (VarE var) = es !! 0
           return $ SymDictTy (Just var) CursorTy
 
         DictInsertP _ty -> do
           len4
           let [a,_d,k,v] = tys
-          let (L _ (VarE var)) = es !! 0
+          let (VarE var) = es !! 0
           _ <- ensureEqualTyModCursor exp ArenaTy a
           _ <- ensureEqualTyModCursor exp SymTy k
           _ <- ensureEqualTyModCursor exp CursorTy v
@@ -438,7 +437,7 @@ tcExp isPacked ddfs env exp@(L p ex) =
       ty <- go e
       return ty
 
-    SpawnE fn locs args -> go (l$ AppE fn locs args)
+    SpawnE fn locs args -> go (AppE fn locs args)
     SyncE -> pure voidTy
 
     WithArenaE v e -> do
@@ -508,7 +507,7 @@ tcProg isPacked prg@Prog{ddefs,fundefs,mainExp} = do
       return ()
 
 
-tcCases :: Bool -> DDefs3 -> Env2 Ty3 -> [(DataCon, [(Var, ())], L Exp3)] -> TcM Ty3 (L Exp3)
+tcCases :: Bool -> DDefs3 -> Env2 Ty3 -> [(DataCon, [(Var, ())], Exp3)] -> TcM Ty3 (Exp3)
 tcCases isPacked ddfs env cs = do
   tys <- forM cs $ \(c,args',rhs) -> do
            let args  = L.map fst args'
@@ -525,7 +524,7 @@ tcCases isPacked ddfs env cs = do
 
 -- | Ensure that two things are equal.
 -- Includes an expression for error reporting.
-ensureEqual :: L Exp3 -> String -> Ty3 -> Ty3 -> TcM Ty3 (L Exp3)
+ensureEqual :: Exp3 -> String -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
 ensureEqual exp str (SymDictTy ar1 _) (SymDictTy ar2 _) =
     if ar1 == ar2
     then return $ SymDictTy ar1 CursorTy
@@ -537,11 +536,11 @@ ensureEqual exp str a b = if a == b
 
 -- | Ensure that two types are equal.
 -- Includes an expression for error reporting.
-ensureEqualTy :: L Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (L Exp3)
+ensureEqualTy :: Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
 ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
                                          ++ (sdoc a) ++ ", " ++ (sdoc b)) a b
 
-ensureEqualTyModCursor :: L Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (L Exp3)
+ensureEqualTyModCursor :: Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
 ensureEqualTyModCursor _exp CursorTy (PackedTy _ _) = return CursorTy
 ensureEqualTyModCursor _exp (PackedTy _ _) CursorTy = return CursorTy
 ensureEqualTyModCursor exp (ProdTy ls1) (ProdTy ls2) =
@@ -558,7 +557,7 @@ compareModCursor CursorTy (PackedTy _ _) = True
 compareModCursor (PackedTy _ _) CursorTy = True
 compareModCursor ty1 ty2 = ty1 == ty2
 
-ensureEqualTyNoLoc :: L Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (L Exp3)
+ensureEqualTyNoLoc :: Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
 ensureEqualTyNoLoc exp t1 t2 =
   case (t1,t2) of
     (SymDictTy _ _ty1, SymDictTy _ _ty2) -> return t1

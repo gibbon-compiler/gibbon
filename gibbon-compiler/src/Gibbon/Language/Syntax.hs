@@ -55,7 +55,6 @@ module Gibbon.Language.Syntax
 import           Control.DeepSeq
 import qualified Data.Map as M
 import           Data.List as L
-import           Data.Loc
 import qualified Data.Set as S
 import           Data.Word ( Word8 )
 import           Text.PrettyPrint.GenericPretty
@@ -253,9 +252,6 @@ class FreeVars a where
     -- | Return a set of free TERM variables.  Does not return location variables.
     gFreeVars :: a -> S.Set Var
 
-instance FreeVars e => FreeVars (L e) where
-  gFreeVars (L _ e) = gFreeVars e
-
 
 -- | A generic interface to expressions found in different phases of
 -- the compiler.
@@ -297,11 +293,11 @@ class Expression e => SimplifiableExt e ext where
 
 type HasSimplifiable e l d = ( Show l, Out l, Show d, Out d
                              , Expression (e l d)
-                             , SimplifiableExt (L (PreExp e l d)) (e l d)
+                             , SimplifiableExt (PreExp e l d) (e l d)
                              )
 
 type HasSimplifiableExt e l d = ( Show l, Out l, Show d, Out d
-                                , Simplifiable (L (PreExp e l d))
+                                , Simplifiable (PreExp e l d)
                                 )
 
 
@@ -322,12 +318,12 @@ class Expression e => SubstitutableExt e ext where
   gSubstEExt :: e   -> e -> ext -> ext
 
 type HasSubstitutable e l d = ( Expression (e l d)
-                              , SubstitutableExt (L (PreExp e l d)) (e l d)
+                              , SubstitutableExt (PreExp e l d) (e l d)
                               , Eq d, Show d, Out d, Eq l, Show l, Out l
                               , Eq (e l d) )
 
 type HasSubstitutableExt e l d = ( Eq d, Show d, Out d, Eq l, Show l, Out l
-                                 , Substitutable (L (PreExp e l d)) )
+                                 , Substitutable (PreExp e l d) )
 
 -- | Alpha renaming, without worrying about name capture -- assuming that Freshen
 -- has run before!
@@ -387,7 +383,7 @@ lookupFEnv v env2 = (fEnv env2) # v
 
 -- Shorthand to make the below definition more readable.
 -- I.e., this covers all the verbose recursive fields.
-#define EXP (L (PreExp ext loc dec))
+#define EXP (PreExp ext loc dec)
 
 -- | The source language.  It has pointer-based sums and products, as
 -- well as packed algebraic datatypes.
@@ -453,10 +449,6 @@ data PreExp (ext :: * -> * -> *) loc dec =
   deriving (Show, Read, Eq, Ord, Generic, NFData, Functor)
   -- Foldable, Traversable - need instances for L in turn
 
-instance NFData (PreExp e l d) => NFData (L (PreExp e l d)) where
-  rnf (L loc a) = seq loc (rnf a)
-
-deriving instance Generic (L (PreExp e l d))
 
 instance (Out l, Show l, Show d, Out d, Expression (e l d))
       => Expression (PreExp e l d) where
@@ -493,12 +485,6 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         SyncE      -> False
         IsBigE{}   -> False
         Ext ext -> isTrivial ext
-
-
-instance Expression (PreExp e l d) => Expression (L (PreExp e l d)) where
-  type (TyOf (L (PreExp e l d)))  = d
-  type (LocOf (L (PreExp e l d))) = l
-  isTrivial (L _ e) = isTrivial e
 
 
 -- | Free data variables.  Does not include function variables, which
@@ -545,8 +531,8 @@ instance (Show (), Out (), Expression (e () (UrTy ())),
       LitE _       -> IntTy
       LitSymE _    -> SymTy
       AppE v _ _   -> outTy $ fEnv env2 # v
-      PrimAppE (DictInsertP ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) $ stripTyLocs ty
-      PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) $ stripTyLocs ty
+      PrimAppE (DictInsertP ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
+      PrimAppE (DictEmptyP  ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
       PrimAppE p _ -> primRetTy p
 
       LetE (v,_,t,_) e -> gRecoverType ddfs (extendVEnv v t env2) e
@@ -572,18 +558,16 @@ instance (Show (), Out (), Expression (e () (UrTy ())),
             args' = L.map fst args
         in gRecoverType ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
 
-instance Typeable (PreExp e l (UrTy l)) => Typeable (L (PreExp e l (UrTy l))) where
-  gRecoverType ddfs env2 (L _ ex) = gRecoverType ddfs env2 ex
-
-instance HasSubstitutable e l d => Substitutable (L (PreExp e l d)) where
-  gSubst  = subst
-  gSubstE = substE
 
 instance Renamable Var where
   gRename env v = M.findWithDefault v v env
 
-instance HasRenamable e l d => Renamable (L (PreExp e l d)) where
-  gRename env (L p ex) = L p $
+instance HasSubstitutable e l d => Substitutable (PreExp e l d) where
+  gSubst  = subst
+  gSubstE = substE
+
+instance HasRenamable e l d => Renamable (PreExp e l d) where
+  gRename env ex =
     case ex of
       VarE v -> VarE (go v)
       LitE{}    -> ex
@@ -686,10 +670,6 @@ data Prim ty
 --------------------------------------------------------------------------------
 -- Do this manually to get prettier formatting: (Issue #90)
 
-instance Out (PreExp e l d) => Out (L (PreExp e l d)) where
-  doc (L _ a)       = doc a
-  docPrec n (L _ a) = docPrec n a
-
 instance (Out l, Out d, Out (e l d)) => Out (PreExp e l d)
 
 instance Out d => Out (Prim d)
@@ -791,24 +771,22 @@ mapMExprs fn prg@Prog{fundefs,mainExp} = do
 visitExp :: forall l1 l2 e1 e2 d1 d2 .
             (l1 -> l2) -> (e1 l1 d1 -> e2 l2 d2) -> (d1 -> d2) ->
             PreExp e1 l1 d1 -> PreExp e2 l2  d2
-visitExp _fl fe _fd exp0 = fin
+visitExp _fl fe _fd exp0 = go exp0
  where
-   L _ fin = go (L NoLoc exp0)
-
-   go :: L (PreExp e1 l1  d1) -> L (PreExp e2 l2 d2)
-   go (L sloc ex) = L sloc $
+   go :: (PreExp e1 l1  d1) -> (PreExp e2 l2 d2)
+   go ex =
      case ex of
-       Ext  x        -> Ext (fe x)
-       _ -> _finishme
+       Ext  x  -> Ext (fe x)
+       _       -> _finishme
 
 
 -- | Substitute an expression in place of a variable.
 subst :: HasSubstitutable e l d
-      => Var -> L (PreExp e l d) -> L (PreExp e l d) -> L (PreExp e l d)
-subst old new (L p0 ex) = L p0 $
+      => Var -> (PreExp e l d) -> (PreExp e l d) -> (PreExp e l d)
+subst old new ex =
   let go = subst old new in
   case ex of
-    VarE v | v == old  -> unLoc new
+    VarE v | v == old  -> new
            | otherwise -> VarE v
     LitE _             -> ex
     LitSymE _          -> ex
@@ -847,18 +825,18 @@ subst old new (L p0 ex) = L p0 $
 -- | Expensive 'subst' that looks for a whole matching sub-EXPRESSION.
 -- If the old expression is a variable, this still avoids going under binder.
 substE :: HasSubstitutable e l d
-       => L (PreExp e l d) -> L (PreExp e l d) -> L (PreExp e l d) -> L (PreExp e l d)
-substE old new (L p0 ex) = L p0 $
+       => (PreExp e l d) -> (PreExp e l d) -> (PreExp e l d) -> (PreExp e l d)
+substE old new ex =
   let go = substE old new in
   case ex of
-    _ | ex == unLoc old -> unLoc new
+    _ | ex == old   -> new
 
     VarE v          -> VarE v
     LitE _          -> ex
     LitSymE _       -> ex
     AppE v loc ls   -> AppE v loc (map go ls)
     PrimAppE p ls   -> PrimAppE p $ L.map go ls
-    LetE (v,loc,t,rhs) bod | (VarE v) == unLoc old  -> LetE (v,loc,t,go rhs) bod
+    LetE (v,loc,t,rhs) bod | (VarE v) == old  -> LetE (v,loc,t,go rhs) bod
                            | otherwise -> LetE (v,loc,t,go rhs) (go bod)
 
     ProjE i e         -> ProjE i (go e)
@@ -870,22 +848,22 @@ substE old new (L p0 ex) = L p0 $
     SpawnE v loc ls   -> SpawnE v loc (map go ls)
     SyncE             -> SyncE
     IsBigE e          -> IsBigE (go e)
-    MapE (v,t,rhs) bod | VarE v == unLoc old  -> MapE (v,t, rhs)    (go bod)
+    MapE (v,t,rhs) bod | VarE v == old  -> MapE (v,t, rhs)    (go bod)
                        | otherwise -> MapE (v,t, go rhs) (go bod)
     FoldE (v1,t1,r1) (v2,t2,r2) bod ->
-        let r1' = if VarE v1 == unLoc old then r1 else go r1
-            r2' = if VarE v2 == unLoc old then r2 else go r2
+        let r1' = if VarE v1 == old then r1 else go r1
+            r2' = if VarE v2 == old then r2 else go r2
         in FoldE (v1,t1,r1') (v2,t2,r2') (go bod)
 
     Ext ext -> Ext (gSubstEExt old new ext)
 
-    WithArenaE v e | (VarE v) == unLoc old -> WithArenaE v e
+    WithArenaE v e | (VarE v) == old -> WithArenaE v e
                    | otherwise -> WithArenaE v (go e)
 
 
 -- | Does the expression contain a TimeIt form?
-hasTimeIt :: L (PreExp e l d) -> Bool
-hasTimeIt (L _ rhs) =
+hasTimeIt :: (PreExp e l d) -> Bool
+hasTimeIt rhs =
     case rhs of
       TimeIt _ _ _ -> True
       DataConE{}   -> False
@@ -907,7 +885,7 @@ hasTimeIt (L _ rhs) =
       Ext _ -> False
       WithArenaE _ e -> hasTimeIt e
 
-hasSpawnsProg :: Prog (L (PreExp e l d)) -> Bool
+hasSpawnsProg :: Prog (PreExp e l d) -> Bool
 hasSpawnsProg (Prog _ fundefs mainExp) =
   any (\FunDef{funBody} -> hasSpawns funBody) (M.elems fundefs) ||
     case mainExp of
@@ -915,8 +893,8 @@ hasSpawnsProg (Prog _ fundefs mainExp) =
       Just (e,_ty) -> hasSpawns e
 
 -- | Does the expression contain a SpawnE form?
-hasSpawns :: L (PreExp e l d) -> Bool
-hasSpawns (L _ rhs) =
+hasSpawns :: (PreExp e l d) -> Bool
+hasSpawns rhs =
     case rhs of
       DataConE{}   -> False
       VarE{}       -> False
@@ -940,41 +918,41 @@ hasSpawns (L _ rhs) =
       WithArenaE _ e -> hasSpawns e
 
 -- | Project something which had better not be the first thing in a tuple.
-projNonFirst :: (Out l, Out d, Out (e l d)) => Int -> L (PreExp e l d) -> L (PreExp e l d)
+projNonFirst :: (Out l, Out d, Out (e l d)) => Int -> (PreExp e l d) -> (PreExp e l d)
 projNonFirst 0 e = error $ "projNonFirst: expected nonzero index into expr: " ++ sdoc e
-projNonFirst i e = L (locOf e) $ ProjE i e
+projNonFirst i e = ProjE i e
 
 -- | Smart constructor that immediately destroys products if it can:
 -- Does NOT avoid single-element tuples.
-mkProj :: Int -> L (PreExp e l d) -> L (PreExp e l d)
-mkProj ix (L _ (MkProdE ls)) = ls !! ix
-mkProj ix e = l$ (ProjE ix e)
+mkProj :: Int -> (PreExp e l d) -> (PreExp e l d)
+mkProj ix (MkProdE ls) = ls !! ix
+mkProj ix e = (ProjE ix e)
 
 -- | Make a product type while avoiding unary products.
-mkProd :: [L (PreExp e l d)]-> L (PreExp e l d)
+mkProd :: [(PreExp e l d)]-> (PreExp e l d)
 mkProd [e] = e
-mkProd ls  = L (locOf $ head ls) $ MkProdE ls
+mkProd ls  = MkProdE ls
 
 -- | Make a nested series of lets.
-mkLets :: [(Var, [loc], dec, L (PreExp ext loc dec))] -> L (PreExp ext loc dec) -> L (PreExp ext loc dec)
+mkLets :: [(Var, [loc], dec, (PreExp ext loc dec))] -> (PreExp ext loc dec) -> (PreExp ext loc dec)
 mkLets [] bod     = bod
-mkLets (b:bs) bod = L NoLoc $ LetE b (mkLets bs bod)
+mkLets (b:bs) bod = LetE b (mkLets bs bod)
 
 -- | Helper function that lifts out Lets on the RHS of other Lets.
 -- Absolutely requires unique names.
-mkLetE :: (Var, [l], d, L (PreExp e l d)) -> L (PreExp e l d) -> L (PreExp e l d)
-mkLetE (vr,lvs,ty,(L _ (LetE bnd e))) bod = mkLetE bnd $ mkLetE (vr,lvs,ty,e) bod
-mkLetE bnd bod = L NoLoc $ LetE bnd bod
+mkLetE :: (Var, [l], d, (PreExp e l d)) -> (PreExp e l d) -> (PreExp e l d)
+mkLetE (vr,lvs,ty,(LetE bnd e)) bod = mkLetE bnd $ mkLetE (vr,lvs,ty,e) bod
+mkLetE bnd bod = LetE bnd bod
 
 -- | Alternative version of L1.mkLets that also flattens
-flatLets :: [(Var,[l],d,L (PreExp e l d))] -> L (PreExp e l d) -> L (PreExp e l d)
+flatLets :: [(Var,[l],d,(PreExp e l d))] -> (PreExp e l d) -> (PreExp e l d)
 flatLets [] bod = bod
 flatLets (b:bs) bod = mkLetE b (flatLets bs bod)
 
-tuplizeRefs :: Var -> [Var] -> [d] -> L (PreExp e l d) -> L (PreExp e l d)
+tuplizeRefs :: Var -> [Var] -> [d] -> (PreExp e l d) -> (PreExp e l d)
 tuplizeRefs ref vars tys =
   mkLets $
-    L.map (\(v,ty,ix) -> (v,[],ty,mkProj ix (l$ VarE ref))) (L.zip3 vars tys [0..])
+    L.map (\(v,ty,ix) -> (v,[],ty,mkProj ix (VarE ref))) (L.zip3 vars tys [0..])
 
 --------------------------------------------------------------------------------
 -- Helpers operating on types
@@ -1204,13 +1182,13 @@ tyToDataCon (PackedTy dcon _) = dcon
 tyToDataCon oth = error $ "tyToDataCon: " ++ show oth ++ " is not packed"
 
 -- | Ensure that an expression is trivial.
-assertTriv :: (Expression e) => L e -> a -> a
-assertTriv (L _ e) =
+assertTriv :: (Expression e) => e -> a -> a
+assertTriv e =
   if isTrivial e
   then id
   else error$ "Expected trivial argument, got: "++sdoc e
 
 -- | List version of 'assertTriv'.
-assertTrivs :: (Expression e) => [L e] -> a -> a
+assertTrivs :: (Expression e) => [e] -> a -> a
 assertTrivs [] = id
 assertTrivs (a:b) = assertTriv a . assertTrivs b

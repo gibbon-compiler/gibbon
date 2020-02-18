@@ -9,7 +9,6 @@ module Gibbon.Passes.Flatten
     ( flattenL0, flattenL1, flattenL2, flattenL3 ) where
 
 import Control.Monad.State
-import Data.Loc
 import Text.PrettyPrint.GenericPretty
 import Prelude hiding (exp)
 import qualified Data.Map as M
@@ -95,10 +94,10 @@ flattenL3 prg@(Prog defs funs main) = do
 type FlattenDeps e l d = (Show l, Out l, Show d, Out d,
                           Expression (e l d),
                           TyOf (e l d) ~ TyOf (PreExp e l d),
-                          Typeable (L (PreExp e l d)),
+                          Typeable (PreExp e l d),
                           Flattenable (e l d))
 
-instance FlattenDeps e l d => Flattenable (L (PreExp e l d)) where
+instance FlattenDeps e l d => Flattenable (PreExp e l d) where
 
   gFlattenExp ddfs env ex = do (b,e') <- gFlattenGatherBinds ddfs env ex
                                return $ flatLets b e'
@@ -106,12 +105,12 @@ instance FlattenDeps e l d => Flattenable (L (PreExp e l d)) where
 
 
 exp :: forall e l d. FlattenDeps e l d
-    => DDefs (TyOf (L (PreExp e l d)))
-    -> Env2 (TyOf (L (PreExp e l d)))
-    -> L (PreExp e l d)
-    -> PassM ([Binds (L (PreExp e l d))], L (PreExp e l d))
-exp ddfs env2 (L sloc e0) =
-  let triv :: String -> L (PreExp e l d) -> PassM ([Binds (L (PreExp e l d))], L (PreExp e l d))
+    => DDefs (TyOf (PreExp e l d))
+    -> Env2 (TyOf (PreExp e l d))
+    -> (PreExp e l d)
+    -> PassM ([Binds (PreExp e l d)], (PreExp e l d))
+exp ddfs env2 e0 =
+  let triv :: String -> (PreExp e l d) -> PassM ([Binds (PreExp e l d)], (PreExp e l d))
       triv m e = -- Force something to be trivial
         if isTrivial e
         then return ([],e)
@@ -119,15 +118,15 @@ exp ddfs env2 (L sloc e0) =
                 let ty = gRecoverType ddfs env2 e
                 (bnds,e') <- exp ddfs env2 e
                 return ( bnds++[(tmp,[],ty,e')]
-                       , L NoLoc $ VarE tmp)
+                       , VarE tmp)
 
-      go :: L (PreExp e l d) -> PassM ([Binds (L (PreExp e l d))], L (PreExp e l d))
+      go :: (PreExp e l d) -> PassM ([Binds (PreExp e l d)], (PreExp e l d))
       go = exp ddfs env2
 
       gols f ls m = do (bndss,ls') <- unzip <$> mapM (triv m) ls
                        return (concat bndss, f ls')
 
-  in fmap (\(a,b) -> (a, L sloc b)) $
+  in
   case e0 of
     Ext ext   -> do (_bnds,e) <- gFlattenGatherBinds ddfs env2 ext
                     return  ([], Ext e)
@@ -141,27 +140,25 @@ exp ddfs env2 (L sloc e0) =
     MkProdE ls        -> gols  MkProdE      ls "Prd"
     DataConE loc k ls -> gols (DataConE loc k) ls "Pkd"
 
-    LetE (v1,lv1,t1, (L sloc' (LetE (v2,lv2,t2,rhs2) rhs1))) bod -> do
-      (bnd, rhs) <- go (L sloc' $
-                        LetE (v2,lv2,t2,rhs2) $
-                        L sloc' $
+    LetE (v1,lv1,t1, ((LetE (v2,lv2,t2,rhs2) rhs1))) bod -> do
+      (bnd, rhs) <- go (LetE (v2,lv2,t2,rhs2) $
                         LetE (v1,lv1,t1,rhs1) bod)
-      return (bnd, unLoc rhs)
+      return (bnd, rhs)
 
     LetE (v,locs,t,rhs) bod -> do (bnd1,rhs') <- go rhs
                                   (bnd2,bod') <- exp ddfs (extendVEnv v t env2) bod
-                                  return (bnd1++[(v,locs,t,rhs')]++bnd2, unLoc bod')
+                                  return (bnd1++[(v,locs,t,rhs')]++bnd2, bod')
     IfE a b c -> do (b1,a') <- triv "If" a
                     (b2,b') <- go b
                     (b3,c') <- go c
                     return (b1, IfE a' (flatLets b2 b') (flatLets b3 c'))
     -- This can happen anywhere, but doing it here prevents
     -- unneccessary bloat where we can ill afford it:
-    ProjE ix (L _ (MkProdE ls)) -> do
+    ProjE ix (MkProdE ls) -> do
       -- dbgTrace 5 (" [flatten] Reducing project-of-tuple, index "++show ix++
       --             " expr:  "++take 80 (show l)++"...")
       (bnd,rhs) <- go (ls !! ix)
-      return (bnd, unLoc rhs)
+      return (bnd, rhs)
 
     ProjE ix e -> do (b,e') <- triv "Prj" e
                      return (b, ProjE ix e')
@@ -212,10 +209,10 @@ flattenL0 prg@(Prog defs funs main) = do
       return $ FunDef nam nargs ty bod'
     env20 = progToEnv prg
 
-flattenExp0 :: L0.DDefs0 -> Env2 L0.Ty0 -> L L0.Exp0
-            -> PassM ([Binds (L L0.Exp0)], L L0.Exp0)
-flattenExp0 ddfs env2 (L sloc e0) =
-  let triv :: String -> L L0.Exp0 -> PassM ([Binds (L L0.Exp0)], L L0.Exp0)
+flattenExp0 :: L0.DDefs0 -> Env2 L0.Ty0 -> L0.Exp0
+            -> PassM ([Binds (L0.Exp0)], L0.Exp0)
+flattenExp0 ddfs env2 e0 =
+  let triv :: String -> L0.Exp0 -> PassM ([Binds (L0.Exp0)], L0.Exp0)
       triv m e = -- Force something to be trivial
         if isTrivial e
         then return ([],e)
@@ -223,16 +220,16 @@ flattenExp0 ddfs env2 (L sloc e0) =
                 let ty = L0.recoverType ddfs env2 e
                 (bnds,e') <- flattenExp0 ddfs env2 e
                 return ( bnds++[(tmp,[],ty,e')]
-                       , L NoLoc $ VarE tmp)
+                       , VarE tmp)
 
-      go :: L L0.Exp0 -> PassM ([Binds (L L0.Exp0)], L L0.Exp0)
+      go :: L0.Exp0 -> PassM ([Binds (L0.Exp0)], L0.Exp0)
       go = flattenExp0 ddfs env2
 
       gols f ls m = do (bndss,ls') <- unzip <$> mapM (triv m) ls
                        dbgTraceIt (sdoc ls) (pure ())
                        return (concat bndss, f ls')
 
-  in fmap (\(a,b) -> (a, L sloc b)) $
+  in
   case e0 of
     LitE _    -> return ([],e0)
     VarE    _ -> return ([],e0)
@@ -243,27 +240,25 @@ flattenExp0 ddfs env2 (L sloc e0) =
     MkProdE ls        -> gols  MkProdE      ls "Prd"
     DataConE loc k ls -> gols (DataConE loc k) ls "Pkd"
 
-    LetE (v1,lv1,t1, (L sloc' (LetE (v2,lv2,t2,rhs2) rhs1))) bod -> do
-      (bnd, rhs) <- go (L sloc' $
-                        LetE (v2,lv2,t2,rhs2) $
-                        L sloc' $
+    LetE (v1,lv1,t1, ((LetE (v2,lv2,t2,rhs2) rhs1))) bod -> do
+      (bnd, rhs) <- go (LetE (v2,lv2,t2,rhs2) $
                         LetE (v1,lv1,t1,rhs1) bod)
-      return (bnd, unLoc rhs)
+      return (bnd, rhs)
 
     LetE (v,locs,t,rhs) bod -> do (bnd1,rhs') <- go rhs
                                   (bnd2,bod') <- flattenExp0 ddfs (extendVEnv v t env2) bod
-                                  return (bnd1++[(v,locs,t,rhs')]++bnd2, unLoc bod')
+                                  return (bnd1++[(v,locs,t,rhs')]++bnd2, bod')
     IfE a b c -> do (b1,a') <- triv "If" a
                     (b2,b') <- go b
                     (b3,c') <- go c
                     return (b1, IfE a' (flatLets b2 b') (flatLets b3 c'))
     -- This can happen anywhere, but doing it here prevents
     -- unneccessary bloat where we can ill afford it:
-    ProjE ix (L _ (MkProdE ls)) -> do
+    ProjE ix (MkProdE ls) -> do
       -- dbgTrace 5 (" [flatten] Reducing project-of-tuple, index "++show ix++
       --             " expr:  "++take 80 (show l)++"...")
       (bnd,rhs) <- go (ls !! ix)
-      return (bnd, unLoc rhs)
+      return (bnd, rhs)
 
     ProjE ix e -> do (b,e') <- triv "Prj" e
                      return (b, ProjE ix e')
@@ -304,3 +299,6 @@ flattenExp0 ddfs env2 (L sloc e0) =
           pure (concat bnds, Ext $ L0.BenchE fn tyapps args' b)
         L0.ParE0 _ls -> do
           error "flattenL0: ParE0"
+        L0.L p e -> do
+          (bnd1,e') <- flattenExp0 ddfs env2 e
+          pure (bnd1, Ext $ L0.L p e')

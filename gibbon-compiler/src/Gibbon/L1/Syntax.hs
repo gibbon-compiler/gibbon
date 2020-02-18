@@ -18,7 +18,6 @@ module Gibbon.L1.Syntax
     ) where
 
 import Control.DeepSeq ( NFData )
-import Data.Loc
 import qualified Data.Set as S
 import GHC.Generics
 import Text.PrettyPrint.GenericPretty
@@ -38,16 +37,16 @@ instance FunctionTy Ty1 where
 type Exp1 = PreExp E1Ext () Ty1
 
 -- | An L1 program.
-type Prog1 = Prog (L Exp1)
+type Prog1 = Prog Exp1
 
 -- | Datatypes
 type DDefs1 = DDefs Ty1
 type DDef1  = DDef Ty1
 
 -- | Function definition used in L1 programs.
-type FunDef1 = FunDef (L Exp1)
+type FunDef1 = FunDef Exp1
 
-type FunDefs1 = FunDefs (L Exp1)
+type FunDefs1 = FunDefs Exp1
 
 -- | The type rperesentation used in L1.
 type Ty1 = UrTy ()
@@ -55,7 +54,7 @@ type Ty1 = UrTy ()
 
 --------------------------------------------------------------------------------
 
-data E1Ext loc dec = BenchE Var [loc] [(L (PreExp E1Ext loc dec))] Bool
+data E1Ext loc dec = BenchE Var [loc] [(PreExp E1Ext loc dec)] Bool
                    | AddFixed Var Int
   deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
@@ -74,16 +73,16 @@ instance (Show l, Show d, Out l, Out d) => Flattenable (E1Ext l d) where
   gFlattenGatherBinds _ddfs _env ex = return ([], ex)
   gFlattenExp _ddfs _env ex = return ex
 
-instance HasSimplifiableExt E1Ext l d => SimplifiableExt (L (PreExp E1Ext l d)) (E1Ext l d) where
+instance HasSimplifiableExt E1Ext l d => SimplifiableExt (PreExp E1Ext l d) (E1Ext l d) where
   gInlineTrivExt _env ext = ext
 
-instance HasSubstitutableExt E1Ext l d => SubstitutableExt (L (PreExp E1Ext l d)) (E1Ext l d) where
+instance HasSubstitutableExt E1Ext l d => SubstitutableExt (PreExp E1Ext l d) (E1Ext l d) where
   gSubstExt old new ext =
     case ext of
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubst old new) args) b
       AddFixed v i -> if v == old
                       then case new of
-                             L _ (VarE v') -> AddFixed v' i
+                             (VarE v') -> AddFixed v' i
                              _oth -> error "Could not substitute non-variable in AddFixed"
                       else AddFixed v i
 

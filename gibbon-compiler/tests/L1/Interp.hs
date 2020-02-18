@@ -4,7 +4,6 @@
 --
 module L1.Interp (l1InterpTests) where
 
-import Data.Loc
 import Data.Map as M
 
 import Test.Tasty.HUnit
@@ -20,8 +19,8 @@ import Gibbon.L1.Interp as L1
 
 p1 :: Prog1
 p1 = Prog emptyDD M.empty
-          (Just ( l$ LetE ("x", [], IntTy, l$ LitE 3) $
-                  l$ VarE "x"
+          (Just ( LetE ("x", [], IntTy, LitE 3) $
+                  VarE "x"
                 , IntTy ))
 
 case_test1 :: Assertion

@@ -27,7 +27,6 @@ module Gibbon.Passes.ParAlloc (parAlloc) where
 
 import           Control.Monad ( when )
 import           Data.Foldable ( foldrM )
-import           Data.Loc
 import qualified Data.Map as M
 import qualified Data.Set as S
 
@@ -76,11 +75,11 @@ parAlloc Prog{ddefs,fundefs,mainExp} = do
         pure $ f {funBody = bod'}
       else pure f
 
-parAllocExp :: DDefs2 -> Env2 Ty2 -> RegEnv -> AfterEnv -> LetLocAfters -> [Binds (L Exp2)] -> S.Set Var
-            -> L Exp2 -> PassM (L Exp2)
-parAllocExp ddefs env2 reg_env after_env afters pending_binds spawned (L p ex) = L p <$>
+parAllocExp :: DDefs2 -> Env2 Ty2 -> RegEnv -> AfterEnv -> LetLocAfters -> [Binds Exp2] -> S.Set Var
+            -> Exp2 -> PassM Exp2
+parAllocExp ddefs env2 reg_env after_env afters pending_binds spawned ex =
   case ex of
-    LetE (v, endlocs, ty, L _ (SpawnE f locs args)) bod -> do
+    LetE (v, endlocs, ty, (SpawnE f locs args)) bod -> do
       let env2' = extendVEnv v ty env2
           spawned' = S.insert v spawned
           newlocs = map (\loc -> M.findWithDefault loc loc after_env) locs
@@ -93,9 +92,9 @@ parAllocExp ddefs env2 reg_env after_env afters pending_binds spawned (L p ex) =
                        reg_env afters'
       args' <- mapM go args
       bod'  <- parAllocExp ddefs env2' reg_env' after_env afters' pending_binds spawned' bod
-      pure $ LetE (v, endlocs, ty', l$ (SpawnE f newlocs args')) bod'
+      pure $ LetE (v, endlocs, ty', (SpawnE f newlocs args')) bod'
 
-    LetE (v, endlocs, ty, L _ SyncE) bod -> do
+    LetE (v, endlocs, ty, SyncE) bod -> do
       let env2' = extendVEnv v ty env2
           -- spawned' = S.insert v spawned
       bod1 <- parAllocExp ddefs env2' reg_env M.empty [] [] S.empty bod
@@ -108,15 +107,15 @@ parAllocExp ddefs env2 reg_env after_env afters pending_binds spawned (L p ex) =
                                                   _ -> acc2)
                                        Nothing (M.elems (vEnv env2))
                         indr_dcon = head $ filter isIndirectionTag $ getConOrdering ddefs tycon
-                        rhs = l$ Ext $ IndirectionE tycon indr_dcon (from, reg_env M.! from) (to, reg_env M.! to) (l$ AppE "nocopy" [] [])
-                    pure $ l$ LetE (indr, [], PackedTy tycon from, rhs) acc)
+                        rhs = Ext $ IndirectionE tycon indr_dcon (from, reg_env M.! from) (to, reg_env M.! to) (AppE "nocopy" [] [])
+                    pure $ LetE (indr, [], PackedTy tycon from, rhs) acc)
                  bod1 (M.toList after_env)
       let bod3 = foldl
-                     (\acc (loc1, (w, loc2)) -> l$ Ext $ LetLocE loc1 (AfterVariableLE w loc2) $ acc)
+                     (\acc (loc1, (w, loc2)) -> Ext $ LetLocE loc1 (AfterVariableLE w loc2) $ acc)
                      bod2 afters
 
           bod4 = mkLets pending_binds bod3
-      pure $ LetE (v, endlocs, ty, l$ SyncE) bod4
+      pure $ LetE (v, endlocs, ty, SyncE) bod4
 
     AppE f locs args -> do
       let newlocs = map (\loc -> M.findWithDefault loc loc after_env) locs
@@ -142,7 +141,7 @@ parAllocExp ddefs env2 reg_env after_env afters pending_binds spawned (L p ex) =
         rhs' <- go rhs
         let pending_binds' = (v, locs, ty, rhs'):pending_binds
             spawned' = S.insert v spawned
-        unLoc <$> parAllocExp ddefs env2' reg_env' after_env afters' pending_binds' spawned' bod
+        parAllocExp ddefs env2' reg_env' after_env afters' pending_binds' spawned' bod
 
     -- Straightforward recursion
     VarE{}     -> pure ex
@@ -153,7 +152,7 @@ parAllocExp ddefs env2 reg_env after_env afters pending_binds spawned (L p ex) =
     IfE a b c  -> IfE <$> go a <*> go b <*> go c
     MkProdE ls -> MkProdE <$> mapM go ls
     CaseE scrt mp -> do
-      let L _ (VarE v) = scrt
+      let (VarE v) = scrt
           PackedTy _ tyloc = lookupVEnv v env2
           reg = reg_env M.! tyloc
       CaseE scrt <$> mapM (docase reg env2 reg_env after_env afters pending_binds spawned) mp
@@ -179,7 +178,7 @@ parAllocExp ddefs env2 reg_env after_env afters pending_binds spawned (L p ex) =
                   afters'    = (loc, (v, loc2)) : afters
               bod' <- parAllocExp ddefs env2 reg_env' after_env' afters' pending_binds spawned bod
               pure $ Ext $ LetRegionE newreg $
-                           l$ Ext $ LetLocE newloc (StartOfLE newreg) $
+                           Ext $ LetLocE newloc (StartOfLE newreg) $
                            bod'
 
             _ -> do

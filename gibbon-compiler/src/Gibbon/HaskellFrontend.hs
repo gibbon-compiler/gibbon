@@ -5,7 +5,6 @@ module Gibbon.HaskellFrontend
   ( parseFile, primMap, multiArgsToOne ) where
 
 import           Data.Foldable ( foldrM )
-import           Data.Loc as Loc
 import           Data.Maybe (catMaybes)
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -33,8 +32,8 @@ parseFile path = do
 
 data TopLevel
   = HDDef (DDef Ty0)
-  | HFunDef (FunDef (L Exp0))
-  | HMain (Maybe (L Exp0, Ty0))
+  | HFunDef (FunDef Exp0)
+  | HMain (Maybe (Exp0, Ty0))
   | HAnnotation (Var, [Int])
   deriving (Show, Eq)
 
@@ -190,14 +189,14 @@ primMap = M.fromList
   , ("readint", ReadInt)
   ]
 
-desugarExp :: (Show a, Pretty a) => TopTyEnv -> Exp a -> PassM (L Exp0)
-desugarExp toplevel e = L NoLoc <$>
+desugarExp :: (Show a, Pretty a) => TopTyEnv -> Exp a -> PassM Exp0
+desugarExp toplevel e =
   case e of
     Paren _ (ExpTypeSig _ (App _ (H.Var _ f) (Lit _ lit)) tyc)
         | (qnameToStr f) == "error" -> pure $ PrimAppE (ErrorP (litToString lit) (desugarType tyc)) []
     -- Paren _ (App _ (H.Var _ f) (Lit _ lit))
     --     | (qnameToStr f) == "error" -> pure $ PrimAppE (ErrorP (litToString lit
-    Paren _ e2 -> Loc.unLoc <$> desugarExp toplevel e2
+    Paren _ e2 -> desugarExp toplevel e2
     H.Var _ qv -> do
       let v = (toVar $ qnameToStr qv)
       if v == "gensym"
@@ -232,7 +231,7 @@ desugarExp toplevel e = L NoLoc <$>
 
     App _ e1 e2 -> do
         desugarExp toplevel e1 >>= \case
-          L _ (VarE f) ->
+          (VarE f) ->
             case M.lookup (fromVar f) primMap of
               Just p  -> (\e2' -> PrimAppE p [e2']) <$> desugarExp toplevel e2
               Nothing ->
@@ -296,7 +295,7 @@ desugarExp toplevel e = L NoLoc <$>
                     ty  <- newMetaTy
                     pure $ PrimAppE (VSnocP ty) [e2']
                   else AppE f [] <$> (: []) <$> desugarExp toplevel e2
-          L _ (DataConE tyapp c as) ->
+          (DataConE tyapp c as) ->
             case M.lookup c primMap of
               Just p  -> pure $ PrimAppE p as
               Nothing ->
@@ -305,26 +304,26 @@ desugarExp toplevel e = L NoLoc <$>
                          Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
                   else (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
-          L _ (Ext (ParE0 ls)) -> do
+          (Ext (ParE0 ls)) -> do
             e2' <- desugarExp toplevel e2
             pure $ Ext $ ParE0 (ls ++ [e2'])
-          L _ (AppE f [] ls) -> do
+          (AppE f [] ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ AppE f [] (ls ++ [e2'])
 
-          L _ (Ext (BenchE fn [] ls b)) -> do
+          (Ext (BenchE fn [] ls b)) -> do
             e2' <- desugarExp toplevel e2
             pure $ Ext $ BenchE fn [] (ls ++ [e2']) b
 
-          L _ (SpawnE fn [] ls) -> do
+          (SpawnE fn [] ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ SpawnE fn [] (ls ++ [e2'])
 
-          L _ (PrimAppE p ls) -> do
+          (PrimAppE p ls) -> do
             e2' <- desugarExp toplevel e2
             pure $ PrimAppE p (ls ++ [e2'])
 
-          L _ TimeIt{} ->
+          TimeIt{} ->
             error "desugarExp: TimeIt can only accept 1 expression."
 
           f -> error ("desugarExp: Couldn't parse function application: (: " ++ show f ++ ")")
@@ -332,7 +331,7 @@ desugarExp toplevel e = L NoLoc <$>
     Let _ (BDecls _ decls) rhs -> do
       rhs' <- desugarExp toplevel rhs
       let funtys = foldr collectTopTy M.empty decls
-      Loc.unLoc <$> foldrM (generateBind toplevel funtys) rhs' decls
+      foldrM (generateBind toplevel funtys) rhs' decls
 
     If _ a b c -> do
       a' <- desugarExp toplevel a
@@ -374,11 +373,11 @@ desugarExp toplevel e = L NoLoc <$>
 
     NegApp _ e1 -> do
       e1' <- desugarExp toplevel e1
-      pure $ PrimAppE SubP [l$ LitE 0, e1']
+      pure $ PrimAppE SubP [LitE 0, e1']
 
     _ -> error ("desugarExp: Unsupported expression: " ++ prettyPrint e)
 
-desugarFun :: (Show a,  Pretty a) => TopTyEnv -> TopTyEnv -> Decl a -> PassM (Var, [Var], TyScheme, L Exp0)
+desugarFun :: (Show a,  Pretty a) => TopTyEnv -> TopTyEnv -> Decl a -> PassM (Var, [Var], TyScheme, Exp0)
 desugarFun toplevel env decl =
   case decl of
     FunBind _ [Match _ fname pats (UnGuardedRhs _ bod) _where] -> do
@@ -396,7 +395,7 @@ desugarFun toplevel env decl =
       pure $ (fname_var, args, unCurryTopTy fun_ty, bod')
     _ -> error $ "desugarFun: Found a function with multiple RHS, " ++ prettyPrint decl
 
-multiArgsToOne :: [Var] -> [Ty0] -> L Exp0 -> (Var, L Exp0)
+multiArgsToOne :: [Var] -> [Ty0] -> Exp0 -> (Var, Exp0)
 multiArgsToOne args tys ex =
   let new_arg = toVar "multi_arg"
   in (new_arg, tuplizeRefs new_arg args tys ex)
@@ -506,7 +505,7 @@ desugarOp qop =
         Nothing -> error $ "desugarExp: Unsupported binary op: " ++ show op
     op -> error $ "desugarExp: Unsupported op: " ++ prettyPrint op
 
-desugarAlt :: (Show a,  Pretty a) => TopTyEnv -> Alt a -> PassM (DataCon, [(Var,Ty0)], L Exp0)
+desugarAlt :: (Show a,  Pretty a) => TopTyEnv -> Alt a -> PassM (DataCon, [(Var,Ty0)], Exp0)
 desugarAlt toplevel alt =
   case alt of
     Alt _ (PApp _ qname ps) (UnGuardedRhs _ rhs) Nothing -> do
@@ -523,7 +522,7 @@ desugarAlt toplevel alt =
     Alt _ _ _ Just{}        -> error "desugarExp: Where clauses not allowed in case."
     Alt _ pat _ _           -> error $ "desugarExp: Unsupported pattern in case: " ++ prettyPrint pat
 
-generateBind :: (Show a,  Pretty a) => TopTyEnv -> TopTyEnv -> Decl a -> L Exp0 -> PassM (L Exp0)
+generateBind :: (Show a,  Pretty a) => TopTyEnv -> TopTyEnv -> Decl a -> Exp0 -> PassM (Exp0)
 generateBind toplevel env decl exp2 =
   case decl of
     -- 'collectTopTy' takes care of this.
@@ -534,8 +533,8 @@ generateBind toplevel env decl exp2 =
       rhs' <- desugarExp toplevel rhs
       w <- gensym "tup"
       ty' <- newMetaTy
-      let tupexp e = l$ LetE (w,[],ty',rhs') e
-      prjexp <- generateTupleProjs toplevel env (zip pats [0..]) (l$ VarE w) exp2
+      let tupexp e = LetE (w,[],ty',rhs') e
+      prjexp <- generateTupleProjs toplevel env (zip pats [0..]) (VarE w) exp2
       pure $ tupexp prjexp
     PatBind _ pat (UnGuardedRhs _ rhs) Nothing -> do
       rhs' <- desugarExp toplevel rhs
@@ -546,18 +545,18 @@ generateBind toplevel env decl exp2 =
       ty' <- case M.lookup w env of
                 Nothing -> newMetaTy
                 Just (ForAll _ ty) -> pure ty
-      pure $ l$ LetE (w, [], ty', rhs') exp2
+      pure $ LetE (w, [], ty', rhs') exp2
     FunBind{} -> do (name,args,ty,bod) <- desugarFun toplevel env decl
-                    pure $ l$ LetE (name,[], tyFromScheme ty, l$ Ext $ LambdaE (zip args (inTys ty)) bod) exp2
+                    pure $ LetE (name,[], tyFromScheme ty, Ext $ LambdaE (zip args (inTys ty)) bod) exp2
     oth -> error ("generateBind: Unsupported pattern: " ++ prettyPrint oth)
 
-generateTupleProjs :: (Show a, Pretty a) => TopTyEnv -> TopTyEnv -> [(Pat a,Int)] -> L Exp0 -> L Exp0 -> PassM (L Exp0)
+generateTupleProjs :: (Show a, Pretty a) => TopTyEnv -> TopTyEnv -> [(Pat a,Int)] -> Exp0 -> Exp0 -> PassM (Exp0)
 generateTupleProjs toplevel env ((PVar _ v,n):pats) tup exp2 = do
     let w = toVar (nameToStr v)
     ty' <- case M.lookup w env of
              Nothing -> newMetaTy
              Just (ForAll _ ty) -> pure ty
-    let prjexp = l$ LetE (w,[],ty',l$ ProjE n tup) exp2
+    let prjexp = LetE (w,[],ty',ProjE n tup) exp2
     generateTupleProjs toplevel env pats tup prjexp
 generateTupleProjs _toplevel _env [] _tup exp2 =
     pure exp2
@@ -608,14 +607,15 @@ instance Pretty SrcSpanInfo where
 -- | SpawnE's are parsed in a strange way. If we see a 'spawn (f x1 x2)',
 -- we parse it as 'SpawnE HOLE [] [(f x1 x2)]'. This function patches it
 -- to 'SpawnE f [] [x1 x2]'.
-fixupSpawn :: L Exp0 -> L Exp0
-fixupSpawn (L p ex) = L p $
+fixupSpawn :: Exp0 -> Exp0
+fixupSpawn ex =
   case ex of
     Ext (LambdaE vars bod) -> Ext (LambdaE vars (go bod))
     Ext (PolyAppE a b)     -> Ext (PolyAppE (go a) (go b))
     Ext (FunRefE{})        -> ex
     Ext (BenchE fn tyapps args b) -> Ext (BenchE fn tyapps (map go args) b)
     Ext (ParE0 ls) -> Ext (ParE0 (map go ls))
+    Ext (L p e)    -> Ext (L p (go e))
     -- Straightforward recursion ...
     VarE{}     -> ex
     LitE{}     -> ex
@@ -633,7 +633,7 @@ fixupSpawn (L p ex) = L p $
     WithArenaE v e -> WithArenaE v (go e)
     SpawnE _ _ args ->
       case args of
-          [L _ (AppE fn tyapps ls)] -> SpawnE fn tyapps ls
+          [(AppE fn tyapps ls)] -> SpawnE fn tyapps ls
           _ -> error $ "fixupSpawn: incorrect use of spawn: " ++ sdoc ex
     SyncE   -> SyncE
     IsBigE e-> IsBigE (go e)
@@ -642,8 +642,8 @@ fixupSpawn (L p ex) = L p $
   where go = fixupSpawn
 
 -- | Verify some assumptions about BenchE.
-verifyBenchEAssumptions :: Bool -> L Exp0 -> L Exp0
-verifyBenchEAssumptions bench_allowed (L p ex) = L p $
+verifyBenchEAssumptions :: Bool -> Exp0 -> Exp0
+verifyBenchEAssumptions bench_allowed ex =
   case ex of
     Ext (LambdaE vars bod) -> Ext (LambdaE vars (not_allowed bod))
     Ext (PolyAppE a b)     -> Ext (PolyAppE (not_allowed a) (not_allowed b))
@@ -651,10 +651,11 @@ verifyBenchEAssumptions bench_allowed (L p ex) = L p $
     Ext (BenchE _ tyapps args b) ->
       if bench_allowed then
         case args of
-          (L _ (VarE fn) : oth) -> Ext (BenchE fn tyapps oth b)
+          ((VarE fn) : oth) -> Ext (BenchE fn tyapps oth b)
           _ -> error $ "desugarModule: bench is a reserved keyword. Usage: bench fn_name args. Got: " ++ sdoc args
       else error $ "verifyBenchEAssumptions: 'bench' can only be used as a tail of the main expression, but it was used in a function. In: " ++ sdoc ex
     Ext (ParE0 ls) -> Ext (ParE0 (map not_allowed ls))
+    Ext (L p e)    -> Ext (L p (go e))
     -- Straightforward recursion ...
     VarE{}     -> ex
     LitE{}     -> ex

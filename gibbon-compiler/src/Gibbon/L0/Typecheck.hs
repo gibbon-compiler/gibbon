@@ -9,7 +9,6 @@ import           Control.Monad.Except
 import           Control.Monad.Fail
 import           Data.Foldable ( foldlM )
 import           Data.List
-import           Data.Loc
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           Text.PrettyPrint hiding ( (<>) )
@@ -73,7 +72,7 @@ tcFun ddefs fenv fn@FunDef{funArgs,funTy,funBody} = do
     Right fn1 -> pure fn1
 
 tcExps :: DDefs0 -> Subst -> Gamma -> Gamma -> [TyVar]
-       -> [(Bool, L Exp0)] -> TcM (Subst, [Ty0], [L Exp0])
+       -> [(Bool, Exp0)] -> TcM (Subst, [Ty0], [Exp0])
 tcExps ddefs sbst venv fenv bound_tyvars ls = do
   (sbsts,tys,exps) <- unzip3 <$> mapM go ls
   pure (foldl (<>) sbst sbsts, tys, exps)
@@ -82,8 +81,8 @@ tcExps ddefs sbst venv fenv bound_tyvars ls = do
 
 --
 tcExp :: DDefs0 -> Subst -> Gamma -> Gamma -> [TyVar]
-      -> Bool -> L Exp0 -> TcM (Subst, Ty0, L Exp0)
-tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b, L loc c)) <$>
+      -> Bool -> Exp0 -> TcM (Subst, Ty0, Exp0)
+tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
   case ex of
     VarE x -> do
       (metas, ty) <-
@@ -107,15 +106,15 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
 
       if isCallUnsaturated sigma args
       then do
-        e' <- saturateCall sigma e
+        e' <- saturateCall sigma ex
         (s1, e_ty, e'') <- tcExp ddefs sbst venv fenv bound_tyvars is_main e'
-        pure (s1, e_ty, unLoc e'')
+        pure (s1, e_ty, e'')
       else do
         (s2, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) args)
         let fn_ty_inst' = zonkTy s2 fn_ty_inst
-        s3 <- unifyl e (arrIns' fn_ty_inst') arg_tys
+        s3 <- unifyl ex (arrIns' fn_ty_inst') arg_tys
         fresh <- newMetaTy
-        s4 <- unify e (ArrowTy arg_tys fresh) fn_ty_inst'
+        s4 <- unify ex (ArrowTy arg_tys fresh) fn_ty_inst'
         -- Fill in type applications for specialization...
         --     id 10 ===> id [Int] 10
         let tyapps = map (zonkTy s3) metas
@@ -247,7 +246,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
           let [a] = arg_tys'
           s2 <- unify (args !! 0) ArenaTy a
           case args !! 0 of
-            L _ (VarE var) ->
+            (VarE var) ->
                 pure (s1 <> s2, SymDictTy (Just var) ty,
                          PrimAppE pr args_tc)
             _ -> err $ text "Expected arena variable argument in: " <+> exp_doc
@@ -260,7 +259,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
           s4 <- unify (args !! 3) ty v
           s5 <- unify (args !! 0) ArenaTy a
           case args !! 0 of
-            L _ (VarE var) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
+            (VarE var) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
                                        SymDictTy (Just var) ty,
                                        PrimAppE pr args_tc)
             _ -> err $ text "Expected arena variable argument in: " <+> exp_doc
@@ -350,7 +349,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
       (s2, t2, b_tc) <- tcExp ddefs s1 venv fenv bound_tyvars is_main b
       (s3, t3, c_tc) <- tcExp ddefs s2 venv fenv bound_tyvars is_main c
       s4 <- unify a t1 BoolTy
-      s5 <- unify e t2 t3
+      s5 <- unify ex t2 t3
       let s6 = s3 <> s4 <> s5
       pure (s6, zonkTy s6 t2,
             IfE (zonkExp s6 a_tc) (zonkExp s6 b_tc) (zonkExp s6 c_tc))
@@ -377,7 +376,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
                      then do
                        let ddf = lookupDDef ddefs tycon
                        ddf' <- substTyVarDDef ddf drvd_tyargs
-                       (s2,t2,brs_tc) <- tcCases ddefs s1 venv fenv bound_tyvars ddf' brs is_main e
+                       (s2,t2,brs_tc) <- tcCases ddefs s1 venv fenv bound_tyvars ddf' brs is_main ex
                        pure (s2, t2, CaseE scrt_tc brs_tc)
                      else err $ text "Couldn't match" <+> doc one
                                 <+> "with:" <+> doc scrt_ty
@@ -392,7 +391,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
     DataConE _tyapps dcon args -> do
       (metas, arg_tys_inst, ret_ty_inst) <- instDataConTy ddefs dcon
       (s1, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) args)
-      s2 <- unifyl e arg_tys_inst arg_tys
+      s2 <- unifyl ex arg_tys_inst arg_tys
       let s3 = s1 <> s2
           tyapps = ProdTy (map (zonkTy s3) metas)
       pure (s3, zonkTy s3 ret_ty_inst,
@@ -403,7 +402,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
                                (\(fs,env,s) (v,ty) -> do
                                  fresh <- newMetaTy
                                  let env' = M.insert v (ForAll [] fresh) env
-                                 s1 <- unify (l$ VarE v) ty fresh
+                                 s1 <- unify (VarE v) ty fresh
                                  pure (fs ++ [fresh], env', s1 <> s))
                                ([],venv, sbst)
                                args
@@ -423,8 +422,8 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
     Ext (BenchE fn tyapps args b) ->
       if is_main
       then do
-        (s1, ty, e') <- go (l$ AppE fn tyapps args)
-        case unLoc e' of
+        (s1, ty, e') <- go (AppE fn tyapps args)
+        case e' of
           AppE fn' tyapps' args' ->
             pure (s1, zonkTy s1 ty, Ext (BenchE fn' tyapps' args' b))
           _ -> err $ text "BenchE"
@@ -434,9 +433,11 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
       (s1, es_tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) es)
       pure (s1, ProdTy es_tys, Ext $ ParE0 es_tc)
 
+    Ext (L _ e) -> go e
+
     TimeIt a ty b -> do
       (s1, ty', a') <- go a
-      s2 <- unify e ty ty'
+      s2 <- unify ex ty ty'
       let s3 = s1 <> s2
       pure (s3, zonkTy s3 ty', TimeIt (zonkExp s3 a') (zonkTy s3 ty') b)
 
@@ -446,8 +447,8 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
       pure (s1, ty', WithArenaE v e1')
 
     SpawnE fn tyapps args -> do
-      (s1, ty, e') <- tcExp ddefs sbst venv fenv bound_tyvars is_main (l$ AppE fn tyapps args)
-      case unLoc e' of
+      (s1, ty, e') <- tcExp ddefs sbst venv fenv bound_tyvars is_main (AppE fn tyapps args)
+      case e' of
         AppE fn' tyapps' args' -> pure (s1, ty, SpawnE fn' tyapps' args')
         _ -> err $ text "SpawnE"
 
@@ -465,8 +466,8 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main e@(L loc ex) = (\(a,b,c) -> (a,b
 
 
 tcCases :: DDefs0 -> Subst -> Gamma -> Gamma -> [TyVar]
-        -> DDef0 -> [(DataCon, [(Var, Ty0)], L Exp0)] -> Bool -> L Exp0
-        -> TcM (Subst, Ty0, [(DataCon, [(Var, Ty0)], L Exp0)])
+        -> DDef0 -> [(DataCon, [(Var, Ty0)], Exp0)] -> Bool -> Exp0
+        -> TcM (Subst, Ty0, [(DataCon, [(Var, Ty0)], Exp0)])
 tcCases ddefs sbst venv fenv bound_tyvars ddf brs is_main ex = do
   (s1,tys,exps) <-
     foldlM
@@ -610,8 +611,8 @@ zonkTyEnv :: Subst -> Gamma -> Gamma
 zonkTyEnv s env = M.map (zonkTyScheme s) env
 
 -- Apply a substitution to an expression i.e substitue all types in it.
-zonkExp :: Subst -> L Exp0 -> L Exp0
-zonkExp s (L p ex) = L p $
+zonkExp :: Subst -> Exp0 -> Exp0
+zonkExp s ex =
   case ex of
     VarE{}    -> ex
     LitE{}    -> ex
@@ -650,6 +651,7 @@ zonkExp s (L p ex) = L p $
     Ext (BenchE fn tyapps args b) -> let tyapps1 = map (zonkTy s) tyapps
                                      in Ext (BenchE fn tyapps1 (map go args) b)
     Ext (ParE0 ls) -> Ext $ ParE0 (map go ls)
+    Ext (L p e)    -> Ext $ L p (go e)
     SpawnE fn tyapps args -> let tyapps1 = map (zonkTy s) tyapps
                              in SpawnE fn tyapps1 (map go args)
     SyncE    -> SyncE
@@ -678,8 +680,8 @@ substTyVarDDef d@DDef{tyArgs,dataCons} tys =
            , dataCons = dcons' }
 
 -- Substitue all tyvars in an expression.
-substTyVarExp :: M.Map TyVar Ty0 -> L Exp0 -> L Exp0
-substTyVarExp s (L p ex) = L p $
+substTyVarExp :: M.Map TyVar Ty0 -> Exp0 -> Exp0
+substTyVarExp s ex =
   case ex of
     VarE{}    -> ex
     LitE{}    -> ex
@@ -709,6 +711,7 @@ substTyVarExp s (L p ex) = L p $
     Ext (BenchE fn tyapps args b) -> let tyapps1 = map (substTyVar s) tyapps
                                      in Ext (BenchE fn tyapps1 (map go args) b)
     Ext (ParE0 ls) -> Ext $ ParE0 (map go ls)
+    Ext (L p e)    -> Ext $ L p (go e)
     WithArenaE{} -> error "substTyVarExp: WithArenaE not handled."
     SpawnE f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
                            in SpawnE f tyapps1 (map go arg)
@@ -770,7 +773,7 @@ tyVarToMetaTy = go M.empty
 -- Unification
 --------------------------------------------------------------------------------
 
-unify :: L Exp0 -> Ty0 -> Ty0 -> TcM Subst
+unify :: Exp0 -> Ty0 -> Ty0 -> TcM Subst
 unify ex ty1 ty2
   | ty1 == ty2 = --dbgTraceIt (sdoc ty1 ++ "/" ++ sdoc ty2) $
                  pure emptySubst
@@ -803,7 +806,7 @@ unify ex ty1 ty2
                     $$ nest 2 (doc ex)
 
 
-unifyl :: L Exp0 -> [Ty0] -> [Ty0] -> TcM Subst
+unifyl :: Exp0 -> [Ty0] -> [Ty0] -> TcM Subst
 unifyl _ [] [] = pure emptySubst
 unifyl e (a:as) (b:bs) = do
     -- N.B. We must apply s1 over the rest of the list before unifying it, i.e.
@@ -818,7 +821,7 @@ unifyl e as bs = err $ text "Couldn't unify:" <+> doc as <+> text "and" <+> doc 
                          $$ text "In the expression: "
                          $$ nest 2 (doc e)
 
-unifyVar :: L Exp0 -> MetaTv -> Ty0 -> TcM Subst
+unifyVar :: Exp0 -> MetaTv -> Ty0 -> TcM Subst
 unifyVar ex a t
   | occursCheck a t = err $ text "Occurs check: cannot construct the inifinite type: "
                               $$ nest 2 (doc a <+> text " ~ " <+> doc t)
@@ -834,7 +837,7 @@ occursCheck a t = a `elem` metaTvsInTy t
 -- Other helpers
 --------------------------------------------------------------------------------
 
-ensureEqualTy :: L Exp0 -> Ty0 -> Ty0 -> TcM ()
+ensureEqualTy :: Exp0 -> Ty0 -> Ty0 -> TcM ()
 ensureEqualTy ex ty1 ty2
   | ty1 == ty2 = pure ()
   | otherwise  = err $ text "Couldn't match expected type:" <+> doc ty1

@@ -8,7 +8,6 @@ import Test.Tasty.TH
 import Test.Tasty
 
 import Control.Monad.Except
-import Data.Loc
 import Data.Map as M
 import Data.Set as S
 
@@ -16,7 +15,7 @@ import Gibbon.Common hiding (FunDef)
 import Gibbon.L1.Syntax
 import Gibbon.L1.Typecheck
 
-type Exp = L Exp1
+type Exp = Exp1
 
 -- |
 assertValue :: Exp -> Ty1 -> Assertion
@@ -57,65 +56,65 @@ l1TypecheckerTests = $(testGroupGenerator)
 --------------------------------------------------------------------------------
 
 -- t6 :: Exp
--- t6 = l$ LetE ("d0",
+-- t6 = LetE ("d0",
 --               [],
 --               SymDictTy IntTy,
---               l$ PrimAppE (DictEmptyP IntTy) [])
---      (l$ LetE ("d21",
+--               PrimAppE (DictEmptyP IntTy) [])
+--      (LetE ("d21",
 --                [],
 --                SymDictTy IntTy,
---                l$ PrimAppE (DictInsertP IntTy) [l$ VarE "d0",l$ LitSymE "hi",l$ LitE 200])
---       (l$ LitE 44))
+--                PrimAppE (DictInsertP IntTy) [VarE "d0",LitSymE "hi",LitE 200])
+--       (LitE 44))
 
 -- case_test_6 :: Assertion
 -- case_test_6 = assertValue t6 IntTy
 
 t5 :: Exp
-t5 = l$  CaseE (l$ DataConE () "B" [l$  LitE 2, l$ LitE 4])
-     [("A", [("x", ())], l$ VarE "x"),
-      ("B", [("x", ()),("y", ())], l$ PrimAppE MkFalse [])]
+t5 =  CaseE (DataConE () "B" [ LitE 2, LitE 4])
+     [("A", [("x", ())], VarE "x"),
+      ("B", [("x", ()),("y", ())], PrimAppE MkFalse [])]
 
 
 case_test_5 :: Assertion
 case_test_5 = assertError t5 expected
   where expected =  GenericTC "Case branches have mismatched types: IntTy, BoolTy"
-                    (l$ PrimAppE MkFalse [])
+                    (PrimAppE MkFalse [])
 
 case_test_4 :: Assertion
 case_test_4 = assertError t4 expected
   where expected = GenericTC "Expected these types to be the same: IntTy, BoolTy"
-                   (l$ PrimAppE MkTrue [])
+                   (PrimAppE MkTrue [])
 
 
 t4 :: Exp
-t4 = l$ LetE ("ev",[], PackedTy "Foo" (), l$ DataConE () "A" [l$ PrimAppE MkTrue []]) $
-     l$ CaseE (l$ VarE "ev")
-     [("A", [], (l$ LitE 10)),
-      ("B", [("x", ()),("y", ())], l$ LitE 200)]
+t4 = LetE ("ev",[], PackedTy "Foo" (), DataConE () "A" [PrimAppE MkTrue []]) $
+     CaseE (VarE "ev")
+     [("A", [], (LitE 10)),
+      ("B", [("x", ()),("y", ())], LitE 200)]
 
 case_test_3 :: Assertion
 case_test_3 = assertValue t3 IntTy
 
 t3 :: Exp
-t3 = l$ IfE (l$ PrimAppE EqIntP [l$  LitE 1, l$  LitE 1])
-     (l$ IfE (l$  PrimAppE EqIntP [l$  LitE 2, l$  LitE 2])
-       (l$  LitE 100)
-       (l$  LitE 1))
-     (l$  LitE 2)
+t3 = IfE (PrimAppE EqIntP [ LitE 1,  LitE 1])
+     (IfE ( PrimAppE EqIntP [ LitE 2,  LitE 2])
+       ( LitE 100)
+       ( LitE 1))
+     ( LitE 2)
 
 case_test_2 :: Assertion
 case_test_2 = assertValue t2 (PackedTy "Foo" ())
 
 t2 :: Exp
-t2 = l$  DataConE () "A" [l$  LitE 10]
+t2 =  DataConE () "A" [ LitE 10]
 
 
 case_test_1 :: Assertion
 case_test_1 = assertValue t1 IntTy
 
 t1 :: Exp
-t1 = l$  AppE "mul" []
-     [l$ LitE 10, l$ AppE "add" [] [l$ LitE 40, l$ LitE 2]]
+t1 =  AppE "mul" []
+     [LitE 10, AppE "add" [] [LitE 40, LitE 2]]
 
 
 t1Prog :: Prog1
@@ -125,17 +124,17 @@ t1Prog = Prog {ddefs = M.fromList [],
                     FunDef {funName = "mul2",
                             funArgs = ["x_y1"],
                             funTy = ([IntTy,IntTy] , IntTy),
-                            funBody = l$ PrimAppE MulP
-                                      [(l$ VarE "x_y1"), (l$ VarE "x_y1")]}),
+                            funBody = PrimAppE MulP
+                                      [(VarE "x_y1"), (VarE "x_y1")]}),
                    ("add2",
                     FunDef {funName = "add2",
                             funArgs = ["x_y0"],
                             funTy = ([IntTy,IntTy], IntTy),
-                            funBody = l$ PrimAppE AddP
-                                      [(l$ VarE "x_y0"),
-                                       (l$ VarE "x_y0")]})],
+                            funBody = PrimAppE AddP
+                                      [(VarE "x_y0"),
+                                       (VarE "x_y0")]})],
         mainExp = Just
-                  ( l$  AppE "mul2" [] [l$ LitE 10, l$ AppE "add2" [] [l$ LitE 40, l$ LitE 2]]
+                  (  AppE "mul2" [] [LitE 10, AppE "add2" [] [LitE 40, LitE 2]]
                   , IntTy)
               }
 
