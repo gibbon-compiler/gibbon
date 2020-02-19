@@ -111,6 +111,47 @@ harvestStructTys (Prog _ funs mtal) =
        (TailCall _ _)    -> []
        (Goto _) -> []
 
+sortFns :: Prog -> S.Set Var
+sortFns (Prog _ funs mtal) = foldl go S.empty allTails
+  where
+    allTails = (case mtal of
+                Just (PrintExp t) -> [t]
+                Nothing -> []) ++
+             map funBody funs
+
+    go acc tl =
+      case tl of
+        RetValsT{} -> acc
+        AssnValsT _ mb_bod -> case mb_bod of
+                                Just bod -> go acc bod
+                                Nothing  -> acc
+        LetCallT{bod} -> go acc bod
+        LetPrimCallT{prim,bod,rands} ->
+          case prim of
+            VSortP{} ->
+              let [_,VarTriv fp] = rands
+              in go (S.insert fp acc) bod
+            _ -> go acc bod
+        LetTrivT{bod}   -> go acc bod
+        LetIfT{ife,bod} ->
+          let (_,a,b) = ife
+          in go (go (go acc a) b) bod
+        LetUnpackT{bod} -> go acc bod
+        LetAllocT{bod}  -> go acc bod
+        IfT{con,els}    -> go (go acc con) els
+        ErrT{} -> acc
+        LetTimedT{timed,bod} -> go (go acc timed) bod
+        Switch _ _ alts mb_tl ->
+          let acc1 = case mb_tl of
+                       Nothing -> acc
+                       Just tl -> go acc tl
+          in case alts of
+               TagAlts ls -> foldr (\(_,b) ac -> go ac b) acc1 ls
+               IntAlts ls -> foldr (\(_,b) ac -> go ac b) acc1 ls
+        TailCall{}     -> acc
+        Goto{}         -> acc
+        LetArenaT{bod} -> go acc bod
+
 --------------------------------------------------------------------------------
 -- * C codegen
 
@@ -132,8 +173,10 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
     where
       init_fun_env = foldr (\fn acc -> M.insert (funName fn) (map snd (funArgs fn), funRetTy fn) acc) M.empty funs
 
+      sort_fns = sortFns prg
+
       defs = fst $ runPassM cfg 0 $ do
-        (prots,funs') <- unzip <$> mapM codegenFun funs
+        (prots,funs') <- (unzip . concat) <$> mapM codegenFun funs
         main_expr' <- main_expr
         let struct_tys = uniqueDicts $ S.toList $ harvestStructTys prg
         return ((L.nub $ makeStructs struct_tys) ++ prots ++ funs' ++ [main_expr'])
@@ -152,11 +195,43 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
           do let retTy   = codegenTy ty
                  params  = map (\(v,t) -> [cparam| $ty:(codegenTy t) $id:v |]) args
                  init_venv = M.fromList args
-             body <- codegenTail init_venv init_fun_env tal ty []
-             let fun     = [cfun| $ty:retTy $id:nam ($params:params) {
-                            $items:body
-                     } |]
-             return fun
+             if S.member nam sort_fns
+             then do
+               -- See codegenSortFn
+               let nam' = varAppend nam (toVar "_original")
+               body <- codegenTail init_venv init_fun_env tal ty []
+               let fun = [cfun| $ty:retTy $id:nam' ($params:params) {
+                                $items:body
+                                } |]
+               return fun
+             else do
+               body <- codegenTail init_venv init_fun_env tal ty []
+               let fun = [cfun| $ty:retTy $id:nam ($params:params) {
+                                $items:body
+                                } |]
+               return fun
+
+      -- C's qsort expects a sort function to be of type, (void*  a, void* b) : int.
+      -- But there's no way for a user to write a function of this type. So we generate
+      -- the function that the user wrote with a different_name, and then codegenSortFn
+      -- generates the actual sort function; which reads the values from these void*
+      -- pointers and calls the user written one after that.
+      codegenSortFn :: FunDecl -> PassM C.Func
+      codegenSortFn (FunDecl nam args _ty _tal _) = do
+        let nam' = varAppend nam (toVar "_original")
+            ([v0,v1],[ty0,ty1]) = unzip args
+            retTy      = codegenTy IntTy
+            params     = map (\v -> [cparam| const void* $id:v |]) [v0,v1]
+        tmpa <- gensym "fst"
+        tmpb <- gensym "snd"
+        let bod = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:tmpa = *($ty:(codegenTy ty0) *) $id:v0; |]
+                  , C.BlockDecl [cdecl| $ty:(codegenTy ty1) $id:tmpb = *($ty:(codegenTy ty1) *) $id:v1; |]
+                  , C.BlockStm  [cstm| return $id:nam'($id:tmpa, $id:tmpb);|]
+                  ]
+            fun = [cfun| $ty:retTy $id:nam ($params:params) {
+                          $items:bod
+                       } |]
+        return fun
 
       makeProt :: C.Func -> Bool -> PassM C.InitGroup
       makeProt fn ispure = do
@@ -170,11 +245,17 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
         then return $ C.InitGroup decl_spec [purattr] inits lc
         else return prot
 
-      codegenFun :: FunDecl -> PassM (C.Definition, C.Definition)
-      codegenFun fd =
+      codegenFun :: FunDecl -> PassM [(C.Definition, C.Definition)]
+      codegenFun fd@FunDecl{funName} =
           do fun <- codegenFun' fd
              prot <- makeProt fun (isPure fd)
-             return (C.DecDef prot noLoc, C.FuncDef fun noLoc)
+             sort_fn <- if S.member funName sort_fns
+                        then do
+                          fun' <- codegenSortFn fd
+                          let prot = C.funcProto fun'
+                          pure [(C.DecDef prot noLoc, C.FuncDef fun' noLoc)]
+                        else pure []
+             return $ [(C.DecDef prot noLoc, C.FuncDef fun noLoc)] ++ sort_fn
 
       mkSymTable :: [C.BlockItem]
       mkSymTable =
@@ -191,9 +272,6 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
           )
           (M.toList sym_tbl)
 
--- S.filter (\x -> case x of
---                       [ListTy{}] -> False
---                       _          -> True) $
 
 makeStructs :: [[Ty]] -> [C.Definition]
 makeStructs [] = []
@@ -751,7 +829,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        ty_name  = case ty of
                          IntTy      -> makeName' ty
                          ProdTy tys -> makeName tys
-                         _ -> "makeStructs: Lists of type " ++ sdoc ty ++ " not allowed."
+                         _ -> "codegenTail: Lists of type " ++ sdoc ty ++ " not allowed."
                        icd_name = ty_name ++ "_icd"
                    tmp <- gensym "tmp"
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
@@ -759,6 +837,19 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                           , C.BlockStm  [cstm| utarray_concat($id:outV,$id:old_ls); |]
                           , C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
                           , C.BlockStm  [cstm| utarray_push_back($id:outV, &($id:tmp)); |]
+                          ]
+                 VSortP ty -> do
+                   let [(outV,_)] = bnds
+                       [VarTriv old_ls, VarTriv sort_fn] = rnds
+                       ty_name  = case ty of
+                         IntTy      -> makeName' ty
+                         ProdTy tys -> makeName tys
+                         _ -> "codegenTail: Lists of type " ++ sdoc ty ++ " not allowed."
+                       icd_name = ty_name ++ "_icd"
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
+                          , C.BlockStm [cstm| utarray_new($id:outV,&($id:icd_name)); |]
+                          , C.BlockStm [cstm| utarray_inserta($id:outV,$id:old_ls,0); |]
+                          , C.BlockStm [cstm| utarray_sort($id:outV, $id:sort_fn); |]
                           ]
 
                  BumpArenaRefCount{} -> error "codegen: BumpArenaRefCount not handled."

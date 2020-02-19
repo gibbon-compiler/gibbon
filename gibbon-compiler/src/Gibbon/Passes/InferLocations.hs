@@ -785,6 +785,20 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                      dummyDty <- dummyTyLocs dty'
                      return (PrimAppE (DictHasKeyP dummyDty) [d',k'], BoolTy, [])
 
+    -- Special case for VSortP because we don't want to lookup fp in
+    -- the type environment.
+    PrimAppE pr@(VSortP{}) [VarE ls, VarE fp] ->
+      case dest of
+        SingleDest d -> err $ "Cannot unify primop " ++ sdoc pr ++ " with destination " ++ sdoc d
+        TupleDest  d -> err $ "Cannot unify primop " ++ sdoc pr ++ " with destination " ++ sdoc d
+        NoDest -> do results <- mapM (\e -> inferExp env e NoDest) [VarE ls]
+                     -- Assume arguments to PrimAppE are trivial
+                     -- so there's no need to deal with constraints or locations
+                     ty <- lift $ lift $ convertTy $ primRetTy pr
+                     pr' <- lift $ lift $ prim pr
+                     let args = [a | (a,_,_) <- results] ++ [VarE fp]
+                     return (PrimAppE pr' args, ty, [])
+
     PrimAppE pr es ->
       case dest of
         SingleDest d -> err $ "Cannot unify primop " ++ sdoc pr ++ " with destination " ++ sdoc d
@@ -916,6 +930,19 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           fcs <- tryInRegion cs'''
           tryBindReg (L2.LetE (vr,[],ty,e) bod'', ty'', fcs)
 
+        -- Special case for VSortP because we don't want to lookup fp in
+        -- the type environment.
+        PrimAppE p@(VSortP ty) [VarE ls, VarE fp] -> do
+          lsrec <- mapM (\e -> inferExp env e NoDest) [VarE ls]
+          ty <- lift $ lift $ convertTy bty
+          (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
+          let ls' = [a | (a,_,_) <- lsrec] ++ [VarE fp]
+              cs'' = concat $ [c | (_,_,c) <- lsrec]
+          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ cs'')
+          fcs <- tryInRegion cs'''
+          p' <- lift $ lift $ prim p
+          tryBindReg (L2.LetE (vr,[],ty, L2.PrimAppE p' ls') bod'', ty'', fcs)
+
         PrimAppE p ls -> do
           lsrec <- mapM (\e -> inferExp env e NoDest) ls
           ty <- lift $ lift $ convertTy bty
@@ -925,8 +952,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ cs'')
           fcs <- tryInRegion cs'''
           p' <- lift $ lift $ prim p
-          tryBindReg (L2.LetE (vr,[],ty, L2.PrimAppE p' ls') bod'',
-                    ty'', fcs)
+          tryBindReg (L2.LetE (vr,[],ty, L2.PrimAppE p' ls') bod'', ty'', fcs)
 
         DataConE _loc k ls  -> do
           loc <- lift $ lift $ freshLocVar "datacon"
@@ -1557,6 +1583,7 @@ prim p = case p of
            VLengthP dty -> convertTy dty >>= return . VLengthP
            VUpdateP dty -> convertTy dty >>= return . VUpdateP
            VSnocP dty   -> convertTy dty >>= return . VSnocP
+           VSortP dty   -> convertTy dty >>= return . VSortP
            SymAppend{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            SymSetEmpty{} -> err $ "prim: SymSetEmpty not handled."

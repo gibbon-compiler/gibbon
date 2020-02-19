@@ -162,7 +162,18 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         LitSymE v -> L1.LitSymE v
         AppE f [] args   -> AppE f [] (map toL1Exp args)
         AppE _ (_:_) _   -> err1 (sdoc ex)
-        PrimAppE pr args -> PrimAppE (toL1Prim pr) (map toL1Exp args)
+        PrimAppE pr args ->
+          case pr of
+            -- This is always going to have a function reference which
+            -- we cannot eliminate.
+            VSortP{} ->
+              case args of
+                [ls, Ext (FunRefE _ fp)] ->
+                  PrimAppE (toL1Prim pr) [toL1Exp ls, VarE fp]
+                [ls, Ext (L _ (Ext (FunRefE _ fp)))] ->
+                  PrimAppE (toL1Prim pr) [toL1Exp ls, VarE fp]
+                _ -> PrimAppE (toL1Prim pr)(map toL1Exp args)
+            _ -> PrimAppE (toL1Prim pr) (map toL1Exp args)
         LetE (v,[],ty,rhs) bod -> LetE (v,[], toL1Ty ty, toL1Exp rhs) (toL1Exp bod)
         LetE (_,(_:_),_,_) _ -> err1 (sdoc ex)
         IfE a b c  -> IfE (toL1Exp a) (toL1Exp b) (toL1Exp c)
@@ -1226,9 +1237,12 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
 --------------------------------------------------------------------------------
 
 elimParE0 :: Prog0 -> PassM Prog0
-elimParE0 prg@Prog{fundefs} = do
+elimParE0 prg@Prog{fundefs,mainExp} = do
   fundefs' <- mapM (\fn@FunDef{funBody} -> go funBody >>= \b -> pure $ fn {funBody = b}) fundefs
-  pure $ prg { fundefs = fundefs' }
+  mainExp' <- case mainExp of
+                Nothing     -> pure Nothing
+                Just (e,ty) -> Just <$> (,ty) <$> go e
+  pure $ prg { fundefs = fundefs', mainExp = mainExp' }
   where
     err1 msg = error $ "elimParE0: " ++ msg
 
@@ -1240,7 +1254,19 @@ elimParE0 prg@Prog{fundefs} = do
         LitE{}    -> pure ex
         LitSymE{} -> pure ex
         AppE f tyapps args-> AppE f tyapps <$> mapM go args
-        PrimAppE pr args  -> PrimAppE pr <$> mapM go args
+        PrimAppE pr args  -> do
+          -- This is always going to have a function reference which
+          -- we cannot eliminate.
+          let args' =
+                case pr of
+                  VSortP{} ->
+                    case args of
+                      [ls, Ext (FunRefE _ fp)]             -> [ls, VarE fp]
+                      [ls, Ext (L _ (Ext (FunRefE _ fp)))] -> [ls, VarE fp]
+                      _ -> error $ "specExp: vsort" ++ sdoc ex
+                  _ -> args
+          args'' <- mapM go args'
+          pure $ PrimAppE pr args''
         LetE (v,tyapps,ty@(ProdTy tys),(Ext (ParE0 ls))) bod -> do
           vs <- mapM (\_ -> gensym "par_") ls
           let ls' = foldr

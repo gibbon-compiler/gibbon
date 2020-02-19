@@ -63,7 +63,7 @@ interpProg1 rc Prog{ddefs,fundefs,mainExp} =
 interp :: forall l. ( Out l, Show l, Expression (E1Ext l (UrTy l)) )
        => RunConfig
        -> DDefs (TyOf (PreExp E1Ext l (UrTy l)))
-       -> M.Map Var (FunDef (PreExp E1Ext l (UrTy l)))
+       -> FunDefs (PreExp E1Ext l (UrTy l))
        -> (PreExp E1Ext l (UrTy l))
        -> WriterT Log (StateT Store IO) Value
 interp rc _ddefs fenv = go M.empty
@@ -81,6 +81,10 @@ interp rc _ddefs fenv = go M.empty
           LitSymE s -> return $ VSym (fromVar s)
           VarE v    -> return $ env # v
 
+          -- Don't sort for now
+          PrimAppE (VSortP{}) [ls,VarE fp] -> do
+            (VList vals) <- go env ls
+            applySortP env vals fp
           PrimAppE p ls -> do args <- mapM (go env) ls
                               return $ applyPrim rc p args
           ProjE ix ex   -> do VProd ls <- go env ex
@@ -177,6 +181,21 @@ interp rc _ddefs fenv = go M.empty
 
           MapE _ _bod    -> error "L1.Interp: finish MapE"
           FoldE _ _ _bod -> error "L1.Interp: finish FoldE"
+    applySortP :: ValEnv -> [Value] -> Var -> WriterT Log (StateT Store IO) Value
+    applySortP env ls f = do
+      let fn  = case M.lookup f fenv of
+                  Just fun -> fun
+                  Nothing -> error $ "L1.Interp: unbound function given to vsort: "++ndoc f
+          ls' = sortBy
+                (\a b ->
+                     let env' = M.union (M.fromList (zip (funArgs fn) [a,b])) env
+                         ((i,_),_) =
+                           unsafePerformIO $ runStateT (runWriterT (go env' (funBody fn))) (Store M.empty)
+                         VInt j = i
+                     in compare j 0)
+                ls
+      pure (VList ls')
+
 
 applyPrim :: (Show l) => RunConfig -> Prim (UrTy l) -> [Value] -> Value
 applyPrim rc p ls =

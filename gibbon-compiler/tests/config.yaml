@@ -281,6 +281,9 @@ tests:
   - name: Error.hs
     answer-file: examples/Error.ans
 
+  - name: Tuples.hs
+    answer-file: examples/Tuples.hs.ans
+
     ## Shouldn't typecheck
   - name: Fail1.hs
     dir: examples/should_fail

@@ -200,6 +200,7 @@ data Prim
     | VLengthP Ty
     | VUpdateP Ty
     | VSnocP Ty
+    | VSortP Ty
 
     | ReadPackedFile (Maybe FilePath) TyCon
 

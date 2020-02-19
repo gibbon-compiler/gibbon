@@ -201,6 +201,7 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       VLengthP{} -> text "vlength"
                                       VUpdateP{} -> text "vupdate"
                                       VSnocP{}   -> text "vsnoc"
+                                      VSortP{}   -> text "vsort"
                                       _ -> error $ "pprint: Unknown primitive: " ++ show pr
                       PPHaskell  -> case pr of
                                       DictEmptyP _ty  -> text "dictEmpty"
