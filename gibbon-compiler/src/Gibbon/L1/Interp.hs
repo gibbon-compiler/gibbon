@@ -205,9 +205,7 @@ applyPrim rc p ls =
    -- FIXME: randomIO does not guarentee unique numbers every time.
    (Gensym, [])            -> VSym $ "gensym_" ++ (show $ (unsafePerformIO randomIO :: Int) `mod` 1000)
    (AddP,[VInt x, VInt y]) -> VInt (x+y)
-   (SubP,[VInt x, VInt y]) -> if x == 0
-                              then error "L1.Interp: Can't run (0 - y)."
-                              else VInt (x-y)
+   (SubP,[VInt x, VInt y]) -> VInt (x-y)
    (MulP,[VInt x, VInt y]) -> VInt (x*y)
    (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
    (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
