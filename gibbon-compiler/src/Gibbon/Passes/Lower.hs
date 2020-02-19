@@ -334,23 +334,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
   fund :: M.Map String Word16 -> FunDef3 -> PassM T.FunDecl
   fund sym_tbl FunDef{funName,funTy,funArgs,funBody} = do
       let (intys, outty) = funTy
-      (args,bod) <- foldlM
-                      (\(acc, b) (arg, ty) ->
-                         case ty of
-                           -- ASSUMPTION: no nested tuples after unariser:
-                           ProdTy ls -> do let tys'  = L.map (fmap (const ())) ls
-                                               tys'' = L.map typ ls
-                                           (vs,e') <- eliminateProjs arg tys' b
-                                           return $
-                                             dbgTrace 7 (" [lower] unzipping funArg "++show arg++" to "++show vs) $
-                                             (acc ++ (zip vs tys''), e')
-                           _ -> return (acc ++ [(arg, typ ty)], b))
-                      ([], funBody)
-                      (zip funArgs intys)
-      -- let bod = funBody
+      let (args, bod) = (zip funArgs (map typ intys), funBody)
       bod' <- tail sym_tbl bod
       return T.FunDecl{ T.funName  = funName
-                      , T.funArgs  = args -- (zip funArgs $ map typ intys)
+                      , T.funArgs  = args
                       , T.funRetTy = typ outty
                       , T.funBody  = bod'
                       , T.isPure   = ispure funBody
