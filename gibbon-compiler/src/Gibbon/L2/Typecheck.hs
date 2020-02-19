@@ -180,8 +180,11 @@ tcExp ddfs env funs constrs regs tstatein exp =
              return (arrOut',tstate')
 
       PrimAppE pr es -> do
-
-               (tys,tstate) <- tcExps ddfs env funs constrs regs tstatein es
+               -- Special case because we can't lookup the type of the function pointer
+               let es' = case pr of
+                           VSortP{} -> init es
+                           _        -> es
+               (tys,tstate) <- tcExps ddfs env funs constrs regs tstatein es'
 
                -- Pattern matches would be one way to check length safely, but then the
                -- error would not go through our monad:
@@ -339,6 +342,27 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    _ <- ensureEqualTy exp (ListTy ty) ls
                    _ <- ensureEqualTy exp ty val
                    pure (ListTy ty, tstate)
+                 -- Given that the first argument is a list of type (ListTy t),
+                 -- ensure that the 2nd argument is function reference of type:
+                 -- ty -> ty -> Bool
+                 VSortP ty ->
+                   case (es !! 1) of
+                     VarE f -> do
+                       len2
+                       let [ls]   = tys
+                           fn_ty  = lookupFEnv f env
+                           in_tys = inTys fn_ty
+                           ret_ty = outTy fn_ty
+                           err x  = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
+                       _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+                       case in_tys of
+                         [a,b] -> do
+                            _ <- ensureEqualTy (es !! 1) a ty
+                            _ <- ensureEqualTy (es !! 1) b ty
+                            _ <- ensureEqualTy (es !! 1) ret_ty IntTy
+                            pure (ListTy ty, tstate)
+                         _ -> err fn_ty
+                     oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
                  PrintInt -> throwError $ GenericTC "PrintInt not handled" exp
                  PrintSym -> throwError $ GenericTC "PrintSym not handled" exp
                  ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp
@@ -581,7 +605,8 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
   case mainExp of
     Nothing -> return ()
     Just (e,t) ->
-        let res = runExcept $ tcExp ddefs (Env2 M.empty M.empty) fundefs
+        let init_env = progToEnv prg0
+            res = runExcept $ tcExp ddefs init_env fundefs
                     (ConstraintSet $ S.empty) (RegionSet $ S.empty)
                     (LocationTypeState $ M.empty) e
         in case res of
@@ -596,7 +621,8 @@ tcProg prg0@Prog{ddefs,fundefs,mainExp} = do
 
     fd :: FunDef2 -> PassM ()
     fd func@FunDef{funTy,funArgs,funBody} = do
-        let env = extendsVEnv (M.fromList $ zip funArgs (arrIns funTy)) emptyEnv2
+        let init_env = progToEnv prg0
+            env = extendsVEnv (M.fromList $ zip funArgs (arrIns funTy)) init_env
             constrs = funConstrs (locVars funTy)
             regs = funRegs (locVars funTy)
             tstate = funTState (locVars funTy)

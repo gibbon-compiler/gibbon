@@ -44,8 +44,8 @@ module Gibbon.Language.Syntax
 
     -- * Helpers operating on types
   , mkProdTy, projTy , voidTy, isProdTy, isNestedProdTy, isPackedTy, isScalarTy
-  , hasPacked, sizeOfTy, primArgsTy, primRetTy, dummyCursorTy, tyToDataCon
-  , stripTyLocs, isValidListTy, getPackedTys
+  , hasPacked, sizeOfTy, primArgsTy, primRetTy, tyToDataCon
+  , stripTyLocs, isValidListElemTy, getPackedTys
 
     -- * Misc
   , assertTriv, assertTrivs
@@ -446,8 +446,7 @@ data PreExp (ext :: * -> * -> *) loc dec =
    ----------------------------------------
   | Ext (ext loc dec) -- ^ Extension point for downstream language extensions.
 
-  deriving (Show, Read, Eq, Ord, Generic, NFData, Functor)
-  -- Foldable, Traversable - need instances for L in turn
+  deriving (Show, Read, Eq, Ord, Generic, NFData, Functor, Foldable, Traversable)
 
 
 instance (Out l, Show l, Show d, Out d, Expression (e l d))
@@ -485,7 +484,6 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         SyncE      -> False
         IsBigE{}   -> False
         Ext ext -> isTrivial ext
-
 
 -- | Free data variables.  Does not include function variables, which
 -- currently occupy a different namespace.  Does not include location/region variables.
@@ -650,6 +648,7 @@ data Prim ty
           | VLengthP ty -- ^ Length of the vector
           | VUpdateP ty -- ^ Update ith element of the vector
           | VSnocP ty   -- ^ Append an element to the end of the vector
+          | VSortP ty   -- ^ A sort primop that accepts a function pointer
 
           | ReadPackedFile (Maybe FilePath) TyCon (Maybe Var) ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
@@ -693,8 +692,8 @@ data UrTy a =
 
         | PackedTy TyCon a -- ^ No type arguments to TyCons for now.  (No polymorphism.)
 
-        | ListTy (UrTy a)  -- ^ These are not fully first class.  They are only
-                           -- allowed as the fields of data constructors.
+        | ListTy (UrTy a)  -- ^ Lists are decorated with the types of their elements;
+                           -- which can only include scalars or flat products of scalars.
 
         | ArenaTy -- ^ Collection of allocated, non-packed values
 
@@ -998,13 +997,12 @@ isScalarTy BoolTy = True
 isScalarTy _      = False
 
 -- | Lists of scalars or flat products of scalars are allowed.
-isValidListTy :: UrTy a -> Bool
-isValidListTy ty
+isValidListElemTy :: UrTy a -> Bool
+isValidListElemTy ty
   | isScalarTy ty = True
   | otherwise = case ty of
                   ProdTy tys -> all isScalarTy tys
                   _ -> False
-
 
 -- | Do values of this type contain packed data?
 hasPacked :: Show a => UrTy a -> Bool
@@ -1090,6 +1088,9 @@ primArgsTy p =
     VLengthP ty -> [ListTy ty]
     VUpdateP ty -> [ListTy ty, IntTy, ty]
     VSnocP ty   -> [ListTy ty, ty]
+    VSortP ty   -> [ListTy ty, voidTy] -- The voidTy is just a placeholder.
+                                       -- We don't have a type for
+                                       -- function pointers.
     PrintInt -> [IntTy]
     PrintSym -> [SymTy]
     ReadInt  -> []
@@ -1139,25 +1140,22 @@ primRetTy p =
     VLengthP{}  -> IntTy
     VUpdateP ty -> ListTy ty
     VSnocP ty   -> ListTy ty
+    VSortP ty   -> ListTy ty
     PrintInt -> IntTy
     PrintSym -> SymTy
     ReadInt  -> IntTy
-    SymSetEmpty -> SymSetTy
-    SymSetInsert -> SymSetTy
+    SymSetEmpty    -> SymSetTy
+    SymSetInsert   -> SymSetTy
     SymSetContains -> BoolTy
-    SymHashEmpty -> SymHashTy
-    SymHashInsert -> SymHashTy
-    SymHashLookup -> SymTy
+    SymHashEmpty   -> SymHashTy
+    SymHashInsert  -> SymHashTy
+    SymHashLookup  -> SymTy
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
     RequestEndOf  -> error "primRetTy: RequestEndOf not handled yet"
     IntHashEmpty  -> error "primRetTy: IntHashEmpty not handled yet"
     IntHashInsert -> error "primRetTy: IntHashInsert not handled yet"
     IntHashLookup -> error "primRetTy: IntHashLookup not handled yet"
-
-
-dummyCursorTy :: UrTy a
-dummyCursorTy = CursorTy
 
 stripTyLocs :: UrTy a -> UrTy ()
 stripTyLocs ty =
@@ -1174,7 +1172,6 @@ stripTyLocs ty =
     SymSetTy -> SymSetTy
     SymHashTy -> SymHashTy
     ArenaTy   -> ArenaTy
-
 
 -- | Get the data constructor type from a type, failing if it's not packed
 tyToDataCon :: Show a => UrTy a -> DataCon

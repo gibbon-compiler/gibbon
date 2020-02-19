@@ -167,7 +167,11 @@ tcExp isPacked ddfs env exp =
       return subFunOutTy
 
     PrimAppE pr es -> do
-      tys <- mapM go es
+      -- Special case because we can't lookup the type of the function pointer
+      let es' = case pr of
+                  VSortP{} -> init es
+                  _ -> es
+      tys <- mapM go es'
       let len0 = checkLen exp pr 0 es
           len1 = checkLen exp pr 1 es
           len2 = checkLen exp pr 2 es
@@ -351,6 +355,25 @@ tcExp isPacked ddfs env exp =
           _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
           _ <- ensureEqualTy (es !! 1) ty val
           pure (ListTy ty)
+
+        VSortP ty -> do
+          case (es !! 1) of
+            VarE f -> do
+              len2
+              let [ls]   = tys
+                  fn_ty  = lookupFEnv f env
+                  in_tys = inTys fn_ty
+                  ret_ty = outTy fn_ty
+                  err x  = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
+              _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+              case in_tys of
+                [a,b] -> do
+                   _ <- ensureEqualTy (es !! 1) a ty
+                   _ <- ensureEqualTy (es !! 1) b ty
+                   _ <- ensureEqualTy (es !! 1) ret_ty IntTy
+                   pure (ListTy ty)
+                _ -> err fn_ty
+            oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
         IntHashEmpty  -> error "L3.Typecheck: IntHashEmpty not handled."
         IntHashInsert -> error "L3.Typecheck: IntHashInsert not handled."

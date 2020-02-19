@@ -920,6 +920,7 @@ prim p =
     VLengthP ty   -> T.VLengthP (typ ty)
     VUpdateP ty   -> T.VUpdateP (typ ty)
     VSnocP ty     -> T.VSnocP (typ ty)
+    VSortP ty     -> T.VSortP (typ ty)
     SymSetEmpty   -> error "lower/prim: SymSetEmpty not handled"
     SymSetInsert  -> error "lower/prim: SymSetInsert not handled"
     SymSetContains-> error "lower/prim: SymSetContains not handled"

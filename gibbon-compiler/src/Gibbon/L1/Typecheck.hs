@@ -78,7 +78,10 @@ tcExp ddfs env exp =
       return subFunOutTy
 
     PrimAppE pr es -> do
-      tys <- mapM go es
+      -- Special case because we can't lookup the type of the function pointer
+      tys <- case pr of
+               VSortP{} -> mapM go (init es)
+               _ -> mapM go es
 
       let len0 = checkLen exp pr 0 es
           len1 = checkLen exp pr 1 es
@@ -192,7 +195,7 @@ tcExp ddfs env exp =
           len1
           let [a] = tys
           _ <- ensureEqualTy exp ArenaTy a
-          case es !! 0 of
+          case (es !! 0) of
             (VarE var) -> do ensureArenaScope exp env $ Just var
                              return $ SymDictTy (Just var) ty
             _ -> throwError $ GenericTC "Expected arena variable argument" exp
@@ -255,26 +258,20 @@ tcExp ddfs env exp =
 
         VEmptyP ty -> do
           len0
-          if isValidListTy ty
-          then pure (ListTy ty)
-          else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc ty) exp
+          checkLists ty (ListTy ty)
 
         VNthP ty -> do
           len2
           let [i,ls] = tys
           _ <- ensureEqualTy (es !! 0) IntTy i
           _ <- ensureEqualTy (es !! 1) (ListTy ty) ls
-          if isValidListTy ty
-          then pure ty
-          else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc ty) exp
+          checkLists ty ty
 
         VLengthP ty -> do
           len1
           let [ls] = tys
           _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
-          if isValidListTy ty
-          then pure IntTy
-          else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc ty) exp
+          checkLists ty IntTy
 
         VUpdateP ty -> do
           len3
@@ -282,18 +279,34 @@ tcExp ddfs env exp =
           _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
           _ <- ensureEqualTy (es !! 1) IntTy i
           _ <- ensureEqualTy (es !! 2) ty val
-          if isValidListTy ty
-          then pure (ListTy ty)
-          else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc ty) exp
+          checkLists ty (ListTy ty)
 
         VSnocP ty -> do
           len2
           let [ls,val] = tys
           _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
           _ <- ensureEqualTy (es !! 1) ty val
-          if isValidListTy ty
-          then pure (ListTy ty)
-          else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc ty) exp
+          checkLists ty (ListTy ty)
+
+        -- Given that the first argument is a list of type (ListTy t),
+        -- ensure that the 2nd argument is function reference of type:
+        -- ty -> ty -> IntTy
+        VSortP ty ->
+          case (es !! 1) of
+            VarE f -> do
+              len2
+              let [ls] = tys
+                  fn_ty@(in_tys, ret_ty) = lookupFEnv f env
+                  err x = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
+              _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+              case in_tys of
+                [a,b] -> do
+                   _ <- ensureEqualTy (es !! 1) a ty
+                   _ <- ensureEqualTy (es !! 1) b ty
+                   _ <- ensureEqualTy (es !! 1) ret_ty IntTy
+                   checkLists ty (ListTy ty)
+                _ -> err fn_ty
+            oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
         IntHashEmpty  -> throwError $ GenericTC "IntHashEmpty not handled." exp
         IntHashInsert -> throwError $ GenericTC "IntHashEmpty not handled." exp
@@ -414,7 +427,10 @@ tcExp ddfs env exp =
 
   where
     go = tcExp ddfs env
-
+    checkLists ty ret_ty =
+      if isValidListElemTy ty
+      then pure ret_ty
+      else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc ty) exp
 
 -- | Typecheck a L1 program
 --

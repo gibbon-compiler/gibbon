@@ -9,72 +9,17 @@ coord axis x y =
 getNextAxis_2D :: Int -> Int
 getNextAxis_2D i = mod (i + 1) 2
 
--- It's a for loop.
-lesser :: Int -> Int -> Int -> Int -> [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
-lesser i n axis elt ls acc =
-  if i == n
-  then acc
-  else  let x   = vnth i ls
-            rst = lesser (i+1) n axis elt ls acc
-            tst = coord axis (x !!! 0) (x !!! 1)
-        in if tst < elt
-           then vsnoc rst x
-           else rst
+cmp1 :: (Int, Int) -> (Int, Int) -> Int
+cmp1 a b = (a !!! 0) - (b !!! 0)
 
--- It's a for loop.
-greater_eq :: Int -> Int -> Int -> Int -> [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
-greater_eq i n axis elt ls acc =
-  if i == n
-  then acc
-  else  let x   = vnth i ls
-            rst = greater_eq (i+1) n axis elt ls acc
-            tst = coord axis (x !!! 0) (x !!! 1)
-        in if tst >= elt
-           then vsnoc rst x
-           else rst
-
-append :: Int -> [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
-append n ls1 ls2 =
-  if n == vlength ls2
-  then ls1
-  else append (n+1) (vsnoc ls1 (vnth n ls2)) ls2
-
-sort0 :: Int -> [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
-sort0 axis ls acc =
-  let n = vlength ls in
-  if n == 0
-  then acc
-  else if n == 1
-  then vsnoc acc (vnth 0 ls)
-  else let pivot = vnth (n-1) ls
-           elt   = coord axis (pivot !!! 0) (pivot !!! 1)
-
-           acc1 :: [(Int,Int)]
-           acc1 = vempty
-           ls1  = lesser 0 ((vlength ls) - 1) axis elt ls acc1
-
-           acc2 :: [(Int,Int)]
-           acc2 = vempty
-           ls2  = sort0 axis ls1 acc2
-
-           acc3 :: [(Int,Int)]
-           acc3 = vempty
-           ls3  = greater_eq 0 ((vlength ls) - 1) axis elt ls acc3
-
-           acc4 :: [(Int,Int)]
-           acc4 = vempty
-           ls4  = sort0 axis ls3 acc4
-
-           ls5  = vsnoc ls2 pivot
-           ls6  = append 0 ls5 ls4
-
-       in ls6
+cmp2 :: (Int, Int) -> (Int, Int) -> Int
+cmp2 a b = (a !!! 1) - (b !!! 1)
 
 sort :: Int -> [(Int, Int)] -> [(Int, Int)]
 sort axis ls =
-    let acc :: [(Int, Int)]
-        acc = vempty
-    in sort0 axis ls acc
+    if axis == 0
+    then vsort ls cmp1
+    else vsort ls cmp2
 
 slice0 :: Int -> Int -> [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
 slice0 i n ls acc =

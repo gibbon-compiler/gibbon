@@ -123,7 +123,6 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
     PrimAppE pr args -> do
       (s1, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) args)
-
       let arg_tys' = map (zonkTy s1) arg_tys
           checkLen :: Int -> TcM ()
           checkLen n =
@@ -312,6 +311,18 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           let [ls,val] = arg_tys'
           s2 <- unify (args !! 0) (ListTy ty) ls
           s3 <- unify (args !! 1) ty val
+          pure (s1 <> s2 <> s3, ListTy ty, PrimAppE pr args_tc)
+
+        -- Given that the first argument is a list of type (ListTy t),
+        -- ensure that the 2nd argument is function reference of type:
+        -- ty -> ty -> IntTy
+        --
+        -- TODO: cannot unify if the 2nd argument is a lambda.
+        VSortP ty -> do
+          len2
+          let [ls,fp] = arg_tys'
+          s2 <- unify (args !! 0) (ListTy ty) ls
+          s3 <- unify (args !! 1) (ArrowTy [ty, ty] IntTy) fp
           pure (s1 <> s2 <> s3, ListTy ty, PrimAppE pr args_tc)
 
         ErrorP _str ty -> do
@@ -626,6 +637,7 @@ zonkExp s ex =
                   VLengthP ty -> VLengthP (zonkTy s ty)
                   VUpdateP ty -> VUpdateP (zonkTy s ty)
                   VSnocP   ty -> VSnocP   (zonkTy s ty)
+                  VSortP   ty -> VSortP   (zonkTy s ty)
                   _ -> pr
       in PrimAppE pr' (map go args)
     -- Let doesn't store any tyapps.

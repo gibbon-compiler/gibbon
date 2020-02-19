@@ -448,6 +448,7 @@ recoverType ddfs env2 ex =
         VLengthP _ty   -> IntTy
         VUpdateP ty    -> ListTy ty
         VSnocP ty      -> ListTy ty
+        VSortP ty      -> ListTy ty
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty
         RequestEndOf -> error "primRetTy1: RequestEndOf not handled yet"
