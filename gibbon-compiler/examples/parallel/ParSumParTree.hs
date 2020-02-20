@@ -1,4 +1,4 @@
-module ParTree where
+module ParSumTree where
 
 data Tree = Leaf Int
           | Node Int Tree Tree
@@ -14,34 +14,19 @@ fib_seq n =
             y = fib_seq (n - 2)
         in x + y
 
-fib :: Int -> Int
-fib n =
-    if n == 0
-    then 0
-    else if n == 1
-    then 1
-    else if n < 19
-    then fib_seq n
-    else
-        let x = spawn (fib (n - 1))
-            y = fib (n - 2)
-            _ = sync
-        in x + y
-
 mkTree_seq :: Int -> Tree
 mkTree_seq i =
   if i <= 0
-  then Leaf (fib_seq 10)
+  then Leaf (fib_seq 20)
   else
       let x = mkTree_seq (i-1)
           y = mkTree_seq (i-1)
       in Node i x y
 
-
 mkTree :: Int -> Tree
 mkTree i =
   if i <= 0
-  then Leaf (fib_seq 10)
+  then Leaf (fib_seq 20)
   else
       if i < 19
       then mkTree_seq i
@@ -72,30 +57,8 @@ sumTree foo =
               _ = sync
           in i + x + y
 
-copy_seq :: Tree -> Tree
-copy_seq foo =
-  case foo of
-    Leaf i     -> Leaf i
-    Node i a b ->
-      let x = copy_seq a
-          y = copy_seq b
-      in Node i x y
-
-copy :: Tree -> Tree
-copy foo =
-  case foo of
-    Leaf i     -> Leaf i
-    Node i a b ->
-      if i < 19
-      then copy_seq foo
-      else
-          let x = spawn (copy a)
-              y = copy b
-              _ = sync
-          in Node i x y
-
 gibbon_main =
   let n = sizeParam
-      x = iterate (mkTree n)
-      -- y = iterate (copy x)
-  in (sumTree_seq x)
+      x = mkTree n
+      y = iterate (sumTree x)
+  in y

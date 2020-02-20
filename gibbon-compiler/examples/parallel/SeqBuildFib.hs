@@ -1,4 +1,4 @@
-module SeqTree where
+module SeqBuildFib where
 
 data Tree = Leaf Int
           | Node Int Tree Tree
@@ -18,7 +18,7 @@ fib_seq n =
 mkTree_seq :: Int -> Tree
 mkTree_seq i =
   if i <= 0
-  then Leaf (fib_seq 10)
+  then Leaf (fib_seq 20)
   else
       let x = mkTree_seq (i-1)
           y = mkTree_seq (i-1)
@@ -33,17 +33,7 @@ sumTree_seq foo =
           y = sumTree_seq b
       in i + x + y
 
-copy_seq :: Tree -> Tree
-copy_seq foo =
-  case foo of
-    Leaf i     -> Leaf i
-    Node i a b ->
-      let x = copy_seq a
-          y = copy_seq b
-      in Node i x y
-
 gibbon_main =
   let n = sizeParam
       x = iterate (mkTree_seq n)
-      -- y = iterate (copy_seq x)
   in (sumTree_seq x)
