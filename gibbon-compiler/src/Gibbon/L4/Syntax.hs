@@ -12,7 +12,7 @@ module Gibbon.L4.Syntax
     , L3.Scalar(..), mkScalar, scalarToTy
 
     -- * Utility functions
-    , withTail, fromL3Ty, voidTy, inlineTrivL4
+    , withTail, fromL3Ty, voidTy, inlineTrivL4, typeOfTriv
     ) where
 
 import           Control.DeepSeq
@@ -53,8 +53,22 @@ data Triv
     = VarTriv Var
     | IntTriv Int64
     | TagTriv Tag
-    | SymTriv Word16 -- ^ An index into the symbol table.
+    | SymTriv Word16    -- ^ An index into the symbol table.
+    | ProdTriv [Triv]   -- ^ Tuples
+    | ProjTriv Int Triv -- ^ Projections
   deriving (Show, Ord, Eq, Generic, NFData, Out)
+
+typeOfTriv :: M.Map Var Ty -> Triv -> Ty
+typeOfTriv env trv =
+  case trv of
+    VarTriv v   -> env M.! v
+    IntTriv{}   -> IntTy
+    TagTriv{}   -> TagTyPacked
+    SymTriv{}   -> SymTy
+    ProdTriv ts -> ProdTy (map (typeOfTriv env) ts)
+    ProjTriv i trv1 -> case typeOfTriv env trv1 of
+                         ProdTy tys -> tys !! i
+                         ty -> error $ "typeOfTriv: expected ProdTy, got: " ++ sdoc ty
 
 -- | Switch alternatives.
 data Alts
@@ -166,6 +180,7 @@ data Ty
     | SymDictTy Var Ty
       -- ^ We allow built-in dictionaries from symbols to a value type.
     | ArenaTy
+    | ListTy Ty
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data Prim
@@ -180,6 +195,11 @@ data Prim
     | DictLookupP Ty -- ^ takes k,dict, errors if absent
     | DictEmptyP Ty
     | DictHasKeyP Ty
+    | VEmptyP Ty
+    | VNthP Ty
+    | VLengthP Ty
+    | VUpdateP Ty
+    | VSnocP Ty
 
     | ReadPackedFile (Maybe FilePath) TyCon
 

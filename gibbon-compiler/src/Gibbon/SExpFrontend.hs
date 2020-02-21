@@ -17,7 +17,7 @@ module Gibbon.SExpFrontend
 import Control.Monad
 import Data.Char ( isLower, isAlpha )
 import Data.List as L
-import Data.Loc
+import Data.Loc ( Loc(..), Pos(..))
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Text hiding (map, head, init, last, length, zip)
@@ -83,9 +83,6 @@ toPos sp = Pos name line col 0
         line = sourceLine sp
         col  = sourceColumn sp
 
-loc :: SC.Location -> a -> L a
-loc l = L (toLoc l)
-
 -- Ideally, we'd extend the parser to ignore #lang lines.
 -- But for now we'll just do that in a preprocessing hack.
 treelangParser :: SExprParser (SC.Located HaskLikeAtom) (SExpr (SC.Located  HaskLikeAtom))
@@ -114,17 +111,16 @@ bracketHacks = T.map $ \case '[' -> '('
                              x   -> x
 
 -- | Change regular applications into data constructor syntax.
-tagDataCons :: DDefs Ty0 -> L Exp0 -> PassM (L Exp0)
+tagDataCons :: DDefs Ty0 -> Exp0 -> PassM Exp0
 tagDataCons ddefs = go allCons
   where
    allCons = S.fromList [ (toVar con)
                         | DDef{dataCons} <- M.elems ddefs
                         , (con,_tys) <- dataCons ]
 
-   go :: S.Set Var -> L Exp0 -> PassM (L Exp0)
-   go cons (L p ex) = L p <$>
+   go :: S.Set Var -> Exp0 -> PassM Exp0
+   go cons ex =
      case ex of
-       Ext _ -> pure ex
        -- [2019.02.01] CSK: Do we need this special case ?
        AppE v _ ls
                   | S.member v cons -> do
@@ -158,6 +154,21 @@ tagDataCons ddefs = go allCons
          e2' <- go cons e2
          b'  <- go cons b
          pure $ FoldE (v1,t1,e1') (v2,t2,e2') b'
+       SpawnE{} -> error "tagDataCons: SpawnE not handled"
+       SyncE{} -> error "tagDataCons: SyncE not handled"
+       IsBigE{} -> error "tagDataCons: IsBigE not handled"
+       Ext (LambdaE bnds e) -> Ext <$> (LambdaE bnds) <$> (go cons e)
+       Ext (PolyAppE a b)   -> do
+         a' <- go cons a
+         b' <- go cons b
+         pure $ Ext $ PolyAppE a' b'
+       Ext (FunRefE{}) -> pure ex
+       Ext (BenchE v tyapps es b) -> do
+         es' <- mapM (go cons) es
+         pure $ Ext $ BenchE v tyapps es' b
+       Ext (ParE0 ls) -> Ext <$> ParE0 <$> mapM (go cons) ls
+       Ext (L p e)    -> Ext <$> (L p) <$> go cons e
+
 
 -- | Convert from raw, unstructured S-Expression into the L1 program datatype we expect.
 parseSExp :: [Sexp] -> PassM Prog0
@@ -257,7 +268,7 @@ typ s = case s of
                          then TyVar $ UserTv (textToVar con)
                          else PackedTy (textToDataCon con) []
          (Ls3 _ "SymDict" (A _ v) t) -> SymDictTy (Just (textToVar v)) (typ t)
-         (Ls2 _ "Listof" t)  -> ListTy $ typ t
+         (Ls2 _ "ListOf" t)  -> ListTy $ typ t
          -- See https://github.com/aisamanra/s-cargot/issues/14.
          (Ls (A _ "-" : A _ ">" : tys)) ->
              let tys'   = L.map typ tys
@@ -312,75 +323,75 @@ keywords = S.fromList $ L.map pack $
 isKeyword :: Text -> Bool
 isKeyword s = s `S.member` keywords
 
-exp :: Sexp -> PassM (L Exp0)
+exp :: Sexp -> PassM Exp0
 exp se =
  case se of
-   A l "True"  -> pure $ L (toLoc l) trueE
-   A l "False" -> pure $ L (toLoc l) falseE
+   A l "True"  -> pure $ Ext $ L (toLoc l) $ trueE
+   A l "False" -> pure $ Ext $ L (toLoc l) $ falseE
 
    Ls ((A l "and") : args)  -> go args
      where
-       go :: [Sexp] -> PassM (L Exp0)
-       go [] = pure $ loc l trueE
+       go :: [Sexp] -> PassM Exp0
+       go [] = pure $ trueE
        go (x:xs) = do
          x'  <- exp x
          xs' <- go xs
-         pure $ loc l $ IfE x' xs' (L NoLoc falseE)
+         pure $ Ext $ L (toLoc l) $ IfE x' xs' falseE
 
    Ls ((A l "or") : args)  -> go args
      where
-       go :: [Sexp] -> PassM (L Exp0)
-       go [] = pure $ loc l falseE
+       go :: [Sexp] -> PassM Exp0
+       go [] = pure $ falseE
        go (x:xs) = do
          x'  <- exp x
          xs' <- go xs
-         pure $ loc l $ IfE x' (L NoLoc trueE) xs'
+         pure $ Ext $ L (toLoc l) $ IfE x' trueE xs'
 
    Ls4 l "if" test conseq altern -> do
      e' <- IfE <$> (exp test) <*> (exp conseq) <*> (exp altern)
-     pure $ loc l $ e'
+     pure $ Ext $ L (toLoc l) $  e'
 
-   Ls2 l "quote" (A _ v) -> pure $ loc l $ LitSymE (textToVar v)
+   Ls2 l "quote" (A _ v) -> pure $ Ext $ L (toLoc l) $ LitSymE (textToVar v)
 
    -- Any other naked symbol is a variable:
-   A l v          -> pure $ loc l $ VarE (textToVar v)
-   G l (HSInt n)  -> pure $ loc l $ LitE (fromIntegral n)
+   A l v          -> pure $ Ext $ L (toLoc l) $ VarE (textToVar v)
+   G l (HSInt n)  -> pure $ Ext $ L (toLoc l) $ LitE (fromIntegral n)
 
    -- This type gets replaced later in flatten:
    Ls2 l "time" arg -> do
      ty <- newMetaTy
      arg' <- exp arg
-     pure $ loc l $ TimeIt arg' ty False
+     pure $ Ext $ L (toLoc l) $ TimeIt arg' ty False
 
    Ls3 l "bench" (A _ fn) arg -> do
      arg' <- exp arg
-     pure $ loc l $ Ext $ BenchE (textToVar fn) [] [arg'] False
+     pure $ Ext $ L (toLoc l) $ Ext $ BenchE (textToVar fn) [] [arg'] False
 
    -- This variant inserts a loop, controlled by the iters
    -- argument on the command line.
    Ls2 l "iterate" arg -> do
      ty <- newMetaTy
      arg' <- exp arg
-     pure $ loc l $ TimeIt arg' ty True
+     pure $ Ext $ L (toLoc l) $ TimeIt arg' ty True
 
    Ls3 l "let" (Ls bnds) bod ->
      -- mkLets tacks on NoLoc's for every expression.
      -- Here, we remove the outermost NoLoc and tag with original src location
-     (loc l . unLoc) <$> (mkLets <$> (mapM letbind bnds) <*> (exp bod))
+     Ext <$> L (toLoc l) <$> (mkLets <$> (mapM letbind bnds) <*> (exp bod))
 
-   Ls3 _ "let*" (Ls []) bod -> exp bod
+   Ls3 l "let*" (Ls []) bod -> Ext <$> L (toLoc l) <$> exp bod
 
    Ls3 l "let*" (Ls (bnd:bnds)) bod -> do
      bnd'  <- letbind bnd
      bnds' <- exp $ Ls3 l "let*" (Ls bnds) bod
       -- just like the `let` case above
-     pure $ loc l $ unLoc $ mkLets [bnd'] bnds'
+     pure $ Ext $ L (toLoc l) $ mkLets [bnd'] bnds'
 
    Ls (A l "case": scrut: cases) -> do
      e' <- CaseE <$> (exp scrut) <*> (mapM docase cases)
-     pure $ loc l e'
+     pure $ Ext $ L (toLoc l) $ e'
 
-   Ls (A l p : ls) | isPrim p -> loc l . PrimAppE (prim p) <$> mapM exp ls
+   Ls (A l p : ls) | isPrim p -> Ext <$> L (toLoc l) <$> PrimAppE (prim p) <$> mapM exp ls
 
    Ls (A l "lambda" : Ls args : [bod]) -> do
      -- POLICY DECISION:
@@ -389,12 +400,12 @@ exp se =
      let args' = L.map getSym args
      bod' <- exp bod
      tys <- mapM  (\_ -> newMetaTy) args'
-     pure $ loc l $ Ext $ LambdaE (zip args' tys) bod'
+     pure $ Ext $ L (toLoc l) $ Ext $ LambdaE (zip args' tys) bod'
 
    Ls3 l "for/list" (Ls1 (Ls4 _ v ":" t e)) bod -> do
      e'   <- exp e
      bod' <- exp bod
-     pure $ loc l $ MapE (textToVar v, typ t, e') bod'
+     pure $ Ext $ L (toLoc l) $ MapE (textToVar v, typ t, e') bod'
 
    -- I don't see why we need the extra type annotation:
    Ls4 l "for/fold"
@@ -404,54 +415,55 @@ exp se =
      e1'  <- exp e1
      e2'  <- exp e2
      bod' <- exp bod
-     pure $ loc l $ FoldE (textToVar v1, typ t1, e1')
+     pure $ Ext $ L (toLoc l) $
+                   FoldE (textToVar v1, typ t1, e1')
                           (textToVar v2, typ t2, e2')
                           bod'
 
    Ls3 l "vector-ref" evec (G _ (HSInt ind)) ->
-       loc l . ProjE (fromIntegral ind) <$> (exp evec)
+     Ext <$> L (toLoc l) <$> ProjE (fromIntegral ind) <$> (exp evec)
 
-   Ls (A l "par" : es) -> loc l . Ext <$> ParE0 <$> mapM exp es
+   Ls (A l "par" : es) -> Ext <$> L (toLoc l) <$> Ext <$> ParE0 <$> mapM exp es
 
    Ls3 l "letarena" v e -> do
      e' <- exp e
      let v' = getSym v
-     pure $ loc l $ WithArenaE v' e'
+     pure $ Ext $ L (toLoc l) $ WithArenaE v' e'
 
-   Ls (A l "vector" : es) -> loc l . MkProdE <$> mapM exp es
+   Ls (A l "vector" : es) -> Ext <$> L (toLoc l) <$> MkProdE <$> mapM exp es
 
    -- Dictionaries require type annotations for now.  No inference!
    Ls3 l "ann" (Ls2 _ "empty-dict" a) (Ls3 _ "SymDict" b ty) -> do
      a' <- exp a
      b' <- exp b
      unless (a' == b') $ error $ "Expected annotation on SymDict:" ++ show a'
-     pure $ loc l $ PrimAppE (DictEmptyP $ typ ty) [a']
+     pure $ Ext $ L (toLoc l) $ PrimAppE (DictEmptyP $ typ ty) [a']
 
    Ls5 l "insert" a d k (Ls3 _ "ann" v ty) -> do
      a' <- exp a
      d' <- exp d
      k' <- exp k
      v' <- exp v
-     pure $ loc l $ PrimAppE (DictInsertP $ typ ty) [a',d',k',v']
+     pure $ Ext $ L (toLoc l) $ PrimAppE (DictInsertP $ typ ty) [a',d',k',v']
 
    Ls3 l "ann" (Ls3 _ "lookup" d k) ty -> do
      d' <- exp d
      k' <- exp k
-     pure $ loc l $ PrimAppE (DictLookupP $ typ ty) [d', k']
+     pure $ Ext $ L (toLoc l) $ PrimAppE (DictLookupP $ typ ty) [d', k']
 
    Ls3 l "ann" (Ls3  _ "has-key?" d k) ty -> do
      d' <- exp d
      k' <- exp k
-     pure $ loc l $ PrimAppE (DictHasKeyP $ typ ty) [d', k']
+     pure $ Ext $ L (toLoc l) $ PrimAppE (DictHasKeyP $ typ ty) [d', k']
 
    -- L [A "error",arg] ->
    Ls3 l "ann" (Ls2 _ "error" arg) ty ->
      case arg of
-       G _ (HSString str) -> pure $ loc l $ PrimAppE (ErrorP (T.unpack str) (typ ty)) []
+       G _ (HSString str) -> pure $ Ext $ L (toLoc l) $ PrimAppE (ErrorP (T.unpack str) (typ ty)) []
        _ -> error$ "bad argument to 'error' primitive: "++prnt arg
 
    -- Other annotations are dropped:
-   Ls3 _ "ann" e _ty -> exp e
+   Ls3 l "ann" e _ty -> Ext <$> L (toLoc l) <$> exp e
 
    Ls (A _ kwd : _args) | isKeyword kwd ->
       error $ "Error reading treelang. " ++ show kwd ++ "is a keyword:\n "++prnt se
@@ -459,15 +471,15 @@ exp se =
    ----------------------------------------
    -- If NOTHING else matches, we are an application.  Be careful we didn't miss anything:
    Ls (A l rator : rands) ->
-     let app = (loc l) . AppE (textToVar rator) []
-     in app <$> mapM exp rands
+     let app = AppE (textToVar rator) []
+     in Ext <$> L (toLoc l) <$> app <$> mapM exp rands
 
    _ -> error $ "Expression form not handled (yet):\n  "++
                show se ++ "\nMore concisely:\n  "++ prnt se
 
 
 -- | One case of a case expression
-docase :: Sexp -> PassM (DataCon,[(Var,Ty0)], L Exp0)
+docase :: Sexp -> PassM (DataCon,[(Var,Ty0)], Exp0)
 docase s =
   case s of
     RSList [ RSList (A _ con : args)
@@ -479,7 +491,7 @@ docase s =
  where
    f x  = (getSym x, ) <$> newMetaTy
 
-letbind :: Sexp -> PassM (Var,[l],Ty0, L Exp0)
+letbind :: Sexp -> PassM (Var,[l],Ty0, Exp0)
 letbind s =
   case s of
    RSList [A _ vr, A _ ":", ty, rhs] ->

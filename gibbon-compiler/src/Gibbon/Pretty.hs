@@ -4,10 +4,9 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 module Gibbon.Pretty
-  ( Pretty(..), PPStyle(..), render, pprintHsWithEnv ) where
+  ( Pretty(..), PPStyle(..), render, pprintHsWithEnv, pprender ) where
 
 import           Prelude hiding ((<>))
-import           Data.Loc
 import           Text.PrettyPrint
 import           Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
@@ -37,6 +36,8 @@ class Pretty e where
 
     {-# MINIMAL pprintWithStyle  #-}
 
+pprender :: Pretty e => e -> String
+pprender = render . pprint
 
 doublecolon :: Doc
 doublecolon = colon <> colon
@@ -195,6 +196,11 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       ErrorP str ty  -> text "ErrorP" <> wty ty <+> doubleQuotes (text str) <> space
                                       ReadPackedFile mb_fp tycon _ _ ->
                                         text "readFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
+                                      VEmptyP ty -> parens $ text "vempty" <+> doublecolon <+> brackets (pprintWithStyle sty ty)
+                                      VNthP{}    -> text "vnth"
+                                      VLengthP{} -> text "vlength"
+                                      VUpdateP{} -> text "vupdate"
+                                      VSnocP{}   -> text "vsnoc"
                                       _ -> error $ "pprint: Unknown primitive: " ++ show pr
                       PPHaskell  -> case pr of
                                       DictEmptyP _ty  -> text "dictEmpty"
@@ -251,6 +257,8 @@ instance (Pretty l) => Pretty (UrTy l) where
           ArenaTy   -> case sty of
                          PPHaskell  -> text "()"
                          PPInternal -> text "Arena"
+          SymSetTy  -> text "SymSet"
+          SymHashTy -> text "SymHash"
 
 -- Function type for L1 and L3
 instance Pretty ([UrTy ()], UrTy ()) where
@@ -266,7 +274,8 @@ instance Pretty ArrowTy2 where
             pprintWithStyle PPHaskell fnty $$
               braces (text "locvars" <+> doc (locVars fnty) <> comma $$
                       text "effs: " <+> doc (arrEffs fnty) <> comma $$
-                      text "locrets: " <+> doc (locRets fnty))
+                      text "locrets: " <+> doc (locRets fnty) <> comma $$
+                      text "parallel: " <+> doc (hasParallelism fnty))
 
 
 -- Expressions
@@ -274,13 +283,8 @@ instance Pretty ArrowTy2 where
 -- CSK: Needs a better name.
 type HasPrettyToo e l d = (Show d, Ord d, Eq d, Pretty d, Pretty l, Pretty (e l d), TyOf (e l (UrTy l)) ~ TyOf (PreExp e l (UrTy l)))
 
-instance Pretty (PreExp e l d) => Pretty (L (PreExp e l d)) where
-    pprintWithStyle sty (L _ e) = pprintWithStyle sty e
 
 instance Pretty (PreExp e l d) => Pretty [(PreExp e l d)] where
-    pprintWithStyle sty ls = hsep $ map (pprintWithStyle sty) ls
-
-instance Pretty (L (PreExp e l d)) => Pretty [(L (PreExp e l d))] where
     pprintWithStyle sty ls = hsep $ map (pprintWithStyle sty) ls
 
 instance HasPrettyToo e l d => Pretty (PreExp e l d) where
@@ -340,10 +344,10 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                 hsep (map (pprintWithStyle sty) es)
                               -- lparen <> hcat (punctuate (text ",") (map (pprintWithStyle sty) es)) <> rparen
           TimeIt e _ty _b -> text "timeit" <+> parens (pprintWithStyle sty e)
-          SpawnE w v locs ls -> text "spawn" <+> pprintWithStyle sty w <+>
-                                  parens (pprintWithStyle sty v <+>
-                                           (brackets $ hcat (punctuate "," (map pprint locs))) <+>
-                                           (pprintWithStyle sty ls))
+          SpawnE v locs ls -> text "spawn" <+>
+                                parens (pprintWithStyle sty v <+>
+                                         (brackets $ hcat (punctuate "," (map pprint locs))) <+>
+                                         (pprintWithStyle sty ls))
           SyncE -> text "sync"
           WithArenaE v e -> case sty of
                               PPHaskell  -> (text "let") <+>
@@ -353,6 +357,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                                             text "in" $+$
                                             pprintWithStyle sty e
                               PPInternal -> text "letarena" <+> pprint v <+> text "in" $+$ pprint e
+          IsBigE e -> text "is_big" <+> pprintWithStyle sty e
           Ext ext -> pprintWithStyle sty ext
           MapE{} -> error $ "Unexpected form in program: MapE"
           FoldE{} -> error $ "Unexpected form in program: FoldE"
@@ -367,6 +372,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
 instance (Pretty l, Pretty d, Ord d, Show d) => Pretty (E1Ext l d) where
     pprintWithStyle sty ext =
       case ext of
+        L1.AddFixed v i -> text "addFixed" <+> pprintWithStyle sty v <+> int i
         BenchE fn tyapps args b -> text "gibbon_bench" <+> (doubleQuotes $ text "") <+> text (fromVar fn) <+>
                                    (brackets $ hcat (punctuate "," (map pprint tyapps))) <+>
                                    (pprintWithStyle sty args) <+> text (if b then "true" else "false")
@@ -379,20 +385,21 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
           AfterConstantLE i loc -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
           AfterVariableLE v loc -> lparen <> pprint loc <+> text "+" <+> doc v <> rparen
           InRegionLE r  -> lparen <> text "inregion" <+> text (sdoc r) <> rparen
-          FromEndLE loc -> lparen <> text "fromend" <+> pprint loc <> rparen
+          FromEndLE loc -> lparen <> text "fromendle" <+> pprint loc <> rparen
           FreeLE -> lparen <> text "free" <> rparen
 
 instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
     pprintWithStyle _ ex0 =
         case ex0 of
+          L2.AddFixed{} -> error "pprintWithStyle: L2.AddFixed not handled."
           LetRegionE r e -> text "letregion" <+>
                                doc r <+> text "in" $+$ pprint e
           LetLocE loc le e -> text "letloc" <+>
                                 pprint loc <+> equals <+> pprint le <+> text "in" $+$ pprint e
-          RetE ls v -> text "return" <+>
-                          lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
+          L2.RetE ls v -> text "return" <+>
+                            lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
                           doc v
-          FromEndE loc -> text "fromend" <+> pprint loc
+          FromEndE loc -> text "fromende" <+> pprint loc
           L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> pprint l2
           IndirectionE tc dc (l1,v1) (l2,v2) e -> text "indirection" <+>
                                                      doc tc <+>
@@ -433,6 +440,9 @@ instance Pretty L0.Ty0 where
         L0.PackedTy tc loc -> text "Packed" <+> text tc <+> brackets (hcat (map (pprintWithStyle sty) loc))
         L0.ListTy ty1 -> brackets (pprintWithStyle sty ty1)
         L0.ArenaTy    -> text "Arena"
+        L0.SymSetTy   -> text "SymSet"
+        L0.SymHashTy  -> text "SymHash"
+        L0.IntHashTy  -> text "IntHash"
 
 
 instance Pretty L0.TyScheme where
@@ -449,6 +459,7 @@ instance (Out a, Pretty a) => Pretty (L0.E0Ext a L0.Ty0) where
                                     (brackets $ hcat (punctuate "," (map pprint tyapps))) <+>
                                     (pprintWithStyle sty args) <+> text (if b then "true" else "false")
       L0.ParE0 ls -> text "par" <+> lparen <> hcat (punctuate (text ", ") (map (pprintWithStyle sty) ls)) <> rparen
+      L0.L _ e    -> pprintWithStyle sty e
 
 
 --------------------------------------------------------------------------------
@@ -488,10 +499,11 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
   in (ghc_compat_prefix main_has_bench) $+$ ddefsDoc $+$ funsDoc $+$ meDoc $+$ sfx
   where
     -- | Verify some assumptions about BenchE.
-    hasBenchE :: L Exp1 -> Bool
-    hasBenchE (L _ ex) =
+    hasBenchE :: Exp1 -> Bool
+    hasBenchE ex =
       case ex of
-        Ext (BenchE{}) -> True
+        Ext (BenchE{})   -> True
+        Ext (L1.AddFixed{}) -> False
         -- Straightforward recursion ...
         VarE{}     -> False
         LitE{}     -> False
@@ -507,6 +519,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         TimeIt{}   -> False
         WithArenaE _ e -> (go e)
         SpawnE{}-> False
+        IsBigE e-> go e
         SyncE   -> False
         MapE{}  -> error $ "hasBenchE: TODO MapE"
         FoldE{} -> error $ "hasBenchE: TODO FoldE"
@@ -524,8 +537,8 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         renderBod = text (fromVar funName) <+> (hsep $ map (text . fromVar) funArgs) <+> equals
                       $$ nest indentLevel (ppExp False env2' funBody)
 
-    ppExp :: Bool -> Env2 Ty1 -> L Exp1 -> Doc
-    ppExp monadic env2 (L _ ex0) =
+    ppExp :: Bool -> Env2 Ty1 -> Exp1 -> Doc
+    ppExp monadic env2 ex0 =
       case ex0 of
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
@@ -547,7 +560,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
             let -- Still avoiding 'PassM'.
                 indexed_vars = map (\i -> (i, varAppend v (toVar $ "_proj_" ++ show i))) [0..(length tys - 1)]
                 -- Substitute projections with variables bound by the pattern match.
-                e2' = foldr (\(i,w) acc -> substE (l$ ProjE i (l$ VarE v)) (l$ VarE w) acc) e2 indexed_vars
+                e2' = foldr (\(i,w) acc -> substE (ProjE i (VarE v)) (VarE w) acc) e2 indexed_vars
 
                 bind_rhs :: Doc -> Doc -> Doc
                 bind_rhs d rhs = d <+> doublecolon <+> pprintWithStyle sty ty <+> equals <+> rhs
@@ -556,7 +569,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
 
             in (text "let") <+>
                vcat [bind_rhs (pprintWithStyle sty v) (ppExp monadic env2 e1),
-                     bind_rhs (parens $ hcat $ punctuate (text ",") (map (pprintWithStyle sty . snd) indexed_vars)) (ppExp monadic env2 (l$ VarE v))] <+>
+                     bind_rhs (parens $ hcat $ punctuate (text ",") (map (pprintWithStyle sty . snd) indexed_vars)) (ppExp monadic env2 (VarE v))] <+>
                (if monadic
                 then empty
                 else text "in") $+$
@@ -601,7 +614,11 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                             text "()" <+>
                             text "in" $+$
                             ppExp monadic env2 e
-          -- text "letarena" <+> pprint v <+> text "in" $+$ ppExp env2 e
+
+          SpawnE{} -> error "ppHsWithEnv: SpawnE not handled."
+          SyncE{}  -> error "ppHsWithEnv: SyncE not handled."
+          IsBigE{} -> error "ppHsWithEnv: IsBigE not handled."
+          Ext(L1.AddFixed{}) -> error "ppHsWithEnv: AddFixed not handled."
           Ext (BenchE fn _locs args _b) ->
              --  -- Criterion
              -- let args_doc = hsep $ map (ppExp env2) args

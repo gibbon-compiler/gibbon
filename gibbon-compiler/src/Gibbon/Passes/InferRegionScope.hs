@@ -1,13 +1,12 @@
 -- | Infer region multiplicities
 --
 --   During inference, regions are merely annotated with a region metavariable.
---   InferMultiplicity takes the next step and decides the region scope (global/dynamic)
+--   InferRegionScope takes the next step and decides the region scope (global/dynamic)
 --   and also assigns it a multiplicity.
 
 module Gibbon.Passes.InferRegionScope
   (inferRegScope, inferRegScopeExp) where
 
-import Data.Loc
 import Data.Graph
 import qualified Data.Map as M
 
@@ -17,7 +16,8 @@ import Gibbon.L2.Syntax
 
 -- All regions are "infinite" right now
 
--- | Infer multiplicity for a program annotated with regions & locations
+-- | Infer region scope and multiplicity for a program annotated with regions
+-- and locations.
 inferRegScope :: Prog2 -> PassM Prog2
 inferRegScope Prog{ddefs,fundefs,mainExp} = do
   fds' <- mapM inferRegScopeFun $ M.elems fundefs
@@ -66,16 +66,17 @@ In fnB, there's no path from `rb` to 1.
 -- | Decide if a region should be global or local (dynamic).
 --
 --  Dynamic regions are stack allocated and automatically freed
-inferRegScopeExp :: L Exp2 -> PassM (L Exp2)
-inferRegScopeExp (L p ex) = L p <$>
+inferRegScopeExp :: Exp2 -> PassM Exp2
+inferRegScopeExp ex =
   case ex of
     Ext ext ->
       case ext of
+        AddFixed{} -> error "inferRegScopeExp: AddFixed not handled"
         LetRegionE r rhs ->
           case r of
             MMapR{} -> Ext <$> LetRegionE r <$> (go rhs)
             _ ->
-              let deps = depList (L p ex)
+              let deps = depList ex
               in case deps of
                    ((retVar,_,_):_) ->
                      let (g,_,vtxF) = graphFromEdges deps
@@ -129,6 +130,7 @@ inferRegScopeExp (L p ex) = L p <$>
       return $ TimeIt e' ty b
     SpawnE{} -> pure ex
     SyncE{}  -> pure ex
+    IsBigE{} -> pure ex
     WithArenaE v e -> WithArenaE v <$> go e
     MapE{}  -> error $ "inferRegScopeExp: TODO MapE"
     FoldE{} -> error $ "inferRegScopeExp: TODO FoldE"

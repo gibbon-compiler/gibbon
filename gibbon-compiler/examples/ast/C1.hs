@@ -280,6 +280,6 @@ eval p =
       ErrorV -> (-1)
       
 main :: IO ()
-main = do print (eval (optimizeJumps ex1))
+main = do print (eval (optimizeJumps (eliminateDeadcode ex1)))
 
-gibbon_main = eval (optimizeJumps ex1)
+gibbon_main = eval (optimizeJumps (eliminateDeadcode ex1))

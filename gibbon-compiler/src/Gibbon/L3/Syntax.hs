@@ -9,7 +9,7 @@
 module Gibbon.L3.Syntax
   (
     -- * Extended language
-    E3Ext(..), Prog3, FunDef3, FunDefs3 , Exp3, Ty3
+    E3Ext(..), Prog3, DDef3, DDefs3, FunDef3, FunDefs3 , Exp3, Ty3
   , Scalar(..), mkScalar, scalarToTy
 
     -- * Functions
@@ -20,7 +20,6 @@ module Gibbon.L3.Syntax
 where
 
 import Control.DeepSeq
-import Data.Loc
 import Data.Map as M
 import Data.Set as S
 import Data.List as L
@@ -32,11 +31,14 @@ import qualified Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
-type Prog3 = Prog (L Exp3)
+type Prog3 = Prog Exp3
 
-type FunDefs3 = FunDefs (L Exp3)
+type DDef3  = DDef Ty3
+type DDefs3 = DDefs Ty3
 
-type FunDef3 = FunDef (L Exp3)
+type FunDefs3 = FunDefs Exp3
+
+type FunDef3 = FunDef Exp3
 
 -- GHC uses the instance defined for L1.Ty1
 -- instance FunctionTy Ty3 where
@@ -50,8 +52,8 @@ type Ty3 = UrTy ()
 -- | The extension that turns L1 into L3.
 data E3Ext loc dec =
     ReadScalar  Scalar Var                            -- ^ One cursor in, (int, cursor') out
-  | WriteScalar Scalar Var (L (PreExp E3Ext loc dec)) -- ^ Write int at cursor, and return a cursor
-  | AddCursor Var (L (PreExp E3Ext loc dec)) -- ^ Add a constant offset to a cursor variable
+  | WriteScalar Scalar Var (PreExp E3Ext loc dec) -- ^ Write int at cursor, and return a cursor
+  | AddCursor Var (PreExp E3Ext loc dec) -- ^ Add a constant offset to a cursor variable
   | ReadTag   Var                  -- ^ One cursor in, (tag,cursor) out
   | WriteTag  DataCon Var          -- ^ Write Tag at Cursor, and return a cursor
   | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
@@ -63,7 +65,7 @@ data E3Ext loc dec =
   | SizeOfScalar Var               -- ^ sizeof(var)
   | BoundsCheck Int Var Var        -- ^ Bytes required, region, write cursor
   | ReadCursor Var                 -- ^ Reads and returns the cursor at Var
-  | WriteCursor Var (L (PreExp E3Ext loc dec)) -- ^ Write a cursor, and return a cursor
+  | WriteCursor Var (PreExp E3Ext loc dec) -- ^ Write a cursor, and return a cursor
   | BumpRefCount Var Var           -- ^ Given an end-of-region ptr, bump it's refcount.
                                    --   Return the updated count (optional).
   | BumpArenaRefCount Var Var      -- ^ Given an arena and end-of-region ptr, add a
@@ -71,6 +73,7 @@ data E3Ext loc dec =
   | NullCursor                     -- ^ Constant null cursor value (hack?).
                                    --   Used for dict lookup, which returns a packed value but
                                    --   no end witness.
+  | RetE [(PreExp E3Ext loc dec)]-- ^ Analogous to L2's RetE
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 instance FreeVars (E3Ext l d) where
@@ -92,21 +95,24 @@ instance FreeVars (E3Ext l d) where
       WriteCursor c ex   -> S.insert c (gFreeVars ex)
       BumpRefCount r1 r2 -> S.fromList [r1, r2]
       NullCursor         -> S.empty
+      BumpArenaRefCount v w -> S.fromList [v, w]
+      RetE ls -> S.unions (L.map gFreeVars ls)
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
   type LocOf (E3Ext l d) = l
   type TyOf  (E3Ext l d) = UrTy l
   isTrivial _ = False
 
-instance (Out l, Show l) => Typeable (E3Ext l (UrTy l)) where
+instance (Out l, Show l, Typeable (PreExp E3Ext l (UrTy l))) => Typeable (E3Ext l (UrTy l)) where
     gRecoverType _ddfs _env2 NullCursor = CursorTy
+    gRecoverType ddfs env2 (RetE ls)    = ProdTy $ L.map (gRecoverType ddfs env2) ls
     gRecoverType _ _ _ = error "L3.gRecoverType"
 
 instance (Show l, Out l) => Flattenable (E3Ext l (UrTy l)) where
     gFlattenGatherBinds _ddfs _env ex = return ([], ex)
     gFlattenExp _ddfs _env ex = return ex
 
-instance HasSimplifiableExt E3Ext l d => SimplifiableExt (L (PreExp E3Ext l d)) (E3Ext l d) where
+instance HasSimplifiableExt E3Ext l d => SimplifiableExt (PreExp E3Ext l d) (E3Ext l d) where
   gInlineTrivExt _ _ = error $ "InlineTriv is not a safe operation to perform on L3." ++
                                " A lot of L3 extensions can only use values" ++
                                " via variable references. So those variables" ++
@@ -114,7 +120,7 @@ instance HasSimplifiableExt E3Ext l d => SimplifiableExt (L (PreExp E3Ext l d)) 
                                " Running copy-propogation should be OK."
 
 
-instance HasSubstitutableExt E3Ext l d => SubstitutableExt (L (PreExp E3Ext l d)) (E3Ext l d) where
+instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E3Ext l d) where
   gSubstExt old new ext =
     case ext of
       WriteScalar s v bod  -> WriteScalar s v (gSubst old new bod)
@@ -147,7 +153,9 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       ReadCursor v       -> ReadCursor (go v)
       WriteCursor v bod  -> WriteCursor (go v) (go bod)
       BumpRefCount a b   -> BumpRefCount (go a) (go b)
+      BumpArenaRefCount v w -> BumpArenaRefCount (go v) (go w)
       NullCursor         -> ext
+      RetE ls            -> RetE (L.map go ls)
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
@@ -192,10 +200,12 @@ cursorizeTy ty =
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy
+    SymSetTy -> SymSetTy
+    SymHashTy-> SymHashTy
 
 -- | Map exprs with an initial type environment:
 -- Exactly the same function that was in L2 before
-mapMExprs :: Monad m => (Env2 Ty3 -> L Exp3 -> m (L Exp3)) -> Prog3 -> m Prog3
+mapMExprs :: Monad m => (Env2 Ty3 -> Exp3 -> m Exp3) -> Prog3 -> m Prog3
 mapMExprs fn (Prog ddfs fundefs mainExp) =
   Prog ddfs <$>
     (mapM (\f@FunDef{funArgs,funTy,funBody} ->

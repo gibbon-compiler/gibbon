@@ -1,7 +1,6 @@
 module Gibbon.Passes.DirectL3
     (directL3) where
 
-import           Data.Loc
 import           Data.List as L
 import qualified Data.Map as M
 
@@ -30,8 +29,8 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
                , funArgs = funArgs
                , funBody = go env2 funBody }
 
-    go :: Env2 Ty1 -> L Exp1 -> L Exp3
-    go env2 (L p ex) = L p $
+    go :: Env2 Ty1 -> Exp1 -> Exp3
+    go env2 ex =
       case ex of
         VarE v    -> VarE v
         LitE n    -> LitE n
@@ -48,13 +47,15 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
         DataConE loc dcon args -> DataConE loc dcon $ L.map (go env2) args
         TimeIt arg ty b -> TimeIt (go env2 arg) ty b
         WithArenaE a e  -> WithArenaE a $ go env2 e
-        SpawnE w fn locs ls -> SpawnE w fn locs $ map (go env2) ls
+        SpawnE fn locs ls -> SpawnE fn locs $ map (go env2) ls
         SyncE -> SyncE
         Ext (BenchE fn _locs args b) ->
           let fn_ty  = lookupFEnv fn env2
               ret_ty = snd fn_ty
-              ex'    = l$ TimeIt (l$ AppE fn [] args) ret_ty b
-          in unLoc $ go env2 ex'
+              ex'    = TimeIt (AppE fn [] args) ret_ty b
+          in go env2 ex'
+        Ext (AddFixed{}) -> error "directL3: AddFixed not handled."
+        IsBigE{}-> error "directL3: IsBigE not handled."
         MapE{}  -> error "directL3: todo MapE"
         FoldE{} -> error "directL3: todo FoldE"
 

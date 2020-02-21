@@ -23,7 +23,7 @@ module Gibbon.Common
        , RunConfig(..), getRunConfig, defaultRunConfig, getGibbonConfig
 
          -- * Misc helpers
-       , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv, l
+       , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
@@ -44,7 +44,6 @@ import Data.List as L
 import Data.Map as M
 import Data.String
 import Data.Symbol
-import Data.Loc
 import Data.Word
 import GHC.Generics
 import GHC.Stack (HasCallStack)
@@ -124,31 +123,6 @@ isUserTv tv =
   case tv of
     UserTv{} -> True
     _        -> False
-
---------------------------------------------------------------------------------
--- Helper methods to integrate the Data.Loc with Gibbon
-
-l :: a -> L a
-l x = L NoLoc x
-
-deriving instance Generic Loc
-deriving instance Generic Pos
-
--- | Orphaned instance: read without source locations.
-instance Read t => Read (L t) where
-  readsPrec n str = [ (L NoLoc a,s) | (a,s) <- readsPrec n str ]
-
-instance Out Loc where
-  docPrec _ loc = doc loc
-
-  doc loc =
-    case loc of
-      Loc start _end -> doc start
-      NoLoc -> PP.empty
-
-instance Out Pos where
-  docPrec _ pos = doc pos
-  doc (Pos path line col _) = hcat [doc path, colon, doc line, colon, doc col]
 
 --------------------------------------------------------------------------------
 -- Gensym monad:

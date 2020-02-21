@@ -25,7 +25,6 @@ module Gibbon.Passes.FindWitnesses
   (findWitnesses) where
 
 
-import Data.Loc
 import Data.Graph
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -53,15 +52,15 @@ findWitnesses = mapMExprs fn
                            ex2 = goE bound0 Map.empty ex1
                        in if ex1 == ex2 then ex2
                           else goFix bound0 ex2 (n - 1)
-  goE bound mp (L p ex) =
+  goE bound mp ex =
     let go      = goE bound -- Shorthand.
         goClear = goE (bound `Set.union` Map.keysSet mp) Map.empty
         -- shorthand for applying (L p)
-        handle' e = handle mp $ L p e
+        handle' e = handle mp e
     in
       case ex of
-        LetE (v,locs,t, L p2 (TimeIt e ty b)) bod ->
-            handle' $ LetE (v,locs,t, L p2 $ TimeIt (go Map.empty e) ty b)
+        LetE (v,locs,t, (TimeIt e ty b)) bod ->
+            handle' $ LetE (v,locs,t, TimeIt (go Map.empty e) ty b)
                       (goE (Set.insert v (bound `Set.union` Map.keysSet mp)) Map.empty bod)
 
         {- HACK:
@@ -80,12 +79,12 @@ findWitnesses = mapMExprs fn
 
            The only test case for this is add1 right now.
         -}
-        LetE (v,locs,t, L _p2 (Ext ext@WriteTag{})) bod ->
-            handle' $ LetE (v,locs,t, (go Map.empty (l$ Ext ext)))
+        LetE (v,locs,t, (Ext ext@WriteTag{})) bod ->
+            handle' $ LetE (v,locs,t, (go Map.empty (Ext ext)))
             (goE (Set.insert v (bound `Set.union` Map.keysSet mp)) Map.empty bod)
 
-        LetE (v,locs,t, L _p2 (Ext ext@WriteScalar{})) bod ->
-            handle' $ LetE (v,locs,t, (go Map.empty (l$ Ext ext)))
+        LetE (v,locs,t, (Ext ext@WriteScalar{})) bod ->
+            handle' $ LetE (v,locs,t, (go Map.empty (Ext ext)))
             (goE (Set.insert v (bound `Set.union` Map.keysSet mp)) Map.empty bod)
 
         LetE (v,locs,t,rhs) bod
@@ -116,18 +115,22 @@ findWitnesses = mapMExprs fn
             -- here, without duplicating bindings:
             if   closed bound mp
             then handle' $ IfE a (goClear b) (goClear c)
-            else (L p) $ IfE (go mp a) -- Otherwise we duplicate...
-                             (go mp b)
-                             (go mp c)
+            else IfE (go mp a) -- Otherwise we duplicate...
+                     (go mp b)
+                     (go mp c)
         -- Like MkProdE
         MapE  (v,t,rhs) bod -> handle' $ MapE (v,t,rhs) (goClear bod)
         FoldE (v1,t1,r1) (v2,t2,r2) bod -> handle' $ FoldE (v1,t1,r1) (v2,t2,r2) (goClear bod)
+        WithArenaE{} -> error "findWitnesses: WithArenaE not handled."
+        SpawnE{} -> error "findWitnesses: SpawnE not handled."
+        SyncE{} -> error "findWitnesses: SyncE not handled."
+        IsBigE{} -> error "findWitnesses: IsBigE not handled."
 
         Ext _ -> handle' $ ex
 
 -- TODO: this needs to preserve any bindings that have TimeIt forms (hasTimeIt).
 -- OR we can only match a certain pattern like (Let (_,_,TimeIt _ _) _)
-handle :: Map.Map Var (Var, [()], Ty3, L Exp3) -> L Exp3 -> L Exp3
+handle :: Map.Map Var (Var, [()], Ty3, Exp3) -> Exp3 -> Exp3
 handle mp expr =
     dbgTrace 6 (" [findWitnesses] building lets using vars "++show vs++" for expr: "++ take 80 (show expr)) $
     buildLets mp vars expr
@@ -153,17 +156,17 @@ view v = v  -- RRN: actually, coming up with a good policy here is problematic.
 --        | otherwise      = v
 
 
-buildLets :: Map.Map Var (Var,[()], Ty3, L Exp3) -> [Var] -> L Exp3-> L Exp3
+buildLets :: Map.Map Var (Var,[()], Ty3, Exp3) -> [Var] -> Exp3-> Exp3
 buildLets _mp [] bod = bod
 buildLets mp (v:vs) bod =
     case Map.lookup (view v) mp of
       Nothing -> buildLets mp vs bod
-      Just bnd -> l$ LetE bnd $ buildLets mp vs bod
+      Just bnd -> LetE bnd $ buildLets mp vs bod
 
 
 -- | Are all the free variables currently bound (transitively) in the
 -- environment?
-closed :: Set.Set Var -> Map.Map Var (v, [()], t, L Exp3) -> Bool
+closed :: Set.Set Var -> Map.Map Var (v, [()], t, Exp3) -> Bool
 closed bound mp = Set.null (allBound `Set.difference` allUsed)
   where
    allBound = bound `Set.union` Map.keysSet mp

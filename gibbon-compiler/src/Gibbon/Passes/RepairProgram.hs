@@ -15,7 +15,8 @@ import Gibbon.Passes.RemoveCopies   (removeCopies)
 import Gibbon.Passes.Flatten        (flattenL2)
 import Gibbon.Passes.AddTraversals  (addTraversals)
 import Gibbon.Passes.AddRAN         (addRAN,needsRAN)
-import Gibbon.Pretty (render, pprint)
+import qualified Gibbon.L2.Typecheck as L2
+import qualified Gibbon.L1.Typecheck as L1
 
 --------------------------------------------------------------------------------
 
@@ -47,7 +48,6 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
 
 -}
 
-
 -- | Add random access nodes to the program, but only where required
 repairProgram :: Prog1 -> Prog2 -> PassM Prog2
 repairProgram oldl1 prg = do
@@ -66,15 +66,23 @@ repairProgram oldl1 prg = do
 
     repairGibbon1 = do
         l2 <- addTraversals prg
+        l2 <- L2.tcProg l2
         l2 <- inferEffects l2
+        l2 <- L2.tcProg l2
         return l2
 
     repairGibbon2 = do
         l1 <- addRAN need_ran oldl1
+        l1 <- L1.tcProg l1
         l2 <- inferLocs l1
+        l2 <- L2.tcProg l2
         l2 <- flattenL2 l2
+        l2 <- L2.tcProg l2
         l2 <- removeCopies l2
+        l2 <- L2.tcProg l2
         l2 <- inferEffects l2
+        l2 <- L2.tcProg l2
         -- See [Keeping old case clauses around] in AddRAN
         l2 <- addTraversals l2
+        l2 <- L2.tcProg l2
         return l2

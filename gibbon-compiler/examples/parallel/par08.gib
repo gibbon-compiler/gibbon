@@ -1,4 +1,0 @@
-#lang gibbon
-
-(let ([tup : (Vector Int Int) (par (+ 1 2) (+ 3 4))])
-  (+ (vector-ref tup 0) (vector-ref tup 1)))

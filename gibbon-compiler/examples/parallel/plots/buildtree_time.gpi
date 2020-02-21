@@ -1,0 +1,36 @@
+#!/usr/bin/env gnuplot
+
+load "common_styles.gpi"
+
+## Add gridlines
+set grid ytics lt 0 lw 1 lc rgb "#bbbbbb"
+set grid xtics lt 0 lw 1 lc rgb "#bbbbbb"
+
+set datafile separator ","
+set key bottom right noreverse enhanced autotitles nobox
+
+set xrange [20:26]
+# set yrange [0:]
+
+
+set key font ",14"
+
+set xtics font ",14"
+set ytics font ",14"
+
+set xlabel "Tree depth" font ",14"
+set ylabel "Time in seconds (log)" font ",14"
+
+set log y
+# set log x
+
+set terminal pdfcairo
+set output "./buildtree_time_2.pdf"
+
+set title "BuildTree"
+
+plot \
+     "results_mktree2.csv" every ::1 using 1:3 title "Pakd-Seq" w linespoints ls 1 , \
+     "results_mktree2.csv" every ::1 using 1:4 title "Pakd-Par" w linespoints ls 2 , \
+     # "results.csv" every ::1 using 1:7 title "MaPLe-Seq" w linespoints ls 3 ,\
+     # "results.csv" every ::1 using 1:8 title "MaPLe-Par" w linespoints ls 4 ,\

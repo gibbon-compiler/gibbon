@@ -6,7 +6,6 @@
 module Gibbon.Passes.HoistNewBuf
     (hoistNewBuf) where
 
-import Data.Loc
 import Prelude hiding (exp)
 import qualified Data.List as L
 
@@ -18,15 +17,15 @@ import Gibbon.L3.Syntax
 hoistNewBuf :: Prog3 -> PassM Prog3
 hoistNewBuf = mapMExprs hoistExp
 
-hoistExp :: ignored -> L Exp3 -> PassM (L Exp3)
+hoistExp :: ignored -> Exp3 -> PassM Exp3
 hoistExp _ ex0 = return $ gocap ex0
   where
 
   gocap ex = let (lets,ex') = go ex in
              mkLets lets ex'
 
-  go :: L Exp3 -> ([(Var,[()],Ty3,L Exp3)], L Exp3)
-  go (L p e0) = (\(x,y) -> (x, L p y)) $
+  go :: Exp3 -> ([(Var,[()],Ty3,Exp3)], Exp3)
+  go e0 =
    case e0 of
     (LitE _)      -> ([], e0)
     (LitSymE _)   -> ([], e0)
@@ -40,14 +39,14 @@ hoistExp _ ex0 = return $ gocap ex0
     (TimeIt e t b) -> let (lts,e') = go e in
                       (lts, TimeIt e' t b)
 
-    (LetE (v,locs,t, nb@(L _ (Ext NewBuffer{}))) bod) ->
+    (LetE (v,locs,t, nb@((Ext NewBuffer{}))) bod) ->
         let (lts1,bod') = go bod in
-        ((v,locs,t, nb):lts1, unLoc bod')
+        ((v,locs,t, nb):lts1, bod')
 
-    (LetE (v,locs,t, nb@(L _ (Ext (AddCursor _ (L _ (Ext (InitSizeOfBuffer{})))))))
+    (LetE (v,locs,t, nb@(Ext (AddCursor _ (Ext (InitSizeOfBuffer{})))))
        bod) ->
         let (lts1,bod') = go bod in
-        ((v,locs,t, nb):lts1, unLoc bod')
+        ((v,locs,t, nb):lts1, bod')
 
     -- boilerplate
     (LetE (v,locs,t,rhs) bod) ->
@@ -78,6 +77,8 @@ hoistExp _ ex0 = return $ gocap ex0
                         (lts, WithArenaE v e')
 
     (Ext _) -> ([], e0)
+
+    (IsBigE{}) -> ([], e0)
 
     -- (MapE (v,t,e') e) ->
     -- (FoldE (v1,t1,e1) (v2,t2,e2) e3) ->

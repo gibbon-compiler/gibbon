@@ -22,7 +22,6 @@ import           Control.Monad.Except
 import           Data.Foldable ( foldlM )
 import qualified Data.Set as S
 import           Data.List as L
-import           Data.Loc
 import qualified Data.Map as M
 import           Data.Maybe
 import           Text.PrettyPrint.GenericPretty
@@ -87,7 +86,7 @@ newtype RegionSet = RegionSet { regSet :: S.Set Var }
 
 
 -- | Shorthand for located expressions
-type Exp = L Exp2
+type Exp = Exp2
 
 -- | These are the kinds of errors that the type checker may throw. There are a
 -- few named errors that I thought would be common, like variables not being
@@ -122,9 +121,9 @@ type TcM a = (Except TCError) a
 tcExp :: DDefs Ty2 -> Env2 Ty2 -> FunDefs2
       -> ConstraintSet -> RegionSet -> LocationTypeState -> Exp
       -> TcM (Ty2, LocationTypeState)
-tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
+tcExp ddfs env funs constrs regs tstatein exp =
 
-    case ex of
+    case exp of
 
       VarE v ->
           -- Look up a variable in the environment
@@ -144,7 +143,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
           --      locations.
           --  (3) We need to make sure that if we pass a packed structure as an argument, its
           --      location is among the passed-in locations.
-          do let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets) =
+          do let (ArrowTy2 locVars arrIns _arrEffs arrOut _locRets _isPar) =
                      case M.lookup v funs of
                        Just f -> funTy f
                        Nothing -> error $ "tcExp: Unbound function: " ++ sdoc v
@@ -252,7 +251,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    let [a] = tys
                    _ <- ensureEqualTy exp ArenaTy a
                    case es !! 0 of
-                     L _ (VarE var) ->
+                     (VarE var) ->
                          do ensureArenaScope exp env (Just var)
                             return (SymDictTy (Just var) (stripTyLocs ty), tstate)
                      _ -> throwError $ GenericTC "Expected arena variable argument" exp
@@ -266,7 +265,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                    case d of
                      SymDictTy ar _ty ->
                          case es !! 0 of
-                           L _ (VarE var) ->
+                           (VarE var) ->
                                do ensureArenaScope exp env ar
                                   ensureArenaScope exp env (Just var)
                                   return (SymDictTy (Just var) (stripTyLocs ty), tstate)
@@ -307,15 +306,51 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                  RequestEndOf -> do
                    len1
                    case (es !! 0) of
-                     L _ VarE{} -> if isPackedTy (tys !! 0)
-                                   then return (CursorTy, tstate)
-                                   else case (tys !! 0) of
-                                          SymTy -> return (CursorTy, tstate)
-                                          IntTy -> return (CursorTy, tstate)
-                                          _ -> throwError $ GenericTC "Expected PackedTy" exp
+                     VarE{} -> if isPackedTy (tys !! 0)
+                               then return (CursorTy, tstate)
+                               else case (tys !! 0) of
+                                      SymTy -> return (CursorTy, tstate)
+                                      IntTy -> return (CursorTy, tstate)
+                                      _ -> throwError $ GenericTC "Expected PackedTy" exp
                      -- L _ LitSymE{} -> return (CursorTy, tstate)
                      -- L _ LitE{} -> return (CursorTy, tstate)
                      _ -> throwError $ GenericTC "Expected a variable argument" exp
+
+                 VEmptyP ty  -> do
+                   len0
+                   pure (ListTy ty, tstate)
+                 VNthP ty    -> do
+                   let [i,ls] = tys
+                   _ <- ensureEqualTy exp IntTy i
+                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   pure (ty, tstate)
+                 VLengthP ty -> do
+                   let [ls] = tys
+                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   pure (IntTy, tstate)
+                 VUpdateP ty -> do
+                   let [ls,i,val] = tys
+                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   _ <- ensureEqualTy exp IntTy i
+                   _ <- ensureEqualTy exp ty val
+                   pure (ListTy ty, tstate)
+                 VSnocP ty   -> do
+                   let [ls,val] = tys
+                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   _ <- ensureEqualTy exp ty val
+                   pure (ListTy ty, tstate)
+                 PrintInt -> throwError $ GenericTC "PrintInt not handled" exp
+                 PrintSym -> throwError $ GenericTC "PrintSym not handled" exp
+                 ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp
+                 SymSetEmpty -> throwError $ GenericTC "SymSetEmpty not handled" exp
+                 SymSetInsert -> throwError $ GenericTC "SymSetInsert not handled" exp
+                 SymSetContains -> throwError $ GenericTC "SymSetContains not handled" exp
+                 SymHashEmpty -> throwError $ GenericTC "SymHashEmpty not handled" exp
+                 SymHashInsert -> throwError $ GenericTC "SymHashInsert not handled" exp
+                 SymHashLookup -> throwError $ GenericTC "SymHashLookup not handled" exp
+                 IntHashEmpty -> throwError $ GenericTC "IntHashEmpty not handled" exp
+                 IntHashInsert -> throwError $ GenericTC "IntHashInsert not handled" exp
+                 IntHashLookup -> throwError $ GenericTC "IntHashLookup not handled" exp
 
 
       LetE (v,_ls,ty,e1) e2 -> do
@@ -389,10 +424,14 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                -- ensureEqualTy exp ty ty1
                return (ty1,tstate1)
 
-      SpawnE w f locs args ->
-        tcExp ddfs env funs constrs regs tstatein (l$ AppE f locs args)
+      SpawnE f locs args ->
+        tcExp ddfs env funs constrs regs tstatein (AppE f locs args)
 
       SyncE -> pure (ProdTy [], tstatein)
+
+      IsBigE e -> do
+        (_ty, tstate1) <- recur tstatein e
+        pure (BoolTy, tstate1)
 
       WithArenaE v e -> do
               let env' = extendVEnv v ArenaTy env
@@ -428,7 +467,7 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                         return (ty,tstate3)
                 AfterVariableLE x l1 ->
                     do r <- getRegion exp constrs l1
-                       (_xty,tstate1) <- tcExp ddfs env funs constrs regs tstatein $ L NoLoc $ VarE x
+                       (_xty,tstate1) <- tcExp ddfs env funs constrs regs tstatein $ VarE x
                        -- NOTE: We now allow aliases (offsets) from scalar vars too. So we can leave out this check
                        -- ensurePackedLoc exp xty l1
                        let tstate2 = extendTS v (Output,True) $ setAfter l1 tstate1
@@ -447,17 +486,18 @@ tcExp ddfs env funs constrs regs tstatein exp@(L _ ex) =
                        return (ty,tstate1)
                 _ -> throwError $ GenericTC "Invalid letloc form" exp
 
+      Ext (FromEndE{}) -> throwError $ GenericTC "FromEndE not handled" exp
+      Ext (AddFixed{}) -> throwError $ GenericTC "AddFixed not handled" exp
+
       Ext (RetE _ls v) -> do
 
                -- skip returned locations for now
-               recur tstatein $ L NoLoc $ VarE v
+               recur tstatein $ VarE v
 
       -- The IntTy is just a placeholder. BoundsCheck is a side-effect
       Ext (BoundsCheck{}) -> return (IntTy,tstatein)
 
       Ext (IndirectionE tycon _ (a,_) _ _) -> return (PackedTy tycon a, tstatein)
-
-      hole -> error $ "FINISHME: L2.tcExp " ++ show hole
 
     where recur ts e = tcExp ddfs env funs constrs regs ts e
 

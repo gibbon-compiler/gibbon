@@ -4,7 +4,6 @@
 --
 module InferRegionScope where
 
-import Data.Loc
 import Data.Set as S
 import Data.Map as M
 
@@ -25,19 +24,19 @@ case_t1 = expected @=? actual
   where
     actual = fst $ defaultPackedRunPassM $ inferRegScopeExp test1
 
-    test1 :: L L2.Exp2
-    test1 = l$ Ext $ LetRegionE (VarR "r1") $
-            l$ Ext $ LetLocE "l1" (StartOfLE (VarR "r1")) $
-            l$ LetE ("x1",[],PackedTy "A" "l1",
-                     l$ DataConE "l1" "A" [l$ LitE 1]) $
-            l$ VarE "x1"
+    test1 :: L2.Exp2
+    test1 = Ext $ LetRegionE (VarR "r1") $
+            Ext $ LetLocE "l1" (StartOfLE (VarR "r1")) $
+            LetE ("x1",[],PackedTy "A" "l1",
+                     DataConE "l1" "A" [LitE 1]) $
+            VarE "x1"
 
-    expected :: L L2.Exp2
-    expected = l$ Ext $ LetRegionE (GlobR "r1" Infinite) $
-               l$ Ext $ LetLocE "l1" (StartOfLE (VarR "r1")) $
-               l$ LetE ("x1",[],PackedTy "A" "l1",
-                        l$ DataConE "l1" "A" [l$ LitE 1]) $
-               l$ VarE "x1"
+    expected :: L2.Exp2
+    expected = Ext $ LetRegionE (GlobR "r1" Infinite) $
+               Ext $ LetLocE "l1" (StartOfLE (VarR "r1")) $
+               LetE ("x1",[],PackedTy "A" "l1",
+                        DataConE "l1" "A" [LitE 1]) $
+               VarE "x1"
 
 
 
@@ -47,19 +46,19 @@ case_t2 = expected @=? actual
   where
     actual = fst $ defaultPackedRunPassM $ inferRegScopeExp test1
 
-    test1 :: L L2.Exp2
-    test1 = l$ Ext $ LetRegionE (VarR "r1") $
-            l$ Ext $ LetLocE "l1" (StartOfLE (VarR "r1")) $
-            l$ LetE ("x1",[],PackedTy "A" "l1",
-                     l$ DataConE "l1" "A" [l$ LitE 1]) $
-            l$ LitE 1
+    test1 :: L2.Exp2
+    test1 = Ext $ LetRegionE (VarR "r1") $
+            Ext $ LetLocE "l1" (StartOfLE (VarR "r1")) $
+            LetE ("x1",[],PackedTy "A" "l1",
+                     DataConE "l1" "A" [LitE 1]) $
+            LitE 1
 
-    expected :: L L2.Exp2
-    expected = l$ Ext $ LetRegionE (GlobR "r1" Infinite) $
-               l$ Ext $ LetLocE "l1" (StartOfLE (VarR "r1")) $
-               l$ LetE ("x1",[],PackedTy "A" "l1",
-                        l$ DataConE "l1" "A" [l$ LitE 1]) $
-               l$ LitE 1
+    expected :: L2.Exp2
+    expected = Ext $ LetRegionE (GlobR "r1" Infinite) $
+               Ext $ LetLocE "l1" (StartOfLE (VarR "r1")) $
+               LetE ("x1",[],PackedTy "A" "l1",
+                        DataConE "l1" "A" [LitE 1]) $
+               LitE 1
 
 inferRegScopeTests :: TestTree
 inferRegScopeTests = $(testGroupGenerator)

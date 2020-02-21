@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE StandaloneDeriving    #-}
 
 -- | A higher-ordered surface language that supports Rank-1 parametric
 -- polymorphism.
@@ -15,7 +16,7 @@ where
 import           Control.Monad.State ( MonadState )
 import           Control.DeepSeq (NFData)
 import           Data.List
-import           Data.Loc
+import qualified Data.Loc as Loc
 import           GHC.Generics
 import           Text.PrettyPrint.GenericPretty
 import           Text.PrettyPrint.HughesPJ as PP
@@ -30,23 +31,49 @@ import           Gibbon.Language hiding (UrTy(..))
 type Exp0     = PreExp E0Ext Ty0 Ty0
 type DDefs0   = DDefs Ty0
 type DDef0    = DDef Ty0
-type FunDef0  = FunDef (L Exp0)
-type FunDefs0 = FunDefs (L Exp0)
-type Prog0    = Prog (L Exp0)
+type FunDef0  = FunDef Exp0
+type FunDefs0 = FunDefs Exp0
+type Prog0    = Prog Exp0
 
 --------------------------------------------------------------------------------
 
 -- | The extension point for L0.
 data E0Ext loc dec =
    LambdaE [(Var,dec)] -- Variable tagged with type
-           (L (PreExp E0Ext loc dec))
- | PolyAppE (L (PreExp E0Ext loc dec)) -- Operator
-            (L (PreExp E0Ext loc dec)) -- Operand
+           (PreExp E0Ext loc dec)
+ | PolyAppE (PreExp E0Ext loc dec) -- Operator
+            (PreExp E0Ext loc dec) -- Operand
  | FunRefE [loc] Var -- Reference to a function (toplevel or lambda),
                      -- along with its tyapps.
- | BenchE Var [loc] [(L (PreExp E0Ext loc dec))] Bool
- | ParE0 [(L (PreExp E0Ext loc dec))]
+ | BenchE Var [loc] [(PreExp E0Ext loc dec)] Bool
+ | ParE0 [(PreExp E0Ext loc dec)]
+ | L Loc.Loc (PreExp E0Ext loc dec)
  deriving (Show, Ord, Eq, Read, Generic, NFData)
+
+--------------------------------------------------------------------------------
+-- Helper methods to integrate the Data.Loc with Gibbon
+
+deriving instance Generic Loc.Loc
+deriving instance Generic Loc.Pos
+deriving instance Ord     Loc.Loc
+deriving instance NFData  Loc.Pos
+deriving instance NFData  Loc.Loc
+
+-- | Orphaned instance: read without source locations.
+instance Read t => Read (Loc.L t) where
+  readsPrec n str = [ (Loc.L Loc.NoLoc a,s) | (a,s) <- readsPrec n str ]
+
+instance Out Loc.Loc where
+  docPrec _ loc = doc loc
+
+  doc loc =
+    case loc of
+      Loc.Loc start _end -> doc start
+      Loc.NoLoc -> PP.empty
+
+instance Out Loc.Pos where
+  docPrec _ pos = doc pos
+  doc (Loc.Pos path line col _) = hcat [doc path, colon, doc line, colon, doc col]
 
 instance FreeVars (E0Ext l d) where
   gFreeVars e =
@@ -56,6 +83,7 @@ instance FreeVars (E0Ext l d) where
       FunRefE _ f      -> S.singleton f
       BenchE _ _ args _-> S.unions (map gFreeVars args)
       ParE0 ls         -> S.unions (map gFreeVars ls)
+      L _ e1           -> gFreeVars e1
 
 instance (Out l, Out d, Show l, Show d) => Expression (E0Ext l d) where
   type LocOf (E0Ext l d) = l
@@ -66,7 +94,7 @@ instance (Show l, Out l) => Flattenable (E0Ext l Ty0) where
     gFlattenGatherBinds _ddfs _env ex = return ([], ex)
     gFlattenExp _ddfs _env ex = return ex
 
-instance HasSubstitutableExt E0Ext l d => SubstitutableExt (L (PreExp E0Ext l d)) (E0Ext l d) where
+instance HasSubstitutableExt E0Ext l d => SubstitutableExt (PreExp E0Ext l d) (E0Ext l d) where
   gSubstExt old new ext =
     case ext of
       LambdaE args bod -> LambdaE args (gSubst old new bod)
@@ -74,6 +102,7 @@ instance HasSubstitutableExt E0Ext l d => SubstitutableExt (L (PreExp E0Ext l d)
       FunRefE{}        -> ext
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubst old new) args) b
       ParE0 ls -> ParE0 $ map (gSubst old new) ls
+      L p e1   -> L p (gSubst old new e1)
 
   gSubstEExt old new ext =
     case ext of
@@ -82,6 +111,7 @@ instance HasSubstitutableExt E0Ext l d => SubstitutableExt (L (PreExp E0Ext l d)
       FunRefE{}        -> ext
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubstE old new) args) b
       ParE0 ls -> ParE0 $ map (gSubstE old new) ls
+      L p e    -> L p $ (gSubstE old new e)
 
 instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
   gRename env ext =
@@ -91,6 +121,7 @@ instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
       FunRefE tyapps a -> FunRefE (map go tyapps) (go a)
       BenchE fn tyapps args b -> BenchE fn (map go tyapps) (map go args) b
       ParE0 ls -> ParE0 $ map (gRename env) ls
+      L p e    -> L p (gRename env e)
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
@@ -160,6 +191,9 @@ instance Renamable Ty0 where
       PackedTy tycon ls -> PackedTy tycon (map go ls)
       ListTy a          -> ListTy (go a)
       ArenaTy           -> ArenaTy
+      SymSetTy          -> SymSetTy
+      SymHashTy         -> SymHashTy
+      IntHashTy         -> IntHashTy
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
@@ -193,20 +227,20 @@ isFunTy :: Ty0 -> Bool
 isFunTy ArrowTy{} = True
 isFunTy _ = False
 
-isCallUnsaturated :: TyScheme -> [L Exp0] -> Bool
+isCallUnsaturated :: TyScheme -> [Exp0] -> Bool
 isCallUnsaturated sigma args = length args < length (arrIns sigma)
 
-saturateCall :: MonadState Int m => TyScheme -> L Exp0 -> m (L Exp0)
-saturateCall sigma (L loc ex) =
+saturateCall :: MonadState Int m => TyScheme -> Exp0 -> m Exp0
+saturateCall sigma ex =
   case ex of
     AppE f [] args -> do
       -- # args needed to saturate this call-site.
       let args_wanted = length (arrIns sigma) - length args
       new_args <- mapM (\_ -> gensym "sat_arg_") [0..(args_wanted-1)]
       new_tys  <- mapM (\_ -> newMetaTy) new_args
-      pure $ L loc $
+      pure $
         Ext (LambdaE (zip new_args new_tys)
-               (l$ AppE f [] (args ++ (map (l . VarE) new_args))))
+               (AppE f [] (args ++ (map VarE new_args))))
 
     AppE _ tyapps _ ->
       error $ "unCurryCall: Expected tyapps to be [], got: " ++ sdoc tyapps
@@ -238,6 +272,7 @@ tyVarsInTys tys = foldr (go []) [] tys
         ArenaTy -> acc
         SymSetTy -> acc
         SymHashTy -> acc
+        IntHashTy -> acc
 
 -- | Get the MetaTvs from a type; no duplicates in result.
 metaTvsInTy :: Ty0 -> [MetaTv]
@@ -265,6 +300,7 @@ metaTvsInTys tys = foldr go [] tys
         ArenaTy -> acc
         SymSetTy -> acc
         SymHashTy -> acc
+        IntHashTy -> acc
 
 -- | Like 'tyVarsInTy'.
 tyVarsInTyScheme :: TyScheme -> [TyVar]
@@ -294,6 +330,9 @@ arrowTysInTy = go []
         ArrowTy tys b -> go (foldl go acc tys) b ++ [ty]
         PackedTy _ vs -> foldl go acc vs
         ListTy a -> go acc a
+        SymSetTy  -> acc
+        SymHashTy -> acc
+        IntHashTy -> acc
 
 -- | Replace the specified quantified type variables by
 -- given meta type variables.
@@ -313,6 +352,7 @@ substTyVar mp ty =
     ArenaTy -> ty
     SymSetTy -> ty
     SymHashTy -> ty
+    IntHashTy -> ty
   where
     go = substTyVar mp
 
@@ -327,8 +367,8 @@ substTyVar mp ty =
 -- Or, we can have a special (Typeable L0), which is what recoverType is.
 -- ¯\_(ツ)_/¯
 --
-recoverType :: DDefs0 -> Env2 Ty0 -> L Exp0 -> Ty0
-recoverType ddfs env2 (L _ ex) =
+recoverType :: DDefs0 -> Env2 Ty0 -> Exp0 -> Ty0
+recoverType ddfs env2 ex =
   case ex of
     VarE v       -> M.findWithDefault (error $ "recoverType: Unbound variable " ++ show v) v (vEnv env2)
     LitE _       -> IntTy
@@ -352,13 +392,15 @@ recoverType ddfs env2 (L _ ex) =
         oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                       ++"\nExpression:\n  "++ sdoc ex
                       ++"\nEnvironment:\n  "++sdoc (vEnv env2)
-    SpawnE _ v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
-                           in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
+    SpawnE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
+                         in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
     SyncE -> ProdTy []
+    IsBigE _ -> BoolTy
     CaseE _ mp ->
       let (c,args,e) = head mp
           args' = map fst args
       in recoverType ddfs (extendsVEnv (M.fromList (zip args' (lookupDataCon ddfs c))) env2) e
+    WithArenaE{} -> error "recoverType: WithArenaE not handled."
     Ext ext ->
       case ext of
         LambdaE args bod ->
@@ -371,6 +413,7 @@ recoverType ddfs env2 (L _ ex) =
         PolyAppE{}  -> error "recoverTypeep: TODO PolyAppE"
         BenchE fn _ _ _ -> outTy $ fEnv env2 # fn
         ParE0 ls -> ProdTy $ map (recoverType ddfs env2) ls
+        L _ e    -> recoverType ddfs env2 e
   where
     -- Return type for a primitive operation.
     primRetTy1 :: Prim Ty0 -> Ty0
@@ -400,9 +443,26 @@ recoverType ddfs env2 (L _ ex) =
         DictEmptyP ty  -> SymDictTy Nothing ty
         DictInsertP ty -> SymDictTy Nothing ty
         DictLookupP ty -> ty
+        VEmptyP ty     -> ListTy ty
+        VNthP ty       -> ty
+        VLengthP _ty   -> IntTy
+        VUpdateP ty    -> ListTy ty
+        VSnocP ty      -> ListTy ty
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty
-        RequestEndOf -> error "primRetTy: PEndOf not handled yet"
+        RequestEndOf -> error "primRetTy1: RequestEndOf not handled yet"
+        PrintInt     -> error "primRetTy1: PrintInt not handled yet"
+        PrintSym     -> error "primRetTy1: PrintSym not handled yet"
+        ReadInt      -> error "primRetTy1: ReadInt not handled yet"
+        SymSetEmpty  -> error "primRetTy1: SymSetEmpty not handled yet"
+        SymSetContains-> error "primRetTy1: SymSetContains not handled yet"
+        SymSetInsert -> error "primRetTy1: SymSetInsert not handled yet"
+        SymHashEmpty -> error "primRetTy1: SymHashEmpty not handled yet"
+        SymHashInsert-> error "primRetTy1: SymHashInsert not handled yet"
+        SymHashLookup-> error "primRetTy1: SymHashLookup not handled yet"
+        IntHashEmpty -> error "primRetTy1: IntHashEmpty not handled yet"
+        IntHashInsert-> error "primRetTy1: IntHashInsert not handled yet"
+        IntHashLookup-> error "primRetTy1: IntHashLookup not handled yet"
 
 
 {-

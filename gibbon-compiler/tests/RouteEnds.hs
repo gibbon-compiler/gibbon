@@ -5,7 +5,6 @@
 --
 module RouteEnds where
 
-import Data.Loc
 import Data.Set as S
 import Data.Map as M
 

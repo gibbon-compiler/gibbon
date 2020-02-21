@@ -6,7 +6,6 @@
 module Gibbon.Passes.ShakeTree
     (shakeTree) where
 
-import Data.Loc
 import Prelude hiding (exp)
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -27,12 +26,12 @@ shakeTree prg@Prog{fundefs,mainExp} = return $
  where
    fd f@FunDef{funBody} = f { funBody = shakeTreeExp funBody }
 
-shakeTreeExp :: L Exp3 -> L Exp3
+shakeTreeExp :: Exp3 -> Exp3
 shakeTreeExp = go
   where
 
-  go :: L Exp3 -> L Exp3
-  go (L p e0) = L p $
+  go :: Exp3 -> Exp3
+  go e0 =
    -- dbgTrace 5 ("Inline, processing with env:\n "++sdoc env++"\n exp: "++sdoc e0) $
    case e0 of
 
@@ -42,7 +41,7 @@ shakeTreeExp = go
         in
         if S.member v fv || hasEffect rhs
         then LetE (v,locs,t, go rhs) bod'
-        else dbgTrace 4 (" [shakeTreeExp] dropping binding: "++show (v,t,rhs))$ unLoc bod'
+        else dbgTrace 4 (" [shakeTreeExp] dropping binding: "++show (v,t,rhs))$ bod'
 
     (VarE v)           -> VarE v
     (LitE i)           -> LitE i
@@ -67,6 +66,11 @@ shakeTreeExp = go
          FoldE (v1,t1,go e1) (v2,t2,go e2)
                (go e3)
 
+    (WithArenaE{}) -> error "shakeTreExp: WithArenaE not handled."
+    (SpawnE{}) -> error "shakeTreExp: SpawnE not handled."
+    (SyncE{}) -> error "shakeTreExp: SyncE not handled."
+    (IsBigE{}) -> error "shakeTreExp: IsBigE not handled."
+
     -- Assume that these are trivial, and always have effects
     Ext _ext -> e0
 
@@ -79,8 +83,8 @@ shakeTreeExp = go
 --
 -- This contains details that are specific to this pass, which is
 -- post-cursorize.  It's not really a good general definition of "hasEffect".
-hasEffect :: L Exp3 -> Bool
-hasEffect (L _ rhs) =
+hasEffect :: Exp3 -> Bool
+hasEffect rhs =
     -- Trivials have been inlined, but we're still flat-ish:
     case rhs of
       VarE _ -> False
@@ -109,6 +113,11 @@ hasEffect (L _ rhs) =
 
       MapE _ _ -> error "hasEffect: FIXME MapE"
       FoldE _ _ _ -> error "hasEffect: FIXME FoldE"
+
+      WithArenaE{} -> error "hasEffect: WithArenaE not handled."
+      SpawnE{} -> error "hasEffect: SpawnE not handled."
+      SyncE{} -> error "hasEffect: SyncE not handled."
+      IsBigE{} -> error "hasEffect: IsBigE not handled."
 
       -- always have effects
       Ext _ -> True

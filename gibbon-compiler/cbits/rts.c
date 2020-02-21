@@ -15,6 +15,7 @@
 #include <errno.h>
 #include <utlist.h>
 #include <uthash.h>
+#include <utarray.h>
 #ifdef _POINTER
 #include <gc.h>
 #endif
@@ -27,7 +28,7 @@
 #define GB (MB * 1000lu)
 
 // Initial size of BigInfinite buffers
-static long long global_init_biginf_buf_size = (5 * GB);
+static long long global_init_biginf_buf_size = (1 * GB);
 
 // Initial size of Infinite buffers
 static long long global_init_inf_buf_size = 64 * KB;
@@ -685,6 +686,12 @@ void free_region(CursorTy end_reg) {
 BoolTy is_big(CursorTy cur) {
     return false;
 }
+
+// -------------------------------------
+// Dynamic Arrays
+// -------------------------------------
+
+
 
 /* -------------------------------------------------------------------------------- */
 

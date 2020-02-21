@@ -13,7 +13,6 @@ module Gibbon.Passes.Lower
 import           Control.Monad
 import           Data.Foldable
 import           Data.Maybe
-import           Data.Loc
 import           Data.List as L hiding (tail)
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -117,30 +116,44 @@ sandwich mid s end = openParen s $ mid $ closeParen end
 
 -- Generate printing functions
 genDconsPrinter :: [Ty3] -> Var -> PassM T.Tail
-genDconsPrinter (x:xs) tail = case x of
-  _ | isScalarTy x ->  do
-    val  <- gensym "val"
-    t    <- gensym "tail"
-    let l4_ty = T.fromL3Ty x
-    T.LetPrimCallT [(val, l4_ty), (t, T.CursorTy)] (T.ReadScalar (mkScalar x)) [(T.VarTriv tail)] <$>
-      printTy False x [T.VarTriv val] <$>
-       maybeSpace <$>
-        genDconsPrinter xs t
+genDconsPrinter (x:xs) tail =
+  case x of
+    L3.PackedTy tyCons _ -> do
+      dflags <- getDynFlags
+      if gopt Opt_Packed dflags
+      then do
+        t    <- gensym "tail"
+        T.LetCallT False [(t, T.CursorTy)] (mkPrinterName tyCons) [(T.VarTriv tail)] <$>
+           maybeSpace <$> genDconsPrinter xs t
+      else do
+        val  <- gensym "val"
+        t    <- gensym "tail"
+        tmp  <- gensym "temp"
+        valc <- gensym "valcur"
+        T.LetPrimCallT [(val, T.IntTy), (t, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv tail)] <$>
+          T.LetTrivT (valc, T.CursorTy, T.VarTriv val) <$>
+          T.LetCallT False [(tmp, T.PtrTy)] (mkPrinterName tyCons) [(T.VarTriv valc)] <$>
+            maybeSpace <$> genDconsPrinter xs t
 
-  L3.PackedTy tyCons _ -> do
-    val  <- gensym "val"
-    t    <- gensym "tail"
-    tmp  <- gensym "temp"
-    valc <- gensym "valcur"
-    T.LetPrimCallT [(val, T.IntTy), (t, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv tail)] <$>
-      T.LetTrivT (valc, T.CursorTy, T.VarTriv val) <$>
-      T.LetCallT False [(tmp, T.PtrTy)] (mkPrinterName tyCons) [(T.VarTriv valc)] <$>
-       maybeSpace <$>
-         genDconsPrinter xs t
+    L3.CursorTy -> do
+      dflags <- getDynFlags
+      if gopt Opt_Packed dflags
+      then do
+        tail2 <- gensym "tail"
+        T.LetPrimCallT [(tail2, T.CursorTy)] T.AddP [T.VarTriv tail, T.IntTriv 8] <$>
+          genDconsPrinter xs tail2
+      else genDconsPrinter xs tail
 
-  L3.CursorTy -> genDconsPrinter xs tail
+    _ | isScalarTy x ->  do
+      val  <- gensym "val"
+      t    <- gensym "tail"
+      let l4_ty = T.fromL3Ty x
+      T.LetPrimCallT [(val, l4_ty), (t, T.CursorTy)] (T.ReadScalar (mkScalar x)) [(T.VarTriv tail)] <$>
+        printTy False x [T.VarTriv val] <$>
+         maybeSpace <$>
+          genDconsPrinter xs t
 
-  _ -> error "FINISHME: genDconsPrinter"
+    _ -> error "FINISHME: genDconsPrinter"
 
  where
   maybeSpace = if L.null xs
@@ -174,9 +187,12 @@ genPrinter DDef{tyName, dataCons} = do
   tail <- gensym "tail"
   alts <- genAltPrinter dataCons tail 0
   lbl  <- gensym "switch"
-  -- CSK: Why is this ReadInt ?
-  bod  <- return $ T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv p)] $
-            T.Switch lbl (T.VarTriv tag) alts Nothing
+  dflags <- getDynFlags
+  let bod = if gopt Opt_Packed dflags
+            then T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadTag) [(T.VarTriv p)] $
+                 T.Switch lbl (T.VarTriv tag) alts Nothing
+            else T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv p)] $
+                 T.Switch lbl (T.VarTriv tag) alts Nothing
   return T.FunDecl{ T.funName  = mkPrinterName (fromVar tyName),
                     T.funArgs  = [(p, T.CursorTy)],
                     T.funRetTy = T.PtrTy,
@@ -331,7 +347,6 @@ lower Prog{fundefs,ddefs,mainExp} = do
                            _ -> return (acc ++ [(arg, typ ty)], b))
                       ([], funBody)
                       (zip funArgs intys)
-      -- dbgTraceIt (render $ pprint bod) (pure ())
       -- let bod = funBody
       bod' <- tail sym_tbl bod
       return T.FunDecl{ T.funName  = funName
@@ -342,8 +357,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
                       }
 
   -- TimeIt forms are impure because they have print statements after codegen
-  ispure :: L Exp3 -> Bool
-  ispure (L _ ex) =
+  ispure :: Exp3 -> Bool
+  ispure ex =
     case ex of
       TimeIt{} -> False
       PrimAppE Gensym [] -> False
@@ -368,8 +383,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
                  (M.foldl (\acc fn -> collect_syms acc (funBody fn)) S.empty fundefs)
 
 
-      collect_syms :: S.Set String -> L Exp3 -> S.Set String
-      collect_syms syms (L _ ex) =
+      collect_syms :: S.Set String -> Exp3 -> S.Set String
+      collect_syms syms ex =
         let go  = collect_syms syms
             gol = foldl collect_syms syms in
         case ex of
@@ -387,8 +402,9 @@ lower Prog{fundefs,ddefs,mainExp} = do
           DataConE _ _ ls -> gol ls
           TimeIt e _ _   -> go e
           WithArenaE _ e -> go e
-          SpawnE _ _ _ ls  -> gol ls
+          SpawnE _ _ ls  -> gol ls
           SyncE -> S.empty
+          IsBigE{} -> error "collect_syms: IsBigE not handled."
           Ext ext        ->
             case ext of
               WriteScalar _ _ ex -> go ex
@@ -407,12 +423,14 @@ lower Prog{fundefs,ddefs,mainExp} = do
               ReadCursor{}       -> syms
               BumpRefCount{}     -> syms
               NullCursor         -> syms
+              BumpArenaRefCount{}-> error "collect_syms: BumpArenaRefCount not handled."
+              RetE ls -> gol ls
           MapE{}         -> syms
           FoldE{}        -> syms
 
 
-  tail :: M.Map String Word16 -> L Exp3 -> PassM T.Tail
-  tail sym_tbl (L _ ex0) = do
+  tail :: M.Map String Word16 -> Exp3 -> PassM T.Tail
+  tail sym_tbl ex0 = do
    dflags <- getDynFlags
    let pkd = gopt Opt_Packed dflags
    case ex0 of
@@ -420,23 +438,23 @@ lower Prog{fundefs,ddefs,mainExp} = do
     -- HACK! We don't have LetSwitchT yet.  This means potential exponential code duplication:
     -- LetE (_,_, CaseE _ _) _ ->
     --    error "lower: unfinished, we cannot let-bind the result of a switch yet."
-    LetE (vr,_locs,ty, L _ (CaseE scrt ls)) bod -> tail sym_tbl $
+    LetE (vr,_locs,ty, (CaseE scrt ls)) bod -> tail sym_tbl $
                                        dbgTrace 1 ("WARNING: Let-bound CasE, code duplication of this body:\n  "
                                                    ++sdoc bod)$
          -- For now just duplicate code:
-         l$ CaseE scrt [ (k,vs, mkLet (vr,ty,e) bod)
+         CaseE scrt [ (k,vs, mkLet (vr,ty,e) bod)
                     | (k,vs,e) <- ls]
 
     -- Aaand... if we're going to push Let's under Case's, we have to repeat this bit of flattening:
-    LetE (v1, locs, t1, L _ (LetE (v2,locs2,t2,rhs2) rhs1)) bod ->
-       tail sym_tbl $ l$ LetE (v2,locs,t2,rhs2) $ l$ LetE (v1,locs2,t1,rhs1) bod
+    LetE (v1, locs, t1, (LetE (v2,locs2,t2,rhs2) rhs1)) bod ->
+       tail sym_tbl $ LetE (v2,locs,t2,rhs2) $ LetE (v1,locs2,t1,rhs1) bod
 
     --------------------------------------------------------------------------------
     -- Packed codegen
     --------------------------------------------------------------------------------
 
     -- Likewise, Case really means ReadTag.  Argument is a cursor.
-    CaseE (L _ (VarE scrut)) ls | pkd -> do
+    CaseE (VarE scrut) ls | pkd -> do
         let (last:restrev) = reverse ls
             rest = reverse restrev
         tagtmp <- gensym $ toVar "tmpval"
@@ -444,13 +462,13 @@ lower Prog{fundefs,ddefs,mainExp} = do
         -- Here we lamely chase down all the tuple references and make them variables:
         -- So that Goto's work properly (See [Modifying switch statements to use redirection nodes]).
         let doalt (k,ls,rhs) = do
-              let rhs' = L3.substE (l$ Ext (AddCursor scrut (l$ LitE 1))) (l$ VarE ctmp) $
+              let rhs' = L3.substE (Ext (AddCursor scrut (LitE 1))) (VarE ctmp) $
                          rhs
               -- We only need to thread one value through, the cursor resulting from read.
               (getTagOfDataCon ddefs k,) <$>
                 case ls of
                   []  -> tail sym_tbl rhs' -- AUDITME -- is this legit, or should it have one cursor param anyway?
-                  [(c,_)] -> tail sym_tbl (subst c (l$ VarE ctmp) rhs')
+                  [(c,_)] -> tail sym_tbl (subst c (VarE ctmp) rhs')
                   oth -> error $ "lower.tail.CaseE: unexpected pattern" ++ show oth
         alts <- mapM doalt rest
         (_,last') <- doalt last
@@ -494,7 +512,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
       let
         e_triv = triv sym_tbl "sum case scrutinee" e
 
-        mk_alt :: (DataCon, [(Var,())], L Exp3) -> PassM (Int64, T.Tail)
+        mk_alt :: (DataCon, [(Var,())], Exp3) -> PassM (Int64, T.Tail)
         mk_alt (con, bndrs, rhs) = do
           let
             con_tag = getTagOfDataCon ddefs con
@@ -516,7 +534,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
 
     -- Accordingly, constructor allocation becomes an allocation.
-    LetE (v, _, _, L _ (DataConE _ k ls)) bod | not pkd -> L3.assertTrivs ls $ do
+    LetE (v, _, _, (DataConE _ k ls)) bod | not pkd -> L3.assertTrivs ls $ do
       let tycon    = getTyOfDataCon ddefs k
           all_cons = dataCons (lookupDDef ddefs tycon)
           tag      = fromJust (L.findIndex ((==) k . fst) all_cons)
@@ -534,23 +552,29 @@ lower Prog{fundefs,ddefs,mainExp} = do
     DataConE _ k _ls -> do
        tmp <- gensym $ toVar "tailift"
        let ty = L3.PackedTy (getTyOfDataCon ddefs k) ()
-       tail sym_tbl $ l$ LetE (tmp, [], ty, l$ ex0) (l$ VarE tmp)
+       tail sym_tbl $ LetE (tmp, [], ty, ex0) (VarE tmp)
 
     --------------------------------------------------------------------------------
 
---    L3.LitE n       -> pure$ T.RetValsT [triv "literal in tail" (LitE n)]
-    MkProdE ls   -> pure$ T.RetValsT (L.map (triv sym_tbl "returned element of tuple") ls)
-    e | isTrivial e -> pure$ T.RetValsT [triv sym_tbl "<internal error1>" (l$ e)]
+    -- Ext (RetE ls)   -> pure$ T.RetValsT (L.map (triv sym_tbl "returned element of tuple") ls)
+    --
+    MkProdE ls      -> pure$ T.RetValsT (L.map (triv sym_tbl "returned element of tuple") ls)
+    e | isTrivial e -> pure$ T.RetValsT [triv sym_tbl "<internal error1>" (e)]
 
     -- We could eliminate these ahead of time (unariser):
     -- FIXME: Remove this when that is done a priori:
-    LetE (v, _, ProdTy tys, L _ (MkProdE ls)) bod -> do
+    LetE (v, _, ProdTy tys, (MkProdE ls)) bod -> do
       (tmps,bod') <- eliminateProjs v tys bod
       -- Bind tmps individually:a
       let go [] acc                 = acc
-          go ((pvr,pty,rhs):rs) acc = go rs (l$ LetE (pvr,[],pty,rhs) acc)
+          go ((pvr,pty,rhs):rs) acc = go rs (LetE (pvr,[],pty,rhs) acc)
       -- Finally reprocess the whole thing
       tail sym_tbl (go (zip3 tmps tys ls) bod')
+
+    LetE (v, _, ty, rhs@(ProjE{})) bod -> do
+      let trv = triv sym_tbl "ProjE" rhs
+      bod' <- tail sym_tbl bod
+      pure $ T.LetTrivT (v,typ ty,trv) bod'
 
     WithArenaE v e -> do
       e' <- tail sym_tbl e
@@ -573,7 +597,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                                       -- And tag "1" is true:
                                       (Just b')
 
-    LetE (vr, _, ty, L _ (L3.TimeIt rhs _ flg)) bod ->
+    LetE (vr, _, ty, (L3.TimeIt rhs _ flg)) bod ->
         do rhs' <- tail sym_tbl rhs
            case ty of
              ProdTy ls ->
@@ -589,32 +613,32 @@ lower Prog{fundefs,ddefs,mainExp} = do
     PrimAppE (ErrorP str _ty) [] ->
       pure $ T.ErrT str
 
-    LetE (_,_,_, L _ (PrimAppE (L3.ErrorP str _) [])) _ ->
+    LetE (_,_,_, (PrimAppE (L3.ErrorP str _) [])) _ ->
       pure $ T.ErrT str
 
     -- Whatever... a little just-in-time flattening.  Should obsolete this:
-    PrimAppE (DictEmptyP ty) ((L sl (VarE v)):ls) -> do
+    PrimAppE (DictEmptyP ty) ((VarE v):ls) -> do
       tmp <- gensym $ toVar "flt"
-      tail sym_tbl (l$ LetE (tmp, [], SymDictTy (Just v) ty, l$ PrimAppE (DictEmptyP ty) ((L sl (VarE v)):ls)) (l$ VarE tmp))
+      tail sym_tbl (LetE (tmp, [], SymDictTy (Just v) ty, PrimAppE (DictEmptyP ty) ((VarE v):ls)) (VarE tmp))
 
-    PrimAppE (DictInsertP ty) ((L sl (VarE v)):ls) -> do
+    PrimAppE (DictInsertP ty) ((VarE v):ls) -> do
       tmp <- gensym $ toVar "flt"
-      tail sym_tbl (l$ LetE (tmp, [], SymDictTy (Just v) ty, l$ PrimAppE (DictInsertP ty) ((L sl (VarE v)):ls)) (l$ VarE tmp))
+      tail sym_tbl (LetE (tmp, [], SymDictTy (Just v) ty, PrimAppE (DictInsertP ty) ((VarE v):ls)) (VarE tmp))
 
     PrimAppE p ls -> do
       tmp <- gensym $ toVar "flt"
-      tail sym_tbl (l$ LetE (tmp, [], primRetTy p, l$ PrimAppE p ls) (l$ VarE tmp))
+      tail sym_tbl (LetE (tmp, [], primRetTy p, PrimAppE p ls) (VarE tmp))
 
     ---------------------
     -- (2) Next FAKE Primapps.  These could be added to L3 if we wanted to pollute it.
 
-    LetE (v,_,_, L _ (Ext (ReadScalar s cur))) bod -> do
+    LetE (v,_,_,  (Ext (ReadScalar s cur))) bod -> do
       vtmp <- gensym $ toVar "tmpval"
       ctmp <- gensym $ toVar "tmpcur"
 
       -- Here we lamely chase down all the tuple references and make them variables:
-      let bod' = L3.substE (l$ ProjE 0 (l$ VarE v)) (l$ VarE vtmp) $
-                 L3.substE (l$ ProjE 1 (l$ VarE v)) (l$ VarE ctmp)
+      let bod' = L3.substE (ProjE 0 (VarE v)) (VarE vtmp) $
+                 L3.substE (ProjE 1 (VarE v)) (VarE ctmp)
                  bod
 
       dbgTrace 7 (" [lower] ReadInt, after substing references to "
@@ -622,38 +646,38 @@ lower Prog{fundefs,ddefs,mainExp} = do
         T.LetPrimCallT [(vtmp, T.scalarToTy s),(ctmp,T.CursorTy)] (T.ReadScalar s) [T.VarTriv cur] <$>
           tail sym_tbl bod'
 
-    LetE (v, _, _, L _ (Ext (WriteScalar s c e))) bod ->
+    LetE (v, _, _,  (Ext (WriteScalar s c e))) bod ->
       T.LetPrimCallT [(v,T.CursorTy)] (T.WriteScalar s) [triv sym_tbl "WriteTag arg" e, T.VarTriv c] <$>
          tail sym_tbl bod
 
 
     -- In Target, AddP is overloaded still:
-    LetE (v,_, _, L _ (Ext (AddCursor c (L _ (Ext (InitSizeOfBuffer mul)))))) bod -> do
+    LetE (v,_, _,  (Ext (AddCursor c ( (Ext (InitSizeOfBuffer mul)))))) bod -> do
       size <- gensym (varAppend "sizeof_" v)
       T.LetPrimCallT [(size,T.IntTy)] (T.InitSizeOfBuffer mul) [] <$>
-        T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv sym_tbl "addCursor base" (l$ VarE c)
-                                               , triv sym_tbl "addCursor offset" (l$ VarE size)] <$>
+        T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv sym_tbl "addCursor base" (VarE c)
+                                               , triv sym_tbl "addCursor offset" (VarE size)] <$>
         tail sym_tbl bod
 
-    LetE (v,_, _, L _ (Ext (AddCursor c (L _ (Ext (MMapFileSize w)))))) bod -> do
+    LetE (v,_, _,  (Ext (AddCursor c ( (Ext (MMapFileSize w)))))) bod -> do
       size <- gensym (varAppend "sizeof_" v)
       T.LetPrimCallT [(size,T.IntTy)] (T.MMapFileSize w) [] <$>
-        T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv sym_tbl "addCursor base" (l$ VarE c)
-                                               , triv sym_tbl "addCursor offset" (l$ VarE size)] <$>
+        T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv sym_tbl "addCursor base" (VarE c)
+                                               , triv sym_tbl "addCursor offset" (VarE size)] <$>
         tail sym_tbl bod
 
-    LetE (v,_, _, L _ (Ext (AddCursor c e))) bod ->
-      T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv sym_tbl "addCursor base" (l$ VarE c)
+    LetE (v,_, _,  (Ext (AddCursor c e))) bod ->
+      T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv sym_tbl "addCursor base" (VarE c)
                                              , triv sym_tbl "addCursor offset" e] <$>
          tail sym_tbl bod
 
-    LetE (v,_, _, L _ (Ext (ReadTag cur))) bod -> do
+    LetE (v,_, _,  (Ext (ReadTag cur))) bod -> do
       vtmp <- gensym $ toVar "tmptag"
       ctmp <- gensym $ toVar "tmpcur"
 
       -- Here we lamely chase down all the tuple references and make them variables:
-      let bod' = L3.substE (l$ ProjE 0 (l$ VarE v)) (l$ VarE vtmp) $
-                 L3.substE (l$ ProjE 1 (l$ VarE v)) (l$ VarE ctmp)
+      let bod' = L3.substE (ProjE 0 (VarE v)) (VarE vtmp) $
+                 L3.substE (ProjE 1 (VarE v)) (VarE ctmp)
                  bod
 
       dbgTrace 7 (" [lower] ReadTag, after substing references to "
@@ -663,12 +687,12 @@ lower Prog{fundefs,ddefs,mainExp} = do
       -- error $ "lower: ReadTag not handled yet."
 
 
-    LetE (cursOut,_, _, L _ (Ext (WriteTag dcon cursIn))) bod -> do
+    LetE (cursOut,_, _,  (Ext (WriteTag dcon cursIn))) bod -> do
       T.LetPrimCallT [(cursOut,T.CursorTy)] T.WriteTag
-        [ T.TagTriv (getTagOfDataCon ddefs dcon) , triv sym_tbl "WriteTag cursor" (l$ VarE cursIn) ] <$>
+        [ T.TagTriv (getTagOfDataCon ddefs dcon) , triv sym_tbl "WriteTag cursor" (VarE cursIn) ] <$>
         tail sym_tbl bod
 
-    LetE (v,_,_, L _ (Ext (NewBuffer mul))) bod -> do
+    LetE (v,_,_,  (Ext (NewBuffer mul))) bod -> do
       reg <- gensym "region"
       tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy)] (T.NewBuffer mul) [] <$>
                tail sym_tbl bod
@@ -678,53 +702,53 @@ lower Prog{fundefs,ddefs,mainExp} = do
          (T.LetPrimCallT [] T.FreeBuffer [(T.VarTriv reg),(T.VarTriv v),(T.VarTriv (toEndV v))] $
             T.RetValsT trvs)
 
-    LetE (v,_,_, L _ (Ext (ScopedBuffer mul))) bod -> do
+    LetE (v,_,_,  (Ext (ScopedBuffer mul))) bod -> do
       T.LetPrimCallT [(v,T.CursorTy)] (T.ScopedBuffer mul) [] <$>
          tail sym_tbl bod
 
-    LetE (v,_,_, L _ (Ext (SizeOfPacked start end))) bod -> do
+    LetE (v,_,_,  (Ext (SizeOfPacked start end))) bod -> do
       T.LetPrimCallT [(v,T.IntTy)] T.SizeOfPacked [ T.VarTriv start, T.VarTriv end ] <$>
         tail sym_tbl bod
 
-    LetE (v,_,_, L _ (Ext (SizeOfScalar w))) bod -> do
+    LetE (v,_,_,  (Ext (SizeOfScalar w))) bod -> do
       T.LetPrimCallT [(v,T.IntTy)] T.SizeOfScalar [ T.VarTriv w ] <$>
         tail sym_tbl bod
 
     -- Just a side effect
-    LetE(_,_,_, L _ (Ext (BoundsCheck i bound cur))) bod -> do
+    LetE(_,_,_,  (Ext (BoundsCheck i bound cur))) bod -> do
       let args = [T.IntTriv (fromIntegral i), T.VarTriv bound, T.VarTriv cur]
       T.LetPrimCallT [] T.BoundsCheck args <$> tail sym_tbl bod
 
-    LetE(v,_,_, L _ (Ext (ReadCursor c))) bod -> do
+    LetE(v,_,_,  (Ext (ReadCursor c))) bod -> do
       vtmp <- gensym $ toVar "tmpcur"
       ctmp <- gensym $ toVar "tmpaftercur"
       -- Here we lamely chase down all the tuple references and make them variables:
-      let bod' = L3.substE (l$ ProjE 0 (l$ VarE v)) (l$ VarE vtmp) $
-                 L3.substE (l$ ProjE 1 (l$ VarE v)) (l$ VarE ctmp)
+      let bod' = L3.substE (ProjE 0 (VarE v)) (VarE vtmp) $
+                 L3.substE (ProjE 1 (VarE v)) (VarE ctmp)
                  bod
       T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy)] T.ReadCursor [T.VarTriv c] <$>
         tail sym_tbl bod'
 
-    LetE (v, _, _, L _ (Ext (WriteCursor cur e))) bod ->
+    LetE (v, _, _,  (Ext (WriteCursor cur e))) bod ->
       T.LetPrimCallT [(v,T.CursorTy)] T.WriteCursor [triv sym_tbl "WriteCursor arg" e, T.VarTriv cur] <$>
          tail sym_tbl bod
 
-    LetE (_, _, _, L _ (Ext (BumpRefCount end_r1 end_r2))) bod ->
+    LetE (_, _, _,  (Ext (BumpRefCount end_r1 end_r2))) bod ->
       T.LetPrimCallT [] T.BumpRefCount [T.VarTriv end_r1, T.VarTriv end_r2] <$>
         tail sym_tbl bod
 
-    LetE (_, _, _, L _ (Ext (BumpArenaRefCount ar end_r))) bod ->
+    LetE (_, _, _,  (Ext (BumpArenaRefCount ar end_r))) bod ->
       T.LetPrimCallT [] T.BumpArenaRefCount [T.VarTriv ar, T.VarTriv end_r] <$>
         tail sym_tbl bod
 
-    LetE (v, _, _, L _ (Ext NullCursor)) bod ->
+    LetE (v, _, _,  (Ext NullCursor)) bod ->
       T.LetTrivT (v,T.CursorTy,T.IntTriv 0) <$> tail sym_tbl bod
 
     Ext _ -> error $ "lower: unexpected extension" ++ sdoc ex0
 
     ---------------------
     -- (3) Proper primapps.
-    LetE (v,_,t, L _ (PrimAppE p ls)) bod -> dbgTrace 3 ("lower: " ++ show v ++ " : " ++ show t) $
+    LetE (v,_,t,  (PrimAppE p ls)) bod -> dbgTrace 7 ("lower: " ++ show v ++ " : " ++ show t) $
         -- No tuple-valued prims here:
         T.LetPrimCallT [(v,typ t)]
              (prim p)
@@ -738,21 +762,21 @@ lower Prog{fundefs,ddefs,mainExp} = do
     SyncE    -> error "lower: Unbound SpanwnE"
 
     -- Tail calls are just an optimization, if we have a Proj/App it cannot be tail:
-    ProjE ix (L _ (AppE f _ e)) -> dbgTrace 5 "ProjE" $ do
+    ProjE ix ( (AppE f _ e)) -> dbgTrace 5 "ProjE" $ do
         tmp <- gensym $ toVar "prjapp"
         let (inTs, _) = funTy (fundefs # f)
         tail sym_tbl $
-          l$ LetE ( tmp
+          LetE ( tmp
                   , []
                   , fmap (const ()) (inTs !! ix)
-                  , l$ ProjE ix (l$ AppE f [] e))
-             (l$ VarE tmp)
+                  , ProjE ix (AppE f [] e))
+             (VarE tmp)
 
-    LetE (_,_,_, (L _ (L3.AppE f _ _))) _
+    LetE (_,_,_, ( (L3.AppE f _ _))) _
         | M.notMember f fundefs -> error $ "Application of unbound function: "++show f
 
     -- Non-tail call:
-    LetE (vr, _,t, projOf -> (stk, (L _ (L3.AppE f _ ls)))) bod -> do
+    LetE (vr, _,t, projOf -> (stk, ( (L3.AppE f _ ls)))) bod -> do
         let (_ , outTy) = funTy (fundefs # f)
         let f' = cleanFunName f
         (vsts,bod') <- case outTy of
@@ -772,15 +796,16 @@ lower Prog{fundefs,ddefs,mainExp} = do
                         _ -> return ([(vr,typ t)], bod)
         T.LetCallT False vsts f' (L.map (triv sym_tbl "one of app rands") ls) <$> (tail sym_tbl bod')
 
-    LetE (v, _,ty, (L _ (L3.SpawnE w fn locs args))) bod -> do
-      call <- tail sym_tbl (l$ LetE (v,_,ty, l$ AppE fn locs args) bod)
-      pure $ call { T.async = True, T.rands = (T.VarTriv w) : (T.rands call) }
+    LetE (v, _,ty, ( (L3.SpawnE fn locs args))) bod -> do
+      tl <- tail sym_tbl (LetE (v,_,ty, AppE fn locs args) bod)
+      -- This is going to be a LetCallT.
+      pure $ tl { T.async = True }
 
-    LetE (_,_,_, L _ SyncE) bod -> do
+    LetE (_,_,_,  SyncE) bod -> do
       bod' <- tail sym_tbl bod
       pure $ T.LetPrimCallT [] T.ParSync [] bod'
 
-    LetE (v, _, t, L _ (IfE a b c)) bod -> do
+    LetE (v, _, t,  (IfE a b c)) bod -> do
       let a' = triv sym_tbl "if test" a
       b' <- tail sym_tbl b
       c' <- tail sym_tbl c
@@ -799,15 +824,15 @@ lower Prog{fundefs,ddefs,mainExp} = do
 --------------------------------------------------------------------------------
 
 -- | View pattern for matching agaist projections of Foo rather than just Foo.
-projOf :: L Exp3 -> ([Int], L Exp3)
-projOf (L _ (ProjE ix e)) = let (stk,e') = projOf e
+projOf :: Exp3 -> ([Int], Exp3)
+projOf ( (ProjE ix e)) = let (stk,e') = projOf e
                            in (stk++[ix], e')
 projOf e = ([],e)
 
 
 
 -- | Eliminate projections from a given tuple variable.  INEFFICIENT!
-eliminateProjs :: Var -> [Ty3] -> L Exp3 -> PassM ([Var],L Exp3)
+eliminateProjs :: Var -> [Ty3] -> Exp3 -> PassM ([Var],Exp3)
 eliminateProjs vr tys bod =
  dbgTrace 7 (" [lower] eliminating "++show (length tys)++
              " projections on variable "++show vr++" in expr with types "
@@ -815,24 +840,24 @@ eliminateProjs vr tys bod =
  do tmps <- mapM (\_ -> gensym "pvrtmp") [1.. (length tys)]
     let go _ [] acc =
             -- If there are ANY references left, we are forced to make the products:
-            L3.subst vr (l$ MkProdE (L.map (l . VarE) tmps)) acc
+            L3.subst vr (MkProdE (L.map VarE tmps)) acc
         go ix ((pvr,_pty):rs) acc =
            go (ix+1) rs
-             (L3.substE (l$ ProjE ix (l$ VarE vr)) (l$ VarE pvr) acc)
+             (L3.substE (ProjE ix (VarE vr)) (VarE pvr) acc)
     let bod' = go 0 (zip tmps tys) bod
     return (tmps,bod')
 
 
 
-mkLet :: (Var, Ty3, L Exp3) -> L Exp3 -> L Exp3
-mkLet (v,t, L _ (LetE (v2, _,t2,rhs2) bod1)) bod2 = l$ LetE (v2,[],t2,rhs2) $
-                                                    l$ LetE (v,[],t,bod1) bod2
-mkLet (v,t,rhs) bod = l$ LetE (v,[],t,rhs) bod
+mkLet :: (Var, Ty3, Exp3) -> Exp3 -> Exp3
+mkLet (v,t,  (LetE (v2, _,t2,rhs2) bod1)) bod2 = LetE (v2,[],t2,rhs2) $
+                                                    LetE (v,[],t,bod1) bod2
+mkLet (v,t,rhs) bod = LetE (v,[],t,rhs) bod
 
 
 
-triv :: M.Map String Word16 -> String -> L Exp3 -> T.Triv
-triv sym_tbl msg (L _ e0) =
+triv :: M.Map String Word16 -> String -> Exp3 -> T.Triv
+triv sym_tbl msg ( e0) =
   case e0 of
     (VarE x) -> T.VarTriv x
     (LitE x) -> T.IntTriv (fromIntegral x) -- TODO: back propogate Int64 to L1
@@ -847,9 +872,8 @@ triv sym_tbl msg (L _ e0) =
     (PrimAppE L3.MkFalse []) -> T.IntTriv 0
     -- Heck, let's map Unit onto Int too:
     (MkProdE []) -> T.IntTriv 0
-    -- TODO: I think we should allow tuples and projection in trivials:
-    -- (ProjE x1 x2) -> __
-    -- (MkProdE ls) ->
+    (MkProdE ls) -> T.ProdTriv (map (\x -> triv sym_tbl (show x) x) ls)
+    (ProjE ix e) -> T.ProjTriv ix (triv sym_tbl "proje argument" e)
     _ | isTrivial e0 -> error $ "lower/triv: this function is written wrong.  "++
                          "It won't handle the following, which satisfies 'isTriv':\n "++sdoc e0++
                          "\nMessage: "++msg
@@ -861,7 +885,7 @@ typ t =
     IntTy  -> T.IntTy
     SymTy  -> T.SymTy
     BoolTy -> T.BoolTy
-    ListTy{} -> error "lower/typ: FinishMe: List types"
+    ListTy ty -> T.ListTy (typ ty)
     ProdTy xs -> T.ProdTy $ L.map typ xs
     SymDictTy (Just var) x -> T.SymDictTy var $ typ x
     SymDictTy Nothing _ty -> error $ "lower/typ: Expected arena annotation on type: " ++ (sdoc t)
@@ -869,8 +893,11 @@ typ t =
     PackedTy{} -> T.PtrTy
     CursorTy -> T.CursorTy -- Audit me
     PtrTy -> T.PtrTy
-    ArenaTy -> T.ArenaTy
+    ArenaTy   -> T.ArenaTy
+    SymSetTy  -> error "lower/typ: SymSetTy not handled."
+    SymHashTy -> error "lower/typ: SymHashTy not handled."
 
+typ' :: String -> Ty3 -> T.Ty
 typ' str t = dbgTraceIt str $ typ t
 
 prim :: Prim Ty3 -> T.Prim
@@ -900,8 +927,21 @@ prim p =
     DictLookupP ty -> T.DictLookupP $ typ ty
     DictEmptyP ty  -> T.DictEmptyP $ typ ty
     DictHasKeyP ty -> T.DictHasKeyP $ typ ty
-
     ReadPackedFile mf tyc _ _ -> T.ReadPackedFile mf tyc
+    VEmptyP ty    -> T.VEmptyP (typ ty)
+    VNthP ty      -> T.VNthP (typ ty)
+    VLengthP ty   -> T.VLengthP (typ ty)
+    VUpdateP ty   -> T.VUpdateP (typ ty)
+    VSnocP ty     -> T.VSnocP (typ ty)
+    SymSetEmpty   -> error "lower/prim: SymSetEmpty not handled"
+    SymSetInsert  -> error "lower/prim: SymSetInsert not handled"
+    SymSetContains-> error "lower/prim: SymSetContains not handled"
+    SymHashEmpty  -> error "lower/prim: SymHashEmpty not handled"
+    SymHashInsert  -> error "lower/prim: SymHashInsert not handled"
+    SymHashLookup  -> error "lower/prim: SymHashLookup not handled"
+    IntHashEmpty  -> error "lower/prim: IntHashEmpty not handled"
+    IntHashInsert  -> error "lower/prim: IntHashInsert not handled"
+    IntHashLookup  -> error "lower/prim: IntHashLookup not handled"
 
     ErrorP{}     -> error$ "lower/prim: internal error, should not have got to here: "++show p
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."
@@ -909,9 +949,9 @@ prim p =
     SymAppend    -> error "lower/prim: internal error. SymAppend should not get here."
     RequestEndOf -> error "lower/prim: internal error. RequestEndOf shouldn't be here."
 
-isTrivial' :: L Exp3 -> Bool
-isTrivial' (L sl e) =
+isTrivial' :: Exp3 -> Bool
+isTrivial' e =
     case e of
       (PrimAppE L3.MkTrue []) -> True
       (PrimAppE L3.MkFalse []) -> True
-      _ -> isTrivial (L sl e)
+      _ -> isTrivial e

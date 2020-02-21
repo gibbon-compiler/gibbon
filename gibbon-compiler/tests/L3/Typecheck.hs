@@ -5,7 +5,6 @@ module L3.Typecheck where
 import Gibbon.Passes.InferEffects
 import Gibbon.Passes.InferRegionScope
 import Gibbon.Passes.RouteEnds
-import Gibbon.Passes.BoundsCheck
 import Gibbon.Passes.ThreadRegions
 import Gibbon.Passes.Cursorize
 import Gibbon.Passes.Unariser
@@ -32,7 +31,6 @@ runT prg = fst $ defaultPackedRunPassM $ do
   l2 <- L2.tcProg l2
   l2 <- routeEnds l2
   l2 <- L2.tcProg l2
-  l2 <- boundsCheck l2
   l2 <- threadRegions l2
   l3 <- cursorize l2
   l3 <- findWitnesses l3

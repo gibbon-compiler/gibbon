@@ -20,7 +20,6 @@ import           Control.Monad
 import           Control.Monad.Writer
 import           Control.Monad.State
 import           Data.List as L
-import           Data.Loc
 import           Data.Map as M
 import           System.Clock
 import           System.IO.Unsafe
@@ -63,19 +62,20 @@ interpProg1 rc Prog{ddefs,fundefs,mainExp} =
 
 interp :: forall l. ( Out l, Show l, Expression (E1Ext l (UrTy l)) )
        => RunConfig
-       -> DDefs (TyOf (L (PreExp E1Ext l (UrTy l))))
-       -> M.Map Var (FunDef (L (PreExp E1Ext l (UrTy l))))
-       -> L (PreExp E1Ext l (UrTy l))
+       -> DDefs (TyOf (PreExp E1Ext l (UrTy l)))
+       -> M.Map Var (FunDef (PreExp E1Ext l (UrTy l)))
+       -> (PreExp E1Ext l (UrTy l))
        -> WriterT Log (StateT Store IO) Value
 interp rc _ddefs fenv = go M.empty
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env ex = go env ex
 
-    go :: ValEnv -> L (PreExp E1Ext l (UrTy l)) -> WriterT Log (StateT Store IO) Value
-    go env (L _ x0) =
+    go :: ValEnv -> (PreExp E1Ext l (UrTy l)) -> WriterT Log (StateT Store IO) Value
+    go env x0 =
         case x0 of
-          Ext (BenchE fn locs args b) -> go env (l$ AppE fn locs args)
+          Ext (BenchE fn locs args _b) -> go env ( AppE fn locs args)
+          Ext (AddFixed{}) -> error "L1.Interp: AddFixed not handled."
 
           LitE c    -> return $ VInt c
           LitSymE s -> return $ VSym (fromVar s)
@@ -161,8 +161,9 @@ interp rc _ddefs fenv = go M.empty
                else tell$ string8 $ "SELFTIMED: "++show tm ++"\n"
               return $! val
 
-          SpawnE _ f locs args -> go env (l$ AppE f locs args)
+          SpawnE f locs args -> go env (AppE f locs args)
           SyncE -> pure $ VInt (-1)
+          IsBigE{} -> pure $ VBool False
 
           WithArenaE v e -> let env' = M.insert v (VInt 0) env
                             in go env' e
@@ -185,7 +186,9 @@ applyPrim rc p ls =
    -- FIXME: randomIO does not guarentee unique numbers every time.
    (Gensym, [])            -> VSym $ "gensym_" ++ (show $ (unsafePerformIO randomIO :: Int) `mod` 1000)
    (AddP,[VInt x, VInt y]) -> VInt (x+y)
-   (SubP,[VInt x, VInt y]) -> VInt (x-y)
+   (SubP,[VInt x, VInt y]) -> if x == 0
+                              then error "L1.Interp: Can't run (0 - y)."
+                              else VInt (x-y)
    (MulP,[VInt x, VInt y]) -> VInt (x*y)
    (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
    (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
@@ -209,8 +212,21 @@ applyPrim rc p ls =
    (SizeParam,[]) -> VInt (rcSize rc)
    (ReadPackedFile file _ _ ty,[]) ->
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
+   (VEmptyP _,[]) -> VList []
+   (VNthP _,[VInt n, VList ls]) -> ls !! n
+   (VLengthP _,[VList ls]) -> VInt (length ls)
+   (VUpdateP _,[VList ls, VInt i, v]) -> if length ls < i
+                                         then error $ "L1.Interp: VUpdate"
+                                         else VList (replaceNth i v ls)
+   (VSnocP _,[VList ls, v]) -> VList (ls ++ [v])
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
+  where
+     replaceNth :: Int -> a -> [a] -> [a]
+     replaceNth _ _ [] = []
+     replaceNth n newVal (x:xs)
+       | n == 0 = newVal:xs
+       | otherwise = x:replaceNth (n-1) newVal xs
 
 clk :: Clock
 clk = Monotonic

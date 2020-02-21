@@ -6,7 +6,6 @@
 module Gibbon.Passes.InferEffects
   (inferEffects, inferExp) where
 
-import Data.Loc
 import Data.List as L
 import Data.Set as S
 import Data.Map as M
@@ -74,8 +73,8 @@ inferFunDef ddfs fenv FunDef{funArgs,funBody,funTy} = funTy { arrEffs = S.inters
     (eff,_outLoc) = inferExp ddfs fenv env0 M.empty funBody
 
 
-inferExp :: DDefs Ty2 -> FunEnv2 -> TyEnv Ty2 -> Deps -> L Exp2 -> (Set Effect, Maybe LocVar)
-inferExp ddfs fenv env dps (L _p expr) =
+inferExp :: DDefs Ty2 -> FunEnv2 -> TyEnv Ty2 -> Deps -> Exp2 -> (Set Effect, Maybe LocVar)
+inferExp ddfs fenv env dps expr =
   case expr of
     -- QUESTION: does a variable reference count as traversing to the end?
     -- If so, the identity function has the traverse effect.
@@ -124,9 +123,11 @@ inferExp ddfs fenv env dps (L _p expr) =
       let (effs, _locs) = unzip $ L.map (inferExp ddfs fenv env dps) ls
       in (S.unions effs, Nothing)
 
-    SpawnE _ fn locs args -> inferExp ddfs fenv env dps (l$ AppE fn locs args)
+    SpawnE fn locs args -> inferExp ddfs fenv env dps (AppE fn locs args)
 
     SyncE -> (S.empty, Nothing)
+
+    IsBigE{} -> (S.empty, Nothing)
 
     ProjE _n e ->
       let (eff, _loc) = inferExp ddfs fenv env dps e
@@ -159,13 +160,16 @@ inferExp ddfs fenv env dps (L _p expr) =
 
     WithArenaE _v e -> inferExp ddfs fenv env dps e
 
+    MapE{} -> error "inferEffects: MapE not handled."
+    FoldE{} -> error "inferEffects: FoldE not handled."
+
     Ext (LetRegionE _ rhs) -> inferExp ddfs fenv env dps rhs
     Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env dps rhs
     Ext (RetE _ _)         -> (S.empty, Nothing)
     Ext (FromEndE _ )      -> (S.empty, Nothing)
     Ext (IndirectionE{})   -> (S.empty, Nothing)
-
-    oth -> error $ "FINISHME: inferExp " ++ sdoc oth
+    Ext (BoundsCheck{})    -> (S.empty, Nothing)
+    Ext (AddFixed{})       -> error "inferEffects: AddFixed not handled."
 
   where
     packedLoc :: Ty2 -> Maybe LocVar
@@ -173,7 +177,7 @@ inferExp ddfs fenv env dps (L _p expr) =
                      PackedTy _ loc -> Just loc
                      _ -> Nothing
 
-    caserhs :: (DataCon, [(Var,LocVar)], L Exp2) -> (Bool, (Set Effect, Maybe LocVar))
+    caserhs :: (DataCon, [(Var,LocVar)], Exp2) -> (Bool, (Set Effect, Maybe LocVar))
     -- We've gotten "to the end" of a nullary constructor just by matching it:
     caserhs (_dcon,[],e) = ( True , inferExp ddfs fenv env dps e )
     caserhs (dcon,patVs,e) =
