@@ -72,7 +72,7 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
             removeCopiesExp ddefs fundefs lenv (extendVEnv v ty env2) bod
         oth -> error $ "removeCopies: Multiple indirection constructors: " ++ sdoc oth
 
-    Ext ext ->
+    Ext ext -> 
       case ext of
         -- Update lenv with a binding for loc
         LetLocE loc rhs bod -> do
@@ -87,6 +87,7 @@ removeCopiesExp ddefs fundefs lenv env2 (L p ex) = L p <$>
             removeCopiesExp ddefs fundefs (M.insert loc reg lenv) env2 bod
        -- Straightforward recursion
         RetE{} -> return ex
+        AddFixed{} -> return ex
         LetRegionE r bod -> Ext <$> LetRegionE r <$> go bod
         FromEndE{}       -> return ex
         BoundsCheck{}    -> return ex
