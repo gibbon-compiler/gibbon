@@ -383,8 +383,10 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
     pprintWithStyle _ le =
         case le of
           StartOfLE r -> lparen <> text "startof" <+> text (sdoc r) <> rparen
-          AfterConstantLE i loc -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
-          AfterVariableLE v loc -> lparen <> pprint loc <+> text "+" <+> doc v <> rparen
+          AfterConstantLE i loc   -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
+          AfterVariableLE v loc b -> if b
+                                     then text "fresh" <> (parens $ pprint loc <+> text "+" <+> doc v)
+                                     else parens $ pprint loc <+> text "+" <+> doc v
           InRegionLE r  -> lparen <> text "inregion" <+> text (sdoc r) <> rparen
           FromEndLE loc -> lparen <> text "fromendle" <+> pprint loc <> rparen
           FreeLE -> lparen <> text "free" <> rparen
@@ -412,10 +414,13 @@ instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
                                                      hcat (punctuate (text ",") [pprint l2,text (fromVar v2)]) <>
                                                      rparen <+>
                                                      pprint e
+          L2.GetCilkWorkerNum -> text "__cilkrts_get_worker_number()"
+          L2.LetAvail vs e    -> text "letavail " <+> pprint vs $+$ pprint e
 
 -- L3
-instance (Out l) => Pretty (L3.E3Ext l (UrTy l)) where
-    pprintWithStyle _ = doc -- TODO: replace this with actual pretty printing for L3 forms
+instance (Out l, HasPrettyToo E3Ext l (UrTy l)) => Pretty (L3.E3Ext l (UrTy l)) where
+    pprintWithStyle _ (L3.LetAvail vs bod) = text "letavail " <+> pprint vs $+$ pprint bod
+    pprintWithStyle _ ex0 = doc ex0 -- TODO: replace this with actual pretty printing for L3 forms
 
 -- L4
 instance Pretty L4.Prog where

@@ -396,15 +396,17 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  e' <- go e
                  return $ Ext (LetLocE v (AfterConstantLE i l1) e')
 
-          Ext (LetLocE v (AfterVariableLE x l1) e) -> do
+          Ext (LetLocE v (AfterVariableLE x l1 b) e) -> do
                  e' <- go e
-                 return $ Ext (LetLocE v (AfterVariableLE x l1) e')
+                 return $ Ext (LetLocE v (AfterVariableLE x l1 b) e')
 
           Ext (LetLocE v (InRegionLE r) bod) -> do
                  bod' <- go bod
                  return $ Ext (LetLocE v (InRegionLE r) bod')
 
           Ext (IndirectionE{}) -> return e
+
+          Ext (LetAvail vs e)  -> Ext <$> LetAvail vs <$> go e
 
           -- For some reason this pass goes into an infinite loop if this is uncommented:
 

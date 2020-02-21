@@ -409,9 +409,9 @@ we need random access for that type.
             let reg = case rhs of
                         StartOfLE r  -> regionToVar r
                         InRegionLE r -> regionToVar r
-                        AfterConstantLE _ lc -> renv # lc
-                        AfterVariableLE _ lc -> renv # lc
-                        FromEndLE lc         -> renv # lc -- TODO: This needs to be fixed
+                        AfterConstantLE _ lc   -> renv # lc
+                        AfterVariableLE _ lc _ -> renv # lc
+                        FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
                         FreeLE -> error "addRANExp: FreeLE not handled"
             in needsRANExp ddefs fundefs env2 (M.insert loc reg renv) tcenv parlocss bod
         _ -> S.empty

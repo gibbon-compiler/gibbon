@@ -36,11 +36,17 @@ isRANDataCon = isSuffixOf "^"
 
 -- | Map a DataCon onto the name of the generated unpack function.
 mkUnpackerName :: TyCon -> Var
-mkUnpackerName tyCons = toVar $ "unpack_" ++ tyCons
+mkUnpackerName tyCons = toVar $ "_unpack_" ++ tyCons
+
+isUnpackerName :: Var -> Bool
+isUnpackerName v = isPrefixOf "_unpack_" (fromVar v)
 
 -- | Map a DataCon onto the name of the generated print function.
 mkPrinterName :: DataCon -> Var
-mkPrinterName tyCons = toVar $ "print_" ++ tyCons
+mkPrinterName tyCons = toVar $ "_print_" ++ tyCons
+
+isPrinterName :: Var -> Bool
+isPrinterName v = isPrefixOf "_print_" (fromVar v)
 
 mkCopyFunName :: DataCon -> Var
 mkCopyFunName dcon = "_copy_" `varAppend` (toVar dcon)

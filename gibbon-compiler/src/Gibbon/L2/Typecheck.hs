@@ -489,7 +489,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                         (ty,tstate2) <- tcExp ddfs env' funs constrs1 regs tstate1 e
                         tstate3 <- removeLoc exp tstate2 v
                         return (ty,tstate3)
-                AfterVariableLE x l1 ->
+                AfterVariableLE x l1 _ ->
                     do r <- getRegion exp constrs l1
                        (_xty,tstate1) <- tcExp ddfs env funs constrs regs tstatein $ VarE x
                        -- NOTE: We now allow aliases (offsets) from scalar vars too. So we can leave out this check
@@ -522,6 +522,10 @@ tcExp ddfs env funs constrs regs tstatein exp =
       Ext (BoundsCheck{}) -> return (IntTy,tstatein)
 
       Ext (IndirectionE tycon _ (a,_) _ _) -> return (PackedTy tycon a, tstatein)
+
+      Ext GetCilkWorkerNum -> return (IntTy, tstatein)
+
+      Ext (LetAvail _ e) -> recur tstatein e
 
     where recur ts e = tcExp ddfs env funs constrs regs ts e
 

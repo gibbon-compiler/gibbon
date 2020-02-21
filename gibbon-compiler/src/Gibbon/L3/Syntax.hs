@@ -13,15 +13,15 @@ module Gibbon.L3.Syntax
   , Scalar(..), mkScalar, scalarToTy
 
     -- * Functions
-  , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim
+  , eraseLocMarkers, mapMExprs, cursorizeTy, toL3Prim, updateAvailVars
 
   , module Gibbon.Language
   )
 where
 
 import Control.DeepSeq
-import Data.Map as M
-import Data.Set as S
+import qualified Data.Map as M
+import qualified Data.Set as S
 import Data.List as L
 import Text.PrettyPrint.GenericPretty
 
@@ -73,7 +73,9 @@ data E3Ext loc dec =
   | NullCursor                     -- ^ Constant null cursor value (hack?).
                                    --   Used for dict lookup, which returns a packed value but
                                    --   no end witness.
-  | RetE [(PreExp E3Ext loc dec)]-- ^ Analogous to L2's RetE
+  | RetE [(PreExp E3Ext loc dec)]  -- ^ Analogous to L2's RetE
+  | GetCilkWorkerNum               -- ^ Runs  __cilkrts_get_worker_number()
+  | LetAvail [Var] (PreExp E3Ext loc dec) -- ^ These variables are available to use before the join point
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 instance FreeVars (E3Ext l d) where
@@ -97,6 +99,9 @@ instance FreeVars (E3Ext l d) where
       NullCursor         -> S.empty
       BumpArenaRefCount v w -> S.fromList [v, w]
       RetE ls -> S.unions (L.map gFreeVars ls)
+      GetCilkWorkerNum   -> S.empty
+      LetAvail ls b      -> (S.fromList ls) `S.union` gFreeVars b
+
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
   type LocOf (E3Ext l d) = l
@@ -126,6 +131,7 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
       WriteScalar s v bod  -> WriteScalar s v (gSubst old new bod)
       WriteCursor v bod    -> WriteCursor v (gSubst old new bod)
       AddCursor v bod      -> AddCursor v (gSubst old new bod)
+      LetAvail ls bod      -> LetAvail ls (gSubst old new bod)
       _ -> ext
 
   gSubstEExt old new ext =
@@ -133,6 +139,7 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
       WriteScalar s v bod    -> WriteScalar s v (gSubstE old new bod)
       WriteCursor v bod -> WriteCursor v (gSubstE old new bod)
       AddCursor v bod   -> AddCursor v (gSubstE old new bod)
+      LetAvail ls b     -> LetAvail ls (gSubstE old new b)
       _ -> ext
 
 instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
@@ -156,6 +163,8 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       BumpArenaRefCount v w -> BumpArenaRefCount (go v) (go w)
       NullCursor         -> ext
       RetE ls            -> RetE (L.map go ls)
+      GetCilkWorkerNum   -> GetCilkWorkerNum
+      LetAvail ls b      -> LetAvail (L.map go ls) (go b)
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
@@ -224,3 +233,36 @@ toL3Prim (DictInsertP _ty) = DictInsertP CursorTy
 toL3Prim (DictLookupP _ty) = DictLookupP CursorTy
 toL3Prim (DictHasKeyP _ty) = DictHasKeyP CursorTy
 toL3Prim pr = fmap L2.stripTyLocs pr
+
+-- |
+updateAvailVars :: [Var] -> [Var] -> Exp3 -> Exp3
+updateAvailVars froms tos ex =
+  case ex of
+    VarE v          -> VarE v
+    LitE _          -> ex
+    LitSymE _       -> ex
+    AppE v loc ls   -> AppE v loc (map go ls)
+    PrimAppE p ls   -> PrimAppE p $ L.map go ls
+    LetE (v,loc,t,rhs) bod -> LetE (v,loc,t,go rhs) (go bod)
+    ProjE i e         -> ProjE i (go e)
+    CaseE e ls        -> CaseE (go e) (L.map (\(c,vs,er) -> (c,vs,go er)) ls)
+    MkProdE ls        -> MkProdE $ L.map go ls
+    DataConE loc k ls -> DataConE loc k $ L.map go ls
+    TimeIt e t b      -> TimeIt (go e) t b
+    IfE a b c         -> IfE (go a) (go b) (go c)
+    SpawnE v loc ls   -> SpawnE v loc (map go ls)
+    SyncE             -> SyncE
+    IsBigE e          -> IsBigE (go e)
+    WithArenaE v e    -> WithArenaE v (go e)
+    MapE (v,t,rhs) bod -> MapE (v,t, go rhs) (go bod)
+    FoldE (v1,t1,r1) (v2,t2,r2) bod ->
+      FoldE (v1,t1,go r1) (v2,t2,go r2) (go bod)
+    Ext ext ->
+      case ext of
+        LetAvail vs bod ->
+          let n o = if o `elem` froms then tos else [o]
+              vs' = foldr (\v acc -> n v ++ acc) [] vs
+          in Ext $ LetAvail vs' (go bod)
+        _ -> ex
+  where
+    go = updateAvailVars froms tos

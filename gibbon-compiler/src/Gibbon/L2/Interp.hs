@@ -160,7 +160,7 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
                     Just val ->
                       error $ "L2.Interp: Unexpected value for " ++ sdoc loc2 ++ ":" ++ sdoc val
 
-                AfterVariableLE v loc2 -> do
+                AfterVariableLE v loc2 _ -> do
                   case M.lookup loc2 env of
                     Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc
                     Just (VLoc reg offset) ->

@@ -78,9 +78,9 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
           let reg = case rhs of
                       StartOfLE r  -> regionToVar r
                       InRegionLE r -> regionToVar r
-                      AfterConstantLE _ lc -> lenv # lc
-                      AfterVariableLE _ lc -> lenv # lc
-                      FromEndLE lc         -> lenv # lc -- TODO: This needs to be fixed
+                      AfterConstantLE _ lc   -> lenv # lc
+                      AfterVariableLE _ lc _ -> lenv # lc
+                      FromEndLE lc           -> lenv # lc -- TODO: This needs to be fixed
                       FreeLE -> toVar "dummy"
           Ext <$> LetLocE loc rhs <$>
             removeCopiesExp ddefs fundefs (M.insert loc reg lenv) env2 bod
@@ -91,6 +91,8 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
         FromEndE{}       -> return ex
         BoundsCheck{}    -> return ex
         IndirectionE{}   -> return ex
+        GetCilkWorkerNum -> return ex
+        LetAvail vs bod -> Ext <$> LetAvail vs <$> go bod
 
     -- Straightforward recursion
     VarE{}     -> return ex

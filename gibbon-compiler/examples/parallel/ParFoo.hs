@@ -145,8 +145,7 @@ copy foo =
 gibbon_main =
   let -- a = mkFoo2 sizeParam
       -- x = a !!! 1
-
       n = sizeParam
-      x = iterate (mkFoo n)
-      y = iterate (copy x)
+      x = mkFoo n
+      y = copy x
   in iterate (sumFoo y)

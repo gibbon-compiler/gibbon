@@ -133,6 +133,8 @@ data Tail
     -- ^ Allocate storage for a struct of the given type,
     --   Initialize all fields Return PtrTy.
 
+    | LetAvailT { vars :: [Var]
+                , bod :: Tail }
 
     | IfT { tst  :: Triv,
             con  :: Tail,
@@ -253,11 +255,13 @@ data Prim
 
     | ReadInt
 
-    | ParSync -- ^ cilk_sync
+    | ParSync          -- ^ cilk_sync
+    | GetCilkWorkerNum -- ^ Runs  __cilkrts_get_worker_number()
 
     | Gensym
 
     | FreeSymTable
+
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data FunDecl = FunDecl
@@ -303,6 +307,7 @@ withTail (tl0,retty) fn =
     (LetAllocT { lhs, vals, bod })             -> LetAllocT  lhs   vals         <$> go bod
     (LetTimedT { isIter, binds, timed, bod })  -> LetTimedT isIter binds timed  <$> go bod
     (LetArenaT { lhs, bod })                   -> LetArenaT lhs                 <$> go bod
+    (LetAvailT { vars, bod })                  -> LetAvailT vars                <$> go bod
 
     -- We could DUPLICATE code in both branches or just let-bind the result instead:
     (IfT { tst, con, els }) -> IfT tst <$> go con <*> go els
@@ -369,6 +374,7 @@ inlineTrivL4 (Prog sym_tbl fundefs mb_main) =
         LetUnpackT{bod} -> tl { bod = go bod }
         LetAllocT{vals,bod} -> tl { vals = map (\(a,b) -> (a, inline env b)) vals
                                   , bod  = go bod }
+        LetAvailT{bod}   -> tl { bod = go bod }
         IfT{tst,con,els} -> IfT (inline env tst) (go con) (go els)
         ErrT{} -> tl
         LetTimedT{timed,bod} -> tl { timed = go timed

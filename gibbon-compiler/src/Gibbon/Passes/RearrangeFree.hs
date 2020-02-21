@@ -67,6 +67,8 @@ rearrangeFreeExp frees tail =
       LetUnpackT binds ptr <$> go bod
     LetAllocT lhs vals bod -> do
       LetAllocT lhs vals <$> go bod
+    LetAvailT vs bod -> do
+      LetAvailT vs <$> go bod
     IfT tst con els ->
       IfT tst <$> go con <*> go els
     ErrT{} -> return tail

@@ -62,14 +62,14 @@ genDcons [] tail fields     = do
   return $ T.LetAllocT ptr fields $ T.RetValsT [T.VarTriv ptr, T.VarTriv tail]
 
 genAlts :: [(DataCon,[(IsBoxed,Ty3)])] -> Var -> Var -> Int64 -> PassM T.Alts
-genAlts ((dcons, typs):xs) tail tag n = do
+-- Don' do anything for indirections. Let 'followRedirects' take care of it.
+genAlts ((dcons, _):rst) tail tag n | isIndirectionTag dcons = genAlts rst tail tag n
+genAlts ((_dcons, typs):xs) tail tag n = do
   let (_,typs') = unzip typs
   -- WARNING: IsBoxed ignored here
   curTail <- genDcons typs' tail [(T.TagTyPacked, T.VarTriv tag)]
   alts    <- genAlts xs tail tag (n+1)
-  let alt = if isIndirectionTag dcons
-            then indirectionAlt
-            else n
+  let alt = n
   case alts of
     T.IntAlts []   -> return $ T.IntAlts [(alt::Int64, curTail)]
     -- T.TagAlts []   -> return $ T.TagAlts [(n::Word8, curTail)]
@@ -164,14 +164,14 @@ genDconsPrinter [] tail     = do
   return $ closeParen $ T.RetValsT [(T.VarTriv tail)]
 
 genAltPrinter :: [(DataCon,[(IsBoxed, Ty3)])] -> Var -> Int64 -> PassM T.Alts
+-- Don' do anything for indirections. Let 'followRedirects' take care of it.
+genAltPrinter ((dcons, _):rst) tail n | isIndirectionTag dcons = genAltPrinter rst tail n
 genAltPrinter ((dcons, typs):xs) tail n = do
   let (_,typs') = unzip typs
   -- WARNING: IsBoxed ignored here
   curTail <- (openParen dcons) <$> genDconsPrinter typs' tail
   alts    <- genAltPrinter xs tail (n+1)
-  let alt = if isIndirectionTag dcons
-            then indirectionAlt
-            else n
+  let alt = n
   case alts of
     T.IntAlts []   -> return $ T.IntAlts [(alt::Int64, curTail)]
     -- T.TagAlts []   -> return $ T.TagAlts [(n::Word8, curTail)]
@@ -412,6 +412,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
               NullCursor         -> syms
               BumpArenaRefCount{}-> error "collect_syms: BumpArenaRefCount not handled."
               RetE ls -> gol ls
+              GetCilkWorkerNum -> syms
+              LetAvail _ bod   -> collect_syms syms bod
           MapE{}         -> syms
           FoldE{}        -> syms
 
@@ -552,11 +554,12 @@ lower Prog{fundefs,ddefs,mainExp} = do
     -- FIXME: Remove this when that is done a priori:
     LetE (v, _, ProdTy tys, (MkProdE ls)) bod -> do
       (tmps,bod') <- eliminateProjs v tys bod
+      let bod'' = updateAvailVars [v] tmps bod'
       -- Bind tmps individually:a
       let go [] acc                 = acc
           go ((pvr,pty,rhs):rs) acc = go rs (LetE (pvr,[],pty,rhs) acc)
       -- Finally reprocess the whole thing
-      tail sym_tbl (go (zip3 tmps tys ls) bod')
+      tail sym_tbl (go (zip3 tmps tys ls) bod'')
 
     LetE (v, _, ty, rhs@(ProjE{})) bod -> do
       let trv = triv sym_tbl "ProjE" rhs
@@ -589,7 +592,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
            case ty of
              ProdTy ls ->
                do (tmps,bod') <- eliminateProjs vr ls bod
-                  T.LetTimedT flg (zip tmps (L.map typ ls)) rhs' <$> tail sym_tbl bod'
+                  let bod'' = updateAvailVars [vr] tmps bod'
+                  T.LetTimedT flg (zip tmps (L.map typ ls)) rhs' <$> tail sym_tbl bod''
              _ -> T.LetTimedT flg   [(vr, typ ty)]          rhs' <$> tail sym_tbl bod
 
 
@@ -731,6 +735,12 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE (v, _, _,  (Ext NullCursor)) bod ->
       T.LetTrivT (v,T.CursorTy,T.IntTriv 0) <$> tail sym_tbl bod
 
+    LetE (v, _, ty, (Ext GetCilkWorkerNum)) bod ->
+      T.LetPrimCallT [(v,typ ty)] T.GetCilkWorkerNum [] <$> tail sym_tbl bod
+
+    Ext (LetAvail vs bod) ->
+      T.LetAvailT vs <$> tail sym_tbl bod
+
     Ext _ -> error $ "lower: unexpected extension" ++ sdoc ex0
 
     ---------------------
@@ -771,7 +781,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
                         L3.ProdTy tys ->
                           case stk of
                             [] -> do (tmps,e) <- eliminateProjs vr (L.map (fmap (const ())) tys) bod
-                                     return (zip tmps (L.map typ tys), e)
+                                     let e' = updateAvailVars [vr] tmps e
+                                     return (zip tmps (L.map typ tys), e')
                             -- More than one should not currently be
                             -- possible (no nested tuple returns):
                             [ix] -> do garbages <- sequence [ gensym "garbage" | _ <- L.tail tys ]
@@ -800,7 +811,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
         -- Finilize unarisation:
         ProdTy ls -> do
              (tmps,bod') <- eliminateProjs v ls bod
-             T.LetIfT (zip tmps (L.map typ ls)) (a', b', c') <$> tail sym_tbl bod'
+             let bod'' = updateAvailVars [v] tmps bod'
+             T.LetIfT (zip tmps (L.map typ ls)) (a', b', c') <$> tail sym_tbl bod''
         _ -> T.LetIfT [(v, typ t)] (a', b', c') <$> tail sym_tbl bod
 
 

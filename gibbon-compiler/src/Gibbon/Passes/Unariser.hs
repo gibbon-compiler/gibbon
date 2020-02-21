@@ -151,7 +151,10 @@ unariserExp ddfs stk env2 ex =
       (MkProdE ls1) <- go env2 (MkProdE ls)
       pure $ Ext $ RetE ls1
 
-    Ext{}  -> return ex
+    Ext (LetAvail vs bod) -> do
+        bod' <- go env2 bod
+        return$ Ext $ LetAvail vs bod'
+    Ext{}   -> return ex
     MapE{}  -> error "unariserExp: MapE TODO"
     FoldE{} -> error "unariserExp: FoldE TODO"
 

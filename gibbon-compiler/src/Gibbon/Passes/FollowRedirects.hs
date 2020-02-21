@@ -6,7 +6,7 @@ import Prelude hiding (tail)
 import qualified Data.Map as M
 
 import Gibbon.Common
-import Gibbon.Language ( TyEnv, indirectionAlt, redirectionAlt)
+import Gibbon.Language ( TyEnv, indirectionAlt, redirectionAlt, isPrinterName)
 import Gibbon.L4.Syntax as L4
 
 {- [Modifying switch statements to use redirection nodes]
@@ -60,18 +60,19 @@ followRedirects (Prog sym_tbl fundefs mainExp) = do
   fundefs' <- mapM followRedirectsFn fundefs
   mainExp' <- case mainExp of
                 Just (PrintExp tail) ->
-                  Just <$> PrintExp <$> followRedirectsExp M.empty M.empty tail
+                  Just <$> PrintExp <$> followRedirectsExp False M.empty M.empty tail
                 Nothing -> return Nothing
   return $ Prog sym_tbl fundefs' mainExp'
 
 followRedirectsFn :: FunDecl -> PassM FunDecl
-followRedirectsFn f@FunDecl{funArgs,funBody} = do
+followRedirectsFn f@FunDecl{funName,funArgs,funBody} = do
   let initTyEnv = M.fromList funArgs
-  bod' <- followRedirectsExp M.empty initTyEnv funBody
+      isPrintFn = isPrinterName funName
+  bod' <- followRedirectsExp isPrintFn M.empty initTyEnv funBody
   return $ f {funBody = bod'}
 
-followRedirectsExp :: TagTailEnv -> TyEnv L4.Ty -> Tail -> PassM Tail
-followRedirectsExp ttailenv tenv tail =
+followRedirectsExp :: Bool -> TagTailEnv -> TyEnv L4.Ty -> Tail -> PassM Tail
+followRedirectsExp isPrintFn ttailenv tenv tail =
   case tail of
     Switch lbl trv alts bod_maybe -> do
       let trvty = typeOfTriv tenv trv
@@ -93,19 +94,24 @@ followRedirectsExp ttailenv tenv tail =
                           (AssnValsT [(tagv , TagTyPacked, VarTriv tagtmp),
                                      (tailv, CursorTy   , VarTriv tailtmp)]
                           (Just (Goto lbl))))
+
+              alttail' = if isPrintFn
+                         then LetPrimCallT [] (PrintString " -> ") [] $ alttail
+                         else alttail
+
           alts' <- case alts of
                     TagAlts ls -> do
-                      ls' <- mapM (\(x,tl) -> (x,) <$> followRedirectsExp ttailenv tenv tl) ls
+                      ls' <- mapM (\(x,tl) -> (x,) <$> go tenv tl) ls
                       if indirectionAlt `elem` (map fst ls')
-                      then return $ TagAlts $ ls' ++ [(redirectionAlt, alttail)]
-                      else return $ TagAlts $ ls' ++ [(redirectionAlt, alttail),
-                                                      (indirectionAlt, alttail)]
+                      then return $ TagAlts $ ls' ++ [(redirectionAlt, alttail')]
+                      else return $ TagAlts $ ls' ++ [(redirectionAlt, alttail'),
+                                                      (indirectionAlt, alttail')]
                     IntAlts ls -> do
-                      ls' <- mapM (\(x,tl) -> (x,) <$> followRedirectsExp ttailenv tenv tl) ls
+                      ls' <- mapM (\(x,tl) -> (x,) <$> go tenv tl) ls
                       if indirectionAlt `elem` (map fst ls')
-                      then return $ IntAlts $ ls' ++ [(redirectionAlt, alttail)]
-                      else return $ IntAlts $ ls' ++ [(redirectionAlt, alttail),
-                                                      (indirectionAlt, alttail)]
+                      then return $ IntAlts $ ls' ++ [(redirectionAlt, alttail')]
+                      else return $ IntAlts $ ls' ++ [(redirectionAlt, alttail'),
+                                                      (indirectionAlt, alttail')]
           return $ Switch lbl trv alts' bod_maybe
         _ -> error "followRedirectsExp: Shouldn't switch on any other type."
 
@@ -121,10 +127,10 @@ followRedirectsExp ttailenv tenv tail =
       case binds of
         [(tag,TagTyPacked),(tail',CursorTy)] ->
           LetPrimCallT binds prim rands <$>
-            followRedirectsExp (M.insert tag tail' ttailenv) (M.union tenv (M.fromList binds)) bod
+            followRedirectsExp isPrintFn (M.insert tag tail' ttailenv) (M.union tenv (M.fromList binds)) bod
         _ ->
           LetPrimCallT binds prim rands <$>
-            followRedirectsExp ttailenv (M.union tenv (M.fromList binds)) bod
+            go (M.union tenv (M.fromList binds)) bod
     LetTrivT bnd@(v,ty,_) bod ->
       LetTrivT bnd <$> go (M.insert v ty tenv) bod
     LetIfT binds (trv,tl1,tl2) bod -> do
@@ -136,6 +142,8 @@ followRedirectsExp ttailenv tenv tail =
       LetUnpackT binds ptr <$> go (M.union tenv (M.fromList binds)) bod
     LetAllocT lhs vals bod -> do
       LetAllocT lhs vals <$> go tenv bod
+    LetAvailT vs bod -> do
+      LetAvailT vs <$> go tenv bod
     IfT tst con els ->
       IfT tst <$> go tenv con <*> go tenv els
     ErrT{} -> return tail
@@ -145,4 +153,4 @@ followRedirectsExp ttailenv tenv tail =
     LetArenaT lhs bod -> LetArenaT lhs <$> go (M.insert lhs ArenaTy tenv) bod
     TailCall{} -> return tail
 
-  where go = followRedirectsExp ttailenv
+  where go = followRedirectsExp isPrintFn ttailenv

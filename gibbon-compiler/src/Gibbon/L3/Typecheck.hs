@@ -120,6 +120,10 @@ tcExp isPacked ddfs env exp =
 
         NullCursor -> return CursorTy
 
+        GetCilkWorkerNum -> return IntTy
+
+        LetAvail _ bod -> go bod
+
     -- All the other cases are exactly same as L1.Typecheck
 
     VarE v    -> lookupVar env v exp

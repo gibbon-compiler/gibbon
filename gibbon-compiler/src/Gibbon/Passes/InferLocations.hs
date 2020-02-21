@@ -304,7 +304,7 @@ inferExp' env exp bound dest=
                 addLetLoc i a =
                     case i of
                       AfterConstantL lv1 v lv2 -> Ext (LetLocE lv1 (AfterConstantLE v lv2) a)
-                      AfterVariableL lv1 v lv2 -> Ext (LetLocE lv1 (AfterVariableLE v lv2) a)
+                      AfterVariableL lv1 v lv2 -> Ext (LetLocE lv1 (AfterVariableLE v lv2 True) a)
                       StartRegionL lv r -> Ext (LetRegionE r (Ext (LetLocE lv (StartOfLE r) a)))
                       AfterTagL lv1 lv2 -> Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
                       FreeL lv -> Ext (LetLocE lv FreeLE a)
@@ -317,7 +317,7 @@ inferExp' env exp bound dest=
                                           _ -> error "bindAllLocations: Not a packed type"
                             a' = subst v1 (VarE v') a
                         in LetE (v',[],copyRetTy, AppE f lvs [VarE v1]) $
-                           Ext (LetLocE lv1 (AfterVariableLE v' lv2) a')
+                           Ext (LetLocE lv1 (AfterVariableLE v' lv2 True) a')
 
   in do res <- inferExp env exp dest
         (e,ty,cs) <- bindAllLocations res
@@ -439,9 +439,9 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
       handleTrailingBindLoc v res =
           do (e,ty,cs) <- bindAfterLoc v res
              case e of
-               (Ext (LetLocE lv1 (AfterVariableLE v lv2) e)) ->
+               (Ext (LetLocE lv1 (AfterVariableLE v lv2 True) e)) ->
                    do (e',ty',cs') <- bindTrivialAfterLoc lv1 (e,ty,cs)
-                      return (Ext (LetLocE lv1 (AfterVariableLE v lv2) e'), ty', cs')
+                      return (Ext (LetLocE lv1 (AfterVariableLE v lv2 True) e'), ty', cs')
                _ -> return (e,ty,cs) -- Should this signal an error instead of silently returning?
 
       -- | Transforms a result by adding a location binding derived from an AfterVariable constraint
@@ -453,7 +453,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                 if v == v'
                 then do lv1' <- finalLocVar lv1
                         lv2' <- finalLocVar lv2
-                        return (Ext (LetLocE lv1' (AfterVariableLE v lv2) e), ty, cs)
+                        return (Ext (LetLocE lv1' (AfterVariableLE v lv2 True) e), ty, cs)
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
                         return (e',ty',c:cs')
             AfterCopyL lv1 v1 v' lv2 f lvs ->
@@ -467,7 +467,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                                           PackedTy _ loc -> substLoc (M.singleton loc lv2) (arrOut arrty)
                                           _ -> error "bindAfterLoc: Not a packed type"
                         return (LetE (v',[],copyRetTy,AppE f lvs [VarE v1]) $
-                                Ext (LetLocE lv1' (AfterVariableLE v' lv2') e), ty, cs)
+                                Ext (LetLocE lv1' (AfterVariableLE v' lv2' True) e), ty, cs)
                 else do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
                         return (e',ty',c:cs')
             _ -> do (e',ty',cs') <- bindAfterLoc v (e,ty,cs)
@@ -1135,9 +1135,9 @@ finishExp e =
                        AfterConstantLE i lv -> do
                                     lv' <- finalLocVar lv
                                     return $ AfterConstantLE i lv'
-                       AfterVariableLE v lv -> do
+                       AfterVariableLE v lv b -> do
                                     lv' <- finalLocVar lv
-                                    return $ AfterVariableLE v lv'
+                                    return $ AfterVariableLE v lv' b
                        oth -> return oth
              return $ Ext (LetLocE loc' lex' e1')
       Ext (L2.AddFixed cur i) -> pure $ Ext (L2.AddFixed cur i)
@@ -1231,8 +1231,8 @@ cleanExp e =
       Ext (LetLocE loc lex e) -> let (e',s') = cleanExp e
                                  in if S.member loc s'
                                     then let ls = case lex of
-                                                    AfterConstantLE _i lv -> [lv]
-                                                    AfterVariableLE _v lv -> [lv]
+                                                    AfterConstantLE _i lv   -> [lv]
+                                                    AfterVariableLE _v lv _ -> [lv]
                                                     oth -> []
                                          in (Ext (LetLocE loc lex e'),
                                               S.delete loc $ S.union s' $ S.fromList ls)

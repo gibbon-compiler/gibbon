@@ -89,18 +89,24 @@ data E2Ext loc dec
                  (loc,Var) -- Pointer
                  (loc,Var) -- Pointee (the thing that the pointer points to)
                  (E2 loc dec) -- If this indirection was added to get rid
-                                  -- of a copy_Foo call, we keep the fn call
-                                  -- around in case we want to go back to it.
-                                  -- E.g. reverting from L2 to L1.
+                              -- of a copy_Foo call, we keep the fn call
+                              -- around in case we want to go back to it.
+                              -- E.g. reverting from L2 to L1.
     -- ^ A tagged indirection node.
+  | GetCilkWorkerNum
+  -- ^ Runs  __cilkrts_get_worker_number()
+  | LetAvail [Var] (E2 loc dec) -- ^ These variables are available to use before the join point
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 -- | Define a location in terms of a different location.
 data PreLocExp loc = StartOfLE Region
-                   | AfterConstantLE Int -- Number of bytes after.
-                                    loc  -- Location which this location is offset from.
-                   | AfterVariableLE Var -- Name of variable v. This loc is size(v) bytes after.
-                                    loc  -- Location which this location is offset from.
+                   | AfterConstantLE Int  -- Number of bytes after.
+                                     loc  -- Location which this location is offset from.
+                   | AfterVariableLE Var  -- Name of variable v. This loc is size(v) bytes after.
+                                     loc  -- Location which this location is offset from.
+                                     Bool -- Whether it's running in a stolen continuation i.e
+                                          -- whether this should return an index in a fresh region or not.
+                                          -- It's True by default and flipped by ParAlloc if required.
                    | InRegionLE Region
                    | FreeLE
                    | FromEndLE  loc
@@ -124,6 +130,8 @@ instance FreeVars (E2Ext l d) where
      AddFixed vr _      -> S.singleton vr
      BoundsCheck{}      -> S.empty
      IndirectionE{}     -> S.empty
+     GetCilkWorkerNum   -> S.empty
+     LetAvail vs bod    -> S.fromList vs `S.union` gFreeVars bod
 
 
 instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
@@ -138,6 +146,8 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       AddFixed{}     -> True
       BoundsCheck{}  -> False
       IndirectionE{} -> False
+      GetCilkWorkerNum-> False
+      LetAvail{}      -> False
 
 instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)) where
   gRecoverType ddfs env2 ex =
@@ -151,6 +161,8 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
       BoundsCheck{}       -> error $ "Shouldn't enconter BoundsCheck in tail position"
       IndirectionE tycon _ _ (to,_) _ -> PackedTy tycon to
       AddFixed{}          -> error $ "Shouldn't enconter AddFixed in tail position"
+      GetCilkWorkerNum    -> IntTy
+      LetAvail _ bod -> gRecoverType ddfs env2 bod
 
 
 instance (Typeable (E2Ext l (UrTy l)),
@@ -171,6 +183,9 @@ instance (Typeable (E2Ext l (UrTy l)),
           AddFixed{}    -> return ([],ex)
           BoundsCheck{} -> return ([],ex)
           IndirectionE{}-> return ([],ex)
+          GetCilkWorkerNum-> return ([],ex)
+          LetAvail vs bod -> do (bnds,bod') <- go bod
+                                return $ ([], LetAvail vs $ flatLets bnds bod')
 
     where go = gFlattenGatherBinds ddfs env
 
@@ -187,6 +202,8 @@ instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2E
       BoundsCheck{}  -> ext
       IndirectionE{} -> ext
       AddFixed{}     -> ext
+      GetCilkWorkerNum-> ext
+      LetAvail vs bod -> LetAvail vs (gInlineTrivExp env bod)
 
 
 instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E2Ext l d) where
@@ -199,6 +216,8 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       BoundsCheck{}    -> ext
       IndirectionE{}   -> ext
       AddFixed{}       -> ext
+      GetCilkWorkerNum -> ext
+      LetAvail vs bod  -> LetAvail vs (gSubst old new bod)
 
   gSubstEExt old new ext =
     case ext of
@@ -209,6 +228,8 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       BoundsCheck{}    -> ext
       IndirectionE{}   -> ext
       AddFixed{}       -> ext
+      GetCilkWorkerNum -> ext
+      LetAvail vs bod  -> LetAvail vs (gSubstE old new bod)
 
 instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
   gRename env ext =
@@ -220,6 +241,8 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
       BoundsCheck{}    -> ext
       IndirectionE{}   -> ext
       AddFixed{}       -> ext
+      GetCilkWorkerNum -> ext
+      LetAvail vs bod  -> LetAvail vs (gRename env bod)
 
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
@@ -525,8 +548,10 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
             RetE _ v -> VarE v
             AddFixed{} -> error "revertExp: AddFixed not handled."
             FromEndE{} -> error "revertExp: TODO FromEndLE"
-            BoundsCheck{} -> error "revertExp: TODO BoundsCheck"
-            IndirectionE{} -> error "revertExp: TODO IndirectionE"
+            BoundsCheck{}   -> error "revertExp: TODO BoundsCheck"
+            IndirectionE{}  -> error "revertExp: TODO IndirectionE"
+            GetCilkWorkerNum-> LitE 0
+            LetAvail _ bod  -> revertExp bod
         MapE{}  -> error $ "revertExp: TODO MapE"
         FoldE{} -> error $ "revertExp: TODO FoldE"
 
@@ -568,7 +593,7 @@ occurs w ex =
         LetLocE _ le bod  ->
           let oc_bod = go bod in
           case le of
-            AfterVariableLE v _ -> v `S.member` w || oc_bod
+            AfterVariableLE v _  _ -> v `S.member` w || oc_bod
             StartOfLE{}         -> oc_bod
             AfterConstantLE{}   -> oc_bod
             InRegionLE{}        -> oc_bod
@@ -580,6 +605,8 @@ occurs w ex =
         AddFixed v _  -> v `S.member` w
         IndirectionE _ _ (_,v1) (_,v2) ib ->
           v1 `S.member` w  || v2 `S.member` w || go ib
+        GetCilkWorkerNum -> False
+        LetAvail _ bod -> go bod
     MapE{}  -> error "occurs: TODO MapE"
     FoldE{} -> error "occurs: TODO FoldE"
   where
@@ -660,13 +687,15 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               BoundsCheck{}  -> acc
               IndirectionE{} -> acc
               AddFixed v _   -> M.insertWith (++) v [v] acc
+              GetCilkWorkerNum -> acc
+              LetAvail _ bod -> go acc bod
 
       dep :: PreLocExp LocVar -> [Var]
       dep ex =
         case ex of
           StartOfLE r -> [regionToVar r]
-          AfterConstantLE _ loc -> [loc]
-          AfterVariableLE v loc -> [v,loc]
+          AfterConstantLE _ loc   -> [loc]
+          AfterVariableLE v loc _ -> [v,loc]
           InRegionLE r  -> [regionToVar r]
           FromEndLE loc -> [loc]
           FreeLE -> []
@@ -687,6 +716,8 @@ allFreeVars ex = S.toList $
         BoundsCheck _ reg cur -> S.fromList [reg,cur]
         IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
         AddFixed v _    -> S.singleton v
+        GetCilkWorkerNum-> S.empty
+        LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod
     _ -> gFreeVars ex
 
 
@@ -721,6 +752,8 @@ changeAppToSpawn v args2 ex1 =
         BoundsCheck{}     -> ex1
         IndirectionE{}    -> ex1
         AddFixed{}        -> ex1
+        GetCilkWorkerNum  -> ex1
+        LetAvail vs bod   -> Ext $ LetAvail vs (go bod)
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{}  -> error "addRANExp: TODO FoldE"
 

@@ -86,9 +86,9 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
           let reg = case locexp of
                       StartOfLE r  -> regionToVar r
                       InRegionLE r -> regionToVar r
-                      AfterConstantLE _ lc -> renv # lc
-                      AfterVariableLE _ lc -> renv # lc
-                      FromEndLE lc         -> renv # lc -- TODO: This needs to be fixed
+                      AfterConstantLE _ lc   -> renv # lc
+                      AfterVariableLE _ lc _ -> renv # lc
+                      FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
                       FreeLE -> error "addTraversalsExp: FreeLE not handled"
           in Ext <$> LetLocE loc locexp <$>
                addTraversalsExp ddefs fundefs env2 (M.insert loc reg renv) context bod

@@ -373,8 +373,6 @@ tests:
   - name: ParSumTree.hs
     dir: examples/parallel
     test-flags: ["--parallel"]
-    # Cannot compile parallel allocations in Gibbon1 mode
-    failing: ["gibbon1"]
     answer-file: examples/parallel/ParSumTree.hs.ans
 
   - name: ParSumParTree.hs
@@ -386,7 +384,7 @@ tests:
 
   - name: SeqSumTree.hs
     dir: examples/parallel
-    answer-file: examples/parallel/SeqSumTree.hs.ans
+    answer-file: examples/parallel/ParSumTree.hs.ans
 
   - name: ParAdd1Tree.hs
     dir: examples/parallel
@@ -402,13 +400,13 @@ tests:
   - name: SeqKdTree.hs
     dir: examples/parallel
     answer-file: examples/parallel/SeqKdTree.hs.ans
-    failing: ["pointer", "interp1"]
+    failing: ["pointer"]
 
   - name: ParKdTree.hs
     dir: examples/parallel
     test-flags: ["--parallel"]
     answer-file: examples/parallel/SeqKdTree.hs.ans
-    failing: ["gibbon1", "pointer", "interp1"]
+    failing: ["gibbon1", "pointer"]
 
   ## Vector operations
   - name: List.hs

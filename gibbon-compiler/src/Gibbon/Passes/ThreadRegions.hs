@@ -211,9 +211,9 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
           let reg = case rhs of
                       StartOfLE r  -> regionToVar r
                       InRegionLE r -> regionToVar r
-                      AfterConstantLE _ lc -> renv # lc
-                      AfterVariableLE _ lc -> renv # lc
-                      FromEndLE lc         -> renv # lc -- TODO: This needs to be fixed
+                      AfterConstantLE _ lc   -> renv # lc
+                      AfterVariableLE _ lc _ -> renv # lc
+                      FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
                       FreeLE -> undefined
           Ext <$> LetLocE loc rhs <$>
             threadRegionsExp ddefs fundefs isMain (M.insert loc reg renv) env2 lfenv bod
@@ -241,7 +241,9 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
         FromEndE{}    -> return ex
         BoundsCheck sz _bound cur -> do
           return $ Ext $ BoundsCheck sz (toEndV (renv # cur)) cur
-        IndirectionE{} -> return ex
+        IndirectionE{}   -> return ex
+        GetCilkWorkerNum -> return ex
+        LetAvail vs bod -> Ext <$> LetAvail vs <$> go bod
 
     -- Straightforward recursion
 
@@ -312,6 +314,8 @@ findRetLocs e0 = go e0 []
             BoundsCheck{}     -> acc
             IndirectionE{}    -> acc
             AddFixed{}        -> acc
+            GetCilkWorkerNum  -> acc
+            LetAvail _ bod    -> go bod acc
         MapE{}  -> error "findRetLocs: TODO MapE"
         FoldE{}  -> error "findRetLocs: TODO FoldE"
 
