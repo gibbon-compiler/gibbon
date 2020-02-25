@@ -125,6 +125,7 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
 -- (2) Otherwise, we must traverse the first (n-1) packed elements
 needsTraversalCase :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> (DataCon, [(Var, LocVar)], Exp2) -> Maybe [(Var, LocVar)]
 needsTraversalCase ddefs fundefs env2 (dcon,vlocs,rhs) =
+  if isRANDataCon dcon then Nothing else
   let (vars, _locs) = unzip vlocs
       tys     = lookupDataCon ddefs dcon
       tyenv   = M.fromList (zip vars tys)
