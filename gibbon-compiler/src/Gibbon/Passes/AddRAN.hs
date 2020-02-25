@@ -425,9 +425,9 @@ we need random access for that type.
       let (vars,locs) = unzip vlocs
           renv' = L.foldr (\lc acc -> M.insert lc reg acc) renv1 locs
           env21' = extendPatternMatchEnv dcon ddefs vars locs env21
-          ran_for_scrt = if L.null (needsTraversalCase ddefs fundefs env2 br)
-                            then S.empty
-                            else S.singleton tycon
+          ran_for_scrt = case (needsTraversalCase ddefs fundefs env2 br) of
+                           Nothing -> S.empty
+                           Just{}  -> S.singleton tycon
       in ran_for_scrt `S.union` needsRANExp ddefs fundefs env21' renv' tcenv1 parlocss1 bod
 
     -- Return the location and tycon of an argument to a function call.

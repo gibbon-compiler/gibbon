@@ -105,7 +105,7 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
           renv1 = L.foldr (\lc acc -> M.insert lc reg acc) renv locs
           needs_traversal = needsTraversalCase ddefs fundefs env21 (dcon,vlocs,rhs)
       case needs_traversal of
-        Nothing -> (dcon, vlocs,) <$> addTraversalsExp ddefs fundefs env21 renv1 context rhs
+        Nothing -> pure (dcon, vlocs, rhs)
         Just ls -> do
           dump_op <- dopt Opt_D_Dump_Repair <$> getDynFlags
 
