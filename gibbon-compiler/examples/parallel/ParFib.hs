@@ -17,7 +17,7 @@ fib n =
     then 0
     else if n == 1
     then 1
-    else if n < 12
+    else if n < 19
     then fib_seq n
     else
         let x = spawn (fib (n - 1))
