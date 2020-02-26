@@ -362,6 +362,21 @@ substTyVar mp ty =
   where
     go = substTyVar mp
 
+isScalarTy0 :: Ty0 -> Bool
+isScalarTy0 IntTy  = True
+isScalarTy0 SymTy0 = True
+isScalarTy0 BoolTy = True
+isScalarTy0 FloatTy= True
+isScalarTy0 _      = False
+
+
+-- | Lists of scalars or flat products of scalars are allowed.
+isValidListElemTy0 :: Ty0 -> Bool
+isValidListElemTy0 ty
+  | isScalarTy0 ty = True
+  | otherwise = case ty of
+                  ProdTy tys -> all isScalarTy0 tys
+                  _ -> False
 
 -- Hack. In the specializer, we'd like to know the type of the scrutinee.
 -- However, we cannot derive Typeable for L0.
@@ -472,6 +487,7 @@ recoverType ddfs env2 ex =
         VSortP ty      -> ListTy ty
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty
+        ReadArrayFile _ ty      -> ty
         RequestEndOf -> error "primRetTy1: RequestEndOf not handled yet"
         PrintInt     -> error "primRetTy1: PrintInt not handled yet"
         PrintSym     -> error "primRetTy1: PrintSym not handled yet"

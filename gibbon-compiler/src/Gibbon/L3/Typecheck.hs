@@ -365,6 +365,12 @@ tcExp isPacked ddfs env exp =
           then return CursorTy
           else return ty
 
+        ReadArrayFile _ ty -> do
+          len0
+          if isValidListElemTy ty
+          then return (ListTy ty)
+          else throwError $ GenericTC "Not a valid list type" exp
+
         RequestEndOf -> error "RequestEndOf shouldn't occur in a L3 program."
 
         VEmptyP ty -> do

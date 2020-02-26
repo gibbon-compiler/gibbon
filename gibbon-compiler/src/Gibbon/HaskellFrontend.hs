@@ -255,6 +255,15 @@ desugarExp toplevel e =
                   then case e2 of
                          Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
+                  else if f == "readArrayFile"
+                  then case e2 of
+                         Lit _ lit -> do
+                           t <- newMetaTy
+                           pure $ PrimAppE (ReadArrayFile (Just (litToString lit)) t) []
+                         Con _ (Special _ (UnitCon _)) -> do
+                           t <- newMetaTy
+                           pure $ PrimAppE (ReadArrayFile Nothing t) []
+                         _ -> error "desugarExp: couldn't parse readArrayFile"
                   else if f == "bench"
                   then do
                     e2' <- desugarExp toplevel e2
@@ -332,6 +341,15 @@ desugarExp toplevel e =
                   then case e2 of
                          Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
+                  else if c == "readArrayFile"
+                  then case e2 of
+                         Lit _ lit -> do
+                           t <- newMetaTy
+                           pure $ PrimAppE (ReadArrayFile (Just (litToString lit)) t) []
+                         Con _ (Special _ (UnitCon _)) -> do
+                           t <- newMetaTy
+                           pure $ PrimAppE (ReadArrayFile Nothing t) []
+                         _ -> error "desugarExp: couldn't parse readArrayFile"
                   else (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
           (Ext (ParE0 ls)) -> do
             e2' <- desugarExp toplevel e2
@@ -516,13 +534,14 @@ desugarLiteral lit =
     (Frac _ i _) -> pure $ FloatE (fromRational i)
     _ -> error ("desugarLiteral: Only integer litrals are allowed: " ++ prettyPrint lit)
 
+
 litToInt :: Literal a -> Int
 litToInt (Int _ i _) = (fromIntegral i)
 litToInt lit         = error ("litToInt: Not an integer: " ++ prettyPrint lit)
 
 litToString :: Literal a -> String
 litToString (String _ a _) = a
-litToString lit            = error ("desugarExp: Expected a String, got: " ++ prettyPrint lit)
+litToString lit            = error ("litToString: Expected a String, got: " ++ prettyPrint lit)
 
 qnameToStr :: H.QName a -> String
 qnameToStr qname =

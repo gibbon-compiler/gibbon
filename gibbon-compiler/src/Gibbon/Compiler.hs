@@ -120,6 +120,10 @@ configParser = Config <$> inputParser
                                             " becomes a command-line argument of the resulting binary."++
                                             " Also we RUN the benchmark right away if this is provided.")))
                           <|> pure Nothing)
+                      <*> ((Just <$> strOption (long "array-input" <> metavar "FILE" <>
+                                      help ("Hard-code the input file for readArrayFile or it"++
+                                            " becomes a command-line argument of the resulting binary.")))
+                          <|> pure Nothing)
                       <*> (option auto (short 'v' <> long "verbose" <>
                                        help "Set the debug output level, 1-5, mirrors DEBUG env var.")
                            <|> pure 1)
@@ -346,7 +350,7 @@ withPrintInterpProg l1 =
 -- | Compile and run the generated code if appropriate
 --
 compileAndRunExe :: Config -> FilePath -> IO String
-compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
+compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp = do
   exepath <- makeAbsolute exe
   clearFile exepath
 
@@ -369,8 +373,12 @@ compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
       runConf <- getRunConfig [] -- FIXME: no command line option atm.  Just env vars.
       case benchInput of
         -- CONVENTION: In benchmark mode we expect the generated executable to take 2 extra params:
-        Just _ | isBench mode   -> runExe $ " " ++show (rcSize runConf) ++ " " ++ show (rcIters runConf)
-        _      | mode == RunExe -> runExe ""
+        Just _ | isBench mode   -> case arrayInput of
+                                     Nothing -> runExe $ " " ++ show (rcSize runConf) ++ " " ++ show (rcIters runConf)
+                                     Just fp -> runExe $ " " ++ "--array-input " ++ fp ++ " "  ++ show (rcSize runConf) ++ " " ++ show (rcIters runConf)
+        _      | mode == RunExe -> case arrayInput of
+                                     Nothing -> runExe ""
+                                     Just fp -> runExe $ " " ++ "--array-input " ++ fp ++ " "
         _                                -> return ""
   where outfile = getOutfile backend fp cfile
         exe = getExeFile backend fp exefile

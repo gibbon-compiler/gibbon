@@ -905,6 +905,14 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                         L2.LetE (vr,[],PackedTy tycon loc,rhs') bod'')
                      , ty', fcs)
 
+        PrimAppE (ReadArrayFile fp ty0) [] -> do
+          ty <- lift $ lift $ convertTy bty
+          ty0' <- lift $ lift $ convertTy ty0
+          (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
+          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty', cs')
+          fcs <- tryInRegion cs'''
+          tryBindReg (L2.LetE (vr,[],ty, L2.PrimAppE (ReadArrayFile fp ty0') []) bod'', ty'', fcs)
+
         -- Don't process the EndOf operation at all, just recur through it
         PrimAppE RequestEndOf [(VarE v)] -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
@@ -1613,6 +1621,7 @@ prim p = case p of
            VSortP dty   -> convertTy dty >>= return . VSortP
            SymAppend{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
+           ReadArrayFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            SymSetEmpty{} -> err $ "prim: SymSetEmpty not handled."
            SymSetInsert{} -> err $ "prim: SymSetInsert not handled."
            SymSetContains{} -> err $ "prim: SymSetContains not handled."

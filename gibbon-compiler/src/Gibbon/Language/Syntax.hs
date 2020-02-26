@@ -663,6 +663,12 @@ data Prim ty
             -- The variable represents the region that this file will be mapped to, and is
             -- set by InferLocations.
 
+          | ReadArrayFile (Maybe FilePath) ty
+            -- ^ Parse a file into an UT_array. This is decorated with the
+            -- element type. If the element type is a struct,
+            -- like (Int, Int), each line must contain 2 numbers
+            -- separated by a space
+
           | RequestEndOf
           -- ^ Conveys a demand for the "end of" some packed value, which is
           -- fulfilled by Cursorize. N.B. the argument must be a VarE that
@@ -1131,6 +1137,7 @@ primArgsTy p =
     SymHashInsert -> [SymHashTy,SymTy,SymTy]
     SymHashLookup -> [SymHashTy,SymTy]
     ReadPackedFile{} -> []
+    ReadArrayFile{}  -> []
     (ErrorP _ _) -> []
     RequestEndOf  -> error "primArgsTy: RequestEndOf not handled yet"
     IntHashEmpty  -> error "primArgsTy: IntHashEmpty not handled yet"
@@ -1196,6 +1203,7 @@ primRetTy p =
     SymHashLookup  -> SymTy
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
+    ReadArrayFile _ ty      -> ty
     RequestEndOf  -> error "primRetTy: RequestEndOf not handled yet"
     IntHashEmpty  -> error "primRetTy: IntHashEmpty not handled yet"
     IntHashInsert -> error "primRetTy: IntHashInsert not handled yet"

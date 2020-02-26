@@ -93,6 +93,7 @@ harvestStructTys (Prog _ funs mtal) =
            VLengthP ty -> ListTy ty : rst
            VUpdateP ty -> ListTy ty : rst
            VSnocP ty   -> ListTy ty : rst
+           ReadArrayFile _ ty -> ListTy ty : rst
            _ -> ProdTy (map snd binds) : rst
        (LetTrivT (_,ty,_) bod)     -> ty : go bod
        -- This should not create a struct.  Again, we add it just for the heck of it:
@@ -812,6 +813,75 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                              return $ mmapCode ++ docall
                      | otherwise -> error $ "ReadPackedFile, wrong arguments "++show rnds++", or expected bindings "++show bnds
 
+                 ReadArrayFile mfile ty
+                   | [] <- rnds, [(outV,_outT)] <- bnds -> do
+                           let filename = case mfile of
+                                            Just f  -> [cexp| $string:f |] -- Fixed at compile time.
+                                            Nothing -> [cexp| read_arrayfile_param() |] -- Will be set by command line arg.
+                           let ty_name  = case ty of
+                                            IntTy      -> makeName' ty
+                                            ProdTy tys -> makeName tys
+                                            _ -> error $ "ReadArrayFile: Lists of type " ++ sdoc ty ++ " not allowed."
+                               icd_name = ty_name ++ "_icd"
+                               parse_in_c t = case t of
+                                                IntTy   -> "%lld"
+                                                FloatTy -> "%lf"
+                                                _ -> error $ "ReadArrayFile: Lists of type " ++ sdoc ty ++ " not allowed."
+
+                           elem <- gensym "arr_elem"
+                           fp <- gensym "fp"
+                           line <- gensym "line"
+                           len <- gensym "len"
+                           read <- gensym "read"
+
+                           (tmps, tmps_parsers, tmps_assns, tmps_decls) <-
+                                 case ty of
+                                     IntTy -> do
+                                       one <- gensym "tmp"
+                                       let assn = C.BlockStm [cstm| $id:elem = $id:one ; |]
+                                       pure ([one], ["%lld"], [ assn ], [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:one; |] ])
+                                     FloatTy -> do
+                                       one <- gensym "tmp"
+                                       let assn = C.BlockStm [cstm| $id:elem = $id:one ; |]
+                                       pure ([one], ["%lf"], [ assn ], [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:one; |] ])
+                                     ProdTy tys -> do
+                                       vs <- mapM (\_ -> gensym "tmp") tys
+                                       let decls = map (\(name, t) -> C.BlockDecl [cdecl| $ty:(codegenTy t) $id:name; |] ) (zip vs tys)
+                                           parsers = map parse_in_c tys
+                                           assns = map (\(v, i) ->
+                                                           let field = "field" ++ (show i)
+                                                           in C.BlockStm [cstm| $id:elem.$id:field = $id:v; |])
+                                                   (zip vs [0..])
+                                       pure (vs, parsers, assns, decls)
+                                     _ -> error $ "ReadArrayFile: Lists of type " ++ sdoc ty ++ " not allowed."
+
+                           let scanf_vars   = map (\v -> [cexp| &($id:v) |]) tmps
+                               scanf_line = [cexp| $id:line |]
+                               scanf_format = [cexp| $string:(intercalate " " tmps_parsers) |]
+                               scanf_rator  = C.Var (C.Id "sscanf" noLoc) noLoc
+                               scanf = C.FnCall scanf_rator (scanf_line : scanf_format : scanf_vars) noLoc
+
+                           return $
+                                  [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
+                                  , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |]
+                                  , C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:elem; |]
+                                  , C.BlockStm  [cstm| FILE *($id:fp); |]
+                                  , C.BlockDecl [cdecl| char *($id:line) = NULL; |]
+                                  , C.BlockStm [cstm| size_t ($id:len); |]
+                                  , C.BlockStm [cstm| $id:len = 0; |]
+                                  , C.BlockStm [cstm| ssize_t ($id:read); |]
+                                  , C.BlockStm [cstm| $id:fp = fopen( $filename, "r"); |]
+                                  , C.BlockStm [cstm| { if($id:fp == NULL) { fprintf(stderr,"fopen failed\n"); abort(); }} |]
+                                  ] ++ tmps_decls ++
+                                  [ C.BlockStm [cstm| while(($id:read = getline(&($id:line), &($id:len), $id:fp)) != -1) {
+                                                      int xxxx = $scanf;
+                                                      $items:tmps_assns
+                                                      utarray_push_back($id:outV, &($id:elem));
+                                                    } |]
+                                  ]
+
+                   | otherwise -> error $ "ReadPackedFile, wrong arguments "++show rnds++", or expected bindings "++show bnds
+
                  MMapFileSize v -> do
                        let [(outV,IntTy)] = bnds
                            -- Must match with mmap_size set by ReadPackedFile
@@ -837,7 +907,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    let ty_name  = case ty of
                          IntTy      -> makeName' ty
                          ProdTy tys -> makeName tys
-                         _ -> "makeStructs: Lists of type " ++ sdoc ty ++ " not allowed."
+                         _ -> "VEmptyP: Lists of type " ++ sdoc ty ++ " not allowed."
                        icd_name = ty_name ++ "_icd"
                        [(outV,_)]  = bnds
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]

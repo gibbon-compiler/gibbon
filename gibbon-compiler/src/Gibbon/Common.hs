@@ -193,6 +193,7 @@ data Config = Config
   { input      :: Input
   , mode       :: Mode -- ^ How to run, which backend.
   , benchInput :: Maybe FilePath -- ^ What packed, binary .gpkd file to use as input.
+  , arrayInput :: Maybe FilePath -- ^ What array file to use as input.
   , verbosity  :: Int   -- ^ Debugging output, equivalent to DEBUG env var.
   , cc         :: String -- ^ C compiler to use
   , optc       :: String -- ^ Options to the C compiler
@@ -230,6 +231,7 @@ defaultConfig =
   Config { input = Unspecified
          , mode  = ToExe
          , benchInput = Nothing
+         , arrayInput = Nothing
          , verbosity = 1
          , cc = "gcc"
          , optc = " -O3  "

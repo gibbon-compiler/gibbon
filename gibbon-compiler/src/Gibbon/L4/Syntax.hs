@@ -212,6 +212,7 @@ data Prim
     | VSortP Ty
 
     | ReadPackedFile (Maybe FilePath) TyCon
+    | ReadArrayFile (Maybe FilePath) Ty
 
     | NewBuffer L2.Multiplicity
     -- ^ Allocate a new buffer, return a cursor.

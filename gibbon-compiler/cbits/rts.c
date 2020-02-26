@@ -42,6 +42,7 @@ static long long global_size_param = 1;
 static long long global_iters_param = 1;
 
 static char* global_benchfile_param = NULL;
+static char* global_arrayfile_param = NULL;
 
 // Sequential for now:
 static const int num_workers = 1;
@@ -261,6 +262,14 @@ char* read_benchfile_param() {
     exit(1);
   } else
     return global_benchfile_param;
+}
+
+char* read_arrayfile_param() {
+  if (global_arrayfile_param == NULL) {
+    fprintf(stderr, "read_arrayfile_param: array input file was not set!\n");
+    exit(1);
+  } else
+    return global_arrayfile_param;
 }
 
 
@@ -749,11 +758,20 @@ int main(int argc, char** argv)
         }
         else if ((strcmp(argv[i], "--bench-input") == 0)) {
           if (i+1 >= argc) {
-            fprintf(stderr, "Not enough arguments after -file, expected <file>.\n");
+            fprintf(stderr, "Not enough arguments after --bench-input, expected <file>.\n");
             show_usage(argv);
             exit(1);
           }
           global_benchfile_param = argv[i+1];
+          i++;
+        }
+        else if ((strcmp(argv[i], "--array-input") == 0)) {
+          if (i+1 >= argc) {
+            fprintf(stderr, "Not enough arguments after --array-input, expected <file>.\n");
+            show_usage(argv);
+            exit(1);
+          }
+          global_arrayfile_param = argv[i+1];
           i++;
         }
         // If present, we expect the two arguments to be <size> <iters>

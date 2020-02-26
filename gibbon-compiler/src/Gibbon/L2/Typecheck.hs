@@ -346,6 +346,12 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    len0
                    return (ty, tstate)
 
+                 ReadArrayFile _ ty -> do
+                   len0
+                   if isValidListElemTy ty
+                   then return (ListTy ty, tstate)
+                   else throwError $ GenericTC "Not a valid list type" exp
+
                  RequestEndOf -> do
                    len1
                    case (es !! 0) of

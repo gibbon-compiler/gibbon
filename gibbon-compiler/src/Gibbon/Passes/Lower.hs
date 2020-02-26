@@ -946,6 +946,7 @@ prim p =
     DictEmptyP ty  -> T.DictEmptyP $ typ ty
     DictHasKeyP ty -> T.DictHasKeyP $ typ ty
     ReadPackedFile mf tyc _ _ -> T.ReadPackedFile mf tyc
+    ReadArrayFile fp ty -> T.ReadArrayFile fp (typ ty)
     VEmptyP ty    -> T.VEmptyP (typ ty)
     VNthP ty      -> T.VNthP (typ ty)
     VLengthP ty   -> T.VLengthP (typ ty)

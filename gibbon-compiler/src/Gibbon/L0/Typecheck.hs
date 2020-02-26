@@ -375,6 +375,10 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           len0
           pure (s1, ty, PrimAppE pr args_tc)
 
+        ReadArrayFile _ ty -> do
+          len0
+          pure (s1, ListTy ty, PrimAppE pr args_tc)
+
         RequestEndOf -> err $ text "Unexpected RequestEndOf in L0: " <+> exp_doc
 
 
@@ -678,6 +682,7 @@ zonkExp s ex =
                   VUpdateP ty -> VUpdateP (zonkTy s ty)
                   VSnocP   ty -> VSnocP   (zonkTy s ty)
                   VSortP   ty -> VSortP   (zonkTy s ty)
+                  ReadArrayFile fp ty -> ReadArrayFile fp (zonkTy s ty)
                   _ -> pr
       in PrimAppE pr' (map go args)
     -- Let doesn't store any tyapps.

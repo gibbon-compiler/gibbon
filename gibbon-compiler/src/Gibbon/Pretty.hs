@@ -202,6 +202,8 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       VUpdateP{} -> text "vupdate"
                                       VSnocP{}   -> text "vsnoc"
                                       VSortP{}   -> text "vsort"
+                                      ReadArrayFile mb_fp ty ->
+                                        text "readArrayFile " <+> parens (text $ pretty mb_fp) <+> pprintWithStyle sty ty
                                       _ -> error $ "pprint: Unknown primitive: " ++ show pr
                       PPHaskell  -> case pr of
                                       DictEmptyP _ty  -> text "dictEmpty"
