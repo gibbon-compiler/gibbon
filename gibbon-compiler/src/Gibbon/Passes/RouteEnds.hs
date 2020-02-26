@@ -180,6 +180,11 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
             let e = LetE (v,ls,ty,rhs) (LetE (tmp,[],IntTy,LitE n) (VarE tmp))
             exp fns retlocs eor lenv afterenv env2 e
 
+          LetE (v,ls,ty,rhs) (FloatE n) -> do
+            tmp <- gensym "fltLitTail"
+            let e = LetE (v,ls,ty,rhs) (LetE (tmp,[],FloatTy,FloatE n) (VarE tmp))
+            exp fns retlocs eor lenv afterenv env2 e
+
           -- This is the most interesting case: a let bound function application.
           -- We need to update the let binding's extra location binding list with
           -- the end witnesses returned from the function.
@@ -365,6 +370,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  exp fns retlocs eor (M.insert v' loc lenv) afterenv (extendVEnv v' ty env2) (e')
 
           LitE i -> return (LitE i)
+          FloatE i -> return (FloatE i)
 
           LitSymE v -> return $ LitSymE v
 
@@ -379,6 +385,11 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  let e = Ext (LetRegionE r (LetE (tmp,[],IntTy,LitE n) (VarE tmp)))
                  exp fns retlocs eor lenv afterenv env2 e
 
+          Ext (LetRegionE r (FloatE n)) -> do
+                 tmp <- gensym "fltLitTail"
+                 let e = Ext (LetRegionE r (LetE (tmp,[],FloatTy,FloatE n) (VarE tmp)))
+                 exp fns retlocs eor lenv afterenv env2 e
+
           Ext (LetRegionE r e) -> do
                  e' <- go e
                  return $ Ext (LetRegionE r e')
@@ -386,6 +397,11 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           Ext (LetLocE v rhs (LitE n)) -> do
                  tmp <- gensym "fltLitTail"
                  let e = Ext (LetLocE v rhs (LetE (tmp,[],IntTy,LitE n) (VarE tmp)))
+                 exp fns retlocs eor lenv afterenv env2 e
+
+          Ext (LetLocE v rhs (FloatE n)) -> do
+                 tmp <- gensym "fltLitTail"
+                 let e = Ext (LetLocE v rhs (LetE (tmp,[],IntTy,FloatE n) (VarE tmp)))
                  exp fns retlocs eor lenv afterenv env2 e
 
           Ext (LetLocE v (StartOfLE r) e) -> do

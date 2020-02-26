@@ -72,7 +72,7 @@ desugarModule m = error $ "desugarModule: " ++ prettyPrint m
 
 builtinTys :: S.Set Var
 builtinTys = S.fromList $
-    [ "Int", "Bool", "Sym", "SymHash", "SymSet", "SymDict", "Arena", "Vector" ]
+    [ "Int", "Float", "Bool", "Sym", "SymHash", "SymSet", "SymDict", "Arena", "Vector" ]
 
 keywords :: S.Set Var
 keywords = S.fromList $ map toVar $
@@ -101,6 +101,7 @@ desugarType ty =
     H.TyVar _ (Ident _ t) -> L0.TyVar $ UserTv (toVar t)
     TyTuple _ Boxed tys   -> ProdTy (map desugarType tys)
     TyCon _ (UnQual _ (Ident _ "Int"))  -> IntTy
+    TyCon _ (UnQual _ (Ident _ "Float"))-> FloatTy
     TyCon _ (UnQual _ (Ident _ "Bool")) -> BoolTy
     TyCon _ (UnQual _ (Ident _ "Sym"))  -> SymTy0
     TyCon _ (UnQual _ (Ident _ con))    -> PackedTy con []
@@ -168,17 +169,30 @@ primMap = M.fromList
   , ("*", MulP)
   , ("/", DivP)
   , ("div", DivP)
+  , ("^", ExpP)
+  , (".+.", FAddP)
+  , (".-.", FSubP)
+  , (".*.", FMulP)
+  , ("./.", FDivP)
+  , ("sqrt", FSqrtP)
   , ("==", EqIntP)
+  , (".==.", EqFloatP)
   , ("<", LtP)
   , (">", GtP)
   , ("<=", LtEqP)
   , (">=", GtEqP)
-  , ("^", ExpP)
+  , (".<.", FLtP)
+  , (".>.", FGtP)
+  , (".<=.", FLtEqP)
+  , (".>=.", FGtEqP)
   , ("mod", ModP)
   , ("||" , OrP)
   , ("&&", AndP)
   , ("eqsym", EqSymP)
   , ("rand", RandP)
+  , ("frand", FRandP)
+  , ("intToFloat", IntToFloatP)
+  , ("floatToInt", FloatToIntP)
   , ("sizeParam", SizeParam)
   , ("symappend", SymAppend)
   , ("True", MkTrue)
@@ -203,6 +217,8 @@ desugarExp toplevel e =
       then pure $ PrimAppE Gensym []
       else if v == "rand"
       then pure $ PrimAppE RandP []
+      else if v == "frand"
+      then pure $ PrimAppE FRandP []
       else if v == "sync"
       then pure SyncE
       else if v == "sizeParam"
@@ -222,7 +238,7 @@ desugarExp toplevel e =
                  -- encode as a function which takes no arguments.
                  _ -> pure $ AppE v [] []
              Nothing -> pure $ VarE v
-    Lit _ lit  -> pure $ LitE (litToInt lit)
+    Lit _ lit  -> desugarLiteral lit
 
     Lambda _ pats bod -> do
       bod' <- desugarExp toplevel bod
@@ -299,6 +315,14 @@ desugarExp toplevel e =
                     e2' <- desugarExp toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VSortP ty) [e2']
+                  else if f == "intToFloat"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    pure $ PrimAppE IntToFloatP [e2']
+                  else if f == "floatToInt"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    pure $ PrimAppE FloatToIntP [e2']
                   else AppE f [] <$> (: []) <$> desugarExp toplevel e2
           (DataConE tyapp c as) ->
             case M.lookup c primMap of
@@ -483,9 +507,18 @@ collectTopLevel env decl =
         _ -> pure Nothing
     _ -> error $ "collectTopLevel: Unsupported top-level expression: " ++ show decl
 
+
+-- pure $ LitE (litToInt lit)
+desugarLiteral :: Literal a -> PassM Exp0
+desugarLiteral lit =
+  case lit of
+    (Int _ i _)  -> pure $ LitE (fromIntegral i)
+    (Frac _ i _) -> pure $ FloatE (fromRational i)
+    _ -> error ("desugarLiteral: Only integer litrals are allowed: " ++ prettyPrint lit)
+
 litToInt :: Literal a -> Int
-litToInt (Int _ i _) = (fromIntegral i) -- lossy conversion here
-litToInt lit         = error ("desugarExp: Only integer litrals are allowed: " ++ prettyPrint lit)
+litToInt (Int _ i _) = (fromIntegral i)
+litToInt lit         = error ("litToInt: Not an integer: " ++ prettyPrint lit)
 
 litToString :: Literal a -> String
 litToString (String _ a _) = a
@@ -624,6 +657,7 @@ fixupSpawn ex =
     -- Straightforward recursion ...
     VarE{}     -> ex
     LitE{}     -> ex
+    FloatE{}   -> ex
     LitSymE{}  -> ex
     AppE fn tyapps args -> AppE fn tyapps (map go args)
     PrimAppE pr args -> PrimAppE pr (map go args)
@@ -664,6 +698,7 @@ verifyBenchEAssumptions bench_allowed ex =
     -- Straightforward recursion ...
     VarE{}     -> ex
     LitE{}     -> ex
+    FloatE{}   -> ex
     LitSymE{}  -> ex
     AppE fn tyapps args -> AppE fn tyapps (map not_allowed args)
     PrimAppE pr args -> PrimAppE pr (map not_allowed args)

@@ -150,6 +150,7 @@ newTyVar = BoundTv <$> genLetter
 
 data Ty0
  = IntTy
+ | FloatTy
  | SymTy0
  | BoolTy
  | TyVar TyVar   -- Rigid/skolem type variables
@@ -181,6 +182,7 @@ instance Renamable Ty0 where
   gRename env ty =
     case ty of
       IntTy  -> IntTy
+      FloatTy-> FloatTy
       SymTy0 -> SymTy0
       BoolTy -> BoolTy
       TyVar tv  -> TyVar (go tv)
@@ -258,6 +260,7 @@ tyVarsInTys tys = foldr (go []) [] tys
     go bound ty acc =
       case ty of
         IntTy  -> acc
+        FloatTy-> acc
         SymTy0 -> acc
         BoolTy -> acc
         TyVar tv -> if (tv `elem` bound) || (tv `elem` acc)
@@ -289,6 +292,7 @@ metaTvsInTys tys = foldr go [] tys
                      then acc
                      else tv : acc
         IntTy   -> acc
+        FloatTy -> acc
         SymTy0  -> acc
         BoolTy  -> acc
         TyVar{} -> acc
@@ -320,6 +324,7 @@ arrowTysInTy = go []
     go acc ty =
       case ty of
         IntTy    -> acc
+        FloatTy  -> acc
         SymTy0   -> acc
         BoolTy   -> acc
         ArenaTy  -> acc
@@ -340,6 +345,7 @@ substTyVar :: M.Map TyVar Ty0 -> Ty0 -> Ty0
 substTyVar mp ty =
   case ty of
     IntTy    -> ty
+    FloatTy  -> ty
     SymTy0   -> ty
     BoolTy   -> ty
     TyVar v  -> M.findWithDefault ty v mp
@@ -372,6 +378,7 @@ recoverType ddfs env2 ex =
   case ex of
     VarE v       -> M.findWithDefault (error $ "recoverType: Unbound variable " ++ show v) v (vEnv env2)
     LitE _       -> IntTy
+    FloatE{}     -> FloatTy
     LitSymE _    -> IntTy
     AppE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
                        in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
@@ -426,13 +433,27 @@ recoverType ddfs env2 ex =
         ModP -> IntTy
         ExpP -> IntTy
         RandP-> IntTy
+        FAddP -> FloatTy
+        FSubP -> FloatTy
+        FMulP -> FloatTy
+        FDivP -> FloatTy
+        FExpP -> FloatTy
+        FSqrtP-> FloatTy
+        FRandP-> FloatTy
+        FloatToIntP -> IntTy
+        IntToFloatP -> FloatTy
         EqSymP  -> BoolTy
         EqIntP  -> BoolTy
+        EqFloatP-> BoolTy
         LtP  -> BoolTy
         GtP  -> BoolTy
         OrP  -> BoolTy
         LtEqP-> BoolTy
         GtEqP-> BoolTy
+        FLtP  -> BoolTy
+        FGtP  -> BoolTy
+        FLtEqP-> BoolTy
+        FGtEqP-> BoolTy
         AndP -> BoolTy
         MkTrue  -> BoolTy
         MkFalse -> BoolTy

@@ -150,6 +150,7 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id afters pending_binds spawn
     -- Straightforward recursion
     VarE{}     -> pure ex
     LitE{}     -> pure ex
+    FloatE{}   -> pure ex
     LitSymE{}  -> pure ex
     PrimAppE{} -> pure ex
     ProjE i e  -> ProjE i <$> go e

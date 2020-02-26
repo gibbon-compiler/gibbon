@@ -43,6 +43,7 @@ inlineTrivExp = go
                      Just e  -> e
       Ext ext   -> Ext $ gInlineTrivExt env ext
       LitE{}    -> e0
+      FloatE{}  -> e0
       LitSymE{} -> e0
 
       AppE v lvs es -> AppE v lvs $ map (go env) es

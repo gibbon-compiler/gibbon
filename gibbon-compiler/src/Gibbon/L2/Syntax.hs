@@ -363,6 +363,7 @@ instance Typeable (PreExp E2Ext LocVar (UrTy LocVar)) where
     case ex of
       VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) v (vEnv env2)
       LitE _       -> IntTy
+      FloatE{}     -> FloatTy
       LitSymE _    -> SymTy
       AppE v locs _ -> let fnty  = fEnv env2 # v
                            outty = arrOut fnty
@@ -523,6 +524,7 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
       case ex of
         VarE v    -> VarE v
         LitE n    -> LitE n
+        FloatE n  -> FloatE n
         LitSymE v -> LitSymE v
         AppE v _ args   -> AppE v [] (L.map revertExp args)
         PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
@@ -573,6 +575,7 @@ occurs w ex =
   case ex of
     VarE v -> v `S.member` w
     LitE{}    -> False
+    FloatE{}  -> False
     LitSymE{} -> False
     AppE _ _ ls   -> any go ls
     PrimAppE _ ls -> any go ls
@@ -617,6 +620,7 @@ mapPacked :: (Var -> l -> UrTy l) -> UrTy l -> UrTy l
 mapPacked fn t =
   case t of
     IntTy  -> IntTy
+    FloatTy-> FloatTy
     BoolTy -> BoolTy
     SymTy  -> SymTy
     (ProdTy x)    -> ProdTy $ L.map (mapPacked fn) x
@@ -633,6 +637,7 @@ constPacked :: UrTy a1 -> UrTy a2 -> UrTy a1
 constPacked c t =
   case t of
     IntTy  -> IntTy
+    FloatTy-> FloatTy
     BoolTy -> BoolTy
     SymTy  -> SymTy
     (ProdTy x)    -> ProdTy $ L.map (constPacked c) x
@@ -658,6 +663,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
         case ex of
           VarE v    -> M.insertWith (++) v [v] acc
           LitE{}    -> acc
+          FloatE{}  -> acc
           LitSymE{} -> acc
           AppE _ _ args   -> foldl go acc args
           PrimAppE _ args -> foldl go acc args
@@ -726,6 +732,7 @@ changeAppToSpawn v args2 ex1 =
   case ex1 of
     VarE{}    -> ex1
     LitE{}    -> ex1
+    FloatE{}  -> ex1
     LitSymE{} -> ex1
     AppE f locs args | v == f && args == args2 -> SpawnE f locs $ map go args
     AppE f locs args -> AppE f locs $ map go args

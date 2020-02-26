@@ -249,6 +249,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
 
     VarE{}     -> return ex
     LitE{}     -> return ex
+    FloatE{}   -> return ex
     LitSymE{}  -> return ex
     PrimAppE{} -> return ex
     DataConE{} -> return ex
@@ -289,6 +290,7 @@ findRetLocs e0 = go e0 []
       case ex of
         VarE{}    -> acc
         LitE{}    -> acc
+        FloatE{}  -> acc
         LitSymE{} -> acc
         AppE _ _ args   -> foldr go acc args
         PrimAppE _ args -> foldr go acc args

@@ -78,6 +78,7 @@ interp rc _ddefs fenv = go M.empty
           Ext (AddFixed{}) -> error "L1.Interp: AddFixed not handled."
 
           LitE c    -> return $ VInt c
+          FloatE c  -> return $ VFloat c
           LitSymE s -> return $ VSym (fromVar s)
           VarE v    -> return $ env # v
 
@@ -210,15 +211,29 @@ applyPrim rc p ls =
    (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
    (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
    (ExpP,[VInt x, VInt y]) -> VInt (x ^ y)
+   (FAddP,[VFloat x, VFloat y]) -> VFloat (x+y)
+   (FSubP,[VFloat x, VFloat y]) -> VFloat (x-y)
+   (FMulP,[VFloat x, VFloat y]) -> VFloat (x*y)
+   (FDivP,[VFloat x, VFloat y]) -> VFloat (x / y)
+   (FExpP,[VFloat x, VFloat y]) -> VFloat (x ** y)
    -- Constrained to the value of RAND_MAX (in C) on my laptop: 2147483647 (2^31 − 1)
    (RandP,[]) -> VInt $ (unsafePerformIO randomIO) `mod` 2147483647
+   (FRandP,[]) -> VFloat $ (unsafePerformIO randomIO) / 2147483647
+   (IntToFloatP,[VInt x]) -> VFloat (fromIntegral x)
+   (FloatToIntP,[VFloat x]) -> VInt (round x)
+   (FSqrtP,[VFloat x]) -> VFloat (sqrt x)
    (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
    (EqSymP,[VSym x, VSym y]) -> VBool (x==y)
    (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
+   (EqFloatP,[VFloat x, VFloat y]) -> VBool (x==y)
    (LtP,[VInt x, VInt y]) -> VBool (x < y)
    (GtP,[VInt x, VInt y]) -> VBool (x > y)
    (LtEqP,[VInt x, VInt y]) -> VBool (x <= y)
    (GtEqP,[VInt x, VInt y]) -> VBool (x >= y)
+   (FLtP,[VFloat x, VFloat y]) -> VBool (x < y)
+   (FGtP,[VFloat x, VFloat y]) -> VBool (x > y)
+   (FLtEqP,[VFloat x, VFloat y]) -> VBool (x <= y)
+   (FGtEqP,[VFloat x, VFloat y]) -> VBool (x >= y)
    (AndP, [VBool x, VBool y]) -> VBool (x && y)
    (OrP, [VBool x, VBool y])  -> VBool (x || y)
    ((DictInsertP _ty),[_, VDict mp, key, val]) -> VDict (M.insert key val mp)

@@ -132,6 +132,7 @@ exp ddfs env2 e0 =
                     return  ([], Ext e)
 
     LitE _    -> return ([],e0)
+    FloatE{}  -> return ([],e0)
     VarE    _ -> return ([],e0)
     LitSymE _ -> return ([],e0)
 
@@ -232,6 +233,7 @@ flattenExp0 ddfs env2 e0 =
   in
   case e0 of
     LitE _    -> return ([],e0)
+    FloatE{}  -> return ([],e0)
     VarE    _ -> return ([],e0)
     LitSymE _ -> return ([],e0)
 

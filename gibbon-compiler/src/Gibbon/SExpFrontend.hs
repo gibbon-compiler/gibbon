@@ -138,6 +138,7 @@ tagDataCons ddefs = go allCons
        VarE{}          -> pure ex
        LitSymE{}       -> pure ex
        LitE _          -> pure ex
+       FloatE _        -> pure ex
        PrimAppE p ls   -> PrimAppE p <$> mapM (go cons) ls
        ProjE i e  -> ProjE i <$> (go cons e)
        CaseE e ls -> CaseE <$> (go cons e) <*> (mapM (\(c,vs,er) -> (c,vs,) <$> go cons er) ls)

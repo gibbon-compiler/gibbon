@@ -34,6 +34,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
       case ex of
         VarE v    -> VarE v
         LitE n    -> LitE n
+        FloatE n  -> FloatE n
         LitSymE v -> LitSymE v
         AppE v locs ls   -> AppE v locs $ map (go env2) ls
         PrimAppE pr args -> PrimAppE pr $ L.map (go env2) args
@@ -63,6 +64,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
     goTy ty =
       case ty of
         IntTy -> IntTy
+        FloatTy-> FloatTy
         SymTy -> SymTy
         BoolTy -> BoolTy
         ProdTy tys -> ProdTy $ map goTy tys

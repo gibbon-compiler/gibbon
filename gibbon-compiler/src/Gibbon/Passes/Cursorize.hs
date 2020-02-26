@@ -144,6 +144,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
     cursorizeInTy ty =
       case ty of
         IntTy     -> IntTy
+        FloatTy   -> FloatTy
         SymTy     -> SymTy
         BoolTy    -> BoolTy
         ProdTy ls -> ProdTy $ L.map cursorizeInTy ls
@@ -229,6 +230,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
   case ex of
     VarE v    -> return $ VarE v
     LitE n    -> return $ LitE n
+    FloatE n  -> return $ FloatE n
     LitSymE n -> return $ LitSymE n
 
     AppE{} -> cursorizeAppE ddfs fundefs denv tenv senv ex
@@ -365,6 +367,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
       else return $ dl $ VarE v
 
     LitE _n    -> error $ "Shouldn't encounter LitE in packed context:" ++ sdoc ex
+    FloatE{}   -> error $ "Shouldn't encounter FloatE in packed context:" ++ sdoc ex
     LitSymE _n -> error $ "Shouldn't encounter LitSymE in packed context:" ++ sdoc ex
 
     AppE{} -> dl <$> cursorizeAppE ddfs fundefs denv tenv senv ex
@@ -606,6 +609,10 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                                sizeVal = Ext $ SizeOfScalar v
                                rhs = Ext $ AddCursor loc (VarE (sizeVar))
                            in mkLets [(sizeVar,[], IntTy, sizeVal)] rhs
+                  FloatTy -> let sizeVar = varAppend "sizeof_" v
+                                 sizeVal = Ext $ SizeOfScalar v
+                                 rhs = Ext $ AddCursor loc (VarE (sizeVar))
+                             in mkLets [(sizeVar,[], IntTy, sizeVal)] rhs
                   oth -> error $ "cursorizeLocExp: AfterVariable TODO " ++ sdoc oth
       if isBound loc tenv
       then if was_stolen

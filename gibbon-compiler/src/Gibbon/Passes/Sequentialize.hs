@@ -55,6 +55,7 @@ sequentializeFn parallel_fn_names fn@FunDef{funName,funBody} = do
       case ex of
         VarE{} -> pure ex
         LitE{} -> pure ex
+        FloatE{}  -> pure ex
         LitSymE{} -> pure ex
         AppE f locs args
           | f `S.member` parallel_fn_names -> (AppE (to_seq f) locs) <$> (mapM go args)

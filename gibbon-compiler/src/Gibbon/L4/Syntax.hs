@@ -52,6 +52,7 @@ data MainExp
 data Triv
     = VarTriv Var
     | IntTriv Int64
+    | FloatTriv Double
     | TagTriv Tag
     | SymTriv Word16    -- ^ An index into the symbol table.
     | ProdTriv [Triv]   -- ^ Tuples
@@ -63,6 +64,7 @@ typeOfTriv env trv =
   case trv of
     VarTriv v   -> env M.! v
     IntTriv{}   -> IntTy
+    FloatTriv{} -> FloatTy
     TagTriv{}   -> TagTyPacked
     SymTriv{}   -> SymTy
     ProdTriv ts -> ProdTy (map (typeOfTriv env) ts)
@@ -159,6 +161,7 @@ data Tail
 
 data Ty
     = IntTy        -- ^ 8 byte integers.
+    | FloatTy      -- ^ 8 byte floating point numbers
     | BoolTy       -- ^ 1 byte integers.
     | TagTyPacked  -- ^ A single byte / Word8.  Used in PACKED mode.
     | TagTyBoxed   -- ^ A tag used in the UNPACKED, boxed, pointer-based, graph-of-structs representation.
@@ -189,10 +192,14 @@ data Prim
     = AddP | SubP | MulP
     | DivP | ModP
     | EqP | LtP | GtP | LtEqP | GtEqP
-    | OrP | AndP
     | ExpP
     | RandP
+    | FRandP
+    | FSqrtP
+    | FloatToIntP
+    | IntToFloatP
     | SizeParam
+    | OrP | AndP
     | DictInsertP Ty -- ^ takes k,v,dict
     | DictLookupP Ty -- ^ takes k,dict, errors if absent
     | DictEmptyP Ty
@@ -249,6 +256,7 @@ data Prim
     | GetFirstWord -- ^ takes a PtrTy, returns IntTy containing the (first) word pointed to.
 
     | PrintInt    -- ^ Print an integer to stdout.
+    | PrintFloat  -- ^ Print a floating point number
     | PrintSym    -- ^ Fetch a symbol from the symbol table, and print it.
     | PrintString String -- ^ Print a constant string to stdout.
                          -- TODO: add string values to the language.
@@ -285,6 +293,7 @@ scalarToTy :: L3.Scalar -> Ty
 scalarToTy L3.IntS  = IntTy
 scalarToTy L3.SymS  = SymTy
 scalarToTy L3.BoolS = BoolTy
+scalarToTy L3.FloatS = FloatTy
 
 -- | Extend the tail of a Tail.  Take the return values from a Tail
 -- expression and do some more computation.
@@ -328,6 +337,7 @@ fromL3Ty :: L3.Ty3 -> Ty
 fromL3Ty ty =
   case ty of
     L.IntTy -> IntTy
+    L.FloatTy -> FloatTy
     L.SymTy -> SymTy
     L.BoolTy -> BoolTy
     L.ProdTy tys -> ProdTy $ map fromL3Ty tys

@@ -397,6 +397,7 @@ lookupFEnv v env2 = (fEnv env2) # v
 data PreExp (ext :: * -> * -> *) loc dec =
      VarE Var              -- ^ Variable reference
    | LitE Int              -- ^ Numeric literal
+   | FloatE Double         -- ^ Floating point literal
    | LitSymE Var           -- ^ A quoted symbol literal.
    | AppE Var [loc] [EXP]
      -- ^ Apply a top-level / first-order function.  Instantiate
@@ -460,6 +461,7 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
        case e of
         VarE _     -> True
         LitE _     -> True
+        FloatE{}   -> True
         LitSymE _  -> True
         PrimAppE{} -> False
 
@@ -491,6 +493,7 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
   gFreeVars ex = case ex of
       VarE v    -> S.singleton v
       LitE _    -> S.empty
+      FloatE{}  -> S.empty
       LitSymE _ -> S.empty
       ProjE _ e -> gFreeVars e
       IfE a b c -> gFreeVars a `S.union` gFreeVars b `S.union` gFreeVars c
@@ -527,6 +530,7 @@ instance (Show (), Out (), Expression (e () (UrTy ())),
     case ex of
       VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) v (vEnv env2)
       LitE _       -> IntTy
+      FloatE{}     -> FloatTy
       LitSymE _    -> SymTy
       AppE v _ _   -> outTy $ fEnv env2 # v
       PrimAppE (DictInsertP ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
@@ -569,6 +573,7 @@ instance HasRenamable e l d => Renamable (PreExp e l d) where
     case ex of
       VarE v -> VarE (go v)
       LitE{}    -> ex
+      FloatE{}  -> ex
       LitSymE{} -> ex
       AppE f locs args -> AppE (go f) (gol locs) (gol args)
       PrimAppE pr args -> PrimAppE pr (gol args)
@@ -607,10 +612,11 @@ data Prim ty
           | RandP              -- ^ Generate a random number.
                                --   Translates to 'rand()' in C.
                                --   TEMP: It's a side-effect, and should be removed.
-          | EqSymP             -- ^ Equality on Sym
           | EqIntP             -- ^ Equality on Int
           | LtP | GtP          -- ^ (<) and (>) for Int's
           | LtEqP | GtEqP      -- ^ <= and >=
+          | FAddP | FSubP | FMulP | FDivP | FExpP | FRandP | EqFloatP | FLtP | FGtP | FLtEqP | FGtEqP | FSqrtP | IntToFloatP | FloatToIntP
+          | EqSymP             -- ^ Equality on Sym
           | OrP | AndP
           | SymAppend          -- ^ A quick hack till we have deterministic gensym
           | DictInsertP ty     -- ^ takes dict, k,v; annotated with element type
@@ -684,6 +690,7 @@ instance Out a => Out (UrTy a)
 -- annotation on Packed types later on.
 data UrTy a =
           IntTy
+        | FloatTy
         | SymTy -- ^ Symbols used in writing compiler passes.
         | BoolTy
         | ProdTy [UrTy a]     -- ^ An N-ary tuple
@@ -718,6 +725,7 @@ instance Renamable a => Renamable (UrTy a) where
   gRename env ty =
     case ty of
       IntTy       -> IntTy
+      FloatTy     -> FloatTy
       SymTy       -> SymTy
       BoolTy      -> BoolTy
       ProdTy ls   -> ProdTy (map (gRename env) ls)
@@ -788,6 +796,7 @@ subst old new ex =
     VarE v | v == old  -> new
            | otherwise -> VarE v
     LitE _             -> ex
+    FloatE{}           -> ex
     LitSymE _          -> ex
     AppE v loc ls      -> AppE v loc (map go ls)
     PrimAppE p ls      -> PrimAppE p $ L.map go ls
@@ -832,6 +841,7 @@ substE old new ex =
 
     VarE v          -> VarE v
     LitE _          -> ex
+    FloatE{}        -> ex
     LitSymE _       -> ex
     AppE v loc ls   -> AppE v loc (map go ls)
     PrimAppE p ls   -> PrimAppE p $ L.map go ls
@@ -868,6 +878,7 @@ hasTimeIt rhs =
       DataConE{}   -> False
       VarE _       -> False
       LitE _       -> False
+      FloatE{}     -> False
       LitSymE _    -> False
       AppE _ _ _   -> False
       PrimAppE _ _ -> False
@@ -898,6 +909,7 @@ hasSpawns rhs =
       DataConE{}   -> False
       VarE{}       -> False
       LitE{}       -> False
+      FloatE{}     -> False
       LitSymE{}    -> False
       AppE{}       -> False
       PrimAppE{}   -> False
@@ -994,6 +1006,7 @@ isScalarTy :: UrTy a -> Bool
 isScalarTy IntTy  = True
 isScalarTy SymTy  = True
 isScalarTy BoolTy = True
+isScalarTy FloatTy= True
 isScalarTy _      = False
 
 -- | Lists of scalars or flat products of scalars are allowed.
@@ -1013,6 +1026,7 @@ hasPacked t =
     SymTy          -> False
     BoolTy         -> False
     IntTy          -> False
+    FloatTy        -> False
     SymDictTy _ _  -> False -- hasPacked ty
     ListTy ty      -> hasPacked ty
     PtrTy          -> False
@@ -1030,6 +1044,7 @@ getPackedTys t =
     SymTy          -> []
     BoolTy         -> []
     IntTy          -> []
+    FloatTy        -> []
     SymDictTy _ _  -> [] -- getPackedTys ty
     ListTy ty      -> getPackedTys ty
     PtrTy          -> []
@@ -1046,6 +1061,7 @@ sizeOfTy t =
     ProdTy ls     -> sum <$> mapM sizeOfTy ls
     SymDictTy _ _ -> Just 8 -- Always a pointer.
     IntTy         -> Just 8
+    FloatTy       -> Just 8
     SymTy         -> Just 4
     BoolTy        -> Just 1
     ListTy _      -> error "FINISHLISTS"
@@ -1065,13 +1081,27 @@ primArgsTy p =
     DivP    -> [IntTy, IntTy]
     ModP    -> [IntTy, IntTy]
     ExpP    -> [IntTy, IntTy]
+    FRandP  -> []
+    FAddP   -> [FloatTy, FloatTy]
+    FSubP   -> [FloatTy, FloatTy]
+    FMulP   -> [FloatTy, FloatTy]
+    FDivP   -> [FloatTy, FloatTy]
+    FExpP   -> [FloatTy, FloatTy]
+    FSqrtP  -> [FloatTy]
+    FloatToIntP -> [FloatTy]
+    IntToFloatP -> [IntTy]
     RandP   -> []
     EqSymP  -> [SymTy, SymTy]
     EqIntP  -> [IntTy, IntTy]
+    EqFloatP-> [FloatTy, FloatTy]
     LtP  -> [IntTy, IntTy]
     GtP  -> [IntTy, IntTy]
     LtEqP-> [IntTy, IntTy]
     GtEqP-> [IntTy, IntTy]
+    FLtP  -> [FloatTy, FloatTy]
+    FGtP  -> [FloatTy, FloatTy]
+    FLtEqP-> [FloatTy, FloatTy]
+    FGtEqP-> [FloatTy, FloatTy]
     OrP  -> [BoolTy, BoolTy]
     AndP -> [BoolTy, BoolTy]
     Gensym  -> []
@@ -1117,15 +1147,29 @@ primRetTy p =
     DivP -> IntTy
     ModP -> IntTy
     ExpP -> IntTy
+    FRandP-> FloatTy
+    FAddP -> FloatTy
+    FSubP -> FloatTy
+    FMulP -> FloatTy
+    FDivP -> FloatTy
+    FExpP -> FloatTy
+    FSqrtP-> FloatTy
+    FloatToIntP -> IntTy
+    IntToFloatP -> FloatTy
     RandP-> IntTy
     Gensym  -> SymTy
     EqSymP  -> BoolTy
     EqIntP  -> BoolTy
+    EqFloatP-> BoolTy
     LtP  -> BoolTy
     GtP  -> BoolTy
-    OrP  -> BoolTy
     LtEqP-> BoolTy
     GtEqP-> BoolTy
+    FLtP  -> BoolTy
+    FGtP  -> BoolTy
+    FLtEqP-> BoolTy
+    FGtEqP-> BoolTy
+    OrP  -> BoolTy
     AndP -> BoolTy
     MkTrue  -> BoolTy
     MkFalse -> BoolTy
@@ -1161,6 +1205,7 @@ stripTyLocs :: UrTy a -> UrTy ()
 stripTyLocs ty =
   case ty of
     IntTy     -> IntTy
+    FloatTy   -> FloatTy
     SymTy     -> SymTy
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map stripTyLocs ls

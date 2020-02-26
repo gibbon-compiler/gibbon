@@ -159,6 +159,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
       case ex of
         VarE v    -> L1.VarE v
         LitE n    -> L1.LitE n
+        FloatE n  -> L1.FloatE n
         LitSymE v -> L1.LitSymE v
         AppE f [] args   -> AppE f [] (map toL1Exp args)
         AppE _ (_:_) _   -> err1 (sdoc ex)
@@ -212,6 +213,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
     toL1Ty ty =
       case ty of
         IntTy   -> L1.IntTy
+        FloatTy -> L1.FloatTy
         SymTy0  -> L1.SymTy
         BoolTy  -> L1.BoolTy
         TyVar{} -> err1 (sdoc ty)
@@ -417,6 +419,7 @@ monoOblsTy :: DDefs0 -> Ty0 -> MonoM Ty0
 monoOblsTy ddefs1 t = do
   case t of
     IntTy     -> pure t
+    FloatTy   -> pure t
     SymTy0    -> pure t
     BoolTy    -> pure t
     TyVar{}   -> pure t
@@ -558,6 +561,7 @@ collectMonoObls ddefs env2 toplevel ex =
     -- Straightforward recursion
     VarE{}    -> pure ex
     LitE{}    -> pure ex
+    FloatE{}  -> pure ex
     LitSymE{} -> pure ex
     IfE a b c -> do
       a' <- go a
@@ -670,6 +674,7 @@ monoLambdas ex =
     -- Straightforward recursion
     VarE{}    -> pure ex
     LitE{}    -> pure ex
+    FloatE{}  -> pure ex
     LitSymE{} -> pure ex
     AppE f tyapps args ->
       case tyapps of
@@ -757,6 +762,7 @@ updateTyConsExp ddefs mono_st ex =
   case ex of
     VarE{}    -> ex
     LitE{}    -> ex
+    FloatE{}  -> ex
     LitSymE{} -> ex
     AppE f [] args    -> AppE f [] (map go args)
     AppE _ (_:_) _ -> error $ "updateTyConsExp: Call-site not monomorphized: " ++ sdoc ex
@@ -802,6 +808,7 @@ updateTyConsTy :: DDefs0 -> MonoState -> Ty0 -> Ty0
 updateTyConsTy ddefs mono_st ty =
   case ty of
     IntTy   -> IntTy
+    FloatTy -> FloatTy
     SymTy0  -> SymTy0
     BoolTy  -> BoolTy
     TyVar{} ->  error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."
@@ -1000,6 +1007,7 @@ specLambdasExp ddefs env2 ex =
     -- Straightforward recursion
     VarE{}    -> pure ex
     LitE{}    -> pure ex
+    FloatE{}  -> pure ex
     LitSymE{} -> pure ex
     PrimAppE pr args -> do
       args' <- mapM go args
@@ -1087,6 +1095,7 @@ specLambdasExp ddefs env2 ex =
       case e of
         VarE{}    -> acc
         LitE{}    -> acc
+        FloatE{}  -> acc
         LitSymE{} -> acc
         AppE _ _ args   -> foldr collectFunRefs acc args
         PrimAppE _ args -> foldr collectFunRefs acc args
@@ -1184,6 +1193,7 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
         -- boilerplate
 
         (LitE _)      -> pure ([], e0)
+        (FloatE{})    -> pure ([], e0)
         (LitSymE _)   -> pure ([], e0)
         (VarE _)      -> pure ([], e0)
         (PrimAppE{})  -> pure ([], e0)
@@ -1252,6 +1262,7 @@ elimParE0 prg@Prog{fundefs,mainExp} = do
       case ex of
         VarE{}    -> pure ex
         LitE{}    -> pure ex
+        FloatE{}  -> pure ex
         LitSymE{} -> pure ex
         AppE f tyapps args-> AppE f tyapps <$> mapM go args
         PrimAppE pr args  -> do

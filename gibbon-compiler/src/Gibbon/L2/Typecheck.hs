@@ -132,6 +132,8 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
       LitE _i -> return (IntTy, tstatein)
 
+      FloatE _i -> return (FloatTy, tstatein)
+
       LitSymE _v -> return (SymTy, tstatein)
 
       AppE v ls args ->
@@ -210,10 +212,22 @@ tcExp ddfs env funs constrs regs tstatein exp =
                      _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
                      pure (IntTy, tstate)
 
+                   float_ops = do
+                     len2
+                     _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
+                     _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
+                     pure (FloatTy, tstate)
+
                    int_cmps = do
                      len2
                      _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
                      _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+                     pure (BoolTy, tstate)
+
+                   float_cmps = do
+                     len2
+                     _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
+                     _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
                      pure (BoolTy, tstate)
 
                case pr of
@@ -225,15 +239,41 @@ tcExp ddfs env funs constrs regs tstatein exp =
                  DivP    -> int_ops
                  ModP    -> int_ops
                  ExpP    -> int_ops
+                 FAddP   -> float_ops
+                 FSubP   -> float_ops
+                 FMulP   -> float_ops
+                 FDivP   -> float_ops
+                 FExpP   -> float_ops
                  EqIntP  -> int_cmps
                  LtP     -> int_cmps
                  GtP     -> int_cmps
                  LtEqP   -> int_cmps
                  GtEqP   -> int_cmps
+                 EqFloatP -> float_cmps
+                 FLtP     -> float_cmps
+                 FGtP     -> float_cmps
+                 FLtEqP   -> float_cmps
+                 FGtEqP   -> float_cmps
                  OrP     -> bool_ops
                  AndP    -> bool_ops
 
                  RandP -> return (IntTy, tstate)
+                 FRandP -> return (FloatTy, tstate)
+
+                 FloatToIntP -> do
+                   len1
+                   ensureEqualTy exp FloatTy (tys !! 0)
+                   return (IntTy, tstate)
+
+                 IntToFloatP -> do
+                   len1
+                   ensureEqualTy exp IntTy (tys !! 0)
+                   return (FloatTy, tstate)
+
+                 FSqrtP -> do
+                   len1
+                   ensureEqualTy exp FloatTy (tys !! 0)
+                   return (FloatTy, tstate)
 
                  Gensym -> len0 >>= \_ -> pure (SymTy, tstate)
 

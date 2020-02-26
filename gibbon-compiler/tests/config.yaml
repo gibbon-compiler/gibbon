@@ -221,6 +221,11 @@ tests:
     bench-fun: bench
     bench-input: examples/twitter_input.gpkd
 
+  - name: FloatTree.hs
+    dir: examples
+    answer-file: examples/FloatTree.hs.ans
+    failing: [interp1]
+
   ## Polymorphic frontend tests
   - name: Poly1.hs
     dir: examples/poly
@@ -383,10 +388,13 @@ tests:
     dir: examples/parallel
     test-flags: ["--parallel"]
     answer-file: examples/parallel/ParSumTree.hs.ans
+    failing: [gibbon1]
 
   - name: SeqSumParTree.hs
     dir: examples/parallel
+    test-flags: ["--parallel"]
     answer-file: examples/parallel/ParSumTree.hs.ans
+    failing: [gibbon1]
 
   - name: ParAdd1Tree.hs
     dir: examples/parallel
@@ -403,12 +411,14 @@ tests:
     dir: examples/parallel
     test-flags: ["--parallel"]
     # Cannot compile parallel allocations in Gibbon1 mode
-    failing: ["gibbon1"]
+    failing: [gibbon1]
     answer-file: examples/parallel/ParAdd1Tree.hs.ans
 
   - name: SeqAdd1ParTree.hs
     dir: examples/parallel
+    test-flags: ["--parallel"]
     answer-file: examples/parallel/ParAdd1Tree.hs.ans
+    failing: [gibbon1]
 
   - name: ParKdTree.hs
     dir: examples/parallel

@@ -45,6 +45,7 @@ shakeTreeExp = go
 
     (VarE v)           -> VarE v
     (LitE i)           -> LitE i
+    (FloatE i)         -> FloatE i
     (LitSymE v)        -> LitSymE v
     (AppE f locs es)   -> AppE f locs $ map go es
     (PrimAppE pr es)   -> PrimAppE pr $ map go es
@@ -89,6 +90,7 @@ hasEffect rhs =
     case rhs of
       VarE _ -> False
       LitE _ -> False
+      FloatE{}  -> False
       LitSymE _ -> False
 
       -- These might have effects on output cursors, but the output cursors aren't used

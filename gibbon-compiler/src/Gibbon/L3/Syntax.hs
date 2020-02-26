@@ -169,17 +169,19 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       go :: forall a. Renamable a => a -> a
       go = gRename env
 
-data Scalar = IntS | SymS | BoolS
+data Scalar = IntS | FloatS | SymS | BoolS
   deriving (Show, Ord, Eq, Read, Generic, NFData, Out)
 
 mkScalar :: Out a => UrTy a -> Scalar
 mkScalar IntTy  = IntS
+mkScalar FloatTy= FloatS
 mkScalar SymTy  = SymS
 mkScalar BoolTy = BoolS
 mkScalar ty = error $ "mkScalar: Not a scalar type: " ++ sdoc ty
 
 scalarToTy :: Scalar -> UrTy a
 scalarToTy IntS  = IntTy
+scalarToTy FloatS= FloatTy
 scalarToTy SymS  = SymTy
 scalarToTy BoolS = BoolTy
 
@@ -200,6 +202,7 @@ cursorizeTy :: UrTy a -> UrTy b
 cursorizeTy ty =
   case ty of
     IntTy     -> IntTy
+    FloatTy   -> FloatTy
     SymTy     -> SymTy
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map cursorizeTy ls
@@ -240,6 +243,7 @@ updateAvailVars froms tos ex =
   case ex of
     VarE v          -> VarE v
     LitE _          -> ex
+    FloatE{}        -> ex
     LitSymE _       -> ex
     AppE v loc ls   -> AppE v loc (map go ls)
     PrimAppE p ls   -> PrimAppE p $ L.map go ls

@@ -109,6 +109,7 @@ instance Out a => Out (Seq a) where
 
 -- | It's a first order language with simple values.
 data Value = VInt Int
+           | VFloat Double
            | VSym String
            | VBool Bool
            | VDict (M.Map Value Value)
@@ -128,6 +129,7 @@ instance Show Value where
  show v =
   case v of
    VInt n   -> show n
+   VFloat n -> show n
    VSym s   -> "'" ++ s
    VBool b  -> if b then truePrinted else falsePrinted
 -- TODO: eventually want Haskell style tuple-printing:

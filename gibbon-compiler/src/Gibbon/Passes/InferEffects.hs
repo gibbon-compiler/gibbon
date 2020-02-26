@@ -84,6 +84,7 @@ inferExp ddfs fenv env dps expr =
                 Nothing -> error $ "Unknown var: " ++ sdoc v
 
     LitE _    -> (S.empty, Nothing)
+    FloatE{}  -> (S.empty, Nothing)
     LitSymE _ -> (S.empty, Nothing)
 
     AppE v locs _e ->
@@ -123,7 +124,7 @@ inferExp ddfs fenv env dps expr =
       let (effs, _locs) = unzip $ L.map (inferExp ddfs fenv env dps) ls
       in (S.unions effs, Nothing)
 
-    SpawnE fn locs args -> (S.empty, Nothing)
+    SpawnE{} -> (S.empty, Nothing)
 
     SyncE -> (S.empty, Nothing)
 

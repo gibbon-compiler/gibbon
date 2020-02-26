@@ -35,6 +35,7 @@ tcExp ddfs env exp =
   case exp of
     VarE v    -> lookupVar env v exp
     LitE _    -> return IntTy
+    FloatE{}  -> return FloatTy
     LitSymE _ -> return SymTy
 
     AppE v locs ls -> do
@@ -105,10 +106,22 @@ tcExp ddfs env exp =
             _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
             pure IntTy
 
+          float_ops = do
+            len2
+            _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
+            _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
+            pure FloatTy
+
           int_cmps = do
             len2
             _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
             _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+            pure BoolTy
+
+          float_cmps = do
+            len2
+            _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
+            _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
             pure BoolTy
 
       case pr of
@@ -120,11 +133,21 @@ tcExp ddfs env exp =
         DivP    -> int_ops
         ModP    -> int_ops
         ExpP    -> int_ops
+        FAddP   -> float_ops
+        FSubP   -> float_ops
+        FMulP   -> float_ops
+        FDivP   -> float_ops
+        FExpP   -> float_ops
         EqIntP  -> int_cmps
         LtP     -> int_cmps
         GtP     -> int_cmps
         LtEqP   -> int_cmps
         GtEqP   -> int_cmps
+        EqFloatP -> float_cmps
+        FLtP     -> float_cmps
+        FGtP     -> float_cmps
+        FLtEqP   -> float_cmps
+        FGtEqP   -> float_cmps
         OrP     -> bool_ops
         AndP    -> bool_ops
 
@@ -137,6 +160,21 @@ tcExp ddfs env exp =
           return BoolTy
 
         RandP -> return IntTy
+        FRandP -> return FloatTy
+        FSqrtP -> do
+          len1
+          _ <- ensureEqualTy exp FloatTy (tys !! 0)
+          return FloatTy
+
+        FloatToIntP -> do
+          len1
+          _ <- ensureEqualTy exp FloatTy (tys !! 0)
+          return IntTy
+
+        IntToFloatP -> do
+          len1
+          _ <- ensureEqualTy exp IntTy (tys !! 0)
+          return FloatTy
 
         SymAppend -> do
           len2

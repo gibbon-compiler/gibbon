@@ -28,6 +28,7 @@ hoistExp _ ex0 = return $ gocap ex0
   go e0 =
    case e0 of
     (LitE _)      -> ([], e0)
+    (FloatE _)    -> ([], e0)
     (LitSymE _)   -> ([], e0)
     (VarE _)      -> ([], e0)
     (AppE _ _ _)  -> ([], e0)

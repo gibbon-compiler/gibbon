@@ -177,6 +177,7 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
 
         -- Straightforward recursion (same as the L1 interpreter)
         LitE n    -> return (VInt n, SOne 8)
+        FloatE n  -> return (VFloat n, SOne 8)
         LitSymE s -> return (VInt (strToInt $ fromVar s), SOne 8)
         VarE v    -> return (env # v, sizeEnv # v)
 

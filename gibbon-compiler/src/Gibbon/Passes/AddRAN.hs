@@ -167,6 +167,7 @@ addRANExp needRANsTyCons ddfs ienv ex =
     -- standard recursion here
     VarE{}    -> return ex
     LitE{}    -> return ex
+    FloatE{}  -> return ex
     LitSymE{} -> return ex
     AppE f locs args -> AppE f locs <$> mapM go args
     PrimAppE f args  -> PrimAppE f <$> mapM go args
@@ -197,6 +198,7 @@ addRANExp needRANsTyCons ddfs ienv ex =
       case ex1 of
         VarE{}    -> ex1
         LitE{}    -> ex1
+        FloatE{}  -> ex1
         LitSymE{} -> ex1
         AppE f locs args -> AppE f locs $ map changeSpawnToApp args
         PrimAppE f args  -> PrimAppE f $ map changeSpawnToApp args
@@ -300,6 +302,7 @@ mkRANs ienv needRANsExp =
                       -- packed datatype. So there has to be random access
                       -- node that's generated before this.
                       LitE{}    -> Ext (L1.AddFixed (fromJust mb_most_recent_ran) (fromJust (sizeOfTy IntTy)))
+                      FloatE{}  -> Ext (L1.AddFixed (fromJust mb_most_recent_ran) (fromJust (sizeOfTy FloatTy)))
                       LitSymE{} -> Ext (L1.AddFixed (fromJust mb_most_recent_ran) (fromJust (sizeOfTy SymTy)))
                       -- LitE{}    -> PrimAppE RequestEndOf [arg]
                       -- LitSymE{} -> PrimAppE RequestEndOf [arg]
@@ -345,6 +348,7 @@ needsRANExp ddefs fundefs env2 renv tcenv parlocss ex =
     -- Standard recursion here (ASSUMPTION: everything is flat)
     VarE{}     -> S.empty
     LitE{}     -> S.empty
+    FloatE{}   -> S.empty
     LitSymE{}  -> S.empty
     -- We do not process the function body here, assuming that the main analysis does it.
     AppE{}     -> S.empty

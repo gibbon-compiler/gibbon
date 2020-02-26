@@ -602,7 +602,8 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
 
     IsBigE{} -> error "inferExp: IsBigE not handled."
 
-    LitE n -> return (LitE n, IntTy, [])
+    LitE n  -> return (LitE n, IntTy, [])
+    FloatE n-> return (FloatE n, IntTy, [])
 
     LitSymE s -> return (LitSymE s, SymTy, [])
 
@@ -672,10 +673,12 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                              (VarE v) -> case lookupVEnv v env of
                                                CursorTy -> return $ ArgFixed 8
                                                IntTy -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                                               FloatTy -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
                                                SymTy -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
                                                BoolTy -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
                                                _ -> return $ ArgVar v
                              (LitE _) -> return $ ArgFixed (fromJust $ sizeOfTy IntTy)
+                             (FloatE _) -> return $ ArgFixed (fromJust $ sizeOfTy FloatTy)
                              (LitSymE _) -> return $ ArgFixed (fromJust $ sizeOfTy SymTy)
                              (PrimAppE MkTrue []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
                              (PrimAppE MkFalse []) -> return $ ArgFixed (fromJust $ sizeOfTy BoolTy)
@@ -884,6 +887,12 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           fcs <- tryInRegion cs''
           tryBindReg (L2.LetE (vr,[],IntTy,L2.LitE i) bod'', ty'', fcs)
 
+        FloatE i -> do
+          (bod',ty',cs') <- inferExp (extendVEnv vr FloatTy env) bod dest
+          (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
+          fcs <- tryInRegion cs''
+          tryBindReg (L2.LetE (vr,[],FloatTy,L2.FloatE i) bod'', ty'', fcs)
+
         -- TODO: docs
         PrimAppE (ReadPackedFile fp tycon _ ty) [] -> do
           r <- lift $ lift $ gensym "r"
@@ -1062,6 +1071,7 @@ finishExp e =
     case e of
       VarE v -> return $ VarE v
       LitE i -> return $ LitE i
+      FloatE i  -> return $ FloatE i
       LitSymE v -> return $ LitSymE v
       AppE v ls es -> do
              es' <- mapM finishExp es
@@ -1173,6 +1183,7 @@ cleanExp e =
     case e of
       VarE v -> (VarE v, S.empty)
       LitE v -> (LitE v, S.empty)
+      FloatE v -> (FloatE v, S.empty)
       LitSymE v -> (LitSymE v, S.empty)
       AppE v ls e -> let (e',s') = unzip $ map cleanExp e
                      in (AppE v ls e', (S.unions s') `S.union` (S.fromList ls))
@@ -1268,6 +1279,7 @@ fixProj renam pvar proj e =
                   Nothing -> VarE v
                   Just v' -> VarE v'
       LitE v -> LitE v
+      FloatE v -> FloatE v
       LitSymE v -> LitSymE v
       AppE v ls es -> let es' = map (fixProj renam pvar proj) es
                       in AppE v ls es'
@@ -1315,6 +1327,7 @@ moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
       case ex of
         VarE{}    -> ex
         LitE{}    -> ex
+        FloatE{}  -> ex
         LitSymE{} -> ex
         AppE v locs ls   -> ex
         PrimAppE pr args -> ex
@@ -1556,15 +1569,29 @@ prim p = case p of
            DivP -> return DivP
            ModP -> return ModP
            ExpP -> return ExpP
+           FAddP -> return FAddP
+           FSubP -> return FSubP
+           FMulP -> return FMulP
+           FDivP -> return FDivP
+           FExpP -> return FExpP
+           FSqrtP -> return FSqrtP
            RandP-> return RandP
+           FRandP->return FRandP
+           FloatToIntP->return FloatToIntP
+           IntToFloatP->return IntToFloatP
            LtP  -> return LtP
            GtP  -> return GtP
            LtEqP-> return LtEqP
            GtEqP-> return GtEqP
+           FLtP  -> return FLtP
+           FGtP  -> return FGtP
+           FLtEqP-> return FLtEqP
+           FGtEqP-> return FGtEqP
            OrP  -> return OrP
            AndP -> return AndP
            EqSymP -> return EqSymP
            EqIntP -> return EqIntP
+           EqFloatP -> return EqFloatP
            MkTrue -> return MkTrue
            MkFalse -> return MkFalse
            Gensym  -> return Gensym

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <math.h>
 #include <stdbool.h>
 #include <string.h>
 #include <time.h>
@@ -180,6 +181,7 @@ static const int num_workers = 1;
 typedef char TagTyPacked;   // Must be consistent with codegen in Target.hs
 typedef char TagTyBoxed;    // Must be consistent with codegen in Target.hs
 typedef long long IntTy;    // Int64 in Haskell
+typedef double FloatTy;
 typedef int SymTy;          // Word16 in Haskell. This could actually be a
                             // uint16_t. However, uthash's HASH_*_INT macros
                             // only work with proper int's.

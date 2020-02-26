@@ -376,7 +376,7 @@ compileAndRunExe cfg@Config{backend,benchInput,mode,cfile,exefile} fp = do
         exe = getExeFile backend fp exefile
         pointer = gopt Opt_Pointer $ dynflags cfg
         links = if pointer then " -lgc " else ""
-        cmd = compilationCmd backend cfg ++ outfile ++ links ++ " -o " ++ exe
+        cmd = compilationCmd backend cfg ++ outfile ++ links ++ " -o " ++ exe ++ " -lm"
 
 
 -- | Return the correct filename to store the generated code,

@@ -341,6 +341,7 @@ rewriteReturns tl bnds =
 codegenTriv :: VEnv -> Triv -> C.Exp
 codegenTriv _ (VarTriv v) = C.Var (C.toIdent v noLoc) noLoc
 codegenTriv _ (IntTriv i) = [cexp| $int:i |]
+codegenTriv _ (FloatTriv i) = [cexp| $double:i |]
 codegenTriv _ (SymTriv i) = [cexp| $i |]
 codegenTriv _ (TagTriv i) = [cexp| $i |]
 codegenTriv venv (ProdTriv ls) =
@@ -608,6 +609,23 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = expll($(codegenTriv venv pleft), $(codegenTriv venv pright)); |]]
                  RandP -> let [(outV,outT)] = bnds in pure
                           [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = rand(); |]]
+                 FRandP-> let [(outV,outT)] = bnds
+                              fty = [cty| typename FloatTy |] in pure
+                          [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:fty) rand() / ($ty:fty) (RAND_MAX); |]]
+                 FSqrtP -> let [(outV,outT)] = bnds
+                               [arg] = rnds in pure
+                           [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = sqrt($(codegenTriv venv arg)) ; |]]
+
+                 FloatToIntP -> let [(outV,outT)] = bnds
+                                    [arg] = rnds
+                                    ity= [cty| typename IntTy |] in pure
+                                [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:ity) ($(codegenTriv venv arg)) ; |]]
+
+                 IntToFloatP -> let [(outV,outT)] = bnds
+                                    [arg] = rnds
+                                    fty= [cty| typename FloatTy |] in pure
+                                [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:fty) ($(codegenTriv venv arg)) ; |]]
+
                  EqP -> let [(outV,outT)] = bnds
                             [pleft,pright] = rnds in pure
                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv venv pleft) == $(codegenTriv venv pright)); |]]
@@ -745,6 +763,13 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                      case bnds of
                        [(outV,IntTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = printf("%lld", $(codegenTriv venv arg)); |] ]
                        [] -> pure [ C.BlockStm [cstm| printf("%lld", $(codegenTriv venv arg)); |] ]
+                       _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
+
+                 PrintFloat ->
+                     let [arg] = rnds in
+                     case bnds of
+                       [(outV,FloatTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:outV = printf("%lf", $(codegenTriv venv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| printf("%lf", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
                  PrintSym ->
@@ -930,6 +955,7 @@ genSwitch venv fenv lbl tr alts lastE ty sync_deps =
 --
 codegenTy :: Ty -> C.Type
 codegenTy IntTy = [cty|typename IntTy|]
+codegenTy FloatTy= [cty|typename FloatTy|]
 codegenTy BoolTy = [cty|typename BoolTy|]
 codegenTy TagTyPacked = [cty|typename TagTyPacked|]
 codegenTy TagTyBoxed  = [cty|typename TagTyBoxed|]
@@ -950,6 +976,7 @@ makeName tys = concatMap makeName' tys ++ "Prod"
 
 makeName' :: Ty -> String
 makeName' IntTy       = "Int64"
+makeName' FloatTy     = "Float64"
 makeName' SymTy       = "Sym"
 makeName' BoolTy      = "Bool"
 makeName' CursorTy    = "Cursor"

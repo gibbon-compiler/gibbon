@@ -94,6 +94,7 @@ findWitnesses = mapMExprs fn
 
         VarE v         -> handle' $ VarE v
         LitE n         -> handle' $ LitE n
+        FloatE n       -> handle' $ FloatE n
         LitSymE v      -> handle' $ LitSymE v
         AppE v locs ls -> handle' $ AppE v locs (map goClear ls)
         PrimAppE pr ls -> handle' $ PrimAppE pr (map goClear ls)

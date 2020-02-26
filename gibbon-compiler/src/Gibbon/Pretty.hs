@@ -239,6 +239,7 @@ instance (Pretty l) => Pretty (UrTy l) where
     pprintWithStyle sty ty =
         case ty of
           IntTy  -> text "Int"
+          FloatTy-> text "Float"
           SymTy  -> text "Sym"
           BoolTy -> text "Bool"
           ProdTy tys    -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
@@ -293,6 +294,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
         case ex0 of
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
+          FloatE i  -> double i
           LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
           AppE v locs ls -> parens $
                              pprintWithStyle sty v <+>
@@ -435,6 +437,7 @@ instance Pretty L0.Ty0 where
   pprintWithStyle sty ty =
       case ty of
         L0.IntTy      -> text "Int"
+        L0.FloatTy    -> text "Float"
         L0.SymTy0     -> text "Sym"
         L0.BoolTy     -> text "Bool"
         L0.TyVar v    -> doc v
@@ -513,6 +516,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         -- Straightforward recursion ...
         VarE{}     -> False
         LitE{}     -> False
+        FloatE{}   -> False
         LitSymE{}  -> False
         AppE{}     -> False
         PrimAppE{} -> False
@@ -548,6 +552,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
       case ex0 of
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
+          FloatE i -> double i
           LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
           AppE v _locs ls -> pprintWithStyle sty v <+>
                             (hsep $ map (ppExp monadic env2) ls)

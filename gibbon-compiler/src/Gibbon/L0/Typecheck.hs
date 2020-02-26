@@ -95,6 +95,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
       else pure (sbst, ty, VarE x)
 
     LitE{}    -> pure (sbst, IntTy, ex)
+    FloatE{}  -> pure (sbst, FloatTy, ex)
     LitSymE{} -> pure (sbst, SymTy0, ex)
 
     AppE f _tyapps args -> do
@@ -160,6 +161,18 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
             s3 <- unify (args !! 1) IntTy (arg_tys' !! 1)
             pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
 
+          float_ops = do
+            len2
+            s2 <- unify (args !! 0) FloatTy (arg_tys' !! 0)
+            s3 <- unify (args !! 1) FloatTy (arg_tys' !! 1)
+            pure (s1 <> s2 <> s3, FloatTy, PrimAppE pr args_tc)
+
+          float_cmps = do
+            len2
+            s2 <- unify (args !! 0) FloatTy (arg_tys' !! 0)
+            s3 <- unify (args !! 1) FloatTy (arg_tys' !! 1)
+            pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+
       case pr of
         MkTrue  -> mk_bools
         MkFalse -> mk_bools
@@ -169,11 +182,21 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
         DivP    -> int_ops
         ModP    -> int_ops
         ExpP    -> int_ops
+        FAddP   -> float_ops
+        FSubP   -> float_ops
+        FMulP   -> float_ops
+        FDivP   -> float_ops
+        FExpP   -> float_ops
         EqIntP  -> int_cmps
         LtP     -> int_cmps
         GtP     -> int_cmps
         LtEqP   -> int_cmps
         GtEqP   -> int_cmps
+        EqFloatP -> float_cmps
+        FLtP     -> float_cmps
+        FGtP     -> float_cmps
+        FLtEqP   -> float_cmps
+        FGtEqP   -> float_cmps
         OrP     -> bool_ops
         AndP    -> bool_ops
 
@@ -186,6 +209,21 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
 
         RandP -> pure (s1, IntTy, PrimAppE pr args_tc)
+        FRandP-> pure (s1, FloatTy, PrimAppE pr args_tc)
+        FSqrtP -> do
+          len1
+          s2 <- unify (args !! 0) FloatTy (arg_tys' !! 0)
+          pure (s1 <> s2, FloatTy, PrimAppE pr args_tc)
+
+        FloatToIntP -> do
+          len1
+          s2 <- unify (args !! 0) FloatTy (arg_tys' !! 0)
+          pure (s1 <> s2, IntTy, PrimAppE pr args_tc)
+
+        IntToFloatP -> do
+          len1
+          s2 <- unify (args !! 0) IntTy (arg_tys' !! 0)
+          pure (s1 <> s2, FloatTy, PrimAppE pr args_tc)
 
         SymAppend -> do
           len2
@@ -596,6 +634,7 @@ zonkTy :: Subst -> Ty0 -> Ty0
 zonkTy s@(Subst mp) ty =
   case ty of
     IntTy   -> ty
+    FloatTy -> ty
     SymTy0  -> ty
     BoolTy  -> ty
     TyVar{} -> ty
@@ -627,6 +666,7 @@ zonkExp s ex =
   case ex of
     VarE{}    -> ex
     LitE{}    -> ex
+    FloatE{}  -> ex
     LitSymE{} -> ex
     AppE f tyapps args -> let tyapps1 = map (zonkTy s) tyapps
                           in AppE f tyapps1 (map go args)
@@ -697,6 +737,7 @@ substTyVarExp s ex =
   case ex of
     VarE{}    -> ex
     LitE{}    -> ex
+    FloatE{}  -> ex
     LitSymE{} -> ex
     AppE f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
                          in AppE f tyapps1 (map go arg)
@@ -752,6 +793,7 @@ tyVarToMetaTy = go M.empty
     go env ty =
      case ty of
        IntTy    -> pure (env, ty)
+       FloatTy  -> pure (env, ty)
        SymTy0   -> pure (env, ty)
        BoolTy   -> pure (env, ty)
        TyVar v  -> do mty <- newMetaTy
@@ -792,6 +834,7 @@ unify ex ty1 ty2
   | otherwise  = -- dbgTraceIt (sdoc ty1 ++ "/" ++ sdoc ty2) $
       case (ty1,ty2) of
         (IntTy, IntTy)     -> pure emptySubst
+        (FloatTy,FloatTy)  -> pure emptySubst
         (BoolTy, BoolTy)   -> pure emptySubst
         (TyVar _, TyVar _) -> fail_
         -- -- CHECKME

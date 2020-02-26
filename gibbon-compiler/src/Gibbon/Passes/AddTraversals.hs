@@ -62,6 +62,7 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
     -- standard recursion here
     VarE{}    -> return ex
     LitE{}    -> return ex
+    FloatE{}  -> return ex
     LitSymE{} -> return ex
     AppE f locs args -> AppE f locs <$> mapM go args
     PrimAppE f args  -> PrimAppE f <$> mapM go args

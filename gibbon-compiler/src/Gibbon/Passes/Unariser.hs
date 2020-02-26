@@ -110,6 +110,11 @@ unariserExp ddfs stk env2 ex =
         [] -> return ex
         _  -> error $ "Impossible. Non-empty projection stack on LitE "++show stk
 
+    FloatE{} ->
+      case stk of
+        [] -> return ex
+        _  -> error $ "Impossible. Non-empty projection stack on LitE "++show stk
+
     LitSymE{} ->
       case stk of
         [] -> return ex

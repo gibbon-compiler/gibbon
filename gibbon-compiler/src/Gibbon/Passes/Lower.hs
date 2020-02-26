@@ -204,6 +204,7 @@ printTy :: Bool -> Ty3 -> [T.Triv] -> (T.Tail -> T.Tail)
 printTy pkd ty trvs =
   case (ty, trvs) of
     (IntTy, [_one])             -> T.LetPrimCallT [] T.PrintInt trvs
+    (FloatTy, [_one])           -> T.LetPrimCallT [] T.PrintFloat trvs
     (SymTy, [_one])             -> T.LetPrimCallT [] T.PrintSym trvs
     (SymDictTy _ ty', [_one])     -> sandwich (printTy pkd ty' trvs) "Dict"
     (PackedTy constr _, [one]) -> -- HACK: Using varAppend here was the simplest way to get
@@ -350,6 +351,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
       TimeIt{} -> False
       PrimAppE Gensym [] -> False
       PrimAppE RandP []  -> False
+      PrimAppE FRandP []  -> False
       LetE (_,_,_,rhs) bod -> ispure rhs && ispure bod
       IfE _ b c   -> ispure b && ispure c
       CaseE _ brs -> all id $ L.map (\(_,_,rhs) -> ispure rhs) brs
@@ -377,6 +379,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
         case ex of
           VarE{}    -> syms
           LitE{}    -> syms
+          FloatE{}  -> syms
           LitSymE v -> S.insert (fromVar v) syms
           AppE _ _ args   -> gol args
           PrimAppE _ args -> gol args
@@ -859,7 +862,8 @@ triv :: M.Map String Word16 -> String -> Exp3 -> T.Triv
 triv sym_tbl msg ( e0) =
   case e0 of
     (VarE x) -> T.VarTriv x
-    (LitE x) -> T.IntTriv (fromIntegral x) -- TODO: back propogate Int64 to L1
+    (LitE x) -> T.IntTriv (fromIntegral x)      -- TODO: back propogate Int64 to L1
+    (FloatE x)  -> T.FloatTriv x -- TODO: back propogate Int64 to L1
     (LitSymE v) -> let s = fromVar v in
                    case M.lookup s sym_tbl of
                      Just i  -> T.SymTriv i
@@ -882,6 +886,7 @@ typ :: UrTy () -> T.Ty
 typ t =
   case t of
     IntTy  -> T.IntTy
+    FloatTy-> T.FloatTy
     SymTy  -> T.SymTy
     BoolTy -> T.BoolTy
     ListTy ty -> T.ListTy (typ ty)
@@ -908,14 +913,28 @@ prim p =
     DivP -> T.DivP
     ModP -> T.ModP
     ExpP -> T.ExpP
+    FAddP -> T.AddP
+    FSubP -> T.SubP
+    FMulP -> T.MulP
+    FDivP -> T.DivP
+    FExpP -> T.ExpP
+    FRandP-> T.FRandP
+    FSqrtP-> T.FSqrtP
+    FloatToIntP -> T.FloatToIntP
+    IntToFloatP -> T.IntToFloatP
     RandP -> T.RandP
     Gensym -> T.Gensym
     EqSymP -> T.EqP
     EqIntP -> T.EqP
+    EqFloatP -> T.EqP
     LtP    -> T.LtP
     GtP    -> T.GtP
     LtEqP  -> T.LtEqP
     GtEqP  -> T.GtEqP
+    FLtP   -> T.LtP
+    FGtP   -> T.GtP
+    FLtEqP -> T.LtEqP
+    FGtEqP -> T.GtEqP
     OrP    -> T.OrP
     AndP   -> T.AndP
     SizeParam -> T.SizeParam
