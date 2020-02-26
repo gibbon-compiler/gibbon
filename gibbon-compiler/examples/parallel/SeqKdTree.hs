@@ -193,6 +193,18 @@ sumKdTree tr =
           p = sumKdTree right
       in o .+. p
 
+sumList0 :: Int -> Int -> [(Float, Float)] -> Float -> Float
+sumList0 i n ls acc =
+  if i == n
+  then acc
+  else let p = vnth i ls
+       in sumList0 (i+1) n ls (acc .+. (p !!! 0) .+. (p !!! 1))
+
+sumList :: [(Float, Float)] -> Float
+sumList ls =
+  sumList0 0 (vlength ls) ls 0.0
+
+
 benchmark :: Float -> [(Float, Float)] -> KdTree -> Int
 benchmark radius pts tr =
   let n = vlength pts
@@ -211,3 +223,5 @@ gibbon_main =
         radius  = intToFloat n
         tr      = fromList pts
     in iterate (benchmark radius pts tr)
+    -- in iterate (sumKdTree tr)
+    -- in iterate (sumList pts)
