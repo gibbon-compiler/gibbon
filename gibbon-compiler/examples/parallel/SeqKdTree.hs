@@ -9,6 +9,12 @@ coord axis pt =
 getNextAxis_2D :: Int -> Int
 getNextAxis_2D i = mod (i + 1) 2
 
+min :: Int -> Int -> Int
+min a b = if a < b then a else b
+
+max :: Int -> Int -> Int
+max a b = if a > b then a else b
+
 cmp1 :: (Int, Int) -> (Int, Int) -> Int
 cmp1 a b = (a !!! 0) - (b !!! 0)
 
@@ -34,37 +40,73 @@ slice i n ls =
        acc = vempty
   in slice0 i n ls acc
 
+
 --------------------------------------------------------------------------------
 -- The main algorithm
 
-data KdTree  = KdNode Int     -- ^ splitting axis (0 == x, 1 == y)
-                      Int     -- ^ x-coord
-                      Int     -- ^ y-coord
-                      KdTree  -- ^ left
-                      KdTree  -- ^ right
-             | KdEmpty
+data KdTree = KdNode Int    -- ^ splitting axis (0 == x, 1 == y)
+                     Int    -- ^ split value
+                     Int    -- ^ min_x
+                     Int    -- ^ max_x
+                     Int    -- ^ min_y
+                     Int    -- ^ max_y
+                     KdTree -- ^ left
+                     KdTree -- ^ right
+
+            | KdLeaf Int    -- ^ x coord
+                     Int    -- ^ y coord
   deriving Show
+
+getMinX :: KdTree -> Int
+getMinX tr =
+  case tr of
+    KdNode _ _ min_x _ _ _ _ _ -> min_x
+    KdLeaf x _                 -> x
+
+getMaxX :: KdTree -> Int
+getMaxX tr =
+  case tr of
+    KdNode _ _ _ max_x _ _ _ _ -> max_x
+    KdLeaf x _                 -> x
+
+getMinY :: KdTree -> Int
+getMinY tr =
+  case tr of
+    KdNode _ _ _ _ min_y _ _ _ -> min_y
+    KdLeaf _ y                 -> y
+
+getMaxY :: KdTree -> Int
+getMaxY tr =
+  case tr of
+    KdNode _ _ _ _ _ max_y _ _ -> max_y
+    KdLeaf _ y                 -> y
+
+fromListWithAxis :: Int -> [(Int, Int)] -> KdTree
+fromListWithAxis axis pts =
+    let len = vlength pts in
+    if len == 1
+    then let pt = vnth 0 pts
+         in KdLeaf (pt !!! 0) (pt !!! 1)
+    else let sorted_pts = sort axis pts
+             pivot_idx  = div len 2
+             pivot      = vnth pivot_idx sorted_pts
+             left_pts   = slice 0 pivot_idx sorted_pts
+             right_pts  = slice pivot_idx len sorted_pts
+             next_axis  = getNextAxis_2D axis
+             left_tr    = fromListWithAxis next_axis left_pts
+             right_tr   = fromListWithAxis next_axis right_pts
+             min_x      = min (getMinX left_tr) (getMinX right_tr)
+             max_x      = max (getMaxX left_tr) (getMaxX right_tr)
+             min_y      = min (getMinY left_tr) (getMinY right_tr)
+             max_y      = max (getMaxY left_tr) (getMaxY right_tr)
+         in KdNode axis (coord axis pivot) min_x max_x min_y max_y left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
 fromList :: [(Int, Int)] -> KdTree
 fromList pts = fromListWithAxis 0 pts
 
--- | A KD-Tree that's split at 'axis'
-fromListWithAxis :: Int -> [(Int, Int)] -> KdTree
-fromListWithAxis axis pts =
-    let len = vlength pts in
-    if len == 0
-    then KdEmpty
-    else
-      let sorted_pts = sort axis pts
-          pivot_idx  = div len 2
-          pivot      = vnth pivot_idx sorted_pts
-          left_pts   = slice 0 pivot_idx sorted_pts
-          right_pts  = slice (pivot_idx+1) len sorted_pts
-          next_axis  = getNextAxis_2D axis
-          left_tr    = fromListWithAxis next_axis left_pts
-          right_tr   = fromListWithAxis next_axis right_pts
-      in KdNode axis (pivot !!! 0) (pivot !!! 1) left_tr right_tr
+
+--------------------------------------------------------------------------------
 
 -- | Distance between two points
 dist :: (Int, Int) -> (Int, Int) -> Int
@@ -74,6 +116,34 @@ dist a b =
       b_x = b !!! 0
       b_y = b !!! 1
   in ((a_x - b_x) ^ 2) + ((a_y - b_y) ^ 2)
+
+
+-- | Two point correlation
+countCorr :: (Int, Int) -> Int -> KdTree -> Int
+countCorr probe radius tr =
+  case tr of
+    KdLeaf x y ->
+      if (dist probe (x, y)) < (radius * radius)
+      then 1
+      else 0
+
+    KdNode axis split_val min_x max_x min_y max_y left right ->
+      -- I don't fully understand what's going on here...
+      let center_x  = div (min_x + max_x) 2
+          center_y  = div (min_y + max_y) 2
+          d_x       = (probe !!! 0) - center_x
+          d_y       = (probe !!! 1) - center_y
+          boxdist_x = div (max_x - min_x) 2
+          boxdist_y = div (max_y - min_y) 2
+          sum       = (d_x * d_x) + (d_y * d_y)
+          boxsum    = (boxdist_x * boxdist_x) + (boxdist_y * boxdist_y)
+      in if (sum - boxsum) < (radius * radius)
+         then let n1 = countCorr probe radius left
+                  n2 = countCorr probe radius right
+              in n1 + n2
+         else 0
+
+{-
 
 -- | Return the point that is closest to a
 least_dist :: (Int, Int) -> (Int, Int) -> (Int, Int) -> (Int, Int)
@@ -109,15 +179,17 @@ find_nearest pivot probe tst_pivot tst_probe side other =
           in best1
      else candidate1
 
+-}
+
 -- | Sum of all points in KD-Tree
 sumKdTree :: KdTree -> Int
 sumKdTree tr =
   case tr of
-    KdEmpty -> 0
-    KdNode _ x y left right ->
+    KdLeaf x y -> x + y
+    KdNode _ _ _ _ _ _ left right ->
       let o = sumKdTree left
           p = sumKdTree right
-      in x + y + o + p
+      in o + p
 
 --------------------------------------------------------------------------------
 
@@ -154,9 +226,10 @@ sumList ls =
 gibbon_main =
     let n   = sizeParam
         ls  = mkList n
-        tr  = iterate (fromList ls)
+        tr  = fromList ls
         m   = (div n 2)
         probe = (m, m)
-        got   = nearest tr probe
-        d     = dist probe got
-    in (probe !!! 0, probe !!! 1, got !!! 0, got !!! 1)
+    --     got   = nearest tr probe
+    --     d     = dist probe got
+    -- in (probe !!! 0, probe !!! 1, got !!! 0, got !!! 1)
+    in countCorr probe 10 tr
