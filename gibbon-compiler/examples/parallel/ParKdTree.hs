@@ -145,6 +145,34 @@ countCorr depth probe radius tr =
               in n1 + n2
          else 0
 
+-- | Two point correlation
+pcountCorr :: Int -> (Float, Float) -> Float -> KdTree -> Int
+pcountCorr depth probe radius tr =
+  if depth <= 14 then countCorr depth probe radius tr else
+  case tr of
+    KdLeaf x y ->
+      if (dist probe (x, y)) .<. (radius .*. radius)
+      then 1
+      else 0
+
+    KdNode axis split_val min_x max_x min_y max_y left right ->
+      -- I don't fully understand what's going on here...
+      let center_x  = (min_x .+. max_x) ./. 2.0
+          center_y  = (min_y .+. max_y) ./. 2.0
+          d_x       = (probe !!! 0) .-. center_x
+          d_y       = (probe !!! 1) .-. center_y
+          boxdist_x = (max_x .-. min_x) ./. 2.0
+          boxdist_y = (max_y .-. min_y) ./. 2.0
+          sum       = (d_x .*. d_x) .+. (d_y .*. d_y)
+          boxsum    = (boxdist_x .*. boxdist_x) .+. (boxdist_y .*. boxdist_y)
+      in if (sum .-. boxsum) .<. (radius .*. radius)
+         then let n1 = spawn (countCorr (depth+1) probe radius left)
+                  n2 = countCorr (depth+1) probe radius right
+                  _  = sync
+              in n1 + n2
+         else 0
+
+
 {-
 
 -- | Return the point that is closest to a
@@ -213,6 +241,6 @@ gibbon_main =
         radius  = intToFloat n
         tr      = fromList pts
         probe   = vnth 0 pts
-    in iterate (countCorr 0 probe radius tr)
+    in iterate (pcountCorr 0 probe radius tr)
     -- in iterate (sumKdTree tr)
     -- in iterate (sumList pts)
