@@ -145,10 +145,10 @@ countCorr depth probe radius tr =
               in n1 + n2
          else 0
 
--- | Two point correlation
+-- | Parallel two point correlation. Run the first 6-levels in parallel
 pcountCorr :: Int -> (Float, Float) -> Float -> KdTree -> Int
 pcountCorr depth probe radius tr =
-  if depth <= 14 then countCorr depth probe radius tr else
+  if depth >= 6 then countCorr depth probe radius tr else
   case tr of
     KdLeaf x y ->
       if (dist probe (x, y)) .<. (radius .*. radius)
