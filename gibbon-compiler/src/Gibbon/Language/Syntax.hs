@@ -1067,7 +1067,7 @@ sizeOfTy t =
     ProdTy ls     -> sum <$> mapM sizeOfTy ls
     SymDictTy _ _ -> Just 8 -- Always a pointer.
     IntTy         -> Just 8
-    FloatTy       -> Just 8
+    FloatTy       -> Just 4
     SymTy         -> Just 4
     BoolTy        -> Just 1
     ListTy _      -> error "FINISHLISTS"

@@ -770,7 +770,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                      let [arg] = rnds in
                      case bnds of
                        [(outV,FloatTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:outV = printf("%lf", $(codegenTriv venv arg)); |] ]
-                       [] -> pure [ C.BlockStm [cstm| printf("%lf", $(codegenTriv venv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| printf("%f", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
                  PrintSym ->
@@ -825,7 +825,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                icd_name = ty_name ++ "_icd"
                                parse_in_c t = case t of
                                                 IntTy   -> "%lld"
-                                                FloatTy -> "%lf"
+                                                FloatTy -> "%f"
                                                 _ -> error $ "ReadArrayFile: Lists of type " ++ sdoc ty ++ " not allowed."
 
                            elem <- gensym "arr_elem"
@@ -839,11 +839,11 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                      IntTy -> do
                                        one <- gensym "tmp"
                                        let assn = C.BlockStm [cstm| $id:elem = $id:one ; |]
-                                       pure ([one], ["%lld"], [ assn ], [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:one; |] ])
+                                       pure ([one], [parse_in_c ty], [ assn ], [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:one; |] ])
                                      FloatTy -> do
                                        one <- gensym "tmp"
                                        let assn = C.BlockStm [cstm| $id:elem = $id:one ; |]
-                                       pure ([one], ["%lf"], [ assn ], [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:one; |] ])
+                                       pure ([one], [parse_in_c ty], [ assn ], [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:one; |] ])
                                      ProdTy tys -> do
                                        vs <- mapM (\_ -> gensym "tmp") tys
                                        let decls = map (\(name, t) -> C.BlockDecl [cdecl| $ty:(codegenTy t) $id:name; |] ) (zip vs tys)
@@ -1046,7 +1046,7 @@ makeName tys = concatMap makeName' tys ++ "Prod"
 
 makeName' :: Ty -> String
 makeName' IntTy       = "Int64"
-makeName' FloatTy     = "Float64"
+makeName' FloatTy     = "Float32"
 makeName' SymTy       = "Sym"
 makeName' BoolTy      = "Bool"
 makeName' CursorTy    = "Cursor"
