@@ -108,43 +108,6 @@ fromList pts = fromListWithAxis 0 pts
 
 --------------------------------------------------------------------------------
 
--- | Distance between two points
-dist :: (Float, Float) -> (Float, Float) -> Float
-dist a b =
-  let a_x = a !!! 0
-      a_y = a !!! 1
-      b_x = b !!! 0
-      b_y = b !!! 1
-      d1 = (a_x .-. b_x)
-      d2 = (a_y .-. b_y)
-  in (d1 .*. d1) .+. (d2 .*. d2)
-
-
--- | Two point correlation
-countCorr :: Int -> (Float, Float) -> Float -> KdTree -> Int
-countCorr depth probe radius tr =
-  case tr of
-    KdLeaf x y ->
-      if (dist probe (x, y)) .<. (radius .*. radius)
-      then 1
-      else 0
-
-    KdNode axis split_val min_x max_x min_y max_y left right ->
-      -- I don't fully understand what's going on here...
-      let center_x  = (min_x .+. max_x) ./. 2.0
-          center_y  = (min_y .+. max_y) ./. 2.0
-          d_x       = (probe !!! 0) .-. center_x
-          d_y       = (probe !!! 1) .-. center_y
-          boxdist_x = (max_x .-. min_x) ./. 2.0
-          boxdist_y = (max_y .-. min_y) ./. 2.0
-          sum       = (d_x .*. d_x) .+. (d_y .*. d_y)
-          boxsum    = (boxdist_x .*. boxdist_x) .+. (boxdist_y .*. boxdist_y)
-      in if (sum .-. boxsum) .<. (radius .*. radius)
-         then let n1 = countCorr (depth+1) probe radius left
-                  n2 = countCorr (depth+1) probe radius right
-              in n1 + n2
-         else 0
-
 {-
 
 -- | Return the point that is closest to a
@@ -204,6 +167,43 @@ sumList :: [(Float, Float)] -> Float
 sumList ls =
   sumList0 0 (vlength ls) ls 0.0
 
+-- | Distance between two points
+dist :: (Float, Float) -> (Float, Float) -> Float
+dist a b =
+  let a_x = a !!! 0
+      a_y = a !!! 1
+      b_x = b !!! 0
+      b_y = b !!! 1
+      d1 = (a_x .-. b_x)
+      d2 = (a_y .-. b_y)
+  in (d1 .*. d1) .+. (d2 .*. d2)
+
+
+-- | Two point correlation
+countCorr :: Int -> (Float, Float) -> Float -> KdTree -> Int
+countCorr depth probe radius tr =
+  case tr of
+    KdLeaf x y ->
+      if (dist probe (x, y)) .<. (radius .*. radius)
+      then 1
+      else 0
+
+    KdNode axis split_val min_x max_x min_y max_y left right ->
+      -- Ported over from ASTBenchmarks
+      let center_x  = (min_x .+. max_x) ./. 2.0
+          center_y  = (min_y .+. max_y) ./. 2.0
+          d_x       = (probe !!! 0) .-. center_x
+          d_y       = (probe !!! 1) .-. center_y
+          boxdist_x = (max_x .-. min_x) ./. 2.0
+          boxdist_y = (max_y .-. min_y) ./. 2.0
+          sum       = (d_x .*. d_x) .+. (d_y .*. d_y)
+          boxsum    = (boxdist_x .*. boxdist_x) .+. (boxdist_y .*. boxdist_y)
+      in if (sum .-. boxsum) .<. (radius .*. radius)
+         then let n1 = countCorr (depth+1) probe radius left
+                  n2 = countCorr (depth+1) probe radius right
+              in n1 + n2
+         else 0
+
 --------------------------------------------------------------------------------
 
 gibbon_main =
@@ -212,7 +212,9 @@ gibbon_main =
         n       = sizeParam
         radius  = intToFloat n
         tr      = fromList pts
-        probe   = vnth 0 pts
+        i       = rand
+        j       = mod i n
+        probe   = vnth j pts
     in iterate (countCorr 0 probe radius tr)
     -- in iterate (sumKdTree tr)
     -- in iterate (sumList pts)
