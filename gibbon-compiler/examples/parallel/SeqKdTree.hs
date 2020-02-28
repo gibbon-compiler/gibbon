@@ -24,15 +24,19 @@ cmp2 a b = floatToInt ((a !!! 1) .-. (b !!! 1))
 sort :: Int -> [(Float, Float)] -> [(Float, Float)]
 sort axis ls =
     if axis == 0
-    then vsort ls cmp1
-    else vsort ls cmp2
+    -- This isn't safe, but avoids memory blowup
+    then let _ = inplacevsort ls cmp1
+         in ls
+    else let _ = inplacevsort ls cmp2
+         in ls
 
 slice0 :: Int -> Int -> [(Float, Float)] -> [(Float, Float)] -> [(Float, Float)]
 slice0 i n ls acc =
   if i == n
   then acc
   else  let x = vnth i ls
-        in slice0 (i+1) n ls (vsnoc acc x)
+            _ = inplacevsnoc acc x
+        in slice0 (i+1) n ls acc
 
 slice :: Int -> Int -> [(Float, Float)] -> [(Float, Float)]
 slice i n ls =
