@@ -78,7 +78,7 @@ keywords :: S.Set Var
 keywords = S.fromList $ map toVar $
     [ "quote", "bench", "error", "par", "spawn", "is_big"
     -- operations on vectors
-    , "vempty", "vnth", "vlength", "vupdate", "vsnoc", "vsort"
+    , "vempty", "vnth", "vlength", "vupdate", "vsnoc", "vsort", "vslice"
     , "inplacevsort", "inplacevsnoc"
     ] ++ M.keys primMap
 
@@ -335,6 +335,11 @@ desugarExp toplevel e =
                     e2' <- desugarExp toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (InPlaceVSortP ty) [e2']
+                  else if f == "vslice"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (VSliceP ty) [e2']
                   else if f == "intToFloat"
                   then do
                     e2' <- desugarExp toplevel e2

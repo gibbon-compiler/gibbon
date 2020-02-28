@@ -359,6 +359,14 @@ tcExp ddfs env exp =
         InPlaceVSortP ty -> do
           go (PrimAppE (VSortP ty) es)
 
+        VSliceP ty -> do
+          len3
+          let [ls,from,to] = tys
+          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 1) IntTy from
+          _ <- ensureEqualTy (es !! 2) IntTy to
+          checkLists ty (ListTy ty)
+
         IntHashEmpty  -> throwError $ GenericTC "IntHashEmpty not handled." exp
         IntHashInsert -> throwError $ GenericTC "IntHashEmpty not handled." exp
         IntHashLookup -> throwError $ GenericTC "IntHashEmpty not handled." exp

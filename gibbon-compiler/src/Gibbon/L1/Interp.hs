@@ -273,6 +273,8 @@ applyPrim rc p ls =
                                          then error $ "L1.Interp: VUpdate"
                                          else VList (replaceNth i v ls)
    (VSnocP _,[VList ls, v]) -> VList (ls ++ [v])
+   (VSliceP _,[VList ls, VInt from, VInt to]) ->
+     VList (L.take (to - from + 1) (L.drop from ls))
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
   where

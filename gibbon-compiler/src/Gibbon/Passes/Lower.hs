@@ -955,6 +955,7 @@ prim p =
     VSortP ty     -> T.VSortP (typ ty)
     InPlaceVSnocP ty -> T.InPlaceVSnocP (typ ty)
     InPlaceVSortP ty -> T.InPlaceVSortP (typ ty)
+    VSliceP ty    -> T.VSliceP (typ ty)
     SymSetEmpty   -> error "lower/prim: SymSetEmpty not handled"
     SymSetInsert  -> error "lower/prim: SymSetInsert not handled"
     SymSetContains-> error "lower/prim: SymSetContains not handled"

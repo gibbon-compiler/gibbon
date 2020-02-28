@@ -979,6 +979,27 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    let [VarTriv old_ls, VarTriv sort_fn] = rnds
                    return [ C.BlockStm [cstm| utarray_sort($id:old_ls, $id:sort_fn); |] ]
 
+                 VSliceP ty -> do
+                   let [(outV,_)] = bnds
+                       [VarTriv old_ls, from, to] = rnds
+                       ty_name  = case ty of
+                         IntTy      -> makeName' ty
+                         ProdTy tys -> makeName tys
+                         _ -> "codegenTail: Lists of type " ++ sdoc ty ++ " not allowed."
+                       icd_name = ty_name ++ "_icd"
+                   from_v <- gensym "from"
+                   to_v <- gensym "to"
+                   len <- gensym "len"
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
+                          , C.BlockStm [cstm| utarray_new($id:outV,&($id:icd_name)); |]
+                          , C.BlockStm [cstm| utarray_inserta($id:outV,$id:old_ls,0); |]
+                          , C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:from_v = $(codegenTriv venv from); |]
+                          , C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:to_v = $(codegenTriv venv to); |]
+                          , C.BlockDecl [cdecl| int $id:len = utarray_len($id:outV); |]
+                          , C.BlockStm [cstm| utarray_erase($id:outV, 0, $id:from_v); |]
+                          , C.BlockStm [cstm| utarray_erase($id:outV, $id:to_v, $id:len - $id:to_v); |]
+                          ]
+
                  BumpArenaRefCount{} -> error "codegen: BumpArenaRefCount not handled."
                  ReadInt{} -> error "codegen: ReadInt not handled."
 

@@ -418,6 +418,13 @@ tcExp ddfs env funs constrs regs tstatein exp =
                  InPlaceVSortP ty -> do
                     recur tstatein (PrimAppE (VSortP ty) es)
 
+                 VSliceP ty   -> do
+                   let [ls,from,to] = tys
+                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   _ <- ensureEqualTy exp IntTy from
+                   _ <- ensureEqualTy exp IntTy to
+                   pure (ListTy ty, tstate)
+
                  PrintInt -> throwError $ GenericTC "PrintInt not handled" exp
                  PrintSym -> throwError $ GenericTC "PrintSym not handled" exp
                  ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp

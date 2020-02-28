@@ -431,6 +431,14 @@ tcExp isPacked ddfs env exp =
         InPlaceVSortP ty -> do
           go (PrimAppE (VSortP ty) es)
 
+        VSliceP ty -> do
+          len3
+          let [ls,from,to] = tys
+          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 1) IntTy from
+          _ <- ensureEqualTy (es !! 2) IntTy to
+          pure (ListTy ty)
+
         IntHashEmpty  -> error "L3.Typecheck: IntHashEmpty not handled."
         IntHashInsert -> error "L3.Typecheck: IntHashInsert not handled."
         IntHashLookup -> error "L3.Typecheck: IntHashLookup not handled."

@@ -30,21 +30,6 @@ sort axis ls =
     else let _ = inplacevsort ls cmp2
          in ls
 
-slice0 :: Int -> Int -> [(Float, Float)] -> [(Float, Float)] -> [(Float, Float)]
-slice0 i n ls acc =
-  if i == n
-  then acc
-  else  let x = vnth i ls
-            _ = inplacevsnoc acc x
-        in slice0 (i+1) n ls acc
-
-slice :: Int -> Int -> [(Float, Float)] -> [(Float, Float)]
-slice i n ls =
-  let  acc :: [(Float, Float)]
-       acc = vempty
-  in slice0 i n ls acc
-
-
 --------------------------------------------------------------------------------
 -- The main algorithm
 
@@ -102,8 +87,8 @@ fromListWithAxis axis pts =
     else let sorted_pts = sort axis pts
              pivot_idx  = div len 2
              pivot      = vnth pivot_idx sorted_pts
-             left_pts   = slice 0 pivot_idx sorted_pts
-             right_pts  = slice pivot_idx len sorted_pts
+             left_pts   = vslice sorted_pts 0 pivot_idx
+             right_pts  = vslice sorted_pts pivot_idx len
              next_axis  = getNextAxis_2D axis
              left_tr    = fromListWithAxis next_axis left_pts
              right_tr   = fromListWithAxis next_axis right_pts

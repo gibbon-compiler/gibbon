@@ -375,6 +375,14 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
             PrimAppE (VSortP t2) args2 -> pure (s2, t, PrimAppE (InPlaceVSortP t2) args2)
             _ -> err $ text "InPlaceVSortP"
 
+        VSliceP ty -> do
+          len3
+          let [ls,from,to] = arg_tys'
+          s2 <- unify (args !! 0) (ListTy ty) ls
+          s3 <- unify (args !! 1) IntTy from
+          s4 <- unify (args !! 2) IntTy to
+          pure (s1 <> s2 <> s3 <> s4, ListTy ty, PrimAppE pr args_tc)
+
         ErrorP _str ty -> do
           len0
           pure (s1, ty, PrimAppE pr args_tc)
@@ -696,6 +704,7 @@ zonkExp s ex =
                   VSortP   ty -> VSortP   (zonkTy s ty)
                   InPlaceVSnocP ty -> InPlaceVSnocP (zonkTy s ty)
                   InPlaceVSortP ty -> InPlaceVSortP (zonkTy s ty)
+                  VSliceP  ty -> VSliceP  (zonkTy s ty)
                   ReadArrayFile fp ty -> ReadArrayFile fp (zonkTy s ty)
                   _ -> pr
       in PrimAppE pr' (map go args)

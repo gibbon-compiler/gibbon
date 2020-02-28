@@ -1621,6 +1621,8 @@ prim p = case p of
            VSortP dty   -> convertTy dty >>= return . VSortP
            InPlaceVSnocP dty   -> convertTy dty >>= return . InPlaceVSnocP
            InPlaceVSortP dty   -> convertTy dty >>= return . InPlaceVSortP
+           VSliceP dty  -> convertTy dty >>= return . VSliceP
+
            SymAppend{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadArrayFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p

@@ -489,6 +489,7 @@ recoverType ddfs env2 ex =
         VSortP ty      -> ListTy ty
         InPlaceVSnocP ty-> ListTy ty
         InPlaceVSortP ty-> ListTy ty
+        VSliceP ty     -> ListTy ty
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty
         ReadArrayFile _ ty      -> ty

@@ -14,6 +14,7 @@ gibbon_main =
         ls2 = vsnoc ls (40,50)
         ls3 = vsnoc ls2 (10,20)
         ls4 = vsort ls3 cmp1
-        x   = vnth 0 ls3
+        ls5 = vslice ls4 1 (vlength ls4)
+        x   = vnth 0 ls5
         y   = vnth 0 ls4
     in (x !!! 0, x !!! 1, y !!! 0, y !!! 1)

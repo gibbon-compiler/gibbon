@@ -655,6 +655,9 @@ data Prim ty
           | VUpdateP ty -- ^ Update ith element of the vector
           | VSnocP ty   -- ^ Append an element to the end of the vector
           | VSortP ty   -- ^ A sort primop that accepts a function pointer
+          | VSliceP ty  -- ^ An efficient slice operation. (vlice ls from to),
+                        -- returns ls[from, to-1]
+                        -- TODO: change the order of arguments to (vslice from to ls)
 
           | InPlaceVSnocP ty   -- ^ Append an element to the end of the vector by mutating it
           | InPlaceVSortP ty   -- ^ A sort primop that sorts the array in place
@@ -1132,6 +1135,7 @@ primArgsTy p =
                                        -- function pointers.
     InPlaceVSnocP ty   -> [ListTy ty, ty]
     InPlaceVSortP ty   -> [ListTy ty, voidTy]
+    VSliceP ty  -> [ListTy ty, IntTy, IntTy]
     PrintInt -> [IntTy]
     PrintSym -> [SymTy]
     ReadInt  -> []
@@ -1199,6 +1203,7 @@ primRetTy p =
     VSortP ty   -> ListTy ty
     InPlaceVSnocP ty -> ListTy ty
     InPlaceVSortP ty -> ListTy ty
+    VSliceP ty  -> ListTy ty
     PrintInt -> IntTy
     PrintSym -> SymTy
     ReadInt  -> IntTy

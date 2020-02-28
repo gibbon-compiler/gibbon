@@ -212,6 +212,7 @@ data Prim
     | VSortP Ty
     | InPlaceVSnocP Ty
     | InPlaceVSortP Ty
+    | VSliceP Ty
 
     | ReadPackedFile (Maybe FilePath) TyCon
     | ReadArrayFile (Maybe FilePath) Ty
