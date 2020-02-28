@@ -101,7 +101,7 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id afters pending_binds spawn
     LetE (v, endlocs, ty, SyncE) bod -> do
       let env2' = extendVEnv v ty env2
           boundlocs' = S.union boundlocs (M.keysSet after_env)
-      bod1 <- parAllocExp ddefs env2' reg_env M.empty Nothing [] [] S.empty boundlocs' bod
+      bod1 <- parAllocExp ddefs env2' reg_env after_env Nothing [] [] S.empty boundlocs' bod
       bod2 <- foldrM
                  (\(from, to) acc -> do
                     indr <- gensym "pindr"

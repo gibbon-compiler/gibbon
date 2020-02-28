@@ -266,6 +266,7 @@ applyPrim rc p ls =
    (SizeParam,[]) -> VInt (rcSize rc)
    (ReadPackedFile file _ _ ty,[]) ->
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
+   (ReadArrayFile{},[]) -> VList []
    (VEmptyP _,[]) -> VList []
    (VNthP _,[VInt n, VList ls]) -> ls !! n
    (VLengthP _,[VList ls]) -> VInt (length ls)
