@@ -351,6 +351,10 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           s3 <- unify (args !! 1) ty val
           pure (s1 <> s2 <> s3, ListTy ty, PrimAppE pr args_tc)
 
+        InPlaceVSnocP ty -> do
+          (s2, _, e) <- go (PrimAppE (VSnocP ty) args)
+          pure (s2, voidTy0, e)
+
         -- Given that the first argument is a list of type (ListTy t),
         -- ensure that the 2nd argument is function reference of type:
         -- ty -> ty -> IntTy
@@ -362,6 +366,10 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           s2 <- unify (args !! 0) (ListTy ty) ls
           s3 <- unify (args !! 1) (ArrowTy [ty, ty] IntTy) fp
           pure (s1 <> s2 <> s3, ListTy ty, PrimAppE pr args_tc)
+
+        InPlaceVSortP ty -> do
+          (s2, _, e) <- go (PrimAppE (VSortP ty) args)
+          pure (s2, voidTy0, e)
 
         ErrorP _str ty -> do
           len0

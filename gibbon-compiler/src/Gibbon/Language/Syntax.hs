@@ -656,6 +656,9 @@ data Prim ty
           | VSnocP ty   -- ^ Append an element to the end of the vector
           | VSortP ty   -- ^ A sort primop that accepts a function pointer
 
+          | InPlaceVSnocP ty   -- ^ Append an element to the end of the vector by mutating it
+          | InPlaceVSortP ty   -- ^ A sort primop that sorts the array in place
+
           | ReadPackedFile (Maybe FilePath) TyCon (Maybe Var) ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
             -- type of the file being read.  The `Ty` tracks the type as the program evolvels
@@ -1127,6 +1130,8 @@ primArgsTy p =
     VSortP ty   -> [ListTy ty, voidTy] -- The voidTy is just a placeholder.
                                        -- We don't have a type for
                                        -- function pointers.
+    InPlaceVSnocP ty   -> [ListTy ty, ty]
+    InPlaceVSortP ty   -> [ListTy ty, voidTy]
     PrintInt -> [IntTy]
     PrintSym -> [SymTy]
     ReadInt  -> []
@@ -1192,6 +1197,8 @@ primRetTy p =
     VUpdateP ty -> ListTy ty
     VSnocP ty   -> ListTy ty
     VSortP ty   -> ListTy ty
+    InPlaceVSnocP{} -> voidTy
+    InPlaceVSortP{} -> voidTy
     PrintInt -> IntTy
     PrintSym -> SymTy
     ReadInt  -> IntTy

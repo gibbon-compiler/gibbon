@@ -388,6 +388,11 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    _ <- ensureEqualTy exp (ListTy ty) ls
                    _ <- ensureEqualTy exp ty val
                    pure (ListTy ty, tstate)
+
+                 InPlaceVSnocP ty -> do
+                    (_, tstate) <- recur tstatein (PrimAppE (VSnocP ty) es)
+                    pure (voidTy, tstate)
+
                  -- Given that the first argument is a list of type (ListTy t),
                  -- ensure that the 2nd argument is function reference of type:
                  -- ty -> ty -> Bool
@@ -409,6 +414,11 @@ tcExp ddfs env funs constrs regs tstatein exp =
                             pure (ListTy ty, tstate)
                          _ -> err fn_ty
                      oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
+
+                 InPlaceVSortP ty -> do
+                    (_, tstate) <- recur tstatein (PrimAppE (VSortP ty) es)
+                    pure (voidTy, tstate)
+
                  PrintInt -> throwError $ GenericTC "PrintInt not handled" exp
                  PrintSym -> throwError $ GenericTC "PrintSym not handled" exp
                  ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp

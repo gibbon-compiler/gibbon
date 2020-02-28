@@ -79,6 +79,7 @@ keywords = S.fromList $ map toVar $
     [ "quote", "bench", "error", "par", "spawn", "is_big"
     -- operations on vectors
     , "vempty", "vnth", "vlength", "vupdate", "vsnoc", "vsort"
+    , "inplacevsort", "inplacevsnoc"
     ] ++ M.keys primMap
 
 desugarTopType :: (Show a,  Pretty a) => Type a -> TyScheme
@@ -319,11 +320,21 @@ desugarExp toplevel e =
                     e2' <- desugarExp toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VSnocP ty) [e2']
+                  else if f == "inplacevsnoc"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (InPlaceVSnocP ty) [e2']
                   else if f == "vsort"
                   then do
                     e2' <- desugarExp toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VSortP ty) [e2']
+                  else if f == "inplacevsort"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (InPlaceVSortP ty) [e2']
                   else if f == "intToFloat"
                   then do
                     e2' <- desugarExp toplevel e2

@@ -369,6 +369,8 @@ isScalarTy0 BoolTy = True
 isScalarTy0 FloatTy= True
 isScalarTy0 _      = False
 
+voidTy0 :: Ty0
+voidTy0 = ProdTy []
 
 -- | Lists of scalars or flat products of scalars are allowed.
 isValidListElemTy0 :: Ty0 -> Bool
@@ -416,7 +418,7 @@ recoverType ddfs env2 ex =
                       ++"\nEnvironment:\n  "++sdoc (vEnv env2)
     SpawnE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
                          in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
-    SyncE -> ProdTy []
+    SyncE -> voidTy0
     IsBigE _ -> BoolTy
     CaseE _ mp ->
       let (c,args,e) = head mp
@@ -485,6 +487,8 @@ recoverType ddfs env2 ex =
         VUpdateP ty    -> ListTy ty
         VSnocP ty      -> ListTy ty
         VSortP ty      -> ListTy ty
+        InPlaceVSnocP{}-> voidTy0
+        InPlaceVSortP{}-> voidTy0
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty
         ReadArrayFile _ ty      -> ty

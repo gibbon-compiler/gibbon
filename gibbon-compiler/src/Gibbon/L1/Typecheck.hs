@@ -332,6 +332,10 @@ tcExp ddfs env exp =
           _ <- ensureEqualTy (es !! 1) ty val
           checkLists ty (ListTy ty)
 
+        InPlaceVSnocP ty -> do
+          _ <- go (PrimAppE (VSnocP ty) es)
+          pure voidTy
+
         -- Given that the first argument is a list of type (ListTy t),
         -- ensure that the 2nd argument is function reference of type:
         -- ty -> ty -> IntTy
@@ -351,6 +355,10 @@ tcExp ddfs env exp =
                    checkLists ty (ListTy ty)
                 _ -> err fn_ty
             oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
+
+        InPlaceVSortP ty -> do
+          _ <- go (PrimAppE (VSortP ty) es)
+          pure voidTy
 
         IntHashEmpty  -> throwError $ GenericTC "IntHashEmpty not handled." exp
         IntHashInsert -> throwError $ GenericTC "IntHashEmpty not handled." exp

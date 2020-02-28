@@ -93,6 +93,9 @@ harvestStructTys (Prog _ funs mtal) =
            VLengthP ty -> ListTy ty : rst
            VUpdateP ty -> ListTy ty : rst
            VSnocP ty   -> ListTy ty : rst
+           VSortP ty   -> ListTy ty : rst
+           InPlaceVSnocP ty   -> ListTy ty : rst
+           InPlaceVSortP ty   -> ListTy ty : rst
            ReadArrayFile _ ty -> ListTy ty : rst
            _ -> ProdTy (map snd binds) : rst
        (LetTrivT (_,ty,_) bod)     -> ty : go bod
@@ -948,6 +951,16 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                           , C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
                           , C.BlockStm  [cstm| utarray_push_back($id:outV, &($id:tmp)); |]
                           ]
+
+                 InPlaceVSnocP ty   -> do
+                   let [(VarTriv old_ls), val] = rnds
+                       trv = codegenTriv venv val
+                       ty1 = codegenTy ty
+                   tmp <- gensym "tmp"
+                   return [ C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
+                          , C.BlockStm  [cstm| utarray_push_back($id:old_ls, &($id:tmp)); |]
+                          ]
+
                  VSortP ty -> do
                    let [(outV,_)] = bnds
                        [VarTriv old_ls, VarTriv sort_fn] = rnds
@@ -961,6 +974,10 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                           , C.BlockStm [cstm| utarray_inserta($id:outV,$id:old_ls,0); |]
                           , C.BlockStm [cstm| utarray_sort($id:outV, $id:sort_fn); |]
                           ]
+
+                 InPlaceVSortP _ty -> do
+                   let [VarTriv old_ls, VarTriv sort_fn] = rnds
+                   return [ C.BlockStm [cstm| utarray_sort($id:old_ls, $id:sort_fn); |] ]
 
                  BumpArenaRefCount{} -> error "codegen: BumpArenaRefCount not handled."
                  ReadInt{} -> error "codegen: ReadInt not handled."

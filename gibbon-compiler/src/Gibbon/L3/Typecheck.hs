@@ -405,6 +405,10 @@ tcExp isPacked ddfs env exp =
           _ <- ensureEqualTy (es !! 1) ty val
           pure (ListTy ty)
 
+        InPlaceVSnocP ty -> do
+          _ <- go (PrimAppE (VSnocP ty) es)
+          pure voidTy
+
         VSortP ty -> do
           case (es !! 1) of
             VarE f -> do
@@ -423,6 +427,10 @@ tcExp isPacked ddfs env exp =
                    pure (ListTy ty)
                 _ -> err fn_ty
             oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
+
+        InPlaceVSortP ty -> do
+          _ <- go (PrimAppE (VSortP ty) es)
+          pure voidTy
 
         IntHashEmpty  -> error "L3.Typecheck: IntHashEmpty not handled."
         IntHashInsert -> error "L3.Typecheck: IntHashInsert not handled."

@@ -86,6 +86,17 @@ interp rc _ddefs fenv = go M.empty
           PrimAppE (VSortP{}) [ls,VarE fp] -> do
             (VList vals) <- go env ls
             applySortP env vals fp
+
+          LetE (_,_,_, PrimAppE (InPlaceVSortP{}) [ls, VarE fp]) bod -> do
+            v@(VList vals) <- go env ls
+            val <- applySortP env vals fp
+            -- go (M.insert )
+            let mp = M.filter (== v) env
+            case M.keys mp of
+              [one] -> go (M.insert one val env) bod
+              [] -> go env bod
+              _  -> error "L1.Interp: InPlaceSortP"
+
           PrimAppE p ls -> do args <- mapM (go env) ls
                               return $ applyPrim rc p args
           ProjE ix ex   -> do VProd ls <- go env ex

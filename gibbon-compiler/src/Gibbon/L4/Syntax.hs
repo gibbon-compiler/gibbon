@@ -210,6 +210,8 @@ data Prim
     | VUpdateP Ty
     | VSnocP Ty
     | VSortP Ty
+    | InPlaceVSnocP Ty
+    | InPlaceVSortP Ty
 
     | ReadPackedFile (Maybe FilePath) TyCon
     | ReadArrayFile (Maybe FilePath) Ty
