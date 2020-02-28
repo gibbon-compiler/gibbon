@@ -30,3 +30,4 @@ examples/**/*.hi
 examples/**/*.o
 demo/*.c
 demo/*.exe
+gibbon-compiler/examples/parallel/data/*.txt
