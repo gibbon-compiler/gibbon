@@ -420,18 +420,6 @@ tests:
     answer-file: examples/parallel/ParAdd1Tree.hs.ans
     failing: [gibbon1]
 
-  # - name: ParKdTree.hs
-  #   dir: examples/parallel
-  #   test-flags: ["--parallel"]
-  #   answer-file: examples/parallel/SeqKdTree.hs.ans
-  #   failing: ["gibbon1", "pointer"]
-
-  - name: SeqKdTree.hs
-    dir: examples/parallel
-    answer-file: examples/parallel/SeqKdTree.hs.ans
-    failing: ["pointer"]
-    skip: true
-
   ## Vector operations
   - name: List.hs
     dir: examples/lists

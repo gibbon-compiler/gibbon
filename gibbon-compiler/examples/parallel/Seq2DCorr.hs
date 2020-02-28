@@ -1,4 +1,4 @@
-module SeqKdTree where
+module Seq2DCorr where
 
 coord :: Int -> (Float, Float) -> Float
 coord axis pt =
@@ -48,7 +48,11 @@ slice i n ls =
 --------------------------------------------------------------------------------
 -- The main algorithm
 
-data KdTree = KdNode Int    -- ^ splitting axis (0 == x, 1 == y)
+data KdTree = KdLeaf Float  -- ^ x coord
+                     Float  -- ^ y coord
+
+            | KdNode Int    -- ^ number of elements in this node
+                     Int    -- ^ splitting axis (0 == x, 1 == y)
                      Float  -- ^ split value
                      Float  -- ^ min_x
                      Float  -- ^ max_x
@@ -56,34 +60,38 @@ data KdTree = KdNode Int    -- ^ splitting axis (0 == x, 1 == y)
                      Float  -- ^ max_y
                      KdTree -- ^ left
                      KdTree -- ^ right
-
-            | KdLeaf Float  -- ^ x coord
-                     Float  -- ^ y coord
   deriving Show
 
 getMinX :: KdTree -> Float
 getMinX tr =
   case tr of
-    KdNode _ _ min_x _ _ _ _ _ -> min_x
-    KdLeaf x _                 -> x
+    KdNode _ _ _ min_x _ _ _ _ _ -> min_x
+    KdLeaf x _                   -> x
 
 getMaxX :: KdTree -> Float
 getMaxX tr =
   case tr of
-    KdNode _ _ _ max_x _ _ _ _ -> max_x
-    KdLeaf x _                 -> x
+    KdNode _ _ _ _ max_x _ _ _ _ -> max_x
+    KdLeaf x _                   -> x
 
 getMinY :: KdTree -> Float
 getMinY tr =
   case tr of
-    KdNode _ _ _ _ min_y _ _ _ -> min_y
-    KdLeaf _ y                 -> y
+    KdNode _ _ _ _ _ min_y _ _ _ -> min_y
+    KdLeaf _ y                   -> y
 
 getMaxY :: KdTree -> Float
 getMaxY tr =
   case tr of
-    KdNode _ _ _ _ _ max_y _ _ -> max_y
-    KdLeaf _ y                 -> y
+    KdNode _ _ _ _ _ _ max_y _ _ -> max_y
+    KdLeaf _ y                   -> y
+
+getElems :: KdTree -> Int
+getElems tr =
+  case tr of
+    KdNode elems _ _ _ _ _ _ _ _ -> elems
+    KdLeaf _ y                   -> 1
+
 
 fromListWithAxis :: Int -> [(Float, Float)] -> KdTree
 fromListWithAxis axis pts =
@@ -103,7 +111,8 @@ fromListWithAxis axis pts =
              max_x      = max (getMaxX left_tr) (getMaxX right_tr)
              min_y      = min (getMinY left_tr) (getMinY right_tr)
              max_y      = max (getMaxY left_tr) (getMaxY right_tr)
-         in KdNode axis (coord axis pivot) min_x max_x min_y max_y left_tr right_tr
+             total_elems= (getElems left_tr) + (getElems right_tr)
+         in KdNode total_elems axis (coord axis pivot) min_x max_x min_y max_y left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
 fromList :: [(Float, Float)] -> KdTree
@@ -155,7 +164,7 @@ sumKdTree :: KdTree -> Float
 sumKdTree tr =
   case tr of
     KdLeaf x y -> x .+. y
-    KdNode _ _ _ _ _ _ left right ->
+    KdNode _ _ _ _ _ _ _ left right ->
       let o = sumKdTree left
           p = sumKdTree right
       in o .+. p
@@ -184,15 +193,15 @@ dist a b =
 
 
 -- | Two point correlation
-countCorr :: Int -> (Float, Float) -> Float -> KdTree -> Int
-countCorr depth probe radius tr =
+countCorr :: (Float, Float) -> Float -> KdTree -> Int
+countCorr probe radius tr =
   case tr of
     KdLeaf x y ->
       if (dist probe (x, y)) .<. (radius .*. radius)
       then 1
       else 0
 
-    KdNode axis split_val min_x max_x min_y max_y left right ->
+    KdNode elems axis split_val min_x max_x min_y max_y left right ->
       -- Ported over from ASTBenchmarks
       let center_x  = (min_x .+. max_x) ./. 2.0
           center_y  = (min_y .+. max_y) ./. 2.0
@@ -203,8 +212,8 @@ countCorr depth probe radius tr =
           sum       = (d_x .*. d_x) .+. (d_y .*. d_y)
           boxsum    = (boxdist_x .*. boxdist_x) .+. (boxdist_y .*. boxdist_y)
       in if (sum .-. boxsum) .<. (radius .*. radius)
-         then let n1 = countCorr (depth+1) probe radius left
-                  n2 = countCorr (depth+1) probe radius right
+         then let n1 = countCorr probe radius left
+                  n2 = countCorr probe radius right
               in n1 + n2
          else 0
 
@@ -217,8 +226,6 @@ gibbon_main =
         radius  = intToFloat n
         tr      = fromList pts
         i       = rand
-        j       = mod i n
+        j       = (mod i n) - 1
         probe   = vnth j pts
-    in iterate (countCorr 0 probe radius tr)
-    -- in iterate (sumKdTree tr)
-    -- in iterate (sumList pts)
+    in iterate (countCorr probe radius tr)
