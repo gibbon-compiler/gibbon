@@ -1197,8 +1197,8 @@ primRetTy p =
     VUpdateP ty -> ListTy ty
     VSnocP ty   -> ListTy ty
     VSortP ty   -> ListTy ty
-    InPlaceVSnocP{} -> voidTy
-    InPlaceVSortP{} -> voidTy
+    InPlaceVSnocP ty -> ListTy ty
+    InPlaceVSortP ty -> ListTy ty
     PrintInt -> IntTy
     PrintSym -> SymTy
     ReadInt  -> IntTy

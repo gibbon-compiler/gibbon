@@ -88,13 +88,24 @@ interp rc _ddefs fenv = go M.empty
             applySortP env vals fp
 
           LetE (_,_,_, PrimAppE (InPlaceVSortP{}) [ls, VarE fp]) bod -> do
-            v@(VList vals) <- go env ls
+            old_v@(VList vals) <- go env ls
             val <- applySortP env vals fp
             -- go (M.insert )
-            let mp = M.filter (== v) env
+            let mp = M.filter (== old_v) env
             case M.keys mp of
               [one] -> go (M.insert one val env) bod
               [] -> go env bod
+              _  -> error "L1.Interp: InPlaceSortP"
+
+          LetE (_,_,_, PrimAppE (InPlaceVSnocP{}) [ls, arg]) bod -> do
+            old_v@(VList vals) <- go env ls
+            v <- go env arg
+            let new_ls = VList (vals ++ [v])
+            -- go (M.insert )
+            let mp = M.filter (== old_v) env
+            case M.keys mp of
+              [one] -> dbgTraceIt (sdoc (M.insert one new_ls env)) $ go (M.insert one new_ls env) bod
+              [] -> dbgTraceIt ("here") $ go env bod
               _  -> error "L1.Interp: InPlaceSortP"
 
           PrimAppE p ls -> do args <- mapM (go env) ls

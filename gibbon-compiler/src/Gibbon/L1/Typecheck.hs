@@ -82,6 +82,7 @@ tcExp ddfs env exp =
       -- Special case because we can't lookup the type of the function pointer
       tys <- case pr of
                VSortP{} -> mapM go (init es)
+               InPlaceVSortP{} -> mapM go (init es)
                _ -> mapM go es
 
       let len0 = checkLen exp pr 0 es
@@ -333,8 +334,7 @@ tcExp ddfs env exp =
           checkLists ty (ListTy ty)
 
         InPlaceVSnocP ty -> do
-          _ <- go (PrimAppE (VSnocP ty) es)
-          pure voidTy
+          go (PrimAppE (VSnocP ty) es)
 
         -- Given that the first argument is a list of type (ListTy t),
         -- ensure that the 2nd argument is function reference of type:
@@ -357,8 +357,7 @@ tcExp ddfs env exp =
             oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
         InPlaceVSortP ty -> do
-          _ <- go (PrimAppE (VSortP ty) es)
-          pure voidTy
+          go (PrimAppE (VSortP ty) es)
 
         IntHashEmpty  -> throwError $ GenericTC "IntHashEmpty not handled." exp
         IntHashInsert -> throwError $ GenericTC "IntHashEmpty not handled." exp

@@ -175,6 +175,7 @@ tcExp isPacked ddfs env exp =
       -- Special case because we can't lookup the type of the function pointer
       let es' = case pr of
                   VSortP{} -> init es
+                  InPlaceVSortP{} -> init es
                   _ -> es
       tys <- mapM go es'
       let len0 = checkLen exp pr 0 es
@@ -406,8 +407,7 @@ tcExp isPacked ddfs env exp =
           pure (ListTy ty)
 
         InPlaceVSnocP ty -> do
-          _ <- go (PrimAppE (VSnocP ty) es)
-          pure voidTy
+          go (PrimAppE (VSnocP ty) es)
 
         VSortP ty -> do
           case (es !! 1) of
@@ -429,8 +429,7 @@ tcExp isPacked ddfs env exp =
             oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
         InPlaceVSortP ty -> do
-          _ <- go (PrimAppE (VSortP ty) es)
-          pure voidTy
+          go (PrimAppE (VSortP ty) es)
 
         IntHashEmpty  -> error "L3.Typecheck: IntHashEmpty not handled."
         IntHashInsert -> error "L3.Typecheck: IntHashInsert not handled."

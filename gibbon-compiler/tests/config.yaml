@@ -438,6 +438,11 @@ tests:
     answer-file: examples/lists/List.hs.ans
     failing: ["pointer"]
 
+  - name: InPlaceList.hs
+    dir: examples/lists
+    answer-file: examples/lists/List.hs.ans
+    failing: ["pointer"]
+
   - name: Sort.hs
     dir: examples/lists
     answer-file: examples/lists/Sort.hs.ans

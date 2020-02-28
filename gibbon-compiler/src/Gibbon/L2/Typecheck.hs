@@ -185,6 +185,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                -- Special case because we can't lookup the type of the function pointer
                let es' = case pr of
                            VSortP{} -> init es
+                           InPlaceVSortP{} -> init es
                            _        -> es
                (tys,tstate) <- tcExps ddfs env funs constrs regs tstatein es'
 
@@ -390,8 +391,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    pure (ListTy ty, tstate)
 
                  InPlaceVSnocP ty -> do
-                    (_, tstate) <- recur tstatein (PrimAppE (VSnocP ty) es)
-                    pure (voidTy, tstate)
+                    recur tstatein (PrimAppE (VSnocP ty) es)
 
                  -- Given that the first argument is a list of type (ListTy t),
                  -- ensure that the 2nd argument is function reference of type:
@@ -416,8 +416,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                      oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
                  InPlaceVSortP ty -> do
-                    (_, tstate) <- recur tstatein (PrimAppE (VSortP ty) es)
-                    pure (voidTy, tstate)
+                    recur tstatein (PrimAppE (VSortP ty) es)
 
                  PrintInt -> throwError $ GenericTC "PrintInt not handled" exp
                  PrintSym -> throwError $ GenericTC "PrintSym not handled" exp

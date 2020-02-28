@@ -487,8 +487,8 @@ recoverType ddfs env2 ex =
         VUpdateP ty    -> ListTy ty
         VSnocP ty      -> ListTy ty
         VSortP ty      -> ListTy ty
-        InPlaceVSnocP{}-> voidTy0
-        InPlaceVSortP{}-> voidTy0
+        InPlaceVSnocP ty-> ListTy ty
+        InPlaceVSortP ty-> ListTy ty
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty
         ReadArrayFile _ ty      -> ty
