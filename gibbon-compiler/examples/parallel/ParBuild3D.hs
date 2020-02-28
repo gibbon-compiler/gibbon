@@ -190,5 +190,5 @@ gibbon_main =
         pts = readArrayFile ()
         n       = sizeParam
         radius  = intToFloat n
-        tr      = iterate (fromList pts)
+        tr      = iterate (fromList_par pts)
     in sumKdTree tr

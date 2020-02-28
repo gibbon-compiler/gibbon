@@ -18,3 +18,4 @@ compiled/
 
 .racket_sandbox/*
 gibbon-compiler/build/
+**/gibbon-compiler/examples/parallel/data/

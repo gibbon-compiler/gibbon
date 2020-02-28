@@ -276,4 +276,4 @@ gibbon_main =
         i       = rand
         j       = (mod i n) - 1
         probe   = vnth j pts
-    in iterate (countCorr probe radius tr)
+    in iterate (countCorr_par probe radius tr)
