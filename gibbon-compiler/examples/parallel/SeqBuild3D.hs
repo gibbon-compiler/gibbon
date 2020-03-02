@@ -27,16 +27,16 @@ cmp3 :: (Float, Float, Float) -> (Float, Float, Float) -> Int
 cmp3 a b = floatToInt ((a !!! 2) .-. (b !!! 2))
 
 sort :: Int -> [(Float, Float, Float)] -> [(Float, Float, Float)]
-sort axis ls = vsort ls cmp1
-    -- if axis == 0
-    -- -- This isn't safe, but avoids memory blowup
-    -- then let _ = inplacevsort ls cmp1
-    --      in ls
-    -- else if axis == 1
-    -- then let _ = inplacevsort ls cmp2
-    --      in ls
-    -- else let _ = inplacevsort ls cmp3
-    --      in ls
+sort axis ls =
+    if axis == 0
+    -- This isn't safe, but avoids memory blowup
+    then let _ = inplacevsort ls cmp1
+         in ls
+    else if axis == 1
+    then let _ = inplacevsort ls cmp2
+         in ls
+    else let _ = inplacevsort ls cmp3
+         in ls
 
 --------------------------------------------------------------------------------
 -- The main algorithm
