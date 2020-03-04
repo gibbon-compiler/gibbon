@@ -951,16 +951,6 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                           , C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
                           , C.BlockStm  [cstm| utarray_push_back($id:outV, &($id:tmp)); |]
                           ]
-
-                 InPlaceVSnocP ty   -> do
-                   let [(VarTriv old_ls), val] = rnds
-                       trv = codegenTriv venv val
-                       ty1 = codegenTy ty
-                   tmp <- gensym "tmp"
-                   return [ C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
-                          , C.BlockStm  [cstm| utarray_push_back($id:old_ls, &($id:tmp)); |]
-                          ]
-
                  VSortP ty -> do
                    let [(outV,_)] = bnds
                        [VarTriv old_ls, VarTriv sort_fn] = rnds
@@ -973,6 +963,15 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                           , C.BlockStm [cstm| utarray_new($id:outV,&($id:icd_name)); |]
                           , C.BlockStm [cstm| utarray_inserta($id:outV,$id:old_ls,0); |]
                           , C.BlockStm [cstm| utarray_sort($id:outV, $id:sort_fn); |]
+                          ]
+
+                 InPlaceVSnocP ty   -> do
+                   let [(VarTriv old_ls), val] = rnds
+                       trv = codegenTriv venv val
+                       ty1 = codegenTy ty
+                   tmp <- gensym "tmp"
+                   return [ C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
+                          , C.BlockStm  [cstm| utarray_push_back($id:old_ls, &($id:tmp)); |]
                           ]
 
                  InPlaceVSortP _ty -> do

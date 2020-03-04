@@ -1648,7 +1648,7 @@ genCopyFn DDef{tyName, dataCons} = do
                 let packed_vars = map fst $ filter (\(x,ty) -> isPackedTy ty) (zip ys tys)
                     bod_with_ran_nodes = foldr (\(ty,x,y,idx) acc ->
                                                   if ty == CursorTy
-                                                  then LetE (y, [], ty, PrimAppE RequestEndOf [VarE (packed_vars !! idx)]) acc
+                                                  then LetE (y, [], ty, PrimAppE RequestEndOf [VarE (packed_vars !!! idx)]) acc
                                                   else acc)
                                            (DataConE () dcon $ map VarE ys) (L.zip4 tys xs ys ([0..] :: [Int]))
                     bod = foldr (\(ty,x,y,idx) acc ->

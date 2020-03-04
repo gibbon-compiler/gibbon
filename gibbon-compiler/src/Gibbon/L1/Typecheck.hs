@@ -97,14 +97,14 @@ tcExp ddfs env exp =
 
           bool_ops = do
             len2
-            _ <- ensureEqualTy (es !! 0) BoolTy (tys !! 0)
-            _ <- ensureEqualTy (es !! 1) BoolTy (tys !! 1)
+            _ <- ensureEqualTy (es !!! 0) BoolTy (tys !!! 0)
+            _ <- ensureEqualTy (es !!! 1) BoolTy (tys !!! 1)
             pure BoolTy
 
           int_ops = do
             len2
-            _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
-            _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+            _ <- ensureEqualTy (es !!! 0) IntTy (tys !!! 0)
+            _ <- ensureEqualTy (es !!! 1) IntTy (tys !!! 1)
             pure IntTy
 
           float_ops = do
@@ -115,8 +115,8 @@ tcExp ddfs env exp =
 
           int_cmps = do
             len2
-            _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
-            _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+            _ <- ensureEqualTy (es !!! 0) IntTy (tys !!! 0)
+            _ <- ensureEqualTy (es !!! 1) IntTy (tys !!! 1)
             pure BoolTy
 
           float_cmps = do
@@ -156,8 +156,8 @@ tcExp ddfs env exp =
 
         EqSymP -> do
           len2
-          _ <- ensureEqualTy (es !! 0) SymTy (tys !! 0)
-          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
+          _ <- ensureEqualTy (es !!! 0) SymTy (tys !!! 0)
+          _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
           return BoolTy
 
         RandP -> return IntTy
@@ -179,18 +179,18 @@ tcExp ddfs env exp =
 
         SymAppend -> do
           len2
-          _ <- ensureEqualTy (es !! 0) SymTy (tys !! 0)
-          _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
+          _ <- ensureEqualTy (es !!! 0) SymTy (tys !!! 0)
+          _ <- ensureEqualTy (es !!! 1) IntTy (tys !!! 1)
           return SymTy
 
         PrintInt -> do
           len1
-          _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
+          _ <- ensureEqualTy (es !!! 0) IntTy (tys !!! 0)
           return IntTy
 
         PrintSym -> do
           len1
-          _ <- ensureEqualTy (es !! 0) SymTy (tys !! 0)
+          _ <- ensureEqualTy (es !!! 0) SymTy (tys !!! 0)
           return IntTy
 
         ReadInt -> do
@@ -203,14 +203,14 @@ tcExp ddfs env exp =
 
         SymSetInsert -> do
           len2
-          _ <- ensureEqualTy (es !! 0) SymSetTy (tys !! 0)
-          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
+          _ <- ensureEqualTy (es !!! 0) SymSetTy (tys !!! 0)
+          _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
           return SymSetTy
 
         SymSetContains -> do
           len2
-          _ <- ensureEqualTy (es !! 0) SymSetTy (tys !! 0)
-          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
+          _ <- ensureEqualTy (es !!! 0) SymSetTy (tys !!! 0)
+          _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
           return BoolTy
 
         SymHashEmpty -> do
@@ -219,15 +219,15 @@ tcExp ddfs env exp =
 
         SymHashInsert -> do
           len3
-          _ <- ensureEqualTy (es !! 0) SymHashTy (tys !! 0)
-          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
-          _ <- ensureEqualTy (es !! 2) SymTy (tys !! 2)
+          _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
+          _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+          _ <- ensureEqualTy (es !!! 2) SymTy (tys !!! 2)
           return SymHashTy
 
         SymHashLookup -> do
           len2
-          _ <- ensureEqualTy (es !! 0) SymHashTy (tys !! 0)
-          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
+          _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
+          _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
           return SymTy
 
         DictEmptyP ty -> do
@@ -248,7 +248,7 @@ tcExp ddfs env exp =
                                    _ <- ensureEqualTy exp ty v
                                    _ <- ensureEqualTy exp ty dty
                                    ensureArenaScope exp env ar
-                                   case es !! 0 of
+                                   case es !!! 0 of
                                      (VarE var) -> do ensureArenaScope exp env $ Just var
                                                       return $ SymDictTy (Just var) ty
                                      _ -> throwError $ GenericTC "Expected arena variable argument" exp
@@ -295,10 +295,11 @@ tcExp ddfs env exp =
 
         RequestEndOf -> do
           len1
-          case (es !! 0) of
-            VarE{} -> if isPackedTy (tys !! 0)
-                      then return CursorTy
-                      else throwError $ GenericTC "Expected PackedTy" exp
+          case (es !!! 0) of
+            VarE{} -> return CursorTy
+                -- if isPackedTy (tys !!! 0)
+                -- then return CursorTy
+                -- else throwError $ GenericTC "Expected PackedTy" exp
             _ -> throwError $ GenericTC "Expected a variable argument" exp
 
         VEmptyP ty -> do
@@ -479,7 +480,8 @@ tcExp ddfs env exp =
     Ext (BenchE fn tyapps args _b) -> do
       go (AppE fn tyapps args)
 
-    Ext (AddFixed{})-> throwError $ GenericTC "AddFixed not handled." exp
+    Ext (AddFixed{})-> -- throwError $ GenericTC "AddFixed not handled." exp
+      pure IntTy -- pure CursorTy
 
     MapE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc exp
     FoldE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc exp
@@ -586,7 +588,7 @@ lookupVar env var exp =
 
 
 tcProj :: (Out l) => PreExp e () (UrTy ()) -> Int -> (UrTy l) -> TcM (UrTy l) (PreExp e () (UrTy ()))
-tcProj _ i (ProdTy tys) = return $ tys !! i
+tcProj _ i (ProdTy tys) = return $ tys !!! i
 tcProj e _i ty = throwError $ GenericTC ("Projection from non-tuple type " ++ (sdoc ty)) e
 
 
