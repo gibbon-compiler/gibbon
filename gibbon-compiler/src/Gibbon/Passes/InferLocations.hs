@@ -603,7 +603,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
     IsBigE{} -> error "inferExp: IsBigE not handled."
 
     LitE n  -> return (LitE n, IntTy, [])
-    FloatE n-> return (FloatE n, IntTy, [])
+    FloatE n-> return (FloatE n, FloatTy, [])
 
     LitSymE s -> return (LitSymE s, SymTy, [])
 

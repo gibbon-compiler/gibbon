@@ -401,7 +401,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
           Ext (LetLocE v rhs (FloatE n)) -> do
                  tmp <- gensym "fltLitTail"
-                 let e = Ext (LetLocE v rhs (LetE (tmp,[],IntTy,FloatE n) (VarE tmp)))
+                 let e = Ext (LetLocE v rhs (LetE (tmp,[],FloatTy,FloatE n) (VarE tmp)))
                  exp fns retlocs eor lenv afterenv env2 e
 
           Ext (LetLocE v (StartOfLE r) e) -> do
