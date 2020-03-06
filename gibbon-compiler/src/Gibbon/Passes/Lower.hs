@@ -577,18 +577,9 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE (v,_,t,rhs) bod | isTrivial' rhs ->
       T.LetTrivT (v,typ t, triv sym_tbl "<internal error2>" rhs) <$> tail sym_tbl bod
 
-    -- TWO OPTIONS HERE: we could push equality prims into the target lang.
-    -- Or we could map directly onto the IfEqT form:
-    -- L3.IfE (L3.PrimAppE L3.EqP __ ) b c -> __
-
-    IfE a b c       -> do b' <- tail sym_tbl b
-                          c' <- tail sym_tbl c
-                          lbl <- gensym "switch"
-                          return $ T.Switch lbl (triv sym_tbl "if test" a)
-                                      -- If we are treating the boolean as a tag, then tag "0" is false
-                                      (T.IntAlts [(0, c')])
-                                      -- And tag "1" is true:
-                                      (Just b')
+    IfE a b c -> do b' <- tail sym_tbl b
+                    c' <- tail sym_tbl c
+                    return $ T.IfT (triv sym_tbl "if test" a) b' c'
 
     LetE (vr, _, ty, (L3.TimeIt rhs _ flg)) bod ->
         do rhs' <- tail sym_tbl rhs
