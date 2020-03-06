@@ -111,7 +111,7 @@ interp rc _ddefs fenv = go M.empty
           PrimAppE p ls -> do args <- mapM (go env) ls
                               return $ applyPrim rc p args
           ProjE ix ex   -> do VProd ls <- go env ex
-                              return $ ls !! ix
+                              return $ ls !!! ix
 
           AppE f _ ls -> do ls' <- mapM (go env) ls
                             case M.lookup f fenv of
@@ -268,7 +268,7 @@ applyPrim rc p ls =
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
    (ReadArrayFile{},[]) -> VList []
    (VEmptyP _,[]) -> VList []
-   (VNthP _,[VInt n, VList ls]) -> ls !! n
+   (VNthP _,[VInt n, VList ls]) -> ls !!! n
    (VLengthP _,[VList ls]) -> VInt (length ls)
    (VUpdateP _,[VList ls, VInt i, v]) -> if length ls < i
                                          then error $ "L1.Interp: VUpdate"

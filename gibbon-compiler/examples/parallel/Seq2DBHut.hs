@@ -336,8 +336,12 @@ check :: [(Float, Float, Float, Float, Float)] -> Float
 check particles =
   let -- global constant
       nCheck = 10.0
-      err = check0 particles 0 (floatToInt nCheck) 0.0
-  in err ./. nCheck
+      len = vlength particles in
+  if len == 0
+  then (intToFloat(-1))
+  else
+    let err = check0 particles 0 (floatToInt nCheck) 0.0
+    in err ./. nCheck
 
 check0 :: [(Float, Float, Float, Float, Float)] -> Int -> Int -> Float -> Float
 check0 particles idx stop err =
