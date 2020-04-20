@@ -38,14 +38,6 @@ tcExp isPacked ddfs env exp =
           ensureEqualTyModCursor exp vrhs (scalarToTy s)
           return CursorTy
 
-        -- Add a constant offset to a cursor variable
-        AddCursor v rhs -> do
-          vty  <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
-          vrhs <- go rhs
-          ensureEqualTyModCursor exp vrhs IntTy
-          return CursorTy
-
         -- One cursor in, (tag,cursor) out
         -- QUESTION: what should be the type of the tag ?  It's just an Int for now
         ReadTag v -> do
@@ -57,6 +49,38 @@ tcExp isPacked ddfs env exp =
         WriteTag _dcon v -> do
           vty  <- lookupVar env v exp
           ensureEqualTyModCursor exp vty CursorTy
+          return CursorTy
+
+        ReadCursor v -> do
+          vty <- lookupVar env v exp
+          ensureEqualTyModCursor exp vty CursorTy
+          return $ ProdTy [CursorTy, CursorTy]
+
+        WriteCursor cur val -> do
+          curty  <- lookupVar env cur exp
+          ensureEqualTyModCursor exp curty CursorTy
+          valty <- go val
+          ensureEqualTyModCursor exp valty CursorTy
+          return CursorTy
+
+        ReadList v ty -> do
+          vty <- lookupVar env v exp
+          ensureEqualTyModCursor exp vty CursorTy
+          return $ ProdTy [ListTy ty, CursorTy]
+
+        WriteList cur val el_ty -> do
+          curty  <- lookupVar env cur exp
+          ensureEqualTyModCursor exp curty CursorTy
+          valty <- go val
+          ensureEqualTyModCursor exp valty (ListTy el_ty)
+          return CursorTy
+
+        -- Add a constant offset to a cursor variable
+        AddCursor v rhs -> do
+          vty  <- lookupVar env v exp
+          ensureEqualTyModCursor exp vty CursorTy
+          vrhs <- go rhs
+          ensureEqualTyModCursor exp vrhs IntTy
           return CursorTy
 
         -- Create a new buffer, and return a cursor
@@ -91,18 +115,6 @@ tcExp isPacked ddfs env exp =
           cty <- lookupVar env cur exp
           ensureEqualTyModCursor exp cty CursorTy
           return IntTy
-
-        ReadCursor v -> do
-          vty <- lookupVar env v exp
-          ensureEqualTyModCursor exp vty CursorTy
-          return $ ProdTy [CursorTy, CursorTy]
-
-        WriteCursor cur val -> do
-          curty  <- lookupVar env cur exp
-          ensureEqualTyModCursor exp curty CursorTy
-          valty <- go val
-          ensureEqualTyModCursor exp valty CursorTy
-          return CursorTy
 
         BumpRefCount end_r1 end_r2 -> do
           end_r1_ty  <- lookupVar env end_r1 exp

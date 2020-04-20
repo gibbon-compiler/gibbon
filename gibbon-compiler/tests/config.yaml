@@ -436,6 +436,11 @@ tests:
     answer-file: examples/lists/Sort.hs.ans
     failing: ["pointer"]
 
+  - name: DataList.hs
+    dir: examples/lists
+    answer-file: examples/lists/DataList.hs.ans
+    failing: ["pointer", "interp1"]
+
   ## AST benchmarks
   - name: C1.hs
     dir: examples/ast

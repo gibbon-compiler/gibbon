@@ -40,7 +40,7 @@ genDcons (x:xs) tail fields = case x of
     T.LetCallT False [(ptr, T.PtrTy), (t, T.CursorTy)] (mkUnpackerName tyCons) [(T.VarTriv tail)]
       <$> genDcons xs t (fields ++ [(T.CursorTy, T.VarTriv ptr)])
 
-  -- Int, Sym or Bool
+  -- Int, Float, Sym or Bool
   _ | isScalarTy x ->  do
     val  <- gensym "val"
     t    <- gensym "tail"
@@ -48,12 +48,20 @@ genDcons (x:xs) tail fields = case x of
     T.LetPrimCallT [(val, l4_ty), (t, T.CursorTy)] (T.ReadScalar (mkScalar x)) [(T.VarTriv tail)]
       <$> genDcons xs t (fields ++ [(l4_ty, T.VarTriv val)])
 
-  -- Indirection, don't do anything
+  ListTy el_ty -> do
+    val <- gensym "val"
+    t   <- gensym "tail"
+    let l4_ty = T.fromL3Ty el_ty
+    T.LetPrimCallT [(val, T.ListTy l4_ty), (t, T.CursorTy)] T.ReadList [(T.VarTriv tail)]
+      <$> genDcons xs t (fields ++ [(l4_ty, T.VarTriv val)])
+
+  -- Indirection or redirection pointer
   CursorTy -> do
     next <- gensym "next"
     afternext <- gensym "afternext"
+    let l4_ty = T.fromL3Ty x
     T.LetPrimCallT [(next, T.CursorTy),(afternext,T.CursorTy)] T.ReadCursor [(T.VarTriv tail)] <$>
-      genDcons xs afternext fields
+      genDcons xs afternext (fields ++ [(l4_ty, T.VarTriv next)])
 
   _ -> error $ "genDcons: FIXME " ++ show x
 
@@ -153,6 +161,15 @@ genDconsPrinter (x:xs) tail =
          maybeSpace <$>
           genDconsPrinter xs t
 
+    ListTy el_ty ->  do
+      val  <- gensym "val"
+      t    <- gensym "tail"
+      let l4_ty = T.fromL3Ty el_ty
+      T.LetPrimCallT [(val, T.ListTy l4_ty), (t, T.CursorTy)] T.ReadList [(T.VarTriv tail)] <$>
+        printTy False x [T.VarTriv val] <$>
+         maybeSpace <$>
+          genDconsPrinter xs t
+
     _ -> error "FINISHME: genDconsPrinter"
 
  where
@@ -222,7 +239,7 @@ printTy pkd ty trvs =
                                                  (mkUnpackerName constr) trvs $
                                                  T.LetCallT False [] (mkPrinterName constr) [T.VarTriv unpkd] tl)
                                     else T.LetCallT False [] (mkPrinterName constr) trvs
-    (ListTy ty', [_one])        -> sandwich (printTy pkd ty' trvs) "List"
+    (ListTy{}, [_one]) -> T.LetPrimCallT [] (T.PrintString "<list>") []
 
     (BoolTy, [trv]) ->
       let prntBool m = T.LetPrimCallT [] (T.PrintString m) []
@@ -403,6 +420,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
               ReadScalar{}   -> syms
               ReadTag{}      -> syms
               WriteTag{}     -> syms
+              ReadList{}     -> syms
+              WriteList _ ex _ -> go ex
               NewBuffer{}    -> syms
               ScopedBuffer{} -> syms
               InitSizeOfBuffer{} -> syms
@@ -713,6 +732,20 @@ lower Prog{fundefs,ddefs,mainExp} = do
                  bod
       T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy)] T.ReadCursor [T.VarTriv c] <$>
         tail sym_tbl bod'
+
+    LetE(v,_,_,  (Ext (ReadList c el_ty))) bod -> do
+      vtmp <- gensym $ toVar "tmplist"
+      ctmp <- gensym $ toVar "tmpafterlist"
+      -- Here we lamely chase down all the tuple references and make them variables:
+      let bod' = L3.substE (ProjE 0 (VarE v)) (VarE vtmp) $
+                 L3.substE (ProjE 1 (VarE v)) (VarE ctmp)
+                 bod
+      T.LetPrimCallT [(vtmp,T.ListTy (T.fromL3Ty el_ty)),(ctmp,T.CursorTy)] T.ReadList [T.VarTriv c] <$>
+        tail sym_tbl bod'
+
+    LetE (v, _, _,  (Ext (WriteList cur e _el_ty))) bod ->
+      T.LetPrimCallT [(v,T.CursorTy)] T.WriteList [triv sym_tbl "WriteList arg" e, T.VarTriv cur] <$>
+         tail sym_tbl bod
 
     LetE (v, _, _,  (Ext (WriteCursor cur e))) bod ->
       T.LetPrimCallT [(v,T.CursorTy)] T.WriteCursor [triv sym_tbl "WriteCursor arg" e, T.VarTriv cur] <$>

@@ -51,11 +51,16 @@ type Ty3 = UrTy ()
 
 -- | The extension that turns L1 into L3.
 data E3Ext loc dec =
-    ReadScalar  Scalar Var                            -- ^ One cursor in, (int, cursor') out
+    ReadScalar  Scalar Var                        -- ^ One cursor in, (int, cursor') out
   | WriteScalar Scalar Var (PreExp E3Ext loc dec) -- ^ Write int at cursor, and return a cursor
-  | AddCursor Var (PreExp E3Ext loc dec) -- ^ Add a constant offset to a cursor variable
-  | ReadTag   Var                  -- ^ One cursor in, (tag,cursor) out
-  | WriteTag  DataCon Var          -- ^ Write Tag at Cursor, and return a cursor
+  | ReadTag Var                            -- ^ One cursor in, (tag,cursor) out
+  | WriteTag DataCon Var                   -- ^ Write Tag at Cursor, and return a cursor
+  | ReadCursor Var                         -- ^ Reads and returns the cursor at Var
+  | WriteCursor Var (PreExp E3Ext loc dec) -- ^ Write a cursor, and return a cursor
+  | ReadList Var dec                       -- ^ Read a pointer to UT_array*. The type is
+                                           -- only used for typechecking, and not during codegen.
+  | WriteList Var (PreExp E3Ext loc dec) dec -- ^ Write a pointer to UT_array*
+  | AddCursor Var (PreExp E3Ext loc dec)     -- ^ Add a constant offset to a cursor variable
   | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
   | ScopedBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
   | InitSizeOfBuffer L2.Multiplicity  -- ^ Returns the initial buffer size for a specific multiplicity
@@ -64,8 +69,6 @@ data E3Ext loc dec =
                                    --   we'll probably represent (sizeof x) as (end_x - start_x) / INT
   | SizeOfScalar Var               -- ^ sizeof(var)
   | BoundsCheck Int Var Var        -- ^ Bytes required, region, write cursor
-  | ReadCursor Var                 -- ^ Reads and returns the cursor at Var
-  | WriteCursor Var (PreExp E3Ext loc dec) -- ^ Write a cursor, and return a cursor
   | BumpRefCount Var Var           -- ^ Given an end-of-region ptr, bump it's refcount.
                                    --   Return the updated count (optional).
   | BumpArenaRefCount Var Var      -- ^ Given an arena and end-of-region ptr, add a
@@ -83,9 +86,13 @@ instance FreeVars (E3Ext l d) where
     case e of
       ReadScalar _  v     -> S.singleton v
       WriteScalar _ v ex  -> S.insert v (gFreeVars ex)
-      AddCursor v ex -> S.insert v (gFreeVars ex)
       ReadTag v      -> S.singleton v
       WriteTag _ v   -> S.singleton v
+      ReadCursor v       -> S.singleton v
+      WriteCursor c ex   -> S.insert c (gFreeVars ex)
+      ReadList v _       -> S.singleton v
+      WriteList c ex  _  -> S.insert c (gFreeVars ex)
+      AddCursor v ex -> S.insert v (gFreeVars ex)
       NewBuffer{}    -> S.empty
       ScopedBuffer{} -> S.empty
       InitSizeOfBuffer{} -> S.empty
@@ -93,8 +100,6 @@ instance FreeVars (E3Ext l d) where
       SizeOfPacked c1 c2 -> S.fromList [c1, c2]
       SizeOfScalar v     -> S.singleton v
       BoundsCheck{}      -> S.empty
-      ReadCursor v       -> S.singleton v
-      WriteCursor c ex   -> S.insert c (gFreeVars ex)
       BumpRefCount r1 r2 -> S.fromList [r1, r2]
       NullCursor         -> S.empty
       BumpArenaRefCount v w -> S.fromList [v, w]
@@ -147,9 +152,13 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
     case ext of
       ReadScalar s v     -> ReadScalar s (go v)
       WriteScalar s v bod-> WriteScalar s (go v) (go bod)
-      AddCursor v bod    -> AddCursor (go v) (go bod)
+      ReadCursor v       -> ReadCursor (go v)
+      WriteCursor v bod  -> WriteCursor (go v) (go bod)
+      ReadList v el_ty      -> ReadList (go v) el_ty
+      WriteList v bod el_ty -> WriteList (go v) (go bod) el_ty
       ReadTag v          -> ReadTag (go v)
       WriteTag dcon v    -> WriteTag dcon (go v)
+      AddCursor v bod    -> AddCursor (go v) (go bod)
       NewBuffer{}        -> ext
       ScopedBuffer{}     -> ext
       InitSizeOfBuffer{} -> ext
@@ -157,8 +166,6 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       SizeOfPacked a b   -> SizeOfPacked (go a) (go b)
       SizeOfScalar v     -> SizeOfScalar (go v)
       BoundsCheck i a b  -> BoundsCheck i (go a) (go b)
-      ReadCursor v       -> ReadCursor (go v)
-      WriteCursor v bod  -> WriteCursor (go v) (go bod)
       BumpRefCount a b   -> BumpRefCount (go a) (go b)
       BumpArenaRefCount v w -> BumpArenaRefCount (go v) (go w)
       NullCursor         -> ext

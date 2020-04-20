@@ -455,10 +455,16 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
                  LetE (d',[], CursorTy, projEnds rnd') <$>
                    go2 d' rst
 
-              -- Int, Sym, or Bool
+              -- Int, Float, Sym, or Bool
               _ | isScalarTy ty -> do
                 rnd' <- cursorizeExp ddfs fundefs denv tenv senv rnd
                 LetE (d',[], CursorTy, Ext $ WriteScalar (mkScalar ty) d rnd') <$>
+                  go2 d' rst
+
+              -- Write a pointer UT_array*
+              ListTy el_ty -> do
+                rnd' <- cursorizeExp ddfs fundefs denv tenv senv rnd
+                LetE (d',[], CursorTy, Ext $ WriteList d rnd' (stripTyLocs el_ty)) <$>
                   go2 d' rst
 
               CursorTy -> do
@@ -1052,7 +1058,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
             ([],[]) -> processRhs denv tenv
             ((v,loc):rst_vlocs, ty:rst_tys) ->
               case ty of
-                -- Int, Sym, or Bool
+                -- Int, Float, Sym, or Bool
                 _ | isScalarTy ty -> do
                   (tenv', binds) <- scalarBinds ty v loc tenv
                   if canBind
@@ -1069,6 +1075,29 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                     let denv' = M.insertWith (++) loc binds denv
                     go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
 
+                ListTy el_ty -> do
+                  tmp <- gensym "read_list_tuple"
+                  let tenv' = M.union (M.fromList [(tmp     , ProdTy [ListTy el_ty, CursorTy]),
+                                                   (v       , ListTy el_ty),
+                                                   (toEndV v, CursorTy)])
+                              tenv
+                      ty'   = stripTyLocs ty
+                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadList loc (stripTyLocs el_ty)),
+                               (v       , [], ty'     , ProjE 0 (VarE tmp)),
+                               (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
+                  if canBind
+                  then do
+                    -- If the location exists in the environment, it indicates that the
+                    -- corresponding variable was also bound and we shouldn't create duplicate
+                    -- bindings (checked in the LetLocE cases).
+                    let binds' = (loc,[],CursorTy, VarE cur):binds
+                        tenv'' = M.insert loc CursorTy tenv'
+                    bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv''
+                    return $ mkLets binds' bod
+                  else do
+                    -- Cannot read this int. Instead, we add it to DepEnv.
+                    let denv' = M.insertWith (++) loc binds denv
+                    go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
 
                 PackedTy{} -> do
                   let tenv' = M.insert v CursorTy tenv

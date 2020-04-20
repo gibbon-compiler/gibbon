@@ -242,6 +242,9 @@ data Prim
     | ReadScalar L3.Scalar
     | WriteScalar L3.Scalar
 
+    | ReadList
+    | WriteList
+
     | BoundsCheck
 
     | BumpRefCount
@@ -340,17 +343,17 @@ withTail (tl0,retty) fn =
 fromL3Ty :: L3.Ty3 -> Ty
 fromL3Ty ty =
   case ty of
-    L.IntTy -> IntTy
+    L.IntTy   -> IntTy
     L.FloatTy -> FloatTy
-    L.SymTy -> SymTy
-    L.BoolTy -> BoolTy
+    L.SymTy   -> SymTy
+    L.BoolTy  -> BoolTy
     L.ProdTy tys -> ProdTy $ map fromL3Ty tys
     L.SymDictTy (Just var) t -> SymDictTy var $ fromL3Ty t
     L.ArenaTy    -> ArenaTy
     L.PtrTy      -> PtrTy
     L.CursorTy   -> CursorTy
     -- L.PackedTy{} -> error "fromL3Ty: Cannot convert PackedTy"
-    -- L.ListTy{}   -> error "fromL3Ty: Cannot convert ListTy"
+    L.ListTy el_ty  -> ListTy (fromL3Ty el_ty)
     _ -> IntTy -- [2019.06.10]: CSK, Why do we need this?
 
 
