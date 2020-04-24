@@ -426,7 +426,7 @@ codegenTail venv fenv (LetAllocT lhs vals body) ty sync_deps =
            size = [cexp| sizeof($ty:structTy) |]
            venv' = M.insert lhs PtrTy venv
        tal <- codegenTail venv' fenv body ty sync_deps
-       return$ assn (codegenTy PtrTy) lhs [cexp| ( $ty:structTy *)ALLOC( $size ) |] :
+       return$ assn (codegenTy PtrTy) lhs [cexp| ALLOC( $size ) |] :
                [ C.BlockStm [cstm| (($ty:structTy *)  $id:lhs)->$id:fld = $(codegenTriv venv trv); |]
                | (ix,(_ty,trv)) <- zip [0 :: Int ..] vals
                , let fld = "field"++show ix] ++ tal

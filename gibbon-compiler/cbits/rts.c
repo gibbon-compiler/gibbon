@@ -572,7 +572,7 @@ RegionFooter* trav_to_first_chunk(RegionFooter *footer) {
         fprintf(stderr, "No previous chunk found at seq_no: %d", footer->seq_no);
         return NULL;
     } else {
-        trav_to_first_chunk(footer->prev);
+        trav_to_first_chunk((RegionFooter *) footer->prev);
     }
 }
 
@@ -650,7 +650,7 @@ void free_region(CursorTy end_reg) {
                 // See [Why is it a doubly linked-list?] above
                 RegionFooter *first_chunk = trav_to_first_chunk(elt_footer);
                 if (first_chunk != NULL) {
-                    free_region(first_chunk);
+                    free_region((CursorTy) first_chunk);
                 }
             }
             DL_DELETE(head,elt);
