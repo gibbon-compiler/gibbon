@@ -1076,7 +1076,7 @@ sizeOfTy t =
     FloatTy       -> Just 4
     SymTy         -> Just 4
     BoolTy        -> Just 1
-    ListTy _      -> error "FINISHLISTS"
+    ListTy{}      -> Just 8 -- Always a pointer.
     PtrTy{}       -> Just 8 -- Assuming 64 bit
     CursorTy{}    -> Just 8
     ArenaTy       -> Just 8

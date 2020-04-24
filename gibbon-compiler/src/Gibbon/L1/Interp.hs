@@ -94,8 +94,8 @@ interp rc _ddefs fenv = go M.empty
             let mp = M.filter (== old_v) env
             case M.keys mp of
               [one] -> go (M.insert one val env) bod
-              [] -> go env bod
-              _  -> error "L1.Interp: InPlaceSortP"
+              []    -> error "L1.Interp: InPlaceSortP no accessor found"
+              oth   -> go (M.insert (last oth) val env) bod
 
           LetE (_,_,_, PrimAppE (InPlaceVSnocP{}) [ls, arg]) bod -> do
             old_v@(VList vals) <- go env ls
@@ -104,9 +104,9 @@ interp rc _ddefs fenv = go M.empty
             -- go (M.insert )
             let mp = M.filter (== old_v) env
             case M.keys mp of
-              [one] -> dbgTraceIt (sdoc (M.insert one new_ls env)) $ go (M.insert one new_ls env) bod
-              [] -> dbgTraceIt ("here") $ go env bod
-              _  -> error "L1.Interp: InPlaceSortP"
+              [one] -> go (M.insert one new_ls env) bod
+              []    -> error "L1.Interp: InPlaceSnocP no accessor found"
+              oth   -> go (M.insert (last oth) new_ls env) bod
 
           PrimAppE p ls -> do args <- mapM (go env) ls
                               return $ applyPrim rc p args

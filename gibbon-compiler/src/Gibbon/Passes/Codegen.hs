@@ -284,11 +284,7 @@ makeStructs [] = []
 makeStructs (ts : ts') =
   case ts of
     [ListTy ty] ->
-        let ty_name  = case ty of
-                         IntTy      -> makeName' ty
-                         ProdTy tys -> makeName tys
-                         _ -> "makeStructs: Lists of type " ++ sdoc ty ++ " not allowed."
-            icd_name = ty_name ++ "_icd"
+        let (ty_name, icd_name) = makeIcdName ty
             icd_ty   = [cty|typename UT_icd|]
             icd      = [cedecl| $ty:icd_ty $id:icd_name = {sizeof($id:ty_name),NULL, NULL, NULL} ;|]
         in icd : makeStructs ([ty]:ts')
@@ -720,6 +716,17 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                  [ C.BlockStm [cstm| *( $ty:(codegenTy CursorTy)  *)($id:cur) = $(codegenTriv venv val); |]
                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + 8; |] ]
 
+                 WriteList    -> let [(outV,CursorTy)] = bnds
+                                     [val,(VarTriv cur)] = rnds
+                                     ls_ty = ListTy (ProdTy []) in pure
+                                  [ C.BlockStm [cstm| *( $ty:(codegenTy ls_ty)  *)($id:cur) = $(codegenTriv venv val); |]
+                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy ls_ty) ); |] ]
+
+                 ReadList     -> let [(valV,valTy),(curV,CursorTy)] = bnds
+                                     [(VarTriv cur)] = rnds in pure
+                                     [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
+                                     , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:curV = ($id:cur) + sizeof( $ty:(codegenTy valTy)); |] ]
+
                  BumpRefCount -> let [(VarTriv end_r1), (VarTriv end_r2)] = rnds
                                  in pure [ C.BlockStm [cstm| bump_ref_count($id:end_r1, $id:end_r2); |] ]
 
@@ -821,11 +828,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                            let filename = case mfile of
                                             Just f  -> [cexp| $string:f |] -- Fixed at compile time.
                                             Nothing -> [cexp| read_arrayfile_param() |] -- Will be set by command line arg.
-                           let ty_name  = case ty of
-                                            IntTy      -> makeName' ty
-                                            ProdTy tys -> makeName tys
-                                            _ -> error $ "ReadArrayFile: Lists of type " ++ sdoc ty ++ " not allowed."
-                               icd_name = ty_name ++ "_icd"
+                           let (_, icd_name) = makeIcdName ty
                                parse_in_c t = case t of
                                                 IntTy   -> "%lld"
                                                 FloatTy -> "%f"
@@ -907,11 +910,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  FreeSymTable -> return [C.BlockStm [cstm| free_symtable(); |]]
 
                  VEmptyP ty  -> do
-                   let ty_name  = case ty of
-                         IntTy      -> makeName' ty
-                         ProdTy tys -> makeName tys
-                         _ -> "VEmptyP: Lists of type " ++ sdoc ty ++ " not allowed."
-                       icd_name = ty_name ++ "_icd"
+                   let (_, icd_name) = makeIcdName ty
                        [(outV,_)]  = bnds
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
                           , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |] ]
@@ -939,11 +938,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        [(VarTriv old_ls), val] = rnds
                        trv = codegenTriv venv val
                        ty1 = codegenTy ty
-                       ty_name  = case ty of
-                         IntTy      -> makeName' ty
-                         ProdTy tys -> makeName tys
-                         _ -> "codegenTail: Lists of type " ++ sdoc ty ++ " not allowed."
-                       icd_name = ty_name ++ "_icd"
+                       (_, icd_name) = makeIcdName ty
                    tmp <- gensym "tmp"
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
                           , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |]
@@ -954,11 +949,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  VSortP ty -> do
                    let [(outV,_)] = bnds
                        [VarTriv old_ls, VarTriv sort_fn] = rnds
-                       ty_name  = case ty of
-                         IntTy      -> makeName' ty
-                         ProdTy tys -> makeName tys
-                         _ -> "codegenTail: Lists of type " ++ sdoc ty ++ " not allowed."
-                       icd_name = ty_name ++ "_icd"
+                       (_, icd_name) = makeIcdName ty
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
                           , C.BlockStm [cstm| utarray_new($id:outV,&($id:icd_name)); |]
                           , C.BlockStm [cstm| utarray_inserta($id:outV,$id:old_ls,0); |]
@@ -981,11 +972,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  VSliceP ty -> do
                    let [(outV,_)] = bnds
                        [VarTriv old_ls, from, to] = rnds
-                       ty_name  = case ty of
-                         IntTy      -> makeName' ty
-                         ProdTy tys -> makeName tys
-                         _ -> "codegenTail: Lists of type " ++ sdoc ty ++ " not allowed."
-                       icd_name = ty_name ++ "_icd"
+                       (_, icd_name) = makeIcdName ty
                    from_v <- gensym "from"
                    to_v <- gensym "to"
                    len <- gensym "len"
@@ -1096,6 +1083,21 @@ makeName' ChunkTy  = "Chunk"
 makeName' ArenaTy  = "Arena"
 makeName' ListTy{} = "Vector"
 makeName' (ProdTy tys) = "Prod" ++ concatMap makeName' tys
+
+
+makeIcdName :: Ty -> (String, String)
+makeIcdName ty =
+  let ty_name  =
+        case ty of
+          IntTy      -> "IntTy"
+          FloatTy    -> "FloatTy"
+          BoolTy     -> "BoolTy"
+          SymTy      -> "SymTy"
+          ProdTy tys -> makeName tys
+          _ -> "codegenTail: Lists of type " ++ sdoc ty ++ " not allowed."
+      icd_name = ty_name ++ "_icd"
+  in (ty_name, icd_name)
+
 
 mkBlock :: [C.BlockItem] -> C.Stm
 mkBlock ss = C.Block ss noLoc
