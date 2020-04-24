@@ -34,6 +34,7 @@ data GeneralFlag
 -- | Exactly like GHC's ddump flags.
 data DebugFlag
   = Opt_D_Dump_Repair
+  | Opt_D_Dump_ParAlloc
   | Opt_D_DumpToFile
   | Opt_D_Dump_Hs
   deriving (Show, Read, Eq, Ord)
@@ -98,6 +99,8 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
     dflagsParser :: Parser DebugFlag
     dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>
                                             help "Dump some information while running RepairProgram") <|>
+                   flag' Opt_D_Dump_ParAlloc (long "ddump-paralloc" <>
+                                             help "Dump the AST after ParAlloc") <|>
                    flag' Opt_D_DumpToFile (long "ddump-to-file" <>
                                            help "Dump output to files instead of stdout.") <|>
                    flag' Opt_D_Dump_Hs (long "ddump-hs" <>

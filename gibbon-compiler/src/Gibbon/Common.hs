@@ -415,9 +415,10 @@ dumpIfSet cfg flag msg =
 debugFlagSuffix :: DebugFlag -> String
 debugFlagSuffix f =
   case f of
-    Opt_D_Dump_Repair -> "dump-repair"
-    Opt_D_DumpToFile  -> "dump-to-file" -- This would never be used.
-    Opt_D_Dump_Hs     -> "gibbon_hs.hs"
+    Opt_D_Dump_Repair   -> "dump-repair"
+    Opt_D_Dump_ParAlloc -> "dump-paralloc"
+    Opt_D_DumpToFile    -> "dump-to-file" -- This would never be used.
+    Opt_D_Dump_Hs       -> "gibbon_hs.hs"
 
 --------------------------------------------------------------------------------
 -- Some global constants

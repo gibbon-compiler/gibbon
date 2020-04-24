@@ -524,6 +524,7 @@ passes config@Config{dynflags} l1 = do
               l2 <- if gopt Opt_Parallel dynflags
                     then do
                       l2 <- go "parAlloc"     parAlloc   l2
+                      lift $ dumpIfSet config Opt_D_Dump_ParAlloc (pprender l2)
                       l2 <- go "L2.typecheck" L2.tcProg  l2
                       pure l2
                     else (pure l2)
