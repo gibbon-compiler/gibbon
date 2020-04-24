@@ -239,7 +239,11 @@ addRANExp needRANsTyCons ddfs ienv ex =
                 firstPacked = fromJust $ L.findIndex isPackedTy tys
                 haveRANsFor = L.take n $ L.drop firstPacked $ L.map fst vs
                 ienv' = M.union ienv (M.fromList $ zip haveRANsFor ranVars)
-            (:[old_pat]) <$>
+            -- Keep around case clauses that don't have random access nodes;
+            -- AddTraversals runs later to make sure that they compile.
+            -- (:[old_pat]) <$>
+            -- [2020.04.23]: disabling this so that the typechecker compiles.
+            (:[]) <$>
               (toRANDataCon dcon, (L.map (,()) ranVars) ++ vs,) <$> addRANExp needRANsTyCons ddfs ienv' bod
 
 -- | Update data type definitions to include random access nodes.

@@ -286,6 +286,9 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
             (VarE var) ->
                 pure (s1 <> s2, SymDictTy (Just var) ty,
                          PrimAppE pr args_tc)
+            Ext (L _ (VarE var)) ->
+                pure (s1 <> s2, SymDictTy (Just var) ty,
+                         PrimAppE pr args_tc)
             _ -> err $ text "Expected arena variable argument in: " <+> exp_doc
 
         DictInsertP ty -> do
@@ -297,6 +300,9 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           s5 <- unify (args !! 0) ArenaTy a
           case args !! 0 of
             (VarE var) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
+                                       SymDictTy (Just var) ty,
+                                       PrimAppE pr args_tc)
+            Ext (L _ (VarE var)) -> pure (s1 <> s2 <> s3 <> s4 <> s5,
                                        SymDictTy (Just var) ty,
                                        PrimAppE pr args_tc)
             _ -> err $ text "Expected arena variable argument in: " <+> exp_doc

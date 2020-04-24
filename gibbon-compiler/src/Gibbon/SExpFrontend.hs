@@ -437,8 +437,13 @@ exp se =
    Ls3 l "ann" (Ls2 _ "empty-dict" a) (Ls3 _ "SymDict" b ty) -> do
      a' <- exp a
      b' <- exp b
-     unless (a' == b') $ error $ "Expected annotation on SymDict:" ++ show a'
-     pure $ Ext $ L (toLoc l) $ PrimAppE (DictEmptyP $ typ ty) [a']
+     case (a', b') of
+       (Ext (L _ a''), Ext (L _ b'')) -> do
+         unless (a'' == b'') $ error $ "Expected annotation on SymDict:" ++ show a''
+         pure $ Ext $ L (toLoc l) $ PrimAppE (DictEmptyP $ typ ty) [a']
+       _ -> do
+         unless (a' == b') $ error $ "Expected annotation on SymDict:" ++ show a'
+         pure $ Ext $ L (toLoc l) $ PrimAppE (DictEmptyP $ typ ty) [a']
 
    Ls5 l "insert" a d k (Ls3 _ "ann" v ty) -> do
      a' <- exp a
