@@ -129,6 +129,15 @@ tagDataCons ddefs = go allCons
        AppE v l ls | S.member v cons -> do ty <- newMetaTy
                                            DataConE ty (fromVar v) <$> mapM (go cons) ls
                    | otherwise       -> AppE v l <$> mapM (go cons) ls
+
+       SpawnE v _ ls
+                  | S.member v cons -> do
+                      ty <- newMetaTy
+                      DataConE ty (fromVar v) <$> (mapM (go cons) ls)
+       SpawnE v l ls | S.member v cons -> do ty <- newMetaTy
+                                             DataConE ty (fromVar v) <$> mapM (go cons) ls
+                   | otherwise       -> SpawnE v l <$> mapM (go cons) ls
+
        LetE (v,l,t,rhs) bod -> do
          let go' = if S.member v cons
                       then go (S.delete v cons)
@@ -155,8 +164,7 @@ tagDataCons ddefs = go allCons
          e2' <- go cons e2
          b'  <- go cons b
          pure $ FoldE (v1,t1,e1') (v2,t2,e2') b'
-       SpawnE{} -> error "tagDataCons: SpawnE not handled"
-       SyncE{} -> error "tagDataCons: SyncE not handled"
+       SyncE -> pure SyncE
        IsBigE{} -> error "tagDataCons: IsBigE not handled"
        Ext (LambdaE bnds e) -> Ext <$> (LambdaE bnds) <$> (go cons e)
        Ext (PolyAppE a b)   -> do
@@ -425,6 +433,16 @@ exp se =
      Ext <$> L (toLoc l) <$> ProjE (fromIntegral ind) <$> (exp evec)
 
    Ls (A l "par" : es) -> Ext <$> L (toLoc l) <$> Ext <$> ParE0 <$> mapM exp es
+
+   Ls2 l1 "spawn" app -> do
+     appe <- exp app
+     case appe of
+       Ext (L _loc (AppE f locs args)) -> pure $ Ext $ L (toLoc l1) (SpawnE f locs args)
+       (AppE f locs args) -> pure $ Ext $ L (toLoc l1) $ SpawnE f locs args
+       _ -> error $ "Only function calls can be spawn'd. Got: " ++ show app
+
+   Ls (A l1 "sync":[]) -> do
+       pure $ Ext $ L (toLoc l1) SyncE
 
    Ls3 l "letarena" v e -> do
      e' <- exp e
