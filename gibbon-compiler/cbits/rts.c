@@ -574,6 +574,7 @@ RegionFooter* trav_to_first_chunk(RegionFooter *footer) {
     } else {
         trav_to_first_chunk((RegionFooter *) footer->prev);
     }
+    return NULL;
 }
 
 int get_ref_count(CursorTy end_ptr) {
@@ -798,3 +799,7 @@ int main(int argc, char** argv)
 
     return 0;
 }
+
+// -----------------------------------------------------------------------------
+// Program starts here
+// -----------------------------------------------------------------------------

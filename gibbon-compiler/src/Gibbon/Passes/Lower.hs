@@ -140,7 +140,7 @@ genDconsPrinter (x:xs) tail =
         valc <- gensym "valcur"
         T.LetPrimCallT [(val, T.IntTy), (t, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv tail)] <$>
           T.LetTrivT (valc, T.CursorTy, T.VarTriv val) <$>
-          T.LetCallT False [(tmp, T.PtrTy)] (mkPrinterName tyCons) [(T.VarTriv valc)] <$>
+          T.LetCallT False [(tmp, T.CursorTy)] (mkPrinterName tyCons) [(T.VarTriv valc)] <$>
             maybeSpace <$> genDconsPrinter xs t
 
     L3.CursorTy -> do
@@ -212,7 +212,7 @@ genPrinter DDef{tyName, dataCons} = do
                  T.Switch lbl (T.VarTriv tag) alts Nothing
   return T.FunDecl{ T.funName  = mkPrinterName (fromVar tyName),
                     T.funArgs  = [(p, T.CursorTy)],
-                    T.funRetTy = T.PtrTy,
+                    T.funRetTy = T.CursorTy,
                     T.funBody  = bod,
                     T.isPure   = False
                   }

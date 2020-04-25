@@ -419,7 +419,7 @@ compilationCmd C config = (cc config) ++" -std=gnu11 "
                           ++(if pointer then "-D_POINTER " else "")
                           ++(if parallel then "-fcilkplus -D_PARALLEL" else "")
                           ++(optc config)++"  "
-                          ++(if warnc then "" else suppress_warnings)
+                          ++(if warnc then "-Wno-unused-variable -Wall " else suppress_warnings)
   where dflags = dynflags config
         bumpAlloc = gopt Opt_BumpAlloc dflags
         pointer = gopt Opt_Pointer dflags
