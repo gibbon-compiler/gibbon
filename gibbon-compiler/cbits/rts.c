@@ -507,9 +507,17 @@ RegionTy *alloc_region(IntTy size) {
     // Allocate the first chunk
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy start = ALLOC_PACKED(total_size);
+    if (start == NULL) {
+        printf("alloc_region: malloc failed: %lld", total_size);
+        exit(1);
+    }
     CursorTy end = start + size;
 
     RegionTy *reg = malloc(sizeof(RegionTy));
+    if (reg == NULL) {
+        printf("alloc_region: malloc failed: %ld", sizeof(RegionTy));
+        exit(1);
+    }
     reg->refcount = 0;
     reg->start_ptr = start;
     reg->outset = NULL;
@@ -544,6 +552,10 @@ ChunkTy alloc_chunk(CursorTy end_old_chunk) {
 
     // Allocate
     CursorTy start = ALLOC_PACKED(total_size);
+    if (start == NULL) {
+        printf("alloc_chunk: malloc failed: %lld", total_size);
+        exit(1);
+    }
     CursorTy end = start + newsize;
 
     #ifdef DEBUG
