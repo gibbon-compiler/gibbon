@@ -1508,132 +1508,418 @@ CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
         CursorTy cur_fields = out_cur + 1;
         CursorTy cur_tree1  = cur_fields + 44;
 
-        // tree1
-        Array_MassPoint *mpts1 = new_array_masspoint();
-        massPtsInBox(mpts1, &b1, mpts);
-        // print_array_masspoint(mpts1);
+        // Data declarations for the trees
+        CursorCursorCursorProd tree1, tree2, tree3, tree4;
+        Array_MassPoint *mpts1, *mpts2, *mpts3, *mpts4;
+        mpts1 = new_array_masspoint();
+        mpts2 = new_array_masspoint();
+        mpts3 = new_array_masspoint();
+        mpts4 = new_array_masspoint();
+        IntTy schedule;
 
+        // tree1
+        massPtsInBox(mpts1, &b1, mpts);
         IntTy parent_id1 = __cilkrts_get_worker_number();
-        CursorCursorCursorProd tree1 = cilk_spawn buildTree(end_out_reg, cur_tree1, &b1, mpts1);
+        tree1 = cilk_spawn buildTree(end_out_reg, cur_tree1, &b1, mpts1);
         IntTy cont_id1 = __cilkrts_get_worker_number();
 
         if (parent_id1 == cont_id1) {
             // tree1 not stolen
 
             // tree2
-            Array_MassPoint *mpts2 = new_array_masspoint();
             massPtsInBox(mpts2, &b2, mpts);
             // print_array_masspoint(mpts2);
-            CursorCursorCursorProd tree2 = buildTree(tree1.field0, tree1.field2, &b2, mpts2);
+            IntTy parent_id2 = __cilkrts_get_worker_number();
+            tree2 = cilk_spawn buildTree(tree1.field0, tree1.field2, &b2, mpts2);
+            IntTy cont_id2 = __cilkrts_get_worker_number();
 
-            //tree 3
-            Array_MassPoint *mpts3 = new_array_masspoint();
-            massPtsInBox(mpts3, &b3, mpts);
-            // print_array_masspoint(mpts3);
-            CursorCursorCursorProd tree3 = buildTree(tree2.field0, tree2.field2, &b3, mpts3);
+            if (parent_id2 == cont_id2) {
+                // tree2 not stolen
 
-            //tree 4
-            Array_MassPoint *mpts4 = new_array_masspoint();
-            massPtsInBox(mpts4, &b4, mpts);
-            // print_array_masspoint(mpts4);
-            CursorCursorCursorProd tree4 = buildTree(tree3.field0, tree3.field2, &b4, mpts4);
+                //tree 3
+                massPtsInBox(mpts3, &b3, mpts);
+                // print_array_masspoint(mpts3);
+                IntTy parent_id3 = __cilkrts_get_worker_number();
+                tree3 = cilk_spawn buildTree(tree2.field0, tree2.field2, &b3, mpts3);
+                IntTy cont_id3 = __cilkrts_get_worker_number();
 
-            cilk_sync;
+                if (parent_id3 == cont_id3) {
+                    // tree3 not stolen
 
-            // Write the fields
-            *(CursorTy *) cur_fields = tree2.field1;
-            cur_fields += 8;
-            *(CursorTy *) cur_fields = tree3.field1;
-            cur_fields += 8;
-            *(CursorTy *) cur_fields = tree4.field1;
-            cur_fields += 8;
-            *(FloatTy *) cur_fields = centroid.field0;
-            cur_fields += sizeof(FloatTy);
-            *(FloatTy *) cur_fields = centroid.field1;
-            cur_fields += sizeof(FloatTy);
-            *(FloatTy *) cur_fields = centroid.field2;
-            cur_fields += sizeof(FloatTy);
+                    // tree4
+                    massPtsInBox(mpts4, &b4, mpts);
+                    // print_array_masspoint(mpts4);
+                    tree4 = buildTree(tree3.field0, tree3.field2, &b4, mpts4);
 
-            IntTy total_elems =
-                getElems(tree1.field0, tree1.field1) +
-                getElems(tree2.field0, tree2.field1) +
-                getElems(tree3.field0, tree3.field1) +
-                getElems(tree4.field0, tree4.field1);
+                    cilk_sync;
 
-            *(IntTy *) cur_fields = total_elems;
-            cur_fields += sizeof(IntTy);
+                    // SCHEDULE:
+                    // ---------
+                    // STOLEN:
+                    // NOT_STOLEN: tree1, tree2, tree3
 
-            // Free up memory
-            free_array_masspoint(mpts1);
-            free_array_masspoint(mpts2);
-            free_array_masspoint(mpts3);
-            free_array_masspoint(mpts4);
+                    // INDIRECTIONS:
+                    // -------------
+                    // None
 
-            return (CursorCursorCursorProd) {tree4.field0, out_cur, tree4.field2};
+                    #ifdef DEBUG
+                    printf("INDIRECTIONS[0]\n");
+                    #endif
+
+                    schedule = 0;
+
+                } else {
+                    // tree3 stolen
+
+                    // tree4
+                    RegionTy *region4 = alloc_region(global_init_inf_buf_size);
+                    CursorTy reg4 = region4->start_ptr;
+                    CursorTy end_reg4 = reg4 + global_init_inf_buf_size;
+                    massPtsInBox(mpts4, &b4, mpts);
+                    // print_array_masspoint(mpts4);
+                    tree4 = buildTree(end_reg4, reg4, &b4, mpts4);
+
+                    cilk_sync;
+
+                    // SCHEDULE:
+                    // ---------
+                    // STOLEN: tree3
+                    // NOT_STOLEN: tree1, tree2
+
+                    // INDIRECTIONS:
+                    // -------------
+                    // end_tree3 -> start_tree4
+
+                    #ifdef DEBUG
+                    printf("INDIRECTIONS[1]\n");
+                    #endif
+
+                    schedule = 1;
+
+                    CursorTy end_tree3 = tree3.field2;
+                    *(TagTyPacked *) end_tree3 = 90;
+                    end_tree3 += 1;
+                    *(CursorTy *) end_tree3 = reg4;
+                }
+
+            } else {
+                // tree2 stolen
+
+                // tree3
+                RegionTy *region3 = alloc_region(global_init_inf_buf_size);
+                CursorTy reg3 = region3->start_ptr;
+                CursorTy end_reg3 = reg3 + global_init_inf_buf_size;
+                massPtsInBox(mpts3, &b3, mpts);
+                // print_array_masspoint(mpts3);
+                IntTy parent_id3 = __cilkrts_get_worker_number();
+                tree3 = cilk_spawn buildTree(end_reg3, reg3, &b3, mpts3);
+                IntTy cont_id3 = __cilkrts_get_worker_number();
+
+                if (parent_id3 == cont_id3) {
+                    // tree3 not stolen
+
+                    // tree4
+                    Array_MassPoint *mpts4 = new_array_masspoint();
+                    // print_array_masspoint(mpts4);
+                    tree4 = buildTree(tree3.field0, tree3.field2, &b4, mpts4);
+
+                    cilk_sync;
+
+                    // SCHEDULE:
+                    // ---------
+                    // STOLEN: tree2
+                    // NOT_STOLEN: tree1, tree3
+
+                    // INDIRECTIONS:
+                    // -------------
+                    // end_tree2 -> start_tree3
+
+                    #ifdef DEBUG
+                    printf("INDIRECTIONS[2]\n");
+                    #endif
+
+                    schedule = 2;
+
+                    CursorTy end_tree2 = tree2.field2;
+                    *(TagTyPacked *) end_tree2 = 90;
+                    end_tree2 += 1;
+                    *(CursorTy *) end_tree2 = reg3;
+
+                } else {
+                    // tree3 stolen
+
+                    // tree4
+                    RegionTy *region4 = alloc_region(global_init_inf_buf_size);
+                    CursorTy reg4 = region4->start_ptr;
+                    CursorTy end_reg4 = reg4 + global_init_inf_buf_size;
+                    massPtsInBox(mpts4, &b4, mpts);
+                    // print_array_masspoint(mpts4);
+                    tree4 = buildTree(end_reg4, reg4, &b4, mpts4);
+
+                    cilk_sync;
+
+                    // SCHEDULE:
+                    // ---------
+                    // STOLEN: tree2, tree3
+                    // NOT_STOLEN: tree1
+
+                    // INDIRECTIONS:
+                    // -------------
+                    // end_tree2 -> start_tree3 , end_tree3 -> start_tree4
+
+                    #ifdef DEBUG
+                    printf("INDIRECTIONS[3]\n");
+                    #endif
+
+                    schedule = 3;
+
+                    CursorTy end_tree2 = tree2.field2;
+                    *(TagTyPacked *) end_tree2 = 90;
+                    end_tree2 += 1;
+                    *(CursorTy *) end_tree2 = reg3;
+
+                    CursorTy end_tree3 = tree3.field2;
+                    *(TagTyPacked *) end_tree3 = 90;
+                    end_tree3 += 1;
+                    *(CursorTy *) end_tree3 = reg4;
+                }
+            }
 
         } else {
             // tree1 stolen
+
+            // tree2
             RegionTy *region2 = alloc_region(global_init_inf_buf_size);
             CursorTy reg2 = region2->start_ptr;
             CursorTy end_reg2 = reg2 + global_init_inf_buf_size;
-
-            // tree2
-            Array_MassPoint *mpts2 = new_array_masspoint();
             massPtsInBox(mpts2, &b2, mpts);
             // print_array_masspoint(mpts2);
-            CursorCursorCursorProd tree2 = buildTree(end_reg2, reg2, &b2, mpts2);
+            IntTy parent_id2 = __cilkrts_get_worker_number();
+            tree2 = cilk_spawn buildTree(end_reg2, reg2, &b2, mpts2);
+            IntTy cont_id2 = __cilkrts_get_worker_number();
 
-            //tree 3
-            Array_MassPoint *mpts3 = new_array_masspoint();
-            massPtsInBox(mpts3, &b3, mpts);
-            // print_array_masspoint(mpts3);
-            CursorCursorCursorProd tree3 = buildTree(tree2.field0, tree2.field2, &b3, mpts3);
+            if (parent_id2 == cont_id2) {
+                // tree2 not stolen
 
-            //tree 4
-            Array_MassPoint *mpts4 = new_array_masspoint();
-            massPtsInBox(mpts4, &b4, mpts);
-            // print_array_masspoint(mpts4);
-            CursorCursorCursorProd tree4 = buildTree(tree3.field0, tree3.field2, &b4, mpts4);
+                //tree 3
+                massPtsInBox(mpts3, &b3, mpts);
+                // print_array_masspoint(mpts3);
+                IntTy parent_id3 = __cilkrts_get_worker_number();
+                tree3 = cilk_spawn buildTree(tree2.field0, tree2.field2, &b3, mpts3);
+                IntTy cont_id3 = __cilkrts_get_worker_number();
 
-            cilk_sync;
+                if (parent_id3 == cont_id3) {
+                    // tree3 not stolen
 
-            CursorTy end_tree1 = tree1.field2;
-            *(TagTyPacked *) end_tree1 = 90;
-            end_tree1 += 1;
-            *(CursorTy *) end_tree1 = reg2;
+                    // tree4
+                    massPtsInBox(mpts4, &b4, mpts);
+                    // print_array_masspoint(mpts4);
+                    tree4 = buildTree(tree3.field0, tree3.field2, &b4, mpts4);
 
-            // Write the fields
-            *(CursorTy *) cur_fields = tree2.field1;
-            cur_fields += 8;
-            *(CursorTy *) cur_fields = tree3.field1;
-            cur_fields += 8;
-            *(CursorTy *) cur_fields = tree4.field1;
-            cur_fields += 8;
-            *(FloatTy *) cur_fields = centroid.field0;
-            cur_fields += sizeof(FloatTy);
-            *(FloatTy *) cur_fields = centroid.field1;
-            cur_fields += sizeof(FloatTy);
-            *(FloatTy *) cur_fields = centroid.field2;
-            cur_fields += sizeof(FloatTy);
+                    cilk_sync;
 
-            IntTy total_elems =
-                getElems(tree1.field0, tree1.field1) +
-                getElems(tree2.field0, tree2.field1) +
-                getElems(tree3.field0, tree3.field1) +
-                getElems(tree4.field0, tree4.field1);
+                    // SCHEDULE:
+                    // ---------
+                    // STOLEN: tree1
+                    // NOT_STOLEN: tree2, tree3
 
-            *(IntTy *) cur_fields = total_elems;
-            cur_fields += sizeof(IntTy);
+                    // INDIRECTIONS:
+                    // -------------
+                    // end_tree1 -> start_tree2
 
-            // Free up memory
-            free_array_masspoint(mpts1);
-            free_array_masspoint(mpts2);
-            free_array_masspoint(mpts3);
-            free_array_masspoint(mpts4);
+                    #ifdef DEBUG
+                    printf("INDIRECTIONS[4]\n");
+                    #endif
 
-            return (CursorCursorCursorProd) {tree4.field0, out_cur, tree4.field2};
+                    schedule = 4;
 
+                    CursorTy end_tree1 = tree1.field2;
+                    *(TagTyPacked *) end_tree1 = 90;
+                    end_tree1 += 1;
+                    *(CursorTy *) end_tree1 = reg2;
+
+                } else {
+                    // tree3 stolen
+
+                    // tree4
+                    RegionTy *region4 = alloc_region(global_init_inf_buf_size);
+                    CursorTy reg4 = region4->start_ptr;
+                    CursorTy end_reg4 = reg4 + global_init_inf_buf_size;
+                    massPtsInBox(mpts4, &b4, mpts);
+                    // print_array_masspoint(mpts4);
+                    tree4 = buildTree(end_reg4, reg4, &b4, mpts4);
+
+                    cilk_sync;
+
+                    // SCHEDULE:
+                    // ---------
+                    // STOLEN: tree1, tree3
+                    // NOT_STOLEN: tree2
+
+                    // INDIRECTIONS:
+                    // -------------
+                    // end_tree1 -> start_tree2, end_tree3 -> start_tree4
+
+                    #ifdef DEBUG
+                    printf("INDIRECTIONS[5]\n");
+                    #endif
+
+                    schedule = 5;
+
+                    CursorTy end_tree1 = tree1.field2;
+                    *(TagTyPacked *) end_tree1 = 90;
+                    end_tree1 += 1;
+                    *(CursorTy *) end_tree1 = reg2;
+
+                    CursorTy end_tree3 = tree3.field2;
+                    *(TagTyPacked *) end_tree3 = 90;
+                    end_tree3 += 1;
+                    *(CursorTy *) end_tree3 = reg4;
+                }
+
+            } else {
+                // tree2 stolen
+
+                // tree3
+                RegionTy *region3 = alloc_region(global_init_inf_buf_size);
+                CursorTy reg3 = region3->start_ptr;
+                CursorTy end_reg3 = reg3 + global_init_inf_buf_size;
+                massPtsInBox(mpts3, &b3, mpts);
+                // print_array_masspoint(mpts3);
+                IntTy parent_id3 = __cilkrts_get_worker_number();
+                tree3 = cilk_spawn buildTree(end_reg3, reg3, &b3, mpts3);
+                IntTy cont_id3 = __cilkrts_get_worker_number();
+
+                if (parent_id3 == cont_id3) {
+                    // tree3 not stolen
+
+                    // tree4
+                    massPtsInBox(mpts4, &b4, mpts);
+                    // print_array_masspoint(mpts4);
+                    tree4 = buildTree(tree3.field0, tree3.field2, &b4, mpts4);
+
+                    cilk_sync;
+
+                    // SCHEDULE:
+                    // ---------
+                    // STOLEN: tree1, tree2
+                    // NOT_STOLEN: tree3
+
+                    // INDIRECTIONS:
+                    // -------------
+                    // end_tree1 -> start_tree2, end_tree2 -> start_tree3
+
+                    #ifdef DEBUG
+                    printf("INDIRECTIONS[6]\n");
+                    #endif
+
+                    schedule = 6;
+
+                    CursorTy end_tree1 = tree1.field2;
+                    *(TagTyPacked *) end_tree1 = 90;
+                    end_tree1 += 1;
+                    *(CursorTy *) end_tree1 = reg2;
+
+                    CursorTy end_tree2 = tree2.field2;
+                    *(TagTyPacked *) end_tree2 = 90;
+                    end_tree2 += 1;
+                    *(CursorTy *) end_tree2 = reg3;
+
+                } else {
+                    // tree3 stolen
+
+                    // tree4
+                    RegionTy *region4 = alloc_region(global_init_inf_buf_size);
+                    CursorTy reg4 = region4->start_ptr;
+                    CursorTy end_reg4 = reg4 + global_init_inf_buf_size;
+                    massPtsInBox(mpts4, &b4, mpts);
+                    // print_array_masspoint(mpts4);
+                    tree4 = buildTree(end_reg4, reg4, &b4, mpts4);
+
+                    cilk_sync;
+
+                    // SCHEDULE:
+                    // ---------
+                    // STOLEN: tree1, tree2, tree3
+                    // NOT_STOLEN:
+
+                    // INDIRECTIONS:
+                    // -------------
+                    // end_tree1 -> start_tree2, end_tree2 -> start_tree3, end_tree3 -> start_tree4
+
+                    #ifdef DEBUG
+                    printf("INDIRECTIONS[7]\n");
+                    #endif
+
+                    schedule = 7;
+
+                    CursorTy end_tree1 = tree1.field2;
+                    *(TagTyPacked *) end_tree1 = 90;
+                    end_tree1 += 1;
+                    *(CursorTy *) end_tree1 = reg2;
+
+                    CursorTy end_tree2 = tree2.field2;
+                    *(TagTyPacked *) end_tree2 = 90;
+                    end_tree2 += 1;
+                    *(CursorTy *) end_tree2 = reg3;
+
+                    CursorTy end_tree3 = tree3.field2;
+                    *(TagTyPacked *) end_tree3 = 90;
+                    end_tree3 += 1;
+                    *(CursorTy *) end_tree3 = reg4;
+
+                }
+            }
         }
+
+        // Possible schedules:
+        // | t1 | t2 | t3 | Ran with uniform_2d_100000.txt ? |
+        // |----+----+----+----------------------------------|
+        // |  0 |  0 |  0 | yes                              |
+        // |  0 |  0 |  1 | yes                              |
+        // |  0 |  1 |  0 | yes                              |
+        // |  0 |  1 |  1 | yes                              |
+        // |  1 |  0 |  0 | yes                              |
+        // |  1 |  0 |  1 | yes                              |
+        // |  1 |  1 |  0 | yes                              |
+        // |  1 |  1 |  1 | yes                              |
+
+        // The above code writes indirections, but doesn't write random access nodes
+        // or the other float fields. Do that here.
+
+        // Write the fields
+        *(CursorTy *) cur_fields = tree2.field1;
+        cur_fields += 8;
+        *(CursorTy *) cur_fields = tree3.field1;
+        cur_fields += 8;
+        *(CursorTy *) cur_fields = tree4.field1;
+        cur_fields += 8;
+        *(FloatTy *) cur_fields = centroid.field0;
+        cur_fields += sizeof(FloatTy);
+        *(FloatTy *) cur_fields = centroid.field1;
+        cur_fields += sizeof(FloatTy);
+        *(FloatTy *) cur_fields = centroid.field2;
+        cur_fields += sizeof(FloatTy);
+
+        IntTy total_elems =
+            getElems(tree1.field0, tree1.field1) +
+            getElems(tree2.field0, tree2.field1) +
+            getElems(tree3.field0, tree3.field1) +
+            getElems(tree4.field0, tree4.field1);
+
+        *(IntTy *) cur_fields = total_elems;
+        cur_fields += sizeof(IntTy);
+
+        // Free up memory
+        free_array_masspoint(mpts1);
+        free_array_masspoint(mpts2);
+        free_array_masspoint(mpts3);
+        free_array_masspoint(mpts4);
+
+        // printf("schedule: %lld\n", schedule);
+
+        return (CursorCursorCursorProd) {tree4.field0, out_cur, tree4.field2};
+
     }
 }
 
