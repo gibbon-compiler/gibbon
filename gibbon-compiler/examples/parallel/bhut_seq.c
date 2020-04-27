@@ -183,7 +183,7 @@ static const int num_workers = 1;
 typedef char TagTyPacked;   // Must be consistent with codegen in Target.hs
 typedef char TagTyBoxed;    // Must be consistent with codegen in Target.hs
 typedef long long IntTy;    // Int64 in Haskell
-typedef float FloatTy;
+typedef double FloatTy;
 typedef int SymTy;          // Word16 in Haskell. This could actually be a
                             // uint16_t. However, uthash's HASH_*_INT macros
                             // only work with proper int's.
@@ -1355,7 +1355,7 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
                                      Box *box, UT_array *mpts) {
 
     // Allocator ran out of space
-    if ((out_cur + 54) > end_out_reg) {
+    if ((out_cur + 128) > end_out_reg) {
         ChunkTy new_chunk = alloc_chunk(end_out_reg);
         CursorTy chunk_start = new_chunk.start_ptr;
         CursorTy chunk_end = new_chunk.end_ptr;
@@ -1410,7 +1410,7 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
 
         *(TagTyPacked *) out_cur = 3;
         CursorTy cur_fields = out_cur + 1;
-        CursorTy cur_tree1  = cur_fields + 44;
+        CursorTy cur_tree1  = cur_fields + 56;
 
         // tree1
         UT_array *mpts1;
@@ -1494,7 +1494,7 @@ IntTy getElems(CursorTy end_in_reg, CursorTy in_cur) {
 
       case 3:
         {
-            tail += 36;
+            tail += 48;
             IntTy n = *(IntTy *) tail;
             return n;
         }
@@ -1722,7 +1722,7 @@ void __main_expr() {
     IntTy idx = 0;
     Point2D p;
     while ((read = getline(&line, &len, fp)) != -1) {
-        int xxxx = sscanf(line, "%f %f", &tmp_x, &tmp_y);
+        int xxxx = sscanf(line, "%lf %lf", &tmp_x, &tmp_y);
         p = (Point2D) {tmp_x, tmp_y};
         utarray_push_back(pts, &p);
         idx++;

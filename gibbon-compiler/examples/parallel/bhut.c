@@ -183,7 +183,7 @@ static const int num_workers = 1;
 typedef char TagTyPacked;   // Must be consistent with codegen in Target.hs
 typedef char TagTyBoxed;    // Must be consistent with codegen in Target.hs
 typedef long long IntTy;    // Int64 in Haskell
-typedef float FloatTy;
+typedef double FloatTy;
 typedef int SymTy;          // Word16 in Haskell. This could actually be a
                             // uint16_t. However, uthash's HASH_*_INT macros
                             // only work with proper int's.
@@ -1361,13 +1361,15 @@ void mapCalcAccel(UT_array *dst, UT_array *mpts, CursorTy tr) {
     MassPoint *mp;
     Point2D p;
 
-    IntTy cutoff = 524288;
+    IntTy cutoff = 1048576;
+    // IntTy cutoff = 524288;
     // IntTy cutoff = 262144;
     // IntTy cutoff = 131072;
 
     for (idx = 0; idx < utarray_len(mpts); idx++) {
         mp = (MassPoint*) utarray_eltptr(mpts, idx);
-        calcAccel(&p, mp, tr, cutoff);
+        // calcAccel(&p, mp, tr, cutoff);
+        calcAccel_seq(&p, mp, tr);
         utarray_push_back(dst, &p);
     }
 }
@@ -1467,7 +1469,7 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
                                      Box *box, UT_array *mpts) {
 
     // Allocator ran out of space
-    if ((out_cur + 54) > end_out_reg) {
+    if ((out_cur + 128) > end_out_reg) {
         ChunkTy new_chunk = alloc_chunk(end_out_reg);
         CursorTy chunk_start = new_chunk.start_ptr;
         CursorTy chunk_end = new_chunk.end_ptr;
@@ -1522,7 +1524,7 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
 
         *(TagTyPacked *) out_cur = 3;
         CursorTy cur_fields = out_cur + 1;
-        CursorTy cur_tree1  = cur_fields + 44;
+        CursorTy cur_tree1  = cur_fields + 56;
 
         // tree1
         UT_array *mpts1;
@@ -1589,7 +1591,7 @@ CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
                                  IntTy c) {
 
     if (utarray_len(mpts) < c) {
-        // printf("Cutting off: %lld\n",mpts->size_masspoints);
+        // printf("Cutting off: %d\n",utarray_len(mpts));
         return buildTree_seq(end_out_reg, out_cur, box, mpts);
     }
 
@@ -1649,7 +1651,7 @@ CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
         // Build the trees
         *(TagTyPacked *) out_cur = 3;
         CursorTy cur_fields = out_cur + 1;
-        CursorTy cur_tree1  = cur_fields + 44;
+        CursorTy cur_tree1  = cur_fields + 56;
 
         // Data declarations for the trees
         CursorCursorCursorProd tree1, tree2, tree3, tree4;
@@ -2088,7 +2090,7 @@ IntTy getElems(CursorTy end_in_reg, CursorTy in_cur) {
 
       case 3:
         {
-            tail += 36;
+            tail += 48;
             IntTy n = *(IntTy *) tail;
             return n;
         }
@@ -2316,7 +2318,7 @@ void __main_expr() {
     IntTy idx = 0;
     Point2D p;
     while ((read = getline(&line, &len, fp)) != -1) {
-        int xxxx = sscanf(line, "%f %f", &tmp_x, &tmp_y);
+        int xxxx = sscanf(line, "%lf %lf", &tmp_x, &tmp_y);
         p = (Point2D) {tmp_x, tmp_y};
         utarray_push_back(pts, &p);
         idx++;
@@ -2356,9 +2358,10 @@ void __main_expr() {
     clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed2661);
 
     // 2 ^ 19 == 524288
-    IntTy cutoff = 524288;
+    // IntTy cutoff = 524288;
     // IntTy cutoff = 262144;
     // IntTy cutoff = 131072;
+    IntTy cutoff = 65536;
 
     for (int i = 0; i < global_iters_param; i++) {
         tree = buildTree(end_reg,cur,&box, mpts, cutoff);
