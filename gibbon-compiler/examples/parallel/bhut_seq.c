@@ -1762,6 +1762,8 @@ void __main_expr() {
     clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed2661);
 
     for (int i = 0; i < global_iters_param; i++) {
+        utarray_clear(accels);
+        utarray_clear(final_particles);
         tree = buildTree_seq(end_reg,cur,&box, mpts);
         CursorTy tr = tree.field1;
         // _print_BH_Tree(tr);

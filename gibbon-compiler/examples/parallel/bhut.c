@@ -2364,6 +2364,8 @@ void __main_expr() {
     IntTy cutoff = 65536;
 
     for (int i = 0; i < global_iters_param; i++) {
+        utarray_clear(accels);
+        utarray_clear(final_particles);
         tree = buildTree(end_reg,cur,&box, mpts, cutoff);
         CursorTy tr = tree.field1;
         // _print_BH_Tree(tr);
