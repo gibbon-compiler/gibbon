@@ -824,6 +824,9 @@ typedef struct Float32Float32Prod_struct {
     FloatTy field1; // y
 } Point2D;
 
+UT_icd Point2D_icd = {sizeof(Point2D), NULL, NULL, NULL};
+
+/*
 typedef struct Array_Point2D_struct {
     Point2D *points;
     IntTy size_points;
@@ -860,6 +863,7 @@ void print_array_point2d(Array_Point2D *ls) {
     printf("\n");
 }
 
+*/
 
 typedef struct Float32Float32Float32Prod_struct {
     FloatTy field0; // x
@@ -867,6 +871,9 @@ typedef struct Float32Float32Float32Prod_struct {
     FloatTy field2; // mass
 } MassPoint;
 
+UT_icd MassPoint_icd = {sizeof(MassPoint), NULL, NULL, NULL};
+
+/*
 typedef struct Array_MassPoint_struct {
     MassPoint *masspoints;
     IntTy size_masspoints;
@@ -904,6 +911,8 @@ void print_array_masspoint(Array_MassPoint *ls) {
     printf("\n");
 }
 
+*/
+
 typedef struct Float32Float32Float32Float32Float32Prod_struct {
     FloatTy field0; // x
     FloatTy field1; // y
@@ -912,6 +921,9 @@ typedef struct Float32Float32Float32Float32Float32Prod_struct {
     FloatTy field4; // velocity y
 } Particle;
 
+UT_icd Particle_icd = {sizeof(Particle), NULL, NULL, NULL};
+
+/*
 typedef struct Array_Particle_struct {
     Particle *particles;
     IntTy size_particles;
@@ -951,6 +963,8 @@ void print_array_particle(Array_Particle *ls) {
     printf("\n");
 }
 
+*/
+
 typedef struct Box_struct {
     FloatTy llx;
     FloatTy lly;
@@ -970,66 +984,67 @@ typedef struct CursorCursorCursorProd_struct {
 
 // -----------------------------------------------------------------------------
 
-void twoDPtsToParticles(Array_Particle *dst, Array_Point2D *ps);
-void particlesToMassPoints(Array_MassPoint *dst, Array_Particle *ps);
-FloatTy minX(Array_Particle *ps);
-FloatTy maxX(Array_Particle *ps);
-FloatTy minY(Array_Particle *ps);
-FloatTy maxY(Array_Particle *ps);
-void calcCentroid(MassPoint *dst, Array_MassPoint *ls);
-void massPtsInBox(Array_MassPoint *dst, Box *box, Array_MassPoint *ps);
+void twoDPtsToParticles(UT_array *dst, UT_array *ps);
+void particlesToMassPoints(UT_array *dst, UT_array *ps);
+FloatTy minX(UT_array *ps);
+FloatTy maxX(UT_array *ps);
+FloatTy minY(UT_array *ps);
+FloatTy maxY(UT_array *ps);
+void calcCentroid(MassPoint *dst, UT_array *ls);
+void massPtsInBox(UT_array *dst, Box *box, UT_array *ps);
 void accel(Point2D *dst, MassPoint *mpt, FloatTy x, FloatTy y, FloatTy m);
 FloatTy dist(FloatTy a_x, FloatTy a_y, FloatTy b_x, FloatTy b_y);
 BoolTy isClose(FloatTy a_x, FloatTy a_y, FloatTy b_x, FloatTy b_y);
 void calcAccel_seq(Point2D *dst, MassPoint *mpt, CursorTy in_cur);
 void calcAccel(Point2D *dst, MassPoint *mpt, CursorTy in_cur, IntTy c);
-void mapCalcAccel(Array_Point2D *dst, Array_MassPoint *mpts, CursorTy tr);
+void mapCalcAccel(UT_array *dst, UT_array *mpts, CursorTy tr);
 void applyAccel(Particle *dst, Particle *particle, Point2D *accel);
-void mapApplyAccel(Array_Particle *dst, Array_Particle *particles, Array_Point2D *accels);
+void mapApplyAccel(UT_array *dst, UT_array *particles, UT_array *accels);
 void minus_point2d(Point2D *dst, Point2D *p1, Point2D *p2);
 void plus_point2d(Point2D *dst, Point2D *p1, Point2D *p2);
 void mult_point2d(Point2D *dst, Point2D *p1, FloatTy s);
 FloatTy pbbs_length_point2d(Point2D *v);
-FloatTy check(Array_Particle *ps);
+FloatTy check(UT_array *ps);
 
 CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
-                                     Box *box, Array_MassPoint *mpts);
-CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur, Box *box, Array_MassPoint *mpts, IntTy c);
+                                     Box *box, UT_array *mpts);
+CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
+                                 Box *box, UT_array *mpts, IntTy c);
 IntTy getElems(CursorTy end_in_reg, CursorTy in_cur);
 CursorTy _print_BH_Tree(CursorTy p3362);
 
 // -----------------------------------------------------------------------------
 
 // Convert input points into particles.
-void twoDPtsToParticles(Array_Particle *dst, Array_Point2D *ps) {
+void twoDPtsToParticles(UT_array *dst, UT_array *ps) {
     IntTy idx = 0;
-    Point2D point;
-    for (idx = 0; idx < ps->size_points; idx++) {
-        point = ps->points[idx];
-        dst->particles[idx].field0 = point.field0;
-        dst->particles[idx].field1 = point.field1;
-        dst->particles[idx].field2 = 1.0;
-        dst->particles[idx].field3 = 0.0;
-        dst->particles[idx].field4 = 0.0;
+    Point2D *point;
+    Particle p;
+    for (idx = 0; idx < utarray_len(ps); idx++) {
+        point = (Point2D*) utarray_eltptr(ps, idx);
+        p = (Particle) {point->field0, point->field1, 1.0, 0.0, 0.0};
+        utarray_push_back(dst, &p);
     }
-    dst->size_particles = ps->size_points;
 }
 
-void particlesToMassPoints(Array_MassPoint *dst, Array_Particle *ps) {
+void particlesToMassPoints(UT_array *dst, UT_array *ps) {
     IntTy idx = 0;
-    for (idx = 0; idx < ps->size_particles; idx++) {
-        dst->masspoints[idx].field0 = ps->particles[idx].field0;
-        dst->masspoints[idx].field1 = ps->particles[idx].field1;
-        dst->masspoints[idx].field2 = ps->particles[idx].field2;
+    Particle *p;
+    MassPoint mp;
+    for (idx = 0; idx < utarray_len(ps); idx++) {
+        p = (Particle*) utarray_eltptr(ps, idx);
+        mp = (MassPoint) {p->field0, p->field1, p->field2};
+        utarray_push_back(dst, &mp);
     }
-    dst->size_masspoints = ps->size_particles;
 }
 
-FloatTy minX(Array_Particle *ps) {
+FloatTy minX(UT_array *ps) {
     FloatTy acc = FLT_MAX, x;
     IntTy idx = 0;
-    for (idx = 0; idx < ps->size_particles; idx++) {
-        x = ps->particles[idx].field0;
+    Particle *p;
+    for (idx = 0; idx < utarray_len(ps); idx++) {
+        p = (Particle*) utarray_eltptr(ps, idx);
+        x = p->field0;
         if (x < acc) {
             acc = x;
         }
@@ -1037,11 +1052,13 @@ FloatTy minX(Array_Particle *ps) {
     return acc;
 }
 
-FloatTy minY(Array_Particle *ps) {
+FloatTy minY(UT_array *ps) {
     FloatTy acc = FLT_MAX, y;
     IntTy idx = 0;
-    for (idx = 0; idx < ps->size_particles; idx++) {
-        y = ps->particles[idx].field1;
+    Particle *p;
+    for (idx = 0; idx < utarray_len(ps); idx++) {
+        p = (Particle*) utarray_eltptr(ps, idx);
+        y = p->field1;
         if (y < acc) {
             acc = y;
         }
@@ -1049,11 +1066,13 @@ FloatTy minY(Array_Particle *ps) {
     return acc;
 }
 
-FloatTy maxX(Array_Particle *ps) {
+FloatTy maxX(UT_array *ps) {
     FloatTy acc = -100, x;
     IntTy idx = 0;
-    for (idx = 0; idx < ps->size_particles; idx++) {
-        x = ps->particles[idx].field0;
+    Particle *p;
+    for (idx = 0; idx < utarray_len(ps); idx++) {
+        p = (Particle*) utarray_eltptr(ps, idx);
+        x = p->field0;
         if (x > acc) {
             acc = x;
         }
@@ -1061,11 +1080,13 @@ FloatTy maxX(Array_Particle *ps) {
     return acc;
 }
 
-FloatTy maxY(Array_Particle *ps) {
+FloatTy maxY(UT_array *ps) {
     FloatTy acc = -100, y;
+    Particle *p;
     IntTy idx = 0;
-    for (idx = 0; idx < ps->size_particles; idx++) {
-        y = ps->particles[idx].field1;
+    for (idx = 0; idx < utarray_len(ps); idx++) {
+        p = (Particle*) utarray_eltptr(ps, idx);
+        y = p->field1;
         if (y > acc) {
             acc = y;
         }
@@ -1073,15 +1094,15 @@ FloatTy maxY(Array_Particle *ps) {
     return acc;
 }
 
-void calcCentroid(MassPoint *dst, Array_MassPoint *ps) {
+void calcCentroid(MassPoint *dst, UT_array *mpts) {
     IntTy idx;
     FloatTy acc_x = 0.0, acc_y = 0.0, acc_mass = 0.0;
-    MassPoint mp;
-    for (idx = 0; idx < ps->size_masspoints; idx++) {
-        mp = ps->masspoints[idx];
-        acc_x += mp.field0 * mp.field2;
-        acc_y += mp.field1 * mp.field2;
-        acc_mass += mp.field2;
+    MassPoint *mp;
+    for (idx = 0; idx < utarray_len(mpts); idx++) {
+        mp = (MassPoint*) utarray_eltptr(mpts, idx);
+        acc_x += mp->field0 * mp->field2;
+        acc_y += mp->field1 * mp->field2;
+        acc_mass += mp->field2;
     }
     dst->field0 = acc_x;
     dst->field1 = acc_y;
@@ -1096,20 +1117,15 @@ BoolTy inBox(Box *box, MassPoint *mp) {
         (mp->field1 <= box->ruy);
 }
 
-void massPtsInBox(Array_MassPoint *dst, Box *box, Array_MassPoint *ps) {
+void massPtsInBox(UT_array *dst, Box *box, UT_array *mpts) {
     IntTy idx;
-    IntTy idxj = 0;
-    MassPoint mp;
-    for (idx = 0; idx < ps->size_masspoints; idx++) {
-        mp = ps->masspoints[idx];
-        if (inBox(box, &mp)) {
-            dst->masspoints[idxj].field0 = mp.field0;
-            dst->masspoints[idxj].field1 = mp.field1;
-            dst->masspoints[idxj].field2 = mp.field2;
-            idxj++;
+    MassPoint *mp;
+    for (idx = 0; idx < utarray_len(mpts); idx++) {
+        mp = (MassPoint*) utarray_eltptr(mpts, idx);
+        if (inBox(box, mp)) {
+            utarray_push_back(dst, mp);
         }
     }
-    dst->size_masspoints = idxj;
 }
 
 void accel(Point2D *dst, MassPoint *mpt, FloatTy x, FloatTy y, FloatTy m) {
@@ -1340,17 +1356,20 @@ void calcAccel(Point2D *dst, MassPoint *mpt, CursorTy in_cur, IntTy c) {
     }
 }
 
-void mapCalcAccel(Array_Point2D *dst, Array_MassPoint *mpts, CursorTy tr) {
+void mapCalcAccel(UT_array *dst, UT_array *mpts, CursorTy tr) {
     IntTy idx;
-    MassPoint mp;
-    // IntTy cutoff = 524288;
-    IntTy cutoff = 262144;
+    MassPoint *mp;
+    Point2D p;
+
+    IntTy cutoff = 524288;
+    // IntTy cutoff = 262144;
     // IntTy cutoff = 131072;
-    for (idx = 0; idx < mpts->size_masspoints; idx++) {
-        mp = mpts->masspoints[idx];
-        calcAccel(&dst->points[idx], &mp, tr, cutoff);
+
+    for (idx = 0; idx < utarray_len(mpts); idx++) {
+        mp = (MassPoint*) utarray_eltptr(mpts, idx);
+        calcAccel(&p, mp, tr, cutoff);
+        utarray_push_back(dst, &p);
     }
-    dst->size_points = idx;
 }
 
 void applyAccel(Particle *dst, Particle *p, Point2D *a) {
@@ -1366,22 +1385,23 @@ void applyAccel(Particle *dst, Particle *p, Point2D *a) {
     dst->field4 = (vy + ay) * 2.0;
 }
 
-void mapApplyAccel(Array_Particle *dst, Array_Particle *ps, Array_Point2D *accels){
+void mapApplyAccel(UT_array *dst, UT_array *ps, UT_array *accels){
 
-    if (ps->size_particles != accels->size_points) {
-        printf("mapApplyAccel: size mismatch, %lld != %lld", ps->size_particles, accels->size_points);
+    if (utarray_len(ps) != utarray_len(accels)) {
+        printf("mapApplyAccel: size mismatch, %d != %d", utarray_len(ps), utarray_len(accels));
         exit(1);
     }
-    IntTy len = ps->size_particles;
+    IntTy len = utarray_len(ps);
     IntTy idx;
-    Particle p;
-    Point2D a;
+    Particle *p;
+    Point2D *a;
+    Particle p2;
     for (idx = 0; idx < len; idx++) {
-        a = accels->points[idx];
-        p = ps->particles[idx];
-        applyAccel(&dst->particles[idx], &p, &a);
+        a = (Point2D*) utarray_eltptr(accels, idx);
+        p = (Particle*) utarray_eltptr(ps, idx);
+        applyAccel(&p2, p, a);
+        utarray_push_back(dst, &p2);
     }
-    dst->size_particles = idx;
 }
 
 FloatTy pbbs_length_point2d(Point2D *v) {
@@ -1403,32 +1423,37 @@ void mult_point2d(Point2D *dst, Point2D *p1, FloatTy s) {
     dst->field1 = p1->field1 * s;
 }
 
-FloatTy check(Array_Particle *ps) {
+FloatTy check(UT_array *ps) {
     IntTy nCheck = 10;
     FloatTy gGrav = 1.0;
     FloatTy err = 0.0;
     IntTy i, j;
     IntTy idx;
 
-    for (i = 0; idx < nCheck; i++) {
-        idx = rand() % (ps->size_particles - 1);
+    for (i = 0; i < nCheck; i++) {
+        idx = rand() % (utarray_len(ps) - 1);
         // idx = i+1;
         Point2D force = (Point2D) {0.0, 0.0};
         Point2D v = (Point2D) {0.0, 0.0};
         Point2D p1, p2;
         FloatTy r, s;
-        for(j = 0; j < ps->size_particles; j++) {
+
+        Particle *pj, *pidx;
+        pidx = (Particle*) utarray_eltptr(ps, idx);
+
+        for(j = 0; j < utarray_len(ps); j++) {
             if (idx != j) {
-                p1 = (Point2D) {ps->particles[j].field3, ps->particles[j].field4};
-                p2 = (Point2D) {ps->particles[idx].field3, ps->particles[idx].field4};
+                pj = (Particle*) utarray_eltptr(ps, j);
+                p1 = (Point2D) {pj->field3, pj->field4};
+                p2 = (Point2D) {pidx->field3, pidx->field4};
                 minus_point2d(&v, &p1, &p2);
                 r = pbbs_length_point2d(&v);
-                s = ps->particles[j].field2 * ps->particles[idx].field2 * (gGrav / (r * r * r));
+                s = pj->field2 * pidx->field2 * (gGrav / (r * r * r));
                 mult_point2d(&v, &v, s);
                 plus_point2d(&force, &force, &v);
             }
         }
-        Point2D force2 = (Point2D) {ps->particles[idx].field3, ps->particles[idx].field4};
+        Point2D force2 = (Point2D) {pidx->field3, pidx->field4};
         minus_point2d(&force2, &force, &force2);
         FloatTy e = pbbs_length_point2d(&force2) / pbbs_length_point2d(&force);
         err += e;
@@ -1439,7 +1464,7 @@ FloatTy check(Array_Particle *ps) {
 // -----------------------------------------------------------------------------
 
 CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
-                                     Box *box, Array_MassPoint *mpts) {
+                                     Box *box, UT_array *mpts) {
 
     // Allocator ran out of space
     if ((out_cur + 54) > end_out_reg) {
@@ -1455,7 +1480,7 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
     }
 
     // Construct the tree.
-    IntTy len = mpts->size_masspoints;
+    IntTy len = utarray_len(mpts);
     if (len == 0) {
         // BH_Empty
         *(TagTyPacked *) out_cur = 0;
@@ -1500,24 +1525,28 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
         CursorTy cur_tree1  = cur_fields + 44;
 
         // tree1
-        Array_MassPoint *mpts1 = new_array_masspoint();
+        UT_array *mpts1;
+        utarray_new(mpts1, &MassPoint_icd);
         massPtsInBox(mpts1, &b1, mpts);
         // print_array_masspoint(mpts1);
         CursorCursorCursorProd tree1 = buildTree_seq(end_out_reg, cur_tree1, &b1, mpts1);
         // tree2
-        Array_MassPoint *mpts2 = new_array_masspoint();
+        UT_array *mpts2;
+        utarray_new(mpts2, &MassPoint_icd);
         massPtsInBox(mpts2, &b2, mpts);
         // print_array_masspoint(mpts2);
         CursorCursorCursorProd tree2 = buildTree_seq(tree1.field0, tree1.field2, &b2, mpts2);
 
         //tree 3
-        Array_MassPoint *mpts3 = new_array_masspoint();
+        UT_array *mpts3;
+        utarray_new(mpts3, &MassPoint_icd);
         massPtsInBox(mpts3, &b3, mpts);
         // print_array_masspoint(mpts3);
         CursorCursorCursorProd tree3 = buildTree_seq(tree2.field0, tree2.field2, &b3, mpts3);
 
         //tree 4
-        Array_MassPoint *mpts4 = new_array_masspoint();
+        UT_array *mpts4;
+        utarray_new(mpts4, &MassPoint_icd);
         massPtsInBox(mpts4, &b4, mpts);
         // print_array_masspoint(mpts4);
         CursorCursorCursorProd tree4 = buildTree_seq(tree3.field0, tree3.field2, &b4, mpts4);
@@ -1546,20 +1575,20 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
         cur_fields += sizeof(IntTy);
 
         // Free up memory
-        free_array_masspoint(mpts1);
-        free_array_masspoint(mpts2);
-        free_array_masspoint(mpts3);
-        free_array_masspoint(mpts4);
+        utarray_free(mpts1);
+        utarray_free(mpts2);
+        utarray_free(mpts3);
+        utarray_free(mpts4);
 
         return (CursorCursorCursorProd) {tree4.field0, out_cur, tree4.field2};
     }
 }
 
 CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
-                                 Box *box, Array_MassPoint *mpts,
+                                 Box *box, UT_array *mpts,
                                  IntTy c) {
 
-    if (mpts->size_masspoints < c) {
+    if (utarray_len(mpts) < c) {
         // printf("Cutting off: %lld\n",mpts->size_masspoints);
         return buildTree_seq(end_out_reg, out_cur, box, mpts);
     }
@@ -1579,7 +1608,7 @@ CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
     }
 
     // Construct the tree.
-    IntTy len = mpts->size_masspoints;
+    IntTy len = utarray_len(mpts);
     if (len == 0) {
         // BH_Empty
         *(TagTyPacked *) out_cur = 0;
@@ -1624,11 +1653,11 @@ CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
 
         // Data declarations for the trees
         CursorCursorCursorProd tree1, tree2, tree3, tree4;
-        Array_MassPoint *mpts1, *mpts2, *mpts3, *mpts4;
-        mpts1 = new_array_masspoint();
-        mpts2 = new_array_masspoint();
-        mpts3 = new_array_masspoint();
-        mpts4 = new_array_masspoint();
+        UT_array *mpts1, *mpts2, *mpts3, *mpts4;
+        utarray_new(mpts1, &MassPoint_icd);
+        utarray_new(mpts2, &MassPoint_icd);
+        utarray_new(mpts3, &MassPoint_icd);
+        utarray_new(mpts4, &MassPoint_icd);
         IntTy schedule;
 
         // tree1
@@ -1733,7 +1762,7 @@ CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
                     // tree3 not stolen
 
                     // tree4
-                    Array_MassPoint *mpts4 = new_array_masspoint();
+                    massPtsInBox(mpts4, &b4, mpts);
                     // print_array_masspoint(mpts4);
                     tree4 = buildTree(tree3.field0, tree3.field2, &b4, mpts4, c);
 
@@ -2025,10 +2054,10 @@ CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
         cur_fields += sizeof(IntTy);
 
         // Free up memory
-        free_array_masspoint(mpts1);
-        free_array_masspoint(mpts2);
-        free_array_masspoint(mpts3);
-        free_array_masspoint(mpts4);
+        utarray_free(mpts1);
+        utarray_free(mpts2);
+        utarray_free(mpts3);
+        utarray_free(mpts4);
 
         // printf("schedule: %lld\n", schedule);
 
@@ -2271,8 +2300,8 @@ CursorTy _print_BH_Tree(CursorTy p3362) {
 
 void __main_expr() {
     // Read --array-input
-    // Array_Point2D pts;
-    Array_Point2D *pts = new_array_point2d();
+    UT_array *pts;
+    utarray_new(pts, &Point2D_icd);
     FILE * fp;
     char *line = NULL;
     size_t len = 0;
@@ -2285,22 +2314,24 @@ void __main_expr() {
     FloatTy tmp_x;
     FloatTy tmp_y;
     IntTy idx = 0;
+    Point2D p;
     while ((read = getline(&line, &len, fp)) != -1) {
         int xxxx = sscanf(line, "%f %f", &tmp_x, &tmp_y);
-        pts->points[idx].field0 = tmp_x;
-        pts->points[idx].field1 = tmp_y;
+        p = (Point2D) {tmp_x, tmp_y};
+        utarray_push_back(pts, &p);
         idx++;
     }
-    pts->size_points = idx;
     // print_array_point2d(pts);
 
     // Convert input points into particles
-    Array_Particle *particles = new_array_particle();
+    UT_array *particles;
+    utarray_new(particles, &Particle_icd);
     twoDPtsToParticles(particles, pts);
     // print_array_particle(particles);
 
     // Convert particles to mass points
-    Array_MassPoint *mpts = new_array_masspoint();
+    UT_array *mpts;
+    utarray_new(mpts, &MassPoint_icd);
     particlesToMassPoints(mpts, particles);
     // print_array_masspoint(mpts);
 
@@ -2316,15 +2347,17 @@ void __main_expr() {
     CursorTy end_reg = cur + global_init_inf_buf_size;
 
     CursorCursorCursorProd tree;
-    Array_Point2D *accels = new_array_point2d();
-    Array_Particle *final_particles = new_array_particle();
+    UT_array *accels;
+    utarray_new(accels, &Point2D_icd);
+    UT_array *final_particles;
+    utarray_new(final_particles, &Particle_icd);
 
     struct timespec begin_timed2661;
     clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed2661);
 
     // 2 ^ 19 == 524288
-    // IntTy cutoff = 524288;
-    IntTy cutoff = 262144;
+    IntTy cutoff = 524288;
+    // IntTy cutoff = 262144;
     // IntTy cutoff = 131072;
 
     for (int i = 0; i < global_iters_param; i++) {
@@ -2335,6 +2368,16 @@ void __main_expr() {
         mapCalcAccel(accels, mpts, tr);
         mapApplyAccel(final_particles, particles, accels);
     }
+
+    // Particle *pcle;
+    // for(pcle=(Particle*)utarray_front(final_particles);
+    //     pcle!=NULL;
+    //     pcle=(Particle*)utarray_next(final_particles,pcle)) {
+    //     printf("(%f, %f, %f, %f, %f)\n", pcle->field0, pcle->field1, pcle->field2, pcle->field3, pcle->field4);
+    // }
+
+
+    printf("Elems: %lld\n", getElems(tree.field0, tree.field1));
 
     struct timespec end_timed2661;
     clock_gettime(CLOCK_MONOTONIC_RAW, &end_timed2661);
@@ -2350,9 +2393,9 @@ void __main_expr() {
     FloatTy err = check(final_particles);
     printf("Err: %f\n",err);
 
-    free_array_point2d(pts);
-    free_array_particle(particles);
-    free_array_masspoint(mpts);
-    free_array_point2d(accels);
-    free_array_particle(final_particles);
+    utarray_free(pts);
+    utarray_free(particles);
+    utarray_free(mpts);
+    utarray_free(accels);
+    utarray_free(final_particles);
 }
