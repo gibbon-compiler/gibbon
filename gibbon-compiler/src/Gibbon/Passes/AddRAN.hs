@@ -241,9 +241,11 @@ addRANExp needRANsTyCons ddfs ienv ex =
                 ienv' = M.union ienv (M.fromList $ zip haveRANsFor ranVars)
             -- Keep around case clauses that don't have random access nodes;
             -- AddTraversals runs later to make sure that they compile.
-            -- (:[old_pat]) <$>
             -- [2020.04.23]: disabling this so that the typechecker compiles.
-            (:[]) <$>
+            -- (:[]) <$>
+            -- [2020.04.28]: re-enabling so that these clauses are kept around in
+            -- order to reproduce the error in the typechecker
+            (:[old_pat]) <$>
               (toRANDataCon dcon, (L.map (,()) ranVars) ++ vs,) <$> addRANExp needRANsTyCons ddfs ienv' bod
 
 -- | Update data type definitions to include random access nodes.
