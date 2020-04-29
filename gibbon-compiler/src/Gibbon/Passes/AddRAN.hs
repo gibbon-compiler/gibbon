@@ -256,16 +256,21 @@ withRANDDefs needRANsTyCons ddfs = M.map go ddfs
     go dd@DDef{dataCons} =
       let dcons' = L.foldr (\(dcon,tys) acc ->
                               case numRANsDataCon ddfs dcon of
-                                0 -> (dcon,tys) : acc
+                                0 -> acc
                                 n -> -- Not all types have random access nodes.
                                      if not (getTyOfDataCon ddfs dcon `S.member` needRANsTyCons)
-                                     then (dcon,tys) : acc
+                                     then acc
                                      else
                                        let tys'  = [(False,CursorTy) | _ <- [1..n]] ++ tys
                                            dcon' = toRANDataCon dcon
-                                       in [(dcon,tys), (dcon',tys')] ++ acc)
+                                       in [(dcon',tys')] ++ acc)
                    [] dataCons
-      in dd {dataCons = dcons'}
+      -- Add the new constructors after all the existing constructors.
+      -- The order of constructors matters when these become numeric tags after codegen.
+      -- Adding new ones after all the old ones ensures that files that were
+      -- serialized using a datatype before continue to work even after this datatype
+      -- is updated to have random access capabilities.
+      in dd {dataCons = dataCons ++ dcons'}
 
 
 -- | The number of nodes needed by a 'DataCon' for full random access
