@@ -146,6 +146,10 @@ addRANFun needRANsTyCons ddfs fd@FunDef{funBody} = do
 addRANExp :: S.Set TyCon -> DDefs Ty1 -> RANEnv -> Exp1 -> PassM Exp1
 addRANExp needRANsTyCons ddfs ienv ex =
   case ex of
+    -- Update a data constructor to produce values with random access nodes.
+    -- N.B. It always uses absolute pointers for random access nodes. We
+    -- may not always want this. If we know that a region is BigInf, we should
+    -- use relative offsets as pointers. But that's not being done right now.
     DataConE loc dcon args ->
       case numRANsDataCon ddfs dcon of
         0 -> return ex
@@ -162,7 +166,7 @@ addRANExp needRANsTyCons ddfs ienv ex =
 
           rans <- mkRANs ienv needRANsExp
           let ranArgs = L.map (\(v,_,_,_) -> VarE v) rans
-          return $ mkLets rans (DataConE loc (toRANDataCon dcon) (ranArgs ++ args))
+          return $ mkLets rans (DataConE loc (toAbsRANDataCon dcon) (ranArgs ++ args))
 
     -- standard recursion here
     VarE{}    -> return ex
@@ -231,22 +235,21 @@ addRANExp needRANsTyCons ddfs ienv ex =
           if not (tycon `S.member` needRANsTyCons)
           then pure [old_pat]
           else do
-            ranVars <- mapM (\_ -> gensym "ran") [1..n]
+            absRanVars <- mapM (\_ -> gensym "absran") [1..n]
+            relRanVars <- mapM (\_ -> gensym "relran") [1..n]
             let tys = lookupDataCon ddfs dcon
                 -- See Note [Reusing RAN's in case expressions]
                 -- We update the environment to track RAN's of the
                 -- variables bound by this pattern.
                 firstPacked = fromJust $ L.findIndex isPackedTy tys
                 haveRANsFor = L.take n $ L.drop firstPacked $ L.map fst vs
-                ienv' = M.union ienv (M.fromList $ zip haveRANsFor ranVars)
-            -- Keep around case clauses that don't have random access nodes;
-            -- AddTraversals runs later to make sure that they compile.
-            -- [2020.04.23]: disabling this so that the typechecker compiles.
-            -- (:[]) <$>
-            -- [2020.04.28]: re-enabling so that these clauses are kept around in
-            -- order to reproduce the error in the typechecker
-            (:[old_pat]) <$>
-              (toRANDataCon dcon, (L.map (,()) ranVars) ++ vs,) <$> addRANExp needRANsTyCons ddfs ienv' bod
+                ienv' = M.union ienv (M.fromList $ zip haveRANsFor absRanVars)
+                ienv'' = M.union ienv (M.fromList $ zip haveRANsFor relRanVars)
+            bod' <- addRANExp needRANsTyCons ddfs ienv' bod
+            bod'' <- addRANExp needRANsTyCons ddfs ienv'' bod
+            let abs_ran_clause = (toAbsRANDataCon dcon, (L.map (,()) absRanVars) ++ vs, bod')
+            let rel_ran_clause = (toRelRANDataCon dcon, (L.map (,()) relRanVars) ++ vs, bod'')
+            pure [old_pat,abs_ran_clause,rel_ran_clause]
 
 -- | Update data type definitions to include random access nodes.
 withRANDDefs :: Out a => S.Set TyCon -> DDefs (UrTy a) -> DDefs (UrTy a)
@@ -261,9 +264,12 @@ withRANDDefs needRANsTyCons ddfs = M.map go ddfs
                                      if not (getTyOfDataCon ddfs dcon `S.member` needRANsTyCons)
                                      then acc
                                      else
-                                       let tys'  = [(False,CursorTy) | _ <- [1..n]] ++ tys
-                                           dcon' = toRANDataCon dcon
-                                       in [(dcon',tys')] ++ acc)
+                                       let tys'   = [(False,CursorTy) | _ <- [1..n]] ++ tys
+                                           dcon'  = toAbsRANDataCon dcon
+
+                                           tys''  = [(False,IntTy) | _ <- [1..n]] ++ tys
+                                           dcon'' = toRelRANDataCon dcon
+                                       in [(dcon',tys'),(dcon'',tys'')] ++ acc)
                    [] dataCons
       -- Add the new constructors after all the existing constructors.
       -- The order of constructors matters when these become numeric tags after codegen.

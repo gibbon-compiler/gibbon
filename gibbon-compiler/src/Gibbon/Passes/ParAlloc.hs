@@ -314,8 +314,8 @@ substLocInExp mp ex1 =
         AddFixed{}        -> ex1
         GetCilkWorkerNum  -> ex1
         LetAvail vs bod   -> Ext $ LetAvail vs (go bod)
-    MapE{}  -> error "addRANExp: TODO MapE"
-    FoldE{}  -> error "addRANExp: TODO FoldE"
+    MapE{}  -> error "substLocInExpExp: TODO MapE"
+    FoldE{}  -> error "substLocInExpExp: TODO FoldE"
 
   where go = substLocInExp mp
         sub loc = M.findWithDefault loc loc mp
