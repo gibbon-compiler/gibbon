@@ -1074,7 +1074,7 @@ sizeOfTy t =
     SymDictTy _ _ -> Just 8 -- Always a pointer.
     IntTy         -> Just 8
     FloatTy       -> Just 4
-    SymTy         -> Just 4
+    SymTy         -> Just 8
     BoolTy        -> Just 1
     ListTy{}      -> Just 8 -- Always a pointer.
     PtrTy{}       -> Just 8 -- Assuming 64 bit

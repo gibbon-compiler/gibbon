@@ -183,9 +183,7 @@ typedef char TagTyPacked;   // Must be consistent with codegen in Target.hs
 typedef char TagTyBoxed;    // Must be consistent with codegen in Target.hs
 typedef long long IntTy;    // Int64 in Haskell
 typedef float FloatTy;
-typedef int SymTy;          // Word16 in Haskell. This could actually be a
-                            // uint16_t. However, uthash's HASH_*_INT macros
-                            // only work with proper int's.
+typedef IntTy SymTy;
 typedef bool BoolTy;
 typedef char* PtrTy;
 typedef char* CursorTy;
@@ -248,7 +246,7 @@ PtrTy dict_lookup_ptr(dict_item_t *ptr, SymTy key) {
       ptr = ptr->next;
     }
   }
-  printf("Error, key %d not found!\n",key);
+  printf("Error, key %lld not found!\n",key);
   exit(1);
 }
 
@@ -354,7 +352,7 @@ void add_symbol(SymTy idx, char *value) {
     s = malloc(sizeof(struct SymTable_elem));
     s->idx = idx;
     strcpy(s->value, value);
-    HASH_ADD_INT( global_sym_table, idx, s );
+    HASH_ADD(hh, global_sym_table, idx, sizeof(IntTy), s);
     if (idx > global_gensym_counter) {
         global_gensym_counter = idx;
     }
@@ -398,7 +396,7 @@ IntTy print_symbol(SymTy idx) {
     return printf(")");
   } else {
     struct SymTable_elem *s;
-    HASH_FIND_INT( global_sym_table, &idx, s );
+    HASH_FIND(hh, global_sym_table, &idx, sizeof(IntTy), s);
     return printf("%s", s->value);
   }
 }
@@ -407,7 +405,7 @@ SymTy gensym() {
     global_gensym_counter += 1;
     SymTy idx = global_gensym_counter;
     char value[global_max_symbol_len];
-    sprintf(value, "gensym_%d",idx);
+    sprintf(value, "gensym_%lld",idx);
     add_symbol(idx, value);
     return idx;
 }
