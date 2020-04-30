@@ -4,6 +4,7 @@ module Gibbon.Passes.Cursorize
 import           Control.Monad (forM)
 import           Data.List as L
 import qualified Data.Map as M
+import           Data.Maybe (fromJust)
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.DynFlags
@@ -238,6 +239,14 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
     PrimAppE RequestEndOf [arg] -> do
       let (VarE v) = arg
       return $ VarE (toEndV v)
+
+    PrimAppE RequestSizeOf [arg] -> do
+      let (VarE v) = arg
+      case M.lookup v tenv of
+        Nothing -> error $ "cursorizeExp: Unbound variable: " ++ sdoc v
+        Just ty -> if isPackedTy ty
+                   then pure $ Ext $ SubPtr (toEndV v) v
+                   else pure $ LitE $ fromJust $ sizeOfTy ty
 
     PrimAppE pr args -> PrimAppE (toL3Prim pr) <$> mapM go args
 
@@ -1218,7 +1227,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
               case numRANsDataCon ddfs (fromRANDataCon dcon) of
                 0 -> M.empty
                 n -> let -- Random access nodes occur immediately after the tag
-                         inds = L.take n vlocs1
+                         inds = L.take n $ L.drop 1 vlocs1
                          -- Everything else is a regular consturctor field,
                          -- which depends on some random access node
                          data_fields = L.take n (reverse vlocs1)
@@ -1249,18 +1258,20 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                   return $ mkLets binds' bod
 
                 PackedTy{} -> do
+                  tmp_loc <- gensym "loc"
                   let tenv' = M.union (M.fromList [ (loc, CursorTy)
                                                   , (v,   CursorTy) ])
                               tenv
-                      loc_bind = case M.lookup v indirections_env of
-                                   -- This is the first packed value. We can unpack this.
-                                   Nothing ->
-                                     (loc, [], CursorTy, VarE cur)
-                                   -- We need to access this using a random access node
-                                   Just (_var_loc, (ind_var, ind_loc)) ->
-                                     (loc,[],CursorTy, Ext $ AddCursor ind_loc (VarE ind_var))
+                      loc_binds = case M.lookup v indirections_env of
+                                    -- This is the first packed value. We can unpack this.
+                                    Nothing ->
+                                      [(loc, [], CursorTy, VarE cur)]
+                                    -- We need to access this using a random access node
+                                    Just (_var_loc, (ind_var, ind_loc)) ->
+                                      [ (tmp_loc,[],CursorTy, Ext $ AddCursor ind_loc (VarE ind_var))
+                                      , (loc,[],CursorTy, Ext $ AddCursor tmp_loc (LitE 8)) ]
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv'
-                  return $ mkLets [ loc_bind, (v, [], CursorTy, VarE loc) ] bod
+                  return $ mkLets  (loc_binds ++ [(v, [], CursorTy, VarE loc)]) bod
 
                 _ -> error $ "unpackWithRelRAN: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
 

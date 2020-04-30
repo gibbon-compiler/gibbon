@@ -61,6 +61,7 @@ data E3Ext loc dec =
                                            -- only used for typechecking, and not during codegen.
   | WriteList Var (PreExp E3Ext loc dec) dec -- ^ Write a pointer to UT_array*
   | AddCursor Var (PreExp E3Ext loc dec)     -- ^ Add a constant offset to a cursor variable
+  | SubPtr Var Var                           -- ^ Pointer subtraction
   | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
   | ScopedBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
   | InitSizeOfBuffer L2.Multiplicity  -- ^ Returns the initial buffer size for a specific multiplicity
@@ -93,6 +94,7 @@ instance FreeVars (E3Ext l d) where
       ReadList v _       -> S.singleton v
       WriteList c ex  _  -> S.insert c (gFreeVars ex)
       AddCursor v ex -> S.insert v (gFreeVars ex)
+      SubPtr v w     -> S.fromList [v, w]
       NewBuffer{}    -> S.empty
       ScopedBuffer{} -> S.empty
       InitSizeOfBuffer{} -> S.empty
@@ -136,6 +138,7 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
       WriteScalar s v bod  -> WriteScalar s v (gSubst old new bod)
       WriteCursor v bod    -> WriteCursor v (gSubst old new bod)
       AddCursor v bod      -> AddCursor v (gSubst old new bod)
+      SubPtr v w           -> SubPtr v w
       LetAvail ls bod      -> LetAvail ls (gSubst old new bod)
       _ -> ext
 
@@ -144,6 +147,7 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
       WriteScalar s v bod    -> WriteScalar s v (gSubstE old new bod)
       WriteCursor v bod -> WriteCursor v (gSubstE old new bod)
       AddCursor v bod   -> AddCursor v (gSubstE old new bod)
+      SubPtr v w        -> SubPtr v w
       LetAvail ls b     -> LetAvail ls (gSubstE old new b)
       _ -> ext
 
@@ -159,6 +163,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       ReadTag v          -> ReadTag (go v)
       WriteTag dcon v    -> WriteTag dcon (go v)
       AddCursor v bod    -> AddCursor (go v) (go bod)
+      SubPtr v w         -> SubPtr (go v) (go w)
       NewBuffer{}        -> ext
       ScopedBuffer{}     -> ext
       InitSizeOfBuffer{} -> ext

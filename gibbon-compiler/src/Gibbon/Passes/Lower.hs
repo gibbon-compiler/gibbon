@@ -418,6 +418,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
             case ext of
               WriteScalar _ _ ex -> go ex
               AddCursor _ ex   -> go ex
+              SubPtr{}         -> syms
               WriteCursor _ ex -> go ex
               ReadScalar{}   -> syms
               ReadTag{}      -> syms
@@ -673,6 +674,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE (v,_, _,  (Ext (AddCursor c e))) bod ->
       T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv sym_tbl "addCursor base" (VarE c)
                                              , triv sym_tbl "addCursor offset" e] <$>
+         tail sym_tbl bod
+
+    LetE (v,_, _,  (Ext (SubPtr a b))) bod ->
+      T.LetPrimCallT [(v,T.IntTy)] T.SubP [ triv sym_tbl "subCursor base" (VarE a)
+                                          , triv sym_tbl "subCursor offset" (VarE b)] <$>
          tail sym_tbl bod
 
     LetE (v,_, _,  (Ext (ReadTag cur))) bod -> do
@@ -995,6 +1001,7 @@ prim p =
     MkFalse      -> error "lower/prim: internal error. MkFalse should not get here."
     SymAppend    -> error "lower/prim: internal error. SymAppend should not get here."
     RequestEndOf -> error "lower/prim: internal error. RequestEndOf shouldn't be here."
+    RequestSizeOf -> error "lower/prim: internal error. RequestSizeOf shouldn't be here."
 
 isTrivial' :: Exp3 -> Bool
 isTrivial' e =

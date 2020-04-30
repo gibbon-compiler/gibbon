@@ -302,6 +302,17 @@ tcExp ddfs env exp =
                 -- else throwError $ GenericTC "Expected PackedTy" exp
             _ -> throwError $ GenericTC "Expected a variable argument" exp
 
+        RequestSizeOf -> do
+          len1
+          case (es !! 0) of
+            VarE{} -> if isPackedTy (tys !! 0)
+                      then return IntTy
+                      else case (tys !! 0) of
+                             SymTy -> return IntTy
+                             IntTy -> return IntTy
+                             _ -> throwError $ GenericTC "Expected PackedTy" exp
+            _ -> throwError $ GenericTC "Expected a variable argument" exp
+
         VEmptyP ty -> do
           len0
           checkLists ty (ListTy ty)

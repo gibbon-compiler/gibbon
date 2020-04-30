@@ -40,6 +40,8 @@ isRelRANDataCon = isSuffixOf "*"
 fromRANDataCon :: DataCon -> DataCon
 fromRANDataCon = init
 
+--------------------------------------------------------------------------------
+
 -- | Map a DataCon onto the name of the generated unpack function.
 mkUnpackerName :: TyCon -> Var
 mkUnpackerName tyCons = toVar $ "_unpack_" ++ tyCons
@@ -62,3 +64,12 @@ isCopyFunName = isPrefixOf "_copy_" . fromVar
 
 mkTravFunName :: DataCon -> Var
 mkTravFunName dcon = "_traverse_" `varAppend` (toVar dcon)
+
+isTravFunName :: Var -> Bool
+isTravFunName = isPrefixOf "_traverse_" . fromVar
+
+mkRelOffsetsFunName :: DataCon -> Var
+mkRelOffsetsFunName dcon = "_add_size_and_rel_offsets_" `varAppend` (toVar dcon)
+
+isRelOffsetsFunName :: Var -> Bool
+isRelOffsetsFunName = isPrefixOf "_add_size_and_rel_offsets_" . fromVar

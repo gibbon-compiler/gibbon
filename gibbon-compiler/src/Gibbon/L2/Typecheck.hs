@@ -366,6 +366,17 @@ tcExp ddfs env funs constrs regs tstatein exp =
                      -- L _ LitE{} -> return (CursorTy, tstate)
                      _ -> throwError $ GenericTC "Expected a variable argument" exp
 
+                 RequestSizeOf -> do
+                   len1
+                   case (es !! 0) of
+                     VarE{} -> if isPackedTy (tys !! 0)
+                               then return (IntTy, tstate)
+                               else case (tys !! 0) of
+                                      SymTy -> return (IntTy, tstate)
+                                      IntTy -> return (IntTy, tstate)
+                                      _ -> throwError $ GenericTC "Expected PackedTy" exp
+                     _ -> throwError $ GenericTC "Expected a variable argument" exp
+
                  VEmptyP ty  -> do
                    len0
                    pure (ListTy ty, tstate)

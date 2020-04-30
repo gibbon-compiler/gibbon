@@ -918,6 +918,10 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
           return (L2.LetE (vr,[],CursorTy, L2.PrimAppE RequestEndOf [(L2.VarE v)]) bod', ty', cs')
 
+        PrimAppE RequestSizeOf [(VarE v)] -> do
+          (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
+          return (L2.LetE (vr,[],IntTy, L2.PrimAppE RequestSizeOf [(L2.VarE v)]) bod', ty', cs')
+
         PrimAppE (DictInsertP dty) ls -> do
           (e,ty,cs) <- inferExp env (PrimAppE (DictInsertP dty) ls) NoDest
           (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
@@ -1608,6 +1612,7 @@ prim p = case p of
            PrintSym -> return PrintSym
            ReadInt  -> return PrintInt
            RequestEndOf -> return RequestEndOf
+           RequestSizeOf -> return RequestSizeOf
            ErrorP sty ty -> convertTy ty >>= \ty -> return (ErrorP sty ty)
            DictEmptyP dty  -> convertTy dty >>= return . DictEmptyP
            DictInsertP dty -> convertTy dty >>= return . DictInsertP

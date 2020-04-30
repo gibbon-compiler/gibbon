@@ -680,6 +680,10 @@ data Prim ty
           -- fulfilled by Cursorize. N.B. the argument must be a VarE that
           -- refers to a packed value.
 
+          | RequestSizeOf
+          -- ^ Like 'RequestEndOf' but gets the size of a packed value. Assume
+          -- that the value is written in a contiguous region, and size = end_v - v.
+
           | Gensym
 
   deriving (Read, Show, Eq, Ord, Generic, NFData, Functor, Foldable, Traversable)
@@ -1149,6 +1153,7 @@ primArgsTy p =
     ReadArrayFile{}  -> []
     (ErrorP _ _) -> []
     RequestEndOf  -> error "primArgsTy: RequestEndOf not handled yet"
+    RequestSizeOf -> error "primArgsTy: RequestSizeOf not handled yet"
     IntHashEmpty  -> error "primArgsTy: IntHashEmpty not handled yet"
     IntHashInsert -> error "primArgsTy: IntHashInsert not handled yet"
     IntHashLookup -> error "primArgsTy: IntHashLookup not handled yet"
@@ -1217,6 +1222,7 @@ primRetTy p =
     ReadPackedFile _ _ _ ty -> ty
     ReadArrayFile _ ty      -> ty
     RequestEndOf  -> error "primRetTy: RequestEndOf not handled yet"
+    RequestSizeOf -> error "primRetTy: RequestSizeOf not handled yet"
     IntHashEmpty  -> error "primRetTy: IntHashEmpty not handled yet"
     IntHashInsert -> error "primRetTy: IntHashInsert not handled yet"
     IntHashLookup -> error "primRetTy: IntHashLookup not handled yet"

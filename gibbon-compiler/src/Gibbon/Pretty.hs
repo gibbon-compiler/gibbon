@@ -193,6 +193,7 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       DictInsertP ty -> text "DictInsert" <> wty ty
                                       DictLookupP ty -> text "DictLookup" <> wty ty
                                       RequestEndOf   -> text "RequestEndOf"
+                                      RequestSizeOf  -> text "RequestSizeOf"
                                       ErrorP str ty  -> text "ErrorP" <> wty ty <+> doubleQuotes (text str) <> space
                                       ReadPackedFile mb_fp tycon _ _ ->
                                         text "readFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
