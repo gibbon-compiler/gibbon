@@ -434,7 +434,6 @@ data PreExp (ext :: * -> * -> *) loc dec =
 
    | SpawnE Var [loc] [EXP]
    | SyncE
-   | IsBigE EXP
 
    -- Limited list handling:
    -- TODO: RENAME to "Array".
@@ -484,7 +483,6 @@ instance (Out l, Show l, Show d, Out d, Expression (e l d))
         WithArenaE{} -> False
         SpawnE{}   -> False
         SyncE      -> False
-        IsBigE{}   -> False
         Ext ext -> isTrivial ext
 
 -- | Free data variables.  Does not include function variables, which
@@ -516,7 +514,6 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
 
       SpawnE _ _ ls -> S.unions (L.map gFreeVars ls)
       SyncE -> S.empty
-      IsBigE e -> gFreeVars e
 
       Ext q -> gFreeVars q
 
@@ -554,7 +551,6 @@ instance (Show (), Out (), Expression (e () (UrTy ())),
       WithArenaE _v e -> gRecoverType ddfs env2 e
       SpawnE v _ _    -> outTy $ fEnv env2 # v
       SyncE           -> voidTy
-      IsBigE _e       -> BoolTy
       CaseE _ mp ->
         let (c,args,e) = head mp
             args' = L.map fst args
@@ -587,7 +583,6 @@ instance HasRenamable e l d => Renamable (PreExp e l d) where
       TimeIt e ty b -> TimeIt (go e) (go ty) b
       SpawnE f locs args -> SpawnE (go f) (gol locs) (gol args)
       SyncE   -> SyncE
-      IsBigE e-> IsBigE (go e)
       WithArenaE v e -> WithArenaE (go v) (go e)
       Ext ext -> Ext (go ext)
       MapE{}  -> ex
@@ -628,6 +623,8 @@ data Prim ty
               --   To avoid needing inference, this is labeled with a return type.
 
           | SizeParam
+
+          | IsBig   -- ^ Check the size of constructors with size.
 
           | MkTrue  -- ^ Zero argument constructor.
           | MkFalse -- ^ Zero argument constructor.
@@ -831,7 +828,6 @@ subst old new ex =
 
     SpawnE v loc ls   -> SpawnE v loc (map go ls)
     SyncE             -> SyncE
-    IsBigE e          -> IsBigE (go e)
 
     MapE (v,t,rhs) bod | v == old  -> MapE (v,t, rhs)    (go bod)
                        | otherwise -> MapE (v,t, go rhs) (go bod)
@@ -872,7 +868,6 @@ substE old new ex =
     IfE a b c         -> IfE (go a) (go b) (go c)
     SpawnE v loc ls   -> SpawnE v loc (map go ls)
     SyncE             -> SyncE
-    IsBigE e          -> IsBigE (go e)
     MapE (v,t,rhs) bod | VarE v == old  -> MapE (v,t, rhs)    (go bod)
                        | otherwise -> MapE (v,t, go rhs) (go bod)
     FoldE (v1,t1,r1) (v2,t2,r2) bod ->
@@ -904,7 +899,6 @@ hasTimeIt rhs =
       CaseE _ ls   -> any hasTimeIt [ e | (_,_,e) <- ls ]
       LetE (_,_,_,e1) e2 -> hasTimeIt e1 || hasTimeIt e2
       SpawnE _ _ _       -> False
-      IsBigE e           -> hasTimeIt e
       SyncE              -> False
       MapE (_,_,e1) e2   -> hasTimeIt e1 || hasTimeIt e2
       FoldE (_,_,e1) (_,_,e2) e3 -> hasTimeIt e1 || hasTimeIt e2 || hasTimeIt e3
@@ -936,7 +930,6 @@ hasSpawns rhs =
       LetE (_,_,_,e1) e2 -> hasSpawns e1 || hasSpawns e2
       SpawnE{}     -> True
       SyncE        -> False
-      IsBigE e     -> hasSpawns e
       TimeIt e _ _ -> hasSpawns e
       MapE (_,_,e1) e2   -> hasSpawns e1 || hasSpawns e2
       FoldE (_,_,e1) (_,_,e2) e3 ->
@@ -1125,6 +1118,7 @@ primArgsTy p =
     MkFalse -> []
     SymAppend        -> [SymTy, IntTy]
     SizeParam        -> []
+    IsBig            -> [IntTy, PackedTy "HOLE" _error]
     DictEmptyP _ty   -> []
     DictInsertP _ty  -> error "primArgsTy: dicts not handled yet"
     DictLookupP _ty  -> error "primArgsTy: dicts not handled yet"
@@ -1196,6 +1190,7 @@ primRetTy p =
     MkFalse -> BoolTy
     SymAppend      -> SymTy
     SizeParam      -> IntTy
+    IsBig          -> BoolTy
     DictHasKeyP _  -> BoolTy
     DictEmptyP ty  -> SymDictTy Nothing $ stripTyLocs ty
     DictInsertP ty -> SymDictTy Nothing $ stripTyLocs ty

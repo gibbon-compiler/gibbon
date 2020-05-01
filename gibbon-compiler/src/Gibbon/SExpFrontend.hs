@@ -165,7 +165,6 @@ tagDataCons ddefs = go allCons
          b'  <- go cons b
          pure $ FoldE (v1,t1,e1') (v2,t2,e2') b'
        SyncE -> pure SyncE
-       IsBigE{} -> error "tagDataCons: IsBigE not handled"
        Ext (LambdaE bnds e) -> Ext <$> (LambdaE bnds) <$> (go cons e)
        Ext (PolyAppE a b)   -> do
          a' <- go cons a
@@ -444,6 +443,11 @@ exp se =
    Ls (A l1 "sync":[]) -> do
        pure $ Ext $ L (toLoc l1) SyncE
 
+   Ls3 l0 "is-big" i e -> do
+       ie <- exp i
+       ee <- exp e
+       pure $ Ext $ L (toLoc l0) $ PrimAppE IsBig [ie, ee]
+
    Ls3 l "letarena" v e -> do
      e' <- exp e
      let v' = getSym v
@@ -561,6 +565,7 @@ primMap = M.fromList
   , ("sym-hash-empty", SymHashEmpty)
   , ("sym-hash-insert", SymHashInsert)
   , ("sym-hash-lookup", SymHashLookup)
+  , ("is-big", IsBig)
   ]
 
 prim :: Text -> Prim Ty0

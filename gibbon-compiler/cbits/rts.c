@@ -179,9 +179,11 @@ static const int num_workers = 1;
 // Basic types
 // -------------------------------------
 
-typedef char TagTyPacked;   // Must be consistent with codegen in Target.hs
-typedef char TagTyBoxed;    // Must be consistent with codegen in Target.hs
-typedef long long IntTy;    // Int64 in Haskell
+// Must be consistent with sizeOfTy defined in Gibbon.Language.Syntax.
+
+typedef unsigned char TagTyPacked;
+typedef unsigned char TagTyBoxed;
+typedef long long IntTy;
 typedef float FloatTy;
 typedef IntTy SymTy;
 typedef bool BoolTy;
@@ -706,7 +708,18 @@ void free_region(CursorTy end_reg) {
     }
 }
 
-BoolTy is_big(CursorTy cur) {
+// Assume that all nodes with size information have tags >= 150.
+BoolTy is_big(IntTy i, CursorTy cur) {
+    TagTyPacked tag = *(TagTyPacked *) cur;
+    if (tag >= 150) {
+        cur += 1;
+        IntTy size = *(IntTy *) cur;
+        if (size >= i) {
+            return true;
+        } else {
+            return false;
+        }
+    }
     return false;
 }
 

@@ -313,6 +313,9 @@ getTagOfDataCon :: Out a => DDefs a -> DataCon -> Tag
 getTagOfDataCon dds dcon =
     if isIndirectionTag dcon
     then indirectionAlt
+    else if isRelRANDataCon dcon
+    -- So that is_big in the RTS can identify which nodes have size information.
+    then 150 + (fromIntegral ix)
     else fromIntegral ix
   where Just ix = L.elemIndex dcon $ getConOrdering dds (fromVar tycon)
         (tycon,_) = lkp dds dcon
@@ -413,7 +416,6 @@ lower Prog{fundefs,ddefs,mainExp} = do
           WithArenaE _ e -> go e
           SpawnE _ _ ls  -> gol ls
           SyncE -> S.empty
-          IsBigE{} -> error "collect_syms: IsBigE not handled."
           Ext ext        ->
             case ext of
               WriteScalar _ _ ex -> go ex
@@ -827,7 +829,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                         _ -> return ([(vr,typ t)], bod)
         T.LetCallT False vsts f' (L.map (triv sym_tbl "one of app rands") ls) <$> (tail sym_tbl bod')
 
-    LetE (v, _,ty, ( (L3.SpawnE fn locs args))) bod -> do
+    LetE (v, _,ty, L3.SpawnE fn locs args) bod -> do
       tl <- tail sym_tbl (LetE (v,_,ty, AppE fn locs args) bod)
       -- This is going to be a LetCallT.
       pure $ tl { T.async = True }
@@ -968,6 +970,7 @@ prim p =
     OrP    -> T.OrP
     AndP   -> T.AndP
     SizeParam -> T.SizeParam
+    IsBig    -> T.IsBig
     PrintInt -> T.PrintInt
     PrintSym -> T.PrintSym
     ReadInt  -> T.ReadInt

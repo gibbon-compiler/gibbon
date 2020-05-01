@@ -266,7 +266,6 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
       return $ TimeIt e' ty b
     SpawnE{} -> error "threadRegionsExp: Unbound SpawnE"
     SyncE    -> pure ex
-    IsBigE e -> IsBigE <$> go e
     MapE{}  -> error $ "threadRegionsExp: TODO MapE"
     FoldE{} -> error $ "threadRegionsExp: TODO FoldE"
 
@@ -306,7 +305,6 @@ findRetLocs e0 = go e0 []
         WithArenaE _v e -> go e acc
         SpawnE{} -> acc
         SyncE{}  -> acc
-        IsBigE e -> go e acc
         Ext ext ->
           case ext of
             LetRegionE _ bod  -> go bod acc

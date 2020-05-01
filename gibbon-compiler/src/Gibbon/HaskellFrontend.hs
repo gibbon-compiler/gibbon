@@ -202,6 +202,7 @@ primMap = M.fromList
   , ("printint", PrintInt)
   , ("printsym", PrintSym)
   , ("readint", ReadInt)
+  , ("is_big", IsBig)
   ]
 
 desugarExp :: (Show a, Pretty a) => TopTyEnv -> Exp a -> PassM Exp0
@@ -294,7 +295,7 @@ desugarExp toplevel e =
                   else if f == "is_big"
                   then do
                     e2' <- desugarExp toplevel e2
-                    pure $ IsBigE e2'
+                    pure $ PrimAppE IsBig [e2']
                   else if f == "vempty"
                   then do
                     e2' <- desugarExp toplevel e2
@@ -710,7 +711,6 @@ fixupSpawn ex =
           [(AppE fn tyapps ls)] -> SpawnE fn tyapps ls
           _ -> error $ "fixupSpawn: incorrect use of spawn: " ++ sdoc ex
     SyncE   -> SyncE
-    IsBigE e-> IsBigE (go e)
     MapE{}  -> error $ "fixupSpawn: TODO MapE"
     FoldE{} -> error $ "fixupSpawn: TODO FoldE"
   where go = fixupSpawn
@@ -746,7 +746,6 @@ verifyBenchEAssumptions bench_allowed ex =
     TimeIt e ty b -> TimeIt (not_allowed e) ty b
     WithArenaE v e -> WithArenaE v (go e)
     SpawnE fn tyapps args -> SpawnE fn tyapps (map not_allowed args)
-    IsBigE e -> IsBigE (not_allowed e)
     SyncE    -> SyncE
     MapE{}  -> error $ "verifyBenchEAssumptions: TODO MapE"
     FoldE{} -> error $ "verifyBenchEAssumptions: TODO FoldE"

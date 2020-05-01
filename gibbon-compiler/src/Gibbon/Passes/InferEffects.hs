@@ -128,8 +128,6 @@ inferExp ddfs fenv env dps expr =
 
     SyncE -> (S.empty, Nothing)
 
-    IsBigE{} -> (S.empty, Nothing)
-
     ProjE _n e ->
       let (eff, _loc) = inferExp ddfs fenv env dps e
       in (eff, Nothing)

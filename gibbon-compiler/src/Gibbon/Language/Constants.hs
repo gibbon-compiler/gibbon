@@ -14,7 +14,7 @@ redirectionTag :: DataCon
 redirectionTag = "REDIRECTION"
 
 redirectionAlt :: Num a => a
-redirectionAlt = 100
+redirectionAlt = 255
 
 indirectionTag :: DataCon
 indirectionTag = "INDIRECTION"
@@ -23,7 +23,7 @@ isIndirectionTag :: DataCon -> Bool
 isIndirectionTag = isPrefixOf indirectionTag
 
 indirectionAlt :: Num a => a
-indirectionAlt = 90
+indirectionAlt = 254
 
 toAbsRANDataCon :: DataCon -> DataCon
 toAbsRANDataCon dcon = dcon ++ "^"

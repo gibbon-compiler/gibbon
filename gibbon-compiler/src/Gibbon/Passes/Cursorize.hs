@@ -290,7 +290,6 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
 
     SpawnE{} -> error "cursorizeExp: Unbound SpawnE"
     SyncE{}  -> error "cursorizeExp: Unbound SyncE"
-    IsBigE{} -> error "cursorizeExp: Unbound IsBigE"
 
     -- Eg. leftmost
     Ext ext ->
@@ -497,7 +496,6 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
 
     SpawnE{} -> error "cursorizePackedExp: Unbound SpawnE"
     SyncE{}  -> error "cursorizePackedExp: Unbound SyncE"
-    IsBigE{} -> error "cursorizePackedExp: Unbound IsBigE"
 
     Ext ext ->
       case ext of

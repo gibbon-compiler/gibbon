@@ -903,6 +903,12 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        e = [cexp| __cilkrts_get_worker_number() |]
                    return $ [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = $exp:e; |] ]
 
+                 IsBig -> do
+                   let [(outV, BoolTy)] = bnds
+                       [i,arg] = rnds
+                       e = [cexp| is_big($(codegenTriv venv i), $(codegenTriv venv arg)) |]
+                   return $ [ C.BlockDecl [cdecl| $ty:(codegenTy BoolTy) $id:outV = $exp:e; |] ]
+
                  Gensym  -> do
                    let [(outV,SymTy)] = bnds
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy SymTy) $id:outV = gensym(); |] ]

@@ -294,6 +294,13 @@ tcExp isPacked ddfs env exp =
           len0
           return IntTy
 
+        IsBig -> do
+          len2
+          let [ity, ety] = tys
+          ensureEqualTy exp ity IntTy
+          ensureEqualTy exp ety CursorTy
+          pure BoolTy
+
         SymAppend -> do
           len2
           _ <- ensureEqualTyModCursor (es !! 0) SymTy (tys !! 0)
@@ -551,8 +558,6 @@ tcExp isPacked ddfs env exp =
     WithArenaE v e -> do
       let env' = extendVEnv v ArenaTy env
       tcExp isPacked ddfs env' e
-
-    IsBigE{}-> throwError $ GenericTC ("IsBigE not handled.") exp
 
     MapE{}  -> throwError $ UnsupportedExpTC exp
     FoldE{} -> throwError $ UnsupportedExpTC exp

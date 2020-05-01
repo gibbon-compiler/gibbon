@@ -125,7 +125,6 @@ findWitnesses = mapMExprs fn
         WithArenaE{} -> error "findWitnesses: WithArenaE not handled."
         SpawnE{} -> error "findWitnesses: SpawnE not handled."
         SyncE{} -> error "findWitnesses: SyncE not handled."
-        IsBigE{} -> error "findWitnesses: IsBigE not handled."
 
         Ext _ -> handle' $ ex
 

@@ -393,7 +393,6 @@ instance Typeable (PreExp E2Ext LocVar (UrTy LocVar)) where
                              mp = M.fromList $ zip (allLocVars fnty) locs
                          in substLoc mp outty
       SyncE -> voidTy
-      IsBigE{} -> BoolTy
       WithArenaE _v e -> gRecoverType ddfs env2 e
       CaseE _ mp ->
         let (c,vlocs,e) = head mp
@@ -541,7 +540,6 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         TimeIt e ty b -> TimeIt (revertExp e) (stripTyLocs ty) b
         SpawnE v _ args -> SpawnE v [] (L.map revertExp args)
         SyncE -> SyncE
-        IsBigE e -> IsBigE (revertExp e)
         WithArenaE v e -> WithArenaE v (revertExp e)
         Ext ext ->
           case ext of
@@ -588,7 +586,6 @@ occurs w ex =
     TimeIt e _ _     -> go e
     SpawnE _ _ ls    -> any go ls
     SyncE            -> False
-    IsBigE e         -> go e
     WithArenaE v rhs -> v `S.member` w || go rhs
     Ext ext ->
       case ext of
@@ -679,7 +676,6 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           WithArenaE _ e -> go acc e
           SpawnE _ _ ls  -> foldl go acc ls
           SyncE          -> acc
-          IsBigE e       -> go acc e
           MapE{}  -> acc
           FoldE{} -> acc
           Ext ext ->
@@ -749,7 +745,6 @@ changeAppToSpawn v args2 ex1 =
     WithArenaE v e -> WithArenaE v (go e)
     SpawnE{} -> ex1
     SyncE{}  -> ex1
-    IsBigE e -> IsBigE (go e)
     Ext ext ->
       case ext of
         LetRegionE r rhs  -> Ext $ LetRegionE r (go rhs)

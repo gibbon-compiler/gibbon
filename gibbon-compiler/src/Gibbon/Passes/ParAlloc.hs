@@ -265,7 +265,6 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boun
         AddFixed{}     -> pure ex
         GetCilkWorkerNum->pure ex
         LetAvail vs bod -> Ext <$> LetAvail vs <$> go bod
-    IsBigE e -> IsBigE <$> go e
     MapE{}  -> error $ "parAllocExp: TODO MapE"
     FoldE{} -> error $ "parAllocExp: TODO FoldE"
   where
@@ -302,7 +301,6 @@ substLocInExp mp ex1 =
     WithArenaE v e -> WithArenaE v (go e)
     SpawnE{} -> ex1
     SyncE{}  -> ex1
-    IsBigE e -> IsBigE (go e)
     Ext ext ->
       case ext of
         LetRegionE r rhs  -> Ext $ LetRegionE r (go rhs)

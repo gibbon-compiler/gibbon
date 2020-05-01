@@ -268,7 +268,6 @@ updateAvailVars froms tos ex =
     IfE a b c         -> IfE (go a) (go b) (go c)
     SpawnE v loc ls   -> SpawnE v loc (map go ls)
     SyncE             -> SyncE
-    IsBigE e          -> IsBigE (go e)
     WithArenaE v e    -> WithArenaE v (go e)
     MapE (v,t,rhs) bod -> MapE (v,t, go rhs) (go bod)
     FoldE (v1,t1,r1) (v2,t2,r2) bod ->

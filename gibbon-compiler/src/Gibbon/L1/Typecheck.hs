@@ -283,6 +283,14 @@ tcExp ddfs env exp =
           len0
           return IntTy
 
+        IsBig -> do
+          len2
+          let [ity,ety] = tys
+          _ <- ensureEqualTy exp ity IntTy
+          if isPackedTy ety
+          then pure BoolTy
+          else error $ "L1.Typecheck: IsBig expects a Packed value. Got: " ++ sdoc ety
+
         ReadPackedFile _fp _tycon _reg ty -> do
           len0
           return ty
@@ -479,10 +487,6 @@ tcExp ddfs env exp =
              _ -> error "L1.Typecheck: SpawnE; type shouldn't be anything else."
 
     SyncE -> pure voidTy
-
-    IsBigE e -> do
-      _ty <- go e
-      pure BoolTy
 
     WithArenaE v e -> do
       let env' = extendEnv env [(v,ArenaTy)]

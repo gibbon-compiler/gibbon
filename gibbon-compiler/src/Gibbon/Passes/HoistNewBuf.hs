@@ -79,7 +79,6 @@ hoistExp _ ex0 = return $ gocap ex0
 
     (Ext _) -> ([], e0)
 
-    (IsBigE{}) -> ([], e0)
 
     -- (MapE (v,t,e') e) ->
     -- (FoldE (v1,t1,e1) (v2,t2,e2) e3) ->

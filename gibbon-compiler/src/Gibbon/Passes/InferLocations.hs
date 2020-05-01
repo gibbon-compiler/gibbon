@@ -600,8 +600,6 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
 
     SyncE -> pure (SyncE, ProdTy [], [])
 
-    IsBigE{} -> error "inferExp: IsBigE not handled."
-
     LitE n  -> return (LitE n, IntTy, [])
     FloatE n-> return (FloatE n, FloatTy, [])
 
@@ -863,12 +861,6 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
         SyncE -> do
           (bod',ty,cs) <- inferExp env bod dest
           pure (LetE (vr,[],ProdTy [],SyncE) bod', ty, cs)
-
-        IsBigE e -> do
-          (e',ty,csa) <- inferExp env e NoDest
-          (bod',bod_ty,csb) <- inferExp (extendVEnv vr BoolTy env) bod dest
-          let cs = L.nub $ csa ++ csb
-          pure (LetE (vr,[],BoolTy,IsBigE e') bod', ty, cs)
 
         IfE a b c -> do
           (boda,tya,csa) <- inferExp env a NoDest
@@ -1139,10 +1131,6 @@ finishExp e =
 
       SyncE -> pure $ SyncE
 
-      IsBigE e -> do
-        e' <- finishExp e
-        pure $ IsBigE e'
-
       WithArenaE v e -> do
              e' <- finishExp e
              return $ WithArenaE v e'
@@ -1239,9 +1227,6 @@ cleanExp e =
 
       SyncE -> (SyncE, S.empty)
 
-      IsBigE e -> let (e',s') = cleanExp e
-                  in (IsBigE e', s')
-
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (WithArenaE v e', s)
 
@@ -1323,7 +1308,6 @@ fixProj renam pvar proj e =
       SpawnE v ls es -> let es' = map (fixProj renam pvar proj) es
                         in SpawnE v ls es'
       SyncE -> SyncE
-      IsBigE{} -> error "fixProj: IsBigE not handled."
       WithArenaE v e -> WithArenaE v $ fixProj renam pvar proj e
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
@@ -1361,7 +1345,6 @@ moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
         WithArenaE a e  -> WithArenaE a $ go acc1 pending e
         SpawnE fn locs ls -> error "moveProjsAfterSync: unbound SpawnE"
         SyncE   -> error "moveProjsAfterSync: unbound SyncE"
-        IsBigE{} -> error "moveProjsAfterSync: IsBigE not handled."
         Ext ext -> case ext of
                      LetRegionE r bod -> Ext $ LetRegionE r $ go acc1 pending bod
                      LetLocE a b bod -> Ext $ LetLocE a b $ go acc1 pending bod
@@ -1608,6 +1591,7 @@ prim p = case p of
            MkFalse -> return MkFalse
            Gensym  -> return Gensym
            SizeParam -> return SizeParam
+           IsBig    -> return IsBig
            PrintInt -> return PrintInt
            PrintSym -> return PrintSym
            ReadInt  -> return PrintInt
