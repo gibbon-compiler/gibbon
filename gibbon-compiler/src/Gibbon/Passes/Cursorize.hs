@@ -1149,7 +1149,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                          ind_vars = L.map fst $ L.take n vlocs1
                          -- Everything else is a regular consturctor field,
                          -- which depends on some random access node
-                         data_fields = L.take n (reverse vlocs1)
+                         data_fields = reverse $ L.take n (reverse vlocs1)
                          (vars, var_locs) = unzip data_fields
                      in M.fromList $ zip vars (zip var_locs ind_vars)
         in go field_cur vlocs1 tys1 ran_mp denv1 (M.insert field_cur CursorTy tenv1)
@@ -1230,7 +1230,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                          inds = L.take n $ L.drop 1 vlocs1
                          -- Everything else is a regular consturctor field,
                          -- which depends on some random access node
-                         data_fields = L.take n (reverse vlocs1)
+                         data_fields = reverse $ L.take n (reverse vlocs1)
                          (vars, var_locs) = unzip data_fields
                      in M.fromList $ zip vars (zip var_locs inds)
         in go field_cur vlocs1 tys1 ran_mp denv1 (M.insert field_cur CursorTy tenv1)
