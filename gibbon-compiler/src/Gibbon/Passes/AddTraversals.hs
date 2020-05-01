@@ -165,7 +165,8 @@ needsTraversalCase ddefs fundefs env2 (dcon,vlocs,rhs) =
                            -- However if (n==1), we traverse that element. Need to audit this.
                            ls = L.map (\a -> (loc_var_mp # a, a)) not_traversed
                            trav = if length ls == 1
-                                  then ls
+                                  -- [2020.05.01]: CSK, I haven't thought about this change too much. Maybe we need to revisit this.
+                                  then []
                                   else init ls
 
                        -- If the problematic elements are unused, we don't need to add traversals

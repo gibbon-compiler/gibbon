@@ -530,9 +530,11 @@ genRelOffsetsFunNameFn needRANsTyCons ddfs DDef{tyName, dataCons} = do
                        else do
                          size_vars <- mapM (\y -> gensym $ toVar $ "sizeof_" ++ fromVar y ++ "_") ys
                          let size_binds acc = foldr
-                                                (\(sz,y) acc ->
-                                                     LetE (sz,[],IntTy,PrimAppE RequestSizeOf [VarE y]) acc)
-                                                acc (zip size_vars ys)
+                                                (\(sz,y,ty) acc ->
+                                                     if isPackedTy ty
+                                                     then LetE (sz,[],IntTy,PrimAppE RequestSizeOf [VarE y]) acc
+                                                     else LetE (sz,[],IntTy,LitE (fromJust $ sizeOfTy ty)) acc)
+                                                acc (L.zip3 size_vars ys tys)
                          offset_vars <- mapM (\_ -> gensym "offset_") [0..(num_offsets-1)]
                          let need_offsets = reverse $ L.take num_offsets (reverse xs)
                          let addp ls = case ls of
