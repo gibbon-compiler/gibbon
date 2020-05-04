@@ -493,6 +493,60 @@ exp se =
    -- Other annotations are dropped:
    Ls3 l "ann" e _ty -> Ext <$> L (toLoc l) <$> exp e
 
+   -- List operations
+   Ls (A l "vempty" : []) -> do
+       ty <- newMetaTy
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VEmptyP ty) []
+
+   Ls3 l "vnth" i ls -> do
+       ty <- newMetaTy
+       ie <- exp i
+       lse <- exp ls
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VNthP ty) [ie, lse]
+
+   Ls2 l "vlength" ls -> do
+       ty <- newMetaTy
+       lse <- exp ls
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VLengthP ty) [lse]
+
+   Ls4 l "vupdate" ls i v -> do
+       ty <- newMetaTy
+       lse <- exp ls
+       ie <- exp i
+       ve <- exp v
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VUpdateP ty) [lse,ie,ve]
+
+   Ls3 l "vsnoc" ls v -> do
+       ty <- newMetaTy
+       lse <- exp ls
+       ve <- exp v
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VSnocP ty) [lse,ve]
+
+   Ls3 l "inplacevsnoc" ls v -> do
+       ty <- newMetaTy
+       lse <- exp ls
+       ve <- exp v
+       pure $ Ext $ L (toLoc l) $ PrimAppE (InPlaceVSnocP ty) [lse,ve]
+
+   Ls3 l "vsort" f ls -> do
+       ty <- newMetaTy
+       fe  <- exp f
+       lse <- exp ls
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VSortP ty) [fe,lse]
+
+   Ls3 l "inplacevsort" f ls -> do
+       ty <- newMetaTy
+       fe  <- exp f
+       lse <- exp ls
+       pure $ Ext $ L (toLoc l) $ PrimAppE (InPlaceVSortP ty) [fe,lse]
+
+   Ls4 l "vslice" ls from to -> do
+       ty <- newMetaTy
+       lse  <- exp ls
+       frome <- exp from
+       toe <- exp to
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VSliceP ty) [lse,frome,toe]
+
    Ls (A _ kwd : _args) | isKeyword kwd ->
       error $ "Error reading treelang. " ++ show kwd ++ "is a keyword:\n "++prnt se
 
