@@ -1170,15 +1170,17 @@ void __main_expr() {
     clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed2661);
 
     for (int i = 0; i < global_iters_param; i++) {
-        paid = payA_seq(end_reg, reg, val, coins, acc);
+        UT_array *coins2;
+        utarray_new(coins2, &Coin_icd);
+        utarray_concat(coins2, coins);
+        paid = payA_seq(end_reg, reg, val, coins2, acc);
         // _print_AList(paid.field1);
-        len = lenA_seq(paid.field0, paid.field1);
     }
     struct timespec end_timed2661;
     clock_gettime(CLOCK_MONOTONIC_RAW, &end_timed2661);
     double batchtime = difftimespecs(&begin_timed2661, &end_timed2661);
     double selftimed = batchtime / global_iters_param;
-
+    len = lenA_seq(paid.field0, paid.field1);
     printf("ITERS: %lld\n", global_iters_param);
     printf("SIZE: %lld\n", global_size_param);
     printf("BATCHTIME: %e\n", batchtime);
