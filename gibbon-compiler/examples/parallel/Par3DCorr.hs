@@ -129,6 +129,35 @@ fromListWithAxis axis pts =
 fromList :: [(Float, Float, Float)] -> KdTree
 fromList pts = fromListWithAxis 0 pts
 
+fromListWithAxis_par :: Int -> Int -> [(Float, Float, Float)] -> KdTree
+fromListWithAxis_par cutoff axis pts =
+    let len = vlength pts in
+    if len < cutoff
+    then fromListWithAxis axis pts
+    -- if len == 1
+    -- then let pt = vnth 0 pts
+    --      in KdLeaf (pt !!! 0) (pt !!! 1) (pt !!! 2)
+    else let sorted_pts = sort axis pts
+             pivot_idx  = div len 2
+             pivot      = vnth pivot_idx sorted_pts
+             left_pts   = vslice sorted_pts 0 pivot_idx
+             right_pts  = vslice sorted_pts pivot_idx len
+             next_axis  = getNextAxis_2D axis
+             left_tr    = spawn (fromListWithAxis_par cutoff next_axis left_pts)
+             right_tr   = fromListWithAxis_par cutoff next_axis right_pts
+             _          = sync
+             min_x      = min (getMinX left_tr) (getMinX right_tr)
+             max_x      = max (getMaxX left_tr) (getMaxX right_tr)
+             min_y      = min (getMinY left_tr) (getMinY right_tr)
+             max_y      = max (getMaxY left_tr) (getMaxY right_tr)
+             min_z      = min (getMinZ left_tr) (getMinZ right_tr)
+             max_z      = max (getMaxZ left_tr) (getMaxZ right_tr)
+             total_elems= (getElems left_tr) + (getElems right_tr)
+         in KdNode total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
+
+-- | Build a KD-Tree out of a set of points
+fromList_par :: Int -> [(Float, Float, Float)] -> KdTree
+fromList_par cutoff pts = fromListWithAxis_par cutoff 0 pts
 
 --------------------------------------------------------------------------------
 
@@ -235,8 +264,8 @@ countCorr probe radius tr =
          else 0
 
 -- | Two point correlation
-countCorr_par :: (Float, Float, Float) -> Float -> KdTree -> Int
-countCorr_par probe radius tr =
+countCorr_par :: Int -> (Float, Float, Float) -> Float -> KdTree -> Int
+countCorr_par cutoff probe radius tr =
   case tr of
     KdLeaf x y z ->
       if (dist probe (x, y, z)) .<. (radius .*. radius)
@@ -244,8 +273,7 @@ countCorr_par probe radius tr =
       else 0
 
     KdNode elems axis split_val min_x max_x min_y max_y min_z max_z left right ->
-      -- 524288 == 2^19
-      if elems < 524288 then countCorr probe radius tr else
+      if elems < cutoff then countCorr probe radius tr else
       -- Ported over from ASTBenchmarks
       let center_x  = (min_x .+. max_x) ./. 2.0
           center_y  = (min_y .+. max_y) ./. 2.0
@@ -259,21 +287,34 @@ countCorr_par probe radius tr =
           sum       = (d_x .*. d_x) .+. (d_y .*. d_y) .+. (d_z .*. d_z)
           boxsum    = (boxdist_x .*. boxdist_x) .+. (boxdist_y .*. boxdist_y) .+. (boxdist_z .*. boxdist_z)
       in if (sum .-. boxsum) .<. (radius .*. radius)
-         then let n1 = spawn (countCorr_par probe radius left)
-                  n2 = countCorr_par probe radius right
+         then let n1 = spawn (countCorr_par cutoff probe radius left)
+                  n2 = countCorr_par cutoff probe radius right
                   _  = sync
               in n1 + n2
          else 0
 
 --------------------------------------------------------------------------------
 
+-- measure :: [(Float, Float, Float)] -> Int -> Int
+-- measure pts n =
+--     let radius  = intToFloat n
+--         i       = rand
+--         j       = (mod i n) - 1
+--         probe   = vnth j pts
+--         -- 524288 == 2^19
+--         cutoff  = 524288
+--         tr      = fromList_par cutoff pts
+--     in countCorr_par cutoff probe radius tr
+
 gibbon_main =
     let pts :: [(Float, Float, Float)]
         pts = readArrayFile ()
-        n       = sizeParam
+        n   = sizeParam
         radius  = intToFloat n
-        tr      = fromList pts
         i       = rand
         j       = (mod i n) - 1
         probe   = vnth j pts
-    in iterate (countCorr_par probe radius tr)
+        -- 524288 == 2^19
+        cutoff  = 524288
+        tr      = fromList pts
+    in iterate (countCorr_par cutoff probe radius tr)

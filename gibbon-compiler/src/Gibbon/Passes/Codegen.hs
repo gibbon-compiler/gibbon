@@ -242,14 +242,15 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       makeProt :: C.Func -> Bool -> PassM C.InitGroup
       makeProt fn ispure = do
         dflags <- getDynFlags
-        let prot@(C.InitGroup decl_spec _ inits lc) = C.funcProto fn
-            purattr = C.Attr (C.Id "pure" noLoc) [] noLoc
+        let _prot@(C.InitGroup decl_spec _ inits lc) = C.funcProto fn
+            _purattr = C.Attr (C.Id "pure" noLoc) [] noLoc
             -- Only add pure annotations if compiling in pointer mode, and if the
             -- --no-pure-annot flag is not passed.
-            pureAnnotOk = not (gopt Opt_No_PureAnnot dflags || gopt Opt_Packed dflags)
-        if ispure && pureAnnotOk
-        then return $ C.InitGroup decl_spec [purattr] inits lc
-        else return prot
+            _pureAnnotOk = not (gopt Opt_No_PureAnnot dflags || gopt Opt_Packed dflags)
+        -- if ispure && pureAnnotOk
+        -- then return $ C.InitGroup decl_spec [purattr] inits lc
+        -- else return prot
+        return prot
 
       codegenFun :: FunDecl -> PassM [(C.Definition, C.Definition)]
       codegenFun fd@FunDecl{funName} =

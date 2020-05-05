@@ -537,7 +537,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
       (s1, ty, e') <- tcExp ddefs sbst venv fenv bound_tyvars is_main (AppE fn tyapps args)
       case e' of
         AppE fn' tyapps' args' -> pure (s1, ty, SpawnE fn' tyapps' args')
-        _ -> err $ text "SpawnE"
+        _ -> err $ text "SpawnE: not a saturated function"
 
     SyncE   -> pure (sbst, ProdTy [], SyncE)
 

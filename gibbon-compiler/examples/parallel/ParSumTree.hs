@@ -21,21 +21,22 @@ sumTree_seq foo =
           y = sumTree_seq b
       in i + x + y
 
-sumTree :: Tree -> Int
-sumTree foo =
+sumTree :: Int -> Tree -> Int
+sumTree cutoff foo =
   case foo of
     Leaf i     -> i
     Node i a b ->
-      if i < 19
+      if i < cutoff
       then sumTree_seq foo
       else
-          let x = spawn (sumTree a)
-              y = sumTree b
+          let x = spawn (sumTree cutoff a)
+              y = sumTree cutoff b
               _ = sync
           in i + x + y
 
 gibbon_main =
   let n = sizeParam
       x = mkTree_seq n
-      y = iterate (sumTree x)
+      cutoff = 19
+      y = iterate (sumTree cutoff x)
   in y

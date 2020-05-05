@@ -236,13 +236,23 @@ countCorr probe radius tr =
 
 --------------------------------------------------------------------------------
 
+-- measure :: [(Float, Float, Float)] -> Int -> Int
+-- measure pts n =
+--     let radius  = intToFloat n
+--         i       = rand
+--         j       = (mod i n) - 1
+--         probe   = vnth j pts
+--         tr      = fromList pts
+--     in countCorr probe radius tr
+
+
 gibbon_main =
     let pts :: [(Float, Float, Float)]
         pts = readArrayFile ()
-        n       = sizeParam
+        n   = sizeParam
         radius  = intToFloat n
-        tr      = fromList pts
         i       = rand
         j       = (mod i n) - 1
         probe   = vnth j pts
+        tr      = fromList pts
     in iterate (countCorr probe radius tr)

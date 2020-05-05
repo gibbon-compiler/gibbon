@@ -12,15 +12,15 @@ mkTree_seq i =
           y = mkTree_seq (i-1)
       in Node i x y
 
-mkTree :: Int -> Tree
-mkTree i =
+mkTree :: Int -> Int -> Tree
+mkTree cutoff i =
   if i <= 0
   then Leaf 6765
   else
-      if i < 19
+      if i < cutoff
       then mkTree_seq i
-      else let x = spawn (mkTree (i-1))
-               y = mkTree (i-1)
+      else let x = spawn (mkTree cutoff (i-1))
+               y = mkTree cutoff (i-1)
                _ = sync
            in Node i x y
 
@@ -33,16 +33,16 @@ add1Tree_seq tr =
           r1 = (add1Tree_seq r)
       in Node (i+1) l1 r1
 
-add1Tree :: Tree -> Tree
-add1Tree tr =
+add1Tree :: Int -> Tree -> Tree
+add1Tree cutoff tr =
   case tr of
     Leaf i     -> Leaf (i+1)
     Node i l r ->
-      if i < 19
+      if i < cutoff
       then add1Tree_seq tr
       else
-        let l1 = spawn (add1Tree l)
-            r1 = (add1Tree r)
+        let l1 = spawn (add1Tree cutoff l)
+            r1 = (add1Tree cutoff r)
             _  = sync
         in Node (i+1) l1 r1
 
@@ -57,6 +57,7 @@ sumTree_seq foo =
 
 gibbon_main =
   let n = sizeParam
-      x = mkTree n
-      y = iterate (add1Tree x)
+      cutoff = 19
+      x = mkTree cutoff n
+      y = iterate (add1Tree cutoff x)
   in (sumTree_seq y)
