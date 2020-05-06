@@ -1100,6 +1100,9 @@ CursorCursorCursorProd payA_seq(CursorTy end_out_reg, CursorTy out_cur,
             //     *(TagTyPacked *) out_cur = 3;
             // }
             *(TagTyPacked *) out_cur = 3;
+
+            utarray_free(coins1);
+
             return (CursorCursorCursorProd) {right.field0, out_cur, right.field2};
         }
     }
@@ -1163,7 +1166,7 @@ CursorCursorCursorProd payA(CursorTy end_out_reg, CursorTy out_cur,
             if (coin->quant != 1) {
                 Coin ctmp = (Coin) {coin->val, coin->quant - 1};
                 utarray_push_back(coins1, &ctmp);
-                // depth_left = depth - 1;
+                depth_left = depth - 1;
             }
 
             IntTy val_left = val - coin->val;
@@ -1210,6 +1213,8 @@ CursorCursorCursorProd payA(CursorTy end_out_reg, CursorTy out_cur,
             //     *(TagTyPacked *) out_cur = 3;
             // }
             *(TagTyPacked *) out_cur = 3;
+
+            utarray_free(coins1);
 
             return (CursorCursorCursorProd) {right.field0, out_cur, right.field2};
         }
@@ -1382,13 +1387,14 @@ void __main_expr() {
     struct timespec begin_timed2661;
     clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed2661);
 
+    UT_array *coins2;
     for (int i = 0; i < global_iters_param; i++) {
-        UT_array *coins2;
         utarray_new(coins2, &Coin_icd);
         utarray_concat(coins2, coins);
         // paid = payA_seq(end_reg, reg, val, coins, acc);
         paid = payA(end_reg, reg, val, coins2, acc, 3);
         // _print_AList(paid.field1);
+        utarray_free(coins2);
     }
     struct timespec end_timed2661;
     clock_gettime(CLOCK_MONOTONIC_RAW, &end_timed2661);

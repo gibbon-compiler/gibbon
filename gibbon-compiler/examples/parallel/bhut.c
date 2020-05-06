@@ -2472,7 +2472,7 @@ void __main_expr() {
     UT_array *accels;
     utarray_new(accels, &Point2D_icd);
     UT_array *final_particles;
-    utarray_new(final_particles, &Particle_icd);
+    // utarray_new(final_particles, &Particle_icd);
 
     struct timespec begin_timed2661;
     clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed2661);
@@ -2490,7 +2490,7 @@ void __main_expr() {
         // printf("\nbuilt tree\n");
 
         utarray_clear(accels);
-        utarray_clear(final_particles);
+        // utarray_clear(final_particles);
 
         // // sequential
         // mapCalcAccel(accels, mpts, tr);
@@ -2505,9 +2505,9 @@ void __main_expr() {
         // runtime is spent on constructing the tree. So the overall effect
         // of parallelizing these loops is negligible.
         utarray_concat(accels,pts);
-        final_particles = particles;
         mapCalcAccel_par2(accels, mpts, tr);
         mapApplyAccel_par2(particles, particles, accels);
+        final_particles = particles;
     }
 
 
