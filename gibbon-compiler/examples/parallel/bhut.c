@@ -23,6 +23,7 @@
 #endif
 #ifdef _PARALLEL
 #include <cilk/cilk.h>
+#include <cilk/reducer.h>
 #include <cilk/cilk_api.h>
 #endif
 
@@ -817,8 +818,6 @@ int main(int argc, char** argv)
 // Program starts here
 // -----------------------------------------------------------------------------
 
-#define MAX_NUM_POINTS 2000000
-
 typedef struct Float32Float32Prod_struct {
     FloatTy field0; // x
     FloatTy field1; // y
@@ -982,6 +981,49 @@ typedef struct CursorCursorCursorProd_struct {
     CursorTy field2;
 } CursorCursorCursorProd;
 
+
+// -----------------------------------------------------------------------------
+// Cilk reducer stuff
+
+void points2d_append(UT_array *ls, Point2D *p) {
+    utarray_push_back(ls, &p);
+}
+
+void points2d_init(UT_array *ls) {
+    utarray_new(ls, &Point2D_icd);
+}
+
+void points2d_identity(void* reducer, void* list) {
+    UT_array *ls = (UT_array*) list;
+    utarray_new(ls, &Point2D_icd);
+}
+
+void points2d_reduce(void* reducer, void* left, void* right) {
+    UT_array *ls1 = (UT_array*) left;
+    UT_array *ls2 = (UT_array*) right;
+    utarray_concat(ls1, ls2);
+}
+
+void particles_append(UT_array *ls, Particle p) {
+    utarray_push_back(ls, &p);
+}
+
+void particles_init(UT_array *ls) {
+    utarray_new(ls, &Particle_icd);
+}
+
+void particles_identity(void* reducer, void* list) {
+    UT_array *ls = (UT_array*) list;
+    utarray_new(ls, &Particle_icd);
+}
+
+void particles_reduce(void* reducer, void* left, void* right) {
+    printf("concating...\n");
+    UT_array *ls1 = (UT_array*) left;
+    UT_array *ls2 = (UT_array*) right;
+    utarray_concat(ls1, ls2);
+}
+
 // -----------------------------------------------------------------------------
 
 void twoDPtsToParticles(UT_array *dst, UT_array *ps);
@@ -998,8 +1040,12 @@ BoolTy isClose(FloatTy a_x, FloatTy a_y, FloatTy b_x, FloatTy b_y);
 void calcAccel_seq(Point2D *dst, MassPoint *mpt, CursorTy in_cur);
 void calcAccel(Point2D *dst, MassPoint *mpt, CursorTy in_cur, IntTy c);
 void mapCalcAccel(UT_array *dst, UT_array *mpts, CursorTy tr);
+void mapCalcAccel_par(UT_array *dst, UT_array *mpts, CursorTy tr);
+void mapCalcAccel_par2(UT_array *dst, UT_array *mpts, CursorTy tr);
 void applyAccel(Particle *dst, Particle *particle, Point2D *accel);
 void mapApplyAccel(UT_array *dst, UT_array *particles, UT_array *accels);
+void mapApplyAccel_par(UT_array *dst, UT_array *particles, UT_array *accels);
+void mapApplyAccel_par2(UT_array *dst, UT_array *particles, UT_array *accels);
 void minus_point2d(Point2D *dst, Point2D *p1, Point2D *p2);
 void plus_point2d(Point2D *dst, Point2D *p1, Point2D *p2);
 void mult_point2d(Point2D *dst, Point2D *p1, FloatTy s);
@@ -1356,15 +1402,42 @@ void calcAccel(Point2D *dst, MassPoint *mpt, CursorTy in_cur, IntTy c) {
     }
 }
 
+void mapCalcAccel_par(UT_array *dst, UT_array *mpts, CursorTy tr) {
+    int len = utarray_len(mpts);
+    utarray_reserve(dst, len);
+
+    CILK_C_DECLARE_REDUCER(UT_array) points2d_reducer =
+        CILK_C_INIT_REDUCER(UT_array,
+                            points2d_reduce,
+                            points2d_identity,
+                            __cilkrts_hyperobject_noop_destroy);
+    // Initial value omitted //;
+    points2d_init(&REDUCER_VIEW(points2d_reducer));
+    CILK_C_REGISTER_REDUCER(points2d_reducer);
+
+    cilk_for (int idx = 0; idx < len; idx++) {
+        Point2D p;
+        MassPoint *mp = (MassPoint*) utarray_eltptr(mpts, idx);
+        calcAccel_seq(&p, mp, tr);
+        points2d_append(&REDUCER_VIEW(points2d_reducer), &p);
+    }
+
+    CILK_C_UNREGISTER_REDUCER(points2d_reducer);
+}
+
+void mapCalcAccel_par2(UT_array *dst, UT_array *mpts, CursorTy tr) {
+    int len = utarray_len(mpts);
+    cilk_for (int idx = 0; idx < len; idx++) {
+        MassPoint *mp = (MassPoint*) utarray_eltptr(mpts, idx);
+        Point2D *p = (Point2D*) utarray_eltptr(dst, idx);
+        calcAccel_seq(p, mp, tr);
+    }
+}
+
 void mapCalcAccel(UT_array *dst, UT_array *mpts, CursorTy tr) {
     IntTy idx;
     MassPoint *mp;
     Point2D p;
-
-    IntTy cutoff = 1048576;
-    // IntTy cutoff = 524288;
-    // IntTy cutoff = 262144;
-    // IntTy cutoff = 131072;
 
     for (idx = 0; idx < utarray_len(mpts); idx++) {
         mp = (MassPoint*) utarray_eltptr(mpts, idx);
@@ -1393,16 +1466,63 @@ void mapApplyAccel(UT_array *dst, UT_array *ps, UT_array *accels){
         printf("mapApplyAccel: size mismatch, %d != %d", utarray_len(ps), utarray_len(accels));
         exit(1);
     }
-    IntTy len = utarray_len(ps);
-    IntTy idx;
+    int len = utarray_len(ps);
     Particle *p;
     Point2D *a;
     Particle p2;
-    for (idx = 0; idx < len; idx++) {
+
+    for (int idx = 0; idx < len; idx++) {
         a = (Point2D*) utarray_eltptr(accels, idx);
         p = (Particle*) utarray_eltptr(ps, idx);
         applyAccel(&p2, p, a);
         utarray_push_back(dst, &p2);
+    }
+}
+
+void mapApplyAccel_par(UT_array *dst, UT_array *ps, UT_array *accels){
+
+    if (utarray_len(ps) != utarray_len(accels)) {
+        printf("mapApplyAccel: size mismatch, %d != %d", utarray_len(ps), utarray_len(accels));
+        exit(1);
+    }
+    IntTy len = utarray_len(ps);
+    IntTy idx;
+
+    utarray_reserve(dst, len);
+
+    CILK_C_DECLARE_REDUCER(UT_array) particles_reducer =
+        CILK_C_INIT_REDUCER(UT_array,
+                            particles_reduce,
+                            particles_identity,
+                            __cilkrts_hyperobject_noop_destroy);
+    // Initial value omitted //;
+    points2d_init(&REDUCER_VIEW(particles_reducer));
+    CILK_C_REGISTER_REDUCER(particles_reducer);
+
+    cilk_for (idx = 0; idx < len; idx++) {
+        Particle *p = (Particle*) utarray_eltptr(ps, idx);
+        Point2D *a = (Point2D*) utarray_eltptr(accels, idx);
+        Particle p3;
+        applyAccel(&p3, p, a);
+        particles_append(&REDUCER_VIEW(particles_reducer), p3);
+    }
+
+    CILK_C_UNREGISTER_REDUCER(particles_reducer);
+}
+
+void mapApplyAccel_par2(UT_array *dst, UT_array *ps, UT_array *accels){
+
+    if (utarray_len(ps) != utarray_len(accels)) {
+        printf("mapApplyAccel: size mismatch, %d != %d", utarray_len(ps), utarray_len(accels));
+        exit(1);
+    }
+    IntTy len = utarray_len(ps);
+    IntTy idx;
+
+    cilk_for (idx = 0; idx < len; idx++) {
+        Particle *p = (Particle*) utarray_eltptr(ps, idx);
+        Point2D *a = (Point2D*) utarray_eltptr(accels, idx);
+        applyAccel(p, p, a);
     }
 }
 
@@ -2364,22 +2484,31 @@ void __main_expr() {
     IntTy cutoff = 65536;
 
     for (int i = 0; i < global_iters_param; i++) {
-        utarray_clear(accels);
-        utarray_clear(final_particles);
         tree = buildTree(end_reg,cur,&box, mpts, cutoff);
         CursorTy tr = tree.field1;
         // _print_BH_Tree(tr);
         // printf("\nbuilt tree\n");
-        mapCalcAccel(accels, mpts, tr);
-        mapApplyAccel(final_particles, particles, accels);
-    }
 
-    // Particle *pcle;
-    // for(pcle=(Particle*)utarray_front(final_particles);
-    //     pcle!=NULL;
-    //     pcle=(Particle*)utarray_next(final_particles,pcle)) {
-    //     printf("(%f, %f, %f, %f, %f)\n", pcle->field0, pcle->field1, pcle->field2, pcle->field3, pcle->field4);
-    // }
+        utarray_clear(accels);
+        utarray_clear(final_particles);
+
+        // // sequential
+        // mapCalcAccel(accels, mpts, tr);
+        // mapApplyAccel(final_particles, particles, accels);
+
+        // // parallel reducers (don't work)
+        // mapCalcAccel_par(accels, mpts, tr);
+        // mapApplyAccel_par(final_particles, particles, accels);
+
+        // parallel for with mutation
+        // On Swarm, cilk_for speeds up these loops by 3-4x. But most of the
+        // runtime is spent on constructing the tree. So the overall effect
+        // of parallelizing these loops is negligible.
+        utarray_concat(accels,pts);
+        final_particles = particles;
+        mapCalcAccel_par2(accels, mpts, tr);
+        mapApplyAccel_par2(particles, particles, accels);
+    }
 
 
     printf("Elems: %lld\n", getElems(tree.field0, tree.field1));
