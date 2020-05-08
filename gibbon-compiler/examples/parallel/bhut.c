@@ -1449,15 +1449,17 @@ void mapCalcAccel(UT_array *dst, UT_array *mpts, CursorTy tr) {
 
 void applyAccel(Particle *dst, Particle *p, Point2D *a) {
     FloatTy vx, vy, ax, ay;
-    vx = p->field0;
-    vy = p->field1;
+    vx = p->field3;
+    vy = p->field4;
     ax = a->field0;
     ay = a->field1;
     dst->field0 = p->field0;
     dst->field1 = p->field1;
     dst->field2 = p->field2;
-    dst->field3 = (vx + ax) * 2.0;
-    dst->field4 = (vy + ay) * 2.0;
+    dst->field3 = vx + (ax * 2.0);
+    dst->field4 = vy + (ay * 2.0);
+    // dst->field3 = 0.0 + (ax * 2.0);
+    // dst->field4 = 0.0 + (ay * 2.0);
 }
 
 void mapApplyAccel(UT_array *dst, UT_array *ps, UT_array *accels){

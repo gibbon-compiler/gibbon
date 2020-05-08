@@ -913,6 +913,13 @@ void print_array_masspoint(Array_MassPoint *ls) {
 
 */
 
+void print_masspoint(MassPoint *mp) {
+    printf("(%f, %f, %f)",
+           mp->field0,
+           mp->field1,
+           mp->field2);
+}
+
 typedef struct Float32Float32Float32Float32Float32Prod_struct {
     FloatTy field0; // x
     FloatTy field1; // y
@@ -1097,12 +1104,15 @@ void calcCentroid(MassPoint *dst, UT_array *mpts) {
     MassPoint *mp;
     for (idx = 0; idx < utarray_len(mpts); idx++) {
         mp = (MassPoint*) utarray_eltptr(mpts, idx);
+        // print_masspoint(mp);
+        // printf("\n");
         acc_x += mp->field0 * mp->field2;
         acc_y += mp->field1 * mp->field2;
         acc_mass += mp->field2;
     }
-    dst->field0 = acc_x;
-    dst->field1 = acc_y;
+    // printf("(%f, %f, %f)\n", acc_x, acc_y, acc_mass);
+    dst->field0 = acc_x / acc_mass;
+    dst->field1 = acc_y / acc_mass;
     dst->field2 = acc_mass;
 }
 
@@ -1130,11 +1140,13 @@ void accel(Point2D *dst, MassPoint *mpt, FloatTy x, FloatTy y, FloatTy m) {
     FloatTy dy = mpt->field1 - y;
     FloatTy rsqr = (dx * dx) + (dy * dy);
     FloatTy r = sqrt(rsqr);
+    // printf("dx: %f, dy: %f, rsqr; %f, r:%f: \n", dx,dy,rsqr,r);
     if (r < 0.05) {
         dst->field0 = 0.0;
         dst->field1 = 0.0;
     } else {
         FloatTy aabs = m / rsqr;
+        // printf("aabs: %f\n", aabs);
         dst->field0 = aabs * dx;
         dst->field1 = aabs * dy;
     }
@@ -1256,21 +1268,24 @@ void mapCalcAccel(UT_array *dst, UT_array *mpts, CursorTy tr) {
     for (idx = 0; idx < utarray_len(mpts); idx++) {
         mp = (MassPoint*) utarray_eltptr(mpts, idx);
         calcAccel(&p, mp, tr);
+        // printf("%f,%f\n", p);
         utarray_push_back(dst, &p);
     }
 }
 
 void applyAccel(Particle *dst, Particle *p, Point2D *a) {
     FloatTy vx, vy, ax, ay;
-    vx = p->field0;
-    vy = p->field1;
+    vx = p->field3;
+    vy = p->field4;
     ax = a->field0;
     ay = a->field1;
     dst->field0 = p->field0;
     dst->field1 = p->field1;
     dst->field2 = p->field2;
-    dst->field3 = (vx + ax) * 2.0;
-    dst->field4 = (vy + ay) * 2.0;
+    dst->field3 = vx + (ax * 2.0);
+    dst->field4 = vy + (ay * 2.0);
+    // dst->field3 = 0.0 + (ax * 2.0);
+    // dst->field4 = 0.0 + (ay * 2.0);
 }
 
 void mapApplyAccel(UT_array *dst, UT_array *ps, UT_array *accels){
@@ -1379,6 +1394,7 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
         CursorTy cur = out_cur;
         MassPoint centroid;
         calcCentroid(&centroid, mpts);
+        // printf("centroid: (%f, %f, %f)\n", centroid.field0, centroid.field1, centroid.field2);
         *(TagTyPacked *) cur = 1;
         cur += 1;
         *(FloatTy *) cur = centroid.field0;
@@ -1394,7 +1410,6 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
         // Get the centroid
         MassPoint centroid;
         calcCentroid(&centroid, mpts);
-        // printf("centroid: (%f, %f, %f)\n", centroid.field0, centroid.field1, centroid.field2);
 
         // Create bounding boxes for 4 quadrants
         FloatTy mid_x, mid_y;
@@ -1438,6 +1453,8 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
         massPtsInBox(mpts4, &b4, mpts);
         // print_array_masspoint(mpts4);
         CursorCursorCursorProd tree4 = buildTree_seq(tree3.field0, tree3.field2, &b4, mpts4);
+
+        // printf("%d, %d, %d, %d\n", utarray_len(mpts1), utarray_len(mpts2), utarray_len(mpts3), utarray_len(mpts4));
 
         // Write the fields
         *(CursorTy *) cur_fields = tree2.field1;
