@@ -30,7 +30,7 @@
 #define GB (MB * 1000lu)
 
 // Initial size of BigInfinite buffers
-static long long global_init_biginf_buf_size = (1 * GB);
+static long long global_init_biginf_buf_size = (4 * GB);
 
 // Initial size of Infinite buffers
 static long long global_init_inf_buf_size = 64 * KB;
@@ -1209,7 +1209,7 @@ CursorCursorCursorCursorProd _copy_ListExpr(CursorTy end_r626,
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval2511");
+            printf("Unknown tag in: tmpval2511: %d", tmpval2511);
             exit(1);
         }
     }
@@ -1983,9 +1983,9 @@ CursorCursorCursorCursorProd _copy_LVBIND(CursorTy end_r656, CursorTy end_r657,
     }
 }
 
-IntTy copied_if = 0;
-IntTy copied_app = 0;
-IntTy copied_continuation = 0;
+// sizes of things copied.
+IntTy copied = 0;
+IntTy copying_limit = (4 * GB);
 
 CursorCursorCursorCursorProd enlarge_if(CursorTy end_r662, CursorTy end_r663,
                                         CursorTy loc661, CursorTy arg421) {
@@ -2421,21 +2421,34 @@ CursorCursorCursorCursorProd _copy_Expr(CursorTy end_r662, CursorTy end_r663,
         {
             // TODO
             CursorTy cur = loc661;
-            // // if
-            // *(TagTyPacked *) cur = 3;
-            // cur += 1;
-            // // quote
-            // *(TagTyPacked *) cur = 9;
-            // cur += 1;
-            // // intlit 42
-            // *(TagTyPacked *) cur = 0;
-            // cur += 1;
-            // *(IntTy *) cur = 42;
-            // cur += 8;
+
+            if (copied > copying_limit) {
+                CursorCursorCursorCursorProd tmp_struct = enlarge_if(end_r662, end_r663, cur, arg421);
+                return tmp_struct;
+            }
+
+            // if
+            *(TagTyPacked *) cur = 3;
+            cur += 1;
+            CursorTy d = cur;
+            // quote
+            *(TagTyPacked *) cur = 9;
+            cur += 1;
+            // intlit 42
+            *(TagTyPacked *) cur = 0;
+            cur += 1;
+            *(IntTy *) cur = 42;
+            cur += 8;
+
             CursorCursorCursorCursorProd tmp_struct = enlarge_if(end_r662, end_r663, cur, arg421);
-            // CursorCursorCursorCursorProd tmp_struct2 = enlarge_if(end_r662, end_r663, tmp_struct.field3, tmp_struct.field2);
-            // return tmp_struct2;
-            return tmp_struct;
+            CursorCursorCursorCursorProd tmp_struct2 = enlarge_if(tmp_struct.field1, tmp_struct.field0, tmp_struct.field3, arg421);
+
+            IntTy size = (IntTy) (tmp_struct2.field3 - tmp_struct2.field2);
+            copied += size;
+
+            // printf("copied: %lld\n", copied);
+
+            return tmp_struct2;
 
             break;
         }
@@ -2865,24 +2878,35 @@ CursorCursorCursorCursorProd _copy_Expr(CursorTy end_r662, CursorTy end_r663,
         // Enlarge WithCMark
       case 12:
         {
-            // // TODO
+            // TODO
             CursorTy cur = loc661;
-            // // if
-            // *(TagTyPacked *) cur = 3;
-            // cur += 1;
-            // // quote
-            // *(TagTyPacked *) cur = 9;
-            // cur += 1;
-            // // intlit 42
-            // *(TagTyPacked *) cur = 0;
-            // cur += 1;
-            // *(IntTy *) cur = 42;
-            // cur += 8;
-            CursorCursorCursorCursorProd tmp_struct = enlarge_continuation(end_r662, end_r663, cur, arg421);
-            // CursorCursorCursorCursorProd tmp_struct2 = enlarge_continuation(end_r662, end_r663, tmp_struct.field3, tmp_struct.field2);
-            // return tmp_struct2;
-            return tmp_struct;
 
+            if (copied > copying_limit) {
+
+                CursorCursorCursorCursorProd tmp_struct = enlarge_continuation(end_r662, end_r663, cur, arg421);
+                return tmp_struct;
+
+            }
+
+            // if
+            *(TagTyPacked *) cur = 3;
+            cur += 1;
+            // quote
+            *(TagTyPacked *) cur = 9;
+            cur += 1;
+            // intlit 42
+            *(TagTyPacked *) cur = 0;
+            cur += 1;
+            *(IntTy *) cur = 42;
+            cur += 8;
+            CursorCursorCursorCursorProd tmp_struct = enlarge_continuation(end_r662, end_r663, cur, arg421);
+            CursorCursorCursorCursorProd tmp_struct2 = enlarge_continuation(tmp_struct.field1, tmp_struct.field0, tmp_struct.field3, arg421);
+
+            IntTy size = (IntTy) (tmp_struct2.field3 - tmp_struct2.field2);
+            copied += size;
+            // printf("copied: %lld\n", copied);
+
+            return tmp_struct2;
             break;
         }
 
@@ -2891,23 +2915,43 @@ CursorCursorCursorCursorProd _copy_Expr(CursorTy end_r662, CursorTy end_r663,
         {
             // TODO
             CursorTy cur = loc661;
-            // // if
-            // *(TagTyPacked *) cur = 3;
-            // cur += 1;
-            // // quote
-            // *(TagTyPacked *) cur = 9;
-            // cur += 1;
-            // // intlit 42
-            // *(TagTyPacked *) cur = 0;
-            // cur += 1;
-            // *(IntTy *) cur = 42;
-            // cur += 8;
+
+            if (copied > copying_limit) {
+
+                // printf("stopped copying...\n");
+                CursorCursorCursorCursorProd tmp_struct = enlarge_app(end_r662, end_r663, cur, arg421);
+                return tmp_struct;
+            }
+
+            // if
+            *(TagTyPacked *) cur = 3;
+            cur += 1;
+            CursorTy d = cur;
+            // quote
+            *(TagTyPacked *) cur = 9;
+            cur += 1;
+            // intlit 42
+            *(TagTyPacked *) cur = 0;
+            cur += 1;
+            *(IntTy *) cur = 42;
+            cur += 8;
 
             CursorCursorCursorCursorProd tmp_struct = enlarge_app(end_r662, end_r663, cur, arg421);
-            // CursorCursorCursorCursorProd tmp_struct2 = enlarge_app(end_r662, end_r663, tmp_struct.field3, tmp_struct.field2);
-            // return tmp_struct2;
+            CursorCursorCursorCursorProd tmp_struct2 = enlarge_app(tmp_struct.field1, tmp_struct.field0, tmp_struct.field3, arg421);
 
-            return tmp_struct;
+            IntTy size = (IntTy) (tmp_struct2.field3 - tmp_struct2.field2);
+            copied += size;
+            // printf("copied: %lld\n", copied);
+
+            // get: end-in, end-out, out, in
+            // return: end-out, end-in, in, out
+            // return (CursorCursorCursorCursorProd) {tmp_struct2.field};
+
+            // _print_LVBIND(tmp_struct2.field1);
+            // printf("\n");
+            // exit(1);
+
+            return tmp_struct2;
 
             break;
         }
@@ -4266,8 +4310,8 @@ void __main_expr()
     CursorTy r2565 = ptr;
     CursorTy end_r2565 = r2565 + bnch_size;
 
-    _print_Toplvl(r2565);
-    printf("\n\n");
+    // _print_Toplvl(r2565);
+    // printf("\n\n");
 
     RegionTy *region = alloc_region(global_init_biginf_buf_size);
     CursorTy out_reg = region->start_ptr;
@@ -4275,7 +4319,22 @@ void __main_expr()
 
     CursorCursorCursorCursorProd tmp_struct =
         _copy_Toplvl(end_r2565, end_out_reg, out_reg, r2565);
+    // _print_Toplvl(out_reg);
+    // printf("\n");
+    CursorTy val_start = tmp_struct.field2;
+    CursorTy val_end = tmp_struct.field3;
+    IntTy val_size = (IntTy) (val_end - val_start);
 
-    _print_Toplvl(out_reg);
-    printf("\n");
+    // write output file
+    size_t len = strlen(global_benchfile_param);
+    char* suffix = ".big";
+    size_t suffix_len = strlen(suffix);
+    char *output_filename = malloc(len + suffix_len + 1);
+    strcpy(output_filename, global_benchfile_param);
+    strcat(output_filename, suffix);
+    FILE *out_hdl = fopen(output_filename, "wb");
+    const size_t wrote = fwrite(val_start, val_size, 1, out_hdl);
+    fclose(out_hdl);
+    printf("Wrote: %s\n", output_filename);
+    printf("copied: %lld\n", copied);
 }
