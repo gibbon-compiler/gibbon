@@ -1,0 +1,259 @@
+#lang gibbon
+
+(require "../../../ASTBenchmarks/grammar_racket.gib")
+(provide countnodes)
+
+(define nullcost : Int 1)
+
+(define conscost : Int 1)
+
+(define scalarcost : Int 0)
+
+(define tag : Int 1)
+
+(define (countnodes [e0 : Toplvl]) : Int
+  (top e0))
+
+(define (loopTopLvl [ls : ListToplvl]) : Int
+  (case ls
+    [(CONSTOPLVL tl ls)
+     (+ conscost (+ (top tl) (loopTopLvl ls)))]
+    [(NULLTOPLVL)
+     nullcost]))
+
+(define (loopExpr [ls : ListExpr]) : Int
+  (case ls
+    [(CONSEXPR e ls)
+     (+ conscost (+ (expr e) (loopExpr ls)))]
+    [(NULLEXPR)
+     nullcost]))
+
+(define (loopLambdaCase [ls : LAMBDACASE]) : Int
+  (case ls
+    [(CONSLAMBDACASE f le ls)
+     (+ conscost (+ (formals f) (+ (loopExpr le) (loopLambdaCase ls))))]
+    [(NULLLAMBDACASE)
+     nullcost]))
+
+(define (loopLVBIND [ls : LVBIND]) : Int
+  (case ls
+    [(CONSLVBIND syms e ls)
+     (+ conscost (+ (loopSyms syms)
+                    (+ (expr e) (loopLVBIND ls))))]
+    [(NULLLVBIND)
+     nullcost]))
+
+(define (top [e : Toplvl]) : Int
+  (case e
+    [(DefineValues ls e)
+     (+ tag (+ (loopSyms ls) (expr e)))]
+    [(DefineSyntaxes ls e)
+     (+ tag (+ (loopSyms ls) (expr e)))]
+    [(BeginTop ls)
+     (+ tag (loopTopLvl ls))]
+    [(Expression e)
+     (expr e)]))
+
+(define (expr [e : Expr]) : Int
+  (case e
+    ;; Variable references:
+    [(VARREF s)
+     (+ tag scalarcost)]
+    [(Top s)
+     (+ tag scalarcost)]
+    [(VariableReference s)
+     (+ tag scalarcost)]
+    [(VariableReferenceTop s)
+     (+ tag scalarcost)]
+    [(VariableReferenceNull)
+     tag]
+
+    ;; Leaf forms:
+    [(Quote d)
+     (+ tag (datum d))]
+    [(QuoteSyntax d)
+     (+ tag (datum d))]
+    [(QuoteSyntaxLocal d)
+     (+ tag (datum d))]
+
+    ;; Binding forms:
+    [(Lambda f lse)
+     (+ tag (+ (formals f) (loopExpr lse)))]
+    [(CaseLambda cases)
+     (+ tag (loopLambdaCase cases))]
+    [(LetValues binds body)
+     (+ tag (+ (loopLVBIND binds)
+               (loopExpr body)))]
+    [(LetrecValues binds body)
+     (+ tag (+ (loopLVBIND binds)
+               (loopExpr body)))]
+    [(If cond then else)
+     (+ tag (+ (expr cond) (+ (expr then) (expr else))))]
+    [(Begin exprs)
+     (+ tag (loopExpr exprs))]
+    [(Begin0 e1 exprs)
+     (+ tag (+ (expr e1) (loopExpr exprs)))]
+    [(App e1 es)
+     (+ tag (+ (expr e1) (loopExpr es)))]
+    [(SetBang s e)
+     (+ tag (+ scalarcost (expr e)))]
+    [(WithContinuationMark e1 e2 e3)
+     (+ tag (+ (expr e1) (+ (expr e2) (expr e3))))]))
+
+(define (datum [d : Datum]) : Int
+  (case d
+    [(INTLIT i)
+     (+ tag scalarcost)]))
+
+(define (loopSyms [ls : ListSym]) : Int
+  (case ls
+    [(CONSSYM s ls)
+     (+ conscost (+ scalarcost (loopSyms ls)))]
+    [(NULLSYM) nullcost]))
+
+(define (formals [f : Formals]) : Int
+  (case f
+    [(F1 ls)
+     (+ tag (loopSyms ls))]
+    [(F2 ls s)
+     (+ tag (+ (loopSyms ls) scalarcost))]
+    [(F3 s)
+     (+ tag scalarcost)]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(define toplvl-cutoff : Int 50000)
+(define expr-cutoff : Int 50000)
+(define looptoplvl-cutoff : Int 50000)
+(define loopexpr-cutoff : Int 50000)
+
+(define (par-countnodes [e0 : Toplvl]) : Int
+  (par-top toplvl-cutoff e0))
+
+(define (par-top [cutoff : Int] [e : Toplvl]) : Int
+  (if (is-big cutoff e)
+      (case e
+        [(DefineValues ls e)
+         (let ([c-loop-syms (spawn (loopSyms ls))]
+               [c-expr (par-expr expr-cutoff e)]
+               [wc (sync)])
+           (+ tag (+ c-loop-syms c-expr)))]
+        [(DefineSyntaxes ls e)
+         (let ([c-loop-syms (spawn (loopSyms ls))]
+               [c-expr (par-expr expr-cutoff e)]
+               [wc (sync)])
+           (+ tag (+ c-loop-syms c-expr)))]
+        ;; [(DefineValues ls e)
+        ;;  (+ tag (+ (loopSyms ls) (par-expr expr-cutoff e)))]
+        ;; [(DefineSyntaxes ls e)
+        ;;  (+ tag (+ (loopSyms ls) (par-expr expr-cutoff e)))]
+        [(BeginTop ls)
+         (+ tag (par-loopTopLvl looptoplvl-cutoff ls))]
+        [(Expression e)
+         (par-expr expr-cutoff e)])
+      (top e)))
+
+(define (par-loopExpr [cutoff : Int] [ls : ListExpr]) : Int
+  (case ls
+    [(CONSEXPR e ls)
+     (+ conscost (+ (expr e) (par-loopExpr loopexpr-cutoff ls)))]
+    [(NULLEXPR)
+     nullcost]))
+
+;; (define (par-loopTopLvl [cutoff : Int] [ls : ListToplvl]) : Int
+;;   (if (is-big cutoff ls)
+;;       (case ls
+;;         [(CONSTOPLVL tl ls)
+;;          (let* ([one (spawn (par-top toplvl-cutoff tl))]
+;;                 [two (par-loopTopLvl cutoff ls)]
+;;                 [wc (sync)])
+;;            (+ conscost (+ one two)))]
+;;         [(NULLTOPLVL)
+;;          nullcost])
+;;       (loopTopLvl ls)))
+
+(define (par-loopTopLvl [cutoff : Int] [ls : ListToplvl]) : Int
+  (case ls
+    [(CONSTOPLVL tl ls)
+     (+ conscost (+ (par-top toplvl-cutoff tl) (par-loopTopLvl cutoff ls)))]
+    [(NULLTOPLVL)
+     nullcost]))
+
+(define (par-expr [cutoff : Int] [e : Expr]) : Int
+  (if (is-big cutoff e)
+      (case e
+        [(VARREF s)
+         (+ tag scalarcost)]
+        [(Top s)
+         (+ tag scalarcost)]
+        [(VariableReference s)
+         (+ tag scalarcost)]
+        [(VariableReferenceTop s)
+         (+ tag scalarcost)]
+
+        ;; Leaf forms:
+        [(VariableReferenceNull)
+         tag]
+        [(Quote d)
+         (+ tag (datum d))]
+        [(QuoteSyntax d)
+         (+ tag (datum d))]
+        [(QuoteSyntaxLocal d)
+         (+ tag (datum d))]
+
+        ;; Binding forms:
+        [(Lambda f lse)
+         (+ tag (+ (formals f) (loopExpr lse)))]
+        ;; [(Lambda f lse)
+        ;;  (let* ([ce1 (spawn (formals f))]
+        ;;         [ce2 (par-loopExpr loopexpr-cutoff lse)]
+        ;;         [wc (sync)])
+        ;;    (+ tag (+ ce1 ce2)))]
+        [(CaseLambda cases)
+         (+ tag (loopLambdaCase cases))]
+        [(LetValues binds body)
+         (+ tag (+ (loopLVBIND binds)
+                   (loopExpr body)))]
+        ;; [(LetValues binds body)
+        ;;  (let* ([ce1 (spawn (loopLVBIND binds))]
+        ;;         [ce2 (par-loopExpr loopexpr-cutoff body)]
+        ;;         [wc (sync)])
+        ;;    (+ tag (+ ce1 ce2)))]
+        [(LetrecValues binds body)
+         (+ tag (+ (loopLVBIND binds)
+                   (loopExpr body)))]
+        ;; [(LetrecValues binds body)
+        ;;  (let* ([ce1 (spawn (loopLVBIND binds))]
+        ;;         [ce2 (par-loopExpr loopexpr-cutoff body)]
+        ;;         [wc (sync)])
+        ;;    (+ tag (+ ce1 ce2)))]
+        [(If cond then else)
+         (let* ([cnd (spawn (par-expr expr-cutoff cond))]
+                [thn (spawn (par-expr expr-cutoff then))]
+                [els (par-expr expr-cutoff else)]
+                [wc  (sync)])
+           (+ tag (+ cnd (+ thn els))))]
+        [(Begin exprs)
+         (+ tag (par-loopExpr loopexpr-cutoff exprs))]
+        [(Begin0 e1 exprs)
+         (+ tag (+ (expr e1) (loopExpr exprs)))]
+        ;; [(Begin0 e1 exprs)
+        ;;  (let* ([ce1 (spawn (par-expr expr-cutoff e1))]
+        ;;         [ce2 (par-loopExpr loopexpr-cutoff exprs)]
+        ;;         [wc (sync)])
+        ;;    (+ tag (+ ce1 ce2)))]
+        [(App e1 es)
+         (let* ([rator (spawn (par-expr expr-cutoff e1))]
+                [rands (par-loopExpr loopexpr-cutoff es)]
+                [wc    (sync)])
+           (+ tag (+ rator rands)))]
+        [(SetBang s e)
+         (+ tag (+ scalarcost (par-expr expr-cutoff e)))]
+        [(WithContinuationMark e1 e2 e3)
+         (let* ([ce1 (spawn (par-expr expr-cutoff e1))]
+                [ce2 (spawn (par-expr expr-cutoff e2))]
+                [ce3 (par-expr expr-cutoff e3)]
+                [ec (sync)])
+           (+ tag (+ ce1 (+ ce2 ce3))))])
+      ;; shell out to sequential
+      (expr e)))

@@ -1360,6 +1360,7 @@ FloatTy check(UT_array *ps) {
         minus_point2d(&force2, &force, &force2);
         FloatTy e = pbbs_length_point2d(&force2) / pbbs_length_point2d(&force);
         err += e;
+        // printf("%f\n", e);
     }
     return err / nCheck;
 }

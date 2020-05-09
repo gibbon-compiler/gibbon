@@ -852,8 +852,12 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           -- then do
           (ex0', ty, cs) <- inferExp env (LetE (vr,locs,bty,(AppE f [] args)) bod) dest
           -- Assume that all args are VarE's
-          let arg_vars = map (\(VarE v) -> v) args
-              args2 = map VarE arg_vars
+          let args2 = map (\e -> case e of
+                                   (VarE v) -> VarE v
+                                   (LitSymE v) -> LitSymE v
+                                   (LitE n) -> LitE n
+                                   (FloatE n) -> FloatE n)
+                          args
               ex0'' = changeAppToSpawn f args2 ex0'
           -- pure (moveProjsAfterSync vr ex0'', ty, cs)
           pure (ex0'', ty, cs)
