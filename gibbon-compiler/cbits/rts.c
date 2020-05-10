@@ -325,6 +325,8 @@ IntTy expll(IntTy base, IntTy pow) {
     }
  }
 
+UT_icd double_icd = {sizeof(double), NULL, NULL, NULL};
+
 // -------------------------------------
 // Symbol table
 // -------------------------------------
