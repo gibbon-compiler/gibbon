@@ -122,10 +122,15 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define toplvl-cutoff : Int 50000)
-(define expr-cutoff : Int 50000)
-(define looptoplvl-cutoff : Int 50000)
-(define loopexpr-cutoff : Int 50000)
+
+;; unused
+(define toplvl-cutoff : Int (* 5 1000000))
+;; 10MB
+(define expr-cutoff : Int (* 100 1000000))
+;; unused
+(define looptoplvl-cutoff : Int (* 10 500000))
+;; unused
+(define loopexpr-cutoff : Int (* 100 1000000))
 
 (define (par-countnodes [e0 : Toplvl]) : Int
   (par-top toplvl-cutoff e0))
@@ -133,20 +138,20 @@
 (define (par-top [cutoff : Int] [e : Toplvl]) : Int
   (if (is-big cutoff e)
       (case e
-        [(DefineValues ls e)
-         (let ([c-loop-syms (spawn (loopSyms ls))]
-               [c-expr (par-expr expr-cutoff e)]
-               [wc (sync)])
-           (+ tag (+ c-loop-syms c-expr)))]
-        [(DefineSyntaxes ls e)
-         (let ([c-loop-syms (spawn (loopSyms ls))]
-               [c-expr (par-expr expr-cutoff e)]
-               [wc (sync)])
-           (+ tag (+ c-loop-syms c-expr)))]
         ;; [(DefineValues ls e)
-        ;;  (+ tag (+ (loopSyms ls) (par-expr expr-cutoff e)))]
+        ;;  (let ([c-loop-syms (spawn (loopSyms ls))]
+        ;;        [c-expr (par-expr expr-cutoff e)]
+        ;;        [wc (sync)])
+        ;;    (+ tag (+ c-loop-syms c-expr)))]
         ;; [(DefineSyntaxes ls e)
-        ;;  (+ tag (+ (loopSyms ls) (par-expr expr-cutoff e)))]
+        ;;  (let ([c-loop-syms (spawn (loopSyms ls))]
+        ;;        [c-expr (par-expr expr-cutoff e)]
+        ;;        [wc (sync)])
+        ;;    (+ tag (+ c-loop-syms c-expr)))]
+        [(DefineValues ls e)
+         (+ tag (+ (loopSyms ls) (par-expr expr-cutoff e)))]
+        [(DefineSyntaxes ls e)
+         (+ tag (+ (loopSyms ls) (par-expr expr-cutoff e)))]
         [(BeginTop ls)
          (+ tag (par-loopTopLvl looptoplvl-cutoff ls))]
         [(Expression e)
