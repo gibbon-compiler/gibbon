@@ -252,7 +252,7 @@ addRANExp needRANsTyCons ddfs ienv ex =
             bod'' <- addRANExp needRANsTyCons ddfs ienv'' bod
             let abs_ran_clause = (toAbsRANDataCon dcon, (L.map (,()) absRanVars) ++ vs, bod')
             let rel_ran_clause = (toRelRANDataCon dcon, (L.map (,()) relRanVars') ++ vs, bod'')
-            pure [old_pat,abs_ran_clause,rel_ran_clause]
+            pure [abs_ran_clause,rel_ran_clause]
 
 -- | Update data type definitions to include random access nodes.
 withRANDDefs :: Out a => S.Set TyCon -> DDefs (UrTy a) -> DDefs (UrTy a)
