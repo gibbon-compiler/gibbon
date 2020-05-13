@@ -146,11 +146,15 @@ static const int num_workers = 1;
   void save_alloc_state() {}
   void restore_alloc_state() {}
 
-#ifdef _POINTER
-#define ALLOC(n) GC_MALLOC(n)
-#else
+#ifdef _PARALLEL
 #define ALLOC(n) malloc(n)
-#endif
+#else
+  #ifdef _POINTER
+#define ALLOC(n) GC_MALLOC(n)
+  #else
+#define ALLOC(n) malloc(n)
+  #endif
+#endif // _PARALLEL
 
 #endif // BUMPALLOC
 
