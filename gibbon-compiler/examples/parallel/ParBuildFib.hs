@@ -47,6 +47,6 @@ sumTree_seq foo =
 
 gibbon_main =
   let n = sizeParam
-      cutoff = 19
+      cutoff = 8
       x = iterate (mkTree cutoff n)
   in (sumTree_seq x)
