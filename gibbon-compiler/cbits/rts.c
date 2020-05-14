@@ -331,6 +331,17 @@ IntTy expll(IntTy base, IntTy pow) {
 
 UT_icd double_icd = {sizeof(double), NULL, NULL, NULL};
 
+void print_timing_array(UT_array *times) {
+    printf("BATCHTIME: [");
+    double *d;
+    for(d=(double*)utarray_front(times);
+        d!=NULL;
+        d=(double*)utarray_next(times,d)) {
+        printf("%f, ",*d);
+    }
+    printf("]\n");
+}
+
 // -------------------------------------
 // Symbol table
 // -------------------------------------

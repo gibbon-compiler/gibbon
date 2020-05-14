@@ -504,6 +504,7 @@ codegenTail venv fenv (LetTimedT flg bnds rhs body) ty sync_deps =
                                , C.BlockStm [cstm| utarray_sort($id:times, compare_doubles); |]
                                , C.BlockDecl [cdecl| double *$id:tmp = (double*) utarray_eltptr($id:times, (global_iters_param / 2)); |]
                                , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
+                               , C.BlockStm [cstm| print_timing_array($id:times); |]
                                ])
 
                          -- else
