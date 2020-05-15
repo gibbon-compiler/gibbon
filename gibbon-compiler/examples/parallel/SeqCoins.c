@@ -2085,6 +2085,7 @@ void __main_expr()
 
         utarray_push_back(times25, &batchtime23);
     }
+    print_timing_array(times25);
     utarray_sort(times25, compare_doubles);
 
     double *tmp26 = (double *) utarray_eltptr(times25, global_iters_param / 2);
