@@ -122,36 +122,28 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(define toplvl-cutoff : Int (* 9 500000))
-
 (define (par-countnodes [e0 : Toplvl]) : Int
-  (par-top toplvl-cutoff e0))
+  (par-top 0 e0))
 
-(define (par-top [cutoff : Int] [e : Toplvl]) : Int
+(define (par-top [height : Int] [e : Toplvl]) : Int
   (case e
     [(DefineValues ls e2)
-     (let ([c-loop-syms (spawn (loopSyms ls))]
-           [c-expr (expr e2)]
-           [wc (sync)])
-       (+ tag (+ c-loop-syms c-expr)))]
+     (+ tag (+ (loopSyms ls) (expr e2)))]
     [(DefineSyntaxes ls e2)
-     (let ([c-loop-syms (spawn (loopSyms ls))]
-           [c-expr (expr e2)]
-           [wc (sync)])
-       (+ tag (+ c-loop-syms c-expr)))]
+     (+ tag (+ (loopSyms ls) (expr e2)))]
     [(BeginTop ls)
-     (+ tag (par-loopTopLvl ls))]
+     (+ tag (par-loopTopLvl height ls))]
     [(Expression e)
      (expr e)]))
 
-(define (par-loopTopLvl [ls : ListToplvl]) : Int
-  (case ls
-    [(CONSTOPLVL tl ls)
-     (if (is-big toplvl-cutoff tl)
-         (let ([ctl (spawn (par-top toplvl-cutoff tl))]
-               [cls (par-loopTopLvl ls)]
+(define (par-loopTopLvl [height : Int] [ls : ListToplvl]) : Int
+  (if (> height 8)
+      (loopTopLvl ls)
+      (case ls
+        [(CONSTOPLVL tl ls)
+         (let ([ctl (spawn (par-top (+ 1 height) tl))]
+               [cls (par-loopTopLvl height ls)]
                [wc (sync)])
-           (+ conscost (+ ctl cls)))
-         (+ conscost (+ (par-top toplvl-cutoff tl) (par-loopTopLvl ls))))]
-    [(NULLTOPLVL)
-     nullcost]))
+           (+ conscost (+ ctl cls)))]
+        [(NULLTOPLVL)
+         nullcost])))

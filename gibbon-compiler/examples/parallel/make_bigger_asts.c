@@ -929,2133 +929,7 @@ CursorTy _print_LVBIND(CursorTy p3341);
 CursorTy _print_Expr(CursorTy p3348);
 CursorTy _print_Toplvl(CursorTy p3384);
 
-CursorCursorCursorCursorProd _copy_ListSym(CursorTy end_r1955,
-                                           CursorTy end_r1956, CursorTy loc1954,
-                                           CursorTy arg1566)
-{
-    CursorTy loc1953 = (CursorTy) arg1566;
-
-    if (loc1954 + 18 > end_r1956) {
-        ChunkTy new_chunk58 = alloc_chunk(end_r1956);
-        CursorTy chunk_start59 = new_chunk58.start_ptr;
-        CursorTy chunk_end60 = new_chunk58.end_ptr;
-
-        end_r1956 = chunk_end60;
-        *(TagTyPacked *) loc1954 = 255;
-
-        CursorTy redir = loc1954 + 1;
-
-        *(CursorTy *) redir = chunk_start59;
-        loc1954 = chunk_start59;
-    }
-
-    CursorTy loc2299 = loc1954 + 1;
-    CursorTy loc2300 = loc2299 + 8;
-    TagTyPacked tmpval5559 = *(TagTyPacked *) arg1566;
-    CursorTy tmpcur5560 = arg1566 + 1;
-
-
-  switch5579:
-    ;
-    switch (tmpval5559) {
-
-      case 0:
-        {
-            CursorTy field_cur3951 = (CursorTy) tmpcur5560;
-            CursorTy case2294 = (CursorTy) field_cur3951;
-            SymTy tmpval5561 = *(SymTy *) case2294;
-            CursorTy tmpcur5562 = case2294 + sizeof(SymTy);
-            SymTy x1567 = (SymTy) tmpval5561;
-            CursorTy end_x1567 = (CursorTy) tmpcur5562;
-            CursorTy case2295 = (CursorTy) end_x1567;
-            CursorTy x1568 = (CursorTy) case2295;
-            CursorTy jump3383 = case2294 + 8;
-            CursorCursorCursorCursorProd tmp_struct57 =
-                                          _copy_ListSym(end_r1955, end_r1956, loc2300, x1568);
-            CursorTy pvrtmp5563 = tmp_struct57.field0;
-            CursorTy pvrtmp5564 = tmp_struct57.field1;
-            CursorTy pvrtmp5565 = tmp_struct57.field2;
-            CursorTy pvrtmp5566 = tmp_struct57.field3;
-            CursorTy fltPrd4825 = (CursorTy) pvrtmp5565;
-            CursorTy fltPrd4826 = (CursorTy) pvrtmp5566;
-            CursorTy pvrtmp5568 = (CursorTy) fltPrd4826;
-            CursorTy pvrtmp5567 = (CursorTy) fltPrd4825;
-            CursorTy y1570 = (CursorTy) pvrtmp5567;
-            CursorTy fltPrd4827 = (CursorTy) pvrtmp5565;
-            CursorTy fltPrd4828 = (CursorTy) pvrtmp5566;
-            CursorTy pvrtmp5570 = (CursorTy) fltPrd4828;
-            CursorTy pvrtmp5569 = (CursorTy) fltPrd4827;
-            CursorTy end_y1570 = (CursorTy) pvrtmp5570;
-            CursorTy end_r1956_3713 = (CursorTy) pvrtmp5563;
-            CursorTy endof3384 = (CursorTy) pvrtmp5564;
-
-            *(TagTyPacked *) loc1954 = 0;
-
-            CursorTy writetag3954 = loc1954 + 1;
-
-            *(SymTy *) writetag3954 = x1567;
-
-            CursorTy writecur3955 = writetag3954 + sizeof(SymTy);
-            CursorTy writecur3956 = (CursorTy) end_y1570;
-            CursorTy pvrtmp5572 = (CursorTy) writecur3956;
-            CursorTy pvrtmp5571 = (CursorTy) loc1954;
-            CursorTy taildc3385 = (CursorTy) pvrtmp5571;
-            CursorTy end_taildc3385 = (CursorTy) pvrtmp5572;
-            CursorTy pvrtmp5574 = (CursorTy) end_taildc3385;
-            CursorTy pvrtmp5573 = (CursorTy) taildc3385;
-            CursorTy fltPrd4829 = (CursorTy) pvrtmp5573;
-            CursorTy fltPrd4830 = (CursorTy) pvrtmp5574;
-
-            return (CursorCursorCursorCursorProd) {end_r1956_3713, endof3384,
-                                                   fltPrd4829, fltPrd4830};
-            break;
-        }
-
-      case 1:
-        {
-            CursorTy field_cur3958 = (CursorTy) tmpcur5560;
-            CursorTy jump3386 = loc1953 + 1;
-
-            *(TagTyPacked *) loc1954 = 1;
-
-            CursorTy writetag3959 = loc1954 + 1;
-            CursorTy pvrtmp5576 = (CursorTy) writetag3959;
-            CursorTy pvrtmp5575 = (CursorTy) loc1954;
-            CursorTy taildc3387 = (CursorTy) pvrtmp5575;
-            CursorTy end_taildc3387 = (CursorTy) pvrtmp5576;
-            CursorTy pvrtmp5578 = (CursorTy) end_taildc3387;
-            CursorTy pvrtmp5577 = (CursorTy) taildc3387;
-            CursorTy fltPrd4831 = (CursorTy) pvrtmp5577;
-            CursorTy fltPrd4832 = (CursorTy) pvrtmp5578;
-
-            return (CursorCursorCursorCursorProd) {end_r1956, jump3386,
-                                                   fltPrd4831, fltPrd4832};
-            break;
-        }
-
-      case 255:
-        {
-            CursorTy tmpcur7286 = *(CursorTy *) tmpcur5560;
-            CursorTy tmpaftercur7287 = tmpcur5560 + 8;
-            TagTyPacked tagtmp7288 = *(TagTyPacked *) tmpcur7286;
-            CursorTy tailtmp7289 = tmpcur7286 + 1;
-
-            tmpval5559 = tagtmp7288;
-            tmpcur5560 = tailtmp7289;
-            goto switch5579;
-            break;
-        }
-
-      case 254:
-        {
-            CursorTy tmpcur7286 = *(CursorTy *) tmpcur5560;
-            CursorTy tmpaftercur7287 = tmpcur5560 + 8;
-            TagTyPacked tagtmp7288 = *(TagTyPacked *) tmpcur7286;
-            CursorTy tailtmp7289 = tmpcur7286 + 1;
-
-            tmpval5559 = tagtmp7288;
-            tmpcur5560 = tailtmp7289;
-            goto switch5579;
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval5559");
-            exit(1);
-        }
-    }
-}
-
-CursorCursorCursorCursorProd _copy_ListExpr(CursorTy end_r1961,
-                                            CursorTy end_r1962,
-                                            CursorTy loc1960, CursorTy arg1576)
-{
-    CursorTy loc1959 = (CursorTy) arg1576;
-
-    if (loc1960 + 18 > end_r1962) {
-        ChunkTy new_chunk64 = alloc_chunk(end_r1962);
-        CursorTy chunk_start65 = new_chunk64.start_ptr;
-        CursorTy chunk_end66 = new_chunk64.end_ptr;
-
-        end_r1962 = chunk_end66;
-        *(TagTyPacked *) loc1960 = 255;
-
-        CursorTy redir = loc1960 + 1;
-
-        *(CursorTy *) redir = chunk_start65;
-        loc1960 = chunk_start65;
-    }
-
-    TagTyPacked tmpval5587 = *(TagTyPacked *) arg1576;
-    CursorTy tmpcur5588 = arg1576 + 1;
-
-
-  switch5613:
-    ;
-    switch (tmpval5587) {
-
-      case 0:
-        {
-            CursorTy field_cur3965 = (CursorTy) tmpcur5588;
-            CursorTy case2313 = (CursorTy) field_cur3965;
-            CursorTy x1577 = (CursorTy) case2313;
-            CursorTy loc2321 = loc1960 + 1;
-            CursorCursorCursorCursorProd tmp_struct62 =
-                                          _copy_Expr(end_r1961, end_r1962, loc2321, x1577);
-            CursorTy pvrtmp5589 = tmp_struct62.field0;
-            CursorTy pvrtmp5590 = tmp_struct62.field1;
-            CursorTy pvrtmp5591 = tmp_struct62.field2;
-            CursorTy pvrtmp5592 = tmp_struct62.field3;
-            CursorTy fltPrd4833 = (CursorTy) pvrtmp5591;
-            CursorTy fltPrd4834 = (CursorTy) pvrtmp5592;
-            CursorTy pvrtmp5594 = (CursorTy) fltPrd4834;
-            CursorTy pvrtmp5593 = (CursorTy) fltPrd4833;
-            CursorTy y1579 = (CursorTy) pvrtmp5593;
-            CursorTy fltPrd4835 = (CursorTy) pvrtmp5591;
-            CursorTy fltPrd4836 = (CursorTy) pvrtmp5592;
-            CursorTy pvrtmp5596 = (CursorTy) fltPrd4836;
-            CursorTy pvrtmp5595 = (CursorTy) fltPrd4835;
-            CursorTy end_y1579 = (CursorTy) pvrtmp5596;
-            CursorTy end_r1962_3714 = (CursorTy) pvrtmp5589;
-            CursorTy endof3393 = (CursorTy) pvrtmp5590;
-            CursorTy case2314 = (CursorTy) endof3393;
-            CursorTy x1578 = (CursorTy) case2314;
-            CursorTy loc2322 = (CursorTy) end_y1579;
-            CursorCursorCursorCursorProd tmp_struct63 =
-                                          _copy_ListExpr(end_r1961, end_r1962_3714, loc2322, x1578);
-            CursorTy pvrtmp5597 = tmp_struct63.field0;
-            CursorTy pvrtmp5598 = tmp_struct63.field1;
-            CursorTy pvrtmp5599 = tmp_struct63.field2;
-            CursorTy pvrtmp5600 = tmp_struct63.field3;
-            CursorTy fltPrd4837 = (CursorTy) pvrtmp5599;
-            CursorTy fltPrd4838 = (CursorTy) pvrtmp5600;
-            CursorTy pvrtmp5602 = (CursorTy) fltPrd4838;
-            CursorTy pvrtmp5601 = (CursorTy) fltPrd4837;
-            CursorTy y1580 = (CursorTy) pvrtmp5601;
-            CursorTy fltPrd4839 = (CursorTy) pvrtmp5599;
-            CursorTy fltPrd4840 = (CursorTy) pvrtmp5600;
-            CursorTy pvrtmp5604 = (CursorTy) fltPrd4840;
-            CursorTy pvrtmp5603 = (CursorTy) fltPrd4839;
-            CursorTy end_y1580 = (CursorTy) pvrtmp5604;
-            CursorTy end_r1962_3714_3715 = (CursorTy) pvrtmp5597;
-            CursorTy endof3394 = (CursorTy) pvrtmp5598;
-
-            *(TagTyPacked *) loc1960 = 0;
-
-            CursorTy writetag3968 = loc1960 + 1;
-            CursorTy writecur3969 = (CursorTy) end_y1579;
-            CursorTy writecur3970 = (CursorTy) end_y1580;
-            CursorTy pvrtmp5606 = (CursorTy) writecur3970;
-            CursorTy pvrtmp5605 = (CursorTy) loc1960;
-            CursorTy taildc3395 = (CursorTy) pvrtmp5605;
-            CursorTy end_taildc3395 = (CursorTy) pvrtmp5606;
-            CursorTy pvrtmp5608 = (CursorTy) end_taildc3395;
-            CursorTy pvrtmp5607 = (CursorTy) taildc3395;
-            CursorTy fltPrd4841 = (CursorTy) pvrtmp5607;
-            CursorTy fltPrd4842 = (CursorTy) pvrtmp5608;
-
-            return (CursorCursorCursorCursorProd) {end_r1962_3714_3715,
-                                                   endof3394, fltPrd4841,
-                                                   fltPrd4842};
-            break;
-        }
-
-      case 1:
-        {
-            CursorTy field_cur3972 = (CursorTy) tmpcur5588;
-            CursorTy jump3396 = loc1959 + 1;
-
-            *(TagTyPacked *) loc1960 = 1;
-
-            CursorTy writetag3973 = loc1960 + 1;
-            CursorTy pvrtmp5610 = (CursorTy) writetag3973;
-            CursorTy pvrtmp5609 = (CursorTy) loc1960;
-            CursorTy taildc3397 = (CursorTy) pvrtmp5609;
-            CursorTy end_taildc3397 = (CursorTy) pvrtmp5610;
-            CursorTy pvrtmp5612 = (CursorTy) end_taildc3397;
-            CursorTy pvrtmp5611 = (CursorTy) taildc3397;
-            CursorTy fltPrd4843 = (CursorTy) pvrtmp5611;
-            CursorTy fltPrd4844 = (CursorTy) pvrtmp5612;
-
-            return (CursorCursorCursorCursorProd) {end_r1962, jump3396,
-                                                   fltPrd4843, fltPrd4844};
-            break;
-        }
-
-      case 255:
-        {
-            CursorTy tmpcur7294 = *(CursorTy *) tmpcur5588;
-            CursorTy tmpaftercur7295 = tmpcur5588 + 8;
-            TagTyPacked tagtmp7296 = *(TagTyPacked *) tmpcur7294;
-            CursorTy tailtmp7297 = tmpcur7294 + 1;
-
-            tmpval5587 = tagtmp7296;
-            tmpcur5588 = tailtmp7297;
-            goto switch5613;
-            break;
-        }
-
-      case 254:
-        {
-            CursorTy tmpcur7294 = *(CursorTy *) tmpcur5588;
-            CursorTy tmpaftercur7295 = tmpcur5588 + 8;
-            TagTyPacked tagtmp7296 = *(TagTyPacked *) tmpcur7294;
-            CursorTy tailtmp7297 = tmpcur7294 + 1;
-
-            tmpval5587 = tagtmp7296;
-            tmpcur5588 = tailtmp7297;
-            goto switch5613;
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval5587");
-            exit(1);
-        }
-    }
-}
-
-CursorCursorCursorCursorProd _copy_ListToplvl(CursorTy end_r1967,
-                                              CursorTy end_r1968,
-                                              CursorTy loc1966,
-                                              CursorTy arg1586)
-{
-    CursorTy loc1965 = (CursorTy) arg1586;
-
-    if (loc1966 + 26 > end_r1968) {
-        ChunkTy new_chunk75 = alloc_chunk(end_r1968);
-        CursorTy chunk_start76 = new_chunk75.start_ptr;
-        CursorTy chunk_end77 = new_chunk75.end_ptr;
-
-        end_r1968 = chunk_end77;
-        *(TagTyPacked *) loc1966 = 255;
-
-        CursorTy redir = loc1966 + 1;
-
-        *(CursorTy *) redir = chunk_start76;
-        loc1966 = chunk_start76;
-    }
-
-    CursorTy loc2358 = loc1966 + 1;
-    CursorTy loc2359 = loc2358 + 8;
-    CursorTy loc2375 = loc1966 + 1;
-    CursorTy loc2376 = loc2375 + 8;
-    CursorTy loc2377 = loc2376 + 8;
-    TagTyPacked tmpval5621 = *(TagTyPacked *) arg1586;
-    CursorTy tmpcur5622 = arg1586 + 1;
-
-
-  switch5693:
-    ;
-    switch (tmpval5621) {
-
-      case 0:
-        {
-            CursorTy field_cur3979 = (CursorTy) tmpcur5622;
-            CursorTy case2336 = (CursorTy) field_cur3979;
-            CursorTy x1587 = (CursorTy) case2336;
-            CursorTy loc2344 = loc1966 + 1;
-            CursorCursorCursorCursorProd tmp_struct69 =
-                                          _copy_Toplvl(end_r1967, end_r1968, loc2344, x1587);
-            CursorTy pvrtmp5623 = tmp_struct69.field0;
-            CursorTy pvrtmp5624 = tmp_struct69.field1;
-            CursorTy pvrtmp5625 = tmp_struct69.field2;
-            CursorTy pvrtmp5626 = tmp_struct69.field3;
-            CursorTy fltPrd4845 = (CursorTy) pvrtmp5625;
-            CursorTy fltPrd4846 = (CursorTy) pvrtmp5626;
-            CursorTy pvrtmp5628 = (CursorTy) fltPrd4846;
-            CursorTy pvrtmp5627 = (CursorTy) fltPrd4845;
-            CursorTy y1589 = (CursorTy) pvrtmp5627;
-            CursorTy fltPrd4847 = (CursorTy) pvrtmp5625;
-            CursorTy fltPrd4848 = (CursorTy) pvrtmp5626;
-            CursorTy pvrtmp5630 = (CursorTy) fltPrd4848;
-            CursorTy pvrtmp5629 = (CursorTy) fltPrd4847;
-            CursorTy end_y1589 = (CursorTy) pvrtmp5630;
-            CursorTy end_r1968_3716 = (CursorTy) pvrtmp5623;
-            CursorTy endof3403 = (CursorTy) pvrtmp5624;
-            CursorTy case2337 = (CursorTy) endof3403;
-            CursorTy x1588 = (CursorTy) case2337;
-            CursorTy loc2345 = (CursorTy) end_y1589;
-            CursorCursorCursorCursorProd tmp_struct70 =
-                                          _copy_ListToplvl(end_r1967, end_r1968_3716, loc2345, x1588);
-            CursorTy pvrtmp5631 = tmp_struct70.field0;
-            CursorTy pvrtmp5632 = tmp_struct70.field1;
-            CursorTy pvrtmp5633 = tmp_struct70.field2;
-            CursorTy pvrtmp5634 = tmp_struct70.field3;
-            CursorTy fltPrd4849 = (CursorTy) pvrtmp5633;
-            CursorTy fltPrd4850 = (CursorTy) pvrtmp5634;
-            CursorTy pvrtmp5636 = (CursorTy) fltPrd4850;
-            CursorTy pvrtmp5635 = (CursorTy) fltPrd4849;
-            CursorTy y1590 = (CursorTy) pvrtmp5635;
-            CursorTy fltPrd4851 = (CursorTy) pvrtmp5633;
-            CursorTy fltPrd4852 = (CursorTy) pvrtmp5634;
-            CursorTy pvrtmp5638 = (CursorTy) fltPrd4852;
-            CursorTy pvrtmp5637 = (CursorTy) fltPrd4851;
-            CursorTy end_y1590 = (CursorTy) pvrtmp5638;
-            CursorTy end_r1968_3716_3717 = (CursorTy) pvrtmp5631;
-            CursorTy endof3404 = (CursorTy) pvrtmp5632;
-
-            *(TagTyPacked *) loc1966 = 0;
-
-            CursorTy writetag3982 = loc1966 + 1;
-            CursorTy writecur3983 = (CursorTy) end_y1589;
-            CursorTy writecur3984 = (CursorTy) end_y1590;
-            CursorTy pvrtmp5640 = (CursorTy) writecur3984;
-            CursorTy pvrtmp5639 = (CursorTy) loc1966;
-            CursorTy taildc3405 = (CursorTy) pvrtmp5639;
-            CursorTy end_taildc3405 = (CursorTy) pvrtmp5640;
-            CursorTy pvrtmp5642 = (CursorTy) end_taildc3405;
-            CursorTy pvrtmp5641 = (CursorTy) taildc3405;
-            CursorTy fltPrd4853 = (CursorTy) pvrtmp5641;
-            CursorTy fltPrd4854 = (CursorTy) pvrtmp5642;
-
-            return (CursorCursorCursorCursorProd) {end_r1968_3716_3717,
-                                                   endof3404, fltPrd4853,
-                                                   fltPrd4854};
-            break;
-        }
-
-      case 1:
-        {
-            CursorTy field_cur3986 = (CursorTy) tmpcur5622;
-            CursorTy jump3406 = loc1965 + 1;
-
-            *(TagTyPacked *) loc1966 = 1;
-
-            CursorTy writetag3987 = loc1966 + 1;
-            CursorTy pvrtmp5644 = (CursorTy) writetag3987;
-            CursorTy pvrtmp5643 = (CursorTy) loc1966;
-            CursorTy taildc3407 = (CursorTy) pvrtmp5643;
-            CursorTy end_taildc3407 = (CursorTy) pvrtmp5644;
-            CursorTy pvrtmp5646 = (CursorTy) end_taildc3407;
-            CursorTy pvrtmp5645 = (CursorTy) taildc3407;
-            CursorTy fltPrd4855 = (CursorTy) pvrtmp5645;
-            CursorTy fltPrd4856 = (CursorTy) pvrtmp5646;
-
-            return (CursorCursorCursorCursorProd) {end_r1968, jump3406,
-                                                   fltPrd4855, fltPrd4856};
-            break;
-        }
-
-      case 2:
-        {
-            CursorTy field_cur3989 = (CursorTy) tmpcur5622;
-            CursorTy tmpcur5647 = *(CursorTy *) field_cur3989;
-            CursorTy tmpaftercur5648 = field_cur3989 + 8;
-            CursorTy case2349 = (CursorTy) field_cur3989;
-            CursorTy x1591 = (CursorTy) tmpcur5647;
-            CursorTy end_x1591 = (CursorTy) tmpaftercur5648;
-            CursorTy case2350 = (CursorTy) end_x1591;
-            CursorTy x1592 = (CursorTy) case2350;
-            CursorTy case2351 = (CursorTy) x1591;
-            CursorTy x1593 = (CursorTy) case2351;
-            CursorTy jump3408 = case2349 + 8;
-            CursorCursorCursorCursorProd tmp_struct71 =
-                                          _copy_Toplvl(end_r1967, end_r1968, loc2359, x1592);
-            CursorTy pvrtmp5649 = tmp_struct71.field0;
-            CursorTy pvrtmp5650 = tmp_struct71.field1;
-            CursorTy pvrtmp5651 = tmp_struct71.field2;
-            CursorTy pvrtmp5652 = tmp_struct71.field3;
-            CursorTy fltPrd4857 = (CursorTy) pvrtmp5651;
-            CursorTy fltPrd4858 = (CursorTy) pvrtmp5652;
-            CursorTy pvrtmp5654 = (CursorTy) fltPrd4858;
-            CursorTy pvrtmp5653 = (CursorTy) fltPrd4857;
-            CursorTy y1595 = (CursorTy) pvrtmp5653;
-            CursorTy fltPrd4859 = (CursorTy) pvrtmp5651;
-            CursorTy fltPrd4860 = (CursorTy) pvrtmp5652;
-            CursorTy pvrtmp5656 = (CursorTy) fltPrd4860;
-            CursorTy pvrtmp5655 = (CursorTy) fltPrd4859;
-            CursorTy end_y1595 = (CursorTy) pvrtmp5656;
-            CursorTy end_r1968_3718 = (CursorTy) pvrtmp5649;
-            CursorTy endof3409 = (CursorTy) pvrtmp5650;
-            CursorTy loc2360 = (CursorTy) end_y1595;
-            CursorCursorCursorCursorProd tmp_struct72 =
-                                          _copy_ListToplvl(end_r1967, end_r1968_3718, loc2360, x1593);
-            CursorTy pvrtmp5657 = tmp_struct72.field0;
-            CursorTy pvrtmp5658 = tmp_struct72.field1;
-            CursorTy pvrtmp5659 = tmp_struct72.field2;
-            CursorTy pvrtmp5660 = tmp_struct72.field3;
-            CursorTy fltPrd4861 = (CursorTy) pvrtmp5659;
-            CursorTy fltPrd4862 = (CursorTy) pvrtmp5660;
-            CursorTy pvrtmp5662 = (CursorTy) fltPrd4862;
-            CursorTy pvrtmp5661 = (CursorTy) fltPrd4861;
-            CursorTy y1596 = (CursorTy) pvrtmp5661;
-            CursorTy fltPrd4863 = (CursorTy) pvrtmp5659;
-            CursorTy fltPrd4864 = (CursorTy) pvrtmp5660;
-            CursorTy pvrtmp5664 = (CursorTy) fltPrd4864;
-            CursorTy pvrtmp5663 = (CursorTy) fltPrd4863;
-            CursorTy end_y1596 = (CursorTy) pvrtmp5664;
-            CursorTy end_r1968_3718_3719 = (CursorTy) pvrtmp5657;
-            CursorTy endof3410 = (CursorTy) pvrtmp5658;
-            CursorTy y1594 = (CursorTy) end_y1595;
-
-            *(TagTyPacked *) loc1966 = 2;
-
-            CursorTy writetag3993 = loc1966 + 1;
-
-            *(CursorTy *) writetag3993 = y1594;
-
-            CursorTy writecur3994 = writetag3993 + 8;
-            CursorTy writecur3995 = (CursorTy) end_y1595;
-            CursorTy writecur3996 = (CursorTy) end_y1596;
-            CursorTy pvrtmp5666 = (CursorTy) writecur3996;
-            CursorTy pvrtmp5665 = (CursorTy) loc1966;
-            CursorTy taildc3411 = (CursorTy) pvrtmp5665;
-            CursorTy end_taildc3411 = (CursorTy) pvrtmp5666;
-            CursorTy pvrtmp5668 = (CursorTy) end_taildc3411;
-            CursorTy pvrtmp5667 = (CursorTy) taildc3411;
-            CursorTy fltPrd4865 = (CursorTy) pvrtmp5667;
-            CursorTy fltPrd4866 = (CursorTy) pvrtmp5668;
-
-            return (CursorCursorCursorCursorProd) {end_r1968_3718_3719,
-                                                   endof3410, fltPrd4865,
-                                                   fltPrd4866};
-            break;
-        }
-
-      case 255:
-        {
-            CursorTy tmpcur7302 = *(CursorTy *) tmpcur5622;
-            CursorTy tmpaftercur7303 = tmpcur5622 + 8;
-            TagTyPacked tagtmp7304 = *(TagTyPacked *) tmpcur7302;
-            CursorTy tailtmp7305 = tmpcur7302 + 1;
-
-            tmpval5621 = tagtmp7304;
-            tmpcur5622 = tailtmp7305;
-            goto switch5693;
-            break;
-        }
-
-      case 254:
-        {
-            CursorTy tmpcur7302 = *(CursorTy *) tmpcur5622;
-            CursorTy tmpaftercur7303 = tmpcur5622 + 8;
-            TagTyPacked tagtmp7304 = *(TagTyPacked *) tmpcur7302;
-            CursorTy tailtmp7305 = tmpcur7302 + 1;
-
-            tmpval5621 = tagtmp7304;
-            tmpcur5622 = tailtmp7305;
-            goto switch5693;
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval5621");
-            exit(1);
-        }
-    }
-}
-
-CursorCursorCursorCursorProd _copy_Formals(CursorTy end_r1973,
-                                           CursorTy end_r1974, CursorTy loc1972,
-                                           CursorTy arg1624)
-{
-    CursorTy loc1971 = (CursorTy) arg1624;
-
-    if (loc1972 + 18 > end_r1974) {
-        ChunkTy new_chunk86 = alloc_chunk(end_r1974);
-        CursorTy chunk_start87 = new_chunk86.start_ptr;
-        CursorTy chunk_end88 = new_chunk86.end_ptr;
-
-        end_r1974 = chunk_end88;
-        *(TagTyPacked *) loc1972 = 255;
-
-        CursorTy redir = loc1972 + 1;
-
-        *(CursorTy *) redir = chunk_start87;
-        loc1972 = chunk_start87;
-    }
-
-    TagTyPacked tmpval5715 = *(TagTyPacked *) arg1624;
-    CursorTy tmpcur5716 = arg1624 + 1;
-
-
-  switch5749:
-    ;
-    switch (tmpval5715) {
-
-      case 0:
-        {
-            CursorTy field_cur4026 = (CursorTy) tmpcur5716;
-            CursorTy case2410 = (CursorTy) field_cur4026;
-            CursorTy x1625 = (CursorTy) case2410;
-            CursorTy loc2414 = loc1972 + 1;
-            CursorCursorCursorCursorProd tmp_struct84 =
-                                          _copy_ListSym(end_r1973, end_r1974, loc2414, x1625);
-            CursorTy pvrtmp5717 = tmp_struct84.field0;
-            CursorTy pvrtmp5718 = tmp_struct84.field1;
-            CursorTy pvrtmp5719 = tmp_struct84.field2;
-            CursorTy pvrtmp5720 = tmp_struct84.field3;
-            CursorTy fltPrd4877 = (CursorTy) pvrtmp5719;
-            CursorTy fltPrd4878 = (CursorTy) pvrtmp5720;
-            CursorTy pvrtmp5722 = (CursorTy) fltPrd4878;
-            CursorTy pvrtmp5721 = (CursorTy) fltPrd4877;
-            CursorTy y1626 = (CursorTy) pvrtmp5721;
-            CursorTy fltPrd4879 = (CursorTy) pvrtmp5719;
-            CursorTy fltPrd4880 = (CursorTy) pvrtmp5720;
-            CursorTy pvrtmp5724 = (CursorTy) fltPrd4880;
-            CursorTy pvrtmp5723 = (CursorTy) fltPrd4879;
-            CursorTy end_y1626 = (CursorTy) pvrtmp5724;
-            CursorTy end_r1974_3722 = (CursorTy) pvrtmp5717;
-            CursorTy endof3431 = (CursorTy) pvrtmp5718;
-
-            *(TagTyPacked *) loc1972 = 0;
-
-            CursorTy writetag4028 = loc1972 + 1;
-            CursorTy writecur4029 = (CursorTy) end_y1626;
-            CursorTy pvrtmp5726 = (CursorTy) writecur4029;
-            CursorTy pvrtmp5725 = (CursorTy) loc1972;
-            CursorTy taildc3432 = (CursorTy) pvrtmp5725;
-            CursorTy end_taildc3432 = (CursorTy) pvrtmp5726;
-            CursorTy pvrtmp5728 = (CursorTy) end_taildc3432;
-            CursorTy pvrtmp5727 = (CursorTy) taildc3432;
-            CursorTy fltPrd4881 = (CursorTy) pvrtmp5727;
-            CursorTy fltPrd4882 = (CursorTy) pvrtmp5728;
-
-            return (CursorCursorCursorCursorProd) {end_r1974_3722, endof3431,
-                                                   fltPrd4881, fltPrd4882};
-            break;
-        }
-
-      case 1:
-        {
-            CursorTy field_cur4031 = (CursorTy) tmpcur5716;
-            CursorTy case2416 = (CursorTy) field_cur4031;
-            CursorTy x1627 = (CursorTy) case2416;
-            CursorTy loc2421 = loc1972 + 1;
-            CursorCursorCursorCursorProd tmp_struct85 =
-                                          _copy_ListSym(end_r1973, end_r1974, loc2421, x1627);
-            CursorTy pvrtmp5729 = tmp_struct85.field0;
-            CursorTy pvrtmp5730 = tmp_struct85.field1;
-            CursorTy pvrtmp5731 = tmp_struct85.field2;
-            CursorTy pvrtmp5732 = tmp_struct85.field3;
-            CursorTy fltPrd4883 = (CursorTy) pvrtmp5731;
-            CursorTy fltPrd4884 = (CursorTy) pvrtmp5732;
-            CursorTy pvrtmp5734 = (CursorTy) fltPrd4884;
-            CursorTy pvrtmp5733 = (CursorTy) fltPrd4883;
-            CursorTy y1629 = (CursorTy) pvrtmp5733;
-            CursorTy fltPrd4885 = (CursorTy) pvrtmp5731;
-            CursorTy fltPrd4886 = (CursorTy) pvrtmp5732;
-            CursorTy pvrtmp5736 = (CursorTy) fltPrd4886;
-            CursorTy pvrtmp5735 = (CursorTy) fltPrd4885;
-            CursorTy end_y1629 = (CursorTy) pvrtmp5736;
-            CursorTy end_r1974_3723 = (CursorTy) pvrtmp5729;
-            CursorTy endof3434 = (CursorTy) pvrtmp5730;
-            CursorTy case2417 = (CursorTy) endof3434;
-            CursorTy jump3433 = case2417 + 8;
-            SymTy tmpval5737 = *(SymTy *) case2417;
-            CursorTy tmpcur5738 = case2417 + sizeof(SymTy);
-            SymTy x1628 = (SymTy) tmpval5737;
-            CursorTy end_x1628 = (CursorTy) tmpcur5738;
-
-            *(TagTyPacked *) loc1972 = 1;
-
-            CursorTy writetag4034 = loc1972 + 1;
-            CursorTy writecur4035 = (CursorTy) end_y1629;
-
-            *(SymTy *) writecur4035 = x1628;
-
-            CursorTy writecur4036 = writecur4035 + sizeof(SymTy);
-            CursorTy pvrtmp5740 = (CursorTy) writecur4036;
-            CursorTy pvrtmp5739 = (CursorTy) loc1972;
-            CursorTy taildc3435 = (CursorTy) pvrtmp5739;
-            CursorTy end_taildc3435 = (CursorTy) pvrtmp5740;
-            CursorTy pvrtmp5742 = (CursorTy) end_taildc3435;
-            CursorTy pvrtmp5741 = (CursorTy) taildc3435;
-            CursorTy fltPrd4887 = (CursorTy) pvrtmp5741;
-            CursorTy fltPrd4888 = (CursorTy) pvrtmp5742;
-
-            return (CursorCursorCursorCursorProd) {end_r1974_3723, jump3433,
-                                                   fltPrd4887, fltPrd4888};
-            break;
-        }
-
-      case 2:
-        {
-            CursorTy field_cur4038 = (CursorTy) tmpcur5716;
-            CursorTy case2426 = (CursorTy) field_cur4038;
-            SymTy tmpval5743 = *(SymTy *) case2426;
-            CursorTy tmpcur5744 = case2426 + sizeof(SymTy);
-            SymTy x1631 = (SymTy) tmpval5743;
-            CursorTy end_x1631 = (CursorTy) tmpcur5744;
-            CursorTy jump3436 = case2426 + 8;
-
-            *(TagTyPacked *) loc1972 = 2;
-
-            CursorTy writetag4040 = loc1972 + 1;
-
-            *(SymTy *) writetag4040 = x1631;
-
-            CursorTy writecur4041 = writetag4040 + sizeof(SymTy);
-            CursorTy pvrtmp5746 = (CursorTy) writecur4041;
-            CursorTy pvrtmp5745 = (CursorTy) loc1972;
-            CursorTy taildc3437 = (CursorTy) pvrtmp5745;
-            CursorTy end_taildc3437 = (CursorTy) pvrtmp5746;
-            CursorTy pvrtmp5748 = (CursorTy) end_taildc3437;
-            CursorTy pvrtmp5747 = (CursorTy) taildc3437;
-            CursorTy fltPrd4889 = (CursorTy) pvrtmp5747;
-            CursorTy fltPrd4890 = (CursorTy) pvrtmp5748;
-
-            return (CursorCursorCursorCursorProd) {end_r1974, jump3436,
-                                                   fltPrd4889, fltPrd4890};
-            break;
-        }
-
-      case 255:
-        {
-            CursorTy tmpcur7310 = *(CursorTy *) tmpcur5716;
-            CursorTy tmpaftercur7311 = tmpcur5716 + 8;
-            TagTyPacked tagtmp7312 = *(TagTyPacked *) tmpcur7310;
-            CursorTy tailtmp7313 = tmpcur7310 + 1;
-
-            tmpval5715 = tagtmp7312;
-            tmpcur5716 = tailtmp7313;
-            goto switch5749;
-            break;
-        }
-
-      case 254:
-        {
-            CursorTy tmpcur7310 = *(CursorTy *) tmpcur5716;
-            CursorTy tmpaftercur7311 = tmpcur5716 + 8;
-            TagTyPacked tagtmp7312 = *(TagTyPacked *) tmpcur7310;
-            CursorTy tailtmp7313 = tmpcur7310 + 1;
-
-            tmpval5715 = tagtmp7312;
-            tmpcur5716 = tailtmp7313;
-            goto switch5749;
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval5715");
-            exit(1);
-        }
-    }
-}
-
-CursorCursorCursorCursorProd _copy_Datum(CursorTy end_r1979, CursorTy end_r1980,
-                                         CursorTy loc1978, CursorTy arg1642)
-{
-    CursorTy loc1977 = (CursorTy) arg1642;
-
-    if (loc1978 + 18 > end_r1980) {
-        ChunkTy new_chunk91 = alloc_chunk(end_r1980);
-        CursorTy chunk_start92 = new_chunk91.start_ptr;
-        CursorTy chunk_end93 = new_chunk91.end_ptr;
-
-        end_r1980 = chunk_end93;
-        *(TagTyPacked *) loc1978 = 255;
-
-        CursorTy redir = loc1978 + 1;
-
-        *(CursorTy *) redir = chunk_start92;
-        loc1978 = chunk_start92;
-    }
-
-    TagTyPacked tmpval5761 = *(TagTyPacked *) arg1642;
-    CursorTy tmpcur5762 = arg1642 + 1;
-
-
-  switch5769:
-    ;
-    switch (tmpval5761) {
-
-      case 0:
-        {
-            CursorTy field_cur4050 = (CursorTy) tmpcur5762;
-            CursorTy case2442 = (CursorTy) field_cur4050;
-            IntTy tmpval5763 = *(IntTy *) case2442;
-            CursorTy tmpcur5764 = case2442 + sizeof(IntTy);
-            IntTy x1643 = (IntTy) tmpval5763;
-            CursorTy end_x1643 = (CursorTy) tmpcur5764;
-            CursorTy jump3445 = case2442 + 8;
-
-            *(TagTyPacked *) loc1978 = 0;
-
-            CursorTy writetag4052 = loc1978 + 1;
-
-            *(IntTy *) writetag4052 = x1643;
-
-            CursorTy writecur4053 = writetag4052 + sizeof(IntTy);
-            CursorTy pvrtmp5766 = (CursorTy) writecur4053;
-            CursorTy pvrtmp5765 = (CursorTy) loc1978;
-            CursorTy taildc3446 = (CursorTy) pvrtmp5765;
-            CursorTy end_taildc3446 = (CursorTy) pvrtmp5766;
-            CursorTy pvrtmp5768 = (CursorTy) end_taildc3446;
-            CursorTy pvrtmp5767 = (CursorTy) taildc3446;
-            CursorTy fltPrd4891 = (CursorTy) pvrtmp5767;
-            CursorTy fltPrd4892 = (CursorTy) pvrtmp5768;
-
-            return (CursorCursorCursorCursorProd) {end_r1980, jump3445,
-                                                   fltPrd4891, fltPrd4892};
-            break;
-        }
-
-      case 255:
-        {
-            CursorTy tmpcur7318 = *(CursorTy *) tmpcur5762;
-            CursorTy tmpaftercur7319 = tmpcur5762 + 8;
-            TagTyPacked tagtmp7320 = *(TagTyPacked *) tmpcur7318;
-            CursorTy tailtmp7321 = tmpcur7318 + 1;
-
-            tmpval5761 = tagtmp7320;
-            tmpcur5762 = tailtmp7321;
-            goto switch5769;
-            break;
-        }
-
-      case 254:
-        {
-            CursorTy tmpcur7318 = *(CursorTy *) tmpcur5762;
-            CursorTy tmpaftercur7319 = tmpcur5762 + 8;
-            TagTyPacked tagtmp7320 = *(TagTyPacked *) tmpcur7318;
-            CursorTy tailtmp7321 = tmpcur7318 + 1;
-
-            tmpval5761 = tagtmp7320;
-            tmpcur5762 = tailtmp7321;
-            goto switch5769;
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval5761");
-            exit(1);
-        }
-    }
-}
-
-CursorCursorCursorCursorProd _copy_LAMBDACASE(CursorTy end_r1985,
-                                              CursorTy end_r1986,
-                                              CursorTy loc1984,
-                                              CursorTy arg1648)
-{
-    CursorTy loc1983 = (CursorTy) arg1648;
-
-    if (loc1984 + 18 > end_r1986) {
-        ChunkTy new_chunk97 = alloc_chunk(end_r1986);
-        CursorTy chunk_start98 = new_chunk97.start_ptr;
-        CursorTy chunk_end99 = new_chunk97.end_ptr;
-
-        end_r1986 = chunk_end99;
-        *(TagTyPacked *) loc1984 = 255;
-
-        CursorTy redir = loc1984 + 1;
-
-        *(CursorTy *) redir = chunk_start98;
-        loc1984 = chunk_start98;
-    }
-
-    TagTyPacked tmpval5775 = *(TagTyPacked *) arg1648;
-    CursorTy tmpcur5776 = arg1648 + 1;
-
-
-  switch5809:
-    ;
-    switch (tmpval5775) {
-
-      case 0:
-        {
-            CursorTy field_cur4057 = (CursorTy) tmpcur5776;
-            CursorTy case2451 = (CursorTy) field_cur4057;
-            CursorTy x1649 = (CursorTy) case2451;
-            CursorTy loc2463 = loc1984 + 1;
-            CursorCursorCursorCursorProd tmp_struct94 =
-                                          _copy_Formals(end_r1985, end_r1986, loc2463, x1649);
-            CursorTy pvrtmp5777 = tmp_struct94.field0;
-            CursorTy pvrtmp5778 = tmp_struct94.field1;
-            CursorTy pvrtmp5779 = tmp_struct94.field2;
-            CursorTy pvrtmp5780 = tmp_struct94.field3;
-            CursorTy fltPrd4893 = (CursorTy) pvrtmp5779;
-            CursorTy fltPrd4894 = (CursorTy) pvrtmp5780;
-            CursorTy pvrtmp5782 = (CursorTy) fltPrd4894;
-            CursorTy pvrtmp5781 = (CursorTy) fltPrd4893;
-            CursorTy y1652 = (CursorTy) pvrtmp5781;
-            CursorTy fltPrd4895 = (CursorTy) pvrtmp5779;
-            CursorTy fltPrd4896 = (CursorTy) pvrtmp5780;
-            CursorTy pvrtmp5784 = (CursorTy) fltPrd4896;
-            CursorTy pvrtmp5783 = (CursorTy) fltPrd4895;
-            CursorTy end_y1652 = (CursorTy) pvrtmp5784;
-            CursorTy end_r1986_3724 = (CursorTy) pvrtmp5777;
-            CursorTy endof3449 = (CursorTy) pvrtmp5778;
-            CursorTy case2452 = (CursorTy) endof3449;
-            CursorTy x1650 = (CursorTy) case2452;
-            CursorTy loc2464 = (CursorTy) end_y1652;
-            CursorCursorCursorCursorProd tmp_struct95 =
-                                          _copy_ListExpr(end_r1985, end_r1986_3724, loc2464, x1650);
-            CursorTy pvrtmp5785 = tmp_struct95.field0;
-            CursorTy pvrtmp5786 = tmp_struct95.field1;
-            CursorTy pvrtmp5787 = tmp_struct95.field2;
-            CursorTy pvrtmp5788 = tmp_struct95.field3;
-            CursorTy fltPrd4897 = (CursorTy) pvrtmp5787;
-            CursorTy fltPrd4898 = (CursorTy) pvrtmp5788;
-            CursorTy pvrtmp5790 = (CursorTy) fltPrd4898;
-            CursorTy pvrtmp5789 = (CursorTy) fltPrd4897;
-            CursorTy y1653 = (CursorTy) pvrtmp5789;
-            CursorTy fltPrd4899 = (CursorTy) pvrtmp5787;
-            CursorTy fltPrd4900 = (CursorTy) pvrtmp5788;
-            CursorTy pvrtmp5792 = (CursorTy) fltPrd4900;
-            CursorTy pvrtmp5791 = (CursorTy) fltPrd4899;
-            CursorTy end_y1653 = (CursorTy) pvrtmp5792;
-            CursorTy end_r1986_3724_3725 = (CursorTy) pvrtmp5785;
-            CursorTy endof3450 = (CursorTy) pvrtmp5786;
-            CursorTy case2453 = (CursorTy) endof3450;
-            CursorTy x1651 = (CursorTy) case2453;
-            CursorTy loc2465 = (CursorTy) end_y1653;
-            CursorCursorCursorCursorProd tmp_struct96 =
-                                          _copy_LAMBDACASE(end_r1985, end_r1986_3724_3725, loc2465, x1651);
-            CursorTy pvrtmp5793 = tmp_struct96.field0;
-            CursorTy pvrtmp5794 = tmp_struct96.field1;
-            CursorTy pvrtmp5795 = tmp_struct96.field2;
-            CursorTy pvrtmp5796 = tmp_struct96.field3;
-            CursorTy fltPrd4901 = (CursorTy) pvrtmp5795;
-            CursorTy fltPrd4902 = (CursorTy) pvrtmp5796;
-            CursorTy pvrtmp5798 = (CursorTy) fltPrd4902;
-            CursorTy pvrtmp5797 = (CursorTy) fltPrd4901;
-            CursorTy y1654 = (CursorTy) pvrtmp5797;
-            CursorTy fltPrd4903 = (CursorTy) pvrtmp5795;
-            CursorTy fltPrd4904 = (CursorTy) pvrtmp5796;
-            CursorTy pvrtmp5800 = (CursorTy) fltPrd4904;
-            CursorTy pvrtmp5799 = (CursorTy) fltPrd4903;
-            CursorTy end_y1654 = (CursorTy) pvrtmp5800;
-            CursorTy end_r1986_3724_3725_3726 = (CursorTy) pvrtmp5793;
-            CursorTy endof3451 = (CursorTy) pvrtmp5794;
-
-            *(TagTyPacked *) loc1984 = 0;
-
-            CursorTy writetag4061 = loc1984 + 1;
-            CursorTy writecur4062 = (CursorTy) end_y1652;
-            CursorTy writecur4063 = (CursorTy) end_y1653;
-            CursorTy writecur4064 = (CursorTy) end_y1654;
-            CursorTy pvrtmp5802 = (CursorTy) writecur4064;
-            CursorTy pvrtmp5801 = (CursorTy) loc1984;
-            CursorTy taildc3452 = (CursorTy) pvrtmp5801;
-            CursorTy end_taildc3452 = (CursorTy) pvrtmp5802;
-            CursorTy pvrtmp5804 = (CursorTy) end_taildc3452;
-            CursorTy pvrtmp5803 = (CursorTy) taildc3452;
-            CursorTy fltPrd4905 = (CursorTy) pvrtmp5803;
-            CursorTy fltPrd4906 = (CursorTy) pvrtmp5804;
-
-            return (CursorCursorCursorCursorProd) {end_r1986_3724_3725_3726,
-                                                   endof3451, fltPrd4905,
-                                                   fltPrd4906};
-            break;
-        }
-
-      case 1:
-        {
-            CursorTy field_cur4066 = (CursorTy) tmpcur5776;
-            CursorTy jump3453 = loc1983 + 1;
-
-            *(TagTyPacked *) loc1984 = 1;
-
-            CursorTy writetag4067 = loc1984 + 1;
-            CursorTy pvrtmp5806 = (CursorTy) writetag4067;
-            CursorTy pvrtmp5805 = (CursorTy) loc1984;
-            CursorTy taildc3454 = (CursorTy) pvrtmp5805;
-            CursorTy end_taildc3454 = (CursorTy) pvrtmp5806;
-            CursorTy pvrtmp5808 = (CursorTy) end_taildc3454;
-            CursorTy pvrtmp5807 = (CursorTy) taildc3454;
-            CursorTy fltPrd4907 = (CursorTy) pvrtmp5807;
-            CursorTy fltPrd4908 = (CursorTy) pvrtmp5808;
-
-            return (CursorCursorCursorCursorProd) {end_r1986, jump3453,
-                                                   fltPrd4907, fltPrd4908};
-            break;
-        }
-
-      case 255:
-        {
-            CursorTy tmpcur7326 = *(CursorTy *) tmpcur5776;
-            CursorTy tmpaftercur7327 = tmpcur5776 + 8;
-            TagTyPacked tagtmp7328 = *(TagTyPacked *) tmpcur7326;
-            CursorTy tailtmp7329 = tmpcur7326 + 1;
-
-            tmpval5775 = tagtmp7328;
-            tmpcur5776 = tailtmp7329;
-            goto switch5809;
-            break;
-        }
-
-      case 254:
-        {
-            CursorTy tmpcur7326 = *(CursorTy *) tmpcur5776;
-            CursorTy tmpaftercur7327 = tmpcur5776 + 8;
-            TagTyPacked tagtmp7328 = *(TagTyPacked *) tmpcur7326;
-            CursorTy tailtmp7329 = tmpcur7326 + 1;
-
-            tmpval5775 = tagtmp7328;
-            tmpcur5776 = tailtmp7329;
-            goto switch5809;
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval5775");
-            exit(1);
-        }
-    }
-}
-
-CursorCursorCursorCursorProd _copy_LVBIND(CursorTy end_r1991,
-                                          CursorTy end_r1992, CursorTy loc1990,
-                                          CursorTy arg1662)
-{
-    CursorTy loc1989 = (CursorTy) arg1662;
-
-    if (loc1990 + 18 > end_r1992) {
-        ChunkTy new_chunk106 = alloc_chunk(end_r1992);
-        CursorTy chunk_start107 = new_chunk106.start_ptr;
-        CursorTy chunk_end108 = new_chunk106.end_ptr;
-
-        end_r1992 = chunk_end108;
-        *(TagTyPacked *) loc1990 = 255;
-
-        CursorTy redir = loc1990 + 1;
-
-        *(CursorTy *) redir = chunk_start107;
-        loc1990 = chunk_start107;
-    }
-
-    TagTyPacked tmpval5819 = *(TagTyPacked *) arg1662;
-    CursorTy tmpcur5820 = arg1662 + 1;
-
-
-  switch5853:
-    ;
-    switch (tmpval5819) {
-
-      case 0:
-        {
-            CursorTy field_cur4074 = (CursorTy) tmpcur5820;
-            CursorTy case2483 = (CursorTy) field_cur4074;
-            CursorTy x1663 = (CursorTy) case2483;
-            CursorTy loc2495 = loc1990 + 1;
-            CursorCursorCursorCursorProd tmp_struct103 =
-                                          _copy_ListSym(end_r1991, end_r1992, loc2495, x1663);
-            CursorTy pvrtmp5821 = tmp_struct103.field0;
-            CursorTy pvrtmp5822 = tmp_struct103.field1;
-            CursorTy pvrtmp5823 = tmp_struct103.field2;
-            CursorTy pvrtmp5824 = tmp_struct103.field3;
-            CursorTy fltPrd4909 = (CursorTy) pvrtmp5823;
-            CursorTy fltPrd4910 = (CursorTy) pvrtmp5824;
-            CursorTy pvrtmp5826 = (CursorTy) fltPrd4910;
-            CursorTy pvrtmp5825 = (CursorTy) fltPrd4909;
-            CursorTy y1666 = (CursorTy) pvrtmp5825;
-            CursorTy fltPrd4911 = (CursorTy) pvrtmp5823;
-            CursorTy fltPrd4912 = (CursorTy) pvrtmp5824;
-            CursorTy pvrtmp5828 = (CursorTy) fltPrd4912;
-            CursorTy pvrtmp5827 = (CursorTy) fltPrd4911;
-            CursorTy end_y1666 = (CursorTy) pvrtmp5828;
-            CursorTy end_r1992_3727 = (CursorTy) pvrtmp5821;
-            CursorTy endof3461 = (CursorTy) pvrtmp5822;
-            CursorTy case2484 = (CursorTy) endof3461;
-            CursorTy x1664 = (CursorTy) case2484;
-            CursorTy loc2496 = (CursorTy) end_y1666;
-            CursorCursorCursorCursorProd tmp_struct104 =
-                                          _copy_Expr(end_r1991, end_r1992_3727, loc2496, x1664);
-            CursorTy pvrtmp5829 = tmp_struct104.field0;
-            CursorTy pvrtmp5830 = tmp_struct104.field1;
-            CursorTy pvrtmp5831 = tmp_struct104.field2;
-            CursorTy pvrtmp5832 = tmp_struct104.field3;
-            CursorTy fltPrd4913 = (CursorTy) pvrtmp5831;
-            CursorTy fltPrd4914 = (CursorTy) pvrtmp5832;
-            CursorTy pvrtmp5834 = (CursorTy) fltPrd4914;
-            CursorTy pvrtmp5833 = (CursorTy) fltPrd4913;
-            CursorTy y1667 = (CursorTy) pvrtmp5833;
-            CursorTy fltPrd4915 = (CursorTy) pvrtmp5831;
-            CursorTy fltPrd4916 = (CursorTy) pvrtmp5832;
-            CursorTy pvrtmp5836 = (CursorTy) fltPrd4916;
-            CursorTy pvrtmp5835 = (CursorTy) fltPrd4915;
-            CursorTy end_y1667 = (CursorTy) pvrtmp5836;
-            CursorTy end_r1992_3727_3728 = (CursorTy) pvrtmp5829;
-            CursorTy endof3462 = (CursorTy) pvrtmp5830;
-            CursorTy case2485 = (CursorTy) endof3462;
-            CursorTy x1665 = (CursorTy) case2485;
-            CursorTy loc2497 = (CursorTy) end_y1667;
-            CursorCursorCursorCursorProd tmp_struct105 =
-                                          _copy_LVBIND(end_r1991, end_r1992_3727_3728, loc2497, x1665);
-            CursorTy pvrtmp5837 = tmp_struct105.field0;
-            CursorTy pvrtmp5838 = tmp_struct105.field1;
-            CursorTy pvrtmp5839 = tmp_struct105.field2;
-            CursorTy pvrtmp5840 = tmp_struct105.field3;
-            CursorTy fltPrd4917 = (CursorTy) pvrtmp5839;
-            CursorTy fltPrd4918 = (CursorTy) pvrtmp5840;
-            CursorTy pvrtmp5842 = (CursorTy) fltPrd4918;
-            CursorTy pvrtmp5841 = (CursorTy) fltPrd4917;
-            CursorTy y1668 = (CursorTy) pvrtmp5841;
-            CursorTy fltPrd4919 = (CursorTy) pvrtmp5839;
-            CursorTy fltPrd4920 = (CursorTy) pvrtmp5840;
-            CursorTy pvrtmp5844 = (CursorTy) fltPrd4920;
-            CursorTy pvrtmp5843 = (CursorTy) fltPrd4919;
-            CursorTy end_y1668 = (CursorTy) pvrtmp5844;
-            CursorTy end_r1992_3727_3728_3729 = (CursorTy) pvrtmp5837;
-            CursorTy endof3463 = (CursorTy) pvrtmp5838;
-
-            *(TagTyPacked *) loc1990 = 0;
-
-            CursorTy writetag4078 = loc1990 + 1;
-            CursorTy writecur4079 = (CursorTy) end_y1666;
-            CursorTy writecur4080 = (CursorTy) end_y1667;
-            CursorTy writecur4081 = (CursorTy) end_y1668;
-            CursorTy pvrtmp5846 = (CursorTy) writecur4081;
-            CursorTy pvrtmp5845 = (CursorTy) loc1990;
-            CursorTy taildc3464 = (CursorTy) pvrtmp5845;
-            CursorTy end_taildc3464 = (CursorTy) pvrtmp5846;
-            CursorTy pvrtmp5848 = (CursorTy) end_taildc3464;
-            CursorTy pvrtmp5847 = (CursorTy) taildc3464;
-            CursorTy fltPrd4921 = (CursorTy) pvrtmp5847;
-            CursorTy fltPrd4922 = (CursorTy) pvrtmp5848;
-
-            return (CursorCursorCursorCursorProd) {end_r1992_3727_3728_3729,
-                                                   endof3463, fltPrd4921,
-                                                   fltPrd4922};
-            break;
-        }
-
-      case 1:
-        {
-            CursorTy field_cur4083 = (CursorTy) tmpcur5820;
-            CursorTy jump3465 = loc1989 + 1;
-
-            *(TagTyPacked *) loc1990 = 1;
-
-            CursorTy writetag4084 = loc1990 + 1;
-            CursorTy pvrtmp5850 = (CursorTy) writetag4084;
-            CursorTy pvrtmp5849 = (CursorTy) loc1990;
-            CursorTy taildc3466 = (CursorTy) pvrtmp5849;
-            CursorTy end_taildc3466 = (CursorTy) pvrtmp5850;
-            CursorTy pvrtmp5852 = (CursorTy) end_taildc3466;
-            CursorTy pvrtmp5851 = (CursorTy) taildc3466;
-            CursorTy fltPrd4923 = (CursorTy) pvrtmp5851;
-            CursorTy fltPrd4924 = (CursorTy) pvrtmp5852;
-
-            return (CursorCursorCursorCursorProd) {end_r1992, jump3465,
-                                                   fltPrd4923, fltPrd4924};
-            break;
-        }
-
-      case 255:
-        {
-            CursorTy tmpcur7334 = *(CursorTy *) tmpcur5820;
-            CursorTy tmpaftercur7335 = tmpcur5820 + 8;
-            TagTyPacked tagtmp7336 = *(TagTyPacked *) tmpcur7334;
-            CursorTy tailtmp7337 = tmpcur7334 + 1;
-
-            tmpval5819 = tagtmp7336;
-            tmpcur5820 = tailtmp7337;
-            goto switch5853;
-            break;
-        }
-
-      case 254:
-        {
-            CursorTy tmpcur7334 = *(CursorTy *) tmpcur5820;
-            CursorTy tmpaftercur7335 = tmpcur5820 + 8;
-            TagTyPacked tagtmp7336 = *(TagTyPacked *) tmpcur7334;
-            CursorTy tailtmp7337 = tmpcur7334 + 1;
-
-            tmpval5819 = tagtmp7336;
-            tmpcur5820 = tailtmp7337;
-            goto switch5853;
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval5819");
-            exit(1);
-        }
-    }
-}
-
-CursorCursorCursorCursorProd _copy_Expr(CursorTy end_r1997, CursorTy end_r1998,
-                                        CursorTy loc1996, CursorTy arg1676)
-{
-    CursorTy loc1995 = (CursorTy) arg1676;
-
-    if (loc1996 + 18 > end_r1998) {
-        ChunkTy new_chunk134 = alloc_chunk(end_r1998);
-        CursorTy chunk_start135 = new_chunk134.start_ptr;
-        CursorTy chunk_end136 = new_chunk134.end_ptr;
-
-        end_r1998 = chunk_end136;
-        *(TagTyPacked *) loc1996 = 255;
-
-        CursorTy redir = loc1996 + 1;
-
-        *(CursorTy *) redir = chunk_start135;
-        loc1996 = chunk_start135;
-    }
-
-    CursorTy loc2602 = loc1996 + 1;
-    CursorTy loc2603 = loc2602 + 8;
-    TagTyPacked tmpval5863 = *(TagTyPacked *) arg1676;
-    CursorTy tmpcur5864 = arg1676 + 1;
-
-
-  switch6123:
-    ;
-    switch (tmpval5863) {
-
-      case 0:
-        {
-            CursorTy field_cur4091 = (CursorTy) tmpcur5864;
-            CursorTy case2515 = (CursorTy) field_cur4091;
-            SymTy tmpval5865 = *(SymTy *) case2515;
-            CursorTy tmpcur5866 = case2515 + sizeof(SymTy);
-            SymTy x1677 = (SymTy) tmpval5865;
-            CursorTy end_x1677 = (CursorTy) tmpcur5866;
-            CursorTy jump3473 = case2515 + 8;
-
-            *(TagTyPacked *) loc1996 = 0;
-
-            CursorTy writetag4093 = loc1996 + 1;
-
-            *(SymTy *) writetag4093 = x1677;
-
-            CursorTy writecur4094 = writetag4093 + sizeof(SymTy);
-            CursorTy pvrtmp5868 = (CursorTy) writecur4094;
-            CursorTy pvrtmp5867 = (CursorTy) loc1996;
-            CursorTy taildc3474 = (CursorTy) pvrtmp5867;
-            CursorTy end_taildc3474 = (CursorTy) pvrtmp5868;
-            CursorTy pvrtmp5870 = (CursorTy) end_taildc3474;
-            CursorTy pvrtmp5869 = (CursorTy) taildc3474;
-            CursorTy fltPrd4925 = (CursorTy) pvrtmp5869;
-            CursorTy fltPrd4926 = (CursorTy) pvrtmp5870;
-
-            return (CursorCursorCursorCursorProd) {end_r1998, jump3473,
-                                                   fltPrd4925, fltPrd4926};
-            break;
-        }
-
-      case 1:
-        {
-            CursorTy field_cur4096 = (CursorTy) tmpcur5864;
-            CursorTy case2519 = (CursorTy) field_cur4096;
-            CursorTy x1679 = (CursorTy) case2519;
-            CursorTy loc2527 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct112 =
-                                          _copy_Formals(end_r1997, end_r1998, loc2527, x1679);
-            CursorTy pvrtmp5871 = tmp_struct112.field0;
-            CursorTy pvrtmp5872 = tmp_struct112.field1;
-            CursorTy pvrtmp5873 = tmp_struct112.field2;
-            CursorTy pvrtmp5874 = tmp_struct112.field3;
-            CursorTy fltPrd4927 = (CursorTy) pvrtmp5873;
-            CursorTy fltPrd4928 = (CursorTy) pvrtmp5874;
-            CursorTy pvrtmp5876 = (CursorTy) fltPrd4928;
-            CursorTy pvrtmp5875 = (CursorTy) fltPrd4927;
-            CursorTy y1681 = (CursorTy) pvrtmp5875;
-            CursorTy fltPrd4929 = (CursorTy) pvrtmp5873;
-            CursorTy fltPrd4930 = (CursorTy) pvrtmp5874;
-            CursorTy pvrtmp5878 = (CursorTy) fltPrd4930;
-            CursorTy pvrtmp5877 = (CursorTy) fltPrd4929;
-            CursorTy end_y1681 = (CursorTy) pvrtmp5878;
-            CursorTy end_r1998_3730 = (CursorTy) pvrtmp5871;
-            CursorTy endof3475 = (CursorTy) pvrtmp5872;
-            CursorTy case2520 = (CursorTy) endof3475;
-            CursorTy x1680 = (CursorTy) case2520;
-            CursorTy loc2528 = (CursorTy) end_y1681;
-            CursorCursorCursorCursorProd tmp_struct113 =
-                                          _copy_ListExpr(end_r1997, end_r1998_3730, loc2528, x1680);
-            CursorTy pvrtmp5879 = tmp_struct113.field0;
-            CursorTy pvrtmp5880 = tmp_struct113.field1;
-            CursorTy pvrtmp5881 = tmp_struct113.field2;
-            CursorTy pvrtmp5882 = tmp_struct113.field3;
-            CursorTy fltPrd4931 = (CursorTy) pvrtmp5881;
-            CursorTy fltPrd4932 = (CursorTy) pvrtmp5882;
-            CursorTy pvrtmp5884 = (CursorTy) fltPrd4932;
-            CursorTy pvrtmp5883 = (CursorTy) fltPrd4931;
-            CursorTy y1682 = (CursorTy) pvrtmp5883;
-            CursorTy fltPrd4933 = (CursorTy) pvrtmp5881;
-            CursorTy fltPrd4934 = (CursorTy) pvrtmp5882;
-            CursorTy pvrtmp5886 = (CursorTy) fltPrd4934;
-            CursorTy pvrtmp5885 = (CursorTy) fltPrd4933;
-            CursorTy end_y1682 = (CursorTy) pvrtmp5886;
-            CursorTy end_r1998_3730_3731 = (CursorTy) pvrtmp5879;
-            CursorTy endof3476 = (CursorTy) pvrtmp5880;
-
-            *(TagTyPacked *) loc1996 = 1;
-
-            CursorTy writetag4099 = loc1996 + 1;
-            CursorTy writecur4100 = (CursorTy) end_y1681;
-            CursorTy writecur4101 = (CursorTy) end_y1682;
-            CursorTy pvrtmp5888 = (CursorTy) writecur4101;
-            CursorTy pvrtmp5887 = (CursorTy) loc1996;
-            CursorTy taildc3477 = (CursorTy) pvrtmp5887;
-            CursorTy end_taildc3477 = (CursorTy) pvrtmp5888;
-            CursorTy pvrtmp5890 = (CursorTy) end_taildc3477;
-            CursorTy pvrtmp5889 = (CursorTy) taildc3477;
-            CursorTy fltPrd4935 = (CursorTy) pvrtmp5889;
-            CursorTy fltPrd4936 = (CursorTy) pvrtmp5890;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3730_3731,
-                                                   endof3476, fltPrd4935,
-                                                   fltPrd4936};
-            break;
-        }
-
-      case 2:
-        {
-            CursorTy field_cur4103 = (CursorTy) tmpcur5864;
-            CursorTy case2531 = (CursorTy) field_cur4103;
-            CursorTy x1683 = (CursorTy) case2531;
-            CursorTy loc2535 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct114 =
-                                          _copy_LAMBDACASE(end_r1997, end_r1998, loc2535, x1683);
-            CursorTy pvrtmp5891 = tmp_struct114.field0;
-            CursorTy pvrtmp5892 = tmp_struct114.field1;
-            CursorTy pvrtmp5893 = tmp_struct114.field2;
-            CursorTy pvrtmp5894 = tmp_struct114.field3;
-            CursorTy fltPrd4937 = (CursorTy) pvrtmp5893;
-            CursorTy fltPrd4938 = (CursorTy) pvrtmp5894;
-            CursorTy pvrtmp5896 = (CursorTy) fltPrd4938;
-            CursorTy pvrtmp5895 = (CursorTy) fltPrd4937;
-            CursorTy y1684 = (CursorTy) pvrtmp5895;
-            CursorTy fltPrd4939 = (CursorTy) pvrtmp5893;
-            CursorTy fltPrd4940 = (CursorTy) pvrtmp5894;
-            CursorTy pvrtmp5898 = (CursorTy) fltPrd4940;
-            CursorTy pvrtmp5897 = (CursorTy) fltPrd4939;
-            CursorTy end_y1684 = (CursorTy) pvrtmp5898;
-            CursorTy end_r1998_3732 = (CursorTy) pvrtmp5891;
-            CursorTy endof3478 = (CursorTy) pvrtmp5892;
-
-            *(TagTyPacked *) loc1996 = 2;
-
-            CursorTy writetag4105 = loc1996 + 1;
-            CursorTy writecur4106 = (CursorTy) end_y1684;
-            CursorTy pvrtmp5900 = (CursorTy) writecur4106;
-            CursorTy pvrtmp5899 = (CursorTy) loc1996;
-            CursorTy taildc3479 = (CursorTy) pvrtmp5899;
-            CursorTy end_taildc3479 = (CursorTy) pvrtmp5900;
-            CursorTy pvrtmp5902 = (CursorTy) end_taildc3479;
-            CursorTy pvrtmp5901 = (CursorTy) taildc3479;
-            CursorTy fltPrd4941 = (CursorTy) pvrtmp5901;
-            CursorTy fltPrd4942 = (CursorTy) pvrtmp5902;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3732, endof3478,
-                                                   fltPrd4941, fltPrd4942};
-            break;
-        }
-
-      case 3:
-        {
-            CursorTy field_cur4108 = (CursorTy) tmpcur5864;
-            CursorTy case2537 = (CursorTy) field_cur4108;
-            CursorTy x1685 = (CursorTy) case2537;
-            CursorTy loc2549 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct115 =
-                                          _copy_Expr(end_r1997, end_r1998, loc2549, x1685);
-            CursorTy pvrtmp5903 = tmp_struct115.field0;
-            CursorTy pvrtmp5904 = tmp_struct115.field1;
-            CursorTy pvrtmp5905 = tmp_struct115.field2;
-            CursorTy pvrtmp5906 = tmp_struct115.field3;
-            CursorTy fltPrd4943 = (CursorTy) pvrtmp5905;
-            CursorTy fltPrd4944 = (CursorTy) pvrtmp5906;
-            CursorTy pvrtmp5908 = (CursorTy) fltPrd4944;
-            CursorTy pvrtmp5907 = (CursorTy) fltPrd4943;
-            CursorTy y1688 = (CursorTy) pvrtmp5907;
-            CursorTy fltPrd4945 = (CursorTy) pvrtmp5905;
-            CursorTy fltPrd4946 = (CursorTy) pvrtmp5906;
-            CursorTy pvrtmp5910 = (CursorTy) fltPrd4946;
-            CursorTy pvrtmp5909 = (CursorTy) fltPrd4945;
-            CursorTy end_y1688 = (CursorTy) pvrtmp5910;
-            CursorTy end_r1998_3733 = (CursorTy) pvrtmp5903;
-            CursorTy endof3480 = (CursorTy) pvrtmp5904;
-            CursorTy case2538 = (CursorTy) endof3480;
-            CursorTy x1686 = (CursorTy) case2538;
-            CursorTy loc2550 = (CursorTy) end_y1688;
-            CursorCursorCursorCursorProd tmp_struct116 =
-                                          _copy_Expr(end_r1997, end_r1998_3733, loc2550, x1686);
-            CursorTy pvrtmp5911 = tmp_struct116.field0;
-            CursorTy pvrtmp5912 = tmp_struct116.field1;
-            CursorTy pvrtmp5913 = tmp_struct116.field2;
-            CursorTy pvrtmp5914 = tmp_struct116.field3;
-            CursorTy fltPrd4947 = (CursorTy) pvrtmp5913;
-            CursorTy fltPrd4948 = (CursorTy) pvrtmp5914;
-            CursorTy pvrtmp5916 = (CursorTy) fltPrd4948;
-            CursorTy pvrtmp5915 = (CursorTy) fltPrd4947;
-            CursorTy y1689 = (CursorTy) pvrtmp5915;
-            CursorTy fltPrd4949 = (CursorTy) pvrtmp5913;
-            CursorTy fltPrd4950 = (CursorTy) pvrtmp5914;
-            CursorTy pvrtmp5918 = (CursorTy) fltPrd4950;
-            CursorTy pvrtmp5917 = (CursorTy) fltPrd4949;
-            CursorTy end_y1689 = (CursorTy) pvrtmp5918;
-            CursorTy end_r1998_3733_3734 = (CursorTy) pvrtmp5911;
-            CursorTy endof3481 = (CursorTy) pvrtmp5912;
-            CursorTy case2539 = (CursorTy) endof3481;
-            CursorTy x1687 = (CursorTy) case2539;
-            CursorTy loc2551 = (CursorTy) end_y1689;
-            CursorCursorCursorCursorProd tmp_struct117 =
-                                          _copy_Expr(end_r1997, end_r1998_3733_3734, loc2551, x1687);
-            CursorTy pvrtmp5919 = tmp_struct117.field0;
-            CursorTy pvrtmp5920 = tmp_struct117.field1;
-            CursorTy pvrtmp5921 = tmp_struct117.field2;
-            CursorTy pvrtmp5922 = tmp_struct117.field3;
-            CursorTy fltPrd4951 = (CursorTy) pvrtmp5921;
-            CursorTy fltPrd4952 = (CursorTy) pvrtmp5922;
-            CursorTy pvrtmp5924 = (CursorTy) fltPrd4952;
-            CursorTy pvrtmp5923 = (CursorTy) fltPrd4951;
-            CursorTy y1690 = (CursorTy) pvrtmp5923;
-            CursorTy fltPrd4953 = (CursorTy) pvrtmp5921;
-            CursorTy fltPrd4954 = (CursorTy) pvrtmp5922;
-            CursorTy pvrtmp5926 = (CursorTy) fltPrd4954;
-            CursorTy pvrtmp5925 = (CursorTy) fltPrd4953;
-            CursorTy end_y1690 = (CursorTy) pvrtmp5926;
-            CursorTy end_r1998_3733_3734_3735 = (CursorTy) pvrtmp5919;
-            CursorTy endof3482 = (CursorTy) pvrtmp5920;
-
-            *(TagTyPacked *) loc1996 = 3;
-
-            CursorTy writetag4112 = loc1996 + 1;
-            CursorTy writecur4113 = (CursorTy) end_y1688;
-            CursorTy writecur4114 = (CursorTy) end_y1689;
-            CursorTy writecur4115 = (CursorTy) end_y1690;
-            CursorTy pvrtmp5928 = (CursorTy) writecur4115;
-            CursorTy pvrtmp5927 = (CursorTy) loc1996;
-            CursorTy taildc3483 = (CursorTy) pvrtmp5927;
-            CursorTy end_taildc3483 = (CursorTy) pvrtmp5928;
-            CursorTy pvrtmp5930 = (CursorTy) end_taildc3483;
-            CursorTy pvrtmp5929 = (CursorTy) taildc3483;
-            CursorTy fltPrd4955 = (CursorTy) pvrtmp5929;
-            CursorTy fltPrd4956 = (CursorTy) pvrtmp5930;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3733_3734_3735,
-                                                   endof3482, fltPrd4955,
-                                                   fltPrd4956};
-            break;
-        }
-
-      case 4:
-        {
-            CursorTy field_cur4117 = (CursorTy) tmpcur5864;
-            CursorTy case2555 = (CursorTy) field_cur4117;
-            CursorTy x1691 = (CursorTy) case2555;
-            CursorTy loc2559 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct118 =
-                                          _copy_ListExpr(end_r1997, end_r1998, loc2559, x1691);
-            CursorTy pvrtmp5931 = tmp_struct118.field0;
-            CursorTy pvrtmp5932 = tmp_struct118.field1;
-            CursorTy pvrtmp5933 = tmp_struct118.field2;
-            CursorTy pvrtmp5934 = tmp_struct118.field3;
-            CursorTy fltPrd4957 = (CursorTy) pvrtmp5933;
-            CursorTy fltPrd4958 = (CursorTy) pvrtmp5934;
-            CursorTy pvrtmp5936 = (CursorTy) fltPrd4958;
-            CursorTy pvrtmp5935 = (CursorTy) fltPrd4957;
-            CursorTy y1692 = (CursorTy) pvrtmp5935;
-            CursorTy fltPrd4959 = (CursorTy) pvrtmp5933;
-            CursorTy fltPrd4960 = (CursorTy) pvrtmp5934;
-            CursorTy pvrtmp5938 = (CursorTy) fltPrd4960;
-            CursorTy pvrtmp5937 = (CursorTy) fltPrd4959;
-            CursorTy end_y1692 = (CursorTy) pvrtmp5938;
-            CursorTy end_r1998_3736 = (CursorTy) pvrtmp5931;
-            CursorTy endof3484 = (CursorTy) pvrtmp5932;
-
-            *(TagTyPacked *) loc1996 = 4;
-
-            CursorTy writetag4119 = loc1996 + 1;
-            CursorTy writecur4120 = (CursorTy) end_y1692;
-            CursorTy pvrtmp5940 = (CursorTy) writecur4120;
-            CursorTy pvrtmp5939 = (CursorTy) loc1996;
-            CursorTy taildc3485 = (CursorTy) pvrtmp5939;
-            CursorTy end_taildc3485 = (CursorTy) pvrtmp5940;
-            CursorTy pvrtmp5942 = (CursorTy) end_taildc3485;
-            CursorTy pvrtmp5941 = (CursorTy) taildc3485;
-            CursorTy fltPrd4961 = (CursorTy) pvrtmp5941;
-            CursorTy fltPrd4962 = (CursorTy) pvrtmp5942;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3736, endof3484,
-                                                   fltPrd4961, fltPrd4962};
-            break;
-        }
-
-      case 5:
-        {
-            CursorTy field_cur4122 = (CursorTy) tmpcur5864;
-            CursorTy case2561 = (CursorTy) field_cur4122;
-            CursorTy x1693 = (CursorTy) case2561;
-            CursorTy loc2569 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct119 =
-                                          _copy_Expr(end_r1997, end_r1998, loc2569, x1693);
-            CursorTy pvrtmp5943 = tmp_struct119.field0;
-            CursorTy pvrtmp5944 = tmp_struct119.field1;
-            CursorTy pvrtmp5945 = tmp_struct119.field2;
-            CursorTy pvrtmp5946 = tmp_struct119.field3;
-            CursorTy fltPrd4963 = (CursorTy) pvrtmp5945;
-            CursorTy fltPrd4964 = (CursorTy) pvrtmp5946;
-            CursorTy pvrtmp5948 = (CursorTy) fltPrd4964;
-            CursorTy pvrtmp5947 = (CursorTy) fltPrd4963;
-            CursorTy y1695 = (CursorTy) pvrtmp5947;
-            CursorTy fltPrd4965 = (CursorTy) pvrtmp5945;
-            CursorTy fltPrd4966 = (CursorTy) pvrtmp5946;
-            CursorTy pvrtmp5950 = (CursorTy) fltPrd4966;
-            CursorTy pvrtmp5949 = (CursorTy) fltPrd4965;
-            CursorTy end_y1695 = (CursorTy) pvrtmp5950;
-            CursorTy end_r1998_3737 = (CursorTy) pvrtmp5943;
-            CursorTy endof3486 = (CursorTy) pvrtmp5944;
-            CursorTy case2562 = (CursorTy) endof3486;
-            CursorTy x1694 = (CursorTy) case2562;
-            CursorTy loc2570 = (CursorTy) end_y1695;
-            CursorCursorCursorCursorProd tmp_struct120 =
-                                          _copy_ListExpr(end_r1997, end_r1998_3737, loc2570, x1694);
-            CursorTy pvrtmp5951 = tmp_struct120.field0;
-            CursorTy pvrtmp5952 = tmp_struct120.field1;
-            CursorTy pvrtmp5953 = tmp_struct120.field2;
-            CursorTy pvrtmp5954 = tmp_struct120.field3;
-            CursorTy fltPrd4967 = (CursorTy) pvrtmp5953;
-            CursorTy fltPrd4968 = (CursorTy) pvrtmp5954;
-            CursorTy pvrtmp5956 = (CursorTy) fltPrd4968;
-            CursorTy pvrtmp5955 = (CursorTy) fltPrd4967;
-            CursorTy y1696 = (CursorTy) pvrtmp5955;
-            CursorTy fltPrd4969 = (CursorTy) pvrtmp5953;
-            CursorTy fltPrd4970 = (CursorTy) pvrtmp5954;
-            CursorTy pvrtmp5958 = (CursorTy) fltPrd4970;
-            CursorTy pvrtmp5957 = (CursorTy) fltPrd4969;
-            CursorTy end_y1696 = (CursorTy) pvrtmp5958;
-            CursorTy end_r1998_3737_3738 = (CursorTy) pvrtmp5951;
-            CursorTy endof3487 = (CursorTy) pvrtmp5952;
-
-            *(TagTyPacked *) loc1996 = 5;
-
-            CursorTy writetag4125 = loc1996 + 1;
-            CursorTy writecur4126 = (CursorTy) end_y1695;
-            CursorTy writecur4127 = (CursorTy) end_y1696;
-            CursorTy pvrtmp5960 = (CursorTy) writecur4127;
-            CursorTy pvrtmp5959 = (CursorTy) loc1996;
-            CursorTy taildc3488 = (CursorTy) pvrtmp5959;
-            CursorTy end_taildc3488 = (CursorTy) pvrtmp5960;
-            CursorTy pvrtmp5962 = (CursorTy) end_taildc3488;
-            CursorTy pvrtmp5961 = (CursorTy) taildc3488;
-            CursorTy fltPrd4971 = (CursorTy) pvrtmp5961;
-            CursorTy fltPrd4972 = (CursorTy) pvrtmp5962;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3737_3738,
-                                                   endof3487, fltPrd4971,
-                                                   fltPrd4972};
-            break;
-        }
-
-      case 6:
-        {
-            CursorTy field_cur4129 = (CursorTy) tmpcur5864;
-            CursorTy case2573 = (CursorTy) field_cur4129;
-            CursorTy x1697 = (CursorTy) case2573;
-            CursorTy loc2581 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct121 =
-                                          _copy_LVBIND(end_r1997, end_r1998, loc2581, x1697);
-            CursorTy pvrtmp5963 = tmp_struct121.field0;
-            CursorTy pvrtmp5964 = tmp_struct121.field1;
-            CursorTy pvrtmp5965 = tmp_struct121.field2;
-            CursorTy pvrtmp5966 = tmp_struct121.field3;
-            CursorTy fltPrd4973 = (CursorTy) pvrtmp5965;
-            CursorTy fltPrd4974 = (CursorTy) pvrtmp5966;
-            CursorTy pvrtmp5968 = (CursorTy) fltPrd4974;
-            CursorTy pvrtmp5967 = (CursorTy) fltPrd4973;
-            CursorTy y1699 = (CursorTy) pvrtmp5967;
-            CursorTy fltPrd4975 = (CursorTy) pvrtmp5965;
-            CursorTy fltPrd4976 = (CursorTy) pvrtmp5966;
-            CursorTy pvrtmp5970 = (CursorTy) fltPrd4976;
-            CursorTy pvrtmp5969 = (CursorTy) fltPrd4975;
-            CursorTy end_y1699 = (CursorTy) pvrtmp5970;
-            CursorTy end_r1998_3739 = (CursorTy) pvrtmp5963;
-            CursorTy endof3489 = (CursorTy) pvrtmp5964;
-            CursorTy case2574 = (CursorTy) endof3489;
-            CursorTy x1698 = (CursorTy) case2574;
-            CursorTy loc2582 = (CursorTy) end_y1699;
-            CursorCursorCursorCursorProd tmp_struct122 =
-                                          _copy_ListExpr(end_r1997, end_r1998_3739, loc2582, x1698);
-            CursorTy pvrtmp5971 = tmp_struct122.field0;
-            CursorTy pvrtmp5972 = tmp_struct122.field1;
-            CursorTy pvrtmp5973 = tmp_struct122.field2;
-            CursorTy pvrtmp5974 = tmp_struct122.field3;
-            CursorTy fltPrd4977 = (CursorTy) pvrtmp5973;
-            CursorTy fltPrd4978 = (CursorTy) pvrtmp5974;
-            CursorTy pvrtmp5976 = (CursorTy) fltPrd4978;
-            CursorTy pvrtmp5975 = (CursorTy) fltPrd4977;
-            CursorTy y1700 = (CursorTy) pvrtmp5975;
-            CursorTy fltPrd4979 = (CursorTy) pvrtmp5973;
-            CursorTy fltPrd4980 = (CursorTy) pvrtmp5974;
-            CursorTy pvrtmp5978 = (CursorTy) fltPrd4980;
-            CursorTy pvrtmp5977 = (CursorTy) fltPrd4979;
-            CursorTy end_y1700 = (CursorTy) pvrtmp5978;
-            CursorTy end_r1998_3739_3740 = (CursorTy) pvrtmp5971;
-            CursorTy endof3490 = (CursorTy) pvrtmp5972;
-
-            *(TagTyPacked *) loc1996 = 6;
-
-            CursorTy writetag4132 = loc1996 + 1;
-            CursorTy writecur4133 = (CursorTy) end_y1699;
-            CursorTy writecur4134 = (CursorTy) end_y1700;
-            CursorTy pvrtmp5980 = (CursorTy) writecur4134;
-            CursorTy pvrtmp5979 = (CursorTy) loc1996;
-            CursorTy taildc3491 = (CursorTy) pvrtmp5979;
-            CursorTy end_taildc3491 = (CursorTy) pvrtmp5980;
-            CursorTy pvrtmp5982 = (CursorTy) end_taildc3491;
-            CursorTy pvrtmp5981 = (CursorTy) taildc3491;
-            CursorTy fltPrd4981 = (CursorTy) pvrtmp5981;
-            CursorTy fltPrd4982 = (CursorTy) pvrtmp5982;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3739_3740,
-                                                   endof3490, fltPrd4981,
-                                                   fltPrd4982};
-            break;
-        }
-
-      case 7:
-        {
-            CursorTy field_cur4136 = (CursorTy) tmpcur5864;
-            CursorTy case2585 = (CursorTy) field_cur4136;
-            CursorTy x1701 = (CursorTy) case2585;
-            CursorTy loc2593 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct123 =
-                                          _copy_LVBIND(end_r1997, end_r1998, loc2593, x1701);
-            CursorTy pvrtmp5983 = tmp_struct123.field0;
-            CursorTy pvrtmp5984 = tmp_struct123.field1;
-            CursorTy pvrtmp5985 = tmp_struct123.field2;
-            CursorTy pvrtmp5986 = tmp_struct123.field3;
-            CursorTy fltPrd4983 = (CursorTy) pvrtmp5985;
-            CursorTy fltPrd4984 = (CursorTy) pvrtmp5986;
-            CursorTy pvrtmp5988 = (CursorTy) fltPrd4984;
-            CursorTy pvrtmp5987 = (CursorTy) fltPrd4983;
-            CursorTy y1703 = (CursorTy) pvrtmp5987;
-            CursorTy fltPrd4985 = (CursorTy) pvrtmp5985;
-            CursorTy fltPrd4986 = (CursorTy) pvrtmp5986;
-            CursorTy pvrtmp5990 = (CursorTy) fltPrd4986;
-            CursorTy pvrtmp5989 = (CursorTy) fltPrd4985;
-            CursorTy end_y1703 = (CursorTy) pvrtmp5990;
-            CursorTy end_r1998_3741 = (CursorTy) pvrtmp5983;
-            CursorTy endof3492 = (CursorTy) pvrtmp5984;
-            CursorTy case2586 = (CursorTy) endof3492;
-            CursorTy x1702 = (CursorTy) case2586;
-            CursorTy loc2594 = (CursorTy) end_y1703;
-            CursorCursorCursorCursorProd tmp_struct124 =
-                                          _copy_ListExpr(end_r1997, end_r1998_3741, loc2594, x1702);
-            CursorTy pvrtmp5991 = tmp_struct124.field0;
-            CursorTy pvrtmp5992 = tmp_struct124.field1;
-            CursorTy pvrtmp5993 = tmp_struct124.field2;
-            CursorTy pvrtmp5994 = tmp_struct124.field3;
-            CursorTy fltPrd4987 = (CursorTy) pvrtmp5993;
-            CursorTy fltPrd4988 = (CursorTy) pvrtmp5994;
-            CursorTy pvrtmp5996 = (CursorTy) fltPrd4988;
-            CursorTy pvrtmp5995 = (CursorTy) fltPrd4987;
-            CursorTy y1704 = (CursorTy) pvrtmp5995;
-            CursorTy fltPrd4989 = (CursorTy) pvrtmp5993;
-            CursorTy fltPrd4990 = (CursorTy) pvrtmp5994;
-            CursorTy pvrtmp5998 = (CursorTy) fltPrd4990;
-            CursorTy pvrtmp5997 = (CursorTy) fltPrd4989;
-            CursorTy end_y1704 = (CursorTy) pvrtmp5998;
-            CursorTy end_r1998_3741_3742 = (CursorTy) pvrtmp5991;
-            CursorTy endof3493 = (CursorTy) pvrtmp5992;
-
-            *(TagTyPacked *) loc1996 = 7;
-
-            CursorTy writetag4139 = loc1996 + 1;
-            CursorTy writecur4140 = (CursorTy) end_y1703;
-            CursorTy writecur4141 = (CursorTy) end_y1704;
-            CursorTy pvrtmp6000 = (CursorTy) writecur4141;
-            CursorTy pvrtmp5999 = (CursorTy) loc1996;
-            CursorTy taildc3494 = (CursorTy) pvrtmp5999;
-            CursorTy end_taildc3494 = (CursorTy) pvrtmp6000;
-            CursorTy pvrtmp6002 = (CursorTy) end_taildc3494;
-            CursorTy pvrtmp6001 = (CursorTy) taildc3494;
-            CursorTy fltPrd4991 = (CursorTy) pvrtmp6001;
-            CursorTy fltPrd4992 = (CursorTy) pvrtmp6002;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3741_3742,
-                                                   endof3493, fltPrd4991,
-                                                   fltPrd4992};
-            break;
-        }
-
-      case 8:
-        {
-            CursorTy field_cur4143 = (CursorTy) tmpcur5864;
-            CursorTy case2597 = (CursorTy) field_cur4143;
-            SymTy tmpval6003 = *(SymTy *) case2597;
-            CursorTy tmpcur6004 = case2597 + sizeof(SymTy);
-            SymTy x1705 = (SymTy) tmpval6003;
-            CursorTy end_x1705 = (CursorTy) tmpcur6004;
-            CursorTy case2598 = (CursorTy) end_x1705;
-            CursorTy x1706 = (CursorTy) case2598;
-            CursorTy jump3495 = case2597 + 8;
-            CursorCursorCursorCursorProd tmp_struct125 =
-                                          _copy_Expr(end_r1997, end_r1998, loc2603, x1706);
-            CursorTy pvrtmp6005 = tmp_struct125.field0;
-            CursorTy pvrtmp6006 = tmp_struct125.field1;
-            CursorTy pvrtmp6007 = tmp_struct125.field2;
-            CursorTy pvrtmp6008 = tmp_struct125.field3;
-            CursorTy fltPrd4993 = (CursorTy) pvrtmp6007;
-            CursorTy fltPrd4994 = (CursorTy) pvrtmp6008;
-            CursorTy pvrtmp6010 = (CursorTy) fltPrd4994;
-            CursorTy pvrtmp6009 = (CursorTy) fltPrd4993;
-            CursorTy y1708 = (CursorTy) pvrtmp6009;
-            CursorTy fltPrd4995 = (CursorTy) pvrtmp6007;
-            CursorTy fltPrd4996 = (CursorTy) pvrtmp6008;
-            CursorTy pvrtmp6012 = (CursorTy) fltPrd4996;
-            CursorTy pvrtmp6011 = (CursorTy) fltPrd4995;
-            CursorTy end_y1708 = (CursorTy) pvrtmp6012;
-            CursorTy end_r1998_3743 = (CursorTy) pvrtmp6005;
-            CursorTy endof3496 = (CursorTy) pvrtmp6006;
-
-            *(TagTyPacked *) loc1996 = 8;
-
-            CursorTy writetag4146 = loc1996 + 1;
-
-            *(SymTy *) writetag4146 = x1705;
-
-            CursorTy writecur4147 = writetag4146 + sizeof(SymTy);
-            CursorTy writecur4148 = (CursorTy) end_y1708;
-            CursorTy pvrtmp6014 = (CursorTy) writecur4148;
-            CursorTy pvrtmp6013 = (CursorTy) loc1996;
-            CursorTy taildc3497 = (CursorTy) pvrtmp6013;
-            CursorTy end_taildc3497 = (CursorTy) pvrtmp6014;
-            CursorTy pvrtmp6016 = (CursorTy) end_taildc3497;
-            CursorTy pvrtmp6015 = (CursorTy) taildc3497;
-            CursorTy fltPrd4997 = (CursorTy) pvrtmp6015;
-            CursorTy fltPrd4998 = (CursorTy) pvrtmp6016;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3743, endof3496,
-                                                   fltPrd4997, fltPrd4998};
-            break;
-        }
-
-      case 9:
-        {
-            CursorTy field_cur4150 = (CursorTy) tmpcur5864;
-            CursorTy case2607 = (CursorTy) field_cur4150;
-            CursorTy x1709 = (CursorTy) case2607;
-            CursorTy loc2611 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct126 =
-                                          _copy_Datum(end_r1997, end_r1998, loc2611, x1709);
-            CursorTy pvrtmp6017 = tmp_struct126.field0;
-            CursorTy pvrtmp6018 = tmp_struct126.field1;
-            CursorTy pvrtmp6019 = tmp_struct126.field2;
-            CursorTy pvrtmp6020 = tmp_struct126.field3;
-            CursorTy fltPrd4999 = (CursorTy) pvrtmp6019;
-            CursorTy fltPrd5000 = (CursorTy) pvrtmp6020;
-            CursorTy pvrtmp6022 = (CursorTy) fltPrd5000;
-            CursorTy pvrtmp6021 = (CursorTy) fltPrd4999;
-            CursorTy y1710 = (CursorTy) pvrtmp6021;
-            CursorTy fltPrd5001 = (CursorTy) pvrtmp6019;
-            CursorTy fltPrd5002 = (CursorTy) pvrtmp6020;
-            CursorTy pvrtmp6024 = (CursorTy) fltPrd5002;
-            CursorTy pvrtmp6023 = (CursorTy) fltPrd5001;
-            CursorTy end_y1710 = (CursorTy) pvrtmp6024;
-            CursorTy end_r1998_3744 = (CursorTy) pvrtmp6017;
-            CursorTy endof3498 = (CursorTy) pvrtmp6018;
-
-            *(TagTyPacked *) loc1996 = 9;
-
-            CursorTy writetag4152 = loc1996 + 1;
-            CursorTy writecur4153 = (CursorTy) end_y1710;
-            CursorTy pvrtmp6026 = (CursorTy) writecur4153;
-            CursorTy pvrtmp6025 = (CursorTy) loc1996;
-            CursorTy taildc3499 = (CursorTy) pvrtmp6025;
-            CursorTy end_taildc3499 = (CursorTy) pvrtmp6026;
-            CursorTy pvrtmp6028 = (CursorTy) end_taildc3499;
-            CursorTy pvrtmp6027 = (CursorTy) taildc3499;
-            CursorTy fltPrd5003 = (CursorTy) pvrtmp6027;
-            CursorTy fltPrd5004 = (CursorTy) pvrtmp6028;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3744, endof3498,
-                                                   fltPrd5003, fltPrd5004};
-            break;
-        }
-
-      case 10:
-        {
-            CursorTy field_cur4155 = (CursorTy) tmpcur5864;
-            CursorTy case2613 = (CursorTy) field_cur4155;
-            CursorTy x1711 = (CursorTy) case2613;
-            CursorTy loc2617 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct127 =
-                                          _copy_Datum(end_r1997, end_r1998, loc2617, x1711);
-            CursorTy pvrtmp6029 = tmp_struct127.field0;
-            CursorTy pvrtmp6030 = tmp_struct127.field1;
-            CursorTy pvrtmp6031 = tmp_struct127.field2;
-            CursorTy pvrtmp6032 = tmp_struct127.field3;
-            CursorTy fltPrd5005 = (CursorTy) pvrtmp6031;
-            CursorTy fltPrd5006 = (CursorTy) pvrtmp6032;
-            CursorTy pvrtmp6034 = (CursorTy) fltPrd5006;
-            CursorTy pvrtmp6033 = (CursorTy) fltPrd5005;
-            CursorTy y1712 = (CursorTy) pvrtmp6033;
-            CursorTy fltPrd5007 = (CursorTy) pvrtmp6031;
-            CursorTy fltPrd5008 = (CursorTy) pvrtmp6032;
-            CursorTy pvrtmp6036 = (CursorTy) fltPrd5008;
-            CursorTy pvrtmp6035 = (CursorTy) fltPrd5007;
-            CursorTy end_y1712 = (CursorTy) pvrtmp6036;
-            CursorTy end_r1998_3745 = (CursorTy) pvrtmp6029;
-            CursorTy endof3500 = (CursorTy) pvrtmp6030;
-
-            *(TagTyPacked *) loc1996 = 10;
-
-            CursorTy writetag4157 = loc1996 + 1;
-            CursorTy writecur4158 = (CursorTy) end_y1712;
-            CursorTy pvrtmp6038 = (CursorTy) writecur4158;
-            CursorTy pvrtmp6037 = (CursorTy) loc1996;
-            CursorTy taildc3501 = (CursorTy) pvrtmp6037;
-            CursorTy end_taildc3501 = (CursorTy) pvrtmp6038;
-            CursorTy pvrtmp6040 = (CursorTy) end_taildc3501;
-            CursorTy pvrtmp6039 = (CursorTy) taildc3501;
-            CursorTy fltPrd5009 = (CursorTy) pvrtmp6039;
-            CursorTy fltPrd5010 = (CursorTy) pvrtmp6040;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3745, endof3500,
-                                                   fltPrd5009, fltPrd5010};
-            break;
-        }
-
-      case 11:
-        {
-            CursorTy field_cur4160 = (CursorTy) tmpcur5864;
-            CursorTy case2619 = (CursorTy) field_cur4160;
-            CursorTy x1713 = (CursorTy) case2619;
-            CursorTy loc2623 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct128 =
-                                          _copy_Datum(end_r1997, end_r1998, loc2623, x1713);
-            CursorTy pvrtmp6041 = tmp_struct128.field0;
-            CursorTy pvrtmp6042 = tmp_struct128.field1;
-            CursorTy pvrtmp6043 = tmp_struct128.field2;
-            CursorTy pvrtmp6044 = tmp_struct128.field3;
-            CursorTy fltPrd5011 = (CursorTy) pvrtmp6043;
-            CursorTy fltPrd5012 = (CursorTy) pvrtmp6044;
-            CursorTy pvrtmp6046 = (CursorTy) fltPrd5012;
-            CursorTy pvrtmp6045 = (CursorTy) fltPrd5011;
-            CursorTy y1714 = (CursorTy) pvrtmp6045;
-            CursorTy fltPrd5013 = (CursorTy) pvrtmp6043;
-            CursorTy fltPrd5014 = (CursorTy) pvrtmp6044;
-            CursorTy pvrtmp6048 = (CursorTy) fltPrd5014;
-            CursorTy pvrtmp6047 = (CursorTy) fltPrd5013;
-            CursorTy end_y1714 = (CursorTy) pvrtmp6048;
-            CursorTy end_r1998_3746 = (CursorTy) pvrtmp6041;
-            CursorTy endof3502 = (CursorTy) pvrtmp6042;
-
-            *(TagTyPacked *) loc1996 = 11;
-
-            CursorTy writetag4162 = loc1996 + 1;
-            CursorTy writecur4163 = (CursorTy) end_y1714;
-            CursorTy pvrtmp6050 = (CursorTy) writecur4163;
-            CursorTy pvrtmp6049 = (CursorTy) loc1996;
-            CursorTy taildc3503 = (CursorTy) pvrtmp6049;
-            CursorTy end_taildc3503 = (CursorTy) pvrtmp6050;
-            CursorTy pvrtmp6052 = (CursorTy) end_taildc3503;
-            CursorTy pvrtmp6051 = (CursorTy) taildc3503;
-            CursorTy fltPrd5015 = (CursorTy) pvrtmp6051;
-            CursorTy fltPrd5016 = (CursorTy) pvrtmp6052;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3746, endof3502,
-                                                   fltPrd5015, fltPrd5016};
-            break;
-        }
-
-      case 12:
-        {
-            CursorTy field_cur4165 = (CursorTy) tmpcur5864;
-            CursorTy case2625 = (CursorTy) field_cur4165;
-            CursorTy x1715 = (CursorTy) case2625;
-            CursorTy loc2637 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct129 =
-                                          _copy_Expr(end_r1997, end_r1998, loc2637, x1715);
-            CursorTy pvrtmp6053 = tmp_struct129.field0;
-            CursorTy pvrtmp6054 = tmp_struct129.field1;
-            CursorTy pvrtmp6055 = tmp_struct129.field2;
-            CursorTy pvrtmp6056 = tmp_struct129.field3;
-            CursorTy fltPrd5017 = (CursorTy) pvrtmp6055;
-            CursorTy fltPrd5018 = (CursorTy) pvrtmp6056;
-            CursorTy pvrtmp6058 = (CursorTy) fltPrd5018;
-            CursorTy pvrtmp6057 = (CursorTy) fltPrd5017;
-            CursorTy y1718 = (CursorTy) pvrtmp6057;
-            CursorTy fltPrd5019 = (CursorTy) pvrtmp6055;
-            CursorTy fltPrd5020 = (CursorTy) pvrtmp6056;
-            CursorTy pvrtmp6060 = (CursorTy) fltPrd5020;
-            CursorTy pvrtmp6059 = (CursorTy) fltPrd5019;
-            CursorTy end_y1718 = (CursorTy) pvrtmp6060;
-            CursorTy end_r1998_3747 = (CursorTy) pvrtmp6053;
-            CursorTy endof3504 = (CursorTy) pvrtmp6054;
-            CursorTy case2626 = (CursorTy) endof3504;
-            CursorTy x1716 = (CursorTy) case2626;
-            CursorTy loc2638 = (CursorTy) end_y1718;
-            CursorCursorCursorCursorProd tmp_struct130 =
-                                          _copy_Expr(end_r1997, end_r1998_3747, loc2638, x1716);
-            CursorTy pvrtmp6061 = tmp_struct130.field0;
-            CursorTy pvrtmp6062 = tmp_struct130.field1;
-            CursorTy pvrtmp6063 = tmp_struct130.field2;
-            CursorTy pvrtmp6064 = tmp_struct130.field3;
-            CursorTy fltPrd5021 = (CursorTy) pvrtmp6063;
-            CursorTy fltPrd5022 = (CursorTy) pvrtmp6064;
-            CursorTy pvrtmp6066 = (CursorTy) fltPrd5022;
-            CursorTy pvrtmp6065 = (CursorTy) fltPrd5021;
-            CursorTy y1719 = (CursorTy) pvrtmp6065;
-            CursorTy fltPrd5023 = (CursorTy) pvrtmp6063;
-            CursorTy fltPrd5024 = (CursorTy) pvrtmp6064;
-            CursorTy pvrtmp6068 = (CursorTy) fltPrd5024;
-            CursorTy pvrtmp6067 = (CursorTy) fltPrd5023;
-            CursorTy end_y1719 = (CursorTy) pvrtmp6068;
-            CursorTy end_r1998_3747_3748 = (CursorTy) pvrtmp6061;
-            CursorTy endof3505 = (CursorTy) pvrtmp6062;
-            CursorTy case2627 = (CursorTy) endof3505;
-            CursorTy x1717 = (CursorTy) case2627;
-            CursorTy loc2639 = (CursorTy) end_y1719;
-            CursorCursorCursorCursorProd tmp_struct131 =
-                                          _copy_Expr(end_r1997, end_r1998_3747_3748, loc2639, x1717);
-            CursorTy pvrtmp6069 = tmp_struct131.field0;
-            CursorTy pvrtmp6070 = tmp_struct131.field1;
-            CursorTy pvrtmp6071 = tmp_struct131.field2;
-            CursorTy pvrtmp6072 = tmp_struct131.field3;
-            CursorTy fltPrd5025 = (CursorTy) pvrtmp6071;
-            CursorTy fltPrd5026 = (CursorTy) pvrtmp6072;
-            CursorTy pvrtmp6074 = (CursorTy) fltPrd5026;
-            CursorTy pvrtmp6073 = (CursorTy) fltPrd5025;
-            CursorTy y1720 = (CursorTy) pvrtmp6073;
-            CursorTy fltPrd5027 = (CursorTy) pvrtmp6071;
-            CursorTy fltPrd5028 = (CursorTy) pvrtmp6072;
-            CursorTy pvrtmp6076 = (CursorTy) fltPrd5028;
-            CursorTy pvrtmp6075 = (CursorTy) fltPrd5027;
-            CursorTy end_y1720 = (CursorTy) pvrtmp6076;
-            CursorTy end_r1998_3747_3748_3749 = (CursorTy) pvrtmp6069;
-            CursorTy endof3506 = (CursorTy) pvrtmp6070;
-
-            *(TagTyPacked *) loc1996 = 12;
-
-            CursorTy writetag4169 = loc1996 + 1;
-            CursorTy writecur4170 = (CursorTy) end_y1718;
-            CursorTy writecur4171 = (CursorTy) end_y1719;
-            CursorTy writecur4172 = (CursorTy) end_y1720;
-            CursorTy pvrtmp6078 = (CursorTy) writecur4172;
-            CursorTy pvrtmp6077 = (CursorTy) loc1996;
-            CursorTy taildc3507 = (CursorTy) pvrtmp6077;
-            CursorTy end_taildc3507 = (CursorTy) pvrtmp6078;
-            CursorTy pvrtmp6080 = (CursorTy) end_taildc3507;
-            CursorTy pvrtmp6079 = (CursorTy) taildc3507;
-            CursorTy fltPrd5029 = (CursorTy) pvrtmp6079;
-            CursorTy fltPrd5030 = (CursorTy) pvrtmp6080;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3747_3748_3749,
-                                                   endof3506, fltPrd5029,
-                                                   fltPrd5030};
-            break;
-        }
-
-      case 13:
-        {
-            CursorTy field_cur4174 = (CursorTy) tmpcur5864;
-            CursorTy case2643 = (CursorTy) field_cur4174;
-            CursorTy x1721 = (CursorTy) case2643;
-            CursorTy loc2651 = loc1996 + 1;
-            CursorCursorCursorCursorProd tmp_struct132 =
-                                          _copy_Expr(end_r1997, end_r1998, loc2651, x1721);
-            CursorTy pvrtmp6081 = tmp_struct132.field0;
-            CursorTy pvrtmp6082 = tmp_struct132.field1;
-            CursorTy pvrtmp6083 = tmp_struct132.field2;
-            CursorTy pvrtmp6084 = tmp_struct132.field3;
-            CursorTy fltPrd5031 = (CursorTy) pvrtmp6083;
-            CursorTy fltPrd5032 = (CursorTy) pvrtmp6084;
-            CursorTy pvrtmp6086 = (CursorTy) fltPrd5032;
-            CursorTy pvrtmp6085 = (CursorTy) fltPrd5031;
-            CursorTy y1723 = (CursorTy) pvrtmp6085;
-            CursorTy fltPrd5033 = (CursorTy) pvrtmp6083;
-            CursorTy fltPrd5034 = (CursorTy) pvrtmp6084;
-            CursorTy pvrtmp6088 = (CursorTy) fltPrd5034;
-            CursorTy pvrtmp6087 = (CursorTy) fltPrd5033;
-            CursorTy end_y1723 = (CursorTy) pvrtmp6088;
-            CursorTy end_r1998_3750 = (CursorTy) pvrtmp6081;
-            CursorTy endof3508 = (CursorTy) pvrtmp6082;
-            CursorTy case2644 = (CursorTy) endof3508;
-            CursorTy x1722 = (CursorTy) case2644;
-            CursorTy loc2652 = (CursorTy) end_y1723;
-            CursorCursorCursorCursorProd tmp_struct133 =
-                                          _copy_ListExpr(end_r1997, end_r1998_3750, loc2652, x1722);
-            CursorTy pvrtmp6089 = tmp_struct133.field0;
-            CursorTy pvrtmp6090 = tmp_struct133.field1;
-            CursorTy pvrtmp6091 = tmp_struct133.field2;
-            CursorTy pvrtmp6092 = tmp_struct133.field3;
-            CursorTy fltPrd5035 = (CursorTy) pvrtmp6091;
-            CursorTy fltPrd5036 = (CursorTy) pvrtmp6092;
-            CursorTy pvrtmp6094 = (CursorTy) fltPrd5036;
-            CursorTy pvrtmp6093 = (CursorTy) fltPrd5035;
-            CursorTy y1724 = (CursorTy) pvrtmp6093;
-            CursorTy fltPrd5037 = (CursorTy) pvrtmp6091;
-            CursorTy fltPrd5038 = (CursorTy) pvrtmp6092;
-            CursorTy pvrtmp6096 = (CursorTy) fltPrd5038;
-            CursorTy pvrtmp6095 = (CursorTy) fltPrd5037;
-            CursorTy end_y1724 = (CursorTy) pvrtmp6096;
-            CursorTy end_r1998_3750_3751 = (CursorTy) pvrtmp6089;
-            CursorTy endof3509 = (CursorTy) pvrtmp6090;
-
-            *(TagTyPacked *) loc1996 = 13;
-
-            CursorTy writetag4177 = loc1996 + 1;
-            CursorTy writecur4178 = (CursorTy) end_y1723;
-            CursorTy writecur4179 = (CursorTy) end_y1724;
-            CursorTy pvrtmp6098 = (CursorTy) writecur4179;
-            CursorTy pvrtmp6097 = (CursorTy) loc1996;
-            CursorTy taildc3510 = (CursorTy) pvrtmp6097;
-            CursorTy end_taildc3510 = (CursorTy) pvrtmp6098;
-            CursorTy pvrtmp6100 = (CursorTy) end_taildc3510;
-            CursorTy pvrtmp6099 = (CursorTy) taildc3510;
-            CursorTy fltPrd5039 = (CursorTy) pvrtmp6099;
-            CursorTy fltPrd5040 = (CursorTy) pvrtmp6100;
-
-            return (CursorCursorCursorCursorProd) {end_r1998_3750_3751,
-                                                   endof3509, fltPrd5039,
-                                                   fltPrd5040};
-            break;
-        }
-
-      case 14:
-        {
-            CursorTy field_cur4181 = (CursorTy) tmpcur5864;
-            CursorTy case2655 = (CursorTy) field_cur4181;
-            SymTy tmpval6101 = *(SymTy *) case2655;
-            CursorTy tmpcur6102 = case2655 + sizeof(SymTy);
-            SymTy x1725 = (SymTy) tmpval6101;
-            CursorTy end_x1725 = (CursorTy) tmpcur6102;
-            CursorTy jump3511 = case2655 + 8;
-
-            *(TagTyPacked *) loc1996 = 14;
-
-            CursorTy writetag4183 = loc1996 + 1;
-
-            *(SymTy *) writetag4183 = x1725;
-
-            CursorTy writecur4184 = writetag4183 + sizeof(SymTy);
-            CursorTy pvrtmp6104 = (CursorTy) writecur4184;
-            CursorTy pvrtmp6103 = (CursorTy) loc1996;
-            CursorTy taildc3512 = (CursorTy) pvrtmp6103;
-            CursorTy end_taildc3512 = (CursorTy) pvrtmp6104;
-            CursorTy pvrtmp6106 = (CursorTy) end_taildc3512;
-            CursorTy pvrtmp6105 = (CursorTy) taildc3512;
-            CursorTy fltPrd5041 = (CursorTy) pvrtmp6105;
-            CursorTy fltPrd5042 = (CursorTy) pvrtmp6106;
-
-            return (CursorCursorCursorCursorProd) {end_r1998, jump3511,
-                                                   fltPrd5041, fltPrd5042};
-            break;
-        }
-
-      case 15:
-        {
-            CursorTy field_cur4186 = (CursorTy) tmpcur5864;
-            CursorTy case2659 = (CursorTy) field_cur4186;
-            SymTy tmpval6107 = *(SymTy *) case2659;
-            CursorTy tmpcur6108 = case2659 + sizeof(SymTy);
-            SymTy x1727 = (SymTy) tmpval6107;
-            CursorTy end_x1727 = (CursorTy) tmpcur6108;
-            CursorTy jump3513 = case2659 + 8;
-
-            *(TagTyPacked *) loc1996 = 15;
-
-            CursorTy writetag4188 = loc1996 + 1;
-
-            *(SymTy *) writetag4188 = x1727;
-
-            CursorTy writecur4189 = writetag4188 + sizeof(SymTy);
-            CursorTy pvrtmp6110 = (CursorTy) writecur4189;
-            CursorTy pvrtmp6109 = (CursorTy) loc1996;
-            CursorTy taildc3514 = (CursorTy) pvrtmp6109;
-            CursorTy end_taildc3514 = (CursorTy) pvrtmp6110;
-            CursorTy pvrtmp6112 = (CursorTy) end_taildc3514;
-            CursorTy pvrtmp6111 = (CursorTy) taildc3514;
-            CursorTy fltPrd5043 = (CursorTy) pvrtmp6111;
-            CursorTy fltPrd5044 = (CursorTy) pvrtmp6112;
-
-            return (CursorCursorCursorCursorProd) {end_r1998, jump3513,
-                                                   fltPrd5043, fltPrd5044};
-            break;
-        }
-
-      case 16:
-        {
-            CursorTy field_cur4191 = (CursorTy) tmpcur5864;
-            CursorTy case2663 = (CursorTy) field_cur4191;
-            SymTy tmpval6113 = *(SymTy *) case2663;
-            CursorTy tmpcur6114 = case2663 + sizeof(SymTy);
-            SymTy x1729 = (SymTy) tmpval6113;
-            CursorTy end_x1729 = (CursorTy) tmpcur6114;
-            CursorTy jump3515 = case2663 + 8;
-
-            *(TagTyPacked *) loc1996 = 16;
-
-            CursorTy writetag4193 = loc1996 + 1;
-
-            *(SymTy *) writetag4193 = x1729;
-
-            CursorTy writecur4194 = writetag4193 + sizeof(SymTy);
-            CursorTy pvrtmp6116 = (CursorTy) writecur4194;
-            CursorTy pvrtmp6115 = (CursorTy) loc1996;
-            CursorTy taildc3516 = (CursorTy) pvrtmp6115;
-            CursorTy end_taildc3516 = (CursorTy) pvrtmp6116;
-            CursorTy pvrtmp6118 = (CursorTy) end_taildc3516;
-            CursorTy pvrtmp6117 = (CursorTy) taildc3516;
-            CursorTy fltPrd5045 = (CursorTy) pvrtmp6117;
-            CursorTy fltPrd5046 = (CursorTy) pvrtmp6118;
-
-            return (CursorCursorCursorCursorProd) {end_r1998, jump3515,
-                                                   fltPrd5045, fltPrd5046};
-            break;
-        }
-
-      case 17:
-        {
-            CursorTy field_cur4196 = (CursorTy) tmpcur5864;
-            CursorTy jump3517 = loc1995 + 1;
-
-            *(TagTyPacked *) loc1996 = 17;
-
-            CursorTy writetag4197 = loc1996 + 1;
-            CursorTy pvrtmp6120 = (CursorTy) writetag4197;
-            CursorTy pvrtmp6119 = (CursorTy) loc1996;
-            CursorTy taildc3518 = (CursorTy) pvrtmp6119;
-            CursorTy end_taildc3518 = (CursorTy) pvrtmp6120;
-            CursorTy pvrtmp6122 = (CursorTy) end_taildc3518;
-            CursorTy pvrtmp6121 = (CursorTy) taildc3518;
-            CursorTy fltPrd5047 = (CursorTy) pvrtmp6121;
-            CursorTy fltPrd5048 = (CursorTy) pvrtmp6122;
-
-            return (CursorCursorCursorCursorProd) {end_r1998, jump3517,
-                                                   fltPrd5047, fltPrd5048};
-            break;
-        }
-
-      case 255:
-        {
-            CursorTy tmpcur7342 = *(CursorTy *) tmpcur5864;
-            CursorTy tmpaftercur7343 = tmpcur5864 + 8;
-            TagTyPacked tagtmp7344 = *(TagTyPacked *) tmpcur7342;
-            CursorTy tailtmp7345 = tmpcur7342 + 1;
-
-            tmpval5863 = tagtmp7344;
-            tmpcur5864 = tailtmp7345;
-            goto switch6123;
-            break;
-        }
-
-      case 254:
-        {
-            CursorTy tmpcur7342 = *(CursorTy *) tmpcur5864;
-            CursorTy tmpaftercur7343 = tmpcur5864 + 8;
-            TagTyPacked tagtmp7344 = *(TagTyPacked *) tmpcur7342;
-            CursorTy tailtmp7345 = tmpcur7342 + 1;
-
-            tmpval5863 = tagtmp7344;
-            tmpcur5864 = tailtmp7345;
-            goto switch6123;
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval5863");
-            exit(1);
-        }
-    }
-}
+// --------------------------------------------------------------------------------
 
 IntTy copied = 0;
 #define COPYING_LIMIT (1.5 * GB)
@@ -3091,448 +965,2501 @@ CursorCursorCursorCursorProd duplicate_expr(IntTy n, CursorTy end_r2003, CursorT
     }
 }
 
-CursorCursorCursorCursorProd _copy_Toplvl(CursorTy end_r2003,
-                                          CursorTy end_r2004, CursorTy loc2002,
-                                          CursorTy arg1786)
+
+// --------------------------------------------------------------------------------
+// Copiers
+
+CursorCursorCursorCursorProd _copy_ListSym(CursorTy end_r1838,
+                                           CursorTy end_r1839, CursorTy loc1837,
+                                           CursorTy arg1517)
 {
-    CursorTy loc2001 = (CursorTy) arg1786;
+    CursorTy loc1836 = (CursorTy) arg1517;
 
-    if (loc2002 + 26 > end_r2004) {
-        ChunkTy new_chunk173 = alloc_chunk(end_r2004);
-        CursorTy chunk_start174 = new_chunk173.start_ptr;
-        CursorTy chunk_end175 = new_chunk173.end_ptr;
+    if (loc1837 + 18 > end_r1839) {
+        ChunkTy new_chunk52 = alloc_chunk(end_r1839);
+        CursorTy chunk_start53 = new_chunk52.start_ptr;
+        CursorTy chunk_end54 = new_chunk52.end_ptr;
 
-        end_r2004 = chunk_end175;
-        *(TagTyPacked *) loc2002 = 255;
+        end_r1839 = chunk_end54;
+        *(TagTyPacked *) loc1837 = 255;
 
-        CursorTy redir = loc2002 + 1;
+        CursorTy redir = loc1837 + 1;
 
-        *(CursorTy *) redir = chunk_start174;
-        loc2002 = chunk_start174;
+        *(CursorTy *) redir = chunk_start53;
+        loc1837 = chunk_start53;
     }
 
-    CursorTy loc2788 = loc2002 + 1;
-    CursorTy loc2789 = loc2788 + 8;
-    CursorTy loc2805 = loc2002 + 1;
-    CursorTy loc2806 = loc2805 + 8;
-    CursorTy loc2807 = loc2806 + 8;
-    CursorTy loc2824 = loc2002 + 1;
-    CursorTy loc2825 = loc2824 + 8;
-    CursorTy loc2841 = loc2002 + 1;
-    CursorTy loc2842 = loc2841 + 8;
-    CursorTy loc2843 = loc2842 + 8;
-    TagTyPacked tmpval6181 = *(TagTyPacked *) arg1786;
-    CursorTy tmpcur6182 = arg1786 + 1;
+    CursorTy loc2138 = loc1837 + 1;
+    CursorTy loc2139 = loc2138 + 8;
+    TagTyPacked tmpval5016 = *(TagTyPacked *) arg1517;
+    CursorTy tmpcur5017 = arg1517 + 1;
 
 
-  switch6339:
+  switch5036:
     ;
-    switch (tmpval6181) {
+    switch (tmpval5016) {
 
       case 0:
         {
-            CursorTy field_cur4244 = (CursorTy) tmpcur6182;
-            CursorTy case2743 = (CursorTy) field_cur4244;
-            CursorTy x1787 = (CursorTy) case2743;
-            CursorTy loc2751 = loc2002 + 1;
-            CursorCursorCursorCursorProd tmp_struct159 =
-                                          _copy_ListSym(end_r2003, end_r2004, loc2751, x1787);
-            CursorTy pvrtmp6183 = tmp_struct159.field0;
-            CursorTy pvrtmp6184 = tmp_struct159.field1;
-            CursorTy pvrtmp6185 = tmp_struct159.field2;
-            CursorTy pvrtmp6186 = tmp_struct159.field3;
-            CursorTy fltPrd5049 = (CursorTy) pvrtmp6185;
-            CursorTy fltPrd5050 = (CursorTy) pvrtmp6186;
-            CursorTy pvrtmp6188 = (CursorTy) fltPrd5050;
-            CursorTy pvrtmp6187 = (CursorTy) fltPrd5049;
-            CursorTy y1789 = (CursorTy) pvrtmp6187;
-            CursorTy fltPrd5051 = (CursorTy) pvrtmp6185;
-            CursorTy fltPrd5052 = (CursorTy) pvrtmp6186;
-            CursorTy pvrtmp6190 = (CursorTy) fltPrd5052;
-            CursorTy pvrtmp6189 = (CursorTy) fltPrd5051;
-            CursorTy end_y1789 = (CursorTy) pvrtmp6190;
-            CursorTy end_r2004_3752 = (CursorTy) pvrtmp6183;
-            CursorTy endof3565 = (CursorTy) pvrtmp6184;
-            CursorTy case2744 = (CursorTy) endof3565;
-            CursorTy x1788 = (CursorTy) case2744;
-            CursorTy loc2752 = (CursorTy) end_y1789;
-            // TODO
-            CursorCursorCursorCursorProd tmp_struct160 =
-                duplicate_expr(4, end_r2003, end_r2004_3752, loc2752, x1788);
-            CursorTy pvrtmp6191 = tmp_struct160.field0;
-            CursorTy pvrtmp6192 = tmp_struct160.field1;
-            CursorTy pvrtmp6193 = tmp_struct160.field2;
-            CursorTy pvrtmp6194 = tmp_struct160.field3;
-            CursorTy fltPrd5053 = (CursorTy) pvrtmp6193;
-            CursorTy fltPrd5054 = (CursorTy) pvrtmp6194;
-            CursorTy pvrtmp6196 = (CursorTy) fltPrd5054;
-            CursorTy pvrtmp6195 = (CursorTy) fltPrd5053;
-            CursorTy y1790 = (CursorTy) pvrtmp6195;
-            CursorTy fltPrd5055 = (CursorTy) pvrtmp6193;
-            CursorTy fltPrd5056 = (CursorTy) pvrtmp6194;
-            CursorTy pvrtmp6198 = (CursorTy) fltPrd5056;
-            CursorTy pvrtmp6197 = (CursorTy) fltPrd5055;
-            CursorTy end_y1790 = (CursorTy) pvrtmp6198;
-            CursorTy end_r2004_3752_3753 = (CursorTy) pvrtmp6191;
-            CursorTy endof3566 = (CursorTy) pvrtmp6192;
+            CursorTy field_cur3574 = (CursorTy) tmpcur5017;
+            CursorTy case2133 = (CursorTy) field_cur3574;
+            SymTy tmpval5018 = *(SymTy *) case2133;
+            CursorTy tmpcur5019 = case2133 + sizeof(SymTy);
+            SymTy x1518 = (SymTy) tmpval5018;
+            CursorTy end_x1518 = (CursorTy) tmpcur5019;
+            CursorTy case2134 = (CursorTy) end_x1518;
+            CursorTy x1519 = (CursorTy) case2134;
+            CursorTy jump3080 = case2133 + 8;
+            CursorCursorCursorCursorProd tmp_struct51 =
+                                          _copy_ListSym(end_r1838, end_r1839, loc2139, x1519);
+            CursorTy pvrtmp5020 = tmp_struct51.field0;
+            CursorTy pvrtmp5021 = tmp_struct51.field1;
+            CursorTy pvrtmp5022 = tmp_struct51.field2;
+            CursorTy pvrtmp5023 = tmp_struct51.field3;
+            CursorTy fltPrd4358 = (CursorTy) pvrtmp5022;
+            CursorTy fltPrd4359 = (CursorTy) pvrtmp5023;
+            CursorTy pvrtmp5025 = (CursorTy) fltPrd4359;
+            CursorTy pvrtmp5024 = (CursorTy) fltPrd4358;
+            CursorTy y1521 = (CursorTy) pvrtmp5024;
+            CursorTy fltPrd4360 = (CursorTy) pvrtmp5022;
+            CursorTy fltPrd4361 = (CursorTy) pvrtmp5023;
+            CursorTy pvrtmp5027 = (CursorTy) fltPrd4361;
+            CursorTy pvrtmp5026 = (CursorTy) fltPrd4360;
+            CursorTy end_y1521 = (CursorTy) pvrtmp5027;
+            CursorTy end_r1839_3374 = (CursorTy) pvrtmp5020;
+            CursorTy endof3081 = (CursorTy) pvrtmp5021;
 
-            *(TagTyPacked *) loc2002 = 0;
+            *(TagTyPacked *) loc1837 = 0;
 
-            CursorTy writetag4247 = loc2002 + 1;
-            CursorTy writecur4248 = (CursorTy) end_y1789;
-            CursorTy writecur4249 = (CursorTy) end_y1790;
-            CursorTy pvrtmp6200 = (CursorTy) writecur4249;
-            CursorTy pvrtmp6199 = (CursorTy) loc2002;
-            CursorTy taildc3567 = (CursorTy) pvrtmp6199;
-            CursorTy end_taildc3567 = (CursorTy) pvrtmp6200;
-            CursorTy pvrtmp6202 = (CursorTy) end_taildc3567;
-            CursorTy pvrtmp6201 = (CursorTy) taildc3567;
-            CursorTy fltPrd5057 = (CursorTy) pvrtmp6201;
-            CursorTy fltPrd5058 = (CursorTy) pvrtmp6202;
+            CursorTy writetag3577 = loc1837 + 1;
 
-            return (CursorCursorCursorCursorProd) {end_r2004_3752_3753,
-                                                   endof3566, fltPrd5057,
-                                                   fltPrd5058};
+            *(SymTy *) writetag3577 = x1518;
+
+            CursorTy writecur3578 = writetag3577 + sizeof(SymTy);
+            CursorTy writecur3579 = (CursorTy) end_y1521;
+            CursorTy pvrtmp5029 = (CursorTy) writecur3579;
+            CursorTy pvrtmp5028 = (CursorTy) loc1837;
+            CursorTy taildc3082 = (CursorTy) pvrtmp5028;
+            CursorTy end_taildc3082 = (CursorTy) pvrtmp5029;
+            CursorTy pvrtmp5031 = (CursorTy) end_taildc3082;
+            CursorTy pvrtmp5030 = (CursorTy) taildc3082;
+            CursorTy fltPrd4362 = (CursorTy) pvrtmp5030;
+            CursorTy fltPrd4363 = (CursorTy) pvrtmp5031;
+
+            return (CursorCursorCursorCursorProd) {end_r1839_3374, endof3081,
+                                                   fltPrd4362, fltPrd4363};
             break;
         }
 
       case 1:
         {
-            CursorTy field_cur4251 = (CursorTy) tmpcur6182;
-            CursorTy case2755 = (CursorTy) field_cur4251;
-            CursorTy x1791 = (CursorTy) case2755;
-            CursorTy loc2763 = loc2002 + 1;
-            CursorCursorCursorCursorProd tmp_struct161 =
-                                          _copy_ListSym(end_r2003, end_r2004, loc2763, x1791);
-            CursorTy pvrtmp6203 = tmp_struct161.field0;
-            CursorTy pvrtmp6204 = tmp_struct161.field1;
-            CursorTy pvrtmp6205 = tmp_struct161.field2;
-            CursorTy pvrtmp6206 = tmp_struct161.field3;
-            CursorTy fltPrd5059 = (CursorTy) pvrtmp6205;
-            CursorTy fltPrd5060 = (CursorTy) pvrtmp6206;
-            CursorTy pvrtmp6208 = (CursorTy) fltPrd5060;
-            CursorTy pvrtmp6207 = (CursorTy) fltPrd5059;
-            CursorTy y1793 = (CursorTy) pvrtmp6207;
-            CursorTy fltPrd5061 = (CursorTy) pvrtmp6205;
-            CursorTy fltPrd5062 = (CursorTy) pvrtmp6206;
-            CursorTy pvrtmp6210 = (CursorTy) fltPrd5062;
-            CursorTy pvrtmp6209 = (CursorTy) fltPrd5061;
-            CursorTy end_y1793 = (CursorTy) pvrtmp6210;
-            CursorTy end_r2004_3754 = (CursorTy) pvrtmp6203;
-            CursorTy endof3568 = (CursorTy) pvrtmp6204;
-            CursorTy case2756 = (CursorTy) endof3568;
-            CursorTy x1792 = (CursorTy) case2756;
-            CursorTy loc2764 = (CursorTy) end_y1793;
-            CursorCursorCursorCursorProd tmp_struct162 =
-                                          _copy_Expr(end_r2003, end_r2004_3754, loc2764, x1792);
-            CursorTy pvrtmp6211 = tmp_struct162.field0;
-            CursorTy pvrtmp6212 = tmp_struct162.field1;
-            CursorTy pvrtmp6213 = tmp_struct162.field2;
-            CursorTy pvrtmp6214 = tmp_struct162.field3;
-            CursorTy fltPrd5063 = (CursorTy) pvrtmp6213;
-            CursorTy fltPrd5064 = (CursorTy) pvrtmp6214;
-            CursorTy pvrtmp6216 = (CursorTy) fltPrd5064;
-            CursorTy pvrtmp6215 = (CursorTy) fltPrd5063;
-            CursorTy y1794 = (CursorTy) pvrtmp6215;
-            CursorTy fltPrd5065 = (CursorTy) pvrtmp6213;
-            CursorTy fltPrd5066 = (CursorTy) pvrtmp6214;
-            CursorTy pvrtmp6218 = (CursorTy) fltPrd5066;
-            CursorTy pvrtmp6217 = (CursorTy) fltPrd5065;
-            CursorTy end_y1794 = (CursorTy) pvrtmp6218;
-            CursorTy end_r2004_3754_3755 = (CursorTy) pvrtmp6211;
-            CursorTy endof3569 = (CursorTy) pvrtmp6212;
+            CursorTy field_cur3581 = (CursorTy) tmpcur5017;
+            CursorTy jump3083 = loc1836 + 1;
 
-            *(TagTyPacked *) loc2002 = 1;
+            *(TagTyPacked *) loc1837 = 1;
 
-            CursorTy writetag4254 = loc2002 + 1;
-            CursorTy writecur4255 = (CursorTy) end_y1793;
-            CursorTy writecur4256 = (CursorTy) end_y1794;
-            CursorTy pvrtmp6220 = (CursorTy) writecur4256;
-            CursorTy pvrtmp6219 = (CursorTy) loc2002;
-            CursorTy taildc3570 = (CursorTy) pvrtmp6219;
-            CursorTy end_taildc3570 = (CursorTy) pvrtmp6220;
-            CursorTy pvrtmp6222 = (CursorTy) end_taildc3570;
-            CursorTy pvrtmp6221 = (CursorTy) taildc3570;
-            CursorTy fltPrd5067 = (CursorTy) pvrtmp6221;
-            CursorTy fltPrd5068 = (CursorTy) pvrtmp6222;
+            CursorTy writetag3582 = loc1837 + 1;
+            CursorTy pvrtmp5033 = (CursorTy) writetag3582;
+            CursorTy pvrtmp5032 = (CursorTy) loc1837;
+            CursorTy taildc3084 = (CursorTy) pvrtmp5032;
+            CursorTy end_taildc3084 = (CursorTy) pvrtmp5033;
+            CursorTy pvrtmp5035 = (CursorTy) end_taildc3084;
+            CursorTy pvrtmp5034 = (CursorTy) taildc3084;
+            CursorTy fltPrd4364 = (CursorTy) pvrtmp5034;
+            CursorTy fltPrd4365 = (CursorTy) pvrtmp5035;
 
-            return (CursorCursorCursorCursorProd) {end_r2004_3754_3755,
-                                                   endof3569, fltPrd5067,
-                                                   fltPrd5068};
-            break;
-        }
-
-      case 2:
-        {
-            CursorTy field_cur4258 = (CursorTy) tmpcur6182;
-            CursorTy case2767 = (CursorTy) field_cur4258;
-            CursorTy x1795 = (CursorTy) case2767;
-            CursorTy loc2771 = loc2002 + 1;
-            CursorCursorCursorCursorProd tmp_struct163 =
-                                          _copy_ListToplvl(end_r2003, end_r2004, loc2771, x1795);
-            CursorTy pvrtmp6223 = tmp_struct163.field0;
-            CursorTy pvrtmp6224 = tmp_struct163.field1;
-            CursorTy pvrtmp6225 = tmp_struct163.field2;
-            CursorTy pvrtmp6226 = tmp_struct163.field3;
-            CursorTy fltPrd5069 = (CursorTy) pvrtmp6225;
-            CursorTy fltPrd5070 = (CursorTy) pvrtmp6226;
-            CursorTy pvrtmp6228 = (CursorTy) fltPrd5070;
-            CursorTy pvrtmp6227 = (CursorTy) fltPrd5069;
-            CursorTy y1796 = (CursorTy) pvrtmp6227;
-            CursorTy fltPrd5071 = (CursorTy) pvrtmp6225;
-            CursorTy fltPrd5072 = (CursorTy) pvrtmp6226;
-            CursorTy pvrtmp6230 = (CursorTy) fltPrd5072;
-            CursorTy pvrtmp6229 = (CursorTy) fltPrd5071;
-            CursorTy end_y1796 = (CursorTy) pvrtmp6230;
-            CursorTy end_r2004_3756 = (CursorTy) pvrtmp6223;
-            CursorTy endof3571 = (CursorTy) pvrtmp6224;
-
-            *(TagTyPacked *) loc2002 = 2;
-
-            CursorTy writetag4260 = loc2002 + 1;
-            CursorTy writecur4261 = (CursorTy) end_y1796;
-            CursorTy pvrtmp6232 = (CursorTy) writecur4261;
-            CursorTy pvrtmp6231 = (CursorTy) loc2002;
-            CursorTy taildc3572 = (CursorTy) pvrtmp6231;
-            CursorTy end_taildc3572 = (CursorTy) pvrtmp6232;
-            CursorTy pvrtmp6234 = (CursorTy) end_taildc3572;
-            CursorTy pvrtmp6233 = (CursorTy) taildc3572;
-            CursorTy fltPrd5073 = (CursorTy) pvrtmp6233;
-            CursorTy fltPrd5074 = (CursorTy) pvrtmp6234;
-
-            return (CursorCursorCursorCursorProd) {end_r2004_3756, endof3571,
-                                                   fltPrd5073, fltPrd5074};
-            break;
-        }
-
-      case 3:
-        {
-            CursorTy field_cur4263 = (CursorTy) tmpcur6182;
-            CursorTy case2773 = (CursorTy) field_cur4263;
-            CursorTy x1797 = (CursorTy) case2773;
-            CursorTy loc2777 = loc2002 + 1;
-            CursorCursorCursorCursorProd tmp_struct164 =
-                                          _copy_Expr(end_r2003, end_r2004, loc2777, x1797);
-            CursorTy pvrtmp6235 = tmp_struct164.field0;
-            CursorTy pvrtmp6236 = tmp_struct164.field1;
-            CursorTy pvrtmp6237 = tmp_struct164.field2;
-            CursorTy pvrtmp6238 = tmp_struct164.field3;
-            CursorTy fltPrd5075 = (CursorTy) pvrtmp6237;
-            CursorTy fltPrd5076 = (CursorTy) pvrtmp6238;
-            CursorTy pvrtmp6240 = (CursorTy) fltPrd5076;
-            CursorTy pvrtmp6239 = (CursorTy) fltPrd5075;
-            CursorTy y1798 = (CursorTy) pvrtmp6239;
-            CursorTy fltPrd5077 = (CursorTy) pvrtmp6237;
-            CursorTy fltPrd5078 = (CursorTy) pvrtmp6238;
-            CursorTy pvrtmp6242 = (CursorTy) fltPrd5078;
-            CursorTy pvrtmp6241 = (CursorTy) fltPrd5077;
-            CursorTy end_y1798 = (CursorTy) pvrtmp6242;
-            CursorTy end_r2004_3757 = (CursorTy) pvrtmp6235;
-            CursorTy endof3573 = (CursorTy) pvrtmp6236;
-
-            *(TagTyPacked *) loc2002 = 3;
-
-            CursorTy writetag4265 = loc2002 + 1;
-            CursorTy writecur4266 = (CursorTy) end_y1798;
-            CursorTy pvrtmp6244 = (CursorTy) writecur4266;
-            CursorTy pvrtmp6243 = (CursorTy) loc2002;
-            CursorTy taildc3574 = (CursorTy) pvrtmp6243;
-            CursorTy end_taildc3574 = (CursorTy) pvrtmp6244;
-            CursorTy pvrtmp6246 = (CursorTy) end_taildc3574;
-            CursorTy pvrtmp6245 = (CursorTy) taildc3574;
-            CursorTy fltPrd5079 = (CursorTy) pvrtmp6245;
-            CursorTy fltPrd5080 = (CursorTy) pvrtmp6246;
-
-            return (CursorCursorCursorCursorProd) {end_r2004_3757, endof3573,
-                                                   fltPrd5079, fltPrd5080};
-            break;
-        }
-
-      case 4:
-        {
-            CursorTy field_cur4268 = (CursorTy) tmpcur6182;
-            CursorTy tmpcur6247 = *(CursorTy *) field_cur4268;
-            CursorTy tmpaftercur6248 = field_cur4268 + 8;
-            CursorTy case2779 = (CursorTy) field_cur4268;
-            CursorTy x1799 = (CursorTy) tmpcur6247;
-            CursorTy end_x1799 = (CursorTy) tmpaftercur6248;
-            CursorTy case2780 = (CursorTy) end_x1799;
-            CursorTy x1800 = (CursorTy) case2780;
-            CursorTy case2781 = (CursorTy) x1799;
-            CursorTy x1801 = (CursorTy) case2781;
-            CursorTy jump3575 = case2779 + 8;
-            CursorCursorCursorCursorProd tmp_struct165 =
-                                          _copy_ListSym(end_r2003, end_r2004, loc2789, x1800);
-            CursorTy pvrtmp6249 = tmp_struct165.field0;
-            CursorTy pvrtmp6250 = tmp_struct165.field1;
-            CursorTy pvrtmp6251 = tmp_struct165.field2;
-            CursorTy pvrtmp6252 = tmp_struct165.field3;
-            CursorTy fltPrd5081 = (CursorTy) pvrtmp6251;
-            CursorTy fltPrd5082 = (CursorTy) pvrtmp6252;
-            CursorTy pvrtmp6254 = (CursorTy) fltPrd5082;
-            CursorTy pvrtmp6253 = (CursorTy) fltPrd5081;
-            CursorTy y1803 = (CursorTy) pvrtmp6253;
-            CursorTy fltPrd5083 = (CursorTy) pvrtmp6251;
-            CursorTy fltPrd5084 = (CursorTy) pvrtmp6252;
-            CursorTy pvrtmp6256 = (CursorTy) fltPrd5084;
-            CursorTy pvrtmp6255 = (CursorTy) fltPrd5083;
-            CursorTy end_y1803 = (CursorTy) pvrtmp6256;
-            CursorTy end_r2004_3758 = (CursorTy) pvrtmp6249;
-            CursorTy endof3576 = (CursorTy) pvrtmp6250;
-            CursorTy loc2790 = (CursorTy) end_y1803;
-            CursorCursorCursorCursorProd tmp_struct166 =
-                                          _copy_Expr(end_r2003, end_r2004_3758, loc2790, x1801);
-            CursorTy pvrtmp6257 = tmp_struct166.field0;
-            CursorTy pvrtmp6258 = tmp_struct166.field1;
-            CursorTy pvrtmp6259 = tmp_struct166.field2;
-            CursorTy pvrtmp6260 = tmp_struct166.field3;
-            CursorTy fltPrd5085 = (CursorTy) pvrtmp6259;
-            CursorTy fltPrd5086 = (CursorTy) pvrtmp6260;
-            CursorTy pvrtmp6262 = (CursorTy) fltPrd5086;
-            CursorTy pvrtmp6261 = (CursorTy) fltPrd5085;
-            CursorTy y1804 = (CursorTy) pvrtmp6261;
-            CursorTy fltPrd5087 = (CursorTy) pvrtmp6259;
-            CursorTy fltPrd5088 = (CursorTy) pvrtmp6260;
-            CursorTy pvrtmp6264 = (CursorTy) fltPrd5088;
-            CursorTy pvrtmp6263 = (CursorTy) fltPrd5087;
-            CursorTy end_y1804 = (CursorTy) pvrtmp6264;
-            CursorTy end_r2004_3758_3759 = (CursorTy) pvrtmp6257;
-            CursorTy endof3577 = (CursorTy) pvrtmp6258;
-            CursorTy y1802 = (CursorTy) end_y1803;
-
-            *(TagTyPacked *) loc2002 = 4;
-
-            CursorTy writetag4272 = loc2002 + 1;
-
-            *(CursorTy *) writetag4272 = y1802;
-
-            CursorTy writecur4273 = writetag4272 + 8;
-            CursorTy writecur4274 = (CursorTy) end_y1803;
-            CursorTy writecur4275 = (CursorTy) end_y1804;
-            CursorTy pvrtmp6266 = (CursorTy) writecur4275;
-            CursorTy pvrtmp6265 = (CursorTy) loc2002;
-            CursorTy taildc3578 = (CursorTy) pvrtmp6265;
-            CursorTy end_taildc3578 = (CursorTy) pvrtmp6266;
-            CursorTy pvrtmp6268 = (CursorTy) end_taildc3578;
-            CursorTy pvrtmp6267 = (CursorTy) taildc3578;
-            CursorTy fltPrd5089 = (CursorTy) pvrtmp6267;
-            CursorTy fltPrd5090 = (CursorTy) pvrtmp6268;
-
-            return (CursorCursorCursorCursorProd) {end_r2004_3758_3759,
-                                                   endof3577, fltPrd5089,
-                                                   fltPrd5090};
-            break;
-        }
-
-      case 6:
-        {
-            CursorTy field_cur4290 = (CursorTy) tmpcur6182;
-            CursorTy tmpcur6293 = *(CursorTy *) field_cur4290;
-            CursorTy tmpaftercur6294 = field_cur4290 + 8;
-            CursorTy case2815 = (CursorTy) field_cur4290;
-            CursorTy x1813 = (CursorTy) tmpcur6293;
-            CursorTy end_x1813 = (CursorTy) tmpaftercur6294;
-            CursorTy case2816 = (CursorTy) end_x1813;
-            CursorTy x1814 = (CursorTy) case2816;
-            CursorTy case2817 = (CursorTy) x1813;
-            CursorTy x1815 = (CursorTy) case2817;
-            CursorTy jump3584 = case2815 + 8;
-            CursorCursorCursorCursorProd tmp_struct169 =
-                                          _copy_ListSym(end_r2003, end_r2004, loc2825, x1814);
-            CursorTy pvrtmp6295 = tmp_struct169.field0;
-            CursorTy pvrtmp6296 = tmp_struct169.field1;
-            CursorTy pvrtmp6297 = tmp_struct169.field2;
-            CursorTy pvrtmp6298 = tmp_struct169.field3;
-            CursorTy fltPrd5101 = (CursorTy) pvrtmp6297;
-            CursorTy fltPrd5102 = (CursorTy) pvrtmp6298;
-            CursorTy pvrtmp6300 = (CursorTy) fltPrd5102;
-            CursorTy pvrtmp6299 = (CursorTy) fltPrd5101;
-            CursorTy y1817 = (CursorTy) pvrtmp6299;
-            CursorTy fltPrd5103 = (CursorTy) pvrtmp6297;
-            CursorTy fltPrd5104 = (CursorTy) pvrtmp6298;
-            CursorTy pvrtmp6302 = (CursorTy) fltPrd5104;
-            CursorTy pvrtmp6301 = (CursorTy) fltPrd5103;
-            CursorTy end_y1817 = (CursorTy) pvrtmp6302;
-            CursorTy end_r2004_3762 = (CursorTy) pvrtmp6295;
-            CursorTy endof3585 = (CursorTy) pvrtmp6296;
-            CursorTy loc2826 = (CursorTy) end_y1817;
-            CursorCursorCursorCursorProd tmp_struct170 =
-                                          _copy_Expr(end_r2003, end_r2004_3762, loc2826, x1815);
-            CursorTy pvrtmp6303 = tmp_struct170.field0;
-            CursorTy pvrtmp6304 = tmp_struct170.field1;
-            CursorTy pvrtmp6305 = tmp_struct170.field2;
-            CursorTy pvrtmp6306 = tmp_struct170.field3;
-            CursorTy fltPrd5105 = (CursorTy) pvrtmp6305;
-            CursorTy fltPrd5106 = (CursorTy) pvrtmp6306;
-            CursorTy pvrtmp6308 = (CursorTy) fltPrd5106;
-            CursorTy pvrtmp6307 = (CursorTy) fltPrd5105;
-            CursorTy y1818 = (CursorTy) pvrtmp6307;
-            CursorTy fltPrd5107 = (CursorTy) pvrtmp6305;
-            CursorTy fltPrd5108 = (CursorTy) pvrtmp6306;
-            CursorTy pvrtmp6310 = (CursorTy) fltPrd5108;
-            CursorTy pvrtmp6309 = (CursorTy) fltPrd5107;
-            CursorTy end_y1818 = (CursorTy) pvrtmp6310;
-            CursorTy end_r2004_3762_3763 = (CursorTy) pvrtmp6303;
-            CursorTy endof3586 = (CursorTy) pvrtmp6304;
-            CursorTy y1816 = (CursorTy) end_y1817;
-
-            *(TagTyPacked *) loc2002 = 6;
-
-            CursorTy writetag4294 = loc2002 + 1;
-
-            *(CursorTy *) writetag4294 = y1816;
-
-            CursorTy writecur4295 = writetag4294 + 8;
-            CursorTy writecur4296 = (CursorTy) end_y1817;
-            CursorTy writecur4297 = (CursorTy) end_y1818;
-            CursorTy pvrtmp6312 = (CursorTy) writecur4297;
-            CursorTy pvrtmp6311 = (CursorTy) loc2002;
-            CursorTy taildc3587 = (CursorTy) pvrtmp6311;
-            CursorTy end_taildc3587 = (CursorTy) pvrtmp6312;
-            CursorTy pvrtmp6314 = (CursorTy) end_taildc3587;
-            CursorTy pvrtmp6313 = (CursorTy) taildc3587;
-            CursorTy fltPrd5109 = (CursorTy) pvrtmp6313;
-            CursorTy fltPrd5110 = (CursorTy) pvrtmp6314;
-
-            return (CursorCursorCursorCursorProd) {end_r2004_3762_3763,
-                                                   endof3586, fltPrd5109,
-                                                   fltPrd5110};
+            return (CursorCursorCursorCursorProd) {end_r1839, jump3083,
+                                                   fltPrd4364, fltPrd4365};
             break;
         }
 
       case 255:
         {
-            CursorTy tmpcur7350 = *(CursorTy *) tmpcur6182;
-            CursorTy tmpaftercur7351 = tmpcur6182 + 8;
-            TagTyPacked tagtmp7352 = *(TagTyPacked *) tmpcur7350;
-            CursorTy tailtmp7353 = tmpcur7350 + 1;
+            CursorTy tmpcur6573 = *(CursorTy *) tmpcur5017;
+            CursorTy tmpaftercur6574 = tmpcur5017 + 8;
+            TagTyPacked tagtmp6575 = *(TagTyPacked *) tmpcur6573;
+            CursorTy tailtmp6576 = tmpcur6573 + 1;
 
-            tmpval6181 = tagtmp7352;
-            tmpcur6182 = tailtmp7353;
-            goto switch6339;
+            tmpval5016 = tagtmp6575;
+            tmpcur5017 = tailtmp6576;
+            goto switch5036;
             break;
         }
 
       case 254:
         {
-            CursorTy tmpcur7350 = *(CursorTy *) tmpcur6182;
-            CursorTy tmpaftercur7351 = tmpcur6182 + 8;
-            TagTyPacked tagtmp7352 = *(TagTyPacked *) tmpcur7350;
-            CursorTy tailtmp7353 = tmpcur7350 + 1;
+            CursorTy tmpcur6573 = *(CursorTy *) tmpcur5017;
+            CursorTy tmpaftercur6574 = tmpcur5017 + 8;
+            TagTyPacked tagtmp6575 = *(TagTyPacked *) tmpcur6573;
+            CursorTy tailtmp6576 = tmpcur6573 + 1;
 
-            tmpval6181 = tagtmp7352;
-            tmpcur6182 = tailtmp7353;
-            goto switch6339;
+            tmpval5016 = tagtmp6575;
+            tmpcur5017 = tailtmp6576;
+            goto switch5036;
             break;
         }
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval6181");
+            printf("%s\n", "Unknown tag in: tmpval5016");
             exit(1);
         }
     }
 }
+CursorCursorCursorCursorProd _copy_ListExpr(CursorTy end_r1844,
+                                            CursorTy end_r1845,
+                                            CursorTy loc1843, CursorTy arg1527)
+{
+    CursorTy loc1842 = (CursorTy) arg1527;
+
+    if (loc1843 + 18 > end_r1845) {
+        ChunkTy new_chunk58 = alloc_chunk(end_r1845);
+        CursorTy chunk_start59 = new_chunk58.start_ptr;
+        CursorTy chunk_end60 = new_chunk58.end_ptr;
+
+        end_r1845 = chunk_end60;
+        *(TagTyPacked *) loc1843 = 255;
+
+        CursorTy redir = loc1843 + 1;
+
+        *(CursorTy *) redir = chunk_start59;
+        loc1843 = chunk_start59;
+    }
+
+    TagTyPacked tmpval5044 = *(TagTyPacked *) arg1527;
+    CursorTy tmpcur5045 = arg1527 + 1;
+
+
+  switch5070:
+    ;
+    switch (tmpval5044) {
+
+      case 0:
+        {
+            CursorTy field_cur3588 = (CursorTy) tmpcur5045;
+            CursorTy case2152 = (CursorTy) field_cur3588;
+            CursorTy x1528 = (CursorTy) case2152;
+            CursorTy loc2160 = loc1843 + 1;
+            CursorCursorCursorCursorProd tmp_struct56 =
+                                          _copy_Expr(end_r1844, end_r1845, loc2160, x1528);
+            CursorTy pvrtmp5046 = tmp_struct56.field0;
+            CursorTy pvrtmp5047 = tmp_struct56.field1;
+            CursorTy pvrtmp5048 = tmp_struct56.field2;
+            CursorTy pvrtmp5049 = tmp_struct56.field3;
+            CursorTy fltPrd4366 = (CursorTy) pvrtmp5048;
+            CursorTy fltPrd4367 = (CursorTy) pvrtmp5049;
+            CursorTy pvrtmp5051 = (CursorTy) fltPrd4367;
+            CursorTy pvrtmp5050 = (CursorTy) fltPrd4366;
+            CursorTy y1530 = (CursorTy) pvrtmp5050;
+            CursorTy fltPrd4368 = (CursorTy) pvrtmp5048;
+            CursorTy fltPrd4369 = (CursorTy) pvrtmp5049;
+            CursorTy pvrtmp5053 = (CursorTy) fltPrd4369;
+            CursorTy pvrtmp5052 = (CursorTy) fltPrd4368;
+            CursorTy end_y1530 = (CursorTy) pvrtmp5053;
+            CursorTy end_r1845_3375 = (CursorTy) pvrtmp5046;
+            CursorTy endof3090 = (CursorTy) pvrtmp5047;
+            CursorTy case2153 = (CursorTy) endof3090;
+            CursorTy x1529 = (CursorTy) case2153;
+            CursorTy loc2161 = (CursorTy) end_y1530;
+            CursorCursorCursorCursorProd tmp_struct57 =
+                                          _copy_ListExpr(end_r1844, end_r1845_3375, loc2161, x1529);
+            CursorTy pvrtmp5054 = tmp_struct57.field0;
+            CursorTy pvrtmp5055 = tmp_struct57.field1;
+            CursorTy pvrtmp5056 = tmp_struct57.field2;
+            CursorTy pvrtmp5057 = tmp_struct57.field3;
+            CursorTy fltPrd4370 = (CursorTy) pvrtmp5056;
+            CursorTy fltPrd4371 = (CursorTy) pvrtmp5057;
+            CursorTy pvrtmp5059 = (CursorTy) fltPrd4371;
+            CursorTy pvrtmp5058 = (CursorTy) fltPrd4370;
+            CursorTy y1531 = (CursorTy) pvrtmp5058;
+            CursorTy fltPrd4372 = (CursorTy) pvrtmp5056;
+            CursorTy fltPrd4373 = (CursorTy) pvrtmp5057;
+            CursorTy pvrtmp5061 = (CursorTy) fltPrd4373;
+            CursorTy pvrtmp5060 = (CursorTy) fltPrd4372;
+            CursorTy end_y1531 = (CursorTy) pvrtmp5061;
+            CursorTy end_r1845_3375_3376 = (CursorTy) pvrtmp5054;
+            CursorTy endof3091 = (CursorTy) pvrtmp5055;
+
+            *(TagTyPacked *) loc1843 = 0;
+
+            CursorTy writetag3591 = loc1843 + 1;
+            CursorTy writecur3592 = (CursorTy) end_y1530;
+            CursorTy writecur3593 = (CursorTy) end_y1531;
+            CursorTy pvrtmp5063 = (CursorTy) writecur3593;
+            CursorTy pvrtmp5062 = (CursorTy) loc1843;
+            CursorTy taildc3092 = (CursorTy) pvrtmp5062;
+            CursorTy end_taildc3092 = (CursorTy) pvrtmp5063;
+            CursorTy pvrtmp5065 = (CursorTy) end_taildc3092;
+            CursorTy pvrtmp5064 = (CursorTy) taildc3092;
+            CursorTy fltPrd4374 = (CursorTy) pvrtmp5064;
+            CursorTy fltPrd4375 = (CursorTy) pvrtmp5065;
+
+            return (CursorCursorCursorCursorProd) {end_r1845_3375_3376,
+                                                   endof3091, fltPrd4374,
+                                                   fltPrd4375};
+            break;
+        }
+
+      case 1:
+        {
+            CursorTy field_cur3595 = (CursorTy) tmpcur5045;
+            CursorTy jump3093 = loc1842 + 1;
+
+            *(TagTyPacked *) loc1843 = 1;
+
+            CursorTy writetag3596 = loc1843 + 1;
+            CursorTy pvrtmp5067 = (CursorTy) writetag3596;
+            CursorTy pvrtmp5066 = (CursorTy) loc1843;
+            CursorTy taildc3094 = (CursorTy) pvrtmp5066;
+            CursorTy end_taildc3094 = (CursorTy) pvrtmp5067;
+            CursorTy pvrtmp5069 = (CursorTy) end_taildc3094;
+            CursorTy pvrtmp5068 = (CursorTy) taildc3094;
+            CursorTy fltPrd4376 = (CursorTy) pvrtmp5068;
+            CursorTy fltPrd4377 = (CursorTy) pvrtmp5069;
+
+            return (CursorCursorCursorCursorProd) {end_r1845, jump3093,
+                                                   fltPrd4376, fltPrd4377};
+            break;
+        }
+
+      case 255:
+        {
+            CursorTy tmpcur6581 = *(CursorTy *) tmpcur5045;
+            CursorTy tmpaftercur6582 = tmpcur5045 + 8;
+            TagTyPacked tagtmp6583 = *(TagTyPacked *) tmpcur6581;
+            CursorTy tailtmp6584 = tmpcur6581 + 1;
+
+            tmpval5044 = tagtmp6583;
+            tmpcur5045 = tailtmp6584;
+            goto switch5070;
+            break;
+        }
+
+      case 254:
+        {
+            CursorTy tmpcur6581 = *(CursorTy *) tmpcur5045;
+            CursorTy tmpaftercur6582 = tmpcur5045 + 8;
+            TagTyPacked tagtmp6583 = *(TagTyPacked *) tmpcur6581;
+            CursorTy tailtmp6584 = tmpcur6581 + 1;
+
+            tmpval5044 = tagtmp6583;
+            tmpcur5045 = tailtmp6584;
+            goto switch5070;
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval5044");
+            exit(1);
+        }
+    }
+}
+CursorCursorCursorCursorProd _copy_ListToplvl(CursorTy end_r1850,
+                                              CursorTy end_r1851,
+                                              CursorTy loc1849,
+                                              CursorTy arg1537)
+{
+    CursorTy loc1848 = (CursorTy) arg1537;
+
+    if (loc1849 + 26 > end_r1851) {
+        ChunkTy new_chunk69 = alloc_chunk(end_r1851);
+        CursorTy chunk_start70 = new_chunk69.start_ptr;
+        CursorTy chunk_end71 = new_chunk69.end_ptr;
+
+        end_r1851 = chunk_end71;
+        *(TagTyPacked *) loc1849 = 255;
+
+        CursorTy redir = loc1849 + 1;
+
+        *(CursorTy *) redir = chunk_start70;
+        loc1849 = chunk_start70;
+    }
+
+    CursorTy loc2197 = loc1849 + 1;
+    CursorTy loc2198 = loc2197 + 8;
+    CursorTy loc2214 = loc1849 + 1;
+    CursorTy loc2215 = loc2214 + 8;
+    CursorTy loc2216 = loc2215 + 8;
+    TagTyPacked tmpval5078 = *(TagTyPacked *) arg1537;
+    CursorTy tmpcur5079 = arg1537 + 1;
+
+
+  switch5150:
+    ;
+    switch (tmpval5078) {
+
+      case 0:
+        {
+            CursorTy field_cur3602 = (CursorTy) tmpcur5079;
+            CursorTy case2175 = (CursorTy) field_cur3602;
+            CursorTy x1538 = (CursorTy) case2175;
+            CursorTy loc2183 = loc1849 + 1;
+            CursorCursorCursorCursorProd tmp_struct63 =
+                                          _copy_Toplvl(end_r1850, end_r1851, loc2183, x1538);
+            CursorTy pvrtmp5080 = tmp_struct63.field0;
+            CursorTy pvrtmp5081 = tmp_struct63.field1;
+            CursorTy pvrtmp5082 = tmp_struct63.field2;
+            CursorTy pvrtmp5083 = tmp_struct63.field3;
+            CursorTy fltPrd4378 = (CursorTy) pvrtmp5082;
+            CursorTy fltPrd4379 = (CursorTy) pvrtmp5083;
+            CursorTy pvrtmp5085 = (CursorTy) fltPrd4379;
+            CursorTy pvrtmp5084 = (CursorTy) fltPrd4378;
+            CursorTy y1540 = (CursorTy) pvrtmp5084;
+            CursorTy fltPrd4380 = (CursorTy) pvrtmp5082;
+            CursorTy fltPrd4381 = (CursorTy) pvrtmp5083;
+            CursorTy pvrtmp5087 = (CursorTy) fltPrd4381;
+            CursorTy pvrtmp5086 = (CursorTy) fltPrd4380;
+            CursorTy end_y1540 = (CursorTy) pvrtmp5087;
+            CursorTy end_r1851_3377 = (CursorTy) pvrtmp5080;
+            CursorTy endof3100 = (CursorTy) pvrtmp5081;
+            CursorTy case2176 = (CursorTy) endof3100;
+            CursorTy x1539 = (CursorTy) case2176;
+            CursorTy loc2184 = (CursorTy) end_y1540;
+            CursorCursorCursorCursorProd tmp_struct64 =
+                                          _copy_ListToplvl(end_r1850, end_r1851_3377, loc2184, x1539);
+            CursorTy pvrtmp5088 = tmp_struct64.field0;
+            CursorTy pvrtmp5089 = tmp_struct64.field1;
+            CursorTy pvrtmp5090 = tmp_struct64.field2;
+            CursorTy pvrtmp5091 = tmp_struct64.field3;
+            CursorTy fltPrd4382 = (CursorTy) pvrtmp5090;
+            CursorTy fltPrd4383 = (CursorTy) pvrtmp5091;
+            CursorTy pvrtmp5093 = (CursorTy) fltPrd4383;
+            CursorTy pvrtmp5092 = (CursorTy) fltPrd4382;
+            CursorTy y1541 = (CursorTy) pvrtmp5092;
+            CursorTy fltPrd4384 = (CursorTy) pvrtmp5090;
+            CursorTy fltPrd4385 = (CursorTy) pvrtmp5091;
+            CursorTy pvrtmp5095 = (CursorTy) fltPrd4385;
+            CursorTy pvrtmp5094 = (CursorTy) fltPrd4384;
+            CursorTy end_y1541 = (CursorTy) pvrtmp5095;
+            CursorTy end_r1851_3377_3378 = (CursorTy) pvrtmp5088;
+            CursorTy endof3101 = (CursorTy) pvrtmp5089;
+
+            *(TagTyPacked *) loc1849 = 0;
+
+            CursorTy writetag3605 = loc1849 + 1;
+            CursorTy writecur3606 = (CursorTy) end_y1540;
+            CursorTy writecur3607 = (CursorTy) end_y1541;
+            CursorTy pvrtmp5097 = (CursorTy) writecur3607;
+            CursorTy pvrtmp5096 = (CursorTy) loc1849;
+            CursorTy taildc3102 = (CursorTy) pvrtmp5096;
+            CursorTy end_taildc3102 = (CursorTy) pvrtmp5097;
+            CursorTy pvrtmp5099 = (CursorTy) end_taildc3102;
+            CursorTy pvrtmp5098 = (CursorTy) taildc3102;
+            CursorTy fltPrd4386 = (CursorTy) pvrtmp5098;
+            CursorTy fltPrd4387 = (CursorTy) pvrtmp5099;
+
+            return (CursorCursorCursorCursorProd) {end_r1851_3377_3378,
+                                                   endof3101, fltPrd4386,
+                                                   fltPrd4387};
+            break;
+        }
+
+      case 1:
+        {
+            CursorTy field_cur3609 = (CursorTy) tmpcur5079;
+            CursorTy jump3103 = loc1848 + 1;
+
+            *(TagTyPacked *) loc1849 = 1;
+
+            CursorTy writetag3610 = loc1849 + 1;
+            CursorTy pvrtmp5101 = (CursorTy) writetag3610;
+            CursorTy pvrtmp5100 = (CursorTy) loc1849;
+            CursorTy taildc3104 = (CursorTy) pvrtmp5100;
+            CursorTy end_taildc3104 = (CursorTy) pvrtmp5101;
+            CursorTy pvrtmp5103 = (CursorTy) end_taildc3104;
+            CursorTy pvrtmp5102 = (CursorTy) taildc3104;
+            CursorTy fltPrd4388 = (CursorTy) pvrtmp5102;
+            CursorTy fltPrd4389 = (CursorTy) pvrtmp5103;
+
+            return (CursorCursorCursorCursorProd) {end_r1851, jump3103,
+                                                   fltPrd4388, fltPrd4389};
+            break;
+        }
+
+      case 2:
+        {
+            CursorTy field_cur3612 = (CursorTy) tmpcur5079;
+            CursorTy tmpcur5104 = *(CursorTy *) field_cur3612;
+            CursorTy tmpaftercur5105 = field_cur3612 + 8;
+            CursorTy case2188 = (CursorTy) field_cur3612;
+            CursorTy x1542 = (CursorTy) tmpcur5104;
+            CursorTy end_x1542 = (CursorTy) tmpaftercur5105;
+            CursorTy case2189 = (CursorTy) end_x1542;
+            CursorTy x1543 = (CursorTy) case2189;
+            CursorTy case2190 = (CursorTy) x1542;
+            CursorTy x1544 = (CursorTy) case2190;
+            CursorTy jump3105 = case2188 + 8;
+            CursorCursorCursorCursorProd tmp_struct65 =
+                                          _copy_Toplvl(end_r1850, end_r1851, loc2198, x1543);
+            CursorTy pvrtmp5106 = tmp_struct65.field0;
+            CursorTy pvrtmp5107 = tmp_struct65.field1;
+            CursorTy pvrtmp5108 = tmp_struct65.field2;
+            CursorTy pvrtmp5109 = tmp_struct65.field3;
+            CursorTy fltPrd4390 = (CursorTy) pvrtmp5108;
+            CursorTy fltPrd4391 = (CursorTy) pvrtmp5109;
+            CursorTy pvrtmp5111 = (CursorTy) fltPrd4391;
+            CursorTy pvrtmp5110 = (CursorTy) fltPrd4390;
+            CursorTy y1546 = (CursorTy) pvrtmp5110;
+            CursorTy fltPrd4392 = (CursorTy) pvrtmp5108;
+            CursorTy fltPrd4393 = (CursorTy) pvrtmp5109;
+            CursorTy pvrtmp5113 = (CursorTy) fltPrd4393;
+            CursorTy pvrtmp5112 = (CursorTy) fltPrd4392;
+            CursorTy end_y1546 = (CursorTy) pvrtmp5113;
+            CursorTy end_r1851_3379 = (CursorTy) pvrtmp5106;
+            CursorTy endof3106 = (CursorTy) pvrtmp5107;
+            CursorTy loc2199 = (CursorTy) end_y1546;
+            CursorCursorCursorCursorProd tmp_struct66 =
+                                          _copy_ListToplvl(end_r1850, end_r1851_3379, loc2199, x1544);
+            CursorTy pvrtmp5114 = tmp_struct66.field0;
+            CursorTy pvrtmp5115 = tmp_struct66.field1;
+            CursorTy pvrtmp5116 = tmp_struct66.field2;
+            CursorTy pvrtmp5117 = tmp_struct66.field3;
+            CursorTy fltPrd4394 = (CursorTy) pvrtmp5116;
+            CursorTy fltPrd4395 = (CursorTy) pvrtmp5117;
+            CursorTy pvrtmp5119 = (CursorTy) fltPrd4395;
+            CursorTy pvrtmp5118 = (CursorTy) fltPrd4394;
+            CursorTy y1547 = (CursorTy) pvrtmp5118;
+            CursorTy fltPrd4396 = (CursorTy) pvrtmp5116;
+            CursorTy fltPrd4397 = (CursorTy) pvrtmp5117;
+            CursorTy pvrtmp5121 = (CursorTy) fltPrd4397;
+            CursorTy pvrtmp5120 = (CursorTy) fltPrd4396;
+            CursorTy end_y1547 = (CursorTy) pvrtmp5121;
+            CursorTy end_r1851_3379_3380 = (CursorTy) pvrtmp5114;
+            CursorTy endof3107 = (CursorTy) pvrtmp5115;
+            CursorTy y1545 = (CursorTy) end_y1546;
+
+            *(TagTyPacked *) loc1849 = 2;
+
+            CursorTy writetag3616 = loc1849 + 1;
+
+            *(CursorTy *) writetag3616 = y1545;
+
+            CursorTy writecur3617 = writetag3616 + 8;
+            CursorTy writecur3618 = (CursorTy) end_y1546;
+            CursorTy writecur3619 = (CursorTy) end_y1547;
+            CursorTy pvrtmp5123 = (CursorTy) writecur3619;
+            CursorTy pvrtmp5122 = (CursorTy) loc1849;
+            CursorTy taildc3108 = (CursorTy) pvrtmp5122;
+            CursorTy end_taildc3108 = (CursorTy) pvrtmp5123;
+            CursorTy pvrtmp5125 = (CursorTy) end_taildc3108;
+            CursorTy pvrtmp5124 = (CursorTy) taildc3108;
+            CursorTy fltPrd4398 = (CursorTy) pvrtmp5124;
+            CursorTy fltPrd4399 = (CursorTy) pvrtmp5125;
+
+            return (CursorCursorCursorCursorProd) {end_r1851_3379_3380,
+                                                   endof3107, fltPrd4398,
+                                                   fltPrd4399};
+            break;
+        }
+
+      case 153:
+        {
+            CursorTy field_cur3621 = (CursorTy) tmpcur5079;
+            CursorTy case2204 = (CursorTy) field_cur3621;
+            IntTy tmpval5126 = *(IntTy *) case2204;
+            CursorTy tmpcur5127 = case2204 + sizeof(IntTy);
+            IntTy x1548 = (IntTy) tmpval5126;
+            CursorTy end_x1548 = (CursorTy) tmpcur5127;
+            CursorTy case2205 = (CursorTy) end_x1548;
+            IntTy tmpval5128 = *(IntTy *) case2205;
+            CursorTy tmpcur5129 = case2205 + sizeof(IntTy);
+            IntTy x1549 = (IntTy) tmpval5128;
+            CursorTy end_x1549 = (CursorTy) tmpcur5129;
+            CursorTy case2206 = (CursorTy) end_x1549;
+            CursorTy x1550 = (CursorTy) case2206;
+            CursorTy loc3625 = case2205 + x1549;
+            CursorTy case2207 = loc3625 + 8;
+            CursorTy x1551 = (CursorTy) case2207;
+            CursorTy jump3110 = case2205 + 8;
+            CursorTy jump3109 = case2204 + 8;
+            CursorCursorCursorCursorProd tmp_struct67 =
+                                          _copy_Toplvl(end_r1850, end_r1851, loc2216, x1550);
+            CursorTy pvrtmp5130 = tmp_struct67.field0;
+            CursorTy pvrtmp5131 = tmp_struct67.field1;
+            CursorTy pvrtmp5132 = tmp_struct67.field2;
+            CursorTy pvrtmp5133 = tmp_struct67.field3;
+            CursorTy fltPrd4400 = (CursorTy) pvrtmp5132;
+            CursorTy fltPrd4401 = (CursorTy) pvrtmp5133;
+            CursorTy pvrtmp5135 = (CursorTy) fltPrd4401;
+            CursorTy pvrtmp5134 = (CursorTy) fltPrd4400;
+            CursorTy y1554 = (CursorTy) pvrtmp5134;
+            CursorTy fltPrd4402 = (CursorTy) pvrtmp5132;
+            CursorTy fltPrd4403 = (CursorTy) pvrtmp5133;
+            CursorTy pvrtmp5137 = (CursorTy) fltPrd4403;
+            CursorTy pvrtmp5136 = (CursorTy) fltPrd4402;
+            CursorTy end_y1554 = (CursorTy) pvrtmp5137;
+            CursorTy end_r1851_3381 = (CursorTy) pvrtmp5130;
+            CursorTy endof3111 = (CursorTy) pvrtmp5131;
+            CursorTy loc2217 = (CursorTy) end_y1554;
+            CursorCursorCursorCursorProd tmp_struct68 =
+                                          _copy_ListToplvl(end_r1850, end_r1851_3381, loc2217, x1551);
+            CursorTy pvrtmp5138 = tmp_struct68.field0;
+            CursorTy pvrtmp5139 = tmp_struct68.field1;
+            CursorTy pvrtmp5140 = tmp_struct68.field2;
+            CursorTy pvrtmp5141 = tmp_struct68.field3;
+            CursorTy fltPrd4404 = (CursorTy) pvrtmp5140;
+            CursorTy fltPrd4405 = (CursorTy) pvrtmp5141;
+            CursorTy pvrtmp5143 = (CursorTy) fltPrd4405;
+            CursorTy pvrtmp5142 = (CursorTy) fltPrd4404;
+            CursorTy y1555 = (CursorTy) pvrtmp5142;
+            CursorTy fltPrd4406 = (CursorTy) pvrtmp5140;
+            CursorTy fltPrd4407 = (CursorTy) pvrtmp5141;
+            CursorTy pvrtmp5145 = (CursorTy) fltPrd4407;
+            CursorTy pvrtmp5144 = (CursorTy) fltPrd4406;
+            CursorTy end_y1555 = (CursorTy) pvrtmp5145;
+            CursorTy end_r1851_3381_3382 = (CursorTy) pvrtmp5138;
+            CursorTy endof3112 = (CursorTy) pvrtmp5139;
+
+            *(TagTyPacked *) loc1849 = 153;
+
+            CursorTy writetag3628 = loc1849 + 1;
+
+            *(IntTy *) writetag3628 = x1548;
+
+            CursorTy writecur3629 = writetag3628 + sizeof(IntTy);
+
+            *(IntTy *) writecur3629 = x1549;
+
+            CursorTy writecur3630 = writecur3629 + sizeof(IntTy);
+            CursorTy writecur3631 = (CursorTy) end_y1554;
+            CursorTy writecur3632 = (CursorTy) end_y1555;
+            CursorTy pvrtmp5147 = (CursorTy) writecur3632;
+            CursorTy pvrtmp5146 = (CursorTy) loc1849;
+            CursorTy taildc3113 = (CursorTy) pvrtmp5146;
+            CursorTy end_taildc3113 = (CursorTy) pvrtmp5147;
+            CursorTy pvrtmp5149 = (CursorTy) end_taildc3113;
+            CursorTy pvrtmp5148 = (CursorTy) taildc3113;
+            CursorTy fltPrd4408 = (CursorTy) pvrtmp5148;
+            CursorTy fltPrd4409 = (CursorTy) pvrtmp5149;
+
+            return (CursorCursorCursorCursorProd) {end_r1851_3381_3382,
+                                                   endof3112, fltPrd4408,
+                                                   fltPrd4409};
+            break;
+        }
+
+      case 255:
+        {
+            CursorTy tmpcur6589 = *(CursorTy *) tmpcur5079;
+            CursorTy tmpaftercur6590 = tmpcur5079 + 8;
+            TagTyPacked tagtmp6591 = *(TagTyPacked *) tmpcur6589;
+            CursorTy tailtmp6592 = tmpcur6589 + 1;
+
+            tmpval5078 = tagtmp6591;
+            tmpcur5079 = tailtmp6592;
+            goto switch5150;
+            break;
+        }
+
+      case 254:
+        {
+            CursorTy tmpcur6589 = *(CursorTy *) tmpcur5079;
+            CursorTy tmpaftercur6590 = tmpcur5079 + 8;
+            TagTyPacked tagtmp6591 = *(TagTyPacked *) tmpcur6589;
+            CursorTy tailtmp6592 = tmpcur6589 + 1;
+
+            tmpval5078 = tagtmp6591;
+            tmpcur5079 = tailtmp6592;
+            goto switch5150;
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval5078");
+            exit(1);
+        }
+    }
+}
+CursorCursorCursorCursorProd _copy_Formals(CursorTy end_r1856,
+                                           CursorTy end_r1857, CursorTy loc1855,
+                                           CursorTy arg1575)
+{
+    CursorTy loc1854 = (CursorTy) arg1575;
+
+    if (loc1855 + 18 > end_r1857) {
+        ChunkTy new_chunk80 = alloc_chunk(end_r1857);
+        CursorTy chunk_start81 = new_chunk80.start_ptr;
+        CursorTy chunk_end82 = new_chunk80.end_ptr;
+
+        end_r1857 = chunk_end82;
+        *(TagTyPacked *) loc1855 = 255;
+
+        CursorTy redir = loc1855 + 1;
+
+        *(CursorTy *) redir = chunk_start81;
+        loc1855 = chunk_start81;
+    }
+
+    TagTyPacked tmpval5172 = *(TagTyPacked *) arg1575;
+    CursorTy tmpcur5173 = arg1575 + 1;
+
+
+  switch5206:
+    ;
+    switch (tmpval5172) {
+
+      case 0:
+        {
+            CursorTy field_cur3649 = (CursorTy) tmpcur5173;
+            CursorTy case2249 = (CursorTy) field_cur3649;
+            CursorTy x1576 = (CursorTy) case2249;
+            CursorTy loc2253 = loc1855 + 1;
+            CursorCursorCursorCursorProd tmp_struct78 =
+                                          _copy_ListSym(end_r1856, end_r1857, loc2253, x1576);
+            CursorTy pvrtmp5174 = tmp_struct78.field0;
+            CursorTy pvrtmp5175 = tmp_struct78.field1;
+            CursorTy pvrtmp5176 = tmp_struct78.field2;
+            CursorTy pvrtmp5177 = tmp_struct78.field3;
+            CursorTy fltPrd4410 = (CursorTy) pvrtmp5176;
+            CursorTy fltPrd4411 = (CursorTy) pvrtmp5177;
+            CursorTy pvrtmp5179 = (CursorTy) fltPrd4411;
+            CursorTy pvrtmp5178 = (CursorTy) fltPrd4410;
+            CursorTy y1577 = (CursorTy) pvrtmp5178;
+            CursorTy fltPrd4412 = (CursorTy) pvrtmp5176;
+            CursorTy fltPrd4413 = (CursorTy) pvrtmp5177;
+            CursorTy pvrtmp5181 = (CursorTy) fltPrd4413;
+            CursorTy pvrtmp5180 = (CursorTy) fltPrd4412;
+            CursorTy end_y1577 = (CursorTy) pvrtmp5181;
+            CursorTy end_r1857_3383 = (CursorTy) pvrtmp5174;
+            CursorTy endof3128 = (CursorTy) pvrtmp5175;
+
+            *(TagTyPacked *) loc1855 = 0;
+
+            CursorTy writetag3651 = loc1855 + 1;
+            CursorTy writecur3652 = (CursorTy) end_y1577;
+            CursorTy pvrtmp5183 = (CursorTy) writecur3652;
+            CursorTy pvrtmp5182 = (CursorTy) loc1855;
+            CursorTy taildc3129 = (CursorTy) pvrtmp5182;
+            CursorTy end_taildc3129 = (CursorTy) pvrtmp5183;
+            CursorTy pvrtmp5185 = (CursorTy) end_taildc3129;
+            CursorTy pvrtmp5184 = (CursorTy) taildc3129;
+            CursorTy fltPrd4414 = (CursorTy) pvrtmp5184;
+            CursorTy fltPrd4415 = (CursorTy) pvrtmp5185;
+
+            return (CursorCursorCursorCursorProd) {end_r1857_3383, endof3128,
+                                                   fltPrd4414, fltPrd4415};
+            break;
+        }
+
+      case 1:
+        {
+            CursorTy field_cur3654 = (CursorTy) tmpcur5173;
+            CursorTy case2255 = (CursorTy) field_cur3654;
+            CursorTy x1578 = (CursorTy) case2255;
+            CursorTy loc2260 = loc1855 + 1;
+            CursorCursorCursorCursorProd tmp_struct79 =
+                                          _copy_ListSym(end_r1856, end_r1857, loc2260, x1578);
+            CursorTy pvrtmp5186 = tmp_struct79.field0;
+            CursorTy pvrtmp5187 = tmp_struct79.field1;
+            CursorTy pvrtmp5188 = tmp_struct79.field2;
+            CursorTy pvrtmp5189 = tmp_struct79.field3;
+            CursorTy fltPrd4416 = (CursorTy) pvrtmp5188;
+            CursorTy fltPrd4417 = (CursorTy) pvrtmp5189;
+            CursorTy pvrtmp5191 = (CursorTy) fltPrd4417;
+            CursorTy pvrtmp5190 = (CursorTy) fltPrd4416;
+            CursorTy y1580 = (CursorTy) pvrtmp5190;
+            CursorTy fltPrd4418 = (CursorTy) pvrtmp5188;
+            CursorTy fltPrd4419 = (CursorTy) pvrtmp5189;
+            CursorTy pvrtmp5193 = (CursorTy) fltPrd4419;
+            CursorTy pvrtmp5192 = (CursorTy) fltPrd4418;
+            CursorTy end_y1580 = (CursorTy) pvrtmp5193;
+            CursorTy end_r1857_3384 = (CursorTy) pvrtmp5186;
+            CursorTy endof3131 = (CursorTy) pvrtmp5187;
+            CursorTy case2256 = (CursorTy) endof3131;
+            CursorTy jump3130 = case2256 + 8;
+            SymTy tmpval5194 = *(SymTy *) case2256;
+            CursorTy tmpcur5195 = case2256 + sizeof(SymTy);
+            SymTy x1579 = (SymTy) tmpval5194;
+            CursorTy end_x1579 = (CursorTy) tmpcur5195;
+
+            *(TagTyPacked *) loc1855 = 1;
+
+            CursorTy writetag3657 = loc1855 + 1;
+            CursorTy writecur3658 = (CursorTy) end_y1580;
+
+            *(SymTy *) writecur3658 = x1579;
+
+            CursorTy writecur3659 = writecur3658 + sizeof(SymTy);
+            CursorTy pvrtmp5197 = (CursorTy) writecur3659;
+            CursorTy pvrtmp5196 = (CursorTy) loc1855;
+            CursorTy taildc3132 = (CursorTy) pvrtmp5196;
+            CursorTy end_taildc3132 = (CursorTy) pvrtmp5197;
+            CursorTy pvrtmp5199 = (CursorTy) end_taildc3132;
+            CursorTy pvrtmp5198 = (CursorTy) taildc3132;
+            CursorTy fltPrd4420 = (CursorTy) pvrtmp5198;
+            CursorTy fltPrd4421 = (CursorTy) pvrtmp5199;
+
+            return (CursorCursorCursorCursorProd) {end_r1857_3384, jump3130,
+                                                   fltPrd4420, fltPrd4421};
+            break;
+        }
+
+      case 2:
+        {
+            CursorTy field_cur3661 = (CursorTy) tmpcur5173;
+            CursorTy case2265 = (CursorTy) field_cur3661;
+            SymTy tmpval5200 = *(SymTy *) case2265;
+            CursorTy tmpcur5201 = case2265 + sizeof(SymTy);
+            SymTy x1582 = (SymTy) tmpval5200;
+            CursorTy end_x1582 = (CursorTy) tmpcur5201;
+            CursorTy jump3133 = case2265 + 8;
+
+            *(TagTyPacked *) loc1855 = 2;
+
+            CursorTy writetag3663 = loc1855 + 1;
+
+            *(SymTy *) writetag3663 = x1582;
+
+            CursorTy writecur3664 = writetag3663 + sizeof(SymTy);
+            CursorTy pvrtmp5203 = (CursorTy) writecur3664;
+            CursorTy pvrtmp5202 = (CursorTy) loc1855;
+            CursorTy taildc3134 = (CursorTy) pvrtmp5202;
+            CursorTy end_taildc3134 = (CursorTy) pvrtmp5203;
+            CursorTy pvrtmp5205 = (CursorTy) end_taildc3134;
+            CursorTy pvrtmp5204 = (CursorTy) taildc3134;
+            CursorTy fltPrd4422 = (CursorTy) pvrtmp5204;
+            CursorTy fltPrd4423 = (CursorTy) pvrtmp5205;
+
+            return (CursorCursorCursorCursorProd) {end_r1857, jump3133,
+                                                   fltPrd4422, fltPrd4423};
+            break;
+        }
+
+      case 255:
+        {
+            CursorTy tmpcur6597 = *(CursorTy *) tmpcur5173;
+            CursorTy tmpaftercur6598 = tmpcur5173 + 8;
+            TagTyPacked tagtmp6599 = *(TagTyPacked *) tmpcur6597;
+            CursorTy tailtmp6600 = tmpcur6597 + 1;
+
+            tmpval5172 = tagtmp6599;
+            tmpcur5173 = tailtmp6600;
+            goto switch5206;
+            break;
+        }
+
+      case 254:
+        {
+            CursorTy tmpcur6597 = *(CursorTy *) tmpcur5173;
+            CursorTy tmpaftercur6598 = tmpcur5173 + 8;
+            TagTyPacked tagtmp6599 = *(TagTyPacked *) tmpcur6597;
+            CursorTy tailtmp6600 = tmpcur6597 + 1;
+
+            tmpval5172 = tagtmp6599;
+            tmpcur5173 = tailtmp6600;
+            goto switch5206;
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval5172");
+            exit(1);
+        }
+    }
+}
+CursorCursorCursorCursorProd _copy_Datum(CursorTy end_r1862, CursorTy end_r1863,
+                                         CursorTy loc1861, CursorTy arg1593)
+{
+    CursorTy loc1860 = (CursorTy) arg1593;
+
+    if (loc1861 + 18 > end_r1863) {
+        ChunkTy new_chunk85 = alloc_chunk(end_r1863);
+        CursorTy chunk_start86 = new_chunk85.start_ptr;
+        CursorTy chunk_end87 = new_chunk85.end_ptr;
+
+        end_r1863 = chunk_end87;
+        *(TagTyPacked *) loc1861 = 255;
+
+        CursorTy redir = loc1861 + 1;
+
+        *(CursorTy *) redir = chunk_start86;
+        loc1861 = chunk_start86;
+    }
+
+    TagTyPacked tmpval5218 = *(TagTyPacked *) arg1593;
+    CursorTy tmpcur5219 = arg1593 + 1;
+
+
+  switch5226:
+    ;
+    switch (tmpval5218) {
+
+      case 0:
+        {
+            CursorTy field_cur3673 = (CursorTy) tmpcur5219;
+            CursorTy case2281 = (CursorTy) field_cur3673;
+            IntTy tmpval5220 = *(IntTy *) case2281;
+            CursorTy tmpcur5221 = case2281 + sizeof(IntTy);
+            IntTy x1594 = (IntTy) tmpval5220;
+            CursorTy end_x1594 = (CursorTy) tmpcur5221;
+            CursorTy jump3142 = case2281 + 8;
+
+            *(TagTyPacked *) loc1861 = 0;
+
+            CursorTy writetag3675 = loc1861 + 1;
+
+            *(IntTy *) writetag3675 = x1594;
+
+            CursorTy writecur3676 = writetag3675 + sizeof(IntTy);
+            CursorTy pvrtmp5223 = (CursorTy) writecur3676;
+            CursorTy pvrtmp5222 = (CursorTy) loc1861;
+            CursorTy taildc3143 = (CursorTy) pvrtmp5222;
+            CursorTy end_taildc3143 = (CursorTy) pvrtmp5223;
+            CursorTy pvrtmp5225 = (CursorTy) end_taildc3143;
+            CursorTy pvrtmp5224 = (CursorTy) taildc3143;
+            CursorTy fltPrd4424 = (CursorTy) pvrtmp5224;
+            CursorTy fltPrd4425 = (CursorTy) pvrtmp5225;
+
+            return (CursorCursorCursorCursorProd) {end_r1863, jump3142,
+                                                   fltPrd4424, fltPrd4425};
+            break;
+        }
+
+      case 255:
+        {
+            CursorTy tmpcur6605 = *(CursorTy *) tmpcur5219;
+            CursorTy tmpaftercur6606 = tmpcur5219 + 8;
+            TagTyPacked tagtmp6607 = *(TagTyPacked *) tmpcur6605;
+            CursorTy tailtmp6608 = tmpcur6605 + 1;
+
+            tmpval5218 = tagtmp6607;
+            tmpcur5219 = tailtmp6608;
+            goto switch5226;
+            break;
+        }
+
+      case 254:
+        {
+            CursorTy tmpcur6605 = *(CursorTy *) tmpcur5219;
+            CursorTy tmpaftercur6606 = tmpcur5219 + 8;
+            TagTyPacked tagtmp6607 = *(TagTyPacked *) tmpcur6605;
+            CursorTy tailtmp6608 = tmpcur6605 + 1;
+
+            tmpval5218 = tagtmp6607;
+            tmpcur5219 = tailtmp6608;
+            goto switch5226;
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval5218");
+            exit(1);
+        }
+    }
+}
+CursorCursorCursorCursorProd _copy_LAMBDACASE(CursorTy end_r1868,
+                                              CursorTy end_r1869,
+                                              CursorTy loc1867,
+                                              CursorTy arg1599)
+{
+    CursorTy loc1866 = (CursorTy) arg1599;
+
+    if (loc1867 + 18 > end_r1869) {
+        ChunkTy new_chunk91 = alloc_chunk(end_r1869);
+        CursorTy chunk_start92 = new_chunk91.start_ptr;
+        CursorTy chunk_end93 = new_chunk91.end_ptr;
+
+        end_r1869 = chunk_end93;
+        *(TagTyPacked *) loc1867 = 255;
+
+        CursorTy redir = loc1867 + 1;
+
+        *(CursorTy *) redir = chunk_start92;
+        loc1867 = chunk_start92;
+    }
+
+    TagTyPacked tmpval5232 = *(TagTyPacked *) arg1599;
+    CursorTy tmpcur5233 = arg1599 + 1;
+
+
+  switch5266:
+    ;
+    switch (tmpval5232) {
+
+      case 0:
+        {
+            CursorTy field_cur3680 = (CursorTy) tmpcur5233;
+            CursorTy case2290 = (CursorTy) field_cur3680;
+            CursorTy x1600 = (CursorTy) case2290;
+            CursorTy loc2302 = loc1867 + 1;
+            CursorCursorCursorCursorProd tmp_struct88 =
+                                          _copy_Formals(end_r1868, end_r1869, loc2302, x1600);
+            CursorTy pvrtmp5234 = tmp_struct88.field0;
+            CursorTy pvrtmp5235 = tmp_struct88.field1;
+            CursorTy pvrtmp5236 = tmp_struct88.field2;
+            CursorTy pvrtmp5237 = tmp_struct88.field3;
+            CursorTy fltPrd4426 = (CursorTy) pvrtmp5236;
+            CursorTy fltPrd4427 = (CursorTy) pvrtmp5237;
+            CursorTy pvrtmp5239 = (CursorTy) fltPrd4427;
+            CursorTy pvrtmp5238 = (CursorTy) fltPrd4426;
+            CursorTy y1603 = (CursorTy) pvrtmp5238;
+            CursorTy fltPrd4428 = (CursorTy) pvrtmp5236;
+            CursorTy fltPrd4429 = (CursorTy) pvrtmp5237;
+            CursorTy pvrtmp5241 = (CursorTy) fltPrd4429;
+            CursorTy pvrtmp5240 = (CursorTy) fltPrd4428;
+            CursorTy end_y1603 = (CursorTy) pvrtmp5241;
+            CursorTy end_r1869_3385 = (CursorTy) pvrtmp5234;
+            CursorTy endof3146 = (CursorTy) pvrtmp5235;
+            CursorTy case2291 = (CursorTy) endof3146;
+            CursorTy x1601 = (CursorTy) case2291;
+            CursorTy loc2303 = (CursorTy) end_y1603;
+            CursorCursorCursorCursorProd tmp_struct89 =
+                                          _copy_ListExpr(end_r1868, end_r1869_3385, loc2303, x1601);
+            CursorTy pvrtmp5242 = tmp_struct89.field0;
+            CursorTy pvrtmp5243 = tmp_struct89.field1;
+            CursorTy pvrtmp5244 = tmp_struct89.field2;
+            CursorTy pvrtmp5245 = tmp_struct89.field3;
+            CursorTy fltPrd4430 = (CursorTy) pvrtmp5244;
+            CursorTy fltPrd4431 = (CursorTy) pvrtmp5245;
+            CursorTy pvrtmp5247 = (CursorTy) fltPrd4431;
+            CursorTy pvrtmp5246 = (CursorTy) fltPrd4430;
+            CursorTy y1604 = (CursorTy) pvrtmp5246;
+            CursorTy fltPrd4432 = (CursorTy) pvrtmp5244;
+            CursorTy fltPrd4433 = (CursorTy) pvrtmp5245;
+            CursorTy pvrtmp5249 = (CursorTy) fltPrd4433;
+            CursorTy pvrtmp5248 = (CursorTy) fltPrd4432;
+            CursorTy end_y1604 = (CursorTy) pvrtmp5249;
+            CursorTy end_r1869_3385_3386 = (CursorTy) pvrtmp5242;
+            CursorTy endof3147 = (CursorTy) pvrtmp5243;
+            CursorTy case2292 = (CursorTy) endof3147;
+            CursorTy x1602 = (CursorTy) case2292;
+            CursorTy loc2304 = (CursorTy) end_y1604;
+            CursorCursorCursorCursorProd tmp_struct90 =
+                                          _copy_LAMBDACASE(end_r1868, end_r1869_3385_3386, loc2304, x1602);
+            CursorTy pvrtmp5250 = tmp_struct90.field0;
+            CursorTy pvrtmp5251 = tmp_struct90.field1;
+            CursorTy pvrtmp5252 = tmp_struct90.field2;
+            CursorTy pvrtmp5253 = tmp_struct90.field3;
+            CursorTy fltPrd4434 = (CursorTy) pvrtmp5252;
+            CursorTy fltPrd4435 = (CursorTy) pvrtmp5253;
+            CursorTy pvrtmp5255 = (CursorTy) fltPrd4435;
+            CursorTy pvrtmp5254 = (CursorTy) fltPrd4434;
+            CursorTy y1605 = (CursorTy) pvrtmp5254;
+            CursorTy fltPrd4436 = (CursorTy) pvrtmp5252;
+            CursorTy fltPrd4437 = (CursorTy) pvrtmp5253;
+            CursorTy pvrtmp5257 = (CursorTy) fltPrd4437;
+            CursorTy pvrtmp5256 = (CursorTy) fltPrd4436;
+            CursorTy end_y1605 = (CursorTy) pvrtmp5257;
+            CursorTy end_r1869_3385_3386_3387 = (CursorTy) pvrtmp5250;
+            CursorTy endof3148 = (CursorTy) pvrtmp5251;
+
+            *(TagTyPacked *) loc1867 = 0;
+
+            CursorTy writetag3684 = loc1867 + 1;
+            CursorTy writecur3685 = (CursorTy) end_y1603;
+            CursorTy writecur3686 = (CursorTy) end_y1604;
+            CursorTy writecur3687 = (CursorTy) end_y1605;
+            CursorTy pvrtmp5259 = (CursorTy) writecur3687;
+            CursorTy pvrtmp5258 = (CursorTy) loc1867;
+            CursorTy taildc3149 = (CursorTy) pvrtmp5258;
+            CursorTy end_taildc3149 = (CursorTy) pvrtmp5259;
+            CursorTy pvrtmp5261 = (CursorTy) end_taildc3149;
+            CursorTy pvrtmp5260 = (CursorTy) taildc3149;
+            CursorTy fltPrd4438 = (CursorTy) pvrtmp5260;
+            CursorTy fltPrd4439 = (CursorTy) pvrtmp5261;
+
+            return (CursorCursorCursorCursorProd) {end_r1869_3385_3386_3387,
+                                                   endof3148, fltPrd4438,
+                                                   fltPrd4439};
+            break;
+        }
+
+      case 1:
+        {
+            CursorTy field_cur3689 = (CursorTy) tmpcur5233;
+            CursorTy jump3150 = loc1866 + 1;
+
+            *(TagTyPacked *) loc1867 = 1;
+
+            CursorTy writetag3690 = loc1867 + 1;
+            CursorTy pvrtmp5263 = (CursorTy) writetag3690;
+            CursorTy pvrtmp5262 = (CursorTy) loc1867;
+            CursorTy taildc3151 = (CursorTy) pvrtmp5262;
+            CursorTy end_taildc3151 = (CursorTy) pvrtmp5263;
+            CursorTy pvrtmp5265 = (CursorTy) end_taildc3151;
+            CursorTy pvrtmp5264 = (CursorTy) taildc3151;
+            CursorTy fltPrd4440 = (CursorTy) pvrtmp5264;
+            CursorTy fltPrd4441 = (CursorTy) pvrtmp5265;
+
+            return (CursorCursorCursorCursorProd) {end_r1869, jump3150,
+                                                   fltPrd4440, fltPrd4441};
+            break;
+        }
+
+      case 255:
+        {
+            CursorTy tmpcur6613 = *(CursorTy *) tmpcur5233;
+            CursorTy tmpaftercur6614 = tmpcur5233 + 8;
+            TagTyPacked tagtmp6615 = *(TagTyPacked *) tmpcur6613;
+            CursorTy tailtmp6616 = tmpcur6613 + 1;
+
+            tmpval5232 = tagtmp6615;
+            tmpcur5233 = tailtmp6616;
+            goto switch5266;
+            break;
+        }
+
+      case 254:
+        {
+            CursorTy tmpcur6613 = *(CursorTy *) tmpcur5233;
+            CursorTy tmpaftercur6614 = tmpcur5233 + 8;
+            TagTyPacked tagtmp6615 = *(TagTyPacked *) tmpcur6613;
+            CursorTy tailtmp6616 = tmpcur6613 + 1;
+
+            tmpval5232 = tagtmp6615;
+            tmpcur5233 = tailtmp6616;
+            goto switch5266;
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval5232");
+            exit(1);
+        }
+    }
+}
+CursorCursorCursorCursorProd _copy_LVBIND(CursorTy end_r1874,
+                                          CursorTy end_r1875, CursorTy loc1873,
+                                          CursorTy arg1613)
+{
+    CursorTy loc1872 = (CursorTy) arg1613;
+
+    if (loc1873 + 18 > end_r1875) {
+        ChunkTy new_chunk100 = alloc_chunk(end_r1875);
+        CursorTy chunk_start101 = new_chunk100.start_ptr;
+        CursorTy chunk_end102 = new_chunk100.end_ptr;
+
+        end_r1875 = chunk_end102;
+        *(TagTyPacked *) loc1873 = 255;
+
+        CursorTy redir = loc1873 + 1;
+
+        *(CursorTy *) redir = chunk_start101;
+        loc1873 = chunk_start101;
+    }
+
+    TagTyPacked tmpval5276 = *(TagTyPacked *) arg1613;
+    CursorTy tmpcur5277 = arg1613 + 1;
+
+
+  switch5310:
+    ;
+    switch (tmpval5276) {
+
+      case 0:
+        {
+            CursorTy field_cur3697 = (CursorTy) tmpcur5277;
+            CursorTy case2322 = (CursorTy) field_cur3697;
+            CursorTy x1614 = (CursorTy) case2322;
+            CursorTy loc2334 = loc1873 + 1;
+            CursorCursorCursorCursorProd tmp_struct97 =
+                                          _copy_ListSym(end_r1874, end_r1875, loc2334, x1614);
+            CursorTy pvrtmp5278 = tmp_struct97.field0;
+            CursorTy pvrtmp5279 = tmp_struct97.field1;
+            CursorTy pvrtmp5280 = tmp_struct97.field2;
+            CursorTy pvrtmp5281 = tmp_struct97.field3;
+            CursorTy fltPrd4442 = (CursorTy) pvrtmp5280;
+            CursorTy fltPrd4443 = (CursorTy) pvrtmp5281;
+            CursorTy pvrtmp5283 = (CursorTy) fltPrd4443;
+            CursorTy pvrtmp5282 = (CursorTy) fltPrd4442;
+            CursorTy y1617 = (CursorTy) pvrtmp5282;
+            CursorTy fltPrd4444 = (CursorTy) pvrtmp5280;
+            CursorTy fltPrd4445 = (CursorTy) pvrtmp5281;
+            CursorTy pvrtmp5285 = (CursorTy) fltPrd4445;
+            CursorTy pvrtmp5284 = (CursorTy) fltPrd4444;
+            CursorTy end_y1617 = (CursorTy) pvrtmp5285;
+            CursorTy end_r1875_3388 = (CursorTy) pvrtmp5278;
+            CursorTy endof3158 = (CursorTy) pvrtmp5279;
+            CursorTy case2323 = (CursorTy) endof3158;
+            CursorTy x1615 = (CursorTy) case2323;
+            CursorTy loc2335 = (CursorTy) end_y1617;
+            CursorCursorCursorCursorProd tmp_struct98 =
+                                          _copy_Expr(end_r1874, end_r1875_3388, loc2335, x1615);
+            CursorTy pvrtmp5286 = tmp_struct98.field0;
+            CursorTy pvrtmp5287 = tmp_struct98.field1;
+            CursorTy pvrtmp5288 = tmp_struct98.field2;
+            CursorTy pvrtmp5289 = tmp_struct98.field3;
+            CursorTy fltPrd4446 = (CursorTy) pvrtmp5288;
+            CursorTy fltPrd4447 = (CursorTy) pvrtmp5289;
+            CursorTy pvrtmp5291 = (CursorTy) fltPrd4447;
+            CursorTy pvrtmp5290 = (CursorTy) fltPrd4446;
+            CursorTy y1618 = (CursorTy) pvrtmp5290;
+            CursorTy fltPrd4448 = (CursorTy) pvrtmp5288;
+            CursorTy fltPrd4449 = (CursorTy) pvrtmp5289;
+            CursorTy pvrtmp5293 = (CursorTy) fltPrd4449;
+            CursorTy pvrtmp5292 = (CursorTy) fltPrd4448;
+            CursorTy end_y1618 = (CursorTy) pvrtmp5293;
+            CursorTy end_r1875_3388_3389 = (CursorTy) pvrtmp5286;
+            CursorTy endof3159 = (CursorTy) pvrtmp5287;
+            CursorTy case2324 = (CursorTy) endof3159;
+            CursorTy x1616 = (CursorTy) case2324;
+            CursorTy loc2336 = (CursorTy) end_y1618;
+            CursorCursorCursorCursorProd tmp_struct99 =
+                                          _copy_LVBIND(end_r1874, end_r1875_3388_3389, loc2336, x1616);
+            CursorTy pvrtmp5294 = tmp_struct99.field0;
+            CursorTy pvrtmp5295 = tmp_struct99.field1;
+            CursorTy pvrtmp5296 = tmp_struct99.field2;
+            CursorTy pvrtmp5297 = tmp_struct99.field3;
+            CursorTy fltPrd4450 = (CursorTy) pvrtmp5296;
+            CursorTy fltPrd4451 = (CursorTy) pvrtmp5297;
+            CursorTy pvrtmp5299 = (CursorTy) fltPrd4451;
+            CursorTy pvrtmp5298 = (CursorTy) fltPrd4450;
+            CursorTy y1619 = (CursorTy) pvrtmp5298;
+            CursorTy fltPrd4452 = (CursorTy) pvrtmp5296;
+            CursorTy fltPrd4453 = (CursorTy) pvrtmp5297;
+            CursorTy pvrtmp5301 = (CursorTy) fltPrd4453;
+            CursorTy pvrtmp5300 = (CursorTy) fltPrd4452;
+            CursorTy end_y1619 = (CursorTy) pvrtmp5301;
+            CursorTy end_r1875_3388_3389_3390 = (CursorTy) pvrtmp5294;
+            CursorTy endof3160 = (CursorTy) pvrtmp5295;
+
+            *(TagTyPacked *) loc1873 = 0;
+
+            CursorTy writetag3701 = loc1873 + 1;
+            CursorTy writecur3702 = (CursorTy) end_y1617;
+            CursorTy writecur3703 = (CursorTy) end_y1618;
+            CursorTy writecur3704 = (CursorTy) end_y1619;
+            CursorTy pvrtmp5303 = (CursorTy) writecur3704;
+            CursorTy pvrtmp5302 = (CursorTy) loc1873;
+            CursorTy taildc3161 = (CursorTy) pvrtmp5302;
+            CursorTy end_taildc3161 = (CursorTy) pvrtmp5303;
+            CursorTy pvrtmp5305 = (CursorTy) end_taildc3161;
+            CursorTy pvrtmp5304 = (CursorTy) taildc3161;
+            CursorTy fltPrd4454 = (CursorTy) pvrtmp5304;
+            CursorTy fltPrd4455 = (CursorTy) pvrtmp5305;
+
+            return (CursorCursorCursorCursorProd) {end_r1875_3388_3389_3390,
+                                                   endof3160, fltPrd4454,
+                                                   fltPrd4455};
+            break;
+        }
+
+      case 1:
+        {
+            CursorTy field_cur3706 = (CursorTy) tmpcur5277;
+            CursorTy jump3162 = loc1872 + 1;
+
+            *(TagTyPacked *) loc1873 = 1;
+
+            CursorTy writetag3707 = loc1873 + 1;
+            CursorTy pvrtmp5307 = (CursorTy) writetag3707;
+            CursorTy pvrtmp5306 = (CursorTy) loc1873;
+            CursorTy taildc3163 = (CursorTy) pvrtmp5306;
+            CursorTy end_taildc3163 = (CursorTy) pvrtmp5307;
+            CursorTy pvrtmp5309 = (CursorTy) end_taildc3163;
+            CursorTy pvrtmp5308 = (CursorTy) taildc3163;
+            CursorTy fltPrd4456 = (CursorTy) pvrtmp5308;
+            CursorTy fltPrd4457 = (CursorTy) pvrtmp5309;
+
+            return (CursorCursorCursorCursorProd) {end_r1875, jump3162,
+                                                   fltPrd4456, fltPrd4457};
+            break;
+        }
+
+      case 255:
+        {
+            CursorTy tmpcur6621 = *(CursorTy *) tmpcur5277;
+            CursorTy tmpaftercur6622 = tmpcur5277 + 8;
+            TagTyPacked tagtmp6623 = *(TagTyPacked *) tmpcur6621;
+            CursorTy tailtmp6624 = tmpcur6621 + 1;
+
+            tmpval5276 = tagtmp6623;
+            tmpcur5277 = tailtmp6624;
+            goto switch5310;
+            break;
+        }
+
+      case 254:
+        {
+            CursorTy tmpcur6621 = *(CursorTy *) tmpcur5277;
+            CursorTy tmpaftercur6622 = tmpcur5277 + 8;
+            TagTyPacked tagtmp6623 = *(TagTyPacked *) tmpcur6621;
+            CursorTy tailtmp6624 = tmpcur6621 + 1;
+
+            tmpval5276 = tagtmp6623;
+            tmpcur5277 = tailtmp6624;
+            goto switch5310;
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval5276");
+            exit(1);
+        }
+    }
+}
+CursorCursorCursorCursorProd _copy_Expr(CursorTy end_r1880, CursorTy end_r1881,
+                                        CursorTy loc1879, CursorTy arg1627)
+{
+    CursorTy loc1878 = (CursorTy) arg1627;
+
+    if (loc1879 + 18 > end_r1881) {
+        ChunkTy new_chunk128 = alloc_chunk(end_r1881);
+        CursorTy chunk_start129 = new_chunk128.start_ptr;
+        CursorTy chunk_end130 = new_chunk128.end_ptr;
+
+        end_r1881 = chunk_end130;
+        *(TagTyPacked *) loc1879 = 255;
+
+        CursorTy redir = loc1879 + 1;
+
+        *(CursorTy *) redir = chunk_start129;
+        loc1879 = chunk_start129;
+    }
+
+    CursorTy loc2441 = loc1879 + 1;
+    CursorTy loc2442 = loc2441 + 8;
+    TagTyPacked tmpval5320 = *(TagTyPacked *) arg1627;
+    CursorTy tmpcur5321 = arg1627 + 1;
+
+
+  switch5580:
+    ;
+    switch (tmpval5320) {
+
+      case 0:
+        {
+            CursorTy field_cur3714 = (CursorTy) tmpcur5321;
+            CursorTy case2354 = (CursorTy) field_cur3714;
+            SymTy tmpval5322 = *(SymTy *) case2354;
+            CursorTy tmpcur5323 = case2354 + sizeof(SymTy);
+            SymTy x1628 = (SymTy) tmpval5322;
+            CursorTy end_x1628 = (CursorTy) tmpcur5323;
+            CursorTy jump3170 = case2354 + 8;
+
+            *(TagTyPacked *) loc1879 = 0;
+
+            CursorTy writetag3716 = loc1879 + 1;
+
+            *(SymTy *) writetag3716 = x1628;
+
+            CursorTy writecur3717 = writetag3716 + sizeof(SymTy);
+            CursorTy pvrtmp5325 = (CursorTy) writecur3717;
+            CursorTy pvrtmp5324 = (CursorTy) loc1879;
+            CursorTy taildc3171 = (CursorTy) pvrtmp5324;
+            CursorTy end_taildc3171 = (CursorTy) pvrtmp5325;
+            CursorTy pvrtmp5327 = (CursorTy) end_taildc3171;
+            CursorTy pvrtmp5326 = (CursorTy) taildc3171;
+            CursorTy fltPrd4458 = (CursorTy) pvrtmp5326;
+            CursorTy fltPrd4459 = (CursorTy) pvrtmp5327;
+
+            return (CursorCursorCursorCursorProd) {end_r1881, jump3170,
+                                                   fltPrd4458, fltPrd4459};
+            break;
+        }
+
+      case 1:
+        {
+            CursorTy field_cur3719 = (CursorTy) tmpcur5321;
+            CursorTy case2358 = (CursorTy) field_cur3719;
+            CursorTy x1630 = (CursorTy) case2358;
+            CursorTy loc2366 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct106 =
+                                          _copy_Formals(end_r1880, end_r1881, loc2366, x1630);
+            CursorTy pvrtmp5328 = tmp_struct106.field0;
+            CursorTy pvrtmp5329 = tmp_struct106.field1;
+            CursorTy pvrtmp5330 = tmp_struct106.field2;
+            CursorTy pvrtmp5331 = tmp_struct106.field3;
+            CursorTy fltPrd4460 = (CursorTy) pvrtmp5330;
+            CursorTy fltPrd4461 = (CursorTy) pvrtmp5331;
+            CursorTy pvrtmp5333 = (CursorTy) fltPrd4461;
+            CursorTy pvrtmp5332 = (CursorTy) fltPrd4460;
+            CursorTy y1632 = (CursorTy) pvrtmp5332;
+            CursorTy fltPrd4462 = (CursorTy) pvrtmp5330;
+            CursorTy fltPrd4463 = (CursorTy) pvrtmp5331;
+            CursorTy pvrtmp5335 = (CursorTy) fltPrd4463;
+            CursorTy pvrtmp5334 = (CursorTy) fltPrd4462;
+            CursorTy end_y1632 = (CursorTy) pvrtmp5335;
+            CursorTy end_r1881_3391 = (CursorTy) pvrtmp5328;
+            CursorTy endof3172 = (CursorTy) pvrtmp5329;
+            CursorTy case2359 = (CursorTy) endof3172;
+            CursorTy x1631 = (CursorTy) case2359;
+            CursorTy loc2367 = (CursorTy) end_y1632;
+            CursorCursorCursorCursorProd tmp_struct107 =
+                                          _copy_ListExpr(end_r1880, end_r1881_3391, loc2367, x1631);
+            CursorTy pvrtmp5336 = tmp_struct107.field0;
+            CursorTy pvrtmp5337 = tmp_struct107.field1;
+            CursorTy pvrtmp5338 = tmp_struct107.field2;
+            CursorTy pvrtmp5339 = tmp_struct107.field3;
+            CursorTy fltPrd4464 = (CursorTy) pvrtmp5338;
+            CursorTy fltPrd4465 = (CursorTy) pvrtmp5339;
+            CursorTy pvrtmp5341 = (CursorTy) fltPrd4465;
+            CursorTy pvrtmp5340 = (CursorTy) fltPrd4464;
+            CursorTy y1633 = (CursorTy) pvrtmp5340;
+            CursorTy fltPrd4466 = (CursorTy) pvrtmp5338;
+            CursorTy fltPrd4467 = (CursorTy) pvrtmp5339;
+            CursorTy pvrtmp5343 = (CursorTy) fltPrd4467;
+            CursorTy pvrtmp5342 = (CursorTy) fltPrd4466;
+            CursorTy end_y1633 = (CursorTy) pvrtmp5343;
+            CursorTy end_r1881_3391_3392 = (CursorTy) pvrtmp5336;
+            CursorTy endof3173 = (CursorTy) pvrtmp5337;
+
+            *(TagTyPacked *) loc1879 = 1;
+
+            CursorTy writetag3722 = loc1879 + 1;
+            CursorTy writecur3723 = (CursorTy) end_y1632;
+            CursorTy writecur3724 = (CursorTy) end_y1633;
+            CursorTy pvrtmp5345 = (CursorTy) writecur3724;
+            CursorTy pvrtmp5344 = (CursorTy) loc1879;
+            CursorTy taildc3174 = (CursorTy) pvrtmp5344;
+            CursorTy end_taildc3174 = (CursorTy) pvrtmp5345;
+            CursorTy pvrtmp5347 = (CursorTy) end_taildc3174;
+            CursorTy pvrtmp5346 = (CursorTy) taildc3174;
+            CursorTy fltPrd4468 = (CursorTy) pvrtmp5346;
+            CursorTy fltPrd4469 = (CursorTy) pvrtmp5347;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3391_3392,
+                                                   endof3173, fltPrd4468,
+                                                   fltPrd4469};
+            break;
+        }
+
+      case 2:
+        {
+            CursorTy field_cur3726 = (CursorTy) tmpcur5321;
+            CursorTy case2370 = (CursorTy) field_cur3726;
+            CursorTy x1634 = (CursorTy) case2370;
+            CursorTy loc2374 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct108 =
+                                          _copy_LAMBDACASE(end_r1880, end_r1881, loc2374, x1634);
+            CursorTy pvrtmp5348 = tmp_struct108.field0;
+            CursorTy pvrtmp5349 = tmp_struct108.field1;
+            CursorTy pvrtmp5350 = tmp_struct108.field2;
+            CursorTy pvrtmp5351 = tmp_struct108.field3;
+            CursorTy fltPrd4470 = (CursorTy) pvrtmp5350;
+            CursorTy fltPrd4471 = (CursorTy) pvrtmp5351;
+            CursorTy pvrtmp5353 = (CursorTy) fltPrd4471;
+            CursorTy pvrtmp5352 = (CursorTy) fltPrd4470;
+            CursorTy y1635 = (CursorTy) pvrtmp5352;
+            CursorTy fltPrd4472 = (CursorTy) pvrtmp5350;
+            CursorTy fltPrd4473 = (CursorTy) pvrtmp5351;
+            CursorTy pvrtmp5355 = (CursorTy) fltPrd4473;
+            CursorTy pvrtmp5354 = (CursorTy) fltPrd4472;
+            CursorTy end_y1635 = (CursorTy) pvrtmp5355;
+            CursorTy end_r1881_3393 = (CursorTy) pvrtmp5348;
+            CursorTy endof3175 = (CursorTy) pvrtmp5349;
+
+            *(TagTyPacked *) loc1879 = 2;
+
+            CursorTy writetag3728 = loc1879 + 1;
+            CursorTy writecur3729 = (CursorTy) end_y1635;
+            CursorTy pvrtmp5357 = (CursorTy) writecur3729;
+            CursorTy pvrtmp5356 = (CursorTy) loc1879;
+            CursorTy taildc3176 = (CursorTy) pvrtmp5356;
+            CursorTy end_taildc3176 = (CursorTy) pvrtmp5357;
+            CursorTy pvrtmp5359 = (CursorTy) end_taildc3176;
+            CursorTy pvrtmp5358 = (CursorTy) taildc3176;
+            CursorTy fltPrd4474 = (CursorTy) pvrtmp5358;
+            CursorTy fltPrd4475 = (CursorTy) pvrtmp5359;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3393, endof3175,
+                                                   fltPrd4474, fltPrd4475};
+            break;
+        }
+
+      case 3:
+        {
+            CursorTy field_cur3731 = (CursorTy) tmpcur5321;
+            CursorTy case2376 = (CursorTy) field_cur3731;
+            CursorTy x1636 = (CursorTy) case2376;
+            CursorTy loc2388 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct109 =
+                                          _copy_Expr(end_r1880, end_r1881, loc2388, x1636);
+            CursorTy pvrtmp5360 = tmp_struct109.field0;
+            CursorTy pvrtmp5361 = tmp_struct109.field1;
+            CursorTy pvrtmp5362 = tmp_struct109.field2;
+            CursorTy pvrtmp5363 = tmp_struct109.field3;
+            CursorTy fltPrd4476 = (CursorTy) pvrtmp5362;
+            CursorTy fltPrd4477 = (CursorTy) pvrtmp5363;
+            CursorTy pvrtmp5365 = (CursorTy) fltPrd4477;
+            CursorTy pvrtmp5364 = (CursorTy) fltPrd4476;
+            CursorTy y1639 = (CursorTy) pvrtmp5364;
+            CursorTy fltPrd4478 = (CursorTy) pvrtmp5362;
+            CursorTy fltPrd4479 = (CursorTy) pvrtmp5363;
+            CursorTy pvrtmp5367 = (CursorTy) fltPrd4479;
+            CursorTy pvrtmp5366 = (CursorTy) fltPrd4478;
+            CursorTy end_y1639 = (CursorTy) pvrtmp5367;
+            CursorTy end_r1881_3394 = (CursorTy) pvrtmp5360;
+            CursorTy endof3177 = (CursorTy) pvrtmp5361;
+            CursorTy case2377 = (CursorTy) endof3177;
+            CursorTy x1637 = (CursorTy) case2377;
+            CursorTy loc2389 = (CursorTy) end_y1639;
+            CursorCursorCursorCursorProd tmp_struct110 =
+                                          _copy_Expr(end_r1880, end_r1881_3394, loc2389, x1637);
+            CursorTy pvrtmp5368 = tmp_struct110.field0;
+            CursorTy pvrtmp5369 = tmp_struct110.field1;
+            CursorTy pvrtmp5370 = tmp_struct110.field2;
+            CursorTy pvrtmp5371 = tmp_struct110.field3;
+            CursorTy fltPrd4480 = (CursorTy) pvrtmp5370;
+            CursorTy fltPrd4481 = (CursorTy) pvrtmp5371;
+            CursorTy pvrtmp5373 = (CursorTy) fltPrd4481;
+            CursorTy pvrtmp5372 = (CursorTy) fltPrd4480;
+            CursorTy y1640 = (CursorTy) pvrtmp5372;
+            CursorTy fltPrd4482 = (CursorTy) pvrtmp5370;
+            CursorTy fltPrd4483 = (CursorTy) pvrtmp5371;
+            CursorTy pvrtmp5375 = (CursorTy) fltPrd4483;
+            CursorTy pvrtmp5374 = (CursorTy) fltPrd4482;
+            CursorTy end_y1640 = (CursorTy) pvrtmp5375;
+            CursorTy end_r1881_3394_3395 = (CursorTy) pvrtmp5368;
+            CursorTy endof3178 = (CursorTy) pvrtmp5369;
+            CursorTy case2378 = (CursorTy) endof3178;
+            CursorTy x1638 = (CursorTy) case2378;
+            CursorTy loc2390 = (CursorTy) end_y1640;
+            CursorCursorCursorCursorProd tmp_struct111 =
+                                          _copy_Expr(end_r1880, end_r1881_3394_3395, loc2390, x1638);
+            CursorTy pvrtmp5376 = tmp_struct111.field0;
+            CursorTy pvrtmp5377 = tmp_struct111.field1;
+            CursorTy pvrtmp5378 = tmp_struct111.field2;
+            CursorTy pvrtmp5379 = tmp_struct111.field3;
+            CursorTy fltPrd4484 = (CursorTy) pvrtmp5378;
+            CursorTy fltPrd4485 = (CursorTy) pvrtmp5379;
+            CursorTy pvrtmp5381 = (CursorTy) fltPrd4485;
+            CursorTy pvrtmp5380 = (CursorTy) fltPrd4484;
+            CursorTy y1641 = (CursorTy) pvrtmp5380;
+            CursorTy fltPrd4486 = (CursorTy) pvrtmp5378;
+            CursorTy fltPrd4487 = (CursorTy) pvrtmp5379;
+            CursorTy pvrtmp5383 = (CursorTy) fltPrd4487;
+            CursorTy pvrtmp5382 = (CursorTy) fltPrd4486;
+            CursorTy end_y1641 = (CursorTy) pvrtmp5383;
+            CursorTy end_r1881_3394_3395_3396 = (CursorTy) pvrtmp5376;
+            CursorTy endof3179 = (CursorTy) pvrtmp5377;
+
+            *(TagTyPacked *) loc1879 = 3;
+
+            CursorTy writetag3735 = loc1879 + 1;
+            CursorTy writecur3736 = (CursorTy) end_y1639;
+            CursorTy writecur3737 = (CursorTy) end_y1640;
+            CursorTy writecur3738 = (CursorTy) end_y1641;
+            CursorTy pvrtmp5385 = (CursorTy) writecur3738;
+            CursorTy pvrtmp5384 = (CursorTy) loc1879;
+            CursorTy taildc3180 = (CursorTy) pvrtmp5384;
+            CursorTy end_taildc3180 = (CursorTy) pvrtmp5385;
+            CursorTy pvrtmp5387 = (CursorTy) end_taildc3180;
+            CursorTy pvrtmp5386 = (CursorTy) taildc3180;
+            CursorTy fltPrd4488 = (CursorTy) pvrtmp5386;
+            CursorTy fltPrd4489 = (CursorTy) pvrtmp5387;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3394_3395_3396,
+                                                   endof3179, fltPrd4488,
+                                                   fltPrd4489};
+            break;
+        }
+
+      case 4:
+        {
+            CursorTy field_cur3740 = (CursorTy) tmpcur5321;
+            CursorTy case2394 = (CursorTy) field_cur3740;
+            CursorTy x1642 = (CursorTy) case2394;
+            CursorTy loc2398 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct112 =
+                                          _copy_ListExpr(end_r1880, end_r1881, loc2398, x1642);
+            CursorTy pvrtmp5388 = tmp_struct112.field0;
+            CursorTy pvrtmp5389 = tmp_struct112.field1;
+            CursorTy pvrtmp5390 = tmp_struct112.field2;
+            CursorTy pvrtmp5391 = tmp_struct112.field3;
+            CursorTy fltPrd4490 = (CursorTy) pvrtmp5390;
+            CursorTy fltPrd4491 = (CursorTy) pvrtmp5391;
+            CursorTy pvrtmp5393 = (CursorTy) fltPrd4491;
+            CursorTy pvrtmp5392 = (CursorTy) fltPrd4490;
+            CursorTy y1643 = (CursorTy) pvrtmp5392;
+            CursorTy fltPrd4492 = (CursorTy) pvrtmp5390;
+            CursorTy fltPrd4493 = (CursorTy) pvrtmp5391;
+            CursorTy pvrtmp5395 = (CursorTy) fltPrd4493;
+            CursorTy pvrtmp5394 = (CursorTy) fltPrd4492;
+            CursorTy end_y1643 = (CursorTy) pvrtmp5395;
+            CursorTy end_r1881_3397 = (CursorTy) pvrtmp5388;
+            CursorTy endof3181 = (CursorTy) pvrtmp5389;
+
+            *(TagTyPacked *) loc1879 = 4;
+
+            CursorTy writetag3742 = loc1879 + 1;
+            CursorTy writecur3743 = (CursorTy) end_y1643;
+            CursorTy pvrtmp5397 = (CursorTy) writecur3743;
+            CursorTy pvrtmp5396 = (CursorTy) loc1879;
+            CursorTy taildc3182 = (CursorTy) pvrtmp5396;
+            CursorTy end_taildc3182 = (CursorTy) pvrtmp5397;
+            CursorTy pvrtmp5399 = (CursorTy) end_taildc3182;
+            CursorTy pvrtmp5398 = (CursorTy) taildc3182;
+            CursorTy fltPrd4494 = (CursorTy) pvrtmp5398;
+            CursorTy fltPrd4495 = (CursorTy) pvrtmp5399;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3397, endof3181,
+                                                   fltPrd4494, fltPrd4495};
+            break;
+        }
+
+      case 5:
+        {
+            CursorTy field_cur3745 = (CursorTy) tmpcur5321;
+            CursorTy case2400 = (CursorTy) field_cur3745;
+            CursorTy x1644 = (CursorTy) case2400;
+            CursorTy loc2408 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct113 =
+                                          _copy_Expr(end_r1880, end_r1881, loc2408, x1644);
+            CursorTy pvrtmp5400 = tmp_struct113.field0;
+            CursorTy pvrtmp5401 = tmp_struct113.field1;
+            CursorTy pvrtmp5402 = tmp_struct113.field2;
+            CursorTy pvrtmp5403 = tmp_struct113.field3;
+            CursorTy fltPrd4496 = (CursorTy) pvrtmp5402;
+            CursorTy fltPrd4497 = (CursorTy) pvrtmp5403;
+            CursorTy pvrtmp5405 = (CursorTy) fltPrd4497;
+            CursorTy pvrtmp5404 = (CursorTy) fltPrd4496;
+            CursorTy y1646 = (CursorTy) pvrtmp5404;
+            CursorTy fltPrd4498 = (CursorTy) pvrtmp5402;
+            CursorTy fltPrd4499 = (CursorTy) pvrtmp5403;
+            CursorTy pvrtmp5407 = (CursorTy) fltPrd4499;
+            CursorTy pvrtmp5406 = (CursorTy) fltPrd4498;
+            CursorTy end_y1646 = (CursorTy) pvrtmp5407;
+            CursorTy end_r1881_3398 = (CursorTy) pvrtmp5400;
+            CursorTy endof3183 = (CursorTy) pvrtmp5401;
+            CursorTy case2401 = (CursorTy) endof3183;
+            CursorTy x1645 = (CursorTy) case2401;
+            CursorTy loc2409 = (CursorTy) end_y1646;
+            CursorCursorCursorCursorProd tmp_struct114 =
+                                          _copy_ListExpr(end_r1880, end_r1881_3398, loc2409, x1645);
+            CursorTy pvrtmp5408 = tmp_struct114.field0;
+            CursorTy pvrtmp5409 = tmp_struct114.field1;
+            CursorTy pvrtmp5410 = tmp_struct114.field2;
+            CursorTy pvrtmp5411 = tmp_struct114.field3;
+            CursorTy fltPrd4500 = (CursorTy) pvrtmp5410;
+            CursorTy fltPrd4501 = (CursorTy) pvrtmp5411;
+            CursorTy pvrtmp5413 = (CursorTy) fltPrd4501;
+            CursorTy pvrtmp5412 = (CursorTy) fltPrd4500;
+            CursorTy y1647 = (CursorTy) pvrtmp5412;
+            CursorTy fltPrd4502 = (CursorTy) pvrtmp5410;
+            CursorTy fltPrd4503 = (CursorTy) pvrtmp5411;
+            CursorTy pvrtmp5415 = (CursorTy) fltPrd4503;
+            CursorTy pvrtmp5414 = (CursorTy) fltPrd4502;
+            CursorTy end_y1647 = (CursorTy) pvrtmp5415;
+            CursorTy end_r1881_3398_3399 = (CursorTy) pvrtmp5408;
+            CursorTy endof3184 = (CursorTy) pvrtmp5409;
+
+            *(TagTyPacked *) loc1879 = 5;
+
+            CursorTy writetag3748 = loc1879 + 1;
+            CursorTy writecur3749 = (CursorTy) end_y1646;
+            CursorTy writecur3750 = (CursorTy) end_y1647;
+            CursorTy pvrtmp5417 = (CursorTy) writecur3750;
+            CursorTy pvrtmp5416 = (CursorTy) loc1879;
+            CursorTy taildc3185 = (CursorTy) pvrtmp5416;
+            CursorTy end_taildc3185 = (CursorTy) pvrtmp5417;
+            CursorTy pvrtmp5419 = (CursorTy) end_taildc3185;
+            CursorTy pvrtmp5418 = (CursorTy) taildc3185;
+            CursorTy fltPrd4504 = (CursorTy) pvrtmp5418;
+            CursorTy fltPrd4505 = (CursorTy) pvrtmp5419;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3398_3399,
+                                                   endof3184, fltPrd4504,
+                                                   fltPrd4505};
+            break;
+        }
+
+      case 6:
+        {
+            CursorTy field_cur3752 = (CursorTy) tmpcur5321;
+            CursorTy case2412 = (CursorTy) field_cur3752;
+            CursorTy x1648 = (CursorTy) case2412;
+            CursorTy loc2420 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct115 =
+                                          _copy_LVBIND(end_r1880, end_r1881, loc2420, x1648);
+            CursorTy pvrtmp5420 = tmp_struct115.field0;
+            CursorTy pvrtmp5421 = tmp_struct115.field1;
+            CursorTy pvrtmp5422 = tmp_struct115.field2;
+            CursorTy pvrtmp5423 = tmp_struct115.field3;
+            CursorTy fltPrd4506 = (CursorTy) pvrtmp5422;
+            CursorTy fltPrd4507 = (CursorTy) pvrtmp5423;
+            CursorTy pvrtmp5425 = (CursorTy) fltPrd4507;
+            CursorTy pvrtmp5424 = (CursorTy) fltPrd4506;
+            CursorTy y1650 = (CursorTy) pvrtmp5424;
+            CursorTy fltPrd4508 = (CursorTy) pvrtmp5422;
+            CursorTy fltPrd4509 = (CursorTy) pvrtmp5423;
+            CursorTy pvrtmp5427 = (CursorTy) fltPrd4509;
+            CursorTy pvrtmp5426 = (CursorTy) fltPrd4508;
+            CursorTy end_y1650 = (CursorTy) pvrtmp5427;
+            CursorTy end_r1881_3400 = (CursorTy) pvrtmp5420;
+            CursorTy endof3186 = (CursorTy) pvrtmp5421;
+            CursorTy case2413 = (CursorTy) endof3186;
+            CursorTy x1649 = (CursorTy) case2413;
+            CursorTy loc2421 = (CursorTy) end_y1650;
+            CursorCursorCursorCursorProd tmp_struct116 =
+                                          _copy_ListExpr(end_r1880, end_r1881_3400, loc2421, x1649);
+            CursorTy pvrtmp5428 = tmp_struct116.field0;
+            CursorTy pvrtmp5429 = tmp_struct116.field1;
+            CursorTy pvrtmp5430 = tmp_struct116.field2;
+            CursorTy pvrtmp5431 = tmp_struct116.field3;
+            CursorTy fltPrd4510 = (CursorTy) pvrtmp5430;
+            CursorTy fltPrd4511 = (CursorTy) pvrtmp5431;
+            CursorTy pvrtmp5433 = (CursorTy) fltPrd4511;
+            CursorTy pvrtmp5432 = (CursorTy) fltPrd4510;
+            CursorTy y1651 = (CursorTy) pvrtmp5432;
+            CursorTy fltPrd4512 = (CursorTy) pvrtmp5430;
+            CursorTy fltPrd4513 = (CursorTy) pvrtmp5431;
+            CursorTy pvrtmp5435 = (CursorTy) fltPrd4513;
+            CursorTy pvrtmp5434 = (CursorTy) fltPrd4512;
+            CursorTy end_y1651 = (CursorTy) pvrtmp5435;
+            CursorTy end_r1881_3400_3401 = (CursorTy) pvrtmp5428;
+            CursorTy endof3187 = (CursorTy) pvrtmp5429;
+
+            *(TagTyPacked *) loc1879 = 6;
+
+            CursorTy writetag3755 = loc1879 + 1;
+            CursorTy writecur3756 = (CursorTy) end_y1650;
+            CursorTy writecur3757 = (CursorTy) end_y1651;
+            CursorTy pvrtmp5437 = (CursorTy) writecur3757;
+            CursorTy pvrtmp5436 = (CursorTy) loc1879;
+            CursorTy taildc3188 = (CursorTy) pvrtmp5436;
+            CursorTy end_taildc3188 = (CursorTy) pvrtmp5437;
+            CursorTy pvrtmp5439 = (CursorTy) end_taildc3188;
+            CursorTy pvrtmp5438 = (CursorTy) taildc3188;
+            CursorTy fltPrd4514 = (CursorTy) pvrtmp5438;
+            CursorTy fltPrd4515 = (CursorTy) pvrtmp5439;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3400_3401,
+                                                   endof3187, fltPrd4514,
+                                                   fltPrd4515};
+            break;
+        }
+
+      case 7:
+        {
+            CursorTy field_cur3759 = (CursorTy) tmpcur5321;
+            CursorTy case2424 = (CursorTy) field_cur3759;
+            CursorTy x1652 = (CursorTy) case2424;
+            CursorTy loc2432 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct117 =
+                                          _copy_LVBIND(end_r1880, end_r1881, loc2432, x1652);
+            CursorTy pvrtmp5440 = tmp_struct117.field0;
+            CursorTy pvrtmp5441 = tmp_struct117.field1;
+            CursorTy pvrtmp5442 = tmp_struct117.field2;
+            CursorTy pvrtmp5443 = tmp_struct117.field3;
+            CursorTy fltPrd4516 = (CursorTy) pvrtmp5442;
+            CursorTy fltPrd4517 = (CursorTy) pvrtmp5443;
+            CursorTy pvrtmp5445 = (CursorTy) fltPrd4517;
+            CursorTy pvrtmp5444 = (CursorTy) fltPrd4516;
+            CursorTy y1654 = (CursorTy) pvrtmp5444;
+            CursorTy fltPrd4518 = (CursorTy) pvrtmp5442;
+            CursorTy fltPrd4519 = (CursorTy) pvrtmp5443;
+            CursorTy pvrtmp5447 = (CursorTy) fltPrd4519;
+            CursorTy pvrtmp5446 = (CursorTy) fltPrd4518;
+            CursorTy end_y1654 = (CursorTy) pvrtmp5447;
+            CursorTy end_r1881_3402 = (CursorTy) pvrtmp5440;
+            CursorTy endof3189 = (CursorTy) pvrtmp5441;
+            CursorTy case2425 = (CursorTy) endof3189;
+            CursorTy x1653 = (CursorTy) case2425;
+            CursorTy loc2433 = (CursorTy) end_y1654;
+            CursorCursorCursorCursorProd tmp_struct118 =
+                                          _copy_ListExpr(end_r1880, end_r1881_3402, loc2433, x1653);
+            CursorTy pvrtmp5448 = tmp_struct118.field0;
+            CursorTy pvrtmp5449 = tmp_struct118.field1;
+            CursorTy pvrtmp5450 = tmp_struct118.field2;
+            CursorTy pvrtmp5451 = tmp_struct118.field3;
+            CursorTy fltPrd4520 = (CursorTy) pvrtmp5450;
+            CursorTy fltPrd4521 = (CursorTy) pvrtmp5451;
+            CursorTy pvrtmp5453 = (CursorTy) fltPrd4521;
+            CursorTy pvrtmp5452 = (CursorTy) fltPrd4520;
+            CursorTy y1655 = (CursorTy) pvrtmp5452;
+            CursorTy fltPrd4522 = (CursorTy) pvrtmp5450;
+            CursorTy fltPrd4523 = (CursorTy) pvrtmp5451;
+            CursorTy pvrtmp5455 = (CursorTy) fltPrd4523;
+            CursorTy pvrtmp5454 = (CursorTy) fltPrd4522;
+            CursorTy end_y1655 = (CursorTy) pvrtmp5455;
+            CursorTy end_r1881_3402_3403 = (CursorTy) pvrtmp5448;
+            CursorTy endof3190 = (CursorTy) pvrtmp5449;
+
+            *(TagTyPacked *) loc1879 = 7;
+
+            CursorTy writetag3762 = loc1879 + 1;
+            CursorTy writecur3763 = (CursorTy) end_y1654;
+            CursorTy writecur3764 = (CursorTy) end_y1655;
+            CursorTy pvrtmp5457 = (CursorTy) writecur3764;
+            CursorTy pvrtmp5456 = (CursorTy) loc1879;
+            CursorTy taildc3191 = (CursorTy) pvrtmp5456;
+            CursorTy end_taildc3191 = (CursorTy) pvrtmp5457;
+            CursorTy pvrtmp5459 = (CursorTy) end_taildc3191;
+            CursorTy pvrtmp5458 = (CursorTy) taildc3191;
+            CursorTy fltPrd4524 = (CursorTy) pvrtmp5458;
+            CursorTy fltPrd4525 = (CursorTy) pvrtmp5459;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3402_3403,
+                                                   endof3190, fltPrd4524,
+                                                   fltPrd4525};
+            break;
+        }
+
+      case 8:
+        {
+            CursorTy field_cur3766 = (CursorTy) tmpcur5321;
+            CursorTy case2436 = (CursorTy) field_cur3766;
+            SymTy tmpval5460 = *(SymTy *) case2436;
+            CursorTy tmpcur5461 = case2436 + sizeof(SymTy);
+            SymTy x1656 = (SymTy) tmpval5460;
+            CursorTy end_x1656 = (CursorTy) tmpcur5461;
+            CursorTy case2437 = (CursorTy) end_x1656;
+            CursorTy x1657 = (CursorTy) case2437;
+            CursorTy jump3192 = case2436 + 8;
+            CursorCursorCursorCursorProd tmp_struct119 =
+                                          _copy_Expr(end_r1880, end_r1881, loc2442, x1657);
+            CursorTy pvrtmp5462 = tmp_struct119.field0;
+            CursorTy pvrtmp5463 = tmp_struct119.field1;
+            CursorTy pvrtmp5464 = tmp_struct119.field2;
+            CursorTy pvrtmp5465 = tmp_struct119.field3;
+            CursorTy fltPrd4526 = (CursorTy) pvrtmp5464;
+            CursorTy fltPrd4527 = (CursorTy) pvrtmp5465;
+            CursorTy pvrtmp5467 = (CursorTy) fltPrd4527;
+            CursorTy pvrtmp5466 = (CursorTy) fltPrd4526;
+            CursorTy y1659 = (CursorTy) pvrtmp5466;
+            CursorTy fltPrd4528 = (CursorTy) pvrtmp5464;
+            CursorTy fltPrd4529 = (CursorTy) pvrtmp5465;
+            CursorTy pvrtmp5469 = (CursorTy) fltPrd4529;
+            CursorTy pvrtmp5468 = (CursorTy) fltPrd4528;
+            CursorTy end_y1659 = (CursorTy) pvrtmp5469;
+            CursorTy end_r1881_3404 = (CursorTy) pvrtmp5462;
+            CursorTy endof3193 = (CursorTy) pvrtmp5463;
+
+            *(TagTyPacked *) loc1879 = 8;
+
+            CursorTy writetag3769 = loc1879 + 1;
+
+            *(SymTy *) writetag3769 = x1656;
+
+            CursorTy writecur3770 = writetag3769 + sizeof(SymTy);
+            CursorTy writecur3771 = (CursorTy) end_y1659;
+            CursorTy pvrtmp5471 = (CursorTy) writecur3771;
+            CursorTy pvrtmp5470 = (CursorTy) loc1879;
+            CursorTy taildc3194 = (CursorTy) pvrtmp5470;
+            CursorTy end_taildc3194 = (CursorTy) pvrtmp5471;
+            CursorTy pvrtmp5473 = (CursorTy) end_taildc3194;
+            CursorTy pvrtmp5472 = (CursorTy) taildc3194;
+            CursorTy fltPrd4530 = (CursorTy) pvrtmp5472;
+            CursorTy fltPrd4531 = (CursorTy) pvrtmp5473;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3404, endof3193,
+                                                   fltPrd4530, fltPrd4531};
+            break;
+        }
+
+      case 9:
+        {
+            CursorTy field_cur3773 = (CursorTy) tmpcur5321;
+            CursorTy case2446 = (CursorTy) field_cur3773;
+            CursorTy x1660 = (CursorTy) case2446;
+            CursorTy loc2450 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct120 =
+                                          _copy_Datum(end_r1880, end_r1881, loc2450, x1660);
+            CursorTy pvrtmp5474 = tmp_struct120.field0;
+            CursorTy pvrtmp5475 = tmp_struct120.field1;
+            CursorTy pvrtmp5476 = tmp_struct120.field2;
+            CursorTy pvrtmp5477 = tmp_struct120.field3;
+            CursorTy fltPrd4532 = (CursorTy) pvrtmp5476;
+            CursorTy fltPrd4533 = (CursorTy) pvrtmp5477;
+            CursorTy pvrtmp5479 = (CursorTy) fltPrd4533;
+            CursorTy pvrtmp5478 = (CursorTy) fltPrd4532;
+            CursorTy y1661 = (CursorTy) pvrtmp5478;
+            CursorTy fltPrd4534 = (CursorTy) pvrtmp5476;
+            CursorTy fltPrd4535 = (CursorTy) pvrtmp5477;
+            CursorTy pvrtmp5481 = (CursorTy) fltPrd4535;
+            CursorTy pvrtmp5480 = (CursorTy) fltPrd4534;
+            CursorTy end_y1661 = (CursorTy) pvrtmp5481;
+            CursorTy end_r1881_3405 = (CursorTy) pvrtmp5474;
+            CursorTy endof3195 = (CursorTy) pvrtmp5475;
+
+            *(TagTyPacked *) loc1879 = 9;
+
+            CursorTy writetag3775 = loc1879 + 1;
+            CursorTy writecur3776 = (CursorTy) end_y1661;
+            CursorTy pvrtmp5483 = (CursorTy) writecur3776;
+            CursorTy pvrtmp5482 = (CursorTy) loc1879;
+            CursorTy taildc3196 = (CursorTy) pvrtmp5482;
+            CursorTy end_taildc3196 = (CursorTy) pvrtmp5483;
+            CursorTy pvrtmp5485 = (CursorTy) end_taildc3196;
+            CursorTy pvrtmp5484 = (CursorTy) taildc3196;
+            CursorTy fltPrd4536 = (CursorTy) pvrtmp5484;
+            CursorTy fltPrd4537 = (CursorTy) pvrtmp5485;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3405, endof3195,
+                                                   fltPrd4536, fltPrd4537};
+            break;
+        }
+
+      case 10:
+        {
+            CursorTy field_cur3778 = (CursorTy) tmpcur5321;
+            CursorTy case2452 = (CursorTy) field_cur3778;
+            CursorTy x1662 = (CursorTy) case2452;
+            CursorTy loc2456 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct121 =
+                                          _copy_Datum(end_r1880, end_r1881, loc2456, x1662);
+            CursorTy pvrtmp5486 = tmp_struct121.field0;
+            CursorTy pvrtmp5487 = tmp_struct121.field1;
+            CursorTy pvrtmp5488 = tmp_struct121.field2;
+            CursorTy pvrtmp5489 = tmp_struct121.field3;
+            CursorTy fltPrd4538 = (CursorTy) pvrtmp5488;
+            CursorTy fltPrd4539 = (CursorTy) pvrtmp5489;
+            CursorTy pvrtmp5491 = (CursorTy) fltPrd4539;
+            CursorTy pvrtmp5490 = (CursorTy) fltPrd4538;
+            CursorTy y1663 = (CursorTy) pvrtmp5490;
+            CursorTy fltPrd4540 = (CursorTy) pvrtmp5488;
+            CursorTy fltPrd4541 = (CursorTy) pvrtmp5489;
+            CursorTy pvrtmp5493 = (CursorTy) fltPrd4541;
+            CursorTy pvrtmp5492 = (CursorTy) fltPrd4540;
+            CursorTy end_y1663 = (CursorTy) pvrtmp5493;
+            CursorTy end_r1881_3406 = (CursorTy) pvrtmp5486;
+            CursorTy endof3197 = (CursorTy) pvrtmp5487;
+
+            *(TagTyPacked *) loc1879 = 10;
+
+            CursorTy writetag3780 = loc1879 + 1;
+            CursorTy writecur3781 = (CursorTy) end_y1663;
+            CursorTy pvrtmp5495 = (CursorTy) writecur3781;
+            CursorTy pvrtmp5494 = (CursorTy) loc1879;
+            CursorTy taildc3198 = (CursorTy) pvrtmp5494;
+            CursorTy end_taildc3198 = (CursorTy) pvrtmp5495;
+            CursorTy pvrtmp5497 = (CursorTy) end_taildc3198;
+            CursorTy pvrtmp5496 = (CursorTy) taildc3198;
+            CursorTy fltPrd4542 = (CursorTy) pvrtmp5496;
+            CursorTy fltPrd4543 = (CursorTy) pvrtmp5497;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3406, endof3197,
+                                                   fltPrd4542, fltPrd4543};
+            break;
+        }
+
+      case 11:
+        {
+            CursorTy field_cur3783 = (CursorTy) tmpcur5321;
+            CursorTy case2458 = (CursorTy) field_cur3783;
+            CursorTy x1664 = (CursorTy) case2458;
+            CursorTy loc2462 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct122 =
+                                          _copy_Datum(end_r1880, end_r1881, loc2462, x1664);
+            CursorTy pvrtmp5498 = tmp_struct122.field0;
+            CursorTy pvrtmp5499 = tmp_struct122.field1;
+            CursorTy pvrtmp5500 = tmp_struct122.field2;
+            CursorTy pvrtmp5501 = tmp_struct122.field3;
+            CursorTy fltPrd4544 = (CursorTy) pvrtmp5500;
+            CursorTy fltPrd4545 = (CursorTy) pvrtmp5501;
+            CursorTy pvrtmp5503 = (CursorTy) fltPrd4545;
+            CursorTy pvrtmp5502 = (CursorTy) fltPrd4544;
+            CursorTy y1665 = (CursorTy) pvrtmp5502;
+            CursorTy fltPrd4546 = (CursorTy) pvrtmp5500;
+            CursorTy fltPrd4547 = (CursorTy) pvrtmp5501;
+            CursorTy pvrtmp5505 = (CursorTy) fltPrd4547;
+            CursorTy pvrtmp5504 = (CursorTy) fltPrd4546;
+            CursorTy end_y1665 = (CursorTy) pvrtmp5505;
+            CursorTy end_r1881_3407 = (CursorTy) pvrtmp5498;
+            CursorTy endof3199 = (CursorTy) pvrtmp5499;
+
+            *(TagTyPacked *) loc1879 = 11;
+
+            CursorTy writetag3785 = loc1879 + 1;
+            CursorTy writecur3786 = (CursorTy) end_y1665;
+            CursorTy pvrtmp5507 = (CursorTy) writecur3786;
+            CursorTy pvrtmp5506 = (CursorTy) loc1879;
+            CursorTy taildc3200 = (CursorTy) pvrtmp5506;
+            CursorTy end_taildc3200 = (CursorTy) pvrtmp5507;
+            CursorTy pvrtmp5509 = (CursorTy) end_taildc3200;
+            CursorTy pvrtmp5508 = (CursorTy) taildc3200;
+            CursorTy fltPrd4548 = (CursorTy) pvrtmp5508;
+            CursorTy fltPrd4549 = (CursorTy) pvrtmp5509;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3407, endof3199,
+                                                   fltPrd4548, fltPrd4549};
+            break;
+        }
+
+      case 12:
+        {
+            CursorTy field_cur3788 = (CursorTy) tmpcur5321;
+            CursorTy case2464 = (CursorTy) field_cur3788;
+            CursorTy x1666 = (CursorTy) case2464;
+            CursorTy loc2476 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct123 =
+                                          _copy_Expr(end_r1880, end_r1881, loc2476, x1666);
+            CursorTy pvrtmp5510 = tmp_struct123.field0;
+            CursorTy pvrtmp5511 = tmp_struct123.field1;
+            CursorTy pvrtmp5512 = tmp_struct123.field2;
+            CursorTy pvrtmp5513 = tmp_struct123.field3;
+            CursorTy fltPrd4550 = (CursorTy) pvrtmp5512;
+            CursorTy fltPrd4551 = (CursorTy) pvrtmp5513;
+            CursorTy pvrtmp5515 = (CursorTy) fltPrd4551;
+            CursorTy pvrtmp5514 = (CursorTy) fltPrd4550;
+            CursorTy y1669 = (CursorTy) pvrtmp5514;
+            CursorTy fltPrd4552 = (CursorTy) pvrtmp5512;
+            CursorTy fltPrd4553 = (CursorTy) pvrtmp5513;
+            CursorTy pvrtmp5517 = (CursorTy) fltPrd4553;
+            CursorTy pvrtmp5516 = (CursorTy) fltPrd4552;
+            CursorTy end_y1669 = (CursorTy) pvrtmp5517;
+            CursorTy end_r1881_3408 = (CursorTy) pvrtmp5510;
+            CursorTy endof3201 = (CursorTy) pvrtmp5511;
+            CursorTy case2465 = (CursorTy) endof3201;
+            CursorTy x1667 = (CursorTy) case2465;
+            CursorTy loc2477 = (CursorTy) end_y1669;
+            CursorCursorCursorCursorProd tmp_struct124 =
+                                          _copy_Expr(end_r1880, end_r1881_3408, loc2477, x1667);
+            CursorTy pvrtmp5518 = tmp_struct124.field0;
+            CursorTy pvrtmp5519 = tmp_struct124.field1;
+            CursorTy pvrtmp5520 = tmp_struct124.field2;
+            CursorTy pvrtmp5521 = tmp_struct124.field3;
+            CursorTy fltPrd4554 = (CursorTy) pvrtmp5520;
+            CursorTy fltPrd4555 = (CursorTy) pvrtmp5521;
+            CursorTy pvrtmp5523 = (CursorTy) fltPrd4555;
+            CursorTy pvrtmp5522 = (CursorTy) fltPrd4554;
+            CursorTy y1670 = (CursorTy) pvrtmp5522;
+            CursorTy fltPrd4556 = (CursorTy) pvrtmp5520;
+            CursorTy fltPrd4557 = (CursorTy) pvrtmp5521;
+            CursorTy pvrtmp5525 = (CursorTy) fltPrd4557;
+            CursorTy pvrtmp5524 = (CursorTy) fltPrd4556;
+            CursorTy end_y1670 = (CursorTy) pvrtmp5525;
+            CursorTy end_r1881_3408_3409 = (CursorTy) pvrtmp5518;
+            CursorTy endof3202 = (CursorTy) pvrtmp5519;
+            CursorTy case2466 = (CursorTy) endof3202;
+            CursorTy x1668 = (CursorTy) case2466;
+            CursorTy loc2478 = (CursorTy) end_y1670;
+            CursorCursorCursorCursorProd tmp_struct125 =
+                                          _copy_Expr(end_r1880, end_r1881_3408_3409, loc2478, x1668);
+            CursorTy pvrtmp5526 = tmp_struct125.field0;
+            CursorTy pvrtmp5527 = tmp_struct125.field1;
+            CursorTy pvrtmp5528 = tmp_struct125.field2;
+            CursorTy pvrtmp5529 = tmp_struct125.field3;
+            CursorTy fltPrd4558 = (CursorTy) pvrtmp5528;
+            CursorTy fltPrd4559 = (CursorTy) pvrtmp5529;
+            CursorTy pvrtmp5531 = (CursorTy) fltPrd4559;
+            CursorTy pvrtmp5530 = (CursorTy) fltPrd4558;
+            CursorTy y1671 = (CursorTy) pvrtmp5530;
+            CursorTy fltPrd4560 = (CursorTy) pvrtmp5528;
+            CursorTy fltPrd4561 = (CursorTy) pvrtmp5529;
+            CursorTy pvrtmp5533 = (CursorTy) fltPrd4561;
+            CursorTy pvrtmp5532 = (CursorTy) fltPrd4560;
+            CursorTy end_y1671 = (CursorTy) pvrtmp5533;
+            CursorTy end_r1881_3408_3409_3410 = (CursorTy) pvrtmp5526;
+            CursorTy endof3203 = (CursorTy) pvrtmp5527;
+
+            *(TagTyPacked *) loc1879 = 12;
+
+            CursorTy writetag3792 = loc1879 + 1;
+            CursorTy writecur3793 = (CursorTy) end_y1669;
+            CursorTy writecur3794 = (CursorTy) end_y1670;
+            CursorTy writecur3795 = (CursorTy) end_y1671;
+            CursorTy pvrtmp5535 = (CursorTy) writecur3795;
+            CursorTy pvrtmp5534 = (CursorTy) loc1879;
+            CursorTy taildc3204 = (CursorTy) pvrtmp5534;
+            CursorTy end_taildc3204 = (CursorTy) pvrtmp5535;
+            CursorTy pvrtmp5537 = (CursorTy) end_taildc3204;
+            CursorTy pvrtmp5536 = (CursorTy) taildc3204;
+            CursorTy fltPrd4562 = (CursorTy) pvrtmp5536;
+            CursorTy fltPrd4563 = (CursorTy) pvrtmp5537;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3408_3409_3410,
+                                                   endof3203, fltPrd4562,
+                                                   fltPrd4563};
+            break;
+        }
+
+      case 13:
+        {
+            CursorTy field_cur3797 = (CursorTy) tmpcur5321;
+            CursorTy case2482 = (CursorTy) field_cur3797;
+            CursorTy x1672 = (CursorTy) case2482;
+            CursorTy loc2490 = loc1879 + 1;
+            CursorCursorCursorCursorProd tmp_struct126 =
+                                          _copy_Expr(end_r1880, end_r1881, loc2490, x1672);
+            CursorTy pvrtmp5538 = tmp_struct126.field0;
+            CursorTy pvrtmp5539 = tmp_struct126.field1;
+            CursorTy pvrtmp5540 = tmp_struct126.field2;
+            CursorTy pvrtmp5541 = tmp_struct126.field3;
+            CursorTy fltPrd4564 = (CursorTy) pvrtmp5540;
+            CursorTy fltPrd4565 = (CursorTy) pvrtmp5541;
+            CursorTy pvrtmp5543 = (CursorTy) fltPrd4565;
+            CursorTy pvrtmp5542 = (CursorTy) fltPrd4564;
+            CursorTy y1674 = (CursorTy) pvrtmp5542;
+            CursorTy fltPrd4566 = (CursorTy) pvrtmp5540;
+            CursorTy fltPrd4567 = (CursorTy) pvrtmp5541;
+            CursorTy pvrtmp5545 = (CursorTy) fltPrd4567;
+            CursorTy pvrtmp5544 = (CursorTy) fltPrd4566;
+            CursorTy end_y1674 = (CursorTy) pvrtmp5545;
+            CursorTy end_r1881_3411 = (CursorTy) pvrtmp5538;
+            CursorTy endof3205 = (CursorTy) pvrtmp5539;
+            CursorTy case2483 = (CursorTy) endof3205;
+            CursorTy x1673 = (CursorTy) case2483;
+            CursorTy loc2491 = (CursorTy) end_y1674;
+            CursorCursorCursorCursorProd tmp_struct127 =
+                                          _copy_ListExpr(end_r1880, end_r1881_3411, loc2491, x1673);
+            CursorTy pvrtmp5546 = tmp_struct127.field0;
+            CursorTy pvrtmp5547 = tmp_struct127.field1;
+            CursorTy pvrtmp5548 = tmp_struct127.field2;
+            CursorTy pvrtmp5549 = tmp_struct127.field3;
+            CursorTy fltPrd4568 = (CursorTy) pvrtmp5548;
+            CursorTy fltPrd4569 = (CursorTy) pvrtmp5549;
+            CursorTy pvrtmp5551 = (CursorTy) fltPrd4569;
+            CursorTy pvrtmp5550 = (CursorTy) fltPrd4568;
+            CursorTy y1675 = (CursorTy) pvrtmp5550;
+            CursorTy fltPrd4570 = (CursorTy) pvrtmp5548;
+            CursorTy fltPrd4571 = (CursorTy) pvrtmp5549;
+            CursorTy pvrtmp5553 = (CursorTy) fltPrd4571;
+            CursorTy pvrtmp5552 = (CursorTy) fltPrd4570;
+            CursorTy end_y1675 = (CursorTy) pvrtmp5553;
+            CursorTy end_r1881_3411_3412 = (CursorTy) pvrtmp5546;
+            CursorTy endof3206 = (CursorTy) pvrtmp5547;
+
+            *(TagTyPacked *) loc1879 = 13;
+
+            CursorTy writetag3800 = loc1879 + 1;
+            CursorTy writecur3801 = (CursorTy) end_y1674;
+            CursorTy writecur3802 = (CursorTy) end_y1675;
+            CursorTy pvrtmp5555 = (CursorTy) writecur3802;
+            CursorTy pvrtmp5554 = (CursorTy) loc1879;
+            CursorTy taildc3207 = (CursorTy) pvrtmp5554;
+            CursorTy end_taildc3207 = (CursorTy) pvrtmp5555;
+            CursorTy pvrtmp5557 = (CursorTy) end_taildc3207;
+            CursorTy pvrtmp5556 = (CursorTy) taildc3207;
+            CursorTy fltPrd4572 = (CursorTy) pvrtmp5556;
+            CursorTy fltPrd4573 = (CursorTy) pvrtmp5557;
+
+            return (CursorCursorCursorCursorProd) {end_r1881_3411_3412,
+                                                   endof3206, fltPrd4572,
+                                                   fltPrd4573};
+            break;
+        }
+
+      case 14:
+        {
+            CursorTy field_cur3804 = (CursorTy) tmpcur5321;
+            CursorTy case2494 = (CursorTy) field_cur3804;
+            SymTy tmpval5558 = *(SymTy *) case2494;
+            CursorTy tmpcur5559 = case2494 + sizeof(SymTy);
+            SymTy x1676 = (SymTy) tmpval5558;
+            CursorTy end_x1676 = (CursorTy) tmpcur5559;
+            CursorTy jump3208 = case2494 + 8;
+
+            *(TagTyPacked *) loc1879 = 14;
+
+            CursorTy writetag3806 = loc1879 + 1;
+
+            *(SymTy *) writetag3806 = x1676;
+
+            CursorTy writecur3807 = writetag3806 + sizeof(SymTy);
+            CursorTy pvrtmp5561 = (CursorTy) writecur3807;
+            CursorTy pvrtmp5560 = (CursorTy) loc1879;
+            CursorTy taildc3209 = (CursorTy) pvrtmp5560;
+            CursorTy end_taildc3209 = (CursorTy) pvrtmp5561;
+            CursorTy pvrtmp5563 = (CursorTy) end_taildc3209;
+            CursorTy pvrtmp5562 = (CursorTy) taildc3209;
+            CursorTy fltPrd4574 = (CursorTy) pvrtmp5562;
+            CursorTy fltPrd4575 = (CursorTy) pvrtmp5563;
+
+            return (CursorCursorCursorCursorProd) {end_r1881, jump3208,
+                                                   fltPrd4574, fltPrd4575};
+            break;
+        }
+
+      case 15:
+        {
+            CursorTy field_cur3809 = (CursorTy) tmpcur5321;
+            CursorTy case2498 = (CursorTy) field_cur3809;
+            SymTy tmpval5564 = *(SymTy *) case2498;
+            CursorTy tmpcur5565 = case2498 + sizeof(SymTy);
+            SymTy x1678 = (SymTy) tmpval5564;
+            CursorTy end_x1678 = (CursorTy) tmpcur5565;
+            CursorTy jump3210 = case2498 + 8;
+
+            *(TagTyPacked *) loc1879 = 15;
+
+            CursorTy writetag3811 = loc1879 + 1;
+
+            *(SymTy *) writetag3811 = x1678;
+
+            CursorTy writecur3812 = writetag3811 + sizeof(SymTy);
+            CursorTy pvrtmp5567 = (CursorTy) writecur3812;
+            CursorTy pvrtmp5566 = (CursorTy) loc1879;
+            CursorTy taildc3211 = (CursorTy) pvrtmp5566;
+            CursorTy end_taildc3211 = (CursorTy) pvrtmp5567;
+            CursorTy pvrtmp5569 = (CursorTy) end_taildc3211;
+            CursorTy pvrtmp5568 = (CursorTy) taildc3211;
+            CursorTy fltPrd4576 = (CursorTy) pvrtmp5568;
+            CursorTy fltPrd4577 = (CursorTy) pvrtmp5569;
+
+            return (CursorCursorCursorCursorProd) {end_r1881, jump3210,
+                                                   fltPrd4576, fltPrd4577};
+            break;
+        }
+
+      case 16:
+        {
+            CursorTy field_cur3814 = (CursorTy) tmpcur5321;
+            CursorTy case2502 = (CursorTy) field_cur3814;
+            SymTy tmpval5570 = *(SymTy *) case2502;
+            CursorTy tmpcur5571 = case2502 + sizeof(SymTy);
+            SymTy x1680 = (SymTy) tmpval5570;
+            CursorTy end_x1680 = (CursorTy) tmpcur5571;
+            CursorTy jump3212 = case2502 + 8;
+
+            *(TagTyPacked *) loc1879 = 16;
+
+            CursorTy writetag3816 = loc1879 + 1;
+
+            *(SymTy *) writetag3816 = x1680;
+
+            CursorTy writecur3817 = writetag3816 + sizeof(SymTy);
+            CursorTy pvrtmp5573 = (CursorTy) writecur3817;
+            CursorTy pvrtmp5572 = (CursorTy) loc1879;
+            CursorTy taildc3213 = (CursorTy) pvrtmp5572;
+            CursorTy end_taildc3213 = (CursorTy) pvrtmp5573;
+            CursorTy pvrtmp5575 = (CursorTy) end_taildc3213;
+            CursorTy pvrtmp5574 = (CursorTy) taildc3213;
+            CursorTy fltPrd4578 = (CursorTy) pvrtmp5574;
+            CursorTy fltPrd4579 = (CursorTy) pvrtmp5575;
+
+            return (CursorCursorCursorCursorProd) {end_r1881, jump3212,
+                                                   fltPrd4578, fltPrd4579};
+            break;
+        }
+
+      case 17:
+        {
+            CursorTy field_cur3819 = (CursorTy) tmpcur5321;
+            CursorTy jump3214 = loc1878 + 1;
+
+            *(TagTyPacked *) loc1879 = 17;
+
+            CursorTy writetag3820 = loc1879 + 1;
+            CursorTy pvrtmp5577 = (CursorTy) writetag3820;
+            CursorTy pvrtmp5576 = (CursorTy) loc1879;
+            CursorTy taildc3215 = (CursorTy) pvrtmp5576;
+            CursorTy end_taildc3215 = (CursorTy) pvrtmp5577;
+            CursorTy pvrtmp5579 = (CursorTy) end_taildc3215;
+            CursorTy pvrtmp5578 = (CursorTy) taildc3215;
+            CursorTy fltPrd4580 = (CursorTy) pvrtmp5578;
+            CursorTy fltPrd4581 = (CursorTy) pvrtmp5579;
+
+            return (CursorCursorCursorCursorProd) {end_r1881, jump3214,
+                                                   fltPrd4580, fltPrd4581};
+            break;
+        }
+
+      case 255:
+        {
+            CursorTy tmpcur6629 = *(CursorTy *) tmpcur5321;
+            CursorTy tmpaftercur6630 = tmpcur5321 + 8;
+            TagTyPacked tagtmp6631 = *(TagTyPacked *) tmpcur6629;
+            CursorTy tailtmp6632 = tmpcur6629 + 1;
+
+            tmpval5320 = tagtmp6631;
+            tmpcur5321 = tailtmp6632;
+            goto switch5580;
+            break;
+        }
+
+      case 254:
+        {
+            CursorTy tmpcur6629 = *(CursorTy *) tmpcur5321;
+            CursorTy tmpaftercur6630 = tmpcur5321 + 8;
+            TagTyPacked tagtmp6631 = *(TagTyPacked *) tmpcur6629;
+            CursorTy tailtmp6632 = tmpcur6629 + 1;
+
+            tmpval5320 = tagtmp6631;
+            tmpcur5321 = tailtmp6632;
+            goto switch5580;
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval5320");
+            exit(1);
+        }
+    }
+}
+CursorCursorCursorCursorProd _copy_Toplvl(CursorTy end_r1886,
+                                          CursorTy end_r1887, CursorTy loc1885,
+                                          CursorTy arg1737)
+{
+    CursorTy loc1884 = (CursorTy) arg1737;
+
+    if (loc1885 + 18 > end_r1887) {
+        ChunkTy new_chunk159 = alloc_chunk(end_r1887);
+        CursorTy chunk_start160 = new_chunk159.start_ptr;
+        CursorTy chunk_end161 = new_chunk159.end_ptr;
+
+        end_r1887 = chunk_end161;
+        *(TagTyPacked *) loc1885 = 255;
+
+        CursorTy redir = loc1885 + 1;
+
+        *(CursorTy *) redir = chunk_start160;
+        loc1885 = chunk_start160;
+    }
+
+    TagTyPacked tmpval5638 = *(TagTyPacked *) arg1737;
+    CursorTy tmpcur5639 = arg1737 + 1;
+
+
+  switch5704:
+    ;
+    switch (tmpval5638) {
+
+      case 0:
+        {
+            CursorTy field_cur3867 = (CursorTy) tmpcur5639;
+            CursorTy case2582 = (CursorTy) field_cur3867;
+            CursorTy x1738 = (CursorTy) case2582;
+            CursorTy loc2590 = loc1885 + 1;
+            CursorCursorCursorCursorProd tmp_struct153 =
+                                          _copy_ListSym(end_r1886, end_r1887, loc2590, x1738);
+            CursorTy pvrtmp5640 = tmp_struct153.field0;
+            CursorTy pvrtmp5641 = tmp_struct153.field1;
+            CursorTy pvrtmp5642 = tmp_struct153.field2;
+            CursorTy pvrtmp5643 = tmp_struct153.field3;
+            CursorTy fltPrd4582 = (CursorTy) pvrtmp5642;
+            CursorTy fltPrd4583 = (CursorTy) pvrtmp5643;
+            CursorTy pvrtmp5645 = (CursorTy) fltPrd4583;
+            CursorTy pvrtmp5644 = (CursorTy) fltPrd4582;
+            CursorTy y1740 = (CursorTy) pvrtmp5644;
+            CursorTy fltPrd4584 = (CursorTy) pvrtmp5642;
+            CursorTy fltPrd4585 = (CursorTy) pvrtmp5643;
+            CursorTy pvrtmp5647 = (CursorTy) fltPrd4585;
+            CursorTy pvrtmp5646 = (CursorTy) fltPrd4584;
+            CursorTy end_y1740 = (CursorTy) pvrtmp5647;
+            CursorTy end_r1887_3413 = (CursorTy) pvrtmp5640;
+            CursorTy endof3262 = (CursorTy) pvrtmp5641;
+            CursorTy case2583 = (CursorTy) endof3262;
+            CursorTy x1739 = (CursorTy) case2583;
+            CursorTy loc2591 = (CursorTy) end_y1740;
+            CursorCursorCursorCursorProd tmp_struct154 =
+                                          _copy_Expr(end_r1886, end_r1887_3413, loc2591, x1739);
+            CursorTy pvrtmp5648 = tmp_struct154.field0;
+            CursorTy pvrtmp5649 = tmp_struct154.field1;
+            CursorTy pvrtmp5650 = tmp_struct154.field2;
+            CursorTy pvrtmp5651 = tmp_struct154.field3;
+            CursorTy fltPrd4586 = (CursorTy) pvrtmp5650;
+            CursorTy fltPrd4587 = (CursorTy) pvrtmp5651;
+            CursorTy pvrtmp5653 = (CursorTy) fltPrd4587;
+            CursorTy pvrtmp5652 = (CursorTy) fltPrd4586;
+            CursorTy y1741 = (CursorTy) pvrtmp5652;
+            CursorTy fltPrd4588 = (CursorTy) pvrtmp5650;
+            CursorTy fltPrd4589 = (CursorTy) pvrtmp5651;
+            CursorTy pvrtmp5655 = (CursorTy) fltPrd4589;
+            CursorTy pvrtmp5654 = (CursorTy) fltPrd4588;
+            CursorTy end_y1741 = (CursorTy) pvrtmp5655;
+            CursorTy end_r1887_3413_3414 = (CursorTy) pvrtmp5648;
+            CursorTy endof3263 = (CursorTy) pvrtmp5649;
+
+            *(TagTyPacked *) loc1885 = 0;
+
+            CursorTy writetag3870 = loc1885 + 1;
+            CursorTy writecur3871 = (CursorTy) end_y1740;
+            CursorTy writecur3872 = (CursorTy) end_y1741;
+            CursorTy pvrtmp5657 = (CursorTy) writecur3872;
+            CursorTy pvrtmp5656 = (CursorTy) loc1885;
+            CursorTy taildc3264 = (CursorTy) pvrtmp5656;
+            CursorTy end_taildc3264 = (CursorTy) pvrtmp5657;
+            CursorTy pvrtmp5659 = (CursorTy) end_taildc3264;
+            CursorTy pvrtmp5658 = (CursorTy) taildc3264;
+            CursorTy fltPrd4590 = (CursorTy) pvrtmp5658;
+            CursorTy fltPrd4591 = (CursorTy) pvrtmp5659;
+
+            return (CursorCursorCursorCursorProd) {end_r1887_3413_3414,
+                                                   endof3263, fltPrd4590,
+                                                   fltPrd4591};
+            break;
+        }
+
+      case 1:
+        {
+            CursorTy field_cur3874 = (CursorTy) tmpcur5639;
+            CursorTy case2594 = (CursorTy) field_cur3874;
+            CursorTy x1742 = (CursorTy) case2594;
+            CursorTy loc2602 = loc1885 + 1;
+            CursorCursorCursorCursorProd tmp_struct155 =
+                                          _copy_ListSym(end_r1886, end_r1887, loc2602, x1742);
+            CursorTy pvrtmp5660 = tmp_struct155.field0;
+            CursorTy pvrtmp5661 = tmp_struct155.field1;
+            CursorTy pvrtmp5662 = tmp_struct155.field2;
+            CursorTy pvrtmp5663 = tmp_struct155.field3;
+            CursorTy fltPrd4592 = (CursorTy) pvrtmp5662;
+            CursorTy fltPrd4593 = (CursorTy) pvrtmp5663;
+            CursorTy pvrtmp5665 = (CursorTy) fltPrd4593;
+            CursorTy pvrtmp5664 = (CursorTy) fltPrd4592;
+            CursorTy y1744 = (CursorTy) pvrtmp5664;
+            CursorTy fltPrd4594 = (CursorTy) pvrtmp5662;
+            CursorTy fltPrd4595 = (CursorTy) pvrtmp5663;
+            CursorTy pvrtmp5667 = (CursorTy) fltPrd4595;
+            CursorTy pvrtmp5666 = (CursorTy) fltPrd4594;
+            CursorTy end_y1744 = (CursorTy) pvrtmp5667;
+            CursorTy end_r1887_3415 = (CursorTy) pvrtmp5660;
+            CursorTy endof3265 = (CursorTy) pvrtmp5661;
+            CursorTy case2595 = (CursorTy) endof3265;
+            CursorTy x1743 = (CursorTy) case2595;
+            CursorTy loc2603 = (CursorTy) end_y1744;
+            CursorCursorCursorCursorProd tmp_struct156 =
+                                          _copy_Expr(end_r1886, end_r1887_3415, loc2603, x1743);
+            CursorTy pvrtmp5668 = tmp_struct156.field0;
+            CursorTy pvrtmp5669 = tmp_struct156.field1;
+            CursorTy pvrtmp5670 = tmp_struct156.field2;
+            CursorTy pvrtmp5671 = tmp_struct156.field3;
+            CursorTy fltPrd4596 = (CursorTy) pvrtmp5670;
+            CursorTy fltPrd4597 = (CursorTy) pvrtmp5671;
+            CursorTy pvrtmp5673 = (CursorTy) fltPrd4597;
+            CursorTy pvrtmp5672 = (CursorTy) fltPrd4596;
+            CursorTy y1745 = (CursorTy) pvrtmp5672;
+            CursorTy fltPrd4598 = (CursorTy) pvrtmp5670;
+            CursorTy fltPrd4599 = (CursorTy) pvrtmp5671;
+            CursorTy pvrtmp5675 = (CursorTy) fltPrd4599;
+            CursorTy pvrtmp5674 = (CursorTy) fltPrd4598;
+            CursorTy end_y1745 = (CursorTy) pvrtmp5675;
+            CursorTy end_r1887_3415_3416 = (CursorTy) pvrtmp5668;
+            CursorTy endof3266 = (CursorTy) pvrtmp5669;
+
+            *(TagTyPacked *) loc1885 = 1;
+
+            CursorTy writetag3877 = loc1885 + 1;
+            CursorTy writecur3878 = (CursorTy) end_y1744;
+            CursorTy writecur3879 = (CursorTy) end_y1745;
+            CursorTy pvrtmp5677 = (CursorTy) writecur3879;
+            CursorTy pvrtmp5676 = (CursorTy) loc1885;
+            CursorTy taildc3267 = (CursorTy) pvrtmp5676;
+            CursorTy end_taildc3267 = (CursorTy) pvrtmp5677;
+            CursorTy pvrtmp5679 = (CursorTy) end_taildc3267;
+            CursorTy pvrtmp5678 = (CursorTy) taildc3267;
+            CursorTy fltPrd4600 = (CursorTy) pvrtmp5678;
+            CursorTy fltPrd4601 = (CursorTy) pvrtmp5679;
+
+            return (CursorCursorCursorCursorProd) {end_r1887_3415_3416,
+                                                   endof3266, fltPrd4600,
+                                                   fltPrd4601};
+            break;
+        }
+
+      case 2:
+        {
+            CursorTy field_cur3881 = (CursorTy) tmpcur5639;
+            CursorTy case2606 = (CursorTy) field_cur3881;
+            CursorTy x1746 = (CursorTy) case2606;
+            CursorTy loc2610 = loc1885 + 1;
+            CursorCursorCursorCursorProd tmp_struct157 =
+                                          _copy_ListToplvl(end_r1886, end_r1887, loc2610, x1746);
+            CursorTy pvrtmp5680 = tmp_struct157.field0;
+            CursorTy pvrtmp5681 = tmp_struct157.field1;
+            CursorTy pvrtmp5682 = tmp_struct157.field2;
+            CursorTy pvrtmp5683 = tmp_struct157.field3;
+            CursorTy fltPrd4602 = (CursorTy) pvrtmp5682;
+            CursorTy fltPrd4603 = (CursorTy) pvrtmp5683;
+            CursorTy pvrtmp5685 = (CursorTy) fltPrd4603;
+            CursorTy pvrtmp5684 = (CursorTy) fltPrd4602;
+            CursorTy y1747 = (CursorTy) pvrtmp5684;
+            CursorTy fltPrd4604 = (CursorTy) pvrtmp5682;
+            CursorTy fltPrd4605 = (CursorTy) pvrtmp5683;
+            CursorTy pvrtmp5687 = (CursorTy) fltPrd4605;
+            CursorTy pvrtmp5686 = (CursorTy) fltPrd4604;
+            CursorTy end_y1747 = (CursorTy) pvrtmp5687;
+            CursorTy end_r1887_3417 = (CursorTy) pvrtmp5680;
+            CursorTy endof3268 = (CursorTy) pvrtmp5681;
+
+            *(TagTyPacked *) loc1885 = 2;
+
+            CursorTy writetag3883 = loc1885 + 1;
+            CursorTy writecur3884 = (CursorTy) end_y1747;
+            CursorTy pvrtmp5689 = (CursorTy) writecur3884;
+            CursorTy pvrtmp5688 = (CursorTy) loc1885;
+            CursorTy taildc3269 = (CursorTy) pvrtmp5688;
+            CursorTy end_taildc3269 = (CursorTy) pvrtmp5689;
+            CursorTy pvrtmp5691 = (CursorTy) end_taildc3269;
+            CursorTy pvrtmp5690 = (CursorTy) taildc3269;
+            CursorTy fltPrd4606 = (CursorTy) pvrtmp5690;
+            CursorTy fltPrd4607 = (CursorTy) pvrtmp5691;
+
+            return (CursorCursorCursorCursorProd) {end_r1887_3417, endof3268,
+                                                   fltPrd4606, fltPrd4607};
+            break;
+        }
+
+      case 3:
+        {
+            CursorTy field_cur3886 = (CursorTy) tmpcur5639;
+            CursorTy case2612 = (CursorTy) field_cur3886;
+            CursorTy x1748 = (CursorTy) case2612;
+            CursorTy loc2616 = loc1885 + 1;
+            // CursorCursorCursorCursorProd tmp_struct158 =
+            //                               _copy_Expr(end_r1886, end_r1887, loc2616, x1748);
+            CursorCursorCursorCursorProd tmp_struct158 =
+                duplicate_expr(3, end_r1886, end_r1887, loc2616, x1748);
+            CursorTy pvrtmp5692 = tmp_struct158.field0;
+            CursorTy pvrtmp5693 = tmp_struct158.field1;
+            CursorTy pvrtmp5694 = tmp_struct158.field2;
+            CursorTy pvrtmp5695 = tmp_struct158.field3;
+            CursorTy fltPrd4608 = (CursorTy) pvrtmp5694;
+            CursorTy fltPrd4609 = (CursorTy) pvrtmp5695;
+            CursorTy pvrtmp5697 = (CursorTy) fltPrd4609;
+            CursorTy pvrtmp5696 = (CursorTy) fltPrd4608;
+            CursorTy y1749 = (CursorTy) pvrtmp5696;
+            CursorTy fltPrd4610 = (CursorTy) pvrtmp5694;
+            CursorTy fltPrd4611 = (CursorTy) pvrtmp5695;
+            CursorTy pvrtmp5699 = (CursorTy) fltPrd4611;
+            CursorTy pvrtmp5698 = (CursorTy) fltPrd4610;
+            CursorTy end_y1749 = (CursorTy) pvrtmp5699;
+            CursorTy end_r1887_3418 = (CursorTy) pvrtmp5692;
+            CursorTy endof3270 = (CursorTy) pvrtmp5693;
+
+            *(TagTyPacked *) loc1885 = 3;
+
+            CursorTy writetag3888 = loc1885 + 1;
+            CursorTy writecur3889 = (CursorTy) end_y1749;
+            CursorTy pvrtmp5701 = (CursorTy) writecur3889;
+            CursorTy pvrtmp5700 = (CursorTy) loc1885;
+            CursorTy taildc3271 = (CursorTy) pvrtmp5700;
+            CursorTy end_taildc3271 = (CursorTy) pvrtmp5701;
+            CursorTy pvrtmp5703 = (CursorTy) end_taildc3271;
+            CursorTy pvrtmp5702 = (CursorTy) taildc3271;
+            CursorTy fltPrd4612 = (CursorTy) pvrtmp5702;
+            CursorTy fltPrd4613 = (CursorTy) pvrtmp5703;
+
+            return (CursorCursorCursorCursorProd) {end_r1887_3418, endof3270,
+                                                   fltPrd4612, fltPrd4613};
+            break;
+        }
+
+      case 255:
+        {
+            CursorTy tmpcur6637 = *(CursorTy *) tmpcur5639;
+            CursorTy tmpaftercur6638 = tmpcur5639 + 8;
+            TagTyPacked tagtmp6639 = *(TagTyPacked *) tmpcur6637;
+            CursorTy tailtmp6640 = tmpcur6637 + 1;
+
+            tmpval5638 = tagtmp6639;
+            tmpcur5639 = tailtmp6640;
+            goto switch5704;
+            break;
+        }
+
+      case 254:
+        {
+            CursorTy tmpcur6637 = *(CursorTy *) tmpcur5639;
+            CursorTy tmpaftercur6638 = tmpcur5639 + 8;
+            TagTyPacked tagtmp6639 = *(TagTyPacked *) tmpcur6637;
+            CursorTy tailtmp6640 = tmpcur6637 + 1;
+
+            tmpval5638 = tagtmp6639;
+            tmpcur5639 = tailtmp6640;
+            goto switch5704;
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval5638");
+            exit(1);
+        }
+    }
+}
+
+
+// --------------------------------------------------------------------------------
+// Printers
 
 CursorTy _print_ListSym(CursorTy p3299)
 {
