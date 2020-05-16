@@ -1973,6 +1973,7 @@ void __main_expr()
 
         utarray_push_back(times31, &batchtime29);
     }
+    print_timing_array(times31);
     utarray_sort(times31, compare_doubles);
 
     double *tmp32 = (double *) utarray_eltptr(times31, global_iters_param / 2);
