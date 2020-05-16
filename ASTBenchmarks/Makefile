@@ -25,7 +25,7 @@ wget_binary:
 
 wget_mega:
 	wget http://cs.indiana.edu/~rrnewton/files/mega_asts_1.0.tbz
-	tar xf mega_asts_1.0.tbz
+	tar xvf mega_asts_1.0.tbz
 
 expanded_racket: ${DATASET}
 	mkdir -p $@
@@ -92,6 +92,7 @@ MEGASIZE=10
 mega_asts:
 	$(MAKE) wget_mega
 
+# These are larger and larger prefixes of the list of 4456 Racket files.
 megas:
 	$(MAKE) MEGASIZE=1 mega
 	$(MAKE) MEGASIZE=5 mega
@@ -103,6 +104,7 @@ megas:
 
 mega: mega_asts/mega_$(MEGASIZE).gpkd
 
+# These are instead more artifical/balanced replications of a single file.
 mega1s: 
 	$(MAKE) REPLICATE=1 mega1
 	$(MAKE) REPLICATE=5 mega1
@@ -127,9 +129,36 @@ mega_asts/mega1_$(REPLICATE).sexp: mega_asts/mega_1.sexp
 	( cat `yes ./mega_asts/mega_1.sexp.list | head -$(REPLICATE) | paste -s` )> mega_asts/mega1_$(REPLICATE).sexp.list
 	cat mega_asts/mega1_$(REPLICATE).sexp.list | racket combine.rkt --out mega_asts/mega1_$(REPLICATE).sexp
 
-mega_asts/mega1_$(REPLICATE).gpkd: mega_asts/mega1_$(REPLICATE).sexp
+# mega_asts/mega1_$(REPLICATE).gpkd: mega_asts/mega1_$(REPLICATE).sexp
+mega_asts/*.gpkd: mega_asts/*.sexp
 	raco make binary_pack.rkt
 	echo $< $@ | racket binary_pack.rkt
+
+pack_all:
+	raco make binary_pack.rkt
+	for f in mega_asts/nested*.sexp; do \
+	  echo $$f "$${f%.sexp}.gpkd" | racket binary_pack.rkt ; done
+
+# These nested versions create a deeper tree by calling combine.rkt log(n) times.
+nested:
+	$(MAKE) mega_asts/nested_1.sexp
+	$(MAKE) COUNT=2 go_nested
+	$(MAKE) COUNT=4 go_nested
+	$(MAKE) COUNT=8 go_nested
+	$(MAKE) COUNT=16 go_nested
+	$(MAKE) COUNT=32 go_nested
+	$(MAKE) COUNT=64 go_nested
+	$(MAKE) COUNT=128 go_nested
+	$(MAKE) COUNT=256 go_nested
+	$(MAKE) COUNT=512 go_nested
+
+go_nested: mega_asts/nested_$(COUNT).sexp
+mega_asts/nested_1.sexp: mega_asts/mega_1.sexp
+	cp $^ $@
+
+COUNT_HALF = $(shell expr $(COUNT) / 2)
+mega_asts/nested_$(COUNT).sexp: mega_asts/nested_$(COUNT_HALF).sexp
+	racket combine.rkt --out $@ $^ $^
 
 largest:
 	echo "Here are some of the larger files:"
