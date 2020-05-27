@@ -243,13 +243,14 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       makeProt fn ispure = do
         dflags <- getDynFlags
         let prot@(C.InitGroup decl_spec _ inits lc) = C.funcProto fn
-            purattr = C.Attr (C.Id "pure" noLoc) [] noLoc
+            _purattr = C.Attr (C.Id "pure" noLoc) [] noLoc
             -- Only add pure annotations if compiling in pointer mode, and if the
             -- --no-pure-annot flag is not passed.
-            pureAnnotOk = not (gopt Opt_No_PureAnnot dflags || gopt Opt_Packed dflags)
-        if ispure && pureAnnotOk
-        then return $ C.InitGroup decl_spec [purattr] inits lc
-        else return prot
+            _pureAnnotOk = not (gopt Opt_No_PureAnnot dflags || gopt Opt_Packed dflags)
+        -- if ispure && pureAnnotOk
+        -- then return $ C.InitGroup decl_spec [purattr] inits lc
+        -- else return prot
+        return prot
 
       codegenFun :: FunDecl -> PassM [(C.Definition, C.Definition)]
       codegenFun fd@FunDecl{funName} =
@@ -474,6 +475,8 @@ codegenTail venv fenv (LetTimedT flg bnds rhs body) ty sync_deps =
        rhs'' <- codegenTail venv fenv rhs' ty sync_deps
        batchtime <- gensym "batchtime"
        selftimed <- gensym "selftimed"
+       times <- gensym "times"
+       tmp <- gensym "tmp"
        let ident = case bnds of
                      ((v,_):_) -> v
                      _ -> (toVar "")
@@ -481,25 +484,40 @@ codegenTail venv fenv (LetTimedT flg bnds rhs body) ty sync_deps =
            end   = "end_" ++ (fromVar ident)
            iters = "iters_"++ (fromVar ident)
 
-           timebod = [ C.BlockDecl [cdecl| struct timespec $id:begn; |]
-                     , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |]
-                     , (if flg
-                        -- Save and restore EXCEPT on the last iteration.  This "cancels out" the effect of intermediate allocations.
-                        then let body = [ C.BlockStm [cstm| if ( $id:iters != global_iters_param-1) save_alloc_state(); |] ] ++
-                                        rhs''++
-                                        [ C.BlockStm [cstm| if ( $id:iters != global_iters_param-1) restore_alloc_state(); |] ]
-                             in C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < global_iters_param; $id:iters ++) { $items:body } |]
-                        else C.BlockStm [cstm| { $items:rhs'' } |])
-                     , C.BlockDecl [cdecl| struct timespec $id:end; |]
-                     , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
-                     , C.BlockDecl [cdecl| double $id:batchtime = difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
-                     , C.BlockDecl [cdecl| double $id:selftimed = $id:batchtime / global_iters_param; |]
-                     ]
+           timebod = [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy FloatTy)) ($id:times); |]
+                     , C.BlockStm  [cstm| utarray_new($id:times, &double_icd); |]
+                     , C.BlockDecl [cdecl| struct timespec $id:begn; |]
+                     , C.BlockDecl [cdecl| struct timespec $id:end; |] ] ++
+
+                     (if flg
+                         -- Save and restore EXCEPT on the last iteration.  This "cancels out" the effect of intermediate allocations.
+                      then (let body = [ C.BlockStm [cstm| if ( $id:iters != global_iters_param-1) save_alloc_state(); |]
+                                       , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |]
+                                       ] ++
+                                       rhs''++
+                                       [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
+                                       , C.BlockStm [cstm| if ( $id:iters != global_iters_param-1) restore_alloc_state(); |]
+                                       , C.BlockDecl [cdecl| double $id:batchtime = difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
+                                       , C.BlockStm [cstm| utarray_push_back($id:times, &($id:batchtime)); |]
+                                       ]
+                            in [ C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < global_iters_param; $id:iters ++) { $items:body } |]
+                               , C.BlockStm [cstm| utarray_sort($id:times, compare_doubles); |]
+                               , C.BlockDecl [cdecl| double *$id:tmp = (double*) utarray_eltptr($id:times, (global_iters_param / 2)); |]
+                               , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
+                               , C.BlockStm [cstm| print_timing_array($id:times); |]
+                               ])
+
+                         -- else
+                      else [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |]
+                           , C.BlockStm [cstm| { $items:rhs'' } |]
+                           , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
+                           , C.BlockDecl [cdecl| double $id:selftimed = difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
+                           ])
            withPrnt = timebod ++
                        if flg
                        then [ C.BlockStm [cstm| printf("ITERS: %lld\n", global_iters_param); |]
                             , C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
-                            , C.BlockStm [cstm| printf("BATCHTIME: %e\n", $id:batchtime); |]
+                            -- , C.BlockStm [cstm| printf("BATCHTIME: %e\n", $id:batchtime); |]
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", $id:selftimed); |]
                             ]
                        else [ C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
@@ -902,6 +920,12 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    let [(outV, IntTy)] = bnds
                        e = [cexp| __cilkrts_get_worker_number() |]
                    return $ [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = $exp:e; |] ]
+
+                 IsBig -> do
+                   let [(outV, BoolTy)] = bnds
+                       [i,arg] = rnds
+                       e = [cexp| is_big($(codegenTriv venv i), $(codegenTriv venv arg)) |]
+                   return $ [ C.BlockDecl [cdecl| $ty:(codegenTy BoolTy) $id:outV = $exp:e; |] ]
 
                  Gensym  -> do
                    let [(outV,SymTy)] = bnds

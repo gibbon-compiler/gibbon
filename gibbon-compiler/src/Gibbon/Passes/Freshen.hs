@@ -227,8 +227,6 @@ freshExp venv tvenv exp =
 
     SyncE -> pure SyncE
 
-    IsBigE e -> IsBigE <$> go e
-
     MapE (v,t,b) e -> do
       b' <- go b
       e' <- go e
@@ -339,8 +337,6 @@ freshExp1 vs exp =
         Just v' -> return $ SpawnE (cleanFunName v') [] ls'
 
     SyncE -> pure SyncE
-
-    IsBigE e -> IsBigE <$> freshExp1 vs e
 
     MapE (v,t,b) e -> do
       b' <- freshExp1 vs b

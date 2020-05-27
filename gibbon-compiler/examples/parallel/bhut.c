@@ -23,6 +23,7 @@
 #endif
 #ifdef _PARALLEL
 #include <cilk/cilk.h>
+#include <cilk/reducer.h>
 #include <cilk/cilk_api.h>
 #endif
 
@@ -817,8 +818,6 @@ int main(int argc, char** argv)
 // Program starts here
 // -----------------------------------------------------------------------------
 
-#define MAX_NUM_POINTS 2000000
-
 typedef struct Float32Float32Prod_struct {
     FloatTy field0; // x
     FloatTy field1; // y
@@ -982,8 +981,52 @@ typedef struct CursorCursorCursorProd_struct {
     CursorTy field2;
 } CursorCursorCursorProd;
 
+
+// -----------------------------------------------------------------------------
+// Cilk reducer stuff
+
+void points2d_append(UT_array *ls, Point2D *p) {
+    utarray_push_back(ls, &p);
+}
+
+void points2d_init(UT_array *ls) {
+    utarray_new(ls, &Point2D_icd);
+}
+
+void points2d_identity(void* reducer, void* list) {
+    UT_array *ls = (UT_array*) list;
+    utarray_new(ls, &Point2D_icd);
+}
+
+void points2d_reduce(void* reducer, void* left, void* right) {
+    UT_array *ls1 = (UT_array*) left;
+    UT_array *ls2 = (UT_array*) right;
+    utarray_concat(ls1, ls2);
+}
+
+void particles_append(UT_array *ls, Particle p) {
+    utarray_push_back(ls, &p);
+}
+
+void particles_init(UT_array *ls) {
+    utarray_new(ls, &Particle_icd);
+}
+
+void particles_identity(void* reducer, void* list) {
+    UT_array *ls = (UT_array*) list;
+    utarray_new(ls, &Particle_icd);
+}
+
+void particles_reduce(void* reducer, void* left, void* right) {
+    printf("concating...\n");
+    UT_array *ls1 = (UT_array*) left;
+    UT_array *ls2 = (UT_array*) right;
+    utarray_concat(ls1, ls2);
+}
+
 // -----------------------------------------------------------------------------
 
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
 void twoDPtsToParticles(UT_array *dst, UT_array *ps);
 void particlesToMassPoints(UT_array *dst, UT_array *ps);
 FloatTy minX(UT_array *ps);
@@ -994,12 +1037,17 @@ void calcCentroid(MassPoint *dst, UT_array *ls);
 void massPtsInBox(UT_array *dst, Box *box, UT_array *ps);
 void accel(Point2D *dst, MassPoint *mpt, FloatTy x, FloatTy y, FloatTy m);
 FloatTy dist(FloatTy a_x, FloatTy a_y, FloatTy b_x, FloatTy b_y);
-BoolTy isClose(FloatTy a_x, FloatTy a_y, FloatTy b_x, FloatTy b_y);
+FloatTy maxDim(Box *b);
+BoolTy isClose(FloatTy a_x, FloatTy a_y, FloatTy b_x, FloatTy b_y, FloatTy size);
 void calcAccel_seq(Point2D *dst, MassPoint *mpt, CursorTy in_cur);
 void calcAccel(Point2D *dst, MassPoint *mpt, CursorTy in_cur, IntTy c);
 void mapCalcAccel(UT_array *dst, UT_array *mpts, CursorTy tr);
+void mapCalcAccel_par(UT_array *dst, UT_array *mpts, CursorTy tr);
+void mapCalcAccel_par2(UT_array *dst, UT_array *mpts, CursorTy tr);
 void applyAccel(Particle *dst, Particle *particle, Point2D *accel);
 void mapApplyAccel(UT_array *dst, UT_array *particles, UT_array *accels);
+void mapApplyAccel_par(UT_array *dst, UT_array *particles, UT_array *accels);
+void mapApplyAccel_par2(UT_array *dst, UT_array *particles, UT_array *accels);
 void minus_point2d(Point2D *dst, Point2D *p1, Point2D *p2);
 void plus_point2d(Point2D *dst, Point2D *p1, Point2D *p2);
 void mult_point2d(Point2D *dst, Point2D *p1, FloatTy s);
@@ -1012,6 +1060,10 @@ CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
                                  Box *box, UT_array *mpts, IntTy c);
 IntTy getElems(CursorTy end_in_reg, CursorTy in_cur);
 CursorTy _print_BH_Tree(CursorTy p3362);
+
+// int visited_leaves = 0;
+// int called_isclose = 0;
+// int isclose = 0;
 
 // -----------------------------------------------------------------------------
 
@@ -1104,8 +1156,8 @@ void calcCentroid(MassPoint *dst, UT_array *mpts) {
         acc_y += mp->field1 * mp->field2;
         acc_mass += mp->field2;
     }
-    dst->field0 = acc_x;
-    dst->field1 = acc_y;
+    dst->field0 = acc_x / acc_mass;
+    dst->field1 = acc_y / acc_mass;
     dst->field2 = acc_mass;
 }
 
@@ -1129,18 +1181,26 @@ void massPtsInBox(UT_array *dst, Box *box, UT_array *mpts) {
 }
 
 void accel(Point2D *dst, MassPoint *mpt, FloatTy x, FloatTy y, FloatTy m) {
+
+    if (mpt->field0 == x && mpt->field1 == y && mpt->field2 == m) {
+        dst->field0 = 0.0;
+        dst->field1 = 0.0;
+        return;
+    }
     FloatTy dx = mpt->field0 - x;
     FloatTy dy = mpt->field1 - y;
     FloatTy rsqr = (dx * dx) + (dy * dy);
     FloatTy r = sqrt(rsqr);
-    if (r < 0.05) {
-        dst->field0 = 0.0;
-        dst->field1 = 0.0;
-    } else {
-        FloatTy aabs = m / rsqr;
-        dst->field0 = aabs * dx;
-        dst->field1 = aabs * dy;
-    }
+    FloatTy s = (mpt->field2 * m / (rsqr * r));
+    dst->field0 = dx * s;
+    dst->field1 = dy * s;
+    // printf("dx:%f, dy: %f, rsqr: %f, r: %f, s: %f, vx: %f, vy: %f\n", dx, dy, rsqr, r, s, dx*s, dy*s);
+}
+
+FloatTy maxDim(Box *b) {
+    FloatTy x = b->rux - b->llx;
+    FloatTy y = b->ruy - b->lly;
+    return MAX(x,y);
 }
 
 FloatTy dist(FloatTy a_x, FloatTy a_y, FloatTy b_x, FloatTy b_y) {
@@ -1149,8 +1209,17 @@ FloatTy dist(FloatTy a_x, FloatTy a_y, FloatTy b_x, FloatTy b_y) {
     return (d1 * d1) + (d2 * d2);
 }
 
-BoolTy isClose(FloatTy a_x, FloatTy a_y, FloatTy b_x, FloatTy b_y) {
-    return dist(a_x, a_y, b_x, b_y) < 0.01;
+BoolTy isClose(FloatTy a_x, FloatTy a_y, FloatTy b_x, FloatTy b_y, FloatTy size) {
+    FloatTy r2 = dist(a_x, a_y, b_x, b_y);
+    // printf("r2: %f, size: %f\n", r2, size);
+    FloatTy alpha2 = 1.0;
+    FloatTy sizesq = size * size;
+    // called_isclose++;
+    BoolTy b = r2 < sizesq;
+    // if (b) {
+    //     isclose++;
+    // }
+    return b;
 }
 
 void calcAccel_seq(Point2D *dst, MassPoint *mpt, CursorTy in_cur) {
@@ -1178,6 +1247,7 @@ void calcAccel_seq(Point2D *dst, MassPoint *mpt, CursorTy in_cur) {
             m = *(FloatTy *) tail;
             tail += sizeof(FloatTy);
 
+            // visited_leaves ++;
             accel(dst,mpt,x,y,m);
 
             return;
@@ -1187,7 +1257,7 @@ void calcAccel_seq(Point2D *dst, MassPoint *mpt, CursorTy in_cur) {
       case 3:
         {
             CursorTy tree1, tree2, tree3, tree4;
-            FloatTy x, y, m;
+            FloatTy x, y, m, size;
             IntTy total_elems;
 
             tree2 = *(CursorTy *) tail;
@@ -1203,13 +1273,14 @@ void calcAccel_seq(Point2D *dst, MassPoint *mpt, CursorTy in_cur) {
             tail += sizeof(FloatTy);
             m = *(FloatTy *) tail;
             tail += sizeof(FloatTy);
+            size = *(FloatTy *) tail;
+            tail += sizeof(FloatTy);
             total_elems = *(IntTy *) tail;
             tail += sizeof(IntTy);
 
             tree1 = tail;
 
-            if(isClose(mpt->field0, mpt->field1, x, y)) {
-
+            if(isClose(mpt->field0, mpt->field1, x, y, size)) {
                 Point2D a1, a2, a3, a4;
                 calcAccel_seq(&a1, mpt, tree1);
                 calcAccel_seq(&a2, mpt, tree2);
@@ -1246,113 +1317,142 @@ void calcAccel_seq(Point2D *dst, MassPoint *mpt, CursorTy in_cur) {
 
       default:
         {
-            printf("calcAccel: Unknown tag: %d", tag);
+            printf("calcAccel_seq: Unknown tag: %d", tag);
             exit(1);
         }
     }
 }
 
-void calcAccel(Point2D *dst, MassPoint *mpt, CursorTy in_cur, IntTy c) {
-    TagTyPacked tag = *(TagTyPacked *) in_cur;
-    CursorTy tail = in_cur + 1;
+// void calcAccel(Point2D *dst, MassPoint *mpt, CursorTy in_cur, IntTy c) {
+//     TagTyPacked tag = *(TagTyPacked *) in_cur;
+//     CursorTy tail = in_cur + 1;
 
-  switch3128:
-    ;
-    switch (tag) {
+//   switch3128:
+//     ;
+//     switch (tag) {
 
-      case 0:
-        {
-            dst->field0 = 0.0;
-            dst->field1 = 0.0;
-            break;
-        }
+//       case 0:
+//         {
+//             dst->field0 = 0.0;
+//             dst->field1 = 0.0;
+//             break;
+//         }
 
-      case 1:
-        {
-            FloatTy x, y, m;
-            x = *(FloatTy *) tail;
-            tail += sizeof(FloatTy);
-            y = *(FloatTy *) tail;
-            tail += sizeof(FloatTy);
-            m = *(FloatTy *) tail;
-            tail += sizeof(FloatTy);
+//       case 1:
+//         {
+//             FloatTy x, y, m;
+//             x = *(FloatTy *) tail;
+//             tail += sizeof(FloatTy);
+//             y = *(FloatTy *) tail;
+//             tail += sizeof(FloatTy);
+//             m = *(FloatTy *) tail;
+//             tail += sizeof(FloatTy);
 
-            accel(dst,mpt,x,y,m);
+//             accel(dst,mpt,x,y,m);
+//             visited_leaves ++;
 
-            return;
-            break;
-        }
+//             return;
+//             break;
+//         }
 
-      case 3:
-        {
-            CursorTy tree1, tree2, tree3, tree4;
-            FloatTy x, y, m;
-            IntTy total_elems;
+//       case 3:
+//         {
+//             CursorTy tree1, tree2, tree3, tree4;
+//             FloatTy x, y, m, size;
+//             IntTy total_elems;
 
-            tree2 = *(CursorTy *) tail;
-            tail += 8;
-            tree3 = *(CursorTy *) tail;
-            tail += 8;
-            tree4 = *(CursorTy *) tail;
-            tail += 8;
+//             tree2 = *(CursorTy *) tail;
+//             tail += 8;
+//             tree3 = *(CursorTy *) tail;
+//             tail += 8;
+//             tree4 = *(CursorTy *) tail;
+//             tail += 8;
 
-            x = *(FloatTy *) tail;
-            tail += sizeof(FloatTy);
-            y = *(FloatTy *) tail;
-            tail += sizeof(FloatTy);
-            m = *(FloatTy *) tail;
-            tail += sizeof(FloatTy);
-            total_elems = *(IntTy *) tail;
-            tail += sizeof(IntTy);
+//             x = *(FloatTy *) tail;
+//             tail += sizeof(FloatTy);
+//             y = *(FloatTy *) tail;
+//             tail += sizeof(FloatTy);
+//             m = *(FloatTy *) tail;
+//             tail += sizeof(FloatTy);
+//             size = *(FloatTy *) tail;
+//             tail += sizeof(FloatTy);
+//             total_elems = *(IntTy *) tail;
+//             tail += sizeof(IntTy);
 
-            tree1 = tail;
+//             tree1 = tail;
 
-            if (total_elems < c) {
-                return calcAccel_seq(dst, mpt, in_cur);
-            }
+//             if(isClose(mpt->field0, mpt->field1, x, y, size)) {
+//                 Point2D a1, a2, a3, a4;
+//                 cilk_spawn calcAccel(&a1, mpt, tree1, c);
+//                 cilk_spawn calcAccel(&a2, mpt, tree2, c);
+//                 cilk_spawn calcAccel(&a3, mpt, tree3, c);
+//                 calcAccel(&a4, mpt, tree4, c);
+//                 dst->field0 = (a1.field0 + a2.field0 + a3.field0 + a4.field0);
+//                 dst->field1 = (a1.field1 + a2.field1 + a3.field1 + a4.field1);
+//                 return;
 
-            if(isClose(mpt->field0, mpt->field1, x, y)) {
+//             } else {
+//                 accel(dst,mpt,x,y,m);
+//                 return;
+//             }
+//             break;
+//         }
 
-                Point2D a1, a2, a3, a4;
-                cilk_spawn calcAccel(&a1, mpt, tree1, c);
-                cilk_spawn calcAccel(&a2, mpt, tree2, c);
-                cilk_spawn calcAccel(&a3, mpt, tree3, c);
-                calcAccel(&a4, mpt, tree4, c);
-                cilk_sync;
-                dst->field0 = (a1.field0 + a2.field0 + a3.field0 + a4.field0);
-                dst->field1 = (a1.field1 + a2.field1 + a3.field1 + a4.field1);
-                return;
+//       case 100:
+//         {
+//             CursorTy new_in_cur = *(CursorTy *) tail;
+//             tag = *(TagTyPacked *) new_in_cur;
+//             tail = new_in_cur + 1;
+//             goto switch3128;
+//             break;
+//         }
 
-            } else {
-                accel(dst,mpt,x,y,m);
-                return;
-            }
-            break;
-        }
+//       case 90:
+//         {
+//             CursorTy new_in_cur = *(CursorTy *) tail;
+//             tag = *(TagTyPacked *) new_in_cur;
+//             tail = new_in_cur + 1;
+//             goto switch3128;
+//             break;
+//         }
 
-      case 100:
-        {
-            CursorTy new_in_cur = *(CursorTy *) tail;
-            tag = *(TagTyPacked *) new_in_cur;
-            tail = new_in_cur + 1;
-            goto switch3128;
-            break;
-        }
+//       default:
+//         {
+//             printf("calcAccel: Unknown tag: %d", tag);
+//             exit(1);
+//         }
+//     }
+// }
 
-      case 90:
-        {
-            CursorTy new_in_cur = *(CursorTy *) tail;
-            tag = *(TagTyPacked *) new_in_cur;
-            tail = new_in_cur + 1;
-            goto switch3128;
-            break;
-        }
+void mapCalcAccel_par(UT_array *dst, UT_array *mpts, CursorTy tr) {
+    int len = utarray_len(mpts);
+    utarray_reserve(dst, len);
 
-      default:
-        {
-            printf("calcAccel: Unknown tag: %d", tag);
-            exit(1);
-        }
+    CILK_C_DECLARE_REDUCER(UT_array) points2d_reducer =
+        CILK_C_INIT_REDUCER(UT_array,
+                            points2d_reduce,
+                            points2d_identity,
+                            __cilkrts_hyperobject_noop_destroy);
+    // Initial value omitted //;
+    points2d_init(&REDUCER_VIEW(points2d_reducer));
+    CILK_C_REGISTER_REDUCER(points2d_reducer);
+
+    cilk_for (int idx = 0; idx < len; idx++) {
+        Point2D p;
+        MassPoint *mp = (MassPoint*) utarray_eltptr(mpts, idx);
+        calcAccel_seq(&p, mp, tr);
+        points2d_append(&REDUCER_VIEW(points2d_reducer), &p);
+    }
+
+    CILK_C_UNREGISTER_REDUCER(points2d_reducer);
+}
+
+void mapCalcAccel_par2(UT_array *dst, UT_array *mpts, CursorTy tr) {
+    int len = utarray_len(mpts);
+    cilk_for (int idx = 0; idx < len; idx++) {
+        MassPoint *mp = (MassPoint*) utarray_eltptr(mpts, idx);
+        Point2D *p = (Point2D*) utarray_eltptr(dst, idx);
+        calcAccel_seq(p, mp, tr);
     }
 }
 
@@ -1360,11 +1460,6 @@ void mapCalcAccel(UT_array *dst, UT_array *mpts, CursorTy tr) {
     IntTy idx;
     MassPoint *mp;
     Point2D p;
-
-    IntTy cutoff = 1048576;
-    // IntTy cutoff = 524288;
-    // IntTy cutoff = 262144;
-    // IntTy cutoff = 131072;
 
     for (idx = 0; idx < utarray_len(mpts); idx++) {
         mp = (MassPoint*) utarray_eltptr(mpts, idx);
@@ -1376,15 +1471,17 @@ void mapCalcAccel(UT_array *dst, UT_array *mpts, CursorTy tr) {
 
 void applyAccel(Particle *dst, Particle *p, Point2D *a) {
     FloatTy vx, vy, ax, ay;
-    vx = p->field0;
-    vy = p->field1;
+    vx = p->field3;
+    vy = p->field4;
     ax = a->field0;
     ay = a->field1;
     dst->field0 = p->field0;
     dst->field1 = p->field1;
     dst->field2 = p->field2;
-    dst->field3 = (vx + ax) * 2.0;
-    dst->field4 = (vy + ay) * 2.0;
+    dst->field3 = vx + (ax * 2.0);
+    dst->field4 = vy + (ay * 2.0);
+    // dst->field3 = 0.0 + (ax * 2.0);
+    // dst->field4 = 0.0 + (ay * 2.0);
 }
 
 void mapApplyAccel(UT_array *dst, UT_array *ps, UT_array *accels){
@@ -1393,16 +1490,64 @@ void mapApplyAccel(UT_array *dst, UT_array *ps, UT_array *accels){
         printf("mapApplyAccel: size mismatch, %d != %d", utarray_len(ps), utarray_len(accels));
         exit(1);
     }
-    IntTy len = utarray_len(ps);
-    IntTy idx;
+    int len = utarray_len(ps);
     Particle *p;
     Point2D *a;
     Particle p2;
-    for (idx = 0; idx < len; idx++) {
+
+    for (int idx = 0; idx < len; idx++) {
         a = (Point2D*) utarray_eltptr(accels, idx);
         p = (Particle*) utarray_eltptr(ps, idx);
         applyAccel(&p2, p, a);
         utarray_push_back(dst, &p2);
+    }
+}
+
+void mapApplyAccel_par(UT_array *dst, UT_array *ps, UT_array *accels){
+
+    if (utarray_len(ps) != utarray_len(accels)) {
+        printf("mapApplyAccel: size mismatch, %d != %d", utarray_len(ps), utarray_len(accels));
+        exit(1);
+    }
+    IntTy len = utarray_len(ps);
+    IntTy idx;
+
+    utarray_reserve(dst, len);
+
+    CILK_C_DECLARE_REDUCER(UT_array) particles_reducer =
+        CILK_C_INIT_REDUCER(UT_array,
+                            particles_reduce,
+                            particles_identity,
+                            __cilkrts_hyperobject_noop_destroy);
+    // Initial value omitted //;
+    points2d_init(&REDUCER_VIEW(particles_reducer));
+    CILK_C_REGISTER_REDUCER(particles_reducer);
+
+    cilk_for (idx = 0; idx < len; idx++) {
+        Particle *p = (Particle*) utarray_eltptr(ps, idx);
+        Point2D *a = (Point2D*) utarray_eltptr(accels, idx);
+        Particle p3;
+        applyAccel(&p3, p, a);
+        particles_append(&REDUCER_VIEW(particles_reducer), p3);
+    }
+
+    CILK_C_UNREGISTER_REDUCER(particles_reducer);
+}
+
+void mapApplyAccel_par2(UT_array *dst, UT_array *ps, UT_array *accels){
+
+    if (utarray_len(ps) != utarray_len(accels)) {
+        printf("mapApplyAccel: size mismatch, %d != %d", utarray_len(ps), utarray_len(accels));
+        exit(1);
+    }
+    IntTy len = utarray_len(ps);
+    IntTy idx;
+
+    cilk_for (idx = 0; idx < len; idx++) {
+        Particle *d = (Particle*) utarray_eltptr(dst, idx);
+        Particle *p = (Particle*) utarray_eltptr(ps, idx);
+        Point2D *a = (Point2D*) utarray_eltptr(accels, idx);
+        applyAccel(d, p, a);
     }
 }
 
@@ -1524,7 +1669,9 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
 
         *(TagTyPacked *) out_cur = 3;
         CursorTy cur_fields = out_cur + 1;
-        CursorTy cur_tree1  = cur_fields + 56;
+        // CursorTy cur_tree1  = cur_fields + 56;
+        int offset = (3 * sizeof(CursorTy)) + (4 * sizeof(FloatTy)) + sizeof(IntTy);
+        CursorTy cur_tree1 = cur_fields + offset;
 
         // tree1
         UT_array *mpts1;
@@ -1565,6 +1712,8 @@ CursorCursorCursorProd buildTree_seq(CursorTy end_out_reg, CursorTy out_cur,
         *(FloatTy *) cur_fields = centroid.field1;
         cur_fields += sizeof(FloatTy);
         *(FloatTy *) cur_fields = centroid.field2;
+        cur_fields += sizeof(FloatTy);
+        *(FloatTy *) cur_fields = maxDim(box);
         cur_fields += sizeof(FloatTy);
 
         IntTy total_elems =
@@ -1651,7 +1800,9 @@ CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
         // Build the trees
         *(TagTyPacked *) out_cur = 3;
         CursorTy cur_fields = out_cur + 1;
-        CursorTy cur_tree1  = cur_fields + 56;
+        // CursorTy cur_tree1  = cur_fields + 56;
+        int offset = (3 * sizeof(CursorTy)) + (4 * sizeof(FloatTy)) + sizeof(IntTy);
+        CursorTy cur_tree1 = cur_fields + offset;
 
         // Data declarations for the trees
         CursorCursorCursorProd tree1, tree2, tree3, tree4;
@@ -2045,6 +2196,8 @@ CursorCursorCursorProd buildTree(CursorTy end_out_reg, CursorTy out_cur,
         cur_fields += sizeof(FloatTy);
         *(FloatTy *) cur_fields = centroid.field2;
         cur_fields += sizeof(FloatTy);
+        *(FloatTy *) cur_fields = maxDim(box);
+        cur_fields += sizeof(FloatTy);
 
         IntTy total_elems =
             getElems(tree1.field0, tree1.field1) +
@@ -2090,7 +2243,8 @@ IntTy getElems(CursorTy end_in_reg, CursorTy in_cur) {
 
       case 3:
         {
-            tail += 48;
+            int offset = (3 * sizeof(CursorTy)) + (4 * sizeof(FloatTy));
+            tail += offset;
             IntTy n = *(IntTy *) tail;
             return n;
         }
@@ -2186,8 +2340,15 @@ CursorTy _print_BH_Tree(CursorTy p3362) {
             printf("%f", val3375);
             fputs(" ", stdout);
 
-            IntTy val3377 = *(IntTy *) tail3376;
-            CursorTy tail3378 = tail3376 + sizeof(IntTy);
+
+            FloatTy val_size = *(FloatTy *) tail3376;
+            CursorTy tail_size = tail3376 + sizeof(FloatTy);
+            printf("%f", val_size);
+            fputs(" ", stdout);
+
+
+            IntTy val3377 = *(IntTy *) tail_size;
+            CursorTy tail3378 = tail_size + sizeof(IntTy);
 
             printf("%lld", val3377);
             fputs(" ", stdout);
@@ -2236,8 +2397,14 @@ CursorTy _print_BH_Tree(CursorTy p3362) {
             printf("%f", val3390);
             fputs(" ", stdout);
 
-            IntTy val3392 = *(IntTy *) tail3391;
-            CursorTy tail3393 = tail3391 + sizeof(IntTy);
+            FloatTy val_size = *(FloatTy *) tail3391;
+            CursorTy tail_size = tail3391 + sizeof(FloatTy);
+
+            printf("%f", val_size);
+            fputs(" ", stdout);
+
+            IntTy val3392 = *(IntTy *) tail_size;
+            CursorTy tail3393 = tail_size + sizeof(IntTy);
 
             printf("%lld", val3392);
             fputs(" ", stdout);
@@ -2363,24 +2530,54 @@ void __main_expr() {
     // IntTy cutoff = 131072;
     IntTy cutoff = 65536;
 
+    struct timespec begin_time_tree;
+    struct timespec end_time_tree;
+    struct timespec begin_time_forces;
+    struct timespec end_time_forces;
+
     for (int i = 0; i < global_iters_param; i++) {
-        utarray_clear(accels);
-        utarray_clear(final_particles);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &begin_time_tree);
         tree = buildTree(end_reg,cur,&box, mpts, cutoff);
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end_time_tree);
+        double time_tree = difftimespecs(&begin_time_tree, &end_time_tree);
+        printf("time tree: %f\n", time_tree);
+
         CursorTy tr = tree.field1;
         // _print_BH_Tree(tr);
         // printf("\nbuilt tree\n");
-        mapCalcAccel(accels, mpts, tr);
-        mapApplyAccel(final_particles, particles, accels);
+
+        utarray_clear(accels);
+        utarray_clear(final_particles);
+
+        clock_gettime(CLOCK_MONOTONIC_RAW, &begin_time_forces);
+
+        // sequential
+        // // printf("mpts.len: %d\n", utarray_len(mpts));
+        // mapCalcAccel(accels, mpts, tr);
+        // mapApplyAccel(final_particles, particles, accels);
+
+        // // parallel reducers (don't work)
+        // mapCalcAccel_par(accels, mpts, tr);
+        // mapApplyAccel_par(final_particles, particles, accels);
+
+        // parallel for with mutation
+        // On Swarm, cilk_for speeds up these loops by 3-4x. But most of the
+        // runtime is spent on constructing the tree. So the overall effect
+        // of parallelizing these loops is negligible.
+        utarray_concat(accels,pts);
+        utarray_concat(final_particles,particles);
+        mapCalcAccel_par2(accels, mpts, tr);
+        mapApplyAccel_par2(final_particles, particles, accels);
+        // final_particles = particles;
+
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end_time_forces);
+        double time_forces = difftimespecs(&begin_time_forces, &end_time_forces);
+        printf("time forces: %f\n", time_forces);
     }
 
-    // Particle *pcle;
-    // for(pcle=(Particle*)utarray_front(final_particles);
-    //     pcle!=NULL;
-    //     pcle=(Particle*)utarray_next(final_particles,pcle)) {
-    //     printf("(%f, %f, %f, %f, %f)\n", pcle->field0, pcle->field1, pcle->field2, pcle->field3, pcle->field4);
-    // }
-
+    // printf("visited_leaves: %d\n", visited_leaves);
+    // printf("called_isclose: %d\n", called_isclose);
+    // printf("isclose: %d\n", isclose);
 
     printf("Elems: %lld\n", getElems(tree.field0, tree.field1));
 

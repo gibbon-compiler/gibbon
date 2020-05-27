@@ -114,7 +114,7 @@ fromListWithAxis axis pts =
              left_pts   = vslice sorted_pts 0 pivot_idx
              right_pts  = vslice sorted_pts pivot_idx len
              next_axis  = getNextAxis_2D axis
-             left_tr    = fromListWithAxis next_axis left_pts
+             left_tr    = fromListWithAxis  next_axis left_pts
              right_tr   = fromListWithAxis next_axis right_pts
              min_x      = min (getMinX left_tr) (getMinX right_tr)
              max_x      = max (getMaxX left_tr) (getMaxX right_tr)
@@ -130,11 +130,10 @@ fromList :: [(Float, Float, Float)] -> KdTree
 fromList pts = fromListWithAxis 0 pts
 
 
-fromListWithAxis_par :: Int -> [(Float, Float, Float)] -> KdTree
-fromListWithAxis_par axis pts =
+fromListWithAxis_par :: Int -> Int -> [(Float, Float, Float)] -> KdTree
+fromListWithAxis_par cutoff axis pts =
     let len = vlength pts in
-    -- 2 ^ 19 == 524288
-    if len < 524288
+    if len < cutoff
     then fromListWithAxis axis pts
     -- if len == 1
     -- then let pt = vnth 0 pts
@@ -145,8 +144,8 @@ fromListWithAxis_par axis pts =
              left_pts   = vslice sorted_pts 0 pivot_idx
              right_pts  = vslice sorted_pts pivot_idx len
              next_axis  = getNextAxis_2D axis
-             left_tr    = spawn (fromListWithAxis_par next_axis left_pts)
-             right_tr   = fromListWithAxis_par next_axis right_pts
+             left_tr    = spawn (fromListWithAxis_par cutoff next_axis left_pts)
+             right_tr   = fromListWithAxis_par cutoff next_axis right_pts
              _          = sync
              min_x      = min (getMinX left_tr) (getMinX right_tr)
              max_x      = max (getMaxX left_tr) (getMaxX right_tr)
@@ -158,8 +157,8 @@ fromListWithAxis_par axis pts =
          in KdNode total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
-fromList_par :: [(Float, Float, Float)] -> KdTree
-fromList_par pts = fromListWithAxis_par 0 pts
+fromList_par :: Int -> [(Float, Float, Float)] -> KdTree
+fromList_par cutoff pts = fromListWithAxis_par cutoff 0 pts
 
 
 -- | Sum of all points in KD-Tree
@@ -190,5 +189,7 @@ gibbon_main =
         pts = readArrayFile ()
         n       = sizeParam
         radius  = intToFloat n
-        tr      = iterate (fromList_par pts)
+        -- 2 ^ 19 == 524288
+        cutoff  = 524288
+        tr      = iterate (fromList_par cutoff pts)
     in sumKdTree tr

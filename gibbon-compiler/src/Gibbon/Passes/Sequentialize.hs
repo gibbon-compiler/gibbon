@@ -75,7 +75,6 @@ sequentializeFn parallel_fn_names fn@FunDef{funName,funBody} = do
           pure $ TimeIt e' ty b
         SpawnE{} -> error "sequentializeFn: Unbound SpawnE"
         SyncE    -> error "sequentializeFn: Unbound SyncE"
-        IsBigE e -> IsBigE <$> go e
         WithArenaE v e -> WithArenaE v <$> (go e)
         Ext{}   -> pure ex
         MapE{}  -> error "MapE"

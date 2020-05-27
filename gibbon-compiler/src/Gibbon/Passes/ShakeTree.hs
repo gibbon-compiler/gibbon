@@ -70,7 +70,6 @@ shakeTreeExp = go
     (WithArenaE{}) -> error "shakeTreExp: WithArenaE not handled."
     (SpawnE{}) -> error "shakeTreExp: SpawnE not handled."
     (SyncE{}) -> error "shakeTreExp: SyncE not handled."
-    (IsBigE{}) -> error "shakeTreExp: IsBigE not handled."
 
     -- Assume that these are trivial, and always have effects
     Ext _ext -> e0
@@ -119,7 +118,6 @@ hasEffect rhs =
       WithArenaE{} -> error "hasEffect: WithArenaE not handled."
       SpawnE{} -> error "hasEffect: SpawnE not handled."
       SyncE{} -> error "hasEffect: SyncE not handled."
-      IsBigE{} -> error "hasEffect: IsBigE not handled."
 
       -- always have effects
       Ext _ -> True

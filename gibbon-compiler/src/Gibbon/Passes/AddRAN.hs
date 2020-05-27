@@ -3,7 +3,7 @@
 module Gibbon.Passes.AddRAN
   (addRAN, numRANsDataCon, needsRAN) where
 
-import           Control.Monad ( when )
+import           Control.Monad ( when, forM )
 import           Data.Foldable
 import           Data.List as L
 import qualified Data.Map as M
@@ -128,12 +128,15 @@ addRAN needRANsTyCons prg@Prog{ddefs,fundefs,mainExp} = do
     dbgTrace 2 ("Adding random access nodes: " ++ sdoc (S.toList needRANsTyCons)) (return ())
   let iddefs = withRANDDefs needRANsTyCons ddefs
   funs <- mapM (\(nm,f) -> (nm,) <$> addRANFun needRANsTyCons iddefs f) (M.toList fundefs)
+  new_fns <- mapM (genRelOffsetsFunNameFn needRANsTyCons ddefs) (M.elems ddefs)
+  let funs' = (M.fromList funs) `M.union`
+              (M.fromList $ L.map (\f -> (funName f, f)) new_fns)
   mainExp' <-
     case mainExp of
       Just (ex,ty) -> Just <$> (,ty) <$> addRANExp needRANsTyCons iddefs M.empty ex
       Nothing -> return Nothing
   let l1 = prg { ddefs = iddefs
-               , fundefs = M.fromList funs
+               , fundefs = funs'
                , mainExp = mainExp'
                }
   pure l1
@@ -146,6 +149,10 @@ addRANFun needRANsTyCons ddfs fd@FunDef{funBody} = do
 addRANExp :: S.Set TyCon -> DDefs Ty1 -> RANEnv -> Exp1 -> PassM Exp1
 addRANExp needRANsTyCons ddfs ienv ex =
   case ex of
+    -- Update a data constructor to produce values with random access nodes.
+    -- N.B. It always uses absolute pointers for random access nodes. We
+    -- may not always want this. If we know that a region is BigInf, we should
+    -- use relative offsets as pointers. But that's not being done right now.
     DataConE loc dcon args ->
       case numRANsDataCon ddfs dcon of
         0 -> return ex
@@ -162,7 +169,7 @@ addRANExp needRANsTyCons ddfs ienv ex =
 
           rans <- mkRANs ienv needRANsExp
           let ranArgs = L.map (\(v,_,_,_) -> VarE v) rans
-          return $ mkLets rans (DataConE loc (toRANDataCon dcon) (ranArgs ++ args))
+          return $ mkLets rans (DataConE loc (toAbsRANDataCon dcon) (ranArgs ++ args))
 
     -- standard recursion here
     VarE{}    -> return ex
@@ -185,7 +192,6 @@ addRANExp needRANsTyCons ddfs ienv ex =
       return $ WithArenaE v e'
     SpawnE f locs args -> SpawnE f locs <$> mapM go args
     SyncE   -> pure SyncE
-    IsBigE e-> IsBigE <$> go e
     Ext _   -> return ex
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{} -> error "addRANExp: TODO FoldE"
@@ -215,7 +221,6 @@ addRANExp needRANsTyCons ddfs ienv ex =
         WithArenaE v e -> WithArenaE v (changeSpawnToApp e)
         SpawnE f locs args -> AppE f locs $ map changeSpawnToApp args
         SyncE   -> SyncE
-        IsBigE e-> IsBigE $ changeSpawnToApp e
         Ext{}   -> ex1
         MapE{}  -> error "addRANExp: TODO MapE"
         FoldE{} -> error "addRANExp: TODO FoldE"
@@ -231,22 +236,23 @@ addRANExp needRANsTyCons ddfs ienv ex =
           if not (tycon `S.member` needRANsTyCons)
           then pure [old_pat]
           else do
-            ranVars <- mapM (\_ -> gensym "ran") [1..n]
+            absRanVars <- mapM (\_ -> gensym "absran") [1..n]
+            sizeVar <- gensym "size"
+            relRanVars <- mapM (\_ -> gensym "relran") [1..n]
+            let relRanVars' = sizeVar : relRanVars
             let tys = lookupDataCon ddfs dcon
                 -- See Note [Reusing RAN's in case expressions]
                 -- We update the environment to track RAN's of the
                 -- variables bound by this pattern.
                 firstPacked = fromJust $ L.findIndex isPackedTy tys
                 haveRANsFor = L.take n $ L.drop firstPacked $ L.map fst vs
-                ienv' = M.union ienv (M.fromList $ zip haveRANsFor ranVars)
-            -- Keep around case clauses that don't have random access nodes;
-            -- AddTraversals runs later to make sure that they compile.
-            -- [2020.04.23]: disabling this so that the typechecker compiles.
-            -- (:[]) <$>
-            -- [2020.04.28]: re-enabling so that these clauses are kept around in
-            -- order to reproduce the error in the typechecker
-            (:[old_pat]) <$>
-              (toRANDataCon dcon, (L.map (,()) ranVars) ++ vs,) <$> addRANExp needRANsTyCons ddfs ienv' bod
+                ienv' = M.union ienv (M.fromList $ zip haveRANsFor absRanVars)
+                ienv'' = M.union ienv (M.fromList $ zip haveRANsFor relRanVars)
+            bod' <- addRANExp needRANsTyCons ddfs ienv' bod
+            bod'' <- addRANExp needRANsTyCons ddfs ienv'' bod
+            let abs_ran_clause = (toAbsRANDataCon dcon, (L.map (,()) absRanVars) ++ vs, bod')
+            let rel_ran_clause = (toRelRANDataCon dcon, (L.map (,()) relRanVars') ++ vs, bod'')
+            pure [abs_ran_clause,rel_ran_clause]
 
 -- | Update data type definitions to include random access nodes.
 withRANDDefs :: Out a => S.Set TyCon -> DDefs (UrTy a) -> DDefs (UrTy a)
@@ -256,27 +262,37 @@ withRANDDefs needRANsTyCons ddfs = M.map go ddfs
     go dd@DDef{dataCons} =
       let dcons' = L.foldr (\(dcon,tys) acc ->
                               case numRANsDataCon ddfs dcon of
-                                0 -> (dcon,tys) : acc
+                                0 -> acc
                                 n -> -- Not all types have random access nodes.
                                      if not (getTyOfDataCon ddfs dcon `S.member` needRANsTyCons)
-                                     then (dcon,tys) : acc
+                                     then acc
                                      else
-                                       let tys'  = [(False,CursorTy) | _ <- [1..n]] ++ tys
-                                           dcon' = toRANDataCon dcon
-                                       in [(dcon,tys), (dcon',tys')] ++ acc)
+                                       let tys'   = [(False,CursorTy) | _ <- [1..n]] ++ tys
+                                           dcon'  = toAbsRANDataCon dcon
+
+                                           tys''  = (False,IntTy) : [(False,IntTy) | _ <- [1..n]] ++ tys
+                                           dcon'' = toRelRANDataCon dcon
+                                       in [(dcon',tys'),(dcon'',tys'')] ++ acc)
                    [] dataCons
-      in dd {dataCons = dcons'}
+      -- Add the new constructors after all the existing constructors.
+      -- The order of constructors matters when these become numeric tags after codegen.
+      -- Adding new ones after all the old ones ensures that files that were
+      -- serialized using a datatype before continue to work even after this datatype
+      -- is updated to have random access capabilities.
+      in dd {dataCons = dataCons ++ dcons'}
 
 
 -- | The number of nodes needed by a 'DataCon' for full random access
 -- (which is equal the number of arguments occurring after the first packed type).
 --
 numRANsDataCon :: Out a => DDefs (UrTy a) -> DataCon -> Int
-numRANsDataCon ddfs dcon =
-  case L.findIndex isPackedTy tys of
-    Nothing -> 0
-    Just firstPacked -> (length tys) - firstPacked - 1
-  where tys = lookupDataCon ddfs dcon
+numRANsDataCon ddfs dcon
+  | isAbsRANDataCon dcon || isRelRANDataCon dcon = 0
+  | otherwise =
+    case L.findIndex isPackedTy tys of
+      Nothing -> 0
+      Just firstPacked -> (length tys) - firstPacked - 1
+    where tys = lookupDataCon ddfs dcon
 
 {-
 
@@ -401,7 +417,6 @@ we need random access for that type.
 
     SpawnE{} -> error "needsRANExp: Unbound SpawnE"
     SyncE    -> error "needsRANExp: Unbound SyncE"
-    IsBigE{} -> S.empty
 
     LetE(v,_,ty,rhs) bod -> go rhs `S.union`
                             needsRANExp ddefs fundefs (extendVEnv v ty env2) renv tcenv parlocss bod
@@ -450,3 +465,102 @@ we need random access for that type.
           tys = map (gRecoverType ddefs env21) args
       in M.fromList (concatMap fn tys)
     parAppLoc _ oth = error $ "parAppLoc: Cannot handle "  ++ sdoc oth
+
+--------------------------------------------------------------------------------
+
+{-| Given a datatype, generate a copy-like function. But instead of just copying
+the input value, it udpates constructors to have size information, and also
+relative offsets. Assumes that this function will always be called on a value
+written to a contiguous region. Chunked regions are not supported.
+
+For example, for the Tree datatype it'll generate a function like this:
+
+data Tree = Leaf Int | Node Tree Tree | Node* Int Int Tree Tree
+
+_add_size_and_rel_offsets_Tree :: Tree -> Tree
+_add_size_and_rel_offsets_Tree tr =
+  case tr of
+    Leaf i          -> Leaf i
+    Node left right ->
+      let left'  = _add_size_and_rel_offsets_Tree left
+          right' = _add_size_and_rel_offsets_Tree right
+          size   = sizeof(left') + sizeof(right') + 1 + 8 + 8
+          offset_right = sizeof(left')
+      in Node* size offset_right left' right'
+
+For a different datatype;
+
+data Foo = K1 | K2 Foo Foo Foo | K2* Int Int Int Tree Tree Tree
+
+_add_size_and_rel_offsets_Foo :: Foo -> Foo
+_add_size_and_rel_offsets_Foo foo =
+  case foo of
+    K1 -> K1
+    K2 a b c ->
+      let a' = _add_size_and_rel_offsets_Foo a
+          b' = _add_size_and_rel_offsets_Foo b
+          c' = _add_size_and_rel_offsets_Foo c
+          size = 1 + 8 + 8 + 8 + sizeof(a') + sizeof(b') + sizeof(c')
+          offset_b = 8 + sizeof(a')
+          offset_c = sizeof(a') + sizeof(b')
+      in K2* size offset_b offset_c a' b' c'
+
+-}
+genRelOffsetsFunNameFn :: S.Set TyCon -> DDefs Ty1 -> DDef Ty1 -> PassM FunDef1
+genRelOffsetsFunNameFn needRANsTyCons ddfs DDef{tyName, dataCons} = do
+  arg <- gensym $ "arg"
+  casebod <- forM dataCons $ \(dcon, dtys) ->
+             do let tys = L.map snd dtys
+                xs <- mapM (\_ -> gensym "x") tys
+                ys <- mapM (\_ -> gensym "y") tys
+                let num_offsets = numRANsDataCon ddfs dcon
+                bod <- do
+                       let bod0 acc = foldr (\(ty,x,y) acc ->
+                                               if isPackedTy ty
+                                               then LetE (y, [], ty, AppE (mkRelOffsetsFunName (tyToDataCon ty)) [] [VarE x]) acc
+                                               else LetE (y, [], ty, VarE x) acc)
+                                            acc
+                                            (L.zip3 tys xs ys)
+                       if not (S.member (fromVar tyName) needRANsTyCons) then return $ bod0 (DataConE () dcon (map VarE ys))
+                       else if num_offsets == 0
+                       -- Nothing much to do. Just recursively process all the packed arguments.
+                       then return $ bod0 (DataConE () dcon (map VarE ys))
+                       -- We have to add a size field, and offsets in addition to recursively processing
+                       -- the packed arguments.
+                       else do
+                         size_vars <- mapM (\y -> gensym $ toVar $ "sizeof_" ++ fromVar y ++ "_") ys
+                         let size_binds acc = foldr
+                                                (\(sz,y,ty) acc ->
+                                                     if isPackedTy ty
+                                                     then LetE (sz,[],IntTy,PrimAppE RequestSizeOf [VarE y]) acc
+                                                     else LetE (sz,[],IntTy,LitE (fromJust $ sizeOfTy ty)) acc)
+                                                acc (L.zip3 size_vars ys tys)
+                         offset_vars <- mapM (\_ -> gensym "offset_") [0..(num_offsets-1)]
+                         let need_offsets = reverse $ L.take num_offsets (reverse xs)
+                         let addp ls = case ls of
+                                         []       -> LitE 0
+                                         (x:y:[]) -> PrimAppE AddP [VarE x, VarE y]
+                                         (x:rst)  -> PrimAppE AddP [VarE x, addp rst]
+                         let offset_binds acc = foldr
+                                                  (\(ov, x) acc ->
+                                                     let idx_of_x    = fromJust $ L.elemIndex x xs
+                                                         idx_of_ov   = fromJust $ L.elemIndex ov offset_vars
+                                                         offsets_infront = length (L.drop idx_of_ov offset_vars) - 1
+                                                         have_to_add = L.take idx_of_x size_vars
+                                                         rhs = PrimAppE AddP [LitE $ (fromJust (sizeOfTy IntTy)) * offsets_infront,
+                                                                              addp have_to_add]
+                                                     in LetE (ov,[],IntTy,rhs) acc)
+                                                  acc (zip offset_vars need_offsets)
+                         dcon_size <- gensym "size_dcon"
+                         let size_offsets = LitE $ 1 + (fromJust (sizeOfTy IntTy)) * length offset_vars
+                             dcon_size_bind acc = LetE (dcon_size,[],IntTy, PrimAppE AddP [size_offsets, addp size_vars] ) acc
+                             dcon_args = [dcon_size] ++ offset_vars ++  ys
+                             dcon' = toRelRANDataCon dcon
+                         pure $ bod0 $ size_binds $ offset_binds $ dcon_size_bind $ DataConE () dcon' (map VarE dcon_args)
+                return (dcon, L.map (\x -> (x,())) xs, bod)
+
+  return $ FunDef { funName = mkRelOffsetsFunName (fromVar tyName)
+                  , funArgs = [arg]
+                  , funTy   = ( [PackedTy (fromVar tyName) ()], PackedTy (fromVar tyName) () )
+                  , funBody = CaseE (VarE arg) casebod
+                  }

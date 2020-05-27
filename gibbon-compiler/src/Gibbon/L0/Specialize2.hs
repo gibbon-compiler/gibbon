@@ -196,7 +196,6 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         SpawnE _ (_:_) _ -> err1 (sdoc ex)
         SpawnE f [] args -> SpawnE f [] (map toL1Exp args)
         SyncE            -> SyncE
-        IsBigE e         -> IsBigE (toL1Exp e)
         WithArenaE v e -> WithArenaE v (toL1Exp e)
         MapE{}  -> err1 (sdoc ex)
         FoldE{} -> err1 (sdoc ex)
@@ -619,7 +618,6 @@ collectMonoObls ddefs env2 toplevel ex =
       f' <- addFnObl f tyapps'
       pure $ SpawnE f' [] args'
     SyncE    -> pure SyncE
-    IsBigE e -> IsBigE <$> go e
     MapE{}  -> error $ "collectMonoObls: TODO: " ++ sdoc ex
     FoldE{} -> error $ "collectMonoObls: TODO: " ++ sdoc ex
   where
@@ -717,7 +715,6 @@ monoLambdas ex =
                  pure $ SpawnE f [] args'
         _  -> error $ "monoLambdas: Expression probably not processed by collectMonoObls: " ++ sdoc ex
     SyncE   -> pure SyncE
-    IsBigE e -> IsBigE <$> go e
     MapE{}  -> error $ "monoLambdas: TODO: " ++ sdoc ex
     FoldE{} -> error $ "monoLambdas: TODO: " ++ sdoc ex
   where go = monoLambdas
@@ -798,7 +795,6 @@ updateTyConsExp ddefs mono_st ex =
     WithArenaE v e -> WithArenaE v (go e)
     SpawnE fn tyapps args -> SpawnE fn tyapps (map go args)
     SyncE   -> SyncE
-    IsBigE e-> IsBigE (go e)
     MapE{}  -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     FoldE{} -> error $ "updateTyConsExp: TODO: " ++ sdoc ex
     Ext (LambdaE args bod) -> Ext (LambdaE (map (\(v,ty) -> (v, updateTyConsTy ddefs mono_st ty)) args) (go bod))
@@ -1043,7 +1039,6 @@ specLambdasExp ddefs env2 ex =
         AppE fn' tyapps' args' -> pure $ SpawnE fn' tyapps' args'
         _ -> error "specLambdasExp: SpawnE"
     SyncE   -> pure SyncE
-    IsBigE e-> IsBigE <$> go e
     MapE{}  -> error $ "specLambdasExp: TODO: " ++ sdoc ex
     FoldE{} -> error $ "specLambdasExp: TODO: " ++ sdoc ex
     Ext ext ->
@@ -1119,7 +1114,6 @@ specLambdasExp ddefs env2 ex =
                             brs
         SpawnE _ _ args -> foldr collectFunRefs acc args
         SyncE     -> acc
-        IsBigE e1 -> collectFunRefs e1 acc
         MapE{}  -> error $ "collectFunRefs: TODO: " ++ sdoc e
         FoldE{} -> error $ "collectFunRefs: TODO: " ++ sdoc e
         Ext ext ->
@@ -1240,10 +1234,6 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
 
         (SyncE)    -> pure ([], SyncE)
 
-        (IsBigE e) -> do
-          (lts,e') <- go e
-          pure (lts, IsBigE e')
-
         (WithArenaE v e) -> do
           e' <- (gocap e)
           pure ([], WithArenaE v e')
@@ -1310,7 +1300,6 @@ elimParE0 prg@Prog{fundefs,mainExp} = do
         WithArenaE v e -> (WithArenaE v) <$> go e
         SpawnE fn locs args -> (SpawnE fn locs) <$> mapM go args
         SyncE   -> pure SyncE
-        IsBigE e-> IsBigE <$> go e
         MapE{}  -> err1 (sdoc ex)
         FoldE{} -> err1 (sdoc ex)
         Ext ext ->

@@ -419,7 +419,6 @@ recoverType ddfs env2 ex =
     SpawnE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
                          in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
     SyncE -> voidTy0
-    IsBigE _ -> BoolTy
     CaseE _ mp ->
       let (c,args,e) = head mp
           args' = map fst args
@@ -477,6 +476,7 @@ recoverType ddfs env2 ex =
         Gensym  -> SymTy0
         SymAppend      -> IntTy
         SizeParam      -> IntTy
+        IsBig          -> BoolTy
         DictHasKeyP _  -> BoolTy
         DictEmptyP ty  -> SymDictTy Nothing ty
         DictInsertP ty -> SymDictTy Nothing ty
@@ -494,6 +494,7 @@ recoverType ddfs env2 ex =
         ReadPackedFile _ _ _ ty -> ty
         ReadArrayFile _ ty      -> ty
         RequestEndOf -> error "primRetTy1: RequestEndOf not handled yet"
+        RequestSizeOf-> error "primRetTy1: RequestSizeOf not handled yet"
         PrintInt     -> error "primRetTy1: PrintInt not handled yet"
         PrintSym     -> error "primRetTy1: PrintSym not handled yet"
         ReadInt      -> error "primRetTy1: ReadInt not handled yet"

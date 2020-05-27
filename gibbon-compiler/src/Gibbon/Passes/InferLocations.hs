@@ -600,8 +600,6 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
 
     SyncE -> pure (SyncE, ProdTy [], [])
 
-    IsBigE{} -> error "inferExp: IsBigE not handled."
-
     LitE n  -> return (LitE n, IntTy, [])
     FloatE n-> return (FloatE n, FloatTy, [])
 
@@ -854,8 +852,12 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           -- then do
           (ex0', ty, cs) <- inferExp env (LetE (vr,locs,bty,(AppE f [] args)) bod) dest
           -- Assume that all args are VarE's
-          let arg_vars = map (\(VarE v) -> v) args
-              args2 = map VarE arg_vars
+          let args2 = map (\e -> case e of
+                                   (VarE v) -> VarE v
+                                   (LitSymE v) -> LitSymE v
+                                   (LitE n) -> LitE n
+                                   (FloatE n) -> FloatE n)
+                          args
               ex0'' = changeAppToSpawn f args2 ex0'
           -- pure (moveProjsAfterSync vr ex0'', ty, cs)
           pure (ex0'', ty, cs)
@@ -863,12 +865,6 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
         SyncE -> do
           (bod',ty,cs) <- inferExp env bod dest
           pure (LetE (vr,[],ProdTy [],SyncE) bod', ty, cs)
-
-        IsBigE e -> do
-          (e',ty,csa) <- inferExp env e NoDest
-          (bod',bod_ty,csb) <- inferExp (extendVEnv vr BoolTy env) bod dest
-          let cs = L.nub $ csa ++ csb
-          pure (LetE (vr,[],BoolTy,IsBigE e') bod', ty, cs)
 
         IfE a b c -> do
           (boda,tya,csa) <- inferExp env a NoDest
@@ -917,6 +913,10 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
         PrimAppE RequestEndOf [(VarE v)] -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
           return (L2.LetE (vr,[],CursorTy, L2.PrimAppE RequestEndOf [(L2.VarE v)]) bod', ty', cs')
+
+        PrimAppE RequestSizeOf [(VarE v)] -> do
+          (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
+          return (L2.LetE (vr,[],IntTy, L2.PrimAppE RequestSizeOf [(L2.VarE v)]) bod', ty', cs')
 
         PrimAppE (DictInsertP dty) ls -> do
           (e,ty,cs) <- inferExp env (PrimAppE (DictInsertP dty) ls) NoDest
@@ -1135,10 +1135,6 @@ finishExp e =
 
       SyncE -> pure $ SyncE
 
-      IsBigE e -> do
-        e' <- finishExp e
-        pure $ IsBigE e'
-
       WithArenaE v e -> do
              e' <- finishExp e
              return $ WithArenaE v e'
@@ -1235,9 +1231,6 @@ cleanExp e =
 
       SyncE -> (SyncE, S.empty)
 
-      IsBigE e -> let (e',s') = cleanExp e
-                  in (IsBigE e', s')
-
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (WithArenaE v e', s)
 
@@ -1319,7 +1312,6 @@ fixProj renam pvar proj e =
       SpawnE v ls es -> let es' = map (fixProj renam pvar proj) es
                         in SpawnE v ls es'
       SyncE -> SyncE
-      IsBigE{} -> error "fixProj: IsBigE not handled."
       WithArenaE v e -> WithArenaE v $ fixProj renam pvar proj e
       Ext{} -> err$ "Unexpected Ext: " ++ (show e)
       MapE{} -> err$ "MapE not supported"
@@ -1357,7 +1349,6 @@ moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
         WithArenaE a e  -> WithArenaE a $ go acc1 pending e
         SpawnE fn locs ls -> error "moveProjsAfterSync: unbound SpawnE"
         SyncE   -> error "moveProjsAfterSync: unbound SyncE"
-        IsBigE{} -> error "moveProjsAfterSync: IsBigE not handled."
         Ext ext -> case ext of
                      LetRegionE r bod -> Ext $ LetRegionE r $ go acc1 pending bod
                      LetLocE a b bod -> Ext $ LetLocE a b $ go acc1 pending bod
@@ -1604,10 +1595,12 @@ prim p = case p of
            MkFalse -> return MkFalse
            Gensym  -> return Gensym
            SizeParam -> return SizeParam
+           IsBig    -> return IsBig
            PrintInt -> return PrintInt
            PrintSym -> return PrintSym
            ReadInt  -> return PrintInt
            RequestEndOf -> return RequestEndOf
+           RequestSizeOf -> return RequestSizeOf
            ErrorP sty ty -> convertTy ty >>= \ty -> return (ErrorP sty ty)
            DictEmptyP dty  -> convertTy dty >>= return . DictEmptyP
            DictInsertP dty -> convertTy dty >>= return . DictInsertP

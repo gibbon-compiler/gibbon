@@ -165,7 +165,6 @@ tagDataCons ddefs = go allCons
          b'  <- go cons b
          pure $ FoldE (v1,t1,e1') (v2,t2,e2') b'
        SyncE -> pure SyncE
-       IsBigE{} -> error "tagDataCons: IsBigE not handled"
        Ext (LambdaE bnds e) -> Ext <$> (LambdaE bnds) <$> (go cons e)
        Ext (PolyAppE a b)   -> do
          a' <- go cons a
@@ -444,6 +443,11 @@ exp se =
    Ls (A l1 "sync":[]) -> do
        pure $ Ext $ L (toLoc l1) SyncE
 
+   Ls3 l0 "is-big" i e -> do
+       ie <- exp i
+       ee <- exp e
+       pure $ Ext $ L (toLoc l0) $ PrimAppE IsBig [ie, ee]
+
    Ls3 l "letarena" v e -> do
      e' <- exp e
      let v' = getSym v
@@ -488,6 +492,60 @@ exp se =
 
    -- Other annotations are dropped:
    Ls3 l "ann" e _ty -> Ext <$> L (toLoc l) <$> exp e
+
+   -- List operations
+   Ls (A l "vempty" : []) -> do
+       ty <- newMetaTy
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VEmptyP ty) []
+
+   Ls3 l "vnth" i ls -> do
+       ty <- newMetaTy
+       ie <- exp i
+       lse <- exp ls
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VNthP ty) [ie, lse]
+
+   Ls2 l "vlength" ls -> do
+       ty <- newMetaTy
+       lse <- exp ls
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VLengthP ty) [lse]
+
+   Ls4 l "vupdate" ls i v -> do
+       ty <- newMetaTy
+       lse <- exp ls
+       ie <- exp i
+       ve <- exp v
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VUpdateP ty) [lse,ie,ve]
+
+   Ls3 l "vsnoc" ls v -> do
+       ty <- newMetaTy
+       lse <- exp ls
+       ve <- exp v
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VSnocP ty) [lse,ve]
+
+   Ls3 l "inplacevsnoc" ls v -> do
+       ty <- newMetaTy
+       lse <- exp ls
+       ve <- exp v
+       pure $ Ext $ L (toLoc l) $ PrimAppE (InPlaceVSnocP ty) [lse,ve]
+
+   Ls3 l "vsort" f ls -> do
+       ty <- newMetaTy
+       fe  <- exp f
+       lse <- exp ls
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VSortP ty) [fe,lse]
+
+   Ls3 l "inplacevsort" f ls -> do
+       ty <- newMetaTy
+       fe  <- exp f
+       lse <- exp ls
+       pure $ Ext $ L (toLoc l) $ PrimAppE (InPlaceVSortP ty) [fe,lse]
+
+   Ls4 l "vslice" ls from to -> do
+       ty <- newMetaTy
+       lse  <- exp ls
+       frome <- exp from
+       toe <- exp to
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VSliceP ty) [lse,frome,toe]
 
    Ls (A _ kwd : _args) | isKeyword kwd ->
       error $ "Error reading treelang. " ++ show kwd ++ "is a keyword:\n "++prnt se
@@ -561,6 +619,7 @@ primMap = M.fromList
   , ("sym-hash-empty", SymHashEmpty)
   , ("sym-hash-insert", SymHashInsert)
   , ("sym-hash-lookup", SymHashLookup)
+  , ("is-big", IsBig)
   ]
 
 prim :: Text -> Prim Ty0

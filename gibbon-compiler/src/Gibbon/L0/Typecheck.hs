@@ -397,6 +397,13 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           len0
           pure (s1, IntTy, PrimAppE pr args_tc)
 
+        IsBig -> do
+          len2
+          let [ity, _ety] = arg_tys'
+          -- s1 <- unify (args !! 0) (PackedTy)
+          s2 <- unify (args !! 0) IntTy ity
+          pure (s1 <> s2, BoolTy, PrimAppE pr args_tc)
+
         ReadPackedFile _fp _tycon _reg ty -> do
           len0
           pure (s1, ty, PrimAppE pr args_tc)
@@ -406,6 +413,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           pure (s1, ListTy ty, PrimAppE pr args_tc)
 
         RequestEndOf -> err $ text "Unexpected RequestEndOf in L0: " <+> exp_doc
+        RequestSizeOf-> err $ text "Unexpected RequestSizeOf in L0: " <+> exp_doc
 
 
     LetE (v, [], gvn_rhs_ty, rhs) bod -> do
@@ -529,13 +537,9 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
       (s1, ty, e') <- tcExp ddefs sbst venv fenv bound_tyvars is_main (AppE fn tyapps args)
       case e' of
         AppE fn' tyapps' args' -> pure (s1, ty, SpawnE fn' tyapps' args')
-        _ -> err $ text "SpawnE"
+        _ -> err $ text "SpawnE: not a saturated function"
 
     SyncE   -> pure (sbst, ProdTy [], SyncE)
-
-    IsBigE e1 -> do
-      (s1, _ty, e1') <- tcExp ddefs sbst venv fenv bound_tyvars is_main e1
-      pure (s1, BoolTy, IsBigE e1')
 
     MapE{}  -> err $ text "TODO" <+> exp_doc
     FoldE{} -> err $ text "TODO" <+> exp_doc
@@ -741,7 +745,6 @@ zonkExp s ex =
     SpawnE fn tyapps args -> let tyapps1 = map (zonkTy s) tyapps
                              in SpawnE fn tyapps1 (map go args)
     SyncE    -> SyncE
-    IsBigE e -> IsBigE (go e)
     MapE{}   -> error $ "zonkExp: TODO, " ++ sdoc ex
     FoldE{}  -> error $ "zonkExp: TODO, " ++ sdoc ex
   where
@@ -803,7 +806,6 @@ substTyVarExp s ex =
     SpawnE f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
                            in SpawnE f tyapps1 (map go arg)
     SyncE    -> SyncE
-    IsBigE e -> IsBigE (go e)
     MapE{}   -> error $ "substTyVarExp: TODO, " ++ sdoc ex
     FoldE{}  -> error $ "substTyVarExp: TODO, " ++ sdoc ex
   where

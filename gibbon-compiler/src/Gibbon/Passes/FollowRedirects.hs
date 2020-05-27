@@ -95,23 +95,26 @@ followRedirectsExp isPrintFn ttailenv tenv tail =
                                      (tailv, CursorTy   , VarTriv tailtmp)]
                           (Just (Goto lbl))))
 
-              alttail' = if isPrintFn
-                         then LetPrimCallT [] (PrintString " -> ") [] $ alttail
-                         else alttail
+              alttail_ind = if isPrintFn
+                            then LetPrimCallT [] (PrintString " ->i ") [] $ alttail
+                            else alttail
+              alttail_red = if isPrintFn
+                            then LetPrimCallT [] (PrintString " ->r ") [] $ alttail
+                            else alttail
 
           alts' <- case alts of
                     TagAlts ls -> do
                       ls' <- mapM (\(x,tl) -> (x,) <$> go tenv tl) ls
                       if indirectionAlt `elem` (map fst ls')
-                      then return $ TagAlts $ ls' ++ [(redirectionAlt, alttail')]
-                      else return $ TagAlts $ ls' ++ [(redirectionAlt, alttail'),
-                                                      (indirectionAlt, alttail')]
+                      then return $ TagAlts $ ls' ++ [(redirectionAlt, alttail_red)]
+                      else return $ TagAlts $ ls' ++ [(redirectionAlt, alttail_red),
+                                                      (indirectionAlt, alttail_ind)]
                     IntAlts ls -> do
                       ls' <- mapM (\(x,tl) -> (x,) <$> go tenv tl) ls
                       if indirectionAlt `elem` (map fst ls')
-                      then return $ IntAlts $ ls' ++ [(redirectionAlt, alttail')]
-                      else return $ IntAlts $ ls' ++ [(redirectionAlt, alttail'),
-                                                      (indirectionAlt, alttail')]
+                      then return $ IntAlts $ ls' ++ [(redirectionAlt, alttail_red)]
+                      else return $ IntAlts $ ls' ++ [(redirectionAlt, alttail_red),
+                                                      (indirectionAlt, alttail_ind)]
           return $ Switch lbl trv alts' bod_maybe
         _ -> error "followRedirectsExp: Shouldn't switch on any other type."
 

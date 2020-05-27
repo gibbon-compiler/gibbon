@@ -979,22 +979,24 @@ CursorCursorCursorProd payA_seq(CursorTy end_out_reg, CursorTy out_cur,
                 payA_seq(left.field0, left.field2, val, coins_rst, acc);
             *(CursorTy *) ran_cur = right.field1;
 
-            TagTyPacked tl, tr;
-            tl = *(TagTyPacked *) left.field1;
-            tr = *(TagTyPacked *) right.field1;
-            if (tl == 0 && tr == 0) {
-                // AppendBothNil
-                *(TagTyPacked *) out_cur = 6;
-            } else if (tl == 0) {
-                // AppendLNil
-                *(TagTyPacked *) out_cur = 4;
-            } else if (tr == 0) {
-                // AppendLNil
-                *(TagTyPacked *) out_cur = 5;
-            } else {
-                // Append
-                *(TagTyPacked *) out_cur = 3;
-            }
+            // TagTyPacked tl, tr;
+            // tl = *(TagTyPacked *) left.field1;
+            // tr = *(TagTyPacked *) right.field1;
+            // if (tl == 0 && tr == 0) {
+            //     // AppendBothNil
+            //     *(TagTyPacked *) out_cur = 6;
+            // } else if (tl == 0) {
+            //     // AppendLNil
+            //     *(TagTyPacked *) out_cur = 4;
+            // } else if (tr == 0) {
+            //     // AppendLNil
+            //     *(TagTyPacked *) out_cur = 5;
+            // } else {
+            //     // Append
+            //     *(TagTyPacked *) out_cur = 3;
+            // }
+            *(TagTyPacked *) out_cur = 3;
+            utarray_free(coins1);
 
             return (CursorCursorCursorProd) {right.field0, out_cur, right.field2};
         }
@@ -1169,16 +1171,19 @@ void __main_expr() {
     struct timespec begin_timed2661;
     clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed2661);
 
+    UT_array *coins2;
     for (int i = 0; i < global_iters_param; i++) {
-        paid = payA_seq(end_reg, reg, val, coins, acc);
+        utarray_new(coins2, &Coin_icd);
+        utarray_concat(coins2, coins);
+        paid = payA_seq(end_reg, reg, val, coins2, acc);
         // _print_AList(paid.field1);
-        len = lenA_seq(paid.field0, paid.field1);
+        utarray_free(coins2);
     }
     struct timespec end_timed2661;
     clock_gettime(CLOCK_MONOTONIC_RAW, &end_timed2661);
     double batchtime = difftimespecs(&begin_timed2661, &end_timed2661);
     double selftimed = batchtime / global_iters_param;
-
+    len = lenA_seq(paid.field0, paid.field1);
     printf("ITERS: %lld\n", global_iters_param);
     printf("SIZE: %lld\n", global_size_param);
     printf("BATCHTIME: %e\n", batchtime);

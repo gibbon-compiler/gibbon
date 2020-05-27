@@ -14,7 +14,7 @@ redirectionTag :: DataCon
 redirectionTag = "REDIRECTION"
 
 redirectionAlt :: Num a => a
-redirectionAlt = 100
+redirectionAlt = 255
 
 indirectionTag :: DataCon
 indirectionTag = "INDIRECTION"
@@ -23,16 +23,24 @@ isIndirectionTag :: DataCon -> Bool
 isIndirectionTag = isPrefixOf indirectionTag
 
 indirectionAlt :: Num a => a
-indirectionAlt = 90
+indirectionAlt = 254
 
-toRANDataCon :: DataCon -> DataCon
-toRANDataCon dcon = dcon ++ "^"
+toAbsRANDataCon :: DataCon -> DataCon
+toAbsRANDataCon dcon = dcon ++ "^"
+
+isAbsRANDataCon :: DataCon -> Bool
+isAbsRANDataCon = isSuffixOf "^"
+
+toRelRANDataCon :: DataCon -> DataCon
+toRelRANDataCon dcon = dcon ++ "*"
+
+isRelRANDataCon :: DataCon -> Bool
+isRelRANDataCon = isSuffixOf "*"
 
 fromRANDataCon :: DataCon -> DataCon
 fromRANDataCon = init
 
-isRANDataCon :: DataCon -> Bool
-isRANDataCon = isSuffixOf "^"
+--------------------------------------------------------------------------------
 
 -- | Map a DataCon onto the name of the generated unpack function.
 mkUnpackerName :: TyCon -> Var
@@ -56,3 +64,12 @@ isCopyFunName = isPrefixOf "_copy_" . fromVar
 
 mkTravFunName :: DataCon -> Var
 mkTravFunName dcon = "_traverse_" `varAppend` (toVar dcon)
+
+isTravFunName :: Var -> Bool
+isTravFunName = isPrefixOf "_traverse_" . fromVar
+
+mkRelOffsetsFunName :: DataCon -> Var
+mkRelOffsetsFunName dcon = "_add_size_and_rel_offsets_" `varAppend` (toVar dcon)
+
+isRelOffsetsFunName :: Var -> Bool
+isRelOffsetsFunName = isPrefixOf "_add_size_and_rel_offsets_" . fromVar

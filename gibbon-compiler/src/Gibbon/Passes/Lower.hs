@@ -94,8 +94,9 @@ genUnpacker DDef{tyName, dataCons} = do
   tail <- gensym "tail"
   alts <- genAlts dataCons tail tag 0
   lbl  <- gensym "switch"
+  let def_alt = T.ErrT $ "Unknown tag in: " ++ fromVar lbl
   bod  <- return $ T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] T.ReadTag [(T.VarTriv p)] $
-            T.Switch lbl (T.VarTriv tag) alts Nothing
+                   T.Switch lbl (T.VarTriv tag) alts (Just def_alt)
   return T.FunDecl{ T.funName  = mkUnpackerName (fromVar tyName),
                     T.funArgs  = [(p, T.CursorTy)],
                     T.funRetTy = T.ProdTy [T.PtrTy, T.CursorTy],
@@ -205,11 +206,12 @@ genPrinter DDef{tyName, dataCons} = do
   alts <- genAltPrinter dataCons tail 0
   lbl  <- gensym "switch"
   dflags <- getDynFlags
+  let def_alt = T.ErrT $ "Unknown tag in: " ++ fromVar lbl
   let bod = if gopt Opt_Packed dflags
             then T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadTag) [(T.VarTriv p)] $
-                 T.Switch lbl (T.VarTriv tag) alts Nothing
+                 T.Switch lbl (T.VarTriv tag) alts (Just def_alt)
             else T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv p)] $
-                 T.Switch lbl (T.VarTriv tag) alts Nothing
+                 T.Switch lbl (T.VarTriv tag) alts (Just def_alt)
   return T.FunDecl{ T.funName  = mkPrinterName (fromVar tyName),
                     T.funArgs  = [(p, T.CursorTy)],
                     T.funRetTy = T.CursorTy,
@@ -311,6 +313,9 @@ getTagOfDataCon :: Out a => DDefs a -> DataCon -> Tag
 getTagOfDataCon dds dcon =
     if isIndirectionTag dcon
     then indirectionAlt
+    else if isRelRANDataCon dcon
+    -- So that is_big in the RTS can identify which nodes have size information.
+    then 150 + (fromIntegral ix)
     else fromIntegral ix
   where Just ix = L.elemIndex dcon $ getConOrdering dds (fromVar tycon)
         (tycon,_) = lkp dds dcon
@@ -411,11 +416,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
           WithArenaE _ e -> go e
           SpawnE _ _ ls  -> gol ls
           SyncE -> S.empty
-          IsBigE{} -> error "collect_syms: IsBigE not handled."
           Ext ext        ->
             case ext of
               WriteScalar _ _ ex -> go ex
               AddCursor _ ex   -> go ex
+              SubPtr{}         -> syms
               WriteCursor _ ex -> go ex
               ReadScalar{}   -> syms
               ReadTag{}      -> syms
@@ -466,8 +471,6 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     -- Likewise, Case really means ReadTag.  Argument is a cursor.
     CaseE (VarE scrut) ls | pkd -> do
-        let (last:restrev) = reverse ls
-            rest = reverse restrev
         tagtmp <- gensym $ toVar "tmpval"
         ctmp   <- gensym $ toVar "tmpcur"
         -- Here we lamely chase down all the tuple references and make them variables:
@@ -481,15 +484,15 @@ lower Prog{fundefs,ddefs,mainExp} = do
                   []  -> tail sym_tbl rhs' -- AUDITME -- is this legit, or should it have one cursor param anyway?
                   [(c,_)] -> tail sym_tbl (subst c (VarE ctmp) rhs')
                   oth -> error $ "lower.tail.CaseE: unexpected pattern" ++ show oth
-        alts <- mapM doalt rest
-        (_,last') <- doalt last
+        alts <- mapM doalt ls
+        let def_alt = T.ErrT $ "Unknown tag in: " ++ fromVar tagtmp
         lbl <- gensym "switch"
         return $
          T.LetPrimCallT [(tagtmp,T.TagTyPacked),(ctmp,T.CursorTy)] T.ReadTag [T.VarTriv scrut] $
           T.Switch lbl
                    (T.VarTriv tagtmp)
                    (T.TagAlts alts)
-                   (Just last')
+                   (Just def_alt)
 
     --------------------------------------------------------------------------------
     -- Not-packed, pointer-based codegen
@@ -516,7 +519,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
       rhs' <- tail sym_tbl rhs
       return (T.LetUnpackT (zip bndrs' tys') e_var rhs')
 
-    CaseE e (def_alt : alts) | not pkd -> do
+    CaseE e alts | not pkd -> do
       tag_bndr <- gensym $ toVar "tag"
       tail_bndr <- gensym $ toVar "tail"
 
@@ -532,8 +535,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
           rhs' <- tail sym_tbl rhs
           return ( fromIntegral con_tag, T.LetUnpackT (zip bndrs' bndr_tys) tail_bndr rhs' )
 
-      alts'    <- mapM mk_alt alts
-      (_, def) <- mk_alt def_alt
+      alts' <- mapM mk_alt alts
+      let def_alt = T.ErrT $ "Unknown tag in: " ++ fromVar tag_bndr
       lbl <- gensym "switch"
 
       return $
@@ -541,7 +544,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
           [(tag_bndr, T.TagTyPacked), (tail_bndr, T.CursorTy)]
           (T.ReadScalar IntS)
           [e_triv]
-          (T.Switch lbl (T.VarTriv tag_bndr) (T.IntAlts alts') (Just def))
+          (T.Switch lbl (T.VarTriv tag_bndr) (T.IntAlts alts') (Just def_alt))
 
 
     -- Accordingly, constructor allocation becomes an allocation.
@@ -673,6 +676,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE (v,_, _,  (Ext (AddCursor c e))) bod ->
       T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv sym_tbl "addCursor base" (VarE c)
                                              , triv sym_tbl "addCursor offset" e] <$>
+         tail sym_tbl bod
+
+    LetE (v,_, _,  (Ext (SubPtr a b))) bod ->
+      T.LetPrimCallT [(v,T.IntTy)] T.SubP [ triv sym_tbl "subCursor base" (VarE a)
+                                          , triv sym_tbl "subCursor offset" (VarE b)] <$>
          tail sym_tbl bod
 
     LetE (v,_, _,  (Ext (ReadTag cur))) bod -> do
@@ -821,7 +829,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                         _ -> return ([(vr,typ t)], bod)
         T.LetCallT False vsts f' (L.map (triv sym_tbl "one of app rands") ls) <$> (tail sym_tbl bod')
 
-    LetE (v, _,ty, ( (L3.SpawnE fn locs args))) bod -> do
+    LetE (v, _,ty, L3.SpawnE fn locs args) bod -> do
       tl <- tail sym_tbl (LetE (v,_,ty, AppE fn locs args) bod)
       -- This is going to be a LetCallT.
       pure $ tl { T.async = True }
@@ -962,6 +970,7 @@ prim p =
     OrP    -> T.OrP
     AndP   -> T.AndP
     SizeParam -> T.SizeParam
+    IsBig    -> T.IsBig
     PrintInt -> T.PrintInt
     PrintSym -> T.PrintSym
     ReadInt  -> T.ReadInt
@@ -995,6 +1004,7 @@ prim p =
     MkFalse      -> error "lower/prim: internal error. MkFalse should not get here."
     SymAppend    -> error "lower/prim: internal error. SymAppend should not get here."
     RequestEndOf -> error "lower/prim: internal error. RequestEndOf shouldn't be here."
+    RequestSizeOf -> error "lower/prim: internal error. RequestSizeOf shouldn't be here."
 
 isTrivial' :: Exp3 -> Bool
 isTrivial' e =

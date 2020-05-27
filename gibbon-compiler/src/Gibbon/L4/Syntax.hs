@@ -272,6 +272,7 @@ data Prim
 
     | ParSync          -- ^ cilk_sync
     | GetCilkWorkerNum -- ^ Runs  __cilkrts_get_worker_number()
+    | IsBig
 
     | Gensym
 

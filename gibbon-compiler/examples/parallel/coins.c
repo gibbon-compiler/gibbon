@@ -837,7 +837,7 @@ CursorCursorCursorProd payA_seq(CursorTy end_out_reg, CursorTy out_cur,
                                 IntTy val, UT_array *coins, UT_array *acc);
 CursorCursorCursorProd payA(CursorTy end_out_reg, CursorTy out_cur,
                             IntTy val, UT_array *coins, UT_array *acc,
-                            IntTy depth, IntTy c);
+                            IntTy depth);
 void print_intlist(UT_array *ls);
 void print_coins(UT_array *ls);
 CursorTy _print_AList(CursorTy cur);
@@ -1006,6 +1006,21 @@ IntTy lenA(CursorTy end_in_reg, CursorTy in_cur, IntTy depth, IntTy c) {
       }
 }
 
+
+// UT_array *get_coins_rst(UT_array *coins) {
+//     IntTy len = (IntTy) utarray_len(coins);
+//     UT_array *coins_rst = coins;
+//     utarray_erase(coins_rst, len-1, 1);
+//     return coins_rst;
+// }
+
+// UT_array *get_coins1(UT_array *coins_rst) {
+//     UT_array *coins1;
+//     utarray_new(coins1, &Coin_icd);
+//     utarray_concat(coins1, coins_rst);
+//     return coins1;
+// }
+
 CursorCursorCursorProd payA_seq(CursorTy end_out_reg, CursorTy out_cur,
                                 IntTy val, UT_array *coins, UT_array *acc) {
 
@@ -1042,6 +1057,7 @@ CursorCursorCursorProd payA_seq(CursorTy end_out_reg, CursorTy out_cur,
         Coin *coin = (Coin*) utarray_back(coins);
         UT_array *coins_rst = coins;
         utarray_erase(coins_rst, len-1, 1);
+        // UT_array *coins_rst = get_coins_rst(coins);
 
         if (coin->val > val) {
             return payA_seq(end_out_reg, out_cur, val, coins_rst, acc);
@@ -1054,6 +1070,7 @@ CursorCursorCursorProd payA_seq(CursorTy end_out_reg, CursorTy out_cur,
             UT_array *coins1;
             utarray_new(coins1, &Coin_icd);
             utarray_concat(coins1, coins_rst);
+            // UT_array *coins1 = get_coins1(coins_rst);
             if (coin->quant != 1) {
                 Coin ctmp = (Coin) {coin->val, coin->quant - 1};
                 utarray_push_back(coins1, &ctmp);
@@ -1066,22 +1083,25 @@ CursorCursorCursorProd payA_seq(CursorTy end_out_reg, CursorTy out_cur,
                 payA_seq(left.field0, left.field2, val, coins_rst, acc);
             *(CursorTy *) ran_cur = right.field1;
 
-            TagTyPacked tl, tr;
-            tl = *(TagTyPacked *) left.field1;
-            tr = *(TagTyPacked *) right.field1;
-            if (tl == 0 && tr == 0) {
-                // AppendBothNil
-                *(TagTyPacked *) out_cur = 6;
-            } else if (tl == 0) {
-                // AppendLNil
-                *(TagTyPacked *) out_cur = 4;
-            } else if (tr == 0) {
-                // AppendLNil
-                *(TagTyPacked *) out_cur = 5;
-            } else {
-                // Append
-                *(TagTyPacked *) out_cur = 3;
-            }
+            // TagTyPacked tl, tr;
+            // tl = *(TagTyPacked *) left.field1;
+            // tr = *(TagTyPacked *) right.field1;
+            // if (tl == 0 && tr == 0) {
+            //     // AppendBothNil
+            //     *(TagTyPacked *) out_cur = 6;
+            // } else if (tl == 0) {
+            //     // AppendLNil
+            //     *(TagTyPacked *) out_cur = 4;
+            // } else if (tr == 0) {
+            //     // AppendLNil
+            //     *(TagTyPacked *) out_cur = 5;
+            // } else {
+            //     // Append
+            //     *(TagTyPacked *) out_cur = 3;
+            // }
+            *(TagTyPacked *) out_cur = 3;
+
+            utarray_free(coins1);
 
             return (CursorCursorCursorProd) {right.field0, out_cur, right.field2};
         }
@@ -1092,9 +1112,9 @@ CursorCursorCursorProd payA_seq(CursorTy end_out_reg, CursorTy out_cur,
 
 CursorCursorCursorProd payA(CursorTy end_out_reg, CursorTy out_cur,
                             IntTy val, UT_array *coins, UT_array *acc,
-                            IntTy depth, IntTy c) {
+                            IntTy depth) {
 
-    if (depth >= c) {
+    if (depth == 0) {
         return payA_seq(end_out_reg, out_cur, val, coins, acc);
     }
 
@@ -1125,7 +1145,6 @@ CursorCursorCursorProd payA(CursorTy end_out_reg, CursorTy out_cur,
         // ANil
         *(TagTyPacked *) out_cur = 0;
         return (CursorCursorCursorProd) {end_out_reg, out_cur, out_cur+1};
-
     } else {
         IntTy len = (IntTy) utarray_len(coins);
         Coin *coin = (Coin*) utarray_back(coins);
@@ -1133,7 +1152,7 @@ CursorCursorCursorProd payA(CursorTy end_out_reg, CursorTy out_cur,
         utarray_erase(coins_rst, len-1, 1);
 
         if (coin->val > val) {
-            return payA(end_out_reg, out_cur, val, coins_rst, acc, depth+1, c);
+            return payA(end_out_reg, out_cur, val, coins_rst, acc, depth);
         } else {
             // Append
             CursorTy cur = out_cur;
@@ -1143,30 +1162,31 @@ CursorCursorCursorProd payA(CursorTy end_out_reg, CursorTy out_cur,
             UT_array *coins1;
             utarray_new(coins1, &Coin_icd);
             utarray_concat(coins1, coins_rst);
+            IntTy depth_left = depth - 1;
             if (coin->quant != 1) {
                 Coin ctmp = (Coin) {coin->val, coin->quant - 1};
                 utarray_push_back(coins1, &ctmp);
+                depth_left = depth - 1;
             }
 
             IntTy val_left = val - coin->val;
             IntTy parent_id = __cilkrts_get_worker_number();
             CursorCursorCursorProd left =
-                cilk_spawn payA(end_out_reg, cur, val_left, coins1, acc, depth+1, c);
+                cilk_spawn payA(end_out_reg, cur, val_left, coins1, acc, depth_left);
             IntTy cont_id = __cilkrts_get_worker_number();
 
             CursorCursorCursorProd right;
 
             if (parent_id == cont_id) {
                 // left not stolen
-                right = payA(left.field0, left.field2, val, coins_rst, acc, depth+1, c);
+                right = payA(left.field0, left.field2, val, coins_rst, acc, depth-1);
                 cilk_sync;
-
             } else {
                 // left stolen
                 RegionTy *region2 = alloc_region(global_init_inf_buf_size);
                 CursorTy reg2 = region2->start_ptr;
                 CursorTy end_reg2 = reg2 + global_init_inf_buf_size;
-                right = payA(end_reg2, reg2, val, coins_rst, acc, depth+1, c);
+                right = payA(end_reg2, reg2, val, coins_rst, acc, depth-1);
                 cilk_sync;
 
                 CursorTy end_left = left.field2;
@@ -1179,19 +1199,22 @@ CursorCursorCursorProd payA(CursorTy end_out_reg, CursorTy out_cur,
             TagTyPacked tl = *(TagTyPacked *) left.field1;
             TagTyPacked tr = *(TagTyPacked *) right.field1;
 
-            if (tl == 0 && tr == 0) {
-                // AppendBothNil
-                *(TagTyPacked *) out_cur = 6;
-            } else if (tl == 0) {
-                // AppendLNil
-                *(TagTyPacked *) out_cur = 4;
-            } else if (tr == 0) {
-                // AppendLNil
-                *(TagTyPacked *) out_cur = 5;
-            } else {
-                // Append
-                *(TagTyPacked *) out_cur = 3;
-            }
+            // if (tl == 0 && tr == 0) {
+            //     // AppendBothNil
+            //     *(TagTyPacked *) out_cur = 6;
+            // } else if (tl == 0) {
+            //     // AppendLNil
+            //     *(TagTyPacked *) out_cur = 4;
+            // } else if (tr == 0) {
+            //     // AppendLNil
+            //     *(TagTyPacked *) out_cur = 5;
+            // } else {
+            //     // Append
+            //     *(TagTyPacked *) out_cur = 3;
+            // }
+            *(TagTyPacked *) out_cur = 3;
+
+            utarray_free(coins1);
 
             return (CursorCursorCursorProd) {right.field0, out_cur, right.field2};
         }
@@ -1352,29 +1375,32 @@ void __main_expr() {
     c = (Coin) {1, 177};
     utarray_push_back(coins, &c);
 
-    RegionTy *region = alloc_region(global_init_inf_buf_size);
-    CursorTy reg = region->start_ptr;
-    CursorTy end_reg = reg + global_init_inf_buf_size;
     IntTy val = global_size_param;
     UT_array *acc;
     utarray_new(acc, &IntTy_icd);
     CursorCursorCursorProd paid;
+    RegionTy *region = alloc_region(global_init_inf_buf_size);
+    CursorTy reg = region->start_ptr;
+    CursorTy end_reg = reg + global_init_inf_buf_size;
     IntTy len;
 
     struct timespec begin_timed2661;
     clock_gettime(CLOCK_MONOTONIC_RAW, &begin_timed2661);
 
+    UT_array *coins2;
     for (int i = 0; i < global_iters_param; i++) {
-        paid = payA(end_reg, reg, val, coins, acc, 3, 0);
+        utarray_new(coins2, &Coin_icd);
+        utarray_concat(coins2, coins);
         // paid = payA_seq(end_reg, reg, val, coins, acc);
+        paid = payA(end_reg, reg, val, coins2, acc, 3);
         // _print_AList(paid.field1);
-        len = lenA(paid.field0, paid.field1, 3, 0);
+        utarray_free(coins2);
     }
     struct timespec end_timed2661;
     clock_gettime(CLOCK_MONOTONIC_RAW, &end_timed2661);
     double batchtime = difftimespecs(&begin_timed2661, &end_timed2661);
     double selftimed = batchtime / global_iters_param;
-
+    len = lenA(paid.field0, paid.field1, 3, 0);
     printf("ITERS: %lld\n", global_iters_param);
     printf("SIZE: %lld\n", global_size_param);
     printf("BATCHTIME: %e\n", batchtime);

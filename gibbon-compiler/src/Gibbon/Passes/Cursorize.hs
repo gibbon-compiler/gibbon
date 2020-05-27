@@ -4,6 +4,7 @@ module Gibbon.Passes.Cursorize
 import           Control.Monad (forM)
 import           Data.List as L
 import qualified Data.Map as M
+import           Data.Maybe (fromJust)
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.DynFlags
@@ -239,6 +240,14 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
       let (VarE v) = arg
       return $ VarE (toEndV v)
 
+    PrimAppE RequestSizeOf [arg] -> do
+      let (VarE v) = arg
+      case M.lookup v tenv of
+        Nothing -> error $ "cursorizeExp: Unbound variable: " ++ sdoc v
+        Just ty -> if isPackedTy ty
+                   then pure $ Ext $ SubPtr (toEndV v) v
+                   else pure $ LitE $ fromJust $ sizeOfTy ty
+
     PrimAppE pr args -> PrimAppE (toL3Prim pr) <$> mapM go args
 
     LetE (v,_locs, _ty, (PrimAppE (ReadPackedFile path tyc reg ty2) [])) bod ->
@@ -281,7 +290,6 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
 
     SpawnE{} -> error "cursorizeExp: Unbound SpawnE"
     SyncE{}  -> error "cursorizeExp: Unbound SyncE"
-    IsBigE{} -> error "cursorizeExp: Unbound IsBigE"
 
     -- Eg. leftmost
     Ext ext ->
@@ -488,7 +496,6 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
 
     SpawnE{} -> error "cursorizePackedExp: Unbound SpawnE"
     SyncE{}  -> error "cursorizePackedExp: Unbound SyncE"
-    IsBigE{} -> error "cursorizePackedExp: Unbound IsBigE"
 
     Ext ext ->
       case ext of
@@ -1027,8 +1034,10 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
   (dcon, [],)
     -- Advance the cursor by 1 byte so that it points to the first field
     <$> mkLets [(field_cur,[],CursorTy, Ext $ AddCursor scrtCur (LitE 1))]
-    <$> (if isRANDataCon dcon
-         then unpackWithRAN field_cur
+    <$> (if isAbsRANDataCon dcon
+         then unpackWithAbsRAN field_cur
+         else if isRelRANDataCon dcon
+         then unpackWithRelRAN field_cur
          else unpackRegularDataCon field_cur)
 
   where
@@ -1121,16 +1130,16 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
 
     -- We have access to all fields in this constructor, and can create
     -- bindings for everything. We begin by unpacking the random access nodes.
-    unpackWithRAN :: Var -> PassM Exp3
-    unpackWithRAN field_cur =
+    unpackWithAbsRAN :: Var -> PassM Exp3
+    unpackWithAbsRAN field_cur =
         -- A map from a variable to a tuple containing it's location and
         -- the RAN field it depends on. Consider this constructor:
         --
-        --     (Node^ [(ind_y3, loc_ind_y3), (n1, loc_n1) , (x2 , loc_x2), (y3 , loc_y3)] ...),
+        --     (Node^ [(ran_y3, loc_ran_y3), (n1, loc_n1) , (x2 , loc_x2), (y3 , loc_y3)] ...),
         --
         -- it will be the map:
         --
-        --     (y3 -> (loc_y3, ind_y3))
+        --     (y3 -> (loc_y3, ran_y3))
         let ran_mp =
               case numRANsDataCon ddfs (fromRANDataCon dcon) of
                 0 -> M.empty
@@ -1138,7 +1147,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                          ind_vars = L.map fst $ L.take n vlocs1
                          -- Everything else is a regular consturctor field,
                          -- which depends on some random access node
-                         data_fields = L.take n (reverse vlocs1)
+                         data_fields = reverse $ L.take n (reverse vlocs1)
                          (vars, var_locs) = unzip data_fields
                      in M.fromList $ zip vars (zip var_locs ind_vars)
         in go field_cur vlocs1 tys1 ran_mp denv1 (M.insert field_cur CursorTy tenv1)
@@ -1196,9 +1205,75 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv'
                   return $ mkLets [ loc_bind, (v, [], CursorTy, VarE loc) ] bod
 
-                _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
+                _ -> error $ "unpackWitnAbsRAN: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
 
-            _ -> error $ "unpackRegularDataCon: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
+            _ -> error $ "unpackWitnAbsRAN: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
+
+    -- We have access to all fields in this constructor, and can create
+    -- bindings for everything. We begin by unpacking the random access nodes.
+    unpackWithRelRAN :: Var -> PassM Exp3
+    unpackWithRelRAN field_cur =
+        -- ran_mp is a map from a variable to a tuple containing it's location and
+        -- the RAN field it depends on. Consider this constructor:
+        --
+        --     (Node* [(ran_y3, loc_ran_y3), (n1, loc_n1) , (x2 , loc_x2), (y3 , loc_y3)] ...),
+        --
+        -- it will be the map:
+        --
+        --     (y3 -> (loc_y3, ran_y3))
+        let ran_mp =
+              case numRANsDataCon ddfs (fromRANDataCon dcon) of
+                0 -> M.empty
+                n -> let -- Random access nodes occur immediately after the tag
+                         inds = L.take n $ L.drop 1 vlocs1
+                         -- Everything else is a regular consturctor field,
+                         -- which depends on some random access node
+                         data_fields = reverse $ L.take n (reverse vlocs1)
+                         (vars, var_locs) = unzip data_fields
+                     in M.fromList $ zip vars (zip var_locs inds)
+        in go field_cur vlocs1 tys1 ran_mp denv1 (M.insert field_cur CursorTy tenv1)
+      where
+        go :: Var -> [(Var, LocVar)] -> [Ty2] -> M.Map Var (Var,(Var,Var)) -> DepEnv -> TyEnv Ty2 -> PassM Exp3
+        go cur vlocs tys indirections_env denv tenv = do
+          case (vlocs, tys) of
+            ([], []) -> processRhs denv tenv
+            ((v,loc):rst_vlocs, ty:rst_tys) ->
+              case ty of
+                -- Int, Sym, or Bool
+                _ | isScalarTy ty -> do
+                  (tenv', binds) <- scalarBinds ty v loc tenv
+                  let loc_bind = case M.lookup v indirections_env of
+                                   -- This appears before the first packed field. Unpack it
+                                   -- in the usual way.
+                                   Nothing ->
+                                     (loc,[],CursorTy, VarE cur)
+                                   -- We need to read this using a random access node
+                                   Just (_var_loc, (ind_var, ind_loc)) ->
+                                     (loc,[],CursorTy, Ext $ AddCursor ind_loc (VarE ind_var))
+                      binds' = loc_bind:binds
+                      tenv'' = M.insert loc CursorTy tenv'
+                  bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv''
+                  return $ mkLets binds' bod
+
+                PackedTy{} -> do
+                  tmp_loc <- gensym "loc"
+                  let tenv' = M.union (M.fromList [ (loc, CursorTy)
+                                                  , (v,   CursorTy) ])
+                              tenv
+                      loc_binds = case M.lookup v indirections_env of
+                                    -- This is the first packed value. We can unpack this.
+                                    Nothing ->
+                                      [(loc, [], CursorTy, VarE cur)]
+                                    -- We need to access this using a random access node
+                                    Just (_var_loc, (ind_var, ind_loc)) ->
+                                      [ (tmp_loc,[],CursorTy, Ext $ AddCursor ind_loc (VarE ind_var))
+                                      , (loc,[],CursorTy, Ext $ AddCursor tmp_loc (LitE 8)) ]
+                  bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv'
+                  return $ mkLets  (loc_binds ++ [(v, [], CursorTy, VarE loc)]) bod
+
+                _ -> error $ "unpackWithRelRAN: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
+
+            _ -> error $ "unpackWithRelRAN: Unexpected numnber of varible, type pairs: " ++ show (vlocs,tys)
 
     -- Generate bindings for unpacking int fields. A convenient
     scalarBinds :: Ty2 -> Var -> LocVar -> TyEnv Ty2 -> PassM (TyEnv Ty2, [(Var, [()], Ty3, Exp3)])

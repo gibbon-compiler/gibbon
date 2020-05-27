@@ -190,7 +190,6 @@ interp rc _ddefs fenv = go M.empty
 
           SpawnE f locs args -> go env (AppE f locs args)
           SyncE -> pure $ VInt (-1)
-          IsBigE{} -> pure $ VBool False
 
           WithArenaE v e -> let env' = M.insert v (VInt 0) env
                             in go env' e
@@ -264,6 +263,7 @@ applyPrim rc p ls =
    ((DictEmptyP _),[_])                      -> VDict M.empty
    ((ErrorP msg _ty),[]) -> error msg
    (SizeParam,[]) -> VInt (rcSize rc)
+   (IsBig,[_one,_two]) -> VBool False
    (ReadPackedFile file _ _ ty,[]) ->
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
    (ReadArrayFile{},[]) -> VList []

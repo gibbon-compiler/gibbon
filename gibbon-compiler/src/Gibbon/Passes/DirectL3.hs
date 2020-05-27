@@ -38,11 +38,17 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
         LitSymE v -> LitSymE v
         AppE v locs ls   -> AppE v locs $ map (go env2) ls
         PrimAppE pr args -> PrimAppE pr $ L.map (go env2) args
+        LetE (v,locs,ty,ProjE i arg) bod ->
+            LetE (v, locs, goTy ty, ProjE i (go env2 arg)) $
+            go (extendVEnv v ty env2) bod
         LetE (v,locs,ty,rhs) bod -> LetE (v, locs, goTy ty, go env2 rhs) $
                                       go (extendVEnv v ty env2) bod
         IfE a b c   -> IfE (go env2 a) (go env2 b) (go env2 c)
         MkProdE ls  -> MkProdE $ L.map (go env2) ls
-        ProjE i arg -> ProjE i $ go env2 arg
+        ProjE i arg ->
+            let ty = gRecoverType ddfs env2 ex
+                rhs' = ProjE i $ go env2 arg
+            in LetE ("prjtmp", [], ty, rhs') (VarE "prjtmp")
         CaseE scrt ls -> CaseE (go env2 scrt) $
                            L.map (\(dcon,vs,rhs) -> (dcon,vs,go env2 rhs)) ls
         DataConE loc dcon args -> DataConE loc dcon $ L.map (go env2) args
@@ -56,7 +62,6 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
               ex'    = TimeIt (AppE fn [] args) ret_ty b
           in go env2 ex'
         Ext (AddFixed{}) -> error "directL3: AddFixed not handled."
-        IsBigE{}-> error "directL3: IsBigE not handled."
         MapE{}  -> error "directL3: todo MapE"
         FoldE{} -> error "directL3: todo FoldE"
 
@@ -71,7 +76,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
         SymDictTy mv _ty -> SymDictTy mv CursorTy
         PackedTy _ _ -> CursorTy
         ArenaTy -> ArenaTy
-        ListTy _ -> error "directL3: todo ListTy"
+        ListTy t -> ListTy (goTy t)
         PtrTy -> PtrTy
         CursorTy -> CursorTy
         SymSetTy -> SymSetTy

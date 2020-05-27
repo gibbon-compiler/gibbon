@@ -150,7 +150,6 @@ unariserExp ddfs stk env2 ex =
                             (SpawnE v locs <$> mapM (go env2) args)
 
     SyncE -> pure SyncE
-    IsBigE{}-> error "unariserExp: IsBigE not handled."
 
     Ext (RetE ls) -> do
       (MkProdE ls1) <- go env2 (MkProdE ls)

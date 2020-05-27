@@ -76,7 +76,6 @@ inlineTrivExp = go
       TimeIt e t b -> TimeIt (go env e) t b
       SpawnE fn locs args -> SpawnE fn locs $ map (go env) args
       SyncE               -> SyncE
-      IsBigE e            -> IsBigE (go env e)
       WithArenaE v e -> WithArenaE v (go env e)
       MapE (v,t,e') e -> MapE (v,t,go env e') (go env e)
       FoldE (v1,t1,e1) (v2,t2,e2) e3 ->

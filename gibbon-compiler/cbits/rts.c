@@ -146,11 +146,15 @@ static const int num_workers = 1;
   void save_alloc_state() {}
   void restore_alloc_state() {}
 
-#ifdef _POINTER
-#define ALLOC(n) GC_MALLOC(n)
-#else
+#ifdef _PARALLEL
 #define ALLOC(n) malloc(n)
-#endif
+#else
+  #ifdef _POINTER
+#define ALLOC(n) GC_MALLOC(n)
+  #else
+#define ALLOC(n) malloc(n)
+  #endif
+#endif // _PARALLEL
 
 #endif // BUMPALLOC
 
@@ -179,13 +183,13 @@ static const int num_workers = 1;
 // Basic types
 // -------------------------------------
 
-typedef char TagTyPacked;   // Must be consistent with codegen in Target.hs
-typedef char TagTyBoxed;    // Must be consistent with codegen in Target.hs
-typedef long long IntTy;    // Int64 in Haskell
+// Must be consistent with sizeOfTy defined in Gibbon.Language.Syntax.
+
+typedef unsigned char TagTyPacked;
+typedef unsigned char TagTyBoxed;
+typedef long long IntTy;
 typedef float FloatTy;
-typedef int SymTy;          // Word16 in Haskell. This could actually be a
-                            // uint16_t. However, uthash's HASH_*_INT macros
-                            // only work with proper int's.
+typedef IntTy SymTy;
 typedef bool BoolTy;
 typedef char* PtrTy;
 typedef char* CursorTy;
@@ -248,7 +252,7 @@ PtrTy dict_lookup_ptr(dict_item_t *ptr, SymTy key) {
       ptr = ptr->next;
     }
   }
-  printf("Error, key %d not found!\n",key);
+  printf("Error, key %lld not found!\n",key);
   exit(1);
 }
 
@@ -325,6 +329,19 @@ IntTy expll(IntTy base, IntTy pow) {
     }
  }
 
+UT_icd double_icd = {sizeof(double), NULL, NULL, NULL};
+
+void print_timing_array(UT_array *times) {
+    printf("BATCHTIME: [");
+    double *d;
+    for(d=(double*)utarray_front(times);
+        d!=NULL;
+        d=(double*)utarray_next(times,d)) {
+        printf("%f, ",*d);
+    }
+    printf("]\n");
+}
+
 // -------------------------------------
 // Symbol table
 // -------------------------------------
@@ -354,7 +371,7 @@ void add_symbol(SymTy idx, char *value) {
     s = malloc(sizeof(struct SymTable_elem));
     s->idx = idx;
     strcpy(s->value, value);
-    HASH_ADD_INT( global_sym_table, idx, s );
+    HASH_ADD(hh, global_sym_table, idx, sizeof(IntTy), s);
     if (idx > global_gensym_counter) {
         global_gensym_counter = idx;
     }
@@ -398,7 +415,7 @@ IntTy print_symbol(SymTy idx) {
     return printf(")");
   } else {
     struct SymTable_elem *s;
-    HASH_FIND_INT( global_sym_table, &idx, s );
+    HASH_FIND(hh, global_sym_table, &idx, sizeof(IntTy), s);
     return printf("%s", s->value);
   }
 }
@@ -407,7 +424,7 @@ SymTy gensym() {
     global_gensym_counter += 1;
     SymTy idx = global_gensym_counter;
     char value[global_max_symbol_len];
-    sprintf(value, "gensym_%d",idx);
+    sprintf(value, "gensym_%lld",idx);
     add_symbol(idx, value);
     return idx;
 }
@@ -708,7 +725,18 @@ void free_region(CursorTy end_reg) {
     }
 }
 
-BoolTy is_big(CursorTy cur) {
+// Assume that all nodes with size information have tags >= 150.
+BoolTy is_big(IntTy i, CursorTy cur) {
+    TagTyPacked tag = *(TagTyPacked *) cur;
+    if (tag >= 150) {
+        cur += 1;
+        IntTy size = *(IntTy *) cur;
+        if (size >= i) {
+            return true;
+        } else {
+            return false;
+        }
+    }
     return false;
 }
 

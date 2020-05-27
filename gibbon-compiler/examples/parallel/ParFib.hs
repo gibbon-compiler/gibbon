@@ -11,20 +11,20 @@ fib_seq n =
             y = fib_seq (n - 2)
         in x + y
 
-fib :: Int -> Int
-fib n =
+fib :: Int -> Int -> Int
+fib cutoff n =
     if n == 0
     then 0
     else if n == 1
     then 1
-    else if n < 19
+    else if n < cutoff
     then fib_seq n
     else
-        let x = spawn (fib (n - 1))
-            y = fib (n - 2)
+        let x = spawn (fib cutoff (n - 1))
+            y = fib cutoff (n - 2)
             _ = sync
         in x + y
 
 gibbon_main =
     let n = sizeParam
-    in iterate (fib n)
+    in iterate (fib 19 n)

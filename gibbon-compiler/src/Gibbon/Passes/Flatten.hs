@@ -179,8 +179,6 @@ exp ddfs env2 e0 =
 
     SpawnE f lvs ls -> gols (SpawnE f lvs)  ls "SpawnE"
     SyncE -> pure ([], SyncE)
-    IsBigE e -> do (b,e') <- triv "IsBig" e
-                   return (b, IsBigE e')
 
     WithArenaE v e -> do
       (bnd, e') <- go e
@@ -280,8 +278,6 @@ flattenExp0 ddfs env2 e0 =
 
     SpawnE f lvs ls -> gols (SpawnE f lvs)  ls "AppE"
     SyncE -> pure ([], SyncE)
-    IsBigE e -> do (b,e') <- triv "IsBig" e
-                   return (b, IsBigE e')
     WithArenaE{}  -> error "flattenL0: WitnArenaE not handled."
     MapE _ _      -> error "FINISHLISTS"
     FoldE _ _ _   -> error "FINISHLISTS"

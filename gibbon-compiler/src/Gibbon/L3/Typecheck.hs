@@ -83,6 +83,14 @@ tcExp isPacked ddfs env exp =
           ensureEqualTyModCursor exp vrhs IntTy
           return CursorTy
 
+        -- Subtract something from a cursor variable
+        SubPtr v w -> do
+          vty  <- lookupVar env v exp
+          ensureEqualTyModCursor exp vty CursorTy
+          wty  <- lookupVar env w exp
+          ensureEqualTyModCursor exp wty CursorTy
+          return IntTy
+
         -- Create a new buffer, and return a cursor
         NewBuffer{} -> return CursorTy
 
@@ -286,6 +294,13 @@ tcExp isPacked ddfs env exp =
           len0
           return IntTy
 
+        IsBig -> do
+          len2
+          let [ity, ety] = tys
+          ensureEqualTy exp ity IntTy
+          ensureEqualTy exp ety CursorTy
+          pure BoolTy
+
         SymAppend -> do
           len2
           _ <- ensureEqualTyModCursor (es !! 0) SymTy (tys !! 0)
@@ -384,7 +399,8 @@ tcExp isPacked ddfs env exp =
           then return (ListTy ty)
           else throwError $ GenericTC "Not a valid list type" exp
 
-        RequestEndOf -> error "RequestEndOf shouldn't occur in a L3 program."
+        RequestEndOf  -> error "RequestEndOf shouldn't occur in a L3 program."
+        RequestSizeOf -> error "RequestSizeOf shouldn't occur in a L3 program."
 
         VEmptyP ty -> do
           len0
@@ -542,8 +558,6 @@ tcExp isPacked ddfs env exp =
     WithArenaE v e -> do
       let env' = extendVEnv v ArenaTy env
       tcExp isPacked ddfs env' e
-
-    IsBigE{}-> throwError $ GenericTC ("IsBigE not handled.") exp
 
     MapE{}  -> throwError $ UnsupportedExpTC exp
     FoldE{} -> throwError $ UnsupportedExpTC exp

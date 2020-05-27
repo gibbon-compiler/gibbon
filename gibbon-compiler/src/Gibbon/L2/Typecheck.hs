@@ -339,6 +339,14 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    len0
                    return (IntTy, tstate)
 
+                 IsBig -> do
+                   len2
+                   let [ity, ety] = tys
+                   ensureEqualTy exp ity IntTy
+                   if isPackedTy ety
+                   then pure (BoolTy, tstate)
+                   else error "L1.Typecheck: IsBig expects a Packed value."
+
                  ErrorP _str ty -> do
                    len0
                    return (ty, tstate)
@@ -364,6 +372,17 @@ tcExp ddfs env funs constrs regs tstatein exp =
                                       _ -> throwError $ GenericTC "Expected PackedTy" exp
                      -- L _ LitSymE{} -> return (CursorTy, tstate)
                      -- L _ LitE{} -> return (CursorTy, tstate)
+                     _ -> throwError $ GenericTC "Expected a variable argument" exp
+
+                 RequestSizeOf -> do
+                   len1
+                   case (es !! 0) of
+                     VarE{} -> if isPackedTy (tys !! 0)
+                               then return (IntTy, tstate)
+                               else case (tys !! 0) of
+                                      SymTy -> return (IntTy, tstate)
+                                      IntTy -> return (IntTy, tstate)
+                                      _ -> throwError $ GenericTC "Expected PackedTy" exp
                      _ -> throwError $ GenericTC "Expected a variable argument" exp
 
                  VEmptyP ty  -> do
@@ -514,10 +533,6 @@ tcExp ddfs env funs constrs regs tstatein exp =
         tcExp ddfs env funs constrs regs tstatein (AppE f locs args)
 
       SyncE -> pure (ProdTy [], tstatein)
-
-      IsBigE e -> do
-        (_ty, tstate1) <- recur tstatein e
-        pure (BoolTy, tstate1)
 
       WithArenaE v e -> do
               let env' = extendVEnv v ArenaTy env

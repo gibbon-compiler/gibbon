@@ -79,7 +79,6 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
       return $ TimeIt e' ty b
     SpawnE{} -> pure ex -- error "addTraversalsExp: Cannot compile SpawnE"
     SyncE    -> pure ex -- error "addTraversalsExp: Cannot compile SyncE"
-    IsBigE e -> IsBigE <$> go e
     Ext ext ->
       case ext of
         LetRegionE reg bod -> Ext <$> LetRegionE reg <$> go bod
@@ -126,7 +125,7 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
 -- (2) Otherwise, we must traverse the first (n-1) packed elements
 needsTraversalCase :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> (DataCon, [(Var, LocVar)], Exp2) -> Maybe [(Var, LocVar)]
 needsTraversalCase ddefs fundefs env2 (dcon,vlocs,rhs) =
-  if isRANDataCon dcon then Nothing else
+  if isAbsRANDataCon dcon || isRelRANDataCon dcon then Nothing else
   let (vars, _locs) = unzip vlocs
       tys     = lookupDataCon ddefs dcon
       tyenv   = M.fromList (zip vars tys)
@@ -166,7 +165,8 @@ needsTraversalCase ddefs fundefs env2 (dcon,vlocs,rhs) =
                            -- However if (n==1), we traverse that element. Need to audit this.
                            ls = L.map (\a -> (loc_var_mp # a, a)) not_traversed
                            trav = if length ls == 1
-                                  then ls
+                                  -- [2020.05.01]: CSK, I haven't thought about this change too much. Maybe we need to revisit this.
+                                  then []
                                   else init ls
 
                        -- If the problematic elements are unused, we don't need to add traversals
