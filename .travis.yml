@@ -41,6 +41,9 @@ matrix:
         - df -h
         - nix-shell shell.nix --run "COARSE_NIX=1 ./run_all_tests.sh"
 
+  allow_failures:
+    - name: coarse_nix
+
 install:
   # Download and unpack the stack executable
   # The Ubuntu package is only available on >16.04. Travis is using 14.04.
