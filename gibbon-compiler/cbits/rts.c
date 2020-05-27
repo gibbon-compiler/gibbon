@@ -403,7 +403,6 @@ void set_rightparen(SymTy idx) {
 }
 
 IntTy print_symbol(SymTy idx) {
-  return printf("abcde");
   if (idx == comma_symbol) {
     return printf(",");
   } else if (idx == newline_symbol) {

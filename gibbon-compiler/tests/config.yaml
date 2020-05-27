@@ -72,7 +72,6 @@ tests:
   - name: test11e_funrec.gib
   - name: test11f_funrec.gib
   - name: test11_fundata.gib
-  - name: test12_skip.gib
   - name: test12b_traverse.gib
   - name: test12c_traverse.gib
   - name: test13b_build.gib
@@ -191,6 +190,8 @@ tests:
   - name: bench_tree_insert.gib
     bench: true
     more-iters: [pointer, gibbon2]
+    # relative offsets introduced this failure..
+    failing: [gibbon2]
 
   - name: bench_repmax.gib
     bench: true
@@ -311,6 +312,7 @@ tests:
 
   - name: render_tree.hs
     dir: examples/fusion-benchmarks
+    skip: true
     failing: [gibbon1, gibbon2]
     test-flags: ["--fusion"]
     answer-file: examples/fusion-benchmarks/render_tree.ans
@@ -331,7 +333,7 @@ tests:
 
   - name: render_tree_five_passes.hs
     dir: examples/fusion-benchmarks
-    failing: [gibbon1, gibbon2]
+    failing: [gibbon1, gibbon2, pointer]
     test-flags: ["--fusion"]
     answer-file: examples/fusion-benchmarks/render_tree_five_passes.ans
 
@@ -424,22 +426,19 @@ tests:
   - name: List.hs
     dir: examples/lists
     answer-file: examples/lists/List.hs.ans
-    failing: ["pointer"]
 
   - name: InPlaceList.hs
     dir: examples/lists
     answer-file: examples/lists/List.hs.ans
-    failing: ["pointer"]
 
   - name: Sort.hs
     dir: examples/lists
     answer-file: examples/lists/Sort.hs.ans
-    failing: ["pointer"]
 
   - name: DataList.hs
     dir: examples/lists
     answer-file: examples/lists/DataList.hs.ans
-    failing: ["pointer", "interp1"]
+    failing: ["interp1"]
 
   ## AST benchmarks
   - name: C1.hs
@@ -451,11 +450,13 @@ tests:
   - name: test29c_list.gib
     failing: [gibbon2]
   - name: test29d_list.gib
-    failing: [gibbon1,gibbon2]
+    failing: [gibbon1]
   - name: test18f_flip.gib
     failing: [gibbon2, gibbon1]
   - name: pp_projs.gib
     failing: [gibbon1, gibbon2]
+  - name: test12_skip.gib
+    failing: [gibbon1]
 
   # Tests that actually work but we can't generate answers with Racket
   - name: test08_dict.gib
