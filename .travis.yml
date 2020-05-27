@@ -78,11 +78,6 @@ git:
 script:
   ./run_all_tests.sh
 
-branches:
-  except:
-  - parallel-local
-  - parallel-local2
-
 notifications:
   email: false
   slack:
