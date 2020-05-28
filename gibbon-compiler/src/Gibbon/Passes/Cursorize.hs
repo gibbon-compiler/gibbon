@@ -151,7 +151,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody} = do
         ProdTy ls -> ProdTy $ L.map cursorizeInTy ls
         SymDictTy ar _ty -> SymDictTy ar CursorTy
         PackedTy{}    -> CursorTy
-        ListTy ty'    -> ListTy $ cursorizeInTy ty'
+        VectorTy el_ty'    -> VectorTy $ cursorizeInTy el_ty'
         PtrTy -> PtrTy
         CursorTy  -> CursorTy
         ArenaTy   -> ArenaTy
@@ -470,7 +470,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
                   go2 d' rst
 
               -- Write a pointer UT_array*
-              ListTy el_ty -> do
+              VectorTy el_ty -> do
                 rnd' <- cursorizeExp ddfs fundefs denv tenv senv rnd
                 LetE (d',[], CursorTy, Ext $ WriteList d rnd' (stripTyLocs el_ty)) <$>
                   go2 d' rst
@@ -1084,10 +1084,10 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                     let denv' = M.insertWith (++) loc binds denv
                     go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
 
-                ListTy el_ty -> do
+                VectorTy el_ty -> do
                   tmp <- gensym "read_list_tuple"
-                  let tenv' = M.union (M.fromList [(tmp     , ProdTy [ListTy el_ty, CursorTy]),
-                                                   (v       , ListTy el_ty),
+                  let tenv' = M.union (M.fromList [(tmp     , ProdTy [VectorTy el_ty, CursorTy]),
+                                                   (v       , VectorTy el_ty),
                                                    (toEndV v, CursorTy)])
                               tenv
                       ty'   = stripTyLocs ty

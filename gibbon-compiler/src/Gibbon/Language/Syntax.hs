@@ -712,7 +712,7 @@ data UrTy a =
 
         | PackedTy TyCon a -- ^ No type arguments to TyCons for now.  (No polymorphism.)
 
-        | ListTy (UrTy a)  -- ^ Lists are decorated with the types of their elements;
+        | VectorTy (UrTy a)  -- ^ Lists are decorated with the types of their elements;
                            -- which can only include scalars or flat products of scalars.
 
         | ArenaTy -- ^ Collection of allocated, non-packed values
@@ -744,7 +744,7 @@ instance Renamable a => Renamable (UrTy a) where
       ProdTy ls   -> ProdTy (map (gRename env) ls)
       SymDictTy a t -> SymDictTy a t
       PackedTy tycon loc -> PackedTy tycon (gRename env loc)
-      ListTy loc -> ListTy (gRename env loc)
+      VectorTy loc -> VectorTy (gRename env loc)
       PtrTy      -> PtrTy
       CursorTy   -> CursorTy
       ArenaTy    -> ArenaTy
@@ -1037,7 +1037,7 @@ hasPacked t =
     IntTy          -> False
     FloatTy        -> False
     SymDictTy _ _  -> False -- hasPacked ty
-    ListTy ty      -> hasPacked ty
+    VectorTy ty      -> hasPacked ty
     PtrTy          -> False
     CursorTy       -> False
     ArenaTy        -> False
@@ -1055,7 +1055,7 @@ getPackedTys t =
     IntTy          -> []
     FloatTy        -> []
     SymDictTy _ _  -> [] -- getPackedTys ty
-    ListTy ty      -> getPackedTys ty
+    VectorTy ty      -> getPackedTys ty
     PtrTy          -> []
     CursorTy       -> []
     ArenaTy        -> []
@@ -1073,7 +1073,7 @@ sizeOfTy t =
     FloatTy       -> Just 4
     SymTy         -> Just 8
     BoolTy        -> Just 1
-    ListTy{}      -> Just 8 -- Always a pointer.
+    VectorTy{}      -> Just 8 -- Always a pointer.
     PtrTy{}       -> Just 8 -- Assuming 64 bit
     CursorTy{}    -> Just 8
     ArenaTy       -> Just 8
@@ -1124,16 +1124,16 @@ primArgsTy p =
     DictLookupP _ty  -> error "primArgsTy: dicts not handled yet"
     DictHasKeyP _ty  -> error "primArgsTy: dicts not handled yet"
     VEmptyP{}   -> []
-    VNthP ty    -> [IntTy, ListTy ty]
-    VLengthP ty -> [ListTy ty]
-    VUpdateP ty -> [ListTy ty, IntTy, ty]
-    VSnocP ty   -> [ListTy ty, ty]
-    VSortP ty   -> [ListTy ty, voidTy] -- The voidTy is just a placeholder.
+    VNthP ty    -> [IntTy, VectorTy ty]
+    VLengthP ty -> [VectorTy ty]
+    VUpdateP ty -> [VectorTy ty, IntTy, ty]
+    VSnocP ty   -> [VectorTy ty, ty]
+    VSortP ty   -> [VectorTy ty, voidTy] -- The voidTy is just a placeholder.
                                        -- We don't have a type for
                                        -- function pointers.
-    InPlaceVSnocP ty   -> [ListTy ty, ty]
-    InPlaceVSortP ty   -> [ListTy ty, voidTy]
-    VSliceP ty  -> [ListTy ty, IntTy, IntTy]
+    InPlaceVSnocP ty   -> [VectorTy ty, ty]
+    InPlaceVSortP ty   -> [VectorTy ty, voidTy]
+    VSliceP ty  -> [VectorTy ty, IntTy, IntTy]
     PrintInt -> [IntTy]
     PrintSym -> [SymTy]
     ReadInt  -> []
@@ -1195,15 +1195,15 @@ primRetTy p =
     DictEmptyP ty  -> SymDictTy Nothing $ stripTyLocs ty
     DictInsertP ty -> SymDictTy Nothing $ stripTyLocs ty
     DictLookupP ty -> ty
-    VEmptyP ty  -> ListTy ty
+    VEmptyP ty  -> VectorTy ty
     VNthP ty    -> ty
     VLengthP{}  -> IntTy
-    VUpdateP ty -> ListTy ty
-    VSnocP ty   -> ListTy ty
-    VSortP ty   -> ListTy ty
-    InPlaceVSnocP ty -> ListTy ty
-    InPlaceVSortP ty -> ListTy ty
-    VSliceP ty  -> ListTy ty
+    VUpdateP ty -> VectorTy ty
+    VSnocP ty   -> VectorTy ty
+    VSortP ty   -> VectorTy ty
+    InPlaceVSnocP ty -> VectorTy ty
+    InPlaceVSortP ty -> VectorTy ty
+    VSliceP ty  -> VectorTy ty
     PrintInt -> IntTy
     PrintSym -> SymTy
     ReadInt  -> IntTy
@@ -1232,7 +1232,7 @@ stripTyLocs ty =
     ProdTy ls -> ProdTy $ L.map stripTyLocs ls
     SymDictTy v ty'  -> SymDictTy v $ stripTyLocs ty'
     PackedTy tycon _ -> PackedTy tycon ()
-    ListTy ty'       -> ListTy $ stripTyLocs ty'
+    VectorTy ty'       -> VectorTy $ stripTyLocs ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     SymSetTy -> SymSetTy

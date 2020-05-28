@@ -626,7 +626,7 @@ mapPacked fn t =
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy
-    ListTy ty-> ListTy ty
+    VectorTy el_ty-> VectorTy el_ty
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy
 
@@ -643,7 +643,7 @@ constPacked c t =
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy
-    ListTy ty-> ListTy (constPacked c ty)
+    VectorTy el_ty -> VectorTy (constPacked c el_ty)
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy
 

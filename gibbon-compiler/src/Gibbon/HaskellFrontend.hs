@@ -109,11 +109,13 @@ desugarType ty =
     TyFun _ t1 t2 -> let t1' = desugarType t1
                          t2' = desugarType t2
                      in ArrowTy [t1'] t2'
-    TyList _ ty1  -> ListTy (desugarType ty1)
     TyParen _ ty1 -> desugarType ty1
     TyApp _ tycon arg ->
       case desugarType tycon of
-        PackedTy con tyargs -> PackedTy con (tyargs ++ [desugarType arg])
+        PackedTy con tyargs ->
+            case (con,tyargs) of
+                ("Vector",[]) -> VectorTy (desugarType arg)
+                _ -> PackedTy con (tyargs ++ [desugarType arg])
         _ -> error $ "desugarType: Unexpected type arguments: " ++ prettyPrint ty
     _ -> error $ "desugarType: Unsupported type: " ++ prettyPrint ty
 

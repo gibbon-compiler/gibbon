@@ -76,7 +76,7 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
         SymDictTy mv _ty -> SymDictTy mv CursorTy
         PackedTy _ _ -> CursorTy
         ArenaTy -> ArenaTy
-        ListTy t -> ListTy (goTy t)
+        VectorTy t -> VectorTy (goTy t)
         PtrTy -> PtrTy
         CursorTy -> CursorTy
         SymSetTy -> SymSetTy

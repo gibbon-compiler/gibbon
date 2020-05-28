@@ -298,7 +298,7 @@ tcExp ddfs env exp =
         ReadArrayFile _ ty -> do
           len0
           if isValidListElemTy ty
-          then return (ListTy ty)
+          then return (VectorTy ty)
           else throwError $ GenericTC "Not a valid list type" exp
 
         RequestEndOf -> do
@@ -323,40 +323,40 @@ tcExp ddfs env exp =
 
         VEmptyP ty -> do
           len0
-          checkLists ty (ListTy ty)
+          checkLists ty (VectorTy ty)
 
         VNthP ty -> do
           len2
           let [i,ls] = tys
           _ <- ensureEqualTy (es !! 0) IntTy i
-          _ <- ensureEqualTy (es !! 1) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 1) (VectorTy ty) ls
           checkLists ty ty
 
         VLengthP ty -> do
           len1
           let [ls] = tys
-          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
           checkLists ty IntTy
 
         VUpdateP ty -> do
           len3
           let [ls,i,val] = tys
-          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
           _ <- ensureEqualTy (es !! 1) IntTy i
           _ <- ensureEqualTy (es !! 2) ty val
-          checkLists ty (ListTy ty)
+          checkLists ty (VectorTy ty)
 
         VSnocP ty -> do
           len2
           let [ls,val] = tys
-          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
           _ <- ensureEqualTy (es !! 1) ty val
-          checkLists ty (ListTy ty)
+          checkLists ty (VectorTy ty)
 
         InPlaceVSnocP ty -> do
           go (PrimAppE (VSnocP ty) es)
 
-        -- Given that the first argument is a list of type (ListTy t),
+        -- Given that the first argument is a list of type (VectorTy t),
         -- ensure that the 2nd argument is function reference of type:
         -- ty -> ty -> IntTy
         VSortP ty ->
@@ -366,13 +366,13 @@ tcExp ddfs env exp =
               let [ls] = tys
                   fn_ty@(in_tys, ret_ty) = lookupFEnv f env
                   err x = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
-              _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+              _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
               case in_tys of
                 [a,b] -> do
                    _ <- ensureEqualTy (es !! 1) a ty
                    _ <- ensureEqualTy (es !! 1) b ty
                    _ <- ensureEqualTy (es !! 1) ret_ty IntTy
-                   checkLists ty (ListTy ty)
+                   checkLists ty (VectorTy ty)
                 _ -> err fn_ty
             oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
@@ -382,10 +382,10 @@ tcExp ddfs env exp =
         VSliceP ty -> do
           len3
           let [ls,from,to] = tys
-          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
           _ <- ensureEqualTy (es !! 1) IntTy from
           _ <- ensureEqualTy (es !! 2) IntTy to
-          checkLists ty (ListTy ty)
+          checkLists ty (VectorTy ty)
 
         IntHashEmpty  -> throwError $ GenericTC "IntHashEmpty not handled." exp
         IntHashInsert -> throwError $ GenericTC "IntHashEmpty not handled." exp
@@ -483,7 +483,7 @@ tcExp ddfs env exp =
                  []    -> pure ty
                  [_one]-> pure ty
                  _     -> error $ "Gibbon-TODO: Product types not allowed in SpawnE. Got: " ++ sdoc ty
-             ListTy{} -> pure ty
+             VectorTy{} -> pure ty
              _ -> error "L1.Typecheck: SpawnE; type shouldn't be anything else."
 
     SyncE -> pure voidTy

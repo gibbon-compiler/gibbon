@@ -3,13 +3,13 @@ module List where
 cmp1 :: (Int, Int) -> (Int, Int) -> Int
 cmp1 a b = (a !!! 0) - (b !!! 0)
 
-sort :: [(Int, Int)] -> [(Int, Int)]
+sort :: Vector (Int,Int) -> Vector (Int,Int)
 sort ls =
   let ls2 = vsort ls cmp1
   in ls2
 
 gibbon_main =
-    let ls :: [(Int,Int)]
+    let ls :: Vector (Int,Int)
         ls  = vempty
         ls2 = vsnoc ls (40,50)
         ls3 = vsnoc ls2 (10,20)

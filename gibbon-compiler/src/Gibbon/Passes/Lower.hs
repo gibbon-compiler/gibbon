@@ -48,11 +48,11 @@ genDcons (x:xs) tail fields = case x of
     T.LetPrimCallT [(val, l4_ty), (t, T.CursorTy)] (T.ReadScalar (mkScalar x)) [(T.VarTriv tail)]
       <$> genDcons xs t (fields ++ [(l4_ty, T.VarTriv val)])
 
-  ListTy el_ty -> do
+  VectorTy el_ty -> do
     val <- gensym "val"
     t   <- gensym "tail"
     let l4_ty = T.fromL3Ty el_ty
-    T.LetPrimCallT [(val, T.ListTy l4_ty), (t, T.CursorTy)] T.ReadList [(T.VarTriv tail)]
+    T.LetPrimCallT [(val, T.VectorTy l4_ty), (t, T.CursorTy)] T.ReadList [(T.VarTriv tail)]
       <$> genDcons xs t (fields ++ [(l4_ty, T.VarTriv val)])
 
   -- Indirection or redirection pointer
@@ -162,11 +162,11 @@ genDconsPrinter (x:xs) tail =
          maybeSpace <$>
           genDconsPrinter xs t
 
-    ListTy el_ty ->  do
+    VectorTy el_ty ->  do
       val  <- gensym "val"
       t    <- gensym "tail"
       let l4_ty = T.fromL3Ty el_ty
-      T.LetPrimCallT [(val, T.ListTy l4_ty), (t, T.CursorTy)] T.ReadList [(T.VarTriv tail)] <$>
+      T.LetPrimCallT [(val, T.VectorTy l4_ty), (t, T.CursorTy)] T.ReadList [(T.VarTriv tail)] <$>
         printTy False x [T.VarTriv val] <$>
          maybeSpace <$>
           genDconsPrinter xs t
@@ -241,7 +241,7 @@ printTy pkd ty trvs =
                                                  (mkUnpackerName constr) trvs $
                                                  T.LetCallT False [] (mkPrinterName constr) [T.VarTriv unpkd] tl)
                                     else T.LetCallT False [] (mkPrinterName constr) trvs
-    (ListTy{}, [_one]) -> T.LetPrimCallT [] (T.PrintString "<list>") []
+    (VectorTy{}, [_one]) -> T.LetPrimCallT [] (T.PrintString "<vector>") []
 
     (BoolTy, [trv]) ->
       let prntBool m = T.LetPrimCallT [] (T.PrintString m) []
@@ -748,7 +748,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
       let bod' = L3.substE (ProjE 0 (VarE v)) (VarE vtmp) $
                  L3.substE (ProjE 1 (VarE v)) (VarE ctmp)
                  bod
-      T.LetPrimCallT [(vtmp,T.ListTy (T.fromL3Ty el_ty)),(ctmp,T.CursorTy)] T.ReadList [T.VarTriv c] <$>
+      T.LetPrimCallT [(vtmp,T.VectorTy (T.fromL3Ty el_ty)),(ctmp,T.CursorTy)] T.ReadList [T.VarTriv c] <$>
         tail sym_tbl bod'
 
     LetE (v, _, _,  (Ext (WriteList cur e _el_ty))) bod ->
@@ -921,7 +921,7 @@ typ t =
     FloatTy-> T.FloatTy
     SymTy  -> T.SymTy
     BoolTy -> T.BoolTy
-    ListTy ty -> T.ListTy (typ ty)
+    VectorTy el_ty -> T.VectorTy (typ el_ty)
     ProdTy xs -> T.ProdTy $ L.map typ xs
     SymDictTy (Just var) x -> T.SymDictTy var $ typ x
     SymDictTy Nothing _ty -> error $ "lower/typ: Expected arena annotation on type: " ++ (sdoc t)

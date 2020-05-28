@@ -358,7 +358,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                  ReadArrayFile _ ty -> do
                    len0
                    if isValidListElemTy ty
-                   then return (ListTy ty, tstate)
+                   then return (VectorTy ty, tstate)
                    else throwError $ GenericTC "Not a valid list type" exp
 
                  RequestEndOf -> do
@@ -387,32 +387,32 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
                  VEmptyP ty  -> do
                    len0
-                   pure (ListTy ty, tstate)
+                   pure (VectorTy ty, tstate)
                  VNthP ty    -> do
                    let [i,ls] = tys
                    _ <- ensureEqualTy exp IntTy i
-                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   _ <- ensureEqualTy exp (VectorTy ty) ls
                    pure (ty, tstate)
                  VLengthP ty -> do
                    let [ls] = tys
-                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   _ <- ensureEqualTy exp (VectorTy ty) ls
                    pure (IntTy, tstate)
                  VUpdateP ty -> do
                    let [ls,i,val] = tys
-                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   _ <- ensureEqualTy exp (VectorTy ty) ls
                    _ <- ensureEqualTy exp IntTy i
                    _ <- ensureEqualTy exp ty val
-                   pure (ListTy ty, tstate)
+                   pure (VectorTy ty, tstate)
                  VSnocP ty   -> do
                    let [ls,val] = tys
-                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   _ <- ensureEqualTy exp (VectorTy ty) ls
                    _ <- ensureEqualTy exp ty val
-                   pure (ListTy ty, tstate)
+                   pure (VectorTy ty, tstate)
 
                  InPlaceVSnocP ty -> do
                     recur tstatein (PrimAppE (VSnocP ty) es)
 
-                 -- Given that the first argument is a list of type (ListTy t),
+                 -- Given that the first argument is a list of type (VectorTy t),
                  -- ensure that the 2nd argument is function reference of type:
                  -- ty -> ty -> Bool
                  VSortP ty ->
@@ -424,13 +424,13 @@ tcExp ddfs env funs constrs regs tstatein exp =
                            in_tys = inTys fn_ty
                            ret_ty = outTy fn_ty
                            err x  = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
-                       _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+                       _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
                        case in_tys of
                          [a,b] -> do
                             _ <- ensureEqualTy (es !! 1) a ty
                             _ <- ensureEqualTy (es !! 1) b ty
                             _ <- ensureEqualTy (es !! 1) ret_ty IntTy
-                            pure (ListTy ty, tstate)
+                            pure (VectorTy ty, tstate)
                          _ -> err fn_ty
                      oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
@@ -439,10 +439,10 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
                  VSliceP ty   -> do
                    let [ls,from,to] = tys
-                   _ <- ensureEqualTy exp (ListTy ty) ls
+                   _ <- ensureEqualTy exp (VectorTy ty) ls
                    _ <- ensureEqualTy exp IntTy from
                    _ <- ensureEqualTy exp IntTy to
-                   pure (ListTy ty, tstate)
+                   pure (VectorTy ty, tstate)
 
                  PrintInt -> throwError $ GenericTC "PrintInt not handled" exp
                  PrintSym -> throwError $ GenericTC "PrintSym not handled" exp

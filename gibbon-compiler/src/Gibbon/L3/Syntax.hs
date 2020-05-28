@@ -220,7 +220,7 @@ cursorizeTy ty =
     ProdTy ls -> ProdTy $ L.map cursorizeTy ls
     SymDictTy v _ -> SymDictTy v CursorTy
     PackedTy{}    -> ProdTy [CursorTy, CursorTy]
-    ListTy ty'    -> ListTy $ cursorizeTy ty'
+    VectorTy el_ty'    -> VectorTy $ cursorizeTy el_ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy

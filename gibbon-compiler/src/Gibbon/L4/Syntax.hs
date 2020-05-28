@@ -185,7 +185,7 @@ data Ty
     | SymDictTy Var Ty
       -- ^ We allow built-in dictionaries from symbols to a value type.
     | ArenaTy
-    | ListTy Ty
+    | VectorTy Ty
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data Prim
@@ -354,7 +354,7 @@ fromL3Ty ty =
     L.PtrTy      -> PtrTy
     L.CursorTy   -> CursorTy
     -- L.PackedTy{} -> error "fromL3Ty: Cannot convert PackedTy"
-    L.ListTy el_ty  -> ListTy (fromL3Ty el_ty)
+    L.VectorTy el_ty  -> VectorTy (fromL3Ty el_ty)
     _ -> IntTy -- [2019.06.10]: CSK, Why do we need this?
 
 

@@ -162,7 +162,7 @@ data Ty0
  | IntHashTy
  | ArrowTy [Ty0] Ty0
  | PackedTy TyCon [Ty0] -- Type arguments to the type constructor
- | ListTy Ty0
+ | VectorTy Ty0
  | ArenaTy
   deriving (Show, Read, Eq, Ord, Generic, NFData)
 
@@ -191,7 +191,7 @@ instance Renamable Ty0 where
       SymDictTy a t     -> SymDictTy a t
       ArrowTy args ret  -> ArrowTy (map go args) ret
       PackedTy tycon ls -> PackedTy tycon (map go ls)
-      ListTy a          -> ListTy (go a)
+      VectorTy a          -> VectorTy (go a)
       ArenaTy           -> ArenaTy
       SymSetTy          -> SymSetTy
       SymHashTy         -> SymHashTy
@@ -271,7 +271,7 @@ tyVarsInTys tys = foldr (go []) [] tys
         SymDictTy _ ty1   -> go bound ty1 acc
         ArrowTy tys1 b  -> foldr (go bound) (go bound b acc) tys1
         PackedTy _ tys1 -> foldr (go bound) acc tys1
-        ListTy ty1      -> go bound ty1 acc
+        VectorTy ty1      -> go bound ty1 acc
         ArenaTy -> acc
         SymSetTy -> acc
         SymHashTy -> acc
@@ -300,7 +300,7 @@ metaTvsInTys tys = foldr go [] tys
         SymDictTy _ ty1   -> go ty1 acc
         ArrowTy tys1 b  -> go b (foldr go acc tys1)
         PackedTy _ tys1 -> foldr go acc tys1
-        ListTy ty1      -> go ty1 acc
+        VectorTy ty1      -> go ty1 acc
         ArenaTy -> acc
         SymSetTy -> acc
         SymHashTy -> acc
@@ -334,7 +334,7 @@ arrowTysInTy = go []
         SymDictTy _ a   -> go acc a
         ArrowTy tys b -> go (foldl go acc tys) b ++ [ty]
         PackedTy _ vs -> foldl go acc vs
-        ListTy a -> go acc a
+        VectorTy a -> go acc a
         SymSetTy  -> acc
         SymHashTy -> acc
         IntHashTy -> acc
@@ -354,7 +354,7 @@ substTyVar mp ty =
     SymDictTy v t -> SymDictTy v (go t)
     ArrowTy tys b  -> ArrowTy (map go tys) (go b)
     PackedTy t tys -> PackedTy t (map go tys)
-    ListTy t -> ListTy (go t)
+    VectorTy t -> VectorTy (go t)
     ArenaTy -> ty
     SymSetTy -> ty
     SymHashTy -> ty
@@ -481,15 +481,15 @@ recoverType ddfs env2 ex =
         DictEmptyP ty  -> SymDictTy Nothing ty
         DictInsertP ty -> SymDictTy Nothing ty
         DictLookupP ty -> ty
-        VEmptyP ty     -> ListTy ty
+        VEmptyP ty     -> VectorTy ty
         VNthP ty       -> ty
         VLengthP _ty   -> IntTy
-        VUpdateP ty    -> ListTy ty
-        VSnocP ty      -> ListTy ty
-        VSortP ty      -> ListTy ty
-        InPlaceVSnocP ty-> ListTy ty
-        InPlaceVSortP ty-> ListTy ty
-        VSliceP ty     -> ListTy ty
+        VUpdateP ty    -> VectorTy ty
+        VSnocP ty      -> VectorTy ty
+        VSortP ty      -> VectorTy ty
+        InPlaceVSnocP ty-> VectorTy ty
+        InPlaceVSortP ty-> VectorTy ty
+        VSliceP ty     -> VectorTy ty
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty
         ReadArrayFile _ ty      -> ty

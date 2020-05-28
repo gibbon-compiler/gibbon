@@ -259,7 +259,7 @@ instance (Pretty l) => Pretty (UrTy l) where
               case sty of
                 PPHaskell  -> text tc
                 PPInternal -> parens $ text "Packed" <+> text tc <+> pprintWithStyle sty loc
-          ListTy ty1 -> brackets $ pprintWithStyle sty ty1
+          VectorTy el_ty1 -> brackets $ pprintWithStyle sty el_ty1
           PtrTy     -> text "Ptr"
           CursorTy  -> text "Cursor"
           ArenaTy   -> case sty of
@@ -452,7 +452,7 @@ instance Pretty L0.Ty0 where
         L0.SymDictTy Nothing  ty1 -> text "Dict" <+> pprint ty1
         L0.ArrowTy as b  -> parens $ (hsep $ map (<+> "->") $ map (pprintWithStyle sty) as) <+> pprint b
         L0.PackedTy tc loc -> text "Packed" <+> text tc <+> brackets (hcat (map (pprintWithStyle sty) loc))
-        L0.ListTy ty1 -> brackets (pprintWithStyle sty ty1)
+        L0.VectorTy el_ty1 -> brackets (pprintWithStyle sty el_ty1)
         L0.ArenaTy    -> text "Arena"
         L0.SymSetTy   -> text "SymSet"
         L0.SymHashTy  -> text "SymHash"

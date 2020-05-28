@@ -1,7 +1,7 @@
 module Sort where
 
 -- It's a for loop.
-lesser :: Int -> Int -> Int -> Int -> [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
+lesser :: Int -> Int -> Int -> Int -> Vector (Int,Int) -> Vector (Int,Int) -> Vector (Int,Int)
 lesser i n elt0 elt1 ls acc =
   if i == n
   then acc
@@ -12,7 +12,7 @@ lesser i n elt0 elt1 ls acc =
            else rst
 
 -- It's a for loop.
-greater_eq :: Int -> Int -> Int -> Int -> [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
+greater_eq :: Int -> Int -> Int -> Int -> Vector (Int,Int) -> Vector (Int,Int) -> Vector (Int,Int)
 greater_eq i n elt0 elt1 ls acc =
   if i == n
   then acc
@@ -22,13 +22,13 @@ greater_eq i n elt0 elt1 ls acc =
            then vsnoc rst x
            else rst
 
-append :: Int -> [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
+append :: Int -> Vector (Int,Int) -> Vector (Int,Int) -> Vector (Int,Int)
 append n ls1 ls2 =
   if n == vlength ls2
   then ls1
   else append (n+1) (vsnoc ls1 (vnth n ls2)) ls2
 
-sort :: [(Int, Int)] -> [(Int, Int)] -> [(Int, Int)]
+sort :: Vector (Int,Int) -> Vector (Int,Int) -> Vector (Int,Int)
 sort ls acc =
   let n = vlength ls in
   if n == 0
@@ -37,19 +37,19 @@ sort ls acc =
   then vsnoc acc (vnth 0 ls)
   else let pivot = vnth (n-1) ls
 
-           acc1 :: [(Int,Int)]
+           acc1 :: Vector (Int,Int)
            acc1 = vempty
            ls1  = lesser 0 ((vlength ls) - 1) (pivot !!! 0) (pivot !!! 1) ls acc1
 
-           acc2 :: [(Int,Int)]
+           acc2 :: Vector (Int,Int)
            acc2 = vempty
            ls2  = sort ls1 acc2
 
-           acc3 :: [(Int,Int)]
+           acc3 :: Vector (Int,Int)
            acc3 = vempty
            ls3  = greater_eq 0 ((vlength ls) - 1) (pivot !!! 0) (pivot !!! 1) ls acc3
 
-           acc4 :: [(Int,Int)]
+           acc4 :: Vector (Int,Int)
            acc4 = vempty
            ls4  = sort ls3 acc4
 
@@ -58,15 +58,15 @@ sort ls acc =
 
        in ls6
 
-sort0 :: [(Int, Int)] -> [(Int, Int)]
+sort0 :: Vector (Int,Int) -> Vector (Int,Int)
 sort0 ls =
-  let acc :: [(Int, Int)]
+  let acc :: Vector (Int,Int)
       acc = vempty
   in sort ls acc
 
 --------------------------------------------------------------------------------
 
-mkList0 :: Int -> [(Int, Int)] -> [(Int, Int)]
+mkList0 :: Int -> Vector (Int,Int) -> Vector (Int,Int)
 mkList0 n acc=
   if n == 0
   then acc
@@ -74,20 +74,20 @@ mkList0 n acc=
            j = mod rand n
        in mkList0 (n-1) (vsnoc acc (i,j))
 
-mkList :: Int -> [(Int, Int)]
+mkList :: Int -> Vector (Int,Int)
 mkList n =
-  let acc :: [(Int, Int)]
+  let acc :: Vector (Int,Int)
       acc = vempty
   in mkList0 n acc
 
-sumList0 :: Int -> Int -> [(Int, Int)] -> Int -> Int
+sumList0 :: Int -> Int -> Vector (Int,Int) -> Int -> Int
 sumList0 i n ls acc =
   if i == n
   then acc
   else let p = vnth i ls
        in sumList0 (i+1) n ls (acc + (p !!! 0) + (p !!! 1))
 
-sumList :: [(Int, Int)] -> Int
+sumList :: Vector (Int,Int) -> Int
 sumList ls =
   sumList0 0 (vlength ls) ls 0
 

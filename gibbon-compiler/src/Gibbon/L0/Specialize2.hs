@@ -234,7 +234,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         SymSetTy -> L1.SymSetTy
         SymHashTy -> L1.SymHashTy
         IntHashTy -> error "toL1Ty: IntHashTy not handled."
-        ListTy a  -> L1.ListTy (toL1Ty a)
+        VectorTy a  -> L1.VectorTy (toL1Ty a)
 
     toL1TyS :: ArrowTy Ty0 -> ArrowTy L1.Ty1
     toL1TyS t@(ForAll tyvars (ArrowTy as b))
@@ -455,7 +455,7 @@ monoOblsTy ddefs1 t = do
                       pure $ PackedTy tycon' []
                     Just suffix -> pure $ PackedTy (tycon ++ (fromVar suffix)) []
                 _  -> pure t
-    ListTy{} -> pure t
+    VectorTy{} -> pure t
     ArenaTy  -> pure t
     SymSetTy -> error "monoOblsTy: SymSetTy not handled."
     SymHashTy-> error "monoOblsTy: SymHashTy not handled."
@@ -825,7 +825,7 @@ updateTyConsTy ddefs mono_st ty =
            Nothing     -> PackedTy t tys'
            -- Why [] ? The type arguments aren't required as the DDef is monomorphic.
            Just suffix -> PackedTy (t ++ fromVar suffix) []
-    ListTy t -> ListTy (go t)
+    VectorTy t -> VectorTy (go t)
     ArenaTy -> ArenaTy
     SymSetTy -> SymSetTy
     SymHashTy -> SymHashTy

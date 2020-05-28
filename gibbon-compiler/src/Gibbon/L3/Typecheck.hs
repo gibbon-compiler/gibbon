@@ -66,13 +66,13 @@ tcExp isPacked ddfs env exp =
         ReadList v ty -> do
           vty <- lookupVar env v exp
           ensureEqualTyModCursor exp vty CursorTy
-          return $ ProdTy [ListTy ty, CursorTy]
+          return $ ProdTy [VectorTy ty, CursorTy]
 
         WriteList cur val el_ty -> do
           curty  <- lookupVar env cur exp
           ensureEqualTyModCursor exp curty CursorTy
           valty <- go val
-          ensureEqualTyModCursor exp valty (ListTy el_ty)
+          ensureEqualTyModCursor exp valty (VectorTy el_ty)
           return CursorTy
 
         -- Add a constant offset to a cursor variable
@@ -396,7 +396,7 @@ tcExp isPacked ddfs env exp =
         ReadArrayFile _ ty -> do
           len0
           if isValidListElemTy ty
-          then return (ListTy ty)
+          then return (VectorTy ty)
           else throwError $ GenericTC "Not a valid list type" exp
 
         RequestEndOf  -> error "RequestEndOf shouldn't occur in a L3 program."
@@ -404,35 +404,35 @@ tcExp isPacked ddfs env exp =
 
         VEmptyP ty -> do
           len0
-          pure (ListTy ty)
+          pure (VectorTy ty)
 
         VNthP ty -> do
           len2
           let [i,ls] = tys
           _ <- ensureEqualTy (es !! 0) IntTy i
-          _ <- ensureEqualTy (es !! 1) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 1) (VectorTy ty) ls
           pure ty
 
         VLengthP ty -> do
           len1
           let [ls] = tys
-          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
           pure IntTy
 
         VUpdateP ty -> do
           len3
           let [ls,i,val] = tys
-          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
           _ <- ensureEqualTy (es !! 1) IntTy i
           _ <- ensureEqualTy (es !! 2) ty val
-          pure (ListTy ty)
+          pure (VectorTy ty)
 
         VSnocP ty -> do
           len2
           let [ls,val] = tys
-          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
           _ <- ensureEqualTy (es !! 1) ty val
-          pure (ListTy ty)
+          pure (VectorTy ty)
 
         InPlaceVSnocP ty -> do
           go (PrimAppE (VSnocP ty) es)
@@ -446,13 +446,13 @@ tcExp isPacked ddfs env exp =
                   in_tys = inTys fn_ty
                   ret_ty = outTy fn_ty
                   err x  = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
-              _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+              _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
               case in_tys of
                 [a,b] -> do
                    _ <- ensureEqualTy (es !! 1) a ty
                    _ <- ensureEqualTy (es !! 1) b ty
                    _ <- ensureEqualTy (es !! 1) ret_ty IntTy
-                   pure (ListTy ty)
+                   pure (VectorTy ty)
                 _ -> err fn_ty
             oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
@@ -462,10 +462,10 @@ tcExp isPacked ddfs env exp =
         VSliceP ty -> do
           len3
           let [ls,from,to] = tys
-          _ <- ensureEqualTy (es !! 0) (ListTy ty) ls
+          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
           _ <- ensureEqualTy (es !! 1) IntTy from
           _ <- ensureEqualTy (es !! 2) IntTy to
-          pure (ListTy ty)
+          pure (VectorTy ty)
 
         IntHashEmpty  -> error "L3.Typecheck: IntHashEmpty not handled."
         IntHashInsert -> error "L3.Typecheck: IntHashInsert not handled."

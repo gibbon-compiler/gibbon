@@ -66,7 +66,7 @@ harvestStructTys (Prog _ funs mtal) =
       go (t:ts) =
        case t of
          ProdTy ls -> S.insert ls $ S.union (go ls) (go ts)
-         ListTy ty -> S.insert [ListTy ty] $ S.union (go [ty])(go ts)
+         VectorTy ty -> S.insert [VectorTy ty] $ S.union (go [ty])(go ts)
          _ -> go ts
 
   -- This finds all types that maybe grouped together as a ProdTy:
@@ -88,15 +88,15 @@ harvestStructTys (Prog _ funs mtal) =
        (LetPrimCallT binds prm _ bod) ->
          let rst = go bod in
          case prm of
-           VEmptyP ty  -> ListTy ty : rst
-           VNthP   ty  -> ListTy ty : rst
-           VLengthP ty -> ListTy ty : rst
-           VUpdateP ty -> ListTy ty : rst
-           VSnocP ty   -> ListTy ty : rst
-           VSortP ty   -> ListTy ty : rst
-           InPlaceVSnocP ty   -> ListTy ty : rst
-           InPlaceVSortP ty   -> ListTy ty : rst
-           ReadArrayFile _ ty -> ListTy ty : rst
+           VEmptyP ty  -> VectorTy ty : rst
+           VNthP   ty  -> VectorTy ty : rst
+           VLengthP ty -> VectorTy ty : rst
+           VUpdateP ty -> VectorTy ty : rst
+           VSnocP ty   -> VectorTy ty : rst
+           VSortP ty   -> VectorTy ty : rst
+           InPlaceVSnocP ty   -> VectorTy ty : rst
+           InPlaceVSortP ty   -> VectorTy ty : rst
+           ReadArrayFile _ ty -> VectorTy ty : rst
            _ -> ProdTy (map snd binds) : rst
        (LetTrivT (_,ty,_) bod)     -> ty : go bod
        -- This should not create a struct.  Again, we add it just for the heck of it:
@@ -284,7 +284,7 @@ makeStructs :: [[Ty]] -> [C.Definition]
 makeStructs [] = []
 makeStructs (ts : ts') =
   case ts of
-    [ListTy ty] ->
+    [VectorTy ty] ->
         let (ty_name, icd_name) = makeIcdName ty
             icd_ty   = [cty|typename UT_icd|]
             icd      = [cedecl| $ty:icd_ty $id:icd_name = {sizeof($id:ty_name),NULL, NULL, NULL} ;|]
@@ -484,7 +484,7 @@ codegenTail venv fenv (LetTimedT flg bnds rhs body) ty sync_deps =
            end   = "end_" ++ (fromVar ident)
            iters = "iters_"++ (fromVar ident)
 
-           timebod = [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy FloatTy)) ($id:times); |]
+           timebod = [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy FloatTy)) ($id:times); |]
                      , C.BlockStm  [cstm| utarray_new($id:times, &double_icd); |]
                      , C.BlockDecl [cdecl| struct timespec $id:begn; |]
                      , C.BlockDecl [cdecl| struct timespec $id:end; |] ] ++
@@ -736,7 +736,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  WriteList    -> let [(outV,CursorTy)] = bnds
                                      [val,(VarTriv cur)] = rnds
-                                     ls_ty = ListTy (ProdTy []) in pure
+                                     ls_ty = VectorTy (ProdTy []) in pure
                                   [ C.BlockStm [cstm| *( $ty:(codegenTy ls_ty)  *)($id:cur) = $(codegenTriv venv val); |]
                                   , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy ls_ty) ); |] ]
 
@@ -886,7 +886,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                scanf = C.FnCall scanf_rator (scanf_line : scanf_format : scanf_vars) noLoc
 
                            return $
-                                  [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
+                                  [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV); |]
                                   , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |]
                                   , C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:elem; |]
                                   , C.BlockStm  [cstm| FILE *($id:fp); |]
@@ -936,7 +936,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  VEmptyP ty  -> do
                    let (_, icd_name) = makeIcdName ty
                        [(outV,_)]  = bnds
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV); |]
                           , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |] ]
 
                  VNthP ty    -> do
@@ -964,7 +964,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        ty1 = codegenTy ty
                        (_, icd_name) = makeIcdName ty
                    tmp <- gensym "tmp"
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV); |]
                           , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |]
                           , C.BlockStm  [cstm| utarray_concat($id:outV,$id:old_ls); |]
                           , C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
@@ -974,7 +974,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    let [(outV,_)] = bnds
                        [VarTriv old_ls, VarTriv sort_fn] = rnds
                        (_, icd_name) = makeIcdName ty
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV); |]
                           , C.BlockStm [cstm| utarray_new($id:outV,&($id:icd_name)); |]
                           , C.BlockStm [cstm| utarray_inserta($id:outV,$id:old_ls,0); |]
                           , C.BlockStm [cstm| utarray_sort($id:outV, $id:sort_fn); |]
@@ -1000,7 +1000,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    from_v <- gensym "from"
                    to_v <- gensym "to"
                    len <- gensym "len"
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy ty)) ($id:outV); |]
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV); |]
                           , C.BlockStm [cstm| utarray_new($id:outV,&($id:icd_name)); |]
                           , C.BlockStm [cstm| utarray_inserta($id:outV,$id:old_ls,0); |]
                           , C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:from_v = $(codegenTriv venv from); |]
@@ -1087,7 +1087,7 @@ codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] n
     where nam = makeName ts
 codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
 codegenTy ArenaTy = [cty|typename ArenaTy|]
-codegenTy ListTy{} = [cty|typename UT_array* |]
+codegenTy VectorTy{} = [cty|typename UT_array* |]
 
 makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"
@@ -1105,7 +1105,7 @@ makeName' (SymDictTy _ _ty) = "Dict"
 makeName' RegionTy = "Region"
 makeName' ChunkTy  = "Chunk"
 makeName' ArenaTy  = "Arena"
-makeName' ListTy{} = "Vector"
+makeName' VectorTy{} = "Vector"
 makeName' (ProdTy tys) = "Prod" ++ concatMap makeName' tys
 
 

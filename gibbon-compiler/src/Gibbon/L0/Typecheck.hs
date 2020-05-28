@@ -327,35 +327,35 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
         VEmptyP ty -> do
           len0
-          pure (sbst, ListTy ty, PrimAppE pr [])
+          pure (sbst, VectorTy ty, PrimAppE pr [])
 
         VNthP ty -> do
           len2
           let [i,ls] = arg_tys'
           s2 <- unify (args !! 0) IntTy i
-          s3 <- unify (args !! 1) (ListTy ty) ls
+          s3 <- unify (args !! 1) (VectorTy ty) ls
           pure (s1 <> s2 <> s3, ty, PrimAppE pr args_tc)
 
         VLengthP ty -> do
           len1
           let [ls] = arg_tys'
-          s2 <- unify (args !! 0) (ListTy ty) ls
+          s2 <- unify (args !! 0) (VectorTy ty) ls
           pure (s1 <> s2, IntTy, PrimAppE pr args_tc)
 
         VUpdateP ty -> do
           len3
           let [ls,i,val] = arg_tys'
-          s2 <- unify (args !! 0) (ListTy ty) ls
+          s2 <- unify (args !! 0) (VectorTy ty) ls
           s3 <- unify (args !! 1) IntTy i
           s4 <- unify (args !! 2) ty val
-          pure (s1 <> s2 <> s3 <> s4, ListTy ty, PrimAppE pr args_tc)
+          pure (s1 <> s2 <> s3 <> s4, VectorTy ty, PrimAppE pr args_tc)
 
         VSnocP ty -> do
           len2
           let [ls,val] = arg_tys'
-          s2 <- unify (args !! 0) (ListTy ty) ls
+          s2 <- unify (args !! 0) (VectorTy ty) ls
           s3 <- unify (args !! 1) ty val
-          pure (s1 <> s2 <> s3, ListTy ty, PrimAppE pr args_tc)
+          pure (s1 <> s2 <> s3, VectorTy ty, PrimAppE pr args_tc)
 
         InPlaceVSnocP ty -> do
           (s2, t, e) <- go (PrimAppE (VSnocP ty) args)
@@ -363,7 +363,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
             PrimAppE (VSnocP t2) args2 -> pure (s2, t, PrimAppE (InPlaceVSnocP t2) args2)
             _ -> err $ text "InPlaceVSortP"
 
-        -- Given that the first argument is a list of type (ListTy t),
+        -- Given that the first argument is a list of type (VectorTy t),
         -- ensure that the 2nd argument is function reference of type:
         -- ty -> ty -> IntTy
         --
@@ -371,9 +371,9 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
         VSortP ty -> do
           len2
           let [ls,fp] = arg_tys'
-          s2 <- unify (args !! 0) (ListTy ty) ls
+          s2 <- unify (args !! 0) (VectorTy ty) ls
           s3 <- unify (args !! 1) (ArrowTy [ty, ty] IntTy) fp
-          pure (s1 <> s2 <> s3, ListTy ty, PrimAppE pr args_tc)
+          pure (s1 <> s2 <> s3, VectorTy ty, PrimAppE pr args_tc)
 
         InPlaceVSortP ty -> do
           (s2, t, e) <- go (PrimAppE (VSortP ty) args)
@@ -384,10 +384,10 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
         VSliceP ty -> do
           len3
           let [ls,from,to] = arg_tys'
-          s2 <- unify (args !! 0) (ListTy ty) ls
+          s2 <- unify (args !! 0) (VectorTy ty) ls
           s3 <- unify (args !! 1) IntTy from
           s4 <- unify (args !! 2) IntTy to
-          pure (s1 <> s2 <> s3 <> s4, ListTy ty, PrimAppE pr args_tc)
+          pure (s1 <> s2 <> s3 <> s4, VectorTy ty, PrimAppE pr args_tc)
 
         ErrorP _str ty -> do
           len0
@@ -410,7 +410,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
         ReadArrayFile _ ty -> do
           len0
-          pure (s1, ListTy ty, PrimAppE pr args_tc)
+          pure (s1, VectorTy ty, PrimAppE pr args_tc)
 
         RequestEndOf -> err $ text "Unexpected RequestEndOf in L0: " <+> exp_doc
         RequestSizeOf-> err $ text "Unexpected RequestSizeOf in L0: " <+> exp_doc
@@ -680,7 +680,7 @@ zonkTy s@(Subst mp) ty =
     SymDictTy v t -> SymDictTy v (go t)
     ArrowTy tys b  -> ArrowTy (map go tys) (go b)
     PackedTy t tys -> PackedTy t (map go tys)
-    ListTy t -> ListTy (go t)
+    VectorTy t -> VectorTy (go t)
     ArenaTy  -> ty
     SymSetTy -> ty
     SymHashTy -> ty
@@ -844,8 +844,8 @@ tyVarToMetaTy = go M.empty
                           pure (env'', ArrowTy as' b')
        PackedTy t tys -> do (env', tys') <- gol env tys
                             pure (env', PackedTy t tys')
-       ListTy t -> do (env', t') <- go env t
-                      pure (env', ListTy t')
+       VectorTy el_t -> do (env', el_t') <- go env el_t
+                           pure (env', VectorTy el_t')
        ArenaTy  -> pure (env, ty)
        SymSetTy -> pure (env, ty)
        SymHashTy-> pure (env, ty)
@@ -887,7 +887,7 @@ unify ex ty1 ty2
           then unifyl ex tys1 tys2
           else fail_
         (SymDictTy _ t1, SymDictTy _ t2) -> unify ex t1 t2
-        (ListTy t1, ListTy t2) -> unify ex t1 t2
+        (VectorTy t1, VectorTy t2) -> unify ex t1 t2
         _ -> dbgTrace 1 ("unify: Catch-all _; failed to unify " ++ sdoc ty1 ++ " with " ++ sdoc ty2) fail_
   where fail_ = err $  text "Couldn't match type" <+> quotes (doc ty2)
                     <+> text "with" <+> quotes (doc ty1)

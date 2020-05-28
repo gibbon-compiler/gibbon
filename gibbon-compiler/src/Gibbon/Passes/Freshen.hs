@@ -89,8 +89,8 @@ freshTy env ty =
                          pure (env'', ArrowTy tys' t')
      PackedTy tycon tys -> do (env', tys') <- freshTys env tys
                               pure (env', PackedTy tycon tys')
-     ListTy t -> do (env', t') <- freshTy env t
-                    pure (env', ListTy t')
+     VectorTy el_t -> do (env', el_t') <- freshTy env el_t
+                         pure (env', VectorTy el_t')
      IntHashTy -> pure (env, ty)
 
 freshTys :: TyVarEnv (TyOf Exp0) -> [Ty0] -> PassM (TyVarEnv (TyOf Exp0), [Ty0])
@@ -130,9 +130,9 @@ freshDictTy m ty =
      PackedTy tycon tys ->
          do tys' <- mapM (freshDictTy m) tys
             pure $ PackedTy tycon tys'
-     ListTy t ->
-         do t' <- freshDictTy m t
-            pure $ ListTy t'
+     VectorTy el_t ->
+         do el_t' <- freshDictTy m el_t
+            pure $ VectorTy el_t'
      SymSetTy  -> error "freshDictTy: SymSetTy not handled."
      SymHashTy -> error "freshDictTy: SymHashTy not handled."
      IntHashTy -> error "freshDictTy: IntHashTy not handled."
