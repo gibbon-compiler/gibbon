@@ -55,11 +55,11 @@ Late becomes, after InlineTriv:
                         LitE 9])
              (MkProdE [MkProdE [VarE "end_tr1",     -- end_A
                                 ProjE 0
-                                      (VarE "fnarg71")],  -- B 
+                                      (VarE "fnarg71")],  -- B
                        ProjE 0
                          (VarE "curstmp74")])
 ```
-                       
+
 Here we have an invalid projection on the `curstmp74`, whereas before
 it was correctly applied to `flatPr58`.
 
@@ -381,7 +381,7 @@ completed "b" value.  This actually sure does make it look like the
 After writing a new flatten, there are still some problems to debug.
 findWitnesses is failing on this input:
 
-``Haskell
+```Haskell
  FunDef {funname = "trav",
             funty = ArrowTy {arrIn = PackedTy "CURSOR_TY" "a",
                              arrEffs = [Traverse "a"],
@@ -416,3 +416,31 @@ findWitnesses is failing on this input:
 Ok, that looks like flatten's fault.  It should have squished that
 `Let (_,_,Let _ _)`.
 
+
+[2020.05.28] {A good vector library for Gibbon}
+-----------------------------------------------
+
+We'd like the library to have the following operations on vectors.
+
+| Op                                                 | Work | Span |
+|----------------------------------------------------|------|------|
+| alloc :: Int -> Int -> Vector a                    | O(1) | O(1) |
+| length :: Vector a -> Int                          | O(1) | O(1) |
+| isEmpty :: Vector a -> Bool                        | O(1) | O(1) |
+| slice :: Int -> Int -> Vector a -> Vector a        | O(1) | O(1) |
+| nth :: Vector a -> a                               | O(1) | O(1) |
+| splitAt :: Int -> Vector a -> (Vector a, Vector a) | O(1) | O(1) |
+| generate :: Int -> (Int -> a) -> Vector a          | O(n) | O(n) |
+| par-generate                                       | O(n) | O(1) |
+| map :: (a -> b) -> Vector a -> Vector b            | O(n) | O(n) |
+| par-map                                            | O(n) | O(1) |
+| foldr :: (a -> b -> b) -> b -> Vector a -> b       | O(n) | O(n) |
+| par-foldr                                          | O(n) | ??   |
+| append :: Vector a -> Vector a -> Vector a         | O(n) | O(n) |
+| par-append                                         | O(n) | O(1) |
+| filter :: (a -> Bool) -> Vector a -> Vector a      | O(n) | O(n) |
+| par-filter                                         | ??   | ??   |
+| snoc                                               | O(n) | O(n) |
+| par-snoc                                           | O(n) | O(1) |
+| update                                             | O(n) | 1    |
+|                                                    |      |      |

@@ -49,6 +49,7 @@ static const int num_workers = 1;
 
 #define REDIRECTION_NODE_SIZE 9
 #define MAX(a,b) (((a)>(b))?(a):(b))
+#define MIN(a,b) (((a)<(b))?(a):(b))
 
 // A region with this refcount has already been garbage collected.
 #define REG_FREED -100
@@ -207,7 +208,7 @@ typedef struct mem_arena {
 typedef mem_arena_t* ArenaTy;
 
 ArenaTy alloc_arena() {
-  ArenaTy ar = malloc(sizeof(mem_arena_t));
+  ArenaTy ar = ALLOC(sizeof(mem_arena_t));
   ar->ind = 0;
   ar->mem = malloc(global_inf_buf_max_chunk_size);
   ar->reflist = 0;
@@ -368,7 +369,7 @@ SymTable_elem *global_sym_table = NULL;
 
 void add_symbol(SymTy idx, char *value) {
     struct SymTable_elem *s;
-    s = malloc(sizeof(struct SymTable_elem));
+    s = ALLOC(sizeof(struct SymTable_elem));
     s->idx = idx;
     strcpy(s->value, value);
     HASH_ADD(hh, global_sym_table, idx, sizeof(IntTy), s);
@@ -530,7 +531,7 @@ RegionTy *alloc_region(IntTy size) {
     }
     CursorTy end = start + size;
 
-    RegionTy *reg = malloc(sizeof(RegionTy));
+    RegionTy *reg = ALLOC(sizeof(RegionTy));
     if (reg == NULL) {
         printf("alloc_region: malloc failed: %ld", sizeof(RegionTy));
         exit(1);
@@ -741,9 +742,82 @@ BoolTy is_big(IntTy i, CursorTy cur) {
 }
 
 // -------------------------------------
-// Dynamic Arrays
+// Vectors
 // -------------------------------------
 
+typedef struct VectorTy_struct {
+    // Bounds on the vector.
+    IntTy lower, upper;
+
+    // Size of each element.
+    IntTy elt_size;
+
+    // Actual elements of the vector.
+    void* data;
+} VectorTy;
+
+typedef struct VectorTyVectorTy_struct {
+    VectorTy *field0;
+    VectorTy *field1;
+} VectorTyVectorTyProd;
+
+VectorTy* vector_alloc(IntTy num, IntTy elt_size) {
+    VectorTy *vec = ALLOC(sizeof(VectorTy));
+    if (vec == NULL) {
+        printf("alloc_vector: malloc failed: %ld", sizeof(VectorTy));
+        exit(1);
+    }
+    void* data = ALLOC(num * elt_size);
+    if (data == NULL) {
+        printf("alloc_vector: malloc failed: %ld", sizeof(num * elt_size));
+        exit(1);
+    }
+    vec->lower = 0;
+    vec->upper = num;
+    vec->elt_size = elt_size;
+    vec->data = data;
+    return vec;
+}
+
+IntTy vector_length(VectorTy *vec) {
+    return (vec->upper - vec->lower);
+}
+
+BoolTy vector_is_empty(VectorTy *vec) {
+    return (vector_length(vec) == 0);
+}
+
+VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
+    if (n > vec->upper) {
+        printf("vector_slice: out of bounds: %lld > %lld", n, vec->upper);
+        exit(1);
+    }
+    VectorTy *vec2 = ALLOC(sizeof(VectorTy));
+    if (vec == NULL) {
+        printf("vector_slice: malloc failed: %ld", sizeof(VectorTy));
+        exit(1);
+    }
+    vec2->lower = i + vec->lower;
+    vec2->upper = n;
+    vec2->data = vec->data;
+    return vec2;
+}
+
+// The callers must cast the return value.
+void* vector_nth(VectorTy *vec, IntTy i) {
+    return (vec->data + (vec->elt_size * i));
+}
+
+
+VectorTyVectorTyProd vector_split_at(IntTy n, VectorTy *vec) {
+    IntTy len = vector_length(vec);
+    IntTy n1 = MAX(n,0);
+    IntTy mid = MIN(n1,len);
+    IntTy upper = MAX(0,(len - n1));
+    VectorTy *v1 = vector_slice(0,mid,vec);
+    VectorTy *v2 = vector_slice(mid,upper,vec);
+    return (VectorTyVectorTyProd) {v1, v2};
+}
 
 
 /* -------------------------------------------------------------------------------- */
