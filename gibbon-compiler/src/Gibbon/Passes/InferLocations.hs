@@ -856,7 +856,8 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                                    (VarE v) -> VarE v
                                    (LitSymE v) -> LitSymE v
                                    (LitE n) -> LitE n
-                                   (FloatE n) -> FloatE n)
+                                   (FloatE n) -> FloatE n
+                                   oth -> error $ "inferExp: spawne, arg not simple: " ++ sdoc oth)
                           args
               ex0'' = changeAppToSpawn f args2 ex0'
           -- pure (moveProjsAfterSync vr ex0'', ty, cs)
