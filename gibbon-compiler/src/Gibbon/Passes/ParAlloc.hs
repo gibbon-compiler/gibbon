@@ -59,7 +59,7 @@ parAlloc Prog{ddefs,fundefs,mainExp} = do
   mainExp' <- case mainExp of
                 Nothing -> pure Nothing
                 Just (mn, ty) -> Just . (,ty) <$>
-                  parAllocExp ddefs env2 M.empty M.empty Nothing [] S.empty S.empty mn
+                  parAllocExp ddefs fundefs env2 M.empty M.empty Nothing [] S.empty S.empty mn
   pure $ Prog ddefs fundefs' mainExp'
   where
     parAllocFn :: FunDef2 -> PassM FunDef2
@@ -75,14 +75,14 @@ parAlloc Prog{ddefs,fundefs,mainExp} = do
             initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
             env2 = Env2 initTyEnv (initFunEnv fundefs)
             boundlocs = S.fromList (funArgs ++ allLocVars funTy)
-        bod' <- parAllocExp ddefs env2 initRegEnv M.empty Nothing [] S.empty boundlocs funBody
+        bod' <- parAllocExp ddefs fundefs env2 initRegEnv M.empty Nothing [] S.empty boundlocs funBody
         pure $ f {funBody = bod'}
       else pure f
 
-parAllocExp :: DDefs2 -> Env2 Ty2 -> RegEnv -> AfterEnv -> Maybe Var
+parAllocExp :: DDefs2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> AfterEnv -> Maybe Var
             -> [PendingBind] -> S.Set Var -> S.Set LocVar -> Exp2
             -> PassM Exp2
-parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boundlocs ex =
+parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned boundlocs ex =
   case ex of
     LetE (v, endlocs, ty, (SpawnE f locs args)) bod -> do
       let env2' = extendVEnv v ty env2
@@ -103,7 +103,7 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boun
                        reg_env pending_binds'
       parent_id <- gensym "parent_id"
       args' <- mapM go args
-      bod'  <- parAllocExp ddefs env2' reg_env' after_env (Just parent_id) pending_binds' spawned' boundlocs bod
+      bod'  <- parAllocExp ddefs fundefs env2' reg_env' after_env (Just parent_id) pending_binds' spawned' boundlocs bod
       pure $ LetE (parent_id, [], IntTy, Ext GetCilkWorkerNum) $
              LetE (v, endlocs, ty', (SpawnE f newlocs args')) bod'
 
@@ -115,7 +115,7 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boun
                                   PVar (a,_,_,_) -> S.insert a acc
                                   PAfter (a,_)   -> S.insert a acc)
                          S.empty pending_binds
-      bod1 <- parAllocExp ddefs env2' reg_env after_env Nothing [] S.empty boundlocs' bod
+      bod1 <- parAllocExp ddefs fundefs env2' reg_env after_env Nothing [] S.empty boundlocs' bod
       bod2 <- foldrM
                  (\(from, to) acc -> do
                     indr <- gensym "pindr"
@@ -160,8 +160,8 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boun
                        reg_env pending_binds'
           env2' = extendVEnv v ty env2
 
-          vars = gFreeVars (substLocInExp after_env rhs)
-          used = S.fromList (allFreeVars (substLocInExp after_env rhs))
+          vars = gFreeVars (substLocInExp after_env rhs) `S.difference` (M.keysSet fundefs)
+          used = S.fromList (allFreeVars (substLocInExp after_env rhs)) `S.difference` (M.keysSet fundefs)
 
       -- Swallow this binding, and add v to 'spawned'
       if not (S.disjoint vars spawned)
@@ -169,19 +169,19 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boun
         rhs' <- go rhs
         let pending_binds'' = PVar (v, locs, ty', rhs') : pending_binds'
             spawned' = S.insert v spawned
-        parAllocExp ddefs env2' reg_env' after_env mb_parent_id pending_binds'' spawned' boundlocs bod
+        parAllocExp ddefs fundefs env2' reg_env' after_env mb_parent_id pending_binds'' spawned' boundlocs bod
       -- Swallow this binding, and but don't add v to 'spawned'
       else if not (S.isSubsetOf used boundlocs)
       then do
         rhs' <- go rhs
         let pending_binds'' = PVar (v, locs, ty', rhs') : pending_binds'
-        parAllocExp ddefs env2' reg_env' after_env mb_parent_id pending_binds'' spawned boundlocs bod
+        parAllocExp ddefs fundefs env2' reg_env' after_env mb_parent_id pending_binds'' spawned boundlocs bod
       -- Emit this binding as usual
       else if S.disjoint vars spawned && S.isSubsetOf used boundlocs
       then do
         let boundlocs' = S.insert v boundlocs
         LetE <$> (v,locs,ty',) <$> go rhs
-             <*> parAllocExp ddefs env2' reg_env' after_env mb_parent_id pending_binds' spawned boundlocs' bod
+             <*> parAllocExp ddefs fundefs env2' reg_env' after_env mb_parent_id pending_binds' spawned boundlocs' bod
       else error "parAlloc: LetE"
 
     -- Straightforward recursion
@@ -223,9 +223,9 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boun
                   boundlocs1 = S.insert newloc boundlocs
                   boundlocs2 = S.insert loc $ S.insert v boundlocs
               -- If this continuation is stolen
-              bod1 <- parAllocExp ddefs env2 reg_env' after_env' (Just cont_id) pending_binds' spawned boundlocs1 (substLocInExp after_env' bod)
+              bod1 <- parAllocExp ddefs fundefs env2 reg_env' after_env' (Just cont_id) pending_binds' spawned boundlocs1 (substLocInExp after_env' bod)
               -- If it's not stolen
-              bod2 <- parAllocExp ddefs env2 reg_env' after_env (Just cont_id) pending_binds (S.delete v spawned) boundlocs2 bod
+              bod2 <- parAllocExp ddefs fundefs env2 reg_env' after_env (Just cont_id) pending_binds (S.delete v spawned) boundlocs2 bod
               not_stolen  <- gensym "not_stolen"
               if S.member loc2 boundlocs
               then
@@ -244,7 +244,7 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boun
               let pending_binds'  = PAfter (loc, (v, loc2)) : pending_binds
                   reg      = reg_env # loc2
                   reg_env' = M.insert loc reg reg_env
-              parAllocExp ddefs env2 reg_env' after_env mb_parent_id pending_binds' spawned boundlocs bod
+              parAllocExp ddefs fundefs env2 reg_env' after_env mb_parent_id pending_binds' spawned boundlocs bod
 
             _ -> do
               let reg = case locexp of
@@ -256,7 +256,7 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boun
                           FreeLE                 -> undefined
                   reg_env'  = M.insert loc reg reg_env
                   boundlocs'= S.insert loc boundlocs
-              bod' <- parAllocExp ddefs env2 reg_env' after_env mb_parent_id pending_binds spawned boundlocs' bod
+              bod' <- parAllocExp ddefs fundefs env2 reg_env' after_env mb_parent_id pending_binds spawned boundlocs' bod
               pure $ Ext $ LetLocE loc locexp bod'
         RetE{}         -> pure ex
         FromEndE{}     -> pure ex
@@ -268,7 +268,7 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boun
     MapE{}  -> error $ "parAllocExp: TODO MapE"
     FoldE{} -> error $ "parAllocExp: TODO FoldE"
   where
-    go = parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boundlocs
+    go = parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned boundlocs
 
     docase reg env21 reg_env2 after_env2 mb_parent_id2 pending_binds2 spawned2 boundlocs2 (dcon,vlocs,bod) = do
       -- Update the envs with bindings for pattern matched variables and locations.
@@ -277,7 +277,7 @@ parAllocExp ddefs env2 reg_env after_env mb_parent_id pending_binds spawned boun
           reg_env2' = foldr (\lc acc -> M.insert lc reg acc) reg_env2 locs
           env21'    = extendPatternMatchEnv dcon ddefs vars locs env21
           boundlocs2' = S.union (S.fromList (vars ++ locs)) boundlocs2
-      (dcon,vlocs,) <$> parAllocExp ddefs env21' reg_env2' after_env2 mb_parent_id2 pending_binds2 spawned2 boundlocs2' bod
+      (dcon,vlocs,) <$> parAllocExp ddefs fundefs env21' reg_env2' after_env2 mb_parent_id2 pending_binds2 spawned2 boundlocs2' bod
 
 
 substLocInExp :: M.Map LocVar LocVar -> Exp2 -> Exp2

@@ -43,7 +43,7 @@ bigNumber = 10 -- limit number of loops
 --
 -- Phase Ordering: This must run after flatten.
 findWitnesses :: Prog3 -> PassM Prog3
-findWitnesses = mapMExprs fn
+findWitnesses p@Prog{fundefs} = mapMExprs fn p
  where
   fn Env2{vEnv,fEnv} ex = return (goFix (Map.keysSet vEnv `Set.union` Map.keysSet fEnv)
                                         ex bigNumber)
@@ -56,7 +56,7 @@ findWitnesses = mapMExprs fn
     let go      = goE bound -- Shorthand.
         goClear = goE (bound `Set.union` Map.keysSet mp) Map.empty
         -- shorthand for applying (L p)
-        handle' e = handle mp e
+        handle' e = handle fundefs mp e
     in
       case ex of
         LetE (v,locs,t, (TimeIt e ty b)) bod ->
@@ -130,13 +130,13 @@ findWitnesses = mapMExprs fn
 
 -- TODO: this needs to preserve any bindings that have TimeIt forms (hasTimeIt).
 -- OR we can only match a certain pattern like (Let (_,_,TimeIt _ _) _)
-handle :: Map.Map Var (Var, [()], Ty3, Exp3) -> Exp3 -> Exp3
-handle mp expr =
+handle :: FunDefs3 -> Map.Map Var (Var, [()], Ty3, Exp3) -> Exp3 -> Exp3
+handle fundefs mp expr =
     dbgTrace 6 (" [findWitnesses] building lets using vars "++show vs++" for expr: "++ take 80 (show expr)) $
     buildLets mp vars expr
     where freeInBind v = case Map.lookup (view v) mp of
                            Nothing -> []
-                           Just (_v,_locs,_t,e) -> Set.toList $ gFreeVars e
+                           Just (_v,_locs,_t,e) -> Set.toList $ (gFreeVars e) `Set.difference` (Map.keysSet fundefs)
           (g,vf,_) = graphFromEdges $ zip3 vs vs $ map freeInBind vs
           vars = reverse $ map (\(x,_,_) -> x) $ map vf $ topSort g
           vs = Map.keys mp

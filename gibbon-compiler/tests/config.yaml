@@ -290,6 +290,10 @@ tests:
   - name: Tuples.hs
     answer-file: examples/Tuples.hs.ans
 
+  - name: NeedsClosure.hs
+    dir: examples/poly
+    answer-file: examples/poly/NeedsClosure.hs.ans
+
     ## Shouldn't typecheck
   - name: Fail1.hs
     dir: examples/should_fail

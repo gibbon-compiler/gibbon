@@ -121,10 +121,10 @@ Assume that the input program is monomorphic.
 
 l0ToL1 :: Prog0 -> PassM L1.Prog1
 l0ToL1 p = do
-  p0  <- bindLambdas p
-  dbgTrace 5 ("\n\nBind Lambdas:\n" ++ (pprender p0)) (pure ())
+  p0  <- closureConvert p
+  dbgTrace 5 ("\n\nClosure converion:\n" ++ (pprender p0)) (pure ())
   -- Typecheck again so that all the meta type variables introduced by
-  -- bindLambdas (to bind lambdas) get zonked.
+  -- closureConvert (to bind lambdas) get zonked.
   p0' <- tcProg p0
   dbgTrace 5 ("\n\nTypechecked:\n" ++ (pprender p0')) (pure ())
   p1 <- monomorphize p0'
@@ -589,7 +589,7 @@ collectMonoObls ddefs env2 toplevel ex =
     Ext ext ->
       case ext of
         LambdaE args bod -> do
-          bod' <- go bod
+          bod' <- collectMonoObls ddefs (extendsVEnv (M.fromList args) env2) toplevel bod
           pure $ Ext $ LambdaE args bod'
         PolyAppE{} -> error ("collectMonoObls: TODO, "++ sdoc ext)
         FunRefE tyapps f ->
@@ -1127,6 +1127,22 @@ specLambdasExp ddefs env2 ex =
 
 --------------------------------------------------------------------------------
 
+closureConvert :: Prog0 -> PassM Prog0
+closureConvert p0 = do
+    p1 <- bindLambdas p0
+    dbgTrace 5 ("\n\nbindLambdas:\n" ++ (pprender p1)) (pure ())
+    p1' <- tcProg p1
+    dbgTrace 5 ("\n\ntypechecked:\n" ++ (pprender p1')) (pure ())
+    p2 <- closeLambdas p1'
+    dbgTrace 5 ("\n\ncloseLambdas:\n" ++ (pprender p2)) (pure ())
+    p2' <- tcProg p2
+    dbgTrace 5 ("\n\ntypechecked:\n" ++ (pprender p2')) (pure ())
+    p3 <- hoistLambdas p2'
+    dbgTrace 5 ("\n\nhoistLambdas:\n" ++ (pprender p3)) (pure ())
+    p3' <- tcProg p3
+    dbgTrace 5 ("\n\ntypechecked:\n" ++ (pprender p3')) (pure ())
+    pure p3'
+
 {-|
 
 Let bind all anonymous lambdas.
@@ -1146,103 +1162,423 @@ bindLambdas :: Prog0 -> PassM Prog0
 bindLambdas prg@Prog{fundefs,mainExp} = do
   mainExp' <- case mainExp of
                 Nothing      -> pure Nothing
-                Just (a, ty) -> Just <$> (,ty) <$> hoistExp a
+                Just (a, ty) -> Just <$> (,ty) <$> goExp a
   fundefs' <- mapM
-                (\fn@FunDef{funBody} -> hoistExp funBody >>=
+                (\fn@FunDef{funBody} -> goExp funBody >>=
                                         \b' -> pure $ fn {funBody = b'})
                 fundefs
   pure $ prg { fundefs = fundefs'
              , mainExp = mainExp' }
   where
-    hoistExp :: Exp0 -> PassM Exp0
-    hoistExp ex0 = gocap ex0
+    goExp :: Exp0 -> PassM Exp0
+    goExp ex0 = gocap ex0
       where
-
       gocap ex = do (lets,ex') <- go ex
                     pure $ mkLets lets ex'
-
       go :: Exp0 -> PassM ([(Var,[Ty0],Ty0,Exp0)], Exp0)
       go e0 =
        case e0 of
-        (AppE f locs args) -> do
-          (ltss,args') <- unzip <$> mapM go args
-          pure (concat ltss, AppE f locs args')
-
-        (Ext (LambdaE args bod)) -> do
-          let arg_vars = map fst args
-              captured_vars = gFreeVars bod `S.difference` (S.fromList arg_vars)
-          if S.null captured_vars
-          then do
-            v  <- gensym "lam_"
-            ty <- newMetaTy
-            pure ([(v,[],ty,e0)], VarE v)
-          else
-             error $ "hoistExp: LambdaE captures variables: "
-                     ++ show captured_vars ++ "\nin\n" ++ sdoc e0
-
+        (Ext (LambdaE{})) -> do
+          v  <- gensym "lam_"
+          ty <- newMetaTy
+          pure ([(v,[],ty,e0)], VarE v)
+        (LetE (v,locs,t,rhs@(Ext LambdaE{})) bod) -> do
+            (lts2, bod') <- go bod
+            pure  (lts2, LetE (v,locs,t,rhs) bod')
+        -- boilerplate
         (Ext (ParE0 ls)) -> do
           ls' <- mapM gocap ls
           pure ([], Ext $ ParE0 ls')
-
         (Ext PolyAppE{}) -> pure ([], e0)
         (Ext FunRefE{})  -> pure ([], e0)
         (Ext BenchE{})   -> pure ([], e0)
         (Ext (L p e1))     -> do
           (ls, e1') <- go e1
           pure (ls, Ext $ L p e1')
-
-        -- boilerplate
-
         (LitE _)      -> pure ([], e0)
         (FloatE{})    -> pure ([], e0)
         (LitSymE _)   -> pure ([], e0)
         (VarE _)      -> pure ([], e0)
         (PrimAppE{})  -> pure ([], e0)
-        (MapE _ _)    -> error "hoistExp.go: FINISHME MapE"
-        (FoldE _ _ _) -> error "hoistExp.go: FINISHME FoldE"
-
-        -- This lambda is already let bound. We shouldn't hoist this again..
-        (LetE (v,locs,t,rhs@(Ext LambdaE{})) bod) -> do
-            (lts2, bod') <- go bod
-            pure  (lts2, LetE (v,locs,t,rhs) bod')
-
+        (AppE f locs args) -> do
+          (ltss,args') <- unzip <$> mapM go args
+          pure (concat ltss, AppE f locs args')
+        (MapE _ _)    -> error "goExp.go: FINISHME MapE"
+        (FoldE _ _ _) -> error "goExp.go: FINISHME FoldE"
         (LetE (v,locs,t,rhs) bod) -> do
-            (lts1, rhs') <- go rhs
-            (lts2, bod') <- go bod
-            pure  (lts1++lts2, LetE (v,locs,t,rhs') bod')
-
+           (lts1, rhs') <- go rhs
+           bod' <- gocap bod
+           pure  (lts1, LetE (v,locs,t,rhs') bod')
         (IfE e1 e2 e3) -> do
              (lts1, e1') <- go e1
              e2' <- gocap e2
              e3' <- gocap e3
              pure  (lts1, IfE e1' e2' e3')
-
         (ProjE i e)  -> do (lts,e') <- go e
                            pure  (lts, ProjE i e')
         (MkProdE es) -> do (ltss,es') <- unzip <$> mapM go es
                            pure (concat ltss, MkProdE es')
-
         (CaseE scrt ls) -> do (lts,scrt') <- go scrt
                               ls' <- mapM (\(a,b,c) -> (a,b,) <$> gocap c) ls
                               pure (lts, CaseE scrt' ls')
         (DataConE c loc es) -> do (ltss,es') <- unzip <$> mapM go es
                                   pure (concat ltss, DataConE c loc es')
-
         (SpawnE f locs args) -> do
           (ltss,args') <- unzip <$> mapM go args
           pure (concat ltss, SpawnE f locs args')
-
         (SyncE)    -> pure ([], SyncE)
-
         (WithArenaE v e) -> do
           e' <- (gocap e)
           pure ([], WithArenaE v e')
-
         (TimeIt e t b) -> do (lts,e') <- go e
                              pure (lts, TimeIt e' t b)
 
+----------------------------------------
+
+-- Closure conversion monad
+type CcM a = StateT (DDefs0, FunDefs0) PassM a
+
+envTyCon :: TyCon
+envTyCon = "_Env"
+
+emptyEnvCon :: DataCon
+emptyEnvCon = "Mk_Env_0"
+
+initEnvTyCon :: CcM ()
+initEnvTyCon = do
+    (ddefs,fundefs) <- get
+    let ddf = DDef { tyName = toVar envTyCon
+                   , tyArgs = []
+                   , dataCons = [(emptyEnvCon,[])]
+                   }
+        ddefs' = M.insert (toVar envTyCon) ddf ddefs
+    put (ddefs',fundefs)
+
+allowedToCaptureTy :: Ty0 -> Bool
+allowedToCaptureTy ty = isScalarTy0 ty || isValidListElemTy0 ty
+
+
+addConForTys :: [Ty0] -> CcM DataCon
+addConForTys [] = pure emptyEnvCon
+addConForTys tys
+    | not (all allowedToCaptureTy tys) = error $ "Can only capture scalar types. Got: " ++ sdoc tys
+    | otherwise = do
+        (ddefs,fundefs) <- get
+        let dcons = getConOrdering ddefs envTyCon
+            matching_con = foldr
+                             (\con acc ->
+                                  let con_tys = lookupDataCon ddefs con in
+                                  if con_tys == tys
+                                  then Just con
+                                  else acc)
+                             Nothing
+                             dcons
+        case matching_con of
+            Just con -> pure con
+            Nothing  -> do
+                uniq <- lift $ newUniq
+                let ddf = lookupDDef ddefs envTyCon
+                    dcon_name = "Mk" ++ envTyCon ++ "_" ++ show uniq
+                    dcon = (dcon_name, map (False,) tys)
+                    ddf' = ddf { dataCons = dcon : (dataCons ddf) }
+                    ddefs' = M.insert (toVar envTyCon) ddf' ddefs
+                put (ddefs',fundefs)
+                pure dcon_name
+
+
+-- | Maps a lambda (FunRef) to an environment.
+type ClosEnv = M.Map Var Var
+
+{-|
+
+Lambdas are updated to read the values of free variables from an environment
+which is given to them as an additonal argument. All call-sites of lambdas are
+updated accordingly.
+
+-}
+closeLambdas :: Prog0 -> PassM Prog0
+closeLambdas p0@(Prog ddefs0 fundefs0 _mainExp) =
+    evalStateT (closeLambdas' p0) (ddefs0,fundefs0)
+
+closeLambdas' :: Prog0 -> CcM Prog0
+closeLambdas' (Prog _ddefs0 fundefs0 mainExp) = do
+    initEnvTyCon
+    mainExp' <- case mainExp of
+                    Nothing -> pure Nothing
+                    Just (a,ty) -> do
+                        a' <- updCallSites M.empty init_env2 a
+                        pure $ Just (a',ty)
+    updaCallSitesFuns
+    (ddefs'',fundefs'') <- get
+    pure $ Prog ddefs'' fundefs'' mainExp'
+  where
+    init_env2 = Env2 M.empty (M.map funTy fundefs0)
+
+    updaCallSitesFuns :: CcM ()
+    updaCallSitesFuns = do
+      (_ddefs,fundefs) <- get
+      fundefs' <-
+        foldlM
+          (\fns fn -> do
+                  let ForAll tvs (ArrowTy in_tys ret_ty) = funTy fn
+                      args = funArgs fn
+                  (args',in_tys',clos_env) <-
+                      foldlM
+                        (\(acc1,acc2,acc3) (arg,ty) ->
+                             case ty of
+                               ArrowTy in_tys1 ret_ty1 -> do
+                                 env_arg <- lift $ gensym "env"
+                                 let env_ty = PackedTy envTyCon []
+                                 let acc1' = acc1 ++ [arg,env_arg]
+                                     acc2' = acc2 ++ [ArrowTy (env_ty : in_tys1) ret_ty1, env_ty]
+                                     acc3' = M.insert arg env_arg acc3
+                                 pure (acc1',acc2',acc3')
+                               _ -> pure (acc1++[arg],acc2++[ty],acc3))
+                        ([],[],M.empty)
+                        (zip args in_tys)
+                  let init_env2' = extendsVEnv (M.fromList (zip args in_tys)) init_env2
+                  e' <- updCallSites clos_env init_env2' (funBody fn)
+                  let fn' = fn { funArgs = args',
+                                 funTy = ForAll tvs (ArrowTy in_tys' ret_ty),
+                                 funBody = e' }
+                      fns' = M.insert (funName fn) fn' fns
+                  pure fns')
+          M.empty
+          fundefs
+      (ddefs',_) <- get
+      put (ddefs',fundefs')
+
+    -- Update call sites to create and pass environments.
+    updCallSites :: ClosEnv -> Env2 Ty0 -> Exp0 -> CcM Exp0
+    updCallSites clos_env env2 ex = do
+        (lets,ex') <- go clos_env env2 ex
+        pure $ mkLets lets ex'
+
+    getLamsEnv :: ClosEnv -> Exp0 -> Maybe Var
+    getLamsEnv clos_env e =
+      case e of
+        Ext (FunRefE _tyapps f) -> M.lookup f clos_env
+        _ -> Nothing
+
+    go :: ClosEnv -> Env2 Ty0 -> Exp0 -> CcM ([(Var,[Ty0],Ty0,Exp0)], Exp0)
+    go clos_env env2 e0 =
+     case e0 of
+      (Ext (LambdaE{})) -> do
+        error $ "closeLambdas: Unbound lambda: " ++ sdoc e0
+
+      (LetE
+          (v,locs,lam_ty,_lam@(Ext (LambdaE args lam_bod)))
+          let_bod) -> do
+        (_,fundefs) <- get
+        let arg_vars = map fst args
+            captured_vars = (gFreeVars lam_bod `S.difference` (S.fromList arg_vars))
+                            `S.difference` (M.keysSet fundefs)
+            cvs = S.toList captured_vars
+        let field_tys = map (\w -> lookupVEnv w env2) cvs
+        env_dcon <- addConForTys field_tys
+        -- (1) update lambda function to fetch free variables from the environment
+        env_arg <- lift $ gensym "env"
+        (lts1, lam_bod'') <- go clos_env env2 lam_bod
+        let args' = (env_arg, PackedTy envTyCon []) : args
+            lam_bod' = CaseE (VarE env_arg) [(env_dcon,zip cvs field_tys,lam_bod'')]
+            lam' = LambdaE args' lam_bod'
+            lam_ty' = case lam_ty of
+                        ArrowTy arg_tys ret_ty -> ArrowTy (PackedTy envTyCon [] : arg_tys) ret_ty
+                        MetaTv{} -> lam_ty
+                        _ -> lam_ty
+            bind_lam = (v,locs,lam_ty',Ext lam')
+        -- (2) create the environment that goes with this lambda
+        env_name <- lift $ gensym "env_val"
+        let env_rhs = DataConE (ProdTy []) env_dcon (map VarE cvs)
+            bind_env = (env_name,[],PackedTy envTyCon [],env_rhs)
+        let clos_env' = M.insert v env_name clos_env
+        -- (3)
+        (lts, let_bod') <- go clos_env' (extendVEnv v lam_ty' env2) let_bod
+        pure $ (lts ++ lts1, mkLets [bind_lam,bind_env] let_bod')
+
+      (AppE f tyapps args) -> do
+        (_,fundefs) <- get
+        (lts,args') <-
+            foldlM
+              (\(acc1,acc2) arg -> do
+                   (lts1,arg') <- go clos_env env2 arg
+                   let donothing = pure (acc1 ++ lts1, acc2 ++ [arg'])
+                   case arg' of
+                     Ext (FunRefE tyapps2 toplvl)  ->
+                       case M.lookup toplvl fundefs of
+                           Nothing ->
+                             case getLamsEnv clos_env arg' of
+                               Nothing  -> donothing
+                               Just env -> pure (acc1 ++ lts1, acc2 ++ [arg', VarE env])
+                           Just fn -> do
+                             env_arg <- lift $ gensym "env"
+                             let lam_args = (funArgs fn)
+                             lam_tys <- mapM (\_ -> lift $ newMetaTy) lam_args
+                             let lam_args' = env_arg : lam_args
+                                 lam_tys' = PackedTy envTyCon [] : lam_tys
+                             lam_name <- lift $ gensym "lam_"
+                             -- TODO: shouldn't use tyapps here;
+                             let lam = LambdaE (zip lam_args' lam_tys') (AppE toplvl tyapps2 (map VarE lam_args))
+                             lam_ty <- lift $ newMetaTy
+                             let lam_bind = (lam_name,[],lam_ty,Ext lam)
+                             case getLamsEnv clos_env arg' of
+                               Nothing  -> pure (lam_bind : (acc1 ++ lts1), acc2 ++ [Ext (FunRefE tyapps2 lam_name), DataConE (ProdTy []) emptyEnvCon []])
+                               Just env -> pure (lam_bind : (acc1 ++ lts1), acc2 ++ [Ext (FunRefE tyapps2 lam_name), VarE env])
+                     _ -> donothing)
+              ([],[])
+              args
+        let args'' = case M.lookup f clos_env of
+                       Nothing  -> args'
+                       Just env -> (VarE env) : args'
+        pure (lts, AppE f tyapps args'')
+
+      -- boilerplate
+      (Ext (ParE0 ls)) -> do
+        ls' <- mapM (updCallSites clos_env env2) ls
+        pure ([], Ext $ ParE0 ls')
+      (Ext PolyAppE{}) -> pure ([], e0)
+      (Ext FunRefE{})  -> pure ([], e0)
+      (Ext BenchE{})   -> pure ([], e0)
+      (Ext (L p e1))     -> do
+        (ls, e1') <- go clos_env env2 e1
+        pure (ls, Ext $ L p e1')
+      (LitE _)      -> pure ([], e0)
+      (FloatE{})    -> pure ([], e0)
+      (LitSymE _)   -> pure ([], e0)
+      (VarE _)      -> pure ([], e0)
+      (PrimAppE{})  -> pure ([], e0)
+      (MapE _ _)    -> error "goExp.go: FINISHME MapE"
+      (FoldE _ _ _) -> error "goExp.go: FINISHME FoldE"
+      (LetE (v,locs,t,rhs) bod) -> do
+          (lts1, rhs') <- go clos_env env2 rhs
+          bod' <- updCallSites clos_env (extendVEnv v t env2) bod
+          pure  (lts1, LetE (v,locs,t,rhs') bod')
+      (IfE e1 e2 e3) -> do
+           (lts1, e1') <- go clos_env env2 e1
+           e2' <- updCallSites clos_env env2 e2
+           e3' <- updCallSites clos_env env2 e3
+           pure  (lts1, IfE e1' e2' e3')
+      (ProjE i e)  -> do (lts,e') <- go clos_env env2 e
+                         pure  (lts, ProjE i e')
+      (MkProdE es) -> do (ltss,es') <- unzip <$> mapM (go clos_env env2) es
+                         pure (concat ltss, MkProdE es')
+      (CaseE scrt ls) -> do (lts,scrt') <- go clos_env env2 scrt
+                            ls' <- mapM (\(a,b,c) -> (a,b,) <$> updCallSites clos_env env2 c) ls
+                            pure (lts, CaseE scrt' ls')
+      (DataConE c loc es) -> do (ltss,es') <- unzip <$> mapM (go clos_env env2) es
+                                pure (concat ltss, DataConE c loc es')
+      (SpawnE f locs args) -> do
+        (ltss,args') <- unzip <$> mapM (go clos_env env2) args
+        pure (concat ltss, SpawnE f locs args')
+      (SyncE)    -> pure ([], SyncE)
+      (WithArenaE v e) -> do
+        e' <- updCallSites clos_env env2 e
+        pure ([], WithArenaE v e')
+      (TimeIt e t b) -> do (lts,e') <- go clos_env env2 e
+                           pure (lts, TimeIt e' t b)
+
+----------------------------------------
+
+hoistLambdas :: Prog0 -> PassM Prog0
+hoistLambdas prg@Prog{fundefs,mainExp} = do
+  (lams1, mainExp') <-
+    case mainExp of
+        Nothing -> pure ([], Nothing)
+        Just (a, ty) -> do
+            (lams,a') <- go a
+            pure (lams, Just (a',ty))
+  (lams2,fundefs') <-
+      foldlM
+        (\(acc1,acc2) fn@FunDef{funName,funBody} -> do
+              (lams,b') <- go funBody
+              let fn' = fn {funBody = b'}
+              pure (acc1 ++ lams, M.insert funName fn' acc2))
+        (lams1,M.empty)
+        fundefs
+  let fundefs2 = map (\(v,_tyapps,ty,e) ->
+                          case e of
+                            Ext (LambdaE args bod) ->
+                                let arg_vars = map fst args
+                                    tyvars = tyVarsInTy ty
+                                in ( v
+                                   , FunDef { funName = v
+                                            , funArgs = arg_vars
+                                            , funTy = ForAll tyvars ty
+                                            , funBody = bod })
+                            _ -> error "not a lambda")
+                     lams2
+  pure $ prg { fundefs = fundefs' `M.union` (M.fromList fundefs2)
+             , mainExp = mainExp' }
+  where
+      go :: Exp0 -> PassM ([(Var,[Ty0],Ty0,Exp0)], Exp0)
+      go e0 =
+       case e0 of
+        (Ext (LambdaE{})) -> error $ "hoistLambdas: unbound lambda: " ++ sdoc e0
+        (LetE (v,locs,t,lam@(Ext LambdaE{})) bod) -> do
+            (lams, bod') <- go bod
+            pure  ((v,locs,t,lam):lams, bod')
+        -- boilerplate
+        (Ext (ParE0 ls)) -> do
+          (lams', ls') <- foldlM
+                   (\(acc1,acc2) a -> do
+                         (lams,a') <- go a
+                         pure $ (acc1 ++ lams, acc2 ++ [a']))
+                   ([],[])
+                   ls
+          pure (lams', Ext $ ParE0 ls')
+        (Ext PolyAppE{}) -> pure ([], e0)
+        (Ext FunRefE{})  -> pure ([], e0)
+        (Ext BenchE{})   -> pure ([], e0)
+        (Ext (L p e1))     -> do
+          (lams, e1') <- go e1
+          pure (lams, Ext $ L p e1')
+        (LitE _)      -> pure ([], e0)
+        (FloatE{})    -> pure ([], e0)
+        (LitSymE _)   -> pure ([], e0)
+        (VarE _)      -> pure ([], e0)
+        (PrimAppE{})  -> pure ([], e0)
+        (AppE f locs args) -> do
+          (lamss,args') <- unzip <$> mapM go args
+          pure (concat lamss, AppE f locs args')
+        (MapE _ _)    -> error "goExp.go: FINISHME MapE"
+        (FoldE _ _ _) -> error "goExp.go: FINISHME FoldE"
+        (LetE (v,locs,t,rhs) bod) -> do
+           (lams1, rhs') <- go rhs
+           (lams2, bod') <- go bod
+           pure  (lams1 ++ lams2, LetE (v,locs,t,rhs') bod')
+        (IfE e1 e2 e3) -> do
+             (lams1, e1') <- go e1
+             (lams2, e2') <- go e2
+             (lams3, e3') <- go e3
+             pure  (lams1++lams2++lams3, IfE e1' e2' e3')
+        (ProjE i e)  -> do (lams,e') <- go e
+                           pure  (lams, ProjE i e')
+        (MkProdE es) -> do (lamss,es') <- unzip <$> mapM go es
+                           pure (concat lamss, MkProdE es')
+        (CaseE scrt ls) -> do (lams1,scrt') <- go scrt
+                              (lams2,ls') <-
+                                  foldlM
+                                    (\(acc, acc2) (a,b,c) -> do
+                                          (lamsc,c') <- go c
+                                          pure (acc ++ lamsc, acc2 ++ [(a,b,c')]))
+                                    ([],[])
+                                    ls
+                              pure (lams1++lams2, CaseE scrt' ls')
+        (DataConE c loc es) -> do (lamss,es') <- unzip <$> mapM go es
+                                  pure (concat lamss, DataConE c loc es')
+        (SpawnE f locs args) -> do
+          (lamss,args') <- unzip <$> mapM go args
+          pure (concat lamss, SpawnE f locs args')
+        (SyncE)    -> pure ([], SyncE)
+        (WithArenaE v e) -> do
+          (lams,e') <- (go e)
+          pure (lams, WithArenaE v e')
+        (TimeIt e t b) -> do (lams,e') <- go e
+                             pure (lams, TimeIt e' t b)
+
 --------------------------------------------------------------------------------
 
+-- | Convert parallel tuples to explicit spawn's and sync's.
 elimParE0 :: Prog0 -> PassM Prog0
 elimParE0 prg@Prog{fundefs,mainExp} = do
   fundefs' <- mapM (\fn@FunDef{funBody} -> go funBody >>= \b -> pure $ fn {funBody = b}) fundefs

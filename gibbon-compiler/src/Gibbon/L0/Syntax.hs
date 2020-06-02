@@ -245,8 +245,8 @@ saturateCall sigma ex =
                (AppE f [] (args ++ (map VarE new_args))))
 
     AppE _ tyapps _ ->
-      error $ "unCurryCall: Expected tyapps to be [], got: " ++ sdoc tyapps
-    _ -> error $ "unCurryCall: " ++ sdoc ex ++ " is not a call-site."
+      error $ "saturateCall: Expected tyapps to be [], got: " ++ sdoc tyapps
+    _ -> error $ "saturateCall: " ++ sdoc ex ++ " is not a call-site."
 
 -- | Get the free TyVars from types; no duplicates in result.
 tyVarsInTy :: Ty0 -> [TyVar]

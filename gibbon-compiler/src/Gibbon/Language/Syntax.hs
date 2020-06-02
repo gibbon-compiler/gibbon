@@ -495,12 +495,15 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
       LitSymE _ -> S.empty
       ProjE _ e -> gFreeVars e
       IfE a b c -> gFreeVars a `S.union` gFreeVars b `S.union` gFreeVars c
-      AppE _v _ ls         -> S.unions (L.map gFreeVars ls)
+      AppE v _ ls         -> S.unions $ (S.singleton v) : (L.map gFreeVars ls)
       PrimAppE _ ls        -> S.unions (L.map gFreeVars ls)
       LetE (v,_,_,rhs) bod -> gFreeVars rhs `S.union`
                               S.delete v (gFreeVars bod)
       CaseE e ls -> S.union (gFreeVars e)
-                    (S.unions $ L.map (\(_, _, ee) -> gFreeVars ee) ls)
+                    (S.unions $ L.map (\(_, vlocs, ee) ->
+                                           let (vars,_) = unzip vlocs
+                                           in (gFreeVars ee) `S.difference` (S.fromList vars))
+                                ls)
       MkProdE ls          -> S.unions $ L.map gFreeVars ls
       DataConE _ _ ls     -> S.unions $ L.map gFreeVars ls
       TimeIt e _ _        -> gFreeVars e

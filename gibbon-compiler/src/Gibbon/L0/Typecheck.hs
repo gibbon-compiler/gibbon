@@ -455,7 +455,8 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
     CaseE scrt brs -> do
       (s1, scrt_ty, scrt_tc) <- go scrt
-      case scrt_ty of
+      let scrt_ty' = zonkTy s1 scrt_ty
+      case scrt_ty' of
         (PackedTy tycon drvd_tyargs) -> do
           let tycons_brs = map (getTyOfDataCon ddefs . (\(a,_,_) -> a)) brs
           case nub tycons_brs of
@@ -466,12 +467,12 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
                        (s2,t2,brs_tc) <- tcCases ddefs s1 venv fenv bound_tyvars ddf' brs is_main ex
                        pure (s2, t2, CaseE scrt_tc brs_tc)
                      else err $ text "Couldn't match" <+> doc one
-                                <+> "with:" <+> doc scrt_ty
+                                <+> "with:" <+> doc scrt_ty'
                                 $$ exp_doc
             oth -> err $ text "Case clause constructors have mismatched types:"
                           <+> doc oth
                           $$ exp_doc
-        _ -> err $ text "Couldn't match" <+> doc scrt_ty
+        _ -> err $ text "Couldn't match" <+> doc scrt_ty'
                      <+> "with a Packed type."
                      $$ exp_doc
 
