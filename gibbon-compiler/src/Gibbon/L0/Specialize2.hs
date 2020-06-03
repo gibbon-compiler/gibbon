@@ -1182,9 +1182,9 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
           v  <- gensym "lam_"
           ty <- newMetaTy
           pure ([(v,[],ty,e0)], VarE v)
-        (LetE (v,locs,t,rhs@(Ext LambdaE{})) bod) -> do
+        (LetE (v,tyapps,t,rhs@(Ext LambdaE{})) bod) -> do
             (lts2, bod') <- go bod
-            pure  (lts2, LetE (v,locs,t,rhs) bod')
+            pure  (lts2, LetE (v,tyapps,t,rhs) bod')
         -- boilerplate
         (Ext (ParE0 ls)) -> do
           ls' <- mapM gocap ls
@@ -1200,15 +1200,15 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
         (LitSymE _)   -> pure ([], e0)
         (VarE _)      -> pure ([], e0)
         (PrimAppE{})  -> pure ([], e0)
-        (AppE f locs args) -> do
+        (AppE f tyapps args) -> do
           (ltss,args') <- unzip <$> mapM go args
-          pure (concat ltss, AppE f locs args')
+          pure (concat ltss, AppE f tyapps args')
         (MapE _ _)    -> error "goExp.go: FINISHME MapE"
         (FoldE _ _ _) -> error "goExp.go: FINISHME FoldE"
-        (LetE (v,locs,t,rhs) bod) -> do
+        (LetE (v,tyapps,t,rhs) bod) -> do
            (lts1, rhs') <- go rhs
            bod' <- gocap bod
-           pure  (lts1, LetE (v,locs,t,rhs') bod')
+           pure  (lts1, LetE (v,tyapps,t,rhs') bod')
         (IfE e1 e2 e3) -> do
              (lts1, e1') <- go e1
              e2' <- gocap e2
@@ -1223,9 +1223,9 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
                               pure (lts, CaseE scrt' ls')
         (DataConE c loc es) -> do (ltss,es') <- unzip <$> mapM go es
                                   pure (concat ltss, DataConE c loc es')
-        (SpawnE f locs args) -> do
+        (SpawnE f tyapps args) -> do
           (ltss,args') <- unzip <$> mapM go args
-          pure (concat ltss, SpawnE f locs args')
+          pure (concat ltss, SpawnE f tyapps args')
         (SyncE)    -> pure ([], SyncE)
         (WithArenaE v e) -> do
           e' <- (gocap e)
@@ -1367,7 +1367,7 @@ closeLambdas' (Prog _ddefs0 fundefs0 mainExp) = do
         error $ "closeLambdas: Unbound lambda: " ++ sdoc e0
 
       (LetE
-          (v,locs,lam_ty,_lam@(Ext (LambdaE args lam_bod)))
+          (v,tyapps,lam_ty,_lam@(Ext (LambdaE args lam_bod)))
           let_bod) -> do
         (_,fundefs) <- get
         let arg_vars = map fst args
@@ -1386,7 +1386,7 @@ closeLambdas' (Prog _ddefs0 fundefs0 mainExp) = do
                         ArrowTy arg_tys ret_ty -> ArrowTy (PackedTy envTyCon [] : arg_tys) ret_ty
                         MetaTv{} -> lam_ty
                         _ -> lam_ty
-            bind_lam = (v,locs,lam_ty',Ext lam')
+            bind_lam = (v,tyapps,lam_ty',Ext lam')
         -- (2) create the environment that goes with this lambda
         env_name <- lift $ gensym "env_val"
         let env_rhs = DataConE (ProdTy []) env_dcon (map VarE cvs)
@@ -1449,10 +1449,10 @@ closeLambdas' (Prog _ddefs0 fundefs0 mainExp) = do
       (PrimAppE{})  -> pure ([], e0)
       (MapE _ _)    -> error "goExp.go: FINISHME MapE"
       (FoldE _ _ _) -> error "goExp.go: FINISHME FoldE"
-      (LetE (v,locs,t,rhs) bod) -> do
+      (LetE (v,tyapps,t,rhs) bod) -> do
           (lts1, rhs') <- go clos_env env2 rhs
           bod' <- updCallSites clos_env (extendVEnv v t env2) bod
-          pure  (lts1, LetE (v,locs,t,rhs') bod')
+          pure  (lts1, LetE (v,tyapps,t,rhs') bod')
       (IfE e1 e2 e3) -> do
            (lts1, e1') <- go clos_env env2 e1
            e2' <- updCallSites clos_env env2 e2
@@ -1467,9 +1467,9 @@ closeLambdas' (Prog _ddefs0 fundefs0 mainExp) = do
                             pure (lts, CaseE scrt' ls')
       (DataConE c loc es) -> do (ltss,es') <- unzip <$> mapM (go clos_env env2) es
                                 pure (concat ltss, DataConE c loc es')
-      (SpawnE f locs args) -> do
+      (SpawnE f tyapps args) -> do
         (ltss,args') <- unzip <$> mapM (go clos_env env2) args
-        pure (concat ltss, SpawnE f locs args')
+        pure (concat ltss, SpawnE f tyapps args')
       (SyncE)    -> pure ([], SyncE)
       (WithArenaE v e) -> do
         e' <- updCallSites clos_env env2 e
@@ -1514,9 +1514,9 @@ hoistLambdas prg@Prog{fundefs,mainExp} = do
       go e0 =
        case e0 of
         (Ext (LambdaE{})) -> error $ "hoistLambdas: unbound lambda: " ++ sdoc e0
-        (LetE (v,locs,t,lam@(Ext LambdaE{})) bod) -> do
+        (LetE (v,tyapps,t,lam@(Ext LambdaE{})) bod) -> do
             (lams, bod') <- go bod
-            pure  ((v,locs,t,lam):lams, bod')
+            pure  ((v,tyapps,t,lam):lams, bod')
         -- boilerplate
         (Ext (ParE0 ls)) -> do
           (lams', ls') <- foldlM
@@ -1537,15 +1537,15 @@ hoistLambdas prg@Prog{fundefs,mainExp} = do
         (LitSymE _)   -> pure ([], e0)
         (VarE _)      -> pure ([], e0)
         (PrimAppE{})  -> pure ([], e0)
-        (AppE f locs args) -> do
+        (AppE f tyapps args) -> do
           (lamss,args') <- unzip <$> mapM go args
-          pure (concat lamss, AppE f locs args')
+          pure (concat lamss, AppE f tyapps args')
         (MapE _ _)    -> error "goExp.go: FINISHME MapE"
         (FoldE _ _ _) -> error "goExp.go: FINISHME FoldE"
-        (LetE (v,locs,t,rhs) bod) -> do
+        (LetE (v,tyapps,t,rhs) bod) -> do
            (lams1, rhs') <- go rhs
            (lams2, bod') <- go bod
-           pure  (lams1 ++ lams2, LetE (v,locs,t,rhs') bod')
+           pure  (lams1 ++ lams2, LetE (v,tyapps,t,rhs') bod')
         (IfE e1 e2 e3) -> do
              (lams1, e1') <- go e1
              (lams2, e2') <- go e2
@@ -1566,9 +1566,9 @@ hoistLambdas prg@Prog{fundefs,mainExp} = do
                               pure (lams1++lams2, CaseE scrt' ls')
         (DataConE c loc es) -> do (lamss,es') <- unzip <$> mapM go es
                                   pure (concat lamss, DataConE c loc es')
-        (SpawnE f locs args) -> do
+        (SpawnE f tyapps args) -> do
           (lamss,args') <- unzip <$> mapM go args
-          pure (concat lamss, SpawnE f locs args')
+          pure (concat lamss, SpawnE f tyapps args')
         (SyncE)    -> pure ([], SyncE)
         (WithArenaE v e) -> do
           (lams,e') <- (go e)
@@ -1634,7 +1634,7 @@ elimParE0 prg@Prog{fundefs,mainExp} = do
         DataConE a dcon ls -> DataConE a dcon <$> mapM go ls
         TimeIt e ty b    -> (\a -> TimeIt a ty b) <$> go e
         WithArenaE v e -> (WithArenaE v) <$> go e
-        SpawnE fn locs args -> (SpawnE fn locs) <$> mapM go args
+        SpawnE fn tyapps args -> (SpawnE fn tyapps) <$> mapM go args
         SyncE   -> pure SyncE
         MapE{}  -> err1 (sdoc ex)
         FoldE{} -> err1 (sdoc ex)
