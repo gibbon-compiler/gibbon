@@ -92,6 +92,7 @@ library
                      , transformers             >= 0.5.2     &&  < 0.6
                      , clock                    >= 0.7.1     &&  < 0.8
                      , random                   >= 1.1       &&  < 1.2
+                     , recursion-schemes        >= 5.1       &&  < 6
                      , vector
                      , tuple
                      -- Parsers:

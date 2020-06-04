@@ -11,7 +11,7 @@ import qualified Data.Map as M
 import           Prelude hiding (exp)
 
 import           Gibbon.Common
-import           Gibbon.Language.Syntax
+import           Gibbon.Language
 
 --------------------------------------------------------------------------------
 
