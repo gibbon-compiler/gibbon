@@ -451,7 +451,7 @@ instance Pretty L0.Ty0 where
         L0.SymDictTy (Just v) ty1 -> text "Dict" <+> pprint v <+> pprint ty1
         L0.SymDictTy Nothing  ty1 -> text "Dict" <+> pprint ty1
         L0.ArrowTy as b  -> parens $ (hsep $ map (<+> "->") $ map (pprintWithStyle sty) as) <+> pprint b
-        L0.PackedTy tc loc -> text "Packed" <+> text tc <+> brackets (hcat (map (pprintWithStyle sty) loc))
+        L0.PackedTy tc loc -> parens $ text "Packed" <+> text tc <+> brackets (hcat (map (pprintWithStyle sty) loc))
         L0.VectorTy el_ty1 -> brackets (pprintWithStyle sty el_ty1)
         L0.ArenaTy    -> text "Arena"
         L0.SymSetTy   -> text "SymSet"

@@ -121,14 +121,17 @@ Assume that the input program is monomorphic.
 
 l0ToL1 :: Prog0 -> PassM L1.Prog1
 l0ToL1 p = do
-  p0  <- closureConvert p
-  dbgTrace 5 ("\n\nClosure converion:\n" ++ (pprender p0)) (pure ())
-  -- Typecheck again so that all the meta type variables introduced by
-  -- closureConvert (to bind lambdas) get zonked.
+  p0 <- bindLambdas p
   p0' <- tcProg p0
-  dbgTrace 5 ("\n\nTypechecked:\n" ++ (pprender p0')) (pure ())
+
   p1 <- monomorphize p0'
   dbgTrace 5 ("\n\nMonomorphized:\n" ++ (pprender p1)) (pure ())
+
+  p1'  <- closureConvert p1
+  dbgTrace 5 ("\n\nClosure converion:\n" ++ (pprender p1')) (pure ())
+  p1'' <- tcProg p1'
+  dbgTrace 5 ("\n\nTypechecked:\n" ++ (pprender p1'')) (pure ())
+
   p2 <- specLambdas p1
   dbgTrace 5 ("\n\nSpecialized:\n" ++ (pprender p2)) (pure ())
   p3 <- elimParE0 p2
@@ -872,13 +875,13 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
           case mainExp of
             Nothing -> pure Nothing
             Just (e, ty) -> do
-              e' <- specLambdasExp ddefs env2 e
+              e' <- specLambdasExp ddefs fundefs env2 e
               pure $ Just (e', ty)
         -- Same reason as Step (1.2) in monomorphization.
         let fo_funs = M.filter isFOFun fundefs
         mapM_
           (\fn@FunDef{funName,funBody} -> do
-                funBody' <- specLambdasExp ddefs env2 funBody
+                funBody' <- specLambdasExp ddefs fundefs env2 funBody
                 low <- get
                 let funs   = sp_fundefs low
                     fn'    = fn { funBody = funBody' }
@@ -910,7 +913,7 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
         let fns = sp_fundefs low
             fn = fns # fn_name
             ((fn_name, refs), new_fn_name) = M.elemAt 0 (sp_funs_todo low)
-        specLambdasFun ddefs (progToEnv prg) new_fn_name refs fn
+        specLambdasFun ddefs fundefs (progToEnv prg) new_fn_name refs fn
         state (\st -> ((), st { sp_funs_todo = M.delete (fn_name, refs) (sp_funs_todo st) }))
         fixpoint
 
@@ -924,8 +927,8 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
          arrowTysInTy ret_ty == []
 
 -- Eliminate all functions passed in as arguments to this function.
-specLambdasFun :: DDefs0 -> Env2 Ty0 -> Var -> [FunRef] -> FunDef0 -> SpecM ()
-specLambdasFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
+specLambdasFun :: DDefs0 -> FunDefs0 -> Env2 Ty0 -> Var -> [FunRef] -> FunDef0 -> SpecM ()
+specLambdasFun ddefs fundefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
   let
       -- lamda args
       funArgs'  = map fst $ filter (isFunTy . snd) $ zip funArgs (inTys funTy)
@@ -934,7 +937,7 @@ specLambdasFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
       funArgs'' = map fst $ filter (not . isFunTy . snd) $ zip funArgs (inTys funTy)
       fn' = fn { funName = new_fn_name
                , funBody = do_spec specs (funBody fn) }
-  funBody' <- specLambdasExp ddefs env2 (funBody fn')
+  funBody' <- specLambdasExp ddefs fundefs env2 (funBody fn')
   let fn''  = fn' { funBody = funBody'
                   , funArgs = funArgs''
                   -- N.B. Only update the type after 'specExp' runs.
@@ -952,8 +955,8 @@ specLambdasFun ddefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
 
     subst' old new ex = gRename (M.singleton old new) ex
 
-specLambdasExp :: DDefs0 -> Env2 Ty0 -> Exp0 -> SpecM Exp0
-specLambdasExp ddefs env2 ex =
+specLambdasExp :: DDefs0 -> FunDefs0 -> Env2 Ty0 -> Exp0 -> SpecM Exp0
+specLambdasExp ddefs fundefs env2 ex =
   case ex of
     -- TODO, docs.
     AppE f [] args -> do
@@ -982,7 +985,7 @@ specLambdasExp ddefs env2 ex =
     -- Float out a lambda fun to the top-level.
     LetE (v, [], ty, (Ext (LambdaE args lam_bod))) bod -> do
       let arg_vars = map fst args
-          captured_vars = gFreeVars lam_bod `S.difference` (S.fromList arg_vars)
+          captured_vars = gFreeVars lam_bod `S.difference` (S.fromList arg_vars) `S.difference` (M.keysSet fundefs)
       if not (S.null captured_vars)
       then error $ "specLambdasExp: LamdaE captures variables: "
                    ++ show captured_vars
@@ -996,13 +999,13 @@ specLambdasExp ddefs env2 ex =
                         , funBody = lam_bod' }
             env2' = extendFEnv v (ForAll [] ty) env2
         state (\st -> ((), st { sp_fundefs = M.insert v fn (sp_fundefs st) }))
-        specLambdasExp ddefs env2' bod
+        specLambdasExp ddefs fundefs env2' bod
 
     LetE (v, [], ty, rhs) bod -> do
       let _fn_refs = collectFunRefs rhs []
           env2' = (extendVEnv v ty env2)
       rhs' <- go rhs
-      bod' <- specLambdasExp ddefs env2' bod
+      bod' <- specLambdasExp ddefs fundefs env2' bod
       pure $ LetE (v, [], ty, rhs') bod'
 
     LetE (_, (_:_),_,_) _ -> error $ "specExp: Binding not monomorphized: " ++ sdoc ex
@@ -1023,7 +1026,7 @@ specLambdasExp ddefs env2 ex =
       brs' <- mapM
                 (\(dcon,vtys,rhs) -> do
                   let env2' = extendsVEnv (M.fromList vtys) env2
-                  (dcon,vtys,) <$> specLambdasExp ddefs env2' rhs)
+                  (dcon,vtys,) <$> specLambdasExp ddefs fundefs env2' rhs)
                 brs
       pure $ CaseE scrt' brs'
     DataConE tyapp dcon args -> (DataConE tyapp dcon) <$> mapM go args
@@ -1031,10 +1034,10 @@ specLambdasExp ddefs env2 ex =
        e' <- go e
        pure $ TimeIt e' ty b
     WithArenaE v e -> do
-       e' <- specLambdasExp ddefs (extendVEnv v ArenaTy env2) e
+       e' <- specLambdasExp ddefs fundefs (extendVEnv v ArenaTy env2) e
        pure $ WithArenaE v e'
     SpawnE fn tyapps args -> do
-      e' <- specLambdasExp ddefs env2 (AppE fn tyapps args)
+      e' <- specLambdasExp ddefs fundefs env2 (AppE fn tyapps args)
       case e' of
         AppE fn' tyapps' args' -> pure $ SpawnE fn' tyapps' args'
         _ -> error "specLambdasExp: SpawnE"
@@ -1078,7 +1081,7 @@ specLambdasExp ddefs env2 ex =
           pure $ mkLets (concat binds) (Ext $ ParE0 calls)
         L p e -> Ext <$> (L p) <$> go e
   where
-    go = specLambdasExp ddefs env2
+    go = specLambdasExp ddefs fundefs env2
 
     _isFunRef e =
       case e of
@@ -1239,7 +1242,13 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
 type CcM a = StateT (DDefs0, FunDefs0) PassM a
 
 envTyCon :: TyCon
-envTyCon = "_Env"
+envTyCon = "Env"
+
+mkEnvTy :: Ty0
+mkEnvTy = PackedTy envTyCon []
+
+isEnvTy :: Ty0 -> Bool
+isEnvTy = (==) mkEnvTy
 
 emptyEnvCon :: DataCon
 emptyEnvCon = "Mk_Env_0"
@@ -1255,8 +1264,7 @@ initEnvTyCon = do
     put (ddefs',fundefs)
 
 allowedToCaptureTy :: Ty0 -> Bool
-allowedToCaptureTy ty = isScalarTy0 ty || isValidListElemTy0 ty
-
+allowedToCaptureTy ty = isScalarTy0 ty || isValidListElemTy0 ty || isFunTy ty || isEnvTy ty
 
 addConForTys :: [Ty0] -> CcM DataCon
 addConForTys [] = pure emptyEnvCon
@@ -1264,11 +1272,17 @@ addConForTys tys
     | not (all allowedToCaptureTy tys) = error $ "Can only capture scalar types. Got: " ++ sdoc tys
     | otherwise = do
         (ddefs,fundefs) <- get
-        let dcons = getConOrdering ddefs envTyCon
+        let tys' = map
+                    (\t -> case t of
+                             ArrowTy in_tys ret_ty ->
+                               ArrowTy (mkEnvTy : in_tys) ret_ty
+                             _ -> t)
+                    tys
+            dcons = getConOrdering ddefs envTyCon
             matching_con = foldr
                              (\con acc ->
                                   let con_tys = lookupDataCon ddefs con in
-                                  if con_tys == tys
+                                  if con_tys == tys'
                                   then Just con
                                   else acc)
                              Nothing
@@ -1278,8 +1292,8 @@ addConForTys tys
             Nothing  -> do
                 uniq <- lift $ newUniq
                 let ddf = lookupDDef ddefs envTyCon
-                    dcon_name = "Mk" ++ envTyCon ++ "_" ++ show uniq
-                    dcon = (dcon_name, map (False,) tys)
+                    dcon_name = "Mk_" ++ envTyCon ++ "_" ++ show uniq
+                    dcon = (dcon_name, map (False,) tys')
                     ddf' = ddf { dataCons = dcon : (dataCons ddf) }
                     ddefs' = M.insert (toVar envTyCon) ddf' ddefs
                 put (ddefs',fundefs)
@@ -1328,9 +1342,8 @@ closeLambdas' (Prog _ddefs0 fundefs0 mainExp) = do
                              case ty of
                                ArrowTy in_tys1 ret_ty1 -> do
                                  env_arg <- lift $ gensym "env"
-                                 let env_ty = PackedTy envTyCon []
                                  let acc1' = acc1 ++ [arg,env_arg]
-                                     acc2' = acc2 ++ [ArrowTy (env_ty : in_tys1) ret_ty1, env_ty]
+                                     acc2' = acc2 ++ [ArrowTy (mkEnvTy : in_tys1) ret_ty1, mkEnvTy]
                                      acc3' = M.insert arg env_arg acc3
                                  pure (acc1',acc2',acc3')
                                _ -> pure (acc1++[arg],acc2++[ty],acc3))
@@ -1374,26 +1387,32 @@ closeLambdas' (Prog _ddefs0 fundefs0 mainExp) = do
             captured_vars = (gFreeVars lam_bod `S.difference` (S.fromList arg_vars))
                             `S.difference` (M.keysSet fundefs)
             cvs = S.toList captured_vars
-        let field_tys = map (\w -> lookupVEnv w env2) cvs
+        let (cvs', env2') = foldr
+                     (\w (acc,env2_acc) -> case M.lookup w clos_env of
+                                    Nothing  -> (w : acc, env2_acc)
+                                    Just env -> (w : env : acc, extendVEnv env mkEnvTy env2_acc))
+                     ([], env2)
+                     cvs
+        let field_tys = map (\w -> lookupVEnv w env2') cvs'
         env_dcon <- addConForTys field_tys
         -- (1) update lambda function to fetch free variables from the environment
         env_arg <- lift $ gensym "env"
-        (lts1, lam_bod'') <- go clos_env env2 lam_bod
-        let args' = (env_arg, PackedTy envTyCon []) : args
-            lam_bod' = CaseE (VarE env_arg) [(env_dcon,zip cvs field_tys,lam_bod'')]
+        (lts1, lam_bod'') <- go clos_env env2' lam_bod
+        let args' = (env_arg, mkEnvTy) : args
+            lam_bod' = CaseE (VarE env_arg) [(env_dcon,zip cvs' field_tys,lam_bod'')]
             lam' = LambdaE args' lam_bod'
             lam_ty' = case lam_ty of
-                        ArrowTy arg_tys ret_ty -> ArrowTy (PackedTy envTyCon [] : arg_tys) ret_ty
+                        ArrowTy arg_tys ret_ty -> ArrowTy (mkEnvTy : arg_tys) ret_ty
                         MetaTv{} -> lam_ty
                         _ -> lam_ty
             bind_lam = (v,tyapps,lam_ty',Ext lam')
         -- (2) create the environment that goes with this lambda
         env_name <- lift $ gensym "env_val"
-        let env_rhs = DataConE (ProdTy []) env_dcon (map VarE cvs)
-            bind_env = (env_name,[],PackedTy envTyCon [],env_rhs)
+        let env_rhs = DataConE (ProdTy []) env_dcon (map VarE cvs')
+            bind_env = (env_name,[],mkEnvTy,env_rhs)
         let clos_env' = M.insert v env_name clos_env
         -- (3)
-        (lts, let_bod') <- go clos_env' (extendVEnv v lam_ty' env2) let_bod
+        (lts, let_bod') <- go clos_env' (extendVEnv v lam_ty' env2') let_bod
         pure $ (lts ++ lts1, mkLets [bind_lam,bind_env] let_bod')
 
       (AppE f tyapps args) -> do
@@ -1415,7 +1434,7 @@ closeLambdas' (Prog _ddefs0 fundefs0 mainExp) = do
                              let lam_args = (funArgs fn)
                              lam_tys <- mapM (\_ -> lift $ newMetaTy) lam_args
                              let lam_args' = env_arg : lam_args
-                                 lam_tys' = PackedTy envTyCon [] : lam_tys
+                                 lam_tys' = mkEnvTy : lam_tys
                              lam_name <- lift $ gensym "lam_"
                              -- TODO: shouldn't use tyapps here;
                              let lam = LambdaE (zip lam_args' lam_tys') (AppE toplvl tyapps2 (map VarE lam_args))

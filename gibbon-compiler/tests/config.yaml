@@ -450,6 +450,7 @@ tests:
   - name: C1.hs
     dir: examples/ast
     failing: [gibbon1, gibbon2]
+    skip: true
     answer-file: examples/ast/C1.ans
 
   ## Tests that only work with some backend:
