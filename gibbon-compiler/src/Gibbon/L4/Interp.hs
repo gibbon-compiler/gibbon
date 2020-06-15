@@ -5,7 +5,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Gibbon.TargetInterp
+module Gibbon.L4.Interp
     ( Val(..), applyPrim
     , execProg
     ) where

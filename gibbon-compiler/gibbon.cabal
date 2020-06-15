@@ -20,9 +20,7 @@ library
   exposed-modules:     Gibbon.Common
                        Gibbon.Compiler
                        Gibbon.DynFlags
-                       Gibbon.TargetInterp
                        Gibbon.Pretty
-                       Gibbon.Interp
 
                        Gibbon.Language
                        Gibbon.Language.Syntax
@@ -30,15 +28,16 @@ library
 
                        Gibbon.L1.Syntax
                        Gibbon.L1.Typecheck
+                       Gibbon.L1.Interp
                        Gibbon.L1.Examples
                        Gibbon.L2.Syntax
                        Gibbon.L2.Typecheck
-                       Gibbon.L2.Examples
-                       Gibbon.L4.Syntax
-                       Gibbon.L1.Interp
                        Gibbon.L2.Interp
+                       Gibbon.L2.Examples
                        Gibbon.L3.Syntax
                        Gibbon.L3.Typecheck
+                       Gibbon.L4.Syntax
+                       Gibbon.L4.Interp
                        Gibbon.SExpFrontend
 
                        -- Polymorphism stuff:

@@ -14,28 +14,22 @@ module Gibbon.L1.Interp
       applyPrim, strToInt
     ) where
 
-import           Data.ByteString.Builder (toLazyByteString, string8)
+import           Data.ByteString.Builder (Builder, toLazyByteString, string8)
+import qualified Data.ByteString.Lazy.Char8 as B
+import           Data.Char ( ord )
 import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.Writer
-import           Control.Monad.State
 import           Data.List as L
 import           Data.Map as M
 import           System.Clock
 import           System.IO.Unsafe
 import           System.Random
 import           Text.PrettyPrint.GenericPretty
-import qualified Data.ByteString.Lazy.Char8 as B
 
 import           Gibbon.Common
-import           Gibbon.Interp
 import           Gibbon.L1.Syntax as L1
 
-
--- TODO:
--- It's a SUPERSET, but use the Value type from TargetInterp anyway:
--- Actually, we should merge these into one type with a simple extension story.
--- import Gibbon.TargetInterp (Val(..), applyPrim)
 
 interpChatter :: Int
 interpChatter = 7
@@ -55,8 +49,7 @@ interpProg1 rc Prog{ddefs,fundefs,mainExp} =
     Just (e,_) -> do
       let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
       -- logs contains print side effects
-      ((res,logs),Store _finstore) <-
-         runStateT (runWriterT (interp rc ddefs fenv e)) (Store M.empty)
+      (res,logs) <- runWriterT (interp rc ddefs fenv e)
       return (res, toLazyByteString logs)
 
 
@@ -65,13 +58,13 @@ interp :: forall l. ( Out l, Show l, Expression (E1Ext l (UrTy l)) )
        -> DDefs (TyOf (PreExp E1Ext l (UrTy l)))
        -> FunDefs (PreExp E1Ext l (UrTy l))
        -> (PreExp E1Ext l (UrTy l))
-       -> WriterT Log (StateT Store IO) Value
+       -> WriterT Log IO Value
 interp rc _ddefs fenv = go M.empty
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env ex = go env ex
 
-    go :: ValEnv -> (PreExp E1Ext l (UrTy l)) -> WriterT Log (StateT Store IO) Value
+    go :: ValEnv -> (PreExp E1Ext l (UrTy l)) -> WriterT Log IO Value
     go env x0 =
         case x0 of
           Ext (BenchE fn locs args _b) -> go env ( AppE fn locs args)
@@ -123,22 +116,6 @@ interp rc _ddefs fenv = go M.empty
           CaseE x1 alts@((_sometag,_,_):_) -> do
                  v <- go env x1
                  case v of
-{-
-                   VCursor idx off | rcCursors rc ->
-                      do Store store <- get
-                         let Buffer seq1 = store IM.! idx
-                         case S.viewl (S.drop off seq1) of
-                           S.EmptyL -> error "L1.Interp: case scrutinize on empty/out-of-bounds cursor."
-                           SerTag tg _ :< _rst -> do
-                             let tycon = getTyOfDataCon ddefs sometag
-                                 datacon = (getConOrdering ddefs tycon) !! fromIntegral tg
-                             let (_tagsym,[(curname,_)],rhs) = lookup3 datacon alts
-                                 -- At this ^ point, we assume that a pattern match against a cursor binds ONE value.
-                             let env' = M.insert curname (VCursor idx (off+1)) env
-                             go env' rhs
-                           oth :< _ -> error $ "L1.Interp: expected to read tag from scrutinee cursor, found: "++show oth
--}
-
                    VPacked k ls2 ->
                        let vs = L.map fst prs
                            (_,prs,rhs) = lookup3 k alts
@@ -158,18 +135,6 @@ interp rc _ddefs fenv = go M.empty
           DataConE _ k ls -> do
               args <- mapM (go env) ls
               return $ VPacked k args
-{-
-              -- Constructors are overloaded.  They have different behavior depending on
-              -- whether we are AFTER Cursorize or not.
-              case args of
-                [ VCursor idx off ] | rcCursors rc ->
-                    do Store store <- get
-                       let tag       = SerTag (getTagOfDataCon ddefs k) k
-                           store'    = IM.alter (\(Just (Buffer s1)) -> Just (Buffer $ s1 |> tag)) idx store
-                       put (Store store')
-                       return $ VCursor idx (off+1)
-                _ -> return $ VPacked k args
--}
 
           TimeIt bod _ isIter -> do
               let iters = if isIter then rcIters rc else 1
@@ -203,7 +168,7 @@ interp rc _ddefs fenv = go M.empty
 
           MapE _ _bod    -> error "L1.Interp: finish MapE"
           FoldE _ _ _bod -> error "L1.Interp: finish FoldE"
-    applySortP :: ValEnv -> [Value] -> Var -> WriterT Log (StateT Store IO) Value
+    applySortP :: ValEnv -> [Value] -> Var -> WriterT Log IO Value
     applySortP env ls f = do
       let fn  = case M.lookup f fenv of
                   Just fun -> fun
@@ -211,8 +176,8 @@ interp rc _ddefs fenv = go M.empty
           ls' = sortBy
                 (\a b ->
                      let env' = M.union (M.fromList (zip (funArgs fn) [a,b])) env
-                         ((i,_),_) =
-                           unsafePerformIO $ runStateT (runWriterT (go env' (funBody fn))) (Store M.empty)
+                         (i,_) =
+                           unsafePerformIO $ (runWriterT (go env' (funBody fn)))
                          VInt j = i
                      in compare j 0)
                 ls
@@ -287,3 +252,8 @@ applyPrim rc p ls =
 
 clk :: Clock
 clk = Monotonic
+
+type Log = Builder
+
+strToInt :: String -> Int
+strToInt = product . L.map ord

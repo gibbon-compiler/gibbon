@@ -38,6 +38,8 @@ module Gibbon.Language.Syntax
   , HasSimplifiable, HasSimplifiableExt, HasSubstitutable, HasSubstitutableExt
   , HasRenamable
 
+  , -- * Interpreter
+    Interp(..), Value(..), ValEnv, execAndPrint
 
   ) where
 
@@ -48,6 +50,8 @@ import qualified Data.Set as S
 import           Data.Word ( Word8 )
 import           Text.PrettyPrint.GenericPretty
 import           Data.Functor.Foldable.TH
+import qualified Data.ByteString.Lazy.Char8 as B
+import           System.IO.Unsafe (unsafePerformIO)
 
 import           Gibbon.Common
 
@@ -572,6 +576,85 @@ class Renamable e where
   gRename :: M.Map Var Var -> e -> e
 
 type HasRenamable e l d = (Renamable l, Renamable d, Renamable (e l d))
+
+--------------------------------------------------------------------------------
+-- Things which can be interpreted to yield a final, printed value.
+--------------------------------------------------------------------------------
+
+-- | Pure Gibbon programs, at any stage of compilation, should always
+-- be evaluatable to a unique value.  The only side effects are timing.
+class Interp a where
+  {-# MINIMAL interpProg #-}
+
+  interpProg :: RunConfig -> a -> IO (Value, B.ByteString)
+
+  -- | Interpret while ignoring timing constructs, and dropping the
+  -- corresponding output to stdout.
+  interpNoLogs :: RunConfig -> a -> String
+  interpNoLogs rc p = unsafePerformIO $ show . fst <$> interpProg rc p
+
+  -- | Interpret and produce a "log" of output lines, as well as a
+  -- final, printed result.  The output lines include timing information.
+  interpWithStdout :: RunConfig -> a -> IO (String,[String])
+  interpWithStdout rc p = do
+   (v,logs) <- interpProg rc p
+   return (show v, lines (B.unpack logs))
+
+-- Values
+-------------------------------------------------------------
+
+-- | It's a first order language with simple values.
+data Value = VInt Int
+           | VFloat Double
+           | VSym String
+           | VBool Bool
+           | VDict (M.Map Value Value)
+           | VProd [Value]
+           | VList [Value]
+           | VPacked DataCon [Value]
+           | VLoc { bufID :: Var, offset :: Int }
+           | VCursor { bufID :: Var, offset :: Int }
+             -- ^ Cursor are a pointer into the Store plus an offset into the Buffer.
+
+  deriving (Read,Eq,Ord,Generic)
+
+instance Out Value
+instance NFData Value
+
+instance Show Value where
+ show v =
+  case v of
+   VInt n   -> show n
+   VFloat n -> show n
+   VSym s   -> "'" ++ s
+   VBool b  -> if b then truePrinted else falsePrinted
+-- TODO: eventually want Haskell style tuple-printing:
+--    VProd ls -> "("++ concat(intersperse ", " (L.map show ls)) ++")"
+-- For now match Gibbon's Racket backend
+   VProd ls -> "'#("++ concat(intersperse " " (L.map show ls)) ++")"
+   VList ls -> show ls
+   VDict m      -> show (M.toList m)
+
+   -- F(x) style.  Maybe we'll switch to sweet-exps to keep everything in sync:
+   -- VPacked k ls -> k ++ show (VProd ls)
+
+   -- For now, Racket style:
+   VPacked k ls -> "(" ++ k ++ concat (L.map ((" "++) . show) ls) ++ ")"
+
+   VLoc buf off -> "<location "++show buf++", "++show off++">"
+
+   VCursor idx off -> "<cursor "++show idx++", "++show off++">"
+
+type ValEnv = M.Map Var Value
+
+execAndPrint :: (Interp (Prog ex)) => RunConfig -> Prog ex -> IO ()
+execAndPrint rc prg = do
+  (val,logs) <- interpProg rc prg
+  B.putStr logs
+  case val of
+    -- Special case: don't print void return:
+    VProd [] -> return () -- FIXME: remove this.
+    _ -> print val
 
 --------------------------------------------------------------------------------
 

@@ -23,7 +23,7 @@ module Gibbon.Common
        , RunConfig(..), getRunConfig, defaultRunConfig, getGibbonConfig
 
          -- * Misc helpers
-       , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv
+       , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv, lookup3
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
@@ -340,6 +340,14 @@ abbrv n x =
     in if len <= n
        then str
        else L.take (n-3) str ++ "..."
+
+lookup3 :: (Eq k, Show k, Show a, Show b) => k -> [(k,a,b)] -> (k,a,b)
+lookup3 k ls = go ls
+  where
+   go [] = error$ "lookup3: key "++show k++" not found in list:\n  "++L.take 80 (show ls)
+   go ((k1,a1,b1):r)
+      | k1 == k   = (k1,a1,b1)
+      | otherwise = go r
 
 --------------------------------------------------------------------------------
 -- DEBUGGING

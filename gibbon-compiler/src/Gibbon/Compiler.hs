@@ -36,17 +36,16 @@ import           System.Process
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
-import           Gibbon.Interp
 import           Gibbon.DynFlags
+import           Gibbon.Language
 import qualified Gibbon.HaskellFrontend as HS
 import qualified Gibbon.L0.Syntax as L0
 import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
--- import qualified Gibbon.L3.Syntax as L3
 import qualified Gibbon.L4.Syntax as L4
 import qualified Gibbon.SExpFrontend as SExp
-import qualified Gibbon.L1.Interp as L1
-import           Gibbon.TargetInterp (Val (..), execProg)
+import           Gibbon.L1.Interp()
+-- import           Gibbon.TargetInterp (Val (..), execProg)
 
 -- Compiler passes
 import qualified Gibbon.L0.Typecheck as L0
@@ -245,9 +244,10 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
 
       if mode == Interp2
       then do
-        l4res <- execProg l4
-        mapM_ (\(IntVal v) -> liftIO $ print v) l4res
-        exitSuccess
+        error "TODO: Interp2"
+        -- l4res <- execProg l4
+        -- mapM_ (\(IntVal v) -> liftIO $ print v) l4res
+        -- exitSuccess
       else do
         str <- case backend of
                  C    -> codegenProg config' l4

@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 
@@ -11,16 +12,18 @@ module Gibbon.L2.Interp (interpProg2) where
 import           Control.DeepSeq
 import           Control.Monad.Writer
 import           Control.Monad.State
-import           Data.ByteString.Builder (toLazyByteString, string8)
+import           Data.ByteString.Builder (Builder, toLazyByteString, string8)
 import           Data.Foldable (foldlM)
 import           System.Clock
 import           Text.PrettyPrint.GenericPretty
 import qualified Data.Map as M
 import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Sequence as S
+import           Data.Sequence (Seq, ViewL(..))
+import           Data.Word (Word8)
+import           Data.Foldable as F
 
 import           Gibbon.Common
-import           Gibbon.Interp
 import           Gibbon.Passes.Lower ( getTagOfDataCon )
 import           Gibbon.L1.Syntax as L1
 import           Gibbon.L1.Interp as L1
@@ -247,3 +250,114 @@ appendSize a b =
         (SMany xs, SMany ys) -> SMany (xs ++ ys)
         (x, SMany xs) -> SMany (x:xs)
         (SMany xs, x) -> SMany (xs++[x])
+
+--------------------------------------------------------------------------------
+
+-- Stores and buffers:
+------------------------------------------------------------
+
+-- | A store is an address space full of buffers.
+data Store = Store (M.Map Var Buffer)
+  deriving (Read,Eq,Ord,Generic, Show)
+
+instance Out Store
+
+insertIntoStore :: MonadState Store m => Var -> Buffer -> m ()
+insertIntoStore v buf = modify (\(Store x) -> Store (M.insert v buf x))
+
+lookupInStore :: MonadState Store m => Var -> m (Maybe Buffer)
+lookupInStore v = do
+  Store store <- get
+  return $ M.lookup v store
+
+data Buffer = Buffer (Seq SerializedVal)
+  deriving (Read,Eq,Ord,Generic, Show)
+
+instance Out Buffer
+
+emptyBuffer :: Buffer
+emptyBuffer = Buffer S.empty
+
+-- | Insert a value at a particular index in the buffer
+insertAtBuffer :: Int -> SerializedVal -> Buffer -> Buffer
+insertAtBuffer i v (Buffer b) = Buffer (S.insertAt i v b)
+
+data SerializedVal = SerTag Word8 DataCon | SerInt Int | SerBool Int
+  deriving (Read,Eq,Ord,Generic, Show)
+
+byteSize :: SerializedVal -> Int
+byteSize (SerInt _) = 8 -- FIXME: get this constant from elsewhere.
+byteSize (SerBool _) = 8
+byteSize (SerTag _ _) = 1
+
+instance Out SerializedVal
+instance NFData SerializedVal
+
+instance Out a => Out (Seq a) where
+  doc s       = doc       (F.toList s)
+  docPrec n s = docPrec n (F.toList s)
+
+
+-- | Code to read a final answer back out.
+deserialize :: (Out ty) => DDefs ty -> Seq SerializedVal -> Value
+deserialize ddefs seq0 = final
+ where
+  ([final],_) = readN 1 seq0
+
+  readN 0 seq1 = ([],seq1)
+  readN n seq1 =
+     case S.viewl seq1 of
+       S.EmptyL -> error $ "deserialize: unexpected end of sequence: "++ndoc seq0
+       SerInt i :< rst ->
+         let (more,rst') = readN (n-1) rst
+         in (VInt i : more, rst')
+
+       SerBool i :< rst ->
+         let (more,rst') = readN (n-1) rst
+             -- 1 is True
+             b = i /= 0
+         in (VBool b : more, rst')
+
+       SerTag _ k :< rst ->
+         let (args,rst')  = readN (length (lookupDataCon ddefs k)) rst
+             (more,rst'') = readN (n-1) rst'
+         in (VPacked k args : more, rst'')
+
+
+{-
+
+           CaseE x1 alts@((_sometag,_,_):_) -> do
+                 v <- go env x1
+                 case v of
+                   VCursor idx off | rcCursors rc ->
+                      do Store store <- get
+                         let Buffer seq1 = store IM.! idx
+                         case S.viewl (S.drop off seq1) of
+                           S.EmptyL -> error "L1.Interp: case scrutinize on empty/out-of-bounds cursor."
+                           SerTag tg _ :< _rst -> do
+                             let tycon = getTyOfDataCon ddefs sometag
+                                 datacon = (getConOrdering ddefs tycon) !! fromIntegral tg
+                             let (_tagsym,[(curname,_)],rhs) = lookup3 datacon alts
+                                 -- At this ^ point, we assume that a pattern match against a cursor binds ONE value.
+                             let env' = M.insert curname (VCursor idx (off+1)) env
+                             go env' rhs
+                           oth :< _ -> error $ "L1.Interp: expected to read tag from scrutinee cursor, found: "++show oth
+
+          DataConE _ k ls -> do
+              args <- mapM (go env) ls
+              return $ VPacked k args
+              -- Constructors are overloaded.  They have different behavior depending on
+              -- whether we are AFTER Cursorize or not.
+              case args of
+                [ VCursor idx off ] | rcCursors rc ->
+                    do Store store <- get
+                       let tag       = SerTag (getTagOfDataCon ddefs k) k
+                           store'    = IM.alter (\(Just (Buffer s1)) -> Just (Buffer $ s1 |> tag)) idx store
+                       put (Store store')
+                       return $ VCursor idx (off+1)
+                _ -> return $ VPacked k args
+
+
+-}
+
+type Log = Builder
