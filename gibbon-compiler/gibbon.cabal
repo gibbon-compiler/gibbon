@@ -45,10 +45,9 @@ library
                        Gibbon.L0.Syntax
                        Gibbon.L0.Typecheck
                        Gibbon.L0.Specialize2
+                       Gibbon.L0.Interp
                        -- -- Gibbon.L0.Specialize
                        -- -- Gibbon.L0.Mono
-                       -- -- This one looks far from done:
-                       -- -- Gibbon.L0.Interp
 
                        -- compiler passes, roughly in the order they're run
                        Gibbon.Passes.Freshen

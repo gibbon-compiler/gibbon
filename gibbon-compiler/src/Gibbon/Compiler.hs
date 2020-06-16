@@ -1,4 +1,5 @@
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
@@ -198,9 +199,9 @@ sepline :: String
 sepline = replicate 80 '='
 
 
-data CompileState = CompileState
+data CompileState a = CompileState
     { cnt :: Int -- ^ Gensym counter
-    , result :: Maybe Value -- ^ Result of evaluating output of prior pass, if available.
+    , result :: Maybe (Value a) -- ^ Result of evaluating output of prior pass, if available.
     }
 
 -- | Compiler entrypoint, given a full configuration and a list of
@@ -336,7 +337,7 @@ parseInput ip fp = do
                               in pure passes
 
 -- |
-withPrintInterpProg :: L1.Prog1 -> IO (Maybe Value)
+withPrintInterpProg :: L1.Prog1 -> IO (Maybe (Value L1.Exp1))
 withPrintInterpProg l1 =
   if dbgLvl >= interpDbgLevel
   then do
@@ -474,7 +475,7 @@ benchMainExp l1 = do
     _ -> return l1
 
 -- | The main compiler pipeline
-passes :: Config -> L1.Prog1 -> StateT CompileState IO L4.Prog
+passes :: (Show v) => Config -> L1.Prog1 -> StateT (CompileState v) IO L4.Prog
 passes config@Config{dynflags} l1 = do
       let isPacked   = gopt Opt_Packed dynflags
           biginf     = gopt Opt_BigInfiniteRegions dynflags
@@ -573,19 +574,22 @@ passes config@Config{dynflags} l1 = do
               pure l4
       return l4
   where
-      go :: PassRunner a b
+      go :: PassRunner a b v
       go = pass config
 
-      goE :: (Interp b) => PassRunner a b
+      goE :: (Interp b, Show v) => InterpPassRunner a b v
       goE = passE config
 
-type PassRunner a b = (Pretty b, Out b, NFData a, NFData b) =>
-                       String -> (a -> PassM b) -> a -> StateT CompileState IO b
+type PassRunner a b v = (Pretty b, Out b, NFData a, NFData b) =>
+                         String -> (a -> PassM b) -> a -> StateT (CompileState v) IO b
 
+type InterpPassRunner a b v = (HasPretty a, HasPretty b, HasOut a, HasOut b,
+                               HasGeneric a, HasGeneric b, HasNFData a, HasNFData b) =>
+                               String -> (Prog a -> PassM (Prog b)) -> Prog a -> StateT (CompileState v) IO (Prog b)
 
 -- | Run a pass and return the result
 --
-pass :: Config -> PassRunner a b
+pass :: Config -> PassRunner a b v
 pass config who fn x = do
   cs@CompileState{cnt} <- get
   x' <- if dbgLvl >= passChatterLvl
@@ -611,7 +615,7 @@ passChatterLvl = 3
 
 -- | Like 'pass', but also evaluates and checks the result.
 --
-passE :: Config -> Interp p2 => PassRunner p1 p2
+passE :: (Interp p2, Show v) => Config -> InterpPassRunner p1 p2 v
 passE config@Config{mode} = wrapInterp mode (pass config)
 
 
@@ -619,15 +623,18 @@ passE config@Config{mode} = wrapInterp mode (pass config)
 -- the interpreter part.
 -- FINISHME! For now not interpreting.
 --
-passF :: Config -> PassRunner p1 p2
+passF :: Config -> PassRunner p1 p2 v
 passF config = pass config
 
 
 -- | Wrapper to enable running a pass AND interpreting the result.
 --
-wrapInterp :: (NFData p1, NFData p2, Interp p2, Out p2, Pretty p2) =>
-              Mode -> PassRunner p1 p2 -> String -> (p1 -> PassM p2) -> p1 ->
-              StateT CompileState IO p2
+wrapInterp :: (HasPretty a, HasPretty b, HasOut a, HasOut b,
+               HasGeneric a, HasGeneric b, HasNFData a, HasNFData b,
+               Interp b, Show v) =>
+              Mode -> InterpPassRunner a b v
+              -> String -> (Prog a -> PassM (Prog b)) -> (Prog a) ->
+              StateT (CompileState v) IO (Prog b)
 wrapInterp mode pass who fn x =
   do CompileState{result} <- get
      p2 <- pass who fn x

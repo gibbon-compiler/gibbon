@@ -36,10 +36,11 @@ module Gibbon.Language.Syntax
 
     -- * Helpers for writing instances
   , HasSimplifiable, HasSimplifiableExt, HasSubstitutable, HasSubstitutableExt
-  , HasRenamable
+  , HasRenamable, HasOut, HasShow, HasEq, HasGeneric, HasNFData
 
   , -- * Interpreter
-    Interp(..), Value(..), ValEnv, execAndPrint
+    Interp(..), InterpExt(..), Value(..), ValEnv, InterpLog,
+    interpProg, interpNoLogs, interpWithStdout, execAndPrint
 
   ) where
 
@@ -51,6 +52,7 @@ import           Data.Word ( Word8 )
 import           Text.PrettyPrint.GenericPretty
 import           Data.Functor.Foldable.TH
 import qualified Data.ByteString.Lazy.Char8 as B
+import           Data.ByteString.Builder (Builder)
 import           System.IO.Unsafe (unsafePerformIO)
 
 import           Gibbon.Common
@@ -577,51 +579,69 @@ class Renamable e where
 
 type HasRenamable e l d = (Renamable l, Renamable d, Renamable (e l d))
 
+-- A convenience wrapper over some of the constraints.
+type HasOut ex = (Out ex, Out (TyOf ex), Out (ArrowTy (TyOf ex)))
+type HasShow ex = (Show ex, Show (TyOf ex), Show (ArrowTy (TyOf ex)))
+type HasEq ex = (Eq ex, Eq (TyOf ex), Eq (ArrowTy (TyOf ex)))
+type HasGeneric ex = (Generic ex, Generic (TyOf ex), Generic (ArrowTy (TyOf ex)))
+type HasNFData ex = (NFData ex, NFData (TyOf ex), NFData (ArrowTy (TyOf ex)))
+
 --------------------------------------------------------------------------------
 -- Things which can be interpreted to yield a final, printed value.
 --------------------------------------------------------------------------------
 
 -- | Pure Gibbon programs, at any stage of compilation, should always
 -- be evaluatable to a unique value.  The only side effects are timing.
-class Interp a where
-  {-# MINIMAL interpProg #-}
+class Expression e => Interp e where
+  gInterpExp :: RunConfig -> ValEnv e -> DDefs (TyOf e) -> FunDefs e -> e -> IO (Value e, B.ByteString)
 
-  interpProg :: RunConfig -> a -> IO (Value, B.ByteString)
+class Expression e => InterpExt e ext where
+  gInterpExt :: RunConfig -> ValEnv e -> DDefs (TyOf e) -> FunDefs e -> ext -> IO (Value e, B.ByteString)
 
-  -- | Interpret while ignoring timing constructs, and dropping the
-  -- corresponding output to stdout.
-  interpNoLogs :: RunConfig -> a -> String
-  interpNoLogs rc p = unsafePerformIO $ show . fst <$> interpProg rc p
+-- | Interpret while ignoring timing constructs, and dropping the
+-- corresponding output to stdout.
+interpNoLogs :: Interp e => RunConfig -> Prog e -> String
+interpNoLogs rc p = unsafePerformIO $ show . fst <$> interpProg rc p
 
-  -- | Interpret and produce a "log" of output lines, as well as a
-  -- final, printed result.  The output lines include timing information.
-  interpWithStdout :: RunConfig -> a -> IO (String,[String])
-  interpWithStdout rc p = do
-   (v,logs) <- interpProg rc p
-   return (show v, lines (B.unpack logs))
+-- | Interpret and produce a "log" of output lines, as well as a
+-- final, printed result.  The output lines include timing information.
+interpWithStdout :: Interp e => RunConfig -> Prog e -> IO (String,[String])
+interpWithStdout rc p = do
+  (res,logs) <- interpProg rc p
+  return (show res, lines (B.unpack logs))
 
--- Values
--------------------------------------------------------------
+-- | Interpret a program, including printing timings to the screen.
+--   The returned bytestring contains that printed timing info.
+interpProg :: Interp e =>  RunConfig -> Prog e -> IO (Value e, B.ByteString)
+interpProg rc Prog{ddefs,fundefs,mainExp} =
+  case mainExp of
+    -- Print nothing, return "void"
+    Nothing -> return (VProd [], B.empty)
+    Just (e,_) -> do
+      let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
+      -- logs contains print side effects
+      gInterpExp rc M.empty ddefs fenv e
+
 
 -- | It's a first order language with simple values.
-data Value = VInt Int
-           | VFloat Double
-           | VSym String
-           | VBool Bool
-           | VDict (M.Map Value Value)
-           | VProd [Value]
-           | VList [Value]
-           | VPacked DataCon [Value]
-           | VLoc { bufID :: Var, offset :: Int }
-           | VCursor { bufID :: Var, offset :: Int }
-             -- ^ Cursor are a pointer into the Store plus an offset into the Buffer.
-
+data Value e = VInt Int
+             | VFloat Double
+             | VSym String
+             | VBool Bool
+             | VDict (M.Map (Value e) (Value e))
+             | VProd [(Value e)]
+             | VList [(Value e)]
+             | VPacked DataCon [(Value e)]
+             | VLoc { bufID :: Var, offset :: Int }
+             | VCursor { bufID :: Var, offset :: Int }
+               -- ^ Cursor are a pointer into the Store plus an offset into the Buffer.
+             | VLam [Var] e (ValEnv e)
   deriving (Read,Eq,Ord,Generic)
 
-instance Out Value
-instance NFData Value
+instance Out e => Out (Value e)
+instance NFData e => NFData (Value e)
 
-instance Show Value where
+instance Show e => Show (Value e) where
  show v =
   case v of
    VInt n   -> show n
@@ -634,20 +654,16 @@ instance Show Value where
    VProd ls -> "'#("++ concat(intersperse " " (L.map show ls)) ++")"
    VList ls -> show ls
    VDict m      -> show (M.toList m)
-
-   -- F(x) style.  Maybe we'll switch to sweet-exps to keep everything in sync:
-   -- VPacked k ls -> k ++ show (VProd ls)
-
    -- For now, Racket style:
    VPacked k ls -> "(" ++ k ++ concat (L.map ((" "++) . show) ls) ++ ")"
-
    VLoc buf off -> "<location "++show buf++", "++show off++">"
-
    VCursor idx off -> "<cursor "++show idx++", "++show off++">"
+   VLam args bod env -> "(lambda (" ++ concat (map ((" "++) . show) args) ++ " " ++ show bod ++ "); env=" ++ show env
 
-type ValEnv = M.Map Var Value
+type ValEnv e = M.Map Var (Value e)
+type InterpLog = Builder
 
-execAndPrint :: (Interp (Prog ex)) => RunConfig -> Prog ex -> IO ()
+execAndPrint :: (Interp ex) => RunConfig -> Prog ex -> IO ()
 execAndPrint rc prg = do
   (val,logs) <- interpProg rc prg
   B.putStr logs

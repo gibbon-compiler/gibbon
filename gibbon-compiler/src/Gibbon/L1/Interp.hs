@@ -1,21 +1,13 @@
-{-# OPTIONS_GHC -fno-warn-name-shadowing #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE BangPatterns          #-}
+{-# LANGUAGE TypeSynonymInstances  #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
--- | Interpreter for the source language (L1)
---
+-- | Interpreter for L1
+module Gibbon.L1.Interp ( interp, applyPrim ) where
 
-module Gibbon.L1.Interp
-    ( execAndPrint, interpProg1,
-      -- * Helpers
-      applyPrim, strToInt
-    ) where
-
-import           Data.ByteString.Builder (Builder, toLazyByteString, string8)
-import qualified Data.ByteString.Lazy.Char8 as B
+import           Data.ByteString.Builder ( toLazyByteString, string8)
 import           Data.Char ( ord )
 import           Control.DeepSeq
 import           Control.Monad
@@ -36,39 +28,44 @@ interpChatter = 7
 
 ------------------------------------------------------------
 
-instance Interp Prog1 where
-  interpProg = interpProg1
+instance InterpExt Exp1 (E1Ext () Ty1) where
+  gInterpExt rc valenv ddefs fundefs ex = do
+    (res,logs) <- runWriterT interpExt1
+    pure (res, toLazyByteString logs)
+    where
+      interpExt1 :: WriterT InterpLog IO (Value Exp1)
+      interpExt1 =
+        case ex of
+          BenchE fn locs args _b -> interp rc valenv ddefs fundefs (AppE fn locs args)
+          AddFixed{} -> error "L1.Interp: AddFixed not handled."
 
--- | Interpret a program, including printing timings to the screen.
---   The returned bytestring contains that printed timing info.
-interpProg1 :: RunConfig -> Prog1 -> IO (Value, B.ByteString)
-interpProg1 rc Prog{ddefs,fundefs,mainExp} =
-  case mainExp of
-    -- Print nothing, return "void"
-    Nothing -> return (VProd [], B.empty)
-    Just (e,_) -> do
-      let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
-      -- logs contains print side effects
-      (res,logs) <- runWriterT (interp rc ddefs fenv e)
-      return (res, toLazyByteString logs)
+instance Interp Exp1 where
+  gInterpExp rc valenv ddefs fundefs e = do
+    (res,logs) <- runWriterT (interp rc valenv ddefs fundefs e)
+    pure (res, toLazyByteString logs)
 
-
-interp :: forall l. ( Out l, Show l, Expression (E1Ext l (UrTy l)) )
+interp :: forall e l d.
+          (Show l, Ord l, NFData l, Out l,
+           Show d, NFData d, Out d, Ord d,
+           Ord (e l d), Out (e l d), NFData (e l d), Show (e l d),
+           InterpExt (PreExp e l d) (e l d))
        => RunConfig
-       -> DDefs (TyOf (PreExp E1Ext l (UrTy l)))
-       -> FunDefs (PreExp E1Ext l (UrTy l))
-       -> (PreExp E1Ext l (UrTy l))
-       -> WriterT Log IO Value
-interp rc _ddefs fenv = go M.empty
+       -> ValEnv (PreExp e l d)
+       -> DDefs (TyOf (PreExp e l d))
+       -> FunDefs (PreExp e l d)
+       -> (PreExp e l d)
+       -> WriterT InterpLog IO (Value (PreExp e l d))
+interp rc valenv ddefs fenv = go valenv
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env ex = go env ex
 
-    go :: ValEnv -> (PreExp E1Ext l (UrTy l)) -> WriterT Log IO Value
+    go :: ValEnv (PreExp e l d) -> (PreExp e l d) -> WriterT InterpLog IO (Value (PreExp e l d))
     go env x0 =
         case x0 of
-          Ext (BenchE fn locs args _b) -> go env ( AppE fn locs args)
-          Ext (AddFixed{}) -> error "L1.Interp: AddFixed not handled."
+          Ext ext -> do
+            (val, _bs) <- lift $ gInterpExt rc env ddefs fenv ext
+            return $ val
 
           LitE c    -> return $ VInt c
           FloatE c  -> return $ VFloat c
@@ -168,7 +165,7 @@ interp rc _ddefs fenv = go M.empty
 
           MapE _ _bod    -> error "L1.Interp: finish MapE"
           FoldE _ _ _bod -> error "L1.Interp: finish FoldE"
-    applySortP :: ValEnv -> [Value] -> Var -> WriterT Log IO Value
+    applySortP :: ValEnv (PreExp e l d) -> [(Value (PreExp e l d))] -> Var -> WriterT InterpLog IO (Value (PreExp e l d))
     applySortP env ls f = do
       let fn  = case M.lookup f fenv of
                   Just fun -> fun
@@ -184,9 +181,10 @@ interp rc _ddefs fenv = go M.empty
       pure (VList ls')
 
 
-applyPrim :: (Show l) => RunConfig -> Prim (UrTy l) -> [Value] -> Value
-applyPrim rc p ls =
- case (p,ls) of
+applyPrim :: (Show ty, Ord l, Out l, Show l, Show d, Out d, Ord d,  Ord (e l d), Out (e l d), Show (e l d))
+          => RunConfig -> Prim ty -> [(Value (PreExp e l d))] -> (Value (PreExp e l d))
+applyPrim rc p args =
+ case (p,args) of
    (MkTrue,[])             -> VBool True
    (MkFalse,[])            -> VBool False
    -- FIXME: randomIO does not guarentee unique numbers every time.
@@ -252,8 +250,6 @@ applyPrim rc p ls =
 
 clk :: Clock
 clk = Monotonic
-
-type Log = Builder
 
 strToInt :: String -> Int
 strToInt = product . L.map ord

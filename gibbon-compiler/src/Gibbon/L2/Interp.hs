@@ -21,22 +21,23 @@ import qualified Data.ByteString.Lazy.Char8 as B
 import qualified Data.Sequence as S
 import           Data.Sequence (Seq, ViewL(..))
 import           Data.Word (Word8)
+import           Data.Char ( ord )
 import           Data.Foldable as F
 
 import           Gibbon.Common
 import           Gibbon.Passes.Lower ( getTagOfDataCon )
 import           Gibbon.L1.Syntax as L1
-import           Gibbon.L1.Interp as L1
+import qualified Gibbon.L1.Interp as L1
 import           Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
-instance Interp Prog2 where
-  interpProg = interpProg2
+-- instance Interp Prog2 where
+--   interpProg = interpProg2
 
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
-interpProg2 :: RunConfig -> Prog2 -> IO (Value, B.ByteString)
+interpProg2 :: RunConfig -> Prog2 -> IO (Value Exp2, B.ByteString)
 interpProg2 rc Prog{ddefs,fundefs,mainExp} =
   case mainExp of
     -- Print nothing, return "void"
@@ -55,13 +56,13 @@ interpProg2 rc Prog{ddefs,fundefs,mainExp} =
       return (res, toLazyByteString logs)
 
 interp :: RunConfig -> DDefs Ty2 -> M.Map Var (FunDef Exp2) -> Exp2
-       -> WriterT Log (StateT Store IO) Value
+       -> WriterT Log (StateT Store IO) (Value Exp2)
 interp rc ddefs fenv e = fst <$> go M.empty M.empty e
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env sizeEnv ex = go env sizeEnv ex
 
-    go :: ValEnv -> SizeEnv -> Exp2 -> WriterT Log (StateT Store IO) (Value, Size)
+    go :: ValEnv Exp2 -> SizeEnv -> Exp2 -> WriterT Log (StateT Store IO) (Value Exp2, Size)
     go env sizeEnv ex =
       case ex of
         -- We interpret a function application by substituting the operand (at
@@ -299,7 +300,7 @@ instance Out a => Out (Seq a) where
 
 
 -- | Code to read a final answer back out.
-deserialize :: (Out ty) => DDefs ty -> Seq SerializedVal -> Value
+deserialize :: (Out ty) => DDefs ty -> Seq SerializedVal -> Value Exp2
 deserialize ddefs seq0 = final
  where
   ([final],_) = readN 1 seq0
@@ -361,3 +362,6 @@ deserialize ddefs seq0 = final
 -}
 
 type Log = Builder
+
+strToInt :: String -> Int
+strToInt = product . map ord

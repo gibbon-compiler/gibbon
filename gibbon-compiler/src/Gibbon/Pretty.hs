@@ -4,7 +4,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 module Gibbon.Pretty
-  ( Pretty(..), PPStyle(..), render, pprintHsWithEnv, pprender ) where
+  ( Pretty(..), PPStyle(..), HasPretty, render, pprintHsWithEnv, pprender ) where
 
 import           Prelude hiding ((<>))
 import           Text.PrettyPrint
