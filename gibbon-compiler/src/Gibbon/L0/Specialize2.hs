@@ -11,7 +11,9 @@ This module is the first attempt to do that.
 
 -}
 
-module Gibbon.L0.Specialize2 where
+module Gibbon.L0.Specialize2
+  (bindLambdas, monomorphize, closureConvert, specLambdas, elimParE0, toL1)
+  where
 
 import           Control.Monad.State
 import           Data.Foldable ( foldlM )
@@ -118,26 +120,6 @@ Assume that the input program is monomorphic.
     Create these functions, drop the lambdas from it's type, arguments etc.
 
 -}
-
-l0ToL1 :: Prog0 -> PassM L1.Prog1
-l0ToL1 p = do
-  p0 <- bindLambdas p
-  p0' <- tcProg p0
-
-  p1 <- monomorphize p0'
-  dbgTrace 5 ("\n\nMonomorphized:\n" ++ (pprender p1)) (pure ())
-
-  p1'  <- closureConvert p1
-  dbgTrace 5 ("\n\nClosure converion:\n" ++ (pprender p1')) (pure ())
-  p1'' <- tcProg p1'
-  dbgTrace 5 ("\n\nTypechecked:\n" ++ (pprender p1'')) (pure ())
-
-  p2 <- specLambdas p1
-  dbgTrace 5 ("\n\nSpecialized:\n" ++ (pprender p2)) (pure ())
-  p3 <- elimParE0 p2
-  dbgTrace 5 ("\n\nEliminateParE0:\n" ++ (pprender p3)) (pure ())
-  pure $ toL1 p3
-
 
 -- Just a mechanical transformation ..
 toL1 :: Prog0 -> L1.Prog1

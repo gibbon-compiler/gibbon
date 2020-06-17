@@ -13,7 +13,7 @@ import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.Writer
 import           Data.List as L
-import           Data.Map as M
+import qualified Data.Map as M
 import           System.Clock
 import           System.IO.Unsafe
 import           System.Random
@@ -103,10 +103,23 @@ interp rc valenv ddefs fenv = go valenv
           ProjE ix ex   -> do VProd ls <- go env ex
                               return $ ls !!! ix
 
-          AppE f _ ls -> do ls' <- mapM (go env) ls
-                            case M.lookup f fenv of
-                             Just fn -> go (M.union (M.fromList (zip (funArgs fn) ls')) env) (funBody fn)
-                             Nothing -> error $ "L1.Interp: unbound function in application: "++ndoc x0
+          -- N.B. this AppE is shared by the interpreters for L0 and L1
+          AppE f _ ls -> do
+            ls' <- mapM (go env) ls
+            -- Look in the local environment first
+            case M.lookup f env of
+              Nothing ->
+                case M.lookup f fenv of
+                  Just fn -> go (M.union (M.fromList (zip (funArgs fn) ls')) env) (funBody fn)
+                  Nothing -> error $ "L1.Interp: unbound function in application: "++ndoc x0
+              Just fn@(VLam args bod closed_env) ->
+                if length args /= length ls'
+                then error $ "L0.Interp: unexpected arguments in application: "++ ndoc ls' ++ " in " ++ ndoc fn
+                else do
+                  let env' = M.fromList (zip args ls') `M.union` closed_env `M.union` env
+                  go env' bod
+              Just oth -> error $ "L0.Interp: expected a lambda in application, got: "++ ndoc oth ++ " in " ++ ndoc oth
+
 
           CaseE _ [] -> error$ "L1.Interp: CaseE with empty alternatives list: "++ndoc x0
 

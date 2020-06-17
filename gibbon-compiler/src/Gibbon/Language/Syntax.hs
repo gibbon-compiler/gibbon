@@ -658,7 +658,7 @@ instance Show e => Show (Value e) where
    VPacked k ls -> "(" ++ k ++ concat (L.map ((" "++) . show) ls) ++ ")"
    VLoc buf off -> "<location "++show buf++", "++show off++">"
    VCursor idx off -> "<cursor "++show idx++", "++show off++">"
-   VLam args bod env -> "(lambda (" ++ concat (map ((" "++) . show) args) ++ " " ++ show bod ++ "); env=" ++ show env
+   VLam args bod env -> "(Clos (lambda (" ++ concat (map ((++" ") . show) args) ++ ") " ++ show bod ++ ") #{" ++ show env ++ "})"
 
 type ValEnv e = M.Map Var (Value e)
 type InterpLog = Builder

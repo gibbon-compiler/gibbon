@@ -45,6 +45,7 @@ import qualified Gibbon.L1.Syntax as L1
 import qualified Gibbon.L2.Syntax as L2
 import qualified Gibbon.L4.Syntax as L4
 import qualified Gibbon.SExpFrontend as SExp
+import           Gibbon.L0.Interp()
 import           Gibbon.L1.Interp()
 -- import           Gibbon.TargetInterp (Val (..), execProg)
 
@@ -215,32 +216,37 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   dir <- getCurrentDirectory
   let fp1 = dir </> fp0
   -- Parse the input file
-  ((l1, cnt0), fp) <- parseInput input fp1
+  ((l0, cnt0), fp) <- parseInput input fp1
   let config' = config { srcFile = Just fp }
 
   case mode of
-    Interp1 -> runL1 l1
-    ToParse -> dbgPrintLn 0 $ sdoc l1
+    Interp1 -> do
+        dbgTrace 5 ("\nParsed:\n" ++ sdoc l0) (pure ())
+        -- We typecheck first to turn the appropriate VarE's into FunRefE's.
+        (l0', _) <- pure $ runPassM defaultConfig 0 (freshNames l0 >>= L0.tcProg)
+        dbgTrace 5 ("\nTypechecked:\n" ++ pprender l0') (pure ())
+        runL0 l0'
+    ToParse -> dbgPrintLn 0 $ pprender l0
 
     _ -> do
       dbgPrintLn passChatterLvl $
           " [compiler] pipeline starting, parsed program: "++
             if dbgLvl >= passChatterLvl+1
-            then "\n"++sepline ++ "\n" ++ (pprender l1)
-            else show (length (sdoc l1)) ++ " characters."
+            then "\n"++sepline ++ "\n" ++ (sdoc l0)
+            else show (length (sdoc l0)) ++ " characters."
 
       let parallel = gopt Opt_Parallel (dynflags config)
-      when (L1.hasSpawnsProg l1 && not parallel) $
+      when (hasSpawnsProg l0 && not parallel) $
         error "To compile a program with parallelism, use -parallel."
 
       -- (Stage 1) Run the program through the interpreter
-      initResult <- withPrintInterpProg l1
+      initResult <- withPrintInterpProg l0
 
       -- (Stage 2) C/LLVM codegen
       let outfile = getOutfile backend fp cfile
 
       -- run the initial program through the compiler pipeline
-      stM <- return $ passes config' l1
+      stM <- return $ passes config' l0
       l4  <- evalStateT stM (CompileState {cnt=cnt0, result=initResult})
 
       if mode == Interp2
@@ -270,6 +276,13 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
           compileAndRunExe config fp >>= putStr
           return ()
 
+runL0 :: L0.Prog0 -> IO ()
+runL0 l0 = do
+    -- FIXME: no command line option atm.  Just env vars.
+    runConf <- getRunConfig []
+    dbgPrintLn 2 $ "Running the following through L0.Interp:\n "++sepline ++ "\n" ++ sdoc l0
+    execAndPrint runConf l0
+    exitSuccess
 
 -- | The compiler's policy for running/printing L1 programs.
 runL1 :: L1.Prog1 -> IO ()
@@ -277,7 +290,7 @@ runL1 l1 = do
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
     dbgPrintLn 2 $ "Running the following through L1.Interp:\n "++sepline ++ "\n" ++ sdoc l1
-    L1.execAndPrint runConf l1
+    execAndPrint runConf l1
     exitSuccess
 
 -- | The compiler's policy for running/printing L2 programs.
@@ -296,7 +309,7 @@ setDebugEnvVar verbosity =
     hPutStrLn stderr$ " ! We set DEBUG based on command-line verbose arg: "++show l
 
 
-parseInput :: Input -> FilePath -> IO ((L1.Prog1, Int), FilePath)
+parseInput :: Input -> FilePath -> IO ((L0.Prog0, Int), FilePath)
 parseInput ip fp = do
   (l0, f) <-
     case ip of
@@ -320,30 +333,18 @@ parseInput ip fp = do
                      then (,f2) <$> SExp.parseFile f1
                      else error$ "compile: unrecognized file extension: "++
                           show oth++"  Please specify compile input format."
-  l1 <- mono_and_spec l0
-  (l1, cnt) <- pure $ runPassM defaultConfig 0 l1
-  pure ((l1, cnt), f)
-  where mono_and_spec :: PassM L0.Prog0 -> IO (PassM L1.Prog1)
-        mono_and_spec pm_l0 = let passes = do
-                                    l0 <- pm_l0
-                                    dbgTrace 5 ("\n\nParsed:\n" ++ (sdoc l0)) (pure ())
-                                    l0 <- freshNames l0
-                                    dbgTrace 5 ("\n\nFreshen:\n" ++ (pprender l0)) (pure ())
-                                    l0 <- L0.tcProg l0
-                                    dbgTrace 5 ("\n\nTypechecked:\n" ++ (pprender l0)) (pure ())
-                                    l1 <- L0.l0ToL1 l0
-                                    dbgTrace 5 ("\n\nLowered to L1:\n" ++ (pprender l1)) (pure ())
-                                    pure l1
-                              in pure passes
+  (l0, cnt) <- pure $ runPassM defaultConfig 0 l0
+  pure ((l0, cnt), f)
+
 
 -- |
-withPrintInterpProg :: L1.Prog1 -> IO (Maybe (Value L1.Exp1))
-withPrintInterpProg l1 =
+withPrintInterpProg :: L0.Prog0 -> IO (Maybe (Value L0.Exp0))
+withPrintInterpProg l0 =
   if dbgLvl >= interpDbgLevel
   then do
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
-    (val,_stdout) <- interpProg runConf l1
+    (val,_stdout) <- interpProg runConf l0
     dbgPrintLn 2 $ " [eval] Init prog evaluated to: "++show val
     return $ Just val
   else
@@ -475,23 +476,31 @@ benchMainExp l1 = do
     _ -> return l1
 
 -- | The main compiler pipeline
-passes :: (Show v) => Config -> L1.Prog1 -> StateT (CompileState v) IO L4.Prog
-passes config@Config{dynflags} l1 = do
+passes :: (Show v) => Config -> L0.Prog0 -> StateT (CompileState v) IO L4.Prog
+passes config@Config{dynflags} l0 = do
       let isPacked   = gopt Opt_Packed dynflags
           biginf     = gopt Opt_BigInfiniteRegions dynflags
           gibbon1    = gopt Opt_Gibbon1 dynflags
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
           should_fuse = gopt Opt_Fusion dynflags
-      l1 <- goE "typecheck"  L1.tcProg                  l1
+      l0 <- go  "freshen"         freshNames            l0
+      l0 <- goE "typecheck"       L0.tcProg             l0
+      l0 <- goE "bindLambdas"     L0.bindLambdas        l0
+      l0 <- goE "monomorphize"    L0.monomorphize       l0
+      l0 <- goE "closureConvert"  L0.closureConvert     l0
+      l0 <- goE "specLambdas"     L0.specLambdas        l0
+      l0 <- goE "elimParE0"       L0.elimParE0          l0
+      -- Note: L0 -> L1
+      l1 <- goE "toL1"            (pure . L0.toL1)      l0
 
+      l1 <- goE "typecheck"     L1.tcProg               l1
       -- If we are executing a benchmark, then we
       -- replace the main function with benchmark code:
-      l1 <- goE "benchMainExp" benchMainExp             l1
+      l1 <- goE "benchMainExp"  benchMainExp            l1
       l1 <- goE "typecheck"     L1.tcProg               l1
       l1 <- goE "flatten"       flattenL1               l1
       l1 <- goE "inlineTriv"    inlineTriv              l1
       l1 <- goE "typecheck"     L1.tcProg               l1
-      -- l1 <- goE "sequentialize" sequentialize           l1
       l1 <- if should_fuse
           then goE  "fusion2"   fusion2                 l1
           else return l1
