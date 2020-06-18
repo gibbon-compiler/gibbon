@@ -53,10 +53,8 @@ library
                        Gibbon.Passes.Freshen
                        Gibbon.Passes.Flatten
                        Gibbon.Passes.InlineTriv
-                       Gibbon.Passes.Sequentialize
                        Gibbon.Passes.DirectL3
                        Gibbon.Passes.Fusion2
-                       Gibbon.Passes.RepairProgram
                        Gibbon.Passes.AddRAN
                        Gibbon.Passes.AddTraversals
                        Gibbon.Passes.InferLocations
