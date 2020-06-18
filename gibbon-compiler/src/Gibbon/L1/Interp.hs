@@ -5,9 +5,10 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 
 -- | Interpreter for L1
-module Gibbon.L1.Interp ( interp, applyPrim ) where
+module Gibbon.L1.Interp ( interpProg, interp, applyPrim ) where
 
 import           Data.ByteString.Builder ( toLazyByteString, string8)
+import qualified Data.ByteString.Lazy.Char8 as B
 import           Data.Char ( ord )
 import           Control.DeepSeq
 import           Control.Monad
@@ -43,6 +44,21 @@ instance Interp Exp1 where
   gInterpExp rc valenv ddefs fundefs e = do
     (res,logs) <- runWriterT (interp rc valenv ddefs fundefs e)
     pure (res, toLazyByteString logs)
+
+instance InterpProg Exp1 where
+  gInterpProg = interpProg
+
+-- | Interpret a program, including printing timings to the screen.
+--   The returned bytestring contains that printed timing info.
+interpProg :: Interp e =>  RunConfig -> Prog e -> IO (Value e, B.ByteString)
+interpProg rc Prog{ddefs,fundefs,mainExp} =
+  case mainExp of
+    -- Print nothing, return "void"
+    Nothing -> return (VProd [], B.empty)
+    Just (e,_) -> do
+      let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
+      -- logs contains print side effects
+      gInterpExp rc M.empty ddefs fenv e
 
 interp :: forall e l d.
           (Show l, Ord l, NFData l, Out l,

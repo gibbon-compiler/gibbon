@@ -39,8 +39,7 @@ module Gibbon.Language.Syntax
   , HasRenamable, HasOut, HasShow, HasEq, HasGeneric, HasNFData
 
   , -- * Interpreter
-    Interp(..), InterpExt(..), Value(..), ValEnv, InterpLog,
-    interpProg, interpNoLogs, interpWithStdout, execAndPrint
+    Interp(..), InterpExt(..), InterpProg(..), Value(..), ValEnv, InterpLog, execAndPrint
 
   ) where
 
@@ -598,29 +597,21 @@ class Expression e => Interp e where
 class Expression e => InterpExt e ext where
   gInterpExt :: RunConfig -> ValEnv e -> DDefs (TyOf e) -> FunDefs e -> ext -> IO (Value e, B.ByteString)
 
--- | Interpret while ignoring timing constructs, and dropping the
--- corresponding output to stdout.
-interpNoLogs :: Interp e => RunConfig -> Prog e -> String
-interpNoLogs rc p = unsafePerformIO $ show . fst <$> interpProg rc p
+class Interp e => InterpProg e where
+  {-# MINIMAL gInterpProg #-}
+  gInterpProg :: RunConfig -> Prog e -> IO (Value e, B.ByteString)
 
--- | Interpret and produce a "log" of output lines, as well as a
--- final, printed result.  The output lines include timing information.
-interpWithStdout :: Interp e => RunConfig -> Prog e -> IO (String,[String])
-interpWithStdout rc p = do
-  (res,logs) <- interpProg rc p
-  return (show res, lines (B.unpack logs))
+  -- | Interpret while ignoring timing constructs, and dropping the
+  -- corresponding output to stdout.
+  gInterpNoLogs :: RunConfig -> Prog e -> String
+  gInterpNoLogs rc p = unsafePerformIO $ show . fst <$> gInterpProg rc p
 
--- | Interpret a program, including printing timings to the screen.
---   The returned bytestring contains that printed timing info.
-interpProg :: Interp e =>  RunConfig -> Prog e -> IO (Value e, B.ByteString)
-interpProg rc Prog{ddefs,fundefs,mainExp} =
-  case mainExp of
-    -- Print nothing, return "void"
-    Nothing -> return (VProd [], B.empty)
-    Just (e,_) -> do
-      let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
-      -- logs contains print side effects
-      gInterpExp rc M.empty ddefs fenv e
+  -- | Interpret and produce a "log" of output lines, as well as a
+  -- final, printed result.  The output lines include timing information.
+  gInterpWithStdout :: RunConfig -> Prog e -> IO (String,[String])
+  gInterpWithStdout rc p = do
+    (res,logs) <- gInterpProg rc p
+    return (show res, lines (B.unpack logs))
 
 
 -- | It's a first order language with simple values.
@@ -663,9 +654,9 @@ instance Show e => Show (Value e) where
 type ValEnv e = M.Map Var (Value e)
 type InterpLog = Builder
 
-execAndPrint :: (Interp ex) => RunConfig -> Prog ex -> IO ()
+execAndPrint :: (InterpProg ex) => RunConfig -> Prog ex -> IO ()
 execAndPrint rc prg = do
-  (val,logs) <- interpProg rc prg
+  (val,logs) <- gInterpProg rc prg
   B.putStr logs
   case val of
     -- Special case: don't print void return:

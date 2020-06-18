@@ -11,7 +11,7 @@ import qualified Data.Map.Lazy as M
 
 import           Gibbon.Common
 import           Gibbon.L0.Syntax
-import           Gibbon.L1.Interp ( interp )
+import           Gibbon.L1.Interp ( interp, interpProg )
 
 --------------------------------------------------------------------------------
 
@@ -46,3 +46,6 @@ instance Interp Exp0 where
   gInterpExp rc valenv ddefs fundefs e = do
     (res,logs) <- runWriterT (interp rc valenv ddefs fundefs e)
     pure (res, toLazyByteString logs)
+
+instance InterpProg Exp0 where
+  gInterpProg = interpProg

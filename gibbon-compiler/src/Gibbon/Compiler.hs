@@ -344,7 +344,7 @@ withPrintInterpProg l0 =
   then do
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
-    (val,_stdout) <- interpProg runConf l0
+    (val,_stdout) <- gInterpProg runConf l0
     dbgPrintLn 2 $ " [eval] Init prog evaluated to: "++show val
     return $ Just val
   else
@@ -586,7 +586,7 @@ passes config@Config{dynflags} l0 = do
       go :: PassRunner a b v
       go = pass config
 
-      goE :: (Interp b, Show v) => InterpPassRunner a b v
+      goE :: (InterpProg b, Show v) => InterpPassRunner a b v
       goE = passE config
 
 type PassRunner a b v = (Pretty b, Out b, NFData a, NFData b) =>
@@ -624,7 +624,7 @@ passChatterLvl = 3
 
 -- | Like 'pass', but also evaluates and checks the result.
 --
-passE :: (Interp p2, Show v) => Config -> InterpPassRunner p1 p2 v
+passE :: (InterpProg p2, Show v) => Config -> InterpPassRunner p1 p2 v
 passE config@Config{mode} = wrapInterp mode (pass config)
 
 
@@ -640,7 +640,7 @@ passF config = pass config
 --
 wrapInterp :: (HasPretty a, HasPretty b, HasOut a, HasOut b,
                HasGeneric a, HasGeneric b, HasNFData a, HasNFData b,
-               Interp b, Show v) =>
+               InterpProg b, Show v) =>
               Mode -> InterpPassRunner a b v
               -> String -> (Prog a -> PassM (Prog b)) -> (Prog a) ->
               StateT (CompileState v) IO (Prog b)
@@ -653,7 +653,7 @@ wrapInterp mode pass who fn x =
        let Just res1 = result
        -- FIXME: no command line option atm.  Just env vars.
        runConf <- getRunConfig []
-       let res2 = interpNoLogs runConf p2
+       let res2 = gInterpNoLogs runConf p2
        res2' <- catch (evaluate (force res2))
                 (\exn -> error $ "Exception while running interpreter on pass result:\n"++sepline++"\n"
                          ++ show (exn::SomeException) ++ "\n"++sepline++"\nProgram was: "++abbrv 300 p2)
