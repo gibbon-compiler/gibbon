@@ -22,7 +22,6 @@ import           Control.Exception
 import           Control.Monad (when)
 import           Control.Monad.State.Strict
 import           Control.Monad.Reader (ask)
-import           Data.Set as S hiding (map)
 #if !MIN_VERSION_base(4,11,0)
 import           Data.Monoid
 #endif
@@ -62,7 +61,9 @@ import           Gibbon.Passes.InlineTriv     (inlineTriv)
 
 import           Gibbon.Passes.DirectL3       (directL3)
 import           Gibbon.Passes.InferLocations (inferLocs)
-import           Gibbon.Passes.RepairProgram  (repairProgram)
+-- import           Gibbon.Passes.RepairProgram  (repairProgram)
+import           Gibbon.Passes.AddRAN         (addRAN,needsRAN)
+import           Gibbon.Passes.AddTraversals  (addTraversals)
 import           Gibbon.Passes.RemoveCopies   (removeCopies)
 import           Gibbon.Passes.InferEffects   (inferEffects)
 import           Gibbon.Passes.ParAlloc       (parAlloc)
@@ -85,26 +86,6 @@ import           Gibbon.Pretty
 import qualified Gibbon.Passes.LLVM.Codegen as LLVM
 #endif
 
-----------------------------------------
--- PASS STUBS
-----------------------------------------
--- All of these need to be implemented, but are just the identity
--- function for now.  Move to Passes/ when implemented
-
-
--- | Find all local variables bound by case expressions which must be
--- traversed, but which are not by the current program.
-findMissingTraversals :: L2.Prog2 -> PassM (Set Var)
-findMissingTraversals _ = pure S.empty
-
--- | Add calls to an implicitly-defined, polymorphic "traverse"
--- function of type `p -> ()` for any packed type p.
-addTraversals :: Set Var -> L2.Prog2 -> PassM L2.Prog2
-addTraversals _ p = pure p
-
--- | Generate code
-lowerCopiesAndTraversals :: L2.Prog2 -> PassM L2.Prog2
-lowerCopiesAndTraversals p = pure p
 
 
 -- Configuring and launching the compiler.
@@ -518,20 +499,67 @@ passes config@Config{dynflags} l0 = do
               -- Note: L1 -> L2
               l2 <- go "inferLocations"   inferLocs     l1
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-
               l2 <- go "L2.flatten"       flattenL2     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-
               l2 <- if gibbon1 || no_rcopies
                     then return l2
-                    else do x <- go "removeCopies" removeCopies l2
-                            go "L2.typecheck"     L2.tcProg     x
+                    else do l2 <- go "removeCopies" removeCopies l2
+                            go "L2.typecheck"       L2.tcProg    l2
+              l2 <- go "inferEffects" inferEffects  l2
 
-              l2 <- go "inferEffects"     inferEffects  l2
+{- Note [Repairing programs]
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-              l2 <- go "repairProgram"(repairProgram l1) l2
+We need a program analysis that decides whether a L2 program needs to be repaired.
+Why ? Because, when we pattern match on a packed value, L2 assumes that *every*
+variable in that pattern is accessible. However, this is not always true.
+Consider the rightmost fn (which does not traverse it's input):
+
+   (Node [(x, loc_x), (y, loc_y)] BODY)
+
+Here, since the input is not traversed, we won't have an end-witness for x. And we
+cannot access y without it. We need to fix such programs. Effectively, what we're
+looking for in this analyis is if we can unpack all the pattern matched variables
+in case expressions occurring in the program. For functions, it means that either
+the function should traverse it's input, or the un-reachable elements in the pattern
+match must remain unused (eg. 'leftmost'). On the other hand, we always have to
+repair a broken main expression (since the "unused" case won't apply).
+
+The compiler has access to 2 program repair strategies -- dummy traversals or
+random access nodes. If we're operating in gibbon1 mode, it uses the former. However,
+this changes the asymptotic complexity of the functions. In gibbon2 mode, we compile
+such programs to store RAN's instead. This basically allows O(1) access to any element
+of a data constructor.
+
+Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
+
+-}
+              l2 <-
+                if gibbon1
+                then do
+                  l2 <- go "addTraversals"   addTraversals l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "inferEffects2"   inferEffects  l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  pure l2
+                else do
+                  let need = needsRAN l2
+                  l1 <- go "addRAN"          (addRAN need) l1
+                  l1 <- go "L1.typecheck"    L1.tcProg     l1
+                  l2 <- go "inferLocations2" inferLocs     l1
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "L2.flatten"      flattenL2     l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "removeCopies"    removeCopies  l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "inferEffects2"   inferEffects  l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- go "addTraversals"   addTraversals l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  pure l2
+
+              lift $ dumpIfSet config Opt_D_Dump_Repair (pprender l2)
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-
               l2 <- if gopt Opt_Parallel dynflags
                     then do
                       l2 <- go "parAlloc"     parAlloc   l2
@@ -539,14 +567,10 @@ passes config@Config{dynflags} l0 = do
                       l2 <- go "L2.typecheck" L2.tcProg  l2
                       pure l2
                     else (pure l2)
-
-
               l2 <- go "inferRegScope"    inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-
               l2 <- go "routeEnds"        routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
@@ -572,7 +596,6 @@ passes config@Config{dynflags} l0 = do
 
       -- Note: L3 -> L4
       l4 <- go "lower"          lower                   l3
-
       l4 <- if gibbon1 || not isPacked
             then return l4
             else do
