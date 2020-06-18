@@ -46,6 +46,7 @@ import qualified Gibbon.L4.Syntax as L4
 import qualified Gibbon.SExpFrontend as SExp
 import           Gibbon.L0.Interp()
 import           Gibbon.L1.Interp()
+import           Gibbon.L2.Interp()
 -- import           Gibbon.TargetInterp (Val (..), execProg)
 
 -- Compiler passes
@@ -540,7 +541,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   l2 <- go "addTraversals"   addTraversals l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- go "inferEffects2"   inferEffects  l2
-                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- goE "L2.typecheck"    L2.tcProg    l2
                   pure l2
                 else do
                   let need = needsRAN l2
@@ -555,11 +556,10 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   l2 <- go "inferEffects2"   inferEffects  l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- go "addTraversals"   addTraversals l2
-                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- goE "L2.typecheck"   L2.tcProg     l2
                   pure l2
 
               lift $ dumpIfSet config Opt_D_Dump_Repair (pprender l2)
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- if gopt Opt_Parallel dynflags
                     then do
                       l2 <- go "parAlloc"     parAlloc   l2

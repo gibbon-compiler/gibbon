@@ -625,6 +625,7 @@ data Value e = VInt Int
              | VPacked DataCon [(Value e)]
              | VLoc { bufID :: Var, offset :: Int }
              | VCursor { bufID :: Var, offset :: Int }
+             | VPtr { bufID :: Var, offset :: Int }
                -- ^ Cursor are a pointer into the Store plus an offset into the Buffer.
              | VLam [Var] e (ValEnv e)
   deriving (Read,Eq,Ord,Generic)
@@ -649,6 +650,7 @@ instance Show e => Show (Value e) where
    VPacked k ls -> "(" ++ k ++ concat (L.map ((" "++) . show) ls) ++ ")"
    VLoc buf off -> "<location "++show buf++", "++show off++">"
    VCursor idx off -> "<cursor "++show idx++", "++show off++">"
+   VPtr idx off -> "<ptr "++show idx++", "++show off++">"
    VLam args bod env -> "(Clos (lambda (" ++ concat (map ((++" ") . show) args) ++ ") " ++ show bod ++ ") #{" ++ show env ++ "})"
 
 type ValEnv e = M.Map Var (Value e)

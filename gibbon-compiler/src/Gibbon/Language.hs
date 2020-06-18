@@ -666,8 +666,8 @@ primRetTy p =
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
     ReadArrayFile _ ty      -> ty
-    RequestEndOf  -> error "primRetTy: RequestEndOf not handled yet"
-    RequestSizeOf -> error "primRetTy: RequestSizeOf not handled yet"
+    RequestEndOf  -> CursorTy
+    RequestSizeOf -> IntTy
     IntHashEmpty  -> error "primRetTy: IntHashEmpty not handled yet"
     IntHashInsert -> error "primRetTy: IntHashInsert not handled yet"
     IntHashLookup -> error "primRetTy: IntHashLookup not handled yet"

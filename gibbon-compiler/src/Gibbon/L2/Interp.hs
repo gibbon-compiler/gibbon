@@ -1,13 +1,14 @@
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE DeriveAnyClass             #-}
+{-# LANGUAGE BangPatterns               #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 
 -- | Interpreter reducing L2 programs to values.
-
-module Gibbon.L2.Interp (interpProg2) where
+module Gibbon.L2.Interp ( interpProg, interp ) where
 
 import           Control.DeepSeq
 import           Control.Monad.Writer
@@ -23,46 +24,72 @@ import           Data.Sequence (Seq, ViewL(..))
 import           Data.Word (Word8)
 import           Data.Char ( ord )
 import           Data.Foldable as F
+import           Data.Maybe ( fromJust )
 
 import           Gibbon.Common
 import           Gibbon.Passes.Lower ( getTagOfDataCon )
-import           Gibbon.L1.Syntax as L1
 import qualified Gibbon.L1.Interp as L1
 import           Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
--- instance Interp Prog2 where
---   interpProg = interpProg2
+instance Interp Exp2 where
+  gInterpExp = interp'
 
--- | Interpret a program, including printing timings to the screen.
---   The returned bytestring contains that printed timing info.
-interpProg2 :: RunConfig -> Prog2 -> IO (Value Exp2, B.ByteString)
-interpProg2 rc Prog{ddefs,fundefs,mainExp} =
+instance InterpExt Exp2 (E2Ext LocVar Ty2) where
+  gInterpExt = interpExt'
+
+instance InterpProg Exp2 where
+  gInterpProg = interpProg
+
+interpProg :: RunConfig -> Prog2 -> IO (Value Exp2, B.ByteString)
+interpProg rc Prog{ddefs,fundefs,mainExp} =
   case mainExp of
     -- Print nothing, return "void"
     Nothing -> return (VProd [], B.empty)
     Just (e,_) -> do
       let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
-      -- logs contains print side effects
-      ((x,logs), Store finstore) <-
-        runStateT (runWriterT (interp rc ddefs fenv e)) (Store M.empty)
-      -- Policy: don't return locations
-      let res = case x of
-                 VLoc reg off ->
-                     let Buffer b = finstore M.! reg
-                     in deserialize ddefs (S.drop off b)
-                 _ -> x
-      return (res, toLazyByteString logs)
+      interp' rc M.empty ddefs fenv e
 
-interp :: RunConfig -> DDefs Ty2 -> M.Map Var (FunDef Exp2) -> Exp2
-       -> WriterT Log (StateT Store IO) (Value Exp2)
-interp rc ddefs fenv e = fst <$> go M.empty M.empty e
+-- Policy: don't return locations
+interp' :: RunConfig -> ValEnv Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Exp2)
+        -> Exp2 -> IO (Value Exp2, B.ByteString)
+interp' rc valenv ddefs fenv e = do
+  ((x,logs), s@(Store finstore)) <-
+    runStateT (runWriterT (interp M.empty rc valenv ddefs fenv e)) emptyStore
+  -- Policy: don't return locations
+  let res = case fst x of
+             (VLoc reg off) ->
+                 let buf = finstore M.! reg
+                 in deserialize ddefs s (dropInBuffer off buf)
+             oth -> oth
+  return (res, toLazyByteString logs)
+
+-- Policy: don't return locations
+interpExt' :: RunConfig -> ValEnv Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Exp2)
+           -> E2Ext LocVar Ty2 -> IO (Value Exp2, B.ByteString)
+interpExt' rc valenv ddefs fenv ext = do
+  ((x,logs), s@(Store finstore)) <-
+    runStateT (runWriterT (interpExt M.empty rc valenv ddefs fenv ext)) emptyStore
+  let res = case fst x of
+             (VLoc reg off) ->
+                 let buf = finstore M.! reg
+                 in deserialize ddefs s (dropInBuffer off buf)
+             oth -> oth
+  return (res, toLazyByteString logs)
+
+--------------------------------------------------------------------------------
+
+type StoreM = StateT Store IO
+
+interp :: SizeEnv -> RunConfig -> ValEnv Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Exp2)
+       -> Exp2 -> WriterT InterpLog StoreM (Value Exp2, Size)
+interp szenv rc valenv ddefs fenv e = go valenv szenv e
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env sizeEnv ex = go env sizeEnv ex
 
-    go :: ValEnv Exp2 -> SizeEnv -> Exp2 -> WriterT Log (StateT Store IO) (Value Exp2, Size)
+    go :: ValEnv Exp2 -> SizeEnv -> Exp2 -> WriterT InterpLog StoreM (Value Exp2, Size)
     go env sizeEnv ex =
       case ex of
         -- We interpret a function application by substituting the operand (at
@@ -94,19 +121,56 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
                  (M.union (M.fromList $ zip funArgs szs) sizeEnv)
                  funBody
 
-        CaseE{} -> error $ "TODO: L2.Interp: " ++ sdoc ex
+        CaseE _ [] -> error $ "L2.Interp: Empty case"
+        CaseE x1 alts -> do
+          (scrt, _sizescrt) <- go env sizeEnv x1
+          case scrt of
+            VLoc idx off ->
+               do (Store store) <- get
+                  let Buffer seq1 = store M.! idx
+                  case S.viewl (S.drop off seq1) of
+                    S.EmptyL -> error "L1.Interp: case scrutinize on empty/out-of-bounds location."
+                    SerTag _tg datacon :< _rst -> do
+                      let -- tycon = getTyOfDataCon ddefs datacon
+                          (_dcon,vlocs,rhs) = lookup3 datacon alts
+                          tys = lookupDataCon ddefs datacon
+                      (env', sizeEnv', _off') <- foldlM
+                                (\(aenv, asizeEnv, prev_off) ((v,loc), ty) -> do
+                                    case ty of
+                                      CursorTy -> pure (aenv, asizeEnv, prev_off + 1)
+                                      IntTy -> do
+                                        s@(Store store1) <- get
+                                        let buf = store1 M.! idx
+                                            val  = deserialize ddefs s (dropInBuffer prev_off buf)
+                                            aenv' = M.insert v val $
+                                                    M.insert loc (VLoc idx prev_off) $
+                                                    aenv
+                                            size = (fromJust $ byteSizeOfTy IntTy)
+                                            asizeEnv' = M.insert v (SOne size) asizeEnv
+                                        pure (aenv', asizeEnv', prev_off + size)
+                                      -- Traverse this value to find it's end-witness and use
+                                      -- it to bind the value after this one.
+                                      PackedTy pkd_tycon _ -> do
+                                          let current_val = VLoc idx prev_off
+                                              aenv' = M.insert v current_val $
+                                                      M.insert loc current_val $
+                                                      aenv
+                                          let trav_fn = mkTravFunName pkd_tycon
+                                          -- Bind v to (SOne -1) in sizeEnv temporarily, just long enough
+                                          -- to evaluate the call to trav_fn.
+                                          (_, sizev) <- go aenv' (M.insert v (SOne (-1)) sizeEnv) (AppE trav_fn [loc] [VarE v])
+                                          let asizeEnv' = M.insert v sizev asizeEnv
+                                          pure (aenv', asizeEnv', prev_off + 1 + (sizeToInt sizev))
+                                      _ -> error $ "L2.Interp: TODO: " ++ sdoc ty)
+                                (env, sizeEnv, off+1)
+                                (zip vlocs tys)
+                      go env' sizeEnv' rhs
+                    oth :< _ -> error $ "L2.Interp: expected to read tag from scrutinee cursor, found: "++show oth
+            _ -> error $ "L2.Interp: expected scrutinee to be a packed value. Got: " ++ sdoc scrt
 
         -- This operation constructs a packed value by writing things to the
         -- buffer. The packed value is represented by a 1 byte tag,
         -- followed by other arguments.
-        -- ---
-        -- These pointers are different (but similar in spirit) to the
-        -- indirections that we add in Gibbon2 mode.
-        -- ---
-        -- Consider the Leaf constructor of the Tree type:
-        --
-        --    | SerTag 0 Leaf | SerInt  | SerInt 1 | ... |
-        --
         DataConE loc dcon args ->
           case M.lookup loc env of
             Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc
@@ -125,70 +189,51 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
                                let new_off1 = off + sizeToInt sz in
                                  case v of
                                    VInt i -> ( insertAtBuffer off (SerInt i) acc , new_off1 )
+                                   VFloat{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
+                                   VSym{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
+                                   VBool{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
                                    -- This is a packed value, and it must already
                                    -- be written to the buffer (by the thing that
                                    -- returned this). So we just update the offset
                                    -- to point to the end of this value.
                                    VLoc{} -> ( acc , new_off1 )
-                                   _ -> error $ "L2.Interp: DataConE todo: " ++ sdoc v)
+                                   VPtr buf_id off1 -> ( insertAtBuffer off (SerPtr buf_id off1) acc, new_off1)
+                                   VDict{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
+                                   VProd{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
+                                   VList{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
+                                   VPacked{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
+                                   VCursor{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
+                                   VLam{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
+                          )
                           (bufWithTag, offset+1)
                           (zip vals tys)
                   insertIntoStore reg bufWithVals
                   return (VLoc reg offset, SOne (new_off - offset))
             Just val -> error $ "L2.Interp: Unexpected value for " ++ sdoc loc ++ ":" ++ sdoc val
 
+        -- Straightforward recursion (same as the L1 interpreter)
         LetE (v,_,_ty,rhs) bod -> do
           (rhs', sz) <- go env sizeEnv rhs
           go (M.insert v rhs' env) (M.insert v sz sizeEnv) bod
-
-        Ext ext ->
-          case ext of
-            LetRegionE reg bod -> do
-              insertIntoStore (regionToVar reg) emptyBuffer
-              go env sizeEnv bod
-
-            LetLocE loc locexp bod ->
-              case locexp of
-                StartOfLE reg -> do
-                  buf_maybe <- lookupInStore (regionToVar reg)
-                  case buf_maybe of
-                    Nothing -> error $ "L2.Interp: Unbound region: " ++ sdoc reg
-                    Just _ ->
-                      go (M.insert loc (VLoc (regionToVar reg) 0) env) sizeEnv bod
-
-                AfterConstantLE i loc2 -> do
-                  case M.lookup loc2 env of
-                    Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc
-                    Just (VLoc reg offset) ->
-                      go (M.insert loc (VLoc reg (offset + i)) env) sizeEnv bod
-                    Just val ->
-                      error $ "L2.Interp: Unexpected value for " ++ sdoc loc2 ++ ":" ++ sdoc val
-
-                AfterVariableLE v loc2 _ -> do
-                  case M.lookup loc2 env of
-                    Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc
-                    Just (VLoc reg offset) ->
-                      case M.lookup v sizeEnv of
-                        Nothing -> error $ "L2.Interp: No size info found: " ++ sdoc v
-                        Just sz ->
-                          go (M.insert loc (VLoc reg (offset + (sizeToInt sz))) env)
-                             sizeEnv bod
-                    Just val ->
-                      error $ "L2.Interp: Unexpected value for " ++ sdoc loc2 ++ ":" ++ sdoc val
-                _ -> error $ "L2.Interp: TODO " ++ sdoc locexp
-
-            _ -> error $ "L2.Interp: TODO " ++ sdoc ext
-
-        -- Straightforward recursion (same as the L1 interpreter)
-        LitE n    -> return (VInt n, SOne 8)
-        FloatE n  -> return (VFloat n, SOne 8)
-        LitSymE s -> return (VInt (strToInt $ fromVar s), SOne 8)
+        Ext ext -> interpExt sizeEnv rc env ddefs fenv ext
+        LitE n    -> return (VInt n, SOne (fromJust $ byteSizeOfTy IntTy))
+        FloatE n  -> return (VFloat n, SOne (fromJust $ byteSizeOfTy FloatTy))
+        LitSymE s -> return (VInt (strToInt $ fromVar s),
+                             SOne (fromJust $ byteSizeOfTy SymTy))
         VarE v    -> return (env # v, sizeEnv # v)
 
-        PrimAppE p args -> do (args',_) <- unzip <$> mapM (go env sizeEnv) args
-                              case sizeOfTy (primRetTy p) of
-                                Just sz -> return (L1.applyPrim rc p args', SOne sz)
-                                Nothing -> error $ "L2.Interp: Couldn't guess the size: " ++ sdoc ex
+        PrimAppE RequestEndOf [arg] ->
+          case arg of
+            VarE v -> do
+              let (VLoc reg off) = env # v
+                  sz  = sizeToInt $ sizeEnv # v
+              return (VPtr reg (off+sz), SOne (fromJust $ byteSizeOfTy CursorTy))
+            _ -> error $ "L2.Interp: RequestEndOf expects a variable argument. Got: " ++ sdoc arg
+        PrimAppE p args -> do
+            (args',_) <- unzip <$> mapM (go env sizeEnv) args
+            case byteSizeOfTy (primRetTy p) of
+              Just sz -> return (L1.applyPrim rc p args', SOne sz)
+              Nothing -> error $ "L2.Interp: Couldn't guess the size: " ++ sdoc ex
 
         IfE a b c -> do (v,_) <- go env sizeEnv a
                         case v of
@@ -222,46 +267,100 @@ interp rc ddefs fenv e = fst <$> go M.empty M.empty e
               return $! (val, sz)
 
         SpawnE f locs args -> go env sizeEnv (AppE f locs args)
-        SyncE -> pure $ (VInt (-1), SOne 8)
+        SyncE -> pure $ (VInt (-1), SOne 0)
 
         WithArenaE{} -> error "L2.Interp: WithArenE not handled"
 
         MapE{} -> error $ "L2.Interp: TODO " ++ sdoc ex
         FoldE{} -> error $ "L2.Interp: TODO " ++ sdoc ex
 
+{-
+          DataConE _ k ls -> do
+              args <- mapM (go env) ls
+              return $ VPacked k args
+              -- Constructors are overloaded.  They have different behavior depending on
+              -- whether we are AFTER Cursorize or not.
+              case args of
+                [ VCursor idx off ] | rcCursors rc ->
+                    do Store store <- get
+                       let tag       = SerTag (getTagOfDataCon ddefs k) k
+                           store'    = IM.alter (\(Just (Buffer s1)) -> Just (Buffer $ s1 |> tag)) idx store
+                       put (Store store')
+                       return $ VCursor idx (off+1)
+                _ -> return $ VPacked k args
+
+
+-}
+
+interpExt :: SizeEnv -> RunConfig -> ValEnv Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Exp2)
+           -> E2Ext LocVar Ty2 -> WriterT InterpLog StoreM (Value Exp2, Size)
+interpExt sizeEnv rc env ddefs fenv ext =
+  case ext of
+    LetRegionE reg bod -> do
+      insertIntoStore (regionToVar reg) emptyBuffer
+      go env sizeEnv bod
+
+    LetLocE loc locexp bod ->
+      case locexp of
+        StartOfLE reg -> do
+          buf_maybe <- lookupInStore (regionToVar reg)
+          case buf_maybe of
+            Nothing -> error $ "L2.Interp: Unbound region: " ++ sdoc reg
+            Just _ ->
+              go (M.insert loc (VLoc (regionToVar reg) 0) env) sizeEnv bod
+
+        AfterConstantLE i loc2 -> do
+          case M.lookup loc2 env of
+            Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc
+            Just (VLoc reg offset) ->
+              go (M.insert loc (VLoc reg (offset + i)) env) sizeEnv bod
+            Just val ->
+              error $ "L2.Interp: Unexpected value for " ++ sdoc loc2 ++ ":" ++ sdoc val
+
+        AfterVariableLE v loc2 _ -> do
+          case M.lookup loc2 env of
+            Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc
+            Just (VLoc reg offset) ->
+              case M.lookup v sizeEnv of
+                Nothing -> error $ "L2.Interp: No size info found: " ++ sdoc v
+                Just sz ->
+                  go (M.insert loc (VLoc reg (offset + (sizeToInt sz))) env)
+                     sizeEnv bod
+            Just val ->
+              error $ "L2.Interp: Unexpected value for " ++ sdoc loc2 ++ ":" ++ sdoc val
+
+        InRegionLE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+        FreeLE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+        FromEndLE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+
+    RetE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    FromEndE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    BoundsCheck{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    AddFixed{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    IndirectionE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    GetCilkWorkerNum{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    LetAvail{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+
+  where
+    go valenv szenv = interp szenv rc valenv ddefs fenv
+
+
 clk :: Clock
 clk = Monotonic
 
---------------------------------------------------------------------------------
-
-data Size = SOne Int
-          | SMany [Size]
-  deriving (Read, Show, Eq, Ord, Generic, Out)
-
-type SizeEnv = M.Map Var Size
-
-sizeToInt :: Size -> Int
-sizeToInt (SOne i)   = i
-sizeToInt (SMany ls) = sum $ map sizeToInt ls
-
-appendSize :: Size -> Size -> Size
-appendSize a b =
-    case (a,b) of
-        (SOne i, SOne j)     -> SOne (i+j)
-        (SMany xs, SMany ys) -> SMany (xs ++ ys)
-        (x, SMany xs) -> SMany (x:xs)
-        (SMany xs, x) -> SMany (xs++[x])
+strToInt :: String -> Int
+strToInt = product . map ord
 
 --------------------------------------------------------------------------------
-
 -- Stores and buffers:
-------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 -- | A store is an address space full of buffers.
-data Store = Store (M.Map Var Buffer)
-  deriving (Read,Eq,Ord,Generic, Show)
+newtype Store = Store (M.Map Var Buffer)
+  deriving (Read, Show, Eq, Ord, Generic, Out)
 
-instance Out Store
+emptyStore :: Store
+emptyStore = Store M.empty
 
 insertIntoStore :: MonadState Store m => Var -> Buffer -> m ()
 insertIntoStore v buf = modify (\(Store x) -> Store (M.insert v buf x))
@@ -271,10 +370,8 @@ lookupInStore v = do
   Store store <- get
   return $ M.lookup v store
 
-data Buffer = Buffer (Seq SerializedVal)
-  deriving (Read,Eq,Ord,Generic, Show)
-
-instance Out Buffer
+newtype Buffer = Buffer (Seq SerializedVal)
+  deriving (Read, Show, Eq, Ord, Generic, Out)
 
 emptyBuffer :: Buffer
 emptyBuffer = Buffer S.empty
@@ -283,25 +380,48 @@ emptyBuffer = Buffer S.empty
 insertAtBuffer :: Int -> SerializedVal -> Buffer -> Buffer
 insertAtBuffer i v (Buffer b) = Buffer (S.insertAt i v b)
 
-data SerializedVal = SerTag Word8 DataCon | SerInt Int | SerBool Int
-  deriving (Read,Eq,Ord,Generic, Show)
+dropInBuffer :: Int -> Buffer -> Buffer
+dropInBuffer off (Buffer ls) = Buffer (S.drop off ls)
 
-byteSize :: SerializedVal -> Int
-byteSize (SerInt _) = 8 -- FIXME: get this constant from elsewhere.
-byteSize (SerBool _) = 8
-byteSize (SerTag _ _) = 1
+data SerializedVal
+    = SerTag Word8 DataCon
+    | SerInt Int
+    | SerBool Int
+    | SerFloat Double
+    | SerPtr { bufID :: Var, offset :: Int }
+  deriving (Read, Show, Eq, Ord, Generic, Out, NFData)
 
-instance Out SerializedVal
-instance NFData SerializedVal
+-- byteSize :: SerializedVal -> Int
+-- byteSize (SerInt _)   = 1 -- Size 8 byte ints occupy a single cell in 'Buffer'.
+-- byteSize (SerBool _)  = 1
+-- byteSize (SerFloat _) = 1
+-- byteSize (SerTag _ _) = 1
+
+-- | Everything occupies a single cell in the 'Buffer'.
+byteSizeOfTy :: UrTy d -> Maybe Int
+byteSizeOfTy ty =
+  case ty of
+    PackedTy{}  -> Nothing
+    ProdTy{}    -> Nothing
+    SymDictTy{} -> Just 1
+    IntTy       -> Just 1
+    FloatTy     -> Just 1
+    SymTy       -> Just 1
+    BoolTy      -> Just 1
+    VectorTy{}  -> Just 1
+    PtrTy{}     -> Just 1
+    CursorTy{}  -> Just 1
+    ArenaTy     -> Just 1
+    SymSetTy    -> error "byteSizeOfTy: SymSetTy not handled."
+    SymHashTy   -> error "byteSizeOfTy: SymHashTy not handled."
 
 instance Out a => Out (Seq a) where
   doc s       = doc       (F.toList s)
   docPrec n s = docPrec n (F.toList s)
 
-
 -- | Code to read a final answer back out.
-deserialize :: (Out ty) => DDefs ty -> Seq SerializedVal -> Value Exp2
-deserialize ddefs seq0 = final
+deserialize :: (Out ty) => DDefs ty -> Store -> Buffer -> Value Exp2
+deserialize ddefs store (Buffer seq0) = final
  where
   ([final],_) = readN 1 seq0
 
@@ -324,44 +444,31 @@ deserialize ddefs seq0 = final
              (more,rst'') = readN (n-1) rst'
          in (VPacked k args : more, rst'')
 
+       SerFloat i :< rst ->
+         let (more,rst') = readN (n-1) rst
+         in (VFloat i : more, rst')
 
-{-
-
-           CaseE x1 alts@((_sometag,_,_):_) -> do
-                 v <- go env x1
-                 case v of
-                   VCursor idx off | rcCursors rc ->
-                      do Store store <- get
-                         let Buffer seq1 = store IM.! idx
-                         case S.viewl (S.drop off seq1) of
-                           S.EmptyL -> error "L1.Interp: case scrutinize on empty/out-of-bounds cursor."
-                           SerTag tg _ :< _rst -> do
-                             let tycon = getTyOfDataCon ddefs sometag
-                                 datacon = (getConOrdering ddefs tycon) !! fromIntegral tg
-                             let (_tagsym,[(curname,_)],rhs) = lookup3 datacon alts
-                                 -- At this ^ point, we assume that a pattern match against a cursor binds ONE value.
-                             let env' = M.insert curname (VCursor idx (off+1)) env
-                             go env' rhs
-                           oth :< _ -> error $ "L1.Interp: expected to read tag from scrutinee cursor, found: "++show oth
-
-          DataConE _ k ls -> do
-              args <- mapM (go env) ls
-              return $ VPacked k args
-              -- Constructors are overloaded.  They have different behavior depending on
-              -- whether we are AFTER Cursorize or not.
-              case args of
-                [ VCursor idx off ] | rcCursors rc ->
-                    do Store store <- get
-                       let tag       = SerTag (getTagOfDataCon ddefs k) k
-                           store'    = IM.alter (\(Just (Buffer s1)) -> Just (Buffer $ s1 |> tag)) idx store
-                       put (Store store')
-                       return $ VCursor idx (off+1)
-                _ -> return $ VPacked k args
+       SerPtr buf_id off :< rst ->
+         let Store s = store
+             Buffer pointee = dropInBuffer off (s M.! buf_id)
+             (ls, _rst') = readN n pointee
+         in (ls, rst)
 
 
--}
+data Size = SOne Int
+          | SMany [Size]
+  deriving (Read, Show, Eq, Ord, Generic, Out)
 
-type Log = Builder
+type SizeEnv = M.Map Var Size
 
-strToInt :: String -> Int
-strToInt = product . map ord
+sizeToInt :: Size -> Int
+sizeToInt (SOne i)   = i
+sizeToInt (SMany ls) = sum $ map sizeToInt ls
+
+appendSize :: Size -> Size -> Size
+appendSize a b =
+    case (a,b) of
+        (SOne i, SOne j)     -> SOne (i+j)
+        (SMany xs, SMany ys) -> SMany (xs ++ ys)
+        (x, SMany xs) -> SMany (x:xs)
+        (SMany xs, x) -> SMany (xs++[x])
