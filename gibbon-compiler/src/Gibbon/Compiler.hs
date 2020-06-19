@@ -498,15 +498,15 @@ passes config@Config{dynflags} l0 = do
               -- branches before InferLocations.
 
               -- Note: L1 -> L2
-              l2 <- go "inferLocations"   inferLocs     l1
+              l2 <- goE "inferLocations"   inferLocs    l1
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- go "L2.flatten"       flattenL2     l2
+              l2 <- goE "L2.flatten"       flattenL2    l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- if gibbon1 || no_rcopies
                     then return l2
                     else do l2 <- go "removeCopies" removeCopies l2
                             go "L2.typecheck"       L2.tcProg    l2
-              l2 <- go "inferEffects" inferEffects  l2
+              l2 <- goE "inferEffects" inferEffects  l2
 
 {- Note [Repairing programs]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -538,38 +538,41 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <-
                 if gibbon1
                 then do
-                  l2 <- go "addTraversals"   addTraversals l2
+                  l2 <- goE "addTraversals"  addTraversals l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- go "inferEffects2"   inferEffects  l2
-                  l2 <- goE "L2.typecheck"    L2.tcProg    l2
+                  l2 <- goE "inferEffects2"  inferEffects  l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- goE "repairProgram"  (pure . id)   l2
                   pure l2
                 else do
                   let need = needsRAN l2
-                  l1 <- go "addRAN"          (addRAN need) l1
+                  l1 <- goE "addRAN"         (addRAN need) l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
-                  l2 <- go "inferLocations2" inferLocs     l1
+                  l2 <- goE "inferLocations2" inferLocs    l1
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- go "L2.flatten"      flattenL2     l2
+                  l2 <- goE "L2.flatten"     flattenL2     l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- go "removeCopies"    removeCopies  l2
+                  l2 <- goE "removeCopies"   removeCopies  l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- go "inferEffects2"   inferEffects  l2
+                  l2 <- goE "inferEffects2"  inferEffects  l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- go "addTraversals"   addTraversals l2
-                  l2 <- goE "L2.typecheck"   L2.tcProg     l2
+                  l2 <- goE "addTraversals"  addTraversals l2
+                  l2 <- go "L2.typecheck"    L2.tcProg     l2
+                  l2 <- goE "repairProgram"  (pure . id)   l2
                   pure l2
 
               lift $ dumpIfSet config Opt_D_Dump_Repair (pprender l2)
               l2 <- if gopt Opt_Parallel dynflags
                     then do
-                      l2 <- go "parAlloc"     parAlloc   l2
+                      l2 <- goE "parAlloc"     parAlloc   l2
                       lift $ dumpIfSet config Opt_D_Dump_ParAlloc (pprender l2)
                       l2 <- go "L2.typecheck" L2.tcProg  l2
                       pure l2
                     else (pure l2)
-              l2 <- go "inferRegScope"    inferRegScope l2
+              l2 <- goE "inferRegScope"   inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- go "routeEnds"        routeEnds     l2
+              l2 <- goE "routeEnds"       routeEnds     l2
+              -- dbgTraceIt (pprender l2) (pure ())
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
@@ -683,5 +686,5 @@ wrapInterp mode pass who fn x =
        unless (show res1 == res2') $
          error $ "After pass "++who++", evaluating the program yielded the wrong answer.\nReceived:  "
          ++show res2'++"\nExpected:  "++show res1
-       dbgPrintLn 5 $ " [interp] answer was: "++ res2'
+       dbgPrintLn interpDbgLevel $ " [interp] answer after " ++ who ++ " was: "++ res2'
      return p2

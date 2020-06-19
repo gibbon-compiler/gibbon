@@ -137,17 +137,12 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                       (env', sizeEnv', _off') <- foldlM
                                 (\(aenv, asizeEnv, prev_off) ((v,loc), ty) -> do
                                     case ty of
-                                      CursorTy -> pure (aenv, asizeEnv, prev_off + 1)
-                                      IntTy -> do
-                                        s@(Store store1) <- get
-                                        let buf = store1 M.! idx
-                                            val  = deserialize ddefs s (dropInBuffer prev_off buf)
-                                            aenv' = M.insert v val $
-                                                    M.insert loc (VLoc idx prev_off) $
-                                                    aenv
-                                            size = (fromJust $ byteSizeOfTy IntTy)
-                                            asizeEnv' = M.insert v (SOne size) asizeEnv
-                                        pure (aenv', asizeEnv', prev_off + size)
+                                      -- Just skip past random access nodes.
+                                      CursorTy -> do
+                                          let sizeloc = fromJust $ byteSizeOfTy CursorTy
+                                              aenv' = M.insert loc (VLoc idx prev_off) aenv
+                                              asizeEnv' = M.insert loc (SOne sizeloc) asizeEnv
+                                          pure (aenv', asizeEnv', prev_off + sizeloc)
                                       -- Traverse this value to find it's end-witness and use
                                       -- it to bind the value after this one.
                                       PackedTy pkd_tycon _ -> do
@@ -159,13 +154,27 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                                           -- Bind v to (SOne -1) in sizeEnv temporarily, just long enough
                                           -- to evaluate the call to trav_fn.
                                           (_, sizev) <- go aenv' (M.insert v (SOne (-1)) sizeEnv) (AppE trav_fn [loc] [VarE v])
-                                          let asizeEnv' = M.insert v sizev asizeEnv
+                                          let sizeloc = fromJust $ byteSizeOfTy CursorTy
+                                              asizeEnv' = M.insert v sizev $
+                                                          M.insert loc (SOne sizeloc) $
+                                                          asizeEnv
                                           pure (aenv', asizeEnv', prev_off + 1 + (sizeToInt sizev))
+                                      scalarty | isScalarTy scalarty -> do
+                                        s@(Store store1) <- get
+                                        let buf = store1 M.! idx
+                                            val  = deserialize ddefs s (dropInBuffer prev_off buf)
+                                            aenv' = M.insert v val $
+                                                    M.insert loc (VLoc idx prev_off) $
+                                                    aenv
+                                            size = (fromJust $ byteSizeOfTy scalarty)
+                                            asizeEnv' = M.insert v (SOne size) asizeEnv
+                                        pure (aenv', asizeEnv', prev_off + size)
                                       _ -> error $ "L2.Interp: TODO: " ++ sdoc ty)
                                 (env, sizeEnv, off+1)
                                 (zip vlocs tys)
                       go env' sizeEnv' rhs
-                    oth :< _ -> error $ "L2.Interp: expected to read tag from scrutinee cursor, found: "++show oth
+                    oth :< _ -> error $ "L2.Interp: expected to read tag from scrutinee cursor, found: "++show oth++
+                                        ".\nRead" ++ sdoc scrt ++ " in buffer: " ++ sdoc seq1
             _ -> error $ "L2.Interp: expected scrutinee to be a packed value. Got: " ++ sdoc scrt
 
         -- This operation constructs a packed value by writing things to the
@@ -211,10 +220,11 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                   return (VLoc reg offset, SOne (new_off - offset))
             Just val -> error $ "L2.Interp: Unexpected value for " ++ sdoc loc ++ ":" ++ sdoc val
 
-        -- Straightforward recursion (same as the L1 interpreter)
-        LetE (v,_,_ty,rhs) bod -> do
+        -- Ignoring end-witnesses atm.
+        LetE (v,_locs,_ty,rhs) bod -> do
           (rhs', sz) <- go env sizeEnv rhs
           go (M.insert v rhs' env) (M.insert v sz sizeEnv) bod
+        -- Straightforward recursion (same as the L1 interpreter)
         Ext ext -> interpExt sizeEnv rc env ddefs fenv ext
         LitE n    -> return (VInt n, SOne (fromJust $ byteSizeOfTy IntTy))
         FloatE n  -> return (VFloat n, SOne (fromJust $ byteSizeOfTy FloatTy))
@@ -311,7 +321,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
 
         AfterConstantLE i loc2 -> do
           case M.lookup loc2 env of
-            Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc
+            Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc2
             Just (VLoc reg offset) ->
               go (M.insert loc (VLoc reg (offset + i)) env) sizeEnv bod
             Just val ->
@@ -319,7 +329,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
 
         AfterVariableLE v loc2 _ -> do
           case M.lookup loc2 env of
-            Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc
+            Nothing -> error $ "L2.Interp: Unbound location: " ++ sdoc loc2
             Just (VLoc reg offset) ->
               case M.lookup v sizeEnv of
                 Nothing -> error $ "L2.Interp: No size info found: " ++ sdoc v
@@ -331,9 +341,10 @@ interpExt sizeEnv rc env ddefs fenv ext =
 
         InRegionLE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
         FreeLE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
-        FromEndLE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+        FromEndLE{} -> go env sizeEnv bod
 
-    RetE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    -- Ignoring end-witnesses atm.
+    RetE _locs v -> return (env # v, sizeEnv # v)
     FromEndE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     BoundsCheck{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     AddFixed{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
@@ -378,7 +389,17 @@ emptyBuffer = Buffer S.empty
 
 -- | Insert a value at a particular index in the buffer
 insertAtBuffer :: Int -> SerializedVal -> Buffer -> Buffer
-insertAtBuffer i v (Buffer b) = Buffer (S.insertAt i v b)
+insertAtBuffer i v (Buffer b) =
+    if expected_size == 1
+    then Buffer b'
+    -- We must make 'v' occupy 'expected_size' number of cells in the buffer.
+    else
+      let pad = expected_size - 1
+          b'' = foldl (\acc j -> S.insertAt (i+j) SerPad acc) b' [1..pad]
+      in Buffer b''
+  where
+    expected_size = byteSize v
+    b' = S.insertAt i v b
 
 dropInBuffer :: Int -> Buffer -> Buffer
 dropInBuffer off (Buffer ls) = Buffer (S.drop off ls)
@@ -389,31 +410,25 @@ data SerializedVal
     | SerBool Int
     | SerFloat Double
     | SerPtr { bufID :: Var, offset :: Int }
+    | SerPad
+    -- ^ Used to make values artificially occupy more cells in the buffer.
+    -- For example, everywhere else we assume that Ints occupy 8 cells.
+    -- But 'SerInt' only occupies a single cell. To make 'SerInt' occupy 8
+    -- cells, we add 7 'SerPad's after it.
   deriving (Read, Show, Eq, Ord, Generic, Out, NFData)
 
--- byteSize :: SerializedVal -> Int
--- byteSize (SerInt _)   = 1 -- Size 8 byte ints occupy a single cell in 'Buffer'.
--- byteSize (SerBool _)  = 1
--- byteSize (SerFloat _) = 1
--- byteSize (SerTag _ _) = 1
+-- Must match with sizes returned by 'byteSizeOfTy'.
+byteSize :: SerializedVal -> Int
+byteSize (SerTag{})   = 1
+byteSize (SerBool{})  = 1
+byteSize (SerPad)     = 1
+byteSize (SerInt{})   = 8
+byteSize (SerFloat{}) = 8
+byteSize (SerPtr{})   = 8
 
 -- | Everything occupies a single cell in the 'Buffer'.
 byteSizeOfTy :: UrTy d -> Maybe Int
-byteSizeOfTy ty =
-  case ty of
-    PackedTy{}  -> Nothing
-    ProdTy{}    -> Nothing
-    SymDictTy{} -> Just 1
-    IntTy       -> Just 1
-    FloatTy     -> Just 1
-    SymTy       -> Just 1
-    BoolTy      -> Just 1
-    VectorTy{}  -> Just 1
-    PtrTy{}     -> Just 1
-    CursorTy{}  -> Just 1
-    ArenaTy     -> Just 1
-    SymSetTy    -> error "byteSizeOfTy: SymSetTy not handled."
-    SymHashTy   -> error "byteSizeOfTy: SymHashTy not handled."
+byteSizeOfTy = sizeOfTy
 
 instance Out a => Out (Seq a) where
   doc s       = doc       (F.toList s)
@@ -452,8 +467,11 @@ deserialize ddefs store (Buffer seq0) = final
          let Store s = store
              Buffer pointee = dropInBuffer off (s M.! buf_id)
              (ls, _rst') = readN n pointee
-         in (ls, rst)
+         in dbgTraceIt (sdoc (s M.! buf_id, off)) (ls, rst)
 
+       SerPad :< rst ->
+         let (more,rst') = readN (n-1) rst
+         in (VInt (-1) : more, rst')
 
 data Size = SOne Int
           | SMany [Size]
