@@ -422,25 +422,27 @@ Ok, that looks like flatten's fault.  It should have squished that
 
 We'd like the library to have the following operations on vectors.
 
-| Op                                                 | Work | Span |
-|----------------------------------------------------|------|------|
-| alloc :: Int -> Int -> Vector a                    | O(1) | O(1) |
-| length :: Vector a -> Int                          | O(1) | O(1) |
-| isEmpty :: Vector a -> Bool                        | O(1) | O(1) |
-| slice :: Int -> Int -> Vector a -> Vector a        | O(1) | O(1) |
-| nth :: Vector a -> a                               | O(1) | O(1) |
-| splitAt :: Int -> Vector a -> (Vector a, Vector a) | O(1) | O(1) |
-| generate :: Int -> (Int -> a) -> Vector a          | O(n) | O(n) |
-| par-generate                                       | O(n) | O(1) |
-| map :: (a -> b) -> Vector a -> Vector b            | O(n) | O(n) |
-| par-map                                            | O(n) | O(1) |
-| foldr :: (a -> b -> b) -> b -> Vector a -> b       | O(n) | O(n) |
-| par-foldr                                          | O(n) | ??   |
-| append :: Vector a -> Vector a -> Vector a         | O(n) | O(n) |
-| par-append                                         | O(n) | O(1) |
-| filter :: (a -> Bool) -> Vector a -> Vector a      | O(n) | O(n) |
-| par-filter                                         | ??   | ??   |
-| snoc                                               | O(n) | O(n) |
-| par-snoc                                           | O(n) | O(1) |
-| update                                             | O(n) | 1    |
-|                                                    |      |      |
+| Op                                                 | Work | Span | built-in? |
+|----------------------------------------------------|------|------|-----------|
+| alloc :: Int -> Int -> Vector a                    | O(1) | O(1) | Y         |
+| length :: Vector a -> Int                          | O(1) | O(1) | Y         |
+| isEmpty :: Vector a -> Bool                        | O(1) | O(1) |           |
+| slice :: Int -> Int -> Vector a -> Vector a        | O(1) | O(1) | Y         |
+| nth :: Vector a -> Int -> a                        | O(1) | O(1) | Y         |
+| unsafeUpdate :: Vector a -> Int -> a -> ()         | O(1) | O(1) | Y         |
+| splitAt :: Int -> Vector a -> (Vector a, Vector a) | O(1) | O(1) |           |
+| generate :: Int -> (Int -> a) -> Vector a          | O(n) | O(n) |           |
+| par-generate                                       | O(n) | O(1) |           |
+| map :: (a -> b) -> Vector a -> Vector b            | O(n) | O(n) |           |
+| par-map                                            | O(n) | O(1) |           |
+| foldr :: (a -> b -> b) -> b -> Vector a -> b       | O(n) | O(n) |           |
+| par-foldr                                          | O(n) | ??   |           |
+| append :: Vector a -> Vector a -> Vector a         | O(n) | O(n) |           |
+| par-append                                         | O(n) | O(1) |           |
+| update :: Vector a -> Int -> a -> Vector a         | O(n) | 1    |           |
+|                                                    |      |      |           |
+| filter :: (a -> Bool) -> Vector a -> Vector a      | O(n) | O(n) |           |
+| par-filter                                         | ??   | ??   |           |
+| snoc                                               | O(n) | O(n) |           |
+| par-snoc                                           | O(n) | O(1) |           |
+|                                                    |      |      |           |
