@@ -185,7 +185,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                -- Special case because we can't lookup the type of the function pointer
                let es' = case pr of
                            VSortP{} -> init es
-                           InPlaceVSortP{} -> init es
+                           InplaceVSortP{} -> init es
                            _        -> es
                (tys,tstate) <- tcExps ddfs env funs constrs regs tstatein es'
 
@@ -385,37 +385,42 @@ tcExp ddfs env funs constrs regs tstatein exp =
                                       _ -> throwError $ GenericTC "Expected PackedTy" exp
                      _ -> throwError $ GenericTC "Expected a variable argument" exp
 
-                 VEmptyP ty  -> do
-                   len0
-                   pure (VectorTy ty, tstate)
-                 VNthP ty    -> do
-                   let [i,ls] = tys
-                   _ <- ensureEqualTy exp IntTy i
-                   _ <- ensureEqualTy exp (VectorTy ty) ls
-                   pure (ty, tstate)
-                 VLengthP ty -> do
-                   let [ls] = tys
-                   _ <- ensureEqualTy exp (VectorTy ty) ls
-                   pure (IntTy, tstate)
-                 VUpdateP ty -> do
-                   let [ls,i,val] = tys
-                   _ <- ensureEqualTy exp (VectorTy ty) ls
-                   _ <- ensureEqualTy exp IntTy i
-                   _ <- ensureEqualTy exp ty val
-                   pure (VectorTy ty, tstate)
-                 VSnocP ty   -> do
-                   let [ls,val] = tys
-                   _ <- ensureEqualTy exp (VectorTy ty) ls
-                   _ <- ensureEqualTy exp ty val
-                   pure (VectorTy ty, tstate)
+                 VAllocP elty -> do
+                   len1
+                   checkListElemTy elty
+                   let [i] = tys
+                   _ <- ensureEqualTy (es !! 0) IntTy i
+                   pure (VectorTy elty, tstate)
 
-                 InPlaceVSnocP ty -> do
-                    recur tstatein (PrimAppE (VSnocP ty) es)
+                 VLengthP elty -> do
+                   let [ls] = tys
+                   _ <- ensureEqualTy exp (VectorTy elty) ls
+                   pure (IntTy, tstate)
+
+                 VNthP elty -> do
+                   let [ls, i] = tys
+                   _ <- ensureEqualTy exp (VectorTy elty) ls
+                   _ <- ensureEqualTy exp IntTy i
+                   pure (elty, tstate)
+
+                 VSliceP elty   -> do
+                   let [from,to,ls] = tys
+                   _ <- ensureEqualTy exp IntTy from
+                   _ <- ensureEqualTy exp IntTy to
+                   _ <- ensureEqualTy exp (VectorTy elty) ls
+                   pure (VectorTy elty, tstate)
+
+                 InplaceVUpdateP elty -> do
+                   let [ls,i,val] = tys
+                   _ <- ensureEqualTy exp (VectorTy elty) ls
+                   _ <- ensureEqualTy exp IntTy i
+                   _ <- ensureEqualTy exp elty val
+                   pure (VectorTy elty, tstate)
 
                  -- Given that the first argument is a list of type (VectorTy t),
                  -- ensure that the 2nd argument is function reference of type:
                  -- ty -> ty -> Bool
-                 VSortP ty ->
+                 VSortP elty ->
                    case (es !! 1) of
                      VarE f -> do
                        len2
@@ -424,25 +429,23 @@ tcExp ddfs env funs constrs regs tstatein exp =
                            in_tys = inTys fn_ty
                            ret_ty = outTy fn_ty
                            err x  = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
-                       _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
+                       _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
                        case in_tys of
                          [a,b] -> do
-                            _ <- ensureEqualTy (es !! 1) a ty
-                            _ <- ensureEqualTy (es !! 1) b ty
+                            _ <- ensureEqualTy (es !! 1) a elty
+                            _ <- ensureEqualTy (es !! 1) b elty
                             _ <- ensureEqualTy (es !! 1) ret_ty IntTy
-                            pure (VectorTy ty, tstate)
+                            pure (VectorTy elty, tstate)
                          _ -> err fn_ty
                      oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
-                 InPlaceVSortP ty -> do
-                    recur tstatein (PrimAppE (VSortP ty) es)
+                 InplaceVSortP ty -> do
+                    (_ty, tstate2) <- recur tstatein (PrimAppE (VSortP ty) es)
+                    pure (voidTy, tstate2)
 
-                 VSliceP ty   -> do
-                   let [ls,from,to] = tys
-                   _ <- ensureEqualTy exp (VectorTy ty) ls
-                   _ <- ensureEqualTy exp IntTy from
-                   _ <- ensureEqualTy exp IntTy to
-                   pure (VectorTy ty, tstate)
+                 GetNumProcessors -> do
+                   len0
+                   pure (IntTy, tstatein)
 
                  PrintInt -> throwError $ GenericTC "PrintInt not handled" exp
                  PrintSym -> throwError $ GenericTC "PrintSym not handled" exp
@@ -605,6 +608,10 @@ tcExp ddfs env funs constrs regs tstatein exp =
       Ext (LetAvail _ e) -> recur tstatein e
 
     where recur ts e = tcExp ddfs env funs constrs regs ts e
+          checkListElemTy el_ty =
+            if isValidListElemTy el_ty
+            then pure ()
+            else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc el_ty) exp
 
 
 

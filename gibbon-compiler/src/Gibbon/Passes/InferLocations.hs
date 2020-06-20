@@ -1607,16 +1607,14 @@ prim p = case p of
            DictInsertP dty -> convertTy dty >>= return . DictInsertP
            DictLookupP dty -> convertTy dty >>= return . DictLookupP
            DictHasKeyP dty -> convertTy dty >>= return . DictHasKeyP
-           VEmptyP dty  -> convertTy dty >>= return . VEmptyP
-           VNthP dty    -> convertTy dty >>= return . VNthP
-           VLengthP dty -> convertTy dty >>= return . VLengthP
-           VUpdateP dty -> convertTy dty >>= return . VUpdateP
-           VSnocP dty   -> convertTy dty >>= return . VSnocP
-           VSortP dty   -> convertTy dty >>= return . VSortP
-           InPlaceVSnocP dty   -> convertTy dty >>= return . InPlaceVSnocP
-           InPlaceVSortP dty   -> convertTy dty >>= return . InPlaceVSortP
-           VSliceP dty  -> convertTy dty >>= return . VSliceP
-
+           VAllocP elty    -> convertTy elty >>= return . VAllocP
+           VLengthP elty   -> convertTy elty >>= return . VLengthP
+           VNthP elty      -> convertTy elty >>= return . VNthP
+           VSliceP elty    -> convertTy elty >>= return . VSliceP
+           InplaceVUpdateP elty -> convertTy elty >>= return . InplaceVUpdateP
+           VSortP elty     -> convertTy elty >>= return . VSortP
+           InplaceVSortP elty -> convertTy elty >>= return . InplaceVSortP
+           GetNumProcessors -> pure GetNumProcessors
            SymAppend{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadArrayFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p

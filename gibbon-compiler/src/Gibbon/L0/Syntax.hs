@@ -481,15 +481,14 @@ recoverType ddfs env2 ex =
         DictEmptyP ty  -> SymDictTy Nothing ty
         DictInsertP ty -> SymDictTy Nothing ty
         DictLookupP ty -> ty
-        VEmptyP ty     -> VectorTy ty
-        VNthP ty       -> ty
-        VLengthP _ty   -> IntTy
-        VUpdateP ty    -> VectorTy ty
-        VSnocP ty      -> VectorTy ty
-        VSortP ty      -> VectorTy ty
-        InPlaceVSnocP ty-> VectorTy ty
-        InPlaceVSortP ty-> VectorTy ty
-        VSliceP ty     -> VectorTy ty
+        VAllocP elty   -> VectorTy elty
+        VLengthP _elty -> IntTy
+        VNthP elty     -> elty
+        VSliceP elty   -> VectorTy elty
+        InplaceVUpdateP _elty -> ProdTy []
+        VSortP elty -> VectorTy elty
+        InplaceVSortP _elty -> ProdTy []
+        GetNumProcessors -> IntTy
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty
         ReadArrayFile _ ty      -> ty

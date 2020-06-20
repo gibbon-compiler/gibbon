@@ -408,18 +408,15 @@ data Prim ty
           | IntHashLookup  -- ^ Look up a integer in a hash table (takes default integer)
 
           -- Operations on vectors
-          | VEmptyP ty  -- ^ Creates an empty vector
-          | VNthP ty    -- ^ Fetch the nth element
+          | VAllocP ty   -- ^ Allocate a vector
           | VLengthP ty -- ^ Length of the vector
-          | VUpdateP ty -- ^ Update ith element of the vector
-          | VSnocP ty   -- ^ Append an element to the end of the vector
-          | VSortP ty   -- ^ A sort primop that accepts a function pointer
-          | VSliceP ty  -- ^ An efficient slice operation. (vlice ls from to),
-                        -- returns ls[from, to-1]
-                        -- TODO: change the order of arguments to (vslice from to ls)
+          | VNthP ty    -- ^ Fetch the nth element
+          | VSliceP ty         -- ^ An efficient slice operation
+          | InplaceVUpdateP ty -- ^ Update ith element of the vector
+          | VSortP ty          -- ^ A sort primop that accepts a function pointer
+          | InplaceVSortP ty   -- ^ A sort primop that sorts the array in place
 
-          | InPlaceVSnocP ty   -- ^ Append an element to the end of the vector by mutating it
-          | InPlaceVSortP ty   -- ^ A sort primop that sorts the array in place
+          | GetNumProcessors -- ^ Return the number of processors
 
           | ReadPackedFile (Maybe FilePath) TyCon (Maybe Var) ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
@@ -467,7 +464,7 @@ data UrTy a =
         | PackedTy TyCon a -- ^ No type arguments to TyCons for now.  (No polymorphism.)
 
         | VectorTy (UrTy a)  -- ^ Lists are decorated with the types of their elements;
-                           -- which can only include scalars or flat products of scalars.
+                             -- which can only include scalars or flat products of scalars.
 
         | ArenaTy -- ^ Collection of allocated, non-packed values
 

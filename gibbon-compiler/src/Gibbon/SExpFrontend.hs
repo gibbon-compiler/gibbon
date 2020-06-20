@@ -494,39 +494,35 @@ exp se =
    Ls3 l "ann" e _ty -> Ext <$> L (toLoc l) <$> exp e
 
    -- List operations
-   Ls (A l "vempty" : []) -> do
-       ty <- newMetaTy
-       pure $ Ext $ L (toLoc l) $ PrimAppE (VEmptyP ty) []
-
-   Ls3 l "vnth" i ls -> do
-       ty <- newMetaTy
+   Ls2 l "valloc" i -> do
+       elty <- newMetaTy
        ie <- exp i
-       lse <- exp ls
-       pure $ Ext $ L (toLoc l) $ PrimAppE (VNthP ty) [ie, lse]
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VAllocP elty) [ie]
 
    Ls2 l "vlength" ls -> do
        ty <- newMetaTy
        lse <- exp ls
        pure $ Ext $ L (toLoc l) $ PrimAppE (VLengthP ty) [lse]
 
-   Ls4 l "vupdate" ls i v -> do
+   Ls3 l "vnth" ls i -> do
+       ty <- newMetaTy
+       lse <- exp ls
+       ie <- exp i
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VNthP ty) [lse, ie]
+
+   Ls4 l "vslice" from to ls -> do
+       ty <- newMetaTy
+       frome <- exp from
+       toe <- exp to
+       lse  <- exp ls
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VSliceP ty) [frome,toe,lse]
+
+   Ls4 l "inplacevupdate" ls i v -> do
        ty <- newMetaTy
        lse <- exp ls
        ie <- exp i
        ve <- exp v
-       pure $ Ext $ L (toLoc l) $ PrimAppE (VUpdateP ty) [lse,ie,ve]
-
-   Ls3 l "vsnoc" ls v -> do
-       ty <- newMetaTy
-       lse <- exp ls
-       ve <- exp v
-       pure $ Ext $ L (toLoc l) $ PrimAppE (VSnocP ty) [lse,ve]
-
-   Ls3 l "inplacevsnoc" ls v -> do
-       ty <- newMetaTy
-       lse <- exp ls
-       ve <- exp v
-       pure $ Ext $ L (toLoc l) $ PrimAppE (InPlaceVSnocP ty) [lse,ve]
+       pure $ Ext $ L (toLoc l) $ PrimAppE (InplaceVUpdateP ty) [lse,ie,ve]
 
    Ls3 l "vsort" f ls -> do
        ty <- newMetaTy
@@ -538,14 +534,7 @@ exp se =
        ty <- newMetaTy
        fe  <- exp f
        lse <- exp ls
-       pure $ Ext $ L (toLoc l) $ PrimAppE (InPlaceVSortP ty) [fe,lse]
-
-   Ls4 l "vslice" ls from to -> do
-       ty <- newMetaTy
-       lse  <- exp ls
-       frome <- exp from
-       toe <- exp to
-       pure $ Ext $ L (toLoc l) $ PrimAppE (VSliceP ty) [lse,frome,toe]
+       pure $ Ext $ L (toLoc l) $ PrimAppE (InplaceVSortP ty) [fe,lse]
 
    Ls (A _ kwd : _args) | isKeyword kwd ->
       error $ "Error reading treelang. " ++ show kwd ++ "is a keyword:\n "++prnt se

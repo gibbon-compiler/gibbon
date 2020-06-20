@@ -88,15 +88,14 @@ harvestStructTys (Prog _ funs mtal) =
        (LetPrimCallT binds prm _ bod) ->
          let rst = go bod in
          case prm of
-           VEmptyP ty  -> VectorTy ty : rst
-           VNthP   ty  -> VectorTy ty : rst
-           VLengthP ty -> VectorTy ty : rst
-           VUpdateP ty -> VectorTy ty : rst
-           VSnocP ty   -> VectorTy ty : rst
-           VSortP ty   -> VectorTy ty : rst
-           InPlaceVSnocP ty   -> VectorTy ty : rst
-           InPlaceVSortP ty   -> VectorTy ty : rst
-           ReadArrayFile _ ty -> VectorTy ty : rst
+           VAllocP elty  -> VectorTy elty : rst
+           VLengthP elty -> VectorTy elty : rst
+           VNthP   elty  -> VectorTy elty : rst
+           VSliceP elty  -> VectorTy elty : rst
+           InplaceVUpdateP elty -> VectorTy elty : rst
+           VSortP elty   -> VectorTy elty : rst
+           InplaceVSortP  _elty  -> voidTy : rst
+           ReadArrayFile _ elty -> VectorTy elty : rst
            _ -> ProdTy (map snd binds) : rst
        (LetTrivT (_,ty,_) bod)     -> ty : go bod
        -- This should not create a struct.  Again, we add it just for the heck of it:
@@ -933,82 +932,47 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  FreeSymTable -> return [C.BlockStm [cstm| free_symtable(); |]]
 
-                 VEmptyP ty  -> do
-                   let (_, icd_name) = makeIcdName ty
-                       [(outV,_)]  = bnds
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV); |]
-                          , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |] ]
-
-                 VNthP ty    -> do
-                   let ty1 = codegenTy ty
+                 VAllocP elty -> do
+                   let ty1 = codegenTy elty
                        [(outV,_)] = bnds
-                       [i, VarTriv ls] = rnds
-                   tmp <- gensym "tmp"
-                   return [ C.BlockDecl [cdecl| $ty:ty1 *($id:tmp); |]
-                          , C.BlockStm  [cstm| $id:tmp = ($ty:ty1 *) utarray_eltptr($id:ls,$(codegenTriv venv i)); |]
-                          , C.BlockDecl [cdecl| $ty:ty1 $id:outV = *($id:tmp); |]
-                          ]
+                       [i] = rnds
+                       i' = codegenTriv venv i
+                   return [ C.BlockDecl [cdecl| $ty:ty1 $id:outV = vector_alloc($exp:i'); |] ]
+
+                 VNthP elty -> do
+                   let ty1 = codegenTy elty
+                       [(outV,_)] = bnds
+                       [VarTriv ls, i] = rnds
+                       i' = codegenTriv venv i
+                   return [ C.BlockDecl [cdecl| $ty:ty1 $id:outV = vector_nth($id:ls, $exp:i'); |] ]
 
                  VLengthP{} -> do
                    let [(v,IntTy)] = bnds
                        [VarTriv ls] = rnds
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:v = ($ty:(codegenTy IntTy)) utarray_len($id:ls); |] ]
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:v = vector_length($id:ls); |] ]
 
-                 VUpdateP{} -> return []
-
-                 -- This is not a side effect. It creates a copy of the old list.
-                 VSnocP ty   -> do
+                 InplaceVUpdateP elty -> do
                    let [(outV,_)] = bnds
-                       [(VarTriv old_ls), val] = rnds
-                       trv = codegenTriv venv val
-                       ty1 = codegenTy ty
-                       (_, icd_name) = makeIcdName ty
-                   tmp <- gensym "tmp"
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV); |]
-                          , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |]
-                          , C.BlockStm  [cstm| utarray_concat($id:outV,$id:old_ls); |]
-                          , C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
-                          , C.BlockStm  [cstm| utarray_push_back($id:outV, &($id:tmp)); |]
-                          ]
-                 VSortP ty -> do
+                       [VarTriv old_ls, i, x] = rnds
+                       i' = codegenTriv venv i
+                       x' = codegenTriv venv x
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', $exp:x'); |] ]
+
+                 VSortP elty -> do
                    let [(outV,_)] = bnds
                        [VarTriv old_ls, VarTriv sort_fn] = rnds
-                       (_, icd_name) = makeIcdName ty
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV); |]
-                          , C.BlockStm [cstm| utarray_new($id:outV,&($id:icd_name)); |]
-                          , C.BlockStm [cstm| utarray_inserta($id:outV,$id:old_ls,0); |]
-                          , C.BlockStm [cstm| utarray_sort($id:outV, $id:sort_fn); |]
-                          ]
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_sort($id:old_ls, $id:sort_fn); |] ]
 
-                 InPlaceVSnocP ty   -> do
-                   let [(VarTriv old_ls), val] = rnds
-                       trv = codegenTriv venv val
-                       ty1 = codegenTy ty
-                   tmp <- gensym "tmp"
-                   return [ C.BlockDecl [cdecl| $ty:ty1 ($id:tmp) = $trv; |]
-                          , C.BlockStm  [cstm| utarray_push_back($id:old_ls, &($id:tmp)); |]
-                          ]
+                 InplaceVSortP _elty -> error "InplaceSortP"
 
-                 InPlaceVSortP _ty -> do
-                   let [VarTriv old_ls, VarTriv sort_fn] = rnds
-                   return [ C.BlockStm [cstm| utarray_sort($id:old_ls, $id:sort_fn); |] ]
-
-                 VSliceP ty -> do
+                 VSliceP elty -> do
                    let [(outV,_)] = bnds
-                       [VarTriv old_ls, from, to] = rnds
-                       (_, icd_name) = makeIcdName ty
-                   from_v <- gensym "from"
-                   to_v <- gensym "to"
-                   len <- gensym "len"
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV); |]
-                          , C.BlockStm [cstm| utarray_new($id:outV,&($id:icd_name)); |]
-                          , C.BlockStm [cstm| utarray_inserta($id:outV,$id:old_ls,0); |]
-                          , C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:from_v = $(codegenTriv venv from); |]
-                          , C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:to_v = $(codegenTriv venv to); |]
-                          , C.BlockDecl [cdecl| int $id:len = utarray_len($id:outV); |]
-                          , C.BlockStm [cstm| utarray_erase($id:outV, 0, $id:from_v); |]
-                          , C.BlockStm [cstm| utarray_erase($id:outV, $id:to_v, $id:len - $id:to_v); |]
-                          ]
+                       [from, to, VarTriv old_ls] = rnds
+                       from' = codegenTriv venv from
+                       to' = codegenTriv venv to
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_slice($exp:from', $exp:to', $id:old_ls); |] ]
+
+                 GetNumProcessors -> error "GetNumProcessors"
 
                  BumpArenaRefCount{} -> error "codegen: BumpArenaRefCount not handled."
                  ReadInt{} -> error "codegen: ReadInt not handled."
@@ -1087,7 +1051,7 @@ codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] n
     where nam = makeName ts
 codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
 codegenTy ArenaTy = [cty|typename ArenaTy|]
-codegenTy VectorTy{} = [cty|typename UT_array* |]
+codegenTy VectorTy{} = [cty|typename VectorTy |]
 
 makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"

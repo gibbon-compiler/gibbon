@@ -159,13 +159,6 @@ toL1 Prog{ddefs, fundefs, mainExp} =
                 [ls, Ext (L _ (Ext (FunRefE _ fp)))] ->
                   PrimAppE (toL1Prim pr) [toL1Exp ls, VarE fp]
                 _ -> PrimAppE (toL1Prim pr)(map toL1Exp args)
-            InPlaceVSortP{} ->
-              case args of
-                [ls, Ext (FunRefE _ fp)] ->
-                  PrimAppE (toL1Prim pr) [toL1Exp ls, VarE fp]
-                [ls, Ext (L _ (Ext (FunRefE _ fp)))] ->
-                  PrimAppE (toL1Prim pr) [toL1Exp ls, VarE fp]
-                _ -> PrimAppE (toL1Prim pr)(map toL1Exp args)
             _ -> PrimAppE (toL1Prim pr) (map toL1Exp args)
         LetE (v,[],ty,rhs) bod -> LetE (v,[], toL1Ty ty, toL1Exp rhs) (toL1Exp bod)
         LetE (_,(_:_),_,_) _ -> err1 (sdoc ex)
@@ -1605,11 +1598,6 @@ elimParE0 prg@Prog{fundefs,mainExp} = do
           let args' =
                 case pr of
                   VSortP{} ->
-                    case args of
-                      [ls, Ext (FunRefE _ fp)]             -> [ls, VarE fp]
-                      [ls, Ext (L _ (Ext (FunRefE _ fp)))] -> [ls, VarE fp]
-                      _ -> error $ "specExp: vsort" ++ sdoc ex
-                  InPlaceVSortP{} ->
                     case args of
                       [ls, Ext (FunRefE _ fp)]             -> [ls, VarE fp]
                       [ls, Ext (L _ (Ext (FunRefE _ fp)))] -> [ls, VarE fp]

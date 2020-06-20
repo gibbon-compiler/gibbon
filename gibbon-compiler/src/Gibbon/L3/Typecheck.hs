@@ -195,7 +195,7 @@ tcExp isPacked ddfs env exp =
       -- Special case because we can't lookup the type of the function pointer
       let es' = case pr of
                   VSortP{} -> init es
-                  InPlaceVSortP{} -> init es
+                  InplaceVSortP{} -> init es
                   _ -> es
       tys <- mapM go es'
       let len0 = checkLen exp pr 0 es
@@ -402,70 +402,73 @@ tcExp isPacked ddfs env exp =
         RequestEndOf  -> error "RequestEndOf shouldn't occur in a L3 program."
         RequestSizeOf -> error "RequestSizeOf shouldn't occur in a L3 program."
 
-        VEmptyP ty -> do
-          len0
-          pure (VectorTy ty)
-
-        VNthP ty -> do
-          len2
-          let [i,ls] = tys
-          _ <- ensureEqualTy (es !! 0) IntTy i
-          _ <- ensureEqualTy (es !! 1) (VectorTy ty) ls
-          pure ty
-
-        VLengthP ty -> do
+        VAllocP elty -> do
           len1
+          checkListElemTy elty
+          let [i] = tys
+          _ <- ensureEqualTy (es !! 0) IntTy i
+          pure (VectorTy elty)
+
+        VLengthP elty -> do
+          len1
+          checkListElemTy elty
           let [ls] = tys
-          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
+          _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
           pure IntTy
 
-        VUpdateP ty -> do
-          len3
-          let [ls,i,val] = tys
-          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
-          _ <- ensureEqualTy (es !! 1) IntTy i
-          _ <- ensureEqualTy (es !! 2) ty val
-          pure (VectorTy ty)
-
-        VSnocP ty -> do
+        VNthP elty -> do
           len2
-          let [ls,val] = tys
-          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
-          _ <- ensureEqualTy (es !! 1) ty val
-          pure (VectorTy ty)
+          checkListElemTy elty
+          let [ls, i] = tys
+          _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
+          _ <- ensureEqualTy (es !! 1) IntTy i
+          pure elty
 
-        InPlaceVSnocP ty -> do
-          go (PrimAppE (VSnocP ty) es)
+        VSliceP elty -> do
+          len3
+          checkListElemTy elty
+          let [from,to,ls] = tys
+          _ <- ensureEqualTy (es !! 0) IntTy from
+          _ <- ensureEqualTy (es !! 1) IntTy to
+          _ <- ensureEqualTy (es !! 2) (VectorTy elty) ls
+          pure (VectorTy elty)
 
-        VSortP ty -> do
+        InplaceVUpdateP elty -> do
+          len3
+          checkListElemTy elty
+          let [ls,i,x] = tys
+          _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
+          _ <- ensureEqualTy (es !! 1) IntTy i
+          _ <- ensureEqualTy (es !! 2) elty x
+          pure voidTy
+
+        -- Given that the first argument is a list of type (VectorTy t),
+        -- ensure that the 2nd argument is function reference of type:
+        -- ty -> ty -> IntTy
+        VSortP elty ->
           case (es !! 1) of
             VarE f -> do
               len2
-              let [ls]   = tys
-                  fn_ty  = lookupFEnv f env
-                  in_tys = inTys fn_ty
-                  ret_ty = outTy fn_ty
-                  err x  = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
-              _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
+              let [ls] = tys
+                  fn_ty@(in_tys, ret_ty) = lookupFEnv f env
+                  err x = throwError $ GenericTC ("vsort: Expected a sort function of type (ty -> ty -> Bool). Got"++ sdoc x) exp
+              _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
               case in_tys of
                 [a,b] -> do
-                   _ <- ensureEqualTy (es !! 1) a ty
-                   _ <- ensureEqualTy (es !! 1) b ty
+                   _ <- ensureEqualTy (es !! 1) a elty
+                   _ <- ensureEqualTy (es !! 1) b elty
                    _ <- ensureEqualTy (es !! 1) ret_ty IntTy
-                   pure (VectorTy ty)
+                   pure (VectorTy elty)
                 _ -> err fn_ty
             oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
-        InPlaceVSortP ty -> do
-          go (PrimAppE (VSortP ty) es)
+        InplaceVSortP ty -> do
+          _ <- go (PrimAppE (VSortP ty) es)
+          pure voidTy
 
-        VSliceP ty -> do
-          len3
-          let [ls,from,to] = tys
-          _ <- ensureEqualTy (es !! 0) (VectorTy ty) ls
-          _ <- ensureEqualTy (es !! 1) IntTy from
-          _ <- ensureEqualTy (es !! 2) IntTy to
-          pure (VectorTy ty)
+        GetNumProcessors -> do
+          len0
+          pure IntTy
 
         IntHashEmpty  -> error "L3.Typecheck: IntHashEmpty not handled."
         IntHashInsert -> error "L3.Typecheck: IntHashInsert not handled."
@@ -566,6 +569,10 @@ tcExp isPacked ddfs env exp =
 
   where
     go = tcExp isPacked ddfs env
+    checkListElemTy el_ty =
+      if isValidListElemTy el_ty
+      then pure ()
+      else throwError $ GenericTC ("Gibbon-TODO: Lists of only scalars or flat products of scalars are allowed. Got" ++ sdoc el_ty) exp
 
 
 -- | Typecheck a L1 program

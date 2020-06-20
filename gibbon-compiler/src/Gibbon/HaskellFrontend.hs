@@ -227,10 +227,6 @@ desugarExp toplevel e =
       then pure SyncE
       else if v == "sizeParam"
       then pure $ PrimAppE SizeParam []
-      else if v == "vempty"
-      then do
-        ty <- newMetaTy
-        pure $ PrimAppE (VEmptyP ty) []
       else case M.lookup v toplevel of
              Just sigma ->
                case tyFromScheme sigma of
@@ -298,11 +294,11 @@ desugarExp toplevel e =
                   then do
                     e2' <- desugarExp toplevel e2
                     pure $ PrimAppE IsBig [e2']
-                  else if f == "vempty"
+                  else if f == "valloc"
                   then do
                     e2' <- desugarExp toplevel e2
                     ty  <- newMetaTy
-                    pure $ PrimAppE (VEmptyP ty) [e2']
+                    pure $ PrimAppE (VAllocP ty) [e2']
                   else if f == "vnth"
                   then do
                     e2' <- desugarExp toplevel e2
@@ -313,21 +309,11 @@ desugarExp toplevel e =
                     e2' <- desugarExp toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VLengthP ty) [e2']
-                  else if f == "vupdate"
+                  else if f == "inplacevupdate"
                   then do
                     e2' <- desugarExp toplevel e2
                     ty  <- newMetaTy
-                    pure $ PrimAppE (VUpdateP ty) [e2']
-                  else if f == "vsnoc"
-                  then do
-                    e2' <- desugarExp toplevel e2
-                    ty  <- newMetaTy
-                    pure $ PrimAppE (VSnocP ty) [e2']
-                  else if f == "inplacevsnoc"
-                  then do
-                    e2' <- desugarExp toplevel e2
-                    ty  <- newMetaTy
-                    pure $ PrimAppE (InPlaceVSnocP ty) [e2']
+                    pure $ PrimAppE (InplaceVUpdateP ty) [e2']
                   else if f == "vsort"
                   then do
                     e2' <- desugarExp toplevel e2
@@ -337,7 +323,7 @@ desugarExp toplevel e =
                   then do
                     e2' <- desugarExp toplevel e2
                     ty  <- newMetaTy
-                    pure $ PrimAppE (InPlaceVSortP ty) [e2']
+                    pure $ PrimAppE (InplaceVSortP ty) [e2']
                   else if f == "vslice"
                   then do
                     e2' <- desugarExp toplevel e2
@@ -351,6 +337,14 @@ desugarExp toplevel e =
                   then do
                     e2' <- desugarExp toplevel e2
                     pure $ PrimAppE FloatToIntP [e2']
+                  else if f == "fst"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    pure $ ProjE 0 e2'
+                  else if f == "snd"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    pure $ ProjE 1 e2'
                   else AppE f [] <$> (: []) <$> desugarExp toplevel e2
           (DataConE tyapp c as) ->
             case M.lookup c primMap of

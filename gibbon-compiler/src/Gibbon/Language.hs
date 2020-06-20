@@ -573,17 +573,16 @@ primArgsTy p =
     DictInsertP _ty  -> error "primArgsTy: dicts not handled yet"
     DictLookupP _ty  -> error "primArgsTy: dicts not handled yet"
     DictHasKeyP _ty  -> error "primArgsTy: dicts not handled yet"
-    VEmptyP{}   -> []
-    VNthP ty    -> [IntTy, VectorTy ty]
-    VLengthP ty -> [VectorTy ty]
-    VUpdateP ty -> [VectorTy ty, IntTy, ty]
-    VSnocP ty   -> [VectorTy ty, ty]
-    VSortP ty   -> [VectorTy ty, voidTy] -- The voidTy is just a placeholder.
-                                       -- We don't have a type for
-                                       -- function pointers.
-    InPlaceVSnocP ty   -> [VectorTy ty, ty]
-    InPlaceVSortP ty   -> [VectorTy ty, voidTy]
-    VSliceP ty  -> [VectorTy ty, IntTy, IntTy]
+    VAllocP _elty  -> [IntTy]
+    VLengthP elty -> [VectorTy elty]
+    VNthP elty    -> [VectorTy elty, IntTy]
+    VSliceP elty  -> [IntTy, IntTy, VectorTy elty]
+    InplaceVUpdateP elty -> [VectorTy elty, IntTy, elty]
+    -- The voidTy is just a placeholder.
+    -- We don't have a type for function pointers.
+    VSortP elty        -> [VectorTy elty, voidTy]
+    InplaceVSortP elty -> [VectorTy elty, voidTy]
+    GetNumProcessors -> []
     PrintInt -> [IntTy]
     PrintSym -> [SymTy]
     ReadInt  -> []
@@ -645,15 +644,14 @@ primRetTy p =
     DictEmptyP ty  -> SymDictTy Nothing $ stripTyLocs ty
     DictInsertP ty -> SymDictTy Nothing $ stripTyLocs ty
     DictLookupP ty -> ty
-    VEmptyP ty  -> VectorTy ty
-    VNthP ty    -> ty
-    VLengthP{}  -> IntTy
-    VUpdateP ty -> VectorTy ty
-    VSnocP ty   -> VectorTy ty
-    VSortP ty   -> VectorTy ty
-    InPlaceVSnocP ty -> VectorTy ty
-    InPlaceVSortP ty -> VectorTy ty
-    VSliceP ty  -> VectorTy ty
+    VAllocP elty    -> VectorTy elty
+    VLengthP _elty -> IntTy
+    VNthP elty     -> elty
+    VSliceP elty   -> VectorTy elty
+    InplaceVUpdateP _elty -> voidTy
+    VSortP elty -> VectorTy elty
+    InplaceVSortP _elty -> voidTy
+    GetNumProcessors -> IntTy
     PrintInt -> IntTy
     PrintSym -> SymTy
     ReadInt  -> IntTy

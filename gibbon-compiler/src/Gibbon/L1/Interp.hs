@@ -88,31 +88,10 @@ interp rc valenv ddefs fenv = go valenv
           LitSymE s -> return $ VSym (fromVar s)
           VarE v    -> return $ env # v
 
-          -- Don't sort for now
-          PrimAppE (VSortP{}) [ls,VarE fp] -> do
-            (VList vals) <- go env ls
-            applySortP env vals fp
-
-          LetE (_,_,_, PrimAppE (InPlaceVSortP{}) [ls, VarE fp]) bod -> do
-            old_v@(VList vals) <- go env ls
-            val <- applySortP env vals fp
-            -- go (M.insert )
-            let mp = M.filter (== old_v) env
-            case M.keys mp of
-              [one] -> go (M.insert one val env) bod
-              []    -> error "L1.Interp: InPlaceSortP no accessor found"
-              oth   -> go (M.insert (last oth) val env) bod
-
-          LetE (_,_,_, PrimAppE (InPlaceVSnocP{}) [ls, arg]) bod -> do
-            old_v@(VList vals) <- go env ls
-            v <- go env arg
-            let new_ls = VList (vals ++ [v])
-            -- go (M.insert )
-            let mp = M.filter (== old_v) env
-            case M.keys mp of
-              [one] -> go (M.insert one new_ls env) bod
-              []    -> error "L1.Interp: InPlaceSnocP no accessor found"
-              oth   -> go (M.insert (last oth) new_ls env) bod
+          -- -- Don't sort for now
+          -- PrimAppE (VSortP{}) [ls,VarE fp] -> do
+          --   (VList vals) <- go env ls
+          --   applySortP env vals fp
 
           PrimAppE p ls -> do args <- mapM (go env) ls
                               return $ applyPrim rc p args
@@ -194,8 +173,8 @@ interp rc valenv ddefs fenv = go valenv
 
           MapE _ _bod    -> error "L1.Interp: finish MapE"
           FoldE _ _ _bod -> error "L1.Interp: finish FoldE"
-    applySortP :: ValEnv (PreExp e l d) -> [(Value (PreExp e l d))] -> Var -> WriterT InterpLog IO (Value (PreExp e l d))
-    applySortP env ls f = do
+    _applySortP :: ValEnv (PreExp e l d) -> [(Value (PreExp e l d))] -> Var -> WriterT InterpLog IO (Value (PreExp e l d))
+    _applySortP env ls f = do
       let fn  = case M.lookup f fenv of
                   Just fun -> fun
                   Nothing -> error $ "L1.Interp: unbound function given to vsort: "++ndoc f
@@ -259,23 +238,23 @@ applyPrim rc p args =
    (ReadPackedFile file _ _ ty,[]) ->
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
    (ReadArrayFile{},[]) -> VList []
-   (VEmptyP _,[]) -> VList []
-   (VNthP _,[VInt n, VList ls]) -> ls !!! n
-   (VLengthP _,[VList ls]) -> VInt (length ls)
-   (VUpdateP _,[VList ls, VInt i, v]) -> if length ls < i
-                                         then error $ "L1.Interp: VUpdate"
-                                         else VList (replaceNth i v ls)
-   (VSnocP _,[VList ls, v]) -> VList (ls ++ [v])
-   (VSliceP _,[VList ls, VInt from, VInt to]) ->
-     VList (L.take (to - from + 1) (L.drop from ls))
+   -- (VEmptyP _,[]) -> VList []
+   -- (VNthP _,[VInt n, VList ls]) -> ls !!! n
+   -- (VLengthP _,[VList ls]) -> VInt (length ls)
+   -- (VUpdateP _,[VList ls, VInt i, v]) -> if length ls < i
+   --                                       then error $ "L1.Interp: VUpdate"
+   --                                       else VList (replaceNth i v ls)
+   -- (VSnocP _,[VList ls, v]) -> VList (ls ++ [v])
+   -- (VSliceP _,[VList ls, VInt from, VInt to]) ->
+   --   VList (L.take (to - from + 1) (L.drop from ls))
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
   where
-     replaceNth :: Int -> a -> [a] -> [a]
-     replaceNth _ _ [] = []
-     replaceNth n newVal (x:xs)
+     _replaceNth :: Int -> a -> [a] -> [a]
+     _replaceNth _ _ [] = []
+     _replaceNth n newVal (x:xs)
        | n == 0 = newVal:xs
-       | otherwise = x:replaceNth (n-1) newVal xs
+       | otherwise = x:_replaceNth (n-1) newVal xs
 
 clk :: Clock
 clk = Monotonic

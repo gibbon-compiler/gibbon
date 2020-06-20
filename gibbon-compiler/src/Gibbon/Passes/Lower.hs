@@ -980,15 +980,14 @@ prim p =
     DictHasKeyP ty -> T.DictHasKeyP $ typ ty
     ReadPackedFile mf tyc _ _ -> T.ReadPackedFile mf tyc
     ReadArrayFile fp ty -> T.ReadArrayFile fp (typ ty)
-    VEmptyP ty    -> T.VEmptyP (typ ty)
-    VNthP ty      -> T.VNthP (typ ty)
-    VLengthP ty   -> T.VLengthP (typ ty)
-    VUpdateP ty   -> T.VUpdateP (typ ty)
-    VSnocP ty     -> T.VSnocP (typ ty)
-    VSortP ty     -> T.VSortP (typ ty)
-    InPlaceVSnocP ty -> T.InPlaceVSnocP (typ ty)
-    InPlaceVSortP ty -> T.InPlaceVSortP (typ ty)
-    VSliceP ty    -> T.VSliceP (typ ty)
+    VAllocP elty  -> T.VAllocP (typ elty)
+    VLengthP elty -> T.VLengthP (typ elty)
+    VNthP elty    -> T.VNthP (typ elty)
+    VSliceP elty    -> T.VSliceP (typ elty)
+    InplaceVUpdateP elty -> T.InplaceVUpdateP (typ elty)
+    VSortP elty   -> T.VSortP (typ elty)
+    InplaceVSortP elty -> T.InplaceVSortP (typ elty)
+    GetNumProcessors -> T.GetNumProcessors
     SymSetEmpty   -> error "lower/prim: SymSetEmpty not handled"
     SymSetInsert  -> error "lower/prim: SymSetInsert not handled"
     SymSetContains-> error "lower/prim: SymSetContains not handled"

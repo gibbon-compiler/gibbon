@@ -204,16 +204,15 @@ data Prim
     | DictLookupP Ty -- ^ takes k,dict, errors if absent
     | DictEmptyP Ty
     | DictHasKeyP Ty
-    | VEmptyP Ty
-    | VNthP Ty
+    -- Operations on vectors
+    | VAllocP Ty
     | VLengthP Ty
-    | VUpdateP Ty
-    | VSnocP Ty
-    | VSortP Ty
-    | InPlaceVSnocP Ty
-    | InPlaceVSortP Ty
+    | VNthP Ty
     | VSliceP Ty
-
+    | InplaceVUpdateP Ty
+    | VSortP Ty
+    | InplaceVSortP Ty
+    | GetNumProcessors
     | ReadPackedFile (Maybe FilePath) TyCon
     | ReadArrayFile (Maybe FilePath) Ty
 

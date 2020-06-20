@@ -325,69 +325,63 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
         IntHashInsert{} -> err $ text "IntHashInsert not handled."
         IntHashLookup{} -> err $ text "IntHashLookup not handled."
 
-        VEmptyP ty -> do
-          len0
-          pure (sbst, VectorTy ty, PrimAppE pr [])
-
-        VNthP ty -> do
-          len2
-          let [i,ls] = arg_tys'
+        VAllocP elty -> do
+          len1
+          let [i] = arg_tys'
           s2 <- unify (args !! 0) IntTy i
-          s3 <- unify (args !! 1) (VectorTy ty) ls
-          pure (s1 <> s2 <> s3, ty, PrimAppE pr args_tc)
+          pure (s1 <> s2, VectorTy elty, PrimAppE pr args_tc)
 
-        VLengthP ty -> do
+        VLengthP elty -> do
           len1
           let [ls] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy ty) ls
+          s2 <- unify (args !! 0) (VectorTy elty) ls
           pure (s1 <> s2, IntTy, PrimAppE pr args_tc)
 
-        VUpdateP ty -> do
+        VNthP elty -> do
+          len2
+          let [ls,i] = arg_tys'
+          s2 <- unify (args !! 0) (VectorTy elty) ls
+          s3 <- unify (args !! 1) IntTy i
+          pure (s1 <> s2 <> s3, elty, PrimAppE pr args_tc)
+
+        VSliceP elty -> do
+          len3
+          let [from,to,ls] = arg_tys'
+          s2 <- unify (args !! 0) IntTy from
+          s3 <- unify (args !! 1) IntTy to
+          s4 <- unify (args !! 2) (VectorTy elty) ls
+          pure (s1 <> s2 <> s3 <> s3 <> s4, VectorTy elty, PrimAppE pr args_tc)
+
+        InplaceVUpdateP elty -> do
           len3
           let [ls,i,val] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy ty) ls
+          s2 <- unify (args !! 0) (VectorTy elty) ls
           s3 <- unify (args !! 1) IntTy i
-          s4 <- unify (args !! 2) ty val
-          pure (s1 <> s2 <> s3 <> s4, VectorTy ty, PrimAppE pr args_tc)
-
-        VSnocP ty -> do
-          len2
-          let [ls,val] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy ty) ls
-          s3 <- unify (args !! 1) ty val
-          pure (s1 <> s2 <> s3, VectorTy ty, PrimAppE pr args_tc)
-
-        InPlaceVSnocP ty -> do
-          (s2, t, e) <- go (PrimAppE (VSnocP ty) args)
-          case e of
-            PrimAppE (VSnocP t2) args2 -> pure (s2, t, PrimAppE (InPlaceVSnocP t2) args2)
-            _ -> err $ text "InPlaceVSortP"
+          s4 <- unify (args !! 2) elty val
+          pure (s1 <> s2 <> s3 <> s4, VectorTy elty, PrimAppE pr args_tc)
 
         -- Given that the first argument is a list of type (VectorTy t),
         -- ensure that the 2nd argument is function reference of type:
         -- ty -> ty -> IntTy
         --
         -- TODO: cannot unify if the 2nd argument is a lambda.
-        VSortP ty -> do
+        VSortP elty -> do
           len2
           let [ls,fp] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy ty) ls
-          s3 <- unify (args !! 1) (ArrowTy [ty, ty] IntTy) fp
-          pure (s1 <> s2 <> s3, VectorTy ty, PrimAppE pr args_tc)
+          s2 <- unify (args !! 0) (VectorTy elty) ls
+          s3 <- unify (args !! 1) (ArrowTy [elty, elty] IntTy) fp
+          pure (s1 <> s2 <> s3, VectorTy elty, PrimAppE pr args_tc)
 
-        InPlaceVSortP ty -> do
-          (s2, t, e) <- go (PrimAppE (VSortP ty) args)
+        InplaceVSortP elty -> do
+          (s2, _t, e) <- go (PrimAppE (VSortP elty) args)
           case e of
-            PrimAppE (VSortP t2) args2 -> pure (s2, t, PrimAppE (InPlaceVSortP t2) args2)
+            PrimAppE (VSortP t2) args2 ->
+              pure (s1 <> s2, voidTy0, PrimAppE (InplaceVSortP t2) args2)
             _ -> err $ text "InPlaceVSortP"
 
-        VSliceP ty -> do
-          len3
-          let [ls,from,to] = arg_tys'
-          s2 <- unify (args !! 0) (VectorTy ty) ls
-          s3 <- unify (args !! 1) IntTy from
-          s4 <- unify (args !! 2) IntTy to
-          pure (s1 <> s2 <> s3 <> s4, VectorTy ty, PrimAppE pr args_tc)
+        GetNumProcessors -> do
+          len0
+          pure (s1, IntTy, PrimAppE pr args_tc)
 
         ErrorP _str ty -> do
           len0
@@ -707,15 +701,13 @@ zonkExp s ex =
                           in AppE f tyapps1 (map go args)
     PrimAppE pr args  ->
       let pr' = case pr of
-                  VEmptyP  ty -> VEmptyP  (zonkTy s ty)
-                  VNthP    ty -> VNthP    (zonkTy s ty)
+                  VAllocP  ty -> VAllocP  (zonkTy s ty)
                   VLengthP ty -> VLengthP (zonkTy s ty)
-                  VUpdateP ty -> VUpdateP (zonkTy s ty)
-                  VSnocP   ty -> VSnocP   (zonkTy s ty)
-                  VSortP   ty -> VSortP   (zonkTy s ty)
-                  InPlaceVSnocP ty -> InPlaceVSnocP (zonkTy s ty)
-                  InPlaceVSortP ty -> InPlaceVSortP (zonkTy s ty)
+                  VNthP    ty -> VNthP    (zonkTy s ty)
                   VSliceP  ty -> VSliceP  (zonkTy s ty)
+                  InplaceVUpdateP ty -> InplaceVUpdateP (zonkTy s ty)
+                  VSortP   ty -> VSortP   (zonkTy s ty)
+                  InplaceVSortP ty -> InplaceVSortP (zonkTy s ty)
                   ReadArrayFile fp ty -> ReadArrayFile fp (zonkTy s ty)
                   _ -> pr
       in PrimAppE pr' (map go args)
