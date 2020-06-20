@@ -429,21 +429,21 @@ tests:
     failing: [gibbon1]
 
   ## Vector operations
-  - name: List.hs
+  - name: Vector.hs
     dir: examples/lists
-    answer-file: examples/lists/List.hs.ans
+    answer-file: examples/lists/Vector.hs.ans
 
-  - name: InPlaceList.hs
+  - name: InPlaceVector.hs
     dir: examples/lists
-    answer-file: examples/lists/List.hs.ans
+    answer-file: examples/lists/Vector.hs.ans
 
   - name: Sort.hs
     dir: examples/lists
     answer-file: examples/lists/Sort.hs.ans
 
-  - name: DataList.hs
+  - name: DataVector.hs
     dir: examples/lists
-    answer-file: examples/lists/DataList.hs.ans
+    answer-file: examples/lists/DataVector.hs.ans
     failing: ["interp1"]
 
   ## AST benchmarks
