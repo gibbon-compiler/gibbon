@@ -330,19 +330,6 @@ IntTy expll(IntTy base, IntTy pow) {
     }
  }
 
-UT_icd double_icd = {sizeof(double), NULL, NULL, NULL};
-
-void print_timing_array(UT_array *times) {
-    printf("BATCHTIME: [");
-    double *d;
-    for(d=(double*)utarray_front(times);
-        d!=NULL;
-        d=(double*)utarray_next(times,d)) {
-        printf("%f, ",*d);
-    }
-    printf("]\n");
-}
-
 // -------------------------------------
 // Symbol table
 // -------------------------------------
@@ -756,11 +743,6 @@ typedef struct VectorTy_struct {
     void* data;
 } VectorTy;
 
-typedef struct VectorTyVectorTy_struct {
-    VectorTy *field0;
-    VectorTy *field1;
-} VectorTyVectorTyProd;
-
 VectorTy* vector_alloc(IntTy num, IntTy elt_size) {
     VectorTy *vec = ALLOC(sizeof(VectorTy));
     if (vec == NULL) {
@@ -808,15 +790,45 @@ void* vector_nth(VectorTy *vec, IntTy i) {
     return (vec->data + (vec->elt_size * i));
 }
 
+void vector_inplace_update(VectorTy *vec, IntTy i, void* elt) {
+    void* dst = vector_nth(vec, i);
+    memcpy(dst, elt, vec->elt_size);
+}
 
-VectorTyVectorTyProd vector_split_at(IntTy n, VectorTy *vec) {
-    IntTy len = vector_length(vec);
-    IntTy n1 = MAX(n,0);
-    IntTy mid = MIN(n1,len);
-    IntTy upper = MAX(0,(len - n1));
-    VectorTy *v1 = vector_slice(0,mid,vec);
-    VectorTy *v2 = vector_slice(mid,upper,vec);
-    return (VectorTyVectorTyProd) {v1, v2};
+void vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
+    qsort(vec->data, vector_length(vec), vec->elt_size, compar);
+}
+
+void vector_free(VectorTy *vec) {
+    free(vec->data);
+    free(vec);
+    return;
+}
+
+void print_timing_array(VectorTy *times) {
+    printf("TIMES: [");
+    double *d;
+    IntTy n = vector_length(times);
+    for(int i = 0; i < n; i++) {
+        d = vector_nth(times, i);
+        if (i == (n-1)) {
+            printf("%f",*d);
+        }
+        else {
+            printf("%f, ",*d);
+        }
+    }
+    printf("]\n");
+}
+
+double sum_timing_array(VectorTy *times) {
+    double *d;
+    double acc = 0;
+    for(int i = 0; i < vector_length(times); i++) {
+        d = vector_nth(times, i);
+        acc += *d;
+    }
+    return acc;
 }
 
 

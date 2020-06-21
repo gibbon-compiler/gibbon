@@ -238,23 +238,25 @@ applyPrim rc p args =
    (ReadPackedFile file _ _ ty,[]) ->
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
    (ReadArrayFile{},[]) -> VList []
-   -- (VEmptyP _,[]) -> VList []
-   -- (VNthP _,[VInt n, VList ls]) -> ls !!! n
-   -- (VLengthP _,[VList ls]) -> VInt (length ls)
-   -- (VUpdateP _,[VList ls, VInt i, v]) -> if length ls < i
-   --                                       then error $ "L1.Interp: VUpdate"
-   --                                       else VList (replaceNth i v ls)
-   -- (VSnocP _,[VList ls, v]) -> VList (ls ++ [v])
-   -- (VSliceP _,[VList ls, VInt from, VInt to]) ->
-   --   VList (L.take (to - from + 1) (L.drop from ls))
+   (VAllocP _,_n) -> VList []
+   (VLengthP _,[VList ls]) -> VInt (length ls)
+   (VNthP _,[VList ls, VInt n]) -> VInt 10 -- ls !!! n
+   -- (InplaceVUpdateP _,[VList ls, VInt i, v]) -> if length ls < i
+   --                                              then
+   --                                                let need = i - (length ls)
+   --                                                    ls' = ls ++ (replicate need v)
+   --                                                in VList ls'
+   --                                              else VList (replaceNth i v ls)
+   (VSliceP _,[VList ls, VInt from, VInt to]) ->
+     VList (L.take (to - from + 1) (L.drop from ls))
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
   where
-     _replaceNth :: Int -> a -> [a] -> [a]
-     _replaceNth _ _ [] = []
-     _replaceNth n newVal (x:xs)
+     replaceNth :: Int -> a -> [a] -> [a]
+     replaceNth _ _ [] = []
+     replaceNth n newVal (x:xs)
        | n == 0 = newVal:xs
-       | otherwise = x:_replaceNth (n-1) newVal xs
+       | otherwise = x:replaceNth (n-1) newVal xs
 
 clk :: Clock
 clk = Monotonic

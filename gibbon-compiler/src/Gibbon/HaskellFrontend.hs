@@ -13,6 +13,9 @@ import           Language.Haskell.Exts.Parser
 import           Language.Haskell.Exts.Syntax as H
 import           Language.Haskell.Exts.Pretty
 import           Language.Haskell.Exts.SrcLoc
+import           System.Environment ( getEnvironment )
+import           System.Directory
+import           Control.Monad
 
 import           Gibbon.L0.Syntax as L0
 import           Gibbon.Common
@@ -21,12 +24,44 @@ import           Gibbon.Common
 
 parseFile :: FilePath -> IO (PassM Prog0)
 parseFile path = do
-  let parse_mode = defaultParseMode { extensions =
-                                        [EnableExtension ScopedTypeVariables]
-                                        ++ (extensions defaultParseMode)}
-  parsed <- parseModuleWithMode parse_mode <$> (readFile path)
+    stdlib <- stdLibrary
+    prog <- parseString <$> readFile path
+    let combined = do
+          (Prog std_ddefs std_fundefs _) <- stdlib
+          (Prog ddefs fundefs mainExp) <- prog
+          let common_ddefs = M.intersection ddefs std_ddefs
+              common_funs  = M.intersection fundefs std_fundefs
+
+          unless (M.null common_ddefs) $
+            error$ "HaskellFrontend:  "++ show (M.keys common_ddefs)
+                   ++ " is already defined in the standard library."
+          unless (M.null common_funs) $
+            error$ "HaskellFrontend:  "++ show (M.keys common_funs)
+                   ++ " is already defined in the standard library."
+          pure (Prog (M.union ddefs std_ddefs) (M.union fundefs std_fundefs) mainExp)
+    pure combined
+
+stdLibrary :: IO (PassM Prog0)
+stdLibrary = do
+    env <- getEnvironment
+    let stdlibPath = case lookup "GIBBONDIR" env of
+                    Just p -> p ++"/gibbon-compiler/stdlib.hs"
+                    Nothing -> "stdlib.hs" -- Assume we're running from the compiler dir!
+    e <- doesFileExist stdlibPath
+    unless e $ error$ "HaskellFrontend: stdlib.hs file not found at path: "++stdlibPath
+                     ++"\n Consider setting GIBBONDIR to repo root.\n"
+    parseString <$> readFile stdlibPath
+
+parseMode :: ParseMode
+parseMode = defaultParseMode { extensions = [EnableExtension ScopedTypeVariables]
+                                            ++ (extensions defaultParseMode)
+                             }
+
+parseString :: String -> PassM Prog0
+parseString str = do
+  let parsed = parseModuleWithMode parseMode str
   case parsed of
-    ParseOk hs -> pure $ desugarModule hs
+    ParseOk hs -> pure $ fst $ defaultRunPassM (desugarModule hs)
     ParseFailed _ er -> do
       error ("haskell-src-exts failed: " ++ er)
 
@@ -78,8 +113,8 @@ keywords :: S.Set Var
 keywords = S.fromList $ map toVar $
     [ "quote", "bench", "error", "par", "spawn", "is_big"
     -- operations on vectors
-    , "vempty", "vnth", "vlength", "vupdate", "vsnoc", "vsort", "vslice"
-    , "inplacevsort", "inplacevsnoc"
+    , "valloc", "vnth", "vlength", "vslice", "inplacevupdate",
+      "vsort", "inplacevsort"
     ] ++ M.keys primMap
 
 desugarTopType :: (Show a,  Pretty a) => Type a -> TyScheme

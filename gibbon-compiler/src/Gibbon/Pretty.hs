@@ -197,7 +197,7 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       ErrorP str ty  -> text "ErrorP" <> wty ty <+> doubleQuotes (text str) <> space
                                       ReadPackedFile mb_fp tycon _ _ ->
                                         text "readFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
-                                      VAllocP ty -> parens $ text "vempty" <+> doublecolon <+> brackets (pprintWithStyle sty ty)
+                                      VAllocP ty -> parens $ text "valloc" <+> doublecolon <+> brackets (pprintWithStyle sty ty)
                                       VLengthP{} -> text "vlength"
                                       VNthP{}    -> text "vnth"
                                       VSliceP{}   -> text "vslice"

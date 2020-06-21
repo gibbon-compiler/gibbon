@@ -358,7 +358,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           s2 <- unify (args !! 0) (VectorTy elty) ls
           s3 <- unify (args !! 1) IntTy i
           s4 <- unify (args !! 2) elty val
-          pure (s1 <> s2 <> s3 <> s4, VectorTy elty, PrimAppE pr args_tc)
+          pure (s1 <> s2 <> s3 <> s4, ProdTy [], PrimAppE pr args_tc)
 
         -- Given that the first argument is a list of type (VectorTy t),
         -- ensure that the 2nd argument is function reference of type:
@@ -771,7 +771,7 @@ substTyVarExp s ex =
     LitSymE{} -> ex
     AppE f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
                          in AppE f tyapps1 (map go arg)
-    PrimAppE pr args  -> PrimAppE pr (map go args)
+    PrimAppE pr args  -> PrimAppE (substTyVarPrim s pr) (map go args)
     -- Let doesn't store any tyapps.
     LetE (v,tyapps,ty,rhs) bod -> LetE (v, tyapps, substTyVar s ty, go rhs) (go bod)
     IfE a b c  -> IfE (go a) (go b) (go c)
@@ -803,6 +803,19 @@ substTyVarExp s ex =
     FoldE{}  -> error $ "substTyVarExp: TODO, " ++ sdoc ex
   where
     go = substTyVarExp s
+
+substTyVarPrim :: M.Map TyVar Ty0 -> Prim Ty0 -> Prim Ty0
+substTyVarPrim mp pr =
+    case pr of
+        VAllocP elty -> VAllocP (substTyVar mp elty)
+        VLengthP elty -> VLengthP (substTyVar mp elty)
+        VNthP elty -> VNthP (substTyVar mp elty)
+        VSliceP elty -> VSliceP (substTyVar mp elty)
+        InplaceVUpdateP elty -> InplaceVUpdateP (substTyVar mp elty)
+        VSortP elty -> VSortP (substTyVar mp elty)
+        InplaceVSortP elty -> InplaceVSortP (substTyVar mp elty)
+        _ -> pr
+
 
 tyVarToMetaTyl :: [Ty0] -> TcM (M.Map TyVar Ty0, [Ty0])
 tyVarToMetaTyl tys =

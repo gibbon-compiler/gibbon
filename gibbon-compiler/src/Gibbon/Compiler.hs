@@ -201,13 +201,18 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   ((l0, cnt0), fp) <- parseInput input fp1
   let config' = config { srcFile = Just fp }
 
+
+  let initTypeChecked :: L0.Prog0
+      initTypeChecked =
+        -- We typecheck first to turn the appropriate VarE's into FunRefE's.
+        fst $ runPassM defaultConfig 0 (freshNames l0 >>= L0.tcProg)
+
   case mode of
     Interp1 -> do
-        dbgTrace 5 ("\nParsed:\n" ++ sdoc l0) (pure ())
-        -- We typecheck first to turn the appropriate VarE's into FunRefE's.
-        (l0', _) <- pure $ runPassM defaultConfig 0 (freshNames l0 >>= L0.tcProg)
-        dbgTrace 5 ("\nTypechecked:\n" ++ pprender l0') (pure ())
-        runL0 l0'
+        dbgTrace passChatterLvl ("\nParsed:"++sepline++ "\n" ++ sdoc l0) (pure ())
+        _ <- withPrintInterpProg initTypeChecked
+        pure ()
+
     ToParse -> dbgPrintLn 0 $ pprender l0
 
     _ -> do
@@ -222,7 +227,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
         error "To compile a program with parallelism, use -parallel."
 
       -- (Stage 1) Run the program through the interpreter
-      initResult <- withPrintInterpProg l0
+      initResult <- withPrintInterpProg initTypeChecked
 
       -- (Stage 2) C/LLVM codegen
       let outfile = getOutfile backend fp cfile
@@ -469,7 +474,7 @@ passes config@Config{dynflags} l0 = do
       l0 <- goE "typecheck"       L0.tcProg             l0
       l0 <- goE "bindLambdas"     L0.bindLambdas        l0
       l0 <- goE "monomorphize"    L0.monomorphize       l0
-      l0 <- goE "closureConvert"  L0.closureConvert     l0
+      -- l0 <- goE "closureConvert"  L0.closureConvert     l0
       l0 <- goE "specLambdas"     L0.specLambdas        l0
       l0 <- goE "elimParE0"       L0.elimParE0          l0
       -- Note: L0 -> L1

@@ -29,6 +29,9 @@ module Gibbon.Language.Syntax
     -- * Expresssions and thier types
   , PreExp(..), Prim(..), UrTy(..)
 
+    -- * Functors for recursion-schemes
+  , PreExpF(..), PrimF(..), UrTyF(..)
+
     -- * Generic operations
   , FreeVars(..), Expression(..), Binds, Flattenable(..)
   , Simplifiable(..), SimplifiableExt(..), Typeable(..)
@@ -666,3 +669,4 @@ execAndPrint rc prg = do
 
 makeBaseFunctor ''PreExp
 makeBaseFunctor ''UrTy
+makeBaseFunctor ''Prim

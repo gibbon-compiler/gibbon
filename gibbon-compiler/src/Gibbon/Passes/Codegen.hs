@@ -472,6 +472,7 @@ codegenTail venv fenv (LetTimedT flg bnds rhs body) ty sync_deps =
                    | (vr0,ty0) <- bnds ]
        let rhs' = rewriteReturns rhs bnds
        rhs'' <- codegenTail venv fenv rhs' ty sync_deps
+       itertime  <- gensym "itertime"
        batchtime <- gensym "batchtime"
        selftimed <- gensym "selftimed"
        times <- gensym "times"
@@ -482,9 +483,9 @@ codegenTail venv fenv (LetTimedT flg bnds rhs body) ty sync_deps =
            begn  = "begin_" ++ (fromVar ident)
            end   = "end_" ++ (fromVar ident)
            iters = "iters_"++ (fromVar ident)
+           vec_ty = codegenTy (VectorTy FloatTy)
 
-           timebod = [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy FloatTy)) ($id:times); |]
-                     , C.BlockStm  [cstm| utarray_new($id:times, &double_icd); |]
+           timebod = [ C.BlockDecl [cdecl| $ty:vec_ty ($id:times) = vector_alloc(global_iters_param, sizeof(double)); |]
                      , C.BlockDecl [cdecl| struct timespec $id:begn; |]
                      , C.BlockDecl [cdecl| struct timespec $id:end; |] ] ++
 
@@ -496,13 +497,14 @@ codegenTail venv fenv (LetTimedT flg bnds rhs body) ty sync_deps =
                                        rhs''++
                                        [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
                                        , C.BlockStm [cstm| if ( $id:iters != global_iters_param-1) restore_alloc_state(); |]
-                                       , C.BlockDecl [cdecl| double $id:batchtime = difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
-                                       , C.BlockStm [cstm| utarray_push_back($id:times, &($id:batchtime)); |]
+                                       , C.BlockDecl [cdecl| double $id:itertime = difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
+                                       , C.BlockStm [cstm| vector_inplace_update($id:times, $id:iters, &($id:itertime)); |]
                                        ]
                             in [ C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < global_iters_param; $id:iters ++) { $items:body } |]
-                               , C.BlockStm [cstm| utarray_sort($id:times, compare_doubles); |]
-                               , C.BlockDecl [cdecl| double *$id:tmp = (double*) utarray_eltptr($id:times, (global_iters_param / 2)); |]
+                               , C.BlockStm [cstm| vector_inplace_sort($id:times, compare_doubles); |]
+                               , C.BlockDecl [cdecl| double *$id:tmp = (double*) vector_nth($id:times, (global_iters_param / 2)); |]
                                , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
+                               , C.BlockDecl [cdecl| double $id:batchtime = sum_timing_array($id:times); |]
                                , C.BlockStm [cstm| print_timing_array($id:times); |]
                                ])
 
@@ -516,7 +518,7 @@ codegenTail venv fenv (LetTimedT flg bnds rhs body) ty sync_deps =
                        if flg
                        then [ C.BlockStm [cstm| printf("ITERS: %lld\n", global_iters_param); |]
                             , C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
-                            -- , C.BlockStm [cstm| printf("BATCHTIME: %e\n", $id:batchtime); |]
+                            , C.BlockStm [cstm| printf("BATCHTIME: %e\n", $id:batchtime); |]
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", $id:selftimed); |]
                             ]
                        else [ C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
@@ -933,30 +935,37 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  FreeSymTable -> return [C.BlockStm [cstm| free_symtable(); |]]
 
                  VAllocP elty -> do
-                   let ty1 = codegenTy elty
+                   let ty1 = codegenTy (VectorTy elty)
                        [(outV,_)] = bnds
                        [i] = rnds
                        i' = codegenTriv venv i
-                   return [ C.BlockDecl [cdecl| $ty:ty1 $id:outV = vector_alloc($exp:i'); |] ]
+                   tmp <- gensym "tmp"
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:tmp = sizeof( $ty:(codegenTy elty)); |]
+                          , C.BlockDecl [cdecl| $ty:ty1 $id:outV = vector_alloc($exp:i', $id:tmp); |]
+                          ]
 
                  VNthP elty -> do
                    let ty1 = codegenTy elty
                        [(outV,_)] = bnds
                        [VarTriv ls, i] = rnds
                        i' = codegenTriv venv i
-                   return [ C.BlockDecl [cdecl| $ty:ty1 $id:outV = vector_nth($id:ls, $exp:i'); |] ]
+                   tmp <- gensym "tmp"
+                   return [ C.BlockDecl [cdecl| $ty:ty1 *($id:tmp); |]
+                          , C.BlockStm  [cstm| $id:tmp = ($ty:ty1 *) vector_nth($id:ls,$exp:i'); |]
+                          , C.BlockDecl [cdecl| $ty:ty1 $id:outV = *($id:tmp); |]
+                          ]
 
                  VLengthP{} -> do
                    let [(v,IntTy)] = bnds
                        [VarTriv ls] = rnds
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:v = vector_length($id:ls); |] ]
 
-                 InplaceVUpdateP elty -> do
-                   let [(outV,_)] = bnds
+                 InplaceVUpdateP _elty -> do
+                   let [(_outV,_)] = bnds
                        [VarTriv old_ls, i, x] = rnds
                        i' = codegenTriv venv i
                        x' = codegenTriv venv x
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', $exp:x'); |] ]
+                   return [ C.BlockStm [cstm| vector_inplace_update($id:old_ls, $exp:i', &$exp:x'); |] ]
 
                  VSortP elty -> do
                    let [(outV,_)] = bnds
@@ -1051,7 +1060,7 @@ codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] n
     where nam = makeName ts
 codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
 codegenTy ArenaTy = [cty|typename ArenaTy|]
-codegenTy VectorTy{} = [cty|typename VectorTy |]
+codegenTy VectorTy{} = [cty|typename VectorTy* |]
 
 makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"

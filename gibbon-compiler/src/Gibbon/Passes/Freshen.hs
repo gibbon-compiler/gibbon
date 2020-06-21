@@ -167,7 +167,12 @@ freshExp venv tvenv exp =
 
     LetE (v,_locs,ty, e1) e2 -> do
       let user_tvs  = filter isUserTv $ tyVarsInTy ty
-      rigid_tyvars <- mapM (\(UserTv w) -> BoundTv <$> gensym w) user_tvs
+      rigid_tyvars <- mapM (\(UserTv w) ->
+                                case M.lookup (UserTv w) tvenv of
+                                  Just (TyVar tv) -> pure tv
+                                  Just oth -> error $ "freshExp: UserTv bound to: " ++ sdoc oth
+                                  Nothing -> BoundTv <$> gensym w)
+                           user_tvs
       let env = M.fromList $ zip user_tvs (map TyVar rigid_tyvars)
           tvenv' = env <> tvenv
 

@@ -312,7 +312,8 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
         ddefs'' <- monoDDefs ddefs'
         let p3 = p { ddefs = ddefs'', fundefs = fundefs'', mainExp = mainExp' }
         -- Step (4)
-        let p4 = updateTyCons mono_st p3
+        p3' <- lift $ tcProg p3
+        let p4 = updateTyCons mono_st p3'
         pure p4
 
   (p4,_) <- runStateT mono_m emptyMonoState
