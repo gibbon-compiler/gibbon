@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_GHC -fno-warn-unused-binds #-}
@@ -46,7 +47,7 @@ import qualified Gibbon.L4.Syntax as L4
 import qualified Gibbon.SExpFrontend as SExp
 import           Gibbon.L0.Interp()
 import           Gibbon.L1.Interp()
-import           Gibbon.L2.Interp()
+import           Gibbon.L2.Interp ( Store, emptyStore )
 -- import           Gibbon.TargetInterp (Val (..), execProg)
 
 -- Compiler passes
@@ -210,6 +211,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   case mode of
     Interp1 -> do
         dbgTrace passChatterLvl ("\nParsed:"++sepline++ "\n" ++ sdoc l0) (pure ())
+        dbgTrace passChatterLvl ("\nTypechecked:"++sepline++ "\n" ++ pprender initTypeChecked) (pure ())
         _ <- withPrintInterpProg initTypeChecked
         pure ()
 
@@ -268,7 +270,7 @@ runL0 l0 = do
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
     dbgPrintLn 2 $ "Running the following through L0.Interp:\n "++sepline ++ "\n" ++ sdoc l0
-    execAndPrint runConf l0
+    execAndPrint () runConf l0
     exitSuccess
 
 -- | The compiler's policy for running/printing L1 programs.
@@ -277,7 +279,7 @@ runL1 l1 = do
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
     dbgPrintLn 2 $ "Running the following through L1.Interp:\n "++sepline ++ "\n" ++ sdoc l1
-    execAndPrint runConf l1
+    execAndPrint () runConf l1
     exitSuccess
 
 -- | The compiler's policy for running/printing L2 programs.
@@ -331,7 +333,7 @@ withPrintInterpProg l0 =
   then do
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
-    (val,_stdout) <- gInterpProg runConf l0
+    (_s1,val,_stdout) <- gInterpProg () runConf l0
     dbgPrintLn 2 $ " [eval] Init prog evaluated to: "++show val
     return $ Just val
   else
@@ -471,27 +473,27 @@ passes config@Config{dynflags} l0 = do
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
           should_fuse = gopt Opt_Fusion dynflags
       l0 <- go  "freshen"         freshNames            l0
-      l0 <- goE "typecheck"       L0.tcProg             l0
-      l0 <- goE "bindLambdas"     L0.bindLambdas        l0
-      l0 <- goE "monomorphize"    L0.monomorphize       l0
-      -- l0 <- goE "closureConvert"  L0.closureConvert     l0
-      l0 <- goE "specLambdas"     L0.specLambdas        l0
-      l0 <- goE "elimParE0"       L0.elimParE0          l0
+      l0 <- goE0 "typecheck"       L0.tcProg             l0
+      l0 <- goE0 "bindLambdas"     L0.bindLambdas       l0
+      l0 <- goE0 "monomorphize"    L0.monomorphize      l0
+      -- l0 <- goE0 "closureConvert"  L0.closureConvert    l0
+      l0 <- goE0 "specLambdas"     L0.specLambdas       l0
+      l0 <- goE0 "elimParE0"       L0.elimParE0         l0
       -- Note: L0 -> L1
-      l1 <- goE "toL1"            (pure . L0.toL1)      l0
+      l1 <- goE0 "toL1"            (pure . L0.toL1)     l0
 
-      l1 <- goE "typecheck"     L1.tcProg               l1
+      l1 <- goE1 "typecheck"     L1.tcProg              l1
       -- If we are executing a benchmark, then we
       -- replace the main function with benchmark code:
-      l1 <- goE "benchMainExp"  benchMainExp            l1
-      l1 <- goE "typecheck"     L1.tcProg               l1
-      l1 <- goE "flatten"       flattenL1               l1
-      l1 <- goE "inlineTriv"    inlineTriv              l1
-      l1 <- goE "typecheck"     L1.tcProg               l1
+      l1 <- goE1 "benchMainExp"  benchMainExp           l1
+      l1 <- goE1 "typecheck"     L1.tcProg              l1
+      l1 <- goE1 "flatten"       flattenL1              l1
+      l1 <- goE1 "inlineTriv"    inlineTriv             l1
+      l1 <- goE1 "typecheck"    L1.tcProg               l1
       l1 <- if should_fuse
-          then goE  "fusion2"   fusion2                 l1
+          then goE1  "fusion2"   fusion2                l1
           else return l1
-      l1 <- goE "typecheck"     L1.tcProg               l1
+      l1 <- goE0 "typecheck"     L1.tcProg              l1
 
       -- Minimal haskell "backend".
       lift $ dumpIfSet config Opt_D_Dump_Hs (render $ pprintHsWithEnv l1)
@@ -503,15 +505,15 @@ passes config@Config{dynflags} l0 = do
               -- branches before InferLocations.
 
               -- Note: L1 -> L2
-              l2 <- goE "inferLocations"   inferLocs    l1
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- goE "L2.flatten"       flattenL2    l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- goE2  "inferLocations" inferLocs    l1
+              l2 <- go   "L2.typecheck"    L2.tcProg    l2
+              l2 <- goE2 "L2.flatten"      flattenL2    l2
+              l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- if gibbon1 || no_rcopies
                     then return l2
                     else do l2 <- go "removeCopies" removeCopies l2
                             go "L2.typecheck"       L2.tcProg    l2
-              l2 <- goE "inferEffects" inferEffects  l2
+              l2 <- goE2 "inferEffects" inferEffects  l2
 
 {- Note [Repairing programs]
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -543,40 +545,40 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <-
                 if gibbon1
                 then do
-                  l2 <- goE "addTraversals"  addTraversals l2
+                  l2 <- goE2 "addTraversals" addTraversals l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- goE "inferEffects2"  inferEffects  l2
+                  l2 <- goE2 "inferEffects2"  inferEffects l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- goE "repairProgram"  (pure . id)   l2
+                  l2 <- goE2 "repairProgram"  (pure . id)  l2
                   pure l2
                 else do
                   let need = needsRAN l2
-                  l1 <- goE "addRAN"         (addRAN need) l1
+                  l1 <- goE1 "addRAN"        (addRAN need) l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
-                  l2 <- goE "inferLocations2" inferLocs    l1
+                  l2 <- goE2 "inferLocations2" inferLocs   l1
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- goE "L2.flatten"     flattenL2     l2
+                  l2 <- goE2 "L2.flatten"    flattenL2     l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- goE "removeCopies"   removeCopies  l2
+                  l2 <- goE2 "removeCopies"  removeCopies  l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- goE "inferEffects2"  inferEffects  l2
+                  l2 <- goE2 "inferEffects2" inferEffects  l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- goE "addTraversals"  addTraversals l2
+                  l2 <- goE2 "addTraversals" addTraversals l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
-                  l2 <- goE "repairProgram"  (pure . id)   l2
+                  l2 <- goE2 "repairProgram" (pure . id)   l2
                   pure l2
 
               lift $ dumpIfSet config Opt_D_Dump_Repair (pprender l2)
               l2 <- if gopt Opt_Parallel dynflags
                     then do
-                      l2 <- goE "parAlloc"     parAlloc   l2
+                      l2 <- goE2 "parAlloc"   parAlloc   l2
                       lift $ dumpIfSet config Opt_D_Dump_ParAlloc (pprender l2)
                       l2 <- go "L2.typecheck" L2.tcProg  l2
                       pure l2
                     else (pure l2)
-              l2 <- goE "inferRegScope"   inferRegScope l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- goE "routeEnds"       routeEnds     l2
+              l2 <- goE2 "inferRegScope"   inferRegScope l2
+              l2 <- go "L2.typecheck"     L2.tcProg      l2
+              l2 <- goE2 "routeEnds"       routeEnds     l2
               -- dbgTraceIt (pprender l2) (pure ())
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
@@ -617,15 +619,21 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
       go :: PassRunner a b v
       go = pass config
 
-      goE :: (InterpProg b, Show v) => InterpPassRunner a b v
-      goE = passE config
+      goE2 :: (InterpProg Store b, Show v) => InterpPassRunner a b Store v
+      goE2 = passE emptyStore config
+
+      goE0 :: (InterpProg () b, Show v) => InterpPassRunner a b () v
+      goE0 = passE () config
+
+      goE1 :: (InterpProg () b, Show v) => InterpPassRunner a b () v
+      goE1 = passE () config
 
 type PassRunner a b v = (Pretty b, Out b, NFData a, NFData b) =>
                          String -> (a -> PassM b) -> a -> StateT (CompileState v) IO b
 
-type InterpPassRunner a b v = (HasPretty a, HasPretty b, HasOut a, HasOut b,
-                               HasGeneric a, HasGeneric b, HasNFData a, HasNFData b) =>
-                               String -> (Prog a -> PassM (Prog b)) -> Prog a -> StateT (CompileState v) IO (Prog b)
+type InterpPassRunner a b s v = (HasPretty a, HasPretty b, HasOut a, HasOut b,
+                                HasGeneric a, HasGeneric b, HasNFData a, HasNFData b) =>
+                                String -> (Prog a -> PassM (Prog b)) -> Prog a -> StateT (CompileState v) IO (Prog b)
 
 -- | Run a pass and return the result
 --
@@ -655,8 +663,8 @@ passChatterLvl = 3
 
 -- | Like 'pass', but also evaluates and checks the result.
 --
-passE :: (InterpProg p2, Show v) => Config -> InterpPassRunner p1 p2 v
-passE config@Config{mode} = wrapInterp mode (pass config)
+passE :: (InterpProg s p2, Show v) => s -> Config -> InterpPassRunner p1 p2 s v
+passE s config@Config{mode} = wrapInterp s mode (pass config)
 
 
 -- | An alternative version that allows FAILURE while running
@@ -669,13 +677,9 @@ passF config = pass config
 
 -- | Wrapper to enable running a pass AND interpreting the result.
 --
-wrapInterp :: (HasPretty a, HasPretty b, HasOut a, HasOut b,
-               HasGeneric a, HasGeneric b, HasNFData a, HasNFData b,
-               InterpProg b, Show v) =>
-              Mode -> InterpPassRunner a b v
-              -> String -> (Prog a -> PassM (Prog b)) -> (Prog a) ->
-              StateT (CompileState v) IO (Prog b)
-wrapInterp mode pass who fn x =
+wrapInterp :: (InterpProg s b, Show v)
+           => s -> Mode -> InterpPassRunner a b s v -> InterpPassRunner a b s v
+wrapInterp s mode pass who fn x =
   do CompileState{result} <- get
      p2 <- pass who fn x
      -- In benchmark mode we simply turn OFF the interpreter.
@@ -684,7 +688,7 @@ wrapInterp mode pass who fn x =
        let Just res1 = result
        -- FIXME: no command line option atm.  Just env vars.
        runConf <- getRunConfig []
-       let res2 = gInterpNoLogs runConf p2
+       let res2 = gInterpNoLogs s runConf p2
        res2' <- catch (evaluate (force res2))
                 (\exn -> error $ "Exception while running interpreter on pass result:\n"++sepline++"\n"
                          ++ show (exn::SomeException) ++ "\n"++sepline++"\nProgram was: "++abbrv 300 p2)

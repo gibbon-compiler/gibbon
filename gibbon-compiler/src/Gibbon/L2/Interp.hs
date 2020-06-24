@@ -8,7 +8,8 @@
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 
 -- | Interpreter reducing L2 programs to values.
-module Gibbon.L2.Interp ( interpProg, interp ) where
+module Gibbon.L2.Interp -- ( interpProg, interp )
+where
 
 import           Control.DeepSeq
 import           Control.Monad.Writer
@@ -33,63 +34,33 @@ import           Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
-instance Interp Exp2 where
-  gInterpExp = interp'
+instance Interp Store Exp2 where
+  gInterpExp rc valenv ddefs fenv ext = fst <$> interp M.empty rc valenv ddefs fenv ext
 
-instance InterpExt Exp2 (E2Ext LocVar Ty2) where
-  gInterpExt = interpExt'
+instance InterpExt Store Exp2 (E2Ext LocVar Ty2) where
+  gInterpExt rc valenv ddefs fenv ext = fst <$> interpExt M.empty rc valenv ddefs fenv ext
 
-instance InterpProg Exp2 where
-  gInterpProg = interpProg
+instance InterpProg Store Exp2 where
+  gInterpProg store rc Prog{ddefs,fundefs,mainExp} =
+      case mainExp of
+        -- Print nothing, return "void"
+        Nothing -> return (store, VProd [], B.empty)
+        Just (e,_) -> do
+          let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
+          ((v, _size),logs,store1) <- runInterpM (interp M.empty rc M.empty ddefs fenv e) store
+          pure (store1, v, toLazyByteString logs)
 
-interpProg :: RunConfig -> Prog2 -> IO (Value Exp2, B.ByteString)
-interpProg rc Prog{ddefs,fundefs,mainExp} =
-  case mainExp of
-    -- Print nothing, return "void"
-    Nothing -> return (VProd [], B.empty)
-    Just (e,_) -> do
-      let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
-      interp' rc M.empty ddefs fenv e
-
--- Policy: don't return locations
-interp' :: RunConfig -> ValEnv Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Exp2)
-        -> Exp2 -> IO (Value Exp2, B.ByteString)
-interp' rc valenv ddefs fenv e = do
-  ((x,logs), s@(Store finstore)) <-
-    runStateT (runWriterT (interp M.empty rc valenv ddefs fenv e)) emptyStore
-  -- Policy: don't return locations
-  let res = case fst x of
-             (VLoc reg off) ->
-                 let buf = finstore M.! reg
-                 in deserialize ddefs s (dropInBuffer off buf)
-             oth -> oth
-  return (res, toLazyByteString logs)
-
--- Policy: don't return locations
-interpExt' :: RunConfig -> ValEnv Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Exp2)
-           -> E2Ext LocVar Ty2 -> IO (Value Exp2, B.ByteString)
-interpExt' rc valenv ddefs fenv ext = do
-  ((x,logs), s@(Store finstore)) <-
-    runStateT (runWriterT (interpExt M.empty rc valenv ddefs fenv ext)) emptyStore
-  let res = case fst x of
-             (VLoc reg off) ->
-                 let buf = finstore M.! reg
-                 in deserialize ddefs s (dropInBuffer off buf)
-             oth -> oth
-  return (res, toLazyByteString logs)
 
 --------------------------------------------------------------------------------
 
-type StoreM = StateT Store IO
-
 interp :: SizeEnv -> RunConfig -> ValEnv Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Exp2)
-       -> Exp2 -> WriterT InterpLog StoreM (Value Exp2, Size)
+       -> Exp2 -> InterpM Store Exp2 (Value Exp2, Size)
 interp szenv rc valenv ddefs fenv e = go valenv szenv e
   where
     {-# NOINLINE goWrapper #-}
     goWrapper !_ix env sizeEnv ex = go env sizeEnv ex
 
-    go :: ValEnv Exp2 -> SizeEnv -> Exp2 -> WriterT InterpLog StoreM (Value Exp2, Size)
+    go :: ValEnv Exp2 -> SizeEnv -> Exp2 -> InterpM Store Exp2 (Value Exp2, Size)
     go env sizeEnv ex =
       case ex of
         -- We interpret a function application by substituting the operand (at
@@ -195,24 +166,27 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                       (bufWithVals, new_off) =
                         foldl
                           (\(acc, off) ((v, sz), _ty) ->
-                               let new_off1 = off + sizeToInt sz in
-                                 case v of
-                                   VInt i -> ( insertAtBuffer off (SerInt i) acc , new_off1 )
-                                   VFloat{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
-                                   VSym{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
-                                   VBool{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
-                                   -- This is a packed value, and it must already
-                                   -- be written to the buffer (by the thing that
-                                   -- returned this). So we just update the offset
-                                   -- to point to the end of this value.
-                                   VLoc{} -> ( acc , new_off1 )
-                                   VPtr buf_id off1 -> ( insertAtBuffer off (SerPtr buf_id off1) acc, new_off1)
-                                   VDict{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
-                                   VProd{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
-                                   VList{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
-                                   VPacked{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
-                                   VCursor{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
-                                   VLam{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v
+                               let new_off1 = off + sizeToInt sz
+                                   f v2 =
+                                     case v2 of
+                                       VInt i -> ( insertAtBuffer off (SerInt i) acc , new_off1 )
+                                       VFloat{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
+                                       VSym{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
+                                       VBool{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
+                                       -- This is a packed value, and it must already
+                                       -- be written to the buffer (by the thing that
+                                       -- returned this). So we just update the offset
+                                       -- to point to the end of this value.
+                                       VLoc{} -> ( acc , new_off1 )
+                                       VPtr buf_id off1 -> ( insertAtBuffer off (SerPtr buf_id off1) acc, new_off1)
+                                       VDict{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
+                                       VProd{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
+                                       VList{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
+                                       VPacked{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
+                                       VCursor{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
+                                       VLam{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
+                                       VWrapId _id2 v3 -> f v3
+                               in f v
                           )
                           (bufWithTag, offset+1)
                           (zip vals tys)
@@ -242,7 +216,9 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
         PrimAppE p args -> do
             (args',_) <- unzip <$> mapM (go env sizeEnv) args
             case byteSizeOfTy (primRetTy p) of
-              Just sz -> return (L1.applyPrim rc p args', SOne sz)
+              Just sz -> do
+                  val <- L1.applyPrim rc p args'
+                  pure (val, SOne sz)
               Nothing -> error $ "L2.Interp: Couldn't guess the size: " ++ sdoc ex
 
         IfE a b c -> do (v,_) <- go env sizeEnv a
@@ -303,7 +279,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
 -}
 
 interpExt :: SizeEnv -> RunConfig -> ValEnv Exp2 -> DDefs Ty2 -> M.Map Var (FunDef Exp2)
-           -> E2Ext LocVar Ty2 -> WriterT InterpLog StoreM (Value Exp2, Size)
+           -> E2Ext LocVar Ty2 -> InterpM Store Exp2 (Value Exp2, Size)
 interpExt sizeEnv rc env ddefs fenv ext =
   case ext of
     LetRegionE reg bod -> do
@@ -373,10 +349,10 @@ newtype Store = Store (M.Map Var Buffer)
 emptyStore :: Store
 emptyStore = Store M.empty
 
-insertIntoStore :: MonadState Store m => Var -> Buffer -> m ()
+insertIntoStore :: Var -> Buffer -> InterpM Store Exp2 ()
 insertIntoStore v buf = modify (\(Store x) -> Store (M.insert v buf x))
 
-lookupInStore :: MonadState Store m => Var -> m (Maybe Buffer)
+lookupInStore :: Var -> InterpM Store Exp2 (Maybe Buffer)
 lookupInStore v = do
   Store store <- get
   return $ M.lookup v store

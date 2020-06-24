@@ -12,6 +12,7 @@ import qualified Data.ByteString.Lazy.Char8 as B
 import           Data.Char ( ord )
 import           Control.DeepSeq
 import           Control.Monad
+import           Control.Monad.State
 import           Control.Monad.Writer
 import           Data.List as L
 import qualified Data.Map as M
@@ -29,64 +30,57 @@ interpChatter = 7
 
 ------------------------------------------------------------
 
-instance InterpExt Exp1 (E1Ext () Ty1) where
-  gInterpExt rc valenv ddefs fundefs ex = do
-    (res,logs) <- runWriterT interpExt1
-    pure (res, toLazyByteString logs)
-    where
-      interpExt1 :: WriterT InterpLog IO (Value Exp1)
-      interpExt1 =
-        case ex of
+instance InterpExt () Exp1 (E1Ext () Ty1) where
+  gInterpExt rc valenv ddefs fundefs ex =
+      case ex of
           BenchE fn locs args _b -> interp rc valenv ddefs fundefs (AppE fn locs args)
           AddFixed{} -> error "L1.Interp: AddFixed not handled."
 
-instance Interp Exp1 where
-  gInterpExp rc valenv ddefs fundefs e = do
-    (res,logs) <- runWriterT (interp rc valenv ddefs fundefs e)
-    pure (res, toLazyByteString logs)
+instance Interp () Exp1 where
+  gInterpExp = interp
 
-instance InterpProg Exp1 where
-  gInterpProg = interpProg
+instance InterpProg () Exp1 where
+  gInterpProg _s = interpProg
 
 -- | Interpret a program, including printing timings to the screen.
 --   The returned bytestring contains that printed timing info.
-interpProg :: Interp e =>  RunConfig -> Prog e -> IO (Value e, B.ByteString)
+interpProg :: Interp () e => RunConfig -> Prog e -> IO ((), Value e, B.ByteString)
 interpProg rc Prog{ddefs,fundefs,mainExp} =
   case mainExp of
     -- Print nothing, return "void"
-    Nothing -> return (VProd [], B.empty)
+    Nothing -> return ((), VProd [], B.empty)
     Just (e,_) -> do
       let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
-      -- logs contains print side effects
-      gInterpExp rc M.empty ddefs fenv e
+      (v,logs,_) <- runInterpM (gInterpExp rc M.empty ddefs fenv e) ()
+      pure ((), v, toLazyByteString logs)
 
-interp :: forall e l d.
+interp :: forall e l d s.
           (Show l, Ord l, NFData l, Out l,
            Show d, NFData d, Out d, Ord d,
-           Ord (e l d), Out (e l d), NFData (e l d), Show (e l d),
-           InterpExt (PreExp e l d) (e l d))
+           Ord (e l d), NFData (e l d),
+           InterpExt s (PreExp e l d) (e l d))
        => RunConfig
        -> ValEnv (PreExp e l d)
        -> DDefs (TyOf (PreExp e l d))
        -> FunDefs (PreExp e l d)
        -> (PreExp e l d)
-       -> WriterT InterpLog IO (Value (PreExp e l d))
+       -> InterpM s (PreExp e l d) (Value (PreExp e l d))
 interp rc valenv ddefs fenv = go valenv
   where
     {-# NOINLINE goWrapper #-}
-    goWrapper !_ix env ex = go env ex
+    goWrapper env !_ix ex = go env ex
 
-    go :: ValEnv (PreExp e l d) -> (PreExp e l d) -> WriterT InterpLog IO (Value (PreExp e l d))
-    go env x0 =
+    go :: ValEnv (PreExp e l d) -> (PreExp e l d) -> InterpM s (PreExp e l d) (Value (PreExp e l d))
+    go env x0 = do
         case x0 of
           Ext ext -> do
-            (val, _bs) <- lift $ gInterpExt rc env ddefs fenv ext
-            return $ val
+              gInterpExt rc env ddefs fenv ext
 
           LitE c    -> return $ VInt c
           FloatE c  -> return $ VFloat c
           LitSymE s -> return $ VSym (fromVar s)
-          VarE v    -> return $ env # v
+          VarE v    -> do
+              return $ env # v
 
           -- -- Don't sort for now
           -- PrimAppE (VSortP{}) [ls,VarE fp] -> do
@@ -94,7 +88,7 @@ interp rc valenv ddefs fenv = go valenv
           --   applySortP env vals fp
 
           PrimAppE p ls -> do args <- mapM (go env) ls
-                              return $ applyPrim rc p args
+                              applyPrim rc p args
           ProjE ix ex   -> do VProd ls <- go env ex
                               return $ ls !!! ix
 
@@ -105,7 +99,9 @@ interp rc valenv ddefs fenv = go valenv
             case M.lookup f env of
               Nothing ->
                 case M.lookup f fenv of
-                  Just fn -> go (M.union (M.fromList (zip (funArgs fn) ls')) env) (funBody fn)
+                  Just fn -> do
+                      let env' = M.union (M.fromList (zip (funArgs fn) ls')) env
+                      go env' (funBody fn)
                   Nothing -> error $ "L1.Interp: unbound function in application: "++ndoc x0
               Just fn@(VLam args bod closed_env) ->
                 if length args /= length ls'
@@ -121,11 +117,11 @@ interp rc valenv ddefs fenv = go valenv
           CaseE x1 alts@((_sometag,_,_):_) -> do
                  v <- go env x1
                  case v of
-                   VPacked k ls2 ->
+                   VPacked k ls2 -> do
                        let vs = L.map fst prs
                            (_,prs,rhs) = lookup3 k alts
                            env' = M.union (M.fromList (zip vs ls2)) env
-                       in go env' rhs
+                       go env' rhs
                    _ -> error$ "L1.Interp: type error, expected data constructor, got: "++ndoc v++
                                "\nWhen evaluating scrutinee of case expression: "++ndoc x1
 
@@ -145,7 +141,7 @@ interp rc valenv ddefs fenv = go valenv
               let iters = if isIter then rcIters rc else 1
               !_ <- return $! force env
               st <- liftIO $ getTime clk
-              val <- foldM (\ _ i -> goWrapper i env bod)
+              val <- foldM (\ _ i -> goWrapper env i bod)
                             (error "Internal error: this should be unused.")
                          [1..iters]
               en <- liftIO $ getTime clk
@@ -161,8 +157,9 @@ interp rc valenv ddefs fenv = go valenv
           SpawnE f locs args -> go env (AppE f locs args)
           SyncE -> pure $ VInt (-1)
 
-          WithArenaE v e -> let env' = M.insert v (VInt 0) env
-                            in go env' e
+          WithArenaE v e -> do
+              let env' = M.insert v (VInt 0) env
+              go env' e
 
           IfE a b c -> do v <- go env a
                           case v of
@@ -173,82 +170,93 @@ interp rc valenv ddefs fenv = go valenv
 
           MapE _ _bod    -> error "L1.Interp: finish MapE"
           FoldE _ _ _bod -> error "L1.Interp: finish FoldE"
-    _applySortP :: ValEnv (PreExp e l d) -> [(Value (PreExp e l d))] -> Var -> WriterT InterpLog IO (Value (PreExp e l d))
-    _applySortP env ls f = do
-      let fn  = case M.lookup f fenv of
-                  Just fun -> fun
-                  Nothing -> error $ "L1.Interp: unbound function given to vsort: "++ndoc f
-          ls' = sortBy
-                (\a b ->
-                     let env' = M.union (M.fromList (zip (funArgs fn) [a,b])) env
-                         (i,_) =
-                           unsafePerformIO $ (runWriterT (go env' (funBody fn)))
-                         VInt j = i
-                     in compare j 0)
-                ls
-      pure (VList ls')
+
+    -- _applySortP :: ValEnv (PreExp e l d) -> [(Value (PreExp e l d))] -> Var -> WriterT InterpLog IO (Value (PreExp e l d))
+    -- _applySortP env ls f = do
+    --   let fn  = case M.lookup f fenv of
+    --               Just fun -> fun
+    --               Nothing -> error $ "L1.Interp: unbound function given to vsort: "++ndoc f
+    --       ls' = sortBy
+    --             (\a b ->
+    --                  let env' = M.union (M.fromList (zip (funArgs fn) [a,b])) env
+    --                      (i,_) =
+    --                        unsafePerformIO $ (runWriterT (go env' (funBody fn)))
+    --                      VInt j = i
+    --                  in compare j 0)
+    --             ls
+    --   pure (VList ls')
 
 
 applyPrim :: (Show ty, Ord l, Out l, Show l, Show d, Out d, Ord d,  Ord (e l d), Out (e l d), Show (e l d))
-          => RunConfig -> Prim ty -> [(Value (PreExp e l d))] -> (Value (PreExp e l d))
+          => RunConfig -> Prim ty -> [(Value (PreExp e l d))] -> InterpM s (PreExp e l d) (Value (PreExp e l d))
 applyPrim rc p args =
  case (p,args) of
-   (MkTrue,[])             -> VBool True
-   (MkFalse,[])            -> VBool False
+   (MkTrue,[])             -> pure $ VBool True
+   (MkFalse,[])            -> pure $ VBool False
    -- FIXME: randomIO does not guarentee unique numbers every time.
-   (Gensym, [])            -> VSym $ "gensym_" ++ (show $ (unsafePerformIO randomIO :: Int) `mod` 1000)
-   (AddP,[VInt x, VInt y]) -> VInt (x+y)
-   (SubP,[VInt x, VInt y]) -> VInt (x-y)
-   (MulP,[VInt x, VInt y]) -> VInt (x*y)
-   (DivP,[VInt x, VInt y]) -> VInt (x `quot` y)
-   (ModP,[VInt x, VInt y]) -> VInt (x `rem` y)
-   (ExpP,[VInt x, VInt y]) -> VInt (x ^ y)
-   (FAddP,[VFloat x, VFloat y]) -> VFloat (x+y)
-   (FSubP,[VFloat x, VFloat y]) -> VFloat (x-y)
-   (FMulP,[VFloat x, VFloat y]) -> VFloat (x*y)
-   (FDivP,[VFloat x, VFloat y]) -> VFloat (x / y)
-   (FExpP,[VFloat x, VFloat y]) -> VFloat (x ** y)
+   (Gensym, [])            -> pure $ VSym $ "gensym_" ++ (show $ (unsafePerformIO randomIO :: Int) `mod` 1000)
+   (AddP,[VInt x, VInt y]) -> pure $ VInt (x+y)
+   (SubP,[VInt x, VInt y]) -> pure $ VInt (x-y)
+   (MulP,[VInt x, VInt y]) -> pure $ VInt (x*y)
+   (DivP,[VInt x, VInt y]) -> pure $ VInt (x `quot` y)
+   (ModP,[VInt x, VInt y]) -> pure $ VInt (x `rem` y)
+   (ExpP,[VInt x, VInt y]) -> pure $ VInt (x ^ y)
+   (FAddP,[VFloat x, VFloat y]) -> pure $ VFloat (x+y)
+   (FSubP,[VFloat x, VFloat y]) -> pure $ VFloat (x-y)
+   (FMulP,[VFloat x, VFloat y]) -> pure $ VFloat (x*y)
+   (FDivP,[VFloat x, VFloat y]) -> pure $ VFloat (x / y)
+   (FExpP,[VFloat x, VFloat y]) -> pure $ VFloat (x ** y)
    -- Constrained to the value of RAND_MAX (in C) on my laptop: 2147483647 (2^31 − 1)
-   (RandP,[]) -> VInt $ (unsafePerformIO randomIO) `mod` 2147483647
-   (FRandP,[]) -> VFloat $ (unsafePerformIO randomIO) / 2147483647
-   (IntToFloatP,[VInt x]) -> VFloat (fromIntegral x)
-   (FloatToIntP,[VFloat x]) -> VInt (round x)
-   (FSqrtP,[VFloat x]) -> VFloat (sqrt x)
-   (SymAppend,[VInt x, VInt y]) -> VInt (x * (strToInt $ show y))
-   (EqSymP,[VSym x, VSym y]) -> VBool (x==y)
-   (EqIntP,[VInt x, VInt y]) -> VBool (x==y)
-   (EqFloatP,[VFloat x, VFloat y]) -> VBool (x==y)
-   (LtP,[VInt x, VInt y]) -> VBool (x < y)
-   (GtP,[VInt x, VInt y]) -> VBool (x > y)
-   (LtEqP,[VInt x, VInt y]) -> VBool (x <= y)
-   (GtEqP,[VInt x, VInt y]) -> VBool (x >= y)
-   (FLtP,[VFloat x, VFloat y]) -> VBool (x < y)
-   (FGtP,[VFloat x, VFloat y]) -> VBool (x > y)
-   (FLtEqP,[VFloat x, VFloat y]) -> VBool (x <= y)
-   (FGtEqP,[VFloat x, VFloat y]) -> VBool (x >= y)
-   (AndP, [VBool x, VBool y]) -> VBool (x && y)
-   (OrP, [VBool x, VBool y])  -> VBool (x || y)
-   ((DictInsertP _ty),[_, VDict mp, key, val]) -> VDict (M.insert key val mp)
-   ((DictLookupP _),[VDict mp, key])        -> mp # key
-   ((DictHasKeyP _),[VDict mp, key])        -> VBool (M.member key mp)
-   ((DictEmptyP _),[_])                      -> VDict M.empty
-   ((ErrorP msg _ty),[]) -> error msg
-   (SizeParam,[]) -> VInt (rcSize rc)
-   (IsBig,[_one,_two]) -> VBool False
+   (RandP,[]) -> do
+       i <- liftIO $ randomIO
+       pure $ VInt $ i `mod` 2147483647
+   (FRandP,[]) -> do
+       i <- liftIO $ randomIO
+       pure $ VFloat i
+   (IntToFloatP,[VInt x]) -> pure $ VFloat (fromIntegral x)
+   (FloatToIntP,[VFloat x]) -> pure $ VInt (round x)
+   (FSqrtP,[VFloat x]) -> pure $ VFloat (sqrt x)
+   (SymAppend,[VInt x, VInt y]) -> pure $ VInt (x * (strToInt $ show y))
+   (EqSymP,[VSym x, VSym y]) -> pure $ VBool (x==y)
+   (EqIntP,[VInt x, VInt y]) -> pure $ VBool (x==y)
+   (EqFloatP,[VFloat x, VFloat y]) -> pure $ VBool (x==y)
+   (LtP,[VInt x, VInt y]) -> pure $ VBool (x < y)
+   (GtP,[VInt x, VInt y]) -> pure $ VBool (x > y)
+   (LtEqP,[VInt x, VInt y]) -> pure $ VBool (x <= y)
+   (GtEqP,[VInt x, VInt y]) -> pure $ VBool (x >= y)
+   (FLtP,[VFloat x, VFloat y]) -> pure $ VBool (x < y)
+   (FGtP,[VFloat x, VFloat y]) -> pure $ VBool (x > y)
+   (FLtEqP,[VFloat x, VFloat y]) -> pure $ VBool (x <= y)
+   (FGtEqP,[VFloat x, VFloat y]) -> pure $ VBool (x >= y)
+   (AndP, [VBool x, VBool y]) -> pure $ VBool (x && y)
+   (OrP, [VBool x, VBool y])  -> pure $ VBool (x || y)
+   ((DictInsertP _ty),[_, VDict mp, key, val]) -> pure $ VDict (M.insert key val mp)
+   ((DictLookupP _),[VDict mp, key])        -> pure $ mp # key
+   ((DictHasKeyP _),[VDict mp, key])        -> pure $ VBool (M.member key mp)
+   ((DictEmptyP _),[_])                     -> pure $ VDict M.empty
+   ((ErrorP msg _ty),[]) -> pure $ error msg
+   (SizeParam,[]) -> pure $ VInt (rcSize rc)
+   (IsBig,[_one,_two]) -> pure $ VBool False
    (ReadPackedFile file _ _ ty,[]) ->
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
-   (ReadArrayFile{},[]) -> VList []
-   (VAllocP _,_n) -> VList []
-   (VLengthP _,[VList ls]) -> VInt (length ls)
-   (VNthP _,[VList ls, VInt n]) -> VInt 10 -- ls !!! n
-   -- (InplaceVUpdateP _,[VList ls, VInt i, v]) -> if length ls < i
-   --                                              then
-   --                                                let need = i - (length ls)
-   --                                                    ls' = ls ++ (replicate need v)
-   --                                                in VList ls'
-   --                                              else VList (replaceNth i v ls)
-   (VSliceP _,[VList ls, VInt from, VInt to]) ->
-     VList (L.take (to - from + 1) (L.drop from ls))
+   (ReadArrayFile{},[]) -> do
+       vid <- liftIO $ randomIO
+       pure $ VWrapId vid (VList [])
+   (VAllocP _,_n) -> do
+       vid <- liftIO $ randomIO
+       pure $ VWrapId vid (VList [])
+   (VLengthP _,[VWrapId _vid (VList ls)]) -> pure $ VInt (length ls)
+   (VNthP _,[VWrapId _vid (VList ls), VInt n]) -> pure $ ls !!! n
+   (InplaceVUpdateP _,[VWrapId vid (VList ls), VInt i, v]) -> do
+       let ls' = if length ls < i
+                 then
+                     let need = (i+1) - (length ls)
+                     in VList $ ls ++ (replicate need v)
+                 else VList (replaceNth i v ls)
+       pure (VWrapId vid ls')
+   (VSliceP _,[VWrapId _vid (VList ls), VInt from, VInt to]) -> do
+       vid2 <- liftIO $ randomIO
+       pure $ VWrapId vid2 $ VList (L.take (to - from + 1) (L.drop from ls))
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
   where
@@ -257,6 +265,7 @@ applyPrim rc p args =
      replaceNth n newVal (x:xs)
        | n == 0 = newVal:xs
        | otherwise = x:replaceNth (n-1) newVal xs
+
 
 clk :: Clock
 clk = Monotonic

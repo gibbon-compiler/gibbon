@@ -1,13 +1,15 @@
-{-# LANGUAGE StandaloneDeriving    #-}
-{-# LANGUAGE DeriveTraversable     #-}
-{-# LANGUAGE DeriveAnyClass        #-}
-{-# LANGUAGE FlexibleContexts      #-}
-{-# LANGUAGE FlexibleInstances     #-}
-{-# LANGUAGE UndecidableInstances  #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE CPP                   #-}
-{-# LANGUAGE ConstraintKinds       #-}
-{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE StandaloneDeriving         #-}
+{-# LANGUAGE DeriveTraversable          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DeriveAnyClass             #-}
+{-# LANGUAGE DerivingStrategies         #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE UndecidableInstances       #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE CPP                        #-}
+{-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE TemplateHaskell            #-}
 
 module Gibbon.Language.Syntax
   (
@@ -42,11 +44,15 @@ module Gibbon.Language.Syntax
   , HasRenamable, HasOut, HasShow, HasEq, HasGeneric, HasNFData
 
   , -- * Interpreter
-    Interp(..), InterpExt(..), InterpProg(..), Value(..), ValEnv, InterpLog, execAndPrint
+    Interp(..), InterpExt(..), InterpProg(..), Value(..), ValEnv, InterpLog,
+    InterpM, runInterpM, execAndPrint
 
   ) where
 
 import           Control.DeepSeq
+import           Control.Monad.State
+import           Control.Monad.Writer
+import           Control.Monad.Fail
 import qualified Data.Map as M
 import           Data.List as L
 import qualified Data.Set as S
@@ -589,28 +595,42 @@ type HasNFData ex = (NFData ex, NFData (TyOf ex), NFData (ArrowTy (TyOf ex)))
 -- Things which can be interpreted to yield a final, printed value.
 --------------------------------------------------------------------------------
 
+type ValEnv e = M.Map Var (Value e)
+type InterpLog = Builder
+
+newtype InterpM s e a = InterpM { unInterpM ::  WriterT InterpLog (StateT s IO) a }
+    deriving newtype (Functor, Applicative, Monad, MonadState s, MonadIO, MonadWriter InterpLog)
+
+instance MonadFail (InterpM a b) where
+    fail = error
+
+runInterpM :: InterpM s e a -> s -> IO (a, InterpLog, s)
+runInterpM m s = do
+    ((v,logs), s1) <- runStateT (runWriterT (unInterpM m)) s
+    pure (v, logs, s1)
+
 -- | Pure Gibbon programs, at any stage of compilation, should always
 -- be evaluatable to a unique value.  The only side effects are timing.
-class Expression e => Interp e where
-  gInterpExp :: RunConfig -> ValEnv e -> DDefs (TyOf e) -> FunDefs e -> e -> IO (Value e, B.ByteString)
+class Expression e => Interp s e where
+  gInterpExp :: RunConfig -> ValEnv e -> DDefs (TyOf e) -> FunDefs e -> e -> InterpM s e (Value e)
 
-class Expression e => InterpExt e ext where
-  gInterpExt :: RunConfig -> ValEnv e -> DDefs (TyOf e) -> FunDefs e -> ext -> IO (Value e, B.ByteString)
+class (Expression e, Expression ext) => InterpExt s e ext where
+  gInterpExt :: RunConfig -> ValEnv e -> DDefs (TyOf e) -> FunDefs e -> ext -> InterpM s e (Value e)
 
-class Interp e => InterpProg e where
+class Interp s e => InterpProg s e where
   {-# MINIMAL gInterpProg #-}
-  gInterpProg :: RunConfig -> Prog e -> IO (Value e, B.ByteString)
+  gInterpProg :: s -> RunConfig -> Prog e -> IO (s, Value e, B.ByteString)
 
   -- | Interpret while ignoring timing constructs, and dropping the
   -- corresponding output to stdout.
-  gInterpNoLogs :: RunConfig -> Prog e -> String
-  gInterpNoLogs rc p = unsafePerformIO $ show . fst <$> gInterpProg rc p
+  gInterpNoLogs :: s -> RunConfig -> Prog e -> String
+  gInterpNoLogs s rc p = unsafePerformIO $ show . snd3 <$> gInterpProg s rc p
 
   -- | Interpret and produce a "log" of output lines, as well as a
   -- final, printed result.  The output lines include timing information.
-  gInterpWithStdout :: RunConfig -> Prog e -> IO (String,[String])
-  gInterpWithStdout rc p = do
-    (res,logs) <- gInterpProg rc p
+  gInterpWithStdout :: s -> RunConfig -> Prog e -> IO (String,[String])
+  gInterpWithStdout s rc p = do
+    (_s1,res,logs) <- gInterpProg s rc p
     return (show res, lines (B.unpack logs))
 
 
@@ -628,6 +648,10 @@ data Value e = VInt Int
              | VPtr { bufID :: Var, offset :: Int }
                -- ^ Cursor are a pointer into the Store plus an offset into the Buffer.
              | VLam [Var] e (ValEnv e)
+             | VWrapId Int (Value e)
+               -- ^ A wrapper for vectors that wraps the value with an "id".
+               -- All Inplace* operations use this "id" to update the value
+               -- in 'ValEnv'.
   deriving (Read,Eq,Ord,Generic)
 
 instance Out e => Out (Value e)
@@ -652,13 +676,11 @@ instance Show e => Show (Value e) where
    VCursor idx off -> "<cursor "++show idx++", "++show off++">"
    VPtr idx off -> "<ptr "++show idx++", "++show off++">"
    VLam args bod env -> "(Clos (lambda (" ++ concat (map ((++" ") . show) args) ++ ") " ++ show bod ++ ") #{" ++ show env ++ "})"
+   VWrapId vid val -> "(id: " ++ show vid ++ " " ++ show val ++ ")"
 
-type ValEnv e = M.Map Var (Value e)
-type InterpLog = Builder
-
-execAndPrint :: (InterpProg ex) => RunConfig -> Prog ex -> IO ()
-execAndPrint rc prg = do
-  (val,logs) <- gInterpProg rc prg
+execAndPrint :: (InterpProg s ex) => s -> RunConfig -> Prog ex -> IO ()
+execAndPrint s rc prg = do
+  (_s1,val,logs) <- gInterpProg s rc prg
   B.putStr logs
   case val of
     -- Special case: don't print void return:

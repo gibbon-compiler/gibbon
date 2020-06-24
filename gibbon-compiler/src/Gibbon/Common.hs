@@ -23,7 +23,7 @@ module Gibbon.Common
        , RunConfig(..), getRunConfig, defaultRunConfig, getGibbonConfig
 
          -- * Misc helpers
-       , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv, lookup3
+       , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv, lookup3, fst3, snd3
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
@@ -348,6 +348,13 @@ lookup3 k ls = go ls
    go ((k1,a1,b1):r)
       | k1 == k   = (k1,a1,b1)
       | otherwise = go r
+
+fst3 :: (a,b,c) -> a
+fst3 (a,_,_) = a
+
+snd3 :: (a,b,c) -> b
+snd3 (_,b,_) = b
+
 
 --------------------------------------------------------------------------------
 -- DEBUGGING
