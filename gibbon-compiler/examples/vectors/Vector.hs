@@ -10,7 +10,7 @@ module Vector where
 
 fib_seq :: Int -> Int
 fib_seq n =
-    if n == 0
+    if n <= 0
     then 0
     else if n == 1
     then 1
@@ -20,7 +20,7 @@ fib_seq n =
         in x + y
 
 gibbon_main =
-    let lam = (\i -> fib_seq 20)
-        vec = iterate (vgenerate_par 500 50000 lam)
-        vec2 = iterate (vgenerate 50000 lam)
-    in vnth vec 10
+    let lam = (\i -> if i > 10 then fib_seq 10 else fib_seq i)
+        vec = iterate (vgenerate_par 500 50 lam)
+        vec2 = iterate (vgenerate 50 lam)
+    in vnth vec 20

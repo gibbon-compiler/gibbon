@@ -53,7 +53,8 @@ stdLibrary = do
     parseString <$> readFile stdlibPath
 
 parseMode :: ParseMode
-parseMode = defaultParseMode { extensions = [EnableExtension ScopedTypeVariables]
+parseMode = defaultParseMode { extensions = [ EnableExtension ScopedTypeVariables
+                                            , EnableExtension CPP ]
                                             ++ (extensions defaultParseMode)
                              }
 

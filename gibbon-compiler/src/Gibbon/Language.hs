@@ -648,9 +648,9 @@ primRetTy p =
     VLengthP _elty -> IntTy
     VNthP elty     -> elty
     VSliceP elty   -> VectorTy elty
-    InplaceVUpdateP _elty -> voidTy
+    InplaceVUpdateP elty -> VectorTy elty
     VSortP elty -> VectorTy elty
-    InplaceVSortP _elty -> voidTy
+    InplaceVSortP elty -> VectorTy elty
     GetNumProcessors -> IntTy
     PrintInt -> IntTy
     PrintSym -> SymTy

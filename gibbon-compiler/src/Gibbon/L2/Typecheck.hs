@@ -439,9 +439,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                          _ -> err fn_ty
                      oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
-                 InplaceVSortP ty -> do
-                    (_ty, tstate2) <- recur tstatein (PrimAppE (VSortP ty) es)
-                    pure (voidTy, tstate2)
+                 InplaceVSortP ty -> recur tstatein (PrimAppE (VSortP ty) es)
 
                  GetNumProcessors -> do
                    len0

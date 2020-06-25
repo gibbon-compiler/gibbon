@@ -960,12 +960,12 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        [VarTriv ls] = rnds
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:v = vector_length($id:ls); |] ]
 
-                 InplaceVUpdateP _elty -> do
-                   let [(_outV,_)] = bnds
+                 InplaceVUpdateP elty -> do
+                   let [(outV,_)] = bnds
                        [VarTriv old_ls, i, x] = rnds
                        i' = codegenTriv venv i
                        x' = codegenTriv venv x
-                   return [ C.BlockStm [cstm| vector_inplace_update($id:old_ls, $exp:i', &$exp:x'); |] ]
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', &$exp:x'); |] ]
 
                  VSortP elty -> do
                    let [(outV,_)] = bnds

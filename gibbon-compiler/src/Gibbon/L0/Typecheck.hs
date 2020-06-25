@@ -358,7 +358,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           s2 <- unify (args !! 0) (VectorTy elty) ls
           s3 <- unify (args !! 1) IntTy i
           s4 <- unify (args !! 2) elty val
-          pure (s1 <> s2 <> s3 <> s4, ProdTy [], PrimAppE pr args_tc)
+          pure (s1 <> s2 <> s3 <> s4, VectorTy elty, PrimAppE pr args_tc)
 
         -- Given that the first argument is a list of type (VectorTy t),
         -- ensure that the 2nd argument is function reference of type:
@@ -373,10 +373,10 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           pure (s1 <> s2 <> s3, VectorTy elty, PrimAppE pr args_tc)
 
         InplaceVSortP elty -> do
-          (s2, _t, e) <- go (PrimAppE (VSortP elty) args)
+          (s2, t, e) <- go (PrimAppE (VSortP elty) args)
           case e of
             PrimAppE (VSortP t2) args2 ->
-              pure (s1 <> s2, voidTy0, PrimAppE (InplaceVSortP t2) args2)
+              pure (s1 <> s2, t, PrimAppE (InplaceVSortP t2) args2)
             _ -> err $ text "InPlaceVSortP"
 
         GetNumProcessors -> do

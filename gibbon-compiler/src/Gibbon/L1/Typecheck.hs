@@ -359,7 +359,7 @@ tcExp ddfs env exp =
           _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls
           _ <- ensureEqualTy (es !! 1) IntTy i
           _ <- ensureEqualTy (es !! 2) elty x
-          pure voidTy
+          pure (VectorTy elty)
 
         -- Given that the first argument is a list of type (VectorTy t),
         -- ensure that the 2nd argument is function reference of type:
@@ -381,9 +381,7 @@ tcExp ddfs env exp =
                 _ -> err fn_ty
             oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
-        InplaceVSortP ty -> do
-          _ <- go (PrimAppE (VSortP ty) es)
-          pure voidTy
+        InplaceVSortP ty -> go (PrimAppE (VSortP ty) es)
 
         GetNumProcessors -> do
           len0

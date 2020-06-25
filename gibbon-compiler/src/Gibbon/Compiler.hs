@@ -210,8 +210,8 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
 
   case mode of
     Interp1 -> do
-        dbgTrace passChatterLvl ("\nParsed:"++sepline++ "\n" ++ sdoc l0) (pure ())
-        dbgTrace passChatterLvl ("\nTypechecked:"++sepline++ "\n" ++ pprender initTypeChecked) (pure ())
+        dbgTrace passChatterLvl ("\nParsed:\n"++sepline++ "\n" ++ sdoc l0) (pure ())
+        dbgTrace passChatterLvl ("\nTypechecked:\n"++sepline++ "\n" ++ pprender initTypeChecked) (pure ())
         _ <- withPrintInterpProg initTypeChecked
         pure ()
 

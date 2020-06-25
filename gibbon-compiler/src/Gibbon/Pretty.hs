@@ -201,8 +201,9 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       VLengthP{} -> text "vlength"
                                       VNthP{}    -> text "vnth"
                                       VSliceP{}   -> text "vslice"
-                                      InplaceVUpdateP{} -> text "vupdate"
+                                      InplaceVUpdateP{} -> text "inplacevupdate"
                                       VSortP{}   -> text "vsort"
+                                      InplaceVSortP{} -> text "inplacevsort"
                                       ReadArrayFile mb_fp ty ->
                                         text "readArrayFile " <+> parens (text $ pretty mb_fp) <+> pprintWithStyle sty ty
                                       _ -> error $ "pprint: Unknown primitive: " ++ show pr

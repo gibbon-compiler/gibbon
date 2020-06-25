@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fdefer-typed-holes #-}
 
 -- A standard library for Gibbon
@@ -8,26 +9,28 @@
 
 {-
 
+#if MIN_VERSION_GLASGOW_HASKELL(8,6,5,0)
+
 -- Built-ins. Uncomment this block in order to load this file in GHCi.
 
 data Vector a = Vector
 
-v_alloc :: Int -> Vector a
-v_alloc = _builtin
+valloc :: Int -> Vector a
+valloc = _builtin
 
-v_length :: Vector a -> Int
-v_length = _builtin
+vlength :: Vector a -> Int
+vlength = _builtin
 
-v_nth :: Vector a -> Int -> a
-v_nth = _builtin
+vnth :: Vector a -> Int -> a
+vnth = _builtin
 
-v_slice :: Int -- Starting index
+vslice :: Int -- Starting index
         -> Int -- length
         -> Vector a -> Vector a
-v_slice = _builtin
+vslice = _builtin
 
-v_unsafe_update :: Vector a -> Int -> a -> ()
-v_unsafe_update = _builtin
+inplacevupdate :: Vector a -> Int -> a -> Vector a
+inplacevupdate = _builtin
 
 numCapabilities :: Int
 numCapabilities = _builtin
@@ -44,15 +47,17 @@ spawn = _builtin
 sync :: ()
 sync = ()
 
+#endif
+
 -}
 
 --------------------------------------------------------------------------------
 
-max :: Int -> Int -> Int
-max a b = if a > b then a else b
+maxInt :: Int -> Int -> Int
+maxInt a b = if a > b then a else b
 
-min :: Int -> Int -> Int
-min a b = if a < b then a else b
+minInt :: Int -> Int -> Int
+minInt a b = if a < b then a else b
 
 --------------------------------------------------------------------------------
 
@@ -72,44 +77,44 @@ visEmpty vec = vlength vec == 0
 --         m'  = max 0 (len - n')
 --     in (v_slice 0 m vec, v_slice m m' vec)
 
-v_generate_loop :: Vector a -> Int -> Int -> (Int -> a) -> Int
+v_generate_loop :: Vector a -> Int -> Int -> (Int -> a) -> Vector a
 v_generate_loop vec start end f =
     if start == end
-    then (-1)
+    then vec
     else
-      let _ = inplacevupdate vec start (f start)
-      in v_generate_loop vec (start+1) end f
+      let vec1 = inplacevupdate vec start (f start)
+      in v_generate_loop vec1 (start+1) end f
 
 -- Work: O(n)
 -- Span: O(n)
 vgenerate :: Int -> (Int -> a) -> Vector a
 vgenerate n f =
-    let vec :: Vector a
-        vec = valloc n
-        n'  = max n 0
-        _   = v_generate_loop vec 0 n' f
-    in vec
+    let n'  = maxInt n 0
+        vec :: Vector a
+        vec = valloc n'
+        vec1  = v_generate_loop vec 0 n' f
+    in vec1
 
-v_generate_par_loop :: Int -> Vector a -> Int -> Int -> (Int -> a) -> Int
+v_generate_par_loop :: Int -> Vector a -> Int -> Int -> (Int -> a) -> Vector a
 v_generate_par_loop cutoff vec start end f =
     if (end - start) <= cutoff
     then v_generate_loop vec start end f
     else
-      let mid = div (start + end) 2
-          _   = spawn (v_generate_par_loop cutoff vec start mid f)
-          _   = v_generate_par_loop cutoff vec mid end f
-          _   = sync
-      in (-1)
+      let mid  = div (start + end) 2
+          vec1 = spawn (v_generate_par_loop cutoff vec start mid f)
+          vec2 = v_generate_par_loop cutoff vec1 mid end f
+          _    = sync
+      in vec2
 
 -- Work: O(n)
 -- Span: O(1)
 vgenerate_par :: Int -> Int -> (Int -> a) -> Vector a
 vgenerate_par cutoff n f =
-    let vec :: Vector a
-        vec = valloc n
-        n'  = max n 0
-        _ = v_generate_par_loop cutoff vec 0 n f
-    in vec
+    let n'  = maxInt n 0
+        vec :: Vector a
+        vec  = valloc n'
+        vec1 = v_generate_par_loop cutoff vec 0 n' f
+    in vec1
 
 -- v_select :: Vector a -> Vector a -> Int -> a
 -- v_select v1 v2 i =
