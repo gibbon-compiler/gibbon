@@ -1,11 +1,12 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase       #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards  #-}
 
 module Gibbon.HaskellFrontend
   ( parseFile, primMap, multiArgsToOne ) where
 
 import           Data.Foldable ( foldrM )
-import           Data.Maybe (catMaybes)
+import           Data.Maybe (catMaybes, isJust)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           Language.Haskell.Exts.Extension
@@ -15,6 +16,7 @@ import           Language.Haskell.Exts.Pretty
 import           Language.Haskell.Exts.SrcLoc
 import           System.Environment ( getEnvironment )
 import           System.Directory
+import           System.FilePath
 import           Control.Monad
 
 import           Gibbon.L0.Syntax as L0
@@ -22,35 +24,52 @@ import           Gibbon.Common
 
 --------------------------------------------------------------------------------
 
+{-
+
+Importing modules:
+~~~~~~~~~~~~~~~~~~
+
+We use the same notion of search paths as GHC[1], except that GHC also has a
+set of "known" packages (base, containers, etc.) where it looks for modules.
+Gibbon doesn't have those, and the rootset for our search is a singleton {"."}.
+Consider this directory structure:
+    .
+    |── A
+    |   └── B
+    |       |── C.hs
+    |       |── D.hs
+    |       |── Foo.hs
+    |── Bar.hs
+
+If Bar.hs has a `import A.B.C`, we look for a file `./A/B/C.hs`. However, note
+that this design is much more primitive than what Cabal/Stack allow. Can A.B.C
+import A.B.D? It depends on where we invoke GHC from. If we do it from ".", then
+yes, because A.B.D exists at A/B/D.hs. But if we run "ghc C.hs", it will fail since
+it expects A.B.D to be at A/B/A/B/D.hs.
+
+[1] https://downloads.haskell.org/ghc/8.6.4/docs/html/users_guide/separate_compilation.html?#the-search-path
+
+-}
+
+
 parseFile :: FilePath -> IO (PassM Prog0)
 parseFile path = do
-    stdlib <- stdLibrary
-    prog <- parseString <$> readFile path
-    let combined = do
-          (Prog std_ddefs std_fundefs _) <- stdlib
-          (Prog ddefs fundefs mainExp) <- prog
-          let common_ddefs = M.intersection ddefs std_ddefs
-              common_funs  = M.intersection fundefs std_fundefs
+    -- stdlib <- importStdLibrary "TODO"
+    parseFile' [] path
+    -- let combined = do
+    --       (Prog std_ddefs std_fundefs _) <- stdlib
+    --       (Prog ddefs fundefs mainExp) <- prog
+    --       let common_ddefs = M.intersection ddefs std_ddefs
+    --           common_funs  = M.intersection fundefs std_fundefs
 
-          unless (M.null common_ddefs) $
-            error$ "HaskellFrontend:  "++ show (M.keys common_ddefs)
-                   ++ " is already defined in the standard library."
-          unless (M.null common_funs) $
-            error$ "HaskellFrontend:  "++ show (M.keys common_funs)
-                   ++ " is already defined in the standard library."
-          pure (Prog (M.union ddefs std_ddefs) (M.union fundefs std_fundefs) mainExp)
-    pure combined
-
-stdLibrary :: IO (PassM Prog0)
-stdLibrary = do
-    env <- getEnvironment
-    let stdlibPath = case lookup "GIBBONDIR" env of
-                    Just p -> p ++"/gibbon-compiler/stdlib.hs"
-                    Nothing -> "stdlib.hs" -- Assume we're running from the compiler dir!
-    e <- doesFileExist stdlibPath
-    unless e $ error$ "HaskellFrontend: stdlib.hs file not found at path: "++stdlibPath
-                     ++"\n Consider setting GIBBONDIR to repo root.\n"
-    parseString <$> readFile stdlibPath
+    --       unless (M.null common_ddefs) $
+    --         error$ " "++ show (M.keys common_ddefs)
+    --                ++ " is already defined in the standard library."
+    --       unless (M.null common_funs) $
+    --         error$ " "++ show (M.keys common_funs)
+    --                ++ " is already defined in the standard library."
+    --       pure (Prog (M.union ddefs std_ddefs) (M.union fundefs std_fundefs) mainExp)
+    -- pure combined
 
 parseMode :: ParseMode
 parseMode = defaultParseMode { extensions = [ EnableExtension ScopedTypeVariables
@@ -58,11 +77,12 @@ parseMode = defaultParseMode { extensions = [ EnableExtension ScopedTypeVariable
                                             ++ (extensions defaultParseMode)
                              }
 
-parseString :: String -> PassM Prog0
-parseString str = do
+parseFile' :: [String] -> FilePath -> IO (PassM Prog0)
+parseFile' import_route path = do
+  str <- readFile path
   let parsed = parseModuleWithMode parseMode str
   case parsed of
-    ParseOk hs -> pure $ fst $ defaultRunPassM (desugarModule hs)
+    ParseOk hs -> desugarModule import_route (takeDirectory path) hs
     ParseFailed _ er -> do
       error ("haskell-src-exts failed: " ++ er)
 
@@ -75,24 +95,42 @@ data TopLevel
 
 type TopTyEnv = TyEnv TyScheme
 
-desugarModule :: (Show a,  Pretty a) => Module a -> PassM Prog0
-desugarModule (Module _ head_mb _pragmas _imports decls) = do
+desugarModule :: (Show a,  Pretty a) => [String] -> FilePath -> Module a -> IO (PassM Prog0)
+desugarModule import_route dir (Module _ head_mb _pragmas imports decls) = do
   let -- Since top-level functions and their types can't be declared in
       -- single top-level declaration we first collect types and then collect
       -- definitions.
       funtys = foldr collectTopTy M.empty decls
-
-  toplevels <- catMaybes <$> mapM (collectTopLevel funtys) decls
-  let (defs,_vars,funs,main) = foldr classify init_acc toplevels
-  pure (Prog defs funs main)
+  imported_progs :: [PassM Prog0] <- mapM (processImport (mod_name : import_route) dir) imports
+  let prog = do
+        toplevels <- catMaybes <$> mapM (collectTopLevel funtys) decls
+        let (defs,_vars,funs,main) = foldr classify init_acc toplevels
+        imported_progs' <- mapM id imported_progs
+        let (defs0,funs0) =
+              foldr
+                (\Prog{ddefs,fundefs} (defs1,funs1) ->
+                     let ddef_names1 = M.keysSet defs1
+                         ddef_names2 = M.keysSet ddefs
+                         fn_names1 = M.keysSet funs1
+                         fn_names2 = M.keysSet fundefs
+                         em1 = S.intersection ddef_names1 ddef_names2
+                         em2 = S.intersection fn_names1 fn_names2
+                     in case (S.null em1, S.null em2) of
+                            (True, True) -> (M.union ddefs defs1,  M.union fundefs funs1)
+                            (False,_) -> error $ "Multiple definitions of " ++ show (S.toList em1) ++ " found in " ++ mod_name
+                            (_,False) -> error $ "Multiple definitions of " ++ show (S.toList em2) ++ " found in " ++ mod_name)
+                (defs, funs)
+                imported_progs'
+        pure (Prog defs0 funs0 main)
+  pure prog
   where
     init_acc = (M.empty, M.empty, M.empty, Nothing)
     mod_name = moduleName head_mb
 
     moduleName :: Maybe (ModuleHead a) -> String
-    moduleName Nothing = "Module404"
+    moduleName Nothing = "Main"
     moduleName (Just (ModuleHead _ mod_name1 _warnings _exports)) =
-      let (ModuleName _ name) = mod_name1 in name
+      mnameToStr mod_name1
 
     classify thing (defs,vars,funs,main) =
       case thing of
@@ -104,7 +142,63 @@ desugarModule (Module _ head_mb _pragmas _imports decls) = do
             Just _  -> error $ "A module cannot have two main expressions."
                                ++ show mod_name
         HAnnotation _a -> (defs, vars, funs, main)
-desugarModule m = error $ "desugarModule: " ++ prettyPrint m
+desugarModule _ _ m = error $ "desugarModule: " ++ prettyPrint m
+
+stdLibraryModules :: [String]
+stdLibraryModules = ["Gibbon.Vector"]
+
+processImport :: [String] -> FilePath -> ImportDecl a -> IO (PassM Prog0)
+processImport import_route dir decl@ImportDecl{..} = do
+    when (mod_name `elem` import_route) $
+      error $ "Circular dependency detected. Import path: "++ show (mod_name : import_route)
+    when (importQualified) $ error $ "Qualified imports not supported yet. Offending import: " ++  prettyPrint decl
+    when (isJust importAs) $ error $ "Module aliases not supported yet. Offending import: " ++  prettyPrint decl
+    when (isJust importSpecs) $ error $ "Selective imports not supported yet. Offending import: " ++  prettyPrint decl
+    prog <-  if mod_name `elem` stdLibraryModules
+               then importStdLibrary mod_name
+               else do
+                 mb_fp <- findModule dir importModule
+                 case mb_fp of
+                     Nothing -> error $ "Cannot find module: " ++
+                                        show mod_name ++ " in " ++ dir
+                     Just mod_fp -> parseFile' import_route mod_fp
+    pure prog
+  where
+    mod_name = mnameToStr importModule
+
+importStdLibrary :: String -> IO (PassM Prog0)
+importStdLibrary mod_name = do
+    env <- getEnvironment
+    let stdlibPath = case lookup "GIBBONDIR" env of
+                    Just p -> p </> "gibbon-compiler" </> modNameToFilename mod_name
+                    -- Assume we're running from the compiler dir!
+                    Nothing -> modNameToFilename mod_name
+    e <- doesFileExist stdlibPath
+    unless e $ error$ "stdlib.hs file not found at path: "++stdlibPath
+                     ++"\n Consider setting GIBBONDIR to repo root.\n"
+    parseFile' [] stdlibPath
+
+  where
+    modNameToFilename :: String -> String
+    modNameToFilename "Gibbon.Vector" = "stdlib" </> "Vector.hs"
+    modNameToFilename "Gibbon.Prelude" = "stdlib" </> "Prelude.hs"
+    modNameToFilename oth = error $ "Unknown module: " ++ oth
+
+-- | Look for a module on the filesystem.
+findModule :: FilePath -> ModuleName a -> IO (Maybe FilePath)
+findModule dir m = do
+  let mod_fp  = dir </> moduleNameToSlashes m <.> "hs"
+  doesFileExist mod_fp >>= \b ->
+    if b
+    then pure $ Just mod_fp
+    else pure Nothing
+
+-- | Returns the string version of the module name, with dots replaced by slashes.
+--
+moduleNameToSlashes :: ModuleName a -> String
+moduleNameToSlashes (ModuleName _ s) = dots_to_slashes s
+  where dots_to_slashes = map (\c -> if c == '.' then pathSeparator else c)
+
 
 builtinTys :: S.Set Var
 builtinTys = S.fromList $

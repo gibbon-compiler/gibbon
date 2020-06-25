@@ -290,6 +290,10 @@ tests:
   - name: Tuples.hs
     answer-file: examples/Tuples.hs.ans
 
+  - name: Foo.hs
+    dir: examples/imports/
+    answer-file: examples/imports/Foo.ans
+
   - name: NeedsClosure.hs
     dir: examples/poly
     answer-file: examples/poly/NeedsClosure.hs.ans
@@ -430,20 +434,20 @@ tests:
 
   ## Vector operations
   - name: Vector.hs
-    dir: examples/lists
-    answer-file: examples/lists/Vector.hs.ans
+    dir: examples/vectors
+    answer-file: examples/vectors/Vector.hs.ans
 
   - name: InPlaceVector.hs
-    dir: examples/lists
-    answer-file: examples/lists/Vector.hs.ans
+    dir: examples/vectors
+    answer-file: examples/vectors/Vector.hs.ans
 
   - name: Sort.hs
-    dir: examples/lists
-    answer-file: examples/lists/Sort.hs.ans
+    dir: examples/vectors
+    answer-file: examples/vectors/Sort.hs.ans
 
   - name: DataVector.hs
-    dir: examples/lists
-    answer-file: examples/lists/DataVector.hs.ans
+    dir: examples/vectors
+    answer-file: examples/vectors/DataVector.hs.ans
     failing: ["interp1"]
 
   ## AST benchmarks

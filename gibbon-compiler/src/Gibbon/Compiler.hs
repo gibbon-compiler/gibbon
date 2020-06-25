@@ -212,8 +212,10 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
     Interp1 -> do
         dbgTrace passChatterLvl ("\nParsed:\n"++sepline++ "\n" ++ sdoc l0) (pure ())
         dbgTrace passChatterLvl ("\nTypechecked:\n"++sepline++ "\n" ++ pprender initTypeChecked) (pure ())
-        _ <- withPrintInterpProg initTypeChecked
-        pure ()
+        runConf <- getRunConfig []
+        (_s1,val,_stdout) <- gInterpProg () runConf l0
+        print val
+
 
     ToParse -> dbgPrintLn 0 $ pprender l0
 
@@ -334,7 +336,7 @@ withPrintInterpProg l0 =
     -- FIXME: no command line option atm.  Just env vars.
     runConf <- getRunConfig []
     (_s1,val,_stdout) <- gInterpProg () runConf l0
-    dbgPrintLn 2 $ " [eval] Init prog evaluated to: "++show val
+    dbgPrintLn interpDbgLevel $ " [eval] Init prog evaluated to: "++show val
     return $ Just val
   else
     return Nothing

@@ -1,5 +1,7 @@
 module Vector where
 
+import Gibbon.Vector
+
 -- cmp1 :: (Int, Int) -> (Int, Int) -> Int
 -- cmp1 a b = (a !!! 0) - (b !!! 0)
 
