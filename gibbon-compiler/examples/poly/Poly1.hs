@@ -1,7 +1,5 @@
 module Poly1 where
 
-import Prelude hiding ( Maybe(..), Either (..), succ, not, foldr, map)
-
 data Maybe z = Nothing | Just z
   deriving Show
 

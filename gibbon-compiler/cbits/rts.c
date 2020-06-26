@@ -790,13 +790,15 @@ void* vector_nth(VectorTy *vec, IntTy i) {
     return (vec->data + (vec->elt_size * i));
 }
 
-void vector_inplace_update(VectorTy *vec, IntTy i, void* elt) {
+VectorTy* vector_inplace_update(VectorTy *vec, IntTy i, void* elt) {
     void* dst = vector_nth(vec, i);
     memcpy(dst, elt, vec->elt_size);
+    return vec;
 }
 
-void vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
+VectorTy* vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
     qsort(vec->data, vector_length(vec), vec->elt_size, compar);
+    return vec;
 }
 
 void vector_free(VectorTy *vec) {

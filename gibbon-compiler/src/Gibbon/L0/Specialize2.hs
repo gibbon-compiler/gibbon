@@ -147,7 +147,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         FloatE n  -> L1.FloatE n
         LitSymE v -> L1.LitSymE v
         AppE f [] args   -> AppE f [] (map toL1Exp args)
-        AppE _ (_:_) _   -> err1 (sdoc ex)
+        AppE{}   -> err1 (sdoc ex)
         PrimAppE pr args ->
           case pr of
             -- This is always going to have a function reference which
@@ -161,7 +161,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
                 _ -> PrimAppE (toL1Prim pr)(map toL1Exp args)
             _ -> PrimAppE (toL1Prim pr) (map toL1Exp args)
         LetE (v,[],ty,rhs) bod -> LetE (v,[], toL1Ty ty, toL1Exp rhs) (toL1Exp bod)
-        LetE (_,(_:_),_,_) _ -> err1 (sdoc ex)
+        LetE{} -> err1 (sdoc ex)
         IfE a b c  -> IfE (toL1Exp a) (toL1Exp b) (toL1Exp c)
         MkProdE ls -> MkProdE (map toL1Exp ls)
         ProjE i a  -> ProjE i (toL1Exp a)
@@ -169,10 +169,11 @@ toL1 Prog{ddefs, fundefs, mainExp} =
                                                                   map (\(x,_) -> (x,())) b,
                                                                   toL1Exp c) )
                                                     brs)
-        DataConE _ dcon ls -> DataConE () dcon (map toL1Exp ls)
+        DataConE (ProdTy []) dcon ls -> DataConE () dcon (map toL1Exp ls)
+        DataConE{} -> err1 (sdoc ex)
         TimeIt e ty b    -> TimeIt (toL1Exp e) (toL1Ty ty) b
-        SpawnE _ (_:_) _ -> err1 (sdoc ex)
         SpawnE f [] args -> SpawnE f [] (map toL1Exp args)
+        SpawnE{} -> err1 (sdoc ex)
         SyncE            -> SyncE
         WithArenaE v e -> WithArenaE v (toL1Exp e)
         MapE{}  -> err1 (sdoc ex)
@@ -311,9 +312,10 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
         -- Step (3)
         ddefs'' <- monoDDefs ddefs'
         let p3 = p { ddefs = ddefs'', fundefs = fundefs'', mainExp = mainExp' }
+        let p3' = updateTyCons mono_st p3
+        -- Important; p3 is not type-checkable until updateTyCons runs.
         -- Step (4)
-        p3' <- lift $ tcProg p3
-        let p4 = updateTyCons mono_st p3'
+        p4 <- lift $ tcProg p3'
         pure p4
 
   (p4,_) <- runStateT mono_m emptyMonoState
@@ -747,11 +749,9 @@ updateTyConsExp ddefs mono_st ex =
     LitE{}    -> ex
     FloatE{}  -> ex
     LitSymE{} -> ex
-    AppE f [] args    -> AppE f [] (map go args)
-    AppE _ (_:_) _ -> error $ "updateTyConsExp: Call-site not monomorphized: " ++ sdoc ex
+    AppE f tyapps args    -> AppE f tyapps (map go args)
     PrimAppE pr args  -> PrimAppE pr (map go args)
-    LetE (v,[],ty,rhs) bod -> LetE (v, [], updateTyConsTy ddefs mono_st ty, go rhs) (go bod)
-    LetE (_,(_:_),_,_) _ -> error $ "updateTyConsExp: Let not monomorphized: " ++ sdoc ex
+    LetE (v,tyapps,ty,rhs) bod -> LetE (v, tyapps, updateTyConsTy ddefs mono_st ty, go rhs) (go bod)
     IfE a b c  -> IfE (go a) (go b) (go c)
     MkProdE ls -> MkProdE (map go ls)
     ProjE i e  -> ProjE i (go e)
@@ -767,8 +767,7 @@ updateTyConsExp ddefs mono_st ex =
           dcon' = case M.lookup (tycon,tyapps') (mono_dcons mono_st) of
                     Nothing     -> dcon
                     Just suffix -> dcon ++ fromVar suffix
-      -- Why [] ? The type arguments aren't required as the DDef is monomorphic.
-      in DataConE (ProdTy []) dcon' (map go args)
+      in DataConE (ProdTy tyapps) dcon' (map go args)
     DataConE{} -> error $ "updateTyConsExp: DataConE expected ProdTy tyapps, got: " ++ sdoc ex
     TimeIt e ty b -> TimeIt (go e) (updateTyConsTy ddefs mono_st ty) b
     WithArenaE v e -> WithArenaE v (go e)
@@ -789,12 +788,12 @@ updateTyConsExp ddefs mono_st ex =
 updateTyConsTy :: DDefs0 -> MonoState -> Ty0 -> Ty0
 updateTyConsTy ddefs mono_st ty =
   case ty of
-    IntTy   -> IntTy
-    FloatTy -> FloatTy
-    SymTy0  -> SymTy0
-    BoolTy  -> BoolTy
-    TyVar{} ->  error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."
-    MetaTv{} -> error $ "updateTyConsTy: " ++ sdoc ty ++ " shouldn't be here."
+    IntTy   -> ty
+    FloatTy -> ty
+    SymTy0  -> ty
+    BoolTy  -> ty
+    TyVar{} ->  ty
+    MetaTv{} -> ty
     ProdTy tys  -> ProdTy (map go tys)
     SymDictTy v t -> SymDictTy v (go t)
     ArrowTy as b   -> ArrowTy (map go as) (go b)
@@ -805,10 +804,10 @@ updateTyConsTy ddefs mono_st ty =
            -- Why [] ? The type arguments aren't required as the DDef is monomorphic.
            Just suffix -> PackedTy (t ++ fromVar suffix) []
     VectorTy t -> VectorTy (go t)
-    ArenaTy -> ArenaTy
-    SymSetTy -> SymSetTy
-    SymHashTy -> SymHashTy
-    IntHashTy -> IntHashTy
+    ArenaTy -> ty
+    SymSetTy -> ty
+    SymHashTy -> ty
+    IntHashTy -> ty
   where
     go = updateTyConsTy ddefs mono_st
 

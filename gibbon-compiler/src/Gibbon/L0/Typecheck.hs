@@ -112,7 +112,8 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
         pure (s1, e_ty, e'')
       else do
         (s2, arg_tys, args_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) args)
-        let fn_ty_inst' = zonkTy s2 fn_ty_inst
+        -- let fn_ty_inst' = zonkTy s2 fn_ty_inst
+        let fn_ty_inst' = fn_ty_inst
         s3 <- unifyl ex (arrIns' fn_ty_inst') arg_tys
         fresh <- newMetaTy
         s4 <- unify ex (ArrowTy arg_tys fresh) fn_ty_inst'

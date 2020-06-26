@@ -1,7 +1,5 @@
 module T1 where
 
-import Prelude hiding (id, map)
-
 id :: a -> a
 id x = x
 
