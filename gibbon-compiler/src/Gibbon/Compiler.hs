@@ -213,7 +213,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
         dbgTrace passChatterLvl ("\nParsed:\n"++sepline++ "\n" ++ sdoc l0) (pure ())
         dbgTrace passChatterLvl ("\nTypechecked:\n"++sepline++ "\n" ++ pprender initTypeChecked) (pure ())
         runConf <- getRunConfig []
-        (_s1,val,_stdout) <- gInterpProg () runConf l0
+        (_s1,val,_stdout) <- gInterpProg () runConf initTypeChecked
         print val
 
 
@@ -581,7 +581,6 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- goE2 "inferRegScope"   inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg      l2
               l2 <- goE2 "routeEnds"       routeEnds     l2
-              -- dbgTraceIt (pprender l2) (pure ())
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the

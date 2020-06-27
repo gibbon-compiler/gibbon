@@ -667,6 +667,7 @@ instance Show e => Show (Value e) where
 -- TODO: eventually want Haskell style tuple-printing:
 --    VProd ls -> "("++ concat(intersperse ", " (L.map show ls)) ++")"
 -- For now match Gibbon's Racket backend
+   VProd [] -> ""
    VProd ls -> "'#("++ concat(intersperse " " (L.map show ls)) ++")"
    VList ls -> show ls
    VDict m      -> show (M.toList m)

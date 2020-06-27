@@ -1,7 +1,5 @@
 module CurriedFns where
 
-import Prelude hiding (foldr, map)
-
 data List a = Nil
             | Cons a (List a)
   deriving Show

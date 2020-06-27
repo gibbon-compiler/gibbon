@@ -1,7 +1,5 @@
 module PolyTree where
 
-import Prelude hiding (succ, and)
-
 data Tree a = Leaf a
             | Node (Tree a) (Tree a)
   deriving Show
