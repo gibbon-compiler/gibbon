@@ -857,20 +857,20 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
         mapM_
           (\fn@FunDef{funName,funBody} -> do
                 funBody' <- specLambdasExp ddefs fundefs env2 funBody
-                low <- get
-                let funs   = sp_fundefs low
+                sp_state <- get
+                let funs   = sp_fundefs sp_state
                     fn'    = fn { funBody = funBody' }
                     funs'  = M.insert funName fn' funs
-                    low' = low { sp_fundefs = funs' }
-                put low'
+                    sp_state' = sp_state { sp_fundefs = funs' }
+                put sp_state'
                 pure ())
           (M.elems fo_funs)
         fixpoint
         pure mainExp'
 
-  (mainExp',low'') <- runStateT spec_m emptySpecState
+  (mainExp',sp_state'') <- runStateT spec_m emptySpecState
   -- Get rid of all higher order functions.
-  let fundefs' = purgeHO (sp_fundefs low'')
+  let fundefs' = purgeHO (sp_fundefs sp_state'')
       prg' = prg { mainExp = mainExp', fundefs = fundefs' }
   -- Typecheck again.
   tcProg prg'
@@ -881,13 +881,13 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
     -- Lower functions
     fixpoint :: SpecM ()
     fixpoint = do
-      low <- get
-      if M.null (sp_funs_todo low)
+      sp_state <- get
+      if M.null (sp_funs_todo sp_state)
       then pure ()
       else do
-        let fns = sp_fundefs low
+        let fns = sp_fundefs sp_state
             fn = fns # fn_name
-            ((fn_name, refs), new_fn_name) = M.elemAt 0 (sp_funs_todo low)
+            ((fn_name, refs), new_fn_name) = M.elemAt 0 (sp_funs_todo sp_state)
         specLambdasFun ddefs fundefs (progToEnv prg) new_fn_name refs fn
         state (\st -> ((), st { sp_funs_todo = M.delete (fn_name, refs) (sp_funs_todo st) }))
         fixpoint
@@ -941,8 +941,8 @@ specLambdasExp ddefs fundefs env2 ex =
       case refs of
         [] -> pure $ AppE f [] args'
         _  -> do
-          low' <- get
-          case M.lookup (f,refs) (sp_funs_todo low') of
+          sp_state' <- get
+          case M.lookup (f,refs) (sp_funs_todo sp_state') of
             Nothing -> do
               f' <- lift $ gensym f
               let ForAll _ (ArrowTy as _) = lookupFEnv f env2
@@ -951,8 +951,8 @@ specLambdasExp ddefs fundefs env2 ex =
               -- of functions 'f' expects.
               assertSameLength ("While lowering the expression " ++ sdoc ex) refs arrow_tys
               -- We have a new lowering obligation.
-              let low'' = low' { sp_funs_todo = M.insert (f,refs) f' (sp_funs_todo low') }
-              put low''
+              let sp_state'' = sp_state' { sp_funs_todo = M.insert (f,refs) f' (sp_funs_todo sp_state') }
+              put sp_state''
               pure $ AppE f' [] args''
             Just f' -> pure $ AppE f' [] args''
     AppE _ (_:_) _ -> error $ "specLambdasExp: Call-site not monomorphized: " ++ sdoc ex
