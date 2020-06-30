@@ -32,7 +32,6 @@ import Gibbon.Passes.FindWitnesses
 import Gibbon.Passes.Lower
 import Gibbon.Passes.FollowRedirects
 import Gibbon.Passes.RearrangeFree
-import Gibbon.TargetInterp
 import Gibbon.Passes.Codegen
 import Gibbon.Passes.Flatten
 import Gibbon.Compiler

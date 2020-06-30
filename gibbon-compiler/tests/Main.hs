@@ -17,7 +17,6 @@ import qualified Data.Map as M
 import Gibbon.L4.Syntax hiding (Prog (..), Ty (..))
 import Gibbon.L2.Syntax (Multiplicity(..))
 import qualified Gibbon.L4.Syntax as T
-import qualified Gibbon.TargetInterp as TI
 
 -- |
 import RouteEnds
@@ -334,11 +333,11 @@ add1_prog = T.Prog M.empty [build_tree, add1]
 -- program.  It doesn't pass in interpreter or compiler.  Disabling
 -- these two tests until there is time to debug further.
 
-_case_interp_add1 :: Assertion
-_case_interp_add1 =
-    do [_val] <- TI.execProg add1_prog
-       -- FIXME: assert correct val.
-       return ()
+-- _case_interp_add1 :: Assertion
+-- _case_interp_add1 =
+--     do [_val] <- TI.execProg add1_prog
+--        -- FIXME: assert correct val.
+--        return ()
 
 {- UNDER_CONSTRUCTION.
 _case_add1 :: Assertion

@@ -257,6 +257,7 @@ tests:
   - name: CurriedFns.hs
     dir: examples/poly
     answer-file: examples/poly/CurriedFns.ans
+    skip: true
     failing: [gibbon1, gibbon2, interp1]
 
   - name: T127.hs

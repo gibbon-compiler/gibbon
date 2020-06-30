@@ -48,7 +48,14 @@ instance InterpProg Store Exp2 where
         Just (e,_) -> do
           let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
           ((v, _size),logs,store1) <- runInterpM (interp M.empty rc M.empty ddefs fenv e) store
-          pure (store1, v, toLazyByteString logs)
+          dbgTraceIt (sdoc store1) (pure ())
+          -- Policy: don't return locations
+          let res = case v of
+                        (VLoc reg off) ->
+                            let buf = fromJust $ lookupInStore' reg store1
+                            in deserialize ddefs store1 (dropInBuffer off buf)
+                        oth -> oth
+          pure (store1, res, toLazyByteString logs)
 
 
 --------------------------------------------------------------------------------
@@ -357,6 +364,9 @@ lookupInStore v = do
   Store store <- get
   return $ M.lookup v store
 
+lookupInStore' :: Var -> Store -> Maybe Buffer
+lookupInStore' reg (Store mp) = M.lookup reg mp
+
 newtype Buffer = Buffer (Seq SerializedVal)
   deriving (Read, Show, Eq, Ord, Generic, Out)
 
@@ -446,8 +456,9 @@ deserialize ddefs store (Buffer seq0) = final
          in dbgTraceIt (sdoc (s M.! buf_id, off)) (ls, rst)
 
        SerPad :< rst ->
-         let (more,rst') = readN (n-1) rst
-         in (VInt (-1) : more, rst')
+         readN n rst
+         -- let (more,rst') = readN (n-1) rst
+         -- in (VInt (-1) : more, rst')
 
 data Size = SOne Int
           | SMany [Size]
