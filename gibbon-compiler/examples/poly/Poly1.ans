@@ -1,2 +1,1 @@
-'#(10 #t 11 #f 2 4 (Nothing_v297 ) (Right_v317 20) (Right_v308 #t) 12 #f 0 3 (Cons_v303 1 (Cons_v303 2 (Nil_v303 ))) (Cons_v303 1 (Cons_v303 2 (Nil_v303 ))) (Right_v308 #t) (Cons_v303 1
-1 (Cons_v303 12 (Nil_v303 ))))
+'#(10 #t 11 #f 2 4 (Nothing_v297 ) (Right_v317 20) (Right_v308 #t) 12 #f 0 3 (Cons_v303 1 (Cons_v303 2 (Nil_v303 ))) (Cons_v303 1 (Cons_v303 2 (Nil_v303 ))) (Right_v308 #t) (Cons_v303 11 (Cons_v303 12 (Nil_v303 ))))
