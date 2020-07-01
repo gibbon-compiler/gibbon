@@ -139,7 +139,7 @@ newUniq = state (\x -> (x, x+1))
 
 -- | Generate a unique symbol by attaching a numeric suffix.
 gensym :: MonadState Int m => Var -> m Var
-gensym v = state (\n -> (cleanFunName v `varAppend` toVar (show n), n + 1))
+gensym v = state (\n -> (cleanFunName v `varAppend` "_" `varAppend` toVar (show n), n + 1))
 
 gensym_tag :: MonadState Int m => Var -> String -> m Var
 gensym_tag v str = state (\n -> (cleanFunName v `varAppend` toVar ((show n)++ str) , n + 1))

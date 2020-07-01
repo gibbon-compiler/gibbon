@@ -820,6 +820,7 @@ type FunRef = Var
 
 data SpecState = SpecState
   { sp_funs_todo :: M.Map (Var, [FunRef]) Var
+  , sp_extra_args :: M.Map Var [(Var, Ty0)]
   , sp_fundefs   :: FunDefs0 }
   deriving (Show, Eq, Generic, Out)
 
@@ -850,13 +851,15 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
           case mainExp of
             Nothing -> pure Nothing
             Just (e, ty) -> do
-              e' <- specLambdasExp ddefs fundefs env2 e
+              e' <- specLambdasExp ddefs env2 e
               pure $ Just (e', ty)
         -- Same reason as Step (1.2) in monomorphization.
         let fo_funs = M.filter isFOFun fundefs
         mapM_
-          (\fn@FunDef{funName,funBody} -> do
-                funBody' <- specLambdasExp ddefs fundefs env2 funBody
+          (\fn@FunDef{funName,funArgs,funTy,funBody} -> do
+                let venv = M.fromList (fragileZip funArgs (inTys funTy))
+                    env2' = extendsVEnv venv env2
+                funBody' <- specLambdasExp ddefs env2' funBody
                 sp_state <- get
                 let funs   = sp_fundefs sp_state
                     fn'    = fn { funBody = funBody' }
@@ -876,7 +879,7 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
   tcProg prg'
   where
     emptySpecState :: SpecState
-    emptySpecState = SpecState M.empty fundefs
+    emptySpecState = SpecState M.empty M.empty fundefs
 
     -- Lower functions
     fixpoint :: SpecM ()
@@ -888,7 +891,7 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
         let fns = sp_fundefs sp_state
             fn = fns # fn_name
             ((fn_name, refs), new_fn_name) = M.elemAt 0 (sp_funs_todo sp_state)
-        specLambdasFun ddefs fundefs (progToEnv prg) new_fn_name refs fn
+        specLambdasFun ddefs new_fn_name refs fn
         state (\st -> ((), st { sp_funs_todo = M.delete (fn_name, refs) (sp_funs_todo st) }))
         fixpoint
 
@@ -902,8 +905,9 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
          arrowTysInTy ret_ty == []
 
 -- Eliminate all functions passed in as arguments to this function.
-specLambdasFun :: DDefs0 -> FunDefs0 -> Env2 Ty0 -> Var -> [FunRef] -> FunDef0 -> SpecM ()
-specLambdasFun ddefs fundefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = do
+specLambdasFun :: DDefs0 -> Var -> [FunRef] -> FunDef0 -> SpecM ()
+specLambdasFun ddefs new_fn_name refs fn@FunDef{funArgs, funTy} = do
+  sp_state <- get
   let
       -- lamda args
       funArgs'  = map fst $ filter (isFunTy . snd) $ zip funArgs (inTys funTy)
@@ -912,11 +916,20 @@ specLambdasFun ddefs fundefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = d
       funArgs'' = map fst $ filter (not . isFunTy . snd) $ zip funArgs (inTys funTy)
       fn' = fn { funName = new_fn_name
                , funBody = do_spec specs (funBody fn) }
-  funBody' <- specLambdasExp ddefs fundefs env2 (funBody fn')
+  let venv = M.fromList (fragileZip funArgs'' (inTys funTy'))
+      env2 = Env2 venv (initFunEnv (sp_fundefs sp_state))
+  funBody' <- specLambdasExp ddefs env2 (funBody fn')
+  sp_state' <- get
+  let (funArgs''', funTy'') = case M.lookup new_fn_name (sp_extra_args sp_state') of
+                               Nothing -> (funArgs'', funTy')
+                               Just extra_args ->
+                                   let ForAll tyvars1 (ArrowTy arg_tys1 ret_ty1) = funTy'
+                                       (extra_vars, extra_tys) = unzip extra_args
+                                   in (funArgs'' ++ extra_vars, ForAll tyvars1 (ArrowTy (arg_tys1 ++ extra_tys) ret_ty1))
   let fn''  = fn' { funBody = funBody'
-                  , funArgs = funArgs''
+                  , funArgs = funArgs'''
                   -- N.B. Only update the type after 'specExp' runs.
-                  , funTy   = funTy' }
+                  , funTy   = funTy'' }
   state (\st -> ((), st { sp_fundefs = M.insert new_fn_name fn'' (sp_fundefs st) }))
   where
     ForAll tyvars (ArrowTy arg_tys ret_ty) = funTy
@@ -930,57 +943,108 @@ specLambdasFun ddefs fundefs env2 new_fn_name refs fn@FunDef{funArgs, funTy} = d
 
     subst' old new ex = gRename (M.singleton old new) ex
 
-specLambdasExp :: DDefs0 -> FunDefs0 -> Env2 Ty0 -> Exp0 -> SpecM Exp0
-specLambdasExp ddefs fundefs env2 ex =
+specLambdasExp :: DDefs0 -> Env2 Ty0 -> Exp0 -> SpecM Exp0
+specLambdasExp ddefs env2 ex =
   case ex of
     -- TODO, docs.
     AppE f [] args -> do
       args' <- mapM go args
-      let args'' = dropFunRefs f args'
+      let args'' = dropFunRefs f env2 args'
           refs   = foldr collectFunRefs [] args
+      sp_state <- get
       case refs of
-        [] -> pure $ AppE f [] args'
+        [] ->
+            case M.lookup f (sp_extra_args sp_state) of
+              Nothing -> pure $ AppE f [] args''
+              Just extra_args -> do
+                  let (vars,_) = unzip extra_args
+                      args''' = args'' ++ map VarE vars
+                  pure $ AppE f [] args'''
         _  -> do
-          sp_state' <- get
-          case M.lookup (f,refs) (sp_funs_todo sp_state') of
+          let extra_args = foldr (\fnref acc ->
+                                          case M.lookup fnref (sp_extra_args sp_state) of
+                                              Nothing    -> acc
+                                              Just extra -> extra ++ acc)
+                                     [] refs
+          let (vars,_) = unzip extra_args
+              args''' = args'' ++ (map VarE vars)
+          case M.lookup (f,refs) (sp_funs_todo sp_state) of
             Nothing -> do
               f' <- lift $ gensym f
-              let ForAll _ (ArrowTy as _) = lookupFEnv f env2
+              let (ForAll _ (ArrowTy as _)) = lookupFEnv f env2
                   arrow_tys = concatMap arrowTysInTy as
               -- Check that the # of refs we collected actually matches the #
               -- of functions 'f' expects.
               assertSameLength ("While lowering the expression " ++ sdoc ex) refs arrow_tys
               -- We have a new lowering obligation.
-              let sp_state'' = sp_state' { sp_funs_todo = M.insert (f,refs) f' (sp_funs_todo sp_state') }
-              put sp_state''
-              pure $ AppE f' [] args''
-            Just f' -> pure $ AppE f' [] args''
+              let sp_extra_args' = case extra_args of
+                                     [] -> sp_extra_args sp_state
+                                     _  -> M.insert f' extra_args (sp_extra_args sp_state)
+              let sp_state' = sp_state { sp_funs_todo = M.insert (f,refs) f' (sp_funs_todo sp_state)
+                                       , sp_extra_args = sp_extra_args'
+                                       }
+              put sp_state'
+              pure $ AppE f' [] args'''
+            Just f' -> pure $ AppE f' [] args'''
     AppE _ (_:_) _ -> error $ "specLambdasExp: Call-site not monomorphized: " ++ sdoc ex
 
     -- Float out a lambda fun to the top-level.
     LetE (v, [], ty, (Ext (LambdaE args lam_bod))) bod -> do
+      v' <- lift $ gensym v
+      let bod' = gRename (M.singleton v v') bod
+      sp_state <- get
       let arg_vars = map fst args
-          captured_vars = gFreeVars lam_bod `S.difference` (S.fromList arg_vars) `S.difference` (M.keysSet fundefs)
+          captured_vars = gFreeVars lam_bod `S.difference` (S.fromList arg_vars)
+                          `S.difference` (M.keysSet (sp_fundefs sp_state))
+      lam_bod' <- go lam_bod
       if not (S.null captured_vars)
-      then error $ "specLambdasExp: LamdaE captures variables: "
-                   ++ show captured_vars
-                   ++ ". TODO: these can become additional arguments."
-      else do
-        lam_bod' <- go lam_bod
-        let _fn_refs = collectFunRefs lam_bod []
-            fn = FunDef { funName = v
-                        , funArgs = arg_vars
-                        , funTy   = ForAll [] ty
+      -- Pass captured values as extra arguments
+      then do
+        let ls = S.toList captured_vars
+            tys = map (\w -> case M.lookup w (vEnv env2) of
+                               Nothing -> error $ "Unbound variable: " ++ pprender w
+                               Just ty1 -> ty1)
+                      ls
+            fns = collectAllFuns lam_bod []
+            extra_args = foldr (\fnref acc ->
+                                          case M.lookup fnref (sp_extra_args sp_state) of
+                                              Nothing    -> acc
+                                              Just extra -> extra ++ acc)
+                                     [] fns
+            extra_args1 = (zip ls tys) ++ extra_args
+            (vars1,tys1) = unzip extra_args1
+            ty' = addArgsToTy tys1 (ForAll [] ty)
+            fn = FunDef { funName = v'
+                        , funArgs = arg_vars ++ vars1
+                        , funTy   = ty'
                         , funBody = lam_bod' }
-            env2' = extendFEnv v (ForAll [] ty) env2
-        state (\st -> ((), st { sp_fundefs = M.insert v fn (sp_fundefs st) }))
-        specLambdasExp ddefs fundefs env2' bod
+            env2' = extendFEnv v' ty' env2
+        state (\st -> ((), st { sp_fundefs = M.insert v' fn (sp_fundefs st)
+                              , sp_extra_args = M.insert v' extra_args1 (sp_extra_args st)}))
+        specLambdasExp ddefs env2' bod'
+      else do
+        let fns = collectAllFuns lam_bod []
+        let extra_args = foldr (\fnref acc ->
+                                          case M.lookup fnref (sp_extra_args sp_state) of
+                                              Nothing    -> acc
+                                              Just extra -> extra ++ acc)
+                                     [] fns
+        let (vars,tys) = unzip extra_args
+            ty' = addArgsToTy tys (ForAll [] ty)
+        let fn = FunDef { funName = v'
+                        , funArgs = arg_vars ++ vars
+                        , funTy   = ty'
+                        , funBody = lam_bod' }
+            env2' = extendFEnv v' (ForAll [] ty) env2
+        state (\st -> ((), st { sp_fundefs = M.insert v' fn (sp_fundefs st)
+                              , sp_extra_args = M.insert v' extra_args (sp_extra_args st)}))
+        specLambdasExp ddefs env2' bod'
 
     LetE (v, [], ty, rhs) bod -> do
       let _fn_refs = collectFunRefs rhs []
           env2' = (extendVEnv v ty env2)
       rhs' <- go rhs
-      bod' <- specLambdasExp ddefs fundefs env2' bod
+      bod' <- specLambdasExp ddefs env2' bod
       pure $ LetE (v, [], ty, rhs') bod'
 
     LetE (_, (_:_),_,_) _ -> error $ "specExp: Binding not monomorphized: " ++ sdoc ex
@@ -1001,7 +1065,7 @@ specLambdasExp ddefs fundefs env2 ex =
       brs' <- mapM
                 (\(dcon,vtys,rhs) -> do
                   let env2' = extendsVEnv (M.fromList vtys) env2
-                  (dcon,vtys,) <$> specLambdasExp ddefs fundefs env2' rhs)
+                  (dcon,vtys,) <$> specLambdasExp ddefs env2' rhs)
                 brs
       pure $ CaseE scrt' brs'
     DataConE tyapp dcon args -> (DataConE tyapp dcon) <$> mapM go args
@@ -1009,10 +1073,10 @@ specLambdasExp ddefs fundefs env2 ex =
        e' <- go e
        pure $ TimeIt e' ty b
     WithArenaE v e -> do
-       e' <- specLambdasExp ddefs fundefs (extendVEnv v ArenaTy env2) e
+       e' <- specLambdasExp ddefs (extendVEnv v ArenaTy env2) e
        pure $ WithArenaE v e'
     SpawnE fn tyapps args -> do
-      e' <- specLambdasExp ddefs fundefs env2 (AppE fn tyapps args)
+      e' <- specLambdasExp ddefs env2 (AppE fn tyapps args)
       case e' of
         AppE fn' tyapps' args' -> pure $ SpawnE fn' tyapps' args'
         _ -> error "specLambdasExp: SpawnE"
@@ -1056,7 +1120,7 @@ specLambdasExp ddefs fundefs env2 ex =
           pure $ mkLets (concat binds) (Ext $ ParE0 calls)
         L p e -> Ext <$> (L p) <$> go e
   where
-    go = specLambdasExp ddefs fundefs env2
+    go = specLambdasExp ddefs env2
 
     _isFunRef e =
       case e of
@@ -1064,11 +1128,11 @@ specLambdasExp ddefs fundefs env2 ex =
         _ -> False
 
     -- fn_0 (fn_1, thing, fn_2) => fn_0 (thing)
-    dropFunRefs :: Var -> [Exp0] -> [Exp0]
-    dropFunRefs fn_name args =
+    dropFunRefs :: Var -> Env2 Ty0 -> [Exp0] -> [Exp0]
+    dropFunRefs fn_name env21 args =
       foldr (\(a,t) acc -> if isFunTy t then acc else a:acc) [] (zip args arg_tys)
       where
-        ForAll _ (ArrowTy arg_tys _) = lookupFEnv fn_name env2
+        ForAll _ (ArrowTy arg_tys _) = lookupFEnv fn_name env21
 
     collectFunRefs :: Exp0 -> [FunRef] -> [FunRef]
     collectFunRefs e acc =
@@ -1102,6 +1166,47 @@ specLambdasExp ddefs fundefs env2 ex =
             BenchE{}            -> acc
             ParE0 ls            -> foldr collectFunRefs acc ls
             L _ e1              -> collectFunRefs e1 acc
+
+    -- Returns all functions used in an expression, both in AppE's and FunRefE's.
+    collectAllFuns :: Exp0 -> [FunRef] -> [FunRef]
+    collectAllFuns e acc =
+      case e of
+        VarE{}    -> acc
+        LitE{}    -> acc
+        FloatE{}  -> acc
+        LitSymE{} -> acc
+        AppE f _ args   -> f : foldr collectAllFuns acc args
+        PrimAppE _ args -> foldr collectAllFuns acc args
+        LetE (_,_,_, rhs) bod -> foldr collectAllFuns acc [bod, rhs]
+        IfE a b c  -> foldr collectAllFuns acc [c, b, a]
+        MkProdE ls -> foldr collectAllFuns acc ls
+        ProjE _ a  -> collectAllFuns a acc
+        DataConE _ _ ls -> foldr collectAllFuns acc ls
+        TimeIt a _ _   -> collectAllFuns a acc
+        WithArenaE _ e1-> collectAllFuns e1 acc
+        CaseE scrt brs -> foldr
+                            (\(_,_,b) acc2 -> collectAllFuns b acc2)
+                            (collectAllFuns scrt acc)
+                            brs
+        SpawnE _ _ args -> foldr collectAllFuns acc args
+        SyncE     -> acc
+        MapE{}  -> error $ "collectAllFuns: TODO: " ++ sdoc e
+        FoldE{} -> error $ "collectAllFuns: TODO: " ++ sdoc e
+        Ext ext ->
+          case ext of
+            LambdaE _ bod       -> collectAllFuns bod acc
+            PolyAppE rator rand -> collectAllFuns rand (collectAllFuns rator acc)
+            FunRefE _ f         -> f : acc
+            BenchE{}            -> acc
+            ParE0 ls            -> foldr collectAllFuns acc ls
+            L _ e1              -> collectAllFuns e1 acc
+
+addArgsToTy :: [Ty0] -> TyScheme -> TyScheme
+addArgsToTy ls (ForAll tyvars (ArrowTy in_tys ret_ty)) =
+    let in_tys' = in_tys ++ ls
+    in ForAll tyvars (ArrowTy in_tys' ret_ty)
+addArgsToTy _ oth = error $ "addArgsToTy: " ++ sdoc oth ++ " is not ArrowTy."
+
 
 --------------------------------------------------------------------------------
 
@@ -1157,7 +1262,7 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
       go e0 =
        case e0 of
         (Ext (LambdaE{})) -> do
-          v  <- gensym "lam_"
+          v  <- gensym "lam"
           ty <- newMetaTy
           pure ([(v,[],ty,e0)], VarE v)
         (LetE (v,tyapps,t,rhs@(Ext LambdaE{})) bod) -> do
