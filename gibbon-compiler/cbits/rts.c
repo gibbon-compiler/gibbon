@@ -421,8 +421,9 @@ void free_symtable() {
     struct SymTable_elem *elt, *tmp;
     HASH_ITER(hh, global_sym_table, elt, tmp) {
         HASH_DEL(global_sym_table,elt);
-        free(elt);
     }
+    free(elt);
+    free(tmp);
 }
 
 /*
