@@ -1,4 +1,4 @@
-module DataList where
+module DataVector where
 
 import Gibbon.Vector
 
@@ -7,17 +7,17 @@ data Ints = MkInts (Vector Int)
 mkInts :: Int -> Ints
 mkInts n =
     let vec :: Vector Int
-        vec = vgenerate n (\i -> i)
+        vec = generate n (\i -> i)
     in MkInts vec
 
 sumInts'' :: Int -> Int -> (Vector Int) -> Int -> Int
 sumInts'' i n ls acc =
     if i == n
     then acc
-    else sumInts'' (i+1) n ls (acc + (vnth ls i))
+    else sumInts'' (i+1) n ls (acc + (nth ls i))
 
 sumInts' :: (Vector Int) -> Int
-sumInts' ls = sumInts'' 0 (vlength ls) ls 0
+sumInts' ls = sumInts'' 0 (length ls) ls 0
 
 sumInts :: Ints -> Int
 sumInts is =
