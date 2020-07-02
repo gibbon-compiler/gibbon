@@ -1017,7 +1017,10 @@ specLambdasExp ddefs env2 ex =
             fn = FunDef { funName = v'
                         , funArgs = arg_vars ++ vars1
                         , funTy   = ty'
-                        , funBody = lam_bod' }
+                        , funBody = lam_bod'
+                        , funRec = NotRec
+                        , funInline = Inline
+                        }
             env2' = extendFEnv v' ty' env2
         state (\st -> ((), st { sp_fundefs = M.insert v' fn (sp_fundefs st)
                               , sp_extra_args = M.insert v' extra_args1 (sp_extra_args st)}))
@@ -1034,7 +1037,10 @@ specLambdasExp ddefs env2 ex =
         let fn = FunDef { funName = v'
                         , funArgs = arg_vars ++ vars
                         , funTy   = ty'
-                        , funBody = lam_bod' }
+                        , funBody = lam_bod'
+                        , funRec = NotRec
+                        , funInline = Inline
+                        }
             env2' = extendFEnv v' (ForAll [] ty) env2
         state (\st -> ((), st { sp_fundefs = M.insert v' fn (sp_fundefs st)
                               , sp_extra_args = M.insert v' extra_args (sp_extra_args st)}))
@@ -1107,6 +1113,8 @@ specLambdasExp ddefs env2 ex =
                                 , funArgs = args
                                 , funTy   = ForAll [] (ArrowTy argtys retty)
                                 , funBody = e0'
+                                , funRec = NotRec
+                                , funInline = NoInline
                                 }
                 pure (Just fn, binds, AppE fnname [] (map VarE args))
           let mb_insert mb_fn mp = case mb_fn of

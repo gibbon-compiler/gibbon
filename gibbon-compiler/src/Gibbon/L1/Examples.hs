@@ -21,7 +21,7 @@ mkAdd1Prog bod mainExp = Prog treeDD
                               mainExp
 
 mkAdd1Fun :: Exp1 -> FunDef1
-mkAdd1Fun bod = FunDef "add1" ["tr"] ([treeTy],treeTy) bod
+mkAdd1Fun bod = FunDef "add1" ["tr"] ([treeTy],treeTy) bod Rec NoInline
 
 ----------------
 
@@ -82,7 +82,8 @@ add1ProgChallenge =
                      , ("pred", FunDef "pred" ["tr"] ([treeTy], BoolTy)
                         (CaseE (VarE "tr") $
                          [ ("Leaf", [("n",())], PrimAppE MkTrue [])
-                         , ("Node", [("x",()),("y",())], PrimAppE MkFalse [])]))])
+                         , ("Node", [("x",()),("y",())], PrimAppE MkFalse [])])
+                        Rec NoInline)])
          Nothing
   where
    bod =

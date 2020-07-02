@@ -48,14 +48,14 @@ freshDDef DDef{tyName,tyArgs,dataCons} = do
                    ++ " in the constructor:\n" ++ msg
 
 freshFun :: FunDef Exp0 -> PassM (FunDef Exp0)
-freshFun (FunDef nam nargs funty bod) =
+freshFun (FunDef nam nargs funty bod isrec inline) =
     do nargs' <- mapM gensym nargs
        let msubst = (M.fromList $ zip nargs nargs')
        (tvenv, funty') <- freshTyScheme funty
        funty'' <- freshDictTyScheme msubst funty'
        bod' <- freshExp msubst tvenv bod
        let nam' = cleanFunName nam
-       pure $ FunDef nam' nargs' funty'' bod'
+       pure $ FunDef nam' nargs' funty'' bod' isrec inline
 
 --
 freshTyScheme :: TyScheme -> PassM (TyVarEnv Ty0, TyScheme)

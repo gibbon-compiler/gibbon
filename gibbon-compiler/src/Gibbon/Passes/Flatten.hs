@@ -37,10 +37,10 @@ flattenL1 prg@(Prog defs funs main) = do
     return $ Prog defs funs' main'
   where
     flattenFuns = mapM flattenFun
-    flattenFun (FunDef nam narg (targ, ty) bod) = do
+    flattenFun (FunDef nam narg (targ, ty) bod isrec inline) = do
       let env2 = Env2 (M.fromList $ zip narg targ) (fEnv env20)
       bod' <- gFlattenExp defs env2 bod
-      return $ FunDef nam narg (targ, ty) bod'
+      return $ FunDef nam narg (targ, ty) bod' isrec inline
 
     env20 = progToEnv prg
 
@@ -55,10 +55,10 @@ flattenL2 prg@(Prog defs funs main) = do
     return $ Prog defs funs' main'
   where
     flattenFuns = mapM flattenFun
-    flattenFun (FunDef nam narg ty bod) = do
+    flattenFun (FunDef nam narg ty bod isrec inline) = do
       let env2 = Env2 (M.fromList $ zip narg (arrIns ty)) (fEnv env20)
       bod' <- gFlattenExp defs env2 bod
-      return $ FunDef nam narg ty bod'
+      return $ FunDef nam narg ty bod' isrec inline
 
     env20 = progToEnv prg
 
@@ -73,10 +73,10 @@ flattenL3 prg@(Prog defs funs main) = do
     return $ Prog defs funs' main'
   where
     flattenFuns = mapM flattenFun
-    flattenFun (FunDef nam narg ty bod) = do
+    flattenFun (FunDef nam narg ty bod isrec inline) = do
       let env2 = Env2 (M.fromList $ zip narg (fst ty)) (fEnv env20)
       bod' <- gFlattenExp defs env2 bod
-      return $ FunDef nam narg ty bod'
+      return $ FunDef nam narg ty bod' isrec inline
 
     env20 = progToEnv prg
 
@@ -202,10 +202,10 @@ flattenL0 prg@(Prog defs funs main) = do
     return $ Prog defs funs' main'
   where
     flattenFuns = mapM flattenFun
-    flattenFun (FunDef nam nargs ty bod) = do
+    flattenFun (FunDef nam nargs ty bod isrec inline) = do
       let env2 = Env2 (M.fromList $ zip nargs (L0.arrIns ty)) (fEnv env20)
       bod' <- snd <$> flattenExp0 defs env2 bod
-      return $ FunDef nam nargs ty bod'
+      return $ FunDef nam nargs ty bod' isrec inline
     env20 = progToEnv prg
 
 flattenExp0 :: L0.DDefs0 -> Env2 L0.Ty0 -> L0.Exp0

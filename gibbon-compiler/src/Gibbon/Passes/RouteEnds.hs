@@ -125,16 +125,16 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
     -- | Process function types (but don't handle bodies)
     fdty :: L2.FunDef2 -> PassM L2.FunDef2
-    fdty FunDef{funName,funTy,funArgs,funBody} =
+    fdty FunDef{funName,funTy,funArgs,funBody,funRec,funInline} =
         do let (ArrowTy2 locin tyin eff tyout _locout isPar) = funTy
                handleLoc (LRM l r m) ls = if S.member (Traverse l) eff then (LRM l r m):ls else ls
                locout' = L.map EndOf $ L.foldr handleLoc [] locin
-           return FunDef{funName,funTy=(ArrowTy2 locin tyin eff tyout locout' isPar),funArgs,funBody}
+           return FunDef{funName,funTy=(ArrowTy2 locin tyin eff tyout locout' isPar),funArgs,funBody,funRec,funInline}
 
 
     -- | Process function bodies
     fd :: FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
-    fd fns FunDef{funName,funTy,funArgs,funBody} =
+    fd fns FunDef{funName,funTy,funArgs,funBody,funRec,funInline} =
         do let (ArrowTy2 locin tyins eff _tyout _locout _isPar) = funTy
                handleLoc (LRM l _r _m) ls = if S.member (Traverse l) eff then l:ls else ls
                retlocs = L.foldr handleLoc [] locin
@@ -146,7 +146,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                initVEnv = M.fromList $ zip funArgs tyins
                env2 = Env2 initVEnv (initFunEnv fundefs)
            funBody' <- exp fns retlocs emptyRel lenv M.empty env2 funBody
-           return FunDef{funName,funTy,funArgs,funBody=funBody'}
+           return FunDef{funName,funTy,funArgs,funBody=funBody',funRec,funInline}
 
 
     -- | Process expressions.

@@ -215,7 +215,7 @@ inferLocs initPrg = do
   p@(Prog dfs fds me) <- addRepairFns initPrg
   let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
-          fenv <- forM fds $ \(FunDef _ _ (intys, outty) bod) -> do
+          fenv <- forM fds $ \(FunDef _ _ (intys, outty) bod _isrec _inline) -> do
                   let has_par = hasSpawns bod
                   lift $ lift $ convertFunTy (intys,outty,has_par)
           let fe = FullEnv dfs' M.empty fenv
@@ -226,14 +226,14 @@ inferLocs initPrg = do
               (me',ty') <- inferExp' fe me [] NoDest
               return $ Just (me',ty')
             Nothing -> return Nothing
-          fds' <- forM fds $ \(FunDef fn fa (intty,outty) fbod) -> do
+          fds' <- forM fds $ \(FunDef fn fa (intty,outty) fbod isrec inline) -> do
                                    let arrty = lookupFEnv fn fe
                                        fe' = extendsVEnv (M.fromList $ fragileZip fa (arrIns arrty)) fe
                                        boundLocs = concat $ map locsInTy (arrIns arrty ++ [arrOut arrty])
                                    dest <- destFromType (arrOut arrty)
                                    mapM_ fixType_ (arrIns arrty)
                                    (fbod',_) <- inferExp' fe' fbod boundLocs dest
-                                   return $ FunDef fn fa arrty fbod'
+                                   return $ FunDef fn fa arrty fbod' isrec inline
           return $ Prog dfs' fds' me'
   prg <- St.runStateT (runExceptT m) M.empty
   case fst prg of
@@ -1658,6 +1658,8 @@ genCopyFn DDef{tyName, dataCons} = do
                   , funTy   = ( [PackedTy (fromVar tyName) ()]
                               , PackedTy (fromVar tyName) () )
                   , funBody = CaseE (VarE arg) casebod
+                  , funRec = Rec
+                  , funInline = NoInline
                   }
 
 -- | Traverses a packed data type and always returns 42.
@@ -1678,6 +1680,8 @@ genTravFn DDef{tyName, dataCons} = do
                   , funArgs = [arg]
                   , funTy   = ( [PackedTy (fromVar tyName) ()] , IntTy )
                   , funBody = CaseE (VarE arg) casebod
+                  , funRec = Rec
+                  , funInline = NoInline
                   }
 
 

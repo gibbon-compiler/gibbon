@@ -22,12 +22,15 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
     init_fun_env = progToEnv prg
 
     fd :: FunDef1 -> FunDef3
-    fd FunDef{funName,funArgs,funTy,funBody} =
+    fd FunDef{funName,funArgs,funTy,funBody,funRec,funInline} =
         let env2 = extendsVEnv (M.fromList $ zip funArgs (fst funTy)) init_fun_env in
         FunDef { funName = funName
                , funTy   = (map goTy $ fst funTy, goTy $ snd funTy)
                , funArgs = funArgs
-               , funBody = go env2 funBody }
+               , funBody = go env2 funBody
+               , funRec  = funRec
+               , funInline = funInline
+               }
 
     go :: Env2 Ty1 -> Exp1 -> Exp3
     go env2 ex =

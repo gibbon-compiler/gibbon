@@ -19,7 +19,8 @@ module Gibbon.Language.Syntax
   , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef
 
     -- * Function definitions
-  , FunctionTy(..), FunDefs, FunDef(..), insertFD, fromListFD, initFunEnv
+  , FunctionTy(..), FunDefs, FunDef(..), FunRec(..), FunInline(..)
+  , insertFD, fromListFD, initFunEnv
 
     -- * Programs
   , Prog(..), progToEnv, getFunTy
@@ -176,11 +177,20 @@ class (Out (ArrowTy ty), Show (ArrowTy ty)) => FunctionTy ty where
 -- | A set of top-level recursive function definitions.
 type FunDefs ex = M.Map Var (FunDef ex)
 
+data FunRec = Rec | NotRec | TailRec
+  deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
+
+data FunInline = Inline | NoInline | Inlineable
+  deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
+
 -- | A function definiton indexed by a type and expression.
-data FunDef ex = FunDef { funName  :: Var
-                        , funArgs  :: [Var]
-                        , funTy    :: ArrowTy (TyOf ex)
-                        , funBody  :: ex }
+data FunDef ex = FunDef { funName   :: Var
+                        , funArgs   :: [Var]
+                        , funTy     :: ArrowTy (TyOf ex)
+                        , funBody   :: ex
+                        , funRec    :: FunRec
+                        , funInline :: FunInline
+                        }
 
 deriving instance (Read ex, Read (ArrowTy (TyOf ex))) => Read (FunDef ex)
 deriving instance (Show ex, Show (ArrowTy (TyOf ex))) => Show (FunDef ex)
