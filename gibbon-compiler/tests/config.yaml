@@ -439,7 +439,7 @@ tests:
   ## Vector operations
   - name: Vector.hs
     dir: examples/vectors
-    skip: true
+    test-flags: ["--parallel"]
     answer-file: examples/vectors/Vector.hs.ans
 
   - name: InPlaceVector.hs
@@ -454,9 +454,8 @@ tests:
 
   - name: DataVector.hs
     dir: examples/vectors
+    test-flags: ["--parallel"]
     answer-file: examples/vectors/DataVector.hs.ans
-    skip: true
-    failing: ["interp1"]
 
   ## AST benchmarks
   - name: C1.hs

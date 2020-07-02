@@ -1,6 +1,8 @@
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fdefer-typed-holes #-}
 
+module Gibbon.Vector where
+
 -- A standard library for Gibbon
 
 --------------------------------------------------------------------------------
@@ -8,7 +10,6 @@
 --------------------------------------------------------------------------------
 
 {-
-
 #if MIN_VERSION_GLASGOW_HASKELL(8,6,5,0)
 
 -- Built-ins. Uncomment this block in order to load this file in GHCi.
@@ -66,16 +67,16 @@ minInt a b = if a < b then a else b
 visEmpty :: Vector a -> Bool
 visEmpty vec = vlength vec == 0
 
--- -- Work: O(1)
--- -- Span: O(1)
--- v_splitAt :: Int -> Vector a -> (Vector a, Vector a)
--- v_splitAt n vec =
---     -- Copied from Haskell's vector library.
---     let len = v_length vec
---         n'  = max n 0
---         m   = min n' len
---         m'  = max 0 (len - n')
---     in (v_slice 0 m vec, v_slice m m' vec)
+-- Work: O(1)
+-- Span: O(1)
+vsplitAt :: Int -> Vector a -> (Vector a, Vector a)
+vsplitAt n vec =
+    -- Copied from Haskell's vector library.
+    let len = vlength vec
+        n'  = maxInt n 0
+        m   = minInt n' len
+        m'  = maxInt 0 (len - n')
+    in (vslice 0 m vec, vslice m m' vec)
 
 v_generate_loop :: Vector a -> Int -> Int -> (Int -> a) -> Vector a
 v_generate_loop vec start end f =
@@ -106,106 +107,114 @@ v_generate_par_loop cutoff vec start end f =
           _    = sync
       in vec2
 
+-- Same default as Cilk.
+defaultGrainSize :: Int -> Int
+defaultGrainSize n =
+    let p = getNumProcessors
+        grain = maxInt 1 (n / (8 * p))
+    in minInt 2048 grain
+
 -- Work: O(n)
 -- Span: O(1)
-vgenerate_par :: Int -> Int -> (Int -> a) -> Vector a
-vgenerate_par cutoff n f =
+vgenerate_par :: Int -> (Int -> a) -> Vector a
+vgenerate_par n f =
     let n'  = maxInt n 0
         vec :: Vector a
         vec  = valloc n'
+        cutoff = defaultGrainSize n'
         vec1 = v_generate_par_loop cutoff vec 0 n' f
     in vec1
 
--- v_select :: Vector a -> Vector a -> Int -> a
--- v_select v1 v2 i =
---     let len = v_length v1 in
---     if i < len
---     then v_nth v1 i
---     else v_nth v2 (i - len)
+v_select :: Vector a -> Vector a -> Int -> a
+v_select v1 v2 i =
+    let len = vlength v1 in
+    if i < len
+    then vnth v1 i
+    else vnth v2 (i - len)
 
--- -- Work: O(n)
--- -- Span: O(n)
--- v_append :: Vector a -> Vector a -> Vector a
--- v_append v1 v2 = v_generate
---                      (v_length v1 + v_length v2)
---                      (\i -> v_select v1 v2 i)
+-- Work: O(n)
+-- Span: O(n)
+vappend :: Vector a -> Vector a -> Vector a
+vappend v1 v2 = vgenerate
+                    (vlength v1 + vlength v2)
+                    (\i -> v_select v1 v2 i)
 
--- -- Work: O(n)
--- -- Span: O(1)
--- v_append_par :: Vector a -> Vector a -> Vector a
--- v_append_par v1 v2 = v_generate_par
---                          (v_length v1 + v_length v2)
---                          (\i -> v_select v1 v2 i)
+-- Work: O(n)
+-- Span: O(1)
+vappend_par :: Vector a -> Vector a -> Vector a
+vappend_par v1 v2 = vgenerate_par
+                        (vlength v1 + vlength v2)
+                        (\i -> v_select v1 v2 i)
 
--- -- Work: O(n)
--- -- Span: O(n)
--- v_map :: (a -> b) -> Vector a -> Vector b
--- v_map f vec = v_generate (v_length vec) (\i -> f (v_nth vec i))
+-- Work: O(n)
+-- Span: O(n)
+vmap :: (a -> b) -> Vector a -> Vector b
+vmap f vec = vgenerate (vlength vec) (\i -> f (vnth vec i))
 
--- -- Work: O(n)
--- -- Span: O(1)
--- v_map_par :: (a -> b) -> Vector a -> Vector b
--- v_map_par f vec = v_generate_par (v_length vec) (\i -> f (v_nth vec i))
+-- Work: O(n)
+-- Span: O(1)
+vmap_par :: (a -> b) -> Vector a -> Vector b
+vmap_par f vec = vgenerate_par (vlength vec) (\i -> f (vnth vec i))
 
--- -- Work: O(n)
--- -- Span: O(n)
--- v_update :: Vector a -> Int -> a -> Vector a
--- v_update vec i x = v_generate
---                        (v_length vec)
---                        (\j -> if i == j then x else v_nth vec j)
+-- Work: O(n)
+-- Span: O(n)
+vupdate :: Vector a -> Int -> a -> Vector a
+vupdate vec i x = vgenerate
+                      (vlength vec)
+                      (\j -> if i == j then x else vnth vec j)
 
--- -- Work: O(n)
--- -- Span: O(1)
--- v_update_par :: Vector a -> Int -> a -> Vector a
--- v_update_par vec i x = v_generate_par
---                            (v_length vec)
---                            (\j -> if i == j then x else v_nth vec j)
+-- Work: O(n)
+-- Span: O(1)
+vupdate_par :: Vector a -> Int -> a -> Vector a
+vupdate_par vec i x = vgenerate_par
+                          (vlength vec)
+                          (\j -> if i == j then x else vnth vec j)
 
--- -- Work: O(n)
--- -- Span: O(n)
--- v_foldl :: (a -> b -> b) -> b -> Vector a -> b
--- v_foldl f acc vec =
---     let len = v_length vec in
---     if len == 0
---       then acc
---       else if len == 1
---         then f (v_nth vec 0) acc
---         else v_foldl f (f (v_nth vec 0) acc) (v_slice 1 (len - 1) vec)
+-- Work: O(n)
+-- Span: O(n)
+vfoldl :: (b -> a -> b) -> b -> Vector a -> b
+vfoldl f acc vec =
+    let len = vlength vec in
+    if len == 0
+      then acc
+      else if len == 1
+        then f acc (vnth vec 0)
+        else vfoldl f (f acc (vnth vec 0)) (vslice 1 (len-1) vec)
 
--- -- Work: O(n)
--- -- Span: O(log n)
--- v_foldl1_par :: (a -> a -> a) -> a -> Vector a -> a
--- v_foldl1_par f acc vec =
---     let len = v_length vec in
---     if len == 0
---       then acc
---       else if len == 1
---         then f (v_nth vec 0) acc
---         else
---           let mid  = div len 2
---               tup  = v_splitAt mid vec
---               v1   = fst tup
---               v2   = snd tup
---               acc1 = spawn (v_foldl1_par f acc v1)
---               acc2 = (v_foldl1_par f acc v2)
---               _    = sync
---           in f acc1 acc2
+-- Work: O(n)
+-- Span: O(log n)
+vfoldl1_par :: (a -> a -> a) -> a -> Vector a -> a
+vfoldl1_par f acc vec =
+    let len = vlength vec in
+    if len == 0
+      then acc
+      else if len == 1
+        then f (vnth vec 0) acc
+        else
+          let mid  = div len 2
+              tup  = vsplitAt mid vec
+              v1   = fst tup
+              v2   = snd tup
+              acc1 = spawn (vfoldl1_par f acc v1)
+              acc2 = (vfoldl1_par f acc v2)
+              _    = sync
+          in f acc1 acc2
 
--- -- Work: O(n)
--- -- Span: O(log n)
--- v_foldl2_par :: (a -> b -> b) -> b -> (b -> b -> b) -> Vector a -> b
--- v_foldl2_par f acc g vec =
---     let len = v_length vec in
---     if len == 0
---       then acc
---       else if len == 1
---         then f (v_nth vec 0) acc
---         else
---           let mid  = div len 2
---               tup  = v_splitAt mid vec
---               v1   = fst tup
---               v2   = snd tup
---               acc1 = spawn (v_foldl2_par f acc g v1)
---               acc2 = (v_foldl2_par f acc g v2)
---               _    = sync
---           in g acc1 acc2
+-- Work: O(n)
+-- Span: O(log n)
+vfoldl2_par :: (b -> a -> b) -> b -> (b -> b -> b) -> Vector a -> b
+vfoldl2_par f acc g vec =
+    let len = vlength vec in
+    if len == 0
+      then acc
+      else if len == 1
+        then f acc (vnth vec 0)
+        else
+          let mid  = div len 2
+              tup  = vsplitAt mid vec
+              v1   = fst tup
+              v2   = snd tup
+              acc1 = spawn (vfoldl2_par f acc g v1)
+              acc2 = (vfoldl2_par f acc g v2)
+              _    = sync
+          in g acc1 acc2

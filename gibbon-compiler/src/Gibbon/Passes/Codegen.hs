@@ -981,7 +981,9 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        to' = codegenTriv venv to
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_slice($exp:from', $exp:to', $id:old_ls); |] ]
 
-                 GetNumProcessors -> error "GetNumProcessors"
+                 GetNumProcessors -> do
+                   let [(outV,outTy)] = bnds
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = get_nprocs(); |] ]
 
                  BumpArenaRefCount{} -> error "codegen: BumpArenaRefCount not handled."
                  ReadInt{} -> error "codegen: ReadInt not handled."

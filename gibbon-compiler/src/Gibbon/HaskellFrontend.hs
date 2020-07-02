@@ -327,6 +327,7 @@ primMap = M.fromList
   , ("intToFloat", IntToFloatP)
   , ("floatToInt", FloatToIntP)
   , ("sizeParam", SizeParam)
+  , ("getNumProcessors", GetNumProcessors)
   , ("symappend", SymAppend)
   , ("True", MkTrue)
   , ("False", MkFalse)
@@ -357,6 +358,8 @@ desugarExp toplevel e =
       then pure SyncE
       else if v == "sizeParam"
       then pure $ PrimAppE SizeParam []
+      else if v == "getNumProcessors"
+      then pure $ PrimAppE GetNumProcessors []
       else case M.lookup v toplevel of
              Just sigma ->
                case tyFromScheme sigma of

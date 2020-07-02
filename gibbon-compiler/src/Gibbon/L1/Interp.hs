@@ -248,15 +248,16 @@ applyPrim rc p args =
    (VLengthP _,[VWrapId _vid (VList ls)]) -> pure $ VInt (length ls)
    (VNthP _,[VWrapId _vid (VList ls), VInt n]) -> pure $ ls !!! n
    (InplaceVUpdateP _,[VWrapId vid (VList ls), VInt i, v]) -> do
-       let ls' = if length ls < i
+       let ls' = if length ls <= i
                  then
                      let need = (i+1) - (length ls)
                      in VList $ ls ++ (replicate need v)
                  else VList (replaceNth i v ls)
        pure (VWrapId vid ls')
-   (VSliceP _,[VWrapId _vid (VList ls), VInt from, VInt to]) -> do
+   (VSliceP _,[VInt from, VInt len, VWrapId _vid (VList ls)]) -> do
        vid2 <- liftIO $ randomIO
-       pure $ VWrapId vid2 $ VList (L.take (to - from + 1) (L.drop from ls))
+       pure $ VWrapId vid2 $ VList (L.take len (L.drop from ls))
+   (GetNumProcessors, []) -> pure $ VInt 1
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
   where

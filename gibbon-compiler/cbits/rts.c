@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/sysinfo.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdarg.h> // For va_start etc
@@ -780,15 +781,16 @@ VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
         printf("vector_slice: malloc failed: %ld", sizeof(VectorTy));
         exit(1);
     }
-    vec2->lower = i + vec->lower;
-    vec2->upper = n;
+    vec2->lower = vec->lower + i;
+    vec2->upper = vec2->lower + n;
+    vec2->elt_size = vec->elt_size;
     vec2->data = vec->data;
     return vec2;
 }
 
 // The callers must cast the return value.
 void* vector_nth(VectorTy *vec, IntTy i) {
-    return (vec->data + (vec->elt_size * i));
+    return (vec->data + (vec->elt_size * (vec->lower + i)));
 }
 
 VectorTy* vector_inplace_update(VectorTy *vec, IntTy i, void* elt) {
