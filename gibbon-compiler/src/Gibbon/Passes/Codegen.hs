@@ -972,7 +972,10 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        [VarTriv old_ls, VarTriv sort_fn] = rnds
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_sort($id:old_ls, $id:sort_fn); |] ]
 
-                 InplaceVSortP _elty -> error "InplaceSortP"
+                 InplaceVSortP elty -> do
+                   let [(outV,_)] = bnds
+                       [VarTriv old_ls, VarTriv sort_fn] = rnds
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_sort($id:old_ls, $id:sort_fn); |] ]
 
                  VSliceP elty -> do
                    let [(outV,_)] = bnds

@@ -442,10 +442,11 @@ tests:
     test-flags: ["--parallel"]
     answer-file: examples/vectors/Vector.hs.ans
 
-  - name: InPlaceVector.hs
+  - name: SortPrim.hs
     dir: examples/vectors
-    skip: true
-    answer-file: examples/vectors/Vector.hs.ans
+    test-flags: ["--parallel"]
+    failing: [interp1]
+    answer-file: examples/vectors/SortPrim.ans
 
   - name: Sort.hs
     skip: true

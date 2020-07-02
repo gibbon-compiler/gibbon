@@ -804,6 +804,19 @@ VectorTy* vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const v
     return vec;
 }
 
+VectorTy* vector_copy(VectorTy *vec) {
+    IntTy len = vector_length(vec);
+    VectorTy *vec2 = vector_alloc(len, vec->elt_size);
+    memcpy(vec2->data, vec->data, len * vec->elt_size);
+    return vec2;
+}
+
+VectorTy* vector_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
+    VectorTy *vec2 = vector_copy(vec);
+    vector_inplace_sort(vec2, compar);
+    return vec2;
+}
+
 void vector_free(VectorTy *vec) {
     free(vec->data);
     free(vec);

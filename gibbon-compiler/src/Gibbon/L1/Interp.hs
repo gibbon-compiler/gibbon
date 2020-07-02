@@ -258,6 +258,13 @@ applyPrim rc p args =
        vid2 <- liftIO $ randomIO
        pure $ VWrapId vid2 $ VList (L.take len (L.drop from ls))
    (GetNumProcessors, []) -> pure $ VInt 1
+   -- Don't sort for now.
+   (VSortP _, [VWrapId _vid ls, _fn]) -> do
+       vid2 <- liftIO $ randomIO
+       pure $ VWrapId vid2 ls
+   (InplaceVSortP _, [VWrapId _vid ls, _fn]) -> do
+       vid2 <- liftIO $ randomIO
+       pure $ VWrapId vid2 ls
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
   where

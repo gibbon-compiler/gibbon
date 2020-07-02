@@ -61,18 +61,33 @@ minInt :: Int -> Int -> Int
 minInt a b = if a < b then a else b
 
 --------------------------------------------------------------------------------
+-- Wrappers over Gibbon primitives.
 
+-- Work: O(1)
+-- Span: O(1)
 length :: Vector a -> Int
 length vec = vlength vec
 
+-- Work: O(1)
+-- Span: O(1)
 nth :: Vector a -> Int -> a
 nth vec i = vnth vec i
 
+-- Work: O(1)
+-- Span: O(1)
 slice :: Int -- Starting index
       -> Int -- length
       -> Vector a
       -> Vector a
 slice i n vec = vslice i n vec
+
+-- sort :: Vector a -> (a -> a -> Int) -> Vector a
+-- sort vec cmp = vsort vec cmp1
+
+-- inplaceSort :: Vector a -> (a -> a -> Int) -> Vector a
+-- inplaceSort vec cmp = inplacevsort vec cmp1
+
+--------------------------------------------------------------------------------
 
 -- Work: O(1)
 -- Span: O(1)
