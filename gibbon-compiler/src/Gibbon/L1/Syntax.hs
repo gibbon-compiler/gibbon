@@ -97,6 +97,9 @@ instance (Show l, Show d, Out l, Out d, FunctionTy d) => Typeable (E1Ext l d) wh
       BenchE fn _ _ _ -> outTy $ fEnv env2 # fn
       AddFixed{}      -> error "gRecoverType: AddFixed not handled."
 
+instance Renamable () where
+    gRename _ () = ()
+
 instance HasRenamable E1Ext l d => Renamable (E1Ext l d) where
   gRename env ext =
     case ext of

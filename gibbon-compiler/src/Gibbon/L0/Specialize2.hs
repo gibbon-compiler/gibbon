@@ -17,6 +17,7 @@ module Gibbon.L0.Specialize2
 
 import           Control.Monad.State
 import           Data.Foldable ( foldlM )
+-- import           Data.Functor.Foldable
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           GHC.Stack (HasCallStack)

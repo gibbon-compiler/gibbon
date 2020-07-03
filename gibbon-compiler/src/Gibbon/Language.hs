@@ -24,6 +24,7 @@ module Gibbon.Language
 import qualified Data.Map as M
 import           Data.List as L
 import qualified Data.Set as S
+-- import           Data.Functor.Foldable
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Language.Constants
@@ -180,26 +181,9 @@ instance HasRenamable e l d => Renamable (PreExp e l d) where
        gol :: forall a. Renamable a => [a] -> [a]
        gol ls = map go ls
 
---------------------------------------------------------------------------------
-
 instance Renamable a => Renamable (UrTy a) where
-  gRename env ty =
-    case ty of
-      IntTy       -> IntTy
-      FloatTy     -> FloatTy
-      SymTy       -> SymTy
-      BoolTy      -> BoolTy
-      ProdTy ls   -> ProdTy (map (gRename env) ls)
-      SymDictTy a t -> SymDictTy a t
-      PackedTy tycon loc -> PackedTy tycon (gRename env loc)
-      VectorTy loc -> VectorTy (gRename env loc)
-      PtrTy      -> PtrTy
-      CursorTy   -> CursorTy
-      ArenaTy    -> ArenaTy
-      SymSetTy   -> SymSetTy
-      SymHashTy  -> SymHashTy
+  gRename env = fmap (gRename env)
 
---------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
 -- Helpers operating on expressions
