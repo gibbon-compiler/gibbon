@@ -53,6 +53,7 @@ library
                        Gibbon.Passes.Freshen
                        Gibbon.Passes.Flatten
                        Gibbon.Passes.InlineTriv
+                       Gibbon.Passes.Simplifier
                        Gibbon.Passes.DirectL3
                        Gibbon.Passes.Fusion2
                        Gibbon.Passes.AddRAN

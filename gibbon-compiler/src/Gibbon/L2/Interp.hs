@@ -239,8 +239,11 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
             (args, szs) <- unzip <$> mapM (go env sizeEnv) ls
             return (VProd args , SMany szs)
 
-        ProjE ix e0 -> do (VProd ls, SMany szs) <- go env sizeEnv e0
-                          return (ls !! ix, szs !! ix)
+        ProjE ix e0 -> do
+            val <- go env sizeEnv e0
+            case val of
+              (VProd ls, SMany szs) -> return (ls !! ix, szs !! ix)
+              oth -> error $ "L2.Interp: expected VProd, got: " ++ sdoc (ex, oth)
 
         TimeIt bod _ isIter -> do
               let iters = if isIter then rcIters rc else 1
@@ -332,7 +335,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
     BoundsCheck{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     AddFixed{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     IndirectionE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
-    GetCilkWorkerNum{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    GetCilkWorkerNum{} -> pure $ (VInt 1, SOne (fromJust $ byteSizeOfTy IntTy))
     LetAvail{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
 
   where

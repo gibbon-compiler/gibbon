@@ -240,31 +240,26 @@ applyPrim rc p args =
    (ReadPackedFile file _ _ ty,[]) ->
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
    (ReadArrayFile{},[]) -> do
-       vid <- liftIO $ randomIO
-       pure $ VWrapId vid (VList [])
+       pure (VList [])
    (VAllocP _,_n) -> do
-       vid <- liftIO $ randomIO
-       pure $ VWrapId vid (VList [])
-   (VLengthP _,[VWrapId _vid (VList ls)]) -> pure $ VInt (length ls)
-   (VNthP _,[VWrapId _vid (VList ls), VInt n]) -> pure $ ls !!! n
-   (InplaceVUpdateP _,[VWrapId vid (VList ls), VInt i, v]) -> do
+       pure (VList [])
+   (VLengthP _,[(VList ls)]) -> pure $ VInt (length ls)
+   (VNthP _,[(VList ls), VInt n]) -> pure $ ls !!! n
+   (InplaceVUpdateP _,[(VList ls), VInt i, v]) -> do
        let ls' = if length ls <= i
                  then
                      let need = (i+1) - (length ls)
                      in VList $ ls ++ (replicate need v)
                  else VList (replaceNth i v ls)
-       pure (VWrapId vid ls')
-   (VSliceP _,[VInt from, VInt len, VWrapId _vid (VList ls)]) -> do
-       vid2 <- liftIO $ randomIO
-       pure $ VWrapId vid2 $ VList (L.take len (L.drop from ls))
+       pure ls'
+   (VSliceP _,[VInt from, VInt len, (VList ls)]) -> do
+       pure $ VList (L.take len (L.drop from ls))
    (GetNumProcessors, []) -> pure $ VInt 1
    -- Don't sort for now.
-   (VSortP _, [VWrapId _vid ls, _fn]) -> do
-       vid2 <- liftIO $ randomIO
-       pure $ VWrapId vid2 ls
-   (InplaceVSortP _, [VWrapId _vid ls, _fn]) -> do
-       vid2 <- liftIO $ randomIO
-       pure $ VWrapId vid2 ls
+   (VSortP _, [ls, _fn]) -> do
+       pure ls
+   (InplaceVSortP _, [ls, _fn]) -> do
+       pure ls
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
   where

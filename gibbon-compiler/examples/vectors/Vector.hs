@@ -13,13 +13,13 @@ fib_seq n =
             y = fib_seq (n - 2)
         in x + y
 
--- main = do
---     let lam = (\i -> if i > 10 then fib_seq 10 else fib_seq i)
---         ls = [lam i | i <- [0..4]]
---         ls2 = [lam i | i <- [0..49]]
---         i = foldl (\i acc -> i + acc) 0 (ls++ls2)
---     print i
--- -- 2295
+-- -- main = do
+-- --     let lam = (\i -> if i > 10 then fib_seq 10 else fib_seq i)
+-- --         ls = [lam i | i <- [0..4]]
+-- --         ls2 = [lam i | i <- [0..49]]
+-- --         i = foldl (\i acc -> i + acc) 0 (ls++ls2)
+-- --     print i
+-- -- -- 2295
 
 gibbon_main =
     let lam = (\i -> if i > 10 then fib_seq 10 else fib_seq i)

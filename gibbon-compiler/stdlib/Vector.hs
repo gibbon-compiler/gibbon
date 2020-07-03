@@ -66,11 +66,13 @@ minInt a b = if a < b then a else b
 -- Work: O(1)
 -- Span: O(1)
 length :: Vector a -> Int
+{-# INLINE length #-}
 length vec = vlength vec
 
 -- Work: O(1)
 -- Span: O(1)
 nth :: Vector a -> Int -> a
+{-# INLINE nth #-}
 nth vec i = vnth vec i
 
 -- Work: O(1)
@@ -79,6 +81,7 @@ slice :: Int -- Starting index
       -> Int -- length
       -> Vector a
       -> Vector a
+{-# INLINE slice #-}
 slice i n vec = vslice i n vec
 
 -- sort :: Vector a -> (a -> a -> Int) -> Vector a
@@ -92,11 +95,13 @@ slice i n vec = vslice i n vec
 -- Work: O(1)
 -- Span: O(1)
 isEmpty :: Vector a -> Bool
+{-# INLINE isEmpty #-}
 isEmpty vec = length vec == 0
 
 -- Work: O(1)
 -- Span: O(1)
 splitAt :: Int -> Vector a -> (Vector a, Vector a)
+{-# INLINE splitAt #-}
 splitAt n vec =
     -- Copied from Haskell's vector library.
     let len = length vec
@@ -116,6 +121,7 @@ generate_loop vec start end f =
 -- Work: O(n)
 -- Span: O(n)
 generate :: Int -> (Int -> a) -> Vector a
+{-# INLINE generate #-}
 generate n f =
     let n'  = maxInt n 0
         vec :: Vector a
@@ -136,6 +142,7 @@ generate_par_loop cutoff vec start end f =
 
 -- Same default as Cilk.
 defaultGrainSize :: Int -> Int
+{-# INLINE defaultGrainSize #-}
 defaultGrainSize n =
     let p = getNumProcessors
         grain = maxInt 1 (n / (8 * p))
@@ -144,6 +151,7 @@ defaultGrainSize n =
 -- Work: O(n)
 -- Span: O(1)
 generate_par :: Int -> (Int -> a) -> Vector a
+{-# INLINE generate_par #-}
 generate_par n f =
     let n'  = maxInt n 0
         vec :: Vector a
@@ -153,6 +161,7 @@ generate_par n f =
     in vec1
 
 select :: Vector a -> Vector a -> Int -> a
+{-# INLINE select #-}
 select v1 v2 i =
     let len = length v1 in
     if i < len
@@ -162,6 +171,7 @@ select v1 v2 i =
 -- Work: O(n)
 -- Span: O(n)
 append :: Vector a -> Vector a -> Vector a
+{-# INLINE append #-}
 append v1 v2 = generate
                     (length v1 + length v2)
                     (\i -> select v1 v2 i)
@@ -169,6 +179,7 @@ append v1 v2 = generate
 -- Work: O(n)
 -- Span: O(1)
 append_par :: Vector a -> Vector a -> Vector a
+{-# INLINE append_par #-}
 append_par v1 v2 = generate_par
                         (length v1 + length v2)
                         (\i -> select v1 v2 i)
@@ -176,16 +187,19 @@ append_par v1 v2 = generate_par
 -- Work: O(n)
 -- Span: O(n)
 map :: (a -> b) -> Vector a -> Vector b
+{-# INLINE map #-}
 map f vec = generate (length vec) (\i -> f (vnth vec i))
 
 -- Work: O(n)
 -- Span: O(1)
 map_par :: (a -> b) -> Vector a -> Vector b
+{-# INLINE map_par #-}
 map_par f vec = generate_par (length vec) (\i -> f (vnth vec i))
 
 -- Work: O(n)
 -- Span: O(n)
 update :: Vector a -> Int -> a -> Vector a
+{-# INLINE update #-}
 update vec i x = generate
                       (length vec)
                       (\j -> if i == j then x else vnth vec j)
@@ -193,6 +207,7 @@ update vec i x = generate
 -- Work: O(n)
 -- Span: O(1)
 update_par :: Vector a -> Int -> a -> Vector a
+{-# INLINE update_par #-}
 update_par vec i x = generate_par
                           (length vec)
                           (\j -> if i == j then x else vnth vec j)

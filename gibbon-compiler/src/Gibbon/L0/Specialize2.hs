@@ -1377,3 +1377,11 @@ elimParE0 prg@Prog{fundefs,mainExp} = do
             BenchE fn _tyapps args b -> (\a -> Ext $ BenchE fn [] a b) <$> mapM go args
             ParE0{} -> err1 "toL1: ParE0"
             L p e   -> Ext <$> (L p) <$> (go e)
+
+--------------------------------------------------------------------------------
+
+-- markRecursiveFuns :: Prog0 -> Prog0
+-- markRecursive = _todo
+
+-- inlineFuns :: Prog0 -> Prog0
+-- inlineFuns prg@Prog{fundefs,mainExp} =

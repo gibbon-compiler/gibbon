@@ -155,11 +155,18 @@ ghc_compat_suffix has_bench =
   then "\nmain = gibbon_main"
   else text "\nmain = print gibbon_main"
 
+instance Pretty FunRec where
+    pprintWithStyle _sty = text . show
+
+instance Pretty FunInline where
+    pprintWithStyle _sty = text . show
+
 -- Functions:
 instance HasPretty ex => Pretty (FunDef ex) where
-    pprintWithStyle sty FunDef{funName,funArgs,funTy,funBody} =
-        text (fromVar funName) <+> doublecolon <+> pprintWithStyle sty funTy
-          $$ renderBod <> text "\n"
+    pprintWithStyle sty FunDef{funName,funArgs,funTy,funBody,funRec,funInline} =
+        braces (text "rec:" <+> pprintWithStyle sty funRec <> text ", inline:" <+> pprintWithStyle sty funInline) $$
+          text (fromVar funName) <+> doublecolon <+> pprintWithStyle sty funTy
+            $$ renderBod <> text "\n"
       where
         renderBod :: Doc
         renderBod = text (fromVar funName) <+> (pprintWithStyle sty funArgs) <+> equals
@@ -223,6 +230,10 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
 -- Types:
 instance Pretty () where
     pprintWithStyle _ _ = empty
+
+instance Pretty Bool where
+    pprintWithStyle _ = text . show
+
 
 instance Pretty Var where
     pprintWithStyle _ v = text (fromVar v)

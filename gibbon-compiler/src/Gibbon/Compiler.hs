@@ -59,6 +59,7 @@ import qualified Gibbon.L3.Typecheck as L3
 import           Gibbon.Passes.Freshen        (freshNames)
 import           Gibbon.Passes.Flatten        (flattenL1, flattenL2, flattenL3)
 import           Gibbon.Passes.InlineTriv     (inlineTriv)
+import           Gibbon.Passes.Simplifier     (simplify)
 -- import           Gibbon.Passes.Sequentialize  (sequentialize)
 
 import           Gibbon.Passes.DirectL3       (directL3)
@@ -489,9 +490,11 @@ passes config@Config{dynflags} l0 = do
       -- replace the main function with benchmark code:
       l1 <- goE1 "benchMainExp"  benchMainExp           l1
       l1 <- goE1 "typecheck"     L1.tcProg              l1
+      l1 <- goE1 "simplify"      simplify               l1
+      l1 <- goE1 "typecheck"     L1.tcProg              l1
       l1 <- goE1 "flatten"       flattenL1              l1
       l1 <- goE1 "inlineTriv"    inlineTriv             l1
-      l1 <- goE1 "typecheck"    L1.tcProg               l1
+      l1 <- goE1 "typecheck"     L1.tcProg              l1
       l1 <- if should_fuse
           then goE1  "fusion2"   fusion2                l1
           else return l1
