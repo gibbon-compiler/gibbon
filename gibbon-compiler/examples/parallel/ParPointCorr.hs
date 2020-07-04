@@ -1,4 +1,4 @@
-module Seq3DCorr where
+module ParPointCorr where
 
 import KdTree
 
@@ -8,9 +8,10 @@ import KdTree
 --         i       = rand
 --         j       = (mod i n) - 1
 --         probe   = vnth j pts
---         tr      = fromList pts
---     in countCorr probe radius tr
-
+--         -- 524288 == 2^19
+--         cutoff  = 524288
+--         tr      = fromList_par cutoff pts
+--     in countCorr_par cutoff probe radius tr
 
 gibbon_main =
     let pts :: [(Float, Float, Float)]
@@ -20,5 +21,7 @@ gibbon_main =
         i       = rand
         j       = (mod i n) - 1
         probe   = vnth j pts
+        -- 524288 == 2^19
+        cutoff  = 524288
         tr      = fromList_seq pts
-    in iterate (countCorr_seq probe radius tr)
+    in iterate (countCorr_par cutoff probe radius tr)
