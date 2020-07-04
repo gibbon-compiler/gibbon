@@ -550,7 +550,6 @@ primArgsTy p =
     Gensym  -> []
     MkTrue  -> []
     MkFalse -> []
-    SymAppend        -> [SymTy, IntTy]
     SizeParam        -> []
     IsBig            -> [IntTy, PackedTy "HOLE" _error]
     DictEmptyP _ty   -> []
@@ -621,7 +620,6 @@ primRetTy p =
     AndP -> BoolTy
     MkTrue  -> BoolTy
     MkFalse -> BoolTy
-    SymAppend      -> SymTy
     SizeParam      -> IntTy
     IsBig          -> BoolTy
     DictHasKeyP _  -> BoolTy

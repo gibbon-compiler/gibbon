@@ -394,7 +394,6 @@ data Prim ty
           | FAddP | FSubP | FMulP | FDivP | FExpP | FRandP | EqFloatP | FLtP | FGtP | FLtEqP | FGtEqP | FSqrtP | IntToFloatP | FloatToIntP
           | EqSymP             -- ^ Equality on Sym
           | OrP | AndP
-          | SymAppend          -- ^ A quick hack till we have deterministic gensym
           | DictInsertP ty     -- ^ takes dict, k,v; annotated with element type
           | DictLookupP ty     -- ^ takes dict,k errors if absent; annotated with element type
           | DictEmptyP  ty     -- ^ annotated with element type to avoid ambiguity

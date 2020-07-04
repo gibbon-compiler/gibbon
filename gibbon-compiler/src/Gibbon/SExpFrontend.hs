@@ -597,7 +597,6 @@ primMap = M.fromList
   , ("or" , OrP)
   , ("and", AndP)
   , ("size-param", SizeParam)
-  , ("sym-append", SymAppend)
   , ("True", MkTrue)
   , ("False", MkFalse)
   , ("gensym", Gensym)

@@ -1,4 +1,0 @@
-#lang gibbon
-
-(let ([a : Sym 'abc])
-  (eqsym 'abc123 (sym-append a 123)))

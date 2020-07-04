@@ -1001,7 +1001,6 @@ prim p =
     ErrorP{}     -> error$ "lower/prim: internal error, should not have got to here: "++show p
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."
     MkFalse      -> error "lower/prim: internal error. MkFalse should not get here."
-    SymAppend    -> error "lower/prim: internal error. SymAppend should not get here."
     RequestEndOf -> error "lower/prim: internal error. RequestEndOf shouldn't be here."
     RequestSizeOf -> error "lower/prim: internal error. RequestSizeOf shouldn't be here."
 

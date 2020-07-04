@@ -13,6 +13,3 @@ printsym s = let _ = unsafePerformIO (print s) in 0
 
 printint :: Int -> Int
 printint i = let _ = unsafePerformIO (print i) in 0
-
-symappend :: Sym -> Int -> Sym
-symappend s i = s ++ (show i)

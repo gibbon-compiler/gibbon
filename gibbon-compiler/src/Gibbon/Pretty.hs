@@ -128,8 +128,6 @@ ghc_compat_prefix has_bench =
   text "mod :: Int -> Int -> Int" $+$
   text "mod = P.mod" $+$
   text "" $+$
-  text "symAppend :: Sym -> Sym -> Sym" $+$
-  text "symAppend = (++)" $+$
   text "" $+$
   text "sizeParam :: Int" $+$
   text "sizeParam = 4" $+$
@@ -317,7 +315,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                              (pprintWithStyle sty ls)
           PrimAppE pr es ->
               case pr of
-                  _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP, SymAppend] ->
+                  _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP] ->
                       let [a1,a2] = es
                       in pprintWithStyle sty a1 <+> pprintWithStyle sty pr <+> pprintWithStyle sty a2
 
@@ -571,7 +569,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                             (hsep $ map (ppExp monadic env2) ls)
           PrimAppE pr es ->
               case pr of
-                  _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP, SymAppend] ->
+                  _ | pr `elem` [AddP, SubP, MulP, DivP, ModP, ExpP, EqSymP, EqIntP, LtP, GtP] ->
                       let [a1,a2] = es
                       in ppExp monadic env2 a1 <+> pprintWithStyle sty pr <+> ppExp monadic env2 a2
 

@@ -1615,7 +1615,6 @@ prim p = case p of
            VSortP elty     -> convertTy elty >>= return . VSortP
            InplaceVSortP elty -> convertTy elty >>= return . InplaceVSortP
            GetNumProcessors -> pure GetNumProcessors
-           SymAppend{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadArrayFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            SymSetEmpty{} -> err $ "prim: SymSetEmpty not handled."
