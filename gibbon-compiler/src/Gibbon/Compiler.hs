@@ -227,10 +227,6 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
             then "\n"++sepline ++ "\n" ++ (sdoc l0)
             else show (length (sdoc l0)) ++ " characters."
 
-      let parallel = gopt Opt_Parallel (dynflags config)
-      when (hasSpawnsProg l0 && not parallel) $
-        error "To compile a program with parallelism, use -parallel."
-
       -- (Stage 1) Run the program through the interpreter
       initResult <- withPrintInterpProg initTypeChecked
 
@@ -474,6 +470,7 @@ passes config@Config{dynflags} l0 = do
           biginf     = gopt Opt_BigInfiniteRegions dynflags
           gibbon1    = gopt Opt_Gibbon1 dynflags
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
+          parallel   = gopt Opt_Parallel dynflags
           should_fuse = gopt Opt_Fusion dynflags
       l0 <- go  "freshen"         freshNames            l0
       l0 <- goE0 "typecheck"       L0.tcProg             l0
@@ -492,6 +489,9 @@ passes config@Config{dynflags} l0 = do
       l1 <- goE1 "typecheck"     L1.tcProg              l1
       l1 <- goE1 "simplify"      simplify               l1
       l1 <- goE1 "typecheck"     L1.tcProg              l1
+      -- Check this after eliminating all dead functions.
+      when (hasSpawnsProg l1 && not parallel) $
+        error "To compile a program with parallelism, use --parallel."
       l1 <- goE1 "flatten"       flattenL1              l1
       l1 <- goE1 "inlineTriv"    inlineTriv             l1
       l1 <- goE1 "typecheck"     L1.tcProg              l1
