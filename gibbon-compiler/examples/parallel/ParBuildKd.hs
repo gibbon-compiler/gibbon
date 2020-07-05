@@ -3,7 +3,7 @@ module ParBuildKd where
 import KdTree
 
 gibbon_main =
-    let pts :: [(Float, Float, Float)]
+    let pts :: Vector (Float, Float, Float)
         pts = readArrayFile ()
         n       = sizeParam
         radius  = intToFloat n

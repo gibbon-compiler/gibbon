@@ -14,7 +14,7 @@ import KdTree
 --     in countCorr_par cutoff probe radius tr
 
 gibbon_main =
-    let pts :: [(Float, Float, Float)]
+    let pts :: Vector (Float, Float, Float)
         pts = readArrayFile ()
         n   = sizeParam
         radius  = intToFloat n

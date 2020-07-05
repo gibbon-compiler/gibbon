@@ -772,8 +772,14 @@ BoolTy vector_is_empty(VectorTy *vec) {
 }
 
 VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
-    if (n > vec->upper) {
-        printf("vector_slice: out of bounds: %lld > %lld", n, vec->upper);
+    IntTy lower = vec->lower + i;
+    IntTy upper = vec->lower + i + n;
+    if ((lower > vec->upper)) {
+        printf("vector_slice: lower out of bounds, %lld > %lld", lower, vec->upper);
+        exit(1);
+    }
+    if ((upper > vec->upper)) {
+        printf("vector_slice: upper out of bounds: %lld > %lld", upper, vec->upper);
         exit(1);
     }
     VectorTy *vec2 = ALLOC(sizeof(VectorTy));
@@ -781,8 +787,8 @@ VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
         printf("vector_slice: malloc failed: %ld", sizeof(VectorTy));
         exit(1);
     }
-    vec2->lower = vec->lower + i;
-    vec2->upper = vec2->lower + n;
+    vec2->lower = lower;
+    vec2->upper = upper;
     vec2->elt_size = vec->elt_size;
     vec2->data = vec->data;
     return vec2;
@@ -790,6 +796,10 @@ VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
 
 // The callers must cast the return value.
 void* vector_nth(VectorTy *vec, IntTy i) {
+    if (i > vec->upper) {
+        printf("vector_nth index out of bounds: %lld > %lld\n", i, vec->upper);
+        exit(1);
+    }
     return (vec->data + (vec->elt_size * (vec->lower + i)));
 }
 
