@@ -837,9 +837,6 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  ReadArrayFile mfile ty
                    | [] <- rnds, [(outV,_outT)] <- bnds -> do
-                           let filename = case mfile of
-                                            Just f  -> [cexp| $string:f |] -- Fixed at compile time.
-                                            Nothing -> [cexp| read_arrayfile_param() |] -- Will be set by command line arg.
                            let parse_in_c t = case t of
                                                 IntTy   -> "%lld"
                                                 FloatTy -> "%f"
@@ -879,8 +876,14 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                scanf_rator  = C.Var (C.Id "sscanf" noLoc) noLoc
                                scanf = C.FnCall scanf_rator (scanf_line : scanf_format : scanf_vars) noLoc
 
+                           let (filename, filelength) = case mfile of
+                                            Just (f, i)  -> ( [cexp| $string:f |]
+                                                            , [cexp| $int:i |]) -- Fixed at compile time.
+                                            Nothing -> ( [cexp| read_arrayfile_param() |]
+                                                       , [cexp| read_arrayfile_length_param() |]) -- Will be set by command line arg.
+
                            return $
-                                  [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV) = vector_alloc(10, sizeof($ty:(codegenTy ty))); |]
+                                  [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV) = vector_alloc($filelength, sizeof($ty:(codegenTy ty))); |]
                                   , C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:elem; |]
                                   , C.BlockStm  [cstm| FILE *($id:fp); |]
                                   , C.BlockDecl [cdecl| char *($id:line) = NULL; |]

@@ -214,7 +214,7 @@ data Prim
     | InplaceVSortP Ty
     | GetNumProcessors
     | ReadPackedFile (Maybe FilePath) TyCon
-    | ReadArrayFile (Maybe FilePath) Ty
+    | ReadArrayFile (Maybe (FilePath, Int)) Ty
 
     | NewBuffer L2.Multiplicity
     -- ^ Allocate a new buffer, return a cursor.

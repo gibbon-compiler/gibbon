@@ -443,11 +443,12 @@ data Prim ty
             -- The variable represents the region that this file will be mapped to, and is
             -- set by InferLocations.
 
-          | ReadArrayFile (Maybe FilePath) ty
-            -- ^ Parse a file into an UT_array. This is decorated with the
+          | ReadArrayFile (Maybe (FilePath, Int)) ty
+            -- ^ Parse a file into a Vector. This is decorated with the
             -- element type. If the element type is a struct,
-            -- like (Int, Int), each line must contain 2 numbers
-            -- separated by a space
+            -- like (Int, Int) for example, each line must contain 2 numbers
+            -- separated by a space. The Int is the number of lines in the
+            -- file.
 
           | RequestEndOf
           -- ^ Conveys a demand for the "end of" some packed value, which is

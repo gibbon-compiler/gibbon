@@ -390,13 +390,13 @@ desugarExp toplevel e =
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
                   else if f == "readArrayFile"
                   then case e2 of
-                         Lit _ lit -> do
+                         Tuple _ Boxed [Lit _ name,Lit _ len] -> do
                            t <- newMetaTy
-                           pure $ PrimAppE (ReadArrayFile (Just (litToString lit)) t) []
+                           pure $ PrimAppE (ReadArrayFile (Just (litToString name, litToInt len)) t) []
                          Con _ (Special _ (UnitCon _)) -> do
                            t <- newMetaTy
                            pure $ PrimAppE (ReadArrayFile Nothing t) []
-                         _ -> error "desugarExp: couldn't parse readArrayFile"
+                         _ -> error $ "desugarExp: couldn't parse readArrayFile; " ++ prettyPrint e2
                   else if f == "bench"
                   then do
                     e2' <- desugarExp toplevel e2
@@ -489,13 +489,13 @@ desugarExp toplevel e =
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
                   else if c == "readArrayFile"
                   then case e2 of
-                         Lit _ lit -> do
+                         Tuple _ Boxed [Lit _ name,Lit _ len] -> do
                            t <- newMetaTy
-                           pure $ PrimAppE (ReadArrayFile (Just (litToString lit)) t) []
+                           pure $ PrimAppE (ReadArrayFile (Just (litToString name, litToInt len)) t) []
                          Con _ (Special _ (UnitCon _)) -> do
                            t <- newMetaTy
                            pure $ PrimAppE (ReadArrayFile Nothing t) []
-                         _ -> error "desugarExp: couldn't parse readArrayFile"
+                         _ -> error $ "desugarExp: couldn't parse readArrayFile; " ++ prettyPrint e2
                   else (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
           (Ext (ParE0 ls)) -> do
             e2' <- desugarExp toplevel e2
