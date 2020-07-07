@@ -19,6 +19,6 @@ gibbon_main =
         radius  = intToFloat n
         i       = rand
         j       = (mod i n) - 1
-        probe   = vnth j pts
+        probe   = nth pts j
         tr      = fromList_seq pts
     in iterate (countCorr_seq probe radius tr)

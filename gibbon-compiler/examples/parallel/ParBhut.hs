@@ -1,4 +1,4 @@
-module Seq2DBHut where
+module ParBhut where
 
 -- Ported from : https://smlnj-gitlab.cs.uchicago.edu/manticore/pmlc/blob/15539f76c33fdef2ac7fd5d4396213e06732e660/src/benchmarks/programs/barnes-hut/barnes-hut-seq.pml
 
@@ -99,6 +99,34 @@ accel a x y m =
 
 -- the acceleration of a mass point after applying the force applied by surrounding
 -- mass points
+calcAccel_seq :: (Float, Float, Float) -> BH_Tree -> (Float, Float)
+calcAccel_seq mpt tr =
+  case tr of
+    BH_Empty -> (0.0, 0.0)
+    BH_Leaf x y mass -> accel mpt x y mass
+    BH_Node x y mass elems tr1 tr2 tr3 tr4 ->
+      if isClose (mpt !!! 0, mpt !!! 1) (x, y)
+      then
+        let a1 = calcAccel_seq mpt tr1
+            x1 = a1 !!! 0
+            y1 = a1 !!! 1
+
+            a2 = calcAccel_seq mpt tr2
+            x2 = a2 !!! 0
+            y2 = a2 !!! 1
+
+            a3 = calcAccel_seq mpt tr3
+            x3 = a3 !!! 0
+            y3 = a3 !!! 1
+
+            a4 = calcAccel_seq mpt tr4
+            x4 = a4 !!! 0
+            y4 = a4 !!! 1
+
+        in (x1 .+. x2 .+. x3 .+. x4, y1 .+. y2 .+. y3 .+. y4)
+      else accel mpt x y mass
+
+
 calcAccel :: (Float, Float, Float) -> BH_Tree -> (Float, Float)
 calcAccel mpt tr =
   case tr of
@@ -106,23 +134,21 @@ calcAccel mpt tr =
     BH_Leaf x y mass -> accel mpt x y mass
     BH_Node x y mass elems tr1 tr2 tr3 tr4 ->
       if isClose (mpt !!! 0, mpt !!! 1) (x, y)
-      then
-        let a1 = calcAccel mpt tr1
+      -- 524288 == 2 ^ 19
+      then if elems < 524288 then calcAccel_seq mpt tr else
+        let a1 = spawn (calcAccel mpt tr1)
+            a2 = spawn (calcAccel mpt tr2)
+            a3 = spawn (calcAccel mpt tr3)
+            a4 = calcAccel mpt tr4
+            _  = sync
             x1 = a1 !!! 0
             y1 = a1 !!! 1
-
-            a2 = calcAccel mpt tr2
             x2 = a2 !!! 0
             y2 = a2 !!! 1
-
-            a3 = calcAccel mpt tr3
             x3 = a3 !!! 0
             y3 = a3 !!! 1
-
-            a4 = calcAccel mpt tr4
             x4 = a4 !!! 0
             y4 = a4 !!! 1
-
         in (x1 .+. x2 .+. x3 .+. x4, y1 .+. y2 .+. y3 .+. y4)
       else accel mpt x y mass
 
@@ -393,8 +419,8 @@ check00 particles idx idx_j stop force_x force_y =
 
 --------------------------------------------------------------------------------
 
-buildTree :: Float -> Float -> Float -> Float -> [(Float, Float, Float)] -> BH_Tree
-buildTree llx lly rux ruy mpts =
+buildTree_seq :: Float -> Float -> Float -> Float -> [(Float, Float, Float)] -> BH_Tree
+buildTree_seq llx lly rux ruy mpts =
   let len = vlength mpts in
   if len == 0
   then BH_Empty
@@ -411,16 +437,47 @@ buildTree llx lly rux ruy mpts =
         midy = (lly .+. ruy) ./. 2.0
 
         p1   = massPtsInBox mpts llx lly midx midy
-        tr1  = buildTree llx lly midx midy p1
+        tr1  = buildTree_seq llx lly midx midy p1
 
         p2   = massPtsInBox mpts llx midy midx ruy
-        tr2  = buildTree llx midy midx ruy p2
+        tr2  = buildTree_seq llx midy midx ruy p2
 
         p3   = massPtsInBox mpts midx midy rux ruy
-        tr3  = buildTree midx midy rux ruy p3
+        tr3  = buildTree_seq midx midy rux ruy p3
+
+        p4   = massPtsInBox mpts midx lly rux midy
+        tr4  = buildTree_seq midx lly rux midy p4
+
+        elems= (getElems tr1) + (getElems tr2) + (getElems tr3) + (getElems tr4)
+    in BH_Node x y m elems tr1 tr2 tr3 tr4
+
+
+buildTree :: Float -> Float -> Float -> Float -> [(Float, Float, Float)] -> BH_Tree
+buildTree llx lly rux ruy mpts =
+  let len = vlength mpts in
+  -- 524288 == 2^19
+  if len < 524288 then buildTree_seq llx lly rux ruy mpts
+  else
+    let tup  = calcCentroid mpts
+        x    = tup !!! 0
+        y    = tup !!! 1
+        m    = tup !!! 2
+        midx = (llx .+. rux) ./. 2.0
+        midy = (lly .+. ruy) ./. 2.0
+
+        p1   = massPtsInBox mpts llx lly midx midy
+        tr1  = spawn (buildTree llx lly midx midy p1)
+
+        p2   = massPtsInBox mpts llx midy midx ruy
+        tr2  = spawn (buildTree llx midy midx ruy p2)
+
+        p3   = massPtsInBox mpts midx midy rux ruy
+        tr3  = spawn (buildTree midx midy rux ruy p3)
 
         p4   = massPtsInBox mpts midx lly rux midy
         tr4  = buildTree midx lly rux midy p4
+
+        _    = sync
 
         elems= (getElems tr1) + (getElems tr2) + (getElems tr3) + (getElems tr4)
     in BH_Node x y m elems tr1 tr2 tr3 tr4

@@ -207,7 +207,9 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   let initTypeChecked :: L0.Prog0
       initTypeChecked =
         -- We typecheck first to turn the appropriate VarE's into FunRefE's.
-        fst $ runPassM defaultConfig 0 (freshNames l0 >>= L0.tcProg)
+        fst $ runPassM defaultConfig 0
+                (freshNames l0 >>=
+                 (\fresh -> dbgTrace 5 ("\nFreshen:\n"++sepline++ "\n" ++pprender fresh) (L0.tcProg fresh)))
 
   case mode of
     Interp1 -> do

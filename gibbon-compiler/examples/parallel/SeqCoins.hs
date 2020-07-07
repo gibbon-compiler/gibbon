@@ -1,57 +1,16 @@
 module SeqCoins where
 
-data AList = ANil | ASing Int | Append AList AList
-
-data Coins = Cons Int Int Coins
-           | Nil
-
-lenA :: AList -> Int
-lenA ls =
-    case ls of
-        ANil -> 0
-        ASing i -> 1
-        Append l r -> lenA l + lenA r
-
-getCoins1 :: Int -> Int -> [(Int,Int)] -> [(Int,Int)]
-getCoins1 c q coins =
-    let len = vlength coins
-    in if q == 1 then (vslice coins 0 len) else vsnoc coins (c,q-1)
-
-getCoinsRst :: [(Int,Int)] -> [(Int,Int)]
-getCoinsRst coins =
-    let len = vlength coins
-    in vslice coins 0 (len-1)
-
-payA :: Int -> [(Int,Int)] -> AList
-payA amt coins =
-    if amt == 0
-    then ASing 1
-    else
-        let len = vlength coins
-        in if len == 0
-        then ANil
-        else
-            let tup = vnth (len-1) coins
-                c = tup !!! 0
-                q = tup !!! 1
-                coins_rst = getCoinsRst coins
-            in if c > amt
-            then payA amt coins_rst
-            else
-                let coins1 = getCoins1 c q coins_rst
-                    left = payA (amt - c) coins1
-                    right = payA amt coins_rst
-                in Append left right
+import Coins
 
 gibbon_main =
-    let coins :: [(Int,Int)]
-        coins = vempty
-        _ = inplacevsnoc coins (250,55)
-        _ = inplacevsnoc coins (100,88)
-        _ = inplacevsnoc coins (25,88)
-        _ = inplacevsnoc coins (10,99)
-        _ = inplacevsnoc coins (5,122)
-        _ = inplacevsnoc coins (1,177)
+    let coins0 :: Vector (Int,Int)
+        coins0 = valloc 6
+        coins1 = inplacevupdate coins0 0 (250,55)
+        coins2 = inplacevupdate coins1 1 (100,88)
+        coins3 = inplacevupdate coins2 2 (25,88)
+        coins4 = inplacevupdate coins3 3 (10,99)
+        coins5 = inplacevupdate coins4 4 (5,122)
+        coins6 = inplacevupdate coins5 5 (1,177)
         amt = sizeParam
-        tr = iterate (payA amt coins)
+        tr = iterate (payA_seq amt coins0)
     in lenA tr

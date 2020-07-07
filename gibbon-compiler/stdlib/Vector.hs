@@ -100,6 +100,16 @@ isEmpty vec = length vec == 0
 
 -- Work: O(1)
 -- Span: O(1)
+singleton :: a -> Vector a
+{-# INLINE singleton #-}
+singleton x =
+    let vec :: Vector a
+        vec = valloc 1
+        vec2 = inplacevupdate vec 0 x
+    in  vec2
+
+-- Work: O(1)
+-- Span: O(1)
 splitAt :: Int -> Vector a -> (Vector a, Vector a)
 {-# INLINE splitAt #-}
 splitAt n vec =
@@ -260,3 +270,55 @@ foldl2_par f acc g vec =
               acc2 = (foldl2_par f acc g v2)
               _    = sync
           in g acc1 acc2
+
+
+filter_loop :: Vector a -> Vector a -> Vector Int -> Int -> Int -> Vector a
+filter_loop to from idxs start end =
+    if start == end
+    then to
+    else
+      let idx = nth idxs start
+      in if idx == (-1)
+         then filter_loop to from idxs (start+1) end
+         else
+           let elt = nth from idx
+               to1 = inplacevupdate to start elt
+           in filter_loop to1 from idxs (start+1) end
+
+-- Work: O(n)
+-- Span: O(n)
+filter :: (a -> Bool) -> Vector a -> Vector a
+{-# INLINE filter #-}
+filter f vec =
+    let idxs :: Vector Int
+        idxs = generate (length vec) (\i -> if f (nth vec i) then i else (-1))
+        ones = foldl (\(acc :: Int) (x :: Int) -> if x == (-1) then acc else acc + 1) 0 idxs
+        to :: Vector a
+        to = valloc ones
+    in filter_loop to vec idxs 0 ones
+
+
+copyAtLoop :: Int -> Int -> Vector a -> Vector a -> Vector a
+copyAtLoop start end src dst =
+    if start == end
+    then dst
+    else let dst2 = inplacevupdate dst start (nth src start)
+         in copyAtLoop (start+1) end src dst2
+
+snoc :: Vector a -> a -> Vector a
+snoc vec x =
+    let len = length vec
+        vec2 :: Vector a
+        vec2 = valloc (len + 1)
+        vec3 = copyAtLoop 0 len vec vec2
+        vec4 = inplacevupdate vec3 len x
+    in vec4
+
+cons :: a -> Vector a -> Vector a
+cons x vec =
+    let len = length vec
+        vec2 :: Vector a
+        vec2 = valloc (len + 1)
+        vec3 = copyAtLoop 1 (len+1) vec vec2
+        vec4 = inplacevupdate vec3 0 x
+    in vec4

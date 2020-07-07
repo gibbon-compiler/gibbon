@@ -20,7 +20,7 @@ gibbon_main =
         radius  = intToFloat n
         i       = rand
         j       = (mod i n) - 1
-        probe   = vnth j pts
+        probe   = nth pts j
         -- 524288 == 2^19
         cutoff  = 524288
         tr      = fromList_seq pts
