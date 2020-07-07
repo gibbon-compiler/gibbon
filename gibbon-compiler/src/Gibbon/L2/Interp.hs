@@ -48,7 +48,6 @@ instance InterpProg Store Exp2 where
         Just (e,_) -> do
           let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
           ((v, _size),logs,store1) <- runInterpM (interp M.empty rc M.empty ddefs fenv e) store
-          dbgTraceIt (sdoc store1) (pure ())
           -- Policy: don't return locations
           let res = case v of
                         (VLoc reg off) ->
@@ -456,7 +455,7 @@ deserialize ddefs store (Buffer seq0) = final
          let Store s = store
              Buffer pointee = dropInBuffer off (s M.! buf_id)
              (ls, _rst') = readN n pointee
-         in dbgTraceIt (sdoc (s M.! buf_id, off)) (ls, rst)
+         in (ls, rst)
 
        SerPad :< rst ->
          readN n rst
