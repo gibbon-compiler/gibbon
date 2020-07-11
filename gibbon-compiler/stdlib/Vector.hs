@@ -33,21 +33,6 @@ vslice = _builtin
 inplacevupdate :: Vector a -> Int -> a -> Vector a
 inplacevupdate = _builtin
 
-numCapabilities :: Int
-numCapabilities = _builtin
-
--- v_inject :: Vector a -> Vector (Int, a) -> Vector a
--- v_inject = _builtin
-
--- v_ninject_par :: Vector a -> Vector (Int, a) -> Vector a
--- v_ninject_par = _builtin
-
-spawn :: a -> a
-spawn = _builtin
-
-sync :: ()
-sync = ()
-
 #endif
 
 -}
@@ -153,12 +138,13 @@ generate n f =
 
 generate_par_loop :: Int -> Vector a -> Int -> Int -> (Int -> a) -> Vector a
 generate_par_loop cutoff vec start end f =
-    if (end - start) <= cutoff
+    -- if (end - start) <= cutoff
+    if (end - start) <= 2
     then generate_loop vec start end f
     else
       let mid  = div (start + end) 2
           vec1 = spawn (generate_par_loop cutoff vec start mid f)
-          vec2 = generate_par_loop cutoff vec1 mid end f
+          vec2 = generate_par_loop cutoff vec mid end f
           _    = sync
       in vec2
 
@@ -258,6 +244,23 @@ foldl f acc vec =
         else foldl f (f acc (vnth vec 0)) (vslice 1 (len-1) vec)
 
 -- Work: O(n)
+-- Span: O(n)
+ifoldl :: (b -> Int -> a -> b) -> b -> Vector a -> b
+{-# INLINE ifoldl #-}
+ifoldl f acc vec = ifoldl1 0 f acc vec
+
+-- Work: O(n)
+-- Span: O(n)
+ifoldl1 :: Int -> (b -> Int -> a -> b) -> b -> Vector a -> b
+ifoldl1 idx f acc vec =
+    let len = length vec in
+    if len == 0
+      then acc
+      else if len == 1
+        then f acc idx (vnth vec 0)
+        else ifoldl1 (idx+1) f (f acc idx (vnth vec 0)) (vslice 1 (len-1) vec)
+
+-- Work: O(n)
 -- Span: O(log n)
 foldl1_par :: (a -> a -> a) -> a -> Vector a -> a
 foldl1_par f acc vec =
@@ -295,34 +298,27 @@ foldl2_par f acc g vec =
               _    = sync
           in g acc1 acc2
 
-----------------------------------------
--- TODO: review things after this.
+-- | It returns an Int because Gibbon doesn't have an IO monad yet.
+printVec :: (a -> Int) -> Vector a -> Int
+printVec f vec =
+    let _ = printsym (quote "[")
+        n = printVec_loop 0 (length vec) vec f
+        _ = printsym (quote "]")
+    in n
 
-filter_loop :: Vector a -> Vector a -> Vector Int -> Int -> Int -> Vector a
-filter_loop to from idxs start end =
+printVec_loop :: Int -> Int -> Vector a -> (a -> Int) -> Int
+printVec_loop start end vec f =
     if start == end
-    then to
+    then 0
     else
-      let idx = nth idxs start
-      in if idx == (-1)
-         then filter_loop to from idxs (start+1) end
-         else
-           let elt = nth from idx
-               to1 = inplacevupdate to start elt
-           in filter_loop to1 from idxs (start+1) end
+        let x = head vec
+            _ = f x
+            _ = printsym (quote ",")
+            rst = tail vec
+        in printVec_loop (start+1) end rst f
 
 -- Work: O(n)
 -- Span: O(n)
-filter :: (a -> Bool) -> Vector a -> Vector a
-{-# INLINE filter #-}
-filter f vec =
-    let idxs :: Vector Int
-        idxs = generate (length vec) (\i -> if f (nth vec i) then i else (-1))
-        ones = foldl (\(acc :: Int) (x :: Int) -> if x == (-1) then acc else acc + 1) 0 idxs
-        to :: Vector a
-        to = valloc ones
-    in filter_loop to vec idxs 0 ones
-
 snoc :: Vector a -> a -> Vector a
 {-# INLINE snoc #-}
 snoc vec x =
@@ -333,6 +329,8 @@ snoc vec x =
         vec4 = inplacevupdate vec3 len x
     in vec4
 
+-- Work: O(n)
+-- Span: O(n)
 cons :: a -> Vector a -> Vector a
 {-# INLINE cons #-}
 cons x vec =
@@ -342,3 +340,30 @@ cons x vec =
         vec3 = generate_loop vec2 1 (len+1) (\i -> nth vec (i-1))
         vec4 = inplacevupdate vec3 0 x
     in vec4
+
+----------------------------------
+-- TODO: review things after this.
+
+filter_loop :: Vector Int -> Int -> Int -> Int -> Vector a -> Vector a -> Vector a
+filter_loop idxs write_at start end from to =
+    if start == end
+    then to
+    else
+        let idx = nth idxs start
+        in if idx == (-1)
+           then filter_loop idxs write_at (start+1) end from to
+           else
+               let elt = nth from idx
+                   to1 = inplacevupdate to write_at elt
+               in filter_loop idxs (write_at+1) (start+1) end from to1
+
+filter :: (a -> Bool) -> Vector a -> Vector a
+{-# INLINE filter #-}
+filter f vec =
+    let idxs :: Vector Int
+        idxs = generate (length vec) (\i -> if f (nth vec i) then i else (-1))
+        num_ones = foldl (\(acc :: Int) (x :: Int) -> if x == (-1) then acc else acc + 1) 0 idxs
+        to :: Vector a
+        to = valloc num_ones
+        len_idxs = length idxs
+    in filter_loop idxs 0 0 len_idxs vec to

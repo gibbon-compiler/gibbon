@@ -11,6 +11,7 @@ gibbon_main =
         coins4 = inplacevupdate coins3 3 (10,99)
         coins5 = inplacevupdate coins4 4 (5,122)
         coins6 = inplacevupdate coins5 5 (1,177)
+    -- in printCoins coins6
         amt = sizeParam
         tr = iterate (payA_seq amt coins0)
     in lenA tr

@@ -18,30 +18,18 @@ getCoins1 c q coins_rst =
 
 printCoins :: Vector (Int, Int) -> Int
 printCoins coins =
-    let _ = printsym (quote "[")
-        n = printCoins' 0 (length coins) coins
-        _ = printsym (quote "]\n")
+    let n = printVec (\tup -> printCoin tup) coins
+        _ = printsym (quote "\n")
     in n
-
-printCoins' :: Int -> Int -> Vector (Int, Int) -> Int
-printCoins' start end coins =
-    if start == end
-    then 0
-    else
-        let tup = head coins
-            _ = printCoin tup
-            rst = tail coins
-        in printCoins' (start+1) end rst
 
 printCoin :: (Int, Int) -> Int
 printCoin tup =
-    let c = tup !!! 0
-        q = tup !!! 1
+    let a = tup !!! 0
+        b = tup !!! 1
         _ = printsym (quote "(")
-        _ = printint c
+        _ = printint a
         _ = printsym (quote ",")
-        _ = printint q
-        _ = printsym (quote "")
+        _ = printint b
         _ = printsym (quote ")")
     in 0
 

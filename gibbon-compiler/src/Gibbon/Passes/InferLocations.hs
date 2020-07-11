@@ -802,8 +802,8 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
 
     PrimAppE pr es ->
       case dest of
-        SingleDest d -> err $ "Cannot unify primop " ++ sdoc pr ++ " with destination " ++ sdoc d
-        TupleDest  d -> err $ "Cannot unify primop " ++ sdoc pr ++ " with destination " ++ sdoc d
+        SingleDest d -> err $ "Cannot unify primop " ++ sdoc pr ++ " with destination " ++ sdoc dest ++ "in " ++ sdoc ex0
+        TupleDest  d -> err $ "Cannot unify primop " ++ sdoc pr ++ " with destination " ++ sdoc dest ++ "in " ++ sdoc ex0
         NoDest -> do results <- mapM (\e -> inferExp env e NoDest) es
                      -- Assume arguments to PrimAppE are trivial
                      -- so there's no need to deal with constraints or locations
