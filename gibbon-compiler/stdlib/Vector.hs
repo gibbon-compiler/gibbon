@@ -120,6 +120,18 @@ splitAt n vec =
         m'  = maxInt 0 (len - n')
     in (vslice 0 m vec, vslice m m' vec)
 
+-- Work: O(1)
+-- Span: O(1)
+head :: Vector a -> a
+{-# INLINE head #-}
+head vec = nth vec 0
+
+-- Work: O(1)
+-- Span: O(1)
+tail :: Vector a -> Vector a
+{-# INLINE tail #-}
+tail vec = slice 1 ((length vec)-1) vec
+
 generate_loop :: Vector a -> Int -> Int -> (Int -> a) -> Vector a
 generate_loop vec start end f =
     if start == end
@@ -169,6 +181,18 @@ generate_par n f =
         cutoff = defaultGrainSize n'
         vec1 = generate_par_loop cutoff vec 0 n' f
     in vec1
+
+-- Work: O(n)
+-- Span: O(n)
+copy :: Vector a -> Vector a
+{-# INLINE copy #-}
+copy vec = generate (length vec) (\i -> nth vec i)
+
+-- Work: O(n)
+-- Span: O(1)
+copy_par :: Vector a -> Vector a
+{-# INLINE copy_par #-}
+copy_par vec = generate_par (length vec) (\i -> nth vec i)
 
 select :: Vector a -> Vector a -> Int -> a
 {-# INLINE select #-}
@@ -271,6 +295,8 @@ foldl2_par f acc g vec =
               _    = sync
           in g acc1 acc2
 
+----------------------------------------
+-- TODO: review things after this.
 
 filter_loop :: Vector a -> Vector a -> Vector Int -> Int -> Int -> Vector a
 filter_loop to from idxs start end =
@@ -297,28 +323,22 @@ filter f vec =
         to = valloc ones
     in filter_loop to vec idxs 0 ones
 
-
-copyAtLoop :: Int -> Int -> Vector a -> Vector a -> Vector a
-copyAtLoop start end src dst =
-    if start == end
-    then dst
-    else let dst2 = inplacevupdate dst start (nth src start)
-         in copyAtLoop (start+1) end src dst2
-
 snoc :: Vector a -> a -> Vector a
+{-# INLINE snoc #-}
 snoc vec x =
     let len = length vec
         vec2 :: Vector a
         vec2 = valloc (len + 1)
-        vec3 = copyAtLoop 0 len vec vec2
+        vec3 = generate_loop vec2 0 len (\i -> nth vec i)
         vec4 = inplacevupdate vec3 len x
     in vec4
 
 cons :: a -> Vector a -> Vector a
+{-# INLINE cons #-}
 cons x vec =
     let len = length vec
         vec2 :: Vector a
         vec2 = valloc (len + 1)
-        vec3 = copyAtLoop 1 (len+1) vec vec2
+        vec3 = generate_loop vec2 1 (len+1) (\i -> nth vec (i-1))
         vec4 = inplacevupdate vec3 0 x
     in vec4
