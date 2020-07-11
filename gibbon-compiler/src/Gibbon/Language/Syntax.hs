@@ -409,7 +409,9 @@ data Prim ty
           | MkTrue  -- ^ Zero argument constructor.
           | MkFalse -- ^ Zero argument constructor.
 
-          | PrintInt -- ^ Print an integer to standard out
+          | PrintInt   -- ^ Print an integer to standard out
+          | PrintFloat -- ^ Print a floating point number to standard out
+          | PrintBool  -- ^ Print a boolean to standard out
           | PrintSym -- ^ Print a symbol to standard out
           | ReadInt  -- ^ Read an int from standard in
 

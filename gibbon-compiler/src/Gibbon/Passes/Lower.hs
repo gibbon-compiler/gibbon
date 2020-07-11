@@ -972,6 +972,8 @@ prim p =
     SizeParam -> T.SizeParam
     IsBig    -> T.IsBig
     PrintInt -> T.PrintInt
+    PrintFloat -> T.PrintFloat
+    PrintBool -> T.PrintBool
     PrintSym -> T.PrintSym
     ReadInt  -> T.ReadInt
     DictInsertP ty -> T.DictInsertP $ typ ty

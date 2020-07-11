@@ -601,6 +601,8 @@ primMap = M.fromList
   , ("False", MkFalse)
   , ("gensym", Gensym)
   , ("printint", PrintInt)
+  , ("printfloat", PrintFloat)
+  , ("printbool", PrintBool)
   , ("printsym", PrintSym)
   , ("readint", ReadInt)
   , ("sym-set-empty", SymSetEmpty)

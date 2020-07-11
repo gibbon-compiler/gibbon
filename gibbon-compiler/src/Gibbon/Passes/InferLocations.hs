@@ -1598,6 +1598,8 @@ prim p = case p of
            SizeParam -> return SizeParam
            IsBig    -> return IsBig
            PrintInt -> return PrintInt
+           PrintFloat -> return PrintFloat
+           PrintBool -> return PrintBool
            PrintSym -> return PrintSym
            ReadInt  -> return PrintInt
            RequestEndOf -> return RequestEndOf

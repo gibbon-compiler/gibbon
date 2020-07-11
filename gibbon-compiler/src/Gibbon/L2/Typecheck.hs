@@ -440,6 +440,8 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    pure (IntTy, tstatein)
 
                  PrintInt -> throwError $ GenericTC "PrintInt not handled" exp
+                 PrintFloat -> throwError $ GenericTC "PrintFloat not handled" exp
+                 PrintBool -> throwError $ GenericTC "PrintBool not handled" exp
                  PrintSym -> throwError $ GenericTC "PrintSym not handled" exp
                  ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp
                  SymSetEmpty -> throwError $ GenericTC "SymSetEmpty not handled" exp

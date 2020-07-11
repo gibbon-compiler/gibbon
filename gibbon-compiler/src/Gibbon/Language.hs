@@ -567,6 +567,8 @@ primArgsTy p =
     InplaceVSortP elty -> [VectorTy elty, voidTy]
     GetNumProcessors -> []
     PrintInt -> [IntTy]
+    PrintFloat -> [IntTy]
+    PrintBool -> [BoolTy]
     PrintSym -> [SymTy]
     ReadInt  -> []
     SymSetEmpty -> []
@@ -634,7 +636,9 @@ primRetTy p =
     VSortP elty -> VectorTy elty
     InplaceVSortP elty -> VectorTy elty
     GetNumProcessors -> IntTy
-    PrintInt -> IntTy
+    PrintInt   -> IntTy
+    PrintFloat -> FloatTy
+    PrintBool  -> BoolTy
     PrintSym -> SymTy
     ReadInt  -> IntTy
     SymSetEmpty    -> SymSetTy

@@ -333,6 +333,8 @@ primMap = M.fromList
   , ("False", MkFalse)
   , ("gensym", Gensym)
   , ("printint", PrintInt)
+  , ("printfloat", PrintFloat)
+  , ("printbool", PrintBool)
   , ("printsym", PrintSym)
   , ("readint", ReadInt)
   , ("is_big", IsBig)

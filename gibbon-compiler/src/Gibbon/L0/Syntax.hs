@@ -494,6 +494,8 @@ recoverType ddfs env2 ex =
         RequestEndOf -> error "primRetTy1: RequestEndOf not handled yet"
         RequestSizeOf-> error "primRetTy1: RequestSizeOf not handled yet"
         PrintInt     -> error "primRetTy1: PrintInt not handled yet"
+        PrintFloat   -> error "primRetTy1: PrintFloat not handled yet"
+        PrintBool    -> error "primRetTy1: PrintBool not handled yet"
         PrintSym     -> error "primRetTy1: PrintSym not handled yet"
         ReadInt      -> error "primRetTy1: ReadInt not handled yet"
         SymSetEmpty  -> error "primRetTy1: SymSetEmpty not handled yet"

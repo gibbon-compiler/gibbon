@@ -795,6 +795,13 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        [] -> pure [ C.BlockStm [cstm| printf("%f", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
+                 PrintBool ->
+                     let [arg] = rnds in
+                     case bnds of
+                       [(outV,BoolTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy BoolTy) $id:outV = printf("%lf", $(codegenTriv venv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| printf("%d", $(codegenTriv venv arg)); |] ]
+                       _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
+
                  PrintSym ->
                      let [arg] = rnds in
                      case bnds of
@@ -961,8 +968,21 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    let [(outV,_)] = bnds
                        [VarTriv old_ls, i, x] = rnds
                        i' = codegenTriv venv i
-                       x' = codegenTriv venv x
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', &$exp:x'); |] ]
+                       xexp = [cexp| $exp:(codegenTriv venv x) |]
+                   case x of
+                     VarTriv{} ->
+                        return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', &$exp:xexp); |] ]
+                     ProdTriv{} ->
+                        return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', &$exp:xexp); |] ]
+                     IntTriv{} -> do
+                        tmp <- gensym "tmp"
+                        return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:tmp = $exp:xexp; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', &$id:tmp); |] ]
+                     FloatTriv{} -> do
+                        tmp <- gensym "tmp"
+                        return [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:tmp = $exp:xexp; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', &$id:tmp); |] ]
+                     _ -> error $ "codegen: InplaceVUpdateP: " ++ sdoc x
 
                  VSortP elty -> do
                    let [(outV,_)] = bnds

@@ -262,7 +262,8 @@ data Prim
     | GetFirstWord -- ^ takes a PtrTy, returns IntTy containing the (first) word pointed to.
 
     | PrintInt    -- ^ Print an integer to stdout.
-    | PrintFloat  -- ^ Print a floating point number
+    | PrintFloat  -- ^ Print a floating point number to stdout.
+    | PrintBool   -- ^ Print a boolean to stdout.
     | PrintSym    -- ^ Fetch a symbol from the symbol table, and print it.
     | PrintString String -- ^ Print a constant string to stdout.
                          -- TODO: add string values to the language.
