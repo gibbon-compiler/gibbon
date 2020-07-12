@@ -24,8 +24,7 @@ type Box = ( Float, Float, Float, Float)
 
 printPoint :: (Float, Float) -> Int
 printPoint tup =
-    let a = tup !!! 0
-        b = tup !!! 1
+    let (a,b) = tup
         _ = printsym (quote "(")
         _ = printfloat a
         _ = printsym (quote ",")
@@ -35,9 +34,7 @@ printPoint tup =
 
 printMassPoint :: (Float, Float, Float) -> Int
 printMassPoint tup =
-    let a = tup !!! 0
-        b = tup !!! 1
-        c = tup !!! 2
+    let (a,b,c) = tup
         _ = printsym (quote "(")
         _ = printfloat a
         _ = printsym (quote ",")
@@ -49,10 +46,7 @@ printMassPoint tup =
 
 printBox :: (Float, Float, Float, Float) -> Int
 printBox tup =
-    let a = tup !!! 0
-        b = tup !!! 1
-        c = tup !!! 2
-        d = tup !!! 3
+    let (a,b,c,d) = tup
         _ = printsym (quote "(")
         _ = printfloat a
         _ = printsym (quote ",")
@@ -66,11 +60,7 @@ printBox tup =
 
 printParticle :: (Float, Float, Float, Float, Float) -> Int
 printParticle tup =
-    let a = tup !!! 0
-        b = tup !!! 1
-        c = tup !!! 2
-        d = tup !!! 3
-        e = tup !!! 4
+    let (a,b,c,d,e) = tup
         _ = printsym (quote "(")
         _ = printfloat a
         _ = printsym (quote ",")
@@ -145,23 +135,19 @@ getTotalPoints tr =
 -- | Distance between two points
 dist :: (Float, Float) -> (Float, Float) -> Float
 dist a b =
-  let a_x = a !!! 0
-      a_y = a !!! 1
-      b_x = b !!! 0
-      b_y = b !!! 1
+  let (a_x, a_y) = a
+      (b_x, b_y) = b
       d1 = (a_x .-. b_x)
       d2 = (a_y .-. b_y)
   in (d1 .*. d1) .+. (d2 .*. d2)
 
 applyAccel :: (Float, Float, Float, Float, Float) -> (Float, Float) -> (Float, Float, Float, Float, Float)
 applyAccel particle accel =
-  let vx = particle !!! 3
-      vy = particle !!! 4
-      ax = accel !!! 0
-      ay = accel !!! 1
+  let (x,y,m,vx,vy) = particle
+      (ax,ay) = accel
       -- global constant
       dt = 2.0
-  in (particle !!! 0, particle !!! 1, particle !!! 2, vx .+. (ax .*. dt), vy .+. (ay .*. dt))
+  in (x, y, m, vx .+. (ax .*. dt), vy .+. (ay .*. dt))
 
 isClose :: (Float, Float) -> (Float, Float) -> Float -> Bool
 isClose a b size =
@@ -171,10 +157,7 @@ isClose a b size =
 
 accel :: (Float, Float, Float) -> Float -> Float -> Float -> (Float, Float)
 accel mpt1 x2 y2 m2 =
-  let x1 = mpt1 !!! 0
-      y1 = mpt1 !!! 1
-      m1 = mpt1 !!! 2
-
+  let (x1,y1,m1) = mpt1
   in if (x1 .==. x2) && (y1 .==. y2) && (m1 .==. m2)
      then (0.0, 0.0)
      else
@@ -195,19 +178,10 @@ calcAccel_seq mpt tr =
     BH_Node x y mass total_pts size tr1 tr2 tr3 tr4 ->
       if isClose (mpt !!! 0, mpt !!! 1) (x, y) size
       then
-        let a1 = calcAccel_seq mpt tr1
-            a2 = calcAccel_seq mpt tr2
-            a3 = calcAccel_seq mpt tr3
-            a4 = calcAccel_seq mpt tr4
-            x1 = a1 !!! 0
-            y1 = a1 !!! 1
-            x2 = a2 !!! 0
-            y2 = a2 !!! 1
-            x3 = a3 !!! 0
-            y3 = a3 !!! 1
-            x4 = a4 !!! 0
-            y4 = a4 !!! 1
-
+        let (x1,y1) = calcAccel_seq mpt tr1
+            (x2,y2) = calcAccel_seq mpt tr2
+            (x3,y3) = calcAccel_seq mpt tr3
+            (x4,y4) = calcAccel_seq mpt tr4
         in (x1 .+. x2 .+. x3 .+. x4, y1 .+. y2 .+. y3 .+. y4)
       else accel mpt x y mass
 
@@ -220,39 +194,25 @@ calcAccel_par cutoff mpt tr =
       if isClose (mpt !!! 0, mpt !!! 1) (x, y) size
       then
         if total_pts < cutoff then calcAccel_seq mpt tr else
-        let a1 = spawn (calcAccel_par cutoff mpt tr1)
-            a2 = spawn (calcAccel_par cutoff mpt tr2)
-            a3 = spawn (calcAccel_par cutoff mpt tr3)
-            a4 = calcAccel_par cutoff mpt tr4
+        let (x1,y1) = spawn (calcAccel_par cutoff mpt tr1)
+            (x2,y2) = spawn (calcAccel_par cutoff mpt tr2)
+            (x3,y3) = spawn (calcAccel_par cutoff mpt tr3)
+            (x4,y4) = calcAccel_par cutoff mpt tr4
             _  = sync
-            x1 = a1 !!! 0
-            y1 = a1 !!! 1
-            x2 = a2 !!! 0
-            y2 = a2 !!! 1
-            x3 = a3 !!! 0
-            y3 = a3 !!! 1
-            x4 = a4 !!! 0
-            y4 = a4 !!! 1
         in (x1 .+. x2 .+. x3 .+. x4, y1 .+. y2 .+. y3 .+. y4)
       else accel mpt x y mass
 
 calcCentroid_seq :: Vector (Float, Float, Float) -> (Float, Float, Float)
 calcCentroid_seq mpts =
     let lam1 = (\(acc :: (Float, Float, Float)) (mpt :: (Float, Float, Float)) ->
-                     let x = mpt !!! 0
-                         y = mpt !!! 1
-                         m = mpt !!! 2
-                         acc_x = acc !!! 0
-                         acc_y = acc !!! 1
-                         acc_m = acc !!! 2
+                     let (x,y,m) = mpt
+                         (acc_x, acc_y, acc_m) = acc
                      in (acc_x .+. (x.*.m), acc_y .+. (y.*.m), acc_m .+. m))
         sum = foldl
                 lam1
                 (0.0, 0.0, 0.0)
                 mpts
-        sum_x = sum !!! 0
-        sum_y = sum !!! 1
-        sum_m = sum !!! 2
+        (sum_x, sum_y, sum_m) = sum
     in (sum_x ./. sum_m, sum_y ./. sum_m, sum_m)
 
 calcCentroid_par :: Vector (Float, Float, Float) -> (Float, Float, Float)
@@ -278,9 +238,7 @@ calcCentroid_par mpts =
                 (0.0, 0.0, 0.0)
                 lam2
                 mpts
-        sum_x = sum !!! 0
-        sum_y = sum !!! 1
-        sum_m = sum !!! 2
+        (sum_x, sum_y, sum_m) = sum
     in (sum_x ./. sum_m, sum_y ./. sum_m, sum_m)
 
 inBox :: Float -> Float -> Float -> Float -> Float -> Float -> Bool
@@ -291,39 +249,26 @@ masspointsInBox_seq :: (Float, Float, Float, Float) -> Vector (Float, Float, Flo
 masspointsInBox_seq box mpts =
     filter
       (\(mpt :: (Float, Float, Float)) ->
-                  let llx = box !!! 0
-                      lly = box !!! 1
-                      rux = box !!! 2
-                      ruy = box !!! 3
-                      x = mpt !!! 0
-                      y = mpt !!! 1
+                  let (llx,lly,rux,ruy) = box
+                      (x,y) = mpt
                   in  inBox llx lly rux ruy x y)
       mpts
 
 maxDim :: (Float, Float, Float, Float) -> Float
 maxDim box =
-    let llx = box !!! 0
-        lly = box !!! 1
-        rux = box !!! 2
-        ruy = box !!! 3
+    let (llx,lly,rux,ruy) = box
     in maxFloat (rux.-.llx) (ruy.-.lly)
 
 buildQtree_seq :: (Float, Float, Float, Float) -> Vector (Float, Float, Float) -> BH_Tree
 buildQtree_seq box mpts =
     let len = length mpts
-        llx = box !!! 0
-        lly = box !!! 1
-        rux = box !!! 2
-        ruy = box !!! 3
+        (llx,lly,rux,ruy) = box
     in
         if len == 0
         then BH_Empty
         else if len == 1
         then
-            let mpt = calcCentroid_seq mpts
-                x  = mpt !!! 0
-                y  = mpt !!! 1
-                m  = mpt !!! 2
+            let (x,y,m) = calcCentroid_seq mpts
             in BH_Leaf x y m
         else
             let mpt = calcCentroid_seq mpts
@@ -345,31 +290,23 @@ buildQtree_seq box mpts =
                     (getTotalPoints tr1) + (getTotalPoints tr2) +
                     (getTotalPoints tr3) + (getTotalPoints tr4)
                 size = maxDim box
-                x = mpt !!! 0
-                y = mpt !!! 1
-                m = mpt !!! 2
+                (x,y,m) = mpt
             in BH_Node x y m total_points size tr1 tr2 tr3 tr4
 
 buildQtree_par :: Int -> (Float, Float, Float, Float) -> Vector (Float, Float, Float) -> BH_Tree
 buildQtree_par cutoff box mpts =
     let len = length mpts in
     if len < cutoff then buildQtree_seq box mpts else
-    let llx = box !!! 0
-        lly = box !!! 1
-        rux = box !!! 2
-        ruy = box !!! 3
+    let (llx,lly,rux,ruy) = box
     in
         if len == 0
         then BH_Empty
         else if len == 1
         then
-            let mpt = calcCentroid_par mpts
-                x  = mpt !!! 0
-                y  = mpt !!! 1
-                m  = mpt !!! 2
+            let (x,y,m) = calcCentroid_par mpts
             in BH_Leaf x y m
         else
-            let mpt = calcCentroid_par mpts
+            let (x,y,m) = calcCentroid_par mpts
                 midx = (llx .+. rux) ./. 2.0
                 midy = (lly .+. ruy) ./. 2.0
                 b1 = (llx, lly, midx, midy)
@@ -389,9 +326,6 @@ buildQtree_par cutoff box mpts =
                     (getTotalPoints tr1) + (getTotalPoints tr2) +
                     (getTotalPoints tr3) + (getTotalPoints tr4)
                 size = maxDim box
-                x = mpt !!! 0
-                y = mpt !!! 1
-                m = mpt !!! 2
             in BH_Node x y m total_points size tr1 tr2 tr3 tr4
 
 oneStep_seq :: (Float, Float, Float, Float)
@@ -446,23 +380,17 @@ calcForces :: Vector (Float, Float, Float, Float, Float)
            -> (Float, Float, Float, Float, Float)
            -> (Float, Float)
 calcForces ps idx p_idx =
-    let m_idx = p_idx !!! 2
-        ax_idx = p_idx !!! 3
-        ay_idx = p_idx !!! 4
+    let (m_idx, ax_idx, ay_idx) = p_idx
         gGrav = 1.0
     in ifoldl
       (\(acc :: (Float, Float)) (j :: Int) (p :: (Float, Float, Float, Float, Float)) ->
            if idx == j
            then
-               let x = acc !!! 0
-                   y = acc !!! 1
+               let (x,y) = acc
                in (x,y)
            else
-               let force_x = acc !!! 0
-                   force_y = acc !!! 1
-                   m_j = p !!! 2
-                   ax_j = p !!! 3
-                   ay_j = p !!! 4
+               let (force_x, force_y) = acc
+                   (_,_,m_j, ax_j, ay_j) = p
                    v_x = ax_j .-. ax_idx
                    v_y = ay_j .-. ay_idx
                    r = pbbs_length v_x v_y
@@ -483,11 +411,8 @@ check ps =
                  (\err i ->
                       let idx = if i == 0 then 0 else i-1
                           p_idx = nth ps idx
-                          ax_idx = p_idx !!! 3
-                          ay_idx = p_idx !!! 4
-                          forces = calcForces ps idx p_idx
-                          force_x = forces !!! 0
-                          force_y = forces !!! 1
+                          (_,_,_,ax_idx, ay_idx) = p_idx
+                          (force_x, force_y) = calcForces ps idx p_idx
                           force2_x = force_x .-. ax_idx
                           force2_y = force_y .-. ay_idx
                           e = (pbbs_length force2_x force2_y) ./. (pbbs_length force_x force_y)

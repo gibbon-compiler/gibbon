@@ -20,13 +20,22 @@ max :: Float -> Float -> Float
 max a b = if a .>. b then a else b
 
 cmp1 :: (Float, Float, Float) -> (Float, Float, Float) -> Int
-cmp1 a b = floatToInt ((a !!! 0) .-. (b !!! 0))
+cmp1 a b =
+    let (ax,_,_) = a
+        (bx,_,_) = b
+    in floatToInt (ax .-. bx)
 
 cmp2 :: (Float, Float, Float) -> (Float, Float, Float) -> Int
-cmp2 a b = floatToInt ((a !!! 1) .-. (b !!! 1))
+cmp2 a b =
+    let (_,ay,_) = a
+        (_,by,_) = b
+    in floatToInt (ay .-. by)
 
 cmp3 :: (Float, Float, Float) -> (Float, Float, Float) -> Int
-cmp3 a b = floatToInt ((a !!! 2) .-. (b !!! 2))
+cmp3 a b =
+    let (_,_,az) = a
+        (_,_,bz) = b
+    in floatToInt (az .-. bz)
 
 sort :: Int -> Vector (Float, Float, Float) -> Vector (Float, Float, Float)
 sort axis ls =
@@ -108,8 +117,8 @@ fromListWithAxis_seq :: Int -> Vector (Float, Float, Float) -> KdTree
 fromListWithAxis_seq axis pts =
     let len = vlength pts in
     if len == 1
-    then let pt = nth pts 0
-         in KdLeaf (pt !!! 0) (pt !!! 1) (pt !!! 2)
+    then let (x,y,z) = nth pts 0
+         in KdLeaf x y z
     else let sorted_pts = sort axis pts
              pivot_idx  = div len 2
              pivot      = nth sorted_pts pivot_idx
@@ -136,9 +145,6 @@ fromListWithAxis_par cutoff axis pts =
     let len = vlength pts in
     if len < cutoff
     then fromListWithAxis_seq axis pts
-    -- if len == 1
-    -- then let pt = vnth 0 pts
-    --      in KdLeaf (pt !!! 0) (pt !!! 1) (pt !!! 2)
     else let sorted_pts = sort axis pts
              pivot_idx  = div len 2
              pivot      = nth sorted_pts pivot_idx
@@ -225,12 +231,8 @@ sumList ls =
 -- | Distance between two points
 dist :: (Float, Float, Float) -> (Float, Float, Float) -> Float
 dist a b =
-  let a_x = a !!! 0
-      a_y = a !!! 1
-      a_z = a !!! 2
-      b_x = b !!! 0
-      b_y = b !!! 1
-      b_z = b !!! 2
+  let (a_x, a_y, a_z) = a
+      (b_x, b_y, b_z) = b
       d1 = (a_x .-. b_x)
       d2 = (a_y .-. b_y)
       d3 = (a_z .-. b_z)
@@ -251,9 +253,10 @@ countCorr_seq probe radius tr =
       let center_x  = (min_x .+. max_x) ./. 2.0
           center_y  = (min_y .+. max_y) ./. 2.0
           center_z  = (min_z .+. max_z) ./. 2.0
-          d_x       = (probe !!! 0) .-. center_x
-          d_y       = (probe !!! 1) .-. center_y
-          d_z       = (probe !!! 2) .-. center_z
+          (probe_x, probe_y, probe_z) = probe
+          d_x       = probe_x .-. center_x
+          d_y       = probe_y .-. center_y
+          d_z       = probe_z .-. center_z
           boxdist_x = (max_x .-. min_x) ./. 2.0
           boxdist_y = (max_y .-. min_y) ./. 2.0
           boxdist_z = (max_z .-. min_z) ./. 2.0
@@ -280,9 +283,10 @@ countCorr_par cutoff probe radius tr =
       let center_x  = (min_x .+. max_x) ./. 2.0
           center_y  = (min_y .+. max_y) ./. 2.0
           center_z  = (min_z .+. max_z) ./. 2.0
-          d_x       = (probe !!! 0) .-. center_x
-          d_y       = (probe !!! 1) .-. center_y
-          d_z       = (probe !!! 2) .-. center_z
+          (probe_x, probe_y, probe_z) = probe
+          d_x       = probe_x .-. center_x
+          d_y       = probe_y .-. center_y
+          d_z       = probe_z .-. center_z
           boxdist_x = (max_x .-. min_x) ./. 2.0
           boxdist_y = (max_y .-. min_y) ./. 2.0
           boxdist_z = (max_z .-. min_z) ./. 2.0

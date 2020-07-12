@@ -779,7 +779,8 @@ generateBind toplevel env decl exp2 =
       w <- gensym "tup"
       ty' <- newMetaTy
       let tupexp e = LetE (w,[],ty',rhs') e
-      prjexp <- generateTupleProjs toplevel env (zip pats [0..]) (VarE w) exp2
+          binds = reverse $ zip pats [0..]
+      prjexp <- generateTupleProjs toplevel env binds (VarE w) exp2
       pure $ tupexp prjexp
     PatBind _ pat (UnGuardedRhs _ rhs) Nothing -> do
       rhs' <- desugarExp toplevel rhs
@@ -796,16 +797,24 @@ generateBind toplevel env decl exp2 =
     oth -> error ("generateBind: Unsupported pattern: " ++ prettyPrint oth)
 
 generateTupleProjs :: (Show a, Pretty a) => TopTyEnv -> TopTyEnv -> [(Pat a,Int)] -> Exp0 -> Exp0 -> PassM (Exp0)
-generateTupleProjs toplevel env ((PVar _ v,n):pats) tup exp2 = do
-    let w = toVar (nameToStr v)
-    ty' <- case M.lookup w env of
-             Nothing -> newMetaTy
-             Just (ForAll _ ty) -> pure ty
-    let prjexp = LetE (w,[],ty',ProjE n tup) exp2
-    generateTupleProjs toplevel env pats tup prjexp
-generateTupleProjs _toplevel _env [] _tup exp2 =
-    pure exp2
-generateTupleProjs _ _ _ _ _ = error "generateTupleProjs: Pattern not handled."
+generateTupleProjs _toplevel _env [] _tup exp2 = pure exp2
+generateTupleProjs toplevel env ((p,n):pats) tup exp2 =
+    case p of
+        (PVar _ v) -> do
+            let w = toVar (nameToStr v)
+            go w
+        (PWildCard _) -> do
+            w <- gensym "wildcard"
+            go w
+        _ -> error $ "generateTupleProjs: Pattern not handled: " ++ prettyPrint p
+
+  where
+    go w = do
+        ty' <- case M.lookup w env of
+                   Nothing -> newMetaTy
+                   Just (ForAll _ ty) -> pure ty
+        let prjexp = LetE (w,[],ty',ProjE n tup) exp2
+        generateTupleProjs toplevel env pats tup prjexp
 
 desugarConstr :: (Show a,  Pretty a) => QualConDecl a -> (DataCon,[(IsBoxed, Ty0)])
 desugarConstr qdecl =
