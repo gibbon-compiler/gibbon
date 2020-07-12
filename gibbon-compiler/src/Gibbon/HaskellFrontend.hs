@@ -154,7 +154,7 @@ desugarModule pstate_ref import_route dir (Module _ head_mb _pragmas imports dec
 desugarModule _ _ _ m = error $ "desugarModule: " ++ prettyPrint m
 
 stdLibraryModules :: [String]
-stdLibraryModules = ["Gibbon.Vector"]
+stdLibraryModules = ["Gibbon.Prelude", "Gibbon.Vector", "Gibbon.Vector.Parallel"]
 
 processImport :: IORef ParseState -> [String] -> FilePath -> ImportDecl a -> IO (PassM Prog0)
 processImport pstate_ref import_route dir decl@ImportDecl{..} = do
@@ -202,6 +202,7 @@ stdlibImportPath mod_name = do
     modNameToFilename :: String -> String
     modNameToFilename "Gibbon.Vector" = "stdlib" </> "Vector.hs"
     modNameToFilename "Gibbon.Prelude" = "stdlib" </> "Prelude.hs"
+    modNameToFilename "Gibbon.Vector.Parallel" = "stdlib" </> "ParallelVector.hs"
     modNameToFilename oth = error $ "Unknown module: " ++ oth
 
 modImportPath :: ModuleName a -> String -> IO FilePath

@@ -21,7 +21,6 @@ gibbon_main =
       rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 0) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 1) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       box = (llx, lly, rux, ruy)
-      -- cutoff = 524288
-      cutoff = 100
+      cutoff = 524288
       particles1 = iterate (oneStep_par cutoff box mpts particles)
   in check particles1

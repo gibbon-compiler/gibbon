@@ -1,6 +1,8 @@
 module Bhut where
 
+import Gibbon.Prelude
 import Gibbon.Vector
+import Gibbon.Vector.Parallel
 
 {-
 
@@ -118,12 +120,6 @@ myprintBHTree bht =
                 _ = myprintBHTree tr4
                 _ = printsym (quote ") ")
             in 10
-
-maxFloat :: Float -> Float -> Float
-maxFloat a b = if a .>. b then a else b
-
-minFloat :: Float -> Float -> Float
-minFloat a b = if a .<. b then a else b
 
 getX :: BH_Tree -> Float
 getX tr =

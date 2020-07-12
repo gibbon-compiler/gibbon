@@ -1,6 +1,7 @@
 module SeqCoins where
 
 import Coins
+import Gibbon.Vector
 
 gibbon_main =
     let coins0 :: Vector (Int,Int)

@@ -1,6 +1,7 @@
 module Coins where
 
 import Gibbon.Vector
+import Gibbon.Vector.Parallel
 
 data AList = ANil | ASing Int | Append AList AList
 
