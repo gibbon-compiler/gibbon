@@ -13,4 +13,5 @@ gibbon_main =
         coins6 = inplacevupdate coins5 5 (1,177)
         amt = sizeParam
         tr = iterate (payA_par 3 amt coins0)
+        _ = vfree coins6
     in lenA tr

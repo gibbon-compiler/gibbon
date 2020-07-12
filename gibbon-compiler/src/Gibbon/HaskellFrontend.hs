@@ -239,7 +239,7 @@ keywords = S.fromList $ map toVar $
     [ "quote", "bench", "error", "par", "spawn", "is_big"
     -- operations on vectors
     , "valloc", "vnth", "vlength", "vslice", "inplacevupdate",
-      "vsort", "inplacevsort"
+      "vsort", "inplacevsort", "vfree", "vfree2"
     ] ++ M.keys primMap
 
 desugarTopType :: (Show a,  Pretty a) => Type a -> TyScheme
@@ -463,6 +463,16 @@ desugarExp toplevel e =
                     e2' <- desugarExp toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VAllocP ty) [e2']
+                  else if f == "vfree"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (VFreeP ty) [e2']
+                  else if f == "vfree2"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (VFree2P ty) [e2']
                   else if f == "vnth"
                   then do
                     e2' <- desugarExp toplevel e2

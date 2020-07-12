@@ -203,6 +203,8 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       ReadPackedFile mb_fp tycon _ _ ->
                                         text "readFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
                                       VAllocP ty -> parens $ text "valloc" <+> doublecolon <+> brackets (pprintWithStyle sty ty)
+                                      VFreeP _ty -> parens $ text "vfree"
+                                      VFree2P _ty-> parens $ text "vfree2"
                                       VLengthP{} -> text "vlength"
                                       VNthP{}    -> text "vnth"
                                       VSliceP{}   -> text "vslice"

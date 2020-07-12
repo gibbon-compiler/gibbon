@@ -43,9 +43,7 @@ payA_seq amt coins =
         in if len == 0
         then ANil
         else
-            let tup = head coins
-                c = tup !!! 0
-                q = tup !!! 1
+            let (c,q) = head coins
                 coins_rst = tail coins
             in if c > amt
             then payA_seq amt coins_rst
@@ -57,6 +55,8 @@ payA_seq amt coins =
                     -- _ = printCoins coins1
                     left = payA_seq (amt - c) coins1
                     right = payA_seq amt coins_rst
+                    _ = vfree coins1
+                    _ = vfree2 coins_rst
                 in Append left right
 
 getDepth1 :: Int -> Int -> Int
@@ -74,9 +74,7 @@ payA_par depth amt coins =
         in if len == 0
         then ANil
         else
-            let tup = head coins
-                c = tup !!! 0
-                q = tup !!! 1
+            let (c,q) = head coins
                 coins_rst = tail coins
             in if c > amt
             then payA_par depth amt coins_rst
@@ -86,4 +84,6 @@ payA_par depth amt coins =
                     left = spawn (payA_par depth1 (amt - c) coins1)
                     right = payA_par (depth-1) amt coins_rst
                     _ = sync
+                    _ = vfree coins1
+                    _ = vfree2 coins_rst
                 in Append left right

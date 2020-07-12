@@ -481,12 +481,14 @@ recoverType ddfs env2 ex =
         DictInsertP ty -> SymDictTy Nothing ty
         DictLookupP ty -> ty
         VAllocP elty   -> VectorTy elty
+        VFreeP _elty   -> ProdTy []
+        VFree2P _elty  -> ProdTy []
         VLengthP _elty -> IntTy
         VNthP elty     -> elty
         VSliceP elty   -> VectorTy elty
-        InplaceVUpdateP _elty -> ProdTy []
-        VSortP elty -> VectorTy elty
-        InplaceVSortP _elty -> ProdTy []
+        InplaceVUpdateP elty -> VectorTy elty
+        VSortP elty        -> VectorTy elty
+        InplaceVSortP elty -> VectorTy elty
         GetNumProcessors -> IntTy
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty

@@ -429,6 +429,8 @@ data Prim ty
 
           -- Operations on vectors
           | VAllocP ty   -- ^ Allocate a vector
+          | VFreeP ty    -- ^ Free a vector, and it's data.
+          | VFree2P ty   -- ^ Free the vector struct, but not it's data.
           | VLengthP ty -- ^ Length of the vector
           | VNthP ty    -- ^ Fetch the nth element
           | VSliceP ty         -- ^ An efficient slice operation

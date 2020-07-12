@@ -336,6 +336,18 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           s2 <- unify (args !! 0) IntTy i
           pure (s1 <> s2, VectorTy elty, PrimAppE pr args_tc)
 
+        VFreeP elty -> do
+          len1
+          let [i] = arg_tys'
+          s2 <- unify (args !! 0) (VectorTy elty) i
+          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+
+        VFree2P elty -> do
+          len1
+          let [i] = arg_tys'
+          s2 <- unify (args !! 0) (VectorTy elty) i
+          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+
         VLengthP elty -> do
           len1
           let [ls] = arg_tys'
@@ -707,6 +719,8 @@ zonkExp s ex =
     PrimAppE pr args  ->
       let pr' = case pr of
                   VAllocP  ty -> VAllocP  (zonkTy s ty)
+                  VFreeP  ty  -> VFreeP  (zonkTy s ty)
+                  VFree2P  ty -> VFree2P  (zonkTy s ty)
                   VLengthP ty -> VLengthP (zonkTy s ty)
                   VNthP    ty -> VNthP    (zonkTy s ty)
                   VSliceP  ty -> VSliceP  (zonkTy s ty)
@@ -813,6 +827,8 @@ substTyVarPrim :: M.Map TyVar Ty0 -> Prim Ty0 -> Prim Ty0
 substTyVarPrim mp pr =
     case pr of
         VAllocP elty -> VAllocP (substTyVar mp elty)
+        VFreeP  elty  -> VFreeP  (substTyVar mp elty)
+        VFree2P  elty -> VFree2P  (substTyVar mp elty)
         VLengthP elty -> VLengthP (substTyVar mp elty)
         VNthP elty -> VNthP (substTyVar mp elty)
         VSliceP elty -> VSliceP (substTyVar mp elty)

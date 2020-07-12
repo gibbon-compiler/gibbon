@@ -386,6 +386,20 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    _ <- ensureEqualTy (es !! 0) IntTy i
                    pure (VectorTy elty, tstate)
 
+                 VFreeP elty -> do
+                   len1
+                   checkListElemTy elty
+                   let [i] = tys
+                   _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
+                   pure (ProdTy [], tstate)
+
+                 VFree2P elty -> do
+                   len1
+                   checkListElemTy elty
+                   let [i] = tys
+                   _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
+                   pure (ProdTy [], tstate)
+
                  VLengthP elty -> do
                    let [ls] = tys
                    _ <- ensureEqualTy exp (VectorTy elty) ls

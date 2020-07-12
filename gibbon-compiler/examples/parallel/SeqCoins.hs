@@ -15,4 +15,5 @@ gibbon_main =
     -- in printCoins coins6
         amt = sizeParam
         tr = iterate (payA_seq amt coins0)
+        _ = vfree coins6
     in lenA tr

@@ -805,7 +805,7 @@ VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
 }
 
 // The callers must cast the return value.
-void* vector_nth(VectorTy *vec, IntTy i) {
+static inline void* vector_nth(VectorTy *vec, IntTy i) {
     if (i > vec->upper) {
         printf("vector_nth index out of bounds: %lld > %lld\n", i, vec->upper);
         exit(1);
@@ -813,31 +813,31 @@ void* vector_nth(VectorTy *vec, IntTy i) {
     return (vec->data + (vec->elt_size * (vec->lower + i)));
 }
 
-VectorTy* vector_inplace_update(VectorTy *vec, IntTy i, void* elt) {
+static inline VectorTy* vector_inplace_update(VectorTy *vec, IntTy i, void* elt) {
     void* dst = vector_nth(vec, i);
     memcpy(dst, elt, vec->elt_size);
     return vec;
 }
 
-VectorTy* vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
+static inline VectorTy* vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
     qsort(vec->data, vector_length(vec), vec->elt_size, compar);
     return vec;
 }
 
-VectorTy* vector_copy(VectorTy *vec) {
+static inline VectorTy* vector_copy(VectorTy *vec) {
     IntTy len = vector_length(vec);
     VectorTy *vec2 = vector_alloc(len, vec->elt_size);
     memcpy(vec2->data, vec->data, len * vec->elt_size);
     return vec2;
 }
 
-VectorTy* vector_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
+static inline VectorTy* vector_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
     VectorTy *vec2 = vector_copy(vec);
     vector_inplace_sort(vec2, compar);
     return vec2;
 }
 
-void vector_free(VectorTy *vec) {
+static inline void vector_free(VectorTy *vec) {
     free(vec->data);
     free(vec);
     return;

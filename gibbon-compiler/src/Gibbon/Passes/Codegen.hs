@@ -89,6 +89,8 @@ harvestStructTys (Prog _ funs mtal) =
          let rst = go bod in
          case prm of
            VAllocP elty  -> VectorTy elty : rst
+           VFreeP elty   -> VectorTy elty : rst
+           VFree2P elty  -> VectorTy elty : rst
            VLengthP elty -> VectorTy elty : rst
            VNthP   elty  -> VectorTy elty : rst
            VSliceP elty  -> VectorTy elty : rst
@@ -947,6 +949,14 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:tmp = sizeof( $ty:(codegenTy elty)); |]
                           , C.BlockDecl [cdecl| $ty:ty1 $id:outV = vector_alloc($exp:i', $id:tmp); |]
                           ]
+
+                 VFreeP _elty -> do
+                   let [vec] = rnds
+                   return [ C.BlockStm [cstm| vector_free($(codegenTriv venv vec)); |] ]
+
+                 VFree2P _elty -> do
+                   let [vec] = rnds
+                   return [ C.BlockStm [cstm| free($(codegenTriv venv vec)); |] ]
 
                  VNthP elty -> do
                    let ty1 = codegenTy elty

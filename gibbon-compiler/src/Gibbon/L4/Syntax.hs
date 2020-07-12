@@ -206,6 +206,8 @@ data Prim
     | DictHasKeyP Ty
     -- Operations on vectors
     | VAllocP Ty
+    | VFreeP Ty
+    | VFree2P Ty
     | VLengthP Ty
     | VNthP Ty
     | VSliceP Ty

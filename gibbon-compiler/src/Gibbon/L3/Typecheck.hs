@@ -413,6 +413,20 @@ tcExp isPacked ddfs env exp =
           _ <- ensureEqualTy (es !! 0) IntTy i
           pure (VectorTy elty)
 
+        VFreeP elty -> do
+          len1
+          checkListElemTy elty
+          let [i] = tys
+          _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
+          pure (ProdTy [])
+
+        VFree2P elty -> do
+          len1
+          checkListElemTy elty
+          let [i] = tys
+          _ <- ensureEqualTy (es !! 0) (VectorTy elty) i
+          pure (ProdTy [])
+
         VLengthP elty -> do
           len1
           checkListElemTy elty

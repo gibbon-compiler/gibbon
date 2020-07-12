@@ -557,6 +557,8 @@ primArgsTy p =
     DictLookupP _ty  -> error "primArgsTy: dicts not handled yet"
     DictHasKeyP _ty  -> error "primArgsTy: dicts not handled yet"
     VAllocP _elty  -> [IntTy]
+    VFreeP elty   -> [VectorTy elty]
+    VFree2P elty  -> [VectorTy elty]
     VLengthP elty -> [VectorTy elty]
     VNthP elty    -> [VectorTy elty, IntTy]
     VSliceP elty  -> [IntTy, IntTy, VectorTy elty]
@@ -628,7 +630,9 @@ primRetTy p =
     DictEmptyP ty  -> SymDictTy Nothing $ stripTyLocs ty
     DictInsertP ty -> SymDictTy Nothing $ stripTyLocs ty
     DictLookupP ty -> ty
-    VAllocP elty    -> VectorTy elty
+    VAllocP elty   -> VectorTy elty
+    VFreeP _elty   -> ProdTy []
+    VFree2P _elty  -> ProdTy []
     VLengthP _elty -> IntTy
     VNthP elty     -> elty
     VSliceP elty   -> VectorTy elty

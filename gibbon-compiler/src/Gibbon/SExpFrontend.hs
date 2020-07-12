@@ -501,6 +501,16 @@ exp se =
        ie <- exp i
        pure $ Ext $ L (toLoc l) $ PrimAppE (VAllocP elty) [ie]
 
+   Ls2 l "vfree" i -> do
+       elty <- newMetaTy
+       ie <- exp i
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VFreeP elty) [ie]
+
+   Ls2 l "vfree2" i -> do
+       elty <- newMetaTy
+       ie <- exp i
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VFree2P elty) [ie]
+
    Ls2 l "vlength" ls -> do
        ty <- newMetaTy
        lse <- exp ls

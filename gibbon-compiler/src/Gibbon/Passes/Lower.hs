@@ -708,11 +708,14 @@ lower Prog{fundefs,ddefs,mainExp} = do
       reg <- gensym "region"
       tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy)] (T.NewBuffer mul) [] <$>
                tail sym_tbl bod
-      -- The type shouldn't matter. PtrTy is not used often in current programs,
-      -- and would be easy to spot.
-      T.withTail (tl',T.PtrTy) $ \trvs ->
-         (T.LetPrimCallT [] T.FreeBuffer [(T.VarTriv reg),(T.VarTriv v),(T.VarTriv (toEndV v))] $
-            T.RetValsT trvs)
+      if gopt Opt_DisableGC dflags
+         then pure tl'
+         else
+           -- The type shouldn't matter. PtrTy is not used often in current programs,
+           -- and would be easy to spot.
+           T.withTail (tl',T.PtrTy) $ \trvs ->
+              (T.LetPrimCallT [] T.FreeBuffer [(T.VarTriv reg),(T.VarTriv v),(T.VarTriv (toEndV v))] $
+                 T.RetValsT trvs)
 
     LetE (v,_,_,  (Ext (ScopedBuffer mul))) bod -> do
       T.LetPrimCallT [(v,T.CursorTy)] (T.ScopedBuffer mul) [] <$>
@@ -983,6 +986,8 @@ prim p =
     ReadPackedFile mf tyc _ _ -> T.ReadPackedFile mf tyc
     ReadArrayFile fp ty -> T.ReadArrayFile fp (typ ty)
     VAllocP elty  -> T.VAllocP (typ elty)
+    VFreeP elty   -> T.VFreeP (typ elty)
+    VFree2P elty  -> T.VFree2P (typ elty)
     VLengthP elty -> T.VLengthP (typ elty)
     VNthP elty    -> T.VNthP (typ elty)
     VSliceP elty    -> T.VSliceP (typ elty)
