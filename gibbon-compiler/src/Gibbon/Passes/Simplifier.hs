@@ -9,6 +9,7 @@ import qualified Data.Map as M
 import Gibbon.Common
 import Gibbon.Language
 import Gibbon.L1.Syntax
+import Gibbon.Passes.Freshen (freshNames1)
 
 --------------------------------------------------------------------------------
 
@@ -47,9 +48,11 @@ inlineFuns (Prog ddefs fundefs main) = do
                                  funBody (zip funArgs new_vars)
                     in_tys = fst funTy
                     binds = map (\(v,ty,e) -> (v,[],ty,e)) (zip3 new_vars in_tys args)
+
                 pure $ mkLets binds funBody'
-              else
-                pure $ AppE f [] args
+              else do
+                args' <- mapM (go . project) args
+                pure $ AppE f [] args'
         _ -> pure $ embed ex
 
 deadFunElim :: Prog1 -> PassM Prog1
@@ -85,7 +88,8 @@ deadFunElim (Prog ddefs fundefs main) = do
 
 simplify :: Prog1 -> PassM Prog1
 simplify p0 = do
-    p1 <- markRecFns p0
+    p0' <- freshNames1 p0
+    p1 <- markRecFns p0'
     p2 <- inlineFuns p1
     p3 <- deadFunElim p2
     pure p3

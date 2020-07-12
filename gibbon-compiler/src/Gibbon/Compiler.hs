@@ -495,6 +495,7 @@ passes config@Config{dynflags} l0 = do
       when (hasSpawnsProg l1 && not parallel) $
         error "To compile a program with parallelism, use --parallel."
       l1 <- goE1 "flatten"       flattenL1              l1
+      l1 <- goE1 "simplify"      simplify               l1
       l1 <- goE1 "inlineTriv"    inlineTriv             l1
       l1 <- goE1 "typecheck"     L1.tcProg              l1
       l1 <- if should_fuse

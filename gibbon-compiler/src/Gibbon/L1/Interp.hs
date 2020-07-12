@@ -88,12 +88,14 @@ interp rc valenv ddefs fenv = go valenv
           --   applySortP env vals fp
 
           PrimAppE p ls -> do args <- mapM (go env) ls
+                              dbgTraceIt (sdoc x0) (pure ())
                               applyPrim rc p args
           ProjE ix ex   -> do VProd ls <- go env ex
                               return $ ls !!! ix
 
           -- N.B. this AppE is shared by the interpreters for L0 and L1
           AppE f _ ls -> do
+            dbgTraceIt (sdoc x0) (pure ())
             ls' <- mapM (go env) ls
             -- Look in the local environment first
             case M.lookup f env of
@@ -240,8 +242,9 @@ applyPrim rc p args =
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
    (ReadArrayFile{},[]) -> do
        pure (VList [])
-   (VAllocP _,_n) -> do
-       pure (VList [])
+   (VAllocP _,_n) -> pure (VList [])
+   (VFreeP _,_n) -> pure (VProd [])
+   (VFree2P _,_n) -> pure (VProd [])
    (VLengthP _,[(VList ls)]) -> pure $ VInt (length ls)
    (VNthP _,[(VList ls), VInt n]) -> pure $ ls !!! n
    (InplaceVUpdateP _,[(VList ls), VInt i, v]) -> do

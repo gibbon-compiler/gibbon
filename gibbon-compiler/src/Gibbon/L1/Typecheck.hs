@@ -195,7 +195,7 @@ tcExp ddfs env exp =
         PrintSym -> do
           len1
           _ <- ensureEqualTy (es !!! 0) SymTy (tys !!! 0)
-          return IntTy
+          return SymTy
 
         ReadInt -> do
           len0
