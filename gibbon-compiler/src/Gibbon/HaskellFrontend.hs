@@ -9,6 +9,7 @@ import           Data.Foldable ( foldrM )
 import           Data.Maybe (catMaybes, isJust)
 import qualified Data.Map as M
 import qualified Data.Set as S
+import           Data.IORef
 import           Language.Haskell.Exts.Extension
 import           Language.Haskell.Exts.Parser
 import           Language.Haskell.Exts.Syntax as H
@@ -54,22 +55,14 @@ it expects A.B.D to be at A/B/A/B/D.hs.
 
 parseFile :: FilePath -> IO (PassM Prog0)
 parseFile path = do
-    -- stdlib <- importStdLibrary "TODO"
-    parseFile' [] path
-    -- let combined = do
-    --       (Prog std_ddefs std_fundefs _) <- stdlib
-    --       (Prog ddefs fundefs mainExp) <- prog
-    --       let common_ddefs = M.intersection ddefs std_ddefs
-    --           common_funs  = M.intersection fundefs std_fundefs
+    pstate0_ref <- newIORef emptyParseState
+    parseFile' pstate0_ref [] path
 
-    --       unless (M.null common_ddefs) $
-    --         error$ " "++ show (M.keys common_ddefs)
-    --                ++ " is already defined in the standard library."
-    --       unless (M.null common_funs) $
-    --         error$ " "++ show (M.keys common_funs)
-    --                ++ " is already defined in the standard library."
-    --       pure (Prog (M.union ddefs std_ddefs) (M.union fundefs std_fundefs) mainExp)
-    -- pure combined
+data ParseState = ParseState
+    { imported :: M.Map (String, FilePath) Prog0 }
+
+emptyParseState :: ParseState
+emptyParseState = ParseState M.empty
 
 parseMode :: ParseMode
 parseMode = defaultParseMode { extensions = [ EnableExtension ScopedTypeVariables
@@ -77,12 +70,12 @@ parseMode = defaultParseMode { extensions = [ EnableExtension ScopedTypeVariable
                                             ++ (extensions defaultParseMode)
                              }
 
-parseFile' :: [String] -> FilePath -> IO (PassM Prog0)
-parseFile' import_route path = do
+parseFile' :: IORef ParseState -> [String] -> FilePath -> IO (PassM Prog0)
+parseFile' pstate_ref import_route path = do
   str <- readFile path
   let parsed = parseModuleWithMode parseMode str
   case parsed of
-    ParseOk hs -> desugarModule import_route (takeDirectory path) hs
+    ParseOk hs -> desugarModule pstate_ref import_route (takeDirectory path) hs
     ParseFailed _ er -> do
       error ("haskell-src-exts failed: " ++ er)
 
@@ -95,13 +88,14 @@ data TopLevel
 
 type TopTyEnv = TyEnv TyScheme
 
-desugarModule :: (Show a,  Pretty a) => [String] -> FilePath -> Module a -> IO (PassM Prog0)
-desugarModule import_route dir (Module _ head_mb _pragmas imports decls) = do
+desugarModule :: (Show a,  Pretty a)
+              => IORef ParseState -> [String] -> FilePath -> Module a -> IO (PassM Prog0)
+desugarModule pstate_ref import_route dir (Module _ head_mb _pragmas imports decls) = do
   let -- Since top-level functions and their types can't be declared in
       -- single top-level declaration we first collect types and then collect
       -- definitions.
       funtys = foldr collectTopTy M.empty decls
-  imported_progs :: [PassM Prog0] <- mapM (processImport (mod_name : import_route) dir) imports
+  imported_progs :: [PassM Prog0] <- mapM (processImport pstate_ref (mod_name : import_route) dir) imports
   let prog = do
         toplevels <- catMaybes <$> mapM (collectTopLevel funtys) decls
         let (defs,_vars,funs,inlines,main) = foldr classify init_acc toplevels
@@ -116,10 +110,24 @@ desugarModule import_route dir (Module _ head_mb _pragmas imports decls) = do
                          fn_names2 = M.keysSet fundefs
                          em1 = S.intersection ddef_names1 ddef_names2
                          em2 = S.intersection fn_names1 fn_names2
-                     in case (S.null em1, S.null em2) of
-                            (True, True) -> (M.union ddefs defs1,  M.union fundefs funs1)
-                            (False,_) -> error $ "Multiple definitions of " ++ show (S.toList em1) ++ " found in " ++ mod_name
-                            (_,False) -> error $ "Multiple definitions of " ++ show (S.toList em2) ++ " found in " ++ mod_name)
+                         conflicts1 = foldr
+                                        (\d acc ->
+                                             if (ddefs M.! d) /= (defs1 M.! d)
+                                             then d : acc
+                                             else acc)
+                                        []
+                                        em1
+                         conflicts2 = foldr
+                                        (\f acc ->
+                                             if (fundefs M.! f) /= (funs1 M.! f)
+                                             then dbgTraceIt (sdoc ((fundefs M.! f), (funs1 M.! f))) (f : acc)
+                                             else acc)
+                                        []
+                                        em2
+                     in case (conflicts1, conflicts2) of
+                            ([], []) -> (M.union ddefs defs1,  M.union fundefs funs1)
+                            (_x:_xs,_) -> error $ "Conflicting definitions of " ++ show conflicts1 ++ " found in " ++ mod_name
+                            (_,_x:_xs) -> error $ "Conflicting definitions of " ++ show (S.toList em2) ++ " found in " ++ mod_name)
                 (defs, funs')
                 imported_progs'
         pure (Prog defs0 funs0 main)
@@ -143,32 +151,44 @@ desugarModule import_route dir (Module _ head_mb _pragmas imports decls) = do
             Just _  -> error $ "A module cannot have two main expressions."
                                ++ show mod_name
         HInline v   -> (defs,vars,funs,S.insert v inlines,main)
-desugarModule _ _ m = error $ "desugarModule: " ++ prettyPrint m
+desugarModule _ _ _ m = error $ "desugarModule: " ++ prettyPrint m
 
 stdLibraryModules :: [String]
 stdLibraryModules = ["Gibbon.Vector"]
 
-processImport :: [String] -> FilePath -> ImportDecl a -> IO (PassM Prog0)
-processImport import_route dir decl@ImportDecl{..} = do
+processImport :: IORef ParseState -> [String] -> FilePath -> ImportDecl a -> IO (PassM Prog0)
+processImport pstate_ref import_route dir decl@ImportDecl{..} = do
     when (mod_name `elem` import_route) $
       error $ "Circular dependency detected. Import path: "++ show (mod_name : import_route)
     when (importQualified) $ error $ "Qualified imports not supported yet. Offending import: " ++  prettyPrint decl
     when (isJust importAs) $ error $ "Module aliases not supported yet. Offending import: " ++  prettyPrint decl
     when (isJust importSpecs) $ error $ "Selective imports not supported yet. Offending import: " ++  prettyPrint decl
-    prog <-  if mod_name `elem` stdLibraryModules
-               then importStdLibrary mod_name
-               else do
-                 mb_fp <- findModule dir importModule
-                 case mb_fp of
-                     Nothing -> error $ "Cannot find module: " ++
-                                        show mod_name ++ " in " ++ dir
-                     Just mod_fp -> parseFile' import_route mod_fp
-    pure prog
+    (ParseState imported) <- readIORef pstate_ref
+    mod_fp <- if mod_name `elem` stdLibraryModules
+                then stdlibImportPath mod_name
+                else modImportPath importModule dir
+    dbgTrace 5 ("Looking at " ++ mod_name) (pure ())
+    dbgTrace 5 ("Previously imported: " ++ show (M.keysSet imported)) (pure ())
+    prog <- case M.lookup (mod_name, mod_fp) imported of
+                Just prog -> do
+                    dbgTrace 5 ("Already imported " ++ mod_name) (pure ())
+                    pure prog
+                Nothing -> do
+                    dbgTrace 5 ("Importing " ++ mod_name ++ " from " ++ mod_fp) (pure ())
+                    prog0 <- parseFile' pstate_ref import_route mod_fp
+                    (ParseState imported') <- readIORef pstate_ref
+                    let (prog0',_) = defaultRunPassM prog0
+                    let imported'' = M.insert (mod_name, mod_fp) prog0' imported'
+                    let pstate' = ParseState { imported = imported'' }
+                    writeIORef pstate_ref pstate'
+                    pure prog0'
+
+    pure (pure prog)
   where
     mod_name = mnameToStr importModule
 
-importStdLibrary :: String -> IO (PassM Prog0)
-importStdLibrary mod_name = do
+stdlibImportPath :: String -> IO FilePath
+stdlibImportPath mod_name = do
     env <- getEnvironment
     let stdlibPath = case lookup "GIBBONDIR" env of
                     Just p -> p </> "gibbon-compiler" </> modNameToFilename mod_name
@@ -177,13 +197,21 @@ importStdLibrary mod_name = do
     e <- doesFileExist stdlibPath
     unless e $ error$ "stdlib.hs file not found at path: "++stdlibPath
                      ++"\n Consider setting GIBBONDIR to repo root.\n"
-    parseFile' [] stdlibPath
-
+    pure stdlibPath
   where
     modNameToFilename :: String -> String
     modNameToFilename "Gibbon.Vector" = "stdlib" </> "Vector.hs"
     modNameToFilename "Gibbon.Prelude" = "stdlib" </> "Prelude.hs"
     modNameToFilename oth = error $ "Unknown module: " ++ oth
+
+modImportPath :: ModuleName a -> String -> IO FilePath
+modImportPath importModule dir = do
+    let mod_name = mnameToStr importModule
+    mb_fp <- findModule dir importModule
+    case mb_fp of
+        Nothing -> error $ "Cannot find module: " ++
+                   show mod_name ++ " in " ++ dir
+        Just mod_fp -> pure mod_fp
 
 -- | Look for a module on the filesystem.
 findModule :: FilePath -> ModuleName a -> IO (Maybe FilePath)
