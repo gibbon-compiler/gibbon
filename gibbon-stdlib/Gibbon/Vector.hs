@@ -1,36 +1,11 @@
-{-# OPTIONS_GHC -fdefer-typed-holes #-}
-
 module Gibbon.Vector where
 
+-- -- haskell-src-exts can't parse this.
+-- #if MIN_VERSION_GLASGOW_HASKELL(8,4,4,0)
+-- import Gibbon.Prim
+-- #endif
+
 import Gibbon.Prelude
-
---------------------------------------------------------------------------------
--- Vectors
---------------------------------------------------------------------------------
-
-{-
--- Built-ins. Uncomment this block in order to load this file in GHCi.
-
-data Vector a
-
-valloc :: Int -> Vector a
-valloc = _builtin
-
-length :: Vector a -> Int
-length = _builtin
-
-vnth :: Vector a -> Int -> a
-vnth = _builtin
-
-vslice :: Int -- Starting index
-        -> Int -- length
-        -> Vector a -> Vector a
-vslice = _builtin
-
-inplacevupdate :: Vector a -> Int -> a -> Vector a
-inplacevupdate = _builtin
-
--}
 
 --------------------------------------------------------------------------------
 -- Wrappers over Gibbon primitives.

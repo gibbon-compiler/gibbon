@@ -1,5 +1,10 @@
 module Gibbon.Prelude where
 
+-- -- haskell-src-exts can't parse this.
+-- #if MIN_VERSION_GLASGOW_HASKELL(8,4,4,0)
+-- import Gibbon.Prim
+-- #endif
+
 --------------------------------------------------------------------------------
 
 maxInt :: Int -> Int -> Int

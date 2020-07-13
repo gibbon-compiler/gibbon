@@ -153,8 +153,8 @@ desugarModule pstate_ref import_route dir (Module _ head_mb _pragmas imports dec
         HInline v   -> (defs,vars,funs,S.insert v inlines,main)
 desugarModule _ _ _ m = error $ "desugarModule: " ++ prettyPrint m
 
-stdLibraryModules :: [String]
-stdLibraryModules = ["Gibbon.Prelude", "Gibbon.Vector", "Gibbon.Vector.Parallel"]
+stdlibModules :: [String]
+stdlibModules = ["Gibbon.Prelude", "Gibbon.Vector", "Gibbon.Vector.Parallel"]
 
 processImport :: IORef ParseState -> [String] -> FilePath -> ImportDecl a -> IO (PassM Prog0)
 processImport pstate_ref import_route dir decl@ImportDecl{..} = do
@@ -164,7 +164,7 @@ processImport pstate_ref import_route dir decl@ImportDecl{..} = do
     when (isJust importAs) $ error $ "Module aliases not supported yet. Offending import: " ++  prettyPrint decl
     when (isJust importSpecs) $ error $ "Selective imports not supported yet. Offending import: " ++  prettyPrint decl
     (ParseState imported) <- readIORef pstate_ref
-    mod_fp <- if mod_name `elem` stdLibraryModules
+    mod_fp <- if mod_name `elem` stdlibModules
                 then stdlibImportPath mod_name
                 else modImportPath importModule dir
     dbgTrace 5 ("Looking at " ++ mod_name) (pure ())
@@ -191,7 +191,7 @@ stdlibImportPath :: String -> IO FilePath
 stdlibImportPath mod_name = do
     env <- getEnvironment
     let stdlibPath = case lookup "GIBBONDIR" env of
-                    Just p -> p </> "gibbon-compiler" </> modNameToFilename mod_name
+                    Just p -> p </> "gibbon-stdlib" </> modNameToFilename mod_name
                     -- Assume we're running from the compiler dir!
                     Nothing -> modNameToFilename mod_name
     e <- doesFileExist stdlibPath
@@ -200,9 +200,9 @@ stdlibImportPath mod_name = do
     pure stdlibPath
   where
     modNameToFilename :: String -> String
-    modNameToFilename "Gibbon.Vector" = "stdlib" </> "Vector.hs"
-    modNameToFilename "Gibbon.Prelude" = "stdlib" </> "Prelude.hs"
-    modNameToFilename "Gibbon.Vector.Parallel" = "stdlib" </> "ParallelVector.hs"
+    modNameToFilename "Gibbon.Prelude" = "Gibbon" </> "Prelude.hs"
+    modNameToFilename "Gibbon.Vector" = "Gibbon" </> "Vector.hs"
+    modNameToFilename "Gibbon.Vector.Parallel" = "Gibbon" </> "Vector" </> "Parallel.hs"
     modNameToFilename oth = error $ "Unknown module: " ++ oth
 
 modImportPath :: ModuleName a -> String -> IO FilePath

@@ -1,5 +1,10 @@
 module Gibbon.Vector.Parallel where
 
+-- -- haskell-src-exts can't parse this.
+-- #if MIN_VERSION_GLASGOW_HASKELL(8,4,4,0)
+-- import Gibbon.Prim
+-- #endif
+
 import Gibbon.Prelude
 import Gibbon.Vector
 
@@ -10,7 +15,7 @@ defaultGrainSize :: Int -> Int
 {-# INLINE defaultGrainSize #-}
 defaultGrainSize n =
     let p = getNumProcessors
-        grain = maxInt 1 (n / (8 * p))
+        grain = maxInt 1 (div n (8 * p))
     in minInt 2048 grain
 
 generate_par_loop :: Int -> Vector a -> Int -> Int -> (Int -> a) -> Vector a
