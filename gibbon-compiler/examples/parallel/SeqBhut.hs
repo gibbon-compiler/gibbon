@@ -21,6 +21,7 @@ gibbon_main =
       rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 0) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 1) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       box = (llx, lly, rux, ruy)
-      particles1 = iterate (oneStep_seq box mpts particles)
+      particles1 = timeit (oneStep_seq box mpts particles)
       err = check particles1
   in err
+  -- in 10

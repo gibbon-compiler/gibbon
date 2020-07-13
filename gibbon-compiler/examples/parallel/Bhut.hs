@@ -88,7 +88,7 @@ data BH_Tree = BH_Empty
                        BH_Tree -- ^ south-east
                        BH_Tree -- ^ south-west
 
-myprintBHTree :: BH_Tree -> Int
+myprintBHTree :: BH_Tree -> Sym
 myprintBHTree bht =
     case bht of
         BH_Empty -> printsym (quote "(BH_Empty)")
@@ -96,7 +96,7 @@ myprintBHTree bht =
             let _ = printsym (quote "(BH_Leaf")
                 _ = printMassPoint (x,y,m)
                 _ = printsym (quote ") ")
-            in 10
+            in quote ""
         BH_Node x y m total size tr1 tr2 tr3 tr4->
             let _ = printsym (quote "(BH_Node")
                 _ = printMassPoint (x,y,m)
@@ -109,7 +109,7 @@ myprintBHTree bht =
                 _ = myprintBHTree tr3
                 _ = myprintBHTree tr4
                 _ = printsym (quote ") ")
-            in 10
+            in quote ""
 
 getX :: BH_Tree -> Float
 getX tr =
@@ -185,6 +185,8 @@ calcAccel_seq mpt tr =
         in (x1 .+. x2 .+. x3 .+. x4, y1 .+. y2 .+. y3 .+. y4)
       else accel mpt x y mass
 
+{-
+
 calcAccel_par :: Int -> (Float, Float, Float) -> BH_Tree -> (Float, Float)
 calcAccel_par cutoff mpt tr =
   case tr of
@@ -202,6 +204,8 @@ calcAccel_par cutoff mpt tr =
         in (x1 .+. x2 .+. x3 .+. x4, y1 .+. y2 .+. y3 .+. y4)
       else accel mpt x y mass
 
+-}
+
 calcCentroid_seq :: Vector (Float, Float, Float) -> (Float, Float, Float)
 calcCentroid_seq mpts =
     let lam1 = (\(acc :: (Float, Float, Float)) (mpt :: (Float, Float, Float)) ->
@@ -215,23 +219,17 @@ calcCentroid_seq mpts =
         (sum_x, sum_y, sum_m) = sum
     in (sum_x ./. sum_m, sum_y ./. sum_m, sum_m)
 
+{-
+
 calcCentroid_par :: Vector (Float, Float, Float) -> (Float, Float, Float)
 calcCentroid_par mpts =
     let lam1 = (\(acc :: (Float, Float, Float)) (mpt :: (Float, Float, Float)) ->
-                     let x = mpt !!! 0
-                         y = mpt !!! 1
-                         m = mpt !!! 2
-                         acc_x = acc !!! 0
-                         acc_y = acc !!! 1
-                         acc_m = acc !!! 2
+                     let (x,y,m) = mpt
+                         (acc_x, acc_y, acc_m) = acc
                      in (acc_x .+. (x.*.m), acc_y .+. (y.*.m), acc_m .+. m))
         lam2  = (\(acc1 :: (Float, Float, Float)) (acc2 :: (Float, Float, Float)) ->
-                     let x1 = acc1 !!! 0
-                         y1 = acc1 !!! 1
-                         z1 = acc1 !!! 2
-                         x2 = acc2 !!! 0
-                         y2 = acc2 !!! 1
-                         z2 = acc2 !!! 2
+                     let (x1,y1,z1) = acc1
+                         (x2,y2,z2) = acc2
                      in (x1 .+. x2, y1 .+. y2, z1 .+. z2))
         sum = foldl2_par
                 lam1
@@ -240,6 +238,8 @@ calcCentroid_par mpts =
                 mpts
         (sum_x, sum_y, sum_m) = sum
     in (sum_x ./. sum_m, sum_y ./. sum_m, sum_m)
+
+-}
 
 inBox :: Float -> Float -> Float -> Float -> Float -> Float -> Bool
 inBox llx lly rux ruy px py =
@@ -296,6 +296,9 @@ buildQtree_seq box mpts =
 buildQtree_par :: Int -> (Float, Float, Float, Float) -> Vector (Float, Float, Float) -> BH_Tree
 buildQtree_par cutoff box mpts =
     let len = length mpts in
+        -- _ = printsym (quote "cutoff=")
+        -- _ = printint cutoff
+        -- _ = printsym (quote "\n") in
     if len < cutoff then buildQtree_seq box mpts else
     let (llx,lly,rux,ruy) = box
     in
@@ -303,10 +306,10 @@ buildQtree_par cutoff box mpts =
         then BH_Empty
         else if len == 1
         then
-            let (x,y,m) = calcCentroid_par mpts
+            let (x,y,m) = calcCentroid_seq mpts
             in BH_Leaf x y m
         else
-            let (x,y,m) = calcCentroid_par mpts
+            let (x,y,m) = calcCentroid_seq mpts
                 midx = (llx .+. rux) ./. 2.0
                 midy = (lly .+. ruy) ./. 2.0
                 b1 = (llx, lly, midx, midy)
@@ -334,6 +337,7 @@ oneStep_seq :: (Float, Float, Float, Float)
             -> Vector (Float, Float, Float, Float, Float)
 oneStep_seq box mpts ps =
     let bht = buildQtree_seq box mpts
+        _ = printsym (quote "tree built\n")
         ps2 = generate (length ps)
                        (\i ->
                             let p = nth ps i
@@ -350,8 +354,8 @@ oneStep_par :: Int
             -> Vector (Float, Float, Float, Float, Float)
 oneStep_par cutoff box mpts ps =
     let bht = buildQtree_par cutoff box mpts
-        _ = printsym (quote "tree built")
-        ps2 = generate_par (length ps)
+        _ = printsym (quote "tree built\n")
+        ps2 = generate (length ps)
                        (\i ->
                             let p = nth ps i
                                 mpt = nth mpts i
@@ -366,7 +370,7 @@ debugPrint bht ps2 =
         _ = printsym (quote "\n")
         _ = printVec (\p -> let _ = printParticle p
                                 _ = printsym (quote "\n")
-                            in  10) ps2
+                            in 10) ps2
         _ = printsym (quote "\n")
     in 10
 
