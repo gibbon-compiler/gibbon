@@ -23,7 +23,8 @@ module Gibbon.Common
        , RunConfig(..), getRunConfig, defaultRunConfig, getGibbonConfig
 
          -- * Misc helpers
-       , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv, lookup3, fst3, snd3
+       , (#), (!!!), fragileZip, fragileZip', sdoc, ndoc, abbrv
+       , lookup3, fst3, snd3, thd3, cataM
 
          -- * Debugging/logging:
        , dbgLvl, dbgPrint, dbgPrintLn, dbgTrace, dbgTraceIt, minChatLvl
@@ -39,6 +40,7 @@ import Control.Exception (evaluate)
 import Control.Monad.Fail
 import Control.Monad.State.Strict
 import Control.Monad.Reader
+import Data.Functor.Foldable
 import Data.Char
 import Data.List as L
 import Data.Map as M
@@ -139,7 +141,7 @@ newUniq = state (\x -> (x, x+1))
 
 -- | Generate a unique symbol by attaching a numeric suffix.
 gensym :: MonadState Int m => Var -> m Var
-gensym v = state (\n -> (cleanFunName v `varAppend` toVar (show n), n + 1))
+gensym v = state (\n -> (cleanFunName v `varAppend` "_" `varAppend` toVar (show n), n + 1))
 
 gensym_tag :: MonadState Int m => Var -> String -> m Var
 gensym_tag v str = state (\n -> (cleanFunName v `varAppend` toVar ((show n)++ str) , n + 1))
@@ -354,6 +356,15 @@ fst3 (a,_,_) = a
 
 snd3 :: (a,b,c) -> b
 snd3 (_,b,_) = b
+
+thd3 :: (a,b,c) -> c
+thd3 (_,_,c) = c
+
+cataM
+  :: (Monad m, Traversable (Base t), Recursive t)
+  => (Base t a -> m a) -> t ->  m a
+cataM alg = c where
+    c = alg <=< traverse c . project
 
 
 --------------------------------------------------------------------------------

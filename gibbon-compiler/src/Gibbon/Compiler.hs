@@ -59,6 +59,7 @@ import qualified Gibbon.L3.Typecheck as L3
 import           Gibbon.Passes.Freshen        (freshNames)
 import           Gibbon.Passes.Flatten        (flattenL1, flattenL2, flattenL3)
 import           Gibbon.Passes.InlineTriv     (inlineTriv)
+import           Gibbon.Passes.Simplifier     (simplify)
 -- import           Gibbon.Passes.Sequentialize  (sequentialize)
 
 import           Gibbon.Passes.DirectL3       (directL3)
@@ -206,7 +207,9 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   let initTypeChecked :: L0.Prog0
       initTypeChecked =
         -- We typecheck first to turn the appropriate VarE's into FunRefE's.
-        fst $ runPassM defaultConfig 0 (freshNames l0 >>= L0.tcProg)
+        fst $ runPassM defaultConfig 0
+                (freshNames l0 >>=
+                 (\fresh -> dbgTrace 5 ("\nFreshen:\n"++sepline++ "\n" ++pprender fresh) (L0.tcProg fresh)))
 
   case mode of
     Interp1 -> do
@@ -225,10 +228,6 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
             if dbgLvl >= passChatterLvl+1
             then "\n"++sepline ++ "\n" ++ (sdoc l0)
             else show (length (sdoc l0)) ++ " characters."
-
-      let parallel = gopt Opt_Parallel (dynflags config)
-      when (hasSpawnsProg l0 && not parallel) $
-        error "To compile a program with parallelism, use -parallel."
 
       -- (Stage 1) Run the program through the interpreter
       initResult <- withPrintInterpProg initTypeChecked
@@ -473,6 +472,7 @@ passes config@Config{dynflags} l0 = do
           biginf     = gopt Opt_BigInfiniteRegions dynflags
           gibbon1    = gopt Opt_Gibbon1 dynflags
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
+          parallel   = gopt Opt_Parallel dynflags
           should_fuse = gopt Opt_Fusion dynflags
       l0 <- go  "freshen"         freshNames            l0
       l0 <- goE0 "typecheck"       L0.tcProg             l0
@@ -489,9 +489,14 @@ passes config@Config{dynflags} l0 = do
       -- replace the main function with benchmark code:
       l1 <- goE1 "benchMainExp"  benchMainExp           l1
       l1 <- goE1 "typecheck"     L1.tcProg              l1
+      l1 <- goE1 "simplify"      simplify               l1
+      l1 <- goE1 "typecheck"     L1.tcProg              l1
+      -- Check this after eliminating all dead functions.
+      when (hasSpawnsProg l1 && not parallel) $
+        error "To compile a program with parallelism, use --parallel."
       l1 <- goE1 "flatten"       flattenL1              l1
       l1 <- goE1 "inlineTriv"    inlineTriv             l1
-      l1 <- goE1 "typecheck"    L1.tcProg               l1
+      l1 <- goE1 "typecheck"     L1.tcProg              l1
       l1 <- if should_fuse
           then goE1  "fusion2"   fusion2                l1
           else return l1

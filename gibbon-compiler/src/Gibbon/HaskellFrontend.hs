@@ -90,7 +90,7 @@ data TopLevel
   = HDDef (DDef Ty0)
   | HFunDef (FunDef Exp0)
   | HMain (Maybe (Exp0, Ty0))
-  | HAnnotation (Var, [Int])
+  | HInline Var
   deriving (Show, Eq)
 
 type TopTyEnv = TyEnv TyScheme
@@ -104,7 +104,8 @@ desugarModule import_route dir (Module _ head_mb _pragmas imports decls) = do
   imported_progs :: [PassM Prog0] <- mapM (processImport (mod_name : import_route) dir) imports
   let prog = do
         toplevels <- catMaybes <$> mapM (collectTopLevel funtys) decls
-        let (defs,_vars,funs,main) = foldr classify init_acc toplevels
+        let (defs,_vars,funs,inlines,main) = foldr classify init_acc toplevels
+            funs' = foldr (\v acc -> M.update (\fn -> Just (fn {funInline = Inline})) v acc) funs inlines
         imported_progs' <- mapM id imported_progs
         let (defs0,funs0) =
               foldr
@@ -119,12 +120,12 @@ desugarModule import_route dir (Module _ head_mb _pragmas imports decls) = do
                             (True, True) -> (M.union ddefs defs1,  M.union fundefs funs1)
                             (False,_) -> error $ "Multiple definitions of " ++ show (S.toList em1) ++ " found in " ++ mod_name
                             (_,False) -> error $ "Multiple definitions of " ++ show (S.toList em2) ++ " found in " ++ mod_name)
-                (defs, funs)
+                (defs, funs')
                 imported_progs'
         pure (Prog defs0 funs0 main)
   pure prog
   where
-    init_acc = (M.empty, M.empty, M.empty, Nothing)
+    init_acc = (M.empty, M.empty, M.empty, S.empty, Nothing)
     mod_name = moduleName head_mb
 
     moduleName :: Maybe (ModuleHead a) -> String
@@ -132,16 +133,16 @@ desugarModule import_route dir (Module _ head_mb _pragmas imports decls) = do
     moduleName (Just (ModuleHead _ mod_name1 _warnings _exports)) =
       mnameToStr mod_name1
 
-    classify thing (defs,vars,funs,main) =
+    classify thing (defs,vars,funs,inlines,main) =
       case thing of
-        HDDef d   -> (M.insert (tyName d) d defs, vars, funs, main)
-        HFunDef f -> (defs, vars, M.insert (funName f) f funs, main)
+        HDDef d   -> (M.insert (tyName d) d defs, vars, funs, inlines, main)
+        HFunDef f -> (defs, vars, M.insert (funName f) f funs, inlines, main)
         HMain m ->
           case main of
-            Nothing -> (defs, vars, funs, m)
+            Nothing -> (defs, vars, funs, inlines, m)
             Just _  -> error $ "A module cannot have two main expressions."
                                ++ show mod_name
-        HAnnotation _a -> (defs, vars, funs, main)
+        HInline v   -> (defs,vars,funs,S.insert v inlines,main)
 desugarModule _ _ m = error $ "desugarModule: " ++ prettyPrint m
 
 stdLibraryModules :: [String]
@@ -327,7 +328,7 @@ primMap = M.fromList
   , ("intToFloat", IntToFloatP)
   , ("floatToInt", FloatToIntP)
   , ("sizeParam", SizeParam)
-  , ("symappend", SymAppend)
+  , ("getNumProcessors", GetNumProcessors)
   , ("True", MkTrue)
   , ("False", MkFalse)
   , ("gensym", Gensym)
@@ -357,6 +358,8 @@ desugarExp toplevel e =
       then pure SyncE
       else if v == "sizeParam"
       then pure $ PrimAppE SizeParam []
+      else if v == "getNumProcessors"
+      then pure $ PrimAppE GetNumProcessors []
       else case M.lookup v toplevel of
              Just sigma ->
                case tyFromScheme sigma of
@@ -387,13 +390,13 @@ desugarExp toplevel e =
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
                   else if f == "readArrayFile"
                   then case e2 of
-                         Lit _ lit -> do
+                         Tuple _ Boxed [Lit _ name,Lit _ len] -> do
                            t <- newMetaTy
-                           pure $ PrimAppE (ReadArrayFile (Just (litToString lit)) t) []
+                           pure $ PrimAppE (ReadArrayFile (Just (litToString name, litToInt len)) t) []
                          Con _ (Special _ (UnitCon _)) -> do
                            t <- newMetaTy
                            pure $ PrimAppE (ReadArrayFile Nothing t) []
-                         _ -> error "desugarExp: couldn't parse readArrayFile"
+                         _ -> error $ "desugarExp: couldn't parse readArrayFile; " ++ prettyPrint e2
                   else if f == "bench"
                   then do
                     e2' <- desugarExp toplevel e2
@@ -486,13 +489,13 @@ desugarExp toplevel e =
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
                   else if c == "readArrayFile"
                   then case e2 of
-                         Lit _ lit -> do
+                         Tuple _ Boxed [Lit _ name,Lit _ len] -> do
                            t <- newMetaTy
-                           pure $ PrimAppE (ReadArrayFile (Just (litToString lit)) t) []
+                           pure $ PrimAppE (ReadArrayFile (Just (litToString name, litToInt len)) t) []
                          Con _ (Special _ (UnitCon _)) -> do
                            t <- newMetaTy
                            pure $ PrimAppE (ReadArrayFile Nothing t) []
-                         _ -> error "desugarExp: couldn't parse readArrayFile"
+                         _ -> error $ "desugarExp: couldn't parse readArrayFile; " ++ prettyPrint e2
                   else (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
           (Ext (ParE0 ls)) -> do
             e2' <- desugarExp toplevel e2
@@ -637,7 +640,10 @@ collectTopLevel env decl =
                      pure $ Just $ HFunDef (FunDef { funName = toVar fn
                                                    , funArgs = args
                                                    , funTy   = fun_ty
-                                                   , funBody = fixupSpawn bod' })
+                                                   , funBody = fixupSpawn bod'
+                                                   , funRec  = NotRec
+                                                   , funInline = NoInline
+                                                   })
 
                -- This is a top-level function that doesn't take any arguments.
                _ -> do
@@ -647,25 +653,23 @@ collectTopLevel env decl =
                  pure $ Just $ HFunDef (FunDef { funName = toVar fn
                                                , funArgs = []
                                                , funTy   = fun_ty''
-                                               , funBody = fixupSpawn rhs' })
+                                               , funBody = fixupSpawn rhs'
+                                               , funRec  = NotRec
+                                               , funInline = NoInline
+                                               })
 
 
     FunBind{} -> do (name,args,ty,bod) <- desugarFun toplevel env decl
                     pure $ Just $ HFunDef (FunDef { funName = name
                                                   , funArgs = args
                                                   , funTy   = ty
-                                                  , funBody = fixupSpawn bod })
+                                                  , funBody = fixupSpawn bod
+                                                  , funRec  = NotRec
+                                                  , funInline = NoInline
+                                                  })
 
-    AnnPragma _ a -> do
-      case a of
-        Ann _ (Ident _ fn_name) (Tuple _ Boxed [H.Var _ (UnQual _ (Ident _ "gibbon_payload")), List _ ps]) -> do
-          let payloads = foldr (\e acc -> case e of
-                                            Lit _ lit -> litToInt lit : acc
-                                            _ -> acc)
-                               []
-                               ps
-          pure $ Just $ HAnnotation (toVar fn_name, payloads)
-        _ -> pure Nothing
+    InlineSig _ _ _ qname -> pure $ Just $ HInline (toVar $ qnameToStr qname)
+
     _ -> error $ "collectTopLevel: Unsupported top-level expression: " ++ show decl
 
 

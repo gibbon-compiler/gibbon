@@ -1,4 +1,4 @@
-import Prelude hiding ( Maybe(..), Either (..), succ, not, foldr, map, head)
+-- import Prelude hiding ( Maybe(..), Either (..), succ, not, foldr, map, head)
 
 data List a = Nil
             | Cons a (List a)

@@ -511,11 +511,13 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
          L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
 
     revertFunDef :: FunDef2 -> FunDef1
-    revertFunDef FunDef{funName,funArgs,funTy,funBody} =
+    revertFunDef FunDef{funName,funArgs,funTy,funBody,funRec,funInline} =
       FunDef { funName = funName
              , funArgs = funArgs
              , funTy   = (L.map stripTyLocs (arrIns funTy), stripTyLocs (arrOut funTy))
              , funBody = revertExp funBody
+             , funRec  = funRec
+             , funInline = funInline
              }
 
     revertExp :: Exp2 -> Exp1

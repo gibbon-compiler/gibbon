@@ -238,6 +238,8 @@ if a thing is a type variable or a data constructor.
                             , funArgs = args''
                             , funTy   = ForAll (tyVarsInTy fun_ty) fun_ty
                             , funBody = bod'
+                            , funRec = NotRec
+                            , funInline = NoInline
                             } : fds)
             cds mn
 
@@ -595,7 +597,6 @@ primMap = M.fromList
   , ("or" , OrP)
   , ("and", AndP)
   , ("size-param", SizeParam)
-  , ("sym-append", SymAppend)
   , ("True", MkTrue)
   , ("False", MkFalse)
   , ("gensym", Gensym)

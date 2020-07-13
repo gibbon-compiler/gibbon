@@ -177,12 +177,6 @@ tcExp ddfs env exp =
           _ <- ensureEqualTy exp IntTy (tys !! 0)
           return FloatTy
 
-        SymAppend -> do
-          len2
-          _ <- ensureEqualTy (es !!! 0) SymTy (tys !!! 0)
-          _ <- ensureEqualTy (es !!! 1) IntTy (tys !!! 1)
-          return SymTy
-
         PrintInt -> do
           len1
           _ <- ensureEqualTy (es !!! 0) IntTy (tys !!! 0)

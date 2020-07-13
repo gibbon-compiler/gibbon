@@ -982,7 +982,7 @@ tupleListOfFunctions  ddefs funcList newName syncedArgs = do
            in substE  oldExp newExp exp
         ) extendedCase syncedArgs
 
-  return (FunDef newName newArgs (newFuncInputType,newRetType) finalBody)
+  return (FunDef newName newArgs (newFuncInputType,newRetType) finalBody NotRec NoInline)
  where
   createOutVar index subscript=
           toVar ("f" L.++ show index L.++"out" L.++ show subscript)

@@ -301,12 +301,6 @@ tcExp isPacked ddfs env exp =
           ensureEqualTy exp ety CursorTy
           pure BoolTy
 
-        SymAppend -> do
-          len2
-          _ <- ensureEqualTyModCursor (es !! 0) SymTy (tys !! 0)
-          _ <- ensureEqualTyModCursor (es !! 1) IntTy (tys !! 1)
-          return SymTy
-
         PrintInt -> do
           len1
           _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)

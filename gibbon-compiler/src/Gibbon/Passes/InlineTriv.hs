@@ -22,8 +22,8 @@ inlineTriv :: (HasSimplifiable e l d)
 inlineTriv (Prog ddefs funs main) =
     return (Prog ddefs (fmap (inlineTrivFun . inlineTrivFun) funs) main')
   where
-    inlineTrivFun (FunDef nam narg ty bod) =
-      FunDef nam narg ty (inlineTrivExp M.empty bod)
+    inlineTrivFun (FunDef nam narg ty bod isrec inline) =
+      FunDef nam narg ty (inlineTrivExp M.empty bod) isrec inline
 
     main' = case main of
               Nothing -> Nothing

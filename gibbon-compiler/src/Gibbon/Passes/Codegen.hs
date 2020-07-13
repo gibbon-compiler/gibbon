@@ -282,13 +282,6 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
 makeStructs :: [[Ty]] -> [C.Definition]
 makeStructs [] = []
 makeStructs (ts : ts') =
-  case ts of
-    [VectorTy ty] ->
-        let (ty_name, icd_name) = makeIcdName ty
-            icd_ty   = [cty|typename UT_icd|]
-            icd      = [cedecl| $ty:icd_ty $id:icd_name = {sizeof($id:ty_name),NULL, NULL, NULL} ;|]
-        in icd : makeStructs ([ty]:ts')
-    _ ->
       let strName = makeName ts
           decls = zipWith (\t n -> [csdecl| $ty:(codegenTy t) $id:("field"++(show n)); |]) ts [0 :: Int ..]
           d = [cedecl| typedef struct $id:(strName ++ "_struct") { $sdecls:decls } $id:strName; |]
@@ -844,11 +837,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  ReadArrayFile mfile ty
                    | [] <- rnds, [(outV,_outT)] <- bnds -> do
-                           let filename = case mfile of
-                                            Just f  -> [cexp| $string:f |] -- Fixed at compile time.
-                                            Nothing -> [cexp| read_arrayfile_param() |] -- Will be set by command line arg.
-                           let (_, icd_name) = makeIcdName ty
-                               parse_in_c t = case t of
+                           let parse_in_c t = case t of
                                                 IntTy   -> "%lld"
                                                 FloatTy -> "%f"
                                                 _ -> error $ "ReadArrayFile: Lists of type " ++ sdoc ty ++ " not allowed."
@@ -858,6 +847,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                            line <- gensym "line"
                            len <- gensym "len"
                            read <- gensym "read"
+                           line_num <- gensym "i"
 
                            (tmps, tmps_parsers, tmps_assns, tmps_decls) <-
                                  case ty of
@@ -886,9 +876,14 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                scanf_rator  = C.Var (C.Id "sscanf" noLoc) noLoc
                                scanf = C.FnCall scanf_rator (scanf_line : scanf_format : scanf_vars) noLoc
 
+                           let (filename, filelength) = case mfile of
+                                            Just (f, i)  -> ( [cexp| $string:f |]
+                                                            , [cexp| $int:i |]) -- Fixed at compile time.
+                                            Nothing -> ( [cexp| read_arrayfile_param() |]
+                                                       , [cexp| read_arrayfile_length_param() |]) -- Will be set by command line arg.
+
                            return $
-                                  [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV); |]
-                                  , C.BlockStm  [cstm| utarray_new($id:outV,&($id:icd_name)); |]
+                                  [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy ty)) ($id:outV) = vector_alloc($filelength, sizeof($ty:(codegenTy ty))); |]
                                   , C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:elem; |]
                                   , C.BlockStm  [cstm| FILE *($id:fp); |]
                                   , C.BlockDecl [cdecl| char *($id:line) = NULL; |]
@@ -898,10 +893,12 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                   , C.BlockStm [cstm| $id:fp = fopen( $filename, "r"); |]
                                   , C.BlockStm [cstm| { if($id:fp == NULL) { fprintf(stderr,"fopen failed\n"); abort(); }} |]
                                   ] ++ tmps_decls ++
-                                  [ C.BlockStm [cstm| while(($id:read = getline(&($id:line), &($id:len), $id:fp)) != -1) {
+                                  [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:line_num = 0; |]
+                                  , C.BlockStm [cstm| while(($id:read = getline(&($id:line), &($id:len), $id:fp)) != -1) {
                                                       int xxxx = $scanf;
                                                       $items:tmps_assns
-                                                      utarray_push_back($id:outV, &($id:elem));
+                                                      vector_inplace_update($id:outV, $id:line_num, &($id:elem));
+                                                      $id:line_num++;
                                                     } |]
                                   ]
 
@@ -972,7 +969,10 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        [VarTriv old_ls, VarTriv sort_fn] = rnds
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_sort($id:old_ls, $id:sort_fn); |] ]
 
-                 InplaceVSortP _elty -> error "InplaceSortP"
+                 InplaceVSortP elty -> do
+                   let [(outV,_)] = bnds
+                       [VarTriv old_ls, VarTriv sort_fn] = rnds
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_sort($id:old_ls, $id:sort_fn); |] ]
 
                  VSliceP elty -> do
                    let [(outV,_)] = bnds
@@ -981,7 +981,9 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        to' = codegenTriv venv to
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_slice($exp:from', $exp:to', $id:old_ls); |] ]
 
-                 GetNumProcessors -> error "GetNumProcessors"
+                 GetNumProcessors -> do
+                   let [(outV,outTy)] = bnds
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = get_nprocs(); |] ]
 
                  BumpArenaRefCount{} -> error "codegen: BumpArenaRefCount not handled."
                  ReadInt{} -> error "codegen: ReadInt not handled."

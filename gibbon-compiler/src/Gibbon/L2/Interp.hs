@@ -48,7 +48,13 @@ instance InterpProg Store Exp2 where
         Just (e,_) -> do
           let fenv = M.fromList [ (funName f , f) | f <- M.elems fundefs]
           ((v, _size),logs,store1) <- runInterpM (interp M.empty rc M.empty ddefs fenv e) store
-          pure (store1, v, toLazyByteString logs)
+          -- Policy: don't return locations
+          let res = case v of
+                        (VLoc reg off) ->
+                            let buf = fromJust $ lookupInStore' reg store1
+                            in deserialize ddefs store1 (dropInBuffer off buf)
+                        oth -> oth
+          pure (store1, res, toLazyByteString logs)
 
 
 --------------------------------------------------------------------------------
@@ -232,8 +238,11 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
             (args, szs) <- unzip <$> mapM (go env sizeEnv) ls
             return (VProd args , SMany szs)
 
-        ProjE ix e0 -> do (VProd ls, SMany szs) <- go env sizeEnv e0
-                          return (ls !! ix, szs !! ix)
+        ProjE ix e0 -> do
+            val <- go env sizeEnv e0
+            case val of
+              (VProd ls, SMany szs) -> return (ls !! ix, szs !! ix)
+              oth -> error $ "L2.Interp: expected VProd, got: " ++ sdoc (ex, oth)
 
         TimeIt bod _ isIter -> do
               let iters = if isIter then rcIters rc else 1
@@ -325,7 +334,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
     BoundsCheck{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     AddFixed{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     IndirectionE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
-    GetCilkWorkerNum{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    GetCilkWorkerNum{} -> pure $ (VInt 1, SOne (fromJust $ byteSizeOfTy IntTy))
     LetAvail{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
 
   where
@@ -356,6 +365,9 @@ lookupInStore :: Var -> InterpM Store Exp2 (Maybe Buffer)
 lookupInStore v = do
   Store store <- get
   return $ M.lookup v store
+
+lookupInStore' :: Var -> Store -> Maybe Buffer
+lookupInStore' reg (Store mp) = M.lookup reg mp
 
 newtype Buffer = Buffer (Seq SerializedVal)
   deriving (Read, Show, Eq, Ord, Generic, Out)
@@ -443,11 +455,12 @@ deserialize ddefs store (Buffer seq0) = final
          let Store s = store
              Buffer pointee = dropInBuffer off (s M.! buf_id)
              (ls, _rst') = readN n pointee
-         in dbgTraceIt (sdoc (s M.! buf_id, off)) (ls, rst)
+         in (ls, rst)
 
        SerPad :< rst ->
-         let (more,rst') = readN (n-1) rst
-         in (VInt (-1) : more, rst')
+         readN n rst
+         -- let (more,rst') = readN (n-1) rst
+         -- in (VInt (-1) : more, rst')
 
 data Size = SOne Int
           | SMany [Size]

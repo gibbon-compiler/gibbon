@@ -141,7 +141,9 @@ tests:
   - name: test_unpacking.gib
   - name: test24_defs.gib
   - name: void_type.gib
+    skip: true
   - name: void_type.hs
+    skip: true
     answer-file: examples/void_type.ans
   - name: T64_1.gib
   - name: test_addtrees.gib
@@ -231,7 +233,7 @@ tests:
   - name: Poly1.hs
     dir: examples/poly
     answer-file: examples/poly/Poly1.ans
-    failing: [gibbon1, gibbon2]
+    failing: [gibbon1, gibbon2, interp1]
 
   # - name: measure_mode.hs
   #   answer-file: examples/measure_mode.ans
@@ -255,7 +257,8 @@ tests:
   - name: CurriedFns.hs
     dir: examples/poly
     answer-file: examples/poly/CurriedFns.ans
-    failing: [gibbon1, gibbon2]
+    skip: true
+    failing: [gibbon1, gibbon2, interp1]
 
   - name: T127.hs
     dir: examples/poly
@@ -435,26 +438,29 @@ tests:
   ## Vector operations
   - name: Vector.hs
     dir: examples/vectors
+    test-flags: ["--parallel"]
     answer-file: examples/vectors/Vector.hs.ans
 
-  - name: InPlaceVector.hs
+  - name: SortPrim.hs
     dir: examples/vectors
-    answer-file: examples/vectors/Vector.hs.ans
+    test-flags: ["--parallel"]
+    failing: [interp1]
+    answer-file: examples/vectors/SortPrim.ans
 
   - name: Sort.hs
+    skip: true
     dir: examples/vectors
     answer-file: examples/vectors/Sort.hs.ans
 
   - name: DataVector.hs
     dir: examples/vectors
+    test-flags: ["--parallel"]
     answer-file: examples/vectors/DataVector.hs.ans
-    failing: ["interp1"]
 
   ## AST benchmarks
   - name: C1.hs
     dir: examples/ast
     failing: [gibbon1, gibbon2]
-    skip: true
     answer-file: examples/ast/C1.ans
 
   ## Tests that only work with some backend:

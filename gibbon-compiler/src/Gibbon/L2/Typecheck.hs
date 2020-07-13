@@ -283,12 +283,6 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    ensureEqualTy exp SymTy (tys !! 1)
                    return (BoolTy,tstate)
 
-                 SymAppend  -> do
-                   len2
-                   _ <- ensureEqualTy (es !! 0) SymTy (tys !! 0)
-                   _ <- ensureEqualTy (es !! 1) IntTy (tys !! 1)
-                   return (SymTy, tstate)
-
                  DictEmptyP ty -> do
                    len1
                    let [a] = tys

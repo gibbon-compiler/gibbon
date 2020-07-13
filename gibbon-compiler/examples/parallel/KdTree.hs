@@ -1,4 +1,6 @@
-module Seq2DCorr where
+module KdTree where
+
+import Gibbon.Vector
 
 coord :: Int -> (Float, Float, Float) -> Float
 coord axis pt =
@@ -26,16 +28,16 @@ cmp2 a b = floatToInt ((a !!! 1) .-. (b !!! 1))
 cmp3 :: (Float, Float, Float) -> (Float, Float, Float) -> Int
 cmp3 a b = floatToInt ((a !!! 2) .-. (b !!! 2))
 
-sort :: Int -> [(Float, Float, Float)] -> [(Float, Float, Float)]
+sort :: Int -> Vector (Float, Float, Float) -> Vector (Float, Float, Float)
 sort axis ls =
     if axis == 0
     -- This isn't safe, but avoids memory blowup
-    then let _ = inplacevsort ls cmp1
-         in ls
+    then let ls2 = inplacevsort ls cmp1
+         in ls2
     else if axis == 1
-    then let _ = inplacevsort ls cmp2
-         in ls
-    else let _ = inplacevsort ls cmp3
+    then let ls2 = inplacevsort ls cmp2
+         in ls2
+    else let ls2 = inplacevsort ls cmp3
          in ls
 
 --------------------------------------------------------------------------------
@@ -102,20 +104,20 @@ getElems tr =
     KdLeaf _ y _                     -> 1
 
 
-fromListWithAxis :: Int -> [(Float, Float, Float)] -> KdTree
-fromListWithAxis axis pts =
+fromListWithAxis_seq :: Int -> Vector (Float, Float, Float) -> KdTree
+fromListWithAxis_seq axis pts =
     let len = vlength pts in
     if len == 1
-    then let pt = vnth 0 pts
+    then let pt = nth pts 0
          in KdLeaf (pt !!! 0) (pt !!! 1) (pt !!! 2)
     else let sorted_pts = sort axis pts
              pivot_idx  = div len 2
-             pivot      = vnth pivot_idx sorted_pts
-             left_pts   = vslice sorted_pts 0 pivot_idx
-             right_pts  = vslice sorted_pts pivot_idx len
+             pivot      = nth sorted_pts pivot_idx
+             left_pts   = slice 0 pivot_idx sorted_pts
+             right_pts  = slice pivot_idx (len - pivot_idx) sorted_pts
              next_axis  = getNextAxis_2D axis
-             left_tr    = fromListWithAxis next_axis left_pts
-             right_tr   = fromListWithAxis next_axis right_pts
+             left_tr    = fromListWithAxis_seq next_axis left_pts
+             right_tr   = fromListWithAxis_seq next_axis right_pts
              min_x      = min (getMinX left_tr) (getMinX right_tr)
              max_x      = max (getMaxX left_tr) (getMaxX right_tr)
              min_y      = min (getMinY left_tr) (getMinY right_tr)
@@ -126,22 +128,22 @@ fromListWithAxis axis pts =
          in KdNode total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
-fromList :: [(Float, Float, Float)] -> KdTree
-fromList pts = fromListWithAxis 0 pts
+fromList_seq :: Vector (Float, Float, Float) -> KdTree
+fromList_seq pts = fromListWithAxis_seq 0 pts
 
-fromListWithAxis_par :: Int -> Int -> [(Float, Float, Float)] -> KdTree
+fromListWithAxis_par :: Int -> Int -> Vector (Float, Float, Float) -> KdTree
 fromListWithAxis_par cutoff axis pts =
     let len = vlength pts in
     if len < cutoff
-    then fromListWithAxis axis pts
+    then fromListWithAxis_seq axis pts
     -- if len == 1
     -- then let pt = vnth 0 pts
     --      in KdLeaf (pt !!! 0) (pt !!! 1) (pt !!! 2)
     else let sorted_pts = sort axis pts
              pivot_idx  = div len 2
-             pivot      = vnth pivot_idx sorted_pts
-             left_pts   = vslice sorted_pts 0 pivot_idx
-             right_pts  = vslice sorted_pts pivot_idx len
+             pivot      = nth sorted_pts pivot_idx
+             left_pts   = slice 0 pivot_idx sorted_pts
+             right_pts  = slice pivot_idx (len - pivot_idx) sorted_pts
              next_axis  = getNextAxis_2D axis
              left_tr    = spawn (fromListWithAxis_par cutoff next_axis left_pts)
              right_tr   = fromListWithAxis_par cutoff next_axis right_pts
@@ -156,7 +158,7 @@ fromListWithAxis_par cutoff axis pts =
          in KdNode total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
-fromList_par :: Int -> [(Float, Float, Float)] -> KdTree
+fromList_par :: Int -> Vector (Float, Float, Float) -> KdTree
 fromList_par cutoff pts = fromListWithAxis_par cutoff 0 pts
 
 --------------------------------------------------------------------------------
@@ -209,14 +211,14 @@ sumKdTree tr =
           p = sumKdTree right
       in o .+. p
 
-sumList0 :: Int -> Int -> [(Float, Float, Float)] -> Float -> Float
+sumList0 :: Int -> Int -> Vector (Float, Float, Float) -> Float -> Float
 sumList0 i n ls acc =
   if i == n
   then acc
-  else let p = vnth i ls
+  else let p = nth ls i
        in sumList0 (i+1) n ls (acc .+. (p !!! 0) .+. (p !!! 1) .+. (p !!! 2))
 
-sumList :: [(Float, Float, Float)] -> Float
+sumList :: Vector (Float, Float, Float) -> Float
 sumList ls =
   sumList0 0 (vlength ls) ls 0.0
 
@@ -236,8 +238,8 @@ dist a b =
 
 
 -- | Two point correlation
-countCorr :: (Float, Float, Float) -> Float -> KdTree -> Int
-countCorr probe radius tr =
+countCorr_seq :: (Float, Float, Float) -> Float -> KdTree -> Int
+countCorr_seq probe radius tr =
   case tr of
     KdLeaf x y z ->
       if (dist probe (x, y, z)) .<. (radius .*. radius)
@@ -258,8 +260,8 @@ countCorr probe radius tr =
           sum       = (d_x .*. d_x) .+. (d_y .*. d_y) .+. (d_z .*. d_z)
           boxsum    = (boxdist_x .*. boxdist_x) .+. (boxdist_y .*. boxdist_y) .+. (boxdist_z .*. boxdist_z)
       in if (sum .-. boxsum) .<. (radius .*. radius)
-         then let n1 = countCorr probe radius left
-                  n2 = countCorr probe radius right
+         then let n1 = countCorr_seq probe radius left
+                  n2 = countCorr_seq probe radius right
               in n1 + n2
          else 0
 
@@ -273,7 +275,7 @@ countCorr_par cutoff probe radius tr =
       else 0
 
     KdNode elems axis split_val min_x max_x min_y max_y min_z max_z left right ->
-      if elems < cutoff then countCorr probe radius tr else
+      if elems < cutoff then countCorr_seq probe radius tr else
       -- Ported over from ASTBenchmarks
       let center_x  = (min_x .+. max_x) ./. 2.0
           center_y  = (min_y .+. max_y) ./. 2.0
@@ -292,29 +294,3 @@ countCorr_par cutoff probe radius tr =
                   _  = sync
               in n1 + n2
          else 0
-
---------------------------------------------------------------------------------
-
--- measure :: [(Float, Float, Float)] -> Int -> Int
--- measure pts n =
---     let radius  = intToFloat n
---         i       = rand
---         j       = (mod i n) - 1
---         probe   = vnth j pts
---         -- 524288 == 2^19
---         cutoff  = 524288
---         tr      = fromList_par cutoff pts
---     in countCorr_par cutoff probe radius tr
-
-gibbon_main =
-    let pts :: [(Float, Float, Float)]
-        pts = readArrayFile ()
-        n   = sizeParam
-        radius  = intToFloat n
-        i       = rand
-        j       = (mod i n) - 1
-        probe   = vnth j pts
-        -- 524288 == 2^19
-        cutoff  = 524288
-        tr      = fromList pts
-    in iterate (countCorr_par cutoff probe radius tr)

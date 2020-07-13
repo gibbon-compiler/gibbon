@@ -216,7 +216,6 @@ applyPrim rc p args =
    (IntToFloatP,[VInt x]) -> pure $ VFloat (fromIntegral x)
    (FloatToIntP,[VFloat x]) -> pure $ VInt (round x)
    (FSqrtP,[VFloat x]) -> pure $ VFloat (sqrt x)
-   (SymAppend,[VInt x, VInt y]) -> pure $ VInt (x * (strToInt $ show y))
    (EqSymP,[VSym x, VSym y]) -> pure $ VBool (x==y)
    (EqIntP,[VInt x, VInt y]) -> pure $ VBool (x==y)
    (EqFloatP,[VFloat x, VFloat y]) -> pure $ VBool (x==y)
@@ -240,23 +239,26 @@ applyPrim rc p args =
    (ReadPackedFile file _ _ ty,[]) ->
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)
    (ReadArrayFile{},[]) -> do
-       vid <- liftIO $ randomIO
-       pure $ VWrapId vid (VList [])
+       pure (VList [])
    (VAllocP _,_n) -> do
-       vid <- liftIO $ randomIO
-       pure $ VWrapId vid (VList [])
-   (VLengthP _,[VWrapId _vid (VList ls)]) -> pure $ VInt (length ls)
-   (VNthP _,[VWrapId _vid (VList ls), VInt n]) -> pure $ ls !!! n
-   (InplaceVUpdateP _,[VWrapId vid (VList ls), VInt i, v]) -> do
-       let ls' = if length ls < i
+       pure (VList [])
+   (VLengthP _,[(VList ls)]) -> pure $ VInt (length ls)
+   (VNthP _,[(VList ls), VInt n]) -> pure $ ls !!! n
+   (InplaceVUpdateP _,[(VList ls), VInt i, v]) -> do
+       let ls' = if length ls <= i
                  then
                      let need = (i+1) - (length ls)
                      in VList $ ls ++ (replicate need v)
                  else VList (replaceNth i v ls)
-       pure (VWrapId vid ls')
-   (VSliceP _,[VWrapId _vid (VList ls), VInt from, VInt to]) -> do
-       vid2 <- liftIO $ randomIO
-       pure $ VWrapId vid2 $ VList (L.take (to - from + 1) (L.drop from ls))
+       pure ls'
+   (VSliceP _,[VInt from, VInt len, (VList ls)]) -> do
+       pure $ VList (L.take len (L.drop from ls))
+   (GetNumProcessors, []) -> pure $ VInt 1
+   -- Don't sort for now.
+   (VSortP _, [ls, _fn]) -> do
+       pure ls
+   (InplaceVSortP _, [ls, _fn]) -> do
+       pure ls
    (PrintSym, [VSym v]) ->
        let v' = case v of
                   "NEWLINE" -> "\n"

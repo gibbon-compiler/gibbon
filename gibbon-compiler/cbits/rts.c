@@ -10,6 +10,7 @@
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <sys/sysinfo.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdarg.h> // For va_start etc
@@ -43,6 +44,8 @@ static long long global_iters_param = 1;
 
 static char* global_benchfile_param = NULL;
 static char* global_arrayfile_param = NULL;
+// Number of lines in the arrayfile
+static long long global_arrayfile_length_param = -1;
 
 // Sequential for now:
 static const int num_workers = 1;
@@ -263,7 +266,7 @@ PtrTy dict_lookup_ptr(dict_item_t *ptr, SymTy key) {
 
 char* read_benchfile_param() {
   if (global_benchfile_param == NULL) {
-    fprintf(stderr, "read_benchfile_param: benchmark input file was not set!\n");
+    fprintf(stderr, "read_benchfile_param: benchmark input file was not set! Set using --bench-input.\n");
     exit(1);
   } else
     return global_benchfile_param;
@@ -271,10 +274,18 @@ char* read_benchfile_param() {
 
 char* read_arrayfile_param() {
   if (global_arrayfile_param == NULL) {
-    fprintf(stderr, "read_arrayfile_param: array input file was not set!\n");
+    fprintf(stderr, "read_arrayfile_param: array input file was not set! Set using --array-input.\n");
     exit(1);
   } else
     return global_arrayfile_param;
+}
+
+IntTy read_arrayfile_length_param() {
+  if (global_arrayfile_length_param == -1) {
+    fprintf(stderr, "read_arrayfile_length_param: array input file length was not set! Set using --array-input-length.\n");
+    exit(1);
+  } else
+    return global_arrayfile_length_param;
 }
 
 
@@ -421,8 +432,9 @@ void free_symtable() {
     struct SymTable_elem *elt, *tmp;
     HASH_ITER(hh, global_sym_table, elt, tmp) {
         HASH_DEL(global_sym_table,elt);
-        free(elt);
     }
+    free(elt);
+    free(tmp);
 }
 
 /*
@@ -770,8 +782,14 @@ BoolTy vector_is_empty(VectorTy *vec) {
 }
 
 VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
-    if (n > vec->upper) {
-        printf("vector_slice: out of bounds: %lld > %lld", n, vec->upper);
+    IntTy lower = vec->lower + i;
+    IntTy upper = vec->lower + i + n;
+    if ((lower > vec->upper)) {
+        printf("vector_slice: lower out of bounds, %lld > %lld", lower, vec->upper);
+        exit(1);
+    }
+    if ((upper > vec->upper)) {
+        printf("vector_slice: upper out of bounds: %lld > %lld", upper, vec->upper);
         exit(1);
     }
     VectorTy *vec2 = ALLOC(sizeof(VectorTy));
@@ -779,15 +797,20 @@ VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
         printf("vector_slice: malloc failed: %ld", sizeof(VectorTy));
         exit(1);
     }
-    vec2->lower = i + vec->lower;
-    vec2->upper = n;
+    vec2->lower = lower;
+    vec2->upper = upper;
+    vec2->elt_size = vec->elt_size;
     vec2->data = vec->data;
     return vec2;
 }
 
 // The callers must cast the return value.
 void* vector_nth(VectorTy *vec, IntTy i) {
-    return (vec->data + (vec->elt_size * i));
+    if (i > vec->upper) {
+        printf("vector_nth index out of bounds: %lld > %lld\n", i, vec->upper);
+        exit(1);
+    }
+    return (vec->data + (vec->elt_size * (vec->lower + i)));
 }
 
 VectorTy* vector_inplace_update(VectorTy *vec, IntTy i, void* elt) {
@@ -799,6 +822,19 @@ VectorTy* vector_inplace_update(VectorTy *vec, IntTy i, void* elt) {
 VectorTy* vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
     qsort(vec->data, vector_length(vec), vec->elt_size, compar);
     return vec;
+}
+
+VectorTy* vector_copy(VectorTy *vec) {
+    IntTy len = vector_length(vec);
+    VectorTy *vec2 = vector_alloc(len, vec->elt_size);
+    memcpy(vec2->data, vec->data, len * vec->elt_size);
+    return vec2;
+}
+
+VectorTy* vector_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
+    VectorTy *vec2 = vector_copy(vec);
+    vector_inplace_sort(vec2, compar);
+    return vec2;
 }
 
 void vector_free(VectorTy *vec) {
@@ -902,6 +938,10 @@ int main(int argc, char** argv)
           }
           global_arrayfile_param = argv[i+1];
           i++;
+        }
+        else if (strcmp(argv[i], "--array-input-length") == 0 && i < argc - 1) {
+            global_arrayfile_length_param = atoll(argv[i+1]);
+            i++;
         }
         // If present, we expect the two arguments to be <size> <iters>
         else if (got_numargs >= 2) {

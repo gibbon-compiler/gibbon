@@ -474,7 +474,6 @@ recoverType ddfs env2 ex =
         MkTrue  -> BoolTy
         MkFalse -> BoolTy
         Gensym  -> SymTy0
-        SymAppend      -> IntTy
         SizeParam      -> IntTy
         IsBig          -> BoolTy
         DictHasKeyP _  -> BoolTy

@@ -125,14 +125,20 @@ t1Prog = Prog {ddefs = M.fromList [],
                             funArgs = ["x_y1"],
                             funTy = ([IntTy,IntTy] , IntTy),
                             funBody = PrimAppE MulP
-                                      [(VarE "x_y1"), (VarE "x_y1")]}),
+                                      [(VarE "x_y1"), (VarE "x_y1")],
+                            funInline = Inline,
+                            funRec = NotRec
+                           }),
                    ("add2",
                     FunDef {funName = "add2",
                             funArgs = ["x_y0"],
                             funTy = ([IntTy,IntTy], IntTy),
                             funBody = PrimAppE AddP
                                       [(VarE "x_y0"),
-                                       (VarE "x_y0")]})],
+                                       (VarE "x_y0")],
+                            funInline = Inline,
+                            funRec = NotRec
+                           })],
         mainExp = Just
                   (  AppE "mul2" [] [LitE 10, AppE "add2" [] [LitE 40, LitE 2]]
                   , IntTy)

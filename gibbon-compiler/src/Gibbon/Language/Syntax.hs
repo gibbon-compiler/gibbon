@@ -19,7 +19,8 @@ module Gibbon.Language.Syntax
   , lookupDataCon', insertDD, emptyDD, fromListDD, isVoidDDef
 
     -- * Function definitions
-  , FunctionTy(..), FunDefs, FunDef(..), insertFD, fromListFD, initFunEnv
+  , FunctionTy(..), FunDefs, FunDef(..), FunRec(..), FunInline(..)
+  , insertFD, fromListFD, initFunEnv
 
     -- * Programs
   , Prog(..), progToEnv, getFunTy
@@ -176,11 +177,20 @@ class (Out (ArrowTy ty), Show (ArrowTy ty)) => FunctionTy ty where
 -- | A set of top-level recursive function definitions.
 type FunDefs ex = M.Map Var (FunDef ex)
 
+data FunRec = Rec | NotRec | TailRec
+  deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
+
+data FunInline = Inline | NoInline | Inlineable
+  deriving (Read, Show, Eq, Ord, Generic, NFData, Out)
+
 -- | A function definiton indexed by a type and expression.
-data FunDef ex = FunDef { funName  :: Var
-                        , funArgs  :: [Var]
-                        , funTy    :: ArrowTy (TyOf ex)
-                        , funBody  :: ex }
+data FunDef ex = FunDef { funName   :: Var
+                        , funArgs   :: [Var]
+                        , funTy     :: ArrowTy (TyOf ex)
+                        , funBody   :: ex
+                        , funRec    :: FunRec
+                        , funInline :: FunInline
+                        }
 
 deriving instance (Read ex, Read (ArrowTy (TyOf ex))) => Read (FunDef ex)
 deriving instance (Show ex, Show (ArrowTy (TyOf ex))) => Show (FunDef ex)
@@ -384,7 +394,6 @@ data Prim ty
           | FAddP | FSubP | FMulP | FDivP | FExpP | FRandP | EqFloatP | FLtP | FGtP | FLtEqP | FGtEqP | FSqrtP | IntToFloatP | FloatToIntP
           | EqSymP             -- ^ Equality on Sym
           | OrP | AndP
-          | SymAppend          -- ^ A quick hack till we have deterministic gensym
           | DictInsertP ty     -- ^ takes dict, k,v; annotated with element type
           | DictLookupP ty     -- ^ takes dict,k errors if absent; annotated with element type
           | DictEmptyP  ty     -- ^ annotated with element type to avoid ambiguity
@@ -434,11 +443,12 @@ data Prim ty
             -- The variable represents the region that this file will be mapped to, and is
             -- set by InferLocations.
 
-          | ReadArrayFile (Maybe FilePath) ty
-            -- ^ Parse a file into an UT_array. This is decorated with the
+          | ReadArrayFile (Maybe (FilePath, Int)) ty
+            -- ^ Parse a file into a Vector. This is decorated with the
             -- element type. If the element type is a struct,
-            -- like (Int, Int), each line must contain 2 numbers
-            -- separated by a space
+            -- like (Int, Int) for example, each line must contain 2 numbers
+            -- separated by a space. The Int is the number of lines in the
+            -- file.
 
           | RequestEndOf
           -- ^ Conveys a demand for the "end of" some packed value, which is
