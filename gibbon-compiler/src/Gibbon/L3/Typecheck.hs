@@ -661,6 +661,8 @@ ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
 ensureEqualTyModCursor :: Exp3 -> Ty3 -> Ty3 -> TcM Ty3 (Exp3)
 ensureEqualTyModCursor _exp CursorTy (PackedTy _ _) = return CursorTy
 ensureEqualTyModCursor _exp (PackedTy _ _) CursorTy = return CursorTy
+ensureEqualTyModCursor _exp IntTy CursorTy = return CursorTy
+ensureEqualTyModCursor _exp CursorTy IntTy = return CursorTy
 ensureEqualTyModCursor exp (ProdTy ls1) (ProdTy ls2) =
   sequence_ [ ensureEqualTyModCursor exp ty1 ty2 | (ty1,ty2) <- zip ls1 ls2] >>= \_ -> return (packedToCursor (ProdTy ls1))
 ensureEqualTyModCursor exp a b = ensureEqualTy exp a b

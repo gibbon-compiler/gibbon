@@ -496,7 +496,7 @@ tcExp ddfs env exp =
       go (AppE fn tyapps args)
 
     Ext (AddFixed{})-> -- throwError $ GenericTC "AddFixed not handled." exp
-      pure IntTy -- pure CursorTy
+      pure CursorTy
 
     MapE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc exp
     FoldE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc exp
@@ -637,6 +637,8 @@ ensureEqual exp str a b = if a == b
 -- ensureEqualTy :: (Eq l, Out l) => PreExp e () (UrTy ()) -> (UrTy l) -> (UrTy l) ->
 --                  TcM (UrTy l) PreExp e () (UrTy ())
 ensureEqualTy :: PreExp e () (UrTy ()) -> Ty1 -> Ty1 -> TcM Ty1 (PreExp e () (UrTy ()))
+ensureEqualTy _exp CursorTy IntTy = return CursorTy
+ensureEqualTy _exp IntTy CursorTy = return CursorTy
 ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
                                          ++ (sdoc a) ++ ", " ++ (sdoc b)) a b
 

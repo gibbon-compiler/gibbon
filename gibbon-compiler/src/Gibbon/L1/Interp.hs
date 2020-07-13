@@ -257,6 +257,16 @@ applyPrim rc p args =
    (VSliceP _,[VWrapId _vid (VList ls), VInt from, VInt to]) -> do
        vid2 <- liftIO $ randomIO
        pure $ VWrapId vid2 $ VList (L.take (to - from + 1) (L.drop from ls))
+   (PrintSym, [VSym v]) ->
+       let v' = case v of
+                  "NEWLINE" -> "\n"
+                  "SPACE"   -> " "
+                  _oth -> v
+       in do liftIO $ putStr v'
+             pure $ VInt 0
+   (PrintInt, [VInt v]) -> do
+       liftIO $ putStr (show v)
+       pure $ VInt 0
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
   where

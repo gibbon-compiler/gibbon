@@ -71,7 +71,7 @@ inferRegScopeExp ex =
   case ex of
     Ext ext ->
       case ext of
-        AddFixed{} -> error "inferRegScopeExp: AddFixed not handled"
+        AddFixed{} -> return ex
         LetRegionE r rhs ->
           case r of
             MMapR{} -> Ext <$> LetRegionE r <$> (go rhs)

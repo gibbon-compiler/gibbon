@@ -3,8 +3,8 @@
 
 module C1 where
 
-import Helpers
-import Prelude hiding ( List(..), Maybe(..), appepnd, foldr, lookup )
+-- import Helpers
+-- import Prelude hiding ( List(..), Maybe(..), appepnd, foldr, lookup )
 
 data List a = Nil | Cons a (List a)
               deriving Show

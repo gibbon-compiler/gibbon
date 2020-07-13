@@ -653,7 +653,7 @@ primRetTy p =
     InplaceVSortP elty -> VectorTy elty
     GetNumProcessors -> IntTy
     PrintInt -> IntTy
-    PrintSym -> SymTy
+    PrintSym -> IntTy
     ReadInt  -> IntTy
     SymSetEmpty    -> SymSetTy
     SymSetInsert   -> SymSetTy

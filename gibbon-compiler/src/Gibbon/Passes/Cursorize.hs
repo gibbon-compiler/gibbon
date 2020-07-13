@@ -294,7 +294,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
     -- Eg. leftmost
     Ext ext ->
       case ext of
-        AddFixed{} -> error "cursorizeExp: AddFixed not handled."
+        AddFixed v i -> return $ Ext $ L3.AddCursor v (L3.LitE i)
         RetE locs v ->
           case locs of
               [] -> return (VarE v)
