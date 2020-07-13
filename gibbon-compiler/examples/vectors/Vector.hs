@@ -1,6 +1,7 @@
 module Vector where
 
 import Gibbon.Vector
+import Gibbon.Vector.Parallel
 
 fib_seq :: Int -> Int
 fib_seq n =

@@ -88,14 +88,12 @@ interp rc valenv ddefs fenv = go valenv
           --   applySortP env vals fp
 
           PrimAppE p ls -> do args <- mapM (go env) ls
-                              dbgTraceIt (sdoc x0) (pure ())
                               applyPrim rc p args
           ProjE ix ex   -> do VProd ls <- go env ex
                               return $ ls !!! ix
 
           -- N.B. this AppE is shared by the interpreters for L0 and L1
           AppE f _ ls -> do
-            dbgTraceIt (sdoc x0) (pure ())
             ls' <- mapM (go env) ls
             -- Look in the local environment first
             case M.lookup f env of
