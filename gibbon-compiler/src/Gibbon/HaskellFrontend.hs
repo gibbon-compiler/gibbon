@@ -454,10 +454,6 @@ desugarExp toplevel e =
                   then do
                     e2' <- desugarExp toplevel e2
                     pure $ SpawnE "HOLE" [] [e2']
-                  else if f == "is_big"
-                  then do
-                    e2' <- desugarExp toplevel e2
-                    pure $ PrimAppE IsBig [e2']
                   else if f == "valloc"
                   then do
                     e2' <- desugarExp toplevel e2
@@ -503,14 +499,6 @@ desugarExp toplevel e =
                     e2' <- desugarExp toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VSliceP ty) [e2']
-                  else if f == "intToFloat"
-                  then do
-                    e2' <- desugarExp toplevel e2
-                    pure $ PrimAppE IntToFloatP [e2']
-                  else if f == "floatToInt"
-                  then do
-                    e2' <- desugarExp toplevel e2
-                    pure $ PrimAppE FloatToIntP [e2']
                   else if f == "fst"
                   then do
                     e2' <- desugarExp toplevel e2

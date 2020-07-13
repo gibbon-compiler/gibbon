@@ -10,4 +10,8 @@ gibbon_main =
         -- 2 ^ 19 == 524288
         cutoff  = 524288
         tr      = iterate (fromList_par cutoff pts)
-    in sumKdTree tr
+        p = sumList pts
+        q = sumKdTree tr
+        err = (q .-. p)
+        _ = printsym (quote "Err: ")
+    in err

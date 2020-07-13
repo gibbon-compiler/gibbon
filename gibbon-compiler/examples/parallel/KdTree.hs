@@ -1,6 +1,7 @@
 module KdTree where
 
 import Gibbon.Vector
+import Gibbon.Vector.Parallel
 
 coord :: Int -> (Float, Float, Float) -> Float
 coord axis pt =
@@ -39,15 +40,21 @@ cmp3 a b =
 
 sort :: Int -> Vector (Float, Float, Float) -> Vector (Float, Float, Float)
 sort axis ls =
+    let ls2 = copy ls in
     if axis == 0
-    -- This isn't safe, but avoids memory blowup
-    then let ls2 = inplacevsort ls cmp1
-         in ls2
+    then inplacevsort ls2 cmp1
     else if axis == 1
-    then let ls2 = inplacevsort ls cmp2
-         in ls2
-    else let ls2 = inplacevsort ls cmp3
-         in ls
+    then inplacevsort ls2 cmp2
+    else inplacevsort ls2 cmp3
+
+sort_par :: Int -> Vector (Float, Float, Float) -> Vector (Float, Float, Float)
+sort_par axis ls =
+    let ls2 = copy_par ls in
+    if axis == 0
+    then inplacevsort ls2 cmp1
+    else if axis == 1
+    then inplacevsort ls2 cmp2
+    else inplacevsort ls2 cmp3
 
 --------------------------------------------------------------------------------
 -- The main algorithm
@@ -145,7 +152,7 @@ fromListWithAxis_par cutoff axis pts =
     let len = vlength pts in
     if len < cutoff
     then fromListWithAxis_seq axis pts
-    else let sorted_pts = sort axis pts
+    else let sorted_pts = sort_par axis pts
              pivot_idx  = div len 2
              pivot      = nth sorted_pts pivot_idx
              left_pts   = slice 0 pivot_idx sorted_pts

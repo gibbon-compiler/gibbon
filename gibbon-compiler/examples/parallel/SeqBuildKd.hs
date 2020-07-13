@@ -10,4 +10,6 @@ gibbon_main =
         tr      = iterate (fromList_seq pts)
         p = sumList pts
         q = sumKdTree tr
-    in (q .-. p) .<. 0.001
+        err = (q .-. p)
+        _ = printsym (quote "Err: ")
+    in err
