@@ -261,6 +261,7 @@ desugarType ty =
   case ty of
     H.TyVar _ (Ident _ t) -> L0.TyVar $ UserTv (toVar t)
     TyTuple _ Boxed tys   -> ProdTy (map desugarType tys)
+    TyCon _ (Special _ (UnitCon _))     -> ProdTy []
     TyCon _ (UnQual _ (Ident _ "Int"))  -> IntTy
     TyCon _ (UnQual _ (Ident _ "Float"))-> FloatTy
     TyCon _ (UnQual _ (Ident _ "Bool")) -> BoolTy
@@ -567,6 +568,8 @@ desugarExp toplevel e =
     Case _ scrt alts -> do
       scrt' <- desugarExp toplevel scrt
       CaseE scrt' <$> mapM (desugarAlt toplevel) alts
+
+    Con _ (Special _ (UnitCon _)) -> pure $ MkProdE []
 
     Con _ qname -> do
       let dcon = qnameToStr qname

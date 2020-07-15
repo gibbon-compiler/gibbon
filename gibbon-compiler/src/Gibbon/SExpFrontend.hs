@@ -273,6 +273,7 @@ typ s = case s of
          (A _ "SymHash") -> SymHashTy
          (A _ "Bool") -> BoolTy
          (A _ "Arena") -> ArenaTy
+         (A _ "Void")  -> ProdTy []
          -- If it's lowercase, it's a type variable. Otherwise, a Packed type.
          (A _ con)    -> if isTyVar con
                          then TyVar $ UserTv (textToVar con)
@@ -338,6 +339,8 @@ exp se =
  case se of
    A l "True"  -> pure $ Ext $ L (toLoc l) $ trueE
    A l "False" -> pure $ Ext $ L (toLoc l) $ falseE
+
+   Ls [A _ "void"] -> pure $ MkProdE []
 
    Ls ((A l "and") : args)  -> go args
      where
