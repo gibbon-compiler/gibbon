@@ -53,7 +53,7 @@ genDcons (x:xs) tail fields = case x of
     t   <- gensym "tail"
     let l4_ty = T.fromL3Ty el_ty
     T.LetPrimCallT [(val, T.VectorTy l4_ty), (t, T.CursorTy)] T.ReadList [(T.VarTriv tail)]
-      <$> genDcons xs t (fields ++ [(l4_ty, T.VarTriv val)])
+      <$> genDcons xs t (fields ++ [(T.VectorTy l4_ty, T.VarTriv val)])
 
   -- Indirection or redirection pointer
   CursorTy -> do
