@@ -1640,10 +1640,11 @@ genCopyFn DDef{tyName, dataCons} = do
              do let tys = L.map snd dtys
                 xs <- mapM (\_ -> gensym "x") tys
                 ys <- mapM (\_ -> gensym "y") tys
-                let packed_vars = map fst $ filter (\(x,ty) -> isPackedTy ty) (zip ys tys)
-                    bod_with_ran_nodes = foldr (\(ty,x,y,idx) acc ->
+                -- let packed_vars = map fst $ filter (\(x,ty) -> isPackedTy ty) (zip ys tys)
+                let bod_with_ran_nodes = foldr (\(ty,x,y,idx) acc ->
                                                   if ty == CursorTy
-                                                  then LetE (y, [], ty, PrimAppE RequestEndOf [VarE (packed_vars !!! idx)]) acc
+                                                  then LetE (y, [], ty, PrimAppE RequestEndOf [VarE (xs !!! idx)]) acc
+                                                  -- then LetE (y, [], ty, PrimAppE RequestEndOf [VarE (packed_vars !!! idx)]) acc
                                                   else acc)
                                            (DataConE () dcon $ map VarE ys) (L.zip4 tys xs ys ([0..] :: [Int]))
                     bod = foldr (\(ty,x,y,idx) acc ->

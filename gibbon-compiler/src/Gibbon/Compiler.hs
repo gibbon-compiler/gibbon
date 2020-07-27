@@ -425,7 +425,7 @@ isBench _ = False
 
 -- | The debug level at which we start to call the interpreter on the program during compilation.
 interpDbgLevel :: Int
-interpDbgLevel = 1
+interpDbgLevel = 5
 
 -- |
 clearFile :: FilePath -> IO ()
@@ -513,7 +513,7 @@ passes config@Config{dynflags} l0 = do
               -- branches before InferLocations.
 
               -- Note: L1 -> L2
-              l2 <- goE2  "inferLocations" inferLocs    l1
+              l2 <- goE2 "inferLocations"  inferLocs    l1
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "L2.flatten"      flattenL2    l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2

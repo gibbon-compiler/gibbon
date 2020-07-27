@@ -201,7 +201,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
 
     Ext ext ->
       case ext of
-        AddFixed{} -> error "threadRegionsExp: AddFixed not handled."
+        AddFixed{} -> return ex
         LetLocE loc FreeLE bod ->
           Ext <$> LetLocE loc FreeLE <$>
             threadRegionsExp ddefs fundefs isMain renv env2 lfenv bod

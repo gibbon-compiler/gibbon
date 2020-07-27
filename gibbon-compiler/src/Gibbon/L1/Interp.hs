@@ -271,6 +271,11 @@ applyPrim rc p args =
        pure $ VBool n
    (PrintSym, [VSym s]) -> do
        tell $ string8 s
+       let v' = case s of
+                  "NEWLINE" -> "\n"
+                  "SPACE"   -> " "
+                  _oth -> s
+       liftIO $ putStr v'
        pure $ VSym s
    (PrintSym, [VInt n]) -> do
        tell $ string8 (show n)

@@ -159,9 +159,8 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
              -- Check arity
              if (length args) /= (length in_tys)
-             then throwError $ GenericTC ("Arity mismatch. Expected:" ++ show (length in_tys) ++
-                                          " Got:" ++ show (length args)) exp
-             else pure ()
+               then throwError $ GenericTC ("Arity mismatch. Expected:" ++ show (length in_tys) ++ " Got:" ++ show (length args)) exp
+               else pure ()
 
              -- (1)
              mapM (uncurry $ ensureEqualTyNoLoc exp) (fragileZip in_tys arrIns)
@@ -363,7 +362,8 @@ tcExp ddfs env funs constrs regs tstatein exp =
                                else case (tys !! 0) of
                                       SymTy -> return (CursorTy, tstate)
                                       IntTy -> return (CursorTy, tstate)
-                                      _ -> throwError $ GenericTC "Expected PackedTy" exp
+                                      CursorTy -> return (CursorTy, tstate)
+                                      ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
                      -- L _ LitSymE{} -> return (CursorTy, tstate)
                      -- L _ LitE{} -> return (CursorTy, tstate)
                      _ -> throwError $ GenericTC "Expected a variable argument" exp
@@ -615,7 +615,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                 _ -> throwError $ GenericTC "Invalid letloc form" exp
 
       Ext (FromEndE{}) -> throwError $ GenericTC "FromEndE not handled" exp
-      Ext (AddFixed{}) -> throwError $ GenericTC "AddFixed not handled" exp
+      Ext (AddFixed{}) -> return (CursorTy,tstatein)
 
       Ext (RetE _ls v) -> do
 
@@ -838,6 +838,8 @@ checkLen expr pr n ls =
 -- | Ensure that two types are equal.
 -- Includes an expression for error reporting.
 ensureEqualTy :: Exp -> Ty2 -> Ty2 -> TcM Ty2
+ensureEqualTy _ CursorTy IntTy = return CursorTy
+ensureEqualTy _ IntTy CursorTy = return CursorTy
 ensureEqualTy exp a b = ensureEqual exp ("Expected these types to be the same: "
                                          ++ (show a) ++ ", " ++ (show b)) a b
 

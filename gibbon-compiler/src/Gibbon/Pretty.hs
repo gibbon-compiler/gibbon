@@ -410,7 +410,8 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
 instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
     pprintWithStyle _ ex0 =
         case ex0 of
-          L2.AddFixed{} -> error "pprintWithStyle: L2.AddFixed not handled."
+          L2.AddFixed v i -> text "addfixed" <+>
+                               doc v <+> doc i
           LetRegionE r e -> text "letregion" <+>
                                doc r <+> text "in" $+$ pprint e
           LetLocE loc le e -> text "letloc" <+>

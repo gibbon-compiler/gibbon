@@ -109,7 +109,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                     S.EmptyL -> error "L1.Interp: case scrutinize on empty/out-of-bounds location."
                     SerTag _tg datacon :< _rst -> do
                       let -- tycon = getTyOfDataCon ddefs datacon
-                          (_dcon,vlocs,rhs) = lookup3 datacon alts
+                          (_dcon,vlocs,rhs) = lookup3 (dbgTrace 3 (show datacon ++ "\n" ++ show alts) $ datacon) alts
                           tys = lookupDataCon ddefs datacon
                       (env', sizeEnv', _off') <- foldlM
                                 (\(aenv, asizeEnv, prev_off) ((v,loc), ty) -> do
