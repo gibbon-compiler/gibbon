@@ -301,6 +301,10 @@ tests:
     dir: examples/poly
     answer-file: examples/poly/NeedsClosure.hs.ans
 
+  - name: MutualRec.hs
+    dir: examples/poly
+    answer-file: examples/poly/MutualRec.ans
+
     ## Shouldn't typecheck
   - name: Fail1.hs
     dir: examples/should_fail
@@ -439,6 +443,7 @@ tests:
   - name: Vector.hs
     dir: examples/vectors
     test-flags: ["--parallel"]
+    failing: ["--interp1"]
     answer-file: examples/vectors/Vector.hs.ans
 
   - name: SortPrim.hs

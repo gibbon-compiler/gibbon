@@ -260,6 +260,21 @@ applyPrim rc p args =
        pure ls
    (InplaceVSortP _, [ls, _fn]) -> do
        pure ls
+   (PrintInt, [VInt n]) -> do
+       tell $ string8 (show n)
+       pure $ VInt n
+   (PrintFloat, [VFloat n]) -> do
+       tell $ string8 (show n)
+       pure $ VFloat n
+   (PrintBool, [VBool n]) -> do
+       tell $ string8 (show n)
+       pure $ VBool n
+   (PrintSym, [VSym s]) -> do
+       tell $ string8 s
+       pure $ VSym s
+   (PrintSym, [VInt n]) -> do
+       tell $ string8 (show n)
+       pure $ VInt n
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
   where

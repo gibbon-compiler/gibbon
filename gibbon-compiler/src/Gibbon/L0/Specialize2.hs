@@ -821,6 +821,7 @@ type FunRef = Var
 
 data SpecState = SpecState
   { sp_funs_todo :: M.Map (Var, [FunRef]) Var
+  , sp_funs_done :: M.Map (Var, [FunRef]) Var
   , sp_extra_args :: M.Map Var [(Var, Ty0)]
   , sp_fundefs   :: FunDefs0 }
   deriving (Show, Eq, Generic, Out)
@@ -880,7 +881,7 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
   tcProg prg'
   where
     emptySpecState :: SpecState
-    emptySpecState = SpecState M.empty M.empty fundefs
+    emptySpecState = SpecState M.empty M.empty M.empty fundefs
 
     -- Lower functions
     fixpoint :: SpecM ()
@@ -893,7 +894,8 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
             fn = fns # fn_name
             ((fn_name, refs), new_fn_name) = M.elemAt 0 (sp_funs_todo sp_state)
         specLambdasFun ddefs new_fn_name refs fn
-        state (\st -> ((), st { sp_funs_todo = M.delete (fn_name, refs) (sp_funs_todo st) }))
+        state (\st -> ((), st { sp_funs_todo = M.delete (fn_name, refs) (sp_funs_todo st)
+                              , sp_funs_done = M.insert (fn_name, refs) new_fn_name (sp_funs_done st) }))
         fixpoint
 
     purgeHO :: FunDefs0 -> FunDefs0
@@ -969,8 +971,8 @@ specLambdasExp ddefs env2 ex =
                                      [] refs
           let (vars,_) = unzip extra_args
               args''' = args'' ++ (map VarE vars)
-          case M.lookup (f,refs) (sp_funs_todo sp_state) of
-            Nothing -> do
+          case (M.lookup (f,refs) (sp_funs_done sp_state), M.lookup (f,refs) (sp_funs_todo sp_state)) of
+            (Nothing, Nothing) -> do
               f' <- lift $ gensym f
               let (ForAll _ (ArrowTy as _)) = lookupFEnv f env2
                   arrow_tys = concatMap arrowTysInTy as
@@ -986,7 +988,8 @@ specLambdasExp ddefs env2 ex =
                                        }
               put sp_state'
               pure $ AppE f' [] args'''
-            Just f' -> pure $ AppE f' [] args'''
+            (Just f', _) -> pure $ AppE f' [] args'''
+            (_, Just f') -> pure $ AppE f' [] args'''
     AppE _ (_:_) _ -> error $ "specLambdasExp: Call-site not monomorphized: " ++ sdoc ex
 
     -- Float out a lambda fun to the top-level.
