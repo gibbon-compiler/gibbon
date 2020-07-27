@@ -331,39 +331,6 @@ buildQtree_par cutoff box mpts =
                 size = maxDim box
             in BH_Node x y m total_points size tr1 tr2 tr3 tr4
 
-oneStep_seq :: (Float, Float, Float, Float)
-            -> Vector (Float, Float, Float)
-            -> Vector (Float, Float, Float, Float, Float)
-            -> Vector (Float, Float, Float, Float, Float)
-oneStep_seq box mpts ps =
-    let bht = buildQtree_seq box mpts
-        _ = printsym (quote "tree built\n")
-        ps2 = generate (length ps)
-                       (\i ->
-                            let p = nth ps i
-                                mpt = nth mpts i
-                                accel = calcAccel_seq mpt bht
-                            in applyAccel p accel)
-        -- _ = debugPrint bht ps2
-    in ps2
-
-oneStep_par :: Int
-            -> (Float, Float, Float, Float)
-            -> Vector (Float, Float, Float)
-            -> Vector (Float, Float, Float, Float, Float)
-            -> Vector (Float, Float, Float, Float, Float)
-oneStep_par cutoff box mpts ps =
-    let bht = buildQtree_par cutoff box mpts
-        _ = printsym (quote "tree built\n")
-        ps2 = generate (length ps)
-                       (\i ->
-                            let p = nth ps i
-                                mpt = nth mpts i
-                                accel = calcAccel_seq mpt bht
-                            in applyAccel p accel)
-        -- _ = debugPrint bht ps2
-    in ps2
-
 debugPrint :: BH_Tree -> Vector (Float, Float, Float, Float, Float) -> Int
 debugPrint bht ps2 =
     let _ = myprintBHTree bht

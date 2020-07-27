@@ -2,6 +2,23 @@ module SeqBhut where
 
 import Bhut
 
+oneStep_seq :: (Float, Float, Float, Float)
+            -> Vector (Float, Float, Float)
+            -> Vector (Float, Float, Float, Float, Float)
+            -> Vector (Float, Float, Float, Float, Float)
+oneStep_seq box mpts ps =
+    let bht = timeit (buildQtree_seq box mpts)
+        _ = printsym (quote "tree built\n")
+        ps2 = iterate (generate (length ps)
+                       (\i ->
+                            let p = nth ps i
+                                mpt = nth mpts i
+                                accel = calcAccel_seq mpt bht
+                            in applyAccel p accel))
+        -- _ = debugPrint bht ps2
+    in ps2
+
+
 gibbon_main =
   let pts :: Vector (Float, Float)
       pts = readArrayFile ()
@@ -21,7 +38,7 @@ gibbon_main =
       rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 0) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 1) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       box = (llx, lly, rux, ruy)
-      particles1 = timeit (oneStep_seq box mpts particles)
+      particles1 = (oneStep_seq box mpts particles)
       err = check particles1
   in err
   -- in 10

@@ -2,6 +2,25 @@ module ParBhut where
 
 import Bhut
 
+oneStep_par :: Int
+            -> (Float, Float, Float, Float)
+            -> Vector (Float, Float, Float)
+            -> Vector (Float, Float, Float, Float, Float)
+            -> Vector (Float, Float, Float, Float, Float)
+oneStep_par cutoff box mpts ps =
+    -- let bht = buildQtree_par cutoff box mpts
+    let bht = timeit (buildQtree_seq box mpts)
+        _ = printsym (quote "tree built\n")
+        ps2 = timeit (generate_par (length ps)
+                       (\i ->
+                            let p = nth ps i
+                                mpt = nth mpts i
+                                -- accel = calcAccel_par cutoff mpt bht
+                                accel = calcAccel mpt bht
+                            in applyAccel p accel))
+        -- _ = debugPrint bht ps2
+    in ps2
+
 gibbon_main =
   let pts :: Vector (Float, Float)
       pts = readArrayFile ()
@@ -21,7 +40,7 @@ gibbon_main =
       rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 0) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 1) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       box = (llx, lly, rux, ruy)
-      -- cutoff = 524288
-      cutoff = 50
-      particles1 = timeit (oneStep_par cutoff box mpts particles)
+      cutoff = 524288
+      -- cutoff = 50
+      particles1 = (oneStep_par cutoff box mpts particles)
   in check particles1

@@ -443,7 +443,7 @@ tests:
   - name: Vector.hs
     dir: examples/vectors
     test-flags: ["--parallel"]
-    failing: ["--interp1"]
+    failing: ["interp1"]
     answer-file: examples/vectors/Vector.hs.ans
 
   - name: SortPrim.hs
