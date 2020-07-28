@@ -457,7 +457,8 @@ isValidListElemTy :: UrTy a -> Bool
 isValidListElemTy ty
   | isScalarTy ty = True
   | otherwise = case ty of
-                  ProdTy tys -> all isScalarTy tys
+                  VectorTy elty -> isValidListElemTy elty
+                  ProdTy tys    -> all isScalarTy tys
                   _ -> False
 
 -- | Do values of this type contain packed data?
