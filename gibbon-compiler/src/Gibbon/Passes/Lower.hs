@@ -247,6 +247,7 @@ printTy pkd ty trvs =
       let prntBool m = T.LetPrimCallT [] (T.PrintString m) []
       in \t -> T.IfT trv (prntBool truePrinted $ t) (prntBool falsePrinted $ t)
 
+    (ProdTy [], _) -> printString "'#()"
     (ProdTy tys, _) ->
       let printTupStart = printString "'#("
           (bltrvs,ltrv) = (init trvs, last trvs)
@@ -815,7 +816,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
         let (_ , outTy) = funTy (fundefs # f)
         let f' = cleanFunName f
         (vsts,bod') <- case outTy of
-                        L3.ProdTy [] -> error "lower: FINISHME: unit valued function"
+                        L3.ProdTy [] -> return ([(vr,typ t)], bod)
                         L3.ProdTy tys ->
                           case stk of
                             [] -> do (tmps,e) <- eliminateProjs vr (L.map (fmap (const ())) tys) bod

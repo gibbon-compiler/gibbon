@@ -180,22 +180,22 @@ tcExp ddfs env exp =
         PrintInt -> do
           len1
           _ <- ensureEqualTy (es !!! 0) IntTy (tys !!! 0)
-          return IntTy
+          return (ProdTy [])
 
         PrintFloat -> do
           len1
           _ <- ensureEqualTy (es !!! 0) FloatTy (tys !!! 0)
-          return FloatTy
+          return (ProdTy [])
 
         PrintBool -> do
           len1
           _ <- ensureEqualTy (es !!! 0) BoolTy (tys !!! 0)
-          return BoolTy
+          return (ProdTy [])
 
         PrintSym -> do
           len1
           _ <- ensureEqualTy (es !!! 0) SymTy (tys !!! 0)
-          return SymTy
+          return (ProdTy [])
 
         ReadInt -> do
           len0

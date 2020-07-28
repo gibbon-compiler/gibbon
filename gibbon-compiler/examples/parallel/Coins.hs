@@ -17,13 +17,13 @@ getCoins1 c q coins_rst =
    let len = length coins_rst
    in if q == 1 then copy coins_rst else cons (c,q-1) coins_rst
 
-printCoins :: Vector (Int, Int) -> Int
+printCoins :: Vector (Int, Int) -> ()
 printCoins coins =
-    let n = printVec (\tup -> printCoin tup) coins
+    let _ = printVec (\tup -> printCoin tup) coins
         _ = printsym (quote "\n")
-    in n
+    in ()
 
-printCoin :: (Int, Int) -> Int
+printCoin :: (Int, Int) -> ()
 printCoin tup =
     let a = tup !!! 0
         b = tup !!! 1
@@ -32,7 +32,7 @@ printCoin tup =
         _ = printsym (quote ",")
         _ = printint b
         _ = printsym (quote ")")
-    in 0
+    in ()
 
 payA_seq :: Int -> Vector (Int,Int) -> AList
 payA_seq amt coins =

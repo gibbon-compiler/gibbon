@@ -9,7 +9,7 @@ oneStep_seq :: (Float, Float, Float, Float)
 oneStep_seq box mpts ps =
     let bht = timeit (buildQtree_seq box mpts)
         _ = printsym (quote "tree built\n")
-        ps2 = iterate (generate (length ps)
+        ps2 = timeit (generate (length ps)
                        (\i ->
                             let p = nth ps i
                                 mpt = nth mpts i
@@ -17,6 +17,7 @@ oneStep_seq box mpts ps =
                             in applyAccel p accel))
         -- _ = debugPrint bht ps2
     in ps2
+    -- in ps
 
 
 gibbon_main =

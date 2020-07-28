@@ -16,7 +16,7 @@ oneStep_par cutoff box mpts ps =
                             let p = nth ps i
                                 mpt = nth mpts i
                                 -- accel = calcAccel_par cutoff mpt bht
-                                accel = calcAccel mpt bht
+                                accel = calcAccel_seq mpt bht
                             in applyAccel p accel))
         -- _ = debugPrint bht ps2
     in ps2

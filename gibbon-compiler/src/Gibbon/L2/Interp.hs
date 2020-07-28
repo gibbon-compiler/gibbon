@@ -242,6 +242,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
             val <- go env sizeEnv e0
             case val of
               (VProd ls, SMany szs) -> return (ls !! ix, szs !! ix)
+              (VProd ls, SOne sz)   -> return (ls !! ix, SOne sz)
               oth -> error $ "L2.Interp: expected VProd, got: " ++ sdoc (ex, oth)
 
         TimeIt bod _ isIter -> do

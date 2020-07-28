@@ -163,17 +163,17 @@ ifoldl1 idx f acc vec =
         else ifoldl1 (idx+1) f (f acc idx (vnth vec 0)) (vslice 1 (len-1) vec)
 
 -- | It returns an Int because Gibbon doesn't have an IO monad yet.
-printVec :: (a -> Int) -> Vector a -> Int
+printVec :: (a -> ()) -> Vector a -> ()
 printVec f vec =
     let _ = printsym (quote "[")
-        n = printVec_loop 0 (length vec) vec f
+        _ = printVec_loop 0 (length vec) vec f
         _ = printsym (quote "]")
-    in n
+    in ()
 
-printVec_loop :: Int -> Int -> Vector a -> (a -> Int) -> Int
+printVec_loop :: Int -> Int -> Vector a -> (a -> ()) -> ()
 printVec_loop start end vec f =
     if start == end
-    then 0
+    then ()
     else
         let x = head vec
             _ = f x

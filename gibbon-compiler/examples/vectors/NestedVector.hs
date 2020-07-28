@@ -8,7 +8,7 @@ mkNestedVec n =
         outer = generate n (\i -> inner)
     in outer
 
-printTup :: (Int, Int) -> Int
+printTup :: (Int, Int) -> ()
 printTup tup =
     let a = tup !!! 0
         b = tup !!! 1
@@ -17,7 +17,7 @@ printTup tup =
         _ = printsym (quote ",")
         _ = printint b
         _ = printsym (quote ")")
-    in 0
+    in ()
 
 sum :: Vector (Int, Int) -> Int
 sum vec =
@@ -41,7 +41,7 @@ gibbon_main =
     let vec = mkNestedVec 4
         _ = printVec (\v -> let _ = printVec printTup v
                                 _ = printsym (quote "\n")
-                            in 10)
+                            in ())
             vec
         _ = printsym (quote "\n")
     in sumNestedVec vec

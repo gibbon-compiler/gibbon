@@ -229,22 +229,22 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
         PrintInt -> do
           len1
           s2 <- unify (args !! 0) IntTy (arg_tys' !! 0)
-          pure (s1 <> s2, IntTy, PrimAppE pr args_tc)
+          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
 
         PrintFloat -> do
           len1
           s2 <- unify (args !! 0) FloatTy (arg_tys' !! 0)
-          pure (s1 <> s2, FloatTy, PrimAppE pr args_tc)
+          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
 
         PrintBool -> do
           len1
           s2 <- unify (args !! 0) BoolTy (arg_tys' !! 0)
-          pure (s1 <> s2, BoolTy, PrimAppE pr args_tc)
+          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
 
         PrintSym -> do
           len1
           s2 <- unify (args !! 0) SymTy0 (arg_tys' !! 0)
-          pure (s1 <> s2, SymTy0, PrimAppE pr args_tc)
+          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
 
         ReadInt -> do
           len0

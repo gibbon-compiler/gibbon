@@ -641,11 +641,11 @@ primRetTy p =
     VSortP elty -> VectorTy elty
     InplaceVSortP elty -> VectorTy elty
     GetNumProcessors -> IntTy
-    PrintInt   -> IntTy
-    PrintFloat -> FloatTy
-    PrintBool  -> BoolTy
-    PrintSym -> SymTy
-    ReadInt  -> IntTy
+    PrintInt   -> ProdTy []
+    PrintFloat -> ProdTy []
+    PrintBool  -> ProdTy []
+    PrintSym   -> ProdTy []
+    ReadInt    -> IntTy
     SymSetEmpty    -> SymSetTy
     SymSetInsert   -> SymSetTy
     SymSetContains -> BoolTy

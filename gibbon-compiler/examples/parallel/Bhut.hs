@@ -22,7 +22,7 @@ type Box = ( Float, Float, Float, Float)
 
 -}
 
-printPoint :: (Float, Float) -> Int
+printPoint :: (Float, Float) -> ()
 printPoint tup =
     let (a,b) = tup
         _ = printsym (quote "(")
@@ -30,9 +30,9 @@ printPoint tup =
         _ = printsym (quote ",")
         _ = printfloat b
         _ = printsym (quote ")")
-    in 0
+    in ()
 
-printMassPoint :: (Float, Float, Float) -> Int
+printMassPoint :: (Float, Float, Float) -> ()
 printMassPoint tup =
     let (a,b,c) = tup
         _ = printsym (quote "(")
@@ -42,9 +42,9 @@ printMassPoint tup =
         _ = printsym (quote ",")
         _ = printfloat c
         _ = printsym (quote ")")
-    in 0
+    in ()
 
-printBox :: (Float, Float, Float, Float) -> Int
+printBox :: (Float, Float, Float, Float) -> ()
 printBox tup =
     let (a,b,c,d) = tup
         _ = printsym (quote "(")
@@ -56,9 +56,9 @@ printBox tup =
         _ = printsym (quote ",")
         _ = printfloat d
         _ = printsym (quote ")")
-    in 0
+    in ()
 
-printParticle :: (Float, Float, Float, Float, Float) -> Int
+printParticle :: (Float, Float, Float, Float, Float) -> ()
 printParticle tup =
     let (a,b,c,d,e) = tup
         _ = printsym (quote "(")
@@ -72,7 +72,7 @@ printParticle tup =
         _ = printsym (quote ",")
         _ = printfloat e
         _ = printsym (quote ")")
-    in 0
+    in ()
 
 data BH_Tree = BH_Empty
              | BH_Leaf Float   -- ^ x coord
@@ -88,15 +88,17 @@ data BH_Tree = BH_Empty
                        BH_Tree -- ^ south-east
                        BH_Tree -- ^ south-west
 
-myprintBHTree :: BH_Tree -> Sym
+myprintBHTree :: BH_Tree -> ()
 myprintBHTree bht =
     case bht of
-        BH_Empty -> printsym (quote "(BH_Empty)")
+        BH_Empty ->
+            let _ = printsym (quote "(BH_Empty)")
+            in ()
         BH_Leaf x y m ->
             let _ = printsym (quote "(BH_Leaf")
                 _ = printMassPoint (x,y,m)
                 _ = printsym (quote ") ")
-            in quote ""
+            in ()
         BH_Node x y m total size tr1 tr2 tr3 tr4->
             let _ = printsym (quote "(BH_Node")
                 _ = printMassPoint (x,y,m)
@@ -109,7 +111,7 @@ myprintBHTree bht =
                 _ = myprintBHTree tr3
                 _ = myprintBHTree tr4
                 _ = printsym (quote ") ")
-            in quote ""
+            in ()
 
 getX :: BH_Tree -> Float
 getX tr =
@@ -134,6 +136,7 @@ getTotalPoints tr =
 
 -- | Distance between two points
 dist :: (Float, Float) -> (Float, Float) -> Float
+{-# INLINE dist #-}
 dist a b =
   let (a_x, a_y) = a
       (b_x, b_y) = b
@@ -142,6 +145,7 @@ dist a b =
   in (d1 .*. d1) .+. (d2 .*. d2)
 
 applyAccel :: (Float, Float, Float, Float, Float) -> (Float, Float) -> (Float, Float, Float, Float, Float)
+{-# INLINE applyAccel #-}
 applyAccel particle accel =
   let (x,y,m,vx,vy) = particle
       (ax,ay) = accel
@@ -150,12 +154,14 @@ applyAccel particle accel =
   in (x, y, m, vx .+. (ax .*. dt), vy .+. (ay .*. dt))
 
 isClose :: (Float, Float) -> (Float, Float) -> Float -> Bool
+{-# INLINE isClose #-}
 isClose a b size =
     let r2 = dist a b
         sizesq = size .*. size
     in r2 .<. sizesq
 
 accel :: (Float, Float, Float) -> Float -> Float -> Float -> (Float, Float)
+{-# INLINE accel #-}
 accel mpt1 x2 y2 m2 =
   let (x1,y1,m1) = mpt1
   in if (x1 .==. x2) && (y1 .==. y2) && (m1 .==. m2)
@@ -242,9 +248,11 @@ calcCentroid_par mpts =
 -}
 
 inBox :: Float -> Float -> Float -> Float -> Float -> Float -> Bool
+{-# INLINE inBox #-}
 inBox llx lly rux ruy px py =
     (px .>. llx) && (px .<=. rux) && (py .>. lly) && (py .<=. ruy)
 
+-- Parallelize...
 masspointsInBox_seq :: (Float, Float, Float, Float) -> Vector (Float, Float, Float) -> Vector (Float, Float, Float)
 masspointsInBox_seq box mpts =
     filter
@@ -255,6 +263,7 @@ masspointsInBox_seq box mpts =
       mpts
 
 maxDim :: (Float, Float, Float, Float) -> Float
+{-# INLINE maxDim #-}
 maxDim box =
     let (llx,lly,rux,ruy) = box
     in maxFloat (rux.-.llx) (ruy.-.lly)
@@ -292,6 +301,8 @@ buildQtree_seq box mpts =
                 size = maxDim box
                 (x,y,m) = mpt
             in BH_Node x y m total_points size tr1 tr2 tr3 tr4
+
+{-
 
 buildQtree_par :: Int -> (Float, Float, Float, Float) -> Vector (Float, Float, Float) -> BH_Tree
 buildQtree_par cutoff box mpts =
@@ -331,15 +342,17 @@ buildQtree_par cutoff box mpts =
                 size = maxDim box
             in BH_Node x y m total_points size tr1 tr2 tr3 tr4
 
-debugPrint :: BH_Tree -> Vector (Float, Float, Float, Float, Float) -> Int
+-}
+
+debugPrint :: BH_Tree -> Vector (Float, Float, Float, Float, Float) -> ()
 debugPrint bht ps2 =
     let _ = myprintBHTree bht
         _ = printsym (quote "\n")
         _ = printVec (\p -> let _ = printParticle p
                                 _ = printsym (quote "\n")
-                            in 10) ps2
+                            in ()) ps2
         _ = printsym (quote "\n")
-    in 10
+    in ()
 
 --------------------------------------------------------------------------------
 

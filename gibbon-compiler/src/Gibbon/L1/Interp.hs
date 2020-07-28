@@ -262,13 +262,13 @@ applyPrim rc p args =
        pure ls
    (PrintInt, [VInt n]) -> do
        tell $ string8 (show n)
-       pure $ VInt n
+       pure $ VProd []
    (PrintFloat, [VFloat n]) -> do
        tell $ string8 (show n)
-       pure $ VFloat n
+       pure $ VProd []
    (PrintBool, [VBool n]) -> do
        tell $ string8 (show n)
-       pure $ VBool n
+       pure $ VProd []
    (PrintSym, [VSym s]) -> do
        tell $ string8 s
        let v' = case s of
@@ -276,10 +276,10 @@ applyPrim rc p args =
                   "SPACE"   -> " "
                   _oth -> s
        liftIO $ putStr v'
-       pure $ VSym s
+       pure $ VProd []
    (PrintSym, [VInt n]) -> do
        tell $ string8 (show n)
-       pure $ VInt n
+       pure $ VProd []
    oth -> error $ "unhandled prim or wrong number of arguments: "++show oth
 
   where

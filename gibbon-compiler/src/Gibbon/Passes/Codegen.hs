@@ -38,6 +38,7 @@ import           Gibbon.L4.Syntax
 -- | Harvest all struct tys.  All product types used anywhere in the program.
 harvestStructTys :: Prog -> S.Set [Ty]
 harvestStructTys (Prog _ funs mtal) =
+    S.map (\tys -> filter (\ty -> ty /= (ProdTy [])) tys) $
     S.delete [] (S.union tys0 tys1)
   where
   tys00 = concatMap allTypes allTails
@@ -65,6 +66,7 @@ harvestStructTys (Prog _ funs mtal) =
       go []     = S.empty
       go (t:ts) =
        case t of
+         ProdTy [] -> go ts
          ProdTy ls -> S.insert ls $ S.union (go ls) (go ts)
          VectorTy ty -> S.insert [VectorTy ty] $ S.union (go [ty])(go ts)
          _ -> go ts
@@ -538,7 +540,11 @@ codegenTail venv fenv (LetCallT False bnds ratr rnds body) ty sync_deps
                                init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(fnexp); |] ]
                            tal <- codegenTail venv' fenv body ty sync_deps
                            return $ init ++ zipWith bind bnds fields ++ tal
-                         ProdTy _ -> error $ "codegenTail: LetCallT" ++ fromVar ratr
+                         ProdTy [] -> do
+                           -- nam <- gensym "tmp"
+                           let init = [ C.BlockDecl [cdecl| $ty:(codegenTy fn_ret_ty) $id:(fst bnd) = $(fnexp); |] ]
+                           tal <- codegenTail venv' fenv body ty sync_deps
+                           return $ init ++ tal
                          _ -> do
                            tal <- codegenTail venv' fenv body ty sync_deps
                            let call = assn (codegenTy (snd bnd)) (fst bnd) (fnexp)
@@ -786,21 +792,21 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  PrintInt ->
                      let [arg] = rnds in
                      case bnds of
-                       [(outV,IntTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = printf("%lld", $(codegenTriv venv arg)); |] ]
+                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%lld", $(codegenTriv venv arg)); |] ]
                        [] -> pure [ C.BlockStm [cstm| printf("%lld", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
                  PrintFloat ->
                      let [arg] = rnds in
                      case bnds of
-                       [(outV,FloatTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:outV = printf("%lf", $(codegenTriv venv arg)); |] ]
+                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%lf", $(codegenTriv venv arg)); |] ]
                        [] -> pure [ C.BlockStm [cstm| printf("%f", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
                  PrintBool ->
                      let [arg] = rnds in
                      case bnds of
-                       [(outV,BoolTy)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy BoolTy) $id:outV = printf("%lf", $(codegenTriv venv arg)); |] ]
+                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%lf", $(codegenTriv venv arg)); |] ]
                        [] -> pure [ C.BlockStm [cstm| printf("%d", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
@@ -1087,7 +1093,7 @@ codegenTy PtrTy = [cty|typename PtrTy|] -- char* - Hack, this could be void* if 
 codegenTy CursorTy = [cty|typename CursorTy|]
 codegenTy RegionTy = [cty|typename RegionTy|]
 codegenTy ChunkTy = [cty|typename ChunkTy|]
-codegenTy (ProdTy []) = [cty|void*|]
+codegenTy (ProdTy []) = [cty|int|]
 codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
     where nam = makeName ts
 codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
