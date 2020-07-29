@@ -485,6 +485,11 @@ desugarExp toplevel e =
                     e2' <- desugarExp toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (InplaceVUpdateP ty) [e2']
+                  else if f == "vconcat"
+                  then do
+                    e2' <- desugarExp toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (VConcatP ty) [e2']
                   else if f == "vsort"
                   then do
                     e2' <- desugarExp toplevel e2

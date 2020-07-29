@@ -564,6 +564,7 @@ primArgsTy p =
     VNthP elty    -> [VectorTy elty, IntTy]
     VSliceP elty  -> [IntTy, IntTy, VectorTy elty]
     InplaceVUpdateP elty -> [VectorTy elty, IntTy, elty]
+    VConcatP elty -> [VectorTy (VectorTy elty)]
     -- The voidTy is just a placeholder.
     -- We don't have a type for function pointers.
     VSortP elty        -> [VectorTy elty, voidTy]
@@ -638,6 +639,7 @@ primRetTy p =
     VNthP elty     -> elty
     VSliceP elty   -> VectorTy elty
     InplaceVUpdateP elty -> VectorTy elty
+    VConcatP elty  -> VectorTy elty
     VSortP elty -> VectorTy elty
     InplaceVSortP elty -> VectorTy elty
     GetNumProcessors -> IntTy

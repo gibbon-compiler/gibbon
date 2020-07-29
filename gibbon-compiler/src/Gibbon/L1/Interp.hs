@@ -254,6 +254,14 @@ applyPrim rc p args =
        pure ls'
    (VSliceP _,[VInt from, VInt len, (VList ls)]) -> do
        pure $ VList (L.take len (L.drop from ls))
+   (VConcatP _, [VList ls]) -> do
+       let concatd = foldl (\acc v ->
+                                case v of
+                                  VList l -> acc ++ l
+                                  _ -> error $ "VConcatP: " ++ show v)
+                           []
+                           ls
+       pure $ VList concatd
    (GetNumProcessors, []) -> pure $ VInt 1
    -- Don't sort for now.
    (VSortP _, [ls, _fn]) -> do

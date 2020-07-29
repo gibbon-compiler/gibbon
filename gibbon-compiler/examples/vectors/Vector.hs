@@ -38,6 +38,8 @@ gibbon_main =
         vec12 = snoc vec8 8
         vec13 = cons 8 vec8
         vec14 = filter (\x -> (mod x 2) == 0) vec2
+        _ = printVec (\i -> printint i) vec14
+        _ = printsym (quote "\n")
 
         test1 = (nth vec2 4) == 3
         test2 = (nth vec4 54) == 55
@@ -46,6 +48,4 @@ gibbon_main =
         test4 = (i9 == 2295) && (i9 == i10) && (i9 == i11)
         test5 = (nth vec12 ((length vec12) - 1)) == 8
         test6 = (nth vec13 0) == 8
-        _ = printVec (\i -> printint i) vec14
-        _ = printsym (quote "\n")
     in test1 && test2 && test3 && test4 && test5 && test6

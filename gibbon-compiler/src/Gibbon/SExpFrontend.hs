@@ -539,6 +539,11 @@ exp se =
        ve <- exp v
        pure $ Ext $ L (toLoc l) $ PrimAppE (InplaceVUpdateP ty) [lse,ie,ve]
 
+   Ls2 l "vconcat" ls -> do
+       ty <- newMetaTy
+       lse <- exp ls
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VConcatP ty) [lse]
+
    Ls3 l "vsort" f ls -> do
        ty <- newMetaTy
        fe  <- exp f

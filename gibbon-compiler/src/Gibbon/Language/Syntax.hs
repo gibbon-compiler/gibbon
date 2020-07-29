@@ -435,6 +435,7 @@ data Prim ty
           | VNthP ty    -- ^ Fetch the nth element
           | VSliceP ty         -- ^ An efficient slice operation
           | InplaceVUpdateP ty -- ^ Update ith element of the vector
+          | VConcatP ty        -- ^ Flatten a vector
           | VSortP ty          -- ^ A sort primop that accepts a function pointer
           | InplaceVSortP ty   -- ^ A sort primop that sorts the array in place
 

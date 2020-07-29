@@ -209,6 +209,7 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       VNthP{}    -> text "vnth"
                                       VSliceP{}   -> text "vslice"
                                       InplaceVUpdateP{} -> text "inplacevupdate"
+                                      VConcatP{} -> text "vconcat"
                                       VSortP{}   -> text "vsort"
                                       InplaceVSortP{} -> text "inplacevsort"
                                       ReadArrayFile mb_fp ty ->

@@ -487,6 +487,7 @@ recoverType ddfs env2 ex =
         VNthP elty     -> elty
         VSliceP elty   -> VectorTy elty
         InplaceVUpdateP elty -> VectorTy elty
+        VConcatP elty  -> VectorTy elty
         VSortP elty        -> VectorTy elty
         InplaceVSortP elty -> VectorTy elty
         GetNumProcessors -> IntTy

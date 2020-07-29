@@ -377,6 +377,12 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           s4 <- unify (args !! 2) elty val
           pure (s1 <> s2 <> s3 <> s4, VectorTy elty, PrimAppE pr args_tc)
 
+        VConcatP elty -> do
+          len1
+          let [ls] = arg_tys'
+          s2 <- unify (args !! 0) (VectorTy (VectorTy elty)) ls
+          pure (s1 <> s2, VectorTy elty, PrimAppE pr args_tc)
+
         -- Given that the first argument is a list of type (VectorTy t),
         -- ensure that the 2nd argument is function reference of type:
         -- ty -> ty -> IntTy
@@ -724,6 +730,7 @@ zonkExp s ex =
                   VLengthP ty -> VLengthP (zonkTy s ty)
                   VNthP    ty -> VNthP    (zonkTy s ty)
                   VSliceP  ty -> VSliceP  (zonkTy s ty)
+                  VConcatP ty -> VConcatP (zonkTy s ty)
                   InplaceVUpdateP ty -> InplaceVUpdateP (zonkTy s ty)
                   VSortP   ty -> VSortP   (zonkTy s ty)
                   InplaceVSortP ty -> InplaceVSortP (zonkTy s ty)
@@ -833,6 +840,7 @@ substTyVarPrim mp pr =
         VNthP elty -> VNthP (substTyVar mp elty)
         VSliceP elty -> VSliceP (substTyVar mp elty)
         InplaceVUpdateP elty -> InplaceVUpdateP (substTyVar mp elty)
+        VConcatP elty -> VConcatP (substTyVar mp elty)
         VSortP elty -> VSortP (substTyVar mp elty)
         InplaceVSortP elty -> InplaceVSortP (substTyVar mp elty)
         _ -> pr

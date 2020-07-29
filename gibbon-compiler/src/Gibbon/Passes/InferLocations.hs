@@ -1616,6 +1616,7 @@ prim p = case p of
            VNthP elty      -> convertTy elty >>= return . VNthP
            VSliceP elty    -> convertTy elty >>= return . VSliceP
            InplaceVUpdateP elty -> convertTy elty >>= return . InplaceVUpdateP
+           VConcatP elty   -> convertTy elty >>= return . VConcatP
            VSortP elty     -> convertTy elty >>= return . VSortP
            InplaceVSortP elty -> convertTy elty >>= return . InplaceVSortP
            GetNumProcessors -> pure GetNumProcessors

@@ -379,6 +379,13 @@ tcExp ddfs env exp =
           _ <- ensureEqualTy (es !! 2) elty x
           pure (VectorTy elty)
 
+        VConcatP elty -> do
+          len1
+          checkListElemTy elty
+          let [ls] = tys
+          _ <- ensureEqualTy (es !! 0) (VectorTy (VectorTy elty)) ls
+          pure (VectorTy elty)
+
         -- Given that the first argument is a list of type (VectorTy t),
         -- ensure that the 2nd argument is function reference of type:
         -- ty -> ty -> IntTy

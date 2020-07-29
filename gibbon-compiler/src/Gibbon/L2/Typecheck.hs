@@ -425,6 +425,13 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    _ <- ensureEqualTy exp elty val
                    pure (VectorTy elty, tstate)
 
+                 VConcatP elty -> do
+                   len1
+                   let [ls] = tys
+                   _ <- ensureEqualTy (es !! 0) (VectorTy (VectorTy elty)) ls
+                   pure (VectorTy elty, tstate)
+
+
                  -- Given that the first argument is a list of type (VectorTy t),
                  -- ensure that the 2nd argument is function reference of type:
                  -- ty -> ty -> Bool

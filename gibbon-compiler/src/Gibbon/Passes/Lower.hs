@@ -993,6 +993,7 @@ prim p =
     VNthP elty    -> T.VNthP (typ elty)
     VSliceP elty    -> T.VSliceP (typ elty)
     InplaceVUpdateP elty -> T.InplaceVUpdateP (typ elty)
+    VConcatP elty -> T.VConcatP (typ elty)
     VSortP elty   -> T.VSortP (typ elty)
     InplaceVSortP elty -> T.InplaceVSortP (typ elty)
     GetNumProcessors -> T.GetNumProcessors

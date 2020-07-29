@@ -67,6 +67,9 @@ vslice :: Int -- Starting index
        -> Vector a
 vslice = _builtin
 
+vflatten :: Vector (Vector a) -> Vector a
+vflatten = _builtin
+
 inplacevupdate :: Vector a -> Int -> a -> Vector a
 inplacevupdate = _builtin
 

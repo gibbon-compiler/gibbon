@@ -212,6 +212,7 @@ data Prim
     | VNthP Ty
     | VSliceP Ty
     | InplaceVUpdateP Ty
+    | VConcatP Ty
     | VSortP Ty
     | InplaceVSortP Ty
     | GetNumProcessors

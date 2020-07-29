@@ -831,6 +831,41 @@ static inline VectorTy* vector_copy(VectorTy *vec) {
     return vec2;
 }
 
+static inline VectorTy* vector_concat(VectorTy *vec) {
+    // Length of the input vector.
+    IntTy len = vector_length(vec);
+    // Length of the concatenated vector.
+    IntTy result_len = 0;
+    // Size of each element in the concatenated vector.
+    IntTy result_elt_size = 0;
+    VectorTy **elt_ref, *elt;
+    for (IntTy i = 0; i < len; i++) {
+        elt_ref = vector_nth(vec, i);
+        elt = *elt_ref;
+        result_elt_size = elt->elt_size;
+        result_len += vector_length(elt);
+    }
+
+    // Concatenated vector.
+    VectorTy *result = vector_alloc(result_len, result_elt_size);
+    IntTy elt_len;
+    // A counter that tracks the index of elements in 'result'.
+    IntTy k = 0;
+    for (IntTy i = 0; i < len; i++) {
+        elt_ref = vector_nth(vec, i);
+        elt = *elt_ref;
+        elt_len = vector_length(elt);
+
+        for (IntTy j = 0; j < elt_len; j++) {
+            void* k_elt = vector_nth(elt, j);
+            vector_inplace_update(result, k, k_elt);
+            k++;
+        }
+    }
+
+    return result;
+}
+
 static inline VectorTy* vector_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
     VectorTy *vec2 = vector_copy(vec);
     vector_inplace_sort(vec2, compar);

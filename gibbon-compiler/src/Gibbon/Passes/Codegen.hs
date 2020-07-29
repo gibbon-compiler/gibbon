@@ -97,6 +97,7 @@ harvestStructTys (Prog _ funs mtal) =
            VNthP   elty  -> VectorTy elty : rst
            VSliceP elty  -> VectorTy elty : rst
            InplaceVUpdateP elty -> VectorTy elty : rst
+           VConcatP elty -> VectorTy elty : rst
            VSortP elty   -> VectorTy elty : rst
            InplaceVSortP  _elty  -> voidTy : rst
            ReadArrayFile _ elty -> VectorTy elty : rst
@@ -999,6 +1000,12 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         return [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:tmp = $exp:xexp; |]
                                , C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', &$id:tmp); |] ]
                      _ -> error $ "codegen: InplaceVUpdateP: " ++ sdoc x
+
+                 VConcatP elty -> do
+                   let [(outV,_)] = bnds
+                       [ls] = rnds
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_concat($exp:(codegenTriv venv ls)); |]
+                          ]
 
                  VSortP elty -> do
                    let [(outV,_)] = bnds
