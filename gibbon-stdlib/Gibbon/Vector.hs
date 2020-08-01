@@ -80,12 +80,12 @@ tail :: Vector a -> Vector a
 tail vec = slice 1 ((length vec)-1) vec
 
 generate_loop :: Vector a -> Int -> Int -> (Int -> a) -> Vector a
-generate_loop vec start end f =
-    if start == end
+generate_loop vec idx end f =
+    if idx == end
     then vec
     else
-      let vec1 = inplacevupdate vec start (f start)
-      in generate_loop vec1 (start+1) end f
+      let vec1 = inplacevupdate vec idx (f idx)
+      in generate_loop vec1 (idx+1) end f
 
 -- Work: O(n)
 -- Span: O(n)
@@ -137,30 +137,32 @@ update vec i x = generate
 -- Work: O(n)
 -- Span: O(n)
 foldl :: (b -> a -> b) -> b -> Vector a -> b
-foldl f acc vec =
-    let len = length vec in
-    if len == 0
+{-# INLINE foldl #-}
+foldl f acc vec = foldl_loop 0 (vlength vec) f acc vec
+
+foldl_loop :: Int -> Int -> (b -> a -> b) -> b -> Vector a -> b
+foldl_loop idx end f acc vec =
+    if idx == end
       then acc
-      else if len == 1
-        then f acc (vnth vec 0)
-        else foldl f (f acc (vnth vec 0)) (vslice 1 (len-1) vec)
+      else
+        let acc1 = f acc (vnth vec idx)
+        in foldl_loop (idx+1) end f acc1 vec
 
 -- Work: O(n)
 -- Span: O(n)
 ifoldl :: (b -> Int -> a -> b) -> b -> Vector a -> b
 {-# INLINE ifoldl #-}
-ifoldl f acc vec = ifoldl1 0 f acc vec
+ifoldl f acc vec = ifoldl_loop 0 (vlength vec) f acc vec
 
 -- Work: O(n)
 -- Span: O(n)
-ifoldl1 :: Int -> (b -> Int -> a -> b) -> b -> Vector a -> b
-ifoldl1 idx f acc vec =
-    let len = length vec in
-    if len == 0
+ifoldl_loop :: Int -> Int -> (b -> Int -> a -> b) -> b -> Vector a -> b
+ifoldl_loop idx end f acc vec =
+    if idx == end
       then acc
-      else if len == 1
-        then f acc idx (vnth vec 0)
-        else ifoldl1 (idx+1) f (f acc idx (vnth vec 0)) (vslice 1 (len-1) vec)
+      else
+        let acc1 = f acc idx (vnth vec idx)
+        in ifoldl_loop (idx+1) end f acc1 vec
 
 -- | It returns an Int because Gibbon doesn't have an IO monad yet.
 printVec :: (a -> ()) -> Vector a -> ()
@@ -171,15 +173,15 @@ printVec f vec =
     in ()
 
 printVec_loop :: Int -> Int -> Vector a -> (a -> ()) -> ()
-printVec_loop start end vec f =
-    if start == end
+printVec_loop idx end vec f =
+    if idx == end
     then ()
     else
         let x = head vec
             _ = f x
             _ = printsym (quote ",")
             rst = tail vec
-        in printVec_loop (start+1) end rst f
+        in printVec_loop (idx+1) end rst f
 
 -- Work: O(n)
 -- Span: O(n)

@@ -73,36 +73,46 @@ update_par vec i x = generate_par
 -- Span: O(log n)
 foldl1_par :: (a -> a -> a) -> a -> Vector a -> a
 foldl1_par f acc vec =
+    let cutoff = defaultGrainSize (length vec)
+    in foldl1_par1 cutoff f acc vec
+
+foldl1_par1 :: Int -> (a -> a -> a) -> a -> Vector a -> a
+foldl1_par1 cutoff f acc vec =
     let len = length vec in
-    if len == 0
-      then acc
-      else if len == 1
-        then f (vnth vec 0) acc
-        else
-          let mid  = div len 2
-              tup  = splitAt mid vec
-              v1   = fst tup
-              v2   = snd tup
-              acc1 = spawn (foldl1_par f acc v1)
-              acc2 = (foldl1_par f acc v2)
-              _    = sync
-          in f acc1 acc2
+    -- if len == 0
+    -- then acc
+    if len <= cutoff
+    then foldl f acc vec
+    else
+        let mid  = div len 2
+            tup  = splitAt mid vec
+            v1   = fst tup
+            v2   = snd tup
+            acc1 = spawn (foldl1_par f acc v1)
+            acc2 = (foldl1_par f acc v2)
+            _    = sync
+        in f acc1 acc2
 
 -- Work: O(n)
 -- Span: O(log n)
 foldl2_par :: (b -> a -> b) -> b -> (b -> b -> b) -> Vector a -> b
 foldl2_par f acc g vec =
+    let cutoff = defaultGrainSize (length vec)
+    in foldl2_par1 cutoff f acc g vec
+
+foldl2_par1 :: Int -> (b -> a -> b) -> b -> (b -> b -> b) -> Vector a -> b
+foldl2_par1 cutoff f acc g vec =
     let len = length vec in
-    if len == 0
-      then acc
-      else if len == 1
-        then f acc (vnth vec 0)
-        else
-          let mid  = div len 2
-              tup  = splitAt mid vec
-              v1   = fst tup
-              v2   = snd tup
-              acc1 = spawn (foldl2_par f acc g v1)
-              acc2 = (foldl2_par f acc g v2)
-              _    = sync
-          in g acc1 acc2
+    -- if len == 0
+    -- then acc
+    if len <= cutoff
+    then foldl f acc vec
+    else
+        let mid  = div len 2
+            tup  = splitAt mid vec
+            v1   = fst tup
+            v2   = snd tup
+            acc1 = spawn (foldl2_par f acc g v1)
+            acc2 = (foldl2_par f acc g v2)
+            _    = sync
+        in g acc1 acc2
