@@ -69,7 +69,7 @@ data Exp = ArgC Arg | ReadC | NegC Arg | PlusC Arg Arg | NotC Arg | CmpC Cmp Arg
 data Stm = AssignC Sym Exp
            deriving Show
 
-data Tal = RetC Exp | SeqC Stm Tal | GotoC Sym | IfC Cmp Arg Arg Sym Sym
+data Tal = RetC Exp | SeqC Stm Tal | GotoC Sym | IfC Sym Sym Cmp Arg Arg
            deriving Show
 
 data Prg = ProgramC Blk
@@ -130,7 +130,7 @@ printTal t =
               i1 = printsym (quote "jmp")
               i2 = printsym (quote "SPACE")
           in printsym s
-      IfC c a1 a2 s1 s2 ->
+      IfC s1 s2 c a1 a2 ->
           let itab = printsym (quote "\t")
               i1 = printsym (quote "cmp")
               i2 = printsym (quote "SPACE")
@@ -204,7 +204,7 @@ consIfTrivial s t b =
       RetC e -> b
       SeqC s t -> b
       GotoC str -> AliasCons s str b
-      IfC c a1 a2 s1 s2 -> b
+      IfC s1 s2 c a1 a2 -> b
 
 replaceJumps :: Blk -> Alias -> Blk
 replaceJumps ts ss =
@@ -219,8 +219,8 @@ replaceJumpsInner t ss =
       RetC e -> RetC e
       SeqC s t1 -> SeqC s (replaceJumpsInner t1 ss)
       GotoC str -> GotoC (replaceLabel str ss)
-      IfC c a1 a2 s1 s2 -> 
-          IfC c a1 a2 (replaceLabel s1 ss) (replaceLabel s2 ss)
+      IfC s1 s2 c a1 a2 -> 
+          IfC (replaceLabel s1 ss) (replaceLabel s2 ss) c a1 a2
 
 replaceLabel :: Sym -> Alias -> Sym
 replaceLabel str ss =
@@ -254,7 +254,7 @@ collectJumpsTal t =
       RetC e -> Nil
       SeqC st t1 -> collectJumpsTal t1
       GotoC str -> Cons str Nil
-      IfC c a1 a2 s1 s2 -> Cons s1 (Cons s2 Nil)
+      IfC s1 s2 c a1 a2 -> Cons s1 (Cons s2 Nil)
 
 
 removeBlocks :: Blk -> List Sym -> Blk
@@ -287,7 +287,7 @@ interpBlock t ls vs =
       GotoC str -> case lookupBlock str ls of
                      Just t1 -> interpBlock t1 ls vs
                      Nothing -> ErrorV
-      IfC c a1 a2 s1 s2 -> interpIf c a1 a2 s1 s2 ls vs
+      IfC s1 s2 c a1 a2 -> interpIf c a1 a2 s1 s2 ls vs
 
 interpIf :: Cmp -> Arg -> Arg -> Sym -> Sym ->
             Blk -> Env -> Val
@@ -361,7 +361,7 @@ ex1 = ProgramC (BlockCons (quote "block1") (RetC (ArgC (IntC 0)))
                 (BlockCons (quote "block2") (GotoC (quote "block1"))
                  (BlockCons (quote "block3") (RetC (ArgC (IntC 42)))
                   (BlockCons (quote "start") ((SeqC (AssignC (quote "y") ReadC)
-                                   (IfC EqpC (VarC (quote "y")) (IntC 1) (quote "block2") (quote "block3"))))
+                                   (IfC (quote "block2") (quote "block3") EqpC (VarC (quote "y")) (IntC 1))))
                    BlockNil))))
 
 -- runners
