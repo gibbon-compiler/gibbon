@@ -461,17 +461,17 @@ tcExp ddfs env funs constrs regs tstatein exp =
                  PrintFloat -> do
                    len1
                    _ <- ensureEqualTy (es !!! 0) FloatTy (tys !!! 0)
-                   pure (FloatTy, tstatein)
+                   pure (IntTy, tstatein)
 
                  PrintBool -> do
                    len1
                    _ <- ensureEqualTy (es !!! 0) BoolTy (tys !!! 0)
-                   pure (BoolTy, tstatein)
+                   pure (IntTy, tstatein)
 
                  PrintSym -> do
                    len1
                    _ <- ensureEqualTy (es !!! 0) SymTy (tys !!! 0)
-                   pure (SymTy, tstatein)
+                   pure (IntTy, tstatein)
 
                  ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp
                  SymSetEmpty -> throwError $ GenericTC "SymSetEmpty not handled" exp
