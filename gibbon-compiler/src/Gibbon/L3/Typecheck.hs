@@ -309,17 +309,17 @@ tcExp isPacked ddfs env exp =
         PrintFloat -> do
           len1
           _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
-          return FloatTy
+          return IntTy
 
         PrintBool -> do
           len1
           _ <- ensureEqualTy (es !! 0) BoolTy (tys !! 0)
-          return BoolTy
+          return IntTy
 
         PrintSym -> do
           len1
           _ <- ensureEqualTy (es !! 0) SymTy (tys !! 0)
-          return SymTy
+          return IntTy
 
         ReadInt -> do
           len0
