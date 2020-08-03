@@ -302,8 +302,6 @@ buildQtree_seq box mpts =
                 (x,y,m) = mpt
             in BH_Node x y m total_points size tr1 tr2 tr3 tr4
 
-{-
-
 buildQtree_par :: Int -> (Float, Float, Float, Float) -> Vector (Float, Float, Float) -> BH_Tree
 buildQtree_par cutoff box mpts =
     let len = length mpts in
@@ -342,7 +340,6 @@ buildQtree_par cutoff box mpts =
                 size = maxDim box
             in BH_Node x y m total_points size tr1 tr2 tr3 tr4
 
--}
 
 debugPrint :: BH_Tree -> Vector (Float, Float, Float, Float, Float) -> ()
 debugPrint bht ps2 =

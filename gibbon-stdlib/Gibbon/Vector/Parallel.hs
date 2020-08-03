@@ -116,3 +116,21 @@ foldl2_par1 cutoff f acc g vec =
             acc2 = (foldl2_par f acc g v2)
             _    = sync
         in g acc1 acc2
+
+----------------------------------
+-- TODO: review things after this.
+
+
+deflate :: (a -> Bool) -> a -> Vector a
+deflate f x =
+    if f x
+    then singleton x
+    else
+        let vec :: Vector a
+            vec = valloc 0
+        in vec
+
+filter_par :: (a -> Bool) -> Vector a -> Vector a
+filter_par f vec =
+    let vec2 = map_par (\elt -> deflate f elt) vec
+    in vconcat vec2

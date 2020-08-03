@@ -3,6 +3,8 @@ module KdTree where
 import Gibbon.Vector
 import Gibbon.Vector.Parallel
 
+import MergeSort
+
 coord :: Int -> (Float, Float, Float) -> Float
 coord axis pt =
   if axis == 0
@@ -49,12 +51,11 @@ sort axis ls =
 
 sort_par :: Int -> Vector (Float, Float, Float) -> Vector (Float, Float, Float)
 sort_par axis ls =
-    let ls2 = copy_par ls in
     if axis == 0
-    then inplacevsort ls2 cmp1
+    then mergeSort cmp1 ls
     else if axis == 1
-    then inplacevsort ls2 cmp2
-    else inplacevsort ls2 cmp3
+    then mergeSort cmp2 ls
+    else mergeSort cmp3 ls
 
 --------------------------------------------------------------------------------
 -- The main algorithm

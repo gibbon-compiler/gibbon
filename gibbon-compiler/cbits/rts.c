@@ -819,15 +819,23 @@ static inline VectorTy* vector_inplace_update(VectorTy *vec, IntTy i, void* elt)
     return vec;
 }
 
+static inline VectorTy* vector_copy(VectorTy *vec) {
+    IntTy len = vector_length(vec);
+    void *start = vector_nth(vec, 0);
+    VectorTy *vec2 = vector_alloc(len, vec->elt_size);
+    memcpy(vec2->data, start, len * vec->elt_size);
+    return vec2;
+}
+
 static inline VectorTy* vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
-    qsort(vec->data, vector_length(vec), vec->elt_size, compar);
+    void *start = vector_nth(vec, 0);
+    qsort(start, vector_length(vec), vec->elt_size, compar);
     return vec;
 }
 
-static inline VectorTy* vector_copy(VectorTy *vec) {
-    IntTy len = vector_length(vec);
-    VectorTy *vec2 = vector_alloc(len, vec->elt_size);
-    memcpy(vec2->data, vec->data, len * vec->elt_size);
+static inline VectorTy* vector_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
+    VectorTy *vec2 = vector_copy(vec);
+    vector_inplace_sort(vec2, compar);
     return vec2;
 }
 
@@ -864,12 +872,6 @@ static inline VectorTy* vector_concat(VectorTy *vec) {
     }
 
     return result;
-}
-
-static inline VectorTy* vector_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
-    VectorTy *vec2 = vector_copy(vec);
-    vector_inplace_sort(vec2, compar);
-    return vec2;
 }
 
 static inline void vector_free(VectorTy *vec) {

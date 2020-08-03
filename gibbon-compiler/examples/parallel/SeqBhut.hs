@@ -42,4 +42,3 @@ gibbon_main =
       particles1 = (oneStep_seq box mpts particles)
       err = check particles1
   in err
-  -- in 10
