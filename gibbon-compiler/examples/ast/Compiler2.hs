@@ -7,7 +7,7 @@ module Compiler2 where
 -- import Prelude hiding ( List(..), Maybe(..), appepnd, foldr, lookup )
 
 tune :: Int
-tune = 500
+tune = sizeParam
 
 data List a = Nil | Cons a (List a)
               deriving Show
@@ -500,5 +500,5 @@ debug =
     in eval step0
 
 gibbon_main =
-  let p = timeit (eliminateDeadcode (optimizeJumps (uniquify ex3)))
+  let p = iterate (eliminateDeadcode (optimizeJumps (uniquify ex3)))
   in eval p
