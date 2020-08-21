@@ -438,7 +438,7 @@ bigBlockBuilder :: Int -> Blk
 bigBlockBuilder i =
   if i == 0
   then BlockNil
-  else let j = mod rand 3
+  else let j = mod i 3
            s = gensym
            t = makeTal j
            b = bigBlockBuilder (i-1)
@@ -448,11 +448,11 @@ makeTal :: Int -> Tal
 makeTal i =
   if i == 0
   then let sym = gensym
-           inc = mod rand 100
+           inc = 120
        in SeqC (AssignC sym ReadC) (SeqC (AssignC sym (PlusC (VarC sym) (IntC inc))) (RetC (ArgC (VarC sym))))
   else if i == 1
        then let sym = gensym
-                inc = mod rand 100
+                inc = 64
             in SeqC (AssignC sym ReadC) (SeqC (AssignC sym (PlusC (VarC sym) (IntC inc))) (GotoC (quote "block2")))
        else GotoC (quote "block3")
 

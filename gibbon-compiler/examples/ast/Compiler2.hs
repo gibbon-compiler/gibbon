@@ -7,7 +7,7 @@ module Compiler2 where
 -- import Prelude hiding ( List(..), Maybe(..), appepnd, foldr, lookup )
 
 tune :: Int
-tune = 200
+tune = 500
 
 data List a = Nil | Cons a (List a)
               deriving Show
@@ -202,6 +202,65 @@ printArg a =
       TrueC -> printint 1
       FalseC -> printint 0
 
+-- Uniquify
+
+uniquify :: Prg -> Prg
+uniquify p =
+  case p of
+    ProgramC ls -> let hash = makeRenameHashBlock empty_hash ls
+                   in ProgramC (renameBlk hash ls)
+
+makeRenameHashBlock :: SymHash -> Blk -> SymHash
+makeRenameHashBlock hash blk =
+  case blk of
+    BlockNil -> hash
+    BlockCons s t b ->
+      let sym = gensym
+          hash' = if eqsym s (quote "start") then hash else insert_hash hash s sym
+      in makeRenameHashBlock hash' b
+
+renameBlk :: SymHash -> Blk -> Blk
+renameBlk hash blk =
+  case blk of
+    BlockNil -> BlockNil
+    BlockCons s t b ->
+      let s' = lookup_hash hash s
+          t' = renameTal hash t
+          b' = renameBlk hash b
+      in BlockCons s' t' b'
+
+renameTal :: SymHash -> Tal -> Tal
+renameTal hash tal =
+  case tal of
+    RetC e -> RetC (renameExp hash e)
+    SeqC s t -> SeqC (renameStm hash s) (renameTal hash t)
+    GotoC s -> GotoC (lookup_hash hash s)
+    IfC s1 s2 c a1 a2 ->
+      IfC (lookup_hash hash s1) (lookup_hash hash s2) c (renameArg hash a1) (renameArg hash a2)
+
+renameExp :: SymHash -> Exp -> Exp
+renameExp hash exp =
+  case exp of
+    ArgC a -> ArgC (renameArg hash a)
+    ReadC -> ReadC
+    NegC a -> NegC (renameArg hash a)
+    PlusC a1 a2 -> PlusC (renameArg hash a1) (renameArg hash a2)
+    NotC a -> NotC (renameArg hash a)
+    CmpC c a1 a2 -> CmpC c (renameArg hash a1) (renameArg hash a2)
+
+renameArg :: SymHash -> Arg -> Arg
+renameArg hash arg =
+  case arg of
+    IntC i -> IntC i
+    VarC s -> VarC (lookup_hash hash s)
+    TrueC -> TrueC
+    FalseC -> FalseC
+
+renameStm :: SymHash -> Stm -> Stm
+renameStm hash stm =
+  case stm of
+    AssignC s e -> AssignC (lookup_hash hash s) (renameExp hash e)
+
 -- Optimize Jumps
 
 optimizeJumps :: Prg -> Prg
@@ -209,66 +268,20 @@ optimizeJumps p =
     case p of
       ProgramC ls -> let hash = empty_hash
                          hash' = collectTrivial hash ls
-                     in ProgramC (replaceJumps hash' ls)
+                     in ProgramC (renameBlk hash' ls) -- (replaceJumps hash' ls)
 
 collectTrivial :: SymHash -> Blk -> SymHash
 collectTrivial hash ls =
     case ls of
       BlockNil -> hash
       BlockCons s t b ->
-        let hash' = insertIfTrivial hash s t
+        let hash' = case t of
+                      RetC e -> hash
+                      SeqC s t -> hash
+                      GotoC str -> insert_hash hash s str
+                      IfC s1 s2 c a1 a2 -> hash
         in collectTrivial hash' b
 
-insertIfTrivial :: SymHash -> Sym -> Tal -> SymHash
-insertIfTrivial hash sym t =
-    case t of
-      RetC e -> hash
-      SeqC s t -> hash
-      GotoC str -> insert_hash hash sym str
-      IfC s1 s2 c a1 a2 -> hash
-
-replaceJumps :: SymHash -> Blk -> Blk
-replaceJumps hash ts =
-    case ts of
-      BlockNil -> BlockNil
-      BlockCons s t b ->
-        let s' = s
-            t' = replaceJumpsInner hash t
-            b' = replaceJumps hash b
-        in BlockCons s' t' b'
-
--- replaceJumpsCons :: Sym -> Tal -> Blk -> Alias -> Blk
--- replaceJumpsCons s t b ss =
---   let t' = replaceJumpsInner t ss
---       b' = replaceJumps b ss
---   in BlockCons s t' b'
-
--- TODO: figure out why this fails when the cases are not lifted to
--- their own top-level functions. somehow the old version of the buffer
--- gets returned, instead of the updated one
-replaceJumpsInner :: SymHash -> Tal -> Tal
-replaceJumpsInner hash t =
-    case t of
-      RetC e -> RetC e
-      SeqC s t1 -> replaceJumpsSeq hash s t1
-      GotoC str -> replaceJumpsGoto hash str
-      IfC s1 s2 c a1 a2 -> replaceIfs hash s1 s2 c a1 a2 t
-
-replaceJumpsSeq :: SymHash -> Stm -> Tal -> Tal
-replaceJumpsSeq hash s t1 =
-  let t1' = replaceJumpsInner hash t1
-  in SeqC s t1'
-
-replaceJumpsGoto :: SymHash -> Sym -> Tal
-replaceJumpsGoto hash str =
-  let str' = lookup_hash hash str
-  in GotoC str'
-
-replaceIfs :: SymHash -> Sym -> Sym -> Cmp -> Arg -> Arg -> Tal -> Tal
-replaceIfs hash s1 s2 c a1 a2 t =
-  let s1' = lookup_hash hash s1
-      s2' = lookup_hash hash s2
-  in IfC s1' s2' c a1 a2
 
 -- Eliminate Dead Code
 
@@ -297,8 +310,6 @@ collectJumpsTal ss t =
       IfC s1 s2 c a1 a2 ->
         let s' = insert_set ss s1
         in insert_set s' s2
-      -- Cons s1 (Cons s2 Nil)
-
 
 removeBlocks :: Blk -> SymSet -> Blk
 removeBlocks ts ss =
@@ -411,19 +422,19 @@ ex1 = ProgramC (BlockCons (quote "block1") (RetC (ArgC (IntC 0)))
                                    (IfC (quote "block2") (quote "block3") EqpC (VarC (quote "y")) (IntC 1))))
                    BlockNil))))
 
-ex2 :: Prg
-ex2 = ProgramC (BlockCons (quote "block1") (RetC (ArgC (IntC 0)))
-                 (BlockCons (quote "block2") (GotoC (quote "block1"))
-                   (BlockCons (quote "block3") (RetC (ArgC (IntC 42)))
-                    (BlockCons (quote "block4") (RetC (ArgC (IntC 0)))
-                     (BlockCons (quote "block5") (GotoC (quote "block1"))
-                      (BlockCons (quote "block6") (RetC (ArgC (IntC 42)))
-                       (BlockCons (quote "block7") (RetC (ArgC (IntC 0)))
-                        (BlockCons (quote "block8") (GotoC (quote "block1"))
-                         (BlockCons (quote "block9") (RetC (ArgC (IntC 42)))
-                          (BlockCons (quote "start") ((SeqC (AssignC (quote "y") ReadC)
-                                                        (IfC (quote "block2") (quote "block3") EqpC (VarC (quote "y")) (IntC 1))))
-                            BlockNil))))))))))
+-- ex2 :: Prg
+-- ex2 = ProgramC (BlockCons (quote "block1") (RetC (ArgC (IntC 0)))
+--                  (BlockCons (quote "block2") (GotoC (quote "block1"))
+--                    (BlockCons (quote "block3") (RetC (ArgC (IntC 42)))
+--                     (BlockCons (quote "block4") (RetC (ArgC (IntC 0)))
+--                      (BlockCons (quote "block5") (GotoC (quote "block1"))
+--                       (BlockCons (quote "block6") (RetC (ArgC (IntC 42)))
+--                        (BlockCons (quote "block7") (RetC (ArgC (IntC 0)))
+--                         (BlockCons (quote "block8") (GotoC (quote "block1"))
+--                          (BlockCons (quote "block9") (RetC (ArgC (IntC 42)))
+--                           (BlockCons (quote "start") ((SeqC (AssignC (quote "y") ReadC)
+--                                                         (IfC (quote "block2") (quote "block3") EqpC (VarC (quote "y")) (IntC 1))))
+--                             BlockNil))))))))))
 
 ex3 :: Prg
 ex3 = ProgramC (BlockCons (quote "block1") (RetC (ArgC (IntC 0)))
@@ -443,7 +454,7 @@ bigBlockBuilder :: Int -> Blk
 bigBlockBuilder i =
   if i == 0
   then BlockNil
-  else let j = mod rand 3
+  else let j = mod i 3
            s = gensym
            t = makeTal j
            b = bigBlockBuilder (i-1)
@@ -453,12 +464,16 @@ makeTal :: Int -> Tal
 makeTal i =
   if i == 0
   then let sym = gensym
-           inc = mod rand 100
+           inc = 120
        in SeqC (AssignC sym ReadC) (SeqC (AssignC sym (PlusC (VarC sym) (IntC inc))) (RetC (ArgC (VarC sym))))
   else if i == 1
        then let sym = gensym
-                inc = mod rand 100
-            in SeqC (AssignC sym ReadC) (SeqC (AssignC sym (PlusC (VarC sym) (IntC inc))) (GotoC (quote "block2")))
+                sym2 = gensym
+                inc = 64
+            in SeqC (AssignC sym ReadC) (SeqC (AssignC sym (PlusC (VarC sym) (IntC inc)))
+                                         (SeqC (AssignC sym (PlusC (VarC sym) (VarC sym)))
+                                          (SeqC (AssignC sym2 (CmpC EqpC (IntC 0) (VarC sym)))
+                                           (IfC (quote "block2") (quote "block3") EqpC TrueC (VarC sym2)))))
        else GotoC (quote "block3")
 
 -- runners
@@ -471,18 +486,19 @@ eval p =
       
 main :: IO ()
 main = do
-  let p = eliminateDeadcode (optimizeJumps ex2)
+  let p = eliminateDeadcode (optimizeJumps ex3)
   print (eval p)
 
 debug :: Int
 debug =
-    let step1 = printPrg ex3
-        step2 = optimizeJumps ex3
+    let step0 = uniquify ex1
+        step1 = printPrg step0
+        step2 = optimizeJumps step0
         step3 = printPrg step2
         step4 = eliminateDeadcode step2
         step5 = printPrg step4
-    in eval step4
+    in eval step0
 
 gibbon_main =
-  let p = timeit (eliminateDeadcode (optimizeJumps ex3))
+  let p = timeit (eliminateDeadcode (optimizeJumps (uniquify ex3)))
   in eval p
