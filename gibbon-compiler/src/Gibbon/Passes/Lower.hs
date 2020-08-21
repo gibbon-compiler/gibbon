@@ -933,8 +933,8 @@ typ t =
     CursorTy -> T.CursorTy -- Audit me
     PtrTy -> T.PtrTy
     ArenaTy   -> T.ArenaTy
-    SymSetTy  -> error "lower/typ: SymSetTy not handled."
-    SymHashTy -> error "lower/typ: SymHashTy not handled."
+    SymSetTy  -> T.SymSetTy
+    SymHashTy -> T.SymHashTy
 
 typ' :: String -> Ty3 -> T.Ty
 typ' str t = dbgTraceIt str $ typ t
@@ -995,15 +995,15 @@ prim p =
     VSortP elty   -> T.VSortP (typ elty)
     InplaceVSortP elty -> T.InplaceVSortP (typ elty)
     GetNumProcessors -> T.GetNumProcessors
-    SymSetEmpty   -> error "lower/prim: SymSetEmpty not handled"
-    SymSetInsert  -> error "lower/prim: SymSetInsert not handled"
-    SymSetContains-> error "lower/prim: SymSetContains not handled"
-    SymHashEmpty  -> error "lower/prim: SymHashEmpty not handled"
-    SymHashInsert  -> error "lower/prim: SymHashInsert not handled"
-    SymHashLookup  -> error "lower/prim: SymHashLookup not handled"
-    IntHashEmpty  -> error "lower/prim: IntHashEmpty not handled"
-    IntHashInsert  -> error "lower/prim: IntHashInsert not handled"
-    IntHashLookup  -> error "lower/prim: IntHashLookup not handled"
+    SymSetEmpty   -> T.SymSetEmpty
+    SymSetInsert  -> T.SymSetInsert
+    SymSetContains-> T.SymSetContains
+    SymHashEmpty  -> T.SymHashEmpty
+    SymHashInsert  -> T.SymHashInsert
+    SymHashLookup  -> T.SymHashLookup
+    IntHashEmpty  -> T.IntHashEmpty
+    IntHashInsert  -> T.IntHashInsert
+    IntHashLookup  -> T.IntHashLookup
 
     ErrorP{}     -> error$ "lower/prim: internal error, should not have got to here: "++show p
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."

@@ -261,6 +261,73 @@ PtrTy dict_lookup_ptr(dict_item_t *ptr, SymTy key) {
 }
 
 // -------------------------------------
+// Set and Hash functions
+// -------------------------------------
+
+
+struct set_elem {
+  int val;
+  UT_hash_handle hh;
+};
+
+typedef struct set_elem* SymSetTy;
+
+SymSetTy empty_set() {
+  return NULL;
+}
+
+SymSetTy insert_set(SymSetTy set, int sym) {
+  SymSetTy s;
+  HASH_FIND_INT(set, &sym, s);  /* sym already in the hash? */
+  if (s==NULL) {
+    s = malloc(sizeof(struct set_elem));
+    s->val = sym;
+    HASH_ADD_INT(set,val,s);
+  }
+  return set;
+}
+
+BoolTy contains_set(SymSetTy set, int sym) {
+  SymSetTy s;
+  HASH_FIND_INT(set, &sym, s);
+  return (s!=NULL);
+}
+
+struct sym_hash_elem {
+  int key;
+  int val;
+  UT_hash_handle hh;
+};
+
+typedef struct sym_hash_elem* SymHashTy;
+
+SymHashTy empty_hash() {
+  return NULL;
+}
+
+SymHashTy insert_hash(SymHashTy hash, int k, int v) {
+  SymHashTy s;
+  // NOTE: not checking for duplicates!
+  s = malloc(sizeof(struct sym_hash_elem));
+  s->val = v;
+  s->key = k;
+  HASH_ADD_INT(hash,key,s);
+
+  return hash;
+}
+
+IntTy lookup_hash(SymHashTy hash, int k) {
+  SymHashTy s;
+  HASH_FIND_INT(hash,&k,s);
+  if (s==NULL) {
+    return k; // NOTE: return original key if val not found
+              // TODO: come up with something better to do here
+  } else {
+    return s->val;
+  }
+}
+
+// -------------------------------------
 // Helpers
 // -------------------------------------
 

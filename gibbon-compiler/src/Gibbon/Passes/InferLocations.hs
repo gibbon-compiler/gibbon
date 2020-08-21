@@ -1621,15 +1621,15 @@ prim p = case p of
            GetNumProcessors -> pure GetNumProcessors
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadArrayFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
-           SymSetEmpty{} -> err $ "prim: SymSetEmpty not handled."
-           SymSetInsert{} -> err $ "prim: SymSetInsert not handled."
-           SymSetContains{} -> err $ "prim: SymSetContains not handled."
-           SymHashEmpty{} -> err $ "prim: SymHashEmpty not handled."
-           SymHashInsert{} -> err $ "prim: SymHashInsert not handled."
-           SymHashLookup{} -> err $ "prim: SymHashLookup not handled."
-           IntHashEmpty{} -> err $ "prim: IntHashEmpty not handled."
-           IntHashInsert{} -> err $ "prim: IntHashInsert not handled."
-           IntHashLookup{} -> err $ "prim: IntHashLookup not handled."
+           SymSetEmpty{} -> return SymSetEmpty
+           SymSetInsert{} -> return SymSetInsert
+           SymSetContains{} -> return SymSetContains
+           SymHashEmpty{} -> return SymHashEmpty
+           SymHashInsert{} -> return SymHashInsert
+           SymHashLookup{} -> return SymHashLookup
+           IntHashEmpty{} -> return IntHashEmpty
+           IntHashInsert{} -> return IntHashInsert
+           IntHashLookup{} -> return IntHashLookup
 
 -- | Generate a copy function for a particular data definition.
 -- Note: there will be redundant let bindings in the function body which may need to be inlined.

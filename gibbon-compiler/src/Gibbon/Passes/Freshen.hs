@@ -133,9 +133,9 @@ freshDictTy m ty =
      VectorTy el_t ->
          do el_t' <- freshDictTy m el_t
             pure $ VectorTy el_t'
-     SymSetTy  -> error "freshDictTy: SymSetTy not handled."
-     SymHashTy -> error "freshDictTy: SymHashTy not handled."
-     IntHashTy -> error "freshDictTy: IntHashTy not handled."
+     SymSetTy  -> pure ty
+     SymHashTy -> pure ty
+     IntHashTy -> pure ty
 
 freshDictTyScheme :: Monad m =>
                      M.Map Var Var -> TyScheme -> m TyScheme

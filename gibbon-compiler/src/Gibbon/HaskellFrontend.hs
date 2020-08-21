@@ -266,6 +266,8 @@ desugarType ty =
     TyCon _ (UnQual _ (Ident _ "Float"))-> FloatTy
     TyCon _ (UnQual _ (Ident _ "Bool")) -> BoolTy
     TyCon _ (UnQual _ (Ident _ "Sym"))  -> SymTy0
+    TyCon _ (UnQual _ (Ident _ "SymSet"))  -> SymSetTy
+    TyCon _ (UnQual _ (Ident _ "SymHash"))  -> SymHashTy
     TyCon _ (UnQual _ (Ident _ con))    -> PackedTy con []
     TyFun _ t1 t2 -> let t1' = desugarType t1
                          t2' = desugarType t2
@@ -368,6 +370,12 @@ primMap = M.fromList
   , ("printsym", PrintSym)
   , ("readint", ReadInt)
   , ("is_big", IsBig)
+  , ("empty_set", SymSetEmpty)
+  , ("insert_set", SymSetInsert)
+  , ("contains_set", SymSetContains)
+  , ("empty_hash", SymHashEmpty)
+  , ("insert_hash", SymHashInsert)
+  , ("lookup_hash", SymHashLookup)
   ]
 
 desugarExp :: (Show a, Pretty a) => TopTyEnv -> Exp a -> PassM Exp0
@@ -392,6 +400,10 @@ desugarExp toplevel e =
       then pure $ PrimAppE SizeParam []
       else if v == "getNumProcessors"
       then pure $ PrimAppE GetNumProcessors []
+      else if v == "empty_set"
+      then pure $ PrimAppE SymSetEmpty []
+      else if v == "empty_hash"
+      then pure $ PrimAppE SymHashEmpty []
       else case M.lookup v toplevel of
              Just sigma ->
                case tyFromScheme sigma of

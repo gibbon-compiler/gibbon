@@ -193,7 +193,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                let len2 = checkLen exp pr 2 es
                    len1 = checkLen exp pr 1 es
                    len0 = checkLen exp pr 0 es
-                   _len3 = checkLen exp pr 3 es
+                   len3 = checkLen exp pr 3 es
                    len4 = checkLen exp pr 4 es
 
                    mk_bools = do
@@ -474,12 +474,40 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    pure (IntTy, tstatein)
 
                  ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp
-                 SymSetEmpty -> throwError $ GenericTC "SymSetEmpty not handled" exp
-                 SymSetInsert -> throwError $ GenericTC "SymSetInsert not handled" exp
-                 SymSetContains -> throwError $ GenericTC "SymSetContains not handled" exp
-                 SymHashEmpty -> throwError $ GenericTC "SymHashEmpty not handled" exp
-                 SymHashInsert -> throwError $ GenericTC "SymHashInsert not handled" exp
-                 SymHashLookup -> throwError $ GenericTC "SymHashLookup not handled" exp
+
+                 SymSetEmpty -> do
+                   len0
+                   pure (SymSetTy, tstatein)
+
+                 SymSetInsert -> do
+                   len2
+                   _ <- ensureEqualTy (es !!! 0) SymSetTy (tys !!! 0)
+                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                   pure (SymSetTy, tstatein)
+
+                 SymSetContains -> do
+                   len2
+                   _ <- ensureEqualTy (es !!! 0) SymSetTy (tys !!! 0)
+                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                   pure (BoolTy, tstatein)
+
+                 SymHashEmpty -> do
+                   len0
+                   pure (SymHashTy, tstatein)
+
+                 SymHashInsert -> do
+                   len3
+                   _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
+                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                   _ <- ensureEqualTy (es !!! 2) SymTy (tys !!! 2)
+                   pure (SymHashTy, tstatein)
+
+                 SymHashLookup -> do
+                   len2
+                   _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
+                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                   pure (SymTy, tstatein)
+
                  IntHashEmpty -> throwError $ GenericTC "IntHashEmpty not handled" exp
                  IntHashInsert -> throwError $ GenericTC "IntHashInsert not handled" exp
                  IntHashLookup -> throwError $ GenericTC "IntHashLookup not handled" exp

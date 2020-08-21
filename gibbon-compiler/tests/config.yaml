@@ -305,6 +305,16 @@ tests:
     dir: examples/poly
     answer-file: examples/poly/MutualRec.ans
 
+  - name: HSSetTest.hs
+    dir: examples
+    answer-file: examples/HSSetTest.ans
+    failing: [interp1]
+
+  - name: HSHashTest.hs
+    dir: examples
+    answer-file: examples/HSHashTest.ans
+    failing: [interp1]
+
     ## Shouldn't typecheck
   - name: Fail1.hs
     dir: examples/should_fail

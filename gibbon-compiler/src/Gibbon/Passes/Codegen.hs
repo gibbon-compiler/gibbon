@@ -674,6 +674,25 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                     [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = dict_has_key_ptr($id:dict); |] ]
                  DictHasKeyP _ -> error $ "codegen: " ++ show prm ++ "unhandled."
 
+                 SymSetEmpty -> let [(outV,outT)] = bnds
+                                in pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = empty_set(); |] ]
+                 SymSetInsert -> let [(outV,outT)] = bnds
+                                     [(VarTriv set),valTriv] = rnds in pure
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = insert_set($id:set, $(codegenTriv venv valTriv)); |] ]
+                 SymSetContains -> let [(outV,ty)] = bnds
+                                       [(VarTriv set),valTriv] = rnds in pure
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = contains_set($id:set, $(codegenTriv venv valTriv)); |] ]
+
+                 SymHashEmpty -> let [(outV,outT)] = bnds
+                                 in pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = empty_hash(); |] ]
+                 SymHashInsert -> let [(outV,outT)] = bnds
+                                      [(VarTriv hash),keyTriv,valTriv] = rnds in pure
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = insert_hash($id:hash, $(codegenTriv venv keyTriv), $(codegenTriv venv valTriv)); |] ]
+                 SymHashLookup -> let [(outV,ty)] = bnds
+                                      [(VarTriv hash),keyTriv] = rnds in pure
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = lookup_hash($id:hash, $(codegenTriv venv keyTriv)); |] ]
+
+
                  NewBuffer mul -> do
                    let [(reg, CursorTy),(outV,CursorTy)] = bnds
                        bufsize = codegenMultiplicity mul
@@ -1091,6 +1110,8 @@ codegenTy (ProdTy []) = [cty|void*|]
 codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
     where nam = makeName ts
 codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
+codegenTy SymSetTy = [cty|typename SymSetTy|]
+codegenTy SymHashTy = [cty|typename SymHashTy|]
 codegenTy ArenaTy = [cty|typename ArenaTy|]
 codegenTy VectorTy{} = [cty|typename VectorTy* |]
 
@@ -1112,6 +1133,8 @@ makeName' ChunkTy  = "Chunk"
 makeName' ArenaTy  = "Arena"
 makeName' VectorTy{} = "Vector"
 makeName' (ProdTy tys) = "Prod" ++ concatMap makeName' tys
+makeName' SymSetTy = "SymSetTy"
+makeName' SymHashTy = "SymHashTy"
 
 
 makeIcdName :: Ty -> (String, String)
