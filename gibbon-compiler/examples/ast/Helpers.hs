@@ -1,4 +1,4 @@
-module Helpers ( Sym, eqsym, quote, printsym, printint, symappend ) where
+module Helpers ( Sym, eqsym, quote, printsym, printint ) where
 import System.IO.Unsafe
     
 type Sym = String

@@ -186,6 +186,9 @@ data Ty
       -- ^ We allow built-in dictionaries from symbols to a value type.
     | ArenaTy
     | VectorTy Ty
+    | SymSetTy
+    | SymHashTy
+    | IntHashTy
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data Prim
@@ -204,6 +207,15 @@ data Prim
     | DictLookupP Ty -- ^ takes k,dict, errors if absent
     | DictEmptyP Ty
     | DictHasKeyP Ty
+    | SymSetEmpty
+    | SymSetContains
+    | SymSetInsert
+    | SymHashEmpty
+    | SymHashInsert
+    | SymHashLookup
+    | IntHashEmpty
+    | IntHashInsert
+    | IntHashLookup
     -- Operations on vectors
     | VAllocP Ty
     | VFreeP Ty

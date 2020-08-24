@@ -439,9 +439,9 @@ monoOblsTy ddefs1 t = do
                 _  -> pure t
     VectorTy{} -> pure t
     ArenaTy  -> pure t
-    SymSetTy -> error "monoOblsTy: SymSetTy not handled."
-    SymHashTy-> error "monoOblsTy: SymHashTy not handled."
-    IntHashTy-> error "monoOblsTy: IntHashTy not handled."
+    SymSetTy -> pure t
+    SymHashTy-> pure t
+    IntHashTy-> pure t
 
 
 -- | Collect monomorphization obligations.
