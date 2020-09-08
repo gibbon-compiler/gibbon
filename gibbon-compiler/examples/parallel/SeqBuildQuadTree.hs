@@ -1,26 +1,10 @@
-module ParBhut where
+module SeqBuildQuadTree where
 
 import Bhut
-
-oneStep_par :: Int
-            -> BH_Tree
-            -> Vector (Float, Float, Float)
-            -> Vector (Float, Float, Float, Float, Float)
-            -> Vector (Float, Float, Float, Float, Float)
-oneStep_par cutoff bht mpts ps =
-    let ps2 = iterate (generate_par (length ps)
-                       (\i ->
-                            let p = nth ps i
-                                mpt = nth mpts i
-                                -- accel = calcAccel_par cutoff mpt bht
-                                accel = calcAccel_seq mpt bht
-                            in applyAccel p accel))
-    in ps2
 
 gibbon_main =
   let pts :: Vector (Float, Float)
       pts = readArrayFile ()
-
       particles  = map (\(pt :: (Float, Float)) ->
                             let x = pt !!! 0
                                 y = pt !!! 1
@@ -36,7 +20,5 @@ gibbon_main =
       rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 0) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 1) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       box = (llx, lly, rux, ruy)
-      cutoff = 524288
-      bht = buildQtree_seq box mpts
-      particles1 = oneStep_par cutoff bht mpts particles
-  in check particles1
+      tr = iterate (buildQtree_seq box mpts)
+  in sumQtree tr

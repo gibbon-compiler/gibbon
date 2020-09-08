@@ -88,6 +88,14 @@ data BH_Tree = BH_Empty
                        BH_Tree -- ^ south-east
                        BH_Tree -- ^ south-west
 
+sumQtree :: BH_Tree -> Float
+sumQtree tr =
+    case tr of
+        BH_Empty -> 0.0
+        BH_Leaf x y m -> x .+. y .+. m
+        BH_Node x y m _ _ tr1 tr2 tr3 tr4 ->
+            x .+. y .+. m .+. (sumQtree tr1) .+. (sumQtree tr2) .+. (sumQtree tr3) .+. (sumQtree tr4)
+
 myprintBHTree :: BH_Tree -> ()
 myprintBHTree bht =
     case bht of
