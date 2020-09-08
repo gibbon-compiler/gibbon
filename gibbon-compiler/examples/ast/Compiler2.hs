@@ -60,12 +60,12 @@ lookupInt elm lst =
           if eqsym k elm
           then Just v
           else lookupInt elm rst
-               
+
 
 strEq :: Sym -> Sym -> Bool
 strEq a b = eqsym a b
 
-printSyms :: List Sym -> Int
+printSyms :: List Sym -> ()
 printSyms lst =
   case lst of
     Nil -> printsym (quote "NEWLINE")
@@ -75,15 +75,15 @@ printSyms lst =
       in printSyms rst
 
 
-    
-               
+
+
 -- C1 Lang
 
 data Arg = IntC Int | VarC Sym | TrueC | FalseC
            deriving Show
 
 data Cmp = EqpC | LtpC
-           deriving Show         
+           deriving Show
 
 data Exp = ArgC Arg | ReadC | NegC Arg | PlusC Arg Arg | NotC Arg | CmpC Cmp Arg Arg
            deriving Show
@@ -109,15 +109,15 @@ data Blk = BlockCons Sym Tal Blk
 
 
 -- Print C1
-printPrg :: Prg -> Int
+printPrg :: Prg -> ()
 printPrg p =
     case p of
       ProgramC blk -> printBlk blk
 
-printBlk :: Blk -> Int
+printBlk :: Blk -> ()
 printBlk b =
     case b of
-      BlockNil -> 0
+      BlockNil -> ()
       BlockCons s t blk ->
           let i1 = printsym s
               i2 = printsym (quote ":")
@@ -126,8 +126,8 @@ printBlk b =
               i5 = printsym (quote "NEWLINE")
           in printBlk blk
 
-printTal :: Tal -> Int
-printTal t = 
+printTal :: Tal -> ()
+printTal t =
     case t of
       RetC e ->
           let itab = printsym (quote "\t")
@@ -170,7 +170,7 @@ printTal t =
               isp = printsym (quote "SPACE")
           in printsym s2
 
-printExp :: Exp -> Int
+printExp :: Exp -> ()
 printExp e =
     case e of
       ArgC a -> printArg a
@@ -194,7 +194,7 @@ printExp e =
                           i5 = printsym (quote "SPACE")
                       in printArg a2
 
-printArg :: Arg -> Int
+printArg :: Arg -> ()
 printArg a =
     case a of
       IntC i -> printint i
@@ -409,7 +409,7 @@ interpArg a vs =
                   Nothing -> ErrorV
       TrueC -> IntV 1
       FalseC -> IntV 0
-          
+
 
 
 -- C1 term
@@ -483,7 +483,7 @@ eval p =
     case (interpPrg p) of
       IntV i -> i
       ErrorV -> (-1)
-      
+
 main :: IO ()
 main = do
   let p = eliminateDeadcode (optimizeJumps ex3)
