@@ -13,6 +13,18 @@ coord axis pt =
   then pt !!! 1
   else pt !!! 2
 
+printPoint :: (Float, Float, Float) -> ()
+printPoint tup =
+    let (a,b,c) = tup
+        _ = printsym (quote "(")
+        _ = printfloat a
+        _ = printsym (quote ",")
+        _ = printfloat b
+        _ = printsym (quote ",")
+        _ = printfloat c
+        _ = printsym (quote ")")
+    in ()
+
 getNextAxis_2D :: Int -> Int
 getNextAxis_2D i = mod (i + 1) 2
 
@@ -73,7 +85,10 @@ data KdTree = KdLeaf Float  -- ^ x coord
                      Float  -- ^ y coord
                      Float  -- ^ z coord
 
-            | KdNode Int    -- ^ number of elements in this node
+            | KdNode Float  -- x coord
+                     Float  -- y coord
+                     Float  -- z coood
+                     Int    -- ^ number of elements in this node
                      Int    -- ^ splitting axis (0 == x, 1 == y)
                      Float  -- ^ split value
                      Float  -- ^ min_x
@@ -84,63 +99,95 @@ data KdTree = KdLeaf Float  -- ^ x coord
                      Float  -- ^ max_z
                      KdTree -- ^ left
                      KdTree -- ^ right
+
+           | KdEmpty
   deriving Show
 
 getMinX :: KdTree -> Float
 getMinX tr =
   case tr of
-    KdNode _ _ _ min_x _ _ _ _ _ _ _ -> min_x
+    KdEmpty -> 0.0
+    KdNode _ _ _ _ _ _ min_x _ _ _ _ _ _ _ -> min_x
     KdLeaf x _ _                     -> x
 
 getMaxX :: KdTree -> Float
 getMaxX tr =
   case tr of
-    KdNode _ _ _ _ max_x _ _ _ _ _ _ -> max_x
+    KdEmpty -> 0.0
+    KdNode _ _ _ _ _ _ _ max_x _ _ _ _ _ _ -> max_x
     KdLeaf x _ _                     -> x
 
 getMinY :: KdTree -> Float
 getMinY tr =
   case tr of
-    KdNode _ _ _ _ _ min_y _ _ _ _ _ -> min_y
+    KdEmpty -> 0.0
+    KdNode _ _ _ _ _ _ _ _ min_y _ _ _ _ _ -> min_y
     KdLeaf _ y _                     -> y
 
 getMaxY :: KdTree -> Float
 getMaxY tr =
   case tr of
-    KdNode _ _ _ _ _ _ max_y _ _ _ _ -> max_y
+    KdEmpty -> 0.0
+    KdNode _ _ _ _ _ _ _ _ _ max_y _ _ _ _ -> max_y
     KdLeaf _ y _                     -> y
 
 getMinZ :: KdTree -> Float
 getMinZ tr =
   case tr of
-    KdNode _ _ _ _ _ _ _ min_z _ _ _ -> min_z
+    KdEmpty -> 0.0
+    KdNode _ _ _ _ _ _ _ _ _ _ min_z _ _ _ -> min_z
     KdLeaf _ _ z                     -> z
 
 getMaxZ :: KdTree -> Float
 getMaxZ tr =
   case tr of
-    KdNode _ _ _ _ _ _ _ _ max_z _ _ -> max_z
+    KdEmpty -> 0.0
+    KdNode _ _ _ _ _ _ _ _ _ _ _ max_z _ _ -> max_z
     KdLeaf _ _ z                     -> z
 
 
 getElems :: KdTree -> Int
 getElems tr =
   case tr of
-    KdNode elems _ _ _ _ _ _ _ _ _ _ -> elems
+    KdEmpty -> 0
+    KdNode _ _ _ elems _ _ _ _ _ _ _ _ _ _ -> elems
     KdLeaf _ y _                     -> 1
 
+getX :: KdTree -> Float
+getX tr =
+    case tr of
+        KdEmpty -> 0.0
+        KdNode x _ _ _ _ _ _ _ _ _ _ _ _ _ -> x
+        KdLeaf x _ _                       -> x
+
+getY :: KdTree -> Float
+getY tr =
+    case tr of
+        KdEmpty -> 0.0
+        KdNode _ y _ _ _ _ _ _ _ _ _ _ _ _ -> y
+        KdLeaf _ y _                       -> y
+
+getZ :: KdTree -> Float
+getZ tr =
+    case tr of
+        KdEmpty -> 0.0
+        KdNode _ _ z _ _ _ _ _ _ _ _ _ _ _ -> z
+        KdLeaf _ _ z                       -> z
 
 fromListWithAxis_seq :: Int -> Vector (Float, Float, Float) -> KdTree
 fromListWithAxis_seq axis pts =
     let len = vlength pts in
-    if len == 1
+    if len == 0
+    then KdEmpty
+    else if len == 1
     then let (x,y,z) = nth pts 0
          in KdLeaf x y z
     else let sorted_pts = sort axis pts
              pivot_idx  = div len 2
              pivot      = nth sorted_pts pivot_idx
+             (x,y,z)    = pivot
              left_pts   = slice 0 pivot_idx sorted_pts
-             right_pts  = slice pivot_idx (len - pivot_idx) sorted_pts
+             right_pts  = slice (pivot_idx+1) (len - pivot_idx - 1) sorted_pts
              next_axis  = getNextAxis_2D axis
              left_tr    = fromListWithAxis_seq next_axis left_pts
              right_tr   = fromListWithAxis_seq next_axis right_pts
@@ -151,7 +198,7 @@ fromListWithAxis_seq axis pts =
              min_z      = min (getMinZ left_tr) (getMinZ right_tr)
              max_z      = max (getMaxZ left_tr) (getMaxZ right_tr)
              total_elems= (getElems left_tr) + (getElems right_tr)
-         in KdNode total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
+         in KdNode x y z total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
 fromList_seq :: Vector (Float, Float, Float) -> KdTree
@@ -165,20 +212,21 @@ fromListWithAxis_par cutoff axis pts =
     else let sorted_pts = sort_par axis pts
              pivot_idx  = div len 2
              pivot      = nth sorted_pts pivot_idx
+             (x,y,z)    = pivot
              left_pts   = slice 0 pivot_idx sorted_pts
-             right_pts  = slice pivot_idx (len - pivot_idx) sorted_pts
+             right_pts  = slice (pivot_idx+1) (len - pivot_idx - 1) sorted_pts
              next_axis  = getNextAxis_2D axis
              left_tr    = spawn (fromListWithAxis_par cutoff next_axis left_pts)
              right_tr   = fromListWithAxis_par cutoff next_axis right_pts
              _          = sync
-             min_x      = min (getMinX left_tr) (getMinX right_tr)
-             max_x      = max (getMaxX left_tr) (getMaxX right_tr)
-             min_y      = min (getMinY left_tr) (getMinY right_tr)
-             max_y      = max (getMaxY left_tr) (getMaxY right_tr)
-             min_z      = min (getMinZ left_tr) (getMinZ right_tr)
-             max_z      = max (getMaxZ left_tr) (getMaxZ right_tr)
+             min_x      = min x (min (getMinX left_tr) (getMinX right_tr))
+             max_x      = max x (max (getMaxX left_tr) (getMaxX right_tr))
+             min_y      = min y (min (getMinY left_tr) (getMinY right_tr))
+             max_y      = max y (max (getMaxY left_tr) (getMaxY right_tr))
+             min_z      = min z (min (getMinZ left_tr) (getMinZ right_tr))
+             max_z      = max z (max (getMaxZ left_tr) (getMaxZ right_tr))
              total_elems= (getElems left_tr) + (getElems right_tr)
-         in KdNode total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
+         in KdNode x y z total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
 fromList_par :: Int -> Vector (Float, Float, Float) -> KdTree
@@ -186,73 +234,77 @@ fromList_par cutoff pts = fromListWithAxis_par cutoff 0 pts
 
 --------------------------------------------------------------------------------
 
-{-
+-- | Maps a list of points to a list of their nearest neighbor.
+allNearest_seq :: KdTree -> Vector (Float, Float, Float) -> Vector (Float, Float, Float)
+allNearest_seq tr ls =
+    map (\p -> nearest tr p) ls
 
--- | Return the point that is closest to a
-least_dist :: (Int, Int) -> (Int, Int) -> (Int, Int) -> (Int, Int)
-least_dist a b c =
-  let d1 = dist a b
-      d2 = dist a c
-  in if d1 < d2 then b else c
+allNearest_par :: KdTree -> Vector (Float, Float, Float) -> Vector (Float, Float, Float)
+allNearest_par tr ls =
+    map_par (\p -> nearest tr p) ls
 
--- | Return the nearest neighbor of probe
-nearest :: KdTree -> (Int, Int) -> (Int, Int)
-nearest tr probe =
-  case tr of
-    KdEmpty -> (-100,-100)
-    KdNode axis pivot_x pivot_y left right ->
-      let pivot   =  (pivot_x, pivot_y)
-          tst_probe = coord axis probe
-          tst_pivot = coord axis pivot
-      in
-      if tst_probe < tst_pivot
-      then find_nearest pivot probe tst_pivot tst_probe left right
-      else find_nearest pivot probe tst_pivot tst_probe right left
+nearest :: KdTree -> (Float, Float, Float) -> (Float, Float, Float)
+nearest tr query =
+    case tr of
+        KdEmpty -> (0.0,0.0,0.0)
+        KdLeaf x y z -> (x,y,z)
+        KdNode x y z total_points axis split_val min_x max_x min_y max_y min_z max_z left_tr right_tr ->
+            let pivot = (x,y,z)
+                tst_query = coord axis query
+                tst_pivot = coord axis pivot
+            in if tst_query .<. tst_pivot
+               then find_nearest pivot query tst_pivot tst_query left_tr right_tr
+               else find_nearest pivot query tst_pivot tst_query right_tr left_tr
 
--- | Find the closest point to probe in a KD-tree
-find_nearest :: (Int, Int) -> (Int, Int) -> Int -> Int -> KdTree -> KdTree -> (Int, Int)
-find_nearest pivot probe tst_pivot tst_probe side other =
-  let best0 = nearest side probe
-      candidate1 = least_dist probe best0 pivot
+-- | Find the closest point to query in a KD-tree
+find_nearest :: (Float, Float, Float) -> (Float, Float, Float) -> Float -> Float -> KdTree -> KdTree -> (Float, Float, Float)
+find_nearest pivot query tst_pivot tst_query good_side other_side =
+  let best0 = nearest good_side query
+      candidate1 = least_dist query best0 pivot
       -- whether the difference between the splitting coordinate of the search point and current node
       -- is less than the distance (overall coordinates) from the search point to the current best.
-  in if ((tst_probe - tst_pivot) ^ 2) <= dist probe candidate1
-     then let candidate2   = nearest other probe
-              best1 = least_dist probe candidate1 candidate2
+      nearest_other_side = tst_query .-. tst_pivot
+  in if (nearest_other_side .*. nearest_other_side) .<=. (dist query candidate1)
+     then let candidate2 = nearest other_side query
+              best1 = least_dist query candidate1 candidate2
           in best1
      else candidate1
 
--}
+-- | Return the point that is closest to a
+least_dist :: (Float, Float, Float) -> (Float, Float, Float) -> (Float, Float, Float) -> (Float, Float, Float)
+least_dist a b c =
+  let d1 = dist a b
+      d2 = dist a c
+  in if d1 .<. d2 then b else c
+
+--------------------------------------------------------------------------------
 
 -- | Sum of all points in KD-Tree
 sumKdTree :: KdTree -> Float
 sumKdTree tr =
   case tr of
+    KdEmpty -> 0.0
     KdLeaf x y z -> x .+. y .+. z
-    KdNode _ _ _ _ _ _ _ _ _ left right ->
+    KdNode x y z _ _ _ _ _ _ _ _ _ left right ->
       let o = sumKdTree left
           p = sumKdTree right
-      in o .+. p
+      in x .+. y .+. z .+. o .+. p
 
 countLeaves :: KdTree -> Int
 countLeaves tr =
   case tr of
+    KdEmpty -> 0
     KdLeaf _ _ _ -> 1
-    KdNode _ _ _ _ _ _ _ _ _ left right ->
+    KdNode _ _ _ _ _ _ _ _ _ _ _ _ left right ->
       let o = countLeaves left
           p = countLeaves right
       in o + p
 
-sumList0 :: Int -> Int -> Vector (Float, Float, Float) -> Float -> Float
-sumList0 i n ls acc =
-  if i == n
-  then acc
-  else let p = nth ls i
-       in sumList0 (i+1) n ls (acc .+. (p !!! 0) .+. (p !!! 1) .+. (p !!! 2))
-
 sumList :: Vector (Float, Float, Float) -> Float
-sumList ls =
-  sumList0 0 (vlength ls) ls 0.0
+sumList ls = foldl (\acc (pt :: (Float, Float, Float)) ->
+                        let (x,y,z) = pt
+                        in acc .+. x .+. y .+. z)
+                   0.0 ls
 
 -- | Distance between two points
 dist :: (Float, Float, Float) -> (Float, Float, Float) -> Float
@@ -269,12 +321,14 @@ dist a b =
 countCorr_seq :: (Float, Float, Float) -> Float -> KdTree -> Int
 countCorr_seq probe radius tr =
   case tr of
+    KdEmpty -> 0
+
     KdLeaf x y z ->
       if (dist probe (x, y, z)) .<. (radius .*. radius)
       then 1
       else 0
 
-    KdNode elems axis split_val min_x max_x min_y max_y min_z max_z left right ->
+    KdNode x y z elems axis split_val min_x max_x min_y max_y min_z max_z left right ->
       -- Ported over from ASTBenchmarks
       let center_x  = (min_x .+. max_x) ./. 2.0
           center_y  = (min_y .+. max_y) ./. 2.0
@@ -291,19 +345,25 @@ countCorr_seq probe radius tr =
       in if (sum .-. boxsum) .<. (radius .*. radius)
          then let n1 = countCorr_seq probe radius left
                   n2 = countCorr_seq probe radius right
-              in n1 + n2
-         else 0
+              in if (dist probe (x, y, z)) .<. (radius .*. radius)
+                 then n1 + n2 + 1
+                 else n1 + n2
+         else
+             if (dist probe (x, y, z)) .<. (radius .*. radius)
+             then 1
+             else 0
 
 -- | Two point correlation
 countCorr_par :: Int -> (Float, Float, Float) -> Float -> KdTree -> Int
 countCorr_par cutoff probe radius tr =
   case tr of
+    KdEmpty -> 0
     KdLeaf x y z ->
       if (dist probe (x, y, z)) .<. (radius .*. radius)
       then 1
       else 0
 
-    KdNode elems axis split_val min_x max_x min_y max_y min_z max_z left right ->
+    KdNode x y z elems axis split_val min_x max_x min_y max_y min_z max_z left right ->
       if elems < cutoff then countCorr_seq probe radius tr else
       -- Ported over from ASTBenchmarks
       let center_x  = (min_x .+. max_x) ./. 2.0
@@ -322,5 +382,10 @@ countCorr_par cutoff probe radius tr =
          then let n1 = spawn (countCorr_par cutoff probe radius left)
                   n2 = countCorr_par cutoff probe radius right
                   _  = sync
-              in n1 + n2
-         else 0
+              in if (dist probe (x, y, z)) .<. (radius .*. radius)
+                 then n1 + n2 + 1
+                 else n1 + n2
+         else
+             if (dist probe (x, y, z)) .<. (radius .*. radius)
+             then 1
+             else 0
