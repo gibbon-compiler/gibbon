@@ -3,7 +3,7 @@ module KdTree where
 import Gibbon.Vector
 import Gibbon.Vector.Parallel
 
-import MergeSort
+-- import MergeSort
 
 coord :: Int -> (Float, Float, Float) -> Float
 coord axis pt =
@@ -51,11 +51,20 @@ sort axis ls =
 
 sort_par :: Int -> Vector (Float, Float, Float) -> Vector (Float, Float, Float)
 sort_par axis ls =
+    let ls2 = copy_par ls in
     if axis == 0
-    then mergeSort cmp1 ls
+    then inplacevsort ls2 cmp1
     else if axis == 1
-    then mergeSort cmp2 ls
-    else mergeSort cmp3 ls
+    then inplacevsort ls2 cmp2
+    else inplacevsort ls2 cmp3
+
+-- sort_par2 :: Int -> Vector (Float, Float, Float) -> Vector (Float, Float, Float)
+-- sort_par2 axis ls =
+--     if axis == 0
+--     then mergeSort cmp1 ls
+--     else if axis == 1
+--     then mergeSort cmp2 ls
+--     else mergeSort cmp3 ls
 
 --------------------------------------------------------------------------------
 -- The main algorithm
@@ -224,6 +233,15 @@ sumKdTree tr =
       let o = sumKdTree left
           p = sumKdTree right
       in o .+. p
+
+countLeaves :: KdTree -> Int
+countLeaves tr =
+  case tr of
+    KdLeaf _ _ _ -> 1
+    KdNode _ _ _ _ _ _ _ _ _ left right ->
+      let o = countLeaves left
+          p = countLeaves right
+      in o + p
 
 sumList0 :: Int -> Int -> Vector (Float, Float, Float) -> Float -> Float
 sumList0 i n ls acc =

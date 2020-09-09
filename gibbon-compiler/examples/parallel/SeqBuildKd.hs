@@ -12,4 +12,7 @@ gibbon_main =
         q = sumKdTree tr
         err = (q .-. p)
         _ = printsym (quote "Err: ")
-    in err
+        _ = printfloat err
+        _ = printsym (quote "\n")
+        c = countLeaves tr
+    in c
