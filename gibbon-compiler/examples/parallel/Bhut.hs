@@ -96,6 +96,14 @@ sumQtree tr =
         BH_Node x y m _ _ tr1 tr2 tr3 tr4 ->
             x .+. y .+. m .+. (sumQtree tr1) .+. (sumQtree tr2) .+. (sumQtree tr3) .+. (sumQtree tr4)
 
+sum_mass_points :: Vector (Float, Float, Float) -> Float
+sum_mass_points mpts =
+  foldl (\acc (pt :: (Float, Float, Float)) ->
+            let (x,y,z) = pt
+            in acc .+. x .+. y .+. z)
+    0.0
+    mpts
+
 myprintBHTree :: BH_Tree -> ()
 myprintBHTree bht =
     case bht of
@@ -361,6 +369,60 @@ debugPrint bht ps2 =
 
 --------------------------------------------------------------------------------
 
+check_buildquadtree :: Vector (Float, Float, Float) -> BH_Tree -> ()
+check_buildquadtree mpts bht =
+    let expected = sum_mass_points mpts
+        actual = sumQtree bht
+        _ = printsym (quote "Expected: ")
+        _ = printfloat expected
+        _ = printsym (quote "\n")
+        _ = printsym (quote "Actual: ")
+        _ = printfloat actual
+        _ = printsym (quote "\n")
+    in print_check (float_abs (expected .-. actual) .<. 0.01)
+
+accel_for :: (Float, Float, Float) -> Vector (Float, Float, Float) -> (Float, Float)
+accel_for query input =
+    foldl (\(acc :: (Float, Float)) (pt :: (Float, Float, Float)) ->
+                  let (aax, aay) = acc
+                      (x,y,m) = pt
+                      (ax,ay) = accel query x y m
+                  in (aax .+. ax, aay .+. ay))
+    (0.0, 0.0)
+    input
+
+check_bhut :: Vector (Float, Float, Float) -> Vector (Float, Float, Float, Float, Float) -> ()
+check_bhut input particles =
+    let
+        n = length input
+        checkpoints0 :: Vector Int
+        checkpoints0 = valloc 4
+        checkpoints1 = inplacevupdate checkpoints0 0 0
+        checkpoints2 = inplacevupdate checkpoints1 1 (div n 4)
+        checkpoints3 = inplacevupdate checkpoints2 2 (div n 2)
+        checkpoints4 = inplacevupdate checkpoints2 3 (n-1)
+        delta = foldl (\err idx ->
+                          let query = nth input idx
+                              (expected_ax,expected_ay) = accel_for query input
+                              (_,_,_,actual_ax,actual_ay) = nth particles idx
+                              _ = printsym (quote "Expected: ")
+                              _ = printfloat expected_ax
+                              _ = printsym (quote ",")
+                              _ = printfloat expected_ay
+                              _ = printsym (quote "\n")
+                              _ = printsym (quote "Actual: ")
+                              _ = printfloat actual_ax
+                              _ = printsym (quote ",")
+                              _ = printfloat actual_ay
+                              _ = printsym (quote "\n")
+                          in float_abs (expected_ax .-. actual_ax) .+. float_abs (expected_ay .-. actual_ay))
+                  0.0 checkpoints4
+
+    in print_check (delta .<. 0.01)
+
+
+{-
+
 pbbs_length :: Float -> Float -> Float
 pbbs_length x y = sqrt ((x .*. x) .+. (y .*. y))
 
@@ -409,3 +471,5 @@ check ps =
                  0.0
                  outer
     in err1 ./. (intToFloat nCheck)
+
+-}

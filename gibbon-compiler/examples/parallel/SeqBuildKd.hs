@@ -8,11 +8,4 @@ gibbon_main =
         n       = sizeParam
         radius  = intToFloat n
         tr      = iterate (fromList_seq pts)
-        p = sumList pts
-        q = sumKdTree tr
-        err = (q .-. p)
-        _ = printsym (quote "Err: ")
-        _ = printfloat err
-        _ = printsym (quote "\n")
-        c = countLeaves tr
-    in c
+    in check_buildkdtree pts tr

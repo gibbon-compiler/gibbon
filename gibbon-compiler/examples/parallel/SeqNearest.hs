@@ -9,5 +9,4 @@ gibbon_main =
         radius = intToFloat n
         tr     = fromList_seq pts
         nns = iterate (allNearest_seq tr pts)
-        -- _ = printVec (\p -> printPoint p) nns
-    in sumKdTree tr
+    in check_nearest pts nns radius

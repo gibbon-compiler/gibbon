@@ -39,4 +39,4 @@ gibbon_main =
       cutoff = 524288
       bht = buildQtree_seq box mpts
       particles1 = oneStep_par cutoff bht mpts particles
-  in check particles1
+  in check_bhut mpts particles1

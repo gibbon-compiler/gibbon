@@ -37,5 +37,4 @@ gibbon_main =
       box = (llx, lly, rux, ruy)
       bht = buildQtree_seq box mpts
       particles1 = oneStep_seq bht mpts particles
-      err = check particles1
-  in err
+  in check_bhut mpts particles1

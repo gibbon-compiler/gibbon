@@ -34,6 +34,12 @@ min a b = if a .<. b then a else b
 max :: Float -> Float -> Float
 max a b = if a .>. b then a else b
 
+eqPt :: (Float, Float, Float) -> (Float, Float, Float) -> Bool
+eqPt a b =
+    let (ax,ay,az) = a
+        (bx,by,bz) = b
+    in ax .==. bx && ay .==. by && az .==. bz
+
 cmp1 :: (Float, Float, Float) -> (Float, Float, Float) -> Int
 cmp1 a b =
     let (ax,_,_) = a
@@ -197,7 +203,7 @@ fromListWithAxis_seq axis pts =
              max_y      = max (getMaxY left_tr) (getMaxY right_tr)
              min_z      = min (getMinZ left_tr) (getMinZ right_tr)
              max_z      = max (getMaxZ left_tr) (getMaxZ right_tr)
-             total_elems= (getElems left_tr) + (getElems right_tr)
+             total_elems= (getElems left_tr) + (getElems right_tr) + 1
          in KdNode x y z total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
@@ -225,7 +231,7 @@ fromListWithAxis_par cutoff axis pts =
              max_y      = max y (max (getMaxY left_tr) (getMaxY right_tr))
              min_z      = min z (min (getMinZ left_tr) (getMinZ right_tr))
              max_z      = max z (max (getMaxZ left_tr) (getMaxZ right_tr))
-             total_elems= (getElems left_tr) + (getElems right_tr)
+             total_elems= (getElems left_tr) + (getElems right_tr) + 1
          in KdNode x y z total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
@@ -269,6 +275,9 @@ find_nearest pivot query tst_pivot tst_query good_side other_side =
               best1 = least_dist query candidate1 candidate2
           in best1
      else candidate1
+  -- in let candidate2 = nearest other_side query
+  --        best1 = least_dist query candidate1 candidate2
+  --    in best1
 
 -- | Return the point that is closest to a
 least_dist :: (Float, Float, Float) -> (Float, Float, Float) -> (Float, Float, Float) -> (Float, Float, Float)
@@ -389,3 +398,52 @@ countCorr_par cutoff probe radius tr =
              if (dist probe (x, y, z)) .<. (radius .*. radius)
              then 1
              else 0
+
+--------------------------------------------------------------------------------
+
+check_buildkdtree :: Vector (Float, Float, Float) -> KdTree -> ()
+check_buildkdtree pts tr =
+    let p = sumList pts
+        q = sumKdTree tr
+        err = (q .-. p)
+    in print_check (float_abs (q .-. p) .<. 0.01)
+
+check_countcorr :: Vector (Float, Float, Float) -> (Float, Float, Float) -> Int -> Float -> ()
+check_countcorr pts query actual radius =
+    let radius_sq = radius .*. radius
+        expected = foldl (\acc pt  ->
+                             if (dist query pt) .<. radius_sq
+                             then acc + 1
+                             else acc)
+                   0 pts
+        _ = printsym (quote "Expected: ")
+        _ = printint expected
+        _ = printsym (quote "\n")
+        _ = printsym (quote "Actual: ")
+        _ = printint actual
+        _ = printsym (quote "\n")
+    in print_check (expected == actual)
+
+check_nearest :: Vector (Float, Float, Float) -> Vector (Float, Float, Float) -> Float -> ()
+check_nearest pts actual radius =
+    let n = length pts
+        idxs = generate n (\i -> i)
+        radius_sq = radius .*. radius
+        tup = foldl (\(acc :: (Bool, Int, Int)) i ->
+                         let pt = nth pts i
+                             nn = nth actual i
+                             (acc_b, acc_inexact, acc_not_near) = acc
+                         in if eqPt pt nn
+                            then (acc_b && True, acc_inexact, acc_not_near)
+                            else if (dist pt nn) .<. radius_sq
+                                 then (acc_b && True, acc_inexact+1, acc_not_near)
+                                 else (False, acc_inexact+1, acc_not_near+1))
+              (True, 0, 0) idxs
+        (is_ok, inexact, not_near) = tup
+        _ = printsym (quote "Inexact: ")
+        _ = printint inexact
+        _ = printsym (quote "\n")
+        _ = printsym (quote "Not near: ")
+        _ = printint not_near
+        _ = printsym (quote "\n")
+    in print_check is_ok

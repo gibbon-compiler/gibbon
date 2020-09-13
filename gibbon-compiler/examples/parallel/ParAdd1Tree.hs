@@ -7,4 +7,4 @@ gibbon_main =
       x = mkTree_seq n
       cutoff = 19
       y = iterate (add1Tree_par cutoff x)
-  in (sumTree_seq y)
+  in check_add1tree n y

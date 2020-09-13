@@ -1,5 +1,6 @@
 module BinTree where
 
+import Gibbon.Prelude
 import Fib
 
 data Tree = Leaf Int
@@ -10,7 +11,7 @@ data Tree = Leaf Int
 mkTree_seq :: Int -> Tree
 mkTree_seq i =
   if i <= 0
-  then Leaf 6765
+  then Leaf 1
   else
       let x = mkTree_seq (i-1)
           y = mkTree_seq (i-1)
@@ -60,7 +61,7 @@ add1Tree_seq tr =
     Node i l r ->
       let l1 = (add1Tree_seq l)
           r1 = (add1Tree_seq r)
-      in Node (i+1) l1 r1
+      in Node i l1 r1
 
 add1Tree_par :: Int -> Tree -> Tree
 add1Tree_par cutoff tr =
@@ -73,7 +74,7 @@ add1Tree_par cutoff tr =
         let l1 = spawn (add1Tree_par cutoff l)
             r1 = (add1Tree_par cutoff r)
             _  = sync
-        in Node (i+1) l1 r1
+        in Node i l1 r1
 
 -- sum
 
@@ -84,7 +85,7 @@ sumTree_seq foo =
     Node i a b ->
       let x = sumTree_seq a
           y = sumTree_seq b
-      in i + x + y
+      in x + y
 
 sumTree_par :: Int -> Tree -> Int
 sumTree_par cutoff foo =
@@ -97,4 +98,33 @@ sumTree_par cutoff foo =
           let x = spawn (sumTree_par cutoff a)
               y = sumTree_par cutoff b
               _ = sync
-          in i + x + y
+          in x + y
+
+--------------------------------------------------------------------------------
+
+check_buildfib :: Int -> Tree -> Int
+check_buildfib n tr =
+    let expected = (2 ^ n) * (fib_seq 20)
+        actual = sumTree_seq tr
+        _ = print_check (expected == actual)
+    in actual
+
+check_buildtree :: Int -> Tree -> Int
+check_buildtree n tr =
+    let expected = (2 ^ n)
+        actual = sumTree_seq tr
+        _ = print_check (expected == actual)
+    in actual
+
+check_add1tree :: Int -> Tree -> Int
+check_add1tree n tr =
+    let expected = (2 ^ n) * 2
+        actual = sumTree_seq tr
+        _ = print_check (expected == actual)
+    in actual
+
+check_sumtree :: Int -> Int -> Int
+check_sumtree n actual =
+    let expected = (2 ^ n)
+        _ = print_check (expected == actual)
+    in actual

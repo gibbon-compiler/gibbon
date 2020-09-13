@@ -87,3 +87,16 @@ payA_par depth amt coins =
                     _ = vfree coins1
                     _ = vfree2 coins_rst
                 in Append left right
+
+check_coins :: Int -> AList -> ()
+check_coins amt tr =
+    let n = lenA tr in
+    if amt == 777
+    then print_check (n == 140899)
+    else if amt == 999
+    then print_check (n == 329565)
+    -- assume its correct
+    else
+        let _ = printint n
+            _ = printsym (quote "\n")
+        in print_check True

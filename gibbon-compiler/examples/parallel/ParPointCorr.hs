@@ -10,7 +10,10 @@ gibbon_main =
         -- 524288 == 2^19
         cutoff  = 524288
         tr      = fromList_seq pts
-    in iterate (let i     = rand
-                    j     = (mod i n) - 1
-                    probe = nth pts j
-                in countCorr_par cutoff probe radius tr)
+        tup =  iterate (let i     = rand
+                            j     = (mod i n) - 1
+                            probe = nth pts j
+                            corr = countCorr_seq probe radius tr
+                        in (probe, corr))
+        (query, actual) = tup
+    in check_countcorr pts query actual radius

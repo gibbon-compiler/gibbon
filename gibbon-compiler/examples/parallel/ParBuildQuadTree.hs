@@ -22,5 +22,4 @@ gibbon_main =
       box = (llx, lly, rux, ruy)
       cutoff = 524288
       tr = timeit (buildQtree_par cutoff box mpts)
-  -- in sumQtree tr
-  in 0.0
+  in check_buildquadtree mpts tr
