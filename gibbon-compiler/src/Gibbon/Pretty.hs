@@ -201,7 +201,7 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       RequestSizeOf  -> text "RequestSizeOf"
                                       ErrorP str ty  -> text "ErrorP" <> wty ty <+> doubleQuotes (text str) <> space
                                       ReadPackedFile mb_fp tycon _ _ ->
-                                        text "readFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
+                                        text "readPackedFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
                                       VAllocP ty -> parens $ text "valloc" <+> doublecolon <+> brackets (pprintWithStyle sty ty)
                                       VFreeP _ty -> parens $ text "vfree"
                                       VFree2P _ty-> parens $ text "vfree2"
@@ -223,7 +223,7 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       RequestEndOf   -> text "RequestEndOf"
                                       ErrorP str _ty -> text "error" <> doubleQuotes (text str)
                                       ReadPackedFile mb_fp tycon _ _ ->
-                                        text "readFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
+                                        text "readPackedFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
                                       _ -> error $ "pprint: Unknown primitive: " ++ show pr
               Just str -> text str
 

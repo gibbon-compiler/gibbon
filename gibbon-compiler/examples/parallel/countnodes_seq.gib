@@ -120,3 +120,7 @@
      (+ tag (+ (loopSyms ls) scalarcost))]
     [(F3 s)
      (+ tag scalarcost)]))
+
+(let ([e : Toplvl (read-packed-file Toplvl)])
+  (let ([n : Int (iterate (countnodes e))])
+    n))

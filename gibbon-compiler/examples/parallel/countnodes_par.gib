@@ -147,3 +147,7 @@
            (+ conscost (+ ctl cls)))]
         [(NULLTOPLVL)
          nullcost])))
+
+(let ([e (read-packed-file Toplvl)])
+  (let ([n (iterate (par-countnodes e))])
+    n))

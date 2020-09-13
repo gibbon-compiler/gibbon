@@ -342,6 +342,8 @@ exp se =
 
    Ls [A _ "void"] -> pure $ MkProdE []
 
+   Ls [] -> pure $ MkProdE []
+
    Ls ((A l "and") : args)  -> go args
      where
        go :: [Sexp] -> PassM Exp0
@@ -452,6 +454,19 @@ exp se =
        ie <- exp i
        ee <- exp e
        pure $ Ext $ L (toLoc l0) $ PrimAppE IsBig [ie, ee]
+
+   Ls2 _ "read-packed-file" (A _ tycon) -> do
+       let tcon = T.unpack tycon
+           ty = PackedTy tcon []
+       pure $ PrimAppE (ReadPackedFile Nothing tcon Nothing ty) []
+
+   Ls3 _l0 "read-packed-file" (A _ tycon) e -> do
+       let tcon = T.unpack tycon
+           ty = PackedTy tcon []
+       case e of
+           G _ (HSString str) -> pure $ PrimAppE (ReadPackedFile (Just (T.unpack str)) (T.unpack tycon) Nothing ty) []
+           A _ str -> pure $ PrimAppE (ReadPackedFile (Just (T.unpack str)) (T.unpack tycon) Nothing ty) []
+           _ -> error $ "Counldn't parse read-packed-file" ++ show se
 
    Ls3 l "letarena" v e -> do
      e' <- exp e
