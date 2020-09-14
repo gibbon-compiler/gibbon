@@ -14,4 +14,5 @@ gibbon_main =
         amt = sizeParam
         tr = iterate (payA_par 3 amt coins0)
         _ = vfree coins6
-    in check_coins amt tr
+    -- in check_coins amt tr
+    in 0

@@ -21,4 +21,5 @@ gibbon_main =
       ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 1) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       box = (llx, lly, rux, ruy)
       tr = iterate (buildQtree_seq box mpts)
-  in check_buildquadtree mpts tr
+  -- in check_buildquadtree mpts tr
+  in 0

@@ -13,7 +13,7 @@ gibbon_main =
         tup =  iterate (let i     = rand
                             j     = (mod i n) - 1
                             probe = nth pts j
-                            corr = countCorr_seq probe radius tr
+                            corr = countCorr_par probe radius tr
                         in (probe, corr))
         (query, actual) = tup
     in check_countcorr pts query actual radius
