@@ -475,6 +475,7 @@ recoverType ddfs env2 ex =
         MkFalse -> BoolTy
         Gensym  -> SymTy0
         SizeParam      -> IntTy
+        BenchProgParam -> SymTy0
         IsBig          -> BoolTy
         DictHasKeyP _  -> BoolTy
         DictEmptyP ty  -> SymDictTy Nothing ty

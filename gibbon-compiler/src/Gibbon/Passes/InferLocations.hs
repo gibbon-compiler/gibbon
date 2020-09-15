@@ -1596,6 +1596,7 @@ prim p = case p of
            MkFalse -> return MkFalse
            Gensym  -> return Gensym
            SizeParam -> return SizeParam
+           BenchProgParam -> return BenchProgParam
            IsBig    -> return IsBig
            PrintInt -> return PrintInt
            PrintFloat -> return PrintFloat

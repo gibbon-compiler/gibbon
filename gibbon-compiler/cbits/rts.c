@@ -417,6 +417,9 @@ IntTy expll(IntTy base, IntTy pow) {
 // Invariant: should always be equal to max(sym_table_keys)
 static SymTy global_gensym_counter = 0;
 
+// Its value is updated by the flags parser.
+static SymTy global_bench_prog_param = -2;
+
 static SymTy newline_symbol = -1;
 static SymTy space_symbol = -1;
 static SymTy comma_symbol = -1;
@@ -481,7 +484,7 @@ IntTy print_symbol(SymTy idx) {
     return printf(")");
   } else {
     struct SymTable_elem *s;
-    HASH_FIND(hh, global_sym_table, &idx, sizeof(IntTy), s);
+    HASH_FIND(hh, global_sym_table, &idx, sizeof(SymTy), s);
     return printf("%s", s->value);
   }
 }
@@ -493,6 +496,15 @@ SymTy gensym() {
     sprintf(value, "gensym_%lld",idx);
     add_symbol(idx, value);
     return idx;
+}
+
+// CSK: This is terrible, symbol equality should just be ==.
+BoolTy eqsym(SymTy s1, SymTy s2) {
+    struct SymTable_elem *se1;
+    HASH_FIND(hh, global_sym_table, &s1, sizeof(SymTy), se1);
+    struct SymTable_elem *se2;
+    HASH_FIND(hh, global_sym_table, &s2, sizeof(SymTy), se2);
+    return (strcmp (se1->value, se2->value) == 0);
 }
 
 void free_symtable() {
@@ -1045,6 +1057,12 @@ int main(int argc, char** argv)
         }
         else if (strcmp(argv[i], "--array-input-length") == 0 && i < argc - 1) {
             global_arrayfile_length_param = atoll(argv[i+1]);
+            i++;
+        }
+        else if (strcmp(argv[i], "--bench-prog") == 0 && i < argc - 1) {
+            global_gensym_counter += 1;
+            global_bench_prog_param = global_gensym_counter;
+            add_symbol(global_bench_prog_param, argv[i+1]);
             i++;
         }
         // If present, we expect the two arguments to be <size> <iters>

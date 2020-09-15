@@ -668,6 +668,11 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  AndP -> let [(outV,outT)] = bnds
                              [pleft,pright] = rnds in pure
                         [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($(codegenTriv venv pleft) && $(codegenTriv venv pright)); |]]
+
+                 EqSymP -> let [(outV,outT)] = bnds
+                               [pleft,pright] = rnds in pure
+                           [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = eqsym($(codegenTriv venv pleft), $(codegenTriv venv pright)); |]]
+
                  DictInsertP _ -> let [(outV,ty)] = bnds
                                       [(VarTriv arena),(VarTriv dict),keyTriv,valTriv] = rnds in pure
                     [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_ptr($id:arena, $id:dict, $(codegenTriv venv keyTriv), $(codegenTriv venv valTriv)); |] ]
@@ -808,6 +813,9 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  SizeParam -> let [(outV,IntTy)] = bnds in pure
                       [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = global_size_param; |] ]
+
+                 BenchProgParam -> let [(outV,SymTy)] = bnds in pure
+                      [ C.BlockDecl [cdecl| $ty:(codegenTy SymTy) $id:outV = global_bench_prog_param; |] ]
 
                  PrintInt ->
                      let [arg] = rnds in

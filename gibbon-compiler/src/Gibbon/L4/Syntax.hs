@@ -195,6 +195,7 @@ data Prim
     = AddP | SubP | MulP
     | DivP | ModP
     | EqP | LtP | GtP | LtEqP | GtEqP
+    | EqSymP
     | ExpP
     | RandP
     | FRandP
@@ -202,6 +203,7 @@ data Prim
     | FloatToIntP
     | IntToFloatP
     | SizeParam
+    | BenchProgParam
     | OrP | AndP
     | DictInsertP Ty -- ^ takes k,v,dict
     | DictLookupP Ty -- ^ takes k,dict, errors if absent

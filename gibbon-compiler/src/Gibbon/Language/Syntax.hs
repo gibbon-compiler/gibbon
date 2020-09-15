@@ -403,6 +403,7 @@ data Prim ty
               --   To avoid needing inference, this is labeled with a return type.
 
           | SizeParam
+          | BenchProgParam
 
           | IsBig   -- ^ Check the size of constructors with size.
 

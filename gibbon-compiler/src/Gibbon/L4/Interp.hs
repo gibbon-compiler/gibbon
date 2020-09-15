@@ -216,6 +216,7 @@ applyPrim PrintInt [IntVal i] = do print i; return []
 applyPrim (PrintString st) [] = do putStrLn st; return []
 
 applyPrim SizeParam [] = error "TargetInterp/applyPrim: finish SizeParam"
+applyPrim BenchProgParam [] = error "TargetInterp/applyPrim: finish BenchProgParam"
 applyPrim ScopedBuffer{} [] = error "TargetInterp/applyPrim: finish ScopedBuf"
 applyPrim GetFirstWord [] = error "TargetInterp/applyPrim: finish GetFirstWord"
 

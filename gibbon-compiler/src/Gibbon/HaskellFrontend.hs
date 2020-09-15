@@ -360,6 +360,7 @@ primMap = M.fromList
   , ("intToFloat", IntToFloatP)
   , ("floatToInt", FloatToIntP)
   , ("sizeParam", SizeParam)
+  , ("benchProgParam", BenchProgParam)
   , ("getNumProcessors", GetNumProcessors)
   , ("True", MkTrue)
   , ("False", MkFalse)
@@ -398,6 +399,8 @@ desugarExp toplevel e =
       then pure SyncE
       else if v == "sizeParam"
       then pure $ PrimAppE SizeParam []
+      else if v == "benchProgParam"
+      then pure $ PrimAppE BenchProgParam []
       else if v == "getNumProcessors"
       then pure $ PrimAppE GetNumProcessors []
       else if v == "empty_set"

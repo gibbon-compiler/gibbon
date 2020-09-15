@@ -552,6 +552,7 @@ primArgsTy p =
     MkTrue  -> []
     MkFalse -> []
     SizeParam        -> []
+    BenchProgParam   -> []
     IsBig            -> [IntTy, PackedTy "HOLE" _error]
     DictEmptyP _ty   -> []
     DictInsertP _ty  -> error "primArgsTy: dicts not handled yet"
@@ -627,6 +628,7 @@ primRetTy p =
     MkTrue  -> BoolTy
     MkFalse -> BoolTy
     SizeParam      -> IntTy
+    BenchProgParam -> SymTy
     IsBig          -> BoolTy
     DictHasKeyP _  -> BoolTy
     DictEmptyP ty  -> SymDictTy Nothing $ stripTyLocs ty

@@ -960,7 +960,7 @@ prim p =
     IntToFloatP -> T.IntToFloatP
     RandP -> T.RandP
     Gensym -> T.Gensym
-    EqSymP -> T.EqP
+    EqSymP -> T.EqSymP
     EqIntP -> T.EqP
     EqFloatP -> T.EqP
     LtP    -> T.LtP
@@ -974,6 +974,7 @@ prim p =
     OrP    -> T.OrP
     AndP   -> T.AndP
     SizeParam -> T.SizeParam
+    BenchProgParam -> T.BenchProgParam
     IsBig    -> T.IsBig
     PrintInt -> T.PrintInt
     PrintFloat -> T.PrintFloat
