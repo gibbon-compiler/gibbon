@@ -22,8 +22,8 @@ type Box = ( Float, Float, Float, Float)
 
 -}
 
-printPoint :: (Float, Float) -> ()
-printPoint tup =
+print2dPoint :: (Float, Float) -> ()
+print2dPoint tup =
     let (a,b) = tup
         _ = printsym (quote "(")
         _ = printfloat a
@@ -129,31 +129,31 @@ myprintBHTree bht =
                 _ = printsym (quote ") ")
             in ()
 
-getX :: BH_Tree -> Float
-getX tr =
+getx_qtree :: BH_Tree -> Float
+getx_qtree tr =
   case tr of
     BH_Empty                  -> 0.0
     BH_Leaf x _ _             -> x
     BH_Node x _ _ _ _ _ _ _ _ -> x
 
-getY :: BH_Tree -> Float
-getY tr =
+gety_qtree :: BH_Tree -> Float
+gety_qtree tr =
   case tr of
     BH_Empty                  -> 0.0
     BH_Leaf _ y _             -> y
     BH_Node _ y _ _ _ _ _ _ _ -> y
 
-getTotalPoints :: BH_Tree -> Int
-getTotalPoints tr =
+getTotalPoints_qtree :: BH_Tree -> Int
+getTotalPoints_qtree tr =
   case tr of
     BH_Empty                  -> 0
     BH_Leaf _ _ _             -> 1
     BH_Node _ _ _ n _ _ _ _ _ -> n
 
 -- | Distance between two points
-dist :: (Float, Float) -> (Float, Float) -> Float
-{-# INLINE dist #-}
-dist a b =
+dist2d :: (Float, Float) -> (Float, Float) -> Float
+{-# INLINE dist2d #-}
+dist2d a b =
   let (a_x, a_y) = a
       (b_x, b_y) = b
       d1 = (a_x .-. b_x)
@@ -172,7 +172,7 @@ applyAccel particle accel =
 isClose :: (Float, Float) -> (Float, Float) -> Float -> Bool
 {-# INLINE isClose #-}
 isClose a b size =
-    let r2 = dist a b
+    let r2 = dist2d a b
         sizesq = size .*. size
     in r2 .<. sizesq
 
@@ -312,8 +312,8 @@ buildQtree_seq box mpts =
                 p4 = masspointsInBox_seq b4 mpts
                 tr4 = buildQtree_seq b4 p4
                 total_points =
-                    (getTotalPoints tr1) + (getTotalPoints tr2) +
-                    (getTotalPoints tr3) + (getTotalPoints tr4)
+                    (getTotalPoints_qtree tr1) + (getTotalPoints_qtree tr2) +
+                    (getTotalPoints_qtree tr3) + (getTotalPoints_qtree tr4)
                 size = maxDim box
                 (x,y,m) = mpt
             in BH_Node x y m total_points size tr1 tr2 tr3 tr4
@@ -351,8 +351,8 @@ buildQtree_par cutoff box mpts =
                 tr4 = buildQtree_par cutoff b4 p4
                 _ = sync
                 total_points =
-                    (getTotalPoints tr1) + (getTotalPoints tr2) +
-                    (getTotalPoints tr3) + (getTotalPoints tr4)
+                    (getTotalPoints_qtree tr1) + (getTotalPoints_qtree tr2) +
+                    (getTotalPoints_qtree tr3) + (getTotalPoints_qtree tr4)
                 size = maxDim box
             in BH_Node x y m total_points size tr1 tr2 tr3 tr4
 
@@ -366,6 +366,35 @@ debugPrint bht ps2 =
                             in ()) ps2
         _ = printsym (quote "\n")
     in ()
+
+
+oneStep_seq :: BH_Tree
+            -> Vector (Float, Float, Float)
+            -> Vector (Float, Float, Float, Float, Float)
+            -> Vector (Float, Float, Float, Float, Float)
+oneStep_seq bht mpts ps =
+    let ps2 = iterate (generate (length ps)
+                       (\i ->
+                            let p = nth ps i
+                                mpt = nth mpts i
+                                accel = calcAccel_seq mpt bht
+                            in applyAccel p accel))
+    in ps2
+
+oneStep_par :: Int
+            -> BH_Tree
+            -> Vector (Float, Float, Float)
+            -> Vector (Float, Float, Float, Float, Float)
+            -> Vector (Float, Float, Float, Float, Float)
+oneStep_par cutoff bht mpts ps =
+    let ps2 = iterate (generate_par (length ps)
+                       (\i ->
+                            let p = nth ps i
+                                mpt = nth mpts i
+                                -- accel = calcAccel_par cutoff mpt bht
+                                accel = calcAccel_seq mpt bht
+                            in applyAccel p accel))
+    in ps2
 
 --------------------------------------------------------------------------------
 

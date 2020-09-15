@@ -102,29 +102,36 @@ sumTree_par cutoff foo =
 
 --------------------------------------------------------------------------------
 
-check_buildfib :: Int -> Tree -> Int
+check_buildfib :: Int -> Tree -> ()
 check_buildfib n tr =
     let expected = (2 ^ n) * (fib_seq 20)
         actual = sumTree_seq tr
         _ = print_check (expected == actual)
-    in actual
+        _ = printint actual
+        _ = printsym (quote "\n")
+    in ()
 
-check_buildtree :: Int -> Tree -> Int
+check_buildtree :: Int -> Tree -> ()
 check_buildtree n tr =
     let expected = (2 ^ n)
         actual = sumTree_seq tr
         _ = print_check (expected == actual)
-    in actual
+        _ = printint actual
+        _ = printsym (quote "\n")
+    in ()
 
-check_add1tree :: Int -> Tree -> Int
+check_add1tree :: Int -> Tree -> ()
 check_add1tree n tr =
     let expected = (2 ^ n) * 2
         actual = sumTree_seq tr
-        _ = print_check (expected == actual)
-    in actual
+        _ = printint actual
+        _ = printsym (quote "\n")
+    in ()
 
-check_sumtree :: Int -> Int -> Int
+check_sumtree :: Int -> Int -> ()
 check_sumtree n actual =
     let expected = (2 ^ n)
         _ = print_check (expected == actual)
-    in actual
+        _ = printint actual
+        _ = printsym (quote "\n")
+    in ()

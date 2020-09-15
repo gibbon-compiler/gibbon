@@ -13,8 +13,8 @@ coord axis pt =
   then pt !!! 1
   else pt !!! 2
 
-printPoint :: (Float, Float, Float) -> ()
-printPoint tup =
+print3dPoint :: (Float, Float, Float) -> ()
+print3dPoint tup =
     let (a,b,c) = tup
         _ = printsym (quote "(")
         _ = printfloat a
@@ -152,29 +152,29 @@ getMaxZ tr =
     KdLeaf _ _ z                     -> z
 
 
-getElems :: KdTree -> Int
-getElems tr =
+getElems_kdtree :: KdTree -> Int
+getElems_kdtree tr =
   case tr of
     KdEmpty -> 0
     KdNode _ _ _ elems _ _ _ _ _ _ _ _ _ _ -> elems
     KdLeaf _ y _                     -> 1
 
-getX :: KdTree -> Float
-getX tr =
+getx_kdtree :: KdTree -> Float
+getx_kdtree tr =
     case tr of
         KdEmpty -> 0.0
         KdNode x _ _ _ _ _ _ _ _ _ _ _ _ _ -> x
         KdLeaf x _ _                       -> x
 
-getY :: KdTree -> Float
-getY tr =
+gety_kdtree :: KdTree -> Float
+gety_kdtree tr =
     case tr of
         KdEmpty -> 0.0
         KdNode _ y _ _ _ _ _ _ _ _ _ _ _ _ -> y
         KdLeaf _ y _                       -> y
 
-getZ :: KdTree -> Float
-getZ tr =
+getz_kdtree :: KdTree -> Float
+getz_kdtree tr =
     case tr of
         KdEmpty -> 0.0
         KdNode _ _ z _ _ _ _ _ _ _ _ _ _ _ -> z
@@ -203,7 +203,7 @@ fromListWithAxis_seq axis pts =
              max_y      = max (getMaxY left_tr) (getMaxY right_tr)
              min_z      = min (getMinZ left_tr) (getMinZ right_tr)
              max_z      = max (getMaxZ left_tr) (getMaxZ right_tr)
-             total_elems= (getElems left_tr) + (getElems right_tr) + 1
+             total_elems= (getElems_kdtree left_tr) + (getElems_kdtree right_tr) + 1
          in KdNode x y z total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
@@ -231,7 +231,7 @@ fromListWithAxis_par cutoff axis pts =
              max_y      = max y (max (getMaxY left_tr) (getMaxY right_tr))
              min_z      = min z (min (getMinZ left_tr) (getMinZ right_tr))
              max_z      = max z (max (getMaxZ left_tr) (getMaxZ right_tr))
-             total_elems= (getElems left_tr) + (getElems right_tr) + 1
+             total_elems= (getElems_kdtree left_tr) + (getElems_kdtree right_tr) + 1
          in KdNode x y z total_elems axis (coord axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
@@ -270,7 +270,7 @@ find_nearest pivot query tst_pivot tst_query good_side other_side =
       -- whether the difference between the splitting coordinate of the search point and current node
       -- is less than the distance (overall coordinates) from the search point to the current best.
       nearest_other_side = tst_query .-. tst_pivot
-  in if (nearest_other_side .*. nearest_other_side) .<=. (dist query candidate1)
+  in if (nearest_other_side .*. nearest_other_side) .<=. (dist3d query candidate1)
      then let candidate2 = nearest other_side query
               best1 = least_dist query candidate1 candidate2
           in best1
@@ -282,8 +282,8 @@ find_nearest pivot query tst_pivot tst_query good_side other_side =
 -- | Return the point that is closest to a
 least_dist :: (Float, Float, Float) -> (Float, Float, Float) -> (Float, Float, Float) -> (Float, Float, Float)
 least_dist a b c =
-  let d1 = dist a b
-      d2 = dist a c
+  let d1 = dist3d a b
+      d2 = dist3d a c
   in if d1 .<. d2 then b else c
 
 --------------------------------------------------------------------------------
@@ -316,8 +316,8 @@ sumList ls = foldl (\acc (pt :: (Float, Float, Float)) ->
                    0.0 ls
 
 -- | Distance between two points
-dist :: (Float, Float, Float) -> (Float, Float, Float) -> Float
-dist a b =
+dist3d :: (Float, Float, Float) -> (Float, Float, Float) -> Float
+dist3d a b =
   let (a_x, a_y, a_z) = a
       (b_x, b_y, b_z) = b
       d1 = (a_x .-. b_x)
@@ -333,7 +333,7 @@ countCorr_seq probe radius tr =
     KdEmpty -> 0
 
     KdLeaf x y z ->
-      if (dist probe (x, y, z)) .<. (radius .*. radius)
+      if (dist3d probe (x, y, z)) .<. (radius .*. radius)
       then 1
       else 0
 
@@ -354,11 +354,11 @@ countCorr_seq probe radius tr =
       in if (sum .-. boxsum) .<. (radius .*. radius)
          then let n1 = countCorr_seq probe radius left
                   n2 = countCorr_seq probe radius right
-              in if (dist probe (x, y, z)) .<. (radius .*. radius)
+              in if (dist3d probe (x, y, z)) .<. (radius .*. radius)
                  then n1 + n2 + 1
                  else n1 + n2
          else
-             if (dist probe (x, y, z)) .<. (radius .*. radius)
+             if (dist3d probe (x, y, z)) .<. (radius .*. radius)
              then 1
              else 0
 
@@ -368,7 +368,7 @@ countCorr_par cutoff probe radius tr =
   case tr of
     KdEmpty -> 0
     KdLeaf x y z ->
-      if (dist probe (x, y, z)) .<. (radius .*. radius)
+      if (dist3d probe (x, y, z)) .<. (radius .*. radius)
       then 1
       else 0
 
@@ -391,11 +391,11 @@ countCorr_par cutoff probe radius tr =
          then let n1 = spawn (countCorr_par cutoff probe radius left)
                   n2 = countCorr_par cutoff probe radius right
                   _  = sync
-              in if (dist probe (x, y, z)) .<. (radius .*. radius)
+              in if (dist3d probe (x, y, z)) .<. (radius .*. radius)
                  then n1 + n2 + 1
                  else n1 + n2
          else
-             if (dist probe (x, y, z)) .<. (radius .*. radius)
+             if (dist3d probe (x, y, z)) .<. (radius .*. radius)
              then 1
              else 0
 
@@ -412,7 +412,7 @@ check_countcorr :: Vector (Float, Float, Float) -> (Float, Float, Float) -> Int 
 check_countcorr pts query actual radius =
     let radius_sq = radius .*. radius
         expected = foldl (\acc pt  ->
-                             if (dist query pt) .<. radius_sq
+                             if (dist3d query pt) .<. radius_sq
                              then acc + 1
                              else acc)
                    0 pts
@@ -435,7 +435,7 @@ check_nearest pts actual radius =
                              (acc_b, acc_inexact, acc_not_near) = acc
                          in if eqPt pt nn
                             then (acc_b && True, acc_inexact, acc_not_near)
-                            else if (dist pt nn) .<. radius_sq
+                            else if (dist3d pt nn) .<. radius_sq
                                  then (acc_b && True, acc_inexact+1, acc_not_near)
                                  else (False, acc_inexact+1, acc_not_near+1))
               (True, 0, 0) idxs
