@@ -500,6 +500,9 @@ SymTy gensym() {
 
 // CSK: This is terrible, symbol equality should just be ==.
 BoolTy eqsym(SymTy s1, SymTy s2) {
+    if (s1 == s2) {
+        return true;
+    }
     struct SymTable_elem *se1;
     HASH_FIND(hh, global_sym_table, &s1, sizeof(SymTy), se1);
     struct SymTable_elem *se2;
