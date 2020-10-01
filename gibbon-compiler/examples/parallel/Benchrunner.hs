@@ -5,6 +5,7 @@ import BinTree
 import KdTree
 import Bhut
 import Coins
+import Countnodes
 
 --------------------------------------------------------------------------------
 
@@ -288,10 +289,24 @@ bench_parcoins =
     in ()
 
 bench_seqcountnodes :: ()
-bench_seqcountnodes = ()
+bench_seqcountnodes =
+  let e = readPackedFile (@Toplvl, ())
+      -- to ensure that mmap'd stuff is in memory.
+      _ = countNodesSeq e
+      n = iterate (countNodesSeq e)
+      _ = printint n
+      _ = printsym (quote "\n")
+  in ()
 
 bench_parcountnodes :: ()
-bench_parcountnodes = ()
+bench_parcountnodes =
+  let e = readPackedFile (@Toplvl, ())
+      -- to ensure that mmap'd stuff is in memory.
+      _ = countNodesPar e
+      n = iterate (countNodesPar e)
+      _ = printint n
+      _ = printsym (quote "\n")
+  in ()
 
 gibbon_main =
     if prog_is (quote "seqfib")

@@ -66,7 +66,9 @@ emptyParseState = ParseState M.empty
 
 parseMode :: ParseMode
 parseMode = defaultParseMode { extensions = [ EnableExtension ScopedTypeVariables
-                                            , EnableExtension CPP ]
+                                            , EnableExtension CPP
+                                            , EnableExtension TypeApplications
+                                            ]
                                             ++ (extensions defaultParseMode)
                              }
 
@@ -446,15 +448,14 @@ desugarExp toplevel e =
                          _ -> error $ "desugarExp: couldn't parse readArrayFile; " ++ prettyPrint e2
                   else if f == "readPackedFile"
                   then case e2 of
-                         Tuple _ Boxed [Lit _ tycon, Lit _ name] -> do
-                           let tcon = litToString tycon
-                               t = PackedTy tcon []
-                           pure $ PrimAppE (ReadPackedFile (Just (litToString name)) tcon Nothing t) []
-                         Tuple _ Boxed [Lit _ tycon, Con _ (Special _ (UnitCon _))] -> do
-                           let tcon = litToString tycon
-                               t = PackedTy tcon []
-                           pure $ PrimAppE (ReadPackedFile Nothing (litToString tycon) Nothing t) []
-                         _ -> error $ "desugarExp: couldn't parse readPackedFile; " ++ prettyPrint e2
+                         Tuple _ Boxed [TypeApp _ (TyCon _ (UnQual _ (Ident _ con))), Lit _ name] -> do
+                           let ty = PackedTy con []
+                           pure $ PrimAppE (ReadPackedFile (Just (litToString name)) con Nothing ty) []
+                         Tuple _ Boxed [TypeApp _ (TyCon _ (UnQual _ (Ident _ con))),
+                                        Con _ (Special _ (UnitCon _))] -> do
+                           let ty = PackedTy con []
+                           pure $ PrimAppE (ReadPackedFile Nothing con Nothing ty) []
+                         _ -> error $ "desugarExp: couldn't parse readPackedFile; " ++ show e2
                   else if f == "bench"
                   then do
                     e2' <- desugarExp toplevel e2
@@ -540,35 +541,7 @@ desugarExp toplevel e =
                     e2' <- desugarExp toplevel e2
                     pure $ ProjE 1 e2'
                   else AppE f [] <$> (: []) <$> desugarExp toplevel e2
-          (DataConE tyapp c as) ->
-            case M.lookup c primMap of
-              Just p  -> pure $ PrimAppE p as
-              Nothing ->
-                  if c == "quote"
-                  then case e2 of
-                         Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
-                         _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
-                  else if c == "readArrayFile"
-                  then case e2 of
-                         Tuple _ Boxed [Lit _ name,Lit _ len] -> do
-                           t <- newMetaTy
-                           pure $ PrimAppE (ReadArrayFile (Just (litToString name, litToInt len)) t) []
-                         Con _ (Special _ (UnitCon _)) -> do
-                           t <- newMetaTy
-                           pure $ PrimAppE (ReadArrayFile Nothing t) []
-                         _ -> error $ "desugarExp: couldn't parse readArrayFile; " ++ prettyPrint e2
-                  else if c == "readPackedFIle"
-                  then case e2 of
-                         Tuple _ Boxed [Lit _ tycon, Lit _ name] -> do
-                           let tcon = litToString tycon
-                               ty = PackedTy tcon []
-                           pure $ PrimAppE (ReadPackedFile (Just (litToString name)) (litToString tycon) Nothing ty) []
-                         Tuple _ Boxed [Lit _ tycon, Con _ (Special _ (UnitCon _))] -> do
-                           let tcon = litToString tycon
-                               ty = PackedTy tcon []
-                           pure $ PrimAppE (ReadPackedFile Nothing (litToString tycon) Nothing ty) []
-                         _ -> error $ "desugarExp: couldn't parse readPackedFile; " ++ prettyPrint e2
-                  else (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
+          (DataConE tyapp c as) -> (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
           (Ext (ParE0 ls)) -> do
             e2' <- desugarExp toplevel e2
             pure $ Ext $ ParE0 (ls ++ [e2'])
