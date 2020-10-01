@@ -412,7 +412,7 @@ IntTy expll(IntTy base, IntTy pow) {
 // Symbol table
 // -------------------------------------
 
-#define global_max_symbol_len 50
+#define global_max_symbol_len 256
 
 // Invariant: should always be equal to max(sym_table_keys)
 static SymTy global_gensym_counter = 0;
@@ -507,6 +507,9 @@ BoolTy eqsym(SymTy s1, SymTy s2) {
     HASH_FIND(hh, global_sym_table, &s1, sizeof(SymTy), se1);
     struct SymTable_elem *se2;
     HASH_FIND(hh, global_sym_table, &s2, sizeof(SymTy), se2);
+    if (se1 == NULL || se2 == NULL) {
+        return false;
+    }
     return (strcmp (se1->value, se2->value) == 0);
 }
 

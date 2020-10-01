@@ -357,4 +357,4 @@ gibbon_main =
     then bench_seqcountnodes
     else if prog_is (quote "parcountnodes")
     then bench_parcountnodes
-    else ()
+    else printsym (quote "benchrunner: select benchmark to run with --bench-prog\n")
