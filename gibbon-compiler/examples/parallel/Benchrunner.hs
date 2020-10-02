@@ -178,8 +178,7 @@ bench_seqbuildquadtree =
       ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 1) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       box = (llx, lly, rux, ruy)
       tr = iterate (buildQtree_seq box mpts)
-  -- in check_buildquadtree mpts tr
-  in ()
+  in check_buildquadtree mpts tr
 
 bench_parbuildquadtree :: ()
 bench_parbuildquadtree =
@@ -202,8 +201,7 @@ bench_parbuildquadtree =
       box = (llx, lly, rux, ruy)
       cutoff = 524288
       tr = iterate (buildQtree_par cutoff box mpts)
-  -- in check_buildquadtree mpts tr
-  in ()
+  in check_buildquadtree mpts tr
 
 bench_seqbhut :: ()
 bench_seqbhut =
@@ -227,7 +225,7 @@ bench_seqbhut =
       box = (llx, lly, rux, ruy)
       bht = buildQtree_seq box mpts
       particles1 = oneStep_seq bht mpts particles
-  in check_bhut mpts particles1
+  in check_bhut particles particles1
 
 bench_parbhut :: ()
 bench_parbhut =
@@ -252,7 +250,7 @@ bench_parbhut =
       bht = buildQtree_seq box mpts
       cutoff = 524288
       particles1 = oneStep_par cutoff bht mpts particles
-  in check_bhut mpts particles1
+  in check_bhut particles particles1
 
 bench_seqcoins :: ()
 bench_seqcoins =

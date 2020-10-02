@@ -78,11 +78,11 @@ data BH_Tree = BH_Empty
              | BH_Leaf Float   -- ^ x coord
                        Float   -- ^ y coord
                        Float   -- ^ mass
-             | BH_Node Float   -- ^ x coord
-                       Float   -- ^ y coord
-                       Float   -- ^ mass
+             | BH_Node Float   -- ^ x coord (centroid)
+                       Float   -- ^ y coord (centroid)
+                       Float   -- ^ mass    (centroid)
                        Int     -- ^ total points
-                       Float   -- ^ Size (max_dim box)
+                       Float   -- ^ width (max_dim box)
                        BH_Tree -- ^ north-west
                        BH_Tree -- ^ north-east
                        BH_Tree -- ^ south-east
@@ -94,7 +94,15 @@ sumQtree tr =
         BH_Empty -> 0.0
         BH_Leaf x y m -> x .+. y .+. m
         BH_Node x y m _ _ tr1 tr2 tr3 tr4 ->
-            x .+. y .+. m .+. (sumQtree tr1) .+. (sumQtree tr2) .+. (sumQtree tr3) .+. (sumQtree tr4)
+            (sumQtree tr1) .+. (sumQtree tr2) .+. (sumQtree tr3) .+. (sumQtree tr4)
+
+countLeavesQtree :: BH_Tree -> Int
+countLeavesQtree tr =
+    case tr of
+        BH_Empty -> 0
+        BH_Leaf x y m -> 1
+        BH_Node x y m _ _ tr1 tr2 tr3 tr4 ->
+            (countLeavesQtree tr1) + (countLeavesQtree tr2) + (countLeavesQtree tr3) + (countLeavesQtree tr4)
 
 sum_mass_points :: Vector (Float, Float, Float) -> Float
 sum_mass_points mpts =
@@ -115,12 +123,12 @@ myprintBHTree bht =
                 _ = printMassPoint (x,y,m)
                 _ = printsym (quote ") ")
             in ()
-        BH_Node x y m total size tr1 tr2 tr3 tr4->
+        BH_Node x y m total width tr1 tr2 tr3 tr4->
             let _ = printsym (quote "(BH_Node")
                 _ = printMassPoint (x,y,m)
                 _ = printint total
                 _ = printsym (quote " ")
-                _ = printfloat size
+                _ = printfloat width
                 _ = printsym (quote " ")
                 _ = myprintBHTree tr1
                 _ = myprintBHTree tr2
@@ -171,10 +179,10 @@ applyAccel particle accel =
 
 isClose :: (Float, Float) -> (Float, Float) -> Float -> Bool
 {-# INLINE isClose #-}
-isClose a b size =
+isClose a b width =
     let r2 = dist2d a b
-        sizesq = size .*. size
-    in r2 .<. sizesq
+        widthsq = width .*. width
+    in r2 .<. widthsq
 
 accel :: (Float, Float, Float) -> Float -> Float -> Float -> (Float, Float)
 {-# INLINE accel #-}
@@ -197,8 +205,8 @@ calcAccel_seq mpt tr =
   case tr of
     BH_Empty -> (0.0, 0.0)
     BH_Leaf x y mass -> accel mpt x y mass
-    BH_Node x y mass total_pts size tr1 tr2 tr3 tr4 ->
-      if isClose (mpt !!! 0, mpt !!! 1) (x, y) size
+    BH_Node x y mass total_pts width tr1 tr2 tr3 tr4 ->
+      if isClose (mpt !!! 0, mpt !!! 1) (x, y) width
       then
         let (x1,y1) = calcAccel_seq mpt tr1
             (x2,y2) = calcAccel_seq mpt tr2
@@ -214,8 +222,8 @@ calcAccel_par cutoff mpt tr =
   case tr of
     BH_Empty -> (0.0, 0.0)
     BH_Leaf x y mass -> accel mpt x y mass
-    BH_Node x y mass total_pts size tr1 tr2 tr3 tr4 ->
-      if isClose (mpt !!! 0, mpt !!! 1) (x, y) size
+    BH_Node x y mass total_pts width tr1 tr2 tr3 tr4 ->
+      if isClose (mpt !!! 0, mpt !!! 1) (x, y) width
       then
         if total_pts < cutoff then calcAccel_seq mpt tr else
         let (x1,y1) = spawn (calcAccel_par cutoff mpt tr1)
@@ -266,7 +274,7 @@ calcCentroid_par mpts =
 inBox :: Float -> Float -> Float -> Float -> Float -> Float -> Bool
 {-# INLINE inBox #-}
 inBox llx lly rux ruy px py =
-    (px .>. llx) && (px .<=. rux) && (py .>. lly) && (py .<=. ruy)
+    (px .>=. llx) && (px .<=. rux) && (py .>=. lly) && (py .<=. ruy)
 
 -- Parallelize...
 masspointsInBox_seq :: (Float, Float, Float, Float) -> Vector (Float, Float, Float) -> Vector (Float, Float, Float)
@@ -314,9 +322,9 @@ buildQtree_seq box mpts =
                 total_points =
                     (getTotalPoints_qtree tr1) + (getTotalPoints_qtree tr2) +
                     (getTotalPoints_qtree tr3) + (getTotalPoints_qtree tr4)
-                size = maxDim box
+                width = maxDim box
                 (x,y,m) = mpt
-            in BH_Node x y m total_points size tr1 tr2 tr3 tr4
+            in BH_Node x y m total_points width tr1 tr2 tr3 tr4
 
 buildQtree_par :: Int -> (Float, Float, Float, Float) -> Vector (Float, Float, Float) -> BH_Tree
 buildQtree_par cutoff box mpts =
@@ -353,8 +361,8 @@ buildQtree_par cutoff box mpts =
                 total_points =
                     (getTotalPoints_qtree tr1) + (getTotalPoints_qtree tr2) +
                     (getTotalPoints_qtree tr3) + (getTotalPoints_qtree tr4)
-                size = maxDim box
-            in BH_Node x y m total_points size tr1 tr2 tr3 tr4
+                width = maxDim box
+            in BH_Node x y m total_points width tr1 tr2 tr3 tr4
 
 
 debugPrint :: BH_Tree -> Vector (Float, Float, Float, Float, Float) -> ()
@@ -402,25 +410,34 @@ check_buildquadtree :: Vector (Float, Float, Float) -> BH_Tree -> ()
 check_buildquadtree mpts bht =
     let expected = sum_mass_points mpts
         actual = sumQtree bht
-        _ = printsym (quote "Expected: ")
+        count1 = countLeavesQtree bht
+        count2 = getTotalPoints_qtree bht
+        _ = printsym (quote "Sum: expected= ")
         _ = printfloat expected
-        _ = printsym (quote "\n")
-        _ = printsym (quote "Actual: ")
+        _ = printsym (quote ", ")
+        _ = printsym (quote "actual= ")
         _ = printfloat actual
+        _ = printsym (quote "\n")
+        _ = printsym (quote "Counts: ")
+        _ = printint count1
+        _ = printsym (quote ", ")
+        _ = printint count2
         _ = printsym (quote "\n")
     in print_check (float_abs (expected .-. actual) .<. 0.01)
 
-accel_for :: (Float, Float, Float) -> Vector (Float, Float, Float) -> (Float, Float)
+accel_for :: (Float, Float, Float, Float, Float) -> Vector (Float, Float, Float, Float, Float) -> (Float, Float)
 accel_for query input =
-    foldl (\(acc :: (Float, Float)) (pt :: (Float, Float, Float)) ->
+    foldl (\(acc :: (Float, Float)) (pt :: (Float, Float, Float, Float, Float)) ->
                   let (aax, aay) = acc
-                      (x,y,m) = pt
-                      (ax,ay) = accel query x y m
+                      (x,y,m,_,_) = pt
+                      (x1,x2,m2,_,_) = query
+                      query_mp = (x1,x2,m2)
+                      (ax,ay) = accel query_mp x y m
                   in (aax .+. ax, aay .+. ay))
     (0.0, 0.0)
     input
 
-check_bhut :: Vector (Float, Float, Float) -> Vector (Float, Float, Float, Float, Float) -> ()
+check_bhut :: Vector (Float, Float, Float, Float, Float) -> Vector (Float, Float, Float, Float, Float) -> ()
 check_bhut input particles =
     let
         n = length input
@@ -432,18 +449,19 @@ check_bhut input particles =
         checkpoints4 = inplacevupdate checkpoints2 3 (n-1)
         delta = foldl (\err idx ->
                           let query = nth input idx
-                              (expected_ax,expected_ay) = accel_for query input
+                              axay = accel_for query input
+                              (_,_,_,expected_ax, expected_ay) = applyAccel query axay
                               (_,_,_,actual_ax,actual_ay) = nth particles idx
-                              _ = printsym (quote "Expected: ")
-                              _ = printfloat expected_ax
-                              _ = printsym (quote ",")
-                              _ = printfloat expected_ay
-                              _ = printsym (quote "\n")
-                              _ = printsym (quote "Actual: ")
-                              _ = printfloat actual_ax
-                              _ = printsym (quote ",")
-                              _ = printfloat actual_ay
-                              _ = printsym (quote "\n")
+                              -- _ = printsym (quote "Expected: ")
+                              -- _ = printfloat expected_ax
+                              -- _ = printsym (quote ",")
+                              -- _ = printfloat expected_ay
+                              -- _ = printsym (quote "\n")
+                              -- _ = printsym (quote "Actual: ")
+                              -- _ = printfloat actual_ax
+                              -- _ = printsym (quote ",")
+                              -- _ = printfloat actual_ay
+                              -- _ = printsym (quote "\n")
                           in float_abs (expected_ax .-. actual_ax) .+. float_abs (expected_ay .-. actual_ay))
                   0.0 checkpoints4
 

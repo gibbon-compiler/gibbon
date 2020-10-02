@@ -429,17 +429,20 @@ check_nearest pts actual radius =
     let n = length pts
         idxs = generate n (\i -> i)
         radius_sq = radius .*. radius
-        tup = foldl (\(acc :: (Bool, Int, Int)) i ->
+        tup = foldl (\(acc :: (Bool, Int, Int, Int)) i ->
                          let pt = nth pts i
                              nn = nth actual i
-                             (acc_b, acc_inexact, acc_not_near) = acc
+                             (acc_b, acc_exact, acc_inexact, acc_not_near) = acc
                          in if eqPt pt nn
-                            then (acc_b && True, acc_inexact, acc_not_near)
+                            then (acc_b && True, acc_exact+1, acc_inexact, acc_not_near)
                             else if (dist3d pt nn) .<. radius_sq
-                                 then (acc_b && True, acc_inexact+1, acc_not_near)
-                                 else (False, acc_inexact+1, acc_not_near+1))
-              (True, 0, 0) idxs
-        (is_ok, inexact, not_near) = tup
+                                 then (acc_b && True, acc_exact, acc_inexact+1, acc_not_near)
+                                 else (False, acc_exact, acc_inexact, acc_not_near+1))
+              (True, 0, 0, 0) idxs
+        (is_ok, exact, inexact, not_near) = tup
+        _ = printsym (quote "Exact: ")
+        _ = printint exact
+        _ = printsym (quote "\n")
         _ = printsym (quote "Inexact: ")
         _ = printint inexact
         _ = printsym (quote "\n")
