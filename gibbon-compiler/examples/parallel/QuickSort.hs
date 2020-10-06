@@ -112,7 +112,7 @@ quickSort_seq' a n f vec =
 -- | Returns a new sorted vector.
 quickSort_seq :: (a -> a -> Int) -> Vector a -> Vector a
 quickSort_seq f vec =
-    let vec2 = copy_par vec
+    let vec2 = copy vec
     in quickSort_seq' 0 (length vec2) f vec2
 
 -- Sort in place.

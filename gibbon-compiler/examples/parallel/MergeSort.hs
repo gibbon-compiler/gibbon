@@ -10,8 +10,8 @@ import Gibbon.Vector.Parallel
 newline :: ()
 newline = printsym (quote "\n")
 
-debugPrint :: Vector Int -> ()
-debugPrint vec =
+mergesort_debugPrint :: Vector Int -> ()
+mergesort_debugPrint vec =
     let _ = printVec (\i -> printint i) vec
         _ = newline
     in ()
@@ -114,7 +114,7 @@ writeSort1 :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
 writeSort1 f s t =
     let len = length s in
     if len < gotoQuickSort
-    -- then inplacevsort s f
+    -- then quickSort_par' 0 (length s) f s
     then inplacevsort s f
     else
         let half = div len 2
@@ -126,12 +126,28 @@ writeSort1 f s t =
             res = writeMerge f tl1 tr1 s
         in res
 
+writeSort1_seq :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
+writeSort1_seq f s t =
+    let len = length s in
+    if len < gotoQuickSort
+    -- then quickSort_par' 0 (length s) f s
+    then inplacevsort s f
+    else
+        let half = div len 2
+            (sl,sr) = splitAt half s
+            (tl,tr) = splitAt half t
+            tl1 = writeSort2_seq f sl tl
+            tr1 = writeSort2_seq f sr tr
+            res = writeMerge_seq f tl1 tr1 s
+        in res
+
 writeSort2 :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
 writeSort2 f s t =
     let len =length s in
     if len < gotoQuickSort
     then
         let t1 = write_loop 0 0 len s t
+        -- in quickSort_par' 0 (length t1) f t1
         in inplacevsort t1 f
     else
         let half = div len 2
@@ -143,11 +159,35 @@ writeSort2 f s t =
             res = writeMerge f sl1 sr1 t
         in res
 
+writeSort2_seq :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
+writeSort2_seq f s t =
+    let len =length s in
+    if len < gotoQuickSort
+    then
+        let t1 = write_loop 0 0 len s t
+        -- in quickSort_par' 0 (length t1) f t1
+        in inplacevsort t1 f
+    else
+        let half = div len 2
+            (sl,sr) = splitAt half s
+            (tl,tr) = splitAt half t
+            sl1 = writeSort1_seq f sl tl
+            sr1 = writeSort1_seq f sr tr
+            res = writeMerge_seq f sl1 sr1 t
+        in res
+
 mergeSort' :: (a -> a -> Int) -> Vector a -> Vector a
 mergeSort' f s =
     let t :: Vector a
         t = valloc (length s)
         t2 = writeSort1 f s t
+    in s
+
+mergeSort'_seq :: (a -> a -> Int) -> Vector a -> Vector a
+mergeSort'_seq f s =
+    let t :: Vector a
+        t = valloc (length s)
+        t2 = writeSort1_seq f s t
     in s
 
 mergeSort :: (a -> a -> Int) -> Vector a -> Vector a
@@ -156,19 +196,57 @@ mergeSort f vec =
         vec3 = mergeSort' f vec2
     in vec3
 
+mergeSort_seq :: (a -> a -> Int) -> Vector a -> Vector a
+mergeSort_seq f vec =
+    let vec2 = copy vec
+        vec3 = mergeSort'_seq f vec2
+    in vec3
+
+cStdlibSort :: (a -> a -> Int) -> Vector a -> Vector a
+cStdlibSort f vec =
+  let vec2 = copy_par vec
+      vec3 = inplacevsort vec2 f
+  in vec3
+
+cStdlibSort_seq :: (a -> a -> Int) -> Vector a -> Vector a
+cStdlibSort_seq f vec =
+  let vec2 = copy vec
+      vec3 = inplacevsort vec2 f
+  in vec3
+
+--------------------------------------------------------------------------------
+
+{-
+
 cmp4 :: Int -> Int -> Int
 cmp4 a b = b - a
 
+cmp5 :: (Float, Float, Float) -> (Float, Float, Float) -> Int
+cmp5 a b =
+    let (ax,_,_) = a
+        (bx,_,_) = b
+    in floatToInt (ax .-. bx)
+
 gibbon_main =
     let n = sizeParam
-        vec = generate n (\i -> n - i)
-        vec2 = timeit (mergeSort (\a b -> b - a) vec)
-        vec3 = timeit (inplacevsort vec cmp4)
+        -- vec = generate n (\i -> n - i)
+        vec :: Vector (Float, Float, Float)
+        vec = readArrayFile ()
+
+        vec2 = timeit (mergeSort cmp5 vec)
+        vec3 = timeit (mergeSort_seq cmp5 vec)
+        vec4 = timeit (cStdlibSort cmp5 vec)
+        vec5 = timeit (cStdlibSort_seq cmp5 vec)
         -- _ = printVec (\i -> printint i) vec
         -- _ = newline
         -- _ = printVec (\i -> printint i) vec2
         -- _ = newline
-        test1 = length vec == length vec2
-        test2 = ifoldl (\acc i elt -> acc && elt == (i+1)) True vec2
-        test3 = ifoldl (\acc i elt -> acc && elt == (i+1)) True vec3
-    in (test1 && test2, test3)
+        -- _ = printVec (\i -> printint i) vec3
+        -- _ = newline
+        test1 = (length vec == length vec2) && ((length vec3 == length vec4) && (length vec4 == length vec5))
+        -- test2 = ifoldl (\acc i elt -> acc && elt == (i+1)) True vec2
+        -- test3 = ifoldl (\acc i elt -> acc && elt == (i+1)) True vec3
+    -- in (test1 && test2, test3)
+    in test1
+
+-}
