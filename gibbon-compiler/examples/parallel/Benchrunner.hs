@@ -162,7 +162,6 @@ bench_seqnearest =
         radius = intToFloat n
         tr     = fromList_seq pts
         nns = iterate (allNearest_seq tr pts)
-    -- in check_nearest pts nns radius
     in ()
 
 bench_parnearest :: ()
@@ -173,7 +172,6 @@ bench_parnearest =
         radius = intToFloat n
         tr     = fromList_seq pts
         nns = iterate (allNearest_par tr pts)
-    -- in check_nearest pts nns radius
     in ()
 
 bench_seqbuildquadtree :: ()

@@ -89,17 +89,19 @@ data TopLevel
   deriving (Show, Eq)
 
 type TopTyEnv = TyEnv TyScheme
+type TypeSynEnv = M.Map TyCon Ty0
 
 desugarModule :: (Show a,  Pretty a)
               => IORef ParseState -> [String] -> FilePath -> Module a -> IO (PassM Prog0)
 desugarModule pstate_ref import_route dir (Module _ head_mb _pragmas imports decls) = do
-  let -- Since top-level functions and their types can't be declared in
+  let type_syns = foldl collectTypeSynonyms M.empty decls
+      -- Since top-level functions and their types can't be declared in
       -- single top-level declaration we first collect types and then collect
       -- definitions.
-      funtys = foldr collectTopTy M.empty decls
+      funtys = foldr (collectTopTy type_syns) M.empty decls
   imported_progs :: [PassM Prog0] <- mapM (processImport pstate_ref (mod_name : import_route) dir) imports
   let prog = do
-        toplevels <- catMaybes <$> mapM (collectTopLevel funtys) decls
+        toplevels <- catMaybes <$> mapM (collectTopLevel type_syns funtys) decls
         let (defs,_vars,funs,inlines,main) = foldr classify init_acc toplevels
             funs' = foldr (\v acc -> M.update (\fn -> Just (fn {funInline = Inline})) v acc) funs inlines
         imported_progs' <- mapM id imported_progs
@@ -244,25 +246,25 @@ keywords = S.fromList $ map toVar $
       "vsort", "inplacevsort", "vfree", "vfree2"
     ] ++ M.keys primMap
 
-desugarTopType :: (Show a,  Pretty a) => Type a -> TyScheme
-desugarTopType ty =
+desugarTopType :: (Show a,  Pretty a) => TypeSynEnv -> Type a -> TyScheme
+desugarTopType type_syns ty =
   case ty of
     -- forall tvs ty.
     TyForall _ mb_tvbind _ ty1 ->
       let tyvars = case mb_tvbind of
                      Just bnds -> map desugarTyVarBind bnds
                      Nothing   -> []
-      in ForAll tyvars (desugarType ty1)
+      in ForAll tyvars (desugarType type_syns ty1)
     -- quantify over all tyvars.
-    _ -> let ty' = desugarType ty
+    _ -> let ty' = desugarType type_syns ty
              tyvars = tyVarsInTy ty'
         in ForAll tyvars ty'
 
-desugarType :: (Show a,  Pretty a) => Type a -> Ty0
-desugarType ty =
+desugarType :: (Show a,  Pretty a) => TypeSynEnv -> Type a -> Ty0
+desugarType type_syns ty =
   case ty of
     H.TyVar _ (Ident _ t) -> L0.TyVar $ UserTv (toVar t)
-    TyTuple _ Boxed tys   -> ProdTy (map desugarType tys)
+    TyTuple _ Boxed tys   -> ProdTy (map (desugarType type_syns) tys)
     TyCon _ (Special _ (UnitCon _))     -> ProdTy []
     TyCon _ (UnQual _ (Ident _ "Int"))  -> IntTy
     TyCon _ (UnQual _ (Ident _ "Float"))-> FloatTy
@@ -270,43 +272,49 @@ desugarType ty =
     TyCon _ (UnQual _ (Ident _ "Sym"))  -> SymTy0
     TyCon _ (UnQual _ (Ident _ "SymSet"))  -> SymSetTy
     TyCon _ (UnQual _ (Ident _ "SymHash"))  -> SymHashTy
-    TyCon _ (UnQual _ (Ident _ con))    -> PackedTy con []
-    TyFun _ t1 t2 -> let t1' = desugarType t1
-                         t2' = desugarType t2
+    TyCon _ (UnQual _ (Ident _ con)) ->
+      case M.lookup con type_syns of
+        Nothing -> PackedTy con []
+        Just ty' -> ty'
+    TyFun _ t1 t2 -> let t1' = desugarType type_syns t1
+                         t2' = desugarType type_syns t2
                      in ArrowTy [t1'] t2'
-    TyParen _ ty1 -> desugarType ty1
+    TyParen _ ty1 -> desugarType type_syns ty1
     TyApp _ tycon arg ->
-      case desugarType tycon of
+      case desugarType type_syns tycon of
         PackedTy con tyargs ->
             case (con,tyargs) of
-                ("Vector",[]) -> VectorTy (desugarType arg)
-                _ -> PackedTy con (tyargs ++ [desugarType arg])
+                ("Vector",[]) -> VectorTy (desugarType type_syns arg)
+                _ ->
+                  case M.lookup con type_syns of
+                    Nothing -> PackedTy con (tyargs ++ [desugarType type_syns arg])
+                    Just ty' -> ty'
         _ -> error $ "desugarType: Unexpected type arguments: " ++ prettyPrint ty
     _ -> error $ "desugarType: Unsupported type: " ++ prettyPrint ty
 
 
 -- Like 'desugarTopType' but understands boxity.
-desugarTopType' :: (Show a,  Pretty a) => Type a -> (IsBoxed, TyScheme)
-desugarTopType' ty =
+desugarTopType' :: (Show a,  Pretty a) => TypeSynEnv -> Type a -> (IsBoxed, TyScheme)
+desugarTopType' type_syns ty =
   case ty of
     -- forall tvs ty.
     TyForall _ mb_tvbind _ ty1 ->
       let tyvars = case mb_tvbind of
                      Just bnds -> map desugarTyVarBind bnds
                      Nothing   -> []
-          (boxity, ty') = desugarType' ty1
+          (boxity, ty') = desugarType' type_syns ty1
       in (boxity, ForAll tyvars ty')
     -- quantify over all tyvars.
-    _ -> let (boxity, ty') = desugarType' ty
+    _ -> let (boxity, ty') = desugarType' type_syns ty
              tyvars = tyVarsInTy ty'
         in (boxity, ForAll tyvars ty')
 
 -- Like 'desugarType' but understands boxity.
-desugarType' :: (Show a,  Pretty a) => Type a -> (IsBoxed, Ty0)
-desugarType' ty =
+desugarType' :: (Show a,  Pretty a) => TypeSynEnv -> Type a -> (IsBoxed, Ty0)
+desugarType' type_syns ty =
   case ty of
-    TyBang _ _ (NoUnpack _) ty1 -> (True, desugarType ty1)
-    _ -> (False, desugarType ty)
+    TyBang _ _ (NoUnpack _) ty1 -> (True, desugarType type_syns ty1)
+    _ -> (False, desugarType type_syns ty)
 
 -- | Transform a multi-argument function type to one where all inputs are a
 -- single tuple argument. E.g. (a -> b -> c -> d) => ((a,b,c) -> d).
@@ -381,14 +389,14 @@ primMap = M.fromList
   , ("lookup_hash", SymHashLookup)
   ]
 
-desugarExp :: (Show a, Pretty a) => TopTyEnv -> Exp a -> PassM Exp0
-desugarExp toplevel e =
+desugarExp :: (Show a, Pretty a) => TypeSynEnv -> TopTyEnv -> Exp a -> PassM Exp0
+desugarExp type_syns toplevel e =
   case e of
     Paren _ (ExpTypeSig _ (App _ (H.Var _ f) (Lit _ lit)) tyc)
-        | (qnameToStr f) == "error" -> pure $ PrimAppE (ErrorP (litToString lit) (desugarType tyc)) []
+        | (qnameToStr f) == "error" -> pure $ PrimAppE (ErrorP (litToString lit) (desugarType type_syns tyc)) []
     -- Paren _ (App _ (H.Var _ f) (Lit _ lit))
     --     | (qnameToStr f) == "error" -> pure $ PrimAppE (ErrorP (litToString lit
-    Paren _ e2 -> desugarExp toplevel e2
+    Paren _ e2 -> desugarExp type_syns toplevel e2
     H.Var _ qv -> do
       let v = (toVar $ qnameToStr qv)
       if v == "gensym"
@@ -423,15 +431,15 @@ desugarExp toplevel e =
     Lit _ lit  -> desugarLiteral lit
 
     Lambda _ pats bod -> do
-      bod' <- desugarExp toplevel bod
-      args <- mapM desugarPatWithTy pats
+      bod' <- desugarExp type_syns toplevel bod
+      args <- mapM (desugarPatWithTy type_syns) pats
       pure $ Ext $ LambdaE args bod'
 
     App _ e1 e2 -> do
-        desugarExp toplevel e1 >>= \case
+        desugarExp type_syns toplevel e1 >>= \case
           (VarE f) ->
             case M.lookup (fromVar f) primMap of
-              Just p  -> (\e2' -> PrimAppE p [e2']) <$> desugarExp toplevel e2
+              Just p  -> (\e2' -> PrimAppE p [e2']) <$> desugarExp type_syns toplevel e2
               Nothing ->
                   if f == "quote"
                   then case e2 of
@@ -458,16 +466,16 @@ desugarExp toplevel e =
                          _ -> error $ "desugarExp: couldn't parse readPackedFile; " ++ show e2
                   else if f == "bench"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     pure $ Ext $ BenchE "HOLE" [] [e2'] False
                   else if f == "timeit"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty <- newMetaTy
                     pure $ TimeIt e2' ty False
                   else if f == "iterate"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty <- newMetaTy
                     pure $ TimeIt e2' ty True
                   else if f == "error"
@@ -476,89 +484,89 @@ desugarExp toplevel e =
                          _ -> error "desugarExp: error expects String literal."
                   else if f == "par"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     pure $ Ext $ ParE0 [e2']
                   else if f == "spawn"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     pure $ SpawnE "HOLE" [] [e2']
                   else if f == "valloc"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VAllocP ty) [e2']
                   else if f == "vfree"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VFreeP ty) [e2']
                   else if f == "vfree2"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VFree2P ty) [e2']
                   else if f == "vnth"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VNthP ty) [e2']
                   else if f == "vlength"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VLengthP ty) [e2']
                   else if f == "inplacevupdate"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (InplaceVUpdateP ty) [e2']
                   else if f == "vconcat"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VConcatP ty) [e2']
                   else if f == "vsort"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VSortP ty) [e2']
                   else if f == "inplacevsort"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (InplaceVSortP ty) [e2']
                   else if f == "vslice"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VSliceP ty) [e2']
                   else if f == "fst"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     pure $ ProjE 0 e2'
                   else if f == "snd"
                   then do
-                    e2' <- desugarExp toplevel e2
+                    e2' <- desugarExp type_syns toplevel e2
                     pure $ ProjE 1 e2'
-                  else AppE f [] <$> (: []) <$> desugarExp toplevel e2
-          (DataConE tyapp c as) -> (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp toplevel e2
+                  else AppE f [] <$> (: []) <$> desugarExp type_syns toplevel e2
+          (DataConE tyapp c as) -> (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp type_syns toplevel e2
           (Ext (ParE0 ls)) -> do
-            e2' <- desugarExp toplevel e2
+            e2' <- desugarExp type_syns toplevel e2
             pure $ Ext $ ParE0 (ls ++ [e2'])
           (AppE f [] ls) -> do
-            e2' <- desugarExp toplevel e2
+            e2' <- desugarExp type_syns toplevel e2
             pure $ AppE f [] (ls ++ [e2'])
 
           (Ext (BenchE fn [] ls b)) -> do
-            e2' <- desugarExp toplevel e2
+            e2' <- desugarExp type_syns toplevel e2
             pure $ Ext $ BenchE fn [] (ls ++ [e2']) b
 
           (SpawnE fn [] ls) -> do
-            e2' <- desugarExp toplevel e2
+            e2' <- desugarExp type_syns toplevel e2
             pure $ SpawnE fn [] (ls ++ [e2'])
 
           (PrimAppE p ls) -> do
-            e2' <- desugarExp toplevel e2
+            e2' <- desugarExp type_syns toplevel e2
             pure $ PrimAppE p (ls ++ [e2'])
 
           TimeIt{} ->
@@ -567,22 +575,22 @@ desugarExp toplevel e =
           f -> error ("desugarExp: Couldn't parse function application: (: " ++ show f ++ ")")
 
     Let _ (BDecls _ decls) rhs -> do
-      rhs' <- desugarExp toplevel rhs
-      let funtys = foldr collectTopTy M.empty decls
-      foldrM (generateBind toplevel funtys) rhs' decls
+      rhs' <- desugarExp type_syns toplevel rhs
+      let funtys = foldr (collectTopTy type_syns) M.empty decls
+      foldrM (generateBind type_syns toplevel funtys) rhs' decls
 
     If _ a b c -> do
-      a' <- desugarExp toplevel a
-      b' <- desugarExp toplevel b
-      c' <- desugarExp toplevel c
+      a' <- desugarExp type_syns toplevel a
+      b' <- desugarExp type_syns toplevel b
+      c' <- desugarExp type_syns toplevel c
       pure $ IfE a' b' c'
 
     Tuple _ Unboxed _ -> error $ "desugarExp: Only boxed tuples are allowed: " ++ prettyPrint e
-    Tuple _ Boxed es  -> MkProdE <$> mapM (desugarExp toplevel) es
+    Tuple _ Boxed es  -> MkProdE <$> mapM (desugarExp type_syns toplevel) es
 
     Case _ scrt alts -> do
-      scrt' <- desugarExp toplevel scrt
-      CaseE scrt' <$> mapM (desugarAlt toplevel) alts
+      scrt' <- desugarExp type_syns toplevel scrt
+      CaseE scrt' <$> mapM (desugarAlt type_syns toplevel) alts
 
     Con _ (Special _ (UnitCon _)) -> pure $ MkProdE []
 
@@ -598,7 +606,7 @@ desugarExp toplevel e =
     -- TODO: timeit: parsing it's type isn't straightforward.
 
     InfixApp _ e1 (QVarOp _ (UnQual _ (Symbol _ "!!!"))) e2 -> do
-      e1' <- desugarExp toplevel e1
+      e1' <- desugarExp type_syns toplevel e1
       case e2 of
         Lit _ lit -> do
           let i = litToInt lit
@@ -606,24 +614,24 @@ desugarExp toplevel e =
         _ -> error $ "desugarExp: !!! expects a integer. Got: " ++ prettyPrint e2
 
     InfixApp _ e1 op e2 -> do
-      e1' <- desugarExp toplevel e1
-      e2' <- desugarExp toplevel e2
+      e1' <- desugarExp type_syns toplevel e1
+      e2' <- desugarExp type_syns toplevel e2
       let op' = desugarOp op
       pure $ PrimAppE op' [e1', e2']
 
     NegApp _ e1 -> do
-      e1' <- desugarExp toplevel e1
+      e1' <- desugarExp type_syns toplevel e1
       pure $ PrimAppE SubP [LitE 0, e1']
 
     _ -> error ("desugarExp: Unsupported expression: " ++ prettyPrint e)
 
-desugarFun :: (Show a,  Pretty a) => TopTyEnv -> TopTyEnv -> Decl a -> PassM (Var, [Var], TyScheme, Exp0)
-desugarFun toplevel env decl =
+desugarFun :: (Show a,  Pretty a) => TypeSynEnv -> TopTyEnv -> TopTyEnv -> Decl a -> PassM (Var, [Var], TyScheme, Exp0)
+desugarFun type_syns toplevel env decl =
   case decl of
     FunBind _ [Match _ fname pats (UnGuardedRhs _ bod) _where] -> do
       let fname_str = nameToStr fname
           fname_var = toVar (fname_str)
-      args <- mapM (\p -> desugarPatWithTy p >>= pure . fst) pats
+      args <- mapM (\p -> desugarPatWithTy type_syns p >>= pure . fst) pats
       fun_ty <- case M.lookup fname_var env of
                   Nothing -> do
                      arg_tys <- mapM (\_ -> newMetaTy) args
@@ -631,7 +639,7 @@ desugarFun toplevel env decl =
                      let funty = ArrowTy arg_tys ret_ty
                      pure $ (ForAll [] funty)
                   Just ty -> pure ty
-      bod' <- desugarExp toplevel bod
+      bod' <- desugarExp type_syns toplevel bod
       pure $ (fname_var, args, unCurryTopTy fun_ty, bod')
     _ -> error $ "desugarFun: Found a function with multiple RHS, " ++ prettyPrint decl
 
@@ -640,24 +648,43 @@ multiArgsToOne args tys ex =
   let new_arg = toVar "multi_arg"
   in (new_arg, tuplizeRefs new_arg args tys ex)
 
-collectTopTy :: (Show a,  Pretty a) => Decl a -> TopTyEnv -> TopTyEnv
-collectTopTy d env =
+collectTopTy :: (Show a,  Pretty a) => TypeSynEnv -> Decl a -> TopTyEnv -> TopTyEnv
+collectTopTy type_syns d env =
   case d of
     TypeSig _ names ty ->
-      let ty' = desugarTopType ty
-      in foldr (\n acc -> M.insert (toVar $ nameToStr n) ty' acc) env names
+      let ty' = desugarTopType type_syns ty
+      in foldr (\name acc ->
+                  let tycon_var = toVar (nameToStr name) in
+                  case M.lookup tycon_var acc of
+                    Nothing ->  M.insert tycon_var ty' acc
+                    Just{} -> error $ "collectTopTy: Multiple type signatures for: " ++ show tycon_var)
+         env names
     _ -> env
 
-collectTopLevel :: (Show a,  Pretty a) => TopTyEnv -> Decl a -> PassM (Maybe TopLevel)
-collectTopLevel env decl =
+collectTypeSynonyms :: (Show a,  Pretty a) => TypeSynEnv -> Decl a -> TypeSynEnv
+collectTypeSynonyms env d =
+  case d of
+    TypeDecl _ (DHead _ name) ty ->
+      let ty' = desugarType env ty
+          tycon = nameToStr name
+      in case M.lookup tycon env of
+           Nothing -> M.insert tycon ty' env
+           Just{} -> error $ "collectTypeSynonyms: Multiple type synonym declarations: " ++ show tycon
+    _ -> env
+
+collectTopLevel :: (Show a,  Pretty a) => TypeSynEnv -> TopTyEnv -> Decl a -> PassM (Maybe TopLevel)
+collectTopLevel type_syns env decl =
   let toplevel = env in
   case decl of
     -- 'collectTopTy' takes care of this.
     TypeSig{} -> pure Nothing
 
+    -- 'collectTypeSynonyms'.
+    TypeDecl{} -> pure Nothing
+
     DataDecl _ (DataType _) _ctx decl_head cons _deriving_binds -> do
       let (ty_name,  ty_args) = desugarDeclHead decl_head
-          cons' = map desugarConstr cons
+          cons' = map (desugarConstr type_syns) cons
       if ty_name `S.member` builtinTys
       then error $ sdoc ty_name ++ " is a built-in type."
       else pure $ Just $ HDDef (DDef ty_name ty_args cons')
@@ -667,7 +694,7 @@ collectTopLevel env decl =
       pure Nothing
 
     PatBind _ (PVar _ (Ident _ "gibbon_main")) (UnGuardedRhs _ rhs) _binds -> do
-      rhs' <- fixupSpawn <$> verifyBenchEAssumptions True <$> desugarExp toplevel rhs
+      rhs' <- fixupSpawn <$> verifyBenchEAssumptions True <$> desugarExp type_syns toplevel rhs
       ty <- newMetaTy
       pure $ Just $ HMain $ Just (rhs', ty)
 
@@ -679,11 +706,11 @@ collectTopLevel env decl =
              --     f = \x -> ...
              case rhs of
                Lambda _ pats bod -> do
-                 bod' <- desugarExp toplevel bod
+                 bod' <- desugarExp type_syns toplevel bod
                  case pats of
                    [] -> error "Impossible"
                    _  -> do
-                     args <- mapM (\p -> desugarPatWithTy p >>= pure . fst) pats
+                     args <- mapM (\p -> desugarPatWithTy type_syns p >>= pure . fst) pats
                      pure $ Just $ HFunDef (FunDef { funName = toVar fn
                                                    , funArgs = args
                                                    , funTy   = fun_ty
@@ -694,7 +721,7 @@ collectTopLevel env decl =
 
                -- This is a top-level function that doesn't take any arguments.
                _ -> do
-                 rhs' <- desugarExp toplevel rhs
+                 rhs' <- desugarExp type_syns toplevel rhs
                  let fun_ty'  = ArrowTy [] (tyFromScheme fun_ty)
                      fun_ty'' = ForAll (tyVarsInTy fun_ty') fun_ty'
                  pure $ Just $ HFunDef (FunDef { funName = toVar fn
@@ -706,7 +733,7 @@ collectTopLevel env decl =
                                                })
 
 
-    FunBind{} -> do (name,args,ty,bod) <- desugarFun toplevel env decl
+    FunBind{} -> do (name,args,ty,bod) <- desugarFun type_syns toplevel env decl
                     pure $ Just $ HFunDef (FunDef { funName = name
                                                   , funArgs = args
                                                   , funTy   = ty
@@ -742,7 +769,7 @@ qnameToStr qname =
   case qname of
     Qual _ mname n -> (mnameToStr mname ++ "." ++ nameToStr n)
     UnQual _ n     -> (nameToStr n)
-    Special{}      -> error $ "desugarExp: Special identifiers not supported: " ++ prettyPrint qname
+    Special{}      -> error $ "qnameToStr: Special identifiers not supported: " ++ prettyPrint qname
 
 mnameToStr :: ModuleName a -> String
 mnameToStr (ModuleName _ s) = s
@@ -753,11 +780,11 @@ desugarOp qop =
     QVarOp _ (UnQual _ (Symbol _ op)) ->
       case M.lookup op primMap of
         Just pr -> pr
-        Nothing -> error $ "desugarExp: Unsupported binary op: " ++ show op
-    op -> error $ "desugarExp: Unsupported op: " ++ prettyPrint op
+        Nothing -> error $ "desugarOp: Unsupported binary op: " ++ show op
+    op -> error $ "desugarOp: Unsupported op: " ++ prettyPrint op
 
-desugarAlt :: (Show a,  Pretty a) => TopTyEnv -> Alt a -> PassM (DataCon, [(Var,Ty0)], Exp0)
-desugarAlt toplevel alt =
+desugarAlt :: (Show a,  Pretty a) => TypeSynEnv -> TopTyEnv -> Alt a -> PassM (DataCon, [(Var,Ty0)], Exp0)
+desugarAlt type_syns toplevel alt =
   case alt of
     Alt _ (PApp _ qname ps) (UnGuardedRhs _ rhs) Nothing -> do
       let conName = qnameToStr qname
@@ -766,22 +793,24 @@ desugarAlt toplevel alt =
                             PWildCard _ -> gensym "wildcard_"
                             _        -> error "desugarExp: Non-variable pattern in case.")
                   ps
-      rhs' <- desugarExp toplevel rhs
+      rhs' <- desugarExp type_syns toplevel rhs
       ps'' <- mapM (\v -> (v,) <$> newMetaTy) ps'
       pure (conName, ps'', rhs')
     Alt _ _ GuardedRhss{} _ -> error "desugarExp: Guarded RHS not supported in case."
     Alt _ _ _ Just{}        -> error "desugarExp: Where clauses not allowed in case."
     Alt _ pat _ _           -> error $ "desugarExp: Unsupported pattern in case: " ++ prettyPrint pat
 
-generateBind :: (Show a,  Pretty a) => TopTyEnv -> TopTyEnv -> Decl a -> Exp0 -> PassM (Exp0)
-generateBind toplevel env decl exp2 =
+generateBind :: (Show a,  Pretty a) => TypeSynEnv -> TopTyEnv -> TopTyEnv -> Decl a -> Exp0 -> PassM (Exp0)
+generateBind type_syns toplevel env decl exp2 =
   case decl of
     -- 'collectTopTy' takes care of this.
     TypeSig{} -> pure exp2
+    -- 'collectTypeSynonyms' takes care of this.
+    TypeDecl{} -> pure exp2
     PatBind _ _ _ Just{}        -> error "generateBind: where clauses not allowed"
     PatBind _ _ GuardedRhss{} _ -> error "generateBind: Guarded right hand side not supported."
     PatBind _ (PTuple _ Boxed pats) (UnGuardedRhs _ rhs) Nothing -> do
-      rhs' <- desugarExp toplevel rhs
+      rhs' <- desugarExp type_syns toplevel rhs
       w <- gensym "tup"
       ty' <- newMetaTy
       let tupexp e = LetE (w,[],ty',rhs') e
@@ -789,7 +818,7 @@ generateBind toplevel env decl exp2 =
       prjexp <- generateTupleProjs toplevel env binds (VarE w) exp2
       pure $ tupexp prjexp
     PatBind _ pat (UnGuardedRhs _ rhs) Nothing -> do
-      rhs' <- desugarExp toplevel rhs
+      rhs' <- desugarExp type_syns toplevel rhs
       w <- case pat of
              PVar _ v    -> pure $ toVar (nameToStr v)
              PWildCard _ -> gensym "wildcard_"
@@ -798,7 +827,7 @@ generateBind toplevel env decl exp2 =
                 Nothing -> newMetaTy
                 Just (ForAll _ ty) -> pure ty
       pure $ LetE (w, [], ty', rhs') exp2
-    FunBind{} -> do (name,args,ty,bod) <- desugarFun toplevel env decl
+    FunBind{} -> do (name,args,ty,bod) <- desugarFun type_syns toplevel env decl
                     pure $ LetE (name,[], tyFromScheme ty, Ext $ LambdaE (zip args (inTys ty)) bod) exp2
     oth -> error ("generateBind: Unsupported pattern: " ++ prettyPrint oth)
 
@@ -822,14 +851,14 @@ generateTupleProjs toplevel env ((p,n):pats) tup exp2 =
         let prjexp = LetE (w,[],ty',ProjE n tup) exp2
         generateTupleProjs toplevel env pats tup prjexp
 
-desugarConstr :: (Show a,  Pretty a) => QualConDecl a -> (DataCon,[(IsBoxed, Ty0)])
-desugarConstr qdecl =
+desugarConstr :: (Show a,  Pretty a) => TypeSynEnv -> QualConDecl a -> (DataCon,[(IsBoxed, Ty0)])
+desugarConstr type_syns qdecl =
   case qdecl of
     QualConDecl _ _tyvars _ctx (ConDecl _ name arg_tys) ->
       -- N.B. This is a type scheme only to make the types work everywhere else
       -- in code. However, we shouldn't actually quantify over any additional
       -- type variables here. We only support Rank-1 types.
-      ( nameToStr name , map desugarType' arg_tys )
+      ( nameToStr name , map (desugarType' type_syns) arg_tys )
     _ -> error ("desugarConstr: Unsupported data constructor: " ++ prettyPrint qdecl)
 
 desugarDeclHead :: DeclHead a -> (Var, [TyVar])
@@ -848,12 +877,12 @@ desugarTyVarBind :: TyVarBind a -> TyVar
 desugarTyVarBind (UnkindedVar _ name) = UserTv (toVar (nameToStr name))
 desugarTyVarBind v@KindedVar{} = error $ "desugarTyVarBind: Vars with kinds not supported yet." ++ prettyPrint v
 
-desugarPatWithTy :: (Show a, Pretty a) => Pat a -> PassM (Var, Ty0)
-desugarPatWithTy pat =
+desugarPatWithTy :: (Show a, Pretty a) => TypeSynEnv -> Pat a -> PassM (Var, Ty0)
+desugarPatWithTy type_syns pat =
   case pat of
-    (PParen _ p)        -> desugarPatWithTy p
-    (PatTypeSig _ p ty) -> do (v,_ty) <- desugarPatWithTy p
-                              pure (v, desugarType ty)
+    (PParen _ p)        -> desugarPatWithTy type_syns p
+    (PatTypeSig _ p ty) -> do (v,_ty) <- desugarPatWithTy type_syns p
+                              pure (v, desugarType type_syns ty)
     (PVar _ n)          -> (toVar $ nameToStr n, ) <$> newMetaTy
     (PWildCard _)       -> (\a b -> (a,b)) <$> gensym "wildcard_" <*> newMetaTy
     _ -> error ("desugarPatWithTy: Unsupported pattern: " ++ show pat)

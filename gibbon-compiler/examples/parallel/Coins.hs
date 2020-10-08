@@ -12,18 +12,22 @@ lenA ls =
         ASing i -> 1
         Append l r -> lenA l + lenA r
 
-getCoins1 :: Int -> Int -> Vector (Int,Int) -> Vector (Int,Int)
+type CoinQty = ( Int -- value
+               , Int -- quantity
+               )
+
+getCoins1 :: Int -> Int -> Vector CoinQty -> Vector CoinQty
 getCoins1 c q coins_rst =
    let len = length coins_rst
    in if q == 1 then copy coins_rst else cons (c,q-1) coins_rst
 
-printCoins :: Vector (Int, Int) -> ()
+printCoins :: Vector CoinQty -> ()
 printCoins coins =
     let _ = printVec (\tup -> printCoin tup) coins
         _ = printsym (quote "\n")
     in ()
 
-printCoin :: (Int, Int) -> ()
+printCoin :: CoinQty -> ()
 printCoin tup =
     let a = tup !!! 0
         b = tup !!! 1
@@ -34,7 +38,7 @@ printCoin tup =
         _ = printsym (quote ")")
     in ()
 
-payA_seq :: Int -> Vector (Int,Int) -> AList
+payA_seq :: Int -> Vector CoinQty -> AList
 payA_seq amt coins =
     if amt == 0
     then ASing 1
@@ -63,7 +67,7 @@ getDepth1 :: Int -> Int -> Int
 getDepth1 q depth =
     if q == 1 then (depth-1) else depth
 
-payA_par :: Int -> Int -> Vector (Int,Int) -> AList
+payA_par :: Int -> Int -> Vector CoinQty -> AList
 payA_par depth amt coins =
     if depth == 0
     then payA_seq amt coins
