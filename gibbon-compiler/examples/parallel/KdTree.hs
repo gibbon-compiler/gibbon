@@ -408,14 +408,47 @@ countCorr_par cutoff probe radius tr =
              then 1
              else 0
 
+
+nCountCorr_seq :: Int -> Float -> Vector (Float, Float, Float) -> KdTree -> (Float, Float, Float, Int)
+nCountCorr_seq iters radius pts tr =
+    let len = length pts
+        i = rand
+        j = (mod i len) - 1
+        query = nth pts j
+        count = countCorr_seq query radius tr
+    in if iters <= 0
+       then let (qx,qy,qz) = query
+            in (qx, qy, qz, count)
+       else nCountCorr_seq (iters-1) radius pts tr
+
+nCountCorr_par :: Int -> Int -> Float -> Vector (Float, Float, Float) -> KdTree -> (Float, Float, Float, Int)
+nCountCorr_par cutoff iters radius pts tr =
+    let len = length pts
+        i = rand
+        j = (mod i len) - 1
+        query = nth pts j
+        count = countCorr_par cutoff query radius tr
+    in if iters <= 0
+       then let (qx,qy,qz) = query
+            in (qx, qy, qz, count)
+        else nCountCorr_par cutoff (iters-1) radius pts tr
+
+allCountCorr_seq :: Float -> KdTree -> Vector (Float, Float, Float) -> Vector Int
+allCountCorr_seq radius tr ls =
+    map (\query -> countCorr_seq query radius tr) ls
+
+allCountCorr_par :: Int -> Float -> KdTree -> Vector (Float, Float, Float) -> Vector Int
+allCountCorr_par cutoff radius tr ls =
+    map_par (\query -> countCorr_par cutoff query radius tr) ls
+
 --------------------------------------------------------------------------------
 
 check_buildkdtree :: Vector (Float, Float, Float) -> KdTree -> ()
 check_buildkdtree pts tr =
-    let p = sumList pts
-        q = sumKdTree tr
-        err = (q .-. p)
-    in print_check (float_abs (q .-. p) .<. 0.01)
+    let expected = sumList pts
+        actual = sumKdTree tr
+        err = (expected .-. actual)
+    in print_check (float_abs err .<. 0.1)
 
 check_countcorr :: Vector (Float, Float, Float) -> (Float, Float, Float) -> Int -> Float -> ()
 check_countcorr pts query actual radius =

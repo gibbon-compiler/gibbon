@@ -99,7 +99,7 @@ instance FreeVars (e l d) => FreeVars (PreExp e l d) where
 
       WithArenaE v e -> S.delete v $ gFreeVars e
 
-      SpawnE _ _ ls -> S.unions (L.map gFreeVars ls)
+      SpawnE v _ ls -> S.unions $ (S.singleton v) : (L.map gFreeVars ls)
       SyncE -> S.empty
 
       Ext q -> gFreeVars q

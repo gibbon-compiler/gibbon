@@ -25,7 +25,7 @@ bench_seqfib =
 bench_parfib :: ()
 bench_parfib =
     let n = sizeParam
-        cutoff = 19
+        cutoff = 30
         m = iterate (fib_par cutoff n)
         _ = printint m
         _ = printsym (quote "\n")
@@ -40,7 +40,7 @@ bench_seqbuildfib =
 bench_parbuildfib :: ()
 bench_parbuildfib =
   let n = sizeParam
-      cutoff = 8
+      cutoff = 6
       x = iterate (mkTreeFib_par cutoff n)
   in check_buildfib n x
 
@@ -103,7 +103,8 @@ bench_parbuildkdtree =
         pts = readArrayFile ()
         n       = sizeParam
         radius  = intToFloat n
-        cutoff  = 524288
+        -- cutoff  = 524288
+        cutoff  = 100000
         tr      = iterate (fromList_par cutoff pts)
     in check_buildkdtree pts tr
 
@@ -112,31 +113,46 @@ bench_seqcountcorr =
     let pts :: Vector (Float, Float, Float)
         pts = readArrayFile ()
         n   = sizeParam
-        radius  = intToFloat n
+        radius  = 10.0
         tr      = fromList_seq pts
-        tup =  iterate (let i     = rand
-                            j     = (mod i n) - 1
-                            probe = nth pts j
-                            corr = countCorr_seq probe radius tr
-                        in (probe, corr))
-        (query, actual) = tup
-    in check_countcorr pts query actual radius
+--         tup =  iterate (let i     = rand
+--                             j     = (mod i n) - 1
+--                             probe = nth pts j
+--                             corr = countCorr_seq probe radius tr
+--                         in (probe, corr))
+--         (query, actual) = tup
+--     in check_countcorr pts query actual radius
+
+--         (qx, qy, qz, count) = iterate (nCountCorr_seq 1 radius pts tr)
+--     in check_countcorr pts (qx,qy,qz) count radius
+        pts' = slice 0 n pts
+        counts = iterate (allCountCorr_seq radius tr pts')
+        query = nth pts' 4
+        count = nth counts 4
+    in check_countcorr pts query count radius
 
 bench_parcountcorr :: ()
 bench_parcountcorr =
     let pts :: Vector (Float, Float, Float)
         pts = readArrayFile ()
         n   = sizeParam
-        radius  = intToFloat n
+        radius  = 10.0
         tr      = fromList_seq pts
         cutoff  = 524288
-        tup =  iterate (let i     = rand
-                            j     = (mod i n) - 1
-                            probe = nth pts j
-                            corr = countCorr_par cutoff probe radius tr
-                        in (probe, corr))
-        (query, actual) = tup
-    in check_countcorr pts query actual radius
+--         tup =  iterate (let i     = rand
+--                             j     = (mod i n) - 1
+--                             probe = nth pts j
+--                             corr = countCorr_par cutoff probe radius tr
+--                         in (probe, corr))
+--         (query, actual) = tup
+--     in check_countcorr pts query actual radius
+--         (qx, qy, qz, count) = iterate (nCountCorr_par cutoff 1 radius pts tr)
+--     in check_countcorr pts (qx,qy,qz) count radius
+        pts' = slice 0 n pts
+        counts = iterate (allCountCorr_par cutoff radius tr pts')
+        query = nth pts' 4
+        count = nth counts 4
+    in check_countcorr pts query count radius
 
 bench_seqnearest :: ()
 bench_seqnearest =
@@ -146,7 +162,8 @@ bench_seqnearest =
         radius = intToFloat n
         tr     = fromList_seq pts
         nns = iterate (allNearest_seq tr pts)
-    in check_nearest pts nns radius
+    -- in check_nearest pts nns radius
+    in ()
 
 bench_parnearest :: ()
 bench_parnearest =
@@ -156,7 +173,8 @@ bench_parnearest =
         radius = intToFloat n
         tr     = fromList_seq pts
         nns = iterate (allNearest_par tr pts)
-    in check_nearest pts nns radius
+    -- in check_nearest pts nns radius
+    in ()
 
 bench_seqbuildquadtree :: ()
 bench_seqbuildquadtree =

@@ -216,7 +216,6 @@ cStdlibSort_seq f vec =
 
 --------------------------------------------------------------------------------
 
-{-
 
 cmp4 :: Int -> Int -> Int
 cmp4 a b = b - a
@@ -249,4 +248,3 @@ gibbon_main =
     -- in (test1 && test2, test3)
     in test1
 
--}
