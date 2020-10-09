@@ -94,7 +94,7 @@ bench_seqbuildkdtree =
         pts = readArrayFile ()
         n       = sizeParam
         radius  = intToFloat n
-        tr      = iterate (fromList_seq pts)
+        tr      = iterate (mkKdTree_seq pts)
     in check_buildkdtree pts tr
 
 bench_parbuildkdtree :: ()
@@ -105,7 +105,7 @@ bench_parbuildkdtree =
         radius  = intToFloat n
         -- cutoff  = 524288
         cutoff  = 100000
-        tr      = iterate (fromList_par cutoff pts)
+        tr      = iterate (mkKdTree_par cutoff pts)
     in check_buildkdtree pts tr
 
 bench_seqcountcorr :: ()
@@ -114,7 +114,7 @@ bench_seqcountcorr =
         pts = readArrayFile ()
         n   = sizeParam
         radius  = 10.0
-        tr      = fromList_seq pts
+        tr      = mkKdTree_seq pts
 --         tup =  iterate (let i     = rand
 --                             j     = (mod i n) - 1
 --                             probe = nth pts j
@@ -137,7 +137,7 @@ bench_parcountcorr =
         pts = readArrayFile ()
         n   = sizeParam
         radius  = 10.0
-        tr      = fromList_seq pts
+        tr      = mkKdTree_seq pts
         cutoff  = 524288
 --         tup =  iterate (let i     = rand
 --                             j     = (mod i n) - 1
@@ -160,7 +160,7 @@ bench_seqnearest =
         pts = readArrayFile ()
         n   = sizeParam
         radius = intToFloat n
-        tr     = fromList_seq pts
+        tr     = mkKdTree_seq pts
         nns = iterate (allNearest_seq tr pts)
     in ()
 
@@ -170,7 +170,7 @@ bench_parnearest =
         pts = readArrayFile ()
         n   = sizeParam
         radius = intToFloat n
-        tr     = fromList_seq pts
+        tr     = mkKdTree_seq pts
         nns = iterate (allNearest_par tr pts)
     in ()
 

@@ -4,6 +4,8 @@ import Gibbon.Prelude
 import Gibbon.Vector
 import Gibbon.Vector.Parallel
 
+import Geometry
+
 -----------------------------------------------------------------------------------------
 
 type Point2d = ( Float -- ^ x coord
@@ -23,26 +25,6 @@ type Particle  = ( Float -- ^ x coord
                  )
 
 type Box = (Float, Float, Float, Float)
-
-print_point2d :: Point2d -> ()
-print_point2d tup =
-    let (a,b) = tup
-        _ = printsym (quote "(")
-        _ = printfloat a
-        _ = printsym (quote ",")
-        _ = printfloat b
-        _ = printsym (quote ")")
-    in ()
-
--- | Distance between two points
-dist_point2d :: Point2d -> Point2d -> Float
-{-# INLINE dist_point2d #-}
-dist_point2d a b =
-  let (a_x, a_y) = a
-      (b_x, b_y) = b
-      d1 = (a_x .-. b_x)
-      d2 = (a_y .-. b_y)
-  in (d1 .*. d1) .+. (d2 .*. d2)
 
 print_masspoint :: MassPoint -> ()
 print_masspoint tup =

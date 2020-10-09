@@ -3,107 +3,12 @@ module KdTree where
 import Gibbon.Vector
 import Gibbon.Vector.Parallel
 
-import MergeSort
-
---------------------------------------------------------------------------------
-
-type Point3d = (Float, Float, Float)
-
-print_point3d :: Point3d -> ()
-print_point3d tup =
-    let (a,b,c) = tup
-        _ = printsym (quote "(")
-        _ = printfloat a
-        _ = printsym (quote ",")
-        _ = printfloat b
-        _ = printsym (quote ",")
-        _ = printfloat c
-        _ = printsym (quote ")")
-    in ()
-
-get_coord_point3d :: Int -> Point3d -> Float
-get_coord_point3d axis pt =
-  if axis == 0
-  then pt !!! 0
-  else if axis == 1
-  then pt !!! 1
-  else pt !!! 2
-
--- | Distance between two points
-dist_point3d :: Point3d -> Point3d -> Float
-dist_point3d a b =
-  let (a_x, a_y, a_z) = a
-      (b_x, b_y, b_z) = b
-      d1 = (a_x .-. b_x)
-      d2 = (a_y .-. b_y)
-      d3 = (a_z .-. b_z)
-  in (d1 .*. d1) .+. (d2 .*. d2) .+. (d3 .*. d3)
-
-
-getNextAxis_3d :: Int -> Int
-getNextAxis_3d i = mod (i + 1) 2
-
-eq_point3d :: Point3d -> Point3d -> Bool
-eq_point3d a b =
-    let (ax,ay,az) = a
-        (bx,by,bz) = b
-    in ax .==. bx && ay .==. by && az .==. bz
-
-cmpx_point3d :: Point3d -> Point3d -> Int
-cmpx_point3d a b =
-    let (ax,_,_) = a
-        (bx,_,_) = b
-    in floatToInt (ax .-. bx)
-
-cmpy_point3d :: Point3d -> Point3d -> Int
-cmpy_point3d a b =
-    let (_,ay,_) = a
-        (_,by,_) = b
-    in floatToInt (ay .-. by)
-
-cmpz_point3d :: Point3d -> Point3d -> Int
-cmpz_point3d a b =
-    let (_,_,az) = a
-        (_,_,bz) = b
-    in floatToInt (az .-. bz)
-
-sort_point3d :: Int -> Vector Point3d -> Vector Point3d
-sort_point3d axis ls =
-    let ls2 = copy ls in
-    if axis == 0
-    then inplacevsort ls2 cmpx_point3d
-    else if axis == 1
-    then inplacevsort ls2 cmpy_point3d
-    else inplacevsort ls2 cmpz_point3d
-
--- sort :: Int -> Vector Point3d -> Vector Point3d
--- sort axis ls =
---     if axis == 0
---     then mergeSort_seq cmpx_point3d ls
---     else if axis == 1
---     then mergeSort_seq cmpy_point3d ls
---     else mergeSort_seq cmpz_point3d ls
-
-
--- sort_par :: Int -> Vector Point3d -> Vector Point3d
--- sort_par axis ls =
---     let ls2 = copy_par ls in
---     if axis == 0
---     then inplacevsort ls2 cmpx_point3d
---     else if axis == 1
---     then inplacevsort ls2 cmpy_point3d
---     else inplacevsort ls2 cmpz_point3d
-
-sort_point3d_par :: Int -> Vector Point3d -> Vector Point3d
-sort_point3d_par axis ls =
-    if axis == 0
-    then mergeSort cmpx_point3d ls
-    else if axis == 1
-    then mergeSort cmpy_point3d ls
-    else mergeSort cmpz_point3d ls
+import Geometry
 
 --------------------------------------------------------------------------------
 -- The main algorithm
+
+type Point3d = (Float, Float, Float)
 
 data KdTree = KdLeaf Float  -- ^ x coord
                      Float  -- ^ y coord
@@ -198,8 +103,8 @@ getz_kdtree tr =
         KdNode _ _ z _ _ _ _ _ _ _ _ _ _ _ -> z
         KdLeaf _ _ z                       -> z
 
-fromListWithAxis_seq :: Int -> Vector Point3d -> KdTree
-fromListWithAxis_seq axis pts =
+mkKdTreeWithAxis_seq :: Int -> Vector Point3d -> KdTree
+mkKdTreeWithAxis_seq axis pts =
     let len = vlength pts in
     if len == 0
     then KdEmpty
@@ -213,8 +118,8 @@ fromListWithAxis_seq axis pts =
              left_pts   = slice 0 pivot_idx sorted_pts
              right_pts  = slice (pivot_idx+1) (len - pivot_idx - 1) sorted_pts
              next_axis  = getNextAxis_3d axis
-             left_tr    = fromListWithAxis_seq next_axis left_pts
-             right_tr   = fromListWithAxis_seq next_axis right_pts
+             left_tr    = mkKdTreeWithAxis_seq next_axis left_pts
+             right_tr   = mkKdTreeWithAxis_seq next_axis right_pts
              min_x      = minFloat x (minFloat (get_minx_kdtree left_tr) (get_minx_kdtree right_tr))
              max_x      = maxFloat x (maxFloat (get_maxx_kdtree left_tr) (get_maxx_kdtree right_tr))
              min_y      = minFloat y (minFloat (get_miny_kdtree left_tr) (get_miny_kdtree right_tr))
@@ -225,14 +130,14 @@ fromListWithAxis_seq axis pts =
          in KdNode x y z total_points axis (get_coord_point3d axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
-fromList_seq :: Vector Point3d -> KdTree
-fromList_seq pts = fromListWithAxis_seq 0 pts
+mkKdTree_seq :: Vector Point3d -> KdTree
+mkKdTree_seq pts = mkKdTreeWithAxis_seq 0 pts
 
-fromListWithAxis_par :: Int -> Int -> Vector Point3d -> KdTree
-fromListWithAxis_par cutoff axis pts =
+mkKdTreeWithAxis_par :: Int -> Int -> Vector Point3d -> KdTree
+mkKdTreeWithAxis_par cutoff axis pts =
     let len = vlength pts in
     if len < cutoff
-    then fromListWithAxis_seq axis pts
+    then mkKdTreeWithAxis_seq axis pts
     else let sorted_pts = sort_point3d_par axis pts
              pivot_idx  = div len 2
              pivot      = nth sorted_pts pivot_idx
@@ -240,8 +145,8 @@ fromListWithAxis_par cutoff axis pts =
              left_pts   = slice 0 pivot_idx sorted_pts
              right_pts  = slice (pivot_idx+1) (len - pivot_idx - 1) sorted_pts
              next_axis  = getNextAxis_3d axis
-             left_tr    = spawn (fromListWithAxis_par cutoff next_axis left_pts)
-             right_tr   = fromListWithAxis_par cutoff next_axis right_pts
+             left_tr    = spawn (mkKdTreeWithAxis_par cutoff next_axis left_pts)
+             right_tr   = mkKdTreeWithAxis_par cutoff next_axis right_pts
              _          = sync
              min_x      = minFloat x (minFloat (get_minx_kdtree left_tr) (get_minx_kdtree right_tr))
              max_x      = maxFloat x (maxFloat (get_maxx_kdtree left_tr) (get_maxx_kdtree right_tr))
@@ -253,8 +158,8 @@ fromListWithAxis_par cutoff axis pts =
          in KdNode x y z total_points axis (get_coord_point3d axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
 
 -- | Build a KD-Tree out of a set of points
-fromList_par :: Int -> Vector Point3d -> KdTree
-fromList_par cutoff pts = fromListWithAxis_par cutoff 0 pts
+mkKdTree_par :: Int -> Vector Point3d -> KdTree
+mkKdTree_par cutoff pts = mkKdTreeWithAxis_par cutoff 0 pts
 
 --------------------------------------------------------------------------------
 
