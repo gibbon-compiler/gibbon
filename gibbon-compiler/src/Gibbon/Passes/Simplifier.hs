@@ -9,7 +9,7 @@ import qualified Data.Map as M
 import Gibbon.Common
 import Gibbon.Language
 import Gibbon.L1.Syntax
-import Gibbon.Passes.Freshen (freshNames1)
+import Gibbon.Passes.Freshen (freshNames1, freshFun1)
 
 --------------------------------------------------------------------------------
 
@@ -40,16 +40,13 @@ inlineFuns (Prog ddefs fundefs main) = do
     go ex =
       case ex of
         AppEF f [] args -> do
-            let FunDef{funArgs,funTy,funBody,funInline,funRec} = fundefs M.! f
-            if funInline == Inline && funRec == NotRec
+            let fn = fundefs M.! f
+            if funInline fn == Inline && funRec fn == NotRec
               then do
-                new_vars <- mapM gensym funArgs
-                let funBody' = foldr (\(o,n) acc -> gSubst o (VarE n) acc)
-                                 funBody (zip funArgs new_vars)
-                    in_tys = fst funTy
-                    binds = map (\(v,ty,e) -> (v,[],ty,e)) (zip3 new_vars in_tys args)
-
-                pure $ mkLets binds funBody'
+                FunDef{funArgs,funTy,funBody} <- freshFun1 fn
+                let in_tys = fst funTy
+                    binds = map (\(v,ty,e) -> (v,[],ty,e)) (zip3 funArgs in_tys args)
+                pure $ mkLets binds funBody
               else do
                 args' <- mapM (go . project) args
                 pure $ AppE f [] args'

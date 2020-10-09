@@ -3,7 +3,7 @@
 
 -- | Unique names.
 
-module Gibbon.Passes.Freshen (freshNames, freshNames1, freshExp, freshExp1) where
+module Gibbon.Passes.Freshen (freshNames, freshNames1, freshExp, freshExp1, freshFun1) where
 
 import           Control.Exception
 import           Data.Foldable ( foldrM )
@@ -280,15 +280,16 @@ freshNames1 (L1.Prog defs funs main) =
                   Nothing -> return Nothing
                   Just (m,ty) -> do m' <- freshExp1 M.empty m
                                     return $ Just (m',ty)
-       funs' <- freshFuns1 funs
+       funs' <- traverse freshFun1 funs
        return $ L1.Prog defs funs' main'
-    where freshFuns1 m = M.fromList <$> mapM freshFun1 (M.toList m)
-          freshFun1 (nam, FunDef _ nargs (targ,ty) bod isrec inline) =
-              do nargs' <- mapM gensym nargs
-                 let msubst = (M.fromList $ zip nargs nargs')
-                 bod' <- freshExp1 msubst bod
-                 let nam' = cleanFunName nam
-                 return (nam', FunDef nam' nargs' (targ,ty) bod' isrec inline)
+
+freshFun1 :: L1.FunDef1 -> PassM L1.FunDef1
+freshFun1 (FunDef nam nargs (targ,ty) bod isrec inline) = do
+    nargs' <- mapM gensym nargs
+    let msubst = (M.fromList $ zip nargs nargs')
+    bod' <- freshExp1 msubst bod
+    -- let nam' = cleanFunName nam
+    return $ FunDef nam nargs' (targ,ty) bod' isrec inline
 
 
 freshExp1 :: VarEnv -> L1.Exp1 -> PassM L1.Exp1
