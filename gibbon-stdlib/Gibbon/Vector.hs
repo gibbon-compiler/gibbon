@@ -150,6 +150,25 @@ foldl_loop idx end f acc vec =
 
 -- Work: O(n)
 -- Span: O(n)
+scanl :: (b -> a -> b) -> b -> Vector a -> Vector b
+{-# INLINE scanl #-}
+scanl f acc vec =
+  let len = vlength vec
+      result :: Vector b
+      result = valloc len
+  in scanl_loop 0 len f acc vec result
+
+scanl_loop :: Int -> Int -> (b -> a -> b) -> b -> Vector a -> Vector b -> Vector b
+scanl_loop idx end f acc vec result =
+    if idx == end
+      then result
+      else
+        let acc1 = f acc (vnth vec idx)
+            result' = inplacevupdate result idx acc1
+        in scanl_loop (idx+1) end f acc1 vec result'
+
+-- Work: O(n)
+-- Span: O(n)
 ifoldl :: (b -> Int -> a -> b) -> b -> Vector a -> b
 {-# INLINE ifoldl #-}
 ifoldl f acc vec = ifoldl_loop 0 (vlength vec) f acc vec
@@ -177,11 +196,10 @@ printVec_loop idx end vec f =
     if idx == end
     then ()
     else
-        let x = head vec
+        let x = vnth vec idx
             _ = f x
             _ = printsym (quote ",")
-            rst = tail vec
-        in printVec_loop (idx+1) end rst f
+        in printVec_loop (idx+1) end vec f
 
 -- Work: O(n)
 -- Span: O(n)
@@ -206,6 +224,7 @@ cons x vec =
         vec3 = generate_loop vec2 1 (len+1) (\i -> nth vec (i-1))
         vec4 = inplacevupdate vec3 0 x
     in vec4
+
 
 ----------------------------------
 -- TODO: review things after this.

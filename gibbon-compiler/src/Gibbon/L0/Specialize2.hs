@@ -1000,7 +1000,7 @@ specLambdasExp ddefs env2 ex =
       let arg_vars = map fst args
           captured_vars = gFreeVars lam_bod `S.difference` (S.fromList arg_vars)
                           `S.difference` (M.keysSet (sp_fundefs sp_state))
-      lam_bod' <- go lam_bod
+      lam_bod' <- specLambdasExp ddefs (L1.extendsVEnv (M.fromList args) env2) lam_bod
       if not (S.null captured_vars)
       -- Pass captured values as extra arguments
       then do

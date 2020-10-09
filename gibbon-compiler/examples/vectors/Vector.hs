@@ -22,6 +22,16 @@ fib_seq n =
 -- --     print i
 -- -- -- 2295
 
+generate_2d :: Int -> Int -> (Int -> Int -> a) -> Vector a
+generate_2d m n f =
+  -- vconcat (generate m (\j -> generate n (\i -> f j i)))
+  let lam3 = (\i j -> f j i)
+      lam1 = (\j ->
+                let lam2 = (\i -> lam3 i j)
+                in generate n lam2)
+      lam0 = (\j -> lam1 j)
+  in vconcat (generate m lam0)
+
 gibbon_main =
     let lam = (\i -> if i > 10 then fib_seq 10 else fib_seq i)
         vec = (generate 5 lam)
@@ -40,7 +50,23 @@ gibbon_main =
         vec14 = filter (\x -> (mod x 2) == 0) vec2
         _ = printVec (\i -> printint i) vec14
         _ = printsym (quote "\n")
-
+        -- scanl
+        vec15 = generate 5 (\i -> i)
+        vec16 = scanl (\acc x -> acc + x) 0 vec15
+        _ = printVec (\i -> printint i) vec15
+        _ = printsym (quote "\n")
+        -- concat
+        vec17 = generate_2d 2 3 (\i j -> (i,j))
+        _ = printVec (\(t::(Int,Int)) ->
+                       let (i,j) = t
+                           _ = printsym (quote "(")
+                           _ = printint i
+                           _ = printsym (quote ",")
+                           _ = printint j
+                           _ = printsym (quote ")")
+                       in ())
+            vec17
+        _ = printsym (quote "\n")
         test1 = (nth vec2 4) == 3
         test2 = (nth vec4 54) == 55
         test3 = (nth vec6 54) == 56

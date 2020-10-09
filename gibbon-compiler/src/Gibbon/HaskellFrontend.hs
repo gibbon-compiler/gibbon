@@ -838,9 +838,10 @@ generateTupleProjs toplevel env ((p,n):pats) tup exp2 =
         (PVar _ v) -> do
             let w = toVar (nameToStr v)
             go w
+        -- Don't bind wildcards from patterns.
         (PWildCard _) -> do
-            w <- gensym "wildcard"
-            go w
+          generateTupleProjs toplevel env pats tup exp2
+
         _ -> error $ "generateTupleProjs: Pattern not handled: " ++ prettyPrint p
 
   where
