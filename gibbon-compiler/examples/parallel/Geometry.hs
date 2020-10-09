@@ -67,46 +67,55 @@ cmpz_point3d a b =
     in floatToInt (az .-. bz)
 
 add_point3d ::  Point3d -> Point3d -> Point3d
+{-# INLINE add_point3d #-}
 add_point3d a b =
   let (ax,ay,az) = a
       (bx,by,bz) = b
   in (ax .+. bx, ay .+. by, az .+. bz)
 
 sub_point3d ::  Point3d -> Point3d -> Point3d
+{-# INLINE sub_point3d #-}
 sub_point3d a b =
   let (ax,ay,az) = a
       (bx,by,bz) = b
   in (ax .-. bx, ay .-. by, az .-. bz)
 
 mul_point3d ::  Point3d -> Point3d -> Point3d
+{-# INLINE mul_point3d #-}
 mul_point3d a b =
   let (ax,ay,az) = a
       (bx,by,bz) = b
   in (ax .*. bx, ay .*. by, az .*. bz)
 
 div_point3d ::  Point3d -> Point3d -> Point3d
+{-# INLINE div_point3d #-}
 div_point3d a b =
   let (ax,ay,az) = a
       (bx,by,bz) = b
   in (ax ./. bx, ay ./. by, az ./. bz)
 
 scale_point3d :: Float -> Point3d -> Point3d
+{-# INLINE scale_point3d #-}
 scale_point3d s p =
   let (x,y,z) = p
   in (x .*. s, y .*. s, z .*. s)
 
 dot_point3d :: Point3d -> Point3d -> Float
+{-# INLINE dot_point3d #-}
 dot_point3d p1 p2 =
   let (x,y,z) = mul_point3d p1 p2
   in x .+. y .+. z
 
 norm_point3d :: Point3d -> Float
+{-# INLINE norm_point3d #-}
 norm_point3d p = sqrt (dot_point3d p p)
 
 normalize_point3d :: Point3d -> Point3d
+{-# INLINE normalize_point3d #-}
 normalize_point3d p = scale_point3d (1.0 ./. (norm_point3d p)) p
 
 cross_point3d :: Point3d -> Point3d -> Point3d
+{-# INLINE cross_point3d #-}
 cross_point3d a b =
   let (ax,ay,az) = a
       (bx,by,bz) = b

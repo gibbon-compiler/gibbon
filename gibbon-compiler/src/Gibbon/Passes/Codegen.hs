@@ -827,14 +827,14 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  PrintFloat ->
                      let [arg] = rnds in
                      case bnds of
-                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%lf", $(codegenTriv venv arg)); |] ]
-                       [] -> pure [ C.BlockStm [cstm| printf("%f", $(codegenTriv venv arg)); |] ]
+                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%.2f", $(codegenTriv venv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| printf("%.2f", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
                  PrintBool ->
                      let [arg] = rnds in
                      case bnds of
-                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%lf", $(codegenTriv venv arg)); |] ]
+                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%d", $(codegenTriv venv arg)); |] ]
                        [] -> pure [ C.BlockStm [cstm| printf("%d", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
