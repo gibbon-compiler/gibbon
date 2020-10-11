@@ -42,7 +42,7 @@ enclosing box_a box_b =
 centre :: Aabb -> Point3d
 {-# INLINE centre #-}
 centre box =
-  let (min_x, min_y, min_z, max_x, max_y, max_z) = box
+  let (_, _, _, max_x, max_y, max_z) = box
   -- https://github.com/athas/raytracers/issues/10
   in (max_x, max_y, max_z)
 
@@ -135,9 +135,9 @@ point_at_param ray t =
 sphere_aabb :: Sphere -> Aabb
 sphere_aabb sphere =
   let (radius, px, py, pz, _, _, _) = sphere
-      (min_x, min_y, min_z) = sub_point3d (px,py,pz) (radius, radius, radius)
-      (max_x, max_y, max_z) = add_point3d (px,py,pz) (radius, radius, radius)
-  in (min_x, min_y, min_z, max_x, max_y, max_z)
+      -- (min_x, min_y, min_z) = sub_point3d (px,py,pz) (radius, radius, radius)
+      -- (max_x, max_y, max_z) = add_point3d (px,py,pz) (radius, radius, radius)
+  in (px .-. radius, py .-. radius, pz .-. radius, px .+. radius, py .+. radius, pz .+. radius)
 
 type Hit = ( -- Shortcut that says whether this is a Just Hit, or a Nothing.
              Bool
@@ -199,7 +199,7 @@ sphere_hit sphere ray t_min t_max =
       origin_ray = get_origin_ray ray
       pos_sphere = get_position_sphere sphere
       radius_sphere = get_radius_sphere sphere
-      color_sphere = get_color_sphere sphere
+      (cx,cy,cz) = get_color_sphere sphere
       oc = sub_point3d origin_ray pos_sphere
       a = dot_point3d dir_ray dir_ray
       b = dot_point3d oc dir_ray
@@ -211,7 +211,6 @@ sphere_hit sphere ray t_min t_max =
                let point = point_at_param ray temp
                    (px,py,pz) = point
                    (nx,ny,nz) = scale_point3d (1.0 ./. radius_sphere) (sub_point3d point pos_sphere)
-                   (cx,cy,cz) = color_sphere
                in (True, temp, px, py, pz, nx, ny, nz, cx, cy, cz)
              else mk_not_hit)
   in if discriminant .<=. 0.0
@@ -473,8 +472,8 @@ mytan x = x
 mkCamera :: Position -> Position -> Direction -> Float -> Float -> Camera
 mkCamera lookfrom lookat vup vfov aspect =
   let pi = 3.14159265358979312
-      theta = (vfov .*. pi) ./. (intToFloat 180)
-      half_height = mytan (theta ./. (intToFloat 2))
+      theta = (vfov .*. pi) ./. 180.0
+      half_height = mytan (theta ./. 2.0)
       half_width = aspect .*. half_height
       origin = lookfrom
       (origin_x, origin_y, origin_z) = origin
@@ -698,6 +697,66 @@ generate_2d m n f =
       lam0 = (\j -> lam1 j)
   in vconcat (generate m lam0)
 
+rgbbox :: Scene
+rgbbox =
+  let n = 10
+      k = 60.0
+
+      leftwall = generate_2d n n (\y z ->
+                                   let neg_k = (0.0 .-. k)
+                                       pos_x = neg_k ./. 2.0
+                                       pos_y = (neg_k ./. 2.0) .+. ((k ./. (intToFloat n)) .*. intToFloat y)
+                                       pos_z = (neg_k ./. 2.0) .+. ((k ./. (intToFloat n)) .*. intToFloat z)
+                                       -- (c_r, c_g, c_b) = (1.0, 0.0, 0.0)
+                                       radius = k ./. ((intToFloat n) .*. 2.0)
+                                   in (radius,pos_x,pos_y,pos_z,1.0,0.0,0.0))
+      midwall = generate_2d n n (\x y ->
+                                   let neg_k = (0.0 .-. k)
+                                       pos_x = (neg_k ./. 2.0) .+. ((k ./. (intToFloat n)) .*. intToFloat x)
+                                       pos_y = (neg_k ./. 2.0) .+. ((k ./. (intToFloat n)) .*. intToFloat y)
+                                       pos_z = neg_k ./. 2.0
+                                       -- (c_r, c_g, c_b) = (1.0, 1.0, 0.0)
+                                       radius = k ./. ((intToFloat n) .*. 2.0)
+                                   in (radius,pos_x,pos_y,pos_z,1.0,1.0,0.0))
+
+      rightwall = generate_2d n n (\y z ->
+                                   let neg_k = (0.0 .-. k)
+                                       pos_x = k ./. 2.0
+                                       pos_y = (neg_k ./. 2.0) .+. ((k ./. (intToFloat n)) .*. intToFloat y)
+                                       pos_z = (neg_k ./. 2.0) .+. ((k ./. (intToFloat n)) .*. intToFloat z)
+                                       -- (c_r, c_g, c_b) = (0.0, 0.0, 1.0)
+                                       radius = k ./. ((intToFloat n) .*. 2.0)
+                                   in (radius,pos_x,pos_y,pos_z,0.0,0.0,1.0))
+
+      bottom = generate_2d n n (\x z ->
+                                   let neg_k = (0.0 .-. k)
+                                       pos_x = (neg_k ./. 2.0) .+. ((k ./. (intToFloat n)) .*. intToFloat x)
+                                       pos_y = neg_k ./. 2.0
+                                       pos_z = (neg_k ./. 2.0) .+. ((k ./. (intToFloat n)) .*. intToFloat z)
+                                       -- (c_r, c_g, c_b) = (1.0, 1.0, 1.0)
+                                       radius = k ./. ((intToFloat n) .*. 2.0)
+                                   in (radius,pos_x,pos_y,pos_z,1.0,1.0,1.0))
+
+      -- This triggers a bug in the compiler.
+      -- spheres = append (append leftwall midwall) (append rightwall bottom)
+      -- Workaround:
+      spheres0 :: Vector (Vector Sphere)
+      spheres0 = valloc 4
+      spheres1 = inplacevupdate spheres0 0 leftwall
+      spheres2 = inplacevupdate spheres1 1 midwall
+      spheres3 = inplacevupdate spheres2 2 rightwall
+      spheres4 = inplacevupdate spheres3 3 bottom
+      spheres = vconcat spheres4
+
+      look_from_x = 0.0
+      look_from_y = 30.0
+      look_from_z = 30.0
+      look_at_x = 0.0
+      look_at_y = (0.0 .-. 1.0)
+      look_at_z = (0.0 .-. 1.0)
+      fov = 75.0
+  in (look_from_x,look_from_y,look_from_z,look_at_x,look_at_y,look_at_z,fov,spheres)
+
 irreg :: Scene
 irreg =
   let n = 100
@@ -725,17 +784,18 @@ gibbon_main =
   let size = sizeParam
       height = size
       width = size
-      scene = irreg
+      -- scene = irreg
+      scene = rgbbox
       -- _ = print_scene scene
       spheres = get_spheres_scene scene
-      objs1 = iterate (mkBvh spheres)
+      -- objs1 = iterate (mkBvh spheres)
       -- _ = print_bvh objs1
       objs2 = iterate (mkBvh_par spheres)
       -- leaves = countLeavesBvh objs
       -- _ = printint leaves
       -- _ = printsym (quote "\n")
       cam = camera_from_scene width height scene
-      pixels = iterate (render objs1 width height cam)
+      -- pixels = iterate (render objs1 width height cam)
       pixels2 = iterate (render_par objs2 width height cam)
       -- _ = printVec (\p -> print_pixel p) pixels
   in ()

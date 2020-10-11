@@ -991,39 +991,42 @@ double sum_timing_array(VectorTy *times) {
     return acc;
 }
 
+typedef struct __Pixel_struct {
+    IntTy field0;
+    IntTy field1;
+    IntTy field2;
+} __Pixel;
 
-// void writePpm(char* filename, IntTy width, IntTy height, VectorTy *pixels)
-// {
-//     FILE *fp;
-//     fp = fopen(filename, "w+");
-//     fprintf(fp, "P3\n");
-//     fprintf(fp, "%lld %lld\n255\n", width, height);
-//     IntTy len = vector_length(pixels);
-//     writePpm_loop(fp, 0, len, pixels);
-//     fclose(fp);
-//     return;
-// }
+void writePpm(char* filename, IntTy width, IntTy height, VectorTy *pixels)
+{
+    FILE *fp;
+    fp = fopen(filename, "w+");
+    fprintf(fp, "P3\n");
+    fprintf(fp, "%lld %lld\n255\n", width, height);
+    IntTy len = vector_length(pixels);
+    writePpm_loop(fp, 0, len, pixels);
+    fclose(fp);
+    return;
+}
 
-// void writePpm_loop(FILE *fp, IntTy idx, IntTy end, VectorTy *pixels)
-// {
-//     BoolTy fltIf_5768_6575 = idx == end;
+void writePpm_loop(FILE *fp, IntTy idx, IntTy end, VectorTy *pixels)
+{
+    BoolTy fltIf_5768_6575 = idx == end;
 
-//     if (fltIf_5768_6575) {
-//         return;
-//     } else {
-//         Int64Int64Int64Prod *tmp_112;
-
-//         tmp_112 = (Int64Int64Int64Prod *) vector_nth(pixels, idx);
-
-//         Int64Int64Int64Prod tup = *tmp_112;
-//         IntTy x = tup.field0;
-//         IntTy y = tup.field1;
-//         IntTy z = tup.field2;
-//         // write to file.
-//         fprintf(fp, "%lld %lld %lld\n", x, y, z);
-//         writePpm_loop(fp, (idx+1), end, pixels);
-//     }
-// }
+    if (fltIf_5768_6575) {
+        return;
+    } else {
+        __Pixel *tmp_112;
+        tmp_112 = (__Pixel *) vector_nth(pixels, idx);
+        __Pixel tup = *tmp_112;
+        IntTy x = tup.field0;
+        IntTy y = tup.field1;
+        IntTy z = tup.field2;
+        // write to file.
+        fprintf(fp, "%lld %lld %lld\n", x, y, z);
+        writePpm_loop(fp, (idx+1), end, pixels);
+    }
+}
 
 
 /* -------------------------------------------------------------------------------- */

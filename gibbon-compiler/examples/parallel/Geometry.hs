@@ -117,12 +117,12 @@ normalize_point3d p = scale_point3d (1.0 ./. (norm_point3d p)) p
 cross_point3d :: Point3d -> Point3d -> Point3d
 {-# INLINE cross_point3d #-}
 cross_point3d a b =
-  let (ax,ay,az) = a
-      (bx,by,bz) = b
-      cx = (ay .*. bz) .-. (az .*. by)
-      cy = (az .*. bx) .-. (ax .*. bz)
-      cz = (ax .*. by) .-. (ay .*. bx)
-  in (cx, cy, cz)
+  let (x1,y1,z1) = a
+      (x2,y2,z2) = b
+      x3 = (y1 .*. z2) .-. (z1 .*. y2)
+      y3 = (z1 .*. x2) .-. (x1 .*. z2)
+      z3 = (x1 .*. y2) .-. (y1 .*. x2)
+  in (x3, y3, z3)
 
 sort_point3d :: Int -> Vector Point3d -> Vector Point3d
 sort_point3d axis ls =
