@@ -641,8 +641,8 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
 
     DataConE () k [] -> do
         case dest of
-          NoDest -> err $ "Expected single location destination for DataConE"
-          TupleDest _ds -> err $ "Expected single location destination for DataConE"
+          NoDest -> err $ "Expected single location destination for DataConE" ++ sdoc ex0
+          TupleDest _ds -> err $ "Expected single location destination for DataConE" ++ sdoc ex0
           SingleDest d ->
               do fakeLoc <- fresh
                  let constrs = [AfterTagL fakeLoc d]
@@ -656,7 +656,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           (e',ty,cs) <- inferExp env (DataConE () k ls) (SingleDest loc)
           fcs <- tryInRegion cs
           tryBindReg (e', ty, fcs)
-        TupleDest _ds -> err $ "Expected single location destination for DataConE"
+        TupleDest _ds -> err $ "Expected single location destination for DataConE" ++ sdoc ex0
         SingleDest d -> do
                   locs <- sequence $ replicate (length ls) fresh
                   mapM_ fixLoc locs -- Don't allow argument locations to freely unify
@@ -876,7 +876,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           let cs = L.nub $ csa ++ csb ++ csc ++ cs'
           return (L2.LetE (vr,[],tyc,L2.IfE boda bodb bodc) bod', ty', cs)
 
-        LetE{} -> err $ "Expected let spine, encountered nested lets: "
+        LetE{} -> err $ "Expected let spine, encountered nested lets: " ++ sdoc ex0
 
         LitE i -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr IntTy env) bod dest

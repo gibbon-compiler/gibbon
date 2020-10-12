@@ -780,22 +780,16 @@ irreg _ =
 
 --------------------------------------------------------------------------------
 
--- gibbon_main =
---   let size = sizeParam
---       height = size
---       width = size
---       -- scene = irreg
---       scene = rgbbox
---       -- _ = print_scene scene
---       spheres = get_spheres_scene scene
---       objs1 = iterate (mkBvh spheres)
---       -- _ = print_bvh objs1
---       -- objs2 = iterate (mkBvh_par spheres)
---       -- leaves = countLeavesBvh objs
---       -- _ = printint leaves
---       -- _ = printsym (quote "\n")
---       cam = camera_from_scene width height scene
---       pixels = iterate (render objs1 width height cam)
---       -- pixels2 = iterate (render_par objs2 width height cam)
---       -- _ = printVec (\p -> print_pixel p) pixels
---   in ()
+gibbon_main =
+  let size = sizeParam
+      height = size
+      width = size
+      -- scene = irreg
+      scene = rgbbox ()
+      spheres = get_spheres_scene scene
+      objs1 = iterate (mkBvh_seq spheres)
+      -- objs2 = iterate (mkBvh_par spheres)
+      cam = camera_from_scene width height scene
+      pixels = iterate (render_seq objs1 width height cam)
+      -- pixels2 = iterate (render_par objs2 width height cam)
+  in ()
