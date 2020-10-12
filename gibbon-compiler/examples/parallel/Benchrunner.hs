@@ -6,6 +6,7 @@ import KdTree
 import Bhut
 import Coins
 import Countnodes
+import Ray
 
 --------------------------------------------------------------------------------
 
@@ -322,6 +323,45 @@ bench_parcountnodes =
       _ = printsym (quote "\n")
   in ()
 
+bench_seqmkbvh :: ()
+bench_seqmkbvh =
+  let scene = rgbbox ()
+      spheres = get_spheres_scene scene
+      bvh = iterate (mkBvh_seq spheres)
+  in ()
+
+bench_parmkbvh :: ()
+bench_parmkbvh =
+  let scene = rgbbox ()
+      spheres = get_spheres_scene scene
+      bvh = iterate (mkBvh_par spheres)
+  in ()
+
+bench_seqray :: ()
+bench_seqray =
+  let scene = rgbbox ()
+      spheres = get_spheres_scene scene
+      size = sizeParam
+      width = size
+      height = size
+      bvh = mkBvh_seq spheres
+      cam = camera_from_scene width height scene
+      pixels = iterate (render_seq bvh width height cam)
+  in ()
+
+bench_parray :: ()
+bench_parray =
+  let scene = rgbbox ()
+      spheres = get_spheres_scene scene
+      size = sizeParam
+      width = size
+      height = size
+      bvh = mkBvh_seq spheres
+      cam = camera_from_scene width height scene
+      pixels = iterate (render_par bvh width height cam)
+  in ()
+
+
 gibbon_main =
     if prog_is (quote "seqfib")
     then bench_seqfib
@@ -371,4 +411,12 @@ gibbon_main =
     then bench_seqcountnodes
     else if prog_is (quote "parcountnodes")
     then bench_parcountnodes
+    else if prog_is (quote "seqmkbvh")
+    then bench_seqmkbvh
+    else if prog_is (quote "parmkbvh")
+    then bench_parmkbvh
+    else if prog_is (quote "seqray")
+    then bench_seqray
+    else if prog_is (quote "parray")
+    then bench_parray
     else printsym (quote "benchrunner: select benchmark to run with --bench-prog\n")

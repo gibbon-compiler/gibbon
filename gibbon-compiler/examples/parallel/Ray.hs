@@ -331,11 +331,11 @@ countLeavesBvh bvh =
       countLeavesBvh left + countLeavesBvh right
 
 
-mkBvh :: Vector Sphere -> Bvh
-mkBvh objs = mkBvh' 0 (length objs) objs
+mkBvh_seq :: Vector Sphere -> Bvh
+mkBvh_seq objs = mkBvh'_seq 0 (length objs) objs
 
-mkBvh' :: Int -> Int -> Vector Sphere -> Bvh
-mkBvh' depth n objs =
+mkBvh'_seq :: Int -> Int -> Vector Sphere -> Bvh
+mkBvh'_seq depth n objs =
   if n == 1
   then let sphere = nth objs 0
            (min_x,min_y,min_z,max_x,max_y,max_z) = sphere_aabb sphere
@@ -349,8 +349,8 @@ mkBvh' depth n objs =
            (left_spheres, right_spheres) = splitAt (div n 2) sorted_objs
            left_n  = length left_spheres
            right_n = length right_spheres
-           left_bvh = mkBvh' (depth+1) left_n left_spheres
-           right_bvh = mkBvh' (depth+1) right_n right_spheres
+           left_bvh = mkBvh'_seq (depth+1) left_n left_spheres
+           right_bvh = mkBvh'_seq (depth+1) right_n right_spheres
            left_aabb = get_aabb_bvh left_bvh
            right_aabb = get_aabb_bvh right_bvh
            (min_x, min_y, min_z, max_x, max_y, max_z) = enclosing left_aabb right_aabb
@@ -362,7 +362,7 @@ mkBvh_par objs = mkBvh'_par 0 (length objs) objs
 mkBvh'_par :: Int -> Int -> Vector Sphere -> Bvh
 mkBvh'_par depth n objs =
   if n < 100
-  then mkBvh' depth n objs
+  then mkBvh'_seq depth n objs
   else if n == 1
   then let sphere = nth objs 0
            (min_x,min_y,min_z,max_x,max_y,max_z) = sphere_aabb sphere
@@ -623,8 +623,8 @@ mkPixel objs width height camera l =
       j = height - (div l width)
   in color_to_pixel (trace_ray objs width height camera j i)
 
-render :: Bvh -> Int -> Int -> Camera -> Vector Pixel
-render objs width height camera =
+render_seq :: Bvh -> Int -> Int -> Camera -> Vector Pixel
+render_seq objs width height camera =
   generate (height*width) (\l -> mkPixel objs width height camera l)
 
 render_par :: Bvh -> Int -> Int -> Camera -> Vector Pixel
@@ -697,8 +697,8 @@ generate_2d m n f =
       lam0 = (\j -> lam1 j)
   in vconcat (generate m lam0)
 
-rgbbox :: Scene
-rgbbox =
+rgbbox :: () -> Scene
+rgbbox _ =
   let n = 10
       k = 60.0
 
@@ -757,8 +757,8 @@ rgbbox =
       fov = 75.0
   in (look_from_x,look_from_y,look_from_z,look_at_x,look_at_y,look_at_z,fov,spheres)
 
-irreg :: Scene
-irreg =
+irreg :: () -> Scene
+irreg _ =
   let n = 100
       k = 600.0
       bottom = generate_2d n n (\x z ->
@@ -780,22 +780,22 @@ irreg =
 
 --------------------------------------------------------------------------------
 
-gibbon_main =
-  let size = sizeParam
-      height = size
-      width = size
-      -- scene = irreg
-      scene = rgbbox
-      -- _ = print_scene scene
-      spheres = get_spheres_scene scene
-      -- objs1 = iterate (mkBvh spheres)
-      -- _ = print_bvh objs1
-      objs2 = iterate (mkBvh_par spheres)
-      -- leaves = countLeavesBvh objs
-      -- _ = printint leaves
-      -- _ = printsym (quote "\n")
-      cam = camera_from_scene width height scene
-      -- pixels = iterate (render objs1 width height cam)
-      pixels2 = iterate (render_par objs2 width height cam)
-      -- _ = printVec (\p -> print_pixel p) pixels
-  in ()
+-- gibbon_main =
+--   let size = sizeParam
+--       height = size
+--       width = size
+--       -- scene = irreg
+--       scene = rgbbox
+--       -- _ = print_scene scene
+--       spheres = get_spheres_scene scene
+--       objs1 = iterate (mkBvh spheres)
+--       -- _ = print_bvh objs1
+--       -- objs2 = iterate (mkBvh_par spheres)
+--       -- leaves = countLeavesBvh objs
+--       -- _ = printint leaves
+--       -- _ = printsym (quote "\n")
+--       cam = camera_from_scene width height scene
+--       pixels = iterate (render objs1 width height cam)
+--       -- pixels2 = iterate (render_par objs2 width height cam)
+--       -- _ = printVec (\p -> print_pixel p) pixels
+--   in ()

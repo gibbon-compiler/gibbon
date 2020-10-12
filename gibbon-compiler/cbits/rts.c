@@ -991,12 +991,21 @@ double sum_timing_array(VectorTy *times) {
     return acc;
 }
 
+
+// -------------------------------------
+// Ppm Images
+// -------------------------------------
+
 typedef struct __Pixel_struct {
     IntTy field0;
     IntTy field1;
     IntTy field2;
 } __Pixel;
 
+void writePpm(char* filename, IntTy width, IntTy height, VectorTy *pixels);
+void writePpm_loop(FILE *fp, IntTy idx, IntTy end, VectorTy *pixels);
+
+// Example: writePpm("gibbon_rgb_1000.ppm", 1000, 1000, pixels);
 void writePpm(char* filename, IntTy width, IntTy height, VectorTy *pixels)
 {
     FILE *fp;
@@ -1027,7 +1036,6 @@ void writePpm_loop(FILE *fp, IntTy idx, IntTy end, VectorTy *pixels)
         writePpm_loop(fp, (idx+1), end, pixels);
     }
 }
-
 
 /* -------------------------------------------------------------------------------- */
 
