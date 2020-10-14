@@ -23,7 +23,7 @@ binarySearch' lo hi f s x =
        then lo
        else let mid = lo + (div n 2)
                 pivot = nth s mid
-                cmp = f pivot x
+                cmp = f x pivot
             in if cmp < 0
                then binarySearch' lo mid f s x
                else if cmp > 0
@@ -126,9 +126,7 @@ writeSort1 f s t =
             tl1 = spawn (writeSort2 f sl tl)
             tr1 = writeSort2 f sr tr
             _ = sync
-            -- BUG
-            -- res = writeMerge f tl1 tr1 s
-            res = writeMerge_seq f tl1 tr1 s
+            res = writeMerge f tl1 tr1 s
         in res
 
 writeSort1_seq :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
@@ -161,9 +159,7 @@ writeSort2 f s t =
             sl1 = spawn (writeSort1 f sl tl)
             sr1 = (writeSort1 f sr tr)
             _ = sync
-            -- BUG
-            -- res = writeMerge f sl1 sr1 t
-            res = writeMerge_seq f sl1 sr1 t
+            res = writeMerge f sl1 sr1 t
         in res
 
 writeSort2_seq :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
