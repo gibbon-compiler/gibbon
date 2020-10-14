@@ -40,9 +40,12 @@ write_loop_seq idx offset end from to =
     else let to1 = inplacevupdate to (idx+offset) (nth from idx)
          in write_loop_seq (idx+1) offset end from to1
 
+goto_seqmerge :: Int
+goto_seqmerge = 4096
+
 write_loop :: Int -> Int -> Int -> Vector a -> Vector a -> Vector a
 write_loop idx offset end from to =
-    if (end - idx) < 4096
+    if (end - idx) < goto_seqmerge
     then write_loop_seq idx offset end from to
     else let mid = div (idx + end) 2
              to1 = spawn (write_loop idx offset mid from to)
@@ -65,7 +68,7 @@ writeMerge_seq_loop i1 i2 j n1 n2 f s1 s2 t =
               in t1
          else let x1 = nth s1 i1
                   x2 = nth s2 i2
-              in if f x1 x2 > 0
+              in if f x1 x2 < 0
                  then let t1 = inplacevupdate t j x1
                       in writeMerge_seq_loop (i1+1) i2 (j+1) n1 n2 f s1 s2 t1
                  else let t1 = inplacevupdate t j x2
@@ -82,7 +85,7 @@ writeMerge_seq f s1 s2 t =
 
 writeMerge :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a -> Vector a
 writeMerge f s1 s2 t =
-    if length t < 4096
+    if length t < goto_seqmerge
     then writeMerge_seq f s1 s2 t
     else
         let n1 = length s1
@@ -91,7 +94,7 @@ writeMerge f s1 s2 t =
            then write_loop 0 0 n2 s2 t
            else let mid1 = div n1 2
                     pivot = nth s1 mid1
-                    mid2 = binarySearch f s2 pivot
+                    mid2 = (binarySearch f s2 pivot)
                     l1 = vslice 0 mid1 s1
                     r1 = vslice (mid1+1) (n1 - (mid1+1)) s1
                     l2 = vslice 0 mid2 s2
@@ -123,7 +126,9 @@ writeSort1 f s t =
             tl1 = spawn (writeSort2 f sl tl)
             tr1 = writeSort2 f sr tr
             _ = sync
-            res = writeMerge f tl1 tr1 s
+            -- BUG
+            -- res = writeMerge f tl1 tr1 s
+            res = writeMerge_seq f tl1 tr1 s
         in res
 
 writeSort1_seq :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
@@ -156,7 +161,9 @@ writeSort2 f s t =
             sl1 = spawn (writeSort1 f sl tl)
             sr1 = (writeSort1 f sr tr)
             _ = sync
-            res = writeMerge f sl1 sr1 t
+            -- BUG
+            -- res = writeMerge f sl1 sr1 t
+            res = writeMerge_seq f sl1 sr1 t
         in res
 
 writeSort2_seq :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
@@ -214,8 +221,28 @@ cStdlibSort_seq f vec =
       vec3 = inplacevsort vec2 f
   in vec3
 
---------------------------------------------------------------------------------
+check_sorted_floats :: (Float -> Float -> Int) -> Vector Float -> ()
+check_sorted_floats f sorted =
+  let arr1 = slice 0 (length sorted - 1) sorted
+      arr2 = slice 1 (length sorted - 1) sorted
+      check = ifoldl (\acc i elt1 -> let elt2 = nth arr2 i
+                                     in acc && (f elt1 elt2 <= 0))
+              True
+              arr1
+  in print_check check
 
+check_sorted_ints :: (Int -> Int -> Int) -> Vector Int -> ()
+check_sorted_ints f sorted =
+  let arr1 = slice 0 (length sorted - 1) sorted
+      arr2 = slice 1 (length sorted - 1) sorted
+      check = ifoldl (\acc i elt1 -> let elt2 = nth arr2 i
+                                     in acc && (f elt1 elt2 <= 0))
+              True
+              arr1
+  in print_check check
+
+
+--------------------------------------------------------------------------------
 
 cmp4 :: Int -> Int -> Int
 cmp4 a b = b - a
@@ -227,24 +254,8 @@ cmp5 a b =
     in floatToInt (ax .-. bx)
 
 gibbon_main =
-    let n = sizeParam
-        -- vec = generate n (\i -> n - i)
-        vec :: Vector (Float, Float, Float)
-        vec = readArrayFile ()
-
-        vec2 = timeit (mergeSort cmp5 vec)
-        vec3 = timeit (mergeSort_seq cmp5 vec)
-        vec4 = timeit (cStdlibSort cmp5 vec)
-        vec5 = timeit (cStdlibSort_seq cmp5 vec)
-        -- _ = printVec (\i -> printint i) vec
-        -- _ = newline
-        -- _ = printVec (\i -> printint i) vec2
-        -- _ = newline
-        -- _ = printVec (\i -> printint i) vec3
-        -- _ = newline
-        test1 = (length vec == length vec2) && ((length vec3 == length vec4) && (length vec4 == length vec5))
-        -- test2 = ifoldl (\acc i elt -> acc && elt == (i+1)) True vec2
-        -- test3 = ifoldl (\acc i elt -> acc && elt == (i+1)) True vec3
-    -- in (test1 && test2, test3)
-    in test1
-
+  let n = sizeParam
+      arr = generate n (\i -> rand)
+      cmp = (\f1 f2 -> if f1 > f2 then 1 else if f1 < f2 then -1 else 0)
+      sorted = iterate (mergeSort cmp arr)
+  in check_sorted_floats cmp sorted
