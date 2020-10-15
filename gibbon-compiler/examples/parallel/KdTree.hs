@@ -32,6 +32,29 @@ data KdTree = KdLeaf Float  -- ^ x coord
            | KdEmpty
   deriving Show
 
+print_kdtree :: KdTree -> ()
+print_kdtree tr =
+  case tr of
+    KdEmpty ->
+        let _ = printsym (quote "empty{}")
+        in ()
+    KdLeaf x y z ->
+      let _ = printsym (quote "leaf{")
+          _ = print_point3d (x,y,z)
+          _ = printsym (quote "}")
+      in ()
+    KdNode x y z _ axis _ _ _ _ _ _ _ left right ->
+      let _ = printsym (quote "node{ point: ")
+          _ = print_point3d (x,y,z)
+          _ = printsym (quote ", axis: ")
+          _ = printint axis
+          _ = printsym (quote ", left: ")
+          _ = print_kdtree left
+          _ = printsym (quote ", right: ")
+          _ = print_kdtree right
+          _ = printsym (quote "}")
+      in ()
+
 get_minx_kdtree :: KdTree -> Float
 get_minx_kdtree tr =
   case tr of

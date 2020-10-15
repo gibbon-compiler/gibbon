@@ -113,7 +113,7 @@ bench_seqcountcorr =
     let pts :: Vector (Float, Float, Float)
         pts = readArrayFile ()
         n   = sizeParam
-        radius  = 10.0
+        radius  = 100.0
         tr      = mkKdTree_seq pts
 --         tup =  iterate (let i     = rand
 --                             j     = (mod i n) - 1
@@ -136,7 +136,7 @@ bench_parcountcorr =
     let pts :: Vector (Float, Float, Float)
         pts = readArrayFile ()
         n   = sizeParam
-        radius  = 10.0
+        radius  = 100.0
         tr      = mkKdTree_seq pts
         cutoff  = 524288
 --         tup =  iterate (let i     = rand

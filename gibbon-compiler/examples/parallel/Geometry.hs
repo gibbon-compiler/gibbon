@@ -40,7 +40,7 @@ dist_point3d a b =
 
 
 getNextAxis_3d :: Int -> Int
-getNextAxis_3d i = mod (i + 1) 2
+getNextAxis_3d i = mod (i + 1) 3
 
 eq_point3d :: Point3d -> Point3d -> Bool
 eq_point3d a b =
