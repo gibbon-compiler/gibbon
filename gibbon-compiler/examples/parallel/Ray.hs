@@ -388,7 +388,7 @@ cmpx_sphere s1 s2 =
       aabb2 = sphere_aabb s2
       (cx1,_,_) = centre aabb1
       (cx2,_,_) = centre aabb2
-  in floatToInt (cx1 .-. cx2)
+  in compare_float cx1 cx2
 
 cmpy_sphere :: Sphere -> Sphere -> Int
 cmpy_sphere s1 s2 =
@@ -396,7 +396,7 @@ cmpy_sphere s1 s2 =
       aabb2 = sphere_aabb s2
       (_,cy1,_) = centre aabb1
       (_,cy2,_) = centre aabb2
-  in floatToInt (cy1 .-. cy2)
+  in compare_float cy1 cy2
 
 cmpz_sphere :: Sphere -> Sphere -> Int
 cmpz_sphere s1 s2 =
@@ -404,7 +404,7 @@ cmpz_sphere s1 s2 =
       aabb2 = sphere_aabb s2
       (_,_,cz1) = centre aabb1
       (_,_,cz2) = centre aabb2
-  in floatToInt (cz1 .-. cz2)
+  in compare_float cz1 cz2
 
 sort_spheres :: Int -> Vector Sphere -> Vector Sphere
 sort_spheres depth ls =

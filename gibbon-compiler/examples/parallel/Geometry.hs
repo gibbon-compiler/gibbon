@@ -52,19 +52,19 @@ cmpx_point3d :: Point3d -> Point3d -> Int
 cmpx_point3d a b =
     let (ax,_,_) = a
         (bx,_,_) = b
-    in floatToInt (ax .-. bx)
+    in compare_float ax bx
 
 cmpy_point3d :: Point3d -> Point3d -> Int
 cmpy_point3d a b =
     let (_,ay,_) = a
         (_,by,_) = b
-    in floatToInt (ay .-. by)
+    in compare_float ay by
 
 cmpz_point3d :: Point3d -> Point3d -> Int
 cmpz_point3d a b =
     let (_,_,az) = a
         (_,_,bz) = b
-    in floatToInt (az .-. bz)
+    in compare_float az bz
 
 add_point3d ::  Point3d -> Point3d -> Point3d
 {-# INLINE add_point3d #-}

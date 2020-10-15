@@ -25,6 +25,15 @@ float_abs f =
     then f .*. (0.0 .-. 1.0)
     else f
 
+compare_float :: Float -> Float -> Int
+{-# INLINE compare_float #-}
+compare_float r1 r2 =
+  if r1 .<. r2
+  then -1
+  else if r1 .>. r2
+  then 1
+  else 0
+
 print_check :: Bool -> ()
 print_check b =
     if b
