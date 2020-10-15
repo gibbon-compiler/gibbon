@@ -367,7 +367,7 @@ bench_seqmergesort =
       arr = generate n (\i -> intToFloat (rand))
       cmp = (\f1 f2 -> if f1 .>. f2 then 1 else if f1 .<. f2 then -1 else 0)
       sorted = iterate (mergeSort_seq cmp arr)
-      -- sorted = iterate (cStdlibSort cmp arr)
+      -- sorted = iterate (cStdlibSort_seq cmp arr)
   in check_sorted_floats cmp sorted
 
 bench_parmergesort :: ()

@@ -31,6 +31,7 @@ binarySearch' lo hi f s x =
                     else mid
 
 binarySearch :: (a -> a -> Int) -> Vector a -> a -> Int
+{-# INLINE binarySearch #-}
 binarySearch f s x = binarySearch' 0 (length s) f s x
 
 write_loop_seq :: Int -> Int -> Int -> Vector a -> Vector a -> Vector a
@@ -60,11 +61,11 @@ writeMerge_seq_loop :: Int -> Int -> Int -> Int -> Int -> (a -> a -> Int) -> Vec
 writeMerge_seq_loop i1 i2 j n1 n2 f s1 s2 t =
     if i1 == n1
     then let tmp1 = vslice i2 (n2-i2) s2
-             t2 = write_loop 0 j (n2-i2) tmp1 t
+             t2 = write_loop_seq 0 j (n2-i2) tmp1 t
          in t2
     else if i2 == n2
          then let tmp1 = vslice i1 (n1-i1) s1
-                  t1 = write_loop 0 j (n1-i1) tmp1 t
+                  t1 = write_loop_seq 0 j (n1-i1) tmp1 t
               in t1
          else let x1 = nth s1 i1
                   x2 = nth s2 i2
@@ -76,6 +77,7 @@ writeMerge_seq_loop i1 i2 j n1 n2 f s1 s2 t =
 
 
 writeMerge_seq :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a -> Vector a
+{-# INLINE writeMerge_seq #-}
 writeMerge_seq f s1 s2 t =
     let n1 = length s1
         n2 = length s2
