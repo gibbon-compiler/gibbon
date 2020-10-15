@@ -371,3 +371,18 @@ check_countcorr pts query actual radius =
         _ = printint actual
         _ = printsym (quote "\n")
     in print_check (expected == actual)
+
+check_nearest :: Vector (Float, Float, Float) -> Vector (Float, Float, Float) -> ()
+check_nearest pts actual =
+    let n = length pts
+        idxs = generate n (\i -> i)
+        tup = foldl (\(acc :: (Bool, Int)) i ->
+                         let pt = nth pts i
+                             nn = nth actual i
+                             (acc_b, acc_inexact) = acc
+                         in if eq_point3d pt nn
+                            then (acc_b && True, acc_inexact)
+                            else (False, acc_inexact+1))
+              (True, 0) idxs
+        (is_ok, _inexact) = tup
+    in print_check is_ok

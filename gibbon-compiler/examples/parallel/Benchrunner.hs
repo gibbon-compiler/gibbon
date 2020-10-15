@@ -158,21 +158,17 @@ bench_seqnearest :: ()
 bench_seqnearest =
     let pts :: Vector (Float, Float, Float)
         pts = readArrayFile ()
-        n   = sizeParam
-        radius = intToFloat n
         tr     = mkKdTree_seq pts
         nns = iterate (allNearest_seq tr pts)
-    in ()
+    in check_nearest pts nns
 
 bench_parnearest :: ()
 bench_parnearest =
     let pts :: Vector (Float, Float, Float)
         pts = readArrayFile ()
-        n   = sizeParam
-        radius = intToFloat n
         tr     = mkKdTree_seq pts
         nns = iterate (allNearest_par tr pts)
-    in ()
+     in check_nearest pts nns
 
 bench_seqbuildquadtree :: ()
 bench_seqbuildquadtree =
