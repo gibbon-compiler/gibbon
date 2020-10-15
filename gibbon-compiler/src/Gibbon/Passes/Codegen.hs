@@ -140,6 +140,9 @@ sortFns (Prog _ funs mtal) = foldl go S.empty allTails
             VSortP{} ->
               let [_,VarTriv fp] = rands
               in go (S.insert fp acc) bod
+            InplaceVSortP{} ->
+              let [_,VarTriv fp] = rands
+              in go (S.insert fp acc) bod
             _ -> go acc bod
         LetTrivT{bod}   -> go acc bod
         LetIfT{ife,bod} ->
@@ -195,7 +198,7 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       main_expr = do
         e <- case mtal of
                -- [2019.06.13]: CSK, Why is codegenTail always called with IntTy?
-               Just (PrintExp t) -> codegenTail M.empty init_fun_env t IntTy []
+               Just (PrintExp t) -> codegenTail M.empty init_fun_env sort_fns t IntTy []
                _ -> pure []
         let bod = mkSymTable ++ e
         pure $ C.FuncDef [cfun| void __main_expr() { $items:bod } |] noLoc
@@ -209,13 +212,13 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
              then do
                -- See codegenSortFn
                let nam' = varAppend nam (toVar "_original")
-               body <- codegenTail init_venv init_fun_env tal ty []
+               body <- codegenTail init_venv init_fun_env sort_fns tal ty []
                let fun = [cfun| $ty:retTy $id:nam' ($params:params) {
                                 $items:body
                                 } |]
                return fun
              else do
-               body <- codegenTail init_venv init_fun_env tal ty []
+               body <- codegenTail init_venv init_fun_env sort_fns tal ty []
                let fun = [cfun| $ty:retTy $id:nam ($params:params) {
                                 $items:body
                                 } |]
@@ -356,12 +359,12 @@ type VEnv = M.Map Var Ty
 type SyncDeps = [(Var, C.BlockItem)]
 
 -- | The central codegen function.
-codegenTail :: VEnv -> FEnv -> Tail -> Ty -> SyncDeps -> PassM [C.BlockItem]
+codegenTail :: VEnv -> FEnv -> S.Set Var -> Tail -> Ty -> SyncDeps -> PassM [C.BlockItem]
 
 -- Void type:
-codegenTail _ _ (RetValsT []) _ty _   = return [ C.BlockStm [cstm| return; |] ]
+codegenTail _ _ _ (RetValsT []) _ty _   = return [ C.BlockStm [cstm| return; |] ]
 -- Single return:
-codegenTail venv _ (RetValsT [tr]) ty _ =
+codegenTail venv _ _ (RetValsT [tr]) ty _ =
     case ty of
       ProdTy [_one] -> do
           let arg = [(Nothing,C.ExpInitializer (codegenTriv venv tr) noLoc)]
@@ -369,68 +372,68 @@ codegenTail venv _ (RetValsT [tr]) ty _ =
           return $ [ C.BlockStm [cstm| return $(C.CompoundLit ty' arg noLoc); |] ]
       _ -> return [ C.BlockStm [cstm| return $(codegenTriv venv tr); |] ]
 -- Multiple return:
-codegenTail venv _ (RetValsT ts) ty _ =
+codegenTail venv _ _ (RetValsT ts) ty _ =
     return $ [ C.BlockStm [cstm| return $(C.CompoundLit ty' args noLoc); |] ]
     where args = map (\a -> (Nothing,C.ExpInitializer (codegenTriv venv a) noLoc)) ts
           ty' = codegenTy ty
 
-codegenTail venv fenv (AssnValsT ls bod_maybe) ty sync_deps = do
+codegenTail venv fenv sort_fns (AssnValsT ls bod_maybe) ty sync_deps = do
     case bod_maybe of
       Just bod -> do
         let venv' = (M.fromList $ map (\(a,b,_) -> (a,b)) ls)
                     `M.union` venv
-        bod' <- codegenTail venv' fenv bod ty sync_deps
+        bod' <- codegenTail venv' fenv sort_fns bod ty sync_deps
         return $ [ mut (codegenTy ty) vr (codegenTriv venv triv) | (vr,ty,triv) <- ls ] ++ bod'
       Nothing  ->
         return $ [ mut (codegenTy ty) vr (codegenTriv venv triv) | (vr,ty,triv) <- ls ]
 
-codegenTail venv fenv (Switch lbl tr alts def) ty sync_deps =
+codegenTail venv fenv sort_fns (Switch lbl tr alts def) ty sync_deps =
     case def of
       Nothing  -> let (rest,lastone) = splitAlts alts in
-                  genSwitch venv fenv lbl tr rest (altTail lastone) ty sync_deps
-      Just def -> genSwitch venv fenv lbl tr alts def ty sync_deps
+                  genSwitch venv fenv sort_fns lbl tr rest (altTail lastone) ty sync_deps
+      Just def -> genSwitch venv fenv sort_fns lbl tr alts def ty sync_deps
 
-codegenTail venv _ (TailCall v ts) _ty _ =
+codegenTail venv _ _ (TailCall v ts) _ty _ =
     return $ [ C.BlockStm [cstm| return $( C.FnCall (cid v) (map (codegenTriv venv) ts) noLoc ); |] ]
 
-codegenTail venv fenv (IfT e0 e1 e2) ty sync_deps = do
-    e1' <- codegenTail venv fenv e1 ty sync_deps
-    e2' <- codegenTail venv fenv e2 ty sync_deps
+codegenTail venv fenv sort_fns (IfT e0 e1 e2) ty sync_deps = do
+    e1' <- codegenTail venv fenv sort_fns e1 ty sync_deps
+    e2' <- codegenTail venv fenv sort_fns e2 ty sync_deps
     return $ [ C.BlockStm [cstm| if ($(codegenTriv venv e0)) { $items:e1' } else { $items:e2' } |] ]
 
-codegenTail _ _ (ErrT s) _ty _ = return $ [ C.BlockStm [cstm| printf("%s\n", $s); |]
-                                          , C.BlockStm [cstm| exit(1); |] ]
+codegenTail _ _ _ (ErrT s) _ty _ = return $ [ C.BlockStm [cstm| printf("%s\n", $s); |]
+                                            , C.BlockStm [cstm| exit(1); |] ]
 
 
 -- We could eliminate these earlier
-codegenTail venv fenv (LetTrivT (vr,rty,rhs) body) ty sync_deps =
+codegenTail venv fenv sort_fns (LetTrivT (vr,rty,rhs) body) ty sync_deps =
     do let venv' = M.insert vr rty venv
-       tal <- codegenTail venv' fenv body ty sync_deps
+       tal <- codegenTail venv' fenv sort_fns body ty sync_deps
        return $ [ C.BlockDecl [cdecl| $ty:(codegenTy rty) $id:vr = ($ty:(codegenTy rty)) $(codegenTriv venv rhs); |] ]
                 ++ tal
 
 -- TODO: extend rts with arena primitives, and invoke them here
-codegenTail venv fenv (LetArenaT vr body) ty sync_deps =
-    do tal <- codegenTail venv fenv body ty sync_deps
+codegenTail venv fenv sort_fns (LetArenaT vr body) ty sync_deps =
+    do tal <- codegenTail venv fenv sort_fns body ty sync_deps
        return $ [ C.BlockDecl [cdecl| $ty:(codegenTy ArenaTy) $id:vr = alloc_arena();|] ]
               ++ tal
 
-codegenTail venv fenv (LetAllocT lhs vals body) ty sync_deps =
+codegenTail venv fenv sort_fns (LetAllocT lhs vals body) ty sync_deps =
     do let structTy = codegenTy (ProdTy (map fst vals))
            size = [cexp| sizeof($ty:structTy) |]
            venv' = M.insert lhs PtrTy venv
-       tal <- codegenTail venv' fenv body ty sync_deps
+       tal <- codegenTail venv' fenv sort_fns body ty sync_deps
        return$ assn (codegenTy PtrTy) lhs [cexp| ALLOC( $size ) |] :
                [ C.BlockStm [cstm| (($ty:structTy *)  $id:lhs)->$id:fld = $(codegenTriv venv trv); |]
                | (ix,(_ty,trv)) <- zip [0 :: Int ..] vals
                , let fld = "field"++show ix] ++ tal
 
-codegenTail venv fenv (LetAvailT vs body) ty sync_deps =
+codegenTail venv fenv sort_fns (LetAvailT vs body) ty sync_deps =
     do let (avail, sync_deps') = partition (\(v,_) -> elem v vs) sync_deps
-       tl <- codegenTail venv fenv body ty sync_deps'
+       tl <- codegenTail venv fenv sort_fns body ty sync_deps'
        pure $ (map snd avail) ++ tl
 
-codegenTail venv fenv (LetUnpackT bs scrt body) ty sync_deps =
+codegenTail venv fenv sort_fns (LetUnpackT bs scrt body) ty sync_deps =
     do let mkFld :: Int -> C.Id
            mkFld i = C.toIdent ("field" ++ show i) noLoc
 
@@ -444,11 +447,11 @@ codegenTail venv fenv (LetUnpackT bs scrt body) ty sync_deps =
            binds = zipWith mk_bind [0..] bs
            venv' = (M.fromList bs) `M.union` venv
 
-       body' <- codegenTail venv' fenv body ty sync_deps
+       body' <- codegenTail venv' fenv sort_fns body ty sync_deps
        return (map C.BlockDecl binds ++ body')
 
 -- Here we unzip the tuple into assignments to local variables.
-codegenTail venv fenv (LetIfT bnds (e0,e1,e2) body) ty sync_deps =
+codegenTail venv fenv sort_fns (LetIfT bnds (e0,e1,e2) body) ty sync_deps =
 
     do let decls = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:vr0; |]
                    | (vr0,ty0) <- bnds ]
@@ -457,19 +460,19 @@ codegenTail venv fenv (LetIfT bnds (e0,e1,e2) body) ty sync_deps =
 
            venv' = (M.fromList bnds) `M.union` venv
 
-       e1'' <- codegenTail venv' fenv e1' ty sync_deps
-       e2'' <- codegenTail venv' fenv e2' ty sync_deps
+       e1'' <- codegenTail venv' fenv sort_fns e1' ty sync_deps
+       e2'' <- codegenTail venv' fenv sort_fns e2' ty sync_deps
        -- Int 1 is Boolean true:
        let ifbod = [ C.BlockStm [cstm| if ($(codegenTriv venv e0)) { $items:e1'' } else { $items:e2'' } |] ]
-       tal <- codegenTail venv' fenv body ty sync_deps
+       tal <- codegenTail venv' fenv sort_fns body ty sync_deps
        return $ decls ++ ifbod ++ tal
 
-codegenTail venv fenv (LetTimedT flg bnds rhs body) ty sync_deps =
+codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
 
     do let decls = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:vr0; |]
                    | (vr0,ty0) <- bnds ]
        let rhs' = rewriteReturns rhs bnds
-       rhs'' <- codegenTail venv fenv rhs' ty sync_deps
+       rhs'' <- codegenTail venv fenv sort_fns rhs' ty sync_deps
        itertime  <- gensym "itertime"
        batchtime <- gensym "batchtime"
        selftimed <- gensym "selftimed"
@@ -522,12 +525,12 @@ codegenTail venv fenv (LetTimedT flg bnds rhs body) ty sync_deps =
                        else [ C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ]
        let venv' = (M.fromList bnds) `M.union` venv
-       tal <- codegenTail venv' fenv body ty sync_deps
+       tal <- codegenTail venv' fenv sort_fns body ty sync_deps
        return $ decls ++ withPrnt ++ tal
 
 
-codegenTail venv fenv (LetCallT False bnds ratr rnds body) ty sync_deps
-    | [] <- bnds = do tal <- codegenTail venv fenv body ty sync_deps
+codegenTail venv fenv sort_fns (LetCallT False bnds ratr rnds body) ty sync_deps
+    | [] <- bnds = do tal <- codegenTail venv fenv sort_fns body ty sync_deps
                       return $ [toStmt fnexp] ++ tal
     | [bnd] <- bnds  = let fn_ret_ty = snd (fenv M.! ratr)
                            venv' = (M.fromList bnds) `M.union` venv in
@@ -539,15 +542,15 @@ codegenTail venv fenv (LetCallT False bnds ratr rnds body) ty sync_deps
                                fields = map (\i -> "field" ++ show i) [0 :: Int .. length bnds - 1]
                                ty0 = ProdTy $ map snd bnds
                                init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(fnexp); |] ]
-                           tal <- codegenTail venv' fenv body ty sync_deps
+                           tal <- codegenTail venv' fenv sort_fns body ty sync_deps
                            return $ init ++ zipWith bind bnds fields ++ tal
                          ProdTy [] -> do
                            -- nam <- gensym "tmp"
                            let init = [ C.BlockDecl [cdecl| $ty:(codegenTy fn_ret_ty) $id:(fst bnd) = $(fnexp); |] ]
-                           tal <- codegenTail venv' fenv body ty sync_deps
+                           tal <- codegenTail venv' fenv sort_fns body ty sync_deps
                            return $ init ++ tal
                          _ -> do
-                           tal <- codegenTail venv' fenv body ty sync_deps
+                           tal <- codegenTail venv' fenv sort_fns body ty sync_deps
                            let call = assn (codegenTy (snd bnd)) (fst bnd) (fnexp)
                            return $ [call] ++ tal
     | otherwise = do
@@ -557,14 +560,19 @@ codegenTail venv fenv (LetCallT False bnds ratr rnds body) ty sync_deps
            ty0 = ProdTy $ map snd bnds
            init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(fnexp); |] ]
            venv' = (M.fromList bnds) `M.union` venv
-       tal <- codegenTail venv' fenv body ty sync_deps
+       tal <- codegenTail venv' fenv sort_fns body ty sync_deps
        return $ init ++ zipWith bind bnds fields ++ tal
   where
-    fncall = C.FnCall (cid ratr) (map (codegenTriv venv) rnds) noLoc
+    fncall =
+      let rnds' = map (codegenTriv venv) rnds
+          rnds'' = if S.member ratr sort_fns
+                   then map (\rnd -> [cexp| &$rnd|]) rnds'
+                   else rnds'
+      in C.FnCall (cid ratr) rnds'' noLoc
     fnexp = C.EscExp (prettyCompact (space <> ppr fncall)) noLoc
 
-codegenTail venv fenv (LetCallT True bnds ratr rnds body) ty sync_deps
-    | [] <- bnds = do tal <- codegenTail venv fenv body ty sync_deps
+codegenTail venv fenv sort_fns (LetCallT True bnds ratr rnds body) ty sync_deps
+    | [] <- bnds = do tal <- codegenTail venv fenv sort_fns body ty sync_deps
                       return $ [toStmt spawnexp] ++ tal
     | [bnd] <- bnds  = let fn_ret_ty = snd (fenv M.! ratr)
                            venv' = (M.fromList bnds) `M.union` venv in
@@ -577,11 +585,11 @@ codegenTail venv fenv (LetCallT True bnds ratr rnds body) ty sync_deps
                                ty0 = ProdTy $ map snd bnds
                                init = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:nam = $(spawnexp); |] ]
                                bind_after_sync = zipWith bind bnds fields
-                           tal <- codegenTail venv' fenv body ty (sync_deps ++ bind_after_sync)
+                           tal <- codegenTail venv' fenv sort_fns body ty (sync_deps ++ bind_after_sync)
                            return $ init ++ tal
                          ProdTy _ -> error $ "codegenTail: LetCallT" ++ fromVar ratr
                          _ -> do
-                           tal <- codegenTail venv' fenv body ty sync_deps
+                           tal <- codegenTail venv' fenv sort_fns body ty sync_deps
                            let call = assn (codegenTy (snd bnd)) (fst bnd) (spawnexp)
                            return $ [call] ++ tal
     | otherwise = do
@@ -593,18 +601,18 @@ codegenTail venv fenv (LetCallT True bnds ratr rnds body) ty sync_deps
 
        let bind_after_sync = zipWith bind bnds fields
            venv' = (M.fromList bnds) `M.union` venv
-       tal <- codegenTail venv' fenv body ty (sync_deps ++ bind_after_sync)
+       tal <- codegenTail venv' fenv sort_fns body ty (sync_deps ++ bind_after_sync)
        return $ init ++  tal
   where
     fncall = C.FnCall (cid ratr) (map (codegenTriv venv) rnds) noLoc
     spawnexp = C.EscExp (prettyCompact (text "cilk_spawn" <> space <> ppr fncall)) noLoc
     _seqexp = C.EscExp (prettyCompact (ppr fncall)) noLoc
 
-codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
+codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
     do let venv' = (M.fromList bnds) `M.union` venv
        bod' <- case prm of
-                 ParSync -> codegenTail venv' fenv body ty []
-                 _       -> codegenTail venv' fenv body ty sync_deps
+                 ParSync -> codegenTail venv' fenv sort_fns body ty []
+                 _       -> codegenTail venv' fenv sort_fns body ty sync_deps
        dflags <- getDynFlags
        let isPacked = gopt Opt_Packed dflags
            noGC = gopt Opt_DisableGC dflags
@@ -874,7 +882,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                        -- In packed mode we eagerly FORCE the IO to happen before we start benchmarking:
                                        then pure [ C.BlockStm [cstm| { int sum=0; for(int i=0; i < st.st_size; i++) sum += ptr[i]; } |]
                                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ptr; |]]
-                                       else codegenTail venv fenv unpackcall voidTy sync_deps
+                                       else codegenTail venv fenv sort_fns unpackcall voidTy sync_deps
                              return $ mmapCode ++ docall
                      | otherwise -> error $ "ReadPackedFile, wrong arguments "++show rnds++", or expected bindings "++show bnds
 
@@ -1060,7 +1068,7 @@ codegenTail venv fenv (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
        return $ pre ++ bod'
 
-codegenTail _ _ (Goto lbl) _ty _ = do
+codegenTail _ _ _ (Goto lbl) _ty _ = do
   return [ C.BlockStm [cstm| goto $id:lbl; |] ]
 
 -- | The sizes for all mulitplicities are defined as globals in the RTS.
@@ -1098,13 +1106,13 @@ normalizeAlts alts =
       IntAlts as -> map (first mk_int_lhs) as
 
 -- | Generate a proper switch expression instead.
-genSwitch :: VEnv -> FEnv -> Label -> Triv -> Alts -> Tail -> Ty -> SyncDeps -> PassM [C.BlockItem]
-genSwitch venv fenv lbl tr alts lastE ty sync_deps =
+genSwitch :: VEnv -> FEnv -> S.Set Var -> Label -> Triv -> Alts -> Tail -> Ty -> SyncDeps -> PassM [C.BlockItem]
+genSwitch venv fenv sort_fns lbl tr alts lastE ty sync_deps =
     do let go :: [(C.Exp,Tail)] -> PassM [C.Stm]
-           go [] = do tal <- codegenTail venv fenv lastE ty sync_deps
+           go [] = do tal <- codegenTail venv fenv sort_fns lastE ty sync_deps
                       return [[cstm| default: $stm:(mkBlock tal) |]]
            go ((ex,tl):rst) =
-               do tal <- codegenTail venv fenv tl ty sync_deps
+               do tal <- codegenTail venv fenv sort_fns tl ty sync_deps
                   let tal2 = tal ++ [ C.BlockStm [cstm| break; |] ]
                   let this = [cstm| case $exp:ex : $stm:(mkBlock tal2) |]
                   rst' <- go rst
