@@ -357,23 +357,6 @@ bench_parray =
       pixels = iterate (render_par bvh width height cam)
   in ()
 
-bench_seqmergesort :: ()
-bench_seqmergesort =
-  let n = sizeParam
-      arr = generate n (\i -> intToFloat (rand))
-      cmp = (\f1 f2 -> if f1 .>. f2 then 1 else if f1 .<. f2 then -1 else 0)
-      sorted = iterate (mergeSort_seq cmp arr)
-      -- sorted = iterate (cStdlibSort_seq cmp arr)
-  in check_sorted_floats cmp sorted
-
-bench_parmergesort :: ()
-bench_parmergesort =
-  let n = sizeParam
-      arr = generate n (\i -> intToFloat (rand))
-      cmp = (\f1 f2 -> if f1 .>. f2 then 1 else if f1 .<. f2 then -1 else 0)
-      sorted = iterate (mergeSort cmp arr)
-  in check_sorted_floats cmp sorted
-
 gibbon_main =
     if prog_is (quote "seqfib")
     then bench_seqfib
@@ -431,8 +414,4 @@ gibbon_main =
     then bench_seqray
     else if prog_is (quote "parray")
     then bench_parray
-    else if prog_is (quote "seqmergesort")
-    then bench_seqmergesort
-    else if prog_is (quote "parmergesort")
-    then bench_parmergesort
     else printsym (quote "benchrunner: select benchmark to run with --bench-prog\n")
