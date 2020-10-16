@@ -31,6 +31,7 @@ binarySearch' lo hi f s x =
                     else mid
 
 binarySearch :: (a -> a -> Int) -> Vector a -> a -> Int
+{-# INLINE binarySearch #-}
 binarySearch f s x = binarySearch' 0 (length s) f s x
 
 write_loop_seq :: Int -> Int -> Int -> Vector a -> Vector a -> Vector a
@@ -41,6 +42,7 @@ write_loop_seq idx offset end from to =
          in write_loop_seq (idx+1) offset end from to1
 
 goto_seqmerge :: Int
+{-# INLINE goto_seqmerge #-}
 goto_seqmerge = 4096
 
 write_loop :: Int -> Int -> Int -> Vector a -> Vector a -> Vector a
@@ -76,6 +78,7 @@ writeMerge_seq_loop i1 i2 j n1 n2 f s1 s2 t =
 
 
 writeMerge_seq :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a -> Vector a
+{-# INLINE writeMerge_seq #-}
 writeMerge_seq f s1 s2 t =
     let n1 = length s1
         n2 = length s2
@@ -111,7 +114,8 @@ writeMerge f s1 s2 t =
 --------------------------------------------------------------------------------
 
 gotoQuickSort :: Int
-gotoQuickSort = 1024
+{-# INLINE gotoQuickSort #-}
+gotoQuickSort = 4096
 
 writeSort1 :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
 writeSort1 f s t =
@@ -167,7 +171,7 @@ writeSort2_seq f s t =
     let len =length s in
     if len < gotoQuickSort
     then
-        let t1 = write_loop 0 0 len s t
+        let t1 = write_loop_seq 0 0 len s t
         -- in quickSort_par' 0 (length t1) f t1
         in inplacevsort t1 f
     else
@@ -180,6 +184,7 @@ writeSort2_seq f s t =
         in res
 
 mergeSort' :: (a -> a -> Int) -> Vector a -> Vector a
+{-# INLINE mergeSort' #-}
 mergeSort' f s =
     let t :: Vector a
         t = valloc (length s)
@@ -187,6 +192,7 @@ mergeSort' f s =
     in s
 
 mergeSort'_seq :: (a -> a -> Int) -> Vector a -> Vector a
+{-# INLINE mergeSort'_seq #-}
 mergeSort'_seq f s =
     let t :: Vector a
         t = valloc (length s)
@@ -194,12 +200,14 @@ mergeSort'_seq f s =
     in s
 
 mergeSort :: (a -> a -> Int) -> Vector a -> Vector a
+{-# INLINE mergeSort #-}
 mergeSort f vec =
     let vec2 = copy_par vec
         vec3 = mergeSort' f vec2
     in vec3
 
 mergeSort_seq :: (a -> a -> Int) -> Vector a -> Vector a
+{-# INLINE mergeSort_seq #-}
 mergeSort_seq f vec =
     let vec2 = copy vec
         vec3 = mergeSort'_seq f vec2
@@ -240,18 +248,16 @@ check_sorted_ints f sorted =
 
 --------------------------------------------------------------------------------
 
-cmp4 :: Int -> Int -> Int
-cmp4 a b = b - a
-
-cmp5 :: (Float, Float, Float) -> (Float, Float, Float) -> Int
-cmp5 a b =
-    let (ax,_,_) = a
-        (bx,_,_) = b
-    in floatToInt (ax .-. bx)
-
 gibbon_main =
-  let n = sizeParam
-      arr = generate n (\i -> rand)
-      cmp = (\f1 f2 -> if f1 > f2 then 1 else if f1 < f2 then -1 else 0)
-      sorted = iterate (mergeSort cmp arr)
-  in check_sorted_ints cmp sorted
+    let s = benchProgParam in
+        if eqsym s (quote "seqmergesort")
+        then
+            let n = sizeParam
+                arr = generate n (\i -> intToFloat (rand))
+                sorted = iterate (mergeSort_seq compare_float arr)
+            in check_sorted_floats compare_float sorted
+        else
+            let n = sizeParam
+                arr = generate n (\i -> intToFloat (rand))
+                sorted = iterate (mergeSort compare_float arr)
+            in check_sorted_floats compare_float sorted
