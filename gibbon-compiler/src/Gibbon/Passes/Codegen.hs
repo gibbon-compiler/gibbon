@@ -854,7 +854,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        _ -> error $ "wrong number of return bindings from PrintSym: "++show bnds
 
                  PrintString str
-                     | [] <- bnds, [] <- rnds -> pure [ C.BlockStm [cstm| fputs( $string:str, stdout ); |] ]
+                     | [] <- bnds, [] <- rnds -> pure [ C.BlockStm [cstm| printf( $string:str ); |] ]
                      | otherwise -> error$ "wrong number of args/return values expected from PrintString prim: "++show (rnds,bnds)
 
                  -- FINISHME: Codegen here depends on whether we are in --packed mode or not.

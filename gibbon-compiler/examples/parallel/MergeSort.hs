@@ -245,7 +245,6 @@ check_sorted_ints f sorted =
               arr1
   in print_check check
 
-
 --------------------------------------------------------------------------------
 
 gibbon_main =
