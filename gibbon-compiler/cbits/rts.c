@@ -358,7 +358,7 @@ IntTy read_arrayfile_length_param() {
 
 // fun fact: __ prefix is actually reserved and this is an undefined behavior.
 // These functions must be provided by the code generator.
-void __main_expr();
+int __main_expr();
 
 
 void show_usage(char** argv)

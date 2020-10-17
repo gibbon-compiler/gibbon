@@ -201,7 +201,7 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
                Just (PrintExp t) -> codegenTail M.empty init_fun_env sort_fns t IntTy []
                _ -> pure []
         let bod = mkSymTable ++ e
-        pure $ C.FuncDef [cfun| void __main_expr() { $items:bod } |] noLoc
+        pure $ C.FuncDef [cfun| int __main_expr() { $items:bod } |] noLoc
 
       codegenFun' :: FunDecl -> PassM C.Func
       codegenFun' (FunDecl nam args ty tal _) =
@@ -233,7 +233,6 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
       codegenSortFn (FunDecl nam args _ty _tal _) = do
         let nam' = varAppend nam (toVar "_original")
             ([v0,v1],[ty0,ty1]) = unzip args
-            retTy      = codegenTy IntTy
             params     = map (\v -> [cparam| const void* $id:v |]) [v0,v1]
         tmpa <- gensym "fst"
         tmpb <- gensym "snd"
@@ -241,7 +240,7 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
                   , C.BlockDecl [cdecl| $ty:(codegenTy ty1) $id:tmpb = *($ty:(codegenTy ty1) *) $id:v1; |]
                   , C.BlockStm  [cstm| return $id:nam'($id:tmpa, $id:tmpb);|]
                   ]
-            fun = [cfun| $ty:retTy $id:nam ($params:params) {
+            fun = [cfun| int $id:nam ($params:params) {
                           $items:bod
                        } |]
         return fun
@@ -362,7 +361,7 @@ type SyncDeps = [(Var, C.BlockItem)]
 codegenTail :: VEnv -> FEnv -> S.Set Var -> Tail -> Ty -> SyncDeps -> PassM [C.BlockItem]
 
 -- Void type:
-codegenTail _ _ _ (RetValsT []) _ty _   = return [ C.BlockStm [cstm| return; |] ]
+codegenTail _ _ _ (RetValsT []) _ty _   = return [ C.BlockStm [cstm| return 0; |] ]
 -- Single return:
 codegenTail venv _ _ (RetValsT [tr]) ty _ =
     case ty of
