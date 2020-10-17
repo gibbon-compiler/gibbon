@@ -96,6 +96,89 @@ instance Monoid EndOfRel where
 instance Semigroup EndOfRel where
   (<>) = eorAppend
 
+bindReturns :: Exp2 -> PassM Exp2
+bindReturns ex =
+  case ex of
+    VarE v -> pure (VarE v)
+    LitE{} -> handleScalarRet ex id
+    FloatE{} -> handleScalarRet ex id
+    LitSymE{} -> handleScalarRet ex id
+    AppE{} -> pure ex
+    PrimAppE p _ ->
+      case p of
+        MkTrue -> handleScalarRet ex id
+        MkFalse -> handleScalarRet ex id
+        _ -> pure ex
+    LetE (v,locs,ty,rhs) bod | isScalar bod -> do
+      handleScalarRet bod (\bod' -> LetE (v,locs,ty,rhs) bod')
+
+    LetE (v,locs,ty,rhs) bod -> do
+      -- rhs' <- bindReturns rhs
+      bod' <- bindReturns bod
+      pure $ LetE (v,locs,ty,rhs) bod'
+
+    IfE a b c  -> do
+      a' <- bindReturns a
+      b' <- bindReturns b
+      c' <- bindReturns c
+      pure $ IfE a' b' c'
+    MkProdE{} -> pure ex
+    ProjE{} -> pure ex
+    CaseE scrt brs -> do
+      scrt' <- bindReturns scrt
+      CaseE scrt' <$> (mapM (\(a,b,c) -> (a,b,) <$> bindReturns c) brs)
+    DataConE{} -> pure ex
+    TimeIt{} -> pure ex
+    SpawnE{} -> pure ex
+    SyncE -> pure ex
+    WithArenaE v e -> do
+      e' <- bindReturns e
+      pure $ WithArenaE v e'
+    Ext ext ->
+      case ext of
+        LetRegionE r bod -> do
+          bod' <- bindReturns bod
+          pure $ Ext $ LetRegionE r bod'
+        LetLocE loc locexp bod -> do
+          bod' <- bindReturns bod
+          pure $ Ext $ LetLocE loc locexp bod'
+        RetE{} -> pure ex
+        L2.AddFixed{} -> pure ex
+        FromEndE{} -> pure ex
+        BoundsCheck{}  -> pure ex
+        IndirectionE{} -> pure ex
+        GetCilkWorkerNum-> pure ex
+        LetAvail a bod  -> do
+          bod' <- bindReturns bod
+          pure $ Ext $ LetAvail a bod'
+    MapE{}  -> error $ "bindReturns: TODO MapE"
+    FoldE{} -> error $ "bindReturns: TODO FoldE"
+
+handleScalarRet :: Exp2 -> (Exp2 -> Exp2) -> PassM Exp2
+handleScalarRet bod fn = do
+  let bind_and_recur bind_e bind_ty = do
+        tmp <- gensym "fltScalar"
+        let e1 = (LetE (tmp,[],bind_ty,bind_e) (VarE tmp))
+        pure $ fn e1
+  case bod of
+    LitE n -> bind_and_recur (LitE n) IntTy
+    FloatE n -> bind_and_recur (FloatE n) FloatTy
+    LitSymE n -> bind_and_recur (LitSymE n) SymTy
+    PrimAppE MkTrue [] -> bind_and_recur (PrimAppE MkTrue []) BoolTy
+    PrimAppE MkFalse [] -> bind_and_recur (PrimAppE MkFalse []) BoolTy
+    _ -> pure $ fn bod
+    -- _ -> error $ "RouteEnds: Not scalar " ++ sdoc bod
+
+isScalar :: Exp2 -> Bool
+isScalar e1 =
+  case e1 of
+    LitE{} -> True
+    FloatE{} -> True
+    LitSymE{} -> True
+    PrimAppE MkTrue [] -> True
+    PrimAppE MkFalse [] -> True
+    _ -> False
+
 -- | Process an L2 Prog and thread through explicit end-witnesses.
 -- Requires Gensym and runs in PassM. Assumes the Prog has been flattened.
 routeEnds :: Prog2 -> PassM Prog2
@@ -113,8 +196,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
   -- Handle the main expression (if it exists):
   mainExp' <- case mainExp of
                 Nothing -> return Nothing
-                Just (e,t) -> do e' <- exp fundefs'' [] emptyRel M.empty M.empty env2 e
-                                 return $ Just (e',t)
+                Just (e,t) -> do e' <- bindReturns e
+                                 e'' <- exp fundefs'' [] emptyRel M.empty M.empty env2 e'
+                                 return $ Just (e'',t)
 
   -- Return the updated Prog
   return $ Prog ddefs fundefs'' mainExp'
@@ -145,8 +229,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                         M.empty (zip funArgs tyins)
                initVEnv = M.fromList $ zip funArgs tyins
                env2 = Env2 initVEnv (initFunEnv fundefs)
-           funBody' <- exp fns retlocs emptyRel lenv M.empty env2 funBody
-           return FunDef{funName,funTy,funArgs,funBody=funBody',funRec,funInline}
+           funBody' <- bindReturns funBody
+           funBody'' <- exp fns retlocs emptyRel lenv M.empty env2 funBody'
+           return FunDef{funName,funTy,funArgs,funBody=funBody'',funRec,funInline}
 
 
     -- | Process expressions.
@@ -170,20 +255,18 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           -- we fmap location at the top-level case expression
           VarE v -> mkRet retlocs $ VarE v
 
+          -- -- If a function has a literal as it's tail, it cannot return any
+          -- -- end witnesses (since only VarE forms are converted to RetE's).
+          -- -- We therefore bind that literal to a variable, and recur. We need
+          -- -- to handle LetRegionE and LetLocE similarly.
+          -- LetE (v,ls,ty,rhs) bod | isScalar bod -> do
+          --   handleScalarRet bod (\bod' -> LetE (v,ls,ty,rhs) bod')
 
-          -- If a function has a literal as it's tail, it cannot return any
-          -- end witnesses (since only VarE forms are converted to RetE's).
-          -- We therefore bind that literal to a variable, and recur. We need
-          -- to handle LetRegionE and LetLocE similarly.
-          LetE (v,ls,ty,rhs) (LitE n) -> do
-            tmp <- gensym "fltLitTail"
-            let e = LetE (v,ls,ty,rhs) (LetE (tmp,[],IntTy,LitE n) (VarE tmp))
-            exp fns retlocs eor lenv afterenv env2 e
+          -- Ext (LetRegionE r bod) | isScalar bod -> do
+          --   handleScalarRet bod (\bod' -> Ext (LetRegionE r bod'))
 
-          LetE (v,ls,ty,rhs) (FloatE n) -> do
-            tmp <- gensym "fltLitTail"
-            let e = LetE (v,ls,ty,rhs) (LetE (tmp,[],FloatTy,FloatE n) (VarE tmp))
-            exp fns retlocs eor lenv afterenv env2 e
+          -- Ext (LetLocE v locexp bod) | isScalar bod -> do
+          --   handleScalarRet bod (\bod' -> Ext (LetLocE v locexp bod'))
 
           -- This is the most interesting case: a let bound function application.
           -- We need to update the let binding's extra location binding list with
@@ -268,9 +351,6 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
             let ex = L1.mkLets [(v,[],ty,complex)] (CaseE (VarE v) brs)
             exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) ex
 
-          -------------------------------------------------------------------------------------------------------------------------
-          --- That's all the interesting cases. The rest are straightforward:
-
 
           -- This shouldn't happen, but as a convenience we can ANF-ify this AppE
           -- by gensyming a new variable, sticking the AppE in a LetE, and recuring.
@@ -287,7 +367,6 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  -- we fmap location at the top-level case expression
                  go (e')
 
-
           -- Same AppE as above. This could just fail, instead of trying to repair
           -- the program.
           PrimAppE pr es -> do
@@ -296,7 +375,6 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                      e' = LetE (v',[],ty, PrimAppE pr es) (VarE v')
                  -- we fmap location at the top-level case expression
                  go (e')
-
 
           -- RouteEnds creates let bindings for such expressions (see those cases below).
           -- Processing the RHS here would cause an infinite loop.
@@ -335,9 +413,9 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  return $ LetE (v,ls,ty,e1') e2'
 
           -- Most boring LetE case, just recur on body
-          LetE (v,ls,ty,e1) e2 -> do
-                 e2' <- exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) e2
-                 return $ LetE (v,ls,ty,e1) e2'
+          LetE (v,ls,ty,rhs) bod -> do
+            bod' <- exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) bod
+            return $ LetE (v,ls,ty,rhs) bod'
 
           IfE e1 e2 e3 -> do
                  e2' <- go e2
@@ -379,55 +457,25 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
           WithArenaE v e -> WithArenaE v <$> go e
 
-          Ext (LetRegionE r (LitE n)) -> do
-                 tmp <- gensym "fltLitTail"
-                 let e = Ext (LetRegionE r (LetE (tmp,[],IntTy,LitE n) (VarE tmp)))
-                 exp fns retlocs eor lenv afterenv env2 e
-
-          Ext (LetRegionE r (FloatE n)) -> do
-                 tmp <- gensym "fltLitTail"
-                 let e = Ext (LetRegionE r (LetE (tmp,[],FloatTy,FloatE n) (VarE tmp)))
-                 exp fns retlocs eor lenv afterenv env2 e
-
           Ext (LetRegionE r e) -> do
-                 e' <- go e
-                 return $ Ext (LetRegionE r e')
+            e' <- go e
+            return $ Ext (LetRegionE r e')
 
-          Ext (LetLocE v rhs (LitE n)) -> do
-                 tmp <- gensym "fltLitTail"
-                 let e = Ext (LetLocE v rhs (LetE (tmp,[],IntTy,LitE n) (VarE tmp)))
-                 exp fns retlocs eor lenv afterenv env2 e
-
-          Ext (LetLocE v rhs (FloatE n)) -> do
-                 tmp <- gensym "fltLitTail"
-                 let e = Ext (LetLocE v rhs (LetE (tmp,[],FloatTy,FloatE n) (VarE tmp)))
-                 exp fns retlocs eor lenv afterenv env2 e
-
-          Ext (LetLocE v (StartOfLE r) e) -> do
-                 e' <- go e
-                 return $ Ext (LetLocE v (StartOfLE r) e')
-
-          Ext (LetLocE v (AfterConstantLE i l1) e) -> do
-                 e' <- go e
-                 return $ Ext (LetLocE v (AfterConstantLE i l1) e')
-
-          Ext (LetLocE v (AfterVariableLE x l1 b) e) -> do
-                 e' <- go e
-                 return $ Ext (LetLocE v (AfterVariableLE x l1 b) e')
-
-          Ext (LetLocE v (InRegionLE r) bod) -> do
-                 bod' <- go bod
-                 return $ Ext (LetLocE v (InRegionLE r) bod')
+          Ext (LetLocE v locexp bod) -> do
+            let only_recur e = do
+                  e' <- go e
+                  return $ Ext (LetLocE v locexp e')
+            case locexp of
+              StartOfLE{} -> only_recur bod
+              AfterConstantLE{} -> only_recur bod
+              AfterVariableLE{} -> only_recur bod
+              InRegionLE{} -> only_recur bod
+              FreeLE{} -> only_recur bod
+              _ -> error $ "RouteEnds: todo" ++ sdoc e
 
           Ext (IndirectionE{}) -> return e
 
           Ext (LetAvail vs e)  -> Ext <$> LetAvail vs <$> go e
-
-          -- For some reason this pass goes into an infinite loop if this is uncommented:
-
-          Ext (LetLocE v FreeLE e) -> do
-                 e' <- go e
-                 return $ Ext (LetLocE v FreeLE e')
 
           Ext ext -> error $ "RouteEnds: Shouldn't encounter " ++ sdoc ext
 
