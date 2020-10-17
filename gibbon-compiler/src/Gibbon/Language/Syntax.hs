@@ -394,10 +394,7 @@ data Prim ty
           | FAddP | FSubP | FMulP | FDivP | FExpP | FRandP | EqFloatP | FLtP | FGtP | FLtEqP | FGtEqP | FSqrtP | IntToFloatP | FloatToIntP
           | EqSymP             -- ^ Equality on Sym
           | OrP | AndP
-          | DictInsertP ty     -- ^ takes dict, k,v; annotated with element type
-          | DictLookupP ty     -- ^ takes dict,k errors if absent; annotated with element type
-          | DictEmptyP  ty     -- ^ annotated with element type to avoid ambiguity
-          | DictHasKeyP ty     -- ^ takes dict,k; returns a Bool, annotated with element type
+
           | ErrorP String ty
               -- ^ crash and issue a static error message.
               --   To avoid needing inference, this is labeled with a return type.
@@ -415,6 +412,13 @@ data Prim ty
           | PrintBool  -- ^ Print a boolean to standard out
           | PrintSym -- ^ Print a symbol to standard out
           | ReadInt  -- ^ Read an int from standard in
+
+          -- Dictionaries.
+
+          | DictInsertP ty     -- ^ takes dict, k,v; annotated with element type
+          | DictLookupP ty     -- ^ takes dict,k errors if absent; annotated with element type
+          | DictEmptyP  ty     -- ^ annotated with element type to avoid ambiguity
+          | DictHasKeyP ty     -- ^ takes dict,k; returns a Bool, annotated with element type
 
           | SymSetEmpty    -- ^ Creates an empty set
           | SymSetInsert   -- ^ Inserts a symbol into a set of symbols
