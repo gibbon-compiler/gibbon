@@ -1582,6 +1582,7 @@ prim p = case p of
            FDivP -> return FDivP
            FExpP -> return FExpP
            FSqrtP -> return FSqrtP
+           FTanP -> return FTanP
            RandP-> return RandP
            FRandP->return FRandP
            FloatToIntP->return FloatToIntP
@@ -1626,6 +1627,20 @@ prim p = case p of
            InplaceVUpdateP elty -> convertTy elty >>= return . InplaceVUpdateP
            VConcatP elty   -> convertTy elty >>= return . VConcatP
            VSortP elty     -> convertTy elty >>= return . VSortP
+           PDictAllocP k v -> convertTy k >>= (\k' -> convertTy v >>= \v' -> return $ PDictAllocP k' v')
+           PDictInsertP k v -> convertTy k >>= (\k' -> convertTy v >>= \v' -> return $ PDictInsertP k' v')
+           PDictLookupP k v -> convertTy k >>= (\k' -> convertTy v >>= \v' -> return $ PDictLookupP k' v')
+           PDictHasKeyP k v -> convertTy k >>= (\k' -> convertTy v >>= \v' -> return $ PDictHasKeyP k' v')
+           PDictForkP k v -> convertTy k >>= (\k' -> convertTy v >>= \v' -> return $ PDictForkP k' v')
+           PDictJoinP k v -> convertTy k >>= (\k' -> convertTy v >>= \v' -> return $ PDictJoinP k' v')
+           LLAllocP elty   -> convertTy elty >>= return . LLAllocP
+           LLIsEmptyP elty   -> convertTy elty >>= return . LLIsEmptyP
+           LLConsP elty   -> convertTy elty >>= return . LLConsP
+           LLHeadP elty   -> convertTy elty >>= return . LLHeadP
+           LLTailP elty   -> convertTy elty >>= return . LLTailP
+           LLFreeP elty   -> convertTy elty >>= return . LLFreeP
+           LLFree2P elty   -> convertTy elty >>= return . LLFree2P
+           LLCopyP elty   -> convertTy elty >>= return . LLCopyP
            InplaceVSortP elty -> convertTy elty >>= return . InplaceVSortP
            GetNumProcessors -> pure GetNumProcessors
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p

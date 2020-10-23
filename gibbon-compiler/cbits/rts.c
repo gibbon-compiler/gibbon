@@ -991,6 +991,66 @@ double sum_timing_array(VectorTy *times) {
     return acc;
 }
 
+// -------------------------------------
+// Linked lists
+// -------------------------------------
+
+typedef struct ListTy_struct {
+    IntTy data_size;
+    void* data;
+    struct ListTy_struct* next;
+} ListTy;
+
+static inline ListTy* list_alloc(IntTy data_size) {
+    ListTy *ls = ALLOC(sizeof(ListTy));
+    ls->data_size = data_size;
+    ls->data = NULL;
+    ls->next = NULL;
+    return ls;
+}
+
+static inline BoolTy list_is_empty(ListTy *ls) {
+    return ls->next == NULL;
+}
+
+static inline ListTy* list_cons(void* elt, ListTy *ls) {
+    void* data = ALLOC(ls->data_size);
+    if (data == NULL) {
+        printf("list_cons: malloc failed: %lld", ls->data_size);
+        exit(1);
+    }
+    memcpy(data, elt, ls->data_size);
+    ListTy *res = ALLOC(sizeof(ListTy));
+    res->data_size = ls->data_size;
+    res->data = data;
+    res->next = (ListTy*) ls;
+    return res;
+}
+
+static inline void* list_head(ListTy *ls) {
+    return ls->data;
+}
+
+static inline ListTy* list_tail(ListTy *ls) {
+    return ls->next;
+}
+
+static inline void list_free(ListTy *ls) {
+    free(ls->data);
+    free(ls);
+    return;
+}
+
+static inline ListTy* list_copy(ListTy *ls) {
+    ListTy *ls2 = list_alloc(ls->data_size);
+    if (ls->data != NULL) {
+        void* data = ALLOC(ls->data_size);
+        memcpy(data, ls->data, ls->data_size);
+        ls2->data = data;
+    }
+    ls2->next = ls->next;
+    return ls2;
+}
 
 // -------------------------------------
 // Ppm Images

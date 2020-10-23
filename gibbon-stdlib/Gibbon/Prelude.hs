@@ -41,3 +41,9 @@ print_check b =
          in ()
     else let _ = printsym (quote "Err\n")
          in ()
+
+print_newline :: () -> ()
+print_newline _ = printsym (quote "\n")
+
+print_space :: () -> ()
+print_space _ = printsym (quote " ")

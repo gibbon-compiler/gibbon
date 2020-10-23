@@ -84,6 +84,9 @@ freshTy env ty =
                          pure (env', ProdTy tys')
      SymDictTy v t   -> do (env', t') <- freshTy env t
                            pure (env', SymDictTy v t')
+     PDictTy k v -> do (env', k') <- freshTy env k
+                       (env'', v') <- freshTy env' v
+                       pure (env'', PDictTy k' v')
      ArrowTy tys t -> do (env', tys') <- freshTys env tys
                          (env'', [t'])  <- freshTys env' [t]
                          pure (env'', ArrowTy tys' t')
@@ -91,6 +94,8 @@ freshTy env ty =
                               pure (env', PackedTy tycon tys')
      VectorTy el_t -> do (env', el_t') <- freshTy env el_t
                          pure (env', VectorTy el_t')
+     ListTy el_t -> do (env', el_t') <- freshTy env el_t
+                       pure (env', ListTy el_t')
      IntHashTy -> pure (env, ty)
 
 freshTys :: TyVarEnv (TyOf Exp0) -> [Ty0] -> PassM (TyVarEnv (TyOf Exp0), [Ty0])
@@ -123,6 +128,10 @@ freshDictTy m ty =
      SymDictTy Nothing t ->
          do t' <- freshDictTy m t
             pure $ SymDictTy Nothing t'
+     PDictTy k v ->
+         do k' <- freshDictTy m k
+            v' <- freshDictTy m v
+            pure $ PDictTy k' v'
      ArrowTy tys t ->
          do tys' <- mapM (freshDictTy m) tys
             t' <- freshDictTy m t
@@ -133,6 +142,9 @@ freshDictTy m ty =
      VectorTy el_t ->
          do el_t' <- freshDictTy m el_t
             pure $ VectorTy el_t'
+     ListTy el_t ->
+         do el_t' <- freshDictTy m el_t
+            pure $ ListTy el_t'
      SymSetTy  -> pure ty
      SymHashTy -> pure ty
      IntHashTy -> pure ty

@@ -150,8 +150,10 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funRec,funInl
         BoolTy    -> BoolTy
         ProdTy ls -> ProdTy $ L.map cursorizeInTy ls
         SymDictTy ar _ty -> SymDictTy ar CursorTy
+        PDictTy k v -> PDictTy (cursorizeInTy k) (cursorizeInTy v)
         PackedTy{}    -> CursorTy
-        VectorTy el_ty'    -> VectorTy $ cursorizeInTy el_ty'
+        VectorTy el_ty -> VectorTy $ cursorizeInTy el_ty
+        ListTy el_ty -> ListTy $ cursorizeInTy el_ty
         PtrTy -> PtrTy
         CursorTy  -> CursorTy
         ArenaTy   -> ArenaTy

@@ -167,6 +167,11 @@ tcExp ddfs env exp =
           _ <- ensureEqualTy exp FloatTy (tys !! 0)
           return FloatTy
 
+        FTanP -> do
+          len1
+          _ <- ensureEqualTy exp FloatTy (tys !! 0)
+          return FloatTy
+
         FloatToIntP -> do
           len1
           _ <- ensureEqualTy exp FloatTy (tys !! 0)
@@ -411,6 +416,112 @@ tcExp ddfs env exp =
             oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
         InplaceVSortP ty -> go (PrimAppE (VSortP ty) es)
+
+        PDictInsertP kty vty -> do
+          len3
+          checkListElemTy kty
+          checkListElemTy vty
+          let [key, val, dict] = tys
+          _ <- ensureEqualTy (es !! 0) key kty
+          _ <- ensureEqualTy (es !! 1) val vty
+          _ <- ensureEqualTy (es !! 2) dict (PDictTy kty vty)
+          pure (PDictTy kty vty)
+
+        PDictLookupP kty vty -> do
+          len2
+          checkListElemTy kty
+          checkListElemTy vty
+          let [key, dict] = tys
+          _ <- ensureEqualTy (es !! 0) key kty
+          _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
+          pure (vty)
+
+        PDictAllocP kty vty -> do
+          len0
+          checkListElemTy kty
+          checkListElemTy vty
+          pure (PDictTy kty vty)
+
+        PDictHasKeyP kty vty -> do
+          len2
+          checkListElemTy kty
+          checkListElemTy vty
+          let [key, dict] = tys
+          _ <- ensureEqualTy (es !! 0) key kty
+          _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
+          pure (BoolTy)
+
+        PDictForkP kty vty -> do
+          len1
+          checkListElemTy kty
+          checkListElemTy vty
+          let [dict] = tys
+          _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
+          pure (ProdTy [PDictTy kty vty, PDictTy kty vty])
+
+        PDictJoinP kty vty -> do
+          len2
+          checkListElemTy kty
+          checkListElemTy vty
+          let [dict1, dict2] = tys
+          _ <- ensureEqualTy (es !! 0) dict1 (PDictTy kty vty)
+          _ <- ensureEqualTy (es !! 0) dict2 (PDictTy kty vty)
+          pure (PDictTy kty vty)
+
+        LLAllocP elty -> do
+          len0
+          checkListElemTy elty
+          pure (ListTy elty)
+
+        LLIsEmptyP elty -> do
+          len1
+          checkListElemTy elty
+          let [ll] = tys
+          _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+          pure (BoolTy)
+
+        LLConsP elty -> do
+          len2
+          checkListElemTy elty
+          let [elt, ll] = tys
+          _ <- ensureEqualTy (es !! 0) elt elty
+          _ <- ensureEqualTy (es !! 1) ll (ListTy elty)
+          pure (ListTy elty)
+
+        LLHeadP elty -> do
+          len1
+          checkListElemTy elty
+          let [ll] = tys
+          _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+          pure (elty)
+
+        LLTailP elty -> do
+          len1
+          checkListElemTy elty
+          let [ll] = tys
+          _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+          pure (ListTy elty)
+
+        LLFreeP elty -> do
+          len1
+          checkListElemTy elty
+          let [i] = tys
+          _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+          pure (ProdTy [])
+
+        LLFree2P elty -> do
+          len1
+          checkListElemTy elty
+          let [i] = tys
+          _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+          pure (ProdTy [])
+
+        LLCopyP elty -> do
+          len1
+          checkListElemTy elty
+          let [i] = tys
+          _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+          pure (ListTy elty)
 
         GetNumProcessors -> do
           len0

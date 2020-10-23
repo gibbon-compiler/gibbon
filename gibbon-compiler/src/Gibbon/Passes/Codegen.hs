@@ -69,6 +69,8 @@ harvestStructTys (Prog _ funs mtal) =
          ProdTy [] -> go ts
          ProdTy ls -> S.insert ls $ S.union (go ls) (go ts)
          VectorTy ty -> S.insert [VectorTy ty] $ S.union (go [ty])(go ts)
+         ListTy ty -> S.insert [ListTy ty] $ S.union (go [ty])(go ts)
+         PDictTy k v -> S.insert [PDictTy k v] $ S.union (go [k, v]) (go ts)
          _ -> go ts
 
   -- This finds all types that maybe grouped together as a ProdTy:
@@ -100,6 +102,20 @@ harvestStructTys (Prog _ funs mtal) =
            VConcatP elty -> VectorTy elty : rst
            VSortP elty   -> VectorTy elty : rst
            InplaceVSortP  _elty  -> voidTy : rst
+           LLAllocP elty -> ListTy elty : rst
+           LLIsEmptyP elty -> ListTy elty : rst
+           LLConsP elty -> ListTy elty : rst
+           LLHeadP elty -> ListTy elty : rst
+           LLTailP elty -> ListTy elty : rst
+           LLFreeP elty -> ListTy elty : rst
+           LLFree2P elty -> ListTy elty : rst
+           LLCopyP elty -> ListTy elty : rst
+           PDictAllocP k v -> PDictTy k v : rst
+           PDictInsertP k v -> PDictTy k v : rst
+           PDictLookupP k v -> PDictTy k v : rst
+           PDictHasKeyP k v -> PDictTy k v : rst
+           PDictForkP k v -> PDictTy k v : rst
+           PDictJoinP k v -> PDictTy k v : rst
            ReadArrayFile _ elty -> VectorTy elty : rst
            _ -> ProdTy (map snd binds) : rst
        (LetTrivT (_,ty,_) bod)     -> ty : go bod
@@ -644,6 +660,10 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                [arg] = rnds in pure
                            [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = sqrt($(codegenTriv venv arg)) ; |]]
 
+                 FTanP -> let [(outV,outT)] = bnds
+                              [arg] = rnds in pure
+                           [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = tan($(codegenTriv venv arg)) ; |]]
+
                  FloatToIntP -> let [(outV,outT)] = bnds
                                     [arg] = rnds
                                     ity= [cty| typename IntTy |] in pure
@@ -711,6 +731,20 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                       [(VarTriv hash),keyTriv] = rnds in pure
                     [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = lookup_hash($id:hash, $(codegenTriv venv keyTriv)); |] ]
 
+                 IntHashEmpty -> return
+                                   [ C.BlockStm [cstm| printf("IntHashEmpty todo\n"); |]
+                                   , C.BlockStm [cstm| exit(1); |]
+                                   ]
+
+                 IntHashInsert -> return
+                                    [ C.BlockStm [cstm| printf("IntHashInsert todo\n"); |]
+                                    , C.BlockStm [cstm| exit(1); |]
+                                    ]
+
+                 IntHashLookup -> return
+                                    [ C.BlockStm [cstm| printf("IntHashLookup todo\n"); |]
+                                    , C.BlockStm [cstm| exit(1); |]
+                                    ]
 
                  NewBuffer mul -> do
                    let [(reg, CursorTy),(outV,CursorTy)] = bnds
@@ -1058,6 +1092,103 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        to' = codegenTriv venv to
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_slice($exp:from', $exp:to', $id:old_ls); |] ]
 
+
+                 PDictAllocP _k _v -> return $
+                                  [ C.BlockStm [cstm| printf("PDictAllocP todo\n"); |]
+                                  , C.BlockStm [cstm| exit(1); |]
+                                  ]
+
+                 PDictInsertP _k _v -> return
+                                   [ C.BlockStm [cstm| printf("PDictInsertP todo\n"); |]
+                                   , C.BlockStm [cstm| exit(1); |]
+                                   ]
+
+                 PDictLookupP _k _v -> return
+                                   [ C.BlockStm [cstm| printf("PDictLookupP todo\n"); |]
+                                   , C.BlockStm [cstm| exit(1); |]
+                                   ]
+
+                 PDictHasKeyP _k _v -> return
+                                   [ C.BlockStm [cstm| printf("PDictHasKeyP todo\n"); |]
+                                   , C.BlockStm [cstm| exit(1); |]
+                                   ]
+
+                 PDictForkP _k _v -> return
+                                 [ C.BlockStm [cstm| printf("PDictForkP todo\n"); |]
+                                 , C.BlockStm [cstm| exit(1); |]
+                                 ]
+
+                 PDictJoinP _k _v -> return
+                                 [ C.BlockStm [cstm| printf("PDictJoinP todo\n"); |]
+                                 , C.BlockStm [cstm| exit(1); |]
+                                 ]
+
+                 LLAllocP elty -> do
+                   let ty1 = codegenTy (ListTy elty)
+                       [(outV,_)] = bnds
+                   return [ C.BlockDecl [cdecl| $ty:ty1 $id:outV = list_alloc(sizeof( $ty:(codegenTy elty))); |] ]
+
+                 LLIsEmptyP _elty -> do
+                   let [(outV,outTy)] = bnds
+                       [ls] = rnds
+                       ls' = codegenTriv venv ls
+                       outTy' = codegenTy outTy
+                   return [ C.BlockDecl [cdecl| $ty:outTy' $id:outV = list_is_empty($exp:ls'); |] ]
+
+                 LLConsP elty -> do
+                   let [(outV,_)] = bnds
+                       [x, VarTriv old_ls] = rnds
+                       xexp = [cexp| $exp:(codegenTriv venv x) |]
+                   case x of
+                     VarTriv{} ->
+                        return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy elty)) $id:outV = list_cons(&$exp:xexp, $id:old_ls); |] ]
+                     ProdTriv{} ->
+                        return [ C.BlockDecl [cdecl| $ty:(codegenTy (ListTy elty)) $id:outV = list_cons(&$exp:xexp, $id:old_ls); |] ]
+                     IntTriv{} -> do
+                        tmp <- gensym "tmp"
+                        return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:tmp = $exp:xexp; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy (ListTy elty)) $id:outV = list_cons(&$id:tmp, $id:old_ls); |] ]
+                     FloatTriv{} -> do
+                        tmp <- gensym "tmp"
+                        return [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:tmp = $exp:xexp; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy (ListTy elty)) $id:outV = list_cons(&$id:tmp, $id:old_ls); |] ]
+                     _ -> error $ "codegen: LLConsP: " ++ sdoc x
+
+                 LLHeadP _elty -> do
+                   let [(outV,outTy)] = bnds
+                       [ls] = rnds
+                       ls' = codegenTriv venv ls
+                       outTy' = codegenTy outTy
+                   tmp <- gensym "tmp"
+                   return [ C.BlockDecl [cdecl| $ty:outTy' *($id:tmp); |]
+                          , C.BlockStm  [cstm| $id:tmp = ($ty:outTy' *) list_head($exp:ls'); |]
+                          , C.BlockDecl [cdecl| $ty:outTy' $id:outV = *($id:tmp); |] ]
+
+                 LLTailP _elty -> do
+                  let [(outV,outTy)] = bnds
+                      [ls] = rnds
+                      ls' = codegenTriv venv ls
+                      outTy' = codegenTy outTy
+                  return [ C.BlockDecl [cdecl| $ty:outTy' $id:outV = list_tail($exp:ls'); |] ]
+
+                 LLFreeP _elty -> do
+                  let [ls] = rnds
+                      ls' = codegenTriv venv ls
+                  return [ C.BlockStm [cstm| list_free($exp:ls'); |] ]
+
+                 LLFree2P _elty -> do
+                  let [ls] = rnds
+                      ls' = codegenTriv venv ls
+                  return [ C.BlockStm [cstm| free($exp:ls'); |] ]
+
+                 LLCopyP _elty -> do
+                  let [(outV,outTy)] = bnds
+                      [ls] = rnds
+                      ls' = codegenTriv venv ls
+                      outTy' = codegenTy outTy
+                  return [ C.BlockDecl [cdecl| $ty:outTy' $id:outV = list_copy($exp:ls'); |] ]
+
+
                  GetNumProcessors -> do
                    let [(outV,outTy)] = bnds
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = get_nprocs(); |] ]
@@ -1140,8 +1271,11 @@ codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] n
 codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
 codegenTy SymSetTy = [cty|typename SymSetTy|]
 codegenTy SymHashTy = [cty|typename SymHashTy|]
+codegenTy IntHashTy = [cty|typename IntHashTy|]
 codegenTy ArenaTy = [cty|typename ArenaTy|]
 codegenTy VectorTy{} = [cty|typename VectorTy* |]
+codegenTy ListTy{} = [cty|typename ListTy* |]
+codegenTy PDictTy{} = [cty|typename PDictTy* |]
 
 makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"
@@ -1160,9 +1294,12 @@ makeName' RegionTy = "Region"
 makeName' ChunkTy  = "Chunk"
 makeName' ArenaTy  = "Arena"
 makeName' VectorTy{} = "Vector"
+makeName' ListTy{} = "List"
+makeName' PDictTy{} = "PDict"
 makeName' (ProdTy tys) = "Prod" ++ concatMap makeName' tys
 makeName' SymSetTy = "SymSetTy"
 makeName' SymHashTy = "SymHashTy"
+makeName' IntHashTy = "IntHashTy"
 
 
 makeIcdName :: Ty -> (String, String)

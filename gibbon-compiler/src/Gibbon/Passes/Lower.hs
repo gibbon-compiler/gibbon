@@ -926,6 +926,8 @@ typ t =
     SymTy  -> T.SymTy
     BoolTy -> T.BoolTy
     VectorTy el_ty -> T.VectorTy (typ el_ty)
+    ListTy el_ty -> T.ListTy (typ el_ty)
+    PDictTy k v -> T.PDictTy (typ k) (typ v)
     ProdTy xs -> T.ProdTy $ L.map typ xs
     SymDictTy (Just var) x -> T.SymDictTy var $ typ x
     SymDictTy Nothing _ty -> error $ "lower/typ: Expected arena annotation on type: " ++ (sdoc t)
@@ -956,6 +958,7 @@ prim p =
     FExpP -> T.ExpP
     FRandP-> T.FRandP
     FSqrtP-> T.FSqrtP
+    FTanP-> T.FTanP
     FloatToIntP -> T.FloatToIntP
     IntToFloatP -> T.IntToFloatP
     RandP -> T.RandP
@@ -997,6 +1000,20 @@ prim p =
     VConcatP elty -> T.VConcatP (typ elty)
     VSortP elty   -> T.VSortP (typ elty)
     InplaceVSortP elty -> T.InplaceVSortP (typ elty)
+    PDictAllocP  k v -> T.PDictAllocP  (typ k) (typ v)
+    PDictInsertP k v -> T.PDictInsertP (typ k) (typ v)
+    PDictLookupP k v -> T.PDictLookupP (typ k) (typ v)
+    PDictHasKeyP k v -> T.PDictHasKeyP (typ k) (typ v)
+    PDictForkP k v -> T.PDictForkP (typ k) (typ v)
+    PDictJoinP k v -> T.PDictJoinP (typ k) (typ v)
+    LLAllocP elty -> T.LLAllocP (typ elty)
+    LLIsEmptyP elty -> T.LLIsEmptyP (typ elty)
+    LLConsP elty -> T.LLConsP (typ elty)
+    LLHeadP elty -> T.LLHeadP (typ elty)
+    LLTailP elty -> T.LLTailP (typ elty)
+    LLFreeP elty -> T.LLFreeP (typ elty)
+    LLFree2P elty -> T.LLFree2P (typ elty)
+    LLCopyP elty -> T.LLCopyP (typ elty)
     GetNumProcessors -> T.GetNumProcessors
     SymSetEmpty   -> T.SymSetEmpty
     SymSetInsert  -> T.SymSetInsert

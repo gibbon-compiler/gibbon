@@ -387,13 +387,15 @@ data Prim ty
           | ExpP               -- ^ Exponentiation
           | RandP              -- ^ Generate a random number.
                                --   Translates to 'rand()' in C.
-                               --   TEMP: It's a side-effect, and should be removed.
           | EqIntP             -- ^ Equality on Int
           | LtP | GtP          -- ^ (<) and (>) for Int's
           | LtEqP | GtEqP      -- ^ <= and >=
           | FAddP | FSubP | FMulP | FDivP | FExpP | FRandP | EqFloatP | FLtP | FGtP | FLtEqP | FGtEqP | FSqrtP | IntToFloatP | FloatToIntP
+          | FTanP              -- ^ Translates to 'tan()' in C.
           | EqSymP             -- ^ Equality on Sym
           | OrP | AndP
+          | MkTrue  -- ^ Zero argument constructor.
+          | MkFalse -- ^ Zero argument constructor.
 
           | ErrorP String ty
               -- ^ crash and issue a static error message.
@@ -403,9 +405,7 @@ data Prim ty
           | BenchProgParam
 
           | IsBig   -- ^ Check the size of constructors with size.
-
-          | MkTrue  -- ^ Zero argument constructor.
-          | MkFalse -- ^ Zero argument constructor.
+          | GetNumProcessors -- ^ Return the number of processors
 
           | PrintInt   -- ^ Print an integer to standard out
           | PrintFloat -- ^ Print a floating point number to standard out
@@ -432,6 +432,24 @@ data Prim ty
           | IntHashInsert  -- ^ Insert an integer into a hash table
           | IntHashLookup  -- ^ Look up a integer in a hash table (takes default integer)
 
+          -- Thread safe dictionaries.
+          | PDictAllocP  ty ty -- ^ annotated with element type to avoid ambiguity
+          | PDictInsertP ty ty -- ^ takes dict, k, v; annotated with element type
+          | PDictLookupP ty ty -- ^ takes dict, k. errors if absent; annotated with element type
+          | PDictHasKeyP ty ty -- ^ takes dict,k; returns a Bool, annotated with element type
+          | PDictForkP ty ty   -- ^ takes dict; returns thread safe safe dicts.
+          | PDictJoinP ty ty   -- ^ takes 2 dicts; returns a merged dict.
+
+          -- Linked Lists.
+          | LLAllocP ty
+          | LLIsEmptyP ty
+          | LLConsP ty
+          | LLHeadP ty
+          | LLTailP ty
+          | LLFreeP ty    -- ^ Free the list, and it's data.
+          | LLFree2P ty   -- ^ Free list struct, but not it's data.
+          | LLCopyP ty    -- ^ Copy the list node.
+
           -- Operations on vectors
           | VAllocP ty   -- ^ Allocate a vector
           | VFreeP ty    -- ^ Free a vector, and it's data.
@@ -444,7 +462,9 @@ data Prim ty
           | VSortP ty          -- ^ A sort primop that accepts a function pointer
           | InplaceVSortP ty   -- ^ A sort primop that sorts the array in place
 
-          | GetNumProcessors -- ^ Return the number of processors
+
+          | Write3dPpmFile FilePath
+          | WritePackedFile FilePath
 
           | ReadPackedFile (Maybe FilePath) TyCon (Maybe Var) ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
@@ -492,8 +512,14 @@ data UrTy a =
 
         | PackedTy TyCon a -- ^ No type arguments to TyCons for now.  (No polymorphism.)
 
-        | VectorTy (UrTy a)  -- ^ Lists are decorated with the types of their elements;
+        | VectorTy (UrTy a)  -- ^ Vectors are decorated with the types of their elements;
                              -- which can only include scalars or flat products of scalars.
+
+        | PDictTy (UrTy a) (UrTy a) -- ^ Thread safe dictionaries decorated with
+                                    -- key and value type.
+
+        | ListTy (UrTy a) -- ^ Linked lists are decorated with the types of their elements;
+                          -- which can only include scalars or flat products of scalars.
 
         | ArenaTy -- ^ Collection of allocated, non-packed values
 

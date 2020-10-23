@@ -472,12 +472,15 @@ hasPacked t =
     IntTy          -> False
     FloatTy        -> False
     SymDictTy _ _  -> False -- hasPacked ty
-    VectorTy ty      -> hasPacked ty
+    PDictTy k v    -> hasPacked k || hasPacked v
+    VectorTy ty    -> hasPacked ty
+    ListTy ty      -> hasPacked ty
     PtrTy          -> False
     CursorTy       -> False
     ArenaTy        -> False
     SymSetTy       -> False
     SymHashTy      -> False
+
 
 -- | Get all packed types in a type.
 getPackedTys :: Show a => UrTy a -> [UrTy a]
@@ -490,7 +493,9 @@ getPackedTys t =
     IntTy          -> []
     FloatTy        -> []
     SymDictTy _ _  -> [] -- getPackedTys ty
-    VectorTy ty      -> getPackedTys ty
+    PDictTy k v    -> getPackedTys k ++ getPackedTys v
+    VectorTy ty    -> getPackedTys ty
+    ListTy ty      -> getPackedTys ty
     PtrTy          -> []
     CursorTy       -> []
     ArenaTy        -> []
@@ -504,11 +509,13 @@ sizeOfTy t =
     PackedTy{}    -> Nothing
     ProdTy ls     -> sum <$> mapM sizeOfTy ls
     SymDictTy _ _ -> Just 8 -- Always a pointer.
+    PDictTy _ _   -> Just 8 -- Always a pointer.
     IntTy         -> Just 8
     FloatTy       -> Just 4
     SymTy         -> Just 8
     BoolTy        -> Just 1
-    VectorTy{}      -> Just 8 -- Always a pointer.
+    VectorTy{}    -> Just 8 -- Always a pointer.
+    ListTy{}      -> Just 8 -- Always a pointer.
     PtrTy{}       -> Just 8 -- Assuming 64 bit
     CursorTy{}    -> Just 8
     ArenaTy       -> Just 8
@@ -532,6 +539,7 @@ primArgsTy p =
     FDivP   -> [FloatTy, FloatTy]
     FExpP   -> [FloatTy, FloatTy]
     FSqrtP  -> [FloatTy]
+    FTanP   -> [FloatTy]
     FloatToIntP -> [FloatTy]
     IntToFloatP -> [IntTy]
     RandP   -> []
@@ -570,6 +578,20 @@ primArgsTy p =
     -- We don't have a type for function pointers.
     VSortP elty        -> [VectorTy elty, voidTy]
     InplaceVSortP elty -> [VectorTy elty, voidTy]
+    PDictInsertP kty vty -> [kty, vty, PDictTy kty vty]
+    PDictLookupP kty vty -> [kty, PDictTy kty vty]
+    PDictAllocP _kty _vty -> []
+    PDictHasKeyP kty vty -> [kty, PDictTy kty vty]
+    PDictForkP kty vty -> [PDictTy kty vty]
+    PDictJoinP kty vty -> [PDictTy kty vty, PDictTy kty vty]
+    LLAllocP _elty -> []
+    LLIsEmptyP elty -> [ListTy elty]
+    LLConsP elty  -> [elty, ListTy elty]
+    LLHeadP elty  -> [ListTy elty]
+    LLTailP elty  -> [ListTy elty]
+    LLFreeP elty   -> [ListTy elty]
+    LLFree2P elty  -> [ListTy elty]
+    LLCopyP elty  -> [ListTy elty]
     GetNumProcessors -> []
     PrintInt -> [IntTy]
     PrintFloat -> [FloatTy]
@@ -608,6 +630,7 @@ primRetTy p =
     FDivP -> FloatTy
     FExpP -> FloatTy
     FSqrtP-> FloatTy
+    FTanP -> FloatTy
     FloatToIntP -> IntTy
     IntToFloatP -> FloatTy
     RandP-> IntTy
@@ -644,6 +667,20 @@ primRetTy p =
     VConcatP elty  -> VectorTy elty
     VSortP elty -> VectorTy elty
     InplaceVSortP elty -> VectorTy elty
+    PDictInsertP kty vty -> PDictTy kty vty
+    PDictLookupP _kty vty -> vty
+    PDictAllocP kty vty -> PDictTy kty vty
+    PDictHasKeyP _kty _vty -> BoolTy
+    PDictForkP kty vty -> ProdTy [PDictTy kty vty, PDictTy kty vty]
+    PDictJoinP kty vty -> PDictTy kty vty
+    LLAllocP elty -> ListTy elty
+    LLIsEmptyP _elty -> BoolTy
+    LLConsP elty  -> ListTy elty
+    LLHeadP elty  -> elty
+    LLTailP elty  -> ListTy elty
+    LLFreeP _elty  -> ProdTy []
+    LLFree2P _elty -> ProdTy []
+    LLCopyP elty  -> ListTy elty
     GetNumProcessors -> IntTy
     PrintInt   -> ProdTy []
     PrintFloat -> ProdTy []
@@ -674,8 +711,10 @@ stripTyLocs ty =
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map stripTyLocs ls
     SymDictTy v ty'  -> SymDictTy v $ stripTyLocs ty'
+    PDictTy k v -> PDictTy (stripTyLocs k) (stripTyLocs v)
     PackedTy tycon _ -> PackedTy tycon ()
-    VectorTy ty'       -> VectorTy $ stripTyLocs ty'
+    VectorTy ty' -> VectorTy $ stripTyLocs ty'
+    ListTy ty' -> ListTy $ stripTyLocs ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     SymSetTy -> SymSetTy

@@ -78,8 +78,8 @@ parseFile' pstate_ref import_route path = do
   let parsed = parseModuleWithMode parseMode str
   case parsed of
     ParseOk hs -> desugarModule pstate_ref import_route (takeDirectory path) hs
-    ParseFailed _ er -> do
-      error ("haskell-src-exts failed: " ++ er)
+    ParseFailed loc er -> do
+      error ("haskell-src-exts failed: " ++ er ++ ", at " ++ prettyPrint loc)
 
 data TopLevel
   = HDDef (DDef Ty0)
@@ -240,10 +240,16 @@ builtinTys = S.fromList $
 
 keywords :: S.Set Var
 keywords = S.fromList $ map toVar $
+    -- These cannot be added to primMap because they all require special handling while parsing.
+    --
     [ "quote", "bench", "error", "par", "spawn", "is_big"
     -- operations on vectors
     , "valloc", "vnth", "vlength", "vslice", "inplacevupdate",
       "vsort", "inplacevsort", "vfree", "vfree2"
+    -- parallel dictionaries
+    , "alloc_pdict", "insert_pdict", "lookup_pdict", "member_pdict", "fork_pdict", "join_pdict"
+    -- linked lists
+    , "alloc_ll", "is_empty_ll", "cons_ll", "head_ll", "tail_ll", "free_ll", "free2_ll", "copy_ll"
     ] ++ M.keys primMap
 
 desugarTopType :: (Show a,  Pretty a) => TypeSynEnv -> Type a -> TyScheme
@@ -281,16 +287,23 @@ desugarType type_syns ty =
                      in ArrowTy [t1'] t2'
     TyParen _ ty1 -> desugarType type_syns ty1
     TyApp _ tycon arg ->
-      case desugarType type_syns tycon of
+      let ty' = desugarType type_syns tycon in
+      case ty' of
         PackedTy con tyargs ->
             case (con,tyargs) of
                 ("Vector",[]) -> VectorTy (desugarType type_syns arg)
+                ("List",[]) -> ListTy (desugarType type_syns arg)
+                ("PDict",[]) ->
+                  let arg' = desugarType type_syns arg in
+                  case arg' of
+                    ProdTy [k, v] -> PDictTy k v
+                    _ -> error $ "desugarType: Unexpected PDictTy argument: " ++ show arg'
                 _ ->
                   case M.lookup con type_syns of
                     Nothing -> PackedTy con (tyargs ++ [desugarType type_syns arg])
-                    Just ty' -> ty'
-        _ -> error $ "desugarType: Unexpected type arguments: " ++ prettyPrint ty
-    _ -> error $ "desugarType: Unsupported type: " ++ prettyPrint ty
+                    Just ty'' -> ty''
+        _ -> error $ "desugarType: Unexpected type arguments: " ++ show ty'
+    _ -> error $ "desugarType: Unsupported type: " ++ show ty
 
 
 -- Like 'desugarTopType' but understands boxity.
@@ -361,6 +374,7 @@ primMap = M.fromList
   , (".>.", FGtP)
   , (".<=.", FLtEqP)
   , (".>=.", FGtEqP)
+  , ("tan", FTanP)
   , ("mod", ModP)
   , ("||" , OrP)
   , ("&&", AndP)
@@ -398,25 +412,21 @@ desugarExp type_syns toplevel e =
     --     | (qnameToStr f) == "error" -> pure $ PrimAppE (ErrorP (litToString lit
     Paren _ e2 -> desugarExp type_syns toplevel e2
     H.Var _ qv -> do
-      let v = (toVar $ qnameToStr qv)
-      if v == "gensym"
-      then pure $ PrimAppE Gensym []
-      else if v == "rand"
-      then pure $ PrimAppE RandP []
-      else if v == "frand"
-      then pure $ PrimAppE FRandP []
+      let str = qnameToStr qv
+          v = (toVar str)
+      if str == "alloc_pdict"
+      then do
+        kty  <- newMetaTy
+        vty  <- newMetaTy
+        pure $ PrimAppE (PDictAllocP kty vty) []
+      else if str == "alloc_ll"
+      then do
+        ty  <- newMetaTy
+        pure $ PrimAppE (LLAllocP ty) []
       else if v == "sync"
       then pure SyncE
-      else if v == "sizeParam"
-      then pure $ PrimAppE SizeParam []
-      else if v == "benchProgParam"
-      then pure $ PrimAppE BenchProgParam []
-      else if v == "getNumProcessors"
-      then pure $ PrimAppE GetNumProcessors []
-      else if v == "empty_set"
-      then pure $ PrimAppE SymSetEmpty []
-      else if v == "empty_hash"
-      then pure $ PrimAppE SymHashEmpty []
+      else if M.member str primMap
+      then pure $ PrimAppE (primMap M.! str) []
       else case M.lookup v toplevel of
              Just sigma ->
                case tyFromScheme sigma of
@@ -540,6 +550,72 @@ desugarExp type_syns toplevel e =
                     e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VSliceP ty) [e2']
+                  else if f == "insert_pdict"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    kty  <- newMetaTy
+                    vty  <- newMetaTy
+                    pure $ PrimAppE (PDictInsertP kty vty) [e2']
+
+                  else if f == "lookup_pdict"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    kty  <- newMetaTy
+                    vty  <- newMetaTy
+                    pure $ PrimAppE (PDictLookupP kty vty) [e2']
+                  else if f == "member_pdict"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    kty  <- newMetaTy
+                    vty  <- newMetaTy
+                    pure $ PrimAppE (PDictHasKeyP kty vty) [e2']
+                  else if f == "fork_pdict"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    kty  <- newMetaTy
+                    vty  <- newMetaTy
+                    pure $ PrimAppE (PDictForkP kty vty) [e2']
+                  else if f == "join_pdict"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    kty  <- newMetaTy
+                    vty  <- newMetaTy
+                    pure $ PrimAppE (PDictJoinP kty vty) [e2']
+                  else if f == "is_empty_ll"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (LLIsEmptyP ty) [e2']
+                  else if f == "cons_ll"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (LLConsP ty) [e2']
+                  else if f == "head_ll"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (LLHeadP ty) [e2']
+                  else if f == "tail_ll"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (LLTailP ty) [e2']
+                  else if f == "free_ll"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (LLFreeP ty) [e2']
+                  else if f == "free2_ll"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (LLFree2P ty) [e2']
+                  else if f == "copy_ll"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (LLCopyP ty) [e2']
                   else if f == "fst"
                   then do
                     e2' <- desugarExp type_syns toplevel e2
@@ -548,6 +624,8 @@ desugarExp type_syns toplevel e =
                   then do
                     e2' <- desugarExp type_syns toplevel e2
                     pure $ ProjE 1 e2'
+                  else if S.member f keywords
+                  then error $ "desugarExp: Keyword not handled: " ++ sdoc f
                   else AppE f [] <$> (: []) <$> desugarExp type_syns toplevel e2
           (DataConE tyapp c as) -> (\e2' -> DataConE tyapp c (as ++ [e2'])) <$> desugarExp type_syns toplevel e2
           (Ext (ParE0 ls)) -> do
@@ -824,8 +902,8 @@ generateBind type_syns toplevel env decl exp2 =
              PWildCard _ -> gensym "wildcard_"
              _           -> error "generateBind: "
       ty' <- case M.lookup w env of
-                Nothing -> newMetaTy
-                Just (ForAll _ ty) -> pure ty
+               Nothing -> newMetaTy
+               Just (ForAll _ ty) -> pure ty
       pure $ LetE (w, [], ty', rhs') exp2
     FunBind{} -> do (name,args,ty,bod) <- desugarFun type_syns toplevel env decl
                     pure $ LetE (name,[], tyFromScheme ty, Ext $ LambdaE (zip args (inTys ty)) bod) exp2

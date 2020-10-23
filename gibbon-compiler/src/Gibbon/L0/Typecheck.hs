@@ -216,6 +216,11 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           s2 <- unify (args !! 0) FloatTy (arg_tys' !! 0)
           pure (s1 <> s2, FloatTy, PrimAppE pr args_tc)
 
+        FTanP -> do
+          len1
+          s2 <- unify (args !! 0) FloatTy (arg_tys' !! 0)
+          pure (s1 <> s2, FloatTy, PrimAppE pr args_tc)
+
         FloatToIntP -> do
           len1
           s2 <- unify (args !! 0) FloatTy (arg_tys' !! 0)
@@ -401,6 +406,92 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
             PrimAppE (VSortP t2) args2 ->
               pure (s1 <> s2, t, PrimAppE (InplaceVSortP t2) args2)
             _ -> err $ text "InPlaceVSortP"
+
+        PDictInsertP kty vty -> do
+          len3
+          let [key, val, dict] = arg_tys'
+          s2 <- unify (args !! 0) key kty
+          s3 <- unify (args !! 1) val vty
+          s4 <- unify (args !! 2) dict (PDictTy kty vty)
+          pure (s1 <> s2 <> s3 <> s4, PDictTy kty vty, PrimAppE pr args_tc)
+
+        PDictLookupP kty vty -> do
+          len2
+          let [key, dict] = arg_tys'
+          s2 <- unify (args !! 0) key kty
+          s3 <- unify (args !! 1) dict (PDictTy kty vty)
+          pure (s1 <> s2 <> s3, vty, PrimAppE pr args_tc)
+
+        PDictAllocP kty vty -> do
+          len0
+          pure (s1, PDictTy kty vty, PrimAppE pr args_tc)
+
+        PDictHasKeyP kty vty -> do
+          len2
+          let [key, dict] = arg_tys'
+          s2 <- unify (args !! 0) key kty
+          s3 <- unify (args !! 1) dict (PDictTy kty vty)
+          pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+
+        PDictForkP kty vty -> do
+          len1
+          let [dict] = arg_tys'
+          s2 <- unify (args !! 0) dict (PDictTy kty vty)
+          pure (s1 <> s2, ProdTy [PDictTy kty vty, PDictTy kty vty], PrimAppE pr args_tc)
+
+        PDictJoinP kty vty -> do
+          len2
+          let [dict1, dict2] = arg_tys'
+          s2 <- unify (args !! 0) dict1 (PDictTy kty vty)
+          s3 <- unify (args !! 1) dict2 (PDictTy kty vty)
+          pure (s1 <> s2 <> s3, PDictTy kty vty, PrimAppE pr args_tc)
+
+        LLAllocP elty -> do
+          len0
+          pure (s1, ListTy elty, PrimAppE pr args_tc)
+
+        LLIsEmptyP elty -> do
+          len1
+          let [ll] = arg_tys
+          s2 <- unify (args !! 0) ll (ListTy elty)
+          pure (s1 <> s2, BoolTy, PrimAppE pr args_tc)
+
+        LLConsP elty -> do
+          len2
+          let [elt, ll] = arg_tys
+          s2 <- unify (args !! 0) elt elty
+          s3 <- unify (args !! 1) ll (ListTy elty)
+          pure (s1 <> s2 <> s3, ListTy elty, PrimAppE pr args_tc)
+
+        LLHeadP elty -> do
+          len1
+          let [ll] = arg_tys
+          s2 <- unify (args !! 0) ll (ListTy elty)
+          pure (s1 <> s2, elty, PrimAppE pr args_tc)
+
+        LLTailP elty -> do
+          len1
+          let [ll] = arg_tys
+          s2 <- unify (args !! 0) ll (ListTy elty)
+          pure (s1 <> s2, ListTy elty, PrimAppE pr args_tc)
+
+        LLFreeP elty -> do
+          len1
+          let [i] = arg_tys'
+          s2 <- unify (args !! 0) (ListTy elty) i
+          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+
+        LLFree2P elty -> do
+          len1
+          let [i] = arg_tys'
+          s2 <- unify (args !! 0) (ListTy elty) i
+          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+
+        LLCopyP elty -> do
+          len1
+          let [i] = arg_tys'
+          s2 <- unify (args !! 0) (ListTy elty) i
+          pure (s1 <> s2, ListTy elty, PrimAppE pr args_tc)
 
         GetNumProcessors -> do
           len0
@@ -700,9 +791,11 @@ zonkTy s@(Subst mp) ty =
                   Just t -> zonkTy s t
     ProdTy tys  -> ProdTy (map go tys)
     SymDictTy v t -> SymDictTy v (go t)
+    PDictTy k v -> PDictTy (go k) (go v)
     ArrowTy tys b  -> ArrowTy (map go tys) (go b)
     PackedTy t tys -> PackedTy t (map go tys)
     VectorTy t -> VectorTy (go t)
+    ListTy t -> ListTy (go t)
     ArenaTy  -> ty
     SymSetTy -> ty
     SymHashTy -> ty
@@ -737,6 +830,20 @@ zonkExp s ex =
                   VConcatP ty -> VConcatP (zonkTy s ty)
                   InplaceVUpdateP ty -> InplaceVUpdateP (zonkTy s ty)
                   VSortP   ty -> VSortP   (zonkTy s ty)
+                  PDictAllocP k v -> PDictAllocP (zonkTy s k) (zonkTy s v)
+                  PDictInsertP k v -> PDictInsertP (zonkTy s k) (zonkTy s v)
+                  PDictLookupP k v -> PDictLookupP (zonkTy s k) (zonkTy s v)
+                  PDictHasKeyP k v -> PDictHasKeyP (zonkTy s k) (zonkTy s v)
+                  PDictForkP k v -> PDictForkP (zonkTy s k) (zonkTy s v)
+                  PDictJoinP k v -> PDictJoinP (zonkTy s k) (zonkTy s v)
+                  LLAllocP ty -> LLAllocP (zonkTy s ty)
+                  LLIsEmptyP ty -> LLIsEmptyP (zonkTy s ty)
+                  LLConsP ty -> LLConsP (zonkTy s ty)
+                  LLHeadP ty -> LLHeadP (zonkTy s ty)
+                  LLTailP ty -> LLTailP (zonkTy s ty)
+                  LLFreeP ty -> LLFreeP (zonkTy s ty)
+                  LLFree2P ty -> LLFree2P (zonkTy s ty)
+                  LLCopyP ty -> LLCopyP (zonkTy s ty)
                   InplaceVSortP ty -> InplaceVSortP (zonkTy s ty)
                   ReadArrayFile fp ty -> ReadArrayFile fp (zonkTy s ty)
                   _ -> pr
@@ -847,6 +954,20 @@ substTyVarPrim mp pr =
         VConcatP elty -> VConcatP (substTyVar mp elty)
         VSortP elty -> VSortP (substTyVar mp elty)
         InplaceVSortP elty -> InplaceVSortP (substTyVar mp elty)
+        PDictInsertP kty vty -> PDictInsertP (substTyVar mp kty) (substTyVar mp vty)
+        PDictLookupP kty vty -> PDictLookupP (substTyVar mp kty) (substTyVar mp vty)
+        PDictAllocP kty vty -> PDictAllocP (substTyVar mp kty) (substTyVar mp vty)
+        PDictHasKeyP kty vty -> PDictHasKeyP (substTyVar mp kty) (substTyVar mp vty)
+        PDictForkP kty vty -> PDictForkP (substTyVar mp kty) (substTyVar mp vty)
+        PDictJoinP kty vty -> PDictJoinP (substTyVar mp kty) (substTyVar mp vty)
+        LLAllocP elty -> LLAllocP (substTyVar mp elty)
+        LLIsEmptyP elty -> LLIsEmptyP (substTyVar mp elty)
+        LLConsP elty -> LLConsP (substTyVar mp elty)
+        LLHeadP elty -> LLHeadP (substTyVar mp elty)
+        LLTailP elty -> LLTailP (substTyVar mp elty)
+        LLFreeP elty -> LLFreeP (substTyVar mp elty)
+        LLFree2P elty -> LLFree2P (substTyVar mp elty)
+        LLCopyP elty -> LLCopyP (substTyVar mp elty)
         _ -> pr
 
 
@@ -878,6 +999,9 @@ tyVarToMetaTy = go M.empty
                         pure (env', ProdTy tys')
        SymDictTy v t -> do (env', t') <- go env t
                            pure (env', SymDictTy v t')
+       PDictTy k v -> do (env', k') <- go env k
+                         (env'', v') <- go env' v
+                         pure (env'', PDictTy k' v')
        ArrowTy as b -> do (env', as') <- gol env as
                           (env'', b') <- go env' b
                           pure (env'', ArrowTy as' b')
@@ -885,6 +1009,8 @@ tyVarToMetaTy = go M.empty
                             pure (env', PackedTy t tys')
        VectorTy el_t -> do (env', el_t') <- go env el_t
                            pure (env', VectorTy el_t')
+       ListTy el_t -> do (env', el_t') <- go env el_t
+                         pure (env', ListTy el_t')
        ArenaTy  -> pure (env, ty)
        SymSetTy -> pure (env, ty)
        SymHashTy-> pure (env, ty)
@@ -927,6 +1053,11 @@ unify ex ty1 ty2
           else fail_
         (SymDictTy _ t1, SymDictTy _ t2) -> unify ex t1 t2
         (VectorTy t1, VectorTy t2) -> unify ex t1 t2
+        (ListTy t1, ListTy t2) -> unify ex t1 t2
+        (PDictTy k1 v1, PDictTy k2 v2) -> do
+          s1 <- unify ex k1 k2
+          s2 <- unify ex v1 v2
+          pure (s1 <> s2)
         _ -> dbgTrace 1 ("unify: Catch-all _; failed to unify " ++ sdoc ty1 ++ " with " ++ sdoc ty2) fail_
   where fail_ = err $  text "Couldn't match type" <+> quotes (doc ty2)
                     <+> text "with" <+> quotes (doc ty1)

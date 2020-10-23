@@ -185,7 +185,9 @@ data Ty
     | SymDictTy Var Ty
       -- ^ We allow built-in dictionaries from symbols to a value type.
     | ArenaTy
+    | PDictTy Ty Ty
     | VectorTy Ty
+    | ListTy Ty
     | SymSetTy
     | SymHashTy
     | IntHashTy
@@ -200,6 +202,7 @@ data Prim
     | RandP
     | FRandP
     | FSqrtP
+    | FTanP
     | FloatToIntP
     | IntToFloatP
     | SizeParam
@@ -229,6 +232,23 @@ data Prim
     | VConcatP Ty
     | VSortP Ty
     | InplaceVSortP Ty
+    -- Thread safe dictionaries
+    | PDictAllocP  Ty Ty
+    | PDictInsertP Ty Ty
+    | PDictLookupP Ty Ty
+    | PDictHasKeyP Ty Ty
+    | PDictForkP Ty Ty
+    | PDictJoinP Ty Ty
+    -- Linked Lists.
+    | LLAllocP Ty
+    | LLIsEmptyP Ty
+    | LLConsP Ty
+    | LLHeadP Ty
+    | LLTailP Ty
+    | LLFreeP Ty
+    | LLFree2P Ty
+    | LLCopyP Ty
+
     | GetNumProcessors
     | ReadPackedFile (Maybe FilePath) TyCon
     | ReadArrayFile (Maybe (FilePath, Int)) Ty

@@ -207,6 +207,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         ProdTy tys  -> L1.ProdTy $ map toL1Ty tys
         SymDictTy (Just v) a -> L1.SymDictTy (Just v) $ toL1Ty a
         SymDictTy Nothing  a -> L1.SymDictTy Nothing $ toL1Ty a
+        PDictTy k v -> L1.PDictTy (toL1Ty k) (toL1Ty v)
         ArrowTy{} -> err2 (sdoc ty)
         PackedTy tycon tyapps | tyapps == [] -> L1.PackedTy tycon ()
                               | otherwise    -> err1 (sdoc ty)
@@ -215,6 +216,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         SymHashTy -> L1.SymHashTy
         IntHashTy -> error "toL1Ty: IntHashTy not handled."
         VectorTy a  -> L1.VectorTy (toL1Ty a)
+        ListTy a  -> L1.ListTy (toL1Ty a)
 
     toL1TyS :: ArrowTy Ty0 -> ArrowTy L1.Ty1
     toL1TyS t@(ForAll tyvars (ArrowTy as b))
@@ -414,6 +416,7 @@ monoOblsTy ddefs1 t = do
     MetaTv{}  -> pure t
     ProdTy ls -> ProdTy <$> mapM (monoOblsTy ddefs1) ls
     SymDictTy{}  -> pure t
+    PDictTy{} -> pure t
     ArrowTy as b -> do
       as' <- mapM (monoOblsTy ddefs1) as
       b' <- monoOblsTy ddefs1 b
@@ -438,6 +441,7 @@ monoOblsTy ddefs1 t = do
                     Just suffix -> pure $ PackedTy (tycon ++ (fromVar suffix)) []
                 _  -> pure t
     VectorTy{} -> pure t
+    ListTy{} -> pure t
     ArenaTy  -> pure t
     SymSetTy -> pure t
     SymHashTy-> pure t
@@ -797,6 +801,7 @@ updateTyConsTy ddefs mono_st ty =
     MetaTv{} -> ty
     ProdTy tys  -> ProdTy (map go tys)
     SymDictTy v t -> SymDictTy v (go t)
+    PDictTy k v -> PDictTy (go k) (go v)
     ArrowTy as b   -> ArrowTy (map go as) (go b)
     PackedTy t tys ->
       let tys' = map go tys
@@ -805,6 +810,7 @@ updateTyConsTy ddefs mono_st ty =
            -- Why [] ? The type arguments aren't required as the DDef is monomorphic.
            Just suffix -> PackedTy (t ++ fromVar suffix) []
     VectorTy t -> VectorTy (go t)
+    ListTy t -> ListTy (go t)
     ArenaTy -> ty
     SymSetTy -> ty
     SymHashTy -> ty

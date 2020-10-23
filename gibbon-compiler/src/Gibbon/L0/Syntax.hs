@@ -157,12 +157,14 @@ data Ty0
  | MetaTv MetaTv -- Unification variables
  | ProdTy [Ty0]
  | SymDictTy (Maybe Var) Ty0
+ | PDictTy Ty0 Ty0
  | SymSetTy
  | SymHashTy
  | IntHashTy
  | ArrowTy [Ty0] Ty0
  | PackedTy TyCon [Ty0] -- Type arguments to the type constructor
  | VectorTy Ty0
+ | ListTy Ty0
  | ArenaTy
   deriving (Show, Read, Eq, Ord, Generic, NFData)
 
@@ -188,10 +190,12 @@ instance Renamable Ty0 where
       TyVar tv  -> TyVar (go tv)
       MetaTv{}  -> ty
       ProdTy ls -> ProdTy (map go ls)
-      SymDictTy a t     -> SymDictTy a t
+      SymDictTy a t     -> SymDictTy a (go t)
+      PDictTy k v       -> PDictTy (go k) (go v)
       ArrowTy args ret  -> ArrowTy (map go args) ret
       PackedTy tycon ls -> PackedTy tycon (map go ls)
-      VectorTy a          -> VectorTy (go a)
+      VectorTy a        -> VectorTy (go a)
+      ListTy a          -> ListTy (go a)
       ArenaTy           -> ArenaTy
       SymSetTy          -> SymSetTy
       SymHashTy         -> SymHashTy
@@ -269,9 +273,11 @@ tyVarsInTys tys = foldr (go []) [] tys
         MetaTv _ -> acc
         ProdTy tys1     -> foldr (go bound) acc tys1
         SymDictTy _ ty1   -> go bound ty1 acc
+        PDictTy k v -> foldr (go bound) acc [k,v]
         ArrowTy tys1 b  -> foldr (go bound) (go bound b acc) tys1
         PackedTy _ tys1 -> foldr (go bound) acc tys1
-        VectorTy ty1      -> go bound ty1 acc
+        VectorTy ty1 -> go bound ty1 acc
+        ListTy ty1 -> go bound ty1 acc
         ArenaTy -> acc
         SymSetTy -> acc
         SymHashTy -> acc
@@ -298,9 +304,11 @@ metaTvsInTys tys = foldr go [] tys
         TyVar{} -> acc
         ProdTy tys1     -> foldr go acc tys1
         SymDictTy _ ty1   -> go ty1 acc
+        PDictTy k v -> go v (go k acc)
         ArrowTy tys1 b  -> go b (foldr go acc tys1)
         PackedTy _ tys1 -> foldr go acc tys1
-        VectorTy ty1      -> go ty1 acc
+        VectorTy ty1 -> go ty1 acc
+        ListTy ty1 -> go ty1 acc
         ArenaTy -> acc
         SymSetTy -> acc
         SymHashTy -> acc
@@ -330,11 +338,13 @@ arrowTysInTy = go []
         ArenaTy  -> acc
         TyVar{}  -> acc
         MetaTv{} -> acc
-        ProdTy tys    -> foldl go acc tys
-        SymDictTy _ a   -> go acc a
+        ProdTy tys -> foldl go acc tys
+        SymDictTy _ a -> go acc a
+        PDictTy k v   -> go (go acc k) v
         ArrowTy tys b -> go (foldl go acc tys) b ++ [ty]
         PackedTy _ vs -> foldl go acc vs
         VectorTy a -> go acc a
+        ListTy a  -> go acc a
         SymSetTy  -> acc
         SymHashTy -> acc
         IntHashTy -> acc
@@ -352,9 +362,11 @@ substTyVar mp ty =
     MetaTv{} -> ty
     ProdTy tys  -> ProdTy (map go tys)
     SymDictTy v t -> SymDictTy v (go t)
+    PDictTy k v -> PDictTy (go k) (go v)
     ArrowTy tys b  -> ArrowTy (map go tys) (go b)
     PackedTy t tys -> PackedTy t (map go tys)
     VectorTy t -> VectorTy (go t)
+    ListTy t -> ListTy (go t)
     ArenaTy -> ty
     SymSetTy -> ty
     SymHashTy -> ty
@@ -456,6 +468,7 @@ recoverType ddfs env2 ex =
         FExpP -> FloatTy
         FSqrtP-> FloatTy
         FRandP-> FloatTy
+        FTanP -> FloatTy
         FloatToIntP -> IntTy
         IntToFloatP -> FloatTy
         EqSymP  -> BoolTy
@@ -491,6 +504,20 @@ recoverType ddfs env2 ex =
         VConcatP elty  -> VectorTy elty
         VSortP elty        -> VectorTy elty
         InplaceVSortP elty -> VectorTy elty
+        PDictInsertP kty vty -> PDictTy kty vty
+        PDictLookupP _kty vty -> vty
+        PDictAllocP kty vty -> PDictTy kty vty
+        PDictHasKeyP _kty _vty -> BoolTy
+        PDictForkP kty vty -> ProdTy [PDictTy kty vty, PDictTy kty vty]
+        PDictJoinP kty vty -> PDictTy kty vty
+        LLAllocP elty -> ListTy elty
+        LLIsEmptyP _elty -> BoolTy
+        LLConsP elty  -> ListTy elty
+        LLHeadP elty  -> elty
+        LLTailP elty  -> ListTy elty
+        LLFreeP _elty   -> ProdTy []
+        LLFree2P _elty  -> ProdTy []
+        LLCopyP elty -> ListTy elty
         GetNumProcessors -> IntTy
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty

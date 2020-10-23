@@ -624,11 +624,13 @@ mapPacked fn t =
     SymTy  -> SymTy
     (ProdTy x)    -> ProdTy $ L.map (mapPacked fn) x
     (SymDictTy v x) -> SymDictTy v x
+    PDictTy k v -> PDictTy k v
     PackedTy k l  -> fn (toVar k) l
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy
-    VectorTy el_ty-> VectorTy el_ty
+    VectorTy elty -> VectorTy elty
+    ListTy elty   -> ListTy elty
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy
 
@@ -641,11 +643,13 @@ constPacked c t =
     SymTy  -> SymTy
     (ProdTy x)    -> ProdTy $ L.map (constPacked c) x
     (SymDictTy v _x) -> SymDictTy v $ stripTyLocs c
+    PDictTy k v -> PDictTy (constPacked c k) (constPacked c v)
     PackedTy _k _l  -> c
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy
     VectorTy el_ty -> VectorTy (constPacked c el_ty)
+    ListTy el_ty -> ListTy (constPacked c el_ty)
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy
 

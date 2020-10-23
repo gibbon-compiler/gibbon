@@ -219,8 +219,10 @@ cursorizeTy ty =
     BoolTy    -> BoolTy
     ProdTy ls -> ProdTy $ L.map cursorizeTy ls
     SymDictTy v _ -> SymDictTy v CursorTy
+    PDictTy k v   -> PDictTy (cursorizeTy k) (cursorizeTy v)
     PackedTy{}    -> ProdTy [CursorTy, CursorTy]
-    VectorTy el_ty'    -> VectorTy $ cursorizeTy el_ty'
+    VectorTy el_ty' -> VectorTy $ cursorizeTy el_ty'
+    ListTy el_ty'   -> ListTy $ cursorizeTy el_ty'
     PtrTy    -> PtrTy
     CursorTy -> CursorTy
     ArenaTy  -> ArenaTy

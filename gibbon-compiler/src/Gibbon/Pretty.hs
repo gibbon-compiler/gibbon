@@ -212,6 +212,20 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       VConcatP{} -> text "vconcat"
                                       VSortP{}   -> text "vsort"
                                       InplaceVSortP{} -> text "inplacevsort"
+                                      PDictAllocP{} -> text "alloc_pdict"
+                                      PDictInsertP{} -> text "insert_pdict"
+                                      PDictLookupP{} -> text "lookup_pdict"
+                                      PDictHasKeyP{} -> text "member_pdict"
+                                      PDictForkP{} -> text "fork_pdict"
+                                      PDictJoinP{} -> text "join_pdict"
+                                      LLAllocP{} -> text "alloc_ll"
+                                      LLIsEmptyP{} -> text "is_empty_ll"
+                                      LLConsP{} -> text "cons_ll"
+                                      LLHeadP{} -> text "head_ll"
+                                      LLTailP{} -> text "tail_ll"
+                                      LLFreeP{} -> text "free_ll"
+                                      LLFree2P{} -> text "free2_ll"
+                                      LLCopyP{} -> text "copy_ll"
                                       ReadArrayFile mb_fp ty ->
                                         text "readArrayFile " <+> parens (text $ pretty mb_fp) <+> pprintWithStyle sty ty
                                       _ -> error $ "pprint: Unknown primitive: " ++ show pr
@@ -265,11 +279,13 @@ instance (Pretty l) => Pretty (UrTy l) where
           SymDictTy Nothing ty1 -> case sty of
                                      PPHaskell  ->text "Dict" <+> pprintWithStyle sty ty1
                                      PPInternal -> text "Dict" <+> text "_" <+> pprintWithStyle sty ty1
+          PDictTy k v -> text "PDict" <+> pprintWithStyle sty k <+> pprintWithStyle sty v
           PackedTy tc loc ->
               case sty of
                 PPHaskell  -> text tc
                 PPInternal -> parens $ text "Packed" <+> text tc <+> pprintWithStyle sty loc
           VectorTy el_ty1 -> text "Vector" <+> pprintWithStyle sty el_ty1
+          ListTy el_ty1 -> text "List" <+> pprintWithStyle sty el_ty1
           PtrTy     -> text "Ptr"
           CursorTy  -> text "Cursor"
           ArenaTy   -> case sty of
@@ -461,9 +477,11 @@ instance Pretty L0.Ty0 where
         L0.ProdTy tys -> parens $ hcat $ punctuate "," $ map (pprintWithStyle sty) tys
         L0.SymDictTy (Just v) ty1 -> text "Dict" <+> pprint v <+> pprint ty1
         L0.SymDictTy Nothing  ty1 -> text "Dict" <+> pprint ty1
+        L0.PDictTy k v -> text "PDict" <+> pprint k <+> pprint v
         L0.ArrowTy as b  -> parens $ (hsep $ map (<+> "->") $ map (pprintWithStyle sty) as) <+> pprint b
         L0.PackedTy tc loc -> parens $ text "Packed" <+> text tc <+> brackets (hcat (map (pprintWithStyle sty) loc))
         L0.VectorTy el_ty1 -> text "Vector" <+> (pprintWithStyle sty el_ty1)
+        L0.ListTy el_ty1 -> text "List" <+> (pprintWithStyle sty el_ty1)
         L0.ArenaTy    -> text "Arena"
         L0.SymSetTy   -> text "SymSet"
         L0.SymHashTy  -> text "SymHash"

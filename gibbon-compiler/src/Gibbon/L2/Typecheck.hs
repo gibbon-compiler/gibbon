@@ -275,6 +275,11 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    ensureEqualTy exp FloatTy (tys !! 0)
                    return (FloatTy, tstate)
 
+                 FTanP -> do
+                   len1
+                   ensureEqualTy exp FloatTy (tys !! 0)
+                   return (FloatTy, tstate)
+
                  Gensym -> len0 >>= \_ -> pure (SymTy, tstate)
 
                  EqSymP -> do
@@ -459,6 +464,112 @@ tcExp ddfs env funs constrs regs tstatein exp =
                      oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
                  InplaceVSortP ty -> recur tstatein (PrimAppE (VSortP ty) es)
+
+                 PDictInsertP kty vty -> do
+                   len3
+                   checkListElemTy kty
+                   checkListElemTy vty
+                   let [key, val, dict] = tys
+                   _ <- ensureEqualTy (es !! 0) key kty
+                   _ <- ensureEqualTy (es !! 1) val vty
+                   _ <- ensureEqualTy (es !! 2) dict (PDictTy kty vty)
+                   pure (PDictTy kty vty, tstate)
+
+                 PDictLookupP kty vty -> do
+                   len2
+                   checkListElemTy kty
+                   checkListElemTy vty
+                   let [key, dict] = tys
+                   _ <- ensureEqualTy (es !! 0) key kty
+                   _ <- ensureEqualTy (es !! 1) dict (PDictTy kty vty)
+                   pure (vty, tstate)
+
+                 PDictAllocP kty vty -> do
+                   len0
+                   checkListElemTy kty
+                   checkListElemTy vty
+                   pure (PDictTy kty vty, tstate)
+
+                 PDictHasKeyP kty vty -> do
+                   len2
+                   checkListElemTy kty
+                   checkListElemTy vty
+                   let [key, dict] = tys
+                   _ <- ensureEqualTy (es !! 0) key kty
+                   _ <- ensureEqualTy (es !! 1) dict (PDictTy kty vty)
+                   pure (BoolTy, tstate)
+
+                 PDictForkP kty vty -> do
+                   len1
+                   checkListElemTy kty
+                   checkListElemTy vty
+                   let [dict] = tys
+                   _ <- ensureEqualTy (es !! 0) dict (PDictTy kty vty)
+                   pure (ProdTy [PDictTy kty vty, PDictTy kty vty], tstate)
+
+                 PDictJoinP kty vty -> do
+                   len2
+                   checkListElemTy kty
+                   checkListElemTy vty
+                   let [dict1, dict2] = tys
+                   _ <- ensureEqualTy (es !! 0) dict1 (PDictTy kty vty)
+                   _ <- ensureEqualTy (es !! 1) dict2 (PDictTy kty vty)
+                   pure (PDictTy kty vty, tstate)
+
+                 LLAllocP elty -> do
+                   len0
+                   checkListElemTy elty
+                   pure (ListTy elty, tstate)
+
+                 LLIsEmptyP elty -> do
+                   len1
+                   checkListElemTy elty
+                   let [ll] = tys
+                   _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+                   pure (BoolTy, tstate)
+
+                 LLConsP elty -> do
+                   len2
+                   checkListElemTy elty
+                   let [elt, ll] = tys
+                   _ <- ensureEqualTy (es !! 0) elt elty
+                   _ <- ensureEqualTy (es !! 1) ll (ListTy elty)
+                   pure (ListTy elty, tstate)
+
+                 LLHeadP elty -> do
+                   len1
+                   checkListElemTy elty
+                   let [ll] = tys
+                   _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+                   pure (elty, tstate)
+
+                 LLTailP elty -> do
+                   len1
+                   checkListElemTy elty
+                   let [ll] = tys
+                   _ <- ensureEqualTy (es !! 0) ll (ListTy elty)
+                   pure (ListTy elty, tstate)
+
+                 LLFreeP elty -> do
+                   len1
+                   checkListElemTy elty
+                   let [i] = tys
+                   _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+                   pure (ProdTy [], tstate)
+
+                 LLFree2P elty -> do
+                   len1
+                   checkListElemTy elty
+                   let [i] = tys
+                   _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+                   pure (ProdTy [], tstate)
+
+                 LLCopyP elty -> do
+                   len1
+                   checkListElemTy elty
+                   let [i] = tys
+                   _ <- ensureEqualTy (es !! 0) (ListTy elty) i
+                   pure (ListTy elty, tstate)
 
                  GetNumProcessors -> do
                    len0
