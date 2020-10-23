@@ -1,8 +1,5 @@
 module Coins where
 
-import Gibbon.Vector
-import Gibbon.Vector.Parallel
-
 data AList = ANil | ASing Int | Append AList AList
 
 lenA :: AList -> Int
@@ -16,16 +13,16 @@ type CoinQty = ( Int -- value
                , Int -- quantity
                )
 
-getCoins1 :: Int -> Int -> Vector CoinQty -> Vector CoinQty
+getCoins1 :: Int -> Int -> List CoinQty -> List CoinQty
+{-# INLINE getCoins1 #-}
 getCoins1 c q coins_rst =
-   let len = length coins_rst
-   in if q == 1 then copy coins_rst else cons (c,q-1) coins_rst
+   if q == 1 then copy_ll coins_rst else cons_ll (c,q-1) coins_rst
 
-printCoins :: Vector CoinQty -> ()
-printCoins coins =
-    let _ = printVec (\tup -> printCoin tup) coins
-        _ = printsym (quote "\n")
-    in ()
+-- printCoins :: List CoinQty -> ()
+-- printCoins coins =
+--     let _ = printVec (\tup -> printCoin tup) coins
+--         _ = printsym (quote "\n")
+--     in ()
 
 printCoin :: CoinQty -> ()
 printCoin tup =
@@ -38,48 +35,43 @@ printCoin tup =
         _ = printsym (quote ")")
     in ()
 
-payA_seq :: Int -> Vector CoinQty -> AList
+payA_seq :: Int -> List CoinQty -> AList
 payA_seq amt coins =
     if amt == 0
     then ASing 1
     else
-        let len = length coins
-        in if len == 0
+        if is_empty_ll coins
         then ANil
         else
-            let (c,q) = head coins
-                coins_rst = tail coins
+            let (c,q) = head_ll coins
+                coins_rst = tail_ll coins
             in if c > amt
             then payA_seq amt coins_rst
             else
                 let coins1 = getCoins1 c q coins_rst
-                    -- _ = printCoins coins
-                    -- _ = printCoin tup
-                    -- _ = printsym (quote "\n")
-                    -- _ = printCoins coins1
                     left = payA_seq (amt - c) coins1
                     right = payA_seq amt coins_rst
-                    _ = vfree coins1
-                    _ = vfree2 coins_rst
+                    _ = free_ll coins1
+                    -- _ = vfree coins1
+                    -- _ = vfree2 coins_rst
                 in Append left right
 
 getDepth1 :: Int -> Int -> Int
 getDepth1 q depth =
     if q == 1 then (depth-1) else depth
 
-payA_par :: Int -> Int -> Vector CoinQty -> AList
+payA_par :: Int -> Int -> List CoinQty -> AList
 payA_par depth amt coins =
     if depth == 0
     then payA_seq amt coins
     else if amt == 0
     then ASing 1
     else
-        let len = length coins
-        in if len == 0
+        if is_empty_ll coins
         then ANil
         else
-            let (c,q) = head coins
-                coins_rst = tail coins
+            let (c,q) = head_ll coins
+                coins_rst = tail_ll coins
             in if c > amt
             then payA_par depth amt coins_rst
             else
@@ -88,19 +80,33 @@ payA_par depth amt coins =
                     left = spawn (payA_par depth1 (amt - c) coins1)
                     right = payA_par (depth-1) amt coins_rst
                     _ = sync
-                    _ = vfree coins1
-                    _ = vfree2 coins_rst
+                    _ = free_ll coins1
+                    -- _ = vfree2 coins_rst
                 in Append left right
 
-check_coins :: Int -> AList -> ()
-check_coins amt tr =
-    let n = lenA tr in
-    if amt == 777
-    then print_check (n == 140899)
-    else if amt == 999
-    then print_check (n == 329565)
-    -- assume its correct
-    else
-        let _ = printint n
-            _ = printsym (quote "\n")
-        in print_check True
+-- check_coins :: Int -> AList -> ()
+-- check_coins amt tr =
+--     let n = lenA tr in
+--     if amt == 777
+--     then print_check (n == 140899)
+--     else if amt == 999
+--     then print_check (n == 329565)
+--     -- assume its correct
+--     else
+--         let _ = printint n
+--             _ = printsym (quote "\n")
+--         in print_check True
+
+gibbon_main =
+    let coins0 :: List (Int,Int)
+        coins0 = alloc_ll
+        coins1 = cons_ll (250,55) coins0
+        coins2 = cons_ll (100,88) coins1
+        coins3 = cons_ll (25,88) coins2
+        coins4 = cons_ll (10,99) coins3
+        coins5 = cons_ll (5,122) coins4
+        coins6 = cons_ll (1,177) coins5
+        amt = sizeParam
+        tr = iterate (payA_seq amt coins6)
+    -- in check_coins amt tr
+    in ()

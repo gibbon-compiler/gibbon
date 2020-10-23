@@ -587,6 +587,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- goE2 "inferRegScope"   inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg      l2
               l2 <- goE2 "routeEnds"       routeEnds     l2
+              -- _ <- lift $ putStrLn (pprender l2)
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
@@ -596,6 +597,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- Note: L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
               l3 <- go "cursorize"        cursorize     l2
+              -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck" (L3.tcProg isPacked) l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
