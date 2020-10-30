@@ -339,12 +339,16 @@ mkRANs ienv needRANsExp =
 needsRAN :: Prog2 -> S.Set TyCon
 needsRAN Prog{ddefs,fundefs,mainExp} =
   let funenv = initFunEnv fundefs
+
       dofun FunDef{funArgs,funTy,funBody} =
-        let tyenv = M.fromList $ zip funArgs (inTys funTy)
-            env2 = Env2 tyenv funenv
-            renv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm)))
-                                      (locVars funTy)
-        in needsRANExp ddefs fundefs env2 renv M.empty [] funBody
+        let inlocs = inLocVars funTy
+            eff = arrEffs funTy
+        in if S.null ((S.fromList inlocs) `S.difference` (S.map (\(Traverse v) -> v) eff)) && not (hasParallelism funTy)
+             then S.empty
+             else let tyenv = M.fromList $ zip funArgs (inTys funTy)
+                      env2 = Env2 tyenv funenv
+                      renv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm))) (locVars funTy)
+                  in needsRANExp ddefs fundefs env2 renv M.empty [] funBody
 
       funs = M.foldr (\f acc -> acc `S.union` dofun f) S.empty fundefs
 

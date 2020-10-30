@@ -203,7 +203,9 @@ inferExp ddfs fenv env dps expr =
 
           dps' = makeDps (reverse $ zip locs tys)
 
+          subst_mp = M.fromList $ zip (concatMap locsInTy tys) locs
           (eff,_) = inferExp ddfs fenv env' dps' e
+          eff' = substEffs subst_mp eff
           winner = -- If there is NO packed child data, then our object has static size:
                    (L.all (not . hasPacked) tys) ||
 
@@ -212,7 +214,7 @@ inferExp ddfs fenv env dps expr =
                       [] -> False
                       ls -> let patVMap = M.fromList patVs
                                 packedlocs = L.map (\(a,_) -> patVMap # a) ls
-                            in all (\x -> S.member (Traverse x) eff) packedlocs)
+                            in all (\x -> S.member (Traverse x) eff') packedlocs)
 
                    -- Or maybe the last-use rule applies:
                    -- TODO
@@ -220,5 +222,5 @@ inferExp ddfs fenv env dps expr =
           -- Also, in any binding form we are obligated to not return
           -- our local bindings in traversal side effects:
           isNotLocal (Traverse v) = not $ L.elem v locs
-          stripped = S.filter isNotLocal eff
-      in ( winner, (stripped,Nothing) )
+          stripped = S.filter isNotLocal eff'
+      in  ( winner, (stripped,Nothing) )

@@ -40,13 +40,18 @@ addTraversals prg@Prog{ddefs,fundefs,mainExp} = do
 
 addTraversalsFn :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM FunDef2
 addTraversalsFn ddefs fundefs f@FunDef{funName, funArgs, funTy, funBody} = do
-    let funenv = initFunEnv fundefs
-        tyenv = M.fromList $ fragileZip funArgs (inTys funTy)
-        env2 = Env2 tyenv funenv
-        renv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm)))
-                                  (locVars funTy)
-    bod' <- addTraversalsExp ddefs fundefs env2 renv (fromVar funName) funBody
-    return $ f {funBody = bod'}
+    let inlocs = inLocVars funTy
+        eff = arrEffs funTy
+    if S.null ((S.fromList inlocs) `S.difference` (S.map (\(Traverse v) -> v) eff)) && not (hasParallelism funTy)
+      then return f
+      else do
+        let funenv = initFunEnv fundefs
+            tyenv = M.fromList $ fragileZip funArgs (inTys funTy)
+            env2 = Env2 tyenv funenv
+            renv = M.fromList $ L.map (\lrm -> (lrmLoc lrm, regionToVar (lrmReg lrm)))
+                                      (locVars funTy)
+        bod' <- addTraversalsExp ddefs fundefs env2 renv (fromVar funName) funBody
+        return $ f {funBody = bod'}
 
 -- Generate traversals for the first (n-1) packed elements
 addTraversalsExp :: DDefs Ty2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> String -> Exp2 -> PassM Exp2

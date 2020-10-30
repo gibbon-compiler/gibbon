@@ -24,7 +24,7 @@ module Gibbon.L2.Syntax
 
     -- * Operations on types
     , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substLoc
-    , substLocs, substEffs, extendPatternMatchEnv
+    , substLocs, substEff, substEffs, extendPatternMatchEnv
     , locsInTy, dummyTyLocs, allFreeVars
 
     -- * Other helpers
@@ -473,13 +473,17 @@ extendPatternMatchEnv dcon ddefs vars locs env2 =
                (fragileZip locs tys)
   in extendsVEnv (M.fromList $ fragileZip vars tys') env2
 
+-- | Apply a substitution to an effect.
+substEff :: M.Map LocVar LocVar -> Effect -> Effect
+substEff mp (Traverse v) =
+    case M.lookup v mp of
+      Just v2 -> Traverse v2
+      Nothing -> Traverse v
+
 -- | Apply a substitution to an effect set.
 substEffs :: M.Map LocVar LocVar -> S.Set Effect -> S.Set Effect
-substEffs mp ef =
-    S.map (\(Traverse v) ->
-               case M.lookup v mp of
-                 Just v2 -> Traverse v2
-                 Nothing -> Traverse v) ef
+substEffs mp effs =
+    S.map (\ef -> substEff mp ef) effs
 
 dummyTyLocs :: Applicative f => UrTy () -> f (UrTy LocVar)
 dummyTyLocs ty = traverse (const (pure (toVar "dummy"))) ty
