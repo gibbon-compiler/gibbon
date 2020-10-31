@@ -9,6 +9,7 @@ library
   exposed-modules:     Gibbon.Prim
                        Gibbon.Vector
                        Gibbon.Vector.Parallel
+                       Gibbon.List
                        Gibbon.Prelude
 
   ghc-options:         -Wall -Wcompat -fdefer-typed-holes
