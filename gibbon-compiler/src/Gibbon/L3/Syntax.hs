@@ -228,6 +228,7 @@ cursorizeTy ty =
     ArenaTy  -> ArenaTy
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy
+    IntHashTy-> IntHashTy
 
 -- | Map exprs with an initial type environment:
 -- Exactly the same function that was in L2 before

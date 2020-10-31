@@ -630,9 +630,22 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
                    pure (SymTy, tstatein)
 
-                 IntHashEmpty -> throwError $ GenericTC "IntHashEmpty not handled" exp
-                 IntHashInsert -> throwError $ GenericTC "IntHashInsert not handled" exp
-                 IntHashLookup -> throwError $ GenericTC "IntHashLookup not handled" exp
+                 IntHashEmpty -> do
+                   len0
+                   pure (IntHashTy, tstatein)
+
+                 IntHashInsert -> do
+                   len3
+                   _ <- ensureEqualTy (es !!! 0) IntHashTy (tys !!! 0)
+                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                   _ <- ensureEqualTy (es !!! 2) IntTy (tys !!! 2)
+                   pure (IntHashTy, tstatein)
+
+                 IntHashLookup -> do
+                   len2
+                   _ <- ensureEqualTy (es !!! 0) IntHashTy (tys !!! 0)
+                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                   pure (IntTy, tstatein)
 
 
       LetE (v,_ls,ty,e1) e2 -> do

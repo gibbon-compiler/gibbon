@@ -527,6 +527,8 @@ data UrTy a =
 
         | SymHashTy  -- ^ Hash table of symbols
 
+        | IntHashTy -- ^ Hash table of integers
+
         ---------- These are not used initially ----------------
         -- (They could be added by a later IR instead:)
 

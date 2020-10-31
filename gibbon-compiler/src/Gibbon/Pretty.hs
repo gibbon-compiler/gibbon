@@ -293,6 +293,7 @@ instance (Pretty l) => Pretty (UrTy l) where
                          PPInternal -> text "Arena"
           SymSetTy  -> text "SymSet"
           SymHashTy -> text "SymHash"
+          IntHashTy -> text "IntHash"
 
 -- Function type for L1 and L3
 instance Pretty ([UrTy ()], UrTy ()) where

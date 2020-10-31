@@ -938,6 +938,7 @@ typ t =
     ArenaTy   -> T.ArenaTy
     SymSetTy  -> T.SymSetTy
     SymHashTy -> T.SymHashTy
+    IntHashTy -> T.IntHashTy
 
 typ' :: String -> Ty3 -> T.Ty
 typ' str t = dbgTraceIt str $ typ t

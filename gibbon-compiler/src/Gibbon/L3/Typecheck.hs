@@ -608,9 +608,22 @@ tcExp isPacked ddfs env exp =
           len0
           pure IntTy
 
-        IntHashEmpty  -> error "L3.Typecheck: IntHashEmpty not handled."
-        IntHashInsert -> error "L3.Typecheck: IntHashInsert not handled."
-        IntHashLookup -> error "L3.Typecheck: IntHashLookup not handled."
+        IntHashEmpty -> do
+          len0
+          return IntHashTy
+
+        IntHashInsert -> do
+          len3
+          _ <- ensureEqualTy (es !! 0) IntHashTy (tys !! 0)
+          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
+          _ <- ensureEqualTy (es !! 2) IntTy (tys !! 2)
+          return IntHashTy
+
+        IntHashLookup -> do
+          len2
+          _ <- ensureEqualTy (es !! 0) IntHashTy (tys !! 0)
+          _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
+          return IntTy
 
 
     LetE (v,[],SymDictTy _ _pty, rhs) e -> do

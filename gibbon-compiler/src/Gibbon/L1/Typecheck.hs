@@ -527,9 +527,22 @@ tcExp ddfs env exp =
           len0
           pure IntTy
 
-        IntHashEmpty  -> throwError $ GenericTC "IntHashEmpty not handled." exp
-        IntHashInsert -> throwError $ GenericTC "IntHashEmpty not handled." exp
-        IntHashLookup -> throwError $ GenericTC "IntHashEmpty not handled." exp
+        IntHashEmpty -> do
+          len0
+          return IntHashTy
+
+        IntHashInsert -> do
+          len3
+          _ <- ensureEqualTy (es !!! 0) IntHashTy (tys !!! 0)
+          _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+          _ <- ensureEqualTy (es !!! 2) IntTy (tys !!! 2)
+          return IntHashTy
+
+        IntHashLookup -> do
+          len2
+          _ <- ensureEqualTy (es !!! 0) IntHashTy (tys !!! 0)
+          _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+          return IntTy
 
 
     LetE (v,[],SymDictTy _ pty, rhs) e -> do

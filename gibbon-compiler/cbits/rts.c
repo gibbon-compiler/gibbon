@@ -261,7 +261,7 @@ PtrTy dict_lookup_ptr(dict_item_t *ptr, SymTy key) {
 }
 
 // -------------------------------------
-// Set and Hash functions
+// Sets
 // -------------------------------------
 
 
@@ -293,6 +293,10 @@ BoolTy contains_set(SymSetTy set, int sym) {
   return (s!=NULL);
 }
 
+// -------------------------------------
+// Sym Hash
+// -------------------------------------
+
 struct sym_hash_elem {
   int key;
   int val;
@@ -300,6 +304,8 @@ struct sym_hash_elem {
 };
 
 typedef struct sym_hash_elem* SymHashTy;
+
+typedef struct sym_hash_elem* IntHashTy;
 
 SymHashTy empty_hash() {
   return NULL;
@@ -326,6 +332,7 @@ IntTy lookup_hash(SymHashTy hash, int k) {
     return s->val;
   }
 }
+
 
 // -------------------------------------
 // Helpers

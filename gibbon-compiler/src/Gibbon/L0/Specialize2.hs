@@ -214,7 +214,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
         ArenaTy -> L1.ArenaTy
         SymSetTy -> L1.SymSetTy
         SymHashTy -> L1.SymHashTy
-        IntHashTy -> error "toL1Ty: IntHashTy not handled."
+        IntHashTy -> L1.IntHashTy
         VectorTy a  -> L1.VectorTy (toL1Ty a)
         ListTy a  -> L1.ListTy (toL1Ty a)
 

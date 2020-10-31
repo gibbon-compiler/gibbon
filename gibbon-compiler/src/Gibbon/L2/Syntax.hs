@@ -637,6 +637,7 @@ mapPacked fn t =
     ListTy elty   -> ListTy elty
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy
+    IntHashTy-> IntHashTy
 
 constPacked :: UrTy a1 -> UrTy a2 -> UrTy a1
 constPacked c t =
@@ -656,6 +657,7 @@ constPacked c t =
     ListTy el_ty -> ListTy (constPacked c el_ty)
     SymSetTy -> SymSetTy
     SymHashTy-> SymHashTy
+    IntHashTy-> IntHashTy
 
 -- | Build a dependency list which can be later converted to a graph
 depList :: Exp2 -> [(Var, Var, [Var])]

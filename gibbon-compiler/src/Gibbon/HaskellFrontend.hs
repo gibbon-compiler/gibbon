@@ -236,7 +236,7 @@ moduleNameToSlashes (ModuleName _ s) = dots_to_slashes s
 
 builtinTys :: S.Set Var
 builtinTys = S.fromList $
-    [ "Int", "Float", "Bool", "Sym", "SymHash", "SymSet", "SymDict", "Arena", "Vector" ]
+    [ "Int", "Float", "Bool", "Sym", "SymHash", "IntHash", "SymSet", "SymDict", "Arena", "Vector" ]
 
 keywords :: S.Set Var
 keywords = S.fromList $ map toVar $
@@ -278,6 +278,7 @@ desugarType type_syns ty =
     TyCon _ (UnQual _ (Ident _ "Sym"))  -> SymTy0
     TyCon _ (UnQual _ (Ident _ "SymSet"))  -> SymSetTy
     TyCon _ (UnQual _ (Ident _ "SymHash"))  -> SymHashTy
+    TyCon _ (UnQual _ (Ident _ "IntHash"))  -> IntHashTy
     TyCon _ (UnQual _ (Ident _ con)) ->
       case M.lookup con type_syns of
         Nothing -> PackedTy con []
@@ -401,6 +402,9 @@ primMap = M.fromList
   , ("empty_hash", SymHashEmpty)
   , ("insert_hash", SymHashInsert)
   , ("lookup_hash", SymHashLookup)
+  , ("empty_int_hash", IntHashEmpty)
+  , ("insert_int_hash", IntHashInsert)
+  , ("lookup_int_hash", IntHashLookup)
   ]
 
 desugarExp :: (Show a, Pretty a) => TypeSynEnv -> TopTyEnv -> Exp a -> PassM Exp0

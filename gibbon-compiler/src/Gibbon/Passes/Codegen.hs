@@ -731,20 +731,14 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                       [(VarTriv hash),keyTriv] = rnds in pure
                     [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = lookup_hash($id:hash, $(codegenTriv venv keyTriv)); |] ]
 
-                 IntHashEmpty -> return
-                                   [ C.BlockStm [cstm| printf("IntHashEmpty todo\n"); |]
-                                   , C.BlockStm [cstm| exit(1); |]
-                                   ]
-
-                 IntHashInsert -> return
-                                    [ C.BlockStm [cstm| printf("IntHashInsert todo\n"); |]
-                                    , C.BlockStm [cstm| exit(1); |]
-                                    ]
-
-                 IntHashLookup -> return
-                                    [ C.BlockStm [cstm| printf("IntHashLookup todo\n"); |]
-                                    , C.BlockStm [cstm| exit(1); |]
-                                    ]
+                 IntHashEmpty -> let [(outV,outT)] = bnds
+                                 in pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = empty_hash(); |] ]
+                 IntHashInsert -> let [(outV,outT)] = bnds
+                                      [(VarTriv hash),keyTriv,valTriv] = rnds in pure
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = insert_hash($id:hash, $(codegenTriv venv keyTriv), $(codegenTriv venv valTriv)); |] ]
+                 IntHashLookup -> let [(outV,ty)] = bnds
+                                      [(VarTriv hash),keyTriv] = rnds in pure
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = lookup_hash($id:hash, $(codegenTriv venv keyTriv)); |] ]
 
                  NewBuffer mul -> do
                    let [(reg, CursorTy),(outV,CursorTy)] = bnds

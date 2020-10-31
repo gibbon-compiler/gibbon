@@ -480,6 +480,7 @@ hasPacked t =
     ArenaTy        -> False
     SymSetTy       -> False
     SymHashTy      -> False
+    IntHashTy      -> False
 
 
 -- | Get all packed types in a type.
@@ -501,6 +502,7 @@ getPackedTys t =
     ArenaTy        -> []
     SymSetTy       -> []
     SymHashTy      -> []
+    IntHashTy      -> []
 
 -- | Provide a size in bytes, if it is statically known.
 sizeOfTy :: UrTy a -> Maybe Int
@@ -521,6 +523,7 @@ sizeOfTy t =
     ArenaTy       -> Just 8
     SymSetTy      -> error "sizeOfTy: SymSetTy not handled."
     SymHashTy     -> error "sizeOfTy: SymHashTy not handled."
+    IntHashTy     -> error "sizeOfTy: SymHashTy not handled."
 
 -- | Type of the arguments for a primitive operation.
 primArgsTy :: Prim (UrTy a) -> [UrTy a]
@@ -604,14 +607,14 @@ primArgsTy p =
     SymHashEmpty -> []
     SymHashInsert -> [SymHashTy,SymTy,SymTy]
     SymHashLookup -> [SymHashTy,SymTy]
+    IntHashEmpty -> []
+    IntHashInsert -> [IntHashTy,SymTy,IntTy]
+    IntHashLookup -> [IntHashTy,SymTy]
     ReadPackedFile{} -> []
     ReadArrayFile{}  -> []
     (ErrorP _ _) -> []
     RequestEndOf  -> error "primArgsTy: RequestEndOf not handled yet"
     RequestSizeOf -> error "primArgsTy: RequestSizeOf not handled yet"
-    IntHashEmpty  -> error "primArgsTy: IntHashEmpty not handled yet"
-    IntHashInsert -> error "primArgsTy: IntHashInsert not handled yet"
-    IntHashLookup -> error "primArgsTy: IntHashLookup not handled yet"
 
 -- | Return type for a primitive operation.
 primRetTy :: Prim (UrTy a) -> (UrTy a)
@@ -693,14 +696,14 @@ primRetTy p =
     SymHashEmpty   -> SymHashTy
     SymHashInsert  -> SymHashTy
     SymHashLookup  -> SymTy
+    IntHashEmpty   -> IntHashTy
+    IntHashInsert  -> IntHashTy
+    IntHashLookup  -> IntTy
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
     ReadArrayFile _ ty      -> ty
     RequestEndOf  -> CursorTy
     RequestSizeOf -> IntTy
-    IntHashEmpty  -> error "primRetTy: IntHashEmpty not handled yet"
-    IntHashInsert -> error "primRetTy: IntHashInsert not handled yet"
-    IntHashLookup -> error "primRetTy: IntHashLookup not handled yet"
 
 stripTyLocs :: UrTy a -> UrTy ()
 stripTyLocs ty =
@@ -719,6 +722,7 @@ stripTyLocs ty =
     CursorTy -> CursorTy
     SymSetTy -> SymSetTy
     SymHashTy -> SymHashTy
+    IntHashTy -> IntHashTy
     ArenaTy   -> ArenaTy
 
 -- | Get the data constructor type from a type, failing if it's not packed
