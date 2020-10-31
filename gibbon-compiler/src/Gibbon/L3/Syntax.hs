@@ -57,9 +57,10 @@ data E3Ext loc dec =
   | WriteTag DataCon Var                   -- ^ Write Tag at Cursor, and return a cursor
   | ReadCursor Var                         -- ^ Reads and returns the cursor at Var
   | WriteCursor Var (PreExp E3Ext loc dec) -- ^ Write a cursor, and return a cursor
-  | ReadList Var dec                       -- ^ Read a pointer to UT_array*. The type is
-                                           -- only used for typechecking, and not during codegen.
-  | WriteList Var (PreExp E3Ext loc dec) dec -- ^ Write a pointer to UT_array*
+  | ReadList Var dec                       -- ^ Read a pointer to a linked list
+  | WriteList Var (PreExp E3Ext loc dec) dec -- ^ Write a pointer to a linked list
+  | ReadVector Var dec                       -- ^ Read a pointer to a vector
+  | WriteVector Var (PreExp E3Ext loc dec) dec -- ^ Write a pointer to a vector
   | AddCursor Var (PreExp E3Ext loc dec)     -- ^ Add a constant offset to a cursor variable
   | SubPtr Var Var                           -- ^ Pointer subtraction
   | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
@@ -160,6 +161,8 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       WriteCursor v bod  -> WriteCursor (go v) (go bod)
       ReadList v el_ty      -> ReadList (go v) el_ty
       WriteList v bod el_ty -> WriteList (go v) (go bod) el_ty
+      ReadVector v el_ty      -> ReadVector (go v) el_ty
+      WriteVector v bod el_ty -> WriteVector (go v) (go bod) el_ty
       ReadTag v          -> ReadTag (go v)
       WriteTag dcon v    -> WriteTag dcon (go v)
       AddCursor v bod    -> AddCursor (go v) (go bod)

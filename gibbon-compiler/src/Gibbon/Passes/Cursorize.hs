@@ -159,6 +159,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funRec,funInl
         ArenaTy   -> ArenaTy
         SymSetTy  -> SymSetTy
         SymHashTy -> SymHashTy
+        IntHashTy -> IntHashTy
 
 {-
 
@@ -471,8 +472,14 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
                 LetE (d',[], CursorTy, Ext $ WriteScalar (mkScalar ty) d rnd') <$>
                   go2 d' rst
 
-              -- Write a pointer UT_array*
+              -- Write a pointer to a vector
               VectorTy el_ty -> do
+                rnd' <- cursorizeExp ddfs fundefs denv tenv senv rnd
+                LetE (d',[], CursorTy, Ext $ WriteVector d rnd' (stripTyLocs el_ty)) <$>
+                  go2 d' rst
+
+              -- Write a pointer to a vector
+              ListTy el_ty -> do
                 rnd' <- cursorizeExp ddfs fundefs denv tenv senv rnd
                 LetE (d',[], CursorTy, Ext $ WriteList d rnd' (stripTyLocs el_ty)) <$>
                   go2 d' rst
@@ -620,14 +627,32 @@ But Infinite regions do not support sizes yet. Re-enable this later.
           bod = case vty of
                   PackedTy{} -> VarE (toEndV v)
                   CursorTy   -> VarE (toEndV v)
-                  IntTy -> let sizeVar = varAppend "sizeof_" v
-                               sizeVal = Ext $ SizeOfScalar v
-                               rhs = Ext $ AddCursor loc (VarE (sizeVar))
-                           in mkLets [(sizeVar,[], IntTy, sizeVal)] rhs
-                  FloatTy -> let sizeVar = varAppend "sizeof_" v
-                                 sizeVal = Ext $ SizeOfScalar v
-                                 rhs = Ext $ AddCursor loc (VarE (sizeVar))
-                             in mkLets [(sizeVar,[], IntTy, sizeVal)] rhs
+                  IntTy -> let sizeVal = LitE (fromJust $ sizeOfTy IntTy)
+                               rhs = Ext $ AddCursor loc sizeVal
+                           in rhs
+                  FloatTy -> let sizeVal = LitE (fromJust $ sizeOfTy FloatTy)
+                                 rhs = Ext $ AddCursor loc sizeVal
+                             in rhs
+                  BoolTy -> let sizeVal = LitE (fromJust $ sizeOfTy BoolTy)
+                                rhs = Ext $ AddCursor loc sizeVal
+                            in rhs
+                  SymTy -> let sizeVal = LitE (fromJust $ sizeOfTy SymTy)
+                               rhs = Ext $ AddCursor loc sizeVal
+                           in rhs
+                  VectorTy elty -> let sizeVal = LitE (fromJust $ sizeOfTy (VectorTy elty))
+                                       rhs = Ext $ AddCursor loc sizeVal
+                                   in rhs
+                  ListTy elty -> let sizeVal = LitE (fromJust $ sizeOfTy (ListTy elty))
+                                     rhs = Ext $ AddCursor loc sizeVal
+                                 in rhs
+                  -- IntTy -> let sizeVar = varAppend "sizeof_" v
+                  --              sizeVal = Ext $ SizeOfScalar v
+                  --              rhs = Ext $ AddCursor loc (VarE (sizeVar))
+                  --          in mkLets [(sizeVar,[], IntTy, sizeVal)] rhs
+                  -- FloatTy -> let sizeVar = varAppend "sizeof_" v
+                  --                sizeVal = Ext $ SizeOfScalar v
+                  --                rhs = Ext $ AddCursor loc (VarE (sizeVar))
+                  --            in mkLets [(sizeVar,[], IntTy, sizeVal)] rhs
                   oth -> error $ "cursorizeLocExp: AfterVariable TODO " ++ sdoc oth
       if isBound loc tenv
       then if was_stolen
@@ -1090,6 +1115,31 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                   tmp <- gensym "read_list_tuple"
                   let tenv' = M.union (M.fromList [(tmp     , ProdTy [VectorTy el_ty, CursorTy]),
                                                    (v       , VectorTy el_ty),
+                                                   (toEndV v, CursorTy)])
+                              tenv
+                      ty'   = stripTyLocs ty
+                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadVector loc (stripTyLocs el_ty)),
+                               (v       , [], ty'     , ProjE 0 (VarE tmp)),
+                               (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
+                  if canBind
+                  then do
+                    -- If the location exists in the environment, it indicates that the
+                    -- corresponding variable was also bound and we shouldn't create duplicate
+                    -- bindings (checked in the LetLocE cases).
+                    let binds' = (loc,[],CursorTy, VarE cur):binds
+                        tenv'' = M.insert loc CursorTy tenv'
+                    bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv''
+                    return $ mkLets binds' bod
+                  else do
+                    -- Cannot read this int. Instead, we add it to DepEnv.
+                    let denv' = M.insertWith (++) loc binds denv
+                    go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
+
+
+                ListTy el_ty -> do
+                  tmp <- gensym "read_list_tuple"
+                  let tenv' = M.union (M.fromList [(tmp     , ProdTy [VectorTy el_ty, CursorTy]),
+                                                   (v       , ListTy el_ty),
                                                    (toEndV v, CursorTy)])
                               tenv
                       ty'   = stripTyLocs ty

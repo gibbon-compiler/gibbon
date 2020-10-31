@@ -798,7 +798,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  WriteList    -> let [(outV,CursorTy)] = bnds
                                      [val,(VarTriv cur)] = rnds
-                                     ls_ty = VectorTy (ProdTy []) in pure
+                                     ls_ty = ListTy (ProdTy []) in pure
                                   [ C.BlockStm [cstm| *( $ty:(codegenTy ls_ty)  *)($id:cur) = $(codegenTriv venv val); |]
                                   , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy ls_ty) ); |] ]
 
@@ -806,6 +806,18 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                      [(VarTriv cur)] = rnds in pure
                                      [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
                                      , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:curV = ($id:cur) + sizeof( $ty:(codegenTy valTy)); |] ]
+
+
+                 WriteVector    -> let [(outV,CursorTy)] = bnds
+                                       [val,(VarTriv cur)] = rnds
+                                       ls_ty = VectorTy (ProdTy []) in pure
+                                  [ C.BlockStm [cstm| *( $ty:(codegenTy ls_ty)  *)($id:cur) = $(codegenTriv venv val); |]
+                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + sizeof( $ty:(codegenTy ls_ty) ); |] ]
+
+                 ReadVector     -> let [(valV,valTy),(curV,CursorTy)] = bnds
+                                       [(VarTriv cur)] = rnds in pure
+                                       [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
+                                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:curV = ($id:cur) + sizeof( $ty:(codegenTy valTy)); |] ]
 
                  BumpRefCount -> let [(VarTriv end_r1), (VarTriv end_r2)] = rnds
                                  in pure [ C.BlockStm [cstm| bump_ref_count($id:end_r1, $id:end_r2); |] ]

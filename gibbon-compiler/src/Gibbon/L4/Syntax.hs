@@ -281,6 +281,9 @@ data Prim
     | ReadList
     | WriteList
 
+    | ReadVector
+    | WriteVector
+
     | BoundsCheck
 
     | BumpRefCount
