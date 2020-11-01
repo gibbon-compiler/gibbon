@@ -227,7 +227,9 @@ addRANExp needRANsTyCons ddfs ienv ex =
 
     docase :: (DataCon, [(Var,())], Exp1) -> PassM [(DataCon, [(Var,())], Exp1)]
     docase (dcon,vs,bod) = do
-      let old_pat = (dcon,vs, changeSpawnToApp bod)
+      -- Always process the body, because it might have another case expression.
+      bod0 <- addRANExp needRANsTyCons ddfs ienv (changeSpawnToApp bod)
+      let old_pat = (dcon,vs,bod0)
       case numRANsDataCon ddfs dcon of
         0 -> pure [old_pat]
         n -> do

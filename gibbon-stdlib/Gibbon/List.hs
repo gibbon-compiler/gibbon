@@ -20,6 +20,19 @@ foldl_ll f acc ls =
         tl = tail_ll ls
     in foldl_ll f (f acc hd) tl
 
+ifoldl_ll :: (b -> Int -> a -> b) -> b -> List a -> b
+{-# INLINE ifoldl_ll #-}
+ifoldl_ll f acc ls = ifoldl_ll_loop 0 f acc ls
+
+ifoldl_ll_loop :: Int -> (b -> Int -> a -> b) -> b -> List a -> b
+ifoldl_ll_loop idx f acc ls =
+  if is_empty_ll ls
+  then acc
+  else
+    let hd = head_ll ls
+        tl = tail_ll ls
+    in ifoldl_ll_loop (idx+1) f (f acc idx hd) tl
+
 map_ll :: (a -> b) -> List a -> List b
 map_ll f ls =
   if is_empty_ll ls
