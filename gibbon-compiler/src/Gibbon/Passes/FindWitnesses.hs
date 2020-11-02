@@ -30,9 +30,14 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 
 import Gibbon.Common
-import Gibbon.L3.Syntax
+-- import Gibbon.L3.Syntax
+import Gibbon.L2.Syntax hiding (mapMExprs)
 
 --------------------------------------------------------------------------------
+
+data DelayedBind = DelayVar (Var,[LocVar], Ty2, Exp2)
+                 | DelayLoc (LocVar, LocExp)
+  deriving (Eq, Show, Ord)
 
 bigNumber :: Int
 bigNumber = 10 -- limit number of loops
@@ -42,61 +47,71 @@ bigNumber = 10 -- limit number of loops
 -- witnesses into scope.
 --
 -- Phase Ordering: This must run after flatten.
-findWitnesses :: Prog3 -> PassM Prog3
+findWitnesses :: Prog2 -> PassM Prog2
 findWitnesses p@Prog{fundefs} = mapMExprs fn p
  where
-  fn Env2{vEnv,fEnv} ex = return (goFix (Map.keysSet vEnv `Set.union` Map.keysSet fEnv)
-                                        ex bigNumber)
+  fn Env2{vEnv,fEnv} boundlocs ex = return (goFix (Map.keysSet vEnv `Set.union` Map.keysSet fEnv
+                                                  `Set.union` boundlocs
+                                                  )
+                                            ex bigNumber)
   goFix _    ex 0 = error $ "timeout in findWitness on " ++ (show ex)
   goFix bound0 ex0 n = let ex1 = goE bound0 Map.empty ex0
                            ex2 = goE bound0 Map.empty ex1
                        in if ex1 == ex2 then ex2
                           else goFix bound0 ex2 (n - 1)
+
+  docase bound mp (k,vs,e) =
+    let (vars,locs) = unzip vs
+        bound' = Set.fromList (vars ++ locs) `Set.union` bound
+    in (k,vs,goE bound' mp e)
+
+  goE :: Set.Set Var -> Map.Map Var DelayedBind -> Exp2 -> Exp2
   goE bound mp ex =
     let go      = goE bound -- Shorthand.
         goClear = goE (bound `Set.union` Map.keysSet mp) Map.empty
         -- shorthand for applying (L p)
-        handle' e = handle fundefs mp e
+        handle' e = handle bound fundefs mp e
     in
       case ex of
         LetE (v,locs,t, (TimeIt e ty b)) bod ->
             handle' $ LetE (v,locs,t, TimeIt (go Map.empty e) ty b)
                       (goE (Set.insert v (bound `Set.union` Map.keysSet mp)) Map.empty bod)
 
-        {- HACK:
+        Ext ext ->
+          case ext of
+            LetLocE loc locexp bod ->
+              let freelocs = gFreeVars locexp `Set.difference` bound
+                  chk = Set.null freelocs
+              in if chk
+                 -- dbgTraceIt (if loc == "loc_17052" then (sdoc (loc, locexp, freelocs, chk)) else "")
+                 then Ext $ LetLocE loc locexp $ goE (Set.insert loc bound) mp bod
+                 else
+                   case locexp of
+                     AfterVariableLE v loc2 b ->
+                       (go (Map.insert loc (DelayLoc (loc, (AfterVariableLE v loc2 b))) mp) bod)
+                     AfterConstantLE i loc2 ->
+                       go (Map.insert loc (DelayLoc (loc, (AfterConstantLE i loc2))) mp) bod
+                     _ -> Ext $ LetLocE loc locexp $ goE (Set.insert loc bound) mp bod
+            LetRegionE r bod -> Ext $ LetRegionE r $ go mp bod
+            _ -> handle' $ ex
 
-           This is just to maintain the ordering of Write* expressions in the AST.
-           Technically, all of the syntax extensions defined in L3 represent side-effects,
-           and shouldn't be re-ordered. But having just (Ext ext) here, also prevents some
-           other expressions from being re-ordered (need to look into this some more).
-
-           But, the return values of all the other extensions are used _somewhere_ in the
-           program. So essentially, when we sort the graph in a topological order,
-           the binding order and the order of side-effects is preserved automatically.
-           On the other hand, when the Write* expressions are executed for their side-effects,
-           the return values may not always be used. So we have to take special care to
-           prevent accidental re-ordering of these expressions.
-
-           The only test case for this is add1 right now.
-        -}
-        LetE (v,locs,t, (Ext ext@WriteTag{})) bod ->
-            handle' $ LetE (v,locs,t, (go Map.empty (Ext ext)))
-            (goE (Set.insert v (bound `Set.union` Map.keysSet mp)) Map.empty bod)
-
-        LetE (v,locs,t, (Ext ext@WriteScalar{})) bod ->
-            handle' $ LetE (v,locs,t, (go Map.empty (Ext ext)))
-            (goE (Set.insert v (bound `Set.union` Map.keysSet mp)) Map.empty bod)
-
-        LetE (v,locs,t,rhs) bod
-            -- isWitnessVar v -> error$ " findWitnesses: internal error, did not expect to see BINDING of witness var: "++show v
-            | otherwise -> go (Map.insert v (v,locs,t,rhs') mp) bod -- don't put the bod in the map
-              where rhs' = go Map.empty rhs -- recur on rhs, but flatten makes these pretty boring.
+        LetE (v,locs,t,rhs) bod ->
+          let rhs' = go Map.empty rhs -- recur on rhs, but flatten makes these pretty boring.
+              freelocs = ex_freeVars rhs' `Set.difference` bound
+              chk = Set.null freelocs
+          in if chk
+             then LetE (v,locs,t,rhs') $ goE (Set.insert v bound) mp (handle (Set.insert v bound) fundefs mp bod)
+             else go (Map.insert v (DelayVar (v,locs,t,rhs')) mp) bod
 
         VarE v         -> handle' $ VarE v
         LitE n         -> handle' $ LitE n
         FloatE n       -> handle' $ FloatE n
         LitSymE v      -> handle' $ LitSymE v
         AppE v locs ls -> handle' $ AppE v locs (map goClear ls)
+
+        SpawnE v locs ls -> handle' $ SpawnE v locs (map goClear ls)
+        SyncE            -> SyncE
+
         PrimAppE pr ls -> handle' $ PrimAppE pr (map goClear ls)
         ProjE i e      -> handle' $ ProjE i (goClear e)
 
@@ -108,13 +123,13 @@ findWitnesses p@Prog{fundefs} = mapMExprs fn p
         TimeIt e t b   -> handle' $ TimeIt (goClear e) t b -- prevent pushing work into timeit
 
         -- FIXME: give CaseE a treatment like IfE:
-        CaseE scrt ls  -> handle' $ CaseE scrt [ (k,vs,goClear e) | (k,vs,e) <- ls ]
+        CaseE scrt ls  -> handle' $ CaseE scrt (map (docase bound mp) ls)
 
         IfE a b c ->
             -- If we have "succeeded" in accumulating all the bindings
             -- we need, then we can discharge their topological sort
             -- here, without duplicating bindings:
-            if   closed bound mp
+            if closed bound mp
             then handle' $ IfE a (goClear b) (goClear c)
             else IfE (go mp a) -- Otherwise we duplicate...
                      (go mp b)
@@ -123,23 +138,25 @@ findWitnesses p@Prog{fundefs} = mapMExprs fn p
         MapE  (v,t,rhs) bod -> handle' $ MapE (v,t,rhs) (goClear bod)
         FoldE (v1,t1,r1) (v2,t2,r2) bod -> handle' $ FoldE (v1,t1,r1) (v2,t2,r2) (goClear bod)
         WithArenaE{} -> error "findWitnesses: WithArenaE not handled."
-        SpawnE{} -> error "findWitnesses: SpawnE not handled."
-        SyncE{} -> error "findWitnesses: SyncE not handled."
 
-        Ext _ -> handle' $ ex
 
 -- TODO: this needs to preserve any bindings that have TimeIt forms (hasTimeIt).
 -- OR we can only match a certain pattern like (Let (_,_,TimeIt _ _) _)
-handle :: FunDefs3 -> Map.Map Var (Var, [()], Ty3, Exp3) -> Exp3 -> Exp3
-handle fundefs mp expr =
+handle :: Set.Set Var -> FunDefs2 -> Map.Map Var DelayedBind -> Exp2 -> Exp2
+handle bound fundefs mp expr =
     dbgTrace 6 (" [findWitnesses] building lets using vars "++show vs++" for expr: "++ take 80 (show expr)) $
+    -- dbgTraceIt (if vars /= [] then "binding: " ++ sdoc vars else "")
     buildLets mp vars expr
     where freeInBind v = case Map.lookup (view v) mp of
                            Nothing -> []
-                           Just (_v,_locs,_t,e) -> Set.toList $ (gFreeVars e) `Set.difference` (Map.keysSet fundefs)
+                           Just (DelayVar (_v,_locs,_t,e)) -> Set.toList $ (ex_freeVars e) `Set.difference` (Map.keysSet fundefs)
+                           Just (DelayLoc (_loc, locexp)) -> Set.toList $ (gFreeVars locexp) `Set.difference` (Map.keysSet fundefs)
+
           (g,vf,_) = graphFromEdges $ zip3 vs vs $ map freeInBind vs
           vars = reverse $ map (\(x,_,_) -> x) $ map vf $ topSort g
-          vs = Map.keys mp
+          vs = Map.keys $ Map.filterWithKey (\k _v -> Set.member k bound) mp
+
+
 
 
 -- withWitnesses :: [LocVar] -> [LocVar]
@@ -156,18 +173,41 @@ view v = v  -- RRN: actually, coming up with a good policy here is problematic.
 --        | otherwise      = v
 
 
-buildLets :: Map.Map Var (Var,[()], Ty3, Exp3) -> [Var] -> Exp3-> Exp3
+buildLets :: Map.Map Var DelayedBind -> [Var] -> Exp2-> Exp2
 buildLets _mp [] bod = bod
 buildLets mp (v:vs) bod =
     case Map.lookup (view v) mp of
       Nothing -> buildLets mp vs bod
-      Just bnd -> LetE bnd $ buildLets mp vs bod
+      Just (DelayVar bnd) -> LetE bnd $ buildLets mp vs bod
+      Just (DelayLoc (loc, bnd)) -> Ext $ LetLocE loc bnd (buildLets mp vs bod)
 
 
 -- | Are all the free variables currently bound (transitively) in the
 -- environment?
-closed :: Set.Set Var -> Map.Map Var (v, [()], t, Exp3) -> Bool
+closed :: Set.Set Var -> Map.Map Var DelayedBind -> Bool
 closed bound mp = Set.null (allBound `Set.difference` allUsed)
   where
    allBound = bound `Set.union` Map.keysSet mp
-   allUsed = Set.unions [ gFreeVars rhs | (_,_,_,rhs) <- Map.elems mp ]
+   -- allUsed = Set.unions [ gFreeVars rhs | (_,_,_,rhs) <- Map.elems mp ]
+   allUsed = Set.unions $ map (\db -> case db of
+                                  DelayVar (_,_,_,rhs) -> ex_freeVars rhs
+                                  DelayLoc (_,locexp)  -> gFreeVars locexp)
+                          (Map.elems mp)
+
+mapMExprs :: Monad m => (Env2 Ty2 -> Set.Set LocVar -> Exp2 -> m Exp2) -> Prog2 -> m Prog2
+mapMExprs fn (Prog ddfs fundefs mainExp) =
+  Prog ddfs <$>
+    (mapM (\f@FunDef{funArgs,funTy,funBody} ->
+              let env = Env2 (Map.fromList $ zip funArgs (inTys funTy)) funEnv
+                  boundlocs = Set.fromList (allLocVars funTy)
+              in do
+                bod' <- fn env boundlocs funBody
+                return $ f { funBody =  bod' })
+     fundefs)
+    <*>
+    (mapM (\ (e,t) -> (,t) <$> fn (Env2 Map.empty funEnv) Set.empty e) mainExp)
+  where funEnv = Map.map funTy fundefs
+
+ex_freeVars :: Exp2 -> Set.Set Var
+ex_freeVars = Set.fromList . allFreeVars
+-- ex_freeVars = gFreeVars

@@ -149,6 +149,7 @@ data SimplExpA = ArgA Arg | ReadA | NegA Arg | NotA Arg
 
 data ExpA = SimplA SimplExpA
           | LetA Var SimplExpA ExpA
+          | LetA2 Var SimplExpA ExpA
           | IfA SimplExpA ExpA ExpA
   deriving Show
 
@@ -158,6 +159,25 @@ data A = ProgramA Ty ExpA
 
 --------------------------------------------------------------------------------
 -- Copy, traverse, and print
+
+trav_simpl_expa :: SimplExpA -> Int
+trav_simpl_expa exp =
+  case exp of
+    ArgA a -> trav_arg a
+    ReadA -> 1
+    NegA a -> trav_arg a
+    NotA a -> trav_arg a
+    PrimA p a1 a2 ->
+      let _ = trav_prim p
+          _ = trav_arg a1
+          _ = trav_arg a2
+      in 1
+    CmpA c a1 a2 ->
+      let _ = trav_cmp c
+          _ = trav_arg a1
+          _ = trav_arg a2
+      in 1
+
 
 print_simpl_expa :: SimplExpA -> ()
 print_simpl_expa exp =
@@ -214,8 +234,17 @@ print_expa exp =
           _ = print_expa bod
           _ = printsym (quote ")")
       in ()
+    LetA2 v rhs bod ->
+      let _ = printsym (quote "(LetA2 ")
+          _ = printsym v
+          _ = printsym (quote " ")
+          _ = print_simpl_expa rhs
+          _ = printsym (quote " ")
+          _ = print_expa bod
+          _ = printsym (quote ")")
+      in ()
     IfA a b c ->
-      let _ = printsym (quote "(LetA ")
+      let _ = printsym (quote "(IfA ")
           _ = print_simpl_expa a
           _ = printsym (quote " ")
           _ = print_expa b
@@ -310,6 +339,14 @@ trav_stm stm =
 
 copy_tail :: TailC -> TailC
 copy_tail tail =
+  case tail of
+    RetC exp -> RetC (copy_expc exp)
+    SeqC stm tail -> SeqC (copy_stm stm) (copy_tail tail)
+    IfC thn els cmp -> IfC thn els (copy_expc cmp)
+    GotoC lbl -> GotoC lbl
+
+_copy_tail :: TailC -> TailC
+_copy_tail tail =
   case tail of
     RetC exp -> RetC (copy_expc exp)
     SeqC stm tail -> SeqC (copy_stm stm) (copy_tail tail)
@@ -754,6 +791,10 @@ typecheckExpA ty_env exp =
       let ty = typecheckSimplExpA ty_env rhs
           ty_env' = insert_hash ty_env v ty
       in typecheckExpA ty_env' bod
+    LetA2 v rhs bod ->
+      let ty = typecheckSimplExpA ty_env rhs
+          ty_env' = insert_hash ty_env v ty
+      in typecheckExpA ty_env' bod
     IfA a b c ->
       let t1 = typecheckSimplExpA ty_env a
           t2 = typecheckExpA ty_env b
@@ -798,26 +839,33 @@ typecheckSimplExpA ty_env exp =
 uniqify :: R -> R
 uniqify prg =
   case prg of
-    ProgramR ty exp -> ProgramR ty (uniqifyExp empty_hash exp)
+    ProgramR ty exp -> ProgramR ty (uniqifyExp empty_set empty_hash exp)
     ErrorR err -> ErrorR err
 
-uniqifyExp :: VarEnv -> ExpR -> ExpR
-uniqifyExp var_env exp =
+uniqifyExp :: SymSet -> VarEnv -> ExpR -> ExpR
+uniqifyExp var_set var_env exp =
   case exp of
     ArgR arg -> ArgR (uniqifyArg var_env arg)
     ReadR -> ReadR
-    NegR e -> NegR (uniqifyExp var_env e)
-    NotR e -> NotR (uniqifyExp var_env e)
+    NegR e -> NegR (uniqifyExp var_set var_env e)
+    NotR e -> NotR (uniqifyExp var_set var_env e)
     -- COPY: prim and cmp are copied (single byte data, so copying is good.)
-    PrimR p e1 e2 -> PrimR (copy_prim p) (uniqifyExp var_env e1) (uniqifyExp var_env e2)
-    CmpR c e1 e2  -> CmpR (copy_cmp c) (uniqifyExp var_env e1) (uniqifyExp var_env e2)
+    PrimR p e1 e2 -> PrimR (copy_prim p) (uniqifyExp var_set var_env e1) (uniqifyExp var_set var_env e2)
+    CmpR c e1 e2  -> CmpR (copy_cmp c) (uniqifyExp var_set var_env e1) (uniqifyExp var_set var_env e2)
     LetR v rhs bod ->
-      let rhs' = uniqifyExp var_env rhs
-          v'   = gensym
-          var_env' = insert_hash var_env v v'
-          bod' = uniqifyExp var_env' bod
-      in LetR v' rhs' bod'
-    IfR a b c -> IfR (uniqifyExp var_env a) (uniqifyExp var_env b) (uniqifyExp var_env c)
+      if contains_set var_set v
+      then
+        let rhs' = uniqifyExp var_set var_env rhs
+            v'   = gensym
+            var_env' = insert_hash var_env v v'
+            bod' = uniqifyExp var_set var_env' bod
+        in LetR v' rhs' bod'
+      else
+        let rhs' = uniqifyExp var_set var_env rhs
+            var_set' = insert_set var_set v
+            bod' = uniqifyExp var_set'  var_env bod
+        in LetR v rhs' bod'
+    IfR a b c -> IfR (uniqifyExp var_set var_env a) (uniqifyExp var_set var_env b) (uniqifyExp var_set var_env c)
 
 uniqifyArg :: VarEnv -> Arg -> Arg
 uniqifyArg var_env arg =
@@ -833,20 +881,40 @@ uniqifyArg var_env arg =
 uniqifyA :: A -> A
 uniqifyA prg =
   case prg of
-    ProgramA ty exp -> ProgramA ty (uniqifyExpA empty_hash exp)
+    ProgramA ty exp -> ProgramA ty (uniqifyExpA empty_set empty_hash exp)
     ErrorA err -> ErrorA err
 
-uniqifyExpA :: VarEnv -> ExpA -> ExpA
-uniqifyExpA var_env exp =
+uniqifyExpA :: SymSet -> VarEnv -> ExpA -> ExpA
+uniqifyExpA var_set var_env exp =
   case exp of
     SimplA simpl -> SimplA (uniqifySimplExpA var_env simpl)
     LetA v rhs bod ->
-      let rhs' = uniqifySimplExpA var_env rhs
-          v'   = gensym
-          var_env' = insert_hash var_env v v'
-          bod' = uniqifyExpA var_env' bod
-      in LetA v' rhs' bod'
-    IfA a b c -> IfA (uniqifySimplExpA var_env a) (uniqifyExpA var_env b) (uniqifyExpA var_env c)
+      if contains_set var_set v
+      then
+        let rhs' = uniqifySimplExpA var_env rhs
+            v'   = gensym
+            var_env' = insert_hash var_env v v'
+            bod' = uniqifyExpA var_set var_env' bod
+        in LetA v' rhs' bod'
+      else
+        let rhs' = uniqifySimplExpA var_env rhs
+            var_set' = insert_set var_set v
+            bod' = uniqifyExpA var_set' var_env bod
+        in LetA v rhs' bod'
+    LetA2 v rhs bod ->
+      if contains_set var_set v
+      then
+        let rhs' = uniqifySimplExpA var_env rhs
+            v'   = gensym
+            var_env' = insert_hash var_env v v'
+            bod' = uniqifyExpA var_set var_env' bod
+        in LetA2 v' rhs' bod'
+      else
+        let rhs' = uniqifySimplExpA var_env rhs
+            var_set' = insert_set var_set v
+            bod' = uniqifyExpA var_set' var_env bod
+        in LetA2 v rhs' bod'
+    IfA a b c -> IfA (uniqifySimplExpA var_env a) (uniqifyExpA var_set var_env b) (uniqifyExpA var_set var_env c)
 
 uniqifySimplExpA :: VarEnv -> SimplExpA -> SimplExpA
 uniqifySimplExpA var_env exp =
@@ -867,13 +935,16 @@ explicateControl prg =
   case prg of
     ProgramA ty exp ->
       let (locals, exp') = explicateTail exp
+      -- let exp' = explicateTail2 exp
       in case exp' of
            MkTailAndBlk tail blk0 ->
              let start = gensym
                  -- COPY: tail and blk0 are copied (terrible!)
-                 tail' = copy_tail tail
+                 tail' = _copy_tail tail
                  -- TRAVERSAL: forcing random access here triggers a InferLocations bug.
                  blk2 = BlockCons start tail' blk0
+                 -- locals :: List Sym
+                 -- locals = alloc_ll
              in ProgramC ty locals blk2
 
 explicateTail :: ExpA -> (List Sym, TailAndBlk)
@@ -884,6 +955,10 @@ explicateTail exp =
           locals :: List Sym
           locals = alloc_ll
       in (locals, tb)
+    LetA2 v rhs bod ->
+      let (locals, tail) = explicateTail2 exp
+          tb = MkTailAndBlk tail BlockNil
+      in (locals, tb)
     LetA v rhs bod ->
       let rhs' = toExpC rhs
           (locals, bod') = explicateTail bod
@@ -891,8 +966,8 @@ explicateTail exp =
            MkTailAndBlk tl blk ->
              -- COPY: tl and blk are copied (indirection)
              let stm = AssignC v rhs'
-                 -- TRAVERSAL: forcing random access here triggers a InferLocations bug.
-                 _ = trav_tail tl
+                 -- TRAVERSAL: random access
+                 -- _ = trav_tail tl
                  tail = SeqC stm tl
                  locals' = cons_ll v locals
              in (locals', MkTailAndBlk tail blk)
@@ -919,14 +994,34 @@ explicateTail exp =
 
                     -- (2) create a tree using BlockAppend
                     -- COPY: thn_blocks and els_blocks is copied (indirection)
-                    thn_tail' = copy_tail thn_tail
+                    -- TRAVERSAL: random access
+                    -- _ = trav_tail thn_tail
+                    thn_tail' = _copy_tail thn_tail
                     blks0 = BlockCons thn_label thn_tail' thn_blocks
-                    els_tail' = copy_tail els_tail
+                    -- _ = trav_tail els_tail
+                    els_tail' = _copy_tail els_tail
                     blks1 = BlockCons els_label els_tail' els_blocks
                     blks2 = BlockAppend blks0 blks1
 
                     tb = MkTailAndBlk tail' blks2
                 in (locals3, tb)
+
+explicateTail2 :: ExpA -> (List Sym, TailC)
+explicateTail2 exp =
+  case exp of
+    SimplA simpl ->
+      let locals :: List Sym
+          locals = alloc_ll
+          tail = RetC (toExpC simpl)
+      in (locals, tail)
+    LetA2 v rhs bod ->
+      let rhs' = toExpC rhs
+          stm = AssignC v rhs'
+          (locals, tail) = explicateTail2 bod
+          locals' = cons_ll v locals
+          tail' = SeqC stm tail
+      in (locals', tail')
+
 
 -- COPY: everything is copied (smallish data, so copying is good.)
 toExpC :: SimplExpA -> ExpC
@@ -951,10 +1046,10 @@ appendBlocks b1 b2 =
       in BlockCons lbl tl rst'
 
 
--- force_random_access :: TailAndBlk -> BlkC
--- force_random_access tb =
---   case tb of
---     MkTailAndBlk tail blk -> blk
+force_random_access :: TailAndBlk -> BlkC
+force_random_access tb =
+  case tb of
+    MkTailAndBlk tail blk -> blk
 
 --------------------------------------------------------------------------------
 -- Remove trivial jumps
@@ -1466,12 +1561,35 @@ assignHomesArgX86 homes arg =
 
 --------------------------------------------------------------------------------
 
-compile :: A -> PseudoX86
-compile p0 =
+compile0 :: A -> A
+compile0 p0 =
   let p1 = typecheckA p0
-      _ = print_program_a p1
-      _ = print_newline()
-      _ = print_newline()
+      p2 = uniqifyA p1
+  in p2
+
+compile1 :: A -> C
+compile1 p0 =
+  let p1 = typecheckA p0
+      p2 = uniqifyA p1
+      p3 = explicateControl p2
+  in p3
+
+compile2 :: A -> PseudoX86
+compile2 p0 =
+  let p1 = typecheckA p0
+      p2 = uniqifyA p1
+      p3 = explicateControl p2
+      -- p4 = optimizeJumps p3
+      p5 = selectInstrs p3
+      p6 = assignHomes p5
+  in p6
+
+compile3 :: A -> PseudoX86
+compile3 p0 =
+  let p1 = typecheckA p0
+      -- _ = print_program_a p1
+      -- _ = print_newline()
+      -- _ = print_newline()
       p2 = uniqifyA p1
       _ = print_program_a p2
       _ = print_newline()
@@ -1489,15 +1607,43 @@ compile p0 =
       _ = print_pseudox86 p6
   in p6
 
+--------------------------------------------------------------------------------
+
+make_big_ex2 :: Int -> ExpA
+make_big_ex2 n =
+  if n == 0
+  then SimplA (ArgA (IntArg 1))
+  else
+    let v2 = gensym
+    in (LetA2 v2 (ArgA (IntArg (n-1))) (make_big_ex2 (n-1)))
+
+make_big_ex :: Int -> ExpA
+make_big_ex n =
+  if n == 0
+  then SimplA (ArgA (IntArg 1))
+  else
+    let v1 = gensym
+    in LetA v1 (ArgA (IntArg n))
+       (IfA (CmpA EqP (VarArg v1) (IntArg 0))
+         (make_big_ex2 (n-1))
+         (make_big_ex2 (n-1))
+         -- (IfA (CmpA EqP (VarArg v1) (IntArg 1))
+         --   (SimplA (ArgA (IntArg 1)))
+         --   (LetA v2 (ArgA (IntArg n))
+         --     (make_big_ex (n-1))))
+       )
+
 gibbon_main =
-  let p = ProgramA intTy
-          (LetA (quote "v0") (ArgA (IntArg 20))
-           (LetA (quote "v1") (ArgA (IntArg 22))
-            (LetA (quote "res") (PrimA AddP (VarArg (quote "v0")) (VarArg (quote "v1")))
-             (IfA
-              (CmpA EqP (VarArg (quote "v0")) (VarArg (quote "v1")))
-              (SimplA (ArgA (VarArg (quote "v0"))))
-              (SimplA (ArgA (VarArg (quote "v1")))))
-            )))
-      compiled = compile p
+  let -- p = ProgramA intTy
+      --     (LetA (quote "v0") (ArgA (IntArg 20))
+      --      (LetA (quote "v1") (ArgA (IntArg 22))
+      --       (LetA (quote "res") (PrimA AddP (VarArg (quote "v0")) (VarArg (quote "v1")))
+      --        (IfA
+      --         (CmpA EqP (VarArg (quote "v0")) (VarArg (quote "v1")))
+      --         (SimplA (ArgA (VarArg (quote "v0"))))
+      --         (SimplA (ArgA (VarArg (quote "v1"))))))))
+      ex = make_big_ex sizeParam
+      -- _ = print_expa ex
+      p = ProgramA intTy ex
+      compiled = iterate (compile2 p)
   in ()

@@ -97,7 +97,7 @@ threadRegionsFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
                         if mode == Output
                         then let rv = toEndV $ regionToVar reg
                                  bc = boundsCheck ddefs (locs_tycons M.! loc)
-                             in LetE ("_",[],IntTy, Ext$ BoundsCheck (bc+9) rv loc) acc
+                             in LetE ("_",[],IntTy, Ext$ BoundsCheck 1024 rv loc) acc
                         else acc)
                      bod'
                      (locVars funTy)

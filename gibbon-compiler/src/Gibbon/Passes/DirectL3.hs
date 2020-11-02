@@ -86,3 +86,4 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
         CursorTy -> CursorTy
         SymSetTy -> SymSetTy
         SymHashTy -> SymHashTy
+        IntHashTy -> IntHashTy

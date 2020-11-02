@@ -492,16 +492,21 @@ IntTy print_symbol(SymTy idx) {
   } else {
     struct SymTable_elem *s;
     HASH_FIND(hh, global_sym_table, &idx, sizeof(SymTy), s);
-    return printf("%s", s->value);
+    if (s == NULL) {
+        return printf("%lld", idx);
+    } else {
+        return printf("%s", s->value);
+    }
+
   }
 }
 
 SymTy gensym() {
     global_gensym_counter += 1;
     SymTy idx = global_gensym_counter;
-    char value[global_max_symbol_len];
-    sprintf(value, "gensym_%lld",idx);
-    add_symbol(idx, value);
+    // char value[global_max_symbol_len];
+    // sprintf(value, "gensym_%lld",idx);
+    // add_symbol(idx, value);
     return idx;
 }
 
@@ -630,6 +635,10 @@ RegionTy *alloc_region(IntTy size) {
     reg->refcount = 0;
     reg->start_ptr = start;
     reg->outset = NULL;
+
+    #ifdef DEBUG
+    printf("Allocated a region: %lld bytes.\n", size);
+    #endif
 
     // Write the footer
     RegionFooter* footer = (RegionFooter *) end;

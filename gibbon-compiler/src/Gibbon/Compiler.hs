@@ -74,7 +74,7 @@ import           Gibbon.Passes.InferRegionScope (inferRegScope)
 import           Gibbon.Passes.RouteEnds      (routeEnds)
 import           Gibbon.Passes.ThreadRegions  (threadRegions)
 import           Gibbon.Passes.Cursorize      (cursorize)
--- -- import           Gibbon.Passes.FindWitnesses  (findWitnesses)
+import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 -- -- import           Gibbon.Passes.ShakeTree      (shakeTree)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
 import           Gibbon.Passes.Unariser       (unariser)
@@ -563,7 +563,9 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   let need = needsRAN l2
                   l1 <- goE1 "addRAN"        (addRAN need) l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
-                  l2 <- goE2 "inferLocations2" inferLocs   l1
+                  l2 <- go "inferLocations2" inferLocs     l1
+                  l2 <- go "L2.flatten"      flattenL2     l2
+                  l2 <- go "findWitnesses" findWitnesses   l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "L2.flatten"    flattenL2     l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2

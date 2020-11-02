@@ -123,7 +123,10 @@ instance FreeVars (E2Ext l d) where
   gFreeVars e =
     case e of
      LetRegionE _ bod   -> gFreeVars bod
-     LetLocE _ _rhs bod -> -- gFreeVars rhs `S.union`
+     LetLocE _ rhs bod  -> (case rhs of
+                              AfterVariableLE v _loc _ -> S.singleton v
+                              _ -> S.empty)
+                           `S.union`
                            gFreeVars bod
      RetE _ vr          -> S.singleton vr
      FromEndE _         -> S.empty
@@ -133,6 +136,13 @@ instance FreeVars (E2Ext l d) where
      GetCilkWorkerNum   -> S.empty
      LetAvail vs bod    -> S.fromList vs `S.union` gFreeVars bod
 
+
+instance FreeVars LocExp where
+  gFreeVars e =
+    case e of
+      AfterConstantLE _ loc   -> S.singleton loc
+      AfterVariableLE v loc _ -> S.fromList [v,loc]
+      _ -> S.empty
 
 instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
   type LocOf (E2Ext l d) = l
