@@ -607,6 +607,7 @@ primArgsTy p =
     SymHashEmpty -> []
     SymHashInsert -> [SymHashTy,SymTy,SymTy]
     SymHashLookup -> [SymHashTy,SymTy]
+    SymHashContains -> [SymHashTy,SymTy]
     IntHashEmpty -> []
     IntHashInsert -> [IntHashTy,SymTy,IntTy]
     IntHashLookup -> [IntHashTy,SymTy]
@@ -696,6 +697,7 @@ primRetTy p =
     SymHashEmpty   -> SymHashTy
     SymHashInsert  -> SymHashTy
     SymHashLookup  -> SymTy
+    SymHashContains  -> BoolTy
     IntHashEmpty   -> IntHashTy
     IntHashInsert  -> IntHashTy
     IntHashLookup  -> IntTy

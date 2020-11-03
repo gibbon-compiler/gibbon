@@ -288,6 +288,12 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           s3 <- unify (args !! 1) SymTy0 (arg_tys' !! 1)
           pure (s1 <> s2 <> s3, SymTy0, PrimAppE pr args_tc)
 
+        SymHashContains -> do
+          len2
+          s2 <- unify (args !! 0) SymHashTy (arg_tys' !! 0)
+          s3 <- unify (args !! 1) SymTy0 (arg_tys' !! 1)
+          pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+
         DictEmptyP ty -> do
           len1
           let [a] = arg_tys'

@@ -427,6 +427,7 @@ data Prim ty
           | SymHashEmpty   -- ^ Create empty hash table of symbols
           | SymHashInsert  -- ^ Insert a symbol into a hash table
           | SymHashLookup  -- ^ Look up a symbol in a hash table (takes default symbol)
+          | SymHashContains -- ^ Queries if a symbol is in a hash
 
           | IntHashEmpty   -- ^ Create empty hash table of integers
           | IntHashInsert  -- ^ Insert an integer into a hash table

@@ -333,6 +333,11 @@ IntTy lookup_hash(SymHashTy hash, int k) {
   }
 }
 
+BoolTy contains_hash(SymHashTy hash, int sym) {
+  SymHashTy s;
+  HASH_FIND_INT(hash,&sym,s);
+  return (s!=NULL);
+}
 
 // -------------------------------------
 // Helpers

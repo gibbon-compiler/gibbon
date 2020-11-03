@@ -239,6 +239,12 @@ tcExp ddfs env exp =
           _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
           return SymTy
 
+        SymHashContains -> do
+          len2
+          _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
+          _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+          return BoolTy
+
         DictEmptyP ty -> do
           len1
           let [a] = tys

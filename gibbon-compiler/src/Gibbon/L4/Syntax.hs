@@ -218,6 +218,7 @@ data Prim
     | SymHashEmpty
     | SymHashInsert
     | SymHashLookup
+    | SymHashContains
     | IntHashEmpty
     | IntHashInsert
     | IntHashLookup

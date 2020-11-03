@@ -645,6 +645,7 @@ primMap = M.fromList
   , ("sym-hash-empty", SymHashEmpty)
   , ("sym-hash-insert", SymHashInsert)
   , ("sym-hash-lookup", SymHashLookup)
+  , ("sym-hash-contains", SymHashLookup)
   , ("is-big", IsBig)
   ]
 

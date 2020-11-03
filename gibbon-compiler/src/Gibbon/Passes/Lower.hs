@@ -1056,6 +1056,7 @@ prim p =
     SymHashEmpty  -> T.SymHashEmpty
     SymHashInsert  -> T.SymHashInsert
     SymHashLookup  -> T.SymHashLookup
+    SymHashContains  -> T.SymHashContains
     IntHashEmpty  -> T.IntHashEmpty
     IntHashInsert  -> T.IntHashInsert
     IntHashLookup  -> T.IntHashLookup

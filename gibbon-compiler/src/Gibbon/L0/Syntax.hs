@@ -535,6 +535,7 @@ recoverType ddfs env2 ex =
         SymHashEmpty -> error "primRetTy1: SymHashEmpty not handled yet"
         SymHashInsert-> error "primRetTy1: SymHashInsert not handled yet"
         SymHashLookup-> error "primRetTy1: SymHashLookup not handled yet"
+        SymHashContains-> error "primRetTy1: SymHashLookup not handled yet"
         IntHashEmpty -> error "primRetTy1: IntHashEmpty not handled yet"
         IntHashInsert-> error "primRetTy1: IntHashInsert not handled yet"
         IntHashLookup-> error "primRetTy1: IntHashLookup not handled yet"

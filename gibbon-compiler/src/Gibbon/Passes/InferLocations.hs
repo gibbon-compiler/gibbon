@@ -1651,6 +1651,7 @@ prim p = case p of
            SymHashEmpty{} -> return SymHashEmpty
            SymHashInsert{} -> return SymHashInsert
            SymHashLookup{} -> return SymHashLookup
+           SymHashContains{} -> return SymHashContains
            IntHashEmpty{} -> return IntHashEmpty
            IntHashInsert{} -> return IntHashInsert
            IntHashLookup{} -> return IntHashLookup

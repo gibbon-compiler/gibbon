@@ -403,6 +403,7 @@ primMap = M.fromList
   , ("empty_hash", SymHashEmpty)
   , ("insert_hash", SymHashInsert)
   , ("lookup_hash", SymHashLookup)
+  , ("contains_hash", SymHashContains)
   , ("empty_int_hash", IntHashEmpty)
   , ("insert_int_hash", IntHashInsert)
   , ("lookup_int_hash", IntHashLookup)

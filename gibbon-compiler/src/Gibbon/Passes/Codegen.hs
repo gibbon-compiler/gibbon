@@ -731,6 +731,10 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                       [(VarTriv hash),keyTriv] = rnds in pure
                     [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = lookup_hash($id:hash, $(codegenTriv venv keyTriv)); |] ]
 
+                 SymHashContains -> let [(outV,ty)] = bnds
+                                        [(VarTriv hash),keyTriv] = rnds in pure
+                    [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = contains_hash($id:hash, $(codegenTriv venv keyTriv)); |] ]
+
                  IntHashEmpty -> let [(outV,outT)] = bnds
                                  in pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = empty_hash(); |] ]
                  IntHashInsert -> let [(outV,outT)] = bnds

@@ -630,6 +630,12 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
                    pure (SymTy, tstatein)
 
+                 SymHashContains -> do
+                   len2
+                   _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
+                   _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
+                   pure (BoolTy, tstatein)
+
                  IntHashEmpty -> do
                    len0
                    pure (IntHashTy, tstatein)
