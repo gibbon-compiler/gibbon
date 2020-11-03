@@ -23,7 +23,7 @@ module Gibbon.L2.Syntax
     , Multiplicity(..), regionToVar
 
     -- * Operations on types
-    , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, substLoc
+    , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, allRegVars, substLoc
     , substLocs, substEff, substEffs, extendPatternMatchEnv
     , locsInTy, dummyTyLocs, allFreeVars
 
@@ -444,6 +444,9 @@ outRegVars ty = L.map (\(LRM _ r _) -> regionToVar r) $
 inRegVars :: ArrowTy2 -> [LocVar]
 inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) $
                L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
+
+allRegVars :: ArrowTy2 -> [LocVar]
+allRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) (locVars ty)
 
 -- | Apply a location substitution to a type.
 substLoc :: M.Map LocVar LocVar -> Ty2 -> Ty2

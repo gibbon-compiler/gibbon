@@ -74,7 +74,7 @@ parAlloc Prog{ddefs,fundefs,mainExp} = do
         let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
             initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
             env2 = Env2 initTyEnv (initFunEnv fundefs)
-            boundlocs = S.fromList (funArgs ++ allLocVars funTy)
+            boundlocs = S.fromList (funArgs ++ allLocVars funTy ++ allRegVars funTy)
         bod' <- parAllocExp ddefs fundefs env2 initRegEnv M.empty Nothing [] S.empty boundlocs funBody
         pure $ f {funBody = bod'}
       else pure f
@@ -163,6 +163,10 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
           vars = gFreeVars (substLocInExp after_env rhs) `S.difference` (M.keysSet fundefs)
           used = S.fromList (allFreeVars (substLocInExp after_env rhs)) `S.difference` (M.keysSet fundefs)
 
+      if v == "cpy_18070" || v == "stm_2381_5619_7454"
+      then dbgTraceIt (sdoc (v, vars, spawned, used, boundlocs)) (pure ())
+      else pure ()
+
       -- Swallow this binding, and add v to 'spawned'
       if not (S.disjoint vars spawned)
       then do
@@ -206,7 +210,8 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
     SyncE{}  -> error "parAllocExp: unbound SyncE"
     Ext ext  ->
       case ext of
-        LetRegionE r bod       -> Ext <$> (LetRegionE r) <$> go bod
+        LetRegionE r bod       -> Ext <$> (LetRegionE r) <$>
+                                    parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned (S.insert (regionToVar r) boundlocs) bod
         LetLocE loc locexp bod -> do
           case locexp of
             -- Binding is swallowed, and it's continuation allocates in a fresh region.

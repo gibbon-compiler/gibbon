@@ -149,7 +149,7 @@ data SimplExpA = ArgA Arg | ReadA | NegA Arg | NotA Arg
 
 data ExpA = SimplA SimplExpA
           | LetA Var SimplExpA ExpA
-          | LetA2 Var SimplExpA ExpA
+          | LetA2 Var SimplExpA ExpA -- A let binding which does not have a conditional in its body.
           | IfA SimplExpA ExpA ExpA
   deriving Show
 
@@ -805,6 +805,33 @@ typecheckExpA ty_env exp =
               else errorTy
          else errorTy
 
+typecheckExpA_par :: TypeEnv -> ExpA -> Ty
+typecheckExpA_par ty_env exp =
+  case exp of
+    SimplA simpl -> typecheckSimplExpA ty_env simpl
+    LetA v rhs bod ->
+      let ty = typecheckSimplExpA ty_env rhs
+          ty_env' = insert_hash ty_env v ty
+      in typecheckExpA ty_env' bod
+    LetA2 v rhs bod ->
+      let ty = typecheckSimplExpA ty_env rhs
+          ty_env' = insert_hash ty_env v ty
+      in typecheckExpA_par ty_env' bod
+    IfA a b c ->
+      let t1 = typecheckSimplExpA ty_env a
+          -- TODO:
+          -- (ty_env1, ty_env2) = fork_pdict ty_env
+          ty_env1 = ty_env
+          ty_env2 = ty_env
+          t2 = spawn (typecheckExpA_par ty_env1 b)
+          t3 = typecheckExpA_par ty_env2 c
+          _ = sync
+      in if eqTy t1 boolTy
+         then if eqTy t2 t3
+              then t2
+              else errorTy
+         else errorTy
+
 typecheckSimplExpA :: TypeEnv -> SimplExpA -> Ty
 typecheckSimplExpA ty_env exp =
   case exp of
@@ -916,6 +943,47 @@ uniqifyExpA var_set var_env exp =
         in LetA2 v rhs' bod'
     IfA a b c -> IfA (uniqifySimplExpA var_env a) (uniqifyExpA var_set var_env b) (uniqifyExpA var_set var_env c)
 
+uniqifyExpA_par :: SymSet -> VarEnv -> ExpA -> ExpA
+uniqifyExpA_par var_set var_env exp =
+  case exp of
+    SimplA simpl -> SimplA (uniqifySimplExpA var_env simpl)
+    LetA v rhs bod ->
+      if contains_set var_set v
+      then
+        let rhs' = uniqifySimplExpA var_env rhs
+            v'   = gensym
+            var_env' = insert_hash var_env v v'
+            bod' = uniqifyExpA_par var_set var_env' bod
+        in LetA v' rhs' bod'
+      else
+        let rhs' = uniqifySimplExpA var_env rhs
+            var_set' = insert_set var_set v
+            bod' = uniqifyExpA_par var_set' var_env bod
+        in LetA v rhs' bod'
+    LetA2 v rhs bod ->
+      if contains_set var_set v
+      then
+        let rhs' = uniqifySimplExpA var_env rhs
+            v'   = gensym
+            var_env' = insert_hash var_env v v'
+            bod' = uniqifyExpA_par var_set var_env' bod
+        in LetA2 v' rhs' bod'
+      else
+        let rhs' = uniqifySimplExpA var_env rhs
+            var_set' = insert_set var_set v
+            bod' = uniqifyExpA_par var_set' var_env bod
+        in LetA2 v rhs' bod'
+    IfA a b c ->
+      let a' = (uniqifySimplExpA var_env a)
+          -- TODO:
+          -- (var_env1, var_env2) = fork_pdict var_env
+          var_env1 = var_env
+          var_env2 = var_env
+          b' = spawn (uniqifyExpA_par var_set var_env b)
+          c' = (uniqifyExpA_par var_set var_env c)
+          _ = sync
+      in IfA a' b' c'
+
 uniqifySimplExpA :: VarEnv -> SimplExpA -> SimplExpA
 uniqifySimplExpA var_env exp =
   case exp of
@@ -935,16 +1003,13 @@ explicateControl prg =
   case prg of
     ProgramA ty exp ->
       let (locals, exp') = explicateTail exp
-      -- let exp' = explicateTail2 exp
       in case exp' of
            MkTailAndBlk tail blk0 ->
              let start = gensym
-                 -- COPY: tail and blk0 are copied (terrible!)
+                 -- COPY: tail and blk0 are copied (indirection)
                  tail' = _copy_tail tail
                  -- TRAVERSAL: forcing random access here triggers a InferLocations bug.
                  blk2 = BlockCons start tail' blk0
-                 -- locals :: List Sym
-                 -- locals = alloc_ll
              in ProgramC ty locals blk2
 
 explicateTail :: ExpA -> (List Sym, TailAndBlk)
@@ -1005,6 +1070,69 @@ explicateTail exp =
 
                     tb = MkTailAndBlk tail' blks2
                 in (locals3, tb)
+
+explicateTail_par :: ExpA -> (List Sym, TailAndBlk)
+explicateTail_par exp =
+  case exp of
+    SimplA simpl ->
+      let tb = MkTailAndBlk (RetC (toExpC simpl)) BlockNil
+          locals :: List Sym
+          locals = alloc_ll
+      in (locals, tb)
+    LetA2 v rhs bod ->
+      let (locals, tail) = explicateTail2 exp
+          tb = MkTailAndBlk tail BlockNil
+      in (locals, tb)
+    LetA v rhs bod ->
+      let rhs' = toExpC rhs
+          (locals, bod') = explicateTail_par bod
+      in case bod' of
+           MkTailAndBlk tl blk ->
+             -- COPY: tl and blk are copied (indirection)
+             let stm = AssignC v rhs'
+                 -- TRAVERSAL: random access
+                 -- _ = trav_tail tl
+                 tail = SeqC stm tl
+                 locals' = cons_ll v locals
+             in (locals', MkTailAndBlk tail blk)
+    IfA a b c ->
+      let a' = toExpC a
+          tup1 = spawn (explicateTail_par b)
+          tup2 = explicateTail_par c
+          _ = sync
+          (locals1, b') = tup1
+          (locals2, c') = tup2
+          locals3 = append_ll locals1 locals2
+      in
+        case b' of
+          MkTailAndBlk thn_tail thn_blocks ->
+            case c' of
+              MkTailAndBlk els_tail els_blocks ->
+                let thn_label = gensym
+                    els_label = gensym
+                    tail' = IfC thn_label els_label a'
+
+                    -- -- (1) use appendBlocks
+                    -- thn_tail' = copy_tail thn_tail
+                    -- els_tail' = copy_tail els_tail
+                    -- blks0 = appendBlocks thn_blocks els_blocks
+                    -- blks1 = BlockCons els_label els_tail' blks0
+                    -- blks2 = BlockCons thn_label thn_tail' blks1
+
+                    -- (2) create a tree using BlockAppend
+                    -- COPY: thn_blocks and els_blocks is copied (indirection)
+                    -- TRAVERSAL: random access
+                    -- _ = trav_tail thn_tail
+                    thn_tail' = _copy_tail thn_tail
+                    blks0 = BlockCons thn_label thn_tail' thn_blocks
+                    -- _ = trav_tail els_tail
+                    els_tail' = _copy_tail els_tail
+                    blks1 = BlockCons els_label els_tail' els_blocks
+                    blks2 = BlockAppend blks0 blks1
+
+                    tb = MkTailAndBlk tail' blks2
+                in (locals3, tb)
+
 
 explicateTail2 :: ExpA -> (List Sym, TailC)
 explicateTail2 exp =
@@ -1097,6 +1225,18 @@ replaceJumps env blk =
           b2' = replaceJumps env b2
       in BlockAppend b1' b2'
 
+replaceJumps_par :: AliasEnv -> BlkC -> BlkC
+replaceJumps_par env blk =
+  case blk of
+    BlockNil -> BlockNil
+    BlockCons lbl tail rst ->
+      BlockCons lbl (replaceJumpsTail env tail) (replaceJumps env rst)
+    BlockAppend b1 b2 ->
+      let b1' = spawn (replaceJumps_par env b1)
+          b2' = replaceJumps_par env b2
+          _ = sync
+      in BlockAppend b1' b2'
+
 replaceJumpsTail :: AliasEnv -> TailC -> TailC
 replaceJumpsTail env tail =
   case tail of
@@ -1126,17 +1266,39 @@ selectInstrsBlk blk =
   case blk of
     BlockNil -> InstrNil
     BlockCons lbl tail rst ->
-      -- TRAVERSAL: tail is traversed (random access)
-      selectInstrsTail2 tail rst
+      -- -- TRAVERSAL: tail is traversed (random access)
+      -- selectInstrsTail2 tail rst
 
-      -- -- better for block level parallelism
-      -- let instrs = selectInstrsBlk rst
-      -- in selectInstrsTail tail instrs
+      -- better for block level parallelism
+      let instrs1 = selectInstrsTail tail
+          instrs2 = selectInstrsBlk rst
+      in InstrAppend instrs1 instrs2
 
     BlockAppend blk1 blk2 ->
       -- TRAVERSAL: blk1 is traversed (random access)
       let instrs1 = selectInstrsBlk blk1
           instrs2 = selectInstrsBlk blk2
+      in InstrAppend instrs1 instrs2
+
+selectInstrsBlk_par :: BlkC -> Instrs
+selectInstrsBlk_par blk =
+  case blk of
+    BlockNil -> InstrNil
+    BlockCons lbl tail rst ->
+      -- -- TRAVERSAL: tail is traversed (random access)
+      -- selectInstrsTail2 tail rst
+
+      -- better for block level parallelism
+      let instrs1 = spawn (selectInstrsTail tail)
+          instrs2 = selectInstrsBlk_par rst
+          _ = sync
+      in InstrAppend instrs1 instrs2
+
+    BlockAppend blk1 blk2 ->
+      -- TRAVERSAL: blk1 is traversed (random access)
+      let instrs1 = spawn (selectInstrsBlk_par blk1)
+          instrs2 = selectInstrsBlk_par blk2
+          _ = sync
       in InstrAppend instrs1 instrs2
 
 selectInstrsTail2 :: TailC -> BlkC -> Instrs
@@ -1320,23 +1482,22 @@ selectInstrsTail2 tail blk_rst =
                      instrs_rst = selectInstrsBlk blk_rst
                  in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 (InstrCons instr6 instrs_rst)))))
 
--- COPY: instrs are copied (indirection)
-selectInstrsTail :: TailC -> Instrs -> Instrs
-selectInstrsTail tail instrs =
+selectInstrsTail :: TailC -> Instrs
+selectInstrsTail tail =
   case tail of
     RetC exp ->
       case exp of
         ArgC arg ->
           let arg' = selectInstrsArg arg
-          in InstrCons (MovQ arg' (RegX86 (quote "rax"))) instrs
+          in InstrCons (MovQ arg' (RegX86 (quote "rax"))) InstrNil
         NegC arg ->
           let arg' = selectInstrsArg arg
           in InstrCons (MovQ arg' (RegX86 (quote "rax")))
-             (InstrCons (NegQ (RegX86 (quote "rax"))) instrs)
+             (InstrCons (NegQ (RegX86 (quote "rax"))) InstrNil)
         NotC arg ->
           let arg' = selectInstrsArg arg
           in InstrCons (MovQ arg' (RegX86 (quote "rax")))
-             (InstrCons (XorQ (IntX86 1) (RegX86 (quote "rax"))) instrs)
+             (InstrCons (XorQ (IntX86 1) (RegX86 (quote "rax"))) InstrNil)
         PrimC p a1 a2 ->
           let -- TRAVERSAL: smallish traversal. OK.
               _ = trav_prim p
@@ -1347,13 +1508,13 @@ selectInstrsTail tail instrs =
                      instr1 = (MovQ a1' (RegX86 (quote "rax")))
                      a2' = selectInstrsArg a2
                      instr2 = (AddQ a2' (RegX86 (quote "rax")))
-                 in InstrCons instr1 (InstrCons instr2 instrs)
+                 in InstrCons instr1 (InstrCons instr2 InstrNil)
                SubP ->
                  let a1' = selectInstrsArg a1
                      instr1 = (MovQ a1' (RegX86 (quote "rax")))
                      a2' = selectInstrsArg a2
                      instr2 = (SubQ a2' (RegX86 (quote "rax")))
-                 in InstrCons instr1 (InstrCons instr2 instrs)
+                 in InstrCons instr1 (InstrCons instr2 InstrNil)
         CmpC c a1 a2 ->
           let -- TRAVERSAL: smallish traversal. OK.
               _ = trav_cmp c
@@ -1365,7 +1526,7 @@ selectInstrsTail tail instrs =
                      instr1 = (CmpQ a1' a2')
                      instr2 = (SetEQ (quote "al"))
                      instr3 = (MovzbQ (RegX86 (quote "al")) (RegX86 (quote "rax")))
-                 in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 instrs))
+                 in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 InstrNil))
                -- LtP -> _todo
 
     SeqC stm rst ->
@@ -1376,19 +1537,19 @@ selectInstrsTail tail instrs =
             ArgC arg ->
               let arg' = selectInstrsArg arg
                   instr1 = (MovQ arg' (VarX86 v))
-                  instrs' = selectInstrsTail rst instrs
+                  instrs' = selectInstrsTail rst
               in InstrCons instr1 instrs'
             NegC arg ->
               let arg' = selectInstrsArg arg
                   instr1 = (MovQ arg' (VarX86 v))
                   instr2 = (NegQ (VarX86 v))
-                  instrs' = selectInstrsTail rst instrs
+                  instrs' = selectInstrsTail rst
               in InstrCons instr1 (InstrCons instr2 instrs')
             NotC arg ->
               let arg' = selectInstrsArg arg
                   instr1 = (MovQ arg' (VarX86 v))
                   instr2 = (XorQ (IntX86 1) (VarX86 v))
-                  instrs' = selectInstrsTail rst instrs
+                  instrs' = selectInstrsTail rst
               in InstrCons instr1 (InstrCons instr2 instrs')
             PrimC p a1 a2 ->
               let -- TRAVERSAL: smallish traversal. OK.
@@ -1400,14 +1561,14 @@ selectInstrsTail tail instrs =
                          instr1 = (MovQ a1' (VarX86 v))
                          a2' = selectInstrsArg a2
                          instr2 = (AddQ a2' (VarX86 v))
-                         instrs' = selectInstrsTail rst instrs
+                         instrs' = selectInstrsTail rst
                      in InstrCons instr1 (InstrCons instr2 instrs')
                    SubP ->
                      let a1' = selectInstrsArg a1
                          instr1 = (MovQ a1' (VarX86 v))
                          a2' = selectInstrsArg a2
                          instr2 = (SubQ a2' (VarX86 v))
-                         instrs' = selectInstrsTail rst instrs
+                         instrs' = selectInstrsTail rst
                      in InstrCons instr1 (InstrCons instr2 instrs')
             CmpC c a1 a2 ->
               let -- TRAVERSAL: smallish traversal. OK.
@@ -1420,7 +1581,7 @@ selectInstrsTail tail instrs =
                          instr1 = (CmpQ a1' a2')
                          instr2 = (SetEQ (quote "al"))
                          instr3 = (MovzbQ (RegX86 (quote "al")) (VarX86 v))
-                         instrs' = selectInstrsTail rst instrs
+                         instrs' = selectInstrsTail rst
                      in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 instrs'))
                    -- LtP -> _todo
 
@@ -1431,7 +1592,7 @@ selectInstrsTail tail instrs =
               instr1 = (CmpQ arg' (IntX86 1))
               instr2 = (JumpEQ thn)
               instr3 = (JumpQ els)
-          in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 instrs))
+          in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 InstrNil))
         NegC arg ->
           let arg' = selectInstrsArg arg
               instr1 = (MovQ arg' (RegX86 (quote "rbx")))
@@ -1439,7 +1600,7 @@ selectInstrsTail tail instrs =
               instr3 = (CmpQ (RegX86 (quote "rbx")) (IntX86 1))
               instr4 = (JumpEQ thn)
               instr5 = (JumpQ els)
-          in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 instrs))))
+          in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 InstrNil))))
         NotC arg ->
           let arg' = selectInstrsArg arg
               instr1 = (MovQ arg' (RegX86 (quote "rbx")))
@@ -1447,7 +1608,7 @@ selectInstrsTail tail instrs =
               instr3 = (CmpQ (RegX86 (quote "rbx")) (IntX86 1))
               instr4 = (JumpEQ thn)
               instr5 = (JumpQ els)
-          in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 instrs))))
+          in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 InstrNil))))
         PrimC p a1 a2 ->
           let -- TRAVERSAL: smallish traversal. OK.
               _ = trav_prim p
@@ -1461,7 +1622,7 @@ selectInstrsTail tail instrs =
                      instr3 = (CmpQ (RegX86 (quote "rbx")) (IntX86 1))
                      instr4 = (JumpEQ thn)
                      instr5 = (JumpQ els)
-                 in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 instrs))))
+                 in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 InstrNil))))
                SubP ->
                  let a1' = selectInstrsArg a1
                      instr1 = (MovQ a1' (RegX86 (quote "rbx")))
@@ -1470,7 +1631,7 @@ selectInstrsTail tail instrs =
                      instr3 = (CmpQ (RegX86 (quote "rbx")) (IntX86 1))
                      instr4 = (JumpEQ thn)
                      instr5 = (JumpQ els)
-                     in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 instrs))))
+                     in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 InstrNil))))
         CmpC c a1 a2 ->
           let -- TRAVERSAL: smallish traversal. OK.
               _ = trav_cmp c
@@ -1486,7 +1647,7 @@ selectInstrsTail tail instrs =
                      instr4 = (CmpQ (RegX86 (quote "rbx")) (IntX86 1))
                      instr5 = (JumpEQ thn)
                      instr6 = (JumpQ els)
-                 in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 (InstrCons instr6 instrs)))))
+                 in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 (InstrCons instr6 InstrNil)))))
 
 
 selectInstrsArg :: Arg -> ArgX86
@@ -1531,6 +1692,20 @@ assignHomesInstrs homes instrs =
     InstrAppend instr1 instr2 ->
       let instr1' = assignHomesInstrs homes instr1
           instr2' = assignHomesInstrs homes instr2
+      in InstrAppend instr1' instr2'
+
+assignHomesInstrs_par :: HomesEnv -> Instrs -> Instrs
+assignHomesInstrs_par homes instrs =
+  case instrs of
+    InstrCons instr rst ->
+      let instr' = assignHomesInstr homes instr
+          rst' = assignHomesInstrs homes rst
+      in InstrCons instr' rst'
+    InstrNil -> InstrNil
+    InstrAppend instr1 instr2 ->
+      let instr1' = spawn (assignHomesInstrs_par homes instr1)
+          instr2' = assignHomesInstrs_par homes instr2
+          _ = sync
       in InstrAppend instr1' instr2'
 
 assignHomesInstr :: HomesEnv -> Instr -> Instr
@@ -1578,8 +1753,8 @@ compile2 :: A -> PseudoX86
 compile2 p0 =
   let p1 = typecheckA p0
       p2 = uniqifyA p1
-      p3 = explicateControl p2
-      -- p4 = optimizeJumps p3
+      p3 = explicateControl p0
+      p4 = optimizeJumps p3
       p5 = selectInstrs p3
       p6 = assignHomes p5
   in p6
@@ -1617,21 +1792,16 @@ make_big_ex2 n =
     let v2 = gensym
     in (LetA2 v2 (ArgA (IntArg (n-1))) (make_big_ex2 (n-1)))
 
-make_big_ex :: Int -> ExpA
-make_big_ex n =
-  if n == 0
-  then SimplA (ArgA (IntArg 1))
+make_big_ex :: Int -> Int -> ExpA
+make_big_ex n d =
+  if d > 3
+  then make_big_ex2 n
   else
     let v1 = gensym
     in LetA v1 (ArgA (IntArg n))
        (IfA (CmpA EqP (VarArg v1) (IntArg 0))
-         (make_big_ex2 (n-1))
-         (make_big_ex2 (n-1))
-         -- (IfA (CmpA EqP (VarArg v1) (IntArg 1))
-         --   (SimplA (ArgA (IntArg 1)))
-         --   (LetA v2 (ArgA (IntArg n))
-         --     (make_big_ex (n-1))))
-       )
+         (make_big_ex (n-1) (d+1))
+         (make_big_ex (n-1) (d+1)))
 
 gibbon_main =
   let -- p = ProgramA intTy
@@ -1642,7 +1812,7 @@ gibbon_main =
       --         (CmpA EqP (VarArg (quote "v0")) (VarArg (quote "v1")))
       --         (SimplA (ArgA (VarArg (quote "v0"))))
       --         (SimplA (ArgA (VarArg (quote "v1"))))))))
-      ex = make_big_ex sizeParam
+      ex = make_big_ex sizeParam 0
       -- _ = print_expa ex
       p = ProgramA intTy ex
       compiled = iterate (compile2 p)
