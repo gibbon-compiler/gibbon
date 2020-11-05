@@ -1,4 +1,4 @@
-module Compiler where
+-- module Compiler where
 
 import Gibbon.Prelude
 import Gibbon.List
@@ -11,15 +11,16 @@ type Label = Sym
 type Var = Sym
 
 data Arg = IntArg Int | TrueArg | FalseArg | VarArg Var
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data Prim = AddP | SubP | AndP | OrP
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data Cmp = EqP | LtP
+  deriving (Show, Generic, NFData)
 
 -- data Val = IntV Int | ErrorV
---   deriving Show
+--   deriving (Show, Generic, NFData)
 
 -- data Type = IntTy | BoolTy
 
@@ -27,6 +28,14 @@ data Cmp = EqP | LtP
 type VarEnv = SymHash
 type TypeEnv = SymHash
 
+lookup_env :: VarEnv -> Var -> Var
+lookup_env env v = lookup_hash env v
+
+insert_env :: VarEnv -> Var -> Var -> VarEnv
+insert_env env k v = insert_hash env k v
+
+contains_env :: VarEnv -> Var -> Bool
+contains_env env v = contains_hash env v
 
 intTy :: Ty
 {-# INLINE intTy #-}
@@ -136,26 +145,28 @@ print_cmp c =
 data ExpR = ArgR Arg | ReadR | NegR ExpR | NotR ExpR
           | PrimR Prim ExpR ExpR | CmpR Cmp ExpR ExpR
           | LetR Var ExpR ExpR | IfR ExpR ExpR ExpR
+  deriving (Show, Generic, NFData)
 
 data R = ProgramR Ty ExpR
        | ErrorR Ty
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 --------------------------------------------------------------------------------
 -- ANF'd Source
 
 data SimplExpA = ArgA Arg | ReadA | NegA Arg | NotA Arg
                | PrimA Prim Arg Arg | CmpA Cmp Arg Arg
+  deriving (Show, Generic, NFData)
 
 data ExpA = SimplA SimplExpA
           | LetA Var SimplExpA ExpA
           | LetA2 Var SimplExpA ExpA -- A let binding which does not have a conditional in its body.
           | IfA SimplExpA ExpA ExpA
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data A = ProgramA Ty ExpA
        | ErrorA Ty
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 --------------------------------------------------------------------------------
 -- Copy, traverse, and print
@@ -274,26 +285,26 @@ print_program_a prg =
 
 data ExpC = ArgC Arg | ReadC | NegC Arg | NotC Arg
           | PrimC Prim Arg Arg | CmpC Cmp Arg Arg
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data StmC = AssignC Var ExpC
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data TailC = RetC ExpC | SeqC StmC TailC
            | IfC Label Label ExpC
            | GotoC Label
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data BlkC = BlockCons Label TailC BlkC
           | BlockNil
           | BlockAppend BlkC BlkC
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data TailAndBlk = MkTailAndBlk TailC BlkC
 
 data C = ProgramC Ty (List Sym) BlkC
        | ErrorC Ty
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 
 --------------------------------------------------------------------------------
@@ -523,12 +534,12 @@ type Reg = Sym
 
 data PseudoX86 = ProgramX86 Ty (List Sym) Instrs
                | ErrorX86 Ty
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data Instrs = InstrCons Instr Instrs
             | InstrNil
             | InstrAppend Instrs Instrs
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data Instr = AddQ ArgX86 ArgX86
            | SubQ ArgX86 ArgX86
@@ -543,13 +554,13 @@ data Instr = AddQ ArgX86 ArgX86
            | PushQ ArgX86
            | PopQ ArgX86
            | RetQ
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 data ArgX86 = IntX86 Int
             | VarX86 Var
             | RegX86 Reg
             | DerefX86 Reg Int
-  deriving Show
+  deriving (Show, Generic, NFData)
 
 --------------------------------------------------------------------------------
 -- Copy, traverse, and print
@@ -717,7 +728,7 @@ typecheckExp ty_env exp =
       in typecheckCmp c te1 te2
     LetR v rhs bod ->
       let ty = typecheckExp ty_env rhs
-          ty_env' = insert_hash ty_env v ty
+          ty_env' = insert_env ty_env v ty
       in typecheckExp ty_env' bod
     IfR a b c ->
       let t1 = typecheckExp ty_env a
@@ -736,8 +747,8 @@ typecheckArg ty_env arg =
     TrueArg  -> boolTy
     FalseArg -> boolTy
     VarArg v ->
-      let ty = lookup_hash ty_env v
-      -- lookup_hash returns the same symbol its given if it doesn't find it in the dictionary.
+      let ty = lookup_env ty_env v
+      -- lookup_env returns the same symbol its given if it doesn't find it in the dictionary.
       -- So we do a little bit of error checking over here.
       in if eqTy ty v
          then errorTy
@@ -789,11 +800,11 @@ typecheckExpA ty_env exp =
     SimplA simpl -> typecheckSimplExpA ty_env simpl
     LetA v rhs bod ->
       let ty = typecheckSimplExpA ty_env rhs
-          ty_env' = insert_hash ty_env v ty
+          ty_env' = insert_env ty_env v ty
       in typecheckExpA ty_env' bod
     LetA2 v rhs bod ->
       let ty = typecheckSimplExpA ty_env rhs
-          ty_env' = insert_hash ty_env v ty
+          ty_env' = insert_env ty_env v ty
       in typecheckExpA ty_env' bod
     IfA a b c ->
       let t1 = typecheckSimplExpA ty_env a
@@ -811,11 +822,11 @@ typecheckExpA_par ty_env exp =
     SimplA simpl -> typecheckSimplExpA ty_env simpl
     LetA v rhs bod ->
       let ty = typecheckSimplExpA ty_env rhs
-          ty_env' = insert_hash ty_env v ty
+          ty_env' = insert_env ty_env v ty
       in typecheckExpA ty_env' bod
     LetA2 v rhs bod ->
       let ty = typecheckSimplExpA ty_env rhs
-          ty_env' = insert_hash ty_env v ty
+          ty_env' = insert_env ty_env v ty
       in typecheckExpA_par ty_env' bod
     IfA a b c ->
       let t1 = typecheckSimplExpA ty_env a
@@ -866,33 +877,33 @@ typecheckSimplExpA ty_env exp =
 uniqify :: R -> R
 uniqify prg =
   case prg of
-    ProgramR ty exp -> ProgramR ty (uniqifyExp empty_set empty_hash exp)
+    ProgramR ty exp -> ProgramR ty (uniqifyExp empty_hash exp)
     ErrorR err -> ErrorR err
 
-uniqifyExp :: SymSet -> VarEnv -> ExpR -> ExpR
-uniqifyExp var_set var_env exp =
+uniqifyExp :: VarEnv -> ExpR -> ExpR
+uniqifyExp var_env exp =
   case exp of
     ArgR arg -> ArgR (uniqifyArg var_env arg)
     ReadR -> ReadR
-    NegR e -> NegR (uniqifyExp var_set var_env e)
-    NotR e -> NotR (uniqifyExp var_set var_env e)
+    NegR e -> NegR (uniqifyExp var_env e)
+    NotR e -> NotR (uniqifyExp var_env e)
     -- COPY: prim and cmp are copied (single byte data, so copying is good.)
-    PrimR p e1 e2 -> PrimR (copy_prim p) (uniqifyExp var_set var_env e1) (uniqifyExp var_set var_env e2)
-    CmpR c e1 e2  -> CmpR (copy_cmp c) (uniqifyExp var_set var_env e1) (uniqifyExp var_set var_env e2)
+    PrimR p e1 e2 -> PrimR (copy_prim p) (uniqifyExp var_env e1) (uniqifyExp var_env e2)
+    CmpR c e1 e2  -> CmpR (copy_cmp c) (uniqifyExp var_env e1) (uniqifyExp var_env e2)
     LetR v rhs bod ->
-      if contains_set var_set v
+      if contains_env var_env v
       then
-        let rhs' = uniqifyExp var_set var_env rhs
+        let rhs' = uniqifyExp var_env rhs
             v'   = gensym
-            var_env' = insert_hash var_env v v'
-            bod' = uniqifyExp var_set var_env' bod
+            var_env' = insert_env var_env v v'
+            bod' = uniqifyExp var_env' bod
         in LetR v' rhs' bod'
       else
-        let rhs' = uniqifyExp var_set var_env rhs
-            var_set' = insert_set var_set v
-            bod' = uniqifyExp var_set'  var_env bod
+        let rhs' = uniqifyExp var_env rhs
+            var_env' = insert_env var_env v v
+            bod' = uniqifyExp var_env' bod
         in LetR v rhs' bod'
-    IfR a b c -> IfR (uniqifyExp var_set var_env a) (uniqifyExp var_set var_env b) (uniqifyExp var_set var_env c)
+    IfR a b c -> IfR (uniqifyExp var_env a) (uniqifyExp var_env b) (uniqifyExp var_env c)
 
 uniqifyArg :: VarEnv -> Arg -> Arg
 uniqifyArg var_env arg =
@@ -900,7 +911,7 @@ uniqifyArg var_env arg =
     IntArg i -> IntArg i
     TrueArg  -> TrueArg
     FalseArg -> FalseArg
-    VarArg v -> VarArg (lookup_hash var_env v)
+    VarArg v -> VarArg (lookup_env var_env v)
 
 --------------------------------------------------------------------------------
 -- Uniqify ANF'd
@@ -908,70 +919,70 @@ uniqifyArg var_env arg =
 uniqifyA :: A -> A
 uniqifyA prg =
   case prg of
-    ProgramA ty exp -> ProgramA ty (uniqifyExpA empty_set empty_hash exp)
+    ProgramA ty exp -> ProgramA ty (uniqifyExpA empty_hash exp)
     ErrorA err -> ErrorA err
 
-uniqifyExpA :: SymSet -> VarEnv -> ExpA -> ExpA
-uniqifyExpA var_set var_env exp =
+uniqifyExpA :: VarEnv -> ExpA -> ExpA
+uniqifyExpA var_env exp =
   case exp of
     SimplA simpl -> SimplA (uniqifySimplExpA var_env simpl)
     LetA v rhs bod ->
-      if contains_set var_set v
+      if contains_env var_env v
       then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
-            var_env' = insert_hash var_env v v'
-            bod' = uniqifyExpA var_set var_env' bod
+            var_env' = insert_env var_env v v'
+            bod' = uniqifyExpA var_env' bod
         in LetA v' rhs' bod'
       else
         let rhs' = uniqifySimplExpA var_env rhs
-            var_set' = insert_set var_set v
-            bod' = uniqifyExpA var_set' var_env bod
+            var_env' = insert_env var_env v v
+            bod' = uniqifyExpA var_env' bod
         in LetA v rhs' bod'
     LetA2 v rhs bod ->
-      if contains_set var_set v
+      if contains_env var_env v
       then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
-            var_env' = insert_hash var_env v v'
-            bod' = uniqifyExpA var_set var_env' bod
+            var_env' = insert_env var_env v v'
+            bod' = uniqifyExpA var_env' bod
         in LetA2 v' rhs' bod'
       else
         let rhs' = uniqifySimplExpA var_env rhs
-            var_set' = insert_set var_set v
-            bod' = uniqifyExpA var_set' var_env bod
+            var_env' = insert_env var_env v v
+            bod' = uniqifyExpA var_env' bod
         in LetA2 v rhs' bod'
-    IfA a b c -> IfA (uniqifySimplExpA var_env a) (uniqifyExpA var_set var_env b) (uniqifyExpA var_set var_env c)
+    IfA a b c -> IfA (uniqifySimplExpA var_env a) (uniqifyExpA var_env b) (uniqifyExpA var_env c)
 
-uniqifyExpA_par :: SymSet -> VarEnv -> ExpA -> ExpA
-uniqifyExpA_par var_set var_env exp =
+uniqifyExpA_par :: VarEnv -> ExpA -> ExpA
+uniqifyExpA_par var_env exp =
   case exp of
     SimplA simpl -> SimplA (uniqifySimplExpA var_env simpl)
     LetA v rhs bod ->
-      if contains_set var_set v
+      if contains_env var_env v
       then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
-            var_env' = insert_hash var_env v v'
-            bod' = uniqifyExpA_par var_set var_env' bod
+            var_env' = insert_env var_env v v'
+            bod' = uniqifyExpA_par var_env' bod
         in LetA v' rhs' bod'
       else
         let rhs' = uniqifySimplExpA var_env rhs
-            var_set' = insert_set var_set v
-            bod' = uniqifyExpA_par var_set' var_env bod
+            var_env' = insert_env var_env v v
+            bod' = uniqifyExpA_par var_env bod
         in LetA v rhs' bod'
     LetA2 v rhs bod ->
-      if contains_set var_set v
+      if contains_env var_env v
       then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
-            var_env' = insert_hash var_env v v'
-            bod' = uniqifyExpA_par var_set var_env' bod
+            var_env' = insert_env var_env v v'
+            bod' = uniqifyExpA_par var_env' bod
         in LetA2 v' rhs' bod'
       else
         let rhs' = uniqifySimplExpA var_env rhs
-            var_set' = insert_set var_set v
-            bod' = uniqifyExpA_par var_set' var_env bod
+            var_env' = insert_env var_env v v
+            bod' = uniqifyExpA_par var_env bod
         in LetA2 v rhs' bod'
     IfA a b c ->
       let a' = (uniqifySimplExpA var_env a)
@@ -979,8 +990,8 @@ uniqifyExpA_par var_set var_env exp =
           -- (var_env1, var_env2) = fork_pdict var_env
           var_env1 = var_env
           var_env2 = var_env
-          b' = spawn (uniqifyExpA_par var_set var_env b)
-          c' = (uniqifyExpA_par var_set var_env c)
+          b' = spawn (uniqifyExpA_par var_env b)
+          c' = (uniqifyExpA_par var_env c)
           _ = sync
       in IfA a' b' c'
 
@@ -1040,7 +1051,7 @@ explicateTail exp =
       let a' = toExpC a
           (locals1, b') = explicateTail b
           (locals2, c') = explicateTail c
-          locals3 = append_ll locals1 locals2
+          -- locals3 = append_ll locals1 locals2
       in
         case b' of
           MkTailAndBlk thn_tail thn_blocks ->
@@ -1069,7 +1080,7 @@ explicateTail exp =
                     blks2 = BlockAppend blks0 blks1
 
                     tb = MkTailAndBlk tail' blks2
-                in (locals3, tb)
+                in (locals1, tb)
 
 explicateTail_par :: ExpA -> (List Sym, TailAndBlk)
 explicateTail_par exp =
@@ -1102,7 +1113,8 @@ explicateTail_par exp =
           _ = sync
           (locals1, b') = tup1
           (locals2, c') = tup2
-          locals3 = append_ll locals1 locals2
+          -- locals3 = append_ll locals1 locals2
+          -- locals3 = locals1
       in
         case b' of
           MkTailAndBlk thn_tail thn_blocks ->
@@ -1131,7 +1143,7 @@ explicateTail_par exp =
                     blks2 = BlockAppend blks0 blks1
 
                     tb = MkTailAndBlk tail' blks2
-                in (locals3, tb)
+                in (locals1, tb)
 
 
 explicateTail2 :: ExpA -> (List Sym, TailC)
@@ -1211,7 +1223,7 @@ consIfTrivial lbl tail env =
   case tail of
     RetC _     -> env
     SeqC _ _   -> env
-    GotoC lbl2 -> insert_hash env lbl lbl2
+    GotoC lbl2 -> insert_env env lbl lbl2
     IfC _ _ _  -> env
 
 replaceJumps :: AliasEnv -> BlkC -> BlkC
@@ -1247,8 +1259,8 @@ replaceJumpsTail env tail =
       SeqC stm (replaceJumpsTail env tail2)
     -- COPY: cmp is copied (indirection)
     IfC thn els cmp ->
-      let thn' = lookup_hash env thn
-          els' = lookup_hash env els
+      let thn' = lookup_env env thn
+          els' = lookup_env env els
       in IfC thn' els' cmp
 
 --------------------------------------------------------------------------------
@@ -1676,7 +1688,9 @@ assignHomes :: PseudoX86 -> PseudoX86
 assignHomes prg =
   case prg of
     ProgramX86 ty locals instrs ->
-      let homes = makeHomes locals
+      let -- homes = makeHomes locals
+          homes :: HomesEnv
+          homes = empty_int_hash
           em :: List Sym
           em = alloc_ll
       in ProgramX86 ty em (assignHomesInstrs homes instrs)
@@ -1730,7 +1744,7 @@ assignHomesArgX86 :: HomesEnv -> ArgX86 -> ArgX86
 assignHomesArgX86 homes arg =
   case arg of
     IntX86 i -> IntX86 i
-    VarX86 v -> DerefX86 (quote "rbp") (lookup_int_hash homes v)
+    VarX86 v -> DerefX86 (quote "rbp") 1 -- (lookup_int_hash homes v)
     RegX86 r -> RegX86 r
     DerefX86 r o -> DerefX86 r o
 
@@ -1753,8 +1767,8 @@ compile2 :: A -> PseudoX86
 compile2 p0 =
   let p1 = typecheckA p0
       p2 = uniqifyA p1
-      p3 = explicateControl p0
-      p4 = optimizeJumps p3
+      p3 = explicateControl p2
+      -- p4 = optimizeJumps p3
       p5 = selectInstrs p3
       p6 = assignHomes p5
   in p6
