@@ -24,18 +24,112 @@ data Cmp = EqP | LtP
 
 -- data Type = IntTy | BoolTy
 
--- Map Sym Sym
-type VarEnv = SymHash
-type TypeEnv = SymHash
+--------------------------------------------------------------------------------
+-- Environments
 
-lookup_env :: VarEnv -> Var -> Var
-lookup_env env v = lookup_hash env v
+-- ----------------------------------------
+-- -- UT hash based
+-- ----------------------------------------
+
+-- -- Map Sym Sym
+-- type VarEnv = SymHash
+-- type TypeEnv = SymHash
+-- type AliasEnv = SymHash
+
+-- empty_env :: VarEnv
+-- empty_env = empty_hash
+
+-- lookup_env :: VarEnv -> Var -> Var
+-- lookup_env env k = lookup_hash env k
+
+-- insert_env :: VarEnv -> Var -> Var -> VarEnv
+-- insert_env env k v = insert_hash env k v
+
+-- contains_env :: VarEnv -> Var -> Bool
+-- contains_env env k = contains_hash env k
+
+-- -- Map Sym Int
+-- type HomesEnv = IntHash
+
+-- empty_int_env :: HomesEnv
+-- empty_int_env = empty_int_hash
+
+-- lookup_int_env :: HomesEnv -> Var -> Int
+-- lookup_int_env env k = lookup_int_hash env k
+
+-- insert_int_env :: HomesEnv -> Var -> Int -> HomesEnv
+-- insert_int_env env k v = insert_int_hash env k v
+
+-- contains_int_env :: HomesEnv -> Var -> Bool
+-- contains_int_env env k = contains_int_hash env k
+
+----------------------------------------
+-- List based
+----------------------------------------
+
+type TypeEnv = List (Sym, Sym)
+type VarEnv = List (Sym, Sym)
+type AliasEnv = List (Sym, Sym)
+
+empty_env :: VarEnv
+empty_env =
+  let x :: VarEnv
+      x = alloc_ll
+  in x
 
 insert_env :: VarEnv -> Var -> Var -> VarEnv
-insert_env env k v = insert_hash env k v
+insert_env env k v = cons_ll (k,v) env
+
+default_sym :: Sym
+{-# INLINE default_sym #-}
+default_sym = quote "notfound"
+
+default_int :: Int
+{-# INLINE default_int #-}
+default_int = 0
+
+lookup_env :: VarEnv -> Var -> Var
+lookup_env env k = lookupWithDefault default_sym k env
 
 contains_env :: VarEnv -> Var -> Bool
-contains_env env v = contains_hash env v
+contains_env env k =
+  let v = lookupWithDefault default_sym k env
+  in eqsym v default_sym
+
+lookupWithDefault :: b -> Sym -> List (Sym, b) -> b
+lookupWithDefault def k env =
+  if is_empty_ll env
+  then def
+  else
+    let (k1,v1) = head_ll env
+        tl = (tail_ll env)
+    in if eqsym k k1
+       then v1
+       else lookupWithDefault def k tl
+
+
+-- Map Sym Int
+type HomesEnv = List (Sym, Int)
+
+empty_int_env :: HomesEnv
+empty_int_env =
+  let x :: HomesEnv
+      x = alloc_ll
+  in x
+
+insert_int_env :: HomesEnv -> Var -> Int -> HomesEnv
+insert_int_env env k v = cons_ll (k,v) env
+
+lookup_int_env :: HomesEnv -> Var -> Int
+lookup_int_env env k = lookupWithDefault default_int k env
+
+contains_int_env :: HomesEnv -> Var -> Bool
+contains_int_env env k =
+  let v = lookupWithDefault default_int k env
+  in v == default_int
+
+--------------------------------------------------------------------------------
+
 
 intTy :: Ty
 {-# INLINE intTy #-}
@@ -692,7 +786,7 @@ typecheck :: R -> R
 typecheck prg =
   case prg of
     ProgramR expected exp ->
-      let actual = typecheckExp empty_hash exp
+      let actual = typecheckExp empty_env exp
       in if eqTy expected actual
          -- COPY: exp is copied (indirection)
          then ProgramR expected exp
@@ -787,7 +881,7 @@ typecheckA :: A -> A
 typecheckA prg =
   case prg of
     ProgramA expected exp ->
-      let actual = typecheckExpA empty_hash exp
+      let actual = typecheckExpA empty_env exp
       in if eqTy expected actual
          -- COPY: exp is copied (indirection)
          then ProgramA expected exp
@@ -877,7 +971,7 @@ typecheckSimplExpA ty_env exp =
 uniqify :: R -> R
 uniqify prg =
   case prg of
-    ProgramR ty exp -> ProgramR ty (uniqifyExp empty_hash exp)
+    ProgramR ty exp -> ProgramR ty (uniqifyExp empty_env exp)
     ErrorR err -> ErrorR err
 
 uniqifyExp :: VarEnv -> ExpR -> ExpR
@@ -919,7 +1013,7 @@ uniqifyArg var_env arg =
 uniqifyA :: A -> A
 uniqifyA prg =
   case prg of
-    ProgramA ty exp -> ProgramA ty (uniqifyExpA empty_hash exp)
+    ProgramA ty exp -> ProgramA ty (uniqifyExpA empty_env exp)
     ErrorA err -> ErrorA err
 
 uniqifyExpA :: VarEnv -> ExpA -> ExpA
@@ -1051,7 +1145,8 @@ explicateTail exp =
       let a' = toExpC a
           (locals1, b') = explicateTail b
           (locals2, c') = explicateTail c
-          -- locals3 = append_ll locals1 locals2
+          locals3 = append_ll locals1 locals2
+          -- locals3 = locals1
       in
         case b' of
           MkTailAndBlk thn_tail thn_blocks ->
@@ -1080,7 +1175,7 @@ explicateTail exp =
                     blks2 = BlockAppend blks0 blks1
 
                     tb = MkTailAndBlk tail' blks2
-                in (locals1, tb)
+                in (locals3, tb)
 
 explicateTail_par :: ExpA -> (List Sym, TailAndBlk)
 explicateTail_par exp =
@@ -1113,8 +1208,7 @@ explicateTail_par exp =
           _ = sync
           (locals1, b') = tup1
           (locals2, c') = tup2
-          -- locals3 = append_ll locals1 locals2
-          -- locals3 = locals1
+          locals3 = append_ll locals1 locals2
       in
         case b' of
           MkTailAndBlk thn_tail thn_blocks ->
@@ -1194,13 +1288,11 @@ force_random_access tb =
 --------------------------------------------------------------------------------
 -- Remove trivial jumps
 
-type AliasEnv = SymHash
-
 optimizeJumps :: C -> C
 optimizeJumps prg =
   case prg of
     ProgramC ty locals blk ->
-      let env = empty_hash
+      let env = empty_env
           trivials = collectTrivial env blk
       in ProgramC ty locals (replaceJumps trivials blk)
     ErrorC err -> ErrorC err
@@ -1672,15 +1764,13 @@ selectInstrsArg arg =
 
 --------------------------------------------------------------------------------
 
-type HomesEnv = IntHash
-
 makeHomes :: List Sym -> HomesEnv
 makeHomes ls =
   let em :: HomesEnv
-      em = empty_int_hash
+      em = empty_int_env
   in ifoldl_ll (\acc i v ->
                   let stack_loc = 0 - (8 + (8 * i))
-                  in insert_int_hash acc v stack_loc)
+                  in insert_int_env acc v stack_loc)
      em
      ls
 
@@ -1690,7 +1780,7 @@ assignHomes prg =
     ProgramX86 ty locals instrs ->
       let -- homes = makeHomes locals
           homes :: HomesEnv
-          homes = empty_int_hash
+          homes = empty_int_env
           em :: List Sym
           em = alloc_ll
       in ProgramX86 ty em (assignHomesInstrs homes instrs)
@@ -1744,7 +1834,7 @@ assignHomesArgX86 :: HomesEnv -> ArgX86 -> ArgX86
 assignHomesArgX86 homes arg =
   case arg of
     IntX86 i -> IntX86 i
-    VarX86 v -> DerefX86 (quote "rbp") 1 -- (lookup_int_hash homes v)
+    VarX86 v -> DerefX86 (quote "rbp") 1 -- (lookup_int_env homes v)
     RegX86 r -> RegX86 r
     DerefX86 r o -> DerefX86 r o
 
@@ -1800,7 +1890,7 @@ compile3 p0 =
 
 make_big_ex2 :: Int -> ExpA
 make_big_ex2 n =
-  if n == 0
+  if n <= 0
   then SimplA (ArgA (IntArg 1))
   else
     let v2 = gensym
