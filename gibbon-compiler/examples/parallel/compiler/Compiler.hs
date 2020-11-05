@@ -94,7 +94,24 @@ lookup_env env k = lookupWithDefault default_sym k env
 contains_env :: VarEnv -> Var -> Bool
 contains_env env k =
   let v = lookupWithDefault default_sym k env
-  in eqsym v default_sym
+  in if eqsym v default_sym
+     then False
+     else True
+
+print_env :: VarEnv -> ()
+print_env env =
+  if is_empty_ll env
+  then let _ = printsym (quote "\n")
+       in ()
+  else
+    let (k1,v1) = head_ll env
+        tl = (tail_ll env)
+        _ = printsym (quote "(")
+        _ = printsym k1
+        _ = printsym (quote ",")
+        _ = printsym v1
+        _ = printsym (quote "), ")
+    in print_env tl
 
 lookupWithDefault :: b -> Sym -> List (Sym, b) -> b
 lookupWithDefault def k env =
@@ -126,7 +143,9 @@ lookup_int_env env k = lookupWithDefault default_int k env
 contains_int_env :: HomesEnv -> Var -> Bool
 contains_int_env env k =
   let v = lookupWithDefault default_int k env
-  in v == default_int
+  in if v == default_int
+     then False
+     else True
 
 --------------------------------------------------------------------------------
 
@@ -1778,9 +1797,9 @@ assignHomes :: PseudoX86 -> PseudoX86
 assignHomes prg =
   case prg of
     ProgramX86 ty locals instrs ->
-      let -- homes = makeHomes locals
-          homes :: HomesEnv
-          homes = empty_int_env
+      let homes = makeHomes locals
+          -- homes :: HomesEnv
+          -- homes = empty_int_env
           em :: List Sym
           em = alloc_ll
       in ProgramX86 ty em (assignHomesInstrs homes instrs)
@@ -1866,9 +1885,9 @@ compile2 p0 =
 compile3 :: A -> PseudoX86
 compile3 p0 =
   let p1 = typecheckA p0
-      -- _ = print_program_a p1
-      -- _ = print_newline()
-      -- _ = print_newline()
+      _ = print_program_a p1
+      _ = print_newline()
+      _ = print_newline()
       p2 = uniqifyA p1
       _ = print_program_a p2
       _ = print_newline()
@@ -1893,7 +1912,8 @@ make_big_ex2 n =
   if n <= 0
   then SimplA (ArgA (IntArg 1))
   else
-    let v2 = gensym
+    -- let v2 = gensym
+    let v2 = quote "v2"
     in (LetA2 v2 (ArgA (IntArg (n-1))) (make_big_ex2 (n-1)))
 
 make_big_ex :: Int -> Int -> ExpA
@@ -1901,11 +1921,12 @@ make_big_ex n d =
   if d > 3
   then make_big_ex2 n
   else
-    let v1 = gensym
+    -- let v1 = gensym
+    let v1 = quote "v1"
     in LetA v1 (ArgA (IntArg n))
        (IfA (CmpA EqP (VarArg v1) (IntArg 0))
-         (make_big_ex (n-1) (d+1))
-         (make_big_ex (n-1) (d+1)))
+         (make_big_ex n (d+1))
+         (make_big_ex n (d+1)))
 
 gibbon_main =
   let -- p = ProgramA intTy

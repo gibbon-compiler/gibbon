@@ -120,11 +120,11 @@ ifoldl_ll_loop idx f acc ls =
 
 --------------------------------------------------------------------------------
 
--- wip:
+-- broken
 global_gensym_counter :: IORef Int
 global_gensym_counter = unsafePerformIO (newIORef 0)
 
--- wip:
+-- broken
 gensym :: Sym
 gensym = unsafePerformIO
   ( do modifyIORef' global_gensym_counter (\i -> i+1)
