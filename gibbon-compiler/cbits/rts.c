@@ -507,6 +507,7 @@ IntTy print_symbol(SymTy idx) {
 }
 
 SymTy gensym() {
+    // SymTy idx = __atomic_add_fetch(&global_gensym_counter, 1, __ATOMIC_SEQ_CST);
     global_gensym_counter += 1;
     SymTy idx = global_gensym_counter;
     // char value[global_max_symbol_len];
