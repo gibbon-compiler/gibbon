@@ -31,7 +31,7 @@
 #define GB (MB * 1000lu)
 
 // Initial size of BigInfinite buffers
-static long long global_init_biginf_buf_size = (1 * GB);
+static long long global_init_biginf_buf_size = (4 * GB);
 
 // Initial size of Infinite buffers
 static long long global_init_inf_buf_size = 64 * KB;
@@ -67,88 +67,87 @@ static const int num_workers = 1;
 // #define DEBUG
 #warning "Using bump allocator."
 
-  char* heap_ptr = (char*)NULL;
+char* heap_ptr = (char*)NULL;
+char* heap_ptr_end = (char*)NULL;
 
-  char* saved_heap_ptr_stack[100];
-  int num_saved_heap_ptr = 0;
+char* saved_heap_ptr_stack[100];
+int num_saved_heap_ptr = 0;
 
-  // Requires -std=gnu11
-  int dbgprintf(const char *format, ...)
+// Requires -std=gnu11
+int dbgprintf(const char *format, ...)
+{
+    int code = 0;
+    va_list args;
+    va_start(args, format);
+#ifdef DEBUG
+    code = vprintf(format, args);
+#endif
+    va_end(args);
+    return code;
+}
+
+// For simplicity just use a single large slab:
+void INITALLOC() {
+  if (! heap_ptr)
   {
-      int code = 0;
-      va_list args;
-      va_start(args, format);
-  #ifdef DEBUG
-      code = vprintf(format, args);
-  #endif
-      va_end(args);
-      return code;
+    // // Use a fixed address in debug mode for easy reading:
+    // #ifdef DEBUG
+    // // heap_ptr = (char*)mmap(0x010000000000, global_init_biginf_buf_size, PROT_READ|PROT_WRITE, MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+    //   heap_ptr = (char*)mmap(0x010000000000, global_init_biginf_buf_size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+    //   if (heap_ptr == MAP_FAILED) {
+    //     fprintf(stderr, "Error: mmap failed: %s\n", strerror(errno));
+    //     abort();
+    //   }
+    // #else
+      heap_ptr = (char*)malloc(global_init_biginf_buf_size);
+      heap_ptr_end = heap_ptr + global_init_biginf_buf_size;
+    // #endif
+    dbgprintf("Arena size for bump alloc: %lld\n", global_init_biginf_buf_size);
   }
+  dbgprintf("BUMPALLOC/INITALLOC DONE: heap_ptr = %p\n", heap_ptr);
+}
 
-  // For simplicity just use a single large slab:
-  void INITALLOC() {
-    if (! heap_ptr)
-    {
-      // Use a fixed address in debug mode for easy reading:
-      #ifdef DEBUG
-      // heap_ptr = (char*)mmap(0x010000000000, global_init_biginf_buf_size, PROT_READ|PROT_WRITE, MAP_FIXED | MAP_ANONYMOUS, -1, 0);
-        heap_ptr = (char*)mmap(0x010000000000, global_init_biginf_buf_size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-        if (heap_ptr == MAP_FAILED) {
-          fprintf(stderr, "Error: mmap failed: %s\n", strerror(errno));
+void* BUMPALLOC(int n) {
+      if (heap_ptr + n < heap_ptr_end) {
+          char* old= heap_ptr;
+          heap_ptr += n;
+          return old;
+      } else {
+          fprintf(stderr, "Error: bump allocator ran out of memory.");
           abort();
-        }
-      #else
-        heap_ptr = (char*)malloc(global_init_biginf_buf_size);
-      #endif
-      dbgprintf("Arena size for bump alloc: %lld\n", global_init_biginf_buf_size);
-    }
-    dbgprintf("BUMPALLOC/INITALLOC DONE: heap_ptr = %p\n", heap_ptr);
-  }
+      }
+}
 
-  #ifdef DEBUG
-    char* my_abort() {
-      fprintf(stderr, "Error: this thread's heap was not initalized.\n");
-      abort();
-      return NULL;
-    }
-    void* ALLOC(int n) {
-      if (!heap_ptr) my_abort();
-      char* old = heap_ptr;
-      printf("ALLOC: %d bytes, returning %p\n", n, old);
-      // heap_ptr += 16 * n; // Optional padding for debugging.
-      heap_ptr += n;
-      return old;
-    }
-  #else
-    // #define ALLOC(n) (do heap_ptr += n)
-    void* ALLOC(int n) { char* old= heap_ptr; heap_ptr += n; return old; }
-  #endif // DEBUG
+// Snapshot the current heap pointer value across all threads.
+void save_alloc_state() {
+  dbgprintf("   Saving(%p): pos %d", heap_ptr, num_saved_heap_ptr);
+  saved_heap_ptr_stack[num_saved_heap_ptr] = heap_ptr;
+  num_saved_heap_ptr++;
+  dbgprintf("\n");
+}
 
-  // Snapshot the current heap pointer value across all threads.
-  void save_alloc_state() {
-    dbgprintf("   Saving(%p): pos %d", heap_ptr, num_saved_heap_ptr);
-    saved_heap_ptr_stack[num_saved_heap_ptr] = heap_ptr;
-    num_saved_heap_ptr++;
-    dbgprintf("\n");
+void restore_alloc_state() {
+  if(num_saved_heap_ptr <= 0) {
+    fprintf(stderr, "Bad call to restore_alloc_state!  Saved stack empty!\ne");
+    abort();
   }
+  num_saved_heap_ptr--;
+  dbgprintf("Restoring(%p): pos %d, discarding %p",
+            saved_heap_ptr_stack[num_saved_heap_ptr], num_saved_heap_ptr, heap_ptr);
+  heap_ptr = saved_heap_ptr_stack[num_saved_heap_ptr];
+}
 
-  void restore_alloc_state() {
-    if(num_saved_heap_ptr <= 0) {
-      fprintf(stderr, "Bad call to restore_alloc_state!  Saved stack empty!\ne");
-      abort();
-    }
-    num_saved_heap_ptr--;
-    dbgprintf("Restoring(%p): pos %d, discarding %p",
-              saved_heap_ptr_stack[num_saved_heap_ptr], num_saved_heap_ptr, heap_ptr);
-    heap_ptr = saved_heap_ptr_stack[num_saved_heap_ptr];
-  }
 
 #else
-  // Regular malloc mode:
-  void INITALLOC() {}
+// Regular malloc mode:
+void INITALLOC() {}
+void save_alloc_state() {}
+void restore_alloc_state() {}
 
-  void save_alloc_state() {}
-  void restore_alloc_state() {}
+#define BUMPALLOC(n) malloc(n)
+
+#endif // BUMPALLOC
+
 
 #ifdef _PARALLEL
 #define ALLOC(n) malloc(n)
@@ -160,7 +159,6 @@ static const int num_workers = 1;
   #endif
 #endif // _PARALLEL
 
-#endif // BUMPALLOC
 
 #define ALLOC_PACKED(n) ALLOC(n)
 
@@ -314,7 +312,8 @@ SymHashTy empty_hash() {
 SymHashTy insert_hash(SymHashTy hash, int k, int v) {
   SymHashTy s;
   // NOTE: not checking for duplicates!
-  s = malloc(sizeof(struct sym_hash_elem));
+  // s = malloc(sizeof(struct sym_hash_elem));
+  s = BUMPALLOC(sizeof(struct sym_hash_elem));
   s->val = v;
   s->key = k;
   HASH_ADD_INT(hash,key,s);
@@ -1024,7 +1023,7 @@ typedef struct ListTy_struct {
 } ListTy;
 
 static inline ListTy* list_alloc(IntTy data_size) {
-    ListTy *ls = ALLOC(sizeof(ListTy));
+    ListTy *ls = BUMPALLOC(sizeof(ListTy));
     ls->data_size = data_size;
     ls->data = NULL;
     ls->next = NULL;
@@ -1036,13 +1035,13 @@ static inline BoolTy list_is_empty(ListTy *ls) {
 }
 
 static inline ListTy* list_cons(void* elt, ListTy *ls) {
-    void* data = ALLOC(ls->data_size);
+    void* data = BUMPALLOC(ls->data_size);
     if (data == NULL) {
         printf("list_cons: malloc failed: %lld", ls->data_size);
         exit(1);
     }
     memcpy(data, elt, ls->data_size);
-    ListTy *res = ALLOC(sizeof(ListTy));
+    ListTy *res = BUMPALLOC(sizeof(ListTy));
     res->data_size = ls->data_size;
     res->data = data;
     res->next = (ListTy*) ls;
@@ -1215,9 +1214,9 @@ int main(int argc, char** argv)
     }
 
     INITALLOC();
-#ifdef BUMPALLOC
+// #ifdef BUMPALLOC
     //    save_alloc_state();
-#endif
+// #endif
     __main_expr();
 
     return 0;
