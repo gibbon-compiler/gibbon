@@ -1938,7 +1938,7 @@ make_big_ex2 n =
 
 make_big_ex :: Int -> Int -> ExpA
 make_big_ex n d =
-  if d > 4
+  if d > 2
   then make_big_ex2 n
   else
     -- let v1 = gensym
@@ -1961,5 +1961,5 @@ gibbon_main =
       -- _ = print_expa ex
       p = ProgramA intTy ex
       compiled = iterate (compile2 p)
-      compiled_par = iterate (compile2_par p)
+      -- compiled_par = iterate (compile2_par p)
   in ()

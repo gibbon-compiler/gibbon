@@ -63,7 +63,7 @@ static const int num_workers = 1;
 // -------------------------------------
 
 
-#ifdef BUMPALLOC
+#ifdef _BUMPALLOC
 // #define DEBUG
 #warning "Using bump allocator."
 
