@@ -907,6 +907,18 @@ typecheckA prg =
          else ErrorA errorTy
     ErrorA err -> ErrorA err
 
+typecheckA_par :: A -> A
+typecheckA_par prg =
+  case prg of
+    ProgramA expected exp ->
+      let actual = typecheckExpA_par empty_env exp
+      in if eqTy expected actual
+         -- COPY: exp is copied (indirection)
+         then ProgramA expected exp
+         else ErrorA errorTy
+    ErrorA err -> ErrorA err
+
+
 typecheckExpA :: TypeEnv -> ExpA -> Ty
 typecheckExpA ty_env exp =
   case exp of
@@ -936,11 +948,9 @@ typecheckExpA_par ty_env exp =
     LetA v rhs bod ->
       let ty = typecheckSimplExpA ty_env rhs
           ty_env' = insert_env ty_env v ty
-      in typecheckExpA ty_env' bod
-    LetA2 v rhs bod ->
-      let ty = typecheckSimplExpA ty_env rhs
-          ty_env' = insert_env ty_env v ty
       in typecheckExpA_par ty_env' bod
+    -- Bottom out to sequential.
+    LetA2 v rhs bod -> typecheckExpA ty_env exp
     IfA a b c ->
       let t1 = typecheckSimplExpA ty_env a
           -- TODO:
@@ -1882,6 +1892,16 @@ compile2 p0 =
       p6 = assignHomes p5
   in p6
 
+compile2_par :: A -> PseudoX86
+compile2_par p0 =
+  let p1 = typecheckA_par p0
+      p2 = uniqifyA p1
+      p3 = explicateControl p2
+      -- p4 = optimizeJumps p3
+      p5 = selectInstrs p3
+      p6 = assignHomes p5
+  in p6
+
 compile3 :: A -> PseudoX86
 compile3 p0 =
   let p1 = typecheckA p0
@@ -1918,7 +1938,7 @@ make_big_ex2 n =
 
 make_big_ex :: Int -> Int -> ExpA
 make_big_ex n d =
-  if d > 3
+  if d > 4
   then make_big_ex2 n
   else
     -- let v1 = gensym
@@ -1941,4 +1961,5 @@ gibbon_main =
       -- _ = print_expa ex
       p = ProgramA intTy ex
       compiled = iterate (compile2 p)
+      compiled_par = iterate (compile2_par p)
   in ()

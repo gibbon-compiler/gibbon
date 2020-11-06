@@ -1023,6 +1023,7 @@ typedef struct ListTy_struct {
 } ListTy;
 
 static inline ListTy* list_alloc(IntTy data_size) {
+    // ListTy *ls = ALLOC(sizeof(ListTy));
     ListTy *ls = BUMPALLOC(sizeof(ListTy));
     ls->data_size = data_size;
     ls->data = NULL;
@@ -1035,12 +1036,14 @@ static inline BoolTy list_is_empty(ListTy *ls) {
 }
 
 static inline ListTy* list_cons(void* elt, ListTy *ls) {
+    // void* data = ALLOC(ls->data_size);
     void* data = BUMPALLOC(ls->data_size);
     if (data == NULL) {
         printf("list_cons: malloc failed: %lld", ls->data_size);
         exit(1);
     }
     memcpy(data, elt, ls->data_size);
+    // ListTy *res = ALLOC(sizeof(ListTy));
     ListTy *res = BUMPALLOC(sizeof(ListTy));
     res->data_size = ls->data_size;
     res->data = data;
