@@ -29,6 +29,7 @@ data GeneralFlag
   | Opt_No_PureAnnot       -- ^ Don't use 'pure' annotations (a GCC optimization)
   | Opt_Fusion             -- ^ Enable fusion.
   | Opt_Parallel           -- ^ Fork/join parallelism.
+  | Opt_RegionOnSpawn      -- ^ Allocate into fresh regions for every spawn, not steal.
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -94,7 +95,8 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                                            help "Don't use 'pure' annotations (a GCC optimization).") <|>
                    flag' Opt_Fusion (long "fusion" <>
                                      help "Enable fusion.") <|>
-                   flag' Opt_Parallel (long "parallel" <> help "Enable parallelism")
+                   flag' Opt_Parallel (long "parallel" <> help "Enable parallelism") <|>
+                   flag' Opt_RegionOnSpawn (long "region-on-spawn" <> help "Allocate into fresh regions for every spawn, not steal.")
 
     dflagsParser :: Parser DebugFlag
     dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>
