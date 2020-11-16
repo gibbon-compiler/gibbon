@@ -7,6 +7,7 @@ import Bhut
 import Coins
 import Countnodes
 import Ray
+import FoldConstants
 
 --------------------------------------------------------------------------------
 
@@ -355,6 +356,22 @@ bench_parray =
       pixels = iterate (render_par bvh width height cam)
   in ()
 
+bench_seqfoldconstants :: ()
+bench_seqfoldconstants =
+    let exp = buildExp sizeParam
+        exp1 = iterate (foldConstants2 exp)
+        m = sumExp exp1
+        _ = printint m
+    in ()
+
+bench_parfoldconstants :: ()
+bench_parfoldconstants =
+    let exp = buildExp sizeParam
+        exp1 = iterate (foldConstants2_par 0 exp)
+        m = sumExp exp1
+        _ = printint m
+    in ()
+
 gibbon_main =
     if prog_is (quote "seqfib")
     then bench_seqfib
@@ -412,4 +429,8 @@ gibbon_main =
     then bench_seqray
     else if prog_is (quote "parray")
     then bench_parray
+    else if prog_is (quote "seqfoldconstants")
+    then bench_seqfoldconstants
+    else if prog_is (quote "parfoldconstants")
+    then bench_parfoldconstants
     else printsym (quote "benchrunner: select benchmark to run with --bench-prog\n")

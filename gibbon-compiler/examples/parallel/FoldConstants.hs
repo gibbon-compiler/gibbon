@@ -1,4 +1,4 @@
-module Example where
+module FoldConstants where
 
 import Gibbon.Prelude
 
@@ -97,7 +97,7 @@ foldConstants2 exp =
 
 foldConstants2_par :: Int -> Exp -> Exp
 foldConstants2_par depth exp =
-  if depth > 8 then foldConstants2 exp else
+  if depth > 6 then foldConstants2 exp else
   case exp of
     Lit i -> Lit i
     MkTrue  -> MkTrue
@@ -122,7 +122,7 @@ foldConstants2_par depth exp =
 buildExp :: Int -> Exp
 buildExp n =
   if n == 0
-  then Lit 1
+  then Plus (Lit 0) (Lit 1)
   else Plus (buildExp (n-1)) (buildExp (n-1))
 
 sumExp :: Exp -> Int
@@ -138,11 +138,11 @@ gibbon_main =
       -- _ = print_exp exp1
       -- _ = print_newline()
       exp = buildExp sizeParam
-      exp2 = iterate (foldConstants2_par 0 exp)
+      -- exp2 = iterate (foldConstants2_par 0 exp)
+      -- m = sumExp exp2
       exp1 = iterate (foldConstants2 exp)
       n = sumExp exp1
-      m = sumExp exp2
-  in (n, m)
+  in n
 
 
 {-
