@@ -186,7 +186,7 @@ lit := int | #t | #f
 (define-type Arena Int)
 (define-type (SymDict t) (HashTable Symbol t))
 
-(define-values (prop:pack pack? pack-ref) (make-struct-type-property 'pack))
+;; (define-values (prop:pack pack? pack-ref) (make-struct-type-property 'pack))
 
 (define (pack-Int [i : Int]) (integer->integer-bytes i 8 #true))
 (define (pack-Float [f : Float]) (real->floating-point-bytes f 8))
