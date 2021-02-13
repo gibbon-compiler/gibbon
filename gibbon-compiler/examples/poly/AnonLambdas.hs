@@ -3,17 +3,17 @@ module T1 where
 id :: a -> a
 id x = x
 
-data List a = Nil
-            | Cons a (List a)
+data MyList a = Nil
+              | Cons a (MyList a)
   deriving Show
 
-map :: (a -> b) -> List a -> List b
+map :: (a -> b) -> MyList a -> MyList b
 map f ls =
   case ls of
     Nil        -> Nil
     Cons x rst -> Cons (f x) (map f rst)
 
-compute :: Int -> List Int
+compute :: Int -> MyList Int
 compute _ =
   let x = map (\a -> a + 1) (Cons 1 (Cons 2 Nil))
       y = map (\_ -> 42) x

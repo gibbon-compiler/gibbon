@@ -1,10 +1,10 @@
 module T127c where
 
-data List a = Nil | Cons a (List a)
+data MyList a = Nil | Cons a (MyList a)
 
 data Maybe a = Nothing | Just a
 
-mbInts :: Maybe (List Int)
+mbInts :: Maybe (MyList Int)
 mbInts = Just Nil
 
 gibbon_main = let x = mbInts in 10

@@ -140,6 +140,7 @@ tests:
   - name: test_sumtree.gib
   - name: test_unpacking.gib
   - name: test24_defs.gib
+    skip: true
   - name: void_type.gib
     skip: true
   - name: void_type.hs
@@ -192,8 +193,6 @@ tests:
   - name: bench_tree_insert.gib
     bench: true
     more-iters: [pointer, gibbon2]
-    # relative offsets introduced this failure..
-    failing: [gibbon2]
 
   - name: bench_repmax.gib
     bench: true

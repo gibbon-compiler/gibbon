@@ -4,15 +4,15 @@
 module C1 where
 
 -- import Helpers
--- import Prelude hiding ( List(..), Maybe(..), appepnd, foldr, lookup )
+-- import Prelude hiding ( MyList(..), Maybe(..), appepnd, foldr, lookup )
 
-data List a = Nil | Cons a (List a)
+data MyList a = Nil | Cons a (MyList a)
               deriving Show
 
 data Maybe z = Nothing | Just z
                deriving Show
 
-foldr :: (a -> b -> b) -> b -> List a -> b
+foldr :: (a -> b -> b) -> b -> MyList a -> b
 foldr f acc ls =
   case ls of
     Nil        -> acc
@@ -20,10 +20,10 @@ foldr f acc ls =
                   in f x acc'
 
 
-append :: List a -> List a -> List a
+append :: MyList a -> MyList a -> MyList a
 append xs ys = foldr (\ a b -> Cons a b) ys xs
 
-containsSym :: Sym -> List Sym -> Bool
+containsSym :: Sym -> MyList Sym -> Bool
 containsSym elm lst =
     case lst of
       Nil -> False
@@ -49,19 +49,19 @@ lookupInt elm lst =
           if eqsym k elm
           then Just v
           else lookupInt elm rst
-               
+
 
 strEq :: Sym -> Sym -> Bool
 strEq a b = eqsym a b
-    
-               
+
+
 -- C1 Lang
 
 data Arg = IntC Int | VarC Sym | TrueC | FalseC
            deriving Show
 
 data Cmp = EqpC | LtpC
-           deriving Show         
+           deriving Show
 
 data Exp = ArgC Arg | ReadC | NegC Arg | PlusC Arg Arg | NotC Arg | CmpC Cmp Arg Arg
            deriving Show
@@ -126,7 +126,7 @@ replaceJumpsInner t ss =
       RetC e -> RetC e
       SeqC s t1 -> SeqC s (replaceJumpsInner t1 ss)
       GotoC str -> GotoC (replaceLabel str ss)
-      IfC c a1 a2 s1 s2 -> 
+      IfC c a1 a2 s1 s2 ->
           IfC c a1 a2 (replaceLabel s1 ss) (replaceLabel s2 ss)
 
 replaceLabel :: Sym -> Alias -> Sym
@@ -148,14 +148,14 @@ eliminateDeadcode p =
           let jmps = collectJumps ls
           in ProgramC (removeBlocks ls (Cons (quote "start") jmps))
 
-collectJumps :: Blk -> List Sym
+collectJumps :: Blk -> MyList Sym
 collectJumps ts =
     case ts of
       BlockNil -> Nil
       BlockCons s t rst ->
           append (collectJumpsTal t) (collectJumps rst)
 
-collectJumpsTal :: Tal -> List Sym
+collectJumpsTal :: Tal -> MyList Sym
 collectJumpsTal t =
     case t of
       RetC e -> Nil
@@ -164,7 +164,7 @@ collectJumpsTal t =
       IfC c a1 a2 s1 s2 -> Cons s1 (Cons s2 Nil)
 
 
-removeBlocks :: Blk -> List Sym -> Blk
+removeBlocks :: Blk -> MyList Sym -> Blk
 removeBlocks ts ss =
     case ts of
       BlockNil -> BlockNil
@@ -209,7 +209,7 @@ interpIf c a1 a2 s1 s2 ls vs =
                        Just t -> interpBlock t ls vs
                        Nothing -> ErrorV
 
-interpStm :: Stm -> Env -> Env -- Maybe (List (Sym,Int))
+interpStm :: Stm -> Env -> Env -- Maybe (MyList (Sym,Int))
 interpStm s vs =
     case s of
       AssignC str exp -> case interpExp exp vs of
@@ -258,7 +258,7 @@ interpArg a vs =
                   Nothing -> ErrorV
       TrueC -> IntV 1
       FalseC -> IntV 0
-          
+
 
 
 -- C1 term
@@ -278,7 +278,7 @@ eval p =
     case (interpPrg p) of
       IntV i -> i
       ErrorV -> (-1)
-      
+
 main :: IO ()
 main = do print (eval (optimizeJumps (eliminateDeadcode ex1)))
 

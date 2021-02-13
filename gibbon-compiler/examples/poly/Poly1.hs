@@ -24,8 +24,8 @@ fmapEither f e =
     Left x -> Left x
     Right y  -> Right (f y)
 
-data List a = Nil
-            | Cons a (List a)
+data MyList a = Nil
+              | Cons a (MyList a)
   deriving Show
 
 {-
@@ -39,7 +39,7 @@ Bugs:
 .. doesn't work right now. The specializer is not able to lift 'f' out of this expression.
 
 -}
-foldr :: (a -> b -> b) -> b -> List a -> b
+foldr :: (a -> b -> b) -> b -> MyList a -> b
 foldr f acc ls =
   case ls of
     Nil        -> acc
@@ -47,13 +47,13 @@ foldr f acc ls =
                   in f x acc'
 
 
-map :: (a -> b) -> List a -> List b
+map :: (a -> b) -> MyList a -> MyList b
 map f ls =
   case ls of
     Nil        -> Nil
     Cons x rst -> Cons (f x) (map f rst)
 
-map2 :: (a -> b) -> List a -> List b
+map2 :: (a -> b) -> MyList a -> MyList b
 map2 f ls = foldr (\x acc -> Cons (f x) acc) Nil ls
 
 plus :: Int -> Int -> Int
@@ -123,10 +123,10 @@ gibbon_main =
          s :: Int
          s = foldr plus 0 (Cons 1 (Cons 2 Nil))
 
-         r :: List Int
+         r :: MyList Int
          r = map id1 (Cons 1 (Cons 2 Nil))
 
-         q :: List Int
+         q :: MyList Int
          q = map2 id1 (Cons 1 (Cons 2 Nil))
 
          p :: Either Int Bool

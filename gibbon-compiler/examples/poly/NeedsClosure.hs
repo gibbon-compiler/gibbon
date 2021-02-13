@@ -9,22 +9,22 @@ id x = x
 ap2 :: (a -> b) -> a -> b
 ap2 fn arg = ap (\arg -> fn arg) arg
 
-data List a = Nil
-            | Cons a (List a)
+data MyList a = Nil
+              | Cons a (MyList a)
   deriving Show
 
-foldr :: (a -> b -> b) -> b -> List a -> b
+foldr :: (a -> b -> b) -> b -> MyList a -> b
 foldr f acc ls =
   case ls of
     Nil        -> acc
     Cons x rst -> let acc' = (foldr f acc rst)
                   in f x acc'
 
-map :: (a -> b) -> List a -> List b
+map :: (a -> b) -> MyList a -> MyList b
 map f ls = foldr (\x acc -> Cons (f x) acc) Nil ls
 
-sumList :: List Int -> Int
-sumList ls = foldr (\i acc -> i + acc) 0 ls
+sumMyList :: MyList Int -> Int
+sumMyList ls = foldr (\i acc -> i + acc) 0 ls
 
 gibbon_main =
     let m = 10
@@ -32,5 +32,5 @@ gibbon_main =
         o = ap2 id 10
         ls1 = Cons 1 (Cons 2 (Cons 3 Nil))
         ls2 = map (\x -> x + 1) ls1
-        p = sumList ls2
+        p = sumMyList ls2
     in n + o + p
