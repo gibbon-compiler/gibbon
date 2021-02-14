@@ -27,11 +27,6 @@ jobs:
         uses: actions/checkout@v2
         with:
           path: source
-      - name: build
-        run: |
-          cd source/gibbon-compiler
-          cabal v2-update -w /opt/ghc/8.4.3/bin/ghc
-          cabal v2-build -w /opt/ghc/8.4.3/bin/ghc .
       - name: cache-cabal
         uses: actions/cache@v2
         with:
@@ -39,15 +34,20 @@ jobs:
           path: |
             ~/.cabal/store
             ~/cabal/packages
-      - name: answers
+      - name: build
         run: |
           cd source/gibbon-compiler
-          make answers
+          cabal v2-update -w /opt/ghc/8.4.3/bin/ghc
+          cabal v2-build -w /opt/ghc/8.4.3/bin/ghc .
       - name: cache-answers
         uses: actions/cache@v2
         with:
           key: ${{ runner.os }}-answers
           path: source/gibbon-compiler/examples/build_tmp/
+      - name: answers
+        run: |
+          cd source/gibbon-compiler
+          make answers
       - name: tests
         run: |
           cd source

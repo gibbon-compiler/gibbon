@@ -1,6 +1,6 @@
 # The Gibbon Compiler
 
-[![Build Status](https://travis-ci.org/iu-parfunc/gibbon.svg?branch=master)](https://travis-ci.org/iu-parfunc/gibbon)
+![test-gibbon](https://github.com/iu-parfunc/gibbon/workflows/test-gibbon/badge.svg?branch=master)
 
 *Gibbon* is an experimental compiler that transforms high-level functional programs
 to operate on _serialized data._
