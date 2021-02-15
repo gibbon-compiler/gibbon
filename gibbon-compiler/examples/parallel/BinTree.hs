@@ -19,7 +19,7 @@ mkTree_seq i =
 
 mkTree_par :: Int -> Int -> Tree
 mkTree_par cutoff i =
-  if i < cutoff
+  if i <= cutoff
   then (mkTree_seq i)
   else
       let x = spawn (mkTree_par cutoff (i-1))
@@ -68,7 +68,7 @@ add1Tree_par cutoff tr =
   case tr of
     Leaf i     -> Leaf (i+1)
     Node i l r ->
-      if i < cutoff
+      if i <= cutoff
       then add1Tree_seq tr
       else
         let l1 = spawn (add1Tree_par cutoff l)
@@ -134,4 +134,19 @@ check_sumtree n actual =
         _ = print_check (expected == actual)
         _ = printint actual
         _ = printsym (quote "\n")
+    in ()
+
+
+--------------------------------------------------------------------------------
+
+gibbon_main =
+    let n = sizeParam
+        tr0 = iterate (mkTree_seq n)
+        _  = check_buildtree n tr0
+        tr1 = iterate (mkTree_par 19 n)
+        _  = check_buildtree n tr1
+        tr2 = iterate (add1Tree_seq tr0)
+        _ = check_add1tree n tr2
+        tr3 = iterate (add1Tree_par 19 tr0)
+        _ = check_add1tree n tr3
     in ()
