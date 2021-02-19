@@ -13,11 +13,9 @@ fib_seq n =
 
 fib_par :: Int -> Int -> Int
 fib_par cutoff n =
-    if n == 0
-    then 0
-    else if n == 1
-    then 1
-    else if n < cutoff
+    if n <= 1
+    then n
+    else if n <= cutoff
     then fib_seq n
     else
         let x = spawn (fib_par cutoff (n - 1))

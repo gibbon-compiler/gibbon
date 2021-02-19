@@ -387,7 +387,7 @@ oneStep_par :: Int
             -> Vector Particle
             -> Vector Particle
 oneStep_par cutoff bht mpts ps =
-    let ps2 = iterate (generate_par (length ps)
+    let ps2 = iterate (generate_par2 4096 (length ps)
                        (\i ->
                             let p = nth ps i
                                 mpt = nth mpts i

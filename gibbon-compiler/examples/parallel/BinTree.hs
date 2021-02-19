@@ -44,7 +44,7 @@ mkTreeFib_par cutoff i =
   if i <= 0
   then Leaf (fib_seq 20)
   else
-      if i < cutoff
+      if i <= cutoff
       then mkTreeFib_seq i
       else let x = spawn (mkTreeFib_par cutoff (i-1))
                y = mkTreeFib_par cutoff (i-1)

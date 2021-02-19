@@ -7,6 +7,16 @@ import Gibbon.Vector.Parallel
 
 --------------------------------------------------------------------------------
 
+goto_seqmerge :: Int
+{-# INLINE goto_seqmerge #-}
+goto_seqmerge = 4096
+
+gotoQuickSort :: Int
+{-# INLINE gotoQuickSort #-}
+gotoQuickSort = 4096
+
+--------------------------------------------------------------------------------
+
 newline :: ()
 newline = printsym (quote "\n")
 
@@ -40,10 +50,6 @@ write_loop_seq idx offset end from to =
     then to
     else let to1 = inplacevupdate to (idx+offset) (nth from idx)
          in write_loop_seq (idx+1) offset end from to1
-
-goto_seqmerge :: Int
-{-# INLINE goto_seqmerge #-}
-goto_seqmerge = 4096
 
 write_loop :: Int -> Int -> Int -> Vector a -> Vector a -> Vector a
 write_loop idx offset end from to =
@@ -112,10 +118,6 @@ writeMerge f s1 s2 t =
                 in t
 
 --------------------------------------------------------------------------------
-
-gotoQuickSort :: Int
-{-# INLINE gotoQuickSort #-}
-gotoQuickSort = 4096
 
 writeSort1 :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
 writeSort1 f s t =

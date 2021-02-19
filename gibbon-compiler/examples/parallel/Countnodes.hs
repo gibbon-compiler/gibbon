@@ -14,7 +14,7 @@ countNodesPar e0 = topPar 0 e0
 
 loopToplvlPar :: Int -> ListToplvl -> Int
 loopToplvlPar height ls =
-    if height > 8 then (loopToplvl ls) else
+    if height >= 9 then (loopToplvl ls) else
     case ls of
         NULLTOPLVL -> nullCost
         CONSTOPLVL tl rst ->

@@ -193,7 +193,7 @@ allNearest_seq tr ls =
 
 allNearest_par :: KdTree -> Vector Point3d -> Vector Point3d
 allNearest_par tr ls =
-    map_par (\p -> nearest tr p) ls
+    map_par2 4096 (\p -> nearest tr p) ls
 
 nearest :: KdTree -> Point3d -> Point3d
 nearest tr query =
@@ -338,7 +338,7 @@ allCountCorr_seq radius tr ls =
 
 allCountCorr_par :: Int -> Float -> KdTree -> Vector Point3d -> Vector Int
 allCountCorr_par cutoff radius tr ls =
-    map_par (\query -> countCorr_par cutoff query radius tr) ls
+    map_par2 4 (\query -> countCorr_par cutoff query radius tr) ls
 
 
 --------------------------------------------------------------------------------

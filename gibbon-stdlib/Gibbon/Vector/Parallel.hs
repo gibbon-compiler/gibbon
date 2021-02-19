@@ -15,6 +15,7 @@ defaultGrainSize :: Int -> Int
 {-# INLINE defaultGrainSize #-}
 defaultGrainSize n =
     let p = getNumProcessors
+        -- _ = printint p
         grain = maxInt 1 (div n (8 * p))
     in minInt 2048 grain
 
@@ -43,6 +44,17 @@ generate_par n f =
 
 -- Work: O(n)
 -- Span: O(1)
+generate_par2 :: Int -> Int -> (Int -> a) -> Vector a
+{-# INLINE generate_par2 #-}
+generate_par2 cutoff n f =
+    let n'  = maxInt n 0
+        vec :: Vector a
+        vec  = valloc n'
+        vec1 = generate_par_loop cutoff vec 0 n' f
+    in vec1
+
+-- Work: O(n)
+-- Span: O(1)
 copy_par :: Vector a -> Vector a
 {-# INLINE copy_par #-}
 copy_par vec = generate_par (length vec) (\i -> nth vec i)
@@ -60,6 +72,10 @@ append_par v1 v2 = generate_par
 map_par :: (a -> b) -> Vector a -> Vector b
 {-# INLINE map_par #-}
 map_par f vec = generate_par (length vec) (\i -> f (vnth vec i))
+
+map_par2 :: Int -> (a -> b) -> Vector a -> Vector b
+{-# INLINE map_par2 #-}
+map_par2 cutoff f vec = generate_par2 cutoff (length vec) (\i -> f (vnth vec i))
 
 -- Work: O(n)
 -- Span: O(1)
