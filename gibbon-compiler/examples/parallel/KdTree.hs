@@ -193,7 +193,7 @@ allNearest_seq tr ls =
 
 allNearest_par :: KdTree -> Vector Point3d -> Vector Point3d
 allNearest_par tr ls =
-    map_par2 4096 (\p -> nearest tr p) ls
+    map_par2 1024 (\p -> nearest tr p) ls
 
 nearest :: KdTree -> Point3d -> Point3d
 nearest tr query =
