@@ -13,7 +13,7 @@ goto_seqmerge = 4096
 
 gotoQuickSort :: Int
 {-# INLINE gotoQuickSort #-}
-gotoQuickSort = 4096
+gotoQuickSort = 8192
 
 --------------------------------------------------------------------------------
 

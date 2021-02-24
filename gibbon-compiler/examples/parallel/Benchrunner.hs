@@ -106,7 +106,7 @@ bench_parbuildkdtree =
         n       = sizeParam
         radius  = intToFloat n
         -- cutoff  = 524288
-        cutoff  = 100000
+        cutoff  = 32000
         tr      = iterate (mkKdTree_par cutoff pts)
     in check_buildkdtree pts tr
 
