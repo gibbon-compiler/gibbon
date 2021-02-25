@@ -140,7 +140,7 @@ bench_parcountcorr =
         n   = sizeParam
         radius  = 100.0
         tr      = mkKdTree_seq pts
-        cutoff  = 50000
+        cutoff  = 8000
 --         tup =  iterate (let i     = rand
 --                             j     = (mod i n) - 1
 --                             probe = nth pts j

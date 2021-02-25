@@ -97,7 +97,7 @@ foldConstants2 exp =
 
 foldConstants2_par :: Int -> Exp -> Exp
 foldConstants2_par depth exp =
-  if depth > 6 then foldConstants2 exp else
+  if depth >= 8 then foldConstants2 exp else
   case exp of
     Lit i -> Lit i
     MkTrue  -> MkTrue
