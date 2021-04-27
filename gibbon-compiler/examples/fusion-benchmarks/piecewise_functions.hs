@@ -200,7 +200,7 @@ buildZeros n st end =
 
 
 
-integrate ::
+-- integrate ::
 
 
 -- cant express trim, project, and some important stuff

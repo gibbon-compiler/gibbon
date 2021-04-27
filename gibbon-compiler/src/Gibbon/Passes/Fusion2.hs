@@ -1570,7 +1570,7 @@ redundancy_output_pass fdefs mainExp firstTime depth =
       let fName = funName f
        in if L.isPrefixOf "_TUP" (fromVar fName)
             then let  testedPositions =
-                            testAllOutputPositions orgFdefs fName M.empty
+                            testAllOutputPositions orgFdefs fName
 
                       newName =  toVar (fromVar fName L.++ "outputFixed") in
                       if M.member newName fdefs
@@ -1590,14 +1590,14 @@ redundancy_output_pass fdefs mainExp firstTime depth =
             else (fdefs, rules)
 
 
-testAllOutputPositions:: FunDefs1 -> Var -> M.Map (Var,Int,Int) Bool ->
-  M.Map (Var,Int,Int) Bool
-testAllOutputPositions  fdefs fName testedPositions =
+testAllOutputPositions:: FunDefs1 -> Var -> M.Map (Var,Int,Int) Bool
+testAllOutputPositions  fdefs fName =
    let f = fdefs M.! fName
        n = case snd (funTy f) of
              ProdTy ls -> L.length ls
-   in loop1 0 0 n testedPositions
+   in loop1 0 0 n M.empty
   where
+    loop1 :: Int -> Int -> Int -> M.Map (Var, Int, Int) Bool -> M.Map (Var, Int, Int) Bool
     loop1 i j n testedPositions =
       if j>=n
         then
@@ -1610,6 +1610,10 @@ testAllOutputPositions  fdefs fName testedPositions =
                loop1 (i+1) j n (snd( testTwoOutputPositions fdefs (fName, i, j) testedPositions))
                --  `debug` (show"start" L.++ show((fName, i, j) ))
 
+
+-- For each pair of distinct output positions of a tuple: (0,1), (1,0),
+-- testTwoOutputPositions checks whether a particular function returns
+-- identical values at those positions.
 testTwoOutputPositions :: FunDefs1 -> (Var, Int, Int) -> M.Map (Var,Int,Int) Bool
   -> (Bool,  M.Map (Var,Int,Int) Bool)
 testTwoOutputPositions fdefs (fName, i, j) testedPositions =
@@ -1653,7 +1657,7 @@ testTwoOutputPositions fdefs (fName, i, j) testedPositions =
     -- unresolvedConditions then proof is done also, otherwise call perform the
     -- call recursively.
     let (res, inductiveAssumption', unresolvedConditions') =
-          S.foldl f (True, inductiveAssumption, S.empty) unresolvedConditions
+          S.foldl foo (True, inductiveAssumption, S.empty) unresolvedConditions
         unresolvedConditions'' = S.filter  (\(f, i, j)->
             S.notMember (f, i, j) inductiveAssumption' &&
               S.notMember (f, j, i) inductiveAssumption') unresolvedConditions'
@@ -1667,13 +1671,18 @@ testTwoOutputPositions fdefs (fName, i, j) testedPositions =
               else
                 testTwoOutputPositionsRec inductiveAssumption'  unresolvedConditions''
 
-  f (condInput, assumptionsInput, unresolvedInput) (fName, i, j) =
+  foo :: (Bool, S.Set (Var, Int, Int), S.Set (Var, Int, Int))
+      -> (Var, Int, Int)
+      -> (Bool, S.Set (Var, Int, Int), S.Set (Var, Int, Int))
+  foo (condInput, assumptionsInput, unresolvedInput) (fName, i, j) =
 
     let (cond, inductiveAssumption, unresolvedConditions) =
               extractAssumptionAndConditions fName i j
     in (cond && condInput, S.union assumptionsInput inductiveAssumption,
         S.union unresolvedConditions unresolvedInput )
 
+  -- TODO.
+  extractAssumptionAndConditions :: Var -> Int -> Int -> (Bool, S.Set (Var, Int, Int), S.Set (Var, Int, Int))
   extractAssumptionAndConditions fName i j  =
     let exp = funBody (fdefs M.! fName)
         inlinedContent = inlineAllButAppE exp --`debug` (show (fName) L.++ "inlined body\n"L.++ (render (pprint exp)))
@@ -1695,12 +1704,15 @@ testTwoOutputPositions fdefs (fName, i, j) testedPositions =
                 else
                     (False, S.empty, S.empty)
 
+
+  parametrizeProdExprs :: (DataCon, [(Var, ())], Exp1) -> [(Exp1, [(Int, Var, Var)])]
   parametrizeProdExprs (_, _, subExp) =
       let vars = collectVars subExp
           leafProd = getLeafProd subExp
           varsToFuncs =  collectVarToFuncs  subExp
       in case leafProd of
         (MkProdE ls) ->L.map  (parametrizeExp vars varsToFuncs) ls
+
   checkExpressions i j b prodListParametrized=
     let (expi, pars1) =  prodListParametrized L.!! i
         (expj, pars2) = prodListParametrized L.!! j
@@ -1727,19 +1739,20 @@ testTwoOutputPositions fdefs (fName, i, j) testedPositions =
 
 
 getLeafExpr :: Exp1 -> Exp1
-getLeafExpr = rec
+getLeafExpr = recur
  where
-   rec ex =
+   recur ex =
      case ex of
-       LetE _ body -> rec body
+       LetE _ body -> recur body
        x-> x
 
+-- fetch the tuple returned at the tail of subExp
 getLeafProd :: Exp1 -> Exp1
-getLeafProd = rec
+getLeafProd = recur
  where
-   rec ex =
+   recur ex =
      case ex of
-       LetE (v, ls, t, _) body -> rec body
+       LetE (v, ls, t, _) body -> recur body
        leaf@MkProdE{} -> leaf
        x-> error (show x)
 
@@ -1752,20 +1765,22 @@ hasConstructorTail = rec
         DataConE _ _ _ -> True
         x -> False
 
+-- all variables which are used to bind function applications.
 collectVars :: Exp1 -> S.Set Var
-collectVars = rec
+collectVars = recur
  where
-   rec ex = case ex of
+   recur ex = case ex of
      LetE (v, ls, t, AppE{}) body ->
-        S.insert v (rec body)
+        S.insert v (recur body)
      MkProdE{} -> S.empty
 
+-- Map of variable binding to its function call
 collectVarToFuncs :: Exp1 -> M.Map Var Var
-collectVarToFuncs = rec
+collectVarToFuncs = recur
  where
-   rec ex = case ex of
+   recur ex = case ex of
      LetE (v, ls, t,  (AppE f _ _)) body ->
-       M.insert v  f  (rec body)
+       M.insert v  f  (recur body)
      MkProdE{} -> M.empty
 
 -- Given a set of variables that represents results of function calls
@@ -1773,10 +1788,10 @@ collectVarToFuncs = rec
 -- and an expression => parameterize the expression around those
 parametrizeExp ::  S.Set Var ->  M.Map Var Var -> Exp1 -> (Exp1, [(Int, Var, Var)])
 parametrizeExp vars mp exp   =
- let (retExp, ls) = rec exp []
+ let (retExp, ls) = recur exp []
  in (retExp, L.map (\(i, v)-> (i, v, mp M.! v )) ls )
   where
-    rec ex ls = case ex of
+    recur ex ls = case ex of
       LetE{} -> error ("let not expected in parametrizeExp" L.++ (show ex))
       -- TODO: this is work around (correct not complete)[should be also handled]
       x@(CaseE caseE caseLs) -> (x, ls)
@@ -1785,7 +1800,7 @@ parametrizeExp vars mp exp   =
         let (args', pList) = L.foldl f ([], ls) args
              where
                f (expList, projList) exp =
-                  let (exp' , ls') = rec exp projList
+                  let (exp' , ls') = recur exp projList
                   in (expList L.++ [exp'], projList L.++ ls')
         in ((AppE v loc args'), pList)
 
@@ -1793,7 +1808,7 @@ parametrizeExp vars mp exp   =
         let (expList', pList) = L.foldl f ([], ls) expList
              where
                f (expList, projList) exp =
-                 let (exp' , ls') = rec exp projList
+                 let (exp' , ls') = recur exp projList
                  in (expList L.++ [exp'], projList L.++ ls')
         in ((DataConE loc dataCons expList'), pList)
 

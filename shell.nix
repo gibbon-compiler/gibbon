@@ -11,6 +11,6 @@ haskell.lib.buildStackProject {
   inherit ghc;
   name = "basicGibbonEnv";
   buildInputs = [ stdenv ghc stack which racket
-                  ncurses boehmgc uthash
+                  ncurses boehmgc uthash unzip
                 ];
 }
