@@ -1,3 +1,6 @@
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Gibbon.List where
 
 import Gibbon.Prelude

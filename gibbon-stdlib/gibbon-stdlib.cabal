@@ -7,12 +7,13 @@ build-type:          Simple
 
 library
   exposed-modules:     Gibbon.Prim
+                       Gibbon.Prelude
                        Gibbon.Vector
                        Gibbon.Vector.Parallel
                        Gibbon.List
-                       Gibbon.Prelude
-
-  ghc-options:         -Wall -Wcompat -fdefer-typed-holes
-  default-extensions:  ScopedTypeVariables CPP NoImplicitPrelude
   build-depends:       base >=4.10 && <4.15
+  ghc-options:         -Wall -Wcompat -fdefer-typed-holes
+  default-extensions:  ScopedTypeVariables
+                       CPP
+                       NoImplicitPrelude
   default-language:    Haskell2010

@@ -1,9 +1,14 @@
-module Gibbon.Prelude where
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
--- -- haskell-src-exts can't parse this.
--- #if MIN_VERSION_GLASGOW_HASKELL(8,4,4,0)
--- import Gibbon.Prim
--- #endif
+module Gibbon.Prelude
+    ( module Gibbon.Prim
+    , maxInt, minInt, maxFloat, minFloat, float_abs, compare_float
+    , print_check, print_newline, print_space
+
+    ) where
+
+import Gibbon.Prim
 
 --------------------------------------------------------------------------------
 

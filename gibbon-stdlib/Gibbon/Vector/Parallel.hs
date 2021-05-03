@@ -1,9 +1,7 @@
-module Gibbon.Vector.Parallel where
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
--- -- haskell-src-exts can't parse this.
--- #if MIN_VERSION_GLASGOW_HASKELL(8,4,4,0)
--- import Gibbon.Prim
--- #endif
+module Gibbon.Vector.Parallel where
 
 import Gibbon.Prelude
 import Gibbon.Vector
@@ -25,7 +23,7 @@ generate_par_loop cutoff vec start end f =
     then generate_loop vec start end f
     else
       let mid  = div (start + end) 2
-          vec1 = spawn (generate_par_loop cutoff vec start mid f)
+          _vec1 = spawn (generate_par_loop cutoff vec start mid f)
           vec2 = generate_par_loop cutoff vec mid end f
           _    = sync
       in vec2

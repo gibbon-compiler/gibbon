@@ -1,5 +1,8 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+
 module MergeSort where
 
+import Gibbon.Prelude
 import Gibbon.Vector
 import Gibbon.Vector.Parallel
 
