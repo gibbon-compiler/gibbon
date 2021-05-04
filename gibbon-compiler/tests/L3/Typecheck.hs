@@ -33,7 +33,7 @@ runT prg = fst $ defaultPackedRunPassM $ do
   l2 <- L2.tcProg l2
   l2 <- threadRegions l2
   l3 <- cursorize l2
-  l3 <- findWitnesses l3
+  {- l3 <- findWitnesses l3 -}
   l3 <- L3.tcProg True l3
   l3 <- shakeTree l3
   l3 <- hoistNewBuf l3

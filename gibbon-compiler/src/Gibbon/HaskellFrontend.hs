@@ -78,9 +78,8 @@ parseMode = defaultParseMode { extensions = [ EnableExtension ScopedTypeVariable
 
 parseFile' :: Config -> IORef ParseState -> [String] -> FilePath -> IO (PassM Prog0)
 parseFile' cfg pstate_ref import_route path = do
-  {- Opt_GhcTc -}
   when (gopt Opt_GhcTc (dynflags cfg)) $
-      typecheckWithGhc path
+      typecheckWithGhc cfg path
   str <- readFile path
   let cleaned = removeLinearArrows str
   let parsed = parseModuleWithMode parseMode cleaned
@@ -89,9 +88,10 @@ parseFile' cfg pstate_ref import_route path = do
     ParseFailed loc er -> do
       error ("haskell-src-exts failed: " ++ er ++ ", at " ++ prettyPrint loc)
 
-typecheckWithGhc :: FilePath -> IO ()
-typecheckWithGhc path = do
-  putStrLn "Typechecking with GHC:"
+typecheckWithGhc :: Config -> FilePath -> IO ()
+typecheckWithGhc cfg path = do
+  when (verbosity cfg >= 3) $
+    putStr " [compiler] Running pass, GHC typechecker\n   => "
   env <- getEnvironment
   gibbondir <- case lookup "GIBBONDIR" env of
                  Just p -> pure p
@@ -108,7 +108,8 @@ typecheckWithGhc path = do
   case exitCode of
     ExitSuccess -> do
       out <- hGetContents hout
-      putStrLn out
+      when (verbosity cfg >= 3) $
+        putStrLn out
       pure ()
     ExitFailure _ -> do
       err <- hGetContents herr
