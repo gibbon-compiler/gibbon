@@ -200,8 +200,6 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       RequestEndOf   -> text "RequestEndOf"
                                       RequestSizeOf  -> text "RequestSizeOf"
                                       ErrorP str ty  -> text "ErrorP" <> wty ty <+> doubleQuotes (text str) <> space
-                                      ReadPackedFile mb_fp tycon _ _ ->
-                                        text "readPackedFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
                                       VAllocP ty -> parens $ text "valloc" <+> doublecolon <+> brackets (pprintWithStyle sty ty)
                                       VFreeP _ty -> parens $ text "vfree"
                                       VFree2P _ty-> parens $ text "vfree2"
@@ -226,8 +224,11 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       LLFreeP{} -> text "free_ll"
                                       LLFree2P{} -> text "free2_ll"
                                       LLCopyP{} -> text "copy_ll"
+                                      ReadPackedFile mb_fp tycon _ _ ->
+                                        parens (text "readPackedFile " <+> parens (text (pretty mb_fp))) <+> doublecolon <+> text tycon
                                       ReadArrayFile mb_fp ty ->
-                                        text "readArrayFile " <+> parens (text $ pretty mb_fp) <+> pprintWithStyle sty ty
+                                        parens (text "readArrayFile " <+> parens (text $ pretty mb_fp)) <+>
+                                        doublecolon <+> pprintWithStyle sty ty
                                       _ -> error $ "pprint: Unknown primitive: " ++ show pr
                       PPHaskell  -> case pr of
                                       DictEmptyP _ty  -> text "dictEmpty"
@@ -237,7 +238,10 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       RequestEndOf   -> text "RequestEndOf"
                                       ErrorP str _ty -> text "error" <> doubleQuotes (text str)
                                       ReadPackedFile mb_fp tycon _ _ ->
-                                        text "readPackedFile " <+> text (pretty mb_fp) <+> doublecolon <+> text tycon
+                                        parens (text "readPackedFile " <+> parens (text (pretty mb_fp))) <+> doublecolon <+> text tycon
+                                      ReadArrayFile mb_fp ty ->
+                                        parens (text "readArrayFile " <+> parens (text $ pretty mb_fp)) <+>
+                                        doublecolon <+> pprintWithStyle sty ty
                                       _ -> error $ "pprint: Unknown primitive: " ++ show pr
               Just str -> text str
 
@@ -340,6 +344,9 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                       in pprintWithStyle sty a1 <+> pprintWithStyle sty pr <+> pprintWithStyle sty a2
 
                   _ | pr `elem` [MkTrue, MkFalse, SizeParam, BenchProgParam] -> pprintWithStyle sty pr
+
+                  ReadPackedFile{} -> pprintWithStyle sty pr
+                  ReadArrayFile{}  -> pprintWithStyle sty pr
 
                   _ -> case sty of
                          PPHaskell  -> pprintWithStyle sty pr <+> hsep (punctuate " " $ map (pprintWithStyle sty) es)

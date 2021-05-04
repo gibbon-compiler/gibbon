@@ -93,7 +93,7 @@ bench_parsumtree =
 bench_seqbuildkdtree :: ()
 bench_seqbuildkdtree =
     let pts :: Vector (Float, Float, Float)
-        pts = readArrayFile ()
+        pts = readArrayFile Nothing
         n       = sizeParam
         radius  = intToFloat n
         tr      = iterate (mkKdTree_seq pts)
@@ -102,7 +102,7 @@ bench_seqbuildkdtree =
 bench_parbuildkdtree :: ()
 bench_parbuildkdtree =
     let pts :: Vector (Float, Float, Float)
-        pts = readArrayFile ()
+        pts = readArrayFile Nothing
         n       = sizeParam
         radius  = intToFloat n
         -- cutoff  = 524288
@@ -113,7 +113,7 @@ bench_parbuildkdtree =
 bench_seqcountcorr :: ()
 bench_seqcountcorr =
     let pts :: Vector (Float, Float, Float)
-        pts = readArrayFile ()
+        pts = readArrayFile Nothing
         n   = sizeParam
         radius  = 100.0
         tr      = mkKdTree_seq pts
@@ -136,7 +136,7 @@ bench_seqcountcorr =
 bench_parcountcorr :: ()
 bench_parcountcorr =
     let pts :: Vector (Float, Float, Float)
-        pts = readArrayFile ()
+        pts = readArrayFile Nothing
         n   = sizeParam
         radius  = 100.0
         tr      = mkKdTree_seq pts
@@ -159,7 +159,7 @@ bench_parcountcorr =
 bench_seqnearest :: ()
 bench_seqnearest =
     let pts :: Vector (Float, Float, Float)
-        pts = readArrayFile ()
+        pts = readArrayFile Nothing
         tr     = mkKdTree_seq pts
         nns = iterate (allNearest_seq tr pts)
     in check_nearest pts nns
@@ -167,7 +167,7 @@ bench_seqnearest =
 bench_parnearest :: ()
 bench_parnearest =
     let pts :: Vector (Float, Float, Float)
-        pts = readArrayFile ()
+        pts = readArrayFile Nothing
         tr     = mkKdTree_seq pts
         nns = iterate (allNearest_par tr pts)
      in check_nearest pts nns
@@ -175,7 +175,7 @@ bench_parnearest =
 bench_seqbuildquadtree :: ()
 bench_seqbuildquadtree =
   let pts :: Vector (Float, Float)
-      pts = readArrayFile ()
+      pts = readArrayFile Nothing
       particles  = map (\(pt :: (Float, Float)) ->
                             let x = pt !!! 0
                                 y = pt !!! 1
@@ -197,7 +197,7 @@ bench_seqbuildquadtree =
 bench_parbuildquadtree :: ()
 bench_parbuildquadtree =
   let pts :: Vector (Float, Float)
-      pts = readArrayFile ()
+      pts = readArrayFile Nothing
       particles  = map (\(pt :: (Float, Float)) ->
                             let x = pt !!! 0
                                 y = pt !!! 1
@@ -220,7 +220,7 @@ bench_parbuildquadtree =
 bench_seqbhut :: ()
 bench_seqbhut =
   let pts :: Vector (Float, Float)
-      pts = readArrayFile ()
+      pts = readArrayFile Nothing
 
       particles  = map (\(pt :: (Float, Float)) ->
                             let x = pt !!! 0
@@ -244,7 +244,7 @@ bench_seqbhut =
 bench_parbhut :: ()
 bench_parbhut =
   let pts :: Vector (Float, Float)
-      pts = readArrayFile ()
+      pts = readArrayFile Nothing
 
       particles  = map (\(pt :: (Float, Float)) ->
                             let x = pt !!! 0
@@ -300,7 +300,7 @@ bench_parcoins =
 
 bench_seqcountnodes :: ()
 bench_seqcountnodes =
-  let e = readPackedFile (@Toplvl, ())
+  let e = readPackedFile @Toplvl Nothing
       -- to ensure that mmap'd stuff is in memory.
       _ = countNodesSeq e
       n = iterate (countNodesSeq e)
@@ -310,7 +310,7 @@ bench_seqcountnodes =
 
 bench_parcountnodes :: ()
 bench_parcountnodes =
-  let e = readPackedFile (@Toplvl, ())
+  let e = readPackedFile @Toplvl Nothing
       -- to ensure that mmap'd stuff is in memory.
       _ = countNodesPar e
       n = iterate (countNodesPar e)

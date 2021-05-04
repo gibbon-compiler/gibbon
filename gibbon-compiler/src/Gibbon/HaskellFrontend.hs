@@ -534,24 +534,23 @@ desugarExp type_syns toplevel e =
                          Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
                          _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
                   else if f == "readArrayFile"
-                  then case e2 of
-                         Tuple _ Boxed [Lit _ name,Lit _ len] -> do
-                           t <- newMetaTy
-                           pure $ PrimAppE (ReadArrayFile (Just (litToString name, litToInt len)) t) []
-                         Con _ (Special _ (UnitCon _)) -> do
-                           t <- newMetaTy
-                           pure $ PrimAppE (ReadArrayFile Nothing t) []
-                         _ -> error $ "desugarExp: couldn't parse readArrayFile; " ++ prettyPrint e2
+                  then let go e0 = case e0 of
+                                    Con _ (UnQual _ (Ident _ "Nothing")) -> do
+                                      t <- newMetaTy
+                                      pure $ PrimAppE (ReadArrayFile Nothing t) []
+                                    App _ (Con _ (UnQual _ (Ident _ "Just"))) (Tuple _ Boxed [Lit _ name, Lit _ len]) -> do
+                                      t <- newMetaTy
+                                      pure $ PrimAppE (ReadArrayFile (Just (litToString name, litToInt len)) t) []
+                                    Paren _ e3 -> go e3
+                                    _ -> error $ "desugarExp: couldn't parse readArrayFile; " ++ show e0
+                       in go e2
                   else if f == "readPackedFile"
-                  then case e2 of
-                         Tuple _ Boxed [TypeApp _ (TyCon _ (UnQual _ (Ident _ con))), Lit _ name] -> do
-                           let ty = PackedTy con []
-                           pure $ PrimAppE (ReadPackedFile (Just (litToString name)) con Nothing ty) []
-                         Tuple _ Boxed [TypeApp _ (TyCon _ (UnQual _ (Ident _ con))),
-                                        Con _ (Special _ (UnitCon _))] -> do
-                           let ty = PackedTy con []
-                           pure $ PrimAppE (ReadPackedFile Nothing con Nothing ty) []
-                         _ -> error $ "desugarExp: couldn't parse readPackedFile; " ++ show e2
+                  then let go e0 = case e0 of
+                                     TypeApp _ (TyCon _ (UnQual _ (Ident _ con))) -> do
+                                       let ty = PackedTy con []
+                                       pure $ PrimAppE (ReadPackedFile Nothing con Nothing ty) []
+                                     _ -> error $ "desugarExp: couldn't parse readPackedFile; " ++ show e0
+                       in go e2
                   else if f == "bench"
                   then do
                     e2' <- desugarExp type_syns toplevel e2
@@ -720,6 +719,16 @@ desugarExp type_syns toplevel e =
           (SpawnE fn [] ls) -> do
             e2' <- desugarExp type_syns toplevel e2
             pure $ SpawnE fn [] (ls ++ [e2'])
+
+          (PrimAppE (ReadPackedFile _mb_fp tycon mb_var ty) []) ->
+             let go e0 = case e0 of
+                           Con _ (UnQual _ (Ident _ "Nothing")) -> do
+                             pure (PrimAppE (ReadPackedFile Nothing tycon mb_var ty) [])
+                           App _ (Con _ (UnQual _ (Ident _ "Just"))) (Lit _ name) -> do
+                             pure (PrimAppE (ReadPackedFile (Just (litToString name)) tycon mb_var ty) [])
+                           Paren _ e3 -> go e3
+                           _ -> error $ "desugarExp: couldn't parse readPackedFile; " ++ show e0
+             in go e2
 
           (PrimAppE p ls) -> do
             e2' <- desugarExp type_syns toplevel e2

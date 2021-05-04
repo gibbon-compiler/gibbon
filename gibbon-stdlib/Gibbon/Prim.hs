@@ -127,9 +127,10 @@ benchProgParam = undefined
  - Make it more like Haskell.
  -}
 
-readArrayFile :: () -> Vector a
+readArrayFile :: Maybe (String, Int) -> Vector a
 readArrayFile = undefined
 
+readPackedFile :: Maybe String -> a
 readPackedFile = undefined
 
 --------------------------------------------------------------------------------

@@ -288,6 +288,9 @@ tests:
     dir: examples/lineartypes/
     failing: [gibbon1, gibbon2, pointer, interp1]
 
+  - name: test_parse.hs
+    failing: [gibbon1, gibbon2, pointer, interp1]
+
   - name: toplevel_value.hs
     answer-file: examples/toplevel_value.ans
 
