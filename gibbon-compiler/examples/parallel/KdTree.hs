@@ -1,5 +1,9 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+
 module KdTree where
 
+import Gibbon.Prelude
 import Gibbon.Vector
 import Gibbon.Vector.Parallel
 
@@ -30,7 +34,6 @@ data KdTree = KdLeaf Float  -- ^ x coord
                      KdTree -- ^ right
 
            | KdEmpty
-  deriving Show
 
 print_kdtree :: KdTree -> ()
 print_kdtree tr =

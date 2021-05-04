@@ -88,21 +88,20 @@ parseFile' cfg pstate_ref import_route path = do
     ParseFailed loc er -> do
       error ("haskell-src-exts failed: " ++ er ++ ", at " ++ prettyPrint loc)
 
+-- | ASSUMPTION: gibbon-stdlib is available to Cabal.
+--
+-- Currently 'run_all_tests.sh' installs it with 'cabal v1-install . -w ghc-9.0.1'.
 typecheckWithGhc :: Config -> FilePath -> IO ()
 typecheckWithGhc cfg path = do
   when (verbosity cfg >= 3) $
     putStr " [compiler] Running pass, GHC typechecker\n   => "
   env <- getEnvironment
-  gibbondir <- case lookup "GIBBONDIR" env of
-                 Just p -> pure p
-                 -- Assume we're running from the compiler dir!
-                 Nothing -> pure ""
-  let cmd = "cabal v2-exec -w ghc-9.0.1 ghc-9.0.1 -- -package gibbon-stdlib " ++ path
+  let cmd = "ghc-9.0.1 -package gibbon-stdlib " ++ path
   (_, Just hout, Just herr, phandle) <-
         createProcess (shell cmd)
             { std_out = CreatePipe
             , std_err = CreatePipe
-            , cwd = Just gibbondir
+            , cwd = Just (takeDirectory path)
             }
   exitCode <- waitForProcess phandle
   case exitCode of
@@ -114,12 +113,6 @@ typecheckWithGhc cfg path = do
     ExitFailure _ -> do
       err <- hGetContents herr
       error err
-
-{-
-   - TODO: Run from GIBBONDIR to typecheck with ghc:
-   -
-   - cabal v2-exec ghc --ghc-options -- -package gibbon-stdlib path
-   -}
 
 -- | Really basic, and won't catch every occurence of a linear arrow.
 --

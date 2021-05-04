@@ -1,3 +1,6 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+
 module Bhut where
 
 import Gibbon.Prelude
@@ -195,7 +198,8 @@ calcAccel_seq mpt tr =
     BH_Empty -> (0.0, 0.0)
     BH_Leaf x y mass -> accel mpt x y mass
     BH_Node x y mass total_pts width tr1 tr2 tr3 tr4 ->
-      if isClose (mpt !!! 0, mpt !!! 1) (x, y) width
+      let (a,b,_) = mpt in
+      if isClose (a, b) (x, y) width
       then
         let (x1,y1) = calcAccel_seq mpt tr1
             (x2,y2) = calcAccel_seq mpt tr2

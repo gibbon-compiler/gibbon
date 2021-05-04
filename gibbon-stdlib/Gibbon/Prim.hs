@@ -39,7 +39,7 @@ module Gibbon.Prim
     , spawn, sync, par, getNumProcessors, is_big
 
       -- * Tuples
-    , fst, snd
+    , fst, snd, Maybe(..)
 
       -- * Error reporting
     , error

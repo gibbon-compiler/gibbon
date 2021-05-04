@@ -1,4 +1,10 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+
 module Coins where
+
+import Gibbon.Prelude
+
+--------------------------------------------------------------------------------
 
 data AList = ANil | ASing Int | Append AList AList
 
@@ -26,8 +32,7 @@ getCoins1 c q coins_rst =
 
 printCoin :: CoinQty -> ()
 printCoin tup =
-    let a = tup !!! 0
-        b = tup !!! 1
+    let (a,b) = tup
         _ = printsym (quote "(")
         _ = printint a
         _ = printsym (quote ",")

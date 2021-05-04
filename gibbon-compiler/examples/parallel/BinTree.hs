@@ -1,3 +1,5 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+
 module BinTree where
 
 import Gibbon.Prelude

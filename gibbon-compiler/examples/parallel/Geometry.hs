@@ -1,5 +1,20 @@
-module Geomerty where
+{-# LANGUAGE NoImplicitPrelude #-}
 
+module Geometry
+    (
+      -- * 3d points
+      print_point3d, get_coord_point3d, dist_point3d, getNextAxis_3d
+    , eq_point3d , cmpx_point3d, cmpy_point3d, cmpz_point3d
+    , add_point3d, sub_point3d, mul_point3d, div_point3d, scale_point3d
+    , dot_point3d, norm_point3d, normalize_point3d, cross_point3d
+    , sort_point3d, sort_point3d_par
+
+      -- * 2d points
+    , print_point2d, dist_point2d
+    ) where
+
+import Gibbon.Vector
+import Gibbon.Prelude
 import MergeSort
 
 --------------------------------------------------------------------------------
@@ -22,11 +37,12 @@ print_point3d tup =
 
 get_coord_point3d :: Int -> Point3d -> Float
 get_coord_point3d axis pt =
-  if axis == 0
-  then pt !!! 0
-  else if axis == 1
-  then pt !!! 1
-  else pt !!! 2
+  let (a,b,c) = pt in
+      if axis == 0
+      then a
+      else if axis == 1
+      then b
+      else c
 
 -- | Distance between two points
 dist_point3d :: Point3d -> Point3d -> Float

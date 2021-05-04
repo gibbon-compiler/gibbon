@@ -40,6 +40,7 @@ which -a gcc
 stack --version | head
 racket --version
 gcc --version
+cabal --version
 
 # Set GIBBONDIR:
 source set_env.sh
@@ -114,6 +115,13 @@ if [ "$COARSE_NIX" == "1" ]; then
 else
     STK+=" --install-ghc "
 fi
+
+set +x; echo
+echo "  Gibbon Standard Library"
+echo "-------------------------"
+set -x
+cd $top/gibbon-stdlib
+cabal v1-install . -w ghc-9.0.1
 
 set +x; echo
 echo "  Gibbon Compiler (1/2): build & unit tests"

@@ -1,5 +1,9 @@
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+
 module Countnodes where
 
+import Gibbon.Prelude
 import RacketGrammar
 
 ----------------------------------------------------------------------------
@@ -19,9 +23,9 @@ loopToplvlPar height ls =
         NULLTOPLVL -> nullCost
         CONSTOPLVL tl rst ->
           let ctl = spawn (topPar (height + 1) tl)
-              rst = loopToplvlPar height rst
+              ct_rst = loopToplvlPar height rst
               _ = sync
-          in consCost + ctl + rst
+          in consCost + ctl + ct_rst
 
 topPar :: Int -> Toplvl -> Int
 topPar height e =

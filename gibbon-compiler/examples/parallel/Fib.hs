@@ -1,5 +1,9 @@
 module Fib where
 
+import Gibbon.Prelude
+
+--------------------------------------------------------------------------------
+
 fib_seq :: Int -> Int
 fib_seq n =
     if n == 0

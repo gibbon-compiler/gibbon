@@ -1,8 +1,12 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+
 module Ray where
 
+import Gibbon.Prelude
 import Gibbon.Vector
 import Gibbon.Vector.Parallel
 
+import Mergesort
 import Geometry
 
 --------------------------------------------------------------------------------

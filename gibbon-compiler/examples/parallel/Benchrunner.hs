@@ -1,3 +1,7 @@
+{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+
 module Benchrunner where
 
 import Fib
@@ -6,8 +10,12 @@ import KdTree
 import Bhut
 import Coins
 import Countnodes
-import Ray
+{- import Ray -}
 import FoldConstants
+import RacketGrammar
+
+import Gibbon.Prelude
+import Gibbon.Vector
 
 --------------------------------------------------------------------------------
 
@@ -177,19 +185,17 @@ bench_seqbuildquadtree =
   let pts :: Vector (Float, Float)
       pts = readArrayFile Nothing
       particles  = map (\(pt :: (Float, Float)) ->
-                            let x = pt !!! 0
-                                y = pt !!! 1
+                            let (x,y) = pt
                             in (x,y,1.0,0.0,0.0))
                    pts
       mpts = map (\(pt :: (Float,Float)) ->
-                      let x = pt !!! 0
-                          y = pt !!! 1
+                      let (x,y) = pt
                       in (x,y,1.0))
                  pts
-      llx = foldl (\acc (pt :: (Float,Float)) -> minFloat (pt !!! 0) acc) 100000.0 pts
-      lly = foldl (\acc (pt :: (Float,Float)) -> minFloat (pt !!! 1) acc) 100000.0 pts
-      rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 0) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
-      ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 1) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
+      llx = foldl (\acc (pt :: (Float,Float)) -> minFloat (fst pt) acc) 100000.0 pts
+      lly = foldl (\acc (pt :: (Float,Float)) -> minFloat (snd pt) acc) 100000.0 pts
+      rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (fst pt) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
+      ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (snd pt) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       box = (llx, lly, rux, ruy)
       tr = iterate (buildQtree_seq box mpts)
   in check_buildquadtree mpts tr
@@ -199,19 +205,17 @@ bench_parbuildquadtree =
   let pts :: Vector (Float, Float)
       pts = readArrayFile Nothing
       particles  = map (\(pt :: (Float, Float)) ->
-                            let x = pt !!! 0
-                                y = pt !!! 1
+                            let (x,y) = pt
                             in (x,y,1.0,0.0,0.0))
                    pts
       mpts = map (\(pt :: (Float,Float)) ->
-                      let x = pt !!! 0
-                          y = pt !!! 1
+                      let (x,y) = pt
                       in (x,y,1.0))
                  pts
-      llx = foldl (\acc (pt :: (Float,Float)) -> minFloat (pt !!! 0) acc) 100000.0 pts
-      lly = foldl (\acc (pt :: (Float,Float)) -> minFloat (pt !!! 1) acc) 100000.0 pts
-      rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 0) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
-      ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 1) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
+      llx = foldl (\acc (pt :: (Float,Float)) -> minFloat (fst pt) acc) 100000.0 pts
+      lly = foldl (\acc (pt :: (Float,Float)) -> minFloat (snd pt) acc) 100000.0 pts
+      rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (fst pt) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
+      ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (snd pt) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       box = (llx, lly, rux, ruy)
       cutoff = 524288
       tr = iterate (buildQtree_par cutoff box mpts)
@@ -223,19 +227,17 @@ bench_seqbhut =
       pts = readArrayFile Nothing
 
       particles  = map (\(pt :: (Float, Float)) ->
-                            let x = pt !!! 0
-                                y = pt !!! 1
+                            let (x,y) = pt
                             in (x,y,1.0,0.0,0.0))
                    pts
       mpts = map (\(pt :: (Float,Float)) ->
-                      let x = pt !!! 0
-                          y = pt !!! 1
+                      let (x,y) = pt
                       in (x,y,1.0))
                  pts
-      llx = foldl (\acc (pt :: (Float,Float)) -> minFloat (pt !!! 0) acc) 100000.0 pts
-      lly = foldl (\acc (pt :: (Float,Float)) -> minFloat (pt !!! 1) acc) 100000.0 pts
-      rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 0) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
-      ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 1) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
+      llx = foldl (\acc (pt :: (Float,Float)) -> minFloat (fst pt) acc) 100000.0 pts
+      lly = foldl (\acc (pt :: (Float,Float)) -> minFloat (snd pt) acc) 100000.0 pts
+      rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (fst pt) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
+      ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (snd pt) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       box = (llx, lly, rux, ruy)
       bht = buildQtree_seq box mpts
       particles1 = oneStep_seq bht mpts particles
@@ -247,19 +249,17 @@ bench_parbhut =
       pts = readArrayFile Nothing
 
       particles  = map (\(pt :: (Float, Float)) ->
-                            let x = pt !!! 0
-                                y = pt !!! 1
+                            let (x,y) = pt
                             in (x,y,1.0,0.0,0.0))
                    pts
       mpts = map (\(pt :: (Float,Float)) ->
-                      let x = pt !!! 0
-                          y = pt !!! 1
+                      let (x,y) = pt
                       in (x,y,1.0))
                  pts
-      llx = foldl (\acc (pt :: (Float,Float)) -> minFloat (pt !!! 0) acc) 100000.0 pts
-      lly = foldl (\acc (pt :: (Float,Float)) -> minFloat (pt !!! 1) acc) 100000.0 pts
-      rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 0) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
-      ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (pt !!! 1) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
+      llx = foldl (\acc (pt :: (Float,Float)) -> minFloat (fst pt) acc) 100000.0 pts
+      lly = foldl (\acc (pt :: (Float,Float)) -> minFloat (snd pt) acc) 100000.0 pts
+      rux = foldl (\acc (pt :: (Float,Float)) -> maxFloat (fst pt) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
+      ruy = foldl (\acc (pt :: (Float,Float)) -> maxFloat (snd pt) acc) ((0.0 .-. 1.0) .*. 100000.0) pts
       box = (llx, lly, rux, ruy)
       bht = buildQtree_seq box mpts
       cutoff = 524288
@@ -318,6 +318,8 @@ bench_parcountnodes =
       _ = printsym (quote "\n")
   in ()
 
+{-
+
 bench_seqmkbvh :: ()
 bench_seqmkbvh =
   let scene = rgbbox ()
@@ -355,6 +357,8 @@ bench_parray =
       cam = camera_from_scene width height scene
       pixels = iterate (render_par bvh width height cam)
   in ()
+
+-}
 
 bench_seqfoldconstants :: ()
 bench_seqfoldconstants =
@@ -421,6 +425,7 @@ gibbon_main =
     then bench_seqcountnodes
     else if prog_is (quote "parcountnodes")
     then bench_parcountnodes
+{-
     else if prog_is (quote "seqmkbvh")
     then bench_seqmkbvh
     else if prog_is (quote "parmkbvh")
@@ -429,6 +434,7 @@ gibbon_main =
     then bench_seqray
     else if prog_is (quote "parray")
     then bench_parray
+-}
     else if prog_is (quote "seqfoldconstants")
     then bench_seqfoldconstants
     else if prog_is (quote "parfoldconstants")

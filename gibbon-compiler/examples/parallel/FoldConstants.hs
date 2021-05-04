@@ -1,3 +1,5 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+
 module FoldConstants where
 
 import Gibbon.Prelude
