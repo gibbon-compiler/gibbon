@@ -30,6 +30,7 @@ data GeneralFlag
   | Opt_Fusion             -- ^ Enable fusion.
   | Opt_Parallel           -- ^ Fork/join parallelism.
   | Opt_RegionOnSpawn      -- ^ Allocate into fresh regions for every spawn, not steal.
+  | Opt_GhcTc              -- ^ Typecheck with GHC before compiling with Gibbon.
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -96,7 +97,8 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                    flag' Opt_Fusion (long "fusion" <>
                                      help "Enable fusion.") <|>
                    flag' Opt_Parallel (long "parallel" <> help "Enable parallelism") <|>
-                   flag' Opt_RegionOnSpawn (long "region-on-spawn" <> help "Allocate into fresh regions for every spawn, not steal.")
+                   flag' Opt_RegionOnSpawn (long "region-on-spawn" <> help "Allocate into fresh regions for every spawn, not steal.") <|>
+                   flag' Opt_GhcTc (long "ghc-tc" <> help "Typecheck with GHC before compiling with Gibbon.")
 
     dflagsParser :: Parser DebugFlag
     dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>

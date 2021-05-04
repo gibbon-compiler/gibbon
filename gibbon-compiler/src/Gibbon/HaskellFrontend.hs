@@ -5,6 +5,7 @@
 module Gibbon.HaskellFrontend
   ( parseFile, primMap, multiArgsToOne ) where
 
+import           Control.Monad
 import           Data.Foldable ( foldrM )
 import           Data.Maybe (catMaybes, isJust)
 import qualified Data.Map as M
@@ -18,10 +19,13 @@ import           Language.Haskell.Exts.SrcLoc
 import           System.Environment ( getEnvironment )
 import           System.Directory
 import           System.FilePath
-import           Control.Monad
+import           System.Process
+import           System.Exit
+import           System.IO
 
 import           Gibbon.L0.Syntax as L0
 import           Gibbon.Common
+import           Gibbon.DynFlags
 
 --------------------------------------------------------------------------------
 
@@ -53,10 +57,10 @@ it expects A.B.D to be at A/B/A/B/D.hs.
 -}
 
 
-parseFile :: FilePath -> IO (PassM Prog0)
-parseFile path = do
+parseFile :: Config -> FilePath -> IO (PassM Prog0)
+parseFile cfg path = do
     pstate0_ref <- newIORef emptyParseState
-    parseFile' pstate0_ref [] path
+    parseFile' cfg pstate0_ref [] path
 
 data ParseState = ParseState
     { imported :: M.Map (String, FilePath) Prog0 }
@@ -72,14 +76,78 @@ parseMode = defaultParseMode { extensions = [ EnableExtension ScopedTypeVariable
                                             ++ (extensions defaultParseMode)
                              }
 
-parseFile' :: IORef ParseState -> [String] -> FilePath -> IO (PassM Prog0)
-parseFile' pstate_ref import_route path = do
+parseFile' :: Config -> IORef ParseState -> [String] -> FilePath -> IO (PassM Prog0)
+parseFile' cfg pstate_ref import_route path = do
+  {- Opt_GhcTc -}
+  when (gopt Opt_GhcTc (dynflags cfg)) $
+      typecheckWithGhc path
   str <- readFile path
-  let parsed = parseModuleWithMode parseMode str
+  let cleaned = removeLinearArrows str
+  let parsed = parseModuleWithMode parseMode cleaned
   case parsed of
-    ParseOk hs -> desugarModule pstate_ref import_route (takeDirectory path) hs
+    ParseOk hs -> desugarModule cfg pstate_ref import_route (takeDirectory path) hs
     ParseFailed loc er -> do
       error ("haskell-src-exts failed: " ++ er ++ ", at " ++ prettyPrint loc)
+
+typecheckWithGhc :: FilePath -> IO ()
+typecheckWithGhc path = do
+  putStrLn "Typechecking with GHC:"
+  env <- getEnvironment
+  gibbondir <- case lookup "GIBBONDIR" env of
+                 Just p -> pure p
+                 -- Assume we're running from the compiler dir!
+                 Nothing -> pure ""
+  let cmd = "cabal v2-exec -w ghc-9.0.1 ghc-9.0.1 -- -package gibbon-stdlib " ++ path
+  (_, Just hout, Just herr, phandle) <-
+        createProcess (shell cmd)
+            { std_out = CreatePipe
+            , std_err = CreatePipe
+            , cwd = Just gibbondir
+            }
+  exitCode <- waitForProcess phandle
+  case exitCode of
+    ExitSuccess -> do
+      out <- hGetContents hout
+      putStrLn out
+      pure ()
+    ExitFailure _ -> do
+      err <- hGetContents herr
+      error err
+
+{-
+   - TODO: Run from GIBBONDIR to typecheck with ghc:
+   -
+   - cabal v2-exec ghc --ghc-options -- -package gibbon-stdlib path
+   -}
+
+-- | Really basic, and won't catch every occurence of a linear arrow.
+--
+-- But its only a stop-gap until we move to ghc-lib-parser, which can parse
+-- linear types and other things not supported by haskell-src-exts (e.g. CPP).
+removeLinearArrows :: String -> String
+removeLinearArrows str =
+    fst $
+    foldr (\c (acc,saw_one) ->
+                if saw_one && c == '%'
+                then (acc, False)
+                else if saw_one && c /= '%'
+                then (c:'1':acc, False)
+                else if c == '1'
+                then (acc, True)
+                else (c:acc, False))
+           ([],False)
+           str
+    {-
+     - messup up indendataion and causes compilation errors.
+     -
+     - unlines .
+     - map (unwords .
+     -      map (\w -> if w == "%1->" || w == "%1 ->"
+     -                 then "->"
+     -                 else w) .
+     -      words) .
+     - lines
+     -}
 
 data TopLevel
   = HDDef (DDef Ty0)
@@ -92,14 +160,14 @@ type TopTyEnv = TyEnv TyScheme
 type TypeSynEnv = M.Map TyCon Ty0
 
 desugarModule :: (Show a,  Pretty a)
-              => IORef ParseState -> [String] -> FilePath -> Module a -> IO (PassM Prog0)
-desugarModule pstate_ref import_route dir (Module _ head_mb _pragmas imports decls) = do
+              => Config -> IORef ParseState -> [String] -> FilePath -> Module a -> IO (PassM Prog0)
+desugarModule cfg pstate_ref import_route dir (Module _ head_mb _pragmas imports decls) = do
   let type_syns = foldl collectTypeSynonyms M.empty decls
       -- Since top-level functions and their types can't be declared in
       -- single top-level declaration we first collect types and then collect
       -- definitions.
       funtys = foldr (collectTopTy type_syns) M.empty decls
-  imported_progs :: [PassM Prog0] <- mapM (processImport pstate_ref (mod_name : import_route) dir) imports
+  imported_progs :: [PassM Prog0] <- mapM (processImport cfg pstate_ref (mod_name : import_route) dir) imports
   let prog = do
         toplevels <- catMaybes <$> mapM (collectTopLevel type_syns funtys) decls
         let (defs,_vars,funs,inlines,main) = foldr classify init_acc toplevels
@@ -155,13 +223,16 @@ desugarModule pstate_ref import_route dir (Module _ head_mb _pragmas imports dec
             Just _  -> error $ "A module cannot have two main expressions."
                                ++ show mod_name
         HInline v   -> (defs,vars,funs,S.insert v inlines,main)
-desugarModule _ _ _ m = error $ "desugarModule: " ++ prettyPrint m
+desugarModule _ _ _ _ m = error $ "desugarModule: " ++ prettyPrint m
 
 stdlibModules :: [String]
-stdlibModules = ["Gibbon.Prelude", "Gibbon.Vector", "Gibbon.Vector.Parallel", "Gibbon.List"]
+stdlibModules = ["Gibbon.Prim", "Gibbon.Prelude", "Gibbon.Vector", "Gibbon.Vector.Parallel", "Gibbon.List"]
 
-processImport :: IORef ParseState -> [String] -> FilePath -> ImportDecl a -> IO (PassM Prog0)
-processImport pstate_ref import_route dir decl@ImportDecl{..} = do
+processImport :: Config -> IORef ParseState -> [String] -> FilePath -> ImportDecl a -> IO (PassM Prog0)
+processImport cfg pstate_ref import_route dir decl@ImportDecl{..}
+    -- When compiling with Gibbon, we should *NOT* inline things defined in Gibbon.Prim.
+    | mod_name == "Gibbon.Prim" = pure (pure (Prog M.empty M.empty Nothing))
+    | otherwise = do
     when (mod_name `elem` import_route) $
       error $ "Circular dependency detected. Import path: "++ show (mod_name : import_route)
     when (importQualified) $ error $ "Qualified imports not supported yet. Offending import: " ++  prettyPrint decl
@@ -179,7 +250,7 @@ processImport pstate_ref import_route dir decl@ImportDecl{..} = do
                     pure prog
                 Nothing -> do
                     dbgTrace 5 ("Importing " ++ mod_name ++ " from " ++ mod_fp) (pure ())
-                    prog0 <- parseFile' pstate_ref import_route mod_fp
+                    prog0 <- parseFile' cfg pstate_ref import_route mod_fp
                     (ParseState imported') <- readIORef pstate_ref
                     let (prog0',_) = defaultRunPassM prog0
                     let imported'' = M.insert (mod_name, mod_fp) prog0' imported'

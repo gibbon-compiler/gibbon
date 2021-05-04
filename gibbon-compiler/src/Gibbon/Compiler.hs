@@ -200,7 +200,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   dir <- getCurrentDirectory
   let fp1 = dir </> fp0
   -- Parse the input file
-  ((l0, cnt0), fp) <- parseInput input fp1
+  ((l0, cnt0), fp) <- parseInput config input fp1
   let config' = config { srcFile = Just fp }
 
 
@@ -299,15 +299,15 @@ setDebugEnvVar verbosity =
     hPutStrLn stderr$ " ! We set DEBUG based on command-line verbose arg: "++show l
 
 
-parseInput :: Input -> FilePath -> IO ((L0.Prog0, Int), FilePath)
-parseInput ip fp = do
+parseInput :: Config -> Input -> FilePath -> IO ((L0.Prog0, Int), FilePath)
+parseInput cfg ip fp = do
   (l0, f) <-
     case ip of
-      Haskell -> (, fp) <$> HS.parseFile fp
+      Haskell -> (, fp) <$> HS.parseFile cfg fp
       SExpr   -> (, fp) <$> SExp.parseFile fp
       Unspecified ->
         case takeExtension fp of
-          ".hs"   -> (, fp) <$> HS.parseFile fp
+          ".hs"   -> (, fp) <$> HS.parseFile cfg fp
           ".sexp" -> (, fp) <$> SExp.parseFile fp
           ".rkt"  -> (, fp) <$> SExp.parseFile fp
           ".gib"  -> (, fp) <$> SExp.parseFile fp
