@@ -15,7 +15,7 @@ module Geometry
 
 import Gibbon.Vector
 import Gibbon.Prelude
-import MergeSort
+import Mergesort
 
 --------------------------------------------------------------------------------
 -- 3d points
