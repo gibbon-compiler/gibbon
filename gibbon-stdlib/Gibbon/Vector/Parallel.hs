@@ -1,5 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE LinearTypes         #-}
 
 module Gibbon.Vector.Parallel where
 
@@ -57,6 +58,10 @@ copy_par :: Vector a -> Vector a
 {-# INLINE copy_par #-}
 copy_par vec = generate_par (length vec) (\i -> nth vec i)
 
+lcopy_par :: Vector a %1-> Vector a
+{-# INLINE lcopy_par #-}
+lcopy_par vec = unsafeToLinear (\x -> copy_par x) vec
+
 -- Work: O(n)
 -- Span: O(1)
 append_par :: Vector a -> Vector a -> Vector a
@@ -74,6 +79,15 @@ map_par f vec = generate_par (length vec) (\i -> f (vnth vec i))
 map_par2 :: Int -> (a -> b) -> Vector a -> Vector b
 {-# INLINE map_par2 #-}
 map_par2 cutoff f vec = generate_par2 cutoff (length vec) (\i -> f (vnth vec i))
+
+
+lmap_par :: (a -> b) -> Vector a %1-> Vector b
+{-# INLINE lmap_par #-}
+lmap_par f vec = unsafeToLinear (\x -> map_par f x) vec
+
+lmap_par2 :: Int -> (a -> b) -> Vector a %1-> Vector b
+{-# INLINE lmap_par2 #-}
+lmap_par2 cutoff f vec = unsafeToLinear (\x -> map_par2 cutoff f x) vec
 
 -- Work: O(n)
 -- Span: O(1)
@@ -107,6 +121,10 @@ foldl1_par1 cutoff f acc vec =
             _    = sync
         in f acc1 acc2
 
+lfoldl1_par :: (a -> a -> a) -> a -> Vector a %1-> a
+lfoldl1_par f acc vec = unsafeToLinear (\x -> foldl1_par f acc x) vec
+
+
 -- Work: O(n)
 -- Span: O(log n)
 foldl2_par :: (b -> a -> b) -> b -> (b -> b -> b) -> Vector a -> b
@@ -130,6 +148,9 @@ foldl2_par1 cutoff f acc g vec =
             acc2 = (foldl2_par f acc g v2)
             _    = sync
         in g acc1 acc2
+
+lfoldl2_par :: (b -> a -> b) -> b -> (b -> b -> b) -> Vector a %1-> b
+lfoldl2_par f acc g vec = unsafeToLinear (\x -> foldl2_par f acc g x) vec
 
 ----------------------------------
 -- TODO: review things after this.

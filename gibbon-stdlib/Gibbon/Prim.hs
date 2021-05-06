@@ -1,3 +1,8 @@
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE GADTs               #-}
+{-# LANGUAGE LinearTypes         #-}
+
 module Gibbon.Prim
     (
       -- * Numerals
@@ -23,7 +28,7 @@ module Gibbon.Prim
     , bench, timeit, iterate
 
       -- * Vectors
-    , Vector, valloc, vlength, vnth, vslice, vconcat, vsort, vfree, vfree2
+    , Vector, valloc, vlength, vnth, vmerge, vslice, vconcat, vsort, vfree, vfree2
     , inplacevupdate, inplacevsort
 
       -- * Linked lists
@@ -44,6 +49,8 @@ module Gibbon.Prim
       -- * Error reporting
     , error
 
+      -- * Linear types
+    , Ur(..), (&), lseq, unsafeToLinear, unsafeAlias
     ) where
 
 import Prelude hiding ( tan, iterate, sqrt )
@@ -122,11 +129,6 @@ sizeParam = undefined
 benchProgParam :: Sym
 benchProgParam = undefined
 
-{-
- - TODO: Both of these also have a variant with weird type application syntax.
- - Make it more like Haskell.
- -}
-
 readArrayFile :: Maybe (String, Int) -> Vector a
 readArrayFile = undefined
 
@@ -153,32 +155,35 @@ data Vector a
 valloc :: Int -> Vector a
 valloc = undefined
 
-vlength :: Vector a -> Int
+vlength :: Vector a %1-> Int
 vlength = undefined
 
-vnth :: Vector a -> Int -> a
+vnth :: Vector a %1-> Int -> a
 vnth = undefined
 
-vslice :: Int -- Starting index
-       -> Int -- length
-       -> Vector a
-       -> Vector a
+vslice ::   Int -- Starting index
+       ->   Int -- length
+       ->   Vector a
+       %1-> Vector a
 vslice = undefined
+
+vmerge :: Vector a %1-> Vector a %1-> Vector a
+vmerge = undefined
 
 vconcat :: Vector (Vector a) -> Vector a
 vconcat = undefined
 
-vsort :: Vector a -> (a -> a -> Int) -> Vector a
+vsort :: Vector a %1-> (a -> a -> Int) -> Vector a
 vsort = undefined
 
-vfree, vfree2 :: Vector a -> ()
+vfree, vfree2 :: Vector a %1-> ()
 vfree  = undefined
 vfree2 = undefined
 
-inplacevupdate :: Vector a -> Int -> a -> Vector a
+inplacevupdate :: Vector a %1-> Int -> a -> Vector a
 inplacevupdate = undefined
 
-inplacevsort :: Vector a -> (a -> a -> Int) -> Vector a
+inplacevsort :: Vector a %1-> (a -> a -> Int) -> Vector a
 inplacevsort = undefined
 
 --------------------------------------------------------------------------------
@@ -253,7 +258,7 @@ contains_int_hash = undefined
 -- Parallelism
 --------------------------------------------------------------------------------
 
-spawn :: a -> a
+spawn :: a %1-> a
 spawn = undefined
 
 sync :: ()
@@ -267,3 +272,57 @@ getNumProcessors = undefined
 
 is_big :: a -> Bool
 is_big = undefined
+
+--------------------------------------------------------------------------------
+-- Linear types (taken from linear-base)
+--------------------------------------------------------------------------------
+
+{-| https://hackage.haskell.org/package/linear-base-0.1.0/docs/Data-Unrestricted-Internal-Ur.html#t:Ur
+
+    The type and the data constructor are both erased by the parser.
+-}
+data Ur a where
+    Ur :: a -> Ur a
+
+
+{-| https://hackage.haskell.org/package/linear-base-0.1.0/docs/Prelude-Linear.html#v:-38-
+
+    This is parsed as a let-binding:
+
+        exp & (\x -> bod) ====> let x = exp in bod
+-}
+(&) :: a %1 -> (a %1 -> b) %1 -> b
+(&) = undefined
+
+{-| https://hackage.haskell.org/package/linear-base-0.1.0/docs/Prelude-Linear.html#v:lseq
+
+    This is parsed as follows:
+
+        a `lseq` b ====> b
+-}
+lseq :: a %1-> b %1-> b
+lseq = undefined
+
+{-| This is directly desugared as a tuple (by the parser itself), and the L0 specializer
+    erases this tuple construction and projections out of it.
+
+        unsafeAlias a & (\x -> bod)
+    ====>
+        (a,a) & (\x -> bod)
+    ====>
+        let x = (a,a) in bod
+    ====>
+        subst (fst x) a (subst (snd x) a bod)
+-}
+unsafeAlias :: a %1-> (a,a)
+unsafeAlias = undefined
+
+{-| https://hackage.haskell.org/package/linear-base-0.1.0/docs/Unsafe-Linear.html#v:toLinear
+
+    This is parsed as follows:
+
+        unsafeToLinear x ====> x
+
+-}
+unsafeToLinear :: (a %p-> b) %1-> (a %1-> b)
+unsafeToLinear = undefined

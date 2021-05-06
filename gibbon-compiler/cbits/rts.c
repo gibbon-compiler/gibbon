@@ -912,8 +912,8 @@ VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
 
 // The callers must cast the return value.
 static inline void* vector_nth(VectorTy *vec, IntTy i) {
-    if (i > vec->upper) {
-        printf("vector_nth index out of bounds: %lld > %lld\n", i, vec->upper);
+    if (i < vec->lower || i > vec->upper) {
+        printf("vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->lower, vec->upper);
         exit(1);
     }
     return (vec->data + (vec->elt_size * (vec->lower + i)));
