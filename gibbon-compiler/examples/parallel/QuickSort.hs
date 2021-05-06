@@ -15,9 +15,9 @@ rotate i j k vec =
     let elt_i = nth vec i
         elt_j = nth vec j
         elt_k = nth vec k
-        vec2 = inplacevupdate vec i elt_k
-        vec3 = inplacevupdate vec j elt_i
-        vec4 = inplacevupdate vec k elt_j
+        vec2 = inplaceUpdate i elt_k vec
+        vec3 = inplaceUpdate j elt_i vec
+        vec4 = inplaceUpdate k elt_j vec
     in vec4
 
 toFront :: Int -> Int -> Int -> Int -> Vector a -> Vector a
@@ -146,7 +146,7 @@ gibbon_main =
     let n = sizeParam
         vec = generate n (\i -> n - i)
         vec2 = timeit (quickSort_seq (\a b -> b - a) vec)
-        vec3 = timeit (vsort vec cmp1)
+        vec3 = timeit (sort vec cmp1)
         -- vec2 = quickSort_par (\a b -> b - a) vec
         -- _ = printVec (\i -> printint i) vec
         -- _ = newline

@@ -415,10 +415,10 @@ sort_spheres depth ls =
     let axis = mod depth 3
         ls2 = copy ls in
     if axis == 0
-    then inplacevsort ls2 cmpx_sphere
+    then inplaceSort ls2 cmpx_sphere
     else if axis == 1
-    then inplacevsort ls2 cmpy_sphere
-    else inplacevsort ls2 cmpz_sphere
+    then inplaceSort ls2 cmpy_sphere
+    else inplaceSort ls2 cmpz_sphere
 
 sort_spheres_par :: Int -> Vector Sphere -> Vector Sphere
 sort_spheres_par depth ls =
@@ -693,13 +693,13 @@ camera_from_scene width height scene =
 
 generate_2d :: Int -> Int -> (Int -> Int -> a) -> Vector a
 generate_2d m n f =
-  -- vconcat (generate m (\j -> generate n (\i -> f j i)))
+  -- flatten (generate m (\j -> generate n (\i -> f j i)))
   let lam3 = (\i j -> f j i)
       lam1 = (\j ->
                 let lam2 = (\i -> lam3 i j)
                 in generate n lam2)
       lam0 = (\j -> lam1 j)
-  in vconcat (generate m lam0)
+  in flatten (generate m lam0)
 
 rgbbox :: () -> Scene
 rgbbox _ =
@@ -746,11 +746,11 @@ rgbbox _ =
       -- Workaround:
       spheres0 :: Vector (Vector Sphere)
       spheres0 = valloc 4
-      spheres1 = inplacevupdate spheres0 0 leftwall
-      spheres2 = inplacevupdate spheres1 1 midwall
-      spheres3 = inplacevupdate spheres2 2 rightwall
-      spheres4 = inplacevupdate spheres3 3 bottom
-      spheres = vconcat spheres4
+      spheres1 = inplaceUpdate 0 leftwall spheres0
+      spheres2 = inplaceUpdate 1 midwall spheres1
+      spheres3 = inplaceUpdate 2 rightwall spheres2
+      spheres4 = inplaceUpdate 3 bottom spheres3
+      spheres = flatten spheres4
 
       look_from_x = 0.0
       look_from_y = 30.0

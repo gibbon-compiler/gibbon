@@ -439,10 +439,10 @@ check_bhut input particles =
         n = length input
         checkpoints0 :: Vector Int
         checkpoints0 = valloc 4
-        checkpoints1 = inplacevupdate checkpoints0 0 0
-        checkpoints2 = inplacevupdate checkpoints1 1 (div n 4)
-        checkpoints3 = inplacevupdate checkpoints2 2 (div n 2)
-        checkpoints4 = inplacevupdate checkpoints2 3 (n-1)
+        checkpoints1 = inplaceUpdate 0 0 checkpoints0
+        checkpoints2 = inplaceUpdate 1 (div n 4) checkpoints1
+        checkpoints3 = inplaceUpdate 2 (div n 2) checkpoints2
+        checkpoints4 = inplaceUpdate 3 (n-1) checkpoints2
         delta = foldl (\err idx ->
                           let query = nth input idx
                               axay = accel_for query input

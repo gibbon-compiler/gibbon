@@ -64,7 +64,7 @@ write_loop_seq :: Int -> Int -> Int -> Vector a -> Vector a -> Vector a
 write_loop_seq to_idx from_idx end from to =
     if from_idx == end
     then to
-    else let to1 = inplacevupdate to to_idx (nth from from_idx)
+    else let to1 = inplaceUpdate to_idx (nth from from_idx) to
          in write_loop_seq (to_idx+1) (from_idx+1) end from to1
 
 -- | Parallel variant of 'write_loop'.
@@ -86,21 +86,21 @@ writeMerge_seq_loop :: Int -> Int -> Int -> Int -> Int -> (a -> a -> Int) -> Vec
 writeMerge_seq_loop i1 i2 j n1 n2 cmp src_1 src_2 tmp =
     -- copy src_2 to tmp.
     if i1 == n1
-    then let -- tmp_1 = vslice i2 (n2-i2) src_2
+    then let -- tmp_1 = slice i2 (n2-i2) src_2
              tmp_2 = write_loop_seq j i2 n2 src_2 tmp
          in tmp_2
     -- copy src_1 to tmp.
     else if i2 == n2
-         then let -- tmp_1 = vslice i1 (n1-i1) src_1
+         then let -- tmp_1 = slice i1 (n1-i1) src_1
                   tmp_2 = write_loop_seq j i1 n1 src_1 tmp
               in tmp_2
     -- compare elements from both arrays and write the smaller one at j.
          else let x1 = nth src_1 i1
                   x2 = nth src_2 i2
               in if cmp x1 x2 < 0
-                 then let tmp_1 = inplacevupdate tmp j x1
+                 then let tmp_1 = inplaceUpdate j x1 tmp
                       in writeMerge_seq_loop (i1+1) i2 (j+1) n1 n2 cmp src_1 src_2 tmp_1
-                 else let tmp_1 = inplacevupdate tmp j x2
+                 else let tmp_1 = inplaceUpdate j x2 tmp
                       in writeMerge_seq_loop i1 (i2+1) (j+1) n1 n2 cmp src_1 src_2 tmp_1
 
 
@@ -128,16 +128,16 @@ writeMerge cmp src_1 src_2 tmp =
                     mid2 = (binarySearch cmp src_2 pivot)
                     -- cannot use splitAt because we want the second array
                     -- to be from (mid1+1) to (n1 - (mid1+1)).
-                    src_1_l = vslice 0 mid1 src_1
-                    src_1_r = vslice (mid1+1) (n1 - (mid1+1)) src_1
+                    src_1_l = slice 0 mid1 src_1
+                    src_1_r = slice (mid1+1) (n1 - (mid1+1)) src_1
                     -- splitAt-able.
-                    src_2_l = vslice 0 mid2 src_2
-                    src_2_r = vslice mid2 (n2-mid2) src_2
-                    _ = inplacevupdate tmp (mid1+mid2) pivot
+                    src_2_l = slice 0 mid2 src_2
+                    src_2_r = slice mid2 (n2-mid2) src_2
+                    _ = inplaceUpdate (mid1+mid2) pivot tmp
                     len_t = length tmp
                     -- cannot use splitAt here as well.
-                    tmp_l = vslice 0 (mid1+mid2) tmp
-                    tmp_r = vslice (mid1+mid2+1) (len_t - (mid1+mid2+1)) tmp
+                    tmp_l = slice 0 (mid1+mid2) tmp
+                    tmp_r = slice (mid1+mid2+1) (len_t - (mid1+mid2+1)) tmp
                     tmp_l1 = spawn (writeMerge cmp src_1_l src_2_l tmp_l)
                     tmp_r1 = writeMerge cmp src_1_r src_2_r tmp_r
                     _ = sync
@@ -152,7 +152,7 @@ writeSort1 cmp src tmp =
     let len = length src in
     if len < gotoQuickSort
     -- then quickSort_par' 0 (length s) f s
-    then inplacevsort src cmp
+    then inplaceSort cmp src
     else
         let half = div len 2
             (src_l,src_r) = splitAt half src
@@ -169,7 +169,7 @@ writeSort1_seq cmp src tmp =
     let len = length src in
     if len < gotoQuickSort
     -- then quickSort_par' 0 (length s) f s
-    then inplacevsort src cmp
+    then inplaceSort cmp src
     else
         let half = div len 2
             (src_l,src_r) = splitAt half src
@@ -188,7 +188,7 @@ writeSort2 cmp src tmp =
     then
         let tmp_1 = write_loop 0 0 len src tmp
         -- in quickSort_par' 0 (length t1) f t1
-        in inplacevsort tmp_1 cmp
+        in inplaceSort cmp tmp_1
     else
         let half = div len 2
             (src_l,src_r) = splitAt half src
@@ -207,7 +207,7 @@ writeSort2_seq cmp src tmp =
     then
         let tmp_1 = write_loop_seq 0 0 len src tmp
         -- in quickSort_par' 0 (length t1) f t1
-        in inplacevsort tmp_1 cmp
+        in inplaceSort cmp tmp_1
     else
         let half = div len 2
             (src_l,src_r) = splitAt half src
@@ -222,7 +222,7 @@ mergeSort' :: (a -> a -> Int) -> Vector a -> Vector a
 {-# INLINE mergeSort' #-}
 mergeSort' cmp src =
     let tmp :: Vector a
-        tmp = valloc (length src)
+        tmp = alloc (length src)
         tmp2 = writeSort1 cmp src tmp
     in src
 
@@ -231,7 +231,7 @@ mergeSort'_seq :: (a -> a -> Int) -> Vector a -> Vector a
 {-# INLINE mergeSort'_seq #-}
 mergeSort'_seq cmp src =
     let tmp :: Vector a
-        tmp = valloc (length src)
+        tmp = alloc (length src)
         tmp2 = writeSort1_seq cmp src tmp
     in src
 
@@ -254,13 +254,13 @@ mergeSort_seq cmp vec =
 cStdlibSort :: (a -> a -> Int) -> Vector a -> Vector a
 cStdlibSort cmp vec =
   let vec2 = copy_par vec
-      vec3 = inplacevsort vec2 cmp
+      vec3 = inplaceSort cmp vec2
   in vec3
 
 cStdlibSort_seq :: (a -> a -> Int) -> Vector a -> Vector a
 cStdlibSort_seq cmp vec =
   let vec2 = copy vec
-      vec3 = inplacevsort vec2 cmp
+      vec3 = inplaceSort cmp vec2
   in vec3
 
 check_sorted :: (a -> a -> Int) -> Vector a -> ()

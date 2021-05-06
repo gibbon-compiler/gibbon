@@ -144,10 +144,10 @@ sort_point3d :: Int -> Vector Point3d -> Vector Point3d
 sort_point3d axis ls =
     let ls2 = copy ls in
     if axis == 0
-    then inplacevsort ls2 cmpx_point3d
+    then inplaceSort cmpx_point3d ls2
     else if axis == 1
-    then inplacevsort ls2 cmpy_point3d
-    else inplacevsort ls2 cmpz_point3d
+    then inplaceSort cmpy_point3d ls2
+    else inplaceSort cmpz_point3d ls2
 
 -- sort_point3d :: Int -> Vector Point3d -> Vector Point3d
 -- sort_point3d axis ls =
@@ -162,10 +162,10 @@ sort_point3d axis ls =
 -- sort_point3d_par axis ls =
 --     let ls2 = copy_par ls in
 --     if axis == 0
---     then inplacevsort ls2 cmpx_point3d
+--     then inplaceSort cmpx_point3d ls2
 --     else if axis == 1
---     then inplacevsort ls2 cmpy_point3d
---     else inplacevsort ls2 cmpz_point3d
+--     then inplaceSort cmpy_point3d ls2
+--     else inplaceSort cmpz_point3d ls2
 
 sort_point3d_par :: Int -> Vector Point3d -> Vector Point3d
 sort_point3d_par axis ls =

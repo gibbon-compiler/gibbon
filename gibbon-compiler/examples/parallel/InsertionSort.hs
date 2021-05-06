@@ -6,8 +6,8 @@ swap :: Int -> Int -> Vector a -> Vector a
 swap i j vec =
     let elt_i = nth vec i
         elt_j = nth vec j
-        vec2 = inplacevupdate vec i elt_j
-        vec3 = inplacevupdate vec j elt_i
+        vec2 = inplaceUpdate i elt_j vec
+        vec3 = inplaceUpdate j elt_i vec
     in vec3
 
 inner :: (a -> a -> Int) -> Int -> Int -> Int -> Int -> Vector a -> Vector a

@@ -10,6 +10,12 @@ import Gibbon.Prelude
 
 -- Work: O(1)
 -- Span: O(1)
+alloc :: Int -> Vector a
+{-# INLINE alloc #-}
+alloc vec = valloc vec
+
+-- Work: O(1)
+-- Span: O(1)
 length :: Vector a -> Int
 {-# INLINE length #-}
 length vec = vlength vec
@@ -29,11 +35,23 @@ slice :: Int -- Starting index
 {-# INLINE slice #-}
 slice i n vec = vslice i n vec
 
--- sort :: Vector a -> (a -> a -> Int) -> Vector a
--- sort vec cmp = vsort vec cmp1
+sort :: (a -> a -> Int) -> Vector a -> Vector a
+{-# INLINE sort #-}
+sort cmp vec = vsort vec cmp
 
--- inplaceSort :: Vector a -> (a -> a -> Int) -> Vector a
--- inplaceSort vec cmp = inplacevsort vec cmp1
+flatten :: Vector (Vector a) -> Vector a
+{-# INLINE flatten #-}
+flatten ls = vconcat ls
+
+inplaceSort :: (a -> a -> Int) -> Vector a -> Vector a
+{-# INLINE inplaceSort #-}
+inplaceSort cmp vec = inplacevsort vec cmp
+
+-- Work: O(1)
+-- Span: O(1)
+inplaceUpdate :: Int -> a -> Vector a -> Vector a
+{-# INLINE inplaceUpdate #-}
+inplaceUpdate i val vec = inplacevupdate vec i val
 
 --------------------------------------------------------------------------------
 
@@ -124,13 +142,13 @@ map :: (a -> b) -> Vector a -> Vector b
 {-# INLINE map #-}
 map f vec = generate (length vec) (\i -> f (vnth vec i))
 
--- Work: O(n)
--- Span: O(n)
-update :: Vector a -> Int -> a -> Vector a
-{-# INLINE update #-}
-update vec i x = generate
-                      (length vec)
-                      (\j -> if i == j then x else vnth vec j)
+-- -- Work: O(n)
+-- -- Span: O(n)
+-- update :: Vector a -> Int -> a -> Vector a
+-- {-# INLINE update #-}
+-- update vec i x = generate
+--                       (length vec)
+--                       (\j -> if i == j then x else vnth vec j)
 
 -- Work: O(n)
 -- Span: O(n)
