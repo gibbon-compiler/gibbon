@@ -1,6 +1,6 @@
 cabal-version:       >=1.10
 name:                gibbon-stdlib
-version:             0.1.0.0
+version:             0.1
 author:              Chaitanya Koparkar
 maintainer:          ckoparkar@gmail.com
 build-type:          Simple
