@@ -95,8 +95,7 @@ typecheckWithGhc :: Config -> FilePath -> IO ()
 typecheckWithGhc cfg path = do
   when (verbosity cfg >= 3) $
     putStr " [compiler] Running pass, GHC typechecker\n   => "
-  env <- getEnvironment
-  let cmd = "ghc-9.0.1 -package gibbon-stdlib " ++ path
+  let cmd = "ghc-9.0.1 -package gibbon-stdlib-0.1 -XNoImplicitPrelude -fno-code " ++ path
   (_, Just hout, Just herr, phandle) <-
         createProcess (shell cmd)
             { std_out = CreatePipe
@@ -106,9 +105,11 @@ typecheckWithGhc cfg path = do
   exitCode <- waitForProcess phandle
   case exitCode of
     ExitSuccess -> do
-      out <- hGetContents hout
-      when (verbosity cfg >= 3) $
+      when (verbosity cfg >= 3) $ do
+        out <- hGetContents hout
+        err <- hGetContents herr
         putStrLn out
+        putStrLn err
       pure ()
     ExitFailure _ -> do
       err <- hGetContents herr
