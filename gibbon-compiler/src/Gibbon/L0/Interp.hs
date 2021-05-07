@@ -29,6 +29,7 @@ instance InterpExt () Exp0 (E0Ext Ty0 Ty0) where
         ParE0 ls -> gInterpExp rc valenv ddefs fundefs (MkProdE ls)
         L _ e -> gInterpExp rc valenv ddefs fundefs e
         PolyAppE{} -> error "L0.Interp: PolyAppE not handled."
+        LinearExt{} -> error $ "L0.Interp: a linear types extension wasn't desugared: " ++ sdoc ex
 
 instance Interp () Exp0 where
   gInterpExp  = L1.interp

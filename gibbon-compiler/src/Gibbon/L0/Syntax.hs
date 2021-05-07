@@ -48,7 +48,24 @@ data E0Ext loc dec =
  | BenchE Var [loc] [(PreExp E0Ext loc dec)] Bool
  | ParE0 [(PreExp E0Ext loc dec)]
  | L Loc.Loc (PreExp E0Ext loc dec)
+ | LinearExt (LinearExt loc dec)
  deriving (Show, Ord, Eq, Read, Generic, NFData)
+
+-- | Linear types primitives.
+data LinearExt loc dec =
+    -- (&) :: a %1 -> (a %1 -> b) %1 -> b
+    ReverseAppE (PreExp E0Ext loc dec) (PreExp E0Ext loc dec)
+
+    -- lseq :: a %1-> b %1-> b
+  | LseqE (PreExp E0Ext loc dec) (PreExp E0Ext loc dec)
+
+    -- unsafeAlias :: a %1-> (a,a)
+  | AliasE (PreExp E0Ext loc dec)
+
+    -- unsafeToLinear :: (a %p-> b) %1-> (a %1-> b)
+  | ToLinearE (PreExp E0Ext loc dec)
+
+  deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 --------------------------------------------------------------------------------
 -- Helper methods to integrate the Data.Loc with Gibbon
@@ -75,6 +92,9 @@ instance Out Loc.Pos where
   docPrec _ pos = doc pos
   doc (Loc.Pos path line col _) = hcat [doc path, colon, doc line, colon, doc col]
 
+--------------------------------------------------------------------------------
+-- Instances for E0Ext
+
 instance FreeVars (E0Ext l d) where
   gFreeVars e =
     case e of
@@ -84,6 +104,7 @@ instance FreeVars (E0Ext l d) where
       BenchE _ _ args _-> S.unions (map gFreeVars args)
       ParE0 ls         -> S.unions (map gFreeVars ls)
       L _ e1           -> gFreeVars e1
+      LinearExt ext      -> gFreeVars ext
 
 instance (Out l, Out d, Show l, Show d) => Expression (E0Ext l d) where
   type LocOf (E0Ext l d) = l
@@ -103,6 +124,7 @@ instance HasSubstitutableExt E0Ext l d => SubstitutableExt (PreExp E0Ext l d) (E
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubst old new) args) b
       ParE0 ls -> ParE0 $ map (gSubst old new) ls
       L p e1   -> L p (gSubst old new e1)
+      LinearExt e -> LinearExt (gSubstExt old new e)
 
   gSubstEExt old new ext =
     case ext of
@@ -112,6 +134,7 @@ instance HasSubstitutableExt E0Ext l d => SubstitutableExt (PreExp E0Ext l d) (E
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubstE old new) args) b
       ParE0 ls -> ParE0 $ map (gSubstE old new) ls
       L p e    -> L p $ (gSubstE old new e)
+      LinearExt e -> LinearExt (gSubstEExt old new e)
 
 instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
   gRename env ext =
@@ -122,6 +145,7 @@ instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
       BenchE fn tyapps args b -> BenchE fn (map go tyapps) (map go args) b
       ParE0 ls -> ParE0 $ map (gRename env) ls
       L p e    -> L p (gRename env e)
+      LinearExt e -> LinearExt (gRename env e)
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env
@@ -129,6 +153,54 @@ instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
 instance (Out l, Out d) => Out (E0Ext l d)
 instance Out Ty0
 instance Out TyScheme
+
+--------------------------------------------------------------------------------
+-- Instances for LinearExt
+
+instance FreeVars (LinearExt l d) where
+  gFreeVars e =
+    case e of
+      ReverseAppE fn arg -> gFreeVars fn `S.union` (gFreeVars arg)
+      LseqE a b   -> gFreeVars a `S.union` gFreeVars b
+      AliasE a    -> gFreeVars a
+      ToLinearE a -> gFreeVars a
+
+instance (Out l, Out d, Show l, Show d) => Expression (LinearExt l d) where
+  type LocOf (LinearExt l d) = l
+  type TyOf (LinearExt l d)  = d
+  isTrivial _ = False
+
+instance (Show l, Out l) => Flattenable (LinearExt l Ty0) where
+    gFlattenGatherBinds _ddfs _env ex = return ([], ex)
+    gFlattenExp _ddfs _env ex = return ex
+
+instance HasSubstitutableExt E0Ext l d => SubstitutableExt (PreExp E0Ext l d) (LinearExt l d) where
+  gSubstExt old new ext =
+    case ext of
+      ReverseAppE fn arg -> ReverseAppE (gSubst old new fn) (gSubst old new arg)
+      LseqE a b   -> LseqE (gSubst old new a) (gSubst old new b)
+      AliasE a    -> AliasE (gSubst old new a)
+      ToLinearE a -> ToLinearE (gSubst old new a)
+
+  gSubstEExt old new ext =
+    case ext of
+      ReverseAppE fn arg -> ReverseAppE (gSubstE old new fn) (gSubstE old new arg)
+      LseqE a b   -> LseqE (gSubstE old new a) (gSubstE old new b)
+      AliasE a    -> AliasE (gSubstE old new a)
+      ToLinearE a -> ToLinearE (gSubstE old new a)
+
+instance HasRenamable E0Ext l d => Renamable (LinearExt l d) where
+  gRename env ext =
+    case ext of
+      ReverseAppE fn arg -> ReverseAppE (go fn) (go arg)
+      LseqE a b   -> LseqE (go a) (go b)
+      AliasE a    -> AliasE (go a)
+      ToLinearE a -> ToLinearE (go a)
+    where
+      go :: forall a. Renamable a => a -> a
+      go = gRename env
+
+instance (Out l, Out d) => Out (LinearExt l d)
 
 --------------------------------------------------------------------------------
 
@@ -392,14 +464,15 @@ isValidListElemTy0 ty
                   ProdTy tys -> all isScalarTy0 tys
                   _ -> False
 
--- Hack. In the specializer, we'd like to know the type of the scrutinee.
--- However, we cannot derive Typeable for L0.
+-- Hack: in the specializer, we sometimes want to know the type of
+-- an expression. However, we cannot derive Typeable for L0.
 --
--- Typeable uses the type 'UrTy' which is shared by the IR's L1, L2 and L3, but not L0.
--- L0 uses it's own type Ty0, which is not an instance of 'UrTy'.
--- Can we merge 'Ty0' and 'UrTy' ? Well we can, but we would end up polluting 'UrTy'
--- with type variables and function types, which should be unused after L0.
--- Or, we can have a special (Typeable L0), which is what recoverType is.
+-- Typeable is based on 'UrTy' which is used by the L1, L2 and L3 IR's, but *not* L0.
+-- L0 uses it's own type (Ty0) representation.
+--
+-- Can we merge 'Ty0' and 'UrTy' ? We could, but we would end up polluting 'UrTy'
+-- with type variables and function types and such, which are unused after L0.
+-- Or we can have a special function just for L0, which is what recoverType is.
 -- ¯\_(ツ)_/¯
 --
 recoverType :: DDefs0 -> Env2 Ty0 -> Exp0 -> Ty0
@@ -448,6 +521,16 @@ recoverType ddfs env2 ex =
         PolyAppE{}  -> error "recoverTypeep: TODO PolyAppE"
         BenchE fn _ _ _ -> outTy $ fEnv env2 # fn
         ParE0 ls -> ProdTy $ map (recoverType ddfs env2) ls
+        LinearExt lin ->
+          case lin of
+            ReverseAppE fn _args -> case recoverType ddfs env2 fn of
+                                      ArrowTy _ ty -> ty
+                                      oth -> error $ "recoverType: ReverseAppE expected a function type, got: " ++ sdoc oth
+            LseqE _ b -> recoverType ddfs env2 b
+            AliasE a  -> let ty = recoverType ddfs env2 a
+                         in ProdTy [ty,ty]
+            ToLinearE a -> recoverType ddfs env2 a
+
         L _ e    -> recoverType ddfs env2 e
   where
     -- Return type for a primitive operation.

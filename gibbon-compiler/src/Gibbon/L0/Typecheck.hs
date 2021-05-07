@@ -658,6 +658,8 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
     Ext (L _ e) -> go e
 
+    Ext (LinearExt{}) -> err $ text "a linear types extension wasn't desugared: " <+> exp_doc
+
     TimeIt a ty b -> do
       (s1, ty', a') <- go a
       s2 <- unify ex ty ty'
@@ -895,6 +897,7 @@ zonkExp s ex =
                                      in Ext (BenchE fn tyapps1 (map go args) b)
     Ext (ParE0 ls) -> Ext $ ParE0 (map go ls)
     Ext (L p e)    -> Ext $ L p (go e)
+    Ext (LinearExt{}) -> error $ "zonkExp: a linear types extension wasn't desugared: " ++ sdoc ex
     SpawnE fn tyapps args -> let tyapps1 = map (zonkTy s) tyapps
                              in SpawnE fn tyapps1 (map go args)
     SyncE    -> SyncE
@@ -955,6 +958,7 @@ substTyVarExp s ex =
                                      in Ext (BenchE fn tyapps1 (map go args) b)
     Ext (ParE0 ls) -> Ext $ ParE0 (map go ls)
     Ext (L p e)    -> Ext $ L p (go e)
+    Ext (LinearExt{}) -> error $ "substTyVarExp: a linear types extension wasn't desugared: " ++ sdoc ex
     WithArenaE{} -> error "substTyVarExp: WithArenaE not handled."
     SpawnE f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
                            in SpawnE f tyapps1 (map go arg)

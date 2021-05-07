@@ -176,6 +176,7 @@ tagDataCons ddefs = go allCons
          pure $ Ext $ BenchE v tyapps es' b
        Ext (ParE0 ls) -> Ext <$> ParE0 <$> mapM (go cons) ls
        Ext (L p e)    -> Ext <$> (L p) <$> go cons e
+       Ext (LinearExt{}) -> error $ "tagDataCons: SExpFrontend doesn't support linear types yet."
 
 
 -- | Convert from raw, unstructured S-Expression into the L1 program datatype we expect.

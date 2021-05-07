@@ -514,8 +514,10 @@ desugarExp type_syns toplevel e =
 
     Lambda _ pats bod -> do
       bod' <- desugarExp type_syns toplevel bod
-      args <- mapM (desugarPatWithTy type_syns) pats
-      pure $ Ext $ LambdaE args bod'
+      (vars,tys,bindss) <- unzip3 <$> mapM (desugarPatWithTy type_syns) pats
+      let binds = concat bindss
+          args = zip vars tys
+      pure $ Ext $ LambdaE args (mkLets binds bod')
 
     App _ e1 e2 -> do
         desugarExp type_syns toplevel e1 >>= \case
@@ -775,8 +777,12 @@ desugarExp type_syns toplevel e =
     InfixApp _ e1 op e2 -> do
       e1' <- desugarExp type_syns toplevel e1
       e2' <- desugarExp type_syns toplevel e2
-      let op' = desugarOp op
-      pure $ PrimAppE op' [e1', e2']
+      case op of
+        QVarOp _ (UnQual _ (Symbol _ "&")) -> do
+          pure $ Ext (LinearExt (ReverseAppE e2' e1'))
+        _ -> do
+          let op' = desugarOp op
+          pure $ PrimAppE op' [e1', e2']
 
     NegApp _ e1 -> do
       e1' <- desugarExp type_syns toplevel e1
@@ -790,7 +796,9 @@ desugarFun type_syns toplevel env decl =
     FunBind _ [Match _ fname pats (UnGuardedRhs _ bod) _where] -> do
       let fname_str = nameToStr fname
           fname_var = toVar (fname_str)
-      args <- mapM (\p -> desugarPatWithTy type_syns p >>= pure . fst) pats
+      (vars,_tys,bindss) <- unzip3 <$> mapM (desugarPatWithTy type_syns) pats
+      let binds = concat bindss
+          args = vars
       fun_ty <- case M.lookup fname_var env of
                   Nothing -> do
                      arg_tys <- mapM (\_ -> newMetaTy) args
@@ -799,7 +807,7 @@ desugarFun type_syns toplevel env decl =
                      pure $ (ForAll [] funty)
                   Just ty -> pure ty
       bod' <- desugarExp type_syns toplevel bod
-      pure $ (fname_var, args, unCurryTopTy fun_ty, bod')
+      pure $ (fname_var, args, unCurryTopTy fun_ty, (mkLets binds bod'))
     _ -> error $ "desugarFun: Found a function with multiple RHS, " ++ prettyPrint decl
 
 multiArgsToOne :: [Var] -> [Ty0] -> Exp0 -> (Var, Exp0)
@@ -869,11 +877,13 @@ collectTopLevel type_syns env decl =
                  case pats of
                    [] -> error "Impossible"
                    _  -> do
-                     args <- mapM (\p -> desugarPatWithTy type_syns p >>= pure . fst) pats
+                     (vars,_tys,bindss) <- unzip3 <$> mapM (desugarPatWithTy type_syns) pats
+                     let binds = concat bindss
+                         args = vars
                      pure $ Just $ HFunDef (FunDef { funName = toVar fn
                                                    , funArgs = args
                                                    , funTy   = fun_ty
-                                                   , funBody = fixupSpawn bod'
+                                                   , funBody = fixupSpawn (mkLets binds bod')
                                                    , funRec  = NotRec
                                                    , funInline = NoInline
                                                    })
@@ -1037,14 +1047,25 @@ desugarTyVarBind :: TyVarBind a -> TyVar
 desugarTyVarBind (UnkindedVar _ name) = UserTv (toVar (nameToStr name))
 desugarTyVarBind v@KindedVar{} = error $ "desugarTyVarBind: Vars with kinds not supported yet." ++ prettyPrint v
 
-desugarPatWithTy :: (Show a, Pretty a) => TypeSynEnv -> Pat a -> PassM (Var, Ty0)
+desugarPatWithTy :: (Show a, Pretty a) => TypeSynEnv -> Pat a -> PassM (Var, Ty0, [L0.Binds Exp0])
 desugarPatWithTy type_syns pat =
   case pat of
     (PParen _ p)        -> desugarPatWithTy type_syns p
-    (PatTypeSig _ p ty) -> do (v,_ty) <- desugarPatWithTy type_syns p
-                              pure (v, desugarType type_syns ty)
-    (PVar _ n)          -> (toVar $ nameToStr n, ) <$> newMetaTy
-    (PWildCard _)       -> (\a b -> (a,b)) <$> gensym "wildcard_" <*> newMetaTy
+    (PatTypeSig _ p ty) -> do (v,_ty,binds) <- desugarPatWithTy type_syns p
+                              pure (v, desugarType type_syns ty, binds)
+    (PVar _ n)          -> do ty <- newMetaTy
+                              pure (toVar (nameToStr n), ty, [])
+    (PWildCard _)       -> do v <- gensym "wildcard_"
+                              ty <- newMetaTy
+                              pure (v,ty,[])
+    (PTuple _ Boxed pats) -> do (vars,tys,bindss) <- unzip3 <$> mapM (desugarPatWithTy type_syns) pats
+                                tup <- gensym "tup"
+                                let binds0 = concat bindss
+                                    binds1 = map (\(v,ty,i) -> (v,[],ty,ProjE i (VarE tup))) (zip3 vars tys [0..])
+                                    tupty = ProdTy tys
+                                dbgTraceIt (show (tup,tupty,binds0 ++ binds1)) (pure ())
+                                pure (tup,tupty,binds0 ++ binds1)
+
     _ -> error ("desugarPatWithTy: Unsupported pattern: " ++ show pat)
 
 nameToStr :: Name a -> String
@@ -1065,6 +1086,12 @@ fixupSpawn ex =
     Ext (BenchE fn tyapps args b) -> Ext (BenchE fn tyapps (map go args) b)
     Ext (ParE0 ls) -> Ext (ParE0 (map go ls))
     Ext (L p e)    -> Ext (L p (go e))
+    Ext (LinearExt ext) ->
+      case ext of
+        ReverseAppE fn arg -> Ext (LinearExt (ReverseAppE (go fn) (go arg)))
+        LseqE a b   -> Ext (LinearExt (LseqE (go a) (go b)))
+        AliasE a    -> Ext (LinearExt (AliasE (go a)))
+        ToLinearE a -> Ext (LinearExt (ToLinearE (go a)))
     -- Straightforward recursion ...
     VarE{}     -> ex
     LitE{}     -> ex
@@ -1105,6 +1132,7 @@ verifyBenchEAssumptions bench_allowed ex =
       else error $ "verifyBenchEAssumptions: 'bench' can only be used as a tail of the main expression, but it was used in a function. In: " ++ sdoc ex
     Ext (ParE0 ls) -> Ext (ParE0 (map not_allowed ls))
     Ext (L p e)    -> Ext (L p (go e))
+    Ext (LinearExt{}) -> error "verifyBenchEAssumptions: LinearExt not handled."
     -- Straightforward recursion ...
     VarE{}     -> ex
     LitE{}     -> ex

@@ -13,7 +13,7 @@ This module is the first attempt to do that.
 -}
 
 module Gibbon.L0.Specialize2
-  (bindLambdas, monomorphize, specLambdas, elimParE0, toL1)
+  (bindLambdas, monomorphize, specLambdas, desugarParE0, toL1)
   where
 
 import           Control.Monad.State
@@ -192,6 +192,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
                 [] -> Ext $ L1.BenchE fn [] (map toL1Exp args) b
                 _  -> error "toL1: Polymorphic 'bench' not supported yet."
             ParE0{} -> error "toL1: ParE0"
+            LinearExt{} -> error $ "toL1: a linear types extension wasn't desugared: " ++ sdoc ex
             -- Erase srclocs while going to L1
             L _ e   -> toL1Exp e
 
@@ -598,6 +599,7 @@ collectMonoObls ddefs env2 toplevel ex =
         L p e -> do
           e' <- go e
           pure $ Ext $ L p e'
+        LinearExt{} -> error $ "collectMonoObls: a linear types extension wasn't desugared: " ++ sdoc ex
     SpawnE f [] args -> do
       args' <- mapM (collectMonoObls ddefs env2 toplevel) args
       pure $ SpawnE f [] args'
@@ -698,6 +700,7 @@ monoLambdas ex =
     Ext (BenchE{})   -> pure ex
     Ext (ParE0 ls)   -> Ext <$> ParE0 <$> mapM monoLambdas ls
     Ext (L p e)      -> Ext <$> (L p) <$> monoLambdas e
+    Ext (LinearExt{}) -> error $ "monoLambdas: a linear types extension wasn't desugared: " ++ sdoc ex
     SpawnE f tyapps args ->
       case tyapps of
         [] -> do args' <- mapM monoLambdas args
@@ -789,6 +792,7 @@ updateTyConsExp ddefs mono_st ex =
     Ext (BenchE{})     -> ex
     Ext (ParE0 ls)     -> Ext $ ParE0 $ map go ls
     Ext (L p e)        -> Ext $ L p (go e)
+    Ext (LinearExt{})  -> error $ "updateTyConsExp: a linear types extension wasn't desugared: " ++ sdoc ex
   where
     go = updateTyConsExp ddefs mono_st
 
@@ -1139,6 +1143,7 @@ specLambdasExp ddefs env2 ex =
                                          ls
           state (\st -> ((), st { sp_fundefs = foldr mb_insert (sp_fundefs st) mb_fns }))
           pure $ mkLets (concat binds) (Ext $ ParE0 calls)
+        LinearExt{}  -> error $ "specLambdasExp: a linear types extension wasn't desugared: " ++ sdoc ex
         L p e -> Ext <$> (L p) <$> go e
   where
     go = specLambdasExp ddefs env2
@@ -1187,6 +1192,7 @@ specLambdasExp ddefs env2 ex =
             BenchE{}            -> acc
             ParE0 ls            -> foldr collectFunRefs acc ls
             L _ e1              -> collectFunRefs e1 acc
+            LinearExt{}         -> error $ "collectFunRefs: a linear types extension wasn't desugared: " ++ sdoc ex
 
     -- Returns all functions used in an expression, both in AppE's and FunRefE's.
     collectAllFuns :: Exp0 -> [FunRef] -> [FunRef]
@@ -1221,6 +1227,7 @@ specLambdasExp ddefs env2 ex =
             BenchE{}            -> acc
             ParE0 ls            -> foldr collectAllFuns acc ls
             L _ e1              -> collectAllFuns e1 acc
+            LinearExt{}         -> error $ "collectAllFuns: a linear types extension wasn't desugared: " ++ sdoc ex
 
 addArgsToTy :: [Ty0] -> TyScheme -> TyScheme
 addArgsToTy ls (ForAll tyvars (ArrowTy in_tys ret_ty)) =
@@ -1282,6 +1289,7 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
         (Ext (L p e1))     -> do
           (ls, e1') <- go e1
           pure (ls, Ext $ L p e1')
+        (Ext (LinearExt{})) -> error $ "bindLambdas: a linear types extension wasn't desugared: " ++ sdoc e0
         (LitE _)      -> pure ([], e0)
         (FloatE{})    -> pure ([], e0)
         (LitSymE _)   -> pure ([], e0)
@@ -1322,16 +1330,16 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
 
 --------------------------------------------------------------------------------
 
--- | Convert parallel tuples to explicit spawn's and sync's.
-elimParE0 :: Prog0 -> PassM Prog0
-elimParE0 prg@Prog{fundefs,mainExp} = do
+-- | Desugar parallel tuples to explicit spawn's and sync's.
+desugarParE0 :: Prog0 -> PassM Prog0
+desugarParE0 prg@Prog{fundefs,mainExp} = do
   fundefs' <- mapM (\fn@FunDef{funBody} -> go funBody >>= \b -> pure $ fn {funBody = b}) fundefs
   mainExp' <- case mainExp of
                 Nothing     -> pure Nothing
                 Just (e,ty) -> Just <$> (,ty) <$> go e
   pure $ prg { fundefs = fundefs', mainExp = mainExp' }
   where
-    err1 msg = error $ "elimParE0: " ++ msg
+    err1 msg = error $ "desugarParE0: " ++ msg
 
     -- | Turn ParE0 into explicit spawn's and sync's
     go :: Exp0 -> PassM Exp0
@@ -1351,23 +1359,26 @@ elimParE0 prg@Prog{fundefs,mainExp} = do
                     case args of
                       [ls, Ext (FunRefE _ fp)]             -> [ls, VarE fp]
                       [ls, Ext (L _ (Ext (FunRefE _ fp)))] -> [ls, VarE fp]
-                      _ -> error $ "elimParE0: vsort" ++ sdoc ex
+                      _ -> error $ "desugarParE0: vsort" ++ sdoc ex
                   InplaceVSortP{} ->
                     case args of
                       [ls, Ext (FunRefE _ fp)]             -> [ls, VarE fp]
                       [ls, Ext (L _ (Ext (FunRefE _ fp)))] -> [ls, VarE fp]
-                      _ -> error $ "elimParE0: vsort" ++ sdoc ex
+                      _ -> error $ "desugarParE0: vsort" ++ sdoc ex
                   _ -> args
           args'' <- mapM go args'
           pure $ PrimAppE pr args''
         LetE (v,tyapps,ty@(ProdTy tys),(Ext (ParE0 ls))) bod -> do
           vs <- mapM (\_ -> gensym "par_") ls
-          let ls' = foldr
+          let xs = (zip3 vs tys ls)
+              spawns = init xs
+              (a,b,c) = last xs
+              ls' = foldr
                       (\(w,ty1,(AppE fn tyapps1 args)) acc ->
                          (w,[],ty1,(SpawnE fn tyapps1 args)) : acc)
                       []
-                      (zip3 vs tys ls)
-              ls'' = ls' ++ [("_", [], ProdTy [], SyncE), (v,tyapps,ty, MkProdE (map VarE vs))]
+                      spawns
+              ls'' = ls' ++ [(a,[],b,c), ("_", [], ProdTy [], SyncE), (v,tyapps,ty, MkProdE (map VarE vs))]
           bod' <- go bod
           pure $  mkLets ls'' bod'
         LetE (v,tyapps,ty,rhs) bod -> LetE <$> (v,tyapps,ty,) <$> go rhs <*> go bod
@@ -1390,6 +1401,7 @@ elimParE0 prg@Prog{fundefs,mainExp} = do
             BenchE fn _tyapps args b -> (\a -> Ext $ BenchE fn [] a b) <$> mapM go args
             ParE0{} -> err1 "toL1: ParE0"
             L p e   -> Ext <$> (L p) <$> (go e)
+            LinearExt{} -> err1 (sdoc ex)
 
 --------------------------------------------------------------------------------
 

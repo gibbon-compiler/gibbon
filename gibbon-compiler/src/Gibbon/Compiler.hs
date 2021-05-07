@@ -482,7 +482,7 @@ passes config@Config{dynflags} l0 = do
       l0 <- goE0 "monomorphize"    L0.monomorphize      l0
       -- l0 <- goE0 "closureConvert"  L0.closureConvert    l0
       l0 <- goE0 "specLambdas"     L0.specLambdas       l0
-      l0 <- goE0 "elimParE0"       L0.elimParE0         l0
+      l0 <- goE0 "desugarParE0"    L0.desugarParE0      l0
       -- Note: L0 -> L1
       l1 <- goE0 "toL1"            (pure . L0.toL1)     l0
 

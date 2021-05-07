@@ -511,6 +511,12 @@ instance (Out a, Pretty a) => Pretty (L0.E0Ext a L0.Ty0) where
                                     (pprintWithStyle sty args) <+> text (if b then "true" else "false")
       L0.ParE0 ls -> text "par" <+> lparen <> hcat (punctuate (text ", ") (map (pprintWithStyle sty) ls)) <> rparen
       L0.L _ e    -> pprintWithStyle sty e
+      L0.LinearExt ext ->
+        case ext of
+          L0.ReverseAppE fn arg -> (pprintWithStyle sty arg <+> text "&") $$ pprintWithStyle sty fn
+          L0.LseqE a b   -> text "lseq" <+> pprintWithStyle sty a <+> pprintWithStyle sty b
+          L0.AliasE a    -> text "unsafeAlias" <+> parens (pprintWithStyle sty a)
+          L0.ToLinearE a -> text "unsafeToLinear" <+> parens (pprintWithStyle sty a)
 
 
 --------------------------------------------------------------------------------
