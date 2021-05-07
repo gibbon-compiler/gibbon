@@ -12,9 +12,6 @@ import Gibbon.Prim
 
 --------------------------------------------------------------------------------
 
-id :: a -> a
-id x = x
-
 maxInt :: Int -> Int -> Int
 maxInt a b = if a > b then a else b
 

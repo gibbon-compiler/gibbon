@@ -3,10 +3,10 @@
 {-# LANGUAGE RecordWildCards  #-}
 
 module Gibbon.HaskellFrontend
-  ( parseFile, primMap, multiArgsToOne ) where
+  ( parseFile, primMap, multiArgsToOne, desugarLinearExts ) where
 
 import           Control.Monad
-import           Data.Foldable ( foldrM )
+import           Data.Foldable ( foldrM, foldl' )
 import           Data.Maybe (catMaybes, isJust)
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -61,6 +61,7 @@ parseFile :: Config -> FilePath -> IO (PassM Prog0)
 parseFile cfg path = do
     pstate0_ref <- newIORef emptyParseState
     parseFile' cfg pstate0_ref [] path
+
 
 data ParseState = ParseState
     { imported :: M.Map (String, FilePath) Prog0 }
@@ -697,6 +698,14 @@ desugarExp type_syns toplevel e =
                   then do
                     e2' <- desugarExp type_syns toplevel e2
                     pure $ ProjE 1 e2'
+                  else if f == "unsafeAlias"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    pure $ Ext (LinearExt (AliasE e2'))
+                  else if f == "unsafeToLinear"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    pure $ Ext (LinearExt (ToLinearE e2'))
                   else if S.member f keywords
                   then error $ "desugarExp: Keyword not handled: " ++ sdoc f
                   else AppE f [] <$> (: []) <$> desugarExp type_syns toplevel e2
@@ -732,6 +741,22 @@ desugarExp type_syns toplevel e =
 
           TimeIt{} ->
             error "desugarExp: TimeIt can only accept 1 expression."
+
+          (Ext (LinearExt (ToLinearE (AppE f [] ls)))) -> do
+            e2' <- desugarExp type_syns toplevel e2
+            pure (Ext (LinearExt (ToLinearE (AppE f [] (ls ++ [e2'])))))
+
+          (Ext (LinearExt (ToLinearE (DataConE tyapp dcon ls)))) -> do
+            e2' <- desugarExp type_syns toplevel e2
+            pure (Ext (LinearExt (ToLinearE (DataConE tyapp dcon (ls ++ [e2'])))))
+
+          (Ext (LinearExt (ToLinearE (Ext (LambdaE [(v,ty)] bod))))) -> do
+            e2' <- desugarExp type_syns toplevel e2
+            pure (Ext (LinearExt (ToLinearE (LetE (v,[],ty,e2') bod))))
+
+          (Ext (LinearExt (ToLinearE (VarE fn)))) -> do
+            e2' <- desugarExp type_syns toplevel e2
+            pure (Ext (LinearExt (ToLinearE (AppE fn [] [e2']))))
 
           f -> error ("desugarExp: Couldn't parse function application: (: " ++ show f ++ ")")
 
@@ -1063,8 +1088,9 @@ desugarPatWithTy type_syns pat =
                                 let binds0 = concat bindss
                                     binds1 = map (\(v,ty,i) -> (v,[],ty,ProjE i (VarE tup))) (zip3 vars tys [0..])
                                     tupty = ProdTy tys
-                                dbgTraceIt (show (tup,tupty,binds0 ++ binds1)) (pure ())
                                 pure (tup,tupty,binds0 ++ binds1)
+
+    (PApp _ (UnQual _ (Ident _ "Ur")) [one]) -> desugarPatWithTy type_syns one
 
     _ -> error ("desugarPatWithTy: Unsupported pattern: " ++ show pat)
 
@@ -1154,3 +1180,119 @@ verifyBenchEAssumptions bench_allowed ex =
     FoldE{} -> error $ "verifyBenchEAssumptions: TODO FoldE"
   where go = verifyBenchEAssumptions bench_allowed
         not_allowed = verifyBenchEAssumptions False
+
+--------------------------------------------------------------------------------
+
+desugarLinearExts :: Prog0 -> PassM Prog0
+desugarLinearExts (Prog ddefs fundefs main) = do
+    main' <- case main of
+               Nothing -> pure Nothing
+               Just (e,ty) -> do
+                 let ty' = goty ty
+                 e' <- go e
+                 pure $ Just (e', ty')
+    fundefs' <- mapM (\fn -> do
+                           bod <- go (funBody fn)
+                           let (ForAll tyvars ty) = (funTy fn)
+                               ty' = goty ty
+                           pure $ fn { funBody = bod
+                                     , funTy = (ForAll tyvars ty')
+                                     })
+                     fundefs
+    pure (Prog ddefs fundefs' main')
+  where
+    goty :: Ty0 -> Ty0
+    goty ty =
+      case ty of
+        ProdTy tys -> ProdTy (map goty tys)
+        SymDictTy v t -> SymDictTy v (goty t)
+        PDictTy k v -> PDictTy (goty k) (goty v)
+        ArrowTy tys b  -> ArrowTy (map goty tys) (goty b)
+        PackedTy "Ur" [one] -> one
+        PackedTy t tys -> PackedTy t (map goty tys)
+        VectorTy t -> VectorTy (goty t)
+        ListTy t -> ListTy (goty t)
+        _ -> ty
+
+    go :: PreExp E0Ext Ty0 Ty0 -> PassM Exp0
+    go ex =
+      case ex of
+        VarE{}    -> pure ex
+        LitE{}    -> pure ex
+        FloatE{}  -> pure ex
+        LitSymE{} -> pure ex
+        AppE f tyapps args -> do args' <- mapM go args
+                                 pure (AppE f tyapps args')
+        PrimAppE pr args   -> do args' <- mapM go args
+                                 pure (PrimAppE pr args')
+        LetE (v,locs,ty,rhs) bod -> do
+          let ty' = goty ty
+          rhs' <- go rhs
+          bod' <- go bod
+          pure $ LetE (v,locs,ty',rhs') bod'
+        IfE a b c -> do a' <- go a
+                        b' <- go b
+                        c' <- go c
+                        pure (IfE a' b' c')
+        MkProdE ls -> do ls' <- mapM go ls
+                         pure (MkProdE ls')
+        ProjE i e  -> do e' <- go e
+                         pure (ProjE i e')
+        CaseE scrt alts -> do scrt' <- go scrt
+                              alts' <- mapM (\(a,b,c) -> do c' <- go c
+                                                            pure (a,b,c'))
+                                            alts
+                              pure (CaseE scrt' alts')
+        DataConE _ "Ur" [arg]   -> do arg' <- go arg
+                                      pure arg'
+        DataConE locs dcon args -> do args' <- mapM go args
+                                      pure (DataConE locs dcon args')
+        TimeIt e ty b -> do e' <- go e
+                            let ty' = goty ty
+                            pure (TimeIt e' ty' b)
+        WithArenaE v e -> do e' <- go e
+                             pure (WithArenaE v e')
+        SpawnE f tyapps args -> do args' <- mapM go args
+                                   pure (SpawnE f tyapps args')
+        SyncE -> pure SyncE
+        MapE{}  -> error "desugarLinearExts: MapE"
+        FoldE{} -> error "desugarLinearExts: FoldE"
+        Ext ext ->
+          case ext of
+            LambdaE args bod -> do bod' <- go bod
+                                   let args' = map (\(v,ty) -> (v,goty ty)) args
+                                   pure (Ext (LambdaE args' bod'))
+            PolyAppE fn arg  -> do fn' <- go fn
+                                   arg' <- go arg
+                                   pure (Ext (PolyAppE fn' arg'))
+            FunRefE{} -> pure ex
+            BenchE fn tyapps args b -> do args' <- mapM go args
+                                          pure (Ext (BenchE fn tyapps args' b))
+            ParE0 ls -> do ls' <- mapM go ls
+                           pure (Ext (ParE0 ls'))
+            L p e -> do e' <- go e
+                        pure (Ext (L p e'))
+            LinearExt lin ->
+              case lin of
+                ReverseAppE fn (Ext (LinearExt (AliasE e))) -> do
+                  fn' <- go fn
+                  case fn' of
+                    Ext (LambdaE [(v,ProdTy tys)] bod) -> do
+                      let ty = head tys
+                          bod'' = foldl' (\acc i -> gSubstE (ProjE i (VarE v)) (VarE v) acc) bod [0..(length tys)]
+                      pure (LetE (v,[],ty,e) bod'')
+                    _ -> error $ "desugarLinearExts: couldn't desugar " ++ sdoc ex
+                ReverseAppE fn arg -> do
+                  fn'  <- go fn
+                  arg' <- go arg
+                  case fn' of
+                    Ext (LambdaE [(v,ty)] bod) -> do
+                      pure (LetE (v,[],ty,arg') bod)
+                    _ -> error $ "desugarLinearExts: couldn't desugar " ++ sdoc ex
+                LseqE _ b   -> do b' <- go b
+                                  pure b'
+                AliasE a    -> do v <- gensym "aliased"
+                                  ty <- newMetaTy
+                                  pure (LetE (v,[],ty,MkProdE [a,a]) (VarE v))
+                ToLinearE a -> do a' <- go a
+                                  pure a'

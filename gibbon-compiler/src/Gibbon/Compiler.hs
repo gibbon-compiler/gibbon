@@ -325,8 +325,12 @@ parseInput cfg ip fp = do
                      then (,f2) <$> SExp.parseFile f1
                      else error$ "compile: unrecognized file extension: "++
                           show oth++"  Please specify compile input format."
-  (l0, cnt) <- pure $ runPassM defaultConfig 0 l0
-  pure ((l0, cnt), f)
+  let l0' = do parsed <- l0
+               -- dbgTraceIt (sdoc parsed) (pure ())
+               desugared <- HS.desugarLinearExts parsed
+               pure desugared
+  (l0'', cnt) <- pure $ runPassM defaultConfig 0 l0'
+  pure ((l0'', cnt), f)
 
 
 -- |
