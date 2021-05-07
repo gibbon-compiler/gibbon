@@ -643,6 +643,10 @@ tcExp isPacked ddfs env exp =
           _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
           return IntTy
 
+        WritePackedFile{} -> throwError $ GenericTC "WritePackedFile not handled yet" exp
+        Write3dPpmFile{} -> throwError $ GenericTC "Write3dPpmFile not handled yet" exp
+
+
 
     LetE (v,[],SymDictTy _ _pty, rhs) e -> do
       tyRhs <- go rhs

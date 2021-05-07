@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE CPP #-}
 
 {- L0 Specializer (part 2):
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -21,7 +22,9 @@ import           Data.Foldable ( foldlM )
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           GHC.Stack (HasCallStack)
+#if !MIN_VERSION_base(4,15,0)
 import           GHC.List (zip3)
+#endif
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
@@ -1287,8 +1290,8 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
         (AppE f tyapps args) -> do
           (ltss,args') <- unzip <$> mapM go args
           pure (concat ltss, AppE f tyapps args')
-        (MapE _ _)    -> error "goExp.go: FINISHME MapE"
-        (FoldE _ _ _) -> error "goExp.go: FINISHME FoldE"
+        (MapE _ _)    -> error "bindLambdas: FINISHME MapE"
+        (FoldE _ _ _) -> error "bindLambdas: FINISHME FoldE"
         (LetE (v,tyapps,t,rhs) bod) -> do
            (lts1, rhs') <- go rhs
            bod' <- gocap bod

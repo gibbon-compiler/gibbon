@@ -6,7 +6,9 @@ module Gibbon.L0.Typecheck where
 
 import           Control.Monad.State ( MonadState )
 import           Control.Monad.Except
+#if !MIN_VERSION_base(4,15,0)
 import           Control.Monad.Fail
+#endif
 import           Data.Foldable ( foldlM )
 import           Data.List
 import qualified Data.Map as M
@@ -543,6 +545,8 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           len0
           pure (s1, VectorTy ty, PrimAppE pr args_tc)
 
+        Write3dPpmFile{} -> err $ text "Write3dPpmFile"
+        WritePackedFile{} -> err $ text "WritePackedFile"
         RequestEndOf -> err $ text "Unexpected RequestEndOf in L0: " <+> exp_doc
         RequestSizeOf-> err $ text "Unexpected RequestSizeOf in L0: " <+> exp_doc
 

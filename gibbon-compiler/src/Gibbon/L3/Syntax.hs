@@ -109,6 +109,8 @@ instance FreeVars (E3Ext l d) where
       RetE ls -> S.unions (L.map gFreeVars ls)
       GetCilkWorkerNum   -> S.empty
       LetAvail ls b      -> (S.fromList ls) `S.union` gFreeVars b
+      ReadVector{} -> error "gFreeVars: ReadVector"
+      WriteVector{} -> error "gFreeVars: WriteVector"
 
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where

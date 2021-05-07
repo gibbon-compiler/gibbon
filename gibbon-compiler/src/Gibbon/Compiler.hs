@@ -20,7 +20,9 @@ module Gibbon.Compiler
 
 import           Control.DeepSeq
 import           Control.Exception
+#if !MIN_VERSION_base(4,15,0)
 import           Control.Monad (when)
+#endif
 import           Control.Monad.State.Strict
 import           Control.Monad.Reader (ask)
 #if !MIN_VERSION_base(4,11,0)

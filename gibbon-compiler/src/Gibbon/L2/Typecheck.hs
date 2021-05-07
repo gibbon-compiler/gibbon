@@ -653,6 +653,9 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
                    pure (IntTy, tstatein)
 
+                 WritePackedFile{} -> throwError $ GenericTC "WritePackedFile not handled yet" exp
+                 Write3dPpmFile{} -> throwError $ GenericTC "Write3dPpmFile not handled yet" exp
+
 
       LetE (v,_ls,ty,e1) e2 -> do
 

@@ -1060,6 +1060,8 @@ prim p =
     IntHashEmpty  -> T.IntHashEmpty
     IntHashInsert  -> T.IntHashInsert
     IntHashLookup  -> T.IntHashLookup
+    WritePackedFile{} -> error$ "lower/prim: internal error, WritePackedFile not handled yet."
+    Write3dPpmFile{} -> error$ "lower/prim: internal error, Write3dPpmFile not handled yet."
 
     ErrorP{}     -> error$ "lower/prim: internal error, should not have got to here: "++show p
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."

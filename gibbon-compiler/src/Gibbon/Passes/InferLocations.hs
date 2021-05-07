@@ -1655,6 +1655,8 @@ prim p = case p of
            IntHashEmpty{} -> return IntHashEmpty
            IntHashInsert{} -> return IntHashInsert
            IntHashLookup{} -> return IntHashLookup
+           Write3dPpmFile{} -> err $ "Write3dPpmFile not handled yet."
+           WritePackedFile{} -> err $ "WritePackedFile not handled yet."
 
 -- | Generate a copy function for a particular data definition.
 -- Note: there will be redundant let bindings in the function body which may need to be inlined.

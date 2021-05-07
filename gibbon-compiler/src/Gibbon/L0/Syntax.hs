@@ -539,6 +539,8 @@ recoverType ddfs env2 ex =
         IntHashEmpty -> error "primRetTy1: IntHashEmpty not handled yet"
         IntHashInsert-> error "primRetTy1: IntHashInsert not handled yet"
         IntHashLookup-> error "primRetTy1: IntHashLookup not handled yet"
+        Write3dPpmFile{}-> error "primRetTy1: Write3dPpmFile not handled yet"
+        WritePackedFile{}-> error "primRetTy1: WritePackedFile not handled yet"
 
 
 {-

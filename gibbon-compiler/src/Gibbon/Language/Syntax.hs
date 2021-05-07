@@ -53,11 +53,14 @@ module Gibbon.Language.Syntax
 import           Control.DeepSeq
 import           Control.Monad.State
 import           Control.Monad.Writer
+#if !MIN_VERSION_base(4,15,0)
 import           Control.Monad.Fail
+#endif
 import qualified Data.Map as M
 import           Data.List as L
 import qualified Data.Set as S
 import           Data.Word ( Word8 )
+import           Data.Kind ( Type )
 import           Text.PrettyPrint.GenericPretty
 import           Data.Functor.Foldable.TH
 import qualified Data.ByteString.Lazy.Char8 as B
@@ -320,7 +323,7 @@ lookupFEnv v env2 = (fEnv env2) # v
 --
 -- (3) It is parameterized by a decoration, d, attached to every binder.
 --
-data PreExp (ext :: * -> * -> *) loc dec =
+data PreExp (ext :: Type -> Type -> Type) loc dec =
      VarE Var              -- ^ Variable reference
    | LitE Int              -- ^ Numeric literal
    | FloatE Double         -- ^ Floating point literal

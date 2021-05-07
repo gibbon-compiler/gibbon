@@ -96,7 +96,9 @@ threadRegionsFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
                      (\(LRM loc reg mode) acc ->
                         if mode == Output
                         then let rv = toEndV $ regionToVar reg
-                                 bc = boundsCheck ddefs (locs_tycons M.! loc)
+                                 -- REVIEW: Why is a new region is always spawned when
+                                 -- there are 1024 bytes left?
+                                 _bc = boundsCheck ddefs (locs_tycons M.! loc)
                              in LetE ("_",[],IntTy, Ext$ BoundsCheck 1024 rv loc) acc
                         else acc)
                      bod'
@@ -214,7 +216,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
                       AfterConstantLE _ lc   -> renv # lc
                       AfterVariableLE _ lc _ -> renv # lc
                       FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
-                      FreeLE -> undefined
+                      -- FreeLE -> undefined
           Ext <$> LetLocE loc rhs <$>
             threadRegionsExp ddefs fundefs isMain (M.insert loc reg renv) env2 lfenv bod
 
