@@ -41,7 +41,7 @@ module Gibbon.Prim
     , IntHash, insert_int_hash, lookup_int_hash, contains_int_hash
 
       -- * Parallelism
-    , spawn, sync, par, getNumProcessors, is_big
+    , spawn, sync, lsync, par, getNumProcessors, is_big
 
       -- * Tuples
     , fst, snd, Maybe(..)
@@ -263,6 +263,9 @@ spawn = undefined
 
 sync :: ()
 sync = undefined
+
+lsync :: Ur ()
+lsync = undefined
 
 par :: [a] -> [a]
 par = undefined

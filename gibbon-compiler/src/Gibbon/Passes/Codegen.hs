@@ -101,7 +101,8 @@ harvestStructTys (Prog _ funs mtal) =
            InplaceVUpdateP elty -> VectorTy elty : rst
            VConcatP elty -> VectorTy elty : rst
            VSortP elty   -> VectorTy elty : rst
-           InplaceVSortP  _elty  -> voidTy : rst
+           InplaceVSortP _elty  -> voidTy : rst
+           VMergeP elty -> VectorTy elty : rst
            LLAllocP elty -> ListTy elty : rst
            LLIsEmptyP elty -> ListTy elty : rst
            LLConsP elty -> ListTy elty : rst
@@ -1102,6 +1103,10 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        to' = codegenTriv venv to
                    return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_slice($exp:from', $exp:to', $id:old_ls); |] ]
 
+                 VMergeP elty -> do
+                   let [(outV,_)] = bnds
+                       [VarTriv ls1, VarTriv ls2] = rnds
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_merge($id:ls1, $id:ls2); |] ]
 
                  PDictAllocP _k _v -> return $
                                   [ C.BlockStm [cstm| printf("PDictAllocP todo\n"); |]

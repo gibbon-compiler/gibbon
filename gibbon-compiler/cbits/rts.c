@@ -890,6 +890,7 @@ BoolTy vector_is_empty(VectorTy *vec) {
 VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
     IntTy lower = vec->lower + i;
     IntTy upper = vec->lower + i + n;
+    fflush(stdout);
     if ((lower > vec->upper)) {
         printf("vector_slice: lower out of bounds, %lld > %lld", lower, vec->upper);
         exit(1);
@@ -912,10 +913,10 @@ VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
 
 // The callers must cast the return value.
 static inline void* vector_nth(VectorTy *vec, IntTy i) {
-    if (i < vec->lower || i > vec->upper) {
-        printf("vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->lower, vec->upper);
-        exit(1);
-    }
+    // if (i < vec->lower || i > vec->upper) {
+    //     printf("vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->lower, vec->upper);
+    //     exit(1);
+    // }
     return (vec->data + (vec->elt_size * (vec->lower + i)));
 }
 
@@ -984,6 +985,24 @@ static inline void vector_free(VectorTy *vec) {
     free(vec->data);
     free(vec);
     return;
+}
+
+static inline VectorTy* vector_merge(VectorTy *vec1, VectorTy *vec2) {
+    if (vec1->upper != vec2->lower) {
+        printf("vector_merge: non-contiguous slices, (%lld,%lld), (%lld,%lld).",
+               vec1->lower, vec1->upper, vec2->lower, vec2->upper);
+        exit(1);
+    }
+    VectorTy *merged = ALLOC(sizeof(VectorTy));
+    if (merged == NULL) {
+        printf("vector_merge: malloc failed: %ld", sizeof(VectorTy));
+        exit(1);
+    }
+    merged->lower = vec1->lower;
+    merged->upper = vec2->upper;
+    merged->elt_size = vec1->elt_size;
+    merged->data = vec1->data;
+    return merged;
 }
 
 void print_timing_array(VectorTy *times) {

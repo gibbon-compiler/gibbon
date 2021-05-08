@@ -514,7 +514,15 @@ tcExp isPacked ddfs env exp =
                 _ -> err fn_ty
             oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
-        InplaceVSortP ty -> go (PrimAppE (VSortP ty) es)
+        InplaceVSortP elty -> go (PrimAppE (VSortP elty) es)
+
+        VMergeP elty -> do
+          len2
+          checkListElemTy elty
+          let [ls1,ls2] = tys
+          _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls1
+          _ <- ensureEqualTy (es !! 1) (VectorTy elty) ls2
+          pure (VectorTy elty)
 
         PDictInsertP kty vty -> do
           len3

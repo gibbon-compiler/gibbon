@@ -1033,6 +1033,7 @@ prim p =
     VSliceP elty    -> T.VSliceP (typ elty)
     InplaceVUpdateP elty -> T.InplaceVUpdateP (typ elty)
     VConcatP elty -> T.VConcatP (typ elty)
+    VMergeP elty  -> T.VMergeP (typ elty)
     VSortP elty   -> T.VSortP (typ elty)
     InplaceVSortP elty -> T.InplaceVSortP (typ elty)
     PDictAllocP  k v -> T.PDictAllocP  (typ k) (typ v)

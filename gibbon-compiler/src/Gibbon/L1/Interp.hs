@@ -263,6 +263,8 @@ applyPrim rc p args =
                            []
                            ls
        pure $ VList concatd
+   (VMergeP _,[VList ls1,VList ls2]) -> do
+       pure $ VList (ls1 ++ ls2)
    (GetNumProcessors, []) -> pure $ VInt 1
    -- Don't sort for now.
    (VSortP _, [ls, _fn]) -> do

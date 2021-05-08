@@ -463,7 +463,15 @@ tcExp ddfs env funs constrs regs tstatein exp =
                          _ -> err fn_ty
                      oth -> throwError $ GenericTC ("vsort: function pointer has to be a variable reference. Got"++ sdoc oth) exp
 
-                 InplaceVSortP ty -> recur tstatein (PrimAppE (VSortP ty) es)
+                 InplaceVSortP elty -> recur tstatein (PrimAppE (VSortP elty) es)
+
+                 VMergeP elty -> do
+                   len2
+                   checkListElemTy elty
+                   let [ls1,ls2] = tys
+                   _ <- ensureEqualTy (es !! 0) (VectorTy elty) ls1
+                   _ <- ensureEqualTy (es !! 1) (VectorTy elty) ls2
+                   pure (VectorTy elty, tstate)
 
                  PDictInsertP kty vty -> do
                    len3

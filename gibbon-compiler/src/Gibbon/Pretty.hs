@@ -210,6 +210,7 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       VConcatP{} -> text "vconcat"
                                       VSortP{}   -> text "vsort"
                                       InplaceVSortP{} -> text "inplacevsort"
+                                      VMergeP{} -> text "vmerge"
                                       PDictAllocP{} -> text "alloc_pdict"
                                       PDictInsertP{} -> text "insert_pdict"
                                       PDictLookupP{} -> text "lookup_pdict"

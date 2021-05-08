@@ -572,6 +572,12 @@ exp se =
        lse <- exp ls
        pure $ Ext $ L (toLoc l) $ PrimAppE (InplaceVSortP ty) [fe,lse]
 
+   Ls3 l "vmerge" ls1 ls2 -> do
+       ty <- newMetaTy
+       ls1e <- exp ls1
+       ls2e <- exp ls2
+       pure $ Ext $ L (toLoc l) $ PrimAppE (VMergeP ty) [ls1e,ls2e]
+
    Ls (A _ kwd : _args) | isKeyword kwd ->
       error $ "Error reading treelang. " ++ show kwd ++ "is a keyword:\n "++prnt se
 

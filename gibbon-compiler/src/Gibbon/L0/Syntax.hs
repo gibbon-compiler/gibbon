@@ -587,6 +587,7 @@ recoverType ddfs env2 ex =
         VConcatP elty  -> VectorTy elty
         VSortP elty        -> VectorTy elty
         InplaceVSortP elty -> VectorTy elty
+        VMergeP elty -> VectorTy elty
         PDictInsertP kty vty -> PDictTy kty vty
         PDictLookupP _kty vty -> vty
         PDictAllocP kty vty -> PDictTy kty vty

@@ -1627,6 +1627,7 @@ prim p = case p of
            InplaceVUpdateP elty -> convertTy elty >>= return . InplaceVUpdateP
            VConcatP elty   -> convertTy elty >>= return . VConcatP
            VSortP elty     -> convertTy elty >>= return . VSortP
+           VMergeP elty    -> convertTy elty >>= return . VMergeP
            PDictAllocP k v -> convertTy k >>= (\k' -> convertTy v >>= \v' -> return $ PDictAllocP k' v')
            PDictInsertP k v -> convertTy k >>= (\k' -> convertTy v >>= \v' -> return $ PDictInsertP k' v')
            PDictLookupP k v -> convertTy k >>= (\k' -> convertTy v >>= \v' -> return $ PDictLookupP k' v')

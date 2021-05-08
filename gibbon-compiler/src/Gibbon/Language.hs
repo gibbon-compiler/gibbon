@@ -581,6 +581,7 @@ primArgsTy p =
     -- We don't have a type for function pointers.
     VSortP elty        -> [VectorTy elty, voidTy]
     InplaceVSortP elty -> [VectorTy elty, voidTy]
+    VMergeP elty       -> [VectorTy elty, VectorTy elty]
     PDictInsertP kty vty -> [kty, vty, PDictTy kty vty]
     PDictLookupP kty vty -> [kty, PDictTy kty vty]
     PDictAllocP _kty _vty -> []
@@ -673,6 +674,7 @@ primRetTy p =
     VConcatP elty  -> VectorTy elty
     VSortP elty -> VectorTy elty
     InplaceVSortP elty -> VectorTy elty
+    VMergeP elty -> VectorTy elty
     PDictInsertP kty vty -> PDictTy kty vty
     PDictLookupP _kty vty -> vty
     PDictAllocP kty vty -> PDictTy kty vty

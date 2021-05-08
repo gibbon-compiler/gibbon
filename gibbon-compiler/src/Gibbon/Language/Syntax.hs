@@ -465,7 +465,11 @@ data Prim ty
           | VConcatP ty        -- ^ Flatten a vector
           | VSortP ty          -- ^ A sort primop that accepts a function pointer
           | InplaceVSortP ty   -- ^ A sort primop that sorts the array in place
-
+          | VMergeP ty         -- ^ ASSUMPTION: the vectors being merged have the same
+                               --   underlying mutable array. This assumption is checked
+                               --   at the type level with a Rank-2 type variable. But this
+                               --   evidence is erased (by the desugarer) by the time we get
+                               --   to L0.
 
           | Write3dPpmFile FilePath
           | WritePackedFile FilePath

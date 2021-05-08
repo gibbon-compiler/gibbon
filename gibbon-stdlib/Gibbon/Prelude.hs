@@ -3,7 +3,7 @@
 
 module Gibbon.Prelude
     ( module Gibbon.Prim
-    , maxInt, minInt, maxFloat, minFloat, float_abs, compare_float
+    , maxInt, minInt, maxFloat, minFloat, float_abs, compare_float, compare_int
     , print_check, print_newline, print_space
 
     ) where
@@ -36,6 +36,15 @@ compare_float r1 r2 =
   if r1 .<. r2
   then -1
   else if r1 .>. r2
+  then 1
+  else 0
+
+compare_int :: Int -> Int -> Int
+{-# INLINE compare_int #-}
+compare_int r1 r2 =
+  if r1 < r2
+  then -1
+  else if r1 > r2
   then 1
   else 0
 

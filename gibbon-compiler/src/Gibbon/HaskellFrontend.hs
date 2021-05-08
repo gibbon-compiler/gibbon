@@ -498,6 +498,8 @@ desugarExp type_syns toplevel e =
         pure $ PrimAppE (LLAllocP ty) []
       else if v == "sync"
       then pure SyncE
+      else if v == "lsync"
+      then pure SyncE
       else if M.member str primMap
       then pure $ PrimAppE (primMap M.! str) []
       else case M.lookup v toplevel of
@@ -624,6 +626,12 @@ desugarExp type_syns toplevel e =
                     e2' <- desugarExp type_syns toplevel e2
                     ty  <- newMetaTy
                     pure $ PrimAppE (VSliceP ty) [e2']
+
+                  else if f == "vmerge"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    ty  <- newMetaTy
+                    pure $ PrimAppE (VMergeP ty) [e2']
                   else if f == "insert_pdict"
                   then do
                     e2' <- desugarExp type_syns toplevel e2
@@ -706,6 +714,10 @@ desugarExp type_syns toplevel e =
                   then do
                     e2' <- desugarExp type_syns toplevel e2
                     pure $ Ext (LinearExt (ToLinearE e2'))
+                  else if f == "lseq"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    pure $ Ext (LinearExt (LseqE e2' undefined))
                   else if S.member f keywords
                   then error $ "desugarExp: Keyword not handled: " ++ sdoc f
                   else AppE f [] <$> (: []) <$> desugarExp type_syns toplevel e2
@@ -735,12 +747,19 @@ desugarExp type_syns toplevel e =
                            _ -> error $ "desugarExp: couldn't parse readPackedFile; " ++ show e0
              in go e2
 
+          (PrimAppE (VMergeP elty) ls) -> do
+            e2' <- desugarExp type_syns toplevel e2
+            pure $ PrimAppE (VMergeP elty) (ls ++ [e2'])
           (PrimAppE p ls) -> do
             e2' <- desugarExp type_syns toplevel e2
             pure $ PrimAppE p (ls ++ [e2'])
 
           TimeIt{} ->
             error "desugarExp: TimeIt can only accept 1 expression."
+
+          (Ext (LinearExt (LseqE a _))) -> do
+            e2' <- desugarExp type_syns toplevel e2
+            pure (Ext (LinearExt (LseqE a e2')))
 
           (Ext (LinearExt (ToLinearE (AppE f [] ls)))) -> do
             e2' <- desugarExp type_syns toplevel e2

@@ -428,6 +428,13 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
               pure (s1 <> s2, t, PrimAppE (InplaceVSortP t2) args2)
             _ -> err $ text "InPlaceVSortP"
 
+        VMergeP elty -> do
+          len2
+          let [ls1,ls2] = arg_tys'
+          s2 <- unify (args !! 0) (VectorTy elty) ls1
+          s3 <- unify (args !! 1) (VectorTy elty) ls2
+          pure (s1 <> s2 <> s3, VectorTy elty, PrimAppE pr args_tc)
+
         PDictInsertP kty vty -> do
           len3
           let [key, val, dict] = arg_tys'
@@ -855,6 +862,7 @@ zonkExp s ex =
                   VConcatP ty -> VConcatP (zonkTy s ty)
                   InplaceVUpdateP ty -> InplaceVUpdateP (zonkTy s ty)
                   VSortP   ty -> VSortP   (zonkTy s ty)
+                  VMergeP ty -> VMergeP (zonkTy s ty)
                   PDictAllocP k v -> PDictAllocP (zonkTy s k) (zonkTy s v)
                   PDictInsertP k v -> PDictInsertP (zonkTy s k) (zonkTy s v)
                   PDictLookupP k v -> PDictLookupP (zonkTy s k) (zonkTy s v)
@@ -981,6 +989,7 @@ substTyVarPrim mp pr =
         VConcatP elty -> VConcatP (substTyVar mp elty)
         VSortP elty -> VSortP (substTyVar mp elty)
         InplaceVSortP elty -> InplaceVSortP (substTyVar mp elty)
+        VMergeP elty -> VMergeP (substTyVar mp elty)
         PDictInsertP kty vty -> PDictInsertP (substTyVar mp kty) (substTyVar mp vty)
         PDictLookupP kty vty -> PDictLookupP (substTyVar mp kty) (substTyVar mp vty)
         PDictAllocP kty vty -> PDictAllocP (substTyVar mp kty) (substTyVar mp vty)

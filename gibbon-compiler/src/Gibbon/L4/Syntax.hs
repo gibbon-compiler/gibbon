@@ -233,6 +233,7 @@ data Prim
     | VConcatP Ty
     | VSortP Ty
     | InplaceVSortP Ty
+    | VMergeP Ty
     -- Thread safe dictionaries
     | PDictAllocP  Ty Ty
     | PDictInsertP Ty Ty
