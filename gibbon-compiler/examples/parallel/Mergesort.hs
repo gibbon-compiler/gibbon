@@ -20,13 +20,10 @@ gotoQuickSort = 8192
 
 --------------------------------------------------------------------------------
 
-newline :: ()
-newline = printsym (quote "\n")
-
 mergesort_debugPrint :: Vector Int -> ()
 mergesort_debugPrint vec =
     let _ = printVec (\i -> printint i) vec
-        _ = newline
+        _ = print_newline ()
     in ()
 
 binarySearch' :: Int -> Int -> (a -> a -> Int) -> Vector a -> a -> Int
@@ -67,7 +64,7 @@ write_loop_seq to_idx from_idx end from to =
     else let to1 = inplaceUpdate to_idx (nth from from_idx) to
          in write_loop_seq (to_idx+1) (from_idx+1) end from to1
 
--- | Parallel variant of 'write_loop'.
+-- | Parallel variant of 'write_loop_seq'.
 write_loop :: Int -> Int -> Int -> Vector a -> Vector a -> Vector a
 write_loop to_idx from_idx end from to =
     if (end - from_idx) < goto_seqmerge
@@ -145,8 +142,7 @@ writeMerge cmp src_1 src_2 tmp =
 
 --------------------------------------------------------------------------------
 
--- | Sort the left and right halves of 'src' into 'tmp', and merge the results
--- back into 'src'.
+-- | In-place sort 'src' using 'tmp' as a temporary array.
 writeSort1 :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
 writeSort1 cmp src tmp =
     let len = length src in
@@ -179,8 +175,7 @@ writeSort1_seq cmp src tmp =
             res = writeMerge_seq cmp tmp_l1 tmp_r1 src
         in res
 
--- | Sort the left and right halves of 'tmp' into 'src', and merge the results
--- back into 'tmp'.
+-- | Destructively sort 'src', writing the result in 'tmp'.
 writeSort2 :: (a -> a -> Int) -> Vector a -> Vector a -> Vector a
 writeSort2 cmp src tmp =
     let len = length src in
@@ -235,7 +230,8 @@ mergeSort'_seq cmp src =
         tmp2 = writeSort1_seq cmp src tmp
     in src
 
--- | Parallel merge sort, copies the input into a separate array.
+-- | Parallel merge sort, copies the input into a separate array and then sorts
+--   that array in-place.
 mergeSort :: (a -> a -> Int) -> Vector a -> Vector a
 {-# INLINE mergeSort #-}
 mergeSort cmp vec =
@@ -243,13 +239,18 @@ mergeSort cmp vec =
         vec3 = mergeSort' cmp vec2
     in vec3
 
--- | Sequential merge sort, copies the input into a separate array.
+-- | Sequential merge sort, copies the input into a separate array and then sorts
+--   that array in-place.
 mergeSort_seq :: (a -> a -> Int) -> Vector a -> Vector a
 {-# INLINE mergeSort_seq #-}
 mergeSort_seq cmp vec =
     let vec2 = copy vec
         vec3 = mergeSort'_seq cmp vec2
     in vec3
+
+--------------------------------------------------------------------------------
+
+{-
 
 cStdlibSort :: (a -> a -> Int) -> Vector a -> Vector a
 cStdlibSort cmp vec =
@@ -263,6 +264,8 @@ cStdlibSort_seq cmp vec =
       vec3 = inplaceSort cmp vec2
   in vec3
 
+-}
+
 check_sorted :: (a -> a -> Int) -> Vector a -> ()
 check_sorted cmp sorted =
   let len = length sorted in
@@ -275,9 +278,18 @@ check_sorted cmp sorted =
                    arr1
        in print_check check
 
---------------------------------------------------------------------------------
+test_main :: ()
+test_main =
+    let n = sizeParam
+        arr = generate n (\i -> (n-i))
+        sorted = mergeSort compare_int arr
+        chk = ifoldl (\acc i n -> acc && ((i+1) == n)) True sorted
+        -- _ = printVec (\i -> printint i) sorted
+        -- _ = print_newline()
+    in print_check chk
 
-gibbon_main =
+bench_main :: ()
+bench_main =
     let s = benchProgParam in
         if eqsym s (quote "seqmergesort")
         then
@@ -290,3 +302,5 @@ gibbon_main =
                 arr = generate n (\i -> intToFloat (rand))
                 sorted = iterate (mergeSort compare_float arr)
             in check_sorted compare_float sorted
+
+gibbon_main = bench_main
