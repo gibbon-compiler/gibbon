@@ -48,8 +48,8 @@ binarySearch_go cmp vec query = Ur (binarySearch' 0 (length vec) cmp vec query)
 -- That is, return a *p* s.t.
 -- (1) elements vec[0]..vec[p] are less than query, and
 -- (2) elements vec[p+1]..vec[end] are greater than query.
-binarySearch :: (a -> a -> Int) -> Vector a %1-> a -> Ur Int
-binarySearch cmp vec query = unsafeToLinear (\vec2 -> binarySearch_go cmp vec2 query) vec
+binarySearch :: (a -> a -> Int) -> Vector a %1-> a -> (Ur Int, Vector a)
+binarySearch cmp vec query = unsafeToLinear (\vec2 -> (binarySearch_go cmp vec2 query, vec2)) vec
 
 --------------------------------------------------------------------------------
 
@@ -132,11 +132,9 @@ writeMerge_go :: (a -> a -> Int) -> Int -> Vector a %1-> Vector a %1-> Vector a 
 writeMerge_go cmp mid1 src_1 src_2 tmp =
     nth2 src_1 mid1 &
         \(Ur pivot, src_11) ->
-            unsafeAlias src_2 &
-                \(src_20,src_21) ->
-                    binarySearch cmp src_20 pivot &
-                        \(Ur mid2) ->
-                            writeMerge_go2 cmp mid1 mid2 pivot src_11 src_21 tmp
+            binarySearch cmp src_2 pivot &
+                \(Ur mid2, src_21) ->
+                    writeMerge_go2 cmp mid1 mid2 pivot src_11 src_21 tmp
 
 
 writeMerge_go2 :: (a -> a -> Int) -> Int -> Int -> a -> Vector a %1-> Vector a %1-> Vector a %1-> Vector a
@@ -261,11 +259,7 @@ mergeSort'_seq :: (a -> a -> Int) -> Vector a %1-> Vector a
 mergeSort'_seq cmp src =
     length2 src &
         \(Ur len, src1) ->
-            unsafeAlias src1 &
-                \(src2,src3) ->
-                    writeSort1_seq cmp src2 (alloc len) &
-                        \tmp2 ->
-                            lseq tmp2 src3
+            writeSort1_seq cmp src1 (alloc len)
 
 -- | Sequential merge sort, copies the input into a separate array and then sorts
 --   that array in-place.
