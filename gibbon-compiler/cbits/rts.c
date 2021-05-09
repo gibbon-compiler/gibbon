@@ -890,7 +890,6 @@ BoolTy vector_is_empty(VectorTy *vec) {
 VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
     IntTy lower = vec->lower + i;
     IntTy upper = vec->lower + i + n;
-    fflush(stdout);
     if ((lower > vec->upper)) {
         printf("vector_slice: lower out of bounds, %lld > %lld", lower, vec->upper);
         exit(1);
