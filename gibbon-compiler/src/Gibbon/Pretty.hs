@@ -345,7 +345,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                       let [a1,a2] = es
                       in pprintWithStyle sty a1 <+> pprintWithStyle sty pr <+> pprintWithStyle sty a2
 
-                  _ | pr `elem` [MkTrue, MkFalse, SizeParam, BenchProgParam] -> pprintWithStyle sty pr
+                  _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprintWithStyle sty pr
 
                   ReadPackedFile{} -> pprintWithStyle sty pr
                   ReadArrayFile{}  -> pprintWithStyle sty pr
@@ -611,7 +611,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
                       let [a1,a2] = es
                       in ppExp monadic env2 a1 <+> pprintWithStyle sty pr <+> ppExp monadic env2 a2
 
-                  _ | pr `elem` [MkTrue, MkFalse, SizeParam, BenchProgParam] -> pprintWithStyle sty pr
+                  _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprintWithStyle sty pr
 
                   _ -> pprintWithStyle sty pr <+> hsep (map (ppExp monadic env2) es)
 

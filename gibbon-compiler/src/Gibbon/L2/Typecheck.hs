@@ -341,10 +341,6 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    len0
                    return (IntTy, tstate)
 
-                 BenchProgParam -> do
-                   len0
-                   return (SymTy, tstate)
-
                  IsBig -> do
                    len2
                    let [ity, ety] = tys

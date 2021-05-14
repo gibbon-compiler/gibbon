@@ -1,4 +1,6 @@
 module Main where
 
 gibbon_main =
-    eqBenchProg "hello"
+    let a = eqBenchProg "hello"
+        b = eqsym (quote "hello") (quote "hello")
+    in (a,b)

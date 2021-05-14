@@ -22,7 +22,7 @@ module Gibbon.Prim
     , printsym, printint, printfloat, printbool
 
       -- * Command-line arguments
-    , sizeParam, benchProgParam, readArrayFile, readPackedFile
+    , sizeParam, readArrayFile, readPackedFile
 
       -- * Benchmarking
     , bench, timeit, iterate
@@ -125,9 +125,6 @@ printbool = undefined
 
 sizeParam :: Int
 sizeParam = undefined
-
-benchProgParam :: Sym
-benchProgParam = undefined
 
 readArrayFile :: Maybe (String, Int) -> Vector a
 readArrayFile = undefined

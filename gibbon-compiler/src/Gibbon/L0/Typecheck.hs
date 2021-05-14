@@ -537,10 +537,6 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           len0
           pure (s1, IntTy, PrimAppE pr args_tc)
 
-        BenchProgParam -> do
-          len0
-          pure (s1, SymTy0, PrimAppE pr args_tc)
-
         IsBig -> do
           len2
           let [ity, _ety] = arg_tys'

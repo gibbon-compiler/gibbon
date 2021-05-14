@@ -315,10 +315,6 @@ tcExp isPacked ddfs env exp =
           len0
           return IntTy
 
-        BenchProgParam -> do
-          len0
-          return SymTy
-
         IsBig -> do
           len2
           let [ity, ety] = tys

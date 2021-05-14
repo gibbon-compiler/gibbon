@@ -699,7 +699,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  EqSymP -> let [(outV,outT)] = bnds
                                [pleft,pright] = rnds in pure
-                           [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = eqsym($(codegenTriv venv pleft), $(codegenTriv venv pright)); |]]
+                           [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) == $(codegenTriv venv pright); |]]
 
                  EqBenchProgP str -> let [(outV,outT)] = bnds
                                      in pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = strcmp($str,global_bench_prog_param) == 0; |]]
@@ -868,9 +868,6 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  SizeParam -> let [(outV,IntTy)] = bnds in pure
                       [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = global_size_param; |] ]
-
-                 BenchProgParam -> let [(outV,SymTy)] = bnds in pure
-                      [ C.BlockDecl [cdecl| $ty:(codegenTy SymTy) $id:outV = global_bench_prog_param; |] ]
 
                  PrintInt ->
                      let [arg] = rnds in

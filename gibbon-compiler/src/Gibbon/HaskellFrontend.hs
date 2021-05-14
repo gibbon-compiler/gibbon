@@ -453,7 +453,6 @@ primMap = M.fromList
   , ("intToFloat", IntToFloatP)
   , ("floatToInt", FloatToIntP)
   , ("sizeParam", SizeParam)
-  , ("benchProgParam", BenchProgParam)
   , ("getNumProcessors", GetNumProcessors)
   , ("True", MkTrue)
   , ("False", MkFalse)

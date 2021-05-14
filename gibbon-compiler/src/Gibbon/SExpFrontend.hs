@@ -640,7 +640,6 @@ primMap = M.fromList
   , ("or" , OrP)
   , ("and", AndP)
   , ("size-param", SizeParam)
-  , ("bench-prog-param", BenchProgParam)
   , ("True", MkTrue)
   , ("False", MkFalse)
   , ("gensym", Gensym)

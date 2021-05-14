@@ -236,7 +236,6 @@ applyPrim rc p args =
    ((DictEmptyP _),[_])                     -> pure $ VDict M.empty
    ((ErrorP msg _ty),[]) -> pure $ error msg
    (SizeParam,[]) -> pure $ VInt (rcSize rc)
-   (BenchProgParam,[]) -> pure $ VSym ""
    (IsBig,[_one,_two]) -> pure $ VBool False
    (ReadPackedFile file _ _ ty,[]) ->
        error $ "L1.Interp: unfinished, need to read a packed file: "++show (file,ty)

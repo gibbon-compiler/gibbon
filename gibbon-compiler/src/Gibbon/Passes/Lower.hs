@@ -1018,7 +1018,6 @@ prim p =
     OrP    -> T.OrP
     AndP   -> T.AndP
     SizeParam -> T.SizeParam
-    BenchProgParam -> T.BenchProgParam
     IsBig    -> T.IsBig
     PrintInt -> T.PrintInt
     PrintFloat -> T.PrintFloat

@@ -19,11 +19,6 @@ import Gibbon.Vector
 
 --------------------------------------------------------------------------------
 
-prog_is :: Sym -> Bool
-prog_is prog =
-    let s = benchProgParam
-    in eqsym s prog
-
 bench_seqfib :: ()
 bench_seqfib =
     let n = sizeParam
@@ -377,66 +372,66 @@ bench_parfoldconstants =
     in ()
 
 gibbon_main =
-    if prog_is (quote "seqfib")
+    if eqBenchProg "seqfib"
     then bench_seqfib
-    else if prog_is (quote "parfib")
+    else if eqBenchProg "parfib"
     then bench_parfib
-    else if prog_is (quote "seqbuildfib")
+    else if eqBenchProg "seqbuildfib"
     then bench_seqbuildfib
-    else if prog_is (quote "parbuildfib")
+    else if eqBenchProg "parbuildfib"
     then bench_parbuildfib
-    else if prog_is (quote "seqbuildtree")
+    else if eqBenchProg "seqbuildtree"
     then bench_seqbuildtree
-    else if prog_is (quote "parbuildtree")
+    else if eqBenchProg "parbuildtree"
     then bench_parbuildtree
-    else if prog_is (quote "seqadd1tree")
+    else if eqBenchProg "seqadd1tree"
     then bench_seqadd1tree
-    else if prog_is (quote "paradd1tree")
+    else if eqBenchProg "paradd1tree"
     then bench_paradd1tree
-    else if prog_is (quote "seqsumtree")
+    else if eqBenchProg "seqsumtree"
     then bench_seqsumtree
-    else if prog_is (quote "parsumtree")
+    else if eqBenchProg "parsumtree"
     then bench_parsumtree
-    else if prog_is (quote "seqbuildkdtree")
+    else if eqBenchProg "seqbuildkdtree"
     then bench_seqbuildkdtree
-    else if prog_is (quote "parbuildkdtree")
+    else if eqBenchProg "parbuildkdtree"
     then bench_parbuildkdtree
-    else if prog_is (quote "seqcountcorr")
+    else if eqBenchProg "seqcountcorr"
     then bench_seqcountcorr
-    else if prog_is (quote "parcountcorr")
+    else if eqBenchProg "parcountcorr"
     then bench_parcountcorr
-    else if prog_is (quote "seqnearest")
+    else if eqBenchProg "seqnearest"
     then bench_seqnearest
-    else if prog_is (quote "parnearest")
+    else if eqBenchProg "parnearest"
     then bench_parnearest
-    else if prog_is (quote "seqbuildquadtree")
+    else if eqBenchProg "seqbuildquadtree"
     then bench_seqbuildquadtree
-    else if prog_is (quote "parbuildquadtree")
+    else if eqBenchProg "parbuildquadtree"
     then bench_parbuildquadtree
-    else if prog_is (quote "seqbhut")
+    else if eqBenchProg "seqbhut"
     then bench_seqbhut
-    else if prog_is (quote "parbhut")
+    else if eqBenchProg "parbhut"
     then bench_parbhut
-    else if prog_is (quote "seqcoins")
+    else if eqBenchProg "seqcoins"
     then bench_seqcoins
-    else if prog_is (quote "parcoins")
+    else if eqBenchProg "parcoins"
     then bench_parcoins
-    else if prog_is (quote "seqcountnodes")
+    else if eqBenchProg "seqcountnodes"
     then bench_seqcountnodes
-    else if prog_is (quote "parcountnodes")
+    else if eqBenchProg "parcountnodes"
     then bench_parcountnodes
 {-
-    else if prog_is (quote "seqmkbvh")
+    else if eqBenchProg "seqmkbvh"
     then bench_seqmkbvh
-    else if prog_is (quote "parmkbvh")
+    else if eqBenchProg "parmkbvh"
     then bench_parmkbvh
-    else if prog_is (quote "seqray")
+    else if eqBenchProg "seqray"
     then bench_seqray
-    else if prog_is (quote "parray")
+    else if eqBenchProg "parray"
     then bench_parray
 -}
-    else if prog_is (quote "seqfoldconstants")
+    else if eqBenchProg "seqfoldconstants"
     then bench_seqfoldconstants
-    else if prog_is (quote "parfoldconstants")
+    else if eqBenchProg "parfoldconstants"
     then bench_parfoldconstants
     else printsym (quote "benchrunner: select benchmark to run with --bench-prog\n")
