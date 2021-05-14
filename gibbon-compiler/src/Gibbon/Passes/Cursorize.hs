@@ -554,7 +554,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
           if gopt Opt_DisableGC dflags || (r1 == "dummy" || r2 == "dummy") -- HACK!!!
           then go tenv senv (DataConE pointer dcon [VarE pointee])
           else
-            onDi (mkLets [("_",[],IntTy, Ext (BumpRefCount (toEndV r1) (toEndV r2)))]) <$>
+            onDi (mkLets [("_",[],ProdTy [],Ext (BumpRefCount (toEndV r1) (toEndV r2)))]) <$>
               go tenv senv (DataConE pointer dcon [VarE pointee])
 
         AddFixed{} -> error "cursorizePackedExp: AddFixed not handled."

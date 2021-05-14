@@ -719,7 +719,7 @@ int get_ref_count(CursorTy end_ptr) {
 
 // B is the pointer, and A is the pointee (i.e B -> A) --
 // bump A's refcount, and update B's outset ptr.
-IntTy bump_ref_count(CursorTy end_b, CursorTy end_a) {
+static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     // Bump refcount
     RegionFooter *footer_a = (RegionFooter *) end_a;
     int refcount = *(footer_a->refcount_ptr);
@@ -741,8 +741,8 @@ IntTy bump_ref_count(CursorTy end_b, CursorTy end_a) {
     // Add A to B's outset
     Outset_elem *add = malloc(sizeof(Outset_elem));
     add->ref = end_a;
-    add->next = NULL;
-    add->prev = NULL;
+    // add->next = NULL;
+    // add->prev = NULL;
     DL_APPEND(head, add);
 
     // As far as I can tell, DL_APPEND updates "head" after an append. Or maybe
@@ -757,7 +757,7 @@ IntTy bump_ref_count(CursorTy end_b, CursorTy end_a) {
     assert(new_refcount == new_count);
     #endif
 
-    return refcount;
+    return;
 }
 
 void free_region(CursorTy end_reg) {
