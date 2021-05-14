@@ -160,6 +160,10 @@ tcExp ddfs env exp =
           _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
           return BoolTy
 
+        EqBenchProgP _ -> do
+          len0
+          return BoolTy
+
         RandP -> return IntTy
         FRandP -> return FloatTy
         FSqrtP -> do

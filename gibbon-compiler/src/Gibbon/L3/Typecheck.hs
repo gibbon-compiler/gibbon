@@ -285,6 +285,10 @@ tcExp isPacked ddfs env exp =
           _ <- ensureEqualTyModCursor (es !! 1) SymTy (tys !! 1)
           return BoolTy
 
+        EqBenchProgP _ -> do
+          len0
+          return BoolTy
+
         RandP -> return IntTy
         FRandP-> return FloatTy
         FSqrtP -> do

@@ -1004,6 +1004,7 @@ prim p =
     RandP -> T.RandP
     Gensym -> T.Gensym
     EqSymP -> T.EqSymP
+    EqBenchProgP str -> T.EqBenchProgP str
     EqIntP -> T.EqP
     EqFloatP -> T.EqP
     LtP    -> T.LtP

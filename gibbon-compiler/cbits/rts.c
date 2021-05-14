@@ -429,7 +429,7 @@ IntTy expll(IntTy base, IntTy pow) {
 static SymTy global_gensym_counter = 0;
 
 // Its value is updated by the flags parser.
-static SymTy global_bench_prog_param = -2;
+static char *global_bench_prog_param;
 
 static SymTy newline_symbol = -1;
 static SymTy space_symbol = -1;
@@ -1213,9 +1213,9 @@ int main(int argc, char** argv)
             i++;
         }
         else if (strcmp(argv[i], "--bench-prog") == 0 && i < argc - 1) {
-            global_gensym_counter += 1;
-            global_bench_prog_param = global_gensym_counter;
-            add_symbol(global_bench_prog_param, argv[i+1]);
+            int len = strlen(argv[i+1]);
+            global_bench_prog_param = (char*) malloc((len+1)*sizeof(char));
+            strncpy(global_bench_prog_param,argv[i+1],len);
             i++;
         }
         // If present, we expect the two arguments to be <size> <iters>
@@ -1232,6 +1232,13 @@ int main(int argc, char** argv)
             global_iters_param = atoll(argv[i]);
           }
         }
+    }
+
+    // Initialize global_bench_prog_param to an empty string in case
+    // the runtime argument --bench-prog isn't passed.
+    if (global_bench_prog_param == NULL) {
+        global_bench_prog_param = (char*) malloc(1*sizeof(char));
+        *global_bench_prog_param = '\n';
     }
 
     INITALLOC();

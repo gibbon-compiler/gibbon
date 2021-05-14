@@ -436,6 +436,9 @@ exp se =
                           (textToVar v2, typ t2, e2')
                           bod'
 
+   Ls2 l "eqBenchProg" (G _ (HSString str)) ->
+     pure $ Ext (L (toLoc l) (PrimAppE (EqBenchProgP (T.unpack str)) []))
+
    Ls3 l "vector-ref" evec (G _ (HSInt ind)) ->
      Ext <$> L (toLoc l) <$> ProjE (fromIntegral ind) <$> (exp evec)
 

@@ -555,6 +555,7 @@ recoverType ddfs env2 ex =
         FloatToIntP -> IntTy
         IntToFloatP -> FloatTy
         EqSymP  -> BoolTy
+        EqBenchProgP _ -> BoolTy
         EqIntP  -> BoolTy
         EqFloatP-> BoolTy
         LtP  -> BoolTy

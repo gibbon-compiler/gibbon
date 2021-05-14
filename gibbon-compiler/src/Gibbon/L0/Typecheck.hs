@@ -211,6 +211,10 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           s3 <- unify (args !! 1) SymTy0 (arg_tys' !! 1)
           pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
 
+        EqBenchProgP _ -> do
+          len0
+          pure (s1, BoolTy, PrimAppE pr args_tc)
+
         RandP -> pure (s1, IntTy, PrimAppE pr args_tc)
         FRandP-> pure (s1, FloatTy, PrimAppE pr args_tc)
         FSqrtP -> do

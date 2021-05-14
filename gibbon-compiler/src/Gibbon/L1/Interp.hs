@@ -217,6 +217,7 @@ applyPrim rc p args =
    (FloatToIntP,[VFloat x]) -> pure $ VInt (round x)
    (FSqrtP,[VFloat x]) -> pure $ VFloat (sqrt x)
    (EqSymP,[VSym x, VSym y]) -> pure $ VBool (x==y)
+   (EqBenchProgP _str,[]) -> pure $ VBool False
    (EqIntP,[VInt x, VInt y]) -> pure $ VBool (x==y)
    (EqFloatP,[VFloat x, VFloat y]) -> pure $ VBool (x==y)
    (LtP,[VInt x, VInt y]) -> pure $ VBool (x < y)

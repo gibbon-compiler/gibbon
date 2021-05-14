@@ -288,6 +288,10 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    ensureEqualTy exp SymTy (tys !! 1)
                    return (BoolTy,tstate)
 
+                 EqBenchProgP _ -> do
+                   len0
+                   return (BoolTy,tstate)
+
                  DictEmptyP ty -> do
                    len1
                    let [a] = tys

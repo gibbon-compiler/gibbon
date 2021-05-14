@@ -396,6 +396,7 @@ data Prim ty
           | FAddP | FSubP | FMulP | FDivP | FExpP | FRandP | EqFloatP | FLtP | FGtP | FLtEqP | FGtEqP | FSqrtP | IntToFloatP | FloatToIntP
           | FTanP              -- ^ Translates to 'tan()' in C.
           | EqSymP             -- ^ Equality on Sym
+          | EqBenchProgP String
           | OrP | AndP
           | MkTrue  -- ^ Zero argument constructor.
           | MkFalse -- ^ Zero argument constructor.

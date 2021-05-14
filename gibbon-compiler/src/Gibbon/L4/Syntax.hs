@@ -198,6 +198,7 @@ data Prim
     | DivP | ModP
     | EqP | LtP | GtP | LtEqP | GtEqP
     | EqSymP
+    | EqBenchProgP String
     | ExpP
     | RandP
     | FRandP

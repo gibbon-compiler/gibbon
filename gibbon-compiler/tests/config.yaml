@@ -288,6 +288,9 @@ tests:
     dir: examples/lineartypes/
     failing: [gibbon1, gibbon2, pointer, interp1]
 
+  - name: EqBench.hs
+    answer-file: examples/EqBench.ans
+
   - name: test_parse.hs
     failing: [gibbon1, gibbon2, pointer, interp1]
 

@@ -531,7 +531,11 @@ desugarExp type_syns toplevel e =
                   if f == "quote"
                   then case e2 of
                          Lit _ lit -> pure $ LitSymE (toVar $ litToString lit)
-                         _ -> error "desugarExp: quote only works with String literals. E.g quote \"hello\""
+                         _ -> error "desugarExp: quote only accepts string literals. E.g quote \"hello\""
+                  else if f == "eqBenchProg"
+                  then case e2 of
+                         Lit _ lit -> pure $ (PrimAppE (EqBenchProgP (litToString lit)) [])
+                         _ -> error "desugarExp: eqBenchProg only accepts string literals."
                   else if f == "readArrayFile"
                   then let go e0 = case e0 of
                                     Con _ (UnQual _ (Ident _ "Nothing")) -> do

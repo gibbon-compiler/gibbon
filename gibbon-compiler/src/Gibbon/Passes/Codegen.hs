@@ -701,6 +701,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                [pleft,pright] = rnds in pure
                            [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = eqsym($(codegenTriv venv pleft), $(codegenTriv venv pright)); |]]
 
+                 EqBenchProgP str -> let [(outV,outT)] = bnds
+                                     in pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = strcmp($str,global_bench_prog_param) == 0; |]]
+
                  DictInsertP _ -> let [(outV,ty)] = bnds
                                       [(VarTriv arena),(VarTriv dict),keyTriv,valTriv] = rnds in pure
                     [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = dict_insert_ptr($id:arena, $id:dict, $(codegenTriv venv keyTriv), $(codegenTriv venv valTriv)); |] ]

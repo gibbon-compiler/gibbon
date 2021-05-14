@@ -547,6 +547,7 @@ primArgsTy p =
     IntToFloatP -> [IntTy]
     RandP   -> []
     EqSymP  -> [SymTy, SymTy]
+    EqBenchProgP _ -> []
     EqIntP  -> [IntTy, IntTy]
     EqFloatP-> [FloatTy, FloatTy]
     LtP  -> [IntTy, IntTy]
@@ -643,6 +644,7 @@ primRetTy p =
     RandP-> IntTy
     Gensym  -> SymTy
     EqSymP  -> BoolTy
+    EqBenchProgP _ -> BoolTy
     EqIntP  -> BoolTy
     EqFloatP-> BoolTy
     LtP  -> BoolTy

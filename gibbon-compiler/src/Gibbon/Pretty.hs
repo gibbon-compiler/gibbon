@@ -230,6 +230,7 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       ReadArrayFile mb_fp ty ->
                                         parens (text "readArrayFile " <+> parens (text $ pretty mb_fp)) <+>
                                         doublecolon <+> pprintWithStyle sty ty
+                                      EqBenchProgP str -> text "eqBenchProg" <+> text str
                                       _ -> error $ "pprint: Unknown primitive: " ++ show pr
                       PPHaskell  -> case pr of
                                       DictEmptyP _ty  -> text "dictEmpty"

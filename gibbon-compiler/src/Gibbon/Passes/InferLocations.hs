@@ -1598,6 +1598,7 @@ prim p = case p of
            OrP  -> return OrP
            AndP -> return AndP
            EqSymP -> return EqSymP
+           EqBenchProgP str -> return (EqBenchProgP str)
            EqIntP -> return EqIntP
            EqFloatP -> return EqFloatP
            MkTrue -> return MkTrue
