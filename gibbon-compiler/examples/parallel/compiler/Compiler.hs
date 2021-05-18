@@ -19,53 +19,8 @@ data Prim = AddP | SubP | AndP | OrP
 data Cmp = EqP | LtP
   deriving (Show, Generic, NFData)
 
--- data Val = IntV Int | ErrorV
---   deriving (Show, Generic, NFData)
-
--- data Type = IntTy | BoolTy
-
 --------------------------------------------------------------------------------
 -- Environments
-
--- ----------------------------------------
--- -- UT hash based
--- ----------------------------------------
-
--- -- Map Sym Sym
--- type VarEnv = SymHash
--- type TypeEnv = SymHash
--- type AliasEnv = SymHash
-
--- empty_env :: VarEnv
--- empty_env = empty_hash
-
--- lookup_env :: VarEnv -> Var -> Var
--- lookup_env env k = lookup_hash env k
-
--- insert_env :: VarEnv -> Var -> Var -> VarEnv
--- insert_env env k v = insert_hash env k v
-
--- contains_env :: VarEnv -> Var -> Bool
--- contains_env env k = contains_hash env k
-
--- -- Map Sym Int
--- type HomesEnv = IntHash
-
--- empty_int_env :: HomesEnv
--- empty_int_env = empty_int_hash
-
--- lookup_int_env :: HomesEnv -> Var -> Int
--- lookup_int_env env k = lookup_int_hash env k
-
--- insert_int_env :: HomesEnv -> Var -> Int -> HomesEnv
--- insert_int_env env k v = insert_int_hash env k v
-
--- contains_int_env :: HomesEnv -> Var -> Bool
--- contains_int_env env k = contains_int_hash env k
-
-----------------------------------------
--- List based
-----------------------------------------
 
 type TypeEnv = List (Sym, Sym)
 type VarEnv = List (Sym, Sym)
@@ -125,7 +80,6 @@ lookupWithDefault def k env =
        else lookupWithDefault def k tl
 
 
--- Map Sym Int
 type HomesEnv = List (Sym, Int)
 
 empty_int_env :: HomesEnv
@@ -148,7 +102,6 @@ contains_int_env env k =
      else True
 
 --------------------------------------------------------------------------------
-
 
 intTy :: Ty
 {-# INLINE intTy #-}
@@ -242,15 +195,6 @@ print_cmp c =
   case c of
     EqP  -> printsym (quote "EqP")
     LtP  -> printsym (quote "LtP")
-
--- print_val :: Val -> ()
--- print_val v =
---   case v of
---     IntV i ->
---       let _ = printsym (quote "IntV ")
---           _ = printint i
---       in ()
---     ErrorV -> printsym (quote "ErrorV")
 
 --------------------------------------------------------------------------------
 -- Source
@@ -1268,17 +1212,9 @@ explicateTail exp =
                     els_label = gensym
                     tail' = IfC thn_label els_label a'
 
-                    -- -- (1) use appendBlocks
-                    -- thn_tail' = copy_tail thn_tail
-                    -- els_tail' = copy_tail els_tail
-                    -- blks0 = appendBlocks thn_blocks els_blocks
-                    -- blks1 = BlockCons els_label els_tail' blks0
-                    -- blks2 = BlockCons thn_label thn_tail' blks1
-
                     -- (2) create a tree using BlockAppend
                     -- COPY: thn_blocks and els_blocks is copied (indirection)
                     -- TRAVERSAL: random access
-                    -- _ = trav_tail thn_tail
                     thn_tail' = _copy_tail thn_tail
                     blks0 = BlockCons thn_label thn_tail' thn_blocks
                     -- _ = trav_tail els_tail
@@ -1309,7 +1245,6 @@ explicateTail_par exp =
              -- COPY: tl and blk are copied (indirection)
              let stm = AssignC v rhs'
                  -- TRAVERSAL: random access
-                 -- _ = trav_tail tl
                  tail = SeqC stm tl
                  locals' = cons_ll v locals
              in (locals', MkTailAndBlk tail blk)
@@ -1329,13 +1264,6 @@ explicateTail_par exp =
                 let thn_label = gensym
                     els_label = gensym
                     tail' = IfC thn_label els_label a'
-
-                    -- -- (1) use appendBlocks
-                    -- thn_tail' = copy_tail thn_tail
-                    -- els_tail' = copy_tail els_tail
-                    -- blks0 = appendBlocks thn_blocks els_blocks
-                    -- blks1 = BlockCons els_label els_tail' blks0
-                    -- blks2 = BlockCons thn_label thn_tail' blks1
 
                     -- (2) create a tree using BlockAppend
                     -- COPY: thn_blocks and els_blocks is copied (indirection)
@@ -1900,8 +1828,6 @@ assignHomes prg =
   case prg of
     ProgramX86 ty locals instrs ->
       let homes = makeHomes locals
-          -- homes :: HomesEnv
-          -- homes = empty_int_env
           em :: List Sym
           em = alloc_ll
       in ProgramX86 ty em (assignHomesInstrs homes instrs)
@@ -1911,8 +1837,6 @@ assignHomes_par prg =
   case prg of
     ProgramX86 ty locals instrs ->
       let homes = makeHomes locals
-          -- homes :: HomesEnv
-          -- homes = empty_int_env
           em :: List Sym
           em = alloc_ll
       in ProgramX86 ty em (assignHomesInstrs_par homes instrs)
@@ -2066,27 +1990,22 @@ make_big_ex n d =
        (IfA (CmpA EqP (VarArg v1) (IntArg 0))
          (make_big_ex n (d+1))
          (make_big_ex n (d+1)))
-{-
 
-small_ex :: A
-small_ex = ProgramA intTy
-          (LetA (quote "v0") (ArgA (IntArg 20))
-           (LetA (quote "v1") (ArgA (IntArg 22))
-            (LetA (quote "res") (PrimA AddP (VarArg (quote "v0")) (VarArg (quote "v1")))
-             (IfA
-              (CmpA EqP (VarArg (quote "v0")) (VarArg (quote "v1")))
-              (SimplA (ArgA (VarArg (quote "v0"))))
-              (SimplA (ArgA (VarArg (quote "v1"))))))))
+bench_seq_compiler :: ()
+bench_seq_compiler =
+  let ex = make_big_ex sizeParam 0
+      p = ProgramA intTy ex
+      compiled = iterate (compile2 p)
+  in ()
 
--}
+bench_par_compiler :: ()
+bench_par_compiler =
+  let ex = make_big_ex sizeParam 0
+      p = ProgramA intTy ex
+      compiled_par = iterate (compile2_par p)
+  in ()
 
 gibbon_main =
-  let ex = make_big_ex sizeParam 0
-      {- _ = print_expa ex -}
-      p = ProgramA intTy ex
-      compiled = timeit (compile2 p)
-      -- _ = print_pseudox86 compiled
-      -- _ = printsym (quote "\n")
-      compiled_par = timeit (compile2_par p)
-      -- _ = print_pseudox86 compiled_par
-  in ()
+  if eqBenchProg "seqcompiler"
+  then bench_seq_compiler
+  else bench_par_compiler
