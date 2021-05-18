@@ -120,16 +120,6 @@ bench_seqcountcorr =
         n   = sizeParam
         radius  = 100.0
         tr      = mkKdTree_seq pts
---         tup =  iterate (let i     = rand
---                             j     = (mod i n) - 1
---                             probe = nth pts j
---                             corr = countCorr_seq probe radius tr
---                         in (probe, corr))
---         (query, actual) = tup
---     in check_countcorr pts query actual radius
-
---         (qx, qy, qz, count) = iterate (nCountCorr_seq 1 radius pts tr)
---     in check_countcorr pts (qx,qy,qz) count radius
         pts' = slice 0 n pts
         counts = iterate (allCountCorr_seq radius tr pts')
         query = nth pts' 4
@@ -144,15 +134,6 @@ bench_parcountcorr =
         radius  = 100.0
         tr      = mkKdTree_seq pts
         cutoff  = 8000
---         tup =  iterate (let i     = rand
---                             j     = (mod i n) - 1
---                             probe = nth pts j
---                             corr = countCorr_par cutoff probe radius tr
---                         in (probe, corr))
---         (query, actual) = tup
---     in check_countcorr pts query actual radius
---         (qx, qy, qz, count) = iterate (nCountCorr_par cutoff 1 radius pts tr)
---     in check_countcorr pts (qx,qy,qz) count radius
         pts' = slice 0 n pts
         counts = iterate (allCountCorr_par cutoff radius tr pts')
         query = nth pts' 4
@@ -236,7 +217,7 @@ bench_seqbhut =
       box = (llx, lly, rux, ruy)
       bht = buildQtree_seq box mpts
       particles1 = oneStep_seq bht mpts particles
-  in check_bhut particles particles1
+  in ()
 
 bench_parbhut :: ()
 bench_parbhut =
@@ -259,7 +240,7 @@ bench_parbhut =
       bht = buildQtree_seq box mpts
       cutoff = 524288
       particles1 = oneStep_par cutoff bht mpts particles
-  in check_bhut particles particles1
+  in ()
 
 bench_seqcoins :: ()
 bench_seqcoins =
@@ -274,8 +255,7 @@ bench_seqcoins =
     -- in printCoins coins6
         amt = sizeParam
         tr = iterate (payA_seq amt coins6)
-    in check_coins amt tr
-    -- in ()
+    in ()
 
 bench_parcoins :: ()
 bench_parcoins =
@@ -290,7 +270,6 @@ bench_parcoins =
     -- in printCoins coins6
         amt = sizeParam
         tr = iterate (payA_par 3 amt coins6)
-    -- in check_coins amt tr
     in ()
 
 bench_seqcountnodes :: ()
@@ -307,53 +286,11 @@ bench_parcountnodes :: ()
 bench_parcountnodes =
   let e = readPackedFile @Toplvl Nothing
       -- to ensure that mmap'd stuff is in memory.
-      _ = countNodesPar e
+      _ = countNodeSeq e
       n = iterate (countNodesPar e)
       _ = printint n
       _ = printsym (quote "\n")
   in ()
-
-{-
-
-bench_seqmkbvh :: ()
-bench_seqmkbvh =
-  let scene = rgbbox ()
-      spheres = get_spheres_scene scene
-      bvh = iterate (mkBvh_seq spheres)
-  in ()
-
-bench_parmkbvh :: ()
-bench_parmkbvh =
-  let scene = rgbbox ()
-      spheres = get_spheres_scene scene
-      bvh = iterate (mkBvh_par spheres)
-  in ()
-
-bench_seqray :: ()
-bench_seqray =
-  let scene = rgbbox ()
-      spheres = get_spheres_scene scene
-      size = sizeParam
-      width = size
-      height = size
-      bvh = mkBvh_seq spheres
-      cam = camera_from_scene width height scene
-      pixels = iterate (render_seq bvh width height cam)
-  in ()
-
-bench_parray :: ()
-bench_parray =
-  let scene = rgbbox ()
-      spheres = get_spheres_scene scene
-      size = sizeParam
-      width = size
-      height = size
-      bvh = mkBvh_seq spheres
-      cam = camera_from_scene width height scene
-      pixels = iterate (render_par bvh width height cam)
-  in ()
-
--}
 
 bench_seqfoldconstants :: ()
 bench_seqfoldconstants =
