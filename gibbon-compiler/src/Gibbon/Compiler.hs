@@ -413,7 +413,7 @@ getExeFile backend fp Nothing =
 compilationCmd :: Backend -> Config -> String
 compilationCmd LLVM _   = "clang-5.0 lib.o "
 compilationCmd C config = (cc config) ++" -std=gnu11 "
-                          ++(if bumpAlloc then "-DBUMPALLOC " else "")
+                          ++(if bumpAlloc then "-D_BUMPALLOC " else "")
                           ++(if pointer then "-D_POINTER " else "")
                           ++(if parallel then "-fcilkplus -D_PARALLEL" else "")
                           ++(optc config)++"  "

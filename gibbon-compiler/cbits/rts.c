@@ -67,15 +67,14 @@ static const int num_workers = 1;
 // #define DEBUG
 #warning "Using bump allocator."
 
-char* heap_ptr = (char*)NULL;
-char* heap_ptr_end = (char*)NULL;
+__thread char* heap_ptr = (char*)NULL;
+__thread char* heap_ptr_end = (char*)NULL;
 
 char* saved_heap_ptr_stack[100];
 int num_saved_heap_ptr = 0;
 
 // Requires -std=gnu11
-int dbgprintf(const char *format, ...)
-{
+int dbgprintf(const char *format, ...) {
     int code = 0;
     va_list args;
     va_start(args, format);
@@ -88,26 +87,16 @@ int dbgprintf(const char *format, ...)
 
 // For simplicity just use a single large slab:
 void INITALLOC() {
-  if (! heap_ptr)
-  {
-    // // Use a fixed address in debug mode for easy reading:
-    // #ifdef DEBUG
-    // // heap_ptr = (char*)mmap(0x010000000000, global_init_biginf_buf_size, PROT_READ|PROT_WRITE, MAP_FIXED | MAP_ANONYMOUS, -1, 0);
-    //   heap_ptr = (char*)mmap(0x010000000000, global_init_biginf_buf_size, PROT_READ|PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
-    //   if (heap_ptr == MAP_FAILED) {
-    //     fprintf(stderr, "Error: mmap failed: %s\n", strerror(errno));
-    //     abort();
-    //   }
-    // #else
+  if (! heap_ptr) {
       heap_ptr = (char*)malloc(global_init_biginf_buf_size);
       heap_ptr_end = heap_ptr + global_init_biginf_buf_size;
-    // #endif
-    dbgprintf("Arena size for bump alloc: %lld\n", global_init_biginf_buf_size);
+      // dbgprintf("Arena size for bump alloc: %lld\n", global_init_biginf_buf_size);
   }
-  dbgprintf("BUMPALLOC/INITALLOC DONE: heap_ptr = %p\n", heap_ptr);
+  // dbgprintf("BUMPALLOC/INITALLOC DONE: heap_ptr = %p\n", heap_ptr);
 }
 
 void* BUMPALLOC(int n) {
+      INITALLOC();
       if (heap_ptr + n < heap_ptr_end) {
           char* old= heap_ptr;
           heap_ptr += n;
@@ -505,15 +494,18 @@ IntTy print_symbol(SymTy idx) {
   }
 }
 
+#ifdef _BUMPALLOC
 SymTy gensym() {
-    // SymTy idx = __atomic_add_fetch(&global_gensym_counter, 1, __ATOMIC_SEQ_CST);
-    global_gensym_counter += 1;
-    SymTy idx = global_gensym_counter;
-    // char value[global_max_symbol_len];
-    // sprintf(value, "gensym_%lld",idx);
-    // add_symbol(idx, value);
+    SymTy idx = __atomic_add_fetch(&global_gensym_counter, 1, __ATOMIC_SEQ_CST);
     return idx;
 }
+#else
+SymTy gensym() {
+    global_gensym_counter += 1;
+    SymTy idx = global_gensym_counter;
+    return idx;
+}
+#endif
 
 void free_symtable() {
     struct SymTable_elem *elt, *tmp;
@@ -1071,7 +1063,7 @@ static inline void list_free(ListTy *ls) {
 static inline ListTy* list_copy(ListTy *ls) {
     ListTy *ls2 = list_alloc(ls->data_size);
     if (ls->data != NULL) {
-        void* data = ALLOC(ls->data_size);
+        void* data = BUMPALLOC(ls->data_size);
         memcpy(data, ls->data, ls->data_size);
         ls2->data = data;
     }
@@ -1226,10 +1218,6 @@ int main(int argc, char** argv)
         *global_bench_prog_param = '\n';
     }
 
-    INITALLOC();
-// #ifdef BUMPALLOC
-    //    save_alloc_state();
-// #endif
     __main_expr();
 
     return 0;
