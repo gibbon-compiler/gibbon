@@ -1,16 +1,22 @@
-# This Nix environment contains everything needed to run the tests.
-
-# Currently using a snapshot of the nixos-18.03 channel.
-# Default GHC should match the current LTS in stack.yaml:
-{ pkgs ? import (fetchTarball (import ./.nix_default_environment.txt)) {}
-, ghc ? pkgs.haskell.compiler.ghc865 }:
+{
+  pkgs ? import (builtins.fetchGit {
+                   name = "nixos-unstable-2021-03-11";
+                   url = "https://github.com/nixos/nixpkgs/";
+                   # Commit hash for nixos-unstable as of 2021-03-11
+                   # `git ls-remote https://github.com/nixos/nixpkgs master`
+                   ref = "refs/heads/master";
+                   rev = "a3228bb6e8bdbb9900f30a11fe09006fdabf7b71";
+                 }) {}
+, stdenv ? pkgs.overrideCC pkgs.stdenv pkgs.gcc7
+# , ghc ? pkgs.haskell.compiler.ghc865
+, ghc901 ? pkgs.haskell.compiler.ghc901
+}:
 
 with pkgs;
 
 haskell.lib.buildStackProject {
-  inherit ghc;
-  name = "basicGibbonEnv";
-  buildInputs = [ stdenv ghc stack which racket
+  name = "treevelocityEnv";
+  buildInputs = [ stdenv ghc901 stack which racket
                   ncurses boehmgc uthash unzip
                 ];
 }

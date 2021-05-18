@@ -129,6 +129,7 @@ tests:
   - name: test29_list.gib
   - name: test29a_list.gib
   - name: test29b_list.gib
+  - name: test29c_list.gib
   - name: test30_twitter.gib
   - name: test_buildstree.gib
   - name: test_buildtree.gib
@@ -412,8 +413,6 @@ tests:
     answer-file: examples/ast/C1.ans
 
   ## Tests that only work with some backend:
-  - name: test29c_list.gib
-    failing: [gibbon2]
   - name: test29d_list.gib
     failing: [gibbon1]
   - name: test18f_flip.gib
