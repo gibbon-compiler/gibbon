@@ -309,8 +309,7 @@ test_main =
 bench_main :: ()
 {-# INLINE bench_main #-}
 bench_main =
-        let s = benchProgParam in
-        if eqsym s (quote "seqmergesort")
+        if eqBenchProg "seqmergesort"
         then
             let n = sizeParam
                 arr = generate n (\i -> intToFloat (rand))
