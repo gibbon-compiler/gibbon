@@ -124,7 +124,7 @@ bench_seqcountcorr =
         counts = iterate (allCountCorr_seq radius tr pts')
         query = nth pts' 4
         count = nth counts 4
-    in check_countcorr pts query count radius
+    in ()
 
 bench_parcountcorr :: ()
 bench_parcountcorr =
@@ -138,7 +138,7 @@ bench_parcountcorr =
         counts = iterate (allCountCorr_par cutoff radius tr pts')
         query = nth pts' 4
         count = nth counts 4
-    in check_countcorr pts query count radius
+    in ()
 
 bench_seqnearest :: ()
 bench_seqnearest =
