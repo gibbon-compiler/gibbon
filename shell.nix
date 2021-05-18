@@ -8,7 +8,7 @@
                    rev = "a3228bb6e8bdbb9900f30a11fe09006fdabf7b71";
                  }) {}
 , stdenv ? pkgs.overrideCC pkgs.stdenv pkgs.gcc7
-# , ghc ? pkgs.haskell.compiler.ghc865
+, ghc ? pkgs.haskell.compiler.ghc865
 , ghc901 ? pkgs.haskell.compiler.ghc901
 }:
 
@@ -16,7 +16,7 @@ with pkgs;
 
 haskell.lib.buildStackProject {
   name = "treevelocityEnv";
-  buildInputs = [ stdenv ghc901 stack which racket
+  buildInputs = [ stdenv ghc ghc901 stack which racket
                   ncurses boehmgc uthash unzip
                 ];
 }

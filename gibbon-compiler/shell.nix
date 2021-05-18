@@ -8,7 +8,7 @@
                    rev = "a3228bb6e8bdbb9900f30a11fe09006fdabf7b71";
                  }) {}
 , stdenv ? pkgs.overrideCC pkgs.stdenv pkgs.gcc7
-# , ghc ? pkgs.haskell.compiler.ghc865
+, ghc ? pkgs.haskell.compiler.ghc865
 , ghc901 ? pkgs.haskell.compiler.ghc901
 }:
 
@@ -17,7 +17,7 @@ with pkgs;
 
 stdenv.mkDerivation {
   name = "basicGibbonEnv";
-  buildInputs = [ ghc901 gcc7 which boehmgc uthash racket cabal-install ghcid
+  buildInputs = [ ghc ghc901 gcc7 which boehmgc uthash racket cabal-install ghcid
                   gdb valgrind stack
                 ];
 }
