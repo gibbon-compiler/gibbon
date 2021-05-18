@@ -432,33 +432,3 @@ accel_for query input =
                   in (aax .+. ax, aay .+. ay))
     (0.0, 0.0)
     input
-
-check_bhut :: Vector Particle -> Vector Particle -> ()
-check_bhut input particles =
-    let
-        n = length input
-        checkpoints0 :: Vector Int
-        checkpoints0 = valloc 4
-        checkpoints1 = inplaceUpdate 0 0 checkpoints0
-        checkpoints2 = inplaceUpdate 1 (div n 4) checkpoints1
-        checkpoints3 = inplaceUpdate 2 (div n 2) checkpoints2
-        checkpoints4 = inplaceUpdate 3 (n-1) checkpoints2
-        delta = foldl (\err idx ->
-                          let query = nth input idx
-                              axay = accel_for query input
-                              (_,_,_,expected_ax, expected_ay) = applyAccel query axay
-                              (_,_,_,actual_ax,actual_ay) = nth particles idx
-                              -- _ = printsym (quote "Expected: ")
-                              -- _ = printfloat expected_ax
-                              -- _ = printsym (quote ",")
-                              -- _ = printfloat expected_ay
-                              -- _ = printsym (quote "\n")
-                              -- _ = printsym (quote "Actual: ")
-                              -- _ = printfloat actual_ax
-                              -- _ = printsym (quote ",")
-                              -- _ = printfloat actual_ay
-                              -- _ = printsym (quote "\n")
-                          in float_abs (expected_ax .-. actual_ax) .+. float_abs (expected_ay .-. actual_ay))
-                  0.0 checkpoints4
-
-    in print_check (delta .<. 0.01)
