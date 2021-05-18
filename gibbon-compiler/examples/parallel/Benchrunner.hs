@@ -286,7 +286,7 @@ bench_parcountnodes :: ()
 bench_parcountnodes =
   let e = readPackedFile @Toplvl Nothing
       -- to ensure that mmap'd stuff is in memory.
-      _ = countNodeSeq e
+      _ = countNodesSeq e
       n = iterate (countNodesPar e)
       _ = printint n
       _ = printsym (quote "\n")
