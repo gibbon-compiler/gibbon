@@ -1368,7 +1368,7 @@ desugarParE0 prg@Prog{fundefs,mainExp} = do
                   _ -> args
           args'' <- mapM go args'
           pure $ PrimAppE pr args''
-        LetE (v,tyapps,ty@(ProdTy tys),(Ext (ParE0 ls))) bod -> do
+        LetE (v,_tyapps,(ProdTy tys),(Ext (ParE0 ls))) bod -> do
           vs <- mapM (\_ -> gensym "par_") ls
           let xs = (zip3 vs tys ls)
               spawns = init xs
@@ -1378,9 +1378,14 @@ desugarParE0 prg@Prog{fundefs,mainExp} = do
                          (w,[],ty1,(SpawnE fn tyapps1 args)) : acc)
                       []
                       spawns
-              ls'' = ls' ++ [(a,[],b,c), ("_", [], ProdTy [], SyncE), (v,tyapps,ty, MkProdE (map VarE vs))]
-          bod' <- go bod
-          pure $  mkLets ls'' bod'
+              ls'' = ls' ++ [(a,[],b,c)]
+              binds = ls'' ++ [("_", [], ProdTy [], SyncE)]
+              bod' = foldr (\((x,_,_,_),i) acc ->
+                                gSubstE (ProjE i (VarE v)) (VarE x) acc)
+                           bod
+                           (zip ls'' [0..])
+          bod'' <- go bod'
+          pure $  mkLets binds bod''
         LetE (v,tyapps,ty,rhs) bod -> LetE <$> (v,tyapps,ty,) <$> go rhs <*> go bod
         IfE a b c  -> IfE <$> go a <*> go b <*> go c
         MkProdE ls -> MkProdE <$> mapM go ls
