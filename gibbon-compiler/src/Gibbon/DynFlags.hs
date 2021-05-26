@@ -32,6 +32,9 @@ data GeneralFlag
   | Opt_RegionOnSpawn      -- ^ Allocate into fresh regions for every spawn, not steal.
   | Opt_GhcTc              -- ^ Typecheck with GHC before compiling with Gibbon.
   | Opt_RelativeOffsets    -- ^ Enable relative offsets.
+  | Opt_CountRegionsAll    -- ^ Count and print the number of regions allocated.
+  | Opt_CountRegionsBench  -- ^ Count the regions allocated by the expression
+                           --   being benchmarked using timeit or iterate.
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -100,7 +103,10 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                    flag' Opt_Parallel (long "parallel" <> help "Enable parallelism") <|>
                    flag' Opt_RegionOnSpawn (long "region-on-spawn" <> help "Allocate into fresh regions for every spawn, not steal.") <|>
                    flag' Opt_GhcTc (long "ghc-tc" <> help "Typecheck with GHC before compiling with Gibbon. Output shown with -v3.") <|>
-                   flag' Opt_RelativeOffsets (long "reloffsets" <> help "Enable relative offsets.")
+                   flag' Opt_RelativeOffsets (long "reloffsets" <> help "Enable relative offsets.") <|>
+                   flag' Opt_CountRegionsAll (long "count-regions" <> help "Count and print the number of regions allocated.") <|>
+                   flag' Opt_CountRegionsBench (long "count-bench-regions" <> help ("Count the regions allocated by the expression " ++
+                                                                                    "being benchmarked using timeit or iterate."))
 
     dflagsParser :: Parser DebugFlag
     dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>

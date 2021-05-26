@@ -2,6 +2,7 @@ module Gibbon.Passes.RearrangeFree
   ( rearrangeFree ) where
 
 import Prelude hiding (tail)
+import Gibbon.DynFlags
 import Gibbon.Common
 import Gibbon.L4.Syntax
 
@@ -13,17 +14,17 @@ rearrangeFree (Prog sym_tbl fundefs mainExp) = do
   fundefs' <- mapM rearrangeFreeFn fundefs
   mainExp' <- case mainExp of
                 Just (PrintExp tail) -> do
-                  Just <$> PrintExp <$> rearrangeFreeExp Nothing tail
+                  Just <$> PrintExp <$> rearrangeFreeExp True Nothing tail
                 Nothing -> return Nothing
   return $ Prog sym_tbl fundefs' mainExp'
 
 rearrangeFreeFn :: FunDecl -> PassM FunDecl
 rearrangeFreeFn f@FunDecl{funBody} = do
-  bod' <- rearrangeFreeExp Nothing funBody
+  bod' <- rearrangeFreeExp False Nothing funBody
   return $ f {funBody = bod'}
 
-rearrangeFreeExp :: Maybe (Tail -> Tail) -> Tail -> PassM Tail
-rearrangeFreeExp frees tail =
+rearrangeFreeExp :: Bool -> Maybe (Tail -> Tail) -> Tail -> PassM Tail
+rearrangeFreeExp is_main frees tail =
   case tail of
     LetPrimCallT binds prim rands bod ->
       case prim of
@@ -31,15 +32,21 @@ rearrangeFreeExp frees tail =
             let clos = case frees of
                          Just f  -> f . LetPrimCallT binds prim rands
                          Nothing -> LetPrimCallT binds prim rands
-            bod' <- rearrangeFreeExp (Just clos) bod
+            bod' <- rearrangeFreeExp is_main (Just clos) bod
             return bod'
             -- withTail (bod', undefined) (\trvs -> clos (RetValsT trvs))
         _ -> LetPrimCallT binds prim rands <$> go bod
 
     -- RetValsT{} -> return tail
-    RetValsT ls -> case frees of
-                     Just f  -> return $ f (RetValsT ls)
-                     Nothing -> return tail
+    RetValsT ls -> do dflags <- getDynFlags
+                      let countRegions = (gopt Opt_CountRegionsAll dflags) || (gopt Opt_CountRegionsBench dflags)
+                          print_reg_count :: Tail -> Tail
+                          print_reg_count = if is_main && countRegions
+                                              then (LetPrimCallT [] PrintRegionCount [])
+                                              else id
+                      case frees of
+                        Just f  -> return $ f $ print_reg_count (RetValsT ls)
+                        Nothing -> return (print_reg_count tail)
 
     -- Straightforward recursion
     Switch lbl trv alts bod_maybe -> do
@@ -79,4 +86,4 @@ rearrangeFreeExp frees tail =
       LetArenaT v <$> go bod
     TailCall{} -> return tail
 
-  where go = rearrangeFreeExp frees
+  where go = rearrangeFreeExp is_main frees

@@ -50,6 +50,24 @@ static long long global_arrayfile_length_param = -1;
 // Sequential for now:
 static const int num_workers = 1;
 
+// Count the number of regions allocated.
+static long long global_region_count = 0;
+static bool global_region_count_flag = false;
+
+static inline void bump_global_region_count() {
+    if (global_region_count_flag) {
+        __atomic_add_fetch(&global_region_count, 1, __ATOMIC_SEQ_CST);
+    }
+    return;
+}
+
+static inline void print_global_region_count() {
+    if (global_region_count_flag) {
+        printf("REGION_COUNT: %lld\n", global_region_count);
+    }
+    return;
+}
+
 #define REDIRECTION_NODE_SIZE 9
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define MIN(a,b) (((a)<(b))?(a):(b))
@@ -600,6 +618,9 @@ typedef struct RegionFooter_struct {
 } RegionFooter;
 
 RegionTy *alloc_region(IntTy size) {
+    // Bump the count.
+    bump_global_region_count();
+
     // Allocate the first chunk
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy start = ALLOC_PACKED(total_size);

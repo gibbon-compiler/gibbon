@@ -309,6 +309,7 @@ data Prim
     | PrintSym    -- ^ Fetch a symbol from the symbol table, and print it.
     | PrintString String -- ^ Print a constant string to stdout.
                          -- TODO: add string values to the language.
+    | PrintRegionCount   -- ^ Call print_global_region_count() defined in the RTS.
 
     | ReadInt
 
