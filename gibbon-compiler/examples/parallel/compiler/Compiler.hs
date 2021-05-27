@@ -1060,31 +1060,31 @@ uniqifyExpA var_env exp =
   case exp of
     SimplA simpl -> SimplA (uniqifySimplExpA var_env simpl)
     LetA v rhs bod ->
-      if contains_env var_env v
-      then
+      -- if contains_env var_env v
+      -- then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
             var_env' = insert_env var_env v v'
             bod' = uniqifyExpA var_env' bod
         in LetA v' rhs' bod'
-      else
-        let rhs' = uniqifySimplExpA var_env rhs
-            var_env' = insert_env var_env v v
-            bod' = uniqifyExpA var_env' bod
-        in LetA v rhs' bod'
+      -- else
+      --   let rhs' = uniqifySimplExpA var_env rhs
+      --       var_env' = insert_env var_env v v
+      --       bod' = uniqifyExpA var_env' bod
+      --   in LetA v rhs' bod'
     LetA2 v rhs bod ->
-      if contains_env var_env v
-      then
+      -- if contains_env var_env v
+      -- then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
             var_env' = insert_env var_env v v'
             bod' = uniqifyExpA var_env' bod
         in LetA2 v' rhs' bod'
-      else
-        let rhs' = uniqifySimplExpA var_env rhs
-            var_env' = insert_env var_env v v
-            bod' = uniqifyExpA var_env' bod
-        in LetA2 v rhs' bod'
+      -- else
+      --   let rhs' = uniqifySimplExpA var_env rhs
+      --       var_env' = insert_env var_env v v
+      --       bod' = uniqifyExpA var_env' bod
+      --   in LetA2 v rhs' bod'
     IfA a b c -> IfA (uniqifySimplExpA var_env a) (uniqifyExpA var_env b) (uniqifyExpA var_env c)
 
 uniqifyExpA_par :: VarEnv -> ExpA -> ExpA
@@ -1092,32 +1092,31 @@ uniqifyExpA_par var_env exp =
   case exp of
     SimplA simpl -> SimplA (uniqifySimplExpA var_env simpl)
     LetA v rhs bod ->
-      if contains_env var_env v
-      then
+      -- if contains_env var_env v
+      -- then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
             var_env' = insert_env var_env v v'
             bod' = uniqifyExpA_par var_env' bod
         in LetA v' rhs' bod'
-      else
-         let rhs' = uniqifySimplExpA var_env rhs
-             var_env' = insert_env var_env v v
-             bod' = uniqifyExpA_par var_env' bod
-         in LetA v rhs' bod'
+      -- else
+      --    let rhs' = uniqifySimplExpA var_env rhs
+      --        var_env' = insert_env var_env v v
+      --        bod' = uniqifyExpA_par var_env' bod
+      --    in LetA v rhs' bod'
     LetA2 v rhs bod ->
-      if contains_env var_env v
-      then
+      -- if contains_env var_env v
+      -- then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
             var_env' = insert_env var_env v v'
             bod' = uniqifyExpA var_env' bod
         in LetA2 v' rhs' bod'
-
-      else
-         let rhs' = uniqifySimplExpA var_env rhs
-             var_env' = insert_env var_env v v
-             bod' = uniqifyExpA var_env' bod
-         in LetA2 v rhs' bod'
+      -- else
+      --    let rhs' = uniqifySimplExpA var_env rhs
+      --        var_env' = insert_env var_env v v
+      --        bod' = uniqifyExpA var_env' bod
+      --    in LetA2 v rhs' bod'
     IfA a b c ->
       let a' = (uniqifySimplExpA var_env a)
           -- TODO:
