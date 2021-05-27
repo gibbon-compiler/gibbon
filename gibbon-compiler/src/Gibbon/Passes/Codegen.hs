@@ -551,7 +551,9 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                        else [ C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ]) ++
                        (if countRegions
-                         then [ C.BlockStm [cstm| global_region_count_flag = false; |] ]
+                         then [ C.BlockStm [cstm| print_global_region_count(); |]
+                              , C.BlockStm [cstm| global_region_count_flag = false; |]
+                              ]
                          else [] )
        let venv' = (M.fromList bnds) `M.union` venv
        tal <- codegenTail venv' fenv sort_fns body ty sync_deps

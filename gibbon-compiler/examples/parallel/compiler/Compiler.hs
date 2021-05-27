@@ -1986,8 +1986,8 @@ make_big_ex n d =
   else
     -- let v1 = gensym
     let v1 = quote "v1"
-    in LetA v1 (ArgA (IntArg n))
-       (IfA (CmpA EqP (VarArg v1) (IntArg 0))
+    in -- LetA v1 (ArgA (IntArg n))
+       (IfA (CmpA EqP (IntArg n) (IntArg 0))
          (make_big_ex n (d+1))
          (make_big_ex n (d+1)))
 
