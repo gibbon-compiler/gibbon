@@ -6,12 +6,12 @@ import Gibbon.Prelude
 
 --------------------------------------------------------------------------------
 
-data AList = ANil | ASing Int | Append AList AList
+data AList = ANil Int | ASing Int | Append AList AList
 
 lenA :: AList -> Int
 lenA ls =
     case ls of
-        ANil -> 0
+        ANil i -> 0
         ASing i -> 1
         Append l r -> lenA l + lenA r
 
@@ -46,7 +46,7 @@ payA_seq amt coins =
     then ASing 1
     else
         if is_empty_ll coins
-        then ANil
+        then ANil 0
         else
             let (c,q) = head_ll coins
                 coins_rst = tail_ll coins
@@ -73,7 +73,7 @@ payA_par depth amt coins =
     then ASing 1
     else
         if is_empty_ll coins
-        then ANil
+        then ANil 0
         else
             let (c,q) = head_ll coins
                 coins_rst = tail_ll coins

@@ -1895,6 +1895,52 @@ assignHomesArgX86 homes arg =
 
 --------------------------------------------------------------------------------
 
+countLeavesX86 :: PseudoX86 -> Int
+countLeavesX86 prg =
+  case prg of
+    ProgramX86 ty locals instrs ->
+      countLeavesInstrs instrs
+
+countLeavesInstrs :: Instrs -> Int
+countLeavesInstrs instrs =
+  case instrs of
+    InstrCons instr rst ->
+      let n = countLeavesInstr instr
+          rst = countLeavesInstrs rst
+      in n + rst
+    InstrNil -> 0
+    InstrAppend instr1 instr2 ->
+      let n1 = countLeavesInstrs instr1
+          n2 = countLeavesInstrs instr2
+      in n1 + n2
+
+countLeavesInstr :: Instr -> Int
+countLeavesInstr instr =
+  case instr of
+    AddQ a1 a2 -> (countLeavesArgX86 a1) + (countLeavesArgX86 a2)
+    SubQ a1 a2 -> (countLeavesArgX86 a1) + (countLeavesArgX86 a2)
+    NegQ a1 -> (countLeavesArgX86 a1)
+    XorQ a1 a2 -> (countLeavesArgX86 a1) + (countLeavesArgX86 a2)
+    SetEQ r -> 1
+    CmpQ a1 a2 -> (countLeavesArgX86 a1) + (countLeavesArgX86 a2)
+    MovQ a1 a2 -> (countLeavesArgX86 a1) + (countLeavesArgX86 a2)
+    MovzbQ a1 a2 -> (countLeavesArgX86 a1) + (countLeavesArgX86 a2)
+    JumpQ lbl -> 1
+    JumpEQ lbl -> 1
+    PushQ a1 -> (countLeavesArgX86 a1)
+    PopQ a1 -> (countLeavesArgX86 a1)
+    RetQ -> 1
+
+countLeavesArgX86 :: ArgX86 -> Int
+countLeavesArgX86 arg =
+  case arg of
+    IntX86 i -> 1
+    VarX86 v -> 1
+    RegX86 r -> 1
+    DerefX86 r o -> 1
+
+--------------------------------------------------------------------------------
+
 compile0 :: A -> A
 compile0 p0 =
   let p1 = typecheckA p0
@@ -1940,29 +1986,6 @@ compile2_par p0 =
       p5 = selectInstrs_par p3
       p6 = assignHomes_par p5
   in p6
-
--- compile3 :: A -> PseudoX86
--- compile3 p0 =
---   let p1 = typecheckA p0
---       _ = print_program_a p1
---       _ = print_newline()
---       _ = print_newline()
---       p2 = uniqifyA p1
---       _ = print_program_a p2
---       _ = print_newline()
---       _ = print_newline()
---       p3 = explicateControl p2
---       _ = print_program_c p3
---       _ = print_newline()
---       _ = print_newline()
---       -- p4 = optimizeJumps p3
---       -- _ = print_program_c p4
---       -- _ = print_newline()
---       p5 = selectInstrs p3
---       _ = print_pseudox86 p5
---       p6 = assignHomes p5
---       _ = print_pseudox86 p6
---   in p6
 
 --------------------------------------------------------------------------------
 
