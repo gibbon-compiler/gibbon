@@ -216,7 +216,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
                       AfterConstantLE _ lc   -> renv # lc
                       AfterVariableLE _ lc _ -> renv # lc
                       FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
-                      -- FreeLE -> undefined
+                      FreeLE -> error "threadRegions: FreeLE"
           Ext <$> LetLocE loc rhs <$>
             threadRegionsExp ddefs fundefs isMain (M.insert loc reg renv) env2 lfenv bod
 
@@ -240,6 +240,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
           else return $ Ext ext
 
         LetRegionE r bod -> Ext <$> LetRegionE r <$> go bod
+        LetParRegionE r bod -> Ext <$> LetParRegionE r <$> go bod
         FromEndE{}    -> return ex
         BoundsCheck sz _bound cur -> do
           return $ Ext $ BoundsCheck sz (toEndV (renv # cur)) cur
@@ -310,6 +311,7 @@ findRetLocs e0 = go e0 []
         Ext ext ->
           case ext of
             LetRegionE _ bod  -> go bod acc
+            LetParRegionE _ bod  -> go bod acc
             LetLocE _ _ bod   -> go bod acc
             RetE locs _       -> locs ++ acc
             FromEndE{}        -> acc

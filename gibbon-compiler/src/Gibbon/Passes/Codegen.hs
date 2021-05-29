@@ -217,12 +217,7 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
                -- [2019.06.13]: CSK, Why is codegenTail always called with IntTy?
                Just (PrintExp t) -> codegenTail M.empty init_fun_env sort_fns t IntTy []
                _ -> pure []
-        dflags <- getDynFlags
-        let countRegions = gopt Opt_CountRegionsAll dflags
-        let set_flag = (if countRegions
-                            then [ C.BlockStm [cstm| global_region_count_flag = true; |] ]
-                            else [] )
-        let bod = mkSymTable ++ set_flag ++ e
+        let bod = mkSymTable ++ e
         pure $ C.FuncDef [cfun| int __main_expr() { $items:bod } |] noLoc
 
       codegenFun' :: FunDecl -> PassM C.Func
@@ -490,9 +485,7 @@ codegenTail venv fenv sort_fns (LetIfT bnds (e0,e1,e2) body) ty sync_deps =
 
 codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
 
-    do dflags <- getDynFlags
-       let countRegions = (gopt Opt_CountRegionsBench dflags) && (not (gopt Opt_CountRegionsAll dflags))
-       let decls = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:vr0; |]
+    do let decls = [ C.BlockDecl [cdecl| $ty:(codegenTy ty0) $id:vr0; |]
                    | (vr0,ty0) <- bnds ]
        let rhs' = rewriteReturns rhs bnds
        rhs'' <- codegenTail venv fenv sort_fns rhs' ty sync_deps
@@ -509,10 +502,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
            iters = "iters_"++ (fromVar ident)
            vec_ty = codegenTy (VectorTy FloatTy)
 
-           timebod = (if countRegions
-                         then [ C.BlockStm [cstm| global_region_count_flag = true; |] ]
-                         else [] ) ++
-                     [ C.BlockDecl [cdecl| $ty:vec_ty ($id:times) = vector_alloc(global_iters_param, sizeof(double)); |]
+           timebod = [ C.BlockDecl [cdecl| $ty:vec_ty ($id:times) = vector_alloc(global_iters_param, sizeof(double)); |]
                      , C.BlockDecl [cdecl| struct timespec $id:begn; |]
                      , C.BlockDecl [cdecl| struct timespec $id:end; |] ] ++
 
@@ -549,12 +539,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", $id:selftimed); |]
                             ]
                        else [ C.BlockStm [cstm| printf("SIZE: %lld\n", global_size_param); |]
-                            , C.BlockStm [cstm| printf("SELFTIMED: %e\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ]) ++
-                       (if countRegions
-                         then [ C.BlockStm [cstm| print_global_region_count(); |]
-                              , C.BlockStm [cstm| global_region_count_flag = false; |]
-                              ]
-                         else [] )
+                            , C.BlockStm [cstm| printf("SELFTIMED: %e\n", difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ])
        let venv' = (M.fromList bnds) `M.union` venv
        tal <- codegenTail venv' fenv sort_fns body ty sync_deps
        return $ decls ++ withPrnt ++ tal
@@ -764,15 +749,46 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                     [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = lookup_hash($id:hash, $(codegenTriv venv keyTriv)); |] ]
 
                  NewBuffer mul -> do
+                   dflags <- getDynFlags
+                   let countRegions = gopt Opt_CountAllRegions dflags
                    let [(reg, CursorTy),(outV,CursorTy)] = bnds
                        bufsize = codegenMultiplicity mul
-                   pure
-                     [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($id:bufsize); |]
-                     , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start_ptr; |]
-                     ]
+                   if countRegions
+                   then
+                     pure
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_counted_region($id:bufsize); |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start_ptr; |]
+                       ]
+                   else
+                     pure
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($id:bufsize); |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start_ptr; |]
+                       ]
+
+                 NewParBuffer mul -> do
+                   dflags <- getDynFlags
+                   let countRegions = gopt Opt_CountParRegions dflags
+                   let [(reg, CursorTy),(outV,CursorTy)] = bnds
+                       bufsize = codegenMultiplicity mul
+                   if countRegions
+                   then
+                     pure
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_counted_region($id:bufsize); |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start_ptr; |]
+                       ]
+                   else
+                     pure
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($id:bufsize); |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start_ptr; |]
+                       ]
                  ScopedBuffer mul -> let [(outV,CursorTy)] = bnds
                                          bufsize = codegenMultiplicity mul
                                      in pure
+                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) )ALLOC_SCOPED($id:bufsize); |] ]
+
+                 ScopedParBuffer mul -> let [(outV,CursorTy)] = bnds
+                                            bufsize = codegenMultiplicity mul
+                                        in pure
                              [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) )ALLOC_SCOPED($id:bufsize); |] ]
 
                  InitSizeOfBuffer mul -> let [(sizev,IntTy)] = bnds

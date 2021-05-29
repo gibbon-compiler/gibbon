@@ -163,6 +163,7 @@ inferExp ddfs fenv env dps expr =
     FoldE{} -> error "inferEffects: FoldE not handled."
 
     Ext (LetRegionE _ rhs) -> inferExp ddfs fenv env dps rhs
+    Ext (LetParRegionE _ rhs) -> inferExp ddfs fenv env dps rhs
     Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env dps rhs
     Ext (RetE _ _)         -> (S.empty, Nothing)
     Ext (FromEndE _ )      -> (S.empty, Nothing)

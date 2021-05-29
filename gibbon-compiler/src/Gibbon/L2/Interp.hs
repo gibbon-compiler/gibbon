@@ -296,6 +296,9 @@ interpExt sizeEnv rc env ddefs fenv ext =
       insertIntoStore (regionToVar reg) emptyBuffer
       go env sizeEnv bod
 
+    LetParRegionE reg bod ->
+      interpExt sizeEnv rc env ddefs fenv (LetRegionE reg bod)
+
     LetLocE loc locexp bod ->
       case locexp of
         StartOfLE reg -> do

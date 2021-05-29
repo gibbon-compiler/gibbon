@@ -342,7 +342,10 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
 
         -- Exactly same as cursorizePackedExp
         LetRegionE reg bod -> do
-          mkLets (regionToBinds reg) <$> go bod
+          mkLets (regionToBinds False reg) <$> go bod
+
+        LetParRegionE reg bod -> do
+          mkLets (regionToBinds True reg) <$> go bod
 
         BoundsCheck i bound cur -> return $ Ext $ L3.BoundsCheck i bound cur
 
@@ -543,7 +546,10 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
             _ -> return $ Di $ L3.MkProdE $ L.foldr (\loc acc -> (VarE loc):acc) [fromDi v'] locs
 
         LetRegionE r bod -> do
-          onDi (mkLets (regionToBinds r)) <$> go tenv senv bod
+          onDi (mkLets (regionToBinds False r)) <$> go tenv senv bod
+
+        LetParRegionE r bod -> do
+          onDi (mkLets (regionToBinds True r)) <$> go tenv senv bod
 
         FromEndE{} -> error $ "cursorizePackedExp: TODO " ++ sdoc ext
 
@@ -1368,14 +1374,20 @@ projEndsTy = projTy 1
 
 
 -- | Bindings for a letregion
-regionToBinds :: Region -> [(Var, [()], Ty3, Exp3)]
-regionToBinds r =
+regionToBinds :: Bool -> Region -> [(Var, [()], Ty3, Exp3)]
+regionToBinds for_parallel_allocs r =
   case r of
     VarR{} -> error $ "Unexpected VarR in Cursorize." ++ sdoc r
-    GlobR v mul -> [ (v       , [], CursorTy, Ext$ NewBuffer mul)
-                   , (toEndV v, [], CursorTy, Ext$ AddCursor v (Ext $ InitSizeOfBuffer mul))]
-    DynR v mul  -> [ (v       , [], CursorTy, Ext$ ScopedBuffer mul)
-                   , (toEndV v, [], CursorTy, Ext$ AddCursor v (Ext $ InitSizeOfBuffer mul))]
+    GlobR v mul -> if for_parallel_allocs
+                   then [ (v       , [], CursorTy, Ext$ NewParBuffer mul)
+                        , (toEndV v, [], CursorTy, Ext$ AddCursor v (Ext $ InitSizeOfBuffer mul))]
+                   else [ (v       , [], CursorTy, Ext$ NewBuffer mul)
+                        , (toEndV v, [], CursorTy, Ext$ AddCursor v (Ext $ InitSizeOfBuffer mul))]
+    DynR v mul  -> if for_parallel_allocs
+                   then [ (v       , [], CursorTy, Ext$ ScopedParBuffer mul)
+                        , (toEndV v, [], CursorTy, Ext$ AddCursor v (Ext $ InitSizeOfBuffer mul))]
+                   else [ (v       , [], CursorTy, Ext$ ScopedBuffer mul)
+                        , (toEndV v, [], CursorTy, Ext$ AddCursor v (Ext $ InitSizeOfBuffer mul))]
     -- TODO: docs
     MMapR _v    -> []
 

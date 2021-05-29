@@ -200,6 +200,8 @@ applyPrim EqP  [IntVal i1, IntVal i2] = pure [IntVal (if i1 == i2 then 1 else 0)
 
 applyPrim NewBuffer{} [] = pure [BufVal Seq.empty]
 
+applyPrim NewParBuffer{} [] = pure [BufVal Seq.empty]
+
 applyPrim WriteTag [TagVal tag, BufVal is] = pure [BufVal (is |> fromIntegral tag)]
 
 applyPrim ReadTag [BufVal is] = case Seq.viewl is of
@@ -217,6 +219,7 @@ applyPrim (PrintString st) [] = do putStrLn st; return []
 
 applyPrim SizeParam [] = error "TargetInterp/applyPrim: finish SizeParam"
 applyPrim ScopedBuffer{} [] = error "TargetInterp/applyPrim: finish ScopedBuf"
+applyPrim ScopedParBuffer{} [] = error "TargetInterp/applyPrim: finish ScopedBuf"
 applyPrim GetFirstWord [] = error "TargetInterp/applyPrim: finish GetFirstWord"
 
 applyPrim (DictInsertP _) [] = error "TargetInterp/applyPrim: finish DictInsertP"

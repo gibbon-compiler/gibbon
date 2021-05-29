@@ -39,7 +39,7 @@ rearrangeFreeExp is_main frees tail =
 
     -- RetValsT{} -> return tail
     RetValsT ls -> do dflags <- getDynFlags
-                      let countRegions = (gopt Opt_CountRegionsAll dflags) || (gopt Opt_CountRegionsBench dflags)
+                      let countRegions = (gopt Opt_CountAllRegions dflags) || (gopt Opt_CountParRegions dflags)
                           print_reg_count :: Tail -> Tail
                           print_reg_count = if is_main && countRegions
                                               then (LetPrimCallT [] PrintRegionCount [])

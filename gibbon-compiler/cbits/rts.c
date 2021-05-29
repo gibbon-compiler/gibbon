@@ -55,16 +55,12 @@ static long long global_region_count = 0;
 static bool global_region_count_flag = false;
 
 static inline void bump_global_region_count() {
-    if (global_region_count_flag) {
-        __atomic_add_fetch(&global_region_count, 1, __ATOMIC_SEQ_CST);
-    }
+    __atomic_add_fetch(&global_region_count, 1, __ATOMIC_SEQ_CST);
     return;
 }
 
 static inline void print_global_region_count() {
-    if (global_region_count_flag) {
-        printf("REGION_COUNT: %lld\n", global_region_count);
-    }
+    printf("REGION_COUNT: %lld\n", global_region_count);
     return;
 }
 
@@ -618,9 +614,6 @@ typedef struct RegionFooter_struct {
 } RegionFooter;
 
 RegionTy *alloc_region(IntTy size) {
-    // Bump the count.
-    bump_global_region_count();
-
     // Allocate the first chunk
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy start = ALLOC_PACKED(total_size);
@@ -655,6 +648,13 @@ RegionTy *alloc_region(IntTy size) {
 
     return reg;
 }
+
+RegionTy *alloc_counted_region(IntTy size) {
+    // Bump the count.
+    bump_global_region_count();
+    return alloc_region(size);
+}
+
 
 typedef struct ChunkTy_struct {
     CursorTy start_ptr;

@@ -105,9 +105,11 @@ tcExp isPacked ddfs env exp =
 
         -- Create a new buffer, and return a cursor
         NewBuffer{} -> return CursorTy
+        NewParBuffer{} -> return CursorTy
 
         -- Create a scoped buffer, and return a cursor
         ScopedBuffer{} -> return CursorTy
+        ScopedParBuffer{} -> return CursorTy
 
         InitSizeOfBuffer{} -> return IntTy
 

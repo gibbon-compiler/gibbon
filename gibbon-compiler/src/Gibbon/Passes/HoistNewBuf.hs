@@ -44,6 +44,10 @@ hoistExp _ ex0 = return $ gocap ex0
         let (lts1,bod') = go bod in
         ((v,locs,t, nb):lts1, bod')
 
+    (LetE (v,locs,t, nb@((Ext NewParBuffer{}))) bod) ->
+        let (lts1,bod') = go bod in
+        ((v,locs,t, nb):lts1, bod')
+
     (LetE (v,locs,t, nb@(Ext (AddCursor _ (Ext (InitSizeOfBuffer{})))))
        bod) ->
         let (lts1,bod') = go bod in

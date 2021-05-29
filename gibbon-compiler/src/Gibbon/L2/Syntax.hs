@@ -77,6 +77,7 @@ type E2 l d = PreExp E2Ext l d
 -- | The extension that turns L1 into L2.
 data E2Ext loc dec
   = LetRegionE Region                 (E2 loc dec) -- ^ Allocate a new region.
+  | LetParRegionE Region              (E2 loc dec) -- ^ Allocate a new region for parallel allocations.
   | LetLocE    loc    (PreLocExp loc) (E2 loc dec) -- ^ Bind a new location.
   | RetE [loc] Var          -- ^ Return a value together with extra loc values.
   | FromEndE loc            -- ^ Bind a location from an EndOf location (for RouteEnds and after).
@@ -123,6 +124,7 @@ instance FreeVars (E2Ext l d) where
   gFreeVars e =
     case e of
      LetRegionE _ bod   -> gFreeVars bod
+     LetParRegionE _ bod   -> gFreeVars bod
      LetLocE _ rhs bod  -> (case rhs of
                               AfterVariableLE v _loc _ -> S.singleton v
                               _ -> S.empty)
@@ -150,6 +152,7 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
   isTrivial e =
     case e of
       LetRegionE{} -> False
+      LetParRegionE{} -> False
       LetLocE{}    -> False
       RetE{}       -> False -- Umm... this one could be potentially.
       FromEndE{}   -> True
@@ -163,6 +166,7 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
   gRecoverType ddfs env2 ex =
     case ex of
       LetRegionE _r bod   -> gRecoverType ddfs env2 bod
+      LetParRegionE _r bod   -> gRecoverType ddfs env2 bod
       LetLocE _l _rhs bod -> gRecoverType ddfs env2 bod
       RetE _loc var       -> case M.lookup var (vEnv env2) of
                                Just ty -> ty
@@ -185,6 +189,9 @@ instance (Typeable (E2Ext l (UrTy l)),
           LetRegionE r bod -> do (bnds,bod') <- go bod
                                  return $ ([], LetRegionE r $ flatLets bnds bod')
 
+          LetParRegionE r bod -> do (bnds,bod') <- go bod
+                                    return $ ([], LetParRegionE r $ flatLets bnds bod')
+
           LetLocE l rhs bod -> do (bnds,bod') <- go bod
                                   return $ ([], LetLocE l rhs $ flatLets bnds bod')
 
@@ -206,6 +213,7 @@ instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2E
   gInlineTrivExt env ext =
     case ext of
       LetRegionE r bod   -> LetRegionE r (gInlineTrivExp env bod)
+      LetParRegionE r bod-> LetParRegionE r (gInlineTrivExp env bod)
       LetLocE loc le bod -> LetLocE loc le (gInlineTrivExp env bod)
       RetE{}         -> ext
       FromEndE{}     -> ext
@@ -220,6 +228,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
   gSubstExt old new ext =
     case ext of
       LetRegionE r bod -> LetRegionE r (gSubst old new bod)
+      LetParRegionE r bod -> LetParRegionE r (gSubst old new bod)
       LetLocE l le bod -> LetLocE l le (gSubst old new bod)
       RetE{}           -> ext
       FromEndE{}       -> ext
@@ -232,6 +241,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
   gSubstEExt old new ext =
     case ext of
       LetRegionE r bod -> LetRegionE r (gSubstE old new bod)
+      LetParRegionE r bod -> LetParRegionE r (gSubstE old new bod)
       LetLocE l le bod -> LetLocE l le (gSubstE old new bod)
       RetE{}           -> ext
       FromEndE{}       -> ext
@@ -245,6 +255,7 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
   gRename env ext =
     case ext of
       LetRegionE r bod -> LetRegionE r (gRename env bod)
+      LetParRegionE r bod -> LetParRegionE r (gRename env bod)
       LetLocE l le bod -> LetLocE l le (gRename env bod)
       RetE{}           -> ext
       FromEndE{}       -> ext
@@ -563,6 +574,7 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
         Ext ext ->
           case ext of
             LetRegionE _ bod -> revertExp bod
+            LetParRegionE _ bod -> revertExp bod
             LetLocE _ _ bod  -> revertExp bod
             RetE _ v -> VarE v
             AddFixed{} -> error "revertExp: AddFixed not handled."
@@ -609,6 +621,7 @@ occurs w ex =
     Ext ext ->
       case ext of
         LetRegionE _ bod  -> go bod
+        LetParRegionE _ bod  -> go bod
         LetLocE _ le bod  ->
           let oc_bod = go bod in
           case le of
@@ -707,6 +720,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
             case ext of
               LetRegionE r rhs ->
                 go (M.insertWith (++) (regionToVar r) (allFreeVars rhs) acc) rhs
+              LetParRegionE r rhs ->
+                go (M.insertWith (++) (regionToVar r) (allFreeVars rhs) acc) rhs
               LetLocE loc phs rhs  ->
                 go (M.insertWith (++) loc (dep phs ++ allFreeVars rhs) acc) rhs
               RetE{}         -> acc
@@ -737,6 +752,7 @@ allFreeVars ex = S.toList $
     Ext ext ->
       case ext of
         LetRegionE r _  -> S.singleton (regionToVar r) `S.union` gFreeVars ex
+        LetParRegionE r _ -> S.singleton (regionToVar r) `S.union` gFreeVars ex
         LetLocE loc _ _ -> S.singleton loc `S.union` gFreeVars ex
         RetE locs _     -> S.fromList locs `S.union` gFreeVars ex
         FromEndE loc    -> S.singleton loc
@@ -773,6 +789,7 @@ changeAppToSpawn v args2 ex1 =
     Ext ext ->
       case ext of
         LetRegionE r rhs  -> Ext $ LetRegionE r (go rhs)
+        LetParRegionE r rhs  -> Ext $ LetParRegionE r (go rhs)
         LetLocE l lhs rhs -> Ext $ LetLocE l lhs (go rhs)
         RetE{}            -> ex1
         FromEndE{}        -> ex1

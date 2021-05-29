@@ -1244,6 +1244,8 @@ cleanExp e =
 
       Ext (LetRegionE r e) -> let (e',s') = cleanExp e
                               in (Ext (LetRegionE r e'), s')
+      Ext (LetParRegionE r e) -> let (e',s') = cleanExp e
+                                 in (Ext (LetParRegionE r e'), s')
       Ext (LetLocE loc FreeLE e) -> let (e', s') = cleanExp e
                                     in if S.member loc s'
                                        then (Ext (LetLocE loc FreeLE e'), S.delete loc s')
@@ -1359,6 +1361,7 @@ moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
         SyncE   -> error "moveProjsAfterSync: unbound SyncE"
         Ext ext -> case ext of
                      LetRegionE r bod -> Ext $ LetRegionE r $ go acc1 pending bod
+                     LetParRegionE r bod -> Ext $ LetParRegionE r $ go acc1 pending bod
                      LetLocE a b bod -> Ext $ LetLocE a b $ go acc1 pending bod
                      oth -> error $ "moveProjsAfterSync: extension not handled." ++ sdoc oth
         MapE{}  -> error "moveProjsAfterSync: todo MapE"

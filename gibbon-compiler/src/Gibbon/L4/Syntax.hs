@@ -257,10 +257,17 @@ data Prim
 
     | NewBuffer L2.Multiplicity
     -- ^ Allocate a new buffer, return a cursor.
+
+    | NewParBuffer L2.Multiplicity
+    -- ^ Allocate a new buffer for parallel allocations, return a cursor.
+
     | ScopedBuffer L2.Multiplicity
     -- ^ Returns a pointer to a buffer, with the invariant that data written
     -- to this region is no longer used after the enclosing function returns.
     -- I.e. this can be stack allocated data.
+
+    | ScopedParBuffer L2.Multiplicity
+    -- ^ Like ScopedBuffer, but for parallel allocations.
 
     | InitSizeOfBuffer L2.Multiplicity
     -- ^ Returns the initial buffer size for a specific multiplicity

@@ -439,6 +439,7 @@ we need random access for that type.
     Ext ext ->
       case ext of
         LetRegionE _ bod -> go bod
+        LetParRegionE _ bod -> go bod
         LetLocE loc rhs bod  ->
             let reg = case rhs of
                         StartOfLE r  -> regionToVar r

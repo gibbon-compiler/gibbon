@@ -139,6 +139,9 @@ bindReturns ex =
         LetRegionE r bod -> do
           bod' <- bindReturns bod
           pure $ Ext $ LetRegionE r bod'
+        LetParRegionE r bod -> do
+          bod' <- bindReturns bod
+          pure $ Ext $ LetParRegionE r bod'
         LetLocE loc locexp bod -> do
           bod' <- bindReturns bod
           pure $ Ext $ LetLocE loc locexp bod'
@@ -460,6 +463,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
           Ext (LetRegionE r e) -> do
             e' <- go e
             return $ Ext (LetRegionE r e')
+
+          Ext (LetParRegionE r e) -> do
+            e' <- go e
+            return $ Ext (LetParRegionE r e')
 
           Ext (LetLocE v locexp bod) -> do
             let only_recur e = do

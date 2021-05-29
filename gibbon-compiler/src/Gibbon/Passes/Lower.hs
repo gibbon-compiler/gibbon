@@ -452,8 +452,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
               WriteList _ ex _ -> go ex
               ReadVector{}     -> syms
               WriteVector _ ex _ -> go ex
-              NewBuffer{}    -> syms
-              ScopedBuffer{} -> syms
+              NewBuffer{}        -> syms
+              NewParBuffer{}     -> syms
+              ScopedBuffer{}     -> syms
+              ScopedParBuffer{}  -> syms
               InitSizeOfBuffer{} -> syms
               MMapFileSize{}     -> syms
               SizeOfPacked{}     -> syms
@@ -742,8 +744,25 @@ lower Prog{fundefs,ddefs,mainExp} = do
               (T.LetPrimCallT [] T.FreeBuffer [(T.VarTriv reg),(T.VarTriv v),(T.VarTriv (toEndV v))] $
                  T.RetValsT trvs)
 
+    LetE (v,_,_,  (Ext (NewParBuffer mul))) bod -> do
+      reg <- gensym "region"
+      tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy)] (T.NewParBuffer mul) [] <$>
+               tail free_reg sym_tbl bod
+      if gopt Opt_DisableGC dflags || not free_reg
+         then pure tl'
+         else
+           -- The type shouldn't matter. PtrTy is not used often in current programs,
+           -- and would be easy to spot.
+           T.withTail (tl',T.PtrTy) $ \trvs ->
+              (T.LetPrimCallT [] T.FreeBuffer [(T.VarTriv reg),(T.VarTriv v),(T.VarTriv (toEndV v))] $
+                 T.RetValsT trvs)
+
     LetE (v,_,_,  (Ext (ScopedBuffer mul))) bod -> do
       T.LetPrimCallT [(v,T.CursorTy)] (T.ScopedBuffer mul) [] <$>
+         tail free_reg sym_tbl bod
+
+    LetE (v,_,_,  (Ext (ScopedParBuffer mul))) bod -> do
+      T.LetPrimCallT [(v,T.CursorTy)] (T.ScopedParBuffer mul) [] <$>
          tail free_reg sym_tbl bod
 
     LetE (v,_,_,  (Ext (SizeOfPacked start end))) bod -> do

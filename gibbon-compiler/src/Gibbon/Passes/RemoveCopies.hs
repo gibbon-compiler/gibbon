@@ -88,6 +88,7 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
         RetE{} -> return ex
         AddFixed{} -> return ex
         LetRegionE r bod -> Ext <$> LetRegionE r <$> go bod
+        LetParRegionE r bod -> Ext <$> LetParRegionE r <$> go bod
         FromEndE{}       -> return ex
         BoundsCheck{}    -> return ex
         IndirectionE{}   -> return ex

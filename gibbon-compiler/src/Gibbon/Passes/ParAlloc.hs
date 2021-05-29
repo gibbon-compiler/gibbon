@@ -214,6 +214,8 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
       case ext of
         LetRegionE r bod       -> Ext <$> (LetRegionE r) <$>
                                     parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned (S.insert (regionToVar r) boundlocs) region_on_spawn bod
+        LetParRegionE r bod    -> Ext <$> (LetParRegionE r) <$>
+                                    parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned (S.insert (regionToVar r) boundlocs) region_on_spawn bod
         LetLocE loc locexp bod -> do
           case locexp of
             -- Binding is swallowed, and it's continuation allocates in a fresh region.
@@ -242,9 +244,9 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                        IfE (VarE not_stolen)
                            (Ext $ LetAvail [v] $
                             Ext $ LetLocE loc (AfterVariableLE v loc2 False) bod2) -- don't allocate in a fresh region
-                           (Ext $ LetRegionE newreg $ Ext $ LetLocE newloc (StartOfLE newreg) bod1)
+                           (Ext $ LetParRegionE newreg $ Ext $ LetLocE newloc (StartOfLE newreg) bod1)
               else
-                pure $ Ext $ LetRegionE newreg $ Ext $ LetLocE newloc (StartOfLE newreg) bod1
+                pure $ Ext $ LetParRegionE newreg $ Ext $ LetLocE newloc (StartOfLE newreg) bod1
 
             -- Binding is swallowed, but no fresh region is created. This can brought back safely after a sync.
             AfterVariableLE v loc2 True | not (S.member loc2 boundlocs) || not (S.member v boundlocs) -> do
@@ -311,6 +313,7 @@ substLocInExp mp ex1 =
     Ext ext ->
       case ext of
         LetRegionE r rhs  -> Ext $ LetRegionE r (go rhs)
+        LetParRegionE r rhs -> Ext $ LetParRegionE r (go rhs)
         LetLocE l lhs rhs -> Ext $ LetLocE l (go2 lhs) (go rhs)
         RetE locs v       -> Ext $ RetE (map (\l -> sub l) locs) v
         FromEndE loc      -> Ext $ FromEndE (sub loc)

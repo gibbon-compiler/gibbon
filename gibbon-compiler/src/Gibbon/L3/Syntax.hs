@@ -65,6 +65,8 @@ data E3Ext loc dec =
   | SubPtr Var Var                           -- ^ Pointer subtraction
   | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
   | ScopedBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
+  | NewParBuffer L2.Multiplicity         -- ^ Create a new buffer for parallel allocations, and return a cursor
+  | ScopedParBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer for parallel allocations, and return a cursor
   | InitSizeOfBuffer L2.Multiplicity  -- ^ Returns the initial buffer size for a specific multiplicity
   | MMapFileSize Var
   | SizeOfPacked Var Var           -- ^ Takes in start and end cursors, and returns an Int
@@ -97,7 +99,9 @@ instance FreeVars (E3Ext l d) where
       AddCursor v ex -> S.insert v (gFreeVars ex)
       SubPtr v w     -> S.fromList [v, w]
       NewBuffer{}    -> S.empty
+      NewParBuffer{}    -> S.empty
       ScopedBuffer{} -> S.empty
+      ScopedParBuffer{} -> S.empty
       InitSizeOfBuffer{} -> S.empty
       MMapFileSize v     -> S.singleton v
       SizeOfPacked c1 c2 -> S.fromList [c1, c2]
@@ -171,6 +175,8 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       SubPtr v w         -> SubPtr (go v) (go w)
       NewBuffer{}        -> ext
       ScopedBuffer{}     -> ext
+      NewParBuffer{}     -> ext
+      ScopedParBuffer{}  -> ext
       InitSizeOfBuffer{} -> ext
       MMapFileSize v     -> MMapFileSize (go v)
       SizeOfPacked a b   -> SizeOfPacked (go a) (go b)
