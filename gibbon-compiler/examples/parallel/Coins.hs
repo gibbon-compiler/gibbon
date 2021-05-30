@@ -89,6 +89,32 @@ payA_par depth amt coins =
                     -- _ = vfree2 coins_rst
                 in Append left right
 
+payA_par_nograin :: Int -> List CoinQty -> AList
+payA_par_nograin amt coins =
+    -- if depth == 0
+    -- then payA_seq amt coins
+    -- else
+    if amt == 0
+    then ASing 1
+    else
+        if is_empty_ll coins
+        then ANil 0
+        else
+            let (c,q) = head_ll coins
+                coins_rst = tail_ll coins
+            in if c > amt
+            then payA_par_nograin amt coins_rst
+            else
+                let coins1 = getCoins1 c q coins_rst
+                    -- depth1 = getDepth1 q depth
+                    left = spawn (payA_par_nograin (amt - c) coins1)
+                    right = payA_par_nograin amt coins_rst
+                    _ = sync
+                    _ = free_ll coins1
+                    -- _ = vfree2 coins_rst
+                in Append left right
+
+
 check_coins :: Int -> AList -> ()
 check_coins amt tr =
     let n = lenA tr in

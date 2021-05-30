@@ -154,10 +154,22 @@ void restore_alloc_state() {}
 
 #ifdef _PARALLEL
 #define ALLOC(n) malloc(n)
+char *ALLOC_COUNTED(size_t size) {
+    bump_global_region_count();
+    return ALLOC(size);
+}
 #else
   #ifdef _POINTER
 #define ALLOC(n) GC_MALLOC(n)
+char *ALLOC_COUNTED(size_t size) {
+    bump_global_region_count();
+    return ALLOC(size);
+}
   #else
+char *ALLOC_COUNTED(size_t size) {
+    bump_global_region_count();
+    return ALLOC(size);
+}
 #define ALLOC(n) malloc(n)
   #endif
 #endif // _PARALLEL

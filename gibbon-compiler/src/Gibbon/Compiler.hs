@@ -624,7 +624,9 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
       -- Note: L3 -> L4
       l4 <- go "lower"          lower                   l3
       l4 <- if gibbon1 || not isPacked
-            then return l4
+            then do
+              l4 <- go "rearrangeFree"   rearrangeFree   l4
+              pure l4
             else do
               -- These additional case branches cause some tests in pointer mode to fail.
               l4 <- go "followRedirects" followRedirects l4

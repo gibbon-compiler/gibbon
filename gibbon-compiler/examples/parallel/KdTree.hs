@@ -189,6 +189,36 @@ mkKdTree_par cutoff pts = mkKdTreeWithAxis_par cutoff 0 pts
 
 --------------------------------------------------------------------------------
 
+mkKdTreeWithAxis_par_nograin :: Int -> Vector Point3d -> KdTree
+mkKdTreeWithAxis_par_nograin axis pts =
+    let len = vlength pts in
+    if len < 4
+    then mkKdTreeWithAxis_seq axis pts
+    else
+         let sorted_pts = sort_point3d_par axis pts
+             pivot_idx  = div len 2
+             pivot      = nth sorted_pts pivot_idx
+             (x,y,z)    = pivot
+             left_pts   = slice 0 pivot_idx sorted_pts
+             right_pts  = slice (pivot_idx+1) (len - pivot_idx - 1) sorted_pts
+             next_axis  = getNextAxis_3d axis
+             left_tr    = spawn (mkKdTreeWithAxis_par_nograin next_axis left_pts)
+             right_tr   = mkKdTreeWithAxis_par_nograin next_axis right_pts
+             _          = sync
+             min_x      = minFloat x (minFloat (get_minx_kdtree left_tr) (get_minx_kdtree right_tr))
+             max_x      = maxFloat x (maxFloat (get_maxx_kdtree left_tr) (get_maxx_kdtree right_tr))
+             min_y      = minFloat y (minFloat (get_miny_kdtree left_tr) (get_miny_kdtree right_tr))
+             max_y      = maxFloat y (maxFloat (get_maxy_kdtree left_tr) (get_maxy_kdtree right_tr))
+             min_z      = minFloat z (minFloat (get_minz_kdtree left_tr) (get_minz_kdtree right_tr))
+             max_z      = maxFloat z (maxFloat (get_maxz_kdtree left_tr) (get_maxz_kdtree right_tr))
+             total_points= (get_total_points_kdtree left_tr) + (get_total_points_kdtree right_tr) + 1
+         in KdNode x y z total_points axis (get_coord_point3d axis pivot) min_x max_x min_y max_y min_z max_z left_tr right_tr
+
+mkKdTree_par_nograin :: Vector Point3d -> KdTree
+mkKdTree_par_nograin pts = mkKdTreeWithAxis_par_nograin 0 pts
+
+--------------------------------------------------------------------------------
+
 -- | Maps a list of points to a list of their nearest neighbor.
 allNearest_seq :: KdTree -> Vector Point3d -> Vector Point3d
 allNearest_seq tr ls =

@@ -439,10 +439,16 @@ codegenTail venv fenv sort_fns (LetAllocT lhs vals body) ty sync_deps =
            size = [cexp| sizeof($ty:structTy) |]
            venv' = M.insert lhs PtrTy venv
        tal <- codegenTail venv' fenv sort_fns body ty sync_deps
-       return$ assn (codegenTy PtrTy) lhs [cexp| ALLOC( $size ) |] :
+       dflags <- getDynFlags
+       let alloc = if (gopt Opt_CountParRegions dflags) || (gopt Opt_CountAllRegions dflags)
+                   then assn (codegenTy PtrTy) lhs [cexp| ALLOC_COUNTED( $size ) |]
+                   else assn (codegenTy PtrTy) lhs [cexp| ALLOC( $size ) |]
+       return$
+              (alloc :
                [ C.BlockStm [cstm| (($ty:structTy *)  $id:lhs)->$id:fld = $(codegenTriv venv trv); |]
                | (ix,(_ty,trv)) <- zip [0 :: Int ..] vals
-               , let fld = "field"++show ix] ++ tal
+               , let fld = "field"++show ix] ++
+                 tal)
 
 codegenTail venv fenv sort_fns (LetAvailT vs body) ty sync_deps =
     do let (avail, sync_deps') = partition (\(v,_) -> elem v vs) sync_deps

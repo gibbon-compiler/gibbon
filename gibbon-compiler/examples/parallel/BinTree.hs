@@ -29,6 +29,7 @@ mkTree_par cutoff i =
           _ = sync
       in Node i x y
 
+
 -- buildfib
 
 mkTreeFib_seq :: Int -> Tree
@@ -50,6 +51,20 @@ mkTreeFib_par cutoff i =
       then mkTreeFib_seq i
       else let x = spawn (mkTreeFib_par cutoff (i-1))
                y = mkTreeFib_par cutoff (i-1)
+               _ = sync
+           in Node i x y
+
+
+mkTreeFib_par_nograin :: Int -> Tree
+mkTreeFib_par_nograin i =
+  if i <= 0
+  then Leaf (fib_seq 20)
+  else
+      -- if i <= cutoff
+      -- then mkTreeFib_seq i
+      -- else
+           let x = spawn (mkTreeFib_par_nograin (i-1))
+               y = mkTreeFib_par_nograin (i-1)
                _ = sync
            in Node i x y
 

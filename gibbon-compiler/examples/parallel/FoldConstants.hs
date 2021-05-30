@@ -121,6 +121,30 @@ foldConstants2_par depth exp =
                   _ = sync
               in Plus a' b'
 
+foldConstants2_par_nograin :: Exp -> Exp
+foldConstants2_par_nograin exp =
+  -- if depth >= 8 then foldConstants2 exp else
+  case exp of
+    Lit i -> Lit i
+    MkTrue  -> MkTrue
+    MkFalse -> MkFalse
+    Plus a b ->
+      let maybe_alit = maybeLit a
+      in if isLit maybe_alit
+         then let _ = trav_exp a
+                  maybe_blit = maybeLit b
+              in if isLit maybe_blit
+                 then let _ = trav_exp b
+                      in Lit (floatToInt maybe_alit + floatToInt maybe_blit)
+                 else let a' = (Lit (floatToInt maybe_alit))
+                          b' = foldConstants2_par_nograin b
+                      in Plus a' b'
+         else
+              let a' = spawn (foldConstants2_par_nograin a)
+                  b' = foldConstants2_par_nograin b
+                  _ = sync
+              in Plus a' b'
+
 buildExp :: Int -> Exp
 buildExp n =
   if n == 0
