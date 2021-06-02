@@ -179,6 +179,7 @@ char *ALLOC_COUNTED(size_t size) {
     return ALLOC(size);
 }
   #else
+#define ALLOC(n) malloc(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
     return ALLOC(size);
