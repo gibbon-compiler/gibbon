@@ -10,7 +10,10 @@
 #include <sys/mman.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
-#include <sys/sysinfo.h>
+// #include <sys/sysinfo.h>
+#ifdef _WIN64
+#include <windows.h>
+#endif
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdarg.h> // For va_start etc
@@ -71,6 +74,16 @@ static inline void print_global_region_count() {
 // A region with this refcount has already been garbage collected.
 #define REG_FREED -100
 
+// https://www.cprogramming.com/snippets/source-code/find-the-number-of-cpu-cores-for-windows-mac-or-linux
+static int get_num_processors() {
+#ifdef _WIN64
+    SYSTEM_INFO sysinfo;
+    GetSystemInfo(&sysinfo);
+    return sysinfo.dwNumberOfProcessors;
+#else
+    return sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+}
 
 // -------------------------------------
 // Allocators

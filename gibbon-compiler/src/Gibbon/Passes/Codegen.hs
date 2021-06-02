@@ -1243,7 +1243,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  GetNumProcessors -> do
                    let [(outV,outTy)] = bnds
-                   return [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = get_nprocs(); |] ]
+                   return [ C.BlockDecl [cdecl| $ty:(codegenTy outTy) $id:outV = get_num_processors(); |] ]
 
                  PrintRegionCount -> return [ C.BlockStm [cstm| print_global_region_count(); |] ]
 
