@@ -1209,9 +1209,14 @@ int main(int argc, char** argv)
           show_usage(argv);
           exit(0);
         }
-        else if (strcmp(argv[i], "--buffer-size") == 0 && i < argc - 1)
+        else if (strcmp(argv[i], "--biginf-buffer-size") == 0 && i < argc - 1)
         {
             global_init_biginf_buf_size = atoll(argv[i + 1]);
+            i++;
+        }
+        else if (strcmp(argv[i], "--inf-buffer-size") == 0 && i < argc - 1)
+        {
+            global_init_inf_buf_size = atoll(argv[i + 1]);
             i++;
         }
         else if ((strcmp(argv[i], "--bench-input") == 0)) {

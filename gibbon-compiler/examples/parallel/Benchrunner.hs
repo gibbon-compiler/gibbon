@@ -255,7 +255,7 @@ bench_seqcoins =
     -- in printCoins coins6
         amt = sizeParam
         tr = iterate (payA_seq amt coins6)
-    in ()
+    in check_coins amt tr
 
 bench_parcoins :: ()
 bench_parcoins =
@@ -270,7 +270,7 @@ bench_parcoins =
     -- in printCoins coins6
         amt = sizeParam
         tr = iterate (payA_par 3 amt coins6)
-    in ()
+    in check_coins amt tr
 
 bench_seqcountnodes :: ()
 bench_seqcountnodes =

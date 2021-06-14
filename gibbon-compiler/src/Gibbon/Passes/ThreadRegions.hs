@@ -99,10 +99,9 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
                      (\(LRM loc reg mode) acc ->
                         if mode == Output
                         then let rv = toEndV $ regionToVar reg
-                                 -- REVIEW: Why is a new region is always spawned when
-                                 -- there are 1024 bytes left?
-                                 _bc = boundsCheck ddefs (locs_tycons M.! loc)
-                             in LetE ("_",[],IntTy, Ext$ BoundsCheck 1024 rv loc) acc
+                                 bc = boundsCheck ddefs (locs_tycons M.! loc)
+                             in -- dbgTraceIt ("boundscheck" ++ sdoc ((locs_tycons M.! loc), bc)) $
+                                LetE ("_",[],IntTy, Ext$ BoundsCheck bc rv loc) acc
                         else acc)
                      bod'
                      (locVars funTy)
