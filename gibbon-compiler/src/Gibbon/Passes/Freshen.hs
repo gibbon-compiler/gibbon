@@ -280,6 +280,18 @@ freshExp venv tvenv exp =
 
         ParE0 ls -> Ext <$> ParE0 <$> mapM go ls
         L p e    -> Ext <$> (L p) <$> go e
+        PrintPacked ty arg -> do
+          (tvenv', ty') <- freshTy tvenv ty
+          arg' <- freshExp venv tvenv' arg
+          pure $ Ext $ PrintPacked ty' arg'
+        CopyPacked ty arg -> do
+          (tvenv', ty') <- freshTy tvenv ty
+          arg' <- freshExp venv tvenv' arg
+          pure $ Ext $ CopyPacked ty' arg'
+        TravPacked ty arg -> do
+          (tvenv', ty') <- freshTy tvenv ty
+          arg' <- freshExp venv tvenv' arg
+          pure $ Ext $ TravPacked ty' arg'
         LinearExt{} -> error $ "freshenExp: a linear types extension wasn't desugared: " ++ sdoc exp
 
   where go = freshExp venv tvenv

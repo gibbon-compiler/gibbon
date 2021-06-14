@@ -50,19 +50,25 @@ isUnpackerName :: Var -> Bool
 isUnpackerName v = isPrefixOf "_unpack_" (fromVar v)
 
 -- | Map a DataCon onto the name of the generated print function.
-mkPrinterName :: DataCon -> Var
+mkPrinterName :: TyCon -> Var
 mkPrinterName tyCons = toVar $ "_print_" ++ tyCons
 
 isPrinterName :: Var -> Bool
 isPrinterName v = isPrefixOf "_print_" (fromVar v)
 
-mkCopyFunName :: DataCon -> Var
+mkCopyFunName :: TyCon -> Var
 mkCopyFunName dcon = "_copy_" `varAppend` (toVar dcon)
 
 isCopyFunName :: Var -> Bool
 isCopyFunName = isPrefixOf "_copy_" . fromVar
 
-mkTravFunName :: DataCon -> Var
+mkCopySansPtrsFunName :: TyCon -> Var
+mkCopySansPtrsFunName dcon = "_copy_without_ptrs_" `varAppend` (toVar dcon)
+
+isCopySansPtrsFunName :: Var -> Bool
+isCopySansPtrsFunName = isPrefixOf "_copy_without_ptrs_" . fromVar
+
+mkTravFunName :: TyCon -> Var
 mkTravFunName dcon = "_traverse_" `varAppend` (toVar dcon)
 
 isTravFunName :: Var -> Bool

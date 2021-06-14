@@ -47,6 +47,9 @@ data E0Ext loc dec =
                      -- along with its tyapps.
  | BenchE Var [loc] [(PreExp E0Ext loc dec)] Bool
  | ParE0 [(PreExp E0Ext loc dec)]
+ | PrintPacked dec (PreExp E0Ext loc dec) -- ^ Print a packed value to standard out.
+ | CopyPacked dec (PreExp E0Ext loc dec) -- ^ Copy a packed value.
+ | TravPacked dec (PreExp E0Ext loc dec) -- ^ Traverse a packed value.
  | L Loc.Loc (PreExp E0Ext loc dec)
  | LinearExt (LinearExt loc dec)
  deriving (Show, Ord, Eq, Read, Generic, NFData)
@@ -103,6 +106,9 @@ instance FreeVars (E0Ext l d) where
       FunRefE _ f      -> S.singleton f
       BenchE _ _ args _-> S.unions (map gFreeVars args)
       ParE0 ls         -> S.unions (map gFreeVars ls)
+      PrintPacked _ e1 -> gFreeVars e1
+      CopyPacked _ e1  -> gFreeVars e1
+      TravPacked _ e1  -> gFreeVars e1
       L _ e1           -> gFreeVars e1
       LinearExt ext      -> gFreeVars ext
 
@@ -123,6 +129,9 @@ instance HasSubstitutableExt E0Ext l d => SubstitutableExt (PreExp E0Ext l d) (E
       FunRefE{}        -> ext
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubst old new) args) b
       ParE0 ls -> ParE0 $ map (gSubst old new) ls
+      PrintPacked ty e1 -> PrintPacked ty (gSubst old new e1)
+      CopyPacked ty e1 -> CopyPacked ty (gSubst old new e1)
+      TravPacked ty e1 -> TravPacked ty (gSubst old new e1)
       L p e1   -> L p (gSubst old new e1)
       LinearExt e -> LinearExt (gSubstExt old new e)
 
@@ -133,6 +142,9 @@ instance HasSubstitutableExt E0Ext l d => SubstitutableExt (PreExp E0Ext l d) (E
       FunRefE{}        -> ext
       BenchE fn tyapps args b -> BenchE fn tyapps (map (gSubstE old new) args) b
       ParE0 ls -> ParE0 $ map (gSubstE old new) ls
+      PrintPacked ty e -> PrintPacked ty $ (gSubstE old new e)
+      CopyPacked ty e -> CopyPacked ty $ (gSubstE old new e)
+      TravPacked ty e -> TravPacked ty $ (gSubstE old new e)
       L p e    -> L p $ (gSubstE old new e)
       LinearExt e -> LinearExt (gSubstEExt old new e)
 
@@ -144,6 +156,9 @@ instance HasRenamable E0Ext l d => Renamable (E0Ext l d) where
       FunRefE tyapps a -> FunRefE (map go tyapps) (go a)
       BenchE fn tyapps args b -> BenchE fn (map go tyapps) (map go args) b
       ParE0 ls -> ParE0 $ map (gRename env) ls
+      PrintPacked ty e -> PrintPacked ty (gRename env e)
+      CopyPacked ty e -> CopyPacked ty (gRename env e)
+      TravPacked ty e -> TravPacked ty (gRename env e)
       L p e    -> L p (gRename env e)
       LinearExt e -> LinearExt (gRename env e)
     where
@@ -520,6 +535,9 @@ recoverType ddfs env2 ex =
             (_, Just ty) -> tyFromScheme ty -- CSK: Not sure if this is what we want?
         PolyAppE{}  -> error "recoverTypeep: TODO PolyAppE"
         BenchE fn _ _ _ -> outTy $ fEnv env2 # fn
+        PrintPacked _ arg -> recoverType ddfs env2 arg
+        CopyPacked _ arg -> recoverType ddfs env2 arg
+        TravPacked _ _ -> voidTy0
         ParE0 ls -> ProdTy $ map (recoverType ddfs env2) ls
         LinearExt lin ->
           case lin of
@@ -605,14 +623,15 @@ recoverType ddfs env2 ex =
         GetNumProcessors -> IntTy
         (ErrorP _ ty)  -> ty
         ReadPackedFile _ _ _ ty -> ty
+        WritePackedFile{} -> ProdTy []
         ReadArrayFile _ ty      -> ty
+        PrintInt     -> ProdTy []
+        PrintFloat   -> ProdTy []
+        PrintBool    -> ProdTy []
+        PrintSym     -> ProdTy []
+        ReadInt      -> IntTy
         RequestEndOf -> error "primRetTy1: RequestEndOf not handled yet"
         RequestSizeOf-> error "primRetTy1: RequestSizeOf not handled yet"
-        PrintInt     -> error "primRetTy1: PrintInt not handled yet"
-        PrintFloat   -> error "primRetTy1: PrintFloat not handled yet"
-        PrintBool    -> error "primRetTy1: PrintBool not handled yet"
-        PrintSym     -> error "primRetTy1: PrintSym not handled yet"
-        ReadInt      -> error "primRetTy1: ReadInt not handled yet"
         SymSetEmpty  -> error "primRetTy1: SymSetEmpty not handled yet"
         SymSetContains-> error "primRetTy1: SymSetContains not handled yet"
         SymSetInsert -> error "primRetTy1: SymSetInsert not handled yet"
@@ -624,7 +643,6 @@ recoverType ddfs env2 ex =
         IntHashInsert-> error "primRetTy1: IntHashInsert not handled yet"
         IntHashLookup-> error "primRetTy1: IntHashLookup not handled yet"
         Write3dPpmFile{}-> error "primRetTy1: Write3dPpmFile not handled yet"
-        WritePackedFile{}-> error "primRetTy1: WritePackedFile not handled yet"
 
 
 {-

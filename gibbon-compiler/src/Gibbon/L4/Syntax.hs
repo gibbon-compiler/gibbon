@@ -253,6 +253,7 @@ data Prim
 
     | GetNumProcessors
     | ReadPackedFile (Maybe FilePath) TyCon
+    | WritePackedFile FilePath TyCon
     | ReadArrayFile (Maybe (FilePath, Int)) Ty
 
     | NewBuffer L2.Multiplicity

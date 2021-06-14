@@ -1,0 +1,4 @@
+(Node (Node (Leaf 1)(Leaf 1))(Node (Leaf 1)(Leaf 1)))
+ ->i (Node (Node (Leaf 1)(Leaf 1))(Node (Leaf 1)(Leaf 1)))
+1
+'#()

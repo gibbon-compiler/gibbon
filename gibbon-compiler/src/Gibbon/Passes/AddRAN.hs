@@ -133,7 +133,7 @@ addRAN needRANsTyCons prg@Prog{ddefs,fundefs,mainExp} = do
               (M.fromList $ L.map (\f -> (funName f, f)) new_fns)
   mainExp' <-
     case mainExp of
-      Just (ex,ty) -> Just <$> (,ty) <$> addRANExp needRANsTyCons iddefs M.empty ex
+      Just (ex,ty) -> Just <$> (,ty) <$> addRANExp True needRANsTyCons iddefs M.empty ex
       Nothing -> return Nothing
   let l1 = prg { ddefs = iddefs
                , fundefs = funs'
@@ -142,18 +142,22 @@ addRAN needRANsTyCons prg@Prog{ddefs,fundefs,mainExp} = do
   pure l1
 
 addRANFun :: S.Set TyCon -> DDefs Ty1 -> FunDef1 -> PassM FunDef1
-addRANFun needRANsTyCons ddfs fd@FunDef{funBody} = do
-  bod <- addRANExp needRANsTyCons ddfs M.empty funBody
+addRANFun needRANsTyCons ddfs fd@FunDef{funName,funBody} = do
+  let dont_change_datacons = isCopySansPtrsFunName funName
+  bod <- addRANExp dont_change_datacons needRANsTyCons ddfs M.empty funBody
   return $ fd{funBody = bod}
 
-addRANExp :: S.Set TyCon -> DDefs Ty1 -> RANEnv -> Exp1 -> PassM Exp1
-addRANExp needRANsTyCons ddfs ienv ex =
+addRANExp :: Bool -> S.Set TyCon -> DDefs Ty1 -> RANEnv -> Exp1 -> PassM Exp1
+addRANExp dont_change_datacons needRANsTyCons ddfs ienv ex =
   case ex of
     -- Update a data constructor to produce values with random access nodes.
     -- N.B. It always uses absolute pointers for random access nodes. We
     -- may not always want this. If we know that a region is BigInf, we should
     -- use relative offsets as pointers. But that's not being done right now.
-    DataConE loc dcon args ->
+    DataConE loc dcon args
+      | dont_change_datacons ->
+        return ex
+      | otherwise ->
       case numRANsDataCon ddfs dcon of
         0 -> return ex
         n ->
@@ -183,7 +187,7 @@ addRANExp needRANsTyCons ddfs ienv ex =
     IfE a b c  -> IfE <$> go a <*> go b <*> go c
     MkProdE xs -> MkProdE <$> mapM go xs
     ProjE i e  -> ProjE i <$> go e
-    CaseE scrt mp -> CaseE scrt <$> concat <$> mapM docase mp
+    CaseE scrt mp -> CaseE scrt <$> concat <$> mapM doalt mp
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
@@ -197,7 +201,7 @@ addRANExp needRANsTyCons ddfs ienv ex =
     FoldE{} -> error "addRANExp: TODO FoldE"
 
   where
-    go = addRANExp needRANsTyCons ddfs ienv
+    go = addRANExp dont_change_datacons needRANsTyCons ddfs ienv
 
     changeSpawnToApp :: Exp1 -> Exp1
     changeSpawnToApp ex1 =
@@ -225,10 +229,10 @@ addRANExp needRANsTyCons ddfs ienv ex =
         MapE{}  -> error "addRANExp: TODO MapE"
         FoldE{} -> error "addRANExp: TODO FoldE"
 
-    docase :: (DataCon, [(Var,())], Exp1) -> PassM [(DataCon, [(Var,())], Exp1)]
-    docase (dcon,vs,bod) = do
+    doalt :: (DataCon, [(Var,())], Exp1) -> PassM [(DataCon, [(Var,())], Exp1)]
+    doalt (dcon,vs,bod) = do
       -- Always process the body, because it might have another case expression.
-      bod0 <- addRANExp needRANsTyCons ddfs ienv (changeSpawnToApp bod)
+      bod0 <- addRANExp dont_change_datacons needRANsTyCons ddfs ienv (changeSpawnToApp bod)
       let old_pat = (dcon,vs,bod0)
       case numRANsDataCon ddfs dcon of
         0 -> pure [old_pat]
@@ -250,8 +254,8 @@ addRANExp needRANsTyCons ddfs ienv ex =
                 haveRANsFor = L.take n $ L.drop firstPacked $ L.map fst vs
                 ienv' = M.union ienv (M.fromList $ zip haveRANsFor absRanVars)
                 ienv'' = M.union ienv (M.fromList $ zip haveRANsFor relRanVars)
-            bod' <- addRANExp needRANsTyCons ddfs ienv' bod
-            bod'' <- addRANExp needRANsTyCons ddfs ienv'' bod
+            bod' <- addRANExp dont_change_datacons needRANsTyCons ddfs ienv' bod
+            bod'' <- addRANExp dont_change_datacons needRANsTyCons ddfs ienv'' bod
             let abs_ran_clause = (toAbsRANDataCon dcon, (L.map (,()) absRanVars) ++ vs, bod')
             let rel_ran_clause = (toRelRANDataCon dcon, (L.map (,()) relRanVars') ++ vs, bod'')
             dflags <- getDynFlags
@@ -331,8 +335,6 @@ mkRANs ienv needRANsExp =
                       LitE{}    -> Ext (L1.AddFixed (fromJust mb_most_recent_ran) (fromJust (sizeOfTy IntTy)))
                       FloatE{}  -> Ext (L1.AddFixed (fromJust mb_most_recent_ran) (fromJust (sizeOfTy FloatTy)))
                       LitSymE{} -> Ext (L1.AddFixed (fromJust mb_most_recent_ran) (fromJust (sizeOfTy SymTy)))
-                      -- LitE{}    -> PrimAppE RequestEndOf [arg]
-                      -- LitSymE{} -> PrimAppE RequestEndOf [arg]
                       oth -> error $ "addRANExp: Expected trivial expression, got: " ++ sdoc oth
           return (Just i, acc ++ [(i,[],CursorTy, rhs)]))
   (Nothing, []) needRANsExp
@@ -372,7 +374,7 @@ needsRANExp ddefs fundefs env2 renv tcenv parlocss ex =
   case ex of
     CaseE (VarE scrt) brs -> let PackedTy tycon tyloc = lookupVEnv scrt env2
                                  reg = renv # tyloc
-                             in S.unions $ L.map (docase tycon reg env2 renv tcenv parlocss) brs
+                             in S.unions $ L.map (doalt tycon reg env2 renv tcenv parlocss) brs
 
     CaseE scrt _ -> error $ "needsRANExp: Scrutinee is not flat " ++ sdoc scrt
 
@@ -456,7 +458,7 @@ we need random access for that type.
     go = needsRANExp ddefs fundefs env2 renv tcenv parlocss
 
     -- Collect all the 'Tycon's which might random access nodes
-    docase tycon reg env21 renv1 tcenv1 parlocss1 br@(dcon,vlocs,bod) =
+    doalt tycon reg env21 renv1 tcenv1 parlocss1 br@(dcon,vlocs,bod) =
       let (vars,locs) = unzip vlocs
           renv' = L.foldr (\lc acc -> M.insert lc reg acc) renv1 locs
           env21' = extendPatternMatchEnv dcon ddefs vars locs env21

@@ -130,110 +130,110 @@ printSpace = printString " "
 sandwich :: (T.Tail -> T.Tail) -> String -> T.Tail -> T.Tail
 sandwich mid s end = openParen s $ mid $ closeParen end
 
--- Generate printing functions
-genDconsPrinter :: [Ty3] -> Var -> PassM T.Tail
-genDconsPrinter (x:xs) tail =
-  case x of
-    L3.PackedTy tyCons _ -> do
-      dflags <- getDynFlags
-      if gopt Opt_Packed dflags
-      then do
-        t    <- gensym "tail"
-        T.LetCallT False [(t, T.CursorTy)] (mkPrinterName tyCons) [(T.VarTriv tail)] <$>
-           maybeSpace <$> genDconsPrinter xs t
-      else do
-        val  <- gensym "val"
-        t    <- gensym "tail"
-        tmp  <- gensym "temp"
-        valc <- gensym "valcur"
-        T.LetPrimCallT [(val, T.IntTy), (t, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv tail)] <$>
-          T.LetTrivT (valc, T.CursorTy, T.VarTriv val) <$>
-          T.LetCallT False [(tmp, T.CursorTy)] (mkPrinterName tyCons) [(T.VarTriv valc)] <$>
-            maybeSpace <$> genDconsPrinter xs t
+-- -- Generate printing functions
+-- genDconsPrinter :: [Ty3] -> Var -> PassM T.Tail
+-- genDconsPrinter (x:xs) tail =
+--   case x of
+--     L3.PackedTy tyCons _ -> do
+--       dflags <- getDynFlags
+--       if gopt Opt_Packed dflags
+--       then do
+--         t    <- gensym "tail"
+--         T.LetCallT False [(t, T.CursorTy)] (mkPrinterName tyCons) [(T.VarTriv tail)] <$>
+--            maybeSpace <$> genDconsPrinter xs t
+--       else do
+--         val  <- gensym "val"
+--         t    <- gensym "tail"
+--         tmp  <- gensym "temp"
+--         valc <- gensym "valcur"
+--         T.LetPrimCallT [(val, T.IntTy), (t, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv tail)] <$>
+--           T.LetTrivT (valc, T.CursorTy, T.VarTriv val) <$>
+--           T.LetCallT False [(tmp, T.CursorTy)] (mkPrinterName tyCons) [(T.VarTriv valc)] <$>
+--             maybeSpace <$> genDconsPrinter xs t
 
-    L3.CursorTy -> do
-      dflags <- getDynFlags
-      if gopt Opt_Packed dflags
-      then do
-        tail2 <- gensym "tail"
-        T.LetPrimCallT [(tail2, T.CursorTy)] T.AddP [T.VarTriv tail, T.IntTriv 8] <$>
-          genDconsPrinter xs tail2
-      else genDconsPrinter xs tail
+--     L3.CursorTy -> do
+--       dflags <- getDynFlags
+--       if gopt Opt_Packed dflags
+--       then do
+--         tail2 <- gensym "tail"
+--         T.LetPrimCallT [(tail2, T.CursorTy)] T.AddP [T.VarTriv tail, T.IntTriv 8] <$>
+--           genDconsPrinter xs tail2
+--       else genDconsPrinter xs tail
 
-    _ | isScalarTy x ->  do
-      val  <- gensym "val"
-      t    <- gensym "tail"
-      let l4_ty = T.fromL3Ty x
-      T.LetPrimCallT [(val, l4_ty), (t, T.CursorTy)] (T.ReadScalar (mkScalar x)) [(T.VarTriv tail)] <$>
-        printTy False x [T.VarTriv val] <$>
-         maybeSpace <$>
-          genDconsPrinter xs t
+--     _ | isScalarTy x ->  do
+--       val  <- gensym "val"
+--       t    <- gensym "tail"
+--       let l4_ty = T.fromL3Ty x
+--       T.LetPrimCallT [(val, l4_ty), (t, T.CursorTy)] (T.ReadScalar (mkScalar x)) [(T.VarTriv tail)] <$>
+--         printTy False x [T.VarTriv val] <$>
+--          maybeSpace <$>
+--           genDconsPrinter xs t
 
-    VectorTy el_ty ->  do
-      val  <- gensym "val"
-      t    <- gensym "tail"
-      let l4_ty = T.fromL3Ty el_ty
-      T.LetPrimCallT [(val, T.VectorTy l4_ty), (t, T.CursorTy)] T.ReadVector [(T.VarTriv tail)] <$>
-        printTy False x [T.VarTriv val] <$>
-         maybeSpace <$>
-          genDconsPrinter xs t
+--     VectorTy el_ty ->  do
+--       val  <- gensym "val"
+--       t    <- gensym "tail"
+--       let l4_ty = T.fromL3Ty el_ty
+--       T.LetPrimCallT [(val, T.VectorTy l4_ty), (t, T.CursorTy)] T.ReadVector [(T.VarTriv tail)] <$>
+--         printTy False x [T.VarTriv val] <$>
+--          maybeSpace <$>
+--           genDconsPrinter xs t
 
-    ListTy el_ty ->  do
-      val  <- gensym "val"
-      t    <- gensym "tail"
-      let l4_ty = T.fromL3Ty el_ty
-      T.LetPrimCallT [(val, T.ListTy l4_ty), (t, T.CursorTy)] T.ReadList [(T.VarTriv tail)] <$>
-        printTy False x [T.VarTriv val] <$>
-         maybeSpace <$>
-          genDconsPrinter xs t
+--     ListTy el_ty ->  do
+--       val  <- gensym "val"
+--       t    <- gensym "tail"
+--       let l4_ty = T.fromL3Ty el_ty
+--       T.LetPrimCallT [(val, T.ListTy l4_ty), (t, T.CursorTy)] T.ReadList [(T.VarTriv tail)] <$>
+--         printTy False x [T.VarTriv val] <$>
+--          maybeSpace <$>
+--           genDconsPrinter xs t
 
-    _ -> error "FINISHME: genDconsPrinter"
+--     _ -> error "FINISHME: genDconsPrinter"
 
- where
-  maybeSpace = if L.null xs
-               then id
-               else printSpace
+--  where
+--   maybeSpace = if L.null xs
+--                then id
+--                else printSpace
 
-genDconsPrinter [] tail = do
-  return $ closeParen $ T.RetValsT [(T.VarTriv tail)]
+-- genDconsPrinter [] tail = do
+--   return $ closeParen $ T.RetValsT [(T.VarTriv tail)]
 
-genAltPrinter :: [(DataCon,[(IsBoxed, Ty3)])] -> Var -> Int64 -> PassM T.Alts
--- Don' do anything for indirections. Let 'followRedirects' take care of it.
-genAltPrinter ((dcons, _):rst) tail n | isIndirectionTag dcons = genAltPrinter rst tail n
-genAltPrinter ((dcons, typs):xs) tail n = do
-  let (_,typs') = unzip typs
-  -- WARNING: IsBoxed ignored here
-  curTail <- (openParen dcons) <$> genDconsPrinter typs' tail
-  alts    <- genAltPrinter xs tail (n+1)
-  let alt = n
-  case alts of
-    T.IntAlts []   -> return $ T.IntAlts [(alt::Int64, curTail)]
-    -- T.TagAlts []   -> return $ T.TagAlts [(n::Word8, curTail)]
-    T.IntAlts tags -> return $ T.IntAlts ((alt::Int64, curTail) : tags)
-    -- T.TagAlts tags -> return $ T.TagAlts ((n::Word8, curTail) : tags)
-    _              -> error $ "Invalid case statement type."
-genAltPrinter [] _ _                = return $ T.IntAlts []
+-- genAltPrinter :: [(DataCon,[(IsBoxed, Ty3)])] -> Var -> Int64 -> PassM T.Alts
+-- -- Don' do anything for indirections. Let 'followRedirects' take care of it.
+-- genAltPrinter ((dcons, _):rst) tail n | isIndirectionTag dcons = genAltPrinter rst tail n
+-- genAltPrinter ((dcons, typs):xs) tail n = do
+--   let (_,typs') = unzip typs
+--   -- WARNING: IsBoxed ignored here
+--   curTail <- (openParen dcons) <$> genDconsPrinter typs' tail
+--   alts    <- genAltPrinter xs tail (n+1)
+--   let alt = n
+--   case alts of
+--     T.IntAlts []   -> return $ T.IntAlts [(alt::Int64, curTail)]
+--     -- T.TagAlts []   -> return $ T.TagAlts [(n::Word8, curTail)]
+--     T.IntAlts tags -> return $ T.IntAlts ((alt::Int64, curTail) : tags)
+--     -- T.TagAlts tags -> return $ T.TagAlts ((n::Word8, curTail) : tags)
+--     _              -> error $ "Invalid case statement type."
+-- genAltPrinter [] _ _                = return $ T.IntAlts []
 
-genPrinter  :: DDef Ty3 -> PassM T.FunDecl
-genPrinter DDef{tyName, dataCons} = do
-  p    <- gensym "p"
-  tag  <- gensym "tag"
-  tail <- gensym "tail"
-  alts <- genAltPrinter dataCons tail 0
-  lbl  <- gensym "switch"
-  dflags <- getDynFlags
-  let def_alt = T.ErrT $ "Unknown tag in: " ++ fromVar lbl
-  let bod = if gopt Opt_Packed dflags
-            then T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadTag) [(T.VarTriv p)] $
-                 T.Switch lbl (T.VarTriv tag) alts (Just def_alt)
-            else T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv p)] $
-                 T.Switch lbl (T.VarTriv tag) alts (Just def_alt)
-  return T.FunDecl{ T.funName  = mkPrinterName (fromVar tyName),
-                    T.funArgs  = [(p, T.CursorTy)],
-                    T.funRetTy = T.CursorTy,
-                    T.funBody  = bod,
-                    T.isPure   = False
-                  }
+-- genPrinter  :: DDef Ty3 -> PassM T.FunDecl
+-- genPrinter DDef{tyName, dataCons} = do
+--   p    <- gensym "p"
+--   tag  <- gensym "tag"
+--   tail <- gensym "tail"
+--   alts <- genAltPrinter dataCons tail 0
+--   lbl  <- gensym "switch"
+--   dflags <- getDynFlags
+--   let def_alt = T.ErrT $ "Unknown tag in: " ++ fromVar lbl
+--   let bod = if gopt Opt_Packed dflags
+--             then T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadTag) [(T.VarTriv p)] $
+--                  T.Switch lbl (T.VarTriv tag) alts (Just def_alt)
+--             else T.LetPrimCallT [(tag, T.TagTyPacked), (tail, T.CursorTy)] (T.ReadScalar IntS) [(T.VarTriv p)] $
+--                  T.Switch lbl (T.VarTriv tag) alts (Just def_alt)
+--   return T.FunDecl{ T.funName  = mkPrinterName (fromVar tyName),
+--                     T.funArgs  = [(p, T.CursorTy)],
+--                     T.funRetTy = T.CursorTy,
+--                     T.funBody  = bod,
+--                     T.isPure   = False
+--                   }
 
 printTy :: Bool -> Ty3 -> [T.Triv] -> (T.Tail -> T.Tail)
 printTy pkd ty trvs =
@@ -368,9 +368,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
           Just (x,mty) -> (Just . T.PrintExp) <$>
                             (addPrintToTail mty =<< tail True inv_sym_tbl x)
   funs       <- mapM (fund inv_sym_tbl) (M.elems fundefs)
-  unpackers  <- mapM genUnpacker (L.filter (not . isVoidDDef) (M.elems ddefs))
-  printers   <- mapM genPrinter (L.filter (not . isVoidDDef) (M.elems ddefs))
-  (T.Prog sym_tbl) <$> pure (funs ++ unpackers ++ printers) <*> pure mn
+  dflags     <- getDynFlags
+  unpackers  <- if gopt Opt_Pointer dflags
+                then mapM genUnpacker (L.filter (not . isVoidDDef) (M.elems ddefs))
+                else pure []
+  (T.Prog sym_tbl) <$> pure (funs ++ unpackers) <*> pure mn
  where
   fund :: M.Map String Word16 -> FunDef3 -> PassM T.FunDecl
   fund sym_tbl FunDef{funName,funTy,funArgs,funBody} = do
@@ -1048,6 +1050,9 @@ prim p =
     DictEmptyP ty  -> T.DictEmptyP $ typ ty
     DictHasKeyP ty -> T.DictHasKeyP $ typ ty
     ReadPackedFile mf tyc _ _ -> T.ReadPackedFile mf tyc
+    WritePackedFile fp ty
+      | (PackedTy tycon _) <- ty -> T.WritePackedFile fp tycon
+      | otherwise -> error $ "prim: writePackedFile given a non-packed type: " ++ sdoc ty
     ReadArrayFile fp ty -> T.ReadArrayFile fp (typ ty)
     VAllocP elty  -> T.VAllocP (typ elty)
     VFreeP elty   -> T.VFreeP (typ elty)
@@ -1085,7 +1090,6 @@ prim p =
     IntHashEmpty  -> T.IntHashEmpty
     IntHashInsert  -> T.IntHashInsert
     IntHashLookup  -> T.IntHashLookup
-    WritePackedFile{} -> error$ "lower/prim: internal error, WritePackedFile not handled yet."
     Write3dPpmFile{} -> error$ "lower/prim: internal error, Write3dPpmFile not handled yet."
 
     ErrorP{}     -> error$ "lower/prim: internal error, should not have got to here: "++show p

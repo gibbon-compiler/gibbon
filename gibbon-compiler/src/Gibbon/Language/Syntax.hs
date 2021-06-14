@@ -413,7 +413,7 @@ data Prim ty
           | PrintInt   -- ^ Print an integer to standard out
           | PrintFloat -- ^ Print a floating point number to standard out
           | PrintBool  -- ^ Print a boolean to standard out
-          | PrintSym -- ^ Print a symbol to standard out
+          | PrintSym   -- ^ Print a symbol to standard out
           | ReadInt  -- ^ Read an int from standard in
 
           -- Dictionaries.
@@ -472,7 +472,6 @@ data Prim ty
                                --   to L0.
 
           | Write3dPpmFile FilePath
-          | WritePackedFile FilePath
 
           | ReadPackedFile (Maybe FilePath) TyCon (Maybe Var) ty
             -- ^ Read (mmap) a binary file containing packed data.  This must be annotated with the
@@ -480,6 +479,14 @@ data Prim ty
             -- (first PackedTy then CursorTy).  The TyCon tracks the original type name.
             -- The variable represents the region that this file will be mapped to, and is
             -- set by InferLocations.
+
+          | WritePackedFile FilePath ty
+            -- ^ Write a packed value to a file.
+            -- To enable re-reading this packed value with Gibbon, this primitive gets rid
+            -- of any absolute pointers in the value. First, it inlines (by copying) any
+            -- regions pointed to by the packed value. Next, random access nodes are eliminated.
+            -- We could change them to relative pointers (numeric offsets),
+            -- but for a first version we can simplify things by getting rid of them completely.
 
           | ReadArrayFile (Maybe (FilePath, Int)) ty
             -- ^ Parse a file into a Vector. This is decorated with the

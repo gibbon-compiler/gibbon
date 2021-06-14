@@ -101,6 +101,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
         CaseE _ [] -> error $ "L2.Interp: Empty case"
         CaseE x1 alts -> do
           (scrt, _sizescrt) <- go env sizeEnv x1
+          dbgTraceIt (sdoc (x1,scrt,env,sizeEnv)) (pure ())
           case scrt of
             VLoc idx off ->
                do (Store store) <- get
@@ -135,7 +136,8 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                                               asizeEnv' = M.insert v sizev $
                                                           M.insert loc (SOne sizeloc) $
                                                           asizeEnv
-                                          pure (aenv', asizeEnv', prev_off + 1 + (sizeToInt sizev))
+                                          dbgTraceIt (sdoc (v, prev_off, sizev, prev_off + 1 + (sizeToInt sizev))) (pure ())
+                                          pure (aenv', asizeEnv', prev_off + (sizeToInt sizev))
                                       scalarty | isScalarTy scalarty -> do
                                         s@(Store store1) <- get
                                         let buf = store1 M.! idx
@@ -151,7 +153,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                                 (zip vlocs tys)
                       go env' sizeEnv' rhs
                     oth :< _ -> error $ "L2.Interp: expected to read tag from scrutinee cursor, found: "++show oth++
-                                        ".\nRead" ++ sdoc scrt ++ " in buffer: " ++ sdoc seq1
+                                        ".\nRead " ++ sdoc scrt ++ " in buffer: " ++ sdoc seq1
             _ -> error $ "L2.Interp: expected scrutinee to be a packed value. Got: " ++ sdoc scrt
 
         -- This operation constructs a packed value by writing things to the

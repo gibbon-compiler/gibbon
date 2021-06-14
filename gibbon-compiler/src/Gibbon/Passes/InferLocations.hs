@@ -212,7 +212,9 @@ data DCArg = ArgFixed Int
 
 inferLocs :: Prog1 -> PassM L2.Prog2
 inferLocs initPrg = do
-  p@(Prog dfs fds me) <- addRepairFns initPrg
+  -- p@(Prog dfs fds me) <- addRepairFns initPrg
+  (Prog dfs fds me) <- do p0 <- flattenL1 initPrg
+                          inlineTriv p0
   let m = do
           dfs' <- lift $ lift $ convertDDefs dfs
           fenv <- forM fds $ \(FunDef _ _ (intys, outty) bod _isrec _inline) -> do
@@ -908,6 +910,21 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           tryBindReg ( (Ext$ LetRegionE (MMapR r) $ Ext $ LetLocE loc (StartOfLE (MMapR r)) $
                         L2.LetE (vr,[],PackedTy tycon loc,rhs') bod'')
                      , ty', fcs)
+
+
+        PrimAppE (WritePackedFile fp _ty0) [VarE packd] -> do
+          bty' <- lift $ lift $ convertTy bty
+          (bod',ty',cs') <- inferExp (extendVEnv vr bty' env) bod dest
+          (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
+          fcs <- tryInRegion cs''
+          let (PackedTy tycon loc) = lookupVEnv packd env
+          unifyloc2 <- lookupUnifyLoc loc
+          let loc2 = case unifyloc2 of
+                       FreshLoc lc -> lc
+                       FixedLoc lc -> lc
+          let rhs' = PrimAppE (WritePackedFile fp (PackedTy tycon loc2)) [VarE packd]
+          tryBindReg (L2.LetE (vr,[],bty',rhs') bod'', ty'', fcs)
+
 
         PrimAppE (ReadArrayFile fp ty0) [] -> do
           ty <- lift $ lift $ convertTy bty
@@ -1649,6 +1666,7 @@ prim p = case p of
            GetNumProcessors -> pure GetNumProcessors
            ReadPackedFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
            ReadArrayFile{} -> err $ "Can't handle this primop yet in InferLocations:\n"++show p
+           WritePackedFile fp ty -> convertTy ty >>= return . (WritePackedFile fp)
            SymSetEmpty{} -> return SymSetEmpty
            SymSetInsert{} -> return SymSetInsert
            SymSetContains{} -> return SymSetContains
@@ -1660,78 +1678,6 @@ prim p = case p of
            IntHashInsert{} -> return IntHashInsert
            IntHashLookup{} -> return IntHashLookup
            Write3dPpmFile{} -> err $ "Write3dPpmFile not handled yet."
-           WritePackedFile{} -> err $ "WritePackedFile not handled yet."
-
--- | Generate a copy function for a particular data definition.
--- Note: there will be redundant let bindings in the function body which may need to be inlined.
-genCopyFn :: DDef Ty1 -> PassM FunDef1
-genCopyFn DDef{tyName, dataCons} = do
-  arg <- gensym $ "arg"
-  casebod <- forM dataCons $ \(dcon, dtys) ->
-             do let tys = L.map snd dtys
-                xs <- mapM (\_ -> gensym "x") tys
-                ys <- mapM (\_ -> gensym "y") tys
-                -- let packed_vars = map fst $ filter (\(x,ty) -> isPackedTy ty) (zip ys tys)
-                let bod_with_ran_nodes = foldr (\(ty,x,y,idx) acc ->
-                                                  if ty == CursorTy
-                                                  then LetE (y, [], ty, PrimAppE RequestEndOf [VarE (xs !!! idx)]) acc
-                                                  -- then LetE (y, [], ty, PrimAppE RequestEndOf [VarE (packed_vars !!! idx)]) acc
-                                                  else acc)
-                                           (DataConE () dcon $ map VarE ys) (L.zip4 tys xs ys ([0..] :: [Int]))
-                    bod = foldr (\(ty,x,y,idx) acc ->
-                                     if isPackedTy ty
-                                     then LetE (y, [], ty, AppE (mkCopyFunName (tyToDataCon ty)) [] [VarE x]) acc
-                                     -- We've already constructed all the random access nodes above.
-                                     else if ty == CursorTy
-                                     then acc
-                                     else LetE (y, [], ty, VarE x) acc)
-
-                            bod_with_ran_nodes (L.zip4 tys xs ys ([0..] :: [Int]))
-                return (dcon, L.map (\x -> (x,())) xs, bod)
-  return $ FunDef { funName = mkCopyFunName (fromVar tyName)
-                  , funArgs = [arg]
-                  , funTy   = ( [PackedTy (fromVar tyName) ()]
-                              , PackedTy (fromVar tyName) () )
-                  , funBody = CaseE (VarE arg) casebod
-                  , funRec = Rec
-                  , funInline = NoInline
-                  }
-
--- | Traverses a packed data type and always returns 42.
-genTravFn :: DDef Ty1 -> PassM FunDef1
-genTravFn DDef{tyName, dataCons} = do
-  arg <- gensym $ "arg"
-  casebod <- forM dataCons $ \(dcon, tys) ->
-             do xs <- mapM (\_ -> gensym "x") tys
-                ys <- mapM (\_ -> gensym "y") tys
-                let bod = L.foldr (\(ty,x,y) acc ->
-                                     if isPackedTy ty
-                                     then LetE (y, [], IntTy, AppE (mkTravFunName (tyToDataCon ty)) [] [VarE x]) acc
-                                     else LetE (y, [], ty, VarE x) acc)
-                          (LitE 42)
-                          (zip3 (L.map snd tys) xs ys)
-                return (dcon, L.map (\x -> (x,())) xs, bod)
-  return $ FunDef { funName = mkTravFunName (fromVar tyName)
-                  , funArgs = [arg]
-                  , funTy   = ( [PackedTy (fromVar tyName) ()] , IntTy )
-                  , funBody = CaseE (VarE arg) casebod
-                  , funRec = Rec
-                  , funInline = NoInline
-                  }
-
-
--- | Add copy & traversal functions for each data type in a prog
-addRepairFns :: Prog1 -> PassM Prog1
-addRepairFns (Prog dfs fds me) = do
-  newFns <- concat <$>
-              mapM (\d -> do
-                    copy_fn <- genCopyFn d
-                    trav_fn <- genTravFn d
-                    return [copy_fn, trav_fn])
-              (filter (not . isVoidDDef) (M.elems dfs))
-  let fds' = fds `M.union` (M.fromList $ L.map (\f -> (funName f, f)) newFns)
-  prg <- flattenL1 $ Prog dfs fds' me
-  inlineTriv prg
 
 emptyEnv :: FullEnv
 emptyEnv = FullEnv { dataDefs = emptyDD

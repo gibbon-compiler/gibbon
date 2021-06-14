@@ -426,6 +426,14 @@ tcExp isPacked ddfs env exp =
           then return CursorTy
           else return ty
 
+        WritePackedFile _ ty
+           | PackedTy{} <- ty  -> do
+             len1
+             let [packed_ty] = tys
+             _ <- ensureEqualTyModCursor exp packed_ty ty
+             pure (ProdTy [])
+           | otherwise -> error $ "writePackedFile expects a packed type. Given" ++ sdoc ty
+
         ReadArrayFile _ ty -> do
           len0
           if isValidListElemTy ty
@@ -653,7 +661,6 @@ tcExp isPacked ddfs env exp =
           _ <- ensureEqualTy (es !! 1) SymTy (tys !! 1)
           return IntTy
 
-        WritePackedFile{} -> throwError $ GenericTC "WritePackedFile not handled yet" exp
         Write3dPpmFile{} -> throwError $ GenericTC "Write3dPpmFile not handled yet" exp
 
 

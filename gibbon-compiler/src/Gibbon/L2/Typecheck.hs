@@ -357,6 +357,14 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    len0
                    return (ty, tstate)
 
+                 WritePackedFile _ ty
+                   | PackedTy{} <- ty  -> do
+                     len1
+                     let [packed_ty] = tys
+                     _ <- ensureEqualTy exp packed_ty ty
+                     pure (ProdTy [], tstate)
+                   | otherwise -> error $ "writePackedFile expects a packed type. Given" ++ sdoc ty
+
                  ReadArrayFile _ ty -> do
                    len0
                    if isValidListElemTy ty
@@ -581,87 +589,86 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
                  GetNumProcessors -> do
                    len0
-                   pure (IntTy, tstatein)
+                   pure (IntTy, tstate)
 
                  PrintInt -> do
                    len1
                    _ <- ensureEqualTy (es !!! 0) IntTy (tys !!! 0)
-                   pure (ProdTy [], tstatein)
+                   pure (ProdTy [], tstate)
 
                  PrintFloat -> do
                    len1
                    _ <- ensureEqualTy (es !!! 0) FloatTy (tys !!! 0)
-                   pure (ProdTy [], tstatein)
+                   pure (ProdTy [], tstate)
 
                  PrintBool -> do
                    len1
                    _ <- ensureEqualTy (es !!! 0) BoolTy (tys !!! 0)
-                   pure (ProdTy [], tstatein)
+                   pure (ProdTy [], tstate)
 
                  PrintSym -> do
                    len1
                    _ <- ensureEqualTy (es !!! 0) SymTy (tys !!! 0)
-                   pure (ProdTy [], tstatein)
+                   pure (ProdTy [], tstate)
 
                  ReadInt  -> throwError $ GenericTC "ReadInt not handled" exp
 
                  SymSetEmpty -> do
                    len0
-                   pure (SymSetTy, tstatein)
+                   pure (SymSetTy, tstate)
 
                  SymSetInsert -> do
                    len2
                    _ <- ensureEqualTy (es !!! 0) SymSetTy (tys !!! 0)
                    _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   pure (SymSetTy, tstatein)
+                   pure (SymSetTy, tstate)
 
                  SymSetContains -> do
                    len2
                    _ <- ensureEqualTy (es !!! 0) SymSetTy (tys !!! 0)
                    _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   pure (BoolTy, tstatein)
+                   pure (BoolTy, tstate)
 
                  SymHashEmpty -> do
                    len0
-                   pure (SymHashTy, tstatein)
+                   pure (SymHashTy, tstate)
 
                  SymHashInsert -> do
                    len3
                    _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
                    _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
                    _ <- ensureEqualTy (es !!! 2) SymTy (tys !!! 2)
-                   pure (SymHashTy, tstatein)
+                   pure (SymHashTy, tstate)
 
                  SymHashLookup -> do
                    len2
                    _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
                    _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   pure (SymTy, tstatein)
+                   pure (SymTy, tstate)
 
                  SymHashContains -> do
                    len2
                    _ <- ensureEqualTy (es !!! 0) SymHashTy (tys !!! 0)
                    _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   pure (BoolTy, tstatein)
+                   pure (BoolTy, tstate)
 
                  IntHashEmpty -> do
                    len0
-                   pure (IntHashTy, tstatein)
+                   pure (IntHashTy, tstate)
 
                  IntHashInsert -> do
                    len3
                    _ <- ensureEqualTy (es !!! 0) IntHashTy (tys !!! 0)
                    _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
                    _ <- ensureEqualTy (es !!! 2) IntTy (tys !!! 2)
-                   pure (IntHashTy, tstatein)
+                   pure (IntHashTy, tstate)
 
                  IntHashLookup -> do
                    len2
                    _ <- ensureEqualTy (es !!! 0) IntHashTy (tys !!! 0)
                    _ <- ensureEqualTy (es !!! 1) SymTy (tys !!! 1)
-                   pure (IntTy, tstatein)
+                   pure (IntTy, tstate)
 
-                 WritePackedFile{} -> throwError $ GenericTC "WritePackedFile not handled yet" exp
                  Write3dPpmFile{} -> throwError $ GenericTC "Write3dPpmFile not handled yet" exp
 
 

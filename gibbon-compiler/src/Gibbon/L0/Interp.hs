@@ -27,6 +27,9 @@ instance InterpExt () Exp0 (E0Ext Ty0 Ty0) where
         BenchE fn locs args _b ->
           gInterpExp rc valenv ddefs fundefs (AppE fn locs args)
         ParE0 ls -> gInterpExp rc valenv ddefs fundefs (MkProdE ls)
+        PrintPacked _ty _arg -> pure $ VProd []
+        CopyPacked _ty arg -> gInterpExp rc valenv ddefs fundefs arg
+        TravPacked _ty _arg -> pure $ VProd []
         L _ e -> gInterpExp rc valenv ddefs fundefs e
         PolyAppE{} -> error "L0.Interp: PolyAppE not handled."
         LinearExt{} -> error $ "L0.Interp: a linear types extension wasn't desugared: " ++ sdoc ex

@@ -6,6 +6,9 @@
 ;; An Int field stored after the unknown-sized packed object.
 (data Foo [MkFoo Nat Int])
 
-(case (MkFoo (Suc (Zero)) 71)
+(define (mkfoo) : Foo
+  (MkFoo (Suc (Zero)) 71))
+
+(case (mkfoo)
   ;; This requires copy-insertion.
   [(MkFoo x y) y])

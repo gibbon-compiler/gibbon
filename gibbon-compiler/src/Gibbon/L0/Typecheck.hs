@@ -552,8 +552,13 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
           len0
           pure (s1, VectorTy ty, PrimAppE pr args_tc)
 
+        WritePackedFile fp ty -> do
+             len1
+             let [packed_ty] = arg_tys'
+             s2 <- unify (args !! 0) ty packed_ty
+             pure (s1 <> s2, ProdTy [], PrimAppE (WritePackedFile fp (zonkTy s2 ty)) args_tc)
+
         Write3dPpmFile{} -> err $ text "Write3dPpmFile"
-        WritePackedFile{} -> err $ text "WritePackedFile"
         RequestEndOf -> err $ text "Unexpected RequestEndOf in L0: " <+> exp_doc
         RequestSizeOf-> err $ text "Unexpected RequestSizeOf in L0: " <+> exp_doc
 
@@ -662,6 +667,21 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
     Ext (ParE0 es)  -> do
       (s1, es_tys, es_tc) <- tcExps ddefs sbst venv fenv bound_tyvars (zip (repeat is_main) es)
       pure (s1, ProdTy es_tys, Ext $ ParE0 es_tc)
+
+    Ext (PrintPacked ty arg) -> do
+            (s1, ty', arg') <- go arg
+            s2 <- unify arg ty ty'
+            pure (s1 <> s2, ProdTy [], Ext (PrintPacked ty arg'))
+
+    Ext (CopyPacked ty arg) -> do
+            (s1, ty', arg') <- go arg
+            s2 <- unify arg ty ty'
+            pure (s1 <> s2, ty', Ext (CopyPacked ty arg'))
+
+    Ext (TravPacked ty arg) -> do
+            (s1, ty', arg') <- go arg
+            s2 <- unify arg ty ty'
+            pure (s1 <> s2, ProdTy [], Ext (TravPacked ty arg'))
 
     Ext (L _ e) -> go e
 
@@ -905,6 +925,9 @@ zonkExp s ex =
                                      in Ext (BenchE fn tyapps1 (map go args) b)
     Ext (ParE0 ls) -> Ext $ ParE0 (map go ls)
     Ext (L p e)    -> Ext $ L p (go e)
+    Ext (PrintPacked ty arg) -> Ext $ PrintPacked (zonkTy s ty) (go arg)
+    Ext (CopyPacked ty arg) -> Ext $ CopyPacked (zonkTy s ty) (go arg)
+    Ext (TravPacked ty arg) -> Ext $ TravPacked (zonkTy s ty) (go arg)
     Ext (LinearExt{}) -> error $ "zonkExp: a linear types extension wasn't desugared: " ++ sdoc ex
     SpawnE fn tyapps args -> let tyapps1 = map (zonkTy s) tyapps
                              in SpawnE fn tyapps1 (map go args)
@@ -965,6 +988,9 @@ substTyVarExp s ex =
     Ext (BenchE fn tyapps args b) -> let tyapps1 = map (substTyVar s) tyapps
                                      in Ext (BenchE fn tyapps1 (map go args) b)
     Ext (ParE0 ls) -> Ext $ ParE0 (map go ls)
+    Ext (PrintPacked ty arg) -> Ext $ PrintPacked (substTyVar s ty) (go arg)
+    Ext (CopyPacked ty arg) -> Ext $ CopyPacked (substTyVar s ty) (go arg)
+    Ext (TravPacked ty arg) -> Ext $ TravPacked (substTyVar s ty) (go arg)
     Ext (L p e)    -> Ext $ L p (go e)
     Ext (LinearExt{}) -> error $ "substTyVarExp: a linear types extension wasn't desugared: " ++ sdoc ex
     WithArenaE{} -> error "substTyVarExp: WithArenaE not handled."

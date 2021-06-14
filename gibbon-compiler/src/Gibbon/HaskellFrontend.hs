@@ -553,6 +553,13 @@ desugarExp type_syns toplevel e =
                                        pure $ PrimAppE (ReadPackedFile Nothing con Nothing ty) []
                                      _ -> error $ "desugarExp: couldn't parse readPackedFile; " ++ show e0
                        in go e2
+                  else if f == "writePackedFile"
+                  then
+                    case e2 of
+                      Lit _ fp -> do
+                        ty <- newMetaTy
+                        pure $ PrimAppE (WritePackedFile (litToString fp) ty) []
+                      _ -> error $ "desugarExp: couldn't parse writePackedFile; " ++ show e2
                   else if f == "bench"
                   then do
                     e2' <- desugarExp type_syns toplevel e2
@@ -709,6 +716,21 @@ desugarExp type_syns toplevel e =
                   then do
                     e2' <- desugarExp type_syns toplevel e2
                     pure $ ProjE 1 e2'
+                  else if f == "printPacked"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    ty <- newMetaTy
+                    pure $ Ext (PrintPacked ty e2')
+                  else if f == "copyPacked"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    ty <- newMetaTy
+                    pure $ Ext (CopyPacked ty e2')
+                  else if f == "travPacked"
+                  then do
+                    e2' <- desugarExp type_syns toplevel e2
+                    ty <- newMetaTy
+                    pure $ Ext (TravPacked ty e2')
                   else if f == "unsafeAlias"
                   then do
                     e2' <- desugarExp type_syns toplevel e2
@@ -739,6 +761,10 @@ desugarExp type_syns toplevel e =
           (SpawnE fn [] ls) -> do
             e2' <- desugarExp type_syns toplevel e2
             pure $ SpawnE fn [] (ls ++ [e2'])
+
+          (PrimAppE (WritePackedFile fp ty) ls) -> do
+             e2' <- desugarExp type_syns toplevel e2
+             pure $ PrimAppE (WritePackedFile fp ty) (ls ++ [e2'])
 
           (PrimAppE (ReadPackedFile _mb_fp tycon mb_var ty) []) ->
              let go e0 = case e0 of
@@ -1133,6 +1159,9 @@ fixupSpawn ex =
     Ext (FunRefE{})        -> ex
     Ext (BenchE fn tyapps args b) -> Ext (BenchE fn tyapps (map go args) b)
     Ext (ParE0 ls) -> Ext (ParE0 (map go ls))
+    Ext (PrintPacked ty arg) -> Ext (PrintPacked ty (go arg))
+    Ext (CopyPacked ty arg) -> Ext (CopyPacked ty (go arg))
+    Ext (TravPacked ty arg) -> Ext (TravPacked ty (go arg))
     Ext (L p e)    -> Ext (L p (go e))
     Ext (LinearExt ext) ->
       case ext of
@@ -1179,6 +1208,9 @@ verifyBenchEAssumptions bench_allowed ex =
           _ -> error $ "desugarModule: bench is a reserved keyword. Usage: bench fn_name args. Got: " ++ sdoc args
       else error $ "verifyBenchEAssumptions: 'bench' can only be used as a tail of the main expression, but it was used in a function. In: " ++ sdoc ex
     Ext (ParE0 ls) -> Ext (ParE0 (map not_allowed ls))
+    Ext (PrintPacked ty arg) -> Ext (PrintPacked ty (not_allowed arg))
+    Ext (CopyPacked ty arg) -> Ext (CopyPacked ty (not_allowed arg))
+    Ext (TravPacked ty arg) -> Ext (TravPacked ty (not_allowed arg))
     Ext (L p e)    -> Ext (L p (go e))
     Ext (LinearExt{}) -> error "verifyBenchEAssumptions: LinearExt not handled."
     -- Straightforward recursion ...
@@ -1292,6 +1324,12 @@ desugarLinearExts (Prog ddefs fundefs main) = do
                                           pure (Ext (BenchE fn tyapps args' b))
             ParE0 ls -> do ls' <- mapM go ls
                            pure (Ext (ParE0 ls'))
+            PrintPacked ty arg -> do arg' <- go arg
+                                     pure (Ext (PrintPacked ty arg'))
+            CopyPacked ty arg -> do arg' <- go arg
+                                    pure (Ext (CopyPacked ty arg'))
+            TravPacked ty arg -> do arg' <- go arg
+                                    pure (Ext (TravPacked ty arg'))
             L p e -> do e' <- go e
                         pure (Ext (L p e'))
             LinearExt lin ->

@@ -19,10 +19,10 @@ module Gibbon.Prim
     , Sym, quote, eqsym, gensym
 
       -- * Printing
-    , printsym, printint, printfloat, printbool
+    , printsym, printint, printfloat, printbool, printPacked
 
       -- * Command-line arguments
-    , sizeParam, readArrayFile, readPackedFile
+    , sizeParam, readArrayFile, readPackedFile, writePackedFile
 
       -- * Benchmarking
     , bench, timeit, iterate
@@ -54,6 +54,12 @@ module Gibbon.Prim
     ) where
 
 import Prelude hiding ( tan, iterate, sqrt )
+
+--------------------------------------------------------------------------------
+-- Packed (serialized) values
+--------------------------------------------------------------------------------
+
+class Packed a where
 
 --------------------------------------------------------------------------------
 -- Floating point numbers
@@ -119,6 +125,15 @@ printfloat = undefined
 printbool :: Bool -> ()
 printbool = undefined
 
+printPacked :: Packed a => a -> ()
+printPacked = undefined
+
+copyPacked :: Packed a => a -> a
+copyPacked = undefined
+
+travPacked :: Packed a => a -> ()
+travPacked = undefined
+
 --------------------------------------------------------------------------------
 -- Command-line arguments
 --------------------------------------------------------------------------------
@@ -129,8 +144,11 @@ sizeParam = undefined
 readArrayFile :: Maybe (String, Int) -> Vector a
 readArrayFile = undefined
 
-readPackedFile :: Maybe String -> a
+readPackedFile :: Packed a => Maybe String -> a
 readPackedFile = undefined
+
+writePackedFile :: Packed a => String -> a -> ()
+writePackedFile = undefined
 
 --------------------------------------------------------------------------------
 -- Benchmarking

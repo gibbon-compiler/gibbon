@@ -187,7 +187,7 @@ genTravBinds ls = concat <$>
         PackedTy tycon loc1 -> do
           w <- gensym "trav"
           let fn_name = mkTravFunName tycon
-          return [(w,[],IntTy, AppE fn_name [loc1] [e])]
+          return [(w,[],ProdTy [], AppE fn_name [loc1] [e])]
         -- TODO: Write a testcase for this path.
         ProdTy tys -> do
           -- So that we don't have to make assumptions about the 'e' being a VarE

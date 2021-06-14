@@ -28,7 +28,11 @@
 (define (tweets-count-ht [ht : Sym] [xs : Tweets]) : Int
   (tweets-count-ht-go 0 ht xs))
 
-(let ([t1 : Tweet (TweetMD 0 (ConsHT 'cats (ConsHT 'boats (NilHT))))])
-  (let ([t2 : Tweet (TweetMD 1 (ConsHT 'cats (NilHT)))])
-    (let ([tweets : Tweets (ConsTW t1 (ConsTW t2 (NilTW)))])
-      (time (tweets-count-ht 'cats tweets)))))
+(define (mktweets) : Tweets
+  (let ([t1 : Tweet (TweetMD 0 (ConsHT 'cats (ConsHT 'boats (NilHT))))])
+    (let ([t2 : Tweet (TweetMD 1 (ConsHT 'cats (NilHT)))])
+      (let ([tweets : Tweets (ConsTW t1 (ConsTW t2 (NilTW)))])
+        tweets))))
+
+(let ([tweets (mktweets)])
+ (time (tweets-count-ht 'cats tweets)))

@@ -326,6 +326,12 @@ tests:
     answer-file: examples/HSHashTest.ans
     failing: [interp1]
 
+  - name: test_printpacked.hs
+    dir: examples
+    answer-file: examples/test_printpacked.ans
+    failing: [interp1,gibbon1,pointer]
+
+
     ## Shouldn't typecheck
   - name: Fail1.hs
     dir: examples/should_fail

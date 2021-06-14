@@ -938,6 +938,49 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                      | [] <- bnds, [] <- rnds -> pure [ C.BlockStm [cstm| printf( $string:str ); |] ]
                      | otherwise -> error$ "wrong number of args/return values expected from PrintString prim: "++show (rnds,bnds)
 
+                 WritePackedFile fp tyc
+                    | [inV] <- rnds -> do
+                        -- Inputs to the copy function.
+                        outreg <- gensym "outreg"
+                        start_outreg <- gensym "start_outreg"
+                        end_outreg <- gensym "end_outreg"
+                        end_inreg <- gensym "end_inreg"
+                        -- Output from the copy function.
+                        end_outreg2 <- gensym "end_outreg2"
+                        end_inreg2 <- gensym "end_inreg2"
+                        copy_start <- gensym "copy_start"
+                        copy_end <- gensym "copy_end"
+                        copy_size <- gensym "copy_size"
+                        let rnds2 = [VarTriv end_inreg, VarTriv end_outreg, VarTriv start_outreg, inV]
+                            bnds2 = [(end_outreg2,CursorTy),(end_inreg2,CursorTy),(copy_start,CursorTy),(copy_end,CursorTy)]
+                        call_copyfn <- codegenTail venv fenv sort_fns (LetCallT False bnds2 (GL.mkCopySansPtrsFunName tyc) rnds2 (AssnValsT [] Nothing)) (ProdTy []) sync_deps
+                        let tyfile = [cty| typename FILE |]
+                            tysize = [cty| typename size_t |]
+                        out_hdl <- gensym "out_hdl"
+                        wrote <- gensym "wrote"
+                        pure $ [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:outreg = alloc_region(global_init_biginf_buf_size); |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg->start_ptr; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg->start_ptr + global_init_biginf_buf_size; |]
+                                 -- This would ideally be the *end* of the input region corresponding to inV
+                                 -- but we have don't have at hand here. Passing in NULL is okay because this pointer
+                                 -- is unused in the copy function.
+                                 -- To get the actual end of the input region, we'll have to encode WritePackedFile as an
+                                 -- expression (instead of a PrimAppE), and add the appropriate code in ThreadRegions.hs.
+                                 -- Sticking with the hacky and less invasive approach for now.
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_inreg = NULL; |]
+                               ] ++ call_copyfn ++
+                               [ C.BlockDecl [cdecl| $ty:tyfile *$id:out_hdl = fopen($string:fp, "wb"); |]
+                               -- , _todo
+                               -- , _todo
+                               , C.BlockDecl [cdecl| $ty:tysize $id:copy_size = ($ty:(codegenTy IntTy)) ($id:copy_end - $id:copy_start); |]
+                               , C.BlockDecl [cdecl| $ty:tysize $id:wrote = fwrite($id:copy_start, $id:copy_size, 1, $id:out_hdl); |]
+                               , C.BlockStm [cstm| fclose($id:out_hdl); |]
+                               , C.BlockStm [cstm| printf("Wrote: %s\n", $string:fp); |]
+                               , C.BlockStm [cstm| if ($id:outreg->refcount != REG_FREED) { free_region($id:end_outreg); }  |]
+                               , C.BlockStm [cstm| free($id:outreg); |]
+                               ]
+                    | otherwise -> error $ "WritePackedFile, wrong arguments "++show rnds++", or expected bindings "++show bnds
+
                  -- FINISHME: Codegen here depends on whether we are in --packed mode or not.
                  ReadPackedFile mfile tyc
                      | [] <- rnds, [(outV,_outT)] <- bnds -> do

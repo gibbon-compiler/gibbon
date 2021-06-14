@@ -230,6 +230,8 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       ReadArrayFile mb_fp ty ->
                                         parens (text "readArrayFile " <+> parens (text $ pretty mb_fp)) <+>
                                         doublecolon <+> pprintWithStyle sty ty
+                                      WritePackedFile fp ty ->
+                                        parens (text "writePackedFile " <+> text fp) <+> doublecolon <+> pprintWithStyle sty ty
                                       EqBenchProgP str -> text "eqBenchProg" <+> text str
                                       _ -> error $ "pprint: Unknown primitive: " ++ show pr
                       PPHaskell  -> case pr of
@@ -348,6 +350,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
                   _ | pr `elem` [MkTrue, MkFalse, SizeParam] -> pprintWithStyle sty pr
 
                   ReadPackedFile{} -> pprintWithStyle sty pr
+                  WritePackedFile{} -> pprintWithStyle sty pr <+> pprintWithStyle sty es
                   ReadArrayFile{}  -> pprintWithStyle sty pr
 
                   _ -> case sty of
@@ -515,6 +518,12 @@ instance (Out a, Pretty a) => Pretty (L0.E0Ext a L0.Ty0) where
                                     (pprintWithStyle sty args) <+> text (if b then "true" else "false")
       L0.ParE0 ls -> text "par" <+> lparen <> hcat (punctuate (text ", ") (map (pprintWithStyle sty) ls)) <> rparen
       L0.L _ e    -> pprintWithStyle sty e
+      L0.PrintPacked ty arg -> text "printPacked" <+>
+                               parens (pprintWithStyle sty arg <> text "::" <> pprintWithStyle sty ty)
+      L0.CopyPacked ty arg -> text "copyPacked" <+>
+                              parens (pprintWithStyle sty arg <> text "::" <> pprintWithStyle sty ty)
+      L0.TravPacked ty arg -> text "travPacked" <+>
+                              parens (pprintWithStyle sty arg <> text "::" <> pprintWithStyle sty ty)
       L0.LinearExt ext ->
         case ext of
           L0.ReverseAppE fn arg -> (pprintWithStyle sty arg <+> text "&") $$ pprintWithStyle sty fn

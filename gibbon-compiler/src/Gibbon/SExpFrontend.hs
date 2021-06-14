@@ -175,6 +175,9 @@ tagDataCons ddefs = go allCons
          es' <- mapM (go cons) es
          pure $ Ext $ BenchE v tyapps es' b
        Ext (ParE0 ls) -> Ext <$> ParE0 <$> mapM (go cons) ls
+       Ext (PrintPacked ty arg) -> Ext <$> (PrintPacked ty) <$> go cons arg
+       Ext (CopyPacked ty arg) -> Ext <$> (CopyPacked ty) <$> go cons arg
+       Ext (TravPacked ty arg) -> Ext <$> (TravPacked ty) <$> go cons arg
        Ext (L p e)    -> Ext <$> (L p) <$> go cons e
        Ext (LinearExt{}) -> error $ "tagDataCons: SExpFrontend doesn't support linear types yet."
 

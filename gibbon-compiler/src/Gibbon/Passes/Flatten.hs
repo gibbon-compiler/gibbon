@@ -295,8 +295,16 @@ flattenExp0 ddfs env2 e0 =
         L0.BenchE fn tyapps args b -> do
           (bnds, args') <- unzip <$> mapM go args
           pure (concat bnds, Ext $ L0.BenchE fn tyapps args' b)
-        L0.ParE0 _ls -> do
-          error "flattenL0: ParE0"
+        L0.ParE0 _ls -> error $ "flattenL0: ParE0 wasn't desugared: " ++ sdoc e0
+        L0.PrintPacked ty arg -> do
+          (bnds, arg') <- go arg
+          pure (bnds, Ext $ L0.PrintPacked ty arg')
+        L0.CopyPacked ty arg -> do
+          (bnds, arg') <- go arg
+          pure (bnds, Ext $ L0.CopyPacked ty arg')
+        L0.TravPacked ty arg -> do
+          (bnds, arg') <- go arg
+          pure (bnds, Ext $ L0.TravPacked ty arg')
         L0.L p e -> do
           (bnd1,e') <- flattenExp0 ddfs env2 e
           pure (bnd1, Ext $ L0.L p e')

@@ -13,7 +13,7 @@ This module is the first attempt to do that.
 -}
 
 module Gibbon.L0.Specialize2
-  (bindLambdas, monomorphize, specLambdas, desugarParE0, toL1)
+  (bindLambdas, monomorphize, specLambdas, desugarL0, toL1)
   where
 
 import           Control.Monad.State
@@ -22,9 +22,7 @@ import           Data.Foldable ( foldlM )
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           GHC.Stack (HasCallStack)
-#if !MIN_VERSION_base(4,15,0)
-import           GHC.List (zip3)
-#endif
+import           Data.List (zip3)
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
@@ -192,6 +190,9 @@ toL1 Prog{ddefs, fundefs, mainExp} =
                 [] -> Ext $ L1.BenchE fn [] (map toL1Exp args) b
                 _  -> error "toL1: Polymorphic 'bench' not supported yet."
             ParE0{} -> error "toL1: ParE0"
+            PrintPacked{} -> error "toL1: PrintPacked"
+            CopyPacked{} -> error "toL1: CopyPacked"
+            TravPacked{} -> error "toL1: TravPacked"
             LinearExt{} -> error $ "toL1: a linear types extension wasn't desugared: " ++ sdoc ex
             -- Erase srclocs while going to L1
             L _ e   -> toL1Exp e
@@ -596,6 +597,15 @@ collectMonoObls ddefs env2 toplevel ex =
         ParE0 ls -> do
           ls' <- mapM (collectMonoObls ddefs env2 toplevel) ls
           pure $ Ext $ ParE0 ls'
+        PrintPacked ty arg -> do
+          arg' <- collectMonoObls ddefs env2 toplevel arg
+          pure $ Ext $ PrintPacked ty arg'
+        CopyPacked ty arg -> do
+          arg' <- collectMonoObls ddefs env2 toplevel arg
+          pure $ Ext $ CopyPacked ty arg'
+        TravPacked ty arg -> do
+          arg' <- collectMonoObls ddefs env2 toplevel arg
+          pure $ Ext $ TravPacked ty arg'
         L p e -> do
           e' <- go e
           pure $ Ext $ L p e'
@@ -699,6 +709,9 @@ monoLambdas ex =
     Ext (FunRefE{})  -> pure ex
     Ext (BenchE{})   -> pure ex
     Ext (ParE0 ls)   -> Ext <$> ParE0 <$> mapM monoLambdas ls
+    Ext (PrintPacked ty arg)-> Ext <$> (PrintPacked ty) <$> monoLambdas arg
+    Ext (CopyPacked ty arg)-> Ext <$> (CopyPacked ty) <$> monoLambdas arg
+    Ext (TravPacked ty arg)-> Ext <$> (TravPacked ty) <$> monoLambdas arg
     Ext (L p e)      -> Ext <$> (L p) <$> monoLambdas e
     Ext (LinearExt{}) -> error $ "monoLambdas: a linear types extension wasn't desugared: " ++ sdoc ex
     SpawnE f tyapps args ->
@@ -791,6 +804,9 @@ updateTyConsExp ddefs mono_st ex =
     Ext (FunRefE{})    -> ex
     Ext (BenchE{})     -> ex
     Ext (ParE0 ls)     -> Ext $ ParE0 $ map go ls
+    Ext (PrintPacked ty arg) -> Ext $ PrintPacked ty (go arg)
+    Ext (CopyPacked ty arg) -> Ext $ CopyPacked ty (go arg)
+    Ext (TravPacked ty arg) -> Ext $ TravPacked ty (go arg)
     Ext (L p e)        -> Ext $ L p (go e)
     Ext (LinearExt{})  -> error $ "updateTyConsExp: a linear types extension wasn't desugared: " ++ sdoc ex
   where
@@ -1143,6 +1159,9 @@ specLambdasExp ddefs env2 ex =
                                          ls
           state (\st -> ((), st { sp_fundefs = foldr mb_insert (sp_fundefs st) mb_fns }))
           pure $ mkLets (concat binds) (Ext $ ParE0 calls)
+        PrintPacked ty arg -> Ext <$> (PrintPacked ty) <$> go arg
+        CopyPacked ty arg -> Ext <$> (CopyPacked ty) <$> go arg
+        TravPacked ty arg -> Ext <$> (TravPacked ty) <$> go arg
         LinearExt{}  -> error $ "specLambdasExp: a linear types extension wasn't desugared: " ++ sdoc ex
         L p e -> Ext <$> (L p) <$> go e
   where
@@ -1191,6 +1210,9 @@ specLambdasExp ddefs env2 ex =
             FunRefE _ f         -> f : acc
             BenchE{}            -> acc
             ParE0 ls            -> foldr collectFunRefs acc ls
+            PrintPacked _ty arg -> collectFunRefs arg acc
+            CopyPacked _ty arg -> collectFunRefs arg acc
+            TravPacked _ty arg -> collectFunRefs arg acc
             L _ e1              -> collectFunRefs e1 acc
             LinearExt{}         -> error $ "collectFunRefs: a linear types extension wasn't desugared: " ++ sdoc ex
 
@@ -1226,6 +1248,9 @@ specLambdasExp ddefs env2 ex =
             FunRefE _ f         -> f : acc
             BenchE{}            -> acc
             ParE0 ls            -> foldr collectAllFuns acc ls
+            PrintPacked _ty arg -> collectAllFuns arg acc
+            CopyPacked _ty arg -> collectAllFuns arg acc
+            TravPacked _ty arg -> collectAllFuns arg acc
             L _ e1              -> collectAllFuns e1 acc
             LinearExt{}         -> error $ "collectAllFuns: a linear types extension wasn't desugared: " ++ sdoc ex
 
@@ -1286,6 +1311,15 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
         (Ext PolyAppE{}) -> pure ([], e0)
         (Ext FunRefE{})  -> pure ([], e0)
         (Ext BenchE{})   -> pure ([], e0)
+        (Ext (PrintPacked ty arg)) -> do
+          (lts, arg') <- go arg
+          pure (lts, Ext (PrintPacked ty arg'))
+        (Ext (CopyPacked ty arg)) -> do
+          (lts, arg') <- go arg
+          pure (lts, Ext (CopyPacked ty arg'))
+        (Ext (TravPacked ty arg)) -> do
+          (lts, arg') <- go arg
+          pure (lts, Ext (TravPacked ty arg'))
         (Ext (L p e1))     -> do
           (ls, e1') <- go e1
           pure (ls, Ext $ L p e1')
@@ -1330,18 +1364,18 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
 
 --------------------------------------------------------------------------------
 
--- | Desugar parallel tuples to explicit spawn's and sync's.
-desugarParE0 :: Prog0 -> PassM Prog0
-desugarParE0 prg@Prog{fundefs,mainExp} = do
+-- | Desugar parallel tuples to spawn's and sync's, and printPacked into function calls.
+desugarL0 :: Prog0 -> PassM Prog0
+desugarL0 prg = do
+  Prog{fundefs,mainExp} <- addRepairFns prg
   fundefs' <- mapM (\fn@FunDef{funBody} -> go funBody >>= \b -> pure $ fn {funBody = b}) fundefs
   mainExp' <- case mainExp of
                 Nothing     -> pure Nothing
                 Just (e,ty) -> Just <$> (,ty) <$> go e
   pure $ prg { fundefs = fundefs', mainExp = mainExp' }
   where
-    err1 msg = error $ "desugarParE0: " ++ msg
+    err1 msg = error $ "desugarL0: " ++ msg
 
-    -- | Turn ParE0 into explicit spawn's and sync's
     go :: Exp0 -> PassM Exp0
     go ex =
       case ex of
@@ -1359,12 +1393,12 @@ desugarParE0 prg@Prog{fundefs,mainExp} = do
                     case args of
                       [ls, Ext (FunRefE _ fp)]             -> [ls, VarE fp]
                       [ls, Ext (L _ (Ext (FunRefE _ fp)))] -> [ls, VarE fp]
-                      _ -> error $ "desugarParE0: vsort" ++ sdoc ex
+                      _ -> error $ "desugarL0: vsort" ++ sdoc ex
                   InplaceVSortP{} ->
                     case args of
                       [ls, Ext (FunRefE _ fp)]             -> [ls, VarE fp]
                       [ls, Ext (L _ (Ext (FunRefE _ fp)))] -> [ls, VarE fp]
-                      _ -> error $ "desugarParE0: vsort" ++ sdoc ex
+                      _ -> error $ "desugarL0: vsort" ++ sdoc ex
                   _ -> args
           args'' <- mapM go args'
           pure $ PrimAppE pr args''
@@ -1379,11 +1413,12 @@ desugarParE0 prg@Prog{fundefs,mainExp} = do
                       []
                       spawns
               ls'' = ls' ++ [(a,[],b,c)]
-              binds = ls'' ++ [("_", [], ProdTy [], SyncE)]
+          ls''' <- mapM (\(w,x,y,z) -> (w,x,y,) <$> go z) ls''
+          let binds = ls''' ++ [("_", [], ProdTy [], SyncE)]
               bod' = foldr (\((x,_,_,_),i) acc ->
                                 gSubstE (ProjE i (VarE v)) (VarE x) acc)
                            bod
-                           (zip ls'' [0..])
+                           (zip ls''' [0..])
           bod'' <- go bod'
           pure $  mkLets binds bod''
         LetE (v,tyapps,ty,rhs) bod -> LetE <$> (v,tyapps,ty,) <$> go rhs <*> go bod
@@ -1404,14 +1439,150 @@ desugarParE0 prg@Prog{fundefs,mainExp} = do
             PolyAppE{} -> err1 (sdoc ex)
             FunRefE{}  -> err1 (sdoc ex)
             BenchE fn _tyapps args b -> (\a -> Ext $ BenchE fn [] a b) <$> mapM go args
-            ParE0{} -> err1 "toL1: ParE0"
+            ParE0 ls -> err1 ("unbound ParE0" ++ sdoc ls)
+            PrintPacked ty arg
+              | (PackedTy tycon _) <- ty -> do
+                  let f = mkPrinterName tycon
+                  pure $ AppE f [] [arg]
+              | otherwise -> err1 $ "printPacked without a packed type. Got " ++ sdoc ty
+            CopyPacked ty arg
+              | (PackedTy tycon _) <- ty -> do
+                  let f = mkCopyFunName tycon
+                  pure $ AppE f [] [arg]
+              | otherwise -> err1 $ "printPacked without a packed type. Got " ++ sdoc ty
+            TravPacked ty arg
+              | (PackedTy tycon _) <- ty -> do
+                  let f = mkTravFunName tycon
+                  pure $ AppE f [] [arg]
+              | otherwise -> err1 $ "printPacked without a packed type. Got " ++ sdoc ty
             L p e   -> Ext <$> (L p) <$> (go e)
             LinearExt{} -> err1 (sdoc ex)
 
 --------------------------------------------------------------------------------
 
--- markRecursiveFuns :: Prog0 -> Prog0
--- markRecursive = _todo
+-- | Add copy & traversal functions for each data type in a prog
+addRepairFns :: Prog0 -> PassM Prog0
+addRepairFns (Prog dfs fds me) = do
+  newFns <- concat <$>
+              mapM (\d -> do
+                    copy_fn  <- genCopyFn d
+                    copy2_fn <- genCopySansPtrsFn d
+                    trav_fn  <- genTravFn d
+                    print_fn <- genPrintFn d
+                    return [copy_fn, copy2_fn, trav_fn, print_fn])
+              (filter (not . isVoidDDef) (M.elems dfs))
+  let fds' = fds `M.union` (M.fromList $ map (\f -> (funName f, f)) newFns)
+  pure $ Prog dfs fds' me
 
--- inlineFuns :: Prog0 -> Prog0
--- inlineFuns prg@Prog{fundefs,mainExp} =
+
+-- | Generate a copy function for a particular data definition.
+-- Note: there will be redundant let bindings in the function body which may need to be inlined.
+genCopyFn :: DDef0 -> PassM FunDef0
+genCopyFn DDef{tyName, dataCons} = do
+  arg <- gensym $ "arg"
+  casebod <- forM dataCons $ \(dcon, dtys) ->
+             do let tys = map snd dtys
+                xs <- mapM (\_ -> gensym "x") tys
+                ys <- mapM (\_ -> gensym "y") tys
+                -- let packed_vars = map fst $ filter (\(x,ty) -> isPackedTy ty) (zip ys tys)
+                let bod = foldr (\(ty,x,y) acc ->
+                                     case ty of
+                                       PackedTy tycon _ -> LetE (y, [], ty, AppE (mkCopyFunName tycon) [] [VarE x]) acc
+                                       _ -> LetE (y, [], ty, VarE x) acc)
+                            (DataConE (ProdTy []) dcon $ map VarE ys) (zip3 tys xs ys)
+                return (dcon, map (\x -> (x,(ProdTy []))) xs, bod)
+  return $ FunDef { funName = mkCopyFunName (fromVar tyName)
+                  , funArgs = [arg]
+                  , funTy   = (ForAll [] (ArrowTy [PackedTy (fromVar tyName) []] (PackedTy (fromVar tyName) [])))
+                  , funBody = CaseE (VarE arg) casebod
+                  , funRec = Rec
+                  , funInline = NoInline
+                  }
+
+genCopySansPtrsFn :: DDef0 -> PassM FunDef0
+genCopySansPtrsFn DDef{tyName,dataCons} = do
+  arg <- gensym $ "arg"
+  casebod <- forM dataCons $ \(dcon, dtys) ->
+             do let tys = map snd dtys
+                xs <- mapM (\_ -> gensym "x") tys
+                ys <- mapM (\_ -> gensym "y") tys
+                -- let packed_vars = map fst $ filter (\(x,ty) -> isPackedTy ty) (zip ys tys)
+                let bod = foldr (\(ty,x,y) acc ->
+                                     case ty of
+                                       PackedTy tycon _ -> LetE (y, [], ty, AppE (mkCopySansPtrsFunName tycon) [] [VarE x]) acc
+                                       _ -> LetE (y, [], ty, VarE x) acc)
+                            (DataConE (ProdTy []) dcon $ map VarE ys) (zip3 tys xs ys)
+                return (dcon, map (\x -> (x,(ProdTy []))) xs, bod)
+  return $ FunDef { funName = mkCopySansPtrsFunName (fromVar tyName)
+                  , funArgs = [arg]
+                  , funTy   = (ForAll [] (ArrowTy [PackedTy (fromVar tyName) []] (PackedTy (fromVar tyName) [])))
+                  , funBody = CaseE (VarE arg) casebod
+                  , funRec = Rec
+                  , funInline = NoInline
+                  }
+
+
+
+
+-- | Traverses a packed data type.
+genTravFn :: DDef0 -> PassM FunDef0
+genTravFn DDef{tyName, dataCons} = do
+  arg <- gensym $ "arg"
+  casebod <- forM dataCons $ \(dcon, tys) ->
+             do xs <- mapM (\_ -> gensym "x") tys
+                ys <- mapM (\_ -> gensym "y") tys
+                let bod = foldr (\(ty,x,y) acc ->
+                                     case ty of
+                                       PackedTy tycon _ -> LetE (y, [], ProdTy [], AppE (mkTravFunName tycon) [] [VarE x]) acc
+                                       _ -> acc)
+                          (MkProdE [])
+                          (zip3 (map snd tys) xs ys)
+                return (dcon, map (\x -> (x,ProdTy [])) xs, bod)
+  return $ FunDef { funName = mkTravFunName (fromVar tyName)
+                  , funArgs = [arg]
+                  , funTy   = (ForAll [] (ArrowTy [PackedTy (fromVar tyName) []] (ProdTy [])))
+                  , funBody = CaseE (VarE arg) casebod
+                  , funRec = Rec
+                  , funInline = NoInline
+                  }
+
+
+-- | Print a packed datatype.
+genPrintFn :: DDef0 -> PassM FunDef0
+genPrintFn DDef{tyName, dataCons} = do
+  arg <- gensym $ "arg"
+  casebod <- forM dataCons $ \(dcon, tys) ->
+             do xs <- mapM (\_ -> gensym "x") tys
+                ys <- mapM (\_ -> gensym "y") tys
+                let bnds = foldr (\(ty,x,y) acc ->
+                                     case ty of
+                                       IntTy   -> (y, [], ProdTy [], PrimAppE PrintInt [VarE x]) : acc
+                                       FloatTy -> (y, [], ProdTy [], PrimAppE PrintFloat [VarE x]) : acc
+                                       SymTy0  -> (y, [], ProdTy [], PrimAppE PrintSym [VarE x]) : acc
+                                       BoolTy  -> (y, [], ProdTy [], PrimAppE PrintBool [VarE x]) : acc
+                                       PackedTy tycon _ -> (y, [], ProdTy [], AppE (mkPrinterName tycon) [] [VarE x]) : acc
+                                       SymDictTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "SymDict")]) : acc
+                                       VectorTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "Vector")]) : acc
+                                       PDictTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "PDict")]) : acc
+                                       ListTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "List")]) : acc
+                                       ArenaTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "Arena")]) : acc
+                                       SymSetTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "SymSet")]) : acc
+                                       SymHashTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "SymHash")]) : acc
+                                       IntHashTy{} -> (y, [], ProdTy [], PrimAppE PrintSym [LitSymE (toVar "IntHash")]) : acc
+                                       _ -> acc)
+                          []
+                          (zip3 (map snd tys) xs ys)
+                w1 <- gensym "wildcard"
+                w2 <- gensym "wildcard"
+                let bnds' = [(w1, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar ("(" ++ dcon ++ " ")))])] ++
+                            bnds ++
+                            [(w2, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar ")"))])]
+                    bod = mkLets bnds' (MkProdE [])
+                return (dcon, map (\x -> (x,ProdTy [])) xs, bod)
+  return $ FunDef { funName = mkPrinterName (fromVar tyName)
+                  , funArgs = [arg]
+                  , funTy   = (ForAll [] (ArrowTy [PackedTy (fromVar tyName) []] (ProdTy [])))
+                  , funBody = CaseE (VarE arg) casebod
+                  , funRec = Rec
+                  , funInline = NoInline
+                  }

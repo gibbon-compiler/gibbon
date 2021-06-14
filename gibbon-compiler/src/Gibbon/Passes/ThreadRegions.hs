@@ -74,7 +74,7 @@ threadRegions Prog{ddefs,fundefs,mainExp} = do
   return $ Prog ddefs fundefs' mainExp'
 
 threadRegionsFn :: DDefs Ty2 -> FunDefs2 -> L2.FunDef2 -> PassM L2.FunDef2
-threadRegionsFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
+threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
   let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
       initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
@@ -82,6 +82,9 @@ threadRegionsFn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
   -- Boundschecking
   dflags <- getDynFlags
   let bod'' = if gopt Opt_BigInfiniteRegions dflags
+              then bod'
+              -- This function is always given a BigInfinite region.
+              else if isCopySansPtrsFunName funName
               then bod'
               else
                 let packed_outs = getPackedTys (arrOut funTy)

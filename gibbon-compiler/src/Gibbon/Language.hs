@@ -613,11 +613,11 @@ primArgsTy p =
     IntHashInsert -> [IntHashTy,SymTy,IntTy]
     IntHashLookup -> [IntHashTy,SymTy]
     ReadPackedFile{} -> []
+    WritePackedFile _ ty -> [ty]
     ReadArrayFile{}  -> []
     (ErrorP _ _) -> []
     RequestEndOf  -> error "primArgsTy: RequestEndOf not handled yet"
     RequestSizeOf -> error "primArgsTy: RequestSizeOf not handled yet"
-    WritePackedFile{} -> error "primArgsTy: WritePackedFile not handled yet"
     Write3dPpmFile{} -> error "primArgsTy: Write3dPpmFile not handled yet"
 
 -- | Return type for a primitive operation.
@@ -707,10 +707,10 @@ primRetTy p =
     IntHashLookup  -> IntTy
     (ErrorP _ ty)  -> ty
     ReadPackedFile _ _ _ ty -> ty
+    WritePackedFile{} -> ProdTy []
     ReadArrayFile _ ty      -> ty
     RequestEndOf  -> CursorTy
     RequestSizeOf -> IntTy
-    WritePackedFile{} -> error "primRetTy: WritePackedFile not handled yet"
     Write3dPpmFile{} -> error "primRetTy: Write3dPpmFile not handled yet"
 
 stripTyLocs :: UrTy a -> UrTy ()
