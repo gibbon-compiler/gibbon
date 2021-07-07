@@ -1,4 +1,4 @@
--- module Compiler where
+module Compiler where
 
 import Gibbon.Prelude
 import Gibbon.List
@@ -611,6 +611,7 @@ data PseudoX86 = ProgramX86 Ty (List Sym) Instrs
 data Instrs = InstrCons Instr Instrs
             | InstrNil
             | InstrAppend Instrs Instrs
+            | InstrAppend2 Label Instrs Instrs
   deriving (Show, Generic, NFData)
 
 data Instr = AddQ ArgX86 ArgX86
@@ -637,6 +638,18 @@ data ArgX86 = IntX86 Int
 --------------------------------------------------------------------------------
 -- Copy, traverse, and print
 
+-- -- Prelude
+-- .globl main
+-- main:
+-- pushq %rbp
+-- movq %rsp, %rbp
+-- -- Conclusion
+-- movq %rsp, %rbp
+-- callq print_any
+-- popq %rbp
+-- movq $0, %rax
+-- retq
+
 print_pseudox86 :: PseudoX86 -> ()
 print_pseudox86 prg =
   case prg of
@@ -644,7 +657,10 @@ print_pseudox86 prg =
       let _ = printsym (quote "(locals ")
           _ = print_locals locals
           _ = printsym (quote ")\n")
-      in print_instrs instrs
+          _ = printsym (quote "main:")
+          _ = print_newline()
+          _ = print_instrs instrs
+      in ()
     ErrorX86 err ->
       let _ = printsym (quote "ErrorX86: ")
           _ = printsym err
@@ -664,6 +680,15 @@ print_instrs instrs =
           _ = print_newline()
           _ = print_instrs instrs2
       in ()
+    InstrAppend2 lbl instrs1 instrs2 ->
+      let _ = printsym lbl
+          _ = printsym (quote ":")
+          _ = print_newline()
+          _ = print_instrs instrs1
+          _ = print_newline()
+          _ = print_instrs instrs2
+      in ()
+
 
 print_instr :: Instr -> ()
 print_instr instr =
@@ -1424,7 +1449,7 @@ selectInstrsBlk blk =
       -- better for block level parallelism
       let instrs1 = selectInstrsTail tail
           instrs2 = selectInstrsBlk rst
-      in InstrAppend instrs1 instrs2
+      in InstrAppend2 lbl instrs1 instrs2
 
     BlockAppend blk1 blk2 ->
       -- TRAVERSAL: blk1 is traversed (random access)
@@ -1444,7 +1469,7 @@ selectInstrsBlk_par blk =
       let instrs1 = spawn (selectInstrsTail tail)
           instrs2 = selectInstrsBlk_par rst
           _ = sync
-      in InstrAppend instrs1 instrs2
+      in InstrAppend2 lbl instrs1 instrs2
 
     BlockAppend blk1 blk2 ->
       -- TRAVERSAL: blk1 is traversed (random access)
@@ -1462,8 +1487,9 @@ selectInstrsTail2 tail blk_rst =
           let arg' = selectInstrsArg arg
               arg2 = (RegX86 (quote "rax"))
               instr1 = (MovQ arg' arg2)
+              instr2 = (JumpQ (quote "conclusion"))
               instrs_rst = selectInstrsBlk blk_rst
-          in InstrCons instr1 instrs_rst
+          in InstrCons instr1 (InstrCons instr2 instrs_rst)
         NegC arg ->
           let arg' = selectInstrsArg arg
               instr1 = (MovQ arg' (RegX86 (quote "rax")))
@@ -1641,15 +1667,17 @@ selectInstrsTail tail =
       case exp of
         ArgC arg ->
           let arg' = selectInstrsArg arg
-          in InstrCons (MovQ arg' (RegX86 (quote "rax"))) InstrNil
+          in InstrCons (MovQ arg' (RegX86 (quote "rax"))) (InstrCons (JumpQ (quote "conclusion")) InstrNil)
         NegC arg ->
           let arg' = selectInstrsArg arg
           in InstrCons (MovQ arg' (RegX86 (quote "rax")))
-             (InstrCons (NegQ (RegX86 (quote "rax"))) InstrNil)
+             (InstrCons (NegQ (RegX86 (quote "rax")))
+              (InstrCons (JumpQ (quote "conclusion")) InstrNil))
         NotC arg ->
           let arg' = selectInstrsArg arg
           in InstrCons (MovQ arg' (RegX86 (quote "rax")))
-             (InstrCons (XorQ (IntX86 1) (RegX86 (quote "rax"))) InstrNil)
+             (InstrCons (XorQ (IntX86 1) (RegX86 (quote "rax")))
+              (InstrCons (JumpQ (quote "conclusion")) InstrNil))
         PrimC p a1 a2 ->
           let -- TRAVERSAL: smallish traversal. OK.
               _ = trav_prim p
@@ -1660,13 +1688,15 @@ selectInstrsTail tail =
                      instr1 = (MovQ a1' (RegX86 (quote "rax")))
                      a2' = selectInstrsArg a2
                      instr2 = (AddQ a2' (RegX86 (quote "rax")))
-                 in InstrCons instr1 (InstrCons instr2 InstrNil)
+                 in InstrCons instr1 (InstrCons instr2
+                                      (InstrCons (JumpQ (quote "conclusion")) InstrNil))
                SubP ->
                  let a1' = selectInstrsArg a1
                      instr1 = (MovQ a1' (RegX86 (quote "rax")))
                      a2' = selectInstrsArg a2
                      instr2 = (SubQ a2' (RegX86 (quote "rax")))
-                 in InstrCons instr1 (InstrCons instr2 InstrNil)
+                 in InstrCons instr1 (InstrCons instr2
+                                      (InstrCons (JumpQ (quote "conclusion")) InstrNil))
         CmpC c a1 a2 ->
           let -- TRAVERSAL: smallish traversal. OK.
               _ = trav_cmp c
@@ -1678,7 +1708,8 @@ selectInstrsTail tail =
                      instr1 = (CmpQ a1' a2')
                      instr2 = (SetEQ (quote "al"))
                      instr3 = (MovzbQ (RegX86 (quote "al")) (RegX86 (quote "rax")))
-                 in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 InstrNil))
+                     instrs_rst = (InstrCons (JumpQ (quote "conclusion")) InstrNil)
+                 in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 instrs_rst))
                -- LtP -> _todo
 
     SeqC stm rst ->
@@ -1852,6 +1883,10 @@ assignHomesInstrs homes instrs =
       let instr1' = assignHomesInstrs homes instr1
           instr2' = assignHomesInstrs homes instr2
       in InstrAppend instr1' instr2'
+    InstrAppend2 lbl instr1 instr2 ->
+      let instr1' = assignHomesInstrs homes instr1
+          instr2' = assignHomesInstrs homes instr2
+      in InstrAppend2 lbl instr1' instr2'
 
 assignHomesInstrs_par :: HomesEnv -> Instrs -> Instrs
 assignHomesInstrs_par homes instrs =
@@ -1866,6 +1901,11 @@ assignHomesInstrs_par homes instrs =
           instr2' = assignHomesInstrs_par homes instr2
           _ = sync
       in InstrAppend instr1' instr2'
+    InstrAppend2 lbl instr1 instr2 ->
+      let instr1' = spawn (assignHomesInstrs_par homes instr1)
+          instr2' = assignHomesInstrs_par homes instr2
+          _ = sync
+      in InstrAppend2 lbl instr1' instr2'
 
 assignHomesInstr :: HomesEnv -> Instr -> Instr
 assignHomesInstr homes instr =
@@ -1910,6 +1950,10 @@ countLeavesInstrs instrs =
       in n + rst
     InstrNil -> 0
     InstrAppend instr1 instr2 ->
+      let n1 = countLeavesInstrs instr1
+          n2 = countLeavesInstrs instr2
+      in n1 + n2
+    InstrAppend2 lbl instr1 instr2 ->
       let n1 = countLeavesInstrs instr1
           n2 = countLeavesInstrs instr2
       in n1 + n2
@@ -1994,40 +2038,45 @@ make_big_ex2 n =
   if n <= 0
   then SimplA (ArgA (IntArg 1))
   else
-    -- let v2 = gensym
     let v2 = quote "v2"
     in (LetA2 v2 (ArgA (IntArg (n-1))) (make_big_ex2 (n-1)))
 
-make_big_ex :: Int -> Int -> ExpA
-make_big_ex n d =
-  -- -- SMALL
-  -- if d > 6
-  -- OTHERWISE
-  if d > 10
+make_big_ex :: Int -> Int -> Int -> ExpA
+make_big_ex n d cutoff =
+  if d > cutoff
   then make_big_ex2 n
   else
-    -- let v1 = gensym
     let v1 = quote "v1"
-    in -- LetA v1 (ArgA (IntArg n))
-       (IfA (CmpA EqP (IntArg n) (IntArg 0))
-         (make_big_ex n (d+1))
-         (make_big_ex n (d+1)))
+    in (IfA (CmpA EqP (IntArg n) (IntArg 0))
+         (make_big_ex n (d+1) cutoff)
+         (make_big_ex n (d+1) cutoff))
 
 bench_seq_compiler :: ()
 bench_seq_compiler =
-  let ex = make_big_ex sizeParam 0
+  let ex = make_big_ex sizeParam 0 10
       p = ProgramA intTy ex
       compiled = iterate (compile2 p)
   in ()
 
 bench_par_compiler :: ()
 bench_par_compiler =
-  let ex = make_big_ex sizeParam 0
+  let ex = make_big_ex sizeParam 0 10
       p = ProgramA intTy ex
       compiled_par = iterate (compile2_par p)
+  in ()
+
+debug_seq_compiler :: ()
+debug_seq_compiler =
+  let -- ex = make_big_ex sizeParam 0 1
+      ex = (IfA (CmpA EqP (IntArg 1) (IntArg 1)) (SimplA (ArgA (IntArg 2))) (SimplA (ArgA (IntArg 3))))
+      p = ProgramA intTy ex
+      compiled = (compile2 p)
+      _ = print_pseudox86 compiled
   in ()
 
 gibbon_main =
   if eqBenchProg "seqcompiler"
   then bench_seq_compiler
-  else bench_par_compiler
+  else if eqBenchProg "parcompiler"
+  then bench_par_compiler
+  else debug_seq_compiler
