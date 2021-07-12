@@ -1,1 +1,4 @@
-packages: gibbon-compiler gibbon-stdlib
+packages: gibbon-compiler gibbon-stdlib gibbon-ghc-plugin gibbon-examples
+
+package *
+    ghc-options: -fexpose-all-unfoldings
