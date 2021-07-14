@@ -6,6 +6,7 @@ build-type:          Simple
 
 executable gibbon-examples
   main-is:             Main.hs
+  other-modules:       BinTree
   build-depends:
                        -- base >= 4.9 &&  < 4.16
                        base == 4.15.*

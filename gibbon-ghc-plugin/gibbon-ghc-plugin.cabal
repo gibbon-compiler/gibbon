@@ -13,4 +13,6 @@ library
                     -- , ghc-lib == 9.0.1.20210324
                       base == 4.15.*
                     , ghc == 9.0.1
+                    , containers
     default-language: Haskell2010
+    default-extensions: ScopedTypeVariables
