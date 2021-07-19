@@ -8,13 +8,17 @@ import           GHC.Types.Var.Set as GHC
 import           Data.Data ( Data )
 import qualified Data.Set as Set
 
+import Gibbon.CoreToL0 ( coreToL0 )
+import Gibbon.Utils
+
 --------------------------------------------------------------------------------
 -- GHC Core-to-Core Plugin
 --------------------------------------------------------------------------------
 
 plugin :: GHC.Plugin
 plugin = GHC.defaultPlugin { GHC.installCoreToDos = installGibbonPlugin
-                           , GHC.pluginRecompile = GHC.purePlugin }
+                           -- , GHC.pluginRecompile = GHC.purePlugin
+                           }
 
 installGibbonPlugin :: [GHC.CommandLineOption] -> [GHC.CoreToDo] -> GHC.CoreM [GHC.CoreToDo]
 installGibbonPlugin _ todos = return (gibbonCoreTodo : todos)
@@ -41,7 +45,7 @@ gibbonCoreTodo = GHC.CoreDoPluginPass "GibbonLiftPacked" test
                       external_ids
 
         -- Things defined in this module.
-        let (module_binds_ls,module_binds,module_ids) =
+        let (_module_binds_ls,module_binds,module_ids) =
                 foldr (\b (acc1,acc2,acc3) -> case b of
                                      GHC.NonRec i rhs -> ((i,rhs):acc1,GHC.extendVarEnv acc2 i rhs, i:acc3)
                                      GHC.Rec ls -> foldr (\(i,rhs) (acc4,acc5,acc6) ->
@@ -81,21 +85,21 @@ gibbonCoreTodo = GHC.CoreDoPluginPass "GibbonLiftPacked" test
                   else case GHC.lookupVarEnv external_unfoldings x of
                            Nothing ->
                               -- GHC.pprSorry ("No unfolding available for:") (GHC.ppr x)
-                               GHC.pprTrace "ERROR:" (GHC.ppr (Ppr.text "No unfolding available for:" Ppr.<> GHC.ppr x))
+                               GHC.pprTrace "WARNING:" (GHC.ppr (Ppr.text "No unfolding available for:" Ppr.<> GHC.ppr x))
                                    (fixpoint dcons_ls binds_ls sucked_in xs)
                            Just rhs ->
                                let binds_ls1 = (x,rhs):binds_ls
                                    sucked_in1 = GHC.extendDVarSet sucked_in x
                                    xs1 = (GHC.exprSomeFreeVarsList GHC.isId rhs) ++ xs
-                                   str = varToString x
                                in GHC.pprTrace "(2):" (GHC.ppr (x,rhs,GHC.exprSomeFreeVarsList GHC.isId rhs))
                                   fixpoint dcons_ls binds_ls1 sucked_in1 xs1
 
         -- The main thing.
         let (dcons,binds) = fixpoint [] [] GHC.emptyDVarSet to_lift
 
-        GHC.putMsg (Ppr.text "\nDatacons:\n----------------------------------------" Ppr.$$ (GHC.ppr dcons))
-        GHC.putMsg (Ppr.text "\nTransitive closure:\n----------------------------------------" Ppr.$$ (GHC.ppr binds))
+        -- GHC.putMsg (Ppr.text "\nDatacons:\n----------------------------------------" Ppr.$$ (GHC.ppr dcons))
+        -- GHC.putMsg (Ppr.text "\nTransitive closure:\n----------------------------------------" Ppr.$$ (GHC.ppr binds))
+        l0_prog <- coreToL0 dcons binds
         pure mod_guts
 
 type PackedAnnEnv = GHC.NameEnv PackedAnn
@@ -116,6 +120,3 @@ excludedFromClos = Set.fromList $
     [ "$fNumInt", "$fNumInt_$c+", "$fNumInt_$c-", "$fNumInt_$c*",
       "$fNumInt_$cnegate", "$fNumInt_$cabs", "$fNumInt_$csignum",
       "$fNumInt_$cfromInteger" ]
-
-varToString :: GHC.Var -> String
-varToString = GHC.occNameString . GHC.nameOccName . GHC.varName
