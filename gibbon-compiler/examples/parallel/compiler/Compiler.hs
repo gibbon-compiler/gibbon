@@ -1449,7 +1449,7 @@ selectInstrsBlk blk =
       -- better for block level parallelism
       let instrs1 = selectInstrsTail tail
           instrs2 = selectInstrsBlk rst
-      in InstrAppend2 lbl instrs1 instrs2
+      in InstrAppend instrs1 instrs2
 
     BlockAppend blk1 blk2 ->
       -- TRAVERSAL: blk1 is traversed (random access)
