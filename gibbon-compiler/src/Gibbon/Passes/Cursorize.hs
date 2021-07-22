@@ -1118,7 +1118,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                     go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
 
                 VectorTy el_ty -> do
-                  tmp <- gensym "read_list_tuple"
+                  tmp <- gensym "read_vec_tuple"
                   let tenv' = M.union (M.fromList [(tmp     , ProdTy [VectorTy el_ty, CursorTy]),
                                                    (v       , VectorTy el_ty),
                                                    (toEndV v, CursorTy)])
@@ -1237,14 +1237,52 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                 _ | isScalarTy ty -> do
                   (tenv', binds) <- scalarBinds ty v loc tenv
                   let loc_bind = case M.lookup v indirections_env of
-                                   -- This appears before the first packed field. Unpack it
-                                   -- in the usual way.
                                    Nothing ->
                                      (loc,[],CursorTy, VarE cur)
-                                   -- We need to read this using a random access node
+                                   -- Read this using a random access node
                                    Just (_var_loc, ind_var) ->
                                      (loc,[],CursorTy, VarE ind_var)
                       binds' = loc_bind:binds
+                      tenv'' = M.insert loc CursorTy tenv'
+                  bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv''
+                  return $ mkLets binds' bod
+
+                VectorTy el_ty -> do
+                  tmp <- gensym "read_vec_tuple"
+                  let tenv' = M.union (M.fromList [(tmp     , ProdTy [VectorTy el_ty, CursorTy]),
+                                                   (v       , VectorTy el_ty),
+                                                   (toEndV v, CursorTy)])
+                              tenv
+                      ty'   = stripTyLocs ty
+                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadVector loc (stripTyLocs el_ty)),
+                               (v       , [], ty'     , ProjE 0 (VarE tmp)),
+                               (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
+                      loc_bind = case M.lookup v indirections_env of
+                                   Nothing ->
+                                     (loc, [], CursorTy, VarE cur)
+                                   Just (_var_loc, ind_var) ->
+                                     (loc, [], CursorTy, VarE ind_var)
+                      binds' = loc_bind : binds
+                      tenv'' = M.insert loc CursorTy tenv'
+                  bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv''
+                  return $ mkLets binds' bod
+
+                ListTy el_ty -> do
+                  tmp <- gensym "read_list_tuple"
+                  let tenv' = M.union (M.fromList [(tmp     , ProdTy [VectorTy el_ty, CursorTy]),
+                                                   (v       , ListTy el_ty),
+                                                   (toEndV v, CursorTy)])
+                              tenv
+                      ty'   = stripTyLocs ty
+                      binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadList loc (stripTyLocs el_ty)),
+                               (v       , [], ty'     , ProjE 0 (VarE tmp)),
+                               (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
+                      loc_bind = case M.lookup v indirections_env of
+                                   Nothing ->
+                                     (loc, [], CursorTy, VarE cur)
+                                   Just (_var_loc, ind_var) ->
+                                     (loc, [], CursorTy, VarE ind_var)
+                      binds' = loc_bind : binds
                       tenv'' = M.insert loc CursorTy tenv'
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv''
                   return $ mkLets binds' bod

@@ -13,6 +13,10 @@ type Var = Sym
 data Arg = IntArg Int | TrueArg | FalseArg | VarArg Var
   deriving (Show, Generic, NFData)
 
+data ArgList = Arg_Cons Arg ArgList
+             | Arg_Nil
+  deriving (Show, Generic, NFData)
+
 data Prim = AddP | SubP | AndP | OrP
   deriving (Show, Generic, NFData)
 
@@ -22,39 +26,40 @@ data Cmp = EqP | LtP
 --------------------------------------------------------------------------------
 -- Environments
 
+
 type TypeEnv = List (Sym, Sym)
 type VarEnv = List (Sym, Sym)
 type AliasEnv = List (Sym, Sym)
 
-empty_env :: VarEnv
-empty_env =
+empty_varenv :: VarEnv
+{-# INLINE empty_varenv #-}
+empty_varenv =
   let x :: VarEnv
       x = alloc_ll
   in x
 
-insert_env :: VarEnv -> Var -> Var -> VarEnv
-insert_env env k v = cons_ll (k,v) env
+insert_varenv :: VarEnv -> Var -> Var -> VarEnv
+{-# INLINE insert_varenv #-}
+insert_varenv env k v = cons_ll (k,v) env
 
 default_sym :: Sym
 {-# INLINE default_sym #-}
 default_sym = quote "notfound"
 
-default_int :: Int
-{-# INLINE default_int #-}
-default_int = 0
+lookup_varenv :: VarEnv -> Var -> Var
+{-# INLINE lookup_varenv #-}
+lookup_varenv env k = lookupWithDefault default_sym k env
 
-lookup_env :: VarEnv -> Var -> Var
-lookup_env env k = lookupWithDefault default_sym k env
-
-contains_env :: VarEnv -> Var -> Bool
-contains_env env k =
+contains_varenv :: VarEnv -> Var -> Bool
+{-# INLINE contains_varenv #-}
+contains_varenv env k =
   let v = lookupWithDefault default_sym k env
   in if eqsym v default_sym
      then False
      else True
 
-print_env :: VarEnv -> ()
-print_env env =
+print_varenv :: VarEnv -> ()
+print_varenv env =
   if is_empty_ll env
   then let _ = printsym (quote "\n")
        in ()
@@ -66,7 +71,7 @@ print_env env =
         _ = printsym (quote ",")
         _ = printsym v1
         _ = printsym (quote "), ")
-    in print_env tl
+    in print_varenv tl
 
 lookupWithDefault :: b -> Sym -> List (Sym, b) -> b
 lookupWithDefault def k env =
@@ -79,27 +84,67 @@ lookupWithDefault def k env =
        then v1
        else lookupWithDefault def k tl
 
+----------------------------------------
 
 type HomesEnv = List (Sym, Int)
 
-empty_int_env :: HomesEnv
-empty_int_env =
+default_int :: Int
+{-# INLINE default_int #-}
+default_int = 0
+
+empty_intenv :: HomesEnv
+{-# INLINE empty_intenv #-}
+empty_intenv =
   let x :: HomesEnv
       x = alloc_ll
   in x
 
-insert_int_env :: HomesEnv -> Var -> Int -> HomesEnv
-insert_int_env env k v = cons_ll (k,v) env
+insert_intenv :: HomesEnv -> Var -> Int -> HomesEnv
+{-# INLINE insert_intenv #-}
+insert_intenv env k v = cons_ll (k,v) env
 
-lookup_int_env :: HomesEnv -> Var -> Int
-lookup_int_env env k = lookupWithDefault default_int k env
+lookup_intenv :: HomesEnv -> Var -> Int
+{-# INLINE lookup_intenv #-}
+lookup_intenv env k = lookupWithDefault default_int k env
 
-contains_int_env :: HomesEnv -> Var -> Bool
-contains_int_env env k =
+contains_intenv :: HomesEnv -> Var -> Bool
+{-# INLINE contains_intenv #-}
+contains_intenv env k =
   let v = lookupWithDefault default_int k env
   in if v == default_int
      then False
      else True
+
+----------------------------------------
+
+-- type FunTypeEnv = List (Sym, List Sym)
+
+-- default_funtype :: List Sym
+-- {-# INLINE default_funtype #-}
+-- default_funtype =
+--     let x :: List Sym
+--         x = alloc_ll
+--     in x
+
+-- empty_funtyenv :: FunTypeEnv
+-- empty_funtyenv =
+--   let x :: FunTypeEnv
+--       x = alloc_ll
+--   in x
+
+-- insert_funtyenv :: FunTypeEnv -> Var -> List Sym -> FunTypeEnv
+-- insert_funtyenv env k v = cons_ll (k,v) env
+
+-- lookupPrecisely_funtyenv :: FunTypeEnv -> Var -> (Bool, List Sym)
+-- lookupPrecisely_funtyenv env k =
+--   if is_empty_ll env
+--   then (False, default_funtype)
+--   else
+--     let (k1,v1) = head_ll env
+--         tl = (tail_ll env)
+--     in if eqsym k k1
+--        then (True, v1)
+--        else lookupPrecisely_funtyenv tl k
 
 --------------------------------------------------------------------------------
 
@@ -153,6 +198,12 @@ print_arg arg =
           _ = printsym v
           _ = printsym (quote ")")
       in ()
+
+copy_arglist :: ArgList -> ArgList
+copy_arglist ls =
+  case ls of
+    Arg_Nil -> Arg_Nil
+    Arg_Cons arg rst -> Arg_Cons (copy_arg arg) (copy_arglist rst)
 
 copy_prim :: Prim -> Prim
 copy_prim p =
@@ -213,6 +264,7 @@ data R = ProgramR Ty ExpR
 
 data SimplExpA = ArgA Arg | ReadA | NegA Arg | NotA Arg
                | PrimA Prim Arg Arg | CmpA Cmp Arg Arg
+               | AppA Var ArgList
   deriving (Show, Generic, NFData)
 
 data ExpA = SimplA SimplExpA
@@ -221,7 +273,19 @@ data ExpA = SimplA SimplExpA
           | IfA SimplExpA ExpA ExpA
   deriving (Show, Generic, NFData)
 
-data A = ProgramA Ty ExpA
+data FunA = MkFunA Var        -- function name
+                   Int        -- arity
+                   (List Ty)  -- argument types (this restricts functions to be first order only)
+                   Ty         -- return type
+                   (List Var) -- arguments
+                   ExpA       -- body
+
+data FunsA = FunsA_Cons FunA FunsA
+           | FunsA_Append FunsA FunsA
+           | FunsA_Nil
+  deriving (Show, Generic, NFData)
+
+data A = ProgramA Ty FunsA ExpA
        | ErrorA Ty
   deriving (Show, Generic, NFData)
 
@@ -284,9 +348,16 @@ print_simpl_expa exp =
           _ = print_arg a2
           _ = printsym (quote ")")
       in ()
+    AppA f args ->
+      let _ = printsym (quote "(AppA ")
+          _ = printsym f
+          _ = printsym (quote " ")
+          _ = printPacked args
+          _ = printsym (quote ")")
+      in ()
 
-print_expa :: ExpA -> ()
-print_expa exp =
+print_exp_a :: ExpA -> ()
+print_exp_a exp =
   case exp of
     SimplA simpl ->
       let _ = printsym (quote "(SimplA ")
@@ -299,7 +370,7 @@ print_expa exp =
           _ = printsym (quote " ")
           _ = print_simpl_expa rhs
           _ = printsym (quote " ")
-          _ = print_expa bod
+          _ = print_exp_a bod
           _ = printsym (quote ")")
       in ()
     LetA2 v rhs bod ->
@@ -308,27 +379,95 @@ print_expa exp =
           _ = printsym (quote " ")
           _ = print_simpl_expa rhs
           _ = printsym (quote " ")
-          _ = print_expa bod
+          _ = print_exp_a bod
           _ = printsym (quote ")")
       in ()
     IfA a b c ->
       let _ = printsym (quote "(IfA ")
           _ = print_simpl_expa a
           _ = printsym (quote " ")
-          _ = print_expa b
+          _ = print_exp_a b
           _ = printsym (quote " ")
-          _ = print_expa c
+          _ = print_exp_a c
           _ = printsym (quote ")")
       in ()
+
+print_funs_a :: FunsA -> ()
+print_funs_a funs =
+    case funs of
+      FunsA_Cons fun rst ->
+          let _ = print_newline()
+              _ = printsym (quote "(FunsA_Cons\n")
+              _ = print_fun_a fun
+              _ = print_funs_a rst
+              _ = printsym (quote ")")
+          in ()
+      FunsA_Append funs1 funs2 ->
+          let _ = print_newline()
+              _ = printsym (quote "(FunsA_Append")
+              _ = print_funs_a funs1
+              _ = print_funs_a funs2
+              _ = printsym (quote ")")
+          in ()
+      FunsA_Nil ->
+          printsym (quote "(FunsA_Nil)")
+
+print_fun_a :: FunA -> ()
+print_fun_a fun =
+    case fun of
+      MkFunA name arity intys retty args bod ->
+          let _ = printsym (quote "(Define " )
+              _ = printsym name
+              _ = printsym (quote " ")
+              _ = print_args_tys args intys
+              _ = printsym (quote ": ")
+              _ = printsym retty
+              _ = print_newline()
+              _ = printsym (quote "  ")
+              _ = print_exp_a bod
+              _ = printsym (quote ")")
+              _ = print_newline()
+          in ()
+
+print_args_tys :: List Var -> List Ty -> ()
+print_args_tys args tys =
+    if is_empty_ll args
+    then ()
+    else let v = head_ll args
+             ty = head_ll tys
+             rst1 = tail_ll args
+             rst2 = tail_ll tys
+             _ = printsym (quote "[")
+             _ = printsym v
+             _ = printsym (quote ":")
+             _ = printsym ty
+             _ = printsym (quote "]")
+             _ = printsym (quote " ")
+             _ = print_args_tys rst1 rst2
+         in ()
+
+print_args :: List Var -> ()
+print_args args =
+    if is_empty_ll args
+    then ()
+    else let v = head_ll args
+             rst = tail_ll args
+             _ = printsym v
+             _ = printsym (quote " ")
+             _ = print_args rst
+         in ()
+
 
 print_program_a :: A -> ()
 print_program_a prg =
   case prg of
-    ProgramA ty exp ->
+    ProgramA ty funs exp ->
       let _ = printsym (quote "(ProgramA ")
           _ = printsym ty
           _ = printsym (quote " ")
-          _ = print_expa exp
+          _ = print_funs_a funs
+          _ = print_newline()
+          _ = print_exp_a exp
           _ = printsym (quote ")")
       in ()
     ErrorA err ->
@@ -342,6 +481,8 @@ print_program_a prg =
 
 data ExpC = ArgC Arg | ReadC | NegC Arg | NotC Arg
           | PrimC Prim Arg Arg | CmpC Cmp Arg Arg
+          | CallC Var ArgList
+          | TailCall Var ArgList
   deriving (Show, Generic, NFData)
 
 data StmC = AssignC Var ExpC
@@ -359,7 +500,18 @@ data BlkC = BlockCons Label TailC BlkC
 
 data TailAndBlk = MkTailAndBlk TailC BlkC
 
-data C = ProgramC Ty (List Sym) BlkC
+data FunC = MkFunC Var        -- function name
+                   Int        -- arity
+                   (List Var) -- arguments
+                   (List Var) -- locals
+                   BlkC
+
+data FunsC = FunsC_Cons FunC FunsC
+           | FunsC_Append FunsC FunsC
+           | FunsC_Nil
+  deriving (Show, Generic, NFData)
+
+data C = ProgramC Ty (List Sym) FunsC BlkC
        | ErrorC Ty
   deriving (Show, Generic, NFData)
 
@@ -376,6 +528,7 @@ copy_expc exp =
     NotC arg -> NotC (copy_arg arg)
     PrimC p a1 a2 -> PrimC (copy_prim p) (copy_arg a1) (copy_arg a2)
     CmpC c a1 a2 -> CmpC (copy_cmp c) (copy_arg a1) (copy_arg a2)
+    CallC f args -> CallC f (copy_arglist args)
 
 trav_expc :: ExpC -> Int
 trav_expc exp =
@@ -393,6 +546,9 @@ trav_expc exp =
       let _ = trav_cmp c
           _ = trav_arg a1
           _ = trav_arg a2
+      in 1
+    CallC f args ->
+      let _ = travPacked args
       in 1
 
 copy_stm :: StmC -> StmC
@@ -479,6 +635,13 @@ print_expc exp =
           _ = print_arg a2
           _ = printsym (quote ")")
       in ()
+    CallC f args ->
+      let _ = printsym (quote "(CallC ")
+          _ = printsym f
+          _ = printsym (quote " ")
+          _ = printPacked args
+          _ = printsym (quote ")")
+      in ()
 
 print_stm :: StmC -> ()
 print_stm stm =
@@ -535,7 +698,7 @@ print_blk blk =
       in ()
     BlockNil -> printsym (quote "(BlockNil)")
     BlockAppend b1 b2 ->
-      let _ = printsym (quote "(BlockApend ")
+      let _ = printsym (quote "(BlockAppend ")
           _ = printsym (quote " ")
           _ = print_blk b1
           _ = printsym (quote " ")
@@ -554,16 +717,58 @@ print_tail_and_blk tlblk =
           _ = printsym (quote ")")
       in ()
 
+print_funs_c :: FunsC -> ()
+print_funs_c funs =
+    case funs of
+      FunsC_Cons fun rst ->
+          let _ = print_newline()
+              _ = printsym (quote "(FunsC_Cons\n")
+              _ = print_fun_c fun
+              _ = print_funs_c rst
+              _ = printsym (quote ")")
+          in ()
+      FunsC_Append funs1 funs2 ->
+          let _ = print_newline()
+              _ = printsym (quote "(FunsC_Append")
+              _ = print_funs_c funs1
+              _ = print_funs_c funs2
+              _ = printsym (quote ")")
+          in ()
+      FunsC_Nil ->
+          printsym (quote "(FunsC_Nil)")
+
+print_fun_c :: FunC -> ()
+print_fun_c fun =
+    case fun of
+      MkFunC name arity args locals bod ->
+          let _ = printsym (quote "(Define " )
+              _ = printsym name
+              _ = printsym (quote " [")
+              _ = print_args args
+              _ = printsym (quote "]")
+              _ = print_newline()
+              _ = printsym (quote "locals: ")
+              _ = print_locals locals
+              _ = print_newline()
+              _ = printsym (quote "  ")
+              _ = print_blk bod
+              _ = printsym (quote ")")
+              _ = print_newline()
+          in ()
+
 print_program_c :: C -> ()
 print_program_c prg =
   case prg of
-    ProgramC ty locals blk ->
+    ProgramC ty locals funs blk ->
       let _ = printsym (quote "(ProgramC ")
           _ = printsym ty
-          _ = printsym (quote " ")
+          _ = print_newline()
+          _ = print_funs_c funs
+          _ = print_newline()
           _ = printsym (quote "(locals ")
           _ = print_locals locals
-          _ = printsym (quote ") ")
+          _ = printsym (quote ")")
+          _ = print_newline()
           _ = print_blk blk
           _ = printsym (quote ")")
       in ()
@@ -584,28 +789,41 @@ print_locals ls =
         _ = printsym (quote " ")
     in print_locals tl
 
-print_varenv :: List (Sym,Sym) -> ()
-print_varenv ls =
-  if is_empty_ll ls
-  then ()
-  else
-    let (a,b) = head_ll ls
-        tl = tail_ll ls
-        _ = printsym (quote "(")
-        _ = printsym a
-        _ = printsym (quote ",")
-        _ = printsym b
-        _ = printsym (quote ")")
-        _ = printsym (quote " ")
-    in print_varenv tl
+-- print_varenv :: List (Sym,Sym) -> ()
+-- print_varenv ls =
+--   if is_empty_ll ls
+--   then ()
+--   else
+--     let (a,b) = head_ll ls
+--         tl = tail_ll ls
+--         _ = printsym (quote "(")
+--         _ = printsym a
+--         _ = printsym (quote ",")
+--         _ = printsym b
+--         _ = printsym (quote ")")
+--         _ = printsym (quote " ")
+--     in print_varenv tl
 
 --------------------------------------------------------------------------------
 -- X86 with variables
 
 type Reg = Sym
 
-data PseudoX86 = ProgramX86 Ty (List Sym) Instrs
+data PseudoX86 = ProgramX86 Ty (List Sym) FunsX86 Instrs
                | ErrorX86 Ty
+  deriving (Show, Generic, NFData)
+
+data FunX86 = MkFunX86
+                   Var        -- function name
+                   Int        -- arity
+                   (List Var) -- arguments
+                   (List Var) -- locals
+                   Instrs
+  deriving (Show, Generic, NFData)
+
+data FunsX86 = FunsX86_Cons FunX86 FunsX86
+             | FunsX86_Append FunsX86 FunsX86
+             | FunsX86_Nil
   deriving (Show, Generic, NFData)
 
 data Instrs = InstrCons Instr Instrs
@@ -653,11 +871,13 @@ data ArgX86 = IntX86 Int
 print_pseudox86 :: PseudoX86 -> ()
 print_pseudox86 prg =
   case prg of
-    ProgramX86 ty locals instrs ->
-      let _ = printsym (quote "(locals ")
-          _ = print_locals locals
-          _ = printsym (quote ")\n")
+    ProgramX86 ty locals funs instrs ->
+      let _ = print_funs_x86 funs
+          _ = print_newline()
           _ = printsym (quote "main:")
+          _ = print_newline()
+          _ = printsym (quote "locals: ")
+          _ = print_locals locals
           _ = print_newline()
           _ = print_instrs instrs
       in ()
@@ -665,6 +885,48 @@ print_pseudox86 prg =
       let _ = printsym (quote "ErrorX86: ")
           _ = printsym err
       in ()
+
+print_funs_x86 :: FunsX86 -> ()
+print_funs_x86 funs =
+    case funs of
+      FunsX86_Cons fun rst ->
+          let -- _ = print_newline()
+              -- _ = printsym (quote "(FunsX86_Cons\n")
+              _ = print_fun_x86 fun
+              _ = print_funs_x86 rst
+              -- _ = printsym (quote ")")
+          in ()
+      FunsX86_Append funs1 funs2 ->
+          let _ = print_newline()
+              -- _ = printsym (quote "(FunsX86_Append")
+              _ = print_funs_x86 funs1
+              _ = print_funs_x86 funs2
+              -- _ = printsym (quote ")")
+          in ()
+      FunsX86_Nil ->
+          ()
+          -- printsym (quote "(FunsC_Nil)")
+
+print_fun_x86 :: FunX86 -> ()
+print_fun_x86 fun =
+    case fun of
+      MkFunX86 name arity args locals bod ->
+          let -- _ = printsym (quote "(Define " )
+              -- _ = printsym name
+              -- _ = printsym (quote " [")
+              -- _ = print_args args
+              -- _ = printsym (quote "]")
+              -- _ = print_newline()
+              _ = printsym name
+              _ = printsym (quote ":")
+              _ = print_newline()
+              _ = printsym (quote "locals: ")
+              _ = print_locals locals
+              _ = print_newline()
+              _ = print_instrs bod
+              -- _ = printsym (quote ")")
+              -- _ = print_newline()
+          in ()
 
 print_instrs :: Instrs -> ()
 print_instrs instrs =
@@ -789,7 +1051,7 @@ typecheck :: R -> R
 typecheck prg =
   case prg of
     ProgramR expected exp ->
-      let actual = typecheckExp empty_env exp
+      let actual = typecheckExp empty_varenv exp
       in if eqTy expected actual
          -- COPY: exp is copied (indirection)
          then ProgramR expected exp
@@ -825,7 +1087,7 @@ typecheckExp ty_env exp =
       in typecheckCmp c te1 te2
     LetR v rhs bod ->
       let ty = typecheckExp ty_env rhs
-          ty_env' = insert_env ty_env v ty
+          ty_env' = insert_varenv ty_env v ty
       in typecheckExp ty_env' bod
     IfR a b c ->
       let t1 = typecheckExp ty_env a
@@ -844,8 +1106,8 @@ typecheckArg ty_env arg =
     TrueArg  -> boolTy
     FalseArg -> boolTy
     VarArg v ->
-      let ty = lookup_env ty_env v
-      -- lookup_env returns the same symbol its given if it doesn't find it in the dictionary.
+      let ty = lookup_varenv ty_env v
+      -- lookup_varenv returns the same symbol its given if it doesn't find it in the dictionary.
       -- So we do a little bit of error checking over here.
       in if eqTy ty v
          then errorTy
@@ -883,25 +1145,25 @@ typecheckCmp c ty1 ty2 =
 typecheckA :: A -> A
 typecheckA prg =
   case prg of
-    ProgramA expected exp ->
-      let actual = typecheckExpA empty_env exp
+    ProgramA expected funs exp ->
+      let actual = typecheckExpA empty_varenv exp
       in if eqTy expected actual
          -- COPY: exp is copied (indirection)
-         then ProgramA expected exp
+         -- COPY: funs is copied (indirection)
+         then ProgramA expected funs exp
          else ErrorA errorTy
     ErrorA err -> ErrorA err
 
 typecheckA_par :: A -> A
 typecheckA_par prg =
   case prg of
-    ProgramA expected exp ->
-      let actual = typecheckExpA_par 0 empty_env exp
+    ProgramA expected funs exp ->
+      let actual = typecheckExpA_par 0 empty_varenv exp
       in if eqTy expected actual
          -- COPY: exp is copied (indirection)
-         then ProgramA expected exp
+         then ProgramA expected funs exp
          else ErrorA errorTy
     ErrorA err -> ErrorA err
-
 
 typecheckExpA :: TypeEnv -> ExpA -> Ty
 typecheckExpA ty_env exp =
@@ -909,11 +1171,11 @@ typecheckExpA ty_env exp =
     SimplA simpl -> typecheckSimplExpA ty_env simpl
     LetA v rhs bod ->
       let ty = typecheckSimplExpA ty_env rhs
-          ty_env' = insert_env ty_env v ty
+          ty_env' = insert_varenv ty_env v ty
       in typecheckExpA ty_env' bod
     LetA2 v rhs bod ->
       let ty = typecheckSimplExpA ty_env rhs
-          ty_env' = insert_env ty_env v ty
+          ty_env' = insert_varenv ty_env v ty
       in typecheckExpA ty_env' bod
     IfA a b c ->
       let t1 = typecheckSimplExpA ty_env a
@@ -932,12 +1194,12 @@ typecheckExpA_par depth ty_env exp =
     SimplA simpl -> typecheckSimplExpA ty_env simpl
     LetA v rhs bod ->
       let ty = typecheckSimplExpA ty_env rhs
-          ty_env' = insert_env ty_env v ty
+          ty_env' = insert_varenv ty_env v ty
       in typecheckExpA_par (depth+1) ty_env' bod
     -- Bottom out to sequential.
     LetA2 v rhs bod ->
       let ty = typecheckSimplExpA ty_env rhs
-          ty_env' = insert_env ty_env v ty
+          ty_env' = insert_varenv ty_env v ty
       in typecheckExpA ty_env' bod
     IfA a b c ->
       let t1 = typecheckSimplExpA ty_env a
@@ -981,47 +1243,9 @@ typecheckSimplExpA ty_env exp =
           te1 = typecheckArg ty_env e1
           te2 = typecheckArg ty_env e2
       in typecheckCmp c te1 te2
-
---------------------------------------------------------------------------------
--- Constant folding
-
--- foldConstants :: R -> R
--- foldConstants prg =
---   case prg of
---     ProgramR ty exp -> ProgramR ty (fcExp empty_env exp)
---     ErrorR err -> ErrorR err
-
--- fcExpA :: ExpA -> ExpA
--- fcExpA exp =
---   case exp of
---     SimplA simpl -> SimplA (uniqifySimplExpA simpl)
---     LetA v rhs bod ->
---       let rhs' = fcSimplExpA rhs
---           bod' = fcExpA var_env' bod
---       in LetA v rhs' bod'
---     LetA2 v rhs bod ->
---       let rhs' = fcSimplExpA rhs
---           bod' = fcExpA var_env' bod
---       in LetA2 v rhs' bod'
---     IfA a b c -> IfA (fcSimplExpA a) (fcExpA b) (fcExpA c)
-
--- fcSimplExpA :: SimplExpA -> SimplExpA
--- fcSimplExpA exp =
---   case exp of
---     ArgA arg -> ArgA (copy_arg arg)
---     ReadA -> ReadA
---     NegA e -> NegA (copy_arg e)
---     NotA e -> NotA (copy_arg e)
---     -- PrimA p e1 e2 ->
---     --     case e1 of
---     --         ArgA a ->
---     --             case a of
---     --                 IntArg i ->
---     --                     case e2 of
---     --                         ArgA b ->
---     --                             case b of
---     --                                 IntArg j ->
---     CmpA c e1 e2  -> CmpA (copy_cmp c) (uniqifyArg e1) (uniqifyArg e2)
+    AppA f args ->
+      let args' = travPacked args
+      in intTy -- dummy
 
 --------------------------------------------------------------------------------
 -- Uniqify
@@ -1029,7 +1253,7 @@ typecheckSimplExpA ty_env exp =
 uniqify :: R -> R
 uniqify prg =
   case prg of
-    ProgramR ty exp -> ProgramR ty (uniqifyExp empty_env exp)
+    ProgramR ty exp -> ProgramR ty (uniqifyExp empty_varenv exp)
     ErrorR err -> ErrorR err
 
 uniqifyExp :: VarEnv -> ExpR -> ExpR
@@ -1043,16 +1267,16 @@ uniqifyExp var_env exp =
     PrimR p e1 e2 -> PrimR (copy_prim p) (uniqifyExp var_env e1) (uniqifyExp var_env e2)
     CmpR c e1 e2  -> CmpR (copy_cmp c) (uniqifyExp var_env e1) (uniqifyExp var_env e2)
     LetR v rhs bod ->
-      if contains_env var_env v
+      if contains_varenv var_env v
       then
         let rhs' = uniqifyExp var_env rhs
             v'   = gensym
-            var_env' = insert_env var_env v v'
+            var_env' = insert_varenv var_env v v'
             bod' = uniqifyExp var_env' bod
         in LetR v' rhs' bod'
       else
         let rhs' = uniqifyExp var_env rhs
-            var_env' = insert_env var_env v v
+            var_env' = insert_varenv var_env v v
             bod' = uniqifyExp var_env' bod
         in LetR v rhs' bod'
     IfR a b c -> IfR (uniqifyExp var_env a) (uniqifyExp var_env b) (uniqifyExp var_env c)
@@ -1063,7 +1287,7 @@ uniqifyArg var_env arg =
     IntArg i -> IntArg i
     TrueArg  -> TrueArg
     FalseArg -> FalseArg
-    VarArg v -> VarArg (lookup_env var_env v)
+    VarArg v -> VarArg (lookup_varenv var_env v)
 
 --------------------------------------------------------------------------------
 -- Uniqify ANF'd
@@ -1071,45 +1295,84 @@ uniqifyArg var_env arg =
 uniqifyA :: A -> A
 uniqifyA prg =
   case prg of
-    ProgramA ty exp -> ProgramA ty (uniqifyExpA empty_env exp)
+    ProgramA ty funs exp ->
+      let funs' = uniqifyFunsA funs
+          exp' = uniqifyExpA empty_varenv exp
+      in ProgramA ty funs' exp'
     ErrorA err -> ErrorA err
 
 uniqifyA_par :: A -> A
 uniqifyA_par prg =
   case prg of
-    ProgramA ty exp -> ProgramA ty (uniqifyExpA_par empty_env exp)
+    ProgramA ty funs exp ->
+      let funs' = uniqifyFunsA_par funs
+          exp' = uniqifyExpA_par empty_varenv exp
+      in ProgramA ty funs' exp'
     ErrorA err -> ErrorA err
+
+uniqifyFunsA :: FunsA -> FunsA
+uniqifyFunsA funs =
+  case funs of
+    FunsA_Cons fun rst ->
+      let fun' = uniqifyFunA fun
+          rst' = uniqifyFunsA rst
+      in FunsA_Cons fun' rst'
+    FunsA_Append funs1 funs2 ->
+      let funs1' = uniqifyFunsA funs1
+          funs2' = uniqifyFunsA funs2
+      in FunsA_Append funs1' funs2'
+    FunsA_Nil -> FunsA_Nil
+
+uniqifyFunsA_par :: FunsA -> FunsA
+uniqifyFunsA_par funs =
+  case funs of
+    FunsA_Cons fun rst ->
+      let fun' = uniqifyFunA fun
+          rst' = uniqifyFunsA rst
+      in FunsA_Cons fun' rst'
+    FunsA_Append funs1 funs2 ->
+      let funs1' = spawn (uniqifyFunsA_par funs1)
+          funs2' = uniqifyFunsA_par funs2
+          _ = sync
+      in FunsA_Append funs1' funs2'
+    FunsA_Nil -> FunsA_Nil
+
+uniqifyFunA :: FunA -> FunA
+uniqifyFunA fun =
+  case fun of
+    MkFunA name arity intys retty args bod ->
+      let intys' = (copy_ll intys)
+          tups = map_ll (\v -> let v' = gensym
+                                in (v,v'))
+                         args
+          env = foldl_ll (\acc (tup :: (Var,Var)) ->
+                              let (v,v') = tup
+                                  acc' = insert_varenv acc v v'
+                              in acc')
+                         empty_varenv
+                         tups
+          args' = map_ll (\(t :: (Var,Var)) -> snd t) tups
+          bod' = uniqifyExpA env bod
+          _ = free_ll tups
+          _ = free_ll env
+      in MkFunA name arity intys' retty args' bod'
 
 uniqifyExpA :: VarEnv -> ExpA -> ExpA
 uniqifyExpA var_env exp =
   case exp of
     SimplA simpl -> SimplA (uniqifySimplExpA var_env simpl)
     LetA v rhs bod ->
-      -- if contains_env var_env v
-      -- then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
-            var_env' = insert_env var_env v v'
+            var_env' = insert_varenv var_env v v'
             bod' = uniqifyExpA var_env' bod
         in LetA v' rhs' bod'
-      -- else
-      --   let rhs' = uniqifySimplExpA var_env rhs
-      --       var_env' = insert_env var_env v v
-      --       bod' = uniqifyExpA var_env' bod
-      --   in LetA v rhs' bod'
     LetA2 v rhs bod ->
-      -- if contains_env var_env v
-      -- then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
-            var_env' = insert_env var_env v v'
+            var_env' = insert_varenv var_env v v'
             bod' = uniqifyExpA var_env' bod
         in LetA2 v' rhs' bod'
-      -- else
-      --   let rhs' = uniqifySimplExpA var_env rhs
-      --       var_env' = insert_env var_env v v
-      --       bod' = uniqifyExpA var_env' bod
-      --   in LetA2 v rhs' bod'
     IfA a b c -> IfA (uniqifySimplExpA var_env a) (uniqifyExpA var_env b) (uniqifyExpA var_env c)
 
 uniqifyExpA_par :: VarEnv -> ExpA -> ExpA
@@ -1117,37 +1380,19 @@ uniqifyExpA_par var_env exp =
   case exp of
     SimplA simpl -> SimplA (uniqifySimplExpA var_env simpl)
     LetA v rhs bod ->
-      -- if contains_env var_env v
-      -- then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
-            var_env' = insert_env var_env v v'
+            var_env' = insert_varenv var_env v v'
             bod' = uniqifyExpA_par var_env' bod
         in LetA v' rhs' bod'
-      -- else
-      --    let rhs' = uniqifySimplExpA var_env rhs
-      --        var_env' = insert_env var_env v v
-      --        bod' = uniqifyExpA_par var_env' bod
-      --    in LetA v rhs' bod'
     LetA2 v rhs bod ->
-      -- if contains_env var_env v
-      -- then
         let rhs' = uniqifySimplExpA var_env rhs
             v'   = gensym
-            var_env' = insert_env var_env v v'
+            var_env' = insert_varenv var_env v v'
             bod' = uniqifyExpA var_env' bod
         in LetA2 v' rhs' bod'
-      -- else
-      --    let rhs' = uniqifySimplExpA var_env rhs
-      --        var_env' = insert_env var_env v v
-      --        bod' = uniqifyExpA var_env' bod
-      --    in LetA2 v rhs' bod'
     IfA a b c ->
       let a' = (uniqifySimplExpA var_env a)
-          -- TODO:
-          -- (var_env1, var_env2) = fork_pdict var_env
-          -- var_env1 = var_env
-          -- var_env2 = var_env
           b' = spawn (uniqifyExpA_par var_env b)
           c' = (uniqifyExpA_par var_env c)
           _ = sync
@@ -1163,6 +1408,16 @@ uniqifySimplExpA var_env exp =
     -- COPY: prim and cmp are copied (single byte data, so copying is good.)
     PrimA p e1 e2 -> PrimA (copy_prim p) (uniqifyArg var_env e1) (uniqifyArg var_env e2)
     CmpA c e1 e2  -> CmpA (copy_cmp c) (uniqifyArg var_env e1) (uniqifyArg var_env e2)
+    AppA f args   -> AppA f (uniqifyArgList var_env args)
+
+uniqifyArgList :: VarEnv -> ArgList -> ArgList
+uniqifyArgList var_env args =
+  case args of
+    Arg_Nil -> Arg_Nil
+    Arg_Cons a rst ->
+      let a' = uniqifyArg var_env a
+          rst' = uniqifyArgList var_env rst
+      in Arg_Cons a' rst'
 
 --------------------------------------------------------------------------------
 -- Lower to C
@@ -1170,32 +1425,75 @@ uniqifySimplExpA var_env exp =
 explicateControl :: A -> C
 explicateControl prg =
   case prg of
-    ProgramA ty exp ->
+    ProgramA ty funs exp ->
       let (locals, exp') = explicateTail exp
       in case exp' of
            MkTailAndBlk tail blk0 ->
-             let start = gensym
+             let funs' = explicateFuns funs
+                 start = gensym
                  -- COPY: tail and blk0 are copied (indirection)
-                 tail' = _copy_tail tail
-                 -- TRAVERSAL: forcing random access here triggers a InferLocations bug.
-                 blk2 = BlockCons start tail' blk0
-             in ProgramC ty locals blk2
-
+                 tail' = copyPacked tail
+                 blk1 = copyPacked blk0
+                 blk2 = BlockCons start tail' blk1
+             in ProgramC ty locals funs' blk2
 
 explicateControl_par :: A -> C
 explicateControl_par prg =
   case prg of
-    ProgramA ty exp ->
-      let (locals, exp') = explicateTail_par exp
+    ProgramA ty funs exp ->
+      let (locals, exp') = explicateTail exp
       in case exp' of
            MkTailAndBlk tail blk0 ->
-             let start = gensym
+             let funs' = explicateFuns_par funs
+                 start = gensym
                  -- COPY: tail and blk0 are copied (indirection)
-                 tail' = _copy_tail tail
-                 -- TRAVERSAL: forcing random access here triggers a InferLocations bug.
-                 blk2 = BlockCons start tail' blk0
-             in ProgramC ty locals blk2
+                 tail' = copyPacked tail
+                 blk1 = copyPacked blk0
+                 blk2 = BlockCons start tail' blk1
+             in ProgramC ty locals funs' blk2
 
+explicateFuns :: FunsA -> FunsC
+explicateFuns funs =
+  case funs of
+    FunsA_Nil -> FunsC_Nil
+    FunsA_Cons fun rst ->
+       let fun' = explicateFun fun
+           rst' = explicateFuns rst
+       in FunsC_Cons fun' rst'
+    FunsA_Append funs1 funs2 ->
+       let funs1' = explicateFuns funs1
+           funs2' = explicateFuns funs2
+       in FunsC_Append funs1' funs2'
+
+explicateFuns_par :: FunsA -> FunsC
+explicateFuns_par funs =
+  case funs of
+    FunsA_Nil -> FunsC_Nil
+    FunsA_Cons fun rst ->
+       let fun' = explicateFun fun
+           rst' = explicateFuns_par rst
+       in FunsC_Cons fun' rst'
+    FunsA_Append funs1 funs2 ->
+       let funs1' = spawn (explicateFuns_par funs1)
+           funs2' = explicateFuns_par funs2
+           _ = sync
+       in FunsC_Append funs1' funs2'
+
+explicateFun :: FunA -> FunC
+explicateFun fun =
+  case fun of
+    MkFunA name arity intys retty args bod ->
+      let (locals, bod') = explicateTail bod
+      in case bod' of
+           MkTailAndBlk tail blk0 ->
+               let lbl = gensym
+                   tail' = copyPacked tail
+                   blk1 = copyPacked blk0
+                   blk2 = BlockCons lbl tail' blk1
+                   -- COPY: no indirection, full copy.
+                   -- but it's a small region so copying is good.
+                   blk3 = copy_blk blk2
+               in MkFunC name arity args locals blk3
 
 explicateTail :: ExpA -> (List Sym, TailAndBlk)
 explicateTail exp =
@@ -1331,34 +1629,22 @@ toExpC exp =
     NotA arg -> NotC (copy_arg arg)
     PrimA p a1 a2 -> PrimC (copy_prim p) (copy_arg a1) (copy_arg a2)
     CmpA c a1 a2 -> CmpC (copy_cmp c) (copy_arg a1) (copy_arg a2)
+    AppA f args  -> CallC f (copy_arglist args)
 
-
-appendBlocks :: BlkC -> BlkC -> BlkC
-appendBlocks b1 b2 =
-  case b1 of
-    -- COPY: b2 is copied (indirection)
-    BlockNil -> b2
-    -- COPY: tl is copied (indirection)
-    BlockCons lbl tl rst ->
-      let rst' = appendBlocks rst b2
-      in BlockCons lbl tl rst'
-
-
-force_random_access :: TailAndBlk -> BlkC
-force_random_access tb =
-  case tb of
-    MkTailAndBlk tail blk -> blk
 
 --------------------------------------------------------------------------------
 -- Remove trivial jumps
 
+
+{-
+
 optimizeJumps :: C -> C
 optimizeJumps prg =
   case prg of
-    ProgramC ty locals blk ->
-      let env = empty_env
+    ProgramC ty locals funs blk ->
+      let env = empty_varenv
           trivials = collectTrivial env blk
-      in ProgramC ty locals (replaceJumps trivials blk)
+      in ProgramC ty locals FunsC_Nil (replaceJumps trivials blk)
     ErrorC err -> ErrorC err
 
 collectTrivial :: AliasEnv -> BlkC -> AliasEnv
@@ -1379,7 +1665,7 @@ consIfTrivial lbl tail env =
   case tail of
     RetC _     -> env
     SeqC _ _   -> env
-    GotoC lbl2 -> insert_env env lbl lbl2
+    GotoC lbl2 -> insert_varenv env lbl lbl2
     IfC _ _ _  -> env
 
 replaceJumps :: AliasEnv -> BlkC -> BlkC
@@ -1415,9 +1701,11 @@ replaceJumpsTail env tail =
       SeqC stm (replaceJumpsTail env tail2)
     -- COPY: cmp is copied (indirection)
     IfC thn els cmp ->
-      let thn' = lookup_env env thn
-          els' = lookup_env env els
+      let thn' = lookup_varenv env thn
+          els' = lookup_varenv env els
       in IfC thn' els' cmp
+
+-}
 
 --------------------------------------------------------------------------------
 -- Lower to pseudo x86
@@ -1425,18 +1713,54 @@ replaceJumpsTail env tail =
 selectInstrs :: C -> PseudoX86
 selectInstrs prg =
   case prg of
-    ProgramC ty locals blk ->
-      ProgramX86 ty locals (selectInstrsBlk blk)
+    ProgramC ty locals funs blk ->
+        let funs' = selectInstrsFuns funs
+            blk' = selectInstrsBlk blk
+        in ProgramX86 ty locals funs' blk'
     ErrorC err -> ErrorX86 err
-
 
 selectInstrs_par :: C -> PseudoX86
 selectInstrs_par prg =
   case prg of
-    ProgramC ty locals blk ->
-      ProgramX86 ty locals (selectInstrsBlk_par blk)
+    ProgramC ty locals funs blk ->
+      ProgramX86 ty locals (selectInstrsFuns_par funs) (selectInstrsBlk_par blk)
     ErrorC err -> ErrorX86 err
 
+selectInstrsFuns :: FunsC -> FunsX86
+selectInstrsFuns funs =
+  case funs of
+    FunsC_Nil -> FunsX86_Nil
+    FunsC_Cons fun rst ->
+      let fun' = selectInstrsFun fun
+          rst' = selectInstrsFuns rst
+      in FunsX86_Cons fun' rst'
+    FunsC_Append funs1 funs2 ->
+      let funs1' = selectInstrsFuns funs1
+          funs2' = selectInstrsFuns funs2
+      in FunsX86_Append funs1' funs2'
+
+selectInstrsFuns_par :: FunsC -> FunsX86
+selectInstrsFuns_par funs =
+  case funs of
+    FunsC_Nil -> FunsX86_Nil
+    FunsC_Cons fun rst ->
+      let fun' = selectInstrsFun fun
+          rst' = selectInstrsFuns_par rst
+      in FunsX86_Cons fun' rst'
+    FunsC_Append funs1 funs2 ->
+      let funs1' = spawn (selectInstrsFuns_par funs1)
+          funs2' = selectInstrsFuns_par funs2
+          _ = sync
+      in FunsX86_Append funs1' funs2'
+
+selectInstrsFun :: FunC -> FunX86
+selectInstrsFun fun =
+  case fun of
+    MkFunC name arity args locals bod ->
+      let args' = copy_ll args
+          locals' = copy_ll locals
+          instrs = selectInstrsBlk bod
+      in MkFunX86 name arity args' locals' instrs
 
 selectInstrsBlk :: BlkC -> Instrs
 selectInstrsBlk blk =
@@ -1444,12 +1768,9 @@ selectInstrsBlk blk =
     BlockNil -> InstrNil
     BlockCons lbl tail rst ->
       -- -- TRAVERSAL: tail is traversed (random access)
-      -- selectInstrsTail2 tail rst
-
-      -- better for block level parallelism
       let instrs1 = selectInstrsTail tail
           instrs2 = selectInstrsBlk rst
-      in InstrAppend instrs1 instrs2
+      in InstrAppend2 lbl instrs1 instrs2
 
     BlockAppend blk1 blk2 ->
       -- TRAVERSAL: blk1 is traversed (random access)
@@ -1462,10 +1783,7 @@ selectInstrsBlk_par blk =
   case blk of
     BlockNil -> InstrNil
     BlockCons lbl tail rst ->
-      -- -- TRAVERSAL: tail is traversed (random access)
-      -- selectInstrsTail2 tail rst
-
-      -- can parallelize this too. but a single block might not have enough work in it...
+      -- better for block level parallelism
       let instrs1 = spawn (selectInstrsTail tail)
           instrs2 = selectInstrsBlk_par rst
           _ = sync
@@ -1846,30 +2164,68 @@ selectInstrsArg arg =
 makeHomes :: List Sym -> HomesEnv
 makeHomes ls =
   let em :: HomesEnv
-      em = empty_int_env
+      em = empty_intenv
   in ifoldl_ll (\acc i v ->
                   let stack_loc = 0 - (8 + (8 * i))
-                  in insert_int_env acc v stack_loc)
-     em
-     ls
+                  in insert_intenv acc v stack_loc)
+               em
+               ls
 
 assignHomes :: PseudoX86 -> PseudoX86
 assignHomes prg =
   case prg of
-    ProgramX86 ty locals instrs ->
+    ProgramX86 ty locals funs instrs ->
       let homes = makeHomes locals
           em :: List Sym
           em = alloc_ll
-      in ProgramX86 ty em (assignHomesInstrs homes instrs)
+      in ProgramX86 ty em (assignHomesFuns funs) (assignHomesInstrs homes instrs)
 
 assignHomes_par :: PseudoX86 -> PseudoX86
 assignHomes_par prg =
   case prg of
-    ProgramX86 ty locals instrs ->
+    ProgramX86 ty locals funs instrs ->
       let homes = makeHomes locals
           em :: List Sym
           em = alloc_ll
-      in ProgramX86 ty em (assignHomesInstrs_par homes instrs)
+      in ProgramX86 ty em (assignHomesFuns_par funs) (assignHomesInstrs_par homes instrs)
+
+assignHomesFuns :: FunsX86 -> FunsX86
+assignHomesFuns funs =
+  case funs of
+    FunsX86_Nil -> FunsX86_Nil
+    FunsX86_Cons fun rst ->
+      let fun' = assignHomesFun fun
+          rst' = assignHomesFuns rst
+      in FunsX86_Cons fun' rst'
+    FunsX86_Append funs1 funs2 ->
+      let funs1' = assignHomesFuns funs1
+          funs2' = assignHomesFuns funs2
+      in FunsX86_Append funs1' funs2'
+
+assignHomesFuns_par :: FunsX86 -> FunsX86
+assignHomesFuns_par funs =
+  case funs of
+    FunsX86_Nil -> FunsX86_Nil
+    FunsX86_Cons fun rst ->
+      let fun' = assignHomesFun fun
+          rst' = assignHomesFuns_par rst
+      in FunsX86_Cons fun' rst'
+    FunsX86_Append funs1 funs2 ->
+      let funs1' = spawn (assignHomesFuns_par funs1)
+          funs2' = assignHomesFuns_par funs2
+          _ = sync
+      in FunsX86_Append funs1' funs2'
+
+assignHomesFun :: FunX86 -> FunX86
+assignHomesFun fun =
+  case fun of
+    MkFunX86 name arity args locals instrs ->
+      let args' = copy_ll args
+          locals' :: List Var
+          locals' = alloc_ll
+          homes = makeHomes locals
+          instrs' = assignHomesInstrs homes instrs
+      in MkFunX86 name arity args' locals' instrs'
 
 assignHomesInstrs :: HomesEnv -> Instrs -> Instrs
 assignHomesInstrs homes instrs =
@@ -1929,7 +2285,7 @@ assignHomesArgX86 :: HomesEnv -> ArgX86 -> ArgX86
 assignHomesArgX86 homes arg =
   case arg of
     IntX86 i -> IntX86 i
-    VarX86 v -> DerefX86 (quote "rbp") (lookup_int_env homes v)
+    VarX86 v -> DerefX86 (quote "rbp") (lookup_intenv homes v)
     RegX86 r -> RegX86 r
     DerefX86 r o -> DerefX86 r o
 
@@ -1938,7 +2294,7 @@ assignHomesArgX86 homes arg =
 countLeavesX86 :: PseudoX86 -> Int
 countLeavesX86 prg =
   case prg of
-    ProgramX86 ty locals instrs ->
+    ProgramX86 ty locals funs instrs ->
       countLeavesInstrs instrs
 
 countLeavesInstrs :: Instrs -> Int
@@ -1985,34 +2341,62 @@ countLeavesArgX86 arg =
 
 --------------------------------------------------------------------------------
 
-compile0 :: A -> A
-compile0 p0 =
+compile_upto_uniqify :: A -> A
+compile_upto_uniqify p0 =
   let p1 = typecheckA p0
       p2 = uniqifyA p1
   in p2
 
-compile0_par :: A -> A
-compile0_par p0 =
+compile_upto_uniqify_par :: A -> A
+compile_upto_uniqify_par p0 =
   let p1 = typecheckA_par p0
       p2 = uniqifyA_par p1
   in p2
 
-compile1 :: A -> C
-compile1 p0 =
+compile_upto_explicatecontrol :: A -> C
+compile_upto_explicatecontrol p0 =
   let p1 = typecheckA p0
       p2 = uniqifyA p1
       p3 = explicateControl p2
   in p3
 
-compile1_par :: A -> C
-compile1_par p0 =
+compile_upto_explicatecontrol_par :: A -> C
+compile_upto_explicatecontrol_par p0 =
   let p1 = typecheckA_par p0
       p2 = uniqifyA_par p1
       p3 = explicateControl_par p2
   in p3
 
-compile2 :: A -> PseudoX86
-compile2 p0 =
+debug_compile :: A -> PseudoX86
+debug_compile p0 =
+  let _ = printsym (quote "\n\ninitial:\n--------------------\n")
+      _ = print_program_a p0
+      _ = print_newline()
+      _ = printsym (quote "\n\ntypecheck:\n--------------------\n")
+      p1 = typecheckA p0
+      _ = print_program_a p1
+      _ = print_newline()
+      _ = printsym (quote "\n\nuniqify:\n--------------------\n")
+      p2 = uniqifyA p1
+      _ = print_program_a p2
+      _ = print_newline()
+      _ = printsym (quote "\n\nexplicateControl:\n--------------------\n")
+      p3 = explicateControl p2
+      _ = print_program_c p3
+      _ = print_newline()
+      -- p4 = optimizeJumps p3
+      _ = printsym (quote "\n\nselectInstrs:\n--------------------\n")
+      p5 = selectInstrs p3
+      _ = print_pseudox86 p5
+      _ = print_newline()
+      _ = printsym (quote "assignHomes:\n--------------------\n")
+      p6 = assignHomes p5
+      _ = print_pseudox86 p6
+      _ = print_newline()
+  in p6
+
+compile :: A -> PseudoX86
+compile p0 =
   let p1 = typecheckA p0
       p2 = uniqifyA p1
       p3 = explicateControl p2
@@ -2021,8 +2405,8 @@ compile2 p0 =
       p6 = assignHomes p5
   in p6
 
-compile2_par :: A -> PseudoX86
-compile2_par p0 =
+compile_par :: A -> PseudoX86
+compile_par p0 =
   let p1 = typecheckA_par p0
       p2 = uniqifyA_par p1
       p3 = explicateControl_par p2
@@ -2054,24 +2438,58 @@ make_big_ex n d cutoff =
 bench_seq_compiler :: ()
 bench_seq_compiler =
   let ex = make_big_ex sizeParam 0 10
-      p = ProgramA intTy ex
-      compiled = iterate (compile2 p)
+      p = ProgramA intTy FunsA_Nil ex
+      compiled = iterate (compile p)
   in ()
 
 bench_par_compiler :: ()
 bench_par_compiler =
   let ex = make_big_ex sizeParam 0 10
-      p = ProgramA intTy ex
-      compiled_par = iterate (compile2_par p)
+      p = ProgramA intTy FunsA_Nil ex
+      compiled_par = iterate (compile_par p)
   in ()
 
-debug_seq_compiler :: ()
-debug_seq_compiler =
+--------------------------------------------------------------------------------
+
+fun_add :: () -> FunA
+fun_add _ =
+    let
+        tys0 :: List Ty
+        tys0 = alloc_ll
+        tys1 = cons_ll intTy tys0
+        tys2 = cons_ll intTy tys1
+
+        args0 :: List Var
+        args0 = alloc_ll
+        args1 = cons_ll (quote "y") args0
+        args2 = cons_ll (quote "x") args1
+
+        bod = SimplA (PrimA AddP (VarArg (quote "x")) (VarArg (quote "y")))
+    in MkFunA
+       (quote "add")
+       2
+       tys2
+       intTy
+       args2
+       bod
+
+toplvl_funs :: () -> FunsA
+toplvl_funs _ =
+    let fun1 = fun_add ()
+    in FunsA_Cons fun1 FunsA_Nil
+
+test_small_exp :: ()
+test_small_exp =
   let -- ex = make_big_ex sizeParam 0 1
-      ex = (IfA (CmpA EqP (IntArg 1) (IntArg 1)) (SimplA (ArgA (IntArg 2))) (SimplA (ArgA (IntArg 3))))
-      p = ProgramA intTy ex
-      compiled = (compile2 p)
-      _ = print_pseudox86 compiled
+      funs = toplvl_funs ()
+      ex = (IfA (CmpA EqP (IntArg 1) (IntArg 1))
+                (SimplA (ArgA (IntArg 2)))
+                (SimplA (ArgA (IntArg 3)))
+                -- (SimplA (AppA (quote "add") (Arg_Cons (IntArg 1) (Arg_Cons (IntArg 2) Arg_Nil))))
+           )
+      p = ProgramA intTy funs ex
+      compiled = (debug_compile p)
+      -- _ = print_pseudox86 compiled
   in ()
 
 gibbon_main =
@@ -2079,4 +2497,4 @@ gibbon_main =
   then bench_seq_compiler
   else if eqBenchProg "parcompiler"
   then bench_par_compiler
-  else debug_seq_compiler
+  else test_small_exp

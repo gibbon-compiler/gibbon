@@ -1247,6 +1247,10 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         tmp <- gensym "tmp"
                         return [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:tmp = $exp:xexp; |]
                                , C.BlockDecl [cdecl| $ty:(codegenTy (ListTy elty)) $id:outV = list_cons(&$id:tmp, $id:old_ls); |] ]
+                     SymTriv{} -> do
+                        tmp <- gensym "tmp"
+                        return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:tmp = $exp:xexp; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy (ListTy elty)) $id:outV = list_cons(&$id:tmp, $id:old_ls); |] ]
                      _ -> error $ "codegen: LLConsP: " ++ sdoc x
 
                  LLHeadP _elty -> do

@@ -458,6 +458,7 @@ isValidListElemTy ty
   | isScalarTy ty = True
   | otherwise = case ty of
                   VectorTy elty -> isValidListElemTy elty
+                  ListTy elty   -> isValidListElemTy elty
                   ProdTy tys    -> all isScalarTy tys
                   _ -> False
 
