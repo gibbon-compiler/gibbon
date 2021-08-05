@@ -809,6 +809,14 @@ print_locals ls =
 
 type Reg = Sym
 
+rbp :: Reg
+{-# INLINE rbp #-}
+rbp = quote "rbp"
+
+rsp :: Reg
+{-# INLINE rbp #-}
+rsp = quote "rsp"
+
 data PseudoX86 = ProgramX86 Ty (List Sym) FunsX86 Instrs
                | ErrorX86 Ty
   deriving (Show, Generic, NFData)
@@ -830,6 +838,7 @@ data Instrs = InstrCons Instr Instrs
             | InstrNil
             | InstrAppend Instrs Instrs
             | InstrAppend2 Label Instrs Instrs
+            | InstrLabel Label Instrs
   deriving (Show, Generic, NFData)
 
 data Instr = AddQ ArgX86 ArgX86
@@ -842,6 +851,7 @@ data Instr = AddQ ArgX86 ArgX86
            | MovzbQ ArgX86 ArgX86
            | JumpQ Label
            | JumpEQ Label
+           | CallQ Label
            | PushQ ArgX86
            | PopQ ArgX86
            | RetQ
@@ -856,59 +866,52 @@ data ArgX86 = IntX86 Int
 --------------------------------------------------------------------------------
 -- Copy, traverse, and print
 
--- -- Prelude
--- .globl main
--- main:
--- pushq %rbp
--- movq %rsp, %rbp
--- -- Conclusion
--- movq %rsp, %rbp
--- callq print_any
--- popq %rbp
--- movq $0, %rax
--- retq
-
-print_pseudox86 :: PseudoX86 -> ()
-print_pseudox86 prg =
+print_pseudox86 :: Bool -> PseudoX86 -> ()
+print_pseudox86 flg prg =
   case prg of
     ProgramX86 ty locals funs instrs ->
-      let _ = print_funs_x86 funs
+      let _ = printsym (quote ".globl main")
           _ = print_newline()
-          _ = printsym (quote "main:")
           _ = print_newline()
-          _ = printsym (quote "locals: ")
-          _ = print_locals locals
+          _ = print_funs_x86 flg funs
           _ = print_newline()
+          _ = if flg
+              then let _ = printsym (quote "main locals: ")
+                       _ = print_locals locals
+                       _ = print_newline()
+                   in ()
+              else ()
           _ = print_instrs instrs
       in ()
+
     ErrorX86 err ->
       let _ = printsym (quote "ErrorX86: ")
           _ = printsym err
       in ()
 
-print_funs_x86 :: FunsX86 -> ()
-print_funs_x86 funs =
+print_funs_x86 :: Bool -> FunsX86 -> ()
+print_funs_x86 flg funs =
     case funs of
       FunsX86_Cons fun rst ->
           let -- _ = print_newline()
               -- _ = printsym (quote "(FunsX86_Cons\n")
-              _ = print_fun_x86 fun
-              _ = print_funs_x86 rst
+              _ = print_fun_x86 flg fun
+              _ = print_funs_x86 flg rst
               -- _ = printsym (quote ")")
           in ()
       FunsX86_Append funs1 funs2 ->
           let _ = print_newline()
               -- _ = printsym (quote "(FunsX86_Append")
-              _ = print_funs_x86 funs1
-              _ = print_funs_x86 funs2
+              _ = print_funs_x86 flg funs1
+              _ = print_funs_x86 flg funs2
               -- _ = printsym (quote ")")
           in ()
       FunsX86_Nil ->
           ()
           -- printsym (quote "(FunsC_Nil)")
 
-print_fun_x86 :: FunX86 -> ()
-print_fun_x86 fun =
+print_fun_x86 :: Bool -> FunX86 -> ()
+print_fun_x86 flg fun =
     case fun of
       MkFunX86 name arity args locals bod ->
           let -- _ = printsym (quote "(Define " )
@@ -920,9 +923,12 @@ print_fun_x86 fun =
               _ = printsym name
               _ = printsym (quote ":")
               _ = print_newline()
-              _ = printsym (quote "locals: ")
-              _ = print_locals locals
-              _ = print_newline()
+              _ = if flg
+                  then let _ = printsym (quote "locals: ")
+                           _ = print_locals locals
+                           _ = print_newline()
+                       in ()
+                  else ()
               _ = print_instrs bod
               -- _ = printsym (quote ")")
               -- _ = print_newline()
@@ -949,6 +955,13 @@ print_instrs instrs =
           _ = print_instrs instrs1
           _ = print_newline()
           _ = print_instrs instrs2
+      in ()
+    InstrLabel lbl instrs ->
+      let _ = printsym lbl
+          _ = printsym (quote ":")
+          _ = print_newline()
+          _ = print_instrs instrs
+          _ = print_newline()
       in ()
 
 
@@ -1007,6 +1020,10 @@ print_instr instr =
       let _ = printsym (quote "je ")
           _ = printsym lbl
       in ()
+    CallQ lbl ->
+      let _ = printsym (quote "callq ")
+          _ = printsym lbl
+      in ()
     PushQ a1 ->
       let _ = printsym (quote "pushq ")
           _ = print_argx86 a1
@@ -1046,6 +1063,9 @@ print_reg r =
 
 --------------------------------------------------------------------------------
 -- Typecheck
+
+
+{-
 
 typecheck :: R -> R
 typecheck prg =
@@ -1099,6 +1119,8 @@ typecheckExp ty_env exp =
               else errorTy
          else errorTy
 
+-}
+
 typecheckArg :: TypeEnv -> Arg -> Ty
 typecheckArg ty_env arg =
     case arg of
@@ -1138,6 +1160,7 @@ typecheckCmp c ty1 ty2 =
     EqP -> if eqTy ty1 intTy && eqTy ty2 intTy
            then boolTy
            else errorTy
+
 
 --------------------------------------------------------------------------------
 -- Typecheck ANF'd
@@ -1250,6 +1273,8 @@ typecheckSimplExpA ty_env exp =
 --------------------------------------------------------------------------------
 -- Uniqify
 
+{-
+
 uniqify :: R -> R
 uniqify prg =
   case prg of
@@ -1280,6 +1305,8 @@ uniqifyExp var_env exp =
             bod' = uniqifyExp var_env' bod
         in LetR v rhs' bod'
     IfR a b c -> IfR (uniqifyExp var_env a) (uniqifyExp var_env b) (uniqifyExp var_env c)
+
+-}
 
 uniqifyArg :: VarEnv -> Arg -> Arg
 uniqifyArg var_env arg =
@@ -1715,15 +1742,39 @@ selectInstrs prg =
   case prg of
     ProgramC ty locals funs blk ->
         let funs' = selectInstrsFuns funs
-            blk' = selectInstrsBlk blk
-        in ProgramX86 ty locals funs' blk'
+            conclusion_lbl = quote "conclusion"
+            stack_space = (length_ll locals) * 8
+            instrs_prequel = InstrLabel (quote "main")
+                             (InstrCons (PushQ (RegX86 rbp))
+                              (InstrCons (MovQ (RegX86 rsp) (RegX86 rbp))
+                               (InstrCons (PushQ (RegX86 (quote "rbx")))
+                                (InstrCons (PushQ (RegX86 (quote "r12")))
+                                 (InstrCons (PushQ (RegX86 (quote "r13")))
+                                  (InstrCons (PushQ (RegX86 (quote "r14")))
+                                   (InstrCons (PushQ (RegX86 (quote "r15")))
+                                    (InstrCons (SubQ (IntX86 stack_space) (RegX86 rsp))
+                                     InstrNil))))))))
+            blk' = selectInstrsBlk conclusion_lbl blk
+            instrs_sequel = InstrLabel conclusion_lbl
+                            (InstrCons (CallQ (quote "print_any"))
+                             (InstrCons (AddQ (IntX86 stack_space) (RegX86 rsp))
+                              (InstrCons (PopQ (RegX86 (quote "r15")))
+                               (InstrCons (PopQ (RegX86 (quote "r14")))
+                                (InstrCons (PopQ (RegX86 (quote "r13")))
+                                 (InstrCons (PopQ (RegX86 (quote "r12")))
+                                  (InstrCons (PopQ (RegX86 (quote "rbx")))
+                                   (InstrCons (MovQ (IntX86 0) (RegX86 (quote "rax")))
+                                    (InstrCons (PopQ (RegX86 rbp))
+                                     (InstrCons RetQ InstrNil))))))))))
+            blk'' = InstrAppend instrs_prequel (InstrAppend blk' instrs_sequel)
+        in ProgramX86 ty locals funs' blk''
     ErrorC err -> ErrorX86 err
 
 selectInstrs_par :: C -> PseudoX86
 selectInstrs_par prg =
   case prg of
     ProgramC ty locals funs blk ->
-      ProgramX86 ty locals (selectInstrsFuns_par funs) (selectInstrsBlk_par blk)
+      ProgramX86 ty locals (selectInstrsFuns_par funs) (selectInstrsBlk_par (quote "conclusion") blk)
     ErrorC err -> ErrorX86 err
 
 selectInstrsFuns :: FunsC -> FunsX86
@@ -1753,48 +1804,76 @@ selectInstrsFuns_par funs =
           _ = sync
       in FunsX86_Append funs1' funs2'
 
+-- Function args:
+-- rdi rsi rdx rcx r8 r9
 selectInstrsFun :: FunC -> FunX86
 selectInstrsFun fun =
   case fun of
     MkFunC name arity args locals bod ->
       let args' = copy_ll args
           locals' = copy_ll locals
-          instrs = selectInstrsBlk bod
-      in MkFunX86 name arity args' locals' instrs
+          fun_conclusion = gensym
+          fun_prequel = gensym
+          stack_space = (length_ll locals) * 8
+          instrs_prequel = InstrLabel fun_prequel
+                           (InstrCons (PushQ (RegX86 rbp))
+                            (InstrCons (MovQ (RegX86 rsp) (RegX86 rbp))
+                             (InstrCons (PushQ (RegX86 (quote "rbx")))
+                              (InstrCons (PushQ (RegX86 (quote "r12")))
+                               (InstrCons (PushQ (RegX86 (quote "r13")))
+                                (InstrCons (PushQ (RegX86 (quote "r14")))
+                                 (InstrCons (PushQ (RegX86 (quote "r15")))
+                                  (InstrCons (SubQ (IntX86 stack_space) (RegX86 rsp))
+                                   InstrNil))))))))
+          instrs = selectInstrsBlk fun_conclusion bod
+          instrs_sequel = InstrLabel fun_conclusion
+                           (InstrCons (AddQ (IntX86 stack_space) (RegX86 rsp))
+                            (InstrCons (PopQ (RegX86 (quote "r15")))
+                             (InstrCons (PopQ (RegX86 (quote "r14")))
+                              (InstrCons (PopQ (RegX86 (quote "r13")))
+                               (InstrCons (PopQ (RegX86 (quote "r12")))
+                                (InstrCons (PopQ (RegX86 (quote "rbx")))
+                                 (InstrCons (PopQ (RegX86 rbp))
+                                  (InstrCons RetQ InstrNil))))))))
 
-selectInstrsBlk :: BlkC -> Instrs
-selectInstrsBlk blk =
+          instrs' = InstrAppend instrs_prequel (InstrAppend instrs instrs_sequel)
+      in MkFunX86 name arity args' locals' instrs'
+
+selectInstrsBlk :: Label -> BlkC -> Instrs
+selectInstrsBlk conclusion_lbl blk =
   case blk of
     BlockNil -> InstrNil
     BlockCons lbl tail rst ->
       -- -- TRAVERSAL: tail is traversed (random access)
-      let instrs1 = selectInstrsTail tail
-          instrs2 = selectInstrsBlk rst
+      let instrs1 = selectInstrsTail conclusion_lbl tail
+          instrs2 = selectInstrsBlk conclusion_lbl rst
       in InstrAppend2 lbl instrs1 instrs2
 
     BlockAppend blk1 blk2 ->
       -- TRAVERSAL: blk1 is traversed (random access)
-      let instrs1 = selectInstrsBlk blk1
-          instrs2 = selectInstrsBlk blk2
+      let instrs1 = selectInstrsBlk conclusion_lbl blk1
+          instrs2 = selectInstrsBlk conclusion_lbl blk2
       in InstrAppend instrs1 instrs2
 
-selectInstrsBlk_par :: BlkC -> Instrs
-selectInstrsBlk_par blk =
+selectInstrsBlk_par :: Label -> BlkC -> Instrs
+selectInstrsBlk_par conclusion_lbl blk =
   case blk of
     BlockNil -> InstrNil
     BlockCons lbl tail rst ->
       -- better for block level parallelism
-      let instrs1 = spawn (selectInstrsTail tail)
-          instrs2 = selectInstrsBlk_par rst
+      let instrs1 = spawn (selectInstrsTail conclusion_lbl tail)
+          instrs2 = selectInstrsBlk_par conclusion_lbl rst
           _ = sync
       in InstrAppend2 lbl instrs1 instrs2
 
     BlockAppend blk1 blk2 ->
       -- TRAVERSAL: blk1 is traversed (random access)
-      let instrs1 = spawn (selectInstrsBlk_par blk1)
-          instrs2 = selectInstrsBlk_par blk2
+      let instrs1 = spawn (selectInstrsBlk_par conclusion_lbl blk1)
+          instrs2 = selectInstrsBlk_par conclusion_lbl blk2
           _ = sync
       in InstrAppend instrs1 instrs2
+
+{-
 
 selectInstrsTail2 :: TailC -> BlkC -> Instrs
 selectInstrsTail2 tail blk_rst =
@@ -1978,24 +2057,26 @@ selectInstrsTail2 tail blk_rst =
                      instrs_rst = selectInstrsBlk blk_rst
                  in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 (InstrCons instr4 (InstrCons instr5 (InstrCons instr6 instrs_rst)))))
 
-selectInstrsTail :: TailC -> Instrs
-selectInstrsTail tail =
+-}
+
+selectInstrsTail :: Label -> TailC -> Instrs
+selectInstrsTail conclusion_lbl tail =
   case tail of
     RetC exp ->
       case exp of
         ArgC arg ->
           let arg' = selectInstrsArg arg
-          in InstrCons (MovQ arg' (RegX86 (quote "rax"))) (InstrCons (JumpQ (quote "conclusion")) InstrNil)
+          in InstrCons (MovQ arg' (RegX86 (quote "rax"))) (InstrCons (JumpQ conclusion_lbl) InstrNil)
         NegC arg ->
           let arg' = selectInstrsArg arg
           in InstrCons (MovQ arg' (RegX86 (quote "rax")))
              (InstrCons (NegQ (RegX86 (quote "rax")))
-              (InstrCons (JumpQ (quote "conclusion")) InstrNil))
+              (InstrCons (JumpQ conclusion_lbl) InstrNil))
         NotC arg ->
           let arg' = selectInstrsArg arg
           in InstrCons (MovQ arg' (RegX86 (quote "rax")))
              (InstrCons (XorQ (IntX86 1) (RegX86 (quote "rax")))
-              (InstrCons (JumpQ (quote "conclusion")) InstrNil))
+              (InstrCons (JumpQ conclusion_lbl) InstrNil))
         PrimC p a1 a2 ->
           let -- TRAVERSAL: smallish traversal. OK.
               _ = trav_prim p
@@ -2007,14 +2088,14 @@ selectInstrsTail tail =
                      a2' = selectInstrsArg a2
                      instr2 = (AddQ a2' (RegX86 (quote "rax")))
                  in InstrCons instr1 (InstrCons instr2
-                                      (InstrCons (JumpQ (quote "conclusion")) InstrNil))
+                                      (InstrCons (JumpQ conclusion_lbl) InstrNil))
                SubP ->
                  let a1' = selectInstrsArg a1
                      instr1 = (MovQ a1' (RegX86 (quote "rax")))
                      a2' = selectInstrsArg a2
                      instr2 = (SubQ a2' (RegX86 (quote "rax")))
                  in InstrCons instr1 (InstrCons instr2
-                                      (InstrCons (JumpQ (quote "conclusion")) InstrNil))
+                                      (InstrCons (JumpQ conclusion_lbl) InstrNil))
         CmpC c a1 a2 ->
           let -- TRAVERSAL: smallish traversal. OK.
               _ = trav_cmp c
@@ -2026,7 +2107,7 @@ selectInstrsTail tail =
                      instr1 = (CmpQ a1' a2')
                      instr2 = (SetEQ (quote "al"))
                      instr3 = (MovzbQ (RegX86 (quote "al")) (RegX86 (quote "rax")))
-                     instrs_rst = (InstrCons (JumpQ (quote "conclusion")) InstrNil)
+                     instrs_rst = (InstrCons (JumpQ conclusion_lbl) InstrNil)
                  in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 instrs_rst))
                -- LtP -> _todo
 
@@ -2038,19 +2119,19 @@ selectInstrsTail tail =
             ArgC arg ->
               let arg' = selectInstrsArg arg
                   instr1 = (MovQ arg' (VarX86 v))
-                  instrs' = selectInstrsTail rst
+                  instrs' = selectInstrsTail conclusion_lbl rst
               in InstrCons instr1 instrs'
             NegC arg ->
               let arg' = selectInstrsArg arg
                   instr1 = (MovQ arg' (VarX86 v))
                   instr2 = (NegQ (VarX86 v))
-                  instrs' = selectInstrsTail rst
+                  instrs' = selectInstrsTail conclusion_lbl rst
               in InstrCons instr1 (InstrCons instr2 instrs')
             NotC arg ->
               let arg' = selectInstrsArg arg
                   instr1 = (MovQ arg' (VarX86 v))
                   instr2 = (XorQ (IntX86 1) (VarX86 v))
-                  instrs' = selectInstrsTail rst
+                  instrs' = selectInstrsTail conclusion_lbl rst
               in InstrCons instr1 (InstrCons instr2 instrs')
             PrimC p a1 a2 ->
               let -- TRAVERSAL: smallish traversal. OK.
@@ -2062,14 +2143,14 @@ selectInstrsTail tail =
                          instr1 = (MovQ a1' (VarX86 v))
                          a2' = selectInstrsArg a2
                          instr2 = (AddQ a2' (VarX86 v))
-                         instrs' = selectInstrsTail rst
+                         instrs' = selectInstrsTail conclusion_lbl rst
                      in InstrCons instr1 (InstrCons instr2 instrs')
                    SubP ->
                      let a1' = selectInstrsArg a1
                          instr1 = (MovQ a1' (VarX86 v))
                          a2' = selectInstrsArg a2
                          instr2 = (SubQ a2' (VarX86 v))
-                         instrs' = selectInstrsTail rst
+                         instrs' = selectInstrsTail conclusion_lbl rst
                      in InstrCons instr1 (InstrCons instr2 instrs')
             CmpC c a1 a2 ->
               let -- TRAVERSAL: smallish traversal. OK.
@@ -2082,7 +2163,7 @@ selectInstrsTail tail =
                          instr1 = (CmpQ a1' a2')
                          instr2 = (SetEQ (quote "al"))
                          instr3 = (MovzbQ (RegX86 (quote "al")) (VarX86 v))
-                         instrs' = selectInstrsTail rst
+                         instrs' = selectInstrsTail conclusion_lbl rst
                      in InstrCons instr1 (InstrCons instr2 (InstrCons instr3 instrs'))
                    -- LtP -> _todo
 
@@ -2243,6 +2324,8 @@ assignHomesInstrs homes instrs =
       let instr1' = assignHomesInstrs homes instr1
           instr2' = assignHomesInstrs homes instr2
       in InstrAppend2 lbl instr1' instr2'
+    InstrLabel lbl instrs ->
+      InstrLabel lbl (assignHomesInstrs homes instrs)
 
 assignHomesInstrs_par :: HomesEnv -> Instrs -> Instrs
 assignHomesInstrs_par homes instrs =
@@ -2262,6 +2345,8 @@ assignHomesInstrs_par homes instrs =
           instr2' = assignHomesInstrs_par homes instr2
           _ = sync
       in InstrAppend2 lbl instr1' instr2'
+    InstrLabel lbl instrs ->
+      InstrLabel lbl (assignHomesInstrs homes instrs)
 
 assignHomesInstr :: HomesEnv -> Instr -> Instr
 assignHomesInstr homes instr =
@@ -2276,6 +2361,7 @@ assignHomesInstr homes instr =
     MovzbQ a1 a2 -> MovzbQ (assignHomesArgX86 homes a1) (assignHomesArgX86 homes a2)
     JumpQ lbl -> JumpQ lbl
     JumpEQ lbl -> JumpEQ lbl
+    CallQ lbl -> CallQ lbl
     PushQ a1 -> PushQ (assignHomesArgX86 homes a1)
     PopQ a1 -> PopQ (assignHomesArgX86 homes a1)
     RetQ -> RetQ
@@ -2285,7 +2371,7 @@ assignHomesArgX86 :: HomesEnv -> ArgX86 -> ArgX86
 assignHomesArgX86 homes arg =
   case arg of
     IntX86 i -> IntX86 i
-    VarX86 v -> DerefX86 (quote "rbp") (lookup_intenv homes v)
+    VarX86 v -> DerefX86 rbp (lookup_intenv homes v)
     RegX86 r -> RegX86 r
     DerefX86 r o -> DerefX86 r o
 
@@ -2327,6 +2413,7 @@ countLeavesInstr instr =
     MovzbQ a1 a2 -> (countLeavesArgX86 a1) + (countLeavesArgX86 a2)
     JumpQ lbl -> 1
     JumpEQ lbl -> 1
+    CallQ lbl -> 1
     PushQ a1 -> (countLeavesArgX86 a1)
     PopQ a1 -> (countLeavesArgX86 a1)
     RetQ -> 1
@@ -2387,11 +2474,11 @@ debug_compile p0 =
       -- p4 = optimizeJumps p3
       _ = printsym (quote "\n\nselectInstrs:\n--------------------\n")
       p5 = selectInstrs p3
-      _ = print_pseudox86 p5
+      _ = print_pseudox86 True p5
       _ = print_newline()
       _ = printsym (quote "assignHomes:\n--------------------\n")
       p6 = assignHomes p5
-      _ = print_pseudox86 p6
+      _ = print_pseudox86 False p6
       _ = print_newline()
   in p6
 
@@ -2437,15 +2524,17 @@ make_big_ex n d cutoff =
 
 bench_seq_compiler :: ()
 bench_seq_compiler =
-  let ex = make_big_ex sizeParam 0 10
-      p = ProgramA intTy FunsA_Nil ex
+  let funs = FunsA_Nil
+      ex = make_big_ex sizeParam 0 10
+      p = ProgramA intTy funs ex
       compiled = iterate (compile p)
   in ()
 
 bench_par_compiler :: ()
 bench_par_compiler =
-  let ex = make_big_ex sizeParam 0 10
-      p = ProgramA intTy FunsA_Nil ex
+  let funs = FunsA_Nil
+      ex = make_big_ex sizeParam 0 10
+      p = ProgramA intTy funs ex
       compiled_par = iterate (compile_par p)
   in ()
 
@@ -2480,8 +2569,8 @@ toplvl_funs _ =
 
 test_small_exp :: ()
 test_small_exp =
-  let -- ex = make_big_ex sizeParam 0 1
-      funs = toplvl_funs ()
+  let funs = toplvl_funs ()
+      -- ex = make_big_ex sizeParam 0 1
       ex = (IfA (CmpA EqP (IntArg 1) (IntArg 1))
                 (SimplA (ArgA (IntArg 2)))
                 (SimplA (ArgA (IntArg 3)))

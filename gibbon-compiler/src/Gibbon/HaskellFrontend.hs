@@ -806,7 +806,7 @@ desugarExp type_syns toplevel e =
             e2' <- desugarExp type_syns toplevel e2
             pure (Ext (LinearExt (ToLinearE (AppE fn [] [e2']))))
 
-          f -> error ("desugarExp: Couldn't parse function application: (: " ++ show f ++ ")")
+          f -> error ("desugarExp: Couldn't parse function application: (" ++ show f ++ ")")
 
     Let _ (BDecls _ decls) rhs -> do
       rhs' <- desugarExp type_syns toplevel rhs

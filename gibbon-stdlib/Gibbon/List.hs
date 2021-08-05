@@ -46,3 +46,7 @@ map_ll f ls =
     let hd = head_ll ls
         tl = tail_ll ls
     in cons_ll (f hd) (map_ll f tl)
+
+
+length_ll :: List a -> Int
+length_ll ls = foldl_ll (\acc elt -> acc+1) 0 ls
