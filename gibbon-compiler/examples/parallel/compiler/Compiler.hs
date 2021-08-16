@@ -511,7 +511,7 @@ data FunsC = FunsC_Cons FunC FunsC
            | FunsC_Nil
   deriving (Show, Generic, NFData)
 
-data C = ProgramC Ty (List Sym) FunsC BlkC
+data C = ProgramC FunsC
        | ErrorC Ty
   deriving (Show, Generic, NFData)
 
@@ -759,17 +759,17 @@ print_fun_c fun =
 print_program_c :: C -> ()
 print_program_c prg =
   case prg of
-    ProgramC ty locals funs blk ->
+    ProgramC funs ->
       let _ = printsym (quote "(ProgramC ")
-          _ = printsym ty
-          _ = print_newline()
+          -- _ = printsym ty
+          -- _ = print_newline()
           _ = print_funs_c funs
           _ = print_newline()
-          _ = printsym (quote "(locals ")
-          _ = print_locals locals
-          _ = printsym (quote ")")
-          _ = print_newline()
-          _ = print_blk blk
+          -- _ = printsym (quote "(locals ")
+          -- _ = print_locals locals
+          -- _ = printsym (quote ")")
+          -- _ = print_newline()
+          -- _ = print_blk blk
           _ = printsym (quote ")")
       in ()
     ErrorC err ->
@@ -817,7 +817,7 @@ rsp :: Reg
 {-# INLINE rbp #-}
 rsp = quote "rsp"
 
-data PseudoX86 = ProgramX86 Ty (List Sym) FunsX86 Instrs
+data PseudoX86 = ProgramX86 FunsX86
                | ErrorX86 Ty
   deriving (Show, Generic, NFData)
 
@@ -1453,6 +1453,25 @@ explicateControl :: A -> C
 explicateControl prg =
   case prg of
     ProgramA ty funs exp ->
+      let
+          -- main_locals :: List Var
+          -- main_locals = alloc_ll
+
+          -- Convert main expression to a main function.
+          main_intys :: List Ty
+          main_intys = alloc_ll
+          main_args :: List Var
+          main_args = alloc_ll
+          main_fun = (MkFunA (quote "main") 0 main_intys ty main_args (copyPacked exp))
+          --
+
+          main_fun_c = explicateFun main_fun
+          funs' = explicateFuns funs
+          funs'' = FunsC_Cons main_fun_c funs'
+
+      in ProgramC funs''
+
+{-
       let (locals, exp') = explicateTail exp
       in case exp' of
            MkTailAndBlk tail blk0 ->
@@ -1463,11 +1482,31 @@ explicateControl prg =
                  blk1 = copyPacked blk0
                  blk2 = BlockCons start tail' blk1
              in ProgramC ty locals funs' blk2
+-}
 
 explicateControl_par :: A -> C
 explicateControl_par prg =
   case prg of
     ProgramA ty funs exp ->
+      let
+          -- main_locals :: List Var
+          -- main_locals = alloc_ll
+
+          -- Convert main expression to a main function.
+          main_intys :: List Ty
+          main_intys = alloc_ll
+          main_args :: List Var
+          main_args = alloc_ll
+          main_fun = (MkFunA (quote "main") 0 main_intys ty main_args (copyPacked exp))
+          --
+
+          main_fun_c = explicateFun main_fun
+          funs' = explicateFuns_par funs
+          funs'' = FunsC_Cons main_fun_c funs'
+
+      in ProgramC funs''
+
+{-
       let (locals, exp') = explicateTail exp
       in case exp' of
            MkTailAndBlk tail blk0 ->
@@ -1478,6 +1517,7 @@ explicateControl_par prg =
                  blk1 = copyPacked blk0
                  blk2 = BlockCons start tail' blk1
              in ProgramC ty locals funs' blk2
+-}
 
 explicateFuns :: FunsA -> FunsC
 explicateFuns funs =
@@ -1519,6 +1559,7 @@ explicateFun fun =
                    blk2 = BlockCons lbl tail' blk1
                    -- COPY: no indirection, full copy.
                    -- but it's a small region so copying is good.
+                   -- TODO: WEIRD that we have to copy to make things work.
                    blk3 = copy_blk blk2
                in MkFunC name arity args locals blk3
 

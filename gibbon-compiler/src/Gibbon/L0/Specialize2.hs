@@ -804,9 +804,9 @@ updateTyConsExp ddefs mono_st ex =
     Ext (FunRefE{})    -> ex
     Ext (BenchE{})     -> ex
     Ext (ParE0 ls)     -> Ext $ ParE0 $ map go ls
-    Ext (PrintPacked ty arg) -> Ext $ PrintPacked ty (go arg)
-    Ext (CopyPacked ty arg) -> Ext $ CopyPacked ty (go arg)
-    Ext (TravPacked ty arg) -> Ext $ TravPacked ty (go arg)
+    Ext (PrintPacked ty arg) -> Ext $ PrintPacked (updateTyConsTy ddefs mono_st ty) (go arg)
+    Ext (CopyPacked ty arg) -> Ext $ CopyPacked (updateTyConsTy ddefs mono_st ty) (go arg)
+    Ext (TravPacked ty arg) -> Ext $ TravPacked (updateTyConsTy ddefs mono_st ty) (go arg)
     Ext (L p e)        -> Ext $ L p (go e)
     Ext (LinearExt{})  -> error $ "updateTyConsExp: a linear types extension wasn't desugared: " ++ sdoc ex
   where
