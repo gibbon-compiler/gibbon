@@ -529,6 +529,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                                , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
                                , C.BlockDecl [cdecl| double $id:batchtime = sum_timing_array($id:times); |]
                                , C.BlockStm [cstm| print_timing_array($id:times); |]
+                               -- , C.BlockStm [cstm| vector_free($id:times); |]
                                ])
 
                          -- else
@@ -536,6 +537,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                            , C.BlockStm [cstm| { $items:rhs'' } |]
                            , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
                            , C.BlockDecl [cdecl| double $id:selftimed = difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
+                           -- , C.BlockStm [cstm| vector_free($id:times); |]
                            ])
            withPrnt = timebod ++
                       (if flg

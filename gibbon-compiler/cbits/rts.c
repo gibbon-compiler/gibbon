@@ -534,6 +534,14 @@ IntTy print_symbol(SymTy idx) {
   }
 }
 
+void delete_all_symbols() {
+    struct SymTable_elem *current, *tmp;
+    HASH_ITER(hh, global_sym_table, current, tmp) {
+        HASH_DEL(global_sym_table, current);
+        free(current);
+    }
+}
+
 #ifdef _BUMPALLOC
 SymTy gensym() {
     SymTy idx = __atomic_add_fetch(&global_gensym_counter, 1, __ATOMIC_SEQ_CST);
