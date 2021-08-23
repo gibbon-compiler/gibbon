@@ -26,14 +26,15 @@ similar to Typed Racket, and a small subset of Haskell.
 ## Building Gibbon
 
 Gibbon is implemented in Haskell, and is set up to be built with
-[Cabal](https://cabal.readthedocs.io/en/3.4/). After you
-install Cabal, proceed to installing Gibbon's dependencies.
+[Cabal](https://cabal.readthedocs.io/en/3.4/).
+After you install Cabal, proceed to installing Gibbon's dependencies:
 
 - Ubuntu:
 
 ```
  $ sudo apt-get install libgc-dev libgmp-dev gcc-7 uthash-dev
  $ sudo add-apt-repository ppa:plt/racket && sudo apt update && sudo apt install racket
+ $ sudo add-apt-repository ppa:hvr/ghc && sudo apt update && sudo apt install ghc-9.0.1 cabal-install-3.4
 ```
 
 
@@ -41,7 +42,7 @@ install Cabal, proceed to installing Gibbon's dependencies.
 
 You can install some of the dependencies using [Homebrew](https://brew.sh/):
 
-    $ brew install libgc gmp
+    $ brew install libgc gmp gcc@7 ghc@9
 
 Others require a few extra steps:
 
@@ -50,7 +51,7 @@ Others require a few extra steps:
 2. [uthash](https://github.com/troydhanson/uthash): Clone the [repository](https://github.com/troydhanson/uthash) and copy all the `.h` files in `src` to `/usr/local/include`
 
 
-After you have both Stack and all the dependencies installed, you can build
+After you have both Cabal and all the dependencies installed, you can build
 Gibbon from source:
 
     $ git clone https://github.com/iu-parfunc/gibbon
