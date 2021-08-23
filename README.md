@@ -6,19 +6,19 @@
 to operate on _serialized data._
 
 Typically, programs that process tree-like data represent trees using pointer-based
-data structures in memory (one heap object per-leaf and per-node) because such a 
-layout is convenient to manipulate in a high-level programming language. 
-This is also generally distinct from the representation of the data in 
+data structures in memory (one heap object per-leaf and per-node) because such a
+layout is convenient to manipulate in a high-level programming language.
+This is also generally distinct from the representation of the data in
 serialized form on disk,
 which means that a program must perform some sort or marshaling when working with serialized data.
 Gibbon _unifies_ the in-memory and serialized formats, transforming recursive
 functions to operate _directly_ on serialized data.
 
 Additionally, while the pointer-based structure is efficient
-for random access and shape-changing modifications, it can be inefficient 
-for traversals that process most or all of a tree in bulk. 
-The Gibbon project aims to explore optimizations of recursive tree transforms 
-by changing how trees are stored in memory. 
+for random access and shape-changing modifications, it can be inefficient
+for traversals that process most or all of a tree in bulk.
+The Gibbon project aims to explore optimizations of recursive tree transforms
+by changing how trees are stored in memory.
 
 Currently, the Gibbon compiler has multiple front-ends: an s-expression synax
 similar to Typed Racket, and a small subset of Haskell.
@@ -26,8 +26,8 @@ similar to Typed Racket, and a small subset of Haskell.
 ## Building Gibbon
 
 Gibbon is implemented in Haskell, and is set up to be built with
-[Stack](https://docs.haskellstack.org/en/stable/README/). After you
-install Stack, proceed to installing Gibbon's dependencies.
+[Cabal](https://cabal.readthedocs.io/en/3.4/). After you
+install Cabal, proceed to installing Gibbon's dependencies.
 
 - Ubuntu:
 
@@ -55,33 +55,77 @@ Gibbon from source:
 
     $ git clone https://github.com/iu-parfunc/gibbon
     $ cd gibbon && source set_env.sh
-    $ cd gibbon-compiler && stack setup && stack build
+    $ cd gibbon-compiler && cabal v2-build . -w ghc-9.0.1
 
 At this point you can run the Gibbon executable:
 
-    $ stack exec -- gibbon -h
+    $ cabal v2-exec -w ghc-9.0.1 gibbon -- -h
 
 If you'd like to run the testsuite, you can do so with:
 
     $ cd $GIBBONDIR && ./run_all_tests.sh
 
+
 ## Using Gibbon
 
-Gibbon can be run in multiple modes. The `-r` flag indicates that you want to
-compile and run a program:
+A valid Gibbon program can be written using Haskell syntax or using Racket-like s-expression syntax.
+Gibbon doesn't support every Haskell feature supported by GHC,
+but informally, many simple Haskell-98 programs (sans monads) are valid Gibbon programs.
+One thing to note is that the main point of entry for a Gibbon program is a
+function named `gibbon_main`, as opposed to the usual `main`.
+Here's a simple Gibbon program that builds a binary tree and sums up its leaves in parallel
+using a parallel tuple (`par`):
 
-    $ gibbon -r ./demo/Add1.hs
 
-If the extension is `*.hs`, it is assumed to be a Haskell source file, and if it
-is `*.gib` it is a Racket source file starting with `#lang gibbon`. 
+```haskell
+module Main where
 
-Just the `-r` flag by itself will apply the high-level specialization optimizations
-but will not use packed data. The `-p` flag instructs Gibbon to use
-a packed representation whenever possible. These can be combined:
+data Tree = Leaf Int
+          | Node Int Tree Tree
 
-    $ gibbon -rp ./demo/PolyTree.hs
+mkTree :: Int -> Tree
+mkTree i =
+  if i <= 0
+  then Leaf 1
+  else
+      let x = (mkTree (i-1))
+          y = (mkTree (i-1))
+      in Node i x y
 
-## About this repository 
+sumTree :: Tree -> Int
+sumTree foo =
+  case foo of
+    Leaf i     -> i
+    Node i a b ->
+      let tup = par (sumTree a) (sumTree b)
+          x = fst tup
+          y = snd tup
+      in x + y
+
+gibbon_main = sumTree (mkTree 10)
+```
+
+The Gibbon compiler is able to run in several modes, which are configured via command line flags.
+Most important are the flags `--packed` which means "packed mode" (use serialized data structures),
+`--run` which means "compile then run", and `--parallel` which means "enable parallel execution".
+You can use these to run the above program as follows:
+
+```
+$ gibbon --run --packed --parallel Bintree.hs
+```
+
+
+This creates a file `Bintree.c` which contains the C-code,
+and a `Bintree.exe` which is the executable for this program.
+Running `./Bintree.exe` prints `1024`, the value of `sumTree (mkTree 10)`.
+There are many other Gibbon features which can be learned by looking at the
+programs under `./examples/parallel/`, and more flags
+which can be printed with `gibbon --help`.
+To view a complete set of primitives supported by Gibbon, you can look at the `Gibbon.Prim`
+module located at `gibbon/gibbon-stdlib/Gibbon/Prim.hs`.
+
+
+## About this repository
 
 This primarily stores the Gibbon
 compiler, an implementation of a high-performance functional language.
@@ -98,7 +142,7 @@ representations.  Here is a guide to the subdirectories:
    Also includes scripts to fetch input datasets.
 
  * `BintreeBench` - a submodule containing the tiniest binary tree microbenchmark, implemented several different languages and compilers.
-   
+
  * [core-harvest](core-harvest) - tools to harvest realistic, large ASTs (mainly Racket) from the wild.
- 
+
  * [DEVLOG.md](DEVLOG.md) - detailed documentation for those hacking on this repository.
