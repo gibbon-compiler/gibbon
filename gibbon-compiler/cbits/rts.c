@@ -220,7 +220,7 @@ typedef unsigned char TagTyPacked;
 typedef unsigned char TagTyBoxed;
 typedef long long IntTy;
 typedef float FloatTy;
-typedef IntTy SymTy;
+typedef unsigned long long SymTy;
 typedef bool BoolTy;
 typedef char* PtrTy;
 typedef char* CursorTy;
@@ -575,13 +575,13 @@ Garbage collection
    stores some additional metadata (RegionFooter) -- to chain the chunks together in a list
    and also for garbage collection. Representation of a footer at runtime:
 
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   serialized data | seq_no | size | refcount_ptr | outset_ptr | next_ptr | prev_ptr
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   serialized data | reg_id_ptr | seq_no | size | refcount_ptr | outset_ptr | next_ptr | prev_ptr
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
    The metadata after the serialized data serves various purposes:
 
-   - next_ptr / prev_ptr: Point to the next and previous chunk respectively.
+   - reg_id_ptr: Pointer to the region_id that this chunk belongs to.
 
    - seq_no: The index of this particular chunk in the list.
 
@@ -594,6 +594,8 @@ Garbage collection
      be bumped by 1. Note that all there's only 1 refcount cell, and 1 outset per logical region,
      and chunks only store a pointer to them.
 
+   - next_ptr / prev_ptr: Point to the next and previous chunk respectively.
+
 
 There are two ways in which a region may be freed:
 
@@ -601,7 +603,7 @@ There are two ways in which a region may be freed:
 
   The RTS tries to free a region whenever it goes out of scope. But this doesn't always succeed as
   regions sometimes contain values that "escape". One reason why this'll happen is if there's an
-  indirection from A->B, and A lives longer than B. (CSK: do we have a program to test this?).
+  indirection from A->B, and A lives longer than B.
   In such a case, when B goes out of scope it's refcount won't be 0, and the RTS won't free it.
   This brings us to (2).
 
@@ -618,7 +620,7 @@ Why is it a doubly linked-list?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Due to way that bounds-checking works, the pointers in the outset may actually point to any
-arbitrary chunk in the chain. However, we want call free_region on the first one to ensure that
+arbitrary chunk in the chain. However, we must call free_region on the first one to ensure that
 all of them are GC'd. So we need pointers to traverse backward get to the first one.
 'trav_to_first_chunk' accomplishes this.
 
@@ -631,7 +633,8 @@ typedef struct Outset_elem {
 } Outset_elem;
 
 typedef struct RegionTy_struct {
-    int refcount;
+    SymTy reg_id;
+    IntTy refcount;
     CursorTy start_ptr;
     Outset_elem *outset;
 } RegionTy;
@@ -639,9 +642,10 @@ typedef struct RegionTy_struct {
 typedef struct RegionFooter_struct {
     // This sequence number is not strictly required, but helps with debugging
     // and error messages.
-    int seq_no;
+    SymTy *reg_id_ptr;
+    IntTy seq_no;
     IntTy size;
-    int *refcount_ptr;
+    IntTy *refcount_ptr;
     Outset_elem *outset_ptr;
     CursorTy next;
     CursorTy prev;
@@ -662,16 +666,18 @@ RegionTy *alloc_region(IntTy size) {
         printf("alloc_region: malloc failed: %ld", sizeof(RegionTy));
         exit(1);
     }
-    reg->refcount = 0;
+    reg->reg_id = gensym();
+    reg->refcount = 1;
     reg->start_ptr = start;
     reg->outset = NULL;
 
-    #ifdef DEBUG
-    printf("Allocated a region: %lld bytes.\n", size);
-    #endif
+#ifdef DEBUG
+    printf("Allocated a region(%lld): %lld bytes.\n", reg->reg_id, size);
+#endif
 
     // Write the footer
     RegionFooter* footer = (RegionFooter *) end;
+    footer->reg_id_ptr = &(reg->reg_id);
     footer->seq_no = 1;
     footer->size = size;
     footer->refcount_ptr = &(reg->refcount);
@@ -713,15 +719,16 @@ ChunkTy alloc_chunk(CursorTy end_old_chunk) {
     }
     CursorTy end = start + newsize;
 
-    #ifdef DEBUG
+#ifdef DEBUG
     printf("Allocated a chunk: %lld bytes.\n", total_size);
-    #endif
+#endif
 
     // Link the next chunk's footer
     footer->next = end;
 
     // Write the footer
     RegionFooter* new_footer = (RegionFooter *) end;
+    new_footer->reg_id_ptr = footer->reg_id_ptr;
     new_footer->seq_no = footer->seq_no + 1;
     new_footer->size = newsize;
     new_footer->refcount_ptr = footer->refcount_ptr;
@@ -736,7 +743,7 @@ RegionFooter* trav_to_first_chunk(RegionFooter *footer) {
     if (footer->seq_no == 1) {
         return footer;
     } else if (footer->prev == NULL) {
-        fprintf(stderr, "No previous chunk found at seq_no: %d", footer->seq_no);
+        fprintf(stderr, "No previous chunk found at seq_no: %lld", footer->seq_no);
         return NULL;
     } else {
         trav_to_first_chunk((RegionFooter *) footer->prev);
@@ -754,21 +761,22 @@ int get_ref_count(CursorTy end_ptr) {
 static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     // Bump refcount
     RegionFooter *footer_a = (RegionFooter *) end_a;
-    int refcount = *(footer_a->refcount_ptr);
-    int new_refcount = refcount + 1;
+    IntTy refcount = *(footer_a->refcount_ptr);
+    IntTy new_refcount = refcount + 1;
     *(footer_a->refcount_ptr) = new_refcount;
 
     // Grab B's outset
     RegionFooter *footer_b = (RegionFooter *) end_b;
     Outset_elem *head = footer_b->outset_ptr;
 
-    #ifdef DEBUG
+#ifdef DEBUG
+    printf("bump_ref_count: %lld -> %lld\n", *(footer_b->reg_id_ptr), *(footer_a->reg_id_ptr));
     Outset_elem *elt;
-    int count;
+    IntTy count;
     DL_COUNT(head, elt, count);
-    printf("bump_ref_count: old-refcount=%d, old-outset-len=%d:\n", refcount, count);
-    assert(refcount == count);
-    #endif
+    printf("bump_ref_count: old-refcount=%lld, old-outset-len=%lld:\n", refcount, count);
+    assert(refcount == count+1);
+#endif
 
     // Add A to B's outset
     Outset_elem *add = malloc(sizeof(Outset_elem));
@@ -782,12 +790,12 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     // In any case, we update outset_ptr here.
     footer_b->outset_ptr = head;
 
-    #ifdef DEBUG
-    int new_count;
+#ifdef DEBUG
+    IntTy new_count;
     DL_COUNT(head, elt, new_count);
-    printf("bump_ref_count: new-refcount=%d, new-outset-len=%d:\n", new_refcount, new_count);
-    assert(new_refcount == new_count);
-    #endif
+    printf("bump_ref_count: new-refcount=%lld, new-outset-len=%lld:\n", new_refcount, new_count);
+    assert(new_refcount == new_count+1);
+#endif
 
     return;
 }
@@ -797,43 +805,72 @@ void free_region(CursorTy end_reg) {
     CursorTy first_chunk = end_reg - footer.size;
     CursorTy next_chunk = footer.next;
 
-    // Decrement refcounts of all regions `reg` points to
-    if (footer.outset_ptr != NULL) {
-        // Grab the outset, and decrement refcounts.
-        Outset_elem *elt, *tmp;
-        Outset_elem *head = (footer.outset_ptr);
+#ifdef DEBUG
+    IntTy old_refcount, new_refcount;
+    old_refcount = *(footer.refcount_ptr);
+#endif
 
-        #ifdef DEBUG
-        int count;
-        DL_COUNT(head, elt, count);
-        printf("free_region: outset-len: %d\n", count);
-        #endif
-
-        // Decrement refcounts, free regions with refcount==0 and also free
-        // elements of the outset.
-        DL_FOREACH_SAFE(head,elt,tmp) {
-            RegionFooter *elt_footer = (RegionFooter *) elt->ref;
-            *(elt_footer->refcount_ptr) = *(elt_footer->refcount_ptr) - 1;
-            if (*(elt_footer->refcount_ptr) == 0) {
-                // See [Why is it a doubly linked-list?] above
-                RegionFooter *first_chunk = trav_to_first_chunk(elt_footer);
-                if (first_chunk != NULL) {
-                    free_region((CursorTy) first_chunk);
-                }
-            }
-            DL_DELETE(head,elt);
-            free(elt);
-        }
+    // Decrement current reference count.
+    if (*(footer.refcount_ptr) != 0) {
+        *(footer.refcount_ptr) = *(footer.refcount_ptr)-1;
     }
 
-    // Free all chunks if recount is 0
+#ifdef DEBUG
+    new_refcount = *(footer.refcount_ptr);
+    printf("free_region(%lld): refcounts (1): old-refcount=%lld, new-refcount=%lld:\n", *(footer.reg_id_ptr), old_refcount, new_refcount);
+#endif
+
+
+    // Free this region recount is 0.
     if (*(footer.refcount_ptr) == 0) {
 
-        #ifdef DEBUG
+        // Decrement refcounts of all regions `reg` points to
+        if (footer.outset_ptr != NULL) {
+            // Grab the outset, and decrement refcounts.
+            Outset_elem *elt, *tmp;
+            Outset_elem *head = (footer.outset_ptr);
+
+#ifdef DEBUG
+            IntTy count;
+            DL_COUNT(head, elt, count);
+            printf("free_region(%lld): outset-len: %lld\n", *(footer.reg_id_ptr), count);
+#endif
+
+            // Decrement refcounts, free regions with refcount==0 and also free
+            // elements of the outset.
+            DL_FOREACH_SAFE(head,elt,tmp) {
+                RegionFooter *elt_footer = (RegionFooter *) elt->ref;
+#ifdef DEBUG
+                old_refcount = *(elt_footer->refcount_ptr);
+#endif
+
+                // TODO(ckoparkar): BUG; *(elt_footer->refcount_ptr) contains a garbage value
+                // which prevents certain regions from getting garbage collected.
+                *(elt_footer->refcount_ptr) = *(elt_footer->refcount_ptr) - 1;
+                // *(elt_footer->refcount_ptr) = 0;
+
+#ifdef DEBUG
+                new_refcount = *(elt_footer->refcount_ptr);
+                printf("free_region(%lld): refcounts (2): old-refcount=%lld, new-refcount=%lld:\n", *(footer.reg_id_ptr), old_refcount, new_refcount);
+#endif
+
+                if (*(elt_footer->refcount_ptr) == 0) {
+                    // See [Why is it a doubly linked-list?] above
+                    RegionFooter *first_chunk = trav_to_first_chunk(elt_footer);
+                    if (first_chunk != NULL) {
+                        free_region((CursorTy) first_chunk);
+                    }
+                }
+                DL_DELETE(head,elt);
+                free(elt);
+            }
+        }
+
+#ifdef DEBUG
         // Bookkeeping
         int num_chunks = 1;
         IntTy total_bytesize = footer.size;
-        #endif
+#endif
 
         // Indicate that this region has been garbage collected.
         *(footer.refcount_ptr) = REG_FREED;
@@ -847,19 +884,19 @@ void free_region(CursorTy end_reg) {
             free(next_chunk - footer.size);
             next_chunk = footer.next;
 
-            #ifdef DEBUG
+#ifdef DEBUG
             num_chunks++;
             total_bytesize = total_bytesize + footer.size;
-            #endif
+#endif
         }
 
-        #ifdef DEBUG
-        printf("GC: Freed %lld bytes across %d chunks.\n",total_bytesize,num_chunks);
-        #endif
+#ifdef DEBUG
+        printf("free_region(%lld): Freed %lld bytes across %d chunks.\n", *(footer.reg_id_ptr), total_bytesize, num_chunks);
+#endif
     } else {
-        #ifdef DEBUG
-        printf("free_region: non-zero refcount: %d.\n", *(footer.refcount_ptr));
-        #endif
+#ifdef DEBUG
+        printf("free_region(%lld): non-zero refcount: %lld.\n", *(footer.reg_id_ptr), *(footer.refcount_ptr));
+#endif
     }
 }
 
@@ -1192,7 +1229,7 @@ int main(int argc, char** argv)
     // lim.rlim_max = lim.rlim_cur; // Normal users may only be able to decrease this.
 
     // WARNING: Haven't yet figured out why this doesn't work on MacOS...
-    #ifndef __APPLE__
+#ifndef __APPLE__
     code = setrlimit(RLIMIT_STACK, &lim);
     while (code) {
       fprintf(stderr, " [gibbon rts] Failed to set stack size to %llu, code %d\n", (unsigned long long)lim.rlim_cur, code);
@@ -1204,7 +1241,7 @@ int main(int argc, char** argv)
       }
       int code = setrlimit(RLIMIT_STACK, &lim);
     }
-    #endif
+#endif
 
     // TODO: atoi() error checking
 
