@@ -765,12 +765,12 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    then
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_counted_region($id:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start_ptr; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_start; |]
                        ]
                    else
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($id:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start_ptr; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_start; |]
                        ]
 
                  NewParBuffer mul -> do
@@ -782,12 +782,12 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    then
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_counted_region($id:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start_ptr; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_start; |]
                        ]
                    else
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($id:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start_ptr; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_start; |]
                        ]
                  ScopedBuffer mul -> let [(outV,CursorTy)] = bnds
                                          bufsize = codegenMultiplicity mul
@@ -809,7 +809,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                else
                                  let [(VarTriv reg),(VarTriv _rcur),(VarTriv endr_cur)] = rnds
                                  in pure
-                                 [ C.BlockStm [cstm| if ($id:reg->refcount != REG_FREED) { free_region($id:endr_cur); }  |]
+                                 [ C.BlockStm [cstm| if ($id:reg->reg_refcount != REG_FREED) { free_region($id:endr_cur); }  |]
                                  , C.BlockStm [cstm| free($id:reg); |]
                                  ]
 
@@ -875,8 +875,8 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    chunk_end   <- gensym "chunk_end"
                    let [(IntTriv i),(VarTriv bound), (VarTriv cur)] = rnds
                        bck = [ C.BlockDecl [cdecl| $ty:(codegenTy ChunkTy) $id:new_chunk = alloc_chunk($id:bound); |]
-                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_start = $id:new_chunk.start_ptr; |]
-                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_end = $id:new_chunk.end_ptr; |]
+                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_start = $id:new_chunk.chunk_start; |]
+                             , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_end = $id:new_chunk.chunk_end; |]
                              , C.BlockStm  [cstm|  $id:bound = $id:chunk_end; |]
                              , C.BlockStm  [cstm|  *($ty:(codegenTy TagTyPacked) *) ($id:cur) = ($int:(GL.redirectionAlt)); |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) redir =  $id:cur + 1; |]
@@ -961,8 +961,8 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         out_hdl <- gensym "out_hdl"
                         wrote <- gensym "wrote"
                         pure $ [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:outreg = alloc_region(global_init_biginf_buf_size); |]
-                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg->start_ptr; |]
-                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg->start_ptr + global_init_biginf_buf_size; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg->reg_start; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg->reg_start + global_init_biginf_buf_size; |]
                                  -- This would ideally be the *end* of the input region corresponding to inV
                                  -- but we have don't have at hand here. Passing in NULL is okay because this pointer
                                  -- is unused in the copy function.
@@ -978,7 +978,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                , C.BlockDecl [cdecl| $ty:tysize $id:wrote = fwrite($id:copy_start, $id:copy_size, 1, $id:out_hdl); |]
                                , C.BlockStm [cstm| fclose($id:out_hdl); |]
                                , C.BlockStm [cstm| printf("Wrote: %s\n", $string:fp); |]
-                               , C.BlockStm [cstm| if ($id:outreg->refcount != REG_FREED) { free_region($id:end_outreg); }  |]
+                               , C.BlockStm [cstm| if ($id:outreg->reg_refcount != REG_FREED) { free_region($id:end_outreg); }  |]
                                , C.BlockStm [cstm| free($id:outreg); |]
                                ]
                     | otherwise -> error $ "WritePackedFile, wrong arguments "++show rnds++", or expected bindings "++show bnds

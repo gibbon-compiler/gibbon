@@ -29,7 +29,7 @@
 #include <cilk/cilk_api.h>
 #endif
 
-#define KB 1000lu
+#define KB 1024lu
 #define MB (KB * 1000lu)
 #define GB (MB * 1000lu)
 
@@ -37,10 +37,10 @@
 static long long global_init_biginf_buf_size = (4 * GB);
 
 // Initial size of Infinite buffers
-static long long global_init_inf_buf_size = 64 * KB;
+static long long global_init_inf_buf_size = 1 * KB;
 
 // Maximum size of a chunk, see GitHub #110.
-long long global_inf_buf_max_chunk_size = 1 * GB;
+static long long global_inf_buf_max_chunk_size = 1 * GB;
 
 static long long global_size_param = 1;
 static long long global_iters_param = 1;
@@ -57,10 +57,17 @@ static const int num_workers = 1;
 static long long global_region_count = 0;
 static bool global_region_count_flag = false;
 
+#ifdef _PARALLEL
 static inline void bump_global_region_count() {
     __atomic_add_fetch(&global_region_count, 1, __ATOMIC_SEQ_CST);
     return;
 }
+#else
+static inline void bump_global_region_count() {
+    global_region_count++;
+    return;
+}
+#endif
 
 static inline void print_global_region_count() {
     printf("REGION_COUNT: %lld\n", global_region_count);
@@ -91,11 +98,11 @@ static int get_num_processors() {
 
 
 #ifdef _BUMPALLOC
-// #define DEBUG
+// #define _DEBUG
 #warning "Using bump allocator."
 
-__thread char* heap_ptr = (char*)NULL;
-__thread char* heap_ptr_end = (char*)NULL;
+__thread char* bumpalloc_heap_ptr = (char*)NULL;
+__thread char* bumpalloc_heap_ptr_end = (char*)NULL;
 
 char* saved_heap_ptr_stack[100];
 int num_saved_heap_ptr = 0;
@@ -105,7 +112,7 @@ int dbgprintf(const char *format, ...) {
     int code = 0;
     va_list args;
     va_start(args, format);
-#ifdef DEBUG
+#ifdef _DEBUG
     code = vprintf(format, args);
 #endif
     va_end(args);
@@ -113,20 +120,24 @@ int dbgprintf(const char *format, ...) {
 }
 
 // For simplicity just use a single large slab:
-void INITALLOC() {
-  if (! heap_ptr) {
-      heap_ptr = (char*)malloc(global_init_biginf_buf_size);
-      heap_ptr_end = heap_ptr + global_init_biginf_buf_size;
-      // dbgprintf("Arena size for bump alloc: %lld\n", global_init_biginf_buf_size);
+void INITBUMPALLOC() {
+  if (! bumpalloc_heap_ptr) {
+      bumpalloc_heap_ptr = (char*)malloc(global_init_biginf_buf_size);
+      bumpalloc_heap_ptr_end = bumpalloc_heap_ptr + global_init_biginf_buf_size;
+#ifdef _DEBUG
+      printf("Arena size for bump alloc: %lld\n", global_init_biginf_buf_size);
+#endif
   }
-  // dbgprintf("BUMPALLOC/INITALLOC DONE: heap_ptr = %p\n", heap_ptr);
+#ifdef _DEBUG
+  printf("BUMPALLOC/INITBUMPALLOC DONE: heap_ptr = %p\n", heap_ptr);
+#endif
 }
 
 void* BUMPALLOC(int n) {
-      INITALLOC();
-      if (heap_ptr + n < heap_ptr_end) {
-          char* old= heap_ptr;
-          heap_ptr += n;
+      INITBUMPALLOC();
+      if (bumpalloc_heap_ptr + n < bumpalloc_heap_ptr_end) {
+          char* old= bumpalloc_heap_ptr;
+          bumpalloc_heap_ptr += n;
           return old;
       } else {
           fprintf(stderr, "Error: bump allocator ran out of memory.");
@@ -149,14 +160,14 @@ void restore_alloc_state() {
   }
   num_saved_heap_ptr--;
   dbgprintf("Restoring(%p): pos %d, discarding %p",
-            saved_heap_ptr_stack[num_saved_heap_ptr], num_saved_heap_ptr, heap_ptr);
-  heap_ptr = saved_heap_ptr_stack[num_saved_heap_ptr];
+            saved_heap_ptr_stack[num_saved_heap_ptr], num_saved_heap_ptr, bumpalloc_heap_ptr);
+  bumpalloc_heap_ptr = saved_heap_ptr_stack[num_saved_heap_ptr];
 }
 
 
 #else
 // Regular malloc mode:
-void INITALLOC() {}
+void INITBUMPALLOC() {}
 void save_alloc_state() {}
 void restore_alloc_state() {}
 
@@ -185,7 +196,7 @@ char *ALLOC_COUNTED(size_t size) {
     return ALLOC(size);
 }
 #define ALLOC(n) malloc(n)
-  #endif
+  #endif // _POINTER
 #endif // _PARALLEL
 
 
@@ -534,15 +545,7 @@ IntTy print_symbol(SymTy idx) {
   }
 }
 
-void delete_all_symbols() {
-    struct SymTable_elem *current, *tmp;
-    HASH_ITER(hh, global_sym_table, current, tmp) {
-        HASH_DEL(global_sym_table, current);
-        free(current);
-    }
-}
-
-#ifdef _BUMPALLOC
+#ifdef _PARALLEL
 SymTy gensym() {
     SymTy idx = __atomic_add_fetch(&global_gensym_counter, 1, __ATOMIC_SEQ_CST);
     return idx;
@@ -575,17 +578,17 @@ Garbage collection
    stores some additional metadata (RegionFooter) -- to chain the chunks together in a list
    and also for garbage collection. Representation of a footer at runtime:
 
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   serialized data | reg_id_ptr | seq_no | size | refcount_ptr | outset_ptr | next_ptr | prev_ptr
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   serialized data | rf_reg_id_ptr | rf_seq_no | rf_size | rf_refcount_ptr | rf_outset_ptr | rf_next | rf_prev
+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
    The metadata after the serialized data serves various purposes:
 
-   - reg_id_ptr: Pointer to the region_id that this chunk belongs to.
+   - rf_reg_id_ptr: Pointer to the region_id that this chunk belongs to.
 
-   - seq_no: The index of this particular chunk in the list.
+   - rf_seq_no: The index of this particular chunk in the list.
 
-   - size: Used during bounds checking to calculate the size of the next region in
+   - rf_size: Used during bounds checking to calculate the size of the next region in
      the linked list.
 
    - refcount and outset: Whenever an inter-region indirection is created, we record that information
@@ -594,7 +597,7 @@ Garbage collection
      be bumped by 1. Note that all there's only 1 refcount cell, and 1 outset per logical region,
      and chunks only store a pointer to them.
 
-   - next_ptr / prev_ptr: Point to the next and previous chunk respectively.
+   - next / prev: Point to the next and previous chunk respectively.
 
 
 There are two ways in which a region may be freed:
@@ -627,32 +630,35 @@ all of them are GC'd. So we need pointers to traverse backward get to the first 
  */
 
 typedef struct Outset_elem {
-    CursorTy ref;
+    CursorTy outset_ref;
+    // These have to be named prev and next for UTLIST macros to work.
     struct Outset_elem *prev;
     struct Outset_elem *next;
 } Outset_elem;
 
 typedef struct RegionTy_struct {
     SymTy reg_id;
-    IntTy refcount;
-    CursorTy start_ptr;
-    Outset_elem *outset;
+    IntTy reg_refcount;
+    CursorTy reg_start;
+    Outset_elem *reg_outset;
 } RegionTy;
 
 typedef struct RegionFooter_struct {
-    // This sequence number is not strictly required, but helps with debugging
-    // and error messages.
-    SymTy *reg_id_ptr;
-    IntTy seq_no;
-    IntTy size;
-    IntTy *refcount_ptr;
-    Outset_elem *outset_ptr;
-    CursorTy next;
-    CursorTy prev;
+    // rf_reg_id_ptr and rf_seq_no are not strictly required,
+    // but they help with debugging and error messages.
+    SymTy *rf_reg_id_ptr;
+    IntTy rf_seq_no;
+
+    // Necessary fields.
+    IntTy rf_size;
+    IntTy *rf_refcount_ptr;
+    Outset_elem *rf_outset_ptr;
+    CursorTy rf_next;
+    CursorTy rf_prev;
 } RegionFooter;
 
 RegionTy *alloc_region(IntTy size) {
-    // Allocate the first chunk
+    // Allocate the first chunk.
     IntTy total_size = size + sizeof(RegionFooter);
     CursorTy start = ALLOC_PACKED(total_size);
     if (start == NULL) {
@@ -667,23 +673,23 @@ RegionTy *alloc_region(IntTy size) {
         exit(1);
     }
     reg->reg_id = gensym();
-    reg->refcount = 1;
-    reg->start_ptr = start;
-    reg->outset = NULL;
+    reg->reg_refcount = 1;
+    reg->reg_start = start;
+    reg->reg_outset = NULL;
 
-#ifdef DEBUG
+#ifdef _DEBUG
     printf("Allocated a region(%lld): %lld bytes.\n", reg->reg_id, size);
 #endif
 
-    // Write the footer
+    // Write the footer.
     RegionFooter* footer = (RegionFooter *) end;
-    footer->reg_id_ptr = &(reg->reg_id);
-    footer->seq_no = 1;
-    footer->size = size;
-    footer->refcount_ptr = &(reg->refcount);
-    footer->outset_ptr = reg->outset;
-    footer->next = NULL;
-    footer->prev = NULL;
+    footer->rf_reg_id_ptr = &(reg->reg_id);
+    footer->rf_seq_no = 1;
+    footer->rf_size = size;
+    footer->rf_refcount_ptr = &(reg->reg_refcount);
+    footer->rf_outset_ptr = reg->reg_outset;
+    footer->rf_next = NULL;
+    footer->rf_prev = NULL;
     *(RegionFooter *) end = *footer;
 
     return reg;
@@ -697,21 +703,21 @@ RegionTy *alloc_counted_region(IntTy size) {
 
 
 typedef struct ChunkTy_struct {
-    CursorTy start_ptr;
-    CursorTy end_ptr;
+    CursorTy chunk_start;
+    CursorTy chunk_end;
 } ChunkTy;
 
 ChunkTy alloc_chunk(CursorTy end_old_chunk) {
-    // Get size from current footer
+    // Get size from current footer.
     RegionFooter *footer = (RegionFooter *) end_old_chunk;
-    IntTy newsize = footer->size * 2;
+    IntTy newsize = footer->rf_size * 2;
     // See #110.
     if (newsize > global_inf_buf_max_chunk_size) {
         newsize = global_inf_buf_max_chunk_size;
     }
     IntTy total_size = newsize + sizeof(RegionFooter);
 
-    // Allocate
+    // Allocate.
     CursorTy start = ALLOC_PACKED(total_size);
     if (start == NULL) {
         printf("alloc_chunk: malloc failed: %lld", total_size);
@@ -719,58 +725,58 @@ ChunkTy alloc_chunk(CursorTy end_old_chunk) {
     }
     CursorTy end = start + newsize;
 
-#ifdef DEBUG
+#ifdef _DEBUG
     printf("Allocated a chunk: %lld bytes.\n", total_size);
 #endif
 
-    // Link the next chunk's footer
-    footer->next = end;
+    // Link the next chunk's footer.
+    footer->rf_next = end;
 
-    // Write the footer
+    // Write the footer.
     RegionFooter* new_footer = (RegionFooter *) end;
-    new_footer->reg_id_ptr = footer->reg_id_ptr;
-    new_footer->seq_no = footer->seq_no + 1;
-    new_footer->size = newsize;
-    new_footer->refcount_ptr = footer->refcount_ptr;
-    new_footer->outset_ptr = footer->outset_ptr;
-    new_footer->next = NULL;
-    new_footer->prev = end_old_chunk;
+    new_footer->rf_reg_id_ptr = footer->rf_reg_id_ptr;
+    new_footer->rf_seq_no = footer->rf_seq_no + 1;
+    new_footer->rf_size = newsize;
+    new_footer->rf_refcount_ptr = footer->rf_refcount_ptr;
+    new_footer->rf_outset_ptr = footer->rf_outset_ptr;
+    new_footer->rf_next = NULL;
+    new_footer->rf_prev = end_old_chunk;
 
     return (ChunkTy) {start , end};
 }
 
 RegionFooter* trav_to_first_chunk(RegionFooter *footer) {
-    if (footer->seq_no == 1) {
+    if (footer->rf_seq_no == 1) {
         return footer;
-    } else if (footer->prev == NULL) {
-        fprintf(stderr, "No previous chunk found at seq_no: %lld", footer->seq_no);
+    } else if (footer->rf_prev == NULL) {
+        fprintf(stderr, "No previous chunk found at rf_seq_no: %lld", footer->rf_seq_no);
         return NULL;
     } else {
-        trav_to_first_chunk((RegionFooter *) footer->prev);
+        trav_to_first_chunk((RegionFooter *) footer->rf_prev);
     }
     return NULL;
 }
 
 int get_ref_count(CursorTy end_ptr) {
     RegionFooter footer = *(RegionFooter *) end_ptr;
-    return *(footer.refcount_ptr);
+    return *(footer.rf_refcount_ptr);
 }
 
-// B is the pointer, and A is the pointee (i.e B -> A) --
-// bump A's refcount, and update B's outset ptr.
+// B is the pointer, and A is the pointee (i.e B -> A).
+// Bump A's refcount and update B's outset ptr.
 static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     // Bump refcount
     RegionFooter *footer_a = (RegionFooter *) end_a;
-    IntTy refcount = *(footer_a->refcount_ptr);
+    IntTy refcount = *(footer_a->rf_refcount_ptr);
     IntTy new_refcount = refcount + 1;
-    *(footer_a->refcount_ptr) = new_refcount;
+    *(footer_a->rf_refcount_ptr) = new_refcount;
 
-    // Grab B's outset
+    // Grab B's outset.
     RegionFooter *footer_b = (RegionFooter *) end_b;
-    Outset_elem *head = footer_b->outset_ptr;
+    Outset_elem *head = footer_b->rf_outset_ptr;
 
-#ifdef DEBUG
-    printf("bump_ref_count: %lld -> %lld\n", *(footer_b->reg_id_ptr), *(footer_a->reg_id_ptr));
+#ifdef _DEBUG
+    printf("bump_ref_count: %lld -> %lld\n", *(footer_b->rf_reg_id_ptr), *(footer_a->rf_reg_id_ptr));
     Outset_elem *elt;
     IntTy count;
     DL_COUNT(head, elt, count);
@@ -778,19 +784,19 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     assert(refcount == count+1);
 #endif
 
-    // Add A to B's outset
+    // Add A to B's outset.
     Outset_elem *add = malloc(sizeof(Outset_elem));
-    add->ref = end_a;
+    add->outset_ref = end_a;
     // add->next = NULL;
     // add->prev = NULL;
     DL_APPEND(head, add);
 
     // As far as I can tell, DL_APPEND updates "head" after an append. Or maybe
     // only after the first one, possibly to change NULL to some struct.
-    // In any case, we update outset_ptr here.
-    footer_b->outset_ptr = head;
+    // In any case, we update rf_outset_ptr here.
+    footer_b->rf_outset_ptr = head;
 
-#ifdef DEBUG
+#ifdef _DEBUG
     IntTy new_count;
     DL_COUNT(head, elt, new_count);
     printf("bump_ref_count: new-refcount=%lld, new-outset-len=%lld:\n", new_refcount, new_count);
@@ -802,59 +808,60 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
 
 void free_region(CursorTy end_reg) {
     RegionFooter footer = *(RegionFooter *) end_reg;
-    CursorTy first_chunk = end_reg - footer.size;
-    CursorTy next_chunk = footer.next;
+    CursorTy first_chunk = end_reg - footer.rf_size;
+    CursorTy next_chunk = footer.rf_next;
 
-#ifdef DEBUG
+#ifdef _DEBUG
     IntTy old_refcount, new_refcount;
-    old_refcount = *(footer.refcount_ptr);
+    old_refcount = *(footer.rf_refcount_ptr);
 #endif
 
     // Decrement current reference count.
-    if (*(footer.refcount_ptr) != 0) {
-        *(footer.refcount_ptr) = *(footer.refcount_ptr)-1;
+    if (*(footer.rf_refcount_ptr) != 0) {
+        *(footer.rf_refcount_ptr) = *(footer.rf_refcount_ptr)-1;
     }
 
-#ifdef DEBUG
-    new_refcount = *(footer.refcount_ptr);
-    printf("free_region(%lld): refcounts (1): old-refcount=%lld, new-refcount=%lld:\n", *(footer.reg_id_ptr), old_refcount, new_refcount);
+#ifdef _DEBUG
+    new_refcount = *(footer.rf_refcount_ptr);
+    printf("free_region(%lld): refcounts (1): old-refcount=%lld, new-refcount=%lld:\n", *(footer.rf_reg_id_ptr), old_refcount, new_refcount);
 #endif
 
 
     // Free this region recount is 0.
-    if (*(footer.refcount_ptr) == 0) {
+    if (*(footer.rf_refcount_ptr) == 0) {
+
+        Outset_elem *elt, *tmp;
+        Outset_elem *head = (footer.rf_outset_ptr);
+
+        // Outset.
+#ifdef _DEBUG
+        IntTy count;
+        DL_COUNT(head, elt, count);
+        printf("free_region(%lld): outset-len: %lld\n", *(footer.rf_reg_id_ptr), count);
+#endif
 
         // Decrement refcounts of all regions `reg` points to
-        if (footer.outset_ptr != NULL) {
-            // Grab the outset, and decrement refcounts.
-            Outset_elem *elt, *tmp;
-            Outset_elem *head = (footer.outset_ptr);
-
-#ifdef DEBUG
-            IntTy count;
-            DL_COUNT(head, elt, count);
-            printf("free_region(%lld): outset-len: %lld\n", *(footer.reg_id_ptr), count);
-#endif
+        if (footer.rf_outset_ptr != NULL) {
 
             // Decrement refcounts, free regions with refcount==0 and also free
             // elements of the outset.
             DL_FOREACH_SAFE(head,elt,tmp) {
-                RegionFooter *elt_footer = (RegionFooter *) elt->ref;
-#ifdef DEBUG
-                old_refcount = *(elt_footer->refcount_ptr);
+                RegionFooter *elt_footer = (RegionFooter *) elt->outset_ref;
+#ifdef _DEBUG
+                old_refcount = *(elt_footer->rf_refcount_ptr);
 #endif
 
-                // TODO(ckoparkar): BUG; *(elt_footer->refcount_ptr) contains a garbage value
+                // TODO(ckoparkar): BUG; *(elt_footer->rf_refcount_ptr) contains a garbage value
                 // which prevents certain regions from getting garbage collected.
-                *(elt_footer->refcount_ptr) = *(elt_footer->refcount_ptr) - 1;
-                // *(elt_footer->refcount_ptr) = 0;
+                *(elt_footer->rf_refcount_ptr) = *(elt_footer->rf_refcount_ptr) - 1;
+                // *(elt_footer->rf_refcount_ptr) = 0;
 
-#ifdef DEBUG
-                new_refcount = *(elt_footer->refcount_ptr);
-                printf("free_region(%lld): refcounts (2): old-refcount=%lld, new-refcount=%lld:\n", *(footer.reg_id_ptr), old_refcount, new_refcount);
+#ifdef _DEBUG
+                new_refcount = *(elt_footer->rf_refcount_ptr);
+                printf("free_region(%lld): refcounts (2): old-refcount=%lld, new-refcount=%lld:\n", *(footer.rf_reg_id_ptr), old_refcount, new_refcount);
 #endif
 
-                if (*(elt_footer->refcount_ptr) == 0) {
+                if (*(elt_footer->rf_refcount_ptr) == 0) {
                     // See [Why is it a doubly linked-list?] above
                     RegionFooter *first_chunk = trav_to_first_chunk(elt_footer);
                     if (first_chunk != NULL) {
@@ -866,14 +873,14 @@ void free_region(CursorTy end_reg) {
             }
         }
 
-#ifdef DEBUG
+#ifdef _DEBUG
         // Bookkeeping
         int num_chunks = 1;
-        IntTy total_bytesize = footer.size;
+        IntTy total_bytesize = footer.rf_size;
 #endif
 
         // Indicate that this region has been garbage collected.
-        *(footer.refcount_ptr) = REG_FREED;
+        *(footer.rf_refcount_ptr) = REG_FREED;
 
         // Free the first chunk
         free(first_chunk);
@@ -881,21 +888,21 @@ void free_region(CursorTy end_reg) {
         // Now, all the others
         while (next_chunk != NULL) {
             footer = *(RegionFooter *) next_chunk;
-            free(next_chunk - footer.size);
-            next_chunk = footer.next;
+            free(next_chunk - footer.rf_size);
+            next_chunk = footer.rf_next;
 
-#ifdef DEBUG
+#ifdef _DEBUG
             num_chunks++;
-            total_bytesize = total_bytesize + footer.size;
+            total_bytesize = total_bytesize + footer.rf_size;
 #endif
         }
 
-#ifdef DEBUG
-        printf("free_region(%lld): Freed %lld bytes across %d chunks.\n", *(footer.reg_id_ptr), total_bytesize, num_chunks);
+#ifdef _DEBUG
+        printf("free_region(%lld): Freed %lld bytes across %d chunks.\n", *(footer.rf_reg_id_ptr), total_bytesize, num_chunks);
 #endif
     } else {
-#ifdef DEBUG
-        printf("free_region(%lld): non-zero refcount: %lld.\n", *(footer.reg_id_ptr), *(footer.refcount_ptr));
+#ifdef _DEBUG
+        printf("free_region(%lld): non-zero refcount: %lld.\n", *(footer.rf_reg_id_ptr), *(footer.rf_refcount_ptr));
 #endif
     }
 }
@@ -921,13 +928,13 @@ BoolTy is_big(IntTy i, CursorTy cur) {
 
 typedef struct VectorTy_struct {
     // Bounds on the vector.
-    IntTy lower, upper;
+    IntTy vec_lower, vec_upper;
 
     // Size of each element.
-    IntTy elt_size;
+    IntTy vec_elt_size;
 
     // Actual elements of the vector.
-    void* data;
+    void* vec_data;
 } VectorTy;
 
 VectorTy* vector_alloc(IntTy num, IntTy elt_size) {
@@ -941,15 +948,15 @@ VectorTy* vector_alloc(IntTy num, IntTy elt_size) {
         printf("alloc_vector: malloc failed: %ld", sizeof(num * elt_size));
         exit(1);
     }
-    vec->lower = 0;
-    vec->upper = num;
-    vec->elt_size = elt_size;
-    vec->data = data;
+    vec->vec_lower = 0;
+    vec->vec_upper = num;
+    vec->vec_elt_size = elt_size;
+    vec->vec_data = data;
     return vec;
 }
 
 IntTy vector_length(VectorTy *vec) {
-    return (vec->upper - vec->lower);
+    return (vec->vec_upper - vec->vec_lower);
 }
 
 BoolTy vector_is_empty(VectorTy *vec) {
@@ -957,14 +964,14 @@ BoolTy vector_is_empty(VectorTy *vec) {
 }
 
 VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
-    IntTy lower = vec->lower + i;
-    IntTy upper = vec->lower + i + n;
-    if ((lower > vec->upper)) {
-        printf("vector_slice: lower out of bounds, %lld > %lld", lower, vec->upper);
+    IntTy lower = vec->vec_lower + i;
+    IntTy upper = vec->vec_lower + i + n;
+    if ((lower > vec->vec_upper)) {
+        printf("vector_slice: lower out of bounds, %lld > %lld", lower, vec->vec_upper);
         exit(1);
     }
-    if ((upper > vec->upper)) {
-        printf("vector_slice: upper out of bounds: %lld > %lld", upper, vec->upper);
+    if ((upper > vec->vec_upper)) {
+        printf("vector_slice: upper out of bounds: %lld > %lld", upper, vec->vec_upper);
         exit(1);
     }
     VectorTy *vec2 = ALLOC(sizeof(VectorTy));
@@ -972,39 +979,39 @@ VectorTy* vector_slice(IntTy i, IntTy n, VectorTy *vec) {
         printf("vector_slice: malloc failed: %ld", sizeof(VectorTy));
         exit(1);
     }
-    vec2->lower = lower;
-    vec2->upper = upper;
-    vec2->elt_size = vec->elt_size;
-    vec2->data = vec->data;
+    vec2->vec_lower = lower;
+    vec2->vec_upper = upper;
+    vec2->vec_elt_size = vec->vec_elt_size;
+    vec2->vec_data = vec->vec_data;
     return vec2;
 }
 
 // The callers must cast the return value.
 static inline void* vector_nth(VectorTy *vec, IntTy i) {
     // if (i < vec->lower || i > vec->upper) {
-    //     printf("vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->lower, vec->upper);
+    //     printf("vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->vec_lower, vec->vec_upper);
     //     exit(1);
     // }
-    return (vec->data + (vec->elt_size * (vec->lower + i)));
+    return (vec->vec_data + (vec->vec_elt_size * (vec->vec_lower + i)));
 }
 
 static inline VectorTy* vector_inplace_update(VectorTy *vec, IntTy i, void* elt) {
     void* dst = vector_nth(vec, i);
-    memcpy(dst, elt, vec->elt_size);
+    memcpy(dst, elt, vec->vec_elt_size);
     return vec;
 }
 
 static inline VectorTy* vector_copy(VectorTy *vec) {
     IntTy len = vector_length(vec);
     void *start = vector_nth(vec, 0);
-    VectorTy *vec2 = vector_alloc(len, vec->elt_size);
-    memcpy(vec2->data, start, len * vec->elt_size);
+    VectorTy *vec2 = vector_alloc(len, vec->vec_elt_size);
+    memcpy(vec2->vec_data, start, len * vec->vec_elt_size);
     return vec2;
 }
 
 static inline VectorTy* vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
     void *start = vector_nth(vec, 0);
-    qsort(start, vector_length(vec), vec->elt_size, compar);
+    qsort(start, vector_length(vec), vec->vec_elt_size, compar);
     return vec;
 }
 
@@ -1025,7 +1032,7 @@ static inline VectorTy* vector_concat(VectorTy *vec) {
     for (IntTy i = 0; i < len; i++) {
         elt_ref = vector_nth(vec, i);
         elt = *elt_ref;
-        result_elt_size = elt->elt_size;
+        result_elt_size = elt->vec_elt_size;
         result_len += vector_length(elt);
     }
 
@@ -1050,15 +1057,15 @@ static inline VectorTy* vector_concat(VectorTy *vec) {
 }
 
 static inline void vector_free(VectorTy *vec) {
-    free(vec->data);
+    free(vec->vec_data);
     free(vec);
     return;
 }
 
 static inline VectorTy* vector_merge(VectorTy *vec1, VectorTy *vec2) {
-    if (vec1->upper != vec2->lower) {
+    if (vec1->vec_upper != vec2->vec_lower) {
         printf("vector_merge: non-contiguous slices, (%lld,%lld), (%lld,%lld).",
-               vec1->lower, vec1->upper, vec2->lower, vec2->upper);
+               vec1->vec_lower, vec1->vec_upper, vec2->vec_lower, vec2->vec_upper);
         exit(1);
     }
     VectorTy *merged = ALLOC(sizeof(VectorTy));
@@ -1066,10 +1073,10 @@ static inline VectorTy* vector_merge(VectorTy *vec1, VectorTy *vec2) {
         printf("vector_merge: malloc failed: %ld", sizeof(VectorTy));
         exit(1);
     }
-    merged->lower = vec1->lower;
-    merged->upper = vec2->upper;
-    merged->elt_size = vec1->elt_size;
-    merged->data = vec1->data;
+    merged->vec_lower = vec1->vec_lower;
+    merged->vec_upper = vec2->vec_upper;
+    merged->vec_elt_size = vec1->vec_elt_size;
+    merged->vec_data = vec1->vec_data;
     return merged;
 }
 
@@ -1104,62 +1111,62 @@ double sum_timing_array(VectorTy *times) {
 // -------------------------------------
 
 typedef struct ListTy_struct {
-    IntTy data_size;
-    void* data;
-    struct ListTy_struct* next;
+    IntTy ll_data_size;
+    void* ll_data;
+    struct ListTy_struct* ll_next;
 } ListTy;
 
 static inline ListTy* list_alloc(IntTy data_size) {
     // ListTy *ls = ALLOC(sizeof(ListTy));
     ListTy *ls = BUMPALLOC(sizeof(ListTy));
-    ls->data_size = data_size;
-    ls->data = NULL;
-    ls->next = NULL;
+    ls->ll_data_size = data_size;
+    ls->ll_data = NULL;
+    ls->ll_next = NULL;
     return ls;
 }
 
 static inline BoolTy list_is_empty(ListTy *ls) {
-    return ls->next == NULL;
+    return ls->ll_next == NULL;
 }
 
 static inline ListTy* list_cons(void* elt, ListTy *ls) {
     // void* data = ALLOC(ls->data_size);
-    void* data = BUMPALLOC(ls->data_size);
+    void* data = BUMPALLOC(ls->ll_data_size);
     if (data == NULL) {
-        printf("list_cons: malloc failed: %lld", ls->data_size);
+        printf("list_cons: malloc failed: %lld", ls->ll_data_size);
         exit(1);
     }
-    memcpy(data, elt, ls->data_size);
+    memcpy(data, elt, ls->ll_data_size);
     // ListTy *res = ALLOC(sizeof(ListTy));
     ListTy *res = BUMPALLOC(sizeof(ListTy));
-    res->data_size = ls->data_size;
-    res->data = data;
-    res->next = (ListTy*) ls;
+    res->ll_data_size = ls->ll_data_size;
+    res->ll_data = data;
+    res->ll_next = (ListTy*) ls;
     return res;
 }
 
 static inline void* list_head(ListTy *ls) {
-    return ls->data;
+    return ls->ll_data;
 }
 
 static inline ListTy* list_tail(ListTy *ls) {
-    return ls->next;
+    return ls->ll_next;
 }
 
 static inline void list_free(ListTy *ls) {
-    free(ls->data);
+    free(ls->ll_data);
     free(ls);
     return;
 }
 
 static inline ListTy* list_copy(ListTy *ls) {
-    ListTy *ls2 = list_alloc(ls->data_size);
-    if (ls->data != NULL) {
-        void* data = BUMPALLOC(ls->data_size);
-        memcpy(data, ls->data, ls->data_size);
-        ls2->data = data;
+    ListTy *ls2 = list_alloc(ls->ll_data_size);
+    if (ls->ll_data != NULL) {
+        void* data = BUMPALLOC(ls->ll_data_size);
+        memcpy(data, ls->ll_data, ls->ll_data_size);
+        ls2->ll_data = data;
     }
-    ls2->next = ls->next;
+    ls2->ll_next = ls->ll_next;
     return ls2;
 }
 
