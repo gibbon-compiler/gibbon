@@ -630,10 +630,9 @@ all of them are GC'd. So we need pointers to traverse backward get to the first 
  */
 
 typedef struct Outset_elem {
+    // SymTy outset_id;
     CursorTy outset_ref;
-    // These have to be named prev and next for UTLIST macros to work.
-    struct Outset_elem *prev;
-    struct Outset_elem *next;
+    UT_hash_handle hh;
 } Outset_elem;
 
 typedef struct RegionTy_struct {
@@ -773,32 +772,26 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
 
     // Grab B's outset.
     RegionFooter *footer_b = (RegionFooter *) end_b;
-    Outset_elem *head = footer_b->rf_outset_ptr;
 
 #ifdef _DEBUG
     printf("bump_ref_count: %lld -> %lld\n", *(footer_b->rf_reg_id_ptr), *(footer_a->rf_reg_id_ptr));
     Outset_elem *elt;
     IntTy count;
-    DL_COUNT(head, elt, count);
+    count = HASH_COUNT(footer_b->rf_outset_ptr);
     printf("bump_ref_count: old-refcount=%lld, old-outset-len=%lld:\n", refcount, count);
     assert(refcount == count+1);
 #endif
 
     // Add A to B's outset.
     Outset_elem *add = malloc(sizeof(Outset_elem));
+    // add->outset_id = gensym();
     add->outset_ref = end_a;
-    // add->next = NULL;
-    // add->prev = NULL;
-    DL_APPEND(head, add);
-
-    // As far as I can tell, DL_APPEND updates "head" after an append. Or maybe
-    // only after the first one, possibly to change NULL to some struct.
-    // In any case, we update rf_outset_ptr here.
-    footer_b->rf_outset_ptr = head;
+    // HASH_ADD(hh, footer_b->rf_outset_ptr, outset_id, sizeof(SymTy), add);
+    HASH_ADD_PTR(footer_b->rf_outset_ptr, outset_ref, add);
 
 #ifdef _DEBUG
     IntTy new_count;
-    DL_COUNT(head, elt, new_count);
+    new_count = HASH_COUNT(footer_b->rf_outset_ptr);
     printf("bump_ref_count: new-refcount=%lld, new-outset-len=%lld:\n", new_refcount, new_count);
     assert(new_refcount == new_count+1);
 #endif
@@ -836,7 +829,7 @@ void free_region(CursorTy end_reg) {
         // Outset.
 #ifdef _DEBUG
         IntTy count;
-        DL_COUNT(head, elt, count);
+        count = HASH_COUNT(head);
         printf("free_region(%lld): outset-len: %lld\n", *(footer.rf_reg_id_ptr), count);
 #endif
 
@@ -845,7 +838,7 @@ void free_region(CursorTy end_reg) {
 
             // Decrement refcounts, free regions with refcount==0 and also free
             // elements of the outset.
-            DL_FOREACH_SAFE(head,elt,tmp) {
+            HASH_ITER(hh, head, elt, tmp) {
                 RegionFooter *elt_footer = (RegionFooter *) elt->outset_ref;
 #ifdef _DEBUG
                 old_refcount = *(elt_footer->rf_refcount_ptr);
@@ -854,10 +847,10 @@ void free_region(CursorTy end_reg) {
                 // TODO(ckoparkar): BUG; *(elt_footer->rf_refcount_ptr) contains a garbage value
                 // which prevents certain regions from getting garbage collected.
                 *(elt_footer->rf_refcount_ptr) = *(elt_footer->rf_refcount_ptr) - 1;
-                // *(elt_footer->rf_refcount_ptr) = 0;
 
 #ifdef _DEBUG
                 new_refcount = *(elt_footer->rf_refcount_ptr);
+                printf("free_region(%lld): seq no: %lld\n", *(footer.rf_reg_id_ptr), footer.rf_seq_no);
                 printf("free_region(%lld): refcounts (2): old-refcount=%lld, new-refcount=%lld:\n", *(footer.rf_reg_id_ptr), old_refcount, new_refcount);
 #endif
 
@@ -868,8 +861,8 @@ void free_region(CursorTy end_reg) {
                         free_region((CursorTy) first_chunk);
                     }
                 }
-                DL_DELETE(head,elt);
-                free(elt);
+                HASH_DEL(head, elt);
+
             }
         }
 
