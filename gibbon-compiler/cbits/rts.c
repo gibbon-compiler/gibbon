@@ -635,11 +635,18 @@ typedef struct Outset_elem {
     UT_hash_handle hh;
 } Outset_elem;
 
+typedef struct Inset_elem {
+    // SymTy inset_id;
+    CursorTy inset_ref;
+    UT_hash_handle hh;
+} Inset_elem;
+
 typedef struct RegionTy_struct {
     SymTy reg_id;
     IntTy reg_refcount;
     CursorTy reg_start;
     Outset_elem *reg_outset;
+    Inset_elem *reg_inset;
 } RegionTy;
 
 typedef struct RegionFooter_struct {
@@ -652,6 +659,7 @@ typedef struct RegionFooter_struct {
     IntTy rf_size;
     IntTy *rf_refcount_ptr;
     Outset_elem *rf_outset_ptr;
+    Inset_elem *rf_inset_ptr;
     CursorTy rf_next;
     CursorTy rf_prev;
 } RegionFooter;
@@ -675,6 +683,7 @@ RegionTy *alloc_region(IntTy size) {
     reg->reg_refcount = 1;
     reg->reg_start = start;
     reg->reg_outset = NULL;
+    reg->reg_inset = NULL;
 
 #ifdef _DEBUG
     printf("Allocated a region(%lld): %lld bytes.\n", reg->reg_id, size);
@@ -687,6 +696,7 @@ RegionTy *alloc_region(IntTy size) {
     footer->rf_size = size;
     footer->rf_refcount_ptr = &(reg->reg_refcount);
     footer->rf_outset_ptr = reg->reg_outset;
+    footer->rf_inset_ptr = reg->reg_inset;
     footer->rf_next = NULL;
     footer->rf_prev = NULL;
     *(RegionFooter *) end = *footer;
@@ -738,6 +748,7 @@ ChunkTy alloc_chunk(CursorTy end_old_chunk) {
     new_footer->rf_size = newsize;
     new_footer->rf_refcount_ptr = footer->rf_refcount_ptr;
     new_footer->rf_outset_ptr = footer->rf_outset_ptr;
+    new_footer->rf_inset_ptr = footer->rf_inset_ptr;
     new_footer->rf_next = NULL;
     new_footer->rf_prev = end_old_chunk;
 
@@ -780,19 +791,30 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     count = HASH_COUNT(footer_b->rf_outset_ptr);
     printf("bump_ref_count: old-refcount=%lld, old-outset-len=%lld:\n", refcount, count);
     assert(refcount == count+1);
+    count = HASH_COUNT(footer_a->rf_inset_ptr);
+    printf("bump_ref_count: old-refcount=%lld, old-inset-len=%lld:\n", refcount, count);
+    assert(refcount == count+1);
 #endif
 
     // Add A to B's outset.
-    Outset_elem *add = malloc(sizeof(Outset_elem));
+    Outset_elem *add_out = malloc(sizeof(Outset_elem));
     // add->outset_id = gensym();
-    add->outset_ref = end_a;
-    // HASH_ADD(hh, footer_b->rf_outset_ptr, outset_id, sizeof(SymTy), add);
-    HASH_ADD_PTR(footer_b->rf_outset_ptr, outset_ref, add);
+    add_out->outset_ref = end_a;
+    // HASH_ADD(hh, footer_b->rf_outset_ptr, outset_id, sizeof(SymTy), add_out);
+    HASH_ADD_PTR(footer_b->rf_outset_ptr, outset_ref, add_out);
 
+    // Add B to A's inset.
+    Inset_elem *add_in = malloc(sizeof(Inset_elem));
+    // TODO: rather than end_b, we should add the exact location which points to A
+    // to its outset.
+    add_in->inset_ref = end_b;
+    HASH_ADD_PTR(footer_a->rf_inset_ptr, inset_ref, add_in);
+
+/*
 #ifdef _DEBUG
     // Test fetch.
     Outset_elem *fetch;
-    HASH_FIND(hh, footer_b->rf_outset_ptr, &add->outset_ref, sizeof(SymTy), fetch);
+    HASH_FIND(hh, footer_b->rf_outset_ptr, &add_out->outset_ref, sizeof(SymTy), fetch);
     RegionFooter *fetch_footer = (RegionFooter *) fetch->outset_ref;
     printf("bump_ref_count: fetched %lld, seq_no=%lld \n", *(fetch_footer->rf_reg_id_ptr), fetch_footer->rf_seq_no);
 
@@ -804,11 +826,15 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     }
     printf("bump_ref_count: outset_ptr: %p\n", footer_b->rf_outset_ptr);
 #endif
+*/
 
 #ifdef _DEBUG
     IntTy new_count;
     new_count = HASH_COUNT(footer_b->rf_outset_ptr);
     printf("bump_ref_count: new-refcount=%lld, new-outset-len=%lld:\n", new_refcount, new_count);
+    assert(new_refcount == new_count+1);
+    new_count = HASH_COUNT(footer_a->rf_inset_ptr);
+    printf("bump_ref_count: new-refcount=%lld, new-inset-len=%lld:\n", new_refcount, new_count);
     assert(new_refcount == new_count+1);
 #endif
 
