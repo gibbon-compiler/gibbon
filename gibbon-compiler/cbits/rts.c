@@ -575,8 +575,8 @@ Garbage collection
 
    Gibbon has "growing regions" i.e each logical region is backed by a doubly linked-list
    of smaller chunks which grows as required. In addition to actual data, each chunk
-   stores some additional metadata (RegionFooter) -- to chain the chunks together in a list
-   and also for garbage collection. Representation of a footer at runtime:
+   stores some additional metadata (RegionFooter) to chain the chunks together in a list
+   and for garbage collection. The footer:
 
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    serialized data | rf_reg_id_ptr | rf_seq_no | rf_size | rf_refcount_ptr | rf_outset_ptr | rf_next | rf_prev
@@ -790,6 +790,22 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     HASH_ADD_PTR(footer_b->rf_outset_ptr, outset_ref, add);
 
 #ifdef _DEBUG
+    // Test fetch.
+    Outset_elem *fetch;
+    HASH_FIND(hh, footer_b->rf_outset_ptr, &add->outset_ref, sizeof(SymTy), fetch);
+    RegionFooter *fetch_footer = (RegionFooter *) fetch->outset_ref;
+    printf("bump_ref_count: fetched %lld, seq_no=%lld \n", *(fetch_footer->rf_reg_id_ptr), fetch_footer->rf_seq_no);
+
+    // Test iteration.
+    Outset_elem *elt2, *tmp;
+    HASH_ITER(hh, footer_b->rf_outset_ptr, elt2, tmp) {
+        fetch_footer = (RegionFooter *) elt2->outset_ref;
+        printf("bump_ref_count: iteration %lld, seq_no=%lld \n", *(fetch_footer->rf_reg_id_ptr), fetch_footer->rf_seq_no);
+    }
+    printf("bump_ref_count: outset_ptr: %p\n", footer_b->rf_outset_ptr);
+#endif
+
+#ifdef _DEBUG
     IntTy new_count;
     new_count = HASH_COUNT(footer_b->rf_outset_ptr);
     printf("bump_ref_count: new-refcount=%lld, new-outset-len=%lld:\n", new_refcount, new_count);
@@ -823,22 +839,22 @@ void free_region(CursorTy end_reg) {
     // Free this region recount is 0.
     if (*(footer.rf_refcount_ptr) == 0) {
 
-        Outset_elem *elt, *tmp;
-        Outset_elem *head = (footer.rf_outset_ptr);
-
         // Outset.
 #ifdef _DEBUG
         IntTy count;
-        count = HASH_COUNT(head);
+        count = HASH_COUNT(footer.rf_outset_ptr);
         printf("free_region(%lld): outset-len: %lld\n", *(footer.rf_reg_id_ptr), count);
+        printf("free_region(%lld): outset_ptr: %p\n", *(footer.rf_reg_id_ptr), footer.rf_outset_ptr);
 #endif
 
         // Decrement refcounts of all regions `reg` points to
         if (footer.rf_outset_ptr != NULL) {
 
+            Outset_elem *elt, *tmp;
+
             // Decrement refcounts, free regions with refcount==0 and also free
             // elements of the outset.
-            HASH_ITER(hh, head, elt, tmp) {
+            HASH_ITER(hh, footer.rf_outset_ptr, elt, tmp) {
                 RegionFooter *elt_footer = (RegionFooter *) elt->outset_ref;
 #ifdef _DEBUG
                 old_refcount = *(elt_footer->rf_refcount_ptr);
@@ -850,8 +866,8 @@ void free_region(CursorTy end_reg) {
 
 #ifdef _DEBUG
                 new_refcount = *(elt_footer->rf_refcount_ptr);
-                printf("free_region(%lld): seq no: %lld\n", *(footer.rf_reg_id_ptr), footer.rf_seq_no);
-                printf("free_region(%lld): refcounts (2): old-refcount=%lld, new-refcount=%lld:\n", *(footer.rf_reg_id_ptr), old_refcount, new_refcount);
+                printf("free_region(%lld): seq no: %lld\n", *(elt_footer->rf_reg_id_ptr), elt_footer->rf_seq_no);
+                printf("free_region(%lld): refcounts (2): old-refcount=%lld, new-refcount=%lld:\n", *(elt_footer->rf_reg_id_ptr), old_refcount, new_refcount);
 #endif
 
                 if (*(elt_footer->rf_refcount_ptr) == 0) {
@@ -861,7 +877,7 @@ void free_region(CursorTy end_reg) {
                         free_region((CursorTy) first_chunk);
                     }
                 }
-                HASH_DEL(head, elt);
+                HASH_DEL(footer.rf_outset_ptr, elt);
 
             }
         }

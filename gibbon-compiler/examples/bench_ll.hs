@@ -45,6 +45,6 @@ gibbon_main =
       ys = Nil_PList
       ys' = iterate (loop2 sizeParam 1 ys)
       m = sumPList 0 ys'
-      _ = printPacked ys'
-      _ = print_newline()
+      -- _ = printPacked ys'
+      -- _ = print_newline()
   in (n,m)
