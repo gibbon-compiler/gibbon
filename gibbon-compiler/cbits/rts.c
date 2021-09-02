@@ -92,8 +92,26 @@ static int get_num_processors() {
 #endif
 }
 
-// -------------------------------------
+// Requires -std=gnu11
+int dbgprintf(const char *format, ...) {
+    int code = 0;
+    va_list args;
+    va_start(args, format);
+#ifdef _DEBUG
+    code = vprintf(format, args);
+#endif
+    va_end(args);
+    return code;
+}
+
+
+// -----------------------------------------------------------------------------
 // Allocators
+// -----------------------------------------------------------------------------
+
+
+// -------------------------------------
+// Bump allocation for linked-lists
 // -------------------------------------
 
 
@@ -107,20 +125,8 @@ __thread char* bumpalloc_heap_ptr_end = (char*)NULL;
 char* saved_heap_ptr_stack[100];
 int num_saved_heap_ptr = 0;
 
-// Requires -std=gnu11
-int dbgprintf(const char *format, ...) {
-    int code = 0;
-    va_list args;
-    va_start(args, format);
-#ifdef _DEBUG
-    code = vprintf(format, args);
-#endif
-    va_end(args);
-    return code;
-}
-
 // For simplicity just use a single large slab:
-void INITBUMPALLOC() {
+static inline void INITBUMPALLOC() {
   if (! bumpalloc_heap_ptr) {
       bumpalloc_heap_ptr = (char*)malloc(global_init_biginf_buf_size);
       bumpalloc_heap_ptr_end = bumpalloc_heap_ptr + global_init_biginf_buf_size;
@@ -133,7 +139,7 @@ void INITBUMPALLOC() {
 #endif
 }
 
-void* BUMPALLOC(int n) {
+static inline void* BUMPALLOC(int n) {
       INITBUMPALLOC();
       if (bumpalloc_heap_ptr + n < bumpalloc_heap_ptr_end) {
           char* old= bumpalloc_heap_ptr;
@@ -176,8 +182,55 @@ void restore_alloc_state() {}
 #endif // BUMPALLOC
 
 
+// -------------------------------------
+// Bump allocated nursery for regions
+// -------------------------------------
+
+// See https://github.com/iu-parfunc/gibbon/issues/122.
+
+__thread char* nursery_heap_ptr = (char*)NULL;
+__thread char* nursery_heap_ptr_end = (char*)NULL;
+
+static inline void init_nursery() {
+    if (! nursery_heap_ptr) {
+        nursery_heap_ptr = (char*)malloc(global_init_biginf_buf_size);
+        nursery_heap_ptr_end = nursery_heap_ptr + global_init_biginf_buf_size;
+    }
+#ifdef _DEBUG
+    printf("init_nursery: DONE, heap_ptr = %p\n", nursery_heap_ptr);
+#endif
+}
+
+static inline void* alloc_in_nursery(int n) {
+    init_nursery();
+    if (nursery_heap_ptr + n < nursery_heap_ptr_end) {
+        char* old= nursery_heap_ptr;
+        nursery_heap_ptr += n;
+        return old;
+    } else {
+        void* mem = malloc(n);
+        return mem;
+    }
+}
+
+// -------------------------------------
+// ALLOC and ALLOC_PACKED macros
+// -------------------------------------
+
+
+/*
+
+If parallelism is enabled, we always use a nursery/malloc based allocator
+since Boehm GC is not thread-safe in its default configuration. It can be
+made thread-safe by building it with appropriate flags, but we don't do that.
+Presently, all parallel pointer-based programs will leak memory.
+
+*/
+
 #ifdef _PARALLEL
 #define ALLOC(n) malloc(n)
+#define ALLOC_PACKED_SMALL(n) malloc(n)
+#define ALLOC_PACKED_BIG(n) malloc(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
     return ALLOC(size);
@@ -185,17 +238,20 @@ char *ALLOC_COUNTED(size_t size) {
 #else
   #ifdef _POINTER
 #define ALLOC(n) GC_MALLOC(n)
+#define ALLOC_PACKED_SMALL(n) GC_MALLOC(n)
+#define ALLOC_PACKED_BIG(n) GC_MALLOC(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
-    return ALLOC(size);
+    return GC_MALLOC(size);
 }
   #else
 #define ALLOC(n) malloc(n)
+#define ALLOC_PACKED_SMALL(n) malloc(n)
+#define ALLOC_PACKED_BIG(n) malloc(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
     return ALLOC(size);
 }
-#define ALLOC(n) malloc(n)
   #endif // _POINTER
 #endif // _PARALLEL
 
@@ -353,7 +409,7 @@ SymHashTy insert_hash(SymHashTy hash, int k, int v) {
   SymHashTy s;
   // NOTE: not checking for duplicates!
   // s = malloc(sizeof(struct sym_hash_elem));
-  s = BUMPALLOC(sizeof(struct sym_hash_elem));
+  s = ALLOC(sizeof(struct sym_hash_elem));
   s->val = v;
   s->key = k;
   HASH_ADD_INT(hash,key,s);
