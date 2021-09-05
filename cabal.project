@@ -1,4 +1,8 @@
-packages: gibbon-compiler gibbon-stdlib gibbon-ghc-plugin gibbon-examples
+packages: gibbon-compiler
+
+-- -- We need to put linear types in gibbon-stdlib
+-- -- behind CPP to make it build with GHC < 9.
+-- gibbon-stdlib gibbon-ghc-plugin gibbon-examples
 
 package *
     ghc-options: -fexpose-all-unfoldings

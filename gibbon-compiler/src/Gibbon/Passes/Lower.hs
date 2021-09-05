@@ -737,7 +737,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
       reg <- gensym "region"
       tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy)] (T.NewBuffer mul) [] <$>
                tail free_reg sym_tbl bod
-      if gopt Opt_DisableGC dflags -- || not free_reg
+      if gopt Opt_DisableGC dflags -- -- || not free_reg
          then pure tl'
          else
            -- The type shouldn't matter. PtrTy is not used often in current programs,
