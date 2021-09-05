@@ -809,7 +809,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                else
                                  let [(VarTriv reg),(VarTriv _rcur),(VarTriv endr_cur)] = rnds
                                  in pure
-                                 [ C.BlockStm [cstm| if ($id:reg->reg_refcount != REG_FREED) { free_region($id:endr_cur); }  |]
+                                 [ C.BlockStm [cstm| free_region($id:endr_cur); |]
                                  , C.BlockStm [cstm| free($id:reg); |]
                                  ]
 
@@ -978,7 +978,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                , C.BlockDecl [cdecl| $ty:tysize $id:wrote = fwrite($id:copy_start, $id:copy_size, 1, $id:out_hdl); |]
                                , C.BlockStm [cstm| fclose($id:out_hdl); |]
                                , C.BlockStm [cstm| printf("Wrote: %s\n", $string:fp); |]
-                               , C.BlockStm [cstm| if ($id:outreg->reg_refcount != REG_FREED) { free_region($id:end_outreg); }  |]
+                               , C.BlockStm [cstm| free_region($id:end_outreg); |]
                                , C.BlockStm [cstm| free($id:outreg); |]
                                ]
                     | otherwise -> error $ "WritePackedFile, wrong arguments "++show rnds++", or expected bindings "++show bnds

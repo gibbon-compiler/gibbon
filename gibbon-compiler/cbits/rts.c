@@ -78,9 +78,6 @@ static inline void print_global_region_count() {
 #define MAX(a,b) (((a)>(b))?(a):(b))
 #define MIN(a,b) (((a)<(b))?(a):(b))
 
-// A region with this refcount has already been garbage collected.
-#define REG_FREED -100
-
 // https://www.cprogramming.com/snippets/source-code/find-the-number-of-cpu-cores-for-windows-mac-or-linux
 static int get_num_processors() {
 #ifdef _WIN64
@@ -127,33 +124,31 @@ int num_saved_heap_ptr = 0;
 
 // For simplicity just use a single large slab:
 static inline void INITBUMPALLOC() {
-  if (! bumpalloc_heap_ptr) {
       bumpalloc_heap_ptr = (char*)malloc(global_init_biginf_buf_size);
       bumpalloc_heap_ptr_end = bumpalloc_heap_ptr + global_init_biginf_buf_size;
 #ifdef _DEBUG
       printf("Arena size for bump alloc: %lld\n", global_init_biginf_buf_size);
-#endif
-  }
-#ifdef _DEBUG
-  printf("BUMPALLOC/INITBUMPALLOC DONE: heap_ptr = %p\n", heap_ptr);
+      printf("BUMPALLOC/INITBUMPALLOC DONE: heap_ptr = %p\n", bumpalloc_heap_ptr);
 #endif
 }
 
-static inline void* BUMPALLOC(int n) {
-      INITBUMPALLOC();
+static inline void* BUMPALLOC(long long n) {
+      if (! bumpalloc_heap_ptr) {
+          INITBUMPALLOC();
+      }
       if (bumpalloc_heap_ptr + n < bumpalloc_heap_ptr_end) {
           char* old= bumpalloc_heap_ptr;
           bumpalloc_heap_ptr += n;
           return old;
       } else {
-          fprintf(stderr, "Error: bump allocator ran out of memory.");
+          fprintf(stderr, "Warning: bump allocator ran out of memory.");
           abort();
       }
 }
 
 // Snapshot the current heap pointer value across all threads.
 void save_alloc_state() {
-  dbgprintf("   Saving(%p): pos %d", heap_ptr, num_saved_heap_ptr);
+  dbgprintf("Saving(%p): pos %d", heap_ptr, num_saved_heap_ptr);
   saved_heap_ptr_stack[num_saved_heap_ptr] = heap_ptr;
   num_saved_heap_ptr++;
   dbgprintf("\n");
@@ -191,25 +186,35 @@ void restore_alloc_state() {}
 __thread char* nursery_heap_ptr = (char*)NULL;
 __thread char* nursery_heap_ptr_end = (char*)NULL;
 
+// #define NURSERY_SIZE 0
+#define NURSERY_SIZE global_init_biginf_buf_size
+#define NURSERY_ALLOC_UPPER_BOUND 1024
+
 static inline void init_nursery() {
-    if (! nursery_heap_ptr) {
-        nursery_heap_ptr = (char*)malloc(global_init_biginf_buf_size);
-        nursery_heap_ptr_end = nursery_heap_ptr + global_init_biginf_buf_size;
+    nursery_heap_ptr = (char*)malloc(NURSERY_SIZE);
+    if (nursery_heap_ptr == NULL) {
+      printf("init_region: malloc failed: %lld", NURSERY_SIZE);
+      exit(1);
     }
+    nursery_heap_ptr_end = nursery_heap_ptr + NURSERY_SIZE;
 #ifdef _DEBUG
     printf("init_nursery: DONE, heap_ptr = %p\n", nursery_heap_ptr);
 #endif
 }
 
-static inline void* alloc_in_nursery(int n) {
-    init_nursery();
+static inline void* alloc_in_nursery(long long n) {
+    if (! nursery_heap_ptr) {
+        init_nursery();
+    }
     if (nursery_heap_ptr + n < nursery_heap_ptr_end) {
-        char* old= nursery_heap_ptr;
+        char* old = nursery_heap_ptr;
         nursery_heap_ptr += n;
+#ifdef _DEBUG
+        printf("alloc_in_nursery: DONE, %lld\n", n);
+#endif
         return old;
     } else {
-        void* mem = malloc(n);
-        return mem;
+        return NULL;
     }
 }
 
@@ -229,7 +234,7 @@ Presently, all parallel pointer-based programs will leak memory.
 
 #ifdef _PARALLEL
 #define ALLOC(n) malloc(n)
-#define ALLOC_PACKED_SMALL(n) malloc(n)
+#define ALLOC_PACKED_SMALL(n) alloc_in_nursery(n)
 #define ALLOC_PACKED_BIG(n) malloc(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
@@ -246,7 +251,7 @@ char *ALLOC_COUNTED(size_t size) {
 }
   #else
 #define ALLOC(n) malloc(n)
-#define ALLOC_PACKED_SMALL(n) malloc(n)
+#define ALLOC_PACKED_SMALL(n) alloc_in_nursery(n)
 #define ALLOC_PACKED_BIG(n) malloc(n)
 char *ALLOC_COUNTED(size_t size) {
     bump_global_region_count();
@@ -254,9 +259,6 @@ char *ALLOC_COUNTED(size_t size) {
 }
   #endif // _POINTER
 #endif // _PARALLEL
-
-
-#define ALLOC_PACKED(n) ALLOC(n)
 
 
 // Could try alloca() here.  Better yet, we could keep our own,
@@ -712,29 +714,45 @@ typedef struct RegionFooter_struct {
     IntTy rf_seq_no;
 
     // Necessary fields.
+    bool rf_nursery_allocated;
     IntTy rf_size;
     IntTy *rf_refcount_ptr;
     Outset_elem *rf_outset_ptr;
     Inset_elem *rf_inset_ptr;
-    CursorTy rf_next;
-    CursorTy rf_prev;
+    struct RegionFooter_struct *rf_next;
+    struct RegionFooter_struct *rf_prev;
 } RegionFooter;
 
 RegionTy *alloc_region(IntTy size) {
+    // Allocate the region metadata.
+    RegionTy *reg = ALLOC(sizeof(RegionTy));
+    if (reg == NULL) {
+        printf("alloc_region: allocation failed: %ld", sizeof(RegionTy));
+        exit(1);
+    }
+
     // Allocate the first chunk.
     IntTy total_size = size + sizeof(RegionFooter);
-    CursorTy start = ALLOC_PACKED(total_size);
+    CursorTy start;
+    bool nursery_allocated = true;
+    if (size <= NURSERY_ALLOC_UPPER_BOUND) {
+        start = ALLOC_PACKED_SMALL(total_size);
+        if (start == NULL) {
+            start = malloc(total_size);
+            nursery_allocated = false;
+        }
+    } else {
+        start = ALLOC_PACKED_BIG(total_size);
+        nursery_allocated = false;
+    }
     if (start == NULL) {
         printf("alloc_region: malloc failed: %lld", total_size);
         exit(1);
     }
+    // Not start+total_size, because the footer goes here.
     CursorTy end = start + size;
 
-    RegionTy *reg = ALLOC(sizeof(RegionTy));
-    if (reg == NULL) {
-        printf("alloc_region: malloc failed: %ld", sizeof(RegionTy));
-        exit(1);
-    }
+    // Initialize metadata fields.
     reg->reg_id = gensym();
     reg->reg_refcount = 1;
     reg->reg_start = start;
@@ -742,11 +760,12 @@ RegionTy *alloc_region(IntTy size) {
     reg->reg_inset = NULL;
 
 #ifdef _DEBUG
-    printf("Allocated a region(%lld): %lld bytes.\n", reg->reg_id, size);
+    printf("Allocated a region(%lld): %lld bytes, nursery=%d.\n", reg->reg_id, size, nursery_allocated);
 #endif
 
     // Write the footer.
-    RegionFooter* footer = (RegionFooter *) end;
+    RegionFooter *footer = (RegionFooter *) end;
+    footer->rf_nursery_allocated = nursery_allocated;
     footer->rf_reg_id_ptr = &(reg->reg_id);
     footer->rf_seq_no = 1;
     footer->rf_size = size;
@@ -755,7 +774,7 @@ RegionTy *alloc_region(IntTy size) {
     footer->rf_inset_ptr = reg->reg_inset;
     footer->rf_next = NULL;
     footer->rf_prev = NULL;
-    *(RegionFooter *) end = *footer;
+    // *(RegionFooter *) end = *footer;
 
     return reg;
 }
@@ -783,7 +802,7 @@ ChunkTy alloc_chunk(CursorTy end_old_chunk) {
     IntTy total_size = newsize + sizeof(RegionFooter);
 
     // Allocate.
-    CursorTy start = ALLOC_PACKED(total_size);
+    CursorTy start = ALLOC_PACKED_BIG(total_size);
     if (start == NULL) {
         printf("alloc_chunk: malloc failed: %lld", total_size);
         exit(1);
@@ -795,10 +814,11 @@ ChunkTy alloc_chunk(CursorTy end_old_chunk) {
 #endif
 
     // Link the next chunk's footer.
-    footer->rf_next = end;
+    footer->rf_next = (RegionFooter *) end;
 
     // Write the footer.
     RegionFooter* new_footer = (RegionFooter *) end;
+    new_footer->rf_nursery_allocated = false;
     new_footer->rf_reg_id_ptr = footer->rf_reg_id_ptr;
     new_footer->rf_seq_no = footer->rf_seq_no + 1;
     new_footer->rf_size = newsize;
@@ -806,7 +826,7 @@ ChunkTy alloc_chunk(CursorTy end_old_chunk) {
     new_footer->rf_outset_ptr = footer->rf_outset_ptr;
     new_footer->rf_inset_ptr = footer->rf_inset_ptr;
     new_footer->rf_next = NULL;
-    new_footer->rf_prev = end_old_chunk;
+    new_footer->rf_prev = (RegionFooter *) end_old_chunk;
 
     return (ChunkTy) {start , end};
 }
@@ -899,8 +919,8 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
 
 void free_region(CursorTy end_reg) {
     RegionFooter footer = *(RegionFooter *) end_reg;
-    CursorTy first_chunk = end_reg - footer.rf_size;
-    CursorTy next_chunk = footer.rf_next;
+    RegionFooter *first_chunk_footer, *next_chunk_footer;
+    CursorTy first_chunk, next_chunk;
 
 #ifdef _DEBUG
     IntTy old_refcount, new_refcount;
@@ -925,7 +945,7 @@ void free_region(CursorTy end_reg) {
 #ifdef _DEBUG
         IntTy count;
         count = HASH_COUNT(footer.rf_outset_ptr);
-        printf("free_region(%lld): outset-len: %lld\n", *(footer.rf_reg_id_ptr), count);
+        printf("free_region(%lld): outset length: %lld\n", *(footer.rf_reg_id_ptr), count);
         printf("free_region(%lld): outset_ptr: %p\n", *(footer.rf_reg_id_ptr), footer.rf_outset_ptr);
 #endif
 
@@ -954,9 +974,9 @@ void free_region(CursorTy end_reg) {
 
                 if (*(elt_footer->rf_refcount_ptr) == 0) {
                     // See [Why is it a doubly linked-list?] above
-                    RegionFooter *first_chunk = trav_to_first_chunk(elt_footer);
-                    if (first_chunk != NULL) {
-                        free_region((CursorTy) first_chunk);
+                    first_chunk_footer = trav_to_first_chunk(elt_footer);
+                    if (first_chunk_footer != NULL) {
+                        free_region((CursorTy) first_chunk_footer);
                     }
                 }
                 HASH_DEL(footer.rf_outset_ptr, elt);
@@ -966,30 +986,35 @@ void free_region(CursorTy end_reg) {
 
 #ifdef _DEBUG
         // Bookkeeping
-        int num_chunks = 1;
-        IntTy total_bytesize = footer.rf_size;
+        IntTy num_freed_chunks = 0, total_bytesize = 0;
 #endif
 
-        // Indicate that this region has been garbage collected.
-        *(footer.rf_refcount_ptr) = REG_FREED;
 
-        // Free the first chunk
-        free(first_chunk);
-
-        // Now, all the others
-        while (next_chunk != NULL) {
-            footer = *(RegionFooter *) next_chunk;
-            free(next_chunk - footer.rf_size);
-            next_chunk = footer.rf_next;
+        // Free the associated chunks.
+        first_chunk = end_reg - footer.rf_size;
+        first_chunk_footer = &footer;
+        next_chunk = footer.rf_next;
 
 #ifdef _DEBUG
-            num_chunks++;
+        printf("free_region(%lld): nursery chunk: %d\n", *(first_chunk_footer->rf_reg_id_ptr), first_chunk_footer->rf_nursery_allocated);
+#endif
+
+        if (first_chunk_footer->rf_nursery_allocated == false) {
+            free(first_chunk);
+        }
+        while (next_chunk != NULL) {
+            next_chunk_footer = *next_chunk;
+            free(next_chunk - next_chunk_footer->rf_size);
+            next_chunk = next_chunk_footer->rf_next;
+
+#ifdef _DEBUG
+            num_freed_chunks++;
             total_bytesize = total_bytesize + footer.rf_size;
 #endif
         }
 
 #ifdef _DEBUG
-        printf("free_region(%lld): Freed %lld bytes across %d chunks.\n", *(footer.rf_reg_id_ptr), total_bytesize, num_chunks);
+        printf("free_region(%lld): Freed %lld bytes across %lld chunks.\n", *(footer.rf_reg_id_ptr), total_bytesize, num_freed_chunks);
 #endif
     } else {
 #ifdef _DEBUG
