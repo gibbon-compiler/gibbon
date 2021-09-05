@@ -14,9 +14,9 @@
 
 with pkgs;
 
-haskell.lib.buildStackProject {
-  name = "treevelocityEnv";
-  buildInputs = [ stdenv ghc ghc901 stack which racket
-                  ncurses boehmgc uthash unzip
+stdenv.mkDerivation {
+  name = "basicGibbonEnv";
+  buildInputs = [ ghc ghc901 gcc7 which boehmgc uthash racket cabal-install ghcid
+                  gdb valgrind stack stdenv ncurses unzip
                 ];
 }
