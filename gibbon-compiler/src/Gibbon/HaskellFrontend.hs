@@ -16,6 +16,7 @@ import           Language.Haskell.Exts.Parser
 import           Language.Haskell.Exts.Syntax as H
 import           Language.Haskell.Exts.Pretty
 import           Language.Haskell.Exts.SrcLoc
+import           Language.Haskell.Exts.CPP
 import           System.Environment ( getEnvironment )
 import           System.Directory
 import           System.FilePath
@@ -83,9 +84,10 @@ parseFile' cfg pstate_ref import_route path = do
       typecheckWithGhc cfg path
   str <- readFile path
   let cleaned = removeLinearArrows str
-  let parsed = parseModuleWithMode parseMode cleaned
+  -- let parsed = parseModuleWithMode parseMode cleaned
+  parsed <- parseFileContentsWithCommentsAndCPP defaultCpphsOptions parseMode cleaned
   case parsed of
-    ParseOk hs -> desugarModule cfg pstate_ref import_route (takeDirectory path) hs
+    ParseOk (hs,_comments) -> desugarModule cfg pstate_ref import_route (takeDirectory path) hs
     ParseFailed loc er -> do
       error ("haskell-src-exts failed: " ++ er ++ ", at " ++ prettyPrint loc)
 

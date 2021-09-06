@@ -1,6 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+#if __GLASGOW_HASKELL__ >= 901
 {-# LANGUAGE LinearTypes         #-}
+#endif
 
 module Gibbon.Vector where
 
