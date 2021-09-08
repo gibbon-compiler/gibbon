@@ -32,7 +32,7 @@ After you install Cabal, proceed to installing Gibbon's dependencies:
 - Ubuntu:
 
 ```
- $ sudo apt-get install libgc-dev libgmp-dev gcc-7 uthash-dev
+ $ sudo apt-get install libgc-dev libgmp-dev gcc-7 uthash-dev software-properties-common haskell-stack
  $ sudo add-apt-repository ppa:plt/racket && sudo apt update && sudo apt install racket
  $ sudo add-apt-repository ppa:hvr/ghc && sudo apt update && sudo apt install ghc-9.0.1 cabal-install-3.4
 ```
