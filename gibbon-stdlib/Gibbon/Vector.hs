@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-#if __GLASGOW_HASKELL__ >= 901
+#if __GLASGOW_HASKELL__ >= 900
 {-# LANGUAGE LinearTypes         #-}
 #endif
 

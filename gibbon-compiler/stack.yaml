@@ -5,6 +5,7 @@ packages:
 
 extra-deps:
 - s-cargot-0.1.4.0
+- hse-cpp-0.2
 
 flags: {}
 extra-package-dbs: []
