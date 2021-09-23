@@ -710,7 +710,7 @@ typedef struct RegionFooter_struct {
     bool rf_nursery_allocated;
     IntTy rf_size;
     IntTy *rf_refcount_ptr;
-    Outset_elem *rf_outset_ptr;
+    Outset_elem **rf_outset_ptr;
     struct RegionFooter_struct *rf_next;
     struct RegionFooter_struct *rf_prev;
 } RegionFooter;
@@ -761,7 +761,7 @@ RegionTy *alloc_region(IntTy size) {
     footer->rf_seq_no = 1;
     footer->rf_size = size;
     footer->rf_refcount_ptr = &(reg->reg_refcount);
-    footer->rf_outset_ptr = reg->reg_outset;
+    footer->rf_outset_ptr = &(reg->reg_outset);
     footer->rf_next = NULL;
     footer->rf_prev = NULL;
     // *(RegionFooter *) end = *footer;
@@ -853,7 +853,7 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     printf("bump_ref_count: %lld -> %lld\n", *(footer_b->rf_reg_id_ptr), *(footer_a->rf_reg_id_ptr));
     Outset_elem *elt;
     IntTy count;
-    count = HASH_COUNT(footer_b->rf_outset_ptr);
+    count = HASH_COUNT(*(footer_b->rf_outset_ptr));
     printf("bump_ref_count: old-refcount=%lld, old-outset-len=%lld:\n", refcount, count);
     assert(refcount == count+1);
 #endif
@@ -863,19 +863,19 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     // add->outset_id = gensym();
     add->outset_ref = end_a;
     // HASH_ADD(hh, footer_b->rf_outset_ptr, outset_id, sizeof(SymTy), add);
-    HASH_ADD_PTR(footer_b->rf_outset_ptr, outset_ref, add);
+    HASH_ADD_PTR(*(footer_b->rf_outset_ptr), outset_ref, add);
 
 #ifdef _DEBUG
     printf("bump_ref_count: outset_ptr: %p\n", footer_b->rf_outset_ptr);
     // Test fetch.
     Outset_elem *fetch;
-    HASH_FIND(hh, footer_b->rf_outset_ptr, &(add->outset_ref), sizeof(SymTy), fetch);
+    HASH_FIND(hh, *(footer_b->rf_outset_ptr), &(add->outset_ref), sizeof(SymTy), fetch);
     RegionFooter *fetch_footer = (RegionFooter *) fetch->outset_ref;
     printf("bump_ref_count: fetched %lld, seq_no=%lld \n", *(fetch_footer->rf_reg_id_ptr), fetch_footer->rf_seq_no);
 
     // Test iteration.
     Outset_elem *elt2, *tmp;
-    HASH_ITER(hh, footer_b->rf_outset_ptr, elt2, tmp) {
+    HASH_ITER(hh, *(footer_b->rf_outset_ptr), elt2, tmp) {
         fetch_footer = (RegionFooter *) elt2->outset_ref;
         printf("bump_ref_count: iteration %lld, seq_no=%lld \n", *(fetch_footer->rf_reg_id_ptr), fetch_footer->rf_seq_no);
     }
@@ -883,7 +883,7 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
 
 #ifdef _DEBUG
     IntTy new_count;
-    new_count = HASH_COUNT(footer_b->rf_outset_ptr);
+    new_count = HASH_COUNT(*(footer_b->rf_outset_ptr));
     printf("bump_ref_count: new-refcount=%lld, new-outset-len=%lld:\n", new_refcount, new_count);
     assert(new_refcount == new_count+1);
 #endif
@@ -914,20 +914,20 @@ void free_region(CursorTy end_reg) {
         // Outset.
 #ifdef _DEBUG
         IntTy count;
-        count = HASH_COUNT(footer->rf_outset_ptr);
+        count = HASH_COUNT(*(footer->rf_outset_ptr));
         printf("free_region(%lld): outset length: %lld\n", *(footer->rf_reg_id_ptr), count);
         printf("free_region(%lld): outset_ptr: %p\n", *(footer->rf_reg_id_ptr), footer->rf_outset_ptr);
 #endif
 
         // Decrement refcounts of all regions `reg` points to
-        if (footer->rf_outset_ptr != NULL) {
+        if (*(footer->rf_outset_ptr) != NULL) {
 
             Outset_elem *elt, *tmp;
             RegionFooter *elt_footer;
 
             // Decrement refcounts, free regions with refcount==0 and also free
             // elements of the outset.
-            HASH_ITER(hh, footer->rf_outset_ptr, elt, tmp) {
+            HASH_ITER(hh, *(footer->rf_outset_ptr), elt, tmp) {
                 elt_footer = (RegionFooter *) elt->outset_ref;
 #ifdef _DEBUG
                 current_refcount = *(elt_footer->rf_refcount_ptr);
@@ -950,7 +950,7 @@ void free_region(CursorTy end_reg) {
                         free_region((CursorTy) first_chunk_footer);
                     }
                 }
-                HASH_DEL(footer->rf_outset_ptr, elt);
+                HASH_DEL(*(footer->rf_outset_ptr), elt);
 
             }
         }
