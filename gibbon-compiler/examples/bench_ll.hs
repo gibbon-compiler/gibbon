@@ -35,11 +35,11 @@ loop2 n x xs =
 
 gibbon_main =
   let
-      xs :: List Int
-      xs = alloc_ll
-      xs' = iterate (loop1 sizeParam 1 xs)
-      n = foldl_ll (\acc v -> acc + v) 0 xs'
-      -- n = 10
+      -- xs :: List Int
+      -- xs = alloc_ll
+      -- xs' = iterate (loop1 sizeParam 1 xs)
+      -- n = foldl_ll (\acc v -> acc + v) 0 xs'
+      n = 10
 
       ys :: PList Int
       ys = Nil_PList

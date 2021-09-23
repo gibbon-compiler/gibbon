@@ -186,14 +186,14 @@ void restore_alloc_state() {}
 __thread char* nursery_heap_ptr = (char*)NULL;
 __thread char* nursery_heap_ptr_end = (char*)NULL;
 
-// #define NURSERY_SIZE 0
-#define NURSERY_SIZE global_init_biginf_buf_size
+#define NURSERY_SIZE 0
+// #define NURSERY_SIZE global_init_biginf_buf_size
 #define NURSERY_ALLOC_UPPER_BOUND 1024
 
 static inline void init_nursery() {
     nursery_heap_ptr = (char*)malloc(NURSERY_SIZE);
     if (nursery_heap_ptr == NULL) {
-      printf("init_region: malloc failed: %lld", NURSERY_SIZE);
+      printf("init_region: malloc failed: %d", NURSERY_SIZE);
       exit(1);
     }
     nursery_heap_ptr_end = nursery_heap_ptr + NURSERY_SIZE;
@@ -866,9 +866,10 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     HASH_ADD_PTR(footer_b->rf_outset_ptr, outset_ref, add);
 
 #ifdef _DEBUG
+    printf("bump_ref_count: outset_ptr: %p\n", footer_b->rf_outset_ptr);
     // Test fetch.
     Outset_elem *fetch;
-    HASH_FIND(hh, footer_b->rf_outset_ptr, &add->outset_ref, sizeof(SymTy), fetch);
+    HASH_FIND(hh, footer_b->rf_outset_ptr, &(add->outset_ref), sizeof(SymTy), fetch);
     RegionFooter *fetch_footer = (RegionFooter *) fetch->outset_ref;
     printf("bump_ref_count: fetched %lld, seq_no=%lld \n", *(fetch_footer->rf_reg_id_ptr), fetch_footer->rf_seq_no);
 
@@ -878,7 +879,6 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
         fetch_footer = (RegionFooter *) elt2->outset_ref;
         printf("bump_ref_count: iteration %lld, seq_no=%lld \n", *(fetch_footer->rf_reg_id_ptr), fetch_footer->rf_seq_no);
     }
-    printf("bump_ref_count: outset_ptr: %p\n", footer_b->rf_outset_ptr);
 #endif
 
 #ifdef _DEBUG
@@ -892,48 +892,45 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
 }
 
 void free_region(CursorTy end_reg) {
-    RegionFooter footer = *(RegionFooter *) end_reg;
+    RegionFooter *footer = (RegionFooter *) end_reg;
     RegionFooter *first_chunk_footer, *next_chunk_footer;
     CursorTy first_chunk, next_chunk;
 
-#ifdef _DEBUG
-    IntTy old_refcount, new_refcount;
-    old_refcount = *(footer.rf_refcount_ptr);
-#endif
-
     // Decrement current reference count.
-    if (*(footer.rf_refcount_ptr) != 0) {
-        *(footer.rf_refcount_ptr) = *(footer.rf_refcount_ptr)-1;
+    IntTy current_refcount = *(footer->rf_refcount_ptr);
+    if (current_refcount != 0) {
+        *(footer->rf_refcount_ptr) = current_refcount-1;
     }
 
 #ifdef _DEBUG
-    new_refcount = *(footer.rf_refcount_ptr);
-    printf("free_region(%lld): refcounts (1): old-refcount=%lld, new-refcount=%lld:\n", *(footer.rf_reg_id_ptr), old_refcount, new_refcount);
+    IntTy new_refcount = *(footer->rf_refcount_ptr);
+    printf("free_region(%lld): refcounts (1): old-refcount=%lld, new-refcount=%lld:\n", *(footer->rf_reg_id_ptr), current_refcount, new_refcount);
 #endif
 
 
     // Free this region recount is 0.
-    if (*(footer.rf_refcount_ptr) == 0) {
+    if (*(footer->rf_refcount_ptr) == 0) {
 
         // Outset.
 #ifdef _DEBUG
         IntTy count;
-        count = HASH_COUNT(footer.rf_outset_ptr);
-        printf("free_region(%lld): outset length: %lld\n", *(footer.rf_reg_id_ptr), count);
-        printf("free_region(%lld): outset_ptr: %p\n", *(footer.rf_reg_id_ptr), footer.rf_outset_ptr);
+        count = HASH_COUNT(footer->rf_outset_ptr);
+        printf("free_region(%lld): outset length: %lld\n", *(footer->rf_reg_id_ptr), count);
+        printf("free_region(%lld): outset_ptr: %p\n", *(footer->rf_reg_id_ptr), footer->rf_outset_ptr);
 #endif
 
         // Decrement refcounts of all regions `reg` points to
-        if (footer.rf_outset_ptr != NULL) {
+        if (footer->rf_outset_ptr != NULL) {
 
             Outset_elem *elt, *tmp;
+            RegionFooter *elt_footer;
 
             // Decrement refcounts, free regions with refcount==0 and also free
             // elements of the outset.
-            HASH_ITER(hh, footer.rf_outset_ptr, elt, tmp) {
-                RegionFooter *elt_footer = (RegionFooter *) elt->outset_ref;
+            HASH_ITER(hh, footer->rf_outset_ptr, elt, tmp) {
+                elt_footer = (RegionFooter *) elt->outset_ref;
 #ifdef _DEBUG
-                old_refcount = *(elt_footer->rf_refcount_ptr);
+                current_refcount = *(elt_footer->rf_refcount_ptr);
 #endif
 
                 // TODO(ckoparkar): BUG; *(elt_footer->rf_refcount_ptr) contains a garbage value
@@ -943,7 +940,7 @@ void free_region(CursorTy end_reg) {
 #ifdef _DEBUG
                 new_refcount = *(elt_footer->rf_refcount_ptr);
                 printf("free_region(%lld): seq no: %lld\n", *(elt_footer->rf_reg_id_ptr), elt_footer->rf_seq_no);
-                printf("free_region(%lld): refcounts (2): old-refcount=%lld, new-refcount=%lld:\n", *(elt_footer->rf_reg_id_ptr), old_refcount, new_refcount);
+                printf("free_region(%lld): refcounts (2): old-refcount=%lld, new-refcount=%lld:\n", *(elt_footer->rf_reg_id_ptr), current_refcount, new_refcount);
 #endif
 
                 if (*(elt_footer->rf_refcount_ptr) == 0) {
@@ -953,7 +950,7 @@ void free_region(CursorTy end_reg) {
                         free_region((CursorTy) first_chunk_footer);
                     }
                 }
-                HASH_DEL(footer.rf_outset_ptr, elt);
+                HASH_DEL(footer->rf_outset_ptr, elt);
 
             }
         }
@@ -965,34 +962,37 @@ void free_region(CursorTy end_reg) {
 
 
         // Free the associated chunks.
-        first_chunk = end_reg - footer.rf_size;
-        first_chunk_footer = &footer;
-        next_chunk = footer.rf_next;
+        first_chunk = end_reg - footer->rf_size;
+        first_chunk_footer = footer;
+        next_chunk = (char*) footer->rf_next;
 
 #ifdef _DEBUG
         printf("free_region(%lld): nursery chunk: %d\n", *(first_chunk_footer->rf_reg_id_ptr), first_chunk_footer->rf_nursery_allocated);
 #endif
 
-        if (first_chunk_footer->rf_nursery_allocated == false) {
+        if (! first_chunk_footer->rf_nursery_allocated) {
             free(first_chunk);
+            #ifdef _DEBUG
+            num_freed_chunks++;
+            total_bytesize = total_bytesize + first_chunk_footer->rf_size;
+            #endif
         }
         while (next_chunk != NULL) {
             next_chunk_footer = *next_chunk;
+            #ifdef _DEBUG
+            num_freed_chunks++;
+            total_bytesize = total_bytesize + next_chunk_footer->rf_size;
+            #endif
             free(next_chunk - next_chunk_footer->rf_size);
             next_chunk = next_chunk_footer->rf_next;
-
-#ifdef _DEBUG
-            num_freed_chunks++;
-            total_bytesize = total_bytesize + footer.rf_size;
-#endif
         }
 
 #ifdef _DEBUG
-        printf("free_region(%lld): Freed %lld bytes across %lld chunks.\n", *(footer.rf_reg_id_ptr), total_bytesize, num_freed_chunks);
+        printf("free_region(%lld): Freed %lld bytes across %lld chunks.\n", *(footer->rf_reg_id_ptr), total_bytesize, num_freed_chunks);
 #endif
     } else {
 #ifdef _DEBUG
-        printf("free_region(%lld): non-zero refcount: %lld.\n", *(footer.rf_reg_id_ptr), *(footer.rf_refcount_ptr));
+        printf("free_region(%lld): non-zero refcount: %lld.\n", *(footer->rf_reg_id_ptr), *(footer->rf_refcount_ptr));
 #endif
     }
 }
