@@ -344,5 +344,8 @@ boundsCheck ddefs tycon =
                         tys
       tyss = map (lookupDataCon ddefs) dcons
       vals = map (fst . spaceReqd) tyss
-  -- Add a byte for the tag.
-  in 1 + maximum vals
+      -- Add a byte for the tag.
+      num_bytes = (1 + maximum vals)
+  in if num_bytes < 32
+     then 32
+     else num_bytes

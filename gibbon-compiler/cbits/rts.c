@@ -637,25 +637,30 @@ Garbage collection
    and for garbage collection. The footer:
 
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   serialized data | rf_reg_id_ptr | rf_seq_no | rf_size | rf_refcount_ptr | rf_outset_ptr | rf_next | rf_prev
+   serialized data | rf_reg_metadata_ptr | rf_seq_no | rf_nursery_allocated | rf_size | rf_next | rf_prev
    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
    The metadata after the serialized data serves various purposes:
 
-   - rf_reg_id_ptr: Pointer to the region_id that this chunk belongs to.
+   - rf_reg_metadata_ptr: A pointer to a RegionTy struct that contains various metadata.
+     Of particular interest to us are the fields:
+
+     = reg_id: A unique identifier for a region.
+
+     = refcount and outset: Whenever an inter-region indirection is created, we record that information
+       using these two fields. Suppose we have an indirection from region A that points to some chunk
+       in region B. Then A's outset will store a pointer to that chunk's footer, and B's refcount will
+       be bumped by 1. Note that all there's only 1 refcount cell, and 1 outset per logical region,
+       and chunks only store a pointer to them.
 
    - rf_seq_no: The index of this particular chunk in the list.
+
+   - rf_nursery_allocated: Whether this chunk was allocated in a nursery.
 
    - rf_size: Used during bounds checking to calculate the size of the next region in
      the linked list.
 
-   - refcount and outset: Whenever an inter-region indirection is created, we record that information
-     using these two fields. Suppose we have an indirection from region A that points to some chunk
-     in region B. Then A's outset will store a pointer to that chunk's footer, and B's refcount will
-     be bumped by 1. Note that all there's only 1 refcount cell, and 1 outset per logical region,
-     and chunks only store a pointer to them.
-
-   - next / prev: Point to the next and previous chunk respectively.
+   - rf_next / rf_prev: Point to the next and previous chunk respectively.
 
 
 There are two ways in which a region may be freed:
@@ -689,20 +694,16 @@ all of them are GC'd. So we need pointers to traverse backward get to the first 
 
 typedef struct RegionTy_struct {
     SymTy reg_id;
-    IntTy reg_refcount;
-    CursorTy reg_start;
+    uint reg_refcount;
+    CursorTy reg_heap;
 } RegionTy;
 
 typedef struct RegionFooter_struct {
-    // rf_reg_id_ptr and rf_seq_no are not strictly required,
-    // but they help with debugging and error messages.
-    SymTy *rf_reg_id_ptr;
-    IntTy rf_seq_no;
+    RegionTy *rf_reg_metadata_ptr;
 
-    // Necessary fields.
+    IntTy rf_seq_no;
     bool rf_nursery_allocated;
     IntTy rf_size;
-    IntTy *rf_refcount_ptr;
     struct RegionFooter_struct *rf_next;
     struct RegionFooter_struct *rf_prev;
 } RegionFooter;
@@ -717,44 +718,42 @@ RegionTy *alloc_region(IntTy size) {
 
     // Allocate the first chunk.
     IntTy total_size = size + sizeof(RegionFooter);
-    CursorTy start;
+    CursorTy heap;
     bool nursery_allocated = true;
     if (size <= NURSERY_ALLOC_UPPER_BOUND) {
-        start = ALLOC_PACKED_SMALL(total_size);
-        if (start == NULL) {
-            start = malloc(total_size);
+        heap = ALLOC_PACKED_SMALL(total_size);
+        if (heap == NULL) {
+            heap = malloc(total_size);
             nursery_allocated = false;
         }
     } else {
-        start = ALLOC_PACKED_BIG(total_size);
+        heap = ALLOC_PACKED_BIG(total_size);
         nursery_allocated = false;
     }
-    if (start == NULL) {
+    if (heap == NULL) {
         printf("alloc_region: malloc failed: %lld", total_size);
         exit(1);
     }
-    // Not start+total_size, because the footer goes here.
-    CursorTy end = start + size;
+    // Not heap+total_size, since we must keep space for the footer.
+    CursorTy heap_end = heap + size;
 
     // Initialize metadata fields.
     reg->reg_id = gensym();
     reg->reg_refcount = 1;
-    reg->reg_start = start;
+    reg->reg_heap = heap;
 
 #ifdef _DEBUG
     printf("Allocated a region(%lld): %lld bytes, nursery=%d.\n", reg->reg_id, size, nursery_allocated);
 #endif
 
     // Write the footer.
-    RegionFooter *footer = (RegionFooter *) end;
-    footer->rf_nursery_allocated = nursery_allocated;
-    footer->rf_reg_id_ptr = &(reg->reg_id);
+    RegionFooter *footer = (RegionFooter *) heap_end;
+    footer->rf_reg_metadata_ptr = reg;
     footer->rf_seq_no = 1;
+    footer->rf_nursery_allocated = nursery_allocated;
     footer->rf_size = size;
-    footer->rf_refcount_ptr = &(reg->reg_refcount);
     footer->rf_next = NULL;
     footer->rf_prev = NULL;
-    // *(RegionFooter *) end = *footer;
 
     return reg;
 }
@@ -789,22 +788,22 @@ ChunkTy alloc_chunk(CursorTy end_old_chunk) {
     }
     CursorTy end = start + newsize;
 
-#ifdef _DEBUG
-    printf("Allocated a chunk: %lld bytes.\n", total_size);
-#endif
-
     // Link the next chunk's footer.
     footer->rf_next = (RegionFooter *) end;
 
     // Write the footer.
     RegionFooter* new_footer = (RegionFooter *) end;
-    new_footer->rf_nursery_allocated = false;
-    new_footer->rf_reg_id_ptr = footer->rf_reg_id_ptr;
+    new_footer->rf_reg_metadata_ptr = footer->rf_reg_metadata_ptr;
     new_footer->rf_seq_no = footer->rf_seq_no + 1;
+    new_footer->rf_nursery_allocated = false;
     new_footer->rf_size = newsize;
-    new_footer->rf_refcount_ptr = footer->rf_refcount_ptr;
     new_footer->rf_next = NULL;
-    new_footer->rf_prev = (RegionFooter *) end_old_chunk;
+    new_footer->rf_prev = footer;
+
+#ifdef _DEBUG
+    RegionTy *reg = (RegionTy*) new_footer->rf_reg_metadata_ptr;
+    printf("alloc_chunk: allocated %lld bytes for region %lld.\n", total_size, reg->reg_id);
+#endif
 
     return (ChunkTy) {start , end};
 }
@@ -821,9 +820,10 @@ RegionFooter* trav_to_first_chunk(RegionFooter *footer) {
     return NULL;
 }
 
-int get_ref_count(CursorTy end_ptr) {
-    RegionFooter footer = *(RegionFooter *) end_ptr;
-    return *(footer.rf_refcount_ptr);
+uint get_ref_count(CursorTy end_ptr) {
+    RegionFooter *footer = (RegionFooter *) end_ptr;
+    RegionTy *reg = (RegionTy *) footer->rf_reg_metadata_ptr;
+    return reg->reg_refcount;
 }
 
 // B is the pointer, and A is the pointee (i.e B -> A).
@@ -833,44 +833,55 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
     RegionFooter *footer_a = (RegionFooter *) end_a;
     RegionFooter *footer_b = (RegionFooter *) end_b;
 
+    // Grab metadata.
+    RegionTy *reg_a = (RegionTy *) footer_a->rf_reg_metadata_ptr;
+    RegionTy *reg_b = (RegionTy *) footer_b->rf_reg_metadata_ptr;
+
     // Bump A's refcount.
-    IntTy refcount = *(footer_a->rf_refcount_ptr);
-    IntTy new_refcount = refcount + 1;
-    *(footer_a->rf_refcount_ptr) = new_refcount;
+    uint current_refcount, new_refcount;
+    current_refcount = reg_a->reg_refcount;
+    new_refcount = current_refcount + 1;
+    reg_a->reg_refcount = new_refcount;
 
 #ifdef _DEBUG
-    printf("bump_ref_count: %lld -> %lld\n", *(footer_b->rf_reg_id_ptr), *(footer_a->rf_reg_id_ptr));
-    printf("bump_ref_count: old-refcount=%lld\n", refcount);
+    printf("bump_ref_count: %lld -> %lld\n", reg_b->reg_id, reg_a->reg_id);
+    printf("bump_ref_count: old-refcount=%d\n", current_refcount);
 #endif
 
     // Add A to B's outset. TODO.
 
 #ifdef _DEBUG
-    printf("bump_ref_count: new-refcount=%lld\n", new_refcount);
+    printf("bump_ref_count: new-refcount=%d\n", new_refcount);
 #endif
 
     return;
 }
 
 void free_region(CursorTy end_reg) {
+    // Grab footer and the metadata.
     RegionFooter *footer = (RegionFooter *) end_reg;
+    RegionTy *reg = (RegionTy *) footer->rf_reg_metadata_ptr;
+
+    //
     RegionFooter *first_chunk_footer, *next_chunk_footer;
     CursorTy first_chunk, next_chunk;
 
     // Decrement current reference count.
-    IntTy current_refcount = *(footer->rf_refcount_ptr);
+    uint current_refcount, new_refcount;
+    current_refcount = reg->reg_refcount;
+    new_refcount = 0;
     if (current_refcount != 0) {
-        *(footer->rf_refcount_ptr) = current_refcount-1;
+        new_refcount = current_refcount - 1;
+        reg->reg_refcount = new_refcount;
     }
 
 #ifdef _DEBUG
-    IntTy new_refcount = *(footer->rf_refcount_ptr);
-    printf("free_region(%lld): refcounts (1): old-refcount=%lld, new-refcount=%lld:\n", *(footer->rf_reg_id_ptr), current_refcount, new_refcount);
+    printf("free_region(%lld): refcounts (1): old-refcount=%d, new-refcount=%d:\n", reg->reg_id, current_refcount, new_refcount);
 #endif
 
 
     // Free this region recount is 0.
-    if (*(footer->rf_refcount_ptr) == 0) {
+    if (new_refcount == 0) {
 
         // Decrement refcounts of all regions `reg` points to,
         // free regions with refcount==0 and also free elements of the outset. TODO.
@@ -886,7 +897,7 @@ void free_region(CursorTy end_reg) {
         next_chunk = (char*) footer->rf_next;
 
 #ifdef _DEBUG
-        printf("free_region(%lld): nursery chunk: %d\n", *(first_chunk_footer->rf_reg_id_ptr), first_chunk_footer->rf_nursery_allocated);
+        printf("free_region(%lld): nursery chunk: %d\n", reg->reg_id, first_chunk_footer->rf_nursery_allocated);
 #endif
 
         if (! first_chunk_footer->rf_nursery_allocated) {
@@ -898,21 +909,21 @@ void free_region(CursorTy end_reg) {
         }
 
         while (next_chunk != NULL) {
-            next_chunk_footer = *next_chunk;
+            next_chunk_footer = (RegionFooter *) next_chunk;
             #ifdef _DEBUG
             num_freed_chunks++;
             total_bytesize = total_bytesize + next_chunk_footer->rf_size;
             #endif
             free(next_chunk - next_chunk_footer->rf_size);
-            next_chunk = next_chunk_footer->rf_next;
+            next_chunk = (char*) next_chunk_footer->rf_next;
         }
 
 #ifdef _DEBUG
-        printf("free_region(%lld): Freed %lld bytes across %lld chunks.\n", *(footer->rf_reg_id_ptr), total_bytesize, num_freed_chunks);
+        printf("free_region(%lld): Freed %lld bytes across %lld chunks.\n", reg->reg_id, total_bytesize, num_freed_chunks);
 #endif
     } else {
 #ifdef _DEBUG
-        printf("free_region(%lld): non-zero refcount: %lld.\n", *(footer->rf_reg_id_ptr), *(footer->rf_refcount_ptr));
+        printf("free_region(%lld): non-zero refcount: %d.\n", reg->reg_id, reg->reg_refcount);
 #endif
     }
 }

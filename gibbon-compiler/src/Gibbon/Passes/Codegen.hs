@@ -765,12 +765,12 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    then
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_counted_region($id:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_start; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
                    else
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($id:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_start; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
 
                  NewParBuffer mul -> do
@@ -782,12 +782,12 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    then
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_counted_region($id:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_start; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
                    else
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($id:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_start; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
                  ScopedBuffer mul -> let [(outV,CursorTy)] = bnds
                                          bufsize = codegenMultiplicity mul
@@ -961,8 +961,8 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         out_hdl <- gensym "out_hdl"
                         wrote <- gensym "wrote"
                         pure $ [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:outreg = alloc_region(global_init_biginf_buf_size); |]
-                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg->reg_start; |]
-                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg->reg_start + global_init_biginf_buf_size; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg->reg_heap; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg->reg_heap + global_init_biginf_buf_size; |]
                                  -- This would ideally be the *end* of the input region corresponding to inV
                                  -- but we have don't have at hand here. Passing in NULL is okay because this pointer
                                  -- is unused in the copy function.
