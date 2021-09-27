@@ -383,6 +383,7 @@ CursorTy printFoo(CursorTy cur) {
         cur = printFoo(cur);
         cur = printFoo(cur);
         printf(") ");
+        return cur;
     } else if (*cur == 100) {
         // redirection
         printf("R -> ");
