@@ -807,11 +807,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  FreeBuffer -> if noGC
                                then pure []
                                else
-                                 let [(VarTriv reg),(VarTriv _rcur),(VarTriv endr_cur)] = rnds
+                                 let [(VarTriv _reg),(VarTriv _rcur),(VarTriv endr_cur)] = rnds
                                  in pure
-                                 [ C.BlockStm [cstm| free_region($id:endr_cur); |]
-                                 , C.BlockStm [cstm| free($id:reg); |]
-                                 ]
+                                 [ C.BlockStm [cstm| free_region($id:endr_cur); |] ]
 
                  WriteTag -> let [(outV,CursorTy)] = bnds
                                  [(TagTriv tag),(VarTriv cur)] = rnds in pure

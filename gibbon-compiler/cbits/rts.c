@@ -142,7 +142,7 @@ static inline void* BUMPALLOC(long long n) {
           return old;
       } else {
           fprintf(stderr, "Warning: bump allocator ran out of memory.");
-          abort();
+          exit(1);
       }
 }
 
@@ -157,7 +157,7 @@ void save_alloc_state() {
 void restore_alloc_state() {
   if(num_saved_heap_ptr <= 0) {
     fprintf(stderr, "Bad call to restore_alloc_state!  Saved stack empty!\ne");
-    abort();
+    exit(1);
   }
   num_saved_heap_ptr--;
   dbgprintf("Restoring(%p): pos %d, discarding %p",
@@ -300,7 +300,7 @@ typedef char* CursorTy;
 
 typedef struct mem_arena {
   int ind;
-  char* mem; // TODO: make this a list of chunks?
+  char* mem; // TODO(vollmerm): make this a list of chunks?
   void* reflist;
 } mem_arena_t;
 
@@ -316,7 +316,7 @@ ArenaTy alloc_arena() {
 
 void free_arena(ArenaTy ar) {
   free(ar->mem);
-  // TODO: free everything in ar->reflist
+  // TODO(vollmerm): free everything in ar->reflist
   free(ar);
 }
 
@@ -424,7 +424,7 @@ IntTy lookup_hash(SymHashTy hash, int k) {
   HASH_FIND_INT(hash,&k,s);
   if (s==NULL) {
     return k; // NOTE: return original key if val not found
-              // TODO: come up with something better to do here
+              // TODO(vollmerm): come up with something better to do here
   } else {
     return s->val;
   }
@@ -692,10 +692,14 @@ all of them are GC'd. So we need pointers to traverse backward get to the first 
 
  */
 
+#define MAX_OUTSET_LENGTH 10
+
 typedef struct RegionTy_struct {
     SymTy reg_id;
     uint reg_refcount;
     CursorTy reg_heap;
+    uint reg_outset_len;
+    CursorTy reg_outset[MAX_OUTSET_LENGTH];
 } RegionTy;
 
 typedef struct RegionFooter_struct {
@@ -707,6 +711,51 @@ typedef struct RegionFooter_struct {
     struct RegionFooter_struct *rf_next;
     struct RegionFooter_struct *rf_prev;
 } RegionFooter;
+
+typedef struct ChunkTy_struct {
+    CursorTy chunk_start;
+    CursorTy chunk_end;
+} ChunkTy;
+
+static inline void insert_into_outset(CursorTy ptr, RegionTy *reg) {
+    uint outset_len = reg->reg_outset_len;
+    // Check for duplicates.
+    for (uint i = 0; i < outset_len; i++) {
+        if (ptr == reg->reg_outset[i]) {
+            return;
+        }
+    }
+    // Otherwise, insert into the outset.
+    reg->reg_outset[outset_len] = ptr;
+    reg->reg_outset_len = outset_len + 1;
+    return;
+}
+
+static inline void remove_from_outset(CursorTy ptr, RegionTy *reg) {
+    uint outset_len = reg->reg_outset_len;
+    CursorTy *outset = reg->reg_outset;
+    int i;
+    if (outset_len == 0) {
+        fprintf(stderr, "remove_from_outset: empty outset\n");
+        exit(1);
+    }
+    // Position of 'ptr' in the outset.
+    int elt_idx = -1;
+    for (i = 0; i < outset_len; i++) {
+        if (ptr == outset[i]) {
+            elt_idx = i;
+        }
+    }
+    if (elt_idx == -1) {
+        fprintf(stderr, "remove_from_outset: element not found\n");
+        exit(1);
+    }
+    // Move all elements ahead of 'elt_idx' back by one position.
+    for (i = elt_idx; i < outset_len; i++) {
+        outset[i] = outset[i+1];
+    }
+    return;
+}
 
 RegionTy *alloc_region(IntTy size) {
     // Allocate the region metadata.
@@ -741,6 +790,7 @@ RegionTy *alloc_region(IntTy size) {
     reg->reg_id = gensym();
     reg->reg_refcount = 1;
     reg->reg_heap = heap;
+    reg->reg_outset_len = 0;
 
 #ifdef _DEBUG
     printf("Allocated a region(%lld): %lld bytes, nursery=%d.\n", reg->reg_id, size, nursery_allocated);
@@ -763,12 +813,6 @@ RegionTy *alloc_counted_region(IntTy size) {
     bump_global_region_count();
     return alloc_region(size);
 }
-
-
-typedef struct ChunkTy_struct {
-    CursorTy chunk_start;
-    CursorTy chunk_end;
-} ChunkTy;
 
 ChunkTy alloc_chunk(CursorTy end_old_chunk) {
     // Get size from current footer.
@@ -845,13 +889,17 @@ static inline void bump_ref_count(CursorTy end_b, CursorTy end_a) {
 
 #ifdef _DEBUG
     printf("bump_ref_count: %lld -> %lld\n", reg_b->reg_id, reg_a->reg_id);
-    printf("bump_ref_count: old-refcount=%d\n", current_refcount);
+    printf("bump_ref_count: old-refcount=%d, old-outset-len=%d:\n", current_refcount, reg_b->reg_outset_len);
+    assert(current_refcount == reg_b->reg_outset_len+1);
 #endif
 
-    // Add A to B's outset. TODO.
+    // Add A to B's outset.
+    insert_into_outset(end_a, reg_b);
 
 #ifdef _DEBUG
-    printf("bump_ref_count: new-refcount=%d\n", new_refcount);
+    // printf("bump_ref_count: Added %p to %lld's outset, %p.\n", end_a, reg_b->reg_id, reg_b);
+    printf("bump_ref_count: new-refcount=%d, new-outset-len=%d\n", new_refcount, reg_b->reg_outset_len);
+    assert(new_refcount == reg_b->reg_outset_len+1);
 #endif
 
     return;
@@ -883,8 +931,48 @@ void free_region(CursorTy end_reg) {
     // Free this region recount is 0.
     if (new_refcount == 0) {
 
-        // Decrement refcounts of all regions `reg` points to,
-        // free regions with refcount==0 and also free elements of the outset. TODO.
+#ifdef _DEBUG
+        printf("free_region(%lld): outset length: %d\n", reg->reg_id, reg->reg_outset_len);
+#endif
+
+        // Decrement refcounts, free regions with refcount==0 and also free
+        // elements of the outset.
+        if (reg->reg_outset_len != 0) {
+            uint outset_len = reg->reg_outset_len;
+            CursorTy *outset = reg->reg_outset;
+            RegionFooter *elt_footer;
+            RegionTy *elt_reg;
+            uint elt_current_refcount, elt_new_refcount;
+            CursorTy to_be_removed[MAX_OUTSET_LENGTH];
+            uint to_be_removed_idx = 0;
+            for (int i = 0; i < outset_len; i++) {
+                elt_footer = (RegionFooter *) outset[i];
+                elt_reg = (RegionTy *) elt_footer->rf_reg_metadata_ptr;
+#ifdef _DEBUG
+                elt_current_refcount = elt_reg->reg_refcount;
+#endif
+                elt_new_refcount = elt_current_refcount - 1;
+                elt_reg->reg_refcount = elt_new_refcount;
+#ifdef _DEBUG
+                printf("free_region(%lld): old-refcount=%d, new-refcount=%d:\n",
+                       elt_reg->reg_id, elt_current_refcount, elt_reg->reg_refcount);
+#endif
+                if (elt_new_refcount == 0) {
+                    // See [Why is it a doubly linked-list?] above
+                    first_chunk_footer = trav_to_first_chunk(elt_footer);
+                    if (first_chunk_footer != NULL) {
+                        free_region((CursorTy) first_chunk_footer);
+                    }
+                }
+                to_be_removed[to_be_removed_idx] = outset[i];
+                to_be_removed_idx++;
+            }
+            // Remove elements from the outset.
+            for (uint i = 0; i < to_be_removed_idx; i++) {
+                remove_from_outset(to_be_removed[i], reg);
+            }
+        }
+
 
 #ifdef _DEBUG
         // Bookkeeping
@@ -897,15 +985,17 @@ void free_region(CursorTy end_reg) {
         next_chunk = (char*) footer->rf_next;
 
 #ifdef _DEBUG
-        printf("free_region(%lld): nursery chunk: %d\n", reg->reg_id, first_chunk_footer->rf_nursery_allocated);
+        printf("free_region(%lld): first chunk in nursery: %d\n",
+               reg->reg_id,
+               first_chunk_footer->rf_nursery_allocated);
 #endif
 
         if (! first_chunk_footer->rf_nursery_allocated) {
-            free(first_chunk);
             #ifdef _DEBUG
             num_freed_chunks++;
             total_bytesize = total_bytesize + first_chunk_footer->rf_size;
             #endif
+            free(first_chunk);
         }
 
         while (next_chunk != NULL) {
@@ -919,11 +1009,17 @@ void free_region(CursorTy end_reg) {
         }
 
 #ifdef _DEBUG
-        printf("free_region(%lld): Freed %lld bytes across %lld chunks.\n", reg->reg_id, total_bytesize, num_freed_chunks);
+        printf("free_region(%lld): Freed %lld bytes across %lld chunks.\n",
+               reg->reg_id, total_bytesize, num_freed_chunks);
 #endif
+
+        // Free the metadata.
+        free(reg);
+
     } else {
 #ifdef _DEBUG
-        printf("free_region(%lld): non-zero refcount: %d.\n", reg->reg_id, reg->reg_refcount);
+        printf("free_region(%lld): non-zero refcount: %d.\n",
+               reg->reg_id, reg->reg_refcount);
 #endif
     }
 }
@@ -1249,7 +1345,7 @@ int main(int argc, char** argv)
     int code;
     if ( (code = getrlimit(RLIMIT_STACK, &lim)) ) {
       fprintf(stderr, " [gibbon rts] failed to getrlimit, code %d\n", code);
-      abort();
+      exit(1);
     }
 
     // lim.rlim_cur = 1024LU * 1024LU * 1024LU; // 1GB stack.
@@ -1270,8 +1366,6 @@ int main(int argc, char** argv)
       int code = setrlimit(RLIMIT_STACK, &lim);
     }
 #endif
-
-    // TODO: atoi() error checking
 
     int got_numargs = 0; // How many numeric arguments have we got.
 
