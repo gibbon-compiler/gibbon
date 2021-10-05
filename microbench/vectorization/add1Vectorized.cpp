@@ -42,6 +42,9 @@ void add1_recursive(CursorTy bufferIn, CursorTy bufferOut);
 void add1_vectorized(IntTy*  bufferIn, IntTy*  bufferOut, IntTy size);
 double difftimespecs(struct timespec* t0, struct timespec* t1);
 
+CursorIntProd createBalancedTree(CursorTy out, IntTy n);
+CursorTy printTreeBalanced(CursorTy cur) ;
+
 CursorIntProd sumTree_bfs(std::vector<Thread*> Threads);
 
 // CursorIntProd sumTree_bfs(std::vector<Thread*> Threads){
@@ -94,6 +97,8 @@ CursorIntProd sumTree_bfs(std::vector<Thread*> Threads);
 //     }
 
 // }
+
+
 
 
 double difftimespecs(struct timespec* t0, struct timespec* t1)
@@ -152,71 +157,203 @@ double difftimespecs(struct timespec* t0, struct timespec* t1)
 //     }
 // }
 
-CursorIntProd createTree(CursorTy out, IntTy n){
+// CursorIntProd createTree(CursorTy out, IntTy n){
+
+//     CursorIntProd tmp;    
+    
+//     if (n <= 0) /*Encountered node A*/ {
+
+//         *out  = 0;             //A node has a value of 0
+//          out += NODE_SIZE;             //make the A label take memory of 8 bytes (need this since both leaves and labels need to take the same space for vectorization) 
+//          *(IntTy *) out = 10;  //Assign integer value to the out node
+//          out += NODE_SIZE;             //Increment the address of the Cursor by 8
+//          return (CursorIntProd) {out, static_cast<IntTy>(2*NODE_SIZE) };     //return 16, since 16 bytes work of data was written
+//     }
+//     else if (n == 1) /*Encountered node B*/{
+        
+//         *out = 1;
+//         //n 
+//         CursorTy out0 = out + NODE_SIZE;  //increment address by 8 again since we are making label size equal to leaf size
+//         *(IntTy *) out0 = n;      //write n 
+//         out0 += NODE_SIZE;                //increment address by 8, since we wrote an integer 
+
+//         //rec 1
+//         tmp = createTree(out0, (n - 1));
+//         CursorTy out1 = tmp.field0;
+//         IntTy size1   = tmp.field1;
+
+//         //rec 2
+//         tmp = createTree(out1, (n - 2));
+//         CursorTy out2 = tmp.field0;
+//         IntTy size2   = tmp.field1;
+
+//         return (CursorIntProd) {out2, static_cast<IntTy>(size1 + size2 + 2*NODE_SIZE) };  //16 bytes of data was written for this particular node.
+
+//     }
+//     else /*Encountered node C*/{
+
+//         *out = 4;
+
+//         //n
+//         CursorTy out0 = out + NODE_SIZE;   
+//         *(IntTy *) out0 = n;
+//         out0 += NODE_SIZE;
+
+//         //rec1
+//         tmp = createTree(out0, (n - 1));
+//         CursorTy out1 = tmp.field0;
+//         IntTy size1   = tmp.field1;
+
+//         //rec2
+//         tmp = createTree(out1, (n - 2));
+//         CursorTy out2 = tmp.field0;
+//         IntTy size2   = tmp.field1;
+
+//         //rec3
+//         tmp = createTree(out2,  (n - 3));
+//         CursorTy out3 = tmp.field0;
+//         IntTy size3 = tmp.field1;
+
+//         return (CursorIntProd) {out3, static_cast<IntTy>(size1 + size2 + size3 + 2*NODE_SIZE)};
+
+//     }
+
+// }
+
+//    createBinaryTree :: Int -> Tree
+//   
+//    createBinaryTree depth
+//        |  depth < 0  =  return root         
+//        |  depth > 0  =  r = createBinaryTree(n-1) | l = createBinaryTree(n-1) 
+//
+//
+//
+
+
+CursorIntProd createBalancedTree(CursorTy out, IntTy n){
 
     CursorIntProd tmp;    
     
-    if (n <= 0) /*Encountered node A*/ {
+    if (n <= 0) {
 
-        *out  = 0;             //A node has a value of 0
-         out += NODE_SIZE;             //make the A label take memory of 8 bytes (need this since both leaves and labels need to take the same space for vectorization) 
-         *(IntTy *) out = 10;  //Assign integer value to the out node
-         out += NODE_SIZE;             //Increment the address of the Cursor by 8
-         return (CursorIntProd) {out, static_cast<IntTy>(2*NODE_SIZE) };     //return 16, since 16 bytes work of data was written
+        *out  ='A';             
+        out += NODE_SIZE;          
+        *(IntTy *) out = 10;  
+        out += NODE_SIZE;             
+        return (CursorIntProd) {out, 2*NODE_SIZE };
     }
-    else if (n == 1) /*Encountered node B*/{
+    else if (n > 0) {
         
-        *out = 1;
+        *out = 'B';
         //n 
-        CursorTy out0 = out + NODE_SIZE;  //increment address by 8 again since we are making label size equal to leaf size
-        *(IntTy *) out0 = n;      //write n 
-        out0 += NODE_SIZE;                //increment address by 8, since we wrote an integer 
+        CursorTy out0 = out + NODE_SIZE;  
+        *(IntTy *) out0 = n;     
+        out0 += NODE_SIZE;           
 
         //rec 1
-        tmp = createTree(out0, (n - 1));
+        tmp = createBalancedTree(out0, (n - 1));
         CursorTy out1 = tmp.field0;
         IntTy size1   = tmp.field1;
 
         //rec 2
-        tmp = createTree(out1, (n - 2));
+        tmp = createBalancedTree(out1, (n - 2));
         CursorTy out2 = tmp.field0;
         IntTy size2   = tmp.field1;
 
-        return (CursorIntProd) {out2, static_cast<IntTy>(size1 + size2 + 2*NODE_SIZE) };  //16 bytes of data was written for this particular node.
+        return (CursorIntProd) {out2, size1 + size2 + 2*NODE_SIZE };  //16 bytes of data was written for this particular node.
 
     }
-    else /*Encountered node C*/{
+}
 
-        *out = 4;
+CursorTy add1_toA_depth_recurse(CursorTy packedData){
 
-        //n
-        CursorTy out0 = out + NODE_SIZE;   
-        *(IntTy *) out0 = n;
-        out0 += NODE_SIZE;
+    CursorTy tmp;
 
-        //rec1
-        tmp = createTree(out0, (n - 1));
-        CursorTy out1 = tmp.field0;
-        IntTy size1   = tmp.field1;
+    TagTyPacked start = *packedData;
+    CursorTy dataCursor = packedData + NODE_SIZE;
+    
+    //encountered a leaf node
+    if(start == 'A'){        
+        *(IntTy*) dataCursor = (*(IntTy*) dataCursor) + 1;
+        CursorTy newCursor = dataCursor + NODE_SIZE;
+        return newCursor;
+    }
+    //non leaf node
+    else if (start == 'B'){
+        
+        //child 1
+        CursorTy child1 = dataCursor + NODE_SIZE;
+        tmp = add1_toA_depth_recurse(child1);
 
-        //rec2
-        tmp = createTree(out1, (n - 2));
-        CursorTy out2 = tmp.field0;
-        IntTy size2   = tmp.field1;
+        //child 2
+        tmp = add1_toA_depth_recurse(tmp);
 
-        //rec3
-        tmp = createTree(out2,  (n - 3));
-        CursorTy out3 = tmp.field0;
-        IntTy size3 = tmp.field1;
-
-        return (CursorIntProd) {out3, static_cast<IntTy>(size1 + size2 + size3 + 2*NODE_SIZE)};
-
+        return tmp;
     }
 
 }
 
-CursorTy printTree(CursorTy cur) {
-    if (*cur == 0) {
+// void add1_toA_depth_recurse(CursorTy packedData, CursorTy* cursor){
+
+//     TagTyPacked start = *packedData;
+//     CursorTy dataCursor = packedData + NODE_SIZE;
+    
+//     //encountered a leaf node
+//     if(start == 'A'){        
+//         *(IntTy*) dataCursor = (*(IntTy*) dataCursor) + 1;
+//         CursorTy newCursor = dataCursor + NODE_SIZE;
+//         *cursor = newCursor;
+//     }
+//     //non leaf node
+//     else if (start == 'B'){
+        
+//         //child 1
+//         CursorTy child1 = dataCursor + NODE_SIZE;
+//         CursorTy* return1;
+//         add1_toA_depth_recurse(child1, return1);
+
+//         //child 2
+//         CursorTy *return2; 
+//         add1_toA_depth_recurse(*return1, return2);
+//     }
+
+// }
+
+// CursorTy printTree(CursorTy cur) {
+//     if (*cur == 0) {
+//         printf("(A ");
+//         cur += NODE_SIZE;
+//         IntTy val = *(IntTy *) cur;
+//         cur += NODE_SIZE;
+//         printf("%lld",val);
+//         printf(") ");
+//         return cur;
+//     } else if (*cur == 1) {
+//         printf("(B ");
+//         cur += NODE_SIZE;
+//         IntTy val = *(IntTy *) cur;
+//         cur += NODE_SIZE;
+//         printf("%lld ", val);
+//         cur = printTree(cur);
+//         cur = printTree(cur);
+//         printf(") ");
+//         return cur;
+//     }  else if (*cur == 4) {
+//         printf("(C_tmp _ ");
+//         cur += NODE_SIZE;
+//         IntTy val = *(IntTy *) cur;
+//         cur += NODE_SIZE;
+//         printf("%lld ", val);
+//         cur = printTree(cur);
+//         cur = printTree(cur);
+//         cur = printTree(cur);
+//         printf(") ");
+//         return cur;        
+//     }
+// }
+
+CursorTy printTreeBalanced(CursorTy cur) {
+    if (*cur == 'A') {
         printf("(A ");
         cur += NODE_SIZE;
         IntTy val = *(IntTy *) cur;
@@ -224,28 +361,29 @@ CursorTy printTree(CursorTy cur) {
         printf("%lld",val);
         printf(") ");
         return cur;
-    } else if (*cur == 1) {
+    } else if (*cur  == 'B') {
         printf("(B ");
         cur += NODE_SIZE;
         IntTy val = *(IntTy *) cur;
         cur += NODE_SIZE;
         printf("%lld ", val);
-        cur = printTree(cur);
-        cur = printTree(cur);
+        cur = printTreeBalanced(cur);
+        cur = printTreeBalanced(cur);
         printf(") ");
         return cur;
-    }  else if (*cur == 4) {
-        printf("(C_tmp _ ");
-        cur += NODE_SIZE;
-        IntTy val = *(IntTy *) cur;
-        cur += NODE_SIZE;
-        printf("%lld ", val);
-        cur = printTree(cur);
-        cur = printTree(cur);
-        cur = printTree(cur);
-        printf(") ");
-        return cur;        
     }
+    // }  else if (*cur == 4) {
+    //     printf("(C_tmp _ ");
+    //     cur += NODE_SIZE;
+    //     IntTy val = *(IntTy *) cur;
+    //     cur += NODE_SIZE;
+    //     printf("%lld ", val);
+    //     cur = printTree(cur);
+    //     cur = printTree(cur);
+    //     cur = printTree(cur);
+    //     printf(") ");
+    //     return cur;        
+    // }
 }
 
 // CursorIntProd add1_recursive(CursorTy bufferIn, CursorTy bufferOut){
@@ -358,11 +496,15 @@ int main (int argc, char** argv){
     //allocate a huge data array for now 
     CursorTy dataArray = (CursorTy) malloc(UINT_MAX);
 
-    myTree = createTree(dataArray, tree_depth);    
+    myTree = createBalancedTree(dataArray, tree_depth);
+    //myTree = createTree(dataArray, tree_depth); 
+    
+    //add1 depth recursive
+    add1_toA_depth_recurse(dataArray);   
 
-    //printf("Printing the original tree that was created\n");
-    //printTree(dataArray);
-    //printf("\n");
+    printf("Printing the original tree that was created\n");
+    printTreeBalanced(dataArray);
+    printf("\n");
 
     //CursorIntProd summedTree = sumTree(dataArray);
 
@@ -381,20 +523,20 @@ int main (int argc, char** argv){
     //printf("The sum is: (%lld)\n", summedTreebfs.field1);
 
 
-    CursorTy dataArrayOut = (CursorTy) malloc(UINT_MAX);
+    //CursorTy dataArrayOut = (CursorTy) malloc(UINT_MAX);
 
-    IntTy size; 
-    size = myTree.field1 / sizeof(IntTy);
+    //IntTy size; 
+    //size = myTree.field1 / sizeof(IntTy);
     
-    clock_gettime(CLOCK_MONOTONIC_RAW, &beginTime);
-    add1_vectorized((IntTy*)dataArray, (IntTy*)dataArrayOut, size);
-    clock_gettime(CLOCK_MONOTONIC_RAW, &endTime);
-    time = difftimespecs(&beginTime, &endTime);
+    //clock_gettime(CLOCK_MONOTONIC_RAW, &beginTime);
+    //add1_vectorized((IntTy*)dataArray, (IntTy*)dataArrayOut, size);
+    //clock_gettime(CLOCK_MONOTONIC_RAW, &endTime);
+    //time = difftimespecs(&beginTime, &endTime);
 
-    printf("Printing second element (%lld)\n", ((IntTy*) dataArrayOut)[1]);
-    printf("\n");
+    //printf("Printing second element (%lld)\n", ((IntTy*) dataArrayOut)[1]);
+    //printf("\n");
 
-    printf("Time taken for vectorized implementation was (%lf) nanoseconds\n", time);
+    //printf("Time taken for vectorized implementation was (%lf) nanoseconds\n", time);
 
     
 
