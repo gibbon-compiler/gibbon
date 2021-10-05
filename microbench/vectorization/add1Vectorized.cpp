@@ -7,25 +7,94 @@
 #include <uthash.h>
 #include <time.h>
 #include <limits.h>
+#include <iostream>
+#include <vector>
 
-typedef short IntTy;
+typedef long long IntTy;
 typedef char* CursorTy;
 typedef char TagTyPacked;
 
-#define NODE_SIZE 2
+#define NODE_SIZE 8
 
 typedef struct CursorIntProd_struct {
     CursorTy field0;
     IntTy    field1;
 } CursorIntProd;
 
+class Thread {
+
+    public:
+        CursorTy address;
+        IntTy sum;
+        Thread(CursorIntProd node);
+};
+
+Thread::Thread(CursorIntProd node){
+    address = node.field0;
+    sum = node.field1;
+}
+
 
 CursorTy printTree(CursorTy cur);
 CursorIntProd createTree(CursorTy out, IntTy n);
 CursorIntProd sumTree(CursorTy buffer);
 void add1_recursive(CursorTy bufferIn, CursorTy bufferOut);
-void add1_vectorized(CursorTy bufferIn, CursorTy bufferOut, IntTy size);
+void add1_vectorized(IntTy*  bufferIn, IntTy*  bufferOut, IntTy size);
 double difftimespecs(struct timespec* t0, struct timespec* t1);
+
+CursorIntProd sumTree_bfs(std::vector<Thread*> Threads);
+
+// CursorIntProd sumTree_bfs(std::vector<Thread*> Threads){
+
+//     std::vector<Thread*> nextBlock;
+
+//     for (Thread* thread : Threads){
+//         TagTyPacked start = *(thread->address);
+//         CursorTy next = thread->address + 8;
+//         IntTy value;
+//         //CursorTy next1;
+//         if(start == 0){
+//             value = *(IntTy*) next;
+//             CursorTy next = next+8;
+//             return (CursorIntProd) {next, value};
+//         }
+//         else if(start == 1){
+//             value = *(IntTy*) next;
+//             next += 8;
+
+//             value += *(IntTy*) next;
+//             next += 8;
+
+//             value += *(IntTy*) next;
+//             next += 8;
+
+//             nextBlock.push_back(new Thread( (CursorIntProd) {next, value} ) );
+
+//         }
+//         else if(start == 4){
+
+//             next+= 8;
+
+//             value = *(IntTy*) next;
+//             next += 8;
+
+//             value += *(IntTy*) next;
+//             next += 8;
+
+//             value += *(IntTy*) next;
+//             next += 8;
+
+//             value += *(IntTy*) next;
+//             next += 8;
+
+//             nextBlock.push_back(new Thread( (CursorIntProd) {next, value} ) );
+//         }
+
+//         sumTree_bfs(nextBlock);
+//     }
+
+// }
+
 
 double difftimespecs(struct timespec* t0, struct timespec* t1)
 {
@@ -34,54 +103,54 @@ double difftimespecs(struct timespec* t0, struct timespec* t1)
 }
 
 
-CursorIntProd sumTree(CursorTy buffer){
+// CursorIntProd sumTree(CursorTy buffer){
 
-    TagTyPacked start = *buffer;
-    CursorTy next = buffer + 8; //next increment the memory by the space taken by the tag.
+//     TagTyPacked start = *buffer;
+//     CursorTy next = buffer + NODE_SIZE; //next increment the memory by the space taken by the tag.
     
-    if (start == 0){
-        //case A
-        IntTy number = *(IntTy *) next;
-        CursorTy next1 = next + 8;         //increment by 8
-        return (CursorIntProd) {next1, number};
-    }
-    else if (start == 1){
-        //case B
-        IntTy number = *(IntTy *) next;
-        next += 8;
+//     if (start == 0){
+//         //case A
+//         IntTy number = *(IntTy *) next;
+//         CursorTy next1 = next + NODE_SIZE;         //increment by 8
+//         return (CursorIntProd) {next1, number};
+//     }
+//     else if (start == 1){
+//         //case B
+//         IntTy number = *(IntTy *) next;
+//         next += NODE_SIZE;
 
-        CursorIntProd tmp1 = sumTree(next);
-        CursorTy next1 = tmp1.field0;
-        IntTy number1 = tmp1.field1;
+//         CursorIntProd tmp1 = sumTree(next);
+//         CursorTy next1 = tmp1.field0;
+//         IntTy number1 = tmp1.field1;
 
-        CursorIntProd tmp2 = sumTree(next1);
-        CursorTy next2 = tmp2.field0;
-        IntTy number2 = tmp2.field1;
+//         CursorIntProd tmp2 = sumTree(next1);
+//         CursorTy next2 = tmp2.field0;
+//         IntTy number2 = tmp2.field1;
 
-        return (CursorIntProd) {next2, number + number1 + number2};
-    }
-    else if (start == 4){
-        //C_tmp
-        next += 8;
+//         return (CursorIntProd) {next2, number + number1 + number2};
+//     }
+//     else if (start == 4){
+//         //C_tmp
+//         next += NODE_SIZE;
 
-        IntTy number = *(IntTy *) next;
-        next += 8;
+//         IntTy number = *(IntTy *) next;
+//         next += NODE_SIZE;
 
-        CursorIntProd tmp1 = sumTree(next);
-        CursorTy next1 = tmp1.field0;
-        IntTy number1 = tmp1.field1;
+//         CursorIntProd tmp1 = sumTree(next);
+//         CursorTy next1 = tmp1.field0;
+//         IntTy number1 = tmp1.field1;
 
-        CursorIntProd tmp2 = sumTree(next1);
-        CursorTy next2 = tmp2.field0;
-        IntTy number2 = tmp2.field1;
+//         CursorIntProd tmp2 = sumTree(next1);
+//         CursorTy next2 = tmp2.field0;
+//         IntTy number2 = tmp2.field1;
 
-        CursorIntProd tmp3 = sumTree(next2);
-        CursorTy next3 = tmp3.field0;
-        IntTy number3 = tmp3.field1;
+//         CursorIntProd tmp3 = sumTree(next2);
+//         CursorTy next3 = tmp3.field0;
+//         IntTy number3 = tmp3.field1;
 
-        return (CursorIntProd) {next3, (number+number1+number2+number3)};
-    }
-}
+//         return (CursorIntProd) {next3, (number+number1+number2+number3)};
+//     }
+// }
 
 CursorIntProd createTree(CursorTy out, IntTy n){
 
@@ -93,7 +162,7 @@ CursorIntProd createTree(CursorTy out, IntTy n){
          out += NODE_SIZE;             //make the A label take memory of 8 bytes (need this since both leaves and labels need to take the same space for vectorization) 
          *(IntTy *) out = 10;  //Assign integer value to the out node
          out += NODE_SIZE;             //Increment the address of the Cursor by 8
-         return (CursorIntProd) {out, 2*NODE_SIZE};     //return 16, since 16 bytes work of data was written
+         return (CursorIntProd) {out, static_cast<IntTy>(2*NODE_SIZE) };     //return 16, since 16 bytes work of data was written
     }
     else if (n == 1) /*Encountered node B*/{
         
@@ -113,7 +182,7 @@ CursorIntProd createTree(CursorTy out, IntTy n){
         CursorTy out2 = tmp.field0;
         IntTy size2   = tmp.field1;
 
-        return (CursorIntProd) {out2, (size1 + size2 + 2*NODE_SIZE)};  //16 bytes of data was written for this particular node.
+        return (CursorIntProd) {out2, static_cast<IntTy>(size1 + size2 + 2*NODE_SIZE) };  //16 bytes of data was written for this particular node.
 
     }
     else /*Encountered node C*/{
@@ -121,7 +190,7 @@ CursorIntProd createTree(CursorTy out, IntTy n){
         *out = 4;
 
         //n
-        CursorTy out0 = out + 2*NODE_SIZE;   
+        CursorTy out0 = out + NODE_SIZE;   
         *(IntTy *) out0 = n;
         out0 += NODE_SIZE;
 
@@ -140,7 +209,7 @@ CursorIntProd createTree(CursorTy out, IntTy n){
         CursorTy out3 = tmp.field0;
         IntTy size3 = tmp.field1;
 
-        return (CursorIntProd) {out3, (size1 + size2 + size3 + 3*NODE_SIZE)};
+        return (CursorIntProd) {out3, static_cast<IntTy>(size1 + size2 + size3 + 2*NODE_SIZE)};
 
     }
 
@@ -152,7 +221,7 @@ CursorTy printTree(CursorTy cur) {
         cur += NODE_SIZE;
         IntTy val = *(IntTy *) cur;
         cur += NODE_SIZE;
-        printf("%d",val);
+        printf("%lld",val);
         printf(") ");
         return cur;
     } else if (*cur == 1) {
@@ -160,17 +229,17 @@ CursorTy printTree(CursorTy cur) {
         cur += NODE_SIZE;
         IntTy val = *(IntTy *) cur;
         cur += NODE_SIZE;
-        printf("%d ", val);
+        printf("%lld ", val);
         cur = printTree(cur);
         cur = printTree(cur);
         printf(") ");
         return cur;
     }  else if (*cur == 4) {
         printf("(C_tmp _ ");
-        cur += 2*NODE_SIZE;
+        cur += NODE_SIZE;
         IntTy val = *(IntTy *) cur;
         cur += NODE_SIZE;
-        printf("%d ", val);
+        printf("%lld ", val);
         cur = printTree(cur);
         cur = printTree(cur);
         cur = printTree(cur);
@@ -253,11 +322,13 @@ CursorTy printTree(CursorTy cur) {
 
 // }
 
-void add1_vectorized(CursorTy bufferIn, CursorTy bufferOut, IntTy size){
+void add1_vectorized(IntTy* bufferIn, IntTy* bufferOut, IntTy size){
     
-    #pragma omp simd
-    for (int i=0; i<size; i += 1){
-        ((IntTy*) bufferOut)[i] = ((IntTy*) bufferIn)[i] + 1;
+    //#pragma omp simd
+    #pragma clang loop vectorize_width(4) interleave_count(4)
+    for (int i=1; i<size; i += 1){
+       bufferOut[i] = bufferIn[i] + 1;
+        //std::cout << ((IntTy*) bufferOut)[i] << std::endl;
         //((IntTy*) bufferOut)[i + 1] = ((IntTy*) bufferIn)[i + 1] + 1;
         //((IntTy*) bufferOut)[i + 2] = ((IntTy*) bufferIn)[i + 2] + 1;
         //((IntTy*) bufferOut)[i + 3] = ((IntTy*) bufferIn)[i + 3] + 1;
@@ -289,14 +360,25 @@ int main (int argc, char** argv){
 
     myTree = createTree(dataArray, tree_depth);    
 
-    printf("Printing the original tree that was created\n");
+    //printf("Printing the original tree that was created\n");
     //printTree(dataArray);
-    printf("\n");
+    //printf("\n");
 
     //CursorIntProd summedTree = sumTree(dataArray);
 
     //printf("Now printing the sum\n");
     //printf("The sum is: (%lld)\n", summedTree.field1);
+
+    //Thread * thread_start = new Thread( ( (CursorIntProd) {dataArray, *dataArray} ) ) ;
+
+    //std::vector<Thread*> startThread;
+    //startThread.push_back(thread_start);
+
+    //CursorIntProd summedTreebfs =  sumTree_bfs(startThread);
+    
+    //printf("\n");
+    //printf("Now printing the sum from bfs\n");
+    //printf("The sum is: (%lld)\n", summedTreebfs.field1);
 
 
     CursorTy dataArrayOut = (CursorTy) malloc(UINT_MAX);
@@ -305,11 +387,11 @@ int main (int argc, char** argv){
     size = myTree.field1 / sizeof(IntTy);
     
     clock_gettime(CLOCK_MONOTONIC_RAW, &beginTime);
-    add1_vectorized(dataArray, dataArrayOut, size);
+    add1_vectorized((IntTy*)dataArray, (IntTy*)dataArrayOut, size);
     clock_gettime(CLOCK_MONOTONIC_RAW, &endTime);
     time = difftimespecs(&beginTime, &endTime);
 
-    printf("Printing first element (%d)\n", dataArrayOut[0]);
+    printf("Printing second element (%lld)\n", ((IntTy*) dataArrayOut)[1]);
     printf("\n");
 
     printf("Time taken for vectorized implementation was (%lf) nanoseconds\n", time);
