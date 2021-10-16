@@ -354,38 +354,67 @@ compileAndRunExe :: Config -> FilePath -> IO String
 compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp = do
   exepath <- makeAbsolute exe
   clearFile exepath
-
   -- (Stage 4) Codegen finished, generate a binary
-  dbgPrintLn minChatLvl cmd
-  cd <- system cmd
-  case cd of
-    ExitFailure n -> error$ (show backend) ++" compiler failed!  Code: "++show n
-    ExitSuccess -> do
-      when (mode == ToExe) exitSuccess
-      -- (Stage 5) Binary compiled, run if appropriate
-      let runExe extra = do
-            (_,Just hout,_, phandle) <- createProcess (shell (exepath++extra))
-                                                 { std_out = CreatePipe }
-            exitCode <- waitForProcess phandle
-            case exitCode of
-                ExitSuccess   -> hGetContents hout
-                ExitFailure n -> die$ "Treelang program exited with error code  "++ show n
-
-      runConf <- getRunConfig [] -- FIXME: no command line option atm.  Just env vars.
-      case benchInput of
-        -- CONVENTION: In benchmark mode we expect the generated executable to take 2 extra params:
-        Just _ | isBench mode   -> case arrayInput of
-                                     Nothing -> runExe $ " " ++ show (rcSize runConf) ++ " " ++ show (rcIters runConf)
-                                     Just fp -> runExe $ " " ++ "--array-input " ++ fp ++ " "  ++ show (rcSize runConf) ++ " " ++ show (rcIters runConf)
-        _      | mode == RunExe -> case arrayInput of
-                                     Nothing -> runExe ""
-                                     Just fp -> runExe $ " " ++ "--array-input " ++ fp ++ " "
-        _                                -> return ""
+  _ <- compile_program
+  -- (Stage 5) Binary compiled, run if appropriate
+  let runExe extra = do
+        (_,Just hout,_, phandle) <- createProcess (shell (exepath++extra))
+                                      { std_out = CreatePipe }
+        exitCode <- waitForProcess phandle
+        case exitCode of
+            ExitSuccess -> hGetContents hout
+            ExitFailure n -> die$ "Treelang program exited with error code  "++ show n
+  runConf <- getRunConfig [] -- FIXME: no command line option atm.  Just env vars.
+  case benchInput of
+    -- CONVENTION: In benchmark mode we expect the generated executable to take 2 extra params:
+    Just _ | isBench mode   -> case arrayInput of
+                                 Nothing -> runExe $ " " ++ show (rcSize runConf) ++ " " ++ show (rcIters runConf)
+                                 Just fp -> runExe $ " " ++ "--array-input " ++ fp ++ " "  ++ show (rcSize runConf) ++ " " ++ show (rcIters runConf)
+    _      | mode == RunExe -> case arrayInput of
+                                 Nothing -> runExe ""
+                                 Just fp -> runExe $ " " ++ "--array-input " ++ fp ++ " "
+    _                                -> return ""
   where outfile = getOutfile backend fp cfile
         exe = getExeFile backend fp exefile
         pointer = gopt Opt_Pointer $ dynflags cfg
         links = if pointer then " -lgc " else ""
-        cmd = compilationCmd backend cfg ++ outfile ++ links ++ " -o " ++ exe ++ " -lm"
+
+        compile_rts = do
+            env <- getEnvironment
+            let rtsPath = case lookup "GIBBONDIR" env of
+                            Just p -> p ++"/gibbon-compiler/cbits/gibbon_rts.c"
+                            -- Otherwise, assume we're running from the compiler dir!
+                            Nothing -> "cbits/gibbon_rts.c"
+            e <- doesFileExist rtsPath
+            unless e $ error$ "codegen: gibbon_rts.c file not found at path: "++rtsPath
+                             ++"\n Consider setting GIBBONDIR to repo root.\n"
+            let rts_o_path = replaceExtension rtsPath ".o"
+            let rts_header_dir = takeDirectory rts_o_path
+            let compile_rts_cmd = compilationCmd backend cfg
+                                  ++" -I " ++ rts_header_dir ++ " "
+                                  ++" -c " ++ rtsPath ++ " -o " ++ rts_o_path ++ " " ++ links ++ " -lm"
+            dbgPrintLn 2 compile_rts_cmd
+            compiled_rts <- system compile_rts_cmd
+            case compiled_rts of
+                ExitFailure _ -> die$ (show backend) ++" compiler failed to compile RTS!"
+                ExitSuccess -> do
+                    pure rts_o_path
+
+        compile_program = do
+            rts_o_path <- compile_rts
+            let rts_header_dir = takeDirectory rts_o_path
+            let compile_prog_cmd = compilationCmd backend cfg ++
+                                   " " ++ rts_o_path ++ " -I" ++ rts_header_dir ++ " " ++
+                                   outfile ++ links
+                                   ++ " -o " ++ exe ++ " -lm"
+            dbgPrintLn minChatLvl compile_prog_cmd
+            compiled <- system compile_prog_cmd
+            case compiled of
+              ExitFailure n -> error$ (show backend) ++" compiler failed!  Code: "++show n
+              ExitSuccess -> do
+                when (mode == ToExe) exitSuccess
+                pure ()
+
 
 
 -- | Return the correct filename to store the generated code,

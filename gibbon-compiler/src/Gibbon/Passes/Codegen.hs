@@ -21,8 +21,6 @@ import           Language.C.Quote.C (cdecl, cedecl, cexp, cfun, cparam, csdecl, 
 import qualified Language.C.Quote.C as C
 import qualified Language.C.Syntax as C
 import           Prelude hiding (init)
-import           System.Directory
-import           System.Environment
 import           Text.PrettyPrint.Mainland
 import           Text.PrettyPrint.Mainland.Class
 
@@ -190,16 +188,8 @@ sortFns (Prog _ funs mtal) = foldl go S.empty allTails
 --
 --  The boolean flag is true when we are compiling in "Packed" mode.
 codegenProg :: Config -> Prog -> IO String
-codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
-      env <- getEnvironment
-      let rtsPath = case lookup "GIBBONDIR" env of
-                      Just p -> p ++"/gibbon-compiler/cbits/rts.c"
-                      Nothing -> "cbits/rts.c" -- Assume we're running from the compiler dir!
-      e <- doesFileExist rtsPath
-      unless e $ error$ "codegen: rts.c file not found at path: "++rtsPath
-                       ++"\n Consider setting GIBBONDIR to repo root.\n"
-      rts <- readFile rtsPath -- TODO (maybe): We can read this in in compile time using TH
-      return (rts ++ '\n' : pretty 80 (stack (map ppr defs)))
+codegenProg cfg prg@(Prog sym_tbl funs mtal) =
+      return (hashIncludes ++ pretty 80 (stack (map ppr defs)))
     where
       init_fun_env = foldr (\fn acc -> M.insert (funName fn) (map snd (funArgs fn), funRetTy fn) acc) M.empty funs
 
@@ -302,6 +292,38 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) = do
           )
           (M.toList sym_tbl)
 
+      hashIncludes =
+        "#include <assert.h>\n\
+        \#include <stdio.h>\n\
+        \#include <stdlib.h>\n\
+        \#include <stdint.h>\n\
+        \#include <math.h>\n\
+        \#include <stdbool.h>\n\
+        \#include <string.h>\n\
+        \#include <time.h>\n\
+        \#include <alloca.h>\n\
+        \#include <sys/mman.h>\n\
+        \#include <sys/resource.h>\n\
+        \#include <sys/stat.h>\n\
+        \#include <unistd.h>\n\
+        \#include <fcntl.h>\n\
+        \#include <stdarg.h>\n\
+        \#include <errno.h>\n\
+        \#include <uthash.h>\n\n\
+        \#ifdef _WIN64\n\
+        \#include <windows.h>\n\
+        \#endif\n\n\
+        \#ifdef _POINTER\n\
+        \#include <gc.h>\n\
+        \#endif\n\n\
+        \#ifdef _PARALLEL\n\
+        \#include <cilk/cilk.h>\n\
+        \#include <cilk/cilk_api.h>\n\
+        \#endif\n\n\
+        \#include \"gibbon.h\"\n\n\
+        \// -----------------------------------------------------------------------------\n\
+        \// Program starts here\n\
+        \// -----------------------------------------------------------------------------\n\n"
 
 makeStructs :: [[Ty]] -> [C.Definition]
 makeStructs [] = []
