@@ -1,6 +1,8 @@
 // The imports here must be kept in sync with
 // 'hashIncludes' in Gibbon.Passes.Codegen.
 
+#include "gibbon.h"
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,15 +34,14 @@
 #include <cilk/cilk_api.h>
 #endif
 
-#include "gibbon.h"
 
-
-/* -----------------------------------------------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Common Globals
- * -----------------------------------------------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
+
 long long gib_global_biginf_init_chunk_size = (4 * GB);
 long long gib_global_inf_init_chunk_size = 1 * KB;
 long long gib_global_max_chunk_size = (1 * GB);
@@ -60,33 +61,36 @@ long long gib_global_region_count = 0;
 SymTy gib_global_gensym_counter = 0;
 
 
-/* -----------------------------------------------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Helpers
- * -----------------------------------------------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-char *gib_read_benchfile_param() {
-  if (gib_global_benchfile_param == NULL) {
-    fprintf(stderr, "gib_read_benchfile_param: benchmark input file was not set! Set using --bench-input.\n");
-    exit(1);
-  } else
-    return gib_global_benchfile_param;
+char *gib_read_benchfile_param()
+{
+    if (gib_global_benchfile_param == NULL) {
+        fprintf(stderr, "gib_read_benchfile_param: benchmark input file was not set! Set using --bench-input.\n");
+        exit(1);
+    } else
+        return gib_global_benchfile_param;
 }
 
-char *gib_read_arrayfile_param() {
-  if (gib_global_arrayfile_param == NULL) {
-    fprintf(stderr, "gib_read_arrayfile_param: array input file was not set! Set using --array-input.\n");
-    exit(1);
-  } else
-    return gib_global_arrayfile_param;
+char *gib_read_arrayfile_param()
+{
+    if (gib_global_arrayfile_param == NULL) {
+        fprintf(stderr, "gib_read_arrayfile_param: array input file was not set! Set using --array-input.\n");
+        exit(1);
+    } else
+        return gib_global_arrayfile_param;
 }
 
-long long gib_read_arrayfile_length_param() {
-  if (gib_global_arrayfile_length_param == -1) {
-    fprintf(stderr, "gib_read_arrayfile_length_param: array input file length was not set! Set using --array-input-length.\n");
-    exit(1);
-  } else
-    return gib_global_arrayfile_length_param;
+long long gib_read_arrayfile_length_param()
+{
+    if (gib_global_arrayfile_length_param == -1) {
+        fprintf(stderr, "gib_read_arrayfile_length_param: array input file length was not set! Set using --array-input-length.\n");
+        exit(1);
+    } else
+        return gib_global_arrayfile_length_param;
 }
 
 
@@ -104,25 +108,29 @@ void gib_show_usage(char** argv) {
     return;
 }
 
-double gib_avg(const double* arr, int n) {
+double gib_avg(const double* arr, int n)
+{
     double sum = 0.0;
     for(int i=0; i<n; i++) sum += arr[i];
     return sum / (double)n;
 }
 
-double gib_difftimespecs(struct timespec* t0, struct timespec* t1) {
+double gib_difftimespecs(struct timespec* t0, struct timespec* t1)
+{
     return (double)(t1->tv_sec - t0->tv_sec)
-      + ((double)(t1->tv_nsec - t0->tv_nsec) / 1000000000.0);
+            + ((double)(t1->tv_nsec - t0->tv_nsec) / 1000000000.0);
 }
 
-int gib_compare_doubles(const void *a, const void *b) {
+int gib_compare_doubles(const void *a, const void *b)
+{
     const double *da = (const double *) a;
     const double *db = (const double *) b;
     return (*da > *db) - (*da < *db);
 }
 
 // Exponentiation
-long long gib_expll(IntTy base, IntTy pow) {
+long long gib_expll(IntTy base, IntTy pow)
+{
     if (base == 2) {
         return (1 << pow);
     } else {
@@ -131,10 +139,11 @@ long long gib_expll(IntTy base, IntTy pow) {
             result *= base;
         return result;
     }
- }
+}
 
 // https://www.cprogramming.com/snippets/source-code/find-the-number-of-cpu-cores-for-windows-mac-or-linux
-int gib_get_num_processors() {
+int gib_get_num_processors()
+{
 #ifdef _WIN64
     SYSTEM_INFO sysinfo;
     GetSystemInfo(&sysinfo);
@@ -145,7 +154,8 @@ int gib_get_num_processors() {
 }
 
 // Requires -std=gnu11
-int dbgprintf(const char *format, ...) {
+int dbgprintf(const char *format, ...)
+{
     int code = 0;
     va_list args;
     va_start(args, format);
@@ -157,16 +167,16 @@ int dbgprintf(const char *format, ...) {
 }
 
 
-/* -----------------------------------------------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Allocators
- * -----------------------------------------------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 
 
-/* -------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Bump allocation for linked-lists
- * -------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 
@@ -180,46 +190,50 @@ char *gib_global_saved_heap_ptr_stack[100];
 int gib_global_num_saved_heap_ptr = 0;
 
 // For simplicity just use a single large slab:
-void gib_init_bumpalloc() {
-      gib_global_bumpalloc_heap_ptr = (char*)malloc(gib_global_biginf_init_chunk_size);
-      gib_global_bumpalloc_heap_ptr_end = gib_global_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
+void gib_init_bumpalloc()
+{
+    gib_global_bumpalloc_heap_ptr = (char*)malloc(gib_global_biginf_init_chunk_size);
+    gib_global_bumpalloc_heap_ptr_end = gib_global_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
 #ifdef _DEBUG
-      printf("Arena size for bump alloc: %lld\n", gib_global_biginf_init_chunk_size);
-      printf("gib_bumpalloc/gib_init_bumpalloc DONE: heap_ptr = %p\n", gib_global_bumpalloc_heap_ptr);
+    printf("Arena size for bump alloc: %lld\n", gib_global_biginf_init_chunk_size);
+    printf("gib_bumpalloc/gib_init_bumpalloc DONE: heap_ptr = %p\n", gib_global_bumpalloc_heap_ptr);
 #endif
 }
 
-void *gib_bumpalloc(long long n) {
-      if (! gib_global_bumpalloc_heap_ptr) {
-          gib_init_bumpalloc();
-      }
-      if (gib_global_bumpalloc_heap_ptr + n < gib_global_bumpalloc_heap_ptr_end) {
-          char* old= gib_global_bumpalloc_heap_ptr;
-          gib_global_bumpalloc_heap_ptr += n;
-          return old;
-      } else {
-          fprintf(stderr, "Warning: bump allocator ran out of memory.");
-          exit(1);
-      }
+void *gib_bumpalloc(long long n)
+{
+    if (! gib_global_bumpalloc_heap_ptr) {
+        gib_init_bumpalloc();
+    }
+    if (gib_global_bumpalloc_heap_ptr + n < gib_global_bumpalloc_heap_ptr_end) {
+        char* old= gib_global_bumpalloc_heap_ptr;
+        gib_global_bumpalloc_heap_ptr += n;
+        return old;
+    } else {
+        fprintf(stderr, "Warning: bump allocator ran out of memory.");
+        exit(1);
+    }
 }
 
 // Snapshot the current heap pointer value across all threads.
-void gib_save_alloc_state() {
-  dbgprintf("Saving(%p): pos %d", heap_ptr, gib_global_num_saved_heap_ptr);
-  gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr] = heap_ptr;
-  gib_global_num_saved_heap_ptr++;
-  dbgprintf("\n");
+void gib_save_alloc_state()
+{
+    dbgprintf("Saving(%p): pos %d", heap_ptr, gib_global_num_saved_heap_ptr);
+    gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr] = heap_ptr;
+    gib_global_num_saved_heap_ptr++;
+    dbgprintf("\n");
 }
 
-void gib_restore_alloc_state() {
-  if(gib_global_num_saved_heap_ptr <= 0) {
-    fprintf(stderr, "Bad call to gib_restore_alloc_state!  Saved stack empty!\ne");
-    exit(1);
-  }
-  gib_global_num_saved_heap_ptr--;
-  dbgprintf("Restoring(%p): pos %d, discarding %p",
-            gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr], gib_global_num_saved_heap_ptr, gib_global_bumpalloc_heap_ptr);
-  gib_global_bumpalloc_heap_ptr = gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr];
+void gib_restore_alloc_state()
+{
+    if(gib_global_num_saved_heap_ptr <= 0) {
+        fprintf(stderr, "Bad call to gib_restore_alloc_state!  Saved stack empty!\ne");
+        exit(1);
+    }
+    gib_global_num_saved_heap_ptr--;
+    dbgprintf("Restoring(%p): pos %d, discarding %p",
+              gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr], gib_global_num_saved_heap_ptr, gib_global_bumpalloc_heap_ptr);
+    gib_global_bumpalloc_heap_ptr = gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr];
 }
 
 #else
@@ -232,20 +246,21 @@ void gib_restore_alloc_state() {}
 #endif // BUMPALLOC
 
 
-/* -------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Bump allocated nursery for regions.
  * See GitHub #122.
- * -------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 __thread char *gib_global_nursery_heap_ptr = (char*)NULL;
 __thread char *gib_global_nursery_heap_ptr_end = (char*)NULL;
 
-inline void gib_init_nursery() {
+inline void gib_init_nursery()
+{
     gib_global_nursery_heap_ptr = (char*)malloc(NURSERY_SIZE);
     if (gib_global_nursery_heap_ptr == NULL) {
-      printf("init_region: malloc failed: %d", NURSERY_SIZE);
-      exit(1);
+        printf("init_region: malloc failed: %d", NURSERY_SIZE);
+        exit(1);
     }
     gib_global_nursery_heap_ptr_end = gib_global_nursery_heap_ptr + NURSERY_SIZE;
 #ifdef _DEBUG
@@ -253,7 +268,8 @@ inline void gib_init_nursery() {
 #endif
 }
 
-inline void *gib_alloc_in_nursery(long long n) {
+inline void *gib_alloc_in_nursery(long long n)
+{
     if (! gib_global_nursery_heap_ptr) {
         gib_init_nursery();
     }
@@ -270,9 +286,9 @@ inline void *gib_alloc_in_nursery(long long n) {
 }
 
 
-/* -------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Helper macros
- * -------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 
@@ -327,131 +343,144 @@ char *ALLOC_COUNTED(size_t size) {
 
 
 
-/* -----------------------------------------------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Arenas
- * -----------------------------------------------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-ArenaTy gib_alloc_arena() {
-  ArenaTy ar = ALLOC(sizeof(mem_arena_t));
-  ar->ind = 0;
-  ar->mem = malloc(gib_global_max_chunk_size);
-  ar->reflist = 0;
-  return ar;
+ArenaTy gib_alloc_arena()
+{
+    ArenaTy ar = ALLOC(sizeof(mem_arena_t));
+    ar->ind = 0;
+    ar->mem = malloc(gib_global_max_chunk_size);
+    ar->reflist = 0;
+    return ar;
 }
 
-void gib_free_arena(ArenaTy ar) {
-  free(ar->mem);
-  // TODO(vollmerm): free everything in ar->reflist
-  free(ar);
+void gib_free_arena(ArenaTy ar)
+{
+    free(ar->mem);
+    // TODO(vollmerm): free everything in ar->reflist
+    free(ar);
 }
 
-CursorTy gib_extend_arena(ArenaTy ar, int size) {
-  CursorTy ret = ar->mem + ar->ind;
-  ar->ind += size;
-  return ret;
+CursorTy gib_extend_arena(ArenaTy ar, int size)
+{
+    CursorTy ret = ar->mem + ar->ind;
+    ar->ind += size;
+    return ret;
 }
 
-/* -------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Arena-based dictionaries
- * -------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 
-dict_item_t *gib_dict_alloc(ArenaTy ar) {
-  return (dict_item_t *) gib_extend_arena(ar, sizeof(dict_item_t)); // ALLOC(sizeof(dict_item_t));
+dict_item_t *gib_dict_alloc(ArenaTy ar)
+{
+    return (dict_item_t *) gib_extend_arena(ar, sizeof(dict_item_t)); // ALLOC(sizeof(dict_item_t));
 }
 
-dict_item_t *gib_dict_insert_ptr(ArenaTy ar, dict_item_t *ptr, SymTy key, PtrTy val) {
-  dict_item_t *ret = gib_dict_alloc(ar);
-  ret->key = key;
-  ret->ptrval = val;
-  ret->next = ptr;
-  return ret;
+dict_item_t *gib_dict_insert_ptr(ArenaTy ar, dict_item_t *ptr, SymTy key, PtrTy val)
+{
+    dict_item_t *ret = gib_dict_alloc(ar);
+    ret->key = key;
+    ret->ptrval = val;
+    ret->next = ptr;
+    return ret;
 }
 
-PtrTy gib_dict_lookup_ptr(dict_item_t *ptr, SymTy key) {
-  while (ptr != 0) {
-    if (ptr->key == key) {
-      return ptr->ptrval;
-    } else {
-      ptr = ptr->next;
+PtrTy gib_dict_lookup_ptr(dict_item_t *ptr, SymTy key)
+{
+    while (ptr != 0) {
+        if (ptr->key == key) {
+            return ptr->ptrval;
+        } else {
+            ptr = ptr->next;
+        }
     }
-  }
-  printf("Error, key %lld not found!\n",key);
-  exit(1);
+    printf("Error, key %lld not found!\n",key);
+    exit(1);
 }
 
-/* -----------------------------------------------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Sets
- * -----------------------------------------------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 
-SymSetTy gib_empty_set() {
-  return NULL;
+SymSetTy gib_empty_set()
+{
+    return NULL;
 }
 
-SymSetTy gib_insert_set(SymSetTy set, int sym) {
-  SymSetTy s;
-  HASH_FIND_INT(set, &sym, s);  /* sym already in the hash? */
-  if (s==NULL) {
-    s = malloc(sizeof(struct set_elem));
-    s->val = sym;
-    HASH_ADD_INT(set,val,s);
-  }
-  return set;
+SymSetTy gib_insert_set(SymSetTy set, int sym)
+{
+    SymSetTy s;
+    HASH_FIND_INT(set, &sym, s);  /* sym already in the hash? */
+    if (s==NULL) {
+        s = malloc(sizeof(struct set_elem));
+        s->val = sym;
+        HASH_ADD_INT(set,val,s);
+    }
+    return set;
 }
 
-BoolTy gib_contains_set(SymSetTy set, int sym) {
-  SymSetTy s;
-  HASH_FIND_INT(set, &sym, s);
-  return (s!=NULL);
+BoolTy gib_contains_set(SymSetTy set, int sym)
+{
+    SymSetTy s;
+    HASH_FIND_INT(set, &sym, s);
+    return (s!=NULL);
 }
 
-/* -----------------------------------------------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Sym Hash
- * -----------------------------------------------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 
-SymHashTy gib_empty_hash() {
-  return NULL;
+SymHashTy gib_empty_hash()
+{
+    return NULL;
 }
 
-SymHashTy gib_insert_hash(SymHashTy hash, int k, int v) {
-  SymHashTy s;
-  // NOTE: not checking for duplicates!
-  // s = malloc(sizeof(struct sym_hash_elem));
-  s = ALLOC(sizeof(struct sym_hash_elem));
-  s->val = v;
-  s->key = k;
-  HASH_ADD_INT(hash,key,s);
+SymHashTy gib_insert_hash(SymHashTy hash, int k, int v)
+{
+    SymHashTy s;
+    // NOTE: not checking for duplicates!
+    // s = malloc(sizeof(struct sym_hash_elem));
+    s = ALLOC(sizeof(struct sym_hash_elem));
+    s->val = v;
+    s->key = k;
+    HASH_ADD_INT(hash,key,s);
 
-  return hash;
+    return hash;
 }
 
-IntTy gib_lookup_hash(SymHashTy hash, int k) {
-  SymHashTy s;
-  HASH_FIND_INT(hash,&k,s);
-  if (s==NULL) {
-    return k; // NOTE: return original key if val not found
-              // TODO(vollmerm): come up with something better to do here
-  } else {
-    return s->val;
-  }
+IntTy gib_lookup_hash(SymHashTy hash, int k)
+{
+    SymHashTy s;
+    HASH_FIND_INT(hash,&k,s);
+    if (s==NULL) {
+        return k; // NOTE: return original key if val not found
+        // TODO(vollmerm): come up with something better to do here
+    } else {
+        return s->val;
+    }
 }
 
-BoolTy gib_contains_hash(SymHashTy hash, int sym) {
-  SymHashTy s;
-  HASH_FIND_INT(hash,&sym,s);
-  return (s!=NULL);
+BoolTy gib_contains_hash(SymHashTy hash, int sym)
+{
+    SymHashTy s;
+    HASH_FIND_INT(hash,&sym,s);
+    return (s!=NULL);
 }
 
 
-/* -----------------------------------------------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Symbol table
- * -----------------------------------------------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 static SymTy newline_symbol = -1;
@@ -464,7 +493,8 @@ static SymTy rightparen_symbol = -1;
 // important! initialize to NULL
 SymTable_elem *global_sym_table = NULL;
 
-void gib_add_symbol(SymTy idx, char *value) {
+void gib_add_symbol(SymTy idx, char *value)
+{
     struct SymTable_elem *s;
     s = ALLOC(sizeof(struct SymTable_elem));
     s->idx = idx;
@@ -475,68 +505,77 @@ void gib_add_symbol(SymTy idx, char *value) {
     }
 }
 
-void gib_set_newline(SymTy idx) {
-  newline_symbol = idx;
-  gib_add_symbol(idx,"NEWLINE");
+void gib_set_newline(SymTy idx)
+{
+    newline_symbol = idx;
+    gib_add_symbol(idx,"NEWLINE");
 }
 
-void gib_set_space(SymTy idx) {
-  space_symbol = idx;
-  gib_add_symbol(idx,"SPACE");
+void gib_set_space(SymTy idx)
+{
+    space_symbol = idx;
+    gib_add_symbol(idx,"SPACE");
 }
 
-void gib_set_comma(SymTy idx) {
-  comma_symbol = idx;
-  gib_add_symbol(idx,"COMMA");
+void gib_set_comma(SymTy idx)
+{
+    comma_symbol = idx;
+    gib_add_symbol(idx,"COMMA");
 }
 
-void gib_set_leftparen(SymTy idx) {
-  leftparen_symbol = idx;
-  gib_add_symbol(idx,"LEFTPAREN");
+void gib_set_leftparen(SymTy idx)
+{
+    leftparen_symbol = idx;
+    gib_add_symbol(idx,"LEFTPAREN");
 }
 
-void gib_set_rightparen(SymTy idx) {
-  rightparen_symbol = idx;
-  gib_add_symbol(idx,"RIGHTPAREN");
+void gib_set_rightparen(SymTy idx)
+{
+    rightparen_symbol = idx;
+    gib_add_symbol(idx,"RIGHTPAREN");
 }
 
-int gib_print_symbol(SymTy idx) {
-  if (idx == comma_symbol) {
-    return printf(",");
-  } else if (idx == newline_symbol) {
-    return printf("\n");
-  } else if (idx == space_symbol) {
-    return printf(" ");
-  } else if (idx == leftparen_symbol) {
-    return printf("(");
-  } else if (idx == rightparen_symbol) {
-    return printf(")");
-  } else {
-    struct SymTable_elem *s;
-    HASH_FIND(hh, global_sym_table, &idx, sizeof(SymTy), s);
-    if (s == NULL) {
-        return printf("%lld", idx);
+int gib_print_symbol(SymTy idx)
+{
+    if (idx == comma_symbol) {
+        return printf(",");
+    } else if (idx == newline_symbol) {
+        return printf("\n");
+    } else if (idx == space_symbol) {
+        return printf(" ");
+    } else if (idx == leftparen_symbol) {
+        return printf("(");
+    } else if (idx == rightparen_symbol) {
+        return printf(")");
     } else {
-        return printf("%s", s->value);
-    }
+        struct SymTable_elem *s;
+        HASH_FIND(hh, global_sym_table, &idx, sizeof(SymTy), s);
+        if (s == NULL) {
+            return printf("%lld", idx);
+        } else {
+            return printf("%s", s->value);
+        }
 
-  }
+    }
 }
 
 #ifdef _PARALLEL
-SymTy gib_gensym() {
+SymTy gib_gensym()
+{
     SymTy idx = __atomic_add_fetch(&gib_global_gensym_counter, 1, __ATOMIC_SEQ_CST);
     return idx;
 }
 #else
-SymTy gib_gensym() {
+SymTy gib_gensym()
+{
     gib_global_gensym_counter += 1;
     SymTy idx = gib_global_gensym_counter;
     return idx;
 }
 #endif
 
-void gib_free_symtable() {
+void gib_free_symtable()
+{
     struct SymTable_elem *elt, *tmp;
     HASH_ITER(hh, global_sym_table, elt, tmp) {
         HASH_DEL(global_sym_table,elt);
@@ -547,45 +586,45 @@ void gib_free_symtable() {
 
 /*
 
------------------------------------------------------------------------------
-Memory Management; regions, chunks, GC etc.
------------------------------------------------------------------------------
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Memory Management; regions, chunks, GC etc.
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-   Gibbon has "growing regions" i.e each logical region is backed by a doubly linked-list
-   of smaller chunks which grows as required. In addition to actual data, each chunk
-   stores some additional metadata (RegionFooter) to chain the chunks together in a list
-   and for garbage collection. The footer:
+  Gibbon has "growing regions" i.e each logical region is backed by a doubly linked-list
+  of smaller chunks which grows as required. In addition to actual data, each chunk
+  stores some additional metadata (RegionFooter) to chain the chunks together in a list
+  and for garbage collection. The footer:
 
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-   serialized data | rf_reg_metadata_ptr | rf_seq_no | rf_nursery_allocated | rf_size | rf_next | rf_prev
-   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  serialized data | rf_reg_metadata_ptr | rf_seq_no | rf_nursery_allocated | rf_size | rf_next | rf_prev
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-   The metadata after the serialized data serves various purposes:
+  The metadata after the serialized data serves various purposes:
 
-   - rf_reg_metadata_ptr: A pointer to a RegionTy struct that contains various metadata.
-     Of particular interest to us are the fields:
+  - rf_reg_metadata_ptr: A pointer to a RegionTy struct that contains various metadata.
+  Of particular interest to us are the fields:
 
-     = reg_id: A unique identifier for a region.
+  = reg_id: A unique identifier for a region.
 
-     = refcount and outset: Whenever an inter-region indirection is created, we record that information
-       using these two fields. Suppose we have an indirection from region A that points to some chunk
-       in region B. Then A's outset will store a pointer to that chunk's footer, and B's refcount will
-       be bumped by 1. Note that all there's only 1 refcount cell, and 1 outset per logical region,
-       and chunks only store a pointer to them.
+  = refcount and outset: Whenever an inter-region indirection is created, we record that information
+  using these two fields. Suppose we have an indirection from region A that points to some chunk
+  in region B. Then A's outset will store a pointer to that chunk's footer, and B's refcount will
+  be bumped by 1. Note that all there's only 1 refcount cell, and 1 outset per logical region,
+  and chunks only store a pointer to them.
 
-   - rf_seq_no: The index of this particular chunk in the list.
+  - rf_seq_no: The index of this particular chunk in the list.
 
-   - rf_nursery_allocated: Whether this chunk was allocated in a nursery.
+  - rf_nursery_allocated: Whether this chunk was allocated in a nursery.
 
-   - rf_size: Used during bounds checking to calculate the size of the next region in
-     the linked list.
+  - rf_size: Used during bounds checking to calculate the size of the next region in
+  the linked list.
 
-   - rf_next / rf_prev: Point to the next and previous chunk respectively.
+  - rf_next / rf_prev: Point to the next and previous chunk respectively.
 
 
-There are two ways in which a region may be freed:
+  There are two ways in which a region may be freed:
 
-(1) Whenever it goes out of scope
+  (1) Whenever it goes out of scope
 
   The RTS tries to free a region whenever it goes out of scope. But this doesn't always succeed as
   regions sometimes contain values that "escape". One reason why this'll happen is if there's an
@@ -593,7 +632,7 @@ There are two ways in which a region may be freed:
   In such a case, when B goes out of scope it's refcount won't be 0, and the RTS won't free it.
   This brings us to (2).
 
-(2)
+  (2)
 
   When the RTS successfully frees a region, it decrements the refcounts of all the regions it
   points to (via the outset). At the same time, if it encounters a region in the outset whoose
@@ -602,17 +641,18 @@ There are two ways in which a region may be freed:
 
 
 
-Why is it a doubly linked-list?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Why is it a doubly linked-list?
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Due to way that bounds-checking works, the pointers in the outset may actually point to any
-arbitrary chunk in the chain. However, we must call gib_free_region on the first one to ensure that
-all of them are GC'd. So we need pointers to traverse backward get to the first one.
-'gib_trav_to_first_chunk' accomplishes this.
+  Due to way that bounds-checking works, the pointers in the outset may actually point to any
+  arbitrary chunk in the chain. However, we must call gib_free_region on the first one to ensure that
+  all of them are GC'd. So we need pointers to traverse backward get to the first one.
+  'gib_trav_to_first_chunk' accomplishes this.
 
- */
+*/
 
-inline void gib_insert_into_outset(CursorTy ptr, RegionTy *reg) {
+inline void gib_insert_into_outset(CursorTy ptr, RegionTy *reg)
+{
     uint outset_len = reg->reg_outset_len;
     // Check for duplicates.
     for (uint i = 0; i < outset_len; i++) {
@@ -652,7 +692,8 @@ inline void gib_remove_from_outset(CursorTy ptr, RegionTy *reg) {
     return;
 }
 
-RegionTy *gib_alloc_region(IntTy size) {
+RegionTy *gib_alloc_region(IntTy size)
+{
     // Allocate the region metadata.
     RegionTy *reg = ALLOC(sizeof(RegionTy));
     if (reg == NULL) {
@@ -703,13 +744,15 @@ RegionTy *gib_alloc_region(IntTy size) {
     return reg;
 }
 
-RegionTy *gib_alloc_counted_region(IntTy size) {
+RegionTy *gib_alloc_counted_region(IntTy size)
+{
     // Bump the count.
     gib_bump_global_region_count();
     return gib_alloc_region(size);
 }
 
-ChunkTy gib_alloc_chunk(CursorTy end_old_chunk) {
+ChunkTy gib_alloc_chunk(CursorTy end_old_chunk)
+{
     // Get size from current footer.
     RegionFooter *footer = (RegionFooter *) end_old_chunk;
     IntTy newsize = footer->rf_size * 2;
@@ -747,7 +790,8 @@ ChunkTy gib_alloc_chunk(CursorTy end_old_chunk) {
     return (ChunkTy) {start , end};
 }
 
-RegionFooter *gib_trav_to_first_chunk(RegionFooter *footer) {
+RegionFooter *gib_trav_to_first_chunk(RegionFooter *footer)
+{
     if (footer->rf_seq_no == 1) {
         return footer;
     } else if (footer->rf_prev == NULL) {
@@ -759,7 +803,8 @@ RegionFooter *gib_trav_to_first_chunk(RegionFooter *footer) {
     return NULL;
 }
 
-uint gib_get_ref_count(CursorTy end_ptr) {
+uint gib_get_ref_count(CursorTy end_ptr)
+{
     RegionFooter *footer = (RegionFooter *) end_ptr;
     RegionTy *reg = (RegionTy *) footer->rf_reg_metadata_ptr;
     return reg->reg_refcount;
@@ -767,7 +812,8 @@ uint gib_get_ref_count(CursorTy end_ptr) {
 
 // B is the pointer, and A is the pointee (i.e B -> A).
 // Bump A's refcount and update B's outset.
-inline void gib_bump_refcount(CursorTy end_b, CursorTy end_a) {
+inline void gib_bump_refcount(CursorTy end_b, CursorTy end_a)
+{
     // Grab footers.
     RegionFooter *footer_a = (RegionFooter *) end_a;
     RegionFooter *footer_b = (RegionFooter *) end_b;
@@ -886,19 +932,19 @@ void gib_free_region(CursorTy end_reg) {
 #endif
 
         if (! first_chunk_footer->rf_nursery_allocated) {
-            #ifdef _DEBUG
+#ifdef _DEBUG
             num_freed_chunks++;
             total_bytesize = total_bytesize + first_chunk_footer->rf_size;
-            #endif
+#endif
             free(first_chunk);
         }
 
         while (next_chunk != NULL) {
             next_chunk_footer = (RegionFooter *) next_chunk;
-            #ifdef _DEBUG
+#ifdef _DEBUG
             num_freed_chunks++;
             total_bytesize = total_bytesize + next_chunk_footer->rf_size;
-            #endif
+#endif
             free(next_chunk - next_chunk_footer->rf_size);
             next_chunk = (char*) next_chunk_footer->rf_next;
         }
@@ -920,7 +966,8 @@ void gib_free_region(CursorTy end_reg) {
 }
 
 // Assume that all nodes with size information have tags >= 150.
-BoolTy gib_is_big(IntTy i, CursorTy cur) {
+BoolTy gib_is_big(IntTy i, CursorTy cur)
+{
     TagTyPacked tag = *(TagTyPacked *) cur;
     if (tag >= 150) {
         cur += 1;
@@ -935,29 +982,33 @@ BoolTy gib_is_big(IntTy i, CursorTy cur) {
 }
 
 #ifdef _PARALLEL
-void gib_bump_global_region_count() {
+void gib_bump_global_region_count()
+{
     __atomic_add_fetch(&gib_global_region_count, 1, __ATOMIC_SEQ_CST);
     return;
 }
 #else
-void gib_bump_global_region_count() {
+void gib_bump_global_region_count()
+{
     gib_global_region_count++;
     return;
 }
 #endif
 
-void gib_print_global_region_count() {
+void gib_print_global_region_count()
+{
     printf("REGION_COUNT: %lld\n", gib_global_region_count);
     return;
 }
 
 
-/* -----------------------------------------------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Vectors
- * -----------------------------------------------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-VectorTy *gib_vector_alloc(IntTy num, IntTy elt_size) {
+VectorTy *gib_vector_alloc(IntTy num, IntTy elt_size)
+{
     VectorTy *vec = ALLOC(sizeof(VectorTy));
     if (vec == NULL) {
         printf("alloc_vector: malloc failed: %ld", sizeof(VectorTy));
@@ -975,15 +1026,18 @@ VectorTy *gib_vector_alloc(IntTy num, IntTy elt_size) {
     return vec;
 }
 
-IntTy gib_vector_length(VectorTy *vec) {
+IntTy gib_vector_length(VectorTy *vec)
+{
     return (vec->vec_upper - vec->vec_lower);
 }
 
-BoolTy gib_vector_is_empty(VectorTy *vec) {
+BoolTy gib_vector_is_empty(VectorTy *vec)
+{
     return (gib_vector_length(vec) == 0);
 }
 
-VectorTy *gib_vector_slice(IntTy i, IntTy n, VectorTy *vec) {
+VectorTy *gib_vector_slice(IntTy i, IntTy n, VectorTy *vec)
+{
     IntTy lower = vec->vec_lower + i;
     IntTy upper = vec->vec_lower + i + n;
     if ((lower > vec->vec_upper)) {
@@ -1007,7 +1061,8 @@ VectorTy *gib_vector_slice(IntTy i, IntTy n, VectorTy *vec) {
 }
 
 // The callers must cast the return value.
-inline void *gib_vector_nth(VectorTy *vec, IntTy i) {
+inline void *gib_vector_nth(VectorTy *vec, IntTy i)
+{
     // if (i < vec->lower || i > vec->upper) {
     //     printf("gib_vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->vec_lower, vec->vec_upper);
     //     exit(1);
@@ -1015,13 +1070,15 @@ inline void *gib_vector_nth(VectorTy *vec, IntTy i) {
     return (vec->vec_data + (vec->vec_elt_size * (vec->vec_lower + i)));
 }
 
-inline VectorTy *gib_vector_inplace_update(VectorTy *vec, IntTy i, void* elt) {
+inline VectorTy *gib_vector_inplace_update(VectorTy *vec, IntTy i, void* elt)
+{
     void* dst = gib_vector_nth(vec, i);
     memcpy(dst, elt, vec->vec_elt_size);
     return vec;
 }
 
-inline VectorTy *gib_vector_copy(VectorTy *vec) {
+inline VectorTy *gib_vector_copy(VectorTy *vec)
+{
     IntTy len = gib_vector_length(vec);
     void *start = gib_vector_nth(vec, 0);
     VectorTy *vec2 = gib_vector_alloc(len, vec->vec_elt_size);
@@ -1029,19 +1086,22 @@ inline VectorTy *gib_vector_copy(VectorTy *vec) {
     return vec2;
 }
 
-inline VectorTy *gib_vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
+inline VectorTy *gib_vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*))
+{
     void *start = gib_vector_nth(vec, 0);
     qsort(start, gib_vector_length(vec), vec->vec_elt_size, compar);
     return vec;
 }
 
-inline VectorTy *gib_vector_sort(VectorTy *vec, int (*compar)(const void *, const void*)) {
+inline VectorTy *gib_vector_sort(VectorTy *vec, int (*compar)(const void *, const void*))
+{
     VectorTy *vec2 = gib_vector_copy(vec);
     gib_vector_inplace_sort(vec2, compar);
     return vec2;
 }
 
-inline VectorTy *gib_vector_concat(VectorTy *vec) {
+inline VectorTy *gib_vector_concat(VectorTy *vec)
+{
     // Length of the input vector.
     IntTy len = gib_vector_length(vec);
     // Length of the concatenated vector.
@@ -1076,13 +1136,15 @@ inline VectorTy *gib_vector_concat(VectorTy *vec) {
     return result;
 }
 
-inline void gib_vector_free(VectorTy *vec) {
+inline void gib_vector_free(VectorTy *vec)
+{
     free(vec->vec_data);
     free(vec);
     return;
 }
 
-inline VectorTy *gib_vector_merge(VectorTy *vec1, VectorTy *vec2) {
+inline VectorTy *gib_vector_merge(VectorTy *vec1, VectorTy *vec2)
+{
     if (vec1->vec_upper != vec2->vec_lower) {
         printf("gib_vector_merge: non-contiguous slices, (%lld,%lld), (%lld,%lld).",
                vec1->vec_lower, vec1->vec_upper, vec2->vec_lower, vec2->vec_upper);
@@ -1116,7 +1178,8 @@ void gib_print_timing_array(VectorTy *times) {
     printf("]\n");
 }
 
-double gib_sum_timing_array(VectorTy *times) {
+double gib_sum_timing_array(VectorTy *times)
+{
     double *d;
     double acc = 0;
     for(int i = 0; i < gib_vector_length(times); i++) {
@@ -1126,12 +1189,13 @@ double gib_sum_timing_array(VectorTy *times) {
     return acc;
 }
 
-/* -----------------------------------------------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Linked lists
- * -----------------------------------------------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-inline ListTy *gib_list_alloc(IntTy data_size) {
+inline ListTy *gib_list_alloc(IntTy data_size)
+{
     // ListTy *ls = ALLOC(sizeof(ListTy));
     ListTy *ls = gib_bumpalloc(sizeof(ListTy));
     ls->ll_data_size = data_size;
@@ -1140,11 +1204,13 @@ inline ListTy *gib_list_alloc(IntTy data_size) {
     return ls;
 }
 
-inline BoolTy gib_list_is_empty(ListTy *ls) {
+inline BoolTy gib_list_is_empty(ListTy *ls)
+{
     return ls->ll_next == NULL;
 }
 
-inline ListTy *gib_list_cons(void *elt, ListTy *ls) {
+inline ListTy *gib_list_cons(void *elt, ListTy *ls)
+{
     // void* data = ALLOC(ls->data_size);
     void* data = gib_bumpalloc(ls->ll_data_size);
     if (data == NULL) {
@@ -1160,21 +1226,25 @@ inline ListTy *gib_list_cons(void *elt, ListTy *ls) {
     return res;
 }
 
-inline void *gib_list_head(ListTy *ls) {
+inline void *gib_list_head(ListTy *ls)
+{
     return ls->ll_data;
 }
 
-inline ListTy* gib_list_tail(ListTy *ls) {
+inline ListTy* gib_list_tail(ListTy *ls)
+{
     return ls->ll_next;
 }
 
-inline void gib_list_free(ListTy *ls) {
+inline void gib_list_free(ListTy *ls)
+{
     free(ls->ll_data);
     free(ls);
     return;
 }
 
-inline ListTy *gib_list_copy(ListTy *ls) {
+inline ListTy *gib_list_copy(ListTy *ls)
+{
     ListTy *ls2 = gib_list_alloc(ls->ll_data_size);
     if (ls->ll_data != NULL) {
         void* data = gib_bumpalloc(ls->ll_data_size);
@@ -1185,9 +1255,9 @@ inline ListTy *gib_list_copy(ListTy *ls) {
     return ls2;
 }
 
-/* -----------------------------------------------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Ppm images
- * -----------------------------------------------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 // Example: writePpm("gibbon_rgb_1000.ppm", 1000, 1000, pixels);
@@ -1220,12 +1290,13 @@ void gib_write_ppm_loop(FILE *fp, IntTy idx, IntTy end, VectorTy *pixels) {
     }
 }
 
-/* -----------------------------------------------------------------------------
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Main functions
- * -----------------------------------------------------------------------------
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-int main(int argc, char** argv) {
+int main(int argc, char** argv)
+{
     // parameters to parse:
     //
     //   num iterations: How many times to repeat a benchmark.
@@ -1234,8 +1305,8 @@ int main(int argc, char** argv) {
     struct rlimit lim;
     int code;
     if ( (code = getrlimit(RLIMIT_STACK, &lim)) ) {
-      fprintf(stderr, " [gibbon rts] failed to getrlimit, code %d\n", code);
-      exit(1);
+        fprintf(stderr, " [gibbon rts] failed to getrlimit, code %d\n", code);
+        exit(1);
     }
 
     // lim.rlim_cur = 1024LU * 1024LU * 1024LU; // 1GB stack.
@@ -1246,14 +1317,14 @@ int main(int argc, char** argv) {
 #ifndef __APPLE__
     code = setrlimit(RLIMIT_STACK, &lim);
     while (code) {
-      fprintf(stderr, " [gibbon rts] Failed to set stack size to %llu, code %d\n", (unsigned long long)lim.rlim_cur, code);
-      lim.rlim_cur /= 2;
-      // lim.rlim_max /= 2;
-      if(lim.rlim_cur < 100 * 1024) {
-        fprintf(stderr, " [gibbon rts] Failed setrlimit stack size to something reasonable; giving up.\n");
-        break; // abort();
-      }
-      int code = setrlimit(RLIMIT_STACK, &lim);
+        fprintf(stderr, " [gibbon rts] Failed to set stack size to %llu, code %d\n", (unsigned long long)lim.rlim_cur, code);
+        lim.rlim_cur /= 2;
+        // lim.rlim_max /= 2;
+        if(lim.rlim_cur < 100 * 1024) {
+            fprintf(stderr, " [gibbon rts] Failed setrlimit stack size to something reasonable; giving up.\n");
+            break; // abort();
+        }
+        int code = setrlimit(RLIMIT_STACK, &lim);
     }
 #endif
 
@@ -1263,8 +1334,8 @@ int main(int argc, char** argv) {
     for (i = 1; i < argc; ++i)
     {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-          gib_show_usage(argv);
-          exit(0);
+            gib_show_usage(argv);
+            exit(0);
         }
         else if (strcmp(argv[i], "--biginf-buffer-size") == 0 && i < argc - 1)
         {
@@ -1277,22 +1348,22 @@ int main(int argc, char** argv) {
             i++;
         }
         else if ((strcmp(argv[i], "--bench-input") == 0)) {
-          if (i+1 >= argc) {
-            fprintf(stderr, "Not enough arguments after --bench-input, expected <file>.\n");
-            gib_show_usage(argv);
-            exit(1);
-          }
-          gib_global_benchfile_param = argv[i+1];
-          i++;
+            if (i+1 >= argc) {
+                fprintf(stderr, "Not enough arguments after --bench-input, expected <file>.\n");
+                gib_show_usage(argv);
+                exit(1);
+            }
+            gib_global_benchfile_param = argv[i+1];
+            i++;
         }
         else if ((strcmp(argv[i], "--array-input") == 0)) {
-          if (i+1 >= argc) {
-            fprintf(stderr, "Not enough arguments after --array-input, expected <file>.\n");
-            gib_show_usage(argv);
-            exit(1);
-          }
-          gib_global_arrayfile_param = argv[i+1];
-          i++;
+            if (i+1 >= argc) {
+                fprintf(stderr, "Not enough arguments after --array-input, expected <file>.\n");
+                gib_show_usage(argv);
+                exit(1);
+            }
+            gib_global_arrayfile_param = argv[i+1];
+            i++;
         }
         else if (strcmp(argv[i], "--array-input-length") == 0 && i < argc - 1) {
             gib_global_arrayfile_length_param = atoll(argv[i+1]);
@@ -1311,12 +1382,12 @@ int main(int argc, char** argv) {
             gib_show_usage(argv);
             exit(1);
         } else {
-          if (got_numargs == 0) {
-            gib_global_size_param  = atoll(argv[i]);
-            got_numargs ++;
-          } else {
-            gib_global_iters_param = atoll(argv[i]);
-          }
+            if (got_numargs == 0) {
+                gib_global_size_param  = atoll(argv[i]);
+                got_numargs ++;
+            } else {
+                gib_global_iters_param = atoll(argv[i]);
+            }
         }
     }
 

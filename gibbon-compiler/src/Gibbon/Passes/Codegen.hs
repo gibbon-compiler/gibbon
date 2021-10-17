@@ -293,7 +293,9 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) =
           (M.toList sym_tbl)
 
       hashIncludes =
-        "#include <assert.h>\n\
+        "// Gibbon program.\n\n\
+        \#include \"gibbon.h\"\n\n\
+        \#include <assert.h>\n\
         \#include <stdio.h>\n\
         \#include <stdlib.h>\n\
         \#include <stdint.h>\n\
@@ -320,7 +322,6 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) =
         \#include <cilk/cilk.h>\n\
         \#include <cilk/cilk_api.h>\n\
         \#endif\n\n\
-        \#include \"gibbon.h\"\n\n\
         \// -----------------------------------------------------------------------------\n\
         \// Program starts here\n\
         \// -----------------------------------------------------------------------------\n\n"
