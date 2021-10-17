@@ -29,23 +29,23 @@ typedef char* CursorTy;
  */
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
-extern long long global_init_biginf_buf_size;
-extern long long global_init_inf_buf_size;
-extern long long global_max_chunk_size;
+extern long long gib_global_biginf_init_chunk_size;
+extern long long gib_global_inf_init_chunk_size;
+extern long long gib_global_max_chunk_size;
 
 // Runtime arguments, values updated by the flags parser.
-extern long long global_size_param;
-extern long long global_iters_param;
-extern char *global_bench_prog_param;
-extern char *global_benchfile_param;
-extern char *global_arrayfile_param;
-extern long long global_arrayfile_length_param;
+extern long long gib_global_size_param;
+extern long long gib_global_iters_param;
+extern char *gib_global_bench_prog_param;
+extern char *gib_global_benchfile_param;
+extern char *gib_global_arrayfile_param;
+extern long long gib_global_arrayfile_length_param;
 
 // Number of regions allocated.
-extern long long global_region_count;
+extern long long gib_global_region_count;
 
 // Invariant: should always be equal to max(sym_table_keys).
-extern SymTy global_gensym_counter;
+extern SymTy gib_global_gensym_counter;
 
 
 /* -----------------------------------------------------------------------------
@@ -53,15 +53,15 @@ extern SymTy global_gensym_counter;
  * -----------------------------------------------------------------------------
  */
 
-char *read_benchfile_param();
-char *read_arrayfile_param();
-long long read_arrayfile_length_param();
-void show_usage(char **argv);
-double avg(const double* arr, int n);
-double difftimespecs(struct timespec *t0, struct timespec *t1);
-int compare_doubles(const void *a, const void *b);
-long long expll(long long base, long long pow);
-int get_num_processors();
+char *gib_read_benchfile_param();
+char *gib_read_arrayfile_param();
+long long gib_read_arrayfile_length_param();
+void gib_show_usage(char **argv);
+double gib_avg(const double* arr, int n);
+double gib_difftimespecs(struct timespec *t0, struct timespec *t1);
+int gib_compare_doubles(const void *a, const void *b);
+long long gib_expll(long long base, long long pow);
+int gib_get_num_processors();
 
 
 /* -----------------------------------------------------------------------------
@@ -72,9 +72,6 @@ int get_num_processors();
 #define KB 1024lu
 #define MB (KB * 1000lu)
 #define GB (MB * 1000lu)
-
-#define MAX(a,b) (((a)>(b))?(a):(b))
-#define MIN(a,b) (((a)<(b))?(a):(b))
 
 
 /* -----------------------------------------------------------------------------
@@ -88,15 +85,15 @@ int get_num_processors();
  * -------------------------------------
  */
 
-extern __thread char *bumpalloc_heap_ptr;
-extern __thread char* bumpalloc_heap_ptr_end;
-extern char *saved_heap_ptr_stack[100];
-extern int num_saved_heap_ptr;
+extern __thread char *gib_global_bumpalloc_heap_ptr;
+extern __thread char *gib_global_bumpalloc_heap_ptr_end;
+extern char *gib_global_saved_heap_ptr_stack[100];
+extern int gib_global_num_saved_heap_ptr;
 
-void init_bumpalloc();
-void *bump_alloc(long long n);
-void save_alloc_state();
-void restore_alloc_state();
+void gib_init_bumpalloc();
+void *gib_bumpalloc(long long n);
+void gib_save_alloc_state();
+void gib_restore_alloc_state();
 
 
 /* -------------------------------------
@@ -108,12 +105,11 @@ void restore_alloc_state();
 #define NURSERY_SIZE 0
 #define NURSERY_ALLOC_UPPER_BOUND 1024
 
-extern __thread char *nursery_heap_ptr;
-extern __thread char *nursery_heap_ptr_end;
+extern __thread char *gib_global_nursery_heap_ptr;
+extern __thread char *gib_global_nursery_heap_ptr_end;
 
-void init_nursery();
-void *alloc_in_nursery(long long n);
-
+void gib_init_nursery();
+void *gib_alloc_in_nursery(long long n);
 
 
 /* -----------------------------------------------------------------------------
@@ -129,9 +125,9 @@ typedef struct mem_arena {
 
 typedef mem_arena_t* ArenaTy;
 
-ArenaTy alloc_arena();
-void free_arena(ArenaTy ar);
-CursorTy extend_arena(ArenaTy ar, int size);
+ArenaTy gib_alloc_arena();
+void gib_free_arena(ArenaTy ar);
+CursorTy gib_extend_arena(ArenaTy ar, int size);
 
 
 /* -------------------------------------
@@ -146,9 +142,9 @@ typedef struct dict_item {
 } dict_item_t;
 
 
-dict_item_t *dict_alloc(ArenaTy ar);
-dict_item_t *dict_insert_ptr(ArenaTy ar, dict_item_t *ptr, SymTy key, PtrTy val);
-PtrTy dict_lookup_ptr(dict_item_t *ptr, SymTy key);
+dict_item_t *gib_dict_alloc(ArenaTy ar);
+dict_item_t *gib_dict_insert_ptr(ArenaTy ar, dict_item_t *ptr, SymTy key, PtrTy val);
+PtrTy gib_dict_lookup_ptr(dict_item_t *ptr, SymTy key);
 
 
 /* -----------------------------------------------------------------------------
@@ -163,9 +159,9 @@ struct set_elem {
 
 typedef struct set_elem* SymSetTy;
 
-SymSetTy empty_set();
-SymSetTy insert_set(SymSetTy set, int sym);
-BoolTy contains_set(SymSetTy set, int sym);
+SymSetTy gib_empty_set();
+SymSetTy gib_insert_set(SymSetTy set, int sym);
+BoolTy gib_contains_set(SymSetTy set, int sym);
 
 
 /* -----------------------------------------------------------------------------
@@ -182,10 +178,10 @@ struct sym_hash_elem {
 typedef struct sym_hash_elem* SymHashTy;
 typedef struct sym_hash_elem* IntHashTy;
 
-SymHashTy empty_hash();
-SymHashTy insert_hash(SymHashTy hash, int k, int v);
-IntTy lookup_hash(SymHashTy hash, int k);
-BoolTy contains_hash(SymHashTy hash, int sym);
+SymHashTy gib_empty_hash();
+SymHashTy gib_insert_hash(SymHashTy hash, int k, int v);
+IntTy gib_lookup_hash(SymHashTy hash, int k);
+BoolTy gib_contains_hash(SymHashTy hash, int sym);
 
 
 /* -----------------------------------------------------------------------------
@@ -203,15 +199,15 @@ typedef struct SymTable_elem {
 
 extern SymTable_elem *global_sym_table;
 
-void add_symbol(SymTy idx, char *value);
-void set_newline(SymTy idx);
-void set_space(SymTy idx);
-void set_comma(SymTy idx);
-void set_leftparen(SymTy idx);
-void set_rightparen(SymTy idx);
-int print_symbol(SymTy idx);
-SymTy gensym();
-void free_symtable();
+void gib_add_symbol(SymTy idx, char *value);
+void gib_set_newline(SymTy idx);
+void gib_set_space(SymTy idx);
+void gib_set_comma(SymTy idx);
+void gib_set_leftparen(SymTy idx);
+void gib_set_rightparen(SymTy idx);
+int gib_print_symbol(SymTy idx);
+SymTy gib_gensym();
+void gib_free_symtable();
 
 
 /* -----------------------------------------------------------------------------
@@ -244,18 +240,18 @@ typedef struct ChunkTy_struct {
     CursorTy chunk_end;
 } ChunkTy;
 
-void insert_into_outset(CursorTy ptr, RegionTy *reg);
-void remove_from_outset(CursorTy ptr, RegionTy *reg);
-RegionTy *alloc_region(IntTy size);
-RegionTy *alloc_counted_region(IntTy size);
-ChunkTy alloc_chunk(CursorTy end_old_chunk);
-RegionFooter *trav_to_first_chunk(RegionFooter *footer);
-uint get_ref_count(CursorTy end_ptr);
-void bump_ref_count(CursorTy end_b, CursorTy end_a);
-void free_region(CursorTy end_reg);
-BoolTy is_big(IntTy i, CursorTy cur);
-void bump_global_region_count();
-void print_global_region_count();
+void gib_insert_into_outset(CursorTy ptr, RegionTy *reg);
+void gib_remove_from_outset(CursorTy ptr, RegionTy *reg);
+RegionTy *gib_alloc_region(IntTy size);
+RegionTy *gib_alloc_counted_region(IntTy size);
+ChunkTy gib_alloc_chunk(CursorTy end_old_chunk);
+RegionFooter *gib_trav_to_first_chunk(RegionFooter *footer);
+uint gib_get_ref_count(CursorTy end_ptr);
+void gib_bump_refcount(CursorTy end_b, CursorTy end_a);
+void gib_free_region(CursorTy end_reg);
+BoolTy gib_is_big(IntTy i, CursorTy cur);
+void gib_bump_global_region_count();
+void gib_print_global_region_count();
 
 
 
@@ -275,20 +271,20 @@ typedef struct VectorTy_struct {
     void* vec_data;
 } VectorTy;
 
-VectorTy *vector_alloc(IntTy num, IntTy elt_size);
-IntTy vector_length(VectorTy *vec);
-BoolTy vector_is_empty(VectorTy *vec);
-VectorTy *vector_slice(IntTy i, IntTy n, VectorTy *vec);
-void* vector_nth(VectorTy *vec, IntTy i);
-VectorTy *vector_inplace_update(VectorTy *vec, IntTy i, void* elt);
-VectorTy *vector_copy(VectorTy *vec);
-VectorTy *vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*));
-VectorTy *vector_sort(VectorTy *vec, int (*compar)(const void *, const void*));
-VectorTy *vector_concat(VectorTy *vec);
-void vector_free(VectorTy *vec);
-VectorTy *vector_merge(VectorTy *vec1, VectorTy *vec2);
-void print_timing_array(VectorTy *times);
-double sum_timing_array(VectorTy *times);
+VectorTy *gib_vector_alloc(IntTy num, IntTy elt_size);
+IntTy gib_vector_length(VectorTy *vec);
+BoolTy gib_vector_is_empty(VectorTy *vec);
+VectorTy *gib_vector_slice(IntTy i, IntTy n, VectorTy *vec);
+void* gib_vector_nth(VectorTy *vec, IntTy i);
+VectorTy *gib_vector_inplace_update(VectorTy *vec, IntTy i, void* elt);
+VectorTy *gib_vector_copy(VectorTy *vec);
+VectorTy *gib_vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*));
+VectorTy *gib_vector_sort(VectorTy *vec, int (*compar)(const void *, const void*));
+VectorTy *gib_vector_concat(VectorTy *vec);
+void gib_vector_free(VectorTy *vec);
+VectorTy *gib_vector_merge(VectorTy *vec1, VectorTy *vec2);
+void gib_print_timing_array(VectorTy *times);
+double gib_sum_timing_array(VectorTy *times);
 
 
 /* -----------------------------------------------------------------------------
@@ -302,13 +298,13 @@ typedef struct ListTy_struct {
     struct ListTy_struct* ll_next;
 } ListTy;
 
-ListTy *list_alloc(IntTy data_size);
-BoolTy list_is_empty(ListTy *ls);
-ListTy *list_cons(void *elt, ListTy *ls);
-void *list_head(ListTy *ls);
-ListTy *list_tail(ListTy *ls);
-void list_free(ListTy *ls);
-ListTy *list_copy(ListTy *ls);
+ListTy *gib_list_alloc(IntTy data_size);
+BoolTy gib_list_is_empty(ListTy *ls);
+ListTy *gib_list_cons(void *elt, ListTy *ls);
+void *gib_list_head(ListTy *ls);
+ListTy *gib_list_tail(ListTy *ls);
+void gib_list_free(ListTy *ls);
+ListTy *gib_list_copy(ListTy *ls);
 
 
 /* -----------------------------------------------------------------------------
@@ -322,8 +318,8 @@ typedef struct __Pixel_struct {
     IntTy field2;
 } __Pixel;
 
-void writePpm(char* filename, IntTy width, IntTy height, VectorTy *pixels);
-void writePpm_loop(FILE *fp, IntTy idx, IntTy end, VectorTy *pixels);
+void gib_write_ppm(char* filename, IntTy width, IntTy height, VectorTy *pixels);
+void gib_write_ppm_loop(FILE *fp, IntTy idx, IntTy end, VectorTy *pixels);
 
 
 /* -----------------------------------------------------------------------------
@@ -332,9 +328,8 @@ void writePpm_loop(FILE *fp, IntTy idx, IntTy end, VectorTy *pixels);
  */
 
 
-// fun fact: __ prefix is actually reserved and this is an undefined behavior.
 // This function must be provided by the code generator.
-int __main_expr();
+int gib_main_expr();
 
 int main(int argc, char** argv);
 
