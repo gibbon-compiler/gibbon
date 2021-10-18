@@ -101,7 +101,7 @@ import qualified Gibbon.Passes.LLVM.Codegen as LLVM
 
 suppress_warnings :: String
 -- suppress_warnings = " -Wno-int-to-pointer-cast -Wno-switch-bool -Wno-return-type "
-suppress_warnings = " "
+suppress_warnings = ""
 
 configParser :: Parser Config
 configParser = Config <$> inputParser
@@ -355,7 +355,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
   exepath <- makeAbsolute exe
   clearFile exepath
   -- (Stage 4) Codegen finished, generate a binary
-  _ <- compile_program
+  compile_program
   -- (Stage 5) Binary compiled, run if appropriate
   let runExe extra = do
         (_,Just hout,_, phandle) <- createProcess (shell (exepath++extra))
@@ -377,11 +377,32 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
   where outfile = getOutfile backend fp cfile
         exe = getExeFile backend fp exefile
         pointer = gopt Opt_Pointer $ dynflags cfg
-        links = if pointer then " -lgc " else ""
+        links = if pointer
+                then " -lgc -lm -lgibbon_rts "
+                else " -lm -lgibbon_rts "
 
-        compile_rts = do
+        compile_rust_rts = do
             env <- getEnvironment
-            let rtsPath = case lookup "GIBBONDIR" env of
+            -- Compile Rust RTS.
+            rust_rts_dir <- makeAbsolute $ case lookup "GIBBON_NEWRTS_DIR" env of
+                                  Just p -> p
+                                  -- Otherwise, assume we're running from the compiler dir!
+                                  Nothing -> "../gibbon-rts/"
+            e2 <- doesDirectoryExist rust_rts_dir
+            unless e2 $ error$ "codegen: Rust RTS not found at path: "++rust_rts_dir
+                               ++"\n Consider setting GIBBON_NEWRTS_DIR.\n"
+            let rust_rts_path = rust_rts_dir ++ "/target/release"
+            let compile_rust_rts_cmd = "cargo build --release"
+
+            compile (Just rust_rts_dir)
+                    compile_rust_rts_cmd
+                    "Compiling the Rust RTS\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+                    "codegen: Rust RTS could not be compiled: "
+            pure rust_rts_path
+
+        compile_c_rts rust_rts_path = do
+            env <- getEnvironment
+            rtsPath <- makeAbsolute $ case lookup "GIBBONDIR" env of
                             Just p -> p ++"/gibbon-compiler/cbits/gibbon_rts.c"
                             -- Otherwise, assume we're running from the compiler dir!
                             Nothing -> "cbits/gibbon_rts.c"
@@ -392,28 +413,50 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
             let rts_header_dir = takeDirectory rts_o_path
             let compile_rts_cmd = compilationCmd backend cfg
                                   ++" -I " ++ rts_header_dir ++ " "
-                                  ++" -c " ++ rtsPath ++ " -o " ++ rts_o_path ++ " " ++ links ++ " -lm"
-            dbgPrintLn 2 compile_rts_cmd
-            compiled_rts <- system compile_rts_cmd
-            case compiled_rts of
-                ExitFailure _ -> die$ (show backend) ++" compiler failed to compile RTS!"
-                ExitSuccess -> do
-                    pure rts_o_path
+                                  ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "
+                                  ++" -c " ++ rtsPath ++ " -o " ++ rts_o_path ++ " " ++ links
+            compile Nothing
+                    compile_rts_cmd
+                    "Compiling the C RTS\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+                    "codegen: C RTS could not be compiled: "
+            pure rts_o_path
+
 
         compile_program = do
-            rts_o_path <- compile_rts
+            rust_rts_path <- compile_rust_rts
+            rts_o_path <- compile_c_rts rust_rts_path
             let rts_header_dir = takeDirectory rts_o_path
-            let compile_prog_cmd = compilationCmd backend cfg ++
-                                   " " ++ rts_o_path ++ " -I" ++ rts_header_dir ++ " " ++
-                                   outfile ++ links
-                                   ++ " -o " ++ exe ++ " -lm"
-            dbgPrintLn minChatLvl compile_prog_cmd
-            compiled <- system compile_prog_cmd
-            case compiled of
-              ExitFailure n -> error$ (show backend) ++" compiler failed!  Code: "++show n
-              ExitSuccess -> do
-                when (mode == ToExe) exitSuccess
-                pure ()
+            let compile_prog_cmd = compilationCmd backend cfg
+                                   ++" " ++ rts_o_path
+                                   ++" -I" ++ rts_header_dir ++ " "
+                                   ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "
+                                   ++outfile ++ " -o " ++ exe ++ links
+
+            compile Nothing
+                    compile_prog_cmd
+                    "Compiling the program\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+                    (show backend ++" compiler failed! ")
+            pure ()
+
+        compile :: Maybe FilePath -> String -> String -> String -> IO ()
+        compile dir cmd msg errmsg = do
+            dbgPrintLn 2 msg
+            dbgPrintLn 2 cmd
+            (_,Just hout,Just herr,phandle) <-
+                createProcess (shell cmd)
+                    { std_out = CreatePipe
+                    , std_err = CreatePipe
+                    , cwd     = dir
+                    }
+            exit_code <- waitForProcess phandle
+            case exit_code of
+                ExitSuccess -> do out <- hGetContents hout
+                                  err <- hGetContents herr
+                                  dbgPrintLn 2 out
+                                  dbgPrintLn 2 err
+                ExitFailure n -> do out <- hGetContents hout
+                                    err <- hGetContents herr
+                                    die$ errmsg++out++"\n"++err++"\nCode: "++show n
 
 
 
@@ -444,11 +487,11 @@ getExeFile backend fp Nothing =
 compilationCmd :: Backend -> Config -> String
 compilationCmd LLVM _   = "clang-5.0 lib.o "
 compilationCmd C config = (cc config) ++" -std=gnu11 "
-                          ++(if bumpAlloc then "-D_BUMPALLOC " else " ")
-                          ++(if pointer then "-D_POINTER " else " ")
-                          ++(if parallel then "-fcilkplus -D_PARALLEL " else " ")
-                          ++(optc config)++"  "
-                          ++(if warnc then "-Wno-unused-variable -Wall " else suppress_warnings)
+                          ++(optc config)
+                          ++(if bumpAlloc then " -D_BUMPALLOC " else "")
+                          ++(if pointer then " -D_POINTER " else "")
+                          ++(if parallel then " -fcilkplus -D_PARALLEL " else "")
+                          ++(if warnc then " -Wno-unused-variable -Wall " else suppress_warnings)
   where dflags = dynflags config
         bumpAlloc = gopt Opt_BumpAlloc dflags
         pointer = gopt Opt_Pointer dflags

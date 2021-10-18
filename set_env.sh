@@ -6,6 +6,7 @@ if ! [ -d ./gibbon-compiler ]; then
 fi
 
 export GIBBONDIR=`pwd`
+export GIBBON_NEWRTS_DIR=$GIBBONDIR/gibbon-rts
 export PLTADDONDIR=$GIBBONDIR/.racket_sandbox/
 
 STK="stack"

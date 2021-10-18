@@ -1,0 +1,16 @@
+[package]
+name = "gibbon-rts"
+version = "0.1.0"
+edition = "2021"
+authors = ["Chaitanya Koparkar <ckoparkar@gmail.com>"]
+description = "A runtime system for the Gibbon compiler."
+homepage = "https://github.com/iu-parfunc/gibbon"
+repository = "https://github.com/iu-parfunc/gibbon"
+license = "BSD-3-Clause"
+
+[lib]
+name = "gibbon_rts"
+crate-type = ["cdylib"]
+
+[profile.release]
+lto = true

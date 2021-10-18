@@ -1399,5 +1399,8 @@ int main(int argc, char** argv)
 
     gib_main_expr();
 
+    // Test linking with the new Rust RTS.
+    hello_rust();
+
     return 0;
 }

@@ -349,6 +349,13 @@ typedef struct gib_pixel {
 void gib_write_ppm(char* filename, GibInt width, GibInt height, GibVector *pixels);
 void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels);
 
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * New RTS
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+void hello_rust();
+
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Main functions
