@@ -686,7 +686,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  RandP -> let [(outV,outT)] = bnds in pure
                           [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = rand(); |]]
                  FRandP-> let [(outV,outT)] = bnds
-                              fty = [cty| typename FloatTy |] in pure
+                              fty = codegenTy FloatTy in pure
                           [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:fty) rand() / ($ty:fty) (RAND_MAX); |]]
                  FSqrtP -> let [(outV,outT)] = bnds
                                [arg] = rnds in pure
@@ -698,12 +698,12 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  FloatToIntP -> let [(outV,outT)] = bnds
                                     [arg] = rnds
-                                    ity= [cty| typename IntTy |] in pure
+                                    ity= codegenTy IntTy in pure
                                 [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:ity) ($(codegenTriv venv arg)) ; |]]
 
                  IntToFloatP -> let [(outV,outT)] = bnds
                                     [arg] = rnds
-                                    fty= [cty| typename FloatTy |] in pure
+                                    fty = codegenTy FloatTy in pure
                                 [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = ($ty:fty) ($(codegenTriv venv arg)) ; |]]
 
                  EqP -> let [(outV,outT)] = bnds
@@ -743,9 +743,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                     [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = gib_dict_lookup_ptr($id:dict, $(codegenTriv venv keyTriv)); |] ]
                  DictEmptyP _ty -> let [(outV,ty)] = bnds
                                    in pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = 0; |] ]
-                 DictHasKeyP PtrTy -> let [(outV,IntTy)] = bnds
-                                          [(VarTriv dict)] = rnds in pure
-                    [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = dict_has_key_ptr($id:dict); |] ]
+                 -- DictHasKeyP PtrTy -> let [(outV,IntTy)] = bnds
+                 --                          [(VarTriv dict)] = rnds in pure
+                 --    [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = dict_has_key_ptr($id:dict); |] ]
                  DictHasKeyP _ -> error $ "codegen: " ++ show prm ++ "unhandled."
 
                  SymSetEmpty -> let [(outV,outT)] = bnds
@@ -909,11 +909,11 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  SizeOfPacked -> let [(sizeV,IntTy)] = bnds
                                      [(VarTriv startV), (VarTriv endV)] = rnds
                                  in pure
-                                   [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:sizeV = $id:endV - $id:startV; |] ]
+                                   [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:sizeV = ($ty:(codegenTy IntTy)) $id:endV - $id:startV; |] ]
                  SizeOfScalar -> let [(sizeV,IntTy)] = bnds
                                      [(VarTriv w)]   = rnds
                                  in pure
-                                   [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:sizeV = sizeof($id:w); |] ]
+                                   [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:sizeV = ($ty:(codegenTy IntTy)) sizeof($id:w); |] ]
 
 
                  GetFirstWord ->
@@ -1392,11 +1392,11 @@ codegenTy ChunkTy = [cty|typename ChunkTy|]
 codegenTy (ProdTy []) = [cty|unsigned char|]
 codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
     where nam = makeName ts
-codegenTy (SymDictTy _ _t) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id "dict_item_t*" noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
-codegenTy SymSetTy = [cty|typename SymSetTy|]
-codegenTy SymHashTy = [cty|typename SymHashTy|]
-codegenTy IntHashTy = [cty|typename IntHashTy|]
-codegenTy ArenaTy = [cty|typename ArenaTy|]
+codegenTy (SymDictTy _ _t) = [cty|typename SymDictTy|]
+codegenTy SymSetTy = [cty|typename SymSetTy*|]
+codegenTy SymHashTy = [cty|typename SymHashTy*|]
+codegenTy IntHashTy = [cty|typename IntHashTy*|]
+codegenTy ArenaTy = [cty|typename ArenaTy*|]
 codegenTy VectorTy{} = [cty|typename VectorTy* |]
 codegenTy ListTy{} = [cty|typename ListTy* |]
 codegenTy PDictTy{} = [cty|typename PDictTy* |]
@@ -1411,7 +1411,7 @@ makeName' SymTy       = "Sym"
 makeName' BoolTy      = "Bool"
 makeName' CursorTy    = "Cursor"
 makeName' TagTyPacked = "Tag"
-makeName' TagTyBoxed  = makeName' IntTy
+makeName' TagTyBoxed  = makeName' TagTyPacked
 makeName' PtrTy = "Ptr"
 makeName' (SymDictTy _ _ty) = "Dict"
 makeName' RegionTy = "Region"

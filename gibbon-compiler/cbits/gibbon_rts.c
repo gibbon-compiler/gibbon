@@ -47,8 +47,8 @@ long long gib_global_inf_init_chunk_size = 1 * KB;
 long long gib_global_max_chunk_size = (1 * GB);
 
 // Runtime arguments, values updated by the flags parser.
-long long gib_global_size_param = 1;
-long long gib_global_iters_param = 1;
+IntTy gib_global_size_param = 1;
+IntTy gib_global_iters_param = 1;
 char *gib_global_bench_prog_param = NULL;
 char *gib_global_benchfile_param = NULL;
 char *gib_global_arrayfile_param = NULL;
@@ -129,7 +129,7 @@ int gib_compare_doubles(const void *a, const void *b)
 }
 
 // Exponentiation
-long long gib_expll(IntTy base, IntTy pow)
+IntTy gib_expll(IntTy base, IntTy pow)
 {
     if (base == 2) {
         return (1 << pow);
@@ -142,7 +142,7 @@ long long gib_expll(IntTy base, IntTy pow)
 }
 
 // https://www.cprogramming.com/snippets/source-code/find-the-number-of-cpu-cores-for-windows-mac-or-linux
-int gib_get_num_processors()
+IntTy gib_get_num_processors()
 {
 #ifdef _WIN64
     SYSTEM_INFO sysinfo;
@@ -348,23 +348,23 @@ char *ALLOC_COUNTED(size_t size) {
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-ArenaTy gib_alloc_arena()
+ArenaTy *gib_alloc_arena()
 {
-    ArenaTy ar = ALLOC(sizeof(mem_arena_t));
+    ArenaTy *ar = ALLOC(sizeof(ArenaTy));
     ar->ind = 0;
     ar->mem = malloc(gib_global_max_chunk_size);
     ar->reflist = 0;
     return ar;
 }
 
-void gib_free_arena(ArenaTy ar)
+void gib_free_arena(ArenaTy *ar)
 {
     free(ar->mem);
     // TODO(vollmerm): free everything in ar->reflist
     free(ar);
 }
 
-CursorTy gib_extend_arena(ArenaTy ar, int size)
+CursorTy gib_extend_arena(ArenaTy *ar, int size)
 {
     CursorTy ret = ar->mem + ar->ind;
     ar->ind += size;
@@ -377,21 +377,21 @@ CursorTy gib_extend_arena(ArenaTy ar, int size)
  */
 
 
-dict_item_t *gib_dict_alloc(ArenaTy ar)
+SymDictTy *gib_dict_alloc(ArenaTy *ar)
 {
-    return (dict_item_t *) gib_extend_arena(ar, sizeof(dict_item_t)); // ALLOC(sizeof(dict_item_t));
+    return (SymDictTy *) gib_extend_arena(ar, sizeof(SymDictTy)); // ALLOC(sizeof(SymDictTy));
 }
 
-dict_item_t *gib_dict_insert_ptr(ArenaTy ar, dict_item_t *ptr, SymTy key, PtrTy val)
+SymDictTy *gib_dict_insert_ptr(ArenaTy *ar, SymDictTy *ptr, SymTy key, PtrTy val)
 {
-    dict_item_t *ret = gib_dict_alloc(ar);
+    SymDictTy *ret = gib_dict_alloc(ar);
     ret->key = key;
     ret->ptrval = val;
     ret->next = ptr;
     return ret;
 }
 
-PtrTy gib_dict_lookup_ptr(dict_item_t *ptr, SymTy key)
+PtrTy gib_dict_lookup_ptr(SymDictTy *ptr, SymTy key)
 {
     while (ptr != 0) {
         if (ptr->key == key) {
@@ -410,26 +410,26 @@ PtrTy gib_dict_lookup_ptr(dict_item_t *ptr, SymTy key)
  */
 
 
-SymSetTy gib_empty_set()
+SymSetTy *gib_empty_set()
 {
     return NULL;
 }
 
-SymSetTy gib_insert_set(SymSetTy set, int sym)
+SymSetTy *gib_insert_set(SymSetTy *set, int sym)
 {
-    SymSetTy s;
+    SymSetTy *s;
     HASH_FIND_INT(set, &sym, s);  /* sym already in the hash? */
     if (s==NULL) {
-        s = malloc(sizeof(struct set_elem));
+        s = malloc(sizeof(SymSetTy));
         s->val = sym;
         HASH_ADD_INT(set,val,s);
     }
     return set;
 }
 
-BoolTy gib_contains_set(SymSetTy set, int sym)
+BoolTy gib_contains_set(SymSetTy *set, int sym)
 {
-    SymSetTy s;
+    SymSetTy *s;
     HASH_FIND_INT(set, &sym, s);
     return (s!=NULL);
 }
@@ -440,17 +440,17 @@ BoolTy gib_contains_set(SymSetTy set, int sym)
  */
 
 
-SymHashTy gib_empty_hash()
+SymHashTy *gib_empty_hash()
 {
     return NULL;
 }
 
-SymHashTy gib_insert_hash(SymHashTy hash, int k, int v)
+SymHashTy *gib_insert_hash(SymHashTy *hash, int k, int v)
 {
-    SymHashTy s;
+    SymHashTy *s;
     // NOTE: not checking for duplicates!
     // s = malloc(sizeof(struct sym_hash_elem));
-    s = ALLOC(sizeof(struct sym_hash_elem));
+    s = ALLOC(sizeof(SymHashTy));
     s->val = v;
     s->key = k;
     HASH_ADD_INT(hash,key,s);
@@ -458,9 +458,9 @@ SymHashTy gib_insert_hash(SymHashTy hash, int k, int v)
     return hash;
 }
 
-IntTy gib_lookup_hash(SymHashTy hash, int k)
+SymTy gib_lookup_hash(SymHashTy *hash, int k)
 {
-    SymHashTy s;
+    SymHashTy *s;
     HASH_FIND_INT(hash,&k,s);
     if (s==NULL) {
         return k; // NOTE: return original key if val not found
@@ -470,9 +470,9 @@ IntTy gib_lookup_hash(SymHashTy hash, int k)
     }
 }
 
-BoolTy gib_contains_hash(SymHashTy hash, int sym)
+BoolTy gib_contains_hash(SymHashTy *hash, int sym)
 {
-    SymHashTy s;
+    SymHashTy *s;
     HASH_FIND_INT(hash,&sym,s);
     return (s!=NULL);
 }
@@ -491,15 +491,15 @@ static SymTy rightparen_symbol = -1;
 
 
 // important! initialize to NULL
-SymTable_elem *global_sym_table = NULL;
+SymTable *global_sym_table = NULL;
 
 void gib_add_symbol(SymTy idx, char *value)
 {
-    struct SymTable_elem *s;
-    s = ALLOC(sizeof(struct SymTable_elem));
+    SymTable *s;
+    s = ALLOC(sizeof(SymTable));
     s->idx = idx;
     strcpy(s->value, value);
-    HASH_ADD(hh, global_sym_table, idx, sizeof(IntTy), s);
+    HASH_ADD(hh, global_sym_table, idx, sizeof(SymTy), s);
     if (idx > gib_global_gensym_counter) {
         gib_global_gensym_counter = idx;
     }
@@ -548,7 +548,7 @@ int gib_print_symbol(SymTy idx)
     } else if (idx == rightparen_symbol) {
         return printf(")");
     } else {
-        struct SymTable_elem *s;
+        SymTable *s;
         HASH_FIND(hh, global_sym_table, &idx, sizeof(SymTy), s);
         if (s == NULL) {
             return printf("%lld", idx);
@@ -576,7 +576,7 @@ SymTy gib_gensym()
 
 void gib_free_symtable()
 {
-    struct SymTable_elem *elt, *tmp;
+    SymTable *elt, *tmp;
     HASH_ITER(hh, global_sym_table, elt, tmp) {
         HASH_DEL(global_sym_table,elt);
     }
@@ -692,7 +692,7 @@ inline void gib_remove_from_outset(CursorTy ptr, RegionTy *reg) {
     return;
 }
 
-RegionTy *gib_alloc_region(IntTy size)
+RegionTy *gib_alloc_region(long long size)
 {
     // Allocate the region metadata.
     RegionTy *reg = ALLOC(sizeof(RegionTy));
@@ -702,7 +702,7 @@ RegionTy *gib_alloc_region(IntTy size)
     }
 
     // Allocate the first chunk.
-    IntTy total_size = size + sizeof(RegionFooter);
+    long long total_size = size + sizeof(RegionFooter);
     CursorTy heap;
     bool nursery_allocated = true;
     if (size <= NURSERY_ALLOC_UPPER_BOUND) {
@@ -744,7 +744,7 @@ RegionTy *gib_alloc_region(IntTy size)
     return reg;
 }
 
-RegionTy *gib_alloc_counted_region(IntTy size)
+RegionTy *gib_alloc_counted_region(long long size)
 {
     // Bump the count.
     gib_bump_global_region_count();
@@ -755,12 +755,12 @@ ChunkTy gib_alloc_chunk(CursorTy end_old_chunk)
 {
     // Get size from current footer.
     RegionFooter *footer = (RegionFooter *) end_old_chunk;
-    IntTy newsize = footer->rf_size * 2;
+    long long newsize = footer->rf_size * 2;
     // See #110.
     if (newsize > gib_global_max_chunk_size) {
         newsize = gib_global_max_chunk_size;
     }
-    IntTy total_size = newsize + sizeof(RegionFooter);
+    long long total_size = newsize + sizeof(RegionFooter);
 
     // Allocate.
     CursorTy start = ALLOC_PACKED_BIG(total_size);
@@ -917,7 +917,7 @@ void gib_free_region(CursorTy end_reg) {
 
 #ifdef _DEBUG
         // Bookkeeping
-        IntTy num_freed_chunks = 0, total_bytesize = 0;
+        long long num_freed_chunks = 0, total_bytesize = 0;
 #endif
 
         // Free the chunks in this region.
@@ -1007,7 +1007,7 @@ void gib_print_global_region_count()
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-VectorTy *gib_vector_alloc(IntTy num, IntTy elt_size)
+VectorTy *gib_vector_alloc(IntTy num, size_t elt_size)
 {
     VectorTy *vec = ALLOC(sizeof(VectorTy));
     if (vec == NULL) {
@@ -1166,7 +1166,7 @@ void gib_print_timing_array(VectorTy *times) {
     printf("TIMES: [");
     double *d;
     IntTy n = gib_vector_length(times);
-    for(int i = 0; i < n; i++) {
+    for(IntTy i = 0; i < n; i++) {
         d = gib_vector_nth(times, i);
         if (i == (n-1)) {
             printf("%f",*d);
@@ -1194,7 +1194,7 @@ double gib_sum_timing_array(VectorTy *times)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-inline ListTy *gib_list_alloc(IntTy data_size)
+inline ListTy *gib_list_alloc(size_t data_size)
 {
     // ListTy *ls = ALLOC(sizeof(ListTy));
     ListTy *ls = gib_bumpalloc(sizeof(ListTy));
@@ -1214,7 +1214,7 @@ inline ListTy *gib_list_cons(void *elt, ListTy *ls)
     // void* data = ALLOC(ls->data_size);
     void* data = gib_bumpalloc(ls->ll_data_size);
     if (data == NULL) {
-        printf("gib_list_cons: malloc failed: %lld", ls->ll_data_size);
+        printf("gib_list_cons: malloc failed: %ld", ls->ll_data_size);
         exit(1);
     }
     memcpy(data, elt, ls->ll_data_size);
@@ -1273,14 +1273,14 @@ void gib_write_ppm(char* filename, IntTy width, IntTy height, VectorTy *pixels) 
 }
 
 void gib_write_ppm_loop(FILE *fp, IntTy idx, IntTy end, VectorTy *pixels) {
-    BoolTy fltIf_5768_6575 = idx == end;
+    bool fltIf_5768_6575 = idx == end;
 
     if (fltIf_5768_6575) {
         return;
     } else {
-        __Pixel *tmp_112;
-        tmp_112 = (__Pixel *) gib_vector_nth(pixels, idx);
-        __Pixel tup = *tmp_112;
+        Pixel *tmp_112;
+        tmp_112 = (Pixel *) gib_vector_nth(pixels, idx);
+        Pixel tup = *tmp_112;
         IntTy x = tup.field0;
         IntTy y = tup.field1;
         IntTy z = tup.field2;
