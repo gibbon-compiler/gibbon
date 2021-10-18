@@ -464,8 +464,8 @@ codegenTail venv fenv sort_fns (LetAllocT lhs vals body) ty sync_deps =
        tal <- codegenTail venv' fenv sort_fns body ty sync_deps
        dflags <- getDynFlags
        let alloc = if (gopt Opt_CountParRegions dflags) || (gopt Opt_CountAllRegions dflags)
-                   then assn (codegenTy PtrTy) lhs [cexp| ALLOC_COUNTED( $size ) |]
-                   else assn (codegenTy PtrTy) lhs [cexp| ALLOC( $size ) |]
+                   then assn (codegenTy PtrTy) lhs [cexp| gib_counted_alloc( $size ) |]
+                   else assn (codegenTy PtrTy) lhs [cexp| gib_alloc( $size ) |]
        return$
               (alloc :
                [ C.BlockStm [cstm| (($ty:structTy *)  $id:lhs)->$id:fld = $(codegenTriv venv trv); |]
@@ -815,12 +815,12 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  ScopedBuffer mul -> let [(outV,CursorTy)] = bnds
                                          bufsize = codegenMultiplicity mul
                                      in pure
-                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) )ALLOC_SCOPED($id:bufsize); |] ]
+                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) ) gib_scoped_alloc($id:bufsize); |] ]
 
                  ScopedParBuffer mul -> let [(outV,CursorTy)] = bnds
                                             bufsize = codegenMultiplicity mul
                                         in pure
-                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) )ALLOC_SCOPED($id:bufsize); |] ]
+                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) ) gib_scoped_alloc($id:bufsize); |] ]
 
                  InitSizeOfBuffer mul -> let [(sizev,IntTy)] = bnds
                                              bufsize = codegenMultiplicity mul

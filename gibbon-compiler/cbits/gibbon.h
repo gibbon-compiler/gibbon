@@ -131,6 +131,17 @@ void gib_init_nursery();
 void *gib_alloc_in_nursery(long long n);
 
 
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Various allocators
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+void *gib_alloc(size_t size);
+void *gib_small_alloc(size_t size);
+void *gib_counted_alloc(size_t size);
+void *gib_scoped_alloc(size_t size);
+
+
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Arenas
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

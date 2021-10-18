@@ -287,7 +287,7 @@ inline void *gib_alloc_in_nursery(long long n)
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Helper macros
+ * Various allocators
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
@@ -299,40 +299,28 @@ inline void *gib_alloc_in_nursery(long long n)
  * Presently, all parallel pointer-based programs will leak memory.
  */
 
-#ifdef _PARALLEL
-#define ALLOC(n) malloc(n)
-#define ALLOC_PACKED_SMALL(n) gib_alloc_in_nursery(n)
-#define ALLOC_PACKED_BIG(n) malloc(n)
-char *ALLOC_COUNTED(size_t size) {
-    gib_bump_global_region_count();
-    return ALLOC(size);
-}
-#else
 #ifdef _POINTER
-#define ALLOC(n) GC_MALLOC(n)
-#define ALLOC_PACKED_SMALL(n) GC_MALLOC(n)
-#define ALLOC_PACKED_BIG(n) GC_MALLOC(n)
-char *ALLOC_COUNTED(size_t size) {
-    gib_bump_global_region_count();
-    return GC_MALLOC(size);
-}
+#ifndef _PARALLEL
+inline void *gib_alloc(size_t n) { return GC_MALLOC(n); }
+inline void *gib_small_alloc(size_t n) { return GC_MALLOC(n); }
 #else
-#define ALLOC(n) malloc(n)
-#define ALLOC_PACKED_SMALL(n) gib_alloc_in_nursery(n)
-#define ALLOC_PACKED_BIG(n) malloc(n)
-char *ALLOC_COUNTED(size_t size) {
-    gib_bump_global_region_count();
-    return ALLOC(size);
-}
-#endif // _POINTER
-#endif // _PARALLEL
+inline void *gib_alloc(size_t n) { return malloc(n); }
+inline void *gib_small_alloc(size_t n) { return gib_alloc_in_nursery(n); }
+#endif // ifndef _PARALLEL
+#else
+inline void *gib_alloc(size_t n) { return malloc(n); }
+inline void *gib_small_alloc(size_t n) { return gib_alloc_in_nursery(n); }
+#endif // ifdef _POINTER
 
+inline void *gib_counted_alloc(size_t n) {
+    gib_bump_global_region_count();
+    return gib_alloc(n);
+}
 
 // Could try alloca() here.  Better yet, we could keep our own,
 // separate stack and insert our own code to restore the pointer
-// before any function that (may have) called ALLOC_SCOPED returns.
-
-#define ALLOC_SCOPED(n) alloca(n)
+// before any function that (may have) called gib_scoped_alloc returns.
+inline void *gib_scoped_alloc(size_t n) { return alloca(n); }
 
 // Stack allocation is either too small or blows our stack.
 // We need a way to make a giant stack if we want to use alloca.
@@ -350,7 +338,7 @@ char *ALLOC_COUNTED(size_t size) {
 
 GibArena *gib_alloc_arena()
 {
-    GibArena *ar = ALLOC(sizeof(GibArena));
+    GibArena *ar = gib_alloc(sizeof(GibArena));
     ar->ind = 0;
     ar->mem = malloc(gib_global_max_chunk_size);
     ar->reflist = 0;
@@ -379,7 +367,7 @@ GibCursor gib_extend_arena(GibArena *ar, int size)
 
 GibSymDict *gib_dict_alloc(GibArena *ar)
 {
-    return (GibSymDict *) gib_extend_arena(ar, sizeof(GibSymDict)); // ALLOC(sizeof(GibSymDict));
+    return (GibSymDict *) gib_extend_arena(ar, sizeof(GibSymDict)); // gib_alloc(sizeof(GibSymDict));
 }
 
 GibSymDict *gib_dict_insert_ptr(GibArena *ar, GibSymDict *ptr, GibSym key, GibPtr val)
@@ -450,7 +438,7 @@ GibSymHash *gib_insert_hash(GibSymHash *hash, int k, int v)
     GibSymHash *s;
     // NOTE: not checking for duplicates!
     // s = malloc(sizeof(struct sym_hash_elem));
-    s = ALLOC(sizeof(GibSymHash));
+    s = gib_alloc(sizeof(GibSymHash));
     s->val = v;
     s->key = k;
     HASH_ADD_INT(hash,key,s);
@@ -496,7 +484,7 @@ GibSymtable *global_sym_table = NULL;
 void gib_add_symbol(GibSym idx, char *value)
 {
     GibSymtable *s;
-    s = ALLOC(sizeof(GibSymtable));
+    s = gib_alloc(sizeof(GibSymtable));
     s->idx = idx;
     strcpy(s->value, value);
     HASH_ADD(hh, global_sym_table, idx, sizeof(GibSym), s);
@@ -695,7 +683,7 @@ inline void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg) {
 GibRegionMeta *gib_alloc_region(long long size)
 {
     // Allocate the region metadata.
-    GibRegionMeta *reg = ALLOC(sizeof(GibRegionMeta));
+    GibRegionMeta *reg = gib_alloc(sizeof(GibRegionMeta));
     if (reg == NULL) {
         printf("gib_alloc_region: allocation failed: %ld", sizeof(GibRegionMeta));
         exit(1);
@@ -706,13 +694,13 @@ GibRegionMeta *gib_alloc_region(long long size)
     GibCursor heap;
     bool nursery_allocated = true;
     if (size <= NURSERY_ALLOC_UPPER_BOUND) {
-        heap = ALLOC_PACKED_SMALL(total_size);
+        heap = gib_small_alloc(total_size);
         if (heap == NULL) {
             heap = malloc(total_size);
             nursery_allocated = false;
         }
     } else {
-        heap = ALLOC_PACKED_BIG(total_size);
+        heap = gib_alloc(total_size);
         nursery_allocated = false;
     }
     if (heap == NULL) {
@@ -763,7 +751,7 @@ GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
     long long total_size = newsize + sizeof(GibRegionFooter);
 
     // Allocate.
-    GibCursor start = ALLOC_PACKED_BIG(total_size);
+    GibCursor start = gib_alloc(total_size);
     if (start == NULL) {
         printf("gib_alloc_chunk: malloc failed: %lld", total_size);
         exit(1);
@@ -814,6 +802,12 @@ uint gib_get_ref_count(GibCursor end_ptr)
 // Bump A's refcount and update B's outset.
 inline void gib_bump_refcount(GibCursor end_b, GibCursor end_a)
 {
+    if (end_a == end_b) {
+#ifdef _DEBUG
+        printf("gib_bump_refcount: indirection within a region found, refcount not bumped. TODO.\n");
+#endif
+        return;
+    }
     // Grab footers.
     GibRegionFooter *footer_a = (GibRegionFooter *) end_a;
     GibRegionFooter *footer_b = (GibRegionFooter *) end_b;
@@ -1009,12 +1003,12 @@ void gib_print_global_region_count()
 
 GibVector *gib_vector_alloc(GibInt num, size_t elt_size)
 {
-    GibVector *vec = ALLOC(sizeof(GibVector));
+    GibVector *vec = gib_alloc(sizeof(GibVector));
     if (vec == NULL) {
         printf("alloc_vector: malloc failed: %ld", sizeof(GibVector));
         exit(1);
     }
-    void* data = ALLOC(num * elt_size);
+    void* data = gib_alloc(num * elt_size);
     if (data == NULL) {
         printf("alloc_vector: malloc failed: %ld", sizeof(num * elt_size));
         exit(1);
@@ -1048,7 +1042,7 @@ GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
         printf("gib_vector_slice: upper out of bounds: %lld > %lld", upper, vec->vec_upper);
         exit(1);
     }
-    GibVector *vec2 = ALLOC(sizeof(GibVector));
+    GibVector *vec2 = gib_alloc(sizeof(GibVector));
     if (vec == NULL) {
         printf("gib_vector_slice: malloc failed: %ld", sizeof(GibVector));
         exit(1);
@@ -1150,7 +1144,7 @@ inline GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
                vec1->vec_lower, vec1->vec_upper, vec2->vec_lower, vec2->vec_upper);
         exit(1);
     }
-    GibVector *merged = ALLOC(sizeof(GibVector));
+    GibVector *merged = gib_alloc(sizeof(GibVector));
     if (merged == NULL) {
         printf("gib_vector_merge: malloc failed: %ld", sizeof(GibVector));
         exit(1);
@@ -1196,7 +1190,7 @@ double gib_sum_timing_array(GibVector *times)
 
 inline GibList *gib_list_alloc(size_t data_size)
 {
-    // GibList *ls = ALLOC(sizeof(GibList));
+    // GibList *ls = gib_alloc(sizeof(GibList));
     GibList *ls = gib_bumpalloc(sizeof(GibList));
     ls->ll_data_size = data_size;
     ls->ll_data = NULL;
@@ -1211,14 +1205,14 @@ inline GibBool gib_list_is_empty(GibList *ls)
 
 inline GibList *gib_list_cons(void *elt, GibList *ls)
 {
-    // void* data = ALLOC(ls->data_size);
+    // void* data = gib_alloc(ls->data_size);
     void* data = gib_bumpalloc(ls->ll_data_size);
     if (data == NULL) {
         printf("gib_list_cons: malloc failed: %ld", ls->ll_data_size);
         exit(1);
     }
     memcpy(data, elt, ls->ll_data_size);
-    // GibList *res = ALLOC(sizeof(GibList));
+    // GibList *res = gib_alloc(sizeof(GibList));
     GibList *res = gib_bumpalloc(sizeof(GibList));
     res->ll_data_size = ls->ll_data_size;
     res->ll_data = data;
