@@ -47,8 +47,8 @@ long long gib_global_inf_init_chunk_size = 1 * KB;
 long long gib_global_max_chunk_size = (1 * GB);
 
 // Runtime arguments, values updated by the flags parser.
-IntTy gib_global_size_param = 1;
-IntTy gib_global_iters_param = 1;
+GibInt gib_global_size_param = 1;
+GibInt gib_global_iters_param = 1;
 char *gib_global_bench_prog_param = NULL;
 char *gib_global_benchfile_param = NULL;
 char *gib_global_arrayfile_param = NULL;
@@ -58,7 +58,7 @@ long long gib_global_arrayfile_length_param = -1;
 long long gib_global_region_count = 0;
 
 // Invariant: should always be equal to max(sym_table_keys)
-SymTy gib_global_gensym_counter = 0;
+GibSym gib_global_gensym_counter = 0;
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -129,12 +129,12 @@ int gib_compare_doubles(const void *a, const void *b)
 }
 
 // Exponentiation
-IntTy gib_expll(IntTy base, IntTy pow)
+GibInt gib_expll(GibInt base, GibInt pow)
 {
     if (base == 2) {
         return (1 << pow);
     } else {
-        IntTy i, result = 1;
+        GibInt i, result = 1;
         for (i = 0; i < pow; i++)
             result *= base;
         return result;
@@ -142,7 +142,7 @@ IntTy gib_expll(IntTy base, IntTy pow)
 }
 
 // https://www.cprogramming.com/snippets/source-code/find-the-number-of-cpu-cores-for-windows-mac-or-linux
-IntTy gib_get_num_processors()
+GibInt gib_get_num_processors()
 {
 #ifdef _WIN64
     SYSTEM_INFO sysinfo;
@@ -348,25 +348,25 @@ char *ALLOC_COUNTED(size_t size) {
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-ArenaTy *gib_alloc_arena()
+GibArena *gib_alloc_arena()
 {
-    ArenaTy *ar = ALLOC(sizeof(ArenaTy));
+    GibArena *ar = ALLOC(sizeof(GibArena));
     ar->ind = 0;
     ar->mem = malloc(gib_global_max_chunk_size);
     ar->reflist = 0;
     return ar;
 }
 
-void gib_free_arena(ArenaTy *ar)
+void gib_free_arena(GibArena *ar)
 {
     free(ar->mem);
     // TODO(vollmerm): free everything in ar->reflist
     free(ar);
 }
 
-CursorTy gib_extend_arena(ArenaTy *ar, int size)
+GibCursor gib_extend_arena(GibArena *ar, int size)
 {
-    CursorTy ret = ar->mem + ar->ind;
+    GibCursor ret = ar->mem + ar->ind;
     ar->ind += size;
     return ret;
 }
@@ -377,21 +377,21 @@ CursorTy gib_extend_arena(ArenaTy *ar, int size)
  */
 
 
-SymDictTy *gib_dict_alloc(ArenaTy *ar)
+GibSymDict *gib_dict_alloc(GibArena *ar)
 {
-    return (SymDictTy *) gib_extend_arena(ar, sizeof(SymDictTy)); // ALLOC(sizeof(SymDictTy));
+    return (GibSymDict *) gib_extend_arena(ar, sizeof(GibSymDict)); // ALLOC(sizeof(GibSymDict));
 }
 
-SymDictTy *gib_dict_insert_ptr(ArenaTy *ar, SymDictTy *ptr, SymTy key, PtrTy val)
+GibSymDict *gib_dict_insert_ptr(GibArena *ar, GibSymDict *ptr, GibSym key, GibPtr val)
 {
-    SymDictTy *ret = gib_dict_alloc(ar);
+    GibSymDict *ret = gib_dict_alloc(ar);
     ret->key = key;
     ret->ptrval = val;
     ret->next = ptr;
     return ret;
 }
 
-PtrTy gib_dict_lookup_ptr(SymDictTy *ptr, SymTy key)
+GibPtr gib_dict_lookup_ptr(GibSymDict *ptr, GibSym key)
 {
     while (ptr != 0) {
         if (ptr->key == key) {
@@ -410,26 +410,26 @@ PtrTy gib_dict_lookup_ptr(SymDictTy *ptr, SymTy key)
  */
 
 
-SymSetTy *gib_empty_set()
+GibSymSet *gib_empty_set()
 {
     return NULL;
 }
 
-SymSetTy *gib_insert_set(SymSetTy *set, int sym)
+GibSymSet *gib_insert_set(GibSymSet *set, int sym)
 {
-    SymSetTy *s;
+    GibSymSet *s;
     HASH_FIND_INT(set, &sym, s);  /* sym already in the hash? */
     if (s==NULL) {
-        s = malloc(sizeof(SymSetTy));
+        s = malloc(sizeof(GibSymSet));
         s->val = sym;
         HASH_ADD_INT(set,val,s);
     }
     return set;
 }
 
-BoolTy gib_contains_set(SymSetTy *set, int sym)
+GibBool gib_contains_set(GibSymSet *set, int sym)
 {
-    SymSetTy *s;
+    GibSymSet *s;
     HASH_FIND_INT(set, &sym, s);
     return (s!=NULL);
 }
@@ -440,17 +440,17 @@ BoolTy gib_contains_set(SymSetTy *set, int sym)
  */
 
 
-SymHashTy *gib_empty_hash()
+GibSymHash *gib_empty_hash()
 {
     return NULL;
 }
 
-SymHashTy *gib_insert_hash(SymHashTy *hash, int k, int v)
+GibSymHash *gib_insert_hash(GibSymHash *hash, int k, int v)
 {
-    SymHashTy *s;
+    GibSymHash *s;
     // NOTE: not checking for duplicates!
     // s = malloc(sizeof(struct sym_hash_elem));
-    s = ALLOC(sizeof(SymHashTy));
+    s = ALLOC(sizeof(GibSymHash));
     s->val = v;
     s->key = k;
     HASH_ADD_INT(hash,key,s);
@@ -458,9 +458,9 @@ SymHashTy *gib_insert_hash(SymHashTy *hash, int k, int v)
     return hash;
 }
 
-SymTy gib_lookup_hash(SymHashTy *hash, int k)
+GibSym gib_lookup_hash(GibSymHash *hash, int k)
 {
-    SymHashTy *s;
+    GibSymHash *s;
     HASH_FIND_INT(hash,&k,s);
     if (s==NULL) {
         return k; // NOTE: return original key if val not found
@@ -470,9 +470,9 @@ SymTy gib_lookup_hash(SymHashTy *hash, int k)
     }
 }
 
-BoolTy gib_contains_hash(SymHashTy *hash, int sym)
+GibBool gib_contains_hash(GibSymHash *hash, int sym)
 {
-    SymHashTy *s;
+    GibSymHash *s;
     HASH_FIND_INT(hash,&sym,s);
     return (s!=NULL);
 }
@@ -483,59 +483,59 @@ BoolTy gib_contains_hash(SymHashTy *hash, int sym)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-static SymTy newline_symbol = -1;
-static SymTy space_symbol = -1;
-static SymTy comma_symbol = -1;
-static SymTy leftparen_symbol = -1;
-static SymTy rightparen_symbol = -1;
+static GibSym newline_symbol = -1;
+static GibSym space_symbol = -1;
+static GibSym comma_symbol = -1;
+static GibSym leftparen_symbol = -1;
+static GibSym rightparen_symbol = -1;
 
 
 // important! initialize to NULL
-SymTable *global_sym_table = NULL;
+GibSymtable *global_sym_table = NULL;
 
-void gib_add_symbol(SymTy idx, char *value)
+void gib_add_symbol(GibSym idx, char *value)
 {
-    SymTable *s;
-    s = ALLOC(sizeof(SymTable));
+    GibSymtable *s;
+    s = ALLOC(sizeof(GibSymtable));
     s->idx = idx;
     strcpy(s->value, value);
-    HASH_ADD(hh, global_sym_table, idx, sizeof(SymTy), s);
+    HASH_ADD(hh, global_sym_table, idx, sizeof(GibSym), s);
     if (idx > gib_global_gensym_counter) {
         gib_global_gensym_counter = idx;
     }
 }
 
-void gib_set_newline(SymTy idx)
+void gib_set_newline(GibSym idx)
 {
     newline_symbol = idx;
     gib_add_symbol(idx,"NEWLINE");
 }
 
-void gib_set_space(SymTy idx)
+void gib_set_space(GibSym idx)
 {
     space_symbol = idx;
     gib_add_symbol(idx,"SPACE");
 }
 
-void gib_set_comma(SymTy idx)
+void gib_set_comma(GibSym idx)
 {
     comma_symbol = idx;
     gib_add_symbol(idx,"COMMA");
 }
 
-void gib_set_leftparen(SymTy idx)
+void gib_set_leftparen(GibSym idx)
 {
     leftparen_symbol = idx;
     gib_add_symbol(idx,"LEFTPAREN");
 }
 
-void gib_set_rightparen(SymTy idx)
+void gib_set_rightparen(GibSym idx)
 {
     rightparen_symbol = idx;
     gib_add_symbol(idx,"RIGHTPAREN");
 }
 
-int gib_print_symbol(SymTy idx)
+int gib_print_symbol(GibSym idx)
 {
     if (idx == comma_symbol) {
         return printf(",");
@@ -548,8 +548,8 @@ int gib_print_symbol(SymTy idx)
     } else if (idx == rightparen_symbol) {
         return printf(")");
     } else {
-        SymTable *s;
-        HASH_FIND(hh, global_sym_table, &idx, sizeof(SymTy), s);
+        GibSymtable *s;
+        HASH_FIND(hh, global_sym_table, &idx, sizeof(GibSym), s);
         if (s == NULL) {
             return printf("%lld", idx);
         } else {
@@ -560,23 +560,23 @@ int gib_print_symbol(SymTy idx)
 }
 
 #ifdef _PARALLEL
-SymTy gib_gensym()
+GibSym gib_gensym()
 {
-    SymTy idx = __atomic_add_fetch(&gib_global_gensym_counter, 1, __ATOMIC_SEQ_CST);
+    GibSym idx = __atomic_add_fetch(&gib_global_gensym_counter, 1, __ATOMIC_SEQ_CST);
     return idx;
 }
 #else
-SymTy gib_gensym()
+GibSym gib_gensym()
 {
     gib_global_gensym_counter += 1;
-    SymTy idx = gib_global_gensym_counter;
+    GibSym idx = gib_global_gensym_counter;
     return idx;
 }
 #endif
 
 void gib_free_symtable()
 {
-    SymTable *elt, *tmp;
+    GibSymtable *elt, *tmp;
     HASH_ITER(hh, global_sym_table, elt, tmp) {
         HASH_DEL(global_sym_table,elt);
     }
@@ -592,7 +592,7 @@ void gib_free_symtable()
 
   Gibbon has "growing regions" i.e each logical region is backed by a doubly linked-list
   of smaller chunks which grows as required. In addition to actual data, each chunk
-  stores some additional metadata (RegionFooter) to chain the chunks together in a list
+  stores some additional metadata (GibRegionFooter) to chain the chunks together in a list
   and for garbage collection. The footer:
 
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -601,7 +601,7 @@ void gib_free_symtable()
 
   The metadata after the serialized data serves various purposes:
 
-  - rf_reg_metadata_ptr: A pointer to a RegionTy struct that contains various metadata.
+  - rf_reg_metadata_ptr: A pointer to a GibRegionMeta struct that contains various metadata.
   Of particular interest to us are the fields:
 
   = reg_id: A unique identifier for a region.
@@ -651,7 +651,7 @@ void gib_free_symtable()
 
 */
 
-inline void gib_insert_into_outset(CursorTy ptr, RegionTy *reg)
+inline void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
 {
     uint outset_len = reg->reg_outset_len;
     // Check for duplicates.
@@ -666,9 +666,9 @@ inline void gib_insert_into_outset(CursorTy ptr, RegionTy *reg)
     return;
 }
 
-inline void gib_remove_from_outset(CursorTy ptr, RegionTy *reg) {
+inline void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg) {
     uint outset_len = reg->reg_outset_len;
-    CursorTy *outset = reg->reg_outset;
+    GibCursor *outset = reg->reg_outset;
     int i;
     if (outset_len == 0) {
         fprintf(stderr, "gib_remove_from_outset: empty outset\n");
@@ -692,18 +692,18 @@ inline void gib_remove_from_outset(CursorTy ptr, RegionTy *reg) {
     return;
 }
 
-RegionTy *gib_alloc_region(long long size)
+GibRegionMeta *gib_alloc_region(long long size)
 {
     // Allocate the region metadata.
-    RegionTy *reg = ALLOC(sizeof(RegionTy));
+    GibRegionMeta *reg = ALLOC(sizeof(GibRegionMeta));
     if (reg == NULL) {
-        printf("gib_alloc_region: allocation failed: %ld", sizeof(RegionTy));
+        printf("gib_alloc_region: allocation failed: %ld", sizeof(GibRegionMeta));
         exit(1);
     }
 
     // Allocate the first chunk.
-    long long total_size = size + sizeof(RegionFooter);
-    CursorTy heap;
+    long long total_size = size + sizeof(GibRegionFooter);
+    GibCursor heap;
     bool nursery_allocated = true;
     if (size <= NURSERY_ALLOC_UPPER_BOUND) {
         heap = ALLOC_PACKED_SMALL(total_size);
@@ -720,7 +720,7 @@ RegionTy *gib_alloc_region(long long size)
         exit(1);
     }
     // Not heap+total_size, since we must keep space for the footer.
-    CursorTy heap_end = heap + size;
+    GibCursor heap_end = heap + size;
 
     // Initialize metadata fields.
     reg->reg_id = gib_gensym();
@@ -733,7 +733,7 @@ RegionTy *gib_alloc_region(long long size)
 #endif
 
     // Write the footer.
-    RegionFooter *footer = (RegionFooter *) heap_end;
+    GibRegionFooter *footer = (GibRegionFooter *) heap_end;
     footer->rf_reg_metadata_ptr = reg;
     footer->rf_seq_no = 1;
     footer->rf_nursery_allocated = nursery_allocated;
@@ -744,37 +744,37 @@ RegionTy *gib_alloc_region(long long size)
     return reg;
 }
 
-RegionTy *gib_alloc_counted_region(long long size)
+GibRegionMeta *gib_alloc_counted_region(long long size)
 {
     // Bump the count.
     gib_bump_global_region_count();
     return gib_alloc_region(size);
 }
 
-ChunkTy gib_alloc_chunk(CursorTy end_old_chunk)
+GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
 {
     // Get size from current footer.
-    RegionFooter *footer = (RegionFooter *) end_old_chunk;
+    GibRegionFooter *footer = (GibRegionFooter *) end_old_chunk;
     long long newsize = footer->rf_size * 2;
     // See #110.
     if (newsize > gib_global_max_chunk_size) {
         newsize = gib_global_max_chunk_size;
     }
-    long long total_size = newsize + sizeof(RegionFooter);
+    long long total_size = newsize + sizeof(GibRegionFooter);
 
     // Allocate.
-    CursorTy start = ALLOC_PACKED_BIG(total_size);
+    GibCursor start = ALLOC_PACKED_BIG(total_size);
     if (start == NULL) {
         printf("gib_alloc_chunk: malloc failed: %lld", total_size);
         exit(1);
     }
-    CursorTy end = start + newsize;
+    GibCursor end = start + newsize;
 
     // Link the next chunk's footer.
-    footer->rf_next = (RegionFooter *) end;
+    footer->rf_next = (GibRegionFooter *) end;
 
     // Write the footer.
-    RegionFooter* new_footer = (RegionFooter *) end;
+    GibRegionFooter* new_footer = (GibRegionFooter *) end;
     new_footer->rf_reg_metadata_ptr = footer->rf_reg_metadata_ptr;
     new_footer->rf_seq_no = footer->rf_seq_no + 1;
     new_footer->rf_nursery_allocated = false;
@@ -783,14 +783,14 @@ ChunkTy gib_alloc_chunk(CursorTy end_old_chunk)
     new_footer->rf_prev = footer;
 
 #ifdef _DEBUG
-    RegionTy *reg = (RegionTy*) new_footer->rf_reg_metadata_ptr;
+    GibRegionMeta *reg = (GibRegionMeta*) new_footer->rf_reg_metadata_ptr;
     printf("gib_alloc_chunk: allocated %lld bytes for region %lld.\n", total_size, reg->reg_id);
 #endif
 
-    return (ChunkTy) {start , end};
+    return (GibChunk) {start , end};
 }
 
-RegionFooter *gib_trav_to_first_chunk(RegionFooter *footer)
+GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
 {
     if (footer->rf_seq_no == 1) {
         return footer;
@@ -798,29 +798,29 @@ RegionFooter *gib_trav_to_first_chunk(RegionFooter *footer)
         fprintf(stderr, "No previous chunk found at rf_seq_no: %lld", footer->rf_seq_no);
         return NULL;
     } else {
-        gib_trav_to_first_chunk((RegionFooter *) footer->rf_prev);
+        gib_trav_to_first_chunk((GibRegionFooter *) footer->rf_prev);
     }
     return NULL;
 }
 
-uint gib_get_ref_count(CursorTy end_ptr)
+uint gib_get_ref_count(GibCursor end_ptr)
 {
-    RegionFooter *footer = (RegionFooter *) end_ptr;
-    RegionTy *reg = (RegionTy *) footer->rf_reg_metadata_ptr;
+    GibRegionFooter *footer = (GibRegionFooter *) end_ptr;
+    GibRegionMeta *reg = (GibRegionMeta *) footer->rf_reg_metadata_ptr;
     return reg->reg_refcount;
 }
 
 // B is the pointer, and A is the pointee (i.e B -> A).
 // Bump A's refcount and update B's outset.
-inline void gib_bump_refcount(CursorTy end_b, CursorTy end_a)
+inline void gib_bump_refcount(GibCursor end_b, GibCursor end_a)
 {
     // Grab footers.
-    RegionFooter *footer_a = (RegionFooter *) end_a;
-    RegionFooter *footer_b = (RegionFooter *) end_b;
+    GibRegionFooter *footer_a = (GibRegionFooter *) end_a;
+    GibRegionFooter *footer_b = (GibRegionFooter *) end_b;
 
     // Grab metadata.
-    RegionTy *reg_a = (RegionTy *) footer_a->rf_reg_metadata_ptr;
-    RegionTy *reg_b = (RegionTy *) footer_b->rf_reg_metadata_ptr;
+    GibRegionMeta *reg_a = (GibRegionMeta *) footer_a->rf_reg_metadata_ptr;
+    GibRegionMeta *reg_b = (GibRegionMeta *) footer_b->rf_reg_metadata_ptr;
 
     // Bump A's refcount.
     uint current_refcount, new_refcount;
@@ -846,14 +846,14 @@ inline void gib_bump_refcount(CursorTy end_b, CursorTy end_a)
     return;
 }
 
-void gib_free_region(CursorTy end_reg) {
+void gib_free_region(GibCursor end_reg) {
     // Grab footer and the metadata.
-    RegionFooter *footer = (RegionFooter *) end_reg;
-    RegionTy *reg = (RegionTy *) footer->rf_reg_metadata_ptr;
+    GibRegionFooter *footer = (GibRegionFooter *) end_reg;
+    GibRegionMeta *reg = (GibRegionMeta *) footer->rf_reg_metadata_ptr;
 
     //
-    RegionFooter *first_chunk_footer, *next_chunk_footer;
-    CursorTy first_chunk, next_chunk;
+    GibRegionFooter *first_chunk_footer, *next_chunk_footer;
+    GibCursor first_chunk, next_chunk;
 
     // Decrement current reference count.
     uint current_refcount, new_refcount;
@@ -880,15 +880,15 @@ void gib_free_region(CursorTy end_reg) {
         // elements of the outset.
         if (reg->reg_outset_len != 0) {
             uint outset_len = reg->reg_outset_len;
-            CursorTy *outset = reg->reg_outset;
-            RegionFooter *elt_footer;
-            RegionTy *elt_reg;
+            GibCursor *outset = reg->reg_outset;
+            GibRegionFooter *elt_footer;
+            GibRegionMeta *elt_reg;
             uint elt_current_refcount, elt_new_refcount;
-            CursorTy to_be_removed[MAX_OUTSET_LENGTH];
+            GibCursor to_be_removed[MAX_OUTSET_LENGTH];
             uint to_be_removed_idx = 0;
             for (int i = 0; i < outset_len; i++) {
-                elt_footer = (RegionFooter *) outset[i];
-                elt_reg = (RegionTy *) elt_footer->rf_reg_metadata_ptr;
+                elt_footer = (GibRegionFooter *) outset[i];
+                elt_reg = (GibRegionMeta *) elt_footer->rf_reg_metadata_ptr;
 #ifdef _DEBUG
                 elt_current_refcount = elt_reg->reg_refcount;
 #endif
@@ -902,7 +902,7 @@ void gib_free_region(CursorTy end_reg) {
                     // See [Why is it a doubly linked-list?] above
                     first_chunk_footer = gib_trav_to_first_chunk(elt_footer);
                     if (first_chunk_footer != NULL) {
-                        gib_free_region((CursorTy) first_chunk_footer);
+                        gib_free_region((GibCursor) first_chunk_footer);
                     }
                 }
                 to_be_removed[to_be_removed_idx] = outset[i];
@@ -940,7 +940,7 @@ void gib_free_region(CursorTy end_reg) {
         }
 
         while (next_chunk != NULL) {
-            next_chunk_footer = (RegionFooter *) next_chunk;
+            next_chunk_footer = (GibRegionFooter *) next_chunk;
 #ifdef _DEBUG
             num_freed_chunks++;
             total_bytesize = total_bytesize + next_chunk_footer->rf_size;
@@ -966,12 +966,12 @@ void gib_free_region(CursorTy end_reg) {
 }
 
 // Assume that all nodes with size information have tags >= 150.
-BoolTy gib_is_big(IntTy i, CursorTy cur)
+GibBool gib_is_big(GibInt i, GibCursor cur)
 {
-    TagTyPacked tag = *(TagTyPacked *) cur;
+    GibPackedTag tag = *(GibPackedTag *) cur;
     if (tag >= 150) {
         cur += 1;
-        IntTy size = *(IntTy *) cur;
+        GibInt size = *(GibInt *) cur;
         if (size >= i) {
             return true;
         } else {
@@ -1007,11 +1007,11 @@ void gib_print_global_region_count()
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-VectorTy *gib_vector_alloc(IntTy num, size_t elt_size)
+GibVector *gib_vector_alloc(GibInt num, size_t elt_size)
 {
-    VectorTy *vec = ALLOC(sizeof(VectorTy));
+    GibVector *vec = ALLOC(sizeof(GibVector));
     if (vec == NULL) {
-        printf("alloc_vector: malloc failed: %ld", sizeof(VectorTy));
+        printf("alloc_vector: malloc failed: %ld", sizeof(GibVector));
         exit(1);
     }
     void* data = ALLOC(num * elt_size);
@@ -1026,20 +1026,20 @@ VectorTy *gib_vector_alloc(IntTy num, size_t elt_size)
     return vec;
 }
 
-IntTy gib_vector_length(VectorTy *vec)
+GibInt gib_vector_length(GibVector *vec)
 {
     return (vec->vec_upper - vec->vec_lower);
 }
 
-BoolTy gib_vector_is_empty(VectorTy *vec)
+GibBool gib_vector_is_empty(GibVector *vec)
 {
     return (gib_vector_length(vec) == 0);
 }
 
-VectorTy *gib_vector_slice(IntTy i, IntTy n, VectorTy *vec)
+GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
 {
-    IntTy lower = vec->vec_lower + i;
-    IntTy upper = vec->vec_lower + i + n;
+    GibInt lower = vec->vec_lower + i;
+    GibInt upper = vec->vec_lower + i + n;
     if ((lower > vec->vec_upper)) {
         printf("gib_vector_slice: lower out of bounds, %lld > %lld", lower, vec->vec_upper);
         exit(1);
@@ -1048,9 +1048,9 @@ VectorTy *gib_vector_slice(IntTy i, IntTy n, VectorTy *vec)
         printf("gib_vector_slice: upper out of bounds: %lld > %lld", upper, vec->vec_upper);
         exit(1);
     }
-    VectorTy *vec2 = ALLOC(sizeof(VectorTy));
+    GibVector *vec2 = ALLOC(sizeof(GibVector));
     if (vec == NULL) {
-        printf("gib_vector_slice: malloc failed: %ld", sizeof(VectorTy));
+        printf("gib_vector_slice: malloc failed: %ld", sizeof(GibVector));
         exit(1);
     }
     vec2->vec_lower = lower;
@@ -1061,7 +1061,7 @@ VectorTy *gib_vector_slice(IntTy i, IntTy n, VectorTy *vec)
 }
 
 // The callers must cast the return value.
-inline void *gib_vector_nth(VectorTy *vec, IntTy i)
+inline void *gib_vector_nth(GibVector *vec, GibInt i)
 {
     // if (i < vec->lower || i > vec->upper) {
     //     printf("gib_vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->vec_lower, vec->vec_upper);
@@ -1070,46 +1070,46 @@ inline void *gib_vector_nth(VectorTy *vec, IntTy i)
     return (vec->vec_data + (vec->vec_elt_size * (vec->vec_lower + i)));
 }
 
-inline VectorTy *gib_vector_inplace_update(VectorTy *vec, IntTy i, void* elt)
+inline GibVector *gib_vector_inplace_update(GibVector *vec, GibInt i, void* elt)
 {
     void* dst = gib_vector_nth(vec, i);
     memcpy(dst, elt, vec->vec_elt_size);
     return vec;
 }
 
-inline VectorTy *gib_vector_copy(VectorTy *vec)
+inline GibVector *gib_vector_copy(GibVector *vec)
 {
-    IntTy len = gib_vector_length(vec);
+    GibInt len = gib_vector_length(vec);
     void *start = gib_vector_nth(vec, 0);
-    VectorTy *vec2 = gib_vector_alloc(len, vec->vec_elt_size);
+    GibVector *vec2 = gib_vector_alloc(len, vec->vec_elt_size);
     memcpy(vec2->vec_data, start, len * vec->vec_elt_size);
     return vec2;
 }
 
-inline VectorTy *gib_vector_inplace_sort(VectorTy *vec, int (*compar)(const void *, const void*))
+inline GibVector *gib_vector_inplace_sort(GibVector *vec, int (*compar)(const void *, const void*))
 {
     void *start = gib_vector_nth(vec, 0);
     qsort(start, gib_vector_length(vec), vec->vec_elt_size, compar);
     return vec;
 }
 
-inline VectorTy *gib_vector_sort(VectorTy *vec, int (*compar)(const void *, const void*))
+inline GibVector *gib_vector_sort(GibVector *vec, int (*compar)(const void *, const void*))
 {
-    VectorTy *vec2 = gib_vector_copy(vec);
+    GibVector *vec2 = gib_vector_copy(vec);
     gib_vector_inplace_sort(vec2, compar);
     return vec2;
 }
 
-inline VectorTy *gib_vector_concat(VectorTy *vec)
+inline GibVector *gib_vector_concat(GibVector *vec)
 {
     // Length of the input vector.
-    IntTy len = gib_vector_length(vec);
+    GibInt len = gib_vector_length(vec);
     // Length of the concatenated vector.
-    IntTy result_len = 0;
+    GibInt result_len = 0;
     // Size of each element in the concatenated vector.
-    IntTy result_elt_size = 0;
-    VectorTy **elt_ref, *elt;
-    for (IntTy i = 0; i < len; i++) {
+    GibInt result_elt_size = 0;
+    GibVector **elt_ref, *elt;
+    for (GibInt i = 0; i < len; i++) {
         elt_ref = gib_vector_nth(vec, i);
         elt = *elt_ref;
         result_elt_size = elt->vec_elt_size;
@@ -1117,16 +1117,16 @@ inline VectorTy *gib_vector_concat(VectorTy *vec)
     }
 
     // Concatenated vector.
-    VectorTy *result = gib_vector_alloc(result_len, result_elt_size);
-    IntTy elt_len;
+    GibVector *result = gib_vector_alloc(result_len, result_elt_size);
+    GibInt elt_len;
     // A counter that tracks the index of elements in 'result'.
-    IntTy k = 0;
-    for (IntTy i = 0; i < len; i++) {
+    GibInt k = 0;
+    for (GibInt i = 0; i < len; i++) {
         elt_ref = gib_vector_nth(vec, i);
         elt = *elt_ref;
         elt_len = gib_vector_length(elt);
 
-        for (IntTy j = 0; j < elt_len; j++) {
+        for (GibInt j = 0; j < elt_len; j++) {
             void* k_elt = gib_vector_nth(elt, j);
             gib_vector_inplace_update(result, k, k_elt);
             k++;
@@ -1136,23 +1136,23 @@ inline VectorTy *gib_vector_concat(VectorTy *vec)
     return result;
 }
 
-inline void gib_vector_free(VectorTy *vec)
+inline void gib_vector_free(GibVector *vec)
 {
     free(vec->vec_data);
     free(vec);
     return;
 }
 
-inline VectorTy *gib_vector_merge(VectorTy *vec1, VectorTy *vec2)
+inline GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
 {
     if (vec1->vec_upper != vec2->vec_lower) {
         printf("gib_vector_merge: non-contiguous slices, (%lld,%lld), (%lld,%lld).",
                vec1->vec_lower, vec1->vec_upper, vec2->vec_lower, vec2->vec_upper);
         exit(1);
     }
-    VectorTy *merged = ALLOC(sizeof(VectorTy));
+    GibVector *merged = ALLOC(sizeof(GibVector));
     if (merged == NULL) {
-        printf("gib_vector_merge: malloc failed: %ld", sizeof(VectorTy));
+        printf("gib_vector_merge: malloc failed: %ld", sizeof(GibVector));
         exit(1);
     }
     merged->vec_lower = vec1->vec_lower;
@@ -1162,11 +1162,11 @@ inline VectorTy *gib_vector_merge(VectorTy *vec1, VectorTy *vec2)
     return merged;
 }
 
-void gib_print_timing_array(VectorTy *times) {
+void gib_print_timing_array(GibVector *times) {
     printf("TIMES: [");
     double *d;
-    IntTy n = gib_vector_length(times);
-    for(IntTy i = 0; i < n; i++) {
+    GibInt n = gib_vector_length(times);
+    for(GibInt i = 0; i < n; i++) {
         d = gib_vector_nth(times, i);
         if (i == (n-1)) {
             printf("%f",*d);
@@ -1178,7 +1178,7 @@ void gib_print_timing_array(VectorTy *times) {
     printf("]\n");
 }
 
-double gib_sum_timing_array(VectorTy *times)
+double gib_sum_timing_array(GibVector *times)
 {
     double *d;
     double acc = 0;
@@ -1194,22 +1194,22 @@ double gib_sum_timing_array(VectorTy *times)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-inline ListTy *gib_list_alloc(size_t data_size)
+inline GibList *gib_list_alloc(size_t data_size)
 {
-    // ListTy *ls = ALLOC(sizeof(ListTy));
-    ListTy *ls = gib_bumpalloc(sizeof(ListTy));
+    // GibList *ls = ALLOC(sizeof(GibList));
+    GibList *ls = gib_bumpalloc(sizeof(GibList));
     ls->ll_data_size = data_size;
     ls->ll_data = NULL;
     ls->ll_next = NULL;
     return ls;
 }
 
-inline BoolTy gib_list_is_empty(ListTy *ls)
+inline GibBool gib_list_is_empty(GibList *ls)
 {
     return ls->ll_next == NULL;
 }
 
-inline ListTy *gib_list_cons(void *elt, ListTy *ls)
+inline GibList *gib_list_cons(void *elt, GibList *ls)
 {
     // void* data = ALLOC(ls->data_size);
     void* data = gib_bumpalloc(ls->ll_data_size);
@@ -1218,34 +1218,34 @@ inline ListTy *gib_list_cons(void *elt, ListTy *ls)
         exit(1);
     }
     memcpy(data, elt, ls->ll_data_size);
-    // ListTy *res = ALLOC(sizeof(ListTy));
-    ListTy *res = gib_bumpalloc(sizeof(ListTy));
+    // GibList *res = ALLOC(sizeof(GibList));
+    GibList *res = gib_bumpalloc(sizeof(GibList));
     res->ll_data_size = ls->ll_data_size;
     res->ll_data = data;
-    res->ll_next = (ListTy*) ls;
+    res->ll_next = (GibList*) ls;
     return res;
 }
 
-inline void *gib_list_head(ListTy *ls)
+inline void *gib_list_head(GibList *ls)
 {
     return ls->ll_data;
 }
 
-inline ListTy* gib_list_tail(ListTy *ls)
+inline GibList* gib_list_tail(GibList *ls)
 {
     return ls->ll_next;
 }
 
-inline void gib_list_free(ListTy *ls)
+inline void gib_list_free(GibList *ls)
 {
     free(ls->ll_data);
     free(ls);
     return;
 }
 
-inline ListTy *gib_list_copy(ListTy *ls)
+inline GibList *gib_list_copy(GibList *ls)
 {
-    ListTy *ls2 = gib_list_alloc(ls->ll_data_size);
+    GibList *ls2 = gib_list_alloc(ls->ll_data_size);
     if (ls->ll_data != NULL) {
         void* data = gib_bumpalloc(ls->ll_data_size);
         memcpy(data, ls->ll_data, ls->ll_data_size);
@@ -1261,29 +1261,29 @@ inline ListTy *gib_list_copy(ListTy *ls)
  */
 
 // Example: writePpm("gibbon_rgb_1000.ppm", 1000, 1000, pixels);
-void gib_write_ppm(char* filename, IntTy width, IntTy height, VectorTy *pixels) {
+void gib_write_ppm(char* filename, GibInt width, GibInt height, GibVector *pixels) {
     FILE *fp;
     fp = fopen(filename, "w+");
     fprintf(fp, "P3\n");
     fprintf(fp, "%lld %lld\n255\n", width, height);
-    IntTy len = gib_vector_length(pixels);
+    GibInt len = gib_vector_length(pixels);
     gib_write_ppm_loop(fp, 0, len, pixels);
     fclose(fp);
     return;
 }
 
-void gib_write_ppm_loop(FILE *fp, IntTy idx, IntTy end, VectorTy *pixels) {
+void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels) {
     bool fltIf_5768_6575 = idx == end;
 
     if (fltIf_5768_6575) {
         return;
     } else {
-        Pixel *tmp_112;
-        tmp_112 = (Pixel *) gib_vector_nth(pixels, idx);
-        Pixel tup = *tmp_112;
-        IntTy x = tup.field0;
-        IntTy y = tup.field1;
-        IntTy z = tup.field2;
+        GibPixel *tmp_112;
+        tmp_112 = (GibPixel *) gib_vector_nth(pixels, idx);
+        GibPixel tup = *tmp_112;
+        GibInt x = tup.field0;
+        GibInt y = tup.field1;
+        GibInt z = tup.field2;
         // write to file.
         fprintf(fp, "%lld %lld %lld\n", x, y, z);
         gib_write_ppm_loop(fp, (idx+1), end, pixels);

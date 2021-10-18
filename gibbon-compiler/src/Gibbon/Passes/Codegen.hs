@@ -1379,27 +1379,27 @@ genSwitch venv fenv sort_fns lbl tr alts lastE ty sync_deps =
 -- | The identifier after typename refers to typedefs defined in rts.c
 --
 codegenTy :: Ty -> C.Type
-codegenTy IntTy = [cty|typename IntTy|]
-codegenTy FloatTy= [cty|typename FloatTy|]
-codegenTy BoolTy = [cty|typename BoolTy|]
-codegenTy TagTyPacked = [cty|typename TagTyPacked|]
-codegenTy TagTyBoxed  = [cty|typename TagTyBoxed|]
-codegenTy SymTy = [cty|typename SymTy|]
-codegenTy PtrTy = [cty|typename PtrTy|] -- char* - Hack, this could be void* if we have enough casts. [2016.11.06]
-codegenTy CursorTy = [cty|typename CursorTy|]
-codegenTy RegionTy = [cty|typename RegionTy|]
-codegenTy ChunkTy = [cty|typename ChunkTy|]
+codegenTy IntTy = [cty|typename GibInt|]
+codegenTy FloatTy= [cty|typename GibFloat|]
+codegenTy BoolTy = [cty|typename GibBool|]
+codegenTy TagTyPacked = [cty|typename GibBoxedTag|]
+codegenTy TagTyBoxed  = [cty|typename GibBoxedTag|]
+codegenTy SymTy = [cty|typename GibSym|]
+codegenTy PtrTy = [cty|typename GibPtr|] -- char* - Hack, this could be void* if we have enough casts. [2016.11.06]
+codegenTy CursorTy = [cty|typename GibCursor|]
+codegenTy RegionTy = [cty|typename GibRegionMeta|]
+codegenTy ChunkTy = [cty|typename GibChunk|]
 codegenTy (ProdTy []) = [cty|unsigned char|]
 codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
     where nam = makeName ts
-codegenTy (SymDictTy _ _t) = [cty|typename SymDictTy|]
-codegenTy SymSetTy = [cty|typename SymSetTy*|]
-codegenTy SymHashTy = [cty|typename SymHashTy*|]
-codegenTy IntHashTy = [cty|typename IntHashTy*|]
-codegenTy ArenaTy = [cty|typename ArenaTy*|]
-codegenTy VectorTy{} = [cty|typename VectorTy* |]
-codegenTy ListTy{} = [cty|typename ListTy* |]
-codegenTy PDictTy{} = [cty|typename PDictTy* |]
+codegenTy (SymDictTy _ _t) = [cty|typename GibSymDict|]
+codegenTy SymSetTy = [cty|typename GibSymSet*|]
+codegenTy SymHashTy = [cty|typename GibSymHash*|]
+codegenTy IntHashTy = [cty|typename GibIntHash*|]
+codegenTy ArenaTy = [cty|typename GibArena*|]
+codegenTy VectorTy{} = [cty|typename GibVector* |]
+codegenTy ListTy{} = [cty|typename GibList* |]
+codegenTy PDictTy{} = [cty|typename GibPDict* |]
 
 makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"
