@@ -142,7 +142,7 @@ GibInt gib_expll(GibInt base, GibInt pow)
 }
 
 // https://www.cprogramming.com/snippets/source-code/find-the-number-of-cpu-cores-for-windows-mac-or-linux
-GibInt gib_get_num_processors()
+inline GibInt gib_get_num_processors()
 {
 #ifdef _WIN64
     SYSTEM_INFO sysinfo;
@@ -190,7 +190,7 @@ char *gib_global_saved_heap_ptr_stack[100];
 int gib_global_num_saved_heap_ptr = 0;
 
 // For simplicity just use a single large slab:
-void gib_init_bumpalloc()
+inline void gib_init_bumpalloc()
 {
     gib_global_bumpalloc_heap_ptr = (char*)malloc(gib_global_biginf_init_chunk_size);
     gib_global_bumpalloc_heap_ptr_end = gib_global_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
@@ -218,10 +218,14 @@ void *gib_bumpalloc(long long n)
 // Snapshot the current heap pointer value across all threads.
 void gib_save_alloc_state()
 {
-    dbgprintf("Saving(%p): pos %d", heap_ptr, gib_global_num_saved_heap_ptr);
+#ifdef _DEBUG
+    printf("Saving(%p): pos %d", heap_ptr, gib_global_num_saved_heap_ptr);
+#endif
     gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr] = heap_ptr;
     gib_global_num_saved_heap_ptr++;
-    dbgprintf("\n");
+#ifdef _DEBUG
+    printf("\n");
+#endif
 }
 
 void gib_restore_alloc_state()
@@ -231,8 +235,10 @@ void gib_restore_alloc_state()
         exit(1);
     }
     gib_global_num_saved_heap_ptr--;
-    dbgprintf("Restoring(%p): pos %d, discarding %p",
-              gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr], gib_global_num_saved_heap_ptr, gib_global_bumpalloc_heap_ptr);
+#ifdef _DEBUG
+    printf("Restoring(%p): pos %d, discarding %p",
+           gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr], gib_global_num_saved_heap_ptr, gib_global_bumpalloc_heap_ptr);
+#endif
     gib_global_bumpalloc_heap_ptr = gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr];
 }
 
@@ -255,7 +261,7 @@ void gib_restore_alloc_state() {}
 __thread char *gib_global_nursery_heap_ptr = (char*)NULL;
 __thread char *gib_global_nursery_heap_ptr_end = (char*)NULL;
 
-inline void gib_init_nursery()
+void gib_init_nursery()
 {
     gib_global_nursery_heap_ptr = (char*)malloc(NURSERY_SIZE);
     if (gib_global_nursery_heap_ptr == NULL) {
@@ -268,7 +274,7 @@ inline void gib_init_nursery()
 #endif
 }
 
-inline void *gib_alloc_in_nursery(long long n)
+void *gib_alloc_in_nursery(long long n)
 {
     if (! gib_global_nursery_heap_ptr) {
         gib_init_nursery();
@@ -336,23 +342,23 @@ inline void *gib_scoped_alloc(size_t n) { return alloca(n); }
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-GibArena *gib_alloc_arena()
+inline GibArena *gib_alloc_arena()
 {
     GibArena *ar = gib_alloc(sizeof(GibArena));
     ar->ind = 0;
-    ar->mem = malloc(gib_global_max_chunk_size);
+    ar->mem = gib_alloc(gib_global_max_chunk_size);
     ar->reflist = 0;
     return ar;
 }
 
-void gib_free_arena(GibArena *ar)
+inline void gib_free_arena(GibArena *ar)
 {
     free(ar->mem);
     // TODO(vollmerm): free everything in ar->reflist
     free(ar);
 }
 
-GibCursor gib_extend_arena(GibArena *ar, int size)
+inline GibCursor gib_extend_arena(GibArena *ar, int size)
 {
     GibCursor ret = ar->mem + ar->ind;
     ar->ind += size;
@@ -365,12 +371,12 @@ GibCursor gib_extend_arena(GibArena *ar, int size)
  */
 
 
-GibSymDict *gib_dict_alloc(GibArena *ar)
+inline GibSymDict *gib_dict_alloc(GibArena *ar)
 {
     return (GibSymDict *) gib_extend_arena(ar, sizeof(GibSymDict)); // gib_alloc(sizeof(GibSymDict));
 }
 
-GibSymDict *gib_dict_insert_ptr(GibArena *ar, GibSymDict *ptr, GibSym key, GibPtr val)
+inline GibSymDict *gib_dict_insert_ptr(GibArena *ar, GibSymDict *ptr, GibSym key, GibPtr val)
 {
     GibSymDict *ret = gib_dict_alloc(ar);
     ret->key = key;
@@ -379,7 +385,7 @@ GibSymDict *gib_dict_insert_ptr(GibArena *ar, GibSymDict *ptr, GibSym key, GibPt
     return ret;
 }
 
-GibPtr gib_dict_lookup_ptr(GibSymDict *ptr, GibSym key)
+inline GibPtr gib_dict_lookup_ptr(GibSymDict *ptr, GibSym key)
 {
     while (ptr != 0) {
         if (ptr->key == key) {
@@ -398,24 +404,24 @@ GibPtr gib_dict_lookup_ptr(GibSymDict *ptr, GibSym key)
  */
 
 
-GibSymSet *gib_empty_set()
+inline GibSymSet *gib_empty_set()
 {
     return NULL;
 }
 
-GibSymSet *gib_insert_set(GibSymSet *set, int sym)
+inline GibSymSet *gib_insert_set(GibSymSet *set, int sym)
 {
     GibSymSet *s;
     HASH_FIND_INT(set, &sym, s);  /* sym already in the hash? */
     if (s==NULL) {
-        s = malloc(sizeof(GibSymSet));
+        s = gib_alloc(sizeof(GibSymSet));
         s->val = sym;
         HASH_ADD_INT(set,val,s);
     }
     return set;
 }
 
-GibBool gib_contains_set(GibSymSet *set, int sym)
+inline GibBool gib_contains_set(GibSymSet *set, int sym)
 {
     GibSymSet *s;
     HASH_FIND_INT(set, &sym, s);
@@ -428,16 +434,15 @@ GibBool gib_contains_set(GibSymSet *set, int sym)
  */
 
 
-GibSymHash *gib_empty_hash()
+inline GibSymHash *gib_empty_hash()
 {
     return NULL;
 }
 
-GibSymHash *gib_insert_hash(GibSymHash *hash, int k, int v)
+inline GibSymHash *gib_insert_hash(GibSymHash *hash, int k, int v)
 {
     GibSymHash *s;
     // NOTE: not checking for duplicates!
-    // s = malloc(sizeof(struct sym_hash_elem));
     s = gib_alloc(sizeof(GibSymHash));
     s->val = v;
     s->key = k;
@@ -446,7 +451,7 @@ GibSymHash *gib_insert_hash(GibSymHash *hash, int k, int v)
     return hash;
 }
 
-GibSym gib_lookup_hash(GibSymHash *hash, int k)
+inline GibSym gib_lookup_hash(GibSymHash *hash, int k)
 {
     GibSymHash *s;
     HASH_FIND_INT(hash,&k,s);
@@ -458,7 +463,7 @@ GibSym gib_lookup_hash(GibSymHash *hash, int k)
     }
 }
 
-GibBool gib_contains_hash(GibSymHash *hash, int sym)
+inline GibBool gib_contains_hash(GibSymHash *hash, int sym)
 {
     GibSymHash *s;
     HASH_FIND_INT(hash,&sym,s);
@@ -493,37 +498,37 @@ void gib_add_symbol(GibSym idx, char *value)
     }
 }
 
-void gib_set_newline(GibSym idx)
+inline void gib_set_newline(GibSym idx)
 {
     newline_symbol = idx;
     gib_add_symbol(idx,"NEWLINE");
 }
 
-void gib_set_space(GibSym idx)
+inline void gib_set_space(GibSym idx)
 {
     space_symbol = idx;
     gib_add_symbol(idx,"SPACE");
 }
 
-void gib_set_comma(GibSym idx)
+inline void gib_set_comma(GibSym idx)
 {
     comma_symbol = idx;
     gib_add_symbol(idx,"COMMA");
 }
 
-void gib_set_leftparen(GibSym idx)
+inline void gib_set_leftparen(GibSym idx)
 {
     leftparen_symbol = idx;
     gib_add_symbol(idx,"LEFTPAREN");
 }
 
-void gib_set_rightparen(GibSym idx)
+inline void gib_set_rightparen(GibSym idx)
 {
     rightparen_symbol = idx;
     gib_add_symbol(idx,"RIGHTPAREN");
 }
 
-int gib_print_symbol(GibSym idx)
+inline int gib_print_symbol(GibSym idx)
 {
     if (idx == comma_symbol) {
         return printf(",");
@@ -639,7 +644,7 @@ void gib_free_symtable()
 
 */
 
-inline void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
+void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
 {
     uint outset_len = reg->reg_outset_len;
     // Check for duplicates.
@@ -654,7 +659,7 @@ inline void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
     return;
 }
 
-inline void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg) {
+void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg) {
     uint outset_len = reg->reg_outset_len;
     GibCursor *outset = reg->reg_outset;
     int i;
@@ -732,7 +737,7 @@ GibRegionMeta *gib_alloc_region(long long size)
     return reg;
 }
 
-GibRegionMeta *gib_alloc_counted_region(long long size)
+inline GibRegionMeta *gib_alloc_counted_region(long long size)
 {
     // Bump the count.
     gib_bump_global_region_count();
@@ -791,7 +796,7 @@ GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
     return NULL;
 }
 
-uint gib_get_ref_count(GibCursor end_ptr)
+inline uint gib_get_ref_count(GibCursor end_ptr)
 {
     GibRegionFooter *footer = (GibRegionFooter *) end_ptr;
     GibRegionMeta *reg = (GibRegionMeta *) footer->rf_reg_metadata_ptr;
@@ -1020,12 +1025,12 @@ GibVector *gib_vector_alloc(GibInt num, size_t elt_size)
     return vec;
 }
 
-GibInt gib_vector_length(GibVector *vec)
+inline GibInt gib_vector_length(GibVector *vec)
 {
     return (vec->vec_upper - vec->vec_lower);
 }
 
-GibBool gib_vector_is_empty(GibVector *vec)
+inline GibBool gib_vector_is_empty(GibVector *vec)
 {
     return (gib_vector_length(vec) == 0);
 }
@@ -1094,7 +1099,7 @@ inline GibVector *gib_vector_sort(GibVector *vec, int (*compar)(const void *, co
     return vec2;
 }
 
-inline GibVector *gib_vector_concat(GibVector *vec)
+GibVector *gib_vector_concat(GibVector *vec)
 {
     // Length of the input vector.
     GibInt len = gib_vector_length(vec);
@@ -1137,7 +1142,7 @@ inline void gib_vector_free(GibVector *vec)
     return;
 }
 
-inline GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
+GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
 {
     if (vec1->vec_upper != vec2->vec_lower) {
         printf("gib_vector_merge: non-contiguous slices, (%lld,%lld), (%lld,%lld).",
