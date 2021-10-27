@@ -43,9 +43,15 @@ typedef char* GibCursor;
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Common Globals
+ * Globals and their accessors
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
+
+
+/*
+ * These globals don't need to be delcared here; they can be
+ * accessed using the functions given below.
+ *
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
 extern long long gib_global_biginf_init_chunk_size;
@@ -66,15 +72,34 @@ extern long long gib_global_region_count;
 // Invariant: should always be equal to max(sym_table_keys).
 extern GibSym gib_global_gensym_counter;
 
+ *
+ */
+
+
+// Chunk sizes of buffers, see GitHub #79 and #110.
+long long gib_get_biginf_init_chunk_size();
+long long gib_get_inf_init_chunk_size();
+
+// Runtime arguments, values updated by the flags parser.
+GibInt gib_get_size_param();
+GibInt gib_get_iters_param();
+char *gib_read_bench_prog_param();
+char *gib_read_benchfile_param();
+char *gib_read_arrayfile_param();
+long long gib_read_arrayfile_length_param();
+
+// Number of regions allocated.
+long long gib_read_region_count();
+
+// Invariant: should always be equal to max(sym_table_keys).
+GibSym gib_read_gensym_counter();
+
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Helpers
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-char *gib_read_benchfile_param();
-char *gib_read_arrayfile_param();
-long long gib_read_arrayfile_length_param();
 void gib_show_usage(char **argv);
 double gib_avg(const double* arr, int n);
 double gib_difftimespecs(struct timespec *t0, struct timespec *t1);
@@ -104,11 +129,6 @@ GibInt gib_get_num_processors();
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-extern __thread char *gib_global_bumpalloc_heap_ptr;
-extern __thread char *gib_global_bumpalloc_heap_ptr_end;
-extern char *gib_global_saved_heap_ptr_stack[100];
-extern int gib_global_num_saved_heap_ptr;
-
 void gib_init_bumpalloc();
 void *gib_bumpalloc(long long n);
 void gib_save_alloc_state();
@@ -121,11 +141,6 @@ void gib_restore_alloc_state();
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-#define NURSERY_SIZE 0
-#define NURSERY_ALLOC_UPPER_BOUND 1024
-
-extern __thread char *gib_global_nursery_heap_ptr;
-extern __thread char *gib_global_nursery_heap_ptr_end;
 
 void gib_init_nursery();
 void *gib_alloc_in_nursery(long long n);
@@ -137,7 +152,6 @@ void *gib_alloc_in_nursery(long long n);
  */
 
 void *gib_alloc(size_t size);
-void *gib_small_alloc(size_t size);
 void *gib_counted_alloc(size_t size);
 void *gib_scoped_alloc(size_t size);
 
@@ -224,8 +238,6 @@ typedef struct gib_symtable {
     char value[MAX_SYMBOL_LEN];
     UT_hash_handle hh;         /* makes this structure hashable */
 } GibSymtable;
-
-extern GibSymtable *global_sym_table;
 
 void gib_add_symbol(GibSym idx, char *value);
 void gib_set_newline(GibSym idx);

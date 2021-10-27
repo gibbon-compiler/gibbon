@@ -531,24 +531,24 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
            iters = "iters_"++ (fromVar ident)
            vec_ty = codegenTy (VectorTy FloatTy)
 
-           timebod = [ C.BlockDecl [cdecl| $ty:vec_ty ($id:times) = gib_vector_alloc(gib_global_iters_param, sizeof(double)); |]
+           timebod = [ C.BlockDecl [cdecl| $ty:vec_ty ($id:times) = gib_vector_alloc(gib_get_iters_param(), sizeof(double)); |]
                      , C.BlockDecl [cdecl| struct timespec $id:begn; |]
                      , C.BlockDecl [cdecl| struct timespec $id:end; |] ] ++
 
                      (if flg
                          -- Save and restore EXCEPT on the last iteration.  This "cancels out" the effect of intermediate allocations.
-                      then (let body = [ C.BlockStm [cstm| if ( $id:iters != gib_global_iters_param-1) gib_save_alloc_state(); |]
+                      then (let body = [ C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) gib_save_alloc_state(); |]
                                        , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |]
                                        ] ++
                                        rhs''++
                                        [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
-                                       , C.BlockStm [cstm| if ( $id:iters != gib_global_iters_param-1) gib_restore_alloc_state(); |]
+                                       , C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) gib_restore_alloc_state(); |]
                                        , C.BlockDecl [cdecl| double $id:itertime = gib_difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
                                        , C.BlockStm [cstm| gib_vector_inplace_update($id:times, $id:iters, &($id:itertime)); |]
                                        ]
-                            in [ C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_global_iters_param; $id:iters ++) { $items:body } |]
+                            in [ C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body } |]
                                , C.BlockStm [cstm| gib_vector_inplace_sort($id:times, gib_compare_doubles); |]
-                               , C.BlockDecl [cdecl| double *$id:tmp = (double*) gib_vector_nth($id:times, (gib_global_iters_param / 2)); |]
+                               , C.BlockDecl [cdecl| double *$id:tmp = (double*) gib_vector_nth($id:times, (gib_get_iters_param() / 2)); |]
                                , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
                                , C.BlockDecl [cdecl| double $id:batchtime = gib_sum_timing_array($id:times); |]
                                , C.BlockStm [cstm| gib_print_timing_array($id:times); |]
@@ -564,12 +564,12 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                            ])
            withPrnt = timebod ++
                       (if flg
-                       then [ C.BlockStm [cstm| printf("ITERS: %lld\n", gib_global_iters_param); |]
-                            , C.BlockStm [cstm| printf("SIZE: %lld\n", gib_global_size_param); |]
+                       then [ C.BlockStm [cstm| printf("ITERS: %lld\n", gib_get_iters_param()); |]
+                            , C.BlockStm [cstm| printf("SIZE: %lld\n", gib_get_size_param()); |]
                             , C.BlockStm [cstm| printf("BATCHTIME: %e\n", $id:batchtime); |]
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", $id:selftimed); |]
                             ]
-                       else [ C.BlockStm [cstm| printf("SIZE: %lld\n", gib_global_size_param); |]
+                       else [ C.BlockStm [cstm| printf("SIZE: %lld\n", gib_get_size_param()); |]
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", gib_difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ])
        let venv' = (M.fromList bnds) `M.union` venv
        tal <- codegenTail venv' fenv sort_fns body ty sync_deps
@@ -733,7 +733,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                            [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = $(codegenTriv venv pleft) == $(codegenTriv venv pright); |]]
 
                  EqBenchProgP str -> let [(outV,outT)] = bnds
-                                     in pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = strcmp($str,gib_global_bench_prog_param) == 0; |]]
+                                     in pure [ C.BlockDecl [cdecl| $ty:(codegenTy outT) $id:outV = strcmp($str,gib_read_bench_prog_param()) == 0; |]]
 
                  DictInsertP _ -> let [(outV,ty)] = bnds
                                       [(VarTriv arena),(VarTriv dict),keyTriv,valTriv] = rnds in pure
@@ -787,12 +787,12 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    if countRegions
                    then
                      pure
-                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_counted_region($id:bufsize); |]
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_counted_region($exp:bufsize); |]
                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
                    else
                      pure
-                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_region($id:bufsize); |]
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_region($exp:bufsize); |]
                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
 
@@ -804,28 +804,28 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    if countRegions
                    then
                      pure
-                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_counted_region($id:bufsize); |]
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_counted_region($exp:bufsize); |]
                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
                    else
                      pure
-                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_region($id:bufsize); |]
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_region($exp:bufsize); |]
                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
                  ScopedBuffer mul -> let [(outV,CursorTy)] = bnds
                                          bufsize = codegenMultiplicity mul
                                      in pure
-                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) ) gib_scoped_alloc($id:bufsize); |] ]
+                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) ) gib_scoped_alloc($exp:bufsize); |] ]
 
                  ScopedParBuffer mul -> let [(outV,CursorTy)] = bnds
                                             bufsize = codegenMultiplicity mul
                                         in pure
-                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) ) gib_scoped_alloc($id:bufsize); |] ]
+                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) ) gib_scoped_alloc($exp:bufsize); |] ]
 
                  InitSizeOfBuffer mul -> let [(sizev,IntTy)] = bnds
                                              bufsize = codegenMultiplicity mul
                                          in pure
-                                            [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:sizev = $id:bufsize; |] ]
+                                            [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:sizev = $exp:bufsize; |] ]
 
                  FreeBuffer -> if noGC
                                then pure []
@@ -927,7 +927,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                     _ -> error $ "wrong number of return bindings from GetFirstWord: "++show bnds
 
                  SizeParam -> let [(outV,IntTy)] = bnds in pure
-                      [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = gib_global_size_param; |] ]
+                      [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = gib_get_size_param(); |] ]
 
                  PrintInt ->
                      let [arg] = rnds in
@@ -981,9 +981,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                             tysize = [cty| typename size_t |]
                         out_hdl <- gensym "out_hdl"
                         wrote <- gensym "wrote"
-                        pure $ [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:outreg = gib_alloc_region(gib_global_biginf_init_chunk_size); |]
+                        pure $ [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:outreg = gib_alloc_region(gib_get_biginf_init_chunk_size()); |]
                                , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg->reg_heap; |]
-                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg->reg_heap + gib_global_biginf_init_chunk_size; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg->reg_heap + gib_get_biginf_init_chunk_size(); |]
                                  -- This would ideally be the *end* of the input region corresponding to inV
                                  -- but we have don't have at hand here. Passing in NULL is okay because this pointer
                                  -- is unused in the copy function.
@@ -1327,11 +1327,11 @@ codegenTail _ _ _ (Goto lbl) _ty _ = do
 
 -- | The sizes for all mulitplicities are defined as globals in the RTS.
 -- Note: Must be consistent with the names in RTS!
-codegenMultiplicity :: Multiplicity -> Var
+codegenMultiplicity :: Multiplicity -> C.Exp
 codegenMultiplicity mul =
   case mul of
-    BigInfinite -> toVar "gib_global_biginf_init_chunk_size"
-    Infinite    -> toVar "gib_global_inf_init_chunk_size"
+    BigInfinite -> [cexp| gib_get_biginf_init_chunk_size() |]
+    Infinite    -> [cexp| gib_get_inf_init_chunk_size() |]
     Bounded     -> error $ "codegenMultiplicity: Bounded buffers not handled yet."
 
 
