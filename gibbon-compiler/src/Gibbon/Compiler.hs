@@ -487,11 +487,13 @@ getExeFile backend fp Nothing =
 compilationCmd :: Backend -> Config -> String
 compilationCmd LLVM _   = "clang-5.0 lib.o "
 compilationCmd C config = (cc config) ++" -std=gnu11 "
+                          ++(if bumpAlloc then " -D_GIBBON_BUMPALLOC_LISTS " else "")
+                          ++(if pointer then " -D_GIBBON_POINTER " else "")
+                          ++(if parallel then " -fcilkplus -D_GIBBON_PARALLEL " else "")
+                          ++(if warnc
+                             then " -Wno-unused-variable -Wno-unused-label -Wall -Wextra -Wpedantic "
+                             else suppress_warnings)
                           ++(optc config)
-                          ++(if bumpAlloc then " -D_BUMPALLOC " else "")
-                          ++(if pointer then " -D_POINTER " else "")
-                          ++(if parallel then " -fcilkplus -D_PARALLEL " else "")
-                          ++(if warnc then " -Wno-unused-variable -Wall " else suppress_warnings)
   where dflags = dynflags config
         bumpAlloc = gopt Opt_BumpAlloc dflags
         pointer = gopt Opt_Pointer dflags

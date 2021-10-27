@@ -1,5 +1,5 @@
-#ifndef _GIBBON_H_
-#define _GIBBON_H_
+#ifndef _GIBBON_H
+#define _GIBBON_H
 
 #include <stdio.h>
 #include <stdint.h>
@@ -179,7 +179,7 @@ GibCursor gib_extend_arena(GibArena *ar, int size);
 
 typedef struct gib_symdict {
   struct gib_symdict *next;
-  int key;
+  GibSym key;
   void *ptrval;
 } GibSymDict;
 
@@ -308,7 +308,7 @@ typedef struct gib_vector {
     size_t vec_elt_size;
 
     // Actual elements of the vector.
-    void* vec_data;
+    void *vec_data;
 } GibVector;
 
 GibVector *gib_vector_alloc(GibInt num, size_t elt_size);
@@ -381,4 +381,4 @@ int gib_main_expr(void);
 int main(int argc, char** argv);
 
 
-#endif // _GIBBON_H_
+#endif // #ifndef _GIBBON_H

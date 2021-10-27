@@ -25,11 +25,11 @@
 #include <windows.h>
 #endif
 
-#ifdef _POINTER
+#ifdef _GIBBON_POINTER
 #include <gc.h>
 #endif
 
-#ifdef _PARALLEL
+#ifdef _GIBBON_PARALLEL
 #include <cilk/cilk.h>
 #include <cilk/cilk_api.h>
 #endif
@@ -201,7 +201,7 @@ int dbgprintf(const char *format, ...)
     int code = 0;
     va_list args;
     va_start(args, format);
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
     code = vprintf(format, args);
 #endif
     va_end(args);
@@ -223,7 +223,7 @@ int dbgprintf(const char *format, ...)
 
 
 #ifdef _BUMPALLOC
-// #define _DEBUG
+// #define _GIBBON_DEBUG
 #warning "Using bump allocator."
 
 __thread char *gib_global_bumpalloc_heap_ptr = (char*)NULL;
@@ -236,7 +236,7 @@ inline void gib_init_bumpalloc(void)
 {
     gib_global_bumpalloc_heap_ptr = (char*)malloc(gib_global_biginf_init_chunk_size);
     gib_global_bumpalloc_heap_ptr_end = gib_global_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
     printf("Arena size for bump alloc: %lld\n", gib_global_biginf_init_chunk_size);
     printf("gib_bumpalloc/gib_init_bumpalloc DONE: heap_ptr = %p\n", gib_global_bumpalloc_heap_ptr);
 #endif
@@ -260,12 +260,12 @@ void *gib_bumpalloc(long long n)
 // Snapshot the current heap pointer value across all threads.
 void gib_save_alloc_state(void)
 {
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
     printf("Saving(%p): pos %d", heap_ptr, gib_global_num_saved_heap_ptr);
 #endif
     gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr] = heap_ptr;
     gib_global_num_saved_heap_ptr++;
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
     printf("\n");
 #endif
 }
@@ -277,7 +277,7 @@ void gib_restore_alloc_state(void)
         exit(1);
     }
     gib_global_num_saved_heap_ptr--;
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
     printf("Restoring(%p): pos %d, discarding %p",
            gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr], gib_global_num_saved_heap_ptr, gib_global_bumpalloc_heap_ptr);
 #endif
@@ -314,7 +314,7 @@ void gib_init_nursery(void)
         exit(1);
     }
     gib_global_nursery_heap_ptr_end = gib_global_nursery_heap_ptr + NURSERY_SIZE;
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
     printf("gib_init_nursery: DONE, heap_ptr = %p\n", gib_global_nursery_heap_ptr);
 #endif
 }
@@ -327,7 +327,7 @@ void *gib_alloc_in_nursery(long long n)
     if (gib_global_nursery_heap_ptr + n < gib_global_nursery_heap_ptr_end) {
         char* old = gib_global_nursery_heap_ptr;
         gib_global_nursery_heap_ptr += n;
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
         printf("gib_alloc_in_nursery: DONE, %lld\n", n);
 #endif
         return old;
@@ -350,15 +350,15 @@ void *gib_alloc_in_nursery(long long n)
  * Presently, all parallel pointer-based programs will leak memory.
  */
 
-#ifdef _POINTER
-#ifndef _PARALLEL
+#ifdef _GIBBON_POINTER
+#ifndef _GIBBON_PARALLEL
 inline void *gib_alloc(size_t n) { return GC_MALLOC(n); }
 #else
 inline void *gib_alloc(size_t n) { return malloc(n); }
-#endif // ifndef _PARALLEL
+#endif // ifndef _GIBBON_PARALLEL
 #else
 inline void *gib_alloc(size_t n) { return malloc(n); }
-#endif // ifdef _POINTER
+#endif // ifdef _GIBBON_POINTER
 
 inline void *gib_counted_alloc(size_t n) {
     gib_bump_global_region_count();
@@ -597,7 +597,7 @@ inline int gib_print_symbol(GibSym idx)
 GibSym gib_gensym(void)
 {
     GibSym idx;
-#ifdef _PARALLEL
+#ifdef _GIBBON_PARALLEL
     idx = __atomic_add_fetch(&gib_global_gensym_counter, 1, __ATOMIC_SEQ_CST);
 #else
     gib_global_gensym_counter += 1;
@@ -702,7 +702,7 @@ void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
 void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg) {
     uint outset_len = reg->reg_outset_len;
     GibCursor *outset = reg->reg_outset;
-    int i;
+    uint i;
     if (outset_len == 0) {
         fprintf(stderr, "gib_remove_from_outset: empty outset\n");
         exit(1);
@@ -761,7 +761,7 @@ GibRegionMeta *gib_alloc_region(long long size)
     reg->reg_heap = heap;
     reg->reg_outset_len = 0;
 
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
     printf("Allocated a region(%lld): %lld bytes, nursery=%d.\n", reg->reg_id, size, nursery_allocated);
 #endif
 
@@ -815,7 +815,7 @@ GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
     new_footer->rf_next = NULL;
     new_footer->rf_prev = footer;
 
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
     GibRegionMeta *reg = (GibRegionMeta*) new_footer->rf_reg_metadata_ptr;
     printf("gib_alloc_chunk: allocated %lld bytes for region %lld.\n", total_size, reg->reg_id);
 #endif
@@ -848,7 +848,7 @@ inline uint gib_get_ref_count(GibCursor end_ptr)
 inline void gib_bump_refcount(GibCursor end_b, GibCursor end_a)
 {
     if (end_a == end_b) {
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
         printf("gib_bump_refcount: indirection within a region found, refcount not bumped. TODO.\n");
 #endif
         return;
@@ -867,7 +867,7 @@ inline void gib_bump_refcount(GibCursor end_b, GibCursor end_a)
     new_refcount = current_refcount + 1;
     reg_a->reg_refcount = new_refcount;
 
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
     printf("gib_bump_refcount: %lld -> %lld\n", reg_b->reg_id, reg_a->reg_id);
     printf("gib_bump_refcount: old-refcount=%d, old-outset-len=%d:\n", current_refcount, reg_b->reg_outset_len);
     assert(current_refcount == reg_b->reg_outset_len+1);
@@ -876,7 +876,7 @@ inline void gib_bump_refcount(GibCursor end_b, GibCursor end_a)
     // Add A to B's outset.
     gib_insert_into_outset(end_a, reg_b);
 
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
     // printf("gib_bump_refcount: Added %p to %lld's outset, %p.\n", end_a, reg_b->reg_id, reg_b);
     printf("gib_bump_refcount: new-refcount=%d, new-outset-len=%d\n", new_refcount, reg_b->reg_outset_len);
     assert(new_refcount == reg_b->reg_outset_len+1);
@@ -903,7 +903,7 @@ void gib_free_region(GibCursor end_reg) {
         reg->reg_refcount = new_refcount;
     }
 
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
     printf("gib_free_region(%lld): refcounts (1): old-refcount=%d, new-refcount=%d:\n", reg->reg_id, current_refcount, new_refcount);
 #endif
 
@@ -911,7 +911,7 @@ void gib_free_region(GibCursor end_reg) {
     // Free this region recount is 0.
     if (new_refcount == 0) {
 
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
         printf("gib_free_region(%lld): outset length: %d\n", reg->reg_id, reg->reg_outset_len);
 #endif
 
@@ -925,13 +925,13 @@ void gib_free_region(GibCursor end_reg) {
             uint elt_current_refcount, elt_new_refcount;
             GibCursor to_be_removed[MAX_OUTSET_LENGTH];
             uint to_be_removed_idx = 0;
-            for (int i = 0; i < outset_len; i++) {
+            for (uint i = 0; i < outset_len; i++) {
                 elt_footer = (GibRegionFooter *) outset[i];
                 elt_reg = (GibRegionMeta *) elt_footer->rf_reg_metadata_ptr;
                 elt_current_refcount = elt_reg->reg_refcount;
                 elt_new_refcount = elt_current_refcount - 1;
                 elt_reg->reg_refcount = elt_new_refcount;
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
                 printf("gib_free_region(%lld): old-refcount=%d, new-refcount=%d:\n",
                        elt_reg->reg_id, elt_current_refcount, elt_reg->reg_refcount);
 #endif
@@ -952,7 +952,7 @@ void gib_free_region(GibCursor end_reg) {
         }
 
 
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
         // Bookkeeping
         long long num_freed_chunks = 0, total_bytesize = 0;
 #endif
@@ -962,14 +962,14 @@ void gib_free_region(GibCursor end_reg) {
         first_chunk_footer = footer;
         next_chunk = (char*) footer->rf_next;
 
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
         printf("gib_free_region(%lld): first chunk in nursery: %d\n",
                reg->reg_id,
                first_chunk_footer->rf_nursery_allocated);
 #endif
 
         if (! first_chunk_footer->rf_nursery_allocated) {
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
             num_freed_chunks++;
             total_bytesize = total_bytesize + first_chunk_footer->rf_size;
 #endif
@@ -978,7 +978,7 @@ void gib_free_region(GibCursor end_reg) {
 
         while (next_chunk != NULL) {
             next_chunk_footer = (GibRegionFooter *) next_chunk;
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
             num_freed_chunks++;
             total_bytesize = total_bytesize + next_chunk_footer->rf_size;
 #endif
@@ -986,7 +986,7 @@ void gib_free_region(GibCursor end_reg) {
             next_chunk = (char*) next_chunk_footer->rf_next;
         }
 
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
         printf("gib_free_region(%lld): Freed %lld bytes across %lld chunks.\n",
                reg->reg_id, total_bytesize, num_freed_chunks);
 #endif
@@ -995,7 +995,7 @@ void gib_free_region(GibCursor end_reg) {
         free(reg);
 
     } else {
-#ifdef _DEBUG
+#ifdef _GIBBON_DEBUG
         printf("gib_free_region(%lld): non-zero refcount: %d.\n",
                reg->reg_id, reg->reg_refcount);
 #endif
@@ -1020,7 +1020,7 @@ GibBool gib_is_big(GibInt i, GibCursor cur)
 
 void gib_bump_global_region_count(void)
 {
-#ifdef _PARALLEL
+#ifdef _GIBBON_PARALLEL
     __atomic_add_fetch(&gib_global_region_count, 1, __ATOMIC_SEQ_CST);
     return;
 #else
@@ -1098,11 +1098,13 @@ GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
 // The callers must cast the return value.
 inline void *gib_vector_nth(GibVector *vec, GibInt i)
 {
-    // if (i < vec->lower || i > vec->upper) {
-    //     printf("gib_vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->vec_lower, vec->vec_upper);
-    //     exit(1);
-    // }
-    return (vec->vec_data + (vec->vec_elt_size * (vec->vec_lower + i)));
+#ifdef _GIBBON_BOUNDSCHECK
+    if (i < vec->lower || i > vec->upper) {
+        fprintf(stdderr, "gib_vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->vec_lower, vec->vec_upper);
+        exit(1);
+    }
+#endif
+    return ((char*)vec->vec_data + (vec->vec_elt_size * (vec->vec_lower + i)));
 }
 
 inline GibVector *gib_vector_inplace_update(GibVector *vec, GibInt i, void* elt)

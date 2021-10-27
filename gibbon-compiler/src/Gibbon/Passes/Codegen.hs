@@ -315,10 +315,10 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) =
         \#ifdef _WIN64\n\
         \#include <windows.h>\n\
         \#endif\n\n\
-        \#ifdef _POINTER\n\
+        \#ifdef _GIBBON_POINTER\n\
         \#include <gc.h>\n\
         \#endif\n\n\
-        \#ifdef _PARALLEL\n\
+        \#ifdef _GIBBON_PARALLEL\n\
         \#include <cilk/cilk.h>\n\
         \#include <cilk/cilk_api.h>\n\
         \#endif\n\n\
