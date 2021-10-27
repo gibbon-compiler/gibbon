@@ -280,19 +280,22 @@ typedef struct gib_chunk {
     GibCursor chunk_end;
 } GibChunk;
 
-void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg);
-void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg);
 GibRegionMeta *gib_alloc_region(long long size);
-GibRegionMeta *gib_alloc_counted_region(long long size);
 GibChunk gib_alloc_chunk(GibCursor end_old_chunk);
-GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer);
-uint gib_get_ref_count(GibCursor end_ptr);
 void gib_bump_refcount(GibCursor end_b, GibCursor end_a);
 void gib_free_region(GibCursor end_reg);
+
+// Helpers for GC.
+void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg);
+void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg);
+GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer);
+uint gib_get_ref_count(GibCursor end_ptr);
 GibBool gib_is_big(GibInt i, GibCursor cur);
+
+// Functions related to counting the number of allocated regions.
+GibRegionMeta *gib_alloc_counted_region(long long size);
 void gib_bump_global_region_count(void);
 void gib_print_global_region_count(void);
-
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

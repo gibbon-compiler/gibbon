@@ -684,47 +684,6 @@ void gib_free_symtable(void)
 
 */
 
-void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
-{
-    uint outset_len = reg->reg_outset_len;
-    // Check for duplicates.
-    for (uint i = 0; i < outset_len; i++) {
-        if (ptr == reg->reg_outset[i]) {
-            return;
-        }
-    }
-    // Otherwise, insert into the outset.
-    reg->reg_outset[outset_len] = ptr;
-    reg->reg_outset_len = outset_len + 1;
-    return;
-}
-
-void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg) {
-    uint outset_len = reg->reg_outset_len;
-    GibCursor *outset = reg->reg_outset;
-    uint i;
-    if (outset_len == 0) {
-        fprintf(stderr, "gib_remove_from_outset: empty outset\n");
-        exit(1);
-    }
-    // Position of 'ptr' in the outset.
-    int elt_idx = -1;
-    for (i = 0; i < outset_len; i++) {
-        if (ptr == outset[i]) {
-            elt_idx = i;
-        }
-    }
-    if (elt_idx == -1) {
-        fprintf(stderr, "gib_remove_from_outset: element not found\n");
-        exit(1);
-    }
-    // Move all elements ahead of 'elt_idx' back by one position.
-    for (i = elt_idx; i < outset_len; i++) {
-        outset[i] = outset[i+1];
-    }
-    return;
-}
-
 GibRegionMeta *gib_alloc_region(long long size)
 {
     // Allocate the region metadata.
@@ -777,13 +736,6 @@ GibRegionMeta *gib_alloc_region(long long size)
     return reg;
 }
 
-inline GibRegionMeta *gib_alloc_counted_region(long long size)
-{
-    // Bump the count.
-    gib_bump_global_region_count();
-    return gib_alloc_region(size);
-}
-
 GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
 {
     // Get size from current footer.
@@ -821,26 +773,6 @@ GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
 #endif
 
     return (GibChunk) {start , end};
-}
-
-GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
-{
-    if (footer->rf_seq_no == 1) {
-        return footer;
-    } else if (footer->rf_prev == NULL) {
-        fprintf(stderr, "No previous chunk found at rf_seq_no: %lld", footer->rf_seq_no);
-        return NULL;
-    } else {
-        gib_trav_to_first_chunk((GibRegionFooter *) footer->rf_prev);
-    }
-    return NULL;
-}
-
-inline uint gib_get_ref_count(GibCursor end_ptr)
-{
-    GibRegionFooter *footer = (GibRegionFooter *) end_ptr;
-    GibRegionMeta *reg = (GibRegionMeta *) footer->rf_reg_metadata_ptr;
-    return reg->reg_refcount;
 }
 
 // B is the pointer, and A is the pointee (i.e B -> A).
@@ -1002,6 +934,67 @@ void gib_free_region(GibCursor end_reg) {
     }
 }
 
+void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
+{
+    uint outset_len = reg->reg_outset_len;
+    // Check for duplicates.
+    for (uint i = 0; i < outset_len; i++) {
+        if (ptr == reg->reg_outset[i]) {
+            return;
+        }
+    }
+    // Otherwise, insert into the outset.
+    reg->reg_outset[outset_len] = ptr;
+    reg->reg_outset_len = outset_len + 1;
+    return;
+}
+
+void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg) {
+    uint outset_len = reg->reg_outset_len;
+    GibCursor *outset = reg->reg_outset;
+    uint i;
+    if (outset_len == 0) {
+        fprintf(stderr, "gib_remove_from_outset: empty outset\n");
+        exit(1);
+    }
+    // Position of 'ptr' in the outset.
+    int elt_idx = -1;
+    for (i = 0; i < outset_len; i++) {
+        if (ptr == outset[i]) {
+            elt_idx = i;
+        }
+    }
+    if (elt_idx == -1) {
+        fprintf(stderr, "gib_remove_from_outset: element not found\n");
+        exit(1);
+    }
+    // Move all elements ahead of 'elt_idx' back by one position.
+    for (i = elt_idx; i < outset_len; i++) {
+        outset[i] = outset[i+1];
+    }
+    return;
+}
+
+GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
+{
+    if (footer->rf_seq_no == 1) {
+        return footer;
+    } else if (footer->rf_prev == NULL) {
+        fprintf(stderr, "No previous chunk found at rf_seq_no: %lld", footer->rf_seq_no);
+        return NULL;
+    } else {
+        gib_trav_to_first_chunk((GibRegionFooter *) footer->rf_prev);
+    }
+    return NULL;
+}
+
+inline uint gib_get_ref_count(GibCursor end_ptr)
+{
+    GibRegionFooter *footer = (GibRegionFooter *) end_ptr;
+    GibRegionMeta *reg = (GibRegionMeta *) footer->rf_reg_metadata_ptr;
+    return reg->reg_refcount;
+}
+
 // Assume that all nodes with size information have tags >= 150.
 GibBool gib_is_big(GibInt i, GibCursor cur)
 {
@@ -1016,6 +1009,15 @@ GibBool gib_is_big(GibInt i, GibCursor cur)
         }
     }
     return false;
+}
+
+// Functions related to counting the number of allocated regions.
+
+inline GibRegionMeta *gib_alloc_counted_region(long long size)
+{
+    // Bump the count.
+    gib_bump_global_region_count();
+    return gib_alloc_region(size);
 }
 
 void gib_bump_global_region_count(void)
