@@ -62,27 +62,27 @@ GibSym gib_global_gensym_counter = 0;
 
 
 
-inline long long gib_get_biginf_init_chunk_size()
+inline long long gib_get_biginf_init_chunk_size(void)
 {
     return gib_global_biginf_init_chunk_size;
 }
 
-inline long long gib_get_inf_init_chunk_size()
+inline long long gib_get_inf_init_chunk_size(void)
 {
     return gib_global_inf_init_chunk_size;
 }
 
-inline GibInt gib_get_size_param()
+inline GibInt gib_get_size_param(void)
 {
     return gib_global_size_param;
 }
 
-inline GibInt gib_get_iters_param()
+inline GibInt gib_get_iters_param(void)
 {
     return gib_global_iters_param;
 }
 
-char *gib_read_bench_prog_param()
+char *gib_read_bench_prog_param(void)
 {
     if (gib_global_benchfile_param == NULL) {
         fprintf(stderr, "gib_read_bench_prog_param: benchmark program was not set! Set using --bench-prog.\n");
@@ -91,7 +91,7 @@ char *gib_read_bench_prog_param()
         return gib_global_benchfile_param;
 }
 
-char *gib_read_benchfile_param()
+char *gib_read_benchfile_param(void)
 {
     if (gib_global_benchfile_param == NULL) {
         fprintf(stderr, "gib_read_benchfile_param: benchmark input file was not set! Set using --bench-input.\n");
@@ -100,7 +100,7 @@ char *gib_read_benchfile_param()
         return gib_global_benchfile_param;
 }
 
-char *gib_read_arrayfile_param()
+char *gib_read_arrayfile_param(void)
 {
     if (gib_global_arrayfile_param == NULL) {
         fprintf(stderr, "gib_read_arrayfile_param: array input file was not set! Set using --array-input.\n");
@@ -109,7 +109,7 @@ char *gib_read_arrayfile_param()
         return gib_global_arrayfile_param;
 }
 
-long long gib_read_arrayfile_length_param()
+long long gib_read_arrayfile_length_param(void)
 {
     if (gib_global_arrayfile_length_param == -1) {
         fprintf(stderr, "gib_read_arrayfile_length_param: array input file length was not set! Set using --array-input-length.\n");
@@ -118,12 +118,12 @@ long long gib_read_arrayfile_length_param()
         return gib_global_arrayfile_length_param;
 }
 
-inline long long gib_read_region_count()
+inline long long gib_read_region_count(void)
 {
     return gib_global_region_count;
 }
 
-inline GibSym gib_read_gensym_counter()
+inline GibSym gib_read_gensym_counter(void)
 {
     return gib_global_gensym_counter;
 }
@@ -184,7 +184,7 @@ GibInt gib_expll(GibInt base, GibInt pow)
 }
 
 // https://www.cprogramming.com/snippets/source-code/find-the-number-of-cpu-cores-for-windows-mac-or-linux
-inline GibInt gib_get_num_processors()
+inline GibInt gib_get_num_processors(void)
 {
 #ifdef _WIN64
     SYSTEM_INFO sysinfo;
@@ -232,7 +232,7 @@ char *gib_global_saved_heap_ptr_stack[100];
 int gib_global_num_saved_heap_ptr = 0;
 
 // For simplicity just use a single large slab:
-inline void gib_init_bumpalloc()
+inline void gib_init_bumpalloc(void)
 {
     gib_global_bumpalloc_heap_ptr = (char*)malloc(gib_global_biginf_init_chunk_size);
     gib_global_bumpalloc_heap_ptr_end = gib_global_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
@@ -258,7 +258,7 @@ void *gib_bumpalloc(long long n)
 }
 
 // Snapshot the current heap pointer value across all threads.
-void gib_save_alloc_state()
+void gib_save_alloc_state(void)
 {
 #ifdef _DEBUG
     printf("Saving(%p): pos %d", heap_ptr, gib_global_num_saved_heap_ptr);
@@ -270,7 +270,7 @@ void gib_save_alloc_state()
 #endif
 }
 
-void gib_restore_alloc_state()
+void gib_restore_alloc_state(void)
 {
     if(gib_global_num_saved_heap_ptr <= 0) {
         fprintf(stderr, "Bad call to gib_restore_alloc_state!  Saved stack empty!\ne");
@@ -286,10 +286,10 @@ void gib_restore_alloc_state()
 
 #else
 // Regular malloc mode:
-void gib_init_bumpalloc() {}
+void gib_init_bumpalloc(void) {}
 void *gib_bumpalloc(long long n) { return malloc(n); }
-void gib_save_alloc_state() {}
-void gib_restore_alloc_state() {}
+void gib_save_alloc_state(void) {}
+void gib_restore_alloc_state(void) {}
 
 #endif // BUMPALLOC
 
@@ -306,7 +306,7 @@ void gib_restore_alloc_state() {}
 __thread char *gib_global_nursery_heap_ptr = (char*)NULL;
 __thread char *gib_global_nursery_heap_ptr_end = (char*)NULL;
 
-void gib_init_nursery()
+void gib_init_nursery(void)
 {
     gib_global_nursery_heap_ptr = (char*)malloc(NURSERY_SIZE);
     if (gib_global_nursery_heap_ptr == NULL) {
@@ -384,7 +384,7 @@ inline void *gib_scoped_alloc(size_t n) { return alloca(n); }
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-inline GibArena *gib_alloc_arena()
+inline GibArena *gib_alloc_arena(void)
 {
     GibArena *ar = gib_alloc(sizeof(GibArena));
     ar->ind = 0;
@@ -446,7 +446,7 @@ inline GibPtr gib_dict_lookup_ptr(GibSymDict *ptr, GibSym key)
  */
 
 
-inline GibSymSet *gib_empty_set()
+inline GibSymSet *gib_empty_set(void)
 {
     return NULL;
 }
@@ -476,7 +476,7 @@ inline GibBool gib_contains_set(GibSymSet *set, int sym)
  */
 
 
-inline GibSymHash *gib_empty_hash()
+inline GibSymHash *gib_empty_hash(void)
 {
     return NULL;
 }
@@ -594,22 +594,20 @@ inline int gib_print_symbol(GibSym idx)
     }
 }
 
+GibSym gib_gensym(void)
+{
+    GibSym idx;
 #ifdef _PARALLEL
-GibSym gib_gensym()
-{
-    GibSym idx = __atomic_add_fetch(&gib_global_gensym_counter, 1, __ATOMIC_SEQ_CST);
-    return idx;
-}
+    idx = __atomic_add_fetch(&gib_global_gensym_counter, 1, __ATOMIC_SEQ_CST);
 #else
-GibSym gib_gensym()
-{
     gib_global_gensym_counter += 1;
-    GibSym idx = gib_global_gensym_counter;
+    idx = gib_global_gensym_counter;
+#endif
     return idx;
 }
-#endif
 
-void gib_free_symtable()
+
+void gib_free_symtable(void)
 {
     GibSymtable *elt, *tmp;
     HASH_ITER(hh, global_sym_table, elt, tmp) {
@@ -930,9 +928,7 @@ void gib_free_region(GibCursor end_reg) {
             for (int i = 0; i < outset_len; i++) {
                 elt_footer = (GibRegionFooter *) outset[i];
                 elt_reg = (GibRegionMeta *) elt_footer->rf_reg_metadata_ptr;
-#ifdef _DEBUG
                 elt_current_refcount = elt_reg->reg_refcount;
-#endif
                 elt_new_refcount = elt_current_refcount - 1;
                 elt_reg->reg_refcount = elt_new_refcount;
 #ifdef _DEBUG
@@ -1022,21 +1018,19 @@ GibBool gib_is_big(GibInt i, GibCursor cur)
     return false;
 }
 
-#ifdef _PARALLEL
-void gib_bump_global_region_count()
+void gib_bump_global_region_count(void)
 {
+#ifdef _PARALLEL
     __atomic_add_fetch(&gib_global_region_count, 1, __ATOMIC_SEQ_CST);
     return;
-}
 #else
-void gib_bump_global_region_count()
-{
     gib_global_region_count++;
+#endif
     return;
 }
-#endif
 
-void gib_print_global_region_count()
+
+void gib_print_global_region_count(void)
 {
     printf("REGION_COUNT: %lld\n", gib_global_region_count);
     return;

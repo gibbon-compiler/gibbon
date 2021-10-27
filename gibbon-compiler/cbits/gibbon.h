@@ -77,22 +77,22 @@ extern GibSym gib_global_gensym_counter;
 
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
-long long gib_get_biginf_init_chunk_size();
-long long gib_get_inf_init_chunk_size();
+long long gib_get_biginf_init_chunk_size(void);
+long long gib_get_inf_init_chunk_size(void);
 
 // Runtime arguments, values updated by the flags parser.
-GibInt gib_get_size_param();
-GibInt gib_get_iters_param();
-char *gib_read_bench_prog_param();
-char *gib_read_benchfile_param();
-char *gib_read_arrayfile_param();
-long long gib_read_arrayfile_length_param();
+GibInt gib_get_size_param(void);
+GibInt gib_get_iters_param(void);
+char *gib_read_bench_prog_param(void);
+char *gib_read_benchfile_param(void);
+char *gib_read_arrayfile_param(void);
+long long gib_read_arrayfile_length_param(void);
 
 // Number of regions allocated.
-long long gib_read_region_count();
+long long gib_read_region_count(void);
 
 // Invariant: should always be equal to max(sym_table_keys).
-GibSym gib_read_gensym_counter();
+GibSym gib_read_gensym_counter(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -105,7 +105,7 @@ double gib_avg(const double* arr, int n);
 double gib_difftimespecs(struct timespec *t0, struct timespec *t1);
 int gib_compare_doubles(const void *a, const void *b);
 GibInt gib_expll(GibInt base, GibInt pow);
-GibInt gib_get_num_processors();
+GibInt gib_get_num_processors(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -129,10 +129,10 @@ GibInt gib_get_num_processors();
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-void gib_init_bumpalloc();
+void gib_init_bumpalloc(void);
 void *gib_bumpalloc(long long n);
-void gib_save_alloc_state();
-void gib_restore_alloc_state();
+void gib_save_alloc_state(void);
+void gib_restore_alloc_state(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -142,7 +142,7 @@ void gib_restore_alloc_state();
  */
 
 
-void gib_init_nursery();
+void gib_init_nursery(void);
 void *gib_alloc_in_nursery(long long n);
 
 
@@ -167,7 +167,7 @@ typedef struct gib_arena {
   void *reflist;
 } GibArena;
 
-GibArena *gib_alloc_arena();
+GibArena *gib_alloc_arena(void);
 void gib_free_arena(GibArena *ar);
 GibCursor gib_extend_arena(GibArena *ar, int size);
 
@@ -200,7 +200,7 @@ typedef struct gib_symset {
 } GibSymSet;
 
 
-GibSymSet *gib_empty_set();
+GibSymSet *gib_empty_set(void);
 GibSymSet *gib_insert_set(GibSymSet *set, int sym);
 GibBool gib_contains_set(GibSymSet *set, int sym);
 
@@ -220,7 +220,7 @@ struct gib_sym_hash {
 typedef struct gib_sym_hash GibSymHash;
 typedef struct gib_sym_hash GibIntHash;
 
-GibSymHash *gib_empty_hash();
+GibSymHash *gib_empty_hash(void);
 GibSymHash *gib_insert_hash(GibSymHash *hash, int k, int v);
 GibSym gib_lookup_hash(GibSymHash *hash, int k);
 GibBool gib_contains_hash(GibSymHash *hash, int sym);
@@ -246,8 +246,8 @@ void gib_set_comma(GibSym idx);
 void gib_set_leftparen(GibSym idx);
 void gib_set_rightparen(GibSym idx);
 int gib_print_symbol(GibSym idx);
-GibSym gib_gensym();
-void gib_free_symtable();
+GibSym gib_gensym(void);
+void gib_free_symtable(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -290,8 +290,8 @@ uint gib_get_ref_count(GibCursor end_ptr);
 void gib_bump_refcount(GibCursor end_b, GibCursor end_a);
 void gib_free_region(GibCursor end_reg);
 GibBool gib_is_big(GibInt i, GibCursor cur);
-void gib_bump_global_region_count();
-void gib_print_global_region_count();
+void gib_bump_global_region_count(void);
+void gib_print_global_region_count(void);
 
 
 
@@ -366,7 +366,7 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-void hello_rust();
+void hello_rust(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -376,7 +376,7 @@ void hello_rust();
 
 
 // This function must be provided by the code generator.
-int gib_main_expr();
+int gib_main_expr(void);
 
 int main(int argc, char** argv);
 
