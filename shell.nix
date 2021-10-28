@@ -17,6 +17,7 @@ let
   ghc = pkgs.haskell.compiler.ghc865;
   ghc901 = pkgs.haskell.compiler.ghc901;
   rust = (pkgs.rustChannelOf { rustToolchain = ./gibbon-rts/rust-toolchain; }).rust;
+  gibbon_dir = builtins.toString ./.;
 in
   with pkgs;
   stdenv.mkDerivation {
@@ -24,4 +25,8 @@ in
     buildInputs = [ ghc ghc901 gcc7 which boehmgc uthash racket cabal-install ghcid
                     gdb valgrind stack stdenv ncurses unzip rr rust
                   ];
+    shellHook = ''
+      export GIBBONDIR=${gibbon_dir} \
+             GIBBON_NEWRTS_DIR="${gibbon_dir}/gibbon-rts"
+    '';
   }
