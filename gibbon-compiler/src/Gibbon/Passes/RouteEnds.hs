@@ -398,10 +398,10 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
             return $ LetE (v,ls,ty,e1) e2'
 
           LetE (v,ls,ty,e1@MkProdE{}) e2 -> do
-            LetE (v,ls,ty,e1) <$> go e2
+            LetE (v,ls,ty,e1) <$> exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) e2
 
           LetE (v,ls,ty,e1@(PrimAppE (DictLookupP _) _)) e2 -> do
-            LetE (v,ls,ty,e1) <$> go e2
+            LetE (v,ls,ty,e1) <$> exp fns retlocs eor lenv afterenv (extendVEnv v ty env2) e2
 
           --
 

@@ -714,7 +714,7 @@ cursorizeAppE ddfs fundefs denv tenv senv ex =
                             then fromDi <$> cursorizePackedExp ddfs fundefs denv tenv senv a
                             else cursorizeExp ddfs fundefs denv tenv senv a)
                  (zip in_tys args)
-      starts <- pure $ map (uncurry giveStarts) (zip argTys args')
+      let starts = zipWith giveStarts argTys args'
       case locs of
         [] -> return $ AppE f [] starts
         _  -> return $ AppE f [] ([VarE loc | loc <- outs] ++ starts)
@@ -1395,12 +1395,8 @@ giveStarts :: Ty2 -> Exp3 -> Exp3
 giveStarts ty e =
   case ty of
     PackedTy{} -> mkProj 0 e
-    ProdTy tys -> case e of
-                    MkProdE es -> MkProdE $ L.map (\(ty',e') -> giveStarts ty' e') (zip tys es)
-                    VarE{} -> MkProdE $ L.map (\(ty',n) -> giveStarts ty' (mkProj n e)) (zip tys [0..])
-                    -- This doesn't look right..
-                    ProjE n x -> giveStarts (tys !! n) (mkProj 0 (mkProj n x))
-                    oth -> error $ "giveStarts: unexpected expresson" ++ sdoc (oth,ty)
+    -- NOTE : mkProj . MkProdE == id
+    ProdTy tys -> MkProdE $ zipWith (\ ty' n -> giveStarts ty' (mkProj n e)) tys [0..]
     _ -> e
 
 

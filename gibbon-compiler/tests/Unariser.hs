@@ -19,7 +19,7 @@ import Gibbon.Passes.Unariser
 
 
 run :: Exp3 -> Exp3
-run x = fst $ defaultRunPassM $ unariserExp undefined [] (Env2 M.empty M.empty) x
+run x = fst $ defaultRunPassM $ unariserExp False undefined [] (Env2 M.empty M.empty) x
 
 case_t1 :: Assertion
 case_t1 = expected @=? actual

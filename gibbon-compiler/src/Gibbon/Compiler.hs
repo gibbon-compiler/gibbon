@@ -209,7 +209,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
   let initTypeChecked :: L0.Prog0
       initTypeChecked =
         -- We typecheck first to turn the appropriate VarE's into FunRefE's.
-        fst $ runPassM defaultConfig 0
+        fst $ runPassM defaultConfig cnt0
                 (freshNames l0 >>=
                  (\fresh -> dbgTrace 5 ("\nFreshen:\n"++sepline++ "\n" ++pprender fresh) (L0.tcProg fresh)))
 
@@ -238,7 +238,7 @@ compile config@Config{mode,input,verbosity,backend,cfile} fp0 = do
       let outfile = getOutfile backend fp cfile
 
       -- run the initial program through the compiler pipeline
-      stM <- return $ passes config' l0
+      let stM = passes config' l0
       l4  <- evalStateT stM (CompileState {cnt=cnt0, result=initResult})
 
       if mode == Interp2
@@ -327,8 +327,7 @@ parseInput cfg ip fp = do
                           show oth++"  Please specify compile input format."
   let l0' = do parsed <- l0
                -- dbgTraceIt (sdoc parsed) (pure ())
-               desugared <- HS.desugarLinearExts parsed
-               pure desugared
+               HS.desugarLinearExts parsed
   (l0'', cnt) <- pure $ runPassM defaultConfig 0 l0'
   pure ((l0'', cnt), f)
 

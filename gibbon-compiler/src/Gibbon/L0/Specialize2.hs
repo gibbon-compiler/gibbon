@@ -18,11 +18,9 @@ module Gibbon.L0.Specialize2
 
 import           Control.Monad.State
 import           Data.Foldable ( foldlM )
--- import           Data.Functor.Foldable
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           GHC.Stack (HasCallStack)
-import           Data.List (zip3)
 import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
@@ -30,7 +28,6 @@ import           Gibbon.Pretty
 import           Gibbon.L0.Syntax
 import           Gibbon.L0.Typecheck
 import qualified Gibbon.L1.Syntax as L1
-
 --------------------------------------------------------------------------------
 
 {-
@@ -307,7 +304,7 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
                   funBody'' <- monoLambdas funBody'
                   mono_st <- get
                   assertLambdasMonomorphized mono_st
-                  let fn' = fn { funBody = funBody'', funTy = (ForAll tyvars (ArrowTy as' b'))}
+                  let fn' = fn { funBody = funBody'', funTy = ForAll tyvars (ArrowTy as' b')}
                   pure $ M.insert funName fn' funs)
             mono_funs
             (M.elems mono_funs)
@@ -323,8 +320,7 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
         let p3' = updateTyCons mono_st p3
         -- Important; p3 is not type-checkable until updateTyCons runs.
         -- Step (4)
-        p4 <- lift $ tcProg p3'
-        pure p4
+        lift $ tcProg p3'
 
   (p4,_) <- runStateT mono_m emptyMonoState
 
@@ -332,8 +328,7 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
   let p5  = purgePolyDDefs p4
   let p5' = purgePolyFuns p5
   -- Step (6)
-  p6 <- tcProg p5'
-  pure p6
+  tcProg p5'
   where
     toplevel = M.keysSet fundefs
 

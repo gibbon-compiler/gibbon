@@ -218,7 +218,6 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
                       AfterConstantLE _ lc   -> renv # lc
                       AfterVariableLE _ lc _ -> renv # lc
                       FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
-                      FreeLE -> error "threadRegions: FreeLE"
           Ext <$> LetLocE loc rhs <$>
             threadRegionsExp ddefs fundefs isMain (M.insert loc reg renv) env2 lfenv bod
 

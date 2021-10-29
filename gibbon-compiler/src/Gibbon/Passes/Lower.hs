@@ -265,6 +265,7 @@ printTy pkd ty trvs =
       in \t -> T.IfT trv (prntBool truePrinted $ t) (prntBool falsePrinted $ t)
 
     (ProdTy [], _) -> printString "'#()"
+    (ProdTy{}, [T.ProdTriv trvs]) -> printTy pkd ty trvs
     (ProdTy tys, _) ->
       let printTupStart = printString "'#("
           (bltrvs,ltrv) = (init trvs, last trvs)

@@ -157,7 +157,7 @@ exp ddfs env2 e0 =
     -- unneccessary bloat where we can ill afford it:
     ProjE ix (MkProdE ls) -> do
       -- dbgTrace 5 (" [flatten] Reducing project-of-tuple, index "++show ix++
-      --             " expr:  "++take 80 (show l)++"...")
+      --             " expr:  "++take 80 (show ls)++"...")
       (bnd,rhs) <- go (ls !! ix)
       return (bnd, rhs)
 

@@ -7,6 +7,7 @@ import qualified Data.List as L
 import Gibbon.Common
 import Gibbon.L1.Syntax
 import Gibbon.L3.Syntax
+import Gibbon.Passes.Flatten()
 
 
 -- | This pass gets ready for Lower by converting most uses of
@@ -26,12 +27,22 @@ import Gibbon.L3.Syntax
 -- are all of the form `ProjE i (VarE v)` and they are then
 -- transformed to varrefs in lower.
 --
+-- [Aditya Gupta, Oct 2021]
+-- NOTE: I am limiting flattening to only intermediate expressions. i.e. the tail value
+-- of main expression is a terminal expression and shouldn't be flattened.
+-- We can recursively propagate terminality based on expression type. This way all intermediate
+-- expressions will enjoy benefit from flattening, but we still retain same output for terminal expressions.
+-- We can have a separate function to recover after unarising but that won't have the env2/ddefs values
+-- and we won't be able to fuse it into unariser cases. But on the other hands, defining a separate function 
+-- can eliminate missed cases, but there are only few, so combining recovering terminal expressions in unariser
+-- seems best.
 
 unariser :: Prog3 -> PassM Prog3
 unariser Prog{ddefs,fundefs,mainExp} = do
   mn <- case mainExp of
-          Just (m,t) -> do m' <- unariserExp ddefs [] (Env2 M.empty funEnv) m
-                           return $ Just (m', flattenTy t)
+          -- type should remain same and main output is a terminal expression
+          Just (m,t) -> do m' <- unariserExp True ddefs [] (Env2 M.empty funEnv) m
+                           return $ Just (m', t)
           Nothing -> return Nothing
   fds' <- mapM unariserFun fundefs
   return $ Prog ddefs fds' mn
@@ -57,7 +68,8 @@ unariser Prog{ddefs,fundefs,mainExp} = do
           fn = f { funTy = (in_tys', out_ty')
                  , funBody = fun_body }
           env2 = Env2 (M.fromList $ zip  funArgs in_tys) funEnv
-      bod <- unariserExp ddefs [] env2 funBody
+      -- all function bodies are intermediate expressions
+      bod <- unariserExp False ddefs [] env2 funBody
       return $ fn { funBody = bod }
 
 
@@ -65,45 +77,52 @@ unariser Prog{ddefs,fundefs,mainExp} = do
 -- perform, from left to right.
 type ProjStack = [Int]
 
-unariserExp :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> Exp3 -> PassM Exp3
-unariserExp ddfs stk env2 ex =
+unariserExp :: Bool -> DDefs Ty3 -> ProjStack -> Env2 Ty3 -> Exp3 -> PassM Exp3
+unariserExp isTerminal ddfs stk env2 ex =
   case ex of
     LetE (v,locs,ty,rhs) bod ->
-      LetE <$> (v,locs,flattenTy ty,)
-           <$> go env2 rhs
-           <*> go (extendVEnv v ty env2) bod
+      LetE . (v,locs, flattenTy ty,)
+        <$> go False env2 rhs
+        <*> go isTerminal (extendVEnv v ty env2) bod
 
     MkProdE es ->
-      case stk of
-        [] -> flattenProd ddfs stk env2 ex
-        (ix:s') -> unariserExp ddfs s' env2 (es ! ix)
+      -- if terminal, don't flatten product
+      if isTerminal then pure $ recover0 ex else
+        case stk of
+          [] -> flattenProd ddfs stk env2 ex
+          (ix:s') -> unariserExp False ddfs s' env2 (es ! ix)
 
     -- When projecting a value out of a nested tuple, we have to update the index
     -- to match the flattened representation. And if the ith projection was a
     -- product before, we have to reconstruct it here, since it will be flattened
     -- after this pass.
+    -- 
+    -- if it's a terminal expression, then ith projection should be a terminal, 
+    -- we can reuse reconstruciton logic.
     ProjE i e ->
       case e of
-        MkProdE ls -> go env2 (ls ! i)
+        MkProdE ls -> go isTerminal env2 (ls ! i)
         _ -> do
-          let ety = gRecoverType ddfs env2 e
-              j   = flatProjIdx i ety
-              ity = projTy i ety
-              fty = flattenTy ity
-          e' <- go env2 e
+          let ety = gRecoverType ddfs env2 e -- type before flattening
+              j   = flatProjIdx i ety -- index in flattened type
+              ity = projTy i ety -- ith index type before flattening
+              fty = flattenTy ity -- jth index type in flattened
+          e' <- go False env2 e -- recusrively unarise, but since this is an intermediate value, we can flatten it
           case e' of
-            MkProdE xs -> return $ (xs ! j)
+            -- if we get a product after flattening, get jth element of flattened element
+            MkProdE xs -> return (xs ! j)
             _ ->
+              -- otherwise, check jth element
              case fty of
-               -- reconstruct
+               -- reconstruct, in case of nested tuple (whether terminal or not)
                ProdTy tys -> do
-                 return $ MkProdE (map (\k -> ProjE k e') [j..(j+(length tys)-1)])
+                 return $ MkProdE (map (\k -> ProjE k e') [j..(j+length tys-1)])  
+               -- if not a tuple, take projection
                _ -> return $ ProjE j e'
 
 
     -- Straightforward recursion
-    --
-    VarE{} -> return $ discharge stk ex
+    VarE{} -> return . (if isTerminal then recover0 else id) $ discharge stk ex
 
     LitE{} ->
       case stk of
@@ -120,50 +139,60 @@ unariserExp ddfs stk env2 ex =
         [] -> return ex
         _  -> error $ "Impossible. Non-empty projection stack on LitSymE "++show stk
 
-    AppE v locs args -> discharge stk <$>
-                        (AppE v locs <$> mapM (go env2) args)
+    -- For function output, we need to recover the application nto the arguments
+    AppE v locs args -> do
+      exp0 <- discharge stk <$> (AppE v locs <$> mapM (go False env2) args)
+      if isTerminal
+        then do
+          tmp <- gensym "tmp_app"
+          let ty' = gRecoverType ddfs env2 exp0
+          return $ LetE (tmp, [], flattenTy ty', exp0) (recover (VarE tmp) ty')
+        else
+          pure exp0
 
-    PrimAppE pr args -> discharge stk <$>
-                        (PrimAppE pr <$> mapM (go env2) args)
+    PrimAppE pr args -> discharge stk <$> (PrimAppE pr <$> mapM (go False env2) args)
 
-    IfE a b c  -> IfE <$> go env2 a <*> go env2 b <*> go env2 c
+    -- condition is an intermediate expression, we only care about then and else branches as terminal expressions
+    IfE a b c  -> IfE <$> go False env2 a <*> go isTerminal env2 b <*> go isTerminal env2 c
 
     CaseE e ls -> do
       -- Add pattern matched vars to the environment
+      -- data constructor arguments are also terminal
       let f dcon vlocs = extendsVEnv (M.fromList $ zip (map fst vlocs) (lookupDataCon ddfs dcon)) env2
-      CaseE <$> go env2 e <*> sequence [ (k,ls',) <$> go (f k ls') x | (k,ls',x) <- ls ]
+      CaseE <$> go False env2 e <*> sequence [ (k,ls',) <$> go isTerminal (f k ls') x | (k,ls',x) <- ls ]
 
     DataConE loc dcon args ->
       case stk of
+        -- data constructor arguments are also terminal
         [] -> discharge stk <$>
-              (DataConE loc dcon <$> mapM (go env2) args)
+              (DataConE loc dcon <$> mapM (go isTerminal env2) args)
         _  -> error $ "Impossible. Non-empty projection stack on DataConE "++show stk
 
     TimeIt e ty b -> do
       tmp <- gensym $ toVar "timed"
-      e'  <- go env2 e
+      e'  <- go isTerminal env2 e
       return $ LetE (tmp,[],flattenTy ty, TimeIt e' ty b) (VarE tmp)
 
-    WithArenaE v e -> WithArenaE v <$> go env2 e
+    WithArenaE v e -> WithArenaE v <$> go isTerminal env2 e
 
     SpawnE v locs args -> discharge stk <$>
-                            (SpawnE v locs <$> mapM (go env2) args)
+                            (SpawnE v locs <$> mapM (go False env2) args)
 
     SyncE -> pure SyncE
 
     Ext (RetE ls) -> do
-      (MkProdE ls1) <- go env2 (MkProdE ls)
+      (MkProdE ls1) <- go isTerminal env2 (MkProdE ls)
       pure $ Ext $ RetE ls1
 
     Ext (LetAvail vs bod) -> do
-        bod' <- go env2 bod
+        bod' <- go isTerminal env2 bod
         return$ Ext $ LetAvail vs bod'
     Ext{}   -> return ex
     MapE{}  -> error "unariserExp: MapE TODO"
     FoldE{} -> error "unariserExp: FoldE TODO"
 
   where
-    go = unariserExp ddfs stk
+    go isTerminal' = unariserExp isTerminal' ddfs stk
 
     -- | Reify a stack of projections.
     discharge :: [Int] -> Exp3 -> Exp3
@@ -171,13 +200,34 @@ unariserExp ddfs stk env2 ex =
     discharge (ix:rst) ((MkProdE ls)) = discharge rst (ls ! ix)
     discharge (ix:rst) e = discharge rst (ProjE ix e)
 
+    recover0 ex0 = let ty = gRecoverType ddfs env2 ex0 in recover ex0 ty
+    recover :: Exp3 -> Ty3 -> Exp3
+    recover ex0 (ProdTy tys) =
+      mkProd . fst $ recover' 0 ex0 tys
+    recover ex0 _ = ex0
+    recover' :: Int -> Exp3 -> [Ty3] -> ([Exp3], Int)
+    recover' idx _ [] = ([], idx)
+    recover' _ ex0@(MkProdE xs) tys =
+      if length xs == length tys then (zipWith recover xs tys, undefined)
+      else error $ "recover': unmatched expression " ++ sdoc ex0 ++ " for type " ++ sdoc tys
+    recover' idx ex0 (ty:tys)=
+      case ty of
+        ProdTy tys' ->
+          let (res, idx') = recover' idx ex0 tys'
+              (res', idx'') = recover' idx' ex0 tys
+          in  (mkProd res:res', idx'')
+        _ ->
+          let (res, idx') = recover' (idx+1) ex0 tys
+          in  (mkProj idx ex0:res, idx')
+
+
     ls ! i = if i <= length ls
              then ls!!i
              else error$ "unariserExp: attempt to project index "++show i++" of list:\n "++sdoc ls
 
 
 -- | Flatten nested tuples
-flattenProd :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> Exp3 -> PassM (Exp3)
+flattenProd :: DDefs Ty3 -> ProjStack -> Env2 Ty3 -> Exp3 -> PassM Exp3
 flattenProd ddfs stk env2 ex =
   case ex of
     MkProdE{} -> do
@@ -212,9 +262,9 @@ flattenProd ddfs stk env2 ex =
           es' <- go2 ts es
           return $ fs ++ es'
         (_ty, ProjE{}) -> do
-          e' <- unariserExp ddfs stk env2 e
+          e' <- unariserExp False ddfs stk env2 e
           es' <- go2 ts es
-          return $ [e'] ++ es'
+          return $ e': es'
         _ -> ([e] ++) <$> go2 ts es
     go2 ts es = error $ "Unexpected input: " ++ sdoc ts ++ " " ++ sdoc es
 
@@ -269,7 +319,7 @@ flattenExp v ty bod =
           projections _ acc = [acc]
 
           projs = projections ty []
-          substs = map (\ps -> (foldr (\i acc -> ProjE i acc) (VarE v) ps,
+          substs = map (\ps -> (foldr ProjE (VarE v) ps,
                                 ProjE (sum ps) (VarE v)))
                    projs
           -- FIXME: This is in-efficient because of the substE ?

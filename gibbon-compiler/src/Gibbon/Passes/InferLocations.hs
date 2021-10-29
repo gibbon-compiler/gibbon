@@ -556,25 +556,23 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                             (return (e',ty',[]))
                             (copy (e',ty,[]) d)
 
-    ProjE i (VarE v) ->
-        let ProdTy tys = lookupVEnv v env
-            ty = tys !! i
-            e' = ProjE i (VarE v)
-        in case dest of
-             NoDest -> return (e', ty, [])
-             TupleDest ds -> err $ "TODO: handle tuple of destinations for ProjE"
-             SingleDest d -> do
-                  loc <- case ty of
-                           PackedTy _ lv -> return lv
-                           _ -> lift $ lift $ freshLocVar "imm"
-                  let ty' = case ty of
-                              PackedTy k lv -> PackedTy k d
-                              t -> t
-                  unify d loc
-                            (return (e',ty',[]))
-                            (copy (e',ty,[]) d)
-
-    ProjE{} -> err$ "Invalid tuple projection: " ++ (show ex0)
+    ProjE i w -> do
+        (e', ty) <- case w of 
+          VarE v -> pure (ProjE i (VarE v), let ProdTy tys = lookupVEnv v env in tys !! i)
+          w' -> (\(e, b, _) -> (e, b)) <$> inferExp env w dest
+        case dest of
+            NoDest -> return (e', ty, [])
+            TupleDest ds -> err "TODO: handle tuple of destinations for ProjE"
+            SingleDest d -> do
+                loc <- case ty of
+                          PackedTy _ lv -> return lv
+                          _ -> lift $ lift $ freshLocVar "imm"
+                let ty' = case ty of
+                            PackedTy k lv -> PackedTy k d
+                            t -> t
+                unify d loc
+                          (return (e',ty',[]))
+                          (copy (e',ty,[]) d)
 
     MkProdE ls ->
       case dest of

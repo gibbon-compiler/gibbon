@@ -15,7 +15,6 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import           Text.PrettyPrint hiding ( (<>) )
 import           Text.PrettyPrint.GenericPretty
-
 #if !MIN_VERSION_base(4,11,0)
 import           Data.Semigroup
 #endif
@@ -41,13 +40,20 @@ tcProg :: Prog0 -> PassM Prog0
 tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   let init_fenv = M.map funTy fundefs
   fundefs_tc <- mapM (tcFun ddefs init_fenv) fundefs
+  -- generalize top level functions, e.g. `foo x = x :: $0 -> $0` to `foo x = x :: forall x. x -> x`
+  fundefs' <-  mapM (\fndef -> do
+                              fnty'' <- either (error . render) id <$> runTcM (snd <$> generalize M.empty emptySubst [] (tyFromScheme (funTy fndef)))
+                              pure $ fndef {funTy = fnty''}
+                           ) fundefs_tc
+  let fenv = M.map funTy fundefs'
   -- Run the typechecker on the expression, and update it's type in the program
   -- (the parser initializes the main expression with the void type).
   mainExp' <- case mainExp of
                 Nothing -> pure Nothing
                 Just (e,gvn_main_ty) -> do
-                  let tc = do (s1, drvd_main_ty, e_tc) <-
-                                tcExp ddefs emptySubst M.empty init_fenv [] True e
+                  let tc = do 
+                              (s1, drvd_main_ty, e_tc) <-
+                                tcExp ddefs emptySubst M.empty fenv [] True e
                               s2 <- unify e gvn_main_ty drvd_main_ty
                               -- let e_tc' = fixTyApps s1 e_tc
                               pure (s1 <> s2, zonkTy s2 drvd_main_ty, e_tc)
@@ -55,7 +61,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
                   case res of
                     Left er -> error (render er)
                     Right (_s, ty, e_tc) -> pure $ Just (e_tc, ty)
-  pure prg { fundefs = fundefs_tc
+  pure prg { fundefs = fundefs'
            , mainExp = mainExp' }
 
 tcFun :: DDefs0 -> Gamma -> FunDef0 -> PassM FunDef0
@@ -748,7 +754,7 @@ tcCases ddefs sbst venv fenv bound_tyvars ddf brs is_main ex = do
 -- type variables.
 instantiate :: TyScheme -> TcM ([Ty0], Ty0)
 instantiate (ForAll tvs ty) = do
-  tvs' <- mapM (\_ -> newMetaTy) tvs
+  tvs' <- mapM (const newMetaTy) tvs
   let ty' = substTyVar (M.fromList $ zip tvs tvs') ty
   pure (tvs', ty')
 
@@ -764,7 +770,6 @@ generalize env s bound_tyvars ty = do
 
       -- Generalize over BoundTv's too.
       free_tvs = (tyVarsInTy ty) \\ bound_tyvars
-
   pure (s <> s2, ForAll (new_bndrs ++ free_tvs) ty')
   where
     env_tvs = metaTvsInTySchemes (M.elems env)
@@ -821,9 +826,23 @@ newtype Subst = Subst (M.Map MetaTv Ty0)
 
 instance Semigroup Subst where
   -- s1 <> s2 == zonkTy s1 . zonkTy s2
-  (Subst s1) <> (Subst s2) =
-    let mp = M.map (zonkTy (Subst s1)) s2 `M.union` s1
+  (Subst s1) <> (Subst s2) = 
+    let s2' = M.map (zonkTy (Subst s1)) s2
+        mp =  M.unionWith combine s2' s1
     in Subst mp
+
+-- | Combine substitutions. In case of substitutions with intersecting keys, 
+-- we will take the narrower type of the two. e.g. combine [($1, $2)] [($1, IntTy)] 
+-- should be [($1, IntTy)]. Map.union does a left biased union so it will result in [($1, $2)]
+combine :: Ty0 -> Ty0 -> Ty0
+combine v1 v2 | v1 == v2 = v1
+              | otherwise = case (v1, v2) of
+                (MetaTv _, _) -> v2
+                (_, MetaTv _) -> v1
+                (ArrowTy xs y, ArrowTy xs' y') -> ArrowTy (zipWith combine xs xs') (combine y y')
+                (VectorTy v1', VectorTy v2') -> VectorTy $ combine v1' v2'
+                _ -> error $ "Failed to combine v1 = " ++ sdoc v1 ++ " with v2 = " ++ sdoc v2
+
 
 emptySubst :: Subst
 emptySubst = Subst (M.empty)
