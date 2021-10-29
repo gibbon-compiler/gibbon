@@ -1,6 +1,8 @@
-// The Gibbon runtime system.
+//! The Gibbon runtime system.
 
-#[no_mangle]
-pub extern "C" fn hello_rust() {
-    println!("Hello from new RTS!");
-}
+// Required to initialize the thread-local nursery in mem.rs.
+#![feature(once_cell)]
+#![feature(thread_local)]
+
+pub mod ffi;
+mod mem;

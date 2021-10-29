@@ -208,7 +208,7 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) =
                Just (PrintExp t) -> codegenTail M.empty init_fun_env sort_fns t IntTy []
                _ -> pure []
         let bod = mkSymTable ++ e
-        pure $ C.FuncDef [cfun| int gib_main_expr() { $items:bod } |] noLoc
+        pure $ C.FuncDef [cfun| int gib_main_expr(void) { $items:bod } |] noLoc
 
       codegenFun' :: FunDecl -> PassM C.Func
       codegenFun' (FunDecl nam args ty tal _) =
@@ -293,7 +293,7 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) =
           (M.toList sym_tbl)
 
       hashIncludes =
-        "// Gibbon program.\n\n\
+        "/* Gibbon program. */\n\n\
         \#include \"gibbon.h\"\n\n\
         \#include <assert.h>\n\
         \#include <stdio.h>\n\
@@ -322,9 +322,10 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) =
         \#include <cilk/cilk.h>\n\
         \#include <cilk/cilk_api.h>\n\
         \#endif\n\n\
-        \// -----------------------------------------------------------------------------\n\
-        \// Program starts here\n\
-        \// -----------------------------------------------------------------------------\n\n"
+        \/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
+        \ * Program starts here\n\
+        \ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
+        \ */\n\n"
 
 makeStructs :: [[Ty]] -> [C.Definition]
 makeStructs [] = []
@@ -1114,8 +1115,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  GetCilkWorkerNum -> do
                    let [(outV, IntTy)] = bnds
-                       e = [cexp| __cilkrts_get_worker_number() |]
-                   return $ [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:outV = $exp:e; |] ]
+                   return $ [ C.BlockDecl [cdecl| int $id:outV = __cilkrts_get_worker_number(); |] ]
 
                  IsBig -> do
                    let [(outV, BoolTy)] = bnds

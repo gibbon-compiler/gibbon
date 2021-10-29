@@ -42,9 +42,9 @@
 
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
-long long gib_global_biginf_init_chunk_size = 4 * GB;
-long long gib_global_inf_init_chunk_size = 1 * KB;
-const long long gib_global_max_chunk_size = (1 * GB);
+unsigned long long gib_global_biginf_init_chunk_size = 4 * GB;
+unsigned long long gib_global_inf_init_chunk_size = 1 * KB;
+const unsigned long long gib_global_max_chunk_size = (1 * GB);
 
 // Runtime arguments, values updated by the flags parser.
 GibInt gib_global_size_param = 1;
@@ -62,12 +62,12 @@ GibSym gib_global_gensym_counter = 0;
 
 
 
-inline long long gib_get_biginf_init_chunk_size(void)
+inline unsigned long long gib_get_biginf_init_chunk_size(void)
 {
     return gib_global_biginf_init_chunk_size;
 }
 
-inline long long gib_get_inf_init_chunk_size(void)
+inline unsigned long long gib_get_inf_init_chunk_size(void)
 {
     return gib_global_inf_init_chunk_size;
 }
@@ -684,7 +684,7 @@ void gib_free_symtable(void)
 
 */
 
-GibRegionMeta *gib_alloc_region(long long size)
+GibRegionMeta *gib_alloc_region(unsigned long long size)
 {
     // Allocate the region metadata.
     GibRegionMeta *reg = gib_alloc(sizeof(GibRegionMeta));
@@ -740,7 +740,7 @@ GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
 {
     // Get size from current footer.
     GibRegionFooter *footer = (GibRegionFooter *) end_old_chunk;
-    long long newsize = footer->rf_size * 2;
+    unsigned long long newsize = footer->rf_size * 2;
     // See #110.
     if (newsize > gib_global_max_chunk_size) {
         newsize = gib_global_max_chunk_size;
@@ -794,7 +794,7 @@ inline void gib_bump_refcount(GibCursor end_b, GibCursor end_a)
     GibRegionMeta *reg_b = (GibRegionMeta *) footer_b->rf_reg_metadata_ptr;
 
     // Bump A's refcount.
-    uint current_refcount, new_refcount;
+    unsigned short int current_refcount, new_refcount;
     current_refcount = reg_a->reg_refcount;
     new_refcount = current_refcount + 1;
     reg_a->reg_refcount = new_refcount;
@@ -827,7 +827,7 @@ void gib_free_region(GibCursor end_reg) {
     GibCursor first_chunk, next_chunk;
 
     // Decrement current reference count.
-    uint current_refcount, new_refcount;
+    unsigned short int current_refcount, new_refcount;
     current_refcount = reg->reg_refcount;
     new_refcount = 0;
     if (current_refcount != 0) {
@@ -850,14 +850,14 @@ void gib_free_region(GibCursor end_reg) {
         // Decrement refcounts, free regions with refcount==0 and also free
         // elements of the outset.
         if (reg->reg_outset_len != 0) {
-            uint outset_len = reg->reg_outset_len;
+            unsigned short int outset_len = reg->reg_outset_len;
             GibCursor *outset = reg->reg_outset;
             GibRegionFooter *elt_footer;
             GibRegionMeta *elt_reg;
-            uint elt_current_refcount, elt_new_refcount;
+            unsigned short int elt_current_refcount, elt_new_refcount;
             GibCursor to_be_removed[MAX_OUTSET_LENGTH];
-            uint to_be_removed_idx = 0;
-            for (uint i = 0; i < outset_len; i++) {
+            unsigned short int to_be_removed_idx = 0;
+            for (unsigned short int i = 0; i < outset_len; i++) {
                 elt_footer = (GibRegionFooter *) outset[i];
                 elt_reg = (GibRegionMeta *) elt_footer->rf_reg_metadata_ptr;
                 elt_current_refcount = elt_reg->reg_refcount;
@@ -878,7 +878,7 @@ void gib_free_region(GibCursor end_reg) {
                 to_be_removed_idx++;
             }
             // Remove elements from the outset.
-            for (uint i = 0; i < to_be_removed_idx; i++) {
+            for (unsigned short int i = 0; i < to_be_removed_idx; i++) {
                 gib_remove_from_outset(to_be_removed[i], reg);
             }
         }
@@ -936,9 +936,9 @@ void gib_free_region(GibCursor end_reg) {
 
 void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
 {
-    uint outset_len = reg->reg_outset_len;
+    unsigned short int outset_len = reg->reg_outset_len;
     // Check for duplicates.
-    for (uint i = 0; i < outset_len; i++) {
+    for (unsigned short int i = 0; i < outset_len; i++) {
         if (ptr == reg->reg_outset[i]) {
             return;
         }
@@ -950,9 +950,9 @@ void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
 }
 
 void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg) {
-    uint outset_len = reg->reg_outset_len;
+    unsigned short int outset_len = reg->reg_outset_len;
     GibCursor *outset = reg->reg_outset;
-    uint i;
+    unsigned short int i;
     if (outset_len == 0) {
         fprintf(stderr, "gib_remove_from_outset: empty outset\n");
         exit(1);
@@ -988,7 +988,7 @@ GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
     return NULL;
 }
 
-inline uint gib_get_ref_count(GibCursor end_ptr)
+inline unsigned short int gib_get_ref_count(GibCursor end_ptr)
 {
     GibRegionFooter *footer = (GibRegionFooter *) end_ptr;
     GibRegionMeta *reg = (GibRegionMeta *) footer->rf_reg_metadata_ptr;

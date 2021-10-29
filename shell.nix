@@ -23,7 +23,8 @@ in
   stdenv.mkDerivation {
     name = "basicGibbonEnv";
     buildInputs = [ ghc ghc901 gcc7 which boehmgc uthash racket cabal-install ghcid
-                    gdb valgrind stack stdenv ncurses unzip rr rust
+                    gdb valgrind stack stdenv ncurses unzip rr
+                    rust rustfmt clippy
                   ];
     shellHook = ''
       export GIBBONDIR=${gibbon_dir} \
