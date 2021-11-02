@@ -84,11 +84,11 @@ inline GibInt gib_get_iters_param(void)
 
 char *gib_read_bench_prog_param(void)
 {
-    if (gib_global_benchfile_param == NULL) {
+    if (gib_global_bench_prog_param == NULL) {
         fprintf(stderr, "gib_read_bench_prog_param: benchmark program was not set! Set using --bench-prog.\n");
         exit(1);
     } else
-        return gib_global_benchfile_param;
+        return gib_global_bench_prog_param;
 }
 
 char *gib_read_benchfile_param(void)
