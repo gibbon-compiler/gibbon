@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
 #include <string.h>
@@ -42,9 +43,9 @@
 
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
-unsigned long long gib_global_biginf_init_chunk_size = 4 * GB;
-unsigned long long gib_global_inf_init_chunk_size = 1 * KB;
-const unsigned long long gib_global_max_chunk_size = (1 * GB);
+uint64_t gib_global_biginf_init_chunk_size = 4 * GB;
+uint64_t gib_global_inf_init_chunk_size = 1 * KB;
+const uint64_t gib_global_max_chunk_size = (1 * GB);
 
 // Runtime arguments, values updated by the flags parser.
 GibInt gib_global_size_param = 1;
@@ -52,22 +53,22 @@ GibInt gib_global_iters_param = 1;
 char *gib_global_bench_prog_param = NULL;
 char *gib_global_benchfile_param = NULL;
 char *gib_global_arrayfile_param = NULL;
-long long gib_global_arrayfile_length_param = -1;
+int64_t gib_global_arrayfile_length_param = -1;
 
 // Number of regions allocated.
-long long gib_global_region_count = 0;
+int64_t gib_global_region_count = 0;
 
 // Invariant: should always be equal to max(sym_table_keys).
 GibSym gib_global_gensym_counter = 0;
 
 
 
-inline unsigned long long gib_get_biginf_init_chunk_size(void)
+inline uint64_t gib_get_biginf_init_chunk_size(void)
 {
     return gib_global_biginf_init_chunk_size;
 }
 
-inline unsigned long long gib_get_inf_init_chunk_size(void)
+inline uint64_t gib_get_inf_init_chunk_size(void)
 {
     return gib_global_inf_init_chunk_size;
 }
@@ -109,7 +110,7 @@ char *gib_read_arrayfile_param(void)
         return gib_global_arrayfile_param;
 }
 
-long long gib_read_arrayfile_length_param(void)
+int64_t gib_read_arrayfile_length_param(void)
 {
     if (gib_global_arrayfile_length_param == -1) {
         fprintf(stderr, "gib_read_arrayfile_length_param: array input file length was not set! Set using --array-input-length.\n");
@@ -118,7 +119,7 @@ long long gib_read_arrayfile_length_param(void)
         return gib_global_arrayfile_length_param;
 }
 
-inline long long gib_read_region_count(void)
+inline int64_t gib_read_region_count(void)
 {
     return gib_global_region_count;
 }
@@ -144,7 +145,7 @@ void gib_show_usage(char** argv)
 
     printf("\n");
     printf("Options:\n");
-    printf(" --buffer-size <bytes>      Set the buffer size (default %lld).\n", gib_global_biginf_init_chunk_size);
+    printf(" --buffer-size <bytes>      Set the buffer size (default %" PRId64 ").\n", gib_global_biginf_init_chunk_size);
     printf(" --bench-input <path>       Set the input file read for benchmarking. Applies only\n");
     printf("                            IF the program was *compiled* with --bench-fun. \n");
     return;
@@ -242,7 +243,7 @@ inline void gib_init_bumpalloc(void)
 #endif
 }
 
-void *gib_bumpalloc(long long n)
+void *gib_bumpalloc(int64_t n)
 {
     if (! gib_global_bumpalloc_heap_ptr) {
         gib_init_bumpalloc();
@@ -287,7 +288,7 @@ void gib_restore_alloc_state(void)
 #else
 // Regular malloc mode:
 void gib_init_bumpalloc(void) {}
-void *gib_bumpalloc(long long n) { return malloc(n); }
+void *gib_bumpalloc(int64_t n) { return malloc(n); }
 void gib_save_alloc_state(void) {}
 void gib_restore_alloc_state(void) {}
 
@@ -319,7 +320,7 @@ void gib_init_nursery(void)
 #endif
 }
 
-void *gib_alloc_in_nursery(long long n)
+void *gib_alloc_in_nursery(int64_t n)
 {
     if (! gib_global_nursery_heap_ptr) {
         gib_init_nursery();
@@ -436,7 +437,7 @@ inline GibPtr gib_dict_lookup_ptr(GibSymDict *ptr, GibSym key)
             ptr = ptr->next;
         }
     }
-    printf("Error, key %lld not found!\n",key);
+    printf("Error, key %" PRId64 " not found!\n",key);
     exit(1);
 }
 
@@ -586,7 +587,7 @@ inline int gib_print_symbol(GibSym idx)
         GibSymtable *s;
         HASH_FIND(hh, global_sym_table, &idx, sizeof(GibSym), s);
         if (s == NULL) {
-            return printf("%lld", idx);
+            return printf("%" PRId64, idx);
         } else {
             return printf("%s", s->value);
         }
@@ -684,7 +685,7 @@ void gib_free_symtable(void)
 
 */
 
-GibRegionMeta *gib_alloc_region(unsigned long long size)
+GibRegionMeta *gib_alloc_region(uint64_t size)
 {
     // Allocate the region metadata.
     GibRegionMeta *reg = gib_alloc(sizeof(GibRegionMeta));
@@ -694,7 +695,7 @@ GibRegionMeta *gib_alloc_region(unsigned long long size)
     }
 
     // Allocate the first chunk.
-    long long total_size = size + sizeof(GibRegionFooter);
+    int64_t total_size = size + sizeof(GibRegionFooter);
     GibCursor heap;
     bool nursery_allocated = true;
     if (size <= NURSERY_ALLOC_UPPER_BOUND) {
@@ -708,7 +709,7 @@ GibRegionMeta *gib_alloc_region(unsigned long long size)
         nursery_allocated = false;
     }
     if (heap == NULL) {
-        printf("gib_alloc_region: malloc failed: %lld", total_size);
+        printf("gib_alloc_region: malloc failed: %" PRId64, total_size);
         exit(1);
     }
     // Not heap+total_size, since we must keep space for the footer.
@@ -740,17 +741,17 @@ GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
 {
     // Get size from current footer.
     GibRegionFooter *footer = (GibRegionFooter *) end_old_chunk;
-    unsigned long long newsize = footer->rf_size * 2;
+    uint64_t newsize = footer->rf_size * 2;
     // See #110.
     if (newsize > gib_global_max_chunk_size) {
         newsize = gib_global_max_chunk_size;
     }
-    long long total_size = newsize + sizeof(GibRegionFooter);
+    int64_t total_size = newsize + sizeof(GibRegionFooter);
 
     // Allocate.
     GibCursor start = gib_alloc(total_size);
     if (start == NULL) {
-        printf("gib_alloc_chunk: malloc failed: %lld", total_size);
+        printf("gib_alloc_chunk: malloc failed: %" PRId64, total_size);
         exit(1);
     }
     GibCursor end = start + newsize;
@@ -794,7 +795,7 @@ inline void gib_bump_refcount(GibCursor end_b, GibCursor end_a)
     GibRegionMeta *reg_b = (GibRegionMeta *) footer_b->rf_reg_metadata_ptr;
 
     // Bump A's refcount.
-    unsigned short int current_refcount, new_refcount;
+    uint16_t current_refcount, new_refcount;
     current_refcount = reg_a->reg_refcount;
     new_refcount = current_refcount + 1;
     reg_a->reg_refcount = new_refcount;
@@ -827,7 +828,7 @@ void gib_free_region(GibCursor end_reg) {
     GibCursor first_chunk, next_chunk;
 
     // Decrement current reference count.
-    unsigned short int current_refcount, new_refcount;
+    uint16_t current_refcount, new_refcount;
     current_refcount = reg->reg_refcount;
     new_refcount = 0;
     if (current_refcount != 0) {
@@ -850,14 +851,14 @@ void gib_free_region(GibCursor end_reg) {
         // Decrement refcounts, free regions with refcount==0 and also free
         // elements of the outset.
         if (reg->reg_outset_len != 0) {
-            unsigned short int outset_len = reg->reg_outset_len;
+            uint16_t outset_len = reg->reg_outset_len;
             GibCursor *outset = reg->reg_outset;
             GibRegionFooter *elt_footer;
             GibRegionMeta *elt_reg;
-            unsigned short int elt_current_refcount, elt_new_refcount;
+            uint16_t elt_current_refcount, elt_new_refcount;
             GibCursor to_be_removed[MAX_OUTSET_LENGTH];
-            unsigned short int to_be_removed_idx = 0;
-            for (unsigned short int i = 0; i < outset_len; i++) {
+            uint16_t to_be_removed_idx = 0;
+            for (uint16_t i = 0; i < outset_len; i++) {
                 elt_footer = (GibRegionFooter *) outset[i];
                 elt_reg = (GibRegionMeta *) elt_footer->rf_reg_metadata_ptr;
                 elt_current_refcount = elt_reg->reg_refcount;
@@ -878,7 +879,7 @@ void gib_free_region(GibCursor end_reg) {
                 to_be_removed_idx++;
             }
             // Remove elements from the outset.
-            for (unsigned short int i = 0; i < to_be_removed_idx; i++) {
+            for (uint16_t i = 0; i < to_be_removed_idx; i++) {
                 gib_remove_from_outset(to_be_removed[i], reg);
             }
         }
@@ -886,7 +887,7 @@ void gib_free_region(GibCursor end_reg) {
 
 #ifdef _GIBBON_DEBUG
         // Bookkeeping
-        long long num_freed_chunks = 0, total_bytesize = 0;
+        int64_t num_freed_chunks = 0, total_bytesize = 0;
 #endif
 
         // Free the chunks in this region.
@@ -936,9 +937,9 @@ void gib_free_region(GibCursor end_reg) {
 
 void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
 {
-    unsigned short int outset_len = reg->reg_outset_len;
+    uint16_t outset_len = reg->reg_outset_len;
     // Check for duplicates.
-    for (unsigned short int i = 0; i < outset_len; i++) {
+    for (uint16_t i = 0; i < outset_len; i++) {
         if (ptr == reg->reg_outset[i]) {
             return;
         }
@@ -950,9 +951,9 @@ void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
 }
 
 void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg) {
-    unsigned short int outset_len = reg->reg_outset_len;
+    uint16_t outset_len = reg->reg_outset_len;
     GibCursor *outset = reg->reg_outset;
-    unsigned short int i;
+    uint16_t i;
     if (outset_len == 0) {
         fprintf(stderr, "gib_remove_from_outset: empty outset\n");
         exit(1);
@@ -980,7 +981,7 @@ GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
     if (footer->rf_seq_no == 1) {
         return footer;
     } else if (footer->rf_prev == NULL) {
-        fprintf(stderr, "No previous chunk found at rf_seq_no: %lld", footer->rf_seq_no);
+        fprintf(stderr, "No previous chunk found at rf_seq_no: %" PRId64, footer->rf_seq_no);
         return NULL;
     } else {
         gib_trav_to_first_chunk((GibRegionFooter *) footer->rf_prev);
@@ -988,7 +989,7 @@ GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
     return NULL;
 }
 
-inline unsigned short int gib_get_ref_count(GibCursor end_ptr)
+inline uint16_t gib_get_ref_count(GibCursor end_ptr)
 {
     GibRegionFooter *footer = (GibRegionFooter *) end_ptr;
     GibRegionMeta *reg = (GibRegionMeta *) footer->rf_reg_metadata_ptr;
@@ -1013,7 +1014,7 @@ GibBool gib_is_big(GibInt i, GibCursor cur)
 
 // Functions related to counting the number of allocated regions.
 
-inline GibRegionMeta *gib_alloc_counted_region(long long size)
+inline GibRegionMeta *gib_alloc_counted_region(int64_t size)
 {
     // Bump the count.
     gib_bump_global_region_count();
@@ -1034,7 +1035,7 @@ void gib_bump_global_region_count(void)
 
 void gib_print_global_region_count(void)
 {
-    printf("REGION_COUNT: %lld\n", gib_global_region_count);
+    printf("REGION_COUNT: %" PRId64 "\n", gib_global_region_count);
     return;
 }
 
@@ -1078,11 +1079,11 @@ GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
     GibInt lower = vec->vec_lower + i;
     GibInt upper = vec->vec_lower + i + n;
     if ((lower > vec->vec_upper)) {
-        printf("gib_vector_slice: lower out of bounds, %lld > %lld", lower, vec->vec_upper);
+        printf("gib_vector_slice: lower out of bounds, %" PRId64 " > %" PRId64, lower, vec->vec_upper);
         exit(1);
     }
     if ((upper > vec->vec_upper)) {
-        printf("gib_vector_slice: upper out of bounds: %lld > %lld", upper, vec->vec_upper);
+        printf("gib_vector_slice: upper out of bounds, %" PRId64 " > %" PRId64, upper, vec->vec_upper);
         exit(1);
     }
     GibVector *vec2 = gib_alloc(sizeof(GibVector));
@@ -1185,7 +1186,7 @@ inline void gib_vector_free(GibVector *vec)
 GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
 {
     if (vec1->vec_upper != vec2->vec_lower) {
-        printf("gib_vector_merge: non-contiguous slices, (%lld,%lld), (%lld,%lld).",
+        printf("gib_vector_merge: non-contiguous slices, (%" PRId64 ",%" PRId64 "), (%" PRId64 ",%" PRId64 ")",
                vec1->vec_lower, vec1->vec_upper, vec2->vec_lower, vec2->vec_upper);
         exit(1);
     }
@@ -1304,7 +1305,8 @@ void gib_write_ppm(char* filename, GibInt width, GibInt height, GibVector *pixel
     FILE *fp;
     fp = fopen(filename, "w+");
     fprintf(fp, "P3\n");
-    fprintf(fp, "%lld %lld\n255\n", width, height);
+    // fprintf(fp, "%lld %lld\n255\n", width, height);
+    fprintf(fp, "%" PRId64 " %" PRId64 "\n255\n", width, height);
     GibInt len = gib_vector_length(pixels);
     gib_write_ppm_loop(fp, 0, len, pixels);
     fclose(fp);
@@ -1324,7 +1326,8 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels) {
         GibInt y = tup.field1;
         GibInt z = tup.field2;
         // write to file.
-        fprintf(fp, "%lld %lld %lld\n", x, y, z);
+        // fprintf(fp, "%lld %lld %lld\n", x, y, z);
+        fprintf(fp, "%" PRId64 " %" PRId64 " %" PRId64 "\n", x, y, z);
         gib_write_ppm_loop(fp, (idx+1), end, pixels);
     }
 }
@@ -1356,7 +1359,7 @@ int main(int argc, char** argv)
 #ifndef __APPLE__
     code = setrlimit(RLIMIT_STACK, &lim);
     while (code) {
-        fprintf(stderr, " [gibbon rts] Failed to set stack size to %llu, code %d\n", (unsigned long long)lim.rlim_cur, code);
+        fprintf(stderr, " [gibbon rts] Failed to set stack size to %lu, code %d\n", (uint64_t)lim.rlim_cur, code);
         lim.rlim_cur /= 2;
         // lim.rlim_max /= 2;
         if(lim.rlim_cur < 100 * 1024) {
@@ -1436,6 +1439,7 @@ int main(int argc, char** argv)
         gib_global_bench_prog_param = (char*) malloc(1*sizeof(char));
         *gib_global_bench_prog_param = '\n';
     }
+
 
     gib_main_expr();
 

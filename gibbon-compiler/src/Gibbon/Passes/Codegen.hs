@@ -565,12 +565,12 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                            ])
            withPrnt = timebod ++
                       (if flg
-                       then [ C.BlockStm [cstm| printf("ITERS: %lld\n", gib_get_iters_param()); |]
-                            , C.BlockStm [cstm| printf("SIZE: %lld\n", gib_get_size_param()); |]
+                       then [ C.BlockStm [cstm| printf("ITERS: %ld\n", gib_get_iters_param()); |]
+                            , C.BlockStm [cstm| printf("SIZE: %ld\n", gib_get_size_param()); |]
                             , C.BlockStm [cstm| printf("BATCHTIME: %e\n", $id:batchtime); |]
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", $id:selftimed); |]
                             ]
-                       else [ C.BlockStm [cstm| printf("SIZE: %lld\n", gib_get_size_param()); |]
+                       else [ C.BlockStm [cstm| printf("SIZE: %ld\n", gib_get_size_param()); |]
                             , C.BlockStm [cstm| printf("SELFTIMED: %e\n", gib_difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end)))); |] ])
        let venv' = (M.fromList bnds) `M.union` venv
        tal <- codegenTail venv' fenv sort_fns body ty sync_deps
@@ -933,8 +933,8 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  PrintInt ->
                      let [arg] = rnds in
                      case bnds of
-                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%lld", $(codegenTriv venv arg)); |] ]
-                       [] -> pure [ C.BlockStm [cstm| printf("%lld", $(codegenTriv venv arg)); |] ]
+                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%ld", $(codegenTriv venv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| printf("%ld", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
                  PrintFloat ->
@@ -1037,7 +1037,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  ReadArrayFile mfile ty
                    | [] <- rnds, [(outV,_outT)] <- bnds -> do
                            let parse_in_c t = case t of
-                                                IntTy   -> "%lld"
+                                                IntTy   -> "%ld"
                                                 FloatTy -> "%f"
                                                 _ -> error $ "ReadArrayFile: Lists of type " ++ sdoc ty ++ " not allowed."
 

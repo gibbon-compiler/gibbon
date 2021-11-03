@@ -1,11 +1,10 @@
 #ifndef _GIBBON_H
-#define _GIBBON_H
+#define _GIBBON_H 1
 
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <uthash.h>
-
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Translating Gibbon's types to C
@@ -32,11 +31,11 @@
  */
 
 
-typedef unsigned char GibPackedTag;
-typedef unsigned char GibBoxedTag;
-typedef long long GibInt;
+typedef uint8_t GibPackedTag;
+typedef uint8_t GibBoxedTag;
+typedef int64_t GibInt;
 typedef float GibFloat;
-typedef unsigned long long GibSym;
+typedef uint64_t GibSym;
 typedef bool GibBool;
 typedef char* GibPtr;
 typedef char* GibCursor;
@@ -54,9 +53,9 @@ typedef char* GibCursor;
  *
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
-extern long long gib_global_biginf_init_chunk_size;
-extern long long gib_global_inf_init_chunk_size;
-extern long long gib_global_max_chunk_size;
+extern int64_t gib_global_biginf_init_chunk_size;
+extern int64_t gib_global_inf_init_chunk_size;
+extern int64_t gib_global_max_chunk_size;
 
 // Runtime arguments, values updated by the flags parser.
 extern GibInt gib_global_size_param;
@@ -64,10 +63,10 @@ extern GibInt gib_global_iters_param;
 extern char *gib_global_bench_prog_param;
 extern char *gib_global_benchfile_param;
 extern char *gib_global_arrayfile_param;
-extern long long gib_global_arrayfile_length_param;
+extern int64_t gib_global_arrayfile_length_param;
 
 // Number of regions allocated.
-extern long long gib_global_region_count;
+extern int64_t gib_global_region_count;
 
 // Invariant: should always be equal to max(sym_table_keys).
 extern GibSym gib_global_gensym_counter;
@@ -77,8 +76,8 @@ extern GibSym gib_global_gensym_counter;
 
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
-unsigned long long gib_get_biginf_init_chunk_size(void);
-unsigned long long gib_get_inf_init_chunk_size(void);
+uint64_t gib_get_biginf_init_chunk_size(void);
+uint64_t gib_get_inf_init_chunk_size(void);
 
 // Runtime arguments, values updated by the flags parser.
 GibInt gib_get_size_param(void);
@@ -86,10 +85,10 @@ GibInt gib_get_iters_param(void);
 char *gib_read_bench_prog_param(void);
 char *gib_read_benchfile_param(void);
 char *gib_read_arrayfile_param(void);
-long long gib_read_arrayfile_length_param(void);
+int64_t gib_read_arrayfile_length_param(void);
 
 // Number of regions allocated.
-long long gib_read_region_count(void);
+int64_t gib_read_region_count(void);
 
 // Invariant: should always be equal to max(sym_table_keys).
 GibSym gib_read_gensym_counter(void);
@@ -130,7 +129,7 @@ GibInt gib_get_num_processors(void);
  */
 
 void gib_init_bumpalloc(void);
-void *gib_bumpalloc(long long n);
+void *gib_bumpalloc(int64_t n);
 void gib_save_alloc_state(void);
 void gib_restore_alloc_state(void);
 
@@ -143,7 +142,7 @@ void gib_restore_alloc_state(void);
 
 
 void gib_init_nursery(void);
-void *gib_alloc_in_nursery(long long n);
+void *gib_alloc_in_nursery(int64_t n);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -151,9 +150,9 @@ void *gib_alloc_in_nursery(long long n);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-void *gib_alloc(size_t size);
-void *gib_counted_alloc(size_t size);
-void *gib_scoped_alloc(size_t size);
+void *gib_alloc(uint64_t size);
+void *gib_counted_alloc(uint64_t size);
+void *gib_scoped_alloc(uint64_t size);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -259,18 +258,18 @@ void gib_free_symtable(void);
 
 typedef struct gib_region_meta {
     GibSym reg_id;
-    unsigned short int reg_refcount;
+    uint16_t reg_refcount;
     GibCursor reg_heap;
-    unsigned short int reg_outset_len;
+    uint16_t reg_outset_len;
     GibCursor reg_outset[MAX_OUTSET_LENGTH];
 } GibRegionMeta;
 
 typedef struct gib_region_footer {
     GibRegionMeta *rf_reg_metadata_ptr;
 
-    long long rf_seq_no;
+    int64_t rf_seq_no;
     bool rf_nursery_allocated;
-    unsigned long long rf_size;
+    uint64_t rf_size;
     struct gib_region_footer *rf_next;
     struct gib_region_footer *rf_prev;
 } GibRegionFooter;
@@ -280,7 +279,7 @@ typedef struct gib_chunk {
     GibCursor chunk_end;
 } GibChunk;
 
-GibRegionMeta *gib_alloc_region(unsigned long long size);
+GibRegionMeta *gib_alloc_region(uint64_t size);
 GibChunk gib_alloc_chunk(GibCursor end_old_chunk);
 void gib_bump_refcount(GibCursor end_b, GibCursor end_a);
 void gib_free_region(GibCursor end_reg);
@@ -289,11 +288,11 @@ void gib_free_region(GibCursor end_reg);
 void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg);
 void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg);
 GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer);
-unsigned short int gib_get_ref_count(GibCursor end_ptr);
+uint16_t gib_get_ref_count(GibCursor end_ptr);
 GibBool gib_is_big(GibInt i, GibCursor cur);
 
 // Functions related to counting the number of allocated regions.
-GibRegionMeta *gib_alloc_counted_region(long long size);
+GibRegionMeta *gib_alloc_counted_region(int64_t size);
 void gib_bump_global_region_count(void);
 void gib_print_global_region_count(void);
 
@@ -308,7 +307,7 @@ typedef struct gib_cursors_pair {
     GibCursor cp_end;
 } GibCursorsPair;
 
-GibCursorsPair *gib_alloc_region2(unsigned long long size);
+GibCursorsPair *gib_alloc_region2(uint64_t size);
 
 // Only use this while testing the Rust RTS!
 void gib_reset_nursery(void);
@@ -321,7 +320,7 @@ void gib_reset_nursery(void);
 
 typedef struct gib_vector {
     // Bounds on the vector.
-    long long vec_lower, vec_upper;
+    int64_t vec_lower, vec_upper;
 
     // Size of each element.
     size_t vec_elt_size;
