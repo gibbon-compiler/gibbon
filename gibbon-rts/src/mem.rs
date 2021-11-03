@@ -48,36 +48,60 @@ We should update [1] to include option (2).
  */
 
 #[thread_local]
-static NURSERY_START: Lazy<*const libc::c_char> =
-    Lazy::new(|| unsafe { libc::malloc(NURSERY_SIZE as usize) as *const libc::c_char });
+static NURSERY_START: Lazy<*const libc::c_char> = Lazy::new(|| unsafe {
+    libc::malloc(NURSERY_SIZE as usize) as *const libc::c_char
+});
 
 #[thread_local]
 static NURSERY_END: Lazy<*const libc::c_char> =
     Lazy::new(|| unsafe { NURSERY_START.offset(NURSERY_SIZE as isize) });
 
 #[thread_local]
-static mut NURSERY_ALLOC: *const libc::c_char = std::ptr::null();
+static mut NURSERY_ALLOC_PTR: *const libc::c_char = std::ptr::null();
 
-/// The nursery is 4 MB.
-const NURSERY_SIZE: u64 = 4 * 1048576;
+/// The nursery is 4 MiB.
+const NURSERY_SIZE: u64 = 4 * 1024 * 1024;
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+/// Upper bound on the size of the region that can be allocated in the nursery.
+const NURSERY_REGION_MAX_SIZE: u64 = 2 * 1024;
 
 pub fn alloc_region(size: u64) -> (ffi::C_GibCursor, ffi::C_GibCursor) {
+    if size > NURSERY_REGION_MAX_SIZE {
+        alloc_region_on_heap(size)
+    } else {
+        alloc_region_in_nursery(size)
+    }
+}
+
+pub fn alloc_region_on_heap(
+    size: u64,
+) -> (ffi::C_GibCursor, ffi::C_GibCursor) {
+    unsafe {
+        println!("TODO: add metadata.");
+        let heap_start = libc::malloc(size as usize) as ffi::C_GibCursor;
+        let heap_end = heap_start.offset(size as isize);
+        (heap_start, heap_end)
+    }
+}
+
+pub fn alloc_region_in_nursery(
+    size: u64,
+) -> (ffi::C_GibCursor, ffi::C_GibCursor) {
     unsafe {
         // Initialize the nursery allocation pointer if its NULL.
-        if NURSERY_ALLOC.is_null() {
-            NURSERY_ALLOC = *NURSERY_START;
+        if NURSERY_ALLOC_PTR.is_null() {
+            NURSERY_ALLOC_PTR = *NURSERY_START;
         }
         // Allocate in the nursery if there's space, otherwise fall back to
         // malloc. No garbage collection for now.
-        let bump = NURSERY_ALLOC.offset(size as isize);
+        let bump = NURSERY_ALLOC_PTR.offset(size as isize);
         let heap_start = if bump < *NURSERY_END {
-            let old = NURSERY_ALLOC;
-            NURSERY_ALLOC = bump;
+            let old = NURSERY_ALLOC_PTR;
+            NURSERY_ALLOC_PTR = bump;
             old
         } else {
-            println!("MALLOC!!!");
+            // TODO: trigger GC.
+            println!("GC!!!");
             libc::malloc(size as usize) as ffi::C_GibCursor
         };
         // The end is always start+size no matter where the allocation happens.
@@ -87,6 +111,8 @@ pub fn alloc_region(size: u64) -> (ffi::C_GibCursor, ffi::C_GibCursor) {
 }
 
 /// Only use this while testing the Rust RTS!
-pub unsafe fn reset_nursery() {
-    NURSERY_ALLOC = *NURSERY_START;
+pub fn reset_nursery() {
+    unsafe {
+        NURSERY_ALLOC_PTR = *NURSERY_START;
+    }
 }

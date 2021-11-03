@@ -13,7 +13,5 @@ pub extern "C" fn gib_alloc_region2(size: u64) -> *mut C_GibCursorsPair {
 #[no_mangle]
 /// Only use this while testing the Rust RTS!
 pub extern "C" fn gib_reset_nursery() {
-    unsafe {
-        mem::reset_nursery();
-    }
+    mem::reset_nursery();
 }
