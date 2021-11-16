@@ -308,6 +308,15 @@ typedef struct gib_cursors_pair {
 } GibCursorsPair;
 
 GibCursorsPair *gib_alloc_region2(uint64_t size);
+int gib_init_info_table(void);
+int gib_insert_dcon_into_info_table(
+    uint32_t datatype,
+    uint8_t datacon,
+    uint8_t num_scalars,
+    uint8_t num_packed,
+    uint32_t *field_tys,
+    uint8_t field_tys_length
+);
 
 // Only use this while testing the Rust RTS!
 void gib_reset_nursery(void);

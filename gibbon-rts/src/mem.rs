@@ -4,11 +4,69 @@ Memory Management; regions, chunks, GC etc.
 
  */
 
-use std::lazy::Lazy;
+use std::collections::HashMap;
+use std::lazy::{Lazy, OnceCell};
 
 use crate::ffi::types as ffi;
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Info table
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+#[derive(Debug)]
+struct DataconInfo {
+    num_scalars: u8,
+    num_packed: u8,
+    field_tys: Vec<ffi::C_GibDatatype>,
+}
+
+type DatatypeInfo = HashMap<ffi::C_GibPackedTag, DataconInfo>;
+
+/// The global info table.
+static mut INFO_TABLE: OnceCell<HashMap<ffi::C_GibDatatype, DatatypeInfo>> =
+    OnceCell::new();
+
+pub fn init_info_table() -> Option<()> {
+    unsafe {
+        match INFO_TABLE.set(HashMap::new()) {
+            Ok(()) => Some(()),
+            Err(_) => None,
+        }
+    }
+}
+
+pub fn insert_dcon_into_info_table(
+    datatype: ffi::C_GibDatatype,
+    datacon: ffi::C_GibPackedTag,
+    num_scalars: u8,
+    num_packed: u8,
+    field_tys: Vec<ffi::C_GibDatatype>,
+) -> Option<()> {
+    unsafe {
+        let tbl = match INFO_TABLE.get_mut() {
+            None => return None,
+            Some(tbl) => tbl,
+        };
+        let datatype_info = tbl.entry(datatype).or_default();
+        if (datatype_info.contains_key(&datacon)) {
+            return None;
+        }
+        datatype_info.insert(
+            datacon,
+            DataconInfo { num_scalars, num_packed, field_tys },
+        );
+        if cfg!(debug_assertions) {
+            println!("{:?}", tbl);
+        }
+        Some(())
+    }
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Allocation
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
 
 /**
 
@@ -65,7 +123,9 @@ const NURSERY_SIZE: u64 = 4 * 1024 * 1024;
 /// Upper bound on the size of the region that can be allocated in the nursery.
 const NURSERY_REGION_MAX_SIZE: u64 = 2 * 1024;
 
-pub fn alloc_region(size: u64) -> (ffi::C_GibCursor, ffi::C_GibCursor) {
+pub fn alloc_region(
+    size: u64,
+) -> Option<(ffi::C_GibCursor, ffi::C_GibCursor)> {
     if size > NURSERY_REGION_MAX_SIZE {
         alloc_region_on_heap(size)
     } else {
@@ -75,18 +135,23 @@ pub fn alloc_region(size: u64) -> (ffi::C_GibCursor, ffi::C_GibCursor) {
 
 pub fn alloc_region_on_heap(
     size: u64,
-) -> (ffi::C_GibCursor, ffi::C_GibCursor) {
+) -> Option<(ffi::C_GibCursor, ffi::C_GibCursor)> {
     unsafe {
-        println!("TODO: add metadata.");
+        if cfg!(debug_assertions) {
+            println!("TODO: add metadata.");
+        }
         let heap_start = libc::malloc(size as usize) as ffi::C_GibCursor;
+        if heap_start.is_null() {
+            return None;
+        }
         let heap_end = heap_start.offset(size as isize);
-        (heap_start, heap_end)
+        Some((heap_start, heap_end))
     }
 }
 
 pub fn alloc_region_in_nursery(
     size: u64,
-) -> (ffi::C_GibCursor, ffi::C_GibCursor) {
+) -> Option<(ffi::C_GibCursor, ffi::C_GibCursor)> {
     unsafe {
         // Initialize the nursery allocation pointer if its NULL.
         if NURSERY_ALLOC_PTR.is_null() {
@@ -101,12 +166,17 @@ pub fn alloc_region_in_nursery(
             old
         } else {
             // TODO: trigger GC.
-            println!("GC!!!");
+            if cfg!(debug_assertions) {
+                println!("GC!!!");
+            }
             libc::malloc(size as usize) as ffi::C_GibCursor
         };
+        if heap_start.is_null() {
+            return None;
+        }
         // The end is always start+size no matter where the allocation happens.
         let heap_end = heap_start.offset(size as isize);
-        (heap_start, heap_end)
+        Some((heap_start, heap_end))
     }
 }
 

@@ -950,7 +950,8 @@ void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
     return;
 }
 
-void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg) {
+void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg)
+{
     uint16_t outset_len = reg->reg_outset_len;
     GibCursor *outset = reg->reg_outset;
     uint16_t i;

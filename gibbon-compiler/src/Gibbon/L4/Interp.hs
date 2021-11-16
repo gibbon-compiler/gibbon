@@ -57,8 +57,8 @@ instance Out (Seq Int) where
     docPrec _ s = text (show s)
 
 execProg :: Prog -> IO [Val]
-execProg (Prog _ _ Nothing) = error "Can't evaluate program: No expression given"
-execProg (Prog _ funs (Just (PrintExp expr))) = exec env expr
+execProg (Prog _ _ _ Nothing) = error "Can't evaluate program: No expression given"
+execProg (Prog _ _ funs (Just (PrintExp expr))) = exec env expr
   where
     env = M.fromList (map (\f -> (funName f, FunVal f)) funs)
 

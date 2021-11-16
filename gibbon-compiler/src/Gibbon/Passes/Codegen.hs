@@ -35,7 +35,7 @@ import           Gibbon.L4.Syntax
 
 -- | Harvest all struct tys.  All product types used anywhere in the program.
 harvestStructTys :: Prog -> S.Set [Ty]
-harvestStructTys (Prog _ funs mtal) =
+harvestStructTys (Prog _ _ funs mtal) =
     S.map (\tys -> filter (\ty -> ty /= (ProdTy [])) tys) $
     S.delete [] (S.union tys0 tys1)
   where
@@ -136,7 +136,7 @@ harvestStructTys (Prog _ funs mtal) =
        (Goto _) -> []
 
 sortFns :: Prog -> S.Set Var
-sortFns (Prog _ funs mtal) = foldl go S.empty allTails
+sortFns (Prog _ _ funs mtal) = foldl go S.empty allTails
   where
     allTails = (case mtal of
                 Just (PrintExp t) -> [t]
@@ -188,7 +188,7 @@ sortFns (Prog _ funs mtal) = foldl go S.empty allTails
 --
 --  The boolean flag is true when we are compiling in "Packed" mode.
 codegenProg :: Config -> Prog -> IO String
-codegenProg cfg prg@(Prog sym_tbl funs mtal) =
+codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
       return (hashIncludes ++ pretty 80 (stack (map ppr defs)))
     where
       init_fun_env = foldr (\fn acc -> M.insert (funName fn) (map snd (funArgs fn), funRetTy fn) acc) M.empty funs
@@ -199,7 +199,9 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) =
         (prots,funs') <- (unzip . concat) <$> mapM codegenFun funs
         main_expr' <- main_expr
         let struct_tys = uniqueDicts $ S.toList $ harvestStructTys prg
-        return ((L.nub $ makeStructs struct_tys) ++ prots ++ funs' ++ [main_expr'])
+        return ((L.nub $ makeStructs struct_tys) ++ prots ++
+                [gibTypesEnum, initInfoTable info_tbl, initSymTable sym_tbl] ++
+                funs' ++ [main_expr'])
 
       main_expr :: PassM C.Definition
       main_expr = do
@@ -207,7 +209,9 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) =
                -- [2019.06.13]: CSK, Why is codegenTail always called with IntTy?
                Just (PrintExp t) -> codegenTail M.empty init_fun_env sort_fns t IntTy []
                _ -> pure []
-        let bod = mkSymTable ++ e
+        let init_info_table = [ C.BlockStm [cstm| init_info_table(); |] ]
+            init_symbol_table = [ C.BlockStm [cstm| init_symbol_table(); |] ]
+        let bod = init_info_table ++ init_symbol_table ++ e
         pure $ C.FuncDef [cfun| int gib_main_expr(void) { $items:bod } |] noLoc
 
       codegenFun' :: FunDecl -> PassM C.Func
@@ -277,20 +281,14 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) =
                         else pure []
              return $ [(C.DecDef prot noLoc, C.FuncDef fun noLoc)] ++ sort_fn
 
-      mkSymTable :: [C.BlockItem]
-      mkSymTable =
-        map
-          (\(k,v) -> case v of
-                       -- Special symbols that get handled differently
-                       "NEWLINE" -> C.BlockStm [cstm| gib_set_newline($k); |]
-                       "COMMA" -> C.BlockStm [cstm| set_comma($k); |]
-                       "SPACE" -> C.BlockStm [cstm| gib_set_space($k); |]
-                       "LEFTPAREN" -> C.BlockStm [cstm| gib_set_leftparen($k); |]
-                       "RIGHTPAREN" -> C.BlockStm [cstm| gib_set_rightparen($k); |]
-                       -- Normal symbols just get added to the table
-                       _ -> C.BlockStm [cstm| gib_add_symbol($k, $v); |]
-          )
-          (M.toList sym_tbl)
+      gibTypesEnum =
+        let go str = C.CEnum (C.Id (str ++ "_T") noLoc) Nothing noLoc
+            decls = map go $
+                      [ "GibInt", "GibFloat", "GibSym", "GibBool", "GibCursor", "GibPackedTag"
+                      , "GibBoxedTag", "GibPtr", "GibSymDict", "GibVector", "GibList", "GibSymSet"
+                      , "GibSymHash", "GibIntHash" ] ++
+                      (M.keys info_tbl)
+        in [cedecl| typedef enum { $enums:decls } GibDatatype; |]
 
       hashIncludes =
         "/* Gibbon program. */\n\n\
@@ -326,6 +324,66 @@ codegenProg cfg prg@(Prog sym_tbl funs mtal) =
         \ * Program starts here\n\
         \ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\
         \ */\n\n"
+
+
+initSymTable :: SymTable -> C.Definition
+initSymTable sym_tbl =
+    let body =  map
+          (\(k,v) -> case v of
+                       -- Special symbols that get handled differently
+                       "NEWLINE" -> C.BlockStm [cstm| gib_set_newline($k); |]
+                       "COMMA" -> C.BlockStm [cstm| set_comma($k); |]
+                       "SPACE" -> C.BlockStm [cstm| gib_set_space($k); |]
+                       "LEFTPAREN" -> C.BlockStm [cstm| gib_set_leftparen($k); |]
+                       "RIGHTPAREN" -> C.BlockStm [cstm| gib_set_rightparen($k); |]
+                       -- Normal symbols just get added to the table
+                       _ -> C.BlockStm [cstm| gib_add_symbol($k, $v); |]
+          )
+          (M.toList sym_tbl)
+        fun = [cfun| void init_symbol_table(void) { $items:body } |]
+    in C.FuncDef fun noLoc
+
+
+initInfoTable :: InfoTable -> C.Definition
+initInfoTable info_tbl =
+    let body =  [ C.BlockDecl [cdecl| int error = gib_init_info_table(); |]
+                , C.BlockStm [cstm| if (error < 0) { fprintf(stderr, "Couldn't initialize info table, errorno=%d", error); exit(1); } |]
+                , C.BlockDecl [cdecl| typename GibDatatype field_tys[$int:max_fields]; |]
+                ] ++ insert_dcon_info
+        fun = [cfun| void init_info_table(void) { $items:body } |]
+    in C.FuncDef fun noLoc
+  where
+    max_fields = M.foldr (\tyc_info acc ->
+                              max acc $
+                                  M.foldrWithKey (\dcon DataConInfo{num_scalars,num_packed} acc2 ->
+                                                      if GL.isIndirectionTag dcon then acc2 else
+                                                          (num_scalars + num_packed) `max` acc2)
+                                                 0
+                                                 tyc_info)
+                         0
+                         info_tbl
+    insert_dcon_info = M.foldrWithKey
+                           (\tycon tyc_info acc ->
+                                M.foldrWithKey (\dcon (DataConInfo dcon_tag num_scalars num_packed field_tys) acc2 ->
+                                                    if GL.isIndirectionTag dcon then acc2 else
+                                                    let set_field_tys =
+                                                            map (\(ty,i) ->
+                                                                     let ty' = (case ty of
+                                                                                    GL.PackedTy tycon _ -> tycon
+                                                                                    _ -> makeName' (fromL3Ty ty))
+                                                                               ++ "_T"
+                                                                         e = (C.Id ty' noLoc)
+                                                                     in C.BlockStm [cstm| field_tys[$int:i] = ($id:e); |])
+                                                                (zip field_tys [0..])
+                                                        tycon' = tycon ++ "_T"
+                                                        insert_into_tbl = [ C.BlockStm [cstm| error = gib_insert_dcon_into_info_table($id:tycon', $int:dcon_tag, $int:num_scalars, $int:num_packed, field_tys, $int:(num_scalars+num_packed)); |]
+                                                                          , C.BlockStm [cstm| if (error < 0) { fprintf(stderr, "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d", error, $id:tycon', $int:dcon_tag); exit(1); } |] ]
+                                             in set_field_tys ++ insert_into_tbl ++ acc2)
+                                        acc
+                                        tyc_info)
+                           []
+                           info_tbl
+
 
 makeStructs :: [[Ty]] -> [C.Definition]
 makeStructs [] = []
@@ -1405,25 +1463,25 @@ makeName :: [Ty] -> String
 makeName tys = concatMap makeName' tys ++ "Prod"
 
 makeName' :: Ty -> String
-makeName' IntTy       = "Int64"
-makeName' FloatTy     = "Float32"
-makeName' SymTy       = "Sym"
-makeName' BoolTy      = "Bool"
-makeName' CursorTy    = "Cursor"
-makeName' TagTyPacked = "Tag"
-makeName' TagTyBoxed  = makeName' TagTyPacked
-makeName' PtrTy = "Ptr"
-makeName' (SymDictTy _ _ty) = "Dict"
-makeName' RegionTy = "Region"
-makeName' ChunkTy  = "Chunk"
-makeName' ArenaTy  = "Arena"
-makeName' VectorTy{} = "Vector"
-makeName' ListTy{} = "List"
+makeName' IntTy       = "GibInt"
+makeName' FloatTy     = "GibFloat"
+makeName' SymTy       = "GibSym"
+makeName' BoolTy      = "GibBool"
+makeName' CursorTy    = "GibCursor"
+makeName' TagTyPacked = "GibPackedTag"
+makeName' TagTyBoxed  = "GibBoxedTag"
+makeName' PtrTy       = "GibPtr"
+makeName' (SymDictTy _ _ty) = "GibSymDict"
+makeName' RegionTy = "GibRegionMeta"
+makeName' ChunkTy  = "GibChunk"
+makeName' ArenaTy  = "GibArena"
+makeName' VectorTy{} = "GibVector"
+makeName' ListTy{} = "GibList"
 makeName' PDictTy{} = "PDict"
 makeName' (ProdTy tys) = "Prod" ++ concatMap makeName' tys
-makeName' SymSetTy = "SymSetTy"
-makeName' SymHashTy = "SymHashTy"
-makeName' IntHashTy = "IntHashTy"
+makeName' SymSetTy = "GibSymSet"
+makeName' SymHashTy = "GibSymHash"
+makeName' IntHashTy = "GibIntHash"
 
 
 makeIcdName :: Ty -> (String, String)

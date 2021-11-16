@@ -56,13 +56,13 @@ now becomes:
 type TagTailEnv = M.Map Var Var
 
 followRedirects :: Prog -> PassM Prog
-followRedirects (Prog sym_tbl fundefs mainExp) = do
+followRedirects (Prog info_tbl sym_tbl fundefs mainExp) = do
   fundefs' <- mapM followRedirectsFn fundefs
   mainExp' <- case mainExp of
                 Just (PrintExp tail) ->
                   Just <$> PrintExp <$> followRedirectsExp False M.empty M.empty tail
                 Nothing -> return Nothing
-  return $ Prog sym_tbl fundefs' mainExp'
+  return $ Prog info_tbl sym_tbl fundefs' mainExp'
 
 followRedirectsFn :: FunDecl -> PassM FunDecl
 followRedirectsFn f@FunDecl{funName,funArgs,funBody} = do

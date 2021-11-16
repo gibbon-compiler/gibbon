@@ -364,6 +364,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
   -- sym_tbl :: M.Map Int64 String
   let sym_tbl = M.fromList $ map swap (M.toList inv_sym_tbl)
 
+  let info_tbl = build_info_table
+
   mn <- case mainExp of
           Nothing    -> return Nothing
           Just (x,mty) -> (Just . T.PrintExp) <$>
@@ -373,7 +375,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
   unpackers  <- if gopt Opt_Pointer dflags
                 then mapM genUnpacker (L.filter (not . isVoidDDef) (M.elems ddefs))
                 else pure []
-  (T.Prog sym_tbl) <$> pure (funs ++ unpackers) <*> pure mn
+
+  (T.Prog info_tbl sym_tbl) <$> pure (funs ++ unpackers) <*> pure mn
  where
   fund :: M.Map String Word16 -> FunDef3 -> PassM T.FunDecl
   fund sym_tbl FunDef{funName,funTy,funArgs,funBody} = do
@@ -386,6 +389,25 @@ lower Prog{fundefs,ddefs,mainExp} = do
                       , T.funBody  = bod'
                       , T.isPure   = ispure funBody
                       }
+
+  build_info_table :: T.InfoTable
+  build_info_table =
+      M.foldr
+          (\DDef{tyName,dataCons} acc ->
+               M.insert
+                   (fromVar tyName)
+                   (foldr (\(dcon,tys) dcon_acc -> M.insert dcon (go dcon tys) dcon_acc) M.empty dataCons)
+                   acc)
+          M.empty
+          ddefs
+      where
+        go dcon tys =
+            let field_tys = map snd tys
+                (num_packed,num_scalars) = (\(a,b) -> ((length a, length b))) $
+                                           partition isPackedTy field_tys
+                dcon_tag = getTagOfDataCon ddefs dcon
+            in (T.DataConInfo dcon_tag num_scalars num_packed field_tys)
+
 
   hasCursorTy :: Ty3 -> Bool
   hasCursorTy CursorTy = True

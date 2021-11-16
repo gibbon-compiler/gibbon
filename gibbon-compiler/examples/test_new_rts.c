@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include <math.h>
 #include <stdbool.h>
 #include <string.h>
@@ -108,7 +109,7 @@ void alloc_region(void)
     GibInt x = fib_seq(20);
     // Allocate a region.
     GibCursorsPair *cursors = gib_alloc_region2(2*MB-1);
-    printf("alloc_region: worker=%d, start=%p, end=%p, x=%lld\n", worker, cursors->cp_start, cursors->cp_end, x);
+    printf("alloc_region: worker=%d, start=%p, end=%p, x=%" PRId64 "\n", worker, cursors->cp_start, cursors->cp_end, x);
     return;
 }
 
@@ -142,8 +143,69 @@ void test_alloc_region(void)
     return;
 }
 
-int gib_main_expr(void) {
-    test_alloc_region();
+typedef enum {
+    // Builtins.
+    GibPackedTag_T,
+    GibBoxedTag_T,
+    GibInt_T,
+    GibFloat_T,
+    GibSym_T,
+    GibBool_T,
+    GibPtr_T,
+    GibCursor_T,
+
+    // User defined.
+    Tree_Int_T,
+    List_Int_T,
+} GibDatatype;
+
+void test_info_table()
+{
+    int error = 0;
+    error = gib_init_info_table();
+    if (error < 0) {
+        fprintf(stderr, "Couldn't initialize info table, errorno=%d", error);
+        exit(1);
+    }
+    GibDatatype field_tys[10];
+
+    field_tys[0] = GibInt_T;
+    error = gib_insert_dcon_into_info_table(
+        Tree_Int_T,
+        0, // Leaf tag
+        1, // num_scalars
+        0, // num_packed
+        field_tys,
+        1);
+    if (error < 0) {
+        fprintf(stderr, "Couldn't insert datacon, errorno=%d", error);
+        exit(1);
+    }
+    field_tys[0] = Tree_Int_T;
+    field_tys[1] = Tree_Int_T;
+    error = gib_insert_dcon_into_info_table(
+        Tree_Int_T,
+        1, // Node tag
+        0, // num_scalars
+        2, // num_packed
+        field_tys,
+        2);
+    if (error < 0) {
+        fprintf(stderr, "Couldn't insert datacon, errorno=%d", error);
+        exit(1);
+    }
+
+    printf("test info tables done.\n");
+}
+
+int gib_main_expr(void)
+{
+    // test_alloc_region();
+
+    uint32_t sz = sizeof(GibDatatype);
+    printf("sizeof(enum): %d\n", sz);
+
+    test_info_table();
 
     return 0;
 }
