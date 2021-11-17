@@ -135,18 +135,7 @@ void gib_restore_alloc_state(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Bump allocated nursery for regions.
- * See GitHub #122.
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-
-void gib_init_nursery(void);
-void *gib_alloc_in_nursery(int64_t n);
-
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Various allocators
+ * Gibbon's allocators
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
@@ -268,7 +257,6 @@ typedef struct gib_region_footer {
     GibRegionMeta *rf_reg_metadata_ptr;
 
     int64_t rf_seq_no;
-    bool rf_nursery_allocated;
     uint64_t rf_size;
     struct gib_region_footer *rf_next;
     struct gib_region_footer *rf_prev;
@@ -307,7 +295,6 @@ typedef struct gib_cursors_pair {
     GibCursor cp_end;
 } GibCursorsPair;
 
-GibCursorsPair *gib_alloc_region2(uint64_t size);
 int gib_init_info_table(void);
 int gib_insert_dcon_into_info_table(
     uint32_t datatype,
@@ -317,9 +304,6 @@ int gib_insert_dcon_into_info_table(
     uint32_t *field_tys,
     uint8_t field_tys_length
 );
-
-// Only use this while testing the Rust RTS!
-void gib_reset_nursery(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

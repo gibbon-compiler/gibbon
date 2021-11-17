@@ -43,23 +43,23 @@
 
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
-uint64_t gib_global_biginf_init_chunk_size = 4 * GB;
-uint64_t gib_global_inf_init_chunk_size = 1 * KB;
-const uint64_t gib_global_max_chunk_size = (1 * GB);
+static uint64_t gib_global_biginf_init_chunk_size = 4 * GB;
+static uint64_t gib_global_inf_init_chunk_size = 1 * KB;
+static const uint64_t gib_global_max_chunk_size = (1 * GB);
 
 // Runtime arguments, values updated by the flags parser.
-GibInt gib_global_size_param = 1;
-GibInt gib_global_iters_param = 1;
-char *gib_global_bench_prog_param = NULL;
-char *gib_global_benchfile_param = NULL;
-char *gib_global_arrayfile_param = NULL;
-int64_t gib_global_arrayfile_length_param = -1;
+static GibInt gib_global_size_param = 1;
+static GibInt gib_global_iters_param = 1;
+static char *gib_global_bench_prog_param = NULL;
+static char *gib_global_benchfile_param = NULL;
+static char *gib_global_arrayfile_param = NULL;
+static int64_t gib_global_arrayfile_length_param = -1;
 
 // Number of regions allocated.
-int64_t gib_global_region_count = 0;
+static int64_t gib_global_region_count = 0;
 
 // Invariant: should always be equal to max(sym_table_keys).
-GibSym gib_global_gensym_counter = 0;
+static GibSym gib_global_gensym_counter = 0;
 
 
 
@@ -227,10 +227,10 @@ int dbgprintf(const char *format, ...)
 // #define _GIBBON_DEBUG
 #warning "Using bump allocator."
 
-__thread char *gib_global_bumpalloc_heap_ptr = (char*)NULL;
-__thread char *gib_global_bumpalloc_heap_ptr_end = (char*)NULL;
-char *gib_global_saved_heap_ptr_stack[100];
-int gib_global_num_saved_heap_ptr = 0;
+static __thread char *gib_global_bumpalloc_heap_ptr = (char*)NULL;
+static __thread char *gib_global_bumpalloc_heap_ptr_end = (char*)NULL;
+static char *gib_global_saved_heap_ptr_stack[100];
+static int gib_global_num_saved_heap_ptr = 0;
 
 // For simplicity just use a single large slab:
 inline void gib_init_bumpalloc(void)
@@ -296,50 +296,7 @@ void gib_restore_alloc_state(void) {}
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Bump allocated nursery for regions.
- * See GitHub #122.
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-#define NURSERY_SIZE 0
-#define NURSERY_ALLOC_UPPER_BOUND 1024
-
-__thread char *gib_global_nursery_heap_ptr = (char*)NULL;
-__thread char *gib_global_nursery_heap_ptr_end = (char*)NULL;
-
-void gib_init_nursery(void)
-{
-    gib_global_nursery_heap_ptr = (char*)malloc(NURSERY_SIZE);
-    if (gib_global_nursery_heap_ptr == NULL) {
-        printf("init_region: malloc failed: %d", NURSERY_SIZE);
-        exit(1);
-    }
-    gib_global_nursery_heap_ptr_end = gib_global_nursery_heap_ptr + NURSERY_SIZE;
-#ifdef _GIBBON_DEBUG
-    printf("gib_init_nursery: DONE, heap_ptr = %p\n", gib_global_nursery_heap_ptr);
-#endif
-}
-
-void *gib_alloc_in_nursery(int64_t n)
-{
-    if (! gib_global_nursery_heap_ptr) {
-        gib_init_nursery();
-    }
-    if (gib_global_nursery_heap_ptr + n < gib_global_nursery_heap_ptr_end) {
-        char* old = gib_global_nursery_heap_ptr;
-        gib_global_nursery_heap_ptr += n;
-#ifdef _GIBBON_DEBUG
-        printf("gib_alloc_in_nursery: DONE, %lld\n", n);
-#endif
-        return old;
-    } else {
-        return NULL;
-    }
-}
-
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Various allocators
+ * Gibbon's allocators
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
@@ -527,7 +484,7 @@ static GibSym rightparen_symbol = -1;
 
 
 // important! initialize to NULL
-GibSymtable *global_sym_table = NULL;
+static GibSymtable *global_sym_table = NULL;
 
 void gib_add_symbol(GibSym idx, char *value)
 {
@@ -630,7 +587,7 @@ void gib_free_symtable(void)
   and for garbage collection. The footer:
 
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  serialized data | rf_reg_metadata_ptr | rf_seq_no | rf_nursery_allocated | rf_size | rf_next | rf_prev
+  serialized data | rf_reg_metadata_ptr | rf_seq_no | rf_size | rf_next | rf_prev
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   The metadata after the serialized data serves various purposes:
@@ -647,8 +604,6 @@ void gib_free_symtable(void)
   and chunks only store a pointer to them.
 
   - rf_seq_no: The index of this particular chunk in the list.
-
-  - rf_nursery_allocated: Whether this chunk was allocated in a nursery.
 
   - rf_size: Used during bounds checking to calculate the size of the next region in
   the linked list.
@@ -696,18 +651,7 @@ GibRegionMeta *gib_alloc_region(uint64_t size)
 
     // Allocate the first chunk.
     int64_t total_size = size + sizeof(GibRegionFooter);
-    GibCursor heap;
-    bool nursery_allocated = true;
-    if (size <= NURSERY_ALLOC_UPPER_BOUND) {
-        heap = gib_alloc(total_size);
-        if (heap == NULL) {
-            heap = malloc(total_size);
-            nursery_allocated = false;
-        }
-    } else {
-        heap = gib_alloc(total_size);
-        nursery_allocated = false;
-    }
+    GibCursor heap = gib_alloc(total_size);
     if (heap == NULL) {
         printf("gib_alloc_region: malloc failed: %" PRId64, total_size);
         exit(1);
@@ -722,14 +666,13 @@ GibRegionMeta *gib_alloc_region(uint64_t size)
     reg->reg_outset_len = 0;
 
 #ifdef _GIBBON_DEBUG
-    printf("Allocated a region(%lld): %lld bytes, nursery=%d.\n", reg->reg_id, size, nursery_allocated);
+    printf("Allocated a region(%lld): %lld bytes.\n", reg->reg_id, size);
 #endif
 
     // Write the footer.
     GibRegionFooter *footer = (GibRegionFooter *) heap_end;
     footer->rf_reg_metadata_ptr = reg;
     footer->rf_seq_no = 1;
-    footer->rf_nursery_allocated = nursery_allocated;
     footer->rf_size = size;
     footer->rf_next = NULL;
     footer->rf_prev = NULL;
@@ -763,7 +706,6 @@ GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
     GibRegionFooter* new_footer = (GibRegionFooter *) end;
     new_footer->rf_reg_metadata_ptr = footer->rf_reg_metadata_ptr;
     new_footer->rf_seq_no = footer->rf_seq_no + 1;
-    new_footer->rf_nursery_allocated = false;
     new_footer->rf_size = newsize;
     new_footer->rf_next = NULL;
     new_footer->rf_prev = footer;
@@ -896,18 +838,10 @@ void gib_free_region(GibCursor end_reg) {
         next_chunk = (char*) footer->rf_next;
 
 #ifdef _GIBBON_DEBUG
-        printf("gib_free_region(%lld): first chunk in nursery: %d\n",
-               reg->reg_id,
-               first_chunk_footer->rf_nursery_allocated);
+        num_freed_chunks++;
+        total_bytesize = total_bytesize + first_chunk_footer->rf_size;
 #endif
-
-        if (! first_chunk_footer->rf_nursery_allocated) {
-#ifdef _GIBBON_DEBUG
-            num_freed_chunks++;
-            total_bytesize = total_bytesize + first_chunk_footer->rf_size;
-#endif
-            free(first_chunk);
-        }
+        free(first_chunk);
 
         while (next_chunk != NULL) {
             next_chunk_footer = (GibRegionFooter *) next_chunk;
