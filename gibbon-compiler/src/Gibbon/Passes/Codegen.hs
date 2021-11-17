@@ -36,8 +36,9 @@ import           Gibbon.L4.Syntax
 -- | Harvest all struct tys.  All product types used anywhere in the program.
 harvestStructTys :: Prog -> S.Set [Ty]
 harvestStructTys (Prog _ _ funs mtal) =
+    S.delete [] $
     S.map (\tys -> filter (\ty -> ty /= (ProdTy [])) tys) $
-    S.delete [] (S.union tys0 tys1)
+    (S.union tys0 tys1)
   where
   tys00 = concatMap allTypes allTails
 
@@ -1177,8 +1178,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  IsBig -> do
                    let [(outV, BoolTy)] = bnds
-                       [i,arg] = rnds
-                       e = [cexp| gib_is_big($(codegenTriv venv i), $(codegenTriv venv arg)) |]
+                       -- [i,arg] = rnds
+                       -- e = [cexp| gib_is_big($(codegenTriv venv i), $(codegenTriv venv arg)) |]
+                       e = [cexp| false |]
                    return $ [ C.BlockDecl [cdecl| $ty:(codegenTy BoolTy) $id:outV = $exp:e; |] ]
 
                  Gensym  -> do

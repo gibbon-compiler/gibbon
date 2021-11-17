@@ -123,16 +123,6 @@ GibInt gib_get_num_processors(void);
  */
 
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Bump allocation for linked-lists
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-void gib_init_bumpalloc(void);
-void *gib_bumpalloc(int64_t n);
-void gib_save_alloc_state(void);
-void gib_restore_alloc_state(void);
-
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Gibbon's allocators
@@ -239,74 +229,6 @@ void gib_free_symtable(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Memory Management; regions, chunks, GC etc.
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-#define MAX_OUTSET_LENGTH 10
-
-typedef struct gib_region_meta {
-    GibSym reg_id;
-    uint16_t reg_refcount;
-    GibCursor reg_heap;
-    uint16_t reg_outset_len;
-    GibCursor reg_outset[MAX_OUTSET_LENGTH];
-} GibRegionMeta;
-
-typedef struct gib_region_footer {
-    GibRegionMeta *rf_reg_metadata_ptr;
-
-    int64_t rf_seq_no;
-    uint64_t rf_size;
-    struct gib_region_footer *rf_next;
-    struct gib_region_footer *rf_prev;
-} GibRegionFooter;
-
-typedef struct gib_chunk {
-    GibCursor chunk_start;
-    GibCursor chunk_end;
-} GibChunk;
-
-GibRegionMeta *gib_alloc_region(uint64_t size);
-GibChunk gib_alloc_chunk(GibCursor end_old_chunk);
-void gib_bump_refcount(GibCursor end_b, GibCursor end_a);
-void gib_free_region(GibCursor end_reg);
-
-// Helpers for GC.
-void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg);
-void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg);
-GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer);
-uint16_t gib_get_ref_count(GibCursor end_ptr);
-GibBool gib_is_big(GibInt i, GibCursor cur);
-
-// Functions related to counting the number of allocated regions.
-GibRegionMeta *gib_alloc_counted_region(int64_t size);
-void gib_bump_global_region_count(void);
-void gib_print_global_region_count(void);
-
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * New RTS
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-typedef struct gib_cursors_pair {
-    GibCursor cp_start;
-    GibCursor cp_end;
-} GibCursorsPair;
-
-int gib_init_info_table(void);
-int gib_insert_dcon_into_info_table(
-    uint32_t datatype,
-    uint8_t datacon,
-    uint8_t num_scalars,
-    uint8_t num_packed,
-    uint32_t *field_tys,
-    uint8_t field_tys_length
-);
-
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Vectors
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
@@ -343,6 +265,22 @@ double gib_sum_timing_array(GibVector *times);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Bump allocation for linked-lists
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+void gib_init_bumpalloc(void);
+void *gib_bumpalloc(int64_t n);
+void gib_save_alloc_state(void);
+void gib_restore_alloc_state(void);
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * List functions
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
 typedef struct gib_list {
     size_t ll_data_size;
     void *ll_data;
@@ -371,6 +309,76 @@ typedef struct gib_pixel {
 
 void gib_write_ppm(char* filename, GibInt width, GibInt height, GibVector *pixels);
 void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels);
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Memory Management; regions, chunks, GC etc.
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+#define MAX_OUTSET_LENGTH 10
+
+typedef struct gib_region_meta {
+    GibSym reg_id;
+    uint16_t reg_refcount;
+    GibCursor reg_heap;
+    uint16_t reg_outset_len;
+    GibCursor reg_outset[MAX_OUTSET_LENGTH];
+} GibRegionMeta;
+
+typedef struct gib_region_footer {
+    GibRegionMeta *rf_reg_metadata_ptr;
+
+    int64_t rf_seq_no;
+    bool rf_nursery_allocated;
+    uint64_t rf_size;
+    struct gib_region_footer *rf_next;
+    struct gib_region_footer *rf_prev;
+} GibRegionFooter;
+
+typedef struct gib_chunk {
+    GibCursor chunk_start;
+    GibCursor chunk_end;
+} GibChunk;
+
+GibRegionMeta *gib_alloc_region(uint64_t size);
+GibChunk gib_alloc_chunk(GibCursor end_old_chunk);
+void gib_bump_refcount(GibCursor end_b, GibCursor end_a);
+void gib_free_region(GibCursor end_reg);
+
+// Functions related to counting the number of allocated regions.
+GibRegionMeta *gib_alloc_counted_region(int64_t size);
+void gib_bump_global_region_count(void);
+void gib_print_global_region_count(void);
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Generational GC functions
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+typedef struct gib_cursors_pair {
+    GibCursor cp_start;
+    GibCursor cp_end;
+} GibCursorsPair;
+
+GibCursorsPair *gib_alloc_region2(uint64_t size);
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Rust RTS functions
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+int gib_init_info_table(void);
+int gib_insert_dcon_into_info_table(
+    uint32_t datatype,
+    uint8_t datacon,
+    uint8_t num_scalars,
+    uint8_t num_packed,
+    uint32_t *field_tys,
+    uint8_t field_tys_length
+);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

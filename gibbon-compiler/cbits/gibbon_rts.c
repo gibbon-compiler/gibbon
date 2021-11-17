@@ -217,82 +217,6 @@ int dbgprintf(const char *format, ...)
 
 
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Bump allocation for linked-lists
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-
-#ifdef _BUMPALLOC
-// #define _GIBBON_DEBUG
-#warning "Using bump allocator."
-
-static __thread char *gib_global_bumpalloc_heap_ptr = (char*)NULL;
-static __thread char *gib_global_bumpalloc_heap_ptr_end = (char*)NULL;
-static char *gib_global_saved_heap_ptr_stack[100];
-static int gib_global_num_saved_heap_ptr = 0;
-
-// For simplicity just use a single large slab:
-inline void gib_init_bumpalloc(void)
-{
-    gib_global_bumpalloc_heap_ptr = (char*)malloc(gib_global_biginf_init_chunk_size);
-    gib_global_bumpalloc_heap_ptr_end = gib_global_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
-#ifdef _GIBBON_DEBUG
-    printf("Arena size for bump alloc: %lld\n", gib_global_biginf_init_chunk_size);
-    printf("gib_bumpalloc/gib_init_bumpalloc DONE: heap_ptr = %p\n", gib_global_bumpalloc_heap_ptr);
-#endif
-}
-
-void *gib_bumpalloc(int64_t n)
-{
-    if (! gib_global_bumpalloc_heap_ptr) {
-        gib_init_bumpalloc();
-    }
-    if (gib_global_bumpalloc_heap_ptr + n < gib_global_bumpalloc_heap_ptr_end) {
-        char* old= gib_global_bumpalloc_heap_ptr;
-        gib_global_bumpalloc_heap_ptr += n;
-        return old;
-    } else {
-        fprintf(stderr, "Warning: bump allocator ran out of memory.");
-        exit(1);
-    }
-}
-
-// Snapshot the current heap pointer value across all threads.
-void gib_save_alloc_state(void)
-{
-#ifdef _GIBBON_DEBUG
-    printf("Saving(%p): pos %d", heap_ptr, gib_global_num_saved_heap_ptr);
-#endif
-    gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr] = heap_ptr;
-    gib_global_num_saved_heap_ptr++;
-#ifdef _GIBBON_DEBUG
-    printf("\n");
-#endif
-}
-
-void gib_restore_alloc_state(void)
-{
-    if(gib_global_num_saved_heap_ptr <= 0) {
-        fprintf(stderr, "Bad call to gib_restore_alloc_state!  Saved stack empty!\ne");
-        exit(1);
-    }
-    gib_global_num_saved_heap_ptr--;
-#ifdef _GIBBON_DEBUG
-    printf("Restoring(%p): pos %d, discarding %p",
-           gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr], gib_global_num_saved_heap_ptr, gib_global_bumpalloc_heap_ptr);
-#endif
-    gib_global_bumpalloc_heap_ptr = gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr];
-}
-
-#else
-// Regular malloc mode:
-void gib_init_bumpalloc(void) {}
-void *gib_bumpalloc(int64_t n) { return malloc(n); }
-void gib_save_alloc_state(void) {}
-void gib_restore_alloc_state(void) {}
-
-#endif // BUMPALLOC
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -575,11 +499,392 @@ void gib_free_symtable(void)
     free(tmp);
 }
 
-/*
 
-  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  Memory Management; regions, chunks, GC etc.
-  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Vectors
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+GibVector *gib_vector_alloc(GibInt num, size_t elt_size)
+{
+    GibVector *vec = gib_alloc(sizeof(GibVector));
+    if (vec == NULL) {
+        printf("alloc_vector: malloc failed: %ld", sizeof(GibVector));
+        exit(1);
+    }
+    void* data = gib_alloc(num * elt_size);
+    if (data == NULL) {
+        printf("alloc_vector: malloc failed: %ld", sizeof(num * elt_size));
+        exit(1);
+    }
+    vec->vec_lower = 0;
+    vec->vec_upper = num;
+    vec->vec_elt_size = elt_size;
+    vec->vec_data = data;
+    return vec;
+}
+
+inline GibInt gib_vector_length(GibVector *vec)
+{
+    return (vec->vec_upper - vec->vec_lower);
+}
+
+inline GibBool gib_vector_is_empty(GibVector *vec)
+{
+    return (gib_vector_length(vec) == 0);
+}
+
+GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
+{
+    GibInt lower = vec->vec_lower + i;
+    GibInt upper = vec->vec_lower + i + n;
+    if ((lower > vec->vec_upper)) {
+        printf("gib_vector_slice: lower out of bounds, %" PRId64 " > %" PRId64, lower, vec->vec_upper);
+        exit(1);
+    }
+    if ((upper > vec->vec_upper)) {
+        printf("gib_vector_slice: upper out of bounds, %" PRId64 " > %" PRId64, upper, vec->vec_upper);
+        exit(1);
+    }
+    GibVector *vec2 = gib_alloc(sizeof(GibVector));
+    if (vec == NULL) {
+        printf("gib_vector_slice: malloc failed: %ld", sizeof(GibVector));
+        exit(1);
+    }
+    vec2->vec_lower = lower;
+    vec2->vec_upper = upper;
+    vec2->vec_elt_size = vec->vec_elt_size;
+    vec2->vec_data = vec->vec_data;
+    return vec2;
+}
+
+// The callers must cast the return value.
+inline void *gib_vector_nth(GibVector *vec, GibInt i)
+{
+#ifdef _GIBBON_BOUNDSCHECK
+    if (i < vec->lower || i > vec->upper) {
+        fprintf(stdderr, "gib_vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->vec_lower, vec->vec_upper);
+        exit(1);
+    }
+#endif
+    return ((char*)vec->vec_data + (vec->vec_elt_size * (vec->vec_lower + i)));
+}
+
+inline GibVector *gib_vector_inplace_update(GibVector *vec, GibInt i, void* elt)
+{
+    void* dst = gib_vector_nth(vec, i);
+    memcpy(dst, elt, vec->vec_elt_size);
+    return vec;
+}
+
+inline GibVector *gib_vector_copy(GibVector *vec)
+{
+    GibInt len = gib_vector_length(vec);
+    void *start = gib_vector_nth(vec, 0);
+    GibVector *vec2 = gib_vector_alloc(len, vec->vec_elt_size);
+    memcpy(vec2->vec_data, start, len * vec->vec_elt_size);
+    return vec2;
+}
+
+inline GibVector *gib_vector_inplace_sort(GibVector *vec, int (*compar)(const void *, const void*))
+{
+    void *start = gib_vector_nth(vec, 0);
+    qsort(start, gib_vector_length(vec), vec->vec_elt_size, compar);
+    return vec;
+}
+
+inline GibVector *gib_vector_sort(GibVector *vec, int (*compar)(const void *, const void*))
+{
+    GibVector *vec2 = gib_vector_copy(vec);
+    gib_vector_inplace_sort(vec2, compar);
+    return vec2;
+}
+
+GibVector *gib_vector_concat(GibVector *vec)
+{
+    // Length of the input vector.
+    GibInt len = gib_vector_length(vec);
+    // Length of the concatenated vector.
+    GibInt result_len = 0;
+    // Size of each element in the concatenated vector.
+    GibInt result_elt_size = 0;
+    GibVector **elt_ref, *elt;
+    for (GibInt i = 0; i < len; i++) {
+        elt_ref = gib_vector_nth(vec, i);
+        elt = *elt_ref;
+        result_elt_size = elt->vec_elt_size;
+        result_len += gib_vector_length(elt);
+    }
+
+    // Concatenated vector.
+    GibVector *result = gib_vector_alloc(result_len, result_elt_size);
+    GibInt elt_len;
+    // A counter that tracks the index of elements in 'result'.
+    GibInt k = 0;
+    for (GibInt i = 0; i < len; i++) {
+        elt_ref = gib_vector_nth(vec, i);
+        elt = *elt_ref;
+        elt_len = gib_vector_length(elt);
+
+        for (GibInt j = 0; j < elt_len; j++) {
+            void* k_elt = gib_vector_nth(elt, j);
+            gib_vector_inplace_update(result, k, k_elt);
+            k++;
+        }
+    }
+
+    return result;
+}
+
+inline void gib_vector_free(GibVector *vec)
+{
+    free(vec->vec_data);
+    free(vec);
+    return;
+}
+
+GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
+{
+    if (vec1->vec_upper != vec2->vec_lower) {
+        printf("gib_vector_merge: non-contiguous slices, (%" PRId64 ",%" PRId64 "), (%" PRId64 ",%" PRId64 ")",
+               vec1->vec_lower, vec1->vec_upper, vec2->vec_lower, vec2->vec_upper);
+        exit(1);
+    }
+    GibVector *merged = gib_alloc(sizeof(GibVector));
+    if (merged == NULL) {
+        printf("gib_vector_merge: malloc failed: %ld", sizeof(GibVector));
+        exit(1);
+    }
+    merged->vec_lower = vec1->vec_lower;
+    merged->vec_upper = vec2->vec_upper;
+    merged->vec_elt_size = vec1->vec_elt_size;
+    merged->vec_data = vec1->vec_data;
+    return merged;
+}
+
+void gib_print_timing_array(GibVector *times) {
+    printf("TIMES: [");
+    double *d;
+    GibInt n = gib_vector_length(times);
+    for(GibInt i = 0; i < n; i++) {
+        d = gib_vector_nth(times, i);
+        if (i == (n-1)) {
+            printf("%f",*d);
+        }
+        else {
+            printf("%f, ",*d);
+        }
+    }
+    printf("]\n");
+}
+
+double gib_sum_timing_array(GibVector *times)
+{
+    double *d;
+    double acc = 0;
+    for(int i = 0; i < gib_vector_length(times); i++) {
+        d = gib_vector_nth(times, i);
+        acc += *d;
+    }
+    return acc;
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Linked lists
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Bump allocation for linked-lists
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+
+#ifdef _BUMPALLOC
+// #define _GIBBON_DEBUG
+#warning "Using bump allocator."
+
+static __thread char *gib_global_bumpalloc_heap_ptr = (char*)NULL;
+static __thread char *gib_global_bumpalloc_heap_ptr_end = (char*)NULL;
+static char *gib_global_saved_heap_ptr_stack[100];
+static int gib_global_num_saved_heap_ptr = 0;
+
+// For simplicity just use a single large slab:
+inline void gib_init_bumpalloc(void)
+{
+    gib_global_bumpalloc_heap_ptr = (char*)malloc(gib_global_biginf_init_chunk_size);
+    gib_global_bumpalloc_heap_ptr_end = gib_global_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
+#ifdef _GIBBON_DEBUG
+    printf("Arena size for bump alloc: %lld\n", gib_global_biginf_init_chunk_size);
+    printf("gib_bumpalloc/gib_init_bumpalloc DONE: heap_ptr = %p\n", gib_global_bumpalloc_heap_ptr);
+#endif
+}
+
+void *gib_bumpalloc(int64_t n)
+{
+    if (! gib_global_bumpalloc_heap_ptr) {
+        gib_init_bumpalloc();
+    }
+    if (gib_global_bumpalloc_heap_ptr + n < gib_global_bumpalloc_heap_ptr_end) {
+        char* old= gib_global_bumpalloc_heap_ptr;
+        gib_global_bumpalloc_heap_ptr += n;
+        return old;
+    } else {
+        fprintf(stderr, "Warning: bump allocator ran out of memory.");
+        exit(1);
+    }
+}
+
+// Snapshot the current heap pointer value across all threads.
+void gib_save_alloc_state(void)
+{
+#ifdef _GIBBON_DEBUG
+    printf("Saving(%p): pos %d", heap_ptr, gib_global_num_saved_heap_ptr);
+#endif
+    gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr] = heap_ptr;
+    gib_global_num_saved_heap_ptr++;
+#ifdef _GIBBON_DEBUG
+    printf("\n");
+#endif
+}
+
+void gib_restore_alloc_state(void)
+{
+    if(gib_global_num_saved_heap_ptr <= 0) {
+        fprintf(stderr, "Bad call to gib_restore_alloc_state!  Saved stack empty!\ne");
+        exit(1);
+    }
+    gib_global_num_saved_heap_ptr--;
+#ifdef _GIBBON_DEBUG
+    printf("Restoring(%p): pos %d, discarding %p",
+           gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr], gib_global_num_saved_heap_ptr, gib_global_bumpalloc_heap_ptr);
+#endif
+    gib_global_bumpalloc_heap_ptr = gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr];
+}
+
+#else
+// Regular malloc mode:
+void gib_init_bumpalloc(void) {}
+void *gib_bumpalloc(int64_t n) { return malloc(n); }
+void gib_save_alloc_state(void) {}
+void gib_restore_alloc_state(void) {}
+
+#endif // BUMPALLOC
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * List functions
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+
+inline GibList *gib_list_alloc(size_t data_size)
+{
+    // GibList *ls = gib_alloc(sizeof(GibList));
+    GibList *ls = gib_bumpalloc(sizeof(GibList));
+    ls->ll_data_size = data_size;
+    ls->ll_data = NULL;
+    ls->ll_next = NULL;
+    return ls;
+}
+
+inline GibBool gib_list_is_empty(GibList *ls)
+{
+    return ls->ll_next == NULL;
+}
+
+inline GibList *gib_list_cons(void *elt, GibList *ls)
+{
+    // void* data = gib_alloc(ls->data_size);
+    void* data = gib_bumpalloc(ls->ll_data_size);
+    if (data == NULL) {
+        printf("gib_list_cons: malloc failed: %ld", ls->ll_data_size);
+        exit(1);
+    }
+    memcpy(data, elt, ls->ll_data_size);
+    // GibList *res = gib_alloc(sizeof(GibList));
+    GibList *res = gib_bumpalloc(sizeof(GibList));
+    res->ll_data_size = ls->ll_data_size;
+    res->ll_data = data;
+    res->ll_next = (GibList*) ls;
+    return res;
+}
+
+inline void *gib_list_head(GibList *ls)
+{
+    return ls->ll_data;
+}
+
+inline GibList* gib_list_tail(GibList *ls)
+{
+    return ls->ll_next;
+}
+
+inline void gib_list_free(GibList *ls)
+{
+    free(ls->ll_data);
+    free(ls);
+    return;
+}
+
+inline GibList *gib_list_copy(GibList *ls)
+{
+    GibList *ls2 = gib_list_alloc(ls->ll_data_size);
+    if (ls->ll_data != NULL) {
+        void* data = gib_bumpalloc(ls->ll_data_size);
+        memcpy(data, ls->ll_data, ls->ll_data_size);
+        ls2->ll_data = data;
+    }
+    ls2->ll_next = ls->ll_next;
+    return ls2;
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Ppm images
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+// Example: writePpm("gibbon_rgb_1000.ppm", 1000, 1000, pixels);
+void gib_write_ppm(char* filename, GibInt width, GibInt height, GibVector *pixels) {
+    FILE *fp;
+    fp = fopen(filename, "w+");
+    fprintf(fp, "P3\n");
+    // fprintf(fp, "%lld %lld\n255\n", width, height);
+    fprintf(fp, "%" PRId64 " %" PRId64 "\n255\n", width, height);
+    GibInt len = gib_vector_length(pixels);
+    gib_write_ppm_loop(fp, 0, len, pixels);
+    fclose(fp);
+    return;
+}
+
+void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels) {
+    bool fltIf_5768_6575 = idx == end;
+
+    if (fltIf_5768_6575) {
+        return;
+    } else {
+        GibPixel *tmp_112;
+        tmp_112 = (GibPixel *) gib_vector_nth(pixels, idx);
+        GibPixel tup = *tmp_112;
+        GibInt x = tup.field0;
+        GibInt y = tup.field1;
+        GibInt z = tup.field2;
+        // write to file.
+        // fprintf(fp, "%lld %lld %lld\n", x, y, z);
+        fprintf(fp, "%" PRId64 " %" PRId64 " %" PRId64 "\n", x, y, z);
+        gib_write_ppm_loop(fp, (idx+1), end, pixels);
+    }
+}
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Memory Management; regions, chunks, GC etc.
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+/*
 
   Gibbon has "growing regions" i.e each logical region is backed by a doubly linked-list
   of smaller chunks which grows as required. In addition to actual data, each chunk
@@ -639,6 +944,13 @@ void gib_free_symtable(void)
   'gib_trav_to_first_chunk' accomplishes this.
 
 */
+
+
+void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg);
+void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg);
+GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer);
+uint16_t gib_get_ref_count(GibCursor end_ptr);
+
 
 GibRegionMeta *gib_alloc_region(uint64_t size)
 {
@@ -931,21 +1243,6 @@ inline uint16_t gib_get_ref_count(GibCursor end_ptr)
     return reg->reg_refcount;
 }
 
-// Assume that all nodes with size information have tags >= 150.
-GibBool gib_is_big(GibInt i, GibCursor cur)
-{
-    GibPackedTag tag = *(GibPackedTag *) cur;
-    if (tag >= 150) {
-        cur += 1;
-        GibInt size = *(GibInt *) cur;
-        if (size >= i) {
-            return true;
-        } else {
-            return false;
-        }
-    }
-    return false;
-}
 
 // Functions related to counting the number of allocated regions.
 
@@ -975,297 +1272,18 @@ void gib_print_global_region_count(void)
 }
 
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Vectors
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Generational GC functions
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-GibVector *gib_vector_alloc(GibInt num, size_t elt_size)
+
+GibCursorsPair *gib_alloc_region2(uint64_t size)
 {
-    GibVector *vec = gib_alloc(sizeof(GibVector));
-    if (vec == NULL) {
-        printf("alloc_vector: malloc failed: %ld", sizeof(GibVector));
-        exit(1);
-    }
-    void* data = gib_alloc(num * elt_size);
-    if (data == NULL) {
-        printf("alloc_vector: malloc failed: %ld", sizeof(num * elt_size));
-        exit(1);
-    }
-    vec->vec_lower = 0;
-    vec->vec_upper = num;
-    vec->vec_elt_size = elt_size;
-    vec->vec_data = data;
-    return vec;
+    return NULL;
 }
 
-inline GibInt gib_vector_length(GibVector *vec)
-{
-    return (vec->vec_upper - vec->vec_lower);
-}
 
-inline GibBool gib_vector_is_empty(GibVector *vec)
-{
-    return (gib_vector_length(vec) == 0);
-}
-
-GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
-{
-    GibInt lower = vec->vec_lower + i;
-    GibInt upper = vec->vec_lower + i + n;
-    if ((lower > vec->vec_upper)) {
-        printf("gib_vector_slice: lower out of bounds, %" PRId64 " > %" PRId64, lower, vec->vec_upper);
-        exit(1);
-    }
-    if ((upper > vec->vec_upper)) {
-        printf("gib_vector_slice: upper out of bounds, %" PRId64 " > %" PRId64, upper, vec->vec_upper);
-        exit(1);
-    }
-    GibVector *vec2 = gib_alloc(sizeof(GibVector));
-    if (vec == NULL) {
-        printf("gib_vector_slice: malloc failed: %ld", sizeof(GibVector));
-        exit(1);
-    }
-    vec2->vec_lower = lower;
-    vec2->vec_upper = upper;
-    vec2->vec_elt_size = vec->vec_elt_size;
-    vec2->vec_data = vec->vec_data;
-    return vec2;
-}
-
-// The callers must cast the return value.
-inline void *gib_vector_nth(GibVector *vec, GibInt i)
-{
-#ifdef _GIBBON_BOUNDSCHECK
-    if (i < vec->lower || i > vec->upper) {
-        fprintf(stdderr, "gib_vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->vec_lower, vec->vec_upper);
-        exit(1);
-    }
-#endif
-    return ((char*)vec->vec_data + (vec->vec_elt_size * (vec->vec_lower + i)));
-}
-
-inline GibVector *gib_vector_inplace_update(GibVector *vec, GibInt i, void* elt)
-{
-    void* dst = gib_vector_nth(vec, i);
-    memcpy(dst, elt, vec->vec_elt_size);
-    return vec;
-}
-
-inline GibVector *gib_vector_copy(GibVector *vec)
-{
-    GibInt len = gib_vector_length(vec);
-    void *start = gib_vector_nth(vec, 0);
-    GibVector *vec2 = gib_vector_alloc(len, vec->vec_elt_size);
-    memcpy(vec2->vec_data, start, len * vec->vec_elt_size);
-    return vec2;
-}
-
-inline GibVector *gib_vector_inplace_sort(GibVector *vec, int (*compar)(const void *, const void*))
-{
-    void *start = gib_vector_nth(vec, 0);
-    qsort(start, gib_vector_length(vec), vec->vec_elt_size, compar);
-    return vec;
-}
-
-inline GibVector *gib_vector_sort(GibVector *vec, int (*compar)(const void *, const void*))
-{
-    GibVector *vec2 = gib_vector_copy(vec);
-    gib_vector_inplace_sort(vec2, compar);
-    return vec2;
-}
-
-GibVector *gib_vector_concat(GibVector *vec)
-{
-    // Length of the input vector.
-    GibInt len = gib_vector_length(vec);
-    // Length of the concatenated vector.
-    GibInt result_len = 0;
-    // Size of each element in the concatenated vector.
-    GibInt result_elt_size = 0;
-    GibVector **elt_ref, *elt;
-    for (GibInt i = 0; i < len; i++) {
-        elt_ref = gib_vector_nth(vec, i);
-        elt = *elt_ref;
-        result_elt_size = elt->vec_elt_size;
-        result_len += gib_vector_length(elt);
-    }
-
-    // Concatenated vector.
-    GibVector *result = gib_vector_alloc(result_len, result_elt_size);
-    GibInt elt_len;
-    // A counter that tracks the index of elements in 'result'.
-    GibInt k = 0;
-    for (GibInt i = 0; i < len; i++) {
-        elt_ref = gib_vector_nth(vec, i);
-        elt = *elt_ref;
-        elt_len = gib_vector_length(elt);
-
-        for (GibInt j = 0; j < elt_len; j++) {
-            void* k_elt = gib_vector_nth(elt, j);
-            gib_vector_inplace_update(result, k, k_elt);
-            k++;
-        }
-    }
-
-    return result;
-}
-
-inline void gib_vector_free(GibVector *vec)
-{
-    free(vec->vec_data);
-    free(vec);
-    return;
-}
-
-GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
-{
-    if (vec1->vec_upper != vec2->vec_lower) {
-        printf("gib_vector_merge: non-contiguous slices, (%" PRId64 ",%" PRId64 "), (%" PRId64 ",%" PRId64 ")",
-               vec1->vec_lower, vec1->vec_upper, vec2->vec_lower, vec2->vec_upper);
-        exit(1);
-    }
-    GibVector *merged = gib_alloc(sizeof(GibVector));
-    if (merged == NULL) {
-        printf("gib_vector_merge: malloc failed: %ld", sizeof(GibVector));
-        exit(1);
-    }
-    merged->vec_lower = vec1->vec_lower;
-    merged->vec_upper = vec2->vec_upper;
-    merged->vec_elt_size = vec1->vec_elt_size;
-    merged->vec_data = vec1->vec_data;
-    return merged;
-}
-
-void gib_print_timing_array(GibVector *times) {
-    printf("TIMES: [");
-    double *d;
-    GibInt n = gib_vector_length(times);
-    for(GibInt i = 0; i < n; i++) {
-        d = gib_vector_nth(times, i);
-        if (i == (n-1)) {
-            printf("%f",*d);
-        }
-        else {
-            printf("%f, ",*d);
-        }
-    }
-    printf("]\n");
-}
-
-double gib_sum_timing_array(GibVector *times)
-{
-    double *d;
-    double acc = 0;
-    for(int i = 0; i < gib_vector_length(times); i++) {
-        d = gib_vector_nth(times, i);
-        acc += *d;
-    }
-    return acc;
-}
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Linked lists
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-inline GibList *gib_list_alloc(size_t data_size)
-{
-    // GibList *ls = gib_alloc(sizeof(GibList));
-    GibList *ls = gib_bumpalloc(sizeof(GibList));
-    ls->ll_data_size = data_size;
-    ls->ll_data = NULL;
-    ls->ll_next = NULL;
-    return ls;
-}
-
-inline GibBool gib_list_is_empty(GibList *ls)
-{
-    return ls->ll_next == NULL;
-}
-
-inline GibList *gib_list_cons(void *elt, GibList *ls)
-{
-    // void* data = gib_alloc(ls->data_size);
-    void* data = gib_bumpalloc(ls->ll_data_size);
-    if (data == NULL) {
-        printf("gib_list_cons: malloc failed: %ld", ls->ll_data_size);
-        exit(1);
-    }
-    memcpy(data, elt, ls->ll_data_size);
-    // GibList *res = gib_alloc(sizeof(GibList));
-    GibList *res = gib_bumpalloc(sizeof(GibList));
-    res->ll_data_size = ls->ll_data_size;
-    res->ll_data = data;
-    res->ll_next = (GibList*) ls;
-    return res;
-}
-
-inline void *gib_list_head(GibList *ls)
-{
-    return ls->ll_data;
-}
-
-inline GibList* gib_list_tail(GibList *ls)
-{
-    return ls->ll_next;
-}
-
-inline void gib_list_free(GibList *ls)
-{
-    free(ls->ll_data);
-    free(ls);
-    return;
-}
-
-inline GibList *gib_list_copy(GibList *ls)
-{
-    GibList *ls2 = gib_list_alloc(ls->ll_data_size);
-    if (ls->ll_data != NULL) {
-        void* data = gib_bumpalloc(ls->ll_data_size);
-        memcpy(data, ls->ll_data, ls->ll_data_size);
-        ls2->ll_data = data;
-    }
-    ls2->ll_next = ls->ll_next;
-    return ls2;
-}
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Ppm images
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-// Example: writePpm("gibbon_rgb_1000.ppm", 1000, 1000, pixels);
-void gib_write_ppm(char* filename, GibInt width, GibInt height, GibVector *pixels) {
-    FILE *fp;
-    fp = fopen(filename, "w+");
-    fprintf(fp, "P3\n");
-    // fprintf(fp, "%lld %lld\n255\n", width, height);
-    fprintf(fp, "%" PRId64 " %" PRId64 "\n255\n", width, height);
-    GibInt len = gib_vector_length(pixels);
-    gib_write_ppm_loop(fp, 0, len, pixels);
-    fclose(fp);
-    return;
-}
-
-void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels) {
-    bool fltIf_5768_6575 = idx == end;
-
-    if (fltIf_5768_6575) {
-        return;
-    } else {
-        GibPixel *tmp_112;
-        tmp_112 = (GibPixel *) gib_vector_nth(pixels, idx);
-        GibPixel tup = *tmp_112;
-        GibInt x = tup.field0;
-        GibInt y = tup.field1;
-        GibInt z = tup.field2;
-        // write to file.
-        // fprintf(fp, "%lld %lld %lld\n", x, y, z);
-        fprintf(fp, "%" PRId64 " %" PRId64 " %" PRId64 "\n", x, y, z);
-        gib_write_ppm_loop(fp, (idx+1), end, pixels);
-    }
-}
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Main functions
