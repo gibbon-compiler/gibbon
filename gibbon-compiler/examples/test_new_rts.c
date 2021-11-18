@@ -95,7 +95,7 @@ GibInt fib_seq(GibInt n)
     }
 }
 
-void alloc_region(void)
+void go_alloc_region(void)
 {
     int worker;
 #ifdef _GIBBON_PARALLEL
@@ -106,39 +106,31 @@ void alloc_region(void)
 
     // A dummy computation to make Cilk schedule this function on
     // different threads.
-    GibInt x = fib_seq(20);
+    GibInt x = fib_seq(25);
     // Allocate a region.
-    GibCursorsPair *cursors = gib_alloc_region2(2*MB-1);
+    GibCursorPair *cursors = gib_alloc_region2(2*KB-1);
     printf("alloc_region: worker=%d, start=%p, end=%p, x=%" PRId64 "\n", worker, cursors->cp_start, cursors->cp_end, x);
     return;
 }
 
+// assumption: NURSERY_REGION_MAX_SIZE is (2 * KB).
 void test_alloc_region(void)
 {
     // sequential.
     printf("\nSequential.\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-    alloc_region();
-    alloc_region();
-    alloc_region();
+    for (int i = 0; i < 3; i++) {
+        go_alloc_region();
+    }
 
-    // reset.
-    printf("\nResetting the nursery.\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\n");
-    gib_reset_nursery();
+    // // reset.
+    // printf("\nResetting the nursery.\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\n");
+    // gib_reset_nursery();
 
-    // parallel.
-    printf("\nParallel.\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-    cilk_spawn alloc_region();
-    cilk_spawn alloc_region();
-    cilk_spawn alloc_region();
-    cilk_spawn alloc_region();
-    cilk_spawn alloc_region();
-    cilk_spawn alloc_region();
-
-    alloc_region();
-    alloc_region();
-    alloc_region();
-
-    cilk_sync;
+    // // parallel.
+    // printf("\nParallel.\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+    // cilk_for (int i = 0; i < 3; i++) {
+    //     go_alloc_region();
+    // }
 
     return;
 }
@@ -200,7 +192,7 @@ void test_info_table()
 
 int gib_main_expr(void)
 {
-    // test_alloc_region();
+    test_alloc_region();
 
     uint32_t sz = sizeof(GibDatatype);
     printf("sizeof(enum): %d\n", sz);

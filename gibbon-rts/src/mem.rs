@@ -62,3 +62,27 @@ pub fn insert_dcon_into_info_table(
         Some(())
     }
 }
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * GC
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+extern "C" {
+    // Nursery.
+    static mut gib_global_nursery_from_space_start: *const u8;
+    static mut gib_global_nursery_to_space_start: *const u8;
+    static mut gib_global_nursery_to_space_end: *const u8;
+    static mut gib_global_nursery_alloc_ptr: *const u8;
+    static mut gib_global_nursery_alloc_ptr_end: *const u8;
+
+    // Shadow stack.
+    static mut gib_global_nursery_shadowstack_start: *const u8;
+    static mut gib_global_nursery_shadowstack_end: *const u8;
+    static mut gib_global_nursery_shadowstack_curr: *const u8;
+}
+
+pub fn collect() -> Option<()> {
+    println!("Trigger GC!!!");
+    return None;
+}

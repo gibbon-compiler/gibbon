@@ -42,3 +42,11 @@ pub extern "C" fn gib_insert_dcon_into_info_table(
         None => -1,
     }
 }
+
+#[no_mangle]
+pub extern "C" fn gib_collect() -> i32 {
+    match mem::collect() {
+        Some(()) => 0,
+        None => -1,
+    }
+}

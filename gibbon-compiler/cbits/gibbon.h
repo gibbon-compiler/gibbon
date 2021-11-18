@@ -122,13 +122,6 @@ GibInt gib_get_num_processors(void);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Gibbon's allocators
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
 void *gib_alloc(uint64_t size);
 void *gib_counted_alloc(uint64_t size);
 void *gib_scoped_alloc(uint64_t size);
@@ -357,16 +350,34 @@ void gib_print_global_region_count(void);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+
+// Nursery:
+extern char *gib_global_nursery_from_space_start;
+extern char *gib_global_nursery_to_space_start;
+extern char *gib_global_nursery_to_space_end;
+extern bool gib_global_nursery_initialized;
+
+// The start and end pointers for the current allocation space being used.
+extern char *gib_global_nursery_alloc_ptr;
+extern char *gib_global_nursery_alloc_ptr_end;
+
+// Shadow stack:
+extern char *gib_global_shadow_stack_top;
+
+
 typedef struct gib_cursors_pair {
     GibCursor cp_start;
     GibCursor cp_end;
-} GibCursorsPair;
+} GibCursorPair;
 
-GibCursorsPair *gib_alloc_region2(uint64_t size);
+GibCursorPair *gib_alloc_region2(uint64_t size);
+
+// Only use while testing the implementation!!
+void gib_reset_nursery(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Rust RTS functions
+ * Implemented in the Rust RTS
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
@@ -379,6 +390,7 @@ int gib_insert_dcon_into_info_table(
     uint32_t *field_tys,
     uint8_t field_tys_length
 );
+int gib_collect(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

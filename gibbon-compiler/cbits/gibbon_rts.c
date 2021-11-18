@@ -216,15 +216,6 @@ int dbgprintf(const char *format, ...)
  */
 
 
-
-
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Gibbon's allocators
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-
 /*
  * If parallelism is enabled, we always use a nursery/malloc based allocator
  * since Boehm GC is not thread-safe in its default configuration. It can be
@@ -318,7 +309,7 @@ inline GibPtr gib_dict_lookup_ptr(GibSymDict *ptr, GibSym key)
             ptr = ptr->next;
         }
     }
-    printf("Error, key %" PRId64 " not found!\n",key);
+    fprintf(stderr, "Error, key %" PRId64 " not found!\n",key);
     exit(1);
 }
 
@@ -510,12 +501,12 @@ GibVector *gib_vector_alloc(GibInt num, size_t elt_size)
 {
     GibVector *vec = gib_alloc(sizeof(GibVector));
     if (vec == NULL) {
-        printf("alloc_vector: malloc failed: %ld", sizeof(GibVector));
+        fprintf(stderr, "alloc_vector: gib_alloc failed: %ld", sizeof(GibVector));
         exit(1);
     }
     void* data = gib_alloc(num * elt_size);
     if (data == NULL) {
-        printf("alloc_vector: malloc failed: %ld", sizeof(num * elt_size));
+        fprintf(stderr, "alloc_vector: gib_alloc failed: %ld", sizeof(num * elt_size));
         exit(1);
     }
     vec->vec_lower = 0;
@@ -540,16 +531,16 @@ GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
     GibInt lower = vec->vec_lower + i;
     GibInt upper = vec->vec_lower + i + n;
     if ((lower > vec->vec_upper)) {
-        printf("gib_vector_slice: lower out of bounds, %" PRId64 " > %" PRId64, lower, vec->vec_upper);
+        fprintf(stderr, "gib_vector_slice: lower out of bounds, %" PRId64 " > %" PRId64, lower, vec->vec_upper);
         exit(1);
     }
     if ((upper > vec->vec_upper)) {
-        printf("gib_vector_slice: upper out of bounds, %" PRId64 " > %" PRId64, upper, vec->vec_upper);
+        fprintf(stderr, "gib_vector_slice: upper out of bounds, %" PRId64 " > %" PRId64, upper, vec->vec_upper);
         exit(1);
     }
     GibVector *vec2 = gib_alloc(sizeof(GibVector));
     if (vec == NULL) {
-        printf("gib_vector_slice: malloc failed: %ld", sizeof(GibVector));
+        fprintf(stderr, "gib_vector_slice: gib_alloc failed: %ld", sizeof(GibVector));
         exit(1);
     }
     vec2->vec_lower = lower;
@@ -647,13 +638,13 @@ inline void gib_vector_free(GibVector *vec)
 GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
 {
     if (vec1->vec_upper != vec2->vec_lower) {
-        printf("gib_vector_merge: non-contiguous slices, (%" PRId64 ",%" PRId64 "), (%" PRId64 ",%" PRId64 ")",
+        fprintf(stderr,"gib_vector_merge: non-contiguous slices, (%" PRId64 ",%" PRId64 "), (%" PRId64 ",%" PRId64 ")",
                vec1->vec_lower, vec1->vec_upper, vec2->vec_lower, vec2->vec_upper);
         exit(1);
     }
     GibVector *merged = gib_alloc(sizeof(GibVector));
     if (merged == NULL) {
-        printf("gib_vector_merge: malloc failed: %ld", sizeof(GibVector));
+        fprintf(stderr, "gib_vector_merge: gib_alloc failed: %ld", sizeof(GibVector));
         exit(1);
     }
     merged->vec_lower = vec1->vec_lower;
@@ -714,7 +705,7 @@ static int gib_global_num_saved_heap_ptr = 0;
 // For simplicity just use a single large slab:
 inline void gib_init_bumpalloc(void)
 {
-    gib_global_bumpalloc_heap_ptr = (char*)malloc(gib_global_biginf_init_chunk_size);
+    gib_global_bumpalloc_heap_ptr = (char*)gib_alloc(gib_global_biginf_init_chunk_size);
     gib_global_bumpalloc_heap_ptr_end = gib_global_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
 #ifdef _GIBBON_DEBUG
     printf("Arena size for bump alloc: %lld\n", gib_global_biginf_init_chunk_size);
@@ -767,7 +758,7 @@ void gib_restore_alloc_state(void)
 #else
 // Regular malloc mode:
 void gib_init_bumpalloc(void) {}
-void *gib_bumpalloc(int64_t n) { return malloc(n); }
+void *gib_bumpalloc(int64_t n) { return gib_alloc(n); }
 void gib_save_alloc_state(void) {}
 void gib_restore_alloc_state(void) {}
 
@@ -800,7 +791,7 @@ inline GibList *gib_list_cons(void *elt, GibList *ls)
     // void* data = gib_alloc(ls->data_size);
     void* data = gib_bumpalloc(ls->ll_data_size);
     if (data == NULL) {
-        printf("gib_list_cons: malloc failed: %ld", ls->ll_data_size);
+        fprintf(stderr, "gib_list_cons: gib_alloc failed: %ld", ls->ll_data_size);
         exit(1);
     }
     memcpy(data, elt, ls->ll_data_size);
@@ -957,7 +948,7 @@ GibRegionMeta *gib_alloc_region(uint64_t size)
     // Allocate the region metadata.
     GibRegionMeta *reg = gib_alloc(sizeof(GibRegionMeta));
     if (reg == NULL) {
-        printf("gib_alloc_region: allocation failed: %ld", sizeof(GibRegionMeta));
+        fprintf(stderr, "gib_alloc_region: allocation failed: %ld", sizeof(GibRegionMeta));
         exit(1);
     }
 
@@ -965,7 +956,7 @@ GibRegionMeta *gib_alloc_region(uint64_t size)
     int64_t total_size = size + sizeof(GibRegionFooter);
     GibCursor heap = gib_alloc(total_size);
     if (heap == NULL) {
-        printf("gib_alloc_region: malloc failed: %" PRId64, total_size);
+        fprintf(stderr, "gib_alloc_region: gib_alloc failed: %" PRId64, total_size);
         exit(1);
     }
     // Not heap+total_size, since we must keep space for the footer.
@@ -1006,7 +997,7 @@ GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
     // Allocate.
     GibCursor start = gib_alloc(total_size);
     if (start == NULL) {
-        printf("gib_alloc_chunk: malloc failed: %" PRId64, total_size);
+        fprintf(stderr, "gib_alloc_chunk: gib_alloc failed: %" PRId64, total_size);
         exit(1);
     }
     GibCursor end = start + newsize;
@@ -1264,7 +1255,6 @@ void gib_bump_global_region_count(void)
     return;
 }
 
-
 void gib_print_global_region_count(void)
 {
     printf("REGION_COUNT: %" PRId64 "\n", gib_global_region_count);
@@ -1277,12 +1267,111 @@ void gib_print_global_region_count(void)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+// 4 megabytes for each semi-space.
+#define NURSERY_SIZE (4 * KB)
 
-GibCursorsPair *gib_alloc_region2(uint64_t size)
+// If a region is over this size, alloc to refcounted heap directly.
+#define NURSERY_REGION_MAX_SIZE (2 * KB)
+
+// CK: Not sure how big should this be, but it's same as the nursery for now.
+#define SHADOWSTACK_SIZE (4 * MB)
+
+
+// Nursery:
+char *gib_global_nursery_from_space_start = (char*) NULL;
+char *gib_global_nursery_to_space_start = (char*) NULL;
+char *gib_global_nursery_to_space_end = (char*) NULL;
+bool gib_global_nursery_initialized = false;
+
+// The start and end pointers for the current allocation space being used.
+char *gib_global_nursery_alloc_ptr = (char*) NULL;
+char *gib_global_nursery_alloc_ptr_end = (char*) NULL;
+
+// Shadow stack:
+char *gib_global_shadowstack_start = (char*) NULL;
+char *gib_global_shadowstack_end = (char*) NULL;
+char *gib_global_shadowstack_curr = (char*) NULL;
+
+
+GibCursorPair *gib_alloc_region_on_heap(uint64_t size);
+GibCursorPair *gib_alloc_region_in_nursery(uint64_t size);
+void gib_initialize_nursery(void);
+
+
+GibCursorPair *gib_alloc_region2(uint64_t size)
 {
-    return NULL;
+    if (size > NURSERY_REGION_MAX_SIZE) {
+        return gib_alloc_region_on_heap(size);
+    } else {
+        return gib_alloc_region_in_nursery(size);
+    }
 }
 
+GibCursorPair *gib_alloc_region_on_heap(uint64_t size)
+{
+    char *heap_start = gib_alloc(size);
+    if (heap_start == NULL) {
+        fprintf(stderr, "gib_alloc_region_on_heap: gib_alloc failed: %" PRId64, size);
+        exit(1);
+    }
+    char *heap_end = heap_start + size;
+    GibCursorPair *heap = gib_alloc(sizeof(GibCursorPair));
+    heap->cp_start = heap_start;
+    heap->cp_end = heap_end;
+    return heap;
+}
+
+GibCursorPair *gib_alloc_region_in_nursery(uint64_t size)
+{
+    assert(gib_global_nursery_initialized);
+    char *bump = gib_global_nursery_alloc_ptr + size;
+    if (bump >= gib_global_nursery_alloc_ptr_end) {
+        gib_collect();
+        return gib_alloc_region_on_heap(size);
+    }
+    char *old = gib_global_nursery_alloc_ptr;
+    gib_global_nursery_alloc_ptr = bump;
+    GibCursorPair *heap = gib_alloc(sizeof(GibCursorPair));
+    heap->cp_start = old;
+    heap->cp_end = bump;
+    return heap;
+}
+
+void gib_initialize_nursery(void)
+{
+    // Initialize nursery.
+    gib_global_nursery_from_space_start = (char*) gib_alloc(NURSERY_SIZE * 2);
+    if (gib_global_nursery_from_space_start == NULL) {
+        fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", (NURSERY_SIZE*2));
+        exit(1);
+    }
+    gib_global_nursery_to_space_start = gib_global_nursery_from_space_start + NURSERY_SIZE;
+    gib_global_nursery_to_space_end = gib_global_nursery_to_space_start + NURSERY_SIZE;
+    gib_global_nursery_alloc_ptr = gib_global_nursery_from_space_start;
+    gib_global_nursery_alloc_ptr_end = gib_global_nursery_to_space_start;
+
+    // Initialize shadow stack.
+    gib_global_shadowstack_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
+    if (gib_global_shadowstack_start == NULL) {
+        fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", SHADOWSTACK_SIZE);
+        exit(1);
+    }
+    gib_global_shadowstack_end = gib_global_shadowstack_start + SHADOWSTACK_SIZE;
+    gib_global_shadowstack_curr = gib_global_shadowstack_start;
+
+    gib_global_nursery_initialized = true;
+}
+
+void gib_reset_nursery(void)
+{
+    gib_global_nursery_alloc_ptr = gib_global_nursery_from_space_start;
+    gib_global_nursery_alloc_ptr_end = gib_global_nursery_to_space_start;
+
+    gib_global_shadowstack_curr = gib_global_shadowstack_start;
+    return;
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1366,7 +1455,7 @@ int main(int argc, char** argv)
         }
         else if (strcmp(argv[i], "--bench-prog") == 0 && i < argc - 1) {
             int len = strlen(argv[i+1]);
-            gib_global_bench_prog_param = (char*) malloc((len+1)*sizeof(char));
+            gib_global_bench_prog_param = (char*) gib_alloc((len+1)*sizeof(char));
             strncpy(gib_global_bench_prog_param,argv[i+1],len);
             i++;
         }
@@ -1389,10 +1478,12 @@ int main(int argc, char** argv)
     // Initialize gib_global_bench_prog_param to an empty string in case
     // the runtime argument --bench-prog isn't passed.
     if (gib_global_bench_prog_param == NULL) {
-        gib_global_bench_prog_param = (char*) malloc(1*sizeof(char));
+        gib_global_bench_prog_param = (char*) gib_alloc(1*sizeof(char));
         *gib_global_bench_prog_param = '\n';
     }
 
+    // Initialize the nursery.
+    gib_initialize_nursery();
 
     gib_main_expr();
 
