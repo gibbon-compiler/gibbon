@@ -33,7 +33,7 @@ jobs:
           key: ${{ runner.os }}-cabal
           path: |
             ~/.cabal/store
-            ~/cabal/packages
+            ~/.cabal/packages
       - name: build
         run: |
           cd source/gibbon-compiler
