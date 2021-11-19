@@ -43,7 +43,7 @@ jobs:
         uses: actions/cache@v2
         with:
           key: ${{ runner.os }}-answers
-          path: source/gibbon-compiler/examples/build_tmp/
+          path: gibbon-compiler/examples/build_tmp/
       - name: answers
         run: |
           cd source/gibbon-compiler
