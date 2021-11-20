@@ -298,6 +298,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \#include <stdio.h>\n\
         \#include <stdlib.h>\n\
         \#include <stdint.h>\n\
+        \#include <inttypes.h>\n\
         \#include <math.h>\n\
         \#include <stdbool.h>\n\
         \#include <string.h>\n\

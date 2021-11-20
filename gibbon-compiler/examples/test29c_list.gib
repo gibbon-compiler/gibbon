@@ -14,6 +14,38 @@
     [(Nil) ys]
     [(Cons z zs) (reverse zs (Cons z ys))]))
 
-(let ([xs : List (Cons 1 (Cons 2 (Cons 3 (Nil))))])
-  (let ([ys : List (reverse xs (Nil))])
-    (sum-list ys)))
+(data Tree
+      [Leaf Int]
+      [Node Tree Tree])
+
+(define (buildtree [n : Int]) : Tree
+  (if (= n 0)
+      (Leaf 1)
+      (Node (buildtree (- n 1))
+            (buildtree (- n 1)))))
+
+(define (sumtree [tr : Tree]) : Int
+  (case tr
+    [(Leaf n) n]
+    [(Node x y)
+     (let ([sumx : Int (sumtree x)])
+       (let ([sumy : Int (sumtree y)])
+         (+ sumx sumy)))]))
+
+(define (add1 [tr : Tree]) : Tree
+  (case tr
+    [(Leaf n) (Leaf (+ n 1))]
+    [(Node x y) (Node (add1 x) (add1 y))]))
+
+(define (do-reverse) : Int
+ (let ([xs : List (Cons 1 (Cons 2 (Cons 3 (Nil))))])
+   (let ([ys : List (reverse xs (Nil))])
+     (sum-list ys))))
+
+
+(define (do-tree) : Int
+  (let ([tr0 : Tree (buildtree 10)])
+    (let ([tr1 : Tree (add1 tr0)])
+      (sumtree tr1))))
+
+(vector (do-reverse) (do-tree))
