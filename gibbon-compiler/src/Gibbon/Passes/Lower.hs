@@ -405,8 +405,13 @@ lower Prog{fundefs,ddefs,mainExp} = do
             let field_tys = map snd tys
                 (num_packed,num_scalars) = (\(a,b) -> ((length a, length b))) $
                                            partition isPackedTy field_tys
+                scalar_bytes = foldl (\acc ty ->
+                                          if isPackedTy ty
+                                          then acc
+                                          else acc + fromJust (sizeOfTy ty))
+                                     0 field_tys
                 dcon_tag = getTagOfDataCon ddefs dcon
-            in (T.DataConInfo dcon_tag num_scalars num_packed field_tys)
+            in (T.DataConInfo dcon_tag scalar_bytes num_scalars num_packed field_tys)
 
 
   hasCursorTy :: Ty3 -> Bool

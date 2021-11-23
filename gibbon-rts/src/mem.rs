@@ -16,6 +16,8 @@ use crate::ffi::types as ffi;
 
 #[derive(Debug)]
 struct DataconInfo {
+    // Number of bytes before the first packed field.
+    scalar_bytes: u8,
     num_scalars: u8,
     num_packed: u8,
     field_tys: Vec<ffi::C_GibDatatype>,
@@ -39,6 +41,7 @@ pub fn init_info_table() -> Option<()> {
 pub fn insert_dcon_into_info_table(
     datatype: ffi::C_GibDatatype,
     datacon: ffi::C_GibPackedTag,
+    scalar_bytes: u8,
     num_scalars: u8,
     num_packed: u8,
     field_tys: Vec<ffi::C_GibDatatype>,
@@ -54,7 +57,7 @@ pub fn insert_dcon_into_info_table(
         }
         datatype_info.insert(
             datacon,
-            DataconInfo { num_scalars, num_packed, field_tys },
+            DataconInfo { scalar_bytes, num_scalars, num_packed, field_tys },
         );
         if cfg!(debug_assertions) {
             println!("{:?}", tbl);

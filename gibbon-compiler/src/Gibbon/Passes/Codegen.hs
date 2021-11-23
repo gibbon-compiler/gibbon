@@ -366,7 +366,7 @@ initInfoTable info_tbl =
                          info_tbl
     insert_dcon_info = M.foldrWithKey
                            (\tycon tyc_info acc ->
-                                M.foldrWithKey (\dcon (DataConInfo dcon_tag num_scalars num_packed field_tys) acc2 ->
+                                M.foldrWithKey (\dcon (DataConInfo dcon_tag scalar_bytes num_scalars num_packed field_tys) acc2 ->
                                                     if GL.isIndirectionTag dcon then acc2 else
                                                     let set_field_tys =
                                                             map (\(ty,i) ->
@@ -378,7 +378,7 @@ initInfoTable info_tbl =
                                                                      in C.BlockStm [cstm| field_tys[$int:i] = ($id:e); |])
                                                                 (zip field_tys [0..])
                                                         tycon' = tycon ++ "_T"
-                                                        insert_into_tbl = [ C.BlockStm [cstm| error = gib_insert_dcon_into_info_table($id:tycon', $int:dcon_tag, $int:num_scalars, $int:num_packed, field_tys, $int:(num_scalars+num_packed)); |]
+                                                        insert_into_tbl = [ C.BlockStm [cstm| error = gib_insert_dcon_into_info_table($id:tycon', $int:dcon_tag, $int:scalar_bytes, $int:num_scalars, $int:num_packed, field_tys, $int:(num_scalars+num_packed)); |]
                                                                           , C.BlockStm [cstm| if (error < 0) { fprintf(stderr, "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d", error, $id:tycon', $int:dcon_tag); exit(1); } |] ]
                                              in set_field_tys ++ insert_into_tbl ++ acc2)
                                         acc

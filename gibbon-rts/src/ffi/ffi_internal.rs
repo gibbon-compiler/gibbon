@@ -22,6 +22,7 @@ pub extern "C" fn gib_init_info_table() -> i32 {
 pub extern "C" fn gib_insert_dcon_into_info_table(
     datatype: C_GibDatatype,
     datacon: C_GibPackedTag,
+    scalar_bytes: u8,
     num_scalars: u8,
     num_packed: u8,
     c_field_tys: *const C_GibDatatype,
@@ -34,6 +35,7 @@ pub extern "C" fn gib_insert_dcon_into_info_table(
     match mem::insert_dcon_into_info_table(
         datatype,
         datacon,
+        scalar_bytes,
         num_scalars,
         num_packed,
         field_tys,
