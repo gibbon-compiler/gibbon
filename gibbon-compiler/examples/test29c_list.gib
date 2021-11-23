@@ -1,8 +1,15 @@
 #lang gibbon
 
+;; list
+
 (data List
       [Nil]
       [Cons Int List])
+
+(define (build-list [n : Int]) : List
+  (if (= n 0)
+      (Nil)
+      (Cons n (build-list (n-1)))))
 
 (define (sum-list [xs : List]) : Int
   (case xs
@@ -13,6 +20,8 @@
   (case xs
     [(Nil) ys]
     [(Cons z zs) (reverse zs (Cons z ys))]))
+
+;; tree
 
 (data Tree
       [Leaf Int]
@@ -37,15 +46,17 @@
     [(Leaf n) (Leaf (+ n 1))]
     [(Node x y) (Node (add1 x) (add1 y))]))
 
-(define (do-reverse) : Int
- (let ([xs : List (Cons 1 (Cons 2 (Cons 3 (Nil))))])
+;; main
+
+(define (do-reverse [n : Int]) : Int
+ (let ([xs : List (build-list n)])
    (let ([ys : List (reverse xs (Nil))])
      (sum-list ys))))
 
 
-(define (do-tree) : Int
-  (let ([tr0 : Tree (buildtree 10)])
+(define (do-tree [n : Int]) : Int
+  (let ([tr0 : Tree (buildtree n)])
     (let ([tr1 : Tree (add1 tr0)])
       (sumtree tr1))))
 
-(vector (do-reverse) (do-tree))
+(vector (do-reverse 10) (do-tree 10))

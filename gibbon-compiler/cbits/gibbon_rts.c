@@ -88,8 +88,9 @@ char *gib_read_bench_prog_param(void)
     if (gib_global_bench_prog_param == NULL) {
         fprintf(stderr, "gib_read_bench_prog_param: benchmark program was not set! Set using --bench-prog.\n");
         exit(1);
-    } else
+    } else {
         return gib_global_bench_prog_param;
+    }
 }
 
 char *gib_read_benchfile_param(void)
@@ -97,8 +98,9 @@ char *gib_read_benchfile_param(void)
     if (gib_global_benchfile_param == NULL) {
         fprintf(stderr, "gib_read_benchfile_param: benchmark input file was not set! Set using --bench-input.\n");
         exit(1);
-    } else
+    } else {
         return gib_global_benchfile_param;
+    }
 }
 
 char *gib_read_arrayfile_param(void)
@@ -106,8 +108,9 @@ char *gib_read_arrayfile_param(void)
     if (gib_global_arrayfile_param == NULL) {
         fprintf(stderr, "gib_read_arrayfile_param: array input file was not set! Set using --array-input.\n");
         exit(1);
-    } else
+    } else {
         return gib_global_arrayfile_param;
+    }
 }
 
 int64_t gib_read_arrayfile_length_param(void)
@@ -115,8 +118,9 @@ int64_t gib_read_arrayfile_length_param(void)
     if (gib_global_arrayfile_length_param == -1) {
         fprintf(stderr, "gib_read_arrayfile_length_param: array input file length was not set! Set using --array-input-length.\n");
         exit(1);
-    } else
+    } else {
         return gib_global_arrayfile_length_param;
+    }
 }
 
 inline int64_t gib_read_region_count(void)
@@ -271,6 +275,7 @@ inline void gib_free_arena(GibArena *ar)
     free(ar->mem);
     // TODO(vollmerm): free everything in ar->reflist
     free(ar);
+    return;
 }
 
 inline GibCursor gib_extend_arena(GibArena *ar, int size)
@@ -411,36 +416,42 @@ void gib_add_symbol(GibSym idx, char *value)
     if (idx > gib_global_gensym_counter) {
         gib_global_gensym_counter = idx;
     }
+    return;
 }
 
 inline void gib_set_newline(GibSym idx)
 {
     newline_symbol = idx;
     gib_add_symbol(idx,"NEWLINE");
+    return;
 }
 
 inline void gib_set_space(GibSym idx)
 {
     space_symbol = idx;
     gib_add_symbol(idx,"SPACE");
+    return;
 }
 
 inline void gib_set_comma(GibSym idx)
 {
     comma_symbol = idx;
     gib_add_symbol(idx,"COMMA");
+    return;
 }
 
 inline void gib_set_leftparen(GibSym idx)
 {
     leftparen_symbol = idx;
     gib_add_symbol(idx,"LEFTPAREN");
+    return;
 }
 
 inline void gib_set_rightparen(GibSym idx)
 {
     rightparen_symbol = idx;
     gib_add_symbol(idx,"RIGHTPAREN");
+    return;
 }
 
 inline int gib_print_symbol(GibSym idx)
@@ -488,6 +499,7 @@ void gib_free_symtable(void)
     }
     free(elt);
     free(tmp);
+    return;
 }
 
 
@@ -655,7 +667,7 @@ GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
 }
 
 void gib_print_timing_array(GibVector *times) {
-    printf("TIMES: [");
+    printf("ITER TIMES: [");
     double *d;
     GibInt n = gib_vector_length(times);
     for(GibInt i = 0; i < n; i++) {
@@ -668,6 +680,7 @@ void gib_print_timing_array(GibVector *times) {
         }
     }
     printf("]\n");
+    return;
 }
 
 double gib_sum_timing_array(GibVector *times)
@@ -1287,18 +1300,23 @@ bool gib_global_nursery_initialized = false;
 char *gib_global_nursery_alloc_ptr = (char*) NULL;
 char *gib_global_nursery_alloc_ptr_end = (char*) NULL;
 
-// Shadow stack:
-char *gib_global_shadowstack_start = (char*) NULL;
-char *gib_global_shadowstack_end = (char*) NULL;
-char *gib_global_shadowstack_curr = (char*) NULL;
+// Shadow stack for input locations:
+char *gib_global_input_shadowstack_start = (char*) NULL;
+char *gib_global_input_shadowstack_end = (char*) NULL;
+char *gib_global_input_shadowstack_curr = (char*) NULL;
+
+// Shadow stack for output locations:
+char *gib_global_output_shadowstack_start = (char*) NULL;
+char *gib_global_output_shadowstack_end = (char*) NULL;
+char *gib_global_output_shadowstack_curr = (char*) NULL;
+
+bool gib_global_shadowstack_initialized = false;
+
+GibRegionAlloc *gib_alloc_region_on_heap(uint64_t size);
+GibRegionAlloc *gib_alloc_region_in_nursery(uint64_t size);
 
 
-GibCursorPair *gib_alloc_region_on_heap(uint64_t size);
-GibCursorPair *gib_alloc_region_in_nursery(uint64_t size);
-void gib_initialize_nursery(void);
-
-
-GibCursorPair *gib_alloc_region2(uint64_t size)
+GibRegionAlloc *gib_alloc_region2(uint64_t size)
 {
     if (size > NURSERY_REGION_MAX_SIZE) {
         return gib_alloc_region_on_heap(size);
@@ -1307,7 +1325,7 @@ GibCursorPair *gib_alloc_region2(uint64_t size)
     }
 }
 
-GibCursorPair *gib_alloc_region_on_heap(uint64_t size)
+GibRegionAlloc *gib_alloc_region_on_heap(uint64_t size)
 {
     char *heap_start = gib_alloc(size);
     if (heap_start == NULL) {
@@ -1315,13 +1333,14 @@ GibCursorPair *gib_alloc_region_on_heap(uint64_t size)
         exit(1);
     }
     char *heap_end = heap_start + size;
-    GibCursorPair *heap = gib_alloc(sizeof(GibCursorPair));
-    heap->cp_start = heap_start;
-    heap->cp_end = heap_end;
-    return heap;
+    GibRegionAlloc *region = gib_alloc(sizeof(GibRegionAlloc));
+    region->ra_in_nursery = false;
+    region->ra_start = heap_start;
+    region->ra_end = heap_end;
+    return region;
 }
 
-GibCursorPair *gib_alloc_region_in_nursery(uint64_t size)
+GibRegionAlloc *gib_alloc_region_in_nursery(uint64_t size)
 {
     assert(gib_global_nursery_initialized);
     char *bump = gib_global_nursery_alloc_ptr + size;
@@ -1331,15 +1350,15 @@ GibCursorPair *gib_alloc_region_in_nursery(uint64_t size)
     }
     char *old = gib_global_nursery_alloc_ptr;
     gib_global_nursery_alloc_ptr = bump;
-    GibCursorPair *heap = gib_alloc(sizeof(GibCursorPair));
-    heap->cp_start = old;
-    heap->cp_end = bump;
-    return heap;
+    GibRegionAlloc *region = gib_alloc(sizeof(GibRegionAlloc));
+    region->ra_in_nursery = true;
+    region->ra_start = old;
+    region->ra_end = bump;
+    return region;
 }
 
 void gib_initialize_nursery(void)
 {
-    // Initialize nursery.
     gib_global_nursery_from_space_start = (char*) gib_alloc(NURSERY_SIZE * 2);
     if (gib_global_nursery_from_space_start == NULL) {
         fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", (NURSERY_SIZE*2));
@@ -1350,26 +1369,53 @@ void gib_initialize_nursery(void)
     gib_global_nursery_alloc_ptr = gib_global_nursery_from_space_start;
     gib_global_nursery_alloc_ptr_end = gib_global_nursery_to_space_start;
 
-    // Initialize shadow stack.
-    gib_global_shadowstack_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
-    if (gib_global_shadowstack_start == NULL) {
+    gib_global_nursery_initialized = true;
+    return;
+}
+
+void gib_initialize_shadowstack(void)
+{
+    // Initialize shadow stack for input locations.
+    gib_global_input_shadowstack_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
+    if (gib_global_input_shadowstack_start == NULL) {
         fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", SHADOWSTACK_SIZE);
         exit(1);
     }
-    gib_global_shadowstack_end = gib_global_shadowstack_start + SHADOWSTACK_SIZE;
-    gib_global_shadowstack_curr = gib_global_shadowstack_start;
+    gib_global_input_shadowstack_end = gib_global_input_shadowstack_start + SHADOWSTACK_SIZE;
+    gib_global_input_shadowstack_curr = gib_global_input_shadowstack_start;
 
-    gib_global_nursery_initialized = true;
+
+    // Initialize shadow stack for output locations.
+    gib_global_output_shadowstack_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
+    if (gib_global_output_shadowstack_start == NULL) {
+        fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", SHADOWSTACK_SIZE);
+        exit(1);
+    }
+    gib_global_output_shadowstack_end = gib_global_output_shadowstack_start + SHADOWSTACK_SIZE;
+    gib_global_output_shadowstack_curr = gib_global_output_shadowstack_start;
+
+    gib_global_shadowstack_initialized = true;
+    return;
 }
 
 void gib_reset_nursery(void)
 {
     gib_global_nursery_alloc_ptr = gib_global_nursery_from_space_start;
     gib_global_nursery_alloc_ptr_end = gib_global_nursery_to_space_start;
-
-    gib_global_shadowstack_curr = gib_global_shadowstack_start;
+    gib_global_input_shadowstack_curr = gib_global_input_shadowstack_start;
+    gib_global_output_shadowstack_curr = gib_global_output_shadowstack_start;
     return;
 }
+
+void gib_free_region2(GibRegionAlloc *region)
+{
+    if (region->ra_in_nursery) {
+        return;
+    }
+    printf("gib_free_region2: region not in nursery. TODO.\n");
+    return;
+}
+
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
@@ -1482,13 +1528,12 @@ int main(int argc, char** argv)
         *gib_global_bench_prog_param = '\n';
     }
 
-    // Initialize the nursery.
+    // Initialize the nursery and shadow stack.
     gib_initialize_nursery();
+    gib_initialize_shadowstack();
 
+    // Run the program.
     gib_main_expr();
-
-    // // Test linking with the new Rust RTS.
-    // hello_rust();
 
     return 0;
 }

@@ -116,6 +116,9 @@ GibInt gib_get_num_processors(void);
 #define MB (KB * 1024lu)
 #define GB (MB * 1024lu)
 
+// Must be same as "Gibbon.Language.Constants".
+#define INDIRECTION_TAG 254
+#define REDIRECTION_TAG 255
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Allocators
@@ -361,16 +364,29 @@ extern bool gib_global_nursery_initialized;
 extern char *gib_global_nursery_alloc_ptr;
 extern char *gib_global_nursery_alloc_ptr_end;
 
-// Shadow stack:
-extern char *gib_global_shadow_stack_top;
+// Shadow stack for input locations:
+extern char *gib_global_input_shadowstack_start;
+extern char *gib_global_input_shadowstack_end;
+extern char *gib_global_input_shadowstack_curr;
 
+// Shadow stack for output locations:
+extern char *gib_global_output_shadowstack_start;
+extern char *gib_global_output_shadowstack_end;
+extern char *gib_global_output_shadowstack_curr;
 
-typedef struct gib_cursors_pair {
-    GibCursor cp_start;
-    GibCursor cp_end;
-} GibCursorPair;
+extern bool gib_global_shadowstack_initialized;
 
-GibCursorPair *gib_alloc_region2(uint64_t size);
+typedef struct gib_region_alloc {
+    bool ra_in_nursery;
+    GibCursor ra_start;
+    GibCursor ra_end;
+} GibRegionAlloc;
+
+GibRegionAlloc *gib_alloc_region2(uint64_t size);
+void gib_free_region2(GibRegionAlloc *region);
+
+void gib_initialize_nursery(void);
+void gib_initialize_shadowstack(void);
 
 // Only use while testing the implementation!!
 void gib_reset_nursery(void);

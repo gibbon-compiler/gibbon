@@ -76,10 +76,15 @@ extern "C" {
     static mut gib_global_nursery_alloc_ptr: *const u8;
     static mut gib_global_nursery_alloc_ptr_end: *const u8;
 
-    // Shadow stack.
-    static mut gib_global_nursery_shadowstack_start: *const u8;
-    static mut gib_global_nursery_shadowstack_end: *const u8;
-    static mut gib_global_nursery_shadowstack_curr: *const u8;
+    // Shadow stack for input locations.
+    static mut gib_global_input_shadowstack_start: *const u8;
+    static mut gib_global_input_shadowstack_end: *const u8;
+    static mut gib_global_input_shadowstack_curr: *const u8;
+
+    // Shadow stack for output locations.
+    static mut gib_global_output_shadowstack_start: *const u8;
+    static mut gib_global_output_shadowstack_end: *const u8;
+    static mut gib_global_output_shadowstack_curr: *const u8;
 }
 
 pub fn collect() -> Option<()> {
