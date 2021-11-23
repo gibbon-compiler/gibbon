@@ -359,6 +359,9 @@ codegenTriv :: VEnv -> Triv -> C.Exp
 codegenTriv _ (VarTriv v) = C.Var (C.toIdent v noLoc) noLoc
 codegenTriv _ (IntTriv i) = [cexp| $int:i |]
 codegenTriv _ (FloatTriv i) = [cexp| $double:i |]
+codegenTriv _ (BoolTriv b) = case b of
+                               True -> [cexp| true |]
+                               False -> [cexp| false |]
 codegenTriv _ (SymTriv i) = [cexp| $i |]
 codegenTriv _ (TagTriv i) = [cexp| $i |]
 codegenTriv venv (ProdTriv ls) =
@@ -437,7 +440,7 @@ codegenTail venv fenv sort_fns (LetArenaT vr body) ty sync_deps =
 codegenTail venv fenv sort_fns (LetAllocT lhs vals body) ty sync_deps =
     do let structTy = codegenTy (ProdTy (map fst vals))
            size = [cexp| sizeof($ty:structTy) |]
-           venv' = M.insert lhs PtrTy venv
+           venv' = M.insert lhs CursorTy venv
        tal <- codegenTail venv' fenv sort_fns body ty sync_deps
        dflags <- getDynFlags
        let alloc = if (gopt Opt_CountParRegions dflags) || (gopt Opt_CountAllRegions dflags)
@@ -556,7 +559,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
 codegenTail venv fenv sort_fns (LetCallT False bnds ratr rnds body) ty sync_deps
     | [] <- bnds = do tal <- codegenTail venv fenv sort_fns body ty sync_deps
                       return $ [toStmt fnexp] ++ tal
-    | [bnd] <- bnds  = let fn_ret_ty = snd (fenv M.! ratr)
+    | [bnd] <- bnds =  let fn_ret_ty = snd (fenv M.! ratr)
                            venv' = (M.fromList bnds) `M.union` venv in
                        case fn_ret_ty of
                          -- Copied from the otherwise case below.
