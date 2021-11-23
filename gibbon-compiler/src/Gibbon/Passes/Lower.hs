@@ -995,8 +995,8 @@ triv sym_tbl msg ( e0) =
                      -- program in the very first step.
                      Nothing -> error $ "triv: Symbol not found in table: " ++ sdoc s
     -- Bools become ints:
-    (PrimAppE L3.MkTrue [])  -> T.IntTriv 1
-    (PrimAppE L3.MkFalse []) -> T.IntTriv 0
+    (PrimAppE L3.MkTrue [])  -> T.BoolTriv True
+    (PrimAppE L3.MkFalse []) -> T.BoolTriv False
     -- Heck, let's map Unit onto Int too:
     (MkProdE []) -> T.IntTriv 0
     (MkProdE ls) -> T.ProdTriv (map (\x -> triv sym_tbl (show x) x) ls)
@@ -1020,7 +1020,7 @@ typ t =
     SymDictTy (Just var) x -> T.SymDictTy var $ typ x
     SymDictTy Nothing _ty -> error $ "lower/typ: Expected arena annotation on type: " ++ (sdoc t)
     -- t | isCursorTy t -> T.CursorTy
-    PackedTy{} -> T.PtrTy
+    PackedTy{} -> T.CursorTy
     CursorTy -> T.CursorTy -- Audit me
     PtrTy -> T.PtrTy
     ArenaTy   -> T.ArenaTy

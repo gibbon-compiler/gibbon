@@ -55,6 +55,7 @@ data Triv
     = VarTriv Var
     | IntTriv Int64
     | FloatTriv Double
+    | BoolTriv Bool
     | TagTriv Tag
     | SymTriv Word16    -- ^ An index into the symbol table.
     | ProdTriv [Triv]   -- ^ Tuples
@@ -67,6 +68,7 @@ typeOfTriv env trv =
     VarTriv v   -> env M.! v
     IntTriv{}   -> IntTy
     FloatTriv{} -> FloatTy
+    BoolTriv{}  -> BoolTy
     TagTriv{}   -> TagTyPacked
     SymTriv{}   -> SymTy
     ProdTriv ts -> ProdTy (map (typeOfTriv env) ts)

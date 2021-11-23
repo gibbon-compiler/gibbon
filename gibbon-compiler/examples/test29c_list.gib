@@ -9,7 +9,7 @@
 (define (build-list [n : Int]) : List
   (if (= n 0)
       (Nil)
-      (Cons n (build-list (n-1)))))
+      (Cons n (build-list (- n 1)))))
 
 (define (sum-list [xs : List]) : Int
   (case xs

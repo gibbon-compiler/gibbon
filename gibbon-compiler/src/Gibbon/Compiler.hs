@@ -83,6 +83,7 @@ import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
 import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
+import           Gibbon.Passes.LateSimplifier (lateInlineTriv)
 import           Gibbon.Passes.FollowRedirects(followRedirects)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
@@ -701,6 +702,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
 
       -- Note: L3 -> L4
       l4 <- go "lower"          lower                   l3
+      l4 <- go "lateInlineTriv" lateInlineTriv          l4
       l4 <- if gibbon1 || not isPacked
             then do
               l4 <- go "rearrangeFree"   rearrangeFree   l4
