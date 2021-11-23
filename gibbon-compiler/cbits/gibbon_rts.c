@@ -1275,8 +1275,15 @@ void gib_print_global_region_count(void)
 }
 
 
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Generational GC
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+
+
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Generational GC functions
+ * Nursery
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
@@ -1285,10 +1292,6 @@ void gib_print_global_region_count(void)
 
 // If a region is over this size, alloc to refcounted heap directly.
 #define NURSERY_REGION_MAX_SIZE (2 * KB)
-
-// CK: Not sure how big should this be, but it's same as the nursery for now.
-#define SHADOWSTACK_SIZE (4 * MB)
-
 
 // Nursery:
 char *gib_global_nursery_from_space_start = (char*) NULL;
@@ -1299,6 +1302,41 @@ bool gib_global_nursery_initialized = false;
 // The start and end pointers for the current allocation space being used.
 char *gib_global_nursery_alloc_ptr = (char*) NULL;
 char *gib_global_nursery_alloc_ptr_end = (char*) NULL;
+
+void gib_initialize_nursery(void)
+{
+    gib_global_nursery_from_space_start = (char*) gib_alloc(NURSERY_SIZE * 2);
+    if (gib_global_nursery_from_space_start == NULL) {
+        fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", (NURSERY_SIZE*2));
+        exit(1);
+    }
+    gib_global_nursery_to_space_start = gib_global_nursery_from_space_start + NURSERY_SIZE;
+    gib_global_nursery_to_space_end = gib_global_nursery_to_space_start + NURSERY_SIZE;
+    gib_global_nursery_alloc_ptr = gib_global_nursery_from_space_start;
+    gib_global_nursery_alloc_ptr_end = gib_global_nursery_to_space_start;
+
+    gib_global_nursery_initialized = true;
+    return;
+}
+
+void gib_reset_nursery(void)
+{
+    gib_global_nursery_alloc_ptr = gib_global_nursery_from_space_start;
+    gib_global_nursery_alloc_ptr_end = gib_global_nursery_to_space_start;
+    gib_global_input_shadowstack_curr = gib_global_input_shadowstack_start;
+    gib_global_output_shadowstack_curr = gib_global_output_shadowstack_start;
+    return;
+}
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Shadow stack
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+
+// CK: Not sure how big should this be, but it's same as the nursery for now.
+#define SHADOWSTACK_SIZE (4 * MB)
 
 // Shadow stack for input locations:
 char *gib_global_input_shadowstack_start = (char*) NULL;
@@ -1312,9 +1350,40 @@ char *gib_global_output_shadowstack_curr = (char*) NULL;
 
 bool gib_global_shadowstack_initialized = false;
 
+void gib_initialize_shadowstack(void)
+{
+    // Initialize shadow stack for input locations.
+    gib_global_input_shadowstack_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
+    if (gib_global_input_shadowstack_start == NULL) {
+        fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", SHADOWSTACK_SIZE);
+        exit(1);
+    }
+    gib_global_input_shadowstack_end = gib_global_input_shadowstack_start + SHADOWSTACK_SIZE;
+    gib_global_input_shadowstack_curr = gib_global_input_shadowstack_start;
+
+
+    // Initialize shadow stack for output locations.
+    gib_global_output_shadowstack_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
+    if (gib_global_output_shadowstack_start == NULL) {
+        fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", SHADOWSTACK_SIZE);
+        exit(1);
+    }
+    gib_global_output_shadowstack_end = gib_global_output_shadowstack_start + SHADOWSTACK_SIZE;
+    gib_global_output_shadowstack_curr = gib_global_output_shadowstack_start;
+
+    gib_global_shadowstack_initialized = true;
+    return;
+}
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Regions, chunks etc.
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+
 GibRegionAlloc *gib_alloc_region_on_heap(uint64_t size);
 GibRegionAlloc *gib_alloc_region_in_nursery(uint64_t size);
-
 
 GibRegionAlloc *gib_alloc_region2(uint64_t size)
 {
@@ -1357,56 +1426,6 @@ GibRegionAlloc *gib_alloc_region_in_nursery(uint64_t size)
     return region;
 }
 
-void gib_initialize_nursery(void)
-{
-    gib_global_nursery_from_space_start = (char*) gib_alloc(NURSERY_SIZE * 2);
-    if (gib_global_nursery_from_space_start == NULL) {
-        fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", (NURSERY_SIZE*2));
-        exit(1);
-    }
-    gib_global_nursery_to_space_start = gib_global_nursery_from_space_start + NURSERY_SIZE;
-    gib_global_nursery_to_space_end = gib_global_nursery_to_space_start + NURSERY_SIZE;
-    gib_global_nursery_alloc_ptr = gib_global_nursery_from_space_start;
-    gib_global_nursery_alloc_ptr_end = gib_global_nursery_to_space_start;
-
-    gib_global_nursery_initialized = true;
-    return;
-}
-
-void gib_initialize_shadowstack(void)
-{
-    // Initialize shadow stack for input locations.
-    gib_global_input_shadowstack_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
-    if (gib_global_input_shadowstack_start == NULL) {
-        fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", SHADOWSTACK_SIZE);
-        exit(1);
-    }
-    gib_global_input_shadowstack_end = gib_global_input_shadowstack_start + SHADOWSTACK_SIZE;
-    gib_global_input_shadowstack_curr = gib_global_input_shadowstack_start;
-
-
-    // Initialize shadow stack for output locations.
-    gib_global_output_shadowstack_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
-    if (gib_global_output_shadowstack_start == NULL) {
-        fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", SHADOWSTACK_SIZE);
-        exit(1);
-    }
-    gib_global_output_shadowstack_end = gib_global_output_shadowstack_start + SHADOWSTACK_SIZE;
-    gib_global_output_shadowstack_curr = gib_global_output_shadowstack_start;
-
-    gib_global_shadowstack_initialized = true;
-    return;
-}
-
-void gib_reset_nursery(void)
-{
-    gib_global_nursery_alloc_ptr = gib_global_nursery_from_space_start;
-    gib_global_nursery_alloc_ptr_end = gib_global_nursery_to_space_start;
-    gib_global_input_shadowstack_curr = gib_global_input_shadowstack_start;
-    gib_global_output_shadowstack_curr = gib_global_output_shadowstack_start;
-    return;
-}
-
 void gib_free_region2(GibRegionAlloc *region)
 {
     if (region->ra_in_nursery) {
@@ -1416,8 +1435,6 @@ void gib_free_region2(GibRegionAlloc *region)
     return;
 }
 
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

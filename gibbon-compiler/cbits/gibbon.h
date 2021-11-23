@@ -348,13 +348,18 @@ void gib_bump_global_region_count(void);
 void gib_print_global_region_count(void);
 
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Generational GC functions
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Generational GC
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 
-// Nursery:
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Nursery
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
 extern char *gib_global_nursery_from_space_start;
 extern char *gib_global_nursery_to_space_start;
 extern char *gib_global_nursery_to_space_end;
@@ -363,6 +368,18 @@ extern bool gib_global_nursery_initialized;
 // The start and end pointers for the current allocation space being used.
 extern char *gib_global_nursery_alloc_ptr;
 extern char *gib_global_nursery_alloc_ptr_end;
+
+// Initialize nursery.
+void gib_initialize_nursery(void);
+
+// Only meant to be used while testing the implementation!!
+void gib_reset_nursery(void);
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Shadow stack
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
 
 // Shadow stack for input locations:
 extern char *gib_global_input_shadowstack_start;
@@ -373,8 +390,22 @@ extern char *gib_global_input_shadowstack_curr;
 extern char *gib_global_output_shadowstack_start;
 extern char *gib_global_output_shadowstack_end;
 extern char *gib_global_output_shadowstack_curr;
-
 extern bool gib_global_shadowstack_initialized;
+
+typedef struct gib_shadowstack_frame {
+    char *ss_ptr;
+    // An enum in C, which is 4 bytes.
+    // The enum, GibDatatype, is defined in the generated program.
+    uint32_t ss_datatype;
+} GibShadowstackFrame;
+
+void gib_initialize_shadowstack(void);
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Regions, chunks etc.
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
 
 typedef struct gib_region_alloc {
     bool ra_in_nursery;
@@ -384,12 +415,6 @@ typedef struct gib_region_alloc {
 
 GibRegionAlloc *gib_alloc_region2(uint64_t size);
 void gib_free_region2(GibRegionAlloc *region);
-
-void gib_initialize_nursery(void);
-void gib_initialize_shadowstack(void);
-
-// Only use while testing the implementation!!
-void gib_reset_nursery(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
