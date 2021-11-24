@@ -447,7 +447,11 @@ codegenTriv _ (BoolTriv b) = case b of
                                True -> [cexp| true |]
                                False -> [cexp| false |]
 codegenTriv _ (SymTriv i) = [cexp| $i |]
-codegenTriv _ (TagTriv i) = [cexp| $i |]
+codegenTriv _ (TagTriv i) = if i == GL.indirectionAlt
+                            then [cexp| INDIRECTION_TAG |]
+                            else if i == GL.redirectionAlt
+                            then [cexp| REDIRECTION_TAG |]
+                            else [cexp| $i |]
 codegenTriv venv (ProdTriv ls) =
   let ty = codegenTy $ typeOfTriv venv (ProdTriv ls)
       args = map (\a -> (Nothing,C.ExpInitializer (codegenTriv venv a) noLoc)) ls
@@ -899,8 +903,8 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                  [ C.BlockStm [cstm| gib_free_region($id:endr_cur); |] ]
 
                  WriteTag -> let [(outV,CursorTy)] = bnds
-                                 [(TagTriv tag),(VarTriv cur)] = rnds in pure
-                             [ C.BlockStm [cstm| *($ty:(codegenTy TagTyPacked) *) ($id:cur) = $tag; |]
+                                 [t@(TagTriv{}),(VarTriv cur)] = rnds in pure
+                             [ C.BlockStm [cstm| *($ty:(codegenTy TagTyPacked) *) ($id:cur) = $(codegenTriv venv t); |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:cur + 1; |] ]
                  ReadTag -> let [(tagV,TagTyPacked),(curV,CursorTy)] = bnds
                                 [(VarTriv cur)] = rnds in pure

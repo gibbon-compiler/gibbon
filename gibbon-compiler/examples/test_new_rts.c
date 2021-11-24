@@ -75,54 +75,40 @@ typedef struct GibCursorGibCursorGibCursorGibCursorProd_struct {
             GibCursor field2;
             GibCursor field3;
         } GibCursorGibCursorGibCursorGibCursorProd;
-GibCursorGibCursorGibCursorGibCursorProd add1(GibCursor end_r_595, // input region
-                                              GibCursor end_r_596, // output region
-                                              GibCursor loc_594, // output location
-                                              GibCursor tr_25_159_253 // input location
+GibCursorGibCursorGibCursorGibCursorProd add1(GibCursor end_r_606,  // input region
+                                              GibCursor end_r_607, // output region
+                                              GibCursor loc_605,  // output location
+                                              GibCursor tr_25_168_265 // input location
                                              );
 GibCursorGibIntProd sumtree(GibCursor end_r_598, GibCursor tr_29_163_260);
 GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_600,
                                           GibCursor loc_599,
                                           GibInt n_35_169_266);
-GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_604, // input region (xs)
-                                                 GibCursor end_r_605, // input region (ys)
-                                                 GibCursor end_r_606, // output region
-                                                 GibCursor loc_603, // output location
-                                                 GibCursor xs_36_170_272, // input location
-                                                 GibCursor ys_37_171_273 // output location
+GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input region (xs)
+                                                 GibCursor end_r_616, // input region (ys)
+                                                 GibCursor end_r_617, // output region
+                                                 GibCursor loc_614, // output location
+                                                 GibCursor xs_36_179_284, // input location
+                                                 GibCursor ys_37_180_285 // input location
                                                 );
 GibInt do_reverse(GibInt n_19_183_289);
 GibInt do_tree(GibInt n_22_186_293);
-GibCursorGibIntProd sum_list(GibCursor end_r_608, GibCursor xs_40_178_285);
+GibCursorGibIntProd sum_list(GibCursor end_r_619, GibCursor xs_40_189_296);
 GibCursorGibCursorGibCursorProd build_list(GibCursor end_r_621,
                                            GibCursor loc_620,
                                            GibInt n_43_192_300,
                                            GibInt n_new);
-GibCursorGibCursorGibCursorGibCursorProd _copy_Tree(GibCursor end_r_611, // input region
-                                                    GibCursor end_r_612, // output region
-                                                    GibCursor loc_610, // output location
-                                                    GibCursor arg_103_181_289 // input location
-                                                   );
-GibCursorGibCursorGibCursorGibCursorProd
-_copy_without_ptrs_Tree(GibCursor end_r_615, GibCursor end_r_616,
-                        GibCursor loc_614, GibCursor arg_110_188_296);
-GibCursorProd _traverse_Tree(GibCursor end_r_618, GibCursor arg_117_195_303);
-GibCursorProd _print_Tree(GibCursor end_r_620, GibCursor arg_124_201_309);
-GibCursorGibCursorGibCursorGibCursorProd _copy_List(GibCursor end_r_623,
-                                                    GibCursor end_r_624,
-                                                    GibCursor loc_622,
-                                                    GibCursor arg_135_212_320);
-GibCursorGibCursorGibCursorGibCursorProd
-_copy_without_ptrs_List(GibCursor end_r_627, GibCursor end_r_628,
-                        GibCursor loc_626, GibCursor arg_140_217_325);
-GibCursorProd _traverse_List(GibCursor end_r_630, GibCursor arg_145_222_330);
-GibCursorProd _print_List(GibCursor end_r_632, GibCursor arg_150_226_334);
-GibCursorGibCursorGibCursorGibCursorProd
-_add_size_and_rel_offsets_Tree(GibCursor end_r_635, GibCursor end_r_636,
-                               GibCursor loc_634, GibCursor arg_578);
-GibCursorGibCursorGibCursorGibCursorProd
-_add_size_and_rel_offsets_List(GibCursor end_r_639, GibCursor end_r_640,
-                               GibCursor loc_638, GibCursor arg_585);
+GibCursorGibCursorGibCursorGibCursorProd _copy_Tree(GibCursor end_r_624,
+                                                    GibCursor end_r_625,
+                                                    GibCursor loc_623,
+                                                    GibCursor arg_112_193_304);
+GibCursorProd _traverse_Tree(GibCursor end_r_631, GibCursor arg_126_207_318);
+GibCursorProd _print_Tree(GibCursor end_r_633, GibCursor arg_133_213_324);
+GibCursorGibCursorGibCursorGibCursorProd _copy_List(GibCursor end_r_636,
+                                                    GibCursor end_r_637,
+                                                    GibCursor loc_635,
+                                                    GibCursor arg_144_224_335);
+GibCursorProd _print_List(GibCursor end_r_645, GibCursor arg_159_238_349);
 typedef enum {
             GibInt_T,
             GibFloat_T,
@@ -154,14 +140,14 @@ void init_info_table(void)
 
     field_tys[0] = GibInt_T;
     field_tys[1] = List_T;
-    error = gib_insert_dcon_into_info_table(List_T, 1, 1, 1, field_tys, 2);
+    error = gib_insert_dcon_into_info_table(List_T, 1, 8, 1, 1, field_tys, 2);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
                 error, List_T, 1);
         exit(1);
     }
-    error = gib_insert_dcon_into_info_table(List_T, 0, 0, 0, field_tys, 0);
+    error = gib_insert_dcon_into_info_table(List_T, 0, 0, 0, 0, field_tys, 0);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -169,7 +155,7 @@ void init_info_table(void)
         exit(1);
     }
     field_tys[0] = GibInt_T;
-    error = gib_insert_dcon_into_info_table(Tree_T, 0, 1, 0, field_tys, 1);
+    error = gib_insert_dcon_into_info_table(Tree_T, 0, 8, 1, 0, field_tys, 1);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -178,7 +164,7 @@ void init_info_table(void)
     }
     field_tys[0] = Tree_T;
     field_tys[1] = Tree_T;
-    error = gib_insert_dcon_into_info_table(Tree_T, 1, 0, 2, field_tys, 2);
+    error = gib_insert_dcon_into_info_table(Tree_T, 1, 0, 0, 2, field_tys, 2);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -188,532 +174,11 @@ void init_info_table(void)
 }
 void init_symbol_table(void)
 {
-    gib_add_symbol(1263, ")");
-    gib_add_symbol(1264, "(Node ");
-    gib_add_symbol(1265, "(Nil ");
-    gib_add_symbol(1266, "(Leaf ");
-    gib_add_symbol(1267, "(Cons ");
-}
-GibCursorGibCursorGibCursorGibCursorProd add1(GibCursor end_r_595, // input region
-                                              GibCursor end_r_596, // output region
-                                              GibCursor loc_594, // output location
-                                              GibCursor tr_25_159_253 // input location
-                                             )
-{
-    GibCursor loc_593 = (GibCursor) tr_25_159_253;
-
-    if (loc_594 + 32 > end_r_596) {
-        GibChunk new_chunk_2 = gib_alloc_chunk(end_r_596);
-        GibCursor chunk_start_3 = new_chunk_2.chunk_start;
-        GibCursor chunk_end_4 = new_chunk_2.chunk_end;
-
-        end_r_596 = chunk_end_4;
-        *(GibBoxedTag *) loc_594 = REDIRECTION_TAG;
-
-        GibCursor redir = loc_594 + 1;
-
-        *(GibCursor *) redir = chunk_start_3;
-        loc_594 = chunk_start_3;
-    }
-
-    GibBoxedTag tmpval_1270 = *(GibBoxedTag *) tr_25_159_253;
-    GibCursor tmpcur_1271 = tr_25_159_253 + 1;
-
-
-  switch_1298:
-    ;
-    switch (tmpval_1270) {
-
-      case 0:
-        {
-            GibCursor field_cur_958 = (GibCursor) tmpcur_1271;
-            GibCursor case_643 = (GibCursor) field_cur_958;
-            GibInt tmpval_1272 = *(GibInt *) case_643;
-            GibCursor tmpcur_1273 = case_643 + sizeof(GibInt);
-            GibInt n_26_160_254 = (GibInt) tmpval_1272;
-            GibCursor end_n_26_160_254 = (GibCursor) tmpcur_1273;
-            GibCursor jump_864 = case_643 + 8;
-            GibInt fltPkd_237_255 = n_26_160_254 + 1;
-
-            *(GibBoxedTag *) loc_594 = 0;
-
-            GibCursor writetag_960 = loc_594 + 1;
-
-            *(GibInt *) writetag_960 = fltPkd_237_255;
-
-            GibCursor writecur_961 = writetag_960 + sizeof(GibInt);
-            GibCursor pvrtmp_1275 = (GibCursor) writecur_961;
-            GibCursor pvrtmp_1274 = (GibCursor) loc_594;
-            GibCursor taildc_865 = (GibCursor) pvrtmp_1274;
-            GibCursor end_taildc_865 = (GibCursor) pvrtmp_1275;
-            GibCursor pvrtmp_1277 = (GibCursor) end_taildc_865;
-            GibCursor pvrtmp_1276 = (GibCursor) taildc_865;
-            GibCursor fltPrd_1159 = (GibCursor) pvrtmp_1276;
-            GibCursor fltPrd_1160 = (GibCursor) pvrtmp_1277;
-
-            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_596,
-                                                               jump_864,
-                                                               fltPrd_1159,
-                                                               fltPrd_1160};
-            break;
-        }
-
-      case 1:
-        {
-            GibCursor field_cur_963 = (GibCursor) tmpcur_1271;
-            GibCursor case_647 = (GibCursor) field_cur_963;
-            GibCursor x_27_161_256 = (GibCursor) case_647;
-            GibCursor loc_655 = loc_594 + 1;
-            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_0 =
-                                                      add1(end_r_595, end_r_596, loc_655, x_27_161_256);
-            GibCursor pvrtmp_1278 = tmp_struct_0.field0;
-            GibCursor pvrtmp_1279 = tmp_struct_0.field1;
-            GibCursor pvrtmp_1280 = tmp_struct_0.field2;
-            GibCursor pvrtmp_1281 = tmp_struct_0.field3;
-            GibCursor fltPrd_1161 = (GibCursor) pvrtmp_1280;
-            GibCursor fltPrd_1162 = (GibCursor) pvrtmp_1281;
-            GibCursor pvrtmp_1283 = (GibCursor) fltPrd_1162;
-            GibCursor pvrtmp_1282 = (GibCursor) fltPrd_1161;
-            GibCursor fltPkd_238_258 = (GibCursor) pvrtmp_1282;
-            GibCursor fltPrd_1163 = (GibCursor) pvrtmp_1280;
-            GibCursor fltPrd_1164 = (GibCursor) pvrtmp_1281;
-            GibCursor pvrtmp_1285 = (GibCursor) fltPrd_1164;
-            GibCursor pvrtmp_1284 = (GibCursor) fltPrd_1163;
-            GibCursor end_fltPkd_238_258 = (GibCursor) pvrtmp_1285;
-            GibCursor end_r_596__941 = (GibCursor) pvrtmp_1278;
-            GibCursor endof_866 = (GibCursor) pvrtmp_1279;
-            GibCursor case_648 = (GibCursor) endof_866;
-            GibCursor y_28_162_257 = (GibCursor) case_648;
-            GibCursor loc_656 = (GibCursor) end_fltPkd_238_258;
-            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_1 =
-                                                      add1(end_r_595, end_r_596__941, loc_656, y_28_162_257);
-            GibCursor pvrtmp_1286 = tmp_struct_1.field0;
-            GibCursor pvrtmp_1287 = tmp_struct_1.field1;
-            GibCursor pvrtmp_1288 = tmp_struct_1.field2;
-            GibCursor pvrtmp_1289 = tmp_struct_1.field3;
-            GibCursor fltPrd_1165 = (GibCursor) pvrtmp_1288;
-            GibCursor fltPrd_1166 = (GibCursor) pvrtmp_1289;
-            GibCursor pvrtmp_1291 = (GibCursor) fltPrd_1166;
-            GibCursor pvrtmp_1290 = (GibCursor) fltPrd_1165;
-            GibCursor fltPkd_239_259 = (GibCursor) pvrtmp_1290;
-            GibCursor fltPrd_1167 = (GibCursor) pvrtmp_1288;
-            GibCursor fltPrd_1168 = (GibCursor) pvrtmp_1289;
-            GibCursor pvrtmp_1293 = (GibCursor) fltPrd_1168;
-            GibCursor pvrtmp_1292 = (GibCursor) fltPrd_1167;
-            GibCursor end_fltPkd_239_259 = (GibCursor) pvrtmp_1293;
-            GibCursor end_r_596__941__942 = (GibCursor) pvrtmp_1286;
-            GibCursor endof_867 = (GibCursor) pvrtmp_1287;
-
-            *(GibBoxedTag *) loc_594 = 1;
-
-            GibCursor writetag_966 = loc_594 + 1;
-            GibCursor writecur_967 = (GibCursor) end_fltPkd_238_258;
-            GibCursor writecur_968 = (GibCursor) end_fltPkd_239_259;
-            GibCursor pvrtmp_1295 = (GibCursor) writecur_968;
-            GibCursor pvrtmp_1294 = (GibCursor) loc_594;
-            GibCursor taildc_868 = (GibCursor) pvrtmp_1294;
-            GibCursor end_taildc_868 = (GibCursor) pvrtmp_1295;
-            GibCursor pvrtmp_1297 = (GibCursor) end_taildc_868;
-            GibCursor pvrtmp_1296 = (GibCursor) taildc_868;
-            GibCursor fltPrd_1169 = (GibCursor) pvrtmp_1296;
-            GibCursor fltPrd_1170 = (GibCursor) pvrtmp_1297;
-
-            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_596__941__942,
-                                                               endof_867,
-                                                               fltPrd_1169,
-                                                               fltPrd_1170};
-            break;
-        }
-
-      case REDIRECTION_TAG:
-        {
-            GibCursor tmpcur_1585 = *(GibCursor *) tmpcur_1271;
-            GibCursor tmpaftercur_1586 = tmpcur_1271 + 8;
-            GibBoxedTag tagtmp_1587 = *(GibBoxedTag *) tmpcur_1585;
-            GibCursor tailtmp_1588 = tmpcur_1585 + 1;
-
-            tmpval_1270 = tagtmp_1587;
-            tmpcur_1271 = tailtmp_1588;
-            goto switch_1298;
-            break;
-        }
-
-      case INDIRECTION_TAG:
-        {
-            GibCursor tmpcur_1585 = *(GibCursor *) tmpcur_1271;
-            GibCursor tmpaftercur_1586 = tmpcur_1271 + 8;
-            GibBoxedTag tagtmp_1587 = *(GibBoxedTag *) tmpcur_1585;
-            GibCursor tailtmp_1588 = tmpcur_1585 + 1;
-
-            tmpval_1270 = tagtmp_1587;
-            tmpcur_1271 = tailtmp_1588;
-            goto switch_1298;
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval_1270");
-            exit(1);
-        }
-    }
-}
-GibCursorGibIntProd sumtree(GibCursor end_r_598, GibCursor tr_29_163_260)
-{
-    GibCursor loc_597 = (GibCursor) tr_29_163_260;
-    GibBoxedTag tmpval_1299 = *(GibBoxedTag *) tr_29_163_260;
-    GibCursor tmpcur_1300 = tr_29_163_260 + 1;
-
-
-  switch_1307:
-    ;
-    switch (tmpval_1299) {
-
-      case 0:
-        {
-            GibCursor field_cur_970 = (GibCursor) tmpcur_1300;
-            GibCursor case_661 = (GibCursor) field_cur_970;
-            GibInt tmpval_1301 = *(GibInt *) case_661;
-            GibCursor tmpcur_1302 = case_661 + sizeof(GibInt);
-            GibInt n_30_164_261 = (GibInt) tmpval_1301;
-            GibCursor end_n_30_164_261 = (GibCursor) tmpcur_1302;
-            GibCursor jump_869 = case_661 + 8;
-
-            return (GibCursorGibIntProd) {jump_869, n_30_164_261};
-            break;
-        }
-
-      case 1:
-        {
-            GibCursor field_cur_972 = (GibCursor) tmpcur_1300;
-            GibCursor case_662 = (GibCursor) field_cur_972;
-            GibCursor x_31_165_262 = (GibCursor) case_662;
-            GibCursorGibIntProd tmp_struct_5 =
-                                 sumtree(end_r_598, x_31_165_262);
-            GibCursor pvrtmp_1303 = tmp_struct_5.field0;
-            GibInt pvrtmp_1304 = tmp_struct_5.field1;
-            GibCursor endof_870 = (GibCursor) pvrtmp_1303;
-            GibInt sumx_33_167_264 = (GibInt) pvrtmp_1304;
-            GibCursor case_663 = (GibCursor) endof_870;
-            GibCursor y_32_166_263 = (GibCursor) case_663;
-            GibCursorGibIntProd tmp_struct_6 =
-                                 sumtree(end_r_598, y_32_166_263);
-            GibCursor pvrtmp_1305 = tmp_struct_6.field0;
-            GibInt pvrtmp_1306 = tmp_struct_6.field1;
-            GibCursor endof_871 = (GibCursor) pvrtmp_1305;
-            GibInt sumy_34_168_265 = (GibInt) pvrtmp_1306;
-            GibInt tailprim_872 = sumx_33_167_264 + sumy_34_168_265;
-
-            return (GibCursorGibIntProd) {endof_871, tailprim_872};
-            break;
-        }
-
-      case REDIRECTION_TAG:
-        {
-            GibCursor tmpcur_1589 = *(GibCursor *) tmpcur_1300;
-            GibCursor tmpaftercur_1590 = tmpcur_1300 + 8;
-            GibBoxedTag tagtmp_1591 = *(GibBoxedTag *) tmpcur_1589;
-            GibCursor tailtmp_1592 = tmpcur_1589 + 1;
-
-            tmpval_1299 = tagtmp_1591;
-            tmpcur_1300 = tailtmp_1592;
-            goto switch_1307;
-            break;
-        }
-
-      case INDIRECTION_TAG:
-        {
-            GibCursor tmpcur_1589 = *(GibCursor *) tmpcur_1300;
-            GibCursor tmpaftercur_1590 = tmpcur_1300 + 8;
-            GibBoxedTag tagtmp_1591 = *(GibBoxedTag *) tmpcur_1589;
-            GibCursor tailtmp_1592 = tmpcur_1589 + 1;
-
-            tmpval_1299 = tagtmp_1591;
-            tmpcur_1300 = tailtmp_1592;
-            goto switch_1307;
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval_1299");
-            exit(1);
-        }
-    }
-}
-GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_600,
-                                          GibCursor loc_599,
-                                          GibInt n_35_169_266)
-{
-    if (loc_599 + 32 > end_r_600) {
-        GibChunk new_chunk_9 = gib_alloc_chunk(end_r_600);
-        GibCursor chunk_start_10 = new_chunk_9.chunk_start;
-        GibCursor chunk_end_11 = new_chunk_9.chunk_end;
-
-        end_r_600 = chunk_end_11;
-        *(GibBoxedTag *) loc_599 = REDIRECTION_TAG;
-
-        GibCursor redir = loc_599 + 1;
-
-        *(GibCursor *) redir = chunk_start_10;
-        loc_599 = chunk_start_10;
-    }
-
-    GibBool fltIf_240_267 = n_35_169_266 == 0;
-
-    if (fltIf_240_267) {
-        *(GibBoxedTag *) loc_599 = 0;
-
-        GibCursor writetag_975 = loc_599 + 1;
-
-        *(GibInt *) writetag_975 = 1;
-
-        GibCursor writecur_976 = writetag_975 + sizeof(GibInt);
-        GibCursor pvrtmp_1309 = (GibCursor) writecur_976;
-        GibCursor pvrtmp_1308 = (GibCursor) loc_599;
-        GibCursor taildc_873 = (GibCursor) pvrtmp_1308;
-        GibCursor end_taildc_873 = (GibCursor) pvrtmp_1309;
-        GibCursor pvrtmp_1311 = (GibCursor) end_taildc_873;
-        GibCursor pvrtmp_1310 = (GibCursor) taildc_873;
-        GibCursor fltPrd_1171 = (GibCursor) pvrtmp_1310;
-        GibCursor fltPrd_1172 = (GibCursor) pvrtmp_1311;
-
-        return (GibCursorGibCursorGibCursorProd) {end_r_600, fltPrd_1171,
-                                                  fltPrd_1172};
-    } else {
-        GibInt fltAppE_242_268 = n_35_169_266 - 1;
-        GibCursor loc_671 = loc_599 + 1;
-        GibCursorGibCursorGibCursorProd tmp_struct_7 =
-                                         buildtree(end_r_600, loc_671, fltAppE_242_268);
-        GibCursor pvrtmp_1312 = tmp_struct_7.field0;
-        GibCursor pvrtmp_1313 = tmp_struct_7.field1;
-        GibCursor pvrtmp_1314 = tmp_struct_7.field2;
-        GibCursor fltPrd_1173 = (GibCursor) pvrtmp_1313;
-        GibCursor fltPrd_1174 = (GibCursor) pvrtmp_1314;
-        GibCursor pvrtmp_1316 = (GibCursor) fltPrd_1174;
-        GibCursor pvrtmp_1315 = (GibCursor) fltPrd_1173;
-        GibCursor fltPkd_241_269 = (GibCursor) pvrtmp_1315;
-        GibCursor fltPrd_1175 = (GibCursor) pvrtmp_1313;
-        GibCursor fltPrd_1176 = (GibCursor) pvrtmp_1314;
-        GibCursor pvrtmp_1318 = (GibCursor) fltPrd_1176;
-        GibCursor pvrtmp_1317 = (GibCursor) fltPrd_1175;
-        GibCursor end_fltPkd_241_269 = (GibCursor) pvrtmp_1318;
-        GibCursor end_r_600__943 = (GibCursor) pvrtmp_1312;
-        GibCursor loc_672 = (GibCursor) end_fltPkd_241_269;
-        GibInt fltAppE_244_270 = n_35_169_266 - 1;
-        GibCursorGibCursorGibCursorProd tmp_struct_8 =
-                                         buildtree(end_r_600__943, loc_672, fltAppE_244_270);
-        GibCursor pvrtmp_1319 = tmp_struct_8.field0;
-        GibCursor pvrtmp_1320 = tmp_struct_8.field1;
-        GibCursor pvrtmp_1321 = tmp_struct_8.field2;
-        GibCursor fltPrd_1177 = (GibCursor) pvrtmp_1320;
-        GibCursor fltPrd_1178 = (GibCursor) pvrtmp_1321;
-        GibCursor pvrtmp_1323 = (GibCursor) fltPrd_1178;
-        GibCursor pvrtmp_1322 = (GibCursor) fltPrd_1177;
-        GibCursor fltPkd_243_271 = (GibCursor) pvrtmp_1322;
-        GibCursor fltPrd_1179 = (GibCursor) pvrtmp_1320;
-        GibCursor fltPrd_1180 = (GibCursor) pvrtmp_1321;
-        GibCursor pvrtmp_1325 = (GibCursor) fltPrd_1180;
-        GibCursor pvrtmp_1324 = (GibCursor) fltPrd_1179;
-        GibCursor end_fltPkd_243_271 = (GibCursor) pvrtmp_1325;
-        GibCursor end_r_600__943__944 = (GibCursor) pvrtmp_1319;
-
-        *(GibBoxedTag *) loc_599 = 1;
-
-        GibCursor writetag_980 = loc_599 + 1;
-        GibCursor writecur_981 = (GibCursor) end_fltPkd_241_269;
-        GibCursor writecur_982 = (GibCursor) end_fltPkd_243_271;
-        GibCursor pvrtmp_1327 = (GibCursor) writecur_982;
-        GibCursor pvrtmp_1326 = (GibCursor) loc_599;
-        GibCursor taildc_874 = (GibCursor) pvrtmp_1326;
-        GibCursor end_taildc_874 = (GibCursor) pvrtmp_1327;
-        GibCursor pvrtmp_1329 = (GibCursor) end_taildc_874;
-        GibCursor pvrtmp_1328 = (GibCursor) taildc_874;
-        GibCursor fltPrd_1181 = (GibCursor) pvrtmp_1328;
-        GibCursor fltPrd_1182 = (GibCursor) pvrtmp_1329;
-
-        return (GibCursorGibCursorGibCursorProd) {end_r_600__943__944,
-                                                  fltPrd_1181, fltPrd_1182};
-    }
-}
-GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_604, // input region (xs)
-                                                 GibCursor end_r_605, // input region (ys)
-                                                 GibCursor end_r_606, // output region
-                                                 GibCursor loc_603, // output location
-                                                 GibCursor xs_36_170_272, // input location
-                                                 GibCursor ys_37_171_273 // output location
-                                                )
-{
-    // GibRegionMeta *region_1330 =
-    //               gib_alloc_region(gib_get_inf_init_chunk_size());
-    // GibCursor r_692 = region_1330->reg_heap;
-    // GibInt sizeof_end_r_692_1331 = gib_get_inf_init_chunk_size();
-    // GibCursor end_r_692 = r_692 + sizeof_end_r_692_1331;
-    GibRegionAlloc *region_1330 =
-        gib_alloc_region2(gib_get_inf_init_chunk_size());
-    GibCursor r_692 = region_1330->ra_start;
-    GibCursor end_r_692 = region_1330->ra_end;
-
-    GibCursor loc_601 = (GibCursor) xs_36_170_272;
-    GibCursor loc_602 = (GibCursor) ys_37_171_273;
-
-    if (loc_603 + 32 > end_r_606) {
-        GibChunk new_chunk_13 = gib_alloc_chunk(end_r_606);
-        GibCursor chunk_start_14 = new_chunk_13.chunk_start;
-        GibCursor chunk_end_15 = new_chunk_13.chunk_end;
-
-        end_r_606 = chunk_end_15;
-        *(GibBoxedTag *) loc_603 = REDIRECTION_TAG;
-
-        GibCursor redir = loc_603 + 1;
-
-        *(GibCursor *) redir = chunk_start_14;
-        loc_603 = chunk_start_14;
-    }
-
-    GibCursor loc_690 = (GibCursor) r_692;
-    GibCursor loc_680 = loc_690 + 1;
-    GibCursor loc_681 = loc_680 + 8;
-    GibBoxedTag tmpval_1332 = *(GibBoxedTag *) xs_36_170_272;
-    GibCursor tmpcur_1333 = xs_36_170_272 + 1;
-
-
-  switch_1354:
-    ;
-    switch (tmpval_1332) {
-
-      case 0:
-        {
-            GibCursor field_cur_984 = (GibCursor) tmpcur_1333;
-            GibCursor jump_875 = loc_601 + 1;
-
-            // gib_bump_refcount(end_r_606, end_r_605);
-            *(GibBoxedTag *) loc_603 = INDIRECTION_TAG;
-
-            GibCursor writetag_985 = loc_603 + 1;
-
-            *(GibCursor *) writetag_985 = loc_602;
-
-            GibCursor writecur_986 = writetag_985 + 8;
-            GibCursor pvrtmp_1335 = (GibCursor) writecur_986;
-            GibCursor pvrtmp_1334 = (GibCursor) loc_603;
-            GibCursor indirection_863 = (GibCursor) pvrtmp_1334;
-            GibCursor end_indirection_863 = (GibCursor) pvrtmp_1335;
-            GibCursor pvrtmp_1337 = (GibCursor) end_indirection_863;
-            GibCursor pvrtmp_1336 = (GibCursor) indirection_863;
-            GibCursor fltPrd_1183 = (GibCursor) pvrtmp_1336;
-            GibCursor fltPrd_1184 = (GibCursor) pvrtmp_1337;
-
-            gib_free_region2(region_1330);
-            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_606,
-                                                               jump_875,
-                                                               fltPrd_1183,
-                                                               fltPrd_1184};
-            break;
-        }
-
-      case 1:
-        {
-            GibCursor field_cur_988 = (GibCursor) tmpcur_1333;
-            GibCursor case_677 = (GibCursor) field_cur_988;
-            GibInt tmpval_1338 = *(GibInt *) case_677;
-            GibCursor tmpcur_1339 = case_677 + sizeof(GibInt);
-            GibInt z_38_172_274 = (GibInt) tmpval_1338;
-            GibCursor end_z_38_172_274 = (GibCursor) tmpcur_1339;
-            GibCursor case_678 = (GibCursor) end_z_38_172_274;
-            GibCursor zs_39_173_275 = (GibCursor) case_678;
-            GibCursor jump_876 = case_677 + 8;
-
-            // TODO:
-            // gib_bump_refcount(end_r_692, end_r_605);
-
-            *(GibBoxedTag *) loc_681 = INDIRECTION_TAG;
-
-            GibCursor writetag_990 = loc_681 + 1;
-
-            *(GibCursor *) writetag_990 = loc_602;
-
-            GibCursor writecur_991 = writetag_990 + 8;
-            GibCursor pvrtmp_1341 = (GibCursor) writecur_991;
-            GibCursor pvrtmp_1340 = (GibCursor) loc_681;
-            GibCursor cpy_684 = (GibCursor) pvrtmp_1340;
-            GibCursor end_cpy_684 = (GibCursor) pvrtmp_1341;
-
-            *(GibBoxedTag *) loc_690 = 1;
-
-            GibCursor writetag_993 = loc_690 + 1;
-
-            *(GibInt *) writetag_993 = z_38_172_274;
-
-            GibCursor writecur_994 = writetag_993 + sizeof(GibInt);
-            GibCursor writecur_995 = (GibCursor) end_cpy_684;
-            GibCursor pvrtmp_1343 = (GibCursor) writecur_995;
-            GibCursor pvrtmp_1342 = (GibCursor) loc_690;
-            GibCursor fltAppE_245_276 = (GibCursor) pvrtmp_1342;
-            GibCursor end_fltAppE_245_276 = (GibCursor) pvrtmp_1343;
-            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_12 =
-                                                      reverse(end_r_604, end_r_692, end_r_606, loc_603, zs_39_173_275, fltAppE_245_276);
-            GibCursor pvrtmp_1344 = tmp_struct_12.field0;
-            GibCursor pvrtmp_1345 = tmp_struct_12.field1;
-            GibCursor pvrtmp_1346 = tmp_struct_12.field2;
-            GibCursor pvrtmp_1347 = tmp_struct_12.field3;
-            GibCursor fltPrd_1185 = (GibCursor) pvrtmp_1346;
-            GibCursor fltPrd_1186 = (GibCursor) pvrtmp_1347;
-            GibCursor pvrtmp_1349 = (GibCursor) fltPrd_1186;
-            GibCursor pvrtmp_1348 = (GibCursor) fltPrd_1185;
-            GibCursor tailapp_877 = (GibCursor) pvrtmp_1348;
-            GibCursor fltPrd_1187 = (GibCursor) pvrtmp_1346;
-            GibCursor fltPrd_1188 = (GibCursor) pvrtmp_1347;
-            GibCursor pvrtmp_1351 = (GibCursor) fltPrd_1188;
-            GibCursor pvrtmp_1350 = (GibCursor) fltPrd_1187;
-            GibCursor end_tailapp_877 = (GibCursor) pvrtmp_1351;
-            GibCursor end_r_606__945 = (GibCursor) pvrtmp_1344;
-            GibCursor endof_878 = (GibCursor) pvrtmp_1345;
-            GibCursor pvrtmp_1353 = (GibCursor) end_tailapp_877;
-            GibCursor pvrtmp_1352 = (GibCursor) tailapp_877;
-            GibCursor fltPrd_1189 = (GibCursor) pvrtmp_1352;
-            GibCursor fltPrd_1190 = (GibCursor) pvrtmp_1353;
-
-            gib_free_region2(region_1330);
-            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_606__945,
-                                                               endof_878,
-                                                               fltPrd_1189,
-                                                               fltPrd_1190};
-            break;
-        }
-
-      case REDIRECTION_TAG:
-        {
-            GibCursor tmpcur_1593 = *(GibCursor *) tmpcur_1333;
-            GibCursor tmpaftercur_1594 = tmpcur_1333 + 8;
-            GibBoxedTag tagtmp_1595 = *(GibBoxedTag *) tmpcur_1593;
-            GibCursor tailtmp_1596 = tmpcur_1593 + 1;
-
-            tmpval_1332 = tagtmp_1595;
-            tmpcur_1333 = tailtmp_1596;
-            goto switch_1354;
-            break;
-        }
-
-      case INDIRECTION_TAG:
-        {
-            GibCursor tmpcur_1593 = *(GibCursor *) tmpcur_1333;
-            GibCursor tmpaftercur_1594 = tmpcur_1333 + 8;
-            GibBoxedTag tagtmp_1595 = *(GibBoxedTag *) tmpcur_1593;
-            GibCursor tailtmp_1596 = tmpcur_1593 + 1;
-
-            tmpval_1332 = tagtmp_1595;
-            tmpcur_1333 = tailtmp_1596;
-            goto switch_1354;
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval_1332");
-            exit(1);
-        }
-    }
+    gib_add_symbol(1286, ")");
+    gib_add_symbol(1287, "(Node ");
+    gib_add_symbol(1288, "(Nil ");
+    gib_add_symbol(1289, "(Leaf ");
+    gib_add_symbol(1290, "(Cons ");
 }
 GibInt do_reverse(GibInt n_19_183_289)
 {
@@ -727,7 +192,6 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor r_720 = region_1378->ra_start;
     GibCursor end_r_720 = region_1378->ra_end;
 
-
     // GibRegionMeta *region_1380 =
     //               gib_alloc_region(gib_get_inf_init_chunk_size());
     // GibCursor r_721 = region_1380->reg_heap;
@@ -738,217 +202,223 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor r_721 = region_1380->ra_start;
     GibCursor end_r_721 = region_1380->ra_end;
 
-
     // GibRegionMeta *region_1382 =
     //               gib_alloc_region(gib_get_inf_init_chunk_size());
     // GibCursor r_719 = region_1382->reg_heap;
     // GibInt sizeof_end_r_719_1383 = gib_get_inf_init_chunk_size();
     // GibCursor end_r_719 = r_719 + sizeof_end_r_719_1383;
-
     GibRegionAlloc *region_1382 =
         gib_alloc_region2(gib_get_inf_init_chunk_size());
     GibCursor r_719 = region_1382->ra_start;
     GibCursor end_r_719 = region_1382->ra_end;
 
-
-    GibCursor loc_715 = (GibCursor) r_720;
-    GibCursor loc_713 = (GibCursor) r_721;
     GibCursorGibCursorGibCursorProd tmp_struct_16 =
-        build_list(end_r_721, loc_713, n_19_183_289, n_19_183_289);
-
-    _print_List(end_r_721, r_721);
-    printf("\n");
-    fflush(stdout);
-
+        build_list(end_r_721, r_721, n_19_183_289, gib_get_size_param());
     GibCursor pvrtmp_1384 = tmp_struct_16.field0;
     GibCursor pvrtmp_1385 = tmp_struct_16.field1;
     GibCursor pvrtmp_1386 = tmp_struct_16.field2;
-    GibCursor fltPrd_1202 = (GibCursor) pvrtmp_1385;
-    GibCursor fltPrd_1203 = (GibCursor) pvrtmp_1386;
-    GibCursor pvrtmp_1388 = (GibCursor) fltPrd_1203;
-    GibCursor pvrtmp_1387 = (GibCursor) fltPrd_1202;
-    GibCursor xs_20_184_290 = (GibCursor) pvrtmp_1387;
-    GibCursor fltPrd_1204 = (GibCursor) pvrtmp_1385;
-    GibCursor fltPrd_1205 = (GibCursor) pvrtmp_1386;
-    GibCursor pvrtmp_1390 = (GibCursor) fltPrd_1205;
-    GibCursor pvrtmp_1389 = (GibCursor) fltPrd_1204;
-    GibCursor end_xs_20_184_290 = (GibCursor) pvrtmp_1390;
-    GibCursor end_r_721__955 = (GibCursor) pvrtmp_1384;
 
-    *(GibBoxedTag *) loc_715 = 0;
+    _print_List(end_r_721, r_721);
+    printf("\n");
 
-    GibCursor writetag_1010 = loc_715 + 1;
-    GibCursor pvrtmp_1392 = (GibCursor) writetag_1010;
-    GibCursor pvrtmp_1391 = (GibCursor) loc_715;
-    GibCursor fltAppE_258_291 = (GibCursor) pvrtmp_1391;
-    GibCursor end_fltAppE_258_291 = (GibCursor) pvrtmp_1392;
-    GibCursor loc_718 = (GibCursor) r_719;
+    *(GibBoxedTag *) r_720 = 0;
+
+    GibCursor writetag_1010 = r_720 + 1;
     GibCursorGibCursorGibCursorGibCursorProd tmp_struct_17 =
-                                              reverse(end_r_721__955, end_r_720, end_r_719, loc_718, xs_20_184_290, fltAppE_258_291);
+                                              reverse(pvrtmp_1384, end_r_720, end_r_719, r_719, pvrtmp_1385, r_720);
     GibCursor pvrtmp_1393 = tmp_struct_17.field0;
     GibCursor pvrtmp_1394 = tmp_struct_17.field1;
     GibCursor pvrtmp_1395 = tmp_struct_17.field2;
     GibCursor pvrtmp_1396 = tmp_struct_17.field3;
-    GibCursor fltPrd_1206 = (GibCursor) pvrtmp_1395;
-    GibCursor fltPrd_1207 = (GibCursor) pvrtmp_1396;
-    GibCursor pvrtmp_1398 = (GibCursor) fltPrd_1207;
-    GibCursor pvrtmp_1397 = (GibCursor) fltPrd_1206;
-    GibCursor ys_21_185_292 = (GibCursor) pvrtmp_1397;
-    GibCursor fltPrd_1208 = (GibCursor) pvrtmp_1395;
-    GibCursor fltPrd_1209 = (GibCursor) pvrtmp_1396;
-    GibCursor pvrtmp_1400 = (GibCursor) fltPrd_1209;
-    GibCursor pvrtmp_1399 = (GibCursor) fltPrd_1208;
-    GibCursor end_ys_21_185_292 = (GibCursor) pvrtmp_1400;
-    GibCursor end_r_719__956 = (GibCursor) pvrtmp_1393;
-    GibCursor endof_886 = (GibCursor) pvrtmp_1394;
-    GibCursorGibIntProd tmp_struct_18 =
-                         sum_list(end_r_719__956, ys_21_185_292);
+    GibCursorGibIntProd tmp_struct_18 =  sum_list(pvrtmp_1393, pvrtmp_1395);
     GibCursor pvrtmp_1401 = tmp_struct_18.field0;
     GibInt pvrtmp_1402 = tmp_struct_18.field1;
-    GibCursor endof_888 = (GibCursor) pvrtmp_1401;
-    GibInt tailapp_887 = (GibInt) pvrtmp_1402;
-
-    _print_List(end_r_721, r_719);
-    printf("\n");
-    fflush(stdout);
 
     gib_free_region2(region_1382);
     gib_free_region2(region_1380);
     gib_free_region2(region_1378);
-    return tailapp_887;
+    return pvrtmp_1402;
 }
-GibInt do_tree(GibInt n_22_186_293)
+GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input region (xs)
+                                                 GibCursor end_r_616, // input region (ys)
+                                                 GibCursor end_r_617, // output region
+                                                 GibCursor loc_614, // output location
+                                                 GibCursor xs_36_179_284, // input location
+                                                 GibCursor ys_37_180_285 // input location
+                                                )
 {
-    GibRegionMeta *region_1403 =
-                  gib_alloc_region(gib_get_inf_init_chunk_size());
-    GibCursor r_731 = region_1403->reg_heap;
-    GibInt sizeof_end_r_731_1404 = gib_get_inf_init_chunk_size();
-    GibCursor end_r_731 = r_731 + sizeof_end_r_731_1404;
-    GibRegionMeta *region_1405 =
-                  gib_alloc_region(gib_get_inf_init_chunk_size());
-    GibCursor r_730 = region_1405->reg_heap;
-    GibInt sizeof_end_r_730_1406 = gib_get_inf_init_chunk_size();
-    GibCursor end_r_730 = r_730 + sizeof_end_r_730_1406;
-    GibCursor loc_726 = (GibCursor) r_731;
-    GibCursorGibCursorGibCursorProd tmp_struct_19 =
-                                     buildtree(end_r_731, loc_726, n_22_186_293);
-    GibCursor pvrtmp_1407 = tmp_struct_19.field0;
-    GibCursor pvrtmp_1408 = tmp_struct_19.field1;
-    GibCursor pvrtmp_1409 = tmp_struct_19.field2;
-    GibCursor fltPrd_1210 = (GibCursor) pvrtmp_1408;
-    GibCursor fltPrd_1211 = (GibCursor) pvrtmp_1409;
-    GibCursor pvrtmp_1411 = (GibCursor) fltPrd_1211;
-    GibCursor pvrtmp_1410 = (GibCursor) fltPrd_1210;
-    GibCursor tr0_23_187_294 = (GibCursor) pvrtmp_1410;
-    GibCursor fltPrd_1212 = (GibCursor) pvrtmp_1408;
-    GibCursor fltPrd_1213 = (GibCursor) pvrtmp_1409;
-    GibCursor pvrtmp_1413 = (GibCursor) fltPrd_1213;
-    GibCursor pvrtmp_1412 = (GibCursor) fltPrd_1212;
-    GibCursor end_tr0_23_187_294 = (GibCursor) pvrtmp_1413;
-    GibCursor end_r_731__957 = (GibCursor) pvrtmp_1407;
-    GibCursor loc_729 = (GibCursor) r_730;
-    GibCursorGibCursorGibCursorGibCursorProd tmp_struct_20 =
-                                              add1(end_r_731__957, end_r_730, loc_729, tr0_23_187_294);
-    GibCursor pvrtmp_1414 = tmp_struct_20.field0;
-    GibCursor pvrtmp_1415 = tmp_struct_20.field1;
-    GibCursor pvrtmp_1416 = tmp_struct_20.field2;
-    GibCursor pvrtmp_1417 = tmp_struct_20.field3;
-    GibCursor fltPrd_1214 = (GibCursor) pvrtmp_1416;
-    GibCursor fltPrd_1215 = (GibCursor) pvrtmp_1417;
-    GibCursor pvrtmp_1419 = (GibCursor) fltPrd_1215;
-    GibCursor pvrtmp_1418 = (GibCursor) fltPrd_1214;
-    GibCursor tr1_24_188_295 = (GibCursor) pvrtmp_1418;
-    GibCursor fltPrd_1216 = (GibCursor) pvrtmp_1416;
-    GibCursor fltPrd_1217 = (GibCursor) pvrtmp_1417;
-    GibCursor pvrtmp_1421 = (GibCursor) fltPrd_1217;
-    GibCursor pvrtmp_1420 = (GibCursor) fltPrd_1216;
-    GibCursor end_tr1_24_188_295 = (GibCursor) pvrtmp_1421;
-    GibCursor end_r_730__958 = (GibCursor) pvrtmp_1414;
-    GibCursor endof_889 = (GibCursor) pvrtmp_1415;
-    GibCursorGibIntProd tmp_struct_21 =
-                         sumtree(end_r_730__958, tr1_24_188_295);
-    GibCursor pvrtmp_1422 = tmp_struct_21.field0;
-    GibInt pvrtmp_1423 = tmp_struct_21.field1;
-    GibCursor endof_891 = (GibCursor) pvrtmp_1422;
-    GibInt tailapp_890 = (GibInt) pvrtmp_1423;
+    // GibRegionMeta *region_1353 =
+    //     gib_alloc_region(gib_get_inf_init_chunk_size());
+    // GibCursor r_705 = region_1353->reg_heap;
+    // GibInt sizeof_end_r_705_1354 = gib_get_inf_init_chunk_size();
+    // GibCursor end_r_705 = r_705 + sizeof_end_r_705_1354;
 
-    gib_free_region(end_r_730);
-    gib_free_region(end_r_731);
-    return tailapp_890;
-}
-GibCursorGibIntProd sum_list(GibCursor end_r_608, GibCursor xs_40_178_285)
-{
-    GibCursor loc_607 = (GibCursor) xs_40_178_285;
-    GibBoxedTag tmpval_1402 = *(GibBoxedTag *) xs_40_178_285;
-    GibCursor tmpcur_1403 = xs_40_178_285 + 1;
+    GibRegionAlloc *region_1353 =
+        gib_alloc_region2(gib_get_inf_init_chunk_size());
+    GibCursor r_705 = region_1353->ra_start;
+    GibCursor end_r_705 = region_1353->ra_end;
+
+    if (loc_614 + 32 > end_r_617) {
+        GibChunk new_chunk_13 = gib_alloc_chunk(end_r_617);
+        GibCursor chunk_start_14 = new_chunk_13.chunk_start;
+        GibCursor chunk_end_15 = new_chunk_13.chunk_end;
+
+        end_r_617 = chunk_end_15;
+        *(GibBoxedTag *) loc_614 = 255;
+
+        GibCursor redir = loc_614 + 1;
+
+        *(GibCursor *) redir = chunk_start_14;
+        loc_614 = chunk_start_14;
+    }
+
+    GibCursor loc_693 = r_705 + 1;
+    GibCursor loc_694 = loc_693 + 8;
+    GibBoxedTag tmpval_1355 = *(GibBoxedTag *) xs_36_179_284;
+    GibCursor tmpcur_1356 = xs_36_179_284 + 1;
 
 
-  switch_1408:
+  switch_1377:
     ;
-    switch (tmpval_1402) {
+    switch (tmpval_1355) {
 
       case 0:
         {
-            GibCursor field_cur_1019 = (GibCursor) tmpcur_1403;
-            GibCursor jump_886 = loc_607 + 1;
-            GibInt fltScalar_885 = (GibInt) 0;
-
-            return (GibCursorGibIntProd) {jump_886, fltScalar_885};
+            GibCursor jump_882 = xs_36_179_284 + 1;
+            // gib_bump_refcount(end_r_617, end_r_616);
+            *(GibBoxedTag *) loc_614 = INDIRECTION_TAG;
+            GibCursor writetag_996 = loc_614 + 1;
+            *(GibCursor *) writetag_996 = ys_37_180_285;
+            GibCursor writecur_997 = writetag_996 + 8;
+            gib_free_region2(region_1353);
+            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_617,
+                                                               jump_882,
+                                                               loc_614,
+                                                               writecur_997};
             break;
         }
 
       case 1:
         {
-            GibCursor field_cur_1020 = (GibCursor) tmpcur_1403;
-            GibCursor case_734 = (GibCursor) field_cur_1020;
-            GibInt tmpval_1404 = *(GibInt *) case_734;
-            GibCursor tmpcur_1405 = case_734 + sizeof(GibInt);
-            GibInt y_41_179_286 = (GibInt) tmpval_1404;
-            GibCursor end_y_41_179_286 = (GibCursor) tmpcur_1405;
-            GibCursor case_735 = (GibCursor) end_y_41_179_286;
-            GibCursor ys_42_180_287 = (GibCursor) case_735;
-            GibCursor jump_887 = case_734 + 8;
-            GibCursorGibIntProd tmp_struct_21 =
-                                 sum_list(end_r_608, ys_42_180_287);
-            GibCursor pvrtmp_1406 = tmp_struct_21.field0;
-            GibInt pvrtmp_1407 = tmp_struct_21.field1;
-            GibCursor endof_888 = (GibCursor) pvrtmp_1406;
-            GibInt fltPrm_250_288 = (GibInt) pvrtmp_1407;
-            GibInt tailprim_889 = y_41_179_286 + fltPrm_250_288;
-
-            return (GibCursorGibIntProd) {endof_888, tailprim_889};
+            GibInt tmpval_1361 = *(GibInt *) tmpcur_1356;
+            GibCursor tmpcur_1362 = tmpcur_1356 + sizeof(GibInt);
+            GibCursor jump_883 = tmpcur_1356 + 8;
+            // gib_bump_refcount(end_r_705, end_r_616);
+            *(GibBoxedTag *) loc_694 = INDIRECTION_TAG;
+            GibCursor writetag_1001 = loc_694 + 1;
+            *(GibCursor *) writetag_1001 = ys_37_180_285;
+            GibCursor writecur_1002 = writetag_1001 + 8;
+            *(GibBoxedTag *) r_705 = 1;
+            GibCursor writetag_1004 = r_705 + 1;
+            *(GibInt *) writetag_1004 = tmpval_1361;
+            GibCursor writecur_1005 = writetag_1004 + sizeof(GibInt);
+            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_12 =
+                reverse(end_r_615, end_r_705, end_r_617, loc_614, tmpcur_1362, r_705);
+            GibCursor pvrtmp_1367 = tmp_struct_12.field0;
+            GibCursor pvrtmp_1368 = tmp_struct_12.field1;
+            GibCursor pvrtmp_1369 = tmp_struct_12.field2;
+            GibCursor pvrtmp_1370 = tmp_struct_12.field3;
+            gib_free_region2(region_1353);
+            return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_1367,
+                                                               pvrtmp_1368,
+                                                               pvrtmp_1369,
+                                                               pvrtmp_1370};
             break;
         }
 
       case REDIRECTION_TAG:
         {
-            GibCursor tmpcur_1597 = *(GibCursor *) tmpcur_1403;
-            GibCursor tmpaftercur_1598 = tmpcur_1403 + 8;
-            GibBoxedTag tagtmp_1599 = *(GibBoxedTag *) tmpcur_1597;
-            GibCursor tailtmp_1600 = tmpcur_1597 + 1;
-
-            tmpval_1402 = tagtmp_1599;
-            tmpcur_1403 = tailtmp_1600;
-            goto switch_1408;
+            GibCursor tmpcur_1630 = *(GibCursor *) tmpcur_1356;
+            GibCursor tmpaftercur_1631 = tmpcur_1356 + 8;
+            GibBoxedTag tagtmp_1632 = *(GibBoxedTag *) tmpcur_1630;
+            GibCursor tailtmp_1633 = tmpcur_1630 + 1;
+            tmpval_1355 = tagtmp_1632;
+            tmpcur_1356 = tailtmp_1633;
+            goto switch_1377;
             break;
         }
 
       case INDIRECTION_TAG:
         {
-            GibCursor tmpcur_1597 = *(GibCursor *) tmpcur_1403;
-            GibCursor tmpaftercur_1598 = tmpcur_1403 + 8;
-            GibBoxedTag tagtmp_1599 = *(GibBoxedTag *) tmpcur_1597;
-            GibCursor tailtmp_1600 = tmpcur_1597 + 1;
-
-            tmpval_1402 = tagtmp_1599;
-            tmpcur_1403 = tailtmp_1600;
-            goto switch_1408;
+            GibCursor tmpcur_1630 = *(GibCursor *) tmpcur_1356;
+            GibCursor tmpaftercur_1631 = tmpcur_1356 + 8;
+            GibBoxedTag tagtmp_1632 = *(GibBoxedTag *) tmpcur_1630;
+            GibCursor tailtmp_1633 = tmpcur_1630 + 1;
+            tmpval_1355 = tagtmp_1632;
+            tmpcur_1356 = tailtmp_1633;
+            goto switch_1377;
             break;
         }
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1402");
+            printf("%s\n", "Unknown tag in: tmpval_1355");
+            exit(1);
+        }
+    }
+}
+GibCursorGibIntProd sum_list(GibCursor end_r_619, GibCursor xs_40_189_296)
+{
+    GibBoxedTag tmpval_1424 = *(GibBoxedTag *) xs_40_189_296;
+    GibCursor tmpcur_1425 = xs_40_189_296 + 1;
+
+
+  switch_1430:
+    ;
+    switch (tmpval_1424) {
+
+      case 0:
+        {
+            GibCursor jump_893 = xs_40_189_296 + 1;
+
+            return (GibCursorGibIntProd) {jump_893, 0};
+            break;
+        }
+
+      case 1:
+        {
+            GibInt tmpval_1426 = *(GibInt *) tmpcur_1425;
+            GibCursor tmpcur_1427 = tmpcur_1425 + sizeof(GibInt);
+            GibCursor jump_894 = tmpcur_1425 + 8;
+            GibCursorGibIntProd tmp_struct_22 =
+                                 sum_list(end_r_619, tmpcur_1427);
+            GibCursor pvrtmp_1428 = tmp_struct_22.field0;
+            GibInt pvrtmp_1429 = tmp_struct_22.field1;
+            GibInt tailprim_896 = tmpval_1426 + pvrtmp_1429;
+
+            return (GibCursorGibIntProd) {pvrtmp_1428, tailprim_896};
+            break;
+        }
+
+      case REDIRECTION_TAG:
+        {
+            GibCursor tmpcur_1634 = *(GibCursor *) tmpcur_1425;
+            GibCursor tmpaftercur_1635 = tmpcur_1425 + 8;
+            GibBoxedTag tagtmp_1636 = *(GibBoxedTag *) tmpcur_1634;
+            GibCursor tailtmp_1637 = tmpcur_1634 + 1;
+
+            tmpval_1424 = tagtmp_1636;
+            tmpcur_1425 = tailtmp_1637;
+            goto switch_1430;
+            break;
+        }
+
+      case INDIRECTION_TAG:
+        {
+            GibCursor tmpcur_1634 = *(GibCursor *) tmpcur_1425;
+            GibCursor tmpaftercur_1635 = tmpcur_1425 + 8;
+            GibBoxedTag tagtmp_1636 = *(GibBoxedTag *) tmpcur_1634;
+            GibCursor tailtmp_1637 = tmpcur_1634 + 1;
+
+            tmpval_1424 = tagtmp_1636;
+            tmpcur_1425 = tailtmp_1637;
+            goto switch_1430;
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval_1424");
             exit(1);
         }
     }
@@ -964,7 +434,7 @@ GibCursorGibCursorGibCursorProd build_list(GibCursor end_r_621,
         GibCursor chunk_end_26 = new_chunk_24.chunk_end;
 
         end_r_621 = chunk_end_26;
-        *(GibBoxedTag *) loc_620 = REDIRECTION_TAG;
+        *(GibBoxedTag *) loc_620 = 255;
 
         GibCursor redir = loc_620 + 1;
 
@@ -980,17 +450,9 @@ GibCursorGibCursorGibCursorProd build_list(GibCursor end_r_621,
         *(GibBoxedTag *) loc_620 = 0;
 
         GibCursor writetag_1021 = loc_620 + 1;
-        GibCursor pvrtmp_1432 = (GibCursor) writetag_1021;
-        GibCursor pvrtmp_1431 = (GibCursor) loc_620;
-        GibCursor taildc_897 = (GibCursor) pvrtmp_1431;
-        GibCursor end_taildc_897 = (GibCursor) pvrtmp_1432;
-        GibCursor pvrtmp_1434 = (GibCursor) end_taildc_897;
-        GibCursor pvrtmp_1433 = (GibCursor) taildc_897;
-        GibCursor fltPrd_1218 = (GibCursor) pvrtmp_1433;
-        GibCursor fltPrd_1219 = (GibCursor) pvrtmp_1434;
 
-        return (GibCursorGibCursorGibCursorProd) {end_r_621, fltPrd_1218,
-                                                  fltPrd_1219};
+        return (GibCursorGibCursorGibCursorProd) {end_r_621, loc_620,
+                                                  writetag_1021};
     } else {
         GibInt fltAppE_262_302 = n_43_192_300 - 1;
         GibCursorGibCursorGibCursorProd tmp_struct_23 =
@@ -998,17 +460,6 @@ GibCursorGibCursorGibCursorProd build_list(GibCursor end_r_621,
         GibCursor pvrtmp_1435 = tmp_struct_23.field0;
         GibCursor pvrtmp_1436 = tmp_struct_23.field1;
         GibCursor pvrtmp_1437 = tmp_struct_23.field2;
-        GibCursor fltPrd_1220 = (GibCursor) pvrtmp_1436;
-        GibCursor fltPrd_1221 = (GibCursor) pvrtmp_1437;
-        GibCursor pvrtmp_1439 = (GibCursor) fltPrd_1221;
-        GibCursor pvrtmp_1438 = (GibCursor) fltPrd_1220;
-        GibCursor fltPkd_261_303 = (GibCursor) pvrtmp_1438;
-        GibCursor fltPrd_1222 = (GibCursor) pvrtmp_1436;
-        GibCursor fltPrd_1223 = (GibCursor) pvrtmp_1437;
-        GibCursor pvrtmp_1441 = (GibCursor) fltPrd_1223;
-        GibCursor pvrtmp_1440 = (GibCursor) fltPrd_1222;
-        GibCursor end_fltPkd_261_303 = (GibCursor) pvrtmp_1441;
-        GibCursor end_r_621__959 = (GibCursor) pvrtmp_1435;
 
         *(GibBoxedTag *) loc_620 = 1;
 
@@ -1017,308 +468,479 @@ GibCursorGibCursorGibCursorProd build_list(GibCursor end_r_621,
         *(GibInt *) writetag_1024 = n_new - n_43_192_300;
 
         GibCursor writecur_1025 = writetag_1024 + sizeof(GibInt);
-        GibCursor writecur_1026 = (GibCursor) end_fltPkd_261_303;
-        GibCursor pvrtmp_1443 = (GibCursor) writecur_1026;
-        GibCursor pvrtmp_1442 = (GibCursor) loc_620;
-        GibCursor taildc_898 = (GibCursor) pvrtmp_1442;
-        GibCursor end_taildc_898 = (GibCursor) pvrtmp_1443;
-        GibCursor pvrtmp_1445 = (GibCursor) end_taildc_898;
-        GibCursor pvrtmp_1444 = (GibCursor) taildc_898;
-        GibCursor fltPrd_1224 = (GibCursor) pvrtmp_1444;
-        GibCursor fltPrd_1225 = (GibCursor) pvrtmp_1445;
 
-        return (GibCursorGibCursorGibCursorProd) {end_r_621__959, fltPrd_1224,
-                                                  fltPrd_1225};
+        return (GibCursorGibCursorGibCursorProd) {pvrtmp_1435, loc_620,
+                                                  pvrtmp_1437};
     }
 }
-GibCursorGibCursorGibCursorGibCursorProd _copy_Tree(GibCursor end_r_611, // input region
-                                                    GibCursor end_r_612, // output region
-                                                    GibCursor loc_610, // output location
-                                                    GibCursor arg_103_181_289 // input location
-                                                   )
+GibInt do_tree(GibInt n_22_186_293)
 {
-    GibCursor loc_609 = (GibCursor) arg_103_181_289;
+    GibRegionMeta *region_1403 =
+                  gib_alloc_region(gib_get_inf_init_chunk_size());
+    GibCursor r_731 = region_1403->reg_heap;
+    GibInt sizeof_end_r_731_1404 = gib_get_inf_init_chunk_size();
+    GibCursor end_r_731 = r_731 + sizeof_end_r_731_1404;
+    GibRegionMeta *region_1405 =
+                  gib_alloc_region(gib_get_inf_init_chunk_size());
+    GibCursor r_730 = region_1405->reg_heap;
+    GibInt sizeof_end_r_730_1406 = gib_get_inf_init_chunk_size();
+    GibCursor end_r_730 = r_730 + sizeof_end_r_730_1406;
+    GibCursorGibCursorGibCursorProd tmp_struct_19 =
+                                     buildtree(end_r_731, r_731, n_22_186_293);
+    GibCursor pvrtmp_1407 = tmp_struct_19.field0;
+    GibCursor pvrtmp_1408 = tmp_struct_19.field1;
+    GibCursor pvrtmp_1409 = tmp_struct_19.field2;
+    GibCursorGibCursorGibCursorGibCursorProd tmp_struct_20 =
+                                              add1(pvrtmp_1407, end_r_730, r_730, pvrtmp_1408);
+    GibCursor pvrtmp_1414 = tmp_struct_20.field0;
+    GibCursor pvrtmp_1415 = tmp_struct_20.field1;
+    GibCursor pvrtmp_1416 = tmp_struct_20.field2;
+    GibCursor pvrtmp_1417 = tmp_struct_20.field3;
+    GibCursorGibIntProd tmp_struct_21 =  sumtree(pvrtmp_1414, pvrtmp_1416);
+    GibCursor pvrtmp_1422 = tmp_struct_21.field0;
+    GibInt pvrtmp_1423 = tmp_struct_21.field1;
 
-    if (loc_610 + 32 > end_r_612) {
-        GibChunk new_chunk_24 = gib_alloc_chunk(end_r_612);
-        GibCursor chunk_start_25 = new_chunk_24.chunk_start;
-        GibCursor chunk_end_26 = new_chunk_24.chunk_end;
+    gib_free_region(end_r_730);
+    gib_free_region(end_r_731);
+    return pvrtmp_1423;
+}
+GibCursorGibCursorGibCursorGibCursorProd add1(GibCursor end_r_606,
+                                              GibCursor end_r_607,
+                                              GibCursor loc_605,
+                                              GibCursor tr_25_168_265)
+{
+    if (loc_605 + 32 > end_r_607) {
+        GibChunk new_chunk_2 = gib_alloc_chunk(end_r_607);
+        GibCursor chunk_start_3 = new_chunk_2.chunk_start;
+        GibCursor chunk_end_4 = new_chunk_2.chunk_end;
 
-        end_r_612 = chunk_end_26;
-        *(GibBoxedTag *) loc_610 = REDIRECTION_TAG;
+        end_r_607 = chunk_end_4;
+        *(GibBoxedTag *) loc_605 = 255;
+
+        GibCursor redir = loc_605 + 1;
+
+        *(GibCursor *) redir = chunk_start_3;
+        loc_605 = chunk_start_3;
+    }
+
+    GibBoxedTag tmpval_1293 = *(GibBoxedTag *) tr_25_168_265;
+    GibCursor tmpcur_1294 = tr_25_168_265 + 1;
+
+
+  switch_1321:
+    ;
+    switch (tmpval_1293) {
+
+      case 0:
+        {
+            GibInt tmpval_1295 = *(GibInt *) tmpcur_1294;
+            GibCursor tmpcur_1296 = tmpcur_1294 + sizeof(GibInt);
+            GibCursor jump_871 = tmpcur_1294 + 8;
+            GibInt fltPkd_249_267 = tmpval_1295 + 1;
+
+            *(GibBoxedTag *) loc_605 = 0;
+
+            GibCursor writetag_971 = loc_605 + 1;
+
+            *(GibInt *) writetag_971 = fltPkd_249_267;
+
+            GibCursor writecur_972 = writetag_971 + sizeof(GibInt);
+
+            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_607,
+                                                               jump_871,
+                                                               loc_605,
+                                                               writecur_972};
+            break;
+        }
+
+      case 1:
+        {
+            GibCursor loc_668 = loc_605 + 1;
+            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_0 =
+                                                      add1(end_r_606, end_r_607, loc_668, tmpcur_1294);
+            GibCursor pvrtmp_1301 = tmp_struct_0.field0;
+            GibCursor pvrtmp_1302 = tmp_struct_0.field1;
+            GibCursor pvrtmp_1303 = tmp_struct_0.field2;
+            GibCursor pvrtmp_1304 = tmp_struct_0.field3;
+            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_1 =
+                                                      add1(end_r_606, pvrtmp_1301, pvrtmp_1304, pvrtmp_1302);
+            GibCursor pvrtmp_1309 = tmp_struct_1.field0;
+            GibCursor pvrtmp_1310 = tmp_struct_1.field1;
+            GibCursor pvrtmp_1311 = tmp_struct_1.field2;
+            GibCursor pvrtmp_1312 = tmp_struct_1.field3;
+
+            *(GibBoxedTag *) loc_605 = 1;
+
+            GibCursor writetag_977 = loc_605 + 1;
+
+            return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_1309,
+                                                               pvrtmp_1310,
+                                                               loc_605,
+                                                               pvrtmp_1312};
+            break;
+        }
+
+      case REDIRECTION_TAG:
+        {
+            GibCursor tmpcur_1622 = *(GibCursor *) tmpcur_1294;
+            GibCursor tmpaftercur_1623 = tmpcur_1294 + 8;
+            GibBoxedTag tagtmp_1624 = *(GibBoxedTag *) tmpcur_1622;
+            GibCursor tailtmp_1625 = tmpcur_1622 + 1;
+
+            tmpval_1293 = tagtmp_1624;
+            tmpcur_1294 = tailtmp_1625;
+            goto switch_1321;
+            break;
+        }
+
+      case INDIRECTION_TAG:
+        {
+            GibCursor tmpcur_1622 = *(GibCursor *) tmpcur_1294;
+            GibCursor tmpaftercur_1623 = tmpcur_1294 + 8;
+            GibBoxedTag tagtmp_1624 = *(GibBoxedTag *) tmpcur_1622;
+            GibCursor tailtmp_1625 = tmpcur_1622 + 1;
+
+            tmpval_1293 = tagtmp_1624;
+            tmpcur_1294 = tailtmp_1625;
+            goto switch_1321;
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval_1293");
+            exit(1);
+        }
+    }
+}
+GibCursorGibIntProd sumtree(GibCursor end_r_609, GibCursor tr_29_172_272)
+{
+    GibBoxedTag tmpval_1322 = *(GibBoxedTag *) tr_29_172_272;
+    GibCursor tmpcur_1323 = tr_29_172_272 + 1;
+
+
+  switch_1330:
+    ;
+    switch (tmpval_1322) {
+
+      case 0:
+        {
+            GibInt tmpval_1324 = *(GibInt *) tmpcur_1323;
+            GibCursor tmpcur_1325 = tmpcur_1323 + sizeof(GibInt);
+            GibCursor jump_876 = tmpcur_1323 + 8;
+
+            return (GibCursorGibIntProd) {jump_876, tmpval_1324};
+            break;
+        }
+
+      case 1:
+        {
+            GibCursorGibIntProd tmp_struct_5 =  sumtree(end_r_609, tmpcur_1323);
+            GibCursor pvrtmp_1326 = tmp_struct_5.field0;
+            GibInt pvrtmp_1327 = tmp_struct_5.field1;
+            GibCursorGibIntProd tmp_struct_6 =  sumtree(end_r_609, pvrtmp_1326);
+            GibCursor pvrtmp_1328 = tmp_struct_6.field0;
+            GibInt pvrtmp_1329 = tmp_struct_6.field1;
+            GibInt tailprim_879 = pvrtmp_1327 + pvrtmp_1329;
+
+            return (GibCursorGibIntProd) {pvrtmp_1328, tailprim_879};
+            break;
+        }
+
+      case REDIRECTION_TAG:
+        {
+            GibCursor tmpcur_1626 = *(GibCursor *) tmpcur_1323;
+            GibCursor tmpaftercur_1627 = tmpcur_1323 + 8;
+            GibBoxedTag tagtmp_1628 = *(GibBoxedTag *) tmpcur_1626;
+            GibCursor tailtmp_1629 = tmpcur_1626 + 1;
+
+            tmpval_1322 = tagtmp_1628;
+            tmpcur_1323 = tailtmp_1629;
+            goto switch_1330;
+            break;
+        }
+
+      case INDIRECTION_TAG:
+        {
+            GibCursor tmpcur_1626 = *(GibCursor *) tmpcur_1323;
+            GibCursor tmpaftercur_1627 = tmpcur_1323 + 8;
+            GibBoxedTag tagtmp_1628 = *(GibBoxedTag *) tmpcur_1626;
+            GibCursor tailtmp_1629 = tmpcur_1626 + 1;
+
+            tmpval_1322 = tagtmp_1628;
+            tmpcur_1323 = tailtmp_1629;
+            goto switch_1330;
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval_1322");
+            exit(1);
+        }
+    }
+}
+GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_611,
+                                          GibCursor loc_610,
+                                          GibInt n_35_178_278)
+{
+    if (loc_610 + 32 > end_r_611) {
+        GibChunk new_chunk_9 = gib_alloc_chunk(end_r_611);
+        GibCursor chunk_start_10 = new_chunk_9.chunk_start;
+        GibCursor chunk_end_11 = new_chunk_9.chunk_end;
+
+        end_r_611 = chunk_end_11;
+        *(GibBoxedTag *) loc_610 = 255;
 
         GibCursor redir = loc_610 + 1;
 
-        *(GibCursor *) redir = chunk_start_25;
-        loc_610 = chunk_start_25;
+        *(GibCursor *) redir = chunk_start_10;
+        loc_610 = chunk_start_10;
     }
 
-    GibBoxedTag tmpval_1409 = *(GibBoxedTag *) arg_103_181_289;
-    GibCursor tmpcur_1410 = arg_103_181_289 + 1;
+    GibBool fltIf_252_279 = n_35_178_278 == 0;
+
+    if (fltIf_252_279) {
+        *(GibBoxedTag *) loc_610 = 0;
+
+        GibCursor writetag_986 = loc_610 + 1;
+
+        *(GibInt *) writetag_986 = 1;
+
+        GibCursor writecur_987 = writetag_986 + sizeof(GibInt);
+
+        return (GibCursorGibCursorGibCursorProd) {end_r_611, loc_610,
+                                                  writecur_987};
+    } else {
+        GibInt fltAppE_254_280 = n_35_178_278 - 1;
+        GibCursor loc_684 = loc_610 + 1;
+        GibCursorGibCursorGibCursorProd tmp_struct_7 =
+                                         buildtree(end_r_611, loc_684, fltAppE_254_280);
+        GibCursor pvrtmp_1335 = tmp_struct_7.field0;
+        GibCursor pvrtmp_1336 = tmp_struct_7.field1;
+        GibCursor pvrtmp_1337 = tmp_struct_7.field2;
+        GibInt fltAppE_256_282 = n_35_178_278 - 1;
+        GibCursorGibCursorGibCursorProd tmp_struct_8 =
+                                         buildtree(pvrtmp_1335, pvrtmp_1337, fltAppE_256_282);
+        GibCursor pvrtmp_1342 = tmp_struct_8.field0;
+        GibCursor pvrtmp_1343 = tmp_struct_8.field1;
+        GibCursor pvrtmp_1344 = tmp_struct_8.field2;
+
+        *(GibBoxedTag *) loc_610 = 1;
+
+        GibCursor writetag_991 = loc_610 + 1;
+
+        return (GibCursorGibCursorGibCursorProd) {pvrtmp_1342, loc_610,
+                                                  pvrtmp_1344};
+    }
+}
+GibCursorGibCursorGibCursorGibCursorProd _copy_Tree(GibCursor end_r_624,
+                                                    GibCursor end_r_625,
+                                                    GibCursor loc_623,
+                                                    GibCursor arg_112_193_304)
+{
+    if (loc_623 + 32 > end_r_625) {
+        GibChunk new_chunk_29 = gib_alloc_chunk(end_r_625);
+        GibCursor chunk_start_30 = new_chunk_29.chunk_start;
+        GibCursor chunk_end_31 = new_chunk_29.chunk_end;
+
+        end_r_625 = chunk_end_31;
+        *(GibBoxedTag *) loc_623 = 255;
+
+        GibCursor redir = loc_623 + 1;
+
+        *(GibCursor *) redir = chunk_start_30;
+        loc_623 = chunk_start_30;
+    }
+
+    GibBoxedTag tmpval_1446 = *(GibBoxedTag *) arg_112_193_304;
+    GibCursor tmpcur_1447 = arg_112_193_304 + 1;
 
 
-  switch_1437:
+  switch_1474:
     ;
-    switch (tmpval_1409) {
+    switch (tmpval_1446) {
 
       case 0:
         {
-            GibCursor field_cur_1023 = (GibCursor) tmpcur_1410;
-            GibCursor case_740 = (GibCursor) field_cur_1023;
-            GibInt tmpval_1411 = *(GibInt *) case_740;
-            GibCursor tmpcur_1412 = case_740 + sizeof(GibInt);
-            GibInt x_104_182_290 = (GibInt) tmpval_1411;
-            GibCursor end_x_104_182_290 = (GibCursor) tmpcur_1412;
-            GibCursor jump_890 = case_740 + 8;
+            GibInt tmpval_1448 = *(GibInt *) tmpcur_1447;
+            GibCursor tmpcur_1449 = tmpcur_1447 + sizeof(GibInt);
+            GibCursor jump_899 = tmpcur_1447 + 8;
 
-            *(GibBoxedTag *) loc_610 = 0;
+            *(GibBoxedTag *) loc_623 = 0;
 
-            GibCursor writetag_1025 = loc_610 + 1;
+            GibCursor writetag_1030 = loc_623 + 1;
 
-            *(GibInt *) writetag_1025 = x_104_182_290;
+            *(GibInt *) writetag_1030 = tmpval_1448;
 
-            GibCursor writecur_1026 = writetag_1025 + sizeof(GibInt);
-            GibCursor pvrtmp_1414 = (GibCursor) writecur_1026;
-            GibCursor pvrtmp_1413 = (GibCursor) loc_610;
-            GibCursor taildc_891 = (GibCursor) pvrtmp_1413;
-            GibCursor end_taildc_891 = (GibCursor) pvrtmp_1414;
-            GibCursor pvrtmp_1416 = (GibCursor) end_taildc_891;
-            GibCursor pvrtmp_1415 = (GibCursor) taildc_891;
-            GibCursor fltPrd_1203 = (GibCursor) pvrtmp_1415;
-            GibCursor fltPrd_1204 = (GibCursor) pvrtmp_1416;
+            GibCursor writecur_1031 = writetag_1030 + sizeof(GibInt);
 
-            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_612,
-                                                               jump_890,
-                                                               fltPrd_1203,
-                                                               fltPrd_1204};
+            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_625,
+                                                               jump_899,
+                                                               loc_623,
+                                                               writecur_1031};
             break;
         }
 
       case 1:
         {
-            GibCursor field_cur_1028 = (GibCursor) tmpcur_1410;
-            GibCursor case_744 = (GibCursor) field_cur_1028;
-            GibCursor x_106_184_292 = (GibCursor) case_744;
-            GibCursor loc_752 = loc_610 + 1;
-            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_22 =
-                                                      _copy_Tree(end_r_611, end_r_612, loc_752, x_106_184_292);
-            GibCursor pvrtmp_1417 = tmp_struct_22.field0;
-            GibCursor pvrtmp_1418 = tmp_struct_22.field1;
-            GibCursor pvrtmp_1419 = tmp_struct_22.field2;
-            GibCursor pvrtmp_1420 = tmp_struct_22.field3;
-            GibCursor fltPrd_1205 = (GibCursor) pvrtmp_1419;
-            GibCursor fltPrd_1206 = (GibCursor) pvrtmp_1420;
-            GibCursor pvrtmp_1422 = (GibCursor) fltPrd_1206;
-            GibCursor pvrtmp_1421 = (GibCursor) fltPrd_1205;
-            GibCursor y_108_186_294 = (GibCursor) pvrtmp_1421;
-            GibCursor fltPrd_1207 = (GibCursor) pvrtmp_1419;
-            GibCursor fltPrd_1208 = (GibCursor) pvrtmp_1420;
-            GibCursor pvrtmp_1424 = (GibCursor) fltPrd_1208;
-            GibCursor pvrtmp_1423 = (GibCursor) fltPrd_1207;
-            GibCursor end_y_108_186_294 = (GibCursor) pvrtmp_1424;
-            GibCursor end_r_612__949 = (GibCursor) pvrtmp_1417;
-            GibCursor endof_892 = (GibCursor) pvrtmp_1418;
-            GibCursor case_745 = (GibCursor) endof_892;
-            GibCursor x_107_185_293 = (GibCursor) case_745;
-            GibCursor loc_753 = (GibCursor) end_y_108_186_294;
-            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_23 =
-                                                      _copy_Tree(end_r_611, end_r_612__949, loc_753, x_107_185_293);
-            GibCursor pvrtmp_1425 = tmp_struct_23.field0;
-            GibCursor pvrtmp_1426 = tmp_struct_23.field1;
-            GibCursor pvrtmp_1427 = tmp_struct_23.field2;
-            GibCursor pvrtmp_1428 = tmp_struct_23.field3;
-            GibCursor fltPrd_1209 = (GibCursor) pvrtmp_1427;
-            GibCursor fltPrd_1210 = (GibCursor) pvrtmp_1428;
-            GibCursor pvrtmp_1430 = (GibCursor) fltPrd_1210;
-            GibCursor pvrtmp_1429 = (GibCursor) fltPrd_1209;
-            GibCursor y_109_187_295 = (GibCursor) pvrtmp_1429;
-            GibCursor fltPrd_1211 = (GibCursor) pvrtmp_1427;
-            GibCursor fltPrd_1212 = (GibCursor) pvrtmp_1428;
-            GibCursor pvrtmp_1432 = (GibCursor) fltPrd_1212;
-            GibCursor pvrtmp_1431 = (GibCursor) fltPrd_1211;
-            GibCursor end_y_109_187_295 = (GibCursor) pvrtmp_1432;
-            GibCursor end_r_612__949__950 = (GibCursor) pvrtmp_1425;
-            GibCursor endof_893 = (GibCursor) pvrtmp_1426;
+            GibCursor loc_759 = loc_623 + 1;
+            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_27 =
+                                                      _copy_Tree(end_r_624, end_r_625, loc_759, tmpcur_1447);
+            GibCursor pvrtmp_1454 = tmp_struct_27.field0;
+            GibCursor pvrtmp_1455 = tmp_struct_27.field1;
+            GibCursor pvrtmp_1456 = tmp_struct_27.field2;
+            GibCursor pvrtmp_1457 = tmp_struct_27.field3;
+            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_28 =
+                                                      _copy_Tree(end_r_624, pvrtmp_1454, pvrtmp_1457, pvrtmp_1455);
+            GibCursor pvrtmp_1462 = tmp_struct_28.field0;
+            GibCursor pvrtmp_1463 = tmp_struct_28.field1;
+            GibCursor pvrtmp_1464 = tmp_struct_28.field2;
+            GibCursor pvrtmp_1465 = tmp_struct_28.field3;
 
-            *(GibBoxedTag *) loc_610 = 1;
+            *(GibBoxedTag *) loc_623 = 1;
 
-            GibCursor writetag_1031 = loc_610 + 1;
-            GibCursor writecur_1032 = (GibCursor) end_y_108_186_294;
-            GibCursor writecur_1033 = (GibCursor) end_y_109_187_295;
-            GibCursor pvrtmp_1434 = (GibCursor) writecur_1033;
-            GibCursor pvrtmp_1433 = (GibCursor) loc_610;
-            GibCursor taildc_894 = (GibCursor) pvrtmp_1433;
-            GibCursor end_taildc_894 = (GibCursor) pvrtmp_1434;
-            GibCursor pvrtmp_1436 = (GibCursor) end_taildc_894;
-            GibCursor pvrtmp_1435 = (GibCursor) taildc_894;
-            GibCursor fltPrd_1213 = (GibCursor) pvrtmp_1435;
-            GibCursor fltPrd_1214 = (GibCursor) pvrtmp_1436;
+            GibCursor writetag_1036 = loc_623 + 1;
 
-            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_612__949__950,
-                                                               endof_893,
-                                                               fltPrd_1213,
-                                                               fltPrd_1214};
+            return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_1462,
+                                                               pvrtmp_1463,
+                                                               loc_623,
+                                                               pvrtmp_1465};
             break;
         }
 
       case REDIRECTION_TAG:
         {
-            GibCursor tmpcur_1601 = *(GibCursor *) tmpcur_1410;
-            GibCursor tmpaftercur_1602 = tmpcur_1410 + 8;
-            GibBoxedTag tagtmp_1603 = *(GibBoxedTag *) tmpcur_1601;
-            GibCursor tailtmp_1604 = tmpcur_1601 + 1;
+            GibCursor tmpcur_1638 = *(GibCursor *) tmpcur_1447;
+            GibCursor tmpaftercur_1639 = tmpcur_1447 + 8;
+            GibBoxedTag tagtmp_1640 = *(GibBoxedTag *) tmpcur_1638;
+            GibCursor tailtmp_1641 = tmpcur_1638 + 1;
 
-            tmpval_1409 = tagtmp_1603;
-            tmpcur_1410 = tailtmp_1604;
-            goto switch_1437;
+            tmpval_1446 = tagtmp_1640;
+            tmpcur_1447 = tailtmp_1641;
+            goto switch_1474;
             break;
         }
 
       case INDIRECTION_TAG:
         {
-            GibCursor tmpcur_1601 = *(GibCursor *) tmpcur_1410;
-            GibCursor tmpaftercur_1602 = tmpcur_1410 + 8;
-            GibBoxedTag tagtmp_1603 = *(GibBoxedTag *) tmpcur_1601;
-            GibCursor tailtmp_1604 = tmpcur_1601 + 1;
+            GibCursor tmpcur_1638 = *(GibCursor *) tmpcur_1447;
+            GibCursor tmpaftercur_1639 = tmpcur_1447 + 8;
+            GibBoxedTag tagtmp_1640 = *(GibBoxedTag *) tmpcur_1638;
+            GibCursor tailtmp_1641 = tmpcur_1638 + 1;
 
-            tmpval_1409 = tagtmp_1603;
-            tmpcur_1410 = tailtmp_1604;
-            goto switch_1437;
+            tmpval_1446 = tagtmp_1640;
+            tmpcur_1447 = tailtmp_1641;
+            goto switch_1474;
             break;
         }
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1409");
+            printf("%s\n", "Unknown tag in: tmpval_1446");
             exit(1);
         }
     }
 }
-GibCursorProd _traverse_Tree(GibCursor end_r_618, GibCursor arg_117_195_303)
+GibCursorProd _traverse_Tree(GibCursor end_r_631, GibCursor arg_126_207_318)
 {
-    GibCursor loc_617 = (GibCursor) arg_117_195_303;
-    GibBoxedTag tmpval_1467 = *(GibBoxedTag *) arg_117_195_303;
-    GibCursor tmpcur_1468 = arg_117_195_303 + 1;
+    GibBoxedTag tmpval_1504 = *(GibBoxedTag *) arg_126_207_318;
+    GibCursor tmpcur_1505 = arg_126_207_318 + 1;
 
 
-  switch_1473:
+  switch_1510:
     ;
-    switch (tmpval_1467) {
+    switch (tmpval_1504) {
 
       case 0:
         {
-            GibCursor field_cur_1047 = (GibCursor) tmpcur_1468;
-            GibCursor case_776 = (GibCursor) field_cur_1047;
-            GibInt tmpval_1469 = *(GibInt *) case_776;
-            GibCursor tmpcur_1470 = case_776 + sizeof(GibInt);
-            GibInt x_118_196_304 = (GibInt) tmpval_1469;
-            GibCursor end_x_118_196_304 = (GibCursor) tmpcur_1470;
-            GibCursor jump_900 = case_776 + 8;
+            GibInt tmpval_1506 = *(GibInt *) tmpcur_1505;
+            GibCursor tmpcur_1507 = tmpcur_1505 + sizeof(GibInt);
+            GibCursor jump_909 = tmpcur_1505 + 8;
 
-            return (GibCursorProd) {jump_900};
+            return (GibCursorProd) {jump_909};
             break;
         }
 
       case 1:
         {
-            GibCursor field_cur_1049 = (GibCursor) tmpcur_1468;
-            GibCursor case_777 = (GibCursor) field_cur_1049;
-            GibCursor x_120_197_305 = (GibCursor) case_777;
-            GibCursorProd tmp_struct_29 =
-                           _traverse_Tree(end_r_618, x_120_197_305);
-            GibCursor pvrtmp_1471 = tmp_struct_29.field0;
-            GibCursor endof_902 = (GibCursor) pvrtmp_1471;
-            GibCursor case_778 = (GibCursor) endof_902;
-            GibCursor x_121_198_306 = (GibCursor) case_778;
-            GibCursorProd tmp_struct_30 =
-                           _traverse_Tree(end_r_618, x_121_198_306);
-            GibCursor pvrtmp_1472 = tmp_struct_30.field0;
-            GibCursor endof_903 = (GibCursor) pvrtmp_1472;
+            GibCursorProd tmp_struct_34 =
+                           _traverse_Tree(end_r_631, tmpcur_1505);
+            GibCursor pvrtmp_1508 = tmp_struct_34.field0;
+            GibCursorProd tmp_struct_35 =
+                           _traverse_Tree(end_r_631, pvrtmp_1508);
+            GibCursor pvrtmp_1509 = tmp_struct_35.field0;
 
-            return (GibCursorProd) {endof_903};
+            return (GibCursorProd) {pvrtmp_1509};
             break;
         }
 
       case REDIRECTION_TAG:
         {
-            GibCursor tmpcur_1609 = *(GibCursor *) tmpcur_1468;
-            GibCursor tmpaftercur_1610 = tmpcur_1468 + 8;
-            GibBoxedTag tagtmp_1611 = *(GibBoxedTag *) tmpcur_1609;
-            GibCursor tailtmp_1612 = tmpcur_1609 + 1;
+            GibCursor tmpcur_1646 = *(GibCursor *) tmpcur_1505;
+            GibCursor tmpaftercur_1647 = tmpcur_1505 + 8;
+            GibBoxedTag tagtmp_1648 = *(GibBoxedTag *) tmpcur_1646;
+            GibCursor tailtmp_1649 = tmpcur_1646 + 1;
 
-            tmpval_1467 = tagtmp_1611;
-            tmpcur_1468 = tailtmp_1612;
-            goto switch_1473;
+            tmpval_1504 = tagtmp_1648;
+            tmpcur_1505 = tailtmp_1649;
+            goto switch_1510;
             break;
         }
 
       case INDIRECTION_TAG:
         {
-            GibCursor tmpcur_1609 = *(GibCursor *) tmpcur_1468;
-            GibCursor tmpaftercur_1610 = tmpcur_1468 + 8;
-            GibBoxedTag tagtmp_1611 = *(GibBoxedTag *) tmpcur_1609;
-            GibCursor tailtmp_1612 = tmpcur_1609 + 1;
+            GibCursor tmpcur_1646 = *(GibCursor *) tmpcur_1505;
+            GibCursor tmpaftercur_1647 = tmpcur_1505 + 8;
+            GibBoxedTag tagtmp_1648 = *(GibBoxedTag *) tmpcur_1646;
+            GibCursor tailtmp_1649 = tmpcur_1646 + 1;
 
-            tmpval_1467 = tagtmp_1611;
-            tmpcur_1468 = tailtmp_1612;
-            goto switch_1473;
+            tmpval_1504 = tagtmp_1648;
+            tmpcur_1505 = tailtmp_1649;
+            goto switch_1510;
             break;
         }
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1467");
+            printf("%s\n", "Unknown tag in: tmpval_1504");
             exit(1);
         }
     }
 }
-GibCursorProd _print_Tree(GibCursor end_r_620, GibCursor arg_124_201_309)
+GibCursorProd _print_Tree(GibCursor end_r_633, GibCursor arg_133_213_324)
 {
-    GibCursor loc_619 = (GibCursor) arg_124_201_309;
-    GibBoxedTag tmpval_1474 = *(GibBoxedTag *) arg_124_201_309;
-    GibCursor tmpcur_1475 = arg_124_201_309 + 1;
+    GibBoxedTag tmpval_1511 = *(GibBoxedTag *) arg_133_213_324;
+    GibCursor tmpcur_1512 = arg_133_213_324 + 1;
 
 
-  switch_1480:
+  switch_1517:
     ;
-    switch (tmpval_1474) {
+    switch (tmpval_1511) {
 
       case 0:
         {
-            GibCursor field_cur_1052 = (GibCursor) tmpcur_1475;
-            GibCursor case_785 = (GibCursor) field_cur_1052;
-            GibInt tmpval_1476 = *(GibInt *) case_785;
-            GibCursor tmpcur_1477 = case_785 + sizeof(GibInt);
-            GibInt x_125_202_310 = (GibInt) tmpval_1476;
-            GibCursor end_x_125_202_310 = (GibCursor) tmpcur_1477;
-            GibCursor jump_905 = case_785 + 8;
-            unsigned char wildcard_127_203_311 = gib_print_symbol(1266);
-            unsigned char y_126_204_312 = printf("%ld", x_125_202_310);
-            unsigned char wildcard_128_205_313 = gib_print_symbol(1263);
+            GibInt tmpval_1513 = *(GibInt *) tmpcur_1512;
+            GibCursor tmpcur_1514 = tmpcur_1512 + sizeof(GibInt);
+            GibCursor jump_914 = tmpcur_1512 + 8;
+            unsigned char wildcard_136_215_326 = gib_print_symbol(1289);
+            unsigned char y_135_216_327 = printf("%ld", tmpval_1513);
+            unsigned char wildcard_137_217_328 = gib_print_symbol(1286);
 
-            return (GibCursorProd) {jump_905};
+            return (GibCursorProd) {jump_914};
             break;
         }
 
       case 1:
         {
-            GibCursor field_cur_1054 = (GibCursor) tmpcur_1475;
-            GibCursor case_786 = (GibCursor) field_cur_1054;
-            GibCursor x_129_206_314 = (GibCursor) case_786;
-            unsigned char wildcard_133_208_316 = gib_print_symbol(1264);
-            GibCursorProd tmp_struct_31 =
-                           _print_Tree(end_r_620, x_129_206_314);
-            GibCursor pvrtmp_1478 = tmp_struct_31.field0;
-            GibCursor endof_907 = (GibCursor) pvrtmp_1478;
-            GibCursor case_787 = (GibCursor) endof_907;
-            GibCursor x_130_207_315 = (GibCursor) case_787;
-            GibCursorProd tmp_struct_32 =
-                           _print_Tree(end_r_620, x_130_207_315);
-            GibCursor pvrtmp_1479 = tmp_struct_32.field0;
-            GibCursor endof_908 = (GibCursor) pvrtmp_1479;
-            unsigned char wildcard_134_211_319 = gib_print_symbol(1263);
+            unsigned char wildcard_142_220_331 = gib_print_symbol(1287);
+            GibCursorProd tmp_struct_36 =  _print_Tree(end_r_633, tmpcur_1512);
+            GibCursor pvrtmp_1515 = tmp_struct_36.field0;
+            GibCursorProd tmp_struct_37 =  _print_Tree(end_r_633, pvrtmp_1515);
+            GibCursor pvrtmp_1516 = tmp_struct_37.field0;
+            unsigned char wildcard_143_223_334 = gib_print_symbol(1286);
 
-            return (GibCursorProd) {endof_908};
+            return (GibCursorProd) {pvrtmp_1516};
             break;
         }
 
@@ -1326,14 +948,14 @@ GibCursorProd _print_Tree(GibCursor end_r_620, GibCursor arg_124_201_309)
         {
             printf(" ->r ");
 
-            GibCursor tmpcur_1613 = *(GibCursor *) tmpcur_1475;
-            GibCursor tmpaftercur_1614 = tmpcur_1475 + 8;
-            GibBoxedTag tagtmp_1615 = *(GibBoxedTag *) tmpcur_1613;
-            GibCursor tailtmp_1616 = tmpcur_1613 + 1;
+            GibCursor tmpcur_1650 = *(GibCursor *) tmpcur_1512;
+            GibCursor tmpaftercur_1651 = tmpcur_1512 + 8;
+            GibBoxedTag tagtmp_1652 = *(GibBoxedTag *) tmpcur_1650;
+            GibCursor tailtmp_1653 = tmpcur_1650 + 1;
 
-            tmpval_1474 = tagtmp_1615;
-            tmpcur_1475 = tailtmp_1616;
-            goto switch_1480;
+            tmpval_1511 = tagtmp_1652;
+            tmpcur_1512 = tailtmp_1653;
+            goto switch_1517;
             break;
         }
 
@@ -1341,281 +963,224 @@ GibCursorProd _print_Tree(GibCursor end_r_620, GibCursor arg_124_201_309)
         {
             printf(" ->i ");
 
-            GibCursor tmpcur_1613 = *(GibCursor *) tmpcur_1475;
-            GibCursor tmpaftercur_1614 = tmpcur_1475 + 8;
-            GibBoxedTag tagtmp_1615 = *(GibBoxedTag *) tmpcur_1613;
-            GibCursor tailtmp_1616 = tmpcur_1613 + 1;
+            GibCursor tmpcur_1650 = *(GibCursor *) tmpcur_1512;
+            GibCursor tmpaftercur_1651 = tmpcur_1512 + 8;
+            GibBoxedTag tagtmp_1652 = *(GibBoxedTag *) tmpcur_1650;
+            GibCursor tailtmp_1653 = tmpcur_1650 + 1;
 
-            tmpval_1474 = tagtmp_1615;
-            tmpcur_1475 = tailtmp_1616;
-            goto switch_1480;
+            tmpval_1511 = tagtmp_1652;
+            tmpcur_1512 = tailtmp_1653;
+            goto switch_1517;
             break;
         }
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1474");
+            printf("%s\n", "Unknown tag in: tmpval_1511");
             exit(1);
         }
     }
 }
-GibCursorGibCursorGibCursorGibCursorProd _copy_List(GibCursor end_r_623,
-                                                    GibCursor end_r_624,
-                                                    GibCursor loc_622,
-                                                    GibCursor arg_135_212_320)
+GibCursorGibCursorGibCursorGibCursorProd _copy_List(GibCursor end_r_636,
+                                                    GibCursor end_r_637,
+                                                    GibCursor loc_635,
+                                                    GibCursor arg_144_224_335)
 {
-    GibCursor loc_621 = (GibCursor) arg_135_212_320;
+    if (loc_635 + 32 > end_r_637) {
+        GibChunk new_chunk_39 = gib_alloc_chunk(end_r_637);
+        GibCursor chunk_start_40 = new_chunk_39.chunk_start;
+        GibCursor chunk_end_41 = new_chunk_39.chunk_end;
 
-    if (loc_622 + 32 > end_r_624) {
-        GibChunk new_chunk_34 = gib_alloc_chunk(end_r_624);
-        GibCursor chunk_start_35 = new_chunk_34.chunk_start;
-        GibCursor chunk_end_36 = new_chunk_34.chunk_end;
+        end_r_637 = chunk_end_41;
+        *(GibBoxedTag *) loc_635 = 255;
 
-        end_r_624 = chunk_end_36;
-        *(GibBoxedTag *) loc_622 = REDIRECTION_TAG;
+        GibCursor redir = loc_635 + 1;
 
-        GibCursor redir = loc_622 + 1;
-
-        *(GibCursor *) redir = chunk_start_35;
-        loc_622 = chunk_start_35;
+        *(GibCursor *) redir = chunk_start_40;
+        loc_635 = chunk_start_40;
     }
 
-    GibCursor loc_800 = loc_622 + 1;
-    GibCursor loc_801 = loc_800 + 8;
-    GibBoxedTag tmpval_1481 = *(GibBoxedTag *) arg_135_212_320;
-    GibCursor tmpcur_1482 = arg_135_212_320 + 1;
+    GibCursor loc_807 = loc_635 + 1;
+    GibCursor loc_808 = loc_807 + 8;
+    GibBoxedTag tmpval_1518 = *(GibBoxedTag *) arg_144_224_335;
+    GibCursor tmpcur_1519 = arg_144_224_335 + 1;
 
 
-  switch_1501:
+  switch_1538:
     ;
-    switch (tmpval_1481) {
+    switch (tmpval_1518) {
 
       case 0:
         {
-            GibCursor field_cur_1057 = (GibCursor) tmpcur_1482;
-            GibCursor jump_910 = loc_621 + 1;
+            GibCursor jump_919 = arg_144_224_335 + 1;
 
-            *(GibBoxedTag *) loc_622 = 0;
+            *(GibBoxedTag *) loc_635 = 0;
 
-            GibCursor writetag_1058 = loc_622 + 1;
-            GibCursor pvrtmp_1484 = (GibCursor) writetag_1058;
-            GibCursor pvrtmp_1483 = (GibCursor) loc_622;
-            GibCursor taildc_911 = (GibCursor) pvrtmp_1483;
-            GibCursor end_taildc_911 = (GibCursor) pvrtmp_1484;
-            GibCursor pvrtmp_1486 = (GibCursor) end_taildc_911;
-            GibCursor pvrtmp_1485 = (GibCursor) taildc_911;
-            GibCursor fltPrd_1227 = (GibCursor) pvrtmp_1485;
-            GibCursor fltPrd_1228 = (GibCursor) pvrtmp_1486;
+            GibCursor writetag_1063 = loc_635 + 1;
 
-            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_624,
-                                                               jump_910,
-                                                               fltPrd_1227,
-                                                               fltPrd_1228};
+            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_637,
+                                                               jump_919,
+                                                               loc_635,
+                                                               writetag_1063};
             break;
         }
 
       case 1:
         {
-            GibCursor field_cur_1060 = (GibCursor) tmpcur_1482;
-            GibCursor case_795 = (GibCursor) field_cur_1060;
-            GibInt tmpval_1487 = *(GibInt *) case_795;
-            GibCursor tmpcur_1488 = case_795 + sizeof(GibInt);
-            GibInt x_136_213_321 = (GibInt) tmpval_1487;
-            GibCursor end_x_136_213_321 = (GibCursor) tmpcur_1488;
-            GibCursor case_796 = (GibCursor) end_x_136_213_321;
-            GibCursor x_137_214_322 = (GibCursor) case_796;
-            GibCursor jump_912 = case_795 + 8;
-            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_33 =
-                                                      _copy_List(end_r_623, end_r_624, loc_801, x_137_214_322);
-            GibCursor pvrtmp_1489 = tmp_struct_33.field0;
-            GibCursor pvrtmp_1490 = tmp_struct_33.field1;
-            GibCursor pvrtmp_1491 = tmp_struct_33.field2;
-            GibCursor pvrtmp_1492 = tmp_struct_33.field3;
-            GibCursor fltPrd_1229 = (GibCursor) pvrtmp_1491;
-            GibCursor fltPrd_1230 = (GibCursor) pvrtmp_1492;
-            GibCursor pvrtmp_1494 = (GibCursor) fltPrd_1230;
-            GibCursor pvrtmp_1493 = (GibCursor) fltPrd_1229;
-            GibCursor y_139_216_324 = (GibCursor) pvrtmp_1493;
-            GibCursor fltPrd_1231 = (GibCursor) pvrtmp_1491;
-            GibCursor fltPrd_1232 = (GibCursor) pvrtmp_1492;
-            GibCursor pvrtmp_1496 = (GibCursor) fltPrd_1232;
-            GibCursor pvrtmp_1495 = (GibCursor) fltPrd_1231;
-            GibCursor end_y_139_216_324 = (GibCursor) pvrtmp_1496;
-            GibCursor end_r_624__953 = (GibCursor) pvrtmp_1489;
-            GibCursor endof_913 = (GibCursor) pvrtmp_1490;
+            GibInt tmpval_1524 = *(GibInt *) tmpcur_1519;
+            GibCursor tmpcur_1525 = tmpcur_1519 + sizeof(GibInt);
+            GibCursor jump_921 = tmpcur_1519 + 8;
+            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_38 =
+                                                      _copy_List(end_r_636, end_r_637, loc_808, tmpcur_1525);
+            GibCursor pvrtmp_1526 = tmp_struct_38.field0;
+            GibCursor pvrtmp_1527 = tmp_struct_38.field1;
+            GibCursor pvrtmp_1528 = tmp_struct_38.field2;
+            GibCursor pvrtmp_1529 = tmp_struct_38.field3;
 
-            *(GibBoxedTag *) loc_622 = 1;
+            *(GibBoxedTag *) loc_635 = 1;
 
-            GibCursor writetag_1063 = loc_622 + 1;
+            GibCursor writetag_1068 = loc_635 + 1;
 
-            *(GibInt *) writetag_1063 = x_136_213_321;
+            *(GibInt *) writetag_1068 = tmpval_1524;
 
-            GibCursor writecur_1064 = writetag_1063 + sizeof(GibInt);
-            GibCursor writecur_1065 = (GibCursor) end_y_139_216_324;
-            GibCursor pvrtmp_1498 = (GibCursor) writecur_1065;
-            GibCursor pvrtmp_1497 = (GibCursor) loc_622;
-            GibCursor taildc_914 = (GibCursor) pvrtmp_1497;
-            GibCursor end_taildc_914 = (GibCursor) pvrtmp_1498;
-            GibCursor pvrtmp_1500 = (GibCursor) end_taildc_914;
-            GibCursor pvrtmp_1499 = (GibCursor) taildc_914;
-            GibCursor fltPrd_1233 = (GibCursor) pvrtmp_1499;
-            GibCursor fltPrd_1234 = (GibCursor) pvrtmp_1500;
+            GibCursor writecur_1069 = writetag_1068 + sizeof(GibInt);
 
-            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_624__953,
-                                                               endof_913,
-                                                               fltPrd_1233,
-                                                               fltPrd_1234};
+            return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_1526,
+                                                               pvrtmp_1527,
+                                                               loc_635,
+                                                               pvrtmp_1529};
             break;
         }
 
       case REDIRECTION_TAG:
         {
-            GibCursor tmpcur_1617 = *(GibCursor *) tmpcur_1482;
-            GibCursor tmpaftercur_1618 = tmpcur_1482 + 8;
-            GibBoxedTag tagtmp_1619 = *(GibBoxedTag *) tmpcur_1617;
-            GibCursor tailtmp_1620 = tmpcur_1617 + 1;
+            GibCursor tmpcur_1654 = *(GibCursor *) tmpcur_1519;
+            GibCursor tmpaftercur_1655 = tmpcur_1519 + 8;
+            GibBoxedTag tagtmp_1656 = *(GibBoxedTag *) tmpcur_1654;
+            GibCursor tailtmp_1657 = tmpcur_1654 + 1;
 
-            tmpval_1481 = tagtmp_1619;
-            tmpcur_1482 = tailtmp_1620;
-            goto switch_1501;
+            tmpval_1518 = tagtmp_1656;
+            tmpcur_1519 = tailtmp_1657;
+            goto switch_1538;
             break;
         }
 
       case INDIRECTION_TAG:
         {
-            GibCursor tmpcur_1617 = *(GibCursor *) tmpcur_1482;
-            GibCursor tmpaftercur_1618 = tmpcur_1482 + 8;
-            GibBoxedTag tagtmp_1619 = *(GibBoxedTag *) tmpcur_1617;
-            GibCursor tailtmp_1620 = tmpcur_1617 + 1;
+            GibCursor tmpcur_1654 = *(GibCursor *) tmpcur_1519;
+            GibCursor tmpaftercur_1655 = tmpcur_1519 + 8;
+            GibBoxedTag tagtmp_1656 = *(GibBoxedTag *) tmpcur_1654;
+            GibCursor tailtmp_1657 = tmpcur_1654 + 1;
 
-            tmpval_1481 = tagtmp_1619;
-            tmpcur_1482 = tailtmp_1620;
-            goto switch_1501;
+            tmpval_1518 = tagtmp_1656;
+            tmpcur_1519 = tailtmp_1657;
+            goto switch_1538;
             break;
         }
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1481");
+            printf("%s\n", "Unknown tag in: tmpval_1518");
             exit(1);
         }
     }
 }
-GibCursorProd _traverse_List(GibCursor end_r_630, GibCursor arg_145_222_330)
+GibCursorProd _traverse_List(GibCursor end_r_643, GibCursor arg_154_234_345)
 {
-    GibCursor loc_629 = (GibCursor) arg_145_222_330;
-    GibBoxedTag tmpval_1523 = *(GibBoxedTag *) arg_145_222_330;
-    GibCursor tmpcur_1524 = arg_145_222_330 + 1;
+    GibBoxedTag tmpval_1560 = *(GibBoxedTag *) arg_154_234_345;
+    GibCursor tmpcur_1561 = arg_154_234_345 + 1;
 
 
-  switch_1528:
+  switch_1565:
     ;
-    switch (tmpval_1523) {
+    switch (tmpval_1560) {
 
       case 0:
         {
-            GibCursor field_cur_1077 = (GibCursor) tmpcur_1524;
-            GibCursor jump_920 = loc_629 + 1;
+            GibCursor jump_929 = arg_154_234_345 + 1;
 
-            return (GibCursorProd) {jump_920};
+            return (GibCursorProd) {jump_929};
             break;
         }
 
       case 1:
         {
-            GibCursor field_cur_1078 = (GibCursor) tmpcur_1524;
-            GibCursor case_820 = (GibCursor) field_cur_1078;
-            GibInt tmpval_1525 = *(GibInt *) case_820;
-            GibCursor tmpcur_1526 = case_820 + sizeof(GibInt);
-            GibInt x_146_223_331 = (GibInt) tmpval_1525;
-            GibCursor end_x_146_223_331 = (GibCursor) tmpcur_1526;
-            GibCursor case_821 = (GibCursor) end_x_146_223_331;
-            GibCursor x_147_224_332 = (GibCursor) case_821;
-            GibCursor jump_922 = case_820 + 8;
-            GibCursorProd tmp_struct_38 =
-                           _traverse_List(end_r_630, x_147_224_332);
-            GibCursor pvrtmp_1527 = tmp_struct_38.field0;
-            GibCursor endof_923 = (GibCursor) pvrtmp_1527;
+            GibInt tmpval_1562 = *(GibInt *) tmpcur_1561;
+            GibCursor tmpcur_1563 = tmpcur_1561 + sizeof(GibInt);
+            GibCursor jump_931 = tmpcur_1561 + 8;
+            GibCursorProd tmp_struct_43 =
+                           _traverse_List(end_r_643, tmpcur_1563);
+            GibCursor pvrtmp_1564 = tmp_struct_43.field0;
 
-            return (GibCursorProd) {endof_923};
+            return (GibCursorProd) {pvrtmp_1564};
             break;
         }
 
       case REDIRECTION_TAG:
         {
-            GibCursor tmpcur_1625 = *(GibCursor *) tmpcur_1524;
-            GibCursor tmpaftercur_1626 = tmpcur_1524 + 8;
-            GibBoxedTag tagtmp_1627 = *(GibBoxedTag *) tmpcur_1625;
-            GibCursor tailtmp_1628 = tmpcur_1625 + 1;
+            GibCursor tmpcur_1662 = *(GibCursor *) tmpcur_1561;
+            GibCursor tmpaftercur_1663 = tmpcur_1561 + 8;
+            GibBoxedTag tagtmp_1664 = *(GibBoxedTag *) tmpcur_1662;
+            GibCursor tailtmp_1665 = tmpcur_1662 + 1;
 
-            tmpval_1523 = tagtmp_1627;
-            tmpcur_1524 = tailtmp_1628;
-            goto switch_1528;
+            tmpval_1560 = tagtmp_1664;
+            tmpcur_1561 = tailtmp_1665;
+            goto switch_1565;
             break;
         }
 
       case INDIRECTION_TAG:
         {
-            GibCursor tmpcur_1625 = *(GibCursor *) tmpcur_1524;
-            GibCursor tmpaftercur_1626 = tmpcur_1524 + 8;
-            GibBoxedTag tagtmp_1627 = *(GibBoxedTag *) tmpcur_1625;
-            GibCursor tailtmp_1628 = tmpcur_1625 + 1;
+            GibCursor tmpcur_1662 = *(GibCursor *) tmpcur_1561;
+            GibCursor tmpaftercur_1663 = tmpcur_1561 + 8;
+            GibBoxedTag tagtmp_1664 = *(GibBoxedTag *) tmpcur_1662;
+            GibCursor tailtmp_1665 = tmpcur_1662 + 1;
 
-            tmpval_1523 = tagtmp_1627;
-            tmpcur_1524 = tailtmp_1628;
-            goto switch_1528;
+            tmpval_1560 = tagtmp_1664;
+            tmpcur_1561 = tailtmp_1665;
+            goto switch_1565;
             break;
         }
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1523");
+            printf("%s\n", "Unknown tag in: tmpval_1560");
             exit(1);
         }
     }
 }
-GibCursorProd _print_List(GibCursor end_r_632, GibCursor arg_150_226_334)
+GibCursorProd _print_List(GibCursor end_r_645, GibCursor arg_159_238_349)
 {
-    GibCursor loc_631 = (GibCursor) arg_150_226_334;
-    GibBoxedTag tmpval_1529 = *(GibBoxedTag *) arg_150_226_334;
-    GibCursor tmpcur_1530 = arg_150_226_334 + 1;
+    GibBoxedTag tmpval_1566 = *(GibBoxedTag *) arg_159_238_349;
+    GibCursor tmpcur_1567 = arg_159_238_349 + 1;
 
 
-  switch_1534:
+  switch_1571:
     ;
-    switch (tmpval_1529) {
+    switch (tmpval_1566) {
 
       case 0:
         {
-            GibCursor field_cur_1081 = (GibCursor) tmpcur_1530;
-            GibCursor jump_925 = loc_631 + 1;
-            unsigned char wildcard_151_227_335 = gib_print_symbol(1265);
-            unsigned char wildcard_152_228_336 = gib_print_symbol(1263);
+            GibCursor jump_934 = arg_159_238_349 + 1;
+            unsigned char wildcard_160_239_350 = gib_print_symbol(1288);
+            unsigned char wildcard_161_240_351 = gib_print_symbol(1286);
 
-            return (GibCursorProd) {jump_925};
+            return (GibCursorProd) {jump_934};
             break;
         }
 
       case 1:
         {
-            GibCursor field_cur_1082 = (GibCursor) tmpcur_1530;
-            GibCursor case_826 = (GibCursor) field_cur_1082;
-            GibInt tmpval_1531 = *(GibInt *) case_826;
-            GibCursor tmpcur_1532 = case_826 + sizeof(GibInt);
-            GibInt x_153_229_337 = (GibInt) tmpval_1531;
-            GibCursor end_x_153_229_337 = (GibCursor) tmpcur_1532;
-            GibCursor case_827 = (GibCursor) end_x_153_229_337;
-            GibCursor x_154_230_338 = (GibCursor) case_827;
-            GibCursor jump_927 = case_826 + 8;
-            unsigned char wildcard_157_231_339 = gib_print_symbol(1267);
-            unsigned char y_155_232_340 = printf("%ld", x_153_229_337);
-            GibCursorProd tmp_struct_39 =
-                           _print_List(end_r_632, x_154_230_338);
-            GibCursor pvrtmp_1533 = tmp_struct_39.field0;
-            GibCursor endof_928 = (GibCursor) pvrtmp_1533;
-            unsigned char wildcard_158_234_342 = gib_print_symbol(1263);
+            GibInt tmpval_1568 = *(GibInt *) tmpcur_1567;
+            GibCursor tmpcur_1569 = tmpcur_1567 + sizeof(GibInt);
+            GibCursor jump_936 = tmpcur_1567 + 8;
+            unsigned char wildcard_166_243_354 = gib_print_symbol(1290);
+            unsigned char y_164_244_355 = printf("%ld", tmpval_1568);
+            GibCursorProd tmp_struct_44 =  _print_List(end_r_645, tmpcur_1569);
+            GibCursor pvrtmp_1570 = tmp_struct_44.field0;
+            unsigned char wildcard_167_246_357 = gib_print_symbol(1286);
 
-            return (GibCursorProd) {endof_928};
+            return (GibCursorProd) {pvrtmp_1570};
             break;
         }
 
@@ -1623,14 +1188,14 @@ GibCursorProd _print_List(GibCursor end_r_632, GibCursor arg_150_226_334)
         {
             printf(" ->r ");
 
-            GibCursor tmpcur_1629 = *(GibCursor *) tmpcur_1530;
-            GibCursor tmpaftercur_1630 = tmpcur_1530 + 8;
-            GibBoxedTag tagtmp_1631 = *(GibBoxedTag *) tmpcur_1629;
-            GibCursor tailtmp_1632 = tmpcur_1629 + 1;
+            GibCursor tmpcur_1666 = *(GibCursor *) tmpcur_1567;
+            GibCursor tmpaftercur_1667 = tmpcur_1567 + 8;
+            GibBoxedTag tagtmp_1668 = *(GibBoxedTag *) tmpcur_1666;
+            GibCursor tailtmp_1669 = tmpcur_1666 + 1;
 
-            tmpval_1529 = tagtmp_1631;
-            tmpcur_1530 = tailtmp_1632;
-            goto switch_1534;
+            tmpval_1566 = tagtmp_1668;
+            tmpcur_1567 = tailtmp_1669;
+            goto switch_1571;
             break;
         }
 
@@ -1638,20 +1203,20 @@ GibCursorProd _print_List(GibCursor end_r_632, GibCursor arg_150_226_334)
         {
             printf(" ->i ");
 
-            GibCursor tmpcur_1629 = *(GibCursor *) tmpcur_1530;
-            GibCursor tmpaftercur_1630 = tmpcur_1530 + 8;
-            GibBoxedTag tagtmp_1631 = *(GibBoxedTag *) tmpcur_1629;
-            GibCursor tailtmp_1632 = tmpcur_1629 + 1;
+            GibCursor tmpcur_1666 = *(GibCursor *) tmpcur_1567;
+            GibCursor tmpaftercur_1667 = tmpcur_1567 + 8;
+            GibBoxedTag tagtmp_1668 = *(GibBoxedTag *) tmpcur_1666;
+            GibCursor tailtmp_1669 = tmpcur_1666 + 1;
 
-            tmpval_1529 = tagtmp_1631;
-            tmpcur_1530 = tailtmp_1632;
-            goto switch_1534;
+            tmpval_1566 = tagtmp_1668;
+            tmpcur_1567 = tailtmp_1669;
+            goto switch_1571;
             break;
         }
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1529");
+            printf("%s\n", "Unknown tag in: tmpval_1566");
             exit(1);
         }
     }
@@ -1773,6 +1338,7 @@ void test_info_table()
     error = gib_insert_dcon_into_info_table(
         Tree_T,
         0, // Leaf tag
+        8, // 8 bytes for the int
         1, // num_scalars
         0, // num_packed
         field_tys,
@@ -1786,6 +1352,7 @@ void test_info_table()
     error = gib_insert_dcon_into_info_table(
         Tree_T,
         1, // Node tag
+        0, // no data
         0, // num_scalars
         2, // num_packed
         field_tys,
