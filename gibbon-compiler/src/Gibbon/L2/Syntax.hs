@@ -25,7 +25,7 @@ module Gibbon.L2.Syntax
     -- * Operations on types
     , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, allRegVars, substLoc
     , substLocs, substEff, substEffs, extendPatternMatchEnv
-    , locsInTy, dummyTyLocs, allFreeVars
+    , locsInTy, dummyTyLocs, allFreeVars, freeLocVars
 
     -- * Other helpers
     , revertToL1, occurs, mapPacked, constPacked, depList, changeAppToSpawn
@@ -123,8 +123,8 @@ data LocRet = EndOf LRM
 instance FreeVars (E2Ext l d) where
   gFreeVars e =
     case e of
-     LetRegionE _ bod   -> gFreeVars bod
-     LetParRegionE _ bod   -> gFreeVars bod
+     LetRegionE _ bod -> gFreeVars bod
+     LetParRegionE _ bod -> gFreeVars bod
      LetLocE _ rhs bod  -> (case rhs of
                               AfterVariableLE v _loc _ -> S.singleton v
                               _ -> S.empty)
@@ -134,7 +134,7 @@ instance FreeVars (E2Ext l d) where
      FromEndE _         -> S.empty
      AddFixed vr _      -> S.singleton vr
      BoundsCheck{}      -> S.empty
-     IndirectionE{}     -> S.empty
+     IndirectionE _ _ (_,a) (_,b) e -> S.fromList [a,b] `S.union` gFreeVars e
      GetCilkWorkerNum   -> S.empty
      LetAvail vs bod    -> S.fromList vs `S.union` gFreeVars bod
 
@@ -763,6 +763,8 @@ allFreeVars ex = S.toList $
         LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod
     _ -> gFreeVars ex
 
+freeLocVars :: Exp2 -> [Var]
+freeLocVars ex = (allFreeVars ex) \\ (S.toList $ gFreeVars ex)
 
 changeAppToSpawn :: Var -> [Exp2] -> Exp2 -> Exp2
 changeAppToSpawn v args2 ex1 =

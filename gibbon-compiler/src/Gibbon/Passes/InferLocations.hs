@@ -10,7 +10,7 @@ module Gibbon.Passes.InferLocations
      fresh, freshUnifyLoc, finalUnifyLoc, fixLoc, freshLocVar, finalLocVar, assocLoc, finishExp,
           prim, emptyEnv,
      -- main functions
-     unify, inferLocs, inferExp, inferExp', convertFunTy)
+     unify, inferLocs, inferExp, inferExp', convertFunTy, pushdownRegions)
     where
 
 {-
@@ -1682,6 +1682,178 @@ emptyEnv = FullEnv { dataDefs = emptyDD
                    , valEnv   = M.empty
                    , funEnv   = M.empty }
 
+
+--------------------------------------------------------------------------------
+
+data DelayedBind = DelayRegion Region
+                 | DelayLoc LocVar LocExp
+
+    deriving (Show, Eq)
+
+type DelayedBindEnv = M.Map (S.Set LocVar) [DelayedBind]
+
+lookupDelayedBind :: LocVar -> DelayedBindEnv -> Maybe (S.Set LocVar, [DelayedBind])
+lookupDelayedBind var env =
+    let ks = M.keys env
+        matching_k = F.find (S.member var) ks
+    in case matching_k of
+         Nothing -> Nothing
+         Just k  -> Just (k, env M.! k)
+
+insertDelayedBind :: LocVar -> LocVar -> DelayedBind -> DelayedBindEnv -> DelayedBindEnv
+insertDelayedBind dep var bind env =
+  case lookupDelayedBind dep env of
+    Nothing -> M.insert (S.singleton var) [bind] env
+    Just (k,v) ->
+      let env' = M.delete k env
+      in M.insert (S.insert var k) (v ++ [bind]) env'
+
+dischargeBinds :: [LocVar] -> DelayedBindEnv -> (DelayedBindEnv, [DelayedBind])
+dischargeBinds locs env0 =
+    foldr go (env0,[]) locs
+  where
+    go loc acc@(env,binds) =
+      case lookupDelayedBind loc env of
+        Nothing -> acc
+        Just (k,binds1) -> (M.delete k env, binds1 ++ binds)
+
+
+-- | Push region allocations as far down as possible.
+pushdownRegions :: L2.Prog2 -> PassM L2.Prog2
+pushdownRegions (Prog ddefs fundefs mainExp) = do
+    let fundefs' = M.map gofun fundefs
+        mainExp' = case mainExp of
+                       Just (e,ty) -> Just (snd $ go M.empty e, ty)
+                       Nothing     -> Nothing
+    pure $ Prog ddefs fundefs' mainExp'
+
+  where
+    gofun f@FunDef{funBody} =
+        let funBody' = snd $ go M.empty funBody
+        in f { funBody = funBody' }
+
+    dobind x acc =
+      case x of
+        DelayRegion reg -> Ext $ LetRegionE reg acc
+        DelayLoc v rhs -> Ext $ LetLocE v rhs acc
+
+    go :: DelayedBindEnv -> L2.Exp2 -> (DelayedBindEnv, L2.Exp2)
+    go env ex =
+      case ex of
+        Ext ext ->
+          case ext of
+            LetRegionE r bod ->
+              let v = regionToVar r
+                  env' = insertDelayedBind v v (DelayRegion r) env
+              in go env' bod
+            LetParRegionE r bod ->
+              let v = regionToVar r
+                  env' = insertDelayedBind v v (DelayRegion r) env
+              in go env' bod
+            LetLocE loc rhs bod ->
+              case rhs of
+                StartOfLE reg ->
+                  let dep = regionToVar reg
+                      env' = insertDelayedBind dep loc (DelayLoc loc rhs) env
+                  in go env' bod
+                AfterConstantLE _i dep ->
+                  let env' = insertDelayedBind dep loc (DelayLoc loc rhs) env
+                  in go env' bod
+                AfterVariableLE _v dep _b ->
+                  let env' = insertDelayedBind dep loc (DelayLoc loc rhs) env
+                  in go env' bod
+                InRegionLE r ->
+                  let dep = regionToVar r
+                      env' = insertDelayedBind dep loc (DelayLoc loc rhs) env
+                  in go env' bod
+                FreeLE ->
+                  let env' = insertDelayedBind loc loc (DelayLoc loc rhs) env
+                  in go env' bod
+                FromEndLE dep ->
+                  let env' = insertDelayedBind dep loc (DelayLoc loc rhs) env
+                  in go env' bod
+            RetE locs v ->
+              let (env',binds) = dischargeBinds locs env
+              in (env', foldr dobind ex binds)
+            FromEndE loc ->
+              let (env', binds) = dischargeBinds [loc] env
+              in (env', foldr dobind ex binds)
+            BoundsCheck i r w ->
+              let (env', binds) = dischargeBinds [r,w] env
+              in (env', foldr dobind ex binds)
+            L2.AddFixed loc i ->
+              let (env', binds) = dischargeBinds [loc] env
+              in (env', foldr dobind ex binds)
+            IndirectionE ty dc (a,b) (c,d) copy ->
+              let (env', binds) = dischargeBinds [a,c] env
+              in (env', foldr dobind ex binds)
+            GetCilkWorkerNum -> (env, ex)
+            LetAvail vars bod ->
+              let (env',bod') = go env bod
+              in (env', Ext $ LetAvail vars bod')
+        LetE (v,locs,ty,rhs@(AppE _ applocs _)) bod ->
+          let (env', binds) = dischargeBinds applocs env
+              (env'',bod') = go env' bod
+              ex' = LetE (v,locs,ty,rhs) bod'
+          in (env'', foldr dobind ex' binds)
+        LetE (v,locs,ty,rhs@(SpawnE _ applocs _)) bod ->
+          let (env', binds) = dischargeBinds applocs env
+              (env'',bod') = go env' bod
+              ex' = LetE (v,locs,ty,rhs) bod'
+          in (env'', foldr dobind ex' binds)
+        LetE (v,locs,ty,rhs@(DataConE loc _ _)) bod ->
+          let (env', binds) = dischargeBinds [loc] env
+              (env'',bod') = go env' bod
+              ex' = LetE (v,locs,ty,rhs) bod'
+          in (env'', foldr dobind ex' binds)
+        LetE (v,locs,ty,rhs@(TimeIt e _ _)) bod ->
+          let locs = freeLocVars e
+              (env', binds) = dischargeBinds locs env
+              (env'',bod') = go env' bod
+              ex' = LetE (v,locs,ty,rhs) bod'
+          in (env'', foldr dobind ex' binds)
+        LetE (v,locs,ty,rhs) bod ->
+          let (env',rhs') = go env rhs
+              (env'',bod') = go env' bod
+          in (env'', LetE (v,locs,ty,rhs') bod')
+        -- straightforward recursion
+        VarE{} -> (env, ex)
+        LitE{} -> (env, ex)
+        FloatE{} -> (env, ex)
+        LitSymE{} -> (env, ex)
+        AppE _f applocs _args ->
+          let (env',binds) = dischargeBinds applocs env
+          in (env', foldr dobind ex binds)
+        SpawnE _f applocs _args ->
+          let (env',binds) = dischargeBinds applocs env
+          in (env', foldr dobind ex binds)
+        SyncE -> (env, ex)
+        PrimAppE{} -> (env, ex)
+        DataConE loc _dc _args ->
+          let (env',binds) = dischargeBinds [loc] env
+          in (env', foldr dobind ex binds)
+        TimeIt e ty b ->
+          let locs = freeLocVars e
+              (env', binds) = dischargeBinds locs env
+          in (env', foldr dobind ex binds)
+        IfE tst thn els ->
+          let (env',tst') = go env tst
+              (env'',thn') = go env thn
+              (env''',els') = go env els
+          in (env' `M.union` env'' `M.union` env''', IfE tst' thn' els')
+        MkProdE{} -> (env, ex)
+        ProjE{} -> (env, ex)
+        CaseE scrt alts ->
+          let (env',scrt') = go env scrt
+              (envs',alts') = unzip $ map (\(a,b,c) -> let (e',c') = go env c
+                                                       in (e', (a,b,c')))
+                                          alts
+          in (M.union env' (M.unions envs'), CaseE scrt' alts')
+        WithArenaE v bod ->
+          let (env', bod') = go env bod
+          in (env', WithArenaE v bod')
+        MapE{} -> error $ "pushdownRegion: MapE"
+        FoldE{} -> error $ "pushdownRegion: FoldE"
 
 {--
 
