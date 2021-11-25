@@ -363,6 +363,8 @@ void gib_print_global_region_count(void);
 extern char *gib_global_nursery_from_space_start;
 extern char *gib_global_nursery_to_space_start;
 extern char *gib_global_nursery_to_space_end;
+
+// Flag.
 extern bool gib_global_nursery_initialized;
 
 // The start and end pointers for the current allocation space being used.
@@ -370,10 +372,10 @@ extern char *gib_global_nursery_alloc_ptr;
 extern char *gib_global_nursery_alloc_ptr_end;
 
 // Initialize nursery.
-void gib_initialize_nursery(void);
+void gib_nursery_initialize(void);
 
 // Only meant to be used while testing the implementation!!
-void gib_reset_nursery(void);
+void gib_nursery_reset(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -381,25 +383,37 @@ void gib_reset_nursery(void);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+typedef enum {
+    SS_Input,
+    SS_Output,
+} GibSSModality;
+
 // Shadow stack for input locations:
 extern char *gib_global_input_shadowstack_start;
 extern char *gib_global_input_shadowstack_end;
-extern char *gib_global_input_shadowstack_curr;
+extern char *gib_global_input_shadowstack_alloc_ptr;
 
 // Shadow stack for output locations:
 extern char *gib_global_output_shadowstack_start;
 extern char *gib_global_output_shadowstack_end;
-extern char *gib_global_output_shadowstack_curr;
+extern char *gib_global_output_shadowstack_alloc_ptr;
+
+// Flag.
 extern bool gib_global_shadowstack_initialized;
 
 typedef struct gib_shadowstack_frame {
-    char *ss_ptr;
+    char *ssf_ptr;
     // An enum in C, which is 4 bytes.
-    // The enum, GibDatatype, is defined in the generated program.
-    uint32_t ss_datatype;
+    // The enum (GibDatatype) will be defined in the generated program.
+    uint32_t ssf_datatype;
 } GibShadowstackFrame;
 
-void gib_initialize_shadowstack(void);
+void gib_shadowstack_initialize(void);
+void gib_shadowstack_push(GibSSModality io, char *ptr, uint32_t datatype);
+GibShadowstackFrame *gib_shadowstack_pop(GibSSModality io);
+int32_t gib_shadowstack_length(GibSSModality io);
+void gib_shadowstack_print(GibSSModality io);
+void gib_shadowstack_reset(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -426,6 +440,7 @@ int gib_init_info_table(void);
 int gib_insert_dcon_into_info_table(
     uint32_t datatype,
     uint8_t datacon,
+    uint8_t scalar_bytes,
     uint8_t num_scalars,
     uint8_t num_packed,
     uint32_t *field_tys,

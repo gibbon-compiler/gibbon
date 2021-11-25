@@ -59,9 +59,9 @@ pub fn insert_dcon_into_info_table(
             datacon,
             DataconInfo { scalar_bytes, num_scalars, num_packed, field_tys },
         );
-        if cfg!(debug_assertions) {
-            println!("{:?}", tbl);
-        }
+        // if cfg!(debug_assertions) {
+        //     println!("{:?}", tbl);
+        // }
         Some(())
     }
 }
@@ -82,12 +82,12 @@ extern "C" {
     // Shadow stack for input locations.
     static mut gib_global_input_shadowstack_start: *const u8;
     static mut gib_global_input_shadowstack_end: *const u8;
-    static mut gib_global_input_shadowstack_curr: *const u8;
+    static mut gib_global_input_shadowstack_alloc_ptr: *const u8;
 
     // Shadow stack for output locations.
     static mut gib_global_output_shadowstack_start: *const u8;
     static mut gib_global_output_shadowstack_end: *const u8;
-    static mut gib_global_output_shadowstack_curr: *const u8;
+    static mut gib_global_output_shadowstack_alloc_ptr: *const u8;
 }
 
 pub fn collect() -> Option<()> {
