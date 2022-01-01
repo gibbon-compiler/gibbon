@@ -1376,21 +1376,21 @@ void gib_shadowstack_initialize(void)
     return;
 }
 
-void gib_shadowstack_push(GibSSModality io, char *ptr, uint32_t datatype)
+void gib_shadowstack_push(GibSSModality rw, char *ptr, uint32_t datatype)
 {
     char *stack_alloc_ptr, *stack_end;
     char **stack_alloc_ptr_addr;
     stack_alloc_ptr = NULL;
     stack_end = NULL;
     stack_alloc_ptr_addr = NULL;
-    switch (io) {
-        case SS_Input:
+    switch (rw) {
+        case SS_Read:
             stack_alloc_ptr = gib_global_input_shadowstack_alloc_ptr;
             stack_end = gib_global_input_shadowstack_end;
             stack_alloc_ptr_addr = &gib_global_input_shadowstack_alloc_ptr;
             break;
 
-        case SS_Output:
+        case SS_Write:
             stack_alloc_ptr = gib_global_output_shadowstack_alloc_ptr;
             stack_end = gib_global_output_shadowstack_end;
             stack_alloc_ptr_addr = &gib_global_output_shadowstack_alloc_ptr;
@@ -1398,7 +1398,7 @@ void gib_shadowstack_push(GibSSModality io, char *ptr, uint32_t datatype)
     }
     size_t size = sizeof(GibShadowstackFrame);
     if (stack_alloc_ptr + size > stack_end) {
-        fprintf(stderr, "gib_shadowstack_push: out of memory, io=%d", io);
+        fprintf(stderr, "gib_shadowstack_push: out of memory, rw=%d", rw);
         exit(1);
     }
     GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
@@ -1408,21 +1408,21 @@ void gib_shadowstack_push(GibSSModality io, char *ptr, uint32_t datatype)
     return;
 }
 
-GibShadowstackFrame *gib_shadowstack_pop(GibSSModality io)
+GibShadowstackFrame *gib_shadowstack_pop(GibSSModality rw)
 {
     char *stack_alloc_ptr, *stack_start;
     char **stack_alloc_ptr_addr;
     stack_alloc_ptr = NULL;
     stack_start = NULL;
     stack_alloc_ptr_addr = NULL;
-    switch (io) {
-        case SS_Input:
+    switch (rw) {
+        case SS_Read:
             stack_alloc_ptr = gib_global_input_shadowstack_alloc_ptr;
             stack_start = gib_global_input_shadowstack_start;
             stack_alloc_ptr_addr = &gib_global_input_shadowstack_alloc_ptr;
             break;
 
-        case SS_Output:
+        case SS_Write:
             stack_alloc_ptr = gib_global_output_shadowstack_alloc_ptr;
             stack_start = gib_global_output_shadowstack_start;
             stack_alloc_ptr_addr = &gib_global_output_shadowstack_alloc_ptr;
@@ -1430,7 +1430,7 @@ GibShadowstackFrame *gib_shadowstack_pop(GibSSModality io)
     }
     size_t size = sizeof(GibShadowstackFrame);
     if (stack_alloc_ptr - size < stack_start) {
-        fprintf(stderr, "gib_shadowstack_pop: stack empty, io=%d", io);
+        fprintf(stderr, "gib_shadowstack_pop: stack empty, rw=%d", rw);
         exit(1);
     }
     (*stack_alloc_ptr_addr) -= size;
@@ -1438,18 +1438,18 @@ GibShadowstackFrame *gib_shadowstack_pop(GibSSModality io)
     return frame;
 }
 
-int32_t gib_shadowstack_length(GibSSModality io)
+int32_t gib_shadowstack_length(GibSSModality rw)
 {
     char *stack_alloc_ptr, *stack_start;
     stack_alloc_ptr = NULL;
     stack_start = NULL;
-    switch (io) {
-        case SS_Input:
+    switch (rw) {
+        case SS_Read:
             stack_alloc_ptr = gib_global_input_shadowstack_alloc_ptr;
             stack_start = gib_global_input_shadowstack_start;
             break;
 
-        case SS_Output:
+        case SS_Write:
             stack_alloc_ptr = gib_global_output_shadowstack_alloc_ptr;
             stack_start = gib_global_output_shadowstack_start;
             break;
@@ -1457,18 +1457,18 @@ int32_t gib_shadowstack_length(GibSSModality io)
     return ( (stack_alloc_ptr - stack_start) / sizeof(GibShadowstackFrame) );
 }
 
-void gib_shadowstack_print(GibSSModality io)
+void gib_shadowstack_print(GibSSModality rw)
 {
     char *run_ptr, *end_ptr;
     run_ptr = NULL;
     end_ptr = NULL;
-    switch (io) {
-        case SS_Input:
+    switch (rw) {
+        case SS_Read:
             run_ptr = gib_global_input_shadowstack_start;
             end_ptr = gib_global_input_shadowstack_alloc_ptr;
             break;
 
-        case SS_Output:
+        case SS_Write:
             run_ptr = gib_global_output_shadowstack_start;
             end_ptr = gib_global_output_shadowstack_alloc_ptr;
             break;
@@ -1528,7 +1528,11 @@ GibRegionAlloc *gib_alloc_region_in_nursery(uint64_t size)
     assert(gib_global_nursery_initialized);
     char *bump = gib_global_nursery_alloc_ptr + size;
     if (bump >= gib_global_nursery_alloc_ptr_end) {
-        gib_collect();
+        int error = gib_collect_minor();
+        if (error < 0) {
+            fprintf(stderr, "Couldn't garbage collect minor gen, errorno=%d", error);
+            exit(1);
+        }
         return gib_alloc_region_on_heap(size);
     }
     char *old = gib_global_nursery_alloc_ptr;
@@ -1556,7 +1560,7 @@ void gib_free_region2(GibRegionAlloc *region)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     // parameters to parse:
     //

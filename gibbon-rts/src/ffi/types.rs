@@ -19,9 +19,3 @@ pub type C_GibCursor = *const i8;
 
 /// An enum in C, which is 4 bytes.
 pub type C_GibDatatype = u32;
-
-#[repr(C)]
-pub struct C_GibCursorsPair {
-    pub start: C_GibCursor,
-    pub end: C_GibCursor,
-}

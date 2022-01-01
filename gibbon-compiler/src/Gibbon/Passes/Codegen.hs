@@ -210,8 +210,8 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
                -- [2019.06.13]: CSK, Why is codegenTail always called with IntTy?
                Just (PrintExp t) -> codegenTail M.empty init_fun_env sort_fns t IntTy []
                _ -> pure []
-        let init_info_table = [ C.BlockStm [cstm| init_info_table(); |] ]
-            init_symbol_table = [ C.BlockStm [cstm| init_symbol_table(); |] ]
+        let init_info_table = [ C.BlockStm [cstm| info_table_initialize(); |] ]
+            init_symbol_table = [ C.BlockStm [cstm| symbol_table_initialize(); |] ]
         let bod = init_info_table ++ init_symbol_table ++ e
         pure $ C.FuncDef [cfun| int gib_main_expr(void) { $items:bod } |] noLoc
 
@@ -284,11 +284,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
 
       gibTypesEnum =
         let go str = C.CEnum (C.Id (str ++ "_T") noLoc) Nothing noLoc
-            decls = map go $
-                      [ "GibInt", "GibFloat", "GibSym", "GibBool", "GibCursor", "GibPackedTag"
-                      , "GibBoxedTag", "GibPtr", "GibSymDict", "GibVector", "GibList", "GibSymSet"
-                      , "GibSymHash", "GibIntHash" ] ++
-                      (M.keys info_tbl)
+            decls = map go (allowedFieldTys ++ M.keys info_tbl)
         in [cedecl| typedef enum { $enums:decls } GibDatatype; |]
 
       hashIncludes =
@@ -328,6 +324,13 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \ */\n\n"
 
 
+allowedFieldTys :: [String]
+allowedFieldTys =
+    [ "GibInt", "GibFloat", "GibSym", "GibBool", "GibVector", "GibList"
+    -- , "GibCursor", "GibPackedTag", "GibBoxedTag", "GibPtr", "GibSymDict", "GibSymSet"
+    -- , "GibSymHash", "GibIntHash"
+    ]
+
 initSymTable :: SymTable -> C.Definition
 initSymTable sym_tbl =
     let body =  map
@@ -342,17 +345,17 @@ initSymTable sym_tbl =
                        _ -> C.BlockStm [cstm| gib_add_symbol($k, $v); |]
           )
           (M.toList sym_tbl)
-        fun = [cfun| void init_symbol_table(void) { $items:body } |]
+        fun = [cfun| void symbol_table_initialize(void) { $items:body } |]
     in C.FuncDef fun noLoc
 
 
 initInfoTable :: InfoTable -> C.Definition
 initInfoTable info_tbl =
-    let body =  [ C.BlockDecl [cdecl| int error = gib_init_info_table(); |]
+    let body =  [ C.BlockDecl [cdecl| int error = gib_info_table_initialize(); |]
                 , C.BlockStm [cstm| if (error < 0) { fprintf(stderr, "Couldn't initialize info table, errorno=%d", error); exit(1); } |]
-                , C.BlockDecl [cdecl| typename GibDatatype field_tys[$int:max_fields]; |]
-                ] ++ insert_dcon_info
-        fun = [cfun| void init_info_table(void) { $items:body } |]
+                ]  ++ insert_scalar_info ++
+                [ C.BlockDecl [cdecl| typename GibDatatype field_tys[$int:max_fields]; |] ] ++ insert_dcon_info
+        fun = [cfun| void info_table_initialize(void) { $items:body } |]
     in C.FuncDef fun noLoc
   where
     max_fields = M.foldr (\tyc_info acc ->
@@ -364,6 +367,7 @@ initInfoTable info_tbl =
                                                  tyc_info)
                          0
                          info_tbl
+    insert_scalar_info = map (\ty -> let ty_t = ty ++ "_T" in C.BlockStm [cstm| gib_info_table_insert_scalar($id:ty_t, sizeof($id:ty)); |]) allowedFieldTys
     insert_dcon_info = M.foldrWithKey
                            (\tycon tyc_info acc ->
                                 M.foldrWithKey (\dcon (DataConInfo dcon_tag scalar_bytes num_scalars num_packed field_tys) acc2 ->
@@ -378,7 +382,7 @@ initInfoTable info_tbl =
                                                                      in C.BlockStm [cstm| field_tys[$int:i] = ($id:e); |])
                                                                 (zip field_tys [0..])
                                                         tycon' = tycon ++ "_T"
-                                                        insert_into_tbl = [ C.BlockStm [cstm| error = gib_insert_dcon_into_info_table($id:tycon', $int:dcon_tag, $int:scalar_bytes, $int:num_scalars, $int:num_packed, field_tys, $int:(num_scalars+num_packed)); |]
+                                                        insert_into_tbl = [ C.BlockStm [cstm| error = gib_info_table_insert_packed_dcon($id:tycon', $int:dcon_tag, $int:scalar_bytes, $int:num_scalars, $int:num_packed, field_tys, $int:(num_scalars+num_packed)); |]
                                                                           , C.BlockStm [cstm| if (error < 0) { fprintf(stderr, "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d", error, $id:tycon', $int:dcon_tag); exit(1); } |] ]
                                              in set_field_tys ++ insert_into_tbl ++ acc2)
                                         acc

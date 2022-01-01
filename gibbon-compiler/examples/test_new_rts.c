@@ -114,40 +114,38 @@ typedef enum {
             GibFloat_T,
             GibSym_T,
             GibBool_T,
-            GibCursor_T,
-            GibPackedTag_T,
-            GibBoxedTag_T,
-            GibPtr_T,
-            GibSymDict_T,
             GibVector_T,
             GibList_T,
-            GibSymSet_T,
-            GibSymHash_T,
-            GibIntHash_T,
             List_T,
             Tree_T,
         } GibDatatype;
-void init_info_table(void)
+void info_table_initialize(void)
 {
-    int error = gib_init_info_table();
+    int error = gib_info_table_initialize();
 
     if (error < 0) {
         fprintf(stderr, "Couldn't initialize info table, errorno=%d", error);
         exit(1);
     }
+    gib_info_table_insert_scalar(GibInt_T, sizeof(GibInt));
+    gib_info_table_insert_scalar(GibFloat_T, sizeof(GibFloat));
+    gib_info_table_insert_scalar(GibSym_T, sizeof(GibSym));
+    gib_info_table_insert_scalar(GibBool_T, sizeof(GibBool));
+    gib_info_table_insert_scalar(GibVector_T, sizeof(GibVector));
+    gib_info_table_insert_scalar(GibList_T, sizeof(GibList));
 
     GibDatatype field_tys[2];
 
     field_tys[0] = GibInt_T;
     field_tys[1] = List_T;
-    error = gib_insert_dcon_into_info_table(List_T, 1, 8, 1, 1, field_tys, 2);
+    error = gib_info_table_insert_packed_dcon(List_T, 1, 8, 1, 1, field_tys, 2);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
                 error, List_T, 1);
         exit(1);
     }
-    error = gib_insert_dcon_into_info_table(List_T, 0, 0, 0, 0, field_tys, 0);
+    error = gib_info_table_insert_packed_dcon(List_T, 0, 0, 0, 0, field_tys, 0);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -155,7 +153,7 @@ void init_info_table(void)
         exit(1);
     }
     field_tys[0] = GibInt_T;
-    error = gib_insert_dcon_into_info_table(Tree_T, 0, 8, 1, 0, field_tys, 1);
+    error = gib_info_table_insert_packed_dcon(Tree_T, 0, 8, 1, 0, field_tys, 1);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -164,7 +162,7 @@ void init_info_table(void)
     }
     field_tys[0] = Tree_T;
     field_tys[1] = Tree_T;
-    error = gib_insert_dcon_into_info_table(Tree_T, 1, 0, 0, 2, field_tys, 2);
+    error = gib_info_table_insert_packed_dcon(Tree_T, 1, 0, 0, 2, field_tys, 2);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -172,7 +170,7 @@ void init_info_table(void)
         exit(1);
     }
 }
-void init_symbol_table(void)
+void symbol_table_initialize(void)
 {
     gib_add_symbol(1286, ")");
     gib_add_symbol(1287, "(Node ");
@@ -218,8 +216,8 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor pvrtmp_1385 = tmp_struct_16.field1;
     GibCursor pvrtmp_1386 = tmp_struct_16.field2;
 
-    _print_List(end_r_721, r_721);
-    printf("\n");
+    // _print_List(end_r_721, r_721);
+    // printf("\n");
 
     *(GibBoxedTag *) r_720 = 0;
 
@@ -234,8 +232,8 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor pvrtmp_1401 = tmp_struct_18.field0;
     GibInt pvrtmp_1402 = tmp_struct_18.field1;
 
-    _print_List(end_r_719, r_719);
-    printf("\n");
+    // _print_List(end_r_719, r_719);
+    // printf("\n");
 
     gib_free_region2(region_1382);
     gib_free_region2(region_1380);
@@ -250,6 +248,7 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
                                                  GibCursor ys_37_180_285 // input location
                                                 )
 {
+    printf("reverse:\n");
     if (loc_614 + 32 > end_r_617) {
         GibChunk new_chunk_13 = gib_alloc_chunk(end_r_617);
         GibCursor chunk_start_14 = new_chunk_13.chunk_start;
@@ -265,8 +264,6 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
     }
 
     GibBoxedTag tmpval_1355 = *(GibBoxedTag *) xs_36_179_284;
-    GibCursor tmpcur_1356 = xs_36_179_284 + 1;
-
 
   switch_1377:
     ;
@@ -297,35 +294,44 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
             // GibCursor end_r_705 = r_705 + sizeof_end_r_705_1354;
 
             // Push to shadow stack.
-            gib_shadowstack_push(SS_Input, tmpcur_1356, GibInt_T);
-            gib_shadowstack_push(SS_Input, ys_37_180_285, List_T);
-            gib_shadowstack_push(SS_Output, loc_614, List_T);
+            gib_shadowstack_push(SS_Read, xs_36_179_284, List_T);
+            gib_shadowstack_push(SS_Read, ys_37_180_285, List_T);
+            gib_shadowstack_push(SS_Write, loc_614, List_T);
             // Pushed.
 
-            printf("length=%d\n", gib_shadowstack_length(SS_Input));
-            gib_shadowstack_print(SS_Input);
+            _print_List(NULL, ys_37_180_285);
+            printf("\n");
 
             GibRegionAlloc *region_1353 =
                 gib_alloc_region2(gib_get_inf_init_chunk_size());
             GibCursor r_705 = region_1353->ra_start;
             GibCursor end_r_705 = region_1353->ra_end;
 
+            // printf("length=%d\n", gib_shadowstack_length(SS_Read));
+            // gib_shadowstack_print(SS_Read);
+            // printf("length=%d\n", gib_shadowstack_length(SS_Write));
+            // gib_shadowstack_print(SS_Write);
+
             // Restore from shadow stack.
             GibShadowstackFrame *frame;
-            frame = gib_shadowstack_pop(SS_Output);
+            frame = gib_shadowstack_pop(SS_Write);
             loc_614 = frame->ssf_ptr;
-            frame = gib_shadowstack_pop(SS_Input);
+            frame = gib_shadowstack_pop(SS_Read);
             ys_37_180_285 = frame->ssf_ptr;
-            frame = gib_shadowstack_pop(SS_Input);
-            tmpcur_1356 = frame->ssf_ptr;
+            frame = gib_shadowstack_pop(SS_Read);
+            xs_36_179_284 = frame->ssf_ptr;
             // Restored.
 
-            printf("length=%d\n", gib_shadowstack_length(SS_Input));
-            gib_shadowstack_print(SS_Input);
+            // printf("length=%d\n", gib_shadowstack_length(SS_Read));
+            // gib_shadowstack_print(SS_Read);
+            // printf("length=%d\n", gib_shadowstack_length(SS_Write));
+            // gib_shadowstack_print(SS_Write);
 
             GibCursor loc_693 = r_705 + 1;
             GibCursor loc_694 = loc_693 + 8;
 
+            // tmpcur_1356 is live during GC in the code generated version.
+            GibCursor tmpcur_1356 = xs_36_179_284 + 1;
             GibInt tmpval_1361 = *(GibInt *) tmpcur_1356;
             GibCursor tmpcur_1362 = tmpcur_1356 + sizeof(GibInt);
             GibCursor jump_883 = tmpcur_1356 + 8;
@@ -354,6 +360,7 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
       case REDIRECTION_TAG:
         {
+            GibCursor tmpcur_1356 = xs_36_179_284 + 1;
             GibCursor tmpcur_1630 = *(GibCursor *) tmpcur_1356;
             GibCursor tmpaftercur_1631 = tmpcur_1356 + 8;
             GibBoxedTag tagtmp_1632 = *(GibBoxedTag *) tmpcur_1630;
@@ -366,6 +373,7 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
       case INDIRECTION_TAG:
         {
+            GibCursor tmpcur_1356 = xs_36_179_284 + 1;
             GibCursor tmpcur_1630 = *(GibCursor *) tmpcur_1356;
             GibCursor tmpaftercur_1631 = tmpcur_1356 + 8;
             GibBoxedTag tagtmp_1632 = *(GibBoxedTag *) tmpcur_1630;
@@ -530,10 +538,11 @@ GibInt do_tree(GibInt n_22_186_293)
     gib_free_region(end_r_731);
     return pvrtmp_1423;
 }
-GibCursorGibCursorGibCursorGibCursorProd add1(GibCursor end_r_606,
-                                              GibCursor end_r_607,
-                                              GibCursor loc_605,
-                                              GibCursor tr_25_168_265)
+GibCursorGibCursorGibCursorGibCursorProd add1(GibCursor end_r_606,  // input region
+                                              GibCursor end_r_607, // output region
+                                              GibCursor loc_605,  // output location
+                                              GibCursor tr_25_168_265 // input location
+                                             )
 {
     if (loc_605 + 32 > end_r_607) {
         GibChunk new_chunk_2 = gib_alloc_chunk(end_r_607);
@@ -1190,6 +1199,7 @@ GibCursorProd _print_List(GibCursor end_r_645, GibCursor arg_159_238_349)
             GibCursor jump_934 = arg_159_238_349 + 1;
             unsigned char wildcard_160_239_350 = gib_print_symbol(1288);
             unsigned char wildcard_161_240_351 = gib_print_symbol(1286);
+            fflush(stdout);
 
             return (GibCursorProd) {jump_934};
             break;
@@ -1205,6 +1215,7 @@ GibCursorProd _print_List(GibCursor end_r_645, GibCursor arg_159_238_349)
             GibCursorProd tmp_struct_44 =  _print_List(end_r_645, tmpcur_1569);
             GibCursor pvrtmp_1570 = tmp_struct_44.field0;
             unsigned char wildcard_167_246_357 = gib_print_symbol(1286);
+            fflush(stdout);
 
             return (GibCursorProd) {pvrtmp_1570};
             break;
@@ -1353,7 +1364,7 @@ void test_alloc_region(void)
 void test_info_table()
 {
     int error = 0;
-    error = gib_init_info_table();
+    error = gib_info_table_initialize();
     if (error < 0) {
         fprintf(stderr, "Couldn't initialize info table, errorno=%d", error);
         exit(1);
@@ -1361,7 +1372,7 @@ void test_info_table()
     GibDatatype field_tys[10];
 
     field_tys[0] = GibInt_T;
-    error = gib_insert_dcon_into_info_table(
+    error = gib_info_table_insert_packed_dcon(
         Tree_T,
         0, // Leaf tag
         8, // 8 bytes for the int
@@ -1375,7 +1386,7 @@ void test_info_table()
     }
     field_tys[0] = Tree_T;
     field_tys[1] = Tree_T;
-    error = gib_insert_dcon_into_info_table(
+    error = gib_info_table_insert_packed_dcon(
         Tree_T,
         1, // Node tag
         0, // no data
@@ -1393,8 +1404,8 @@ void test_info_table()
 
 int gib_main_expr(void)
 {
-    init_info_table();
-    init_symbol_table();
+    info_table_initialize();
+    symbol_table_initialize();
 
     // test_alloc_region();
     // uint32_t sz = sizeof(GibDatatype);

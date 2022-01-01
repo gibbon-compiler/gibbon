@@ -1,6 +1,5 @@
 //
 
-use std::collections::HashMap;
 use std::slice;
 
 use crate::ffi::types::*;
@@ -11,15 +10,15 @@ use crate::mem;
 #[no_mangle]
 /// The user is responsible for initializing the info table before
 /// calling the get/set methods on it.
-pub extern "C" fn gib_init_info_table() -> i32 {
-    match mem::init_info_table() {
-        None => -1,
-        Some(()) => 0,
+pub extern "C" fn gib_info_table_initialize() -> i32 {
+    match mem::info_table_initialize() {
+        Ok(()) => 0,
+        Err(_err) => -1,
     }
 }
 
 #[no_mangle]
-pub extern "C" fn gib_insert_dcon_into_info_table(
+pub extern "C" fn gib_info_table_insert_packed_dcon(
     datatype: C_GibDatatype,
     datacon: C_GibPackedTag,
     scalar_bytes: u8,
@@ -32,7 +31,7 @@ pub extern "C" fn gib_insert_dcon_into_info_table(
         slice::from_raw_parts(c_field_tys, c_field_tys_length as usize)
             .to_vec()
     };
-    match mem::insert_dcon_into_info_table(
+    match mem::info_table_insert_packed_dcon(
         datatype,
         datacon,
         scalar_bytes,
@@ -40,15 +39,26 @@ pub extern "C" fn gib_insert_dcon_into_info_table(
         num_packed,
         field_tys,
     ) {
-        Some(()) => 0,
-        None => -1,
+        Ok(()) => 0,
+        Err(_err) => -1,
     }
 }
 
 #[no_mangle]
-pub extern "C" fn gib_collect() -> i32 {
-    match mem::collect() {
-        Some(()) => 0,
-        None => -1,
+pub extern "C" fn gib_info_table_insert_scalar(
+    datatype: C_GibDatatype,
+    size: u8,
+) -> i32 {
+    match mem::info_table_insert_scalar(datatype, size) {
+        Ok(()) => 0,
+        Err(_err) => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn gib_collect_minor() -> i32 {
+    match mem::collect_minor() {
+        Ok(()) => 0,
+        Err(_err) => -1,
     }
 }

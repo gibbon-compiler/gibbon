@@ -1,5 +1,5 @@
 #ifndef _GIBBON_H
-#define _GIBBON_H 1
+#define _GIBBON_H
 
 #include <stdio.h>
 #include <stdint.h>
@@ -117,8 +117,8 @@ GibInt gib_get_num_processors(void);
 #define GB (MB * 1024lu)
 
 // Must be same as "Gibbon.Language.Constants".
-#define INDIRECTION_TAG 254
 #define REDIRECTION_TAG 255
+#define INDIRECTION_TAG 254
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Allocators
@@ -384,8 +384,8 @@ void gib_nursery_reset(void);
  */
 
 typedef enum {
-    SS_Input,
-    SS_Output,
+    SS_Read,
+    SS_Write,
 } GibSSModality;
 
 // Shadow stack for input locations:
@@ -436,8 +436,9 @@ void gib_free_region2(GibRegionAlloc *region);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-int gib_init_info_table(void);
-int gib_insert_dcon_into_info_table(
+int gib_info_table_initialize(void);
+int gib_info_table_insert_scalar(uint32_t datatype, uint8_t size);
+int gib_info_table_insert_packed_dcon(
     uint32_t datatype,
     uint8_t datacon,
     uint8_t scalar_bytes,
@@ -446,7 +447,7 @@ int gib_insert_dcon_into_info_table(
     uint32_t *field_tys,
     uint8_t field_tys_length
 );
-int gib_collect(void);
+int gib_collect_minor(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
