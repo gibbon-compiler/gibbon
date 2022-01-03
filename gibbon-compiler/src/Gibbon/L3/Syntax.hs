@@ -67,7 +67,7 @@ data E3Ext loc dec =
   | ScopedBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
   | NewParBuffer L2.Multiplicity         -- ^ Create a new buffer for parallel allocations, and return a cursor
   | ScopedParBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer for parallel allocations, and return a cursor
-  | InitSizeOfBuffer L2.Multiplicity  -- ^ Returns the initial buffer size for a specific multiplicity
+  | EndOfBuffer L2.Multiplicity
   | MMapFileSize Var
   | SizeOfPacked Var Var           -- ^ Takes in start and end cursors, and returns an Int
                                    --   we'll probably represent (sizeof x) as (end_x - start_x) / INT
@@ -99,10 +99,10 @@ instance FreeVars (E3Ext l d) where
       AddCursor v ex -> S.insert v (gFreeVars ex)
       SubPtr v w     -> S.fromList [v, w]
       NewBuffer{}    -> S.empty
-      NewParBuffer{}    -> S.empty
-      ScopedBuffer{} -> S.empty
-      ScopedParBuffer{} -> S.empty
-      InitSizeOfBuffer{} -> S.empty
+      NewParBuffer{}     -> S.empty
+      ScopedBuffer{}     -> S.empty
+      ScopedParBuffer{}  -> S.empty
+      EndOfBuffer{}      -> S.empty
       MMapFileSize v     -> S.singleton v
       SizeOfPacked c1 c2 -> S.fromList [c1, c2]
       SizeOfScalar v     -> S.singleton v
@@ -177,7 +177,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       ScopedBuffer{}     -> ext
       NewParBuffer{}     -> ext
       ScopedParBuffer{}  -> ext
-      InitSizeOfBuffer{} -> ext
+      EndOfBuffer{}      -> ext
       MMapFileSize v     -> MMapFileSize (go v)
       SizeOfPacked a b   -> SizeOfPacked (go a) (go b)
       SizeOfScalar v     -> SizeOfScalar (go v)

@@ -360,13 +360,14 @@ fn copy_readers() -> Result<()> {
             }
             // A packed type that should copied by referring to the info table.
             Some(DatatypeInfo::Packed(_packed_info)) => {
+                // how big should this allocation be?
                 let (dst, dst_end) = nursery_malloc(1024);
                 let ret = copy_packed(datatype, src, dst, dst_end);
                 println!("printing in rust...");
-                _print_List(src, src);
-                println!("\n");
-                _print_List(dst, dst);
-                println!("\n");
+                // _print_List(src, src);
+                // println!("\n");
+                // _print_List(dst, dst);
+                // println!("\n");
                 ret.and(Ok(()))
             }
         }
@@ -374,9 +375,9 @@ fn copy_readers() -> Result<()> {
     shadowstack_map(SSModality::Read, copy_region)
 }
 
-extern "C" {
-    fn _print_List(end: *const i8, start: *const i8);
-}
+// extern "C" {
+//     fn _print_List(end: *const i8, start: *const i8);
+// }
 
 fn copy_packed(
     datatype: ffi::C_GibDatatype,

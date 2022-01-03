@@ -76,7 +76,7 @@ if the functions "traverses" it's input (more details in the paer).
 --   See `FindWitnesses.hs` for why that is needed.
 type DepEnv = M.Map LocVar [(Var,[()],Ty3,Exp3)]
 
--- | Things we cannt define until we see a join point. There's a Ty2 to so that
+-- | Things we cannot define until we see a join point. There's a Ty2 to so that
 -- we can extend the environment.
 type SyncEnv = M.Map Var [(Var,[()],Ty3,Ty2,Exp3)]
 
@@ -1414,14 +1414,14 @@ regionToBinds for_parallel_allocs r =
     VarR{} -> error $ "Unexpected VarR in Cursorize." ++ sdoc r
     GlobR v mul -> if for_parallel_allocs
                    then [ (v       , [], CursorTy, Ext$ NewParBuffer mul)
-                        , (toEndV v, [], CursorTy, Ext$ AddCursor v (Ext $ InitSizeOfBuffer mul))]
+                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul)]
                    else [ (v       , [], CursorTy, Ext$ NewBuffer mul)
-                        , (toEndV v, [], CursorTy, Ext$ AddCursor v (Ext $ InitSizeOfBuffer mul))]
+                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul)]
     DynR v mul  -> if for_parallel_allocs
                    then [ (v       , [], CursorTy, Ext$ ScopedParBuffer mul)
-                        , (toEndV v, [], CursorTy, Ext$ AddCursor v (Ext $ InitSizeOfBuffer mul))]
+                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul)]
                    else [ (v       , [], CursorTy, Ext$ ScopedBuffer mul)
-                        , (toEndV v, [], CursorTy, Ext$ AddCursor v (Ext $ InitSizeOfBuffer mul))]
+                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul)]
     -- TODO: docs
     MMapR _v    -> []
 

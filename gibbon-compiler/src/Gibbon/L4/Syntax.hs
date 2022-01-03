@@ -286,8 +286,7 @@ data Prim
     | ScopedParBuffer L2.Multiplicity
     -- ^ Like ScopedBuffer, but for parallel allocations.
 
-    | InitSizeOfBuffer L2.Multiplicity
-    -- ^ Returns the initial buffer size for a specific multiplicity
+    | EndOfBuffer L2.Multiplicity
 
     | MMapFileSize Var
 

@@ -314,36 +314,24 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels);
 
 #define MAX_OUTSET_LENGTH 10
 
-typedef struct gib_region_meta {
-    GibSym reg_id;
-    uint16_t reg_refcount;
-    GibCursor reg_heap;
-    uint16_t reg_outset_len;
-    GibCursor reg_outset[MAX_OUTSET_LENGTH];
-} GibRegionMeta;
-
-typedef struct gib_region_footer {
-    GibRegionMeta *rf_reg_metadata_ptr;
-
-    int64_t rf_seq_no;
-    bool rf_nursery_allocated;
-    uint64_t rf_size;
-    struct gib_region_footer *rf_next;
-    struct gib_region_footer *rf_prev;
-} GibRegionFooter;
+typedef struct gib_region_alloc {
+    bool ra_in_nursery;
+    GibCursor ra_start;
+    GibCursor ra_end;
+} GibRegionAlloc;
 
 typedef struct gib_chunk {
     GibCursor chunk_start;
     GibCursor chunk_end;
-} GibChunk;
+} GibChunkAlloc;
 
-GibRegionMeta *gib_alloc_region(uint64_t size);
-GibChunk gib_alloc_chunk(GibCursor end_old_chunk);
+GibRegionAlloc *gib_alloc_region(uint64_t size);
+GibChunkAlloc gib_alloc_chunk(GibCursor end_old_chunk);
 void gib_bump_refcount(GibCursor end_b, GibCursor end_a);
 void gib_free_region(GibCursor end_reg);
 
 // Functions related to counting the number of allocated regions.
-GibRegionMeta *gib_alloc_counted_region(int64_t size);
+GibRegionAlloc *gib_alloc_counted_region(int64_t size);
 void gib_bump_global_region_count(void);
 void gib_print_global_region_count(void);
 
@@ -421,12 +409,6 @@ void gib_shadowstack_reset(void);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-typedef struct gib_region_alloc {
-    bool ra_in_nursery;
-    GibCursor ra_start;
-    GibCursor ra_end;
-} GibRegionAlloc;
-
 GibRegionAlloc *gib_alloc_region2(uint64_t size);
 void gib_free_region2(GibRegionAlloc *region);
 
@@ -459,6 +441,7 @@ int gib_collect_minor(void);
 // This function must be provided by the code generator.
 int gib_main_expr(void);
 
+// Defined in the RTS.
 int main(int argc, char** argv);
 
 

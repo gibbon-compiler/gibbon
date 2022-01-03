@@ -486,7 +486,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               NewParBuffer{}     -> syms
               ScopedBuffer{}     -> syms
               ScopedParBuffer{}  -> syms
-              InitSizeOfBuffer{} -> syms
+              EndOfBuffer{}      -> syms
               MMapFileSize{}     -> syms
               SizeOfPacked{}     -> syms
               SizeOfScalar{}     -> syms
@@ -716,13 +716,6 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
 
     -- In Target, AddP is overloaded still:
-    LetE (v,_, _,  (Ext (AddCursor c ( (Ext (InitSizeOfBuffer mul)))))) bod -> do
-      size <- gensym (varAppend "sizeof_" v)
-      T.LetPrimCallT [(size,T.IntTy)] (T.InitSizeOfBuffer mul) [] <$>
-        T.LetPrimCallT [(v,T.CursorTy)] T.AddP [ triv sym_tbl "addCursor base" (VarE c)
-                                               , triv sym_tbl "addCursor offset" (VarE size)] <$>
-        tail free_reg sym_tbl bod
-
     LetE (v,_, _,  (Ext (AddCursor c ( (Ext (MMapFileSize w)))))) bod -> do
       size <- gensym (varAppend "sizeof_" v)
       T.LetPrimCallT [(size,T.IntTy)] (T.MMapFileSize w) [] <$>
@@ -763,7 +756,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     LetE (v,_,_,  (Ext (NewBuffer mul))) bod -> do
       reg <- gensym "region"
-      tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy)] (T.NewBuffer mul) [] <$>
+      tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy),(toEndV v,T.CursorTy)] (T.NewBuffer mul) [] <$>
                tail free_reg sym_tbl bod
       if gopt Opt_DisableGC dflags -- -- || not free_reg
          then pure tl'
@@ -776,7 +769,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     LetE (v,_,_,  (Ext (NewParBuffer mul))) bod -> do
       reg <- gensym "region"
-      tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy)] (T.NewParBuffer mul) [] <$>
+      tl' <- T.LetPrimCallT [(reg,T.CursorTy),(v,T.CursorTy),(toEndV v,T.CursorTy)] (T.NewParBuffer mul) [] <$>
                tail free_reg sym_tbl bod
       if gopt Opt_DisableGC dflags -- || not free_reg
          then pure tl'
@@ -793,6 +786,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     LetE (v,_,_,  (Ext (ScopedParBuffer mul))) bod -> do
       T.LetPrimCallT [(v,T.CursorTy)] (T.ScopedParBuffer mul) [] <$>
+         tail free_reg sym_tbl bod
+
+    LetE (v,_,_,  (Ext (EndOfBuffer mul))) bod -> do
+      T.LetPrimCallT [(v,T.CursorTy)] (T.EndOfBuffer mul) [] <$>
          tail free_reg sym_tbl bod
 
     LetE (v,_,_,  (Ext (SizeOfPacked start end))) bod -> do

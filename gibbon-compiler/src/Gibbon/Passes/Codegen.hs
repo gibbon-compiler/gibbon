@@ -854,35 +854,39 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  NewBuffer mul -> do
                    dflags <- getDynFlags
                    let countRegions = gopt Opt_CountAllRegions dflags
-                   let [(reg, CursorTy),(outV,CursorTy)] = bnds
+                   let [(reg, CursorTy),(outV,CursorTy),(endV,CursorTy)] = bnds
                        bufsize = codegenMultiplicity mul
                    if countRegions
                    then
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_counted_region($exp:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->ra_start; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg->ra_end; |]
                        ]
                    else
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_region($exp:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->ra_start; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg->ra_end; |]
                        ]
 
                  NewParBuffer mul -> do
                    dflags <- getDynFlags
                    let countRegions = gopt Opt_CountParRegions dflags
-                   let [(reg, CursorTy),(outV,CursorTy)] = bnds
+                   let [(reg, CursorTy),(outV,CursorTy),(endV,CursorTy)] = bnds
                        bufsize = codegenMultiplicity mul
                    if countRegions
                    then
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_counted_region($exp:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->ra_start; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg->ra_end; |]
                        ]
                    else
                      pure
                        [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_region($exp:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->ra_start; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg->ra_end; |]
                        ]
                  ScopedBuffer mul -> let [(outV,CursorTy)] = bnds
                                          bufsize = codegenMultiplicity mul
@@ -894,10 +898,8 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                         in pure
                              [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) ) gib_scoped_alloc($exp:bufsize); |] ]
 
-                 InitSizeOfBuffer mul -> let [(sizev,IntTy)] = bnds
-                                             bufsize = codegenMultiplicity mul
-                                         in pure
-                                            [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:sizev = $exp:bufsize; |] ]
+                 -- generated during newbuffer.
+                 EndOfBuffer{} -> pure []
 
                  FreeBuffer -> if noGC
                                then pure []
@@ -1054,8 +1056,8 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         out_hdl <- gensym "out_hdl"
                         wrote <- gensym "wrote"
                         pure $ [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:outreg = gib_alloc_region(gib_get_biginf_init_chunk_size()); |]
-                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg->reg_heap; |]
-                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg->reg_heap + gib_get_biginf_init_chunk_size(); |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg->ra_start; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg->ra_end; |]
                                  -- This would ideally be the *end* of the input region corresponding to inV
                                  -- but we have don't have at hand here. Passing in NULL is okay because this pointer
                                  -- is unused in the copy function.
@@ -1462,8 +1464,8 @@ codegenTy TagTyBoxed  = [cty|typename GibBoxedTag|]
 codegenTy SymTy = [cty|typename GibSym|]
 codegenTy PtrTy = [cty|typename GibPtr|] -- char* - Hack, this could be void* if we have enough casts. [2016.11.06]
 codegenTy CursorTy = [cty|typename GibCursor|]
-codegenTy RegionTy = [cty|typename GibRegionMeta|]
-codegenTy ChunkTy = [cty|typename GibChunk|]
+codegenTy RegionTy = [cty|typename GibRegionAlloc|]
+codegenTy ChunkTy = [cty|typename GibChunkAlloc|]
 codegenTy (ProdTy []) = [cty|unsigned char|]
 codegenTy (ProdTy ts) = C.Type (C.DeclSpec [] [] (C.Tnamed (C.Id nam noLoc) [] noLoc) noLoc) (C.DeclRoot noLoc) noLoc
     where nam = makeName ts

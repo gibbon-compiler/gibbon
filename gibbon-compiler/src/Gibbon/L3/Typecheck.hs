@@ -111,7 +111,7 @@ tcExp isPacked ddfs env exp =
         ScopedBuffer{} -> return CursorTy
         ScopedParBuffer{} -> return CursorTy
 
-        InitSizeOfBuffer{} -> return IntTy
+        EndOfBuffer{} -> return CursorTy
 
         MMapFileSize{} -> return IntTy
 

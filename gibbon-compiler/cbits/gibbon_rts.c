@@ -950,36 +950,52 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels) {
 */
 
 
+typedef struct gib_region_meta {
+    GibSym reg_id;
+    uint16_t reg_refcount;
+    uint16_t reg_outset_len;
+    GibCursor reg_outset[MAX_OUTSET_LENGTH];
+} GibRegionMeta;
+
+typedef struct gib_region_footer {
+    GibRegionMeta *rf_reg_metadata_ptr;
+
+    uint16_t rf_seq_no;
+    bool rf_nursery_allocated;
+    uint64_t rf_size;
+    struct gib_region_footer *rf_next;
+    struct gib_region_footer *rf_prev;
+} GibRegionFooter;
+
 void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg);
 void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg);
 GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer);
 uint16_t gib_get_ref_count(GibCursor end_ptr);
 
 
-GibRegionMeta *gib_alloc_region(uint64_t size)
+GibRegionAlloc *gib_alloc_region(uint64_t size)
 {
     // Allocate the region metadata.
-    GibRegionMeta *reg = gib_alloc(sizeof(GibRegionMeta));
-    if (reg == NULL) {
+    GibRegionMeta *reg_meta = gib_alloc(sizeof(GibRegionMeta));
+    if (reg_meta == NULL) {
         fprintf(stderr, "gib_alloc_region: allocation failed: %ld", sizeof(GibRegionMeta));
         exit(1);
     }
 
     // Allocate the first chunk.
     int64_t total_size = size + sizeof(GibRegionFooter);
-    GibCursor heap = gib_alloc(total_size);
-    if (heap == NULL) {
+    GibCursor heap_start = gib_alloc(total_size);
+    if (heap_start == NULL) {
         fprintf(stderr, "gib_alloc_region: gib_alloc failed: %" PRId64, total_size);
         exit(1);
     }
-    // Not heap+total_size, since we must keep space for the footer.
-    GibCursor heap_end = heap + size;
+    // Not start+total_size, since we must keep space for the footer.
+    GibCursor heap_end = heap_start + size;
 
     // Initialize metadata fields.
-    reg->reg_id = gib_gensym();
-    reg->reg_refcount = 1;
-    reg->reg_heap = heap;
-    reg->reg_outset_len = 0;
+    reg_meta->reg_id = gib_gensym();
+    reg_meta->reg_refcount = 1;
+    reg_meta->reg_outset_len = 0;
 
 #ifdef _GIBBON_DEBUG
     printf("Allocated a region(%lld): %lld bytes.\n", reg->reg_id, size);
@@ -987,16 +1003,20 @@ GibRegionMeta *gib_alloc_region(uint64_t size)
 
     // Write the footer.
     GibRegionFooter *footer = (GibRegionFooter *) heap_end;
-    footer->rf_reg_metadata_ptr = reg;
+    footer->rf_reg_metadata_ptr = reg_meta;
     footer->rf_seq_no = 1;
     footer->rf_size = size;
     footer->rf_next = NULL;
     footer->rf_prev = NULL;
 
-    return reg;
+    GibRegionAlloc *region = gib_alloc(sizeof(GibRegionAlloc));
+    region->ra_in_nursery = false;
+    region->ra_start = heap_start;
+    region->ra_end = heap_end;
+    return region;
 }
 
-GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
+GibChunkAlloc gib_alloc_chunk(GibCursor end_old_chunk)
 {
     // Get size from current footer.
     GibRegionFooter *footer = (GibRegionFooter *) end_old_chunk;
@@ -1031,7 +1051,7 @@ GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
     printf("gib_alloc_chunk: allocated %lld bytes for region %lld.\n", total_size, reg->reg_id);
 #endif
 
-    return (GibChunk) {start , end};
+    return (GibChunkAlloc) {start , end};
 }
 
 // B is the pointer, and A is the pointee (i.e B -> A).
@@ -1232,7 +1252,7 @@ GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
     if (footer->rf_seq_no == 1) {
         return footer;
     } else if (footer->rf_prev == NULL) {
-        fprintf(stderr, "No previous chunk found at rf_seq_no: %" PRId64, footer->rf_seq_no);
+        fprintf(stderr, "No previous chunk found at rf_seq_no: %" PRIu16, footer->rf_seq_no);
         return NULL;
     } else {
         gib_trav_to_first_chunk((GibRegionFooter *) footer->rf_prev);
@@ -1250,7 +1270,7 @@ inline uint16_t gib_get_ref_count(GibCursor end_ptr)
 
 // Functions related to counting the number of allocated regions.
 
-inline GibRegionMeta *gib_alloc_counted_region(int64_t size)
+inline GibRegionAlloc *gib_alloc_counted_region(int64_t size)
 {
     // Bump the count.
     gib_bump_global_region_count();
