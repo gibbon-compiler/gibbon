@@ -278,7 +278,7 @@ _case_copy =
 -- add1 example encoded as AST by hand
 
 add1_prog :: T.Prog
-add1_prog = T.Prog M.empty [build_tree, add1]
+add1_prog = T.Prog M.empty M.empty [build_tree, add1]
             (Just $ PrintExp $
              LetPrimCallT [("buf", T.CursorTy)] (T.NewBuffer BigInfinite) [] $
              LetPrimCallT [("buf2", T.CursorTy)] (T.NewBuffer BigInfinite) [] $

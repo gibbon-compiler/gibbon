@@ -326,8 +326,8 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
 
 allowedFieldTys :: [String]
 allowedFieldTys =
-    [ "GibInt", "GibFloat", "GibSym", "GibBool", "GibVector", "GibList"
-    -- , "GibCursor", "GibPackedTag", "GibBoxedTag", "GibPtr", "GibSymDict", "GibSymSet"
+    [ "GibInt", "GibFloat", "GibSym", "GibBool", "GibVector", "GibList", "GibCursor"
+    -- , "GibPackedTag", "GibBoxedTag", "GibPtr", "GibSymDict", "GibSymSet"
     -- , "GibSymHash", "GibIntHash"
     ]
 
