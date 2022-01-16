@@ -155,14 +155,14 @@ extern "C" {
     static mut gib_global_nursery_initialized: bool;
 
     // Shadow stack for input locations.
-    static mut gib_global_input_shadowstack_start: *const i8;
-    static mut gib_global_input_shadowstack_end: *const i8;
-    static mut gib_global_input_shadowstack_alloc_ptr: *const i8;
+    static mut gib_global_read_shadowstack_start: *const i8;
+    static mut gib_global_read_shadowstack_end: *const i8;
+    static mut gib_global_read_shadowstack_alloc_ptr: *const i8;
 
     // Shadow stack for output locations.
-    static mut gib_global_output_shadowstack_start: *const i8;
-    static mut gib_global_output_shadowstack_end: *const i8;
-    static mut gib_global_output_shadowstack_alloc_ptr: *const i8;
+    static mut gib_global_write_shadowstack_start: *const i8;
+    static mut gib_global_write_shadowstack_end: *const i8;
+    static mut gib_global_write_shadowstack_alloc_ptr: *const i8;
 
     // Flag.
     static mut gib_global_shadowstack_initialized: bool;
@@ -186,6 +186,45 @@ enum ShadowstackModality {
     Write,
 }
 
+struct ShadowstackIter {
+    run_ptr: *const i8,
+    end_ptr: *const i8,
+}
+
+impl ShadowstackIter {
+    fn new(rw: ShadowstackModality) -> ShadowstackIter {
+        unsafe {
+            match rw {
+                ShadowstackModality::Read => ShadowstackIter {
+                    run_ptr: gib_global_read_shadowstack_start,
+                    end_ptr: gib_global_read_shadowstack_alloc_ptr,
+                },
+
+                ShadowstackModality::Write => ShadowstackIter {
+                    run_ptr: gib_global_write_shadowstack_start,
+                    end_ptr: gib_global_write_shadowstack_alloc_ptr,
+                },
+            }
+        }
+    }
+}
+
+impl Iterator for ShadowstackIter {
+    type Item = *mut ShadowstackFrame;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.run_ptr < self.end_ptr {
+            unsafe {
+                let frame = self.run_ptr as *mut ShadowstackFrame;
+                self.run_ptr = self.run_ptr.add(size_of::<ShadowstackFrame>());
+                Some(frame)
+            }
+        } else {
+            None
+        }
+    }
+}
+
 /// This function is defined here to test if all the globals
 /// are set up properly. Its output should match the C version's output.
 fn shadowstack_debugprint() {
@@ -202,20 +241,20 @@ fn shadowstack_debugprint() {
 }
 
 /// Length of the shadow-stack.
-fn shadowstack_length(io: ShadowstackModality) -> isize {
+fn shadowstack_length(rw: ShadowstackModality) -> isize {
     unsafe {
         let (start_ptr, end_ptr): (
             *const ShadowstackFrame,
             *const ShadowstackFrame,
-        ) = match io {
+        ) = match rw {
             ShadowstackModality::Read => (
-                gib_global_input_shadowstack_start as *const ShadowstackFrame,
-                gib_global_input_shadowstack_alloc_ptr
+                gib_global_read_shadowstack_start as *const ShadowstackFrame,
+                gib_global_read_shadowstack_alloc_ptr
                     as *const ShadowstackFrame,
             ),
             ShadowstackModality::Write => (
-                gib_global_output_shadowstack_start as *const ShadowstackFrame,
-                gib_global_output_shadowstack_alloc_ptr
+                gib_global_write_shadowstack_start as *const ShadowstackFrame,
+                gib_global_write_shadowstack_alloc_ptr
                     as *const ShadowstackFrame,
             ),
         };
@@ -224,45 +263,15 @@ fn shadowstack_length(io: ShadowstackModality) -> isize {
     }
 }
 
-/// Map over all frames of the shadow-stack.
-#[inline]
-fn shadowstack_map<A>(
-    io: ShadowstackModality,
-    f: fn(*mut ShadowstackFrame) -> Result<A>,
-) -> Result<()> {
-    unsafe {
-        let (mut run_ptr, end_ptr) = match io {
-            ShadowstackModality::Read => (
-                gib_global_input_shadowstack_start,
-                gib_global_input_shadowstack_alloc_ptr,
-            ),
-            ShadowstackModality::Write => (
-                gib_global_output_shadowstack_start,
-                gib_global_output_shadowstack_alloc_ptr,
-            ),
-        };
-        debug_assert!(run_ptr <= end_ptr);
-        let mut frame: *mut ShadowstackFrame;
-        while run_ptr < end_ptr {
-            frame = run_ptr as *mut ShadowstackFrame;
-            match f(frame) {
-                Ok(a) => {}
-                Err(err) => return Err(err),
-            }
-            run_ptr = run_ptr.add(size_of::<ShadowstackFrame>());
-        }
-        Ok(())
-    }
-}
-
 /// Print all frames of the shadow-stack.
 #[inline]
-fn shadowstack_print(io: ShadowstackModality) {
-    shadowstack_map(io, |frame| unsafe {
-        println!("{:?}", *frame);
-        Ok(())
-    })
-    .ok();
+fn shadowstack_print(rw: ShadowstackModality) {
+    let ss = ShadowstackIter::new(rw);
+    for frame in ss {
+        unsafe {
+            println!("{:?}", *frame);
+        }
+    }
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -286,14 +295,14 @@ pub fn collect_minor() -> Result<()> {
             assert!(gib_global_nursery_initialized);
             assert!(gib_global_shadowstack_initialized);
             assert!(
-                gib_global_output_shadowstack_alloc_ptr
-                    >= gib_global_output_shadowstack_start
+                gib_global_write_shadowstack_alloc_ptr
+                    >= gib_global_write_shadowstack_start
             );
             assert!(
-                gib_global_output_shadowstack_alloc_ptr
-                    < gib_global_output_shadowstack_end
+                gib_global_write_shadowstack_alloc_ptr
+                    < gib_global_write_shadowstack_end
             );
-            // shadowstack_debugprint();
+            shadowstack_debugprint();
         }
     }
     if allocator_in_tospace() {
@@ -331,12 +340,14 @@ fn copy_to_tospace() -> Result<()> {
 }
 
 fn cauterize_writers() -> Result<()> {
-    let cauterize = |frame: *mut ShadowstackFrame| unsafe {
-        let ptr = (*frame).ptr as *mut i8;
-        write(ptr, CAUTERIZED_TAG);
-        Ok(())
-    };
-    shadowstack_map(ShadowstackModality::Write, cauterize)
+    let ss = ShadowstackIter::new(ShadowstackModality::Write);
+    for frame in ss {
+        unsafe {
+            let ptr = (*frame).ptr as *mut i8;
+            write(ptr, CAUTERIZED_TAG);
+        }
+    }
+    Ok(())
 }
 
 fn uncauterize_writers() -> Result<()> {
@@ -344,40 +355,40 @@ fn uncauterize_writers() -> Result<()> {
 }
 
 fn copy_readers() -> Result<()> {
-    let copy_region = |frame: *mut ShadowstackFrame| unsafe {
-        println!("frame: {:?}", *frame);
-        let src = (*frame).ptr;
-        let datatype = (*frame).datatype;
-        match INFO_TABLE.get().unwrap().get(&datatype) {
-            None => {
-                Err(MemError::Gc(format!("Unknown datatype, {:?}", datatype)))
-            }
-            // A scalar type that can be copied directly.
-            Some(DatatypeInfo::Scalar(size)) => {
-                let (dst, _) = nursery_malloc(*size as u64);
-                copy_nonoverlapping(src, dst, *size as usize);
-                Ok(())
-            }
-            // A packed type that should copied by referring to the info table.
-            Some(DatatypeInfo::Packed(_packed_info)) => {
-                // how big should this allocation be?
-                let (dst, dst_end) = nursery_malloc(1024);
-                let ret = copy_packed(datatype, src, dst, dst_end);
-                println!("printing in rust...");
-                // _print_List(src, src);
-                // println!("\n");
-                // _print_List(dst, dst);
-                // println!("\n");
-                ret.and(Ok(()))
+    let ss = ShadowstackIter::new(ShadowstackModality::Read);
+    for frame in ss {
+        unsafe {
+            // println!("copy_readers frame: {:?}", *frame);
+            let src = (*frame).ptr;
+            let datatype = (*frame).datatype;
+            // update frame.ptr to dst after copying...
+            match INFO_TABLE.get().unwrap().get(&datatype) {
+                None => {
+                    return Err(MemError::Gc(format!(
+                        "Unknown datatype, {:?}",
+                        datatype
+                    )))
+                }
+                // A scalar type that can be copied directly.
+                Some(DatatypeInfo::Scalar(size)) => {
+                    let (dst, _) = nursery_malloc(*size as u64);
+                    copy_nonoverlapping(src, dst, *size as usize);
+                }
+                // A packed type that should copied by referring to the info table.
+                Some(DatatypeInfo::Packed(_packed_info)) => {
+                    // how big should this allocation be?
+                    let (dst, dst_end) = nursery_malloc(1024);
+                    let ret = copy_packed(datatype, src, dst, dst_end);
+                    match ret {
+                        Ok(_) => (),
+                        Err(err) => return Err(err),
+                    }
+                }
             }
         }
-    };
-    shadowstack_map(SSModality::Read, copy_region)
+    }
+    Ok(())
 }
-
-// extern "C" {
-//     fn _print_List(end: *const i8, start: *const i8);
-// }
 
 fn copy_packed(
     datatype: ffi::C_GibDatatype,
@@ -400,10 +411,12 @@ fn copy_packed(
             Some(DatatypeInfo::Packed(packed_info)) => {
                 let (tag, mut src_next): (ffi::C_GibPackedTag, *const i8) =
                     read(src);
-                let mut dst_next = write(dst, tag);
                 if tag == INDIRECTION_TAG {
                     todo!()
+                } else if tag == REDIRECTION_TAG {
+                    todo!()
                 } else {
+                    let mut dst_next = write(dst, tag);
                     let dcon_info = packed_info.get(&tag).unwrap();
                     let DataconInfo { scalar_bytes, field_tys, .. } =
                         dcon_info;
