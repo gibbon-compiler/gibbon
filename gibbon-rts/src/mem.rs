@@ -181,7 +181,7 @@ struct ShadowstackFrame {
     datatype: ffi::C_GibDatatype,
 }
 
-enum SSModality {
+enum ShadowstackModality {
     Read,
     Write,
 }
@@ -191,29 +191,29 @@ enum SSModality {
 fn shadowstack_debugprint() {
     println!(
         "length={}, stack of readers:",
-        shadowstack_length(SSModality::Read)
+        shadowstack_length(ShadowstackModality::Read)
     );
-    shadowstack_print(SSModality::Read);
+    shadowstack_print(ShadowstackModality::Read);
     println!(
         "length={}, stack of writers:",
-        shadowstack_length(SSModality::Write)
+        shadowstack_length(ShadowstackModality::Write)
     );
-    shadowstack_print(SSModality::Write);
+    shadowstack_print(ShadowstackModality::Write);
 }
 
 /// Length of the shadow-stack.
-fn shadowstack_length(io: SSModality) -> isize {
+fn shadowstack_length(io: ShadowstackModality) -> isize {
     unsafe {
         let (start_ptr, end_ptr): (
             *const ShadowstackFrame,
             *const ShadowstackFrame,
         ) = match io {
-            SSModality::Read => (
+            ShadowstackModality::Read => (
                 gib_global_input_shadowstack_start as *const ShadowstackFrame,
                 gib_global_input_shadowstack_alloc_ptr
                     as *const ShadowstackFrame,
             ),
-            SSModality::Write => (
+            ShadowstackModality::Write => (
                 gib_global_output_shadowstack_start as *const ShadowstackFrame,
                 gib_global_output_shadowstack_alloc_ptr
                     as *const ShadowstackFrame,
@@ -227,16 +227,16 @@ fn shadowstack_length(io: SSModality) -> isize {
 /// Map over all frames of the shadow-stack.
 #[inline]
 fn shadowstack_map<A>(
-    io: SSModality,
+    io: ShadowstackModality,
     f: fn(*mut ShadowstackFrame) -> Result<A>,
 ) -> Result<()> {
     unsafe {
         let (mut run_ptr, end_ptr) = match io {
-            SSModality::Read => (
+            ShadowstackModality::Read => (
                 gib_global_input_shadowstack_start,
                 gib_global_input_shadowstack_alloc_ptr,
             ),
-            SSModality::Write => (
+            ShadowstackModality::Write => (
                 gib_global_output_shadowstack_start,
                 gib_global_output_shadowstack_alloc_ptr,
             ),
@@ -257,7 +257,7 @@ fn shadowstack_map<A>(
 
 /// Print all frames of the shadow-stack.
 #[inline]
-fn shadowstack_print(io: SSModality) {
+fn shadowstack_print(io: ShadowstackModality) {
     shadowstack_map(io, |frame| unsafe {
         println!("{:?}", *frame);
         Ok(())
@@ -336,7 +336,7 @@ fn cauterize_writers() -> Result<()> {
         write(ptr, CAUTERIZED_TAG);
         Ok(())
     };
-    shadowstack_map(SSModality::Write, cauterize)
+    shadowstack_map(ShadowstackModality::Write, cauterize)
 }
 
 fn uncauterize_writers() -> Result<()> {

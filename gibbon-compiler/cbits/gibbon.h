@@ -372,22 +372,10 @@ void gib_nursery_reset(void);
  */
 
 typedef enum {
-    SS_Read,
-    SS_Write,
-} GibSSModality;
+    SSM_Read,
+    SSM_Write,
+} GibShadowstackModality;
 
-// Shadow stack for input locations:
-extern char *gib_global_input_shadowstack_start;
-extern char *gib_global_input_shadowstack_end;
-extern char *gib_global_input_shadowstack_alloc_ptr;
-
-// Shadow stack for output locations:
-extern char *gib_global_output_shadowstack_start;
-extern char *gib_global_output_shadowstack_end;
-extern char *gib_global_output_shadowstack_alloc_ptr;
-
-// Flag.
-extern bool gib_global_shadowstack_initialized;
 
 typedef struct gib_shadowstack_frame {
     char *ssf_ptr;
@@ -396,11 +384,30 @@ typedef struct gib_shadowstack_frame {
     uint32_t ssf_datatype;
 } GibShadowstackFrame;
 
+// Shadow stack for readable locations:
+extern char *gib_global_read_shadowstack_start;
+extern char *gib_global_read_shadowstack_end;
+extern char *gib_global_read_shadowstack_alloc_ptr;
+
+// Shadow stack for writeable locations:
+extern char *gib_global_write_shadowstack_start;
+extern char *gib_global_write_shadowstack_end;
+extern char *gib_global_write_shadowstack_alloc_ptr;
+
+// Flag.
+extern bool gib_global_shadowstack_initialized;
+
 void gib_shadowstack_initialize(void);
-void gib_shadowstack_push(GibSSModality io, char *ptr, uint32_t datatype);
-GibShadowstackFrame *gib_shadowstack_pop(GibSSModality io);
-int32_t gib_shadowstack_length(GibSSModality io);
-void gib_shadowstack_print(GibSSModality io);
+void gib_shadowstack_push(
+    GibShadowstackModality rw,
+    char *ptr,
+    uint32_t datatype,
+    GibCursorBindType cbt,
+    char *cbt_baseptr
+);
+GibShadowstackFrame *gib_shadowstack_pop(GibShadowstackModality io);
+int32_t gib_shadowstack_length(GibShadowstackModality io);
+void gib_shadowstack_print(GibShadowstackModality io);
 void gib_shadowstack_reset(void);
 
 
