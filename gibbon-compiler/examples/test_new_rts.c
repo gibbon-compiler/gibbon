@@ -1300,117 +1300,15 @@ $GIBBONDIR/gibbon-compiler/cbits/gibbon_rts.o -I$GIBBONDIR/gibbon-compiler/cbits
  * Run:
  * ~~~~~~~~~~
 
-CILK_NWORKERS=3 $GIBBONDIR/gibbon-compiler/examples/test_new_rts.exe
+$GIBBONDIR/gibbon-compiler/examples/test_new_rts.exe
 
 
  */
-
-GibInt fib_seq(GibInt n)
-{
-    if (n == 0) {
-        return 0;
-    } else {
-        if (n == 1) {
-            return 1;
-        } else {
-            GibInt x =  fib_seq(n - 1);
-            GibInt y =  fib_seq(n - 2);
-            return (x + y);
-        }
-    }
-}
-
-void go_alloc_region(void)
-{
-    int worker;
-#ifdef _GIBBON_PARALLEL
-     worker = __cilkrts_get_worker_number();
-#else
-     worker = 0;
-#endif
-
-    // A dummy computation to make Cilk schedule this function on
-    // different threads.
-    GibInt x = fib_seq(25);
-    // Allocate a region.
-    GibRegionAlloc *region = gib_alloc_region2(2*KB-1);
-    printf("alloc_region: worker=%d, start=%p, end=%p, in_nursery=%d, x=%" PRId64 "\n",
-           worker, region->ra_start, region->ra_end, region->ra_in_nursery, x);
-    return;
-}
-
-// assumption: NURSERY_REGION_MAX_SIZE is (2 * KB).
-void test_alloc_region(void)
-{
-    // sequential.
-    printf("\nSequential.\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-    for (int i = 0; i < 3; i++) {
-        go_alloc_region();
-    }
-
-    // // reset.
-    // printf("\nResetting the nursery.\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\n");
-    // gib_reset_nursery();
-
-    // // parallel.
-    // printf("\nParallel.\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
-    // cilk_for (int i = 0; i < 3; i++) {
-    //     go_alloc_region();
-    // }
-
-    return;
-}
-
-void test_info_table()
-{
-    int error = 0;
-    error = gib_info_table_initialize();
-    if (error < 0) {
-        fprintf(stderr, "Couldn't initialize info table, errorno=%d", error);
-        exit(1);
-    }
-    GibDatatype field_tys[10];
-
-    field_tys[0] = GibInt_T;
-    error = gib_info_table_insert_packed_dcon(
-        Tree_T,
-        0, // Leaf tag
-        8, // 8 bytes for the int
-        1, // num_scalars
-        0, // num_packed
-        field_tys,
-        1);
-    if (error < 0) {
-        fprintf(stderr, "Couldn't insert datacon, errorno=%d", error);
-        exit(1);
-    }
-    field_tys[0] = Tree_T;
-    field_tys[1] = Tree_T;
-    error = gib_info_table_insert_packed_dcon(
-        Tree_T,
-        1, // Node tag
-        0, // no data
-        0, // num_scalars
-        2, // num_packed
-        field_tys,
-        2);
-    if (error < 0) {
-        fprintf(stderr, "Couldn't insert datacon, errorno=%d", error);
-        exit(1);
-    }
-
-    printf("test info tables done.\n");
-}
 
 int gib_main_expr(void)
 {
     info_table_initialize();
     symbol_table_initialize();
-
-    // test_alloc_region();
-    // uint32_t sz = sizeof(GibDatatype);
-    // printf("sizeof(enum): %d\n", sz);
-    // test_info_table();
 
     GibInt fltPrd_235_251 =  do_reverse(gib_get_size_param());
     // GibInt fltPrd_236_252 =  do_tree();
