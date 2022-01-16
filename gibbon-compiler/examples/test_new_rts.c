@@ -190,21 +190,11 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor r_720 = region_1378->ra_start;
     GibCursor end_r_720 = region_1378->ra_end;
 
-    // GibRegionMeta *region_1380 =
-    //               gib_alloc_region(gib_get_inf_init_chunk_size());
-    // GibCursor r_721 = region_1380->reg_heap;
-    // GibInt sizeof_end_r_721_1381 = gib_get_inf_init_chunk_size();
-    // GibCursor end_r_721 = r_721 + sizeof_end_r_721_1381;
     GibRegionAlloc *region_1380 =
         gib_alloc_region2(gib_get_inf_init_chunk_size());
     GibCursor r_721 = region_1380->ra_start;
     GibCursor end_r_721 = region_1380->ra_end;
 
-    // GibRegionMeta *region_1382 =
-    //               gib_alloc_region(gib_get_inf_init_chunk_size());
-    // GibCursor r_719 = region_1382->reg_heap;
-    // GibInt sizeof_end_r_719_1383 = gib_get_inf_init_chunk_size();
-    // GibCursor end_r_719 = r_719 + sizeof_end_r_719_1383;
     GibRegionAlloc *region_1382 =
         gib_alloc_region2(gib_get_inf_init_chunk_size());
     GibCursor r_719 = region_1382->ra_start;
@@ -463,7 +453,7 @@ GibCursorGibCursorGibCursorProd build_list(GibCursor end_r_621,
                                            GibInt n_new)
 {
     if (loc_620 + 32 > end_r_621) {
-        GibChunk new_chunk_24 = gib_alloc_chunk(end_r_621);
+        GibChunkAlloc new_chunk_24 = gib_alloc_chunk(end_r_621);
         GibCursor chunk_start_25 = new_chunk_24.chunk_start;
         GibCursor chunk_end_26 = new_chunk_24.chunk_end;
 
@@ -509,16 +499,14 @@ GibCursorGibCursorGibCursorProd build_list(GibCursor end_r_621,
 }
 GibInt do_tree(GibInt n_22_186_293)
 {
-    GibRegionMeta *region_1403 =
+    GibRegionAlloc *region_1403 =
                   gib_alloc_region(gib_get_inf_init_chunk_size());
-    GibCursor r_731 = region_1403->reg_heap;
-    GibInt sizeof_end_r_731_1404 = gib_get_inf_init_chunk_size();
-    GibCursor end_r_731 = r_731 + sizeof_end_r_731_1404;
-    GibRegionMeta *region_1405 =
+    GibCursor r_731 = region_1403->ra_start;
+    GibCursor end_r_731 = region_1403->ra_end;
+    GibRegionAlloc *region_1405 =
                   gib_alloc_region(gib_get_inf_init_chunk_size());
-    GibCursor r_730 = region_1405->reg_heap;
-    GibInt sizeof_end_r_730_1406 = gib_get_inf_init_chunk_size();
-    GibCursor end_r_730 = r_730 + sizeof_end_r_730_1406;
+    GibCursor r_730 = region_1405->ra_start;
+    GibCursor end_r_730 = region_1405->ra_end;
     GibCursorGibCursorGibCursorProd tmp_struct_19 =
                                      buildtree(end_r_731, r_731, n_22_186_293);
     GibCursor pvrtmp_1407 = tmp_struct_19.field0;
@@ -545,7 +533,7 @@ GibCursorGibCursorGibCursorGibCursorProd add1(GibCursor end_r_606,  // input reg
                                              )
 {
     if (loc_605 + 32 > end_r_607) {
-        GibChunk new_chunk_2 = gib_alloc_chunk(end_r_607);
+        GibChunkAlloc new_chunk_2 = gib_alloc_chunk(end_r_607);
         GibCursor chunk_start_3 = new_chunk_2.chunk_start;
         GibCursor chunk_end_4 = new_chunk_2.chunk_end;
 
@@ -720,7 +708,7 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_611,
                                           GibInt n_35_178_278)
 {
     if (loc_610 + 32 > end_r_611) {
-        GibChunk new_chunk_9 = gib_alloc_chunk(end_r_611);
+        GibChunkAlloc new_chunk_9 = gib_alloc_chunk(end_r_611);
         GibCursor chunk_start_10 = new_chunk_9.chunk_start;
         GibCursor chunk_end_11 = new_chunk_9.chunk_end;
 
@@ -775,7 +763,7 @@ GibCursorGibCursorGibCursorGibCursorProd _copy_Tree(GibCursor end_r_624,
                                                     GibCursor arg_112_193_304)
 {
     if (loc_623 + 32 > end_r_625) {
-        GibChunk new_chunk_29 = gib_alloc_chunk(end_r_625);
+        GibChunkAlloc new_chunk_29 = gib_alloc_chunk(end_r_625);
         GibCursor chunk_start_30 = new_chunk_29.chunk_start;
         GibCursor chunk_end_31 = new_chunk_29.chunk_end;
 
@@ -1022,7 +1010,7 @@ GibCursorGibCursorGibCursorGibCursorProd _copy_List(GibCursor end_r_636,
                                                     GibCursor arg_144_224_335)
 {
     if (loc_635 + 32 > end_r_637) {
-        GibChunk new_chunk_39 = gib_alloc_chunk(end_r_637);
+        GibChunkAlloc new_chunk_39 = gib_alloc_chunk(end_r_637);
         GibCursor chunk_start_40 = new_chunk_39.chunk_start;
         GibCursor chunk_end_41 = new_chunk_39.chunk_end;
 
