@@ -19,3 +19,6 @@ pub type C_GibCursor = *const i8;
 
 /// An enum in C, which is 4 bytes.
 pub type C_GibDatatype = u32;
+
+/// An enum in C, which is 4 bytes.
+pub type C_GibCursorBindType = u32;

@@ -13,7 +13,12 @@ use crate::mem;
 pub extern "C" fn gib_info_table_initialize() -> i32 {
     match mem::info_table_initialize() {
         Ok(()) => 0,
-        Err(_err) => -1,
+        Err(err) => {
+            if cfg!(debug_assertions) {
+                println!("{:?}", err);
+            }
+            -1
+        }
     }
 }
 
@@ -40,7 +45,12 @@ pub extern "C" fn gib_info_table_insert_packed_dcon(
         field_tys,
     ) {
         Ok(()) => 0,
-        Err(_err) => -1,
+        Err(err) => {
+            if cfg!(debug_assertions) {
+                println!("{:?}", err);
+            }
+            -1
+        }
     }
 }
 
@@ -51,7 +61,12 @@ pub extern "C" fn gib_info_table_insert_scalar(
 ) -> i32 {
     match mem::info_table_insert_scalar(datatype, size) {
         Ok(()) => 0,
-        Err(_err) => -1,
+        Err(err) => {
+            if cfg!(debug_assertions) {
+                println!("{:?}", err);
+            }
+            -1
+        }
     }
 }
 
@@ -59,6 +74,11 @@ pub extern "C" fn gib_info_table_insert_scalar(
 pub extern "C" fn gib_collect_minor() -> i32 {
     match mem::collect_minor() {
         Ok(()) => 0,
-        Err(_err) => -1,
+        Err(err) => {
+            if cfg!(debug_assertions) {
+                println!("{:?}", err);
+            }
+            -1
+        }
     }
 }
