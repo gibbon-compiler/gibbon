@@ -1401,9 +1401,7 @@ void gib_shadowstack_initialize(void)
 
 void gib_shadowstack_push(GibShadowstackModality rw,
                           char *ptr,
-                          uint32_t datatype,
-                          GibCursorBindType cbt,
-                          char *cbt_baseptr)
+                          uint32_t datatype)
 {
     char *stack_alloc_ptr, *stack_end;
     char **stack_alloc_ptr_addr;
@@ -1431,8 +1429,6 @@ void gib_shadowstack_push(GibShadowstackModality rw,
     GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
     frame->ssf_ptr = ptr;
     frame->ssf_datatype = datatype;
-    frame->ssf_cbt = cbt;
-    frame->ssf_cbt_baseptr = cbt_baseptr;
     (*stack_alloc_ptr_addr) += size;
     return;
 }

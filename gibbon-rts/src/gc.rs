@@ -181,8 +181,6 @@ extern "C" {
 struct ShadowstackFrame {
     ptr: *const i8,
     datatype: ffi::C_GibDatatype,
-    cbt: ffi::C_GibCursorBindType,
-    cbt_baseptr: *const i8,
 }
 
 /// There are separate stacks for read and write cursors.

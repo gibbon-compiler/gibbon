@@ -376,24 +376,12 @@ typedef enum {
     SSM_Write,
 } GibShadowstackModality;
 
-typedef enum {
-    CBT_Nothing,
-    CBT_Start,
-    CBT_PlusOne,
-    CBT_After,
-} GibCursorBindType;
-
 typedef struct gib_shadowstack_frame {
     char *ssf_ptr;
+
     // An enum in C, which is 4 bytes.
     // The enum (GibDatatype) will be defined in the generated program.
     uint32_t ssf_datatype;
-
-    // For write cursors, we store their relationship (start,+1,after)
-    // to a read cursor in order to uncauterize them.
-    GibCursorBindType ssf_cbt;
-    // Base pointer for +1 and after cursors.
-    char *ssf_cbt_baseptr;
 } GibShadowstackFrame;
 
 // Shadow stack for readable locations:
@@ -413,9 +401,7 @@ void gib_shadowstack_initialize(void);
 void gib_shadowstack_push(
     GibShadowstackModality rw,
     char *ptr,
-    uint32_t datatype,
-    GibCursorBindType cbt,
-    char *cbt_baseptr
+    uint32_t datatype
 );
 GibShadowstackFrame *gib_shadowstack_pop(GibShadowstackModality io);
 int32_t gib_shadowstack_length(GibShadowstackModality io);
