@@ -346,7 +346,9 @@ pub fn collect_minor() -> Result<()> {
 
 fn copy_to_tospace() -> Result<()> {
     allocator_switch_to_tospace();
-    cauterize_writers().and(copy_readers()).and(uncauterize_writers())
+    cauterize_writers()?;
+    // Also uncauterizes writers.
+    copy_readers()
 }
 
 fn cauterize_writers() -> Result<()> {
@@ -357,10 +359,6 @@ fn cauterize_writers() -> Result<()> {
             write(ptr, CAUTERIZED_TAG);
         }
     }
-    Ok(())
-}
-
-fn uncauterize_writers() -> Result<()> {
     Ok(())
 }
 
@@ -441,41 +439,35 @@ fn copy_packed(
                     COPIED_TO_TAG => todo!(),
                     CAUTERIZED_TAG => todo!(),
                     _ => {
-                        let dcon_info = packed_info.get(&tag).unwrap();
                         let DataconInfo {
                             scalar_bytes,
                             field_tys,
                             num_packed,
                             ..
-                        } = dcon_info;
-                        // If there's enough space, write a COPIED_TO tag and
-                        // dst's address at src. Otherwise write a COPIED tag.
-                        if (*scalar_bytes) > 8 {
-                            write(src, COPIED_TO_TAG);
-                            let src_plus_one = src.add(1);
-                            write(src_plus_one, dst);
-                        } else {
-                            write(src, COPIED_TAG);
-                        }
+                        } = packed_info.get(&tag).unwrap();
+
                         // Bounds check before copying the fields.
                         let space_avail = dst_end.offset_from(dst);
-                        let space_reqd = if *num_packed == 0 {
-                            *scalar_bytes as isize
+                        let space_reqd: isize = if *num_packed == 0 {
+                            std::cmp::max(32, *scalar_bytes).into()
                         } else {
                             // Additional 9 bytes for the redirection node.
-                            9 + *scalar_bytes as isize
+                            std::cmp::max(32, 9 + *scalar_bytes).into()
                         };
                         if space_avail < space_reqd {
+                            // TODO(ckoparkar): see the TODO in copy_readers.
                             match nursery_malloc(1024) {
                                 Ok((new_dst, new_dst_end)) => {
-                                    let next = write(dst, REDIRECTION_TAG);
-                                    write(next, new_dst);
+                                    let dst_plus_one =
+                                        write(dst, REDIRECTION_TAG);
+                                    write(dst_plus_one, new_dst);
                                     dst = new_dst;
                                     dst_end = new_dst_end;
                                 }
                                 Err(err) => return Err(err),
                             }
                         }
+
                         // Copy the tag and the fields.
                         let mut src_next = src_next_c as *mut i8;
                         let mut dst_next = write(dst, tag);
@@ -485,6 +477,16 @@ fn copy_packed(
                         );
                         src_next = src_next.add(*scalar_bytes as usize);
                         dst_next = dst_next.add(*scalar_bytes as usize);
+                        // Add forwarding pointers:
+                        // if there's enough space, write a COPIED_TO tag and
+                        // dst's address at src. Otherwise write a COPIED tag.
+                        if (*scalar_bytes) > 8 {
+                            let src_plus_one = write(src, COPIED_TO_TAG);
+                            write(src_plus_one, dst);
+                        } else {
+                            write(src, COPIED_TAG);
+                        }
+                        // TODO(ckoparkar): instead of recursion, use a worklist alogorithm.
                         for ty in field_tys.iter() {
                             match copy_packed(ty, src_next, dst_next, dst_end)
                             {

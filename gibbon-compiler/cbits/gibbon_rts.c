@@ -1308,6 +1308,9 @@ void gib_print_global_region_count(void)
  */
 
 // 4 megabytes for each semi-space.
+// #define NURSERY_SIZE (4 * MB)
+
+// 4KB for debugging.
 #define NURSERY_SIZE (4 * KB)
 
 // If a region is over this size, alloc to refcounted heap directly.

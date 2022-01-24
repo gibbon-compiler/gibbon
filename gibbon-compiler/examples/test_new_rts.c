@@ -342,6 +342,8 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_12 =
                 reverse(end_r_615, end_r_705, end_r_617, loc_614, tmpcur_1362, r_705);
 
+            // TODO: pop to cleanup shadow stack.
+
             // Don't need to restore anything from the shadowstack because
             // none of those cursors are used after this point.
 
