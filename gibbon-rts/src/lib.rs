@@ -5,4 +5,4 @@
 #![feature(thread_local)]
 
 pub mod ffi;
-mod mem;
+mod gc;
