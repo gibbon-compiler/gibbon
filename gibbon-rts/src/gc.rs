@@ -354,7 +354,8 @@ fn cauterize_writers() -> Result<()> {
     for frame in ss {
         unsafe {
             let ptr = (*frame).ptr as *mut i8;
-            write(ptr, CAUTERIZED_TAG);
+            let ptr_next = write(ptr, CAUTERIZED_TAG);
+            write(ptr_next, frame);
         }
     }
     Ok(())
@@ -427,15 +428,34 @@ fn copy_packed(
                 Ok((src.add(*size as usize), dst.add(*size as usize)))
             }
             Some(DatatypeInfo::Packed(packed_info)) => {
-                let (tag, src_next_c): (ffi::C_GibPackedTag, *const i8) =
-                    read(src);
-                // Special tags.
+                let (tag, mut src_next): (ffi::C_GibPackedTag, *mut i8) =
+                    read_mut(src);
                 match tag {
-                    INDIRECTION_TAG => todo!(),
-                    REDIRECTION_TAG => todo!(),
-                    COPIED_TAG => todo!(),
+                    // Follow redirection and continue copying.
+                    REDIRECTION_TAG => {
+                        let (pointee, _): (*mut i8, _) = read(src_next);
+                        copy_packed(datatype, pointee, dst, dst_end)
+                    }
+                    // POLICY DECISION:
+                    // Indirections are always inlined in the current version.
+                    // Follow the pointer and continue copying.
+                    INDIRECTION_TAG => {
+                        let (pointee, _): (*mut i8, _) = read(src_next);
+                        copy_packed(datatype, pointee, dst, dst_end)
+                    }
                     COPIED_TO_TAG => todo!(),
-                    CAUTERIZED_TAG => todo!(),
+                    COPIED_TAG => todo!(),
+                    // Update the write cursor's new address in shadowstack.
+                    CAUTERIZED_TAG => {
+                        let (frame_ptr, _): (*const i8, _) = read(src_next);
+                        let frame = frame_ptr as *mut ShadowstackFrame;
+                        if cfg!(debug_assertions) {
+                            println!("{:?}", frame);
+                        }
+                        (*frame).ptr = src;
+                        Ok((src, dst))
+                    }
+                    // Regular datatype, copy.
                     _ => {
                         let DataconInfo {
                             scalar_bytes,
@@ -467,7 +487,6 @@ fn copy_packed(
                         }
 
                         // Copy the tag and the fields.
-                        let mut src_next = src_next_c as *mut i8;
                         let mut dst_next = write(dst, tag);
                         dst_next.copy_from_nonoverlapping(
                             src_next,
@@ -562,6 +581,11 @@ fn allocator_switch_to_tospace() {
 unsafe fn read<A>(cursor: *const i8) -> (A, *const i8) {
     let cursor2 = cursor as *const A;
     (cursor2.read_unaligned(), cursor2.add(1) as *const i8)
+}
+
+unsafe fn read_mut<A>(cursor: *mut i8) -> (A, *mut i8) {
+    let cursor2 = cursor as *const A;
+    (cursor2.read_unaligned(), cursor2.add(1) as *mut i8)
 }
 
 #[inline]
