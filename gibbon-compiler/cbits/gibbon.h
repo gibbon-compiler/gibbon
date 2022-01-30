@@ -39,6 +39,7 @@ typedef uint64_t GibSym;
 typedef bool GibBool;
 typedef char* GibPtr;
 typedef char* GibCursor;
+typedef uint64_t GibThreadId;
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -306,6 +307,18 @@ typedef struct gib_pixel {
 void gib_write_ppm(char* filename, GibInt width, GibInt height, GibVector *pixels);
 void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels);
 
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Threads and parallelism
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+// TODO(ckoparkar): only a single thread for now.
+// extern uint64_t gib_global_num_threads;
+// extern GibThreadId gib_thread_id();
+
+#define gib_global_num_threads 1
+#define gib_thread_id() 0
+
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Memory Management; regions, chunks, GC etc.
@@ -341,40 +354,26 @@ void gib_print_global_region_count(void);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+typedef struct gib_nursery {
+    // Step.
+    uint8_t n_step;
 
+    // From space.
+    char *n_fs_start;
+    char *n_fs_end;
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Nursery
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
+    // To space.
+    char *n_ts_start;
+    char *n_ts_end;
 
-extern char *gib_global_nursery_from_space_start;
-extern char *gib_global_nursery_to_space_start;
-extern char *gib_global_nursery_to_space_end;
+    // Current allocation area.
+    char *n_alloc;
+    char *n_alloc_end;
 
-// Flag.
-extern bool gib_global_nursery_initialized;
+    // Is the allocation aread initialized?
+    bool n_initialized;
 
-// The start and end pointers for the current allocation space being used.
-extern char *gib_global_nursery_alloc_ptr;
-extern char *gib_global_nursery_alloc_ptr_end;
-
-// Initialize nursery.
-void gib_nursery_initialize(void);
-
-// Only meant to be used while testing the implementation!!
-void gib_nursery_reset(void);
-
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Shadow stack
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-typedef enum {
-    SSM_Read,
-    SSM_Write,
-} GibShadowstackModality;
+} GibNursery;
 
 typedef struct gib_shadowstack_frame {
     char *ssf_ptr;
@@ -384,35 +383,28 @@ typedef struct gib_shadowstack_frame {
     uint32_t ssf_datatype;
 } GibShadowstackFrame;
 
-// Shadow stack for readable locations:
-extern char *gib_global_read_shadowstack_start;
-extern char *gib_global_read_shadowstack_end;
-extern char *gib_global_read_shadowstack_alloc_ptr;
+typedef struct gib_shadowstack {
+    bool ss_initialized;
+    char *ss_start;
+    char *ss_end;
+    char *ss_alloc;
+} GibShadowstack;
 
-// Shadow stack for writeable locations:
-extern char *gib_global_write_shadowstack_start;
-extern char *gib_global_write_shadowstack_end;
-extern char *gib_global_write_shadowstack_alloc_ptr;
+// Array of nurseries, indexed by thread_id.
+extern GibNursery *gib_global_nurseries;
 
-// Flag.
-extern bool gib_global_shadowstack_initialized;
+// Shadow stacks for readable and writeable locations respectively,
+// indexed by thread_id.
+extern GibShadowstack *gib_global_read_shadowstacks;
+extern GibShadowstack *gib_global_write_shadowstacks;
 
-void gib_shadowstack_initialize(void);
-void gib_shadowstack_push(
-    GibShadowstackModality rw,
-    char *ptr,
-    uint32_t datatype
-);
-GibShadowstackFrame *gib_shadowstack_pop(GibShadowstackModality io);
-int32_t gib_shadowstack_length(GibShadowstackModality io);
-void gib_shadowstack_print(GibShadowstackModality io);
-void gib_shadowstack_reset(void);
+// Initialize nurseries, shadow stacks.
+void gib_storage_initialize(void);
 
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Regions, chunks etc.
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
+void gib_shadowstack_push(GibShadowstack *stack, char *ptr, uint32_t datatype);
+GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack);
+int32_t gib_shadowstack_length(GibShadowstack *stack);
+void gib_shadowstack_print_all(GibShadowstack *stack);
 
 GibRegionAlloc *gib_alloc_region2(uint64_t size);
 void gib_free_region2(GibRegionAlloc *region);
@@ -434,7 +426,9 @@ int gib_info_table_insert_packed_dcon(
     uint32_t *field_tys,
     uint8_t field_tys_length
 );
-int gib_collect_minor(void);
+int gib_collect_minor(GibShadowstack *rstack,
+                      GibShadowstack *wstack,
+                      GibNursery *nursery);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

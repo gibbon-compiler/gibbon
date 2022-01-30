@@ -35,6 +35,35 @@ pub mod types {
 
     /// An enum in C, which is 4 bytes.
     pub type C_GibCursorBindType = u32;
+
+    #[repr(C)]
+    #[derive(Debug)]
+    pub struct C_GibShadowstackFrame {
+        pub ptr: *const i8,
+        pub datatype: C_GibDatatype,
+    }
+
+    #[repr(C)]
+    #[derive(Debug)]
+    pub struct C_GibShadowstack {
+        pub initialized: bool,
+        pub start: *const i8,
+        pub end: *const i8,
+        pub alloc: *const i8,
+    }
+
+    #[repr(C)]
+    #[derive(Debug)]
+    pub struct C_GibNursery {
+        pub step: u8,
+        pub fs_start: *const i8,
+        pub fs_end: *const i8,
+        pub ts_start: *const i8,
+        pub ts_end: *const i8,
+        pub alloc: *const i8,
+        pub alloc_end: *const i8,
+        pub initialized: bool,
+    }
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -106,8 +135,12 @@ pub extern "C" fn gib_info_table_insert_scalar(
 }
 
 #[no_mangle]
-pub extern "C" fn gib_collect_minor() -> i32 {
-    match gc::collect_minor() {
+pub extern "C" fn gib_collect_minor(
+    rstack: *mut C_GibShadowstack,
+    wstack: *mut C_GibShadowstack,
+    nursery: *mut C_GibNursery,
+) -> i32 {
+    match gc::collect_minor(rstack, wstack, nursery) {
         Ok(()) => 0,
         Err(err) => {
             if cfg!(debug_assertions) {

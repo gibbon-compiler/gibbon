@@ -209,12 +209,16 @@ GibInt do_reverse(GibInt n_19_183_289)
     *(GibBoxedTag *) r_720 = 0;
     GibCursor writetag_1010 = r_720 + 1;
 
+    GibThreadId tid = gib_thread_id();
+    GibShadowstack *rstack = &(gib_global_read_shadowstacks[tid]);
+    GibShadowstack *wstack = &(gib_global_write_shadowstacks[tid]);
+
     // xs
-    gib_shadowstack_push(SSM_Read, pvrtmp_1385, List_T);
+    gib_shadowstack_push(rstack, pvrtmp_1385, List_T);
     // ys
-    gib_shadowstack_push(SSM_Read, r_720, List_T);
+    gib_shadowstack_push(rstack, r_720, List_T);
     // output
-    gib_shadowstack_push(SSM_Write, r_719, List_T);
+    gib_shadowstack_push(wstack, r_719, List_T);
 
     // _print_List(NULL, pvrtmp_1385);
     // printf("\n");
@@ -259,6 +263,10 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
         loc_614 = chunk_start_14;
     }
 
+    GibThreadId tid = gib_thread_id();
+    GibShadowstack *rstack = &(gib_global_read_shadowstacks[tid]);
+    GibShadowstack *wstack = &(gib_global_write_shadowstacks[tid]);
+
     GibBoxedTag tmpval_1355 = *(GibBoxedTag *) xs_36_179_284;
 
   switch_1377:
@@ -282,9 +290,9 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
       case 1:
         {
-            // printf("before GC:\n");
-            // _print_List(NULL, xs_36_179_284);
-            // printf("\n");
+            printf("before GC:\n");
+            _print_List(NULL, xs_36_179_284);
+            printf("\n");
 
             // Only are function arguments are live at this point. The caller
             // would have already pushed them to the shadowstack. We can
@@ -297,17 +305,17 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
             // Restore from shadow stack.
             GibShadowstackFrame *frame;
-            frame = gib_shadowstack_pop(SSM_Write);
+            frame = gib_shadowstack_pop(wstack);
             loc_614 = frame->ssf_ptr;
-            frame = gib_shadowstack_pop(SSM_Read);
+            frame = gib_shadowstack_pop(rstack);
             ys_37_180_285 = frame->ssf_ptr;
-            frame = gib_shadowstack_pop(SSM_Read);
+            frame = gib_shadowstack_pop(rstack);
             xs_36_179_284 = frame->ssf_ptr;
             // Restored.
 
-            // printf("after GC:\n");
-            // _print_List(NULL, xs_36_179_284);
-            // printf("\n");
+            printf("after GC:\n");
+            _print_List(NULL, xs_36_179_284);
+            printf("\n");
 
             GibCursor loc_693 = r_705 + 1;
             GibCursor loc_694 = loc_693 + 8;
@@ -328,19 +336,25 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
             *(GibInt *) writetag_1004 = tmpval_1361;
             GibCursor writecur_1005 = writetag_1004 + sizeof(GibInt);
 
+            tid = gib_thread_id();
+            rstack = &(gib_global_read_shadowstacks[tid]);
+            wstack = &(gib_global_write_shadowstacks[tid]);
+
             // Push to shadow stack.
             // xs
-            gib_shadowstack_push(SSM_Read, tmpcur_1362, List_T);
+            gib_shadowstack_push(rstack, tmpcur_1362, List_T);
             // ys
-            gib_shadowstack_push(SSM_Read, r_705, List_T);
+            gib_shadowstack_push(rstack, r_705, List_T);
             // output
-            gib_shadowstack_push(SSM_Write, loc_614, List_T);
+            gib_shadowstack_push(wstack, loc_614, List_T);
             // Pushed.
 
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_12 =
                 reverse(end_r_615, end_r_705, end_r_617, loc_614, tmpcur_1362, r_705);
 
-            // TODO: pop to cleanup shadow stack.
+            /* gib_shadowstack_pop(wstack); */
+            /* gib_shadowstack_pop(rstack); */
+            /* gib_shadowstack_pop(rstack); */
 
             // Don't need to restore anything from the shadowstack because
             // none of those cursors are used after this point.

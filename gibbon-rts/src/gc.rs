@@ -12,7 +12,7 @@ use std::lazy::OnceCell;
 use std::mem::size_of;
 use std::ptr::{copy_nonoverlapping, null, null_mut, write_bytes};
 
-use crate::ffi::types as ffi;
+use crate::ffi::types::*;
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Custom error type
@@ -56,17 +56,17 @@ struct DataconInfo {
     /// Number of packed fields.
     num_packed: u8,
     /// Field types.
-    field_tys: Vec<ffi::C_GibDatatype>,
+    field_tys: Vec<C_GibDatatype>,
 }
 
 #[derive(Debug)]
 enum DatatypeInfo {
     Scalar(u8),
-    Packed(HashMap<ffi::C_GibPackedTag, DataconInfo>),
+    Packed(HashMap<C_GibPackedTag, DataconInfo>),
 }
 
 /// The global info table.
-static mut INFO_TABLE: OnceCell<HashMap<ffi::C_GibDatatype, DatatypeInfo>> =
+static mut INFO_TABLE: OnceCell<HashMap<C_GibDatatype, DatatypeInfo>> =
     OnceCell::new();
 
 #[inline]
@@ -83,12 +83,12 @@ pub fn info_table_initialize() -> Result<()> {
 
 #[inline]
 pub fn info_table_insert_packed_dcon(
-    datatype: ffi::C_GibDatatype,
-    datacon: ffi::C_GibPackedTag,
+    datatype: C_GibDatatype,
+    datacon: C_GibPackedTag,
     scalar_bytes: u8,
     num_scalars: u8,
     num_packed: u8,
-    field_tys: Vec<ffi::C_GibDatatype>,
+    field_tys: Vec<C_GibDatatype>,
 ) -> Result<()> {
     let tbl = unsafe {
         match INFO_TABLE.get_mut() {
@@ -127,7 +127,7 @@ pub fn info_table_insert_packed_dcon(
 }
 
 pub fn info_table_insert_scalar(
-    datatype: ffi::C_GibDatatype,
+    datatype: C_GibDatatype,
     size: u8,
 ) -> Result<()> {
     let tbl = unsafe {
@@ -149,48 +149,10 @@ pub fn info_table_insert_scalar(
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-// Globals defined in C code.
-extern "C" {
-    // Nursery.
-    static mut gib_global_nursery_from_space_start: *const i8;
-    static mut gib_global_nursery_to_space_start: *const i8;
-    static mut gib_global_nursery_to_space_end: *const i8;
-    static mut gib_global_nursery_alloc_ptr: *const i8;
-    static mut gib_global_nursery_alloc_ptr_end: *const i8;
-    static mut gib_global_nursery_initialized: bool;
-
-    // Shadow stack for input locations.
-    static mut gib_global_read_shadowstack_start: *const i8;
-    static mut gib_global_read_shadowstack_end: *const i8;
-    static mut gib_global_read_shadowstack_alloc_ptr: *const i8;
-
-    // Shadow stack for output locations.
-    static mut gib_global_write_shadowstack_start: *const i8;
-    static mut gib_global_write_shadowstack_end: *const i8;
-    static mut gib_global_write_shadowstack_alloc_ptr: *const i8;
-
-    // Flag.
-    static mut gib_global_shadowstack_initialized: bool;
-}
-
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Shadow stack
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
-
-/// Must be consistent with 'GibShadowstackFrame' defined in 'gibbon.h'.
-#[repr(C)]
-#[derive(Debug)]
-struct ShadowstackFrame {
-    ptr: *const i8,
-    datatype: ffi::C_GibDatatype,
-}
-
-///Separate stacks are used for read and write cursors.
-enum ShadowstackModality {
-    Read,
-    Write,
-}
 
 /// An iterator to traverse the shadowstack.
 struct ShadowstackIter {
@@ -199,34 +161,23 @@ struct ShadowstackIter {
 }
 
 impl ShadowstackIter {
-    fn new(rw: ShadowstackModality) -> ShadowstackIter {
-        let (run_ptr, end_ptr) = match rw {
-            ShadowstackModality::Read => unsafe {
-                (
-                    gib_global_read_shadowstack_start,
-                    gib_global_read_shadowstack_alloc_ptr,
-                )
-            },
-            ShadowstackModality::Write => unsafe {
-                (
-                    gib_global_write_shadowstack_start,
-                    gib_global_write_shadowstack_alloc_ptr,
-                )
-            },
-        };
-        debug_assert!(run_ptr <= end_ptr);
-        ShadowstackIter { run_ptr, end_ptr }
+    fn new(ss: *mut C_GibShadowstack) -> ShadowstackIter {
+        unsafe {
+            debug_assert!((*ss).start <= (*ss).alloc);
+            ShadowstackIter { run_ptr: (*ss).start, end_ptr: (*ss).alloc }
+        }
     }
 }
 
 impl Iterator for ShadowstackIter {
-    type Item = *mut ShadowstackFrame;
+    type Item = *mut C_GibShadowstackFrame;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.run_ptr < self.end_ptr {
-            let frame = self.run_ptr as *mut ShadowstackFrame;
+            let frame = self.run_ptr as *mut C_GibShadowstackFrame;
             unsafe {
-                self.run_ptr = self.run_ptr.add(size_of::<ShadowstackFrame>());
+                self.run_ptr =
+                    self.run_ptr.add(size_of::<C_GibShadowstackFrame>());
             }
             Some(frame)
         } else {
@@ -237,34 +188,23 @@ impl Iterator for ShadowstackIter {
 
 /// This function is defined here to test if all the globals are set up
 /// properly. Its output should match the C version's output.
-fn shadowstack_debugprint() {
-    println!(
-        "stack of readers, length={}:",
-        shadowstack_length(ShadowstackModality::Read)
-    );
-    shadowstack_print_all(ShadowstackModality::Read);
-    println!(
-        "stack of writers, length={}:",
-        shadowstack_length(ShadowstackModality::Write)
-    );
-    shadowstack_print_all(ShadowstackModality::Write);
+fn shadowstack_debugprint(
+    rstack: *mut C_GibShadowstack,
+    wstack: *mut C_GibShadowstack,
+) {
+    println!("stack of readers, length={}:", shadowstack_length(rstack));
+    shadowstack_print_all(rstack);
+    println!("stack of writers, length={}:", shadowstack_length(wstack));
+    shadowstack_print_all(wstack);
 }
 
 /// Length of the shadow-stack.
-fn shadowstack_length(rw: ShadowstackModality) -> isize {
+fn shadowstack_length(ss: *mut C_GibShadowstack) -> isize {
     unsafe {
-        let (start_ptr, end_ptr) = match rw {
-            ShadowstackModality::Read => (
-                gib_global_read_shadowstack_start as *const ShadowstackFrame,
-                gib_global_read_shadowstack_alloc_ptr
-                    as *const ShadowstackFrame,
-            ),
-            ShadowstackModality::Write => (
-                gib_global_write_shadowstack_start as *const ShadowstackFrame,
-                gib_global_write_shadowstack_alloc_ptr
-                    as *const ShadowstackFrame,
-            ),
-        };
+        let (start_ptr, end_ptr) = (
+            (*ss).start as *const C_GibShadowstackFrame,
+            (*ss).alloc as *const C_GibShadowstackFrame,
+        );
         debug_assert!(start_ptr <= end_ptr);
         end_ptr.offset_from(start_ptr)
     }
@@ -272,9 +212,9 @@ fn shadowstack_length(rw: ShadowstackModality) -> isize {
 
 /// Print all frames of the shadow-stack.
 #[inline]
-fn shadowstack_print_all(rw: ShadowstackModality) {
-    let ss = ShadowstackIter::new(rw);
-    for frame in ss {
+fn shadowstack_print_all(ss: *mut C_GibShadowstack) {
+    let ss_iter = ShadowstackIter::new(ss);
+    for frame in ss_iter {
         unsafe {
             println!("{:?}", *frame);
         }
@@ -287,53 +227,37 @@ fn shadowstack_print_all(rw: ShadowstackModality) {
  */
 
 // Must be same as "gibbon.h".
-const REDIRECTION_TAG: ffi::C_GibPackedTag = 255;
-const INDIRECTION_TAG: ffi::C_GibPackedTag = 254;
+const REDIRECTION_TAG: C_GibPackedTag = 255;
+const INDIRECTION_TAG: C_GibPackedTag = 254;
 
 // Used internally in the garbage collector.
-const CAUTERIZED_TAG: ffi::C_GibPackedTag = 253;
-const COPIED_TO_TAG: ffi::C_GibPackedTag = 252;
-const COPIED_TAG: ffi::C_GibPackedTag = 251;
+const CAUTERIZED_TAG: C_GibPackedTag = 253;
+const COPIED_TO_TAG: C_GibPackedTag = 252;
+const COPIED_TAG: C_GibPackedTag = 251;
 
 /// Minor collection:
 /// If the data is already in to-space, it is promoted to an older generation.
 /// Otherwise data in from-space is copied to to-space.
-pub fn collect_minor() -> Result<()> {
+pub fn collect_minor(
+    rstack: *mut C_GibShadowstack,
+    wstack: *mut C_GibShadowstack,
+    nursery: *mut C_GibNursery,
+) -> Result<()> {
     // Print some debugging information.
     if cfg!(debug_assertions) {
         println!("Triggered GC!!!");
         unsafe {
-            assert!(gib_global_nursery_initialized);
-            assert!(
-                gib_global_nursery_alloc_ptr
-                    < gib_global_nursery_alloc_ptr_end
-            );
-            assert!(gib_global_shadowstack_initialized);
-            assert!(
-                gib_global_read_shadowstack_alloc_ptr
-                    >= gib_global_read_shadowstack_start
-            );
-            assert!(
-                gib_global_read_shadowstack_alloc_ptr
-                    < gib_global_read_shadowstack_end
-            );
-            assert!(
-                gib_global_write_shadowstack_alloc_ptr
-                    >= gib_global_write_shadowstack_start
-            );
-            assert!(
-                gib_global_write_shadowstack_alloc_ptr
-                    < gib_global_write_shadowstack_end
-            );
+            assert!((*nursery).initialized);
+            assert!((*nursery).alloc < (*nursery).alloc_end);
         }
-        shadowstack_debugprint();
+        shadowstack_debugprint(rstack, wstack);
     }
-    if allocator_in_tospace() {
+    if allocator_in_tospace(nursery) {
         promote_to_oldgen()
     } else {
-        let current_space_avail = allocator_space_available();
-        let _ = copy_to_tospace()?;
-        let new_space_avail = allocator_space_available();
+        let current_space_avail = allocator_space_available(nursery);
+        copy_to_tospace(rstack, wstack, nursery)?;
+        let new_space_avail = allocator_space_available(nursery);
         // Promote everything to the older generation if we couldn't
         // free up any space after a minor collection.
         if current_space_avail == new_space_avail {
@@ -345,33 +269,40 @@ pub fn collect_minor() -> Result<()> {
 }
 
 /// Copy data in from-space to to-space.
-fn copy_to_tospace() -> Result<()> {
-    allocator_switch_to_tospace();
-    cauterize_writers()?;
+fn copy_to_tospace(
+    rstack: *mut C_GibShadowstack,
+    wstack: *mut C_GibShadowstack,
+    nursery: *mut C_GibNursery,
+) -> Result<()> {
+    allocator_switch_to_tospace(nursery);
+    cauterize_writers(wstack)?;
     // Also uncauterizes writers.
-    copy_readers()
+    copy_readers(rstack, nursery)
 }
 
 /// Write a CAUTERIZED_TAG at all write cursors so that the collector knows
 /// when to stop copying.
-fn cauterize_writers() -> Result<()> {
-    let ss = ShadowstackIter::new(ShadowstackModality::Write);
-    for frame in ss {
-        unsafe {
+fn cauterize_writers(wstack: *mut C_GibShadowstack) -> Result<()> {
+    unsafe {
+        let ss = ShadowstackIter::new(wstack);
+        for frame in ss {
             let ptr = (*frame).ptr as *mut i8;
             let ptr_next = write(ptr, CAUTERIZED_TAG);
             write(ptr_next, frame);
         }
+        Ok(())
     }
-    Ok(())
 }
 
 /// Copy values at all read cursors from one place to another. Uses
 /// nursery_malloc to allocate memory for the destination.
-fn copy_readers() -> Result<()> {
-    let ss = ShadowstackIter::new(ShadowstackModality::Read);
-    for frame in ss {
-        unsafe {
+fn copy_readers(
+    rstack: *mut C_GibShadowstack,
+    nursery: *mut C_GibNursery,
+) -> Result<()> {
+    unsafe {
+        let ss = ShadowstackIter::new(rstack);
+        for frame in ss {
             let datatype = (*frame).datatype;
             match INFO_TABLE.get().unwrap().get(&datatype) {
                 None => {
@@ -382,7 +313,7 @@ fn copy_readers() -> Result<()> {
                 }
                 // A scalar type that can be copied directly.
                 Some(DatatypeInfo::Scalar(size)) => {
-                    let (dst, _) = nursery_malloc(*size as u64)?;
+                    let (dst, _) = nursery_malloc(nursery, *size as u64)?;
                     let src = (*frame).ptr as *mut i8;
                     copy_nonoverlapping(src, dst, *size as usize);
                     // Update the pointer in shadowstack.
@@ -397,10 +328,10 @@ fn copy_readers() -> Result<()> {
                     // info in a chunk footer. Then that size can somehow
                     // influence how big this new to-space chunk is.
                     // Using 1024 for now.
-                    let (dst, dst_end) = nursery_malloc(1024)?;
+                    let (dst, dst_end) = nursery_malloc(nursery, 1024)?;
                     let src = (*frame).ptr as *mut i8;
                     let (src_after, dst_after, _dst_after_end, tag) =
-                        copy_packed(&datatype, src, dst, dst_end)?;
+                        copy_packed(nursery, &datatype, src, dst, dst_end)?;
                     // Update the pointer in shadowstack.
                     (*frame).ptr = dst;
                     // See (1) below required for supporting a COPIED_TAG;
@@ -422,14 +353,15 @@ fn copy_readers() -> Result<()> {
                 }
             }
         }
+        Ok(())
     }
-    Ok(())
 }
 
 /// Copy a packed value by referring to the info table.
 ///
 /// Arguments:
 ///
+/// * nursery - allocation area to copy data into
 /// * datatype - an index into the info table
 /// * src - a pointer to the value to be copied in source buffer
 /// * dst - a pointer to the value's new destination in the destination buffer
@@ -449,11 +381,12 @@ fn copy_readers() -> Result<()> {
 ///             the end of the source buffer.
 ///
 fn copy_packed(
-    datatype: &ffi::C_GibDatatype,
+    nursery: *mut C_GibNursery,
+    datatype: &C_GibDatatype,
     src: *mut i8,
     dst: *mut i8,
     dst_end: *const i8,
-) -> Result<(*mut i8, *mut i8, *const i8, Option<ffi::C_GibPackedTag>)> {
+) -> Result<(*mut i8, *mut i8, *const i8, Option<C_GibPackedTag>)> {
     unsafe {
         match INFO_TABLE.get().unwrap().get(datatype) {
             None => {
@@ -468,7 +401,7 @@ fn copy_packed(
                 Ok((src.add(size1), dst.add(size1), dst_end, None))
             }
             Some(DatatypeInfo::Packed(packed_info)) => {
-                let (tag, src_after_tag): (ffi::C_GibPackedTag, *mut i8) =
+                let (tag, src_after_tag): (C_GibPackedTag, *mut i8) =
                     read_mut(src);
                 match tag {
                     // Nothing to copy. Just update the write cursor's new
@@ -476,7 +409,7 @@ fn copy_packed(
                     CAUTERIZED_TAG => {
                         let (wframe_ptr, _): (*const i8, _) =
                             read(src_after_tag);
-                        let wframe = wframe_ptr as *mut ShadowstackFrame;
+                        let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
                         if cfg!(debug_assertions) {
                             println!("{:?}", wframe);
                         }
@@ -490,7 +423,7 @@ fn copy_packed(
                             read_mut(src_after_tag);
                         let space_reqd = 18;
                         let (dst1, dst_end1) =
-                            check_bounds(space_reqd, dst, dst_end)?;
+                            check_bounds(nursery, space_reqd, dst, dst_end)?;
                         let dst_after_tag = write(dst1, INDIRECTION_TAG);
                         let dst_after_indr = write(dst_after_tag, fwd_ptr);
                         Ok((
@@ -525,7 +458,7 @@ fn copy_packed(
                     //     COPIED_TO_TAG and forwarding pointer.
                     COPIED_TAG => {
                         let (mut scan_tag, mut scan_ptr): (
-                            ffi::C_GibPackedTag,
+                            C_GibPackedTag,
                             *const i8,
                         ) = read(src_after_tag);
                         while scan_tag != COPIED_TO_TAG {
@@ -540,7 +473,7 @@ fn copy_packed(
                         let fwd_want = fwd_avail.sub(offset as usize);
                         let space_reqd = 18;
                         let (dst1, dst_end1) =
-                            check_bounds(space_reqd, dst, dst_end)?;
+                            check_bounds(nursery, space_reqd, dst, dst_end)?;
                         let dst_after_tag = write(dst1, INDIRECTION_TAG);
                         let dst_after_indr = write(dst_after_tag, fwd_want);
                         Ok((null_mut(), dst_after_indr, dst_end1, Some(tag)))
@@ -559,7 +492,9 @@ fn copy_packed(
                         write(src, COPIED_TO_TAG);
                         write(src_after_tag, dst);
                         // Continue in the next chunk.
-                        copy_packed(datatype, next_chunk, dst, dst_end)
+                        copy_packed(
+                            nursery, datatype, next_chunk, dst, dst_end,
+                        )
                     }
                     // A pointer to a value in another buffer; copy this value
                     // and then switch back to copying rest of the source buffer.
@@ -569,10 +504,12 @@ fn copy_packed(
                     INDIRECTION_TAG => {
                         let (pointee, _): (*mut i8, _) = read(src_after_tag);
                         let (_, dst_after_pointee, dst_after_pointee_end, _) =
-                            copy_packed(datatype, pointee, dst, dst_end)?;
+                            copy_packed(
+                                nursery, datatype, pointee, dst, dst_end,
+                            )?;
                         // Add a forwarding pointer in the source buffer.
                         write(src, COPIED_TO_TAG);
-                        let src_after_indr = write(src_after_tag, dst1);
+                        let src_after_indr = write(src_after_tag, dst);
                         // Return 1 past the indirection pointer as src_after
                         // and the dst_after that copy_packed returned.
                         Ok((
@@ -593,8 +530,9 @@ fn copy_packed(
                         {
                             // Scope for mutable variables dst_mut and src_mut.
 
-                            let (mut dst_mut, mut dst_end_mut) =
-                                check_bounds(space_reqd, dst, dst_end)?;
+                            let (mut dst_mut, mut dst_end_mut) = check_bounds(
+                                nursery, space_reqd, dst, dst_end,
+                            )?;
                             // Copy the tag and the fields.
                             dst_mut = write(dst_mut, tag);
                             dst_mut.copy_from_nonoverlapping(
@@ -626,6 +564,7 @@ fn copy_packed(
                             for ty in field_tys.iter() {
                                 let (src1, dst1, dst_end1, field_tag) =
                                     copy_packed(
+                                        nursery,
                                         ty,
                                         src_mut,
                                         dst_mut,
@@ -667,6 +606,7 @@ fn promote_to_oldgen() -> Result<()> {
 
 #[inline]
 fn check_bounds(
+    nursery: *mut C_GibNursery,
     space_reqd: isize,
     dst: *mut i8,
     dst_end: *const i8,
@@ -675,7 +615,7 @@ fn check_bounds(
         let space_avail = dst_end.offset_from(dst);
         if space_avail < space_reqd {
             // TODO(ckoparkar): see the TODO in copy_readers.
-            let (new_dst, new_dst_end) = nursery_malloc(1024)?;
+            let (new_dst, new_dst_end) = nursery_malloc(nursery, 1024)?;
             let dst_after_tag = write(dst, REDIRECTION_TAG);
             write(dst_after_tag, new_dst);
             Ok((new_dst, new_dst_end))
@@ -686,50 +626,45 @@ fn check_bounds(
 }
 
 #[inline]
-fn nursery_malloc(size: u64) -> Result<(*mut i8, *const i8)> {
+fn nursery_malloc(
+    nursery: *mut C_GibNursery,
+    size: u64,
+) -> Result<(*mut i8, *const i8)> {
     unsafe {
-        let old = gib_global_nursery_alloc_ptr as *mut i8;
-        let bump = gib_global_nursery_alloc_ptr.add(size as usize);
+        let old = (*nursery).alloc as *mut i8;
+        let bump = old.add(size as usize);
+        let end = (*nursery).alloc_end as *mut i8;
         // Check if there's enough space in the nursery to fulfill the request.
         //
         // CSK: Do we have to check this? Since we're copying things which are
         // already in the from-space, in the worst case we'll copy everything
         // but all of from-space should always fit in the to-space.
-        if bump <= gib_global_nursery_alloc_ptr_end {
-            gib_global_nursery_alloc_ptr = bump;
+        if bump <= end {
+            (*nursery).alloc = bump;
             Ok((old, bump))
         } else {
             Err(RtsError::Gc(format!(
                 "nursery_malloc: out of space, requested={:?}, available={:?}",
                 size,
-                gib_global_nursery_alloc_ptr_end
-                    .offset_from(gib_global_nursery_alloc_ptr)
+                end.offset_from(old)
             )))
         }
     }
 }
 
 #[inline]
-fn allocator_in_fromspace() -> bool {
-    unsafe { gib_global_nursery_alloc_ptr < gib_global_nursery_to_space_start }
+fn allocator_in_tospace(nursery: *mut C_GibNursery) -> bool {
+    unsafe { (*nursery).alloc > (*nursery).ts_start }
 }
 
-#[inline]
-fn allocator_in_tospace() -> bool {
-    unsafe { gib_global_nursery_alloc_ptr > gib_global_nursery_to_space_start }
+fn allocator_space_available(nursery: *mut C_GibNursery) -> isize {
+    unsafe { (*nursery).alloc_end.offset_from((*nursery).alloc) }
 }
 
-fn allocator_space_available() -> isize {
+fn allocator_switch_to_tospace(nursery: *mut C_GibNursery) {
     unsafe {
-        gib_global_nursery_alloc_ptr_end
-            .offset_from(gib_global_nursery_alloc_ptr)
-    }
-}
-
-fn allocator_switch_to_tospace() {
-    unsafe {
-        gib_global_nursery_alloc_ptr = gib_global_nursery_to_space_start;
-        gib_global_nursery_alloc_ptr_end = gib_global_nursery_to_space_end;
+        (*nursery).alloc = (*nursery).ts_start;
+        (*nursery).alloc_end = (*nursery).ts_end;
     }
 }
 

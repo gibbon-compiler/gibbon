@@ -50,9 +50,9 @@ static const uint64_t gib_global_max_chunk_size = (1 * GB);
 // Runtime arguments, values updated by the flags parser.
 static GibInt gib_global_size_param = 1;
 static GibInt gib_global_iters_param = 1;
-static char *gib_global_bench_prog_param = NULL;
-static char *gib_global_benchfile_param = NULL;
-static char *gib_global_arrayfile_param = NULL;
+static char *gib_global_bench_prog_param = (char *) NULL;
+static char *gib_global_benchfile_param = (char *) NULL;
+static char *gib_global_arrayfile_param = (char *) NULL;
 static int64_t gib_global_arrayfile_length_param = -1;
 
 // Number of regions allocated.
@@ -326,7 +326,7 @@ inline GibPtr gib_dict_lookup_ptr(GibSymDict *ptr, GibSym key)
 
 inline GibSymSet *gib_empty_set(void)
 {
-    return NULL;
+    return (GibSymSet *) NULL;
 }
 
 inline GibSymSet *gib_insert_set(GibSymSet *set, int sym)
@@ -356,7 +356,7 @@ inline GibBool gib_contains_set(GibSymSet *set, int sym)
 
 inline GibSymHash *gib_empty_hash(void)
 {
-    return NULL;
+    return (GibSymHash *) NULL;
 }
 
 inline GibSymHash *gib_insert_hash(GibSymHash *hash, int k, int v)
@@ -404,7 +404,7 @@ static GibSym rightparen_symbol = -1;
 
 
 // important! initialize to NULL
-static GibSymtable *global_sym_table = NULL;
+static GibSymtable *global_sym_table = (GibSymtable *) NULL;
 
 void gib_add_symbol(GibSym idx, char *value)
 {
@@ -710,8 +710,8 @@ double gib_sum_timing_array(GibVector *times)
 // #define _GIBBON_DEBUG
 #warning "Using bump allocator."
 
-static __thread char *gib_global_bumpalloc_heap_ptr = (char*)NULL;
-static __thread char *gib_global_bumpalloc_heap_ptr_end = (char*)NULL;
+static __thread char *gib_global_bumpalloc_heap_ptr = (char *) NULL;
+static __thread char *gib_global_bumpalloc_heap_ptr_end = (char *) NULL;
 static char *gib_global_saved_heap_ptr_stack[100];
 static int gib_global_num_saved_heap_ptr = 0;
 
@@ -789,8 +789,8 @@ inline GibList *gib_list_alloc(size_t data_size)
     // GibList *ls = gib_alloc(sizeof(GibList));
     GibList *ls = gib_bumpalloc(sizeof(GibList));
     ls->ll_data_size = data_size;
-    ls->ll_data = NULL;
-    ls->ll_next = NULL;
+    ls->ll_data = (void *) NULL;
+    ls->ll_next = (GibList *) NULL;
     return ls;
 }
 
@@ -1006,8 +1006,8 @@ GibRegionAlloc *gib_alloc_region(uint64_t size)
     footer->rf_reg_metadata_ptr = reg_meta;
     footer->rf_seq_no = 1;
     footer->rf_size = size;
-    footer->rf_next = NULL;
-    footer->rf_prev = NULL;
+    footer->rf_next = (GibRegionFooter *) NULL;
+    footer->rf_prev = (GibRegionFooter *) NULL;
 
     GibRegionAlloc *region = gib_alloc(sizeof(GibRegionAlloc));
     region->ra_in_nursery = false;
@@ -1043,7 +1043,7 @@ GibChunkAlloc gib_alloc_chunk(GibCursor end_old_chunk)
     new_footer->rf_reg_metadata_ptr = footer->rf_reg_metadata_ptr;
     new_footer->rf_seq_no = footer->rf_seq_no + 1;
     new_footer->rf_size = newsize;
-    new_footer->rf_next = NULL;
+    new_footer->rf_next = (GibRegionFooter *) NULL;
     new_footer->rf_prev = footer;
 
 #ifdef _GIBBON_DEBUG
@@ -1253,11 +1253,11 @@ GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
         return footer;
     } else if (footer->rf_prev == NULL) {
         fprintf(stderr, "No previous chunk found at rf_seq_no: %" PRIu16, footer->rf_seq_no);
-        return NULL;
+        return (GibRegionFooter *) NULL;
     } else {
         gib_trav_to_first_chunk((GibRegionFooter *) footer->rf_prev);
     }
-    return NULL;
+    return (GibRegionFooter *) NULL;
 }
 
 inline uint16_t gib_get_ref_count(GibCursor end_ptr)
@@ -1300,13 +1300,6 @@ void gib_print_global_region_count(void)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Nursery
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
 // 4 megabytes for each semi-space.
 // #define NURSERY_SIZE (4 * MB)
 
@@ -1314,116 +1307,89 @@ void gib_print_global_region_count(void)
 #define NURSERY_SIZE (4 * KB)
 
 // If a region is over this size, alloc to refcounted heap directly.
-#define NURSERY_REGION_MAX_SIZE (2 * KB)
+#define NURSERY_REGION_MAX_SIZE (NURSERY_SIZE / 2)
 
-// Nursery:
-char *gib_global_nursery_from_space_start = (char*) NULL;
-char *gib_global_nursery_to_space_start = (char*) NULL;
-char *gib_global_nursery_to_space_end = (char*) NULL;
+// TODO(ckopaprkar): The shadow stack doesn't grow and we don't check for
+// overflows at the moment. But a 4MB stack probably wouldn't overflow since
+// each stack frame is only 12 bytes.
+#define SHADOWSTACK_SIZE (4 * MB)
 
-// Flag.
-bool gib_global_nursery_initialized = false;
+// Array of nurseries, indexed by thread_id.
+GibNursery *gib_global_nurseries = (GibNursery *) NULL;
 
-// The start and end pointers for the current allocation space being used.
-char *gib_global_nursery_alloc_ptr = (char*) NULL;
-char *gib_global_nursery_alloc_ptr_end = (char*) NULL;
+// Shadow stacks for readable and writeable locations respectively,
+// indexed by thread_id.
+GibShadowstack *gib_global_read_shadowstacks = (GibShadowstack *) NULL;
+GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 
-void gib_nursery_initialize(void)
+void gib_nursery_initialize(GibNursery *nursery);
+void gib_shadowstack_initialize(GibShadowstack *stack);
+
+// Initialize nurseries, shadow stacks.
+void gib_storage_initialize(void)
 {
-    gib_global_nursery_from_space_start = (char*) gib_alloc(NURSERY_SIZE * 2);
-    if (gib_global_nursery_from_space_start == NULL) {
+    // Initialize shadow stacks.
+    uint64_t ss;
+    gib_global_read_shadowstacks =
+            (GibShadowstack*) gib_alloc(gib_global_num_threads *
+                                        sizeof(GibShadowstack));
+    gib_global_write_shadowstacks =
+            (GibShadowstack*) gib_alloc(gib_global_num_threads *
+                                        sizeof(GibShadowstack));
+    for (ss = 0; ss < gib_global_num_threads; ss++) {
+        gib_shadowstack_initialize(&(gib_global_read_shadowstacks[ss]));
+        gib_shadowstack_initialize(&(gib_global_write_shadowstacks[ss]));
+     }
+
+    // Initialize nurseries.
+    uint64_t n;
+    gib_global_nurseries = (GibNursery*) gib_alloc(gib_global_num_threads *
+                                                   sizeof(GibNursery));
+    for (n = 0; n < gib_global_num_threads; n++) {
+        gib_nursery_initialize(&(gib_global_nurseries[n]));
+     }
+}
+
+// Initialize a nursery.
+void gib_nursery_initialize(GibNursery *nursery)
+{
+    nursery->n_step = 0;
+    nursery->n_fs_start = (char*) gib_alloc(NURSERY_SIZE * 2);
+    if (nursery->n_fs_start == NULL) {
         fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", (NURSERY_SIZE*2));
         exit(1);
     }
-    gib_global_nursery_to_space_start = gib_global_nursery_from_space_start + NURSERY_SIZE;
-    gib_global_nursery_to_space_end = gib_global_nursery_to_space_start + NURSERY_SIZE;
-    gib_global_nursery_alloc_ptr = gib_global_nursery_from_space_start;
-    gib_global_nursery_alloc_ptr_end = gib_global_nursery_to_space_start;
-
-    gib_global_nursery_initialized = true;
+    nursery->n_fs_end = nursery->n_fs_start + NURSERY_SIZE;
+    nursery->n_ts_start = nursery->n_fs_end;
+    nursery->n_ts_end = nursery->n_ts_start + NURSERY_SIZE;
+    nursery->n_alloc = nursery->n_fs_start;
+    nursery->n_alloc_end = nursery->n_fs_end;
+    nursery->n_initialized = true;
     return;
 }
 
-void gib_nursery_reset(void)
+// Initialize a shadow stack.
+void gib_shadowstack_initialize(GibShadowstack* stack)
 {
-    gib_global_nursery_alloc_ptr = gib_global_nursery_from_space_start;
-    gib_global_nursery_alloc_ptr_end = gib_global_nursery_to_space_start;
-    return;
-}
-
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Shadow stack
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-
-// CK: Not sure how big should this be, but it's same as the nursery for now.
-#define SHADOWSTACK_SIZE (4 * MB)
-
-// Shadow stack for readable locations:
-char *gib_global_read_shadowstack_start = (char*) NULL;
-char *gib_global_read_shadowstack_end = (char*) NULL;
-char *gib_global_read_shadowstack_alloc_ptr = (char*) NULL;
-
-// Shadow stack for writeable locations:
-char *gib_global_write_shadowstack_start = (char*) NULL;
-char *gib_global_write_shadowstack_end = (char*) NULL;
-char *gib_global_write_shadowstack_alloc_ptr = (char*) NULL;
-
-// Flag.
-bool gib_global_shadowstack_initialized = false;
-
-void gib_shadowstack_initialize(void)
-{
-    // Initialize shadow stack for read locations.
-    gib_global_read_shadowstack_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
-    if (gib_global_read_shadowstack_start == NULL) {
-        fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", SHADOWSTACK_SIZE);
+    stack->ss_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
+    if (stack->ss_start == NULL) {
+        fprintf(stderr, "gib_initialize_shadowstack: gib_alloc failed: %ld", SHADOWSTACK_SIZE);
         exit(1);
     }
-    gib_global_read_shadowstack_end = gib_global_read_shadowstack_start + SHADOWSTACK_SIZE;
-    gib_global_read_shadowstack_alloc_ptr = gib_global_read_shadowstack_start;
-
-
-    // Initialize shadow stack for write locations.
-    gib_global_write_shadowstack_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
-    if (gib_global_write_shadowstack_start == NULL) {
-        fprintf(stderr, "gib_initialize_nursery: gib_alloc failed: %ld", SHADOWSTACK_SIZE);
-        exit(1);
-    }
-    gib_global_write_shadowstack_end = gib_global_write_shadowstack_start + SHADOWSTACK_SIZE;
-    gib_global_write_shadowstack_alloc_ptr = gib_global_write_shadowstack_start;
-
-    gib_global_shadowstack_initialized = true;
+    stack->ss_end = stack->ss_start + SHADOWSTACK_SIZE;
+    stack->ss_alloc = stack->ss_start;
+    stack->ss_initialized = true;
     return;
 }
 
-void gib_shadowstack_push(GibShadowstackModality rw,
-                          char *ptr,
-                          uint32_t datatype)
+void gib_shadowstack_push(GibShadowstack *stack, char *ptr, uint32_t datatype)
 {
-    char *stack_alloc_ptr, *stack_end;
-    char **stack_alloc_ptr_addr;
-    stack_alloc_ptr = NULL;
-    stack_end = NULL;
-    stack_alloc_ptr_addr = NULL;
-    switch (rw) {
-        case SSM_Read:
-            stack_alloc_ptr = gib_global_read_shadowstack_alloc_ptr;
-            stack_end = gib_global_read_shadowstack_end;
-            stack_alloc_ptr_addr = &gib_global_read_shadowstack_alloc_ptr;
-            break;
-
-        case SSM_Write:
-            stack_alloc_ptr = gib_global_write_shadowstack_alloc_ptr;
-            stack_end = gib_global_write_shadowstack_end;
-            stack_alloc_ptr_addr = &gib_global_write_shadowstack_alloc_ptr;
-            break;
-    }
+    char *stack_alloc_ptr = stack->ss_alloc;
+    char *stack_end = stack->ss_end;
+    char **stack_alloc_ptr_addr = &(stack->ss_alloc);
     size_t size = sizeof(GibShadowstackFrame);
     if (stack_alloc_ptr + size > stack_end) {
-        fprintf(stderr, "gib_shadowstack_push: out of memory, rw=%d", rw);
+        fprintf(stderr, "gib_shadowstack_push: out of memory");
         exit(1);
     }
     GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
@@ -1433,29 +1399,14 @@ void gib_shadowstack_push(GibShadowstackModality rw,
     return;
 }
 
-GibShadowstackFrame *gib_shadowstack_pop(GibShadowstackModality rw)
+GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack)
 {
-    char *stack_alloc_ptr, *stack_start;
-    char **stack_alloc_ptr_addr;
-    stack_alloc_ptr = NULL;
-    stack_start = NULL;
-    stack_alloc_ptr_addr = NULL;
-    switch (rw) {
-        case SSM_Read:
-            stack_alloc_ptr = gib_global_read_shadowstack_alloc_ptr;
-            stack_start = gib_global_read_shadowstack_start;
-            stack_alloc_ptr_addr = &gib_global_read_shadowstack_alloc_ptr;
-            break;
-
-        case SSM_Write:
-            stack_alloc_ptr = gib_global_write_shadowstack_alloc_ptr;
-            stack_start = gib_global_write_shadowstack_start;
-            stack_alloc_ptr_addr = &gib_global_write_shadowstack_alloc_ptr;
-            break;
-    }
+    char *stack_alloc_ptr = stack->ss_alloc;
+    char *stack_start = stack->ss_start;
+    char **stack_alloc_ptr_addr = &(stack->ss_alloc);
     size_t size = sizeof(GibShadowstackFrame);
     if (stack_alloc_ptr - size < stack_start) {
-        fprintf(stderr, "gib_shadowstack_pop: stack empty, rw=%d", rw);
+        fprintf(stderr, "gib_shadowstack_pop: stack empty");
         exit(1);
     }
     (*stack_alloc_ptr_addr) -= size;
@@ -1463,54 +1414,23 @@ GibShadowstackFrame *gib_shadowstack_pop(GibShadowstackModality rw)
     return frame;
 }
 
-int32_t gib_shadowstack_length(GibShadowstackModality rw)
+int32_t gib_shadowstack_length(GibShadowstack *stack)
 {
-    char *stack_alloc_ptr, *stack_start;
-    stack_alloc_ptr = NULL;
-    stack_start = NULL;
-    switch (rw) {
-        case SSM_Read:
-            stack_alloc_ptr = gib_global_read_shadowstack_alloc_ptr;
-            stack_start = gib_global_read_shadowstack_start;
-            break;
-
-        case SSM_Write:
-            stack_alloc_ptr = gib_global_write_shadowstack_alloc_ptr;
-            stack_start = gib_global_write_shadowstack_start;
-            break;
-    }
+    char *stack_alloc_ptr = stack->ss_alloc;
+    char *stack_start = stack->ss_start;
     return ( (stack_alloc_ptr - stack_start) / sizeof(GibShadowstackFrame) );
 }
 
-void gib_shadowstack_print(GibShadowstackModality rw)
+void gib_shadowstack_print_all(GibShadowstack *stack)
 {
-    char *run_ptr, *end_ptr;
-    run_ptr = NULL;
-    end_ptr = NULL;
-    switch (rw) {
-        case SSM_Read:
-            run_ptr = gib_global_read_shadowstack_start;
-            end_ptr = gib_global_read_shadowstack_alloc_ptr;
-            break;
-
-        case SSM_Write:
-            run_ptr = gib_global_write_shadowstack_start;
-            end_ptr = gib_global_write_shadowstack_alloc_ptr;
-            break;
-    }
+    char *run_ptr = stack->ss_start;
+    char *end_ptr = stack->ss_alloc;
     GibShadowstackFrame *frame;
     while (run_ptr < end_ptr) {
         frame = (GibShadowstackFrame *) run_ptr;
         printf("ptr=%p, datatype=%d\n", frame->ssf_ptr, frame->ssf_datatype);
         run_ptr += sizeof(GibShadowstackFrame);
     }
-    return;
-}
-
-void gib_shadowstack_reset(void)
-{
-    gib_global_read_shadowstack_alloc_ptr = gib_global_read_shadowstack_start;
-    gib_global_write_shadowstack_alloc_ptr = gib_global_write_shadowstack_start;
     return;
 }
 
@@ -1550,18 +1470,22 @@ GibRegionAlloc *gib_alloc_region_on_heap(uint64_t size)
 
 GibRegionAlloc *gib_alloc_region_in_nursery(uint64_t size)
 {
-    assert(gib_global_nursery_initialized);
-    char *bump = gib_global_nursery_alloc_ptr + size;
-    if (bump >= gib_global_nursery_alloc_ptr_end) {
-        int error = gib_collect_minor();
+    GibThreadId tid = gib_thread_id();
+    GibNursery *nursery = &(gib_global_nurseries[tid]);
+    GibShadowstack *rstack = &(gib_global_read_shadowstacks[tid]);
+    GibShadowstack *wstack = &(gib_global_write_shadowstacks[tid]);
+    assert(nursery->n_initialized);
+    char *bump = nursery->n_alloc + size;
+    if (bump >= nursery->n_alloc_end) {
+        int error = gib_collect_minor(rstack, wstack, nursery);
         if (error < 0) {
             fprintf(stderr, "Couldn't garbage collect minor gen, errorno=%d", error);
             exit(1);
         }
         return gib_alloc_region_on_heap(size);
     }
-    char *old = gib_global_nursery_alloc_ptr;
-    gib_global_nursery_alloc_ptr = bump;
+    char *old = nursery->n_alloc;
+    nursery->n_alloc = bump;
     GibRegionAlloc *region = gib_alloc(sizeof(GibRegionAlloc));
     region->ra_in_nursery = true;
     region->ra_start = old;
@@ -1689,8 +1613,7 @@ int main(int argc, char **argv)
     }
 
     // Initialize the nursery and shadow stack.
-    gib_nursery_initialize();
-    gib_shadowstack_initialize();
+    gib_storage_initialize();
 
     // Run the program.
     gib_main_expr();
