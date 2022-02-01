@@ -700,12 +700,6 @@ double gib_sum_timing_array(GibVector *times)
  */
 
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Bump allocation for linked-lists
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-
 #ifdef _BUMPALLOC
 // #define _GIBBON_DEBUG
 #warning "Using bump allocator."
@@ -722,11 +716,11 @@ inline void gib_init_bumpalloc(void)
     gib_global_bumpalloc_heap_ptr_end = gib_global_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
 #ifdef _GIBBON_DEBUG
     printf("Arena size for bump alloc: %lld\n", gib_global_biginf_init_chunk_size);
-    printf("gib_bumpalloc/gib_init_bumpalloc DONE: heap_ptr = %p\n", gib_global_bumpalloc_heap_ptr);
+    printf("gib_list_bumpalloc/gib_init_bumpalloc DONE: heap_ptr = %p\n", gib_global_bumpalloc_heap_ptr);
 #endif
 }
 
-void *gib_bumpalloc(int64_t n)
+void *gib_list_bumpalloc(int64_t n)
 {
     if (! gib_global_bumpalloc_heap_ptr) {
         gib_init_bumpalloc();
@@ -771,23 +765,19 @@ void gib_restore_alloc_state(void)
 #else
 // Regular malloc mode:
 void gib_init_bumpalloc(void) {}
-void *gib_bumpalloc(int64_t n) { return gib_alloc(n); }
+void *gib_list_bumpalloc(int64_t n) { return gib_alloc(n); }
 void gib_save_alloc_state(void) {}
 void gib_restore_alloc_state(void) {}
 
 #endif // BUMPALLOC
 
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * List functions
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
+// List API.
 
 inline GibList *gib_list_alloc(size_t data_size)
 {
     // GibList *ls = gib_alloc(sizeof(GibList));
-    GibList *ls = gib_bumpalloc(sizeof(GibList));
+    GibList *ls = gib_list_bumpalloc(sizeof(GibList));
     ls->ll_data_size = data_size;
     ls->ll_data = (void *) NULL;
     ls->ll_next = (GibList *) NULL;
@@ -802,14 +792,14 @@ inline GibBool gib_list_is_empty(GibList *ls)
 inline GibList *gib_list_cons(void *elt, GibList *ls)
 {
     // void* data = gib_alloc(ls->data_size);
-    void* data = gib_bumpalloc(ls->ll_data_size);
+    void* data = gib_list_bumpalloc(ls->ll_data_size);
     if (data == NULL) {
         fprintf(stderr, "gib_list_cons: gib_alloc failed: %ld", ls->ll_data_size);
         exit(1);
     }
     memcpy(data, elt, ls->ll_data_size);
     // GibList *res = gib_alloc(sizeof(GibList));
-    GibList *res = gib_bumpalloc(sizeof(GibList));
+    GibList *res = gib_list_bumpalloc(sizeof(GibList));
     res->ll_data_size = ls->ll_data_size;
     res->ll_data = data;
     res->ll_next = (GibList*) ls;
@@ -837,7 +827,7 @@ inline GibList *gib_list_copy(GibList *ls)
 {
     GibList *ls2 = gib_list_alloc(ls->ll_data_size);
     if (ls->ll_data != NULL) {
-        void* data = gib_bumpalloc(ls->ll_data_size);
+        void* data = gib_list_bumpalloc(ls->ll_data_size);
         memcpy(data, ls->ll_data, ls->ll_data_size);
         ls2->ll_data = data;
     }
@@ -1309,25 +1299,105 @@ void gib_print_global_region_count(void)
 // If a region is over this size, alloc to refcounted heap directly.
 #define NURSERY_REGION_MAX_SIZE (NURSERY_SIZE / 2)
 
+#define NUM_GENERATIONS 3
+
 // TODO(ckopaprkar): The shadow stack doesn't grow and we don't check for
 // overflows at the moment. But a 4MB stack probably wouldn't overflow since
 // each stack frame is only 12 bytes.
 #define SHADOWSTACK_SIZE (4 * MB)
 
+typedef struct gib_nursery {
+    // Step.
+    uint8_t n_step;
+
+    // From space.
+    char *n_fs_start;
+    char *n_fs_end;
+
+    // To space.
+    char *n_ts_start;
+    char *n_ts_end;
+
+    // Current allocation area.
+    char *n_alloc;
+    char *n_alloc_end;
+
+    // Is the allocation aread initialized?
+    bool n_initialized;
+
+} GibNursery;
+
+typedef struct gib_generation {
+    // Generation number.
+    uint8_t g_no;
+
+    // Destination generation for live objects.
+    struct gib_generation *g_dest;
+
+    // Is this the oldest generation?
+    bool g_refcounted;
+
+    // Allocation area.
+    char *g_heap;
+    uint64_t g_heap_size;
+
+} GibGeneration;
+
+
 // Array of nurseries, indexed by thread_id.
 GibNursery *gib_global_nurseries = (GibNursery *) NULL;
 
+// Array of all generations.
+GibGeneration *gib_global_generations = (GibGeneration *) NULL;
+// For convenience.
+GibGeneration *gib_global_gen0 = (GibGeneration *) NULL;
+GibGeneration *gib_global_oldest_gen = (GibGeneration *) NULL;
+
 // Shadow stacks for readable and writeable locations respectively,
 // indexed by thread_id.
+//
+// TODO(ckoparkar): not clear how shadow stacks would be when we have
+// parallel mutators.. These arrays are abstract enough for now.
 GibShadowstack *gib_global_read_shadowstacks = (GibShadowstack *) NULL;
 GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 
+// Initialize nurseries, shadow stacks and generations.
+void gib_storage_initialize(void);
 void gib_nursery_initialize(GibNursery *nursery);
+void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no);
 void gib_shadowstack_initialize(GibShadowstack *stack);
 
-// Initialize nurseries, shadow stacks.
+// Initialize nurseries, shadow stacks and generations.
 void gib_storage_initialize(void)
 {
+    if (gib_global_nurseries != NULL) {
+        return;
+    }
+
+    // Initialize nurseries.
+    uint64_t n;
+    gib_global_nurseries = (GibNursery*) gib_alloc(gib_global_num_threads *
+                                                   sizeof(GibNursery));
+    for (n = 0; n < gib_global_num_threads; n++) {
+        gib_nursery_initialize(&(gib_global_nurseries[n]));
+     }
+
+    // Initialize generations.
+    int g;
+    gib_global_generations = (GibGeneration*) gib_alloc(NUM_GENERATIONS *
+                                                        sizeof(GibGeneration));
+    for (g = 0; g < NUM_GENERATIONS; g++) {
+        gib_generation_initialize(&(gib_global_generations[g]), g);
+    }
+    gib_global_gen0 = &(gib_global_generations[0]);
+    gib_global_oldest_gen = &(gib_global_generations[NUM_GENERATIONS-1]);
+    // Set up destination pointers in each generation.
+    for (g = 0; g < NUM_GENERATIONS-1; g++) {
+        gib_global_generations[g].g_dest = &(gib_global_generations[g+1]);
+    }
+    gib_global_oldest_gen->g_dest = gib_global_oldest_gen;
+    gib_global_oldest_gen->g_refcounted = true;
+
     // Initialize shadow stacks.
     uint64_t ss;
     gib_global_read_shadowstacks =
@@ -1339,14 +1409,6 @@ void gib_storage_initialize(void)
     for (ss = 0; ss < gib_global_num_threads; ss++) {
         gib_shadowstack_initialize(&(gib_global_read_shadowstacks[ss]));
         gib_shadowstack_initialize(&(gib_global_write_shadowstacks[ss]));
-     }
-
-    // Initialize nurseries.
-    uint64_t n;
-    gib_global_nurseries = (GibNursery*) gib_alloc(gib_global_num_threads *
-                                                   sizeof(GibNursery));
-    for (n = 0; n < gib_global_num_threads; n++) {
-        gib_nursery_initialize(&(gib_global_nurseries[n]));
      }
 }
 
@@ -1365,6 +1427,16 @@ void gib_nursery_initialize(GibNursery *nursery)
     nursery->n_alloc = nursery->n_fs_start;
     nursery->n_alloc_end = nursery->n_fs_end;
     nursery->n_initialized = true;
+    return;
+}
+
+void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
+{
+    gen->g_no = gen_no;
+    gen->g_dest = (GibGeneration *) NULL;
+    gen->g_refcounted = false;
+    gen->g_heap = (char *) NULL;
+    gen->g_heap_size = 0;
     return;
 }
 
@@ -1435,12 +1507,6 @@ void gib_shadowstack_print_all(GibShadowstack *stack)
 }
 
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Regions, chunks etc.
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-
 GibRegionAlloc *gib_alloc_region_on_heap(uint64_t size);
 GibRegionAlloc *gib_alloc_region_in_nursery(uint64_t size);
 
@@ -1470,10 +1536,9 @@ GibRegionAlloc *gib_alloc_region_on_heap(uint64_t size)
 
 GibRegionAlloc *gib_alloc_region_in_nursery(uint64_t size)
 {
-    GibThreadId tid = gib_thread_id();
-    GibNursery *nursery = &(gib_global_nurseries[tid]);
-    GibShadowstack *rstack = &(gib_global_read_shadowstacks[tid]);
-    GibShadowstack *wstack = &(gib_global_write_shadowstacks[tid]);
+    GibNursery *nursery = &(gib_global_nurseries[0]);
+    GibShadowstack *rstack = &(gib_global_read_shadowstacks[0]);
+    GibShadowstack *wstack = &(gib_global_write_shadowstacks[0]);
     assert(nursery->n_initialized);
     char *bump = nursery->n_alloc + size;
     if (bump >= nursery->n_alloc_end) {

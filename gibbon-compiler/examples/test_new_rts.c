@@ -209,9 +209,8 @@ GibInt do_reverse(GibInt n_19_183_289)
     *(GibBoxedTag *) r_720 = 0;
     GibCursor writetag_1010 = r_720 + 1;
 
-    GibThreadId tid = gib_thread_id();
-    GibShadowstack *rstack = &(gib_global_read_shadowstacks[tid]);
-    GibShadowstack *wstack = &(gib_global_write_shadowstacks[tid]);
+    GibShadowstack *rstack = &(gib_global_read_shadowstacks[0]);
+    GibShadowstack *wstack = &(gib_global_write_shadowstacks[0]);
 
     // xs
     gib_shadowstack_push(rstack, pvrtmp_1385, List_T);
@@ -263,9 +262,8 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
         loc_614 = chunk_start_14;
     }
 
-    GibThreadId tid = gib_thread_id();
-    GibShadowstack *rstack = &(gib_global_read_shadowstacks[tid]);
-    GibShadowstack *wstack = &(gib_global_write_shadowstacks[tid]);
+    GibShadowstack *rstack = &(gib_global_read_shadowstacks[0]);
+    GibShadowstack *wstack = &(gib_global_write_shadowstacks[0]);
 
     GibBoxedTag tmpval_1355 = *(GibBoxedTag *) xs_36_179_284;
 
@@ -336,9 +334,8 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
             *(GibInt *) writetag_1004 = tmpval_1361;
             GibCursor writecur_1005 = writetag_1004 + sizeof(GibInt);
 
-            tid = gib_thread_id();
-            rstack = &(gib_global_read_shadowstacks[tid]);
-            wstack = &(gib_global_write_shadowstacks[tid]);
+            rstack = &(gib_global_read_shadowstacks[0]);
+            wstack = &(gib_global_write_shadowstacks[0]);
 
             // Push to shadow stack.
             // xs

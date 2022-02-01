@@ -262,21 +262,9 @@ double gib_sum_timing_array(GibVector *times);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Bump allocation for linked-lists
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-void gib_init_bumpalloc(void);
-void *gib_bumpalloc(int64_t n);
-void gib_save_alloc_state(void);
-void gib_restore_alloc_state(void);
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * List functions
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
+// Bump allocation.
+void gib_list_save_alloc_state(void);
+void gib_list_restore_alloc_state(void);
 
 typedef struct gib_list {
     size_t ll_data_size;
@@ -354,34 +342,8 @@ void gib_print_global_region_count(void);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-typedef struct gib_nursery {
-    // Step.
-    uint8_t n_step;
-
-    // From space.
-    char *n_fs_start;
-    char *n_fs_end;
-
-    // To space.
-    char *n_ts_start;
-    char *n_ts_end;
-
-    // Current allocation area.
-    char *n_alloc;
-    char *n_alloc_end;
-
-    // Is the allocation aread initialized?
-    bool n_initialized;
-
-} GibNursery;
-
-typedef struct gib_shadowstack_frame {
-    char *ssf_ptr;
-
-    // An enum in C, which is 4 bytes.
-    // The enum (GibDatatype) will be defined in the generated program.
-    uint32_t ssf_datatype;
-} GibShadowstackFrame;
+// An abstract type declaration is sufficient here.
+typedef struct gib_nursery GibNursery;
 
 typedef struct gib_shadowstack {
     bool ss_initialized;
@@ -390,22 +352,30 @@ typedef struct gib_shadowstack {
     char *ss_alloc;
 } GibShadowstack;
 
-// Array of nurseries, indexed by thread_id.
-extern GibNursery *gib_global_nurseries;
+typedef struct gib_shadowstack_frame {
+    char *ssf_ptr;
+
+    // An enum in C, which is 4 bytes.
+    // The enum (GibDatatype) will be defined in the generated program.
+    uint32_t ssf_datatype;
+
+} GibShadowstackFrame;
 
 // Shadow stacks for readable and writeable locations respectively,
 // indexed by thread_id.
+//
+// TODO(ckoparkar): not clear how shadow stacks would be when we have
+// parallel mutators.. These arrays are abstract enough for now.
 extern GibShadowstack *gib_global_read_shadowstacks;
 extern GibShadowstack *gib_global_write_shadowstacks;
 
-// Initialize nurseries, shadow stacks.
-void gib_storage_initialize(void);
-
+// Shadowstack API.
 void gib_shadowstack_push(GibShadowstack *stack, char *ptr, uint32_t datatype);
 GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack);
 int32_t gib_shadowstack_length(GibShadowstack *stack);
 void gib_shadowstack_print_all(GibShadowstack *stack);
 
+// Region allocation.
 GibRegionAlloc *gib_alloc_region2(uint64_t size);
 void gib_free_region2(GibRegionAlloc *region);
 

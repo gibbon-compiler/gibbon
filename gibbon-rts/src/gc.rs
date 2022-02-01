@@ -559,8 +559,9 @@ fn copy_packed(
                                 // TODO: check if src_mut != burn?
                                 write_bytes(burn, COPIED_TAG, i as usize);
                             }
-                            // TODO(ckoparkar): instead of recursion, use a
-                            // worklist alogorithm.
+                            // TODO(ckoparkar):
+                            // (1) instead of recursion, use a worklist
+                            // (2) handle redirection nodes properly
                             for ty in field_tys.iter() {
                                 let (src1, dst1, dst_end1, field_tag) =
                                     copy_packed(
@@ -572,20 +573,17 @@ fn copy_packed(
                                     )?;
                                 // Must immediately stop copying upon reaching
                                 // the cauterized tag.
-                                match field_tag {
-                                    Some(CAUTERIZED_TAG) => {
-                                        return Ok((
-                                            null_mut(),
-                                            null_mut(),
-                                            null(),
-                                            field_tag,
-                                        ));
-                                    }
-                                    _ => {
-                                        src_mut = src1;
-                                        dst_mut = dst1;
-                                        dst_end_mut = dst_end1;
-                                    }
+                                if field_tag == CAUTERIZED_TAG {
+                                    return Ok((
+                                        null_mut(),
+                                        null_mut(),
+                                        null(),
+                                        field_tag,
+                                    ));
+                                } else {
+                                    src_mut = src1;
+                                    dst_mut = dst1;
+                                    dst_end_mut = dst_end1;
                                 }
                             }
                             Ok((src_mut, dst_mut, dst_end_mut, Some(tag)))
