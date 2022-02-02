@@ -136,11 +136,11 @@ pub extern "C" fn gib_info_table_insert_scalar(
 
 #[no_mangle]
 pub extern "C" fn gib_collect_minor(
-    rstack: *mut C_GibShadowstack,
-    wstack: *mut C_GibShadowstack,
-    nursery: *mut C_GibNursery,
+    rstack_ptr: *mut C_GibShadowstack,
+    wstack_ptr: *mut C_GibShadowstack,
+    nursery_ptr: *mut C_GibNursery,
 ) -> i32 {
-    match gc::collect_minor(rstack, wstack, nursery) {
+    match gc::collect_minor(rstack_ptr, wstack_ptr, nursery_ptr) {
         Ok(()) => 0,
         Err(err) => {
             if cfg!(debug_assertions) {
