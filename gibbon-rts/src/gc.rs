@@ -252,11 +252,11 @@ pub fn collect_minor(
         }
         shadowstack_debugprint(rstack, wstack);
     }
-    if allocator_in_tospace(nursery) {
+    if nursery_allocator_in_tospace(nursery) {
         promote_to_oldgen()
     } else {
         let current_space_avail = allocator_space_available(nursery);
-        copy_to_tospace(rstack, wstack, nursery)?;
+        evac_to_tospace(rstack, wstack, nursery)?;
         let new_space_avail = allocator_space_available(nursery);
         // Promote everything to the older generation if we couldn't
         // free up any space after a minor collection.
@@ -269,7 +269,7 @@ pub fn collect_minor(
 }
 
 /// Copy data in from-space to to-space.
-fn copy_to_tospace(
+fn evac_to_tospace(
     rstack: *mut C_GibShadowstack,
     wstack: *mut C_GibShadowstack,
     nursery: *mut C_GibNursery,
@@ -277,7 +277,7 @@ fn copy_to_tospace(
     allocator_switch_to_tospace(nursery);
     cauterize_writers(wstack)?;
     // Also uncauterizes writers.
-    copy_readers(rstack, nursery)
+    evac_readers(rstack, nursery)
 }
 
 /// Write a CAUTERIZED_TAG at all write cursors so that the collector knows
@@ -296,7 +296,7 @@ fn cauterize_writers(wstack: *mut C_GibShadowstack) -> Result<()> {
 
 /// Copy values at all read cursors from one place to another. Uses
 /// nursery_malloc to allocate memory for the destination.
-fn copy_readers(
+fn evac_readers(
     rstack: *mut C_GibShadowstack,
     nursery: *mut C_GibNursery,
 ) -> Result<()> {
@@ -320,7 +320,7 @@ fn copy_readers(
                     (*frame).ptr = dst;
                 }
                 // A packed type that should copied by referring to the info table.
-                Some(DatatypeInfo::Packed(_packed_info)) => {
+                Some(DatatypeInfo::Packed(packed_info)) => {
                     // TODO(ckoparkar): How big should this chunk be?
                     //
                     // If we have variable sized initial chunks based on the
@@ -331,7 +331,7 @@ fn copy_readers(
                     let (dst, dst_end) = nursery_malloc(nursery, 1024)?;
                     let src = (*frame).ptr as *mut i8;
                     let (src_after, dst_after, _dst_after_end, tag) =
-                        copy_packed(nursery, &datatype, src, dst, dst_end)?;
+                        evac_packed(nursery, packed_info, src, dst, dst_end)?;
                     // Update the pointer in shadowstack.
                     (*frame).ptr = dst;
                     // See (1) below required for supporting a COPIED_TAG;
@@ -357,30 +357,7 @@ fn copy_readers(
     }
 }
 
-/// Copy a packed value by referring to the info table.
-///
-/// Arguments:
-///
-/// * nursery - allocation area to copy data into
-/// * datatype - an index into the info table
-/// * src - a pointer to the value to be copied in source buffer
-/// * dst - a pointer to the value's new destination in the destination buffer
-/// * dst_end - end of the destination buffer for bounds checking
-///
-/// Returns: (src_after, dst_after)
-///
-/// src_after - a pointer in the source buffer that's one past the
-///             last cell occupied by the value that was copied
-/// dst_after - a pointer in the destination buffer that's one past the
-///             last cell occupied by the value in it's new home
-/// dst_end   - end of the destination buffer (which can change during copying
-///             due to bounds checking)
-/// maybe_tag - when copying a packed value, return the tag of the the datacon
-///             that this function was called with. copy_readers uses this tag
-///             to decide whether it should write a forwarding pointer at
-///             the end of the source buffer.
-///
-fn copy_packed(
+fn evacuate(
     nursery: *mut C_GibNursery,
     datatype: &C_GibDatatype,
     src: *mut i8,
@@ -391,7 +368,7 @@ fn copy_packed(
         match INFO_TABLE.get().unwrap().get(datatype) {
             None => {
                 return Err(RtsError::Gc(format!(
-                    "copy_packed: Unknown datatype, {:?}",
+                    "evacuate: Unknown datatype, {:?}",
                     datatype
                 )));
             }
@@ -401,194 +378,216 @@ fn copy_packed(
                 Ok((src.add(size1), dst.add(size1), dst_end, None))
             }
             Some(DatatypeInfo::Packed(packed_info)) => {
-                let (tag, src_after_tag): (C_GibPackedTag, *mut i8) =
-                    read_mut(src);
-                match tag {
-                    // Nothing to copy. Just update the write cursor's new
-                    // address in shadowstack.
-                    CAUTERIZED_TAG => {
-                        let (wframe_ptr, _): (*const i8, _) =
-                            read(src_after_tag);
-                        let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
-                        if cfg!(debug_assertions) {
-                            println!("{:?}", wframe);
-                        }
-                        (*wframe).ptr = src;
-                        Ok((null_mut(), null_mut(), null(), Some(tag)))
-                    }
-                    // This is a forwarding pointer. Use this to write an
-                    // indirection in the destination buffer.
-                    COPIED_TO_TAG => {
-                        let (fwd_ptr, src_after_fwd_ptr): (*mut i8, _) =
-                            read_mut(src_after_tag);
-                        let space_reqd = 18;
-                        let (dst1, dst_end1) =
-                            check_bounds(nursery, space_reqd, dst, dst_end)?;
-                        let dst_after_tag = write(dst1, INDIRECTION_TAG);
-                        let dst_after_indr = write(dst_after_tag, fwd_ptr);
-                        Ok((
-                            src_after_fwd_ptr,
-                            dst_after_indr,
-                            dst_end1,
-                            Some(tag),
-                        ))
-                    }
-                    // Algorithm:
-                    //
-                    // Scan to the right for the next COPIED_TO_TAG, then take
-                    // the negative offset of that pointer to find it's position
-                    // in the destination buffer. Write an indirection to that
-                    // in the spot you would have copied the data to.
-                    //
-                    // Assumptions:
-                    // The correctness of this depends on guaranteeing two
-                    // properties:
-                    //
-                    // (1) We always end a chunk with a CopiedTo tag:
-                    //
-                    //     this is taken care of by copy_readers.
-                    //
-                    // (2) There are no indirections inside the interval (before
-                    //     or after copying), which would cause it to be a
-                    //     different size in the from and to space and thus
-                    //     invalidate offsets within it:
-                    //
-                    //     we are able to guarantee this because indirections
-                    //     themselves provide exactly enough room to write a
-                    //     COPIED_TO_TAG and forwarding pointer.
-                    COPIED_TAG => {
-                        let (mut scan_tag, mut scan_ptr): (
-                            C_GibPackedTag,
-                            *const i8,
-                        ) = read(src_after_tag);
-                        while scan_tag != COPIED_TO_TAG {
-                            (scan_tag, scan_ptr) = read(scan_ptr);
-                        }
-                        // At this point the scan_ptr is one past the
-                        // COPIED_TO_TAG i.e. at the forwarding pointer.
-                        let offset = scan_ptr.offset_from(src) - 1;
-                        // The forwarding pointer that's available.
-                        let (fwd_avail, _): (*const i8, _) = read(scan_ptr);
-                        // The position in the destination buffer we wanted.
-                        let fwd_want = fwd_avail.sub(offset as usize);
-                        let space_reqd = 18;
-                        let (dst1, dst_end1) =
-                            check_bounds(nursery, space_reqd, dst, dst_end)?;
-                        let dst_after_tag = write(dst1, INDIRECTION_TAG);
-                        let dst_after_indr = write(dst_after_tag, fwd_want);
-                        Ok((null_mut(), dst_after_indr, dst_end1, Some(tag)))
-                    }
-                    // Indicates end-of-current-chunk in the source buffer i.e.
-                    // there's nothing more to copy in the current chunk.
-                    // Follow the redirection pointer to the next chunk and
-                    // continue copying there.
-                    //
-                    // POLICY DECISION:
-                    // Redirections are always inlined in the current version.
-                    REDIRECTION_TAG => {
-                        let (next_chunk, _): (*mut i8, _) =
-                            read(src_after_tag);
-                        // Add a forwarding pointer in the source buffer.
-                        write(src, COPIED_TO_TAG);
-                        write(src_after_tag, dst);
-                        // Continue in the next chunk.
-                        copy_packed(
-                            nursery, datatype, next_chunk, dst, dst_end,
-                        )
-                    }
-                    // A pointer to a value in another buffer; copy this value
-                    // and then switch back to copying rest of the source buffer.
-                    //
-                    // POLICY DECISION:
-                    // Indirections are always inlined in the current version.
-                    INDIRECTION_TAG => {
-                        let (pointee, _): (*mut i8, _) = read(src_after_tag);
-                        let (_, dst_after_pointee, dst_after_pointee_end, _) =
-                            copy_packed(
-                                nursery, datatype, pointee, dst, dst_end,
-                            )?;
-                        // Add a forwarding pointer in the source buffer.
-                        write(src, COPIED_TO_TAG);
-                        let src_after_indr = write(src_after_tag, dst);
-                        // Return 1 past the indirection pointer as src_after
-                        // and the dst_after that copy_packed returned.
-                        Ok((
-                            src_after_indr,
-                            dst_after_pointee,
-                            dst_after_pointee_end,
-                            Some(tag),
-                        ))
-                    }
-                    // Regular datatype, copy.
-                    _ => {
-                        let DataconInfo { scalar_bytes, field_tys, .. } =
-                            packed_info.get(&tag).unwrap();
-                        // Check bound of the destination buffer before copying.
-                        // Reserve additional space for a redirection node or a
-                        // forwarding pointer.
-                        let space_reqd: isize = (32 + *scalar_bytes).into();
-                        {
-                            // Scope for mutable variables dst_mut and src_mut.
+                evac_packed(nursery, packed_info, src, dst, dst_end)
+            }
+        }
+    }
+}
 
-                            let (mut dst_mut, mut dst_end_mut) = check_bounds(
-                                nursery, space_reqd, dst, dst_end,
-                            )?;
-                            // Copy the tag and the fields.
-                            dst_mut = write(dst_mut, tag);
-                            dst_mut.copy_from_nonoverlapping(
-                                src_after_tag,
-                                *scalar_bytes as usize,
-                            );
-                            let mut src_mut =
-                                src_after_tag.add(*scalar_bytes as usize);
-                            dst_mut = dst_mut.add(*scalar_bytes as usize);
-                            // Add forwarding pointers:
-                            // if there's enough space, write a COPIED_TO tag and
-                            // dst's address at src. Otherwise write a COPIED tag.
-                            // After the forwarding pointer, burn the rest of
-                            // space previously occupied by scalars.
-                            if *scalar_bytes >= 8 {
-                                let mut burn = write(src, COPIED_TO_TAG);
-                                burn = write(burn, dst);
-                                // TODO: check if src_mut != burn?
-                                let i = src_mut.offset_from(burn);
-                                write_bytes(burn, COPIED_TAG, i as usize);
-                            } else {
-                                let burn = write(src, COPIED_TAG);
-                                let i = src_mut.offset_from(burn);
-                                // TODO: check if src_mut != burn?
-                                write_bytes(burn, COPIED_TAG, i as usize);
+/// Evacuate a packed value by referring to the info table.
+///
+/// Arguments:
+///
+/// * nursery - allocation area to copy data into
+/// * datatype - an index into the info table
+/// * src - a pointer to the value to be copied in source buffer
+/// * dst - a pointer to the value's new destination in the destination buffer
+/// * dst_end - end of the destination buffer for bounds checking
+///
+/// Returns: (src_after, dst_after, dst_end, maybe_tag)
+///
+/// * src_after - a pointer in the source buffer that's one past the
+///               last cell occupied by the value that was copied
+/// * dst_after - a pointer in the destination buffer that's one past the
+///               last cell occupied by the value in it's new home
+/// * dst_end   - end of the destination buffer (which can change during copying
+///               due to bounds checking)
+/// * maybe_tag - when copying a packed value, return the tag of the the datacon
+///               that this function was called with. copy_readers uses this tag
+///               to decide whether it should write a forwarding pointer at
+///               the end of the source buffer.
+///
+fn evac_packed(
+    nursery: *mut C_GibNursery,
+    packed_info: &HashMap<C_GibPackedTag, DataconInfo>,
+    src: *mut i8,
+    dst: *mut i8,
+    dst_end: *const i8,
+) -> Result<(*mut i8, *mut i8, *const i8, Option<C_GibPackedTag>)> {
+    unsafe {
+        let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
+        match tag {
+            // Nothing to copy. Just update the write cursor's new
+            // address in shadowstack.
+            CAUTERIZED_TAG => {
+                let (wframe_ptr, _): (*const i8, _) = read(src_after_tag);
+                let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
+                if cfg!(debug_assertions) {
+                    println!("{:?}", wframe);
+                }
+                (*wframe).ptr = src;
+                Ok((null_mut(), null_mut(), null(), Some(tag)))
+            }
+            // This is a forwarding pointer. Use this to write an
+            // indirection in the destination buffer.
+            COPIED_TO_TAG => {
+                let (fwd_ptr, src_after_fwd_ptr): (*mut i8, _) =
+                    read_mut(src_after_tag);
+                let space_reqd = 18;
+                let (dst1, dst_end1) =
+                    check_bounds(nursery, space_reqd, dst, dst_end)?;
+                let dst_after_tag = write(dst1, INDIRECTION_TAG);
+                let dst_after_indr = write(dst_after_tag, fwd_ptr);
+                Ok((src_after_fwd_ptr, dst_after_indr, dst_end1, Some(tag)))
+            }
+            // Algorithm:
+            //
+            // Scan to the right for the next COPIED_TO_TAG, then take
+            // the negative offset of that pointer to find it's position
+            // in the destination buffer. Write an indirection to that
+            // in the spot you would have copied the data to.
+            //
+            // Assumptions:
+            // The correctness of this depends on guaranteeing two
+            // properties:
+            //
+            // (1) We always end a chunk with a CopiedTo tag:
+            //
+            //     this is taken care of by copy_readers.
+            //
+            // (2) There are no indirections inside the interval (before
+            //     or after copying), which would cause it to be a
+            //     different size in the from and to space and thus
+            //     invalidate offsets within it:
+            //
+            //     we are able to guarantee this because indirections
+            //     themselves provide exactly enough room to write a
+            //     COPIED_TO_TAG and forwarding pointer.
+            COPIED_TAG => {
+                let (mut scan_tag, mut scan_ptr): (C_GibPackedTag, *const i8) =
+                    read(src_after_tag);
+                while scan_tag != COPIED_TO_TAG {
+                    (scan_tag, scan_ptr) = read(scan_ptr);
+                }
+                // At this point the scan_ptr is one past the
+                // COPIED_TO_TAG i.e. at the forwarding pointer.
+                let offset = scan_ptr.offset_from(src) - 1;
+                // The forwarding pointer that's available.
+                let (fwd_avail, _): (*const i8, _) = read(scan_ptr);
+                // The position in the destination buffer we wanted.
+                let fwd_want = fwd_avail.sub(offset as usize);
+                let space_reqd = 18;
+                let (dst1, dst_end1) =
+                    check_bounds(nursery, space_reqd, dst, dst_end)?;
+                let dst_after_tag = write(dst1, INDIRECTION_TAG);
+                let dst_after_indr = write(dst_after_tag, fwd_want);
+                Ok((null_mut(), dst_after_indr, dst_end1, Some(tag)))
+            }
+            // Indicates end-of-current-chunk in the source buffer i.e.
+            // there's nothing more to copy in the current chunk.
+            // Follow the redirection pointer to the next chunk and
+            // continue copying there.
+            //
+            // POLICY DECISION:
+            // Redirections are always inlined in the current version.
+            REDIRECTION_TAG => {
+                let (next_chunk, _): (*mut i8, _) = read(src_after_tag);
+                // Add a forwarding pointer in the source buffer.
+                write(src, COPIED_TO_TAG);
+                write(src_after_tag, dst);
+                // Continue in the next chunk.
+                evac_packed(nursery, packed_info, next_chunk, dst, dst_end)
+            }
+            // A pointer to a value in another buffer; copy this value
+            // and then switch back to copying rest of the source buffer.
+            //
+            // POLICY DECISION:
+            // Indirections are always inlined in the current version.
+            INDIRECTION_TAG => {
+                let (pointee, _): (*mut i8, _) = read(src_after_tag);
+                let (_, dst_after_pointee, dst_after_pointee_end, _) =
+                    evac_packed(nursery, packed_info, pointee, dst, dst_end)?;
+                // Add a forwarding pointer in the source buffer.
+                write(src, COPIED_TO_TAG);
+                let src_after_indr = write(src_after_tag, dst);
+                // Return 1 past the indirection pointer as src_after
+                // and the dst_after that evac_packed returned.
+                Ok((
+                    src_after_indr,
+                    dst_after_pointee,
+                    dst_after_pointee_end,
+                    Some(tag),
+                ))
+            }
+            // Regular datatype, copy.
+            _ => {
+                let DataconInfo { scalar_bytes, field_tys, .. } =
+                    packed_info.get(&tag).unwrap();
+                // Check bound of the destination buffer before copying.
+                // Reserve additional space for a redirection node or a
+                // forwarding pointer.
+                let space_reqd: isize = (32 + *scalar_bytes).into();
+                {
+                    // Scope for mutable variables dst_mut and src_mut.
+
+                    let (mut dst_mut, mut dst_end_mut) =
+                        check_bounds(nursery, space_reqd, dst, dst_end)?;
+                    // Copy the tag and the fields.
+                    dst_mut = write(dst_mut, tag);
+                    dst_mut.copy_from_nonoverlapping(
+                        src_after_tag,
+                        *scalar_bytes as usize,
+                    );
+                    let mut src_mut =
+                        src_after_tag.add(*scalar_bytes as usize);
+                    dst_mut = dst_mut.add(*scalar_bytes as usize);
+                    // Add forwarding pointers:
+                    // if there's enough space, write a COPIED_TO tag and
+                    // dst's address at src. Otherwise write a COPIED tag.
+                    // After the forwarding pointer, burn the rest of
+                    // space previously occupied by scalars.
+                    if *scalar_bytes >= 8 {
+                        let mut burn = write(src, COPIED_TO_TAG);
+                        burn = write(burn, dst);
+                        // TODO: check if src_mut != burn?
+                        let i = src_mut.offset_from(burn);
+                        write_bytes(burn, COPIED_TAG, i as usize);
+                    } else {
+                        let burn = write(src, COPIED_TAG);
+                        let i = src_mut.offset_from(burn);
+                        // TODO: check if src_mut != burn?
+                        write_bytes(burn, COPIED_TAG, i as usize);
+                    }
+                    // TODO(ckoparkar):
+                    // (1) instead of recursion, use a worklist
+                    // (2) handle redirection nodes properly
+                    for ty in field_tys.iter() {
+                        let (src1, dst1, dst_end1, field_tag) = evacuate(
+                            nursery,
+                            ty,
+                            src_mut,
+                            dst_mut,
+                            dst_end_mut,
+                        )?;
+                        // Must immediately stop copying upon reaching
+                        // the cauterized tag.
+                        match field_tag {
+                            Some(CAUTERIZED_TAG) => {
+                                return Ok((
+                                    null_mut(),
+                                    null_mut(),
+                                    null(),
+                                    field_tag,
+                                ))
                             }
-                            // TODO(ckoparkar):
-                            // (1) instead of recursion, use a worklist
-                            // (2) handle redirection nodes properly
-                            for ty in field_tys.iter() {
-                                let (src1, dst1, dst_end1, field_tag) =
-                                    copy_packed(
-                                        nursery,
-                                        ty,
-                                        src_mut,
-                                        dst_mut,
-                                        dst_end_mut,
-                                    )?;
-                                // Must immediately stop copying upon reaching
-                                // the cauterized tag.
-                                if field_tag == CAUTERIZED_TAG {
-                                    return Ok((
-                                        null_mut(),
-                                        null_mut(),
-                                        null(),
-                                        field_tag,
-                                    ));
-                                } else {
-                                    src_mut = src1;
-                                    dst_mut = dst1;
-                                    dst_end_mut = dst_end1;
-                                }
+                            _ => {
+                                src_mut = src1;
+                                dst_mut = dst1;
+                                dst_end_mut = dst_end1;
                             }
-                            Ok((src_mut, dst_mut, dst_end_mut, Some(tag)))
                         }
                     }
+                    Ok((src_mut, dst_mut, dst_end_mut, Some(tag)))
                 }
             }
         }
@@ -651,7 +650,7 @@ fn nursery_malloc(
 }
 
 #[inline]
-fn allocator_in_tospace(nursery: *mut C_GibNursery) -> bool {
+fn nursery_allocator_in_tospace(nursery: *mut C_GibNursery) -> bool {
     unsafe { (*nursery).alloc > (*nursery).ts_start }
 }
 

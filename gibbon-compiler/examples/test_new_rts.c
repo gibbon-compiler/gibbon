@@ -116,6 +116,7 @@ typedef enum {
             GibBool_T,
             GibVector_T,
             GibList_T,
+            GibCursor_T,
             List_T,
             Tree_T,
         } GibDatatype;
