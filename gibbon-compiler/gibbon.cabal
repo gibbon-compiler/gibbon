@@ -1,5 +1,5 @@
 name:                  gibbon
-version:               0.2
+version:               0.3
 synopsis:              A compiler for operating on serialized data
 description:           @<http://iu-parfunc.github.io/gibbon/ Gibbon>@
                        is an experimental compiler that transforms high-level
