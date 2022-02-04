@@ -1,13 +1,15 @@
 name:                  gibbon
-version:               0.1.0.0
-synopsis:              A compiler for operating on serialized trees.
--- description:
+version:               0.2
+synopsis:              A compiler for operating on serialized data
+description:           @<http://iu-parfunc.github.io/gibbon/ Gibbon>@
+                       is an experimental compiler that transforms high-level
+                       functional programs to operate on serialized data.
 -- license:
 -- license-file:          LICENSE
 author:                Ryan Newton
 maintainer:            rrnewton@gmail.com
--- copyright:
--- category:
+copyright:             Copyright 2016-2022 Ryan Newton and contributors
+category:              Compilers/Interpreters
 build-type:            Simple
 extra-source-files:    README.md, cbits/rts.c
 cabal-version:         >=1.10
@@ -26,11 +28,17 @@ library
                        Gibbon.Compiler
                        Gibbon.DynFlags
                        Gibbon.Pretty
+                       Gibbon.SExpFrontend
+                       Gibbon.HaskellFrontend
 
                        Gibbon.Language
                        Gibbon.Language.Syntax
                        Gibbon.Language.Constants
 
+                       Gibbon.L0.Syntax
+                       Gibbon.L0.Typecheck
+                       Gibbon.L0.Specialize2
+                       Gibbon.L0.Interp
                        Gibbon.L1.Syntax
                        Gibbon.L1.Typecheck
                        Gibbon.L1.Interp
@@ -43,16 +51,6 @@ library
                        Gibbon.L3.Typecheck
                        Gibbon.L4.Syntax
                        Gibbon.L4.Interp
-                       Gibbon.SExpFrontend
-
-                       -- Polymorphism stuff:
-                       Gibbon.HaskellFrontend
-                       Gibbon.L0.Syntax
-                       Gibbon.L0.Typecheck
-                       Gibbon.L0.Specialize2
-                       Gibbon.L0.Interp
-                       -- -- Gibbon.L0.Specialize
-                       -- -- Gibbon.L0.Mono
 
                        -- compiler passes, roughly in the order they're run
                        Gibbon.Passes.Freshen
@@ -121,7 +119,7 @@ library
 
   hs-source-dirs:      src
   default-language:    Haskell2010
-  ghc-options:         -Wall -Wno-orphans -Wredundant-constraints
+  ghc-options:         -Wall -Wcompat -Wno-orphans -Wredundant-constraints
                        -Wno-partial-type-signatures -Wno-unused-top-binds
                        -Wno-typed-holes -fdefer-typed-holes
   default-extensions:  ScopedTypeVariables PatternSynonyms DeriveGeneric DeriveFunctor
