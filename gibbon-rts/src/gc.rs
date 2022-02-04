@@ -475,12 +475,16 @@ impl fmt::Debug for Nursery {
 impl Heap for Nursery {
     fn space_available(&self) -> isize {
         let nursery: *mut C_GibNursery = self.0;
-        unsafe { (*nursery).alloc_end.offset_from((*nursery).alloc) }
+        unsafe {
+            debug_assert!((*nursery).alloc < (*nursery).alloc_end);
+            (*nursery).alloc_end.offset_from((*nursery).alloc)
+        }
     }
 
     fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)> {
+        let nursery: *mut C_GibNursery = self.0;
         unsafe {
-            let nursery: *mut C_GibNursery = self.0;
+            debug_assert!((*nursery).alloc < (*nursery).alloc_end);
             let old = (*nursery).alloc as *mut i8;
             let bump = old.add(size as usize);
             let end = (*nursery).alloc_end as *mut i8;
@@ -494,10 +498,10 @@ impl Heap for Nursery {
                 Ok((old, bump))
             } else {
                 Err(RtsError::Gc(format!(
-                "nursery_malloc: out of space, requested={:?}, available={:?}",
-                size,
-                end.offset_from(old)
-            )))
+                    "nursery_malloc: out of space, requested={:?}, available={:?}",
+                    size,
+                    end.offset_from(old)
+                )))
             }
         }
     }

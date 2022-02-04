@@ -731,12 +731,9 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_611,
         GibChunkAlloc new_chunk_9 = gib_alloc_chunk(end_r_611);
         GibCursor chunk_start_10 = new_chunk_9.chunk_start;
         GibCursor chunk_end_11 = new_chunk_9.chunk_end;
-
         end_r_611 = chunk_end_11;
         *(GibBoxedTag *) loc_610 = REDIRECTION_TAG;
-
         GibCursor redir = loc_610 + 1;
-
         *(GibCursor *) redir = chunk_start_10;
         loc_610 = chunk_start_10;
     }
@@ -745,13 +742,9 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_611,
 
     if (fltIf_252_279) {
         *(GibBoxedTag *) loc_610 = 0;
-
         GibCursor writetag_986 = loc_610 + 1;
-
         *(GibInt *) writetag_986 = 1;
-
         GibCursor writecur_987 = writetag_986 + sizeof(GibInt);
-
         return (GibCursorGibCursorGibCursorProd) {end_r_611, loc_610,
                                                   writecur_987};
     } else {
@@ -769,8 +762,8 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_611,
         GibCursor pvrtmp_1343 = tmp_struct_8.field1;
         GibCursor pvrtmp_1344 = tmp_struct_8.field2;
 
+        // Write the node tag.
         *(GibBoxedTag *) loc_610 = 1;
-
         GibCursor writetag_991 = loc_610 + 1;
 
         return (GibCursorGibCursorGibCursorProd) {pvrtmp_1342, loc_610,

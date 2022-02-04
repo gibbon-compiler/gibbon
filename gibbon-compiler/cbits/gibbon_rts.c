@@ -736,7 +736,7 @@ void *gib_list_bumpalloc(int64_t n)
 }
 
 // Snapshot the current heap pointer value across all threads.
-void gib_save_alloc_state(void)
+void gib_list_save_alloc_state(void)
 {
 #ifdef _GIBBON_DEBUG
     printf("Saving(%p): pos %d", heap_ptr, gib_global_num_saved_heap_ptr);
@@ -748,10 +748,10 @@ void gib_save_alloc_state(void)
 #endif
 }
 
-void gib_restore_alloc_state(void)
+void gib_list_restore_alloc_state(void)
 {
     if(gib_global_num_saved_heap_ptr <= 0) {
-        fprintf(stderr, "Bad call to gib_restore_alloc_state!  Saved stack empty!\ne");
+        fprintf(stderr, "Bad call to gib_list_restore_alloc_state!  Saved stack empty!\ne");
         exit(1);
     }
     gib_global_num_saved_heap_ptr--;
@@ -766,8 +766,8 @@ void gib_restore_alloc_state(void)
 // Regular malloc mode:
 void gib_init_bumpalloc(void) {}
 void *gib_list_bumpalloc(int64_t n) { return gib_alloc(n); }
-void gib_save_alloc_state(void) {}
-void gib_restore_alloc_state(void) {}
+void gib_list_save_alloc_state(void) {}
+void gib_list_restore_alloc_state(void) {}
 
 #endif // BUMPALLOC
 
