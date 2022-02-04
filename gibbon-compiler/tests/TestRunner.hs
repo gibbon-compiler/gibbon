@@ -739,7 +739,7 @@ fromRight_ (Right b) = b
 fromRight_ oth  = error $ "fromRight_: Unexpected value " ++ show oth
 
 configFile :: String
-configFile = "tests/config.yaml"
+configFile = "tests/test-gibbon-examples.yaml"
 
 -- | Flush @msg1@ if the versosity level is >= @n@. Otherwise, flush @msg2@.
 -- The caller is responsible for controlling newlines.

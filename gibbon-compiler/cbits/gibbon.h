@@ -315,24 +315,18 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels);
 
 #define MAX_OUTSET_LENGTH 10
 
-typedef struct gib_region_alloc {
-    bool ra_in_nursery;
-    GibCursor ra_start;
-    GibCursor ra_end;
-} GibRegionAlloc;
-
 typedef struct gib_chunk {
-    GibCursor chunk_start;
-    GibCursor chunk_end;
-} GibChunkAlloc;
+    GibCursor c_start;
+    GibCursor c_end;
+} GibChunk;
 
-GibRegionAlloc *gib_alloc_region(uint64_t size);
-GibChunkAlloc gib_alloc_chunk(GibCursor end_old_chunk);
+GibChunk *gib_alloc_region(uint64_t size);
+GibChunk gib_alloc_chunk(GibCursor end_old_chunk);
 void gib_bump_refcount(GibCursor end_b, GibCursor end_a);
 void gib_free_region(GibCursor end_reg);
 
 // Functions related to counting the number of allocated regions.
-GibRegionAlloc *gib_alloc_counted_region(int64_t size);
+GibChunk *gib_alloc_counted_region(int64_t size);
 void gib_bump_global_region_count(void);
 void gib_print_global_region_count(void);
 
@@ -376,8 +370,8 @@ int32_t gib_shadowstack_length(GibShadowstack *stack);
 void gib_shadowstack_print_all(GibShadowstack *stack);
 
 // Region allocation.
-GibRegionAlloc *gib_alloc_region2(uint64_t size);
-void gib_free_region2(GibRegionAlloc *region);
+GibChunk *gib_alloc_region2(uint64_t size);
+void gib_free_region2(GibChunk *region);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -963,7 +963,7 @@ GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer);
 uint16_t gib_get_ref_count(GibCursor end_ptr);
 
 
-GibRegionAlloc *gib_alloc_region(uint64_t size)
+GibChunk *gib_alloc_region(uint64_t size)
 {
     // Allocate the region metadata.
     GibRegionMeta *reg_meta = gib_alloc(sizeof(GibRegionMeta));
@@ -999,14 +999,13 @@ GibRegionAlloc *gib_alloc_region(uint64_t size)
     footer->rf_next = (GibRegionFooter *) NULL;
     footer->rf_prev = (GibRegionFooter *) NULL;
 
-    GibRegionAlloc *region = gib_alloc(sizeof(GibRegionAlloc));
-    region->ra_in_nursery = false;
-    region->ra_start = heap_start;
-    region->ra_end = heap_end;
+    GibChunk *region = gib_alloc(sizeof(GibChunk));
+    region->c_start = heap_start;
+    region->c_end = heap_end;
     return region;
 }
 
-GibChunkAlloc gib_alloc_chunk(GibCursor end_old_chunk)
+GibChunk gib_alloc_chunk(GibCursor end_old_chunk)
 {
     // Get size from current footer.
     GibRegionFooter *footer = (GibRegionFooter *) end_old_chunk;
@@ -1041,7 +1040,7 @@ GibChunkAlloc gib_alloc_chunk(GibCursor end_old_chunk)
     printf("gib_alloc_chunk: allocated %lld bytes for region %lld.\n", total_size, reg->reg_id);
 #endif
 
-    return (GibChunkAlloc) {start , end};
+    return (GibChunk) {start , end};
 }
 
 // B is the pointer, and A is the pointee (i.e B -> A).
@@ -1260,7 +1259,7 @@ inline uint16_t gib_get_ref_count(GibCursor end_ptr)
 
 // Functions related to counting the number of allocated regions.
 
-inline GibRegionAlloc *gib_alloc_counted_region(int64_t size)
+inline GibChunk *gib_alloc_counted_region(int64_t size)
 {
     // Bump the count.
     gib_bump_global_region_count();
@@ -1507,10 +1506,10 @@ void gib_shadowstack_print_all(GibShadowstack *stack)
 }
 
 
-GibRegionAlloc *gib_alloc_region_on_heap(uint64_t size);
-GibRegionAlloc *gib_alloc_region_in_nursery(uint64_t size);
+GibChunk *gib_alloc_region_on_heap(uint64_t size);
+GibChunk *gib_alloc_region_in_nursery(uint64_t size);
 
-GibRegionAlloc *gib_alloc_region2(uint64_t size)
+GibChunk *gib_alloc_region2(uint64_t size)
 {
     if (size > NURSERY_REGION_MAX_SIZE) {
         return gib_alloc_region_on_heap(size);
@@ -1519,7 +1518,7 @@ GibRegionAlloc *gib_alloc_region2(uint64_t size)
     }
 }
 
-GibRegionAlloc *gib_alloc_region_on_heap(uint64_t size)
+GibChunk *gib_alloc_region_on_heap(uint64_t size)
 {
     char *heap_start = gib_alloc(size);
     if (heap_start == NULL) {
@@ -1527,14 +1526,13 @@ GibRegionAlloc *gib_alloc_region_on_heap(uint64_t size)
         exit(1);
     }
     char *heap_end = heap_start + size;
-    GibRegionAlloc *region = gib_alloc(sizeof(GibRegionAlloc));
-    region->ra_in_nursery = false;
-    region->ra_start = heap_start;
-    region->ra_end = heap_end;
+    GibChunk *region = gib_alloc(sizeof(GibChunk));
+    region->c_start = heap_start;
+    region->c_end = heap_end;
     return region;
 }
 
-GibRegionAlloc *gib_alloc_region_in_nursery(uint64_t size)
+GibChunk *gib_alloc_region_in_nursery(uint64_t size)
 {
     GibNursery *nursery = &(gib_global_nurseries[0]);
     GibShadowstack *rstack = &(gib_global_read_shadowstacks[0]);
@@ -1551,19 +1549,15 @@ GibRegionAlloc *gib_alloc_region_in_nursery(uint64_t size)
     }
     char *old = nursery->n_alloc;
     nursery->n_alloc = bump;
-    GibRegionAlloc *region = gib_alloc(sizeof(GibRegionAlloc));
-    region->ra_in_nursery = true;
-    region->ra_start = old;
-    region->ra_end = bump;
+    GibChunk *region = gib_alloc(sizeof(GibChunk));
+    region->c_start = old;
+    region->c_end = bump;
     return region;
 }
 
-void gib_free_region2(GibRegionAlloc *region)
+void gib_free_region2(GibChunk *region)
 {
-    if (region->ra_in_nursery) {
-        return;
-    }
-    printf("gib_free_region2: region not in nursery. TODO.\n");
+    printf("gib_free_region2: TODO.\n");
     return;
 }
 
