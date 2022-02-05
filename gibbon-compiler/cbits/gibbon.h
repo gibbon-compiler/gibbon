@@ -321,7 +321,7 @@ typedef struct gib_chunk {
 } GibChunk;
 
 GibChunk *gib_alloc_region(uint64_t size);
-GibChunk gib_alloc_chunk(GibCursor end_old_chunk);
+GibChunk gib_alloc_chunk(GibCursor footer_ptr);
 void gib_bump_refcount(GibCursor end_b, GibCursor end_a);
 void gib_free_region(GibCursor end_reg);
 
@@ -336,8 +336,41 @@ void gib_print_global_region_count(void);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-// An abstract type declaration is sufficient here.
-typedef struct gib_nursery GibNursery;
+typedef struct gib_nursery {
+    // Step.
+    uint8_t n_step;
+
+    // Allocation area.
+    uint64_t n_heap_size;
+    char *n_heap_start;
+    char *n_heap_end;
+    char *n_alloc;
+
+    // Is the allocation aread initialized?
+    bool n_initialized;
+
+} GibNursery;
+
+typedef struct gib_generation {
+    // Generation number.
+    uint8_t g_no;
+
+    // Destination generation for live objects.
+    struct gib_generation *g_dest;
+
+    // True in the oldest generation.
+    bool g_refcounted;
+
+    // Amount of memory allocated in this generation.
+    uint64_t g_mem_allocated;
+
+    // Allocation area; uninitialized in the oldest gen which uses malloc.
+    uint64_t g_heap_size;
+    char *g_heap_start;
+    char *g_heap_end;
+    char *g_alloc;
+
+} GibGeneration;
 
 typedef struct gib_shadowstack {
     bool ss_initialized;
@@ -390,9 +423,13 @@ int gib_info_table_insert_packed_dcon(
     uint32_t *field_tys,
     uint8_t field_tys_length
 );
-int gib_collect_minor(GibShadowstack *rstack,
-                      GibShadowstack *wstack,
-                      GibNursery *nursery);
+int gib_garbage_collect(
+    GibShadowstack *rstack,
+    GibShadowstack *wstack,
+    GibNursery *nursery,
+    GibGeneration *generations,
+    bool force_major
+);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

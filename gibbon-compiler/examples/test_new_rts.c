@@ -235,8 +235,8 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor pvrtmp_1401 = tmp_struct_18.field0;
     GibInt pvrtmp_1402 = tmp_struct_18.field1;
 
-    // _print_List(end_r_719, r_719);
-    // printf("\n");
+    _print_List(end_r_719, r_719);
+    printf("\n");
 
     gib_free_region2(region_1382);
     gib_free_region2(region_1380);

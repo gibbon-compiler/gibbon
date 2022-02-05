@@ -8,8 +8,8 @@ homepage = "https://github.com/iu-parfunc/gibbon"
 repository = "https://github.com/iu-parfunc/gibbon"
 license = "BSD-3-Clause"
 
-# [dependencies]
-# libc = "0.2"
+[dependencies]
+libc = "0.2"
 
 [lib]
 name = "gibbon_rts"

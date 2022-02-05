@@ -38,9 +38,26 @@ pub mod types {
 
     #[repr(C)]
     #[derive(Debug)]
-    pub struct C_GibShadowstackFrame {
-        pub ptr: *const i8,
-        pub datatype: C_GibDatatype,
+    pub struct C_GibNursery {
+        pub step: u8,
+        pub heap_size: u64,
+        pub heap_start: *const i8,
+        pub heap_end: *const i8,
+        pub alloc: *const i8,
+        pub initialized: bool,
+    }
+
+    #[repr(C)]
+    #[derive(Debug)]
+    pub struct C_GibGeneration {
+        pub no: u8,
+        pub dest: *mut C_GibGeneration,
+        pub refcounted: bool,
+        pub mem_allocated: u64,
+        pub heap_size: u64,
+        pub heap_start: *const i8,
+        pub heap_end: *const i8,
+        pub alloc: *const i8,
     }
 
     #[repr(C)]
@@ -54,15 +71,9 @@ pub mod types {
 
     #[repr(C)]
     #[derive(Debug)]
-    pub struct C_GibNursery {
-        pub step: u8,
-        pub fs_start: *const i8,
-        pub fs_end: *const i8,
-        pub ts_start: *const i8,
-        pub ts_end: *const i8,
-        pub alloc: *const i8,
-        pub alloc_end: *const i8,
-        pub initialized: bool,
+    pub struct C_GibShadowstackFrame {
+        pub ptr: *const i8,
+        pub datatype: C_GibDatatype,
     }
 }
 
@@ -135,12 +146,20 @@ pub extern "C" fn gib_info_table_insert_scalar(
 }
 
 #[no_mangle]
-pub extern "C" fn gib_collect_minor(
+pub extern "C" fn gib_garbage_collect(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
+    generations_ptr: *mut C_GibGeneration,
+    force_major: bool,
 ) -> i32 {
-    match gc::collect_minor(rstack_ptr, wstack_ptr, nursery_ptr) {
+    match gc::collect(
+        rstack_ptr,
+        wstack_ptr,
+        nursery_ptr,
+        generations_ptr,
+        force_major,
+    ) {
         Ok(()) => 0,
         Err(err) => {
             if cfg!(debug_assertions) {

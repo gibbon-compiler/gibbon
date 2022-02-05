@@ -6,6 +6,7 @@ Implementation of the new generation garbage collector for Gibbon.
 
  */
 
+use libc;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -23,49 +24,34 @@ use crate::ffi::types::*;
 // Must be same as "gibbon.h".
 const REDIRECTION_TAG: C_GibPackedTag = 255;
 const INDIRECTION_TAG: C_GibPackedTag = 254;
+const NUM_GENERATIONS: u8 = 1;
 
 // Used internally in the garbage collector.
 const CAUTERIZED_TAG: C_GibPackedTag = 253;
 const COPIED_TO_TAG: C_GibPackedTag = 252;
 const COPIED_TAG: C_GibPackedTag = 251;
 
-/// Minor collection:
-///
-/// If the data is already in to-space, it is promoted to an older generation.
-/// Otherwise data in from-space is copied to to-space.
-pub fn collect_minor(
+/// Minor collection
+pub fn collect(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
+    generations_ptr: *mut C_GibGeneration,
+    _force_major: bool,
 ) -> Result<()> {
-    let nursery = &mut Nursery(nursery_ptr);
     let rstack = &Shadowstack(rstack_ptr);
     let wstack = &Shadowstack(wstack_ptr);
-    // Print some debugging information.
-    if cfg!(debug_assertions) {
-        println!("Triggered GC!!!");
-        unsafe {
-            assert!((*nursery_ptr).initialized);
-            assert!((*nursery_ptr).alloc < (*nursery_ptr).alloc_end);
-        }
-        println!("stack of readers, length={}:", rstack.length());
-        rstack.print_all();
-        println!("stack of writers, length={}:", wstack.length());
-        wstack.print_all();
-    }
-    if nursery.allocator_in_tospace() {
-        promote_to_oldgen()
+    let nursery = &mut Nursery(nursery_ptr);
+    if NUM_GENERATIONS == 1 {
+        let mut oldest_gen = OldestGeneration(generations_ptr);
+        cauterize_writers(wstack)?;
+        // Also uncauterizes writers.
+        evacuate_readers(rstack, &mut oldest_gen)?;
+        // Reset nursery's allocation area.
+        nursery.reset_alloc();
+        Ok(())
     } else {
-        let current_space_avail = Heap::space_available(nursery);
-        nursery.evacuate_to_tospace(rstack, wstack)?;
-        let new_space_avail = Heap::space_available(nursery);
-        // Promote everything to the older generation if we couldn't
-        // free up any space after a minor collection.
-        if current_space_avail == new_space_avail {
-            promote_to_oldgen()
-        } else {
-            Ok(())
-        }
+        todo!()
     }
 }
 
@@ -175,7 +161,7 @@ fn evacuate(
 /// Arguments:
 ///
 /// * dest - allocation area to copy data into
-/// * datatype - an index into the info table
+/// * packed_info - information about the fields of this datatype
 /// * src - a pointer to the value to be copied in source buffer
 /// * dst - a pointer to the value's new destination in the destination buffer
 /// * dst_end - end of the destination buffer for bounds checking
@@ -312,7 +298,7 @@ fn evacuate_packed(
                 // Check bound of the destination buffer before copying.
                 // Reserve additional space for a redirection node or a
                 // forwarding pointer.
-                let space_reqd: isize = (32 + *scalar_bytes).into();
+                let space_reqd: usize = (32 + *scalar_bytes).into();
                 {
                     // Scope for mutable variables dst_mut and src_mut.
 
@@ -375,13 +361,6 @@ fn evacuate_packed(
     }
 }
 
-fn promote_to_oldgen() -> Result<()> {
-    if cfg!(debug_assertions) {
-        println!("Promoting to older generation...");
-    }
-    Ok(())
-}
-
 #[inline]
 unsafe fn read<A>(cursor: *const i8) -> (A, *const i8) {
     let cursor2 = cursor as *const A;
@@ -408,16 +387,17 @@ unsafe fn write<A>(cursor: *mut i8, val: A) -> *mut i8 {
 /// Typeclass for different allocation areas; nurseries, generations etc.
 pub trait Heap {
     fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)>;
-    fn space_available(&self) -> isize;
+    fn space_available(&self) -> usize;
 
     fn check_bounds(
         &mut self,
-        space_reqd: isize,
+        space_reqd: usize,
         dst: *mut i8,
         dst_end: *const i8,
     ) -> Result<(*mut i8, *const i8)> {
         unsafe {
-            let space_avail = dst_end.offset_from(dst);
+            debug_assert!((dst as *const i8) < dst_end);
+            let space_avail = dst_end.offset_from(dst) as usize;
             if space_avail < space_reqd {
                 // TODO(ckoparkar): see the TODO in copy_readers.
                 let (new_dst, new_dst_end) = Heap::allocate(self, 1024)?;
@@ -440,29 +420,11 @@ pub trait Heap {
 struct Nursery(*mut C_GibNursery);
 
 impl Nursery {
-    fn allocator_in_tospace(&mut self) -> bool {
+    fn reset_alloc(&mut self) {
         let nursery: *mut C_GibNursery = self.0;
-        unsafe { (*nursery).alloc > (*nursery).ts_start }
-    }
-
-    fn switch_to_tospace(&mut self) {
         unsafe {
-            let nursery: *mut C_GibNursery = self.0;
-            (*nursery).alloc = (*nursery).ts_start;
-            (*nursery).alloc_end = (*nursery).ts_end;
+            (*nursery).alloc = (*nursery).heap_start;
         }
-    }
-
-    /// Copy data in from-space to to-space.
-    fn evacuate_to_tospace(
-        &mut self,
-        rstack: &Shadowstack,
-        wstack: &Shadowstack,
-    ) -> Result<()> {
-        self.switch_to_tospace();
-        cauterize_writers(wstack)?;
-        // Also uncauterizes writers.
-        evacuate_readers(rstack, self)
     }
 }
 
@@ -473,35 +435,106 @@ impl fmt::Debug for Nursery {
 }
 
 impl Heap for Nursery {
-    fn space_available(&self) -> isize {
+    fn space_available(&self) -> usize {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
-            debug_assert!((*nursery).alloc < (*nursery).alloc_end);
-            (*nursery).alloc_end.offset_from((*nursery).alloc)
+            debug_assert!((*nursery).alloc <= (*nursery).heap_end);
+            (*nursery).heap_end.offset_from((*nursery).alloc) as usize
         }
     }
 
     fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)> {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
-            debug_assert!((*nursery).alloc < (*nursery).alloc_end);
+            debug_assert!((*nursery).alloc < (*nursery).heap_end);
             let old = (*nursery).alloc as *mut i8;
             let bump = old.add(size as usize);
-            let end = (*nursery).alloc_end as *mut i8;
+            let end = (*nursery).heap_end as *mut i8;
             // Check if there's enough space in the nursery to fulfill the request.
-            //
-            // CSK: Do we have to check this? Since we're copying things which are
-            // already in the from-space, in the worst case we'll copy everything
-            // but all of from-space should always fit in the to-space.
             if bump <= end {
                 (*nursery).alloc = bump;
                 Ok((old, bump))
             } else {
                 Err(RtsError::Gc(format!(
-                    "nursery_malloc: out of space, requested={:?}, available={:?}",
+                    "nursery alloc: out of space, requested={:?}, available={:?}",
                     size,
                     end.offset_from(old)
                 )))
+            }
+        }
+    }
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Generation
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+/// A wrapper over the naked C pointer.
+struct Generation(*mut C_GibGeneration);
+
+impl fmt::Debug for Generation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("{:?}", self.0))
+    }
+}
+
+impl Heap for Generation {
+    fn space_available(&self) -> usize {
+        let gen: *mut C_GibGeneration = self.0;
+        unsafe {
+            debug_assert!((*gen).alloc <= (*gen).heap_end);
+            (*gen).heap_end.offset_from((*gen).alloc) as usize
+        }
+    }
+
+    fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)> {
+        let gen: *mut C_GibGeneration = self.0;
+        unsafe {
+            debug_assert!((*gen).alloc < (*gen).heap_end);
+            let old = (*gen).alloc as *mut i8;
+            let bump = old.add(size as usize);
+            let end = (*gen).heap_end as *mut i8;
+            // Check if there's enough space in the gen to fulfill the request.
+            if bump <= end {
+                (*gen).mem_allocated += size;
+                (*gen).alloc = bump;
+                Ok((old, bump))
+            } else {
+                Err(RtsError::Gc(format!(
+                    "gen alloc: out of space, requested={:?}, available={:?}",
+                    size,
+                    end.offset_from(old)
+                )))
+            }
+        }
+    }
+}
+
+/// A wrapper over the naked C pointer.
+struct OldestGeneration(*mut C_GibGeneration);
+
+impl fmt::Debug for OldestGeneration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("{:?}", self.0))
+    }
+}
+
+impl Heap for OldestGeneration {
+    fn space_available(&self) -> usize {
+        0
+    }
+
+    fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)> {
+        let gen: *mut C_GibGeneration = self.0;
+        unsafe {
+            let start = libc::malloc(size as usize) as *mut i8;
+            if start.is_null() {
+                Err(RtsError::Gc(format!("oldest gen alloc: malloc failed")))
+            } else {
+                (*gen).mem_allocated += size;
+                let end = start.add(size as usize);
+                Ok((start, end))
             }
         }
     }
@@ -547,9 +580,9 @@ struct ShadowstackIter {
 impl ShadowstackIter {
     fn new(stk: &Shadowstack) -> ShadowstackIter {
         unsafe {
-            let ss: *mut C_GibShadowstack = stk.0;
-            debug_assert!((*ss).start <= (*ss).alloc);
-            ShadowstackIter { run_ptr: (*ss).start, end_ptr: (*ss).alloc }
+            let cstk: *mut C_GibShadowstack = stk.0;
+            debug_assert!((*cstk).start <= (*cstk).alloc);
+            ShadowstackIter { run_ptr: (*cstk).start, end_ptr: (*cstk).alloc }
         }
     }
 }
