@@ -48,34 +48,6 @@ typedef uint64_t GibThreadId;
  */
 
 
-/*
- * These globals don't need to be delcared here; they can be
- * accessed using the functions given below.
- *
-
-// Chunk sizes of buffers, see GitHub #79 and #110.
-extern int64_t gib_global_biginf_init_chunk_size;
-extern int64_t gib_global_inf_init_chunk_size;
-extern int64_t gib_global_max_chunk_size;
-
-// Runtime arguments, values updated by the flags parser.
-extern GibInt gib_global_size_param;
-extern GibInt gib_global_iters_param;
-extern char *gib_global_bench_prog_param;
-extern char *gib_global_benchfile_param;
-extern char *gib_global_arrayfile_param;
-extern int64_t gib_global_arrayfile_length_param;
-
-// Number of regions allocated.
-extern int64_t gib_global_region_count;
-
-// Invariant: should always be equal to max(sym_table_keys).
-extern GibSym gib_global_gensym_counter;
-
- *
- */
-
-
 // Chunk sizes of buffers, see GitHub #79 and #110.
 uint64_t gib_get_biginf_init_chunk_size(void);
 uint64_t gib_get_inf_init_chunk_size(void);
@@ -93,19 +65,6 @@ int64_t gib_read_region_count(void);
 
 // Invariant: should always be equal to max(sym_table_keys).
 GibSym gib_read_gensym_counter(void);
-
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Helpers
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-void gib_show_usage(char **argv);
-double gib_avg(const double* arr, int n);
-double gib_difftimespecs(struct timespec *t0, struct timespec *t1);
-int gib_compare_doubles(const void *a, const void *b);
-GibInt gib_expll(GibInt base, GibInt pow);
-GibInt gib_get_num_processors(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -237,8 +196,9 @@ typedef struct gib_vector {
     // Size of each element.
     size_t vec_elt_size;
 
-    // Actual elements of the vector.
+    // Elements of the vector.
     void *vec_data;
+
 } GibVector;
 
 GibVector *gib_vector_alloc(GibInt num, size_t elt_size);
@@ -269,7 +229,7 @@ void gib_list_restore_alloc_state(void);
 typedef struct gib_list {
     size_t ll_data_size;
     void *ll_data;
-    struct gib_list* ll_next;
+    struct gib_list *ll_next;
 } GibList;
 
 GibList *gib_list_alloc(size_t data_size);
@@ -346,8 +306,12 @@ typedef struct gib_nursery {
     char *n_heap_end;
     char *n_alloc;
 
-    // Is the allocation aread initialized?
+    // Is the allocation area initialized?
     bool n_initialized;
+
+    // Remembered set to store young to old pointers;
+    // this is a pointer to a structure on the Rust Heap.
+    void *n_rem_set;
 
 } GibNursery;
 
@@ -369,6 +333,14 @@ typedef struct gib_generation {
     char *g_heap_start;
     char *g_heap_end;
     char *g_alloc;
+
+    // Remembered set to store old to young pointers;
+    // this is a pointer to a structure on the Rust Heap.
+    void *g_rem_set;
+
+    // Zero count table;
+    // this is a pointer to a structure on the Rust Heap.
+    void *g_zct;
 
 } GibGeneration;
 
@@ -406,7 +378,6 @@ void gib_shadowstack_print_all(GibShadowstack *stack);
 GibChunk *gib_alloc_region2(uint64_t size);
 void gib_free_region2(GibChunk *region);
 
-
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Implemented in the Rust RTS
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -430,6 +401,19 @@ int gib_garbage_collect(
     GibGeneration *generations,
     bool force_major
 );
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Helpers
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+void gib_show_usage(char **argv);
+double gib_avg(const double* arr, int n);
+double gib_difftimespecs(struct timespec *t0, struct timespec *t1);
+int gib_compare_doubles(const void *a, const void *b);
+GibInt gib_expll(GibInt base, GibInt pow);
+GibInt gib_get_num_processors(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

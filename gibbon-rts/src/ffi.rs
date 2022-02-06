@@ -5,11 +5,6 @@ See gibbon-compiler/cbits/gibbon.h.
 
  */
 
-use std::slice;
-
-use crate::ffi::types::*;
-use crate::gc;
-
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Translating Gibbon's types to Rust
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -17,6 +12,8 @@ use crate::gc;
 
 pub mod types {
     #![allow(non_camel_case_types)]
+
+    use std::collections::HashSet;
 
     // These typedefs must match their counterparts in C.
     // See gibbon-compiler/cbits/gibbon.h.
@@ -45,6 +42,7 @@ pub mod types {
         pub heap_end: *const i8,
         pub alloc: *const i8,
         pub initialized: bool,
+        pub rem_set: *mut HashSet<C_GibShadowstackFrame>,
     }
 
     #[repr(C)]
@@ -58,6 +56,8 @@ pub mod types {
         pub heap_start: *const i8,
         pub heap_end: *const i8,
         pub alloc: *const i8,
+        pub rem_set: *mut HashSet<C_GibShadowstackFrame>,
+        pub zct: *mut std::ffi::c_void,
     }
 
     #[repr(C)]
@@ -70,17 +70,24 @@ pub mod types {
     }
 
     #[repr(C)]
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq, Eq, Hash)]
     pub struct C_GibShadowstackFrame {
         pub ptr: *const i8,
         pub datatype: C_GibDatatype,
     }
 }
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * FFI functions
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
+
+use std::slice;
+
+use crate::ffi::types::*;
+use crate::gc;
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 #[no_mangle]
 /// The user is responsible for initializing the info table before
@@ -153,7 +160,7 @@ pub extern "C" fn gib_garbage_collect(
     generations_ptr: *mut C_GibGeneration,
     force_major: bool,
 ) -> i32 {
-    match gc::collect(
+    match gc::collect_minor(
         rstack_ptr,
         wstack_ptr,
         nursery_ptr,

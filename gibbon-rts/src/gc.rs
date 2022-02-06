@@ -31,8 +31,8 @@ const CAUTERIZED_TAG: C_GibPackedTag = 253;
 const COPIED_TO_TAG: C_GibPackedTag = 252;
 const COPIED_TAG: C_GibPackedTag = 251;
 
-/// Minor collection
-pub fn collect(
+/// Minor collection.
+pub fn collect_minor(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
@@ -45,9 +45,7 @@ pub fn collect(
     if NUM_GENERATIONS == 1 {
         let mut oldest_gen = OldestGeneration(generations_ptr);
         cauterize_writers(wstack)?;
-        // Also uncauterizes writers.
         evacuate_readers(rstack, &mut oldest_gen)?;
-        // Reset nursery's allocation area.
         nursery.reset_alloc();
         Ok(())
     } else {
@@ -58,23 +56,21 @@ pub fn collect(
 /// Write a CAUTERIZED_TAG at all write cursors so that the collector knows
 /// when to stop copying.
 fn cauterize_writers(wstack: &Shadowstack) -> Result<()> {
-    unsafe {
-        let ss = ShadowstackIter::new(wstack);
-        for frame in ss {
+    for frame in ShadowstackIter::new(wstack) {
+        unsafe {
             let ptr = (*frame).ptr as *mut i8;
             let ptr_next = write(ptr, CAUTERIZED_TAG);
             write(ptr_next, frame);
         }
-        Ok(())
     }
+    Ok(())
 }
 
-/// Copy values at all read cursors from one place to another. Uses
-/// the provided destination heap to allocate memory.
+/// Copy values at all read cursors from the nursery to the provided
+/// destination. Also uncauterize any CAUTERIZED_TAGs that are reached.
 fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
-    unsafe {
-        let ss = ShadowstackIter::new(rstack);
-        for frame in ss {
+    for frame in ShadowstackIter::new(rstack) {
+        unsafe {
             let datatype = (*frame).datatype;
             match INFO_TABLE.get().unwrap().get(&datatype) {
                 None => {
@@ -125,8 +121,8 @@ fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
                 }
             }
         }
-        Ok(())
     }
+    Ok(())
 }
 
 fn evacuate(
