@@ -214,7 +214,7 @@ inline GibCursor gib_extend_arena(GibArena *ar, int size)
 
 inline GibSymDict *gib_dict_alloc(GibArena *ar)
 {
-    return (GibSymDict *) gib_extend_arena(ar, sizeof(GibSymDict)); // gib_alloc(sizeof(GibSymDict));
+    return (GibSymDict *) gib_extend_arena(ar, sizeof(GibSymDict));
 }
 
 inline GibSymDict *gib_dict_insert_ptr(GibArena *ar, GibSymDict *ptr, GibSym key, GibPtr val)
@@ -464,11 +464,13 @@ GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
     GibInt lower = vec->vec_lower + i;
     GibInt upper = vec->vec_lower + i + n;
     if ((lower > vec->vec_upper)) {
-        fprintf(stderr, "gib_vector_slice: lower out of bounds, %" PRId64 " > %" PRId64, lower, vec->vec_upper);
+        fprintf(stderr, "gib_vector_slice: lower out of bounds, %" PRId64
+                " > %" PRId64, lower, vec->vec_upper);
         exit(1);
     }
     if ((upper > vec->vec_upper)) {
-        fprintf(stderr, "gib_vector_slice: upper out of bounds, %" PRId64 " > %" PRId64, upper, vec->vec_upper);
+        fprintf(stderr, "gib_vector_slice: upper out of bounds, %" PRId64
+                " > %" PRId64, upper, vec->vec_upper);
         exit(1);
     }
     GibVector *vec2 = (GibVector *) gib_alloc(sizeof(GibVector));
@@ -488,7 +490,8 @@ inline void *gib_vector_nth(GibVector *vec, GibInt i)
 {
 #ifdef _GIBBON_BOUNDSCHECK
     if (i < vec->lower || i > vec->upper) {
-        fprintf(stdderr, "gib_vector_nth index out of bounds: %lld (%lld,%lld) \n", i, vec->vec_lower, vec->vec_upper);
+        fprintf(stdderr, "gib_vector_nth index out of bounds: %lld (%lld,%lld)\n",
+                i, vec->vec_lower, vec->vec_upper);
         exit(1);
     }
 #endif
@@ -571,7 +574,8 @@ inline void gib_vector_free(GibVector *vec)
 GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
 {
     if (vec1->vec_upper != vec2->vec_lower) {
-        fprintf(stderr,"gib_vector_merge: non-contiguous slices, (%" PRId64 ",%" PRId64 "), (%" PRId64 ",%" PRId64 ")",
+        fprintf(stderr,"gib_vector_merge: non-contiguous slices, (%" PRId64
+                ",%" PRId64 "), (%" PRId64 ",%" PRId64 ")",
                vec1->vec_lower, vec1->vec_upper, vec2->vec_lower, vec2->vec_upper);
         exit(1);
     }
@@ -625,30 +629,34 @@ double gib_sum_timing_array(GibVector *times)
 // #define _GIBBON_DEBUG
 #warning "Using bump allocator."
 
-static __thread char *gib_global_bumpalloc_heap_ptr = (char *) NULL;
-static __thread char *gib_global_bumpalloc_heap_ptr_end = (char *) NULL;
-static char *gib_global_saved_heap_ptr_stack[100];
-static int gib_global_num_saved_heap_ptr = 0;
+static __thread char *gib_global_list_bumpalloc_heap_ptr = (char *) NULL;
+static __thread char *gib_global_list_bumpalloc_heap_ptr_end = (char *) NULL;
+static char *gib_global_list_saved_heap_ptr_stack[100];
+static int gib_global_list_num_saved_heap_ptr = 0;
 
 // For simplicity just use a single large slab:
 inline void gib_init_bumpalloc(void)
 {
-    gib_global_bumpalloc_heap_ptr = (char*)gib_alloc(gib_global_biginf_init_chunk_size);
-    gib_global_bumpalloc_heap_ptr_end = gib_global_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
+    gib_global_list_bumpalloc_heap_ptr =
+        (char*) gib_alloc(gib_global_biginf_init_chunk_size);
+    gib_global_list_bumpalloc_heap_ptr_end =
+        gib_global_list_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
 #ifdef _GIBBON_DEBUG
     printf("Arena size for bump alloc: %lld\n", gib_global_biginf_init_chunk_size);
-    printf("gib_list_bumpalloc/gib_init_bumpalloc DONE: heap_ptr = %p\n", gib_global_bumpalloc_heap_ptr);
+    printf("gib_list_bumpalloc/gib_init_bumpalloc DONE: heap_ptr = %p\n",
+           gib_global_list_bumpalloc_heap_ptr);
 #endif
 }
 
 void *gib_list_bumpalloc(int64_t n)
 {
-    if (! gib_global_bumpalloc_heap_ptr) {
+    if (! gib_global_list_bumpalloc_heap_ptr) {
         gib_init_bumpalloc();
     }
-    if (gib_global_bumpalloc_heap_ptr + n < gib_global_bumpalloc_heap_ptr_end) {
-        char* old= gib_global_bumpalloc_heap_ptr;
-        gib_global_bumpalloc_heap_ptr += n;
+    if (gib_global_list_bumpalloc_heap_ptr + n <
+        gib_global_list_bumpalloc_heap_ptr_end) {
+        char* old= gib_global_list_bumpalloc_heap_ptr;
+        gib_global_list_bumpalloc_heap_ptr += n;
         return old;
     } else {
         fprintf(stderr, "Warning: bump allocator ran out of memory.");
@@ -660,10 +668,10 @@ void *gib_list_bumpalloc(int64_t n)
 void gib_list_save_alloc_state(void)
 {
 #ifdef _GIBBON_DEBUG
-    printf("Saving(%p): pos %d", heap_ptr, gib_global_num_saved_heap_ptr);
+    printf("Saving(%p): pos %d", heap_ptr, gib_global_list_num_saved_heap_ptr);
 #endif
-    gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr] = heap_ptr;
-    gib_global_num_saved_heap_ptr++;
+    gib_global_list_saved_heap_ptr_stack[gib_global_list_num_saved_heap_ptr] = heap_ptr;
+    gib_global_list_num_saved_heap_ptr++;
 #ifdef _GIBBON_DEBUG
     printf("\n");
 #endif
@@ -671,19 +679,19 @@ void gib_list_save_alloc_state(void)
 
 void gib_list_restore_alloc_state(void)
 {
-    if(gib_global_num_saved_heap_ptr <= 0) {
+    if(gib_global_list_num_saved_heap_ptr <= 0) {
         fprintf(stderr, "Bad call to gib_list_restore_alloc_state!  Saved stack empty!\ne");
         exit(1);
     }
-    gib_global_num_saved_heap_ptr--;
+    gib_global_list_num_saved_heap_ptr--;
 #ifdef _GIBBON_DEBUG
     printf("Restoring(%p): pos %d, discarding %p",
-           gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr],
-           gib_global_num_saved_heap_ptr,
-           gib_global_bumpalloc_heap_ptr);
+           gib_global_list_saved_heap_ptr_stack[gib_global_list_num_saved_heap_ptr],
+           gib_global_list_num_saved_heap_ptr,
+           gib_global_list_bumpalloc_heap_ptr);
 #endif
-    gib_global_bumpalloc_heap_ptr =
-        gib_global_saved_heap_ptr_stack[gib_global_num_saved_heap_ptr];
+    gib_global_list_bumpalloc_heap_ptr =
+        gib_global_list_saved_heap_ptr_stack[gib_global_list_num_saved_heap_ptr];
 }
 
 #else
