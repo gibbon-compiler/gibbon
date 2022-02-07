@@ -46,6 +46,7 @@ pub fn collect_minor(
         let mut oldest_gen = OldestGeneration(generations_ptr);
         cauterize_writers(wstack)?;
         evacuate_readers(rstack, &mut oldest_gen)?;
+        nursery.bump_collections();
         nursery.reset_alloc();
         Ok(())
     } else {
@@ -416,6 +417,13 @@ pub trait Heap {
 struct Nursery(*mut C_GibNursery);
 
 impl Nursery {
+    fn bump_collections(&mut self) {
+        let nursery: *mut C_GibNursery = self.0;
+        unsafe {
+            (*nursery).collections += 1;
+        }
+    }
+
     fn reset_alloc(&mut self) {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {

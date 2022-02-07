@@ -13,8 +13,6 @@ See gibbon-compiler/cbits/gibbon.h.
 pub mod types {
     #![allow(non_camel_case_types)]
 
-    use std::collections::HashSet;
-
     // These typedefs must match their counterparts in C.
     // See gibbon-compiler/cbits/gibbon.h.
 
@@ -36,27 +34,30 @@ pub mod types {
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibNursery {
-        pub step: u8,
+        pub collections: u64,
         pub heap_size: u64,
         pub heap_start: *const i8,
         pub heap_end: *const i8,
         pub alloc: *const i8,
         pub initialized: bool,
-        pub rem_set: *mut HashSet<C_GibShadowstackFrame>,
+        pub rem_set: *mut std::ffi::c_void,
     }
+
+    pub type C_GibRememberedSetElt = C_GibShadowstackFrame;
+    pub type C_GibRememberedSet = C_GibShadowstack;
 
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibGeneration {
         pub no: u8,
         pub dest: *mut C_GibGeneration,
-        pub refcounted: bool,
+        pub oldest: bool,
         pub mem_allocated: u64,
         pub heap_size: u64,
         pub heap_start: *const i8,
         pub heap_end: *const i8,
         pub alloc: *const i8,
-        pub rem_set: *mut HashSet<C_GibShadowstackFrame>,
+        pub rem_set: *mut C_GibRememberedSet,
         pub zct: *mut std::ffi::c_void,
     }
 

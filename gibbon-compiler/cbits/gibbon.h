@@ -296,9 +296,28 @@ void gib_print_global_region_count(void);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+typedef struct gib_shadowstack {
+    bool ss_initialized;
+    char *ss_start;
+    char *ss_end;
+    char *ss_alloc;
+} GibShadowstack;
+
+typedef struct gib_shadowstack_frame {
+    char *ssf_ptr;
+
+    // An enum in C, which is 4 bytes.
+    // The enum (GibDatatype) will be defined in the generated program.
+    uint32_t ssf_datatype;
+
+} GibShadowstackFrame;
+
+typedef GibShadowstackFrame GibRememberedSetElt;
+typedef GibShadowstack GibRememberedSet;
+
 typedef struct gib_nursery {
     // Step.
-    uint8_t n_step;
+    uint64_t n_collections;
 
     // Allocation area.
     uint64_t n_heap_size;
@@ -322,8 +341,8 @@ typedef struct gib_generation {
     // Destination generation for live objects.
     struct gib_generation *g_dest;
 
-    // True in the oldest generation.
-    bool g_refcounted;
+    // Is this the oldest generation?
+    bool g_oldest;
 
     // Amount of memory allocated in this generation.
     uint64_t g_mem_allocated;
@@ -334,31 +353,14 @@ typedef struct gib_generation {
     char *g_heap_end;
     char *g_alloc;
 
-    // Remembered set to store old to young pointers;
-    // this is a pointer to a structure on the Rust Heap.
-    void *g_rem_set;
+    // Remembered set to store old to young pointers.
+    GibRememberedSet *g_rem_set;
 
     // Zero count table;
     // this is a pointer to a structure on the Rust Heap.
     void *g_zct;
 
 } GibGeneration;
-
-typedef struct gib_shadowstack {
-    bool ss_initialized;
-    char *ss_start;
-    char *ss_end;
-    char *ss_alloc;
-} GibShadowstack;
-
-typedef struct gib_shadowstack_frame {
-    char *ssf_ptr;
-
-    // An enum in C, which is 4 bytes.
-    // The enum (GibDatatype) will be defined in the generated program.
-    uint32_t ssf_datatype;
-
-} GibShadowstackFrame;
 
 // Shadow stacks for readable and writeable locations respectively,
 // indexed by thread_id.

@@ -1252,6 +1252,9 @@ void gib_print_global_region_count(void)
 // each stack frame is only 16 bytes.
 #define SHADOWSTACK_SIZE (sizeof(GibShadowstackFrame) * 4 * 1024 * 1024)
 
+// Same as SHADOWSTACK_SIZE, overflows are not checked.
+#define REMEMBERED_SET_SIZE (sizeof(GibRememberedSetElt) * 1024)
+
 
 // Array of nurseries, indexed by thread_id.
 GibNursery *gib_global_nurseries = (GibNursery *) NULL;
@@ -1274,7 +1277,7 @@ GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 void gib_storage_initialize(void);
 void gib_nursery_initialize(GibNursery *nursery);
 void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no);
-void gib_shadowstack_initialize(GibShadowstack *stack);
+void gib_shadowstack_initialize(GibShadowstack *stack, uint64_t stack_size);
 
 // Initialize nurseries, shadow stacks and generations.
 void gib_storage_initialize(void)
@@ -1315,8 +1318,10 @@ void gib_storage_initialize(void)
             (GibShadowstack *) gib_alloc(gib_global_num_threads *
                                          sizeof(GibShadowstack));
     for (ss = 0; ss < gib_global_num_threads; ss++) {
-        gib_shadowstack_initialize(&(gib_global_read_shadowstacks[ss]));
-        gib_shadowstack_initialize(&(gib_global_write_shadowstacks[ss]));
+        gib_shadowstack_initialize(&(gib_global_read_shadowstacks[ss]),
+                                   SHADOWSTACK_SIZE);
+        gib_shadowstack_initialize(&(gib_global_write_shadowstacks[ss]),
+                                   SHADOWSTACK_SIZE);
      }
 
     return;
@@ -1325,7 +1330,7 @@ void gib_storage_initialize(void)
 // Initialize a nursery.
 void gib_nursery_initialize(GibNursery *nursery)
 {
-    nursery->n_step = 0;
+    nursery->n_collections = 0;
     nursery->n_heap_size = NURSERY_SIZE;
     nursery->n_heap_start = (char *) gib_alloc(NURSERY_SIZE);
     if (nursery->n_heap_start == NULL) {
@@ -1347,15 +1352,24 @@ void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
     gen->g_no = gen_no;
     gen->g_dest = (GibGeneration *) NULL;
     gen->g_mem_allocated = 0;
-    // Initialize the heap if it's not the oldest generation.
-    if (gen == gib_global_oldest_gen) {
-        gib_global_oldest_gen->g_refcounted = true;
+    gen->g_zct = (void *) NULL;
+    // Initialize the remembered set.
+    gen->g_rem_set = (GibRememberedSet *) gib_alloc(sizeof(GibRememberedSet));
+    if (gen->g_rem_set == NULL) {
+        fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %ld",
+                sizeof(GibRememberedSet));
+        exit(1);
+    }
+    gib_shadowstack_initialize(gen->g_rem_set, REMEMBERED_SET_SIZE);
+    // Initialize the heap if this is not the oldest generation.
+    if (gen_no == (NUM_GENERATIONS - 1)) {
+        gen->g_oldest = true;
         gen->g_heap_size = 0;
         gen->g_heap_start = (char *) NULL;
         gen->g_heap_end = (char *) NULL;
         gen->g_alloc = (char *) NULL;
     } else {
-        gen->g_refcounted = false;
+        gen->g_oldest = false;
         gen->g_heap_size = ((gen_no+1) * 256 * MB);
         gen->g_heap_start = (char *) gib_alloc(gen->g_heap_size);
         if (gen->g_heap_start == NULL) {
@@ -1365,22 +1379,20 @@ void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
         gen->g_heap_end = gen->g_heap_start + gen->g_heap_size;
         gen->g_alloc = gen->g_heap_start;
     }
-    gen->g_rem_set = (void *) NULL;
-    gen->g_zct = (void *) NULL;
 
     return;
 }
 
 // Initialize a shadow stack.
-void gib_shadowstack_initialize(GibShadowstack* stack)
+void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_size)
 {
-    stack->ss_start = (char*) gib_alloc(SHADOWSTACK_SIZE);
+    stack->ss_start = (char*) gib_alloc(stack_size);
     if (stack->ss_start == NULL) {
         fprintf(stderr, "gib_shadowstack_initialize: gib_alloc failed: %ld",
-                SHADOWSTACK_SIZE);
+                stack_size);
         exit(1);
     }
-    stack->ss_end = stack->ss_start + SHADOWSTACK_SIZE;
+    stack->ss_end = stack->ss_start + stack_size;
     stack->ss_alloc = stack->ss_start;
     stack->ss_initialized = true;
     return;
