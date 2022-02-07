@@ -85,14 +85,14 @@ data E2Ext loc dec
                 loc -- Region
                 loc -- Write cursor
   | AddFixed Var Int
-  | IndirectionE TyCon
-                 DataCon
-                 (loc,Var) -- Pointer
-                 (loc,Var) -- Pointee (the thing that the pointer points to)
+  | IndirectionE TyCon     -- Type of the data pointed to by this indirection.
+                 DataCon   -- Constructor for an indirection in this type.
+                 (loc,Var) -- Pointer.
+                 (loc,Var) -- Pointee (the thing that the pointer points to).
                  (E2 loc dec) -- If this indirection was added to get rid
                               -- of a copy_Foo call, we keep the fn call
                               -- around in case we want to go back to it.
-                              -- E.g. reverting from L2 to L1.
+                              -- E.g. when reverting from L2 to L1.
     -- ^ A tagged indirection node.
   | GetCilkWorkerNum
   -- ^ Runs  __cilkrts_get_worker_number()

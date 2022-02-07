@@ -282,8 +282,8 @@ typedef struct gib_chunk {
 
 GibChunk *gib_alloc_region(uint64_t size);
 GibChunk gib_alloc_chunk(GibCursor footer_ptr);
-void gib_bump_refcount(GibCursor end_b, GibCursor end_a);
-void gib_free_region(GibCursor end_reg);
+void gib_bump_refcount(GibCursor from_footer_ptr, GibCursor to_footer_ptr);
+void gib_free_region(GibCursor reg_footer_ptr);
 
 // Functions related to counting the number of allocated regions.
 GibChunk *gib_alloc_counted_region(int64_t size);
@@ -370,6 +370,9 @@ typedef struct gib_generation {
 extern GibShadowstack *gib_global_read_shadowstacks;
 extern GibShadowstack *gib_global_write_shadowstacks;
 
+// Nursery API.
+bool gib_addr_in_nursery(char *ptr);
+
 // Shadowstack API.
 void gib_shadowstack_push(GibShadowstack *stack, char *ptr, uint32_t datatype);
 GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack);
@@ -379,6 +382,15 @@ void gib_shadowstack_print_all(GibShadowstack *stack);
 // Region allocation.
 GibChunk *gib_alloc_region2(uint64_t size);
 void gib_free_region2(GibChunk *region);
+
+// Write barrier. INLINE!!!
+void gib_indirection_barrier(
+    GibCursor from,
+    GibCursor from_footer_ptr,
+    GibCursor to,
+    GibCursor to_footer_ptr,
+    uint32_t datatype
+);
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Implemented in the Rust RTS

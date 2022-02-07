@@ -34,6 +34,14 @@
 #include <cilk/cilk_api.h>
 #endif
 
+// Convenience macros since we don't really need the arrays of nurseries and
+// shadowstacks since mutators are still sequential.
+// #define DEFAULT_NURSERY gib_global_nurseries
+#define DEFAULT_NURSERY (&(gib_global_nurseries[0]))
+#define DEFAULT_READ_SHADOWSTACK (&(gib_global_read_shadowstacks[0]))
+#define DEFAULT_WRITE_SHADOWSTACK (&(gib_global_write_shadowstacks[0]))
+
+
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Program starts here
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -210,8 +218,8 @@ GibInt do_reverse(GibInt n_19_183_289)
     *(GibBoxedTag *) r_720 = 0;
     GibCursor writetag_1010 = r_720 + 1;
 
-    GibShadowstack *rstack = &(gib_global_read_shadowstacks[0]);
-    GibShadowstack *wstack = &(gib_global_write_shadowstacks[0]);
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
 
     // xs
     gib_shadowstack_push(rstack, pvrtmp_1385, List_T);
@@ -263,8 +271,8 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
         loc_614 = c_start_14;
     }
 
-    GibShadowstack *rstack = &(gib_global_read_shadowstacks[0]);
-    GibShadowstack *wstack = &(gib_global_write_shadowstacks[0]);
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
 
     GibBoxedTag tmpval_1355 = *(GibBoxedTag *) xs_36_179_284;
 
@@ -335,8 +343,8 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
             *(GibInt *) writetag_1004 = tmpval_1361;
             GibCursor writecur_1005 = writetag_1004 + sizeof(GibInt);
 
-            rstack = &(gib_global_read_shadowstacks[0]);
-            wstack = &(gib_global_write_shadowstacks[0]);
+            rstack = DEFAULT_READ_SHADOWSTACK;
+            wstack = DEFAULT_WRITE_SHADOWSTACK;
 
             // Push to shadow stack.
             // xs

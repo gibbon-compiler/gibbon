@@ -893,10 +893,10 @@ typedef struct gib_region_footer {
     struct gib_region_footer *rf_prev;
 } GibRegionFooter;
 
-void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg);
-void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg);
-GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer);
-uint16_t gib_get_ref_count(GibCursor end_ptr);
+static void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg);
+static void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg);
+static GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer);
+static uint16_t gib_get_ref_count(GibCursor end_ptr);
 
 
 GibChunk *gib_alloc_region(uint64_t size)
@@ -984,53 +984,53 @@ GibChunk gib_alloc_chunk(GibCursor footer_ptr)
     return (GibChunk) {start , end};
 }
 
-// B is the pointer, and A is the pointee (i.e B -> A).
-// Bump A's refcount and update B's outset.
-void gib_bump_refcount(GibCursor end_b, GibCursor end_a)
+// Bump to's refcount and insert 'to' into 'from's outset.
+void gib_bump_refcount(GibCursor from_footer_ptr, GibCursor to_footer_ptr)
 {
-    if (end_a == end_b) {
+    if (to_footer_ptr == from_footer_ptr) {
 #ifdef _GIBBON_DEBUG
         printf("gib_bump_refcount: indirection within a region found, refcount not bumped. TODO.\n");
 #endif
         return;
     }
     // Grab footers.
-    GibRegionFooter *footer_a = (GibRegionFooter *) end_a;
-    GibRegionFooter *footer_b = (GibRegionFooter *) end_b;
+    GibRegionFooter *to_footer = (GibRegionFooter *) to_footer_ptr;
+    GibRegionFooter *from_footer = (GibRegionFooter *) from_footer_ptr;
 
     // Grab metadata.
-    GibRegionMeta *reg_a = (GibRegionMeta *) footer_a->rf_reg_metadata_ptr;
-    GibRegionMeta *reg_b = (GibRegionMeta *) footer_b->rf_reg_metadata_ptr;
+    GibRegionMeta *to_reg = (GibRegionMeta *) to_footer->rf_reg_metadata_ptr;
+    GibRegionMeta *from_reg = (GibRegionMeta *) from_footer->rf_reg_metadata_ptr;
 
     // Bump A's refcount.
     uint16_t current_refcount, new_refcount;
-    current_refcount = reg_a->reg_refcount;
+    current_refcount = to_reg->reg_refcount;
     new_refcount = current_refcount + 1;
-    reg_a->reg_refcount = new_refcount;
+    to_reg->reg_refcount = new_refcount;
 
 #ifdef _GIBBON_DEBUG
-    printf("gib_bump_refcount: %lld -> %lld\n", reg_b->reg_id, reg_a->reg_id);
+    printf("gib_bump_refcount: %lld -> %lld\n", from_reg->reg_id, to_reg->reg_id);
     printf("gib_bump_refcount: old-refcount=%d, old-outset-len=%d:\n",
-           current_refcount, reg_b->reg_outset_len);
-    assert(current_refcount == reg_b->reg_outset_len+1);
+           current_refcount, from_reg->reg_outset_len);
+    assert(current_refcount == from_reg->reg_outset_len+1);
 #endif
 
-    // Add A to B's outset.
-    gib_insert_into_outset(end_a, reg_b);
+    // Add 'to' to 'from's outset.
+    gib_insert_into_outset(to_footer_ptr, from_reg);
 
 #ifdef _GIBBON_DEBUG
-    // printf("gib_bump_refcount: Added %p to %lld's outset, %p.\n", end_a, reg_b->reg_id, reg_b);
+    printf("gib_bump_refcount: Added %p to %lld's outset, %p.\n",
+           to_footer_ptr, from_reg->reg_id, from_reg);
     printf("gib_bump_refcount: new-refcount=%d, new-outset-len=%d\n",
-           new_refcount, reg_b->reg_outset_len);
-    assert(new_refcount == reg_b->reg_outset_len+1);
+           new_refcount, from_reg->reg_outset_len);
+    assert(new_refcount == from_reg->reg_outset_len+1);
 #endif
 
     return;
 }
 
-void gib_free_region(GibCursor end_reg) {
+void gib_free_region(GibCursor reg_footer_ptr) {
     // Grab footer and the metadata.
-    GibRegionFooter *footer = (GibRegionFooter *) end_reg;
+    GibRegionFooter *footer = (GibRegionFooter *) reg_footer_ptr;
     GibRegionMeta *reg = (GibRegionMeta *) footer->rf_reg_metadata_ptr;
 
     //
@@ -1104,7 +1104,7 @@ void gib_free_region(GibCursor end_reg) {
 #endif
 
         // Free the chunks in this region.
-        first_chunk = end_reg - footer->rf_size;
+        first_chunk = reg_footer_ptr - footer->rf_size;
         first_chunk_footer = footer;
         next_chunk = (char*) footer->rf_next;
 
@@ -1140,22 +1140,22 @@ void gib_free_region(GibCursor end_reg) {
     }
 }
 
-void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg)
+static void gib_insert_into_outset(GibCursor to_ptr, GibRegionMeta *from_reg)
 {
-    uint16_t outset_len = reg->reg_outset_len;
+    uint16_t outset_len = from_reg->reg_outset_len;
     // Check for duplicates.
     for (uint16_t i = 0; i < outset_len; i++) {
-        if (ptr == reg->reg_outset[i]) {
+        if (to_ptr == from_reg->reg_outset[i]) {
             return;
         }
     }
     // Otherwise, insert into the outset.
-    reg->reg_outset[outset_len] = ptr;
-    reg->reg_outset_len = outset_len + 1;
+    from_reg->reg_outset[outset_len] = to_ptr;
+    from_reg->reg_outset_len = outset_len + 1;
     return;
 }
 
-void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg)
+static void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg)
 {
     uint16_t outset_len = reg->reg_outset_len;
     GibCursor *outset = reg->reg_outset;
@@ -1182,7 +1182,7 @@ void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg)
     return;
 }
 
-GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
+static GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
 {
     if (footer->rf_seq_no == 1) {
         return footer;
@@ -1196,9 +1196,9 @@ GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
     return (GibRegionFooter *) NULL;
 }
 
-uint16_t gib_get_ref_count(GibCursor end_ptr)
+static uint16_t gib_get_ref_count(GibCursor footer_ptr)
 {
-    GibRegionFooter *footer = (GibRegionFooter *) end_ptr;
+    GibRegionFooter *footer = (GibRegionFooter *) footer_ptr;
     GibRegionMeta *reg = (GibRegionMeta *) footer->rf_reg_metadata_ptr;
     return reg->reg_refcount;
 }
@@ -1273,14 +1273,23 @@ GibGeneration *gib_global_oldest_gen = (GibGeneration *) NULL;
 GibShadowstack *gib_global_read_shadowstacks = (GibShadowstack *) NULL;
 GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 
-// Initialize nurseries, shadow stacks and generations.
-void gib_storage_initialize(void);
-void gib_nursery_initialize(GibNursery *nursery);
-void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no);
-void gib_shadowstack_initialize(GibShadowstack *stack, uint64_t stack_size);
+// Convenience macros since we don't really need the arrays of nurseries and
+// shadowstacks since mutators are still sequential.
+// #define DEFAULT_NURSERY gib_global_nurseries
+#define DEFAULT_NURSERY (&(gib_global_nurseries[0]))
+#define DEFAULT_GENERATION gib_global_oldest_gen
+#define DEFAULT_READ_SHADOWSTACK (&(gib_global_read_shadowstacks[0]))
+#define DEFAULT_WRITE_SHADOWSTACK (&(gib_global_write_shadowstacks[0]))
+
 
 // Initialize nurseries, shadow stacks and generations.
-void gib_storage_initialize(void)
+static void gib_storage_initialize(void);
+static void gib_nursery_initialize(GibNursery *nursery);
+static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no);
+static void gib_shadowstack_initialize(GibShadowstack *stack, uint64_t stack_size);
+
+// Initialize nurseries, shadow stacks and generations.
+static void gib_storage_initialize(void)
 {
     if (gib_global_nurseries != NULL) {
         return;
@@ -1328,7 +1337,7 @@ void gib_storage_initialize(void)
 }
 
 // Initialize a nursery.
-void gib_nursery_initialize(GibNursery *nursery)
+static void gib_nursery_initialize(GibNursery *nursery)
 {
     nursery->n_collections = 0;
     nursery->n_heap_size = NURSERY_SIZE;
@@ -1347,7 +1356,7 @@ void gib_nursery_initialize(GibNursery *nursery)
 }
 
 // Initialize a generation.
-void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
+static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
 {
     gen->g_no = gen_no;
     gen->g_dest = (GibGeneration *) NULL;
@@ -1384,9 +1393,9 @@ void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
 }
 
 // Initialize a shadow stack.
-void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_size)
+static void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_size)
 {
-    stack->ss_start = (char*) gib_alloc(stack_size);
+    stack->ss_start = (char *) gib_alloc(stack_size);
     if (stack->ss_start == NULL) {
         fprintf(stderr, "gib_shadowstack_initialize: gib_alloc failed: %ld",
                 stack_size);
@@ -1398,6 +1407,14 @@ void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_size)
     return;
 }
 
+// Nursery API.
+bool gib_addr_in_nursery(char *ptr)
+{
+    GibNursery *nursery = &(gib_global_nurseries[0]);
+    return ((ptr >= nursery->n_heap_start) && (ptr <= nursery->n_heap_end));
+}
+
+// Shadowstack API.
 void gib_shadowstack_push(GibShadowstack *stack, char *ptr, uint32_t datatype)
 {
     assert(stack->ss_initialized);
@@ -1454,8 +1471,8 @@ void gib_shadowstack_print_all(GibShadowstack *stack)
 }
 
 
-GibChunk *gib_alloc_region_on_heap(uint64_t size);
-GibChunk *gib_alloc_region_in_nursery(uint64_t size);
+static GibChunk *gib_alloc_region_on_heap(uint64_t size);
+static GibChunk *gib_alloc_region_in_nursery(uint64_t size);
 
 GibChunk *gib_alloc_region2(uint64_t size)
 {
@@ -1466,11 +1483,12 @@ GibChunk *gib_alloc_region2(uint64_t size)
     }
 }
 
-GibChunk *gib_alloc_region_on_heap(uint64_t size)
+static GibChunk *gib_alloc_region_on_heap(uint64_t size)
 {
     char *heap_start = gib_alloc(size);
     if (heap_start == NULL) {
-        fprintf(stderr, "gib_alloc_region_on_heap: gib_alloc failed: %" PRId64, size);
+        fprintf(stderr, "gib_alloc_region_on_heap: gib_alloc failed: %" PRId64,
+                 size);
         exit(1);
     }
     char *heap_end = heap_start + size;
@@ -1480,16 +1498,18 @@ GibChunk *gib_alloc_region_on_heap(uint64_t size)
     return region;
 }
 
+static GibChunk *gib_alloc_region_in_nursery_fast(uint64_t size, bool collected);
+static GibChunk *gib_alloc_region_in_nursery_slow(uint64_t size, bool collected);
+
 GibChunk *gib_alloc_region_in_nursery(uint64_t size)
 {
-    GibNursery *nursery = &(gib_global_nurseries[0]);
-    GibShadowstack *rstack = &(gib_global_read_shadowstacks[0]);
-    GibShadowstack *wstack = &(gib_global_write_shadowstacks[0]);
-    GibGeneration *generations = gib_global_generations;
-    assert(nursery->n_initialized);
-    bool garbage_collected = false;
+    return gib_alloc_region_in_nursery_fast(size, false);
+}
 
-try_alloc: ; // empty statement to appease C
+static GibChunk *gib_alloc_region_in_nursery_fast(uint64_t size, bool collected)
+{
+    GibNursery *nursery = DEFAULT_NURSERY;
+    assert(nursery->n_initialized);
     char *old = nursery->n_alloc;
     char *bump = old + size;
     if (bump < nursery->n_heap_end) {
@@ -1499,23 +1519,106 @@ try_alloc: ; // empty statement to appease C
         region->c_end = bump;
         return region;
     }
-    if (garbage_collected) {
+    return gib_alloc_region_in_nursery_slow(size, collected);
+}
+
+static GibChunk *gib_alloc_region_in_nursery_slow(uint64_t size, bool collected)
+{
+    if (collected) {
         fprintf(stderr, "Couldn't free space after garbage collection.\n");
         exit(1);
     }
-    int error = gib_garbage_collect(rstack, wstack, nursery, generations, false);
-    if (error < 0) {
-        fprintf(stderr, "Couldn't garbage collect minor gen, errorno=%d.",
-                error);
+    GibNursery *nursery = DEFAULT_NURSERY;
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    GibGeneration *generations = gib_global_generations;
+    int err = gib_garbage_collect(rstack, wstack, nursery, generations, false);
+    if (err < 0) {
+        fprintf(stderr, "Couldn't perform minor collection, errorno=%d.", err);
         exit(1);
     }
-    garbage_collected = true;
-    goto try_alloc;
+    return gib_alloc_region_in_nursery_fast(size, true);
 }
+
 
 void gib_free_region2(GibChunk *region)
 {
     printf("gib_free_region2: TODO.\n");
+    return;
+}
+
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Write barrier
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ *
+ * The following is how different types of indirections are handled:
+ *
+ * (1) nursery -> oldgen
+ *
+ *     We have two options here:
+ *
+ *     (a) Do nothing. However, when this region gets evacuated out of the
+ *         nursery, we'll always have to inline the pointed-to data since we
+ *         won't have access to its metadata to bump its refcount.
+ *
+ *     (b) Record it in a "deferred increment set" in the nursery. This way the
+ *         evacuate function is free to decide whether to inline the pointed-to
+ *         data or not. If it doesn't, it can find the correct metadata object
+ *         to apply the refcount increment to in this "deferred increment set".
+ *
+ * (2) nursery -> nursery
+ *
+ *     Do nothing.
+ *
+ * (3) oldgen -> nursery
+ *
+ *     Add to remembered set.
+ *
+ * (4) oldgen -> oldgen
+ *
+ *     Same as old Gibbon, bump refcount and insert into outset.
+ *
+ */
+
+static void gib_add_to_rem_set(char *from, uint32_t datatype);
+
+// Write barrier. INLINE!!!
+void gib_indirection_barrier(
+    GibCursor from,
+    GibCursor from_footer_ptr,
+    GibCursor to,
+    GibCursor to_footer_ptr,
+    uint32_t datatype
+)
+{
+    bool from_young = gib_addr_in_nursery(from);
+    bool from_old = !from_young;
+    bool to_young = gib_addr_in_nursery(to);
+    bool to_old = !to_young;
+    if (from_young && to_old) {
+        // (1) nursery -> oldgen
+        fprintf(stderr, "indirection barrier: todo nursery -> oldgen\n");
+        exit(1);
+    } else if (from_young && to_young) {
+        // (2) nursery -> nursery
+        return;
+    } else if (from_old && to_young) {
+        // (3) oldgen -> nursery
+        gib_add_to_rem_set(from, datatype);
+        return;
+    } else if (from_old && to_old) {
+        // (4) oldgen -> oldgen
+        gib_bump_refcount(from_footer_ptr, to_footer_ptr);
+        return;
+    }
+}
+
+static void gib_add_to_rem_set(char *from, uint32_t datatype)
+{
+    GibGeneration *gen = DEFAULT_GENERATION;
+    gib_shadowstack_push(gen->g_rem_set, from, datatype);
     return;
 }
 
