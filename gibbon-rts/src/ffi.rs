@@ -12,6 +12,7 @@ See gibbon-compiler/cbits/gibbon.h.
 
 pub mod types {
     #![allow(non_camel_case_types)]
+
     //! Everything in this module must match its counterpart in C. See
     //! gibbon-compiler/cbits/gibbon.h and gibbon-compiler/cbits/gibbon_rts.c.
 

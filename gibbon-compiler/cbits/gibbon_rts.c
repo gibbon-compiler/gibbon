@@ -41,11 +41,11 @@
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+#define MAX_CHUNK_SIZE (1 * GB)
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
 static uint64_t gib_global_biginf_init_chunk_size = 4 * GB;
 static uint64_t gib_global_inf_init_chunk_size = 1 * KB;
-static const uint64_t gib_global_max_chunk_size = (1 * GB);
 
 // Runtime arguments, values updated by the flags parser.
 static GibInt gib_global_size_param = 1;
@@ -53,7 +53,7 @@ static GibInt gib_global_iters_param = 1;
 static char *gib_global_bench_prog_param = (char *) NULL;
 static char *gib_global_benchfile_param = (char *) NULL;
 static char *gib_global_arrayfile_param = (char *) NULL;
-static int64_t gib_global_arrayfile_length_param = -1;
+static uint64_t gib_global_arrayfile_length_param = -1;
 
 // Number of regions allocated.
 static int64_t gib_global_region_count = 0;
@@ -113,14 +113,9 @@ char *gib_read_arrayfile_param(void)
     }
 }
 
-int64_t gib_read_arrayfile_length_param(void)
+uint64_t gib_read_arrayfile_length_param(void)
 {
-    if (gib_global_arrayfile_length_param == -1) {
-        fprintf(stderr, "gib_read_arrayfile_length_param: array input file length was not set! Set using --array-input-length.\n");
-        exit(1);
-    } else {
-        return gib_global_arrayfile_length_param;
-    }
+    return gib_global_arrayfile_length_param;
 }
 
 int64_t gib_read_region_count(void)
@@ -186,7 +181,7 @@ GibArena *gib_alloc_arena(void)
 {
     GibArena *ar = gib_alloc(sizeof(GibArena));
     ar->ind = 0;
-    ar->mem = (char *) gib_alloc(gib_global_max_chunk_size);
+    ar->mem = (char *) gib_alloc(MAX_CHUNK_SIZE);
     ar->reflist = 0;
     return ar;
 }
@@ -950,10 +945,10 @@ GibChunk gib_alloc_chunk(GibCursor footer_ptr)
     GibChunkFooter *footer = (GibChunkFooter *) footer_ptr;
     uint64_t newsize = footer->cf_size * 2;
     // See #110.
-    if (newsize > gib_global_max_chunk_size) {
-        newsize = gib_global_max_chunk_size;
+    if (newsize > MAX_CHUNK_SIZE) {
+        newsize = MAX_CHUNK_SIZE;
     }
-    int64_t total_size = newsize + sizeof(GibChunkFooter);
+    uint64_t total_size = newsize + sizeof(GibChunkFooter);
 
     // Allocate.
     GibCursor start = (char *) gib_alloc(total_size);

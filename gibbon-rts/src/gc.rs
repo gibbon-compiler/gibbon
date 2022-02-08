@@ -21,6 +21,78 @@ use crate::ffi::types::*;
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+/*
+ * Discuss:
+ * ~~~~~~~~
+
+(1)
+Only maintain refcounts and outsets for indirections in the old generation.
+
+When evacuating the roots in the remembered set, set refcount of the evacuated
+data to 1, or bump it by 1 (how? don't know the meatadata address) if a root
+here reaches burnt data. For all roots in the shadow stack, set refcount of the
+evacuated data to 0 and add it to ZCT.
+
+(2)
+During a major collection, (a) perform a minor collection, and (b) traverse the
+ZCT and free all regions which don't have pointers from the shadowstack.
+
+(3)
+Evacuate_packed makes an assumption that buffers are always evacuated left-to-right...
+But it can encounter burnt data in the middle of the buffer such that there's
+more data to be evacuated after it.
+
+New policy:
+~~~~~~~~~~~~
+
+If evacuate_packed reaches burnt data while evacuating the fields of a data
+constructor, it means that one of the fields was already evacuated before but
+there may still be more fields to evacuate. Thus, we must traverse past this
+burnt field and evacuate the rest. But this traversal is tricky. The simple
+strategy of "go right until you stop seeing burnt things" doesn't work because
+the neighboring fields might also be burnt and we wouldn't know where one ends
+and the next begins.
+
+If evacuate_packed arrives at burnt data via an indirection, write an indirection
+in the destination using the forwarding pointer. In this case we are traversing
+past the source field (which was an indirection) to reach any subsequent fields
+that might need to be evacuated. See below re: maintaining refcounts.
+
+(4)
+Every time we write an indirection while evacuating, we must adjust refcounts
+and outsets. In the current implementation, we write an indirection only when
+we reach already burnt data, but we don't have access to the metadata of the
+region where the data was forwarded. We could do two things here:
+
+  (a) always inline EVERYTHING. but this might be bad..
+
+  (b) in addition to storing a forwarding pointer, we could also store the
+      metadata adress with it. but this means that a forwarding node will now
+      occupy 17 bytes! this breaks its representational equivalence with
+      indirections, which is necessary to support burning data that doesn't
+      have room for a forwarding pointer a.k.a. the COPIED tag.
+      this means we'll have to make indirections 17 bytes long too? yikes.
+
+(5)
+When we write young-to-old indirections in the mutator we run into a similar
+problem as above while evacuating them i.e. we must always inline the pointed-to
+data. If we wanted to preserve this indirection while evacuating, we would have
+to adjust the refcount of the oldgen region, but wouldn't know the address of
+its metadata. The presumption here is that data in the oldgen is BIG and we
+might not want to inline it. Inlining young-to-young indirections seems okay.
+
+Should we preserve the young-to-old indirections by making the write barrier
+store some information in a "deferred increment set"? That is, we store
+(from_addr, to_addr, to_metadata) in a set. While evacuating young-to-old
+indirections, we lookup this metadata address in the set and update the refcount.
+Maintaining a correct outset is easy since regions in nursery don't have any
+metadata and we allocate fresh footers and metadata while evacuating them.
+
+(6)
+Handle shortcut pointers properly while evacuating.
+
+ */
+
 // Tags used internally in the garbage collector.
 const CAUTERIZED_TAG: C_GibPackedTag = 253;
 const COPIED_TO_TAG: C_GibPackedTag = 252;
@@ -161,29 +233,32 @@ fn evacuate(
     }
 }
 
-/// Evacuate a packed value by referring to the info table.
-///
-/// Arguments:
-///
-/// * dest - allocation area to copy data into
-/// * packed_info - information about the fields of this datatype
-/// * src - a pointer to the value to be copied in source buffer
-/// * dst - a pointer to the value's new destination in the destination buffer
-/// * dst_end - end of the destination buffer for bounds checking
-///
-/// Returns: (src_after, dst_after, dst_end, maybe_tag)
-///
-/// * src_after - a pointer in the source buffer that's one past the
-///               last cell occupied by the value that was copied
-/// * dst_after - a pointer in the destination buffer that's one past the
-///               last cell occupied by the value in it's new home
-/// * dst_end   - end of the destination buffer (which can change during copying
-///               due to bounds checking)
-/// * maybe_tag - when copying a packed value, return the tag of the the datacon
-///               that this function was called with. copy_readers uses this tag
-///               to decide whether it should write a forwarding pointer at
-///               the end of the source buffer.
-///
+/**
+
+Evacuate a packed value by referring to the info table.
+
+Arguments:
+
+- dest - allocation area to copy data into
+- packed_info - information about the fields of this datatype
+- src - a pointer to the value to be copied in source buffer
+- dst - a pointer to the value's new destination in the destination buffer
+- dst_end - end of the destination buffer for bounds checking
+
+Returns: (src_after, dst_after, dst_end, maybe_tag)
+
+- src_after - a pointer in the source buffer that's one past the
+              last cell occupied by the value that was copied
+- dst_after - a pointer in the destination buffer that's one past the
+              last cell occupied by the value in its new home
+- dst_end   - end of the destination buffer (which can change during copying
+              due to bounds checking)
+- maybe_tag - when copying a packed value, return the tag of the the datacon
+              that this function was called with. copy_readers uses this tag
+              to decide whether it should write a forwarding pointer at
+              the end of the source buffer.
+
+ */
 fn evacuate_packed(
     dest: &mut impl Heap,
     packed_info: &HashMap<C_GibPackedTag, DataconInfo>,
@@ -208,19 +283,18 @@ fn evacuate_packed(
             // This is a forwarding pointer. Use this to write an
             // indirection in the destination buffer.
             COPIED_TO_TAG => {
-                let (fwd_ptr, src_after_fwd_ptr): (*mut i8, _) =
-                    read_mut(src_after_tag);
+                let (fwd_ptr, _): (*mut i8, _) = read_mut(src_after_tag);
                 let space_reqd = 18;
                 let (dst1, dst_end1) =
                     Heap::check_bounds(dest, space_reqd, dst, dst_end)?;
                 let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                 let dst_after_indr = write(dst_after_tag, fwd_ptr);
-                Ok((src_after_fwd_ptr, dst_after_indr, dst_end1, Some(tag)))
+                Ok((null_mut(), dst_after_indr, dst_end1, Some(tag)))
             }
             // Algorithm:
             //
             // Scan to the right for the next COPIED_TO_TAG, then take
-            // the negative offset of that pointer to find it's position
+            // the negative offset of that pointer to find its position
             // in the destination buffer. Write an indirection to that
             // in the spot you would have copied the data to.
             //
@@ -401,13 +475,13 @@ pub trait Heap {
         dst: *mut i8,
         dst_end: *const i8,
     ) -> Result<(*mut i8, *const i8)> {
+        assert!((dst as *const i8) < dst_end);
         unsafe {
-            debug_assert!((dst as *const i8) < dst_end);
             let space_avail = dst_end.offset_from(dst) as usize;
             if space_avail < space_reqd {
                 // TODO(ckoparkar): see the TODO in copy_readers.
                 let (new_dst, new_dst_end) = Heap::allocate(self, 1024)?;
-                let dst_after_tag = write(dst, REDIRECTION_TAG);
+                let dst_after_tag = write(dst, C_REDIRECTION_TAG);
                 write(dst_after_tag, new_dst);
                 Ok((new_dst, new_dst_end))
             } else {
@@ -451,7 +525,7 @@ impl Heap for Nursery {
     fn space_available(&self) -> usize {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
-            debug_assert!((*nursery).alloc <= (*nursery).heap_end);
+            assert!((*nursery).alloc <= (*nursery).heap_end);
             (*nursery).heap_end.offset_from((*nursery).alloc) as usize
         }
     }
@@ -459,7 +533,7 @@ impl Heap for Nursery {
     fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)> {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
-            debug_assert!((*nursery).alloc < (*nursery).heap_end);
+            assert!((*nursery).alloc < (*nursery).heap_end);
             let old = (*nursery).alloc as *mut i8;
             let bump = old.add(size as usize);
             let end = (*nursery).heap_end as *mut i8;
@@ -496,7 +570,7 @@ impl Heap for Generation {
     fn space_available(&self) -> usize {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
-            debug_assert!((*gen).alloc <= (*gen).heap_end);
+            assert!((*gen).alloc <= (*gen).heap_end);
             (*gen).heap_end.offset_from((*gen).alloc) as usize
         }
     }
@@ -504,7 +578,7 @@ impl Heap for Generation {
     fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)> {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
-            debug_assert!((*gen).alloc < (*gen).heap_end);
+            assert!((*gen).alloc < (*gen).heap_end);
             let old = (*gen).alloc as *mut i8;
             let bump = old.add(size as usize);
             let end = (*gen).heap_end as *mut i8;
@@ -570,7 +644,7 @@ impl Shadowstack {
                 (*ss).start as *const C_GibShadowstackFrame,
                 (*ss).alloc as *const C_GibShadowstackFrame,
             );
-            debug_assert!(start_ptr <= end_ptr);
+            assert!(start_ptr <= end_ptr);
             end_ptr.offset_from(start_ptr)
         }
     }
@@ -594,7 +668,7 @@ impl ShadowstackIter {
     fn new(stk: &Shadowstack) -> ShadowstackIter {
         unsafe {
             let cstk: *mut C_GibShadowstack = stk.0;
-            debug_assert!((*cstk).start <= (*cstk).alloc);
+            assert!((*cstk).start <= (*cstk).alloc);
             ShadowstackIter { run_ptr: (*cstk).start, end_ptr: (*cstk).alloc }
         }
     }

@@ -25,7 +25,8 @@
  * primitive SizeParam is translated to gib_global_size_param, VSliceP to
  * gib_vector_slice etc.) are defined using a typedef'd type. This allows us to
  * change their C type *without* changing anything in the Gibbon code generator.
- * Other declarations use regular C types:
+ *
+ * Other declarations directly use C types:
  * https://www.kernel.org/doc/html/v4.10/process/coding-style.html#typedefs
  *
  */
@@ -58,7 +59,7 @@ GibInt gib_get_iters_param(void);
 char *gib_read_bench_prog_param(void);
 char *gib_read_benchfile_param(void);
 char *gib_read_arrayfile_param(void);
-int64_t gib_read_arrayfile_length_param(void);
+uint64_t gib_read_arrayfile_length_param(void);
 
 // Number of regions allocated.
 int64_t gib_read_region_count(void);
