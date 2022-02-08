@@ -1,6 +1,6 @@
 /* Gibbon program. */
 
-#include "gibbon.h"
+#include "gibbon_rts.h"
 
 #include <assert.h>
 #include <stdio.h>

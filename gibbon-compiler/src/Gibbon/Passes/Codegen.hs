@@ -289,7 +289,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
 
       hashIncludes =
         "/* Gibbon program. */\n\n\
-        \#include \"gibbon.h\"\n\n\
+        \#include \"gibbon_rts.h\"\n\n\
         \#include <assert.h>\n\
         \#include <stdio.h>\n\
         \#include <stdlib.h>\n\

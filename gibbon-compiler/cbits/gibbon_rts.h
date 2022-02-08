@@ -204,6 +204,9 @@ typedef struct gib_vector {
 
 } GibVector;
 
+// Comparison function.
+typedef int (*GibCmpFn)(const void *, const void*) ;
+
 GibVector *gib_vector_alloc(GibInt num, size_t elt_size);
 GibInt gib_vector_length(GibVector *vec);
 GibBool gib_vector_is_empty(GibVector *vec);
@@ -211,8 +214,8 @@ GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec);
 void *gib_vector_nth(GibVector *vec, GibInt i);
 GibVector *gib_vector_inplace_update(GibVector *vec, GibInt i, void* elt);
 GibVector *gib_vector_copy(GibVector *vec);
-GibVector *gib_vector_inplace_sort(GibVector *vec, int (*compar)(const void *, const void*));
-GibVector *gib_vector_sort(GibVector *vec, int (*compar)(const void *, const void*));
+GibVector *gib_vector_inplace_sort(GibVector *vec, GibCmpFn cmp);
+GibVector *gib_vector_sort(GibVector *vec, GibCmpFn cmp);
 GibVector *gib_vector_concat(GibVector *vec);
 void gib_vector_free(GibVector *vec);
 GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2);
