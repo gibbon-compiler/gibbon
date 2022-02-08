@@ -284,7 +284,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
 
       gibTypesEnum =
         let go str = C.CEnum (C.Id (str ++ "_T") noLoc) Nothing noLoc
-            decls = map go (allowedFieldTys ++ M.keys info_tbl)
+            decls = map go (builtinFieldTys ++ M.keys info_tbl)
         in [cedecl| typedef enum { $enums:decls } GibDatatype; |]
 
       hashIncludes =
@@ -324,8 +324,8 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
         \ */\n\n"
 
 
-allowedFieldTys :: [String]
-allowedFieldTys =
+builtinFieldTys :: [String]
+builtinFieldTys =
     [ "GibInt", "GibFloat", "GibSym", "GibBool", "GibVector", "GibList", "GibCursor"
     -- , "GibPackedTag", "GibBoxedTag", "GibPtr", "GibSymDict", "GibSymSet"
     -- , "GibSymHash", "GibIntHash"
@@ -367,7 +367,7 @@ initInfoTable info_tbl =
                                                  tyc_info)
                          0
                          info_tbl
-    insert_scalar_info = map (\ty -> let ty_t = ty ++ "_T" in C.BlockStm [cstm| gib_info_table_insert_scalar($id:ty_t, sizeof($id:ty)); |]) allowedFieldTys
+    insert_scalar_info = map (\ty -> let ty_t = ty ++ "_T" in C.BlockStm [cstm| gib_info_table_insert_scalar($id:ty_t, sizeof($id:ty)); |]) builtinFieldTys
     insert_dcon_info = M.foldrWithKey
                            (\tycon tyc_info acc ->
                                 M.foldrWithKey (\dcon (DataConInfo dcon_tag scalar_bytes num_scalars num_packed field_tys) acc2 ->

@@ -12,9 +12,8 @@ See gibbon-compiler/cbits/gibbon.h.
 
 pub mod types {
     #![allow(non_camel_case_types)]
-
-    // These type definitions must match their counterparts in C. See
-    // gibbon-compiler/cbits/gibbon.h and gibbon-compiler/cbits/gibbon_rts.c.
+    //! Everything in this module must match its counterpart in C. See
+    //! gibbon-compiler/cbits/gibbon.h and gibbon-compiler/cbits/gibbon_rts.c.
 
     pub type C_GibPackedTag = u8;
     pub type C_GibBoxedTag = u8;
@@ -28,8 +27,9 @@ pub mod types {
     /// An enum in C, which is 4 bytes.
     pub type C_GibDatatype = u32;
 
-    /// An enum in C, which is 4 bytes.
-    pub type C_GibCursorBindType = u32;
+    pub const C_REDIRECTION_TAG: C_GibPackedTag = 255;
+    pub const C_INDIRECTION_TAG: C_GibPackedTag = 254;
+    pub const C_NUM_GENERATIONS: u8 = 1;
 
     #[repr(C)]
     #[derive(Debug)]
@@ -71,10 +71,31 @@ pub mod types {
     }
 
     #[repr(C)]
-    #[derive(Debug, PartialEq, Eq, Hash)]
+    #[derive(Debug)]
     pub struct C_GibShadowstackFrame {
         pub ptr: *const i8,
         pub datatype: C_GibDatatype,
+    }
+
+    const MAX_OUTSET_LENGTH: usize = 10;
+
+    #[repr(C)]
+    #[derive(Debug)]
+    pub struct C_GibRegionInfo {
+        pub id: C_GibSym,
+        pub refcount: u16,
+        pub outset_len: u16,
+        pub outset: [C_GibCursor; MAX_OUTSET_LENGTH],
+    }
+
+    #[repr(C)]
+    #[derive(Debug)]
+    pub struct C_GibChunkFooter {
+        pub reg_info: *mut C_GibRegionInfo,
+        pub seq_no: u16,
+        pub size: u64,
+        pub next: *mut C_GibChunkFooter,
+        pub prev: *mut C_GibChunkFooter,
     }
 }
 

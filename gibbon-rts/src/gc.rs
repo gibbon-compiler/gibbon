@@ -21,12 +21,7 @@ use crate::ffi::types::*;
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-// Must be same as "gibbon.h".
-const REDIRECTION_TAG: C_GibPackedTag = 255;
-const INDIRECTION_TAG: C_GibPackedTag = 254;
-const NUM_GENERATIONS: u8 = 1;
-
-// Used internally in the garbage collector.
+// Tags used internally in the garbage collector.
 const CAUTERIZED_TAG: C_GibPackedTag = 253;
 const COPIED_TO_TAG: C_GibPackedTag = 252;
 const COPIED_TAG: C_GibPackedTag = 251;
@@ -42,7 +37,7 @@ pub fn collect_minor(
     let rstack = &Shadowstack(rstack_ptr);
     let wstack = &Shadowstack(wstack_ptr);
     let nursery = &mut Nursery(nursery_ptr);
-    if NUM_GENERATIONS == 1 {
+    if C_NUM_GENERATIONS == 1 {
         let mut oldest_gen = OldestGeneration(generations_ptr);
         cauterize_writers(wstack)?;
         evacuate_readers(rstack, &mut oldest_gen)?;
@@ -109,6 +104,19 @@ fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
                     //
                     // ASSUMPTION: There are at least 9 bytes available in the
                     // source buffer.
+                    //
+                    // Why is this a reasonable assumption?
+                    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                    //
+                    // We process the shadowstack starting with the oldest
+                    // frame first. Older frames always point to start of
+                    // of regions. Thus, we will evacuate a buffer and reach
+                    // its true end. Due to the way buffers are set up, there's
+                    // always sufficient space to write a forwarding pointer
+                    // here. When we get further down the shadowstack and reach
+                    // frames that point to values in the middle of a buffer,
+                    // we will encounter COPIED_TO or COPIED tags and not write
+                    // the forwarding pointers after these values.
                     match tag {
                         None => {}
                         Some(CAUTERIZED_TAG) => {}
@@ -205,7 +213,7 @@ fn evacuate_packed(
                 let space_reqd = 18;
                 let (dst1, dst_end1) =
                     Heap::check_bounds(dest, space_reqd, dst, dst_end)?;
-                let dst_after_tag = write(dst1, INDIRECTION_TAG);
+                let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                 let dst_after_indr = write(dst_after_tag, fwd_ptr);
                 Ok((src_after_fwd_ptr, dst_after_indr, dst_end1, Some(tag)))
             }
@@ -248,7 +256,7 @@ fn evacuate_packed(
                 let space_reqd = 18;
                 let (dst1, dst_end1) =
                     Heap::check_bounds(dest, space_reqd, dst, dst_end)?;
-                let dst_after_tag = write(dst1, INDIRECTION_TAG);
+                let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                 let dst_after_indr = write(dst_after_tag, fwd_want);
                 Ok((null_mut(), dst_after_indr, dst_end1, Some(tag)))
             }
@@ -259,7 +267,7 @@ fn evacuate_packed(
             //
             // POLICY DECISION:
             // Redirections are always inlined in the current version.
-            REDIRECTION_TAG => {
+            C_REDIRECTION_TAG => {
                 let (next_chunk, _): (*mut i8, _) = read(src_after_tag);
                 // Add a forwarding pointer in the source buffer.
                 write(src, COPIED_TO_TAG);
@@ -272,7 +280,7 @@ fn evacuate_packed(
             //
             // POLICY DECISION:
             // Indirections are always inlined in the current version.
-            INDIRECTION_TAG => {
+            C_INDIRECTION_TAG => {
                 let (pointee, _): (*mut i8, _) = read(src_after_tag);
                 let (_, dst_after_pointee, dst_after_pointee_end, _) =
                     evacuate_packed(dest, packed_info, pointee, dst, dst_end)?;
@@ -290,8 +298,9 @@ fn evacuate_packed(
             }
             // Regular datatype, copy.
             _ => {
-                let DataconInfo { scalar_bytes, field_tys, .. } =
-                    packed_info.get(&tag).unwrap();
+                let DataconInfo {
+                    scalar_bytes, field_tys, num_scalars, ..
+                } = packed_info.get(&tag).unwrap();
                 // Check bound of the destination buffer before copying.
                 // Reserve additional space for a redirection node or a
                 // forwarding pointer.
@@ -318,19 +327,19 @@ fn evacuate_packed(
                     if *scalar_bytes >= 8 {
                         let mut burn = write(src, COPIED_TO_TAG);
                         burn = write(burn, dst);
-                        // TODO: check if src_mut != burn?
+                        // TODO(ckoparkar): check if src_mut != burn?
                         let i = src_mut.offset_from(burn);
                         write_bytes(burn, COPIED_TAG, i as usize);
                     } else {
                         let burn = write(src, COPIED_TAG);
                         let i = src_mut.offset_from(burn);
-                        // TODO: check if src_mut != burn?
+                        // TODO(ckoparkar): check if src_mut != burn?
                         write_bytes(burn, COPIED_TAG, i as usize);
                     }
                     // TODO(ckoparkar):
                     // (1) instead of recursion, use a worklist
                     // (2) handle redirection nodes properly
-                    for ty in field_tys.iter() {
+                    for ty in field_tys.iter().skip((*num_scalars) as usize) {
                         let (src1, dst1, dst_end1, field_tag) =
                             evacuate(dest, ty, src_mut, dst_mut, dst_end_mut)?;
                         // Must immediately stop copying upon reaching
