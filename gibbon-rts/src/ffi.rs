@@ -13,8 +13,8 @@ See gibbon-compiler/cbits/gibbon.h.
 pub mod types {
     #![allow(non_camel_case_types)]
 
-    // These typedefs must match their counterparts in C.
-    // See gibbon-compiler/cbits/gibbon.h.
+    // These type definitions must match their counterparts in C. See
+    // gibbon-compiler/cbits/gibbon.h and gibbon-compiler/cbits/gibbon_rts.c.
 
     pub type C_GibPackedTag = u8;
     pub type C_GibBoxedTag = u8;

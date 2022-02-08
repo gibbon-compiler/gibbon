@@ -76,6 +76,9 @@ GibSym gib_read_gensym_counter(void);
 #define MB (KB * 1024lu)
 #define GB (MB * 1024lu)
 
+#define ATTR_ALWAYS_INLINE __attribute__((always_inline))
+#define ATTR_HOT __attribute__((hot))
+
 // Must be same as "Gibbon.Language.Constants".
 #define REDIRECTION_TAG 255
 #define INDIRECTION_TAG 254
@@ -310,55 +313,13 @@ typedef struct gib_shadowstack_frame {
 
 } GibShadowstackFrame;
 
+// Type snonyms for convenience.
 typedef GibShadowstackFrame GibRememberedSetElt;
 typedef GibShadowstack GibRememberedSet;
 
-typedef struct gib_nursery {
-    // Step.
-    uint64_t n_collections;
-
-    // Allocation area.
-    uint64_t n_heap_size;
-    char *n_heap_start;
-    char *n_heap_end;
-    char *n_alloc;
-
-    // Is the allocation area initialized?
-    bool n_initialized;
-
-    // Remembered set to store young to old pointers;
-    // this is a pointer to a structure on the Rust Heap.
-    void *n_rem_set;
-
-} GibNursery;
-
-typedef struct gib_generation {
-    // Generation number.
-    uint8_t g_no;
-
-    // Destination generation for live objects.
-    struct gib_generation *g_dest;
-
-    // Is this the oldest generation?
-    bool g_oldest;
-
-    // Amount of memory allocated in this generation.
-    uint64_t g_mem_allocated;
-
-    // Allocation area; uninitialized in the oldest gen which uses malloc.
-    uint64_t g_heap_size;
-    char *g_heap_start;
-    char *g_heap_end;
-    char *g_alloc;
-
-    // Remembered set to store old to young pointers.
-    GibRememberedSet *g_rem_set;
-
-    // Zero count table;
-    // this is a pointer to a structure on the Rust Heap.
-    void *g_zct;
-
-} GibGeneration;
+// Abstract definitions are sufficient.
+typedef struct gib_nursery GibNursery;
+typedef struct gib_generation GibGeneration;
 
 // Shadow stacks for readable and writeable locations respectively,
 // indexed by thread_id.
@@ -376,6 +337,17 @@ void gib_shadowstack_push(GibShadowstack *stack, char *ptr, uint32_t datatype);
 GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack);
 int32_t gib_shadowstack_length(GibShadowstack *stack);
 void gib_shadowstack_print_all(GibShadowstack *stack);
+
+// Remembered Set API.
+#define gib_remset_push(stack, ptr, datatype) \
+    gib_shadowstack_push(stack, ptr, datatype)
+#define gib_remset_pop(stack) \
+    gib_shadowstack_pop(stack)
+#define gib_remset_length(stack) \
+    gib_shadowstack_length(stack)
+#define gib_remset_print_all(stack) \
+    gib_shadowstack_print_all(stack)
+void gib_remset_reset(GibRememberedSet *set);
 
 // Region allocation.
 GibChunk *gib_alloc_region2(uint64_t size);

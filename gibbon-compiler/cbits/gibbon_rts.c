@@ -1256,6 +1256,52 @@ void gib_print_global_region_count(void)
 // Same as SHADOWSTACK_SIZE, overflows are not checked.
 #define REMEMBERED_SET_SIZE (sizeof(GibRememberedSetElt) * 1024)
 
+typedef struct gib_nursery {
+    // Step.
+    uint64_t n_collections;
+
+    // Allocation area.
+    uint64_t n_heap_size;
+    char *n_heap_start;
+    char *n_heap_end;
+    char *n_alloc;
+
+    // Is the allocation area initialized?
+    bool n_initialized;
+
+    // Remembered set to store young to old pointers;
+    // this is a pointer to a structure on the Rust Heap.
+    void *n_rem_set;
+
+} GibNursery;
+
+typedef struct gib_generation {
+    // Generation number.
+    uint8_t g_no;
+
+    // Destination generation for live objects.
+    struct gib_generation *g_dest;
+
+    // Is this the oldest generation?
+    bool g_oldest;
+
+    // Amount of memory allocated in this generation.
+    uint64_t g_mem_allocated;
+
+    // Allocation area; uninitialized in the oldest gen which uses malloc.
+    uint64_t g_heap_size;
+    char *g_heap_start;
+    char *g_heap_end;
+    char *g_alloc;
+
+    // Remembered set to store old to young pointers.
+    GibRememberedSet *g_rem_set;
+
+    // Zero count table;
+    // this is a pointer to a structure on the Rust Heap.
+    void *g_zct;
+
+} GibGeneration;
 
 // Array of nurseries, indexed by thread_id.
 GibNursery *gib_global_nurseries = (GibNursery *) NULL;
@@ -1471,6 +1517,10 @@ void gib_shadowstack_print_all(GibShadowstack *stack)
     return;
 }
 
+void gib_remset_reset(GibRememberedSet *set)
+{
+    set->ss_alloc = set->ss_start;
+}
 
 static GibChunk *gib_alloc_region_on_heap(uint64_t size);
 static GibChunk *gib_alloc_region_in_nursery(uint64_t size);
@@ -1583,8 +1633,6 @@ void gib_free_region2(GibChunk *region)
  *
  */
 
-static void gib_add_to_rem_set(char *from, uint32_t datatype);
-
 // Write barrier. INLINE!!!
 void gib_indirection_barrier(
     GibCursor from,
@@ -1607,20 +1655,14 @@ void gib_indirection_barrier(
         return;
     } else if (from_old && to_young) {
         // (3) oldgen -> nursery
-        gib_add_to_rem_set(from, datatype);
+        GibGeneration *gen = DEFAULT_GENERATION;
+        gib_remset_push(gen->g_rem_set, from, datatype);
         return;
     } else if (from_old && to_old) {
         // (4) oldgen -> oldgen
         gib_bump_refcount(from_footer_ptr, to_footer_ptr);
         return;
     }
-}
-
-static void gib_add_to_rem_set(char *from, uint32_t datatype)
-{
-    GibGeneration *gen = DEFAULT_GENERATION;
-    gib_shadowstack_push(gen->g_rem_set, from, datatype);
-    return;
 }
 
 
