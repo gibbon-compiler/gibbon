@@ -273,8 +273,6 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-#define MAX_OUTSET_LENGTH 10
-
 typedef struct gib_chunk {
     GibCursor c_start;
     GibCursor c_end;

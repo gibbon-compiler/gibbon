@@ -816,16 +816,16 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 
   Gibbon has "growing regions" i.e each logical region is backed by a doubly
   linked-list of smaller chunks which grows as required. In addition to actual
-  data, each chunk stores some additional metadata (GibRegionFooter) to chain
+  data, each chunk stores some additional metadata (GibChunkFooter) to chain
   the chunks together in a list and for garbage collection. The footer:
 
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  data | rf_reg_metadata_ptr | rf_seq_no | rf_size | rf_next | rf_prev
+  data | cf_reg_info | cf_seq_no | cf_size | cf_next | cf_prev
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   The metadata after the serialized data serves various purposes:
 
-  - rf_reg_metadata_ptr: A pointer to a GibRegionMeta struct that contains
+  - cf_reg_info: A pointer to a GibRegionInfo struct that contains
   various metadata. Of particular interest to us are the fields:
 
   = reg_id: A unique identifier for a region.
@@ -837,12 +837,12 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
     be bumped by 1. Note that all there's only 1 refcount cell, and 1 outset
     per logical region, and chunks only store a pointer to them.
 
-  - rf_seq_no: The index of this particular chunk in the list.
+  - cf_seq_no: The index of this particular chunk in the list.
 
-  - rf_size: Used during bounds checking to calculate the size of the next
+  - cf_size: Used during bounds checking to calculate the size of the next
     region in the linked list.
 
-  - rf_next / rf_prev: Point to the next and previous chunk respectively.
+  - cf_next / cf_prev: Point to the next and previous chunk respectively.
 
 
   There are two ways in which a region may be freed:
@@ -876,41 +876,42 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 
 */
 
+#define MAX_OUTSET_LENGTH 10
 
 typedef struct gib_region_meta {
     GibSym reg_id;
     uint16_t reg_refcount;
     uint16_t reg_outset_len;
     GibCursor reg_outset[MAX_OUTSET_LENGTH];
-} GibRegionMeta;
+} GibRegionInfo;
 
-typedef struct gib_region_footer {
-    GibRegionMeta *rf_reg_metadata_ptr;
+typedef struct gib_chunk_footer {
+    GibRegionInfo *cf_reg_info;
 
-    uint16_t rf_seq_no;
-    uint64_t rf_size;
-    struct gib_region_footer *rf_next;
-    struct gib_region_footer *rf_prev;
-} GibRegionFooter;
+    uint16_t cf_seq_no;
+    uint64_t cf_size;
+    struct gib_chunk_footer *cf_next;
+    struct gib_chunk_footer *cf_prev;
+} GibChunkFooter;
 
-static void gib_insert_into_outset(GibCursor ptr, GibRegionMeta *reg);
-static void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg);
-static GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer);
+static void gib_insert_into_outset(GibCursor ptr, GibRegionInfo *reg);
+static void gib_remove_from_outset(GibCursor ptr, GibRegionInfo *reg);
+static GibChunkFooter *gib_trav_to_first_chunk(GibChunkFooter *footer);
 static uint16_t gib_get_ref_count(GibCursor end_ptr);
 
 
 GibChunk *gib_alloc_region(uint64_t size)
 {
     // Allocate the region metadata.
-    GibRegionMeta *reg_meta = gib_alloc(sizeof(GibRegionMeta));
-    if (reg_meta == NULL) {
+    GibRegionInfo *reg_info = gib_alloc(sizeof(GibRegionInfo));
+    if (reg_info == NULL) {
         fprintf(stderr, "gib_alloc_region: allocation failed: %ld",
-                sizeof(GibRegionMeta));
+                sizeof(GibRegionInfo));
         exit(1);
     }
 
     // Allocate the first chunk.
-    int64_t total_size = size + sizeof(GibRegionFooter);
+    int64_t total_size = size + sizeof(GibChunkFooter);
     GibCursor heap_start = gib_alloc(total_size);
     if (heap_start == NULL) {
         fprintf(stderr, "gib_alloc_region: gib_alloc failed: %" PRId64,
@@ -921,21 +922,21 @@ GibChunk *gib_alloc_region(uint64_t size)
     GibCursor heap_end = heap_start + size;
 
     // Initialize metadata fields.
-    reg_meta->reg_id = gib_gensym();
-    reg_meta->reg_refcount = 1;
-    reg_meta->reg_outset_len = 0;
+    reg_info->reg_id = gib_gensym();
+    reg_info->reg_refcount = 1;
+    reg_info->reg_outset_len = 0;
 
 #ifdef _GIBBON_DEBUG
     printf("Allocated a region(%lld): %lld bytes.\n", reg->reg_id, size);
 #endif
 
     // Write the footer.
-    GibRegionFooter *footer = (GibRegionFooter *) heap_end;
-    footer->rf_reg_metadata_ptr = reg_meta;
-    footer->rf_seq_no = 1;
-    footer->rf_size = size;
-    footer->rf_next = (GibRegionFooter *) NULL;
-    footer->rf_prev = (GibRegionFooter *) NULL;
+    GibChunkFooter *footer = (GibChunkFooter *) heap_end;
+    footer->cf_reg_info = reg_info;
+    footer->cf_seq_no = 1;
+    footer->cf_size = size;
+    footer->cf_next = (GibChunkFooter *) NULL;
+    footer->cf_prev = (GibChunkFooter *) NULL;
 
     GibChunk *region = (GibChunk *) gib_alloc(sizeof(GibChunk));
     region->c_start = heap_start;
@@ -946,13 +947,13 @@ GibChunk *gib_alloc_region(uint64_t size)
 GibChunk gib_alloc_chunk(GibCursor footer_ptr)
 {
     // Get size from current footer.
-    GibRegionFooter *footer = (GibRegionFooter *) footer_ptr;
-    uint64_t newsize = footer->rf_size * 2;
+    GibChunkFooter *footer = (GibChunkFooter *) footer_ptr;
+    uint64_t newsize = footer->cf_size * 2;
     // See #110.
     if (newsize > gib_global_max_chunk_size) {
         newsize = gib_global_max_chunk_size;
     }
-    int64_t total_size = newsize + sizeof(GibRegionFooter);
+    int64_t total_size = newsize + sizeof(GibChunkFooter);
 
     // Allocate.
     GibCursor start = (char *) gib_alloc(total_size);
@@ -964,18 +965,18 @@ GibChunk gib_alloc_chunk(GibCursor footer_ptr)
     GibCursor end = start + newsize;
 
     // Link the next chunk's footer.
-    footer->rf_next = (GibRegionFooter *) end;
+    footer->cf_next = (GibChunkFooter *) end;
 
     // Write the footer.
-    GibRegionFooter *new_footer = (GibRegionFooter *) end;
-    new_footer->rf_reg_metadata_ptr = footer->rf_reg_metadata_ptr;
-    new_footer->rf_seq_no = footer->rf_seq_no + 1;
-    new_footer->rf_size = newsize;
-    new_footer->rf_next = (GibRegionFooter *) NULL;
-    new_footer->rf_prev = footer;
+    GibChunkFooter *new_footer = (GibChunkFooter *) end;
+    new_footer->cf_reg_info = footer->cf_reg_info;
+    new_footer->cf_seq_no = footer->cf_seq_no + 1;
+    new_footer->cf_size = newsize;
+    new_footer->cf_next = (GibChunkFooter *) NULL;
+    new_footer->cf_prev = footer;
 
 #ifdef _GIBBON_DEBUG
-    GibRegionMeta *reg = (GibRegionMeta*) new_footer->rf_reg_metadata_ptr;
+    GibRegionInfo *reg = (GibRegionInfo*) new_footer->cf_reg_info;
     printf("gib_alloc_chunk: allocated %lld bytes for region %lld.\n",
            total_size,
            reg->reg_id);
@@ -994,12 +995,12 @@ void gib_bump_refcount(GibCursor from_footer_ptr, GibCursor to_footer_ptr)
         return;
     }
     // Grab footers.
-    GibRegionFooter *to_footer = (GibRegionFooter *) to_footer_ptr;
-    GibRegionFooter *from_footer = (GibRegionFooter *) from_footer_ptr;
+    GibChunkFooter *to_footer = (GibChunkFooter *) to_footer_ptr;
+    GibChunkFooter *from_footer = (GibChunkFooter *) from_footer_ptr;
 
     // Grab metadata.
-    GibRegionMeta *to_reg = (GibRegionMeta *) to_footer->rf_reg_metadata_ptr;
-    GibRegionMeta *from_reg = (GibRegionMeta *) from_footer->rf_reg_metadata_ptr;
+    GibRegionInfo *to_reg = (GibRegionInfo *) to_footer->cf_reg_info;
+    GibRegionInfo *from_reg = (GibRegionInfo *) from_footer->cf_reg_info;
 
     // Bump A's refcount.
     uint16_t current_refcount, new_refcount;
@@ -1030,11 +1031,11 @@ void gib_bump_refcount(GibCursor from_footer_ptr, GibCursor to_footer_ptr)
 
 void gib_free_region(GibCursor reg_footer_ptr) {
     // Grab footer and the metadata.
-    GibRegionFooter *footer = (GibRegionFooter *) reg_footer_ptr;
-    GibRegionMeta *reg = (GibRegionMeta *) footer->rf_reg_metadata_ptr;
+    GibChunkFooter *footer = (GibChunkFooter *) reg_footer_ptr;
+    GibRegionInfo *reg = (GibRegionInfo *) footer->cf_reg_info;
 
     //
-    GibRegionFooter *first_chunk_footer, *next_chunk_footer;
+    GibChunkFooter *first_chunk_footer, *next_chunk_footer;
     GibCursor first_chunk, next_chunk;
 
     // Decrement current reference count.
@@ -1064,14 +1065,14 @@ void gib_free_region(GibCursor reg_footer_ptr) {
         if (reg->reg_outset_len != 0) {
             uint16_t outset_len = reg->reg_outset_len;
             GibCursor *outset = reg->reg_outset;
-            GibRegionFooter *elt_footer;
-            GibRegionMeta *elt_reg;
+            GibChunkFooter *elt_footer;
+            GibRegionInfo *elt_reg;
             uint16_t elt_current_refcount, elt_new_refcount;
             GibCursor to_be_removed[MAX_OUTSET_LENGTH];
             uint16_t to_be_removed_idx = 0;
             for (uint16_t i = 0; i < outset_len; i++) {
-                elt_footer = (GibRegionFooter *) outset[i];
-                elt_reg = (GibRegionMeta *) elt_footer->rf_reg_metadata_ptr;
+                elt_footer = (GibChunkFooter *) outset[i];
+                elt_reg = (GibRegionInfo *) elt_footer->cf_reg_info;
                 elt_current_refcount = elt_reg->reg_refcount;
                 elt_new_refcount = elt_current_refcount - 1;
                 elt_reg->reg_refcount = elt_new_refcount;
@@ -1104,24 +1105,24 @@ void gib_free_region(GibCursor reg_footer_ptr) {
 #endif
 
         // Free the chunks in this region.
-        first_chunk = reg_footer_ptr - footer->rf_size;
+        first_chunk = reg_footer_ptr - footer->cf_size;
         first_chunk_footer = footer;
-        next_chunk = (char*) footer->rf_next;
+        next_chunk = (char*) footer->cf_next;
 
 #ifdef _GIBBON_DEBUG
         num_freed_chunks++;
-        total_bytesize = total_bytesize + first_chunk_footer->rf_size;
+        total_bytesize = total_bytesize + first_chunk_footer->cf_size;
 #endif
         free(first_chunk);
 
         while (next_chunk != NULL) {
-            next_chunk_footer = (GibRegionFooter *) next_chunk;
+            next_chunk_footer = (GibChunkFooter *) next_chunk;
 #ifdef _GIBBON_DEBUG
             num_freed_chunks++;
-            total_bytesize = total_bytesize + next_chunk_footer->rf_size;
+            total_bytesize = total_bytesize + next_chunk_footer->cf_size;
 #endif
-            free(next_chunk - next_chunk_footer->rf_size);
-            next_chunk = (char*) next_chunk_footer->rf_next;
+            free(next_chunk - next_chunk_footer->cf_size);
+            next_chunk = (char*) next_chunk_footer->cf_next;
         }
 
 #ifdef _GIBBON_DEBUG
@@ -1140,7 +1141,7 @@ void gib_free_region(GibCursor reg_footer_ptr) {
     }
 }
 
-static void gib_insert_into_outset(GibCursor to_ptr, GibRegionMeta *from_reg)
+static void gib_insert_into_outset(GibCursor to_ptr, GibRegionInfo *from_reg)
 {
     uint16_t outset_len = from_reg->reg_outset_len;
     // Check for duplicates.
@@ -1155,7 +1156,7 @@ static void gib_insert_into_outset(GibCursor to_ptr, GibRegionMeta *from_reg)
     return;
 }
 
-static void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg)
+static void gib_remove_from_outset(GibCursor ptr, GibRegionInfo *reg)
 {
     uint16_t outset_len = reg->reg_outset_len;
     GibCursor *outset = reg->reg_outset;
@@ -1182,24 +1183,24 @@ static void gib_remove_from_outset(GibCursor ptr, GibRegionMeta *reg)
     return;
 }
 
-static GibRegionFooter *gib_trav_to_first_chunk(GibRegionFooter *footer)
+static GibChunkFooter *gib_trav_to_first_chunk(GibChunkFooter *footer)
 {
-    if (footer->rf_seq_no == 1) {
+    if (footer->cf_seq_no == 1) {
         return footer;
-    } else if (footer->rf_prev == NULL) {
-        fprintf(stderr, "No previous chunk found at rf_seq_no: %" PRIu16,
-                footer->rf_seq_no);
-        return (GibRegionFooter *) NULL;
+    } else if (footer->cf_prev == NULL) {
+        fprintf(stderr, "No previous chunk found at cf_seq_no: %" PRIu16,
+                footer->cf_seq_no);
+        return (GibChunkFooter *) NULL;
     } else {
-        gib_trav_to_first_chunk((GibRegionFooter *) footer->rf_prev);
+        gib_trav_to_first_chunk((GibChunkFooter *) footer->cf_prev);
     }
-    return (GibRegionFooter *) NULL;
+    return (GibChunkFooter *) NULL;
 }
 
 static uint16_t gib_get_ref_count(GibCursor footer_ptr)
 {
-    GibRegionFooter *footer = (GibRegionFooter *) footer_ptr;
-    GibRegionMeta *reg = (GibRegionMeta *) footer->rf_reg_metadata_ptr;
+    GibChunkFooter *footer = (GibChunkFooter *) footer_ptr;
+    GibRegionInfo *reg = (GibRegionInfo *) footer->cf_reg_info;
     return reg->reg_refcount;
 }
 
