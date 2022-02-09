@@ -1463,7 +1463,7 @@ void gib_shadowstack_push(GibShadowstack *stack, char *ptr, uint32_t datatype)
     char *stack_end = stack->ss_end;
     char **stack_alloc_ptr_addr = &(stack->ss_alloc);
     size_t size = sizeof(GibShadowstackFrame);
-    if (stack_alloc_ptr + size > stack_end) {
+    if ((stack_alloc_ptr + size) > stack_end) {
         fprintf(stderr, "gib_shadowstack_push: out of memory");
         exit(1);
     }
@@ -1481,7 +1481,7 @@ GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack)
     char *stack_start = stack->ss_start;
     char **stack_alloc_ptr_addr = &(stack->ss_alloc);
     size_t size = sizeof(GibShadowstackFrame);
-    if (stack_alloc_ptr - size < stack_start) {
+    if ((stack_alloc_ptr - size) < stack_start) {
         fprintf(stderr, "gib_shadowstack_pop: stack empty");
         exit(1);
     }

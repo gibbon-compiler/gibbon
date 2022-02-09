@@ -34,6 +34,9 @@ pub fn collect_minor(
     generations_ptr: *mut C_GibGeneration,
     _force_major: bool,
 ) -> Result<()> {
+    if cfg!(debug_assertions) {
+        println!("GC!!!");
+    }
     let rstack = &Shadowstack(rstack_ptr);
     let wstack = &Shadowstack(wstack_ptr);
     let nursery = &mut Nursery(nursery_ptr);
