@@ -98,7 +98,7 @@ fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
                     // Using 1024 for now.
                     let (dst, dst_end) = Heap::allocate(dest, 1024)?;
                     let src = (*frame).ptr as *mut i8;
-                    let (src_after, dst_after, dst_after_end, _tag) =
+                    let (src_after, dst_after, dst_after_end, tag) =
                         evacuate_packed(dest, packed_info, src, dst, dst_end)?;
                     // Update the pointers in shadowstack.
                     (*frame).ptr = dst;
@@ -145,8 +145,7 @@ fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
                         Some(COPIED_TO_TAG) => {}
                         Some(COPIED_TAG) => {}
                         _ => {
-                            let reached_true_end = true;
-                            if reached_true_end {
+                            if (*frame).start_of_chunk {
                                 let burn = write(src_after, COPIED_TO_TAG);
                                 write(burn, dst_after);
                             }

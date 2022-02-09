@@ -77,6 +77,7 @@ pub mod types {
         pub ptr: *const i8,
         pub endptr: *const i8,
         pub datatype: C_GibDatatype,
+        pub start_of_chunk: bool,
     }
 
     const MAX_OUTSET_LENGTH: usize = 10;

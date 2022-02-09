@@ -229,9 +229,9 @@ GibInt do_reverse(GibInt n_19_183_289)
 
     // Push to shadow stack.
     // xs, ys, output
-    gib_shadowstack_push(rstack, pvrtmp_1385, pvrtmp_1384, List_T);
-    gib_shadowstack_push(rstack, r_720, end_r_720, List_T);
-    gib_shadowstack_push(wstack, r_719, end_r_719, List_T);
+    gib_shadowstack_push(rstack, pvrtmp_1385, pvrtmp_1384, List_T, true);
+    gib_shadowstack_push(rstack, r_720, end_r_720, List_T, true);
+    gib_shadowstack_push(wstack, r_719, end_r_719, List_T, true);
     // Pushed.
 
     GibCursorGibCursorGibCursorGibCursorProd tmp_struct_17 =
@@ -343,9 +343,9 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
             // Push to shadow stack.
             // xs, ys, output
-            gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T);
-            gib_shadowstack_push(rstack, ys_37_180_285, end_r_616, List_T);
-            gib_shadowstack_push(wstack, loc_614, end_r_617, List_T);
+            gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T, false);
+            gib_shadowstack_push(rstack, ys_37_180_285, end_r_616, List_T, false);
+            gib_shadowstack_push(wstack, loc_614, end_r_617, List_T, false);
             // Pushed.
 
             GibChunk *region_1353 =
@@ -391,9 +391,9 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
             // Push to shadow stack.
             // xs, ys, output
-            gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T);
-            gib_shadowstack_push(rstack, r_705, end_r_705, List_T);
-            gib_shadowstack_push(wstack, loc_614, end_r_617, List_T);
+            gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T, false);
+            gib_shadowstack_push(rstack, r_705, end_r_705, List_T, true);
+            gib_shadowstack_push(wstack, loc_614, end_r_617, List_T, false);
             // Pushed.
 
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_12 =

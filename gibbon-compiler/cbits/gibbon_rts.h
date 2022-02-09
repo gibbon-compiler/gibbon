@@ -319,6 +319,8 @@ typedef struct gib_shadowstack_frame {
     // The enum (GibDatatype) will be defined in the generated program.
     uint32_t ssf_datatype;
 
+    // Does ssf_ptr point to the start of chunk?
+    bool ssf_start_of_chunk;
 } GibShadowstackFrame;
 
 // Type snonyms for convenience.
@@ -345,7 +347,8 @@ void gib_shadowstack_push(
     GibShadowstack *stack,
     char *ptr,
     char *endptr,
-    uint32_t datatype
+    uint32_t datatype,
+    bool start_of_chunk
 );
 GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack);
 int32_t gib_shadowstack_length(GibShadowstack *stack);
@@ -353,7 +356,7 @@ void gib_shadowstack_print_all(GibShadowstack *stack);
 
 // Remembered Set API.
 #define gib_remset_push(stack, ptr, datatype) \
-    gib_shadowstack_push(stack, ptr, (char *) NULL, datatype)
+    gib_shadowstack_push(stack, ptr, (char *) NULL, datatype, false)
 #define gib_remset_pop(stack) \
     gib_shadowstack_pop(stack)
 #define gib_remset_length(stack) \

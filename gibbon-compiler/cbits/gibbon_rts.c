@@ -1460,7 +1460,8 @@ void gib_shadowstack_push(
     GibShadowstack *stack,
     char *ptr,
     char *endptr,
-    uint32_t datatype
+    uint32_t datatype,
+    bool start_of_chunk
 )
 {
     assert(stack->ss_initialized);
@@ -1476,6 +1477,7 @@ void gib_shadowstack_push(
     frame->ssf_ptr = ptr;
     frame->ssf_endptr = endptr;
     frame->ssf_datatype = datatype;
+    frame->ssf_start_of_chunk = start_of_chunk;
     (*stack_alloc_ptr_addr) += size;
     return;
 }
