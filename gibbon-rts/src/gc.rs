@@ -98,38 +98,58 @@ fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
                     // Using 1024 for now.
                     let (dst, dst_end) = Heap::allocate(dest, 1024)?;
                     let src = (*frame).ptr as *mut i8;
-                    let (src_after, dst_after, _dst_after_end, tag) =
+                    let (src_after, dst_after, dst_after_end, _tag) =
                         evacuate_packed(dest, packed_info, src, dst, dst_end)?;
                     // Update the pointers in shadowstack.
                     (*frame).ptr = dst;
                     (*frame).endptr = dst_after_end;
-                    // See (1) below required for supporting a COPIED_TAG;
-                    // every value must end with a COPIED_TO_TAG. The exceptions
-                    // to this rule are handled in the match expression.
-                    //
-                    // ASSUMPTION: There are at least 9 bytes available in the
-                    // source buffer.
-                    //
-                    // Why is this a reasonable assumption?
-                    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-                    //
-                    // We process the shadowstack starting with the oldest
-                    // frame first. Older frames always point to start of
-                    // of regions. Thus, we will evacuate a buffer and reach
-                    // its true end. Due to the way buffers are set up, there's
-                    // always sufficient space to write a forwarding pointer
-                    // here. When we get further down the shadowstack and reach
-                    // frames that point to values in the middle of a buffer,
-                    // we will encounter COPIED_TO or COPIED tags and not write
-                    // the forwarding pointers after these values.
+                    /*
+                    See (1) regarding the COPIED_TAG;
+                    every value must end with a COPIED_TO_TAG. The exceptions
+                    to this rule are handled in the match expression.
+
+                    ASSUMPTION: There are at least 9 bytes available in the
+                    source buffer.
+
+                    Is this a reasonable assumption?
+                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+                    Yes, if all values are always evacuated in a left-to-right
+                    order. This happens if we process the shadowstack starting
+                    with the oldest frame first. Older frames always point to
+                    start of regions. Thus, we will evacuate a buffer and reach
+                    its *true* end. Due to the way buffers are set up, there's
+                    always sufficient space to write a forwarding pointer
+                    there. When we get further down the shadowstack and reach
+                    frames that point to values in the middle of a buffer,
+                    we will encounter COPIED_TO or COPIED tags and not write
+                    the forwarding pointers after these values.
+
+                    Can this assumption be invalidated?
+                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+                    Yes, if values are not evacuated in a left-to-right order.
+                    Suppose there's a value (K a b c d) and we first evacuate
+                    'a' (e.g. suppose the remembered set points to it). Now
+                    the code will reach this point and try to write a forwarding
+                    pointer. But this will overwrite other data in the buffer!!
+                    Thus, we must only write a forwarding pointer when we've
+                    reached the true end of the source buffer. The only time
+                    we actually reach the true end is when we're evacuating a
+                    value starts at the very beginning of the chunk.
+                    Hence, we record this information in the shadowstack.
+                     */
                     match tag {
                         None => {}
                         Some(CAUTERIZED_TAG) => {}
                         Some(COPIED_TO_TAG) => {}
                         Some(COPIED_TAG) => {}
                         _ => {
-                            let burn = write(src_after, COPIED_TO_TAG);
-                            write(burn, dst_after);
+                            let reached_true_end = true;
+                            if reached_true_end {
+                                let burn = write(src_after, COPIED_TO_TAG);
+                                write(burn, dst_after);
+                            }
                         }
                     }
                 }
@@ -224,8 +244,9 @@ fn evacuate_packed(
                 let dst_after_indr = write(dst_after_tag, fwd_ptr);
                 Ok((null_mut(), dst_after_indr, dst_end1, Some(tag)))
             }
+
             // Algorithm:
-            //
+            // ~~~~~~~~~~
             // Scan to the right for the next COPIED_TO_TAG, then take
             // the negative offset of that pointer to find its position
             // in the destination buffer. Write an indirection to that
