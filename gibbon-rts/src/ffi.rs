@@ -75,6 +75,7 @@ pub mod types {
     #[derive(Debug)]
     pub struct C_GibShadowstackFrame {
         pub ptr: *const i8,
+        pub endptr: *const i8,
         pub datatype: C_GibDatatype,
     }
 

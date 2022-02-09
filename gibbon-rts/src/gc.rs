@@ -48,7 +48,7 @@ pub fn collect_minor(
         nursery.reset_alloc();
         Ok(())
     } else {
-        todo!()
+        todo!("NUM_GENERATIONS > 1")
     }
 }
 
@@ -80,11 +80,12 @@ fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
                 }
                 // A scalar type that can be copied directly.
                 Some(DatatypeInfo::Scalar(size)) => {
-                    let (dst, _) = Heap::allocate(dest, *size as u64)?;
+                    let (dst, dst_end) = Heap::allocate(dest, *size as u64)?;
                     let src = (*frame).ptr as *mut i8;
                     copy_nonoverlapping(src, dst, *size as usize);
                     // Update the pointer in shadowstack.
                     (*frame).ptr = dst;
+                    (*frame).endptr = dst_end;
                 }
                 // A packed type that should copied by referring to the info table.
                 Some(DatatypeInfo::Packed(packed_info)) => {
@@ -99,8 +100,9 @@ fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
                     let src = (*frame).ptr as *mut i8;
                     let (src_after, dst_after, _dst_after_end, tag) =
                         evacuate_packed(dest, packed_info, src, dst, dst_end)?;
-                    // Update the pointer in shadowstack.
+                    // Update the pointers in shadowstack.
                     (*frame).ptr = dst;
+                    (*frame).endptr = dst_after_end;
                     // See (1) below required for supporting a COPIED_TAG;
                     // every value must end with a COPIED_TO_TAG. The exceptions
                     // to this rule are handled in the match expression.

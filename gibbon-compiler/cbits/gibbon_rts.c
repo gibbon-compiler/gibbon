@@ -1456,7 +1456,12 @@ bool gib_addr_in_nursery(char *ptr)
 }
 
 // Shadowstack API.
-void gib_shadowstack_push(GibShadowstack *stack, char *ptr, uint32_t datatype)
+void gib_shadowstack_push(
+    GibShadowstack *stack,
+    char *ptr,
+    char *endptr,
+    uint32_t datatype
+)
 {
     assert(stack->ss_initialized);
     char *stack_alloc_ptr = stack->ss_alloc;
@@ -1469,6 +1474,7 @@ void gib_shadowstack_push(GibShadowstack *stack, char *ptr, uint32_t datatype)
     }
     GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
     frame->ssf_ptr = ptr;
+    frame->ssf_endptr = endptr;
     frame->ssf_datatype = datatype;
     (*stack_alloc_ptr_addr) += size;
     return;
@@ -1505,7 +1511,8 @@ void gib_shadowstack_print_all(GibShadowstack *stack)
     GibShadowstackFrame *frame;
     while (run_ptr < end_ptr) {
         frame = (GibShadowstackFrame *) run_ptr;
-        printf("ptr=%p, datatype=%d\n", frame->ssf_ptr, frame->ssf_datatype);
+        printf("ptr=%p, endptr=%p, datatype=%d\n",
+               frame->ssf_ptr, frame->ssf_endptr, frame->ssf_datatype);
         run_ptr += sizeof(GibShadowstackFrame);
     }
     return;

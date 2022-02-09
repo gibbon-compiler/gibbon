@@ -309,7 +309,11 @@ typedef struct gib_shadowstack {
 } GibShadowstack;
 
 typedef struct gib_shadowstack_frame {
+    // Pointer to packed data.
     char *ssf_ptr;
+
+    // Pointer to the end of the chunk where this packed data lives.
+    char *ssf_endptr;
 
     // An enum in C, which is 4 bytes.
     // The enum (GibDatatype) will be defined in the generated program.
@@ -337,14 +341,19 @@ extern GibShadowstack *gib_global_write_shadowstacks;
 bool gib_addr_in_nursery(char *ptr);
 
 // Shadowstack API.
-void gib_shadowstack_push(GibShadowstack *stack, char *ptr, uint32_t datatype);
+void gib_shadowstack_push(
+    GibShadowstack *stack,
+    char *ptr,
+    char *endptr,
+    uint32_t datatype
+);
 GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack);
 int32_t gib_shadowstack_length(GibShadowstack *stack);
 void gib_shadowstack_print_all(GibShadowstack *stack);
 
 // Remembered Set API.
 #define gib_remset_push(stack, ptr, datatype) \
-    gib_shadowstack_push(stack, ptr, datatype)
+    gib_shadowstack_push(stack, ptr, (char *) NULL, datatype)
 #define gib_remset_pop(stack) \
     gib_shadowstack_pop(stack)
 #define gib_remset_length(stack) \
