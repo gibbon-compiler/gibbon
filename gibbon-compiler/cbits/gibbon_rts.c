@@ -1323,7 +1323,6 @@ GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 #define DEFAULT_READ_SHADOWSTACK (&(gib_global_read_shadowstacks[0]))
 #define DEFAULT_WRITE_SHADOWSTACK (&(gib_global_write_shadowstacks[0]))
 
-
 // Initialize nurseries, shadow stacks and generations.
 static void gib_storage_initialize(void);
 static void gib_nursery_initialize(GibNursery *nursery);
@@ -1452,7 +1451,7 @@ static void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_siz
 // Nursery API.
 bool gib_addr_in_nursery(char *ptr)
 {
-    GibNursery *nursery = &(gib_global_nurseries[0]);
+    GibNursery *nursery = DEFAULT_NURSERY;
     return ((ptr >= nursery->n_heap_start) && (ptr <= nursery->n_heap_end));
 }
 
