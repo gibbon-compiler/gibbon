@@ -35,7 +35,7 @@ pub mod types {
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibNursery {
-        pub collections: u64,
+        pub num_collections: u64,
         pub heap_size: u64,
         pub heap_start: *const i8,
         pub heap_end: *const i8,
@@ -89,6 +89,7 @@ pub mod types {
         pub refcount: u16,
         pub outset_len: u16,
         pub outset: [C_GibCursor; MAX_OUTSET_LENGTH],
+        pub outset2: *mut std::ffi::c_void,
     }
 
     #[repr(C)]
@@ -185,7 +186,7 @@ pub extern "C" fn gib_garbage_collect(
     generations_ptr: *mut C_GibGeneration,
     force_major: bool,
 ) -> i32 {
-    match gc::collect_minor(
+    match gc::garbage_collect(
         rstack_ptr,
         wstack_ptr,
         nursery_ptr,

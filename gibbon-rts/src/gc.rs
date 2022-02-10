@@ -26,8 +26,7 @@ const CAUTERIZED_TAG: C_GibPackedTag = 253;
 const COPIED_TO_TAG: C_GibPackedTag = 252;
 const COPIED_TAG: C_GibPackedTag = 251;
 
-/// Minor collection.
-pub fn collect_minor(
+pub fn garbage_collect(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
@@ -37,15 +36,36 @@ pub fn collect_minor(
     if cfg!(debug_assertions) {
         println!("GC!!!");
     }
-    let rstack = &Shadowstack(rstack_ptr);
-    let wstack = &Shadowstack(wstack_ptr);
+    collect_minor(rstack_ptr, wstack_ptr, nursery_ptr, generations_ptr)
+}
+
+/// Minor collection.
+pub fn collect_minor(
+    rstack_ptr: *mut C_GibShadowstack,
+    wstack_ptr: *mut C_GibShadowstack,
+    nursery_ptr: *mut C_GibNursery,
+    generations_ptr: *mut C_GibGeneration,
+) -> Result<()> {
+    let rstack = &Shadowstack(rstack_ptr, GcRootProv::Stk);
+    let wstack = &Shadowstack(wstack_ptr, GcRootProv::Stk);
     let nursery = &mut Nursery(nursery_ptr);
     if C_NUM_GENERATIONS == 1 {
-        let mut oldest_gen = OldestGeneration(generations_ptr);
+        // Start by cauterizing the writers.
         cauterize_writers(wstack)?;
+        // Prepare to evacuate the readers.
+        let mut oldest_gen = OldestGeneration(generations_ptr);
+        let rem_set = unsafe {
+            &RememberedSet((*generations_ptr).rem_set, GcRootProv::RemSet)
+        };
+        // First evacuate the remembered set.
+        evacuate_readers(rem_set, &mut oldest_gen)?;
+        // Then the shadow stack.
         evacuate_readers(rstack, &mut oldest_gen)?;
-        nursery.bump_collections();
+        // Reset the allocation area.
         nursery.reset_alloc();
+        // Record stats.
+        nursery.bump_num_collections();
+        // Done.
         Ok(())
     } else {
         todo!("NUM_GENERATIONS > 1")
@@ -55,7 +75,7 @@ pub fn collect_minor(
 /// Write a CAUTERIZED_TAG at all write cursors so that the collector knows
 /// when to stop copying.
 fn cauterize_writers(wstack: &Shadowstack) -> Result<()> {
-    for frame in ShadowstackIter::new(wstack) {
+    for frame in wstack.into_iter() {
         unsafe {
             let ptr = (*frame).ptr as *mut i8;
             let ptr_next = write(ptr, CAUTERIZED_TAG);
@@ -68,7 +88,7 @@ fn cauterize_writers(wstack: &Shadowstack) -> Result<()> {
 /// Copy values at all read cursors from the nursery to the provided
 /// destination. Also uncauterize any CAUTERIZED_TAGs that are reached.
 fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
-    for frame in ShadowstackIter::new(rstack) {
+    for frame in rstack.into_iter() {
         unsafe {
             let datatype = (*frame).datatype;
             match INFO_TABLE.get().unwrap().get(&datatype) {
@@ -87,16 +107,36 @@ fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
                     (*frame).ptr = dst;
                     (*frame).endptr = dst_end;
                 }
-                // A packed type that should copied by referring to the info table.
+                // A packed type that is copied by referring to the info table.
                 Some(DatatypeInfo::Packed(packed_info)) => {
                     // TODO(ckoparkar): How big should this chunk be?
                     //
                     // If we have variable sized initial chunks based on the
                     // region bound analysis, maybe we'll have to store that
-                    // info in a chunk footer. Then that size can somehow
-                    // influence how big this new to-space chunk is.
-                    // Using 1024 for now.
-                    let (dst, dst_end) = Heap::allocate(dest, 1024)?;
+                    // info in a chunk footer. Then that size can guide how big
+                    // this new to-space chunk should be. Using 1024 for now.
+                    let chunk_size = 1024;
+                    let (chunk_start, chunk_end) =
+                        Heap::allocate(dest, chunk_size)?;
+                    // Write a footer if evacuating to the oldest generation.
+                    let dst = chunk_start;
+                    let dst_end = if !dest.is_oldest() {
+                        // Middle generation chunks don't need footers.
+                        chunk_end
+                    } else {
+                        // Oldest generation chunks need a footer.
+                        let footer_space = size_of::<C_GibChunkFooter>();
+                        let data_end = chunk_end.sub(footer_space) as *mut i8;
+                        let usable_size = chunk_size - (footer_space as u64);
+                        let refcount = match rstack.1 {
+                            GcRootProv::RemSet => 1,
+                            GcRootProv::Stk => 0,
+                        };
+                        init_footer_at(data_end, usable_size, refcount);
+                        // TODO(ckoparkar): add data_end to src's outset.
+                        data_end
+                    };
+                    // Evacuate the data.
                     let src = (*frame).ptr as *mut i8;
                     let (src_after, dst_after, dst_after_end, tag) =
                         evacuate_packed(dest, packed_info, src, dst, dst_end)?;
@@ -104,9 +144,9 @@ fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
                     (*frame).ptr = dst;
                     (*frame).endptr = dst_after_end;
                     /*
-                    See (1) regarding the COPIED_TAG;
-                    every value must end with a COPIED_TO_TAG. The exceptions
-                    to this rule are handled in the match expression.
+                    Each chunk should end with a COPIED_TO_TAG; see (1)
+                    regarding the COPIED_TAG. The exceptions to this
+                    rule are handled in the match expression below.
 
                     ASSUMPTION: There are at least 9 bytes available in the
                     source buffer.
@@ -241,9 +281,13 @@ fn evacuate_packed(
                     Heap::check_bounds(dest, space_reqd, dst, dst_end)?;
                 let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                 let dst_after_indr = write(dst_after_tag, fwd_ptr);
+                // TODO(ckoparkar):
+                // (1) update outsets and refcounts if evacuating to the oldest
+                //     generation.
+                // (2) return a position *after* this evacuated value in the
+                //     source buffer.
                 Ok((null_mut(), dst_after_indr, dst_end1, Some(tag)))
             }
-
             // Algorithm:
             // ~~~~~~~~~~
             // Scan to the right for the next COPIED_TO_TAG, then take
@@ -285,6 +329,11 @@ fn evacuate_packed(
                     Heap::check_bounds(dest, space_reqd, dst, dst_end)?;
                 let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                 let dst_after_indr = write(dst_after_tag, fwd_want);
+                // TODO(ckoparkar):
+                // (1) update outsets and refcounts if evacuating to the oldest
+                //     generation.
+                // (2) return a position *after* this evacuated value in the
+                //     source buffer.
                 Ok((null_mut(), dst_after_indr, dst_end1, Some(tag)))
             }
             // Indicates end-of-current-chunk in the source buffer i.e.
@@ -395,6 +444,26 @@ fn evacuate_packed(
 }
 
 #[inline]
+unsafe fn init_footer_at(addr: *mut i8, size: u64, refcount: u16) {
+    let region_info = C_GibRegionInfo {
+        // TODO(ckoparkar): gensym an identifier.
+        id: 0,
+        refcount: refcount,
+        outset_len: 0,
+        outset: [null(); 10],
+        outset2: null_mut(),
+    };
+    let region_info_ptr: *mut C_GibRegionInfo =
+        Box::into_raw(Box::new(region_info));
+    let footer: *mut C_GibChunkFooter = addr as *mut C_GibChunkFooter;
+    (*footer).reg_info = region_info_ptr;
+    (*footer).seq_no = 0;
+    (*footer).size = size;
+    (*footer).next = null_mut();
+    (*footer).prev = null_mut();
+}
+
+#[inline]
 unsafe fn read<A>(cursor: *const i8) -> (A, *const i8) {
     let cursor2 = cursor as *const A;
     (cursor2.read_unaligned(), cursor2.add(1) as *const i8)
@@ -408,6 +477,8 @@ unsafe fn read_mut<A>(cursor: *mut i8) -> (A, *mut i8) {
 #[inline]
 unsafe fn write<A>(cursor: *mut i8, val: A) -> *mut i8 {
     let cursor2 = cursor as *mut A;
+    // TODO(ckoparkar): what's the difference between these?
+    // *cursor2 = val;
     cursor2.write_unaligned(val);
     cursor2.add(1) as *mut i8
 }
@@ -419,6 +490,8 @@ unsafe fn write<A>(cursor: *mut i8, val: A) -> *mut i8 {
 
 /// Typeclass for different allocation areas; nurseries, generations etc.
 pub trait Heap {
+    fn is_nursery(&self) -> bool;
+    fn is_oldest(&self) -> bool;
     fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)>;
     fn space_available(&self) -> usize;
 
@@ -453,13 +526,15 @@ pub trait Heap {
 struct Nursery(*mut C_GibNursery);
 
 impl Nursery {
-    fn bump_collections(&mut self) {
+    #[inline]
+    fn bump_num_collections(&mut self) {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
-            (*nursery).collections += 1;
+            (*nursery).num_collections += 1;
         }
     }
 
+    #[inline]
     fn reset_alloc(&mut self) {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
@@ -475,6 +550,17 @@ impl fmt::Debug for Nursery {
 }
 
 impl Heap for Nursery {
+    #[inline]
+    fn is_nursery(&self) -> bool {
+        true
+    }
+
+    #[inline]
+    fn is_oldest(&self) -> bool {
+        false
+    }
+
+    #[inline]
     fn space_available(&self) -> usize {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
@@ -520,6 +606,16 @@ impl fmt::Debug for Generation {
 }
 
 impl Heap for Generation {
+    #[inline]
+    fn is_nursery(&self) -> bool {
+        false
+    }
+
+    #[inline]
+    fn is_oldest(&self) -> bool {
+        false
+    }
+
     fn space_available(&self) -> usize {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
@@ -561,6 +657,17 @@ impl fmt::Debug for OldestGeneration {
 }
 
 impl Heap for OldestGeneration {
+    #[inline]
+    fn is_nursery(&self) -> bool {
+        false
+    }
+
+    #[inline]
+    fn is_oldest(&self) -> bool {
+        true
+    }
+
+    #[inline]
     fn space_available(&self) -> usize {
         0
     }
@@ -585,8 +692,16 @@ impl Heap for OldestGeneration {
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+/// Provenance of a GC root; shadow stack or remembered set.
+#[derive(Debug)]
+enum GcRootProv {
+    Stk,
+    RemSet,
+}
+
 /// A wrapper over the naked C pointer.
-struct Shadowstack(*mut C_GibShadowstack);
+#[derive(Debug)]
+struct Shadowstack(*mut C_GibShadowstack, GcRootProv);
 
 impl Shadowstack {
     /// Length of the shadow-stack.
@@ -608,6 +723,15 @@ impl Shadowstack {
                 println!("{:?}", *frame);
             }
         }
+    }
+}
+
+impl IntoIterator for &Shadowstack {
+    type Item = *mut C_GibShadowstackFrame;
+    type IntoIter = ShadowstackIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ShadowstackIter::new(self)
     }
 }
 
@@ -643,6 +767,9 @@ impl Iterator for ShadowstackIter {
         }
     }
 }
+
+use Shadowstack as RememberedSet;
+use ShadowstackIter as RememberedSetIter;
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Info table

@@ -1253,7 +1253,7 @@ void gib_print_global_region_count(void)
 
 typedef struct gib_nursery {
     // Step.
-    uint64_t n_collections;
+    uint64_t n_num_collections;
 
     // Allocation area.
     uint64_t n_heap_size;
@@ -1380,7 +1380,7 @@ static void gib_storage_initialize(void)
 // Initialize a nursery.
 static void gib_nursery_initialize(GibNursery *nursery)
 {
-    nursery->n_collections = 0;
+    nursery->n_num_collections = 0;
     nursery->n_heap_size = NURSERY_SIZE;
     nursery->n_heap_start = (char *) gib_alloc(NURSERY_SIZE);
     if (nursery->n_heap_start == NULL) {
