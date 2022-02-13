@@ -17,7 +17,7 @@ use std::ptr::{copy_nonoverlapping, null, null_mut, write_bytes};
 use crate::ffi::types::*;
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Collection; evacuate, promote etc.
+ * Garbage Collector; evacuation, promotion etc.
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
@@ -51,21 +51,21 @@ pub fn collect_minor(
     let nursery = &mut Nursery(nursery_ptr);
     if C_NUM_GENERATIONS == 1 {
         // Start by cauterizing the writers.
-        cauterize_writers(wstack)?;
+        let mut cenv = cauterize_writers(wstack)?;
         // Prepare to evacuate the readers.
         let mut oldest_gen = OldestGeneration(generations_ptr);
         let rem_set = unsafe {
             &RememberedSet((*generations_ptr).rem_set, GcRootProv::RemSet)
         };
-        // First evacuate the remembered set.
-        evacuate_readers(rem_set, &mut oldest_gen)?;
-        // Then the shadow stack.
-        evacuate_readers(rstack, &mut oldest_gen)?;
-        // Reset the allocation area.
+        // First evacuate the remembered set, then the shadow stack.
+        evacuate_readers(&mut cenv, rem_set, &mut oldest_gen)?;
+        evacuate_readers(&mut cenv, rstack, &mut oldest_gen)?;
+        // Reset the allocation area and record stats.
         nursery.reset_alloc();
-        // Record stats.
         nursery.bump_num_collections();
-        // Done.
+        // Restore the remaining cauterized writers. Allocate space for them
+        // in the nursery, not oldgen.
+        restore_writers(&cenv, nursery)?;
         Ok(())
     } else {
         todo!("NUM_GENERATIONS > 1")
@@ -74,20 +74,83 @@ pub fn collect_minor(
 
 /// Write a CAUTERIZED_TAG at all write cursors so that the collector knows
 /// when to stop copying.
-fn cauterize_writers(wstack: &Shadowstack) -> Result<()> {
+fn cauterize_writers(wstack: &Shadowstack) -> Result<CauterizedEnv> {
+    let mut cenv: CauterizedEnv = HashMap::new();
     for frame in wstack.into_iter() {
         unsafe {
             let ptr = (*frame).ptr as *mut i8;
             let ptr_next = write(ptr, CAUTERIZED_TAG);
             write(ptr_next, frame);
+            match cenv.get_mut(&ptr) {
+                None => {
+                    cenv.insert(ptr, ((*frame).start_of_chunk, vec![frame]));
+                    ()
+                }
+                Some((start_of_chunk, frames)) => {
+                    *start_of_chunk =
+                        *start_of_chunk || (*frame).start_of_chunk;
+                    frames.push(frame)
+                }
+            }
+        }
+    }
+    Ok(cenv)
+}
+
+/**
+
+Some writers don't get uncauterized and need to be restored by hand.
+
+This happens when a region has been allocated but nothing has been written
+to it yet. So there will be a write cursor for it on the shadow stack but there
+won't be any read cursors pointing to any data before this write cursor.
+Thus this write cursor won't get uncauterized during evacuation.
+
+We restore all such start-of-chunk uncauterized write cursors by allocating
+fresh chunks for them in the nursery.
+
+ */
+fn restore_writers(cenv: &CauterizedEnv, dest: &mut impl Heap) -> Result<()> {
+    for (wptr, (start_of_chunk, frames)) in cenv.iter() {
+        if !(*start_of_chunk) {
+            return Err(RtsError::Gc(format!(
+                "restore_writers: uncauterized cursor that's not at the \
+                 start of a chunk, {:?}",
+                wptr
+            )));
+        }
+        // TODO(ckoparkar): see the TODO in copy_readers.
+        let (chunk_start, chunk_end) = Heap::allocate(dest, 1024)?;
+        for frame in frames {
+            unsafe {
+                (*(*frame)).ptr = chunk_start;
+                (*(*frame)).endptr = chunk_end;
+            }
         }
     }
     Ok(())
 }
 
+/**
+Maps a write cursor to a list of shadowstack frames that it appears in.
+
+Why a list of frames?
+
+Because some write cursors may have multiple frames tracking them. E.g. if we
+allocate a region and pass to a function, and the function immediately
+pushes it to the stack again (e.g. because it makes a function call or allocates
+a new region etc.), we'll have two frames tracking the *same address* in memory.
+Thus, we must track all such frames corresponding to a memory addrerss.
+ */
+type CauterizedEnv = HashMap<*mut i8, (bool, Vec<*mut C_GibShadowstackFrame>)>;
+
 /// Copy values at all read cursors from the nursery to the provided
 /// destination. Also uncauterize any CAUTERIZED_TAGs that are reached.
-fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
+fn evacuate_readers(
+    cenv: &mut CauterizedEnv,
+    rstack: &Shadowstack,
+    dest: &mut impl Heap,
+) -> Result<()> {
     for frame in rstack.into_iter() {
         unsafe {
             let datatype = (*frame).datatype;
@@ -139,7 +202,14 @@ fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
                     // Evacuate the data.
                     let src = (*frame).ptr as *mut i8;
                     let (src_after, dst_after, dst_after_end, tag) =
-                        evacuate_packed(dest, packed_info, src, dst, dst_end)?;
+                        evacuate_packed(
+                            cenv,
+                            dest,
+                            packed_info,
+                            src,
+                            dst,
+                            dst_end,
+                        )?;
                     // Update the pointers in shadowstack.
                     (*frame).ptr = dst;
                     (*frame).endptr = dst_after_end;
@@ -199,6 +269,7 @@ fn evacuate_readers(rstack: &Shadowstack, dest: &mut impl Heap) -> Result<()> {
 }
 
 fn evacuate(
+    cenv: &mut CauterizedEnv,
     dest: &mut impl Heap,
     datatype: &C_GibDatatype,
     src: *mut i8,
@@ -219,7 +290,7 @@ fn evacuate(
                 Ok((src.add(size1), dst.add(size1), dst_end, None))
             }
             Some(DatatypeInfo::Packed(packed_info)) => {
-                evacuate_packed(dest, packed_info, src, dst, dst_end)
+                evacuate_packed(cenv, dest, packed_info, src, dst, dst_end)
             }
         }
     }
@@ -252,6 +323,7 @@ Returns: (src_after, dst_after, dst_end, maybe_tag)
 
  */
 fn evacuate_packed(
+    cenv: &mut CauterizedEnv,
     dest: &mut impl Heap,
     packed_info: &HashMap<C_GibPackedTag, DataconInfo>,
     src: *mut i8,
@@ -270,6 +342,8 @@ fn evacuate_packed(
                     println!("{:?}", wframe);
                 }
                 (*wframe).ptr = src;
+                let del = (*wframe).ptr as *mut i8;
+                cenv.remove(&del);
                 Ok((null_mut(), null_mut(), null(), Some(tag)))
             }
             // This is a forwarding pointer. Use this to write an
@@ -349,7 +423,14 @@ fn evacuate_packed(
                 write(src, COPIED_TO_TAG);
                 write(src_after_tag, dst);
                 // Continue in the next chunk.
-                evacuate_packed(dest, packed_info, next_chunk, dst, dst_end)
+                evacuate_packed(
+                    cenv,
+                    dest,
+                    packed_info,
+                    next_chunk,
+                    dst,
+                    dst_end,
+                )
             }
             // A pointer to a value in another buffer; copy this value
             // and then switch back to copying rest of the source buffer.
@@ -359,7 +440,14 @@ fn evacuate_packed(
             C_INDIRECTION_TAG => {
                 let (pointee, _): (*mut i8, _) = read(src_after_tag);
                 let (_, dst_after_pointee, dst_after_pointee_end, _) =
-                    evacuate_packed(dest, packed_info, pointee, dst, dst_end)?;
+                    evacuate_packed(
+                        cenv,
+                        dest,
+                        packed_info,
+                        pointee,
+                        dst,
+                        dst_end,
+                    )?;
                 // Add a forwarding pointer in the source buffer.
                 write(src, COPIED_TO_TAG);
                 let src_after_indr = write(src_after_tag, dst);
@@ -416,8 +504,14 @@ fn evacuate_packed(
                     // (1) instead of recursion, use a worklist
                     // (2) handle redirection nodes properly
                     for ty in field_tys.iter().skip((*num_scalars) as usize) {
-                        let (src1, dst1, dst_end1, field_tag) =
-                            evacuate(dest, ty, src_mut, dst_mut, dst_end_mut)?;
+                        let (src1, dst1, dst_end1, field_tag) = evacuate(
+                            cenv,
+                            dest,
+                            ty,
+                            src_mut,
+                            dst_mut,
+                            dst_end_mut,
+                        )?;
                         // Must immediately stop copying upon reaching
                         // the cauterized tag.
                         match field_tag {
@@ -582,7 +676,8 @@ impl Heap for Nursery {
                 Ok((old, bump))
             } else {
                 Err(RtsError::Gc(format!(
-                    "nursery alloc: out of space, requested={:?}, available={:?}",
+                    "nursery alloc: out of space, requested={:?}, \
+                     available={:?}",
                     size,
                     end.offset_from(old)
                 )))
