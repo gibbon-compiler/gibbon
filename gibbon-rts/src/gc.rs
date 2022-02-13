@@ -2,7 +2,7 @@
 
 /*!
 
-Implementation of the new generation garbage collector for Gibbon.
+Implementation of the new generational garbage collector for Gibbon.
 
  */
 
@@ -17,9 +17,206 @@ use std::ptr::{copy_nonoverlapping, null, null_mut, write_bytes};
 use crate::ffi::types::*;
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Notes
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+See https://github.com/iu-parfunc/gibbon/issues/122#issuecomment-938311529.
+
+
+*** Maintaining sharing, Copied and CopiedTo tags:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Maintaining sharing while evacuating packed data is HARD. You can't do the
+simple thing of marking all copied data with a forwarding pointer. That depends
+on having enough space for the forwarding pointer. But for binary tree data in
+the heap, you don't have it:
+
+┌─────────────┐
+│  N L 1 L 2  │
+└─────────────┘
+
+Specifically, there are 3 heap objects here. The two leaves happen to have
+enough room for a forwarding pointer, but the intermediate Node doesn't.
+We need some complicated scheme to retain sharing while evacuating this data.
+For example:
+
+- "Burn" all data as you copy it by changing all tags to Copied
+
+- Use a CopiedTo tag (that functions identically to existing Indirections),
+  when there is room for a forwarding pointer.
+
+- Reason about copies of contiguous intervals. I.e. the GC copies bytes from
+  location L0 to L1, without any intervening space for a forwarding pointer.
+
+- A second thread that points into the middle of such an interval, reads a
+  Copied tag, but must figure out its destination based on an offset from a
+  CopiedTo tag to the left or right of the interval.
+
+  Algorithm: scan to the right for the next COPIED_TO tag, then take the
+  negative offset of that pointer to find its position in the destination
+  buffer. Write an indirection to that in the spot you would have copied the
+  data to.
+
+The correctness of this depends on guaranteeing two properties:
+
+(1) We always end a chunk with a CopiedTo tag:
+
+    this is taken care of by copy_readers.
+
+(2) There are no indirections inside the interval (before or after copying),
+    which would cause it to be a different size in the from and to space and
+    thus invalidate offsets within it:
+
+    we are able to guarantee this because indirections themselves provide
+    exactly enough room to write a CopiedTo and forwarding pointer.
+
+
+
+*** Adding a forwarding pointer at the end of every chunk:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+'evacuate_readers' writes this tag and a forwarding pointer unless:
+
+
+(1) the value being evacuated doesn't end at the *true* end of the buffer,
+    see below.
+
+(2) the value being evacuated starts with a CopiedTo or a Copied tag.
+    we don't need to write a forwarding pointer since we would have already
+    written one during the previous evacuation.
+
+(3) if a evacuation ends with a Cauterized tag
+    TODO(ckoparkar): audit this case.
+
+
+ASSUMPTION: There is sufficient space available (9 bytes) to write a
+forwarding pointer in the source buffer.
+
+
+Is this a reasonable assumption?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Yes, only if all values are always evacuated in a strict left-to-right order.
+This happens if we process the shadowstack starting with the oldest frame first.
+Older frames always point to start of regions. Thus, we will evacuate a buffer
+and reach its *true* end. Due to the way buffers are set up, there's always
+sufficient space to write a forwarding pointer there. When we get further down
+the shadowstack and reach frames that point to values in the middle of a buffer,
+we will encounter CopiedTo or Copied tags and not write the forwarding pointers
+after these values.
+
+If values are NOT evacuated in a left-to-right order, this assumption is
+invalidated. Suppose there's a value (K a b c d) and we first evacuate 'a'
+(e.g. maybe because the remembered set points to it). Now the code will reach
+this point and try to write a forwarding pointer. But this will overwrite other
+data in the buffer!!
+
+Thus, we must only write a forwarding pointer when we've reached the true end
+of the source buffer. The only time we actually reach the true end is when we're
+evacuating a value starts at the very beginning of the chunk. Hence, we store
+this information in a shadowstack frame.
+
+
+**** Traversing burned data:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The left-to-right evacuation mentioned above is important for another reason.
+When buffers are NOT evacuated left-to-right, evacuate_packed can encounter
+burned data in the middle of a buffer such that there's more data to be
+evacuated after it. Thus, we must traverse past this burned field and evacuate
+the rest. But this traversal is tricky. The simple strategy of "scan right until
+you stop seeing burned things" doesn't work because two neighboring fields
+might be burned and we wouldn't know where one field ends and the next one
+begins.
+
+To accomplish this traversal we maintain a table of "burned addresses",
+{ start-of-burned-field -> end-of-burned-field }, for all roots that can create
+"burned holes" in the middle of buffers. In the current implementation we only
+need to track this info for the roots in the remembered set which can create
+burned holes since they are evacuated before the shadow stack. While evacuating
+the roots in the shadow stack, we always start at the oldest oldest frame which
+guarantees a left-to-right traversal of buffers.
+
+
+Granularity of the burned addresses table
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Does every intermediate packed field within a value pointed to by a root
+in a remembered set need its separate entry in the burned address table?
+No, IF we guarantee a left-to-right traversal of buffers while evacuating
+the remembered set, which ensures that we won't see any burned holes during
+this evacuation. To this end, we sort the roots in the remembered set and start
+evacuating from the one pointing to the leftmost object in the nursery.
+
+Moreover, this is sufficient while evacuating the shadow stack as well.
+Because at that time we only care about the boundaries of a burned field,
+anything within it doesn't need to be traversed.
+
+
+
+*** Finding a region's metadata from a pointer into it:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Every time we write an indirection while evacuating, we must adjust refcounts
+and outsets. In order to do this we need the address of the metadata for the
+pointed-to region, which we don't always have. For example, while evacuating
+a young-to-old indirection added by the mutator, we only know the address of
+the pointed-to data and nothing else. This stops us from writing *any*
+indirections during evacuation, forcing us to always inline everything.
+To address this, we need a way to go from a pointer to some data in a region
+to that region's metadata, which is stored in its footer.
+
+We could do one of three things here:
+
+(1) always inline EVERYTHING, but this is terrible.
+
+(2) in addition to storing an indirection pointer, we could also store the
+    metadata adress with it by using extra space. this means that an
+    indirection pointer (and correspondingly all forwarding pointers) will now
+    occupy 17 bytes! yikes.
+
+(3) fit all of this information in an 8 byte pointer by using the top 16 bits
+    to store a *tag*. this tag could be a distance-to-region-footer offset,
+    using which we can reach the footer and extract the metadata address that's
+    stored there. but this does introduces an upper bound on the size of the
+    biggest chunk that Gibbon can allocate; 65K bytes (2^16).
+
+    TODO(ckoparkar): MR and STH pointed out that if we ensure that the footer's
+    address is always aligned to a power of 2, we can store *more* information
+    in 16 bits and increase the upper bound the chunk size.
+
+
+*** Restoring uncauterized write cursors:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Some write cursors don't get uncauterized and need to be restored by hand.
+This happens when a region has been allocated but nothing has been written
+to it yet. So there will be a write cursor for it on the shadow stack but there
+won't be any read cursors pointing to any data before this write cursor, since
+there isn't any data here. Thus this write cursor won't get uncauterized during
+evacuation. We need to restore all such start-of-chunk uncauterized write
+cursors by allocating fresh chunks for them in the nursery. To accomplish this,
+we track all write cursors in a "cauterized environment" that maps a write
+cursor to a list of shadowstack frames that it appears in. Why a list of frames?
+Because some write cursors may have multiple frames tracking them. E.g. if we
+allocate a region and pass it to a function, and the function immediately pushes
+it to the stack again (e.g. maybe because it makes a function call or allocates
+a new region etc.), we'll have two frames tracking the *same address* in memory.
+Thus, we must track all such frames corresponding to a memory addrerss.
+
+
+*/
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Garbage Collector; evacuation, promotion etc.
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
+
+/// If we have variable sized initial chunks due to the region bound analysis,
+/// we'll have to store that info in a chunk footer, and then that could guide
+/// how big this new chunk should be. Using a default value of 1024 for now.
+const CHUNK_SIZE: u64 = 1024;
 
 // Tags used internally in the garbage collector.
 const CAUTERIZED_TAG: C_GibPackedTag = 253;
@@ -97,19 +294,7 @@ fn cauterize_writers(wstack: &Shadowstack) -> Result<CauterizedEnv> {
     Ok(cenv)
 }
 
-/**
-
-Some writers don't get uncauterized and need to be restored by hand.
-
-This happens when a region has been allocated but nothing has been written
-to it yet. So there will be a write cursor for it on the shadow stack but there
-won't be any read cursors pointing to any data before this write cursor.
-Thus this write cursor won't get uncauterized during evacuation.
-
-We restore all such start-of-chunk uncauterized write cursors by allocating
-fresh chunks for them in the nursery.
-
- */
+/// See Note [Restoring uncauterized write cursors].
 fn restore_writers(cenv: &CauterizedEnv, dest: &mut impl Heap) -> Result<()> {
     for (wptr, (start_of_chunk, frames)) in cenv.iter() {
         if !(*start_of_chunk) {
@@ -119,8 +304,7 @@ fn restore_writers(cenv: &CauterizedEnv, dest: &mut impl Heap) -> Result<()> {
                 wptr
             )));
         }
-        // TODO(ckoparkar): see the TODO in copy_readers.
-        let (chunk_start, chunk_end) = Heap::allocate(dest, 1024)?;
+        let (chunk_start, chunk_end) = Heap::allocate(dest, CHUNK_SIZE)?;
         for frame in frames {
             unsafe {
                 (*(*frame)).ptr = chunk_start;
@@ -131,17 +315,7 @@ fn restore_writers(cenv: &CauterizedEnv, dest: &mut impl Heap) -> Result<()> {
     Ok(())
 }
 
-/**
-Maps a write cursor to a list of shadowstack frames that it appears in.
-
-Why a list of frames?
-
-Because some write cursors may have multiple frames tracking them. E.g. if we
-allocate a region and pass to a function, and the function immediately
-pushes it to the stack again (e.g. because it makes a function call or allocates
-a new region etc.), we'll have two frames tracking the *same address* in memory.
-Thus, we must track all such frames corresponding to a memory addrerss.
- */
+/// See Note [Restoring uncauterized write cursors].
 type CauterizedEnv = HashMap<*mut i8, (bool, Vec<*mut C_GibShadowstackFrame>)>;
 
 /// Copy values at all read cursors from the nursery to the provided
@@ -172,22 +346,15 @@ fn evacuate_readers(
                 }
                 // A packed type that is copied by referring to the info table.
                 Some(DatatypeInfo::Packed(packed_info)) => {
-                    // TODO(ckoparkar): How big should this chunk be?
-                    //
-                    // If we have variable sized initial chunks based on the
-                    // region bound analysis, maybe we'll have to store that
-                    // info in a chunk footer. Then that size can guide how big
-                    // this new to-space chunk should be. Using 1024 for now.
-                    let chunk_size = 1024;
+                    let chunk_size = CHUNK_SIZE;
                     let (chunk_start, chunk_end) =
                         Heap::allocate(dest, chunk_size)?;
-                    // Write a footer if evacuating to the oldest generation.
+                    // Write a footer if evacuating to the oldest generation,
+                    // middle generation chunks don't need a footer.
                     let dst = chunk_start;
                     let dst_end = if !dest.is_oldest() {
-                        // Middle generation chunks don't need footers.
                         chunk_end
                     } else {
-                        // Oldest generation chunks need a footer.
                         let footer_space = size_of::<C_GibChunkFooter>();
                         let data_end = chunk_end.sub(footer_space) as *mut i8;
                         let usable_size = chunk_size - (footer_space as u64);
@@ -213,42 +380,8 @@ fn evacuate_readers(
                     // Update the pointers in shadowstack.
                     (*frame).ptr = dst;
                     (*frame).endptr = dst_after_end;
-                    /*
-                    Each chunk should end with a COPIED_TO_TAG; see (1)
-                    regarding the COPIED_TAG. The exceptions to this
-                    rule are handled in the match expression below.
-
-                    ASSUMPTION: There are at least 9 bytes available in the
-                    source buffer.
-
-                    Is this a reasonable assumption?
-                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-                    Yes, if all values are always evacuated in a left-to-right
-                    order. This happens if we process the shadowstack starting
-                    with the oldest frame first. Older frames always point to
-                    start of regions. Thus, we will evacuate a buffer and reach
-                    its *true* end. Due to the way buffers are set up, there's
-                    always sufficient space to write a forwarding pointer
-                    there. When we get further down the shadowstack and reach
-                    frames that point to values in the middle of a buffer,
-                    we will encounter COPIED_TO or COPIED tags and not write
-                    the forwarding pointers after these values.
-
-                    Can this assumption be invalidated?
-                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-                    Yes, if values are not evacuated in a left-to-right order.
-                    Suppose there's a value (K a b c d) and we first evacuate
-                    'a' (e.g. suppose the remembered set points to it). Now
-                    the code will reach this point and try to write a forwarding
-                    pointer. But this will overwrite other data in the buffer!!
-                    Thus, we must only write a forwarding pointer when we've
-                    reached the true end of the source buffer. The only time
-                    we actually reach the true end is when we're evacuating a
-                    value starts at the very beginning of the chunk.
-                    Hence, we record this information in the shadowstack.
-                     */
+                    // See Note [Adding a forwarding pointer at the end of
+                    // every chunk]:
                     match tag {
                         None => {}
                         Some(CAUTERIZED_TAG) => {}
@@ -346,8 +479,7 @@ fn evacuate_packed(
                 cenv.remove(&del);
                 Ok((null_mut(), null_mut(), null(), Some(tag)))
             }
-            // This is a forwarding pointer. Use this to write an
-            // indirection in the destination buffer.
+            // See Note [Maintaining sharing, Copied and CopiedTo tags].
             COPIED_TO_TAG => {
                 let (fwd_ptr, _): (*mut i8, _) = read_mut(src_after_tag);
                 let space_reqd = 18;
@@ -362,29 +494,7 @@ fn evacuate_packed(
                 //     source buffer.
                 Ok((null_mut(), dst_after_indr, dst_end1, Some(tag)))
             }
-            // Algorithm:
-            // ~~~~~~~~~~
-            // Scan to the right for the next COPIED_TO_TAG, then take
-            // the negative offset of that pointer to find its position
-            // in the destination buffer. Write an indirection to that
-            // in the spot you would have copied the data to.
-            //
-            // Assumptions:
-            // The correctness of this depends on guaranteeing two
-            // properties:
-            //
-            // (1) We always end a chunk with a CopiedTo tag:
-            //
-            //     this is taken care of by copy_readers.
-            //
-            // (2) There are no indirections inside the interval (before
-            //     or after copying), which would cause it to be a
-            //     different size in the from and to space and thus
-            //     invalidate offsets within it:
-            //
-            //     we are able to guarantee this because indirections
-            //     themselves provide exactly enough room to write a
-            //     COPIED_TO_TAG and forwarding pointer.
+            // See Note [Maintaining sharing, Copied and CopiedTo tags].
             COPIED_TAG => {
                 let (mut scan_tag, mut scan_ptr): (C_GibPackedTag, *const i8) =
                     read(src_after_tag);
@@ -599,8 +709,7 @@ pub trait Heap {
         unsafe {
             let space_avail = dst_end.offset_from(dst) as usize;
             if space_avail < space_reqd {
-                // TODO(ckoparkar): see the TODO in copy_readers.
-                let (new_dst, new_dst_end) = Heap::allocate(self, 1024)?;
+                let (new_dst, new_dst_end) = Heap::allocate(self, CHUNK_SIZE)?;
                 let dst_after_tag = write(dst, C_REDIRECTION_TAG);
                 write(dst_after_tag, new_dst);
                 Ok((new_dst, new_dst_end))
@@ -670,7 +779,8 @@ impl Heap for Nursery {
             let old = (*nursery).alloc as *mut i8;
             let bump = old.add(size as usize);
             let end = (*nursery).heap_end as *mut i8;
-            // Check if there's enough space in the nursery to fulfill the request.
+            // Check if there's enough space in the nursery to fulfill the
+            // request.
             if bump <= end {
                 (*nursery).alloc = bump;
                 Ok((old, bump))
@@ -864,7 +974,7 @@ impl Iterator for ShadowstackIter {
 }
 
 use Shadowstack as RememberedSet;
-use ShadowstackIter as RememberedSetIter;
+// use ShadowstackIter as RememberedSetIter;
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Info table
