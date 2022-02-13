@@ -255,8 +255,8 @@ pub fn collect_minor(
             &RememberedSet((*generations_ptr).rem_set, GcRootProv::RemSet)
         };
         // First evacuate the remembered set, then the shadow stack.
-        evacuate_readers(&mut cenv, rem_set, &mut oldest_gen)?;
-        evacuate_readers(&mut cenv, rstack, &mut oldest_gen)?;
+        evacuate_readers(&mut cenv, rem_set, &mut oldest_gen, true)?;
+        evacuate_readers(&mut cenv, rstack, &mut oldest_gen, false)?;
         // Reset the allocation area and record stats.
         nursery.reset_alloc();
         nursery.bump_num_collections();
@@ -324,8 +324,25 @@ fn evacuate_readers(
     cenv: &mut CauterizedEnv,
     rstack: &Shadowstack,
     dest: &mut impl Heap,
+    sort_frames: bool,
 ) -> Result<()> {
-    for frame in rstack.into_iter() {
+    let frames: Box<dyn Iterator<Item = *mut C_GibShadowstackFrame>> =
+        if sort_frames {
+            // Store all the frames in a vector and sort.
+            let mut frames_vec: Vec<*mut C_GibShadowstackFrame> = Vec::new();
+            for frame in rstack.into_iter() {
+                frames_vec.push(frame);
+            }
+            frames_vec.sort_unstable_by(|a, b| unsafe {
+                let ptra: *const i8 = (*(*a)).ptr;
+                let ptrb: *const i8 = (*(*b)).ptr;
+                (ptra).cmp(&ptrb)
+            });
+            Box::new(frames_vec.into_iter())
+        } else {
+            Box::new(rstack.into_iter())
+        };
+    for frame in frames {
         unsafe {
             let datatype = (*frame).datatype;
             match INFO_TABLE.get().unwrap().get(&datatype) {
