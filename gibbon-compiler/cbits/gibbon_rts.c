@@ -1638,10 +1638,13 @@ void gib_free_region2(GibChunk *region)
 
 // Write barrier. INLINE!!!
 void gib_indirection_barrier(
+    // Address where the indirection tag will be written.
     GibCursor from,
     GibCursor from_footer_ptr,
+    // Address where the indirection pointer points to.
     GibCursor to,
     GibCursor to_footer_ptr,
+    // Data type written at from/to.
     uint32_t datatype
 )
 {
@@ -1659,7 +1662,7 @@ void gib_indirection_barrier(
     } else if (from_old && to_young) {
         // (3) oldgen -> nursery
         GibGeneration *gen = DEFAULT_GENERATION;
-        gib_remset_push(gen->g_rem_set, from, datatype);
+        gib_remset_push(gen->g_rem_set, from, from_footer_ptr, datatype);
         return;
     } else if (from_old && to_old) {
         // (4) oldgen -> oldgen

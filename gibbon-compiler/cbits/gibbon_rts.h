@@ -355,8 +355,8 @@ int32_t gib_shadowstack_length(GibShadowstack *stack);
 void gib_shadowstack_print_all(GibShadowstack *stack);
 
 // Remembered Set API.
-#define gib_remset_push(stack, ptr, datatype) \
-    gib_shadowstack_push(stack, ptr, (char *) NULL, datatype, false)
+#define gib_remset_push(stack, ptr, endptr, datatype) \
+    gib_shadowstack_push(stack, ptr, (char *) endptr, datatype, false)
 #define gib_remset_pop(stack) \
     gib_shadowstack_pop(stack)
 #define gib_remset_length(stack) \

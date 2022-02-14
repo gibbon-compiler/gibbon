@@ -376,16 +376,24 @@ fn evacuate_readers(
                     let (dst, dst_end) = Heap::allocate(heap, *size as u64)?;
                     let src = (*frame).ptr as *mut i8;
                     copy_nonoverlapping(src, dst, *size as usize);
-                    // Update the burned address table.
-                    match rstack.1 {
-                        GcRootProv::RemSet => {
-                            benv_rem_set.insert(src, src.add(*size as usize));
-                        }
-                        GcRootProv::Stk => (),
-                    };
-                    // Update the pointer in shadow stack.
+                    // Update the pointers in shadow stack.
                     (*frame).ptr = dst;
-                    (*frame).endptr = dst_end;
+                    // When evacuating the remembered set, endptr points to
+                    // the footer of the region containing the old-to-young
+                    // pointer. We don't want to update it here.
+                    if rstack.1 == GcRootProv::Stk {
+                        (*frame).endptr = dst_end;
+                    } else {
+                        // When evacuating the remembered set, endptr points to
+                        // the footer of the region containing the old-to-young
+                        // pointer. We don't want to update it here.
+                        //
+                        // TODO(ckoparkar): insert dst_end to oldgen region's
+                        // outset using (*frame).endptr a.k.a. footer pointer.
+
+                        // Update the burned address table.
+                        benv_rem_set.insert(src, src.add(*size as usize));
+                    }
                 }
                 // A packed type that is copied by referring to the info table.
                 Some(DatatypeInfo::Packed(packed_info)) => {
@@ -425,16 +433,21 @@ fn evacuate_readers(
                             dst,
                             dst_end,
                         )?;
-                    // Update the burned address table.
-                    match rstack.1 {
-                        GcRootProv::RemSet => {
-                            benv_rem_set.insert(src, src_after);
-                        }
-                        GcRootProv::Stk => (),
-                    };
                     // Update the pointers in shadow stack.
                     (*frame).ptr = dst;
-                    (*frame).endptr = dst_after_end;
+                    if rstack.1 == GcRootProv::Stk {
+                        (*frame).endptr = dst_after_end;
+                    } else {
+                        // When evacuating the remembered set, endptr points to
+                        // the footer of the region containing the old-to-young
+                        // pointer. We don't want to update it here.
+                        //
+                        // TODO(ckoparkar): insert dst_after_end to oldgen region's
+                        // outset using (*frame).endptr a.k.a. footer pointer.
+
+                        // Update the burned address table.
+                        benv_rem_set.insert(src, src_after);
+                    }
                     // See Note [Adding a forwarding pointer at the end of
                     // every chunk]:
                     match tag {
@@ -456,7 +469,7 @@ fn evacuate_readers(
     Ok(benv_rem_set)
 }
 
-fn evacuate(
+fn evacuate_field(
     benv: Option<&BurnedAddressEnv>,
     cenv: &mut CauterizedEnv,
     heap: &mut impl Heap,
@@ -693,15 +706,16 @@ fn evacuate_packed(
                     // (1) instead of recursion, use a worklist
                     // (2) handle redirection nodes properly
                     for ty in field_tys.iter().skip((*num_scalars) as usize) {
-                        let (src1, dst1, dst_end1, field_tag) = evacuate(
-                            mb_benv,
-                            cenv,
-                            heap,
-                            ty,
-                            src_mut,
-                            dst_mut,
-                            dst_end_mut,
-                        )?;
+                        let (src1, dst1, dst_end1, field_tag) =
+                            evacuate_field(
+                                mb_benv,
+                                cenv,
+                                heap,
+                                ty,
+                                src_mut,
+                                dst_mut,
+                                dst_end_mut,
+                            )?;
                         // Must immediately stop copying upon reaching
                         // the cauterized tag.
                         match field_tag {
