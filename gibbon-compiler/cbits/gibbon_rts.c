@@ -1602,7 +1602,9 @@ static GibChunk *gib_alloc_region_in_nursery_slow(uint64_t size, bool collected)
 void gib_free_region2(GibChunk *region)
 {
     (void) region;
-    printf("gib_free_region2: TODO.\n");
+#ifdef _GIBBON_DEBUG
+    // printf("gib_free_region2: TODO.\n");
+#endif
     return;
 }
 
@@ -1643,10 +1645,10 @@ void gib_free_region2(GibChunk *region)
 
 // Write barrier. INLINE!!!
 void gib_indirection_barrier(
-    // Address where the indirection tag will be written.
+    // Address where the indirection tag is written.
     GibCursor from,
     GibCursor from_footer_ptr,
-    // Address where the indirection pointer points to.
+    // Address of the pointed-to data.
     GibCursor to,
     GibCursor to_footer_ptr,
     // Data type written at from/to.
@@ -1661,7 +1663,9 @@ void gib_indirection_barrier(
     bool to_old = !to_young;
     if (from_young && to_old) {
         // (1) nursery -> oldgen
+#ifdef _GIBBON_DEBUG
         printf("young to old pointer\n");
+#endif
         fprintf(stderr, "indirection barrier: todo nursery -> oldgen\n");
         exit(1);
     } else if (from_young && to_young) {
@@ -1670,14 +1674,21 @@ void gib_indirection_barrier(
         return;
     } else if (from_old && to_young) {
         // (3) oldgen -> nursery
+#ifdef _GIBBON_DEBUG
         printf("old to young pointer\n");
+#endif
         GibGeneration *gen = DEFAULT_GENERATION;
-        gib_remset_push(gen->g_rem_set, from, from_footer_ptr, datatype);
+        // Store the address of the indirection pointer, *NOT* the address of
+        // the indirection tag, in the remembered set.
+        GibCursor indr_addr = from + sizeof(GibPackedTag);
+        gib_remset_push(gen->g_rem_set, indr_addr, from_footer_ptr, datatype);
         return;
     } else if (from_old && to_old) {
         // (4) oldgen -> oldgen
+#ifdef _GIBBON_DEBUG
         printf("old to old pointer\n");
-        // gib_bump_refcount(from_footer_ptr, to_footer_ptr);
+#endif
+        gib_bump_refcount(from_footer_ptr, to_footer_ptr);
         return;
     }
 }

@@ -118,7 +118,7 @@ evacuating a value starts at the very beginning of the chunk. Hence, we store
 this information in a shadow stack frame.
 
 
-**** Traversing burned data:
+*** Traversing burned data:
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The left-to-right evacuation mentioned above is important for another reason.
@@ -221,6 +221,7 @@ Thus, we must track all such frames corresponding to a memory addrerss.
 /// we'll have to store that info in a chunk footer, and then that could guide
 /// how big this new chunk should be. Using a default value of 1024 for now.
 const CHUNK_SIZE: u64 = 1024;
+const MAX_CHUNK_SIZE: u64 = 1 * 1024 * 1024 * 1024;
 
 // Tags used internally in the garbage collector.
 const CAUTERIZED_TAG: C_GibPackedTag = 253;
@@ -259,9 +260,14 @@ pub fn collect_minor(
             let rem_set =
                 &RememberedSet((*generations_ptr).rem_set, GcRootProv::RemSet);
             // First evacuate the remembered set, then the shadow stack.
-            let benv =
+            let mut benv =
                 evacuate_remembered_set(&mut cenv, &mut oldest_gen, rem_set)?;
-            evacuate_shadowstack(&benv, &mut cenv, &mut oldest_gen, rstack)?;
+            evacuate_shadowstack(
+                &mut benv,
+                &mut cenv,
+                &mut oldest_gen,
+                rstack,
+            )?;
         }
         // Reset the allocation area and record stats.
         nursery.reset_alloc();
@@ -327,7 +333,12 @@ type CauterizedEnv = HashMap<*mut i8, (bool, Vec<*mut C_GibShadowstackFrame>)>;
 /// See Note [Traversing burned data].
 type BurnedAddressEnv = HashMap<*mut i8, *const i8>;
 
-/// TODO(ckoparkar).
+/// Copy values at all read cursors from the remembered set to the provided
+/// destination heap. Update the burned environment along the way.
+/// The roots are processed in a left-to-right order based on the addresses of
+/// the pointers they contain, to avoid the issue of running into holes due to
+/// burning while we're still evacuating the remembered set.
+/// See Note [Granularity of the burned addresses table].
 unsafe fn evacuate_remembered_set(
     cenv: &mut CauterizedEnv,
     heap: &mut impl Heap,
@@ -355,66 +366,55 @@ unsafe fn evacuate_remembered_set(
                 return Err(RtsError::Gc(format!(
                     "copy_readers: Unknown datatype, {:?}",
                     datatype
-                )))
+                )));
             }
             // A scalar type that can be copied directly.
             Some(DatatypeInfo::Scalar(size)) => {
-                let (dst, dst_end) = Heap::allocate(heap, *size as u64)?;
-                let src = (*frame).ptr as *mut i8;
+                // Allocate space in the destination.
+                let (dst, _dst_end) =
+                    Heap::allocate_first_chunk(heap, *size as u64, 1)?;
+                // The remembered set contains the address of the indirection
+                // pointer. We must read it to get the address of the pointed-to
+                // data.
+                let (src, _): (*mut i8, _) = read((*frame).ptr);
+                // Evacuate the data.
                 copy_nonoverlapping(src, dst, *size as usize);
-                // // Update the pointers in shadow stack.
-                // (*frame).ptr = dst;
-                // (*frame).endptr = dst_end;
-
-                // // When evacuating the remembered set, endptr points to
-                // // the footer of the region containing the old-to-young
-                // // pointer. We don't want to update it here.
-                // //
-                // // TODO(ckoparkar): insert dst_end to oldgen region's
-                // // outset using (*frame).endptr a.k.a. footer pointer.
-
-                // // Update the burned address table.
-                // benv.insert(src, src.add(*size as usize));
+                // Update the indirection pointer in oldgen region.
+                write((*frame).ptr as *mut i8, dst);
+                // TODO(ckoparkar): update the outset in oldgen region.
+                // let (footer_addr, _): (*const i8, _) = read((*frame).endptr);
+                // Update the burned address table.
+                benv.insert(src, src.add(*size as usize));
             }
             // A packed type that is copied by referring to the info table.
             Some(DatatypeInfo::Packed(packed_info)) => {
-                let chunk_size = CHUNK_SIZE;
-                let (chunk_start, chunk_end) =
-                    Heap::allocate(heap, chunk_size)?;
-                let dst = chunk_start;
-                // Write a footer if evacuating to the oldest generation,
-                // middle generation chunks don't need a footer.
-                let refcount = 1;
-                let dst_end = if !heap.is_oldest() {
-                    chunk_end
-                } else {
-                    init_footer_at(chunk_end, chunk_size, refcount)
-                };
+                // Allocate space in the destination.
+                let (dst, dst_end) =
+                    Heap::allocate_first_chunk(heap, CHUNK_SIZE, 1)?;
+                // The remembered set contains the address where the indirect-
+                // ion pointer is stored. We must read it to get the address of
+                // the pointed-to data.
+                let (src, _): (*mut i8, _) = read((*frame).ptr);
                 // Evacuate the data.
-                let src = (*frame).ptr as *mut i8;
-                let (_src_after, _dst_after, _dst_after_end, _tag) =
+                let (src_after, _dst_after, _dst_after_end, _tag) =
                     evacuate_packed(
-                        &benv,
+                        &mut benv,
                         cenv,
                         heap,
+                        &GcRootProv::RemSet,
                         packed_info,
                         src,
                         dst,
                         dst_end,
                     )?;
-                // // Update the pointers in shadow stack.
-                // (*frame).ptr = dst;
-                // (*frame).endptr = dst_after_end;
-
-                // // When evacuating the remembered set, endptr points to
-                // // the footer of the region containing the old-to-young
-                // // pointer. We don't want to update it here.
-                // //
-                // // TODO(ckoparkar): insert dst_after_end to oldgen region's
-                // // outset using (*frame).endptr a.k.a. footer pointer.
-
-                // // Update the burned address table.
-                // benv.insert(src, src_after);
+                // Update the indirection pointer in oldgen region.
+                write((*frame).ptr as *mut i8, dst);
+                // TODO(ckoparkar): update the outset in oldgen region.
+                let (footer_addr, _): (*const i8, _) = read((*frame).endptr);
+                let footer = footer_addr as *mut C_GibChunkFooter;
+                println!("{:?}", *footer);
+                // Update the burned address table.
+                benv.insert(src, src_after);
             }
         }
     }
@@ -424,7 +424,7 @@ unsafe fn evacuate_remembered_set(
 /// Copy values at all read cursors from the nursery to the provided
 /// destination heap. Also uncauterize any writer cursors that are reached.
 unsafe fn evacuate_shadowstack(
-    benv: &BurnedAddressEnv,
+    benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
     heap: &mut impl Heap,
     rstack: &Shadowstack,
@@ -436,11 +436,14 @@ unsafe fn evacuate_shadowstack(
                 return Err(RtsError::Gc(format!(
                     "copy_readers: Unknown datatype, {:?}",
                     datatype
-                )))
+                )));
             }
             // A scalar type that can be copied directly.
             Some(DatatypeInfo::Scalar(size)) => {
-                let (dst, dst_end) = Heap::allocate(heap, *size as u64)?;
+                // Allocate space in the destination.
+                let (dst, dst_end) =
+                    Heap::allocate_first_chunk(heap, *size as u64, 0)?;
+                // Evacuate the data.
                 let src = (*frame).ptr as *mut i8;
                 copy_nonoverlapping(src, dst, *size as usize);
                 // Update the pointers in shadow stack.
@@ -449,18 +452,9 @@ unsafe fn evacuate_shadowstack(
             }
             // A packed type that is copied by referring to the info table.
             Some(DatatypeInfo::Packed(packed_info)) => {
-                let chunk_size = CHUNK_SIZE;
-                let (chunk_start, chunk_end) =
-                    Heap::allocate(heap, chunk_size)?;
-                let dst = chunk_start;
-                // Write a footer if evacuating to the oldest generation,
-                // middle generation chunks don't need a footer.
-                let refcount = 0;
-                let dst_end = if !heap.is_oldest() {
-                    chunk_end
-                } else {
-                    init_footer_at(chunk_end, chunk_size, refcount)
-                };
+                // Allocate space in the destination.
+                let (dst, dst_end) =
+                    Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
                 // Evacuate the data.
                 let src = (*frame).ptr as *mut i8;
                 let (src_after, dst_after, dst_after_end, tag) =
@@ -468,6 +462,7 @@ unsafe fn evacuate_shadowstack(
                         benv,
                         cenv,
                         heap,
+                        &GcRootProv::Stk,
                         packed_info,
                         src,
                         dst,
@@ -527,9 +522,10 @@ Returns: (src_after, dst_after, dst_end, maybe_tag)
 
  */
 unsafe fn evacuate_packed(
-    benv: &BurnedAddressEnv,
+    benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
     heap: &mut impl Heap,
+    prov: &GcRootProv,
     packed_info: &HashMap<C_GibPackedTag, DataconInfo>,
     src: *mut i8,
     dst: *mut i8,
@@ -542,12 +538,12 @@ unsafe fn evacuate_packed(
         CAUTERIZED_TAG => {
             let (wframe_ptr, _): (*const i8, _) = read(src_after_tag);
             let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
-            if cfg!(debug_assertions) {
-                println!("{:?}", wframe);
-            }
-            (*wframe).ptr = src;
+            // Mark this cursor as uncauterized.
             let del = (*wframe).ptr as *mut i8;
             cenv.remove(&del);
+            // Update the poiners on the shadow stack.
+            (*wframe).ptr = dst;
+            (*wframe).endptr = dst_end;
             Ok((null_mut(), null_mut(), null(), Some(tag)))
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
@@ -612,6 +608,7 @@ unsafe fn evacuate_packed(
                 benv,
                 cenv,
                 heap,
+                prov,
                 packed_info,
                 next_chunk,
                 dst,
@@ -625,19 +622,33 @@ unsafe fn evacuate_packed(
         // Indirections are always inlined in the current version.
         C_INDIRECTION_TAG => {
             let (pointee, _): (*mut i8, _) = read(src_after_tag);
-            let (_, dst_after_pointee, dst_after_pointee_end, _) =
-                evacuate_packed(
-                    benv,
-                    cenv,
-                    heap,
-                    packed_info,
-                    pointee,
-                    dst,
-                    dst_end,
-                )?;
+            let (
+                src_after_pointee,
+                dst_after_pointee,
+                dst_after_pointee_end,
+                _,
+            ) = evacuate_packed(
+                benv,
+                cenv,
+                heap,
+                prov,
+                packed_info,
+                pointee,
+                dst,
+                dst_end,
+            )?;
             // Add a forwarding pointer in the source buffer.
             write(src, COPIED_TO_TAG);
             let src_after_indr = write(src_after_tag, dst);
+            // Update the burned environment if we're evacuating a root
+            // from the remembered set.
+            match prov {
+                GcRootProv::RemSet => {
+                    benv.insert(pointee, src_after_pointee);
+                    ()
+                }
+                GcRootProv::Stk => (),
+            }
             // Return 1 past the indirection pointer as src_after
             // and the dst_after that evacuate_packed returned.
             Ok((
@@ -650,7 +661,9 @@ unsafe fn evacuate_packed(
         // Regular datatype, copy.
         _ => {
             let DataconInfo { scalar_bytes, field_tys, num_scalars, .. } =
-                packed_info.get(&tag).unwrap();
+                packed_info
+                    .get(&tag)
+                    .expect(&format!("Unknown tag: {:?}", tag));
             // Check bound of the destination buffer before copying.
             // Reserve additional space for a redirection node or a
             // forwarding pointer.
@@ -693,6 +706,7 @@ unsafe fn evacuate_packed(
                         benv,
                         cenv,
                         heap,
+                        prov,
                         ty,
                         src_mut,
                         dst_mut,
@@ -707,7 +721,7 @@ unsafe fn evacuate_packed(
                                 null_mut(),
                                 null(),
                                 field_tag,
-                            ))
+                            ));
                         }
                         _ => {
                             if src1.is_null() {
@@ -732,9 +746,10 @@ unsafe fn evacuate_packed(
 }
 
 unsafe fn evacuate_field(
-    benv: &BurnedAddressEnv,
+    benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
     heap: &mut impl Heap,
+    prov: &GcRootProv,
     datatype: &C_GibDatatype,
     src: *mut i8,
     dst: *mut i8,
@@ -752,37 +767,17 @@ unsafe fn evacuate_field(
             let size1 = *size as usize;
             Ok((src.add(size1), dst.add(size1), dst_end, None))
         }
-        Some(DatatypeInfo::Packed(packed_info)) => {
-            evacuate_packed(benv, cenv, heap, packed_info, src, dst, dst_end)
-        }
+        Some(DatatypeInfo::Packed(packed_info)) => evacuate_packed(
+            benv,
+            cenv,
+            heap,
+            prov,
+            packed_info,
+            src,
+            dst,
+            dst_end,
+        ),
     }
-}
-
-unsafe fn init_footer_at(
-    chunk_end: *const i8,
-    chunk_size: u64,
-    refcount: u16,
-) -> *const i8 {
-    let footer_space = size_of::<C_GibChunkFooter>();
-    let footer_start = chunk_end.sub(footer_space);
-    let usable_size = chunk_size - (footer_space as u64);
-    let region_info = C_GibRegionInfo {
-        // TODO(ckoparkar): gensym an identifier.
-        id: 0,
-        refcount: refcount,
-        outset_len: 0,
-        outset: [null(); 10],
-        outset2: null_mut(),
-    };
-    let region_info_ptr: *mut C_GibRegionInfo =
-        Box::into_raw(Box::new(region_info));
-    let footer: *mut C_GibChunkFooter = footer_start as *mut C_GibChunkFooter;
-    (*footer).reg_info = region_info_ptr;
-    (*footer).seq_no = 0;
-    (*footer).size = usable_size;
-    (*footer).next = null_mut();
-    (*footer).prev = null_mut();
-    footer_start
 }
 
 #[inline]
@@ -818,25 +813,101 @@ pub trait Heap {
     fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)>;
     fn space_available(&self) -> usize;
 
-    fn check_bounds(
+    unsafe fn allocate_first_chunk(
+        &mut self,
+        size: u64,
+        refcount: u16,
+    ) -> Result<(*mut i8, *const i8)> {
+        if !self.is_oldest() {
+            self.allocate(size)
+        } else {
+            let total_size = size + (size_of::<C_GibChunkFooter>() as u64);
+            let (start, end) = self.allocate(total_size)?;
+            let footer_start = init_footer_at(end, None, 0, size, refcount);
+            Ok((start, footer_start))
+        }
+    }
+
+    unsafe fn allocate_next_chunk(
+        &mut self,
+        dst: *mut i8,
+        dst_end: *const i8,
+    ) -> Result<(*mut i8, *const i8)> {
+        if !self.is_oldest() {
+            let (new_dst, new_dst_end) = Heap::allocate(self, CHUNK_SIZE)?;
+            // Write a redirection tag in the old chunk.
+            let dst_after_tag = write(dst, C_REDIRECTION_TAG);
+            write(dst_after_tag, new_dst);
+            Ok((new_dst, new_dst_end))
+        } else {
+            // Access the old footer to get the region metadata.
+            let old_footer = dst_end as *mut C_GibChunkFooter;
+            // Allocate space for the new chunk.
+            let mut chunk_size = (*old_footer).size * 2;
+            if chunk_size > MAX_CHUNK_SIZE {
+                chunk_size = MAX_CHUNK_SIZE;
+            }
+            let (new_dst, new_dst_end) = Heap::allocate(self, chunk_size)?;
+            // Write a redirection tag in the old chunk.
+            let dst_after_tag = write(dst, C_REDIRECTION_TAG);
+            write(dst_after_tag, new_dst);
+            // Initialize a footer at the end of the new chunk.
+            let reg_info: *mut C_GibRegionInfo = (*old_footer).reg_info;
+            let new_footer_start = init_footer_at(
+                new_dst_end,
+                Some(reg_info),
+                (*old_footer).seq_no + 1,
+                chunk_size,
+                (*reg_info).refcount,
+            );
+            let new_footer: *mut C_GibChunkFooter =
+                new_footer_start as *mut C_GibChunkFooter;
+            (*old_footer).next = new_footer;
+            (*new_footer).prev = old_footer;
+            Ok((new_dst, new_footer_start))
+        }
+    }
+
+    unsafe fn check_bounds(
         &mut self,
         space_reqd: usize,
         dst: *mut i8,
         dst_end: *const i8,
     ) -> Result<(*mut i8, *const i8)> {
-        assert!((dst as *const i8) < dst_end);
-        unsafe {
-            let space_avail = dst_end.offset_from(dst) as usize;
-            if space_avail < space_reqd {
-                let (new_dst, new_dst_end) = Heap::allocate(self, CHUNK_SIZE)?;
-                let dst_after_tag = write(dst, C_REDIRECTION_TAG);
-                write(dst_after_tag, new_dst);
-                Ok((new_dst, new_dst_end))
-            } else {
-                Ok((dst, dst_end))
-            }
+        let space_avail = dst_end.offset_from(dst) as usize;
+        if space_avail >= space_reqd {
+            Ok((dst, dst_end))
+        } else {
+            self.allocate_next_chunk(dst, dst_end)
         }
     }
+}
+
+unsafe fn init_footer_at(
+    chunk_end: *const i8,
+    reg_info: Option<*mut C_GibRegionInfo>,
+    seq_no: u16,
+    chunk_size: u64,
+    refcount: u16,
+) -> *const i8 {
+    let footer_space = size_of::<C_GibChunkFooter>();
+    let footer_start = chunk_end.sub(footer_space);
+
+    let region_info_ptr: *mut C_GibRegionInfo = match reg_info {
+        None => {
+            let mut region_info = C_GibRegionInfo::new();
+            region_info.refcount = refcount;
+            Box::into_raw(Box::new(region_info))
+        }
+        Some(info_ptr) => info_ptr,
+    };
+    let footer: *mut C_GibChunkFooter = footer_start as *mut C_GibChunkFooter;
+    (*footer).reg_info = region_info_ptr;
+    (*footer).seq_no = seq_no;
+    (*footer).size = chunk_size;
+    (*footer).next = null_mut();
+    (*footer).prev = null_mut();
+    footer_start
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1011,6 +1082,19 @@ impl Heap for OldestGeneration {
     }
 }
 
+impl C_GibRegionInfo {
+    pub fn new() -> C_GibRegionInfo {
+        C_GibRegionInfo {
+            // TODO(ckoparkar): gensym an identifier.
+            id: 0,
+            refcount: 0,
+            outset_len: 0,
+            outset: [null(); 10],
+            outset2: null_mut(),
+        }
+    }
+}
+
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Shadow stack
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1148,7 +1232,7 @@ pub fn info_table_insert_packed_dcon(
             None => {
                 return Err(RtsError::InfoTable(
                     "INFO_TABLE not initialized.".to_string(),
-                ))
+                ));
             }
             Some(tbl) => tbl,
         }
@@ -1188,7 +1272,7 @@ pub fn info_table_insert_scalar(
             None => {
                 return Err(RtsError::InfoTable(
                     "INFO_TABLE not initialized.".to_string(),
-                ))
+                ));
             }
             Some(tbl) => tbl,
         }

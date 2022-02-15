@@ -1459,7 +1459,7 @@ codegenTy :: Ty -> C.Type
 codegenTy IntTy = [cty|typename GibInt|]
 codegenTy FloatTy= [cty|typename GibFloat|]
 codegenTy BoolTy = [cty|typename GibBool|]
-codegenTy TagTyPacked = [cty|typename GibBoxedTag|]
+codegenTy TagTyPacked = [cty|typename GibPackedTag|]
 codegenTy TagTyBoxed  = [cty|typename GibBoxedTag|]
 codegenTy SymTy = [cty|typename GibSym|]
 codegenTy PtrTy = [cty|typename GibPtr|] -- char* - Hack, this could be void* if we have enough casts. [2016.11.06]

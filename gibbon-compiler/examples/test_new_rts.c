@@ -670,15 +670,20 @@ GibCursorGibCursorGibCursorGibCursorProd add1(GibCursor end_r_606,  // input reg
       case 1:
         {
             *(GibBoxedTag *) loc_605 = 1;
+
             GibCursor loc_668 = loc_605 + 1;
+            // spill loc_605.
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_0 =
                                                       add1(end_r_606, end_r_607, loc_668, tmpcur_1294);
+            // restored.
             GibCursor pvrtmp_1301 = tmp_struct_0.field0;
             GibCursor pvrtmp_1302 = tmp_struct_0.field1;
             GibCursor pvrtmp_1303 = tmp_struct_0.field2;
             GibCursor pvrtmp_1304 = tmp_struct_0.field3;
+            // spill loc_605
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_1 =
                                                       add1(end_r_606, pvrtmp_1301, pvrtmp_1304, pvrtmp_1302);
+            // restored.
             GibCursor pvrtmp_1309 = tmp_struct_1.field0;
             GibCursor pvrtmp_1310 = tmp_struct_1.field1;
             GibCursor pvrtmp_1311 = tmp_struct_1.field2;
