@@ -922,7 +922,8 @@ GibChunk *gib_alloc_region(uint64_t size)
     reg_info->reg_outset_len = 0;
 
 #ifdef _GIBBON_DEBUG
-    printf("Allocated a region(%lld): %lld bytes.\n", reg->reg_id, size);
+    printf("Allocated a region(%" PRIu64 "): %" PRIu64 " bytes.\n",
+           reg_info->reg_id, size);
 #endif
 
     // Write the footer.
@@ -972,9 +973,9 @@ GibChunk gib_alloc_chunk(GibCursor footer_ptr)
 
 #ifdef _GIBBON_DEBUG
     GibRegionInfo *reg = (GibRegionInfo*) new_footer->cf_reg_info;
-    printf("gib_alloc_chunk: allocated %lld bytes for region %lld.\n",
+    printf("gib_alloc_chunk: allocated %" PRIu64 " bytes for region %" PRIu64 "\n",
            total_size,
-           reg->reg_id);
+           (footer->cf_reg_info)->reg_id);
 #endif
 
     return (GibChunk) {start , end};
@@ -1004,7 +1005,8 @@ void gib_bump_refcount(GibCursor from_footer_ptr, GibCursor to_footer_ptr)
     to_reg->reg_refcount = new_refcount;
 
 #ifdef _GIBBON_DEBUG
-    printf("gib_bump_refcount: %lld -> %lld\n", from_reg->reg_id, to_reg->reg_id);
+    printf("gib_bump_refcount: %" PRIu64 "-> %" PRIu64 "\n",
+           from_reg->reg_id, to_reg->reg_id);
     printf("gib_bump_refcount: old-refcount=%d, old-outset-len=%d:\n",
            current_refcount, from_reg->reg_outset_len);
     assert(current_refcount == from_reg->reg_outset_len+1);
@@ -1014,9 +1016,9 @@ void gib_bump_refcount(GibCursor from_footer_ptr, GibCursor to_footer_ptr)
     gib_insert_into_outset(to_footer_ptr, from_reg);
 
 #ifdef _GIBBON_DEBUG
-    printf("gib_bump_refcount: Added %p to %lld's outset, %p.\n",
-           to_footer_ptr, from_reg->reg_id, from_reg);
-    printf("gib_bump_refcount: new-refcount=%d, new-outset-len=%d\n",
+    printf("gib_bump_refcount: Added %p to %" PRIu64 "'s outset, %p.\n",
+           to_footer_ptr, from_reg->reg_id, (void *) from_reg);
+    printf("gib_bump_refcount: new-refcount=%" PRIu16 ", new-outset-len=%d\n",
            new_refcount, from_reg->reg_outset_len);
     assert(new_refcount == from_reg->reg_outset_len+1);
 #endif
@@ -1043,7 +1045,8 @@ void gib_free_region(GibCursor reg_footer_ptr) {
     }
 
 #ifdef _GIBBON_DEBUG
-    printf("gib_free_region(%lld): refcounts (1): old-refcount=%d, new-refcount=%d:\n", reg->reg_id, current_refcount, new_refcount);
+    printf("gib_free_region(%" PRIu64 "): refcounts (1): old-refcount=%d, new-refcount=%d:\n",
+           reg->reg_id, current_refcount, new_refcount);
 #endif
 
 
@@ -1051,7 +1054,7 @@ void gib_free_region(GibCursor reg_footer_ptr) {
     if (new_refcount == 0) {
 
 #ifdef _GIBBON_DEBUG
-        printf("gib_free_region(%lld): outset length: %d\n",
+        printf("gib_free_region(%" PRIu64 "): outset length: %d\n",
                reg->reg_id, reg->reg_outset_len);
 #endif
 
@@ -1072,7 +1075,7 @@ void gib_free_region(GibCursor reg_footer_ptr) {
                 elt_new_refcount = elt_current_refcount - 1;
                 elt_reg->reg_refcount = elt_new_refcount;
 #ifdef _GIBBON_DEBUG
-                printf("gib_free_region(%lld): old-refcount=%d, new-refcount=%d:\n",
+                printf("gib_free_region(%" PRIu64 "): old-refcount=%d, new-refcount=%d:\n",
                        elt_reg->reg_id,
                        elt_current_refcount,
                        elt_reg->reg_refcount);
@@ -1121,7 +1124,8 @@ void gib_free_region(GibCursor reg_footer_ptr) {
         }
 
 #ifdef _GIBBON_DEBUG
-        printf("gib_free_region(%lld): Freed %lld bytes across %lld chunks.\n",
+        printf("gib_free_region(%" PRIu64 "): Freed %" PRId64
+               " bytes across %" PRId64 " chunks.\n",
                reg->reg_id, total_bytesize, num_freed_chunks);
 #endif
 
@@ -1130,7 +1134,7 @@ void gib_free_region(GibCursor reg_footer_ptr) {
 
     } else {
 #ifdef _GIBBON_DEBUG
-        printf("gib_free_region(%lld): non-zero refcount: %d.\n",
+        printf("gib_free_region(%" PRIu64 "): non-zero refcount: %d.\n",
                reg->reg_id, reg->reg_refcount);
 #endif
     }
@@ -1597,6 +1601,7 @@ static GibChunk *gib_alloc_region_in_nursery_slow(uint64_t size, bool collected)
 
 void gib_free_region2(GibChunk *region)
 {
+    (void) region;
     printf("gib_free_region2: TODO.\n");
     return;
 }
@@ -1648,25 +1653,31 @@ void gib_indirection_barrier(
     uint32_t datatype
 )
 {
+    (void) to_footer_ptr;
+
     bool from_young = gib_addr_in_nursery(from);
     bool from_old = !from_young;
     bool to_young = gib_addr_in_nursery(to);
     bool to_old = !to_young;
     if (from_young && to_old) {
         // (1) nursery -> oldgen
+        printf("young to old pointer\n");
         fprintf(stderr, "indirection barrier: todo nursery -> oldgen\n");
         exit(1);
     } else if (from_young && to_young) {
+        printf("young to young pointer\n");
         // (2) nursery -> nursery
         return;
     } else if (from_old && to_young) {
         // (3) oldgen -> nursery
+        printf("old to young pointer\n");
         GibGeneration *gen = DEFAULT_GENERATION;
         gib_remset_push(gen->g_rem_set, from, from_footer_ptr, datatype);
         return;
     } else if (from_old && to_old) {
         // (4) oldgen -> oldgen
-        gib_bump_refcount(from_footer_ptr, to_footer_ptr);
+        printf("old to old pointer\n");
+        // gib_bump_refcount(from_footer_ptr, to_footer_ptr);
         return;
     }
 }
