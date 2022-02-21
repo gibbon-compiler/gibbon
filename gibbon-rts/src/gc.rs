@@ -7,7 +7,8 @@ Implementation of the new generational garbage collector for Gibbon.
  */
 
 use libc;
-use std::collections::HashMap;
+
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::lazy::OnceCell;
@@ -228,9 +229,14 @@ pub fn garbage_collect(
     _force_major: bool,
 ) -> Result<()> {
     if cfg!(debug_assertions) {
-        println!("GC!!!");
+        println!("Start of GC.");
     }
-    collect_minor(rstack_ptr, wstack_ptr, nursery_ptr, generations_ptr)
+    let res =
+        collect_minor(rstack_ptr, wstack_ptr, nursery_ptr, generations_ptr);
+    if cfg!(debug_assertions) {
+        println!("End of GC.");
+    }
+    res
 }
 
 /// Minor collection.
@@ -366,7 +372,7 @@ unsafe fn evacuate_remembered_set(
             // A scalar type that can be copied directly.
             Some(DatatypeInfo::Scalar(size)) => {
                 // Allocate space in the destination.
-                let (dst, _dst_end) =
+                let (dst, dst_end) =
                     Heap::allocate_first_chunk(heap, *size as u64, 1)?;
                 // The remembered set contains the address of the indirection
                 // pointer. We must read it to get the address of the pointed-to
@@ -376,8 +382,8 @@ unsafe fn evacuate_remembered_set(
                 copy_nonoverlapping(src, dst, *size as usize);
                 // Update the indirection pointer in oldgen region.
                 write((*frame).ptr as *mut i8, dst);
-                // TODO(ckoparkar): update the outset in oldgen region.
-                // let (footer_addr, _): (*const i8, _) = read((*frame).endptr);
+                // Update the outset in oldgen region.
+                add_to_outset((*frame).endptr, dst_end);
                 // Update the burned address table.
                 benv.insert(src, src.add(*size as usize));
             }
@@ -404,9 +410,8 @@ unsafe fn evacuate_remembered_set(
                     )?;
                 // Update the indirection pointer in oldgen region.
                 write((*frame).ptr as *mut i8, dst);
-                // // TODO(ckoparkar): update the outset in oldgen region.
-                // let (footer_addr, _): (*const i8, _) = read((*frame).endptr);
-                // let footer = footer_addr as *mut C_GibChunkFooter;
+                // Update the outset in oldgen region.
+                add_to_outset((*frame).endptr, dst_end);
                 // Update the burned address table.
                 benv.insert(src, src_after);
             }
@@ -876,6 +881,45 @@ pub trait Heap {
     }
 }
 
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Manage region metadata
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+static mut GENSYM_COUNTER: u64 = 0;
+
+/// ASSUMPTION: no parallelism.
+fn gensym() -> u64 {
+    unsafe {
+        let old = GENSYM_COUNTER;
+        GENSYM_COUNTER = old + 1;
+        old
+    }
+}
+
+impl C_GibRegionInfo {
+    pub fn new() -> C_GibRegionInfo {
+        C_GibRegionInfo {
+            id: gensym(),
+            refcount: 0,
+            outset_len: 0,
+            outset: [null(); 10],
+            outset2: Box::into_raw(Box::new(HashSet::new())),
+        }
+    }
+}
+
+unsafe fn add_to_outset(from_addr: *const i8, to_addr: *const i8) {
+    let footer = from_addr as *mut C_GibChunkFooter;
+    let reg_info = (*footer).reg_info;
+    let i = (*reg_info).outset_len as usize;
+    (*reg_info).outset[i] = to_addr;
+    (*reg_info).outset_len = (*reg_info).outset_len + 1;
+    let mut outset2 = *(Box::from_raw((*reg_info).outset2));
+    outset2.insert(to_addr);
+    (*reg_info).outset2 = Box::into_raw(Box::new(outset2));
+}
+
 unsafe fn init_footer_at(
     chunk_end: *const i8,
     reg_info: Option<*mut C_GibRegionInfo>,
@@ -901,22 +945,6 @@ unsafe fn init_footer_at(
     (*footer).next = null_mut();
     (*footer).prev = null_mut();
     footer_start
-}
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Gensym
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-static mut GENSYM_COUNTER: u64 = 0;
-
-/// ASSUMPTION: no parallelism.
-fn gensym() -> u64 {
-    unsafe {
-        let old = GENSYM_COUNTER;
-        GENSYM_COUNTER = old + 1;
-        old
-    }
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1087,18 +1115,6 @@ impl Heap for OldestGeneration {
                 let end = start.add(size as usize);
                 Ok((start, end))
             }
-        }
-    }
-}
-
-impl C_GibRegionInfo {
-    pub fn new() -> C_GibRegionInfo {
-        C_GibRegionInfo {
-            id: gensym(),
-            refcount: 0,
-            outset_len: 0,
-            outset: [null(); 10],
-            outset2: null_mut(),
         }
     }
 }

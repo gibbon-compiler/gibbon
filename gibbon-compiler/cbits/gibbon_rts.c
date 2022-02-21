@@ -878,6 +878,7 @@ typedef struct gib_region_meta {
     uint16_t reg_refcount;
     uint16_t reg_outset_len;
     GibCursor reg_outset[MAX_OUTSET_LENGTH];
+    void *reg_outset2;
 } GibRegionInfo;
 
 typedef struct gib_chunk_footer {
@@ -920,6 +921,7 @@ GibChunk *gib_alloc_region(uint64_t size)
     reg_info->reg_id = gib_gensym();
     reg_info->reg_refcount = 1;
     reg_info->reg_outset_len = 0;
+    reg_info->reg_outset2 = NULL;
 
 #ifdef _GIBBON_DEBUG
     printf("Allocated a region(%" PRIu64 "): %" PRIu64 " bytes.\n",

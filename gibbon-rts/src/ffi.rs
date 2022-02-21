@@ -16,6 +16,8 @@ pub mod types {
     //! Everything in this module must match its counterpart in C. See
     //! gibbon-compiler/cbits/gibbon.h and gibbon-compiler/cbits/gibbon_rts.c.
 
+    use std::collections::HashSet;
+
     pub type C_GibPackedTag = u8;
     pub type C_GibBoxedTag = u8;
     pub type C_GibInt = i64;
@@ -94,7 +96,7 @@ pub mod types {
         pub refcount: u16,
         pub outset_len: u16,
         pub outset: [C_GibCursor; MAX_OUTSET_LENGTH],
-        pub outset2: *mut std::ffi::c_void,
+        pub outset2: *mut HashSet<*const i8>,
     }
 
     #[repr(C)]
