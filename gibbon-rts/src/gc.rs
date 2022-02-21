@@ -86,9 +86,6 @@ The correctness of this depends on guaranteeing two properties:
     we don't need to write a forwarding pointer since we would have already
     written one during the previous evacuation.
 
-(3) if a evacuation ends with a Cauterized tag
-    TODO(ckoparkar): audit this case.
-
 
 ASSUMPTION: There is sufficient space available (9 bytes) to write a
 forwarding pointer in the source buffer.
@@ -223,11 +220,6 @@ Thus, we must track all such frames corresponding to a memory addrerss.
 const CHUNK_SIZE: u64 = 1024;
 const MAX_CHUNK_SIZE: u64 = 1 * 1024 * 1024 * 1024;
 
-// Tags used internally in the garbage collector.
-const CAUTERIZED_TAG: C_GibPackedTag = 253;
-const COPIED_TO_TAG: C_GibPackedTag = 252;
-const COPIED_TAG: C_GibPackedTag = 251;
-
 pub fn garbage_collect(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
@@ -257,11 +249,14 @@ pub fn collect_minor(
         // Prepare to evacuate the readers.
         let mut oldest_gen = OldestGeneration(generations_ptr);
         unsafe {
-            let rem_set =
-                &RememberedSet((*generations_ptr).rem_set, GcRootProv::RemSet);
+            let rem_set = &mut RememberedSet(
+                (*generations_ptr).rem_set,
+                GcRootProv::RemSet,
+            );
             // First evacuate the remembered set, then the shadow stack.
             let mut benv =
                 evacuate_remembered_set(&mut cenv, &mut oldest_gen, rem_set)?;
+            rem_set.clear();
             evacuate_shadowstack(
                 &mut benv,
                 &mut cenv,
@@ -281,14 +276,14 @@ pub fn collect_minor(
     }
 }
 
-/// Write a CAUTERIZED_TAG at all write cursors so that the collector knows
+/// Write a C_CAUTERIZED_TAG at all write cursors so that the collector knows
 /// when to stop copying.
 fn cauterize_writers(wstack: &Shadowstack) -> Result<CauterizedEnv> {
     let mut cenv: CauterizedEnv = HashMap::new();
     for frame in wstack.into_iter() {
         unsafe {
             let ptr = (*frame).ptr as *mut i8;
-            let ptr_next = write(ptr, CAUTERIZED_TAG);
+            let ptr_next = write(ptr, C_CAUTERIZED_TAG);
             write(ptr_next, frame);
             match cenv.get_mut(&ptr) {
                 None => {
@@ -409,10 +404,9 @@ unsafe fn evacuate_remembered_set(
                     )?;
                 // Update the indirection pointer in oldgen region.
                 write((*frame).ptr as *mut i8, dst);
-                // TODO(ckoparkar): update the outset in oldgen region.
-                let (footer_addr, _): (*const i8, _) = read((*frame).endptr);
-                let footer = footer_addr as *mut C_GibChunkFooter;
-                println!("{:?}", *footer);
+                // // TODO(ckoparkar): update the outset in oldgen region.
+                // let (footer_addr, _): (*const i8, _) = read((*frame).endptr);
+                // let footer = footer_addr as *mut C_GibChunkFooter;
                 // Update the burned address table.
                 benv.insert(src, src_after);
             }
@@ -457,7 +451,7 @@ unsafe fn evacuate_shadowstack(
                     Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
                 // Evacuate the data.
                 let src = (*frame).ptr as *mut i8;
-                let (src_after, dst_after, dst_after_end, tag) =
+                let (src_after, dst_after, dst_after_end, mb_tag) =
                     evacuate_packed(
                         benv,
                         cenv,
@@ -473,14 +467,13 @@ unsafe fn evacuate_shadowstack(
                 (*frame).endptr = dst_after_end;
                 // See Note [Adding a forwarding pointer at the end of
                 // every chunk]:
-                match tag {
+                match mb_tag {
                     None => {}
-                    Some(CAUTERIZED_TAG) => {}
-                    Some(COPIED_TO_TAG) => {}
-                    Some(COPIED_TAG) => {}
-                    _ => {
-                        if (*frame).start_of_chunk {
-                            let burn = write(src_after, COPIED_TO_TAG);
+                    Some(C_COPIED_TO_TAG) => {}
+                    Some(C_COPIED_TAG) => {}
+                    Some(tag) => {
+                        if (*frame).start_of_chunk || tag == C_CAUTERIZED_TAG {
+                            let burn = write(src_after, C_COPIED_TO_TAG);
                             write(burn, dst_after);
                         }
                     }
@@ -535,7 +528,7 @@ unsafe fn evacuate_packed(
     match tag {
         // Nothing to copy. Just update the write cursor's new
         // address in shadow stack.
-        CAUTERIZED_TAG => {
+        C_CAUTERIZED_TAG => {
             let (wframe_ptr, _): (*const i8, _) = read(src_after_tag);
             let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
             // Mark this cursor as uncauterized.
@@ -544,10 +537,10 @@ unsafe fn evacuate_packed(
             // Update the poiners on the shadow stack.
             (*wframe).ptr = dst;
             (*wframe).endptr = dst_end;
-            Ok((null_mut(), null_mut(), null(), Some(tag)))
+            Ok((src, null_mut(), dst_end, Some(tag)))
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
-        COPIED_TO_TAG => {
+        C_COPIED_TO_TAG => {
             let (fwd_ptr, _): (*mut i8, _) = read_mut(src_after_tag);
             let space_reqd = 18;
             let (dst1, dst_end1) =
@@ -564,14 +557,14 @@ unsafe fn evacuate_packed(
             Ok((src_after_burned, dst_after_indr, dst_end1, Some(tag)))
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
-        COPIED_TAG => {
+        C_COPIED_TAG => {
             let (mut scan_tag, mut scan_ptr): (C_GibPackedTag, *const i8) =
                 read(src_after_tag);
-            while scan_tag != COPIED_TO_TAG {
+            while scan_tag != C_COPIED_TO_TAG {
                 (scan_tag, scan_ptr) = read(scan_ptr);
             }
             // At this point the scan_ptr is one past the
-            // COPIED_TO_TAG i.e. at the forwarding pointer.
+            // C_COPIED_TO_TAG i.e. at the forwarding pointer.
             let offset = scan_ptr.offset_from(src) - 1;
             // The forwarding pointer that's available.
             let (fwd_avail, _): (*const i8, _) = read(scan_ptr);
@@ -601,7 +594,7 @@ unsafe fn evacuate_packed(
         C_REDIRECTION_TAG => {
             let (next_chunk, _): (*mut i8, _) = read(src_after_tag);
             // Add a forwarding pointer in the source buffer.
-            write(src, COPIED_TO_TAG);
+            write(src, C_COPIED_TO_TAG);
             write(src_after_tag, dst);
             // Continue in the next chunk.
             evacuate_packed(
@@ -638,7 +631,7 @@ unsafe fn evacuate_packed(
                 dst_end,
             )?;
             // Add a forwarding pointer in the source buffer.
-            write(src, COPIED_TO_TAG);
+            write(src, C_COPIED_TO_TAG);
             let src_after_indr = write(src_after_tag, dst);
             // Update the burned environment if we're evacuating a root
             // from the remembered set.
@@ -687,16 +680,16 @@ unsafe fn evacuate_packed(
                 // After the forwarding pointer, burn the rest of
                 // space previously occupied by scalars.
                 if *scalar_bytes >= 8 {
-                    let mut burn = write(src, COPIED_TO_TAG);
+                    let mut burn = write(src, C_COPIED_TO_TAG);
                     burn = write(burn, dst);
                     // TODO(ckoparkar): check if src_mut != burn?
                     let i = src_mut.offset_from(burn);
-                    write_bytes(burn, COPIED_TAG, i as usize);
+                    write_bytes(burn, C_COPIED_TAG, i as usize);
                 } else {
-                    let burn = write(src, COPIED_TAG);
+                    let burn = write(src, C_COPIED_TAG);
                     let i = src_mut.offset_from(burn);
                     // TODO(ckoparkar): check if src_mut != burn?
-                    write_bytes(burn, COPIED_TAG, i as usize);
+                    write_bytes(burn, C_COPIED_TAG, i as usize);
                 }
                 // TODO(ckoparkar):
                 // (1) instead of recursion, use a worklist
@@ -715,11 +708,11 @@ unsafe fn evacuate_packed(
                     // Must immediately stop copying upon reaching
                     // the cauterized tag.
                     match field_tag {
-                        Some(CAUTERIZED_TAG) => {
+                        Some(C_CAUTERIZED_TAG) => {
                             return Ok((
+                                src1,
                                 null_mut(),
-                                null_mut(),
-                                null(),
+                                dst_end1,
                                 field_tag,
                             ));
                         }
@@ -911,6 +904,22 @@ unsafe fn init_footer_at(
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Gensym
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+static mut GENSYM_COUNTER: u64 = 0;
+
+/// ASSUMPTION: no parallelism.
+fn gensym() -> u64 {
+    unsafe {
+        let old = GENSYM_COUNTER;
+        GENSYM_COUNTER = old + 1;
+        old
+    }
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Nursery
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
@@ -1085,8 +1094,7 @@ impl Heap for OldestGeneration {
 impl C_GibRegionInfo {
     pub fn new() -> C_GibRegionInfo {
         C_GibRegionInfo {
-            // TODO(ckoparkar): gensym an identifier.
-            id: 0,
+            id: gensym(),
             refcount: 0,
             outset_len: 0,
             outset: [null(); 10],
@@ -1130,6 +1138,14 @@ impl Shadowstack {
             unsafe {
                 println!("{:?}", *frame);
             }
+        }
+    }
+
+    /// Delete all frames from the shadow-stack.
+    fn clear(&mut self) {
+        let ss: *mut C_GibShadowstack = self.0;
+        unsafe {
+            (*ss).alloc = (*ss).start;
         }
     }
 }

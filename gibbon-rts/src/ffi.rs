@@ -32,6 +32,11 @@ pub mod types {
     pub const C_INDIRECTION_TAG: C_GibPackedTag = 254;
     pub const C_NUM_GENERATIONS: u8 = 1;
 
+    // Tags reserved for the garbage collector.
+    pub const C_CAUTERIZED_TAG: C_GibPackedTag = 253;
+    pub const C_COPIED_TO_TAG: C_GibPackedTag = 252;
+    pub const C_COPIED_TAG: C_GibPackedTag = 251;
+
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibNursery {

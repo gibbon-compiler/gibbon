@@ -84,6 +84,12 @@ GibSym gib_read_gensym_counter(void);
 #define REDIRECTION_TAG 255
 #define INDIRECTION_TAG 254
 
+// Tags reserved for the garbage collector.
+#define CAUTERIZED_TAG 253
+#define COPIED_TO_TAG 252
+#define COPIED_TAG 251
+
+
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Allocators
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

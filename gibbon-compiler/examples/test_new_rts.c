@@ -589,8 +589,8 @@ GibInt do_tree(GibInt n_22_186_293)
     GibCursor pvrtmp_1408 = tmp_struct_19.field1;
     GibCursor pvrtmp_1409 = tmp_struct_19.field2;
 
-    _print_Tree(NULL, pvrtmp_1408);
-    printf("\n");
+    // _print_Tree(NULL, pvrtmp_1408);
+    // printf("\n");
 
     /*
     GibChunk *region_1405 =
@@ -912,7 +912,7 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
 
           default:
             {
-                printf("%s\n", "Unknown tag in: tmpval_1420");
+                printf("Unknown tag in: tmpval_1420: %d", tmpval_1420);
                 exit(1);
             }
         }
@@ -929,20 +929,11 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
         GibCursorGibCursorGibCursorProd tmp_struct_7 =
                                          buildtree(end_r_652, loc_743, fltAppE_270_302);
 
-        // restore from shadow stack.
-        frame = gib_shadowstack_pop(rstack);
-        loc_651 = frame->ssf_ptr;
-        end_r_652 = frame->ssf_endptr;
-        // restored.
-
         GibCursor pvrtmp_1433 = tmp_struct_7.field0;
         GibCursor pvrtmp_1434 = tmp_struct_7.field1;
         GibCursor pvrtmp_1435 = tmp_struct_7.field2;
         GibInt fltAppE_272_304 = n_41_188_294 - 1;
 
-        // push to shadow stack.
-        gib_shadowstack_push(rstack, loc_651, end_r_652, Tree_T, false);
-        // pushed.
 
         GibCursorGibCursorGibCursorProd tmp_struct_8 =
                                          buildtree(pvrtmp_1433, pvrtmp_1435, fltAppE_272_304);
@@ -953,14 +944,10 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
         end_r_652 = frame->ssf_endptr;
         // restored.
 
-        // _print_Tree(NULL, loc_651);
-        // printf("\n");
-
         GibCursor pvrtmp_1440 = tmp_struct_8.field0;
         GibCursor pvrtmp_1441 = tmp_struct_8.field1;
         GibCursor pvrtmp_1442 = tmp_struct_8.field2;
 
-        GibCursor writetag_1068 = loc_651 + 1;
 
         return (GibCursorGibCursorGibCursorProd) {pvrtmp_1440, loc_651,
                                                   pvrtmp_1442};
@@ -1202,7 +1189,30 @@ GibCursorProd _print_Tree(GibCursor end_r_633, GibCursor arg_133_213_324)
 
             tmpval_1511 = tagtmp_1652;
             tmpcur_1512 = tailtmp_1653;
-            goto switch_1517;
+            // goto switch_1517;
+            _print_Tree(NULL, tmpcur_1650);
+            return (GibCursorProd) {tmpaftercur_1651};
+            break;
+        }
+
+      case COPIED_TAG:
+        {
+            printf(" COPIED \n");
+            fflush(stdout);
+            break;
+        }
+
+      case COPIED_TO_TAG:
+        {
+            printf(" COPIED_TO \n");
+            fflush(stdout);
+            break;
+        }
+
+      case CAUTERIZED_TAG:
+        {
+            printf(" CAUTERIZED \n");
+            fflush(stdout);
             break;
         }
 
@@ -1512,6 +1522,7 @@ int gib_main_expr(void)
     // GibInt pvrtmp_1269 = (GibInt) fltPrd_236_252;
     // GibInt pvrtmp_1268 = (GibInt) fltPrd_235_251;
 
+    printf("sum tree: %" PRIu64, fltPrd_236_252);
     // printf("'#(");
     // printf("%ld", pvrtmp_1268);
     // printf(" ");
