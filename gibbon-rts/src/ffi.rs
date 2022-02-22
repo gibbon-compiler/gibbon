@@ -38,6 +38,7 @@ pub mod types {
     pub const C_CAUTERIZED_TAG: C_GibPackedTag = 253;
     pub const C_COPIED_TO_TAG: C_GibPackedTag = 252;
     pub const C_COPIED_TAG: C_GibPackedTag = 251;
+    pub const C_SCALAR_TAG: C_GibPackedTag = 250;
 
     #[repr(C)]
     #[derive(Debug)]
@@ -48,7 +49,6 @@ pub mod types {
         pub heap_end: *const i8,
         pub alloc: *const i8,
         pub initialized: bool,
-        pub rem_set: *mut std::ffi::c_void,
     }
 
     pub type C_GibRememberedSetElt = C_GibShadowstackFrame;

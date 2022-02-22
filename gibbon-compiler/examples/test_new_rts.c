@@ -189,25 +189,10 @@ void symbol_table_initialize(void)
 }
 GibInt do_reverse(GibInt n_19_183_289)
 {
-    // GibRegionMeta *region_1378 =
-    //               gib_alloc_region(gib_get_inf_init_chunk_size());
-    // GibCursor r_720 = region_1378->reg_heap;
-    // GibInt sizeof_end_r_720_1379 = gib_get_inf_init_chunk_size();
-    // GibCursor end_r_720 = r_720 + sizeof_end_r_720_1379;
-    GibChunk *region_1378 =
-        gib_alloc_region2(gib_get_inf_init_chunk_size());
-    GibCursor r_720 = region_1378->c_start;
-    GibCursor end_r_720 = region_1378->c_end;
-
     GibChunk *region_1380 =
         gib_alloc_region2(gib_get_inf_init_chunk_size());
     GibCursor r_721 = region_1380->c_start;
     GibCursor end_r_721 = region_1380->c_end;
-
-    GibChunk *region_1382 =
-        gib_alloc_region2(gib_get_inf_init_chunk_size());
-    GibCursor r_719 = region_1382->c_start;
-    GibCursor end_r_719 = region_1382->c_end;
 
     GibCursorGibCursorGibCursorProd tmp_struct_16 =
         build_list(end_r_721, r_721, n_19_183_289, gib_get_size_param());
@@ -215,43 +200,35 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor pvrtmp_1385 = tmp_struct_16.field1;
     GibCursor pvrtmp_1386 = tmp_struct_16.field2;
 
+    GibChunk *region_1378 =
+        gib_alloc_region2(gib_get_inf_init_chunk_size());
+    GibCursor r_720 = region_1378->c_start;
+    GibCursor end_r_720 = region_1378->c_end;
+
     *(GibBoxedTag *) r_720 = 0;
     GibCursor writetag_1010 = r_720 + 1;
 
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
 
-    // printf("(0) before GC:\n");
-    // _print_List(NULL, pvrtmp_1385);
-    // printf("\n");
-    // _print_List(NULL, r_720);
-    // printf("\n");
+    printf("input:");
+    _print_List(NULL, pvrtmp_1385);
+    printf("\n");
 
-    // Push to shadow stack.
-    // xs, ys, output
-    gib_shadowstack_push(rstack, pvrtmp_1385, pvrtmp_1384, List_T, true);
-    gib_shadowstack_push(rstack, r_720, end_r_720, List_T, true);
-    gib_shadowstack_push(wstack, r_719, end_r_719, List_T, true);
-    // Pushed.
+    gib_shadowstack_push(rstack, r_720, end_r_720, List_T, false);
+
+    GibChunk *region_1382 =
+        gib_alloc_region2(gib_get_inf_init_chunk_size());
+    GibCursor r_719 = region_1382->c_start;
+    GibCursor end_r_719 = region_1382->c_end;
+
+    GibShadowstackFrame *frame;
+    frame = gib_shadowstack_pop(rstack);
+    r_720 = frame->ssf_ptr;
+    end_r_720 = frame->ssf_endptr;
 
     GibCursorGibCursorGibCursorGibCursorProd tmp_struct_17 =
                                               reverse(pvrtmp_1384, end_r_720, end_r_719, r_719, pvrtmp_1385, r_720);
-
-    // Pop from shadowstack.
-    GibShadowstackFrame *frame;
-    frame = gib_shadowstack_pop(wstack);
-    r_719 = frame->ssf_ptr;
-    frame = gib_shadowstack_pop(rstack);
-    r_720 = frame->ssf_ptr;
-    frame = gib_shadowstack_pop(rstack);
-    pvrtmp_1385 = frame->ssf_ptr;
-    // Popped.
-
-    // printf("(0) after GC:\n");
-    // _print_List(NULL, pvrtmp_1385);
-    // printf("\n");
-    // _print_List(NULL, r_720);
-    // printf("\n");
 
     GibCursor pvrtmp_1393 = tmp_struct_17.field0;
     GibCursor pvrtmp_1394 = tmp_struct_17.field1;
@@ -261,11 +238,8 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor pvrtmp_1401 = tmp_struct_18.field0;
     GibInt pvrtmp_1402 = tmp_struct_18.field1;
 
-    printf("input:");
-    _print_List(NULL, pvrtmp_1385);
-    printf("\n");
-    printf("result:");
-    _print_List(NULL, r_719);
+    printf("reversed:");
+    _print_List(NULL, pvrtmp_1395);
     printf("\n");
 
     gib_free_region2(region_1382);
@@ -356,10 +330,13 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
             // Restore from shadow stack.
             frame = gib_shadowstack_pop(wstack);
             loc_614 = frame->ssf_ptr;
+            end_r_617 = frame->ssf_endptr;
             frame = gib_shadowstack_pop(rstack);
             ys_37_180_285 = frame->ssf_ptr;
+            end_r_616 = frame->ssf_endptr;
             frame = gib_shadowstack_pop(rstack);
             tmpcur_1362 = frame->ssf_ptr;
+            end_r_615 = frame->ssf_endptr;
             // Restored.
 
             // printf("(1) after GC:\n");
@@ -389,22 +366,22 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
             // _print_List(NULL, r_705);
             // printf("\n");
 
-            // Push to shadow stack.
-            // xs, ys, output
-            gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T, false);
-            gib_shadowstack_push(rstack, r_705, end_r_705, List_T, true);
-            gib_shadowstack_push(wstack, loc_614, end_r_617, List_T, false);
-            // Pushed.
+            // // Push to shadow stack.
+            // // xs, ys, output
+            // gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T, false);
+            // gib_shadowstack_push(rstack, r_705, end_r_705, List_T, true);
+            // gib_shadowstack_push(wstack, loc_614, end_r_617, List_T, false);
+            // // Pushed.
 
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_12 =
                 reverse(end_r_615, end_r_705, end_r_617, loc_614, tmpcur_1362, r_705);
 
-            // Popping is sufficient, don't need to restore anything because
-            // all of these cursors are unused after this point.
-            gib_shadowstack_pop(wstack);
-            gib_shadowstack_pop(rstack);
-            gib_shadowstack_pop(rstack);
-            // Popped.
+            // // Popping is sufficient, don't need to restore anything because
+            // // all of these cursors are unused after this point.
+            // gib_shadowstack_pop(wstack);
+            // gib_shadowstack_pop(rstack);
+            // gib_shadowstack_pop(rstack);
+            // // Popped.
 
             // printf("(2) after GC:\n");
             // _print_List(NULL, tmpcur_1362);
@@ -782,12 +759,15 @@ GibCursorGibIntProd sumtree(GibCursor end_r_609, GibCursor tr_29_172_272)
         {
             GibCursor tmpcur_1626 = *(GibCursor *) tmpcur_1323;
             GibCursor tmpaftercur_1627 = tmpcur_1323 + 8;
-            GibBoxedTag tagtmp_1628 = *(GibBoxedTag *) tmpcur_1626;
-            GibCursor tailtmp_1629 = tmpcur_1626 + 1;
+            // GibBoxedTag tagtmp_1628 = *(GibBoxedTag *) tmpcur_1626;
+            // GibCursor tailtmp_1629 = tmpcur_1626 + 1;
+            // tmpval_1322 = tagtmp_1628;
+            // tmpcur_1323 = tailtmp_1629;
+            GibCursorGibIntProd tmpstruct = sumtree(end_r_609, tmpcur_1626);
+            GibInt x = tmpstruct.field1;
+            return (GibCursorGibIntProd) {tmpaftercur_1627, x};
 
-            tmpval_1322 = tagtmp_1628;
-            tmpcur_1323 = tailtmp_1629;
-            goto switch_1330;
+            // goto switch_1330;
             break;
         }
 
@@ -1517,18 +1497,10 @@ int gib_main_expr(void)
     info_table_initialize();
     symbol_table_initialize();
 
-    // GibInt fltPrd_235_251 =  do_reverse(gib_get_size_param());
+    GibInt fltPrd_235_251 =  do_reverse(gib_get_size_param());
+    printf("reverse: %" PRIu64 "\n", fltPrd_235_251);
     GibInt fltPrd_236_252 =  do_tree(gib_get_size_param());
-    // GibInt pvrtmp_1269 = (GibInt) fltPrd_236_252;
-    // GibInt pvrtmp_1268 = (GibInt) fltPrd_235_251;
-
     printf("sum tree: %" PRIu64, fltPrd_236_252);
-    // printf("'#(");
-    // printf("%ld", pvrtmp_1268);
-    // printf(" ");
-    // printf("%ld", pvrtmp_1269);
-    // printf(")");
-    // printf("\n");
-    // gib_free_symtable();
+    gib_free_symtable();
     return 0;
 }

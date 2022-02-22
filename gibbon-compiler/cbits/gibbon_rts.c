@@ -1270,10 +1270,6 @@ typedef struct gib_nursery {
     // Is the allocation area initialized?
     bool n_initialized;
 
-    // Remembered set to store young to old pointers;
-    // this is a pointer to a structure on the Rust Heap.
-    void *n_rem_set;
-
 } GibNursery;
 
 typedef struct gib_generation {
@@ -1397,7 +1393,6 @@ static void gib_nursery_initialize(GibNursery *nursery)
     nursery->n_heap_end = nursery->n_heap_start + NURSERY_SIZE;
     nursery->n_alloc = nursery->n_heap_start;
     nursery->n_initialized = true;
-    nursery->n_rem_set = (void *) NULL;
 
     return;
 }
@@ -1455,6 +1450,10 @@ static void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_siz
 }
 
 // Nursery API.
+// TODO(ckoparkar):
+// If we allocate the nursery at a high address AND ensure that all of the
+// subsequent mallocs return a block at addresses lower than this, we can
+// implement addr_in_nursery with one address check instead than two. -- RRN
 bool gib_addr_in_nursery(char *ptr)
 {
     GibNursery *nursery = DEFAULT_NURSERY;
@@ -1603,10 +1602,7 @@ static GibChunk *gib_alloc_region_in_nursery_slow(uint64_t size, bool collected)
 
 void gib_free_region2(GibChunk *region)
 {
-    (void) region;
-#ifdef _GIBBON_DEBUG
-    // printf("gib_free_region2: TODO.\n");
-#endif
+    free(region);
     return;
 }
 
@@ -1618,28 +1614,11 @@ void gib_free_region2(GibChunk *region)
  *
  * The following is how different types of indirections are handled:
  *
- * (1) nursery -> oldgen
- *
- *     We have two options here:
- *
- *     (a) Do nothing. However, when this region gets evacuated out of the
- *         nursery, we'll always have to inline the pointed-to data since we
- *         won't have access to its metadata to bump its refcount.
- *
- *     (b) Record it in a "deferred increment set" in the nursery. This way the
- *         evacuate function is free to decide whether to inline the pointed-to
- *         data or not. If it doesn't, it can find the correct metadata object
- *         to apply the refcount increment to in this "deferred increment set".
- *
- * (2) nursery -> nursery
- *
- *     Do nothing.
- *
- * (3) oldgen -> nursery
+ * (1) oldgen -> nursery
  *
  *     Add to remembered set.
  *
- * (4) oldgen -> oldgen
+ * (2) oldgen -> oldgen
  *
  *     Same as old Gibbon, bump refcount and insert into outset.
  *
@@ -1657,27 +1636,15 @@ void gib_indirection_barrier(
     uint32_t datatype
 )
 {
-    (void) to_footer_ptr;
+    UNUSED(to_footer_ptr);
 
-    bool from_young = gib_addr_in_nursery(from);
-    bool from_old = !from_young;
+    bool from_old = !gib_addr_in_nursery(from);
     bool to_young = gib_addr_in_nursery(to);
     bool to_old = !to_young;
-    if (from_young && to_old) {
-        // (1) nursery -> oldgen
-#ifdef _GIBBON_DEBUG
-        printf("young to old pointer\n");
-#endif
-        fprintf(stderr, "indirection barrier: todo nursery -> oldgen\n");
-        exit(1);
-    } else if (from_young && to_young) {
-        printf("young to young pointer\n");
-        // (2) nursery -> nursery
-        return;
-    } else if (from_old && to_young) {
+    if (from_old && to_young) {
         // (3) oldgen -> nursery
 #ifdef _GIBBON_DEBUG
-        printf("old to young pointer\n");
+        printf("gib_indirection_barrier: old to young pointer\n");
 #endif
         GibGeneration *gen = DEFAULT_GENERATION;
         // Store the address of the indirection pointer, *NOT* the address of
@@ -1688,11 +1655,12 @@ void gib_indirection_barrier(
     } else if (from_old && to_old) {
         // (4) oldgen -> oldgen
 #ifdef _GIBBON_DEBUG
-        printf("old to old pointer\n");
+        printf("gib_indirection_barrier: old to old pointer\n");
 #endif
         gib_bump_refcount(from_footer_ptr, to_footer_ptr);
         return;
     }
+    return;
 }
 
 

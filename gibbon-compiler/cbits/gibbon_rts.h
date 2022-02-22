@@ -80,6 +80,8 @@ GibSym gib_read_gensym_counter(void);
 #define ATTR_ALWAYS_INLINE __attribute__((always_inline))
 #define ATTR_HOT __attribute__((hot))
 
+#define UNUSED(x) (void)(x)
+
 // Must be same as "Gibbon.Language.Constants".
 #define REDIRECTION_TAG 255
 #define INDIRECTION_TAG 254
@@ -88,6 +90,7 @@ GibSym gib_read_gensym_counter(void);
 #define CAUTERIZED_TAG 253
 #define COPIED_TO_TAG 252
 #define COPIED_TAG 251
+#define SCALAR_TAG 250
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

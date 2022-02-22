@@ -96,11 +96,11 @@ Is this a reasonable assumption?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Yes, only if all values are always evacuated in a strict left-to-right order.
-This happens if we process the shadow stack starting with the oldest frame first.
+This happens if we process the shadow-stack starting with the oldest frame first.
 Older frames always point to start of regions. Thus, we will evacuate a buffer
 and reach its *true* end. Due to the way buffers are set up, there's always
 sufficient space to write a forwarding pointer there. When we get further down
-the shadow stack and reach frames that point to values in the middle of a buffer,
+the shadow-stack and reach frames that point to values in the middle of a buffer,
 we will encounter CopiedTo or Copied tags and not write the forwarding pointers
 after these values.
 
@@ -113,7 +113,7 @@ data in the buffer!!
 Thus, we must only write a forwarding pointer when we've reached the true end
 of the source buffer. The only time we actually reach the true end is when we're
 evacuating a value starts at the very beginning of the chunk. Hence, we store
-this information in a shadow stack frame.
+this information in a shadow-stack frame.
 
 
 *** Traversing burned data:
@@ -136,8 +136,8 @@ To accomplish this traversal we maintain a table of "burned addresses",
 { start-of-burned-field -> end-of-burned-field }, for all roots that can create
 "burned holes" in the middle of buffers. In the current implementation we only
 need to track this info for the roots in the remembered set which can create
-burned holes since they are evacuated before the shadow stack. While evacuating
-the roots in the shadow stack, we always start at the oldest oldest frame which
+burned holes since they are evacuated before the shadow-stack. While evacuating
+the roots in the shadow-stack, we always start at the oldest oldest frame which
 guarantees a left-to-right traversal of buffers.
 
 
@@ -151,7 +151,7 @@ the remembered set, which ensures that we won't see any burned holes during
 this evacuation. To this end, we sort the roots in the remembered set and start
 evacuating from the one pointing to the leftmost object in the nursery.
 
-Moreover, this is sufficient while evacuating the shadow stack as well.
+Moreover, this is sufficient while evacuating the shadow-stack as well.
 Because at that time we only care about the boundaries of a burned field,
 anything within it doesn't need to be traversed.
 
@@ -194,18 +194,56 @@ We could do one of three things here:
 
 Some write cursors don't get uncauterized and need to be restored by hand.
 This happens when a region has been allocated but nothing has been written
-to it yet. So there will be a write cursor for it on the shadow stack but there
+to it yet. So there will be a write cursor for it on the shadow-stack but there
 won't be any read cursors pointing to any data before this write cursor, since
 there isn't any data here. Thus this write cursor won't get uncauterized during
 evacuation. We need to restore all such start-of-chunk uncauterized write
 cursors by allocating fresh chunks for them in the nursery. To accomplish this,
 we track all write cursors in a "cauterized environment" that maps a write
-cursor to a list of shadow stack frames that it appears in. Why a list of frames?
+cursor to a list of shadow-stack frames that it appears in. Why a list of frames?
 Because some write cursors may have multiple frames tracking them. E.g. if we
 allocate a region and pass it to a function, and the function immediately pushes
 it to the stack again (e.g. maybe because it makes a function call or allocates
 a new region etc.), we'll have two frames tracking the *same address* in memory.
 Thus, we must track all such frames corresponding to a memory addrerss.
+
+
+*** Sorting roots on the shadow-stack and remembered set:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The order in which GC roots are processed has a huge impact on the
+representation of the evacuated value in the old generation. Ideally we'd like
+to reduce the number of indirections in the evacuated value as much as possible.
+The only indirections we should add are those that represent "real" sharing.
+Consider a situation in which the value shown below is allocated in the nursery,
+and the outermost node and the second leaf are both on the shadow-stack.
+
+┌─────────────┐
+│  N L 1 L 2  │
+└──│─────│────┘
+   x     y
+
+If we process x first and then y, we get the following value:
+
+┌─────────────┐      ┌─────────────┐
+│  I •────────│──┐   │  N L 1 L 2  │
+└──│──────────┘  │   └──│─────│────┘
+   y             │      x     │
+                 └────────────┘
+
+
+However, if we process y first and then x, we get the following value:
+
+
+┌─────────────┐      ┌─────────────┐
+│  L 2        │      │  N L 1 I •  │
+└──│──────────┘      └──│───────│──┘
+   y                    x       │
+   │                            │
+   └────────────────────────────┘
+
+
+TODO.
 
 
 */
@@ -259,7 +297,7 @@ pub fn collect_minor(
                 (*generations_ptr).rem_set,
                 GcRootProv::RemSet,
             );
-            // First evacuate the remembered set, then the shadow stack.
+            // First evacuate the remembered set, then the shadow-stack.
             let mut benv =
                 evacuate_remembered_set(&mut cenv, &mut oldest_gen, rem_set)?;
             rem_set.clear();
@@ -309,7 +347,8 @@ fn cauterize_writers(wstack: &Shadowstack) -> Result<CauterizedEnv> {
 
 /// See Note [Restoring uncauterized write cursors].
 fn restore_writers(cenv: &CauterizedEnv, heap: &mut impl Heap) -> Result<()> {
-    for (wptr, (start_of_chunk, frames)) in cenv.iter() {
+    for (_wptr, (_start_of_chunk, frames)) in cenv.iter() {
+        /*
         if !(*start_of_chunk) {
             return Err(RtsError::Gc(format!(
                 "restore_writers: uncauterized cursor that's not at the \
@@ -317,6 +356,7 @@ fn restore_writers(cenv: &CauterizedEnv, heap: &mut impl Heap) -> Result<()> {
                 wptr
             )));
         }
+         */
         let (chunk_start, chunk_end) = Heap::allocate(heap, CHUNK_SIZE)?;
         for frame in frames {
             unsafe {
@@ -373,7 +413,7 @@ unsafe fn evacuate_remembered_set(
             Some(DatatypeInfo::Scalar(size)) => {
                 // Allocate space in the destination.
                 let (dst, dst_end) =
-                    Heap::allocate_first_chunk(heap, *size as u64, 1)?;
+                    Heap::allocate_first_chunk(heap, 32 + *size as u64, 1)?;
                 // The remembered set contains the address of the indirection
                 // pointer. We must read it to get the address of the pointed-to
                 // data.
@@ -441,11 +481,11 @@ unsafe fn evacuate_shadowstack(
             Some(DatatypeInfo::Scalar(size)) => {
                 // Allocate space in the destination.
                 let (dst, dst_end) =
-                    Heap::allocate_first_chunk(heap, *size as u64, 0)?;
+                    Heap::allocate_first_chunk(heap, 32 + *size as u64, 0)?;
                 // Evacuate the data.
                 let src = (*frame).ptr as *mut i8;
                 copy_nonoverlapping(src, dst, *size as usize);
-                // Update the pointers in shadow stack.
+                // Update the pointers in shadow-stack.
                 (*frame).ptr = dst;
                 (*frame).endptr = dst_end;
             }
@@ -456,7 +496,7 @@ unsafe fn evacuate_shadowstack(
                     Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
                 // Evacuate the data.
                 let src = (*frame).ptr as *mut i8;
-                let (src_after, dst_after, dst_after_end, mb_tag) =
+                let (src_after, dst_after, dst_after_end, tag) =
                     evacuate_packed(
                         benv,
                         cenv,
@@ -467,16 +507,14 @@ unsafe fn evacuate_shadowstack(
                         dst,
                         dst_end,
                     )?;
-                // Update the pointers in shadow stack.
+                // Update the pointers in shadow-stack.
                 (*frame).ptr = dst;
                 (*frame).endptr = dst_after_end;
                 // See Note [Adding a forwarding pointer at the end of
                 // every chunk]:
-                match mb_tag {
-                    None => {}
-                    Some(C_COPIED_TO_TAG) => {}
-                    Some(C_COPIED_TAG) => {}
-                    Some(tag) => {
+                match tag {
+                    C_COPIED_TO_TAG | C_COPIED_TAG => {}
+                    _ => {
                         if (*frame).start_of_chunk || tag == C_CAUTERIZED_TAG {
                             let burn = write(src_after, C_COPIED_TO_TAG);
                             write(burn, dst_after);
@@ -496,7 +534,7 @@ Evacuate a packed value by referring to the info table.
 Arguments:
 
 - benv - an environment that provides the ends of burned fields. only
-  relevant when evacuating the shadow stack.
+  relevant when evacuating the shadow-stack.
 - cenv - an environment that tracks cauterized write cursors
 - heap - allocation area to copy data into
 - packed_info - information about the fields of this datatype
@@ -528,21 +566,21 @@ unsafe fn evacuate_packed(
     src: *mut i8,
     dst: *mut i8,
     dst_end: *const i8,
-) -> Result<(*mut i8, *mut i8, *const i8, Option<C_GibPackedTag>)> {
+) -> Result<(*mut i8, *mut i8, *const i8, C_GibPackedTag)> {
     let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
     match tag {
         // Nothing to copy. Just update the write cursor's new
-        // address in shadow stack.
+        // address in shadow-stack.
         C_CAUTERIZED_TAG => {
             let (wframe_ptr, _): (*const i8, _) = read(src_after_tag);
             let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
             // Mark this cursor as uncauterized.
             let del = (*wframe).ptr as *mut i8;
             cenv.remove(&del);
-            // Update the poiners on the shadow stack.
+            // Update the poiners on the shadow-stack.
             (*wframe).ptr = dst;
             (*wframe).endptr = dst_end;
-            Ok((src, null_mut(), dst_end, Some(tag)))
+            Ok((src, null_mut(), dst_end, tag))
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
         C_COPIED_TO_TAG => {
@@ -559,7 +597,7 @@ unsafe fn evacuate_packed(
             // TODO(ckoparkar):
             // (1) update outsets and refcounts if evacuating to the oldest
             //     generation.
-            Ok((src_after_burned, dst_after_indr, dst_end1, Some(tag)))
+            Ok((src_after_burned, dst_after_indr, dst_end1, tag))
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
         C_COPIED_TAG => {
@@ -587,7 +625,7 @@ unsafe fn evacuate_packed(
             // TODO(ckoparkar):
             // (1) update outsets and refcounts if evacuating to the oldest
             //     generation.
-            Ok((src_after_burned, dst_after_indr, dst_end1, Some(tag)))
+            Ok((src_after_burned, dst_after_indr, dst_end1, tag))
         }
         // Indicates end-of-current-chunk in the source buffer i.e.
         // there's nothing more to copy in the current chunk.
@@ -649,12 +687,7 @@ unsafe fn evacuate_packed(
             }
             // Return 1 past the indirection pointer as src_after
             // and the dst_after that evacuate_packed returned.
-            Ok((
-                src_after_indr,
-                dst_after_pointee,
-                dst_after_pointee_end,
-                Some(tag),
-            ))
+            Ok((src_after_indr, dst_after_pointee, dst_after_pointee_end, tag))
         }
         // Regular datatype, copy.
         _ => {
@@ -713,7 +746,7 @@ unsafe fn evacuate_packed(
                     // Must immediately stop copying upon reaching
                     // the cauterized tag.
                     match field_tag {
-                        Some(C_CAUTERIZED_TAG) => {
+                        C_CAUTERIZED_TAG => {
                             return Ok((
                                 src1,
                                 null_mut(),
@@ -722,6 +755,7 @@ unsafe fn evacuate_packed(
                             ));
                         }
                         _ => {
+                            /*
                             if src1.is_null() {
                                 return Err(RtsError::Gc(format!(
                                         "evacuate_packed: Got back null as an \
@@ -731,13 +765,14 @@ unsafe fn evacuate_packed(
                                         ty, tag, packed_info
                                     )));
                             }
+                             */
                             src_mut = src1;
                             dst_mut = dst1;
                             dst_end_mut = dst_end1;
                         }
                     }
                 }
-                Ok((src_mut, dst_mut, dst_end_mut, Some(tag)))
+                Ok((src_mut, dst_mut, dst_end_mut, tag))
             }
         }
     }
@@ -752,7 +787,7 @@ unsafe fn evacuate_field(
     src: *mut i8,
     dst: *mut i8,
     dst_end: *const i8,
-) -> Result<(*mut i8, *mut i8, *const i8, Option<C_GibPackedTag>)> {
+) -> Result<(*mut i8, *mut i8, *const i8, C_GibPackedTag)> {
     match INFO_TABLE.get().unwrap().get(datatype) {
         None => {
             return Err(RtsError::Gc(format!(
@@ -763,7 +798,7 @@ unsafe fn evacuate_field(
         Some(DatatypeInfo::Scalar(size)) => {
             copy_nonoverlapping(src, dst, *size as usize);
             let size1 = *size as usize;
-            Ok((src.add(size1), dst.add(size1), dst_end, None))
+            Ok((src.add(size1), dst.add(size1), dst_end, C_SCALAR_TAG))
         }
         Some(DatatypeInfo::Packed(packed_info)) => evacuate_packed(
             benv,
@@ -811,7 +846,7 @@ pub trait Heap {
     fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)>;
     fn space_available(&self) -> usize;
 
-    unsafe fn allocate_first_chunk(
+    fn allocate_first_chunk(
         &mut self,
         size: u64,
         refcount: u16,
@@ -821,58 +856,61 @@ pub trait Heap {
         } else {
             let total_size = size + (size_of::<C_GibChunkFooter>() as u64);
             let (start, end) = self.allocate(total_size)?;
-            let footer_start = init_footer_at(end, None, 0, size, refcount);
+            let footer_start =
+                unsafe { init_footer_at(end, None, 0, size, refcount) };
             Ok((start, footer_start))
         }
     }
 
-    unsafe fn allocate_next_chunk(
+    fn allocate_next_chunk(
         &mut self,
         dst: *mut i8,
         dst_end: *const i8,
     ) -> Result<(*mut i8, *const i8)> {
-        if !self.is_oldest() {
-            let (new_dst, new_dst_end) = Heap::allocate(self, CHUNK_SIZE)?;
-            // Write a redirection tag in the old chunk.
-            let dst_after_tag = write(dst, C_REDIRECTION_TAG);
-            write(dst_after_tag, new_dst);
-            Ok((new_dst, new_dst_end))
-        } else {
-            // Access the old footer to get the region metadata.
-            let old_footer = dst_end as *mut C_GibChunkFooter;
-            // Allocate space for the new chunk.
-            let mut chunk_size = (*old_footer).size * 2;
-            if chunk_size > MAX_CHUNK_SIZE {
-                chunk_size = MAX_CHUNK_SIZE;
+        unsafe {
+            if !self.is_oldest() {
+                let (new_dst, new_dst_end) = Heap::allocate(self, CHUNK_SIZE)?;
+                // Write a redirection tag in the old chunk.
+                let dst_after_tag = write(dst, C_REDIRECTION_TAG);
+                write(dst_after_tag, new_dst);
+                Ok((new_dst, new_dst_end))
+            } else {
+                // Access the old footer to get the region metadata.
+                let old_footer = dst_end as *mut C_GibChunkFooter;
+                // Allocate space for the new chunk.
+                let mut chunk_size = (*old_footer).size * 2;
+                if chunk_size > MAX_CHUNK_SIZE {
+                    chunk_size = MAX_CHUNK_SIZE;
+                }
+                let (new_dst, new_dst_end) = Heap::allocate(self, chunk_size)?;
+                // Write a redirection tag in the old chunk.
+                let dst_after_tag = write(dst, C_REDIRECTION_TAG);
+                write(dst_after_tag, new_dst);
+                // Initialize a footer at the end of the new chunk.
+                let reg_info: *mut C_GibRegionInfo = (*old_footer).reg_info;
+                let new_footer_start = init_footer_at(
+                    new_dst_end,
+                    Some(reg_info),
+                    (*old_footer).seq_no + 1,
+                    chunk_size,
+                    (*reg_info).refcount,
+                );
+                let new_footer: *mut C_GibChunkFooter =
+                    new_footer_start as *mut C_GibChunkFooter;
+                (*old_footer).next = new_footer;
+                (*new_footer).prev = old_footer;
+                Ok((new_dst, new_footer_start))
             }
-            let (new_dst, new_dst_end) = Heap::allocate(self, chunk_size)?;
-            // Write a redirection tag in the old chunk.
-            let dst_after_tag = write(dst, C_REDIRECTION_TAG);
-            write(dst_after_tag, new_dst);
-            // Initialize a footer at the end of the new chunk.
-            let reg_info: *mut C_GibRegionInfo = (*old_footer).reg_info;
-            let new_footer_start = init_footer_at(
-                new_dst_end,
-                Some(reg_info),
-                (*old_footer).seq_no + 1,
-                chunk_size,
-                (*reg_info).refcount,
-            );
-            let new_footer: *mut C_GibChunkFooter =
-                new_footer_start as *mut C_GibChunkFooter;
-            (*old_footer).next = new_footer;
-            (*new_footer).prev = old_footer;
-            Ok((new_dst, new_footer_start))
         }
     }
 
-    unsafe fn check_bounds(
+    fn check_bounds(
         &mut self,
         space_reqd: usize,
         dst: *mut i8,
         dst_end: *const i8,
     ) -> Result<(*mut i8, *const i8)> {
-        let space_avail = dst_end.offset_from(dst) as usize;
+        let space_avail = unsafe { dst_end.offset_from(dst) as usize };
         if space_avail >= space_reqd {
             Ok((dst, dst_end))
         } else {
@@ -1120,11 +1158,11 @@ impl Heap for OldestGeneration {
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Shadow stack
+ * Shadow-stack
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-/// Provenance of a GC root; shadow stack or remembered set.
+/// Provenance of a GC root; shadow-stack or remembered set.
 #[derive(Debug, PartialEq, Eq)]
 enum GcRootProv {
     Stk,
@@ -1175,7 +1213,7 @@ impl IntoIterator for &Shadowstack {
     }
 }
 
-/// An iterator to traverse the shadowstack.
+/// An iterator to traverse the shadow-stack.
 struct ShadowstackIter {
     run_ptr: *const i8,
     end_ptr: *const i8,
