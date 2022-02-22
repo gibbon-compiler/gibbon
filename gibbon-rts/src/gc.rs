@@ -383,23 +383,10 @@ type BurnedAddressEnv = HashMap<*mut i8, *const i8>;
 unsafe fn evacuate_remembered_set(
     cenv: &mut CauterizedEnv,
     heap: &mut impl Heap,
-    rstack: &Shadowstack,
+    rem_set: &Shadowstack,
 ) -> Result<BurnedAddressEnv> {
-    let frames: Box<dyn Iterator<Item = *mut C_GibShadowstackFrame>> = {
-        // Store all the frames in a vector and sort,
-        // see Note [Granularity of the burned addresses table].
-        let mut frames_vec: Vec<*mut C_GibShadowstackFrame> = Vec::new();
-        for frame in rstack.into_iter() {
-            frames_vec.push(frame);
-        }
-        frames_vec.sort_unstable_by(|a, b| unsafe {
-            let ptra: *const i8 = (*(*a)).ptr;
-            let ptrb: *const i8 = (*(*b)).ptr;
-            (ptra).cmp(&ptrb)
-        });
-        Box::new(frames_vec.into_iter())
-    };
     let mut benv: BurnedAddressEnv = HashMap::new();
+    let frames = sort_roots(rem_set);
     for frame in frames {
         let datatype = (*frame).datatype;
         match INFO_TABLE.get().unwrap().get(&datatype) {
@@ -468,7 +455,9 @@ unsafe fn evacuate_shadowstack(
     heap: &mut impl Heap,
     rstack: &Shadowstack,
 ) -> Result<()> {
-    for frame in rstack.into_iter() {
+    // let frames = rstack.into_iter();
+    let frames = sort_roots(rstack);
+    for frame in frames {
         let datatype = (*frame).datatype;
         match INFO_TABLE.get().unwrap().get(&datatype) {
             None => {
@@ -813,6 +802,24 @@ unsafe fn evacuate_field(
     }
 }
 
+fn sort_roots(
+    roots: &Shadowstack,
+) -> Box<dyn Iterator<Item = *mut C_GibShadowstackFrame>> {
+    // Store all the frames in a vector and sort,
+    // see Note [Granularity of the burned addresses table] and
+    // Note [Sorting roots on the shadow-stack and remembered set].
+    let mut frames_vec: Vec<*mut C_GibShadowstackFrame> = Vec::new();
+    for frame in roots.into_iter() {
+        frames_vec.push(frame);
+    }
+    frames_vec.sort_unstable_by(|a, b| unsafe {
+        let ptra: *const i8 = (*(*a)).ptr;
+        let ptrb: *const i8 = (*(*b)).ptr;
+        (ptra).cmp(&ptrb)
+    });
+    Box::new(frames_vec.into_iter())
+}
+
 #[inline]
 unsafe fn read<A>(cursor: *const i8) -> (A, *const i8) {
     let cursor2 = cursor as *const A;
@@ -1006,7 +1013,7 @@ impl Nursery {
     fn reset_alloc(&mut self) {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
-            (*nursery).alloc = (*nursery).heap_start;
+            (*nursery).alloc = (*nursery).heap_end;
         }
     }
 }
@@ -1032,29 +1039,29 @@ impl Heap for Nursery {
     fn space_available(&self) -> usize {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
-            assert!((*nursery).alloc <= (*nursery).heap_end);
-            (*nursery).heap_end.offset_from((*nursery).alloc) as usize
+            assert!((*nursery).alloc > (*nursery).heap_start);
+            (*nursery).alloc.offset_from((*nursery).heap_start) as usize
         }
     }
 
     fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)> {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
-            assert!((*nursery).alloc < (*nursery).heap_end);
+            assert!((*nursery).alloc >= (*nursery).heap_start);
             let old = (*nursery).alloc as *mut i8;
-            let bump = old.add(size as usize);
-            let end = (*nursery).heap_end as *mut i8;
+            let bump = old.sub(size as usize);
+            let start = (*nursery).heap_start as *mut i8;
             // Check if there's enough space in the nursery to fulfill the
             // request.
-            if bump <= end {
+            if bump >= start {
                 (*nursery).alloc = bump;
-                Ok((old, bump))
+                Ok((bump, old))
             } else {
                 Err(RtsError::Gc(format!(
                     "nursery alloc: out of space, requested={:?}, \
                      available={:?}",
                     size,
-                    end.offset_from(old)
+                    old.offset_from(start)
                 )))
             }
         }
@@ -1089,28 +1096,28 @@ impl Heap for Generation {
     fn space_available(&self) -> usize {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
-            assert!((*gen).alloc <= (*gen).heap_end);
-            (*gen).heap_end.offset_from((*gen).alloc) as usize
+            assert!((*gen).alloc > (*gen).heap_start);
+            (*gen).alloc.offset_from((*gen).heap_start) as usize
         }
     }
 
     fn allocate(&mut self, size: u64) -> Result<(*mut i8, *const i8)> {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
-            assert!((*gen).alloc < (*gen).heap_end);
+            assert!((*gen).alloc > (*gen).heap_start);
             let old = (*gen).alloc as *mut i8;
-            let bump = old.add(size as usize);
-            let end = (*gen).heap_end as *mut i8;
+            let bump = old.sub(size as usize);
+            let start = (*gen).heap_start as *mut i8;
             // Check if there's enough space in the gen to fulfill the request.
-            if bump <= end {
+            if bump >= start {
                 (*gen).mem_allocated += size;
                 (*gen).alloc = bump;
-                Ok((old, bump))
+                Ok((bump, old))
             } else {
                 Err(RtsError::Gc(format!(
                     "gen alloc: out of space, requested={:?}, available={:?}",
                     size,
-                    end.offset_from(old)
+                    old.offset_from(start)
                 )))
             }
         }

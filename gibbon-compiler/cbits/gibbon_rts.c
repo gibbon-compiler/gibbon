@@ -1391,7 +1391,7 @@ static void gib_nursery_initialize(GibNursery *nursery)
         exit(1);
     }
     nursery->n_heap_end = nursery->n_heap_start + NURSERY_SIZE;
-    nursery->n_alloc = nursery->n_heap_start;
+    nursery->n_alloc = nursery->n_heap_end;
     nursery->n_initialized = true;
 
     return;
@@ -1570,12 +1570,13 @@ static GibChunk *gib_alloc_region_in_nursery_fast(uint64_t size, bool collected)
     GibNursery *nursery = DEFAULT_NURSERY;
     assert(nursery->n_initialized);
     char *old = nursery->n_alloc;
-    char *bump = old + size;
-    if (bump < nursery->n_heap_end) {
+    char *bump = old - size;
+    // TODO(ckoparkar): why does >= make some programs segfault?
+    if (bump >= nursery->n_heap_start) {
         nursery->n_alloc = bump;
         GibChunk *region = gib_alloc(sizeof(GibChunk));
-        region->c_start = old;
-        region->c_end = bump;
+        region->c_start = bump;
+        region->c_end = old;
         return region;
     }
     return gib_alloc_region_in_nursery_slow(size, collected);
