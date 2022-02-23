@@ -1471,16 +1471,24 @@ cd $GIBBONDIR/gibbon-rts && cargo build --release
 
 2) Compile the C RTS:
 
-gcc -std=gnu11  -fcilkplus -D_GIBBON_PARALLEL  -Wno-unused-variable -Wno-unused-label -Wall -Wextra -Wpedantic  -O3  -flto \
--I $GIBBONDIR/gibbon-compiler/cbits  -L$GIBBONDIR/gibbon-rts/target/release -Wl,-rpath=$GIBBONDIR/gibbon-rts/target/release \
--c $GIBBONDIR/gibbon-compiler/cbits/gibbon_rts.c -o $GIBBONDIR/gibbon-compiler/cbits/gibbon_rts.o  -lm -lgibbon_rts
+gcc -std=gnu11 -m64 -fcilkplus -D_GIBBON_DEBUG -D_GIBBON_PARALLEL \
+-Wno-unused-variable -Wno-unused-label -Wall -Wextra -Wpedantic  \
+-O3  -flto \
+-I $GIBBONDIR/gibbon-compiler/cbits  -L$GIBBONDIR/gibbon-rts/target/debug \
+-Wl,-rpath=$GIBBONDIR/gibbon-rts/target/debug \
+-c $GIBBONDIR/gibbon-compiler/cbits/gibbon_rts.c \
+-o $GIBBONDIR/gibbon-compiler/cbits/gibbon_rts.o -lm -lgibbon_rts
 
 
 3) Compile this program:
 
-gcc -std=gnu11  -fcilkplus -D_GIBBON_PARALLEL  -Wno-unused-variable -Wno-unused-label -Wall -Wextra -Wpedantic  -O3  -flto \
-$GIBBONDIR/gibbon-compiler/cbits/gibbon_rts.o -I$GIBBONDIR/gibbon-compiler/cbits  -L$GIBBONDIR/gibbon-rts/target/release \
--Wl,-rpath=$GIBBONDIR/gibbon-rts/target/release $GIBBONDIR/gibbon-compiler/examples/test_new_rts.c \
+gcc -std=gnu11 -m64 -fcilkplus -D_GIBBON_DEBUG -D_GIBBON_PARALLEL  \
+-Wno-unused-variable -Wno-unused-label -Wall -Wextra -Wpedantic \
+-O0 -g  -flto \
+$GIBBONDIR/gibbon-compiler/cbits/gibbon_rts.o -I$GIBBONDIR/gibbon-compiler/cbits \
+-L$GIBBONDIR/gibbon-rts/target/debug  \
+-Wl,-rpath=$GIBBONDIR/gibbon-rts/target/debug \
+$GIBBONDIR/gibbon-compiler/examples/test_new_rts.c \
 -o $GIBBONDIR/gibbon-compiler/examples/test_new_rts.exe -lm -lgibbon_rts
 
 
@@ -1492,6 +1500,96 @@ $GIBBONDIR/gibbon-compiler/examples/test_new_rts.exe
 
  */
 
+// https://stackoverflow.com/a/27627015
+void print_binary(uint64_t number, int *i)
+{
+    if (number >> 1) {
+        print_binary(number >> 1, i);
+    }
+    (*i)++;
+    putc((number & 1) ? '1' : '0', stdout);
+}
+
+// https://stackoverflow.com/a/18426582.
+void test_ptr_tagging()
+{
+    printf("\nTest pointer tagging:\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+    int i = 0;
+
+    // The mask to use.
+    const uintptr_t MASK = ~(1ULL << 48);
+    printf("The mask to use: %ld\n", MASK);
+    print_binary((uintptr_t) MASK, &i);
+    printf("\ni=%d\n\n", i);
+    i = 0;
+
+    // Original pointer.
+    char *addr = malloc(1024);
+    printf("Original pointer: %p\n", addr);
+    print_binary((uintptr_t) addr, &i);
+    printf("\ni=%d\n\n", i);
+    i = 0;
+
+    // Data to be stored.
+    uint16_t data = 65535;
+    printf("Data to be stored: %d\n", data);
+    print_binary(data, &i);
+    printf("\ni=%d\n\n", i);
+    i = 0;
+
+    uint64_t data2 = data;
+    data2 = data2 << 48;
+    printf("Left shifted data: %ld\n", data2);
+    print_binary(data2, &i);
+    printf("\ni=%d\n\n", i);
+    i = 0;
+
+    // Store data into the pointer.
+    // Note: To be on the safe side and future-proof (because future implementations
+    //     can increase the number of significant bits in the pointer), we should
+    //     store values from the most significant bits down to the lower ones
+    char *tagged = (char *) (((uintptr_t)addr & MASK) | data2);
+    printf("Tagged pointer: %p\n", tagged);
+    print_binary((uintptr_t) tagged, &i);
+    printf("\ni=%d\n\n", i);
+    i = 0;
+
+    // Recovered data.
+    uint16_t data3 = (uintptr_t) tagged >> 48;
+    printf("Recovered data: %d\n", data3);
+    print_binary((uintptr_t) data3, &i);
+    printf("\ni=%d\n\n", i);
+    i = 0;
+
+    // Deference the pointer.
+    // Sign extend first to make the pointer canonical
+    // Note: Technically this is implementation defined. You may want a more
+    //     standard-compliant way to sign-extend the value
+    // uintptr_t ptr2 = (((uintptr_t) tagged << 16) >> 16);
+    // uintptr_t ptr2 = (((uintptr_t)tagged & ((1ull << 48) - 1)) |
+    //                   ~(((uintptr_t)tagged & (1ull << 47)) - 1));
+    char *ptr2 = (char *) (((uintptr_t) tagged << 16) >> 16);
+    printf("Deferenced pointer: %p\n", ptr2);
+    print_binary((uintptr_t) ptr2, &i);
+    printf("\ni=%d\n\n", i);
+    i = 0;
+
+    char *addr2 = (char *) ptr2;
+    printf("addr2: %p\n", addr2);
+    print_binary((uintptr_t) addr2, &i);
+    printf("\ni=%d\n\n", i);
+    i = 0;
+
+
+    // Check if tagging and untagging cancels out.
+    printf("Checking original data == recovered data.\n");
+    assert(data3 == data);
+    printf("Checking original pointer == recovered pointer.\n");
+    assert(addr2 == addr);
+    printf("Checks passed.");
+
+}
+
 int gib_main_expr(void)
 {
     info_table_initialize();
@@ -1500,7 +1598,10 @@ int gib_main_expr(void)
     GibInt fltPrd_235_251 =  do_reverse(gib_get_size_param());
     printf("reverse: %" PRIu64 "\n", fltPrd_235_251);
     GibInt fltPrd_236_252 =  do_tree(gib_get_size_param());
-    printf("sum tree: %" PRIu64, fltPrd_236_252);
+    printf("sum tree: %" PRIu64 "\n", fltPrd_236_252);
     gib_free_symtable();
+
+    test_ptr_tagging();
+
     return 0;
 }
