@@ -858,8 +858,7 @@ pub trait Heap {
         } else {
             let total_size = size + (size_of::<C_GibChunkFooter>() as u64);
             let (start, end) = self.allocate(total_size)?;
-            let footer_start =
-                unsafe { init_footer_at(end, None, 0, size, refcount) };
+            let footer_start = init_footer_at(end, None, 0, size, refcount);
             Ok((start, footer_start))
         }
     }
@@ -949,18 +948,15 @@ impl C_GibRegionInfo {
     }
 }
 
-unsafe fn add_to_outset(from_addr: *const i8, to_addr: *const i8) {
+fn add_to_outset(from_addr: *const i8, to_addr: *const i8) {
     let footer = from_addr as *mut C_GibChunkFooter;
-    let reg_info = (*footer).reg_info;
-    let i = (*reg_info).outset_len as usize;
-    (*reg_info).outset[i] = to_addr;
-    (*reg_info).outset_len = (*reg_info).outset_len + 1;
-    let mut outset2 = *(Box::from_raw((*reg_info).outset2));
-    outset2.insert(to_addr);
-    (*reg_info).outset2 = Box::into_raw(Box::new(outset2));
+    unsafe {
+        let reg_info = (*footer).reg_info;
+        (*((*reg_info).outset2)).insert(to_addr);
+    }
 }
 
-unsafe fn init_footer_at(
+fn init_footer_at(
     chunk_end: *const i8,
     reg_info: Option<*mut C_GibRegionInfo>,
     seq_no: u16,
@@ -968,7 +964,7 @@ unsafe fn init_footer_at(
     refcount: u16,
 ) -> *const i8 {
     let footer_space = size_of::<C_GibChunkFooter>();
-    let footer_start = chunk_end.sub(footer_space);
+    let footer_start = unsafe { chunk_end.sub(footer_space) };
 
     let region_info_ptr: *mut C_GibRegionInfo = match reg_info {
         None => {
@@ -979,11 +975,13 @@ unsafe fn init_footer_at(
         Some(info_ptr) => info_ptr,
     };
     let footer: *mut C_GibChunkFooter = footer_start as *mut C_GibChunkFooter;
-    (*footer).reg_info = region_info_ptr;
-    (*footer).seq_no = seq_no;
-    (*footer).size = chunk_size;
-    (*footer).next = null_mut();
-    (*footer).prev = null_mut();
+    unsafe {
+        (*footer).reg_info = region_info_ptr;
+        (*footer).seq_no = seq_no;
+        (*footer).size = chunk_size;
+        (*footer).next = null_mut();
+        (*footer).prev = null_mut();
+    }
     footer_start
 }
 
