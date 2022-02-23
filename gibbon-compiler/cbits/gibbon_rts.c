@@ -437,16 +437,16 @@ GibVector *gib_vector_alloc(GibInt num, size_t elt_size)
         fprintf(stderr, "alloc_vector: gib_alloc failed: %ld", sizeof(num * elt_size));
         exit(1);
     }
-    vec->vec_lower = 0;
-    vec->vec_upper = num;
-    vec->vec_elt_size = elt_size;
-    vec->vec_data = data;
+    vec->lower = 0;
+    vec->upper = num;
+    vec->elt_size = elt_size;
+    vec->data = data;
     return vec;
 }
 
 GibInt gib_vector_length(GibVector *vec)
 {
-    return (vec->vec_upper - vec->vec_lower);
+    return (vec->upper - vec->lower);
 }
 
 GibBool gib_vector_is_empty(GibVector *vec)
@@ -456,16 +456,16 @@ GibBool gib_vector_is_empty(GibVector *vec)
 
 GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
 {
-    GibInt lower = vec->vec_lower + i;
-    GibInt upper = vec->vec_lower + i + n;
-    if ((lower > vec->vec_upper)) {
+    GibInt lower = vec->lower + i;
+    GibInt upper = vec->lower + i + n;
+    if ((lower > vec->upper)) {
         fprintf(stderr, "gib_vector_slice: lower out of bounds, %" PRId64
-                " > %" PRId64, lower, vec->vec_upper);
+                " > %" PRId64, lower, vec->upper);
         exit(1);
     }
-    if ((upper > vec->vec_upper)) {
+    if ((upper > vec->upper)) {
         fprintf(stderr, "gib_vector_slice: upper out of bounds, %" PRId64
-                " > %" PRId64, upper, vec->vec_upper);
+                " > %" PRId64, upper, vec->upper);
         exit(1);
     }
     GibVector *vec2 = (GibVector *) gib_alloc(sizeof(GibVector));
@@ -473,10 +473,10 @@ GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
         fprintf(stderr, "gib_vector_slice: gib_alloc failed: %ld", sizeof(GibVector));
         exit(1);
     }
-    vec2->vec_lower = lower;
-    vec2->vec_upper = upper;
-    vec2->vec_elt_size = vec->vec_elt_size;
-    vec2->vec_data = vec->vec_data;
+    vec2->lower = lower;
+    vec2->upper = upper;
+    vec2->elt_size = vec->elt_size;
+    vec2->data = vec->data;
     return vec2;
 }
 
@@ -486,17 +486,17 @@ void *gib_vector_nth(GibVector *vec, GibInt i)
 #ifdef _GIBBON_BOUNDSCHECK
     if (i < vec->lower || i > vec->upper) {
         fprintf(stdderr, "gib_vector_nth index out of bounds: %lld (%lld,%lld)\n",
-                i, vec->vec_lower, vec->vec_upper);
+                i, vec->lower, vec->upper);
         exit(1);
     }
 #endif
-    return ((char*)vec->vec_data + (vec->vec_elt_size * (vec->vec_lower + i)));
+    return ((char*)vec->data + (vec->elt_size * (vec->lower + i)));
 }
 
 GibVector *gib_vector_inplace_update(GibVector *vec, GibInt i, void* elt)
 {
     void* dst = gib_vector_nth(vec, i);
-    memcpy(dst, elt, vec->vec_elt_size);
+    memcpy(dst, elt, vec->elt_size);
     return vec;
 }
 
@@ -504,15 +504,15 @@ GibVector *gib_vector_copy(GibVector *vec)
 {
     GibInt len = gib_vector_length(vec);
     void *start = gib_vector_nth(vec, 0);
-    GibVector *vec2 = gib_vector_alloc(len, vec->vec_elt_size);
-    memcpy(vec2->vec_data, start, len * vec->vec_elt_size);
+    GibVector *vec2 = gib_vector_alloc(len, vec->elt_size);
+    memcpy(vec2->data, start, len * vec->elt_size);
     return vec2;
 }
 
 GibVector *gib_vector_inplace_sort(GibVector *vec, int (*compar)(const void *, const void*))
 {
     void *start = gib_vector_nth(vec, 0);
-    qsort(start, gib_vector_length(vec), vec->vec_elt_size, compar);
+    qsort(start, gib_vector_length(vec), vec->elt_size, compar);
     return vec;
 }
 
@@ -535,7 +535,7 @@ GibVector *gib_vector_concat(GibVector *vec)
     for (GibInt i = 0; i < len; i++) {
         elt_ref = gib_vector_nth(vec, i);
         elt = *elt_ref;
-        result_elt_size = elt->vec_elt_size;
+        result_elt_size = elt->elt_size;
         result_len += gib_vector_length(elt);
     }
 
@@ -561,17 +561,17 @@ GibVector *gib_vector_concat(GibVector *vec)
 
 void gib_vector_free(GibVector *vec)
 {
-    free(vec->vec_data);
+    free(vec->data);
     free(vec);
     return;
 }
 
 GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
 {
-    if (vec1->vec_upper != vec2->vec_lower) {
+    if (vec1->upper != vec2->lower) {
         fprintf(stderr,"gib_vector_merge: non-contiguous slices, (%" PRId64
                 ",%" PRId64 "), (%" PRId64 ",%" PRId64 ")",
-               vec1->vec_lower, vec1->vec_upper, vec2->vec_lower, vec2->vec_upper);
+               vec1->lower, vec1->upper, vec2->lower, vec2->upper);
         exit(1);
     }
     GibVector *merged = (GibVector *) gib_alloc(sizeof(GibVector));
@@ -579,10 +579,10 @@ GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
         fprintf(stderr, "gib_vector_merge: gib_alloc failed: %ld", sizeof(GibVector));
         exit(1);
     }
-    merged->vec_lower = vec1->vec_lower;
-    merged->vec_upper = vec2->vec_upper;
-    merged->vec_elt_size = vec1->vec_elt_size;
-    merged->vec_data = vec1->vec_data;
+    merged->lower = vec1->lower;
+    merged->upper = vec2->upper;
+    merged->elt_size = vec1->elt_size;
+    merged->data = vec1->data;
     return merged;
 }
 
@@ -705,60 +705,60 @@ GibList *gib_list_alloc(size_t data_size)
 {
     // GibList *ls = gib_alloc(sizeof(GibList));
     GibList *ls = gib_list_bumpalloc(sizeof(GibList));
-    ls->ll_data_size = data_size;
-    ls->ll_data = (void *) NULL;
-    ls->ll_next = (GibList *) NULL;
+    ls->data_size = data_size;
+    ls->data = (void *) NULL;
+    ls->next = (GibList *) NULL;
     return ls;
 }
 
 GibBool gib_list_is_empty(GibList *ls)
 {
-    return ls->ll_next == NULL;
+    return ls->next == NULL;
 }
 
 GibList *gib_list_cons(void *elt, GibList *ls)
 {
     // void* data = gib_alloc(ls->data_size);
-    void* data = gib_list_bumpalloc(ls->ll_data_size);
+    void* data = gib_list_bumpalloc(ls->data_size);
     if (data == NULL) {
-        fprintf(stderr, "gib_list_cons: gib_alloc failed: %ld", ls->ll_data_size);
+        fprintf(stderr, "gib_list_cons: gib_alloc failed: %ld", ls->data_size);
         exit(1);
     }
-    memcpy(data, elt, ls->ll_data_size);
+    memcpy(data, elt, ls->data_size);
     // GibList *res = gib_alloc(sizeof(GibList));
     GibList *res = gib_list_bumpalloc(sizeof(GibList));
-    res->ll_data_size = ls->ll_data_size;
-    res->ll_data = data;
-    res->ll_next = (GibList*) ls;
+    res->data_size = ls->data_size;
+    res->data = data;
+    res->next = (GibList*) ls;
     return res;
 }
 
 void *gib_list_head(GibList *ls)
 {
-    return ls->ll_data;
+    return ls->data;
 }
 
 GibList* gib_list_tail(GibList *ls)
 {
-    return ls->ll_next;
+    return ls->next;
 }
 
 void gib_list_free(GibList *ls)
 {
-    free(ls->ll_data);
+    free(ls->data);
     free(ls);
     return;
 }
 
 GibList *gib_list_copy(GibList *ls)
 {
-    GibList *ls2 = gib_list_alloc(ls->ll_data_size);
-    if (ls->ll_data != NULL) {
-        void* data = gib_list_bumpalloc(ls->ll_data_size);
-        memcpy(data, ls->ll_data, ls->ll_data_size);
-        ls2->ll_data = data;
+    GibList *ls2 = gib_list_alloc(ls->data_size);
+    if (ls->data != NULL) {
+        void* data = gib_list_bumpalloc(ls->data_size);
+        memcpy(data, ls->data, ls->data_size);
+        ls2->data = data;
     }
-    ls2->ll_next = ls->ll_next;
+    ls2->next = ls->next;
     return ls2;
 }
 
@@ -815,15 +815,15 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
   the chunks together in a list and for garbage collection. The footer:
 
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  data | cf_reg_info | cf_seq_no | cf_size | cf_next | cf_prev
+  data | reg_info | seq_no | size | next | prev
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   The metadata after the serialized data serves various purposes:
 
-  - cf_reg_info: A pointer to a GibRegionInfo struct that contains
+  - reg_info: A pointer to a GibRegionInfo struct that contains
   various metadata. Of particular interest to us are the fields:
 
-  = reg_id: A unique identifier for a region.
+  = id: A unique identifier for a region.
 
   = refcount and outset: Whenever an inter-region indirection is created, we
     record that information using these two fields. Suppose we have an
@@ -832,12 +832,12 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
     be bumped by 1. Note that all there's only 1 refcount cell, and 1 outset
     per logical region, and chunks only store a pointer to them.
 
-  - cf_seq_no: The index of this particular chunk in the list.
+  - seq_no: The index of this particular chunk in the list.
 
-  - cf_size: Used during bounds checking to calculate the size of the next
+  - size: Used during bounds checking to calculate the size of the next
     region in the linked list.
 
-  - cf_next / cf_prev: Point to the next and previous chunk respectively.
+  - next / prev: Point to the next and previous chunk respectively.
 
 
   There are two ways in which a region may be freed:
@@ -874,20 +874,20 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 #define MAX_OUTSET_LENGTH 10
 
 typedef struct gib_region_meta {
-    GibSym reg_id;
-    uint16_t reg_refcount;
-    uint16_t reg_outset_len;
-    GibCursor reg_outset[MAX_OUTSET_LENGTH];
-    void *reg_outset2;
+    GibSym id;
+    uint16_t refcount;
+    uint16_t outset_len;
+    GibCursor outset[MAX_OUTSET_LENGTH];
+    void *outset2;
 } GibRegionInfo;
 
 typedef struct gib_chunk_footer {
-    GibRegionInfo *cf_reg_info;
+    GibRegionInfo *reg_info;
 
-    uint16_t cf_seq_no;
-    uint64_t cf_size;
-    struct gib_chunk_footer *cf_next;
-    struct gib_chunk_footer *cf_prev;
+    uint16_t seq_no;
+    uint64_t size;
+    struct gib_chunk_footer *next;
+    struct gib_chunk_footer *prev;
 } GibChunkFooter;
 
 static void gib_insert_into_outset(GibCursor ptr, GibRegionInfo *reg);
@@ -918,27 +918,27 @@ GibChunk *gib_alloc_region(uint64_t size)
     GibCursor heap_end = heap_start + size;
 
     // Initialize metadata fields.
-    reg_info->reg_id = gib_gensym();
-    reg_info->reg_refcount = 1;
-    reg_info->reg_outset_len = 0;
-    reg_info->reg_outset2 = NULL;
+    reg_info->id = gib_gensym();
+    reg_info->refcount = 1;
+    reg_info->outset_len = 0;
+    reg_info->outset2 = NULL;
 
 #ifdef _GIBBON_DEBUG
     printf("Allocated a region(%" PRIu64 "): %" PRIu64 " bytes.\n",
-           reg_info->reg_id, size);
+           reg_info->id, size);
 #endif
 
     // Write the footer.
     GibChunkFooter *footer = (GibChunkFooter *) heap_end;
-    footer->cf_reg_info = reg_info;
-    footer->cf_seq_no = 1;
-    footer->cf_size = size;
-    footer->cf_next = (GibChunkFooter *) NULL;
-    footer->cf_prev = (GibChunkFooter *) NULL;
+    footer->reg_info = reg_info;
+    footer->seq_no = 1;
+    footer->size = size;
+    footer->next = (GibChunkFooter *) NULL;
+    footer->prev = (GibChunkFooter *) NULL;
 
     GibChunk *region = (GibChunk *) gib_alloc(sizeof(GibChunk));
-    region->c_start = heap_start;
-    region->c_end = heap_end;
+    region->start = heap_start;
+    region->end = heap_end;
     return region;
 }
 
@@ -946,7 +946,7 @@ GibChunk gib_alloc_chunk(GibCursor footer_ptr)
 {
     // Get size from current footer.
     GibChunkFooter *footer = (GibChunkFooter *) footer_ptr;
-    uint64_t newsize = footer->cf_size * 2;
+    uint64_t newsize = footer->size * 2;
     // See #110.
     if (newsize > MAX_CHUNK_SIZE) {
         newsize = MAX_CHUNK_SIZE;
@@ -963,21 +963,21 @@ GibChunk gib_alloc_chunk(GibCursor footer_ptr)
     GibCursor end = start + newsize;
 
     // Link the next chunk's footer.
-    footer->cf_next = (GibChunkFooter *) end;
+    footer->next = (GibChunkFooter *) end;
 
     // Write the footer.
     GibChunkFooter *new_footer = (GibChunkFooter *) end;
-    new_footer->cf_reg_info = footer->cf_reg_info;
-    new_footer->cf_seq_no = footer->cf_seq_no + 1;
-    new_footer->cf_size = newsize;
-    new_footer->cf_next = (GibChunkFooter *) NULL;
-    new_footer->cf_prev = footer;
+    new_footer->reg_info = footer->reg_info;
+    new_footer->seq_no = footer->seq_no + 1;
+    new_footer->size = newsize;
+    new_footer->next = (GibChunkFooter *) NULL;
+    new_footer->prev = footer;
 
 #ifdef _GIBBON_DEBUG
-    GibRegionInfo *reg = (GibRegionInfo*) new_footer->cf_reg_info;
+    GibRegionInfo *reg = (GibRegionInfo*) new_footer->reg_info;
     printf("gib_alloc_chunk: allocated %" PRIu64 " bytes for region %" PRIu64 "\n",
            total_size,
-           (footer->cf_reg_info)->reg_id);
+           (footer->reg_info)->id);
 #endif
 
     return (GibChunk) {start , end};
@@ -997,21 +997,21 @@ void gib_bump_refcount(GibCursor from_footer_ptr, GibCursor to_footer_ptr)
     GibChunkFooter *from_footer = (GibChunkFooter *) from_footer_ptr;
 
     // Grab metadata.
-    GibRegionInfo *to_reg = (GibRegionInfo *) to_footer->cf_reg_info;
-    GibRegionInfo *from_reg = (GibRegionInfo *) from_footer->cf_reg_info;
+    GibRegionInfo *to_reg = (GibRegionInfo *) to_footer->reg_info;
+    GibRegionInfo *from_reg = (GibRegionInfo *) from_footer->reg_info;
 
     // Bump A's refcount.
     uint16_t current_refcount, new_refcount;
-    current_refcount = to_reg->reg_refcount;
+    current_refcount = to_reg->refcount;
     new_refcount = current_refcount + 1;
-    to_reg->reg_refcount = new_refcount;
+    to_reg->refcount = new_refcount;
 
 #ifdef _GIBBON_DEBUG
     printf("gib_bump_refcount: %" PRIu64 "-> %" PRIu64 "\n",
-           from_reg->reg_id, to_reg->reg_id);
+           from_reg->id, to_reg->id);
     printf("gib_bump_refcount: old-refcount=%d, old-outset-len=%d:\n",
-           current_refcount, from_reg->reg_outset_len);
-    assert(current_refcount == from_reg->reg_outset_len+1);
+           current_refcount, from_reg->outset_len);
+    assert(current_refcount == from_reg->outset_len+1);
 #endif
 
     // Add 'to' to 'from's outset.
@@ -1019,10 +1019,10 @@ void gib_bump_refcount(GibCursor from_footer_ptr, GibCursor to_footer_ptr)
 
 #ifdef _GIBBON_DEBUG
     printf("gib_bump_refcount: Added %p to %" PRIu64 "'s outset, %p.\n",
-           to_footer_ptr, from_reg->reg_id, (void *) from_reg);
+           to_footer_ptr, from_reg->id, (void *) from_reg);
     printf("gib_bump_refcount: new-refcount=%" PRIu16 ", new-outset-len=%d\n",
-           new_refcount, from_reg->reg_outset_len);
-    assert(new_refcount == from_reg->reg_outset_len+1);
+           new_refcount, from_reg->outset_len);
+    assert(new_refcount == from_reg->outset_len+1);
 #endif
 
     return;
@@ -1031,7 +1031,7 @@ void gib_bump_refcount(GibCursor from_footer_ptr, GibCursor to_footer_ptr)
 void gib_free_region(GibCursor reg_footer_ptr) {
     // Grab footer and the metadata.
     GibChunkFooter *footer = (GibChunkFooter *) reg_footer_ptr;
-    GibRegionInfo *reg = (GibRegionInfo *) footer->cf_reg_info;
+    GibRegionInfo *reg = (GibRegionInfo *) footer->reg_info;
 
     //
     GibChunkFooter *first_chunk_footer, *next_chunk_footer;
@@ -1039,16 +1039,16 @@ void gib_free_region(GibCursor reg_footer_ptr) {
 
     // Decrement current reference count.
     uint16_t current_refcount, new_refcount;
-    current_refcount = reg->reg_refcount;
+    current_refcount = reg->refcount;
     new_refcount = 0;
     if (current_refcount != 0) {
         new_refcount = current_refcount - 1;
-        reg->reg_refcount = new_refcount;
+        reg->refcount = new_refcount;
     }
 
 #ifdef _GIBBON_DEBUG
     printf("gib_free_region(%" PRIu64 "): refcounts (1): old-refcount=%d, new-refcount=%d:\n",
-           reg->reg_id, current_refcount, new_refcount);
+           reg->id, current_refcount, new_refcount);
 #endif
 
 
@@ -1057,14 +1057,14 @@ void gib_free_region(GibCursor reg_footer_ptr) {
 
 #ifdef _GIBBON_DEBUG
         printf("gib_free_region(%" PRIu64 "): outset length: %d\n",
-               reg->reg_id, reg->reg_outset_len);
+               reg->id, reg->outset_len);
 #endif
 
         // Decrement refcounts, free regions with refcount==0 and also free
         // elements of the outset.
-        if (reg->reg_outset_len != 0) {
-            uint16_t outset_len = reg->reg_outset_len;
-            GibCursor *outset = reg->reg_outset;
+        if (reg->outset_len != 0) {
+            uint16_t outset_len = reg->outset_len;
+            GibCursor *outset = reg->outset;
             GibChunkFooter *elt_footer;
             GibRegionInfo *elt_reg;
             uint16_t elt_current_refcount, elt_new_refcount;
@@ -1072,15 +1072,15 @@ void gib_free_region(GibCursor reg_footer_ptr) {
             uint16_t to_be_removed_idx = 0;
             for (uint16_t i = 0; i < outset_len; i++) {
                 elt_footer = (GibChunkFooter *) outset[i];
-                elt_reg = (GibRegionInfo *) elt_footer->cf_reg_info;
-                elt_current_refcount = elt_reg->reg_refcount;
+                elt_reg = (GibRegionInfo *) elt_footer->reg_info;
+                elt_current_refcount = elt_reg->refcount;
                 elt_new_refcount = elt_current_refcount - 1;
-                elt_reg->reg_refcount = elt_new_refcount;
+                elt_reg->refcount = elt_new_refcount;
 #ifdef _GIBBON_DEBUG
                 printf("gib_free_region(%" PRIu64 "): old-refcount=%d, new-refcount=%d:\n",
-                       elt_reg->reg_id,
+                       elt_reg->id,
                        elt_current_refcount,
-                       elt_reg->reg_refcount);
+                       elt_reg->refcount);
 #endif
                 if (elt_new_refcount == 0) {
                     // See [Why is it a doubly linked-list?] above
@@ -1105,13 +1105,13 @@ void gib_free_region(GibCursor reg_footer_ptr) {
 #endif
 
         // Free the chunks in this region.
-        first_chunk = reg_footer_ptr - footer->cf_size;
+        first_chunk = reg_footer_ptr - footer->size;
         first_chunk_footer = footer;
-        next_chunk = (char*) footer->cf_next;
+        next_chunk = (char*) footer->next;
 
 #ifdef _GIBBON_DEBUG
         num_freed_chunks++;
-        total_bytesize = total_bytesize + first_chunk_footer->cf_size;
+        total_bytesize = total_bytesize + first_chunk_footer->size;
 #endif
         free(first_chunk);
 
@@ -1119,16 +1119,16 @@ void gib_free_region(GibCursor reg_footer_ptr) {
             next_chunk_footer = (GibChunkFooter *) next_chunk;
 #ifdef _GIBBON_DEBUG
             num_freed_chunks++;
-            total_bytesize = total_bytesize + next_chunk_footer->cf_size;
+            total_bytesize = total_bytesize + next_chunk_footer->size;
 #endif
-            free(next_chunk - next_chunk_footer->cf_size);
-            next_chunk = (char*) next_chunk_footer->cf_next;
+            free(next_chunk - next_chunk_footer->size);
+            next_chunk = (char*) next_chunk_footer->next;
         }
 
 #ifdef _GIBBON_DEBUG
         printf("gib_free_region(%" PRIu64 "): Freed %" PRId64
                " bytes across %" PRId64 " chunks.\n",
-               reg->reg_id, total_bytesize, num_freed_chunks);
+               reg->id, total_bytesize, num_freed_chunks);
 #endif
 
         // Free the metadata.
@@ -1137,30 +1137,30 @@ void gib_free_region(GibCursor reg_footer_ptr) {
     } else {
 #ifdef _GIBBON_DEBUG
         printf("gib_free_region(%" PRIu64 "): non-zero refcount: %d.\n",
-               reg->reg_id, reg->reg_refcount);
+               reg->id, reg->refcount);
 #endif
     }
 }
 
 static void gib_insert_into_outset(GibCursor to_ptr, GibRegionInfo *from_reg)
 {
-    uint16_t outset_len = from_reg->reg_outset_len;
+    uint16_t outset_len = from_reg->outset_len;
     // Check for duplicates.
     for (uint16_t i = 0; i < outset_len; i++) {
-        if (to_ptr == from_reg->reg_outset[i]) {
+        if (to_ptr == from_reg->outset[i]) {
             return;
         }
     }
     // Otherwise, insert into the outset.
-    from_reg->reg_outset[outset_len] = to_ptr;
-    from_reg->reg_outset_len = outset_len + 1;
+    from_reg->outset[outset_len] = to_ptr;
+    from_reg->outset_len = outset_len + 1;
     return;
 }
 
 static void gib_remove_from_outset(GibCursor ptr, GibRegionInfo *reg)
 {
-    uint16_t outset_len = reg->reg_outset_len;
-    GibCursor *outset = reg->reg_outset;
+    uint16_t outset_len = reg->outset_len;
+    GibCursor *outset = reg->outset;
     uint16_t i;
     if (outset_len == 0) {
         fprintf(stderr, "gib_remove_from_outset: empty outset\n");
@@ -1186,14 +1186,14 @@ static void gib_remove_from_outset(GibCursor ptr, GibRegionInfo *reg)
 
 static GibChunkFooter *gib_trav_to_first_chunk(GibChunkFooter *footer)
 {
-    if (footer->cf_seq_no == 1) {
+    if (footer->seq_no == 1) {
         return footer;
-    } else if (footer->cf_prev == NULL) {
-        fprintf(stderr, "No previous chunk found at cf_seq_no: %" PRIu16,
-                footer->cf_seq_no);
+    } else if (footer->prev == NULL) {
+        fprintf(stderr, "No previous chunk found at seq_no: %" PRIu16,
+                footer->seq_no);
         return (GibChunkFooter *) NULL;
     } else {
-        gib_trav_to_first_chunk((GibChunkFooter *) footer->cf_prev);
+        gib_trav_to_first_chunk((GibChunkFooter *) footer->prev);
     }
     return (GibChunkFooter *) NULL;
 }
@@ -1201,8 +1201,8 @@ static GibChunkFooter *gib_trav_to_first_chunk(GibChunkFooter *footer)
 static uint16_t gib_get_ref_count(GibCursor footer_ptr)
 {
     GibChunkFooter *footer = (GibChunkFooter *) footer_ptr;
-    GibRegionInfo *reg = (GibRegionInfo *) footer->cf_reg_info;
-    return reg->reg_refcount;
+    GibRegionInfo *reg = (GibRegionInfo *) footer->reg_info;
+    return reg->refcount;
 }
 
 
@@ -1259,41 +1259,41 @@ void gib_print_global_region_count(void)
 
 typedef struct gib_nursery {
     // Step.
-    uint64_t n_num_collections;
+    uint64_t num_collections;
 
     // Allocation area.
-    uint64_t n_heap_size;
-    char *n_heap_start;
-    char *n_heap_end;
-    char *n_alloc;
+    uint64_t heap_size;
+    char *heap_start;
+    char *heap_end;
+    char *alloc;
 
 } GibNursery;
 
 typedef struct gib_generation {
     // Generation number.
-    uint8_t g_no;
+    uint8_t no;
 
     // Destination generation for live objects.
-    struct gib_generation *g_dest;
+    struct gib_generation *dest;
 
     // Is this the oldest generation?
-    bool g_oldest;
+    bool oldest;
 
     // Amount of memory allocated in this generation.
-    uint64_t g_mem_allocated;
+    uint64_t mem_allocated;
 
     // Allocation area; uninitialized in the oldest gen which uses malloc.
-    uint64_t g_heap_size;
-    char *g_heap_start;
-    char *g_heap_end;
-    char *g_alloc;
+    uint64_t heap_size;
+    char *heap_start;
+    char *heap_end;
+    char *alloc;
 
     // Remembered set to store old to young pointers.
-    GibRememberedSet *g_rem_set;
+    GibRememberedSet *rem_set;
 
     // Zero count table;
     // this is a pointer to a structure on the Rust Heap.
-    void *g_zct;
+    void *zct;
 
 } GibGeneration;
 
@@ -1354,9 +1354,9 @@ static void gib_storage_initialize(void)
     gib_global_oldest_gen = &(gib_global_generations[NUM_GENERATIONS-1]);
     // Set up destination pointers in each generation.
     for (g = 0; g < NUM_GENERATIONS-1; g++) {
-        gib_global_generations[g].g_dest = &(gib_global_generations[g+1]);
+        gib_global_generations[g].dest = &(gib_global_generations[g+1]);
     }
-    gib_global_oldest_gen->g_dest = gib_global_oldest_gen;
+    gib_global_oldest_gen->dest = gib_global_oldest_gen;
 
     // Initialize shadow stacks.
     uint64_t ss;
@@ -1379,16 +1379,16 @@ static void gib_storage_initialize(void)
 // Initialize a nursery.
 static void gib_nursery_initialize(GibNursery *nursery)
 {
-    nursery->n_num_collections = 0;
-    nursery->n_heap_size = NURSERY_SIZE;
-    nursery->n_heap_start = (char *) gib_alloc(NURSERY_SIZE);
-    if (nursery->n_heap_start == NULL) {
+    nursery->num_collections = 0;
+    nursery->heap_size = NURSERY_SIZE;
+    nursery->heap_start = (char *) gib_alloc(NURSERY_SIZE);
+    if (nursery->heap_start == NULL) {
         fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %ld",
                 NURSERY_SIZE);
         exit(1);
     }
-    nursery->n_heap_end = nursery->n_heap_start + NURSERY_SIZE;
-    nursery->n_alloc = nursery->n_heap_end;
+    nursery->heap_end = nursery->heap_start + NURSERY_SIZE;
+    nursery->alloc = nursery->heap_end;
 
     return;
 }
@@ -1396,35 +1396,35 @@ static void gib_nursery_initialize(GibNursery *nursery)
 // Initialize a generation.
 static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
 {
-    gen->g_no = gen_no;
-    gen->g_dest = (GibGeneration *) NULL;
-    gen->g_mem_allocated = 0;
-    gen->g_zct = (void *) NULL;
+    gen->no = gen_no;
+    gen->dest = (GibGeneration *) NULL;
+    gen->mem_allocated = 0;
+    gen->zct = (void *) NULL;
     // Initialize the remembered set.
-    gen->g_rem_set = (GibRememberedSet *) gib_alloc(sizeof(GibRememberedSet));
-    if (gen->g_rem_set == NULL) {
+    gen->rem_set = (GibRememberedSet *) gib_alloc(sizeof(GibRememberedSet));
+    if (gen->rem_set == NULL) {
         fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %ld",
                 sizeof(GibRememberedSet));
         exit(1);
     }
-    gib_shadowstack_initialize(gen->g_rem_set, REMEMBERED_SET_SIZE);
+    gib_shadowstack_initialize(gen->rem_set, REMEMBERED_SET_SIZE);
     // Initialize the heap if this is not the oldest generation.
     if (gen_no == (NUM_GENERATIONS - 1)) {
-        gen->g_oldest = true;
-        gen->g_heap_size = 0;
-        gen->g_heap_start = (char *) NULL;
-        gen->g_heap_end = (char *) NULL;
-        gen->g_alloc = (char *) NULL;
+        gen->oldest = true;
+        gen->heap_size = 0;
+        gen->heap_start = (char *) NULL;
+        gen->heap_end = (char *) NULL;
+        gen->alloc = (char *) NULL;
     } else {
-        gen->g_oldest = false;
-        gen->g_heap_size = ((gen_no+1) * 256 * MB);
-        gen->g_heap_start = (char *) gib_alloc(gen->g_heap_size);
-        if (gen->g_heap_start == NULL) {
+        gen->oldest = false;
+        gen->heap_size = ((gen_no+1) * 256 * MB);
+        gen->heap_start = (char *) gib_alloc(gen->heap_size);
+        if (gen->heap_start == NULL) {
             fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %ld",
-                    gen->g_heap_size);
+                    gen->heap_size);
         }
-        gen->g_heap_end = gen->g_heap_start + gen->g_heap_size;
-        gen->g_alloc = gen->g_heap_start;
+        gen->heap_end = gen->heap_start + gen->heap_size;
+        gen->alloc = gen->heap_start;
     }
 
     return;
@@ -1433,14 +1433,14 @@ static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
 // Initialize a shadow stack.
 static void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_size)
 {
-    stack->ss_start = (char *) gib_alloc(stack_size);
-    if (stack->ss_start == NULL) {
+    stack->start = (char *) gib_alloc(stack_size);
+    if (stack->start == NULL) {
         fprintf(stderr, "gib_shadowstack_initialize: gib_alloc failed: %ld",
                 stack_size);
         exit(1);
     }
-    stack->ss_end = stack->ss_start + stack_size;
-    stack->ss_alloc = stack->ss_start;
+    stack->end = stack->start + stack_size;
+    stack->alloc = stack->start;
     return;
 }
 
@@ -1452,7 +1452,7 @@ static void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_siz
 bool gib_addr_in_nursery(char *ptr)
 {
     GibNursery *nursery = DEFAULT_NURSERY;
-    return ((ptr >= nursery->n_heap_start) && (ptr <= nursery->n_heap_end));
+    return ((ptr >= nursery->heap_start) && (ptr <= nursery->heap_end));
 }
 
 // Shadowstack API.
@@ -1464,28 +1464,28 @@ void gib_shadowstack_push(
     bool start_of_chunk
 )
 {
-    char *stack_alloc_ptr = stack->ss_alloc;
-    char *stack_end = stack->ss_end;
-    char **stack_alloc_ptr_addr = &(stack->ss_alloc);
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_end = stack->end;
+    char **stack_alloc_ptr_addr = &(stack->alloc);
     size_t size = sizeof(GibShadowstackFrame);
     if ((stack_alloc_ptr + size) > stack_end) {
         fprintf(stderr, "gib_shadowstack_push: out of memory");
         exit(1);
     }
     GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
-    frame->ssf_ptr = ptr;
-    frame->ssf_endptr = endptr;
-    frame->ssf_datatype = datatype;
-    frame->ssf_start_of_chunk = start_of_chunk;
+    frame->ptr = ptr;
+    frame->endptr = endptr;
+    frame->datatype = datatype;
+    frame->start_of_chunk = start_of_chunk;
     (*stack_alloc_ptr_addr) += size;
     return;
 }
 
 GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack)
 {
-    char *stack_alloc_ptr = stack->ss_alloc;
-    char *stack_start = stack->ss_start;
-    char **stack_alloc_ptr_addr = &(stack->ss_alloc);
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_start = stack->start;
+    char **stack_alloc_ptr_addr = &(stack->alloc);
     size_t size = sizeof(GibShadowstackFrame);
     if ((stack_alloc_ptr - size) < stack_start) {
         fprintf(stderr, "gib_shadowstack_pop: stack empty");
@@ -1498,20 +1498,20 @@ GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack)
 
 int32_t gib_shadowstack_length(GibShadowstack *stack)
 {
-    char *stack_alloc_ptr = stack->ss_alloc;
-    char *stack_start = stack->ss_start;
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_start = stack->start;
     return ( (stack_alloc_ptr - stack_start) / sizeof(GibShadowstackFrame) );
 }
 
 void gib_shadowstack_print_all(GibShadowstack *stack)
 {
-    char *run_ptr = stack->ss_start;
-    char *end_ptr = stack->ss_alloc;
+    char *run_ptr = stack->start;
+    char *end_ptr = stack->alloc;
     GibShadowstackFrame *frame;
     while (run_ptr < end_ptr) {
         frame = (GibShadowstackFrame *) run_ptr;
         printf("ptr=%p, endptr=%p, datatype=%d\n",
-               frame->ssf_ptr, frame->ssf_endptr, frame->ssf_datatype);
+               frame->ptr, frame->endptr, frame->datatype);
         run_ptr += sizeof(GibShadowstackFrame);
     }
     return;
@@ -1519,7 +1519,7 @@ void gib_shadowstack_print_all(GibShadowstack *stack)
 
 void gib_remset_reset(GibRememberedSet *set)
 {
-    set->ss_alloc = set->ss_start;
+    set->alloc = set->start;
 }
 
 static GibChunk *gib_alloc_region_on_heap(uint64_t size);
@@ -1544,8 +1544,8 @@ static GibChunk *gib_alloc_region_on_heap(uint64_t size)
     }
     char *heap_end = heap_start + size;
     GibChunk *region = gib_alloc(sizeof(GibChunk));
-    region->c_start = heap_start;
-    region->c_end = heap_end;
+    region->start = heap_start;
+    region->end = heap_end;
     return region;
 }
 
@@ -1560,14 +1560,14 @@ GibChunk *gib_alloc_region_in_nursery(uint64_t size)
 static GibChunk *gib_alloc_region_in_nursery_fast(uint64_t size, bool collected)
 {
     GibNursery *nursery = DEFAULT_NURSERY;
-    char *old = nursery->n_alloc;
+    char *old = nursery->alloc;
     char *bump = old - size;
     // TODO(ckoparkar): why does >= make some programs segfault?
-    if (bump >= nursery->n_heap_start) {
-        nursery->n_alloc = bump;
+    if (bump >= nursery->heap_start) {
+        nursery->alloc = bump;
         GibChunk *region = gib_alloc(sizeof(GibChunk));
-        region->c_start = bump;
-        region->c_end = old;
+        region->start = bump;
+        region->end = old;
         return region;
     }
     return gib_alloc_region_in_nursery_slow(size, collected);
@@ -1642,7 +1642,7 @@ void gib_indirection_barrier(
         // Store the address of the indirection pointer, *NOT* the address of
         // the indirection tag, in the remembered set.
         GibCursor indr_addr = from + sizeof(GibPackedTag);
-        gib_remset_push(gen->g_rem_set, indr_addr, from_footer_ptr, datatype);
+        gib_remset_push(gen->rem_set, indr_addr, from_footer_ptr, datatype);
         return;
     } else if (from_old && to_old) {
         // (4) oldgen -> oldgen

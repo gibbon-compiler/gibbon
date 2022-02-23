@@ -204,13 +204,13 @@ void gib_free_symtable(void);
 
 typedef struct gib_vector {
     // Bounds on the vector.
-    int64_t vec_lower, vec_upper;
+    int64_t lower, upper;
 
     // Size of each element.
-    size_t vec_elt_size;
+    size_t elt_size;
 
     // Elements of the vector.
-    void *vec_data;
+    void *data;
 
 } GibVector;
 
@@ -243,9 +243,9 @@ void gib_list_save_alloc_state(void);
 void gib_list_restore_alloc_state(void);
 
 typedef struct gib_list {
-    size_t ll_data_size;
-    void *ll_data;
-    struct gib_list *ll_next;
+    size_t data_size;
+    void *data;
+    struct gib_list *next;
 } GibList;
 
 GibList *gib_list_alloc(size_t data_size);
@@ -290,8 +290,8 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels);
  */
 
 typedef struct gib_chunk {
-    GibCursor c_start;
-    GibCursor c_end;
+    GibCursor start;
+    GibCursor end;
 } GibChunk;
 
 GibChunk *gib_alloc_region(uint64_t size);
@@ -311,24 +311,24 @@ void gib_print_global_region_count(void);
  */
 
 typedef struct gib_shadowstack {
-    char *ss_start;
-    char *ss_end;
-    char *ss_alloc;
+    char *start;
+    char *end;
+    char *alloc;
 } GibShadowstack;
 
 typedef struct gib_shadowstack_frame {
     // Pointer to packed data.
-    char *ssf_ptr;
+    char *ptr;
 
     // Pointer to the end of the chunk where this packed data lives.
-    char *ssf_endptr;
+    char *endptr;
 
     // An enum in C, which is 4 bytes.
     // The enum (GibDatatype) will be defined in the generated program.
-    uint32_t ssf_datatype;
+    uint32_t datatype;
 
-    // Does ssf_ptr point to the start of chunk?
-    bool ssf_start_of_chunk;
+    // Does ptr point to the start of chunk?
+    bool start_of_chunk;
 } GibShadowstackFrame;
 
 // Type snonyms for convenience.
