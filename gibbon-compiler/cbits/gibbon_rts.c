@@ -1267,9 +1267,6 @@ typedef struct gib_nursery {
     char *n_heap_end;
     char *n_alloc;
 
-    // Is the allocation area initialized?
-    bool n_initialized;
-
 } GibNursery;
 
 typedef struct gib_generation {
@@ -1392,7 +1389,6 @@ static void gib_nursery_initialize(GibNursery *nursery)
     }
     nursery->n_heap_end = nursery->n_heap_start + NURSERY_SIZE;
     nursery->n_alloc = nursery->n_heap_end;
-    nursery->n_initialized = true;
 
     return;
 }
@@ -1445,7 +1441,6 @@ static void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_siz
     }
     stack->ss_end = stack->ss_start + stack_size;
     stack->ss_alloc = stack->ss_start;
-    stack->ss_initialized = true;
     return;
 }
 
@@ -1469,7 +1464,6 @@ void gib_shadowstack_push(
     bool start_of_chunk
 )
 {
-    assert(stack->ss_initialized);
     char *stack_alloc_ptr = stack->ss_alloc;
     char *stack_end = stack->ss_end;
     char **stack_alloc_ptr_addr = &(stack->ss_alloc);
@@ -1489,7 +1483,6 @@ void gib_shadowstack_push(
 
 GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack)
 {
-    assert(stack->ss_initialized);
     char *stack_alloc_ptr = stack->ss_alloc;
     char *stack_start = stack->ss_start;
     char **stack_alloc_ptr_addr = &(stack->ss_alloc);
@@ -1505,7 +1498,6 @@ GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack)
 
 int32_t gib_shadowstack_length(GibShadowstack *stack)
 {
-    assert(stack->ss_initialized);
     char *stack_alloc_ptr = stack->ss_alloc;
     char *stack_start = stack->ss_start;
     return ( (stack_alloc_ptr - stack_start) / sizeof(GibShadowstackFrame) );
@@ -1568,7 +1560,6 @@ GibChunk *gib_alloc_region_in_nursery(uint64_t size)
 static GibChunk *gib_alloc_region_in_nursery_fast(uint64_t size, bool collected)
 {
     GibNursery *nursery = DEFAULT_NURSERY;
-    assert(nursery->n_initialized);
     char *old = nursery->n_alloc;
     char *bump = old - size;
     // TODO(ckoparkar): why does >= make some programs segfault?

@@ -311,7 +311,6 @@ void gib_print_global_region_count(void);
  */
 
 typedef struct gib_shadowstack {
-    bool ss_initialized;
     char *ss_start;
     char *ss_end;
     char *ss_alloc;
