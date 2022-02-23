@@ -569,7 +569,7 @@ unsafe fn evacuate_packed(
             // Update the poiners on the shadow-stack.
             (*wframe).ptr = dst;
             (*wframe).endptr = dst_end;
-            Ok((src, null_mut(), dst_end, tag))
+            Ok((src, dst, dst_end, tag))
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
         C_COPIED_TO_TAG => {
@@ -736,12 +736,7 @@ unsafe fn evacuate_packed(
                     // the cauterized tag.
                     match field_tag {
                         C_CAUTERIZED_TAG => {
-                            return Ok((
-                                src1,
-                                null_mut(),
-                                dst_end1,
-                                field_tag,
-                            ));
+                            return Ok((src1, dst1, dst_end1, field_tag));
                         }
                         _ => {
                             /*

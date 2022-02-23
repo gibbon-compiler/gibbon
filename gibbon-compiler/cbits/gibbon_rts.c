@@ -1242,7 +1242,7 @@ void gib_print_global_region_count(void)
 // #define NURSERY_SIZE (4 * MB)
 
 // 5KB for debugging.
-#define NURSERY_SIZE (5 * KB)
+#define NURSERY_SIZE (4 * KB)
 
 // If a region is over this size, alloc to refcounted heap directly.
 #define NURSERY_REGION_MAX_SIZE (NURSERY_SIZE / 2)
