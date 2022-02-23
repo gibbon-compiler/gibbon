@@ -113,7 +113,8 @@ data in the buffer!!
 Thus, we must only write a forwarding pointer when we've reached the true end
 of the source buffer. The only time we actually reach the true end is when we're
 evacuating a value starts at the very beginning of the chunk. Hence, we store
-this information in a shadow-stack frame.
+the start-of-chunk addresses in an auxillary data structure in the nursery
+and use them to check if we've reached the end of a chunk.
 
 
 *** Traversing burned data:
@@ -291,6 +292,7 @@ pub fn collect_minor(
         // Start by cauterizing the writers.
         let mut cenv = cauterize_writers(wstack)?;
         // Prepare to evacuate the readers.
+        let chunk_starts = nursery.chunk_starts();
         let mut oldest_gen = OldestGeneration(generations_ptr);
         unsafe {
             let rem_set = &mut RememberedSet(
@@ -298,18 +300,23 @@ pub fn collect_minor(
                 GcRootProv::RemSet,
             );
             // First evacuate the remembered set, then the shadow-stack.
-            let mut benv =
-                evacuate_remembered_set(&mut cenv, &mut oldest_gen, rem_set)?;
+            let mut benv = evacuate_remembered_set(
+                &mut cenv,
+                &chunk_starts,
+                &mut oldest_gen,
+                rem_set,
+            )?;
             rem_set.clear();
             evacuate_shadowstack(
                 &mut benv,
                 &mut cenv,
+                &chunk_starts,
                 &mut oldest_gen,
                 rstack,
             )?;
         }
         // Reset the allocation area and record stats.
-        nursery.reset_alloc();
+        nursery.clear();
         nursery.bump_num_collections();
         // Restore the remaining cauterized writers. Allocate space for them
         // in the nursery, not oldgen.
@@ -331,14 +338,10 @@ fn cauterize_writers(wstack: &Shadowstack) -> Result<CauterizedEnv> {
             write(ptr_next, frame);
             match cenv.get_mut(&ptr) {
                 None => {
-                    cenv.insert(ptr, ((*frame).start_of_chunk, vec![frame]));
+                    cenv.insert(ptr, vec![frame]);
                     ()
                 }
-                Some((start_of_chunk, frames)) => {
-                    *start_of_chunk =
-                        *start_of_chunk || (*frame).start_of_chunk;
-                    frames.push(frame)
-                }
+                Some(frames) => frames.push(frame),
             }
         }
     }
@@ -347,7 +350,7 @@ fn cauterize_writers(wstack: &Shadowstack) -> Result<CauterizedEnv> {
 
 /// See Note [Restoring uncauterized write cursors].
 fn restore_writers(cenv: &CauterizedEnv, heap: &mut impl Heap) -> Result<()> {
-    for (_wptr, (_start_of_chunk, frames)) in cenv.iter() {
+    for (_wptr, frames) in cenv.iter() {
         /*
         if !(*start_of_chunk) {
             return Err(RtsError::Gc(format!(
@@ -369,7 +372,7 @@ fn restore_writers(cenv: &CauterizedEnv, heap: &mut impl Heap) -> Result<()> {
 }
 
 /// See Note [Restoring uncauterized write cursors].
-type CauterizedEnv = HashMap<*mut i8, (bool, Vec<*mut C_GibShadowstackFrame>)>;
+type CauterizedEnv = HashMap<*mut i8, Vec<*mut C_GibShadowstackFrame>>;
 
 /// See Note [Traversing burned data].
 type BurnedAddressEnv = HashMap<*mut i8, *const i8>;
@@ -382,6 +385,7 @@ type BurnedAddressEnv = HashMap<*mut i8, *const i8>;
 /// See Note [Granularity of the burned addresses table].
 unsafe fn evacuate_remembered_set(
     cenv: &mut CauterizedEnv,
+    chunk_starts: &HashSet<*mut i8>,
     heap: &mut impl Heap,
     rem_set: &Shadowstack,
 ) -> Result<BurnedAddressEnv> {
@@ -428,6 +432,7 @@ unsafe fn evacuate_remembered_set(
                     evacuate_packed(
                         &mut benv,
                         cenv,
+                        chunk_starts,
                         heap,
                         &GcRootProv::RemSet,
                         packed_info,
@@ -452,6 +457,7 @@ unsafe fn evacuate_remembered_set(
 unsafe fn evacuate_shadowstack(
     benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
+    chunk_starts: &HashSet<*mut i8>,
     heap: &mut impl Heap,
     rstack: &Shadowstack,
 ) -> Result<()> {
@@ -489,6 +495,7 @@ unsafe fn evacuate_shadowstack(
                     evacuate_packed(
                         benv,
                         cenv,
+                        chunk_starts,
                         heap,
                         &GcRootProv::Stk,
                         packed_info,
@@ -499,12 +506,13 @@ unsafe fn evacuate_shadowstack(
                 // Update the pointers in shadow-stack.
                 (*frame).ptr = dst;
                 (*frame).endptr = dst_after_end;
-                // See Note [Adding a forwarding pointer at the end of
-                // every chunk]:
+                // Note [Adding a forwarding pointer at the end of every chunk].
                 match tag {
                     C_COPIED_TO_TAG | C_COPIED_TAG => {}
                     _ => {
-                        if (*frame).start_of_chunk || tag == C_CAUTERIZED_TAG {
+                        if chunk_starts.contains(&src)
+                            || tag == C_CAUTERIZED_TAG
+                        {
                             let burn = write(src_after, C_COPIED_TO_TAG);
                             write(burn, dst_after);
                         }
@@ -549,6 +557,7 @@ Returns: (src_after, dst_after, dst_end, maybe_tag)
 unsafe fn evacuate_packed(
     benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
+    chunk_starts: &HashSet<*mut i8>,
     heap: &mut impl Heap,
     prov: &GcRootProv,
     packed_info: &HashMap<C_GibPackedTag, DataconInfo>,
@@ -632,6 +641,7 @@ unsafe fn evacuate_packed(
             evacuate_packed(
                 benv,
                 cenv,
+                chunk_starts,
                 heap,
                 prov,
                 packed_info,
@@ -655,6 +665,7 @@ unsafe fn evacuate_packed(
             ) = evacuate_packed(
                 benv,
                 cenv,
+                chunk_starts,
                 heap,
                 prov,
                 packed_info,
@@ -725,6 +736,7 @@ unsafe fn evacuate_packed(
                     let (src1, dst1, dst_end1, field_tag) = evacuate_field(
                         benv,
                         cenv,
+                        chunk_starts,
                         heap,
                         prov,
                         ty,
@@ -765,6 +777,7 @@ unsafe fn evacuate_packed(
 unsafe fn evacuate_field(
     benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
+    chunk_starts: &HashSet<*mut i8>,
     heap: &mut impl Heap,
     prov: &GcRootProv,
     datatype: &C_GibDatatype,
@@ -787,6 +800,7 @@ unsafe fn evacuate_field(
         Some(DatatypeInfo::Packed(packed_info)) => evacuate_packed(
             benv,
             cenv,
+            chunk_starts,
             heap,
             prov,
             packed_info,
@@ -1003,11 +1017,29 @@ impl Nursery {
     }
 
     #[inline]
-    fn reset_alloc(&mut self) {
+    fn clear(&mut self) {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
             (*nursery).alloc = (*nursery).heap_end;
+            (*nursery).chunk_starts_i = 0;
         }
+    }
+
+    fn chunk_starts(&self) -> HashSet<*mut i8> {
+        let nursery: *mut C_GibNursery = self.0;
+        let mut chunk_starts = HashSet::new();
+        unsafe {
+            let mut run_ptr: *const i8 = (*nursery).chunk_starts;
+            let end_ptr = run_ptr.add(
+                size_of::<*const i8>() * (*nursery).chunk_starts_i as usize,
+            );
+            while run_ptr < end_ptr {
+                let (chunk_start_addr, next): (*mut i8, _) = read(run_ptr);
+                chunk_starts.insert(chunk_start_addr);
+                run_ptr = next;
+            }
+        }
+        chunk_starts
     }
 }
 

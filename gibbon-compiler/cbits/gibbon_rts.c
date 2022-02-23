@@ -1267,6 +1267,10 @@ typedef struct gib_nursery {
     char *heap_end;
     char *alloc;
 
+    // A place to store starting addresses of chunks.
+    char *chunk_starts;
+    uint64_t chunk_starts_i;
+
 } GibNursery;
 
 typedef struct gib_generation {
@@ -1389,6 +1393,13 @@ static void gib_nursery_initialize(GibNursery *nursery)
     }
     nursery->heap_end = nursery->heap_start + NURSERY_SIZE;
     nursery->alloc = nursery->heap_end;
+    nursery->chunk_starts = (char *) gib_alloc(NURSERY_SIZE);
+    if (nursery->chunk_starts == NULL) {
+        fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %ld",
+                NURSERY_SIZE);
+        exit(1);
+    }
+    nursery->chunk_starts_i = 0;
 
     return;
 }
@@ -1460,8 +1471,7 @@ void gib_shadowstack_push(
     GibShadowstack *stack,
     char *ptr,
     char *endptr,
-    uint32_t datatype,
-    bool start_of_chunk
+    uint32_t datatype
 )
 {
     char *stack_alloc_ptr = stack->alloc;
@@ -1476,7 +1486,6 @@ void gib_shadowstack_push(
     frame->ptr = ptr;
     frame->endptr = endptr;
     frame->datatype = datatype;
-    frame->start_of_chunk = start_of_chunk;
     (*stack_alloc_ptr_addr) += size;
     return;
 }
@@ -1562,9 +1571,12 @@ static GibChunk *gib_alloc_region_in_nursery_fast(uint64_t size, bool collected)
     GibNursery *nursery = DEFAULT_NURSERY;
     char *old = nursery->alloc;
     char *bump = old - size;
-    // TODO(ckoparkar): why does >= make some programs segfault?
     if (bump >= nursery->heap_start) {
         nursery->alloc = bump;
+        char *chunk_starts_alloc = nursery->chunk_starts +
+            (nursery->chunk_starts_i * sizeof(char*));
+        *(char**) chunk_starts_alloc = bump;
+        nursery->chunk_starts_i = nursery->chunk_starts_i + 1;
         GibChunk *region = gib_alloc(sizeof(GibChunk));
         region->start = bump;
         region->end = old;

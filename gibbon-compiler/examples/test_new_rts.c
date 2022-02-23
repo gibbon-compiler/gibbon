@@ -215,7 +215,7 @@ GibInt do_reverse(GibInt n_19_183_289)
     _print_List(NULL, pvrtmp_1385);
     printf("\n");
 
-    gib_shadowstack_push(rstack, r_720, end_r_720, List_T, false);
+    gib_shadowstack_push(rstack, r_720, end_r_720, List_T);
 
     GibChunk *region_1382 =
         gib_alloc_region2(gib_get_inf_init_chunk_size());
@@ -317,9 +317,9 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
             // Push to shadow stack.
             // xs, ys, output
-            gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T, false);
-            gib_shadowstack_push(rstack, ys_37_180_285, end_r_616, List_T, false);
-            gib_shadowstack_push(wstack, loc_614, end_r_617, List_T, false);
+            gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T);
+            gib_shadowstack_push(rstack, ys_37_180_285, end_r_616, List_T);
+            gib_shadowstack_push(wstack, loc_614, end_r_617, List_T);
             // Pushed.
 
             GibChunk *region_1353 =
@@ -368,9 +368,9 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
             // // Push to shadow stack.
             // // xs, ys, output
-            // gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T, false);
-            // gib_shadowstack_push(rstack, r_705, end_r_705, List_T, true);
-            // gib_shadowstack_push(wstack, loc_614, end_r_617, List_T, false);
+            // gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T);
+            // gib_shadowstack_push(rstack, r_705, end_r_705, List_T);
+            // gib_shadowstack_push(wstack, loc_614, end_r_617, List_T);
             // // Pushed.
 
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_12 =
@@ -803,7 +803,7 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
     if (fltIf_266_295) {
 
         // push to shadow stack.
-        gib_shadowstack_push(wstack, loc_651, end_r_652, Tree_T, false);
+        gib_shadowstack_push(wstack, loc_651, end_r_652, Tree_T);
         // pushed.
 
         GibChunk *region_1413 = gib_alloc_region2(gib_get_inf_init_chunk_size());
@@ -903,7 +903,7 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
         GibCursor loc_743 = loc_651 + 1;
 
         // push to shadow stack.
-        gib_shadowstack_push(rstack, loc_651, end_r_652, Tree_T, false);
+        gib_shadowstack_push(rstack, loc_651, end_r_652, Tree_T);
         // pushed.
 
         GibCursorGibCursorGibCursorProd tmp_struct_7 =
