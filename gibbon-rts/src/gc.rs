@@ -700,7 +700,9 @@ unsafe fn evacuate_packed(
             // forwarding pointer.
             let space_reqd: usize = (32 + *scalar_bytes).into();
             {
-                // Scope for mutable variables dst_mut and src_mut.
+                // Scope for mutable variables src_mut and dst_mut,
+                // which are the read and write cursors in the source
+                // and destination buffer respectively.
 
                 let (mut dst_mut, mut dst_end_mut) =
                     Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
@@ -714,19 +716,17 @@ unsafe fn evacuate_packed(
                 dst_mut = dst_mut.add(*scalar_bytes as usize);
                 // Add forwarding pointers:
                 // if there's enough space, write a COPIED_TO tag and
-                // dst's address at src. Otherwise write a COPIED tag.
+                // dst's address at src. Otherwise just write a COPIED tag.
                 // After the forwarding pointer, burn the rest of
                 // space previously occupied by scalars.
-                if *scalar_bytes >= 8 {
-                    let mut burn = write(src, C_COPIED_TO_TAG);
-                    burn = write(burn, dst);
-                    // TODO(ckoparkar): check if src_mut != burn?
-                    let i = src_mut.offset_from(burn);
-                    write_bytes(burn, C_COPIED_TAG, i as usize);
+                let burn = if *scalar_bytes >= 8 {
+                    let burn0 = write(src, C_COPIED_TO_TAG);
+                    write(burn0, dst)
                 } else {
-                    let burn = write(src, C_COPIED_TAG);
+                    write(src, C_COPIED_TAG)
+                };
+                if src_mut != burn {
                     let i = src_mut.offset_from(burn);
-                    // TODO(ckoparkar): check if src_mut != burn?
                     write_bytes(burn, C_COPIED_TAG, i as usize);
                 }
                 // TODO(ckoparkar):
@@ -751,17 +751,6 @@ unsafe fn evacuate_packed(
                             return Ok((src1, dst1, dst_end1, field_tag));
                         }
                         _ => {
-                            /*
-                            if src1.is_null() {
-                                return Err(RtsError::Gc(format!(
-                                        "evacuate_packed: Got back null as an \
-                                         end-witness while traversing field of \
-                                         type {:?} in the constructor {:?}; \
-                                         packed_info={:?}",
-                                        ty, tag, packed_info
-                                    )));
-                            }
-                             */
                             src_mut = src1;
                             dst_mut = dst1;
                             dst_end_mut = dst_end1;
