@@ -1,6 +1,5 @@
 module Gibbon.Passes.RegionsInwards (regionsInwards) where
 
-import GHC.Generics (Generic)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import qualified Data.List as L 
@@ -11,7 +10,6 @@ import Gibbon.Common
 import Gibbon.L2.Syntax
 import Data.Maybe ()
 import qualified Data.Maybe as S
-import Gibbon.Passes.InferLocations (inferExp')
 
 
 data DelayedBind = DelayRegion Region                                            --define data type that can be Region, Loc, LocExp to store the delayed bindings
@@ -138,7 +136,7 @@ placeRegionInwards env scopeSet ex  =
                           newEnv   = M.insert myKey' valList' tempDict
                           in placeRegionInwards newEnv scopeSet rhs 
 
-            FreeLE -> error "Free LE not implemented yet!"                       --For FreeLE we need to figure out how to handle this
+            FreeLE -> error "Free LE not implemented yet!"                       --For FreeLE we need to figure out how to handle this?
          
         LetParRegionE r rhs -> do                                                --Handle a parallel LetRegion
           let key' = S.singleton (regionToVar r)
@@ -147,91 +145,99 @@ placeRegionInwards env scopeSet ex  =
               in placeRegionInwards env' scopeSet rhs 
 
 
-        RetE locList _                                  -> do  {-Actual type is RetE locList variable, here you can't just return the expression, look at the locList to see which variables are alive in env and codegen them before-}
+        RetE locList _                                  -> do              {- Look at the locList to see which variables are alive in env and codegen them before -}
                                                             let (_, ex') = dischargeBinds' env (S.fromList locList) ex
                                                               in return ex'
 
-        FromEndE _                                     -> return ex {-Actual type is FromEndE loc, Don't need to worry about it will appear later in the pipeline, Just return the expression-}
-        BoundsCheck{}                                  -> return ex {-Actual type is BoundsCheck integer l1 l2, Don't need to worry about it will appear later in the pipeline, Just return the expression-}
-        AddFixed{}                                     -> return ex {-Actual type is AddFixed variable integer, Return the expression-}
-        IndirectionE{}                                 -> return ex {-Actual type: IndirectionE tyCon dataCon (l1,v1) (l2,v2) rhs, skip the recursion, IndirectionE doesn't appear until later in the IR language, return the expression-}
-        GetCilkWorkerNum                               -> return ex {-Just return the expression, there is no recusrion to do here-}
-        LetAvail vs e                                  -> Ext . LetAvail vs <$> go e  {-Recurse on the rhs directly-}
+        FromEndE _                                     -> return ex        {- Actual type is FromEndE loc, Don't need to worry about it will appear later in the pipeline, Just return the expression -}
+        BoundsCheck{}                                  -> return ex        {- Actual type is BoundsCheck integer l1 l2, Don't need to worry about it will appear later in the pipeline, Just return the expression -}
+        AddFixed{}                                     -> return ex        {- Actual type is AddFixed variable integer, Return the expression -}
+        IndirectionE{}                                 -> return ex        {- Actual type: IndirectionE tyCon dataCon (l1,v1) (l2,v2) rhs, skip the recursion, IndirectionE doesn't appear until later in the IR language, return the expression -}
+        GetCilkWorkerNum                               -> return ex                   {- Just return the expression, there is no recusrion to do here -}
+        LetAvail vs e                                  -> Ext . LetAvail vs <$> go e  {- Recurse on the rhs directly -}
         
 
      -- Straightforward recursion ...
-    VarE{}                 -> return ex --Just return Nothing special here 
-    LitE{}                 -> return ex --Just return Nothing special here 
-    FloatE{}               -> return ex --Just return Nothing special here 
-    LitSymE{}              -> return ex --Just return Nothing special here 
+    VarE{}                 -> return ex        -- Just return Nothing special here 
+    LitE{}                 -> return ex        -- Just return Nothing special here 
+    FloatE{}               -> return ex        -- Just return Nothing special here 
+    LitSymE{}              -> return ex        -- Just return Nothing special here 
     AppE f locVars ls      -> do
-                              let allKeys  =  M.keys env                                                            -- List of all keys from env
-                                  keyList  = map (\variable -> F.find (S.member variable) allKeys) locVars          -- For each var in the input set find its corresponding key
-                                  keyList' = S.catMaybes keyList                                                    -- Filter all the Nothing values from the list and let only Just values in the list
+                              let allKeys  =  M.keys env                                                             -- List of all keys from env
+                                  keyList  = map (\variable -> F.find (S.member variable) allKeys) locVars           -- For each var in the input set find its corresponding key
+                                  keyList' = S.catMaybes keyList                                                     -- Filter all the Nothing values from the list and let only Just values in the list
                                   newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'       -- Filter all the Nothing values from the list and let only Just values in the list
                                   newVals   = map (\key -> M.findWithDefault [] key env) newKeys
-                                  tupleList = zipWith (\x y -> (x, y)) newKeys newVals
+                                  tupleList = zip newKeys newVals
                                   newEnv'   = M.fromList tupleList
                                in do ls' <- mapM (placeRegionInwards newEnv' scopeSet) ls
                                      let (_, ex') = dischargeBinds' env (S.fromList locVars) (AppE f locVars ls')
                                       in return ex'
 
-      --Just return Nothing special here 
-    PrimAppE{}             -> return ex --Just return Nothing special here 
+    PrimAppE{}             -> return ex                                                                                   -- Just return, Nothing special here 
 
     DataConE loc dataCons args      -> do
-                                       let allKeys  =  M.keys env                                                        -- List of all keys from env
-                                           keyList  = map (\variable -> F.find (S.member variable) allKeys) [loc]        -- For each var in the input set find its corresponding key
-                                           keyList' = S.catMaybes keyList                                                -- Filter all the Nothing values from the list and let only Just values in the list
-                                           newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'  -- Filter all the Nothing values from the list and let only Just values in the list
+                                       let allKeys  =  M.keys env                                                         -- List of all keys from env
+                                           keyList  = map (\variable -> F.find (S.member variable) allKeys) [loc]         -- For each var in the input set find its corresponding key
+                                           keyList' = S.catMaybes keyList                                                 -- Filter all the Nothing values from the list and let only Just values in the list
+                                           newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'   -- Filter all the Nothing values from the list and let only Just values in the list
                                            newVals   = map (\key -> M.findWithDefault [] key env) newKeys
-                                           tupleList = zipWith (\x y -> (x, y)) newKeys newVals
+                                           tupleList = zip newKeys newVals
                                            newEnv'   = M.fromList tupleList
                                            in do args' <- mapM (placeRegionInwards newEnv' scopeSet) args
                                                  let (_, ex') = dischargeBinds' env (S.singleton loc) (DataConE loc dataCons args')
                                                   in return ex'                        
                                                   
-    ProjE i e              -> ProjE i <$> go e {-Simple recursion on e-}
+    ProjE i e              -> ProjE i <$> go e    {- Simple recursion on e -}
 
-    IfE a b c              -> do  {-Check if there are freeVariables in the condition a, if the set has any freeVars from "a" then codegen all the locations and regions before the IfE-}
-                                     let (d, a') =  {-dbgTraceIt "Starting binding from IfE"-} (dischargeBinds env scopeSet a) --If there are freeVariables in a then codgen bindings for those in a
-                                     b' <- placeRegionInwards d scopeSet b        --Recurse on b (Then part) 
-                                     c' <- placeRegionInwards d scopeSet c        --Recurse on c (Else part)
-                                     return $ IfE a' b' c' --dbgTraceIt "End IfE"                        --Return the new IfE expression
+    IfE a b c              -> do     -- Optimization for IF statements check the freeVariables in b and c, intersect them to avoid generating duplicate bindings at in then and else part
+                                     let freeVarsB  = freeVars b  
+                                         freeVarsC  = freeVars c
+                                         commonVars = freeVarsB `S.intersection` freeVarsC
+                                         allKeys    = M.keys env
+                                         keyList    = map (\variable -> F.find (S.member variable) allKeys) (S.toList commonVars)
+                                         keyList'   = S.catMaybes keyList
+                                         newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'
+                                         newVals    = map (\key -> M.findWithDefault [] key env) newKeys
+                                         tupleList  = zip newKeys newVals
+                                         newEnv'    = M.fromList tupleList
+                                     b' <- placeRegionInwards newEnv' scopeSet b       -- Recurse on b (Then part) 
+                                     c' <- placeRegionInwards newEnv' scopeSet c       -- Recurse on c (Else part)
+                                     let (_, a') = dischargeBinds env scopeSet a
+                                     return $ IfE a' b' c'                             -- Return the new IfE expression
 
-    MkProdE ls                    -> MkProdE <$> mapM go ls {-Recurse over all expression in the tuple in the expression ls-}
+    MkProdE ls                    -> MkProdE <$> mapM go ls                            {- Recurse over all expression in the tuple in the expression ls -}
 
     LetE (v,locs,ty,rhs) bod      -> do
-                                    let newScope = S.insert v scopeSet                                                              {-The locs will be empty at this point, so just update scope set and recurse-}
+                                    let newScope = S.insert v scopeSet                                                     {- The locs will be empty at this point, so just update scope set and recurse -}
                                         allKeys  =  M.keys env
-                                        free_vars =   locsInTy ty                                                                  -- List of all keys from env
-                                        keyList  = map (\variable -> F.find (S.member variable) allKeys) free_vars  -- For each var in the input set find its corresponding key
+                                        free_vars =   locsInTy ty                                                          -- List of all keys from env
+                                        keyList  = map (\variable -> F.find (S.member variable) allKeys) free_vars         -- For each var in the input set find its corresponding key
                                         keyList' = S.catMaybes keyList 
                                         newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'       -- Filter all the Nothing values from the list and let only Just values in the list
                                         newVals   = map (\key -> M.findWithDefault [] key env) newKeys
-                                        tupleList = zipWith (\x y -> (x, y)) newKeys newVals
+                                        tupleList = zip newKeys newVals
                                         newEnv'   = M.fromList tupleList
                                         in do ex' <- LetE . (v,locs,ty,) <$> placeRegionInwards newEnv' newScope rhs <*> placeRegionInwards newEnv' newScope bod
                                               let (_, ex'') = dischargeBinds' env (S.fromList free_vars) ex'
-                                               in {-dbgTraceIt "\nPrint info in LetE: (v, locs, ty rhs)\n" dbgTraceIt (sdoc (v, locs, ty, rhs, env, newEnv',ex'')) dbgTraceIt (sdoc (keyList, ex', free_vars, newVals, tupleList)) dbgTraceIt "End of LetE\n"-} return ex''
+                                               in return ex''
                                           
-                                      -- in dbgTraceIt "\nPrint info in LetE: (v, locs, ty rhs)\n" dbgTraceIt (sdoc (v, locs, ty, rhs)) dbgTraceIt "End of LetE\n"  {-dbgTraceIt "\nThis is what the LetE expression look like in L2 at this point\n" dbgTraceIt (sdoc ex) dbgTraceIt "\nEnd of LetE\n"-}   
     CaseE scrt brs                -> do      
       brs' <- mapM 
-        (\(a,b,c) -> do let varList = fmap fst b                                                                       --Get all the variables from the tuple list
+        (\(a,b,c) -> do let varList = fmap fst b                                                                       -- Get all the variables from the tuple list
                             newScope  = scopeSet `S.union` S.fromList varList                                          -- Make the newScope set by unioning the old one with the varList
                             allKeys   =  M.keys env
-                            free_vars = freeVars c `S.union` newScope                                                                     -- List of all keys from env
-                            keyList   = map (\variable -> F.find (S.member variable) allKeys) (S.toList free_vars)   -- For each var in the input set find its corresponding key
+                            free_vars = freeVars c `S.union` newScope                                                  -- List of all keys from env
+                            keyList   = map (\variable -> F.find (S.member variable) allKeys) (S.toList free_vars)     -- For each var in the input set find its corresponding key
                             keyList'  = S.catMaybes keyList
-                            newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'       -- Filter all the Nothing values from the list and let only Just values in the list
+                            newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'               -- Filter all the Nothing values from the list and let only Just values in the list
                             newVals   = map (\key -> M.findWithDefault [] key env) newKeys
-                            tupleList = zipWith (\x y -> (x, y)) newKeys newVals
+                            tupleList = zip newKeys newVals
                             newEnv'   = M.fromList tupleList
                         c' <- placeRegionInwards newEnv' newScope c
-                        let (_, c'') = {-dbgTraceIt "Starting binding from CaseE"-} dischargeBinds' env free_vars c'          -- Discharge the binds using the newScope and the dictionary
-                         in {-dbgTraceIt "Print (c, c' c'') in CaseE\n" dbgTraceIt (sdoc c) dbgTraceIt "1\n" dbgTraceIt (sdoc c') dbgTraceIt "2\n" dbgTraceIt (sdoc c'') dbgTraceIt "3\n" dbgTraceIt (sdoc (env,free_vars, newEnv', keyList, keyList')) dbgTraceIt "End CaseE\n"-} (return (a,b,c''))) brs
-                        {-dbgTraceIt "Print the env that is passed Initially\n" dbgTraceIt (sdoc env) dbgTraceIt "\nPrint Parts of the CaseE statement\n" dbgTraceIt (sdoc (a, b, c)) dbgTraceIt "\nEnd of CaseE a, b, c\n" -}                              --dbgTraceIt (sdoc (c,c'))
+                        let (_, c'') = dischargeBinds' env free_vars c'                                                -- Discharge the binds using the newScope and the dictionary
+                         in return (a,b,c'')) brs
+                       
       return $ CaseE scrt brs'
     TimeIt e ty b                 -> do
       e' <- go e
@@ -239,89 +245,36 @@ placeRegionInwards env scopeSet ex  =
     SpawnE{}                      -> pure ex   
     SyncE{}                       -> pure ex
     WithArenaE v e                -> WithArenaE v <$> go e
-    MapE{}                        -> return ex --Is there a recursion element to this?
-    FoldE{}                       -> return ex --Is there a recursion element to this?
+    MapE{}                        -> return ex                        -- Is there a recursion element to this?
+    FoldE{}                       -> return ex                        -- Is there a recursion element to this?
   where 
     go = placeRegionInwards env scopeSet
 
-    --Cases for which checking the local variables might be important
-    --AppE
-    --DataConE
-    --IfE
-    --LetE
-    --CaseE
-    --SpawnE
-
-{-
-
-foo x y = x
-
-bar x y = y
-
-initial inScope for main expression = (names of all top level functions)
-initial inScope for functions = (names of all top level functions) + (arguments to functions)
-
--- lots of passes track Env2
-
--- allFreeVars :: Exp2 -> [Var]
-
-main =
-  let a = foo 1 2 in -- inScope = {foo, bar}
-  let b = bar 2 3 in -- inScope = {foo, bar, a}
-  (a,b)              -- inScope = {foo, bar, a, b}
-
-letregion r bod -> inScope doesn't grow here
-
-grow for:
-- let expressions
-- bound variables in pattern matches for case
-
--}
-
---This is a function to discharge binds given a dictionary, scopeSet and expression where free variables might exist
+-- This is a function to discharge binds given a dictionary, scopeSet and expression where free variables might exist
 dischargeBinds :: DelayedBindEnv -> S.Set Var -> Exp2 -> (DelayedBindEnv, Exp2)
 dischargeBinds env scopeSet exp2 =
-  let free_vars        = S.difference (freeVars exp2) scopeSet   --Take the difference of the scopeSet with the set that freeVar gives.
+  let free_vars        = S.difference (freeVars exp2) scopeSet                         -- Take the difference of the scopeSet with the set that freeVar gives.
       (newEnv, newExp) = codeGen free_vars env exp2
-  in {-dbgTraceIt "\nPrint info in discharge binds (env, freevars, newEnv, newExp)\n" dbgTraceIt (sdoc (env, free_vars, newEnv, newExp, scopeSet)) dbgTraceIt "\nEnd\n"-} (newEnv, newExp)
+  in  (newEnv, newExp)
 
---This is a duplicate function to the one above but instead it takes a Set of LocVar to codeGen directly instead of the expression and scopeSet.
+-- This is a duplicate function to the one above but instead it takes a Set of LocVar to codeGen directly instead of the expression and scopeSet.
 dischargeBinds' :: DelayedBindEnv -> S.Set LocVar -> Exp2 -> (DelayedBindEnv, Exp2)
 dischargeBinds' env free_vars exp2 = do codeGen free_vars env exp2  
-
-{-
-
---Use this function to recursively create Maybe Exp2, it terminates when you reach [] or the variable you are doing codeGen for
-buildExp2 :: [DelayedBind] -> LocVar -> Bool -> (Maybe Exp2 , Bool)
-buildExp2 valList var terminate = case (valList, var, terminate) of
-  ([], _ , _)              -> (Nothing, True)
-  (_ , _ , True)           -> (Nothing, True) 
-  (x : xs, locVar, False)  -> case x of
-    DelayRegion region     -> if region == locVar 
-                                then LetRegionE region (buildExp2 xs locVar True)
-                                else LetRegionE region (buildExp2 xs locVar False)
-    DelayLoc variable locExp -> if variable == locVar 
-                                then LetLocE variable locExp (buildExp2 xs locVar True)
-                                else LetLocE variable locExp (buildExp2 xs locVar False)
-    DelayParRegion region  -> if region == locVar 
-                                then LetParRegionE region (buildExp2 xs locVar True)
-                                else LetParRegionE region (buildExp2 xs locVar False) 
-                                
--}
 
 -- Use this function to codegen from the env by giving a set of variables you want to codegen from
 codeGen :: S.Set LocVar -> DelayedBindEnv -> Exp2 -> (DelayedBindEnv, Exp2)
 codeGen set env body =
-  let allKeys   =  M.keys env                                                          --List of all keys from env
+  let allKeys   =  M.keys env                                                          -- List of all keys from env
       keyList   = map (\variable -> F.find (S.member variable) allKeys ) (toList set)  -- For each var in the input set find its corresponding key
       keyList'  = S.toList $ S.fromList $ S.catMaybes keyList                          -- Filter out all the Nothing values from the list and let only Just values in the list
       valList   = concatMap (\key -> M.findWithDefault [] key env) keyList'            -- For each key in the keyList from before find the value associated with the key
-      newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'       -- Filter all the Nothing values from the list and let only Just values in the list
+      newKeys   = S.toList $ S.fromList allKeys `S.difference` S.fromList keyList'     -- Filter all the Nothing values from the list and let only Just values in the list
       newVals   = map (\key -> M.findWithDefault [] key env) newKeys
-      tupleList = zipWith (\x y -> (x, y)) newKeys newVals
+      tupleList = zip newKeys newVals
       newEnv'   = M.fromList tupleList
       exps      = foldr bindDelayedBind body valList                                   -- Get all the bindings for all the expressions in the key  
-   in {-dbgTraceIt "Print info codeGen (keys, vals, delete, newEnv)\n" dbgTraceIt ( sdoc (keyList', valList, newEnv, newEnv') ) dbgTraceIt "End: codegen\n"-} (newEnv', exps) -- dbgTraceIt (sdoc (set,env,body)) -- This was for printing : dbgTraceIt (sdoc (set,env,body))
+   in (newEnv', exps)                                                
+                                                                     
 
 bindDelayedBind :: DelayedBind -> Exp2 -> Exp2
 bindDelayedBind delayed body =
@@ -330,33 +283,28 @@ bindDelayedBind delayed body =
     DelayParRegion r -> Ext $ LetParRegionE r body
     DelayLoc loc locexp -> Ext $ LetLocE loc locexp body
 
--- convertFromMaybe :: Maybe a -> a
--- convertFromMaybe maybeA = case maybeA of
---   Nothing -> null
---   Just a  -> a 
 
-
---A function for use specific to this pass which gives all the possible variables and local variables that are used in a particular expression
+-- A function for use specific to this pass which gives all the possible variables and local variables that are used in a particular expression
 freeVars :: Exp2 -> S.Set Var
 freeVars ex = case ex of
   Ext ext                           ->
     case ext of
       LetRegionE _ rhs              -> freeVars rhs
-      LetLocE loc phs rhs           -> 
+      LetLocE _ phs rhs             -> 
         case phs of
-        StartOfLE r                 -> freeVars rhs 
-        AfterConstantLE _ loc'      -> freeVars rhs
-        AfterVariableLE var loc' _  -> freeVars rhs
-        InRegionLE r                -> freeVars rhs
-        FromEndLE loc'              -> freeVars rhs
+        StartOfLE _                 -> freeVars rhs 
+        AfterConstantLE _ _         -> freeVars rhs
+        AfterVariableLE{}           -> freeVars rhs
+        InRegionLE _                -> freeVars rhs
+        FromEndLE _                 -> freeVars rhs
         _                           -> S.empty
       _                             -> S.empty
   
-  LetE (_,locs, ty,rhs) bod         -> (S.fromList locs)  `S.union` (S.fromList (locsInTy ty)) `S.union` (freeVars rhs) `S.union` (freeVars bod)
+  LetE (_,locs, ty,rhs) bod         -> S.fromList locs  `S.union` S.fromList (locsInTy ty) `S.union` freeVars rhs `S.union` freeVars bod
   LitE _                            -> S.empty
   LitSymE _                         -> S.empty
   VarE v                            -> S.singleton v
-  AppE v locvarList ls              -> S.unions (L.map freeVars ls) `S.union` (S.singleton v) `S.union` (S.fromList locvarList)
+  AppE v locvarList ls              -> S.unions (L.map freeVars ls) `S.union` S.singleton v `S.union` S.fromList locvarList
   PrimAppE _ ls                     -> S.unions (L.map freeVars ls) 
   MkProdE ls                        -> S.unions (L.map freeVars ls)
   DataConE locVar _ ls              -> S.singleton locVar  `S.union`  S.unions (L.map freeVars ls)
@@ -367,96 +315,3 @@ freeVars ex = case ex of
                                            let (vars, locVars) = unzip vlocs
                                            in freeVars ee `S.union` S.fromList vars `S.union` S.fromList locVars) ls)
   _                                 -> S.empty
-
-
-{-
-
-free variables
-----------------------
-
-let x = 1 in
-let y = 2 in
-(x,y)
-
-freeVars (x,y) = {x,y}
-freeVars (let y = 2 in (x,y)) = {x}
-
-LetE (v,locs,ty,rhs) bod -> freeVars rhs `S.difference` (S.singleton v)
-
-(if loc is free ty then loc is always free rhs.)
-
-duplicating bindings
-------------------------
-
-letregion r1 in
-letloc l1 = startof r1 in
-if X
-  then ....allocate to l1....
-  else ....allocate to l1....
-
-==> 
-
-if X
-then letregion r1 in
-     letloc l1 = startof r1 in
-     ... allocate to l1 ...
-else letregion r1 in
-     letloc l1 = startof r1 in
-     ... allocate to l1 ...
-
-=== implementation ===
-
-IfE a b c -> do 
-             let free_b = allFreeVars b
-             let free_c = allFreeVars c
-             let common = free_b `S.intersect` free_c -- all regions and locations 
-                                                      -- used in both branches
-             let keys_to_delete = blah common
-             b' <- placeRegionsInwards (env - keys_to_delete) scopeSet b
-             c' <- placeRegionsInwards (env - keys_to_delete) scopeSet c
-             dischargeBinds' env common ex'
-
-
-old version
--------------------------
-
-letregion r1 in
-letloc l1 = startof r1 in
-(if X
-  then ....allocate to l1....
-  else ....allocate to l1....)
-
-when we process the if expression, it returns the regions and locations it generated
-bindings for. 
-
-LetLocE loc locexp bod -> do (bod',X) recurse env in_scope bod
-                             -- X tells us if loc is bound in bod
-                             if (loc is bound in bod)
-                               then bod
-                               else LetLocE loc locexp bod
-
-=====>
- 
-
-
-State monad:
-----------------------------
-
-C:
-
-map_t my_map = XX;
-
-int foo(expr_t ex) {
-  // update + use my_map
-}
-
-Hs:
-
-foo :: Map x y -> a
-foo env = ...
-
-typedef PassM x y a = State (Map x y) a
-
-return, bind;
-
--}
