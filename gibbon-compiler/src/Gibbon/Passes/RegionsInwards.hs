@@ -203,7 +203,7 @@ placeRegionInwards env scopeSet ex  =
                                          newEnv'    = M.fromList tupleList
                                      b' <- placeRegionInwards newEnv' scopeSet b       -- Recurse on b (Then part) 
                                      c' <- placeRegionInwards newEnv' scopeSet c       -- Recurse on c (Else part)
-                                     let (_, a') = dischargeBinds env scopeSet a
+                                     let (_, a') = dischargeBinds' env commonVars a
                                      return $ IfE a' b' c'                             -- Return the new IfE expression
 
     MkProdE ls                    -> MkProdE <$> mapM go ls                            {- Recurse over all expression in the tuple in the expression ls -}
@@ -285,6 +285,9 @@ bindDelayedBind delayed body =
 
 
 -- A function for use specific to this pass which gives all the possible variables and local variables that are used in a particular expression
+-- This pass was made speciic because other version in gibbon don't return location variables, this version also adds location variables to the 
+-- returned set
+
 freeVars :: Exp2 -> S.Set Var
 freeVars ex = case ex of
   Ext ext                           ->
