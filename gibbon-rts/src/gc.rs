@@ -16,6 +16,7 @@ use std::mem::size_of;
 use std::ptr::{copy_nonoverlapping, null, null_mut, write_bytes};
 
 use crate::ffi::types::*;
+use crate::tagged_pointer::*;
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Notes
@@ -513,8 +514,14 @@ unsafe fn evacuate_shadowstack(
                         if chunk_starts.contains(&src)
                             || tag == C_CAUTERIZED_TAG
                         {
-                            let burn = write(src_after, C_COPIED_TO_TAG);
-                            write(burn, dst_after);
+                            write_forwarding_pointer_at(
+                                src_after,
+                                dst_after,
+                                dst_after_end
+                                    .offset_from(dst_after)
+                                    .try_into()
+                                    .unwrap(),
+                            );
                         }
                     }
                 }
@@ -582,7 +589,9 @@ unsafe fn evacuate_packed(
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
         C_COPIED_TO_TAG => {
-            let (fwd_ptr, _): (*mut i8, _) = read_mut(src_after_tag);
+            let (tagged_fwd_ptr, _): (u64, _) = read_mut(src_after_tag);
+            let tagged = TaggedPointer::from_u64(tagged_fwd_ptr);
+            let fwd_ptr = tagged.pointer();
             let space_reqd = 18;
             let (dst1, dst_end1) =
                 Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
@@ -592,9 +601,14 @@ unsafe fn evacuate_packed(
                 None => null_mut(),
                 Some(end) => *end as *mut i8,
             };
-            // TODO(ckoparkar):
-            // (1) update outsets and refcounts if evacuating to the oldest
-            //     generation.
+            // Update outsets and refcounts if evacuating to the oldest
+            // generation.
+            if heap.is_oldest() {
+                let fwd_footer_offset = tagged.tag();
+                let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
+                bump_refcount(fwd_footer_addr);
+                add_to_outset(dst_end, fwd_footer_addr);
+            }
             Ok((src_after_burned, dst_after_indr, dst_end1, tag))
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
@@ -608,7 +622,9 @@ unsafe fn evacuate_packed(
             // C_COPIED_TO_TAG i.e. at the forwarding pointer.
             let offset = scan_ptr.offset_from(src) - 1;
             // The forwarding pointer that's available.
-            let (fwd_avail, _): (*const i8, _) = read(scan_ptr);
+            let (tagged_fwd_avail, _): (u64, _) = read(scan_ptr);
+            let tagged = TaggedPointer::from_u64(tagged_fwd_avail);
+            let fwd_avail = tagged.pointer();
             // The position in the destination buffer we wanted.
             let fwd_want = fwd_avail.sub(offset as usize);
             let space_reqd = 18;
@@ -620,9 +636,15 @@ unsafe fn evacuate_packed(
                 None => null_mut(),
                 Some(end) => *end as *mut i8,
             };
-            // TODO(ckoparkar):
-            // (1) update outsets and refcounts if evacuating to the oldest
-            //     generation.
+            // Update outsets and refcounts if evacuating to the oldest
+            // generation.
+            if heap.is_oldest() {
+                let fwd_footer_offset = tagged.tag();
+                let fwd_footer_addr =
+                    fwd_avail.add(fwd_footer_offset as usize);
+                bump_refcount(fwd_footer_addr);
+                add_to_outset(dst_end, fwd_footer_addr);
+            }
             Ok((src_after_burned, dst_after_indr, dst_end1, tag))
         }
         // Indicates end-of-current-chunk in the source buffer i.e.
@@ -635,8 +657,11 @@ unsafe fn evacuate_packed(
         C_REDIRECTION_TAG => {
             let (next_chunk, _): (*mut i8, _) = read(src_after_tag);
             // Add a forwarding pointer in the source buffer.
-            write(src, C_COPIED_TO_TAG);
-            write(src_after_tag, dst);
+            write_forwarding_pointer_at(
+                src,
+                dst,
+                dst_end.offset_from(dst).try_into().unwrap(),
+            );
             // Continue in the next chunk.
             evacuate_packed(
                 benv,
@@ -675,7 +700,11 @@ unsafe fn evacuate_packed(
             )?;
             // Add a forwarding pointer in the source buffer.
             write(src, C_COPIED_TO_TAG);
-            let src_after_indr = write(src_after_tag, dst);
+            let src_after_indr = write_forwarding_pointer_at(
+                src,
+                dst,
+                dst_end.offset_from(dst).try_into().unwrap(),
+            );
             // Update the burned environment if we're evacuating a root
             // from the remembered set.
             match prov {
@@ -720,8 +749,11 @@ unsafe fn evacuate_packed(
                 // After the forwarding pointer, burn the rest of
                 // space previously occupied by scalars.
                 let burn = if *scalar_bytes >= 8 {
-                    let burn0 = write(src, C_COPIED_TO_TAG);
-                    write(burn0, dst)
+                    write_forwarding_pointer_at(
+                        src,
+                        dst,
+                        dst_end.offset_from(dst).try_into().unwrap(),
+                    )
                 } else {
                     write(src, C_COPIED_TAG)
                 };
@@ -816,6 +848,16 @@ fn sort_roots(
         (ptra).cmp(&ptrb)
     });
     Box::new(frames_vec.into_iter())
+}
+
+unsafe fn write_forwarding_pointer_at(
+    addr: *mut i8,
+    fwd: *const i8,
+    tag: u16,
+) -> *mut i8 {
+    let tagged: u64 = TaggedPointer::new(fwd, tag as u16).as_u64();
+    let addr1 = write(addr, C_COPIED_TO_TAG);
+    write(addr1, tagged)
 }
 
 #[inline]
@@ -956,6 +998,14 @@ fn add_to_outset(from_addr: *const i8, to_addr: *const i8) {
     unsafe {
         let reg_info = (*footer).reg_info;
         (*((*reg_info).outset2)).insert(to_addr);
+    }
+}
+
+fn bump_refcount(addr: *const i8) {
+    let footer = addr as *mut C_GibChunkFooter;
+    unsafe {
+        let reg_info = (*footer).reg_info;
+        (*reg_info).refcount += 1;
     }
 }
 

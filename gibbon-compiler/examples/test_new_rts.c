@@ -1601,7 +1601,7 @@ int gib_main_expr(void)
     printf("sum tree: %" PRIu64 "\n", fltPrd_236_252);
     gib_free_symtable();
 
-    test_ptr_tagging();
+    // test_ptr_tagging();
 
     return 0;
 }

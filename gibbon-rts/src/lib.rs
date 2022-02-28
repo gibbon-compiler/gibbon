@@ -7,3 +7,4 @@
 
 pub mod ffi;
 mod gc;
+mod tagged_pointer;

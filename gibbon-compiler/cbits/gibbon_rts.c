@@ -41,7 +41,7 @@
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-#define MAX_CHUNK_SIZE (1 * GB)
+#define MAX_CHUNK_SIZE 65535
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
 static uint64_t gib_global_biginf_init_chunk_size = 4 * GB;
