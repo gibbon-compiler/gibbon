@@ -850,16 +850,6 @@ fn sort_roots(
     Box::new(frames_vec.into_iter())
 }
 
-unsafe fn write_forwarding_pointer_at(
-    addr: *mut i8,
-    fwd: *const i8,
-    tag: u16,
-) -> *mut i8 {
-    let tagged: u64 = TaggedPointer::new(fwd, tag as u16).as_u64();
-    let addr1 = write(addr, C_COPIED_TO_TAG);
-    write(addr1, tagged)
-}
-
 #[inline]
 unsafe fn read<A>(cursor: *const i8) -> (A, *const i8) {
     let cursor2 = cursor as *const A;
@@ -879,6 +869,90 @@ unsafe fn write<A>(cursor: *mut i8, val: A) -> *mut i8 {
     // *cursor2 = val;
     cursor2.write_unaligned(val);
     cursor2.add(1) as *mut i8
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Managing regions, chunks, metadata etc.
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+impl C_GibRegionInfo {
+    pub fn new() -> C_GibRegionInfo {
+        C_GibRegionInfo {
+            id: gensym(),
+            refcount: 0,
+            outset_len: 0,
+            outset: [null(); 10],
+            outset2: Box::into_raw(Box::new(HashSet::new())),
+        }
+    }
+}
+
+static mut GENSYM_COUNTER: u64 = 0;
+
+/// ASSUMPTION: no parallelism.
+fn gensym() -> u64 {
+    unsafe {
+        let old = GENSYM_COUNTER;
+        GENSYM_COUNTER = old + 1;
+        old
+    }
+}
+
+unsafe fn write_forwarding_pointer_at(
+    addr: *mut i8,
+    fwd: *const i8,
+    tag: u16,
+) -> *mut i8 {
+    let tagged: u64 = TaggedPointer::new(fwd, tag as u16).as_u64();
+    let addr1 = write(addr, C_COPIED_TO_TAG);
+    write(addr1, tagged)
+}
+
+unsafe fn free_region(footer: *const C_GibChunkFooter) -> Result<()> {
+    println!("freed: {:?}", (*footer));
+    Ok(())
+}
+
+unsafe fn add_to_outset(from_addr: *const i8, to_addr: *const i8) {
+    let footer = from_addr as *mut C_GibChunkFooter;
+    let reg_info = (*footer).reg_info;
+    (*((*reg_info).outset2)).insert(to_addr);
+}
+
+unsafe fn bump_refcount(addr: *const i8) {
+    let footer = addr as *mut C_GibChunkFooter;
+    let reg_info = (*footer).reg_info;
+    (*reg_info).refcount += 1;
+}
+
+fn init_footer_at(
+    chunk_end: *const i8,
+    reg_info: Option<*mut C_GibRegionInfo>,
+    seq_no: u16,
+    chunk_size: u64,
+    refcount: u16,
+) -> *const i8 {
+    let footer_space = size_of::<C_GibChunkFooter>();
+    let footer_start = unsafe { chunk_end.sub(footer_space) };
+
+    let region_info_ptr: *mut C_GibRegionInfo = match reg_info {
+        None => {
+            let mut region_info = C_GibRegionInfo::new();
+            region_info.refcount = refcount;
+            Box::into_raw(Box::new(region_info))
+        }
+        Some(info_ptr) => info_ptr,
+    };
+    let footer: *mut C_GibChunkFooter = footer_start as *mut C_GibChunkFooter;
+    unsafe {
+        (*footer).reg_info = region_info_ptr;
+        (*footer).seq_no = seq_no;
+        (*footer).size = chunk_size;
+        (*footer).next = null_mut();
+        (*footer).prev = null_mut();
+    }
+    footer_start
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -963,79 +1037,6 @@ pub trait Heap {
             self.allocate_next_chunk(dst, dst_end)
         }
     }
-}
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Manage region metadata
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-static mut GENSYM_COUNTER: u64 = 0;
-
-/// ASSUMPTION: no parallelism.
-fn gensym() -> u64 {
-    unsafe {
-        let old = GENSYM_COUNTER;
-        GENSYM_COUNTER = old + 1;
-        old
-    }
-}
-
-impl C_GibRegionInfo {
-    pub fn new() -> C_GibRegionInfo {
-        C_GibRegionInfo {
-            id: gensym(),
-            refcount: 0,
-            outset_len: 0,
-            outset: [null(); 10],
-            outset2: Box::into_raw(Box::new(HashSet::new())),
-        }
-    }
-}
-
-fn add_to_outset(from_addr: *const i8, to_addr: *const i8) {
-    let footer = from_addr as *mut C_GibChunkFooter;
-    unsafe {
-        let reg_info = (*footer).reg_info;
-        (*((*reg_info).outset2)).insert(to_addr);
-    }
-}
-
-fn bump_refcount(addr: *const i8) {
-    let footer = addr as *mut C_GibChunkFooter;
-    unsafe {
-        let reg_info = (*footer).reg_info;
-        (*reg_info).refcount += 1;
-    }
-}
-
-fn init_footer_at(
-    chunk_end: *const i8,
-    reg_info: Option<*mut C_GibRegionInfo>,
-    seq_no: u16,
-    chunk_size: u64,
-    refcount: u16,
-) -> *const i8 {
-    let footer_space = size_of::<C_GibChunkFooter>();
-    let footer_start = unsafe { chunk_end.sub(footer_space) };
-
-    let region_info_ptr: *mut C_GibRegionInfo = match reg_info {
-        None => {
-            let mut region_info = C_GibRegionInfo::new();
-            region_info.refcount = refcount;
-            Box::into_raw(Box::new(region_info))
-        }
-        Some(info_ptr) => info_ptr,
-    };
-    let footer: *mut C_GibChunkFooter = footer_start as *mut C_GibChunkFooter;
-    unsafe {
-        (*footer).reg_info = region_info_ptr;
-        (*footer).seq_no = seq_no;
-        (*footer).size = chunk_size;
-        (*footer).next = null_mut();
-        (*footer).prev = null_mut();
-    }
-    footer_start
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
