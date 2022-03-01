@@ -268,15 +268,7 @@ pub fn garbage_collect(
     generations_ptr: *mut C_GibGeneration,
     _force_major: bool,
 ) -> Result<()> {
-    if cfg!(debug_assertions) {
-        println!("Start of GC.");
-    }
-    let res =
-        collect_minor(rstack_ptr, wstack_ptr, nursery_ptr, generations_ptr);
-    if cfg!(debug_assertions) {
-        println!("End of GC.");
-    }
-    res
+    collect_minor(rstack_ptr, wstack_ptr, nursery_ptr, generations_ptr)
 }
 
 /// Minor collection.
@@ -295,7 +287,12 @@ pub fn collect_minor(
         // Prepare to evacuate the readers.
         let chunk_starts = nursery.chunk_starts();
         let mut oldest_gen = OldestGeneration(generations_ptr);
+
         unsafe {
+            // Initialize ZCTs if this is the very first collection.
+            if (*nursery_ptr).num_collections == 0 {
+                oldest_gen.init_zcts();
+            }
             let rem_set = &mut RememberedSet(
                 (*generations_ptr).rem_set,
                 GcRootProv::RemSet,
@@ -304,6 +301,7 @@ pub fn collect_minor(
             let mut benv = evacuate_remembered_set(
                 &mut cenv,
                 &chunk_starts,
+                (*generations_ptr).new_zct,
                 &mut oldest_gen,
                 rem_set,
             )?;
@@ -312,9 +310,12 @@ pub fn collect_minor(
                 &mut benv,
                 &mut cenv,
                 &chunk_starts,
+                (*generations_ptr).new_zct,
                 &mut oldest_gen,
                 rstack,
             )?;
+            // Collect dead regions.
+            oldest_gen.collect_regions()?;
         }
         // Reset the allocation area and record stats.
         nursery.clear();
@@ -387,6 +388,7 @@ type BurnedAddressEnv = HashMap<*mut i8, *const i8>;
 unsafe fn evacuate_remembered_set(
     cenv: &mut CauterizedEnv,
     chunk_starts: &HashSet<*mut i8>,
+    zct: *mut HashSet<*const C_GibChunkFooter>,
     heap: &mut impl Heap,
     rem_set: &Shadowstack,
 ) -> Result<BurnedAddressEnv> {
@@ -434,6 +436,7 @@ unsafe fn evacuate_remembered_set(
                         &mut benv,
                         cenv,
                         chunk_starts,
+                        zct,
                         heap,
                         &GcRootProv::RemSet,
                         packed_info,
@@ -459,6 +462,7 @@ unsafe fn evacuate_shadowstack(
     benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
     chunk_starts: &HashSet<*mut i8>,
+    zct: *mut HashSet<*const C_GibChunkFooter>,
     heap: &mut impl Heap,
     rstack: &Shadowstack,
 ) -> Result<()> {
@@ -484,6 +488,8 @@ unsafe fn evacuate_shadowstack(
                 // Update the pointers in shadow-stack.
                 (*frame).ptr = dst;
                 (*frame).endptr = dst_end;
+                // Update ZCT.
+                (*zct).insert(dst_end as *const C_GibChunkFooter);
             }
             // A packed type that is copied by referring to the info table.
             Some(DatatypeInfo::Packed(packed_info)) => {
@@ -497,6 +503,7 @@ unsafe fn evacuate_shadowstack(
                         benv,
                         cenv,
                         chunk_starts,
+                        zct,
                         heap,
                         &GcRootProv::Stk,
                         packed_info,
@@ -507,6 +514,8 @@ unsafe fn evacuate_shadowstack(
                 // Update the pointers in shadow-stack.
                 (*frame).ptr = dst;
                 (*frame).endptr = dst_after_end;
+                // Update ZCT.
+                (*zct).insert(dst_end as *const C_GibChunkFooter);
                 // Note [Adding a forwarding pointer at the end of every chunk].
                 match tag {
                     C_COPIED_TO_TAG | C_COPIED_TAG => {}
@@ -565,6 +574,7 @@ unsafe fn evacuate_packed(
     benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
     chunk_starts: &HashSet<*mut i8>,
+    zct: *mut HashSet<*const C_GibChunkFooter>,
     heap: &mut impl Heap,
     prov: &GcRootProv,
     packed_info: &HashMap<C_GibPackedTag, DataconInfo>,
@@ -608,6 +618,15 @@ unsafe fn evacuate_packed(
                 let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
                 bump_refcount(fwd_footer_addr);
                 add_to_outset(dst_end, fwd_footer_addr);
+                match prov {
+                    GcRootProv::RemSet => {}
+                    GcRootProv::Stk => {
+                        (*zct).remove(
+                            &(fwd_footer_addr as *const C_GibChunkFooter),
+                        );
+                        ()
+                    }
+                }
             }
             Ok((src_after_burned, dst_after_indr, dst_end1, tag))
         }
@@ -644,6 +663,15 @@ unsafe fn evacuate_packed(
                     fwd_avail.add(fwd_footer_offset as usize);
                 bump_refcount(fwd_footer_addr);
                 add_to_outset(dst_end, fwd_footer_addr);
+                match prov {
+                    GcRootProv::RemSet => {}
+                    GcRootProv::Stk => {
+                        (*zct).remove(
+                            &(fwd_footer_addr as *const C_GibChunkFooter),
+                        );
+                        ()
+                    }
+                }
             }
             Ok((src_after_burned, dst_after_indr, dst_end1, tag))
         }
@@ -667,6 +695,7 @@ unsafe fn evacuate_packed(
                 benv,
                 cenv,
                 chunk_starts,
+                zct,
                 heap,
                 prov,
                 packed_info,
@@ -691,6 +720,7 @@ unsafe fn evacuate_packed(
                 benv,
                 cenv,
                 chunk_starts,
+                zct,
                 heap,
                 prov,
                 packed_info,
@@ -769,6 +799,7 @@ unsafe fn evacuate_packed(
                         benv,
                         cenv,
                         chunk_starts,
+                        zct,
                         heap,
                         prov,
                         ty,
@@ -799,6 +830,7 @@ unsafe fn evacuate_field(
     benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
     chunk_starts: &HashSet<*mut i8>,
+    zct: *mut HashSet<*const C_GibChunkFooter>,
     heap: &mut impl Heap,
     prov: &GcRootProv,
     datatype: &C_GibDatatype,
@@ -822,6 +854,7 @@ unsafe fn evacuate_field(
             benv,
             cenv,
             chunk_starts,
+            zct,
             heap,
             prov,
             packed_info,
@@ -909,9 +942,56 @@ unsafe fn write_forwarding_pointer_at(
     write(addr1, tagged)
 }
 
-unsafe fn free_region(footer: *const C_GibChunkFooter) -> Result<()> {
-    println!("freed: {:?}", (*footer));
+unsafe fn free_region(
+    footer: *const C_GibChunkFooter,
+    zct: *mut HashSet<*const C_GibChunkFooter>,
+) -> Result<()> {
+    let reg_info = (*footer).reg_info;
+    // Decrement refcounts of all regions in the outset and add the ones with a
+    // zero refcount to the ZCT. Also free the HashSet backing the outset for
+    // this region.
+    let outset: HashSet<*const i8> = *(Box::from_raw((*reg_info).outset2));
+    for o_ptr in outset.into_iter() {
+        let o_new_refcount = decrement_refcount(o_ptr);
+        if o_new_refcount == 0 {
+            (*zct).insert(o_ptr as *const C_GibChunkFooter);
+        }
+    }
+    // Free the chunks in this region.
+    let first_chunk_footer = trav_to_first_chunk(footer)?;
+    let mut free_this = addr_to_free(first_chunk_footer);
+    let mut next_chunk_footer = (*first_chunk_footer).next;
+    // Free the first chunk.
+    println!("freed: {:?}", *footer);
+    libc::free(free_this);
+    // Then all others.
+    while !next_chunk_footer.is_null() {
+        free_this = addr_to_free(next_chunk_footer);
+        next_chunk_footer = (*next_chunk_footer).next;
+        libc::free(free_this);
+    }
     Ok(())
+}
+
+unsafe fn addr_to_free(footer: *const C_GibChunkFooter) -> *mut libc::c_void {
+    ((footer as *const i8).sub((*footer).size as usize)) as *mut libc::c_void
+}
+
+unsafe fn trav_to_first_chunk(
+    footer: *const C_GibChunkFooter,
+) -> Result<*const C_GibChunkFooter> {
+    if (*footer).prev.is_null() {
+        if (*footer).seq_no == 0 {
+            Ok(footer)
+        } else {
+            Err(RtsError::Gc(format!(
+                "No previous chunk found at seq_no: {}",
+                (*footer).seq_no
+            )))
+        }
+    } else {
+        trav_to_first_chunk((*footer).prev)
+    }
 }
 
 unsafe fn add_to_outset(from_addr: *const i8, to_addr: *const i8) {
@@ -920,13 +1000,21 @@ unsafe fn add_to_outset(from_addr: *const i8, to_addr: *const i8) {
     (*((*reg_info).outset2)).insert(to_addr);
 }
 
-unsafe fn bump_refcount(addr: *const i8) {
+unsafe fn bump_refcount(addr: *const i8) -> u16 {
     let footer = addr as *mut C_GibChunkFooter;
     let reg_info = (*footer).reg_info;
     (*reg_info).refcount += 1;
+    (*reg_info).refcount
 }
 
-fn init_footer_at(
+unsafe fn decrement_refcount(addr: *const i8) -> u16 {
+    let footer = addr as *mut C_GibChunkFooter;
+    let reg_info = (*footer).reg_info;
+    (*reg_info).refcount -= 1;
+    (*reg_info).refcount
+}
+
+unsafe fn init_footer_at(
     chunk_end: *const i8,
     reg_info: Option<*mut C_GibRegionInfo>,
     seq_no: u16,
@@ -934,7 +1022,7 @@ fn init_footer_at(
     refcount: u16,
 ) -> *const i8 {
     let footer_space = size_of::<C_GibChunkFooter>();
-    let footer_start = unsafe { chunk_end.sub(footer_space) };
+    let footer_start = chunk_end.sub(footer_space);
 
     let region_info_ptr: *mut C_GibRegionInfo = match reg_info {
         None => {
@@ -945,13 +1033,11 @@ fn init_footer_at(
         Some(info_ptr) => info_ptr,
     };
     let footer: *mut C_GibChunkFooter = footer_start as *mut C_GibChunkFooter;
-    unsafe {
-        (*footer).reg_info = region_info_ptr;
-        (*footer).seq_no = seq_no;
-        (*footer).size = chunk_size;
-        (*footer).next = null_mut();
-        (*footer).prev = null_mut();
-    }
+    (*footer).reg_info = region_info_ptr;
+    (*footer).seq_no = seq_no;
+    (*footer).size = chunk_size;
+    (*footer).next = null_mut();
+    (*footer).prev = null_mut();
     footer_start
 }
 
@@ -977,7 +1063,8 @@ pub trait Heap {
         } else {
             let total_size = size + (size_of::<C_GibChunkFooter>() as u64);
             let (start, end) = self.allocate(total_size)?;
-            let footer_start = init_footer_at(end, None, 0, size, refcount);
+            let footer_start =
+                unsafe { init_footer_at(end, None, 0, size, refcount) };
             Ok((start, footer_start))
         }
     }
@@ -1191,6 +1278,38 @@ impl Heap for Generation {
 
 /// A wrapper over the naked C pointer.
 struct OldestGeneration(*mut C_GibGeneration);
+
+impl OldestGeneration {
+    fn collect_regions(&mut self) -> Result<()> {
+        let gen: *mut C_GibGeneration = self.0;
+        unsafe {
+            for footer in (*((*gen).old_zct)).drain() {
+                if !(*((*gen).new_zct)).contains(&footer) {
+                    free_region(footer, (*gen).new_zct)?;
+                }
+            }
+        }
+        self.swap_zcts();
+        Ok(())
+    }
+
+    fn init_zcts(&mut self) {
+        let gen: *mut C_GibGeneration = self.0;
+        unsafe {
+            (*gen).old_zct = Box::into_raw(Box::new(HashSet::new()));
+            (*gen).new_zct = Box::into_raw(Box::new(HashSet::new()));
+        }
+    }
+
+    fn swap_zcts(&mut self) {
+        let gen: *mut C_GibGeneration = self.0;
+        unsafe {
+            let tmp = (*gen).old_zct;
+            (*gen).old_zct = (*gen).new_zct;
+            (*gen).new_zct = tmp;
+        }
+    }
+}
 
 impl fmt::Debug for OldestGeneration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

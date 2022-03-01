@@ -67,7 +67,8 @@ pub mod types {
         pub heap_end: *const i8,
         pub alloc: *const i8,
         pub rem_set: *mut C_GibRememberedSet,
-        pub zct: *mut std::ffi::c_void,
+        pub old_zct: *mut HashSet<*const C_GibChunkFooter>,
+        pub new_zct: *mut HashSet<*const C_GibChunkFooter>,
     }
 
     #[repr(C)]

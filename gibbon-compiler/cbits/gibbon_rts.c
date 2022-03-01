@@ -1295,9 +1295,9 @@ typedef struct gib_generation {
     // Remembered set to store old to young pointers.
     GibRememberedSet *rem_set;
 
-    // Zero count table;
-    // this is a pointer to a structure on the Rust Heap.
-    void *zct;
+    // Zero count tables; pointers to structures on the Rust Heap.
+    void *old_zct;
+    void *new_zct;
 
 } GibGeneration;
 

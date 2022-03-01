@@ -1,3 +1,5 @@
+cabal-version:         >=1.10
+
 name:                  gibbon
 version:               0.3
 synopsis:              A compiler for operating on serialized data
@@ -10,9 +12,9 @@ author:                Ryan Newton
 maintainer:            rrnewton@gmail.com
 copyright:             Copyright 2016-2022 Ryan Newton and contributors
 category:              Compilers/Interpreters
+extra-source-files:    README.md, cbits/gibbon_rts.h, cbits/gibbon_rts.c
 build-type:            Simple
-extra-source-files:    README.md, cbits/gibbon.h, cbits/gibbon_rts.c
-cabal-version:         >=1.10
+
 tested-with:           GHC==9.0.1
                      , GHC==8.10.4
                      , GHC==8.8.4
