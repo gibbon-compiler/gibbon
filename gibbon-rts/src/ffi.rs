@@ -209,3 +209,21 @@ pub extern "C" fn gib_garbage_collect(
         }
     }
 }
+
+#[no_mangle]
+pub extern "C" fn gib_gc_cleanup(
+    rstack_ptr: *mut C_GibShadowstack,
+    wstack_ptr: *mut C_GibShadowstack,
+    nursery_ptr: *mut C_GibNursery,
+    generations_ptr: *mut C_GibGeneration,
+) -> i32 {
+    match gc::cleanup(rstack_ptr, wstack_ptr, nursery_ptr, generations_ptr) {
+        Ok(()) => 0,
+        Err(err) => {
+            if cfg!(debug_assertions) {
+                println!("{:?}", err);
+            }
+            -1
+        }
+    }
+}

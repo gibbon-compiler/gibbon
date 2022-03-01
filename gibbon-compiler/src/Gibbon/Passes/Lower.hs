@@ -324,7 +324,7 @@ addPrintToTail ty tl0 = do
       printTy pkd ty (properTrivs pkd ty trvs) $
         -- Always print a trailing newline at the end of execution:
         T.LetPrimCallT [] (T.PrintString "\n") [] $
-          T.LetPrimCallT [] T.FreeSymTable [] $
+          -- T.LetPrimCallT [] T.FreeSymTable [] $
           T.RetValsT []  -- Void return after printing.
 
 -- | Look up the numeric tag for a dataCon

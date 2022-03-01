@@ -412,9 +412,8 @@ void gib_free_symtable(void)
     GibSymtable *elt, *tmp;
     HASH_ITER(hh, global_sym_table, elt, tmp) {
         HASH_DEL(global_sym_table,elt);
+        free(elt);
     }
-    free(elt);
-    free(tmp);
     return;
 }
 
@@ -1328,9 +1327,13 @@ GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 
 // Initialize nurseries, shadow stacks and generations.
 static void gib_storage_initialize(void);
+static void gib_storage_free(void);
 static void gib_nursery_initialize(GibNursery *nursery);
+static void gib_nursery_free(GibNursery *nursery);
 static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no);
+static void gib_generation_free(GibGeneration *gen, uint8_t gen_no);
 static void gib_shadowstack_initialize(GibShadowstack *stack, uint64_t stack_size);
+static void gib_shadowstack_free(GibShadowstack *stack);
 
 // Initialize nurseries, shadow stacks and generations.
 static void gib_storage_initialize(void)
@@ -1380,6 +1383,36 @@ static void gib_storage_initialize(void)
     return;
 }
 
+static void gib_storage_free(void)
+{
+    if (gib_global_nurseries == NULL) {
+        return;
+    }
+
+    // Free nurseries.
+    uint64_t n;
+    for (n = 0; n < gib_global_num_threads; n++) {
+        gib_nursery_free(&(gib_global_nurseries[n]));
+     }
+    free(gib_global_nurseries);
+
+    // Free generations.
+    int g;
+    for (g = 0; g < NUM_GENERATIONS; g++) {
+        gib_generation_free(&(gib_global_generations[g]), g);
+    }
+    free(gib_global_generations);
+
+    // Free shadow-stacks.
+    uint64_t ss;
+    for (ss = 0; ss < gib_global_num_threads; ss++) {
+        gib_shadowstack_free(&(gib_global_read_shadowstacks[ss]));
+        gib_shadowstack_free(&(gib_global_write_shadowstacks[ss]));
+    }
+    free(gib_global_read_shadowstacks);
+    free(gib_global_write_shadowstacks);
+}
+
 // Initialize a nursery.
 static void gib_nursery_initialize(GibNursery *nursery)
 {
@@ -1404,13 +1437,22 @@ static void gib_nursery_initialize(GibNursery *nursery)
     return;
 }
 
+// Free data associated with a nursery.
+static void gib_nursery_free(GibNursery *nursery)
+{
+    free(nursery->heap_start);
+    free(nursery->chunk_starts);
+    return;
+}
+
 // Initialize a generation.
 static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
 {
     gen->no = gen_no;
     gen->dest = (GibGeneration *) NULL;
     gen->mem_allocated = 0;
-    gen->zct = (void *) NULL;
+    gen->old_zct = (void *) NULL;
+    gen->new_zct = (void *) NULL;
     // Initialize the remembered set.
     gen->rem_set = (GibRememberedSet *) gib_alloc(sizeof(GibRememberedSet));
     if (gen->rem_set == NULL) {
@@ -1441,6 +1483,17 @@ static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
     return;
 }
 
+static void gib_generation_free(GibGeneration *gen, uint8_t gen_no)
+{
+    gib_shadowstack_free(gen->rem_set);
+    free(gen->rem_set);
+    // Initialize the heap if this is not the oldest generation.
+    if (gen_no != (NUM_GENERATIONS - 1)) {
+        free(gen->heap_start);
+    }
+    return;
+}
+
 // Initialize a shadow stack.
 static void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_size)
 {
@@ -1452,6 +1505,12 @@ static void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_siz
     }
     stack->end = stack->start + stack_size;
     stack->alloc = stack->start;
+    return;
+}
+
+static void gib_shadowstack_free(GibShadowstack* stack)
+{
+    free(stack->start);
     return;
 }
 
@@ -1645,24 +1704,26 @@ void gib_indirection_barrier(
     bool from_old = !gib_addr_in_nursery(from);
     bool to_young = gib_addr_in_nursery(to);
     bool to_old = !to_young;
-    if (from_old && to_young) {
-        // (3) oldgen -> nursery
+    if (from_old) {
+        if (to_young) {
+            // (3) oldgen -> nursery
 #ifdef _GIBBON_DEBUG
-        printf("gib_indirection_barrier: old to young pointer\n");
+            printf("gib_indirection_barrier: old to young pointer\n");
 #endif
-        GibGeneration *gen = DEFAULT_GENERATION;
-        // Store the address of the indirection pointer, *NOT* the address of
-        // the indirection tag, in the remembered set.
-        GibCursor indr_addr = from + sizeof(GibPackedTag);
-        gib_remset_push(gen->rem_set, indr_addr, from_footer_ptr, datatype);
-        return;
-    } else if (from_old && to_old) {
-        // (4) oldgen -> oldgen
+            GibGeneration *gen = DEFAULT_GENERATION;
+            // Store the address of the indirection pointer, *NOT* the address of
+            // the indirection tag, in the remembered set.
+            GibCursor indr_addr = from + sizeof(GibPackedTag);
+            gib_remset_push(gen->rem_set, indr_addr, from_footer_ptr, datatype);
+            return;
+        } else if (to_old) {
+            // (4) oldgen -> oldgen
 #ifdef _GIBBON_DEBUG
-        printf("gib_indirection_barrier: old to old pointer\n");
+            printf("gib_indirection_barrier: old to old pointer\n");
 #endif
-        gib_bump_refcount(from_footer_ptr, to_footer_ptr);
-        return;
+            gib_bump_refcount(from_footer_ptr, to_footer_ptr);
+            return;
+        }
     }
     return;
 }
@@ -1862,6 +1923,18 @@ int main(int argc, char **argv)
 
     // Run the program.
     gib_main_expr();
+
+    // Free all objects initialized by the Rust RTS.
+    free(gib_global_bench_prog_param);
+    GibNursery *nursery = DEFAULT_NURSERY;
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    GibGeneration *generations = gib_global_generations;
+    gib_gc_cleanup(rstack, wstack, nursery, generations);
+
+    // Next, free all objects initialized by the C RTS.
+    gib_storage_free();
+    gib_free_symtable();
 
     return 0;
 }

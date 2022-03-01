@@ -773,7 +773,7 @@ GibCursorGibIntProd sumtree(GibCursor end_r_609, GibCursor tr_29_172_272)
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1322");
+            printf("Unknown tag in: tmpval_1322, %d", tmpval_1322);
             exit(1);
         }
     }
@@ -1599,7 +1599,6 @@ int gib_main_expr(void)
     printf("reverse: %" PRIu64 "\n", fltPrd_235_251);
     GibInt fltPrd_236_252 =  do_tree(gib_get_size_param());
     printf("sum tree: %" PRIu64 "\n", fltPrd_236_252);
-    gib_free_symtable();
 
     // test_ptr_tagging();
 

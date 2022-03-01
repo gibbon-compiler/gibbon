@@ -261,6 +261,44 @@ TODO.
 const CHUNK_SIZE: u64 = 1024;
 const MAX_CHUNK_SIZE: u64 = 1 * 1024 * 1024 * 1024;
 
+pub fn cleanup(
+    rstack_ptr: *mut C_GibShadowstack,
+    wstack_ptr: *mut C_GibShadowstack,
+    nursery_ptr: *mut C_GibNursery,
+    generations_ptr: *mut C_GibGeneration,
+) -> Result<()> {
+    // Free the info table.
+    unsafe {
+        drop(INFO_TABLE.take());
+    }
+    // Free all the regions.
+    let mut oldest_gen = OldestGeneration(generations_ptr);
+    let rstack = &Shadowstack(rstack_ptr, GcRootProv::Stk);
+    let wstack = &Shadowstack(wstack_ptr, GcRootProv::Stk);
+    let nursery = &Nursery(nursery_ptr);
+    if C_NUM_GENERATIONS == 1 {
+        unsafe {
+            if !(*generations_ptr).old_zct.is_null() {
+                for frame in rstack.into_iter().chain(wstack.into_iter()) {
+                    if !nursery.contains_addr((*frame).endptr) {
+                        (*((*generations_ptr).old_zct)).insert(
+                            (*frame).endptr as *const C_GibChunkFooter,
+                        );
+                    }
+                }
+                for footer in (*((*generations_ptr).old_zct)).drain() {
+                    free_region(footer, (*generations_ptr).new_zct, true)?;
+                }
+            }
+        }
+    } else {
+        todo!("NUM_GENERATIONS > 1")
+    }
+    // Free ZCTs associated with the oldest generation.
+    oldest_gen.free_zcts();
+    Ok(())
+}
+
 pub fn garbage_collect(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
@@ -283,11 +321,10 @@ pub fn collect_minor(
     let nursery = &mut Nursery(nursery_ptr);
     if C_NUM_GENERATIONS == 1 {
         // Start by cauterizing the writers.
-        let mut cenv = cauterize_writers(wstack)?;
+        let mut cenv = cauterize_writers(nursery, wstack)?;
         // Prepare to evacuate the readers.
         let chunk_starts = nursery.chunk_starts();
         let mut oldest_gen = OldestGeneration(generations_ptr);
-
         unsafe {
             // Initialize ZCTs if this is the very first collection.
             if (*nursery_ptr).num_collections == 0 {
@@ -307,6 +344,7 @@ pub fn collect_minor(
             )?;
             rem_set.clear();
             evacuate_shadowstack(
+                nursery,
                 &mut benv,
                 &mut cenv,
                 &chunk_starts,
@@ -314,7 +352,7 @@ pub fn collect_minor(
                 &mut oldest_gen,
                 rstack,
             )?;
-            // Collect dead regions.
+            // // Collect dead regions.
             oldest_gen.collect_regions()?;
         }
         // Reset the allocation area and record stats.
@@ -331,10 +369,16 @@ pub fn collect_minor(
 
 /// Write a C_CAUTERIZED_TAG at all write cursors so that the collector knows
 /// when to stop copying.
-fn cauterize_writers(wstack: &Shadowstack) -> Result<CauterizedEnv> {
+fn cauterize_writers(
+    nursery: &Nursery,
+    wstack: &Shadowstack,
+) -> Result<CauterizedEnv> {
     let mut cenv: CauterizedEnv = HashMap::new();
     for frame in wstack.into_iter() {
         unsafe {
+            if !nursery.contains_addr((*frame).ptr) {
+                continue;
+            }
             let ptr = (*frame).ptr as *mut i8;
             let ptr_next = write(ptr, C_CAUTERIZED_TAG);
             write(ptr_next, frame);
@@ -459,6 +503,7 @@ unsafe fn evacuate_remembered_set(
 /// Copy values at all read cursors from the nursery to the provided
 /// destination heap. Also uncauterize any writer cursors that are reached.
 unsafe fn evacuate_shadowstack(
+    nursery: &Nursery,
     benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
     chunk_starts: &HashSet<*mut i8>,
@@ -470,6 +515,13 @@ unsafe fn evacuate_shadowstack(
     let frames = sort_roots(rstack);
     for frame in frames {
         let datatype = (*frame).datatype;
+        if !nursery.contains_addr((*frame).ptr) {
+            let footer = (*frame).endptr as *const C_GibChunkFooter;
+            if (*((*footer).reg_info)).refcount == 0 {
+                (*zct).insert(footer);
+            }
+            continue;
+        }
         match INFO_TABLE.get().unwrap().get(&datatype) {
             None => {
                 return Err(RtsError::Gc(format!(
@@ -945,16 +997,22 @@ unsafe fn write_forwarding_pointer_at(
 unsafe fn free_region(
     footer: *const C_GibChunkFooter,
     zct: *mut HashSet<*const C_GibChunkFooter>,
+    free_descendants: bool,
 ) -> Result<()> {
-    let reg_info = (*footer).reg_info;
+    // Rust drops this heap allocated object when reg_info goes out of scope.
+    let reg_info = Box::from_raw((*footer).reg_info);
     // Decrement refcounts of all regions in the outset and add the ones with a
     // zero refcount to the ZCT. Also free the HashSet backing the outset for
     // this region.
-    let outset: HashSet<*const i8> = *(Box::from_raw((*reg_info).outset2));
+    let outset: Box<HashSet<*const i8>> = Box::from_raw(reg_info.outset2);
     for o_ptr in outset.into_iter() {
         let o_new_refcount = decrement_refcount(o_ptr);
         if o_new_refcount == 0 {
-            (*zct).insert(o_ptr as *const C_GibChunkFooter);
+            if free_descendants {
+                free_region(o_ptr as *const C_GibChunkFooter, zct, true)?;
+            } else {
+                (*zct).insert(o_ptr as *const C_GibChunkFooter);
+            }
         }
     }
     // Free the chunks in this region.
@@ -962,7 +1020,6 @@ unsafe fn free_region(
     let mut free_this = addr_to_free(first_chunk_footer);
     let mut next_chunk_footer = (*first_chunk_footer).next;
     // Free the first chunk.
-    println!("freed: {:?}", *footer);
     libc::free(free_this);
     // Then all others.
     while !next_chunk_footer.is_null() {
@@ -1168,6 +1225,13 @@ impl Nursery {
         }
         chunk_starts
     }
+
+    fn contains_addr(&self, addr: *const i8) -> bool {
+        let nursery: *mut C_GibNursery = self.0;
+        unsafe {
+            (addr >= (*nursery).heap_start) && (addr <= (*nursery).heap_end)
+        }
+    }
 }
 
 impl fmt::Debug for Nursery {
@@ -1285,7 +1349,7 @@ impl OldestGeneration {
         unsafe {
             for footer in (*((*gen).old_zct)).drain() {
                 if !(*((*gen).new_zct)).contains(&footer) {
-                    free_region(footer, (*gen).new_zct)?;
+                    free_region(footer, (*gen).new_zct, false)?;
                 }
             }
         }
@@ -1298,6 +1362,17 @@ impl OldestGeneration {
         unsafe {
             (*gen).old_zct = Box::into_raw(Box::new(HashSet::new()));
             (*gen).new_zct = Box::into_raw(Box::new(HashSet::new()));
+        }
+    }
+
+    fn free_zcts(&mut self) {
+        let gen: *mut C_GibGeneration = self.0;
+        unsafe {
+            if !(*gen).old_zct.is_null() {
+                // Rust will drop these heap objects at the end of this scope.
+                Box::from_raw((*gen).old_zct);
+                Box::from_raw((*gen).new_zct);
+            }
         }
     }
 

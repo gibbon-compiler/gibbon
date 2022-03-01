@@ -405,6 +405,12 @@ int gib_garbage_collect(
     GibGeneration *generations,
     bool force_major
 );
+int gib_gc_cleanup(
+    GibShadowstack *rstack,
+    GibShadowstack *wstack,
+    GibNursery *nursery,
+    GibGeneration *generations
+);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
