@@ -55,8 +55,8 @@ pub mod types {
     pub type C_GibRememberedSetElt = C_GibShadowstackFrame;
     pub type C_GibRememberedSet = C_GibShadowstack;
 
-    pub type Zct = HashSet<*mut C_GibRegionInfo>;
-    pub type Outset = HashSet<*mut C_GibRegionInfo>;
+    pub type Zct = HashSet<*const C_GibRegionInfo>;
+    pub type Outset = HashSet<*const C_GibRegionInfo>;
 
     #[repr(C)]
     #[derive(Debug)]
@@ -85,8 +85,8 @@ pub mod types {
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibShadowstackFrame {
-        pub ptr: *const i8,
-        pub endptr: *const i8,
+        pub ptr: *mut i8,
+        pub endptr: *mut i8,
         pub datatype: C_GibDatatype,
     }
 
