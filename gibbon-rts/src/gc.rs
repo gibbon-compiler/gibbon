@@ -962,7 +962,7 @@ unsafe fn write<A>(cursor: *mut i8, val: A) -> *mut i8 {
  */
 
 impl C_GibRegionInfo {
-    pub fn new() -> C_GibRegionInfo {
+    fn new() -> C_GibRegionInfo {
         C_GibRegionInfo {
             id: gensym(),
             refcount: 0,
@@ -1049,6 +1049,17 @@ unsafe fn trav_to_first_chunk(
     } else {
         trav_to_first_chunk((*footer).prev)
     }
+}
+
+pub fn handle_old_to_old_indirection(
+    from_footer_ptr: *mut i8,
+    to_footer_ptr: *mut i8,
+) -> Result<()> {
+    unsafe {
+        add_to_outset(from_footer_ptr, to_footer_ptr);
+        bump_refcount(to_footer_ptr);
+    }
+    Ok(())
 }
 
 unsafe fn add_to_outset(from_addr: *const i8, to_addr: *const i8) {

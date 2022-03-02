@@ -1721,7 +1721,7 @@ void gib_indirection_barrier(
 #ifdef _GIBBON_DEBUG
             printf("gib_indirection_barrier: old to old pointer\n");
 #endif
-            gib_bump_refcount(from_footer_ptr, to_footer_ptr);
+            gib_handle_old_to_old_indirection(from_footer_ptr, to_footer_ptr);
             return;
         }
     }

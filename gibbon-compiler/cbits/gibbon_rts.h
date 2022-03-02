@@ -409,6 +409,10 @@ int gib_garbage_collect(
     GibGeneration *generations,
     bool force_major
 );
+int gib_handle_old_to_old_indirection(
+    char *from_footer,
+    char *to_footer
+);
 int gib_gc_cleanup(
     GibShadowstack *rstack,
     GibShadowstack *wstack,
