@@ -73,8 +73,10 @@ data E3Ext loc dec =
                                    --   we'll probably represent (sizeof x) as (end_x - start_x) / INT
   | SizeOfScalar Var               -- ^ sizeof(var)
   | BoundsCheck Int Var Var        -- ^ Bytes required, region, write cursor
-  | BumpRefCount Var Var           -- ^ Given an end-of-region ptr, bump it's refcount.
-                                   --   Return the updated count (optional).
+  | IndirectionBarrier TyCon (Var,Var,Var,Var)
+    -- ^ Do one of the following:
+    -- (1) If it's a old-to-young indirection, record it in the remembered set.
+    -- (2) Otherwise, bump the refcount and update the outset.
   | BumpArenaRefCount Var Var      -- ^ Given an arena and end-of-region ptr, add a
                                    --   reference from the arena to the region
   | NullCursor                     -- ^ Constant null cursor value (hack?).
@@ -107,7 +109,7 @@ instance FreeVars (E3Ext l d) where
       SizeOfPacked c1 c2 -> S.fromList [c1, c2]
       SizeOfScalar v     -> S.singleton v
       BoundsCheck{}      -> S.empty
-      BumpRefCount r1 r2 -> S.fromList [r1, r2]
+      IndirectionBarrier _tycon (l1,r1,l2,r2) -> S.fromList [l1,r1,l2,r2]
       NullCursor         -> S.empty
       BumpArenaRefCount v w -> S.fromList [v, w]
       RetE ls -> S.unions (L.map gFreeVars ls)
@@ -182,7 +184,8 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       SizeOfPacked a b   -> SizeOfPacked (go a) (go b)
       SizeOfScalar v     -> SizeOfScalar (go v)
       BoundsCheck i a b  -> BoundsCheck i (go a) (go b)
-      BumpRefCount a b   -> BumpRefCount (go a) (go b)
+      IndirectionBarrier tycon (a,b,c,d) ->
+        IndirectionBarrier tycon (go a, go b, go c, go d)
       BumpArenaRefCount v w -> BumpArenaRefCount (go v) (go w)
       NullCursor         -> ext
       RetE ls            -> RetE (L.map go ls)

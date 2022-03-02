@@ -492,7 +492,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               SizeOfScalar{}     -> syms
               BoundsCheck{}      -> syms
               ReadCursor{}       -> syms
-              BumpRefCount{}     -> syms
+              IndirectionBarrier{} -> syms
               NullCursor         -> syms
               BumpArenaRefCount{}-> error "collect_syms: BumpArenaRefCount not handled."
               RetE ls -> gol ls
@@ -848,8 +848,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [(v,T.CursorTy)] T.WriteCursor [triv sym_tbl "WriteCursor arg" e, T.VarTriv cur] <$>
          tail free_reg sym_tbl bod
 
-    LetE (_, _, _,  (Ext (BumpRefCount end_r1 end_r2))) bod ->
-      T.LetPrimCallT [] T.BumpRefCount [T.VarTriv end_r1, T.VarTriv end_r2] <$>
+    LetE (_, _, _,  (Ext (IndirectionBarrier tycon (l1, end_r1, l2, end_r2)))) bod ->
+      T.LetPrimCallT [] (T.IndirectionBarrier tycon) [T.VarTriv l1, T.VarTriv end_r1, T.VarTriv l2, T.VarTriv end_r2] <$>
         tail free_reg sym_tbl bod
 
     LetE (_, _, _,  (Ext (BumpArenaRefCount ar end_r))) bod ->

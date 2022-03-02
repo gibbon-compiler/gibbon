@@ -961,15 +961,18 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                        [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
                                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:curV = ($id:cur) + sizeof( $ty:(codegenTy valTy)); |] ]
 
-                 BumpRefCount -> let [(VarTriv end_r1), (VarTriv end_r2)] = rnds
-                                 in pure [ C.BlockStm [cstm| gib_bump_refcount($id:end_r1, $id:end_r2); |] ]
+                 IndirectionBarrier tycon ->
+                   let [(VarTriv from_loc), (VarTriv end_from_reg),
+                        (VarTriv to_loc), (VarTriv end_to_reg)] = rnds
+                       tycon_t = (C.Id (tycon ++ "_T") noLoc)
+                   in pure [ C.BlockStm [cstm| gib_indirection_barrier($id:from_loc, $id:end_from_reg, $id:to_loc, $id:end_to_reg, $id:tycon_t); |] ]
 
                  BoundsCheck -> do
                    new_chunk   <- gensym "new_chunk"
                    chunk_start <- gensym "chunk_start"
                    chunk_end   <- gensym "chunk_end"
                    let [(IntTriv i),(VarTriv bound), (VarTriv cur)] = rnds
-                       bck = [ C.BlockDecl [cdecl| $ty:(codegenTy ChunkTy) $id:new_chunk = gib_alloc_chunk($id:bound); |]
+                       bck = [ C.BlockDecl [cdecl| $ty:(codegenTy ChunkTy) $id:new_chunk = gib_grow_region($id:bound); |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_start = $id:new_chunk.start; |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_end = $id:new_chunk.end; |]
                              , C.BlockStm  [cstm|  $id:bound = $id:chunk_end; |]

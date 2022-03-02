@@ -941,7 +941,7 @@ GibChunk *gib_alloc_region(uint64_t size)
     return region;
 }
 
-GibChunk gib_alloc_chunk(GibCursor footer_ptr)
+GibChunk gib_grow_region(GibCursor footer_ptr)
 {
     // Get size from current footer.
     GibChunkFooter *footer = (GibChunkFooter *) footer_ptr;
@@ -955,7 +955,7 @@ GibChunk gib_alloc_chunk(GibCursor footer_ptr)
     // Allocate.
     GibCursor start = (char *) gib_alloc(total_size);
     if (start == NULL) {
-        fprintf(stderr, "gib_alloc_chunk: gib_alloc failed: %" PRId64,
+        fprintf(stderr, "gib_grow_region: gib_alloc failed: %" PRId64,
                 total_size);
         exit(1);
     }
@@ -974,7 +974,7 @@ GibChunk gib_alloc_chunk(GibCursor footer_ptr)
 
 #ifdef _GIBBON_DEBUG
     GibRegionInfo *reg = (GibRegionInfo*) new_footer->reg_info;
-    printf("gib_alloc_chunk: allocated %" PRIu64 " bytes for region %" PRIu64 "\n",
+    printf("gib_grow_region: allocated %" PRIu64 " bytes for region %" PRIu64 "\n",
            total_size,
            (footer->reg_info)->id);
 #endif

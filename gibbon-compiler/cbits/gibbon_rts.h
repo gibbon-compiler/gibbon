@@ -295,7 +295,7 @@ typedef struct gib_chunk {
 } GibChunk;
 
 GibChunk *gib_alloc_region(uint64_t size);
-GibChunk gib_alloc_chunk(GibCursor footer_ptr);
+GibChunk gib_grow_region(GibCursor footer_ptr);
 void gib_bump_refcount(GibCursor from_footer_ptr, GibCursor to_footer_ptr);
 void gib_free_region(GibCursor reg_footer_ptr);
 

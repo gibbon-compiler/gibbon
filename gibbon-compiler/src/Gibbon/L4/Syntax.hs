@@ -311,7 +311,7 @@ data Prim
 
     | BoundsCheck
 
-    | BumpRefCount
+    | IndirectionBarrier TyCon
 
     | BumpArenaRefCount
 

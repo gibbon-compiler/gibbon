@@ -555,13 +555,16 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
 
         BoundsCheck i bound cur -> return <$> dl <$> Ext $ L3.BoundsCheck i bound cur
 
-        IndirectionE _ dcon (pointer,r1) (pointee,r2) _ -> do
+        IndirectionE tycon dcon (from,from_reg) (to,to_reg) _ -> do
           dflags <- getDynFlags
-          if gopt Opt_DisableGC dflags || (r1 == "dummy" || r2 == "dummy") -- HACK!!!
-          then go tenv senv (DataConE pointer dcon [VarE pointee])
+          if gopt Opt_DisableGC dflags ||
+             (from_reg == "dummy" || to_reg == "dummy") -- HACK!!!
+             -- [2022.03.02]: ckoparkar:WTH does this hack enable?
+          then go tenv senv (DataConE from dcon [VarE to])
           else
-            onDi (mkLets [("_",[],ProdTy [],Ext (BumpRefCount (toEndV r1) (toEndV r2)))]) <$>
-              go tenv senv (DataConE pointer dcon [VarE pointee])
+            onDi (mkLets [("_",[],ProdTy [],
+                           Ext (IndirectionBarrier tycon (from,(toEndV from_reg),to,(toEndV to_reg))))]) <$>
+              go tenv senv (DataConE from dcon [VarE to])
 
         AddFixed{} -> error "cursorizePackedExp: AddFixed not handled."
 

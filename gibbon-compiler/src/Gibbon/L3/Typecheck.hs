@@ -138,9 +138,13 @@ tcExp isPacked ddfs env exp =
           ensureEqualTyModCursor exp cty CursorTy
           return IntTy
 
-        BumpRefCount end_r1 end_r2 -> do
+        IndirectionBarrier _tycon (l1, end_r1, l2, end_r2) -> do
+          l1_ty  <- lookupVar env l1 exp
+          ensureEqualTyModCursor exp l1_ty CursorTy
           end_r1_ty  <- lookupVar env end_r1 exp
           ensureEqualTyModCursor exp end_r1_ty CursorTy
+          l2_ty  <- lookupVar env l2 exp
+          ensureEqualTyModCursor exp l2_ty CursorTy
           end_r2_ty  <- lookupVar env end_r2 exp
           ensureEqualTyModCursor exp end_r2_ty CursorTy
           return (ProdTy [])
