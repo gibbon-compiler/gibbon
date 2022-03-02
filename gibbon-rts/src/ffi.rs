@@ -92,7 +92,7 @@ pub mod types {
     pub struct C_GibRegionInfo {
         pub id: C_GibSym,
         pub refcount: u16,
-        pub outset2: *mut HashSet<*const i8>,
+        pub outset: *mut HashSet<*const i8>,
     }
 
     #[repr(C)]

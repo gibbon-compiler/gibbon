@@ -895,7 +895,7 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 typedef struct gib_region_info {
     GibSym id;
     uint16_t refcount;
-    void *outset2;
+    void *outset;
 } GibRegionInfo;
 
 typedef struct gib_chunk_footer {
@@ -976,275 +976,50 @@ GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 #define DEFAULT_READ_SHADOWSTACK (&(gib_global_read_shadowstacks[0]))
 #define DEFAULT_WRITE_SHADOWSTACK (&(gib_global_write_shadowstacks[0]))
 
-// Initialize nurseries, shadow stacks and generations.
-static void gib_storage_initialize(void);
-static void gib_storage_free(void);
-static void gib_nursery_initialize(GibNursery *nursery);
-static void gib_nursery_free(GibNursery *nursery);
-static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no);
-static void gib_generation_free(GibGeneration *gen, uint8_t gen_no);
-static void gib_shadowstack_initialize(GibShadowstack *stack, uint64_t stack_size);
-static void gib_shadowstack_free(GibShadowstack *stack);
 
-// Initialize nurseries, shadow stacks and generations.
-static void gib_storage_initialize(void)
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Ensure that C and Rust agree on sizes
+ * of structs that cross the boundary.
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+void gib_check_rust_struct_sizes(void)
 {
-    if (gib_global_nurseries != NULL) {
-        return;
-    }
+    // Sizes in the Rust RTS.
+    size_t *stack, *frame, *nursery, *generation, *reg_info, *footer;
+    stack = (size_t *) malloc(sizeof(size_t) * 6);
+    frame = (size_t *) ((char *) stack + sizeof(size_t));
+    nursery = (size_t *) ((char *) frame + sizeof(size_t));
+    generation = (size_t *) ((char *) nursery + sizeof(size_t));
+    reg_info = (size_t *) ((char *) generation + sizeof(size_t));
+    footer = (size_t *) ((char *) reg_info + sizeof(size_t));
+    gib_get_rust_struct_sizes(stack, frame, nursery, generation, reg_info, footer);
 
-    // Initialize nurseries.
-    uint64_t n;
-    gib_global_nurseries = (GibNursery *) gib_alloc(gib_global_num_threads *
-                                                    sizeof(GibNursery));
-    for (n = 0; n < gib_global_num_threads; n++) {
-        gib_nursery_initialize(&(gib_global_nurseries[n]));
-     }
+    // Check if they match with sizes in the C RTS.
+    assert(*stack == sizeof(GibShadowstack));
+    assert(*frame == sizeof(GibShadowstackFrame));
+    assert(*nursery == sizeof(GibNursery));
+    assert(*generation == sizeof(GibGeneration));
+    assert(*reg_info == sizeof(GibRegionInfo));
+    assert(*footer == sizeof(GibChunkFooter));
 
-    // Initialize generations.
-    int g;
-    gib_global_generations = (GibGeneration *) gib_alloc(NUM_GENERATIONS *
-                                                         sizeof(GibGeneration));
-    for (g = 0; g < NUM_GENERATIONS; g++) {
-        gib_generation_initialize(&(gib_global_generations[g]), g);
-    }
-    gib_global_gen0 = &(gib_global_generations[0]);
-    gib_global_oldest_gen = &(gib_global_generations[NUM_GENERATIONS-1]);
-    // Set up destination pointers in each generation.
-    for (g = 0; g < NUM_GENERATIONS-1; g++) {
-        gib_global_generations[g].dest = &(gib_global_generations[g+1]);
-    }
-    gib_global_oldest_gen->dest = gib_global_oldest_gen;
-
-    // Initialize shadow stacks.
-    uint64_t ss;
-    gib_global_read_shadowstacks =
-            (GibShadowstack *) gib_alloc(gib_global_num_threads *
-                                         sizeof(GibShadowstack));
-    gib_global_write_shadowstacks =
-            (GibShadowstack *) gib_alloc(gib_global_num_threads *
-                                         sizeof(GibShadowstack));
-    for (ss = 0; ss < gib_global_num_threads; ss++) {
-        gib_shadowstack_initialize(&(gib_global_read_shadowstacks[ss]),
-                                   SHADOWSTACK_SIZE);
-        gib_shadowstack_initialize(&(gib_global_write_shadowstacks[ss]),
-                                   SHADOWSTACK_SIZE);
-     }
+    // Done.
+    free(stack);
 
     return;
 }
 
-static void gib_storage_free(void)
-{
-    if (gib_global_nurseries == NULL) {
-        return;
-    }
 
-    // Free nurseries.
-    uint64_t n;
-    for (n = 0; n < gib_global_num_threads; n++) {
-        gib_nursery_free(&(gib_global_nurseries[n]));
-     }
-    free(gib_global_nurseries);
-
-    // Free generations.
-    int g;
-    for (g = 0; g < NUM_GENERATIONS; g++) {
-        gib_generation_free(&(gib_global_generations[g]), g);
-    }
-    free(gib_global_generations);
-
-    // Free shadow-stacks.
-    uint64_t ss;
-    for (ss = 0; ss < gib_global_num_threads; ss++) {
-        gib_shadowstack_free(&(gib_global_read_shadowstacks[ss]));
-        gib_shadowstack_free(&(gib_global_write_shadowstacks[ss]));
-    }
-    free(gib_global_read_shadowstacks);
-    free(gib_global_write_shadowstacks);
-}
-
-// Initialize a nursery.
-static void gib_nursery_initialize(GibNursery *nursery)
-{
-    nursery->num_collections = 0;
-    nursery->heap_size = NURSERY_SIZE;
-    nursery->heap_start = (char *) gib_alloc(NURSERY_SIZE);
-    if (nursery->heap_start == NULL) {
-        fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %ld",
-                NURSERY_SIZE);
-        exit(1);
-    }
-    nursery->heap_end = nursery->heap_start + NURSERY_SIZE;
-    nursery->alloc = nursery->heap_end;
-    nursery->chunk_starts = (char *) gib_alloc(NURSERY_SIZE);
-    if (nursery->chunk_starts == NULL) {
-        fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %ld",
-                NURSERY_SIZE);
-        exit(1);
-    }
-    nursery->chunk_starts_i = 0;
-
-    return;
-}
-
-// Free data associated with a nursery.
-static void gib_nursery_free(GibNursery *nursery)
-{
-    free(nursery->heap_start);
-    free(nursery->chunk_starts);
-    return;
-}
-
-// Initialize a generation.
-static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
-{
-    gen->no = gen_no;
-    gen->dest = (GibGeneration *) NULL;
-    gen->mem_allocated = 0;
-    gen->old_zct = (void *) NULL;
-    gen->new_zct = (void *) NULL;
-    // Initialize the remembered set.
-    gen->rem_set = (GibRememberedSet *) gib_alloc(sizeof(GibRememberedSet));
-    if (gen->rem_set == NULL) {
-        fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %ld",
-                sizeof(GibRememberedSet));
-        exit(1);
-    }
-    gib_shadowstack_initialize(gen->rem_set, REMEMBERED_SET_SIZE);
-    // Initialize the heap if this is not the oldest generation.
-    if (gen_no == (NUM_GENERATIONS - 1)) {
-        gen->oldest = true;
-        gen->heap_size = 0;
-        gen->heap_start = (char *) NULL;
-        gen->heap_end = (char *) NULL;
-        gen->alloc = (char *) NULL;
-    } else {
-        gen->oldest = false;
-        gen->heap_size = ((gen_no+1) * 256 * MB);
-        gen->heap_start = (char *) gib_alloc(gen->heap_size);
-        if (gen->heap_start == NULL) {
-            fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %ld",
-                    gen->heap_size);
-        }
-        gen->heap_end = gen->heap_start + gen->heap_size;
-        gen->alloc = gen->heap_start;
-    }
-
-    return;
-}
-
-static void gib_generation_free(GibGeneration *gen, uint8_t gen_no)
-{
-    gib_shadowstack_free(gen->rem_set);
-    free(gen->rem_set);
-    // Initialize the heap if this is not the oldest generation.
-    if (gen_no != (NUM_GENERATIONS - 1)) {
-        free(gen->heap_start);
-    }
-    return;
-}
-
-// Initialize a shadow stack.
-static void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_size)
-{
-    stack->start = (char *) gib_alloc(stack_size);
-    if (stack->start == NULL) {
-        fprintf(stderr, "gib_shadowstack_initialize: gib_alloc failed: %ld",
-                stack_size);
-        exit(1);
-    }
-    stack->end = stack->start + stack_size;
-    stack->alloc = stack->start;
-    return;
-}
-
-static void gib_shadowstack_free(GibShadowstack* stack)
-{
-    free(stack->start);
-    return;
-}
-
-// Nursery API.
-// TODO(ckoparkar):
-// If we allocate the nursery at a high address AND ensure that all of the
-// subsequent mallocs return a block at addresses lower than this, we can
-// implement addr_in_nursery with one address check instead than two. -- RRN
-bool gib_addr_in_nursery(char *ptr)
-{
-    GibNursery *nursery = DEFAULT_NURSERY;
-    return ((ptr >= nursery->heap_start) && (ptr <= nursery->heap_end));
-}
-
-// Shadowstack API.
-void gib_shadowstack_push(
-    GibShadowstack *stack,
-    char *ptr,
-    char *endptr,
-    uint32_t datatype
-)
-{
-    char *stack_alloc_ptr = stack->alloc;
-    char *stack_end = stack->end;
-    char **stack_alloc_ptr_addr = &(stack->alloc);
-    size_t size = sizeof(GibShadowstackFrame);
-    if ((stack_alloc_ptr + size) > stack_end) {
-        fprintf(stderr, "gib_shadowstack_push: out of memory");
-        exit(1);
-    }
-    GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
-    frame->ptr = ptr;
-    frame->endptr = endptr;
-    frame->datatype = datatype;
-    (*stack_alloc_ptr_addr) += size;
-    return;
-}
-
-GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack)
-{
-    char *stack_alloc_ptr = stack->alloc;
-    char *stack_start = stack->start;
-    char **stack_alloc_ptr_addr = &(stack->alloc);
-    size_t size = sizeof(GibShadowstackFrame);
-    if ((stack_alloc_ptr - size) < stack_start) {
-        fprintf(stderr, "gib_shadowstack_pop: stack empty");
-        exit(1);
-    }
-    (*stack_alloc_ptr_addr) -= size;
-    GibShadowstackFrame *frame = (GibShadowstackFrame *) (*stack_alloc_ptr_addr);
-    return frame;
-}
-
-int32_t gib_shadowstack_length(GibShadowstack *stack)
-{
-    char *stack_alloc_ptr = stack->alloc;
-    char *stack_start = stack->start;
-    return ( (stack_alloc_ptr - stack_start) / sizeof(GibShadowstackFrame) );
-}
-
-void gib_shadowstack_print_all(GibShadowstack *stack)
-{
-    char *run_ptr = stack->start;
-    char *end_ptr = stack->alloc;
-    GibShadowstackFrame *frame;
-    while (run_ptr < end_ptr) {
-        frame = (GibShadowstackFrame *) run_ptr;
-        printf("ptr=%p, endptr=%p, datatype=%d\n",
-               frame->ptr, frame->endptr, frame->datatype);
-        run_ptr += sizeof(GibShadowstackFrame);
-    }
-    return;
-}
-
-void gib_remset_reset(GibRememberedSet *set)
-{
-    set->alloc = set->start;
-}
-
-// Region allocation.
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Region allocation and growth
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
 
 static GibChunk *gib_alloc_region_on_heap(uint64_t size);
 static GibChunk *gib_alloc_region_in_nursery(uint64_t size);
+static GibChunk *gib_alloc_region_in_nursery_fast(uint64_t size, bool collected);
+static GibChunk *gib_alloc_region_in_nursery_slow(uint64_t size, bool collected);
 
 GibChunk *gib_alloc_region(uint64_t size)
 {
@@ -1269,9 +1044,6 @@ static GibChunk *gib_alloc_region_on_heap(uint64_t size)
     region->end = heap_end;
     return region;
 }
-
-static GibChunk *gib_alloc_region_in_nursery_fast(uint64_t size, bool collected);
-static GibChunk *gib_alloc_region_in_nursery_slow(uint64_t size, bool collected);
 
 GibChunk *gib_alloc_region_in_nursery(uint64_t size)
 {
@@ -1362,11 +1134,334 @@ GibChunk gib_grow_region(GibCursor footer_ptr)
     return (GibChunk) {start , end};
 }
 
+// Functions related to counting the number of allocated regions.
+GibChunk *gib_alloc_counted_region(int64_t size)
+{
+    // Bump the count.
+    gib_bump_global_region_count();
+    return gib_alloc_region(size);
+}
+
+static void gib_bump_global_region_count(void)
+{
+#ifdef _GIBBON_PARALLEL
+    __atomic_add_fetch(&gib_global_region_count, 1, __ATOMIC_SEQ_CST);
+    return;
+#else
+    gib_global_region_count++;
+#endif
+    return;
+}
+
+void gib_print_global_region_count(void)
+{
+    printf("REGION_COUNT: %" PRId64 "\n", gib_global_region_count);
+    return;
+}
+
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Storage management
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+// Initialize nurseries, shadow stacks and generations.
+static void gib_storage_initialize(void);
+static void gib_storage_free(void);
+static void gib_nursery_initialize(GibNursery *nursery);
+static void gib_nursery_free(GibNursery *nursery);
+static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no);
+static void gib_generation_free(GibGeneration *gen, uint8_t gen_no);
+static void gib_shadowstack_initialize(GibShadowstack *stack, uint64_t stack_size);
+static void gib_shadowstack_free(GibShadowstack *stack);
+
+// Initialize nurseries, shadow stacks and generations.
+static void gib_storage_initialize(void)
+{
+    if (gib_global_nurseries != NULL) {
+        return;
+    }
+
+    // Initialize nurseries.
+    uint64_t n;
+    gib_global_nurseries = (GibNursery *) gib_alloc(gib_global_num_threads *
+                                                    sizeof(GibNursery));
+    for (n = 0; n < gib_global_num_threads; n++) {
+        gib_nursery_initialize(&(gib_global_nurseries[n]));
+     }
+
+    // Initialize generations.
+    int g;
+    gib_global_generations = (GibGeneration *) gib_alloc(NUM_GENERATIONS *
+                                                         sizeof(GibGeneration));
+    for (g = 0; g < NUM_GENERATIONS; g++) {
+        gib_generation_initialize(&(gib_global_generations[g]), g);
+    }
+    gib_global_gen0 = &(gib_global_generations[0]);
+    gib_global_oldest_gen = &(gib_global_generations[NUM_GENERATIONS-1]);
+    // Set up destination pointers in each generation.
+    for (g = 0; g < NUM_GENERATIONS-1; g++) {
+        gib_global_generations[g].dest = &(gib_global_generations[g+1]);
+    }
+    gib_global_oldest_gen->dest = gib_global_oldest_gen;
+
+    // Initialize shadow stacks.
+    uint64_t ss;
+    gib_global_read_shadowstacks =
+            (GibShadowstack *) gib_alloc(gib_global_num_threads *
+                                         sizeof(GibShadowstack));
+    gib_global_write_shadowstacks =
+            (GibShadowstack *) gib_alloc(gib_global_num_threads *
+                                         sizeof(GibShadowstack));
+    for (ss = 0; ss < gib_global_num_threads; ss++) {
+        gib_shadowstack_initialize(&(gib_global_read_shadowstacks[ss]),
+                                   SHADOWSTACK_SIZE);
+        gib_shadowstack_initialize(&(gib_global_write_shadowstacks[ss]),
+                                   SHADOWSTACK_SIZE);
+     }
+
+    return;
+}
+
+static void gib_storage_free(void)
+{
+    if (gib_global_nurseries == NULL) {
+        return;
+    }
+
+    // Free nurseries.
+    uint64_t n;
+    for (n = 0; n < gib_global_num_threads; n++) {
+        gib_nursery_free(&(gib_global_nurseries[n]));
+     }
+    free(gib_global_nurseries);
+
+    // Free generations.
+    int g;
+    for (g = 0; g < NUM_GENERATIONS; g++) {
+        gib_generation_free(&(gib_global_generations[g]), g);
+    }
+    free(gib_global_generations);
+
+    // Free shadow-stacks.
+    uint64_t ss;
+    for (ss = 0; ss < gib_global_num_threads; ss++) {
+        gib_shadowstack_free(&(gib_global_read_shadowstacks[ss]));
+        gib_shadowstack_free(&(gib_global_write_shadowstacks[ss]));
+    }
+    free(gib_global_read_shadowstacks);
+    free(gib_global_write_shadowstacks);
+}
+
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Nursery
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+static void gib_nursery_initialize(GibNursery *nursery)
+{
+    nursery->num_collections = 0;
+    nursery->heap_size = NURSERY_SIZE;
+    nursery->heap_start = (char *) gib_alloc(NURSERY_SIZE);
+    if (nursery->heap_start == NULL) {
+        fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %ld",
+                NURSERY_SIZE);
+        exit(1);
+    }
+    nursery->heap_end = nursery->heap_start + NURSERY_SIZE;
+    nursery->alloc = nursery->heap_end;
+    nursery->chunk_starts = (char *) gib_alloc(NURSERY_SIZE);
+    if (nursery->chunk_starts == NULL) {
+        fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %ld",
+                NURSERY_SIZE);
+        exit(1);
+    }
+    nursery->chunk_starts_i = 0;
+
+    return;
+}
+
+// Free data associated with a nursery.
+static void gib_nursery_free(GibNursery *nursery)
+{
+    free(nursery->heap_start);
+    free(nursery->chunk_starts);
+    return;
+}
+
+// TODO(ckoparkar):
+// If we allocate the nursery at a high address AND ensure that all of the
+// subsequent mallocs return a block at addresses lower than this, we can
+// implement addr_in_nursery with one address check instead than two. -- RRN
+bool gib_addr_in_nursery(char *ptr)
+{
+    GibNursery *nursery = DEFAULT_NURSERY;
+    return ((ptr >= nursery->heap_start) && (ptr <= nursery->heap_end));
+}
+
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Middle and old generations
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
+{
+    gen->no = gen_no;
+    gen->dest = (GibGeneration *) NULL;
+    gen->mem_allocated = 0;
+    gen->old_zct = (void *) NULL;
+    gen->new_zct = (void *) NULL;
+    // Initialize the remembered set.
+    gen->rem_set = (GibRememberedSet *) gib_alloc(sizeof(GibRememberedSet));
+    if (gen->rem_set == NULL) {
+        fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %ld",
+                sizeof(GibRememberedSet));
+        exit(1);
+    }
+    gib_shadowstack_initialize(gen->rem_set, REMEMBERED_SET_SIZE);
+    // Initialize the heap if this is not the oldest generation.
+    if (gen_no == (NUM_GENERATIONS - 1)) {
+        gen->oldest = true;
+        gen->heap_size = 0;
+        gen->heap_start = (char *) NULL;
+        gen->heap_end = (char *) NULL;
+        gen->alloc = (char *) NULL;
+    } else {
+        gen->oldest = false;
+        gen->heap_size = ((gen_no+1) * 256 * MB);
+        gen->heap_start = (char *) gib_alloc(gen->heap_size);
+        if (gen->heap_start == NULL) {
+            fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %ld",
+                    gen->heap_size);
+        }
+        gen->heap_end = gen->heap_start + gen->heap_size;
+        gen->alloc = gen->heap_start;
+    }
+
+    return;
+}
+
+static void gib_generation_free(GibGeneration *gen, uint8_t gen_no)
+{
+    gib_shadowstack_free(gen->rem_set);
+    free(gen->rem_set);
+    // Initialize the heap if this is not the oldest generation.
+    if (gen_no != (NUM_GENERATIONS - 1)) {
+        free(gen->heap_start);
+    }
+    return;
+}
+
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Shadow-stack
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+// Initialize a shadow stack.
+static void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_size)
+{
+    stack->start = (char *) gib_alloc(stack_size);
+    if (stack->start == NULL) {
+        fprintf(stderr, "gib_shadowstack_initialize: gib_alloc failed: %ld",
+                stack_size);
+        exit(1);
+    }
+    stack->end = stack->start + stack_size;
+    stack->alloc = stack->start;
+    return;
+}
+
+static void gib_shadowstack_free(GibShadowstack* stack)
+{
+    free(stack->start);
+    return;
+}
+
+void gib_shadowstack_push(
+    GibShadowstack *stack,
+    char *ptr,
+    char *endptr,
+    uint32_t datatype
+)
+{
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_end = stack->end;
+    char **stack_alloc_ptr_addr = &(stack->alloc);
+    size_t size = sizeof(GibShadowstackFrame);
+    if ((stack_alloc_ptr + size) > stack_end) {
+        fprintf(stderr, "gib_shadowstack_push: out of memory");
+        exit(1);
+    }
+    GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
+    frame->ptr = ptr;
+    frame->endptr = endptr;
+    frame->datatype = datatype;
+    (*stack_alloc_ptr_addr) += size;
+    return;
+}
+
+GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack)
+{
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_start = stack->start;
+    char **stack_alloc_ptr_addr = &(stack->alloc);
+    size_t size = sizeof(GibShadowstackFrame);
+    if ((stack_alloc_ptr - size) < stack_start) {
+        fprintf(stderr, "gib_shadowstack_pop: stack empty");
+        exit(1);
+    }
+    (*stack_alloc_ptr_addr) -= size;
+    GibShadowstackFrame *frame = (GibShadowstackFrame *) (*stack_alloc_ptr_addr);
+    return frame;
+}
+
+int32_t gib_shadowstack_length(GibShadowstack *stack)
+{
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_start = stack->start;
+    return ( (stack_alloc_ptr - stack_start) / sizeof(GibShadowstackFrame) );
+}
+
+void gib_shadowstack_print_all(GibShadowstack *stack)
+{
+    char *run_ptr = stack->start;
+    char *end_ptr = stack->alloc;
+    GibShadowstackFrame *frame;
+    while (run_ptr < end_ptr) {
+        frame = (GibShadowstackFrame *) run_ptr;
+        printf("ptr=%p, endptr=%p, datatype=%d\n",
+               frame->ptr, frame->endptr, frame->datatype);
+        run_ptr += sizeof(GibShadowstackFrame);
+    }
+    return;
+}
+
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Remembered set
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+void gib_remset_reset(GibRememberedSet *set)
+{
+    set->alloc = set->start;
+}
+
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Write barrier
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ *
+ * INLINE!!!
  *
  * The following is how different types of indirections are handled:
  *
@@ -1379,8 +1474,6 @@ GibChunk gib_grow_region(GibCursor footer_ptr)
  *     Same as old Gibbon, bump refcount and insert into outset.
  *
  */
-
-// Write barrier. INLINE!!!
 void gib_indirection_barrier(
     // Address where the indirection tag is written.
     GibCursor from,
@@ -1421,59 +1514,6 @@ void gib_indirection_barrier(
     return;
 }
 
-// Functions related to counting the number of allocated regions.
-
-GibChunk *gib_alloc_counted_region(int64_t size)
-{
-    // Bump the count.
-    gib_bump_global_region_count();
-    return gib_alloc_region(size);
-}
-
-static void gib_bump_global_region_count(void)
-{
-#ifdef _GIBBON_PARALLEL
-    __atomic_add_fetch(&gib_global_region_count, 1, __ATOMIC_SEQ_CST);
-    return;
-#else
-    gib_global_region_count++;
-#endif
-    return;
-}
-
-void gib_print_global_region_count(void)
-{
-    printf("REGION_COUNT: %" PRId64 "\n", gib_global_region_count);
-    return;
-}
-
-
-// Ensure that C and Rust agree on sizes of structs that cross the boundary.
-void gib_check_rust_struct_sizes(void)
-{
-    // Sizes in the Rust RTS.
-    size_t *stack, *frame, *nursery, *generation, *reg_info, *footer;
-    stack = (size_t *) malloc(sizeof(size_t) * 6);
-    frame = (size_t *) ((char *) stack + sizeof(size_t));
-    nursery = (size_t *) ((char *) frame + sizeof(size_t));
-    generation = (size_t *) ((char *) nursery + sizeof(size_t));
-    reg_info = (size_t *) ((char *) generation + sizeof(size_t));
-    footer = (size_t *) ((char *) reg_info + sizeof(size_t));
-    gib_get_rust_struct_sizes(stack, frame, nursery, generation, reg_info, footer);
-
-    // Check if they match with sizes in the C RTS.
-    assert(*stack == sizeof(GibShadowstack));
-    assert(*frame == sizeof(GibShadowstackFrame));
-    assert(*nursery == sizeof(GibNursery));
-    assert(*generation == sizeof(GibGeneration));
-    assert(*reg_info == sizeof(GibRegionInfo));
-    assert(*footer == sizeof(GibChunkFooter));
-
-    // Done.
-    free(stack);
-
-    return;
-}
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Helpers

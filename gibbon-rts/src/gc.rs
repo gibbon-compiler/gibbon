@@ -970,7 +970,7 @@ impl C_GibRegionInfo {
         C_GibRegionInfo {
             id: gensym(),
             refcount: 0,
-            outset2: Box::into_raw(Box::new(HashSet::new())),
+            outset: Box::into_raw(Box::new(HashSet::new())),
         }
     }
 }
@@ -1006,7 +1006,7 @@ unsafe fn free_region(
     // Decrement refcounts of all regions in the outset and add the ones with a
     // zero refcount to the ZCT. Also free the HashSet backing the outset for
     // this region.
-    let outset: Box<HashSet<*const i8>> = Box::from_raw(reg_info.outset2);
+    let outset: Box<HashSet<*const i8>> = Box::from_raw(reg_info.outset);
     for o_ptr in outset.into_iter() {
         let o_new_refcount = decrement_refcount(o_ptr);
         if o_new_refcount == 0 {
@@ -1067,7 +1067,7 @@ pub fn handle_old_to_old_indirection(
 unsafe fn add_to_outset(from_addr: *const i8, to_addr: *const i8) {
     let footer = from_addr as *mut C_GibChunkFooter;
     let reg_info = (*footer).reg_info;
-    (*((*reg_info).outset2)).insert(to_addr);
+    (*((*reg_info).outset)).insert(to_addr);
 }
 
 unsafe fn bump_refcount(addr: *const i8) -> u16 {

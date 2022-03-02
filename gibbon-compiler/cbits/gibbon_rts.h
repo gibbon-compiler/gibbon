@@ -328,10 +328,42 @@ typedef struct gib_generation GibGeneration;
 extern GibShadowstack *gib_global_read_shadowstacks;
 extern GibShadowstack *gib_global_write_shadowstacks;
 
-// Nursery API.
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Ensure that C and Rust agree on sizes
+ * of structs that cross the boundary.
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+void gib_check_rust_struct_sizes(void);
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Region allocation and growth
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+// Region allocation.
+GibChunk *gib_alloc_region(uint64_t size);
+void gib_free_region(GibChunk *region);
+GibChunk gib_grow_region(GibCursor footer_ptr);
+
+// Functions related to counting the number of allocated regions.
+GibChunk *gib_alloc_counted_region(int64_t size);
+void gib_print_global_region_count(void);
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Nursery
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
 bool gib_addr_in_nursery(char *ptr);
 
-// Shadowstack API.
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Shadow-stack
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
 void gib_shadowstack_push(
     GibShadowstack *stack,
     char *ptr,
@@ -342,7 +374,11 @@ GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack);
 int32_t gib_shadowstack_length(GibShadowstack *stack);
 void gib_shadowstack_print_all(GibShadowstack *stack);
 
-// Remembered Set API.
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Remembered set
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
 #define gib_remset_push(stack, ptr, endptr, datatype) \
     gib_shadowstack_push(stack, ptr, (char *) endptr, datatype)
 #define gib_remset_pop(stack) \
@@ -353,12 +389,15 @@ void gib_shadowstack_print_all(GibShadowstack *stack);
     gib_shadowstack_print_all(stack)
 void gib_remset_reset(GibRememberedSet *set);
 
-// Region allocation.
-GibChunk *gib_alloc_region(uint64_t size);
-void gib_free_region(GibChunk *region);
-GibChunk gib_grow_region(GibCursor footer_ptr);
 
-// Write barrier. INLINE!!!
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Write barrier
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ *
+ * INLINE!!!
+ *
+ */
 void gib_indirection_barrier(
     GibCursor from,
     GibCursor from_footer_ptr,
@@ -366,13 +405,6 @@ void gib_indirection_barrier(
     GibCursor to_footer_ptr,
     uint32_t datatype
 );
-
-// Functions related to counting the number of allocated regions.
-GibChunk *gib_alloc_counted_region(int64_t size);
-void gib_print_global_region_count(void);
-
-// Ensure that C and Rust agree on sizes of structs that cross the boundary.
-void gib_check_rust_struct_sizes(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
