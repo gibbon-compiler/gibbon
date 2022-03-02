@@ -55,6 +55,9 @@ pub mod types {
     pub type C_GibRememberedSetElt = C_GibShadowstackFrame;
     pub type C_GibRememberedSet = C_GibShadowstack;
 
+    pub type Zct = HashSet<*mut C_GibRegionInfo>;
+    pub type Outset = HashSet<*mut C_GibRegionInfo>;
+
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibGeneration {
@@ -67,8 +70,8 @@ pub mod types {
         pub heap_end: *const i8,
         pub alloc: *const i8,
         pub rem_set: *mut C_GibRememberedSet,
-        pub old_zct: *mut HashSet<*const C_GibChunkFooter>,
-        pub new_zct: *mut HashSet<*const C_GibChunkFooter>,
+        pub old_zct: *mut Zct,
+        pub new_zct: *mut Zct,
     }
 
     #[repr(C)]
@@ -92,7 +95,8 @@ pub mod types {
     pub struct C_GibRegionInfo {
         pub id: C_GibSym,
         pub refcount: u16,
-        pub outset: *mut HashSet<*const i8>,
+        pub outset: *mut Outset,
+        pub first_chunk_footer: *const C_GibChunkFooter,
     }
 
     #[repr(C)]
@@ -102,7 +106,6 @@ pub mod types {
         pub seq_no: u16,
         pub size: u64,
         pub next: *mut C_GibChunkFooter,
-        pub prev: *mut C_GibChunkFooter,
     }
 }
 

@@ -810,13 +810,13 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 
 /*
 
-  Gibbon has "growing regions" i.e each logical region is backed by a doubly
+  Gibbon has "growing regions" i.e each logical region is backed by a singly
   linked-list of smaller chunks which grows as required. In addition to actual
   data, each chunk stores some additional metadata (GibChunkFooter) to chain
   the chunks together in a list and for garbage collection. The footer:
 
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  data | reg_info | seq_no | size | next | prev
+  data | reg_info | seq_no | size | next
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   The metadata after the serialized data serves various purposes:
@@ -833,12 +833,15 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
     be bumped by 1. Note that all there's only 1 refcount cell, and 1 outset
     per logical region, and chunks only store a pointer to them.
 
+  = first_chunk_footer: Address of the first chunk in this region;
+    used to garbage collect the linked-list of chunks.
+
   - seq_no: The index of this particular chunk in the list.
 
   - size: Used during bounds checking to calculate the size of the next
     region in the linked list.
 
-  - next / prev: Point to the next and previous chunk respectively.
+  - next: Pointer to the next chunk's footer.
 
 
   There are two ways in which a region may be freed:
@@ -859,16 +862,6 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
   calls gib_free_region on that. This way we can be sure that all regions will
   eventually be garbage collected before the program exits.
 
-
-
-  Why is it a doubly linked-list?
-  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-  Due to way that bounds-checking works, the pointers in the outset may
-  actually point to any arbitrary chunk in the chain. However, we must call
-  gib_free_region on the first one to ensure that all of them are GC'd.
-  So we need pointers to traverse backward get to the first one.
-  'gib_trav_to_first_chunk' accomplishes this.
 
 */
 
@@ -895,7 +888,9 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 typedef struct gib_region_info {
     GibSym id;
     uint16_t refcount;
+    // Pointers to a structure that is initialized and tracked on the Rust heap.
     void *outset;
+    char *first_chunk_footer;
 } GibRegionInfo;
 
 typedef struct gib_chunk_footer {
@@ -904,7 +899,6 @@ typedef struct gib_chunk_footer {
     uint16_t seq_no;
     uint64_t size;
     struct gib_chunk_footer *next;
-    struct gib_chunk_footer *prev;
 } GibChunkFooter;
 
 typedef struct gib_nursery {
@@ -945,7 +939,8 @@ typedef struct gib_generation {
     // Remembered set to store old to young pointers.
     GibRememberedSet *rem_set;
 
-    // Zero count tables; pointers to structures on the Rust Heap.
+    // Zero count tables; pointers to structures that are initialized and
+    // tracked on the Rust Heap.
     void *old_zct;
     void *new_zct;
 
@@ -1105,13 +1100,13 @@ GibChunk gib_grow_region(GibCursor footer_ptr)
     uint64_t total_size = newsize + sizeof(GibChunkFooter);
 
     // Allocate.
-    GibCursor start = (char *) gib_alloc(total_size);
+    char *start = (char *) gib_alloc(total_size);
     if (start == NULL) {
         fprintf(stderr, "gib_grow_region: gib_alloc failed: %" PRId64,
                 total_size);
         exit(1);
     }
-    GibCursor end = start + newsize;
+    char *end = start + newsize;
 
     // Link the next chunk's footer.
     footer->next = (GibChunkFooter *) end;
@@ -1122,7 +1117,6 @@ GibChunk gib_grow_region(GibCursor footer_ptr)
     new_footer->seq_no = footer->seq_no + 1;
     new_footer->size = newsize;
     new_footer->next = (GibChunkFooter *) NULL;
-    new_footer->prev = footer;
 
 #ifdef _GIBBON_DEBUG
     GibRegionInfo *reg = (GibRegionInfo*) new_footer->reg_info;
@@ -1499,7 +1493,7 @@ void gib_indirection_barrier(
             GibGeneration *gen = DEFAULT_GENERATION;
             // Store the address of the indirection pointer, *NOT* the address of
             // the indirection tag, in the remembered set.
-            GibCursor indr_addr = from + sizeof(GibPackedTag);
+            char *indr_addr = (char *) from + sizeof(GibPackedTag);
             gib_remset_push(gen->rem_set, indr_addr, from_footer_ptr, datatype);
             return;
         } else if (to_old) {
