@@ -190,7 +190,7 @@ void symbol_table_initialize(void)
 GibInt do_reverse(GibInt n_19_183_289)
 {
     GibChunk *region_1380 =
-        gib_alloc_region2(gib_get_inf_init_chunk_size());
+        gib_alloc_region(gib_get_inf_init_chunk_size());
     GibCursor r_721 = region_1380->start;
     GibCursor end_r_721 = region_1380->end;
 
@@ -201,7 +201,7 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor pvrtmp_1386 = tmp_struct_16.field2;
 
     GibChunk *region_1378 =
-        gib_alloc_region2(gib_get_inf_init_chunk_size());
+        gib_alloc_region(gib_get_inf_init_chunk_size());
     GibCursor r_720 = region_1378->start;
     GibCursor end_r_720 = region_1378->end;
 
@@ -218,7 +218,7 @@ GibInt do_reverse(GibInt n_19_183_289)
     gib_shadowstack_push(rstack, r_720, end_r_720, List_T);
 
     GibChunk *region_1382 =
-        gib_alloc_region2(gib_get_inf_init_chunk_size());
+        gib_alloc_region(gib_get_inf_init_chunk_size());
     GibCursor r_719 = region_1382->start;
     GibCursor end_r_719 = region_1382->end;
 
@@ -242,9 +242,9 @@ GibInt do_reverse(GibInt n_19_183_289)
     _print_List(NULL, pvrtmp_1395);
     printf("\n");
 
-    gib_free_region2(region_1382);
-    gib_free_region2(region_1380);
-    gib_free_region2(region_1378);
+    gib_free_region(region_1382);
+    gib_free_region(region_1380);
+    gib_free_region(region_1378);
     return pvrtmp_1402;
 }
 GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input region (xs)
@@ -323,7 +323,7 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
             // Pushed.
 
             GibChunk *region_1353 =
-                gib_alloc_region2(gib_get_inf_init_chunk_size());
+                gib_alloc_region(gib_get_inf_init_chunk_size());
             GibCursor r_705 = region_1353->start;
             GibCursor end_r_705 = region_1353->end;
 
@@ -393,7 +393,7 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
             GibCursor pvrtmp_1368 = tmp_struct_12.field1;
             GibCursor pvrtmp_1369 = tmp_struct_12.field2;
             GibCursor pvrtmp_1370 = tmp_struct_12.field3;
-            gib_free_region2(region_1353);
+            gib_free_region(region_1353);
             return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_1367,
                                                                pvrtmp_1368,
                                                                pvrtmp_1369,
@@ -555,7 +555,7 @@ GibInt do_tree(GibInt n_22_186_293)
     GibShadowstackFrame *frame;
 
     GibChunk *region_1403 =
-                  gib_alloc_region2(gib_get_inf_init_chunk_size());
+                  gib_alloc_region(gib_get_inf_init_chunk_size());
     GibCursor r_731 = region_1403->start;
     GibCursor end_r_731 = region_1403->end;
 
@@ -571,7 +571,7 @@ GibInt do_tree(GibInt n_22_186_293)
 
     /*
     GibChunk *region_1405 =
-                  gib_alloc_region2(gib_get_inf_init_chunk_size());
+                  gib_alloc_region(gib_get_inf_init_chunk_size());
     GibCursor r_730 = region_1405->start;
     GibCursor end_r_730 = region_1405->end;
 
@@ -588,7 +588,7 @@ GibInt do_tree(GibInt n_22_186_293)
     GibCursor pvrtmp_1422 = tmp_struct_21.field0;
     GibInt pvrtmp_1423 = tmp_struct_21.field1;
 
-    gib_free_region2(region_1403);
+    gib_free_region(region_1403);
     // gib_free_region(end_r_730);
     return pvrtmp_1423;
 
@@ -806,7 +806,7 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
         gib_shadowstack_push(wstack, loc_651, end_r_652, Tree_T);
         // pushed.
 
-        GibChunk *region_1413 = gib_alloc_region2(gib_get_inf_init_chunk_size());
+        GibChunk *region_1413 = gib_alloc_region(gib_get_inf_init_chunk_size());
 
         // restore from shadow stack.
         frame = gib_shadowstack_pop(wstack);
@@ -844,7 +844,7 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
                 GibCursor writetag_1059 = loc_651 + 1;
                 *(GibInt *) writetag_1059 = tmpval_1422;
                 GibCursor writecur_1060 = writetag_1059 + sizeof(GibInt);
-                gib_free_region2(region_1413);
+                gib_free_region(region_1413);
                 return (GibCursorGibCursorGibCursorProd) {end_r_652, loc_651,
                                                           writecur_1060};
                 break;
@@ -858,7 +858,7 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
                 GibCursor writetag_1063 = loc_651 + 1;
                 *(GibCursor *) writetag_1063 = tmpcur_1421;
                 GibCursor writecur_1064 = writetag_1063 + 8;
-                gib_free_region2(region_1413);
+                gib_free_region(region_1413);
                 return (GibCursorGibCursorGibCursorProd) {end_r_652, loc_651,
                                                           writecur_1064};
                 break;

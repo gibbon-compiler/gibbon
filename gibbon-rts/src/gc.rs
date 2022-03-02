@@ -13,7 +13,7 @@ use std::error::Error;
 use std::fmt;
 use std::lazy::OnceCell;
 use std::mem::size_of;
-use std::ptr::{copy_nonoverlapping, null, null_mut, write_bytes};
+use std::ptr::{copy_nonoverlapping, null_mut, write_bytes};
 
 use crate::ffi::types::*;
 use crate::tagged_pointer::*;
@@ -659,6 +659,8 @@ unsafe fn evacuate_packed(
                 Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
             let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
             let dst_after_indr = write(dst_after_tag, fwd_ptr);
+            // TODO(ckoparkar): check that no code path will try to read/write
+            // at this null pointer.
             let src_after_burned = match benv.get(&src) {
                 None => null_mut(),
                 Some(end) => *end as *mut i8,
@@ -703,6 +705,8 @@ unsafe fn evacuate_packed(
                 Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
             let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
             let dst_after_indr = write(dst_after_tag, fwd_want);
+            // TODO(ckoparkar): check that no code path will try to read/write
+            // at this null pointer.
             let src_after_burned = match benv.get(&src) {
                 None => null_mut(),
                 Some(end) => *end as *mut i8,
@@ -966,8 +970,6 @@ impl C_GibRegionInfo {
         C_GibRegionInfo {
             id: gensym(),
             refcount: 0,
-            outset_len: 0,
-            outset: [null(); 10],
             outset2: Box::into_raw(Box::new(HashSet::new())),
         }
     }

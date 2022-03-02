@@ -87,15 +87,11 @@ pub mod types {
         pub datatype: C_GibDatatype,
     }
 
-    const MAX_OUTSET_LENGTH: usize = 10;
-
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibRegionInfo {
         pub id: C_GibSym,
         pub refcount: u16,
-        pub outset_len: u16,
-        pub outset: [C_GibCursor; MAX_OUTSET_LENGTH],
         pub outset2: *mut HashSet<*const i8>,
     }
 
