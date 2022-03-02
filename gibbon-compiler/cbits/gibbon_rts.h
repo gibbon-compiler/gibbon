@@ -382,6 +382,10 @@ void gib_indirection_barrier(
     uint32_t datatype
 );
 
+// Ensure that C and Rust agree on sizes of structs that cross the boundary.
+void gib_check_rust_struct_sizes(void);
+
+
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Implemented in the Rust RTS
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -410,6 +414,14 @@ int gib_gc_cleanup(
     GibShadowstack *wstack,
     GibNursery *nursery,
     GibGeneration *generations
+);
+void gib_get_rust_struct_sizes(
+    size_t *stack,
+    size_t *frame,
+    size_t *nursery,
+    size_t *generation,
+    size_t *reg_info,
+    size_t *footer
 );
 
 

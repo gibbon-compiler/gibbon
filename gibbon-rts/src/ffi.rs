@@ -115,6 +115,7 @@ pub mod types {
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+use std::mem::size_of;
 use std::slice;
 
 use crate::ffi::types::*;
@@ -226,4 +227,21 @@ pub extern "C" fn gib_gc_cleanup(
             -1
         }
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn gib_get_rust_struct_sizes(
+    stack: *mut usize,
+    frame: *mut usize,
+    nursery: *mut usize,
+    generation: *mut usize,
+    reg_info: *mut usize,
+    footer: *mut usize,
+) {
+    *stack = size_of::<C_GibShadowstack>();
+    *frame = size_of::<C_GibShadowstackFrame>();
+    *nursery = size_of::<C_GibNursery>();
+    *generation = size_of::<C_GibGeneration>();
+    *reg_info = size_of::<C_GibRegionInfo>();
+    *footer = size_of::<C_GibChunkFooter>();
 }

@@ -872,7 +872,7 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 
 #define MAX_OUTSET_LENGTH 10
 
-typedef struct gib_region_meta {
+typedef struct gib_region_info {
     GibSym id;
     uint16_t refcount;
     uint16_t outset_len;
@@ -1728,6 +1728,32 @@ void gib_indirection_barrier(
     return;
 }
 
+// Ensure that C and Rust agree on sizes of structs that cross the boundary.
+void gib_check_rust_struct_sizes(void)
+{
+    // Sizes in the Rust RTS.
+    size_t *stack, *frame, *nursery, *generation, *reg_info, *footer;
+    stack = (size_t *) malloc(sizeof(size_t) * 6);
+    frame = (size_t *) ((char *) stack + sizeof(size_t));
+    nursery = (size_t *) ((char *) frame + sizeof(size_t));
+    generation = (size_t *) ((char *) nursery + sizeof(size_t));
+    reg_info = (size_t *) ((char *) generation + sizeof(size_t));
+    footer = (size_t *) ((char *) reg_info + sizeof(size_t));
+    gib_get_rust_struct_sizes(stack, frame, nursery, generation, reg_info, footer);
+
+    // Check if they match with sizes in the C RTS.
+    assert(*stack == sizeof(GibShadowstack));
+    assert(*frame == sizeof(GibShadowstackFrame));
+    assert(*nursery == sizeof(GibNursery));
+    assert(*generation == sizeof(GibGeneration));
+    assert(*reg_info == sizeof(GibRegionInfo));
+    assert(*footer == sizeof(GibChunkFooter));
+
+    // Done.
+    free(stack);
+
+    return;
+}
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Helpers
@@ -1816,6 +1842,9 @@ int dbgprintf(const char *format, ...)
 
 int main(int argc, char **argv)
 {
+    // Ensure that C and Rust agree on sizes of structs that cross the boundary.
+    gib_check_rust_struct_sizes();
+
     // parameters to parse:
     //
     //   num iterations: How many times to repeat a benchmark.
