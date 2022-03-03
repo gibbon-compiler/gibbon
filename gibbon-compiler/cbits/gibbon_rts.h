@@ -433,6 +433,12 @@ int gib_handle_old_to_old_indirection(
     char *from_footer,
     char *to_footer
 );
+char *gib_init_footer_at(
+    char *chunk_end,
+    size_t chunk_size,
+    uint16_t refcount
+);
+
 int gib_gc_cleanup(
     GibShadowstack *rstack,
     GibShadowstack *wstack,

@@ -1029,8 +1029,8 @@ static GibChunk gib_alloc_region_on_heap(size_t size)
         exit(1);
     }
     char *heap_end = heap_start + size;
-    // TODO(ckoparkar): initialize a footer at heap_end.
-    return (GibChunk) {heap_start, heap_end};
+    char *footer_start = gib_init_footer_at(heap_end, size, 0);
+    return (GibChunk) {heap_start, footer_start};
 }
 
 GibChunk gib_alloc_region_in_nursery(size_t size)
@@ -1072,14 +1072,24 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     return gib_alloc_region_in_nursery_fast(size, true);
 }
 
+// Eager promotion.
 GibChunk gib_grow_region(GibCursor footer_ptr)
 {
-    // Get size from current footer.
-    GibChunkFooter *footer = (GibChunkFooter *) footer_ptr;
-    size_t newsize = footer->size * 2;
-    // See #110.
-    if (newsize > MAX_CHUNK_SIZE) {
-        newsize = MAX_CHUNK_SIZE;
+    size_t newsize;
+    bool old_chunk_in_nursery;
+    GibChunkFooter *footer = NULL;
+    if (gib_addr_in_nursery(footer_ptr)) {
+        old_chunk_in_nursery = true;
+        newsize = gib_global_inf_init_chunk_size;
+    } else {
+        old_chunk_in_nursery = false;
+        // Get size from current footer.
+        footer = (GibChunkFooter *) footer_ptr;
+        newsize = footer->size * 2;
+        // See #110.
+        if (newsize > MAX_CHUNK_SIZE) {
+            newsize = MAX_CHUNK_SIZE;
+        }
     }
     size_t total_size = newsize + sizeof(GibChunkFooter);
 
@@ -1091,10 +1101,11 @@ GibChunk gib_grow_region(GibCursor footer_ptr)
     }
     char *end = start + newsize;
 
-    // Link the next chunk's footer.
-    footer->next = (GibChunkFooter *) end;
-
-    // Write the footer.
+    // Write a new footer at this chunk and link it with the old footer.
+    if (!old_chunk_in_nursery) {
+        // Link the next chunk's footer.
+        footer->next = (GibChunkFooter *) end;
+    }
     GibChunkFooter *new_footer = (GibChunkFooter *) end;
     new_footer->reg_info = footer->reg_info;
     new_footer->size = newsize;

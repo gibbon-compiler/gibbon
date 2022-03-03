@@ -114,6 +114,7 @@ pub mod types {
  */
 
 use std::mem::size_of;
+use std::ptr::null_mut;
 use std::slice;
 
 use crate::ffi::types::*;
@@ -210,7 +211,7 @@ pub extern "C" fn gib_garbage_collect(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gib_handle_old_to_old_indirection(
+pub extern "C" fn gib_handle_old_to_old_indirection(
     from_footer_ptr: *mut i8,
     to_footer_ptr: *mut i8,
 ) -> i32 {
@@ -223,6 +224,16 @@ pub unsafe extern "C" fn gib_handle_old_to_old_indirection(
             -1
         }
     }
+}
+
+#[no_mangle]
+pub extern "C" fn gib_init_footer_at(
+    chunk_end: *mut i8,
+    // Total size of the chunk, *including* space required to store the footer.
+    chunk_size: usize,
+    refcount: u16,
+) -> *mut i8 {
+    unsafe { gc::init_footer_at(chunk_end, null_mut(), chunk_size, refcount) }
 }
 
 #[no_mangle]

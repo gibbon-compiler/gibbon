@@ -762,6 +762,10 @@ unsafe fn evacuate_packed(
                 dst,
                 dst_end.offset_from(dst).try_into().unwrap(),
             );
+            // TODO(ckoparkar): if the next chunk is in oldgen, we don't want
+            // to evacuate it. Just write a redireciton node at dst (pointing to
+            // the start of the oldgen chunk) and link the footers.
+
             // Continue in the next chunk.
             evacuate_packed(
                 benv,
@@ -1080,25 +1084,25 @@ unsafe fn decrement_refcount(addr: *mut i8) -> u16 {
     (*reg_info).refcount
 }
 
-unsafe fn init_footer_at(
+pub unsafe fn init_footer_at(
     chunk_end: *mut i8,
-    reg_info: Option<*mut C_GibRegionInfo>,
+    reg_info: *mut C_GibRegionInfo,
+    // Total size of the chunk, *including* space required to store the footer.
     chunk_size: usize,
     refcount: u16,
 ) -> *mut i8 {
     let footer_space = size_of::<C_GibChunkFooter>();
     let footer_start = chunk_end.sub(footer_space);
     let footer: *mut C_GibChunkFooter = footer_start as *mut C_GibChunkFooter;
-    let region_info_ptr: *mut C_GibRegionInfo = match reg_info {
-        None => {
-            let mut region_info = C_GibRegionInfo::new(footer);
-            region_info.refcount = refcount;
-            Box::into_raw(Box::new(region_info))
-        }
-        Some(info_ptr) => info_ptr,
+    let region_info_ptr: *mut C_GibRegionInfo = if reg_info.is_null() {
+        let mut region_info = C_GibRegionInfo::new(footer);
+        region_info.refcount = refcount;
+        Box::into_raw(Box::new(region_info))
+    } else {
+        reg_info
     };
     (*footer).reg_info = region_info_ptr;
-    (*footer).size = chunk_size;
+    (*footer).size = chunk_size - footer_space;
     (*footer).next = null_mut();
     footer_start
 }
@@ -1109,7 +1113,7 @@ unsafe fn init_footer_at(
  */
 
 /// Typeclass for different allocation areas; nurseries, generations etc.
-pub trait Heap {
+trait Heap {
     fn is_nursery(&self) -> bool;
     fn is_oldest(&self) -> bool;
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)>;
@@ -1125,8 +1129,9 @@ pub trait Heap {
         } else {
             let total_size = size + size_of::<C_GibChunkFooter>();
             let (start, end) = self.allocate(total_size)?;
-            let footer_start =
-                unsafe { init_footer_at(end, None, size, refcount) };
+            let footer_start = unsafe {
+                init_footer_at(end, null_mut(), total_size, refcount)
+            };
             Ok((start, footer_start))
         }
     }
@@ -1159,7 +1164,7 @@ pub trait Heap {
                 let reg_info: *mut C_GibRegionInfo = (*old_footer).reg_info;
                 let new_footer_start = init_footer_at(
                     new_dst_end,
-                    Some(reg_info),
+                    reg_info,
                     chunk_size,
                     (*reg_info).refcount,
                 );
