@@ -1175,6 +1175,7 @@ GibCursorProd _print_Tree(GibCursor end_r_633, GibCursor arg_133_213_324)
             break;
         }
 
+/*
       case COPIED_TAG:
         {
             printf(" COPIED \n");
@@ -1195,7 +1196,7 @@ GibCursorProd _print_Tree(GibCursor end_r_633, GibCursor arg_133_213_324)
             fflush(stdout);
             break;
         }
-
+*/
       default:
         {
             printf("Unknown tag in: tmpval_1511: %d", tmpval_1511);

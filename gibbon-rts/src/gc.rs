@@ -258,8 +258,8 @@ TODO.
 /// If we have variable sized initial chunks due to the region bound analysis,
 /// we'll have to store that info in a chunk footer, and then that could guide
 /// how big this new chunk should be. Using a default value of 1024 for now.
-const CHUNK_SIZE: u64 = 1024;
-const MAX_CHUNK_SIZE: u64 = 1 * 1024 * 1024 * 1024;
+const CHUNK_SIZE: usize = 1024;
+const MAX_CHUNK_SIZE: usize = 65535;
 
 pub fn cleanup(
     rstack_ptr: *mut C_GibShadowstack,
@@ -458,19 +458,19 @@ unsafe fn evacuate_remembered_set(
             Some(DatatypeInfo::Scalar(size)) => {
                 // Allocate space in the destination.
                 let (dst, dst_end) =
-                    Heap::allocate_first_chunk(heap, 32 + *size as u64, 1)?;
+                    Heap::allocate_first_chunk(heap, 32 + *size, 1)?;
                 // The remembered set contains the address of the indirection
                 // pointer. We must read it to get the address of the pointed-to
                 // data.
                 let (src, _): (*mut i8, _) = read((*frame).ptr);
                 // Evacuate the data.
-                copy_nonoverlapping(src, dst, *size as usize);
+                copy_nonoverlapping(src, dst, *size);
                 // Update the indirection pointer in oldgen region.
                 write((*frame).ptr, dst);
                 // Update the outset in oldgen region.
                 add_to_outset((*frame).endptr, dst_end);
                 // Update the burned address table.
-                benv.insert(src, src.add(*size as usize));
+                benv.insert(src, src.add(*size));
             }
             // A packed type that is copied by referring to the info table.
             Some(DatatypeInfo::Packed(packed_info)) => {
@@ -540,10 +540,10 @@ unsafe fn evacuate_shadowstack(
             Some(DatatypeInfo::Scalar(size)) => {
                 // Allocate space in the destination.
                 let (dst, dst_end) =
-                    Heap::allocate_first_chunk(heap, 32 + *size as u64, 0)?;
+                    Heap::allocate_first_chunk(heap, 32 + *size, 0)?;
                 // Evacuate the data.
                 let src = (*frame).ptr;
-                copy_nonoverlapping(src, dst, *size as usize);
+                copy_nonoverlapping(src, dst, *size);
                 // Update the pointers in shadow-stack.
                 (*frame).ptr = dst;
                 (*frame).endptr = dst_end;
@@ -830,7 +830,7 @@ unsafe fn evacuate_packed(
             // Check bound of the destination buffer before copying.
             // Reserve additional space for a redirection node or a
             // forwarding pointer.
-            let space_reqd: usize = (32 + *scalar_bytes).into();
+            let space_reqd: usize = 32 + *scalar_bytes;
             {
                 // Scope for mutable variables src_mut and dst_mut,
                 // which are the read and write cursors in the source
@@ -840,12 +840,9 @@ unsafe fn evacuate_packed(
                     Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
                 // Copy the tag and the fields.
                 dst_mut = write(dst_mut, tag);
-                dst_mut.copy_from_nonoverlapping(
-                    src_after_tag,
-                    *scalar_bytes as usize,
-                );
-                let mut src_mut = src_after_tag.add(*scalar_bytes as usize);
-                dst_mut = dst_mut.add(*scalar_bytes as usize);
+                dst_mut.copy_from_nonoverlapping(src_after_tag, *scalar_bytes);
+                let mut src_mut = src_after_tag.add(*scalar_bytes);
+                dst_mut = dst_mut.add(*scalar_bytes);
                 // Add forwarding pointers:
                 // if there's enough space, write a COPIED_TO tag and
                 // dst's address at src. Otherwise just write a COPIED tag.
@@ -920,9 +917,8 @@ unsafe fn evacuate_field(
             )));
         }
         Some(DatatypeInfo::Scalar(size)) => {
-            copy_nonoverlapping(src, dst, *size as usize);
-            let size1 = *size as usize;
-            Ok((src.add(size1), dst.add(size1), dst_end, C_SCALAR_TAG))
+            copy_nonoverlapping(src, dst, *size);
+            Ok((src.add(*size), dst.add(*size), dst_end, C_SCALAR_TAG))
         }
         Some(DatatypeInfo::Packed(packed_info)) => evacuate_packed(
             benv,
@@ -1050,7 +1046,7 @@ unsafe fn free_region(
 }
 
 unsafe fn addr_to_free(footer: *const C_GibChunkFooter) -> *mut libc::c_void {
-    ((footer as *const i8).sub((*footer).size as usize)) as *mut libc::c_void
+    ((footer as *const i8).sub((*footer).size)) as *mut libc::c_void
 }
 
 pub fn handle_old_to_old_indirection(
@@ -1088,7 +1084,7 @@ unsafe fn init_footer_at(
     chunk_end: *mut i8,
     reg_info: Option<*mut C_GibRegionInfo>,
     seq_no: u16,
-    chunk_size: u64,
+    chunk_size: usize,
     refcount: u16,
 ) -> *mut i8 {
     let footer_space = size_of::<C_GibChunkFooter>();
@@ -1118,18 +1114,18 @@ unsafe fn init_footer_at(
 pub trait Heap {
     fn is_nursery(&self) -> bool;
     fn is_oldest(&self) -> bool;
-    fn allocate(&mut self, size: u64) -> Result<(*mut i8, *mut i8)>;
+    fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)>;
     fn space_available(&self) -> usize;
 
     fn allocate_first_chunk(
         &mut self,
-        size: u64,
+        size: usize,
         refcount: u16,
     ) -> Result<(*mut i8, *mut i8)> {
         if !self.is_oldest() {
             self.allocate(size)
         } else {
-            let total_size = size + (size_of::<C_GibChunkFooter>() as u64);
+            let total_size = size + size_of::<C_GibChunkFooter>();
             let (start, end) = self.allocate(total_size)?;
             let footer_start =
                 unsafe { init_footer_at(end, None, 0, size, refcount) };
@@ -1271,12 +1267,12 @@ impl Heap for Nursery {
         }
     }
 
-    fn allocate(&mut self, size: u64) -> Result<(*mut i8, *mut i8)> {
+    fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
             assert!((*nursery).alloc >= (*nursery).heap_start);
             let old = (*nursery).alloc as *mut i8;
-            let bump = old.sub(size as usize);
+            let bump = old.sub(size);
             let start = (*nursery).heap_start as *mut i8;
             // Check if there's enough space in the nursery to fulfill the
             // request.
@@ -1328,12 +1324,12 @@ impl Heap for Generation {
         }
     }
 
-    fn allocate(&mut self, size: u64) -> Result<(*mut i8, *mut i8)> {
+    fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
             assert!((*gen).alloc > (*gen).heap_start);
             let old = (*gen).alloc as *mut i8;
-            let bump = old.sub(size as usize);
+            let bump = old.sub(size);
             let start = (*gen).heap_start as *mut i8;
             // Check if there's enough space in the gen to fulfill the request.
             if bump >= start {
@@ -1423,15 +1419,15 @@ impl Heap for OldestGeneration {
         0
     }
 
-    fn allocate(&mut self, size: u64) -> Result<(*mut i8, *mut i8)> {
+    fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
-            let start = libc::malloc(size as usize) as *mut i8;
+            let start = libc::malloc(size) as *mut i8;
             if start.is_null() {
                 Err(RtsError::Gc(format!("oldest gen alloc: malloc failed")))
             } else {
                 (*gen).mem_allocated += size;
-                let end = start.add(size as usize);
+                let end = start.add(size);
                 Ok((start, end))
             }
         }
@@ -1541,7 +1537,7 @@ type DatatypeEnv = HashMap<C_GibDatatype, DatatypeInfo>;
 #[derive(Debug)]
 struct DataconInfo {
     /// Bytes before the first packed field.
-    scalar_bytes: u8,
+    scalar_bytes: usize,
     /// Number of scalar fields.
     num_scalars: u8,
     /// Number of packed fields.
@@ -1552,7 +1548,7 @@ struct DataconInfo {
 
 #[derive(Debug)]
 enum DatatypeInfo {
-    Scalar(u8),
+    Scalar(usize),
     Packed(DataconEnv),
 }
 
@@ -1575,7 +1571,7 @@ pub fn info_table_initialize() -> Result<()> {
 pub fn info_table_insert_packed_dcon(
     datatype: C_GibDatatype,
     datacon: C_GibPackedTag,
-    scalar_bytes: u8,
+    scalar_bytes: usize,
     num_scalars: u8,
     num_packed: u8,
     field_tys: Vec<C_GibDatatype>,
@@ -1618,7 +1614,7 @@ pub fn info_table_insert_packed_dcon(
 
 pub fn info_table_insert_scalar(
     datatype: C_GibDatatype,
-    size: u8,
+    size: usize,
 ) -> Result<()> {
     let tbl = unsafe {
         match INFO_TABLE.get_mut() {

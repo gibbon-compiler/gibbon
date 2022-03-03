@@ -44,8 +44,8 @@
 #define MAX_CHUNK_SIZE 65535
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
-static uint64_t gib_global_biginf_init_chunk_size = 4 * GB;
-static uint64_t gib_global_inf_init_chunk_size = 1 * KB;
+static size_t gib_global_biginf_init_chunk_size = 4 * GB;
+static size_t gib_global_inf_init_chunk_size = 1 * KB;
 
 // Runtime arguments, values updated by the flags parser.
 static GibInt gib_global_size_param = 1;
@@ -63,12 +63,12 @@ static GibSym gib_global_gensym_counter = 0;
 
 
 
-uint64_t gib_get_biginf_init_chunk_size(void)
+size_t gib_get_biginf_init_chunk_size(void)
 {
     return gib_global_biginf_init_chunk_size;
 }
 
-uint64_t gib_get_inf_init_chunk_size(void)
+size_t gib_get_inf_init_chunk_size(void)
 {
     return gib_global_inf_init_chunk_size;
 }
@@ -430,12 +430,12 @@ GibVector *gib_vector_alloc(GibInt num, size_t elt_size)
 {
     GibVector *vec = (GibVector *) gib_alloc(sizeof(GibVector));
     if (vec == NULL) {
-        fprintf(stderr, "alloc_vector: gib_alloc failed: %ld", sizeof(GibVector));
+        fprintf(stderr, "alloc_vector: gib_alloc failed: %zu", sizeof(GibVector));
         exit(1);
     }
     void *data = (void *) gib_alloc(num * elt_size);
     if (data == NULL) {
-        fprintf(stderr, "alloc_vector: gib_alloc failed: %ld", sizeof(num * elt_size));
+        fprintf(stderr, "alloc_vector: gib_alloc failed: %zu", sizeof(num * elt_size));
         exit(1);
     }
     vec->lower = 0;
@@ -471,7 +471,7 @@ GibVector *gib_vector_slice(GibInt i, GibInt n, GibVector *vec)
     }
     GibVector *vec2 = (GibVector *) gib_alloc(sizeof(GibVector));
     if (vec == NULL) {
-        fprintf(stderr, "gib_vector_slice: gib_alloc failed: %ld", sizeof(GibVector));
+        fprintf(stderr, "gib_vector_slice: gib_alloc failed: %zu", sizeof(GibVector));
         exit(1);
     }
     vec2->lower = lower;
@@ -577,7 +577,7 @@ GibVector *gib_vector_merge(GibVector *vec1, GibVector *vec2)
     }
     GibVector *merged = (GibVector *) gib_alloc(sizeof(GibVector));
     if (merged == NULL) {
-        fprintf(stderr, "gib_vector_merge: gib_alloc failed: %ld", sizeof(GibVector));
+        fprintf(stderr, "gib_vector_merge: gib_alloc failed: %zu", sizeof(GibVector));
         exit(1);
     }
     merged->lower = vec1->lower;
@@ -631,23 +631,23 @@ static char *gib_global_list_saved_heap_ptr_stack[100];
 static int gib_global_list_num_saved_heap_ptr = 0;
 
 // For simplicity just use a single large slab:
-void gib_init_bumpalloc(void)
+void gib_init_list_bumpalloc(void)
 {
     gib_global_list_bumpalloc_heap_ptr =
         (char*) gib_alloc(gib_global_biginf_init_chunk_size);
     gib_global_list_bumpalloc_heap_ptr_end =
         gib_global_list_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
 #ifdef _GIBBON_DEBUG
-    printf("Arena size for bump alloc: %lld\n", gib_global_biginf_init_chunk_size);
-    printf("gib_list_bumpalloc/gib_init_bumpalloc DONE: heap_ptr = %p\n",
+    printf("Arena size for bump alloc: %zu\n", gib_global_biginf_init_chunk_size);
+    printf("gib_init_list_bumpalloc DONE: heap_ptr = %p\n",
            gib_global_list_bumpalloc_heap_ptr);
 #endif
 }
 
-void *gib_list_bumpalloc(int64_t n)
+void *gib_list_bumpalloc(size_t n)
 {
     if (! gib_global_list_bumpalloc_heap_ptr) {
-        gib_init_bumpalloc();
+        gib_init_list_bumpalloc();
     }
     if (gib_global_list_bumpalloc_heap_ptr + n <
         gib_global_list_bumpalloc_heap_ptr_end) {
@@ -692,8 +692,8 @@ void gib_list_restore_alloc_state(void)
 
 #else
 // Regular malloc mode:
-void gib_init_bumpalloc(void) {}
-void *gib_list_bumpalloc(int64_t n) { return gib_alloc(n); }
+void gib_init_list_bumpalloc(void) {}
+void *gib_list_bumpalloc(size_t n) { return gib_alloc(n); }
 void gib_list_save_alloc_state(void) {}
 void gib_list_restore_alloc_state(void) {}
 
@@ -722,7 +722,7 @@ GibList *gib_list_cons(void *elt, GibList *ls)
     // void* data = gib_alloc(ls->data_size);
     void* data = gib_list_bumpalloc(ls->data_size);
     if (data == NULL) {
-        fprintf(stderr, "gib_list_cons: gib_alloc failed: %ld", ls->data_size);
+        fprintf(stderr, "gib_list_cons: gib_alloc failed: %zu", ls->data_size);
         exit(1);
     }
     memcpy(data, elt, ls->data_size);
@@ -897,7 +897,7 @@ typedef struct gib_chunk_footer {
     GibRegionInfo *reg_info;
 
     uint16_t seq_no;
-    uint64_t size;
+    size_t size;
     struct gib_chunk_footer *next;
 } GibChunkFooter;
 
@@ -906,7 +906,7 @@ typedef struct gib_nursery {
     uint64_t num_collections;
 
     // Allocation area.
-    uint64_t heap_size;
+    size_t heap_size;
     char *heap_start;
     char *heap_end;
     char *alloc;
@@ -928,10 +928,10 @@ typedef struct gib_generation {
     bool oldest;
 
     // Amount of memory allocated in this generation.
-    uint64_t mem_allocated;
+    size_t mem_allocated;
 
     // Allocation area; uninitialized in the oldest gen which uses malloc.
-    uint64_t heap_size;
+    size_t heap_size;
     char *heap_start;
     char *heap_end;
     char *alloc;
@@ -1011,12 +1011,12 @@ void gib_check_rust_struct_sizes(void)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-static GibChunk *gib_alloc_region_on_heap(uint64_t size);
-static GibChunk *gib_alloc_region_in_nursery(uint64_t size);
-static GibChunk *gib_alloc_region_in_nursery_fast(uint64_t size, bool collected);
-static GibChunk *gib_alloc_region_in_nursery_slow(uint64_t size, bool collected);
+static GibChunk *gib_alloc_region_on_heap(size_t size);
+static GibChunk *gib_alloc_region_in_nursery(size_t size);
+static GibChunk *gib_alloc_region_in_nursery_fast(size_t size, bool collected);
+static GibChunk *gib_alloc_region_in_nursery_slow(size_t size, bool collected);
 
-GibChunk *gib_alloc_region(uint64_t size)
+GibChunk *gib_alloc_region(size_t size)
 {
     if (size > NURSERY_REGION_MAX_SIZE) {
         return gib_alloc_region_on_heap(size);
@@ -1025,12 +1025,11 @@ GibChunk *gib_alloc_region(uint64_t size)
     }
 }
 
-static GibChunk *gib_alloc_region_on_heap(uint64_t size)
+static GibChunk *gib_alloc_region_on_heap(size_t size)
 {
     char *heap_start = gib_alloc(size);
     if (heap_start == NULL) {
-        fprintf(stderr, "gib_alloc_region_on_heap: gib_alloc failed: %" PRId64,
-                 size);
+        fprintf(stderr, "gib_alloc_region_on_heap: gib_alloc failed: %zu",size);
         exit(1);
     }
     char *heap_end = heap_start + size;
@@ -1040,12 +1039,12 @@ static GibChunk *gib_alloc_region_on_heap(uint64_t size)
     return region;
 }
 
-GibChunk *gib_alloc_region_in_nursery(uint64_t size)
+GibChunk *gib_alloc_region_in_nursery(size_t size)
 {
     return gib_alloc_region_in_nursery_fast(size, false);
 }
 
-static GibChunk *gib_alloc_region_in_nursery_fast(uint64_t size, bool collected)
+static GibChunk *gib_alloc_region_in_nursery_fast(size_t size, bool collected)
 {
     GibNursery *nursery = DEFAULT_NURSERY;
     char *old = nursery->alloc;
@@ -1064,7 +1063,7 @@ static GibChunk *gib_alloc_region_in_nursery_fast(uint64_t size, bool collected)
     return gib_alloc_region_in_nursery_slow(size, collected);
 }
 
-static GibChunk *gib_alloc_region_in_nursery_slow(uint64_t size, bool collected)
+static GibChunk *gib_alloc_region_in_nursery_slow(size_t size, bool collected)
 {
     if (collected) {
         fprintf(stderr, "Couldn't free space after garbage collection.\n");
@@ -1092,18 +1091,17 @@ GibChunk gib_grow_region(GibCursor footer_ptr)
 {
     // Get size from current footer.
     GibChunkFooter *footer = (GibChunkFooter *) footer_ptr;
-    uint64_t newsize = footer->size * 2;
+    size_t newsize = footer->size * 2;
     // See #110.
     if (newsize > MAX_CHUNK_SIZE) {
         newsize = MAX_CHUNK_SIZE;
     }
-    uint64_t total_size = newsize + sizeof(GibChunkFooter);
+    size_t total_size = newsize + sizeof(GibChunkFooter);
 
     // Allocate.
     char *start = (char *) gib_alloc(total_size);
     if (start == NULL) {
-        fprintf(stderr, "gib_grow_region: gib_alloc failed: %" PRId64,
-                total_size);
+        fprintf(stderr, "gib_grow_region: gib_alloc failed: %zu", total_size);
         exit(1);
     }
     char *end = start + newsize;
@@ -1120,7 +1118,7 @@ GibChunk gib_grow_region(GibCursor footer_ptr)
 
 #ifdef _GIBBON_DEBUG
     GibRegionInfo *reg = (GibRegionInfo*) new_footer->reg_info;
-    printf("gib_grow_region: allocated %" PRIu64 " bytes for region %" PRIu64 "\n",
+    printf("gib_grow_region: allocated %zu bytes for region %" PRIu64 "\n",
            total_size,
            (footer->reg_info)->id);
 #endif
@@ -1167,7 +1165,7 @@ static void gib_nursery_initialize(GibNursery *nursery);
 static void gib_nursery_free(GibNursery *nursery);
 static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no);
 static void gib_generation_free(GibGeneration *gen, uint8_t gen_no);
-static void gib_shadowstack_initialize(GibShadowstack *stack, uint64_t stack_size);
+static void gib_shadowstack_initialize(GibShadowstack *stack, size_t stack_size);
 static void gib_shadowstack_free(GibShadowstack *stack);
 
 // Initialize nurseries, shadow stacks and generations.
@@ -1178,7 +1176,7 @@ static void gib_storage_initialize(void)
     }
 
     // Initialize nurseries.
-    uint64_t n;
+    int n;
     gib_global_nurseries = (GibNursery *) gib_alloc(gib_global_num_threads *
                                                     sizeof(GibNursery));
     for (n = 0; n < gib_global_num_threads; n++) {
@@ -1201,7 +1199,7 @@ static void gib_storage_initialize(void)
     gib_global_oldest_gen->dest = gib_global_oldest_gen;
 
     // Initialize shadow stacks.
-    uint64_t ss;
+    int ss;
     gib_global_read_shadowstacks =
             (GibShadowstack *) gib_alloc(gib_global_num_threads *
                                          sizeof(GibShadowstack));
@@ -1225,7 +1223,7 @@ static void gib_storage_free(void)
     }
 
     // Free nurseries.
-    uint64_t n;
+    int n;
     for (n = 0; n < gib_global_num_threads; n++) {
         gib_nursery_free(&(gib_global_nurseries[n]));
      }
@@ -1239,7 +1237,7 @@ static void gib_storage_free(void)
     free(gib_global_generations);
 
     // Free shadow-stacks.
-    uint64_t ss;
+    int ss;
     for (ss = 0; ss < gib_global_num_threads; ss++) {
         gib_shadowstack_free(&(gib_global_read_shadowstacks[ss]));
         gib_shadowstack_free(&(gib_global_write_shadowstacks[ss]));
@@ -1261,7 +1259,7 @@ static void gib_nursery_initialize(GibNursery *nursery)
     nursery->heap_size = NURSERY_SIZE;
     nursery->heap_start = (char *) gib_alloc(NURSERY_SIZE);
     if (nursery->heap_start == NULL) {
-        fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %ld",
+        fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %zu",
                 NURSERY_SIZE);
         exit(1);
     }
@@ -1269,7 +1267,7 @@ static void gib_nursery_initialize(GibNursery *nursery)
     nursery->alloc = nursery->heap_end;
     nursery->chunk_starts = (char *) gib_alloc(NURSERY_SIZE);
     if (nursery->chunk_starts == NULL) {
-        fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %ld",
+        fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %zu",
                 NURSERY_SIZE);
         exit(1);
     }
@@ -1313,7 +1311,7 @@ static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
     // Initialize the remembered set.
     gen->rem_set = (GibRememberedSet *) gib_alloc(sizeof(GibRememberedSet));
     if (gen->rem_set == NULL) {
-        fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %ld",
+        fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %zu",
                 sizeof(GibRememberedSet));
         exit(1);
     }
@@ -1330,7 +1328,7 @@ static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
         gen->heap_size = ((gen_no+1) * 256 * MB);
         gen->heap_start = (char *) gib_alloc(gen->heap_size);
         if (gen->heap_start == NULL) {
-            fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %ld",
+            fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %zu",
                     gen->heap_size);
         }
         gen->heap_end = gen->heap_start + gen->heap_size;
@@ -1359,11 +1357,11 @@ static void gib_generation_free(GibGeneration *gen, uint8_t gen_no)
  */
 
 // Initialize a shadow stack.
-static void gib_shadowstack_initialize(GibShadowstack* stack, uint64_t stack_size)
+static void gib_shadowstack_initialize(GibShadowstack* stack, size_t stack_size)
 {
     stack->start = (char *) gib_alloc(stack_size);
     if (stack->start == NULL) {
-        fprintf(stderr, "gib_shadowstack_initialize: gib_alloc failed: %ld",
+        fprintf(stderr, "gib_shadowstack_initialize: gib_alloc failed: %zu",
                 stack_size);
         exit(1);
     }

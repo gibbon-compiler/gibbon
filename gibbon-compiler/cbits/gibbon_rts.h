@@ -50,8 +50,8 @@ typedef uint64_t GibThreadId;
 
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
-uint64_t gib_get_biginf_init_chunk_size(void);
-uint64_t gib_get_inf_init_chunk_size(void);
+size_t gib_get_biginf_init_chunk_size(void);
+size_t gib_get_inf_init_chunk_size(void);
 
 // Runtime arguments, values updated by the flags parser.
 GibInt gib_get_size_param(void);
@@ -98,9 +98,9 @@ GibSym gib_read_gensym_counter(void);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-void *gib_alloc(uint64_t size);
-void *gib_counted_alloc(uint64_t size);
-void *gib_scoped_alloc(uint64_t size);
+void *gib_alloc(size_t size);
+void *gib_counted_alloc(size_t size);
+void *gib_scoped_alloc(size_t size);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -343,7 +343,7 @@ void gib_check_rust_struct_sizes(void);
  */
 
 // Region allocation.
-GibChunk *gib_alloc_region(uint64_t size);
+GibChunk *gib_alloc_region(size_t size);
 void gib_free_region(GibChunk *region);
 GibChunk gib_grow_region(GibCursor footer_ptr);
 
@@ -413,11 +413,11 @@ void gib_indirection_barrier(
  */
 
 int gib_info_table_initialize(void);
-int gib_info_table_insert_scalar(uint32_t datatype, uint8_t size);
+int gib_info_table_insert_scalar(uint32_t datatype, size_t size);
 int gib_info_table_insert_packed_dcon(
     uint32_t datatype,
     uint8_t datacon,
-    uint8_t scalar_bytes,
+    size_t scalar_bytes,
     uint8_t num_scalars,
     uint8_t num_packed,
     uint32_t *field_tys,

@@ -44,7 +44,7 @@ pub mod types {
     #[derive(Debug)]
     pub struct C_GibNursery {
         pub num_collections: u64,
-        pub heap_size: u64,
+        pub heap_size: usize,
         pub heap_start: *const i8,
         pub heap_end: *const i8,
         pub alloc: *const i8,
@@ -64,8 +64,8 @@ pub mod types {
         pub no: u8,
         pub dest: *mut C_GibGeneration,
         pub oldest: bool,
-        pub mem_allocated: u64,
-        pub heap_size: u64,
+        pub mem_allocated: usize,
+        pub heap_size: usize,
         pub heap_start: *const i8,
         pub heap_end: *const i8,
         pub alloc: *const i8,
@@ -104,7 +104,7 @@ pub mod types {
     pub struct C_GibChunkFooter {
         pub reg_info: *mut C_GibRegionInfo,
         pub seq_no: u16,
-        pub size: u64,
+        pub size: usize,
         pub next: *mut C_GibChunkFooter,
     }
 }
@@ -141,7 +141,7 @@ pub extern "C" fn gib_info_table_initialize() -> i32 {
 pub extern "C" fn gib_info_table_insert_packed_dcon(
     datatype: C_GibDatatype,
     datacon: C_GibPackedTag,
-    scalar_bytes: u8,
+    scalar_bytes: usize,
     num_scalars: u8,
     num_packed: u8,
     c_field_tys: *const C_GibDatatype,
@@ -172,7 +172,7 @@ pub extern "C" fn gib_info_table_insert_packed_dcon(
 #[no_mangle]
 pub extern "C" fn gib_info_table_insert_scalar(
     datatype: C_GibDatatype,
-    size: u8,
+    size: usize,
 ) -> i32 {
     match gc::info_table_insert_scalar(datatype, size) {
         Ok(()) => 0,
