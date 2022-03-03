@@ -1011,12 +1011,12 @@ void gib_check_rust_struct_sizes(void)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-static GibChunk *gib_alloc_region_on_heap(size_t size);
-static GibChunk *gib_alloc_region_in_nursery(size_t size);
-static GibChunk *gib_alloc_region_in_nursery_fast(size_t size, bool collected);
-static GibChunk *gib_alloc_region_in_nursery_slow(size_t size, bool collected);
+static GibChunk gib_alloc_region_on_heap(size_t size);
+static GibChunk gib_alloc_region_in_nursery(size_t size);
+static GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected);
+static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected);
 
-GibChunk *gib_alloc_region(size_t size)
+GibChunk gib_alloc_region(size_t size)
 {
     if (size > NURSERY_REGION_MAX_SIZE) {
         return gib_alloc_region_on_heap(size);
@@ -1025,7 +1025,7 @@ GibChunk *gib_alloc_region(size_t size)
     }
 }
 
-static GibChunk *gib_alloc_region_on_heap(size_t size)
+static GibChunk gib_alloc_region_on_heap(size_t size)
 {
     char *heap_start = gib_alloc(size);
     if (heap_start == NULL) {
@@ -1033,18 +1033,16 @@ static GibChunk *gib_alloc_region_on_heap(size_t size)
         exit(1);
     }
     char *heap_end = heap_start + size;
-    GibChunk *region = gib_alloc(sizeof(GibChunk));
-    region->start = heap_start;
-    region->end = heap_end;
-    return region;
+    // TODO(ckoparkar): initialize a footer at heap_end.
+    return (GibChunk) {heap_start, heap_end};
 }
 
-GibChunk *gib_alloc_region_in_nursery(size_t size)
+GibChunk gib_alloc_region_in_nursery(size_t size)
 {
     return gib_alloc_region_in_nursery_fast(size, false);
 }
 
-static GibChunk *gib_alloc_region_in_nursery_fast(size_t size, bool collected)
+static GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected)
 {
     GibNursery *nursery = DEFAULT_NURSERY;
     char *old = nursery->alloc;
@@ -1055,15 +1053,12 @@ static GibChunk *gib_alloc_region_in_nursery_fast(size_t size, bool collected)
             (nursery->chunk_starts_i * sizeof(char*));
         *(char**) chunk_starts_alloc = bump;
         nursery->chunk_starts_i = nursery->chunk_starts_i + 1;
-        GibChunk *region = gib_alloc(sizeof(GibChunk));
-        region->start = bump;
-        region->end = old;
-        return region;
+        return (GibChunk) {bump, old};
     }
     return gib_alloc_region_in_nursery_slow(size, collected);
 }
 
-static GibChunk *gib_alloc_region_in_nursery_slow(size_t size, bool collected)
+static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
 {
     if (collected) {
         fprintf(stderr, "Couldn't free space after garbage collection.\n");
@@ -1079,12 +1074,6 @@ static GibChunk *gib_alloc_region_in_nursery_slow(size_t size, bool collected)
         exit(1);
     }
     return gib_alloc_region_in_nursery_fast(size, true);
-}
-
-void gib_free_region(GibChunk *region)
-{
-    free(region);
-    return;
 }
 
 GibChunk gib_grow_region(GibCursor footer_ptr)
@@ -1127,7 +1116,7 @@ GibChunk gib_grow_region(GibCursor footer_ptr)
 }
 
 // Functions related to counting the number of allocated regions.
-GibChunk *gib_alloc_counted_region(int64_t size)
+GibChunk gib_alloc_counted_region(size_t size)
 {
     // Bump the count.
     gib_bump_global_region_count();

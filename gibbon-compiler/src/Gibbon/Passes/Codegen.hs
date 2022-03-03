@@ -865,9 +865,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        ]
                    else
                      pure
-                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_region($exp:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start; |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg->end; |]
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = gib_alloc_region($exp:bufsize); |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg.start; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg.end; |]
                        ]
 
                  NewParBuffer mul -> do
@@ -884,9 +884,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        ]
                    else
                      pure
-                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = gib_alloc_region($exp:bufsize); |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->start; |]
-                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg->end; |]
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:reg = gib_alloc_region($exp:bufsize); |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg.start; |]
+                       , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:endV = $id:reg.end; |]
                        ]
                  ScopedBuffer mul -> let [(outV,CursorTy)] = bnds
                                          bufsize = codegenMultiplicity mul
@@ -901,13 +901,15 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  -- generated during newbuffer.
                  EndOfBuffer{} -> pure []
 
-                 FreeBuffer -> if noGC
+                 FreeBuffer -> pure []
+                              {-
+                               if noGC
                                then pure []
                                else
                                  let [(VarTriv _reg),(VarTriv _rcur),(VarTriv endr_cur)] = rnds
                                  in pure
                                  [ C.BlockStm [cstm| gib_free_region($id:endr_cur); |] ]
-
+                               -}
                  WriteTag -> let [(outV,CursorTy)] = bnds
                                  [t@(TagTriv{}),(VarTriv cur)] = rnds in pure
                              [ C.BlockStm [cstm| *($ty:(codegenTy TagTyPacked) *) ($id:cur) = $(codegenTriv venv t); |]
@@ -1058,9 +1060,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                             tysize = [cty| typename size_t |]
                         out_hdl <- gensym "out_hdl"
                         wrote <- gensym "wrote"
-                        pure $ [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:outreg = gib_alloc_region(gib_get_biginf_init_chunk_size()); |]
-                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg->start; |]
-                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg->end; |]
+                        pure $ [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy) $id:outreg = gib_alloc_region(gib_get_biginf_init_chunk_size()); |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:start_outreg = $id:outreg.start; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:end_outreg = $id:outreg.end; |]
                                  -- This would ideally be the *end* of the input region corresponding to inV
                                  -- but we have don't have at hand here. Passing in NULL is okay because this pointer
                                  -- is unused in the copy function.

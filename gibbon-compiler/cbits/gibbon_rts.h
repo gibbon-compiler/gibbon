@@ -343,12 +343,11 @@ void gib_check_rust_struct_sizes(void);
  */
 
 // Region allocation.
-GibChunk *gib_alloc_region(size_t size);
-void gib_free_region(GibChunk *region);
+GibChunk gib_alloc_region(size_t size);
 GibChunk gib_grow_region(GibCursor footer_ptr);
 
 // Functions related to counting the number of allocated regions.
-GibChunk *gib_alloc_counted_region(int64_t size);
+GibChunk gib_alloc_counted_region(size_t size);
 void gib_print_global_region_count(void);
 
 /*
