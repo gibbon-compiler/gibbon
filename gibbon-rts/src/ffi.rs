@@ -103,7 +103,6 @@ pub mod types {
     #[derive(Debug)]
     pub struct C_GibChunkFooter {
         pub reg_info: *mut C_GibRegionInfo,
-        pub seq_no: u16,
         pub size: usize,
         pub next: *mut C_GibChunkFooter,
     }

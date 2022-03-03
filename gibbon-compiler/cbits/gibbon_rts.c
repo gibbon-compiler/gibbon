@@ -816,7 +816,7 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
   the chunks together in a list and for garbage collection. The footer:
 
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  data | reg_info | seq_no | size | next
+  data | reg_info | size | next
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   The metadata after the serialized data serves various purposes:
@@ -835,8 +835,6 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 
   = first_chunk_footer: Address of the first chunk in this region;
     used to garbage collect the linked-list of chunks.
-
-  - seq_no: The index of this particular chunk in the list.
 
   - size: Used during bounds checking to calculate the size of the next
     region in the linked list.
@@ -895,8 +893,6 @@ typedef struct gib_region_info {
 
 typedef struct gib_chunk_footer {
     GibRegionInfo *reg_info;
-
-    uint16_t seq_no;
     size_t size;
     struct gib_chunk_footer *next;
 } GibChunkFooter;
@@ -1101,7 +1097,6 @@ GibChunk gib_grow_region(GibCursor footer_ptr)
     // Write the footer.
     GibChunkFooter *new_footer = (GibChunkFooter *) end;
     new_footer->reg_info = footer->reg_info;
-    new_footer->seq_no = footer->seq_no + 1;
     new_footer->size = newsize;
     new_footer->next = (GibChunkFooter *) NULL;
 

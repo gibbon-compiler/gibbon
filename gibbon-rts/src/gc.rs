@@ -1083,7 +1083,6 @@ unsafe fn decrement_refcount(addr: *mut i8) -> u16 {
 unsafe fn init_footer_at(
     chunk_end: *mut i8,
     reg_info: Option<*mut C_GibRegionInfo>,
-    seq_no: u16,
     chunk_size: usize,
     refcount: u16,
 ) -> *mut i8 {
@@ -1099,7 +1098,6 @@ unsafe fn init_footer_at(
         Some(info_ptr) => info_ptr,
     };
     (*footer).reg_info = region_info_ptr;
-    (*footer).seq_no = seq_no;
     (*footer).size = chunk_size;
     (*footer).next = null_mut();
     footer_start
@@ -1128,7 +1126,7 @@ pub trait Heap {
             let total_size = size + size_of::<C_GibChunkFooter>();
             let (start, end) = self.allocate(total_size)?;
             let footer_start =
-                unsafe { init_footer_at(end, None, 0, size, refcount) };
+                unsafe { init_footer_at(end, None, size, refcount) };
             Ok((start, footer_start))
         }
     }
@@ -1162,7 +1160,6 @@ pub trait Heap {
                 let new_footer_start = init_footer_at(
                     new_dst_end,
                     Some(reg_info),
-                    (*old_footer).seq_no + 1,
                     chunk_size,
                     (*reg_info).refcount,
                 );
