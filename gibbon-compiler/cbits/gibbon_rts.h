@@ -68,29 +68,15 @@ int64_t gib_read_region_count(void);
 GibSym gib_read_gensym_counter(void);
 
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Shorthands
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-#define KB 1024lu
-#define MB (KB * 1024lu)
-#define GB (MB * 1024lu)
-
-#define ATTR_ALWAYS_INLINE __attribute__((always_inline))
-#define ATTR_HOT __attribute__((hot))
-
-#define UNUSED(x) (void)(x)
-
 // Must be same as "Gibbon.Language.Constants".
-#define REDIRECTION_TAG 255
-#define INDIRECTION_TAG 254
+#define GIB_REDIRECTION_TAG 255
+#define GIB_INDIRECTION_TAG 254
 
 // Tags reserved for the garbage collector.
-#define CAUTERIZED_TAG 253
-#define COPIED_TO_TAG 252
-#define COPIED_TAG 251
-#define SCALAR_TAG 250
+#define GIB_CAUTERIZED_TAG 253
+#define GIB_COPIED_TO_TAG 252
+#define GIB_COPIED_TAG 251
+#define GIB_SCALAR_TAG 250
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -98,18 +84,18 @@ GibSym gib_read_gensym_counter(void);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-#define TAG_BITS 16
-#define POINTER_BITS 48
-static const uintptr_t POINTER_MASK = (UINTPTR_MAX >> TAG_BITS);
+#define GIB_TAG_BITS 16
+#define GIB_POINTER_BITS 48
+static const uintptr_t GIB_POINTER_MASK = (UINTPTR_MAX >> GIB_TAG_BITS);
 
-#define TAG(ptr, tag)                                                     \
-    (uintptr_t) (((uintptr_t) ptr) | (((uintptr_t) tag) << POINTER_BITS)) \
+#define GIB_STORE_TAG(ptr, tag)                                               \
+    (uintptr_t) (((uintptr_t) ptr) | (((uintptr_t) tag) << GIB_POINTER_BITS)) \
 
-#define UNTAG(tagged)                              \
-    (char *) (((uintptr_t) tagged) & POINTER_MASK) \
+#define GIB_UNTAG(tagged)                              \
+    (char *) (((uintptr_t) tagged) & GIB_POINTER_MASK) \
 
-#define GET_TAG(tagged)                               \
-    (uint16_t) (((uintptr_t) tagged) >> POINTER_BITS) \
+#define GIB_GET_TAG(tagged)                               \
+    (uint16_t) (((uintptr_t) tagged) >> GIB_POINTER_BITS) \
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

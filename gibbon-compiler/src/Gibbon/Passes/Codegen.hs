@@ -452,9 +452,9 @@ codegenTriv _ (BoolTriv b) = case b of
                                False -> [cexp| false |]
 codegenTriv _ (SymTriv i) = [cexp| $i |]
 codegenTriv _ (TagTriv i) = if i == GL.indirectionAlt
-                            then [cexp| INDIRECTION_TAG |]
+                            then [cexp| GIB_INDIRECTION_TAG |]
                             else if i == GL.redirectionAlt
-                            then [cexp| REDIRECTION_TAG |]
+                            then [cexp| GIB_REDIRECTION_TAG |]
                             else [cexp| $i |]
 codegenTriv venv (ProdTriv ls) =
   let ty = codegenTy $ typeOfTriv venv (ProdTriv ls)
@@ -978,7 +978,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_start = $id:new_chunk.start; |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:chunk_end = $id:new_chunk.end; |]
                              , C.BlockStm  [cstm|  $id:bound = $id:chunk_end; |]
-                             , C.BlockStm  [cstm|  *($ty:(codegenTy TagTyPacked) *) ($id:cur) = REDIRECTION_TAG; |]
+                             , C.BlockStm  [cstm|  *($ty:(codegenTy TagTyPacked) *) ($id:cur) = GIB_REDIRECTION_TAG; |]
                              , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) redir =  $id:cur + 1; |]
                              , C.BlockStm  [cstm|  *($ty:(codegenTy CursorTy) *) redir = $id:chunk_start; |]
                              , C.BlockStm  [cstm|  $id:cur = $id:chunk_start; |]
@@ -1428,8 +1428,8 @@ altTail oth = error $ "altTail expected a 'singleton' Alts, got: "++ abbrv 80 ot
 -- Helper for lhs of a case
 mk_tag_lhs :: (Integral a, Show a) => a -> C.Exp
 mk_tag_lhs lhs
-    | GL.indirectionAlt == lhs = C.Var (C.Id "INDIRECTION_TAG" noLoc) noLoc
-    | GL.redirectionAlt == lhs = C.Var (C.Id "REDIRECTION_TAG" noLoc) noLoc
+    | GL.indirectionAlt == lhs = C.Var (C.Id "GIB_INDIRECTION_TAG" noLoc) noLoc
+    | GL.redirectionAlt == lhs = C.Var (C.Id "GIB_REDIRECTION_TAG" noLoc) noLoc
     | otherwise = C.Const (C.IntConst (show lhs) C.Unsigned (fromIntegral lhs) noLoc) noLoc
 
 mk_int_lhs :: (Integral a, Show a) => a -> C.Exp

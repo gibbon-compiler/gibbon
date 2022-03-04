@@ -37,6 +37,21 @@
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Shorthands
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+#define KB 1024lu
+#define MB (KB * 1024lu)
+#define GB (MB * 1024lu)
+
+#define ATTR_ALWAYS_INLINE __attribute__((always_inline))
+#define ATTR_HOT __attribute__((hot))
+
+#define UNUSED(x) (void)(x)
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Globals and their accessors
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
@@ -1129,9 +1144,9 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     // Write a redirection tag at writeloc and make it point to the start of
     // this fresh chunk, but store a tagged pointer here.
     uint16_t new_footer_offset = new_footer_start - heap_start;
-    uintptr_t tagged = TAG(heap_start, new_footer_offset);
+    uintptr_t tagged = GIB_STORE_TAG(heap_start, new_footer_offset);
     GibCursor writeloc = *writeloc_addr;
-    *(GibBoxedTag *) writeloc = REDIRECTION_TAG;
+    *(GibBoxedTag *) writeloc = GIB_REDIRECTION_TAG;
     writeloc += 1;
     *(uintptr_t *) writeloc = tagged;
 
