@@ -33,7 +33,7 @@ pub struct TaggedPointer(u64);
 
 impl TaggedPointer {
     pub fn new(ptr: *mut i8, tag: u16) -> TaggedPointer {
-        let tagged = TaggedPointer::tag_pointer(ptr, tag);
+        let tagged = TaggedPointer::store_tag(ptr, tag);
         TaggedPointer(tagged)
     }
 
@@ -45,11 +45,11 @@ impl TaggedPointer {
         self.0
     }
 
-    fn tag_pointer(ptr: *mut i8, tag: u16) -> u64 {
+    fn store_tag(ptr: *mut i8, tag: u16) -> u64 {
         (ptr as u64) | ((tag as u64) << POINTER_BITS)
     }
 
-    pub fn tag(&self) -> u16 {
+    pub fn get_tag(&self) -> u16 {
         (self.0 >> POINTER_BITS) as u16
     }
 
@@ -57,7 +57,7 @@ impl TaggedPointer {
     //
     // uintptr_t ptr2 = (((uintptr_t)tagged & ((1ull << 48) - 1)) |
     //                   ~(((uintptr_t)tagged & (1ull << 47)) - 1))
-    pub fn pointer(&self) -> *mut i8 {
+    pub fn untag(&self) -> *mut i8 {
         (self.0 & TAG_MASK) as *mut i8
     }
 }

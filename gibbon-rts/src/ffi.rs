@@ -237,6 +237,18 @@ pub extern "C" fn gib_init_footer_at(
 }
 
 #[no_mangle]
+pub extern "C" fn gib_add_to_old_zct(
+    generations_ptr: *mut C_GibGeneration,
+    reg_info: *const C_GibRegionInfo,
+) {
+    if C_NUM_GENERATIONS == 1 {
+        unsafe { (*((*generations_ptr).old_zct)).insert(reg_info) };
+    } else {
+        todo!("NUM_GENERATIONS > 1");
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn gib_gc_cleanup(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
@@ -255,7 +267,7 @@ pub extern "C" fn gib_gc_cleanup(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gib_get_rust_struct_sizes(
+pub extern "C" fn gib_get_rust_struct_sizes(
     stack: *mut usize,
     frame: *mut usize,
     nursery: *mut usize,
@@ -263,10 +275,12 @@ pub unsafe extern "C" fn gib_get_rust_struct_sizes(
     reg_info: *mut usize,
     footer: *mut usize,
 ) {
-    *stack = size_of::<C_GibShadowstack>();
-    *frame = size_of::<C_GibShadowstackFrame>();
-    *nursery = size_of::<C_GibNursery>();
-    *generation = size_of::<C_GibGeneration>();
-    *reg_info = size_of::<C_GibRegionInfo>();
-    *footer = size_of::<C_GibChunkFooter>();
+    unsafe {
+        *stack = size_of::<C_GibShadowstack>();
+        *frame = size_of::<C_GibShadowstackFrame>();
+        *nursery = size_of::<C_GibNursery>();
+        *generation = size_of::<C_GibGeneration>();
+        *reg_info = size_of::<C_GibRegionInfo>();
+        *footer = size_of::<C_GibChunkFooter>();
+    }
 }

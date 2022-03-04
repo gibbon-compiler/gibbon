@@ -320,12 +320,12 @@ pub fn collect_minor(
     nursery_ptr: *mut C_GibNursery,
     generations_ptr: *mut C_GibGeneration,
 ) -> Result<()> {
-    let rstack = &Shadowstack(rstack_ptr, GcRootProv::Stk);
-    let wstack = &Shadowstack(wstack_ptr, GcRootProv::Stk);
-    let nursery = &mut Nursery(nursery_ptr);
+    let rstack = Shadowstack(rstack_ptr, GcRootProv::Stk);
+    let wstack = Shadowstack(wstack_ptr, GcRootProv::Stk);
+    let mut nursery = Nursery(nursery_ptr);
     if C_NUM_GENERATIONS == 1 {
         // Start by cauterizing the writers.
-        let mut cenv = cauterize_writers(nursery, wstack)?;
+        let mut cenv = cauterize_writers(&nursery, &wstack)?;
         // Prepare to evacuate the readers.
         let chunk_starts = nursery.chunk_starts();
         let mut oldest_gen = OldestGeneration(generations_ptr);
@@ -334,27 +334,26 @@ pub fn collect_minor(
             if (*nursery_ptr).num_collections == 0 {
                 oldest_gen.init_zcts();
             }
-            let rem_set = &mut RememberedSet(
-                (*generations_ptr).rem_set,
-                GcRootProv::RemSet,
-            );
+            let mut rem_set =
+                RememberedSet((*generations_ptr).rem_set, GcRootProv::RemSet);
             // First evacuate the remembered set, then the shadow-stack.
             let mut benv = evacuate_remembered_set(
                 &mut cenv,
                 &chunk_starts,
                 (*generations_ptr).new_zct,
+                &nursery,
                 &mut oldest_gen,
-                rem_set,
+                &rem_set,
             )?;
             rem_set.clear();
             evacuate_shadowstack(
-                nursery,
                 &mut benv,
                 &mut cenv,
                 &chunk_starts,
                 (*generations_ptr).new_zct,
+                &nursery,
                 &mut oldest_gen,
-                rstack,
+                &rstack,
             )?;
             // // Collect dead regions.
             oldest_gen.collect_regions()?;
@@ -364,7 +363,7 @@ pub fn collect_minor(
         nursery.bump_num_collections();
         // Restore the remaining cauterized writers. Allocate space for them
         // in the nursery, not oldgen.
-        restore_writers(&cenv, nursery)?;
+        restore_writers(&cenv, &mut nursery)?;
         Ok(())
     } else {
         todo!("NUM_GENERATIONS > 1")
@@ -440,6 +439,7 @@ unsafe fn evacuate_remembered_set(
     cenv: &mut CauterizedEnv,
     chunk_starts: &ChunkStartsSet,
     zct: *mut Zct,
+    nursery: &Nursery,
     heap: &mut impl Heap,
     rem_set: &Shadowstack,
 ) -> Result<BurnedAddressEnv> {
@@ -488,6 +488,7 @@ unsafe fn evacuate_remembered_set(
                         cenv,
                         chunk_starts,
                         zct,
+                        nursery,
                         heap,
                         &GcRootProv::RemSet,
                         packed_info,
@@ -510,11 +511,11 @@ unsafe fn evacuate_remembered_set(
 /// Copy values at all read cursors from the nursery to the provided
 /// destination heap. Also uncauterize any writer cursors that are reached.
 unsafe fn evacuate_shadowstack(
-    nursery: &Nursery,
     benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
     chunk_starts: &ChunkStartsSet,
     zct: *mut Zct,
+    nursery: &Nursery,
     heap: &mut impl Heap,
     rstack: &Shadowstack,
 ) -> Result<()> {
@@ -564,6 +565,7 @@ unsafe fn evacuate_shadowstack(
                         cenv,
                         chunk_starts,
                         zct,
+                        nursery,
                         heap,
                         &GcRootProv::Stk,
                         packed_info,
@@ -579,7 +581,7 @@ unsafe fn evacuate_shadowstack(
                 (*zct).insert((*footer).reg_info);
                 // Note [Adding a forwarding pointer at the end of every chunk].
                 match tag {
-                    C_COPIED_TO_TAG | C_COPIED_TAG => {}
+                    C_COPIED_TO_TAG | C_COPIED_TAG | C_REDIRECTION_TAG => {}
                     _ => {
                         if chunk_starts.contains(&src)
                             || tag == C_CAUTERIZED_TAG
@@ -637,6 +639,7 @@ unsafe fn evacuate_packed(
     cenv: &mut CauterizedEnv,
     chunk_starts: &ChunkStartsSet,
     zct: *mut Zct,
+    nursery: &Nursery,
     heap: &mut impl Heap,
     prov: &GcRootProv,
     packed_info: &DataconEnv,
@@ -663,7 +666,7 @@ unsafe fn evacuate_packed(
         C_COPIED_TO_TAG => {
             let (tagged_fwd_ptr, _): (u64, _) = read_mut(src_after_tag);
             let tagged = TaggedPointer::from_u64(tagged_fwd_ptr);
-            let fwd_ptr = tagged.pointer();
+            let fwd_ptr = tagged.untag();
             let space_reqd = 18;
             let (dst1, dst_end1) =
                 Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
@@ -678,7 +681,7 @@ unsafe fn evacuate_packed(
             // Update outsets and refcounts if evacuating to the oldest
             // generation.
             if heap.is_oldest() {
-                let fwd_footer_offset = tagged.tag();
+                let fwd_footer_offset = tagged.get_tag();
                 let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
                 handle_old_to_old_indirection(dst_end, fwd_footer_addr)?;
                 match prov {
@@ -710,7 +713,7 @@ unsafe fn evacuate_packed(
             // The forwarding pointer that's available.
             let (tagged_fwd_avail, _): (u64, _) = read(scan_ptr);
             let tagged = TaggedPointer::from_u64(tagged_fwd_avail);
-            let fwd_avail = tagged.pointer();
+            let fwd_avail = tagged.untag();
             // The position in the destination buffer we wanted.
             let fwd_want = fwd_avail.sub(offset as usize);
             let space_reqd = 18;
@@ -727,7 +730,7 @@ unsafe fn evacuate_packed(
             // Update outsets and refcounts if evacuating to the oldest
             // generation.
             if heap.is_oldest() {
-                let fwd_footer_offset = tagged.tag();
+                let fwd_footer_offset = tagged.get_tag();
                 let fwd_footer_addr =
                     fwd_avail.add(fwd_footer_offset as usize);
                 handle_old_to_old_indirection(dst_end, fwd_footer_addr)?;
@@ -754,7 +757,10 @@ unsafe fn evacuate_packed(
         // POLICY DECISION:
         // Redirections are always inlined in the current version.
         C_REDIRECTION_TAG => {
-            let (next_chunk, _): (*mut i8, _) = read(src_after_tag);
+            let (tagged_next_chunk, src_after_next_chunk): (u64, _) =
+                read(src_after_tag);
+            let tagged = TaggedPointer::from_u64(tagged_next_chunk);
+            let next_chunk = tagged.untag();
             // Add a forwarding pointer in the source buffer.
             assert!(dst < dst_end);
             write_forwarding_pointer_at(
@@ -762,23 +768,54 @@ unsafe fn evacuate_packed(
                 dst,
                 dst_end.offset_from(dst).try_into().unwrap(),
             );
-            // TODO(ckoparkar): if the next chunk is in oldgen, we don't want
-            // to evacuate it. Just write a redireciton node at dst (pointing to
-            // the start of the oldgen chunk) and link the footers.
+            // If the next chunk is in the nursery, continue evacuating it.
+            // Otherwise, write a redireciton node at dst (pointing to
+            // the start of the oldgen chunk), link the footers and reconcile
+            // the two RegionInfo objects.
+            if nursery.contains_addr(next_chunk) {
+                evacuate_packed(
+                    benv,
+                    cenv,
+                    chunk_starts,
+                    zct,
+                    nursery,
+                    heap,
+                    prov,
+                    packed_info,
+                    next_chunk,
+                    dst,
+                    dst_end,
+                )
+            } else {
+                let dst_after_tag = write(dst, C_REDIRECTION_TAG);
+                let dst_after_redir = write(dst_after_tag, next_chunk);
 
-            // Continue in the next chunk.
-            evacuate_packed(
-                benv,
-                cenv,
-                chunk_starts,
-                zct,
-                heap,
-                prov,
-                packed_info,
-                next_chunk,
-                dst,
-                dst_end,
-            )
+                // Link footers.
+                let footer1 = dst_end as *mut C_GibChunkFooter;
+                let next_chunk_footer_offset = tagged.get_tag();
+                let footer2 = next_chunk.add(next_chunk_footer_offset as usize)
+                    as *mut C_GibChunkFooter;
+                (*footer1).next = footer2;
+
+                // Reconcile RegionInfo objects.
+                // Rust drops this heap allocated object when reg_info1 goes
+                // out of scope.
+                let reg_info1: Box<C_GibRegionInfo> =
+                    Box::from_raw((*footer1).reg_info);
+                let reg_info2 = (*footer2).reg_info;
+                (*reg_info2).refcount += reg_info1.refcount;
+                (*((*reg_info2).outset)).extend(&*(reg_info1.outset));
+                (*reg_info2).first_chunk_footer =
+                    (*reg_info1).first_chunk_footer;
+                drop(reg_info1);
+                // Stop evacuating.
+                Ok((
+                    src_after_next_chunk as *mut i8,
+                    dst_after_redir,
+                    dst_end,
+                    tag,
+                ))
+            }
         }
         // A pointer to a value in another buffer; copy this value
         // and then switch back to copying rest of the source buffer.
@@ -797,6 +834,7 @@ unsafe fn evacuate_packed(
                 cenv,
                 chunk_starts,
                 zct,
+                nursery,
                 heap,
                 prov,
                 packed_info,
@@ -875,6 +913,7 @@ unsafe fn evacuate_packed(
                         cenv,
                         chunk_starts,
                         zct,
+                        nursery,
                         heap,
                         prov,
                         ty,
@@ -885,7 +924,7 @@ unsafe fn evacuate_packed(
                     // Must immediately stop copying upon reaching
                     // the cauterized tag.
                     match field_tag {
-                        C_CAUTERIZED_TAG => {
+                        C_CAUTERIZED_TAG | C_REDIRECTION_TAG => {
                             return Ok((src1, dst1, dst_end1, field_tag));
                         }
                         _ => {
@@ -906,6 +945,7 @@ unsafe fn evacuate_field(
     cenv: &mut CauterizedEnv,
     chunk_starts: &ChunkStartsSet,
     zct: *mut Zct,
+    nursery: &Nursery,
     heap: &mut impl Heap,
     prov: &GcRootProv,
     datatype: &C_GibDatatype,
@@ -929,6 +969,7 @@ unsafe fn evacuate_field(
             cenv,
             chunk_starts,
             zct,
+            nursery,
             heap,
             prov,
             packed_info,
@@ -1046,6 +1087,7 @@ unsafe fn free_region(
         next_chunk_footer = (*next_chunk_footer).next;
         libc::free(free_this);
     }
+    drop(reg_info);
     Ok(())
 }
 
@@ -1145,8 +1187,12 @@ trait Heap {
             if !self.is_oldest() {
                 let (new_dst, new_dst_end) = Heap::allocate(self, CHUNK_SIZE)?;
                 // Write a redirection tag in the old chunk.
+                let footer_offset: u16 =
+                    dst_end.offset_from(dst).try_into().unwrap();
+                let tagged: u64 =
+                    TaggedPointer::new(new_dst, footer_offset).as_u64();
                 let dst_after_tag = write(dst, C_REDIRECTION_TAG);
-                write(dst_after_tag, new_dst);
+                write(dst_after_tag, tagged);
                 Ok((new_dst, new_dst_end))
             } else {
                 // Access the old footer to get the region metadata.

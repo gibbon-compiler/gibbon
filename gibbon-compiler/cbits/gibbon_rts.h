@@ -94,6 +94,25 @@ GibSym gib_read_gensym_counter(void);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Pointer tagging
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+#define TAG_BITS 16
+#define POINTER_BITS 48
+static const uintptr_t POINTER_MASK = (UINTPTR_MAX >> TAG_BITS);
+
+#define TAG(ptr, tag)                                                     \
+    (uintptr_t) (((uintptr_t) ptr) | (((uintptr_t) tag) << POINTER_BITS)) \
+
+#define UNTAG(tagged)                              \
+    (char *) (((uintptr_t) tagged) & POINTER_MASK) \
+
+#define GET_TAG(tagged)                               \
+    (uint16_t) (((uintptr_t) tagged) >> POINTER_BITS) \
+
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Allocators
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
@@ -319,6 +338,7 @@ typedef GibShadowstack GibRememberedSet;
 // Abstract definitions are sufficient.
 typedef struct gib_nursery GibNursery;
 typedef struct gib_generation GibGeneration;
+typedef struct gib_region_info GibRegionInfo;
 
 // Shadow stacks for readable and writeable locations respectively,
 // indexed by thread_id.
@@ -344,7 +364,7 @@ void gib_check_rust_struct_sizes(void);
 
 // Region allocation.
 GibChunk gib_alloc_region(size_t size);
-GibChunk gib_grow_region(GibCursor footer_ptr);
+void gib_grow_region(char **writeloc_addr, char **footer_addr);
 
 // Functions related to counting the number of allocated regions.
 GibChunk gib_alloc_counted_region(size_t size);
@@ -438,7 +458,10 @@ char *gib_init_footer_at(
     size_t chunk_size,
     uint16_t refcount
 );
-
+void gib_add_to_old_zct(
+    GibGeneration *generations,
+    GibRegionInfo *reg_info
+);
 int gib_gc_cleanup(
     GibShadowstack *rstack,
     GibShadowstack *wstack,

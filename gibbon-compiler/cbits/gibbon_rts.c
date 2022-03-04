@@ -129,7 +129,6 @@ GibSym gib_read_gensym_counter(void)
 }
 
 
-
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Allocators
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1073,11 +1072,13 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
 }
 
 // Eager promotion.
-GibChunk gib_grow_region(GibCursor footer_ptr)
+void gib_grow_region(char **writeloc_addr, char **footer_addr)
 {
+    char *footer_ptr = *footer_addr;
     size_t newsize;
     bool old_chunk_in_nursery;
     GibChunkFooter *footer = NULL;
+
     if (gib_addr_in_nursery(footer_ptr)) {
         old_chunk_in_nursery = true;
         newsize = gib_global_inf_init_chunk_size;
@@ -1094,31 +1095,51 @@ GibChunk gib_grow_region(GibCursor footer_ptr)
     size_t total_size = newsize + sizeof(GibChunkFooter);
 
     // Allocate.
-    char *start = (char *) gib_alloc(total_size);
-    if (start == NULL) {
+    char *heap_start = (char *) gib_alloc(total_size);
+    if (heap_start == NULL) {
         fprintf(stderr, "gib_grow_region: gib_alloc failed: %zu", total_size);
         exit(1);
     }
-    char *end = start + newsize;
+    char *heap_end = heap_start + total_size;
 
-    // Write a new footer at this chunk and link it with the old footer.
+    // Write a new footer for this chunk and link it with the old chunk's footer.
+    char *new_footer_start = NULL;
+    GibChunkFooter *new_footer = NULL;
     if (!old_chunk_in_nursery) {
-        // Link the next chunk's footer.
-        footer->next = (GibChunkFooter *) end;
+        new_footer_start = heap_start + newsize;
+        new_footer = (GibChunkFooter *) new_footer_start;
+        new_footer->reg_info = footer->reg_info;
+        new_footer->size = newsize;
+        new_footer->next = (GibChunkFooter *) NULL;
+        // Link with the old chunk's footer.
+        footer->next = (GibChunkFooter *) new_footer;
+    } else {
+        new_footer_start = gib_init_footer_at(heap_end, total_size, 0);
+        new_footer = (GibChunkFooter *) new_footer_start;
+        gib_add_to_old_zct(DEFAULT_GENERATION, new_footer->reg_info);
     }
-    GibChunkFooter *new_footer = (GibChunkFooter *) end;
-    new_footer->reg_info = footer->reg_info;
-    new_footer->size = newsize;
-    new_footer->next = (GibChunkFooter *) NULL;
 
 #ifdef _GIBBON_DEBUG
     GibRegionInfo *reg = (GibRegionInfo*) new_footer->reg_info;
     printf("gib_grow_region: allocated %zu bytes for region %" PRIu64 "\n",
            total_size,
-           (footer->reg_info)->id);
+           (new_footer->reg_info)->id);
 #endif
 
-    return (GibChunk) {start , end};
+    // Write a redirection tag at writeloc and make it point to the start of
+    // this fresh chunk, but store a tagged pointer here.
+    uint16_t new_footer_offset = new_footer_start - heap_start;
+    uintptr_t tagged = TAG(heap_start, new_footer_offset);
+    GibCursor writeloc = *writeloc_addr;
+    *(GibBoxedTag *) writeloc = REDIRECTION_TAG;
+    writeloc += 1;
+    *(uintptr_t *) writeloc = tagged;
+
+    // Update start and end cursors.
+    *(char **) writeloc_addr = heap_start;
+    *(char **) footer_addr = new_footer_start;
+
+    return;
 }
 
 // Functions related to counting the number of allocated regions.
@@ -1480,9 +1501,6 @@ void gib_indirection_barrier(
     if (from_old) {
         if (to_young) {
             // (3) oldgen -> nursery
-#ifdef _GIBBON_DEBUG
-            printf("gib_indirection_barrier: old to young pointer\n");
-#endif
             GibGeneration *gen = DEFAULT_GENERATION;
             // Store the address of the indirection pointer, *NOT* the address of
             // the indirection tag, in the remembered set.
@@ -1491,9 +1509,6 @@ void gib_indirection_barrier(
             return;
         } else if (to_old) {
             // (4) oldgen -> oldgen
-#ifdef _GIBBON_DEBUG
-            printf("gib_indirection_barrier: old to old pointer\n");
-#endif
             gib_handle_old_to_old_indirection(from_footer_ptr, to_footer_ptr);
             return;
         }
