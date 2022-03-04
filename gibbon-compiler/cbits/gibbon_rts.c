@@ -1726,16 +1726,17 @@ int main(int argc, char **argv)
 
     // Initialize the nursery and shadow stack.
     gib_storage_initialize();
+    GibNursery *nursery = DEFAULT_NURSERY;
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    GibGeneration *generations = gib_global_generations;
+    gib_init_zcts(generations);
 
     // Run the program.
     gib_main_expr();
 
     // Free all objects initialized by the Rust RTS.
     free(gib_global_bench_prog_param);
-    GibNursery *nursery = DEFAULT_NURSERY;
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibGeneration *generations = gib_global_generations;
     gib_gc_cleanup(rstack, wstack, nursery, generations);
 
     // Next, free all objects initialized by the C RTS.

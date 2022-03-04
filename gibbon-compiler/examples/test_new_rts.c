@@ -510,7 +510,7 @@ GibCursorGibIntProd sum_list(GibCursor end_r_619, GibCursor xs_40_189_296)
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1424");
+            printf("Unknown tag in: tmpval_1424, %d\n", tmpval_1424);
             exit(1);
         }
     }

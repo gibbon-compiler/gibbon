@@ -444,6 +444,7 @@ char *gib_init_footer_at(
     size_t chunk_size,
     uint16_t refcount
 );
+void gib_init_zcts(GibGeneration *generations);
 void gib_add_to_old_zct(
     GibGeneration *generations,
     GibRegionInfo *reg_info

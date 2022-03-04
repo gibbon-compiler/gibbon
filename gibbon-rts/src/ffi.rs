@@ -237,6 +237,11 @@ pub extern "C" fn gib_init_footer_at(
 }
 
 #[no_mangle]
+pub extern "C" fn gib_init_zcts(generations_ptr: *mut C_GibGeneration) {
+    gc::init_zcts(generations_ptr);
+}
+
+#[no_mangle]
 pub extern "C" fn gib_add_to_old_zct(
     generations_ptr: *mut C_GibGeneration,
     reg_info: *const C_GibRegionInfo,

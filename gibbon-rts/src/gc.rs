@@ -330,10 +330,6 @@ pub fn collect_minor(
         let chunk_starts = nursery.chunk_starts();
         let mut oldest_gen = OldestGeneration(generations_ptr);
         unsafe {
-            // Initialize ZCTs if this is the very first collection.
-            if (*nursery_ptr).num_collections == 0 {
-                oldest_gen.init_zcts();
-            }
             let mut rem_set =
                 RememberedSet((*generations_ptr).rem_set, GcRootProv::RemSet);
             // First evacuate the remembered set, then the shadow-stack.
@@ -1479,6 +1475,15 @@ impl Heap for OldestGeneration {
                 Ok((start, end))
             }
         }
+    }
+}
+
+pub fn init_zcts(generations_ptr: *mut C_GibGeneration) {
+    if C_NUM_GENERATIONS == 1 {
+        let mut oldest_gen = OldestGeneration(generations_ptr);
+        oldest_gen.init_zcts();
+    } else {
+        todo!("NUM_GENERATIONS > 1");
     }
 }
 
