@@ -880,7 +880,7 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 // 4 megabytes for each semi-space.
 // #define NURSERY_SIZE (4 * MB)
 
-// 5KB for debugging.
+// 4KB for debugging.
 #define NURSERY_SIZE (4 * KB)
 
 // If a region is over this size, alloc to refcounted heap directly.
