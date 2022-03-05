@@ -704,7 +704,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           PrimAppE _ args -> foldl go acc args
           LetE (v,_,_,rhs) bod ->
             let acc_rhs = go acc rhs
-            in go (M.insertWith (++) v (allFreeVars rhs) acc_rhs) bod
+            in go (M.insertWith (++) v (S.toList $ allFreeVars rhs) acc_rhs) bod
           IfE _ b c  -> go (go acc b) c
           MkProdE ls -> foldl go acc ls
           ProjE _ e  -> go acc e
@@ -719,11 +719,11 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           Ext ext ->
             case ext of
               LetRegionE r rhs ->
-                go (M.insertWith (++) (regionToVar r) (allFreeVars rhs) acc) rhs
+                go (M.insertWith (++) (regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
               LetParRegionE r rhs ->
-                go (M.insertWith (++) (regionToVar r) (allFreeVars rhs) acc) rhs
+                go (M.insertWith (++) (regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
               LetLocE loc phs rhs  ->
-                go (M.insertWith (++) loc (dep phs ++ allFreeVars rhs) acc) rhs
+                go (M.insertWith (++) loc (dep phs ++ (S.toList $ allFreeVars rhs)) acc) rhs
               RetE{}         -> acc
               FromEndE{}     -> acc
               BoundsCheck{}  -> acc
@@ -743,18 +743,26 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           FreeLE -> []
 
 -- gFreeVars ++ locations ++ region variables
-allFreeVars :: Exp2 -> [Var]
-allFreeVars ex = S.toList $
+allFreeVars :: Exp2 -> S.Set Var
+allFreeVars ex =
   case ex of
-    AppE _ locs _       -> S.fromList locs `S.union` gFreeVars ex
-    LetE (_,locs,_,_) _ -> S.fromList locs `S.union` gFreeVars ex
-    DataConE loc _ _    -> S.singleton loc `S.union` gFreeVars ex
+    AppE _ locs args -> S.fromList locs `S.union` (S.unions (map allFreeVars args))
+    PrimAppE _ args -> (S.unions (map allFreeVars args))
+    LetE (_,locs,_,rhs) bod -> S.fromList locs `S.union` (allFreeVars rhs) `S.union` (allFreeVars bod)
+    IfE a b c -> allFreeVars a `S.union` allFreeVars b `S.union` allFreeVars c
+    MkProdE args -> (S.unions (map allFreeVars args))
+    ProjE _ bod -> allFreeVars bod
+    CaseE scrt brs -> (allFreeVars scrt) `S.union` (S.unions (map (\(_,_,c) -> allFreeVars c) brs))
+    DataConE loc _ args -> S.singleton loc `S.union` (S.unions (map allFreeVars args))
+    TimeIt e _ _ -> allFreeVars e
+    WithArenaE _ e -> allFreeVars e
+    SpawnE _ locs args -> S.fromList locs `S.union` (S.unions (map allFreeVars args))
     Ext ext ->
       case ext of
-        LetRegionE r _  -> S.singleton (regionToVar r) `S.union` gFreeVars ex
-        LetParRegionE r _ -> S.singleton (regionToVar r) `S.union` gFreeVars ex
-        LetLocE loc _ _ -> S.singleton loc `S.union` gFreeVars ex
-        RetE locs _     -> S.fromList locs `S.union` gFreeVars ex
+        LetRegionE r bod -> S.delete (regionToVar r) (allFreeVars bod)
+        LetParRegionE r bod -> S.delete (regionToVar r) (allFreeVars bod)
+        LetLocE loc locexp bod -> S.delete loc (allFreeVars bod `S.union` gFreeVars locexp)
+        RetE locs v     -> S.insert v (S.fromList locs)
         FromEndE loc    -> S.singleton loc
         BoundsCheck _ reg cur -> S.fromList [reg,cur]
         IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
@@ -764,7 +772,7 @@ allFreeVars ex = S.toList $
     _ -> gFreeVars ex
 
 freeLocVars :: Exp2 -> [Var]
-freeLocVars ex = (allFreeVars ex) \\ (S.toList $ gFreeVars ex)
+freeLocVars ex = S.toList $ (allFreeVars ex) `S.difference` (gFreeVars ex)
 
 changeAppToSpawn :: Var -> [Exp2] -> Exp2 -> Exp2
 changeAppToSpawn v args2 ex1 =

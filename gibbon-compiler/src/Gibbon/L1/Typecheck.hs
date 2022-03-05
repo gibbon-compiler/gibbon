@@ -695,6 +695,9 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   -- Get flags to check if we're in packed mode
   flags <- getDynFlags
 
+  -- check ddefs
+  mapM_ checkDDef $ M.elems ddefs
+
   -- Handle functions
   mapM_ fd $ M.elems fundefs
 
@@ -725,15 +728,36 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   where
     env = L1.progToEnv prg
 
+    checkDDef DDef{tyName, dataCons} = do
+        mapM_ go dataCons
+      where
+        go (dcon, tys) = do
+          let tys' = (L.map snd tys)
+              mb_firstPacked = L.findIndex isPackedTy tys'
+              scalars = findIndices (not . isPackedTy) tys'
+          case mb_firstPacked of
+            Nothing -> return ()
+            Just fp -> case scalars of
+                         [] -> return ()
+                         _ -> if (last scalars) > fp
+                              then error ("Gibbon-TODO: Constructor " ++ dcon ++
+                                          " has a scalar field after a packed field which isn't" ++
+                                          " allowed at the moment.")
+                              else return ()
+
+
     -- fd :: forall e l . FunDef Ty1 Exp -> SyM ()
-    fd FunDef{funArgs,funTy,funBody} = do
+    fd FunDef{funName,funArgs,funTy,funBody} = do
       let (argTys,retty) = funTy
           venv = M.fromList (zip funArgs argTys)
           env' = Env2 venv (fEnv env)
           res  = runExcept $ tcExp ddefs env' funBody
       case res of
         Left err -> error $ sdoc err
-        Right ty -> if ty == retty
+        Right ty -> if (length $ getPackedTys retty) > 1
+                    then error ("Gibbon-TODO: Functions cannot return multiple packed values; "
+                                ++ "check " ++ sdoc funName)
+                    else if ty == retty
                     then return ()
                     else error $ "Expected type " ++ (sdoc retty)
                               ++ " and got type " ++ (sdoc ty)

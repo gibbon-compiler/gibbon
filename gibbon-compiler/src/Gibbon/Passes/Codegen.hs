@@ -970,9 +970,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    in pure [ C.BlockStm [cstm| gib_indirection_barrier($id:from_loc, $id:end_from_reg, $id:to_loc, $id:end_to_reg, $id:tycon_t); |] ]
 
                  BoundsCheck -> do
-                   new_chunk   <- gensym "new_chunk"
-                   chunk_start <- gensym "chunk_start"
-                   chunk_end   <- gensym "chunk_end"
+                   _new_chunk   <- gensym "new_chunk"
+                   _chunk_start <- gensym "chunk_start"
+                   _chunk_end   <- gensym "chunk_end"
                    let [(IntTriv i),(VarTriv bound), (VarTriv cur)] = rnds
                        {-
                        bck = [ C.BlockDecl [cdecl| $ty:(codegenTy ChunkTy) $id:new_chunk = gib_grow_region($id:bound); |]

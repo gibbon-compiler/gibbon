@@ -61,7 +61,7 @@ import qualified Gibbon.L3.Typecheck as L3
 import           Gibbon.Passes.Freshen        (freshNames)
 import           Gibbon.Passes.Flatten        (flattenL1, flattenL2, flattenL3)
 import           Gibbon.Passes.InlineTriv     (inlineTriv)
-import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv)
+import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv, simplifyLocBinds)
 -- import           Gibbon.Passes.Sequentialize  (sequentialize)
 
 import           Gibbon.Passes.DirectL3       (directL3)
@@ -598,9 +598,8 @@ passes config@Config{dynflags} l0 = do
 
               -- Note: L1 -> L2
               l2 <- goE2 "inferLocations"  inferLocs    l1
-              -- l2 <- go "pushdownRegions"   pushdownRegions l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
-              l2 <- go "regionsInwards"    regionsInwards l2
+              l2 <- go "regionsInwards"  regionsInwards l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "L2.flatten"      flattenL2    l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
@@ -651,6 +650,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   l1 <- goE1 "addRAN"        (addRAN need) l1
                   l1 <- go "L1.typecheck"    L1.tcProg     l1
                   l2 <- go "inferLocations2" inferLocs     l1
+                  l2 <- go "regionsInwards" regionsInwards l2
+                  l2 <- go   "L2.typecheck"  L2.tcProg     l2
                   l2 <- go "L2.flatten"      flattenL2     l2
                   -- l2 <- go "pushdownRegions" pushdownRegions l2
                   l2 <- go "findWitnesses" findWitnesses   l2
@@ -667,16 +668,19 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   pure l2
 
               lift $ dumpIfSet config Opt_D_Dump_Repair (pprender l2)
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- if gopt Opt_Parallel dynflags
                     then do
-                      l2 <- goE2 "parAlloc"   parAlloc   l2
+                      l2 <- goE2 "parAlloc"   parAlloc  l2
                       lift $ dumpIfSet config Opt_D_Dump_ParAlloc (pprender l2)
-                      l2 <- go "L2.typecheck" L2.tcProg  l2
+                      l2 <- go "L2.typecheck" L2.tcProg l2
                       pure l2
                     else (pure l2)
               l2 <- goE2 "inferRegScope"  inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "routeEnds"      routeEnds     l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
