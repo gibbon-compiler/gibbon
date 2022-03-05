@@ -195,7 +195,7 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor end_r_721 = region_1380.end;
 
     GibCursorGibCursorGibCursorProd tmp_struct_16 =
-        build_list(end_r_721, r_721, n_19_183_289, gib_get_size_param());
+        build_list(end_r_721, r_721, n_19_183_289, n_19_183_289);
     GibCursor pvrtmp_1384 = tmp_struct_16.field0;
     GibCursor pvrtmp_1385 = tmp_struct_16.field1;
     GibCursor pvrtmp_1386 = tmp_struct_16.field2;
@@ -235,15 +235,13 @@ GibInt do_reverse(GibInt n_19_183_289)
 
     for (int i = 0; i < gib_get_iters_param(); i++) {
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin);
-
         tmp_struct_17 = reverse(pvrtmp_1384, end_r_720, end_r_719, r_719, pvrtmp_1385, r_720);
-
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-
         double itertime = gib_difftimespecs(&begin, &end);
         gib_vector_inplace_update(timings, i, &itertime);
     }
 
+    /*
     gib_vector_inplace_sort(timings, gib_compare_doubles);
     double *tmp_34 = (double *) gib_vector_nth(timings, gib_get_iters_param() / 2);
     double selftimed = *tmp_34;
@@ -253,19 +251,22 @@ GibInt do_reverse(GibInt n_19_183_289)
     printf("SIZE: %ld\n", gib_get_size_param());
     printf("BATCHTIME: %e\n", batchtime);
     printf("SELFTIMED: %e\n", selftimed);
-
+    */
 
     GibCursor pvrtmp_1393 = tmp_struct_17.field0;
     GibCursor pvrtmp_1394 = tmp_struct_17.field1;
     GibCursor pvrtmp_1395 = tmp_struct_17.field2;
     GibCursor pvrtmp_1396 = tmp_struct_17.field3;
-    GibCursorGibIntProd tmp_struct_18 =  sum_list(pvrtmp_1393, pvrtmp_1395);
-    GibCursor pvrtmp_1401 = tmp_struct_18.field0;
-    GibInt pvrtmp_1402 = tmp_struct_18.field1;
 
     // printf("reversed:");
     // _print_List(NULL, pvrtmp_1395);
     // printf("\n");
+
+    GibCursorGibIntProd tmp_struct_18 =  sum_list(pvrtmp_1393, pvrtmp_1395);
+    GibCursor pvrtmp_1401 = tmp_struct_18.field0;
+    GibInt pvrtmp_1402 = tmp_struct_18.field1;
+
+    gib_vector_free(timings);
 
     return pvrtmp_1402;
 }
@@ -1458,7 +1459,7 @@ GibCursorProd _print_List(GibCursor end_r_645, GibCursor arg_159_238_349)
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1566");
+            printf("Unknown tag in: tmpval_1566 %d", tmpval_1566);
             exit(1);
         }
     }

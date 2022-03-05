@@ -1086,7 +1086,7 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     return gib_alloc_region_in_nursery_fast(size, true);
 }
 
-// Eager promotion.
+// TODO(ckoparkar): BUGGY, AUDITME.
 void gib_grow_region(char **writeloc_addr, char **footer_addr)
 {
     char *footer_ptr = *footer_addr;

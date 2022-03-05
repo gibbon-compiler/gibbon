@@ -753,7 +753,7 @@ unsafe fn evacuate_packed(
         // POLICY DECISION:
         // Redirections are always inlined in the current version.
         C_REDIRECTION_TAG => {
-            let (tagged_next_chunk, src_after_next_chunk): (u64, _) =
+            let (tagged_next_chunk, _src_after_next_chunk): (u64, _) =
                 read(src_after_tag);
             let tagged = TaggedPointer::from_u64(tagged_next_chunk);
             let next_chunk = tagged.untag();
@@ -764,6 +764,21 @@ unsafe fn evacuate_packed(
                 dst,
                 dst_end.offset_from(dst).try_into().unwrap(),
             );
+            evacuate_packed(
+                benv,
+                cenv,
+                chunk_starts,
+                zct,
+                nursery,
+                heap,
+                prov,
+                packed_info,
+                next_chunk,
+                dst,
+                dst_end,
+            )
+            /*
+            // // TODO(ckoparkar): BUGGY, AUDITME.
             // If the next chunk is in the nursery, continue evacuating it.
             // Otherwise, write a redireciton node at dst (pointing to
             // the start of the oldgen chunk), link the footers and reconcile
@@ -812,6 +827,7 @@ unsafe fn evacuate_packed(
                     tag,
                 ))
             }
+             */
         }
         // A pointer to a value in another buffer; copy this value
         // and then switch back to copying rest of the source buffer.
