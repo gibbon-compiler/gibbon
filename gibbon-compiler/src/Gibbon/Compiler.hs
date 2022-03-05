@@ -61,14 +61,13 @@ import qualified Gibbon.L3.Typecheck as L3
 import           Gibbon.Passes.Freshen        (freshNames)
 import           Gibbon.Passes.Flatten        (flattenL1, flattenL2, flattenL3)
 import           Gibbon.Passes.InlineTriv     (inlineTriv)
-import           Gibbon.Passes.Simplifier     (simplify)
+import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv)
 -- import           Gibbon.Passes.Sequentialize  (sequentialize)
 
 import           Gibbon.Passes.DirectL3       (directL3)
 import           Gibbon.Passes.InferLocations (inferLocs)
 -- This is the custom pass reference to issue #133 that moves regionsInwards
 import           Gibbon.Passes.RegionsInwards (regionsInwards)
-import           Gibbon.Passes.InferLocations (inferLocs, pushdownRegions)
 -- import           Gibbon.Passes.RepairProgram  (repairProgram)
 import           Gibbon.Passes.AddRAN         (addRAN,needsRAN)
 import           Gibbon.Passes.AddTraversals  (addTraversals)
@@ -85,7 +84,6 @@ import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
 import           Gibbon.Passes.ReorderAlloc   (reorderAlloc)
 import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
-import           Gibbon.Passes.LateSimplifier (lateInlineTriv)
 import           Gibbon.Passes.FollowRedirects(followRedirects)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
@@ -575,13 +573,13 @@ passes config@Config{dynflags} l0 = do
       -- replace the main function with benchmark code:
       l1 <- goE1 "benchMainExp"  benchMainExp           l1
       l1 <- goE1 "typecheck"     L1.tcProg              l1
-      l1 <- goE1 "simplify"      simplify               l1
+      l1 <- goE1 "simplify"      simplifyL1             l1
       l1 <- goE1 "typecheck"     L1.tcProg              l1
       -- Check this after eliminating all dead functions.
       when (hasSpawnsProg l1 && not parallel) $
         error "To compile a program with parallelism, use --parallel."
       l1 <- goE1 "flatten"       flattenL1              l1
-      l1 <- goE1 "simplify"      simplify               l1
+      l1 <- goE1 "simplify"      simplifyL1             l1
       l1 <- goE1 "inlineTriv"    inlineTriv             l1
       l1 <- goE1 "typecheck"     L1.tcProg              l1
       l1 <- if should_fuse

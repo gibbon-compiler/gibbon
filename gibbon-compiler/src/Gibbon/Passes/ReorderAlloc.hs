@@ -25,4 +25,6 @@ reorderAlloc (Prog ddefs fundefs mainExp) = do
     go = reorderAllocExp
 
 reorderAllocExp :: Exp3 -> PassM Exp3
-reorderAllocExp = _todo
+reorderAllocExp ex = pure ex
+
+--------------------------------------------------------------------------------
