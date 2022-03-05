@@ -82,6 +82,7 @@ import           Gibbon.Passes.Cursorize      (cursorize)
 import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 -- -- import           Gibbon.Passes.ShakeTree      (shakeTree)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
+import           Gibbon.Passes.ReorderAlloc   (reorderAlloc)
 import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.LateSimplifier (lateInlineTriv)
@@ -558,6 +559,7 @@ passes config@Config{dynflags} l0 = do
           no_rcopies = gopt Opt_No_RemoveCopies dynflags
           parallel   = gopt Opt_Parallel dynflags
           should_fuse = gopt Opt_Fusion dynflags
+          tcProg3     = L3.tcProg isPacked
       l0 <- go  "freshen"         freshNames            l0
       l0 <- goE0 "typecheck"       L0.tcProg             l0
       l0 <- goE0 "bindLambdas"     L0.bindLambdas       l0
@@ -674,41 +676,39 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                       l2 <- go "L2.typecheck" L2.tcProg  l2
                       pure l2
                     else (pure l2)
-              l2 <- goE2 "inferRegScope"   inferRegScope l2
-              l2 <- go "L2.typecheck"     L2.tcProg      l2
-              l2 <- goE2 "routeEnds"       routeEnds     l2
-              -- _ <- lift $ putStrLn (pprender l2)
+              l2 <- goE2 "inferRegScope"  inferRegScope l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- goE2 "routeEnds"      routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
               l2 <- go "threadRegions"    threadRegions l2
 
-              -- Note: L2 -> L3
-              -- TODO: Compose L3.TcM with (ReaderT Config)
+              -- L2 -> L3
               l3 <- go "cursorize"        cursorize     l2
-              -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3
-              l3 <- go "L3.typecheck" (L3.tcProg isPacked) l3
+              l3 <- go "L3.typecheck"     tcProg3       l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
-              l3 <- go "L3.typecheck" (L3.tcProg isPacked) l3
+              l3 <- go "L3.typecheck"     tcProg3       l3
+              l3 <- go "reorderAlloc"     reorderAlloc  l3
               return l3
             else do
               l3 <- go "directL3"         directL3      l1
-              l3 <- go "L3.typecheck" (L3.tcProg isPacked) l3
+              l3 <- go "L3.typecheck"     tcProg3       l3
               return l3
 
       l3 <- go "unariser"       unariser                l3
-      l3 <- go "L3.typecheck"   (L3.tcProg isPacked)    l3
+      l3 <- go "L3.typecheck"   tcProg3                 l3
       l3 <- go "L3.flatten"     flattenL3               l3
-      l3 <- go "L3.typecheck"   (L3.tcProg isPacked)    l3
+      l3 <- go "L3.typecheck"   tcProg3                 l3
 
       -- Note: L3 -> L4
       l4 <- go "lower"          lower                   l3
       l4 <- go "lateInlineTriv" lateInlineTriv          l4
       l4 <- if gibbon1 || not isPacked
             then do
-              l4 <- go "rearrangeFree"   rearrangeFree   l4
+              l4 <- go "rearrangeFree"  rearrangeFree   l4
               pure l4
             else do
               -- These additional case branches cause some tests in pointer mode to fail.

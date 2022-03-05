@@ -75,6 +75,7 @@ library
                        Gibbon.Passes.FindWitnesses
                        Gibbon.Passes.ShakeTree
                        Gibbon.Passes.HoistNewBuf
+                       Gibbon.Passes.ReorderAlloc
                        Gibbon.Passes.Unariser
                        Gibbon.Passes.Lower
                        Gibbon.Passes.LateSimplifier
