@@ -76,7 +76,6 @@ library
                        Gibbon.Passes.HoistNewBuf
                        Gibbon.Passes.Unariser
                        Gibbon.Passes.Lower
-                       Gibbon.Passes.LateSimplifier
                        Gibbon.Passes.FollowRedirects
                        Gibbon.Passes.RearrangeFree
                        Gibbon.Passes.Codegen
