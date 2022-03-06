@@ -148,6 +148,8 @@ inferRegScopeExp ex =
         IndirectionE{}-> return ex
         GetCilkWorkerNum -> return ex
         LetAvail vs e    -> Ext <$> LetAvail vs <$> go e
+        AllocateTagHere{} -> return ex
+        AllocateScalarsHere{} -> return ex
 
     -- Straightforward recursion ...
     VarE{}     -> return ex

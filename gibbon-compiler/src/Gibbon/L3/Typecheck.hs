@@ -162,6 +162,36 @@ tcExp isPacked ddfs env exp =
 
         LetAvail _ bod -> go bod
 
+        AllocateTagHere v -> do
+          rty <- lookupVar env v exp
+          ensureEqualTyModCursor exp rty CursorTy
+          return (ProdTy [])
+
+        AllocateScalarsHere v -> do
+          rty <- lookupVar env v exp
+          ensureEqualTyModCursor exp rty CursorTy
+          return (ProdTy [])
+
+        StartTagAllocation v -> do
+          rty <- lookupVar env v exp
+          ensureEqualTyModCursor exp rty CursorTy
+          return (ProdTy [])
+
+        EndTagAllocation v -> do
+          rty <- lookupVar env v exp
+          ensureEqualTyModCursor exp rty CursorTy
+          return (ProdTy [])
+
+        EndScalarsAllocation v -> do
+          rty <- lookupVar env v exp
+          ensureEqualTyModCursor exp rty CursorTy
+          return (ProdTy [])
+
+        StartScalarsAllocation v -> do
+          rty <- lookupVar env v exp
+          ensureEqualTyModCursor exp rty CursorTy
+          return (ProdTy [])
+
     -- All the other cases are exactly same as L1.Typecheck
 
     VarE v    -> lookupVar env v exp

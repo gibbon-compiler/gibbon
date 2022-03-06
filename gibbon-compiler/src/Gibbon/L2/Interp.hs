@@ -342,6 +342,8 @@ interpExt sizeEnv rc env ddefs fenv ext =
     IndirectionE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     GetCilkWorkerNum{} -> pure $ (VInt 1, SOne (fromJust $ byteSizeOfTy IntTy))
     LetAvail{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    AllocateTagHere{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    AllocateScalarsHere{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
 
   where
     go valenv szenv = interp szenv rc valenv ddefs fenv

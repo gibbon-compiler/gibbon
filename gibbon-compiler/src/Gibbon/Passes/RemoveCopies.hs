@@ -94,6 +94,8 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
         IndirectionE{}   -> return ex
         GetCilkWorkerNum -> return ex
         LetAvail vs bod -> Ext <$> LetAvail vs <$> go bod
+        AllocateTagHere{} -> return ex
+        AllocateScalarsHere{} -> return ex
 
     -- Straightforward recursion
     VarE{}     -> return ex

@@ -465,6 +465,8 @@ instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
                                                      pprint e
           L2.GetCilkWorkerNum -> text "__cilkrts_get_worker_number()"
           L2.LetAvail vs e    -> text "letavail " <+> pprint vs $+$ pprint e
+          L2.AllocateTagHere loc -> text "allocateTagHere" <+> pprint loc
+          L2.AllocateScalarsHere loc -> text "allocateScalarsHere" <+> pprint loc
 
 -- L3
 instance (Out l, HasPrettyToo E3Ext l (UrTy l)) => Pretty (L3.E3Ext l (UrTy l)) where

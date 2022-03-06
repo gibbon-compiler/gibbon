@@ -1791,6 +1791,8 @@ pushdownRegions (Prog ddefs fundefs mainExp) = do
             LetAvail vars bod ->
               let (env',bod') = go env bod
               in (env', Ext $ LetAvail vars bod')
+            AllocateTagHere loc -> (env, ex)
+            AllocateScalarsHere loc -> (env, ex)
         LetE (v,locs,ty,rhs@(AppE _ applocs _)) bod ->
           let (env', binds) = dischargeBinds applocs env
               (env'',bod') = go env' bod

@@ -82,9 +82,15 @@ data E3Ext loc dec =
   | NullCursor                     -- ^ Constant null cursor value (hack?).
                                    --   Used for dict lookup, which returns a packed value but
                                    --   no end witness.
-  | RetE [(PreExp E3Ext loc dec)]  -- ^ Analogous to L2's RetE
-  | GetCilkWorkerNum               -- ^ Runs  __cilkrts_get_worker_number()
+  | RetE [(PreExp E3Ext loc dec)]  -- ^ Analogous to L2's RetE.
+  | GetCilkWorkerNum               -- ^ Translates to  __cilkrts_get_worker_number().
   | LetAvail [Var] (PreExp E3Ext loc dec) -- ^ These variables are available to use before the join point
+  | AllocateTagHere Var -- ^ Analogous to L2's extension.
+  | AllocateScalarsHere Var -- ^ Analogous to L2's extension.
+  | StartTagAllocation Var -- ^ Marks the beginning of tag allocation.
+  | EndTagAllocation Var -- ^ Marks the end of tag allocation.
+  | StartScalarsAllocation Var -- ^ Marks the beginning of scalar allocation.
+  | EndScalarsAllocation Var -- ^ Marks the end of scalar allocation.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 instance FreeVars (E3Ext l d) where
@@ -117,6 +123,12 @@ instance FreeVars (E3Ext l d) where
       LetAvail ls b      -> (S.fromList ls) `S.union` gFreeVars b
       ReadVector{} -> error "gFreeVars: ReadVector"
       WriteVector{} -> error "gFreeVars: WriteVector"
+      AllocateTagHere v -> S.singleton v
+      AllocateScalarsHere v -> S.singleton v
+      StartTagAllocation v -> S.singleton v
+      EndTagAllocation v -> S.singleton v
+      StartScalarsAllocation v -> S.singleton v
+      EndScalarsAllocation v -> S.singleton v
 
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
@@ -191,6 +203,12 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       RetE ls            -> RetE (L.map go ls)
       GetCilkWorkerNum   -> GetCilkWorkerNum
       LetAvail ls b      -> LetAvail (L.map go ls) (go b)
+      AllocateTagHere v  -> AllocateTagHere (go v)
+      AllocateScalarsHere v  -> AllocateScalarsHere (go v)
+      StartTagAllocation v -> StartTagAllocation (go v)
+      EndTagAllocation v -> EndTagAllocation (go v)
+      StartScalarsAllocation v -> StartScalarsAllocation (go v)
+      EndScalarsAllocation v -> EndScalarsAllocation (go v)
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env

@@ -498,6 +498,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
               RetE ls -> gol ls
               GetCilkWorkerNum -> syms
               LetAvail _ bod   -> collect_syms syms bod
+              AllocateTagHere{} -> syms
+              AllocateScalarsHere{} -> syms
+              StartTagAllocation{} -> syms
+              EndTagAllocation{} -> syms
+              EndScalarsAllocation{} -> syms
           MapE{}         -> syms
           FoldE{}        -> syms
 

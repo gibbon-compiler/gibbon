@@ -93,10 +93,15 @@ data E2Ext loc dec
                               -- of a copy_Foo call, we keep the fn call
                               -- around in case we want to go back to it.
                               -- E.g. when reverting from L2 to L1.
-    -- ^ A tagged indirection node.
+    -- ^ A indirection node.
   | GetCilkWorkerNum
-  -- ^ Runs  __cilkrts_get_worker_number()
-  | LetAvail [Var] (E2 loc dec) -- ^ These variables are available to use before the join point
+    -- ^ Translates to  __cilkrts_get_worker_number().
+  | LetAvail [Var] (E2 loc dec) -- ^ These variables are available to use before the join point.
+  | AllocateTagHere LocVar
+  | AllocateScalarsHere LocVar
+    -- ^ A marker which tells subsequent a compiler pass where to
+    -- move the tag and scalar field allocations so that they happen
+    -- before any of the subsequent packed fields.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 -- | Define a location in terms of a different location.
@@ -137,6 +142,8 @@ instance FreeVars (E2Ext l d) where
      IndirectionE _ _ (_,a) (_,b) e -> S.fromList [a,b] `S.union` gFreeVars e
      GetCilkWorkerNum   -> S.empty
      LetAvail vs bod    -> S.fromList vs `S.union` gFreeVars bod
+     AllocateTagHere{}  -> S.empty
+     AllocateScalarsHere{}  -> S.empty
 
 
 instance FreeVars LocExp where
@@ -161,6 +168,8 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       IndirectionE{} -> False
       GetCilkWorkerNum-> False
       LetAvail{}      -> False
+      AllocateTagHere{} -> False
+      AllocateScalarsHere{} -> False
 
 instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)) where
   gRecoverType ddfs env2 ex =
@@ -177,6 +186,8 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
       AddFixed{}          -> error $ "Shouldn't enconter AddFixed in tail position"
       GetCilkWorkerNum    -> IntTy
       LetAvail _ bod -> gRecoverType ddfs env2 bod
+      AllocateTagHere{} -> ProdTy []
+      AllocateScalarsHere{} -> ProdTy []
 
 
 instance (Typeable (E2Ext l (UrTy l)),
@@ -203,6 +214,8 @@ instance (Typeable (E2Ext l (UrTy l)),
           GetCilkWorkerNum-> return ([],ex)
           LetAvail vs bod -> do (bnds,bod') <- go bod
                                 return $ ([], LetAvail vs $ flatLets bnds bod')
+          AllocateTagHere{} -> return ([],ex)
+          AllocateScalarsHere{} -> return ([],ex)
 
     where go = gFlattenGatherBinds ddfs env
 
@@ -222,6 +235,8 @@ instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2E
       AddFixed{}     -> ext
       GetCilkWorkerNum-> ext
       LetAvail vs bod -> LetAvail vs (gInlineTrivExp env bod)
+      AllocateTagHere{} -> ext
+      AllocateScalarsHere{} -> ext
 
 
 instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E2Ext l d) where
@@ -237,6 +252,8 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       AddFixed{}       -> ext
       GetCilkWorkerNum -> ext
       LetAvail vs bod  -> LetAvail vs (gSubst old new bod)
+      AllocateTagHere{} -> ext
+      AllocateScalarsHere{} -> ext
 
   gSubstEExt old new ext =
     case ext of
@@ -250,6 +267,8 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       AddFixed{}       -> ext
       GetCilkWorkerNum -> ext
       LetAvail vs bod  -> LetAvail vs (gSubstE old new bod)
+      AllocateTagHere{} -> ext
+      AllocateScalarsHere{} -> ext
 
 instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
   gRename env ext =
@@ -264,6 +283,8 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
       AddFixed{}       -> ext
       GetCilkWorkerNum -> ext
       LetAvail vs bod  -> LetAvail vs (gRename env bod)
+      AllocateTagHere{} -> ext
+      AllocateScalarsHere{} -> ext
 
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
@@ -577,12 +598,14 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
             LetParRegionE _ bod -> revertExp bod
             LetLocE _ _ bod  -> revertExp bod
             RetE _ v -> VarE v
-            AddFixed{} -> error "revertExp: AddFixed not handled."
+            AddFixed{} -> error "revertExp: TODO AddFixed."
             FromEndE{} -> error "revertExp: TODO FromEndLE"
             BoundsCheck{}   -> error "revertExp: TODO BoundsCheck"
             IndirectionE{}  -> error "revertExp: TODO IndirectionE"
             GetCilkWorkerNum-> LitE 0
             LetAvail _ bod  -> revertExp bod
+            AllocateTagHere{} -> error "revertExp: TODO AddFixed."
+            AllocateScalarsHere{} -> error "revertExp: TODO AddFixed."
         MapE{}  -> error $ "revertExp: TODO MapE"
         FoldE{} -> error $ "revertExp: TODO FoldE"
 
@@ -639,6 +662,8 @@ occurs w ex =
           v1 `S.member` w  || v2 `S.member` w || go ib
         GetCilkWorkerNum -> False
         LetAvail _ bod -> go bod
+        AllocateTagHere{} -> False
+        AllocateScalarsHere{} -> False
     MapE{}  -> error "occurs: TODO MapE"
     FoldE{} -> error "occurs: TODO FoldE"
   where
@@ -731,6 +756,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               AddFixed v _   -> M.insertWith (++) v [v] acc
               GetCilkWorkerNum -> acc
               LetAvail _ bod -> go acc bod
+              AllocateTagHere{} -> acc
+              AllocateScalarsHere{} -> acc
 
       dep :: PreLocExp LocVar -> [Var]
       dep ex =
@@ -769,6 +796,8 @@ allFreeVars ex =
         AddFixed v _    -> S.singleton v
         GetCilkWorkerNum-> S.empty
         LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod
+        AllocateTagHere loc -> S.singleton loc
+        AllocateScalarsHere loc -> S.singleton loc
     _ -> gFreeVars ex
 
 freeLocVars :: Exp2 -> [Var]
@@ -808,6 +837,8 @@ changeAppToSpawn v args2 ex1 =
         AddFixed{}        -> ex1
         GetCilkWorkerNum  -> ex1
         LetAvail vs bod   -> Ext $ LetAvail vs (go bod)
+        AllocateTagHere{} -> ex1
+        AllocateScalarsHere{} -> ex1
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{}  -> error "addRANExp: TODO FoldE"
 

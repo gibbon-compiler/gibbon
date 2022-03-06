@@ -822,6 +822,16 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
       Ext (LetAvail _ e) -> recur tstatein e
 
+      Ext (AllocateTagHere{}) -> do
+        -- (ty,tstate1) <- recur tstatein (VarE v)
+        -- ensureEqualTy (VarE v) ty CursorTy
+        return (ProdTy [], tstatein)
+
+      Ext (AllocateScalarsHere{}) -> do
+        -- (ty,tstate1) <- recur tstatein (VarE v)
+        -- ensureEqualTy (VarE v) ty CursorTy
+        return (ProdTy [], tstatein)
+
     where recur ts e = tcExp ddfs env funs constrs regs ts e
           checkListElemTy el_ty =
             if isValidListElemTy el_ty

@@ -172,6 +172,8 @@ inferExp ddfs fenv env dps expr =
     Ext (AddFixed{})       -> error "inferEffects: AddFixed not handled."
     Ext (GetCilkWorkerNum) -> (S.empty, Nothing)
     Ext (LetAvail _ e)     -> inferExp ddfs fenv env dps e
+    Ext (AllocateTagHere{}) -> (S.empty, Nothing)
+    Ext (AllocateScalarsHere{}) -> (S.empty, Nothing)
 
   where
     packedLoc :: Ty2 -> Maybe LocVar

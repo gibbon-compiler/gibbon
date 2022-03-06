@@ -10,7 +10,8 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.DynFlags
 import           Gibbon.Common
 import           Gibbon.L2.Syntax
-import           Gibbon.L3.Syntax hiding ( BoundsCheck, RetE, GetCilkWorkerNum, LetAvail )
+import           Gibbon.L3.Syntax hiding ( BoundsCheck, RetE, GetCilkWorkerNum, LetAvail,
+                                           AllocateTagHere, AllocateScalarsHere )
 import qualified Gibbon.L3.Syntax as L3
 import           Gibbon.Passes.AddRAN ( numRANsDataCon )
 
@@ -357,6 +358,10 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
 
         LetAvail vs bod  -> Ext <$> L3.LetAvail vs <$> go bod
 
+        AllocateTagHere v -> pure $ Ext $ L3.AllocateTagHere v
+
+        AllocateScalarsHere v -> pure $ Ext $ L3.AllocateScalarsHere v
+
     MapE{} -> error $ "TODO: cursorizeExp MapE"
     FoldE{} -> error $ "TODO: cursorizeExp FoldE"
 
@@ -572,6 +577,9 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
 
         LetAvail vs bod  -> do
           onDi (Ext . L3.LetAvail vs) <$> go tenv senv bod
+
+        AllocateTagHere v -> pure <$> dl <$> Ext $ L3.AllocateTagHere v
+        AllocateScalarsHere v -> pure <$> dl <$> Ext $ L3.AllocateScalarsHere v
 
     MapE{}  -> error $ "TODO: cursorizePackedExp MapE"
     FoldE{} -> error $ "TODO: cursorizePackedExp FoldE"

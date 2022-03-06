@@ -728,7 +728,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   where
     env = L1.progToEnv prg
 
-    checkDDef DDef{tyName, dataCons} = do
+    checkDDef DDef{dataCons} = do
         mapM_ go dataCons
       where
         go (dcon, tys) = do

@@ -154,6 +154,8 @@ bindReturns ex =
         LetAvail a bod  -> do
           bod' <- bindReturns bod
           pure $ Ext $ LetAvail a bod'
+        AllocateTagHere{} -> pure ex
+        AllocateScalarsHere{} -> pure ex
     MapE{}  -> error $ "bindReturns: TODO MapE"
     FoldE{} -> error $ "bindReturns: TODO FoldE"
 
