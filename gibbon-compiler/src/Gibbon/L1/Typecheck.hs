@@ -696,7 +696,10 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   flags <- getDynFlags
 
   -- check ddefs
-  mapM_ checkDDef $ M.elems ddefs
+  dynflags <- getDynFlags
+  let isPacked = gopt Opt_Packed dynflags
+  when isPacked $
+    mapM_ checkDDef (M.elems ddefs)
 
   -- Handle functions
   mapM_ fd $ M.elems fundefs
@@ -752,9 +755,11 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
           venv = M.fromList (zip funArgs argTys)
           env' = Env2 venv (fEnv env)
           res  = runExcept $ tcExp ddefs env' funBody
+      dynflags <- getDynFlags
+      let isPacked = gopt Opt_Packed dynflags
       case res of
         Left err -> error $ sdoc err
-        Right ty -> if (length $ getPackedTys retty) > 1
+        Right ty -> if isPacked && (length $ getPackedTys retty) > 1
                     then error ("Gibbon-TODO: Functions cannot return multiple packed values; "
                                 ++ "check " ++ sdoc funName)
                     else if ty == retty

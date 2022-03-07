@@ -8,7 +8,7 @@ foo i = (FooK, (FooK, i))
 
 gibbon_main =
   let x = foo 10
-  in x
+  in 10
 
 main :: IO ()
 main = print gibbon_main

@@ -733,7 +733,16 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           IfE _ b c  -> go (go acc b) c
           MkProdE ls -> foldl go acc ls
           ProjE _ e  -> go acc e
-          CaseE _ mp -> L.foldr (\(_,_,e) acc' -> go acc' e) acc mp
+          CaseE (VarE v) mp ->
+            L.foldr (\(_,vlocs,e) acc' ->
+                       let (vars,locs) = unzip vlocs
+                           acc'' = L.foldr (\w acc''' -> M.insertWith (++) v [w] acc''')
+                                           acc'
+                                           (vars ++ locs)
+                       in go acc'' e)
+                    acc
+                    mp
+          CaseE _scrt mp -> L.foldr (\(_,_,e) acc' -> go acc' e) acc mp
           DataConE _ _ args -> foldl go acc args
           TimeIt e _ _ -> go acc e
           WithArenaE _ e -> go acc e

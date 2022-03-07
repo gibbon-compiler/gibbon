@@ -463,45 +463,62 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
       let
           -- Return (start,end) cursors
           -- The final return value lives at the position of the out cursors:
-          go2 :: Var -> [(Exp2, Ty2)] -> PassM Exp3
-          go2 d [] = return $ MkProdE [VarE sloc, VarE d]
+          go2 :: Bool -> Var -> [(Exp2, Ty2)] -> PassM Exp3
+          go2 marker_added d [] =
+            if not (marker_added)
+            then do
+              end_scalars_alloc <- gensym "end_scalars_alloc"
+              return (LetE (end_scalars_alloc,[],ProdTy [],Ext $ EndScalarsAllocation sloc)
+                           (MkProdE [VarE sloc, VarE d]))
+            else return (MkProdE [VarE sloc, VarE d])
 
-          go2 d ((rnd, ty):rst) = do
+          go2 marker_added d ((rnd, ty):rst) = do
             d' <- gensym "writecur"
             case ty of
               _ | isPackedTy ty -> do
+
                  rnd' <- go tenv senv rnd
-                 LetE (d',[], CursorTy, projEnds rnd') <$>
-                   go2 d' rst
+                 end_scalars_alloc <- gensym "end_scalars_alloc"
+                 LetE (end_scalars_alloc,[],ProdTy [],Ext $ EndScalarsAllocation sloc) <$>
+                   LetE (d',[], CursorTy, projEnds rnd') <$>
+                   go2 True d' rst
 
               -- Int, Float, Sym, or Bool
               _ | isScalarTy ty -> do
                 rnd' <- cursorizeExp ddfs fundefs denv tenv senv rnd
                 LetE (d',[], CursorTy, Ext $ WriteScalar (mkScalar ty) d rnd') <$>
-                  go2 d' rst
+                  go2 marker_added d' rst
 
               -- Write a pointer to a vector
               VectorTy el_ty -> do
                 rnd' <- cursorizeExp ddfs fundefs denv tenv senv rnd
                 LetE (d',[], CursorTy, Ext $ WriteVector d rnd' (stripTyLocs el_ty)) <$>
-                  go2 d' rst
+                  go2 marker_added d' rst
 
               -- Write a pointer to a vector
               ListTy el_ty -> do
                 rnd' <- cursorizeExp ddfs fundefs denv tenv senv rnd
                 LetE (d',[], CursorTy, Ext $ WriteList d rnd' (stripTyLocs el_ty)) <$>
-                  go2 d' rst
+                  go2 marker_added d' rst
 
               CursorTy -> do
                 rnd' <- cursorizeExp ddfs fundefs denv tenv senv rnd
                 LetE (d',[], CursorTy, Ext $ WriteCursor d rnd') <$>
-                  go2 d' rst
+                  go2 marker_added d' rst
               _ -> error $ "Unknown type encounterred while cursorizing DataConE. Type was " ++ show ty
 
       writetag <- gensym "writetag"
+      after_tag <- gensym "after_tag"
+      start_tag_alloc <- gensym "start_tag_alloc"
+      end_tag_alloc <- gensym "end_tag_alloc"
+      start_scalars_alloc <- gensym "start_scalars_alloc"
       dl <$>
+        LetE (start_tag_alloc,[],ProdTy [], Ext $ StartTagAllocation sloc) <$>
         LetE (writetag,[], CursorTy, Ext $ WriteTag dcon sloc) <$>
-          go2 writetag (zip args (lookupDataCon ddfs dcon))
+        LetE (end_tag_alloc,[],ProdTy [], Ext $ EndTagAllocation sloc) <$>
+        LetE (start_scalars_alloc,[],ProdTy [], Ext $ StartScalarsAllocation sloc) <$>
+        LetE (after_tag,[], CursorTy, Ext $ AddCursor sloc (L3.LitE 1)) <$>
+          go2 False after_tag (zip args (lookupDataCon ddfs dcon))
 
     TimeIt e t b -> do
       Di e' <- go tenv senv e

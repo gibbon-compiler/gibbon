@@ -21,8 +21,10 @@ hoistExp :: ignored -> Exp3 -> PassM Exp3
 hoistExp _ ex0 = return $ gocap ex0
   where
 
-  gocap ex = let (lets,ex') = go ex in
-             mkLets lets ex'
+  gocap ex =
+    if not (hasTimeIt ex) then ex else
+      let (lets,ex') = go ex in
+        mkLets lets ex'
 
   go :: Exp3 -> ([(Var,[()],Ty3,Exp3)], Exp3)
   go e0 =

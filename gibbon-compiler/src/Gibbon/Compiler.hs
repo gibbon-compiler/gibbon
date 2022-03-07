@@ -81,7 +81,7 @@ import           Gibbon.Passes.Cursorize      (cursorize)
 import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 -- -- import           Gibbon.Passes.ShakeTree      (shakeTree)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
-import           Gibbon.Passes.ReorderAlloc   (reorderAlloc)
+import           Gibbon.Passes.ReorderAlloc   (allocationOrderMarkers, reorderAlloc)
 import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.FollowRedirects(followRedirects)
@@ -678,9 +678,11 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                     else (pure l2)
               l2 <- goE2 "inferRegScope"  inferRegScope l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- goE2 "routeEnds"      routeEnds     l2
-              l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "allocationOrderMarkers" allocationOrderMarkers l2
+              l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- goE2 "routeEnds"      routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
@@ -689,11 +691,11 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
 
               -- L2 -> L3
               l3 <- go "cursorize"        cursorize     l2
+              l3 <- go "reorderAlloc"     reorderAlloc  l3
               l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck"     tcProg3       l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3
               l3 <- go "L3.typecheck"     tcProg3       l3
-              l3 <- go "reorderAlloc"     reorderAlloc  l3
               return l3
             else do
               l3 <- go "directL3"         directL3      l1

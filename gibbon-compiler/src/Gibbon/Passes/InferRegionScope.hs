@@ -24,12 +24,12 @@ inferRegScope Prog{ddefs,fundefs,mainExp} = do
   let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
   mainExp' <- case mainExp of
                 Nothing -> return Nothing
-                Just (mn, ty) -> Just <$> (,ty) <$> inferRegScopeExp mn
+                Just (mn, ty) -> Just <$> (,ty) <$> inferRegScopeExp M.empty mn
   return $ Prog ddefs fundefs' mainExp'
 
 inferRegScopeFun :: FunDef2 -> PassM FunDef2
 inferRegScopeFun f@FunDef{funBody} = do
-  funBody' <- inferRegScopeExp funBody
+  funBody' <- inferRegScopeExp M.empty funBody
   return $ f {funBody = funBody'}
 
 {- Region scoping rules:
@@ -66,8 +66,8 @@ In fnB, there's no path from `rb` to 1.
 -- | Decide if a region should be global or local (dynamic).
 --
 --  Dynamic regions are stack allocated and automatically freed
-inferRegScopeExp :: Exp2 -> PassM Exp2
-inferRegScopeExp ex =
+inferRegScopeExp :: M.Map Region Region -> Exp2 -> PassM Exp2
+inferRegScopeExp env ex =
   case ex of
     Ext ext ->
       case ext of
@@ -99,11 +99,15 @@ inferRegScopeExp ex =
                                                (gopt Opt_Gibbon1 dflags)
                                             then BigInfinite
                                             else Infinite
-                           if path g retVertex regVertex
-                           then Ext <$> LetRegionE (GlobR regV defaultMul) <$> (go rhs)
-                           -- [2018.03.30] - TEMP: Turning off scoped buffers.
-                           -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
-                           else Ext <$> LetRegionE (GlobR regV defaultMul) <$> (go rhs)
+                           let scoped_reg = if path g retVertex regVertex
+                                            then (GlobR regV defaultMul)
+                                            -- [2018.03.30] - TEMP: Turning off scoped buffers.
+                                            -- else Ext$ LetRegionE (DynR regV mul) (inferRegScopeExp rhs)
+                                            -- else (DynR regV mul)
+                                            else (GlobR regV defaultMul)
+                           Ext <$>
+                             LetRegionE scoped_reg <$>
+                             inferRegScopeExp (M.insert r scoped_reg env) rhs
                    [] -> return ex
 
         LetParRegionE r rhs ->
@@ -141,7 +145,12 @@ inferRegScopeExp ex =
                    [] -> return ex
 
         -- Straightforward recursion
-        LetLocE loc le bod -> Ext <$> LetLocE loc le <$> (go bod)
+        LetLocE loc le bod -> do
+          let le' = case le of
+                      StartOfLE r -> StartOfLE (env # r)
+                      InRegionLE r -> InRegionLE (env # r)
+                      _ -> le
+          Ext <$> LetLocE loc le' <$> (go bod)
         RetE{}     -> return ex
         FromEndE{} -> return ex
         BoundsCheck{} -> return ex
@@ -173,4 +182,4 @@ inferRegScopeExp ex =
     MapE{}  -> error $ "inferRegScopeExp: TODO MapE"
     FoldE{} -> error $ "inferRegScopeExp: TODO FoldE"
   where
-    go = inferRegScopeExp
+    go = inferRegScopeExp env
