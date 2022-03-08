@@ -115,7 +115,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
       let ty = gRecoverType ddefs env2 ex
           argtys = map (gRecoverType ddefs env2) args
           argtylocs = concatMap locsInTy argtys
-          argregs = foldr (\x acc -> case M.lookup x renv of
+          in_regs = foldr (\x acc -> case M.lookup x renv of
                                        Just r -> r:acc
                                        Nothing -> acc)
                     [] argtylocs
@@ -123,45 +123,45 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
       -- locations and therefore, input and output regions.
       if hasPacked ty
       then do
-        let tylocs = locsInTy ty
-            regs   = map (renv #) tylocs
-        let newapplocs = (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
+        let out_tylocs = locsInTy ty
+            out_regs   = map (renv #) out_tylocs
+        let newapplocs = (map toEndV in_regs) ++ (map toEndV out_regs)  ++ applocs
         return $ AppE f newapplocs args
       -- Otherwise, only input regions.
       else do
-        let newapplocs = (map toEndV argregs) ++ applocs
+        let newapplocs = (map toEndV in_regs) ++ applocs
         return $ AppE f newapplocs args
 
     LetE (v,locs,ty, (AppE f applocs args)) bod -> do
       let argtys = map (gRecoverType ddefs env2) args
           argtylocs = concatMap locsInTy argtys
-          argregs = foldr (\x acc -> case M.lookup x renv of
+          in_regs = foldr (\x acc -> case M.lookup x renv of
                                        Just r -> r:acc
                                        Nothing -> acc)
                     [] argtylocs
           -- Map EndOf locations to input regions
-          renv' = M.union renv (M.fromList $ zip locs argregs)
+          renv' = M.union renv (M.fromList $ zip locs in_regs)
 
       -- Similar to the AppE case above, this one would have input and
       -- output regions.
       if hasPacked ty
       then do
         let tylocs = locsInTy ty
-            regs   = map (renv #) tylocs
-        regs' <- mapM (\r -> gensym $ varAppend r "_") regs
+            out_regs   = map (renv #) tylocs
+        out_regs' <- mapM (\r -> gensym r) out_regs
         -- Update all locations to point to the fresh region
         let renv'' = foldr (\(lc,r,r') acc ->
                              M.insert lc r' $
                              M.map (\tyl -> if tyl == r then r' else tyl) acc)
                     renv'
-                    (L.zip3 tylocs regs regs')
-            newlocs    = (map toEndV regs') ++ locs
-            newapplocs = (map toEndV argregs) ++ (map toEndV regs)  ++ applocs
-        LetE (v, newlocs, ty, AppE f newapplocs args) <$>
+                    (L.zip3 tylocs out_regs out_regs')
+            newretlocs = (map toEndV out_regs') ++ locs
+            newapplocs = (map toEndV in_regs) ++ (map toEndV out_regs)  ++ applocs
+        LetE (v, newretlocs, ty, AppE f newapplocs args) <$>
           threadRegionsExp ddefs fundefs isMain renv'' (extendVEnv v ty env2) lfenv bod
       -- Only input regions.
       else do
-          let newapplocs = (map toEndV argregs) ++ applocs
+          let newapplocs = (map toEndV in_regs) ++ applocs
           LetE (v,locs,ty,  AppE f newapplocs args) <$>
             threadRegionsExp ddefs fundefs isMain renv' (extendVEnv v ty env2) lfenv bod
 
@@ -192,8 +192,8 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
     LetE (v,locs,ty, rhs@(TimeIt{})) bod -> do
        rhs' <- go rhs
        let retlocs = findRetLocs rhs'
-           newlocs = retlocs ++ locs
-       LetE (v, newlocs,ty, rhs') <$>
+           newretlocs = retlocs ++ locs
+       LetE (v, newretlocs,ty, rhs') <$>
          threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv bod
 
     LetE (v,locs,ty, rhs) bod ->

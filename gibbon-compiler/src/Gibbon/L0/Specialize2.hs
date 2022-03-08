@@ -236,7 +236,7 @@ toL1 Prog{ddefs, fundefs, mainExp} =
 type MonoM a = StateT MonoState PassM a
 
 data MonoState = MonoState
-  { mono_funs_todo :: M.Map (Var, [Ty0]) Var
+  { mono_funs_worklist :: M.Map (Var, [Ty0]) Var
   , mono_funs_done :: M.Map (Var, [Ty0]) Var
   , mono_lams      :: M.Map (Var, [Ty0]) Var
   , mono_dcons     :: M.Map (TyCon, [Ty0]) Var -- suffix
@@ -245,12 +245,12 @@ data MonoState = MonoState
 
 emptyMonoState :: MonoState
 emptyMonoState = MonoState
-  { mono_funs_todo = M.empty, mono_funs_done = M.empty
+  { mono_funs_worklist = M.empty, mono_funs_done = M.empty
   , mono_lams = M.empty, mono_dcons = M.empty }
 
 extendFuns :: (Var,[Ty0]) -> Var -> MonoState -> MonoState
-extendFuns k v mono_st@MonoState{mono_funs_todo} =
-  mono_st { mono_funs_todo = M.insert k v mono_funs_todo }
+extendFuns k v mono_st@MonoState{mono_funs_worklist} =
+  mono_st { mono_funs_worklist = M.insert k v mono_funs_worklist }
 
 extendLambdas :: (Var,[Ty0]) -> Var -> MonoState -> MonoState
 extendLambdas k v mono_st@MonoState{mono_lams} =
@@ -336,10 +336,10 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
     monoFunDefs :: FunDefs0 -> MonoM FunDefs0
     monoFunDefs fundefs1 = do
       mono_st <- get
-      if M.null (mono_funs_todo mono_st)
+      if M.null (mono_funs_worklist mono_st)
       then pure fundefs1
       else do
-        let (((fun_name, tyapps), new_fun_name):rst) = M.toList (mono_funs_todo mono_st)
+        let (((fun_name, tyapps), new_fun_name):rst) = M.toList (mono_funs_worklist mono_st)
             fn@FunDef{funArgs, funName, funBody} = fundefs # fun_name
             tyvars = tyVarsFromScheme (funTy fn)
         assertSameLength ("While monormorphizing the function: " ++ sdoc funName) tyvars tyapps
@@ -348,7 +348,7 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
             funBody' = substTyVarExp mp funBody
             -- Move this obligation from todo to done.
             mono_st' = mono_st { mono_funs_done = M.insert (fun_name, tyapps) new_fun_name (mono_funs_done mono_st)
-                               , mono_funs_todo = M.fromList rst }
+                               , mono_funs_worklist = M.fromList rst }
         put mono_st'
         -- Collect any more obligations generated due to the monormorphization
         let env21 = Env2 (M.fromList $ zip funArgs (inTys funTy')) (M.map funTy fundefs1)
@@ -624,7 +624,7 @@ collectMonoObls ddefs env2 toplevel ex =
     addFnObl f tyapps = do
       mono_st <- get
       if f `S.member` toplevel
-      then case (M.lookup (f,tyapps) (mono_funs_done mono_st), M.lookup (f,tyapps) (mono_funs_todo mono_st)) of
+      then case (M.lookup (f,tyapps) (mono_funs_done mono_st), M.lookup (f,tyapps) (mono_funs_worklist mono_st)) of
              (Nothing, Nothing) -> do
                new_name <- lift $ gensym f
                state (\st -> ((), extendFuns (f,tyapps) new_name st))
@@ -844,7 +844,7 @@ type SpecM a = StateT SpecState PassM a
 type FunRef = Var
 
 data SpecState = SpecState
-  { sp_funs_todo :: M.Map (Var, [FunRef]) Var
+  { sp_funs_worklist :: M.Map (Var, [FunRef]) Var
   , sp_funs_done :: M.Map (Var, [FunRef]) Var
   , sp_extra_args :: M.Map Var [(Var, Ty0)]
   , sp_fundefs   :: FunDefs0 }
@@ -911,14 +911,14 @@ specLambdas prg@Prog{ddefs,fundefs,mainExp} = do
     fixpoint :: SpecM ()
     fixpoint = do
       sp_state <- get
-      if M.null (sp_funs_todo sp_state)
+      if M.null (sp_funs_worklist sp_state)
       then pure ()
       else do
         let fns = sp_fundefs sp_state
             fn = fns # fn_name
-            ((fn_name, refs), new_fn_name) = M.elemAt 0 (sp_funs_todo sp_state)
+            ((fn_name, refs), new_fn_name) = M.elemAt 0 (sp_funs_worklist sp_state)
         specLambdasFun ddefs new_fn_name refs fn
-        state (\st -> ((), st { sp_funs_todo = M.delete (fn_name, refs) (sp_funs_todo st)
+        state (\st -> ((), st { sp_funs_worklist = M.delete (fn_name, refs) (sp_funs_worklist st)
                               , sp_funs_done = M.insert (fn_name, refs) new_fn_name (sp_funs_done st) }))
         fixpoint
 
@@ -995,7 +995,7 @@ specLambdasExp ddefs env2 ex =
                                      [] refs
           let (vars,_) = unzip extra_args
               args''' = args'' ++ (map VarE vars)
-          case (M.lookup (f,refs) (sp_funs_done sp_state), M.lookup (f,refs) (sp_funs_todo sp_state)) of
+          case (M.lookup (f,refs) (sp_funs_done sp_state), M.lookup (f,refs) (sp_funs_worklist sp_state)) of
             (Nothing, Nothing) -> do
               f' <- lift $ gensym f
               let (ForAll _ (ArrowTy as _)) = lookupFEnv f env2
@@ -1007,7 +1007,7 @@ specLambdasExp ddefs env2 ex =
               let sp_extra_args' = case extra_args of
                                      [] -> sp_extra_args sp_state
                                      _  -> M.insert f' extra_args (sp_extra_args sp_state)
-              let sp_state' = sp_state { sp_funs_todo = M.insert (f,refs) f' (sp_funs_todo sp_state)
+              let sp_state' = sp_state { sp_funs_worklist = M.insert (f,refs) f' (sp_funs_worklist sp_state)
                                        , sp_extra_args = sp_extra_args'
                                        }
               put sp_state'
@@ -1624,3 +1624,44 @@ genPrintFn DDef{tyName, dataCons} = do
                   , funRec = Rec
                   , funInline = NoInline
                   }
+
+
+--------------------------------------------------------------------------------
+
+-- floatUpCase :: Prog0 -> PassM Prog0
+-- floatUpCase Prog{fundefs,mainExp} =
+--   fundefs' <- mapM (\fn@FunDef{funBody} -> go funBody >>= \b -> pure $ fn {funBody = b}) fundefs
+--   mainExp' <- case mainExp of
+--                 Nothing     -> pure Nothing
+--                 Just (e,ty) -> Just <$> (,ty) <$> go e
+--   pure $ prg { fundefs = fundefs', mainExp = mainExp' }
+--   where
+--     err1 msg = error $ "desugarL0: " ++ msg
+
+--     go :: Exp0 -> PassM Exp0
+--     go ex =
+--       case ex of
+--         VarE{}    -> pure ex
+--         LitE{}    -> pure ex
+--         FloatE{}  -> pure ex
+--         LitSymE{} -> pure ex
+--         AppE f tyapps args-> AppE f tyapps <$> mapM go args
+--         PrimAppE pr args  -> do
+--           args' <- mapM go args
+--           pure $ PrimAppE pr args'
+--         LetE (v,_tyapps,ty,rhs) bod -> do
+--           rhs' <- go rhs
+--           bod' <- go bod
+--           pure $  mkLets binds bod''
+--         LetE (v,tyapps,ty,rhs) bod -> LetE <$> (v,tyapps,ty,) <$> go rhs <*> go bod
+--         IfE a b c  -> IfE <$> go a <*> go b <*> go c
+--         MkProdE ls -> MkProdE <$> mapM go ls
+--         ProjE i a  -> (ProjE i) <$> go a
+--         CaseE scrt brs -> CaseE <$> go scrt <*> (mapM (\(a,b,c) -> (a, b,) <$> go c) brs)
+--         DataConE a dcon ls -> DataConE a dcon <$> mapM go ls
+--         TimeIt e ty b    -> (\a -> TimeIt a ty b) <$> go e
+--         WithArenaE v e -> (WithArenaE v) <$> go e
+--         SpawnE fn tyapps args -> (SpawnE fn tyapps) <$> mapM go args
+--         SyncE   -> pure SyncE
+--         MapE{}  -> err1 (sdoc ex)
+--         FoldE{} -> err1 (sdoc ex)
