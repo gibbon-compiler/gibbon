@@ -46,7 +46,7 @@
 
 (define (add1 [tr : Tree]) : Tree
   (case tr
-    [(Leaf n) (Leaf (+ n 1))]
+    [(Leaf n) (Leaf (+ n 0))]
     [(Node x y) (Node (add1 x) (add1 y))]))
 
 ;; main
@@ -62,4 +62,4 @@
     (let ([tr1 : Tree (add1 tr0)])
       (sumtree tr1))))
 
-(vector (do-reverse 0) (do-tree 0))
+(vector (do-reverse (size-param)) (do-tree (size-param)))

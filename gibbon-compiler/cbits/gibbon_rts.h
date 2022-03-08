@@ -326,6 +326,9 @@ typedef struct gib_nursery GibNursery;
 typedef struct gib_generation GibGeneration;
 typedef struct gib_region_info GibRegionInfo;
 
+// Array of nurseries, indexed by thread_id.
+extern GibNursery *gib_global_nurseries;
+
 // Shadow stacks for readable and writeable locations respectively,
 // indexed by thread_id.
 //
@@ -333,6 +336,13 @@ typedef struct gib_region_info GibRegionInfo;
 // parallel mutators.. These arrays are abstract enough for now.
 extern GibShadowstack *gib_global_read_shadowstacks;
 extern GibShadowstack *gib_global_write_shadowstacks;
+
+// Convenience macros since we don't really need the arrays of nurseries and
+// shadowstacks since mutators are still sequential.
+// #define DEFAULT_NURSERY gib_global_nurseries
+#define DEFAULT_NURSERY (&(gib_global_nurseries[0]))
+#define DEFAULT_READ_SHADOWSTACK (&(gib_global_read_shadowstacks[0]))
+#define DEFAULT_WRITE_SHADOWSTACK (&(gib_global_write_shadowstacks[0]))
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

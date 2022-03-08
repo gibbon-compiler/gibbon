@@ -1616,8 +1616,8 @@ int gib_main_expr(void)
 
     GibInt fltPrd_235_251 =  do_reverse(gib_get_size_param());
     printf("reverse: %" PRIu64 "\n", fltPrd_235_251);
-    // GibInt fltPrd_236_252 =  do_tree(gib_get_size_param());
-    // printf("sum tree: %" PRIu64 "\n", fltPrd_236_252);
+    GibInt fltPrd_236_252 =  do_tree(gib_get_size_param());
+    printf("sum tree: %" PRIu64 "\n", fltPrd_236_252);
 
     // test_ptr_tagging();
 

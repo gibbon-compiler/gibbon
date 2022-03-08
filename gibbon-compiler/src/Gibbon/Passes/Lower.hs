@@ -870,6 +870,13 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE (v, _, ty, (Ext GetCilkWorkerNum)) bod ->
       T.LetPrimCallT [(v,typ ty)] T.GetCilkWorkerNum [] <$> tail free_reg sym_tbl bod
 
+    LetE (_v, _, _ty, (Ext (SSPush a b c d))) bod ->
+      T.LetPrimCallT [] (T.SSPush a d) [T.VarTriv b, T.VarTriv c] <$> tail free_reg sym_tbl bod
+
+    LetE (_v, _, _ty, (Ext (SSPop a b c))) bod ->
+      T.LetPrimCallT [] (T.SSPop a) [T.VarTriv b, T.VarTriv c] <$> tail free_reg sym_tbl bod
+
+
     LetE (_v, _, _ty, rhs@(Ext AllocateTagHere{})) _bod -> error $ "lower: " ++ sdoc rhs
     LetE (_v, _, _ty, rhs@(Ext AllocateScalarsHere{})) _bod -> error $ "lower: " ++ sdoc rhs
     LetE (_v, _, _ty, rhs@(Ext StartTagAllocation{})) _bod -> error $ "lower: " ++ sdoc rhs

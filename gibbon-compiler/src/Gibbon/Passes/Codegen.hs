@@ -220,21 +220,15 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
           do let retTy   = codegenTy ty
                  params  = map (\(v,t) -> [cparam| $ty:(codegenTy t) $id:v |]) args
                  init_venv = M.fromList args
-             if S.member nam sort_fns
-             then do
-               -- See codegenSortFn
-               let nam' = varAppend nam (toVar "_original")
-               body <- codegenTail init_venv init_fun_env sort_fns tal ty []
-               let fun = [cfun| $ty:retTy $id:nam' ($params:params) {
-                                $items:body
-                                } |]
-               return fun
-             else do
-               body <- codegenTail init_venv init_fun_env sort_fns tal ty []
-               let fun = [cfun| $ty:retTy $id:nam ($params:params) {
-                                $items:body
-                                } |]
-               return fun
+             let nam' = if S.member nam sort_fns
+                        then varAppend nam (toVar "_original")
+                        else nam
+             body <- codegenTail init_venv init_fun_env sort_fns tal ty []
+             let body' = ssDecls ++ body
+             let fun = [cfun| $ty:retTy $id:nam' ($params:params) {
+                              $items:body'
+                              } |]
+             return fun
 
       -- C's qsort expects a sort function to be of type, (void*  a, void* b) : int.
       -- But there's no way for a user to write a function of this type. So we generate
@@ -469,6 +463,25 @@ type FEnv = M.Map Var ([Ty], Ty)
 type VEnv = M.Map Var Ty
 type SyncDeps = [(Var, C.BlockItem)]
 
+writeShadowstack :: Var
+writeShadowstack = toVar "wstack"
+
+readShadowstack :: Var
+readShadowstack = toVar "rstack"
+
+shadowstackFrame :: Var
+shadowstackFrame = toVar "frame"
+
+ssDecls :: [C.BlockItem]
+ssDecls =
+  [ C.BlockDecl [cdecl| $ty:stk_ty *$id:readShadowstack = DEFAULT_READ_SHADOWSTACK; |]
+  , C.BlockDecl [cdecl| $ty:stk_ty *$id:writeShadowstack = DEFAULT_WRITE_SHADOWSTACK; |]
+  , C.BlockDecl [cdecl| $ty:frame_ty *$id:shadowstackFrame; |]
+  ]
+  where
+    stk_ty = [cty|typename GibShadowstack|]
+    frame_ty = [cty|typename GibShadowstackFrame|]
+
 -- | The central codegen function.
 codegenTail :: VEnv -> FEnv -> S.Set Var -> Tail -> Ty -> SyncDeps -> PassM [C.BlockItem]
 
@@ -624,7 +637,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                                , C.BlockDecl [cdecl| double $id:selftimed = *($id:tmp); |]
                                , C.BlockDecl [cdecl| double $id:batchtime = gib_sum_timing_array($id:times); |]
                                , C.BlockStm [cstm| gib_print_timing_array($id:times); |]
-                               -- , C.BlockStm [cstm| gib_vector_free($id:times); |]
+                               , C.BlockStm [cstm| gib_vector_free($id:times); |]
                                ])
 
                          -- else
@@ -632,7 +645,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                            , C.BlockStm [cstm| { $items:rhs'' } |]
                            , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
                            , C.BlockDecl [cdecl| double $id:selftimed = gib_difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
-                           -- , C.BlockStm [cstm| gib_vector_free($id:times); |]
+                           , C.BlockStm [cstm| gib_vector_free($id:times); |]
                            ])
            withPrnt = timebod ++
                       (if flg
@@ -1400,9 +1413,23 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  PrintRegionCount -> return [ C.BlockStm [cstm| gib_print_global_region_count(); |] ]
 
-                 SSPush{} -> _todo
+                 SSPush stk tycon -> do
+                   let tycon_t = (C.Id (tycon ++ "_T") noLoc)
+                       [VarTriv loc, VarTriv endloc] = rnds
+                   case stk of
+                     Write ->
+                       return [ C.BlockStm [cstm| gib_shadowstack_push($id:writeShadowstack, $id:loc, $id:endloc, $id:tycon_t); |] ]
+                     Read ->
+                       return [ C.BlockStm [cstm| gib_shadowstack_push($id:readShadowstack, $id:loc, $id:endloc, $id:tycon_t); |] ]
 
-                 SSPop{} -> _todo
+                 SSPop stk -> do
+                   let [VarTriv loc, VarTriv endloc] = rnds
+                   return $
+                     (case stk of
+                        Write -> [ C.BlockStm [cstm| $id:shadowstackFrame = gib_shadowstack_pop($id:writeShadowstack); |] ]
+                        Read -> [ C.BlockStm [cstm| $id:shadowstackFrame = gib_shadowstack_pop($id:readShadowstack); |] ]) ++
+                     [ C.BlockStm [cstm| $id:loc = $id:shadowstackFrame->ptr; |]
+                     , C.BlockStm [cstm| $id:endloc = $id:shadowstackFrame->endptr; |]]
 
                  BumpArenaRefCount{} -> error "codegen: BumpArenaRefCount not handled."
                  ReadInt{} -> error "codegen: ReadInt not handled."

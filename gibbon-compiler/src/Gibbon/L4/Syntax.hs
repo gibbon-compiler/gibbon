@@ -344,8 +344,8 @@ data Prim
 
     | FreeSymTable
 
-    | SSPush SSModality Var Var TyCon
-    | SSPop SSModality Var Var
+    | SSPush SSModality TyCon
+    | SSPop SSModality
 
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
