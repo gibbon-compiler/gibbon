@@ -35,7 +35,7 @@ module Gibbon.L2.Syntax
     where
 
 import           Control.DeepSeq
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Map as M
 import           GHC.Stack (HasCallStack)
@@ -102,6 +102,9 @@ data E2Ext loc dec
     -- ^ A marker which tells subsequent a compiler pass where to
     -- move the tag and scalar field allocations so that they happen
     -- before any of the subsequent packed fields.
+  | SSPush SSModality LocVar LocVar TyCon
+  | SSPop SSModality LocVar LocVar
+    -- ^ Spill and restore from the shadow-stack.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 -- | Define a location in terms of a different location.
@@ -144,6 +147,8 @@ instance FreeVars (E2Ext l d) where
      LetAvail vs bod    -> S.fromList vs `S.union` gFreeVars bod
      AllocateTagHere{}  -> S.empty
      AllocateScalarsHere{}  -> S.empty
+     SSPush{} -> S.empty
+     SSPop{} -> S.empty
 
 
 instance FreeVars LocExp where
@@ -170,6 +175,8 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       LetAvail{}      -> False
       AllocateTagHere{} -> False
       AllocateScalarsHere{} -> False
+      SSPush{} -> False
+      SSPop{} -> False
 
 instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)) where
   gRecoverType ddfs env2 ex =
@@ -188,6 +195,8 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
       LetAvail _ bod -> gRecoverType ddfs env2 bod
       AllocateTagHere{} -> ProdTy []
       AllocateScalarsHere{} -> ProdTy []
+      SSPush{} -> ProdTy []
+      SSPop{} -> ProdTy []
 
 
 instance (Typeable (E2Ext l (UrTy l)),
@@ -216,6 +225,8 @@ instance (Typeable (E2Ext l (UrTy l)),
                                 return $ ([], LetAvail vs $ flatLets bnds bod')
           AllocateTagHere{} -> return ([],ex)
           AllocateScalarsHere{} -> return ([],ex)
+          SSPush{} -> return ([],ex)
+          SSPop{} -> return ([],ex)
 
     where go = gFlattenGatherBinds ddfs env
 
@@ -237,6 +248,8 @@ instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2E
       LetAvail vs bod -> LetAvail vs (gInlineTrivExp env bod)
       AllocateTagHere{} -> ext
       AllocateScalarsHere{} -> ext
+      SSPush{} -> ext
+      SSPop{} -> ext
 
 
 instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E2Ext l d) where
@@ -254,6 +267,8 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       LetAvail vs bod  -> LetAvail vs (gSubst old new bod)
       AllocateTagHere{} -> ext
       AllocateScalarsHere{} -> ext
+      SSPush{} -> ext
+      SSPop{} -> ext
 
   gSubstEExt old new ext =
     case ext of
@@ -269,6 +284,8 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       LetAvail vs bod  -> LetAvail vs (gSubstE old new bod)
       AllocateTagHere{} -> ext
       AllocateScalarsHere{} -> ext
+      SSPush{} -> ext
+      SSPop{} -> ext
 
 instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
   gRename env ext =
@@ -285,6 +302,8 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
       LetAvail vs bod  -> LetAvail vs (gRename env bod)
       AllocateTagHere{} -> ext
       AllocateScalarsHere{} -> ext
+      SSPush{} -> ext
+      SSPop{} -> ext
 
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
@@ -474,11 +493,11 @@ outRegVars ty = L.map (\(LRM _ r _) -> regionToVar r) $
                 L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
 inRegVars :: ArrowTy2 -> [LocVar]
-inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) $
+inRegVars ty = L.nub $ L.map (\(LRM _ r _) -> regionToVar r) $
                L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
 allRegVars :: ArrowTy2 -> [LocVar]
-allRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) (locVars ty)
+allRegVars ty = L.nub $ L.map (\(LRM _ r _) -> regionToVar r) (locVars ty)
 
 -- | Apply a location substitution to a type.
 substLoc :: M.Map LocVar LocVar -> Ty2 -> Ty2
@@ -606,6 +625,8 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
             LetAvail _ bod  -> revertExp bod
             AllocateTagHere{} -> error "revertExp: TODO AddFixed."
             AllocateScalarsHere{} -> error "revertExp: TODO AddFixed."
+            SSPush{} -> error "revertExp: TODO SSPush."
+            SSPop{} -> error "revertExp: TODO SSPop."
         MapE{}  -> error $ "revertExp: TODO MapE"
         FoldE{} -> error $ "revertExp: TODO FoldE"
 
@@ -664,6 +685,8 @@ occurs w ex =
         LetAvail _ bod -> go bod
         AllocateTagHere{} -> False
         AllocateScalarsHere{} -> False
+        SSPush{} -> False
+        SSPop{} -> False
     MapE{}  -> error "occurs: TODO MapE"
     FoldE{} -> error "occurs: TODO FoldE"
   where
@@ -767,6 +790,8 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               LetAvail _ bod -> go acc bod
               AllocateTagHere{} -> acc
               AllocateScalarsHere{} -> acc
+              SSPush{} -> acc
+              SSPop{} -> acc
 
       dep :: PreLocExp LocVar -> [Var]
       dep ex =
@@ -807,6 +832,8 @@ allFreeVars ex =
         LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod
         AllocateTagHere loc -> S.singleton loc
         AllocateScalarsHere loc -> S.singleton loc
+        SSPush _ a b _ -> S.fromList [a,b]
+        SSPop _ a b -> S.fromList [a,b]
     _ -> gFreeVars ex
 
 freeLocVars :: Exp2 -> [Var]
@@ -848,6 +875,8 @@ changeAppToSpawn v args2 ex1 =
         LetAvail vs bod   -> Ext $ LetAvail vs (go bod)
         AllocateTagHere{} -> ex1
         AllocateScalarsHere{} -> ex1
+        SSPush{} -> ex1
+        SSPop{} -> ex1
     MapE{}  -> error "addRANExp: TODO MapE"
     FoldE{}  -> error "addRANExp: TODO FoldE"
 

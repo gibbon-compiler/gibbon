@@ -344,6 +344,8 @@ interpExt sizeEnv rc env ddefs fenv ext =
     LetAvail{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     AllocateTagHere{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     AllocateScalarsHere{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    SSPush{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
+    SSPop{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
 
   where
     go valenv szenv = interp szenv rc valenv ddefs fenv

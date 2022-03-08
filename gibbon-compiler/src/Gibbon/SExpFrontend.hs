@@ -16,7 +16,7 @@ module Gibbon.SExpFrontend
 
 import Control.Monad
 import Data.Char ( isLower, isAlpha )
-import Data.List as L
+import qualified Data.List as L
 import Data.Loc ( Loc(..), Pos(..))
 import qualified Data.Map as M
 import qualified Data.Set as S

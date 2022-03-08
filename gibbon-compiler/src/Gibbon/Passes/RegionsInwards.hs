@@ -157,6 +157,8 @@ placeRegionInwards env scopeSet ex  =
         LetAvail vs e                                  -> Ext . LetAvail vs <$> go e  {- Recurse on the rhs directly -}
         AllocateTagHere{} -> return ex
         AllocateScalarsHere{} -> return ex
+        SSPush{} -> return ex
+        SSPop{} -> return ex
 
      -- Straightforward recursion ...
     VarE{}                 -> return ex        -- Just return Nothing special here

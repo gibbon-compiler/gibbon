@@ -344,6 +344,9 @@ data Prim
 
     | FreeSymTable
 
+    | SSPush SSModality Var Var TyCon
+    | SSPop SSModality Var Var
+
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
 data FunDecl = FunDecl

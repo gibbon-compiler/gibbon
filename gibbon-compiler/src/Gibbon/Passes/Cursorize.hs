@@ -2,7 +2,7 @@ module Gibbon.Passes.Cursorize
   (cursorize) where
 
 import           Control.Monad (forM)
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Map as M
 import           Data.Maybe (fromJust)
 import           Text.PrettyPrint.GenericPretty
@@ -11,7 +11,7 @@ import           Gibbon.DynFlags
 import           Gibbon.Common
 import           Gibbon.L2.Syntax
 import           Gibbon.L3.Syntax hiding ( BoundsCheck, RetE, GetCilkWorkerNum, LetAvail,
-                                           AllocateTagHere, AllocateScalarsHere )
+                                           AllocateTagHere, AllocateScalarsHere, SSPush, SSPop )
 import qualified Gibbon.L3.Syntax as L3
 import           Gibbon.Passes.AddRAN ( numRANsDataCon )
 
@@ -362,6 +362,9 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
 
         AllocateScalarsHere v -> pure $ Ext $ L3.AllocateScalarsHere v
 
+        SSPush a b c d -> pure $ Ext $ L3.SSPush a b c d
+        SSPop a b c -> pure $ Ext $ L3.SSPop a b c
+
     MapE{} -> error $ "TODO: cursorizeExp MapE"
     FoldE{} -> error $ "TODO: cursorizeExp FoldE"
 
@@ -596,7 +599,12 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
           onDi (Ext . L3.LetAvail vs) <$> go tenv senv bod
 
         AllocateTagHere v -> pure <$> dl <$> Ext $ L3.AllocateTagHere v
+
         AllocateScalarsHere v -> pure <$> dl <$> Ext $ L3.AllocateScalarsHere v
+
+        SSPush a b c d -> pure <$> dl <$> Ext $ L3.SSPush a b c d
+
+        SSPop a b c -> pure <$> dl <$> Ext $ L3.SSPop a b c
 
     MapE{}  -> error $ "TODO: cursorizePackedExp MapE"
     FoldE{} -> error $ "TODO: cursorizePackedExp FoldE"

@@ -8,7 +8,7 @@ module Gibbon.Passes.Freshen (freshNames, freshNames1, freshExp, freshExp1, fres
 import           Control.Exception
 import           Data.Foldable ( foldrM )
 import           Prelude hiding (exp)
-import           Data.List
+import qualified Data.List as L
 import qualified Data.Map as M
 
 import           Gibbon.Common
@@ -41,7 +41,7 @@ freshDDef DDef{tyName,tyArgs,dataCons} = do
     go :: String -> [TyVar] -> TyVarEnv Ty0 -> (t, Ty0) -> PassM (t, Ty0)
     go msg bound env (b, ty) = do
       (_, ty') <- freshTy env ty
-      let free_tvs = tyVarsInTy ty' \\ bound
+      let free_tvs = tyVarsInTy ty' L.\\ bound
       if free_tvs == []
       then pure (b, ty')
       else error $ "freshDDef: Unbound type variables " ++ sdoc free_tvs

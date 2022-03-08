@@ -250,6 +250,8 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
         LetAvail vs bod -> Ext <$> LetAvail vs <$> go bod
         AllocateTagHere{} -> pure ex
         AllocateScalarsHere{} -> pure ex
+        SSPush{} -> pure ex
+        SSPop{} -> pure ex
 
     -- Straightforward recursion
 
@@ -325,6 +327,8 @@ findRetLocs e0 = go e0 []
             LetAvail _ bod    -> go bod acc
             AllocateTagHere{} -> acc
             AllocateScalarsHere{} -> acc
+            SSPush{} -> acc
+            SSPop{} -> acc
         MapE{}  -> error "findRetLocs: TODO MapE"
         FoldE{}  -> error "findRetLocs: TODO FoldE"
 

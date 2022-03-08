@@ -276,6 +276,8 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
         LetAvail vs bod -> Ext <$> LetAvail vs <$> go bod
         AllocateTagHere{} -> pure ex
         AllocateScalarsHere{} -> pure ex
+        SSPush{} -> pure ex
+        SSPop{} -> pure ex
     MapE{}  -> error $ "parAllocExp: TODO MapE"
     FoldE{} -> error $ "parAllocExp: TODO FoldE"
   where
@@ -326,6 +328,8 @@ substLocInExp mp ex1 =
         LetAvail vs bod   -> Ext $ LetAvail vs (go bod)
         AllocateTagHere{} -> ex1
         AllocateScalarsHere{} -> ex1
+        SSPush{} -> ex1
+        SSPop{} -> ex1
     MapE{}  -> error "substLocInExpExp: TODO MapE"
     FoldE{}  -> error "substLocInExpExp: TODO FoldE"
 

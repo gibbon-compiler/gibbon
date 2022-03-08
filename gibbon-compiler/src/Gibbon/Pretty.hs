@@ -467,6 +467,8 @@ instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
           L2.LetAvail vs e    -> text "letavail " <+> pprint vs $+$ pprint e
           L2.AllocateTagHere loc -> text "allocateTagHere" <+> pprint loc
           L2.AllocateScalarsHere loc -> text "allocateScalarsHere" <+> pprint loc
+          L2.SSPush mode loc endloc tycon -> text "ss_push" <+> doc mode <+> pprint loc <+> pprint endloc <+> doc tycon
+          L2.SSPop mode loc endloc -> text "ss_pop" <+> doc mode <+> pprint loc <+> pprint endloc
 
 -- L3
 instance (Out l, HasPrettyToo E3Ext l (UrTy l)) => Pretty (L3.E3Ext l (UrTy l)) where

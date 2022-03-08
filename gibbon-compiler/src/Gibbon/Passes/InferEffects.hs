@@ -174,6 +174,8 @@ inferExp ddfs fenv env dps expr =
     Ext (LetAvail _ e)     -> inferExp ddfs fenv env dps e
     Ext (AllocateTagHere{}) -> (S.empty, Nothing)
     Ext (AllocateScalarsHere{}) -> (S.empty, Nothing)
+    Ext (SSPush{}) -> (S.empty, Nothing)
+    Ext (SSPop{}) -> (S.empty, Nothing)
 
   where
     packedLoc :: Ty2 -> Maybe LocVar

@@ -22,7 +22,7 @@ where
 import Control.DeepSeq
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.List as L
+import qualified Data.List as L
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
@@ -91,6 +91,9 @@ data E3Ext loc dec =
   | EndTagAllocation Var -- ^ Marks the end of tag allocation.
   | StartScalarsAllocation Var -- ^ Marks the beginning of scalar allocation.
   | EndScalarsAllocation Var -- ^ Marks the end of scalar allocation.
+  | SSPush SSModality Var Var TyCon
+  | SSPop SSModality Var Var
+    -- ^ Analogous to L2's extensions.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 instance FreeVars (E3Ext l d) where
@@ -129,6 +132,8 @@ instance FreeVars (E3Ext l d) where
       EndTagAllocation v -> S.singleton v
       StartScalarsAllocation v -> S.singleton v
       EndScalarsAllocation v -> S.singleton v
+      SSPush _ a b _ -> S.fromList [a,b]
+      SSPop _ a b -> S.fromList [a,b]
 
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
@@ -209,6 +214,8 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       EndTagAllocation v -> EndTagAllocation (go v)
       StartScalarsAllocation v -> StartScalarsAllocation (go v)
       EndScalarsAllocation v -> EndScalarsAllocation (go v)
+      SSPush a b c d -> SSPush a (go b) (go c) d
+      SSPop a b c -> SSPop a (go b) (go c)
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env

@@ -130,6 +130,8 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
             L2.LetAvail vars bod -> Ext <$> (L2.LetAvail vars) <$> recur bod
             L2.AllocateTagHere{} -> pure ex
             L2.AllocateScalarsHere{} -> pure ex
+            L2.SSPush{} -> pure ex
+            L2.SSPop{} -> pure ex
 
         -- straightforward recursion (assumption: a-normal form)
         VarE{}     -> pure ex

@@ -96,6 +96,8 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
         LetAvail vs bod -> Ext <$> LetAvail vs <$> go bod
         AllocateTagHere{} -> return ex
         AllocateScalarsHere{} -> return ex
+        SSPush{} -> return ex
+        SSPop{} -> return ex
 
     -- Straightforward recursion
     VarE{}     -> return ex

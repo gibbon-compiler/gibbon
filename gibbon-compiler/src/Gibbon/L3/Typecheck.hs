@@ -192,6 +192,20 @@ tcExp isPacked ddfs env exp =
           ensureEqualTyModCursor exp rty CursorTy
           return (ProdTy [])
 
+        SSPush _ v w _ -> do
+          rty1 <- lookupVar env v exp
+          ensureEqualTyModCursor exp rty1 CursorTy
+          rty2 <- lookupVar env w exp
+          ensureEqualTyModCursor exp rty2 CursorTy
+          return (ProdTy [])
+
+        SSPop _ v w -> do
+          rty1 <- lookupVar env v exp
+          ensureEqualTyModCursor exp rty1 CursorTy
+          rty2 <- lookupVar env w exp
+          ensureEqualTyModCursor exp rty2 CursorTy
+          return (ProdTy [])
+
     -- All the other cases are exactly same as L1.Typecheck
 
     VarE v    -> lookupVar env v exp

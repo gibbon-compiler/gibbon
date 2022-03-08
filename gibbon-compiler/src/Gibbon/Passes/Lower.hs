@@ -13,7 +13,7 @@ module Gibbon.Passes.Lower
 import           Control.Monad
 import           Data.Foldable
 import           Data.Maybe
-import           Data.List as L hiding (tail)
+import qualified Data.List as L hiding (tail)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           Data.Int (Int64)
@@ -404,7 +404,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
         go dcon tys =
             let field_tys = map snd tys
                 (num_packed,num_scalars) = (\(a,b) -> ((length a, length b))) $
-                                           partition isPackedTy field_tys
+                                           L.partition isPackedTy field_tys
                 scalar_bytes = foldl (\acc ty ->
                                           if isPackedTy ty
                                           then acc
@@ -502,7 +502,10 @@ lower Prog{fundefs,ddefs,mainExp} = do
               AllocateScalarsHere{} -> syms
               StartTagAllocation{} -> syms
               EndTagAllocation{} -> syms
+              StartScalarsAllocation{} -> syms
               EndScalarsAllocation{} -> syms
+              SSPush{} -> syms
+              SSPop{} -> syms
           MapE{}         -> syms
           FoldE{}        -> syms
 
@@ -866,6 +869,13 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     LetE (v, _, ty, (Ext GetCilkWorkerNum)) bod ->
       T.LetPrimCallT [(v,typ ty)] T.GetCilkWorkerNum [] <$> tail free_reg sym_tbl bod
+
+    LetE (_v, _, _ty, rhs@(Ext AllocateTagHere{})) _bod -> error $ "lower: " ++ sdoc rhs
+    LetE (_v, _, _ty, rhs@(Ext AllocateScalarsHere{})) _bod -> error $ "lower: " ++ sdoc rhs
+    LetE (_v, _, _ty, rhs@(Ext StartTagAllocation{})) _bod -> error $ "lower: " ++ sdoc rhs
+    LetE (_v, _, _ty, rhs@(Ext EndTagAllocation{})) _bod -> error $ "lower: " ++ sdoc rhs
+    LetE (_v, _, _ty, rhs@(Ext StartScalarsAllocation{})) _bod -> error $ "lower: " ++ sdoc rhs
+    LetE (_v, _, _ty, rhs@(Ext EndScalarsAllocation{})) _bod -> error $ "lower: " ++ sdoc rhs
 
     Ext (LetAvail vs bod) ->
       T.LetAvailT vs <$> tail free_reg sym_tbl bod

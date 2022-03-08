@@ -159,6 +159,8 @@ inferRegScopeExp env ex =
         LetAvail vs e    -> Ext <$> LetAvail vs <$> go e
         AllocateTagHere{} -> return ex
         AllocateScalarsHere{} -> return ex
+        SSPush{} -> return ex
+        SSPop{} -> return ex
 
     -- Straightforward recursion ...
     VarE{}     -> return ex
