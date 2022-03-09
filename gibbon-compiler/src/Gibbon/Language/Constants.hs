@@ -1,6 +1,6 @@
 module Gibbon.Language.Constants where
 
-import Data.List
+import Data.List as L
 
 import Gibbon.Language.Syntax
 import Gibbon.Common
@@ -12,6 +12,9 @@ redirectionSize = 9
 
 redirectionTag :: DataCon
 redirectionTag = "REDIRECTION"
+
+isRedirectionTag :: DataCon -> Bool
+isRedirectionTag = L.isPrefixOf redirectionTag
 
 redirectionAlt :: Num a => a
 redirectionAlt = 255

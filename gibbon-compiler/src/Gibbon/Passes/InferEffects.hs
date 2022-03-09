@@ -6,7 +6,7 @@
 module Gibbon.Passes.InferEffects
   (inferEffects, inferExp) where
 
-import Data.List as L
+import qualified Data.List as L
 import Data.Set as S
 import Data.Map as M
 

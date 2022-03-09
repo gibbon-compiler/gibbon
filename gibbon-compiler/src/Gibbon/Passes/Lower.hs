@@ -77,8 +77,6 @@ genDcons [] tail fields     = do
   return $ T.LetAllocT ptr fields $ T.RetValsT [T.VarTriv ptr, T.VarTriv tail]
 
 genAlts :: [(DataCon,[(IsBoxed,Ty3)])] -> Var -> Var -> Int64 -> PassM T.Alts
--- Don' do anything for indirections. Let 'followRedirects' take care of it.
-genAlts ((dcons, _):rst) tail tag n | isIndirectionTag dcons = genAlts rst tail tag n
 genAlts ((_dcons, typs):xs) tail tag n = do
   let (_,typs') = unzip typs
   -- WARNING: IsBoxed ignored here
@@ -332,6 +330,8 @@ getTagOfDataCon :: Out a => DDefs a -> DataCon -> Tag
 getTagOfDataCon dds dcon =
     if isIndirectionTag dcon
     then indirectionAlt
+    else if isRedirectionTag dcon
+    then redirectionAlt
     else if isRelRANDataCon dcon
     -- So that is_big in the RTS can identify which nodes have size information.
     then 150 + (fromIntegral ix)
