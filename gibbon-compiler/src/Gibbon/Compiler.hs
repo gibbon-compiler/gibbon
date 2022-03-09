@@ -378,10 +378,12 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
     _                                -> return ""
   where outfile = getOutfile backend fp cfile
         exe = getExeFile backend fp exefile
-        pointer = gopt Opt_Pointer $ dynflags cfg
+        pointer = gopt Opt_Pointer (dynflags cfg)
         links = if pointer
                 then " -lgc -lm -lgibbon_rts "
                 else " -lm -lgibbon_rts "
+
+        rts_debug = gopt Opt_RtsDebug (dynflags cfg)
 
         compile_rust_rts = do
             env <- getEnvironment
@@ -393,8 +395,12 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
             e2 <- doesDirectoryExist rust_rts_dir
             unless e2 $ error$ "codegen: Rust RTS not found at path: "++rust_rts_dir
                                ++"\n Consider setting GIBBON_NEWRTS_DIR.\n"
-            let rust_rts_path = rust_rts_dir ++ "/target/release"
-            let compile_rust_rts_cmd = "cargo build --release"
+            let rust_rts_path = rust_rts_dir ++
+                                (if rts_debug
+                                 then "/target/debug"
+                                 else "/target/release")
+
+            let compile_rust_rts_cmd = "cargo build" ++ (if rts_debug then "" else " --release")
 
             compile (Just rust_rts_dir)
                     compile_rust_rts_cmd
@@ -414,6 +420,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
             let rts_o_path = replaceExtension rtsPath ".o"
             let rts_header_dir = takeDirectory rts_o_path
             let compile_rts_cmd = compilationCmd backend cfg
+                                  ++ (if rts_debug then " -D_GIBBON_DEBUG -O0 -g" else "")
                                   ++" -I " ++ rts_header_dir ++ " "
                                   ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "
                                   ++" -c " ++ rtsPath ++ " -o " ++ rts_o_path ++ " " ++ links
@@ -430,6 +437,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
             let rts_header_dir = takeDirectory rts_o_path
             let compile_prog_cmd = compilationCmd backend cfg
                                    ++" " ++ rts_o_path
+                                   ++ (if rts_debug then " -D_GIBBON_DEBUG -O0 -g" else "")
                                    ++" -I" ++ rts_header_dir ++ " "
                                    ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "
                                    ++outfile ++ " -o " ++ exe ++ links
