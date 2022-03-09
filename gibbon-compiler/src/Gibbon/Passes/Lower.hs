@@ -13,7 +13,7 @@ module Gibbon.Passes.Lower
 import           Control.Monad
 import           Data.Foldable
 import           Data.Maybe
-import           Data.List as L hiding (tail)
+import qualified Data.List as L hiding (tail)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           Data.Int (Int64)

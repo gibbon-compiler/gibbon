@@ -15,7 +15,7 @@ import           Data.Int
 import           Data.Loc
 import qualified Data.Map as M
 import           Data.Maybe
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Set as S
 import           Language.C.Quote.C (cdecl, cedecl, cexp, cfun, cparam, csdecl, cstm, cty)
 import qualified Language.C.Quote.C as C
@@ -454,7 +454,7 @@ codegenTail venv fenv sort_fns (LetAllocT lhs vals body) ty sync_deps =
                  tal)
 
 codegenTail venv fenv sort_fns (LetAvailT vs body) ty sync_deps =
-    do let (avail, sync_deps') = partition (\(v,_) -> elem v vs) sync_deps
+    do let (avail, sync_deps') = L.partition (\(v,_) -> elem v vs) sync_deps
        tl <- codegenTail venv fenv sort_fns body ty sync_deps'
        pure $ (map snd avail) ++ tl
 
@@ -1050,7 +1050,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                            let scanf_vars   = map (\v -> [cexp| &($id:v) |]) tmps
                                scanf_line = [cexp| $id:line |]
-                               scanf_format = [cexp| $string:(intercalate " " tmps_parsers) |]
+                               scanf_format = [cexp| $string:(L.intercalate " " tmps_parsers) |]
                                scanf_rator  = C.Var (C.Id "sscanf" noLoc) noLoc
                                scanf = C.FnCall scanf_rator (scanf_line : scanf_format : scanf_vars) noLoc
 
@@ -1316,8 +1316,8 @@ codegenMultiplicity mul =
 
 
 splitAlts :: Alts -> (Alts, Alts)
-splitAlts (TagAlts ls) = (TagAlts (init ls), TagAlts [last ls])
-splitAlts (IntAlts ls) = (IntAlts (init ls), IntAlts [last ls])
+splitAlts (TagAlts ls) = (TagAlts (L.init ls), TagAlts [last ls])
+splitAlts (IntAlts ls) = (IntAlts (L.init ls), IntAlts [last ls])
 
 -- | Take a "singleton" Alts and extract the Tail.
 altTail :: Alts -> Tail

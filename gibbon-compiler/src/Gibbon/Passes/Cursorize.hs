@@ -2,7 +2,7 @@ module Gibbon.Passes.Cursorize
   (cursorize) where
 
 import           Control.Monad (forM)
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Map as M
 import           Data.Maybe (fromJust)
 import           Text.PrettyPrint.GenericPretty

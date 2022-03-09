@@ -16,7 +16,7 @@ where
 import Control.Monad.Except
 import Data.Map as M
 import Data.Set as S
-import Data.List as L
+import qualified Data.List as L
 import Data.Maybe
 import Text.PrettyPrint
 import Text.PrettyPrint.GenericPretty
@@ -694,7 +694,6 @@ tcProg :: Prog1 -> PassM Prog1
 tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   -- Get flags to check if we're in packed mode
   flags <- getDynFlags
-
   -- Handle functions
   mapM_ fd $ M.elems fundefs
 

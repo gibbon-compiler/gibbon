@@ -1,6 +1,6 @@
 module Gibbon.Passes.ThreadRegions where
 
-import Data.List as L
+import qualified Data.List as L
 import Data.Maybe ( fromJust )
 import qualified Data.Map as M
 

@@ -5,7 +5,7 @@ module Gibbon.Passes.Simplifier where
 import Data.Functor.Foldable as Foldable
 import qualified Data.Set as S
 import qualified Data.Map as M
-import Data.List ( isPrefixOf )
+import qualified Data.List as L ( isPrefixOf )
 
 import Gibbon.Common
 import Gibbon.Language
@@ -62,7 +62,7 @@ deadFunElim (Prog ddefs fundefs main) = do
     let (fundefs',deleted) =
             M.foldr (\fn (acc1,acc2) ->
                          let f = funName fn in
-                           if f `S.member` used' || isPrefixOf "_" (fromVar f)
+                           if f `S.member` used' || L.isPrefixOf "_" (fromVar f)
                            then (M.insert f fn acc1, acc2)
                            else (acc1, f:acc2))
                     (M.empty,[])

@@ -21,7 +21,7 @@ import           Control.DeepSeq
 import           Control.Monad.Except
 import           Data.Foldable ( foldlM )
 import qualified Data.Set as S
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Map as M
 import           Data.Maybe
 import           Text.PrettyPrint.GenericPretty
@@ -167,7 +167,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
              -- (3) Check location of argument
              let tyls = concatMap locsInTy in_tys
-             case find (\loc -> not $ S.member loc (S.fromList ls)) tyls of
+             case L.find (\loc -> not $ S.member loc (S.fromList ls)) tyls of
                Nothing -> return ()
                Just not_in_ls -> throwError $ GenericTC ("Packed argument location expected: " ++ show not_in_ls) exp
              let handleTS ts (l,Output) =  switchOutLoc exp ts l

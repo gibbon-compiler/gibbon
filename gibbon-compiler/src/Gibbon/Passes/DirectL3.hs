@@ -1,7 +1,7 @@
 module Gibbon.Passes.DirectL3
     (directL3) where
 
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Map as M
 
 import           Gibbon.Common

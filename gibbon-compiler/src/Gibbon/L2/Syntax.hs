@@ -35,7 +35,7 @@ module Gibbon.L2.Syntax
     where
 
 import           Control.DeepSeq
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Map as M
 import           GHC.Stack (HasCallStack)
@@ -453,11 +453,11 @@ outRegVars ty = L.map (\(LRM _ r _) -> regionToVar r) $
                 L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
 inRegVars :: ArrowTy2 -> [LocVar]
-inRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) $
+inRegVars ty = L.nub $ L.map (\(LRM _ r _) -> regionToVar r) $
                L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
 allRegVars :: ArrowTy2 -> [LocVar]
-allRegVars ty = nub $ L.map (\(LRM _ r _) -> regionToVar r) (locVars ty)
+allRegVars ty = L.nub $ L.map (\(LRM _ r _) -> regionToVar r) (locVars ty)
 
 -- | Apply a location substitution to a type.
 substLoc :: M.Map LocVar LocVar -> Ty2 -> Ty2

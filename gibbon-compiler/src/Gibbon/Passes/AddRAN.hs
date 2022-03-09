@@ -5,7 +5,7 @@ module Gibbon.Passes.AddRAN
 
 import           Control.Monad ( when, forM )
 import           Data.Foldable
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Map as M
 import           Data.Maybe ( fromJust )
 import qualified Data.Set as S

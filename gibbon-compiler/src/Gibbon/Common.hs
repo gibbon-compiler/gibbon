@@ -45,7 +45,7 @@ import Control.Monad.State.Strict
 import Control.Monad.Reader
 import Data.Functor.Foldable
 import Data.Char
-import Data.List as L
+import qualified Data.List as L
 import Data.Map as M
 import Data.String
 import Data.Symbol
