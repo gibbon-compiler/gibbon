@@ -747,7 +747,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                  _       -> codegenTail venv' fenv sort_fns body ty sync_deps
        dflags <- getDynFlags
        let isPacked = gopt Opt_Packed dflags
-           noGC = gopt Opt_DisableGC dflags
+           _noGC = gopt Opt_DisableGC dflags
 
        pre <- case prm of
                  AddP -> let [(outV,outT)] = bnds
@@ -947,6 +947,18 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:next = *($ty:(codegenTy CursorTy) *) ($id:cur); |]
                                , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:afternext = ($id:cur) + 8; |]
                                ]
+
+                 ReadTaggedCursor -> do
+                               tagged <- gensym "tagged_tmpcur"
+                               let [(next,CursorTy),(afternext,CursorTy)] = bnds
+                                   [(VarTriv cur)] = rnds
+                                   tagged_t = [cty| typename uintptr_t |]
+                               pure
+                                 [ C.BlockDecl [cdecl| $ty:tagged_t $id:tagged = *($ty:tagged_t *) ($id:cur); |]
+                                 , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:next = GIB_UNTAG($id:tagged); |]
+                                 , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:afternext = ($id:cur) + 8; |]
+                                 ]
+
 
                  WriteCursor -> let [(outV,CursorTy)] = bnds
                                     [val,(VarTriv cur)] = rnds in pure
