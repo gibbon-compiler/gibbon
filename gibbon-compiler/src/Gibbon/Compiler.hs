@@ -565,6 +565,7 @@ passes config@Config{dynflags} l0 = do
       -- l0 <- goE0 "closureConvert"  L0.closureConvert    l0
       l0 <- goE0 "specLambdas"     L0.specLambdas       l0
       l0 <- goE0 "desugarL0"       L0.desugarL0         l0
+      l0 <- goE0 "floatOutCase"    L0.floatOutCase      l0
       -- Note: L0 -> L1
       l1 <- goE0 "toL1"            (pure . L0.toL1)     l0
 

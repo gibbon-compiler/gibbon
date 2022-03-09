@@ -727,7 +727,7 @@ GibCursorGibCursorGibCursorGibCursorProd add1(GibCursor end_r_606,  // input reg
 
             return (GibCursorGibCursorGibCursorGibCursorProd) {tmp_struct_1.field0,
                                                                tmpaftercur_1623,
-                                                               loc_605,
+                                                               tmp_struct_1.field2,
                                                                tmp_struct_1.field3};
 
             break;
