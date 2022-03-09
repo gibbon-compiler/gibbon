@@ -421,6 +421,22 @@ exp se =
      tys <- mapM  (\_ -> newMetaTy) args'
      pure $ Ext $ L (toLoc l) $ Ext $ LambdaE (zip args' tys) bod'
 
+   Ls2 l "print-packed" arg -> do
+     ty <- newMetaTy
+     arg' <- exp arg
+     pure $ Ext $ L (toLoc l) $ Ext $ PrintPacked ty arg'
+
+   Ls2 l "copy-packed" arg -> do
+     ty <- newMetaTy
+     arg' <- exp arg
+     pure $ Ext $ L (toLoc l) $ Ext $ CopyPacked ty arg'
+
+   Ls2 l "trav-packed" arg -> do
+     ty <- newMetaTy
+     arg' <- exp arg
+     pure $ Ext $ L (toLoc l) $ Ext $ TravPacked ty arg'
+
+
    Ls3 l "for/list" (Ls1 (Ls4 _ v ":" t e)) bod -> do
      e'   <- exp e
      bod' <- exp bod

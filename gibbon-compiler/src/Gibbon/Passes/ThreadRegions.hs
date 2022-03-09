@@ -142,8 +142,15 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
         return $ AppE f newapplocs args
 
     LetE (v,locs,ty, (AppE f applocs args)) bod -> do
-      let argtys = map (gRecoverType ddefs env2) args
-          argtylocs = concatMap locsInTy argtys
+      let -- argtys = map (gRecoverType ddefs env2) args
+          -- argtylocs = concatMap locsInTy argtys
+          argtylocs = concatMap
+                        (\arg@(VarE w) ->
+                             let ty = gRecoverType ddefs env2 arg in
+                               case ty of
+                                 CursorTy -> [w]
+                                 _ -> locsInTy ty)
+                        args
           in_regs = foldr (\x acc -> case M.lookup x renv of
                                        Just r -> r:acc
                                        Nothing -> acc)
@@ -153,7 +160,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
 
       -- Similar to the AppE case above, this one would have input and
       -- output regions.
-      if hasPacked ty
+      if (hasPacked ty)
       then do
         let tylocs = locsInTy ty
             out_regs   = map (renv #) tylocs
@@ -315,7 +322,10 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
       -- Update the envs with bindings for pattern matched variables and locations.
       -- The locations point to the same region as the scrutinee.
       let (vars,locs) = unzip vlocs
-          renv1' = foldr (\lc acc -> M.insert lc reg acc) renv1 locs
+          renv0  = if isIndirectionTag dcon
+                   then foldr (\lc acc -> M.insert lc reg acc) renv1 vars
+                   else renv1
+          renv1' = foldr (\lc acc -> M.insert lc reg acc) renv0 locs
           env21' = extendPatternMatchEnv dcon ddefs vars locs env21
           rlocs_env1' = foldr (\(loc,ty) acc ->
                                 case ty of
@@ -341,6 +351,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
           let rpop = map (\(x,locs,ty,Ext (SSPush a b c _)) -> (x,locs,ty,Ext (SSPop a b c))) (reverse rpush)
               wpop = map (\(x,locs,ty,Ext (SSPush a b c _)) -> (x,locs,ty,Ext (SSPop a b c))) (reverse wpush)
           pure (rpush,wpush,rpop,wpop)
+
 
 -- Inspect an AST and return locations in a RetE form.
 findRetLocs :: Exp2 -> [LocVar]

@@ -76,6 +76,7 @@ import           Gibbon.Passes.InferEffects   (inferEffects)
 import           Gibbon.Passes.ParAlloc       (parAlloc)
 import           Gibbon.Passes.InferRegionScope (inferRegScope)
 import           Gibbon.Passes.RouteEnds      (routeEnds)
+import           Gibbon.Passes.FollowIndirections (followIndirections)
 import           Gibbon.Passes.ThreadRegions  (threadRegions)
 import           Gibbon.Passes.Cursorize      (cursorize)
 import           Gibbon.Passes.FindWitnesses  (findWitnesses)
@@ -687,6 +688,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "followIndirections" followIndirections l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
