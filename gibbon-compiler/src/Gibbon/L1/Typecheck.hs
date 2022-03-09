@@ -16,7 +16,7 @@ where
 import Control.Monad.Except
 import Data.Map as M
 import Data.Set as S
-import Data.List as L
+import qualified Data.List as L
 import Data.Maybe
 import Text.PrettyPrint
 import Text.PrettyPrint.GenericPretty
@@ -737,7 +737,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
         go (dcon, tys) = do
           let tys' = (L.map snd tys)
               mb_firstPacked = L.findIndex isPackedTy tys'
-              scalars = findIndices (not . isPackedTy) tys'
+              scalars = L.findIndices (not . isPackedTy) tys'
           case mb_firstPacked of
             Nothing -> return ()
             Just fp -> case scalars of

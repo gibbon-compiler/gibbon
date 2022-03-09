@@ -62,4 +62,6 @@
     (let ([tr1 : Tree (add1 tr0)])
       (sumtree tr1))))
 
-(vector (do-reverse (size-param)) (do-tree (size-param)))
+;; (vector (do-reverse (size-param)) (do-tree (size-param)))
+(do-tree (size-param))
+;; (do-reverse (size-param))

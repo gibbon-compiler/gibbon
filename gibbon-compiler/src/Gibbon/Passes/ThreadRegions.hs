@@ -146,10 +146,10 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
           -- argtylocs = concatMap locsInTy argtys
           argtylocs = concatMap
                         (\arg@(VarE w) ->
-                             let ty = gRecoverType ddefs env2 arg in
-                               case ty of
+                             let argty = gRecoverType ddefs env2 arg in
+                               case argty of
                                  CursorTy -> [w]
-                                 _ -> locsInTy ty)
+                                 _ -> locsInTy argty)
                         args
           in_regs = foldr (\x acc -> case M.lookup x renv of
                                        Just r -> r:acc
