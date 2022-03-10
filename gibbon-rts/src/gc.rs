@@ -453,6 +453,8 @@ unsafe fn evacuate_remembered_set(
             // A scalar type that can be copied directly.
             Some(DatatypeInfo::Scalar(size)) => {
                 // Allocate space in the destination.
+                // Reserve additional space for a redirection node or a
+                // forwarding pointer.
                 let (dst, dst_end) =
                     Heap::allocate_first_chunk(heap, 32 + *size, 1)?;
                 // The remembered set contains the address of the indirection
@@ -536,6 +538,8 @@ unsafe fn evacuate_shadowstack(
             // A scalar type that can be copied directly.
             Some(DatatypeInfo::Scalar(size)) => {
                 // Allocate space in the destination.
+                // Reserve additional space for a redirection node or a
+                // forwarding pointer.
                 let (dst, dst_end) =
                     Heap::allocate_first_chunk(heap, 32 + *size, 0)?;
                 // Evacuate the data.

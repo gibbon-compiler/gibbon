@@ -1530,7 +1530,7 @@ void print_binary(uint64_t number, int *i)
 }
 
 // https://stackoverflow.com/a/18426582.
-void test_ptr_tagging()
+void test_ptr_tagging_old()
 {
     printf("\nTest pointer tagging:\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
     int i = 0;
@@ -1609,6 +1609,25 @@ void test_ptr_tagging()
 
 }
 
+void test_ptr_tagging()
+{
+    printf("\nTest pointer tagging:\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+    size_t data = 65535;
+    char *ptr = malloc(1024);
+    uintptr_t tagged = GIB_STORE_TAG(ptr, data);
+    char *ptr2 = GIB_UNTAG(tagged);
+    size_t data2 = GIB_GET_TAG(tagged);
+
+    // Check if tagging and untagging cancels out.
+    printf("Checking original data == recovered data.\n");
+    assert(data2 == data);
+    printf("Checking original pointer == recovered pointer.\n");
+    assert(ptr2 == ptr);
+    printf("Checks passed.");
+
+    free(ptr);
+}
+
 int gib_main_expr(void)
 {
     info_table_initialize();
@@ -1619,7 +1638,7 @@ int gib_main_expr(void)
     GibInt fltPrd_236_252 =  do_tree(gib_get_size_param());
     printf("sum tree: %" PRIu64 "\n", fltPrd_236_252);
 
-    // test_ptr_tagging();
+    test_ptr_tagging();
 
     return 0;
 }

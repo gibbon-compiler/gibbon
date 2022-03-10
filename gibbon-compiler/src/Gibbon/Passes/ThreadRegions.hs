@@ -187,9 +187,14 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
 
       -- Only input regions.
       else do
+          bod' <- threadRegionsExp ddefs fundefs isMain renv' (extendVEnv v ty env2) lfenv rlocs_env wlocs_env bod
           let newapplocs = (map toEndV in_regs) ++ applocs
-          LetE (v,locs,ty,  AppE f newapplocs args) <$>
-            threadRegionsExp ddefs fundefs isMain renv' (extendVEnv v ty env2) lfenv rlocs_env wlocs_env bod
+          let free = S.fromList $ freeLocVars bod
+              free_rlocs = free `S.intersection` (M.keysSet rlocs_env)
+              free_wlocs = free `S.intersection` (M.keysSet wlocs_env)
+          (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs
+          let binds = rpush ++ wpush ++ [(v, locs, ty, AppE f newapplocs args)] ++ wpop ++ rpop
+          (pure $ mkLets binds bod')
 
     LetE (v,locs,ty, (SpawnE f applocs args)) bod -> do
       let e' = LetE (v,locs,ty, (AppE f applocs args)) bod
@@ -421,6 +426,5 @@ boundsCheck ddefs tycon =
       vals = map (fst . spaceReqd) tyss
       -- Add a byte for the tag.
       num_bytes = (1 + maximum vals)
-  in if num_bytes < 32
-     then 32
-     else num_bytes
+  -- Reserve additional space for a redirection node or a forwarding pointer.
+  in num_bytes + 32
