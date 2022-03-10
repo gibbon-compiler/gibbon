@@ -77,8 +77,6 @@ genDcons [] tail fields     = do
   return $ T.LetAllocT ptr fields $ T.RetValsT [T.VarTriv ptr, T.VarTriv tail]
 
 genAlts :: [(DataCon,[(IsBoxed,Ty3)])] -> Var -> Var -> Int64 -> PassM T.Alts
--- Don' do anything for indirections. Let 'followRedirects' take care of it.
-genAlts ((dcons, _):rst) tail tag n | isIndirectionTag dcons = genAlts rst tail tag n
 genAlts ((_dcons, typs):xs) tail tag n = do
   let (_,typs') = unzip typs
   -- WARNING: IsBoxed ignored here
@@ -332,6 +330,8 @@ getTagOfDataCon :: Out a => DDefs a -> DataCon -> Tag
 getTagOfDataCon dds dcon =
     if isIndirectionTag dcon
     then indirectionAlt
+    else if isRedirectionTag dcon
+    then redirectionAlt
     else if isRelRANDataCon dcon
     -- So that is_big in the RTS can identify which nodes have size information.
     then 150 + (fromIntegral ix)
@@ -492,6 +492,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               SizeOfScalar{}     -> syms
               BoundsCheck{}      -> syms
               ReadCursor{}       -> syms
+              ReadTaggedCursor{} -> syms
               IndirectionBarrier{} -> syms
               NullCursor         -> syms
               BumpArenaRefCount{}-> error "collect_syms: BumpArenaRefCount not handled."
@@ -821,6 +822,16 @@ lower Prog{fundefs,ddefs,mainExp} = do
                  L3.substE (ProjE 1 (VarE v)) (VarE ctmp)
                  bod
       T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy)] T.ReadCursor [T.VarTriv c] <$>
+        tail free_reg sym_tbl bod'
+
+    LetE(v,_,_,  (Ext (ReadTaggedCursor c))) bod -> do
+      vtmp <- gensym $ toVar "tmpcur"
+      ctmp <- gensym $ toVar "tmpaftercur"
+      -- Here we lamely chase down all the tuple references and make them variables:
+      let bod' = L3.substE (ProjE 0 (VarE v)) (VarE vtmp) $
+                 L3.substE (ProjE 1 (VarE v)) (VarE ctmp)
+                 bod
+      T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy)] T.ReadTaggedCursor [T.VarTriv c] <$>
         tail free_reg sym_tbl bod'
 
     LetE(v,_,_,  (Ext (ReadList c el_ty))) bod -> do

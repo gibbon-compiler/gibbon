@@ -54,9 +54,15 @@ followIndirections (Prog ddefs fundefs mainExp) = do
                             (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->i ")]) else id) $
                             LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
                             Ext (RetE ret_endofs callv)
-
             let indir_dcon = fst $ fromJust $ L.find (isIndirectionTag . fst) dataCons
             let indir_br = (indir_dcon,[(indir_ptrv,indir_ptrloc)],indir_bod)
-            (pure (CaseE scrt (brs ++ [indir_br])))
+            ----------------------------------------
+            let redir_dcon = fst $ fromJust $ L.find (isRedirectionTag . fst) dataCons
+            let redir_bod = (if isPrinterName funName then LetE (wc,[],ProdTy[],PrimAppE PrintSym [LitSymE (toVar " ->r ")]) else id) $
+                            LetE (callv,endofs,out_ty,AppE funName (in_locs ++ out_locs) args) $
+                            Ext (RetE endofs callv)
+            let redir_br = (redir_dcon,[(indir_ptrv,indir_ptrloc)],redir_bod)
+            ----------------------------------------
+            (pure (CaseE scrt (brs ++ [indir_br,redir_br])))
           _ -> pure funBody
       pure $ f { funBody = funBody' }

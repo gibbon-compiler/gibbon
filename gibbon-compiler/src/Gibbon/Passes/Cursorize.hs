@@ -1153,7 +1153,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                     let denv' = M.insertWith (++) loc binds denv
                     go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
 
-                -- The indirection pointer.
+                -- An indirection or redirection pointer.
                 -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
                 CursorTy -> do
                   tmp <- gensym "readcursor_indir"
@@ -1162,8 +1162,12 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                                                    (v       , CursorTy),
                                                    (toEndV v, CursorTy)])
                               tenv
-
-                      binds = [(tmp     , [], ProdTy [CursorTy, CursorTy], Ext $ ReadCursor cur),
+                      read_cursor = if isIndirectionTag dcon
+                                    then Ext (ReadCursor cur)
+                                    else if isRedirectionTag dcon
+                                         then Ext (ReadTaggedCursor cur)
+                                         else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
+                      binds = [(tmp     , [], ProdTy [CursorTy, CursorTy], read_cursor),
                                (loc     , [], CursorTy, VarE cur),
                                (v       , [], CursorTy, ProjE 0 (VarE tmp)),
                                (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]

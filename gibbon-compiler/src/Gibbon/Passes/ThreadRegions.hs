@@ -145,11 +145,14 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
       let -- argtys = map (gRecoverType ddefs env2) args
           -- argtylocs = concatMap locsInTy argtys
           argtylocs = concatMap
-                        (\arg@(VarE w) ->
+                        (\arg ->
                              let argty = gRecoverType ddefs env2 arg in
-                               case argty of
-                                 CursorTy -> [w]
-                                 _ -> locsInTy argty)
+                             case arg of
+                               VarE w ->
+                                 case argty of
+                                   CursorTy -> [w]
+                                   _ -> locsInTy argty
+                               _ -> locsInTy argty)
                         args
           in_regs = foldr (\x acc -> case M.lookup x renv of
                                        Just r -> r:acc
@@ -322,7 +325,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
       -- Update the envs with bindings for pattern matched variables and locations.
       -- The locations point to the same region as the scrutinee.
       let (vars,locs) = unzip vlocs
-          renv0  = if isIndirectionTag dcon
+          renv0  = if isIndirectionTag dcon || isRedirectionTag dcon
                    then foldr (\lc acc -> M.insert lc reg acc) renv1 vars
                    else renv1
           renv1' = foldr (\lc acc -> M.insert lc reg acc) renv0 locs

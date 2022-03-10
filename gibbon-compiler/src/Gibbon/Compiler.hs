@@ -85,7 +85,7 @@ import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
 import           Gibbon.Passes.ReorderAlloc   (allocationOrderMarkers, reorderAlloc)
 import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
-import           Gibbon.Passes.FollowRedirects(followRedirects)
+-- import           Gibbon.Passes.FollowRedirects(followRedirects)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
@@ -557,6 +557,15 @@ benchMainExp l1 = do
       return $ l1{ L1.mainExp = Just $ (newExp, L1.voidTy) }
     _ -> return l1
 
+addRedirectionCon :: L2.Prog2 -> PassM L2.Prog2
+addRedirectionCon p@Prog{ddefs} = do
+  ddefs' <- mapM (\ddf@DDef{dataCons} -> do
+                    dcon <- fromVar <$> gensym (toVar redirectionTag)
+                    let datacons = filter (not . isRedirectionTag . fst) dataCons
+                    return ddf {dataCons = datacons ++ [(dcon, [(False, CursorTy)])]})
+            ddefs
+  return $ p { ddefs = ddefs' }
+
 -- | The main compiler pipeline
 passes :: (Show v) => Config -> L0.Prog0 -> StateT (CompileState v) IO L4.Prog
 passes config@Config{dynflags} l0 = do
@@ -696,6 +705,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "addRedirectionCon" addRedirectionCon l2
               l2 <- go "followIndirections" followIndirections l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
@@ -729,7 +739,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               pure l4
             else do
               -- These additional case branches cause some tests in pointer mode to fail.
-              l4 <- go "followRedirects" followRedirects l4
+              -- l4 <- go "followRedirects" followRedirects l4
               l4 <- go "rearrangeFree"   rearrangeFree   l4
               -- l4 <- go "inlineTrivL4"    (pure . L4.inlineTrivL4) l4
               pure l4
