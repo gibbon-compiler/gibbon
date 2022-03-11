@@ -1131,7 +1131,7 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     } else {
         new_footer_start = gib_init_footer_at(heap_end, total_size, 0);
         new_footer = (GibChunkFooter *) new_footer_start;
-        gib_add_to_old_zct(DEFAULT_GENERATION, new_footer->reg_info);
+        gib_insert_into_old_zct(DEFAULT_GENERATION, new_footer->reg_info);
     }
 
 #ifdef _GIBBON_DEBUG
@@ -1529,6 +1529,179 @@ void gib_indirection_barrier(
         }
     }
     return;
+}
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Save and restore GC's state
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+typedef struct gib_gc_state_snapshot {
+    // nursery
+    uint64_t nursery_num_collections;
+    char *nursery_alloc;
+    uint64_t nursery_num_chunk_starts;
+    char *nursery_heap;
+
+    // generations
+    size_t gen_mem_allocated;
+    char *gen_alloc;
+    char *gen_rem_set_alloc;
+    void *gen_old_zct;
+    void *gen_new_zct;
+
+    // shadow-stacks
+    char *ss_read_alloc;
+    char *ss_write_alloc;
+
+    // region metadata
+    uint64_t num_regions;
+    GibRegionInfo **reg_info_addrs;
+    char **outsets;
+
+} GibGcStateSnapshot;
+
+GibGcStateSnapshot *gib_gc_init_state(uint64_t num_regions)
+{
+    GibGcStateSnapshot *snapshot = gib_alloc(sizeof(GibGcStateSnapshot));
+    if (snapshot == NULL) {
+        fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu", sizeof(GibGcStateSnapshot));
+        exit(1);
+    }
+    snapshot->nursery_heap = gib_alloc(NURSERY_SIZE);
+    if (snapshot->nursery_heap == NULL) {
+        fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu", NURSERY_SIZE);
+        exit(1);
+    }
+    snapshot->reg_info_addrs = gib_alloc(num_regions * sizeof(GibRegionInfo*));
+    if (snapshot == NULL) {
+        fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu",
+                num_regions * sizeof(GibRegionInfo *));
+        exit(1);
+    }
+    snapshot->outsets = gib_alloc(num_regions * sizeof(char*));
+    if (snapshot == NULL) {
+        fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu",
+                num_regions * sizeof(void*));
+        exit(1);
+    }
+    return snapshot;
+}
+
+void gib_gc_save_state(GibGcStateSnapshot *snapshot, uint64_t num_regions, ...)
+{
+    if (NUM_GENERATIONS != 1) {
+        fprintf(stderr, "gib_gc_save_state: NUM_GENERATIONS != 1");
+        exit(1);
+    }
+
+    GibNursery *nursery = DEFAULT_NURSERY;
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    GibGeneration *oldest_gen = gib_global_generations;
+
+    // nursery
+    snapshot->nursery_num_collections = nursery->num_collections;
+    snapshot->nursery_alloc = nursery->alloc;
+    snapshot->nursery_num_chunk_starts = nursery->num_chunk_starts;
+    memcpy(snapshot->nursery_heap, nursery->heap_start, NURSERY_SIZE);
+
+    // generations
+    snapshot->gen_mem_allocated = oldest_gen->mem_allocated;
+    snapshot->gen_alloc = oldest_gen->alloc;
+    snapshot->gen_rem_set_alloc = (oldest_gen->rem_set)->alloc;
+    snapshot->gen_old_zct = gib_clone_zct(oldest_gen->old_zct);
+    snapshot->gen_new_zct = gib_clone_zct(oldest_gen->new_zct);
+
+    // shadow-stacks
+    snapshot->ss_read_alloc = rstack->alloc;
+    snapshot->ss_write_alloc = wstack->alloc;
+
+    // regions
+    snapshot->num_regions = num_regions;
+    char *footer_addr;
+    GibChunkFooter *footer;
+    GibRegionInfo *reg_info;
+    void *outset;
+    va_list ap;
+    uint64_t i;
+    va_start(ap, num_regions);
+    for (i = 0; i < num_regions; i++) {
+        footer_addr = va_arg(ap, char *);
+        if (!gib_addr_in_nursery(footer_addr)) {
+            footer = (GibChunkFooter *) footer_addr;
+            reg_info = footer->reg_info;
+            outset = gib_clone_outset(reg_info->outset);
+            snapshot->reg_info_addrs[i] = reg_info;
+            snapshot->outsets[i] = outset;
+            // memcpy(&(snapshot->reg_info_addrs[i]), reg_info_addr, sizeof(GibRegionInfo *));
+            // memcpy(&(snapshot->outsets[i]), &outset, sizeof(void *));
+        }
+        else {
+            snapshot->reg_info_addrs[i] = (GibRegionInfo *) NULL;
+            snapshot->outsets[i] = (void *) NULL;
+        }
+    }
+    va_end(ap);
+
+    return;
+}
+
+void gib_gc_restore_state(GibGcStateSnapshot *snapshot)
+{
+    if (NUM_GENERATIONS != 1) {
+        fprintf(stderr, "gib_gc_restore_state: NUM_GENERATIONS != 1");
+        exit(1);
+    }
+
+    if (snapshot == NULL) {
+        fprintf(stderr, "gib_gc_restore_state: NULL snapshot");
+        exit(1);
+    }
+
+    GibNursery *nursery = DEFAULT_NURSERY;
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    GibGeneration *oldest_gen = gib_global_generations;
+
+    // nursery
+    nursery->num_collections = snapshot->nursery_num_collections;
+    nursery->alloc = snapshot->nursery_alloc;
+    nursery->num_chunk_starts = snapshot->nursery_num_chunk_starts;
+    memcpy(nursery->heap_start, snapshot->nursery_heap, NURSERY_SIZE);
+
+    // generations
+    oldest_gen->mem_allocated = snapshot->gen_mem_allocated;
+    oldest_gen->alloc = snapshot->gen_alloc;
+    (oldest_gen->rem_set)->alloc = snapshot->gen_rem_set_alloc;
+    gib_free_zct(oldest_gen->old_zct);
+    gib_free_zct(oldest_gen->new_zct);
+    oldest_gen->old_zct = snapshot->gen_old_zct;
+    oldest_gen->new_zct = snapshot->gen_new_zct;
+
+    // shadow-stacks
+    rstack->alloc = snapshot->ss_read_alloc;
+    wstack->alloc = snapshot->ss_write_alloc;
+
+    // regions
+    uint64_t i;
+    GibRegionInfo *reg_info;
+    for (i = 0; i < snapshot->num_regions; i++) {
+        if (snapshot->reg_info_addrs[i] != NULL) {
+            reg_info = snapshot->reg_info_addrs[i];
+            gib_free_outset(reg_info->outset);
+            reg_info->outset = snapshot->outsets[i];
+        }
+    }
+}
+
+void gib_gc_free_state(GibGcStateSnapshot *snapshot)
+{
+    free(snapshot->nursery_heap);
+    free(snapshot->reg_info_addrs);
+    free(snapshot->outsets);
+    free(snapshot);
 }
 
 

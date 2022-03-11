@@ -421,6 +421,20 @@ void gib_indirection_barrier(
     uint32_t datatype
 );
 
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Save and restore GC's state
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+// Abstract definition is sufficient.
+typedef struct gib_gc_state_snapshot GibGcStateSnapshot;
+
+GibGcStateSnapshot *gib_gc_init_state(uint64_t num_regions);
+void gib_gc_save_state(GibGcStateSnapshot *snapshot, uint64_t num_regions, ...);
+void gib_gc_restore_state(GibGcStateSnapshot *snapshot);
+void gib_gc_free_state(GibGcStateSnapshot *snapshot);
+
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Implemented in the Rust RTS
@@ -455,10 +469,14 @@ char *gib_init_footer_at(
     uint16_t refcount
 );
 void gib_init_zcts(GibGeneration *generations);
-void gib_add_to_old_zct(
+void gib_insert_into_old_zct(
     GibGeneration *generations,
     GibRegionInfo *reg_info
 );
+void *gib_clone_zct(void *zct);
+void *gib_clone_outset(void *outset);
+void *gib_free_zct(void *zct);
+void *gib_free_outset(void *outset);
 int gib_gc_cleanup(
     GibShadowstack *rstack,
     GibShadowstack *wstack,

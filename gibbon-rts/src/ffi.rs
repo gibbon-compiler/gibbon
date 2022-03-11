@@ -242,7 +242,7 @@ pub extern "C" fn gib_init_zcts(generations_ptr: *mut C_GibGeneration) {
 }
 
 #[no_mangle]
-pub extern "C" fn gib_add_to_old_zct(
+pub extern "C" fn gib_insert_into_old_zct(
     generations_ptr: *mut C_GibGeneration,
     reg_info: *const C_GibRegionInfo,
 ) {
@@ -251,6 +251,32 @@ pub extern "C" fn gib_add_to_old_zct(
     } else {
         todo!("NUM_GENERATIONS > 1");
     }
+}
+
+#[no_mangle]
+pub extern "C" fn gib_clone_zct(zct: *const Zct) -> *const Zct {
+    unsafe {
+        let zct2: Zct = (*zct).clone();
+        Box::into_raw(Box::new(zct2))
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn gib_clone_outset(outset: *const Outset) -> *const Outset {
+    unsafe {
+        let outset2: Outset = (*outset).clone();
+        Box::into_raw(Box::new(outset2))
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn gib_free_zct(zct: *mut Zct) {
+    unsafe { drop(Box::from_raw(zct)) }
+}
+
+#[no_mangle]
+pub extern "C" fn gib_free_outset(outset: *mut Outset) {
+    unsafe { drop(Box::from_raw(outset)) }
 }
 
 #[no_mangle]

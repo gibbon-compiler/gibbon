@@ -1204,7 +1204,7 @@ trait Heap {
                 let (new_dst, new_dst_end) = Heap::allocate(self, CHUNK_SIZE)?;
                 // Write a redirection tag in the old chunk.
                 let footer_offset: u16 =
-                    dst_end.offset_from(dst).try_into().unwrap();
+                    new_dst_end.offset_from(new_dst).try_into().unwrap();
                 let tagged: u64 =
                     TaggedPointer::new(new_dst, footer_offset).as_u64();
                 let dst_after_tag = write(dst, C_REDIRECTION_TAG);
@@ -1220,8 +1220,12 @@ trait Heap {
                 }
                 let (new_dst, new_dst_end) = Heap::allocate(self, chunk_size)?;
                 // Write a redirection tag in the old chunk.
+                let footer_offset: u16 =
+                    new_dst_end.offset_from(new_dst).try_into().unwrap();
+                let tagged: u64 =
+                    TaggedPointer::new(new_dst, footer_offset).as_u64();
                 let dst_after_tag = write(dst, C_REDIRECTION_TAG);
-                write(dst_after_tag, new_dst);
+                write(dst_after_tag, tagged);
                 // Initialize a footer at the end of the new chunk.
                 let reg_info: *mut C_GibRegionInfo = (*old_footer).reg_info;
                 let new_footer_start = init_footer_at(

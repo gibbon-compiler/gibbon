@@ -232,16 +232,17 @@ GibInt do_reverse(GibInt n_19_183_289)
     struct timespec end;
 
     GibCursorGibCursorGibCursorGibCursorProd tmp_struct_17;
-
+    GibGcStateSnapshot *snapshot = gib_gc_init_state(3);
     for (int i = 0; i < gib_get_iters_param(); i++) {
+        // gib_gc_save_state(snapshot, 3, region_1380.end, region_1378.end, region_1382.end);
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin);
         tmp_struct_17 = reverse(pvrtmp_1384, end_r_720, end_r_719, r_719, pvrtmp_1385, r_720);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+        // gib_gc_restore_state(snapshot);
         double itertime = gib_difftimespecs(&begin, &end);
+        printf("itertime: %lf\n", itertime);
         gib_vector_inplace_update(timings, i, &itertime);
     }
-
-    /*
     gib_vector_inplace_sort(timings, gib_compare_doubles);
     double *tmp_34 = (double *) gib_vector_nth(timings, gib_get_iters_param() / 2);
     double selftimed = *tmp_34;
@@ -251,7 +252,6 @@ GibInt do_reverse(GibInt n_19_183_289)
     printf("SIZE: %ld\n", gib_get_size_param());
     printf("BATCHTIME: %e\n", batchtime);
     printf("SELFTIMED: %e\n", selftimed);
-    */
 
     GibCursor pvrtmp_1393 = tmp_struct_17.field0;
     GibCursor pvrtmp_1394 = tmp_struct_17.field1;
@@ -266,6 +266,7 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor pvrtmp_1401 = tmp_struct_18.field0;
     GibInt pvrtmp_1402 = tmp_struct_18.field1;
 
+    gib_gc_free_state(snapshot);
     gib_vector_free(timings);
 
     return pvrtmp_1402;
@@ -444,7 +445,7 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1355");
+            printf("Unknown tag in: tmpval_1355 %d", tmpval_1355);
             exit(1);
         }
     }
@@ -1530,7 +1531,7 @@ void print_binary(uint64_t number, int *i)
 }
 
 // https://stackoverflow.com/a/18426582.
-void test_ptr_tagging_old()
+void test_ptr_tagging_old(void)
 {
     printf("\nTest pointer tagging:\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
     int i = 0;
@@ -1609,7 +1610,7 @@ void test_ptr_tagging_old()
 
 }
 
-void test_ptr_tagging()
+void test_ptr_tagging(void)
 {
     printf("\nTest pointer tagging:\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
     size_t data = 65535;
@@ -1623,9 +1624,21 @@ void test_ptr_tagging()
     assert(data2 == data);
     printf("Checking original pointer == recovered pointer.\n");
     assert(ptr2 == ptr);
-    printf("Checks passed.");
+    printf("Checks passed.\n");
 
     free(ptr);
+}
+
+void test_gc_save_state(void)
+{
+    printf("\nTest gc_save_state:\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+    GibChunk reg1 = gib_alloc_region(3 * 1024);
+    GibChunk reg2 = gib_alloc_region(1 * 1024);
+    GibChunk reg3 = gib_alloc_region(3 * 1024);
+
+    GibGcStateSnapshot *snapshot = gib_gc_init_state(3);
+    gib_gc_save_state(snapshot, 3, reg1.end, reg2.end, reg3.end);
+    gib_gc_free_state(snapshot);
 }
 
 int gib_main_expr(void)
@@ -1635,10 +1648,12 @@ int gib_main_expr(void)
 
     GibInt fltPrd_235_251 =  do_reverse(gib_get_size_param());
     printf("reverse: %" PRIu64 "\n", fltPrd_235_251);
-    GibInt fltPrd_236_252 =  do_tree(gib_get_size_param());
-    printf("sum tree: %" PRIu64 "\n", fltPrd_236_252);
+    // GibInt fltPrd_236_252 =  do_tree(gib_get_size_param());
+    // printf("sum tree: %" PRIu64 "\n", fltPrd_236_252);
 
-    test_ptr_tagging();
+    // test_ptr_tagging();
+    // test_gc_save_state();
+
 
     return 0;
 }
