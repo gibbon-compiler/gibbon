@@ -244,8 +244,8 @@ double gib_sum_timing_array(GibVector *times);
  */
 
 // Bump allocation.
-void gib_list_save_alloc_state(void);
-void gib_list_restore_alloc_state(void);
+void gib_list_bumpalloc_save_state(void);
+void gib_list_bumpalloc_restore_state(void);
 
 typedef struct gib_list {
     size_t data_size;

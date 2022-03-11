@@ -675,7 +675,7 @@ void *gib_list_bumpalloc(size_t n)
 }
 
 // Snapshot the current heap pointer value across all threads.
-void gib_list_save_alloc_state(void)
+void gib_list_bumpalloc_save_state(void)
 {
 #ifdef _GIBBON_DEBUG
     printf("Saving(%p): pos %d", heap_ptr, gib_global_list_num_saved_heap_ptr);
@@ -687,10 +687,10 @@ void gib_list_save_alloc_state(void)
 #endif
 }
 
-void gib_list_restore_alloc_state(void)
+void gib_list_bumpalloc_restore_state(void)
 {
     if(gib_global_list_num_saved_heap_ptr <= 0) {
-        fprintf(stderr, "Bad call to gib_list_restore_alloc_state!  Saved stack empty!\ne");
+        fprintf(stderr, "Bad call to gib_list_bumpalloc_restore_state!  Saved stack empty!\ne");
         exit(1);
     }
     gib_global_list_num_saved_heap_ptr--;
@@ -708,8 +708,8 @@ void gib_list_restore_alloc_state(void)
 // Regular malloc mode:
 void gib_init_list_bumpalloc(void) {}
 void *gib_list_bumpalloc(size_t n) { return gib_alloc(n); }
-void gib_list_save_alloc_state(void) {}
-void gib_list_restore_alloc_state(void) {}
+void gib_list_bumpalloc_save_state(void) {}
+void gib_list_bumpalloc_restore_state(void) {}
 
 #endif // BUMPALLOC
 
@@ -923,7 +923,7 @@ typedef struct gib_nursery {
 
     // A place to store starting addresses of chunks.
     char *chunk_starts;
-    uint64_t chunk_starts_i;
+    uint64_t num_chunk_starts;
 
 } GibNursery;
 
@@ -1060,9 +1060,9 @@ static GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected)
     if (bump >= nursery->heap_start) {
         nursery->alloc = bump;
         char *chunk_starts_alloc = nursery->chunk_starts +
-            (nursery->chunk_starts_i * sizeof(char*));
+            (nursery->num_chunk_starts * sizeof(char*));
         *(char**) chunk_starts_alloc = bump;
-        nursery->chunk_starts_i = nursery->chunk_starts_i + 1;
+        nursery->num_chunk_starts = nursery->num_chunk_starts + 1;
         return (GibChunk) {bump, old};
     }
     return gib_alloc_region_in_nursery_slow(size, collected);
@@ -1302,7 +1302,7 @@ static void gib_nursery_initialize(GibNursery *nursery)
                 NURSERY_SIZE);
         exit(1);
     }
-    nursery->chunk_starts_i = 0;
+    nursery->num_chunk_starts = 0;
 
     return;
 }

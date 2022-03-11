@@ -1276,7 +1276,7 @@ impl Nursery {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
             (*nursery).alloc = (*nursery).heap_end;
-            (*nursery).chunk_starts_i = 0;
+            (*nursery).num_chunk_starts = 0;
         }
     }
 
@@ -1286,7 +1286,7 @@ impl Nursery {
         unsafe {
             let mut run_ptr: *const i8 = (*nursery).chunk_starts;
             let end_ptr = run_ptr.add(
-                size_of::<*const i8>() * (*nursery).chunk_starts_i as usize,
+                size_of::<*const i8>() * (*nursery).num_chunk_starts as usize,
             );
             while run_ptr < end_ptr {
                 let (chunk_start_addr, next): (*mut i8, _) = read(run_ptr);

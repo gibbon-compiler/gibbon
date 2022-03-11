@@ -622,12 +622,12 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
 
                      (if flg
                          -- Save and restore EXCEPT on the last iteration.  This "cancels out" the effect of intermediate allocations.
-                      then (let body = [ C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) gib_list_save_alloc_state(); |]
+                      then (let body = [ C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) gib_list_bumpalloc_save_state(); |]
                                        , C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, & $id:begn );  |]
                                        ] ++
                                        rhs''++
                                        [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
-                                       , C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) gib_list_restore_alloc_state(); |]
+                                       , C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) gib_list_bumpalloc_restore_state(); |]
                                        , C.BlockDecl [cdecl| double $id:itertime = gib_difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
                                        , C.BlockStm [cstm| gib_vector_inplace_update($id:times, $id:iters, &($id:itertime)); |]
                                        ]
