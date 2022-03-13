@@ -1131,7 +1131,7 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     } else {
         new_footer_start = gib_init_footer_at(heap_end, total_size, 0);
         new_footer = (GibChunkFooter *) new_footer_start;
-        gib_insert_into_old_zct(DEFAULT_GENERATION, new_footer->reg_info);
+        gib_insert_into_new_zct(DEFAULT_GENERATION, new_footer->reg_info);
     }
 
 #ifdef _GIBBON_DEBUG

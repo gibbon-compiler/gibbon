@@ -351,7 +351,7 @@ pub fn collect_minor(
                 &mut oldest_gen,
                 &rstack,
             )?;
-            // // Collect dead regions.
+            // Collect dead regions.
             oldest_gen.collect_regions()?;
         }
         // Reset the allocation area and record stats.
@@ -520,7 +520,6 @@ unsafe fn evacuate_shadowstack(
     // let frames = rstack.into_iter();
     let frames = sort_roots(rstack);
     for frame in frames {
-        let datatype = (*frame).datatype;
         if !nursery.contains_addr((*frame).ptr) {
             let footer = (*frame).endptr as *const C_GibChunkFooter;
             if (*((*footer).reg_info)).refcount == 0 {
@@ -528,6 +527,7 @@ unsafe fn evacuate_shadowstack(
             }
             continue;
         }
+        let datatype = (*frame).datatype;
         match INFO_TABLE.get().unwrap().get(&datatype) {
             None => {
                 return Err(RtsError::Gc(format!(
@@ -557,6 +557,9 @@ unsafe fn evacuate_shadowstack(
                 // Allocate space in the destination.
                 let (dst, dst_end) =
                     Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
+                // Update ZCT.
+                let footer = dst_end as *const C_GibChunkFooter;
+                (*zct).insert((*footer).reg_info);
                 // Evacuate the data.
                 let src = (*frame).ptr;
                 let (src_after, dst_after, dst_after_end, tag) =
@@ -576,9 +579,6 @@ unsafe fn evacuate_shadowstack(
                 // Update the pointers in shadow-stack.
                 (*frame).ptr = dst;
                 (*frame).endptr = dst_after_end;
-                // Update ZCT.
-                let footer = dst_end as *const C_GibChunkFooter;
-                (*zct).insert((*footer).reg_info);
                 // Note [Adding a forwarding pointer at the end of every chunk].
                 match tag {
                     C_COPIED_TO_TAG | C_COPIED_TAG | C_REDIRECTION_TAG => {}
@@ -757,7 +757,7 @@ unsafe fn evacuate_packed(
         // POLICY DECISION:
         // Redirections are always inlined in the current version.
         C_REDIRECTION_TAG => {
-            let (tagged_next_chunk, _src_after_next_chunk): (u64, _) =
+            let (tagged_next_chunk, src_after_next_chunk): (u64, _) =
                 read(src_after_tag);
             let tagged = TaggedPointer::from_u64(tagged_next_chunk);
             let next_chunk = tagged.untag();
@@ -768,21 +768,7 @@ unsafe fn evacuate_packed(
                 dst,
                 dst_end.offset_from(dst).try_into().unwrap(),
             );
-            evacuate_packed(
-                benv,
-                cenv,
-                chunk_starts,
-                zct,
-                nursery,
-                heap,
-                prov,
-                packed_info,
-                next_chunk,
-                dst,
-                dst_end,
-            )
-            /*
-            // // TODO(ckoparkar): BUGGY, AUDITME.
+
             // If the next chunk is in the nursery, continue evacuating it.
             // Otherwise, write a redireciton node at dst (pointing to
             // the start of the oldgen chunk), link the footers and reconcile
@@ -802,27 +788,30 @@ unsafe fn evacuate_packed(
                     dst_end,
                 )
             } else {
+                // TODO(ckoparkar): BUGGY, AUDITME.
                 let dst_after_tag = write(dst, C_REDIRECTION_TAG);
-                let dst_after_redir = write(dst_after_tag, next_chunk);
+                let dst_after_redir = write(dst_after_tag, tagged_next_chunk);
 
                 // Link footers.
                 let footer1 = dst_end as *mut C_GibChunkFooter;
                 let next_chunk_footer_offset = tagged.get_tag();
                 let footer2 = next_chunk.add(next_chunk_footer_offset as usize)
                     as *mut C_GibChunkFooter;
-                (*footer1).next = footer2;
 
                 // Reconcile RegionInfo objects.
-                // Rust drops this heap allocated object when reg_info1 goes
-                // out of scope.
-                let reg_info1: Box<C_GibRegionInfo> =
-                    Box::from_raw((*footer1).reg_info);
+                let reg_info1 = (*footer1).reg_info;
                 let reg_info2 = (*footer2).reg_info;
-                (*reg_info2).refcount += reg_info1.refcount;
-                (*((*reg_info2).outset)).extend(&*(reg_info1.outset));
+                (*reg_info2).refcount += (*reg_info1).refcount;
+                (*((*reg_info2).outset)).extend(&*((*reg_info1).outset));
                 (*reg_info2).first_chunk_footer =
                     (*reg_info1).first_chunk_footer;
-                drop(reg_info1);
+                (*footer1).next = footer2;
+                (*footer1).reg_info = reg_info2;
+
+                // Update ZCT.
+                (*zct).remove(&(reg_info1 as *const C_GibRegionInfo));
+                (*zct).insert(reg_info2);
+
                 // Stop evacuating.
                 Ok((
                     src_after_next_chunk as *mut i8,
@@ -831,7 +820,6 @@ unsafe fn evacuate_packed(
                     tag,
                 ))
             }
-             */
         }
         // A pointer to a value in another buffer; copy this value
         // and then switch back to copying rest of the source buffer.
@@ -1203,12 +1191,8 @@ trait Heap {
             if !self.is_oldest() {
                 let (new_dst, new_dst_end) = Heap::allocate(self, CHUNK_SIZE)?;
                 // Write a redirection tag in the old chunk.
-                let footer_offset: u16 =
-                    new_dst_end.offset_from(new_dst).try_into().unwrap();
-                let tagged: u64 =
-                    TaggedPointer::new(new_dst, footer_offset).as_u64();
                 let dst_after_tag = write(dst, C_REDIRECTION_TAG);
-                write(dst_after_tag, tagged);
+                write(dst_after_tag, new_dst);
                 Ok((new_dst, new_dst_end))
             } else {
                 // Access the old footer to get the region metadata.
@@ -1219,13 +1203,6 @@ trait Heap {
                     chunk_size = MAX_CHUNK_SIZE;
                 }
                 let (new_dst, new_dst_end) = Heap::allocate(self, chunk_size)?;
-                // Write a redirection tag in the old chunk.
-                let footer_offset: u16 =
-                    new_dst_end.offset_from(new_dst).try_into().unwrap();
-                let tagged: u64 =
-                    TaggedPointer::new(new_dst, footer_offset).as_u64();
-                let dst_after_tag = write(dst, C_REDIRECTION_TAG);
-                write(dst_after_tag, tagged);
                 // Initialize a footer at the end of the new chunk.
                 let reg_info: *mut C_GibRegionInfo = (*old_footer).reg_info;
                 let new_footer_start = init_footer_at(
@@ -1234,6 +1211,14 @@ trait Heap {
                     chunk_size,
                     (*reg_info).refcount,
                 );
+                // Write a redirection tag in the old chunk.
+                let footer_offset: u16 =
+                    new_footer_start.offset_from(new_dst).try_into().unwrap();
+                let tagged: u64 =
+                    TaggedPointer::new(new_dst, footer_offset).as_u64();
+                let dst_after_tag = write(dst, C_REDIRECTION_TAG);
+                write(dst_after_tag, tagged);
+                // Link the footers.
                 let new_footer: *mut C_GibChunkFooter =
                     new_footer_start as *mut C_GibChunkFooter;
                 (*old_footer).next = new_footer;
@@ -1423,7 +1408,12 @@ impl OldestGeneration {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
             for reg_info in (*((*gen).old_zct)).drain() {
-                if !(*((*gen).new_zct)).contains(&reg_info) {
+                let footer = (*reg_info).first_chunk_footer;
+                if !(*((*gen).new_zct)).contains(&reg_info)
+                    && !(*((*gen).new_zct)).contains(
+                        &((*footer).reg_info as *const C_GibRegionInfo),
+                    )
+                {
                     free_region(
                         (*reg_info).first_chunk_footer,
                         (*gen).new_zct,

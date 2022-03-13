@@ -469,7 +469,7 @@ char *gib_init_footer_at(
     uint16_t refcount
 );
 void gib_init_zcts(GibGeneration *generations);
-void gib_insert_into_old_zct(
+void gib_insert_into_new_zct(
     GibGeneration *generations,
     GibRegionInfo *reg_info
 );

@@ -242,12 +242,12 @@ pub extern "C" fn gib_init_zcts(generations_ptr: *mut C_GibGeneration) {
 }
 
 #[no_mangle]
-pub extern "C" fn gib_insert_into_old_zct(
+pub extern "C" fn gib_insert_into_new_zct(
     generations_ptr: *mut C_GibGeneration,
     reg_info: *const C_GibRegionInfo,
 ) {
     if C_NUM_GENERATIONS == 1 {
-        unsafe { (*((*generations_ptr).old_zct)).insert(reg_info) };
+        unsafe { (*((*generations_ptr).new_zct)).insert(reg_info) };
     } else {
         todo!("NUM_GENERATIONS > 1");
     }
