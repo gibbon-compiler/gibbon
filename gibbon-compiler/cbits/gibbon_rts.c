@@ -878,10 +878,10 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 */
 
 // // 4 megabytes for each semi-space.
-// #define NURSERY_SIZE (4 * MB)
+#define NURSERY_SIZE (4 * MB)
 
 // 4KB for debugging.
-#define NURSERY_SIZE (4 * KB)
+// #define NURSERY_SIZE (4 * gib_global_inf_init_chunk_size)
 
 // If a region is over this size, alloc to refcounted heap directly.
 #define NURSERY_REGION_MAX_SIZE (NURSERY_SIZE / 2)
@@ -1047,7 +1047,7 @@ static GibChunk gib_alloc_region_on_heap(size_t size)
     return (GibChunk) {heap_start, footer_start};
 }
 
-GibChunk gib_alloc_region_in_nursery(size_t size)
+static GibChunk gib_alloc_region_in_nursery(size_t size)
 {
     return gib_alloc_region_in_nursery_fast(size, false);
 }

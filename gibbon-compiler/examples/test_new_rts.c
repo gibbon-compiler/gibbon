@@ -233,12 +233,17 @@ GibInt do_reverse(GibInt n_19_183_289)
 
     GibCursorGibCursorGibCursorGibCursorProd tmp_struct_17;
     GibGcStateSnapshot *snapshot = gib_gc_init_state(3);
-    for (int i = 0; i < gib_get_iters_param(); i++) {
-        // gib_gc_save_state(snapshot, 3, region_1380.end, region_1378.end, region_1382.end);
+    GibInt N = gib_get_iters_param();
+    for (int i = 0; i < N; i++) {
+        if (i < N-1) {
+            gib_gc_save_state(snapshot, 3, region_1380.end, region_1378.end, region_1382.end);
+        }
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin);
         tmp_struct_17 = reverse(pvrtmp_1384, end_r_720, end_r_719, r_719, pvrtmp_1385, r_720);
         clock_gettime(CLOCK_MONOTONIC_RAW, &end);
-        // gib_gc_restore_state(snapshot);
+        if (i < N-1) {
+            gib_gc_restore_state(snapshot);
+        }
         double itertime = gib_difftimespecs(&begin, &end);
         printf("itertime: %lf\n", itertime);
         gib_vector_inplace_update(timings, i, &itertime);
@@ -340,7 +345,7 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
             // Pushed.
 
             GibChunk region_1353 =
-                gib_alloc_region(gib_get_inf_init_chunk_size());
+                gib_alloc_region(18);
             GibCursor r_705 = region_1353.start;
             GibCursor end_r_705 = region_1353.end;
 

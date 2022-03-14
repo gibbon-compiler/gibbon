@@ -629,6 +629,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
                                        [ C.BlockStm [cstm| clock_gettime(CLOCK_MONOTONIC_RAW, &$(cid (toVar end))); |]
                                        , C.BlockStm [cstm| if ( $id:iters != gib_get_iters_param()-1) gib_list_bumpalloc_restore_state(); |]
                                        , C.BlockDecl [cdecl| double $id:itertime = gib_difftimespecs(&$(cid (toVar begn)), &$(cid (toVar end))); |]
+                                       , C.BlockStm [cstm| printf("itertime: %lf\n", $id:itertime); |]
                                        , C.BlockStm [cstm| gib_vector_inplace_update($id:times, $id:iters, &($id:itertime)); |]
                                        ]
                             in [ C.BlockStm [cstm| for (long long $id:iters = 0; $id:iters < gib_get_iters_param(); $id:iters ++) { $items:body } |]
