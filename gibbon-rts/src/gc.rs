@@ -248,6 +248,20 @@ However, if we process y first and then x, we get the following value:
 TODO.
 
 
+*** Smart inlining policies:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The current heuristic for when to inline indirections/redirections is very
+simple. If the pointed-to region is in the old generation, it is never inlined.
+Maybe we can have a smarter policy which inlines indirections/redirections
+up to a limit (e.g. 2KB) or tries to infer the size of the object based on
+which region it is in. The latter isn't straightforward because a large object
+can *start* in one of the smaller chunks and a huge chunk could have a small
+object too.
+
+Deferred until after the paper deadline...
+
+
 */
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -667,11 +681,11 @@ unsafe fn evacuate_packed(
             let (tagged_fwd_ptr, _): (u64, _) = read_mut(src_after_tag);
             let tagged = TaggedPointer::from_u64(tagged_fwd_ptr);
             let fwd_ptr = tagged.untag();
-            let space_reqd = 18;
+            let space_reqd = 32;
             let (dst1, dst_end1) =
                 Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
             let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
-            let dst_after_indr = write(dst_after_tag, fwd_ptr);
+            let dst_after_indr = write(dst_after_tag, tagged_fwd_ptr);
             // TODO(ckoparkar): check that no code path will try to read/write
             // at this null pointer.
             let src_after_burned = match benv.get(&src) {
@@ -712,15 +726,25 @@ unsafe fn evacuate_packed(
             let offset = scan_ptr.offset_from(src) - 1;
             // The forwarding pointer that's available.
             let (tagged_fwd_avail, _): (u64, _) = read(scan_ptr);
-            let tagged = TaggedPointer::from_u64(tagged_fwd_avail);
-            let fwd_avail = tagged.untag();
+            let tagged_avail = TaggedPointer::from_u64(tagged_fwd_avail);
+            let fwd_avail = tagged_avail.untag();
+            let fwd_footer_offset_avail = tagged_avail.get_tag();
+            let fwd_footer_addr_avail =
+                fwd_avail.add(fwd_footer_offset_avail as usize);
             // The position in the destination buffer we wanted.
             let fwd_want = fwd_avail.sub(offset as usize);
-            let space_reqd = 18;
+            let fwd_footer_offset_want =
+                fwd_footer_addr_avail.offset_from(fwd_want);
+            let tagged_want: u64 = TaggedPointer::new(
+                fwd_avail,
+                fwd_footer_offset_want.try_into().unwrap(),
+            )
+            .as_u64();
+            let space_reqd = 32;
             let (dst1, dst_end1) =
                 Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
             let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
-            let dst_after_indr = write(dst_after_tag, fwd_want);
+            let dst_after_indr = write(dst_after_tag, tagged_want);
             // TODO(ckoparkar): check that no code path will try to read/write
             // at this null pointer.
             let src_after_burned = match benv.get(&src) {
@@ -730,15 +754,12 @@ unsafe fn evacuate_packed(
             // Update outsets and refcounts if evacuating to the oldest
             // generation.
             if heap.is_oldest() {
-                let fwd_footer_offset = tagged.get_tag();
-                let fwd_footer_addr =
-                    fwd_avail.add(fwd_footer_offset as usize);
-                handle_old_to_old_indirection(dst_end, fwd_footer_addr)?;
+                handle_old_to_old_indirection(dst_end, fwd_footer_addr_avail)?;
                 match prov {
                     GcRootProv::RemSet => {}
                     GcRootProv::Stk => {
                         let fwd_footer =
-                            fwd_footer_addr as *const C_GibChunkFooter;
+                            fwd_footer_addr_avail as *const C_GibChunkFooter;
                         (*zct).remove(
                             &((*fwd_footer).reg_info
                                 as *const C_GibRegionInfo),
@@ -755,7 +776,8 @@ unsafe fn evacuate_packed(
         // continue copying there.
         //
         // POLICY DECISION:
-        // Redirections are always inlined in the current version.
+        // Redirections into oldgen are not inlined in the current version.
+        // See Note [Smart inlining policies].
         C_REDIRECTION_TAG => {
             let (tagged_next_chunk, src_after_next_chunk): (u64, _) =
                 read(src_after_tag);
@@ -825,49 +847,77 @@ unsafe fn evacuate_packed(
         // and then switch back to copying rest of the source buffer.
         //
         // POLICY DECISION:
-        // Indirections are always inlined in the current version.
+        // Indirections into oldgen are not inlined in the current version.
+        // See Note [Smart inlining policies].
         C_INDIRECTION_TAG => {
-            let (tagged_pointee, _): (u64, _) = read(src_after_tag);
+            let (tagged_pointee, src_after_indr): (u64, _) =
+                read(src_after_tag);
+            let src_after_indr1 = src_after_indr as *mut i8;
             let tagged = TaggedPointer::from_u64(tagged_pointee);
             let pointee = tagged.untag();
-            let (
-                src_after_pointee,
-                dst_after_pointee,
-                dst_after_pointee_end,
-                _,
-            ) = evacuate_packed(
-                benv,
-                cenv,
-                chunk_starts,
-                zct,
-                nursery,
-                heap,
-                prov,
-                packed_info,
-                pointee,
-                dst,
-                dst_end,
-            )?;
             // Add a forwarding pointer in the source buffer.
-            write(src, C_COPIED_TO_TAG);
             assert!(dst < dst_end);
-            let src_after_indr = write_forwarding_pointer_at(
+            write_forwarding_pointer_at(
                 src,
                 dst,
                 dst_end.offset_from(dst).try_into().unwrap(),
             );
-            // Update the burned environment if we're evacuating a root
-            // from the remembered set.
-            match prov {
-                GcRootProv::RemSet => {
-                    benv.insert(pointee, src_after_pointee);
-                    ()
+
+            // If the pointee is in the nursery, evacuate it.
+            // Otherwise, write an indirection node at dst and adjust the
+            // refcount and outset.
+            if nursery.contains_addr(pointee) {
+                let (
+                    src_after_pointee,
+                    dst_after_pointee,
+                    dst_after_pointee_end,
+                    _,
+                ) = evacuate_packed(
+                    benv,
+                    cenv,
+                    chunk_starts,
+                    zct,
+                    nursery,
+                    heap,
+                    prov,
+                    packed_info,
+                    pointee,
+                    dst,
+                    dst_end,
+                )?;
+                // Update the burned environment if we're evacuating a root
+                // from the remembered set.
+                match prov {
+                    GcRootProv::RemSet => {
+                        benv.insert(pointee, src_after_pointee);
+                        ()
+                    }
+                    GcRootProv::Stk => (),
                 }
-                GcRootProv::Stk => (),
+                // Return 1 past the indirection pointer as src_after
+                // and the dst_after that evacuate_packed returned.
+                Ok((
+                    src_after_indr1,
+                    dst_after_pointee,
+                    dst_after_pointee_end,
+                    tag,
+                ))
+            } else {
+                let space_reqd = 32;
+                let (dst1, dst_end1) =
+                    Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
+                let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
+                let dst_after_indr = write(dst_after_tag, tagged_pointee);
+                let pointee_footer_offset = tagged.get_tag();
+                let pointee_footer =
+                    pointee.add(pointee_footer_offset as usize);
+                handle_old_to_old_indirection(dst_end1, pointee_footer)?;
+                // (*zct).insert(
+                //     ((*(pointee_footer as *mut C_GibChunkFooter)).reg_info
+                //         as *const C_GibRegionInfo),
+                // );
+                Ok((src_after_indr1, dst_after_indr, dst_end1, tag))
             }
-            // Return 1 past the indirection pointer as src_after
-            // and the dst_after that evacuate_packed returned.
-            Ok((src_after_indr, dst_after_pointee, dst_after_pointee_end, tag))
         }
         // Regular datatype, copy.
         _ => {
@@ -1411,7 +1461,9 @@ impl OldestGeneration {
         unsafe {
             for reg_info in (*((*gen).old_zct)).drain() {
                 let footer = (*reg_info).first_chunk_footer;
-                if !(*((*gen).new_zct)).contains(&reg_info)
+                // TODO(ckoparkar): review ZCT usage.
+                if (*reg_info).refcount == 0
+                    && !(*((*gen).new_zct)).contains(&reg_info)
                     && !(*((*gen).new_zct)).contains(
                         &((*footer).reg_info as *const C_GibRegionInfo),
                     )

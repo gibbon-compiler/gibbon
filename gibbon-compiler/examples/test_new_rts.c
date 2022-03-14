@@ -367,10 +367,8 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
             // GibCursor jump_883 = tmpcur_1356 + 8;
             // gib_bump_refcount(end_r_705, end_r_616);
-            *(GibBoxedTag *) loc_694 = GIB_INDIRECTION_TAG;
-            GibCursor writetag_1001 = loc_694 + 1;
-            *(GibCursor *) writetag_1001 = ys_37_180_285;
-            GibCursor writecur_1002 = writetag_1001 + 8;
+            gib_indirection_barrier(loc_694, end_r_705, ys_37_180_285, end_r_616, List_T);
+            GibCursor writecur_1002 = loc_694 + 9;
 
             *(GibBoxedTag *) r_705 = 1;
             GibCursor writetag_1004 = r_705 + 1;
@@ -891,10 +889,7 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
             {
                 // gib_bump_refcount(end_r_652, end_r_740);
                 gib_indirection_barrier(loc_651, end_r_652, tmpcur_1421, end_r_740, Tree_T);
-                *(GibBoxedTag *) loc_651 = GIB_INDIRECTION_TAG;
-                GibCursor writetag_1063 = loc_651 + 1;
-                *(GibCursor *) writetag_1063 = tmpcur_1421;
-                GibCursor writecur_1064 = writetag_1063 + 8;
+                GibCursor writecur_1064 = loc_651 + 9;
                 return (GibCursorGibCursorGibCursorProd) {end_r_652, loc_651,
                                                           writecur_1064};
                 break;
@@ -1400,78 +1395,75 @@ GibCursorProd _traverse_List(GibCursor end_r_643, GibCursor arg_154_234_345)
         }
     }
 }
-GibCursorProd _print_List(GibCursor end_r_645, GibCursor arg_159_238_349)
+GibCursorProd _print_List(GibCursor end_r_574, GibCursor arg_167_250_336)
 {
-    GibBoxedTag tmpval_1566 = *(GibBoxedTag *) arg_159_238_349;
-    GibCursor tmpcur_1567 = arg_159_238_349 + 1;
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    GibShadowstackFrame *frame;
+    GibPackedTag tmpval_1839 = *(GibPackedTag *) arg_167_250_336;
+    GibCursor tmpcur_1840 = arg_167_250_336 + 1;
 
 
-  switch_1571:
+  switch_1850:
     ;
-    switch (tmpval_1566) {
+    switch (tmpval_1839) {
 
       case 0:
         {
-            GibCursor jump_934 = arg_159_238_349 + 1;
-            unsigned char wildcard_160_239_350 = gib_print_symbol(1288);
-            unsigned char wildcard_161_240_351 = gib_print_symbol(1286);
-            fflush(stdout);
+            GibCursor jump_824 = arg_167_250_336 + 1;
+            unsigned char wildcard_168_251_337 = gib_print_symbol(1288);
+            unsigned char wildcard_169_252_338 = gib_print_symbol(1286);
 
-            return (GibCursorProd) {jump_934};
+            return (GibCursorProd) {jump_824};
             break;
         }
 
       case 1:
         {
-            GibInt tmpval_1568 = *(GibInt *) tmpcur_1567;
-            GibCursor tmpcur_1569 = tmpcur_1567 + sizeof(GibInt);
-            GibCursor jump_936 = tmpcur_1567 + 8;
-            unsigned char wildcard_166_243_354 = gib_print_symbol(1290);
-            unsigned char y_164_244_355 = printf("%ld", tmpval_1568);
-            GibCursorProd tmp_struct_44 =  _print_List(end_r_645, tmpcur_1569);
-            GibCursor pvrtmp_1570 = tmp_struct_44.field0;
-            unsigned char wildcard_167_246_357 = gib_print_symbol(1286);
-            fflush(stdout);
+            GibInt tmpval_1841 = *(GibInt *) tmpcur_1840;
+            GibCursor tmpcur_1842 = tmpcur_1840 + sizeof(GibInt);
+            unsigned char wildcard_174_255_341 = gib_print_symbol(1290);
+            unsigned char y_172_256_342 = printf("%ld", tmpval_1841);
+            GibCursorProd tmp_struct_70 =  _print_List(end_r_574, tmpcur_1842);
+            GibCursor pvrtmp_1843 = tmp_struct_70.field0;
+            unsigned char wildcard_175_258_344 = gib_print_symbol(1286);
 
-            return (GibCursorProd) {pvrtmp_1570};
-            break;
-        }
-
-      case GIB_REDIRECTION_TAG:
-        {
-            printf(" ->r ");
-
-            uintptr_t tagged_tmpcur_1666 = *(uintptr_t *) tmpcur_1567;
-            GibCursor tmpcur_1666 = GIB_UNTAG(tagged_tmpcur_1666);
-            GibCursor tmpaftercur_1667 = tmpcur_1567 + 8;
-            GibBoxedTag tagtmp_1668 = *(GibBoxedTag *) tmpcur_1666;
-            GibCursor tailtmp_1669 = tmpcur_1666 + 1;
-
-            tmpval_1566 = tagtmp_1668;
-            tmpcur_1567 = tailtmp_1669;
-            goto switch_1571;
+            return (GibCursorProd) {pvrtmp_1843};
             break;
         }
 
       case GIB_INDIRECTION_TAG:
         {
-            printf(" ->i ");
+            uintptr_t tagged_tmpcur_72 = *(uintptr_t *) tmpcur_1840;
+            GibCursor tmpcur_1844 = GIB_UNTAG(tagged_tmpcur_72);
+            GibCursor tmpaftercur_1845 = tmpcur_1840 + 8;
+            GibCursor jump_898 = tmpcur_1840 + 8;
+            unsigned char wildcard_901 = printf(" ->i ");
+            fflush(stdout);
+            GibCursorProd tmp_struct_71 =  _print_List(end_r_574, tmpcur_1844);
+            GibCursor pvrtmp_1846 = tmp_struct_71.field0;
 
-            uintptr_t tagged_tmpcur_1666 = *(uintptr_t *) tmpcur_1567;
-            GibCursor tmpcur_1666 = GIB_UNTAG(tagged_tmpcur_1666);
-            GibCursor tmpaftercur_1667 = tmpcur_1567 + 8;
-            GibBoxedTag tagtmp_1668 = *(GibBoxedTag *) tmpcur_1666;
-            GibCursor tailtmp_1669 = tmpcur_1666 + 1;
+            return (GibCursorProd) {jump_898};
+            break;
+        }
 
-            tmpval_1566 = tagtmp_1668;
-            tmpcur_1567 = tailtmp_1669;
-            goto switch_1571;
+      case GIB_REDIRECTION_TAG:
+        {
+            uintptr_t tagged_tmpcur_74 = *(uintptr_t *) tmpcur_1840;
+            GibCursor tmpcur_1847 = GIB_UNTAG(tagged_tmpcur_74);
+            GibCursor tmpaftercur_1848 = tmpcur_1840 + 8;
+            unsigned char wildcard_901 = printf(" ->r ");
+            fflush(stdout);
+            GibCursorProd tmp_struct_73 =  _print_List(end_r_574, tmpcur_1847);
+            GibCursor pvrtmp_1849 = tmp_struct_73.field0;
+
+            return (GibCursorProd) {pvrtmp_1849};
             break;
         }
 
       default:
         {
-            printf("Unknown tag in: tmpval_1566 %d", tmpval_1566);
+            printf("Unknown tag in: tmpval_1839 %d", tmpval_1839);
             exit(1);
         }
     }
