@@ -827,7 +827,9 @@ unsafe fn evacuate_packed(
         // POLICY DECISION:
         // Indirections are always inlined in the current version.
         C_INDIRECTION_TAG => {
-            let (pointee, _): (*mut i8, _) = read(src_after_tag);
+            let (tagged_pointee, _): (u64, _) = read(src_after_tag);
+            let tagged = TaggedPointer::from_u64(tagged_pointee);
+            let pointee = tagged.untag();
             let (
                 src_after_pointee,
                 dst_after_pointee,

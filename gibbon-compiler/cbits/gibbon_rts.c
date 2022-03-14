@@ -1508,8 +1508,15 @@ void gib_indirection_barrier(
     uint32_t datatype
 )
 {
-    UNUSED(to_footer_ptr);
+    // Write the indirection.
+    uint16_t footer_offset = to_footer_ptr - to;
+    uintptr_t tagged = GIB_STORE_TAG(to, footer_offset);
+    GibCursor writeloc = from;
+    *(GibBoxedTag *) writeloc = GIB_INDIRECTION_TAG;
+    writeloc += 1;
+    *(uintptr_t *) writeloc = tagged;
 
+    // Add to remembered set if it's an old to young pointer.
     bool from_old = !gib_addr_in_nursery(from);
     bool to_young = gib_addr_in_nursery(to);
     bool to_old = !to_young;
@@ -1522,7 +1529,7 @@ void gib_indirection_barrier(
             char *indr_addr = (char *) from + sizeof(GibPackedTag);
             gib_remset_push(gen->rem_set, indr_addr, from_footer_ptr, datatype);
             return;
-        } else if (to_old) {
+        } else {
             // (4) oldgen -> oldgen
             gib_handle_old_to_old_indirection(from_footer_ptr, to_footer_ptr);
             return;

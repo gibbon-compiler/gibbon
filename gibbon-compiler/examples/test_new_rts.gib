@@ -6,10 +6,10 @@
       [Nil]
       [Cons Int List])
 
-(define (build-list [n : Int]) : List
+(define (build-list [n : Int] [n2 : Int]) : List
   (if (= n 0)
       (Nil)
-      (Cons n (build-list (- n 1)))))
+      (Cons (- n2 n) (build-list (- n 1) n2))))
 
 (define (sum-list [xs : List]) : Int
   (case xs
@@ -52,7 +52,7 @@
 ;; main
 
 (define (do-reverse [n : Int]) : Int
- (let ([xs : List (build-list n)])
+ (let ([xs : List (build-list n n)])
    (let ([ys : List (iterate (reverse xs (Nil)))])
      (sum-list ys))))
 
@@ -63,5 +63,6 @@
       (sumtree tr1))))
 
 ;; (vector (do-reverse (size-param)) (do-tree (size-param)))
-(do-tree (size-param))
+;; (do-tree (size-param))
 ;; (do-reverse (size-param))
+(do-reverse (size-param))

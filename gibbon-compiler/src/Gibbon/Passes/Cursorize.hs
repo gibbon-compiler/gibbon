@@ -586,10 +586,14 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
              (from_reg == "dummy" || to_reg == "dummy") -- HACK!!!
              -- [2022.03.02]: ckoparkar:WTH does this hack enable?
           then go tenv senv (DataConE from dcon [VarE to])
-          else
-            onDi (mkLets [("_",[],ProdTy [],
-                           Ext (IndirectionBarrier tycon (from,(toEndV from_reg),to,(toEndV to_reg))))]) <$>
-              go tenv senv (DataConE from dcon [VarE to])
+          else do
+            start <- gensym "start"
+            end <- gensym "end"
+            return $ Di $
+              (mkLets [("_",[],ProdTy [],Ext (IndirectionBarrier tycon (from,(toEndV from_reg),to,(toEndV to_reg)))),
+                       (start, [], CursorTy, VarE from),
+                       (end, [], CursorTy, Ext $ AddCursor from (L3.LitE 9))]
+                 (MkProdE [VarE start, VarE end]))
 
         AddFixed{} -> error "cursorizePackedExp: AddFixed not handled."
 
@@ -1162,11 +1166,9 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                                                    (v       , CursorTy),
                                                    (toEndV v, CursorTy)])
                               tenv
-                      read_cursor = if isIndirectionTag dcon
-                                    then Ext (ReadCursor cur)
-                                    else if isRedirectionTag dcon
-                                         then Ext (ReadTaggedCursor cur)
-                                         else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
+                      read_cursor = if isIndirectionTag dcon || isRedirectionTag dcon
+                                    then Ext (ReadTaggedCursor cur)
+                                    else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
                       binds = [(tmp     , [], ProdTy [CursorTy, CursorTy], read_cursor),
                                (loc     , [], CursorTy, VarE cur),
                                (v       , [], CursorTy, ProjE 0 (VarE tmp)),
