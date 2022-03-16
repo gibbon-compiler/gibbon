@@ -507,7 +507,7 @@ unsafe fn evacuate_remembered_set(
                         src,
                         dst,
                         dst_end,
-                    )?;
+                    );
                 // Update the indirection pointer in oldgen region.
                 write((*frame).ptr, dst);
                 // Update the outset in oldgen region.
@@ -589,7 +589,7 @@ unsafe fn evacuate_shadowstack(
                         src,
                         dst,
                         dst_end,
-                    )?;
+                    );
                 // Update the pointers in shadow-stack.
                 (*frame).ptr = dst;
                 (*frame).endptr = dst_after_end;
@@ -660,7 +660,7 @@ unsafe fn evacuate_packed(
     src: *mut i8,
     dst: *mut i8,
     dst_end: *mut i8,
-) -> Result<(*mut i8, *mut i8, *mut i8, C_GibPackedTag)> {
+) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
     let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
     match tag {
         // Nothing to copy. Just update the write cursor's new
@@ -674,7 +674,7 @@ unsafe fn evacuate_packed(
             // Update the poiners on the shadow-stack.
             (*wframe).ptr = dst;
             (*wframe).endptr = dst_end;
-            Ok((src, dst, dst_end, tag))
+            (src, dst, dst_end, tag)
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
         C_COPIED_TO_TAG => {
@@ -683,7 +683,7 @@ unsafe fn evacuate_packed(
             let fwd_ptr = tagged.untag();
             let space_reqd = 32;
             let (dst1, dst_end1) =
-                Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
+                Heap::check_bounds(heap, space_reqd, dst, dst_end).unwrap();
             let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
             let dst_after_indr = write(dst_after_tag, tagged_fwd_ptr);
             // TODO(ckoparkar): check that no code path will try to read/write
@@ -711,7 +711,7 @@ unsafe fn evacuate_packed(
                     }
                 }
             }
-            Ok((src_after_burned, dst_after_indr, dst_end1, tag))
+            (src_after_burned, dst_after_indr, dst_end1, tag)
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
         C_COPIED_TAG => {
@@ -742,7 +742,7 @@ unsafe fn evacuate_packed(
             .as_u64();
             let space_reqd = 32;
             let (dst1, dst_end1) =
-                Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
+                Heap::check_bounds(heap, space_reqd, dst, dst_end).unwrap();
             let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
             let dst_after_indr = write(dst_after_tag, tagged_want);
             // TODO(ckoparkar): check that no code path will try to read/write
@@ -768,7 +768,7 @@ unsafe fn evacuate_packed(
                     }
                 }
             }
-            Ok((src_after_burned, dst_after_indr, dst_end1, tag))
+            (src_after_burned, dst_after_indr, dst_end1, tag)
         }
         // Indicates end-of-current-chunk in the source buffer i.e.
         // there's nothing more to copy in the current chunk.
@@ -835,12 +835,12 @@ unsafe fn evacuate_packed(
                 (*zct).insert(reg_info2);
 
                 // Stop evacuating.
-                Ok((
+                (
                     src_after_next_chunk as *mut i8,
                     dst_after_redir,
                     dst_end,
                     tag,
-                ))
+                )
             }
         }
         // A pointer to a value in another buffer; copy this value
@@ -884,7 +884,7 @@ unsafe fn evacuate_packed(
                     pointee,
                     dst,
                     dst_end,
-                )?;
+                );
                 // Update the burned environment if we're evacuating a root
                 // from the remembered set.
                 match prov {
@@ -896,16 +896,17 @@ unsafe fn evacuate_packed(
                 }
                 // Return 1 past the indirection pointer as src_after
                 // and the dst_after that evacuate_packed returned.
-                Ok((
+                (
                     src_after_indr1,
                     dst_after_pointee,
                     dst_after_pointee_end,
                     tag,
-                ))
+                )
             } else {
                 let space_reqd = 32;
                 let (dst1, dst_end1) =
-                    Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
+                    Heap::check_bounds(heap, space_reqd, dst, dst_end)
+                        .unwrap();
                 let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                 let dst_after_indr = write(dst_after_tag, tagged_pointee);
                 let pointee_footer_offset = tagged.get_tag();
@@ -916,7 +917,7 @@ unsafe fn evacuate_packed(
                 //     ((*(pointee_footer as *mut C_GibChunkFooter)).reg_info
                 //         as *const C_GibRegionInfo),
                 // );
-                Ok((src_after_indr1, dst_after_indr, dst_end1, tag))
+                (src_after_indr1, dst_after_indr, dst_end1, tag)
             }
         }
         // Regular datatype, copy.
@@ -934,7 +935,8 @@ unsafe fn evacuate_packed(
                 // and destination buffer respectively.
 
                 let (mut dst_mut, mut dst_end_mut) =
-                    Heap::check_bounds(heap, space_reqd, dst, dst_end)?;
+                    Heap::check_bounds(heap, space_reqd, dst, dst_end)
+                        .unwrap();
                 // Copy the tag and the fields.
                 dst_mut = write(dst_mut, tag);
                 dst_mut.copy_from_nonoverlapping(src_after_tag, *scalar_bytes);
@@ -975,12 +977,12 @@ unsafe fn evacuate_packed(
                         src_mut,
                         dst_mut,
                         dst_end_mut,
-                    )?;
+                    );
                     // Must immediately stop copying upon reaching
                     // the cauterized tag.
                     match field_tag {
                         C_CAUTERIZED_TAG | C_REDIRECTION_TAG => {
-                            return Ok((src1, dst1, dst_end1, field_tag));
+                            return (src1, dst1, dst_end1, field_tag);
                         }
                         _ => {
                             src_mut = src1;
@@ -989,7 +991,7 @@ unsafe fn evacuate_packed(
                         }
                     }
                 }
-                Ok((src_mut, dst_mut, dst_end_mut, tag))
+                (src_mut, dst_mut, dst_end_mut, tag)
             }
         }
     }
@@ -1007,17 +1009,14 @@ unsafe fn evacuate_field(
     src: *mut i8,
     dst: *mut i8,
     dst_end: *mut i8,
-) -> Result<(*mut i8, *mut i8, *mut i8, C_GibPackedTag)> {
+) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
     match INFO_TABLE.get().unwrap().get(datatype) {
         None => {
-            return Err(RtsError::Gc(format!(
-                "evacuate: Unknown datatype, {:?}",
-                datatype
-            )));
+            panic!("evacuate: Unknown datatype, {:?}", datatype);
         }
         Some(DatatypeInfo::Scalar(size)) => {
             copy_nonoverlapping(src, dst, *size);
-            Ok((src.add(*size), dst.add(*size), dst_end, C_SCALAR_TAG))
+            (src.add(*size), dst.add(*size), dst_end, C_SCALAR_TAG)
         }
         Some(DatatypeInfo::Packed(packed_info)) => evacuate_packed(
             benv,
@@ -1200,6 +1199,10 @@ pub unsafe fn init_footer_at(
     (*footer).next = null_mut();
     footer_start
 }
+
+#[inline]
+#[cold]
+fn cold() {}
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Generic memory allocation
