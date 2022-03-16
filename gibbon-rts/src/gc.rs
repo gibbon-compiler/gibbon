@@ -922,9 +922,8 @@ unsafe fn evacuate_packed(
         // Regular datatype, copy.
         _ => {
             let DataconInfo { scalar_bytes, field_tys, num_scalars, .. } =
-                packed_info
-                    .get(&tag)
-                    .expect(&format!("Unknown tag: {:?}", tag));
+                packed_info.get(&tag).unwrap();
+
             // Check bound of the destination buffer before copying.
             // Reserve additional space for a redirection node or a
             // forwarding pointer.
