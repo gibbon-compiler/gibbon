@@ -214,15 +214,9 @@ pub extern "C" fn gib_garbage_collect(
 pub extern "C" fn gib_handle_old_to_old_indirection(
     from_footer_ptr: *mut i8,
     to_footer_ptr: *mut i8,
-) -> i32 {
-    match gc::handle_old_to_old_indirection(from_footer_ptr, to_footer_ptr) {
-        Ok(()) => 0,
-        Err(err) => {
-            if cfg!(debug_assertions) {
-                println!("{:?}", err);
-            }
-            -1
-        }
+) {
+    unsafe {
+        gc::handle_old_to_old_indirection(from_footer_ptr, to_footer_ptr);
     }
 }
 

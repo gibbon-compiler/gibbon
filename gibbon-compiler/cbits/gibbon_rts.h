@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <uthash.h>
+#include <assert.h>
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Translating Gibbon's types to C
@@ -42,6 +43,36 @@ typedef char* GibPtr;
 typedef char* GibCursor;
 typedef uint64_t GibThreadId;
 
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Shorthands
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+#define KB 1024lu
+#define MB (KB * 1024lu)
+#define GB (MB * 1024lu)
+
+#define ATTR_ALWAYS_INLINE __attribute__((always_inline))
+#define ATTR_HOT __attribute__((hot))
+
+#define LIKELY(x) __builtin_expect((bool) x, 1)
+#define UNLIKELY(x) __builtin_expect((bool) x, 0)
+
+/*
+ * Inlining macros taken from GHC:
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ *
+ * INLINE_HEADER is for inline functions in header files (macros)
+ * STATIC_INLINE is for inline functions in source files
+ * EXTERN_INLINE is for functions that we want to inline sometimes, we also
+ * compile a static version of the function.
+ *
+ */
+
+#define INLINE_HEADER static inline
+#define STATIC_INLINE static inline
+#define EXTERN_INLINE extern inline
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Globals and their accessors
@@ -339,8 +370,6 @@ extern GibShadowstack *gib_global_write_shadowstacks;
 
 // Convenience macros since we don't really need the arrays of nurseries and
 // shadowstacks since mutators are still sequential.
-// #define DEFAULT_NURSERY gib_global_nurseries
-#define DEFAULT_NURSERY (&(gib_global_nurseries[0]))
 #define DEFAULT_READ_SHADOWSTACK (&(gib_global_read_shadowstacks[0]))
 #define DEFAULT_WRITE_SHADOWSTACK (&(gib_global_write_shadowstacks[0]))
 
@@ -371,7 +400,7 @@ void gib_print_global_region_count(void);
  * Nursery
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
-bool gib_addr_in_nursery(char *ptr);
+
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -379,30 +408,81 @@ bool gib_addr_in_nursery(char *ptr);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-void gib_shadowstack_push(
+INLINE_HEADER void gib_shadowstack_push(
     GibShadowstack *stack,
     char *ptr,
     char *endptr,
     uint32_t datatype
-);
-GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack);
-int32_t gib_shadowstack_length(GibShadowstack *stack);
-void gib_shadowstack_print_all(GibShadowstack *stack);
+)
+{
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_end = stack->end;
+    char **stack_alloc_ptr_addr = &(stack->alloc);
+    size_t size = sizeof(GibShadowstackFrame);
+    assert((stack_alloc_ptr + size) <= stack_end);
+    GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
+    frame->ptr = ptr;
+    frame->endptr = endptr;
+    frame->datatype = datatype;
+    (*stack_alloc_ptr_addr) += size;
+    return;
+}
+
+INLINE_HEADER GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack)
+{
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_start = stack->start;
+    char **stack_alloc_ptr_addr = &(stack->alloc);
+    size_t size = sizeof(GibShadowstackFrame);
+    assert((stack_alloc_ptr - size) >= stack_start);
+    (*stack_alloc_ptr_addr) -= size;
+    GibShadowstackFrame *frame = (GibShadowstackFrame *) (*stack_alloc_ptr_addr);
+    return frame;
+}
+
+INLINE_HEADER int32_t gib_shadowstack_length(GibShadowstack *stack)
+{
+    char *stack_alloc_ptr = stack->alloc;
+    char *stack_start = stack->start;
+    return ( (stack_alloc_ptr - stack_start) / sizeof(GibShadowstackFrame) );
+}
+
+INLINE_HEADER void gib_shadowstack_print_all(GibShadowstack *stack)
+{
+    char *run_ptr = stack->start;
+    char *end_ptr = stack->alloc;
+    GibShadowstackFrame *frame;
+    while (run_ptr < end_ptr) {
+        frame = (GibShadowstackFrame *) run_ptr;
+        printf("ptr=%p, endptr=%p, datatype=%d\n",
+               frame->ptr, frame->endptr, frame->datatype);
+        run_ptr += sizeof(GibShadowstackFrame);
+    }
+    return;
+}
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Remembered set
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
-#define gib_remset_push(stack, ptr, endptr, datatype) \
+
+#define gib_remset_push(stack, ptr, endptr, datatype)           \
     gib_shadowstack_push(stack, ptr, (char *) endptr, datatype)
-#define gib_remset_pop(stack) \
+
+#define gib_remset_pop(stack)                   \
     gib_shadowstack_pop(stack)
-#define gib_remset_length(stack) \
+
+#define gib_remset_length(stack)                \
     gib_shadowstack_length(stack)
-#define gib_remset_print_all(stack) \
+
+#define gib_remset_print_all(stack)             \
     gib_shadowstack_print_all(stack)
-void gib_remset_reset(GibRememberedSet *set);
+
+INLINE_HEADER void gib_remset_reset(GibRememberedSet *set)
+{
+    set->alloc = set->start;
+}
 
 
 /*
@@ -459,7 +539,7 @@ int gib_garbage_collect(
     GibGeneration *generations,
     bool force_major
 );
-int gib_handle_old_to_old_indirection(
+void gib_handle_old_to_old_indirection(
     char *from_footer,
     char *to_footer
 );

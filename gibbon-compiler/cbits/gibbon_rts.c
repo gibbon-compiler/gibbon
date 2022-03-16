@@ -36,19 +36,6 @@
 #endif
 
 
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Shorthands
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- */
-
-#define KB 1024lu
-#define MB (KB * 1024lu)
-#define GB (MB * 1024lu)
-
-#define ATTR_ALWAYS_INLINE __attribute__((always_inline))
-#define ATTR_HOT __attribute__((hot))
-
-#define UNUSED(x) (void)(x)
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -877,11 +864,11 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 
 */
 
-// // 4 megabytes for each semi-space.
+#ifdef _GIBBON_DEBUG
+#define NURSERY_SIZE (4 * gib_global_inf_init_chunk_size)
+#else
 #define NURSERY_SIZE (4 * MB)
-
-// 4KB for debugging.
-// #define NURSERY_SIZE (4 * gib_global_inf_init_chunk_size)
+#endif
 
 // If a region is over this size, alloc to refcounted heap directly.
 #define NURSERY_REGION_MAX_SIZE (NURSERY_SIZE / 2)
@@ -976,7 +963,7 @@ GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 // Convenience macros since we don't really need the arrays of nurseries and
 // shadowstacks since mutators are still sequential.
 // #define DEFAULT_NURSERY gib_global_nurseries
-#define DEFAULT_NURSERY (&(gib_global_nurseries[0]))
+#define DEFAULT_NURSERY gib_global_nurseries
 #define DEFAULT_GENERATION gib_global_oldest_gen
 #define DEFAULT_READ_SHADOWSTACK (&(gib_global_read_shadowstacks[0]))
 #define DEFAULT_WRITE_SHADOWSTACK (&(gib_global_write_shadowstacks[0]))
@@ -1022,16 +1009,17 @@ void gib_check_rust_struct_sizes(void)
  */
 
 static GibChunk gib_alloc_region_on_heap(size_t size);
-static GibChunk gib_alloc_region_in_nursery(size_t size);
-static GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected);
+STATIC_INLINE GibChunk gib_alloc_region_in_nursery(size_t size);
+STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected);
 static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected);
+STATIC_INLINE bool gib_addr_in_nursery(char *ptr);
 
 GibChunk gib_alloc_region(size_t size)
 {
-    if (size > NURSERY_REGION_MAX_SIZE) {
-        return gib_alloc_region_on_heap(size);
-    } else {
+    if (size <= NURSERY_REGION_MAX_SIZE) {
         return gib_alloc_region_in_nursery(size);
+    } else {
+        return gib_alloc_region_on_heap(size);
     }
 }
 
@@ -1047,25 +1035,26 @@ static GibChunk gib_alloc_region_on_heap(size_t size)
     return (GibChunk) {heap_start, footer_start};
 }
 
-static GibChunk gib_alloc_region_in_nursery(size_t size)
+STATIC_INLINE GibChunk gib_alloc_region_in_nursery(size_t size)
 {
     return gib_alloc_region_in_nursery_fast(size, false);
 }
 
-static GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected)
+STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected)
 {
     GibNursery *nursery = DEFAULT_NURSERY;
     char *old = nursery->alloc;
     char *bump = old - size;
-    if (bump >= nursery->heap_start) {
+    if (LIKELY((bump >= nursery->heap_start))) {
         nursery->alloc = bump;
         char *chunk_starts_alloc = nursery->chunk_starts +
             (nursery->num_chunk_starts * sizeof(char*));
         *(char**) chunk_starts_alloc = bump;
         nursery->num_chunk_starts = nursery->num_chunk_starts + 1;
         return (GibChunk) {bump, old};
+    } else {
+        return gib_alloc_region_in_nursery_slow(size, collected);
     }
-    return gib_alloc_region_in_nursery_slow(size, collected);
 }
 
 static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
@@ -1120,7 +1109,11 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     // Write a new footer for this chunk and link it with the old chunk's footer.
     char *new_footer_start = NULL;
     GibChunkFooter *new_footer = NULL;
-    if (!old_chunk_in_nursery) {
+    if (old_chunk_in_nursery) {
+        new_footer_start = gib_init_footer_at(heap_end, total_size, 0);
+        new_footer = (GibChunkFooter *) new_footer_start;
+        gib_insert_into_new_zct(DEFAULT_GENERATION, new_footer->reg_info);
+    } else {
         new_footer_start = heap_start + newsize;
         new_footer = (GibChunkFooter *) new_footer_start;
         new_footer->reg_info = footer->reg_info;
@@ -1128,10 +1121,6 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
         new_footer->next = (GibChunkFooter *) NULL;
         // Link with the old chunk's footer.
         footer->next = (GibChunkFooter *) new_footer;
-    } else {
-        new_footer_start = gib_init_footer_at(heap_end, total_size, 0);
-        new_footer = (GibChunkFooter *) new_footer_start;
-        gib_insert_into_new_zct(DEFAULT_GENERATION, new_footer->reg_info);
     }
 
 #ifdef _GIBBON_DEBUG
@@ -1319,7 +1308,7 @@ static void gib_nursery_free(GibNursery *nursery)
 // If we allocate the nursery at a high address AND ensure that all of the
 // subsequent mallocs return a block at addresses lower than this, we can
 // implement addr_in_nursery with one address check instead than two. -- RRN
-bool gib_addr_in_nursery(char *ptr)
+STATIC_INLINE bool gib_addr_in_nursery(char *ptr)
 {
     GibNursery *nursery = DEFAULT_NURSERY;
     return ((ptr >= nursery->heap_start) && (ptr <= nursery->heap_end));
@@ -1407,65 +1396,6 @@ static void gib_shadowstack_free(GibShadowstack* stack)
     return;
 }
 
-void gib_shadowstack_push(
-    GibShadowstack *stack,
-    char *ptr,
-    char *endptr,
-    uint32_t datatype
-)
-{
-    char *stack_alloc_ptr = stack->alloc;
-    char *stack_end = stack->end;
-    char **stack_alloc_ptr_addr = &(stack->alloc);
-    size_t size = sizeof(GibShadowstackFrame);
-    if ((stack_alloc_ptr + size) > stack_end) {
-        fprintf(stderr, "gib_shadowstack_push: out of memory");
-        exit(1);
-    }
-    GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
-    frame->ptr = ptr;
-    frame->endptr = endptr;
-    frame->datatype = datatype;
-    (*stack_alloc_ptr_addr) += size;
-    return;
-}
-
-GibShadowstackFrame *gib_shadowstack_pop(GibShadowstack *stack)
-{
-    char *stack_alloc_ptr = stack->alloc;
-    char *stack_start = stack->start;
-    char **stack_alloc_ptr_addr = &(stack->alloc);
-    size_t size = sizeof(GibShadowstackFrame);
-    if ((stack_alloc_ptr - size) < stack_start) {
-        fprintf(stderr, "gib_shadowstack_pop: stack empty");
-        exit(1);
-    }
-    (*stack_alloc_ptr_addr) -= size;
-    GibShadowstackFrame *frame = (GibShadowstackFrame *) (*stack_alloc_ptr_addr);
-    return frame;
-}
-
-int32_t gib_shadowstack_length(GibShadowstack *stack)
-{
-    char *stack_alloc_ptr = stack->alloc;
-    char *stack_start = stack->start;
-    return ( (stack_alloc_ptr - stack_start) / sizeof(GibShadowstackFrame) );
-}
-
-void gib_shadowstack_print_all(GibShadowstack *stack)
-{
-    char *run_ptr = stack->start;
-    char *end_ptr = stack->alloc;
-    GibShadowstackFrame *frame;
-    while (run_ptr < end_ptr) {
-        frame = (GibShadowstackFrame *) run_ptr;
-        printf("ptr=%p, endptr=%p, datatype=%d\n",
-               frame->ptr, frame->endptr, frame->datatype);
-        run_ptr += sizeof(GibShadowstackFrame);
-    }
-    return;
-}
-
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1473,10 +1403,6 @@ void gib_shadowstack_print_all(GibShadowstack *stack)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-void gib_remset_reset(GibRememberedSet *set)
-{
-    set->alloc = set->start;
-}
 
 
 /*

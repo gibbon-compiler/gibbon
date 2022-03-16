@@ -697,7 +697,7 @@ unsafe fn evacuate_packed(
             if heap.is_oldest() {
                 let fwd_footer_offset = tagged.get_tag();
                 let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
-                handle_old_to_old_indirection(dst_end, fwd_footer_addr)?;
+                handle_old_to_old_indirection(dst_end, fwd_footer_addr);
                 match prov {
                     GcRootProv::RemSet => {}
                     GcRootProv::Stk => {
@@ -754,7 +754,7 @@ unsafe fn evacuate_packed(
             // Update outsets and refcounts if evacuating to the oldest
             // generation.
             if heap.is_oldest() {
-                handle_old_to_old_indirection(dst_end, fwd_footer_addr_avail)?;
+                handle_old_to_old_indirection(dst_end, fwd_footer_addr_avail);
                 match prov {
                     GcRootProv::RemSet => {}
                     GcRootProv::Stk => {
@@ -911,7 +911,7 @@ unsafe fn evacuate_packed(
                 let pointee_footer_offset = tagged.get_tag();
                 let pointee_footer =
                     pointee.add(pointee_footer_offset as usize);
-                handle_old_to_old_indirection(dst_end1, pointee_footer)?;
+                handle_old_to_old_indirection(dst_end1, pointee_footer);
                 // (*zct).insert(
                 //     ((*(pointee_footer as *mut C_GibChunkFooter)).reg_info
                 //         as *const C_GibRegionInfo),
@@ -1151,17 +1151,14 @@ unsafe fn addr_to_free(footer: *const C_GibChunkFooter) -> *mut libc::c_void {
     ((footer as *const i8).sub((*footer).size)) as *mut libc::c_void
 }
 
-pub fn handle_old_to_old_indirection(
+pub unsafe fn handle_old_to_old_indirection(
     from_footer_ptr: *mut i8,
     to_footer_ptr: *mut i8,
-) -> Result<()> {
-    unsafe {
-        let added = add_to_outset(from_footer_ptr, to_footer_ptr);
-        if added {
-            bump_refcount(to_footer_ptr);
-        }
+) {
+    let added = add_to_outset(from_footer_ptr, to_footer_ptr);
+    if added {
+        bump_refcount(to_footer_ptr);
     }
-    Ok(())
 }
 
 unsafe fn add_to_outset(from_addr: *mut i8, to_addr: *const i8) -> bool {
