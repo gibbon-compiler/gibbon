@@ -439,6 +439,18 @@ type BurnedAddressEnv = HashMap<*mut i8, *mut i8>;
 /// A set of start addresses of regions allocated in the nursery.
 type ChunkStartsSet = HashSet<*mut i8>;
 
+/// Things needed during evacuation.
+#[derive(Debug)]
+struct EvacState<'a> {
+    benv: &'a mut BurnedAddressEnv,
+    cenv: &'a mut CauterizedEnv,
+    chunk_starts: &'a ChunkStartsSet,
+    zct: *mut Zct,
+    nursery: &'a Nursery,
+    // heap: Box<&'a mut dyn Heap>,
+    prov: &'a GcRootProv,
+}
+
 /// Copy values at all read cursors from the remembered set to the provided
 /// destination heap. Update the burned environment along the way.
 /// The roots are processed in a left-to-right order based on the addresses of
@@ -494,15 +506,18 @@ unsafe fn evacuate_remembered_set(
                 // the pointed-to data.
                 let (src, _): (*mut i8, _) = read((*frame).ptr);
                 // Evacuate the data.
+                let mut st = EvacState {
+                    benv: &mut benv,
+                    cenv,
+                    chunk_starts,
+                    zct,
+                    nursery,
+                    prov: &GcRootProv::RemSet,
+                };
                 let (src_after, _dst_after, _dst_after_end, _tag) =
                     evacuate_packed(
-                        &mut benv,
-                        cenv,
-                        chunk_starts,
-                        zct,
-                        nursery,
+                        &mut st,
                         heap,
-                        &GcRootProv::RemSet,
                         packed_info,
                         src,
                         dst,
@@ -575,16 +590,19 @@ unsafe fn evacuate_shadowstack(
                 let footer = dst_end as *const C_GibChunkFooter;
                 (*zct).insert((*footer).reg_info);
                 // Evacuate the data.
+                let mut st = EvacState {
+                    benv,
+                    cenv,
+                    chunk_starts,
+                    zct,
+                    nursery,
+                    prov: &GcRootProv::Stk,
+                };
                 let src = (*frame).ptr;
                 let (src_after, dst_after, dst_after_end, tag) =
                     evacuate_packed(
-                        benv,
-                        cenv,
-                        chunk_starts,
-                        zct,
-                        nursery,
+                        &mut st,
                         heap,
-                        &GcRootProv::Stk,
                         packed_info,
                         src,
                         dst,
@@ -651,13 +669,8 @@ Returns: (src_after, dst_after, dst_end, maybe_tag)
 
  */
 unsafe fn evacuate_packed(
-    benv: &mut BurnedAddressEnv,
-    cenv: &mut CauterizedEnv,
-    chunk_starts: &ChunkStartsSet,
-    zct: *mut Zct,
-    nursery: &Nursery,
+    st: &mut EvacState,
     heap: &mut impl Heap,
-    prov: &GcRootProv,
     packed_info: &DataconEnv,
     src: *mut i8,
     dst: *mut i8,
@@ -672,7 +685,7 @@ unsafe fn evacuate_packed(
             let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
             // Mark this cursor as uncauterized.
             let del = (*wframe).ptr;
-            cenv.remove(&del);
+            st.cenv.remove(&del);
             // Update the poiners on the shadow-stack.
             (*wframe).ptr = dst;
             (*wframe).endptr = dst_end;
@@ -690,7 +703,7 @@ unsafe fn evacuate_packed(
             let dst_after_indr = write(dst_after_tag, tagged_fwd_ptr);
             // TODO(ckoparkar): check that no code path will try to read/write
             // at this null pointer.
-            let src_after_burned = match benv.get(&src) {
+            let src_after_burned = match st.benv.get(&src) {
                 None => null_mut(),
                 Some(end) => *end,
             };
@@ -700,12 +713,12 @@ unsafe fn evacuate_packed(
                 let fwd_footer_offset = tagged.get_tag();
                 let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
                 handle_old_to_old_indirection(dst_end, fwd_footer_addr);
-                match prov {
+                match st.prov {
                     GcRootProv::RemSet => {}
                     GcRootProv::Stk => {
                         let fwd_footer =
                             fwd_footer_addr as *const C_GibChunkFooter;
-                        (*zct).remove(
+                        (*(st.zct)).remove(
                             &((*fwd_footer).reg_info
                                 as *const C_GibRegionInfo),
                         );
@@ -749,7 +762,7 @@ unsafe fn evacuate_packed(
             let dst_after_indr = write(dst_after_tag, tagged_want);
             // TODO(ckoparkar): check that no code path will try to read/write
             // at this null pointer.
-            let src_after_burned = match benv.get(&src) {
+            let src_after_burned = match st.benv.get(&src) {
                 None => null_mut(),
                 Some(end) => *end,
             };
@@ -757,12 +770,12 @@ unsafe fn evacuate_packed(
             // generation.
             if heap.is_oldest() {
                 handle_old_to_old_indirection(dst_end, fwd_footer_addr_avail);
-                match prov {
+                match st.prov {
                     GcRootProv::RemSet => {}
                     GcRootProv::Stk => {
                         let fwd_footer =
                             fwd_footer_addr_avail as *const C_GibChunkFooter;
-                        (*zct).remove(
+                        (*(st.zct)).remove(
                             &((*fwd_footer).reg_info
                                 as *const C_GibRegionInfo),
                         );
@@ -797,15 +810,10 @@ unsafe fn evacuate_packed(
             // Otherwise, write a redireciton node at dst (pointing to
             // the start of the oldgen chunk), link the footers and reconcile
             // the two RegionInfo objects.
-            if nursery.contains_addr(next_chunk) {
+            if st.nursery.contains_addr(next_chunk) {
                 evacuate_packed(
-                    benv,
-                    cenv,
-                    chunk_starts,
-                    zct,
-                    nursery,
+                    st,
                     heap,
-                    prov,
                     packed_info,
                     next_chunk,
                     dst,
@@ -833,8 +841,8 @@ unsafe fn evacuate_packed(
                 (*footer1).reg_info = reg_info2;
 
                 // Update ZCT.
-                (*zct).remove(&(reg_info1 as *const C_GibRegionInfo));
-                (*zct).insert(reg_info2);
+                (*(st.zct)).remove(&(reg_info1 as *const C_GibRegionInfo));
+                (*(st.zct)).insert(reg_info2);
 
                 // Stop evacuating.
                 (
@@ -868,20 +876,15 @@ unsafe fn evacuate_packed(
             // If the pointee is in the nursery, evacuate it.
             // Otherwise, write an indirection node at dst and adjust the
             // refcount and outset.
-            if nursery.contains_addr(pointee) {
+            if st.nursery.contains_addr(pointee) {
                 let (
                     src_after_pointee,
                     dst_after_pointee,
                     dst_after_pointee_end,
                     _,
                 ) = evacuate_packed(
-                    benv,
-                    cenv,
-                    chunk_starts,
-                    zct,
-                    nursery,
+                    st,
                     heap,
-                    prov,
                     packed_info,
                     pointee,
                     dst,
@@ -889,9 +892,9 @@ unsafe fn evacuate_packed(
                 );
                 // Update the burned environment if we're evacuating a root
                 // from the remembered set.
-                match prov {
+                match st.prov {
                     GcRootProv::RemSet => {
-                        benv.insert(pointee, src_after_pointee);
+                        st.benv.insert(pointee, src_after_pointee);
                         ()
                     }
                     GcRootProv::Stk => (),
@@ -968,13 +971,8 @@ unsafe fn evacuate_packed(
                 // (2) handle redirection nodes properly
                 for ty in field_tys.iter().skip((*num_scalars) as usize) {
                     let (src1, dst1, dst_end1, field_tag) = evacuate_field(
-                        benv,
-                        cenv,
-                        chunk_starts,
-                        zct,
-                        nursery,
+                        st,
                         heap,
-                        prov,
                         ty,
                         src_mut,
                         dst_mut,
@@ -1000,13 +998,8 @@ unsafe fn evacuate_packed(
 }
 
 unsafe fn evacuate_field(
-    benv: &mut BurnedAddressEnv,
-    cenv: &mut CauterizedEnv,
-    chunk_starts: &ChunkStartsSet,
-    zct: *mut Zct,
-    nursery: &Nursery,
+    st: &mut EvacState,
     heap: &mut impl Heap,
-    prov: &GcRootProv,
     datatype: &C_GibDatatype,
     src: *mut i8,
     dst: *mut i8,
@@ -1020,19 +1013,9 @@ unsafe fn evacuate_field(
             copy_nonoverlapping(src, dst, *size);
             (src.add(*size), dst.add(*size), dst_end, C_SCALAR_TAG)
         }
-        Some(DatatypeInfo::Packed(packed_info)) => evacuate_packed(
-            benv,
-            cenv,
-            chunk_starts,
-            zct,
-            nursery,
-            heap,
-            prov,
-            packed_info,
-            src,
-            dst,
-            dst_end,
-        ),
+        Some(DatatypeInfo::Packed(packed_info)) => {
+            evacuate_packed(st, heap, packed_info, src, dst, dst_end)
+        }
     }
 }
 
