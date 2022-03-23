@@ -973,19 +973,43 @@ unsafe fn evacuate_packed(
                 // (1) instead of recursion, use a worklist
                 // (2) handle redirection nodes properly
                 for ty in field_tys.iter().skip((*num_scalars) as usize) {
-                    let (src1, dst1, dst_end1, field_tag) = evacuate_field(
-                        st,
-                        heap,
-                        ty,
-                        src_mut,
-                        dst_mut,
-                        dst_end_mut,
-                        evac_major,
-                    );
-                    // Must immediately stop copying upon reaching
-                    // the cauterized tag.
+                    let (src1, dst1, dst_end1, field_tag) =
+                        match INFO_TABLE.get().unwrap().get(ty) {
+                            Some(DatatypeInfo::Packed(packed_info)) => {
+                                evacuate_packed(
+                                    st,
+                                    heap,
+                                    packed_info,
+                                    src_mut,
+                                    dst_mut,
+                                    dst_end_mut,
+                                    evac_major,
+                                )
+                            }
+                            Some(DatatypeInfo::Scalar(size)) => {
+                                copy_nonoverlapping(src_mut, dst_mut, *size);
+                                (
+                                    src_mut.add(*size),
+                                    dst_mut.add(*size),
+                                    dst_end_mut,
+                                    C_SCALAR_TAG,
+                                )
+                            }
+                            None => {
+                                panic!("evacuate: Unknown datatype, {:?}", ty);
+                            }
+                        };
                     match field_tag {
-                        C_CAUTERIZED_TAG | C_REDIRECTION_TAG => {
+                        // Immediately stop copying upon reaching the
+                        // cauterized tag.
+                        C_CAUTERIZED_TAG => {
+                            return (src1, dst1, dst_end1, field_tag);
+                        }
+                        // This redirection would likely be in oldgen and the
+                        // next call to evacuate_packed would terminate anyway.
+                        // Unless we're evacuating the oldgen as well, in which
+                        // case keep evacuating.
+                        C_REDIRECTION_TAG if !evac_major => {
                             return (src1, dst1, dst_end1, field_tag);
                         }
                         _ => {
@@ -998,35 +1022,6 @@ unsafe fn evacuate_packed(
                 (src_mut, dst_mut, dst_end_mut, tag)
             }
         }
-    }
-}
-
-unsafe fn evacuate_field(
-    st: &mut EvacState,
-    heap: &mut impl Heap,
-    datatype: &C_GibDatatype,
-    src: *mut i8,
-    dst: *mut i8,
-    dst_end: *mut i8,
-    evac_major: bool,
-) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
-    match INFO_TABLE.get().unwrap().get(datatype) {
-        None => {
-            panic!("evacuate: Unknown datatype, {:?}", datatype);
-        }
-        Some(DatatypeInfo::Scalar(size)) => {
-            copy_nonoverlapping(src, dst, *size);
-            (src.add(*size), dst.add(*size), dst_end, C_SCALAR_TAG)
-        }
-        Some(DatatypeInfo::Packed(packed_info)) => evacuate_packed(
-            st,
-            heap,
-            packed_info,
-            src,
-            dst,
-            dst_end,
-            evac_major,
-        ),
     }
 }
 
