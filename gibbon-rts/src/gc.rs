@@ -186,10 +186,6 @@ We could do one of three things here:
     stored there. but this does introduces an upper bound on the size of the
     biggest chunk that Gibbon can allocate; 65K bytes (2^16).
 
-    TODO(ckoparkar): MR and STH pointed out that if we ensure that the footer's
-    address is always aligned to a power of 2, we can store *more* information
-    in 16 bits and increase the upper bound the chunk size.
-
 
 *** Restoring uncauterized write cursors:
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -275,6 +271,8 @@ Deferred until after the paper deadline...
 const CHUNK_SIZE: usize = 1024;
 const MAX_CHUNK_SIZE: usize = 65500;
 
+const COLLECT_MAJOR_K: u8 = 4;
+
 pub fn cleanup(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
@@ -322,18 +320,9 @@ pub fn garbage_collect(
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
     generations_ptr: *mut C_GibGeneration,
-    _force_major: bool,
+    force_major: bool,
 ) -> Result<()> {
-    collect_minor(rstack_ptr, wstack_ptr, nursery_ptr, generations_ptr)
-}
-
-/// Minor collection.
-pub fn collect_minor(
-    rstack_ptr: *mut C_GibShadowstack,
-    wstack_ptr: *mut C_GibShadowstack,
-    nursery_ptr: *mut C_GibNursery,
-    generations_ptr: *mut C_GibGeneration,
-) -> Result<()> {
+    // println!("gc...");
     let rstack = Shadowstack(rstack_ptr, GcRootProv::Stk);
     let wstack = Shadowstack(wstack_ptr, GcRootProv::Stk);
     let mut nursery = Nursery(nursery_ptr);
@@ -344,6 +333,11 @@ pub fn collect_minor(
         let chunk_starts = nursery.chunk_starts();
         let mut oldest_gen = OldestGeneration(generations_ptr);
         unsafe {
+            let evac_major = force_major
+                || (*nursery_ptr)
+                    .num_collections
+                    .rem_euclid(COLLECT_MAJOR_K.into())
+                    == 0;
             let mut rem_set =
                 RememberedSet((*generations_ptr).rem_set, GcRootProv::RemSet);
             // First evacuate the remembered set, then the shadow-stack.
@@ -354,6 +348,7 @@ pub fn collect_minor(
                 &nursery,
                 &mut oldest_gen,
                 &rem_set,
+                evac_major,
             )?;
             rem_set.clear();
             evacuate_shadowstack(
@@ -364,6 +359,7 @@ pub fn collect_minor(
                 &nursery,
                 &mut oldest_gen,
                 &rstack,
+                evac_major,
             )?;
             // Collect dead regions.
             oldest_gen.collect_regions()?;
@@ -464,6 +460,7 @@ unsafe fn evacuate_remembered_set(
     nursery: &Nursery,
     heap: &mut impl Heap,
     rem_set: &Shadowstack,
+    evac_major: bool,
 ) -> Result<BurnedAddressEnv> {
     let mut benv: BurnedAddressEnv = HashMap::new();
     let frames = sort_roots(rem_set);
@@ -522,6 +519,7 @@ unsafe fn evacuate_remembered_set(
                         src,
                         dst,
                         dst_end,
+                        evac_major,
                     );
                 // Update the indirection pointer in oldgen region.
                 write((*frame).ptr, dst);
@@ -545,11 +543,12 @@ unsafe fn evacuate_shadowstack(
     nursery: &Nursery,
     heap: &mut impl Heap,
     rstack: &Shadowstack,
+    evac_major: bool,
 ) -> Result<()> {
     // let frames = rstack.into_iter();
     let frames = sort_roots(rstack);
     for frame in frames {
-        if !nursery.contains_addr((*frame).ptr) {
+        if !evac_major && !nursery.contains_addr((*frame).ptr) {
             let footer = (*frame).endptr as *const C_GibChunkFooter;
             if (*((*footer).reg_info)).refcount == 0 {
                 (*zct).insert((*footer).reg_info);
@@ -607,6 +606,7 @@ unsafe fn evacuate_shadowstack(
                         src,
                         dst,
                         dst_end,
+                        evac_major,
                     );
                 // Update the pointers in shadow-stack.
                 (*frame).ptr = dst;
@@ -675,6 +675,7 @@ unsafe fn evacuate_packed(
     src: *mut i8,
     dst: *mut i8,
     dst_end: *mut i8,
+    evac_major: bool,
 ) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
     let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
     match tag {
@@ -810,7 +811,7 @@ unsafe fn evacuate_packed(
             // Otherwise, write a redireciton node at dst (pointing to
             // the start of the oldgen chunk), link the footers and reconcile
             // the two RegionInfo objects.
-            if st.nursery.contains_addr(next_chunk) {
+            if evac_major || st.nursery.contains_addr(next_chunk) {
                 evacuate_packed(
                     st,
                     heap,
@@ -818,6 +819,7 @@ unsafe fn evacuate_packed(
                     next_chunk,
                     dst,
                     dst_end,
+                    evac_major,
                 )
             } else {
                 // TODO(ckoparkar): BUGGY, AUDITME.
@@ -876,7 +878,7 @@ unsafe fn evacuate_packed(
             // If the pointee is in the nursery, evacuate it.
             // Otherwise, write an indirection node at dst and adjust the
             // refcount and outset.
-            if st.nursery.contains_addr(pointee) {
+            if evac_major || st.nursery.contains_addr(pointee) {
                 let (
                     src_after_pointee,
                     dst_after_pointee,
@@ -889,6 +891,7 @@ unsafe fn evacuate_packed(
                     pointee,
                     dst,
                     dst_end,
+                    evac_major,
                 );
                 // Update the burned environment if we're evacuating a root
                 // from the remembered set.
@@ -977,6 +980,7 @@ unsafe fn evacuate_packed(
                         src_mut,
                         dst_mut,
                         dst_end_mut,
+                        evac_major,
                     );
                     // Must immediately stop copying upon reaching
                     // the cauterized tag.
@@ -1004,6 +1008,7 @@ unsafe fn evacuate_field(
     src: *mut i8,
     dst: *mut i8,
     dst_end: *mut i8,
+    evac_major: bool,
 ) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
     match INFO_TABLE.get().unwrap().get(datatype) {
         None => {
@@ -1013,9 +1018,15 @@ unsafe fn evacuate_field(
             copy_nonoverlapping(src, dst, *size);
             (src.add(*size), dst.add(*size), dst_end, C_SCALAR_TAG)
         }
-        Some(DatatypeInfo::Packed(packed_info)) => {
-            evacuate_packed(st, heap, packed_info, src, dst, dst_end)
-        }
+        Some(DatatypeInfo::Packed(packed_info)) => evacuate_packed(
+            st,
+            heap,
+            packed_info,
+            src,
+            dst,
+            dst_end,
+            evac_major,
+        ),
     }
 }
 
@@ -1025,6 +1036,10 @@ fn sort_roots(
     // Store all the frames in a vector and sort,
     // see Note [Granularity of the burned addresses table] and
     // Note [Sorting roots on the shadow-stack and remembered set].
+    //
+    // TODO(ckoparkar): sort roots into oldgen and nursery seperately;
+    // for oldgen we want to sort using highest depth first,
+    // for nursery we want to start with leftmost root first.
     let mut frames_vec: Vec<*mut C_GibShadowstackFrame> = Vec::new();
     for frame in roots.into_iter() {
         frames_vec.push(frame);
