@@ -273,7 +273,7 @@ Deferred until after the paper deadline...
 /// we'll have to store that info in a chunk footer, and then that could guide
 /// how big this new chunk should be. Using a default value of 1024 for now.
 const CHUNK_SIZE: usize = 1024;
-const MAX_CHUNK_SIZE: usize = 65535;
+const MAX_CHUNK_SIZE: usize = 65500;
 
 pub fn cleanup(
     rstack_ptr: *mut C_GibShadowstack,
@@ -592,7 +592,9 @@ unsafe fn evacuate_shadowstack(
                     );
                 // Update the pointers in shadow-stack.
                 (*frame).ptr = dst;
-                (*frame).endptr = dst_after_end;
+                // TODO(ckoparkar): AUDITME.
+                // (*frame).endptr = dst_after_end;
+                (*frame).endptr = dst_end;
                 // Note [Adding a forwarding pointer at the end of every chunk].
                 match tag {
                     C_COPIED_TO_TAG | C_COPIED_TAG | C_REDIRECTION_TAG => {}
