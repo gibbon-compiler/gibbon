@@ -320,7 +320,7 @@ pub fn garbage_collect(
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
     generations_ptr: *mut C_GibGeneration,
-    force_major: bool,
+    _force_major: bool,
 ) -> Result<()> {
     // println!("gc...");
     let rstack = Shadowstack(rstack_ptr, GcRootProv::Stk);
@@ -333,11 +333,10 @@ pub fn garbage_collect(
         let chunk_starts = nursery.chunk_starts();
         let mut oldest_gen = OldestGeneration(generations_ptr);
         unsafe {
-            let evac_major = force_major
-                || (*nursery_ptr)
-                    .num_collections
-                    .rem_euclid(COLLECT_MAJOR_K.into())
-                    == 0;
+            // let evac_major = force_major
+            //     || (*nursery_ptr).num_collections.rem_euclid(COLLECT_MAJOR_K.into())
+            //         == 0;
+            let evac_major = false;
             let mut rem_set =
                 RememberedSet((*generations_ptr).rem_set, GcRootProv::RemSet);
             // First evacuate the remembered set, then the shadow-stack.
