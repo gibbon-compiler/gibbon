@@ -1194,6 +1194,7 @@ trait Heap {
         }
     }
 
+    #[inline(always)]
     fn check_bounds(
         &mut self,
         space_reqd: usize,
