@@ -280,8 +280,8 @@ pub fn cleanup(
 ) -> Result<()> {
     unsafe {
         // Free the info table.
-        INFO_TABLE.drain(..);
-        INFO_TABLE.shrink_to_fit();
+        _INFO_TABLE.drain(..);
+        _INFO_TABLE.shrink_to_fit();
     }
     // Free all the regions.
     let mut oldest_gen = OldestGeneration(generations_ptr);
@@ -1629,8 +1629,8 @@ use Shadowstack as RememberedSet;
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-type DataconEnv = Vec<DataconInfo>;
-type DatatypeEnv = Vec<DatatypeInfo>;
+type _DataconEnv = Vec<DataconInfo>;
+type _DatatypeEnv = Vec<_DatatypeInfo>;
 
 #[derive(Debug, Clone)]
 struct DataconInfo {
@@ -1645,20 +1645,20 @@ struct DataconInfo {
 }
 
 #[derive(Debug, Clone)]
-enum DatatypeInfo {
-    Scalar(usize),
-    Packed(DataconEnv),
+enum _DatatypeInfo {
+    _Scalar(usize),
+    _Packed(_DataconEnv),
 }
 
 /// The global info table.
-static mut INFO_TABLE: DatatypeEnv = Vec::new();
+static mut _INFO_TABLE: _DatatypeEnv = Vec::new();
 
 #[inline]
 pub fn info_table_initialize(size: usize) {
     unsafe {
         // If a datatype is not packed, info_table_insert_scalar will
         // overwrite this entry.
-        INFO_TABLE = vec![DatatypeInfo::Packed(Vec::new()); size];
+        _INFO_TABLE = vec![_DatatypeInfo::_Packed(Vec::new()); size];
     }
 }
 
@@ -1673,16 +1673,16 @@ pub fn info_table_insert_packed_dcon(
 ) -> Result<()> {
     let dcon_info =
         DataconInfo { scalar_bytes, num_scalars, num_packed, field_tys };
-    let entry = unsafe { INFO_TABLE.get_unchecked_mut(datatype as usize) };
+    let entry = unsafe { _INFO_TABLE.get_unchecked_mut(datatype as usize) };
     match entry {
-        DatatypeInfo::Packed(packed_info) => {
+        _DatatypeInfo::_Packed(packed_info) => {
             while packed_info.len() <= datacon.into() {
                 packed_info.push(dcon_info.clone());
             }
             packed_info[datacon as usize] = dcon_info;
             Ok(())
         }
-        DatatypeInfo::Scalar(_) => Err(RtsError::InfoTable(format!(
+        _DatatypeInfo::_Scalar(_) => Err(RtsError::InfoTable(format!(
             "Expected a packed entry for datatype {:?}, got a scalar.",
             datatype
         ))),
@@ -1691,7 +1691,46 @@ pub fn info_table_insert_packed_dcon(
 
 pub fn info_table_insert_scalar(datatype: C_GibDatatype, size: usize) {
     unsafe {
-        INFO_TABLE[datatype as usize] = DatatypeInfo::Scalar(size);
+        _INFO_TABLE[datatype as usize] = _DatatypeInfo::_Scalar(size);
+    }
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+type DataconEnv = &'static [DataconInfo];
+type DatatypeEnv = &'static [DatatypeInfo];
+
+#[derive(Debug, Clone)]
+enum DatatypeInfo {
+    Scalar(usize),
+    Packed(DataconEnv),
+}
+
+/// The global info table.
+static mut INFO_TABLE: &[DatatypeInfo] = &[];
+
+pub fn info_table_finalize() {
+    unsafe {
+        let info_table: *mut DatatypeInfo =
+            libc::malloc(_INFO_TABLE.len() * size_of::<DatatypeInfo>())
+                as *mut DatatypeInfo;
+        let mut info_table_alloc = info_table;
+        for ty in _INFO_TABLE.iter() {
+            match ty {
+                _DatatypeInfo::_Scalar(size) => {
+                    let ty_info = DatatypeInfo::Scalar(*size);
+                    // info_table_alloc.write_unaligned(ty_info);
+                    *info_table_alloc = ty_info;
+                    info_table_alloc = info_table_alloc.add(1);
+                }
+                _DatatypeInfo::_Packed(_packed_info) => {
+                    let packed_info = &_packed_info[..];
+                    let ty_info = DatatypeInfo::Packed(packed_info);
+                    *info_table_alloc = ty_info;
+                    info_table_alloc = info_table_alloc.add(1);
+                }
+            }
+        }
+        INFO_TABLE = std::slice::from_raw_parts(info_table, _INFO_TABLE.len());
     }
 }
 

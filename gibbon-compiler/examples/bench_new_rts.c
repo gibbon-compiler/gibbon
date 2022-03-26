@@ -179,6 +179,8 @@ void info_table_initialize(void)
                 error, Tree_T, 1);
         exit(1);
     }
+
+    gib_info_table_finalize();
 }
 void symbol_table_initialize(void)
 {

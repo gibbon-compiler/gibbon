@@ -349,7 +349,8 @@ initInfoTable info_tbl =
         body =  [ C.BlockDecl [cdecl| int error = gib_info_table_initialize($int:info_table_len); |]
                 , C.BlockStm [cstm| if (error < 0) { fprintf(stderr, "Couldn't initialize info table, errorno=%d", error); exit(1); } |]
                 ]  ++ insert_scalar_info ++
-                [ C.BlockDecl [cdecl| typename GibDatatype field_tys[$int:max_fields]; |] ] ++ insert_dcon_info
+                [ C.BlockDecl [cdecl| typename GibDatatype field_tys[$int:max_fields]; |] ] ++ insert_dcon_info ++
+                [C.BlockStm [cstm| gib_info_table_finalize(); |] ]
         fun = [cfun| void info_table_initialize(void) { $items:body } |]
     in C.FuncDef fun noLoc
   where

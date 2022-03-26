@@ -131,6 +131,12 @@ pub extern "C" fn gib_info_table_initialize(size: usize) -> i32 {
 }
 
 #[no_mangle]
+pub extern "C" fn gib_info_table_finalize() -> i32 {
+    gc::info_table_finalize();
+    0
+}
+
+#[no_mangle]
 pub extern "C" fn gib_info_table_insert_packed_dcon(
     datatype: C_GibDatatype,
     datacon: C_GibPackedTag,
