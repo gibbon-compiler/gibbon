@@ -136,19 +136,11 @@ void info_table_initialize(void)
         fprintf(stderr, "Couldn't initialize info table, errorno=%d", error);
         exit(1);
     }
-    gib_info_table_insert_scalar(GibInt_T, sizeof(GibInt));
-    gib_info_table_insert_scalar(GibFloat_T, sizeof(GibFloat));
-    gib_info_table_insert_scalar(GibSym_T, sizeof(GibSym));
-    gib_info_table_insert_scalar(GibBool_T, sizeof(GibBool));
-    gib_info_table_insert_scalar(GibVector_T, sizeof(GibVector));
-    gib_info_table_insert_scalar(GibList_T, sizeof(GibList));
-    gib_info_table_insert_scalar(GibCursor_T, sizeof(GibCursor));
 
     GibDatatype field_tys[2];
 
-    field_tys[0] = GibInt_T;
-    field_tys[1] = List_T;
-    error = gib_info_table_insert_packed_dcon(List_T, 1, 8, 1, 1, field_tys, 2);
+    field_tys[0] = List_T;
+    error = gib_info_table_insert_packed_dcon(List_T, 1, 8, 1, 1, field_tys, 1);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -162,8 +154,15 @@ void info_table_initialize(void)
                 error, List_T, 0);
         exit(1);
     }
-    field_tys[0] = GibInt_T;
-    error = gib_info_table_insert_packed_dcon(Tree_T, 0, 8, 1, 0, field_tys, 1);
+    error = gib_info_table_insert_packed_dcon(List_T, 255, 8, 1, 0, field_tys,
+                                              0);
+    if (error < 0) {
+        fprintf(stderr,
+                "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
+                error, List_T, 255);
+        exit(1);
+    }
+    error = gib_info_table_insert_packed_dcon(Tree_T, 0, 8, 1, 0, field_tys, 0);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -179,7 +178,14 @@ void info_table_initialize(void)
                 error, Tree_T, 1);
         exit(1);
     }
-
+    error = gib_info_table_insert_packed_dcon(Tree_T, 255, 8, 1, 0, field_tys,
+                                              0);
+    if (error < 0) {
+        fprintf(stderr,
+                "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
+                error, Tree_T, 255);
+        exit(1);
+    }
     gib_info_table_finalize();
 }
 void symbol_table_initialize(void)

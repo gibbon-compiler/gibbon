@@ -348,7 +348,8 @@ initInfoTable info_tbl =
     let info_table_len = length info_tbl + length builtinFieldTys
         body =  [ C.BlockDecl [cdecl| int error = gib_info_table_initialize($int:info_table_len); |]
                 , C.BlockStm [cstm| if (error < 0) { fprintf(stderr, "Couldn't initialize info table, errorno=%d", error); exit(1); } |]
-                ]  ++ insert_scalar_info ++
+                ]  ++
+                -- insert_scalar_info ++
                 [ C.BlockDecl [cdecl| typename GibDatatype field_tys[$int:max_fields]; |] ] ++ insert_dcon_info ++
                 [C.BlockStm [cstm| gib_info_table_finalize(); |] ]
         fun = [cfun| void info_table_initialize(void) { $items:body } |]
@@ -363,7 +364,8 @@ initInfoTable info_tbl =
                                                  tyc_info)
                          0
                          info_tbl
-    insert_scalar_info = map (\ty -> let ty_t = ty ++ "_T" in C.BlockStm [cstm| gib_info_table_insert_scalar($id:ty_t, sizeof($id:ty)); |]) builtinFieldTys
+    _insert_scalar_info = map (\ty -> let ty_t = ty ++ "_T" in C.BlockStm [cstm| gib_info_table_insert_scalar($id:ty_t, sizeof($id:ty)); |]) builtinFieldTys
+
     insert_dcon_info = M.foldrWithKey
                            (\tycon tyc_info acc ->
                                 M.foldrWithKey (\dcon (DataConInfo dcon_tag scalar_bytes num_scalars num_packed field_tys) acc2 ->
@@ -376,9 +378,9 @@ initInfoTable info_tbl =
                                                                                ++ "_T"
                                                                          e = (C.Id ty' noLoc)
                                                                      in C.BlockStm [cstm| field_tys[$int:i] = ($id:e); |])
-                                                                (zip field_tys [0..])
+                                                                (zip (filter GL.isPackedTy field_tys) [0..])
                                                         tycon' = tycon ++ "_T"
-                                                        insert_into_tbl = [ C.BlockStm [cstm| error = gib_info_table_insert_packed_dcon($id:tycon', $int:dcon_tag, $int:scalar_bytes, $int:num_scalars, $int:num_packed, field_tys, $int:(num_scalars+num_packed)); |]
+                                                        insert_into_tbl = [ C.BlockStm [cstm| error = gib_info_table_insert_packed_dcon($id:tycon', $int:dcon_tag, $int:scalar_bytes, $int:num_scalars, $int:num_packed, field_tys, $int:(num_packed)); |]
                                                                           , C.BlockStm [cstm| if (error < 0) { fprintf(stderr, "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d", error, $id:tycon', $int:dcon_tag); exit(1); } |] ]
                                              in set_field_tys ++ insert_into_tbl ++ acc2)
                                         acc

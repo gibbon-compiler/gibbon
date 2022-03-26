@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::mem::size_of;
-use std::ptr::{copy_nonoverlapping, null_mut, write_bytes};
+use std::ptr::{null_mut, write_bytes};
 
 use crate::ffi::types::*;
 use crate::tagged_pointer::*;
@@ -465,63 +465,37 @@ unsafe fn evacuate_remembered_set(
     let frames = sort_roots(rem_set);
     for frame in frames {
         let datatype = (*frame).datatype;
-        match INFO_TABLE.get_unchecked(datatype as usize) {
-            // A scalar type that can be copied directly.
-            DatatypeInfo::Scalar(size) => {
-                // Allocate space in the destination.
-                // Reserve additional space for a redirection node or a
-                // forwarding pointer.
-                let (dst, dst_end) =
-                    Heap::allocate_first_chunk(heap, 32 + *size, 1)?;
-                // The remembered set contains the address of the indirection
-                // pointer. We must read it to get the address of the pointed-to
-                // data.
-                let (src, _): (*mut i8, _) = read((*frame).ptr);
-                // Evacuate the data.
-                copy_nonoverlapping(src, dst, *size);
-                // Update the indirection pointer in oldgen region.
-                write((*frame).ptr, dst);
-                // Update the outset in oldgen region.
-                add_to_outset((*frame).endptr, dst_end);
-                // Update the burned address table.
-                benv.insert(src, src.add(*size));
-            }
-            // A packed type that is copied by referring to the info table.
-            DatatypeInfo::Packed(packed_info) => {
-                // Allocate space in the destination.
-                let (dst, dst_end) =
-                    Heap::allocate_first_chunk(heap, CHUNK_SIZE, 1)?;
-                // The remembered set contains the address where the indirect-
-                // ion pointer is stored. We must read it to get the address of
-                // the pointed-to data.
-                let (src, _): (*mut i8, _) = read((*frame).ptr);
-                // Evacuate the data.
-                let mut st = EvacState {
-                    benv: &mut benv,
-                    cenv,
-                    chunk_starts,
-                    zct,
-                    nursery,
-                    prov: &GcRootProv::RemSet,
-                };
-                let (src_after, _dst_after, _dst_after_end, _tag) =
-                    evacuate_packed(
-                        &mut st,
-                        heap,
-                        packed_info,
-                        src,
-                        dst,
-                        dst_end,
-                        evac_major,
-                    );
-                // Update the indirection pointer in oldgen region.
-                write((*frame).ptr, dst);
-                // Update the outset in oldgen region.
-                add_to_outset((*frame).endptr, dst_end);
-                // Update the burned address table.
-                benv.insert(src, src_after);
-            }
-        }
+        let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
+        // Allocate space in the destination.
+        let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 1)?;
+        // The remembered set contains the address where the indirect-
+        // ion pointer is stored. We must read it to get the address of
+        // the pointed-to data.
+        let (src, _): (*mut i8, _) = read((*frame).ptr);
+        // Evacuate the data.
+        let mut st = EvacState {
+            benv: &mut benv,
+            cenv,
+            chunk_starts,
+            zct,
+            nursery,
+            prov: &GcRootProv::RemSet,
+        };
+        let (src_after, _dst_after, _dst_after_end, _tag) = evacuate_packed(
+            &mut st,
+            heap,
+            packed_info,
+            src,
+            dst,
+            dst_end,
+            evac_major,
+        );
+        // Update the indirection pointer in oldgen region.
+        write((*frame).ptr, dst);
+        // Update the outset in oldgen region.
+        add_to_outset((*frame).endptr, dst_end);
+        // Update the burned address table.
+        benv.insert(src, src_after);
     }
     Ok(benv)
 }
@@ -549,75 +523,51 @@ unsafe fn evacuate_shadowstack(
             continue;
         }
         let datatype = (*frame).datatype;
-        match INFO_TABLE.get_unchecked(datatype as usize) {
-            // A scalar type that can be copied directly.
-            DatatypeInfo::Scalar(size) => {
-                // Allocate space in the destination.
-                // Reserve additional space for a redirection node or a
-                // forwarding pointer.
-                let (dst, dst_end) =
-                    Heap::allocate_first_chunk(heap, 32 + *size, 0)?;
-                // Evacuate the data.
-                let src = (*frame).ptr;
-                copy_nonoverlapping(src, dst, *size);
-                // Update the pointers in shadow-stack.
-                (*frame).ptr = dst;
-                (*frame).endptr = dst_end;
-                // Update ZCT.
-                let footer = dst_end as *const C_GibChunkFooter;
-                (*zct).insert((*footer).reg_info);
-            }
-            // A packed type that is copied by referring to the info table.
-            DatatypeInfo::Packed(packed_info) => {
-                // Allocate space in the destination.
-                let (dst, dst_end) =
-                    Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
-                // Update ZCT.
-                let footer = dst_end as *const C_GibChunkFooter;
-                (*zct).insert((*footer).reg_info);
-                // Evacuate the data.
-                let mut st = EvacState {
-                    benv,
-                    cenv,
-                    chunk_starts,
-                    zct,
-                    nursery,
-                    prov: &GcRootProv::Stk,
-                };
-                let src = (*frame).ptr;
-                let (src_after, dst_after, dst_after_end, tag) =
-                    evacuate_packed(
-                        &mut st,
-                        heap,
-                        packed_info,
-                        src,
-                        dst,
-                        dst_end,
-                        evac_major,
+        let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
+
+        // Allocate space in the destination.
+        let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
+        // Update ZCT.
+        let footer = dst_end as *const C_GibChunkFooter;
+        (*zct).insert((*footer).reg_info);
+        // Evacuate the data.
+        let mut st = EvacState {
+            benv,
+            cenv,
+            chunk_starts,
+            zct,
+            nursery,
+            prov: &GcRootProv::Stk,
+        };
+        let src = (*frame).ptr;
+        let (src_after, dst_after, dst_after_end, tag) = evacuate_packed(
+            &mut st,
+            heap,
+            packed_info,
+            src,
+            dst,
+            dst_end,
+            evac_major,
+        );
+        // Update the pointers in shadow-stack.
+        (*frame).ptr = dst;
+        // TODO(ckoparkar): AUDITME.
+        // (*frame).endptr = dst_after_end;
+        (*frame).endptr = dst_end;
+        // Note [Adding a forwarding pointer at the end of every chunk].
+        match tag {
+            C_COPIED_TO_TAG | C_COPIED_TAG | C_REDIRECTION_TAG => {}
+            _ => {
+                if chunk_starts.contains(&src) || tag == C_CAUTERIZED_TAG {
+                    assert!(dst_after < dst_after_end);
+                    write_forwarding_pointer_at(
+                        src_after,
+                        dst_after,
+                        dst_after_end
+                            .offset_from(dst_after)
+                            .try_into()
+                            .unwrap(),
                     );
-                // Update the pointers in shadow-stack.
-                (*frame).ptr = dst;
-                // TODO(ckoparkar): AUDITME.
-                // (*frame).endptr = dst_after_end;
-                (*frame).endptr = dst_end;
-                // Note [Adding a forwarding pointer at the end of every chunk].
-                match tag {
-                    C_COPIED_TO_TAG | C_COPIED_TAG | C_REDIRECTION_TAG => {}
-                    _ => {
-                        if chunk_starts.contains(&src)
-                            || tag == C_CAUTERIZED_TAG
-                        {
-                            assert!(dst_after < dst_after_end);
-                            write_forwarding_pointer_at(
-                                src_after,
-                                dst_after,
-                                dst_after_end
-                                    .offset_from(dst_after)
-                                    .try_into()
-                                    .unwrap(),
-                            );
-                        }
-                    }
                 }
             }
         }
@@ -959,29 +909,17 @@ unsafe fn evacuate_packed(
                 // TODO(ckoparkar):
                 // (1) instead of recursion, use a worklist
                 // (2) handle redirection nodes properly
-                for ty in field_tys.iter().skip((*num_scalars) as usize) {
-                    let (src1, dst1, dst_end1, field_tag) = match INFO_TABLE
-                        .get_unchecked(*ty as usize)
-                    {
-                        DatatypeInfo::Packed(packed_info) => evacuate_packed(
-                            st,
-                            heap,
-                            packed_info,
-                            src_mut,
-                            dst_mut,
-                            dst_end_mut,
-                            evac_major,
-                        ),
-                        DatatypeInfo::Scalar(size) => {
-                            copy_nonoverlapping(src_mut, dst_mut, *size);
-                            (
-                                src_mut.add(*size),
-                                dst_mut.add(*size),
-                                dst_end_mut,
-                                C_SCALAR_TAG,
-                            )
-                        }
-                    };
+                for ty in field_tys.iter() {
+                    let packed_info = INFO_TABLE.get_unchecked(*ty as usize);
+                    let (src1, dst1, dst_end1, field_tag) = evacuate_packed(
+                        st,
+                        heap,
+                        packed_info,
+                        src_mut,
+                        dst_mut,
+                        dst_end_mut,
+                        evac_major,
+                    );
                     match field_tag {
                         // Immediately stop copying upon reaching the
                         // cauterized tag.
@@ -1698,12 +1636,7 @@ pub fn info_table_insert_scalar(datatype: C_GibDatatype, size: usize) {
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 type DataconEnv = &'static [DataconInfo];
 type DatatypeEnv = &'static [DatatypeInfo];
-
-#[derive(Debug, Clone)]
-enum DatatypeInfo {
-    Scalar(usize),
-    Packed(DataconEnv),
-}
+type DatatypeInfo = DataconEnv;
 
 /// The global info table.
 static mut INFO_TABLE: &[DatatypeInfo] = &[];
@@ -1716,16 +1649,15 @@ pub fn info_table_finalize() {
         let mut info_table_alloc = info_table;
         for ty in _INFO_TABLE.iter() {
             match ty {
-                _DatatypeInfo::_Scalar(size) => {
-                    let ty_info = DatatypeInfo::Scalar(*size);
-                    // info_table_alloc.write_unaligned(ty_info);
-                    *info_table_alloc = ty_info;
+                _DatatypeInfo::_Scalar(_size) => {
+                    // let ty_info = DatatypeInfo::Scalar(*size);
+                    // // info_table_alloc.write_unaligned(ty_info);
+                    // *info_table_alloc = ty_info;
                     info_table_alloc = info_table_alloc.add(1);
                 }
                 _DatatypeInfo::_Packed(_packed_info) => {
                     let packed_info = &_packed_info[..];
-                    let ty_info = DatatypeInfo::Packed(packed_info);
-                    *info_table_alloc = ty_info;
+                    *info_table_alloc = packed_info;
                     info_table_alloc = info_table_alloc.add(1);
                 }
             }
