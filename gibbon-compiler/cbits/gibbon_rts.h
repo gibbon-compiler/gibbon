@@ -521,7 +521,7 @@ void gib_gc_free_state(GibGcStateSnapshot *snapshot);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-int gib_info_table_initialize(void);
+int gib_info_table_initialize(size_t size);
 int gib_info_table_insert_scalar(uint32_t datatype, size_t size);
 int gib_info_table_insert_packed_dcon(
     uint32_t datatype,

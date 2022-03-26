@@ -125,16 +125,9 @@ use crate::gc;
 #[no_mangle]
 /// The user is responsible for initializing the info table before
 /// calling the get/set methods on it.
-pub extern "C" fn gib_info_table_initialize() -> i32 {
-    match gc::info_table_initialize() {
-        Ok(()) => 0,
-        Err(err) => {
-            if cfg!(debug_assertions) {
-                println!("{:?}", err);
-            }
-            -1
-        }
-    }
+pub extern "C" fn gib_info_table_initialize(size: usize) -> i32 {
+    gc::info_table_initialize(size);
+    0
 }
 
 #[no_mangle]
@@ -174,15 +167,8 @@ pub extern "C" fn gib_info_table_insert_scalar(
     datatype: C_GibDatatype,
     size: usize,
 ) -> i32 {
-    match gc::info_table_insert_scalar(datatype, size) {
-        Ok(()) => 0,
-        Err(err) => {
-            if cfg!(debug_assertions) {
-                println!("{:?}", err);
-            }
-            -1
-        }
-    }
+    gc::info_table_insert_scalar(datatype, size);
+    0
 }
 
 #[no_mangle]

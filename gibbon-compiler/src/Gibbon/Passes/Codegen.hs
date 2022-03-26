@@ -345,7 +345,8 @@ initSymTable sym_tbl =
 
 initInfoTable :: InfoTable -> C.Definition
 initInfoTable info_tbl =
-    let body =  [ C.BlockDecl [cdecl| int error = gib_info_table_initialize(); |]
+    let info_table_len = length info_tbl + length builtinFieldTys
+        body =  [ C.BlockDecl [cdecl| int error = gib_info_table_initialize($int:info_table_len); |]
                 , C.BlockStm [cstm| if (error < 0) { fprintf(stderr, "Couldn't initialize info table, errorno=%d", error); exit(1); } |]
                 ]  ++ insert_scalar_info ++
                 [ C.BlockDecl [cdecl| typename GibDatatype field_tys[$int:max_fields]; |] ] ++ insert_dcon_info

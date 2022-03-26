@@ -11,7 +11,6 @@ use libc;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
-use std::lazy::OnceCell;
 use std::mem::size_of;
 use std::ptr::{copy_nonoverlapping, null_mut, write_bytes};
 
@@ -279,9 +278,10 @@ pub fn cleanup(
     nursery_ptr: *mut C_GibNursery,
     generations_ptr: *mut C_GibGeneration,
 ) -> Result<()> {
-    // Free the info table.
     unsafe {
-        drop(INFO_TABLE.take());
+        // Free the info table.
+        INFO_TABLE.drain(..);
+        INFO_TABLE.shrink_to_fit();
     }
     // Free all the regions.
     let mut oldest_gen = OldestGeneration(generations_ptr);
@@ -465,15 +465,9 @@ unsafe fn evacuate_remembered_set(
     let frames = sort_roots(rem_set);
     for frame in frames {
         let datatype = (*frame).datatype;
-        match INFO_TABLE.get().unwrap().get(&datatype) {
-            None => {
-                return Err(RtsError::Gc(format!(
-                    "copy_readers: Unknown datatype, {:?}",
-                    datatype
-                )));
-            }
+        match INFO_TABLE.get_unchecked(datatype as usize) {
             // A scalar type that can be copied directly.
-            Some(DatatypeInfo::Scalar(size)) => {
+            DatatypeInfo::Scalar(size) => {
                 // Allocate space in the destination.
                 // Reserve additional space for a redirection node or a
                 // forwarding pointer.
@@ -493,7 +487,7 @@ unsafe fn evacuate_remembered_set(
                 benv.insert(src, src.add(*size));
             }
             // A packed type that is copied by referring to the info table.
-            Some(DatatypeInfo::Packed(packed_info)) => {
+            DatatypeInfo::Packed(packed_info) => {
                 // Allocate space in the destination.
                 let (dst, dst_end) =
                     Heap::allocate_first_chunk(heap, CHUNK_SIZE, 1)?;
@@ -555,15 +549,9 @@ unsafe fn evacuate_shadowstack(
             continue;
         }
         let datatype = (*frame).datatype;
-        match INFO_TABLE.get().unwrap().get(&datatype) {
-            None => {
-                return Err(RtsError::Gc(format!(
-                    "copy_readers: Unknown datatype, {:?}",
-                    datatype
-                )));
-            }
+        match INFO_TABLE.get_unchecked(datatype as usize) {
             // A scalar type that can be copied directly.
-            Some(DatatypeInfo::Scalar(size)) => {
+            DatatypeInfo::Scalar(size) => {
                 // Allocate space in the destination.
                 // Reserve additional space for a redirection node or a
                 // forwarding pointer.
@@ -580,7 +568,7 @@ unsafe fn evacuate_shadowstack(
                 (*zct).insert((*footer).reg_info);
             }
             // A packed type that is copied by referring to the info table.
-            Some(DatatypeInfo::Packed(packed_info)) => {
+            DatatypeInfo::Packed(packed_info) => {
                 // Allocate space in the destination.
                 let (dst, dst_end) =
                     Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
@@ -930,7 +918,7 @@ unsafe fn evacuate_packed(
         // Regular datatype, copy.
         _ => {
             let DataconInfo { scalar_bytes, field_tys, num_scalars, .. } =
-                packed_info.get(&tag).unwrap();
+                packed_info.get_unchecked(tag as usize);
 
             // Check bound of the destination buffer before copying.
             // Reserve additional space for a redirection node or a
@@ -972,32 +960,28 @@ unsafe fn evacuate_packed(
                 // (1) instead of recursion, use a worklist
                 // (2) handle redirection nodes properly
                 for ty in field_tys.iter().skip((*num_scalars) as usize) {
-                    let (src1, dst1, dst_end1, field_tag) =
-                        match INFO_TABLE.get().unwrap().get(ty) {
-                            Some(DatatypeInfo::Packed(packed_info)) => {
-                                evacuate_packed(
-                                    st,
-                                    heap,
-                                    packed_info,
-                                    src_mut,
-                                    dst_mut,
-                                    dst_end_mut,
-                                    evac_major,
-                                )
-                            }
-                            Some(DatatypeInfo::Scalar(size)) => {
-                                copy_nonoverlapping(src_mut, dst_mut, *size);
-                                (
-                                    src_mut.add(*size),
-                                    dst_mut.add(*size),
-                                    dst_end_mut,
-                                    C_SCALAR_TAG,
-                                )
-                            }
-                            None => {
-                                panic!("evacuate: Unknown datatype, {:?}", ty);
-                            }
-                        };
+                    let (src1, dst1, dst_end1, field_tag) = match INFO_TABLE
+                        .get_unchecked(*ty as usize)
+                    {
+                        DatatypeInfo::Packed(packed_info) => evacuate_packed(
+                            st,
+                            heap,
+                            packed_info,
+                            src_mut,
+                            dst_mut,
+                            dst_end_mut,
+                            evac_major,
+                        ),
+                        DatatypeInfo::Scalar(size) => {
+                            copy_nonoverlapping(src_mut, dst_mut, *size);
+                            (
+                                src_mut.add(*size),
+                                dst_mut.add(*size),
+                                dst_end_mut,
+                                C_SCALAR_TAG,
+                            )
+                        }
+                    };
                     match field_tag {
                         // Immediately stop copying upon reaching the
                         // cauterized tag.
@@ -1645,10 +1629,10 @@ use Shadowstack as RememberedSet;
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-type DataconEnv = HashMap<C_GibPackedTag, DataconInfo>;
-type DatatypeEnv = HashMap<C_GibDatatype, DatatypeInfo>;
+type DataconEnv = Vec<DataconInfo>;
+type DatatypeEnv = Vec<DatatypeInfo>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct DataconInfo {
     /// Bytes before the first packed field.
     scalar_bytes: usize,
@@ -1660,24 +1644,21 @@ struct DataconInfo {
     field_tys: Vec<C_GibDatatype>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum DatatypeInfo {
     Scalar(usize),
     Packed(DataconEnv),
 }
 
 /// The global info table.
-static mut INFO_TABLE: OnceCell<DatatypeEnv> = OnceCell::new();
+static mut INFO_TABLE: DatatypeEnv = Vec::new();
 
 #[inline]
-pub fn info_table_initialize() -> Result<()> {
+pub fn info_table_initialize(size: usize) {
     unsafe {
-        match INFO_TABLE.set(HashMap::new()) {
-            Ok(()) => Ok(()),
-            Err(_) => Err(RtsError::InfoTable(
-                "Couldn't initialize info-table.".to_string(),
-            )),
-        }
+        // If a datatype is not packed, info_table_insert_scalar will
+        // overwrite this entry.
+        INFO_TABLE = vec![DatatypeInfo::Packed(Vec::new()); size];
     }
 }
 
@@ -1690,58 +1671,28 @@ pub fn info_table_insert_packed_dcon(
     num_packed: u8,
     field_tys: Vec<C_GibDatatype>,
 ) -> Result<()> {
-    let tbl = unsafe {
-        match INFO_TABLE.get_mut() {
-            None => {
-                return Err(RtsError::InfoTable(
-                    "INFO_TABLE not initialized.".to_string(),
-                ));
-            }
-            Some(tbl) => tbl,
-        }
-    };
-    match tbl.entry(datatype).or_insert(DatatypeInfo::Packed(HashMap::new())) {
+    let dcon_info =
+        DataconInfo { scalar_bytes, num_scalars, num_packed, field_tys };
+    let entry = unsafe { INFO_TABLE.get_unchecked_mut(datatype as usize) };
+    match entry {
         DatatypeInfo::Packed(packed_info) => {
-            if packed_info.contains_key(&datacon) {
-                return Err(RtsError::InfoTable(format!(
-                    "Data constructor {} already present in the info-table.",
-                    datacon
-                )));
+            while packed_info.len() <= datacon.into() {
+                packed_info.push(dcon_info.clone());
             }
-            packed_info.insert(
-                datacon,
-                DataconInfo {
-                    scalar_bytes,
-                    num_scalars,
-                    num_packed,
-                    field_tys,
-                },
-            );
+            packed_info[datacon as usize] = dcon_info;
             Ok(())
         }
         DatatypeInfo::Scalar(_) => Err(RtsError::InfoTable(format!(
-            "Expected a packed info-table entry for datatype {:?}, got scalar.",
+            "Expected a packed entry for datatype {:?}, got a scalar.",
             datatype
         ))),
     }
 }
 
-pub fn info_table_insert_scalar(
-    datatype: C_GibDatatype,
-    size: usize,
-) -> Result<()> {
-    let tbl = unsafe {
-        match INFO_TABLE.get_mut() {
-            None => {
-                return Err(RtsError::InfoTable(
-                    "INFO_TABLE not initialized.".to_string(),
-                ));
-            }
-            Some(tbl) => tbl,
-        }
-    };
-    tbl.insert(datatype, DatatypeInfo::Scalar(size));
-    Ok(())
+pub fn info_table_insert_scalar(datatype: C_GibDatatype, size: usize) {
+    unsafe {
+        INFO_TABLE[datatype as usize] = DatatypeInfo::Scalar(size);
+    }
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -130,7 +130,7 @@ typedef enum {
         } GibDatatype;
 void info_table_initialize(void)
 {
-    int error = gib_info_table_initialize();
+    int error = gib_info_table_initialize(9);
 
     if (error < 0) {
         fprintf(stderr, "Couldn't initialize info table, errorno=%d", error);
@@ -142,6 +142,7 @@ void info_table_initialize(void)
     gib_info_table_insert_scalar(GibBool_T, sizeof(GibBool));
     gib_info_table_insert_scalar(GibVector_T, sizeof(GibVector));
     gib_info_table_insert_scalar(GibList_T, sizeof(GibList));
+    gib_info_table_insert_scalar(GibCursor_T, sizeof(GibCursor));
 
     GibDatatype field_tys[2];
 
