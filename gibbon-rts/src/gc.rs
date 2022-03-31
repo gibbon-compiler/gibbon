@@ -1247,7 +1247,8 @@ impl Nursery {
             );
             while run_ptr < end_ptr {
                 let (chunk_start_addr, next): (*mut i8, _) = read(run_ptr);
-                chunk_starts.insert(chunk_start_addr);
+                // TODO(ckoparkar): This is EXPENSIVE. Find an alternative.
+                // chunk_starts.insert(chunk_start_addr);
                 run_ptr = next;
             }
         }
