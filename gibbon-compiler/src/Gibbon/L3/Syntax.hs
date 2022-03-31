@@ -86,7 +86,7 @@ data E3Ext loc dec =
   | RetE [(PreExp E3Ext loc dec)]  -- ^ Analogous to L2's RetE.
   | GetCilkWorkerNum               -- ^ Translates to  __cilkrts_get_worker_number().
   | LetAvail [Var] (PreExp E3Ext loc dec) -- ^ These variables are available to use before the join point
-  | AllocateTagHere Var -- ^ Analogous to L2's extension.
+  | AllocateTagHere Var TyCon -- ^ Analogous to L2's extension.
   | AllocateScalarsHere Var -- ^ Analogous to L2's extension.
   | StartTagAllocation Var -- ^ Marks the beginning of tag allocation.
   | EndTagAllocation Var -- ^ Marks the end of tag allocation.
@@ -128,7 +128,7 @@ instance FreeVars (E3Ext l d) where
       LetAvail ls b      -> (S.fromList ls) `S.union` gFreeVars b
       ReadVector{} -> error "gFreeVars: ReadVector"
       WriteVector{} -> error "gFreeVars: WriteVector"
-      AllocateTagHere v -> S.singleton v
+      AllocateTagHere v _ -> S.singleton v
       AllocateScalarsHere v -> S.singleton v
       StartTagAllocation v -> S.singleton v
       EndTagAllocation v -> S.singleton v
@@ -211,7 +211,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       RetE ls            -> RetE (L.map go ls)
       GetCilkWorkerNum   -> GetCilkWorkerNum
       LetAvail ls b      -> LetAvail (L.map go ls) (go b)
-      AllocateTagHere v  -> AllocateTagHere (go v)
+      AllocateTagHere v tycon -> AllocateTagHere (go v) tycon
       AllocateScalarsHere v  -> AllocateScalarsHere (go v)
       StartTagAllocation v -> StartTagAllocation (go v)
       EndTagAllocation v -> EndTagAllocation (go v)

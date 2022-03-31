@@ -227,8 +227,8 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
        LetE (v, newretlocs,ty, rhs') <$>
          threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv rlocs_env wlocs_env bod
 
-    LetE (v,locs,ty,rhs@(Ext (AllocateTagHere x))) bod -> do
-      let x_tycon = (wlocs_env # x)
+    LetE (v,locs,ty,rhs@(Ext (AllocateTagHere x x_tycon))) bod -> do
+      let -- x_tycon = (wlocs_env # x)
           rlocs_env' = M.insert x x_tycon rlocs_env
           wlocs_env' = M.delete x wlocs_env
       (LetE (v,locs,ty,rhs)) <$>

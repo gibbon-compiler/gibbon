@@ -358,7 +358,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
 
         LetAvail vs bod  -> Ext <$> L3.LetAvail vs <$> go bod
 
-        AllocateTagHere v -> pure $ Ext $ L3.AllocateTagHere v
+        AllocateTagHere v tycon -> pure $ Ext $ L3.AllocateTagHere v tycon
 
         AllocateScalarsHere v -> pure $ Ext $ L3.AllocateScalarsHere v
 
@@ -602,7 +602,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
         LetAvail vs bod  -> do
           onDi (Ext . L3.LetAvail vs) <$> go tenv senv bod
 
-        AllocateTagHere v -> pure <$> dl <$> Ext $ L3.AllocateTagHere v
+        AllocateTagHere v tycon -> pure <$> dl <$> Ext $ L3.AllocateTagHere v tycon
 
         AllocateScalarsHere v -> pure <$> dl <$> Ext $ L3.AllocateScalarsHere v
 

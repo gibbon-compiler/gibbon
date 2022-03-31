@@ -212,7 +212,7 @@ codegenProg cfg prg@(Prog info_tbl sym_tbl funs mtal) =
                _ -> pure []
         let init_info_table = [ C.BlockStm [cstm| info_table_initialize(); |] ]
             init_symbol_table = [ C.BlockStm [cstm| symbol_table_initialize(); |] ]
-        let bod = init_info_table ++ init_symbol_table ++ e
+        let bod = init_info_table ++ init_symbol_table ++ ssDecls ++ e
         pure $ C.FuncDef [cfun| int gib_main_expr(void) { $items:bod } |] noLoc
 
       codegenFun' :: FunDecl -> PassM C.Func

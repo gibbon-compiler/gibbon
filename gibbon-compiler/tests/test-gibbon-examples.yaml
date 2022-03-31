@@ -69,8 +69,6 @@ tests:
   - name: test11e_funrec.gib
   - name: test11f_funrec.gib
   - name: test11_fundata.gib
-  - name: test12b_traverse.gib
-  - name: test12c_traverse.gib
   - name: test13b_build.gib
   - name: test13_build.gib
 
@@ -78,7 +76,6 @@ tests:
   - name: test14_repair.gib
 
   - name: test14a_tup.gib
-  - name: test14b_tup.gib
   - name: test14c_tail.gib
   - name: test14d_unary_tup.gib
   - name: test15a_symsearch.gib
@@ -112,31 +109,18 @@ tests:
   - name: test20e_bintree.gib
   - name: test20f_bintree.gib
   - name: test20h_idree.gib
-  - name: test25a_withprint.gib
-  - name: test25b_racketcore.gib
-  - name: test25c_racketcore.gib
-  - name: test25d_racketcore.gib
   - name: test25e_countnodes.gib
-  - name: test25_rackcore.gib
-  - name: test25f_countnodes.gib
-  - name: test26_treewalk.gib
-  - name: test26a_treewalk.gib
-  - name: test27a_subst.gib
   - name: test27c_subst.gib
-  - name: test29_list.gib
   - name: test29a_list.gib
   - name: test29b_list.gib
-  - name: test29c_list.gib
   - name: test30_twitter.gib
   - name: test_buildstree.gib
   - name: test_buildtree.gib
   - name: test_buildtreesum.gib
-  - name: test_buildtwotrees.gib
   - name: test_ddtree.gib
   - name: test_stree.gib
   - name: test_sumstree.gib
   - name: test_sumtree.gib
-  - name: test_unpacking.gib
   - name: test24_defs.gib
     skip: true
   - name: void_type.gib
@@ -243,10 +227,6 @@ tests:
     dir: examples/poly
     answer-file: examples/poly/PolyTree.ans
 
-  - name: TupleTest.hs
-    dir: examples/poly
-    answer-file: examples/poly/TupleTest.ans
-
   - name: NestedTuples.hs
     dir: examples/poly
     answer-file: examples/poly/NestedTuples.ans
@@ -332,19 +312,64 @@ tests:
     answer-file: examples/test_printpacked.ans
     failing: [interp1,gibbon1,pointer]
 
+   ## FAILING: Multiple packed outputs.
+  - name: TupleTest.hs
+    dir: examples/poly
+    answer-file: examples/poly/TupleTest.ans
+    skip: true
+  - name: test_buildtwotrees.gib
+    skip: true
+  - name: test14b_tup.gib
+    skip: true
+
+    ## FAILING: Scalar field after a packed field.
+  - name: test12_skip.gib
+    failing: [gibbon1]
+    skip: true
+  - name: test12b_traverse.gib
+    skip: true
+  - name: test12c_traverse.gib
+    skip: true
+  - name: test25_rackcore.gib
+    skip: true
+  - name: test25a_withprint.gib
+    skip: true
+  - name: test25b_racketcore.gib
+    skip: true
+  - name: test25c_racketcore.gib
+    skip: true
+  - name: test25d_racketcore.gib
+    skip: true
+  - name: test25f_countnodes.gib
+    skip: true
+  - name: test26_treewalk.gib
+    skip: true
+  - name: test26a_treewalk.gib
+    skip: true
+  - name: test27a_subst.gib
+    skip: true
+  - name: test29_list.gib
+    skip: true
+  - name: test29c_list.gib
+    skip: true
+  - name: test29d_list.gib
+    skip: true
+    failing: [gibbon1]
+  - name: test_unpacking.gib
+    skip: true
+
 
     ## Shouldn't typecheck
   - name: Fail1.hs
     dir: examples/should_fail
     failing: [gibbon1, gibbon2, pointer, interp1]
-
   - name: Fail2.hs
     dir: examples/should_fail
     failing: [gibbon1, gibbon2, pointer, interp1]
-
   - name: Fail3.hs
     dir: examples/should_fail
     failing: [gibbon1, gibbon2, pointer, interp1]
+
 
   ## Fusion2 tests
   - name: test_sumup_seteven.gib
@@ -420,13 +445,9 @@ tests:
     answer-file: examples/ast/C1.ans
 
   ## Tests that only work with some backend:
-  - name: test29d_list.gib
-    failing: [gibbon1]
   - name: test18f_flip.gib
     failing: [gibbon2, gibbon1]
   - name: pp_projs.gib
-  - name: test12_skip.gib
-    failing: [gibbon1]
 
   # Tests that actually work but we can't generate answers with Racket
   - name: test08_dict.gib

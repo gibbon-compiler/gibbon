@@ -97,7 +97,7 @@ data E2Ext loc dec
   | GetCilkWorkerNum
     -- ^ Translates to  __cilkrts_get_worker_number().
   | LetAvail [Var] (E2 loc dec) -- ^ These variables are available to use before the join point.
-  | AllocateTagHere LocVar
+  | AllocateTagHere LocVar TyCon
   | AllocateScalarsHere LocVar
     -- ^ A marker which tells subsequent a compiler pass where to
     -- move the tag and scalar field allocations so that they happen
@@ -809,11 +809,12 @@ allFreeVars ex =
   case ex of
     AppE _ locs args -> S.fromList locs `S.union` (S.unions (map allFreeVars args))
     PrimAppE _ args -> (S.unions (map allFreeVars args))
-    LetE (_,locs,_,rhs) bod -> S.fromList locs `S.union` (allFreeVars rhs) `S.union` (allFreeVars bod)
+    LetE (v,locs,_,rhs) bod -> (S.fromList locs `S.union` (allFreeVars rhs) `S.union` (allFreeVars bod))
+                               `S.difference` S.singleton v
     IfE a b c -> allFreeVars a `S.union` allFreeVars b `S.union` allFreeVars c
     MkProdE args -> (S.unions (map allFreeVars args))
     ProjE _ bod -> allFreeVars bod
-    CaseE scrt brs -> (allFreeVars scrt) `S.union` (S.unions (map (\(_,_,c) -> allFreeVars c) brs))
+    CaseE scrt brs -> (allFreeVars scrt) `S.union` (S.unions (map (\(_,vlocs,c) -> allFreeVars c `S.difference` S.fromList (map fst vlocs)) brs))
     DataConE loc _ args -> S.singleton loc `S.union` (S.unions (map allFreeVars args))
     TimeIt e _ _ -> allFreeVars e
     WithArenaE _ e -> allFreeVars e
@@ -830,7 +831,7 @@ allFreeVars ex =
         AddFixed v _    -> S.singleton v
         GetCilkWorkerNum-> S.empty
         LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod
-        AllocateTagHere loc -> S.singleton loc
+        AllocateTagHere loc _ -> S.singleton loc
         AllocateScalarsHere loc -> S.singleton loc
         SSPush _ a b _ -> S.fromList [a,b]
         SSPop _ a b -> S.fromList [a,b]

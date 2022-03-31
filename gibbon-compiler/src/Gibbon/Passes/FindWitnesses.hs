@@ -200,7 +200,8 @@ mapMExprs fn (Prog ddfs fundefs mainExp) =
   Prog ddfs <$>
     (mapM (\f@FunDef{funArgs,funTy,funBody} ->
               let env = Env2 (Map.fromList $ zip funArgs (inTys funTy)) funEnv
-                  boundlocs = Set.fromList (allLocVars funTy)
+                  boundlocs = Set.fromList (allLocVars funTy) `Set.union`
+                              Set.fromList funArgs
               in do
                 bod' <- fn env boundlocs funBody
                 return $ f { funBody =  bod' })

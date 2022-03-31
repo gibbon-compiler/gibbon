@@ -55,36 +55,25 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
         LetE (v,locs,ty,rhs) bod -> do
           let env2' = extendVEnv v ty env2
           case (L2.locsInTy ty) of
-            -- scalar type
             [] -> (LetE (v,locs,ty,rhs)) <$> (go reg_env alloc_env store_env env2' bod)
-              -- case M.lookup v store_env of
-              --   Nothing -> (LetE (v,locs,ty,rhs)) <$> (go reg_env alloc_env store_env env2' bod)
-              --   Just tagloc -> do
-              --     start_scalars_alloc <- gensym "start_scalars_alloc"
-              --     end_scalars_alloc <- gensym "end_scalars_alloc"
-              --     bod' <- (go reg_env alloc_env store_env env2' bod)
-              --     pure $
-              --       LetE (start_scalars_alloc,[],ProdTy [],Ext $ L2.StartScalarsAllocation tagloc) $
-              --       LetE (v,locs,ty,rhs) $
-              --       LetE (end_scalars_alloc,[],ProdTy [],Ext $ L2.EndScalarsAllocation tagloc) $
-              --       bod'
-            [one] -> let (is_ok, locs_before, reg, (RegionLocs rlocs allocated)) = isAllocationOk one
+            [one] -> let (is_ok, locs_before, reg, (RegionLocs rlocs allocated)) = isAllocationOk one rhs bod
                          reg_env' = foldr (\loc acc -> M.insert loc reg acc) reg_env locs
                          alloc_env' =
                            M.insert reg
                              (RegionLocs rlocs (S.insert one (S.fromList locs_before `S.union` allocated)))
                              alloc_env
-                         tag_loc = head locs_before
                      in if is_ok
                         then (LetE (v,locs,ty,rhs)) <$> (go reg_env' alloc_env' store_env env2' bod)
                         else do
+                          let tag_loc = head locs_before
+                          let tag_tycon = findTyCon tag_loc bod
                           let in_scope = M.keysSet (vEnv env2) `S.union` M.keysSet (fEnv env2)
                               (move_set,move_scalars) = checkScalarDeps ddefs in_scope tag_loc ex
                               move_scalars_easy = move_scalars && S.null move_set
                               store_env' = foldr (\x acc -> M.insert x tag_loc acc) store_env (S.toList move_set)
                           alloc_tag_here <- gensym "alloc_tag_here"
                           alloc_scalars_here <- gensym "alloc_scalars_here"
-                          LetE (alloc_tag_here,[],ProdTy [],Ext $ L2.AllocateTagHere tag_loc) <$>
+                          LetE (alloc_tag_here,[],ProdTy [],Ext $ L2.AllocateTagHere tag_loc tag_tycon) <$>
                             (if move_scalars_easy
                              then
                                LetE (alloc_scalars_here,[],ProdTy [],Ext $ L2.AllocateScalarsHere tag_loc) <$>
@@ -165,14 +154,46 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
         FoldE{}    -> pure ex
       where
         recur = go reg_env alloc_env store_env env2
-        isAllocationOk loc =
+        isAllocationOk loc rhs bod =
           case M.lookup loc reg_env of
             Nothing  -> error $ "allocationOrderMarkers: free location " ++ sdoc loc
             Just reg -> case M.lookup reg alloc_env of
                           Nothing -> error $ "allocationOrderMarkers: free region " ++ sdoc reg
                           Just rloc@(RegionLocs locs allocated_to) ->
-                            let locs_before = takeWhile (/= loc) locs
-                            in (S.isSubsetOf (S.fromList locs_before) allocated_to, locs_before, reg, rloc)
+                            let locs_before = takeWhile (/= loc) locs in
+                              case locs_before of
+                                [] -> (True, locs_before, reg, rloc)
+                                _  ->
+                                  let freev = L2.allFreeVars rhs `S.union` L2.allFreeVars bod
+                                      locs_before' = filter (\x -> S.member x freev) locs_before
+                                  in (S.isProperSubsetOf (S.fromList locs_before') allocated_to, locs_before', reg, rloc)
+
+        findTyCon :: LocVar -> L2.Exp2 -> TyCon
+        findTyCon want e =
+          case e of
+            DataConE loc dcon _ | want == loc -> getTyOfDataCon ddefs dcon
+                                | otherwise -> error $ "findTyCon: " ++ show want ++ " not found. "  ++ sdoc (want,e)
+            LetE (_v,_locs,PackedTy tycon loc,_rhs) bod | want == loc -> tycon
+                                                        | otherwise -> findTyCon want bod
+            LetE (_v,_locs,_ty,_rhs) bod -> findTyCon want bod
+            IfE _ b c  -> let tycon_b = (findTyCon want b)
+                              tycon_c = (findTyCon want c)
+                          in if tycon_b == tycon_c
+                             then tycon_b
+                             else error $ "findTyCon want: types don't match"
+            CaseE _scrt brs -> let tycons = foldr (\(_a,_b,c) acc -> findTyCon want c : acc) [] brs
+                               in if all (== (head tycons)) tycons
+                                  then head tycons
+                                  else error $ "findTyCon want: types don't match"
+            WithArenaE _ar bod -> (findTyCon want bod)
+            TimeIt e0 _ty _b -> (findTyCon want e0)
+            Ext ext ->
+              case ext of
+                L2.LetRegionE _ bod -> (findTyCon want bod)
+                L2.LetParRegionE _ bod -> (findTyCon want bod)
+                L2.LetLocE _ _ bod -> (findTyCon want bod)
+                _ -> error $ "findTyCon: " ++ show want ++ " not found. " ++ sdoc (want,e)
+            _ -> error $ "findTyCon: " ++ show want ++ " not found. " ++ sdoc (want,e)
 
 
 -- | Do the values of scalar fields depend on the packed fields?
@@ -312,7 +333,7 @@ reorderAlloc (Prog ddefs fundefs mainExp) = do
       case ex of
         LetE (v,locs,ty,rhs) bod ->
           case rhs of
-            Ext (L3.AllocateTagHere loc) ->
+            Ext (L3.AllocateTagHere loc _) ->
               let (binds,bod') = collectBinds Tag loc bod
               in (mkLets binds (go bod'))
             Ext (L3.AllocateScalarsHere loc) ->
@@ -333,7 +354,7 @@ data Collect = Tag | Scalars
   deriving Eq
 
 data Mode = Search L3.Exp3 | SearchAndStore L3.Exp3
-  deriving Eq
+  deriving (Eq, Show)
 
 collectBinds :: Collect -> Var -> L3.Exp3 -> ([(Var,[()],L3.Ty3,L3.Exp3)], L3.Exp3)
 collectBinds collect loc ex0 =
@@ -356,8 +377,8 @@ collectBinds collect loc ex0 =
               then go (SearchAndStore (invert s)) acc bod
               else
                 let (acc1,rhs') = go mode acc rhs
-                    (acc2,bod') = go mode acc bod
-                in (acc1 ++ acc2, LetE (v,locs,ty,rhs') bod')
+                    (acc2,bod') = go mode acc1 bod
+                in (acc2, LetE (v,locs,ty,rhs') bod')
             SearchAndStore s ->
               if s == rhs
               then (acc,ex)

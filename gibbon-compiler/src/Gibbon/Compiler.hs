@@ -706,7 +706,9 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- go "addRedirectionCon" addRedirectionCon l2
-              l2 <- go "followIndirections" followIndirections l2
+              l2 <- if gibbon1
+                    then pure l2
+                    else go "followIndirections" followIndirections l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.

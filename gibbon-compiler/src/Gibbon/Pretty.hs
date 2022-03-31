@@ -465,7 +465,7 @@ instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
                                                      pprint e
           L2.GetCilkWorkerNum -> text "__cilkrts_get_worker_number()"
           L2.LetAvail vs e    -> text "letavail " <+> pprint vs $+$ pprint e
-          L2.AllocateTagHere loc -> text "allocateTagHere" <+> pprint loc
+          L2.AllocateTagHere loc tycon -> text "allocateTagHere" <+> pprint loc <+> text tycon
           L2.AllocateScalarsHere loc -> text "allocateScalarsHere" <+> pprint loc
           L2.SSPush mode loc endloc tycon -> text "ss_push" <+> doc mode <+> pprint loc <+> pprint endloc <+> doc tycon
           L2.SSPop mode loc endloc -> text "ss_pop" <+> doc mode <+> pprint loc <+> pprint endloc

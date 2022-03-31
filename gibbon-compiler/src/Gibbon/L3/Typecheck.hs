@@ -167,7 +167,7 @@ tcExp isPacked ddfs env exp =
 
         LetAvail _ bod -> go bod
 
-        AllocateTagHere v -> do
+        AllocateTagHere v _ -> do
           rty <- lookupVar env v exp
           ensureEqualTyModCursor exp rty CursorTy
           return (ProdTy [])
