@@ -176,20 +176,27 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
                     (L.zip3 tylocs out_regs out_regs')
             newretlocs = (map toEndV out_regs') ++ locs
             newapplocs = (map toEndV in_regs) ++ (map toEndV out_regs)  ++ applocs
-
-        bod' <- threadRegionsExp ddefs fundefs isMain renv'' (extendVEnv v ty env2) lfenv rlocs_env wlocs_env bod
-        let free = S.fromList $ freeLocVars bod
-            free_rlocs = free `S.intersection` (M.keysSet rlocs_env)
-            free_wlocs = free `S.intersection` (M.keysSet wlocs_env)
+        let env2' = extendVEnv v ty env2
+            rlocs_env' = case ty of
+                           PackedTy tycon loc -> M.insert loc tycon rlocs_env
+                           _ -> error "threadRegionExp: "
+            wlocs_env' = foldr (\loc acc -> M.delete loc acc) wlocs_env (locsInTy ty)
+        bod' <- threadRegionsExp ddefs fundefs isMain renv'' env2' lfenv rlocs_env' wlocs_env' bod
+        let -- free = S.fromList $ freeLocVars bod
+            free = ss_free_locs (S.fromList (v : locsInTy ty ++ locs)) env2' bod
+            free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
+            free_wlocs = free `S.intersection` (M.keysSet wlocs_env')
         (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs
         let binds = rpush ++ wpush ++ [(v, newretlocs, ty, AppE f newapplocs args)] ++ wpop ++ rpop
         (pure $ mkLets binds bod')
 
       -- Only input regions.
       else do
-          bod' <- threadRegionsExp ddefs fundefs isMain renv' (extendVEnv v ty env2) lfenv rlocs_env wlocs_env bod
+          let env2' = extendVEnv v ty env2
+          bod' <- threadRegionsExp ddefs fundefs isMain renv' env2' lfenv rlocs_env wlocs_env bod
           let newapplocs = (map toEndV in_regs) ++ applocs
-          let free = S.fromList $ freeLocVars bod
+          let -- free = S.fromList $ freeLocVars bod
+              free = ss_free_locs (S.fromList (v : locsInTy ty ++ locs)) env2' bod
               free_rlocs = free `S.intersection` (M.keysSet rlocs_env)
               free_wlocs = free `S.intersection` (M.keysSet wlocs_env)
           (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs
@@ -256,8 +263,9 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
                       AfterConstantLE _ lc   -> renv # lc
                       AfterVariableLE _ lc _ -> renv # lc
                       FromEndLE lc           -> renv # lc
+              wlocs_env' = M.insert loc hole_tycon wlocs_env
           Ext <$> LetLocE loc rhs <$>
-            threadRegionsExp ddefs fundefs isMain (M.insert loc reg renv) env2 lfenv rlocs_env wlocs_env bod
+            threadRegionsExp ddefs fundefs isMain (M.insert loc reg renv) env2 lfenv rlocs_env wlocs_env' bod
 
         RetE locs v -> do
           let ty = lookupVEnv v env2
@@ -279,7 +287,8 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
           else return $ Ext ext
 
         LetRegionE r bod -> do
-          let free = S.fromList $ freeLocVars bod
+          let -- free = S.fromList $ freeLocVars bod
+              free = ss_free_locs (S.singleton (regionToVar r)) env2 bod
               free_rlocs = free `S.intersection` (M.keysSet rlocs_env)
               free_wlocs = free `S.intersection` (M.keysSet wlocs_env)
           (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs
@@ -343,17 +352,34 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
                               (fragileZip locs (lookupDataCon ddefs dcon))
       (dcon,vlocs,) <$> (threadRegionsExp ddefs fundefs isMain renv1' env21' lfenv1 rlocs_env1' wlocs_env1 bod)
 
+    ss_free_locs bound env20 ex0 =
+                     S.map (\w -> case M.lookup w (vEnv env20) of
+                                       -- assumption: it's a location
+                                       Nothing -> w
+                                       Just (PackedTy _ loc) -> loc
+                                       Just wty -> error $ "threadRegionsExp: unexpected type " ++ show (w,wty))
+                           (allFreeVars_sans_datacon_args ex0 `S.difference`
+                            (bound `S.union`
+                             M.keysSet (M.filter (not . isPackedTy) (vEnv env20)) `S.union`
+                             M.keysSet (fEnv env20)))
+
+    hole_tycon = "HOLE"
+
     ss_ops free_rlocs free_wlocs = do
           rpush <- (foldrM (\x acc -> do
                              push <- gensym "ss_push"
                              let tycon = rlocs_env # x
-                             pure ((push,[],ProdTy [], Ext $ SSPush Read x (toEndV (renv # x)) tycon) : acc))
+                             if tycon == hole_tycon
+                             then pure acc
+                             else pure ((push,[],ProdTy [], Ext $ SSPush Read x (toEndV (renv # x)) tycon) : acc))
                            []
                            free_rlocs) :: PassM [(Var, [LocVar], Ty2, PreExp E2Ext LocVar Ty2)]
           wpush <- (foldrM (\x acc -> do
                              push <- gensym "ss_push"
                              let tycon = wlocs_env # x
-                             pure ((push,[],ProdTy [], Ext $ SSPush Write x (toEndV (renv # x)) tycon) : acc))
+                             if tycon == hole_tycon
+                             then pure acc
+                             else pure ((push,[],ProdTy [], Ext $ SSPush Write x (toEndV (renv # x)) tycon) : acc))
                            []
                            free_wlocs) :: PassM [(Var, [LocVar], Ty2, PreExp E2Ext LocVar Ty2)]
           let rpop = map (\(x,locs,ty,Ext (SSPush a b c _)) -> (x,locs,ty,Ext (SSPop a b c))) (reverse rpush)
@@ -428,3 +454,42 @@ boundsCheck ddefs tycon =
       num_bytes = (1 + maximum vals)
   -- Reserve additional space for a redirection node or a forwarding pointer.
   in num_bytes + 32
+
+----------------------------------------
+
+-- gFreeVars ++ locations ++ region variables - (args to datacons)
+allFreeVars_sans_datacon_args :: Exp2 -> S.Set Var
+allFreeVars_sans_datacon_args ex =
+  case ex of
+    AppE _ locs args -> S.fromList locs `S.union` (S.unions (map allFreeVars_sans_datacon_args args))
+    PrimAppE _ args -> (S.unions (map allFreeVars_sans_datacon_args args))
+    LetE (v,locs,_,rhs) bod -> (S.fromList locs `S.union` (allFreeVars_sans_datacon_args rhs) `S.union` (allFreeVars_sans_datacon_args bod))
+                               `S.difference` S.singleton v
+    IfE a b c -> allFreeVars_sans_datacon_args a `S.union` allFreeVars_sans_datacon_args b `S.union` allFreeVars_sans_datacon_args c
+    MkProdE args -> (S.unions (map allFreeVars_sans_datacon_args args))
+    ProjE _ bod -> allFreeVars_sans_datacon_args bod
+    CaseE scrt brs -> (allFreeVars_sans_datacon_args scrt) `S.union` (S.unions (map (\(_,vlocs,c) -> allFreeVars_sans_datacon_args c `S.difference`
+                                                                                   S.fromList (map fst vlocs) `S.difference`
+                                                                                   S.fromList (map snd vlocs))
+                                                                  brs))
+    DataConE loc _ _args -> S.singleton loc
+    TimeIt e _ _ -> allFreeVars_sans_datacon_args e
+    WithArenaE _ e -> allFreeVars_sans_datacon_args e
+    SpawnE _ locs args -> S.fromList locs `S.union` (S.unions (map allFreeVars_sans_datacon_args args))
+    Ext ext ->
+      case ext of
+        LetRegionE r bod -> S.delete (regionToVar r) (allFreeVars_sans_datacon_args bod)
+        LetParRegionE r bod -> S.delete (regionToVar r) (allFreeVars_sans_datacon_args bod)
+        LetLocE loc locexp bod -> S.delete loc (allFreeVars_sans_datacon_args bod `S.union` gFreeVars locexp)
+        RetE locs v     -> S.insert v (S.fromList locs)
+        FromEndE loc    -> S.singleton loc
+        BoundsCheck _ reg cur -> S.fromList [reg,cur]
+        IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
+        AddFixed v _    -> S.singleton v
+        GetCilkWorkerNum-> S.empty
+        LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod
+        AllocateTagHere loc _ -> S.singleton loc
+        AllocateScalarsHere loc -> S.singleton loc
+        SSPush _ a b _ -> S.fromList [a,b]
+        SSPop _ a b -> S.fromList [a,b]
+    _ -> gFreeVars ex

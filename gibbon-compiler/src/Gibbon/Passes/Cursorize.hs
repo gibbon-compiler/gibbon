@@ -269,6 +269,24 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
     LetE (_v,_locs, _ty, SyncE) _bod ->
       cursorizeSync False ddfs fundefs denv tenv senv ex
 
+    LetE (v,_locs,ty, rhs@(Ext (SSPush _ start _ _))) bod ->
+      case M.lookup start tenv of
+        Nothing -> go bod
+        Just{}  -> do
+          rhs' <- go rhs
+          bod' <- go bod
+          let ty' = cursorizeTy ty
+          return $ LetE (v,[],ty',rhs') bod'
+
+    LetE (v,_locs,ty, rhs@(Ext (SSPop _ start _))) bod ->
+      case M.lookup start tenv of
+        Nothing -> go bod
+        Just{}  -> do
+          rhs' <- go rhs
+          bod' <- go bod
+          let ty' = cursorizeTy ty
+          return $ LetE (v,[],ty',rhs') bod'
+
     LetE bnd bod -> cursorizeLet False ddfs fundefs denv tenv senv bnd bod
 
     IfE a b c  -> IfE <$> go a <*> go b <*> go c
@@ -440,6 +458,24 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
     LetE (_v,_locs, _ty, SyncE) _bod ->
       dl <$> cursorizeSync True ddfs fundefs denv tenv senv ex
 
+    LetE (v,_locs,ty, rhs@(Ext (SSPush _ start _ _))) bod ->
+      case M.lookup start tenv of
+        Nothing -> go tenv senv bod
+        Just{}  -> do
+          rhs' <- go tenv senv rhs
+          let ty' = cursorizeTy ty
+          bod' <- go (M.insert v ty tenv) senv bod
+          return $ Di (LetE (v,[], ty', fromDi rhs') (fromDi bod'))
+
+    LetE (v,_locs,ty, rhs@(Ext (SSPop _ start _))) bod ->
+      case M.lookup start tenv of
+        Nothing -> go tenv senv bod
+        Just{}  -> do
+          rhs' <- go tenv senv rhs
+          let ty' = cursorizeTy ty
+          bod' <- go (M.insert v ty tenv) senv bod
+          return $ Di (LetE (v,[],ty', fromDi rhs') (fromDi bod'))
+
     LetE bnd bod -> dl <$> cursorizeLet True ddfs fundefs denv tenv senv bnd bod
 
     -- Here we route the dest cursor to both braches.  We switch
@@ -482,7 +518,9 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
 
                  rnd' <- go tenv senv rnd
                  end_scalars_alloc <- gensym "end_scalars_alloc"
-                 LetE (end_scalars_alloc,[],ProdTy [],Ext $ EndScalarsAllocation sloc) <$>
+                 (if not marker_added
+                  then LetE (end_scalars_alloc,[],ProdTy [],Ext $ EndScalarsAllocation sloc)
+                  else id) <$>
                    LetE (d',[], CursorTy, projEnds rnd') <$>
                    go2 True d' rst
 
@@ -607,7 +645,6 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
         AllocateScalarsHere v -> pure <$> dl <$> Ext $ L3.AllocateScalarsHere v
 
         SSPush a b c d -> pure <$> dl <$> Ext $ L3.SSPush a b c d
-
         SSPop a b c -> pure <$> dl <$> Ext $ L3.SSPop a b c
 
     MapE{}  -> error $ "TODO: cursorizePackedExp MapE"

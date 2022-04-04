@@ -814,7 +814,10 @@ allFreeVars ex =
     IfE a b c -> allFreeVars a `S.union` allFreeVars b `S.union` allFreeVars c
     MkProdE args -> (S.unions (map allFreeVars args))
     ProjE _ bod -> allFreeVars bod
-    CaseE scrt brs -> (allFreeVars scrt) `S.union` (S.unions (map (\(_,vlocs,c) -> allFreeVars c `S.difference` S.fromList (map fst vlocs)) brs))
+    CaseE scrt brs -> (allFreeVars scrt) `S.union` (S.unions (map (\(_,vlocs,c) -> allFreeVars c `S.difference`
+                                                                                   S.fromList (map fst vlocs) `S.difference`
+                                                                                   S.fromList (map snd vlocs))
+                                                                  brs))
     DataConE loc _ args -> S.singleton loc `S.union` (S.unions (map allFreeVars args))
     TimeIt e _ _ -> allFreeVars e
     WithArenaE _ e -> allFreeVars e
