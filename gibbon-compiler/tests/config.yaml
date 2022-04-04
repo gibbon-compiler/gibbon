@@ -254,6 +254,10 @@ tests:
     dir: examples/poly
     answer-file: examples/poly/NestedTuples.ans
 
+  - name: TuplesInDatacon.hs
+    dir: examples/poly
+    answer-file: examples/poly/TuplesInDatacon.ans
+
   - name: AnonLambdas.hs
     dir: examples/poly
     answer-file: examples/poly/AnonLambdas.ans
