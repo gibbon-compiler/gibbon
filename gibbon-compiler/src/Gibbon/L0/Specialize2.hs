@@ -17,7 +17,7 @@ module Gibbon.L0.Specialize2
   where
 
 import           Control.Monad.State
-import           Data.Foldable ( foldlM )
+import           Data.Foldable ( foldlM, foldrM )
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           GHC.Stack (HasCallStack)
@@ -1361,15 +1361,26 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
 
 -- | Desugar parallel tuples to spawn's and sync's, and printPacked into function calls.
 desugarL0 :: Prog0 -> PassM Prog0
-desugarL0 prg = do
-  Prog{fundefs,mainExp} <- addRepairFns prg
-  fundefs' <- mapM (\fn@FunDef{funBody} -> go funBody >>= \b -> pure $ fn {funBody = b}) fundefs
-  mainExp' <- case mainExp of
+desugarL0 prg@(Prog ddefs _fundefs _mainExp) = do
+  (Prog ddefs' fundefs' mainExp') <- addRepairFns prg
+  let ddefs'' = M.map desugar_tuples ddefs'
+  fundefs'' <- mapM (\fn@FunDef{funBody} -> go funBody >>= \b -> pure $ fn {funBody = b}) fundefs'
+  mainExp'' <- case mainExp' of
                 Nothing     -> pure Nothing
                 Just (e,ty) -> Just <$> (,ty) <$> go e
-  pure $ prg { fundefs = fundefs', mainExp = mainExp' }
+  pure $ Prog ddefs'' fundefs'' mainExp''
   where
     err1 msg = error $ "desugarL0: " ++ msg
+
+    desugar_tuples :: DDef0 -> DDef0
+    desugar_tuples d@DDef{dataCons} =
+        let dataCons' = map (\(dcon,tys) -> (dcon, concatMap goty tys)) dataCons
+        in d { dataCons = dataCons' }
+      where
+        goty (is_boxed,ty) =
+          case ty of
+            ProdTy ls -> map (\x -> (is_boxed,x)) ls
+            _ -> [(is_boxed,ty)]
 
     go :: Exp0 -> PassM Exp0
     go ex =
@@ -1420,8 +1431,40 @@ desugarL0 prg = do
         IfE a b c  -> IfE <$> go a <*> go b <*> go c
         MkProdE ls -> MkProdE <$> mapM go ls
         ProjE i a  -> (ProjE i) <$> go a
-        CaseE scrt brs -> CaseE <$> go scrt <*> (mapM (\(a,b,c) -> (a, b,) <$> go c) brs)
-        DataConE a dcon ls -> DataConE a dcon <$> mapM go ls
+        CaseE scrt brs -> do
+          scrt' <- go scrt
+          brs' <- mapM (\(dcon,vtys,bod) -> do
+                          let (xs,_tyapps) = unzip vtys
+                          bod' <- go bod
+                          let dcon_tys = lookupDataCon ddefs dcon
+                          (xs',bod'') <-
+                            foldrM (\(x,xty) (acc1,acc2) ->
+                                       case xty of
+                                            ProdTy ls -> do
+                                              ys <- mapM (\_ -> gensym "y") ls
+                                              let acc2' =
+                                                    foldr (\(i,y) acc2'' -> gSubstE (ProjE i (VarE x)) (VarE y) acc2'')
+                                                          acc2
+                                                          (zip [0..] ys)
+                                              let acc2''' = gSubstE (VarE x) (MkProdE (map VarE ys)) acc2'
+                                              pure (ys ++ acc1, acc2''')
+                                            _ -> pure (x:acc1,acc2))
+                                   ([],bod')
+                                   (zip xs dcon_tys)
+                          let vtys' = (zip xs' (repeat (ProdTy [])))
+                          (pure (dcon, vtys', bod'')))
+                       brs
+          pure $ CaseE scrt' brs'
+        DataConE a dcon ls -> do
+          ls' <- mapM go ls
+          let tys = lookupDataCon ddefs dcon
+          let ls'' = concatMap
+                       (\(ty,arg) ->
+                          case ty of
+                            ProdTy xs -> map (\i -> ProjE i arg) (take (length xs) [0..])
+                            _ -> [arg])
+                       (zip tys ls')
+          pure $ DataConE a dcon ls''
         TimeIt e ty b    -> (\a -> TimeIt a ty b) <$> go e
         WithArenaE v e -> (WithArenaE v) <$> go e
         SpawnE fn tyapps args -> (SpawnE fn tyapps) <$> mapM go args

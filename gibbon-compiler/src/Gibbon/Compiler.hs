@@ -455,7 +455,7 @@ benchMainExp l1 = do
           ([arg@(L1.PackedTy tyc _)], ret) = L1.getFunTy fnname l1
           -- At L1, we assume ReadPackedFile has a single return value:
           newExp = L1.TimeIt (
-                        (L1.LetE (toVar tmp, [],  
+                        (L1.LetE (toVar tmp, [],
                                  arg,
                                  L1.PrimAppE
                                  (L1.ReadPackedFile benchInput tyc Nothing arg) [])
@@ -523,7 +523,6 @@ passes config@Config{dynflags} l0 = do
               -- Note: L1 -> L2
               l2 <- goE2 "inferLocations"  inferLocs    l1
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
-              -- call the RegionsInwards optimization pass here              
               l2 <- go "regionsInwards"    regionsInwards l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "L2.flatten"      flattenL2    l2
