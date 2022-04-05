@@ -33,6 +33,9 @@
 #define MB (KB * 1000lu)
 #define GB (MB * 1000lu)
 
+#define REDIRECTION_TAG 255
+#define INDIRECTION_TAG 254
+
 // Initial size of BigInfinite buffers
 static long long global_init_biginf_buf_size = (4 * GB);
 

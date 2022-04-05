@@ -363,7 +363,11 @@ codegenTriv _ (BoolTriv b) = case b of
                                True -> [cexp| true |]
                                False -> [cexp| false |]
 codegenTriv _ (SymTriv i) = [cexp| $i |]
-codegenTriv _ (TagTriv i) = [cexp| $i |]
+codegenTriv _ (TagTriv i) = if i == GL.indirectionAlt
+                            then [cexp| INDIRECTION_TAG |]
+                            else if i == GL.redirectionAlt
+                            then [cexp| REDIRECTION_TAG |]
+                            else [cexp| $i |]
 codegenTriv venv (ProdTriv ls) =
   let ty = codegenTy $ typeOfTriv venv (ProdTriv ls)
       args = map (\a -> (Nothing,C.ExpInitializer (codegenTriv venv a) noLoc)) ls
@@ -1328,7 +1332,11 @@ altTail oth = error $ "altTail expected a 'singleton' Alts, got: "++ abbrv 80 ot
 
 -- Helper for lhs of a case
 mk_tag_lhs :: (Integral a, Show a) => a -> C.Exp
-mk_tag_lhs lhs = C.Const (C.IntConst (show lhs) C.Unsigned (fromIntegral lhs) noLoc) noLoc
+mk_tag_lhs lhs
+    | GL.indirectionAlt == lhs = C.Var (C.Id "INDIRECTION_TAG" noLoc) noLoc
+    | GL.redirectionAlt == lhs = C.Var (C.Id "REDIRECTION_TAG" noLoc) noLoc
+    | otherwise = C.Const (C.IntConst (show lhs) C.Unsigned (fromIntegral lhs) noLoc) noLoc
+
 
 mk_int_lhs :: (Integral a, Show a) => a -> C.Exp
 mk_int_lhs lhs = C.Const (C.IntConst (show lhs) C.Signed   (fromIntegral lhs) noLoc) noLoc
