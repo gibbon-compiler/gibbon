@@ -43,8 +43,6 @@ pub mod types {
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibNursery {
-        pub regions: u64,
-
         pub heap_size: usize,
         pub heap_start: *const i8,
         pub heap_end: *const i8,
@@ -70,6 +68,18 @@ pub mod types {
         pub rem_set: *mut C_GibRememberedSet,
         pub old_zct: *mut Zct,
         pub new_zct: *mut Zct,
+    }
+
+    #[repr(C)]
+    #[derive(Debug)]
+    pub struct C_GibGcStats {
+        pub minor_collections: u64,
+        pub major_collections: u64,
+        pub mem_allocated: usize,
+        pub nursery_regions: u64,
+        pub oldgen_regions: u64,
+        pub gc_elapsed_time: f64,
+        pub gc_cpu_time: f64,
     }
 
     #[repr(C)]
@@ -181,6 +191,8 @@ pub extern "C" fn gib_garbage_collect(
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
     generations_ptr: *mut C_GibGeneration,
+    gc_stats: *mut C_GibGcStats,
+    record_stats: bool,
     force_major: bool,
 ) -> i32 {
     match gc::garbage_collect(
@@ -188,6 +200,8 @@ pub extern "C" fn gib_garbage_collect(
         wstack_ptr,
         nursery_ptr,
         generations_ptr,
+        gc_stats,
+        record_stats,
         force_major,
     ) {
         Ok(()) => 0,
@@ -289,6 +303,7 @@ pub extern "C" fn gib_get_rust_struct_sizes(
     generation: *mut usize,
     reg_info: *mut usize,
     footer: *mut usize,
+    gc_stats: *mut usize,
 ) {
     unsafe {
         *stack = size_of::<C_GibShadowstack>();
@@ -297,5 +312,6 @@ pub extern "C" fn gib_get_rust_struct_sizes(
         *generation = size_of::<C_GibGeneration>();
         *reg_info = size_of::<C_GibRegionInfo>();
         *footer = size_of::<C_GibChunkFooter>();
+        *gc_stats = size_of::<C_GibGcStats>();
     }
 }

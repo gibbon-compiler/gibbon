@@ -272,6 +272,9 @@ const MAX_CHUNK_SIZE: usize = 65535;
 
 const COLLECT_MAJOR_K: u8 = 4;
 
+static mut GC_STATS: *mut C_GibGcStats = null_mut();
+static mut RECORD_GC_STATS: bool = false;
+
 pub fn cleanup(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
@@ -320,6 +323,8 @@ pub fn garbage_collect(
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
     generations_ptr: *mut C_GibGeneration,
+    gc_stats: *mut C_GibGcStats,
+    record_stats: bool,
     _force_major: bool,
 ) -> Result<()> {
     // println!("gc...");
@@ -336,6 +341,18 @@ pub fn garbage_collect(
             //     || (*nursery_ptr).num_collections.rem_euclid(COLLECT_MAJOR_K.into())
             //         == 0;
             let evac_major = false;
+
+            // Update stats.
+            RECORD_GC_STATS = record_stats;
+            GC_STATS = gc_stats;
+            if RECORD_GC_STATS {
+                (*GC_STATS).minor_collections += 1;
+                if evac_major {
+                    (*GC_STATS).major_collections += 1;
+                }
+            }
+
+            // Start collection.
             let mut rem_set =
                 RememberedSet((*generations_ptr).rem_set, GcRootProv::RemSet);
             // First evacuate the remembered set, then the shadow-stack.
@@ -1021,6 +1038,9 @@ unsafe fn free_region(
     zct: *mut Zct,
     free_descendants: bool,
 ) -> Result<()> {
+    if RECORD_GC_STATS {
+        (*GC_STATS).oldgen_regions -= 1;
+    }
     // Rust drops this heap allocated object when reg_info goes out of scope.
     let reg_info = Box::from_raw((*footer).reg_info);
     // Decrement refcounts of all regions in the outset and add the ones with a
@@ -1135,6 +1155,11 @@ trait Heap {
             let footer_start = unsafe {
                 init_footer_at(end, null_mut(), total_size, refcount)
             };
+            unsafe {
+                if RECORD_GC_STATS {
+                    (*GC_STATS).oldgen_regions += 1;
+                }
+            }
             Ok((start, footer_start))
         }
     }
@@ -1218,7 +1243,6 @@ impl Nursery {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
             (*nursery).alloc = (*nursery).heap_end;
-            (*nursery).regions = 0;
         }
     }
 
@@ -1324,7 +1348,6 @@ impl Heap for Generation {
             let start = (*gen).heap_start as *mut i8;
             // Check if there's enough space in the gen to fulfill the request.
             if bump >= start {
-                (*gen).mem_allocated += size;
                 (*gen).alloc = bump;
                 Ok((bump, old))
             } else {
@@ -1419,13 +1442,15 @@ impl Heap for OldestGeneration {
 
     #[inline]
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
-        let gen: *mut C_GibGeneration = self.0;
+        // let gen: *mut C_GibGeneration = self.0;
         unsafe {
             let start = libc::malloc(size) as *mut i8;
             if start.is_null() {
                 Err(RtsError::Gc(format!("oldest gen alloc: malloc failed")))
             } else {
-                (*gen).mem_allocated += size;
+                if RECORD_GC_STATS {
+                    (*GC_STATS).mem_allocated += size;
+                }
                 let end = start.add(size);
                 Ok((start, end))
             }
@@ -1457,6 +1482,7 @@ enum GcRootProv {
 /// A wrapper over the naked C pointer.
 #[derive(Debug)]
 struct Shadowstack(*mut C_GibShadowstack, GcRootProv);
+// TODO(ckoparkar): delete the second parameter here.
 
 impl Shadowstack {
     /// Length of the shadow-stack.

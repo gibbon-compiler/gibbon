@@ -34,13 +34,6 @@
 #include <cilk/cilk_api.h>
 #endif
 
-// Convenience macros since we don't really need the arrays of nurseries and
-// shadowstacks since mutators are still sequential.
-// #define DEFAULT_NURSERY gib_global_nurseries
-#define DEFAULT_NURSERY (&(gib_global_nurseries[0]))
-#define DEFAULT_READ_SHADOWSTACK (&(gib_global_read_shadowstacks[0]))
-#define DEFAULT_WRITE_SHADOWSTACK (&(gib_global_write_shadowstacks[0]))
-
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Program starts here

@@ -899,8 +899,6 @@ typedef struct gib_chunk_footer {
 } GibChunkFooter;
 
 typedef struct gib_nursery {
-    uint64_t regions;
-
     // Allocation area.
     size_t heap_size;
     char *heap_start;
@@ -935,6 +933,28 @@ typedef struct gib_generation {
 
 } GibGeneration;
 
+typedef struct gib_gc_stats {
+    // Number of copying minor collections (owned by Rust RTS).
+    uint64_t minor_collections;
+
+    // Number of copying major collections (owned by Rust RTS).
+    uint64_t major_collections;
+
+    // Memory allocated in the major heap (owned by Rust RTS).
+    size_t mem_allocated;
+
+    // Number of regions.
+    // Owned by C RTS.
+    uint64_t nursery_regions;
+    // Owned by Rust RTS.
+    uint64_t oldgen_regions;
+
+    // GC time (owned by C RTS).
+    double gc_elapsed_time;
+    double gc_cpu_time;
+
+} GibGcStats;
+
 // Array of nurseries, indexed by thread_id.
 GibNursery *gib_global_nurseries = (GibNursery *) NULL;
 
@@ -952,13 +972,15 @@ GibGeneration *gib_global_oldest_gen = (GibGeneration *) NULL;
 GibShadowstack *gib_global_read_shadowstacks = (GibShadowstack *) NULL;
 GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 
+// Collect GC statistics.
+GibGcStats *gib_global_gc_stats = (GibGcStats *) NULL;
+
 // Convenience macros since we don't really need the arrays of nurseries and
 // shadowstacks since mutators are still sequential.
 // #define DEFAULT_NURSERY gib_global_nurseries
 #define DEFAULT_NURSERY gib_global_nurseries
 #define DEFAULT_GENERATION gib_global_oldest_gen
-#define DEFAULT_READ_SHADOWSTACK (&(gib_global_read_shadowstacks[0]))
-#define DEFAULT_WRITE_SHADOWSTACK (&(gib_global_write_shadowstacks[0]))
+#define GC_STATS gib_global_gc_stats
 
 
 /*
@@ -970,14 +992,15 @@ GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 void gib_check_rust_struct_sizes(void)
 {
     // Sizes in the Rust RTS.
-    size_t *stack, *frame, *nursery, *generation, *reg_info, *footer;
-    stack = (size_t *) malloc(sizeof(size_t) * 6);
+    size_t *stack, *frame, *nursery, *generation, *reg_info, *footer, *gc_stats;
+    stack = (size_t *) malloc(sizeof(size_t) * 7);
     frame = (size_t *) ((char *) stack + sizeof(size_t));
     nursery = (size_t *) ((char *) frame + sizeof(size_t));
     generation = (size_t *) ((char *) nursery + sizeof(size_t));
     reg_info = (size_t *) ((char *) generation + sizeof(size_t));
     footer = (size_t *) ((char *) reg_info + sizeof(size_t));
-    gib_get_rust_struct_sizes(stack, frame, nursery, generation, reg_info, footer);
+    gc_stats = (size_t *) ((char *) footer + sizeof(size_t));
+    gib_get_rust_struct_sizes(stack, frame, nursery, generation, reg_info, footer, gc_stats);
 
     // Check if they match with sizes in the C RTS.
     assert(*stack == sizeof(GibShadowstack));
@@ -986,6 +1009,7 @@ void gib_check_rust_struct_sizes(void)
     assert(*generation == sizeof(GibGeneration));
     assert(*reg_info == sizeof(GibRegionInfo));
     assert(*footer == sizeof(GibChunkFooter));
+    assert(*gc_stats == sizeof(GibGcStats));
 
     // Done.
     free(stack);
@@ -1024,6 +1048,9 @@ GibChunk gib_alloc_region_on_heap(size_t size)
 
 STATIC_INLINE GibChunk gib_alloc_region_in_nursery(size_t size)
 {
+#ifdef _GIBBON_GCSTATS
+    GC_STATS->nursery_regions++;
+#endif
     return gib_alloc_region_in_nursery_fast(size, false);
 }
 
@@ -1045,7 +1072,6 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     if (UNLIKELY((size > NURSERY_REGION_MAX_SIZE))) {
         return gib_alloc_region_on_heap(size);
     }
-
     if (collected) {
         fprintf(stderr, "Couldn't free space after garbage collection.\n");
         exit(1);
@@ -1054,11 +1080,27 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibGeneration *generations = gib_global_generations;
-    int err = gib_garbage_collect(rstack, wstack, nursery, generations, false);
+    GibGcStats *gc_stats = GC_STATS;
+
+#ifdef _GIBBON_GCSTATS
+    struct timespec begin;
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC_RAW, &begin);
+    gib_garbage_collect(rstack, wstack, nursery, generations, gc_stats, true, false);
+    /*
+    int err =
     if (err < 0) {
         fprintf(stderr, "Couldn't perform minor collection, errorno=%d.", err);
         exit(1);
     }
+    */
+    clock_gettime(CLOCK_MONOTONIC_RAW, &end);
+    gc_stats->gc_elapsed_time += gib_difftimespecs(&begin, &end);
+    gc_stats->gc_cpu_time += gc_stats->gc_elapsed_time / CLOCKS_PER_SEC;
+#else
+    gib_garbage_collect(rstack, wstack, nursery, generations, gc_stats, false, false);
+#endif
+
     return gib_alloc_region_in_nursery_fast(size, true);
 }
 
@@ -1172,6 +1214,8 @@ static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no);
 static void gib_generation_free(GibGeneration *gen, uint8_t gen_no);
 static void gib_shadowstack_initialize(GibShadowstack *stack, size_t stack_size);
 static void gib_shadowstack_free(GibShadowstack *stack);
+static void gib_gc_stats_initialize(GibGcStats *stats);
+static void gib_gc_stats_free(GibGcStats *stats);
 
 // Initialize nurseries, shadow stacks and generations.
 static void gib_storage_initialize(void)
@@ -1218,6 +1262,10 @@ static void gib_storage_initialize(void)
                                    SHADOWSTACK_SIZE);
      }
 
+    // Initialize the stats object.
+    gib_global_gc_stats = (GibGcStats *) gib_alloc(sizeof(GibGcStats));
+    gib_gc_stats_initialize(gib_global_gc_stats);
+
     return;
 }
 
@@ -1249,6 +1297,9 @@ static void gib_storage_free(void)
     }
     free(gib_global_read_shadowstacks);
     free(gib_global_write_shadowstacks);
+
+    // Free the stats object.
+    gib_gc_stats_free(gib_global_gc_stats);
 }
 
 
@@ -1260,7 +1311,6 @@ static void gib_storage_free(void)
 
 static void gib_nursery_initialize(GibNursery *nursery)
 {
-    nursery->regions = 0;
     nursery->heap_size = NURSERY_SIZE;
     nursery->heap_start = (char *) gib_alloc(NURSERY_SIZE);
     if (nursery->heap_start == NULL) {
@@ -1380,6 +1430,41 @@ static void gib_shadowstack_free(GibShadowstack* stack)
  */
 
 
+
+/*
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Gc statistics
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+
+static void gib_gc_stats_initialize(GibGcStats *stats)
+{
+    stats->minor_collections = 0;
+    stats->major_collections = 0;
+    stats->mem_allocated = 0;
+    stats->nursery_regions = 0;
+    stats->oldgen_regions = 0;
+    stats->gc_elapsed_time = 0;
+    stats->gc_cpu_time = 0;
+}
+
+static void gib_gc_stats_free(GibGcStats *stats)
+{
+    free(stats);
+}
+
+static void gib_gc_stats_print(GibGcStats *stats)
+{
+    printf("\nGC statistics\n----------------------------------------\n");
+    printf("Major collections:\t %" PRIu64 "\n", stats->major_collections / gib_global_iters_param);
+    printf("Minor collections:\t %" PRIu64 "\n", stats->minor_collections / gib_global_iters_param);
+    printf("Mem allocated:\t\t %zu\n", stats->mem_allocated / gib_global_iters_param);
+    printf("GC nursery regions:\t %lu\n", stats->nursery_regions / gib_global_iters_param);
+    printf("GC oldgen regions:\t %lu\n", stats->oldgen_regions / gib_global_iters_param);
+    printf("GC elapsed time:\t %e\n", stats->gc_elapsed_time / gib_global_iters_param);
+    printf("GC cpu time:\t\t %e\n", stats->gc_cpu_time / gib_global_iters_param);
+}
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1811,6 +1896,11 @@ int main(int argc, char **argv)
     // Free all objects initialized by the Rust RTS.
     free(gib_global_bench_prog_param);
     // gib_gc_cleanup(rstack, wstack, nursery, generations);
+
+#ifdef _GIBBON_GCSTATS
+    // Print GC statistics.
+    gib_gc_stats_print(GC_STATS);
+#endif
 
     // Next, free all objects initialized by the C RTS.
     gib_storage_free();

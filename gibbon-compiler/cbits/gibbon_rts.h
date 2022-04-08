@@ -356,6 +356,7 @@ typedef GibShadowstack GibRememberedSet;
 typedef struct gib_nursery GibNursery;
 typedef struct gib_generation GibGeneration;
 typedef struct gib_region_info GibRegionInfo;
+typedef struct gib_gc_stats GibGcStats;
 
 // Array of nurseries, indexed by thread_id.
 extern GibNursery *gib_global_nurseries;
@@ -370,8 +371,8 @@ extern GibShadowstack *gib_global_write_shadowstacks;
 
 // Convenience macros since we don't really need the arrays of nurseries and
 // shadowstacks since mutators are still sequential.
-#define DEFAULT_READ_SHADOWSTACK (&(gib_global_read_shadowstacks[0]))
-#define DEFAULT_WRITE_SHADOWSTACK (&(gib_global_write_shadowstacks[0]))
+#define DEFAULT_READ_SHADOWSTACK gib_global_read_shadowstacks
+#define DEFAULT_WRITE_SHADOWSTACK gib_global_write_shadowstacks
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -539,6 +540,8 @@ int gib_garbage_collect(
     GibShadowstack *wstack,
     GibNursery *nursery,
     GibGeneration *generations,
+    GibGcStats *stats,
+    bool record_stats,
     bool force_major
 );
 void gib_handle_old_to_old_indirection(
@@ -571,7 +574,8 @@ void gib_get_rust_struct_sizes(
     size_t *nursery,
     size_t *generation,
     size_t *reg_info,
-    size_t *footer
+    size_t *footer,
+    size_t *gc_stats
 );
 
 
