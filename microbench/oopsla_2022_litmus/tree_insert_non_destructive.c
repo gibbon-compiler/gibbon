@@ -1,4 +1,4 @@
-#include "tree_insert_litmus_test.h"
+#include "tree_insert_non_destructive.h"
 
 Tree *createTreeNode(int n){
     
@@ -19,7 +19,7 @@ void treeInsertHelper(Tree *root, int value){
             root->left = new;
         }
         //insert at the right of the root
-        else{            
+        else{              
             root->right = new;
         }
     }
@@ -83,18 +83,39 @@ int sumTree(Tree *root){
 
 }
 
+
+Tree * treeCopy(Tree *root){
+
+    if(root == NULL){
+        return NULL;
+    }
+    else {
+
+        Tree *copiedNode  = createTreeNode(root->n);
+        copiedNode->left  = treeCopy(root->left);
+        copiedNode->right = treeCopy(root->right);
+        return copiedNode;
+    }
+
+}
+
 Tree *treeInsert(Tree *root, int value){
+
+    //copy the original tree coz we don't want to modify it
+    //Non destructive insert.
+
+    Tree *copy = treeCopy(root);
     
     //case NULL
-    if (root == NULL){
+    if (copy == NULL){
         Tree *new = createTreeNode(value);
         return new;
     }
     else {
-        treeInsertHelper(root, value);
+        treeInsertHelper(copy, value);
     }
 
-    return root;  
+    return copy;  
 
 }
 
@@ -184,13 +205,19 @@ int main (int argc, char ** argv){
     Tree *root = helper(0, totalNodes);
 
     printTree(root);
+    
+    //assign new to the root at the beginning
+    Tree * new = root;
 
     for(int i=0; i < iterations; i++){
 
-        int j = rand() % totalNodes;
-        root = treeInsert(root, j);
-        printTree(root);
+        //Question :: Here the old pointer to the tree remains and is not freed
 
+        //Question :: How do we choose to delete using rand % 2 ?? if 0 then insert if 1 then delete??
+
+        int j = rand() % totalNodes;
+        new = treeInsert(new, j);
+        printTree(new);
 
     }
 
