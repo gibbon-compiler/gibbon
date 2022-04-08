@@ -47,8 +47,8 @@ import Text.PrettyPrint.GenericPretty
 import Control.DeepSeq (NFData)
 
 type Loc = LocVar
+data Reg = Var
 
-type Reg = Var
 
 data LocProgram = LocProgram (DDefs Ptype) (Map Var Fdef) (Maybe Exp)
                   deriving (Read,Show,Eq,Ord, Generic, NFData)
@@ -262,7 +262,7 @@ interpE fenv env exp =
                                  let env' = M.insert v e1' env
                                  interpE fenv env' e2
 
-      LetRegionE _ exp -> interpE fenv env exp
+      LetRegionE _ exp _ -> interpE fenv env exp
 
       LetLocE _ _ exp -> interpE fenv env exp
 

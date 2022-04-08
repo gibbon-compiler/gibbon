@@ -13,7 +13,7 @@
 
 
 	// Add the IDs of extensions you want installed when the container is created.
-	"extensions": [],
+	"extensions": ["haskell.haskell","justusadam.language-haskell", "k--kato.intellij-idea-keybindings"],
 
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
