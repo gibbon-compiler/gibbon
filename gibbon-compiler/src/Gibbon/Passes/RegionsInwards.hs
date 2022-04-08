@@ -12,8 +12,8 @@ import Data.Maybe ()
 import qualified Data.Maybe as S
 
 
-data DelayedBind = DelayRegion Region                                            --define data type that can be Region, Loc, LocExp to store the delayed bindings
-                 | DelayLoc LocVar LocExp | DelayParRegion Region
+data DelayedBind = DelayRegion Region RegionSize (Maybe RegionType)                                            --define data type that can be Region, Loc, LocExp to store the delayed bindings
+                 | DelayLoc LocVar LocExp | DelayParRegion Region RegionSize (Maybe RegionType)
   deriving (Show, Generic)
 
 instance Out DelayedBind
@@ -50,9 +50,9 @@ placeRegionInwards env scopeSet ex  =
     Ext ext ->
       case ext of
 
-        LetRegionE r rhs -> do                                                   --take care of regions
+        LetRegionE r sz ty rhs -> do                                                   --take care of regions
           let key' = S.singleton (regionToVar r)
-              val' = [DelayRegion r]
+              val' = [DelayRegion r sz ty]
               env' = M.insert key' val' env
               in placeRegionInwards env' scopeSet rhs
 
@@ -138,9 +138,9 @@ placeRegionInwards env scopeSet ex  =
 
             FreeLE -> error "Free LE not implemented yet!"                       --For FreeLE we need to figure out how to handle this?
 
-        LetParRegionE r rhs -> do                                                --Handle a parallel LetRegion
+        LetParRegionE r sz ty rhs -> do                                                --Handle a parallel LetRegion
           let key' = S.singleton (regionToVar r)
-              val' = [DelayParRegion r]
+              val' = [DelayParRegion r sz ty]
               env' = M.insert key' val' env
               in placeRegionInwards env' scopeSet rhs
 
@@ -282,8 +282,8 @@ codeGen set env body =
 bindDelayedBind :: DelayedBind -> Exp2 -> Exp2
 bindDelayedBind delayed body =
   case delayed of
-    DelayRegion r -> Ext $ LetRegionE r body
-    DelayParRegion r -> Ext $ LetParRegionE r body
+    DelayRegion r sz ty -> Ext $ LetRegionE r sz ty body
+    DelayParRegion r sz ty -> Ext $ LetParRegionE r sz ty body
     DelayLoc loc locexp -> Ext $ LetLocE loc locexp body
 
 
@@ -292,7 +292,7 @@ freeVars :: Exp2 -> S.Set Var
 freeVars ex = case ex of
   Ext ext                           ->
     case ext of
-      LetRegionE _ rhs              -> freeVars rhs
+      LetRegionE _ _ _ rhs          -> freeVars rhs
       LetLocE _ phs rhs             ->
         case phs of
         StartOfLE _                 -> freeVars rhs

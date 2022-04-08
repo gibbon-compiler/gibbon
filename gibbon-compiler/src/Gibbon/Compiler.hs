@@ -673,7 +673,6 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                   l2 <- go "regionsInwards" regionsInwards l2
                   l2 <- go   "L2.typecheck"  L2.tcProg     l2
                   l2 <- go "L2.flatten"      flattenL2     l2
-                  -- l2 <- go "pushdownRegions" pushdownRegions l2
                   l2 <- go "findWitnesses" findWitnesses   l2
                   l2 <- go "L2.typecheck"    L2.tcProg     l2
                   l2 <- goE2 "L2.flatten"    flattenL2     l2
@@ -710,6 +709,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- if gibbon1
                     then pure l2
                     else go "followIndirections" followIndirections l2
+              l2 <- go "calculateBounds" calculateBounds l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
@@ -717,7 +717,6 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
 
               -- L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
-              l3 <- go "calculateBounds" calculateBounds l2
               l3 <- go "cursorize"        cursorize     l2
               l3 <- go "reorderAlloc"     reorderAlloc  l3
               l3 <- go "L3.flatten"       flattenL3     l3

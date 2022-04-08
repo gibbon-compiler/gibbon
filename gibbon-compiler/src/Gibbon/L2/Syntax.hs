@@ -633,36 +633,36 @@ revertExp ex =
     LetE (v,_,ty, (Ext (IndirectionE _ _ _ _ arg))) bod ->
       let PackedTy tycon _ =  ty in
           LetE (v,[],(stripTyLocs ty), AppE (mkCopyFunName tycon) [] [revertExp arg]) (revertExp bod)
-        LetE (v,_,ty,rhs) bod ->
-          LetE (v,[], stripTyLocs ty, revertExp rhs) (revertExp bod)
-        IfE a b c  -> IfE (revertExp a) (revertExp b) (revertExp c)
-        MkProdE ls -> MkProdE $ L.map revertExp ls
-        ProjE i e  -> ProjE i (revertExp e)
-        CaseE scrt brs     -> CaseE (revertExp scrt) (L.map docase brs)
-        DataConE _ dcon ls -> DataConE () dcon $ L.map revertExp ls
-        TimeIt e ty b -> TimeIt (revertExp e) (stripTyLocs ty) b
-        SpawnE v _ args -> SpawnE v [] (L.map revertExp args)
-        SyncE -> SyncE
-        WithArenaE v e -> WithArenaE v (revertExp e)
-        Ext ext ->
-          case ext of
-            LetRegionE _ _ _ bod -> revertExp bod
-            LetParRegionE _ _ _ bod -> revertExp bod
-            LetLocE _ _ bod  -> revertExp bod
-            RetE _ v -> VarE v
-            AddFixed{} -> error "revertExp: TODO AddFixed."
-            FromEndE{} -> error "revertExp: TODO FromEndLE"
-            BoundsCheck{}   -> error "revertExp: TODO BoundsCheck"
-            IndirectionE{}  -> error "revertExp: TODO IndirectionE"
-            GetCilkWorkerNum-> LitE 0
-            LetAvail _ bod  -> revertExp bod
-            AllocateTagHere{} -> error "revertExp: TODO AddFixed."
-            AllocateScalarsHere{} -> error "revertExp: TODO AddFixed."
-            SSPush{} -> error "revertExp: TODO SSPush."
-            SSPop{} -> error "revertExp: TODO SSPop."
-        MapE{}  -> error $ "revertExp: TODO MapE"
-        FoldE{} -> error $ "revertExp: TODO FoldE"
-
+    LetE (v,_,ty,rhs) bod ->
+      LetE (v,[], stripTyLocs ty, revertExp rhs) (revertExp bod)
+    IfE a b c  -> IfE (revertExp a) (revertExp b) (revertExp c)
+    MkProdE ls -> MkProdE $ L.map revertExp ls
+    ProjE i e  -> ProjE i (revertExp e)
+    CaseE scrt brs     -> CaseE (revertExp scrt) (L.map docase brs)
+    DataConE _ dcon ls -> DataConE () dcon $ L.map revertExp ls
+    TimeIt e ty b -> TimeIt (revertExp e) (stripTyLocs ty) b
+    SpawnE v _ args -> SpawnE v [] (L.map revertExp args)
+    SyncE -> SyncE
+    WithArenaE v e -> WithArenaE v (revertExp e)
+    Ext ext ->
+      case ext of
+        LetRegionE _ _ _ bod -> revertExp bod
+        LetParRegionE _ _ _ bod -> revertExp bod
+        LetLocE _ _ bod  -> revertExp bod
+        RetE _ v -> VarE v
+        AddFixed{} -> error "revertExp: TODO AddFixed."
+        FromEndE{} -> error "revertExp: TODO FromEndLE"
+        BoundsCheck{}   -> error "revertExp: TODO BoundsCheck"
+        IndirectionE{}  -> error "revertExp: TODO IndirectionE"
+        GetCilkWorkerNum-> LitE 0
+        LetAvail _ bod  -> revertExp bod
+        AllocateTagHere{} -> error "revertExp: TODO AddFixed."
+        AllocateScalarsHere{} -> error "revertExp: TODO AddFixed."
+        SSPush{} -> error "revertExp: TODO SSPush."
+        SSPop{} -> error "revertExp: TODO SSPop."
+    MapE{}  -> error $ "revertExp: TODO MapE"
+    FoldE{} -> error $ "revertExp: TODO FoldE"
+  where
     -- Ugh .. this is bad. Can we remove the identity cases here ?
     -- TODO: Get rid of this (and L3.toL3Prim) soon.
     revertPrim :: Prim Ty2 -> Prim Ty1

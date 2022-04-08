@@ -128,8 +128,8 @@ simplifyLocBinds (Prog ddefs fundefs mainExp) = do
         SpawnE f locs args -> SpawnE f locs (map (go env) args)
         Ext ext ->
           case ext of
-            LetRegionE reg bod -> Ext (LetRegionE reg (go env bod))
-            LetParRegionE reg bod -> Ext (LetParRegionE reg (go env bod))
+            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go env bod))
+            LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go env bod))
             LetLocE loc (AfterConstantLE i loc2) bod ->
               case (M.lookup loc2 env) of
                 Nothing ->
@@ -160,8 +160,8 @@ simplifyLocBinds (Prog ddefs fundefs mainExp) = do
         SpawnE f locs args -> SpawnE f locs (map go2 args)
         Ext ext ->
           case ext of
-            LetRegionE reg bod -> Ext (LetRegionE reg (go2 bod))
-            LetParRegionE reg bod -> Ext (LetParRegionE reg (go2 bod))
+            LetRegionE reg sz ty bod -> Ext (LetRegionE reg sz ty (go2 bod))
+            LetParRegionE reg sz ty bod -> Ext (LetParRegionE reg sz ty (go2 bod))
             LetLocE loc rhs bod ->
               let bod' = go2 bod
                   free_vars = (allFreeVars bod')

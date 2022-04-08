@@ -478,8 +478,8 @@ allFreeVars_sans_datacon_args ex =
     SpawnE _ locs args -> S.fromList locs `S.union` (S.unions (map allFreeVars_sans_datacon_args args))
     Ext ext ->
       case ext of
-        LetRegionE r bod -> S.delete (regionToVar r) (allFreeVars_sans_datacon_args bod)
-        LetParRegionE r bod -> S.delete (regionToVar r) (allFreeVars_sans_datacon_args bod)
+        LetRegionE r _sz _ty bod -> S.delete (regionToVar r) (allFreeVars_sans_datacon_args bod)
+        LetParRegionE r _sz _ty bod -> S.delete (regionToVar r) (allFreeVars_sans_datacon_args bod)
         LetLocE loc locexp bod -> S.delete loc (allFreeVars_sans_datacon_args bod `S.union` gFreeVars locexp)
         RetE locs v     -> S.insert v (S.fromList locs)
         FromEndE loc    -> S.singleton loc

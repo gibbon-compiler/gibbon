@@ -88,12 +88,12 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
 
         Ext ext ->
           case ext of
-            L2.LetRegionE reg bod -> do
+            L2.LetRegionE reg sz ty bod -> do
               let alloc_env' = M.insert reg (RegionLocs [] S.empty) alloc_env
-              Ext <$> (L2.LetRegionE reg) <$> go reg_env alloc_env' store_env env2 bod
-            L2.LetParRegionE reg bod -> do
+              Ext <$> (L2.LetRegionE reg sz ty) <$> go reg_env alloc_env' store_env env2 bod
+            L2.LetParRegionE reg sz ty bod -> do
               let alloc_env' = M.insert reg (RegionLocs [] S.empty) alloc_env
-              Ext <$> (L2.LetParRegionE reg) <$> go reg_env alloc_env' store_env env2 bod
+              Ext <$> (L2.LetParRegionE reg sz ty) <$> go reg_env alloc_env' store_env env2 bod
             L2.LetLocE loc rhs bod -> do
               let reg = case rhs of
                       L2.StartOfLE r  -> r
@@ -189,8 +189,8 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
             TimeIt e0 _ty _b -> (findTyCon want e0)
             Ext ext ->
               case ext of
-                L2.LetRegionE _ bod -> (findTyCon want bod)
-                L2.LetParRegionE _ bod -> (findTyCon want bod)
+                L2.LetRegionE _ _ _ bod -> (findTyCon want bod)
+                L2.LetParRegionE _ _ _ bod -> (findTyCon want bod)
                 L2.LetLocE _ _ bod -> (findTyCon want bod)
                 _ -> error $ "findTyCon: " ++ show want ++ " not found. " ++ sdoc (want,e)
             _ -> error $ "findTyCon: " ++ show want ++ " not found. " ++ sdoc (want,e)
@@ -254,10 +254,10 @@ checkScalarDeps ddefs in_scope tag_loc ex0 =
         FoldE{}  -> (dep_env,move_set,move)
         Ext ext  ->
           case ext of
-            L2.LetRegionE _ bod ->
+            L2.LetRegionE _ _ _ bod ->
               let (dep_env',move_set',move') = go dep_env move_set move bod
               in (dep_env' `M.union` dep_env, move_set `S.union` move_set', move && move')
-            L2.LetParRegionE _ bod ->
+            L2.LetParRegionE _ _ _ bod ->
               let (dep_env',move_set',move') = go dep_env move_set move bod
               in (dep_env' `M.union` dep_env, move_set `S.union` move_set', move && move')
             L2.LetLocE _ _ bod ->
