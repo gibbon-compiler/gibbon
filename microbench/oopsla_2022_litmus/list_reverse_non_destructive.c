@@ -75,13 +75,13 @@ int main(int argc, char **argv){
 
     printf("Calling reverse on List.\n");
     //reverse list
-    head = reverseList(head);
-    printList(head);
+    List *reversedHead = reverseList(head);
+    printList(reversedHead);
 
     //Question :: What happens to the input list should that be freed too? 
 
     //free the reversed list
-    freeList(head);
+    freeList(reversedHead);
 
 }
 
