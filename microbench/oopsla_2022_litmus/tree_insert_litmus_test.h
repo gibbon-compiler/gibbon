@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 typedef struct tree {
     struct tree * left; 
@@ -14,3 +15,7 @@ void treeInsertHelper(Tree *root, int value);
 void printTreeHelper(Tree *root);
 void printTree(Tree *root);
 void freeTree(Tree *root);
+int sumTree(Tree *root);
+int sumTreeHelper(Tree *root);
+Tree *helper(int s, int e);
+long int power(int base, int superscript);

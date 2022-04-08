@@ -48,9 +48,40 @@ void treeInsertHelper(Tree *root, int value){
             }
         }
     }
-
 }
 
+
+
+int sumTreeHelper(Tree *root){
+
+    //leaf case
+    if (root->left == NULL && root->right == NULL){
+       return root->n;
+    }
+    //non leaf case
+    else {
+        if (root->left == NULL){
+            return root->n + sumTreeHelper(root->right);                
+        }
+        else if (root->right == NULL){
+            return root->n + sumTreeHelper(root->left);
+        }
+        else {
+            return root->n + sumTreeHelper(root->left) + sumTreeHelper(root->right);
+        }     
+    }
+}
+
+
+int sumTree(Tree *root){
+
+    if (root == NULL){
+        return 0;
+    }
+    
+    return sumTreeHelper(root);
+
+}
 
 Tree *treeInsert(Tree *root, int value){
     
@@ -68,9 +99,30 @@ Tree *treeInsert(Tree *root, int value){
 }
 
 
+Tree *helper(int s, int e){
+
+    if (e < s){
+        return NULL;
+    }
+    else if (e == s){
+        return createTreeNode(s);
+    }
+    else{
+        int m = s + ((e - s) / 2);
+        Tree *newNode  = createTreeNode(m);
+        newNode->left  = helper(s, m - 1);
+        newNode->right = helper(m + 1, e);
+
+        return newNode;
+    }
+
+}
+
+
 void printTreeHelper(Tree *root){
 
     if (root == NULL){
+        printf(" Null ");
         return;
     }
 
@@ -101,19 +153,46 @@ void freeTree(Tree *root){
 
 }
 
+long int power(int base, int superscript){
+
+    long int power = 1;
+
+    for(int i = 0; i < superscript; i++){
+        power *= base;
+    }
+
+    return power;
+
+}
+
 
 int main (int argc, char ** argv){
 
-    Tree * root = createTreeNode(5);
-    Tree * left = createTreeNode(4);
-    Tree * right = createTreeNode(6);
-    
-    root->left  = left;
-    root->right = right;
+    if (argc < 3){
+        printf("Error: Usage: ./a.out treeSize random-iterations\n");
+        exit(1);
+    }
 
-    root = treeInsert(root, 1);
-    
+    srand(time(NULL));
+
+    long int sizeParam = atol(argv[1]);
+
+    long int iterations = atol(argv[2]);
+
+    long int totalNodes = power(2, sizeParam + 1) - 1;
+
+    Tree *root = helper(0, totalNodes);
+
     printTree(root);
+
+    for(int i=0; i < iterations; i++){
+
+        int j = rand() % totalNodes;
+        root = treeInsert(root, j);
+        printTree(root);
+
+
+    }
 
     //free memory
     freeTree(root);
