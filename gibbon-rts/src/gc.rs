@@ -362,7 +362,6 @@ pub fn garbage_collect(
         }
         // Reset the allocation area and record stats.
         nursery.clear();
-        nursery.bump_num_collections();
         // Restore the remaining cauterized writers. Allocate space for them
         // in the nursery, not oldgen.
         restore_writers(&cenv, &mut nursery)?;
@@ -1215,18 +1214,11 @@ struct Nursery(*mut C_GibNursery);
 
 impl Nursery {
     #[inline]
-    fn bump_num_collections(&mut self) {
-        let nursery: *mut C_GibNursery = self.0;
-        unsafe {
-            (*nursery).num_collections += 1;
-        }
-    }
-
-    #[inline]
     fn clear(&mut self) {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
             (*nursery).alloc = (*nursery).heap_end;
+            (*nursery).regions = 0;
         }
     }
 

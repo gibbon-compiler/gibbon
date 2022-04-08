@@ -899,8 +899,7 @@ typedef struct gib_chunk_footer {
 } GibChunkFooter;
 
 typedef struct gib_nursery {
-    // Step.
-    uint64_t num_collections;
+    uint64_t regions;
 
     // Allocation area.
     size_t heap_size;
@@ -919,9 +918,6 @@ typedef struct gib_generation {
 
     // Is this the oldest generation?
     bool oldest;
-
-    // Amount of memory allocated in this generation.
-    size_t mem_allocated;
 
     // Allocation area; uninitialized in the oldest gen which uses malloc.
     size_t heap_size;
@@ -1264,7 +1260,7 @@ static void gib_storage_free(void)
 
 static void gib_nursery_initialize(GibNursery *nursery)
 {
-    nursery->num_collections = 0;
+    nursery->regions = 0;
     nursery->heap_size = NURSERY_SIZE;
     nursery->heap_start = (char *) gib_alloc(NURSERY_SIZE);
     if (nursery->heap_start == NULL) {
@@ -1306,7 +1302,6 @@ static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
 {
     gen->no = gen_no;
     gen->dest = (GibGeneration *) NULL;
-    gen->mem_allocated = 0;
     gen->old_zct = (void *) NULL;
     gen->new_zct = (void *) NULL;
     // Initialize the remembered set.
@@ -1453,12 +1448,10 @@ void gib_indirection_barrier(
 
 typedef struct gib_gc_state_snapshot {
     // nursery
-    uint64_t nursery_num_collections;
     char *nursery_alloc;
     char *nursery_heap;
 
     // generations
-    size_t gen_mem_allocated;
     char *gen_alloc;
     char *gen_rem_set_alloc;
     void *gen_old_zct;
@@ -1515,12 +1508,10 @@ void gib_gc_save_state(GibGcStateSnapshot *snapshot, uint64_t num_regions, ...)
     GibGeneration *oldest_gen = gib_global_generations;
 
     // nursery
-    snapshot->nursery_num_collections = nursery->num_collections;
     snapshot->nursery_alloc = nursery->alloc;
     memcpy(snapshot->nursery_heap, nursery->heap_start, NURSERY_SIZE);
 
     // generations
-    snapshot->gen_mem_allocated = oldest_gen->mem_allocated;
     snapshot->gen_alloc = oldest_gen->alloc;
     snapshot->gen_rem_set_alloc = (oldest_gen->rem_set)->alloc;
     snapshot->gen_old_zct = gib_clone_zct(oldest_gen->old_zct);
@@ -1578,12 +1569,10 @@ void gib_gc_restore_state(GibGcStateSnapshot *snapshot)
     GibGeneration *oldest_gen = gib_global_generations;
 
     // nursery
-    nursery->num_collections = snapshot->nursery_num_collections;
     nursery->alloc = snapshot->nursery_alloc;
     memcpy(nursery->heap_start, snapshot->nursery_heap, NURSERY_SIZE);
 
     // generations
-    oldest_gen->mem_allocated = snapshot->gen_mem_allocated;
     oldest_gen->alloc = snapshot->gen_alloc;
     (oldest_gen->rem_set)->alloc = snapshot->gen_rem_set_alloc;
     gib_free_zct(oldest_gen->old_zct);

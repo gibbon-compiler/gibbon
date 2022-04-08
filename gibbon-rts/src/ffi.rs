@@ -43,7 +43,8 @@ pub mod types {
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibNursery {
-        pub num_collections: u64,
+        pub regions: u64,
+
         pub heap_size: usize,
         pub heap_start: *const i8,
         pub heap_end: *const i8,
@@ -62,7 +63,6 @@ pub mod types {
         pub no: u8,
         pub dest: *mut C_GibGeneration,
         pub oldest: bool,
-        pub mem_allocated: usize,
         pub heap_size: usize,
         pub heap_start: *const i8,
         pub heap_end: *const i8,
