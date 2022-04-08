@@ -471,7 +471,9 @@ unsafe fn evacuate_remembered_set(
         // The remembered set contains the address where the indirect-
         // ion pointer is stored. We must read it to get the address of
         // the pointed-to data.
-        let (src, _): (*mut i8, _) = read((*frame).ptr);
+        let (tagged_src, _): (u64, _) = read((*frame).ptr);
+        let tagged = TaggedPointer::from_u64(tagged_src);
+        let src = tagged.untag();
         // Evacuate the data.
         let mut st = EvacState {
             benv: &mut benv,
