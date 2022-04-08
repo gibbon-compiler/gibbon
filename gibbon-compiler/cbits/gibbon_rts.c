@@ -1821,7 +1821,7 @@ int main(int argc, char **argv)
 
     // Free all objects initialized by the Rust RTS.
     free(gib_global_bench_prog_param);
-    gib_gc_cleanup(rstack, wstack, nursery, generations);
+    // gib_gc_cleanup(rstack, wstack, nursery, generations);
 
     // Next, free all objects initialized by the C RTS.
     gib_storage_free();

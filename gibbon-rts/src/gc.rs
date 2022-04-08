@@ -529,6 +529,8 @@ unsafe fn evacuate_shadowstack(
         let mut st =
             EvacState { benv, cenv, zct, nursery, prov: &GcRootProv::Stk };
         let src = (*frame).ptr;
+        let src_end = (*frame).endptr;
+        let is_loc_0 = (src_end.offset_from(src)) == 1024;
         let (src_after, dst_after, dst_after_end, tag) = evacuate_packed(
             &mut st,
             heap,
@@ -547,8 +549,7 @@ unsafe fn evacuate_shadowstack(
         match tag {
             C_COPIED_TO_TAG | C_COPIED_TAG | C_REDIRECTION_TAG => {}
             _ => {
-                // TODO(ckoparkar): write forwarding pointer if src is loc0.
-                if tag == C_CAUTERIZED_TAG {
+                if is_loc_0 || tag == C_CAUTERIZED_TAG {
                     assert!(dst_after < dst_after_end);
                     write_forwarding_pointer_at(
                         src_after,
