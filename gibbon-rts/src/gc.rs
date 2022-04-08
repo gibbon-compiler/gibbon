@@ -330,7 +330,6 @@ pub fn garbage_collect(
         // Start by cauterizing the writers.
         let mut cenv = cauterize_writers(&nursery, &wstack)?;
         // Prepare to evacuate the readers.
-        let chunk_starts = nursery.chunk_starts();
         let mut oldest_gen = OldestGeneration(generations_ptr);
         unsafe {
             // let evac_major = force_major
@@ -342,7 +341,6 @@ pub fn garbage_collect(
             // First evacuate the remembered set, then the shadow-stack.
             let mut benv = evacuate_remembered_set(
                 &mut cenv,
-                &chunk_starts,
                 (*generations_ptr).new_zct,
                 &nursery,
                 &mut oldest_gen,
@@ -353,7 +351,6 @@ pub fn garbage_collect(
             evacuate_shadowstack(
                 &mut benv,
                 &mut cenv,
-                &chunk_starts,
                 (*generations_ptr).new_zct,
                 &nursery,
                 &mut oldest_gen,
@@ -439,7 +436,6 @@ type ChunkStartsSet = HashSet<*mut i8>;
 struct EvacState<'a> {
     benv: &'a mut BurnedAddressEnv,
     cenv: &'a mut CauterizedEnv,
-    chunk_starts: &'a ChunkStartsSet,
     zct: *mut Zct,
     nursery: &'a Nursery,
     // heap: Box<&'a mut dyn Heap>,
@@ -454,7 +450,6 @@ struct EvacState<'a> {
 /// See Note [Granularity of the burned addresses table].
 unsafe fn evacuate_remembered_set(
     cenv: &mut CauterizedEnv,
-    chunk_starts: &ChunkStartsSet,
     zct: *mut Zct,
     nursery: &Nursery,
     heap: &mut impl Heap,
@@ -478,7 +473,6 @@ unsafe fn evacuate_remembered_set(
         let mut st = EvacState {
             benv: &mut benv,
             cenv,
-            chunk_starts,
             zct,
             nursery,
             prov: &GcRootProv::RemSet,
@@ -507,7 +501,6 @@ unsafe fn evacuate_remembered_set(
 unsafe fn evacuate_shadowstack(
     benv: &mut BurnedAddressEnv,
     cenv: &mut CauterizedEnv,
-    chunk_starts: &ChunkStartsSet,
     zct: *mut Zct,
     nursery: &Nursery,
     heap: &mut impl Heap,
@@ -533,14 +526,8 @@ unsafe fn evacuate_shadowstack(
         let footer = dst_end as *const C_GibChunkFooter;
         (*zct).insert((*footer).reg_info);
         // Evacuate the data.
-        let mut st = EvacState {
-            benv,
-            cenv,
-            chunk_starts,
-            zct,
-            nursery,
-            prov: &GcRootProv::Stk,
-        };
+        let mut st =
+            EvacState { benv, cenv, zct, nursery, prov: &GcRootProv::Stk };
         let src = (*frame).ptr;
         let (src_after, dst_after, dst_after_end, tag) = evacuate_packed(
             &mut st,
@@ -560,7 +547,8 @@ unsafe fn evacuate_shadowstack(
         match tag {
             C_COPIED_TO_TAG | C_COPIED_TAG | C_REDIRECTION_TAG => {}
             _ => {
-                if chunk_starts.contains(&src) || tag == C_CAUTERIZED_TAG {
+                // TODO(ckoparkar): write forwarding pointer if src is loc0.
+                if tag == C_CAUTERIZED_TAG {
                     assert!(dst_after < dst_after_end);
                     write_forwarding_pointer_at(
                         src_after,
@@ -868,13 +856,15 @@ unsafe fn evacuate_packed(
         }
         // Regular datatype, copy.
         _ => {
-            let DataconInfo { scalar_bytes, field_tys, num_scalars, .. } =
+            let DataconInfo { scalar_bytes, field_tys, .. } =
                 packed_info.get_unchecked(tag as usize);
+
+            let scalar_bytes1 = *scalar_bytes;
 
             // Check bound of the destination buffer before copying.
             // Reserve additional space for a redirection node or a
             // forwarding pointer.
-            let space_reqd: usize = 32 + *scalar_bytes;
+            let space_reqd: usize = 32 + scalar_bytes1;
             {
                 // Scope for mutable variables src_mut and dst_mut,
                 // which are the read and write cursors in the source
@@ -884,15 +874,15 @@ unsafe fn evacuate_packed(
                     Heap::check_bounds(heap, space_reqd, dst, dst_end);
                 // Copy the tag and the fields.
                 dst_mut = write(dst_mut, tag);
-                dst_mut.copy_from_nonoverlapping(src_after_tag, *scalar_bytes);
-                let mut src_mut = src_after_tag.add(*scalar_bytes);
-                dst_mut = dst_mut.add(*scalar_bytes);
+                dst_mut.copy_from_nonoverlapping(src_after_tag, scalar_bytes1);
+                let mut src_mut = src_after_tag.add(scalar_bytes1);
+                dst_mut = dst_mut.add(scalar_bytes1);
                 // Add forwarding pointers:
                 // if there's enough space, write a COPIED_TO tag and
                 // dst's address at src. Otherwise just write a COPIED tag.
                 // After the forwarding pointer, burn the rest of
                 // space previously occupied by scalars.
-                let burn = if *scalar_bytes >= 8 {
+                let burn = if scalar_bytes1 >= 8 {
                     assert!(dst < dst_end);
                     write_forwarding_pointer_at(
                         src,
@@ -1236,26 +1226,7 @@ impl Nursery {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
             (*nursery).alloc = (*nursery).heap_end;
-            (*nursery).num_chunk_starts = 0;
         }
-    }
-
-    fn chunk_starts(&self) -> ChunkStartsSet {
-        let nursery: *mut C_GibNursery = self.0;
-        let mut chunk_starts = HashSet::new();
-        unsafe {
-            let mut run_ptr: *const i8 = (*nursery).chunk_starts;
-            let end_ptr = run_ptr.add(
-                size_of::<*const i8>() * (*nursery).num_chunk_starts as usize,
-            );
-            while run_ptr < end_ptr {
-                let (chunk_start_addr, next): (*mut i8, _) = read(run_ptr);
-                // TODO(ckoparkar): This is EXPENSIVE. Find an alternative.
-                // chunk_starts.insert(chunk_start_addr);
-                run_ptr = next;
-            }
-        }
-        chunk_starts
     }
 
     fn contains_addr(&self, addr: *const i8) -> bool {

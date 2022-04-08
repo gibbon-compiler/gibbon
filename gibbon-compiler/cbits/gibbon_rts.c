@@ -908,10 +908,6 @@ typedef struct gib_nursery {
     char *heap_end;
     char *alloc;
 
-    // A place to store starting addresses of chunks.
-    char *chunk_starts;
-    uint64_t num_chunk_starts;
-
 } GibNursery;
 
 typedef struct gib_generation {
@@ -1047,10 +1043,6 @@ STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collec
     char *bump = old - size;
     if (LIKELY((bump >= nursery->heap_start))) {
         nursery->alloc = bump;
-        char *chunk_starts_alloc = nursery->chunk_starts +
-            (nursery->num_chunk_starts * sizeof(char*));
-        *(char**) chunk_starts_alloc = bump;
-        nursery->num_chunk_starts = nursery->num_chunk_starts + 1;
         return (GibChunk) {bump, old};
     } else {
         return gib_alloc_region_in_nursery_slow(size, collected);
@@ -1285,13 +1277,6 @@ static void gib_nursery_initialize(GibNursery *nursery)
     }
     nursery->heap_end = nursery->heap_start + NURSERY_SIZE;
     nursery->alloc = nursery->heap_end;
-    nursery->chunk_starts = (char *) gib_alloc(NURSERY_SIZE);
-    if (nursery->chunk_starts == NULL) {
-        fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %zu",
-                NURSERY_SIZE);
-        exit(1);
-    }
-    nursery->num_chunk_starts = 0;
 
     return;
 }
@@ -1300,7 +1285,6 @@ static void gib_nursery_initialize(GibNursery *nursery)
 static void gib_nursery_free(GibNursery *nursery)
 {
     free(nursery->heap_start);
-    free(nursery->chunk_starts);
     return;
 }
 
@@ -1474,7 +1458,6 @@ typedef struct gib_gc_state_snapshot {
     // nursery
     uint64_t nursery_num_collections;
     char *nursery_alloc;
-    uint64_t nursery_num_chunk_starts;
     char *nursery_heap;
 
     // generations
@@ -1537,7 +1520,6 @@ void gib_gc_save_state(GibGcStateSnapshot *snapshot, uint64_t num_regions, ...)
     // nursery
     snapshot->nursery_num_collections = nursery->num_collections;
     snapshot->nursery_alloc = nursery->alloc;
-    snapshot->nursery_num_chunk_starts = nursery->num_chunk_starts;
     memcpy(snapshot->nursery_heap, nursery->heap_start, NURSERY_SIZE);
 
     // generations
@@ -1601,7 +1583,6 @@ void gib_gc_restore_state(GibGcStateSnapshot *snapshot)
     // nursery
     nursery->num_collections = snapshot->nursery_num_collections;
     nursery->alloc = snapshot->nursery_alloc;
-    nursery->num_chunk_starts = snapshot->nursery_num_chunk_starts;
     memcpy(nursery->heap_start, snapshot->nursery_heap, NURSERY_SIZE);
 
     // generations

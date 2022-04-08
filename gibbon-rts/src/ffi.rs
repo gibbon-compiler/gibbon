@@ -48,8 +48,6 @@ pub mod types {
         pub heap_start: *const i8,
         pub heap_end: *const i8,
         pub alloc: *const i8,
-        pub chunk_starts: *const i8,
-        pub num_chunk_starts: u64,
     }
 
     pub type C_GibRememberedSetElt = C_GibShadowstackFrame;
