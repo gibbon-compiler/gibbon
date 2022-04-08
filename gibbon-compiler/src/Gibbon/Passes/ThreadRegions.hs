@@ -286,7 +286,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
             return $ Ext $ RetE (newlocs_env ++ locs) v
           else return $ Ext ext
 
-        LetRegionE r bod -> do
+        LetRegionE r sz ty bod -> do
           let -- free = S.fromList $ freeLocVars bod
               free = ss_free_locs (S.singleton (regionToVar r)) env2 bod
               free_rlocs = free `S.intersection` (M.keysSet rlocs_env)
@@ -295,8 +295,8 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env ex =
           bod' <- go bod
           let pre = mkLets (rpush ++ wpush)
               post = mkLets (wpop ++ rpop) bod'
-          pure $ pre (Ext $ LetRegionE r post)
-        LetParRegionE r bod -> Ext <$> LetParRegionE r <$> go bod
+          pure $ pre (Ext $ LetRegionE r sz ty post)
+        LetParRegionE r sz ty bod -> Ext <$> LetParRegionE r sz ty <$> go bod
         FromEndE{}    -> return ex
         BoundsCheck sz _bound cur -> do
           return $ Ext $ BoundsCheck sz (toEndV (renv # cur)) cur
@@ -414,8 +414,8 @@ findRetLocs e0 = go e0 []
         SyncE{}  -> acc
         Ext ext ->
           case ext of
-            LetRegionE _ bod  -> go bod acc
-            LetParRegionE _ bod  -> go bod acc
+            LetRegionE _ _ _ bod  -> go bod acc
+            LetParRegionE _ _ _ bod  -> go bod acc
             LetLocE _ _ bod   -> go bod acc
             RetE locs _       -> locs ++ acc
             FromEndE{}        -> acc

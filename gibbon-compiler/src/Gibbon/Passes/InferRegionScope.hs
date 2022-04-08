@@ -72,9 +72,9 @@ inferRegScopeExp env ex =
     Ext ext ->
       case ext of
         AddFixed{} -> return ex
-        LetRegionE r rhs ->
+        LetRegionE r sz ty rhs ->
           case r of
-            MMapR{} -> Ext <$> LetRegionE r <$> (go rhs)
+            MMapR{} -> Ext . LetRegionE r sz ty <$> go rhs
             _ ->
               let deps = depList ex
               in case deps of
@@ -106,13 +106,13 @@ inferRegScopeExp env ex =
                                             -- else (DynR regV mul)
                                             else (GlobR regV defaultMul)
                            Ext <$>
-                             LetRegionE scoped_reg <$>
+                             LetRegionE scoped_reg Undefined Nothing <$>
                              inferRegScopeExp (M.insert r scoped_reg env) rhs
                    [] -> return ex
 
-        LetParRegionE r rhs ->
+        LetParRegionE r sz ty rhs ->
           case r of
-            MMapR{} -> Ext <$> LetParRegionE r <$> (go rhs)
+            MMapR{} -> Ext . LetParRegionE r sz ty <$> go rhs
             _ ->
               let deps = depList ex
               in case deps of
@@ -138,10 +138,10 @@ inferRegScopeExp env ex =
                                             then BigInfinite
                                             else Infinite
                            if path g retVertex regVertex
-                           then Ext <$> LetParRegionE (GlobR regV defaultMul) <$> (go rhs)
+                           then Ext <$> LetParRegionE (GlobR regV defaultMul) Undefined Nothing <$> (go rhs)
                            -- [2018.03.30] - TEMP: Turning off scoped buffers.
                            -- else Ext$ LetParRegionE (DynR regV mul) (inferRegScopeExp rhs)
-                           else Ext <$> LetParRegionE (GlobR regV defaultMul) <$> (go rhs)
+                           else Ext <$> LetParRegionE (GlobR regV defaultMul) Undefined Nothing <$> (go rhs)
                    [] -> return ex
 
         -- Straightforward recursion

@@ -89,6 +89,7 @@ import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
+import Gibbon.Passes.CalculateBounds (calculateBounds)
 import           Gibbon.Pretty
 
 
@@ -715,6 +716,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "threadRegions"    threadRegions l2
 
               -- L2 -> L3
+              -- TODO: Compose L3.TcM with (ReaderT Config)
+              l3 <- go "calculateBounds" calculateBounds l2
               l3 <- go "cursorize"        cursorize     l2
               l3 <- go "reorderAlloc"     reorderAlloc  l3
               l3 <- go "L3.flatten"       flattenL3     l3

@@ -13,6 +13,6 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
      gcc-7 uthash-dev racket \
      ghc-9.0.1 cabal-install-3.4 vim
 RUN curl -sSL https://get.haskellstack.org/ | sh
-RUN echo "export PATH=/opt/ghc/bin:\$PATH" >> /home/vscode/.bashrc 
+ENV PATH /opt/ghc/bin:/opt/cabal/bin:$PATH
 RUN sudo ln -sf /usr/bin/gcc-7 /usr/bin/gcc
 RUN cabal update

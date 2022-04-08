@@ -294,12 +294,12 @@ interpExt :: SizeEnv -> RunConfig -> ValEnv Exp2 -> DDefs Ty2 -> M.Map Var (FunD
            -> E2Ext LocVar Ty2 -> InterpM Store Exp2 (Value Exp2, Size)
 interpExt sizeEnv rc env ddefs fenv ext =
   case ext of
-    LetRegionE reg bod -> do
+    LetRegionE reg _ _ bod -> do
       insertIntoStore (regionToVar reg) emptyBuffer
       go env sizeEnv bod
 
-    LetParRegionE reg bod ->
-      interpExt sizeEnv rc env ddefs fenv (LetRegionE reg bod)
+    LetParRegionE reg sz ty bod ->
+      interpExt sizeEnv rc env ddefs fenv (LetRegionE reg sz ty bod)
 
     LetLocE loc locexp bod ->
       case locexp of
