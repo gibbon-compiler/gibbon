@@ -43,6 +43,5 @@
   ;; (2 ^ (n+1)) - 1
   (let ([total-nodes : Int (- (exp 2 (+ (size-param) 1)) 1)])
     (let ([tr0 : Tree (helper 0 total-nodes)])
-      (let ([tr1 : Tree (iterate (let ([j : Int (mod (rand) total-nodes)])
-                                   (tree-insert tr0 j)))])
+      (let ([tr1 : Tree (iterate (loop tr0 5000))])
         (sum-tree tr1)))))

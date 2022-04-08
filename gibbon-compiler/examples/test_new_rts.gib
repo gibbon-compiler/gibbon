@@ -56,6 +56,10 @@
    (let ([ys : List (iterate (reverse xs (Nil)))])
      (sum-list ys))))
 
+(define (do-reverse2 [n : Int]) : Int
+ (let ([xs : List (build-list n n)])
+   (let ([n : Int (iterate (sum-list (reverse xs (Nil))))])
+     n)))
 
 (define (do-tree [n : Int]) : Int
   (let ([tr0 : Tree (buildtree 10)])
