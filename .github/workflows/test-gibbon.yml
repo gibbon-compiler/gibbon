@@ -2,6 +2,7 @@ name: test-gibbon
 on:
   - push
   - pull_request
+      types: [review_requested, ready_for_review]
 jobs:
   linux:
     name: test-gibbon

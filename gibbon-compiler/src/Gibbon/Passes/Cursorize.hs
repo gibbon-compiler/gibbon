@@ -341,10 +341,10 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
             Left denv' -> cursorizeExp ddfs fundefs denv' tenv' senv bod
 
         -- Exactly same as cursorizePackedExp
-        LetRegionE reg bod -> do
+        LetRegionE reg _ _ bod -> do
           mkLets (regionToBinds False reg) <$> go bod
 
-        LetParRegionE reg bod -> do
+        LetParRegionE reg _ _ bod -> do
           mkLets (regionToBinds True reg) <$> go bod
 
         BoundsCheck i bound cur -> return $ Ext $ L3.BoundsCheck i bound cur
@@ -545,10 +545,10 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
             [loc] ->  pure $ mkDi (VarE loc) [ fromDi v' ]
             _ -> return $ Di $ L3.MkProdE $ L.foldr (\loc acc -> (VarE loc):acc) [fromDi v'] locs
 
-        LetRegionE r bod -> do
+        LetRegionE r _ _ bod -> do
           onDi (mkLets (regionToBinds False r)) <$> go tenv senv bod
 
-        LetParRegionE r bod -> do
+        LetParRegionE r _ _ bod -> do
           onDi (mkLets (regionToBinds True r)) <$> go tenv senv bod
 
         FromEndE{} -> error $ "cursorizePackedExp: TODO " ++ sdoc ext
@@ -683,6 +683,7 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                        DynR v _  -> Right (VarE v, [], tenv, senv)
                        -- TODO: docs
                        MMapR _v   -> Left denv
+
 
     FreeLE -> Left denv -- AUDIT: should we just throw away this information?
 

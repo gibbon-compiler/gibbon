@@ -78,6 +78,7 @@ library
                        Gibbon.Passes.FollowRedirects
                        Gibbon.Passes.RearrangeFree
                        Gibbon.Passes.Codegen
+                       Gibbon.Passes.CalculateBounds
 
   other-extensions:    DeriveDataTypeable CPP
 
