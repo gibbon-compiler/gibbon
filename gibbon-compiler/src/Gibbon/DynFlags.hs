@@ -35,6 +35,7 @@ data GeneralFlag
   | Opt_CountParRegions    -- ^ Count and print the number of regions allocated for parallelism.
   | Opt_CountAllRegions    -- ^ Count and print the number of all the regions allocated.
   | Opt_RtsDebug           -- ^ Compile the RTS in debugging mode.
+  | Opt_PrintGcStats       -- ^ Record and print GC statistics.
   deriving (Show,Read,Eq,Ord)
 
 -- | Exactly like GHC's ddump flags.
@@ -106,7 +107,9 @@ dynflagsParser = DynFlags <$> (S.fromList <$> many gflagsParser) <*> (S.fromList
                    flag' Opt_RelativeOffsets (long "reloffsets" <> help "Enable relative offsets.") <|>
                    flag' Opt_CountParRegions (long "count-par-regions" <> help "Count and print the number of regions allocated for parallelism.") <|>
                    flag' Opt_CountAllRegions (long "count-all-regions" <> help "Count and print the number of all the regions allocated.") <|>
-                   flag' Opt_RtsDebug (long "debug-rts" <> help "Compile the RTS in debugging mode.")
+                   flag' Opt_RtsDebug (long "debug-rts" <> help "Compile the RTS in debugging mode.") <|>
+                   flag' Opt_PrintGcStats (long "print-gc-stats" <> short 'S' <> help "Record and print GC statistics.")
+
 
     dflagsParser :: Parser DebugFlag
     dflagsParser = flag' Opt_D_Dump_Repair (long "ddump-repair" <>

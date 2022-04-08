@@ -385,6 +385,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
                 else " -lm -lgibbon_rts "
 
         rts_debug = gopt Opt_RtsDebug (dynflags cfg)
+        print_gc_stats = gopt Opt_PrintGcStats (dynflags cfg)
 
         compile_rust_rts = do
             env <- getEnvironment
@@ -422,6 +423,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
             let rts_header_dir = takeDirectory rts_o_path
             let compile_rts_cmd = compilationCmd backend cfg
                                   ++ (if rts_debug then " -D_GIBBON_DEBUG -O0 -g" else "")
+                                  ++ (if print_gc_stats then " -D_GIBBON_GCSTATS " else "")
                                   ++" -I " ++ rts_header_dir ++ " "
                                   ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "
                                   ++" -c " ++ rtsPath ++ " -o " ++ rts_o_path ++ " " ++ links
