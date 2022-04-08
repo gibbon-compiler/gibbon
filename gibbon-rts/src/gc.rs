@@ -268,7 +268,7 @@ Deferred until after the paper deadline...
 /// we'll have to store that info in a chunk footer, and then that could guide
 /// how big this new chunk should be. Using a default value of 1024 for now.
 const CHUNK_SIZE: usize = 1024;
-const MAX_CHUNK_SIZE: usize = 65500;
+const MAX_CHUNK_SIZE: usize = 65535;
 
 const COLLECT_MAJOR_K: u8 = 4;
 

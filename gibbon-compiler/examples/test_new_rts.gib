@@ -58,11 +58,10 @@
 
 
 (define (do-tree [n : Int]) : Int
-  (let ([tr0 : Tree (buildtree n)])
+  (let ([tr0 : Tree (buildtree 10)])
     (let ([tr1 : Tree (add1 tr0)])
       (sumtree tr1))))
 
-;; (vector (do-reverse (size-param)) (do-tree (size-param)))
-;; (do-tree (size-param))
-;; (do-reverse (size-param))
-(do-reverse (size-param))
+(let* ([n : Int (do-reverse (size-param))]
+       [m : Int (do-tree (size-param))])
+  (vector n m))

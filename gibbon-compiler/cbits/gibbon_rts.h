@@ -389,6 +389,7 @@ void gib_check_rust_struct_sizes(void);
 
 // Region allocation.
 GibChunk gib_alloc_region(size_t size);
+GibChunk gib_alloc_region_on_heap(size_t size);
 void gib_grow_region(char **writeloc_addr, char **footer_addr);
 
 // Functions related to counting the number of allocated regions.

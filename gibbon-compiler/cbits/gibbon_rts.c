@@ -43,7 +43,7 @@
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-#define MAX_CHUNK_SIZE 65500
+#define MAX_CHUNK_SIZE 65535
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
 static size_t gib_global_biginf_init_chunk_size = 4 * GB;
@@ -1004,7 +1004,6 @@ void gib_check_rust_struct_sizes(void)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-static GibChunk gib_alloc_region_on_heap(size_t size);
 STATIC_INLINE GibChunk gib_alloc_region_in_nursery(size_t size);
 STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected);
 static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected);
@@ -1012,14 +1011,10 @@ STATIC_INLINE bool gib_addr_in_nursery(char *ptr);
 
 GibChunk gib_alloc_region(size_t size)
 {
-    if (size <= NURSERY_REGION_MAX_SIZE) {
-        return gib_alloc_region_in_nursery(size);
-    } else {
-        return gib_alloc_region_on_heap(size);
-    }
+    return gib_alloc_region_in_nursery(size);
 }
 
-static GibChunk gib_alloc_region_on_heap(size_t size)
+GibChunk gib_alloc_region_on_heap(size_t size)
 {
     char *heap_start = gib_alloc(size);
     if (heap_start == NULL) {
@@ -1051,6 +1046,10 @@ STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collec
 
 static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
 {
+    if (UNLIKELY((size > NURSERY_REGION_MAX_SIZE))) {
+        return gib_alloc_region_on_heap(size);
+    }
+
     if (collected) {
         fprintf(stderr, "Couldn't free space after garbage collection.\n");
         exit(1);
@@ -1067,7 +1066,6 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     return gib_alloc_region_in_nursery_fast(size, true);
 }
 
-// TODO(ckoparkar): BUGGY, AUDITME.
 void gib_grow_region(char **writeloc_addr, char **footer_addr)
 {
     char *footer_ptr = *footer_addr;
@@ -1082,31 +1080,30 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
         old_chunk_in_nursery = false;
         // Get size from current footer.
         footer = (GibChunkFooter *) footer_ptr;
-        newsize = footer->size * 2;
+        newsize = (footer->size) << 1;
         // See #110.
         if (newsize > MAX_CHUNK_SIZE) {
             newsize = MAX_CHUNK_SIZE;
         }
     }
-    size_t total_size = newsize + sizeof(GibChunkFooter);
 
     // Allocate.
-    char *heap_start = (char *) gib_alloc(total_size);
+    char *heap_start = (char *) gib_alloc(newsize);
     if (heap_start == NULL) {
-        fprintf(stderr, "gib_grow_region: gib_alloc failed: %zu", total_size);
+        fprintf(stderr, "gib_grow_region: gib_alloc failed: %zu", newsize);
         exit(1);
     }
-    char *heap_end = heap_start + total_size;
+    char *heap_end = heap_start + newsize;
 
     // Write a new footer for this chunk and link it with the old chunk's footer.
     char *new_footer_start = NULL;
     GibChunkFooter *new_footer = NULL;
     if (old_chunk_in_nursery) {
-        new_footer_start = gib_init_footer_at(heap_end, total_size, 0);
+        new_footer_start = gib_init_footer_at(heap_end, newsize, 0);
         new_footer = (GibChunkFooter *) new_footer_start;
         gib_insert_into_new_zct(DEFAULT_GENERATION, new_footer->reg_info);
     } else {
-        new_footer_start = heap_start + newsize;
+        new_footer_start = heap_end - sizeof(GibChunkFooter);
         new_footer = (GibChunkFooter *) new_footer_start;
         new_footer->reg_info = footer->reg_info;
         new_footer->size = newsize;
@@ -1118,7 +1115,7 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
 #ifdef _GIBBON_DEBUG
     GibRegionInfo *reg = (GibRegionInfo*) new_footer->reg_info;
     printf("gib_grow_region: allocated %zu bytes for region %" PRIu64 "\n",
-           total_size,
+           newsize,
            (new_footer->reg_info)->id);
 #endif
 
