@@ -1694,7 +1694,9 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
               scrt' <- go flag env2 scrt
               brs' <- mapM
                         (\(dcon,vtys,rhs) -> do
-                          let env2' = extendsVEnv (M.fromList vtys) env2
+                          let vars = map fst vtys
+                          let tys = lookupDataCon ddefs dcon
+                          let env2' = extendsVEnv (M.fromList (zip vars tys)) env2
                           rhs' <- go True env2' rhs
                           pure (dcon,vtys,rhs'))
                         brs
