@@ -1658,18 +1658,19 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
 
     float_fn :: Env2 Ty0 -> Exp0 -> FloatM Exp0
     float_fn env2 ex = do
-      let free = S.toList $ gFreeVars ex `S.difference` (M.keysSet (fEnv env2))
+      fundefs' <- get
+      let free = S.toList $ gFreeVars ex `S.difference` (M.keysSet fundefs')
           in_tys = map (\x -> lookupVEnv x env2) free
           ret_ty = recoverType ddefs env2 ex
           fn_ty = ForAll [] (ArrowTy in_tys ret_ty)
       fn_name <- lift $ gensym "caseFn"
-      args <- mapM (\_ -> lift $ gensym "x") free
+      args <- mapM (\x -> lift $ gensym x) free
       let ex' = foldr (\(from,to) acc -> gSubst from (VarE to) acc) ex (zip free args)
       let fn = FunDef fn_name args fn_ty ex' NotRec NoInline
       state (\s -> ((AppE fn_name [] (map VarE free)), M.insert fn_name fn s))
 
     go :: Bool -> Env2 Ty0 -> Exp0 -> FloatM Exp0
-    go flag env2 ex =
+    go float env2 ex =
       case ex of
         VarE{}    -> pure ex
         LitE{}    -> pure ex
@@ -1687,20 +1688,18 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
         IfE a b c  -> IfE <$> go True env2 a <*> go True env2 b <*> go True env2 c
         MkProdE ls -> MkProdE <$> mapM recur ls
         ProjE i a  -> (ProjE i) <$> recur a
-        CaseE scrt brs ->
-          if flag
-            then float_fn env2 ex
-            else do
-              scrt' <- go flag env2 scrt
-              brs' <- mapM
-                        (\(dcon,vtys,rhs) -> do
+        CaseE scrt brs -> do
+          scrt' <- go float env2 scrt
+          brs' <- mapM (\(dcon,vtys,rhs) -> do
                           let vars = map fst vtys
                           let tys = lookupDataCon ddefs dcon
                           let env2' = extendsVEnv (M.fromList (zip vars tys)) env2
                           rhs' <- go True env2' rhs
                           pure (dcon,vtys,rhs'))
-                        brs
-              pure $ CaseE scrt' brs'
+                       brs
+          if float
+          then float_fn env2 (CaseE scrt' brs')
+          else pure $ CaseE scrt' brs'
         DataConE a dcon ls -> DataConE a dcon <$> mapM recur ls
         TimeIt e ty b    -> (\a -> TimeIt a ty b) <$> recur e
         WithArenaE v e -> (WithArenaE v) <$> recur e
@@ -1711,4 +1710,4 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
         FoldE{} -> err1 (sdoc ex)
 
       where
-        recur = go flag env2
+        recur = go float env2
