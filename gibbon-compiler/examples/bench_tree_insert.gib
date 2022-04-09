@@ -33,10 +33,15 @@
                        (Node n1 l (tree-insert r n))
                        (Node n1 (tree-insert l n) r))]))
 
+(define (loop [tr : Tree] [n : Int]) : Tree
+  (if (= n 0)
+      tr
+      (let ([j : Int (mod (rand) 100)])
+        (loop (tree-insert tr j) (- n 1)))))
+
 (let ([m : Int (size-param)])
   ;; (2 ^ (n+1)) - 1
   (let ([total-nodes : Int (- (exp 2 (+ (size-param) 1)) 1)])
     (let ([tr0 : Tree (helper 0 total-nodes)])
-      (let ([tr1 : Tree (iterate (let ([j : Int (mod (rand) total-nodes)])
-                                   (tree-insert tr0 j))) ])
+      (let ([tr1 : Tree (iterate (loop tr0 1000))])
         (sum-tree tr1)))))

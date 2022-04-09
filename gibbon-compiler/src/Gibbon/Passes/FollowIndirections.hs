@@ -24,8 +24,11 @@ followIndirections (Prog ddefs fundefs mainExp) = do
     gofun f@FunDef{funName,funArgs,funBody,funTy} = do
       let in_tys = arrIns funTy
       let out_ty = arrOut funTy
-      funBody' <-
-        case funBody of
+      funBody' <- go in_tys out_ty funName funArgs funTy funBody
+      pure $ f { funBody = funBody' }
+
+    go in_tys out_ty funName funArgs funTy e =
+      case e of
           CaseE scrt brs -> do
             let VarE scrtv = scrt
                 PackedTy tycon scrt_loc = snd $ fromJust $ L.find (\t -> fst t == scrtv) (zip funArgs in_tys)
@@ -64,5 +67,25 @@ followIndirections (Prog ddefs fundefs mainExp) = do
             let redir_br = (redir_dcon,[(indir_ptrv,indir_ptrloc)],redir_bod)
             ----------------------------------------
             (pure (CaseE scrt (brs ++ [indir_br,redir_br])))
-          _ -> pure funBody
-      pure $ f { funBody = funBody' }
+
+          IfE a b c -> do
+            a' <- go in_tys out_ty funName funArgs funTy a
+            b' <- go in_tys out_ty funName funArgs funTy b
+            c' <- go in_tys out_ty funName funArgs funTy c
+            pure $ IfE a' b' c'
+
+          WithArenaE v bod -> (WithArenaE v) <$> go in_tys out_ty funName funArgs funTy bod
+
+          LetE (v,ty,locs,rhs) bod ->
+            LetE (v,ty,locs,rhs) <$> go in_tys out_ty funName funArgs funTy  bod
+
+          Ext (LetLocE loc rhs bod) ->
+            Ext <$> (LetLocE loc rhs) <$> go in_tys out_ty funName funArgs funTy  bod
+
+          Ext (LetRegionE reg sz ty bod) ->
+            Ext <$> (LetRegionE reg sz ty) <$> go in_tys out_ty funName funArgs funTy  bod
+
+          Ext (LetParRegionE reg sz ty bod) ->
+            Ext <$> (LetParRegionE reg sz ty) <$> go in_tys out_ty funName funArgs funTy  bod
+
+          _ -> pure e
