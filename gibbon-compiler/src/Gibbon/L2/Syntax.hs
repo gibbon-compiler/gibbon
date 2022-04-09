@@ -864,7 +864,7 @@ allFreeVars ex =
         RetE locs v     -> S.insert v (S.fromList locs)
         FromEndE loc    -> S.singleton loc
         BoundsCheck _ reg cur -> S.fromList [reg,cur]
-        IndirectionE _ _ (a,b) (c,d) _ -> S.fromList [a,b,c,d]
+        IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [a,b,c,d]
         AddFixed v _    -> S.singleton v
         GetCilkWorkerNum-> S.empty
         LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod

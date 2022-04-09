@@ -106,17 +106,13 @@ followRedirectsExp isPrintFn ttailenv tenv tail =
                     TagAlts ls -> do
                       ls' <- mapM (\(x,tl) -> (x,) <$> go tenv tl) ls
                       if indirectionAlt `elem` (map fst ls')
-                      then return $ TagAlts $ ls' ++ [(redirectionAlt, alttail_red)]
-                      else return $ TagAlts $ ls' ++ [(redirectionAlt, alttail_red)
-                                                      -- (indirectionAlt, alttail_ind)
-                                                     ]
+                      then return $ TagAlts $ ls'
+                      else return $ TagAlts $ ls'
                     IntAlts ls -> do
                       ls' <- mapM (\(x,tl) -> (x,) <$> go tenv tl) ls
                       if indirectionAlt `elem` (map fst ls')
-                      then return $ IntAlts $ ls' ++ [(redirectionAlt, alttail_red)]
-                      else return $ IntAlts $ ls' ++ [(redirectionAlt, alttail_red)
-                                                      -- (indirectionAlt, alttail_ind)
-                                                     ]
+                      then return $ IntAlts $ ls'
+                      else return $ IntAlts $ ls'
           return $ Switch lbl trv alts' bod_maybe
         _ -> error "followRedirectsExp: Shouldn't switch on any other type."
 

@@ -1,4 +1,4 @@
-#include "list_reverse_litmus_test.h"
+#include "list_reverse_destructive.h"
 
 List *createListnode(int val){
     List *newNode = (List *) malloc(sizeof(List));
@@ -19,7 +19,7 @@ void printList(List *head){
 
     printf("NIL\n");
 }
-
+  
 List * createList(int length){
 
     List * head = createListnode(length);

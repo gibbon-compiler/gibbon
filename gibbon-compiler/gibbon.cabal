@@ -79,6 +79,7 @@ library
                        Gibbon.Passes.ReorderAlloc
                        Gibbon.Passes.Unariser
                        Gibbon.Passes.Lower
+                       Gibbon.Passes.LateSimplifier
                        Gibbon.Passes.FollowRedirects
                        Gibbon.Passes.RearrangeFree
                        Gibbon.Passes.Codegen

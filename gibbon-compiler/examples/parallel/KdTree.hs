@@ -442,27 +442,3 @@ check_nearest pts actual =
               (True, 0) idxs
         (is_ok, _inexact) = tup
     in print_check is_ok
-
-bench_seqcountcorr :: ()
-bench_seqcountcorr =
-    let pts :: Vector (Float, Float, Float)
-        pts = readArrayFile Nothing
-        n   = sizeParam
-        radius  = 100.0
-        tr      = mkKdTree_seq pts
-        pts' = slice 0 n pts
-        counts = iterate (allCountCorr_seq radius tr pts')
-        query = nth pts' 4
-        count = nth counts 4
-    in ()
-
-bench_seqbuildkdtree :: ()
-bench_seqbuildkdtree =
-    let pts :: Vector (Float, Float, Float)
-        pts = readArrayFile Nothing
-        n       = sizeParam
-        radius  = intToFloat n
-        tr      = iterate (mkKdTree_seq pts)
-    in check_buildkdtree pts tr
-
-gibbon_main = bench_seqcountcorr
