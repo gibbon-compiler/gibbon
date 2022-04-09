@@ -250,8 +250,8 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv ex =
             return $ Ext $ RetE (newlocs ++ locs) v
           else return $ Ext ext
 
-        LetRegionE r bod -> Ext <$> LetRegionE r <$> go bod
-        LetParRegionE r bod -> Ext <$> LetParRegionE r <$> go bod
+        LetRegionE r sz ty bod -> Ext . LetRegionE r sz ty <$> go bod
+        LetParRegionE r sz ty bod -> Ext . LetParRegionE r sz ty <$> go bod
         FromEndE{}    -> return ex
         BoundsCheck sz _bound cur -> do
           return $ Ext $ BoundsCheck sz (toEndV (renv # cur)) cur
@@ -325,8 +325,8 @@ findRetLocs e0 = go e0 []
         SyncE{}  -> acc
         Ext ext ->
           case ext of
-            LetRegionE _ bod  -> go bod acc
-            LetParRegionE _ bod  -> go bod acc
+            LetRegionE _ _ _ bod  -> go bod acc
+            LetParRegionE _ _ _ bod  -> go bod acc
             LetLocE _ _ bod   -> go bod acc
             RetE locs _       -> locs ++ acc
             FromEndE{}        -> acc
