@@ -133,7 +133,7 @@ addRAN needRANsTyCons prg@Prog{ddefs,fundefs,mainExp} = do
               (M.fromList $ L.map (\f -> (funName f, f)) new_fns)
   mainExp' <-
     case mainExp of
-      Just (ex,ty) -> Just <$> (,ty) <$> addRANExp True needRANsTyCons iddefs M.empty ex
+      Just (ex,ty) -> Just <$> (,ty) <$> addRANExp False needRANsTyCons iddefs M.empty ex
       Nothing -> return Nothing
   let l1 = prg { ddefs = iddefs
                , fundefs = funs'

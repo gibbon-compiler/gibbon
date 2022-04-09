@@ -163,7 +163,7 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
           env2' = extendVEnv v ty env2
 
           vars = gFreeVars (substLocInExp after_env rhs) `S.difference` (M.keysSet fundefs)
-          used = S.fromList (allFreeVars (substLocInExp after_env rhs)) `S.difference` (M.keysSet fundefs)
+          used = (allFreeVars (substLocInExp after_env rhs)) `S.difference` (M.keysSet fundefs)
 
       if v == "cpy_18070" || v == "stm_2381_5619_7454"
       then dbgTraceIt (sdoc (v, vars, spawned, used, boundlocs)) (pure ())

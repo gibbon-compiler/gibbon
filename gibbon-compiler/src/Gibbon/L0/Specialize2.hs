@@ -1658,7 +1658,7 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
 
     float_fn :: Env2 Ty0 -> Exp0 -> FloatM Exp0
     float_fn env2 ex = do
-      let free = S.toList $ gFreeVars ex
+      let free = S.toList $ gFreeVars ex `S.difference` (M.keysSet (fEnv env2))
           in_tys = map (\x -> lookupVEnv x env2) free
           ret_ty = recoverType ddefs env2 ex
           fn_ty = ForAll [] (ArrowTy in_tys ret_ty)

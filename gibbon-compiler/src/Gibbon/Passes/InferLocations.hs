@@ -1360,7 +1360,7 @@ moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
           let bod' = go [] S.empty bod
           in LetE (v,locs,ty,SyncE) (mkLets acc1 bod')
         LetE (v,locs,ty,rhs) bod ->
-          let vars = S.fromList $ allFreeVars rhs
+          let vars = allFreeVars rhs
           in if S.null (S.intersection vars pending)
              then LetE (v, locs, ty, rhs) (go acc1 pending bod)
              else go ((v, locs, ty, rhs):acc1) (S.insert v pending) bod

@@ -427,6 +427,7 @@ tests:
   - name: pp_projs.gib
   - name: test12_skip.gib
     failing: [gibbon1]
+    skip: true
 
   # Tests that actually work but we can't generate answers with Racket
   - name: test08_dict.gib
