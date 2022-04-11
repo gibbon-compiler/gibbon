@@ -135,7 +135,10 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
                           --         . map (maybe Undefined BoundedSize . sizeOfTy) -- map to our region size type
                           --         $ lookupDataCon ddefs dcon -- find ddef)
                           let venv' = M.union (M.fromList $ zip (map fst vlocs) (lookupDataCon ddefs dcon)) (vEnv env2)
-                          (bod', re, rt) <- calculateBoundsExp ddefs env2 { vEnv = venv'} varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv regTyEnv bod
+                              varLocEnv' = M.fromList vlocs `M.union` varLocEnv
+                              (_vars,locs) = unzip vlocs
+                              locOffEnv' = (M.fromList (zip locs (repeat Undefined))) `M.union` locOffEnv
+                          (bod', re, rt) <- calculateBoundsExp ddefs (env2 { vEnv = venv'}) varSzEnv varLocEnv' locRegEnv locOffEnv' regSzEnv regTyEnv bod
                           return ((dcon, vlocs, bod'), re, rt)
                         )
                         cases
