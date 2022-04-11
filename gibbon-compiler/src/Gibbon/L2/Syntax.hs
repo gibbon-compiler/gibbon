@@ -80,10 +80,12 @@ data RegionType = IndirectionFree | RightwardLocalIndirections | LocalIndirectio
   deriving (Eq, Ord, Read, Show, Generic, NFData, Out)
 
 
+-- | 'Undefined' is at the top of this lattice.
 instance Ord RegionSize where
   (<=) (BoundedSize sz1) (BoundedSize sz2) = sz1 <= sz2
-  (<=) Undefined         v                 = error $ "Invalid comparison " ++ show v
-  (<=) v                 Undefined         = error $ "Invalid comparison " ++ show v
+  (<=) Undefined         (BoundedSize{})   = False
+  (<=) (BoundedSize{})   Undefined         = True
+  (<=) Undefined         Undefined         = True
 
 instance Semigroup RegionType where
   -- IndirectionFree < RightwardLocalIndirections < LocalIndirections < NoSharing

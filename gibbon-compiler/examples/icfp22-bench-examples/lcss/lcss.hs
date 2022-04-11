@@ -163,25 +163,46 @@ printTupleList list = case list of
                             _ = printTupleList rst
                         in ()
 
+
+unitTestListComp :: Plist Int -> Plist Int -> Bool 
+unitTestListComp list1 list2 = case list1 of 
+                               Nil -> case list2 of
+                                      Nil -> True  
+                                      Cons x rst -> False 
+                               Cons x rst -> case list2 of
+                                             Nil -> False  
+                                             Cons x' rst' -> if x == x' then True && (unitTestListComp rst rst') else False 
+
 -- Main program to run longest common subsequence
 bench_main :: ()
 bench_main = 
   let f :: Vector Int
       a', b', c', d', e', f'  :: Int
-      l1, l2, l3              :: Plist Int
+      l1, l2, l3, l5          :: Plist Int
       l4                      :: Plist (Int, Int)
       t1, t2                  :: Bool
-      f  = readArrayFile Nothing
+      f        = readArrayFile Nothing
+      --_        = printVec (\i -> printint i) f
       a' = nth f 0
       b' = nth f 1
       c' = nth f 2
       d' = nth f 3
       e' = nth f 4
       f' = nth f 5
+      --_ = printint (nth f ((length f) - 1))
+      l5 = makeIntList (nth f 6) (nth f ((length f) - 1)) ((nth f 7) - (nth f 6))
+      --_  = printIntList l5
       l1 = makeIntList a' c' (b' - a')
       l2 = makeIntList d' f' (e' - d')
+      _ = printsym (quote "\n" )
+      _ = printsym (quote "The output list produced is\n" )
       l3  = lcss l1 l2
       _   = printIntList l3
+      t1 = unitTestListComp l3 l5
+      _ = printsym (quote "\n" )
+      _ = printsym (quote "The result of checking the output produced by gibbon lcss is\n" )
+      _ = printbool t1
+      _ = printsym (quote "\n" )
 
   in ()
 
@@ -191,26 +212,7 @@ gibbon_main = bench_main
 -- Instructions to run
 
 -- Command use to run 
--- gibbon --packed --to-exe lcss.hs; ./lcss.exe --array-input-length 6 --array-input lcss.txt 
--- Modify lcss.txt file for 3 cases like so: 
 
--- 1.) Fast   Case  -> 1 
---                     2
---                     2000
---                     1000
---                     1001
---                     2000
-
--- 2.) Slow   Case  -> 1
---                     2
---                     2000
---                     1000
---                     1001
---                     4000 
-
--- 3.) Normal Case  -> 1
---                     2 
---                     4000
---                     1000
---                     1001
---                     4000
+-- 1.) Fast: gibbon --packed --to-exe lcss.hs; ./lcss.exe --array-input-length 1007 --array-input lcss.faststdin
+-- 2.) Norm: gibbon --packed --to-exe lcss.hs; ./lcss.exe --array-input-length 1007 --array-input lcss.normstdin  
+-- 3.) Slow: gibbon --packed --to-exe lcss.hs; ./lcss.exe --array-input-length 3007 --array-input lcss.slowstdin
