@@ -13,7 +13,7 @@ module Gibbon.Passes.Lower
 import           Control.Monad
 import           Data.Foldable
 import           Data.Maybe
-import           Data.List as L hiding (tail)
+import qualified Data.List as L hiding (tail)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           Data.Int (Int64)
@@ -77,8 +77,6 @@ genDcons [] tail fields     = do
   return $ T.LetAllocT ptr fields $ T.RetValsT [T.VarTriv ptr, T.VarTriv tail]
 
 genAlts :: [(DataCon,[(IsBoxed,Ty3)])] -> Var -> Var -> Int64 -> PassM T.Alts
--- Don' do anything for indirections. Let 'followRedirects' take care of it.
-genAlts ((dcons, _):rst) tail tag n | isIndirectionTag dcons = genAlts rst tail tag n
 genAlts ((_dcons, typs):xs) tail tag n = do
   let (_,typs') = unzip typs
   -- WARNING: IsBoxed ignored here
@@ -332,6 +330,8 @@ getTagOfDataCon :: Out a => DDefs a -> DataCon -> Tag
 getTagOfDataCon dds dcon =
     if isIndirectionTag dcon
     then indirectionAlt
+    else if isRedirectionTag dcon
+    then redirectionAlt
     else if isRelRANDataCon dcon
     -- So that is_big in the RTS can identify which nodes have size information.
     then 150 + (fromIntegral ix)
@@ -968,8 +968,8 @@ triv sym_tbl msg ( e0) =
                      -- program in the very first step.
                      Nothing -> error $ "triv: Symbol not found in table: " ++ sdoc s
     -- Bools become ints:
-    (PrimAppE L3.MkTrue [])  -> T.IntTriv 1
-    (PrimAppE L3.MkFalse []) -> T.IntTriv 0
+    (PrimAppE L3.MkTrue [])  -> T.BoolTriv True
+    (PrimAppE L3.MkFalse []) -> T.BoolTriv False
     -- Heck, let's map Unit onto Int too:
     (MkProdE []) -> T.IntTriv 0
     (MkProdE ls) -> T.ProdTriv (map (\x -> triv sym_tbl (show x) x) ls)
@@ -993,7 +993,7 @@ typ t =
     SymDictTy (Just var) x -> T.SymDictTy var $ typ x
     SymDictTy Nothing _ty -> error $ "lower/typ: Expected arena annotation on type: " ++ (sdoc t)
     -- t | isCursorTy t -> T.CursorTy
-    PackedTy{} -> T.PtrTy
+    PackedTy{} -> T.CursorTy
     CursorTy -> T.CursorTy -- Audit me
     PtrTy -> T.PtrTy
     ArenaTy   -> T.ArenaTy

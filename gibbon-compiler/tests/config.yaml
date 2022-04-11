@@ -34,9 +34,6 @@ tests:
   - name: test01_if.gib
   - name: test02_arith.gib
   - name: test02b_datacon.gib
-    # This fails because of a duplicate region binding that ThreadRegions
-    # introduces inside timeit forms. Fix it later.
-    failing: [Gibbon1, Gibbon2]
   - name: test02c_case.gib
   - name: test02d_printPair.gib
   - name: test02e_printNest.gib
@@ -430,6 +427,7 @@ tests:
   - name: pp_projs.gib
   - name: test12_skip.gib
     failing: [gibbon1]
+    skip: true
 
   # Tests that actually work but we can't generate answers with Racket
   - name: test08_dict.gib

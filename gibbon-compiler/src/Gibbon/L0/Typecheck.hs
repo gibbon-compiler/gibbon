@@ -10,7 +10,7 @@ import           Control.Monad.Except
 import           Control.Monad.Fail
 #endif
 import           Data.Foldable ( foldlM )
-import           Data.List
+import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Set as S
 import           Text.PrettyPrint hiding ( (<>) )
@@ -51,7 +51,7 @@ tcProg prg@Prog{ddefs,fundefs,mainExp} = do
   mainExp' <- case mainExp of
                 Nothing -> pure Nothing
                 Just (e,gvn_main_ty) -> do
-                  let tc = do 
+                  let tc = do
                               (s1, drvd_main_ty, e_tc) <-
                                 tcExp ddefs emptySubst M.empty fenv [] True e
                               s2 <- unify e gvn_main_ty drvd_main_ty
@@ -612,7 +612,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
       case scrt_ty' of
         (PackedTy tycon drvd_tyargs) -> do
           let tycons_brs = map (getTyOfDataCon ddefs . (\(a,_,_) -> a)) brs
-          case nub tycons_brs of
+          case L.nub tycons_brs of
             [one] -> if one == tycon
                      then do
                        let ddf = lookupDDef ddefs tycon
@@ -728,7 +728,7 @@ tcCases ddefs sbst venv fenv bound_tyvars ddf brs is_main ex = do
       (\(s,acc,ex_acc) (con,vtys,rhs) -> do
         let vars = map fst vtys
             tys  = lookupDataCon' ddf con
-            tys_gen = map (ForAll (tyArgs ddf \\ bound_tyvars)) tys
+            tys_gen = map (ForAll (tyArgs ddf L.\\ bound_tyvars)) tys
             venv' = venv <> (M.fromList $ zip vars tys_gen)
             vtys' = zip vars tys
         (s', rhs_ty, rhs_tc) <- tcExp ddefs s venv' fenv bound_tyvars is_main rhs
@@ -769,14 +769,14 @@ generalize env s bound_tyvars ty = do
       ty' = zonkTy (s <> s2) ty
 
       -- Generalize over BoundTv's too.
-      free_tvs = (tyVarsInTy ty) \\ bound_tyvars
+      free_tvs = (tyVarsInTy ty) L.\\ bound_tyvars
   pure (s <> s2, ForAll (new_bndrs ++ free_tvs) ty')
   where
     env_tvs = metaTvsInTySchemes (M.elems env)
     res_tvs = metaTvsInTy ty
 
     meta_tvs :: [MetaTv]
-    meta_tvs = res_tvs \\ env_tvs
+    meta_tvs = res_tvs L.\\ env_tvs
 
 --
 instDataConTy :: DDefs0 -> DataCon -> TcM ([Ty0], [Ty0], Ty0)
@@ -826,13 +826,13 @@ newtype Subst = Subst (M.Map MetaTv Ty0)
 
 instance Semigroup Subst where
   -- s1 <> s2 == zonkTy s1 . zonkTy s2
-  (Subst s1) <> (Subst s2) = 
+  (Subst s1) <> (Subst s2) =
     let s2' = M.map (zonkTy (Subst s1)) s2
         mp =  M.unionWith combine s2' s1
     in Subst mp
 
--- | Combine substitutions. In case of substitutions with intersecting keys, 
--- we will take the narrower type of the two. e.g. combine [($1, $2)] [($1, IntTy)] 
+-- | Combine substitutions. In case of substitutions with intersecting keys,
+-- we will take the narrower type of the two. e.g. combine [($1, $2)] [($1, IntTy)]
 -- should be [($1, IntTy)]. Map.union does a left biased union so it will result in [($1, $2)]
 combine :: Ty0 -> Ty0 -> Ty0
 combine v1 v2 | v1 == v2 = v1

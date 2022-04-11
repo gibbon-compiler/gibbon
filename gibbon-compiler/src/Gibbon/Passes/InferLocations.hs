@@ -296,7 +296,7 @@ inferExp' env exp bound dest=
       bindAllUnbound e (lv:ls) = do
         r <- lift $ lift $ freshRegVar
         e' <- bindAllUnbound e ls
-        return $ Ext (LetRegionE r (Ext (LetLocE lv (StartOfLE r) e')))
+        return $ Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfLE r) e')))
       bindAllUnbound e _ = return e
 
       bindAllLocations :: Result -> TiM Result
@@ -307,7 +307,7 @@ inferExp' env exp bound dest=
                     case i of
                       AfterConstantL lv1 v lv2 -> Ext (LetLocE lv1 (AfterConstantLE v lv2) a)
                       AfterVariableL lv1 v lv2 -> Ext (LetLocE lv1 (AfterVariableLE v lv2 True) a)
-                      StartRegionL lv r -> Ext (LetRegionE r (Ext (LetLocE lv (StartOfLE r) a)))
+                      StartRegionL lv r -> Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfLE r) a)))
                       AfterTagL lv1 lv2 -> Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
                       FreeL lv -> Ext (LetLocE lv FreeLE a)
                       AfterCopyL lv1 v1 v' lv2 f lvs ->
@@ -346,7 +346,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
              b1 <- noAfterLoc lv' cs' cs'
              if b1
              then do (e'',ty'',cs'') <- bindTrivialAfterLoc lv' (e',ty',cs')
-                     return (Ext (LetRegionE r (Ext (LetLocE lv' (StartOfLE r) e''))), ty'', cs'')
+                     return (Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv' (StartOfLE r) e''))), ty'', cs'')
              else return (e',ty',(StartRegionL lv r):cs')
       tryBindReg (e,ty,c:cs) =
           do (e',ty',cs') <- tryBindReg (e,ty,cs)
@@ -557,7 +557,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
                             (copy (e',ty,[]) d)
 
     ProjE i w -> do
-        (e', ty) <- case w of 
+        (e', ty) <- case w of
           VarE v -> pure (ProjE i (VarE v), let ProdTy tys = lookupVEnv v env in tys !! i)
           w' -> (\(e, b, _) -> (e, b)) <$> inferExp env w dest
         case dest of
@@ -905,8 +905,8 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           (bod',ty',cs') <- inferExp (extendVEnv vr (PackedTy tycon loc) env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs'
-          tryBindReg ( (Ext$ LetRegionE (MMapR r) $ Ext $ LetLocE loc (StartOfLE (MMapR r)) $
-                        L2.LetE (vr,[],PackedTy tycon loc,rhs') bod'')
+          tryBindReg ( Ext$ LetRegionE (MMapR r) Undefined Nothing $ Ext $ LetLocE loc (StartOfLE (MMapR r)) $
+                        L2.LetE (vr,[],PackedTy tycon loc,rhs') bod''
                      , ty', fcs)
 
 
@@ -1162,9 +1162,9 @@ finishExp e =
              e' <- finishExp e
              return $ WithArenaE v e'
 
-      Ext (LetRegionE r e1) -> do
+      Ext (LetRegionE r sz ty e1) -> do
              e1' <- finishExp e1
-             return $ Ext (LetRegionE r e1')
+             return $ Ext (LetRegionE r sz ty e1')
       Ext (LetLocE loc lex e1) -> do
              e1' <- finishExp e1
              loc' <- finalLocVar loc
@@ -1257,10 +1257,10 @@ cleanExp e =
       WithArenaE v e -> let (e',s) = cleanExp e
                         in (WithArenaE v e', s)
 
-      Ext (LetRegionE r e) -> let (e',s') = cleanExp e
-                              in (Ext (LetRegionE r e'), s')
-      Ext (LetParRegionE r e) -> let (e',s') = cleanExp e
-                                 in (Ext (LetParRegionE r e'), s')
+      Ext (LetRegionE r sz ty e) -> let (e',s') = cleanExp e
+                              in (Ext (LetRegionE r sz ty e'), s')
+      Ext (LetParRegionE r sz ty e) -> let (e',s') = cleanExp e
+                                 in (Ext (LetParRegionE r sz ty e'), s')
       Ext (LetLocE loc FreeLE e) -> let (e', s') = cleanExp e
                                     in if S.member loc s'
                                        then (Ext (LetLocE loc FreeLE e'), S.delete loc s')
@@ -1360,7 +1360,7 @@ moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
           let bod' = go [] S.empty bod
           in LetE (v,locs,ty,SyncE) (mkLets acc1 bod')
         LetE (v,locs,ty,rhs) bod ->
-          let vars = S.fromList $ allFreeVars rhs
+          let vars = allFreeVars rhs
           in if S.null (S.intersection vars pending)
              then LetE (v, locs, ty, rhs) (go acc1 pending bod)
              else go ((v, locs, ty, rhs):acc1) (S.insert v pending) bod
@@ -1375,8 +1375,8 @@ moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
         SpawnE fn locs ls -> error "moveProjsAfterSync: unbound SpawnE"
         SyncE   -> error "moveProjsAfterSync: unbound SyncE"
         Ext ext -> case ext of
-                     LetRegionE r bod -> Ext $ LetRegionE r $ go acc1 pending bod
-                     LetParRegionE r bod -> Ext $ LetParRegionE r $ go acc1 pending bod
+                     LetRegionE r sz ty bod -> Ext $ LetRegionE r sz ty $ go acc1 pending bod
+                     LetParRegionE r sz ty bod -> Ext $ LetParRegionE r sz ty $ go acc1 pending bod
                      LetLocE a b bod -> Ext $ LetLocE a b $ go acc1 pending bod
                      oth -> error $ "moveProjsAfterSync: extension not handled." ++ sdoc oth
         MapE{}  -> error "moveProjsAfterSync: todo MapE"

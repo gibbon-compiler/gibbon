@@ -6,7 +6,7 @@
 module Gibbon.Passes.InferEffects
   (inferEffects, inferExp) where
 
-import Data.List as L
+import qualified Data.List as L
 import Data.Set as S
 import Data.Map as M
 
@@ -162,8 +162,8 @@ inferExp ddfs fenv env dps expr =
     MapE{} -> error "inferEffects: MapE not handled."
     FoldE{} -> error "inferEffects: FoldE not handled."
 
-    Ext (LetRegionE _ rhs) -> inferExp ddfs fenv env dps rhs
-    Ext (LetParRegionE _ rhs) -> inferExp ddfs fenv env dps rhs
+    Ext (LetRegionE _ _ _ rhs) -> inferExp ddfs fenv env dps rhs
+    Ext (LetParRegionE _ _ _ rhs) -> inferExp ddfs fenv env dps rhs
     Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env dps rhs
     Ext (RetE _ _)         -> (S.empty, Nothing)
     Ext (FromEndE _ )      -> (S.empty, Nothing)

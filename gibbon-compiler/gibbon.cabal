@@ -68,6 +68,7 @@ library
                        Gibbon.Passes.ParAlloc
                        Gibbon.Passes.InferRegionScope
                        Gibbon.Passes.RouteEnds
+                       Gibbon.Passes.FollowIndirections
                        Gibbon.Passes.ThreadRegions
                        Gibbon.Passes.Cursorize
                        Gibbon.Passes.FindWitnesses
@@ -78,6 +79,7 @@ library
                        Gibbon.Passes.FollowRedirects
                        Gibbon.Passes.RearrangeFree
                        Gibbon.Passes.Codegen
+                       Gibbon.Passes.CalculateBounds
 
   other-extensions:    DeriveDataTypeable CPP
 

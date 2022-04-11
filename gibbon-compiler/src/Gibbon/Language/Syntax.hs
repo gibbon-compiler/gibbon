@@ -57,7 +57,7 @@ import           Control.Monad.Writer
 import           Control.Monad.Fail
 #endif
 import qualified Data.Map as M
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Set as S
 import           Data.Word ( Word8 )
 import           Data.Kind ( Type )
@@ -731,7 +731,7 @@ instance Show e => Show (Value e) where
 --    VProd ls -> "("++ concat(intersperse ", " (L.map show ls)) ++")"
 -- For now match Gibbon's Racket backend
    VProd [] -> ""
-   VProd ls -> "'#("++ concat(intersperse " " (L.map show ls)) ++")"
+   VProd ls -> "'#("++ concat(L.intersperse " " (L.map show ls)) ++")"
    VList ls -> show ls
    VDict m      -> show (M.toList m)
    -- For now, Racket style:

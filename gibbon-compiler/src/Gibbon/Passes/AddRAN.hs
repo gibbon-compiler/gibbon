@@ -5,7 +5,7 @@ module Gibbon.Passes.AddRAN
 
 import           Control.Monad ( when, forM )
 import           Data.Foldable
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Map as M
 import           Data.Maybe ( fromJust )
 import qualified Data.Set as S
@@ -133,7 +133,7 @@ addRAN needRANsTyCons prg@Prog{ddefs,fundefs,mainExp} = do
               (M.fromList $ L.map (\f -> (funName f, f)) new_fns)
   mainExp' <-
     case mainExp of
-      Just (ex,ty) -> Just <$> (,ty) <$> addRANExp True needRANsTyCons iddefs M.empty ex
+      Just (ex,ty) -> Just <$> (,ty) <$> addRANExp False needRANsTyCons iddefs M.empty ex
       Nothing -> return Nothing
   let l1 = prg { ddefs = iddefs
                , fundefs = funs'
@@ -440,8 +440,8 @@ we need random access for that type.
 
     Ext ext ->
       case ext of
-        LetRegionE _ bod -> go bod
-        LetParRegionE _ bod -> go bod
+        LetRegionE _ _ _ bod -> go bod
+        LetParRegionE _ _ _ bod -> go bod
         LetLocE loc rhs bod  ->
             let reg = case rhs of
                         StartOfLE r  -> regionToVar r

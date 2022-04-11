@@ -15,7 +15,7 @@ where
 
 import           Control.Monad.State ( MonadState )
 import           Control.DeepSeq (NFData)
-import           Data.List
+import qualified Data.List as L
 import qualified Data.Loc as Loc
 import           GHC.Generics
 import           Text.PrettyPrint.GenericPretty
@@ -403,7 +403,7 @@ metaTvsInTys tys = foldr go [] tys
 
 -- | Like 'tyVarsInTy'.
 tyVarsInTyScheme :: TyScheme -> [TyVar]
-tyVarsInTyScheme (ForAll tyvars ty) = tyVarsInTy ty \\ tyvars
+tyVarsInTyScheme (ForAll tyvars ty) = tyVarsInTy ty L.\\ tyvars
 
 -- | Like 'metaTvsInTy'.
 metaTvsInTyScheme :: TyScheme -> [MetaTv]

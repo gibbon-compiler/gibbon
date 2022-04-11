@@ -28,7 +28,7 @@
 module Gibbon.Passes.RouteEnds
     ( routeEnds ) where
 
-import Data.List as L
+import qualified Data.List as L
 import Data.Map as M
 import Data.Set as S
 import Control.Monad
@@ -136,12 +136,12 @@ bindReturns ex =
       pure $ WithArenaE v e'
     Ext ext ->
       case ext of
-        LetRegionE r bod -> do
+        LetRegionE r sz ty bod -> do
           bod' <- bindReturns bod
-          pure $ Ext $ LetRegionE r bod'
-        LetParRegionE r bod -> do
+          pure $ Ext $ LetRegionE r sz ty bod'
+        LetParRegionE r sz ty bod -> do
           bod' <- bindReturns bod
-          pure $ Ext $ LetParRegionE r bod'
+          pure $ Ext $ LetParRegionE r sz ty bod'
         LetLocE loc locexp bod -> do
           bod' <- bindReturns bod
           pure $ Ext $ LetLocE loc locexp bod'
@@ -460,13 +460,13 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
 
           WithArenaE v e -> WithArenaE v <$> go e
 
-          Ext (LetRegionE r e) -> do
+          Ext (LetRegionE r sz ty e) -> do
             e' <- go e
-            return $ Ext (LetRegionE r e')
+            return $ Ext (LetRegionE r sz ty e')
 
-          Ext (LetParRegionE r e) -> do
+          Ext (LetParRegionE r sz ty e) -> do
             e' <- go e
-            return $ Ext (LetParRegionE r e')
+            return $ Ext (LetParRegionE r sz ty e')
 
           Ext (LetLocE v locexp bod) -> do
             let only_recur e = do

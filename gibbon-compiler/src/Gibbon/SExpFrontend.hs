@@ -16,7 +16,7 @@ module Gibbon.SExpFrontend
 
 import Control.Monad
 import Data.Char ( isLower, isAlpha )
-import Data.List as L
+import qualified Data.List as L
 import Data.Loc ( Loc(..), Pos(..))
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -420,6 +420,22 @@ exp se =
      bod' <- exp bod
      tys <- mapM  (\_ -> newMetaTy) args'
      pure $ Ext $ L (toLoc l) $ Ext $ LambdaE (zip args' tys) bod'
+
+   Ls2 l "print-packed" arg -> do
+     ty <- newMetaTy
+     arg' <- exp arg
+     pure $ Ext $ L (toLoc l) $ Ext $ PrintPacked ty arg'
+
+   Ls2 l "copy-packed" arg -> do
+     ty <- newMetaTy
+     arg' <- exp arg
+     pure $ Ext $ L (toLoc l) $ Ext $ CopyPacked ty arg'
+
+   Ls2 l "trav-packed" arg -> do
+     ty <- newMetaTy
+     arg' <- exp arg
+     pure $ Ext $ L (toLoc l) $ Ext $ TravPacked ty arg'
+
 
    Ls3 l "for/list" (Ls1 (Ls4 _ v ":" t e)) bod -> do
      e'   <- exp e

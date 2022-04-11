@@ -61,7 +61,7 @@ import qualified Gibbon.L3.Typecheck as L3
 import           Gibbon.Passes.Freshen        (freshNames)
 import           Gibbon.Passes.Flatten        (flattenL1, flattenL2, flattenL3)
 import           Gibbon.Passes.InlineTriv     (inlineTriv)
-import           Gibbon.Passes.Simplifier     (simplify)
+import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv)
 -- import           Gibbon.Passes.Sequentialize  (sequentialize)
 
 import           Gibbon.Passes.DirectL3       (directL3)
@@ -76,6 +76,7 @@ import           Gibbon.Passes.InferEffects   (inferEffects)
 import           Gibbon.Passes.ParAlloc       (parAlloc)
 import           Gibbon.Passes.InferRegionScope (inferRegScope)
 import           Gibbon.Passes.RouteEnds      (routeEnds)
+import           Gibbon.Passes.FollowIndirections (followIndirections)
 import           Gibbon.Passes.ThreadRegions  (threadRegions)
 import           Gibbon.Passes.Cursorize      (cursorize)
 import           Gibbon.Passes.FindWitnesses  (findWitnesses)
@@ -83,10 +84,10 @@ import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
 import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
-import           Gibbon.Passes.FollowRedirects(followRedirects)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
+import Gibbon.Passes.CalculateBounds (calculateBounds)
 import           Gibbon.Pretty
 
 
@@ -473,6 +474,15 @@ benchMainExp l1 = do
       return $ l1{ L1.mainExp = Just $ (newExp, L1.voidTy) }
     _ -> return l1
 
+addRedirectionCon :: L2.Prog2 -> PassM L2.Prog2
+addRedirectionCon p@Prog{ddefs} = do
+  ddefs' <- mapM (\ddf@DDef{dataCons} -> do
+                    dcon <- fromVar <$> gensym (toVar redirectionTag)
+                    let datacons = filter (not . isRedirectionTag . fst) dataCons
+                    return ddf {dataCons = datacons ++ [(dcon, [(False, CursorTy)])]})
+            ddefs
+  return $ p { ddefs = ddefs' }
+
 -- | The main compiler pipeline
 passes :: (Show v) => Config -> L0.Prog0 -> StateT (CompileState v) IO L4.Prog
 passes config@Config{dynflags} l0 = do
@@ -489,6 +499,7 @@ passes config@Config{dynflags} l0 = do
       -- l0 <- goE0 "closureConvert"  L0.closureConvert    l0
       l0 <- goE0 "specLambdas"     L0.specLambdas       l0
       l0 <- goE0 "desugarL0"       L0.desugarL0         l0
+      l0 <- goE0 "floatOutCase"    L0.floatOutCase      l0
       -- Note: L0 -> L1
       l1 <- goE0 "toL1"            (pure . L0.toL1)     l0
 
@@ -497,13 +508,13 @@ passes config@Config{dynflags} l0 = do
       -- replace the main function with benchmark code:
       l1 <- goE1 "benchMainExp"  benchMainExp           l1
       l1 <- goE1 "typecheck"     L1.tcProg              l1
-      l1 <- goE1 "simplify"      simplify               l1
+      l1 <- goE1 "simplify"      simplifyL1             l1
       l1 <- goE1 "typecheck"     L1.tcProg              l1
       -- Check this after eliminating all dead functions.
       when (hasSpawnsProg l1 && not parallel) $
         error "To compile a program with parallelism, use --parallel."
       l1 <- goE1 "flatten"       flattenL1              l1
-      l1 <- goE1 "simplify"      simplify               l1
+      l1 <- goE1 "simplify"      simplifyL1             l1
       l1 <- goE1 "inlineTriv"    inlineTriv             l1
       l1 <- goE1 "typecheck"     L1.tcProg              l1
       l1 <- if should_fuse
@@ -601,6 +612,10 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- goE2 "routeEnds"       routeEnds     l2
               -- _ <- lift $ putStrLn (pprender l2)
               l2 <- go "L2.typecheck"     L2.tcProg     l2
+              l2 <- go "addRedirectionCon" addRedirectionCon l2
+              l2 <- if gibbon1
+                    then pure l2
+                    else go "followIndirections" followIndirections l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
@@ -608,7 +623,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
 
               -- Note: L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
-              l3 <- go "cursorize"        cursorize     l2
+              l3 <- go "calculateBounds "        calculateBounds l2
+              l3 <- go "cursorize"        cursorize     l3
               -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck" (L3.tcProg isPacked) l3
@@ -627,13 +643,14 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
 
       -- Note: L3 -> L4
       l4 <- go "lower"          lower                   l3
+      l4 <- go "lateInlineTriv" lateInlineTriv          l4
       l4 <- if gibbon1 || not isPacked
             then do
               l4 <- go "rearrangeFree"   rearrangeFree   l4
               pure l4
             else do
               -- These additional case branches cause some tests in pointer mode to fail.
-              l4 <- go "followRedirects" followRedirects l4
+              -- l4 <- go "followRedirects" followRedirects l4
               l4 <- go "rearrangeFree"   rearrangeFree   l4
               -- l4 <- go "inlineTrivL4"    (pure . L4.inlineTrivL4) l4
               pure l4

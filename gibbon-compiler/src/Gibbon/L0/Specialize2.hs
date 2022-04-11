@@ -13,7 +13,7 @@ This module is the first attempt to do that.
 -}
 
 module Gibbon.L0.Specialize2
-  (bindLambdas, monomorphize, specLambdas, desugarL0, toL1)
+  (bindLambdas, monomorphize, specLambdas, desugarL0, toL1, floatOutCase)
   where
 
 import           Control.Monad.State
@@ -1624,3 +1624,90 @@ genPrintFn DDef{tyName, dataCons} = do
                   , funRec = Rec
                   , funInline = NoInline
                   }
+
+
+--------------------------------------------------------------------------------
+
+type FloatState = FunDefs0
+type FloatM a = StateT FloatState PassM a
+
+floatOutCase :: Prog0 -> PassM Prog0
+floatOutCase (Prog ddefs fundefs mainExp) = do
+    let float_m = do
+          mapM_
+            (\fn@FunDef{funName,funArgs,funTy,funBody} -> do
+                  fstate <- get
+                  let venv = M.fromList (fragileZip funArgs (inTys funTy))
+                  let env2 = Env2 venv (initFunEnv fstate)
+                  funBody' <- go False env2 funBody
+                  let fn' = fn { funBody = funBody' }
+                  state (\s -> ((), M.insert funName fn' s)))
+            (M.elems fundefs)
+          float_main <- do
+             fstate <- get
+             let env2 = Env2 M.empty (initFunEnv fstate)
+             case mainExp of
+               Nothing -> pure Nothing
+               Just (e,ty) -> Just <$> (,ty) <$> go True env2 e
+          pure float_main
+
+    (mainExp',state') <- runStateT float_m fundefs
+    pure $ (Prog ddefs state' mainExp')
+  where
+    err1 msg = error $ "floatOutCase: " ++ msg
+
+    float_fn :: Env2 Ty0 -> Exp0 -> FloatM Exp0
+    float_fn env2 ex = do
+      fundefs' <- get
+      let free = S.toList $ gFreeVars ex `S.difference` (M.keysSet fundefs')
+          in_tys = map (\x -> lookupVEnv x env2) free
+          ret_ty = recoverType ddefs env2 ex
+          fn_ty = ForAll [] (ArrowTy in_tys ret_ty)
+      fn_name <- lift $ gensym "caseFn"
+      args <- mapM (\x -> lift $ gensym x) free
+      let ex' = foldr (\(from,to) acc -> gSubst from (VarE to) acc) ex (zip free args)
+      let fn = FunDef fn_name args fn_ty ex' NotRec NoInline
+      state (\s -> ((AppE fn_name [] (map VarE free)), M.insert fn_name fn s))
+
+    go :: Bool -> Env2 Ty0 -> Exp0 -> FloatM Exp0
+    go float env2 ex =
+      case ex of
+        VarE{}    -> pure ex
+        LitE{}    -> pure ex
+        FloatE{}  -> pure ex
+        LitSymE{} -> pure ex
+        AppE f tyapps args-> AppE f tyapps <$> mapM recur args
+        PrimAppE pr args  -> do
+          args' <- mapM recur args
+          pure $ PrimAppE pr args'
+        LetE (v,tyapps,ty,rhs) bod ->  do
+          rhs' <- recur rhs
+          let env2'= extendVEnv v ty env2
+          bod' <- go True env2' bod
+          pure $ LetE (v,tyapps,ty,rhs') bod'
+        IfE a b c  -> IfE <$> go True env2 a <*> go True env2 b <*> go True env2 c
+        MkProdE ls -> MkProdE <$> mapM recur ls
+        ProjE i a  -> (ProjE i) <$> recur a
+        CaseE scrt brs -> do
+          scrt' <- go float env2 scrt
+          brs' <- mapM (\(dcon,vtys,rhs) -> do
+                          let vars = map fst vtys
+                          let tys = lookupDataCon ddefs dcon
+                          let env2' = extendsVEnv (M.fromList (zip vars tys)) env2
+                          rhs' <- go True env2' rhs
+                          pure (dcon,vtys,rhs'))
+                       brs
+          if float
+          then float_fn env2 (CaseE scrt' brs')
+          else pure $ CaseE scrt' brs'
+        DataConE a dcon ls -> DataConE a dcon <$> mapM recur ls
+        TimeIt e ty b    -> (\a -> TimeIt a ty b) <$> recur e
+        WithArenaE v e -> (WithArenaE v) <$> recur e
+        SpawnE fn tyapps args -> (SpawnE fn tyapps) <$> mapM recur args
+        SyncE   -> pure SyncE
+        Ext{}   -> pure ex
+        MapE{}  -> err1 (sdoc ex)
+        FoldE{} -> err1 (sdoc ex)
+
+      where
+        recur = go float env2

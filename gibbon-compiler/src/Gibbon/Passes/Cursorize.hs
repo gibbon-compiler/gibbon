@@ -2,7 +2,7 @@ module Gibbon.Passes.Cursorize
   (cursorize) where
 
 import           Control.Monad (forM)
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Map as M
 import           Data.Maybe (fromJust)
 import           Text.PrettyPrint.GenericPretty
@@ -341,10 +341,10 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
             Left denv' -> cursorizeExp ddfs fundefs denv' tenv' senv bod
 
         -- Exactly same as cursorizePackedExp
-        LetRegionE reg bod -> do
+        LetRegionE reg _ _ bod -> do
           mkLets (regionToBinds False reg) <$> go bod
 
-        LetParRegionE reg bod -> do
+        LetParRegionE reg _ _ bod -> do
           mkLets (regionToBinds True reg) <$> go bod
 
         BoundsCheck i bound cur -> return $ Ext $ L3.BoundsCheck i bound cur
@@ -545,10 +545,10 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
             [loc] ->  pure $ mkDi (VarE loc) [ fromDi v' ]
             _ -> return $ Di $ L3.MkProdE $ L.foldr (\loc acc -> (VarE loc):acc) [fromDi v'] locs
 
-        LetRegionE r bod -> do
+        LetRegionE r _ _ bod -> do
           onDi (mkLets (regionToBinds False r)) <$> go tenv senv bod
 
-        LetParRegionE r bod -> do
+        LetParRegionE r _ _ bod -> do
           onDi (mkLets (regionToBinds True r)) <$> go tenv senv bod
 
         FromEndE{} -> error $ "cursorizePackedExp: TODO " ++ sdoc ext
@@ -683,6 +683,7 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                        DynR v _  -> Right (VarE v, [], tenv, senv)
                        -- TODO: docs
                        MMapR _v   -> Left denv
+
 
     FreeLE -> Left denv -- AUDIT: should we just throw away this information?
 
@@ -1116,6 +1117,28 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                     -- Cannot read this int. Instead, we add it to DepEnv.
                     let denv' = M.insertWith (++) loc binds denv
                     go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
+
+                -- An indirection or redirection pointer.
+                -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
+                CursorTy -> do
+                  tmp <- gensym "readcursor_indir"
+                  let tenv' = M.union (M.fromList [(tmp     , ProdTy [CursorTy, CursorTy]),
+                                                   (loc     , CursorTy),
+                                                   (v       , CursorTy),
+                                                   (toEndV v, CursorTy)])
+                              tenv
+                      read_cursor = if isIndirectionTag dcon
+                                    then Ext (ReadCursor cur)
+                                    else if isRedirectionTag dcon
+                                         then Ext (ReadCursor cur)
+                                         else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
+                      binds = [(tmp     , [], ProdTy [CursorTy, CursorTy], read_cursor),
+                               (loc     , [], CursorTy, VarE cur),
+                               (v       , [], CursorTy, ProjE 0 (VarE tmp)),
+                               (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
+                  bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv'
+                  return $ mkLets binds bod
+
 
                 VectorTy el_ty -> do
                   tmp <- gensym "read_vec_tuple"

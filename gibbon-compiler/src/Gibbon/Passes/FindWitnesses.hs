@@ -92,8 +92,8 @@ findWitnesses p@Prog{fundefs} = mapMExprs fn p
                      AfterConstantLE i loc2 ->
                        go (Map.insert loc (DelayLoc (loc, (AfterConstantLE i loc2))) mp) bod
                      _ -> Ext $ LetLocE loc locexp $ goE (Set.insert loc bound) mp bod
-            LetRegionE r bod -> Ext $ LetRegionE r $ go mp bod
-            LetParRegionE r bod -> Ext $ LetParRegionE r $ go mp bod
+            LetRegionE r sz ty bod -> Ext $ LetRegionE r sz ty $ go mp bod
+            LetParRegionE r sz ty bod -> Ext $ LetParRegionE r sz ty $ go mp bod
             _ -> handle' $ ex
 
         LetE (v,locs,t,rhs) bod ->
@@ -200,7 +200,8 @@ mapMExprs fn (Prog ddfs fundefs mainExp) =
   Prog ddfs <$>
     (mapM (\f@FunDef{funArgs,funTy,funBody} ->
               let env = Env2 (Map.fromList $ zip funArgs (inTys funTy)) funEnv
-                  boundlocs = Set.fromList (allLocVars funTy)
+                  boundlocs = Set.fromList (allLocVars funTy) `Set.union`
+                              Set.fromList funArgs
               in do
                 bod' <- fn env boundlocs funBody
                 return $ f { funBody =  bod' })
@@ -210,5 +211,5 @@ mapMExprs fn (Prog ddfs fundefs mainExp) =
   where funEnv = Map.map funTy fundefs
 
 ex_freeVars :: Exp2 -> Set.Set Var
-ex_freeVars = Set.fromList . allFreeVars
+ex_freeVars = allFreeVars
 -- ex_freeVars = gFreeVars

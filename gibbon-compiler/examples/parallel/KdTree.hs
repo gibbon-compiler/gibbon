@@ -442,3 +442,12 @@ check_nearest pts actual =
               (True, 0) idxs
         (is_ok, _inexact) = tup
     in print_check is_ok
+
+gibbon_main =
+  let pts :: Vector (Float, Float, Float)
+      pts = readArrayFile Nothing
+      n       = sizeParam
+      radius  = intToFloat n
+      tr      = mkKdTree_seq pts
+      -- _ = printPacked tr
+  in check_buildkdtree pts tr

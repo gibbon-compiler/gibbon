@@ -15,7 +15,7 @@ import           Data.Int
 import           Data.Loc
 import qualified Data.Map as M
 import           Data.Maybe
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Set as S
 import           Language.C.Quote.C (cdecl, cedecl, cexp, cfun, cparam, csdecl, cstm, cty)
 import qualified Language.C.Quote.C as C
@@ -359,8 +359,15 @@ codegenTriv :: VEnv -> Triv -> C.Exp
 codegenTriv _ (VarTriv v) = C.Var (C.toIdent v noLoc) noLoc
 codegenTriv _ (IntTriv i) = [cexp| $int:i |]
 codegenTriv _ (FloatTriv i) = [cexp| $double:i |]
+codegenTriv _ (BoolTriv b) = case b of
+                               True -> [cexp| true |]
+                               False -> [cexp| false |]
 codegenTriv _ (SymTriv i) = [cexp| $i |]
-codegenTriv _ (TagTriv i) = [cexp| $i |]
+codegenTriv _ (TagTriv i) = if i == GL.indirectionAlt
+                            then [cexp| INDIRECTION_TAG |]
+                            else if i == GL.redirectionAlt
+                            then [cexp| REDIRECTION_TAG |]
+                            else [cexp| $i |]
 codegenTriv venv (ProdTriv ls) =
   let ty = codegenTy $ typeOfTriv venv (ProdTriv ls)
       args = map (\a -> (Nothing,C.ExpInitializer (codegenTriv venv a) noLoc)) ls
@@ -437,7 +444,7 @@ codegenTail venv fenv sort_fns (LetArenaT vr body) ty sync_deps =
 codegenTail venv fenv sort_fns (LetAllocT lhs vals body) ty sync_deps =
     do let structTy = codegenTy (ProdTy (map fst vals))
            size = [cexp| sizeof($ty:structTy) |]
-           venv' = M.insert lhs PtrTy venv
+           venv' = M.insert lhs CursorTy venv
        tal <- codegenTail venv' fenv sort_fns body ty sync_deps
        dflags <- getDynFlags
        let alloc = if (gopt Opt_CountParRegions dflags) || (gopt Opt_CountAllRegions dflags)
@@ -451,7 +458,7 @@ codegenTail venv fenv sort_fns (LetAllocT lhs vals body) ty sync_deps =
                  tal)
 
 codegenTail venv fenv sort_fns (LetAvailT vs body) ty sync_deps =
-    do let (avail, sync_deps') = partition (\(v,_) -> elem v vs) sync_deps
+    do let (avail, sync_deps') = L.partition (\(v,_) -> elem v vs) sync_deps
        tl <- codegenTail venv fenv sort_fns body ty sync_deps'
        pure $ (map snd avail) ++ tl
 
@@ -556,7 +563,7 @@ codegenTail venv fenv sort_fns (LetTimedT flg bnds rhs body) ty sync_deps =
 codegenTail venv fenv sort_fns (LetCallT False bnds ratr rnds body) ty sync_deps
     | [] <- bnds = do tal <- codegenTail venv fenv sort_fns body ty sync_deps
                       return $ [toStmt fnexp] ++ tal
-    | [bnd] <- bnds  = let fn_ret_ty = snd (fenv M.! ratr)
+    | [bnd] <- bnds =  let fn_ret_ty = snd (fenv M.! ratr)
                            venv' = (M.fromList bnds) `M.union` venv in
                        case fn_ret_ty of
                          -- Copied from the otherwise case below.
@@ -1047,7 +1054,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                            let scanf_vars   = map (\v -> [cexp| &($id:v) |]) tmps
                                scanf_line = [cexp| $id:line |]
-                               scanf_format = [cexp| $string:(intercalate " " tmps_parsers) |]
+                               scanf_format = [cexp| $string:(L.intercalate " " tmps_parsers) |]
                                scanf_rator  = C.Var (C.Id "sscanf" noLoc) noLoc
                                scanf = C.FnCall scanf_rator (scanf_line : scanf_format : scanf_vars) noLoc
 
@@ -1313,8 +1320,8 @@ codegenMultiplicity mul =
 
 
 splitAlts :: Alts -> (Alts, Alts)
-splitAlts (TagAlts ls) = (TagAlts (init ls), TagAlts [last ls])
-splitAlts (IntAlts ls) = (IntAlts (init ls), IntAlts [last ls])
+splitAlts (TagAlts ls) = (TagAlts (L.init ls), TagAlts [last ls])
+splitAlts (IntAlts ls) = (IntAlts (L.init ls), IntAlts [last ls])
 
 -- | Take a "singleton" Alts and extract the Tail.
 altTail :: Alts -> Tail
@@ -1325,7 +1332,11 @@ altTail oth = error $ "altTail expected a 'singleton' Alts, got: "++ abbrv 80 ot
 
 -- Helper for lhs of a case
 mk_tag_lhs :: (Integral a, Show a) => a -> C.Exp
-mk_tag_lhs lhs = C.Const (C.IntConst (show lhs) C.Unsigned (fromIntegral lhs) noLoc) noLoc
+mk_tag_lhs lhs
+    | GL.indirectionAlt == lhs = C.Var (C.Id "INDIRECTION_TAG" noLoc) noLoc
+    | GL.redirectionAlt == lhs = C.Var (C.Id "REDIRECTION_TAG" noLoc) noLoc
+    | otherwise = C.Const (C.IntConst (show lhs) C.Unsigned (fromIntegral lhs) noLoc) noLoc
+
 
 mk_int_lhs :: (Integral a, Show a) => a -> C.Exp
 mk_int_lhs lhs = C.Const (C.IntConst (show lhs) C.Signed   (fromIntegral lhs) noLoc) noLoc

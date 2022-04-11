@@ -14,7 +14,7 @@ import           Control.DeepSeq
 import           Control.Monad
 import           Control.Monad.State
 import           Control.Monad.Writer
-import           Data.List as L
+import qualified Data.List as L
 import qualified Data.Map as M
 import           System.Clock
 import           System.IO.Unsafe

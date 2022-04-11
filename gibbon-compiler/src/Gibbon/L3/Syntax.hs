@@ -22,7 +22,7 @@ where
 import Control.DeepSeq
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.List as L
+import qualified Data.List as L
 import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common

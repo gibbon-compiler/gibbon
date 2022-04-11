@@ -25,5 +25,5 @@ gibbon_main =
         pakd1 = readPackedFile @Foo Nothing
 
         pakd2 :: Foo
-        pakd2 = readPackedFile @Foo (Just "/dir/tree.gpkd")
+        pakd2 = readPackedFile   (Just "/dir/tree.gpkd")
     in ()

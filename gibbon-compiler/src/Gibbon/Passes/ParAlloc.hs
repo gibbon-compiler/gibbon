@@ -163,7 +163,7 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
           env2' = extendVEnv v ty env2
 
           vars = gFreeVars (substLocInExp after_env rhs) `S.difference` (M.keysSet fundefs)
-          used = S.fromList (allFreeVars (substLocInExp after_env rhs)) `S.difference` (M.keysSet fundefs)
+          used = (allFreeVars (substLocInExp after_env rhs)) `S.difference` (M.keysSet fundefs)
 
       if v == "cpy_18070" || v == "stm_2381_5619_7454"
       then dbgTraceIt (sdoc (v, vars, spawned, used, boundlocs)) (pure ())
@@ -212,9 +212,9 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
     SyncE{}  -> error "parAllocExp: unbound SyncE"
     Ext ext  ->
       case ext of
-        LetRegionE r bod       -> Ext <$> (LetRegionE r) <$>
+        LetRegionE r sz ty bod       -> Ext <$> (LetRegionE r sz ty) <$>
                                     parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned (S.insert (regionToVar r) boundlocs) region_on_spawn bod
-        LetParRegionE r bod    -> Ext <$> (LetParRegionE r) <$>
+        LetParRegionE r sz ty bod    -> Ext <$> (LetParRegionE r sz ty) <$>
                                     parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned (S.insert (regionToVar r) boundlocs) region_on_spawn bod
         LetLocE loc locexp bod -> do
           case locexp of
@@ -244,9 +244,9 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                        IfE (VarE not_stolen)
                            (Ext $ LetAvail [v] $
                             Ext $ LetLocE loc (AfterVariableLE v loc2 False) bod2) -- don't allocate in a fresh region
-                           (Ext $ LetParRegionE newreg $ Ext $ LetLocE newloc (StartOfLE newreg) bod1)
+                           (Ext $ LetParRegionE newreg Undefined Nothing $ Ext $ LetLocE newloc (StartOfLE newreg) bod1)
               else
-                pure $ Ext $ LetParRegionE newreg $ Ext $ LetLocE newloc (StartOfLE newreg) bod1
+                pure $ Ext $ LetParRegionE newreg Undefined Nothing $ Ext $ LetLocE newloc (StartOfLE newreg) bod1
 
             -- Binding is swallowed, but no fresh region is created. This can brought back safely after a sync.
             AfterVariableLE v loc2 True | not (S.member loc2 boundlocs) || not (S.member v boundlocs) -> do
@@ -312,8 +312,8 @@ substLocInExp mp ex1 =
     SyncE{}  -> ex1
     Ext ext ->
       case ext of
-        LetRegionE r rhs  -> Ext $ LetRegionE r (go rhs)
-        LetParRegionE r rhs -> Ext $ LetParRegionE r (go rhs)
+        LetRegionE r sz ty rhs  -> Ext $ LetRegionE r sz ty (go rhs)
+        LetParRegionE r sz ty rhs -> Ext $ LetParRegionE r sz ty (go rhs)
         LetLocE l lhs rhs -> Ext $ LetLocE l (go2 lhs) (go rhs)
         RetE locs v       -> Ext $ RetE (map (\l -> sub l) locs) v
         FromEndE loc      -> Ext $ FromEndE (sub loc)

@@ -442,9 +442,9 @@ instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
         case ex0 of
           L2.AddFixed v i -> text "addfixed" <+>
                                doc v <+> doc i
-          LetRegionE r e -> text "letregion" <+>
+          LetRegionE r _ _ e -> text "letregion" <+>
                                doc r <+> text "in" $+$ pprint e
-          LetParRegionE r e -> text "letparregion" <+>
+          LetParRegionE r _ _ e -> text "letparregion" <+>
                                  doc r <+> text "in" $+$ pprint e
           LetLocE loc le e -> text "letloc" <+>
                                 pprint loc <+> equals <+> pprint le <+> text "in" $+$ pprint e
