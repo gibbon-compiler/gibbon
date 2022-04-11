@@ -87,7 +87,8 @@
        [l1 (make-int-list a1 c1 (- b1 a1))]
        [l2 (make-int-list d1 f1 (- e1 d1))]
        [l3 (lcss l1 l2)]
-       [l5 (make-int-list (list-ref f 6) (list-ref f (- (length f) 1)) (- (list-ref f 7) (list-ref f 6)))]
-       [t1 (equal? l3 l5)])
-  (display t1)(newline)
-  t1)
+       ;[l5 (make-int-list (list-ref f 6) (list-ref f (- (length f) 1)) (- (list-ref f 7) (list-ref f 6)))]
+       ;[t1 (equal? l3 l5)]
+       )
+  ;(display t1)
+  '())
