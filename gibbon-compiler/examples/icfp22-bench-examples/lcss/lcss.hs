@@ -13,9 +13,6 @@ sndList tupleList = case tupleList of
 max :: Int -> Int -> Int 
 max a' b' = if (a' >= b') then a' else b'
 
-ifalgb :: Bool -> Int -> Int -> Int 
-ifalgb tell add max = if (tell) then add else max
-
 algb2 :: Int -> Int -> Int -> Plist (Int, Int) -> Plist (Int, Int)
 algb2 x k0j1 k1j1 mList = case mList of 
                             Nil      -> Nil
@@ -26,7 +23,7 @@ algb2 x k0j1 k1j1 mList = case mList of
                                                 tell   = (x == y)
                                                 addVal = k0j1 + 1
                                                 maxVal = max k1j1 k0j 
-                                                kjcurr = ifalgb tell addVal maxVal
+                                                kjcurr = if (tell) then addVal else maxVal
                                                 newTup = (y, kjcurr)
                                                 in Cons newTup (algb2 x k0j kjcurr ys) 
 
@@ -93,12 +90,9 @@ findk k km m list = case list of
 
 
 
+{- # INLINE # -}
 ifalgc :: Bool -> Plist Int -> Plist Int -> Plist Int
 ifalgc check list1 list2 = if (check) then list1 else list2
-
-
-appendCons :: Int -> Plist Int -> Plist Int
-appendCons val tail = Cons val tail
 
 algc :: Int -> Int -> Plist Int -> Plist Int -> Plist Int -> Plist Int
 algc m n xs ys ys' = case ys of 
@@ -109,7 +103,7 @@ algc m n xs ys ys' = case ys of
                                                                Nil -> let isElem :: Bool
                                                                           headList, idList :: Plist Int
                                                                           isElem = elem x' ys 
-                                                                          headList = appendCons x' ys' 
+                                                                          headList = Cons x' ys' 
                                                                           idList   = m_id ys'
                                                                           in (ifalgc isElem headList idList)    
                                                                Cons x'' rst'' -> let m2 = m / 2                                    
@@ -178,27 +172,24 @@ bench_main :: ()
 bench_main = 
   let f :: Vector Int
       a', b', c', d', e', f'  :: Int
-      l1, l2, l3, l5          :: Plist Int
-      l4                      :: Plist (Int, Int)
-      t1, t2                  :: Bool
+      l1, l2, l3, l4          :: Plist Int
+      t1                      :: Bool
       f        = readArrayFile Nothing
-      --_        = printVec (\i -> printint i) f
       a' = nth f 0
       b' = nth f 1
       c' = nth f 2
       d' = nth f 3
       e' = nth f 4
       f' = nth f 5
-      --_ = printint (nth f ((length f) - 1))
-      l5 = makeIntList (nth f 6) (nth f ((length f) - 1)) ((nth f 7) - (nth f 6))
-      --_  = printIntList l5
       l1 = makeIntList a' c' (b' - a')
       l2 = makeIntList d' f' (e' - d')
       _ = printsym (quote "\n" )
       _ = printsym (quote "The output list produced is\n" )
       l3  = lcss l1 l2
       _   = printIntList l3
-      t1 = unitTestListComp l3 l5
+      -- for sanity checking, make list l4 and use unitTestListComp function
+      l4 = makeIntList (nth f 6) (nth f ((length f) - 1)) ((nth f 7) - (nth f 6))
+      t1 = unitTestListComp l3 l4
       _ = printsym (quote "\n" )
       _ = printsym (quote "The result of checking the output produced by gibbon lcss is\n" )
       _ = printbool t1
