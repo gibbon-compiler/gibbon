@@ -187,7 +187,7 @@ bench_main =
       _ = printsym (quote "The output list produced is\n" )
       l3  = lcss l1 l2
       _   = printIntList l3
-      -- for sanity checking, make list l5 and use unitTestListComp function
+      -- for sanity checking, make list l4 and use unitTestListComp function
       l4 = makeIntList (nth f 6) (nth f ((length f) - 1)) ((nth f 7) - (nth f 6))
       t1 = unitTestListComp l3 l4
       _ = printsym (quote "\n" )
