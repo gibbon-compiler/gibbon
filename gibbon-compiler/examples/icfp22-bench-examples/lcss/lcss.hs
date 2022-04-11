@@ -13,9 +13,6 @@ sndList tupleList = case tupleList of
 max :: Int -> Int -> Int 
 max a' b' = if (a' >= b') then a' else b'
 
-ifalgb :: Bool -> Int -> Int -> Int 
-ifalgb tell add max = if (tell) then add else max
-
 algb2 :: Int -> Int -> Int -> Plist (Int, Int) -> Plist (Int, Int)
 algb2 x k0j1 k1j1 mList = case mList of 
                             Nil      -> Nil
@@ -26,7 +23,7 @@ algb2 x k0j1 k1j1 mList = case mList of
                                                 tell   = (x == y)
                                                 addVal = k0j1 + 1
                                                 maxVal = max k1j1 k0j 
-                                                kjcurr = ifalgb tell addVal maxVal
+                                                kjcurr = if (tell) then addVal else maxVal
                                                 newTup = (y, kjcurr)
                                                 in Cons newTup (algb2 x k0j kjcurr ys) 
 
@@ -93,12 +90,9 @@ findk k km m list = case list of
 
 
 
+{- # INLINE # -}
 ifalgc :: Bool -> Plist Int -> Plist Int -> Plist Int
 ifalgc check list1 list2 = if (check) then list1 else list2
-
-
-appendCons :: Int -> Plist Int -> Plist Int
-appendCons val tail = Cons val tail
 
 algc :: Int -> Int -> Plist Int -> Plist Int -> Plist Int -> Plist Int
 algc m n xs ys ys' = case ys of 
@@ -109,7 +103,7 @@ algc m n xs ys ys' = case ys of
                                                                Nil -> let isElem :: Bool
                                                                           headList, idList :: Plist Int
                                                                           isElem = elem x' ys 
-                                                                          headList = appendCons x' ys' 
+                                                                          headList = Cons x' ys' 
                                                                           idList   = m_id ys'
                                                                           in (ifalgc isElem headList idList)    
                                                                Cons x'' rst'' -> let m2 = m / 2                                    
