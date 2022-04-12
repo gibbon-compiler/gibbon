@@ -52,6 +52,7 @@ tests:
   - name: test06b_case.gib
   - name: test06_case.gib
   - name: test06c_nested.gib
+    skip: true
   - name: test06d_rec.gib
   - name: test06e_rec.gib
   - name: test06f_rec.gib
@@ -119,7 +120,9 @@ tests:
   - name: test25e_countnodes.gib
   - name: test25_rackcore.gib
   - name: test25f_countnodes.gib
+    skip: true
   - name: test26_treewalk.gib
+    skip: true
   - name: test26a_treewalk.gib
   - name: test27a_subst.gib
   - name: test27c_subst.gib
@@ -418,6 +421,7 @@ tests:
     dir: examples/ast
     failing: [gibbon1, gibbon2]
     answer-file: examples/ast/C1.ans
+    skip: true
 
   ## Tests that only work with some backend:
   - name: test29d_list.gib
