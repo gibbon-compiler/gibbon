@@ -273,7 +273,6 @@ const MAX_CHUNK_SIZE: usize = 65500;
 const COLLECT_MAJOR_K: u8 = 4;
 
 static mut GC_STATS: *mut C_GibGcStats = null_mut();
-static mut RECORD_GC_STATS: bool = false;
 
 pub fn cleanup(
     rstack_ptr: *mut C_GibShadowstack,
@@ -324,7 +323,6 @@ pub fn garbage_collect(
     nursery_ptr: *mut C_GibNursery,
     generations_ptr: *mut C_GibGeneration,
     gc_stats: *mut C_GibGcStats,
-    record_stats: bool,
     _force_major: bool,
 ) -> Result<()> {
     // println!("gc...");
@@ -343,13 +341,10 @@ pub fn garbage_collect(
             let evac_major = false;
 
             // Update stats.
-            RECORD_GC_STATS = record_stats;
             GC_STATS = gc_stats;
-            if RECORD_GC_STATS {
-                (*GC_STATS).minor_collections += 1;
-                if evac_major {
-                    (*GC_STATS).major_collections += 1;
-                }
+            stats_bump_minor_collections();
+            if evac_major {
+                stats_bump_major_collections();
             }
 
             // Start collection.
@@ -1040,9 +1035,7 @@ unsafe fn free_region(
     zct: *mut Zct,
     free_descendants: bool,
 ) -> Result<()> {
-    if RECORD_GC_STATS {
-        (*GC_STATS).oldgen_regions -= 1;
-    }
+    stats_dec_oldgen_regions();
     // Rust drops this heap allocated object when reg_info goes out of scope.
     let reg_info = Box::from_raw((*footer).reg_info);
     // Decrement refcounts of all regions in the outset and add the ones with a
@@ -1157,11 +1150,7 @@ trait Heap {
             let footer_start = unsafe {
                 init_footer_at(end, null_mut(), total_size, refcount)
             };
-            unsafe {
-                if RECORD_GC_STATS {
-                    (*GC_STATS).oldgen_regions += 1;
-                }
-            }
+            stats_bump_oldgen_regions();
             Ok((start, footer_start))
         }
     }
@@ -1450,10 +1439,8 @@ impl Heap for OldestGeneration {
             if start.is_null() {
                 Err(RtsError::Gc(format!("oldest gen alloc: malloc failed")))
             } else {
-                if RECORD_GC_STATS {
-                    (*GC_STATS).mem_allocated += size;
-                }
                 let end = start.add(size);
+                stats_bump_mem_allocated(size);
                 Ok((start, end))
             }
         }
@@ -1665,6 +1652,61 @@ pub fn info_table_finalize() {
         INFO_TABLE = std::slice::from_raw_parts(info_table, _INFO_TABLE.len());
     }
 }
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Bump GC statistics
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+#[cfg(feature = "gcstats")]
+fn stats_bump_minor_collections() {
+    unsafe {
+        (*GC_STATS).minor_collections += 1;
+    }
+}
+
+#[cfg(not(feature = "gcstats"))]
+fn stats_bump_minor_collections() {}
+
+#[cfg(feature = "gcstats")]
+fn stats_bump_major_collections() {
+    unsafe {
+        (*GC_STATS).major_collections += 1;
+    }
+}
+
+#[cfg(not(feature = "gcstats"))]
+fn stats_bump_major_collections() {}
+
+#[cfg(feature = "gcstats")]
+fn stats_bump_oldgen_regions() {
+    unsafe {
+        (*GC_STATS).oldgen_regions += 1;
+    }
+}
+
+#[cfg(not(feature = "gcstats"))]
+fn stats_bump_oldgen_regions() {}
+
+#[cfg(feature = "gcstats")]
+fn stats_dec_oldgen_regions() {
+    unsafe {
+        (*GC_STATS).oldgen_regions -= 1;
+    }
+}
+
+#[cfg(not(feature = "gcstats"))]
+fn stats_dec_oldgen_regions() {}
+
+#[cfg(feature = "gcstats")]
+fn stats_bump_mem_allocated(size: usize) {
+    unsafe {
+        (*GC_STATS).mem_allocated += size;
+    }
+}
+
+#[cfg(not(feature = "gcstats"))]
+fn stats_bump_mem_allocated(_size: usize) {}
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Custom error type

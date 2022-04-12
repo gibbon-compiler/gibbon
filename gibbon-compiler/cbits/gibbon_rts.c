@@ -1043,6 +1043,9 @@ GibChunk gib_alloc_region_on_heap(size_t size)
     }
     char *heap_end = heap_start + size;
     char *footer_start = gib_init_footer_at(heap_end, size, 0);
+#ifdef _GIBBON_GCSTATS
+    GC_STATS->mem_allocated += size;
+#endif
     return (GibChunk) {heap_start, footer_start};
 }
 
@@ -1086,7 +1089,7 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     struct timespec begin;
     struct timespec end;
     clock_gettime(CLOCK_MONOTONIC_RAW, &begin);
-    gib_garbage_collect(rstack, wstack, nursery, generations, gc_stats, true, false);
+    gib_garbage_collect(rstack, wstack, nursery, generations, gc_stats, false);
     /*
     int err =
     if (err < 0) {
@@ -1098,7 +1101,7 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     gc_stats->gc_elapsed_time += gib_difftimespecs(&begin, &end);
     gc_stats->gc_cpu_time += gc_stats->gc_elapsed_time / CLOCKS_PER_SEC;
 #else
-    gib_garbage_collect(rstack, wstack, nursery, generations, gc_stats, false, false);
+    gib_garbage_collect(rstack, wstack, nursery, generations, gc_stats, false);
 #endif
 
     return gib_alloc_region_in_nursery_fast(size, true);
@@ -1132,6 +1135,9 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
         exit(1);
     }
     char *heap_end = heap_start + newsize;
+#ifdef _GIBBON_GCSTATS
+    GC_STATS->mem_allocated += newsize;
+#endif
 
     // Write a new footer for this chunk and link it with the old chunk's footer.
     char *new_footer_start = NULL;
@@ -1224,13 +1230,17 @@ static void gib_storage_initialize(void)
         return;
     }
 
+    // Initialize the stats object.
+    gib_global_gc_stats = (GibGcStats *) gib_alloc(sizeof(GibGcStats));
+    gib_gc_stats_initialize(gib_global_gc_stats);
+
     // Initialize nurseries.
     int n;
     gib_global_nurseries = (GibNursery *) gib_alloc(gib_global_num_threads *
                                                     sizeof(GibNursery));
     for (n = 0; n < gib_global_num_threads; n++) {
         gib_nursery_initialize(&(gib_global_nurseries[n]));
-     }
+    }
 
     // Initialize generations.
     int g;
@@ -1260,11 +1270,7 @@ static void gib_storage_initialize(void)
                                    SHADOWSTACK_SIZE);
         gib_shadowstack_initialize(&(gib_global_write_shadowstacks[ss]),
                                    SHADOWSTACK_SIZE);
-     }
-
-    // Initialize the stats object.
-    gib_global_gc_stats = (GibGcStats *) gib_alloc(sizeof(GibGcStats));
-    gib_gc_stats_initialize(gib_global_gc_stats);
+    }
 
     return;
 }
@@ -1320,6 +1326,10 @@ static void gib_nursery_initialize(GibNursery *nursery)
     }
     nursery->heap_end = nursery->heap_start + NURSERY_SIZE;
     nursery->alloc = nursery->heap_end;
+
+#ifdef _GIBBON_GCSTATS
+    GC_STATS->mem_allocated += NURSERY_SIZE;
+#endif
 
     return;
 }
@@ -1379,6 +1389,9 @@ static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
         }
         gen->heap_end = gen->heap_start + gen->heap_size;
         gen->alloc = gen->heap_start;
+#ifdef _GIBBON_GCSTATS
+    GC_STATS->mem_allocated += gen->heap_size;
+#endif
     }
 
     return;
@@ -1500,7 +1513,7 @@ void gib_indirection_barrier(
     uintptr_t tagged = GIB_STORE_TAG(to, footer_offset);
     GibCursor writeloc = from;
     *(GibBoxedTag *) writeloc = GIB_INDIRECTION_TAG;
-    writeloc += 1;
+    writeloc += sizeof(GibPackedTag);
     *(uintptr_t *) writeloc = tagged;
 
     // Add to remembered set if it's an old to young pointer.

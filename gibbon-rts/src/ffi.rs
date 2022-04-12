@@ -192,7 +192,6 @@ pub extern "C" fn gib_garbage_collect(
     nursery_ptr: *mut C_GibNursery,
     generations_ptr: *mut C_GibGeneration,
     gc_stats: *mut C_GibGcStats,
-    record_stats: bool,
     force_major: bool,
 ) -> i32 {
     match gc::garbage_collect(
@@ -201,7 +200,6 @@ pub extern "C" fn gib_garbage_collect(
         nursery_ptr,
         generations_ptr,
         gc_stats,
-        record_stats,
         force_major,
     ) {
         Ok(()) => 0,

@@ -541,7 +541,6 @@ int gib_garbage_collect(
     GibNursery *nursery,
     GibGeneration *generations,
     GibGcStats *stats,
-    bool record_stats,
     bool force_major
 );
 void gib_handle_old_to_old_indirection(
