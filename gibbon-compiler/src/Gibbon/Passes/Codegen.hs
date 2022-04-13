@@ -1463,8 +1463,15 @@ codegenMultiplicity mul =
   case mul of
     BigInfinite -> [cexp| gib_get_biginf_init_chunk_size() |]
     Infinite    -> [cexp| gib_get_inf_init_chunk_size() |]
-    Bounded     -> error $ "codegenMultiplicity: Bounded buffers not handled yet."
+    Bounded i   ->
+      let rounded = (i+32)
+      in [cexp| $int:rounded |]
 
+-- | Round up a number to a power of 2.
+--
+-- Copied from https://stackoverflow.com/a/466256.
+roundUp :: Int -> Int
+roundUp n = ceiling (2 ^ (ceiling (log (fromIntegral n) / log 2)))
 
 splitAlts :: Alts -> (Alts, Alts)
 splitAlts (TagAlts ls) = (TagAlts (L.init ls), TagAlts [last ls])

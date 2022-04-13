@@ -18,6 +18,7 @@ library
                        Gibbon.Vector
                        Gibbon.Vector.Parallel
                        Gibbon.List
+                       Gibbon.PList
   build-depends:       base >= 4.15 && <4.16
                        -- base >=4.11 && <4.16
   ghc-options:         -Wall -Wcompat -fdefer-typed-holes

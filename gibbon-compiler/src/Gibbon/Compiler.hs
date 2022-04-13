@@ -88,7 +88,7 @@ import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
-import Gibbon.Passes.CalculateBounds (calculateBounds)
+import Gibbon.Passes.CalculateBounds          (inferRegSize)
 import           Gibbon.Pretty
 
 
@@ -709,17 +709,19 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "addRedirectionCon" addRedirectionCon l2
               l2 <- if gibbon1
                     then pure l2
+                    else go "inferRegSize" inferRegSize l2
+              l2 <- if gibbon1
+                    then pure l2
                     else go "followIndirections" followIndirections l2
-              l2 <- go "calculateBounds" calculateBounds l2
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
               l2 <- go "threadRegions"    threadRegions l2
-
               -- L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
               l3 <- go "cursorize"        cursorize     l2
               l3 <- go "reorderAlloc"     reorderAlloc  l3
+              -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck"     tcProg3       l3
               l3 <- go "hoistNewBuf"      hoistNewBuf   l3

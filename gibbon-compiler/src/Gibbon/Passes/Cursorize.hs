@@ -360,11 +360,11 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
             Left denv' -> cursorizeExp ddfs fundefs denv' tenv' senv bod
 
         -- Exactly same as cursorizePackedExp
-        LetRegionE reg _ _ bod -> do
-          mkLets (regionToBinds False reg) <$> go bod
+        LetRegionE reg sz _ bod -> do
+          mkLets (regionToBinds False reg sz) <$> go bod
 
-        LetParRegionE reg _ _ bod -> do
-          mkLets (regionToBinds True reg) <$> go bod
+        LetParRegionE reg sz _ bod -> do
+          mkLets (regionToBinds True reg sz) <$> go bod
 
         BoundsCheck i bound cur -> return $ Ext $ L3.BoundsCheck i bound cur
 
@@ -608,11 +608,11 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
             [loc] ->  pure $ mkDi (VarE loc) [ fromDi v' ]
             _ -> return $ Di $ L3.MkProdE $ L.foldr (\loc acc -> (VarE loc):acc) [fromDi v'] locs
 
-        LetRegionE r _ _ bod -> do
-          onDi (mkLets (regionToBinds False r)) <$> go tenv senv bod
+        LetRegionE r sz _ bod -> do
+          onDi (mkLets (regionToBinds False r sz)) <$> go tenv senv bod
 
-        LetParRegionE r _ _ bod -> do
-          onDi (mkLets (regionToBinds True r)) <$> go tenv senv bod
+        LetParRegionE r sz _ bod -> do
+          onDi (mkLets (regionToBinds True r sz)) <$> go tenv senv bod
 
         FromEndE{} -> error $ "cursorizePackedExp: TODO " ++ sdoc ext
 
@@ -1506,22 +1506,32 @@ projEndsTy = projTy 1
 
 
 -- | Bindings for a letregion
-regionToBinds :: Bool -> Region -> [(Var, [()], Ty3, Exp3)]
-regionToBinds for_parallel_allocs r =
+regionToBinds :: Bool -> Region -> RegionSize -> [(Var, [()], Ty3, Exp3)]
+regionToBinds for_parallel_allocs r sz =
   case r of
     VarR{} -> error $ "Unexpected VarR in Cursorize." ++ sdoc r
-    GlobR v mul -> if for_parallel_allocs
-                   then [ (v       , [], CursorTy, Ext$ NewParBuffer mul)
-                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul)]
-                   else [ (v       , [], CursorTy, Ext$ NewBuffer mul)
-                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul)]
-    DynR v mul  -> if for_parallel_allocs
-                   then [ (v       , [], CursorTy, Ext$ ScopedParBuffer mul)
-                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul)]
-                   else [ (v       , [], CursorTy, Ext$ ScopedBuffer mul)
-                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul)]
+    GlobR v mul -> let mul' = go mul in
+                   if for_parallel_allocs
+                   then [ (v       , [], CursorTy, Ext$ NewParBuffer mul')
+                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul')]
+                   else [ (v       , [], CursorTy, Ext$ NewBuffer mul')
+                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul')]
+    DynR v mul  -> let mul' = go mul in
+                   if for_parallel_allocs
+                   then [ (v       , [], CursorTy, Ext$ ScopedParBuffer mul')
+                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul')]
+                   else [ (v       , [], CursorTy, Ext$ ScopedBuffer mul')
+                        , (toEndV v, [], CursorTy, Ext$ EndOfBuffer mul')]
     -- TODO: docs
     MMapR _v    -> []
+
+ where
+  go mul =
+    case sz of
+      BoundedSize 0 -> mul
+      BoundedSize x -> Bounded x
+      Undefined     -> mul
+
 
 isBound :: LocVar -> TyEnv Ty2 -> Bool
 isBound = M.member

@@ -1,11 +1,11 @@
 {-# LANGUAGE FlexibleInstances #-}
-module Gibbon.Passes.CalculateBounds where
+module Gibbon.Passes.CalculateBounds ( inferRegSize ) where
 
 import           Gibbon.Common
 import qualified Data.Map                      as M
 import           Gibbon.L2.Syntax
-import           Debug.Trace
-import           Data.List
+-- import           Debug.Trace
+import qualified Data.List as L
 
 type LocationRegionMapping = M.Map LocVar Var
 type LocationOffsetMapping = M.Map LocVar RegionSize
@@ -13,6 +13,9 @@ type VarSizeMapping = M.Map Var RegionSize
 type VarLocMapping = M.Map Var LocVar
 type RegionSizeMapping = M.Map Var RegionSize
 type RegionTypeMapping = M.Map Var RegionType
+
+inferRegSize :: Prog2 -> PassM Prog2
+inferRegSize = calculateBounds
 
 calculateBounds :: Prog2 -> PassM Prog2
 calculateBounds Prog { ddefs, fundefs, mainExp } = do
@@ -26,7 +29,7 @@ calculateBounds Prog { ddefs, fundefs, mainExp } = do
 
 calculateBoundsFun :: DDefs Ty2 -> Env2 Ty2 -> VarSizeMapping -> FunDef2 -> PassM FunDef2
 calculateBoundsFun ddefs env2 varSzEnv f@FunDef { funName, funBody, funTy, funArgs } = do
-  if "_" `isPrefixOf` fromVar funName
+  if "_" `L.isPrefixOf` fromVar funName
     then return f
     else do
       let locRegEnv = M.fromList $ map (\lv -> (lrmLoc lv, regionToVar $ lrmReg lv)) (locVars funTy)
@@ -149,18 +152,18 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
                 let regVar = regionToVar reg
                 let regSz  = re # regVar
                 let regTy = Just $ M.findWithDefault IndirectionFree regVar rt
-                traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
-                return (Ext $ LetRegionE reg regSz regTy bod', re, rt)
+                dbgTrace 4 (">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy) $
+                  return (Ext $ LetRegionE reg regSz regTy bod', re, rt)
               LetParRegionE reg _ _ bod -> do
                 (bod', re, rt) <- go bod
                 let regVar = regionToVar reg
                 let regSz  = re # regVar
                 let regTy = Just $ M.findWithDefault IndirectionFree regVar rt
-                traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
-                return (Ext $ LetParRegionE reg regSz regTy bod', re, rt)
+                dbgTrace 4 (">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy) $
+                  (return (Ext (LetParRegionE reg regSz regTy bod'), re, rt))
               LetLocE loc locExp ex1 -> do
                 -- * NOTE: jumps are only necessary for route ends, skipping them.
-                if "jump_" `isPrefixOf` fromVar loc
+                if "jump_" `L.isPrefixOf` fromVar loc
                   then do
                     (ex1', re', rt') <- go ex1
                     return (Ext $ LetLocE loc locExp ex1', re', rt')
