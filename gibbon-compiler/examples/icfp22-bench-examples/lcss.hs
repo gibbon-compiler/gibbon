@@ -13,6 +13,9 @@ sndList tupleList = case tupleList of
 max :: Int -> Int -> Int 
 max a' b' = if (a' >= b') then a' else b'
 
+ifalgb :: Bool -> Int -> Int -> Int 
+ifalgb tell add max = if (tell) then add else max
+
 algb2 :: Int -> Int -> Int -> Plist (Int, Int) -> Plist (Int, Int)
 algb2 x k0j1 k1j1 mList = case mList of 
                             Nil      -> Nil
@@ -23,7 +26,7 @@ algb2 x k0j1 k1j1 mList = case mList of
                                                 tell   = (x == y)
                                                 addVal = k0j1 + 1
                                                 maxVal = max k1j1 k0j 
-                                                kjcurr = if (tell) then addVal else maxVal
+                                                kjcurr = ifalgb tell addVal maxVal
                                                 newTup = (y, kjcurr)
                                                 in Cons newTup (algb2 x k0j kjcurr ys) 
 
@@ -90,9 +93,12 @@ findk k km m list = case list of
 
 
 
-{- # INLINE # -}
 ifalgc :: Bool -> Plist Int -> Plist Int -> Plist Int
 ifalgc check list1 list2 = if (check) then list1 else list2
+
+
+appendCons :: Int -> Plist Int -> Plist Int
+appendCons val tail = Cons val tail
 
 algc :: Int -> Int -> Plist Int -> Plist Int -> Plist Int -> Plist Int
 algc m n xs ys ys' = case ys of 
@@ -103,7 +109,7 @@ algc m n xs ys ys' = case ys of
                                                                Nil -> let isElem :: Bool
                                                                           headList, idList :: Plist Int
                                                                           isElem = elem x' ys 
-                                                                          headList = Cons x' ys' 
+                                                                          headList = appendCons x' ys' 
                                                                           idList   = m_id ys'
                                                                           in (ifalgc isElem headList idList)    
                                                                Cons x'' rst'' -> let m2 = m / 2                                    
@@ -157,24 +163,15 @@ printTupleList list = case list of
                             _ = printTupleList rst
                         in ()
 
-
-unitTestListComp :: Plist Int -> Plist Int -> Bool 
-unitTestListComp list1 list2 = case list1 of 
-                               Nil -> case list2 of
-                                      Nil -> True  
-                                      Cons x rst -> False 
-                               Cons x rst -> case list2 of
-                                             Nil -> False  
-                                             Cons x' rst' -> if x == x' then True && (unitTestListComp rst rst') else False 
-
 -- Main program to run longest common subsequence
 bench_main :: ()
 bench_main = 
   let f :: Vector Int
       a', b', c', d', e', f'  :: Int
-      l1, l2, l3, l4          :: Plist Int
-      t1                      :: Bool
-      f        = readArrayFile Nothing
+      l1, l2, l3              :: Plist Int
+      l4                      :: Plist (Int, Int)
+      t1, t2                  :: Bool
+      f  = readArrayFile Nothing
       a' = nth f 0
       b' = nth f 1
       c' = nth f 2
@@ -183,17 +180,8 @@ bench_main =
       f' = nth f 5
       l1 = makeIntList a' c' (b' - a')
       l2 = makeIntList d' f' (e' - d')
-      _ = printsym (quote "\n" )
-      _ = printsym (quote "The output list produced is\n" )
       l3  = lcss l1 l2
       _   = printIntList l3
-      -- for sanity checking, make list l4 and use unitTestListComp function
-      l4 = makeIntList (nth f 6) (nth f ((length f) - 1)) ((nth f 7) - (nth f 6))
-      t1 = unitTestListComp l3 l4
-      _ = printsym (quote "\n" )
-      _ = printsym (quote "The result of checking the output produced by gibbon lcss is\n" )
-      _ = printbool t1
-      _ = printsym (quote "\n" )
 
   in ()
 
@@ -203,7 +191,26 @@ gibbon_main = bench_main
 -- Instructions to run
 
 -- Command use to run 
+-- gibbon --packed --to-exe lcss.hs; ./lcss.exe --array-input-length 6 --array-input lcss.txt 
+-- Modify lcss.txt file for 3 cases like so: 
 
--- 1.) Fast: gibbon --packed --to-exe lcss.hs; ./lcss.exe --array-input-length 1007 --array-input lcss.faststdin
--- 2.) Norm: gibbon --packed --to-exe lcss.hs; ./lcss.exe --array-input-length 1007 --array-input lcss.normstdin  
--- 3.) Slow: gibbon --packed --to-exe lcss.hs; ./lcss.exe --array-input-length 3007 --array-input lcss.slowstdin
+-- 1.) Fast   Case  -> 1 
+--                     2
+--                     2000
+--                     1000
+--                     1001
+--                     2000
+
+-- 2.) Slow   Case  -> 1
+--                     2
+--                     2000
+--                     1000
+--                     1001
+--                     4000 
+
+-- 3.) Normal Case  -> 1
+--                     2 
+--                     4000
+--                     1000
+--                     1001
+--                     4000

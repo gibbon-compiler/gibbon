@@ -9,6 +9,68 @@ Tree *createTreeNode(int n){
 
 }
 
+Tree * findMinSuccessor(Tree *right){
+
+    Tree * tmp = right;
+    
+    //keep traversing the left of the tree to get to the leftmost node in the tree, since we know that left most nodes are always going to be smaller that the root
+    while(tmp != NULL && tmp->left != NULL){
+        tmp = tmp->left;
+    }
+
+    return tmp;
+
+}
+
+Tree *treeDelete(Tree * root, int value){
+
+    if (root == NULL){
+        return root;
+    }
+    
+    //go to the left subtree as the value to be deleted is less that the node's value
+    if (root->n > value){
+        root->left = treeDelete(root->left, value);
+    }
+    //go to the right subtree as the value to be deleted is more that the node's value
+    else if (root->n < value){
+        root->right = treeDelete(root->right, value);
+    }
+    //otherwise the value to be deleted is the value at the root
+    else{
+
+       //if there is no left subtree, then find minimum successor in right subtree
+        if(root->left == NULL){
+            
+            Tree *replacement = root->right; 
+            //now free this node as it can be deleted;
+            free(root);
+            return replacement;
+
+        }
+        else if (root->right == NULL){
+
+            Tree * replacement = root->left;
+            //now free this node as it can be deleted;
+            free(root);
+            return replacement;
+
+        }
+        else{
+            //find the minimum successor
+            Tree *minSuccessor = findMinSuccessor(root->right);
+            
+            //copy successor over to the root
+            root->n = minSuccessor->n;
+
+            //recursively delete the minSuccessor;
+            root->right = treeDelete(root->right, root->n);
+
+        }
+        return root;        
+    }
+}
+
 void treeInsertHelper(Tree *root, int value){
     
     //leaf case
@@ -103,19 +165,17 @@ Tree *treeInsert(Tree *root, int value){
 
     //copy the original tree coz we don't want to modify it
     //Non destructive insert.
-
-    Tree *copy = treeCopy(root);
     
     //case NULL
-    if (copy == NULL){
+    if (root == NULL){
         Tree *new = createTreeNode(value);
         return new;
     }
     else {
-        treeInsertHelper(copy, value);
+        treeInsertHelper(root, value);
     }
 
-    return copy;  
+    return root;  
 
 }
 
@@ -206,22 +266,27 @@ int main (int argc, char ** argv){
 
     printTree(root);
     
-    //assign new to the root at the beginning
-    Tree * new = root;
-
+    //initially copy is the root
+    Tree * copy = root;
     for(int i=0; i < iterations; i++){
 
-        //Question :: Here the old pointer to the tree remains and is not freed
+        //make a copy of the root node
+        copy = treeCopy(copy);
+        int n = rand(); 
+        int j = n % totalNodes;
+        if(n % 2 == 0){
+            copy = treeInsert(copy, j);  
+        }
+        else{
+            copy = treeDelete(copy, j);
+        }
 
-        //Question :: How do we choose to delete using rand % 2 ?? if 0 then insert if 1 then delete??
-
-        int j = rand() % totalNodes;
-        new = treeInsert(new, j);
-        printTree(new);
+        printTree(copy);
 
     }
 
-    //free memory
-    freeTree(root);
+    //NOTE: All intermediate copy nodes are not freed and remain in memory! 
 
+    //free original input tree
+    freeTree(root);
 }

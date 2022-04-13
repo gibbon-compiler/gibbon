@@ -59,11 +59,11 @@ data E3Ext loc dec =
   | ReadTaggedCursor Var                   -- ^ Reads and returns a tagged cursor at Var
   | WriteCursor Var (PreExp E3Ext loc dec) -- ^ Write a cursor, and return a cursor
   | ReadList Var dec                       -- ^ Read a pointer to a linked list
-  | WriteList Var (PreExp E3Ext loc dec) dec -- ^ Write a pointer to a linked list
-  | ReadVector Var dec                       -- ^ Read a pointer to a vector
-  | WriteVector Var (PreExp E3Ext loc dec) dec -- ^ Write a pointer to a vector
-  | AddCursor Var (PreExp E3Ext loc dec)     -- ^ Add a constant offset to a cursor variable
-  | SubPtr Var Var                           -- ^ Pointer subtraction
+  | WriteList Var (PreExp E3Ext loc dec) dec       -- ^ Write a pointer to a linked list
+  | ReadVector Var dec                             -- ^ Read a pointer to a vector
+  | WriteVector Var (PreExp E3Ext loc dec) dec     -- ^ Write a pointer to a vector
+  | AddCursor Var (PreExp E3Ext loc dec)           -- ^ Add a constant offset to a cursor variable
+  | SubPtr Var Var                                 -- ^ Pointer subtraction
   | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
   | ScopedBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
   | NewParBuffer L2.Multiplicity         -- ^ Create a new buffer for parallel allocations, and return a cursor
@@ -126,7 +126,7 @@ instance FreeVars (E3Ext l d) where
       RetE ls -> S.unions (L.map gFreeVars ls)
       GetCilkWorkerNum   -> S.empty
       LetAvail ls b      -> (S.fromList ls) `S.union` gFreeVars b
-      ReadVector{} -> error "gFreeVars: ReadVector"
+      ReadVector{}  -> error "gFreeVars: ReadVector"
       WriteVector{} -> error "gFreeVars: WriteVector"
       AllocateTagHere v _ -> S.singleton v
       AllocateScalarsHere v -> S.singleton v

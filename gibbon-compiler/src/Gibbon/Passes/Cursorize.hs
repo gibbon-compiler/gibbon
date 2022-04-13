@@ -1242,7 +1242,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
 
                 ListTy el_ty -> do
                   tmp <- gensym "read_list_tuple"
-                  let tenv' = M.union (M.fromList [(tmp     , ProdTy [VectorTy el_ty, CursorTy]),
+                  let tenv' = M.union (M.fromList [(tmp     , ProdTy [ListTy el_ty, CursorTy]),
                                                    (v       , ListTy el_ty),
                                                    (toEndV v, CursorTy)])
                               tenv

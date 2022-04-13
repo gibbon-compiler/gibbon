@@ -52,6 +52,7 @@ tests:
   - name: test06b_case.gib
   - name: test06_case.gib
   - name: test06c_nested.gib
+    skip: true
   - name: test06d_rec.gib
   - name: test06e_rec.gib
   - name: test06f_rec.gib
@@ -443,6 +444,7 @@ tests:
     dir: examples/ast
     failing: [gibbon1, gibbon2]
     answer-file: examples/ast/C1.ans
+    skip: true
 
   ## Tests that only work with some backend:
   - name: test18f_flip.gib

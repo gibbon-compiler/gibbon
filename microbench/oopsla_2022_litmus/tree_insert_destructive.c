@@ -99,6 +99,70 @@ Tree *treeInsert(Tree *root, int value){
 }
 
 
+Tree * findMinSuccessor(Tree *right){
+
+    Tree * tmp = right;
+    
+    //keep traversing the left of the tree to get to the leftmost node in the tree, since we know that left most nodes are always going to be smaller that the root
+    while(tmp != NULL && tmp->left != NULL){
+        tmp = tmp->left;
+    }
+
+    return tmp;
+
+}
+
+
+Tree *treeDelete(Tree * root, int value){
+
+    if (root == NULL){
+        return root;
+    }
+    
+    //go to the left subtree as the value to be deleted is less that the node's value
+    if (root->n > value){
+        root->left = treeDelete(root->left, value);
+    }
+    //go to the right subtree as the value to be deleted is more that the node's value
+    else if (root->n < value){
+        root->right = treeDelete(root->right, value);
+    }
+    //otherwise the value to be deleted is the value at the root
+    else{
+
+       //if there is no left subtree, then find minimum successor in right subtree
+        if(root->left == NULL){
+            
+            Tree *replacement = root->right; 
+            //now free this node as it can be deleted;
+            free(root);
+            return replacement;
+
+        }
+        else if (root->right == NULL){
+
+            Tree * replacement = root->left;
+            //now free this node as it can be deleted;
+            free(root);
+            return replacement;
+
+        }
+        else{
+            //find the minimum successor
+            Tree *minSuccessor = findMinSuccessor(root->right);
+            
+            //copy successor over to the root
+            root->n = minSuccessor->n;
+
+            //recursively delete the minSuccessor;
+            root->right = treeDelete(root->right, root->n);
+
+        }
+        return root;        
+    }
+}
+
+
 Tree *helper(int s, int e){
 
     if (e < s){
@@ -186,12 +250,17 @@ int main (int argc, char ** argv){
     printTree(root);
 
     for(int i=0; i < iterations; i++){
+        
+        int n = rand(); 
+        int j = n % totalNodes;
+        if(n % 2 == 0){
+            root = treeInsert(root, j);  
+        }
+        else{
+           root = treeDelete(root, j);
+        }
 
-        int j = rand() % totalNodes;
-        root = treeInsert(root, j);
         printTree(root);
-
-
     }
 
     //free memory

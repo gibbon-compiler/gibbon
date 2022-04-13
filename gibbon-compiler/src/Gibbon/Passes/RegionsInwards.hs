@@ -197,6 +197,7 @@ placeRegionInwards env scopeSet ex  =
                                      let freeVarsB  = freeVars b
                                          freeVarsC  = freeVars c
                                          commonVars = freeVarsB `S.intersection` freeVarsC
+                                         --_          = dbgTraceIt (sdoc commonVars)
                                          allKeys    = M.keys env
                                          keyList    = map (\variable -> F.find (S.member variable) allKeys) (S.toList commonVars)
                                          keyList'   = S.catMaybes keyList
@@ -204,10 +205,10 @@ placeRegionInwards env scopeSet ex  =
                                          newVals    = map (\key -> M.findWithDefault [] key env) newKeys
                                          tupleList  = zip newKeys newVals
                                          newEnv'    = M.fromList tupleList
-                                     b' <- placeRegionInwards newEnv' scopeSet b       -- Recurse on b (Then part)
-                                     c' <- placeRegionInwards newEnv' scopeSet c       -- Recurse on c (Else part)
-                                     let (_, a') = dischargeBinds env scopeSet a
-                                     return $ IfE a' b' c'                             -- Return the new IfE expression
+                                     b' <- placeRegionInwards env scopeSet b       -- Recurse on b (Then part)
+                                     c' <- placeRegionInwards env scopeSet c       -- Recurse on c (Else part)
+                                     let (_, a') = dischargeBinds' newEnv' commonVars a
+                                     return $ IfE a' b' c'                             -- Return the new IfE expression {-dbgTraceIt (sdoc (commonVars, keyList, env, newEnv'))-} 
 
     MkProdE ls                    -> MkProdE <$> mapM go ls                            {- Recurse over all expression in the tuple in the expression ls -}
 
@@ -237,9 +238,9 @@ placeRegionInwards env scopeSet ex  =
                             newVals   = map (\key -> M.findWithDefault [] key env) newKeys
                             tupleList = zip newKeys newVals
                             newEnv'   = M.fromList tupleList
-                        c' <- placeRegionInwards newEnv' newScope c
-                        let (_, c'') = dischargeBinds' env free_vars c'                                                -- Discharge the binds using the newScope and the dictionary
-                         in return (a,b,c'')) brs
+                        c' <- placeRegionInwards env newScope c
+                        let (_, c'') = dischargeBinds' newEnv' free_vars c'                                                -- Discharge the binds using the newScope and the dictionary
+                         in return (a,b,c'')) brs                                                                          -- dbgTraceIt (sdoc (free_vars, keyList, env, newEnv'))
 
       return $ CaseE scrt brs'
     TimeIt e ty b                 -> do
@@ -276,7 +277,7 @@ codeGen set env body =
       tupleList = zip newKeys newVals
       newEnv'   = M.fromList tupleList
       exps      = foldr bindDelayedBind body valList                                   -- Get all the bindings for all the expressions in the key
-   in (newEnv', exps)
+   in {-dbgTraceIt (sdoc set)-} (newEnv', exps)
 
 
 bindDelayedBind :: DelayedBind -> Exp2 -> Exp2
@@ -288,6 +289,9 @@ bindDelayedBind delayed body =
 
 
 -- A function for use specific to this pass which gives all the possible variables and local variables that are used in a particular expression
+-- This pass was made speciic because other version in gibbon don't return location variables, this version also adds location variables to the 
+-- returned set
+
 freeVars :: Exp2 -> S.Set Var
 freeVars ex = case ex of
   Ext ext                           ->
