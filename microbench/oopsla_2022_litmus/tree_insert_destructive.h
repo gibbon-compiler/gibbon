@@ -19,4 +19,6 @@ int sumTree(Tree *root);
 int sumTreeHelper(Tree *root);
 Tree *helper(int s, int e);
 long int power(int base, int superscript);
-   
+Tree * treeCopy(Tree *root);
+Tree *treeDelete(Tree * root, int value);
+Tree * findMinSuccessor(Tree *right);
