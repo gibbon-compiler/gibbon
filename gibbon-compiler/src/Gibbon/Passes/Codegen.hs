@@ -1318,7 +1318,7 @@ codegenMultiplicity mul =
     Infinite    -> C.Var (C.toIdent (toVar "global_init_inf_buf_size") noLoc) noLoc
     -- reserve 32 bytes at the end.
     Bounded i   ->
-      let rounded = roundUp (i+32)
+      let rounded = (i+32)
       in [cexp| $int:rounded |]
 
 -- | Round up a number to a power of 2.
