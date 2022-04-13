@@ -1453,6 +1453,7 @@ regionToBinds for_parallel_allocs r sz =
  where
   go mul =
     case sz of
+      BoundedSize 0 -> mul
       BoundedSize x -> Bounded x
       Undefined     -> mul
 
