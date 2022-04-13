@@ -257,12 +257,10 @@ int main (int argc, char ** argv){
             root = treeInsert(root, j);  
         }
         else{
-            root = treeDelete(root, j);
+           root = treeDelete(root, j);
         }
 
         printTree(root);
-
-
     }
 
     //free memory
