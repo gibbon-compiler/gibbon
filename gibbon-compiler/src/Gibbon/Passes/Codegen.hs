@@ -771,12 +771,12 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    if countRegions
                    then
                      pure
-                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_counted_region($id:bufsize); |]
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_counted_region($bufsize); |]
                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
                    else
                      pure
-                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($id:bufsize); |]
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($bufsize); |]
                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
 
@@ -788,28 +788,28 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                    if countRegions
                    then
                      pure
-                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_counted_region($id:bufsize); |]
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_counted_region($bufsize); |]
                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
                    else
                      pure
-                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($id:bufsize); |]
+                       [ C.BlockDecl [cdecl| $ty:(codegenTy RegionTy)* $id:reg = alloc_region($bufsize); |]
                        , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = $id:reg->reg_heap; |]
                        ]
                  ScopedBuffer mul -> let [(outV,CursorTy)] = bnds
                                          bufsize = codegenMultiplicity mul
                                      in pure
-                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) )ALLOC_SCOPED($id:bufsize); |] ]
+                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) )ALLOC_SCOPED($bufsize); |] ]
 
                  ScopedParBuffer mul -> let [(outV,CursorTy)] = bnds
                                             bufsize = codegenMultiplicity mul
                                         in pure
-                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) )ALLOC_SCOPED($id:bufsize); |] ]
+                             [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ( $ty:(codegenTy CursorTy) )ALLOC_SCOPED($bufsize); |] ]
 
                  InitSizeOfBuffer mul -> let [(sizev,IntTy)] = bnds
                                              bufsize = codegenMultiplicity mul
                                          in pure
-                                            [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:sizev = $id:bufsize; |] ]
+                                            [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:sizev = $bufsize; |] ]
 
                  FreeBuffer -> if noGC
                                then pure []
@@ -1311,13 +1311,21 @@ codegenTail _ _ _ (Goto lbl) _ty _ = do
 
 -- | The sizes for all mulitplicities are defined as globals in the RTS.
 -- Note: Must be consistent with the names in RTS!
-codegenMultiplicity :: Multiplicity -> Var
+codegenMultiplicity :: Multiplicity -> C.Exp
 codegenMultiplicity mul =
   case mul of
-    BigInfinite -> toVar "global_init_biginf_buf_size"
-    Infinite    -> toVar "global_init_inf_buf_size"
-    Bounded     -> error $ "codegenMultiplicity: Bounded buffers not handled yet."
+    BigInfinite -> C.Var (C.toIdent (toVar "global_init_biginf_buf_size") noLoc) noLoc
+    Infinite    -> C.Var (C.toIdent (toVar "global_init_inf_buf_size") noLoc) noLoc
+    -- reserve 32 bytes at the end.
+    Bounded i   ->
+      let rounded = roundUp (i+32)
+      in [cexp| $int:rounded |]
 
+-- | Round up a number to a power of 2.
+--
+-- Copied from https://stackoverflow.com/a/466256.
+roundUp :: Int -> Int
+roundUp n = ceiling (2 ^ (ceiling (log (fromIntegral n) / log 2)))
 
 splitAlts :: Alts -> (Alts, Alts)
 splitAlts (TagAlts ls) = (TagAlts (L.init ls), TagAlts [last ls])

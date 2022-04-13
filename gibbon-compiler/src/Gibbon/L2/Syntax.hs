@@ -324,7 +324,7 @@ data Effect = Traverse LocVar
 -- See https://github.com/iu-parfunc/gibbon/issues/79 for more details
 -- | Region variants (multiplicities)
 data Multiplicity
-    = Bounded     -- ^ Contain a finite number of values and can be
+    = Bounded Int -- ^ Contain a finite number of values and can be
                   --   stack-allocated.
 
     | Infinite    -- ^ Consist of a linked list of buffers, spread

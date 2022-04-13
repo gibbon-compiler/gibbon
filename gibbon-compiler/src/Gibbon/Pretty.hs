@@ -437,13 +437,17 @@ instance Pretty l => Pretty (L2.PreLocExp l) where
           FromEndLE loc -> lparen <> text "fromendle" <+> pprint loc <> rparen
           FreeLE -> lparen <> text "free" <> rparen
 
+instance Pretty RegionSize where
+    pprintWithStyle _ (BoundedSize x) = parens $ text "Bounded" <+> int x
+    pprintWithStyle _ Undefined       = text "Unbounded"
+
 instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
     pprintWithStyle _ ex0 =
         case ex0 of
           L2.AddFixed v i -> text "addfixed" <+>
                                doc v <+> doc i
-          LetRegionE r _ _ e -> text "letregion" <+>
-                               doc r <+> text "in" $+$ pprint e
+          LetRegionE r sz _ e -> text "letregion" <+> pprint sz <+>
+                                 doc r <+> text "in" $+$ pprint e
           LetParRegionE r _ _ e -> text "letparregion" <+>
                                  doc r <+> text "in" $+$ pprint e
           LetLocE loc le e -> text "letloc" <+>
