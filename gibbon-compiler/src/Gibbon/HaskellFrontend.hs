@@ -224,7 +224,8 @@ desugarModule cfg pstate_ref import_route dir (Module _ head_mb _pragmas imports
 desugarModule _ _ _ _ m = error $ "desugarModule: " ++ prettyPrint m
 
 stdlibModules :: [String]
-stdlibModules = ["Gibbon.Prim", "Gibbon.Prelude", "Gibbon.Vector", "Gibbon.Vector.Parallel", "Gibbon.List"]
+stdlibModules = ["Gibbon.Prim", "Gibbon.Prelude", "Gibbon.Vector", "Gibbon.Vector.Parallel",
+                 "Gibbon.List", "Gibbon.PList"]
 
 processImport :: Config -> IORef ParseState -> [String] -> FilePath -> ImportDecl a -> IO (PassM Prog0)
 processImport cfg pstate_ref import_route dir decl@ImportDecl{..}
@@ -277,6 +278,7 @@ stdlibImportPath mod_name = do
     modNameToFilename "Gibbon.Vector" = "Gibbon" </> "Vector.hs"
     modNameToFilename "Gibbon.Vector.Parallel" = "Gibbon" </> "Vector" </> "Parallel.hs"
     modNameToFilename "Gibbon.List" = "Gibbon" </> "List.hs"
+    modNameToFilename "Gibbon.PList" = "Gibbon" </> "PList.hs"
     modNameToFilename oth = error $ "Unknown module: " ++ oth
 
 modImportPath :: ModuleName a -> String -> IO FilePath
@@ -871,7 +873,7 @@ desugarFun type_syns toplevel env decl =
     FunBind _ [Match _ fname pats (UnGuardedRhs _ bod) _where] -> do
       let fname_str = nameToStr fname
           fname_var = toVar (fname_str)
-      (vars, arg_tys,bindss) <- unzip3 <$> mapM (desugarPatWithTy type_syns) pats 
+      (vars, arg_tys,bindss) <- unzip3 <$> mapM (desugarPatWithTy type_syns) pats
       let binds = concat bindss
           args = vars
       fun_ty <- case M.lookup fname_var env of
