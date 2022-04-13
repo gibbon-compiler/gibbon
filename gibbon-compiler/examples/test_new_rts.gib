@@ -1,0 +1,68 @@
+#lang gibbon
+
+;; list
+
+(data List
+      [Nil]
+      [Cons Int List])
+
+(define (build-list [n : Int] [n2 : Int]) : List
+  (if (= n 0)
+      (Nil)
+      (Cons (- n2 n) (build-list (- n 1) n2))))
+
+(define (sum-list [xs : List]) : Int
+  (case xs
+    [(Nil) 0]
+    [(Cons y ys) (+ y (sum-list ys))]))
+
+(define (reverse [xs : List] [ys : List]) : List
+  (case xs
+    [(Nil) ys]
+    [(Cons z zs) (reverse zs (Cons z ys))]))
+
+;; tree
+
+(data Tree
+      [Leaf Int]
+      [Node Tree Tree])
+
+(define (buildtree [n : Int]) : Tree
+  (if (= n 0)
+      (let ([tr : Tree (Node (Leaf 100) (Leaf 200))])
+        (case tr
+          [(Leaf n) (Leaf n)]
+          [(Node l r) l]))
+      (Node (buildtree (- n 1))
+            (buildtree (- n 1)))))
+
+(define (sumtree [tr : Tree]) : Int
+  (case tr
+    [(Leaf n) n]
+    [(Node x y)
+     (let ([sumx : Int (sumtree x)])
+       (let ([sumy : Int (sumtree y)])
+         (+ sumx sumy)))]))
+
+(define (add1 [tr : Tree]) : Tree
+  (case tr
+    [(Leaf n) (Leaf (+ n 0))]
+    [(Node x y) (Node (add1 x) (add1 y))]))
+
+;; main
+
+(define (do-reverse [n : Int]) : Int
+ (let ([xs : List (build-list n n)])
+   (let ([ys : List (iterate (reverse xs (Nil)))])
+     (sum-list ys))))
+
+
+(define (do-tree [n : Int]) : Int
+  (let ([tr0 : Tree (buildtree n)])
+    (let ([tr1 : Tree (add1 tr0)])
+      (sumtree tr1))))
+
+;; (vector (do-reverse (size-param)) (do-tree (size-param)))
+;; (do-tree (size-param))
+;; (do-reverse (size-param))
+(do-reverse (size-param))
