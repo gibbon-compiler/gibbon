@@ -308,6 +308,18 @@ bench_parfoldconstants =
         _ = printint m
     in ()
 
+bench_treejoin :: ()
+bench_treejoin =
+    let n  = sizeParam
+        f1, f2 :: Vector (Int, Int, Int)
+        f1 = readArrayFile Nothing 
+        f2 = readArrayFile Nothing
+        fk = (\(x, _, _) -> x)
+        t1 = mkTree fk f1 Empty
+        t2 = mkTree fk f2 Empty
+        _  = join t1 t2 Empty
+    in ()
+
 gibbon_main =
     if eqBenchProg "seqfib"
     then bench_seqfib
@@ -371,4 +383,6 @@ gibbon_main =
     then bench_seqfoldconstants
     else if eqBenchProg "parfoldconstants"
     then bench_parfoldconstants
+    else if eqBenchProg "treejoin"
+    then bench_treejoin
     else printsym (quote "benchrunner: select benchmark to run with --bench-prog\n")
