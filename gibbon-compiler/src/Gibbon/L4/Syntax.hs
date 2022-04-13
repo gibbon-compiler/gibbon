@@ -296,9 +296,6 @@ data Prim
     | ReadVector
     | WriteVector
 
-    | ReadTuple
-    | WriteTuple
-
     | BoundsCheck
 
     | BumpRefCount

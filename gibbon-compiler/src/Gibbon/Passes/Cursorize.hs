@@ -468,7 +468,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
                  rnd' <- go tenv senv rnd
                  LetE (d',[], CursorTy, projEnds rnd') <$>
                    go2 d' rst
-   
+
               -- Int, Float, Sym, or Bool
               _ | isScalarTy ty -> do
                 rnd' <- cursorizeExp ddfs fundefs denv tenv senv rnd
@@ -1190,7 +1190,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                     go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
 
                 PackedTy{} -> do
-                  let tenv' = {-dbgTraceIt "Testing if PackedTy is triggered or not"-} M.insert v CursorTy tenv
+                  let tenv' = M.insert v CursorTy tenv
                   if canBind
                   then do
                     let tenv'' = M.insert loc CursorTy tenv'
@@ -1204,33 +1204,6 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                     -- Cannot read this. Instead, we add it to DepEnv.
                     let denv' = M.insertWith (++) loc [(v,[],CursorTy,VarE loc)] denv
                     go (toEndV v) rst_vlocs rst_tys False denv' tenv'
-                
-                --Trying to handle a tuple type
-                -- ProdTy el_ty -> do
-                --   tmp <- gensym "read_tuple"
-                --   let tenv' = M.union (M.fromList [(tmp     , ProdTy [ProdTy el_ty, CursorTy]),
-                --                                    (v       , ProdTy el_ty),
-                --                                    (toEndV v, CursorTy)])
-                --               tenv
-                --       ty'   = stripTyLocs ty
-                --       binds = [(tmp     , [], ProdTy [ty', CursorTy], Ext $ ReadTuple loc (stripTyLocs el_ty)),
-                --                (v       , [], ty'     , ProjE 0 (VarE tmp)),
-                --                (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
-                --   if canBind
-                --   then do
-                --     -- If the location exists in the environment, it indicates that the
-                --     -- corresponding variable was also bound and we shouldn't create duplicate
-                --     -- bindings (checked in the LetLocE cases).
-                --     let binds' = (loc,[],CursorTy, VarE cur):binds
-                --         tenv'' = M.insert loc CursorTy tenv'
-                --     bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv''
-                --     return $ mkLets binds' bod
-                --   else do
-                --     -- Cannot read this int. Instead, we add it to DepEnv.
-                --     let denv' = M.insertWith (++) loc binds denv
-                --     go (toEndV v) rst_vlocs rst_tys canBind denv' tenv'
-
-                
 
                 _ -> error $ "unpackRegularDataCon: Unexpected field " ++ sdoc (v,loc) ++ ":" ++ sdoc ty
 
