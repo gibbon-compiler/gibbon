@@ -50,3 +50,10 @@ map_ll f ls =
 
 length_ll :: List a -> Int
 length_ll ls = foldl_ll (\acc elt -> acc+1) 0 ls
+
+splitAt_ll :: Int -> List a -> (List a, List a)
+splitAt_ll n ls 
+  = if n ==0 then (alloc_ll, ls)
+   else 
+     let (a, b) = splitAt_ll (n-1) (tail_ll ls)
+     in (cons_ll (head_ll ls) a, b)

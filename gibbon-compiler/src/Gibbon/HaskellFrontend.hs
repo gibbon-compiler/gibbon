@@ -1034,7 +1034,7 @@ desugarAlt type_syns toplevel alt =
       ps' <- mapM (\x -> case x of
                             PVar _ v -> (pure . toVar . nameToStr) v
                             PWildCard _ -> gensym "wildcard_"
-                            _        -> error "desugarExp: Non-variable pattern in case.")
+                            _        -> error $ "desugarExp: Non-variable pattern in case." ++ show x)
                   ps
       rhs' <- desugarExp type_syns toplevel rhs
       ps'' <- mapM (\v -> (v,) <$> newMetaTy) ps'
@@ -1065,7 +1065,7 @@ generateBind type_syns toplevel env decl exp2 =
       w <- case pat of
              PVar _ v    -> pure $ toVar (nameToStr v)
              PWildCard _ -> gensym "wildcard_"
-             _           -> error "generateBind: "
+             _           -> error $ "generateBind: " ++ show pat
       ty' <- case M.lookup w env of
                Nothing -> newMetaTy
                Just (ForAll _ ty) -> pure ty

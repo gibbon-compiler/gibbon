@@ -58,11 +58,13 @@ data E3Ext loc dec =
   | ReadCursor Var                         -- ^ Reads and returns the cursor at Var
   | WriteCursor Var (PreExp E3Ext loc dec) -- ^ Write a cursor, and return a cursor
   | ReadList Var dec                       -- ^ Read a pointer to a linked list
-  | WriteList Var (PreExp E3Ext loc dec) dec -- ^ Write a pointer to a linked list
-  | ReadVector Var dec                       -- ^ Read a pointer to a vector
-  | WriteVector Var (PreExp E3Ext loc dec) dec -- ^ Write a pointer to a vector
-  | AddCursor Var (PreExp E3Ext loc dec)     -- ^ Add a constant offset to a cursor variable
-  | SubPtr Var Var                           -- ^ Pointer subtraction
+  | WriteList Var (PreExp E3Ext loc dec) dec       -- ^ Write a pointer to a linked list
+  | ReadVector Var dec                             -- ^ Read a pointer to a vector
+  | WriteVector Var (PreExp E3Ext loc dec) dec     -- ^ Write a pointer to a vector
+  | ReadTuple Var dec                         -- ^ Read a pointer to a tuple
+  | WriteTuple Var (PreExp E3Ext loc dec) dec -- ^ Write a pointer to a tuple 
+  | AddCursor Var (PreExp E3Ext loc dec)           -- ^ Add a constant offset to a cursor variable
+  | SubPtr Var Var                                 -- ^ Pointer subtraction
   | NewBuffer L2.Multiplicity         -- ^ Create a new buffer, and return a cursor
   | ScopedBuffer L2.Multiplicity      -- ^ Create a temporary scoped buffer, and return a cursor
   | NewParBuffer L2.Multiplicity         -- ^ Create a new buffer for parallel allocations, and return a cursor
@@ -113,8 +115,10 @@ instance FreeVars (E3Ext l d) where
       RetE ls -> S.unions (L.map gFreeVars ls)
       GetCilkWorkerNum   -> S.empty
       LetAvail ls b      -> (S.fromList ls) `S.union` gFreeVars b
-      ReadVector{} -> error "gFreeVars: ReadVector"
+      ReadVector{}  -> error "gFreeVars: ReadVector"
       WriteVector{} -> error "gFreeVars: WriteVector"
+      ReadTuple{}   -> error "gFreeVars: ReadTuple"
+      WriteTuple{}  -> error "gFreeVars: WriteTuple"
 
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
@@ -161,33 +165,35 @@ instance HasSubstitutableExt E3Ext l d => SubstitutableExt (PreExp E3Ext l d) (E
 instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
   gRename env ext =
     case ext of
-      ReadScalar s v     -> ReadScalar s (go v)
-      WriteScalar s v bod-> WriteScalar s (go v) (go bod)
-      ReadCursor v       -> ReadCursor (go v)
-      WriteCursor v bod  -> WriteCursor (go v) (go bod)
-      ReadList v el_ty      -> ReadList (go v) el_ty
-      WriteList v bod el_ty -> WriteList (go v) (go bod) el_ty
-      ReadVector v el_ty      -> ReadVector (go v) el_ty
-      WriteVector v bod el_ty -> WriteVector (go v) (go bod) el_ty
-      ReadTag v          -> ReadTag (go v)
-      WriteTag dcon v    -> WriteTag dcon (go v)
-      AddCursor v bod    -> AddCursor (go v) (go bod)
-      SubPtr v w         -> SubPtr (go v) (go w)
-      NewBuffer{}        -> ext
-      ScopedBuffer{}     -> ext
-      NewParBuffer{}     -> ext
-      ScopedParBuffer{}  -> ext
-      InitSizeOfBuffer{} -> ext
-      MMapFileSize v     -> MMapFileSize (go v)
-      SizeOfPacked a b   -> SizeOfPacked (go a) (go b)
-      SizeOfScalar v     -> SizeOfScalar (go v)
-      BoundsCheck i a b  -> BoundsCheck i (go a) (go b)
-      BumpRefCount a b   -> BumpRefCount (go a) (go b)
-      BumpArenaRefCount v w -> BumpArenaRefCount (go v) (go w)
-      NullCursor         -> ext
-      RetE ls            -> RetE (L.map go ls)
-      GetCilkWorkerNum   -> GetCilkWorkerNum
-      LetAvail ls b      -> LetAvail (L.map go ls) (go b)
+      ReadScalar s v              -> ReadScalar s (go v)
+      WriteScalar s v bod         -> WriteScalar s (go v) (go bod)
+      ReadCursor v                -> ReadCursor (go v)
+      WriteCursor v bod           -> WriteCursor (go v) (go bod)
+      ReadList v el_ty            -> ReadList (go v) el_ty
+      WriteList v bod el_ty       -> WriteList (go v) (go bod) el_ty
+      ReadVector v el_ty          -> ReadVector (go v) el_ty
+      WriteVector v bod el_ty     -> WriteVector (go v) (go bod) el_ty
+      ReadTuple v el_ty           -> ReadTuple (go v) el_ty
+      WriteTuple v bod el_ty      -> WriteTuple (go v) (go bod) el_ty
+      ReadTag v                   -> ReadTag (go v)
+      WriteTag dcon v             -> WriteTag dcon (go v)
+      AddCursor v bod             -> AddCursor (go v) (go bod)
+      SubPtr v w                  -> SubPtr (go v) (go w)
+      NewBuffer{}                 -> ext
+      ScopedBuffer{}              -> ext
+      NewParBuffer{}              -> ext
+      ScopedParBuffer{}           -> ext
+      InitSizeOfBuffer{}          -> ext
+      MMapFileSize v              -> MMapFileSize (go v)
+      SizeOfPacked a b            -> SizeOfPacked (go a) (go b)
+      SizeOfScalar v              -> SizeOfScalar (go v)
+      BoundsCheck i a b           -> BoundsCheck i (go a) (go b)
+      BumpRefCount a b            -> BumpRefCount (go a) (go b)
+      BumpArenaRefCount v w       -> BumpArenaRefCount (go v) (go w)
+      NullCursor                  -> ext
+      RetE ls                     -> RetE (L.map go ls)
+      GetCilkWorkerNum            -> GetCilkWorkerNum
+      LetAvail ls b               -> LetAvail (L.map go ls) (go b)
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env

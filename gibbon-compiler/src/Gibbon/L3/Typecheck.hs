@@ -86,6 +86,20 @@ tcExp isPacked ddfs env exp =
           valty <- go val
           ensureEqualTyModCursor exp valty (VectorTy el_ty)
           return CursorTy
+        
+        --Read for Tuple
+        ReadTuple v ty -> do
+          vty <- lookupVar env v exp
+          ensureEqualTyModCursor exp vty CursorTy
+          return $ ProdTy [ty, CursorTy]
+        
+        --Write for Tuple
+        WriteTuple cur val el_ty -> do
+          curty  <- lookupVar env cur exp
+          ensureEqualTyModCursor exp curty CursorTy
+          valty <- go val
+          ensureEqualTyModCursor exp valty el_ty
+          return CursorTy
 
         -- Add a constant offset to a cursor variable
         AddCursor v rhs -> do
