@@ -1464,7 +1464,7 @@ codegenMultiplicity mul =
     BigInfinite -> [cexp| gib_get_biginf_init_chunk_size() |]
     Infinite    -> [cexp| gib_get_inf_init_chunk_size() |]
     Bounded i   ->
-      let rounded = i
+      let rounded = i+9
       in [cexp| $int:rounded |]
 
 -- | Round up a number to a power of 2.
