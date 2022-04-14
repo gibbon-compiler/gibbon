@@ -1474,13 +1474,13 @@ static void gib_gc_stats_free(GibGcStats *stats)
 static void gib_gc_stats_print(GibGcStats *stats)
 {
     printf("\nGC statistics\n----------------------------------------\n");
-    printf("Major collections:\t %" PRIu64 "\n", stats->major_collections / gib_global_iters_param);
-    printf("Minor collections:\t %" PRIu64 "\n", stats->minor_collections / gib_global_iters_param);
-    printf("Mem allocated:\t\t %zu\n", stats->mem_allocated / gib_global_iters_param);
-    printf("GC nursery regions:\t %lu\n", stats->nursery_regions / gib_global_iters_param);
-    printf("GC oldgen regions:\t %lu\n", stats->oldgen_regions / gib_global_iters_param);
-    printf("GC elapsed time:\t %e\n", stats->gc_elapsed_time / gib_global_iters_param);
-    printf("GC cpu time:\t\t %e\n", stats->gc_cpu_time / gib_global_iters_param);
+    printf("Major collections:\t %" PRIu64 "\n", stats->major_collections);
+    printf("Minor collections:\t %" PRIu64 "\n", stats->minor_collections);
+    printf("Mem allocated:\t\t %zu\n", stats->mem_allocated);
+    printf("GC nursery regions:\t %lu\n", stats->nursery_regions);
+    printf("GC oldgen regions:\t %lu\n", stats->oldgen_regions);
+    printf("GC elapsed time:\t %e\n", stats->gc_elapsed_time);
+    printf("GC cpu time:\t\t %e\n", stats->gc_cpu_time);
 }
 
 /*
