@@ -1748,11 +1748,11 @@ int gib_main_expr(void)
     info_table_initialize();
     symbol_table_initialize();
 
-    // GibInt fltPrd_235_251 =  do_reverse(gib_get_size_param());
-    // printf("reverse: %" PRIu64 "\n", fltPrd_235_251);
-
-    GibInt fltPrd_235_251 =  do_reverse2(gib_get_size_param());
+    GibInt fltPrd_235_251 =  do_reverse(gib_get_size_param());
     printf("reverse: %" PRIu64 "\n", fltPrd_235_251);
+
+    // GibInt fltPrd_235_251 =  do_reverse2(gib_get_size_param());
+    // printf("reverse: %" PRIu64 "\n", fltPrd_235_251);
 
     // GibInt fltPrd_236_252 =  do_tree(gib_get_size_param());
     // printf("sum tree: %" PRIu64 "\n", fltPrd_236_252);

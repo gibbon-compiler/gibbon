@@ -541,7 +541,7 @@ unsafe fn evacuate_shadowstack(
         };
 
         // Allocate space in the destination.
-        let (dst, dst_end) = Heap::allocate_first_chunk(heap, chunk_size, 0)?;
+        let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
         // Update ZCT.
         let footer = dst_end as *const C_GibChunkFooter;
         (*zct).insert((*footer).reg_info);
@@ -550,7 +550,7 @@ unsafe fn evacuate_shadowstack(
             EvacState { benv, cenv, zct, nursery, prov: &GcRootProv::Stk };
         let src = (*frame).ptr;
         let src_end = (*frame).endptr;
-        let is_loc_0 = (src_end.offset_from(src)) == 1024;
+        let is_loc_0 = (src_end.offset_from(src)) == chunk_size as isize;
         let (src_after, dst_after, dst_after_end, tag) = evacuate_packed(
             &mut st,
             heap,
