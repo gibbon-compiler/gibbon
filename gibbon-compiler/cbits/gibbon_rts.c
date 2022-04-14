@@ -934,24 +934,35 @@ typedef struct gib_generation {
 } GibGeneration;
 
 typedef struct gib_gc_stats {
-    // Number of copying minor collections (owned by Rust RTS).
+    // Number of copying minor collections (maintained by Rust RTS).
     uint64_t minor_collections;
 
-    // Number of copying major collections (owned by Rust RTS).
+    // Number of copying major collections (maintained by Rust RTS).
     uint64_t major_collections;
 
-    // Memory allocated in the major heap (owned by Rust RTS).
+    // Overall memory allocated (maintained by C and Rust RTS).
     size_t mem_allocated;
 
-    // Number of regions.
-    // Owned by C RTS.
+    // Overall memory copied (maintained by Rust RTS).
+    size_t mem_copied;
+
+    // Number of regions in the nursery (maintained by C RTS).
     uint64_t nursery_regions;
-    // Owned by Rust RTS.
+
+    // Number of regions in the old generation (maintained by Rust RTS).
     uint64_t oldgen_regions;
 
-    // GC time (owned by C RTS).
+    // Total GC time (maintained by C RTS).
     double gc_elapsed_time;
     double gc_cpu_time;
+
+    // Fine grained stats to measure various different parts of the collector
+    // (maintained by Rust RTS).
+    double gc_rootset_sort_time;
+    double gc_burn_time;
+    double gc_find_fwdptr_time;
+    double gc_info_tbl_lkp_time;
+    double gc_zct_mgmt_time;
 
 } GibGcStats;
 
@@ -1462,6 +1473,11 @@ static void gib_gc_stats_initialize(GibGcStats *stats)
     stats->oldgen_regions = 0;
     stats->gc_elapsed_time = 0;
     stats->gc_cpu_time = 0;
+    stats->gc_rootset_sort_time = 0;
+    stats->gc_burn_time = 0;
+    stats->gc_find_fwdptr_time = 0;
+    stats->gc_info_tbl_lkp_time = 0;
+    stats->gc_zct_mgmt_time = 0;
 }
 
 static void gib_gc_stats_free(GibGcStats *stats)
@@ -1472,13 +1488,28 @@ static void gib_gc_stats_free(GibGcStats *stats)
 static void gib_gc_stats_print(GibGcStats *stats)
 {
     printf("\nGC statistics\n----------------------------------------\n");
-    printf("Major collections:\t %" PRIu64 "\n", stats->major_collections);
-    printf("Minor collections:\t %" PRIu64 "\n", stats->minor_collections);
-    printf("Mem allocated:\t\t %zu\n", stats->mem_allocated);
-    printf("GC nursery regions:\t %lu\n", stats->nursery_regions);
-    printf("GC oldgen regions:\t %lu\n", stats->oldgen_regions);
-    printf("GC elapsed time:\t %e\n", stats->gc_elapsed_time);
-    printf("GC cpu time:\t\t %e\n", stats->gc_cpu_time);
+    printf("Major collections:\t\t %" PRIu64 "\n", stats->major_collections);
+    printf("Minor collections:\t\t %" PRIu64 "\n", stats->minor_collections);
+
+    printf("\n");
+    printf("Mem allocated:\t\t\t %zu\n", stats->mem_allocated);
+    printf("Mem copied:\t\t\t %zu\n", stats->mem_copied);
+
+    printf("\n");
+    printf("GC nursery regions:\t\t %lu\n", stats->nursery_regions);
+    printf("GC oldgen regions:\t\t %lu\n", stats->oldgen_regions);
+
+    printf("\n");
+    printf("GC elapsed time:\t\t %e\n", stats->gc_elapsed_time);
+    printf("GC cpu time:\t\t\t %e\n", stats->gc_cpu_time);
+
+    printf("\n");
+    printf("GC rootset sort time:\t\t %e\n", stats->gc_rootset_sort_time);
+    printf("GC burn time:\t\t\t %e\n", stats->gc_burn_time);
+    printf("GC fwd scan time:\t\t %e\n", stats->gc_find_fwdptr_time);
+    printf("GC info table lookup time:\t %e\n", stats->gc_info_tbl_lkp_time);
+    printf("GC ZCT mgmt time:\t\t %e\n", stats->gc_zct_mgmt_time);
+
 }
 
 /*

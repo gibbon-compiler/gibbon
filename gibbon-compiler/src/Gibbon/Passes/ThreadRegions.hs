@@ -453,7 +453,7 @@ boundsCheck ddefs tycon =
       -- Add a byte for the tag.
       num_bytes = (1 + maximum vals)
   -- Reserve additional space for a redirection node or a forwarding pointer.
-  in num_bytes + 32
+  in num_bytes + 9
 
 ----------------------------------------
 

@@ -13,8 +13,10 @@ use std::error::Error;
 use std::fmt;
 use std::mem::size_of;
 use std::ptr::{null_mut, write_bytes};
+use std::time::Instant;
 
 use crate::ffi::types::*;
+use crate::measure;
 use crate::tagged_pointer::*;
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -451,6 +453,7 @@ struct EvacState<'a> {
     nursery: &'a Nursery,
     // heap: Box<&'a mut dyn Heap>,
     prov: &'a GcRootProv,
+    evac_major: bool,
 }
 
 /// Copy values at all read cursors from the remembered set to the provided
@@ -468,7 +471,8 @@ unsafe fn evacuate_remembered_set(
     evac_major: bool,
 ) -> Result<BurnedAddressEnv> {
     let mut benv: BurnedAddressEnv = HashMap::new();
-    let frames = sort_roots(rem_set);
+    let frames =
+        measure!(sort_roots(rem_set), (*GC_STATS).gc_rootset_sort_time);
     for frame in frames {
         let datatype = (*frame).datatype;
         let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
@@ -487,16 +491,10 @@ unsafe fn evacuate_remembered_set(
             zct,
             nursery,
             prov: &GcRootProv::RemSet,
-        };
-        let (src_after, _dst_after, _dst_after_end, _tag) = evacuate_packed(
-            &mut st,
-            heap,
-            packed_info,
-            src,
-            dst,
-            dst_end,
             evac_major,
-        );
+        };
+        let (src_after, _dst_after, _dst_after_end, _tag) =
+            evacuate_packed(&mut st, heap, packed_info, src, dst, dst_end);
         // Update the indirection pointer in oldgen region.
         write((*frame).ptr, dst);
         // Update the outset in oldgen region.
@@ -533,33 +531,35 @@ unsafe fn evacuate_shadowstack(
         let datatype = (*frame).datatype;
         let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
 
+        // Allocate space in the destination.
+        let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
+        // Update ZCT.
+        let footer = dst_end as *const C_GibChunkFooter;
+        measure!(
+            (*zct).insert((*footer).reg_info),
+            (*GC_STATS).gc_zct_mgmt_time
+        );
+        // Evacuate the data.
+        let mut st = EvacState {
+            benv,
+            cenv,
+            zct,
+            nursery,
+            prov: &GcRootProv::Stk,
+            evac_major,
+        };
+        let src = (*frame).ptr;
+        let src_end = (*frame).endptr;
         let chunk_size = if root_in_nursery {
             let nursery_footer: *mut u16 = (*frame).endptr as *mut u16;
             *nursery_footer as usize
         } else {
             CHUNK_SIZE
         };
-
-        // Allocate space in the destination.
-        let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
-        // Update ZCT.
-        let footer = dst_end as *const C_GibChunkFooter;
-        (*zct).insert((*footer).reg_info);
-        // Evacuate the data.
-        let mut st =
-            EvacState { benv, cenv, zct, nursery, prov: &GcRootProv::Stk };
-        let src = (*frame).ptr;
-        let src_end = (*frame).endptr;
         let is_loc_0 = (src_end.offset_from(src)) == chunk_size as isize;
-        let (src_after, dst_after, dst_after_end, tag) = evacuate_packed(
-            &mut st,
-            heap,
-            packed_info,
-            src,
-            dst,
-            dst_end,
-            evac_major,
-        );
+
+        let (src_after, dst_after, dst_after_end, tag) =
+            evacuate_packed(&mut st, heap, packed_info, src, dst, dst_end);
         // Update the pointers in shadow-stack.
         (*frame).ptr = dst;
         // TODO(ckoparkar): AUDITME.
@@ -623,7 +623,6 @@ unsafe fn evacuate_packed(
     src: *mut i8,
     dst: *mut i8,
     dst_end: *mut i8,
-    evac_major: bool,
 ) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
     let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
     match tag {
@@ -667,9 +666,12 @@ unsafe fn evacuate_packed(
                     GcRootProv::Stk => {
                         let fwd_footer =
                             fwd_footer_addr as *const C_GibChunkFooter;
-                        (*(st.zct)).remove(
-                            &((*fwd_footer).reg_info
-                                as *const C_GibRegionInfo),
+                        measure!(
+                            (*(st.zct)).remove(
+                                &((*fwd_footer).reg_info
+                                    as *const C_GibRegionInfo),
+                            ),
+                            (*GC_STATS).gc_zct_mgmt_time
                         );
                         ()
                     }
@@ -724,9 +726,12 @@ unsafe fn evacuate_packed(
                     GcRootProv::Stk => {
                         let fwd_footer =
                             fwd_footer_addr_avail as *const C_GibChunkFooter;
-                        (*(st.zct)).remove(
-                            &((*fwd_footer).reg_info
-                                as *const C_GibRegionInfo),
+                        measure!(
+                            (*(st.zct)).remove(
+                                &((*fwd_footer).reg_info
+                                    as *const C_GibRegionInfo),
+                            ),
+                            (*GC_STATS).gc_zct_mgmt_time
                         );
                         ()
                     }
@@ -759,7 +764,7 @@ unsafe fn evacuate_packed(
             // Otherwise, write a redireciton node at dst (pointing to
             // the start of the oldgen chunk), link the footers and reconcile
             // the two RegionInfo objects.
-            if evac_major || st.nursery.contains_addr(next_chunk) {
+            if st.evac_major || st.nursery.contains_addr(next_chunk) {
                 evacuate_packed(
                     st,
                     heap,
@@ -767,7 +772,6 @@ unsafe fn evacuate_packed(
                     next_chunk,
                     dst,
                     dst_end,
-                    evac_major,
                 )
             } else {
                 // TODO(ckoparkar): BUGGY, AUDITME.
@@ -791,9 +795,14 @@ unsafe fn evacuate_packed(
                 (*footer1).reg_info = reg_info2;
 
                 // Update ZCT.
-                (*(st.zct)).remove(&(reg_info1 as *const C_GibRegionInfo));
-                (*(st.zct)).insert(reg_info2);
-
+                measure!(
+                    (*(st.zct)).remove(&(reg_info1 as *const C_GibRegionInfo)),
+                    (*GC_STATS).gc_zct_mgmt_time
+                );
+                measure!(
+                    (*(st.zct)).insert(reg_info2),
+                    (*GC_STATS).gc_zct_mgmt_time
+                );
                 // Stop evacuating.
                 (
                     src_after_next_chunk as *mut i8,
@@ -826,7 +835,7 @@ unsafe fn evacuate_packed(
             // If the pointee is in the nursery, evacuate it.
             // Otherwise, write an indirection node at dst and adjust the
             // refcount and outset.
-            if evac_major || st.nursery.contains_addr(pointee) {
+            if st.evac_major || st.nursery.contains_addr(pointee) {
                 let (
                     src_after_pointee,
                     dst_after_pointee,
@@ -839,7 +848,6 @@ unsafe fn evacuate_packed(
                     pointee,
                     dst,
                     dst_end,
-                    evac_major,
                 );
                 // Update the burned environment if we're evacuating a root
                 // from the remembered set.
@@ -900,6 +908,8 @@ unsafe fn evacuate_packed(
                 dst_mut.copy_from_nonoverlapping(src_after_tag, scalar_bytes1);
                 let mut src_mut = src_after_tag.add(scalar_bytes1);
                 dst_mut = dst_mut.add(scalar_bytes1);
+                stats_bump_mem_copied(1 + scalar_bytes1);
+
                 // Add forwarding pointers:
                 // if there's enough space, write a COPIED_TO tag and
                 // dst's address at src. Otherwise just write a COPIED tag.
@@ -931,7 +941,6 @@ unsafe fn evacuate_packed(
                         src_mut,
                         dst_mut,
                         dst_end_mut,
-                        evac_major,
                     );
                     match field_tag {
                         // Immediately stop copying upon reaching the
@@ -943,7 +952,7 @@ unsafe fn evacuate_packed(
                         // next call to evacuate_packed would terminate anyway.
                         // Unless we're evacuating the oldgen as well, in which
                         // case keep evacuating.
-                        C_REDIRECTION_TAG if !evac_major => {
+                        C_REDIRECTION_TAG if !st.evac_major => {
                             return (src1, dst1, dst_end1, field_tag);
                         }
                         _ => {
@@ -981,19 +990,19 @@ fn sort_roots(
     Box::new(frames_vec.into_iter())
 }
 
-#[inline]
+#[inline(always)]
 unsafe fn read<A>(cursor: *const i8) -> (A, *const i8) {
     let cursor2 = cursor as *const A;
     (cursor2.read_unaligned(), cursor2.add(1) as *const i8)
 }
 
-#[inline]
+#[inline(always)]
 unsafe fn read_mut<A>(cursor: *mut i8) -> (A, *mut i8) {
     let cursor2 = cursor as *const A;
     (cursor2.read_unaligned(), cursor2.add(1) as *mut i8)
 }
 
-#[inline]
+#[inline(always)]
 unsafe fn write<A>(cursor: *mut i8, val: A) -> *mut i8 {
     let cursor2 = cursor as *mut A;
     // TODO(ckoparkar): what's the difference between these?
@@ -1663,7 +1672,7 @@ pub fn info_table_finalize() {
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Bump GC statistics
+ * Update GC statistics
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
@@ -1716,6 +1725,34 @@ fn stats_bump_mem_allocated(size: usize) {
 
 #[cfg(not(feature = "gcstats"))]
 fn stats_bump_mem_allocated(_size: usize) {}
+
+#[cfg(feature = "gcstats")]
+fn stats_bump_mem_copied(size: usize) {
+    unsafe {
+        (*GC_STATS).mem_copied += size;
+    }
+}
+
+#[cfg(not(feature = "gcstats"))]
+fn stats_bump_mem_copied(_size: usize) {}
+
+#[cfg(feature = "gcstats")]
+#[macro_export]
+macro_rules! measure {
+    ( $x:expr, $addr:expr ) => {{
+        let start = Instant::now();
+        let y = $x;
+        let duration = start.elapsed();
+        $addr += duration.as_secs_f64();
+        y
+    }};
+}
+
+#[cfg(not(feature = "gcstats"))]
+#[macro_export]
+macro_rules! measure {
+    ( $x:expr, $addr:expr ) => {{}};
+}
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Custom error type

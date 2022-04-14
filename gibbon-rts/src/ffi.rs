@@ -76,10 +76,16 @@ pub mod types {
         pub minor_collections: u64,
         pub major_collections: u64,
         pub mem_allocated: usize,
+        pub mem_copied: usize,
         pub nursery_regions: u64,
         pub oldgen_regions: u64,
         pub gc_elapsed_time: f64,
         pub gc_cpu_time: f64,
+        pub gc_rootset_sort_time: f64,
+        pub gc_burn_time: f64,
+        pub gc_find_fwdptr_time: f64,
+        pub gc_info_tbl_lkp_time: f64,
+        pub gc_zct_mgmt_time: f64,
     }
 
     #[repr(C)]
