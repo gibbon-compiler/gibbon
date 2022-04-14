@@ -534,8 +534,8 @@ unsafe fn evacuate_shadowstack(
         let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
 
         let chunk_size = if root_in_nursery {
-            let nursery_footer: *mut usize = (*frame).endptr as *mut usize;
-            *nursery_footer
+            let nursery_footer: *mut u16 = (*frame).endptr as *mut u16;
+            *nursery_footer as usize
         } else {
             CHUNK_SIZE
         };

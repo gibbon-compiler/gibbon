@@ -1061,13 +1061,11 @@ STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collec
 {
     GibNursery *nursery = DEFAULT_NURSERY;
     char *old = nursery->alloc;
-    // TODO(ckoparkar): we could make an assumption that size is always a
-    // power of 2 and store log(2) here.
-    char *bump = old - size - sizeof(size_t);
+    char *bump = old - size - sizeof(uint16_t);
     if (LIKELY((bump >= nursery->heap_start))) {
         nursery->alloc = bump;
-        char *footer = old - sizeof(size_t);
-        *(size_t *) footer = size;
+        char *footer = old - sizeof(uint16_t);
+        *(uint16_t *) footer = size;
         return (GibChunk) {bump, footer};
     } else {
         return gib_alloc_region_in_nursery_slow(size, collected);
