@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <uthash.h>
 #include <assert.h>
+#include <limits.h>
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Translating Gibbon's types to C
@@ -404,6 +405,7 @@ void gib_print_global_region_count(void);
  */
 
 
+
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Shadow-stack
@@ -590,6 +592,15 @@ int gib_compare_doubles(const void *a, const void *b);
 GibInt gib_expll(GibInt base, GibInt pow);
 GibInt gib_get_num_processors(void);
 
+// Copied from: https://stackoverflow.com/a/47074187
+//
+// ASSUMPTIONS:
+// (1) x is a power of 2, and
+// (2) log(2) is less than 256
+INLINE_HEADER uint8_t gib_log2(size_t x)
+{
+    return sizeof(uint32_t) * CHAR_BIT - __builtin_clz(x) - 1;
+}
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Main functions

@@ -521,18 +521,27 @@ unsafe fn evacuate_shadowstack(
     // let frames = rstack.into_iter();
     let frames = sort_roots(rstack);
     for frame in frames {
-        if !evac_major && !nursery.contains_addr((*frame).ptr) {
+        let root_in_nursery = nursery.contains_addr((*frame).endptr);
+        if !evac_major && !root_in_nursery {
             let footer = (*frame).endptr as *const C_GibChunkFooter;
             if (*((*footer).reg_info)).refcount == 0 {
                 (*zct).insert((*footer).reg_info);
             }
             continue;
         }
+
         let datatype = (*frame).datatype;
         let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
 
+        let chunk_size = if root_in_nursery {
+            let nursery_footer: *mut usize = (*frame).endptr as *mut usize;
+            *nursery_footer
+        } else {
+            CHUNK_SIZE
+        };
+
         // Allocate space in the destination.
-        let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
+        let (dst, dst_end) = Heap::allocate_first_chunk(heap, chunk_size, 0)?;
         // Update ZCT.
         let footer = dst_end as *const C_GibChunkFooter;
         (*zct).insert((*footer).reg_info);
