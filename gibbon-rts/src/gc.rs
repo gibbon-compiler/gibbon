@@ -793,16 +793,9 @@ unsafe fn evacuate_packed(
                   eprintln!("   Forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged, dst);      
 
                   stats_bump_mem_copied(9);
-                  // TODO(ckoparkar): check that no code path will try to read/write
-                  // at this null pointer.
-                  let src_after_burned = match st.benv.get(&src) {
-                      None => panic!("Could not find {:?} in benv", src), // null_mut(),
-                      Some(end) => *end,
-                  };
                   // Update outsets and refcounts if evacuating to the oldest
                   // generation.
                   if heap.is_oldest() {
-                      todo!();
                       let fwd_footer_offset = tagged.get_tag();
                       let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
                       handle_old_to_old_indirection(dst_end, fwd_footer_addr);
@@ -822,16 +815,22 @@ unsafe fn evacuate_packed(
                           }
                       }
                   }
-                  src = src_after_burned;
+                  
                   dst = dst_after_indr;
                   dst_end = dst_end1;
-                  // TODO: make this reusable somehow (local macro?)
+                  let src_after_burned = st.benv.get(&src);
+
                   if let Some(next) = worklist.pop() {
                     next_action = next;          
+                    src = *src_after_burned.unwrap_or_else(|| panic!("Could not find {:?} in benv", src));
                     continue;
                   } else {
+                      // WARNING: allow a corrupt null src return pointer.  Should make it an OPTION.
+                      src = *src_after_burned.unwrap_or(&null_mut());
+                      #[cfg(feature = "gcstats")]
+                      eprintln!("   Forwarding pointer was last, don't need skip-over, src = {:?}", src);
                       break;
-                  }                  
+                  }               
               }                  
 
 /*                            
