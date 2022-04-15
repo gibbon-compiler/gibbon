@@ -747,7 +747,7 @@ unsafe fn evacuate_packed(
                       dst = dst_after_indr;
                       dst_end = dst_end1;
 
-                      // make this reusable somehow (local macro?)
+                      // TODO: make this reusable somehow (local macro?)
                       if let Some(next) = worklist.pop() {
                         next_action = next;          
                         continue;
@@ -758,7 +758,6 @@ unsafe fn evacuate_packed(
               }
 
               C_COPIED_TAG => todo!(),
-              C_REDIRECTION_TAG => todo!(),
 
               // Nothing to copy. Just update the write cursor's new
               // address in shadow-stack.
@@ -896,6 +895,7 @@ unsafe fn evacuate_packed(
                   }
                   (src_after_burned, dst_after_indr, dst_end1, tag)
               }
+*/    
       
               // Indicates end-of-current-chunk in the source buffer i.e.
               // there's nothing more to copy in the current chunk.
@@ -910,6 +910,10 @@ unsafe fn evacuate_packed(
                       read(src_after_tag);
                   let tagged = TaggedPointer::from_u64(tagged_next_chunk);
                   let next_chunk = tagged.untag();
+
+                  #[cfg(feature = "gcstats")]
+                  eprintln!("   Redirection ptr!: src {:?}, to next chunk {:?}", src, next_chunk);
+                  
                   // Add a forwarding pointer in the source buffer.
                   assert!(dst < dst_end);
                   write_forwarding_pointer_at(
@@ -923,15 +927,18 @@ unsafe fn evacuate_packed(
                   // the start of the oldgen chunk), link the footers and reconcile
                   // the two RegionInfo objects.
                   if st.evac_major || st.nursery.contains_addr(next_chunk) {
-                      evacuate_packed(
-                          st,
-                          heap,
-                          packed_info,
-                          next_chunk,
-                          dst,
-                          dst_end,
-                      )
+
+                    src = next_chunk;
+                    // TODO: make this reusable somehow (local macro?)
+                    if let Some(next) = worklist.pop() {
+                        next_action = next;          
+                        continue;
+                    } else {
+                        break;
+                    }
                   } else {
+                      // A pretenured object whose next chunk is in the old_gen.
+
                       // TODO(ckoparkar): BUGGY, AUDITME.
                       let dst_after_tag = write(dst, C_REDIRECTION_TAG);
                       let dst_after_redir = write(dst_after_tag, tagged_next_chunk);
@@ -963,15 +970,12 @@ unsafe fn evacuate_packed(
                           (*GC_STATS).gc_zct_mgmt_time
                       );
                       // Stop evacuating.
-                      (
-                          src_after_next_chunk as *mut i8,
-                          dst_after_redir,
-                          dst_end,
-                          tag,
-                      )
+                      src = src_after_next_chunk as *mut i8;
+                      dst = dst_after_redir;
+                      // dst_end??
+                      break;
                   }
               }        
-*/    
 
               // Regular datatype, copy.
               _ => {
