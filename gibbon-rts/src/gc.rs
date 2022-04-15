@@ -757,8 +757,6 @@ unsafe fn evacuate_packed(
                   }        
               }
 
-              C_COPIED_TAG => todo!(),
-
               // Nothing to copy. Just update the write cursor's new
               // address in shadow-stack.
               C_CAUTERIZED_TAG => {
@@ -818,7 +816,6 @@ unsafe fn evacuate_packed(
                   dst = dst_after_indr;
                   dst_end = dst_end1;
                   let src_after_burned = st.benv.get(&src);
-
                   if let Some(next) = worklist.pop() {
                     next_action = next;          
                     src = *src_after_burned.unwrap_or_else(|| panic!("Could not find {:?} in benv", src));
@@ -832,10 +829,9 @@ unsafe fn evacuate_packed(
                   }               
               }                  
 
-/*                            
               // See Note [Maintaining sharing, Copied and CopiedTo tags].
               C_COPIED_TAG => {
-                  todo!();    
+                  // TODO: bound scanning.
                   let (mut scan_tag, mut scan_ptr): (C_GibPackedTag, *const i8) =
                       read(src_after_tag);
                   while scan_tag != C_COPIED_TO_TAG {
@@ -867,12 +863,6 @@ unsafe fn evacuate_packed(
                   let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                   let dst_after_indr = write(dst_after_tag, tagged_want);
                   stats_bump_mem_copied(9);
-                  // TODO(ckoparkar): check that no code path will try to read/write
-                  // at this null pointer.
-                  let src_after_burned = match st.benv.get(&src) {
-                      None => null_mut(),
-                      Some(end) => *end,
-                  };
                   // Update outsets and refcounts if evacuating to the oldest
                   // generation.
                   if heap.is_oldest() {
@@ -893,9 +883,22 @@ unsafe fn evacuate_packed(
                           }
                       }
                   }
-                  (src_after_burned, dst_after_indr, dst_end1, tag)
+                  
+                  dst = dst_after_indr;
+                  dst_end = dst_end1;
+                  let src_after_burned = st.benv.get(&src);
+                  if let Some(next) = worklist.pop() {
+                    next_action = next;          
+                    src = *src_after_burned.unwrap_or_else(|| panic!("Could not find {:?} in benv", src));
+                    continue;
+                  } else {
+                      // WARNING: allow a corrupt null src return pointer.  Should make it an OPTION.
+                      src = *src_after_burned.unwrap_or(&null_mut());
+                      #[cfg(feature = "gcstats")]
+                      eprintln!("   Burned tag was last, don't need skip-over, src = {:?}", src);
+                      break;
+                  }
               }
-*/    
       
               // Indicates end-of-current-chunk in the source buffer i.e.
               // there's nothing more to copy in the current chunk.
@@ -1020,7 +1023,7 @@ unsafe fn evacuate_packed(
                               dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                           );
                       }
-/* TEMP disable burned tags                      
+                      // NOTE: Comment this case to disable burned tags:
                       else {
                           #[cfg(feature = "gcstats")]
                           eprintln!("   burning non-forwardable data at {:?}, scalar bytes {}", src, scalar_bytes1);
@@ -1029,13 +1032,12 @@ unsafe fn evacuate_packed(
                           if scalar_bytes1 >= 1 {
                              write_bytes(src_after_tag, C_COPIED_TAG, scalar_bytes1 as usize);
                           }
-                          // Double check this versus the old version here:
+                          // todo: Double check the above versus the old version here:
                           //   if src_mut > burn {
                           //     let i = src_mut.offset_from(burn);
                           //     write_bytes(burn, C_COPIED_TAG, i as usize);
                           //   }                          
                       }  
-*/    
 
                       // TODO(ckoparkar):
                       // (1) instead of recursion, use a worklist
@@ -1055,41 +1057,6 @@ unsafe fn evacuate_packed(
                       } else {
                           break;
                       }
-
-                      // TODO: restore cauterize behavior.  But couldn't that go in the cauterize case?
-      /*                
-                      for ty in field_tys.iter() {
-                          eprintln!("    field iter loop over ty {:?}", ty);
-                          let packed_info = INFO_TABLE.get_unchecked(*ty as usize);
-                          let (src1, dst1, dst_end1, field_tag) = evacuate_packed(
-                              st,
-                              heap,
-                              packed_info,
-                              src_mut,
-                              dst_mut,
-                              dst_end_mut,
-                          );
-                          match field_tag {
-                              // Immediately stop copying upon reaching the
-                              // cauterized tag.
-                              C_CAUTERIZED_TAG => {
-                                  return (src1, dst1, dst_end1, field_tag);
-                              }
-                              // This redirection would likely be in oldgen and the
-                              // next call to evacuate_packed would terminate anyway.
-                              // Unless we're evacuating the oldgen as well, in which
-                              // case keep evacuating.
-                              C_REDIRECTION_TAG if !st.evac_major => {
-                                  return (src1, dst1, dst_end1, field_tag);
-                              }
-                              _ => {
-                                  src_mut = src1;
-                                  dst_mut = dst1;
-                                  dst_end_mut = dst_end1;
-                              }
-                          }
-                      }
-                      */
                   }                            
               }         
           } // End match
