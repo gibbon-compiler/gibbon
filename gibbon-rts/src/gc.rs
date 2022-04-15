@@ -994,8 +994,6 @@ unsafe fn evacuate_packed(
                       // After the forwarding pointer, burn the rest of
                       // space previously occupied by scalars.
       
-      
-                      // let burn = 
                       if scalar_bytes1 >= 8 {
                           debug_assert!(dst < dst_end);
                           write_forwarding_pointer_at(
@@ -1003,16 +1001,22 @@ unsafe fn evacuate_packed(
                               dst,
                               dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                           );
-                      };
-      /*                
-                      else {
-                          write(src, C_COPIED_TAG)
-                      };
-                      if src_mut > burn {
-                          let i = src_mut.offset_from(burn);
-                          write_bytes(burn, C_COPIED_TAG, i as usize);
                       }
-      */
+                      else {
+                          #[cfg(feature = "gcstats")]
+                          eprintln!("   burning non-forwardable data at {:?}, scalar bytes {}", src, scalar_bytes1);
+                          let _ = write(src, C_COPIED_TAG);
+                          // Also burn any scalar bytes that weren't big enough for a pointer:
+                          if scalar_bytes1 >= 1 {
+                             write_bytes(src_after_tag, C_COPIED_TAG, scalar_bytes1 as usize);
+                          }
+                          // Double check this versus the old version here:
+                          //   if src_mut > burn {
+                          //     let i = src_mut.offset_from(burn);
+                          //     write_bytes(burn, C_COPIED_TAG, i as usize);
+                          //   }                          
+                      }  
+    
                       // TODO(ckoparkar):
                       // (1) instead of recursion, use a worklist
                       // (2) handle redirection nodes properly
