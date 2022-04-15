@@ -492,7 +492,7 @@ unsafe fn evacuate_remembered_set(
             prov: &GcRootProv::RemSet,
             evac_major,
         };
-        let (src_after, _dst_after, _dst_after_end, _tag) =
+        let (src_after, _dst_after, _dst_after_end) =
             evacuate_packed(&mut st, heap, datatype, src, dst, dst_end);
         // Update the indirection pointer in oldgen region.
         write((*frame).ptr, dst);
@@ -556,13 +556,15 @@ unsafe fn evacuate_shadowstack(
         };
         let is_loc_0 = (src_end.offset_from(src)) == chunk_size as isize;
 
-        let (src_after, dst_after, dst_after_end, tag) =
+        let (src_after, dst_after, dst_after_end) =
             evacuate_packed(&mut st, heap, datatype, src, dst, dst_end);
         // Update the pointers in shadow-stack.
         (*frame).ptr = dst;
         // TODO(ckoparkar): AUDITME.
         // (*frame).endptr = dst_after_end;
         (*frame).endptr = dst_end;
+
+/* TEMP - FIXME: restore cauterized/forwarding handling.
         // Note [Adding a forwarding pointer at the end of every chunk].
         match tag {
             C_COPIED_TO_TAG | C_COPIED_TAG | C_REDIRECTION_TAG => {}
@@ -578,6 +580,7 @@ unsafe fn evacuate_shadowstack(
                 }
             }
         }
+        */
     }
     Ok(())
 }
@@ -630,7 +633,7 @@ unsafe fn evacuate_packed(
     orig_src: *mut i8,
     orig_dst: *mut i8,
     orig_dst_end: *mut i8,
-) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
+) -> (*mut i8, *mut i8, *mut i8) {
     // These four comprise the main mutable state of the traversal and should be updated 
     // together at the end of every iteration:
     let mut src = orig_src;
@@ -638,9 +641,6 @@ unsafe fn evacuate_packed(
     let mut dst_end = orig_dst_end;
     // The implicit -1th element of the worklist:
     let mut next_action = EvacAction::ProcessTy(orig_typ);
-
-    // TODO: get rid of this: 
-    let (orig_tag, _): (C_GibPackedTag, *mut i8) = read_mut(orig_src);
 
     #[cfg(feature = "gcstats")]
     eprintln!("Evac packed {:?} -> {:?}", src, dst);
@@ -667,7 +667,9 @@ unsafe fn evacuate_packed(
           }
           EvacAction::ProcessTy(next_ty) => {
             let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
-    
+            #[cfg(feature = "gcstats")]
+            eprintln!("   Read next tag {} from src {:?}", tag, src);
+            
             let packed_info = INFO_TABLE.get_unchecked(next_ty as usize); 
             match tag {          
               // A pointer to a value in another buffer; copy this value
@@ -760,7 +762,8 @@ unsafe fn evacuate_packed(
 
               // Nothing to copy. Just update the write cursor's new
               // address in shadow-stack.
-              C_CAUTERIZED_TAG => {                  
+              C_CAUTERIZED_TAG => {
+/*   TEMP - FIXME: restore cauterized/forwarding handling.               
                   let (wframe_ptr, _): (*mut i8, _) = read(src_after_tag);
                   let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
                   // Mark this cursor as uncauterized.
@@ -769,9 +772,9 @@ unsafe fn evacuate_packed(
                   // Update the poiners on the shadow-stack.
                   (*wframe).ptr = dst;
                   (*wframe).endptr = dst_end;                  
-
+*/
                   #[cfg(feature = "gcstats")]
-                  eprintln!("Hit cauterize, remaining Worklist: {:?}", worklist);
+                  eprintln!(" Hit cauterize at {:?}, remaining Worklist: {:?}", src, worklist);
                   break; // no change to src, dst, dst_end
               }
     
@@ -1096,7 +1099,14 @@ unsafe fn evacuate_packed(
           }
       }      
    }; // End while   
-   (src, dst, dst_end, orig_tag)
+
+   #[cfg(feature = "gcstats")]
+   eprintln!(" Finished evacuate_packed: recording in benv {:?} -> {:?}", orig_src, src);
+   // Provide skip-over information for what we just cleared out.
+   // FIXME: only insert if it is a non-zero location?
+   st.benv.insert(orig_src, src);
+
+   (src, dst, dst_end)
 }
 
 fn sort_roots(
