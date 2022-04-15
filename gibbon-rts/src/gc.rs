@@ -668,7 +668,97 @@ unsafe fn evacuate_packed(
             let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
     
             let packed_info = INFO_TABLE.get_unchecked(next_ty as usize); 
-            match tag {    
+            match tag {          
+              // A pointer to a value in another buffer; copy this value
+              // and then switch back to copying rest of the source buffer.
+              //
+              // POLICY DECISION:
+              // Indirections into oldgen are not inlined in the current version.
+              // See Note [Smart inlining policies].
+              C_INDIRECTION_TAG => {            
+                  let (tagged_pointee, src_after_indr): (u64, _) =
+                      read(src_after_tag);
+      
+                      #[cfg(feature = "gcstats")]
+                      eprintln!("   indirection! src {:?} dest {:?}, after {:?}", src_after_tag, tagged_pointee as *mut i8, src_after_indr);      
+
+                  let src_after_indr1 = src_after_indr as *mut i8;
+                  let tagged = TaggedPointer::from_u64(tagged_pointee);
+                  let pointee = tagged.untag();
+                  // Add a forwarding pointer in the source buffer.
+                  debug_assert!(dst < dst_end);
+      
+                  write_forwarding_pointer_at(
+                      src,
+                      dst,
+                      dst_end.offset_from(dst) as u16, // .try_into().unwrap()
+                  );
+      
+                  // If the pointee is in the nursery, evacuate it.
+                  // Otherwise, write an indirection node at dst and adjust the
+                  // refcount and outset.
+                  if st.evac_major || st.nursery.contains_addr(pointee) {
+
+                      // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
+                      if !worklist.is_empty() {                         
+                         worklist.push(EvacAction::RestoreSrc(src_after_indr1));
+                      } else {
+                        #[cfg(feature = "gcstats")]
+                        eprintln!("   tail optimization!");      
+                      }
+                      src = pointee;
+                                           
+                      // Update the burned environment if we're evacuating a root
+                      // from the remembered set.
+                      match st.prov {
+                        GcRootProv::RemSet => {
+                            #[cfg(feature = "gcstats")]
+                            eprintln!("   pushing BenvWrite action to stack");      
+                            worklist.push(EvacAction::BenvWrite(pointee));
+                        }
+                        GcRootProv::Stk => (),
+                      }
+                      
+                      // Same type, new location to evac from:
+                      next_action = EvacAction::ProcessTy(next_ty); // Fixme, don't push just for the while() to pop.                      
+                      continue;
+                  } else {                    
+                      let space_reqd = 32;
+                      let (dst1, dst_end1) =
+                          Heap::check_bounds(heap, space_reqd, dst, dst_end);
+                      let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
+                      let dst_after_indr = write(dst_after_tag, tagged_pointee);
+                      stats_bump_mem_copied(9);
+                      let pointee_footer_offset = tagged.get_tag();
+                      let pointee_footer =
+                          pointee.add(pointee_footer_offset as usize);
+                      // TODO(ckoparkar): incorrect pointee_footer_offset causes
+                      // treeinsert to segfault.
+                      handle_old_to_old_indirection(dst_end1, pointee_footer);
+                      // (*zct).insert(
+                      //     ((*(pointee_footer as *mut C_GibChunkFooter)).reg_info
+                      //         as *const C_GibRegionInfo),
+                      // );
+
+                      src = src_after_indr1;
+                      dst = dst_after_indr;
+                      dst_end = dst_end1;
+
+                      // make this reusable somehow (local macro?)
+                      if let Some(next) = worklist.pop() {
+                        next_action = next;          
+                        continue;
+                      } else {
+                          break;
+                      }
+                  }        
+              }
+
+              C_CAUTERIZED_TAG => todo!(),
+              C_COPIED_TO_TAG => todo!(),
+              C_COPIED_TAG => todo!(),
+              C_REDIRECTION_TAG => todo!(),
+
       /*
               // Nothing to copy. Just update the write cursor's new
               // address in shadow-stack.
@@ -864,103 +954,6 @@ unsafe fn evacuate_packed(
                   }
               }        
       */    
-      
-              // A pointer to a value in another buffer; copy this value
-              // and then switch back to copying rest of the source buffer.
-              //
-              // POLICY DECISION:
-              // Indirections into oldgen are not inlined in the current version.
-              // See Note [Smart inlining policies].
-              C_INDIRECTION_TAG => {            
-                  let (tagged_pointee, src_after_indr): (u64, _) =
-                      read(src_after_tag);
-      
-                      #[cfg(feature = "gcstats")]
-                      eprintln!("   indirection! src {:?} dest {:?}, after {:?}", src_after_tag, tagged_pointee as *mut i8, src_after_indr);      
-
-                  let src_after_indr1 = src_after_indr as *mut i8;
-                  let tagged = TaggedPointer::from_u64(tagged_pointee);
-                  let pointee = tagged.untag();
-                  // Add a forwarding pointer in the source buffer.
-                  debug_assert!(dst < dst_end);
-      
-                  write_forwarding_pointer_at(
-                      src,
-                      dst,
-                      dst_end.offset_from(dst) as u16, // .try_into().unwrap()
-                  );
-      
-                  // If the pointee is in the nursery, evacuate it.
-                  // Otherwise, write an indirection node at dst and adjust the
-                  // refcount and outset.
-                  if st.evac_major || st.nursery.contains_addr(pointee) {
-
-                      // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
-                      if !worklist.is_empty() {                         
-                         worklist.push(EvacAction::RestoreSrc(src_after_indr1));
-                      } else {
-                        #[cfg(feature = "gcstats")]
-                        eprintln!("   tail optimization!");      
-                      }
-                      src = pointee;
-                                           
-                      // Update the burned environment if we're evacuating a root
-                      // from the remembered set.
-                      match st.prov {
-                        GcRootProv::RemSet => {
-                            #[cfg(feature = "gcstats")]
-                            eprintln!("   pushing BenvWrite action to stack");      
-                            worklist.push(EvacAction::BenvWrite(pointee));
-                        }
-                        GcRootProv::Stk => (),
-                      }
-                      
-                      // Same type, new location to evac from:
-                      next_action = EvacAction::ProcessTy(next_ty); // Fixme, don't push just for the while() to pop.                      
-                      continue;                      
-
-                      // Return 1 past the indirection pointer as src_after
-                      // and the dst_after that evacuate_packed returned.
-                    /*                      
-                      result = (
-                          src_after_indr1,
-                          dst_after_pointee,
-                          dst_after_pointee_end,
-                          tag,
-                      );
-                      */
-                  } else {                    
-                      let space_reqd = 32;
-                      let (dst1, dst_end1) =
-                          Heap::check_bounds(heap, space_reqd, dst, dst_end);
-                      let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
-                      let dst_after_indr = write(dst_after_tag, tagged_pointee);
-                      stats_bump_mem_copied(9);
-                      let pointee_footer_offset = tagged.get_tag();
-                      let pointee_footer =
-                          pointee.add(pointee_footer_offset as usize);
-                      // TODO(ckoparkar): incorrect pointee_footer_offset causes
-                      // treeinsert to segfault.
-                      handle_old_to_old_indirection(dst_end1, pointee_footer);
-                      // (*zct).insert(
-                      //     ((*(pointee_footer as *mut C_GibChunkFooter)).reg_info
-                      //         as *const C_GibRegionInfo),
-                      // );
-
-                      src = src_after_indr1;
-                      dst = dst_after_indr;
-                      dst_end = dst_end1;
-
-                      // make this reusable somehow (local macro?)
-                      if let Some(next) = worklist.pop() {
-                        next_action = next;          
-                        continue;
-                      } else {
-                          break;
-                      }
-                  }        
-              }
-      
               // Regular datatype, copy.
               _ => {
                   let DataconInfo { scalar_bytes, field_tys, .. } =
