@@ -1768,7 +1768,7 @@ fn stats_bump_mem_copied(_size: usize) {}
 #[macro_export]
 macro_rules! measure {
     ( $x:expr, $addr:expr ) => {{
-        let start = use std::time::Instant::now();
+        let start = std::time::Instant::now();
         let y = $x;
         let duration = start.elapsed();
         $addr += duration.as_secs_f64();
