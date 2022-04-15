@@ -474,7 +474,7 @@ unsafe fn evacuate_remembered_set(
         measure!(sort_roots(rem_set), (*GC_STATS).gc_rootset_sort_time);
     for frame in frames {
         let datatype = (*frame).datatype;
-        let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
+        // let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
         // Allocate space in the destination.
         let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 1)?;
         // The remembered set contains the address where the indirect-
@@ -493,7 +493,7 @@ unsafe fn evacuate_remembered_set(
             evac_major,
         };
         let (src_after, _dst_after, _dst_after_end, _tag) =
-            evacuate_packed(&mut st, heap, packed_info, src, dst, dst_end);
+            evacuate_packed(&mut st, heap, datatype, src, dst, dst_end);
         // Update the indirection pointer in oldgen region.
         write((*frame).ptr, dst);
         // Update the outset in oldgen region.
@@ -527,8 +527,7 @@ unsafe fn evacuate_shadowstack(
             continue;
         }
 
-        let datatype = (*frame).datatype;
-        let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
+        let datatype = (*frame).datatype;        
 
         // Allocate space in the destination.
         let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
@@ -558,7 +557,7 @@ unsafe fn evacuate_shadowstack(
         let is_loc_0 = (src_end.offset_from(src)) == chunk_size as isize;
 
         let (src_after, dst_after, dst_after_end, tag) =
-            evacuate_packed(&mut st, heap, packed_info, src, dst, dst_end);
+            evacuate_packed(&mut st, heap, datatype, src, dst, dst_end);
         // Update the pointers in shadow-stack.
         (*frame).ptr = dst;
         // TODO(ckoparkar): AUDITME.
@@ -616,13 +615,27 @@ Returns: (src_after, dst_after, dst_end, maybe_tag)
 unsafe fn evacuate_packed(
     st: &mut EvacState,
     heap: &mut impl Heap,
-    packed_info: &DataconEnv,
-    src: *mut i8,
-    dst: *mut i8,
-    dst_end: *mut i8,
+    orig_typ: C_GibDatatype,
+    orig_src: *mut i8,
+    orig_dst: *mut i8,
+    orig_dst_end: *mut i8,
 ) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
-    let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
-    match tag {
+    let mut src = orig_src;
+    let mut dst = orig_dst;
+    let mut dst_end = orig_dst_end;
+    let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(orig_src);
+
+    eprintln!("Evac packed {:?} -> {:?}", src, dst);
+    let mut worklist: Vec<C_GibDatatype> = Vec::new();
+
+    worklist.push(orig_typ);
+    let mut result: (*mut i8, *mut i8, *mut i8, C_GibPackedTag) = (src,dst,dst_end,0);
+
+    while let Some(next_ty) = worklist.pop() 
+    {
+      eprintln!("  While loop iteration on type {:?} ", next_ty);
+      let packed_info = INFO_TABLE.get_unchecked(next_ty as usize); 
+      match tag {    
 /*
         // Nothing to copy. Just update the write cursor's new
         // address in shadow-stack.
@@ -826,23 +839,24 @@ unsafe fn evacuate_packed(
         // Indirections into oldgen are not inlined in the current version.
         // See Note [Smart inlining policies].
         C_INDIRECTION_TAG => {            
+            todo!();
             let (tagged_pointee, src_after_indr): (u64, _) =
                 read(src_after_tag);
 
-            // eprintln!("Hello indirection! src {} dest {}", src_after_tag as u64, tagged_pointee);
+            eprintln!("   indirection! src {} dest {}", src_after_tag as u64, tagged_pointee);
 
             let src_after_indr1 = src_after_indr as *mut i8;
             let tagged = TaggedPointer::from_u64(tagged_pointee);
             let pointee = tagged.untag();
             // Add a forwarding pointer in the source buffer.
-            assert!(dst < dst_end);
-
+            debug_assert!(dst < dst_end);
+/* TEMP
             write_forwarding_pointer_at(
                 src,
                 dst,
                 dst_end.offset_from(dst) as u16, // .try_into().unwrap()
             );
-
+*/            
             // If the pointee is in the nursery, evacuate it.
             // Otherwise, write an indirection node at dst and adjust the
             // refcount and outset.
@@ -855,7 +869,7 @@ unsafe fn evacuate_packed(
                 ) = evacuate_packed(
                     st,
                     heap,
-                    packed_info,
+                    todo!(),
                     pointee,
                     dst,
                     dst_end,
@@ -872,12 +886,12 @@ unsafe fn evacuate_packed(
                 }
                 // Return 1 past the indirection pointer as src_after
                 // and the dst_after that evacuate_packed returned.
-                (
+                result = (
                     src_after_indr1,
                     dst_after_pointee,
                     dst_after_pointee_end,
                     tag,
-                )
+                );
             } else {
                 let space_reqd = 32;
                 let (dst1, dst_end1) =
@@ -895,8 +909,9 @@ unsafe fn evacuate_packed(
                 //     ((*(pointee_footer as *mut C_GibChunkFooter)).reg_info
                 //         as *const C_GibRegionInfo),
                 // );
-                (src_after_indr1, dst_after_indr, dst_end1, tag)
-            }
+                result = (src_after_indr1, dst_after_indr, dst_end1, tag);
+                
+            }        
         }
 
         // Regular datatype, copy.
@@ -904,6 +919,8 @@ unsafe fn evacuate_packed(
             let DataconInfo { scalar_bytes, field_tys, .. } =
                 packed_info.get_unchecked(tag as usize);
 
+            eprintln!("   regular datacon, field_tys {:?}", field_tys);
+                
             let scalar_bytes1 = *scalar_bytes;
 
             // Check bound of the destination buffer before copying.
@@ -915,38 +932,53 @@ unsafe fn evacuate_packed(
                 // which are the read and write cursors in the source
                 // and destination buffer respectively.
 
-                let (mut dst_mut, mut dst_end_mut) =
+                let (mut dst2, mut dst_end2) =
                     Heap::check_bounds(heap, space_reqd, dst, dst_end);
                 // Copy the tag and the fields.
-                dst_mut = write(dst_mut, tag);
-                dst_mut.copy_from_nonoverlapping(src_after_tag, scalar_bytes1);
-                let mut src_mut = src_after_tag.add(scalar_bytes1);
-                dst_mut = dst_mut.add(scalar_bytes1);
+                dst2 = write(dst2, tag);
+                dst2.copy_from_nonoverlapping(src_after_tag, scalar_bytes1);
+                dst2 = dst2.add(scalar_bytes1);
                 stats_bump_mem_copied(1 + scalar_bytes1);
+                
+                src = src_after_tag.add(scalar_bytes1);
+                dst = dst2;
+                dst_end = dst_end2;
 
                 // Add forwarding pointers:
                 // if there's enough space, write a COPIED_TO tag and
                 // dst's address at src. Otherwise just write a COPIED tag.
                 // After the forwarding pointer, burn the rest of
                 // space previously occupied by scalars.
-                let burn = if scalar_bytes1 >= 8 {
-                    assert!(dst < dst_end);
+
+/* TEMP
+                // let burn = 
+                if scalar_bytes1 >= 8 {
+                    debug_assert!(dst < dst_end);
                     write_forwarding_pointer_at(
                         src,
                         dst,
                         dst_end.offset_from(dst) as u16, // .try_into().unwrap()
-                    )
-                } else {
+                    );
+                };
+*/
+/*                
+                else {
                     write(src, C_COPIED_TAG)
                 };
                 if src_mut > burn {
                     let i = src_mut.offset_from(burn);
                     write_bytes(burn, C_COPIED_TAG, i as usize);
                 }
+*/
                 // TODO(ckoparkar):
                 // (1) instead of recursion, use a worklist
                 // (2) handle redirection nodes properly
+                for ty in field_tys.iter().rev() {                
+                    worklist.push(*ty);
+                }
+/*                
                 for ty in field_tys.iter() {
+                    eprintln!("    field iter loop over ty {:?}", ty);
                     let packed_info = INFO_TABLE.get_unchecked(*ty as usize);
                     let (src1, dst1, dst_end1, field_tag) = evacuate_packed(
                         st,
@@ -960,6 +992,7 @@ unsafe fn evacuate_packed(
                         // Immediately stop copying upon reaching the
                         // cauterized tag.
                         C_CAUTERIZED_TAG => {
+                            todo!();    
                             return (src1, dst1, dst_end1, field_tag);
                         }
                         // This redirection would likely be in oldgen and the
@@ -967,6 +1000,7 @@ unsafe fn evacuate_packed(
                         // Unless we're evacuating the oldgen as well, in which
                         // case keep evacuating.
                         C_REDIRECTION_TAG if !st.evac_major => {
+                            todo!();
                             return (src1, dst1, dst_end1, field_tag);
                         }
                         _ => {
@@ -976,10 +1010,15 @@ unsafe fn evacuate_packed(
                         }
                     }
                 }
-                (src_mut, dst_mut, dst_end_mut, tag)
-            }
-        }
-    }
+                */
+                result = (src, dst, dst_end, tag)
+            }                            
+        }         
+        // _ => return (src, dst, dst_end, C_COPIED_TO_TAG)
+    } // End match
+   }; // End while
+   // todo!()
+   result
 }
 
 fn sort_roots(
