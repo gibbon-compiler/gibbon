@@ -860,6 +860,7 @@ unsafe fn evacuate_packed(
                     dst,
                     dst_end,
                 );
+                
                 // Update the burned environment if we're evacuating a root
                 // from the remembered set.
                 match st.prov {
@@ -1692,6 +1693,7 @@ pub fn info_table_finalize() {
  */
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_bump_minor_collections() {
     unsafe {
         (*GC_STATS).minor_collections += 1;
@@ -1699,9 +1701,11 @@ fn stats_bump_minor_collections() {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_bump_minor_collections() {}
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_bump_major_collections() {
     unsafe {
         (*GC_STATS).major_collections += 1;
@@ -1709,9 +1713,11 @@ fn stats_bump_major_collections() {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_bump_major_collections() {}
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_bump_oldgen_regions() {
     unsafe {
         (*GC_STATS).oldgen_regions += 1;
@@ -1719,9 +1725,11 @@ fn stats_bump_oldgen_regions() {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_bump_oldgen_regions() {}
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_dec_oldgen_regions() {
     unsafe {
         (*GC_STATS).oldgen_regions -= 1;
@@ -1729,9 +1737,11 @@ fn stats_dec_oldgen_regions() {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_dec_oldgen_regions() {}
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_bump_mem_allocated(size: usize) {
     unsafe {
         (*GC_STATS).mem_allocated += size;
@@ -1739,9 +1749,11 @@ fn stats_bump_mem_allocated(size: usize) {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_bump_mem_allocated(_size: usize) {}
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_bump_mem_copied(size: usize) {
     unsafe {
         (*GC_STATS).mem_copied += size;
@@ -1749,6 +1761,7 @@ fn stats_bump_mem_copied(size: usize) {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_bump_mem_copied(_size: usize) {}
 
 #[cfg(feature = "gcstats")]
