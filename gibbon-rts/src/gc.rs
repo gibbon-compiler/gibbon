@@ -623,6 +623,7 @@ unsafe fn evacuate_packed(
     dst_end: *mut i8,
 ) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
     let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
+    println!("tag: {:?}", tag);
     match tag {
         // Nothing to copy. Just update the write cursor's new
         // address in shadow-stack.
@@ -1643,11 +1644,11 @@ pub fn info_table_insert_scalar(datatype: C_GibDatatype, size: usize) {
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 type DataconEnv = &'static [DataconInfo];
-type DatatypeEnv = &'static [DatatypeInfo];
+// type DatatypeEnv = &'static [DatatypeInfo];
 type DatatypeInfo = DataconEnv;
 
 /// The global info table.
-static mut INFO_TABLE: &[DatatypeInfo] = &[];
+static mut INFO_TABLE: &[&[DataconInfo]] = &[];
 
 pub fn info_table_finalize() {
     unsafe {
