@@ -642,8 +642,7 @@ unsafe fn evacuate_packed(
     eprintln!("Evac packed {:?} -> {:?}", src, dst);
     let mut worklist: Vec<EvacAction> = Vec::new();
 
-    worklist.push(EvacAction::ProcessTy(orig_typ));
-    let mut result: (*mut i8, *mut i8, *mut i8, C_GibPackedTag) = (src,dst,dst_end,0);
+    worklist.push(EvacAction::ProcessTy(orig_typ));    
 
     while let Some(next_action) = worklist.pop() 
     {      
@@ -936,7 +935,6 @@ unsafe fn evacuate_packed(
                       dst = dst_after_indr;
                       dst_end = dst_end1;
                       continue;
-                      // result = (src_after_indr1, dst_after_indr, dst_end1, tag);                      
                   }        
               }
       
@@ -966,11 +964,7 @@ unsafe fn evacuate_packed(
                       dst2.copy_from_nonoverlapping(src_after_tag, scalar_bytes1);
                       dst2 = dst2.add(scalar_bytes1);
                       stats_bump_mem_copied(1 + scalar_bytes1);
-                      
-                      src = src_after_tag.add(scalar_bytes1);
-                      dst = dst2;
-                      dst_end = dst_end2;
-      
+                                                  
                       // Add forwarding pointers:
                       // if there's enough space, write a COPIED_TO tag and
                       // dst's address at src. Otherwise just write a COPIED tag.
@@ -1003,6 +997,11 @@ unsafe fn evacuate_packed(
                       for ty in field_tys.iter().rev() {                
                           worklist.push(EvacAction::ProcessTy(*ty));
                       }
+
+                      src = src_after_tag.add(scalar_bytes1);
+                      dst = dst2;
+                      dst_end = dst_end2;
+                      continue;
 
                       // TODO: restore cauterize behavior.  But couldn't that go in the cauterize case?
       /*                
@@ -1040,10 +1039,8 @@ unsafe fn evacuate_packed(
                           }
                       }
                       */
-                      // result = (src, dst, dst_end, tag)
                   }                            
               }         
-              // _ => return (src, dst, dst_end, C_COPIED_TO_TAG)
           } // End match
           }
       }      
