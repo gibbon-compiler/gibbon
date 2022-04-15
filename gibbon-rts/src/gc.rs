@@ -650,7 +650,8 @@ unsafe fn evacuate_packed(
     
     loop {      
       #[cfg(feature = "gcstats")]    
-      eprintln!("  Loop iteration on src {:?} action {:?}, length after this {}", src, next_action, worklist.len());
+      eprintln!("  Loop iteration on src {:?} action {:?}, length after this {}, first 5 {:?}", 
+                src, next_action, worklist.len(), &worklist[..std::cmp::min(5, worklist.len())]);                
     
       match next_action {
           EvacAction::RestoreSrc(new_src) => {
@@ -754,16 +755,13 @@ unsafe fn evacuate_packed(
                   }        
               }
 
-              C_CAUTERIZED_TAG => todo!(),
               C_COPIED_TO_TAG => todo!(),
               C_COPIED_TAG => todo!(),
               C_REDIRECTION_TAG => todo!(),
 
-      /*
               // Nothing to copy. Just update the write cursor's new
               // address in shadow-stack.
-              C_CAUTERIZED_TAG => {
-                  todo!();
+              C_CAUTERIZED_TAG => {                  
                   let (wframe_ptr, _): (*mut i8, _) = read(src_after_tag);
                   let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
                   // Mark this cursor as uncauterized.
@@ -771,9 +769,14 @@ unsafe fn evacuate_packed(
                   st.cenv.remove(&del);
                   // Update the poiners on the shadow-stack.
                   (*wframe).ptr = dst;
-                  (*wframe).endptr = dst_end;
-                  (src, dst, dst_end, tag)
+                  (*wframe).endptr = dst_end;                  
+
+                  #[cfg(feature = "gcstats")]
+                  eprintln!("Hit cauterize, remaining Worklist: {:?}", worklist);
+                  break; // no change to src, dst, dst_end
               }
+
+      /*              
               // See Note [Maintaining sharing, Copied and CopiedTo tags].
               C_COPIED_TO_TAG => {
                   todo!();    
@@ -995,6 +998,7 @@ unsafe fn evacuate_packed(
                               dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                           );
                       }
+/* TEMP disable burned tags                      
                       else {
                           #[cfg(feature = "gcstats")]
                           eprintln!("   burning non-forwardable data at {:?}, scalar bytes {}", src, scalar_bytes1);
@@ -1009,7 +1013,8 @@ unsafe fn evacuate_packed(
                           //     write_bytes(burn, C_COPIED_TAG, i as usize);
                           //   }                          
                       }  
-    
+*/    
+
                       // TODO(ckoparkar):
                       // (1) instead of recursion, use a worklist
                       // (2) handle redirection nodes properly

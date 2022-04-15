@@ -867,8 +867,10 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 #ifdef _GIBBON_DEBUG
 #define NURSERY_SIZE (4 * gib_global_inf_init_chunk_size)
 #else
-#define NURSERY_SIZE (4 * MB)
-// #define NURSERY_SIZE (4096)
+  #ifndef NURSERY_SIZE
+  #define NURSERY_SIZE (4 * MB)
+  // #define NURSERY_SIZE (4096)
+  #endif
 // #define NURSERY_SIZE (2048) // This seems to mess things up.
 #endif
 
