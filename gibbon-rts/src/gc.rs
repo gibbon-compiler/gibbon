@@ -883,13 +883,13 @@ unsafe fn evacuate_packed(
                   let pointee = tagged.untag();
                   // Add a forwarding pointer in the source buffer.
                   debug_assert!(dst < dst_end);
-      /* TEMP
+      
                   write_forwarding_pointer_at(
                       src,
                       dst,
                       dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                   );
-      */            
+      
                   // If the pointee is in the nursery, evacuate it.
                   // Otherwise, write an indirection node at dst and adjust the
                   // refcount and outset.
@@ -994,7 +994,7 @@ unsafe fn evacuate_packed(
                       // After the forwarding pointer, burn the rest of
                       // space previously occupied by scalars.
       
-      /* TEMP
+      
                       // let burn = 
                       if scalar_bytes1 >= 8 {
                           debug_assert!(dst < dst_end);
@@ -1004,7 +1004,6 @@ unsafe fn evacuate_packed(
                               dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                           );
                       };
-      */
       /*                
                       else {
                           write(src, C_COPIED_TAG)
