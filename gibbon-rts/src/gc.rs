@@ -397,6 +397,7 @@ fn cauterize_writers(
                 continue;
             }
             let ptr = (*frame).ptr;
+            // Layout for cauterized object is a tag followed by a pointer back to the frame.:
             let ptr_next = write(ptr, C_CAUTERIZED_TAG);
             write(ptr_next, frame);
             match cenv.get_mut(&ptr) {
@@ -492,7 +493,7 @@ unsafe fn evacuate_remembered_set(
             prov: &GcRootProv::RemSet,
             evac_major,
         };
-        let (src_after, _dst_after, _dst_after_end) =
+        let (src_after, _dst_after, _dst_after_end, _forwarded) =
             evacuate_packed(&mut st, heap, datatype, src, dst, dst_end);
         // Update the indirection pointer in oldgen region.
         write((*frame).ptr, dst);
@@ -556,7 +557,7 @@ unsafe fn evacuate_shadowstack(
         };
         let is_loc_0 = (src_end.offset_from(src)) == chunk_size as isize;
 
-        let (src_after, dst_after, dst_after_end) =
+        let (src_after, dst_after, dst_after_end, forwarded) =
             evacuate_packed(&mut st, heap, datatype, src, dst, dst_end);
         // Update the pointers in shadow-stack.
         (*frame).ptr = dst;
@@ -564,23 +565,19 @@ unsafe fn evacuate_shadowstack(
         // (*frame).endptr = dst_after_end;
         (*frame).endptr = dst_end;
 
-/* TEMP - FIXME: restore cauterized/forwarding handling.
         // Note [Adding a forwarding pointer at the end of every chunk].
-        match tag {
-            C_COPIED_TO_TAG | C_COPIED_TAG | C_REDIRECTION_TAG => {}
-            _ => {
-                if is_loc_0 || tag == C_CAUTERIZED_TAG {
-                    assert!(dst_after < dst_after_end);
-                    write_forwarding_pointer_at(
-                        src_after,
-                        dst_after,
-                        dst_after_end.offset_from(dst_after) as u16, // .try_into()
-                                                                     // .unwrap()
-                    );
-                }
-            }
+
+        // FIXME: forwarded is currently true if evacuate forwarded ANYTHING.
+        // We need to enforce it for each chunk...
+        if !forwarded & is_loc_0 {
+            assert!(dst_after < dst_after_end);
+            write_forwarding_pointer_at(
+                src_after,
+                dst_after,
+                dst_after_end.offset_from(dst_after) as u16, // .try_into()
+                                                             // .unwrap()
+            );
         }
-        */
     }
     Ok(())
 }
@@ -621,10 +618,9 @@ Returns: (src_after, dst_after, dst_end, maybe_tag)
               last cell occupied by the value in its new home
 - dst_end   - end of the destination buffer (which can change during copying
               due to bounds checking)
-- maybe_tag - return the tag of the the datacon that was just copied.
-              copy_readers uses this tag to decide whether it should write a
-              forwarding pointer at the end of the source buffer.
+- forwarded - did the interval evacuated have at least one forwarding pointer written?
 
+FIXME: forwarded is currently for the entire (multi-chunk) evaluation, and it should be per-chunk.
  */
 unsafe fn evacuate_packed(
     st: &mut EvacState,
@@ -633,14 +629,15 @@ unsafe fn evacuate_packed(
     orig_src: *mut i8,
     orig_dst: *mut i8,
     orig_dst_end: *mut i8,
-) -> (*mut i8, *mut i8, *mut i8) {
-    // These four comprise the main mutable state of the traversal and should be updated 
+) -> (*mut i8, *mut i8, *mut i8, bool) {
+    // These comprise the main mutable state of the traversal and should be updated 
     // together at the end of every iteration:
     let mut src = orig_src;
     let mut dst = orig_dst;
     let mut dst_end = orig_dst_end;
     // The implicit -1th element of the worklist:
     let mut next_action = EvacAction::ProcessTy(orig_typ);
+    let mut forwarded = false;
 
     #[cfg(feature = "gcstats")]
     eprintln!("Evac packed {:?} -> {:?}", src, dst);
@@ -696,6 +693,7 @@ unsafe fn evacuate_packed(
                       dst,
                       dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                   );
+                  forwarded = true;
       
                   // If the pointee is in the nursery, evacuate it.
                   // Otherwise, write an indirection node at dst and adjust the
@@ -723,7 +721,7 @@ unsafe fn evacuate_packed(
                       }
                       
                       // Same type, new location to evac from:
-                      next_action = EvacAction::ProcessTy(next_ty); // Fixme, don't push just for the while() to pop.                      
+                      next_action = EvacAction::ProcessTy(next_ty);
                       continue;
                   } else {                    
                       let space_reqd = 32;
@@ -760,16 +758,16 @@ unsafe fn evacuate_packed(
               // Nothing to copy. Just update the write cursor's new
               // address in shadow-stack.
               C_CAUTERIZED_TAG => {
-/*   TEMP - FIXME: restore cauterized/forwarding handling.               
+                  // Recover the reverse-pointer back to the shadowstack frame:
                   let (wframe_ptr, _): (*mut i8, _) = read(src_after_tag);
                   let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
                   // Mark this cursor as uncauterized.
-                  let del = (*wframe).ptr;
-                  st.cenv.remove(&del);
-                  // Update the poiners on the shadow-stack.
+                  let _del = (*wframe).ptr;
+                  // st.cenv.remove(&del);
+                  // Update the pointers on the shadow-stack.
                   (*wframe).ptr = dst;
                   (*wframe).endptr = dst_end;                  
-*/
+
                   #[cfg(feature = "gcstats")]
                   eprintln!(" Hit cauterize at {:?}, remaining Worklist: {:?}", src, worklist);
                   break; // no change to src, dst, dst_end
@@ -788,7 +786,8 @@ unsafe fn evacuate_packed(
 
                   #[cfg(feature = "gcstats")]
                   eprintln!("   Forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged, dst);      
-
+                  forwarded = true; // i.e. ALREADY forwarded.
+                  
                   stats_bump_mem_copied(9);
                   // Update outsets and refcounts if evacuating to the oldest
                   // generation.
@@ -924,6 +923,7 @@ unsafe fn evacuate_packed(
                       dst,
                       dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                   );
+                  forwarded = true;
       
                   // If the next chunk is in the nursery, continue evacuating it.
                   // Otherwise, write a redireciton node at dst (pointing to
@@ -1022,6 +1022,7 @@ unsafe fn evacuate_packed(
                               dst,
                               dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                           );
+                          forwarded = true;
                       }
                       // NOTE: Comment this case to disable burned tags:
                       else {
@@ -1076,7 +1077,7 @@ unsafe fn evacuate_packed(
    // FIXME: only insert if it is a non-zero location?
    st.benv.insert(orig_src, src);
 
-   (src, dst, dst_end)
+   (src, dst, dst_end, forwarded)
 }
 
 fn sort_roots(
