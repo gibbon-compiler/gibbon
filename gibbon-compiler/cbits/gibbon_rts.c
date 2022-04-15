@@ -867,7 +867,8 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 #ifdef _GIBBON_DEBUG
 #define NURSERY_SIZE (4 * gib_global_inf_init_chunk_size)
 #else
-#define NURSERY_SIZE (4 * MB)
+// #define NURSERY_SIZE (4 * MB)
+#define NURSERY_SIZE (4096)
 #endif
 
 // If a region is over this size, alloc to refcounted heap directly.

@@ -624,9 +624,11 @@ unsafe fn evacuate_packed(
 ) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
     let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
     match tag {
+/*
         // Nothing to copy. Just update the write cursor's new
         // address in shadow-stack.
         C_CAUTERIZED_TAG => {
+            todo!();
             let (wframe_ptr, _): (*mut i8, _) = read(src_after_tag);
             let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
             // Mark this cursor as uncauterized.
@@ -639,6 +641,7 @@ unsafe fn evacuate_packed(
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
         C_COPIED_TO_TAG => {
+            todo!();    
             let (tagged_fwd_ptr, _): (u64, _) = read_mut(src_after_tag);
             let tagged = TaggedPointer::from_u64(tagged_fwd_ptr);
             let fwd_ptr = tagged.untag();
@@ -680,6 +683,7 @@ unsafe fn evacuate_packed(
         }
         // See Note [Maintaining sharing, Copied and CopiedTo tags].
         C_COPIED_TAG => {
+            todo!();    
             let (mut scan_tag, mut scan_ptr): (C_GibPackedTag, *const i8) =
                 read(src_after_tag);
             while scan_tag != C_COPIED_TO_TAG {
@@ -739,6 +743,7 @@ unsafe fn evacuate_packed(
             }
             (src_after_burned, dst_after_indr, dst_end1, tag)
         }
+
         // Indicates end-of-current-chunk in the source buffer i.e.
         // there's nothing more to copy in the current chunk.
         // Follow the redirection pointer to the next chunk and
@@ -747,7 +752,7 @@ unsafe fn evacuate_packed(
         // POLICY DECISION:
         // Redirections into oldgen are not inlined in the current version.
         // See Note [Smart inlining policies].
-        C_REDIRECTION_TAG => {
+        C_REDIRECTION_TAG => {            
             let (tagged_next_chunk, src_after_next_chunk): (u64, _) =
                 read(src_after_tag);
             let tagged = TaggedPointer::from_u64(tagged_next_chunk);
@@ -812,21 +817,27 @@ unsafe fn evacuate_packed(
                     tag,
                 )
             }
-        }
+        }        
+*/    
+
         // A pointer to a value in another buffer; copy this value
         // and then switch back to copying rest of the source buffer.
         //
         // POLICY DECISION:
         // Indirections into oldgen are not inlined in the current version.
         // See Note [Smart inlining policies].
-        C_INDIRECTION_TAG => {
+        C_INDIRECTION_TAG => {            
             let (tagged_pointee, src_after_indr): (u64, _) =
                 read(src_after_tag);
+
+            // eprintln!("Hello indirection! src {} dest {}", src_after_tag as u64, tagged_pointee);
+
             let src_after_indr1 = src_after_indr as *mut i8;
             let tagged = TaggedPointer::from_u64(tagged_pointee);
             let pointee = tagged.untag();
             // Add a forwarding pointer in the source buffer.
             assert!(dst < dst_end);
+
             write_forwarding_pointer_at(
                 src,
                 dst,
@@ -887,6 +898,7 @@ unsafe fn evacuate_packed(
                 (src_after_indr1, dst_after_indr, dst_end1, tag)
             }
         }
+
         // Regular datatype, copy.
         _ => {
             let DataconInfo { scalar_bytes, field_tys, .. } =
@@ -1040,6 +1052,7 @@ fn gensym() -> u64 {
     }
 }
 
+#[inline(always)]
 unsafe fn write_forwarding_pointer_at(
     addr: *mut i8,
     fwd: *mut i8,
