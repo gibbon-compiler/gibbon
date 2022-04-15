@@ -629,29 +629,36 @@ unsafe fn evacuate_packed(
     orig_dst: *mut i8,
     orig_dst_end: *mut i8,
 ) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
-    // These three comprise the main mutable state of the traversal and should be updated 
+    // These four comprise the main mutable state of the traversal and should be updated 
     // together at the end of every iteration:
     let mut src = orig_src;
     let mut dst = orig_dst;
     let mut dst_end = orig_dst_end;
+    // The implicit -1th element of the worklist:
+    let mut next_action = EvacAction::ProcessTy(orig_typ);
 
     // TODO: get rid of this: 
     let (orig_tag, _): (C_GibPackedTag, *mut i8) = read_mut(orig_src);
 
     #[cfg(feature = "gcstats")]
     eprintln!("Evac packed {:?} -> {:?}", src, dst);
-    let mut worklist: Vec<EvacAction> = Vec::new();
-
-    worklist.push(EvacAction::ProcessTy(orig_typ));    
-
-    while let Some(next_action) = worklist.pop() 
-    {      
+    let mut worklist: Vec<EvacAction> = Vec::new();    
+    
+    loop {      
       #[cfg(feature = "gcstats")]    
-      eprintln!("  While loop iteration on src {:?} action {:?}, length remaining {}", src, next_action, worklist.len());
+      eprintln!("  Loop iteration on src {:?} action {:?}, length after this {}", src, next_action, worklist.len());
     
       match next_action {
           EvacAction::RestoreSrc(new_src) => {
-              src = new_src            
+              src = new_src;
+
+              // make this reusable somehow (local macro?)
+              if let Some(next) = worklist.pop() {
+                next_action = next;          
+                continue;
+              } else {
+                break;
+              }              
           }
           EvacAction::ProcessTy(next_ty) => {
             let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
@@ -867,6 +874,8 @@ unsafe fn evacuate_packed(
                   #[cfg(feature = "gcstats")]
                   eprintln!("   indirection! src {:?} dest {:?}, after {:?}", src_after_tag, tagged_pointee as *mut i8, src_after_indr);
       
+
+
                   let src_after_indr1 = src_after_indr as *mut i8;
                   let tagged = TaggedPointer::from_u64(tagged_pointee);
                   let pointee = tagged.untag();
@@ -888,7 +897,8 @@ unsafe fn evacuate_packed(
                       worklist.push(EvacAction::RestoreSrc(src_after_indr1));
                       src = pointee;
                       // Same type, new location to evac from:
-                      worklist.push(EvacAction::ProcessTy(next_ty)); // Fixme, don't push just for the while() to pop.
+                      next_action = EvacAction::ProcessTy(next_ty); // Fixme, don't push just for the while() to pop.
+                      continue;
 
                       // TODO: restore Benv actions as a separate explicit EvacAction for the stack.
                       /*
@@ -934,7 +944,14 @@ unsafe fn evacuate_packed(
                       src = src_after_indr1;
                       dst = dst_after_indr;
                       dst_end = dst_end1;
-                      continue;
+
+                      // make this reusable somehow (local macro?)
+                      if let Some(next) = worklist.pop() {
+                        next_action = next;          
+                        continue;
+                      } else {
+                          break;
+                      }
                   }        
               }
       
@@ -1001,7 +1018,14 @@ unsafe fn evacuate_packed(
                       src = src_after_tag.add(scalar_bytes1);
                       dst = dst2;
                       dst_end = dst_end2;
-                      continue;
+                      
+                      // make this reusable somehow (local macro?)
+                      if let Some(next) = worklist.pop() {
+                        next_action = next;          
+                        continue;
+                      } else {
+                          break;
+                      }
 
                       // TODO: restore cauterize behavior.  But couldn't that go in the cauterize case?
       /*                
