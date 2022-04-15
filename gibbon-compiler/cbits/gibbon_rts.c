@@ -946,6 +946,9 @@ typedef struct gib_gc_stats {
     // Overall memory copied (maintained by Rust RTS).
     size_t mem_copied;
 
+    // Overall memory burned (maintained by Rust RTS).
+    size_t mem_burned;
+
     // Number of regions in the nursery (maintained by C RTS).
     uint64_t nursery_regions;
 
@@ -1469,6 +1472,8 @@ static void gib_gc_stats_initialize(GibGcStats *stats)
     stats->minor_collections = 0;
     stats->major_collections = 0;
     stats->mem_allocated = 0;
+    stats->mem_copied = 0;
+    stats->mem_burned = 0;
     stats->nursery_regions = 0;
     stats->oldgen_regions = 0;
     stats->gc_elapsed_time = 0;
@@ -1494,6 +1499,7 @@ static void gib_gc_stats_print(GibGcStats *stats)
     printf("\n");
     printf("Mem allocated:\t\t\t %zu\n", stats->mem_allocated);
     printf("Mem copied:\t\t\t %zu\n", stats->mem_copied);
+    printf("Mem burned:\t\t\t %zu\n", stats->mem_burned);
 
     printf("\n");
     printf("GC nursery regions:\t\t %lu\n", stats->nursery_regions);

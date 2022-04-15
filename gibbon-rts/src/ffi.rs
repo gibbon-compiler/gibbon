@@ -77,6 +77,7 @@ pub mod types {
         pub major_collections: u64,
         pub mem_allocated: usize,
         pub mem_copied: usize,
+        pub mem_burned: usize,
         pub nursery_regions: u64,
         pub oldgen_regions: u64,
         pub gc_elapsed_time: f64,

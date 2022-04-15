@@ -574,10 +574,8 @@ unsafe fn evacuate_shadowstack(
                     write_forwarding_pointer_at(
                         src_after,
                         dst_after,
-                        dst_after_end
-                            .offset_from(dst_after)
-                            .try_into()
-                            .unwrap(),
+                        dst_after_end.offset_from(dst_after) as u16, // .try_into()
+                                                                     // .unwrap()
                     );
                 }
             }
@@ -649,6 +647,7 @@ unsafe fn evacuate_packed(
                 Heap::check_bounds(heap, space_reqd, dst, dst_end);
             let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
             let dst_after_indr = write(dst_after_tag, tagged_fwd_ptr);
+            stats_bump_mem_copied(9);
             // TODO(ckoparkar): check that no code path will try to read/write
             // at this null pointer.
             let src_after_burned = match st.benv.get(&src) {
@@ -703,7 +702,7 @@ unsafe fn evacuate_packed(
                 fwd_footer_addr_avail.offset_from(fwd_want);
             let tagged_want: u64 = TaggedPointer::new(
                 fwd_avail,
-                fwd_footer_offset_want.try_into().unwrap(),
+                fwd_footer_offset_want as u16, // try_into().unwrap()
             )
             .as_u64();
             let space_reqd = 32;
@@ -711,6 +710,7 @@ unsafe fn evacuate_packed(
                 Heap::check_bounds(heap, space_reqd, dst, dst_end);
             let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
             let dst_after_indr = write(dst_after_tag, tagged_want);
+            stats_bump_mem_copied(9);
             // TODO(ckoparkar): check that no code path will try to read/write
             // at this null pointer.
             let src_after_burned = match st.benv.get(&src) {
@@ -757,7 +757,7 @@ unsafe fn evacuate_packed(
             write_forwarding_pointer_at(
                 src,
                 dst,
-                dst_end.offset_from(dst).try_into().unwrap(),
+                dst_end.offset_from(dst) as u16, // .try_into().unwrap()
             );
 
             // If the next chunk is in the nursery, continue evacuating it.
@@ -777,6 +777,7 @@ unsafe fn evacuate_packed(
                 // TODO(ckoparkar): BUGGY, AUDITME.
                 let dst_after_tag = write(dst, C_REDIRECTION_TAG);
                 let dst_after_redir = write(dst_after_tag, tagged_next_chunk);
+                stats_bump_mem_copied(9);
 
                 // Link footers.
                 let footer1 = dst_end as *mut C_GibChunkFooter;
@@ -829,7 +830,7 @@ unsafe fn evacuate_packed(
             write_forwarding_pointer_at(
                 src,
                 dst,
-                dst_end.offset_from(dst).try_into().unwrap(),
+                dst_end.offset_from(dst) as u16, // .try_into().unwrap()
             );
 
             // If the pointee is in the nursery, evacuate it.
@@ -872,6 +873,7 @@ unsafe fn evacuate_packed(
                     Heap::check_bounds(heap, space_reqd, dst, dst_end);
                 let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                 let dst_after_indr = write(dst_after_tag, tagged_pointee);
+                stats_bump_mem_copied(9);
                 let pointee_footer_offset = tagged.get_tag();
                 let pointee_footer =
                     pointee.add(pointee_footer_offset as usize);
@@ -920,7 +922,7 @@ unsafe fn evacuate_packed(
                     write_forwarding_pointer_at(
                         src,
                         dst,
-                        dst_end.offset_from(dst).try_into().unwrap(),
+                        dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                     )
                 } else {
                     write(src, C_COPIED_TAG)
@@ -1206,7 +1208,8 @@ trait Heap {
                 );
                 // Write a redirection tag in the old chunk.
                 let footer_offset: u16 =
-                    new_footer_start.offset_from(new_dst).try_into().unwrap();
+                    new_footer_start.offset_from(new_dst) as u16; // .try_into().unwrap()
+
                 let tagged: u64 =
                     TaggedPointer::new(new_dst, footer_offset).as_u64();
                 let dst_after_tag = write(dst, C_REDIRECTION_TAG);
@@ -1751,7 +1754,9 @@ macro_rules! measure {
 #[cfg(not(feature = "gcstats"))]
 #[macro_export]
 macro_rules! measure {
-    ( $x:expr, $addr:expr ) => {{}};
+    ( $x:expr, $addr:expr ) => {{
+        $x
+    }};
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

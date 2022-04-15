@@ -32,23 +32,28 @@ const TAG_MASK: u64 = u64::MAX >> TAG_BITS;
 pub struct TaggedPointer(u64);
 
 impl TaggedPointer {
+    #[inline(always)]
     pub fn new(ptr: *mut i8, tag: u16) -> TaggedPointer {
         let tagged = TaggedPointer::store_tag(ptr, tag);
         TaggedPointer(tagged)
     }
 
+    #[inline(always)]
     pub fn from_u64(tagged: u64) -> TaggedPointer {
         TaggedPointer(tagged)
     }
 
+    #[inline(always)]
     pub fn as_u64(&self) -> u64 {
         self.0
     }
 
+    #[inline(always)]
     fn store_tag(ptr: *mut i8, tag: u16) -> u64 {
         (ptr as u64) | ((tag as u64) << POINTER_BITS)
     }
 
+    #[inline(always)]
     pub fn get_tag(&self) -> u16 {
         (self.0 >> POINTER_BITS) as u16
     }
@@ -57,6 +62,7 @@ impl TaggedPointer {
     //
     // uintptr_t ptr2 = (((uintptr_t)tagged & ((1ull << 48) - 1)) |
     //                   ~(((uintptr_t)tagged & (1ull << 47)) - 1))
+    #[inline(always)]
     pub fn untag(&self) -> *mut i8 {
         (self.0 & TAG_MASK) as *mut i8
     }
