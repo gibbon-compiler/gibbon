@@ -642,6 +642,8 @@ unsafe fn evacuate_packed(
 
     #[cfg(feature = "gcstats")]
     eprintln!("Evac packed {:?} -> {:?}", src, dst);
+
+    // Stores everything to process AFTER the next_action.
     let mut worklist: Vec<EvacAction> = Vec::new();    
     
     loop {      
@@ -871,10 +873,8 @@ unsafe fn evacuate_packed(
                   let (tagged_pointee, src_after_indr): (u64, _) =
                       read(src_after_tag);
       
-                  #[cfg(feature = "gcstats")]
-                  eprintln!("   indirection! src {:?} dest {:?}, after {:?}", src_after_tag, tagged_pointee as *mut i8, src_after_indr);
-      
-
+                      #[cfg(feature = "gcstats")]
+                      eprintln!("   indirection! src {:?} dest {:?}, after {:?}", src_after_tag, tagged_pointee as *mut i8, src_after_indr);      
 
                   let src_after_indr1 = src_after_indr as *mut i8;
                   let tagged = TaggedPointer::from_u64(tagged_pointee);
@@ -894,7 +894,12 @@ unsafe fn evacuate_packed(
                   if st.evac_major || st.nursery.contains_addr(pointee) {
 
                       // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
-                      worklist.push(EvacAction::RestoreSrc(src_after_indr1));
+                      if !worklist.is_empty() {                         
+                         worklist.push(EvacAction::RestoreSrc(src_after_indr1));
+                      } else {
+                        #[cfg(feature = "gcstats")]
+                        eprintln!("   tail optimization!");      
+                      }
                       src = pointee;
                       // Same type, new location to evac from:
                       next_action = EvacAction::ProcessTy(next_ty); // Fixme, don't push just for the while() to pop.
