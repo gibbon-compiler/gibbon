@@ -13,7 +13,6 @@ use std::error::Error;
 use std::fmt;
 use std::mem::size_of;
 use std::ptr::{null_mut, write_bytes};
-use std::time::Instant;
 
 use crate::ffi::types::*;
 use crate::measure;
@@ -1154,7 +1153,7 @@ pub unsafe fn init_footer_at(
     footer_start
 }
 
-#[inline]
+#[inline(always)]
 #[cold]
 fn cold() {}
 
@@ -1263,7 +1262,7 @@ trait Heap {
 struct Nursery(*mut C_GibNursery);
 
 impl Nursery {
-    #[inline]
+    #[inline(always)]
     fn clear(&mut self) {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
@@ -1286,17 +1285,17 @@ impl fmt::Debug for Nursery {
 }
 
 impl Heap for Nursery {
-    #[inline]
+    #[inline(always)]
     fn is_nursery(&self) -> bool {
         true
     }
 
-    #[inline]
+    #[inline(always)]
     fn is_oldest(&self) -> bool {
         false
     }
 
-    #[inline]
+    #[inline(always)]
     fn space_available(&self) -> usize {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
@@ -1305,7 +1304,7 @@ impl Heap for Nursery {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
@@ -1345,12 +1344,12 @@ impl fmt::Debug for Generation {
 }
 
 impl Heap for Generation {
-    #[inline]
+    #[inline(always)]
     fn is_nursery(&self) -> bool {
         false
     }
 
-    #[inline]
+    #[inline(always)]
     fn is_oldest(&self) -> bool {
         false
     }
@@ -1363,7 +1362,7 @@ impl Heap for Generation {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
@@ -1450,22 +1449,22 @@ impl fmt::Debug for OldestGeneration {
 }
 
 impl Heap for OldestGeneration {
-    #[inline]
+    #[inline(always)]
     fn is_nursery(&self) -> bool {
         false
     }
 
-    #[inline]
+    #[inline(always)]
     fn is_oldest(&self) -> bool {
         true
     }
 
-    #[inline]
+    #[inline(always)]
     fn space_available(&self) -> usize {
         0
     }
 
-    #[inline]
+    #[inline(always)]
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
         // let gen: *mut C_GibGeneration = self.0;
         unsafe {
@@ -1612,7 +1611,7 @@ enum _DatatypeInfo {
 /// The global info table.
 static mut _INFO_TABLE: _DatatypeEnv = Vec::new();
 
-#[inline]
+#[inline(always)]
 pub fn info_table_initialize(size: usize) {
     unsafe {
         // If a datatype is not packed, info_table_insert_scalar will
@@ -1621,7 +1620,7 @@ pub fn info_table_initialize(size: usize) {
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn info_table_insert_packed_dcon(
     datatype: C_GibDatatype,
     datacon: C_GibPackedTag,
@@ -1756,7 +1755,7 @@ fn stats_bump_mem_copied(_size: usize) {}
 #[macro_export]
 macro_rules! measure {
     ( $x:expr, $addr:expr ) => {{
-        let start = Instant::now();
+        let start = use std::time::Instant::now();
         let y = $x;
         let duration = start.elapsed();
         $addr += duration.as_secs_f64();
