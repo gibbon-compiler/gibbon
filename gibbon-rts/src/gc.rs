@@ -650,7 +650,7 @@ unsafe fn evacuate_packed(
     
     loop {      
       #[cfg(feature = "gcstats")]    
-      eprintln!("  Loop iteration on src {:?} action {:?}, length after this {}, first 5 {:?}", 
+      eprintln!("  Loop iteration on src {:?} action {:?}, length after this {}, prefix(5): {:?}", 
                 src, next_action, worklist.len(), &worklist[..std::cmp::min(5, worklist.len())]);                
     
       match next_action {
@@ -680,8 +680,8 @@ unsafe fn evacuate_packed(
                   let (tagged_pointee, src_after_indr): (u64, _) =
                       read(src_after_tag);
       
-                      #[cfg(feature = "gcstats")]
-                      eprintln!("   indirection! src {:?} dest {:?}, after {:?}", src_after_tag, tagged_pointee as *mut i8, src_after_indr);      
+                  #[cfg(feature = "gcstats")]
+                  eprintln!("   Indirection! src {:?} dest {:?}, after {:?}", src_after_tag, tagged_pointee as *mut i8, src_after_indr);      
 
                   let src_after_indr1 = src_after_indr as *mut i8;
                   let tagged = TaggedPointer::from_u64(tagged_pointee);
@@ -755,7 +755,6 @@ unsafe fn evacuate_packed(
                   }        
               }
 
-              C_COPIED_TO_TAG => todo!(),
               C_COPIED_TAG => todo!(),
               C_REDIRECTION_TAG => todo!(),
 
@@ -775,11 +774,9 @@ unsafe fn evacuate_packed(
                   eprintln!("Hit cauterize, remaining Worklist: {:?}", worklist);
                   break; // no change to src, dst, dst_end
               }
-
-      /*              
+    
               // See Note [Maintaining sharing, Copied and CopiedTo tags].
-              C_COPIED_TO_TAG => {
-                  todo!();    
+              C_COPIED_TO_TAG => {                            
                   let (tagged_fwd_ptr, _): (u64, _) = read_mut(src_after_tag);
                   let tagged = TaggedPointer::from_u64(tagged_fwd_ptr);
                   let fwd_ptr = tagged.untag();
@@ -788,16 +785,21 @@ unsafe fn evacuate_packed(
                       Heap::check_bounds(heap, space_reqd, dst, dst_end);
                   let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                   let dst_after_indr = write(dst_after_tag, tagged_fwd_ptr);
+
+                  #[cfg(feature = "gcstats")]
+                  eprintln!("   Forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged, dst);      
+
                   stats_bump_mem_copied(9);
                   // TODO(ckoparkar): check that no code path will try to read/write
                   // at this null pointer.
                   let src_after_burned = match st.benv.get(&src) {
-                      None => null_mut(),
+                      None => panic!("Could not find {:?} in benv", src), // null_mut(),
                       Some(end) => *end,
                   };
                   // Update outsets and refcounts if evacuating to the oldest
                   // generation.
                   if heap.is_oldest() {
+                      todo!();
                       let fwd_footer_offset = tagged.get_tag();
                       let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
                       handle_old_to_old_indirection(dst_end, fwd_footer_addr);
@@ -817,8 +819,19 @@ unsafe fn evacuate_packed(
                           }
                       }
                   }
-                  (src_after_burned, dst_after_indr, dst_end1, tag)
-              }
+                  src = src_after_burned;
+                  dst = dst_after_indr;
+                  dst_end = dst_end1;
+                  // TODO: make this reusable somehow (local macro?)
+                  if let Some(next) = worklist.pop() {
+                    next_action = next;          
+                    continue;
+                  } else {
+                      break;
+                  }                  
+              }                  
+
+/*                            
               // See Note [Maintaining sharing, Copied and CopiedTo tags].
               C_COPIED_TAG => {
                   todo!();    
@@ -956,14 +969,15 @@ unsafe fn evacuate_packed(
                       )
                   }
               }        
-      */    
+*/    
+
               // Regular datatype, copy.
               _ => {
                   let DataconInfo { scalar_bytes, field_tys, .. } =
                       packed_info.get_unchecked(tag as usize);
       
                   #[cfg(feature = "gcstats")]
-                  eprintln!("   regular datacon, field_tys {:?}", field_tys);
+                  eprintln!("   Regular datacon, field_tys {:?}", field_tys);
                       
                   let scalar_bytes1 = *scalar_bytes;
       
@@ -991,6 +1005,8 @@ unsafe fn evacuate_packed(
                       // space previously occupied by scalars.
       
                       if scalar_bytes1 >= 8 {
+                          #[cfg(feature = "gcstats")]
+                          eprintln!("   Forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
                           debug_assert!(dst < dst_end);
                           write_forwarding_pointer_at(
                               src,
