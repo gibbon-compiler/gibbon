@@ -588,7 +588,9 @@ unsafe fn evacuate_shadowstack(
 // The actions pushed on the stack while evacuating.
 enum EvacAction {
     ProcessTy(C_GibDatatype),
-    RestoreSrc(*mut i8)
+    RestoreSrc(*mut i8),
+    // A reified continuation of processing the target of an indirection.
+    BenvWrite(*mut i8),
 }
 
 /**
@@ -901,22 +903,21 @@ unsafe fn evacuate_packed(
                         eprintln!("   tail optimization!");      
                       }
                       src = pointee;
-                      // Same type, new location to evac from:
-                      next_action = EvacAction::ProcessTy(next_ty); // Fixme, don't push just for the while() to pop.
-                      continue;
-
-                      // TODO: restore Benv actions as a separate explicit EvacAction for the stack.
-                      /*
+                                           
                       // Update the burned environment if we're evacuating a root
                       // from the remembered set.
                       match st.prov {
-                          GcRootProv::RemSet => {
-                              st.benv.insert(pointee, src_after_pointee);
-                              ()
-                          }
-                          GcRootProv::Stk => (),
+                        GcRootProv::RemSet => {
+                            #[cfg(feature = "gcstats")]
+                            eprintln!("   pushing BenvWrite action to stack");      
+                            worklist.push(EvacAction::BenvWrite(pointee));
+                        }
+                        GcRootProv::Stk => (),
                       }
-                      */
+                      
+                      // Same type, new location to evac from:
+                      next_action = EvacAction::ProcessTy(next_ty); // Fixme, don't push just for the while() to pop.                      
+                      continue;                      
 
                       // Return 1 past the indirection pointer as src_after
                       // and the dst_after that evacuate_packed returned.
@@ -1049,7 +1050,6 @@ unsafe fn evacuate_packed(
                               // Immediately stop copying upon reaching the
                               // cauterized tag.
                               C_CAUTERIZED_TAG => {
-                                  todo!();    
                                   return (src1, dst1, dst_end1, field_tag);
                               }
                               // This redirection would likely be in oldgen and the
@@ -1057,7 +1057,6 @@ unsafe fn evacuate_packed(
                               // Unless we're evacuating the oldgen as well, in which
                               // case keep evacuating.
                               C_REDIRECTION_TAG if !st.evac_major => {
-                                  todo!();
                                   return (src1, dst1, dst_end1, field_tag);
                               }
                               _ => {
@@ -1071,6 +1070,12 @@ unsafe fn evacuate_packed(
                   }                            
               }         
           } // End match
+          }
+          EvacAction::BenvWrite(pointee) => {
+            #[cfg(feature = "gcstats")]
+            eprintln!("   performing benv insert continuation: {:?} to {:?}", pointee, src);
+            st.benv.insert(pointee, src);
+            continue;
           }
       }      
    }; // End while   
