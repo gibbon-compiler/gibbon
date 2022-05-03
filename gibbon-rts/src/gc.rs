@@ -13,7 +13,6 @@ use std::error::Error;
 use std::fmt;
 use std::mem::size_of;
 use std::ptr::{null_mut, write_bytes};
-use std::time::Instant;
 
 use crate::ffi::types::*;
 use crate::measure;
@@ -398,6 +397,7 @@ fn cauterize_writers(
                 continue;
             }
             let ptr = (*frame).ptr;
+            // Layout for cauterized object is a tag followed by a pointer back to the frame.:
             let ptr_next = write(ptr, C_CAUTERIZED_TAG);
             write(ptr_next, frame);
             match cenv.get_mut(&ptr) {
@@ -475,7 +475,7 @@ unsafe fn evacuate_remembered_set(
         measure!(sort_roots(rem_set), (*GC_STATS).gc_rootset_sort_time);
     for frame in frames {
         let datatype = (*frame).datatype;
-        let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
+        // let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
         // Allocate space in the destination.
         let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 1)?;
         // The remembered set contains the address where the indirect-
@@ -493,8 +493,8 @@ unsafe fn evacuate_remembered_set(
             prov: &GcRootProv::RemSet,
             evac_major,
         };
-        let (src_after, _dst_after, _dst_after_end, _tag) =
-            evacuate_packed(&mut st, heap, packed_info, src, dst, dst_end);
+        let (src_after, _dst_after, _dst_after_end, _forwarded) =
+            evacuate_packed(&mut st, heap, datatype, src, dst, dst_end);
         // Update the indirection pointer in oldgen region.
         write((*frame).ptr, dst);
         // Update the outset in oldgen region.
@@ -528,8 +528,7 @@ unsafe fn evacuate_shadowstack(
             continue;
         }
 
-        let datatype = (*frame).datatype;
-        let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
+        let datatype = (*frame).datatype;        
 
         // Allocate space in the destination.
         let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
@@ -558,30 +557,40 @@ unsafe fn evacuate_shadowstack(
         };
         let is_loc_0 = (src_end.offset_from(src)) == chunk_size as isize;
 
-        let (src_after, dst_after, dst_after_end, tag) =
-            evacuate_packed(&mut st, heap, packed_info, src, dst, dst_end);
+        let (src_after, dst_after, dst_after_end, forwarded) =
+            evacuate_packed(&mut st, heap, datatype, src, dst, dst_end);
         // Update the pointers in shadow-stack.
         (*frame).ptr = dst;
         // TODO(ckoparkar): AUDITME.
         // (*frame).endptr = dst_after_end;
         (*frame).endptr = dst_end;
+
         // Note [Adding a forwarding pointer at the end of every chunk].
-        match tag {
-            C_COPIED_TO_TAG | C_COPIED_TAG | C_REDIRECTION_TAG => {}
-            _ => {
-                if is_loc_0 || tag == C_CAUTERIZED_TAG {
-                    assert!(dst_after < dst_after_end);
-                    write_forwarding_pointer_at(
-                        src_after,
-                        dst_after,
-                        dst_after_end.offset_from(dst_after) as u16, // .try_into()
-                                                                     // .unwrap()
-                    );
-                }
-            }
+
+        // FIXME: forwarded is currently true if evacuate forwarded ANYTHING.
+        // We need to enforce it for each chunk...
+        if !forwarded & is_loc_0 {
+            assert!(dst_after < dst_after_end);
+            write_forwarding_pointer_at(
+                src_after,
+                dst_after,
+                dst_after_end.offset_from(dst_after) as u16, // .try_into()
+                                                             // .unwrap()
+            );
         }
     }
     Ok(())
+}
+
+
+
+#[derive(Debug)]
+// The actions pushed on the stack while evacuating.
+enum EvacAction {
+    ProcessTy(C_GibDatatype),
+    RestoreSrc(*mut i8),
+    // A reified continuation of processing the target of an indirection.
+    BenvWrite(*mut i8),
 }
 
 /**
@@ -609,366 +618,466 @@ Returns: (src_after, dst_after, dst_end, maybe_tag)
               last cell occupied by the value in its new home
 - dst_end   - end of the destination buffer (which can change during copying
               due to bounds checking)
-- maybe_tag - return the tag of the the datacon that was just copied.
-              copy_readers uses this tag to decide whether it should write a
-              forwarding pointer at the end of the source buffer.
+- forwarded - did the interval evacuated have at least one forwarding pointer written?
 
+FIXME: forwarded is currently for the entire (multi-chunk) evaluation, and it should be per-chunk.
  */
 unsafe fn evacuate_packed(
     st: &mut EvacState,
     heap: &mut impl Heap,
-    packed_info: &DataconEnv,
-    src: *mut i8,
-    dst: *mut i8,
-    dst_end: *mut i8,
-) -> (*mut i8, *mut i8, *mut i8, C_GibPackedTag) {
-    let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
-    println!("tag: {:?}", tag);
-    match tag {
-        // Nothing to copy. Just update the write cursor's new
-        // address in shadow-stack.
-        C_CAUTERIZED_TAG => {
-            let (wframe_ptr, _): (*mut i8, _) = read(src_after_tag);
-            let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
-            // Mark this cursor as uncauterized.
-            let del = (*wframe).ptr;
-            st.cenv.remove(&del);
-            // Update the poiners on the shadow-stack.
-            (*wframe).ptr = dst;
-            (*wframe).endptr = dst_end;
-            (src, dst, dst_end, tag)
-        }
-        // See Note [Maintaining sharing, Copied and CopiedTo tags].
-        C_COPIED_TO_TAG => {
-            let (tagged_fwd_ptr, _): (u64, _) = read_mut(src_after_tag);
-            let tagged = TaggedPointer::from_u64(tagged_fwd_ptr);
-            let fwd_ptr = tagged.untag();
-            let space_reqd = 32;
-            let (dst1, dst_end1) =
-                Heap::check_bounds(heap, space_reqd, dst, dst_end);
-            let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
-            let dst_after_indr = write(dst_after_tag, tagged_fwd_ptr);
-            stats_bump_mem_copied(9);
-            // TODO(ckoparkar): check that no code path will try to read/write
-            // at this null pointer.
-            let src_after_burned = match st.benv.get(&src) {
-                None => null_mut(),
-                Some(end) => *end,
-            };
-            // Update outsets and refcounts if evacuating to the oldest
-            // generation.
-            if heap.is_oldest() {
-                let fwd_footer_offset = tagged.get_tag();
-                let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
-                handle_old_to_old_indirection(dst_end, fwd_footer_addr);
-                match st.prov {
-                    GcRootProv::RemSet => {}
-                    GcRootProv::Stk => {
-                        let fwd_footer =
-                            fwd_footer_addr as *const C_GibChunkFooter;
-                        measure!(
-                            (*(st.zct)).remove(
-                                &((*fwd_footer).reg_info
-                                    as *const C_GibRegionInfo),
-                            ),
-                            (*GC_STATS).gc_zct_mgmt_time
-                        );
-                        ()
-                    }
-                }
-            }
-            (src_after_burned, dst_after_indr, dst_end1, tag)
-        }
-        // See Note [Maintaining sharing, Copied and CopiedTo tags].
-        C_COPIED_TAG => {
-            let (mut scan_tag, mut scan_ptr): (C_GibPackedTag, *const i8) =
-                read(src_after_tag);
-            while scan_tag != C_COPIED_TO_TAG {
-                (scan_tag, scan_ptr) = read(scan_ptr);
-            }
-            // At this point the scan_ptr is one past the
-            // C_COPIED_TO_TAG i.e. at the forwarding pointer.
-            assert!((src as *const i8) < scan_ptr);
-            let offset = scan_ptr.offset_from(src) - 1;
-            // The forwarding pointer that's available.
-            let (tagged_fwd_avail, _): (u64, _) = read(scan_ptr);
-            let tagged_avail = TaggedPointer::from_u64(tagged_fwd_avail);
-            let fwd_avail = tagged_avail.untag();
-            let fwd_footer_offset_avail = tagged_avail.get_tag();
-            let fwd_footer_addr_avail =
-                fwd_avail.add(fwd_footer_offset_avail as usize);
-            // The position in the destination buffer we wanted.
-            let fwd_want = fwd_avail.sub(offset as usize);
-            let fwd_footer_offset_want =
-                fwd_footer_addr_avail.offset_from(fwd_want);
-            let tagged_want: u64 = TaggedPointer::new(
-                fwd_avail,
-                fwd_footer_offset_want as u16, // try_into().unwrap()
-            )
-            .as_u64();
-            let space_reqd = 32;
-            let (dst1, dst_end1) =
-                Heap::check_bounds(heap, space_reqd, dst, dst_end);
-            let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
-            let dst_after_indr = write(dst_after_tag, tagged_want);
-            stats_bump_mem_copied(9);
-            // TODO(ckoparkar): check that no code path will try to read/write
-            // at this null pointer.
-            let src_after_burned = match st.benv.get(&src) {
-                None => null_mut(),
-                Some(end) => *end,
-            };
-            // Update outsets and refcounts if evacuating to the oldest
-            // generation.
-            if heap.is_oldest() {
-                handle_old_to_old_indirection(dst_end, fwd_footer_addr_avail);
-                match st.prov {
-                    GcRootProv::RemSet => {}
-                    GcRootProv::Stk => {
-                        let fwd_footer =
-                            fwd_footer_addr_avail as *const C_GibChunkFooter;
-                        measure!(
-                            (*(st.zct)).remove(
-                                &((*fwd_footer).reg_info
-                                    as *const C_GibRegionInfo),
-                            ),
-                            (*GC_STATS).gc_zct_mgmt_time
-                        );
-                        ()
-                    }
-                }
-            }
-            (src_after_burned, dst_after_indr, dst_end1, tag)
-        }
-        // Indicates end-of-current-chunk in the source buffer i.e.
-        // there's nothing more to copy in the current chunk.
-        // Follow the redirection pointer to the next chunk and
-        // continue copying there.
-        //
-        // POLICY DECISION:
-        // Redirections into oldgen are not inlined in the current version.
-        // See Note [Smart inlining policies].
-        C_REDIRECTION_TAG => {
-            let (tagged_next_chunk, src_after_next_chunk): (u64, _) =
-                read(src_after_tag);
-            let tagged = TaggedPointer::from_u64(tagged_next_chunk);
-            let next_chunk = tagged.untag();
-            // Add a forwarding pointer in the source buffer.
-            assert!(dst < dst_end);
-            write_forwarding_pointer_at(
-                src,
-                dst,
-                dst_end.offset_from(dst) as u16, // .try_into().unwrap()
-            );
+    orig_typ: C_GibDatatype,
+    orig_src: *mut i8,
+    orig_dst: *mut i8,
+    orig_dst_end: *mut i8,
+) -> (*mut i8, *mut i8, *mut i8, bool) {
+    // These comprise the main mutable state of the traversal and should be updated 
+    // together at the end of every iteration:
+    let mut src = orig_src;
+    let mut dst = orig_dst;
+    let mut dst_end = orig_dst_end;
+    // The implicit -1th element of the worklist:
+    let mut next_action = EvacAction::ProcessTy(orig_typ);
+    let mut forwarded = false;
 
-            // If the next chunk is in the nursery, continue evacuating it.
-            // Otherwise, write a redireciton node at dst (pointing to
-            // the start of the oldgen chunk), link the footers and reconcile
-            // the two RegionInfo objects.
-            if st.evac_major || st.nursery.contains_addr(next_chunk) {
-                evacuate_packed(
-                    st,
-                    heap,
-                    packed_info,
-                    next_chunk,
-                    dst,
-                    dst_end,
-                )
-            } else {
-                // TODO(ckoparkar): BUGGY, AUDITME.
-                let dst_after_tag = write(dst, C_REDIRECTION_TAG);
-                let dst_after_redir = write(dst_after_tag, tagged_next_chunk);
-                stats_bump_mem_copied(9);
+    #[cfg(feature = "gcstats")]
+    eprintln!("Evac packed {:?} -> {:?}", src, dst);
 
-                // Link footers.
-                let footer1 = dst_end as *mut C_GibChunkFooter;
-                let next_chunk_footer_offset = tagged.get_tag();
-                let footer2 = next_chunk.add(next_chunk_footer_offset as usize)
-                    as *mut C_GibChunkFooter;
+    // Stores everything to process AFTER the next_action.
+    let mut worklist: Vec<EvacAction> = Vec::new();    
+    
+    loop {      
+      #[cfg(feature = "gcstats")]    
+      eprintln!("  Loop iteration on src {:?} action {:?}, length after this {}, prefix(5): {:?}", 
+                src, next_action, worklist.len(), &worklist[..std::cmp::min(5, worklist.len())]);                
+    
+      match next_action {
+          EvacAction::RestoreSrc(new_src) => {
+              src = new_src;
 
-                // Reconcile RegionInfo objects.
-                let reg_info1 = (*footer1).reg_info;
-                let reg_info2 = (*footer2).reg_info;
-                (*reg_info2).refcount += (*reg_info1).refcount;
-                (*((*reg_info2).outset)).extend(&*((*reg_info1).outset));
-                (*reg_info2).first_chunk_footer =
-                    (*reg_info1).first_chunk_footer;
-                (*footer1).next = footer2;
-                (*footer1).reg_info = reg_info2;
+              // make this reusable somehow (local macro?)
+              if let Some(next) = worklist.pop() {
+                next_action = next;          
+                continue;
+              } else {
+                break;
+              }              
+          }
+          EvacAction::ProcessTy(next_ty) => {
+            let (tag, src_after_tag): (C_GibPackedTag, *mut i8) = read_mut(src);
+            #[cfg(feature = "gcstats")]
+            eprintln!("   Read next tag {} from src {:?}", tag, src);
+            
+            let packed_info = INFO_TABLE.get_unchecked(next_ty as usize); 
+            match tag {          
+              // A pointer to a value in another buffer; copy this value
+              // and then switch back to copying rest of the source buffer.
+              //
+              // POLICY DECISION:
+              // Indirections into oldgen are not inlined in the current version.
+              // See Note [Smart inlining policies].
+              C_INDIRECTION_TAG => {            
+                  let (tagged_pointee, src_after_indr): (u64, _) =
+                      read(src_after_tag);
+      
+                  #[cfg(feature = "gcstats")]
+                  eprintln!("   Indirection! src {:?} dest {:?}, after {:?}", src_after_tag, tagged_pointee as *mut i8, src_after_indr);      
 
-                // Update ZCT.
-                measure!(
-                    (*(st.zct)).remove(&(reg_info1 as *const C_GibRegionInfo)),
-                    (*GC_STATS).gc_zct_mgmt_time
-                );
-                measure!(
-                    (*(st.zct)).insert(reg_info2),
-                    (*GC_STATS).gc_zct_mgmt_time
-                );
-                // Stop evacuating.
-                (
-                    src_after_next_chunk as *mut i8,
-                    dst_after_redir,
-                    dst_end,
-                    tag,
-                )
-            }
-        }
-        // A pointer to a value in another buffer; copy this value
-        // and then switch back to copying rest of the source buffer.
-        //
-        // POLICY DECISION:
-        // Indirections into oldgen are not inlined in the current version.
-        // See Note [Smart inlining policies].
-        C_INDIRECTION_TAG => {
-            let (tagged_pointee, src_after_indr): (u64, _) =
-                read(src_after_tag);
-            let src_after_indr1 = src_after_indr as *mut i8;
-            let tagged = TaggedPointer::from_u64(tagged_pointee);
-            let pointee = tagged.untag();
-            // Add a forwarding pointer in the source buffer.
-            assert!(dst < dst_end);
-            write_forwarding_pointer_at(
-                src,
-                dst,
-                dst_end.offset_from(dst) as u16, // .try_into().unwrap()
-            );
+                  let src_after_indr1 = src_after_indr as *mut i8;
+                  let tagged = TaggedPointer::from_u64(tagged_pointee);
+                  let pointee = tagged.untag();
+                  // Add a forwarding pointer in the source buffer.
+                  debug_assert!(dst < dst_end);
+      
+                  write_forwarding_pointer_at(
+                      src,
+                      dst,
+                      dst_end.offset_from(dst) as u16, // .try_into().unwrap()
+                  );
+                  forwarded = true;
+      
+                  // If the pointee is in the nursery, evacuate it.
+                  // Otherwise, write an indirection node at dst and adjust the
+                  // refcount and outset.
+                  if st.evac_major || st.nursery.contains_addr(pointee) {
 
-            // If the pointee is in the nursery, evacuate it.
-            // Otherwise, write an indirection node at dst and adjust the
-            // refcount and outset.
-            if st.evac_major || st.nursery.contains_addr(pointee) {
-                let (
-                    src_after_pointee,
-                    dst_after_pointee,
-                    dst_after_pointee_end,
-                    _,
-                ) = evacuate_packed(
-                    st,
-                    heap,
-                    packed_info,
-                    pointee,
-                    dst,
-                    dst_end,
-                );
-                // Update the burned environment if we're evacuating a root
-                // from the remembered set.
-                match st.prov {
-                    GcRootProv::RemSet => {
-                        st.benv.insert(pointee, src_after_pointee);
-                        ()
-                    }
-                    GcRootProv::Stk => (),
-                }
-                // Return 1 past the indirection pointer as src_after
-                // and the dst_after that evacuate_packed returned.
-                (
-                    src_after_indr1,
-                    dst_after_pointee,
-                    dst_after_pointee_end,
-                    tag,
-                )
-            } else {
-                let space_reqd = 32;
-                let (dst1, dst_end1) =
-                    Heap::check_bounds(heap, space_reqd, dst, dst_end);
-                let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
-                let dst_after_indr = write(dst_after_tag, tagged_pointee);
-                stats_bump_mem_copied(9);
-                let pointee_footer_offset = tagged.get_tag();
-                let pointee_footer =
-                    pointee.add(pointee_footer_offset as usize);
-                // TODO(ckoparkar): incorrect pointee_footer_offset causes
-                // treeinsert to segfault.
-                handle_old_to_old_indirection(dst_end1, pointee_footer);
-                // (*zct).insert(
-                //     ((*(pointee_footer as *mut C_GibChunkFooter)).reg_info
-                //         as *const C_GibRegionInfo),
-                // );
-                (src_after_indr1, dst_after_indr, dst_end1, tag)
-            }
-        }
-        // Regular datatype, copy.
-        _ => {
-            let DataconInfo { scalar_bytes, field_tys, .. } =
-                packed_info.get_unchecked(tag as usize);
-
-            let scalar_bytes1 = *scalar_bytes;
-
-            // Check bound of the destination buffer before copying.
-            // Reserve additional space for a redirection node or a
-            // forwarding pointer.
-            let space_reqd: usize = 32 + scalar_bytes1;
-            {
-                // Scope for mutable variables src_mut and dst_mut,
-                // which are the read and write cursors in the source
-                // and destination buffer respectively.
-
-                let (mut dst_mut, mut dst_end_mut) =
-                    Heap::check_bounds(heap, space_reqd, dst, dst_end);
-                // Copy the tag and the fields.
-                dst_mut = write(dst_mut, tag);
-                dst_mut.copy_from_nonoverlapping(src_after_tag, scalar_bytes1);
-                let mut src_mut = src_after_tag.add(scalar_bytes1);
-                dst_mut = dst_mut.add(scalar_bytes1);
-                stats_bump_mem_copied(1 + scalar_bytes1);
-
-                // Add forwarding pointers:
-                // if there's enough space, write a COPIED_TO tag and
-                // dst's address at src. Otherwise just write a COPIED tag.
-                // After the forwarding pointer, burn the rest of
-                // space previously occupied by scalars.
-                let burn = if scalar_bytes1 >= 8 {
-                    assert!(dst < dst_end);
-                    write_forwarding_pointer_at(
-                        src,
-                        dst,
-                        dst_end.offset_from(dst) as u16, // .try_into().unwrap()
-                    )
-                } else {
-                    write(src, C_COPIED_TAG)
-                };
-                if src_mut > burn {
-                    let i = src_mut.offset_from(burn);
-                    write_bytes(burn, C_COPIED_TAG, i as usize);
-                }
-                // TODO(ckoparkar):
-                // (1) instead of recursion, use a worklist
-                // (2) handle redirection nodes properly
-                for ty in field_tys.iter() {
-                    let packed_info = INFO_TABLE.get_unchecked(*ty as usize);
-                    let (src1, dst1, dst_end1, field_tag) = evacuate_packed(
-                        st,
-                        heap,
-                        packed_info,
-                        src_mut,
-                        dst_mut,
-                        dst_end_mut,
-                    );
-                    match field_tag {
-                        // Immediately stop copying upon reaching the
-                        // cauterized tag.
-                        C_CAUTERIZED_TAG => {
-                            return (src1, dst1, dst_end1, field_tag);
+                      // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
+                      if !worklist.is_empty() {                         
+                         worklist.push(EvacAction::RestoreSrc(src_after_indr1));
+                      } else {
+                        #[cfg(feature = "gcstats")]
+                        eprintln!("   tail optimization!");      
+                      }
+                      src = pointee;
+                                           
+                      // Update the burned environment if we're evacuating a root
+                      // from the remembered set.
+                      match st.prov {
+                        GcRootProv::RemSet => {
+                            #[cfg(feature = "gcstats")]
+                            eprintln!("   pushing BenvWrite action to stack");      
+                            worklist.push(EvacAction::BenvWrite(pointee));
                         }
-                        // This redirection would likely be in oldgen and the
-                        // next call to evacuate_packed would terminate anyway.
-                        // Unless we're evacuating the oldgen as well, in which
-                        // case keep evacuating.
-                        C_REDIRECTION_TAG if !st.evac_major => {
-                            return (src1, dst1, dst_end1, field_tag);
-                        }
-                        _ => {
-                            src_mut = src1;
-                            dst_mut = dst1;
-                            dst_end_mut = dst_end1;
-                        }
+                        GcRootProv::Stk => (),
+                      }
+                      
+                      // Same type, new location to evac from:
+                      next_action = EvacAction::ProcessTy(next_ty);
+                      continue;
+                  } else {                    
+                      let space_reqd = 32;
+                      let (dst1, dst_end1) =
+                          Heap::check_bounds(heap, space_reqd, dst, dst_end);
+                      let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
+                      let dst_after_indr = write(dst_after_tag, tagged_pointee);
+                      stats_bump_mem_copied(9);
+                      let pointee_footer_offset = tagged.get_tag();
+                      let pointee_footer =
+                          pointee.add(pointee_footer_offset as usize);
+                      // TODO(ckoparkar): incorrect pointee_footer_offset causes
+                      // treeinsert to segfault.
+                      handle_old_to_old_indirection(dst_end1, pointee_footer);
+                      // (*zct).insert(
+                      //     ((*(pointee_footer as *mut C_GibChunkFooter)).reg_info
+                      //         as *const C_GibRegionInfo),
+                      // );
+
+                      src = src_after_indr1;
+                      dst = dst_after_indr;
+                      dst_end = dst_end1;
+
+                      // TODO: make this reusable somehow (local macro?)
+                      if let Some(next) = worklist.pop() {
+                        next_action = next;          
+                        continue;
+                      } else {
+                          break;
+                      }
+                  }        
+              }
+
+              // Nothing to copy. Just update the write cursor's new
+              // address in shadow-stack.
+              C_CAUTERIZED_TAG => {
+                  // Recover the reverse-pointer back to the shadowstack frame:
+                  let (wframe_ptr, _): (*mut i8, _) = read(src_after_tag);
+                  let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
+                  // Mark this cursor as uncauterized.
+                  let _del = (*wframe).ptr;
+                  // st.cenv.remove(&del);
+                  // Update the pointers on the shadow-stack.
+                  (*wframe).ptr = dst;
+                  (*wframe).endptr = dst_end;                  
+
+                  #[cfg(feature = "gcstats")]
+                  eprintln!(" Hit cauterize at {:?}, remaining Worklist: {:?}", src, worklist);
+                  break; // no change to src, dst, dst_end
+              }
+    
+              // See Note [Maintaining sharing, Copied and CopiedTo tags].
+              C_COPIED_TO_TAG => {                            
+                  let (tagged_fwd_ptr, _): (u64, _) = read_mut(src_after_tag);
+                  let tagged = TaggedPointer::from_u64(tagged_fwd_ptr);
+                  let fwd_ptr = tagged.untag();
+                  let space_reqd = 32;
+                  let (dst1, dst_end1) =
+                      Heap::check_bounds(heap, space_reqd, dst, dst_end);
+                  let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
+                  let dst_after_indr = write(dst_after_tag, tagged_fwd_ptr);
+
+                  #[cfg(feature = "gcstats")]
+                  eprintln!("   Forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged, dst);      
+                  forwarded = true; // i.e. ALREADY forwarded.
+                  
+                  stats_bump_mem_copied(9);
+                  // Update outsets and refcounts if evacuating to the oldest
+                  // generation.
+                  if heap.is_oldest() {
+                      let fwd_footer_offset = tagged.get_tag();
+                      let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
+                      handle_old_to_old_indirection(dst_end, fwd_footer_addr);
+                      match st.prov {
+                          GcRootProv::RemSet => {}
+                          GcRootProv::Stk => {
+                              let fwd_footer =
+                                  fwd_footer_addr as *const C_GibChunkFooter;
+                              measure!(
+                                  (*(st.zct)).remove(
+                                      &((*fwd_footer).reg_info
+                                          as *const C_GibRegionInfo),
+                                  ),
+                                  (*GC_STATS).gc_zct_mgmt_time
+                              );
+                              ()
+                          }
+                      }
+                  }
+                  
+                  dst = dst_after_indr;
+                  dst_end = dst_end1;
+                  let src_after_burned = st.benv.get(&src);
+                  if let Some(next) = worklist.pop() {
+                    next_action = next;          
+                    src = *src_after_burned.unwrap_or_else(|| panic!("Could not find {:?} in benv", src));
+                    continue;
+                  } else {
+                      // WARNING: allow a corrupt null src return pointer.  Should make it an OPTION.
+                      src = *src_after_burned.unwrap_or(&null_mut());
+                      #[cfg(feature = "gcstats")]
+                      eprintln!("   Forwarding pointer was last, don't need skip-over, src = {:?}", src);
+                      break;
+                  }               
+              }                  
+
+              // See Note [Maintaining sharing, Copied and CopiedTo tags].
+              C_COPIED_TAG => {
+                  // TODO: bound scanning.
+                  let (mut scan_tag, mut scan_ptr): (C_GibPackedTag, *const i8) =
+                      read(src_after_tag);
+                  while scan_tag != C_COPIED_TO_TAG {
+                      (scan_tag, scan_ptr) = read(scan_ptr);
+                  }
+                  // At this point the scan_ptr is one past the
+                  // C_COPIED_TO_TAG i.e. at the forwarding pointer.
+                  assert!((src as *const i8) < scan_ptr);
+                  let offset = scan_ptr.offset_from(src) - 1;
+                  // The forwarding pointer that's available.
+                  let (tagged_fwd_avail, _): (u64, _) = read(scan_ptr);
+                  let tagged_avail = TaggedPointer::from_u64(tagged_fwd_avail);
+                  let fwd_avail = tagged_avail.untag();
+                  let fwd_footer_offset_avail = tagged_avail.get_tag();
+                  let fwd_footer_addr_avail =
+                      fwd_avail.add(fwd_footer_offset_avail as usize);
+                  // The position in the destination buffer we wanted.
+                  let fwd_want = fwd_avail.sub(offset as usize);
+                  let fwd_footer_offset_want =
+                      fwd_footer_addr_avail.offset_from(fwd_want);
+                  let tagged_want: u64 = TaggedPointer::new(
+                      fwd_avail,
+                      fwd_footer_offset_want as u16, // try_into().unwrap()
+                  )
+                  .as_u64();
+                  let space_reqd = 32;
+                  let (dst1, dst_end1) =
+                      Heap::check_bounds(heap, space_reqd, dst, dst_end);
+                  let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
+                  let dst_after_indr = write(dst_after_tag, tagged_want);
+                  stats_bump_mem_copied(9);
+                  // Update outsets and refcounts if evacuating to the oldest
+                  // generation.
+                  if heap.is_oldest() {
+                      handle_old_to_old_indirection(dst_end, fwd_footer_addr_avail);
+                      match st.prov {
+                          GcRootProv::RemSet => {}
+                          GcRootProv::Stk => {
+                              let fwd_footer =
+                                  fwd_footer_addr_avail as *const C_GibChunkFooter;
+                              measure!(
+                                  (*(st.zct)).remove(
+                                      &((*fwd_footer).reg_info
+                                          as *const C_GibRegionInfo),
+                                  ),
+                                  (*GC_STATS).gc_zct_mgmt_time
+                              );
+                              ()
+                          }
+                      }
+                  }
+                  
+                  dst = dst_after_indr;
+                  dst_end = dst_end1;
+                  let src_after_burned = st.benv.get(&src);
+                  if let Some(next) = worklist.pop() {
+                    next_action = next;          
+                    src = *src_after_burned.unwrap_or_else(|| panic!("Could not find {:?} in benv", src));
+                    continue;
+                  } else {
+                      // WARNING: allow a corrupt null src return pointer.  Should make it an OPTION.
+                      src = *src_after_burned.unwrap_or(&null_mut());
+                      #[cfg(feature = "gcstats")]
+                      eprintln!("   Burned tag was last, don't need skip-over, src = {:?}", src);
+                      break;
+                  }
+              }
+      
+              // Indicates end-of-current-chunk in the source buffer i.e.
+              // there's nothing more to copy in the current chunk.
+              // Follow the redirection pointer to the next chunk and
+              // continue copying there.
+              //
+              // POLICY DECISION:
+              // Redirections into oldgen are not inlined in the current version.
+              // See Note [Smart inlining policies].
+              C_REDIRECTION_TAG => {            
+                  let (tagged_next_chunk, src_after_next_chunk): (u64, _) =
+                      read(src_after_tag);
+                  let tagged = TaggedPointer::from_u64(tagged_next_chunk);
+                  let next_chunk = tagged.untag();
+
+                  #[cfg(feature = "gcstats")]
+                  eprintln!("   Redirection ptr!: src {:?}, to next chunk {:?}", src, next_chunk);
+                  
+                  // Add a forwarding pointer in the source buffer.
+                  assert!(dst < dst_end);
+                  write_forwarding_pointer_at(
+                      src,
+                      dst,
+                      dst_end.offset_from(dst) as u16, // .try_into().unwrap()
+                  );
+                  forwarded = true;
+      
+                  // If the next chunk is in the nursery, continue evacuating it.
+                  // Otherwise, write a redireciton node at dst (pointing to
+                  // the start of the oldgen chunk), link the footers and reconcile
+                  // the two RegionInfo objects.
+                  if st.evac_major || st.nursery.contains_addr(next_chunk) {
+
+                    src = next_chunk;
+                    // TODO: make this reusable somehow (local macro?)
+                    if let Some(next) = worklist.pop() {
+                        next_action = next;          
+                        continue;
+                    } else {
+                        break;
                     }
-                }
-                (src_mut, dst_mut, dst_end_mut, tag)
-            }
-        }
-    }
+                  } else {
+                      // A pretenured object whose next chunk is in the old_gen.
+
+                      // TODO(ckoparkar): BUGGY, AUDITME.
+                      let dst_after_tag = write(dst, C_REDIRECTION_TAG);
+                      let dst_after_redir = write(dst_after_tag, tagged_next_chunk);
+                      stats_bump_mem_copied(9);
+      
+                      // Link footers.
+                      let footer1 = dst_end as *mut C_GibChunkFooter;
+                      let next_chunk_footer_offset = tagged.get_tag();
+                      let footer2 = next_chunk.add(next_chunk_footer_offset as usize)
+                          as *mut C_GibChunkFooter;
+      
+                      // Reconcile RegionInfo objects.
+                      let reg_info1 = (*footer1).reg_info;
+                      let reg_info2 = (*footer2).reg_info;
+                      (*reg_info2).refcount += (*reg_info1).refcount;
+                      (*((*reg_info2).outset)).extend(&*((*reg_info1).outset));
+                      (*reg_info2).first_chunk_footer =
+                          (*reg_info1).first_chunk_footer;
+                      (*footer1).next = footer2;
+                      (*footer1).reg_info = reg_info2;
+      
+                      // Update ZCT.
+                      measure!(
+                          (*(st.zct)).remove(&(reg_info1 as *const C_GibRegionInfo)),
+                          (*GC_STATS).gc_zct_mgmt_time
+                      );
+                      measure!(
+                          (*(st.zct)).insert(reg_info2),
+                          (*GC_STATS).gc_zct_mgmt_time
+                      );
+                      // Stop evacuating.
+                      src = src_after_next_chunk as *mut i8;
+                      dst = dst_after_redir;
+                      // dst_end??
+                      break;
+                  }
+              }        
+
+              // Regular datatype, copy.
+              _ => {
+                  let DataconInfo { scalar_bytes, field_tys, .. } =
+                      packed_info.get_unchecked(tag as usize);
+      
+                  #[cfg(feature = "gcstats")]
+                  eprintln!("   Regular datacon, field_tys {:?}", field_tys);
+                      
+                  let scalar_bytes1 = *scalar_bytes;
+      
+                  // Check bound of the destination buffer before copying.
+                  // Reserve additional space for a redirection node or a
+                  // forwarding pointer.
+                  let space_reqd: usize = 32 + scalar_bytes1;
+                  {
+                      // Scope for mutable variables src_mut and dst_mut,
+                      // which are the read and write cursors in the source
+                      // and destination buffer respectively.
+      
+                      let (mut dst2, dst_end2) =
+                          Heap::check_bounds(heap, space_reqd, dst, dst_end);
+                      // Copy the tag and the fields.
+                      dst2 = write(dst2, tag);
+                      dst2.copy_from_nonoverlapping(src_after_tag, scalar_bytes1);
+                      dst2 = dst2.add(scalar_bytes1);
+                      stats_bump_mem_copied(1 + scalar_bytes1);
+                                                  
+                      // Add forwarding pointers:
+                      // if there's enough space, write a COPIED_TO tag and
+                      // dst's address at src. Otherwise just write a COPIED tag.
+                      // After the forwarding pointer, burn the rest of
+                      // space previously occupied by scalars.
+      
+                      if scalar_bytes1 >= 8 {
+                          #[cfg(feature = "gcstats")]
+                          eprintln!("   Forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
+                          debug_assert!(dst < dst_end);
+                          write_forwarding_pointer_at(
+                              src,
+                              dst,
+                              dst_end.offset_from(dst) as u16, // .try_into().unwrap()
+                          );
+                          forwarded = true;
+                      }
+                      // NOTE: Comment this case to disable burned tags:
+                      else {
+                          #[cfg(feature = "gcstats")]
+                          eprintln!("   burning non-forwardable data at {:?}, scalar bytes {}", src, scalar_bytes1);
+                          let _ = write(src, C_COPIED_TAG);
+                          // Also burn any scalar bytes that weren't big enough for a pointer:
+                          if scalar_bytes1 >= 1 {
+                             write_bytes(src_after_tag, C_COPIED_TAG, scalar_bytes1 as usize);
+                          }
+                          // todo: Double check the above versus the old version here:
+                          //   if src_mut > burn {
+                          //     let i = src_mut.offset_from(burn);
+                          //     write_bytes(burn, C_COPIED_TAG, i as usize);
+                          //   }                          
+                      }  
+
+                      // TODO(ckoparkar):
+                      // (1) instead of recursion, use a worklist
+                      // (2) handle redirection nodes properly
+                      for ty in field_tys.iter().rev() {                
+                          worklist.push(EvacAction::ProcessTy(*ty));
+                      }
+
+                      src = src_after_tag.add(scalar_bytes1);
+                      dst = dst2;
+                      dst_end = dst_end2;
+                      
+                      // make this reusable somehow (local macro?)
+                      if let Some(next) = worklist.pop() {
+                        next_action = next;          
+                        continue;
+                      } else {
+                          break;
+                      }
+                  }                            
+              }         
+          } // End match
+          }
+          EvacAction::BenvWrite(pointee) => {
+            #[cfg(feature = "gcstats")]
+            eprintln!("   performing benv insert continuation: {:?} to {:?}", pointee, src);
+            st.benv.insert(pointee, src);
+            continue;
+          }
+      }      
+   }; // End while   
+
+   #[cfg(feature = "gcstats")]
+   eprintln!(" Finished evacuate_packed: recording in benv {:?} -> {:?}", orig_src, src);
+   // Provide skip-over information for what we just cleared out.
+   // FIXME: only insert if it is a non-zero location?
+   st.benv.insert(orig_src, src);
+
+   (src, dst, dst_end, forwarded)
 }
 
 fn sort_roots(
@@ -1041,6 +1150,7 @@ fn gensym() -> u64 {
     }
 }
 
+#[inline(always)]
 unsafe fn write_forwarding_pointer_at(
     addr: *mut i8,
     fwd: *mut i8,
@@ -1142,7 +1252,7 @@ pub unsafe fn init_footer_at(
     footer_start
 }
 
-#[inline]
+#[inline(always)]
 #[cold]
 fn cold() {}
 
@@ -1251,7 +1361,7 @@ trait Heap {
 struct Nursery(*mut C_GibNursery);
 
 impl Nursery {
-    #[inline]
+    #[inline(always)]
     fn clear(&mut self) {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
@@ -1274,17 +1384,17 @@ impl fmt::Debug for Nursery {
 }
 
 impl Heap for Nursery {
-    #[inline]
+    #[inline(always)]
     fn is_nursery(&self) -> bool {
         true
     }
 
-    #[inline]
+    #[inline(always)]
     fn is_oldest(&self) -> bool {
         false
     }
 
-    #[inline]
+    #[inline(always)]
     fn space_available(&self) -> usize {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
@@ -1293,7 +1403,7 @@ impl Heap for Nursery {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
         let nursery: *mut C_GibNursery = self.0;
         unsafe {
@@ -1333,12 +1443,12 @@ impl fmt::Debug for Generation {
 }
 
 impl Heap for Generation {
-    #[inline]
+    #[inline(always)]
     fn is_nursery(&self) -> bool {
         false
     }
 
-    #[inline]
+    #[inline(always)]
     fn is_oldest(&self) -> bool {
         false
     }
@@ -1351,7 +1461,7 @@ impl Heap for Generation {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
@@ -1438,22 +1548,22 @@ impl fmt::Debug for OldestGeneration {
 }
 
 impl Heap for OldestGeneration {
-    #[inline]
+    #[inline(always)]
     fn is_nursery(&self) -> bool {
         false
     }
 
-    #[inline]
+    #[inline(always)]
     fn is_oldest(&self) -> bool {
         true
     }
 
-    #[inline]
+    #[inline(always)]
     fn space_available(&self) -> usize {
         0
     }
 
-    #[inline]
+    #[inline(always)]
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
         // let gen: *mut C_GibGeneration = self.0;
         unsafe {
@@ -1600,7 +1710,7 @@ enum _DatatypeInfo {
 /// The global info table.
 static mut _INFO_TABLE: _DatatypeEnv = Vec::new();
 
-#[inline]
+#[inline(always)]
 pub fn info_table_initialize(size: usize) {
     unsafe {
         // If a datatype is not packed, info_table_insert_scalar will
@@ -1609,7 +1719,7 @@ pub fn info_table_initialize(size: usize) {
     }
 }
 
-#[inline]
+#[inline(always)]
 pub fn info_table_insert_packed_dcon(
     datatype: C_GibDatatype,
     datacon: C_GibPackedTag,
@@ -1681,6 +1791,7 @@ pub fn info_table_finalize() {
  */
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_bump_minor_collections() {
     unsafe {
         (*GC_STATS).minor_collections += 1;
@@ -1688,9 +1799,11 @@ fn stats_bump_minor_collections() {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_bump_minor_collections() {}
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_bump_major_collections() {
     unsafe {
         (*GC_STATS).major_collections += 1;
@@ -1698,9 +1811,11 @@ fn stats_bump_major_collections() {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_bump_major_collections() {}
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_bump_oldgen_regions() {
     unsafe {
         (*GC_STATS).oldgen_regions += 1;
@@ -1708,9 +1823,11 @@ fn stats_bump_oldgen_regions() {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_bump_oldgen_regions() {}
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_dec_oldgen_regions() {
     unsafe {
         (*GC_STATS).oldgen_regions -= 1;
@@ -1718,9 +1835,11 @@ fn stats_dec_oldgen_regions() {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_dec_oldgen_regions() {}
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_bump_mem_allocated(size: usize) {
     unsafe {
         (*GC_STATS).mem_allocated += size;
@@ -1728,9 +1847,11 @@ fn stats_bump_mem_allocated(size: usize) {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_bump_mem_allocated(_size: usize) {}
 
 #[cfg(feature = "gcstats")]
+#[inline(always)]
 fn stats_bump_mem_copied(size: usize) {
     unsafe {
         (*GC_STATS).mem_copied += size;
@@ -1738,13 +1859,14 @@ fn stats_bump_mem_copied(size: usize) {
 }
 
 #[cfg(not(feature = "gcstats"))]
+#[inline(always)]
 fn stats_bump_mem_copied(_size: usize) {}
 
 #[cfg(feature = "gcstats")]
 #[macro_export]
 macro_rules! measure {
     ( $x:expr, $addr:expr ) => {{
-        let start = Instant::now();
+        let start = std::time::Instant::now();
         let y = $x;
         let duration = start.elapsed();
         $addr += duration.as_secs_f64();
