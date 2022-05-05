@@ -641,14 +641,14 @@ unsafe fn evacuate_packed(
     let mut next_action = EvacAction::ProcessTy(orig_typ);
     let mut forwarded = false;
 
-    #[cfg(feature = "gcstats")]
+    #[cfg(feature = "verbose_evac")]
     eprintln!("Evac packed {:?} -> {:?}", src, dst);
 
     // Stores everything to process AFTER the next_action.
     let mut worklist: Vec<EvacAction> = Vec::new();
 
     loop {
-        #[cfg(feature = "gcstats")]
+        #[cfg(feature = "verbose_evac")]
         eprintln!("  Loop iteration on src {:?} action {:?}, length after this {}, prefix(5): {:?}",
                 src, next_action, worklist.len(), &worklist[..std::cmp::min(5, worklist.len())]);
 
@@ -667,7 +667,7 @@ unsafe fn evacuate_packed(
             EvacAction::ProcessTy(next_ty) => {
                 let (tag, src_after_tag): (C_GibPackedTag, *mut i8) =
                     read_mut(src);
-                #[cfg(feature = "gcstats")]
+                #[cfg(feature = "verbose_evac")]
                 eprintln!("   Read next tag {} from src {:?}", tag, src);
 
                 let packed_info = INFO_TABLE.get_unchecked(next_ty as usize);
@@ -682,7 +682,7 @@ unsafe fn evacuate_packed(
                         let (tagged_pointee, src_after_indr): (u64, _) =
                             read(src_after_tag);
 
-                        #[cfg(feature = "gcstats")]
+                        #[cfg(feature = "verbose_evac")]
                         eprintln!(
                             "   Indirection! src {:?} dest {:?}, after {:?}",
                             src_after_tag,
@@ -713,7 +713,7 @@ unsafe fn evacuate_packed(
                                     src_after_indr1,
                                 ));
                             } else {
-                                #[cfg(feature = "gcstats")]
+                                #[cfg(feature = "verbose_evac")]
                                 eprintln!("   tail optimization!");
                             }
                             src = pointee;
@@ -722,7 +722,7 @@ unsafe fn evacuate_packed(
                             // from the remembered set.
                             match st.prov {
                                 GcRootProv::RemSet => {
-                                    #[cfg(feature = "gcstats")]
+                                    #[cfg(feature = "verbose_evac")]
                                     eprintln!(
                                         "   pushing BenvWrite action to stack"
                                     );
@@ -791,7 +791,7 @@ unsafe fn evacuate_packed(
                         (*wframe).ptr = dst;
                         (*wframe).endptr = dst_end;
 
-                        #[cfg(feature = "gcstats")]
+                        #[cfg(feature = "verbose_evac")]
                         eprintln!(
                             " Hit cauterize at {:?}, remaining Worklist: {:?}",
                             src, worklist
@@ -812,7 +812,7 @@ unsafe fn evacuate_packed(
                         let dst_after_indr =
                             write(dst_after_tag, tagged_fwd_ptr);
 
-                        #[cfg(feature = "gcstats")]
+                        #[cfg(feature = "verbose_evac")]
                         eprintln!("   Forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged, dst);
                         forwarded = true; // i.e. ALREADY forwarded.
 
@@ -860,7 +860,7 @@ unsafe fn evacuate_packed(
                         } else {
                             // WARNING: allow a corrupt null src return pointer.  Should make it an OPTION.
                             src = *src_after_burned.unwrap_or(&null_mut());
-                            #[cfg(feature = "gcstats")]
+                            #[cfg(feature = "verbose_evac")]
                             eprintln!("   Forwarding pointer was last, don't need skip-over, src = {:?}", src);
                             break;
                         }
@@ -944,7 +944,7 @@ unsafe fn evacuate_packed(
                         } else {
                             // WARNING: allow a corrupt null src return pointer.  Should make it an OPTION.
                             src = *src_after_burned.unwrap_or(&null_mut());
-                            #[cfg(feature = "gcstats")]
+                            #[cfg(feature = "verbose_evac")]
                             eprintln!("   Burned tag was last, don't need skip-over, src = {:?}", src);
                             break;
                         }
@@ -967,7 +967,7 @@ unsafe fn evacuate_packed(
                             TaggedPointer::from_u64(tagged_next_chunk);
                         let next_chunk = tagged.untag();
 
-                        #[cfg(feature = "gcstats")]
+                        #[cfg(feature = "verbose_evac")]
                         eprintln!("   Redirection ptr!: src {:?}, to next chunk {:?}", src, next_chunk);
 
                         // Add a forwarding pointer in the source buffer.
@@ -1049,7 +1049,7 @@ unsafe fn evacuate_packed(
                         let DataconInfo { scalar_bytes, field_tys, .. } =
                             packed_info.get_unchecked(tag as usize);
 
-                        #[cfg(feature = "gcstats")]
+                        #[cfg(feature = "verbose_evac")]
                         eprintln!(
                             "   Regular datacon, field_tys {:?}",
                             field_tys
@@ -1089,7 +1089,7 @@ unsafe fn evacuate_packed(
                             // space previously occupied by scalars.
 
                             if scalar_bytes1 >= 8 {
-                                #[cfg(feature = "gcstats")]
+                                #[cfg(feature = "verbose_evac")]
                                 eprintln!("   Forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
                                 debug_assert!(dst < dst_end);
                                 write_forwarding_pointer_at(
@@ -1101,7 +1101,7 @@ unsafe fn evacuate_packed(
                             }
                             // NOTE: Comment this case to disable burned tags:
                             else {
-                                #[cfg(feature = "gcstats")]
+                                #[cfg(feature = "verbose_evac")]
                                 eprintln!("   burning non-forwardable data at {:?}, scalar bytes {}", src, scalar_bytes1);
                                 let _ = write(src, C_COPIED_TAG);
                                 // Also burn any scalar bytes that weren't big enough for a pointer:
@@ -1142,7 +1142,7 @@ unsafe fn evacuate_packed(
                 } // End match
             }
             EvacAction::BenvWrite(pointee) => {
-                #[cfg(feature = "gcstats")]
+                #[cfg(feature = "verbose_evac")]
                 eprintln!(
                     "   performing benv insert continuation: {:?} to {:?}",
                     pointee, src
@@ -1153,7 +1153,7 @@ unsafe fn evacuate_packed(
         }
     } // End while
 
-    #[cfg(feature = "gcstats")]
+    #[cfg(feature = "verbose_evac")]
     eprintln!(
         " Finished evacuate_packed: recording in benv {:?} -> {:?}",
         orig_src, src

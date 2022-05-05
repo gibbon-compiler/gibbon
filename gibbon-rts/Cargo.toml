@@ -21,3 +21,4 @@ debug = true
 
 [features]
 gcstats = []
+verbose_evac = []
