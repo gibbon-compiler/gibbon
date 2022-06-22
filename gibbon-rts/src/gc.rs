@@ -11,6 +11,7 @@ use libc;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fmt;
+use std::intrinsics::ptr_offset_from;
 use std::mem::size_of;
 use std::ptr::{null_mut, write_bytes};
 
@@ -276,9 +277,9 @@ const COLLECT_MAJOR_K: u8 = 4;
 static mut GC_STATS: *mut C_GibGcStats = null_mut();
 
 pub fn cleanup(
-    rstack_ptr: *mut C_GibShadowstack,
-    wstack_ptr: *mut C_GibShadowstack,
-    nursery_ptr: *mut C_GibNursery,
+    rstack: &mut C_GibShadowstack,
+    wstack: &mut C_GibShadowstack,
+    nursery: &mut C_GibNursery,
     generations_ptr: *mut C_GibGeneration,
 ) -> Result<()> {
     unsafe {
@@ -288,26 +289,20 @@ pub fn cleanup(
     }
     // Free all the regions.
     let mut oldest_gen = OldestGeneration(generations_ptr);
-    let rstack = &Shadowstack(rstack_ptr, GcRootProv::Stk);
-    let wstack = &Shadowstack(wstack_ptr, GcRootProv::Stk);
-    let nursery = &Nursery(nursery_ptr);
     if C_NUM_GENERATIONS == 1 {
         unsafe {
-            if !(*generations_ptr).old_zct.is_null() {
-                for frame in rstack.into_iter().chain(wstack.into_iter()) {
-                    let footer = (*frame).endptr as *const C_GibChunkFooter;
-                    if !nursery.contains_addr((*frame).endptr) {
-                        (*((*generations_ptr).old_zct))
-                            .insert((*footer).reg_info);
-                    }
+            for frame in rstack.into_iter().chain(wstack.into_iter()) {
+                let footer = (*frame).endptr as *const C_GibChunkFooter;
+                if !nursery.contains_addr((*frame).endptr) {
+                    (*((*generations_ptr).old_zct)).insert((*footer).reg_info);
                 }
-                for reg_info in (*((*generations_ptr).old_zct)).drain() {
-                    free_region(
-                        (*reg_info).first_chunk_footer,
-                        (*generations_ptr).new_zct,
-                        true,
-                    )?;
-                }
+            }
+            for reg_info in (*((*generations_ptr).old_zct)).drain() {
+                free_region(
+                    (*reg_info).first_chunk_footer,
+                    (*generations_ptr).new_zct,
+                    true,
+                )?;
             }
         }
     } else {
@@ -319,23 +314,21 @@ pub fn cleanup(
 }
 
 pub fn garbage_collect(
-    rstack_ptr: *mut C_GibShadowstack,
-    wstack_ptr: *mut C_GibShadowstack,
-    nursery_ptr: *mut C_GibNursery,
-    generations_ptr: *mut C_GibGeneration,
+    rstack: &mut C_GibShadowstack,
+    wstack: &mut C_GibShadowstack,
+    nursery: &mut C_GibNursery,
+    generations_ref: &mut C_GibGeneration,
     gc_stats: *mut C_GibGcStats,
     _force_major: bool,
 ) -> Result<()> {
     // println!("gc...");
-    let rstack = Shadowstack(rstack_ptr, GcRootProv::Stk);
-    let wstack = Shadowstack(wstack_ptr, GcRootProv::Stk);
-    let mut nursery = Nursery(nursery_ptr);
     if C_NUM_GENERATIONS == 1 {
-        // Start by cauterizing the writers.
-        let mut cenv = cauterize_writers(&nursery, &wstack)?;
-        // Prepare to evacuate the readers.
-        let mut oldest_gen = OldestGeneration(generations_ptr);
         unsafe {
+            // Start by cauterizing the writers.
+            let mut cenv = cauterize_writers(nursery, wstack)?;
+            // Prepare to evacuate the readers.
+            let mut oldest_gen = OldestGeneration(generations_ref);
+
             // let evac_major = force_major
             //     || (*nursery_ptr).num_collections.rem_euclid(COLLECT_MAJOR_K.into())
             //         == 0;
@@ -353,36 +346,36 @@ pub fn garbage_collect(
             }
 
             // Start collection.
-            let mut rem_set =
-                RememberedSet((*generations_ptr).rem_set, GcRootProv::RemSet);
+            let rem_set: &mut C_GibRememberedSet = (*generations_ref).rem_set;
             // First evacuate the remembered set, then the shadow-stack.
             let mut benv = evacuate_remembered_set(
                 &mut cenv,
-                (*generations_ptr).new_zct,
-                &nursery,
+                (*generations_ref).new_zct,
+                nursery,
                 &mut oldest_gen,
-                &rem_set,
+                rem_set,
                 evac_major,
             )?;
             rem_set.clear();
             evacuate_shadowstack(
                 &mut benv,
                 &mut cenv,
-                (*generations_ptr).new_zct,
-                &nursery,
+                (*generations_ref).new_zct,
+                nursery,
                 &mut oldest_gen,
-                &rstack,
+                rstack,
                 evac_major,
             )?;
             // Collect dead regions.
             oldest_gen.collect_regions()?;
+
+            // Reset the allocation area and record stats.
+            nursery.clear();
+            // Restore the remaining cauterized writers. Allocate space for them
+            // in the nursery, not oldgen.
+            restore_writers(&cenv, nursery)?;
+            Ok(())
         }
-        // Reset the allocation area and record stats.
-        nursery.clear();
-        // Restore the remaining cauterized writers. Allocate space for them
-        // in the nursery, not oldgen.
-        restore_writers(&cenv, &mut nursery)?;
-        Ok(())
     } else {
         todo!("NUM_GENERATIONS > 1")
     }
@@ -391,8 +384,8 @@ pub fn garbage_collect(
 /// Write a C_CAUTERIZED_TAG at all write cursors so that the collector knows
 /// when to stop copying.
 fn cauterize_writers(
-    nursery: &Nursery,
-    wstack: &Shadowstack,
+    nursery: &C_GibNursery,
+    wstack: &C_GibShadowstack,
 ) -> Result<CauterizedEnv> {
     let mut cenv: CauterizedEnv = HashMap::new();
     for frame in wstack.into_iter() {
@@ -417,7 +410,10 @@ fn cauterize_writers(
 }
 
 /// See Note [Restoring uncauterized write cursors].
-fn restore_writers(cenv: &CauterizedEnv, heap: &mut impl Heap) -> Result<()> {
+fn restore_writers(
+    cenv: &CauterizedEnv,
+    heap: &mut C_GibNursery,
+) -> Result<()> {
     for (_wptr, frames) in cenv.iter() {
         /*
         if !(*start_of_chunk) {
@@ -445,16 +441,13 @@ type CauterizedEnv = HashMap<*mut i8, Vec<*mut C_GibShadowstackFrame>>;
 /// See Note [Traversing burned data].
 type BurnedAddressEnv = HashMap<*mut i8, *mut i8>;
 
-/// A set of start addresses of regions allocated in the nursery.
-type ChunkStartsSet = HashSet<*mut i8>;
-
 /// Things needed during evacuation.
 #[derive(Debug)]
 struct EvacState<'a> {
     benv: &'a mut BurnedAddressEnv,
     cenv: &'a mut CauterizedEnv,
     zct: *mut Zct,
-    nursery: &'a Nursery,
+    nursery: &'a C_GibNursery,
     // heap: Box<&'a mut dyn Heap>,
     prov: &'a GcRootProv,
     evac_major: bool,
@@ -466,12 +459,12 @@ struct EvacState<'a> {
 /// the pointers they contain, to avoid the issue of running into holes due to
 /// burning while we're still evacuating the remembered set.
 /// See Note [Granularity of the burned addresses table].
-unsafe fn evacuate_remembered_set(
-    cenv: &mut CauterizedEnv,
+unsafe fn evacuate_remembered_set<'a>(
+    cenv: &'a mut CauterizedEnv,
     zct: *mut Zct,
-    nursery: &Nursery,
+    nursery: &'a C_GibNursery,
     heap: &mut impl Heap,
-    rem_set: &Shadowstack,
+    rem_set: &C_GibRememberedSet,
     evac_major: bool,
 ) -> Result<BurnedAddressEnv> {
     let mut benv: BurnedAddressEnv = HashMap::new();
@@ -511,13 +504,14 @@ unsafe fn evacuate_remembered_set(
 
 /// Copy values at all read cursors from the nursery to the provided
 /// destination heap. Also uncauterize any writer cursors that are reached.
-unsafe fn evacuate_shadowstack(
-    benv: &mut BurnedAddressEnv,
-    cenv: &mut CauterizedEnv,
+unsafe fn evacuate_shadowstack<'a, 'b>(
+    benv: &'a mut BurnedAddressEnv,
+    cenv: &'a mut CauterizedEnv,
     zct: *mut Zct,
-    nursery: &Nursery,
+    // nursery: &'b Nursery<'b, 'c>,
+    nursery: &'b C_GibNursery,
     heap: &mut impl Heap,
-    rstack: &Shadowstack,
+    rstack: &C_GibShadowstack,
     evac_major: bool,
 ) -> Result<()> {
     // let frames = rstack.into_iter();
@@ -1166,7 +1160,7 @@ unsafe fn evacuate_packed(
 }
 
 fn sort_roots(
-    roots: &Shadowstack,
+    roots: &C_GibShadowstack,
 ) -> Box<dyn Iterator<Item = *mut C_GibShadowstackFrame>> {
     // Store all the frames in a vector and sort,
     // see Note [Granularity of the burned addresses table] and
@@ -1451,33 +1445,18 @@ trait Heap {
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-/// A wrapper over the naked C pointer.
-struct Nursery(*mut C_GibNursery);
-
-impl Nursery {
+impl<'a> C_GibNursery {
     #[inline(always)]
     fn clear(&mut self) {
-        let nursery: *mut C_GibNursery = self.0;
-        unsafe {
-            (*nursery).alloc = (*nursery).heap_end;
-        }
+        (*self).alloc = (*self).heap_end;
     }
 
     fn contains_addr(&self, addr: *const i8) -> bool {
-        let nursery: *mut C_GibNursery = self.0;
-        unsafe {
-            (addr >= (*nursery).heap_start) && (addr <= (*nursery).heap_end)
-        }
+        (addr >= (*self).heap_start) && (addr <= (*self).heap_end)
     }
 }
 
-impl fmt::Debug for Nursery {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("{:?}", self.0))
-    }
-}
-
-impl Heap for Nursery {
+impl<'a> Heap for C_GibNursery {
     #[inline(always)]
     fn is_nursery(&self) -> bool {
         true
@@ -1490,26 +1469,26 @@ impl Heap for Nursery {
 
     #[inline(always)]
     fn space_available(&self) -> usize {
-        let nursery: *mut C_GibNursery = self.0;
         unsafe {
-            assert!((*nursery).alloc > (*nursery).heap_start);
-            (*nursery).alloc.offset_from((*nursery).heap_start) as usize
+            assert!((*self).alloc > (*self).heap_start);
+            // alloc - heap_start.
+            ptr_offset_from((*self).alloc, (*self).heap_start) as usize
         }
     }
 
     #[inline(always)]
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
-        let nursery: *mut C_GibNursery = self.0;
+        let nursery: *mut C_GibNursery = self;
         unsafe {
             assert!((*nursery).alloc >= (*nursery).heap_start);
-            let old = (*nursery).alloc as *mut i8;
-            let bump = old.sub(size);
-            let start = (*nursery).heap_start as *mut i8;
+            let old = (*nursery).alloc as *const i8;
+            let bump: *const i8 = old.sub(size);
+            let start = (*nursery).heap_start as *const i8;
             // Check if there's enough space in the nursery to fulfill the
             // request.
             if bump >= start {
                 (*nursery).alloc = bump;
-                Ok((bump, old))
+                Ok((bump as *mut i8, old as *mut i8))
             } else {
                 Err(RtsError::Gc(format!(
                     "nursery alloc: out of space, requested={:?}, \
@@ -1527,16 +1506,16 @@ impl Heap for Nursery {
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-/// A wrapper over the naked C pointer.
-struct Generation(*mut C_GibGeneration);
+/// A wrapper over the raw C pointer.
+struct Generation<'a>(&'a mut C_GibGeneration<'a>);
 
-impl fmt::Debug for Generation {
+impl<'a> fmt::Debug for Generation<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!("{:?}", self.0))
     }
 }
 
-impl Heap for Generation {
+impl<'a> Heap for Generation<'a> {
     #[inline(always)]
     fn is_nursery(&self) -> bool {
         false
@@ -1548,10 +1527,10 @@ impl Heap for Generation {
     }
 
     fn space_available(&self) -> usize {
-        let gen: *mut C_GibGeneration = self.0;
+        let gen: *const C_GibGeneration = self.0;
         unsafe {
             assert!((*gen).alloc > (*gen).heap_start);
-            (*gen).alloc.offset_from((*gen).heap_start) as usize
+            ptr_offset_from((*gen).alloc, (*gen).heap_start) as usize
         }
     }
 
@@ -1560,9 +1539,9 @@ impl Heap for Generation {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
             assert!((*gen).alloc > (*gen).heap_start);
-            let old = (*gen).alloc as *mut i8;
+            let old = (*gen).alloc;
             let bump = old.sub(size);
-            let start = (*gen).heap_start as *mut i8;
+            let start = (*gen).heap_start;
             // Check if there's enough space in the gen to fulfill the request.
             if bump >= start {
                 (*gen).alloc = bump;
@@ -1578,10 +1557,10 @@ impl Heap for Generation {
     }
 }
 
-/// A wrapper over the naked C pointer.
-struct OldestGeneration(*mut C_GibGeneration);
+/// A wrapper over the raw C pointer.
+struct OldestGeneration<'a>(*mut C_GibGeneration<'a>);
 
-impl OldestGeneration {
+impl<'a> OldestGeneration<'a> {
     fn collect_regions(&mut self) -> Result<()> {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
@@ -1609,39 +1588,37 @@ impl OldestGeneration {
     fn init_zcts(&mut self) {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
-            (*gen).old_zct = Box::into_raw(Box::new(HashSet::new()));
-            (*gen).new_zct = Box::into_raw(Box::new(HashSet::new()));
+            (*gen).old_zct = &mut *(Box::into_raw(Box::new(HashSet::new())));
+            (*gen).new_zct = &mut *(Box::into_raw(Box::new(HashSet::new())));
         }
     }
 
     fn free_zcts(&mut self) {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
-            if !(*gen).old_zct.is_null() {
-                // Rust will drop these heap objects at the end of this scope.
-                Box::from_raw((*gen).old_zct);
-                Box::from_raw((*gen).new_zct);
-            }
+            // Rust will drop these heap objects at the end of this scope.
+            Box::from_raw((*gen).old_zct);
+            Box::from_raw((*gen).new_zct);
         }
     }
 
     fn swap_zcts(&mut self) {
         let gen: *mut C_GibGeneration = self.0;
         unsafe {
-            let tmp = (*gen).old_zct;
+            let tmp = &mut (*gen).old_zct;
             (*gen).old_zct = (*gen).new_zct;
-            (*gen).new_zct = tmp;
+            (*gen).new_zct = *tmp;
         }
     }
 }
 
-impl fmt::Debug for OldestGeneration {
+impl<'a> fmt::Debug for OldestGeneration<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!("{:?}", self.0))
     }
 }
 
-impl Heap for OldestGeneration {
+impl<'a> Heap for OldestGeneration<'a> {
     #[inline(always)]
     fn is_nursery(&self) -> bool {
         false
@@ -1699,19 +1676,13 @@ enum GcRootProv {
     RemSet,
 }
 
-/// A wrapper over the naked C pointer.
-#[derive(Debug)]
-struct Shadowstack(*mut C_GibShadowstack, GcRootProv);
-// TODO(ckoparkar): delete the second parameter here.
-
-impl Shadowstack {
+impl<'a> C_GibShadowstack {
     /// Length of the shadow-stack.
     fn length(&self) -> isize {
-        let ss: *mut C_GibShadowstack = self.0;
         unsafe {
             let (start_ptr, end_ptr) = (
-                (*ss).start as *const C_GibShadowstackFrame,
-                (*ss).alloc as *const C_GibShadowstackFrame,
+                ((*self).start as *const i8) as *const C_GibShadowstackFrame,
+                ((*self).alloc as *const i8) as *const C_GibShadowstackFrame,
             );
             assert!(start_ptr <= end_ptr);
             end_ptr.offset_from(start_ptr)
@@ -1728,14 +1699,11 @@ impl Shadowstack {
 
     /// Delete all frames from the shadow-stack.
     fn clear(&mut self) {
-        let ss: *mut C_GibShadowstack = self.0;
-        unsafe {
-            (*ss).alloc = (*ss).start;
-        }
+        (*self).alloc = (*self).start;
     }
 }
 
-impl IntoIterator for &Shadowstack {
+impl<'a> IntoIterator for &C_GibShadowstack {
     type Item = *mut C_GibShadowstackFrame;
     type IntoIter = ShadowstackIter;
 
@@ -1745,18 +1713,15 @@ impl IntoIterator for &Shadowstack {
 }
 
 /// An iterator to traverse the shadow-stack.
-struct ShadowstackIter {
+pub struct ShadowstackIter {
     run_ptr: *const i8,
     end_ptr: *const i8,
 }
 
 impl ShadowstackIter {
-    fn new(stk: &Shadowstack) -> ShadowstackIter {
-        unsafe {
-            let cstk: *mut C_GibShadowstack = stk.0;
-            assert!((*cstk).start <= (*cstk).alloc);
-            ShadowstackIter { run_ptr: (*cstk).start, end_ptr: (*cstk).alloc }
-        }
+    fn new(cstk: &C_GibShadowstack) -> ShadowstackIter {
+        assert!((*cstk).start <= (*cstk).alloc);
+        ShadowstackIter { run_ptr: (*cstk).start, end_ptr: (*cstk).alloc }
     }
 }
 
@@ -1776,9 +1741,6 @@ impl Iterator for ShadowstackIter {
         }
     }
 }
-
-use Shadowstack as RememberedSet;
-// use ShadowstackIter as RememberedSetIter;
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Info table

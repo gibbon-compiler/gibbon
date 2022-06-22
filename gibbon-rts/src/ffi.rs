@@ -57,17 +57,17 @@ pub mod types {
 
     #[repr(C)]
     #[derive(Debug)]
-    pub struct C_GibGeneration {
+    pub struct C_GibGeneration<'a> {
         pub no: u8,
-        pub dest: *mut C_GibGeneration,
+        pub dest: &'a C_GibGeneration<'a>,
         pub oldest: bool,
         pub heap_size: usize,
-        pub heap_start: *const i8,
-        pub heap_end: *const i8,
-        pub alloc: *const i8,
-        pub rem_set: *mut C_GibRememberedSet,
-        pub old_zct: *mut Zct,
-        pub new_zct: *mut Zct,
+        pub heap_start: *mut i8,
+        pub heap_end: *mut i8,
+        pub alloc: *mut i8,
+        pub rem_set: &'a mut C_GibRememberedSet,
+        pub old_zct: &'a mut Zct,
+        pub new_zct: &'a mut Zct,
     }
 
     #[repr(C)]
@@ -92,9 +92,9 @@ pub mod types {
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibShadowstack {
-        pub start: *const i8,
-        pub end: *const i8,
-        pub alloc: *const i8,
+        pub start: *mut i8,
+        pub end: *mut i8,
+        pub alloc: *mut i8,
     }
 
     #[repr(C)]
@@ -201,11 +201,16 @@ pub extern "C" fn gib_garbage_collect(
     gc_stats: *mut C_GibGcStats,
     force_major: bool,
 ) -> i32 {
+    // let Some() = rstack_ptr.as_mut();
+    let rstack: &mut C_GibShadowstack = unsafe { &mut *rstack_ptr };
+    let wstack: &mut C_GibShadowstack = unsafe { &mut *wstack_ptr };
+    let nursery: &mut C_GibNursery = unsafe { &mut *nursery_ptr };
+    let generations: &mut C_GibGeneration = unsafe { &mut *generations_ptr };
     match gc::garbage_collect(
-        rstack_ptr,
-        wstack_ptr,
-        nursery_ptr,
-        generations_ptr,
+        rstack,
+        wstack,
+        nursery,
+        generations,
         gc_stats,
         force_major,
     ) {
@@ -289,7 +294,10 @@ pub extern "C" fn gib_gc_cleanup(
     nursery_ptr: *mut C_GibNursery,
     generations_ptr: *mut C_GibGeneration,
 ) -> i32 {
-    match gc::cleanup(rstack_ptr, wstack_ptr, nursery_ptr, generations_ptr) {
+    let rstack: &mut C_GibShadowstack = unsafe { &mut *rstack_ptr };
+    let wstack: &mut C_GibShadowstack = unsafe { &mut *wstack_ptr };
+    let nursery: &mut C_GibNursery = unsafe { &mut *nursery_ptr };
+    match gc::cleanup(rstack, wstack, nursery, generations_ptr) {
         Ok(()) => 0,
         Err(err) => {
             if cfg!(debug_assertions) {
