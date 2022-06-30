@@ -280,7 +280,7 @@ pub fn cleanup(
     rstack: &mut C_GibShadowstack,
     wstack: &mut C_GibShadowstack,
     nursery: &mut C_GibNursery,
-    generations_ptr: *mut C_GibGeneration,
+    generations_ptr: *mut C_GibOldGeneration,
 ) -> Result<()> {
     unsafe {
         // Free the info table.
@@ -288,28 +288,24 @@ pub fn cleanup(
         _INFO_TABLE.shrink_to_fit();
     }
     // Free all the regions.
-    let mut oldest_gen = OldestGeneration(generations_ptr);
-    if C_NUM_GENERATIONS == 1 {
-        unsafe {
-            for frame in rstack.into_iter().chain(wstack.into_iter()) {
-                let footer = (*frame).endptr as *const C_GibChunkFooter;
-                if !nursery.contains_addr((*frame).endptr) {
-                    (*((*generations_ptr).old_zct)).insert((*footer).reg_info);
-                }
-            }
-            for reg_info in (*((*generations_ptr).old_zct)).drain() {
-                free_region(
-                    (*reg_info).first_chunk_footer,
-                    (*generations_ptr).new_zct,
-                    true,
-                )?;
+    let mut oldgen = OldGeneration(generations_ptr);
+    unsafe {
+        for frame in rstack.into_iter().chain(wstack.into_iter()) {
+            let footer = (*frame).endptr as *const C_GibChunkFooter;
+            if !nursery.contains_addr((*frame).endptr) {
+                (*((*generations_ptr).old_zct)).insert((*footer).reg_info);
             }
         }
-    } else {
-        todo!("NUM_GENERATIONS > 1")
+        for reg_info in (*((*generations_ptr).old_zct)).drain() {
+            free_region(
+                (*reg_info).first_chunk_footer,
+                (*generations_ptr).new_zct,
+                true,
+            )?;
+        }
     }
     // Free ZCTs associated with the oldest generation.
-    oldest_gen.free_zcts();
+    oldgen.free_zcts();
     Ok(())
 }
 
@@ -317,67 +313,63 @@ pub fn garbage_collect(
     rstack: &mut C_GibShadowstack,
     wstack: &mut C_GibShadowstack,
     nursery: &mut C_GibNursery,
-    generations_ref: &mut C_GibGeneration,
+    generations_ref: &mut C_GibOldGeneration,
     gc_stats: *mut C_GibGcStats,
     _force_major: bool,
 ) -> Result<()> {
     // println!("gc...");
-    if C_NUM_GENERATIONS == 1 {
-        unsafe {
-            // Start by cauterizing the writers.
-            let mut cenv = cauterize_writers(nursery, wstack)?;
-            // Prepare to evacuate the readers.
-            let mut oldest_gen = OldestGeneration(generations_ref);
+    unsafe {
+        // Start by cauterizing the writers.
+        let mut cenv = cauterize_writers(nursery, wstack)?;
+        // Prepare to evacuate the readers.
+        let mut oldgen = OldGeneration(generations_ref);
 
-            // let evac_major = force_major
-            //     || (*nursery_ptr).num_collections.rem_euclid(COLLECT_MAJOR_K.into())
-            //         == 0;
-            let evac_major = false;
+        // let evac_major = force_major
+        //     || (*nursery_ptr).num_collections.rem_euclid(COLLECT_MAJOR_K.into())
+        //         == 0;
+        let evac_major = false;
 
-            // Set the global stats object pointer.
-            GC_STATS = gc_stats;
-            // Update stats.
-            #[cfg(feature = "gcstats")]
-            {
-                (*GC_STATS).minor_collections += 1;
-                if evac_major {
-                    (*GC_STATS).major_collections += 1;
-                }
+        // Set the global stats object pointer.
+        GC_STATS = gc_stats;
+        // Update stats.
+        #[cfg(feature = "gcstats")]
+        {
+            (*GC_STATS).minor_collections += 1;
+            if evac_major {
+                (*GC_STATS).major_collections += 1;
             }
-
-            // Start collection.
-            let rem_set: &mut C_GibRememberedSet = (*generations_ref).rem_set;
-            // First evacuate the remembered set, then the shadow-stack.
-            let mut benv = evacuate_remembered_set(
-                &mut cenv,
-                (*generations_ref).new_zct,
-                nursery,
-                &mut oldest_gen,
-                rem_set,
-                evac_major,
-            )?;
-            rem_set.clear();
-            evacuate_shadowstack(
-                &mut benv,
-                &mut cenv,
-                (*generations_ref).new_zct,
-                nursery,
-                &mut oldest_gen,
-                rstack,
-                evac_major,
-            )?;
-            // Collect dead regions.
-            oldest_gen.collect_regions()?;
-
-            // Reset the allocation area and record stats.
-            nursery.clear();
-            // Restore the remaining cauterized writers. Allocate space for them
-            // in the nursery, not oldgen.
-            restore_writers(&cenv, nursery)?;
-            Ok(())
         }
-    } else {
-        todo!("NUM_GENERATIONS > 1")
+
+        // Start collection.
+        let rem_set: &mut C_GibRememberedSet = (*generations_ref).rem_set;
+        // First evacuate the remembered set, then the shadow-stack.
+        let mut benv = evacuate_remembered_set(
+            &mut cenv,
+            (*generations_ref).new_zct,
+            nursery,
+            &mut oldgen,
+            rem_set,
+            evac_major,
+        )?;
+        rem_set.clear();
+        evacuate_shadowstack(
+            &mut benv,
+            &mut cenv,
+            (*generations_ref).new_zct,
+            nursery,
+            &mut oldgen,
+            rstack,
+            evac_major,
+        )?;
+        // Collect dead regions.
+        oldgen.collect_regions()?;
+
+        // Reset the allocation area and record stats.
+        nursery.clear();
+        // Restore the remaining cauterized writers. Allocate space for them
+        // in the nursery, not oldgen.
+        restore_writers(&cenv, nursery)?;
+        Ok(())
     }
 }
 
@@ -1502,67 +1494,16 @@ impl<'a> Heap for C_GibNursery {
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Generation
+ * Old generation
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
 /// A wrapper over the raw C pointer.
-struct Generation<'a>(&'a mut C_GibGeneration<'a>);
+struct OldGeneration<'a>(*mut C_GibOldGeneration<'a>);
 
-impl<'a> fmt::Debug for Generation<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("{:?}", self.0))
-    }
-}
-
-impl<'a> Heap for Generation<'a> {
-    #[inline(always)]
-    fn is_nursery(&self) -> bool {
-        false
-    }
-
-    #[inline(always)]
-    fn is_oldest(&self) -> bool {
-        false
-    }
-
-    fn space_available(&self) -> usize {
-        let gen: *const C_GibGeneration = self.0;
-        unsafe {
-            assert!((*gen).alloc > (*gen).heap_start);
-            ptr_offset_from((*gen).alloc, (*gen).heap_start) as usize
-        }
-    }
-
-    #[inline(always)]
-    fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
-        let gen: *mut C_GibGeneration = self.0;
-        unsafe {
-            assert!((*gen).alloc > (*gen).heap_start);
-            let old = (*gen).alloc;
-            let bump = old.sub(size);
-            let start = (*gen).heap_start;
-            // Check if there's enough space in the gen to fulfill the request.
-            if bump >= start {
-                (*gen).alloc = bump;
-                Ok((bump, old))
-            } else {
-                Err(RtsError::Gc(format!(
-                    "gen alloc: out of space, requested={:?}, available={:?}",
-                    size,
-                    old.offset_from(start)
-                )))
-            }
-        }
-    }
-}
-
-/// A wrapper over the raw C pointer.
-struct OldestGeneration<'a>(*mut C_GibGeneration<'a>);
-
-impl<'a> OldestGeneration<'a> {
+impl<'a> OldGeneration<'a> {
     fn collect_regions(&mut self) -> Result<()> {
-        let gen: *mut C_GibGeneration = self.0;
+        let gen: *mut C_GibOldGeneration = self.0;
         unsafe {
             for reg_info in (*((*gen).old_zct)).drain() {
                 let footer = (*reg_info).first_chunk_footer;
@@ -1586,7 +1527,7 @@ impl<'a> OldestGeneration<'a> {
     }
 
     fn init_zcts(&mut self) {
-        let gen: *mut C_GibGeneration = self.0;
+        let gen: *mut C_GibOldGeneration = self.0;
         unsafe {
             (*gen).old_zct = &mut *(Box::into_raw(Box::new(HashSet::new())));
             (*gen).new_zct = &mut *(Box::into_raw(Box::new(HashSet::new())));
@@ -1594,7 +1535,7 @@ impl<'a> OldestGeneration<'a> {
     }
 
     fn free_zcts(&mut self) {
-        let gen: *mut C_GibGeneration = self.0;
+        let gen: *mut C_GibOldGeneration = self.0;
         unsafe {
             // Rust will drop these heap objects at the end of this scope.
             Box::from_raw((*gen).old_zct);
@@ -1603,7 +1544,7 @@ impl<'a> OldestGeneration<'a> {
     }
 
     fn swap_zcts(&mut self) {
-        let gen: *mut C_GibGeneration = self.0;
+        let gen: *mut C_GibOldGeneration = self.0;
         unsafe {
             let tmp = &mut (*gen).old_zct;
             (*gen).old_zct = (*gen).new_zct;
@@ -1612,13 +1553,13 @@ impl<'a> OldestGeneration<'a> {
     }
 }
 
-impl<'a> fmt::Debug for OldestGeneration<'a> {
+impl<'a> fmt::Debug for OldGeneration<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!("{:?}", self.0))
     }
 }
 
-impl<'a> Heap for OldestGeneration<'a> {
+impl<'a> Heap for OldGeneration<'a> {
     #[inline(always)]
     fn is_nursery(&self) -> bool {
         false
@@ -1636,7 +1577,7 @@ impl<'a> Heap for OldestGeneration<'a> {
 
     #[inline(always)]
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
-        // let gen: *mut C_GibGeneration = self.0;
+        // let gen: *mut C_GibOldGeneration = self.0;
         unsafe {
             let start = libc::malloc(size) as *mut i8;
             if start.is_null() {
@@ -1655,13 +1596,9 @@ impl<'a> Heap for OldestGeneration<'a> {
     }
 }
 
-pub fn init_zcts(generations_ptr: *mut C_GibGeneration) {
-    if C_NUM_GENERATIONS == 1 {
-        let mut oldest_gen = OldestGeneration(generations_ptr);
-        oldest_gen.init_zcts();
-    } else {
-        todo!("NUM_GENERATIONS > 1");
-    }
+pub fn init_zcts(generations_ptr: *mut C_GibOldGeneration) {
+    let mut oldgen = OldGeneration(generations_ptr);
+    oldgen.init_zcts();
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

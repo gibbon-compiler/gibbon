@@ -877,8 +877,6 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 // If a region is over this size, alloc to refcounted heap directly.
 #define NURSERY_REGION_MAX_SIZE (NURSERY_SIZE / 2)
 
-#define NUM_GENERATIONS 1
-
 // TODO(ckopaprkar): The shadow stack doesn't grow and we don't check for
 // overflows at the moment. But this stack probably wouldn't overflow since
 // each stack frame is only 16 bytes.
@@ -911,22 +909,7 @@ typedef struct gib_nursery {
 
 } GibNursery;
 
-typedef struct gib_generation {
-    // Generation number.
-    uint8_t no;
-
-    // Destination generation for live objects.
-    struct gib_generation *dest;
-
-    // Is this the oldest generation?
-    bool oldest;
-
-    // Allocation area; uninitialized in the oldest gen which uses malloc.
-    size_t heap_size;
-    char *heap_start;
-    char *heap_end;
-    char *alloc;
-
+typedef struct gib_old_generation {
     // Remembered set to store old to young pointers.
     GibRememberedSet *rem_set;
 
@@ -935,7 +918,7 @@ typedef struct gib_generation {
     void *old_zct;
     void *new_zct;
 
-} GibGeneration;
+} GibOldGeneration;
 
 typedef struct gib_gc_stats {
     // Number of copying minor collections (maintained by Rust RTS).
@@ -975,12 +958,8 @@ typedef struct gib_gc_stats {
 
 // Array of nurseries, indexed by thread_id.
 GibNursery *gib_global_nurseries = (GibNursery *) NULL;
-
-// Array of all generations.
-GibGeneration *gib_global_generations = (GibGeneration *) NULL;
-// For convenience.
-GibGeneration *gib_global_gen0 = (GibGeneration *) NULL;
-GibGeneration *gib_global_oldest_gen = (GibGeneration *) NULL;
+// Old generation.
+GibOldGeneration *gib_global_oldgen = (GibOldGeneration *) NULL;
 
 // Shadow stacks for readable and writeable locations respectively,
 // indexed by thread_id.
@@ -997,7 +976,7 @@ GibGcStats *gib_global_gc_stats = (GibGcStats *) NULL;
 // shadowstacks since mutators are still sequential.
 // #define DEFAULT_NURSERY gib_global_nurseries
 #define DEFAULT_NURSERY gib_global_nurseries
-#define DEFAULT_GENERATION gib_global_oldest_gen
+#define DEFAULT_GENERATION gib_global_oldgen
 #define GC_STATS gib_global_gc_stats
 
 
@@ -1024,7 +1003,7 @@ void gib_check_rust_struct_sizes(void)
     assert(*stack == sizeof(GibShadowstack));
     assert(*frame == sizeof(GibShadowstackFrame));
     assert(*nursery == sizeof(GibNursery));
-    assert(*generation == sizeof(GibGeneration));
+    assert(*generation == sizeof(GibOldGeneration));
     assert(*reg_info == sizeof(GibRegionInfo));
     assert(*footer == sizeof(GibChunkFooter));
     assert(*gc_stats == sizeof(GibGcStats));
@@ -1102,26 +1081,23 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     GibNursery *nursery = DEFAULT_NURSERY;
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibGeneration *generations = gib_global_generations;
+    GibOldGeneration *oldgen = DEFAULT_GENERATION;
     GibGcStats *gc_stats = GC_STATS;
 
 #ifdef _GIBBON_GCSTATS
     struct timespec begin;
     struct timespec end;
     clock_gettime(CLOCK_MONOTONIC_RAW, &begin);
-    gib_garbage_collect(rstack, wstack, nursery, generations, gc_stats, false);
-    /*
-    int err =
+    int err = gib_garbage_collect(rstack, wstack, nursery, oldgen, gc_stats, false);
     if (err < 0) {
         fprintf(stderr, "Couldn't perform minor collection, errorno=%d.", err);
         exit(1);
     }
-    */
     clock_gettime(CLOCK_MONOTONIC_RAW, &end);
     gc_stats->gc_elapsed_time += gib_difftimespecs(&begin, &end);
     gc_stats->gc_cpu_time += gc_stats->gc_elapsed_time / CLOCKS_PER_SEC;
 #else
-    gib_garbage_collect(rstack, wstack, nursery, generations, gc_stats, false);
+    gib_garbage_collect(rstack, wstack, nursery, oldgen, gc_stats, false);
 #endif
 
     return gib_alloc_region_in_nursery_fast(size, true);
@@ -1236,8 +1212,8 @@ static void gib_storage_initialize(void);
 static void gib_storage_free(void);
 static void gib_nursery_initialize(GibNursery *nursery);
 static void gib_nursery_free(GibNursery *nursery);
-static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no);
-static void gib_generation_free(GibGeneration *gen, uint8_t gen_no);
+static void gib_oldgen_initialize(GibOldGeneration *oldgen);
+static void gib_oldgen_free(GibOldGeneration *oldgen);
 static void gib_shadowstack_initialize(GibShadowstack *stack, size_t stack_size);
 static void gib_shadowstack_free(GibShadowstack *stack);
 static void gib_gc_stats_initialize(GibGcStats *stats);
@@ -1262,20 +1238,9 @@ static void gib_storage_initialize(void)
         gib_nursery_initialize(&(gib_global_nurseries[n]));
     }
 
-    // Initialize generations.
-    int g;
-    gib_global_generations = (GibGeneration *) gib_alloc(NUM_GENERATIONS *
-                                                         sizeof(GibGeneration));
-    for (g = 0; g < NUM_GENERATIONS; g++) {
-        gib_generation_initialize(&(gib_global_generations[g]), g);
-    }
-    gib_global_gen0 = &(gib_global_generations[0]);
-    gib_global_oldest_gen = &(gib_global_generations[NUM_GENERATIONS-1]);
-    // Set up destination pointers in each generation.
-    for (g = 0; g < NUM_GENERATIONS-1; g++) {
-        gib_global_generations[g].dest = &(gib_global_generations[g+1]);
-    }
-    gib_global_oldest_gen->dest = gib_global_oldest_gen;
+    // Initialize old generation.
+    gib_global_oldgen = (GibOldGeneration *) gib_alloc(sizeof(GibOldGeneration));
+    gib_oldgen_initialize(gib_global_oldgen);
 
     // Initialize shadow stacks.
     int ss;
@@ -1308,12 +1273,9 @@ static void gib_storage_free(void)
      }
     free(gib_global_nurseries);
 
-    // Free generations.
-    int g;
-    for (g = 0; g < NUM_GENERATIONS; g++) {
-        gib_generation_free(&(gib_global_generations[g]), g);
-    }
-    free(gib_global_generations);
+    // Free oldgen.
+    gib_oldgen_free(gib_global_oldgen);
+    free(gib_global_oldgen);
 
     // Free shadow-stacks.
     int ss;
@@ -1374,57 +1336,30 @@ STATIC_INLINE bool gib_addr_in_nursery(char *ptr)
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Middle and old generations
+ * Old generation
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-static void gib_generation_initialize(GibGeneration *gen, uint8_t gen_no)
+static void gib_oldgen_initialize(GibOldGeneration *oldgen)
 {
-    gen->no = gen_no;
-    gen->dest = (GibGeneration *) NULL;
-    gen->old_zct = (void *) NULL;
-    gen->new_zct = (void *) NULL;
+    oldgen->old_zct = (void *) NULL;
+    oldgen->new_zct = (void *) NULL;
     // Initialize the remembered set.
-    gen->rem_set = (GibRememberedSet *) gib_alloc(sizeof(GibRememberedSet));
-    if (gen->rem_set == NULL) {
-        fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %zu",
+    oldgen->rem_set = (GibRememberedSet *) gib_alloc(sizeof(GibRememberedSet));
+    if (oldgen->rem_set == NULL) {
+        fprintf(stderr, "gib_oldgen_initialize: gib_alloc failed: %zu",
                 sizeof(GibRememberedSet));
         exit(1);
     }
-    gib_shadowstack_initialize(gen->rem_set, REMEMBERED_SET_SIZE);
-    // Initialize the heap if this is not the oldest generation.
-    if (gen_no == (NUM_GENERATIONS - 1)) {
-        gen->oldest = true;
-        gen->heap_size = 0;
-        gen->heap_start = (char *) NULL;
-        gen->heap_end = (char *) NULL;
-        gen->alloc = (char *) NULL;
-    } else {
-        gen->oldest = false;
-        gen->heap_size = ((gen_no+1) * 256 * MB);
-        gen->heap_start = (char *) gib_alloc(gen->heap_size);
-        if (gen->heap_start == NULL) {
-            fprintf(stderr, "gib_generation_initialize: gib_alloc failed: %zu",
-                    gen->heap_size);
-        }
-        gen->heap_end = gen->heap_start + gen->heap_size;
-        gen->alloc = gen->heap_start;
-#ifdef _GIBBON_GCSTATS
-    GC_STATS->mem_allocated += gen->heap_size;
-#endif
-    }
+    gib_shadowstack_initialize(oldgen->rem_set, REMEMBERED_SET_SIZE);
 
     return;
 }
 
-static void gib_generation_free(GibGeneration *gen, uint8_t gen_no)
+static void gib_oldgen_free(GibOldGeneration *oldgen)
 {
-    gib_shadowstack_free(gen->rem_set);
-    free(gen->rem_set);
-    // Initialize the heap if this is not the oldest generation.
-    if (gen_no != (NUM_GENERATIONS - 1)) {
-        free(gen->heap_start);
-    }
+    gib_shadowstack_free(oldgen->rem_set);
+    free(oldgen->rem_set);
     return;
 }
 
@@ -1566,11 +1501,11 @@ void gib_indirection_barrier(
     if (from_old) {
         if (to_young) {
             // (3) oldgen -> nursery
-            GibGeneration *gen = DEFAULT_GENERATION;
+            GibOldGeneration *oldgen = DEFAULT_GENERATION;
             // Store the address of the indirection pointer, *NOT* the address of
             // the indirection tag, in the remembered set.
             char *indr_addr = (char *) from + sizeof(GibPackedTag);
-            gib_remset_push(gen->rem_set, indr_addr, from_footer_ptr, datatype);
+            gib_remset_push(oldgen->rem_set, indr_addr, from_footer_ptr, datatype);
             return;
         } else {
             // (4) oldgen -> oldgen
@@ -1593,7 +1528,6 @@ typedef struct gib_gc_state_snapshot {
     char *nursery_heap;
 
     // generations
-    char *gen_alloc;
     char *gen_rem_set_alloc;
     void *gen_old_zct;
     void *gen_new_zct;
@@ -1638,25 +1572,19 @@ GibGcStateSnapshot *gib_gc_init_state(uint64_t num_regions)
 
 void gib_gc_save_state(GibGcStateSnapshot *snapshot, uint64_t num_regions, ...)
 {
-    if (NUM_GENERATIONS != 1) {
-        fprintf(stderr, "gib_gc_save_state: NUM_GENERATIONS != 1");
-        exit(1);
-    }
-
     GibNursery *nursery = DEFAULT_NURSERY;
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibGeneration *oldest_gen = gib_global_generations;
+    GibOldGeneration *oldgen = DEFAULT_GENERATION;
 
     // nursery
     snapshot->nursery_alloc = nursery->alloc;
     memcpy(snapshot->nursery_heap, nursery->heap_start, NURSERY_SIZE);
 
-    // generations
-    snapshot->gen_alloc = oldest_gen->alloc;
-    snapshot->gen_rem_set_alloc = (oldest_gen->rem_set)->alloc;
-    snapshot->gen_old_zct = gib_clone_zct(oldest_gen->old_zct);
-    snapshot->gen_new_zct = gib_clone_zct(oldest_gen->new_zct);
+    // old generation
+    snapshot->gen_rem_set_alloc = (oldgen->rem_set)->alloc;
+    snapshot->gen_old_zct = gib_clone_zct(oldgen->old_zct);
+    snapshot->gen_new_zct = gib_clone_zct(oldgen->new_zct);
 
     // shadow-stacks
     snapshot->ss_read_alloc = rstack->alloc;
@@ -1694,11 +1622,6 @@ void gib_gc_save_state(GibGcStateSnapshot *snapshot, uint64_t num_regions, ...)
 
 void gib_gc_restore_state(GibGcStateSnapshot *snapshot)
 {
-    if (NUM_GENERATIONS != 1) {
-        fprintf(stderr, "gib_gc_restore_state: NUM_GENERATIONS != 1");
-        exit(1);
-    }
-
     if (snapshot == NULL) {
         fprintf(stderr, "gib_gc_restore_state: NULL snapshot");
         exit(1);
@@ -1707,19 +1630,18 @@ void gib_gc_restore_state(GibGcStateSnapshot *snapshot)
     GibNursery *nursery = DEFAULT_NURSERY;
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibGeneration *oldest_gen = gib_global_generations;
+    GibOldGeneration *oldgen = DEFAULT_GENERATION;
 
     // nursery
     nursery->alloc = snapshot->nursery_alloc;
     memcpy(nursery->heap_start, snapshot->nursery_heap, NURSERY_SIZE);
 
-    // generations
-    oldest_gen->alloc = snapshot->gen_alloc;
-    (oldest_gen->rem_set)->alloc = snapshot->gen_rem_set_alloc;
-    gib_free_zct(oldest_gen->old_zct);
-    gib_free_zct(oldest_gen->new_zct);
-    oldest_gen->old_zct = snapshot->gen_old_zct;
-    oldest_gen->new_zct = snapshot->gen_new_zct;
+    // oldgen
+    (oldgen->rem_set)->alloc = snapshot->gen_rem_set_alloc;
+    gib_free_zct(oldgen->old_zct);
+    gib_free_zct(oldgen->new_zct);
+    oldgen->old_zct = snapshot->gen_old_zct;
+    oldgen->new_zct = snapshot->gen_new_zct;
 
     // shadow-stacks
     rstack->alloc = snapshot->ss_read_alloc;
@@ -1943,15 +1865,15 @@ int main(int argc, char **argv)
     GibNursery *nursery = DEFAULT_NURSERY;
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibGeneration *generations = gib_global_generations;
-    gib_init_zcts(generations);
+    GibOldGeneration *oldgen = DEFAULT_GENERATION;
+    gib_init_zcts(oldgen);
 
     // Run the program.
     gib_main_expr();
 
     // Free all objects initialized by the Rust RTS.
     free(gib_global_bench_prog_param);
-    // gib_gc_cleanup(rstack, wstack, nursery, generations);
+    // gib_gc_cleanup(rstack, wstack, nursery, oldgen);
 
 #ifdef _GIBBON_GCSTATS
     // Print GC statistics.

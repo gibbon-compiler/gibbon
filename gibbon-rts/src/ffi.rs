@@ -32,7 +32,6 @@ pub mod types {
 
     pub const C_REDIRECTION_TAG: C_GibPackedTag = 255;
     pub const C_INDIRECTION_TAG: C_GibPackedTag = 254;
-    pub const C_NUM_GENERATIONS: u8 = 1;
 
     // Tags reserved for the garbage collector.
     pub const C_CAUTERIZED_TAG: C_GibPackedTag = 253;
@@ -57,14 +56,7 @@ pub mod types {
 
     #[repr(C)]
     #[derive(Debug)]
-    pub struct C_GibGeneration<'a> {
-        pub no: u8,
-        pub dest: &'a C_GibGeneration<'a>,
-        pub oldest: bool,
-        pub heap_size: usize,
-        pub heap_start: *mut i8,
-        pub heap_end: *mut i8,
-        pub alloc: *mut i8,
+    pub struct C_GibOldGeneration<'a> {
         pub rem_set: &'a mut C_GibRememberedSet,
         pub old_zct: &'a mut Zct,
         pub new_zct: &'a mut Zct,
@@ -197,7 +189,7 @@ pub extern "C" fn gib_garbage_collect(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
-    generations_ptr: *mut C_GibGeneration,
+    generations_ptr: *mut C_GibOldGeneration,
     gc_stats: *mut C_GibGcStats,
     force_major: bool,
 ) -> i32 {
@@ -205,7 +197,8 @@ pub extern "C" fn gib_garbage_collect(
     let rstack: &mut C_GibShadowstack = unsafe { &mut *rstack_ptr };
     let wstack: &mut C_GibShadowstack = unsafe { &mut *wstack_ptr };
     let nursery: &mut C_GibNursery = unsafe { &mut *nursery_ptr };
-    let generations: &mut C_GibGeneration = unsafe { &mut *generations_ptr };
+    let generations: &mut C_GibOldGeneration =
+        unsafe { &mut *generations_ptr };
     match gc::garbage_collect(
         rstack,
         wstack,
@@ -245,20 +238,16 @@ pub extern "C" fn gib_init_footer_at(
 }
 
 #[no_mangle]
-pub extern "C" fn gib_init_zcts(generations_ptr: *mut C_GibGeneration) {
+pub extern "C" fn gib_init_zcts(generations_ptr: *mut C_GibOldGeneration) {
     gc::init_zcts(generations_ptr);
 }
 
 #[no_mangle]
 pub extern "C" fn gib_insert_into_new_zct(
-    generations_ptr: *mut C_GibGeneration,
+    generations_ptr: *mut C_GibOldGeneration,
     reg_info: *const C_GibRegionInfo,
 ) {
-    if C_NUM_GENERATIONS == 1 {
-        unsafe { (*((*generations_ptr).new_zct)).insert(reg_info) };
-    } else {
-        todo!("NUM_GENERATIONS > 1");
-    }
+    unsafe { (*((*generations_ptr).new_zct)).insert(reg_info) };
 }
 
 #[no_mangle]
@@ -292,7 +281,7 @@ pub extern "C" fn gib_gc_cleanup(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
-    generations_ptr: *mut C_GibGeneration,
+    generations_ptr: *mut C_GibOldGeneration,
 ) -> i32 {
     let rstack: &mut C_GibShadowstack = unsafe { &mut *rstack_ptr };
     let wstack: &mut C_GibShadowstack = unsafe { &mut *wstack_ptr };
@@ -322,7 +311,7 @@ pub extern "C" fn gib_get_rust_struct_sizes(
         *stack = size_of::<C_GibShadowstack>();
         *frame = size_of::<C_GibShadowstackFrame>();
         *nursery = size_of::<C_GibNursery>();
-        *generation = size_of::<C_GibGeneration>();
+        *generation = size_of::<C_GibOldGeneration>();
         *reg_info = size_of::<C_GibRegionInfo>();
         *footer = size_of::<C_GibChunkFooter>();
         *gc_stats = size_of::<C_GibGcStats>();

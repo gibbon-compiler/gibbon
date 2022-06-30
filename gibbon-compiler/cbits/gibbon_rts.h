@@ -355,7 +355,7 @@ typedef GibShadowstack GibRememberedSet;
 
 // Abstract definitions are sufficient.
 typedef struct gib_nursery GibNursery;
-typedef struct gib_generation GibGeneration;
+typedef struct gib_old_generation GibOldGeneration;
 typedef struct gib_region_info GibRegionInfo;
 typedef struct gib_gc_stats GibGcStats;
 
@@ -368,6 +368,7 @@ extern GibNursery *gib_global_nurseries;
 // TODO(ckoparkar): not clear how shadow stacks would be when we have
 // parallel mutators.. These arrays are abstract enough for now.
 extern GibShadowstack *gib_global_read_shadowstacks;
+
 extern GibShadowstack *gib_global_write_shadowstacks;
 
 // Convenience macros since we don't really need the arrays of nurseries and
@@ -474,13 +475,13 @@ INLINE_HEADER void gib_shadowstack_print_all(GibShadowstack *stack)
 #define gib_remset_push(stack, ptr, endptr, datatype)           \
     gib_shadowstack_push(stack, ptr, (char *) endptr, datatype)
 
-#define gib_remset_pop(stack)                   \
+#define gib_remset_pop(stack) \
     gib_shadowstack_pop(stack)
 
-#define gib_remset_length(stack)                \
+#define gib_remset_length(stack) \
     gib_shadowstack_length(stack)
 
-#define gib_remset_print_all(stack)             \
+#define gib_remset_print_all(stack) \
     gib_shadowstack_print_all(stack)
 
 INLINE_HEADER void gib_remset_reset(GibRememberedSet *set)
@@ -541,7 +542,7 @@ int gib_garbage_collect(
     GibShadowstack *rstack,
     GibShadowstack *wstack,
     GibNursery *nursery,
-    GibGeneration *generations,
+    GibOldGeneration *generation,
     GibGcStats *stats,
     bool force_major
 );
@@ -554,9 +555,9 @@ char *gib_init_footer_at(
     size_t chunk_size,
     uint16_t refcount
 );
-void gib_init_zcts(GibGeneration *generations);
+void gib_init_zcts(GibOldGeneration *generation);
 void gib_insert_into_new_zct(
-    GibGeneration *generations,
+    GibOldGeneration *generation,
     GibRegionInfo *reg_info
 );
 void *gib_clone_zct(void *zct);
@@ -567,7 +568,7 @@ int gib_gc_cleanup(
     GibShadowstack *rstack,
     GibShadowstack *wstack,
     GibNursery *nursery,
-    GibGeneration *generations
+    GibOldGeneration *generation
 );
 void gib_get_rust_struct_sizes(
     size_t *stack,
