@@ -3,82 +3,6 @@ module Main where
 data PageList = Nil | Cons (Content) (PageList) | Snoc (PageList) (Content) deriving (Show)
 data String   = End | C Int (String)
 data Content  = Image String | Text String
-data Ascii    = Ascii Int
-
-countPages :: PageList -> Int
-countPages pageList = case pageList of 
-                            Nil                    -> 0
-                            Cons content nextPage  -> 1 + countPages nextPage
-                            Snoc nextPage content  -> 1 + countPages nextPage
-
-countPagesTR :: PageList -> Int -> Int
-countPagesTR pageList accumulator = case pageList of 
-                                         Nil -> accumulator
-                                         Cons content nextPage -> countPagesTR nextPage (1+accumulator)
-                                         Snoc nextPage content -> countPagesTR nextPage (1+accumulator)                            
-                            
-mkContent :: Int -> Content
-mkContent n = if (mod n 2 == 0)
-                 then Image (mkString 1)
-                 else Text  (mkString 1)
-
--- make String type of a random length
--- set max value to 128, using mod function to emulate ascii table                            
-mkString :: Int -> String
-mkString len = if len <= 0
-                    then End
-                    else 
-                        let randomChar = mod rand 128
-                            rst = mkString (len - 1)
-                        in C randomChar rst
-
--- make a Cons style page list with random text
-mkConsRandomTextPageList :: Int -> PageList
-mkConsRandomTextPageList len = if len <= 0
-                                    then Nil 
-                                    else
-                                        let text    = mkString 100
-                                            content = Text text
-                                            rst     = mkConsRandomTextPageList (len-1)
-                                        in Cons content rst
-
--- make a Snoc style page list with random text
-mkSnocRandomTextPageList :: Int -> PageList
-mkSnocRandomTextPageList len = if len <= 0
-                                    then Nil 
-                                    else
-                                        let rst     = mkSnocRandomTextPageList (len-1)
-                                            text    = mkString 100
-                                            content = Text text
-                                        in Snoc rst content     
-
--- make a Cons style page list with 
-mkConsList :: Int -> PageList
-mkConsList numPages = if numPages <= 0 
-                         then Nil
-                         else 
-                            let content = mkContent numPages 
-                                rst     = (mkConsList (numPages - 1))                                
-                            in Cons content rst
-
--- make a Snoc style page list with a 
-mkSnocList :: Int -> PageList
-mkSnocList numPages = if numPages <= 0 
-                         then Nil
-                         else 
-                            let rst = (mkSnocList (numPages-1))
-                                content = mkContent numPages
-                            in Snoc rst content
-
-takeAsciiInverseString :: String -> String
-takeAsciiInverseString string = case string of 
-    End -> End
-    C val rst -> C (127 - val) (takeAsciiInverseString rst)
-
-takeAsciiInverseContent :: Content -> Content
-takeAsciiInverseContent content = case content of 
-    Image x -> Image (takeAsciiInverseString x) 
-    Text  y -> Text  (takeAsciiInverseString y)
 
 asciiInvertPageList :: PageList -> PageList
 asciiInvertPageList list = case list of 
@@ -88,35 +12,67 @@ asciiInvertPageList list = case list of
             newRst  = asciiInvertPageList rst 
         in Cons newCont newRst
     Snoc rst a ->
-        let newCont = takeAsciiInverseContent a
-            newRst  = asciiInvertPageList rst
+        let newRst  = asciiInvertPageList rst
+            newCont = takeAsciiInverseContent a            
         in Snoc newRst newCont
-                            
-printContent :: Content -> ()
-printContent content = 
-    case content of 
-        Text n -> 
-            let _ = printsym (quote "Text ")
-                _ = printString n
-            in ()
-        Image n ->
-            let _ = printsym (quote "Image ")
-                _ = printString n
-            in ()
-                            
-printString :: String -> ()
-printString string = 
-    case string of 
-        End -> 
-            let _ = printsym (quote "End")
-            in ()
-        C val rst -> 
-            let _ = printsym (quote "(C ")
-                _ = printAscii val
-                _ = printsym (quote "SPACE")
-                _ = printString rst
-                _ = printsym (quote ")")
-            in ()
+
+takeAsciiInverseContent :: Content -> Content
+takeAsciiInverseContent content = case content of 
+    Image x -> Image (takeAsciiInverseString x) 
+    Text  y -> Text  (takeAsciiInverseString y)
+
+takeAsciiInverseString :: String -> String
+takeAsciiInverseString string = case string of 
+    End -> End
+    C val rst -> let newVal = 0
+                     --addVal = newVal + 10
+                     --mulVal = addVal * 10
+                     --divVal = mulVal / 5
+                     --modVal = mod divVal 128
+                 in C newVal (takeAsciiInverseString rst)
+                 
+                 
+-- make String type of a random length
+-- set max value to 128, using mod function to emulate ascii table                            
+mkString :: Int -> String
+mkString len = if len <= 0
+                    then End
+                    else 
+                        let randomChar = mod 1234 128
+                            rst = mkString (len - 1)
+                        in C randomChar rst
+
+-- make a Snoc style page list with random text
+mkSnocRandomTextPageList :: Int -> Int -> PageList
+mkSnocRandomTextPageList len strSize = if len <= 0
+                                          then Nil 
+                                          else
+                                            let rst     = mkSnocRandomTextPageList (len-1) strSize
+                                                text    = mkString strSize
+                                                content = Text text
+                                            in Snoc rst content   
+
+-- make a Cons style page list with random text
+mkConsRandomTextPageList :: Int -> Int -> PageList
+mkConsRandomTextPageList len strSize = if len <= 0
+                                         then Nil 
+                                         else
+                                           let text    = mkString strSize
+                                               content = Text text
+                                               rst     = mkConsRandomTextPageList (len-1) strSize
+                                           in Cons content rst
+
+
+
+loop :: (PageList -> PageList) -> PageList -> Int -> PageList
+loop function list iters = if iters <= 0 
+                                then list
+                                else
+                                    let newList = function list 
+                                    in loop function list (iters - 1)
+                                    
+
+-----------Print utilities, print ascii, print string, print content, print pagelist -----------------------------------
 
 printAscii :: Int -> ()
 printAscii decimal =  
@@ -503,10 +459,37 @@ printAscii decimal =
             in ()
         else
             let _ = printsym (quote "DEL")
-            in ()            
+            in ()
 
-printSyms :: PageList -> ()
-printSyms lst =
+printString :: String -> ()
+printString string = 
+    case string of 
+        End -> 
+            let _ = printsym (quote "End")
+            in ()
+        C val rst -> 
+            let _ = printsym (quote "(C ")
+                _ = printAscii val
+                _ = printsym (quote "SPACE")
+                _ = printString rst
+                _ = printsym (quote ")")
+            in ()
+
+printContent :: Content -> ()
+printContent content = 
+    case content of 
+        Text n -> 
+            let _ = printsym (quote "Text ")
+                _ = printString n
+            in ()
+        Image n ->
+            let _ = printsym (quote "Image ")
+                _ = printString n
+            in ()
+            
+
+printPageList :: PageList -> ()
+printPageList lst =
   case lst of
     Nil -> 
         let _ = printsym (quote "Nil")
@@ -516,39 +499,35 @@ printSyms lst =
       let _ = printsym (quote "(Cons ")
           _ = printContent a
           _ = printsym (quote "SPACE")
-          _ = printSyms rst
+          _ = printPageList rst
           _ = printsym (quote ")")
           _ = printsym (quote "SPACE")
       in ()
     Snoc rst a -> 
         let _ = printsym (quote "(Snoc ")
-            _ = printSyms rst
+            _ = printPageList rst
             _ = printContent a
             _ = printsym (quote "SPACE")
             _ = printsym (quote ")")
             _ = printsym (quote "SPACE")
         in ()
-                           
-gibbon_main = 
-    let list1 = mkConsList 1000
-        list2 = mkSnocList 1000
-        --_     = printSyms list1
-        --_     = printsym (quote "NEWLINE")
-        --_     = printSyms list2
-        --_     = printsym (quote "NEWLINE")
-        count1 = timeit (countPagesTR list1 0)
-        count2 = timeit (countPagesTR list2 0)
-        list3  = mkConsRandomTextPageList 100 
-        list4  = mkSnocRandomTextPageList 100
-        _      = printSyms list3
-        _      = printsym (quote "NEWLINE")
-        _      = printSyms list4
-        _      = printsym (quote "NEWLINE")
-        list5  = timeit (asciiInvertPageList list3)
-        list6  = timeit (asciiInvertPageList list4)
-        --_      = printSyms list5
-        --_      = printsym (quote "NEWLINE")
-        --_      = printSyms list6
-        --_      = printsym (quote "NEWLINE")
 
+-------------------------------- Print functions end here -----------------------------------
+
+
+
+gibbon_main = 
+    let cons_list     = (mkConsRandomTextPageList 30000 500)
+        --_             = printPageList cons_list
+        --_             = printsym (quote "SPACE")
+        snoc_list     = (mkSnocRandomTextPageList 30000 500)
+        --_             = printPageList snoc_list
+        --_             = printsym (quote "SPACE")
+        cons_new_list = iterate (asciiInvertPageList cons_list)
+        --_             = printPageList cons_new_list
+        --_             = printsym (quote "SPACE")
+        snoc_new_list = iterate (asciiInvertPageList snoc_list)
+        --_             = printPageList snoc_new_list
+        --_             = printsym (quote "SPACE")
+        
     in ()

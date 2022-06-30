@@ -1,125 +1,114 @@
 module Main where
 
-data PageList = Nil | Cons (Content) (PageList) | Snoc (PageList) (Content) deriving (Show)
 data String   = End | C Int (String)
-data Content  = Image String | Text String
-data Ascii    = Ascii Int
+data Content  = Text String | Image String
+data Tags     = Nul | Tag Int (Tags)
+data PageList = Nil | Cons (Tags) (Content) (PageList) | Snoc (PageList) (Content) (Tags)
+              | Cons2 Tags PageList Content
+              | Snoc2 PageList Tags Content
+  deriving (Show)
 
-countPages :: PageList -> Int
-countPages pageList = case pageList of 
-                            Nil                    -> 0
-                            Cons content nextPage  -> 1 + countPages nextPage
-                            Snoc nextPage content  -> 1 + countPages nextPage
+-- Snoc2 (Snoc2 Nil (Tag 2 (Tag 3 Nul)) (Image string2)) (Tag 1 (Tag 2 Nul)) (Image string1)
 
-countPagesTR :: PageList -> Int -> Int
-countPagesTR pageList accumulator = case pageList of 
-                                         Nil -> accumulator
-                                         Cons content nextPage -> countPagesTR nextPage (1+accumulator)
-                                         Snoc nextPage content -> countPagesTR nextPage (1+accumulator)                            
-                            
-mkContent :: Int -> Content
-mkContent n = if (mod n 2 == 0)
-                 then Image (mkString 1)
-                 else Text  (mkString 1)
+searchPageList :: PageList -> Tags -> PageList
+searchPageList inList tag = case inList of
+                                         Nil -> Nil
+                                         Cons tags content rst -> let present = searchTags tag tags
+                                                                      newRst  = searchPageList rst tag
+                                                                  in if (present) then Cons tags content newRst else newRst
+                                         Cons2 tags rst content -> let present = searchTags tag tags
+                                                                       newRst  = searchPageList rst tag
+                                                                   in if (present) then Cons2 tags newRst content else newRst
+                                         Snoc rst content tags -> let newRst  = searchPageList rst tag
+                                                                      present = searchTags tag tags
+                                                                  in if (present) then Snoc newRst content tags else newRst
+                                         Snoc2 rst tags content -> let newRst  = searchPageList rst tag
+                                                                       present = searchTags tag tags
+                                                                   in if (present) then Snoc2 newRst tags content else newRst
+
+searchTags :: Tags -> Tags -> Bool
+searchTags inTags outTags = case inTags of
+                                 Nul -> case outTags of
+                                             Nul -> True
+                                             Tag val rst -> False
+                                 Tag val rst -> case outTags of
+                                                     Nul -> False
+                                                     Tag val' rst' -> (searchTag inTags outTags) && (searchTags rst outTags)
+
+searchTag :: Tags -> Tags -> Bool
+searchTag tag tagList = case tag of
+                              Nul -> case tagList of
+                                          Nul         -> True
+                                          Tag val rst -> False
+                              Tag val rst -> case tagList of
+                                                  Nul  -> False
+                                                  Tag val' rst' -> if (val == val') then True else (False || searchTag tag rst')
+
 
 -- make String type of a random length
--- set max value to 128, using mod function to emulate ascii table                            
+-- set max value to 128, using mod function to emulate ascii table
 mkString :: Int -> String
 mkString len = if len <= 0
                     then End
-                    else 
+                    else
                         let randomChar = mod rand 128
                             rst = mkString (len - 1)
                         in C randomChar rst
 
--- make a Cons style page list with random text
-mkConsRandomTextPageList :: Int -> PageList
-mkConsRandomTextPageList len = if len <= 0
-                                    then Nil 
-                                    else
-                                        let text    = mkString 100
-                                            content = Text text
-                                            rst     = mkConsRandomTextPageList (len-1)
-                                        in Cons content rst
 
--- make a Snoc style page list with random text
-mkSnocRandomTextPageList :: Int -> PageList
-mkSnocRandomTextPageList len = if len <= 0
-                                    then Nil 
-                                    else
-                                        let rst     = mkSnocRandomTextPageList (len-1)
-                                            text    = mkString 100
-                                            content = Text text
-                                        in Snoc rst content     
+mkConsList :: Int -> Int -> Int -> PageList
+mkConsList len tagLen strLen = if (len <= 0)
+                                  then Nil
+                                  else let
+                                           tags    = mkRandomTags tagLen
+                                           text = mkString strLen
+                                           content = Text text
+                                           rst     = mkConsList (len - 1) tagLen strLen
+                                       in Cons tags content rst
 
--- make a Cons style page list with 
-mkConsList :: Int -> PageList
-mkConsList numPages = if numPages <= 0 
-                         then Nil
-                         else 
-                            let content = mkContent numPages 
-                                rst     = (mkConsList (numPages - 1))                                
-                            in Cons content rst
+mkCons2List :: Int -> Int -> Int -> PageList
+mkCons2List len tagLen strLen = if (len <= 0)
+                                  then Nil
+                                  else let
+                                           tags    = mkRandomTags tagLen
+                                           rst     = mkConsList (len - 1) tagLen strLen
+                                           text = mkString strLen
+                                           content = Text text
+                                       in Cons2 tags rst content
 
--- make a Snoc style page list with a 
-mkSnocList :: Int -> PageList
-mkSnocList numPages = if numPages <= 0 
-                         then Nil
-                         else 
-                            let rst = (mkSnocList (numPages-1))
-                                content = mkContent numPages
-                            in Snoc rst content
+mkSnocList :: Int -> Int -> Int -> PageList
+mkSnocList len tagLen strLen = if (len <= 0)
+                                  then Nil
+                                  else let
+                                           rst = mkSnocList (len - 1) tagLen strLen
+                                           text    = mkString strLen
+                                           content = Text text
+                                           tags    = mkRandomTags tagLen
+                                       in Snoc rst content tags
 
-takeAsciiInverseString :: String -> String
-takeAsciiInverseString string = case string of 
-    End -> End
-    C val rst -> C (127 - val) (takeAsciiInverseString rst)
+mkSnoc2List :: Int -> Int -> Int -> PageList
+mkSnoc2List len tagLen strLen = if (len <= 0)
+                                  then Nil
+                                  else let
+                                           rst = mkSnocList (len - 1) tagLen strLen
+                                           text    = mkString strLen
+                                           tags    = mkRandomTags tagLen
+                                           content = Text text
+                                       in Snoc2 rst tags content
 
-takeAsciiInverseContent :: Content -> Content
-takeAsciiInverseContent content = case content of 
-    Image x -> Image (takeAsciiInverseString x) 
-    Text  y -> Text  (takeAsciiInverseString y)
 
-asciiInvertPageList :: PageList -> PageList
-asciiInvertPageList list = case list of 
-    Nil -> Nil
-    Cons a rst -> 
-        let newCont = takeAsciiInverseContent a
-            newRst  = asciiInvertPageList rst 
-        in Cons newCont newRst
-    Snoc rst a ->
-        let newCont = takeAsciiInverseContent a
-            newRst  = asciiInvertPageList rst
-        in Snoc newRst newCont
-                            
-printContent :: Content -> ()
-printContent content = 
-    case content of 
-        Text n -> 
-            let _ = printsym (quote "Text ")
-                _ = printString n
-            in ()
-        Image n ->
-            let _ = printsym (quote "Image ")
-                _ = printString n
-            in ()
-                            
-printString :: String -> ()
-printString string = 
-    case string of 
-        End -> 
-            let _ = printsym (quote "End")
-            in ()
-        C val rst -> 
-            let _ = printsym (quote "(C ")
-                _ = printAscii val
-                _ = printsym (quote "SPACE")
-                _ = printString rst
-                _ = printsym (quote ")")
-            in ()
+mkRandomTags :: Int -> Tags
+mkRandomTags len = if (len <= 0)
+                      then Nul
+                      else let
+                               val = 10
+                               rst = mkRandomTags (len - 1)
+                           in Tag val rst
+
+-----------Print utilities, print ascii, print string, print content, print pagelist -----------------------------------
 
 printAscii :: Int -> ()
-printAscii decimal =  
+printAscii decimal =
         if decimal == 0 then
             let _ = printsym (quote "NUL")
             in ()
@@ -179,7 +168,7 @@ printAscii decimal =
             in ()
         else if decimal == 19 then
             let _ = printsym (quote "DC3")
-            in ()    
+            in ()
         else if decimal == 20 then
             let _ = printsym (quote "DC4")
             in ()
@@ -269,7 +258,7 @@ printAscii decimal =
             in ()
         else if decimal == 49 then
             let _ = printsym (quote "1")
-            in ()             
+            in ()
         else if decimal == 50 then
             let _ = printsym (quote "2")
             in ()
@@ -389,7 +378,7 @@ printAscii decimal =
             in ()
         else if decimal == 89 then
             let _ = printsym (quote "Y")
-            in ()    
+            in ()
         else if decimal == 90 then
             let _ = printsym (quote "Z")
             in ()
@@ -503,52 +492,97 @@ printAscii decimal =
             in ()
         else
             let _ = printsym (quote "DEL")
-            in ()            
+            in ()
 
-printSyms :: PageList -> ()
-printSyms lst =
+printString :: String -> ()
+printString string =
+    case string of
+        End ->
+            let _ = printsym (quote "End")
+            in ()
+        C val rst ->
+            let _ = printsym (quote "(C ")
+                _ = printAscii val
+                _ = printsym (quote "SPACE")
+                _ = printString rst
+                _ = printsym (quote ")")
+            in ()
+
+printContent :: Content -> ()
+printContent content =
+    case content of
+        Text n ->
+            let _ = printsym (quote "Text ")
+                _ = printString n
+            in ()
+        Image n ->
+            let _ = printsym (quote "Image ")
+                _ = printString n
+            in ()
+
+printTags :: Tags -> ()
+printTags tags =
+    case tags of
+        Nul ->
+            let _ = printsym (quote "Nul")
+                _ = printsym (quote "SPACE")
+            in ()
+        Tag val rst ->
+            let _ = printsym (quote "(Tag ")
+                _ = printint val
+                _ = printsym (quote "SPACE")
+                _ = printTags rst
+                _ = printsym (quote ")")
+                _ = printsym (quote "SPACE")
+            in ()
+
+
+printPageList :: PageList -> ()
+printPageList lst =
   case lst of
-    Nil -> 
+    Nil ->
         let _ = printsym (quote "Nil")
             _ = printsym (quote "SPACE")
         in ()
-    Cons a rst ->
+    Cons tags content rst ->
       let _ = printsym (quote "(Cons ")
-          _ = printContent a
+          _ = printTags tags
+          _ = printContent content
           _ = printsym (quote "SPACE")
-          _ = printSyms rst
+          _ = printPageList rst
           _ = printsym (quote ")")
           _ = printsym (quote "SPACE")
       in ()
-    Snoc rst a -> 
+    Snoc rst content tags ->
         let _ = printsym (quote "(Snoc ")
-            _ = printSyms rst
-            _ = printContent a
+            _ = printPageList rst
+            _ = printContent content
+            _ = printTags tags
             _ = printsym (quote "SPACE")
             _ = printsym (quote ")")
             _ = printsym (quote "SPACE")
         in ()
-                           
-gibbon_main = 
-    let list1 = mkConsList 1000
-        list2 = mkSnocList 1000
-        --_     = printSyms list1
-        --_     = printsym (quote "NEWLINE")
-        --_     = printSyms list2
-        --_     = printsym (quote "NEWLINE")
-        count1 = timeit (countPagesTR list1 0)
-        count2 = timeit (countPagesTR list2 0)
-        list3  = mkConsRandomTextPageList 100 
-        list4  = mkSnocRandomTextPageList 100
-        _      = printSyms list3
-        _      = printsym (quote "NEWLINE")
-        _      = printSyms list4
-        _      = printsym (quote "NEWLINE")
-        list5  = timeit (asciiInvertPageList list3)
-        list6  = timeit (asciiInvertPageList list4)
-        --_      = printSyms list5
-        --_      = printsym (quote "NEWLINE")
-        --_      = printSyms list6
-        --_      = printsym (quote "NEWLINE")
 
+-------------------------------- Print functions end here -----------------------------------
+
+--Cons and Snoc list take, listLength, tagLength and strLength respectively
+
+gibbon_main =
+    let cons_list = mkConsList 1 sizeParam 1000
+        cons2_list = mkCons2List 1 sizeParam 1000
+        snoc_list = mkSnocList 1 sizeParam 1000
+        snoc2_list = mkSnoc2List 1 sizeParam 1000
+        -- _ = printPageList cons_list
+        -- _ = printPacked cons2_list
+        -- _ = printPacked snoc_list
+        -- _ = printPacked snoc2_list
+        tags = mkRandomTags 1
+        _ = printsym (quote "cons\n")
+        cons_new_list = iterate (searchPageList cons_list tags)
+        _ = printsym (quote "cons2\n")
+        cons2_new_list = iterate (searchPageList cons2_list tags)
+        _ = printsym (quote "snoc\n")
+        snoc_new_list = iterate (searchPageList snoc_list tags)
+        _ = printsym (quote "snoc2\n")
+        snoc2_new_list = iterate (searchPageList snoc2_list tags)
     in ()
