@@ -36,7 +36,7 @@ printAdt adt =
             _ = printsym (quote "SPACE")
         in ()
     CA a rst ->
-      let _ = printsym (quote "(Cons ")
+      let _ = printsym (quote "(CA ")
           _ = printContent a
           _ = printsym (quote "SPACE")
           _ = printAdt rst
@@ -44,7 +44,7 @@ printAdt adt =
           _ = printsym (quote "SPACE")
       in ()
     AC rst a -> 
-        let _ = printsym (quote "(Snoc ")
+        let _ = printsym (quote "(AC ")
             _ = printAdt rst
             _ = printContent a
             _ = printsym (quote "SPACE")
