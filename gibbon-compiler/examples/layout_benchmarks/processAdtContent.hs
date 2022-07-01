@@ -10,7 +10,7 @@ processAdt adt = case adt of
                           CA content rst -> 
                             let newContent  = processContent content 
                                 newRst      = processAdt rst
-                            in CA newContent newRst
+                            in CA copyPacked newContent newRst
                           AC rst content  -> 
                             let newContent = processContent content 
                                 newRst     = processAdt rst
@@ -33,29 +33,29 @@ processString string = case string of
 
 
 gibbon_main = 
-    let ca            = mkCAList 2000000 50
-        --_             = printsym (quote "CA Adt: ")
-        --_             = printsym (quote "NEWLINE")
-        --_             = printAdt ca
-        --_             = printsym (quote "NEWLINE")
-        ac            = mkACList 2000000 50
-        --_             = printsym (quote "AC Adt: ")
-        --_             = printsym (quote "NEWLINE")
-        --_             = printAdt ac
-        --_             = printsym (quote "NEWLINE")
+    let ca            = mkCAList 2 5
+        _             = printsym (quote "CA Adt: ")
+        _             = printsym (quote "NEWLINE")
+        _             = printAdt ca
+        _             = printsym (quote "NEWLINE")
+        ac            = mkACList 2 5
+        _             = printsym (quote "AC Adt: ")
+        _             = printsym (quote "NEWLINE")
+        _             = printAdt ac
+        _             = printsym (quote "NEWLINE")
         _               = printsym (quote "CA Adt Time to process content: ")
         _               = printsym (quote "NEWLINE")
         ca_new        = iterate (processAdt ca)
-        --_             = printsym (quote "New CA Adt: ")
-        --_             = printsym (quote "NEWLINE")
-        --_             = printAdt ca_new
-        --_             = printsym (quote "NEWLINE")
+        _             = printsym (quote "New CA Adt: ")
+        _             = printsym (quote "NEWLINE")
+        _             = printAdt ca_new
+        _             = printsym (quote "NEWLINE")
         _               = printsym (quote "AC Adt Time to process content: ")
         _               = printsym (quote "NEWLINE")
         ac_new        = iterate (processAdt ac)
-        --_             = printsym (quote "New AC Adt: ")
-        --_             = printsym (quote "NEWLINE")
-        --_             = printAdt ac_new
-        --_             = printsym (quote "NEWLINE")
+        _             = printsym (quote "New AC Adt: ")
+        _             = printsym (quote "NEWLINE")
+        _             = printAdt ac_new
+        _             = printsym (quote "NEWLINE")
         
     in ()

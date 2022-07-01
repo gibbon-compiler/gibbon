@@ -418,7 +418,7 @@ printString string =
                 _ = printAscii val
                 _ = printsym (quote "SPACE")
                 _ = printString rst
-                _ = printsym (quote ")")
+                _ = printsym (quote ") ")
             in ()
 
 -----------------------------------------------------------------------------------------------------
