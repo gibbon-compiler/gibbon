@@ -206,6 +206,7 @@ fn restore_writers(
     cenv: &CauterizedEnv,
     heap: &mut C_GibNursery,
 ) -> Result<()> {
+    // for frame in wstack.into_iter() {}
     for (_wptr, frames) in cenv.iter() {
         /*
         if !(*start_of_chunk) {
@@ -300,6 +301,14 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
             }
             continue;
         }
+        // Compute chunk size.
+        let chunk_size = if root_in_nursery {
+            let nursery_footer: *mut u16 = (*frame).endptr as *mut u16;
+            *nursery_footer as usize
+        } else {
+            let footer = (*frame).endptr as *const C_GibChunkFooter;
+            (*footer).size
+        };
 
         // Allocate space in the destination.
         let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
@@ -313,12 +322,6 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
         let mut st = EvacState { so_env, cenv, zct, nursery, evac_major };
         let src = (*frame).ptr;
         let src_end = (*frame).endptr;
-        let chunk_size = if root_in_nursery {
-            let nursery_footer: *mut u16 = (*frame).endptr as *mut u16;
-            *nursery_footer as usize
-        } else {
-            CHUNK_SIZE
-        };
         let is_loc_0 = (src_end.offset_from(src)) == chunk_size as isize;
 
         let (src_after, dst_after, dst_after_end, forwarded) =
@@ -586,28 +589,26 @@ unsafe fn evacuate_packed(
 
                         // Update outsets and refcounts if evacuating to the oldest
                         // generation.
-                        if heap.is_oldest() {
-                            let fwd_footer_offset = tagged.get_tag();
-                            let fwd_footer_addr =
-                                fwd_ptr.add(fwd_footer_offset as usize);
-                            handle_old_to_old_indirection(
-                                dst_end,
-                                fwd_footer_addr,
-                            );
-                            match (*frame).gc_root_prov {
-                                C_GcRootProv::RemSet => {}
-                                C_GcRootProv::Stk => {
-                                    let fwd_footer = fwd_footer_addr
-                                        as *const C_GibChunkFooter;
-                                    record_time!(
-                                        (*(st.zct)).remove(
-                                            &((*fwd_footer).reg_info
-                                                as *const C_GibRegionInfo),
-                                        ),
-                                        (*GC_STATS).gc_zct_mgmt_time
-                                    );
-                                    ()
-                                }
+                        let fwd_footer_offset = tagged.get_tag();
+                        let fwd_footer_addr =
+                            fwd_ptr.add(fwd_footer_offset as usize);
+                        handle_old_to_old_indirection(
+                            dst_end,
+                            fwd_footer_addr,
+                        );
+                        match (*frame).gc_root_prov {
+                            C_GcRootProv::RemSet => {}
+                            C_GcRootProv::Stk => {
+                                let fwd_footer =
+                                    fwd_footer_addr as *const C_GibChunkFooter;
+                                record_time!(
+                                    (*(st.zct)).remove(
+                                        &((*fwd_footer).reg_info
+                                            as *const C_GibRegionInfo),
+                                    ),
+                                    (*GC_STATS).gc_zct_mgmt_time
+                                );
+                                ()
                             }
                         }
 
@@ -673,25 +674,23 @@ unsafe fn evacuate_packed(
 
                         // Update outsets and refcounts if evacuating to the oldest
                         // generation.
-                        if heap.is_oldest() {
-                            handle_old_to_old_indirection(
-                                dst_end,
-                                fwd_footer_addr_avail,
-                            );
-                            match (*frame).gc_root_prov {
-                                C_GcRootProv::RemSet => {}
-                                C_GcRootProv::Stk => {
-                                    let fwd_footer = fwd_footer_addr_avail
-                                        as *const C_GibChunkFooter;
-                                    record_time!(
-                                        (*(st.zct)).remove(
-                                            &((*fwd_footer).reg_info
-                                                as *const C_GibRegionInfo),
-                                        ),
-                                        (*GC_STATS).gc_zct_mgmt_time
-                                    );
-                                    ()
-                                }
+                        handle_old_to_old_indirection(
+                            dst_end,
+                            fwd_footer_addr_avail,
+                        );
+                        match (*frame).gc_root_prov {
+                            C_GcRootProv::RemSet => {}
+                            C_GcRootProv::Stk => {
+                                let fwd_footer = fwd_footer_addr_avail
+                                    as *const C_GibChunkFooter;
+                                record_time!(
+                                    (*(st.zct)).remove(
+                                        &((*fwd_footer).reg_info
+                                            as *const C_GibRegionInfo),
+                                    ),
+                                    (*GC_STATS).gc_zct_mgmt_time
+                                );
+                                ()
                             }
                         }
 
@@ -1112,81 +1111,19 @@ fn cold() {}
 trait Heap {
     fn is_nursery(&self) -> bool;
     fn is_oldest(&self) -> bool;
-    fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)>;
     fn space_available(&self) -> usize;
 
+    fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)>;
     fn allocate_first_chunk(
         &mut self,
         size: usize,
         refcount: u16,
-    ) -> Result<(*mut i8, *mut i8)> {
-        if !self.is_oldest() {
-            self.allocate(size)
-        } else {
-            let total_size = size + size_of::<C_GibChunkFooter>();
-            let (start, end) = self.allocate(total_size)?;
-            let footer_start = unsafe {
-                init_footer_at(end, null_mut(), total_size, refcount)
-            };
-
-            #[cfg(feature = "gcstats")]
-            {
-                unsafe {
-                    (*GC_STATS).oldgen_regions += 1;
-                }
-            }
-
-            Ok((start, footer_start))
-        }
-    }
-
+    ) -> Result<(*mut i8, *mut i8)>;
     fn allocate_next_chunk(
         &mut self,
         dst: *mut i8,
         dst_end: *mut i8,
-    ) -> (*mut i8, *mut i8) {
-        unsafe {
-            if !self.is_oldest() {
-                let (new_dst, new_dst_end) =
-                    Heap::allocate(self, CHUNK_SIZE).unwrap();
-                // Write a redirection tag in the old chunk.
-                let dst_after_tag = write(dst, C_REDIRECTION_TAG);
-                write(dst_after_tag, new_dst);
-                (new_dst, new_dst_end)
-            } else {
-                // Access the old footer to get the region metadata.
-                let old_footer = dst_end as *mut C_GibChunkFooter;
-                // Allocate space for the new chunk.
-                let mut chunk_size = (*old_footer).size * 2;
-                if chunk_size > MAX_CHUNK_SIZE {
-                    chunk_size = MAX_CHUNK_SIZE;
-                }
-                let (new_dst, new_dst_end) =
-                    Heap::allocate(self, chunk_size).unwrap();
-                // Initialize a footer at the end of the new chunk.
-                let reg_info: *mut C_GibRegionInfo = (*old_footer).reg_info;
-                let new_footer_start = init_footer_at(
-                    new_dst_end,
-                    reg_info,
-                    chunk_size,
-                    (*reg_info).refcount,
-                );
-                // Write a redirection tag in the old chunk.
-                let footer_offset: u16 =
-                    new_footer_start.offset_from(new_dst) as u16; // .try_into().unwrap()
-
-                let tagged: u64 =
-                    TaggedPointer::new(new_dst, footer_offset).as_u64();
-                let dst_after_tag = write(dst, C_REDIRECTION_TAG);
-                write(dst_after_tag, tagged);
-                // Link the footers.
-                let new_footer: *mut C_GibChunkFooter =
-                    new_footer_start as *mut C_GibChunkFooter;
-                (*old_footer).next = new_footer;
-                (new_dst, new_footer_start)
-            }
-        }
-    }
+    ) -> (*mut i8, *mut i8);
 
     #[inline(always)]
     fn check_bounds(
@@ -1239,6 +1176,53 @@ impl<'a> Heap for C_GibNursery {
             assert!((*self).alloc > (*self).heap_start);
             // alloc - heap_start.
             ptr_offset_from((*self).alloc, (*self).heap_start) as usize
+        }
+    }
+
+    fn allocate_first_chunk(
+        &mut self,
+        size: usize,
+        _refcount: u16,
+    ) -> Result<(*mut i8, *mut i8)> {
+        if !self.is_oldest() {
+            self.allocate(size)
+        } else {
+            let total_size = size + size_of::<u16>();
+            let (start, _end) = self.allocate(total_size)?;
+            let footer_start = unsafe { start.add(size) };
+            let footer = footer_start as *mut u16;
+            unsafe {
+                (*footer) = size as u16;
+            }
+
+            #[cfg(feature = "gcstats")]
+            {
+                unsafe {
+                    (*GC_STATS).oldgen_regions += 1;
+                }
+            }
+
+            Ok((start, footer_start))
+        }
+    }
+
+    fn allocate_next_chunk(
+        &mut self,
+        dst: *mut i8,
+        _dst_end: *mut i8,
+    ) -> (*mut i8, *mut i8) {
+        unsafe {
+            let (new_dst, new_dst_end) =
+                Heap::allocate(self, CHUNK_SIZE).unwrap();
+
+            let footer_start = new_dst.add(CHUNK_SIZE);
+            let footer = footer_start as *mut u16;
+            (*footer) = CHUNK_SIZE as u16;
+
+            // Write a redirection tag in the old chunk.
+            let dst_after_tag = write(dst, C_REDIRECTION_TAG);
+            write(dst_after_tag, new_dst);
+            (new_dst, new_dst_end)
         }
     }
 
@@ -1338,6 +1322,65 @@ impl<'a> Heap for C_GibOldGeneration<'a> {
     #[inline(always)]
     fn space_available(&self) -> usize {
         0
+    }
+
+    fn allocate_first_chunk(
+        &mut self,
+        size: usize,
+        refcount: u16,
+    ) -> Result<(*mut i8, *mut i8)> {
+        let total_size = size + size_of::<C_GibChunkFooter>();
+        let (start, end) = self.allocate(total_size)?;
+        let footer_start =
+            unsafe { init_footer_at(end, null_mut(), total_size, refcount) };
+
+        #[cfg(feature = "gcstats")]
+        {
+            unsafe {
+                (*GC_STATS).oldgen_regions += 1;
+            }
+        }
+
+        Ok((start, footer_start))
+    }
+
+    fn allocate_next_chunk(
+        &mut self,
+        dst: *mut i8,
+        dst_end: *mut i8,
+    ) -> (*mut i8, *mut i8) {
+        unsafe {
+            // Access the old footer to get the region metadata.
+            let old_footer = dst_end as *mut C_GibChunkFooter;
+            // Allocate space for the new chunk.
+            let mut chunk_size = (*old_footer).size * 2;
+            if chunk_size > MAX_CHUNK_SIZE {
+                chunk_size = MAX_CHUNK_SIZE;
+            }
+            let (new_dst, new_dst_end) =
+                Heap::allocate(self, chunk_size).unwrap();
+            // Initialize a footer at the end of the new chunk.
+            let reg_info: *mut C_GibRegionInfo = (*old_footer).reg_info;
+            let new_footer_start = init_footer_at(
+                new_dst_end,
+                reg_info,
+                chunk_size,
+                (*reg_info).refcount,
+            );
+            // Write a redirection tag in the old chunk.
+            let footer_offset: u16 =
+                new_footer_start.offset_from(new_dst) as u16; // .try_into().unwrap()
+
+            let tagged: u64 =
+                TaggedPointer::new(new_dst, footer_offset).as_u64();
+            let dst_after_tag = write(dst, C_REDIRECTION_TAG);
+            write(dst_after_tag, tagged);
+            // Link the footers.
+            let new_footer: *mut C_GibChunkFooter =
+                new_footer_start as *mut C_GibChunkFooter;
+            (*old_footer).next = new_footer;
+            (new_dst, new_footer_start)
+        }
     }
 
     #[inline(always)]
