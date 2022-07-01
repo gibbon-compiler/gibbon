@@ -69,8 +69,6 @@ struct EvacState<'a> {
     cenv: &'a mut CauterizedEnv,
     zct: *mut Zct,
     nursery: &'a C_GibNursery,
-    // TODO: use the provenance recorded in each shadowstack frame.
-    prov: &'a C_GcRootProv,
     evac_major: bool,
 }
 
@@ -264,7 +262,6 @@ unsafe fn evacuate_remembered_set<'a>(
             cenv,
             zct,
             nursery,
-            prov: &C_GcRootProv::RemSet,
             evac_major,
         };
         let (src_after, _dst_after, _dst_after_end, _forwarded) =
@@ -304,8 +301,6 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
             continue;
         }
 
-        let datatype = (*frame).datatype;
-
         // Allocate space in the destination.
         let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
         // Update ZCT.
@@ -315,14 +310,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
             (*GC_STATS).gc_zct_mgmt_time
         );
         // Evacuate the data.
-        let mut st = EvacState {
-            so_env,
-            cenv,
-            zct,
-            nursery,
-            prov: &C_GcRootProv::Stk,
-            evac_major,
-        };
+        let mut st = EvacState { so_env, cenv, zct, nursery, evac_major };
         let src = (*frame).ptr;
         let src_end = (*frame).endptr;
         let chunk_size = if root_in_nursery {
@@ -334,7 +322,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
         let is_loc_0 = (src_end.offset_from(src)) == chunk_size as isize;
 
         let (src_after, dst_after, dst_after_end, forwarded) =
-            evacuate_packed(&mut st, heap, datatype, src, dst, dst_end);
+            evacuate_packed(&mut st, heap, frame, dst, dst_end);
         // Update the pointers in shadow-stack.
         (*frame).ptr = dst;
         // TODO(ckoparkar): AUDITME.
@@ -399,11 +387,13 @@ FIXME: forwarded is currently for the entire (multi-chunk) evaluation, and it sh
 unsafe fn evacuate_packed(
     st: &mut EvacState,
     heap: &mut impl Heap,
-    orig_typ: C_GibDatatype,
-    orig_src: *mut i8,
+    frame: *const C_GibShadowstackFrame,
     orig_dst: *mut i8,
     orig_dst_end: *mut i8,
 ) -> (*mut i8, *mut i8, *mut i8, bool) {
+    let orig_typ = (*frame).datatype;
+    let orig_src = (*frame).ptr;
+
     // These comprise the main mutable state of the traversal and should be updated
     // together at the end of every iteration:
     let mut src = orig_src;
@@ -492,7 +482,7 @@ unsafe fn evacuate_packed(
 
                             // Update the burned environment if we're evacuating a root
                             // from the remembered set.
-                            match st.prov {
+                            match (*frame).gc_root_prov {
                                 C_GcRootProv::RemSet => {
                                     #[cfg(feature = "verbose_evac")]
                                     eprintln!(
@@ -604,7 +594,7 @@ unsafe fn evacuate_packed(
                                 dst_end,
                                 fwd_footer_addr,
                             );
-                            match st.prov {
+                            match (*frame).gc_root_prov {
                                 C_GcRootProv::RemSet => {}
                                 C_GcRootProv::Stk => {
                                     let fwd_footer = fwd_footer_addr
@@ -688,7 +678,7 @@ unsafe fn evacuate_packed(
                                 dst_end,
                                 fwd_footer_addr_avail,
                             );
-                            match st.prov {
+                            match (*frame).gc_root_prov {
                                 C_GcRootProv::RemSet => {}
                                 C_GcRootProv::Stk => {
                                     let fwd_footer = fwd_footer_addr_avail
