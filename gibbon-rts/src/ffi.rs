@@ -89,11 +89,19 @@ pub mod types {
         pub alloc: *mut i8,
     }
 
+    #[repr(u32)]
+    #[derive(Debug, PartialEq, Eq)]
+    pub enum C_GcRootProv {
+        Stk,
+        RemSet,
+    }
+
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibShadowstackFrame {
         pub ptr: *mut i8,
         pub endptr: *mut i8,
+        pub gc_root_prov: C_GcRootProv,
         pub datatype: C_GibDatatype,
     }
 
@@ -189,7 +197,7 @@ pub extern "C" fn gib_garbage_collect(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
-    generations_ptr: *mut C_GibOldGeneration,
+    oldgen_ptr: *mut C_GibOldGeneration,
     gc_stats: *mut C_GibGcStats,
     force_major: bool,
 ) -> i32 {
@@ -197,13 +205,12 @@ pub extern "C" fn gib_garbage_collect(
     let rstack: &mut C_GibShadowstack = unsafe { &mut *rstack_ptr };
     let wstack: &mut C_GibShadowstack = unsafe { &mut *wstack_ptr };
     let nursery: &mut C_GibNursery = unsafe { &mut *nursery_ptr };
-    let generations: &mut C_GibOldGeneration =
-        unsafe { &mut *generations_ptr };
+    let oldgen: &mut C_GibOldGeneration = unsafe { &mut *oldgen_ptr };
     match gc::garbage_collect(
         rstack,
         wstack,
         nursery,
-        generations,
+        oldgen,
         gc_stats,
         force_major,
     ) {
@@ -238,16 +245,17 @@ pub extern "C" fn gib_init_footer_at(
 }
 
 #[no_mangle]
-pub extern "C" fn gib_init_zcts(generations_ptr: *mut C_GibOldGeneration) {
-    gc::init_zcts(generations_ptr);
+pub extern "C" fn gib_init_zcts(oldgen_ptr: *mut C_GibOldGeneration) {
+    let oldgen: &mut C_GibOldGeneration = unsafe { &mut *oldgen_ptr };
+    gc::init_zcts(oldgen);
 }
 
 #[no_mangle]
 pub extern "C" fn gib_insert_into_new_zct(
-    generations_ptr: *mut C_GibOldGeneration,
+    oldgen_ptr: *mut C_GibOldGeneration,
     reg_info: *const C_GibRegionInfo,
 ) {
-    unsafe { (*((*generations_ptr).new_zct)).insert(reg_info) };
+    unsafe { (*((*oldgen_ptr).new_zct)).insert(reg_info) };
 }
 
 #[no_mangle]
@@ -281,12 +289,13 @@ pub extern "C" fn gib_gc_cleanup(
     rstack_ptr: *mut C_GibShadowstack,
     wstack_ptr: *mut C_GibShadowstack,
     nursery_ptr: *mut C_GibNursery,
-    generations_ptr: *mut C_GibOldGeneration,
+    oldgen_ptr: *mut C_GibOldGeneration,
 ) -> i32 {
     let rstack: &mut C_GibShadowstack = unsafe { &mut *rstack_ptr };
     let wstack: &mut C_GibShadowstack = unsafe { &mut *wstack_ptr };
     let nursery: &mut C_GibNursery = unsafe { &mut *nursery_ptr };
-    match gc::cleanup(rstack, wstack, nursery, generations_ptr) {
+    let oldgen: &mut C_GibOldGeneration = unsafe { &mut *oldgen_ptr };
+    match gc::cleanup(rstack, wstack, nursery, oldgen) {
         Ok(()) => 0,
         Err(err) => {
             if cfg!(debug_assertions) {

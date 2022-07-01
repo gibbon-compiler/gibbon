@@ -93,7 +93,7 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
                                                  GibCursor ys_37_180_285 // input location
                                                 );
 GibInt do_reverse(GibInt n_19_183_289);
-GibInt do_reverse2(GibInt n_19_183_289);
+GibInt do_reverse_and_sumlist(GibInt n_19_183_289);
 GibInt do_tree(GibInt n_22_186_293);
 GibCursorGibIntProd sum_list(GibCursor end_r_619, GibCursor xs_40_189_296);
 GibCursorGibCursorGibCursorProd build_list(GibCursor end_r_621,
@@ -218,7 +218,7 @@ GibInt do_reverse(GibInt n_19_183_289)
     // _print_List(NULL, pvrtmp_1385);
     // printf("\n");
 
-    gib_shadowstack_push(rstack, r_720, end_r_720, List_T);
+    gib_shadowstack_push(rstack, r_720, end_r_720, Stk, List_T);
 
     GibChunk region_1382 =
         gib_alloc_region(gib_get_inf_init_chunk_size());
@@ -266,9 +266,9 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor pvrtmp_1395 = tmp_struct_17.field2;
     GibCursor pvrtmp_1396 = tmp_struct_17.field3;
 
-    // printf("reversed:");
-    // _print_List(NULL, pvrtmp_1395);
-    // printf("\n");
+    printf("reversed:");
+    _print_List(NULL, pvrtmp_1395);
+    printf("\n");
 
     GibCursorGibIntProd tmp_struct_18 =  sum_list(pvrtmp_1393, pvrtmp_1395);
     GibCursor pvrtmp_1401 = tmp_struct_18.field0;
@@ -279,7 +279,7 @@ GibInt do_reverse(GibInt n_19_183_289)
 
     return pvrtmp_1402;
 }
-GibInt do_reverse2(GibInt n_19_183_289)
+GibInt do_reverse_and_sumlist(GibInt n_19_183_289)
 {
     GibChunk region_1380 =
         gib_alloc_region(gib_get_inf_init_chunk_size());
@@ -307,7 +307,7 @@ GibInt do_reverse2(GibInt n_19_183_289)
     // _print_List(NULL, pvrtmp_1385);
     // printf("\n");
 
-    gib_shadowstack_push(rstack, r_720, end_r_720, List_T);
+    gib_shadowstack_push(rstack, r_720, end_r_720, Stk, List_T);
 
     GibChunk region_1382 =
         gib_alloc_region(gib_get_inf_init_chunk_size());
@@ -433,9 +433,9 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
             // Push to shadow stack.
             // xs, ys, output
-            gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T);
-            gib_shadowstack_push(rstack, ys_37_180_285, end_r_616, List_T);
-            gib_shadowstack_push(wstack, loc_614, end_r_617, List_T);
+            gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, Stk, List_T);
+            gib_shadowstack_push(rstack, ys_37_180_285, end_r_616, Stk, List_T);
+            gib_shadowstack_push(wstack, loc_614, end_r_617, Stk, List_T);
             // Pushed.
 
             GibChunk region_1353 =
@@ -482,9 +482,9 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
 
             // // Push to shadow stack.
             // // xs, ys, output
-            // gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, List_T);
-            // gib_shadowstack_push(rstack, r_705, end_r_705, List_T);
-            // gib_shadowstack_push(wstack, loc_614, end_r_617, List_T);
+            // gib_shadowstack_push(rstack, tmpcur_1362, end_r_615, Stk, List_T);
+            // gib_shadowstack_push(rstack, r_705, end_r_705, Stk, List_T);
+            // gib_shadowstack_push(wstack, loc_614, end_r_617, Stk, List_T);
             // // Pushed.
 
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_12 =
@@ -679,7 +679,7 @@ GibInt do_tree(GibInt n_22_186_293)
     // _print_Tree(NULL, pvrtmp_1408);
     // printf("\n");
 
-    gib_shadowstack_push(rstack, pvrtmp_1408, pvrtmp_1407, Tree_T);
+    gib_shadowstack_push(rstack, pvrtmp_1408, pvrtmp_1407, Stk, Tree_T);
 
     GibChunk region_1405 =
                   gib_alloc_region(gib_get_inf_init_chunk_size());
@@ -762,7 +762,7 @@ GibCursorGibCursorGibCursorGibCursorProd add1(GibCursor end_r_606,  // input reg
             *(GibBoxedTag *) loc_605 = 1;
             GibCursor loc_668 = loc_605 + 1;
 
-            gib_shadowstack_push(rstack, loc_605, end_r_607, Tree_T);
+            gib_shadowstack_push(rstack, loc_605, end_r_607, Stk, Tree_T);
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_0 =
                                                       add1(end_r_606, end_r_607, loc_668, tmpcur_1294);
             frame = gib_shadowstack_pop(rstack);
@@ -774,7 +774,7 @@ GibCursorGibCursorGibCursorGibCursorProd add1(GibCursor end_r_606,  // input reg
             GibCursor pvrtmp_1303 = tmp_struct_0.field2;
             GibCursor pvrtmp_1304 = tmp_struct_0.field3;
 
-            gib_shadowstack_push(rstack, loc_605, end_r_607, Tree_T);
+            gib_shadowstack_push(rstack, loc_605, end_r_607, Stk, Tree_T);
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_1 =
                                                       add1(end_r_606, pvrtmp_1301, pvrtmp_1304, pvrtmp_1302);
             frame = gib_shadowstack_pop(rstack);
@@ -938,7 +938,7 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
     if (fltIf_266_295) {
 
         // push to shadow stack.
-        gib_shadowstack_push(wstack, loc_651, end_r_652, Tree_T);
+        gib_shadowstack_push(wstack, loc_651, end_r_652, Stk, Tree_T);
         // pushed.
 
         GibChunk region_1413 = gib_alloc_region(gib_get_inf_init_chunk_size());
@@ -1035,7 +1035,7 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
         GibCursor loc_743 = loc_651 + 1;
 
         // push to shadow stack.
-        gib_shadowstack_push(rstack, loc_651, end_r_652, Tree_T);
+        gib_shadowstack_push(rstack, loc_651, end_r_652, Stk, Tree_T);
         // pushed.
 
         GibCursorGibCursorGibCursorProd tmp_struct_7 =
@@ -1751,7 +1751,7 @@ int gib_main_expr(void)
     GibInt fltPrd_235_251 =  do_reverse(gib_get_size_param());
     printf("reverse: %" PRIu64 "\n", fltPrd_235_251);
 
-    // GibInt fltPrd_235_251 =  do_reverse2(gib_get_size_param());
+    // GibInt fltPrd_235_251 =  do_reverse_and_sumlist(gib_get_size_param());
     // printf("reverse: %" PRIu64 "\n", fltPrd_235_251);
 
     // GibInt fltPrd_236_252 =  do_tree(gib_get_size_param());

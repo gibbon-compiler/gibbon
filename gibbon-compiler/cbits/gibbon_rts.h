@@ -337,12 +337,21 @@ typedef struct gib_shadowstack {
     char *alloc;
 } GibShadowstack;
 
+// Provenance of a GC root: shadow-stack or remembered set.
+typedef enum {
+    Stk,
+    RemSet,
+} GibGcRootProv;
+
 typedef struct gib_shadowstack_frame {
     // Pointer to packed data.
     char *ptr;
 
     // Pointer to the end of the chunk where this packed data lives.
     char *endptr;
+
+    // Provenance of the GC root located at ptr.
+    GibGcRootProv gc_root_prov;
 
     // An enum in C, which is 4 bytes.
     // The enum (GibDatatype) will be defined in the generated program.
@@ -417,6 +426,7 @@ INLINE_HEADER void gib_shadowstack_push(
     GibShadowstack *stack,
     char *ptr,
     char *endptr,
+    GibGcRootProv gc_root_prov,
     uint32_t datatype
 )
 {
@@ -428,6 +438,7 @@ INLINE_HEADER void gib_shadowstack_push(
     GibShadowstackFrame *frame = (GibShadowstackFrame *) stack_alloc_ptr;
     frame->ptr = ptr;
     frame->endptr = endptr;
+    frame->gc_root_prov = gc_root_prov;
     frame->datatype = datatype;
     (*stack_alloc_ptr_addr) += size;
     return;
@@ -472,8 +483,8 @@ INLINE_HEADER void gib_shadowstack_print_all(GibShadowstack *stack)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-#define gib_remset_push(stack, ptr, endptr, datatype)           \
-    gib_shadowstack_push(stack, ptr, (char *) endptr, datatype)
+#define gib_remset_push(stack, ptr, endptr, datatype)                   \
+    gib_shadowstack_push(stack, ptr, (char *) endptr, RemSet, datatype)
 
 #define gib_remset_pop(stack) \
     gib_shadowstack_pop(stack)

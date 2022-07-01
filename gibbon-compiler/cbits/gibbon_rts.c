@@ -864,20 +864,24 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 
 */
 
-#ifdef _GIBBON_DEBUG
-#define NURSERY_SIZE (4 * gib_global_inf_init_chunk_size)
+#if defined NURSERY_SIZE
+
+#if NURSERY_SIZE < 64
+// The nursery size provided is too small, set it to 64 bytes.
+#define NURSERY_SIZE 64
 #else
-  #ifndef NURSERY_SIZE
-  #define NURSERY_SIZE (4 * MB)
-  // #define NURSERY_SIZE (4096)
-  #endif
-// #define NURSERY_SIZE (2048) // This seems to mess things up.
+// The nursery size provided at compile time is OK.
+#endif
+
+// NURSERY_SIZE not defined, initialize it to a default value.
+#else
+#define NURSERY_SIZE (4 * MB)
 #endif
 
 // If a region is over this size, alloc to refcounted heap directly.
 #define NURSERY_REGION_MAX_SIZE (NURSERY_SIZE / 2)
 
-// TODO(ckopaprkar): The shadow stack doesn't grow and we don't check for
+// TODO: The shadow stack doesn't grow and we don't check for
 // overflows at the moment. But this stack probably wouldn't overflow since
 // each stack frame is only 16 bytes.
 #define SHADOWSTACK_SIZE (sizeof(GibShadowstackFrame) * 4 * 1024 * 1024)
@@ -964,7 +968,7 @@ GibOldGeneration *gib_global_oldgen = (GibOldGeneration *) NULL;
 // Shadow stacks for readable and writeable locations respectively,
 // indexed by thread_id.
 //
-// TODO(ckoparkar): not clear how shadow stacks would be when we have
+// TODO: not clear how shadow stacks would be when we have
 // parallel mutators.. These arrays are abstract enough for now.
 GibShadowstack *gib_global_read_shadowstacks = (GibShadowstack *) NULL;
 GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
@@ -1303,7 +1307,7 @@ static void gib_nursery_initialize(GibNursery *nursery)
     nursery->heap_start = (char *) gib_alloc(NURSERY_SIZE);
     if (nursery->heap_start == NULL) {
         fprintf(stderr, "gib_nursery_initialize: gib_alloc failed: %zu",
-                NURSERY_SIZE);
+                (size_t) NURSERY_SIZE);
         exit(1);
     }
     nursery->heap_end = nursery->heap_start + NURSERY_SIZE;
@@ -1323,7 +1327,7 @@ static void gib_nursery_free(GibNursery *nursery)
     return;
 }
 
-// TODO(ckoparkar):
+// TODO:
 // If we allocate the nursery at a high address AND ensure that all of the
 // subsequent mallocs return a block at addresses lower than this, we can
 // implement addr_in_nursery with one address check instead than two. -- RRN
@@ -1478,20 +1482,21 @@ static void gib_gc_stats_print(GibGcStats *stats)
 void gib_indirection_barrier(
     // Address where the indirection tag is written.
     GibCursor from,
-    GibCursor from_footer_ptr,
+    GibCursor from_footer,
     // Address of the pointed-to data.
     GibCursor to,
-    GibCursor to_footer_ptr,
+    GibCursor to_footer,
     // Data type written at from/to.
     uint32_t datatype
 )
 {
     // Write the indirection.
-    uint16_t footer_offset = to_footer_ptr - to;
+    uint16_t footer_offset = to_footer - to;
     uintptr_t tagged = GIB_STORE_TAG(to, footer_offset);
     GibCursor writeloc = from;
     *(GibBoxedTag *) writeloc = GIB_INDIRECTION_TAG;
     writeloc += sizeof(GibPackedTag);
+    char *indr_ptr_addr = writeloc;
     *(uintptr_t *) writeloc = tagged;
 
     // Add to remembered set if it's an old to young pointer.
@@ -1505,11 +1510,11 @@ void gib_indirection_barrier(
             // Store the address of the indirection pointer, *NOT* the address of
             // the indirection tag, in the remembered set.
             char *indr_addr = (char *) from + sizeof(GibPackedTag);
-            gib_remset_push(oldgen->rem_set, indr_addr, from_footer_ptr, datatype);
+            gib_remset_push(oldgen->rem_set, indr_addr, from_footer, datatype);
             return;
         } else {
             // (4) oldgen -> oldgen
-            gib_handle_old_to_old_indirection(from_footer_ptr, to_footer_ptr);
+            gib_handle_old_to_old_indirection(from_footer, to_footer);
             return;
         }
     }
@@ -1552,7 +1557,7 @@ GibGcStateSnapshot *gib_gc_init_state(uint64_t num_regions)
     }
     snapshot->nursery_heap = gib_alloc(NURSERY_SIZE);
     if (snapshot->nursery_heap == NULL) {
-        fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu", NURSERY_SIZE);
+        fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu", (size_t) NURSERY_SIZE);
         exit(1);
     }
     snapshot->reg_info_addrs = gib_alloc(num_regions * sizeof(GibRegionInfo*));
@@ -1867,6 +1872,9 @@ int main(int argc, char **argv)
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibOldGeneration *oldgen = DEFAULT_GENERATION;
     gib_init_zcts(oldgen);
+
+    // Minimal test to see if FFI is set up correctly.
+    gib_check_rust_struct_sizes();
 
     // Run the program.
     gib_main_expr();

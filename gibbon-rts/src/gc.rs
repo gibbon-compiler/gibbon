@@ -10,7 +10,6 @@ use libc;
 
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::fmt;
 use std::intrinsics::ptr_offset_from;
 use std::mem::size_of;
 use std::ptr::{null_mut, write_bytes};
@@ -18,248 +17,6 @@ use std::ptr::{null_mut, write_bytes};
 use crate::ffi::types::*;
 use crate::record_time;
 use crate::tagged_pointer::*;
-
-/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Notes
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-
-See https://github.com/iu-parfunc/gibbon/issues/122#issuecomment-938311529.
-
-
-*** Maintaining sharing, Copied and CopiedTo tags:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Maintaining sharing while evacuating packed data is HARD. You can't do the
-simple thing of marking all copied data with a forwarding pointer. That depends
-on having enough space for the forwarding pointer. But for binary tree data in
-the heap, you don't have it:
-
-┌─────────────┐
-│  N L 1 L 2  │
-└─────────────┘
-
-Specifically, there are 3 heap objects here. The two leaves happen to have
-enough room for a forwarding pointer, but the intermediate Node doesn't.
-We need some complicated scheme to retain sharing while evacuating this data.
-For example:
-
-- "Burn" all data as you copy it by changing all tags to Copied
-
-- Use a CopiedTo tag (that functions identically to existing Indirections),
-  when there is room for a forwarding pointer.
-
-- Reason about copies of contiguous intervals. I.e. the GC copies bytes from
-  location L0 to L1, without any intervening space for a forwarding pointer.
-
-- A second thread that points into the middle of such an interval, reads a
-  Copied tag, but must figure out its destination based on an offset from a
-  CopiedTo tag to the left or right of the interval.
-
-  Algorithm: scan to the right for the next COPIED_TO tag, then take the
-  negative offset of that pointer to find its position in the destination
-  buffer. Write an indirection to that in the spot you would have copied the
-  data to.
-
-The correctness of this depends on guaranteeing two properties:
-
-(1) We always end a chunk with a CopiedTo tag:
-
-    this is taken care of by copy_readers.
-
-(2) There are no indirections inside the interval (before or after copying),
-    which would cause it to be a different size in the from and to space and
-    thus invalidate offsets within it:
-
-    we are able to guarantee this because indirections themselves provide
-    exactly enough room to write a CopiedTo and forwarding pointer.
-
-
-
-*** Adding a forwarding pointer at the end of every chunk:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-'evacuate_readers' writes this tag and a forwarding pointer unless:
-
-
-(1) the value being evacuated doesn't end at the *true* end of the buffer,
-    see below.
-
-(2) the value being evacuated starts with a CopiedTo or a Copied tag.
-    we don't need to write a forwarding pointer since we would have already
-    written one during the previous evacuation.
-
-
-ASSUMPTION: There is sufficient space available (9 bytes) to write a
-forwarding pointer in the source buffer.
-
-
-Is this a reasonable assumption?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Yes, only if all values are always evacuated in a strict left-to-right order.
-This happens if we process the shadow-stack starting with the oldest frame first.
-Older frames always point to start of regions. Thus, we will evacuate a buffer
-and reach its *true* end. Due to the way buffers are set up, there's always
-sufficient space to write a forwarding pointer there. When we get further down
-the shadow-stack and reach frames that point to values in the middle of a buffer,
-we will encounter CopiedTo or Copied tags and not write the forwarding pointers
-after these values.
-
-If values are NOT evacuated in a left-to-right order, this assumption is
-invalidated. Suppose there's a value (K a b c d) and we first evacuate 'a'
-(e.g. maybe because the remembered set points to it). Now the code will reach
-this point and try to write a forwarding pointer. But this will overwrite other
-data in the buffer!!
-
-Thus, we must only write a forwarding pointer when we've reached the true end
-of the source buffer. The only time we actually reach the true end is when we're
-evacuating a value starts at the very beginning of the chunk. Hence, we store
-the start-of-chunk addresses in an auxillary data structure in the nursery
-and use them to check if we've reached the end of a chunk.
-
-
-*** Traversing burned data:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The left-to-right evacuation mentioned above is important for another reason.
-When buffers are NOT evacuated left-to-right, evacuate_packed can encounter
-burned data in the middle of a buffer such that there's more data to be
-evacuated after it. Thus, we must traverse past this burned field and evacuate
-the rest. But this traversal is tricky. The simple strategy of "scan right until
-you stop seeing burned things" doesn't work because two neighboring fields
-might be burned and we wouldn't know where one field ends and the next one
-begins.
-
-For example, consider a sitation where we have a constructor with 4 fields,
-(K a b c d), and fields 'a' and 'b' have been evacuated (burned) but 'c' and 'd'
-have not. Now someone comes along to try to copy K. How do you reach 'c'?
-
-To accomplish this traversal we maintain a table of "burned addresses",
-{ start-of-burned-field -> end-of-burned-field }, for all roots that can create
-"burned holes" in the middle of buffers. In the current implementation we only
-need to track this info for the roots in the remembered set which can create
-burned holes since they are evacuated before the shadow-stack. While evacuating
-the roots in the shadow-stack, we always start at the oldest oldest frame which
-guarantees a left-to-right traversal of buffers.
-
-
-Granularity of the burned addresses table
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Does every intermediate packed field within a value pointed to by a root
-in a remembered set need its separate entry in the burned address table?
-No, IF we guarantee a left-to-right traversal of buffers while evacuating
-the remembered set, which ensures that we won't see any burned holes during
-this evacuation. To this end, we sort the roots in the remembered set and start
-evacuating from the one pointing to the leftmost object in the nursery.
-
-Moreover, this is sufficient while evacuating the shadow-stack as well.
-Because at that time we only care about the boundaries of a burned field,
-anything within it doesn't need to be traversed.
-
-
-
-*** Finding a region's metadata from a pointer into it:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Every time we write an indirection while evacuating, we must adjust refcounts
-and outsets. In order to do this we need the address of the metadata for the
-pointed-to region, which we don't always have. For example, while evacuating
-a young-to-old indirection added by the mutator, we only know the address of
-the pointed-to data and nothing else. This stops us from writing *any*
-indirections during evacuation, forcing us to always inline everything.
-To address this, we need a way to go from a pointer to some data in a region
-to that region's metadata, which is stored in its footer.
-
-We could do one of three things here:
-
-(1) always inline EVERYTHING, but this is terrible.
-
-(2) in addition to storing an indirection pointer, we could also store the
-    metadata adress with it by using extra space. this means that an
-    indirection pointer (and correspondingly all forwarding pointers) will now
-    occupy 17 bytes! yikes.
-
-(3) fit all of this information in an 8 byte pointer by using the top 16 bits
-    to store a *tag*. this tag could be a distance-to-region-footer offset,
-    using which we can reach the footer and extract the metadata address that's
-    stored there. but this does introduces an upper bound on the size of the
-    biggest chunk that Gibbon can allocate; 65K bytes (2^16).
-
-
-*** Restoring uncauterized write cursors:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Some write cursors don't get uncauterized and need to be restored by hand.
-This happens when a region has been allocated but nothing has been written
-to it yet. So there will be a write cursor for it on the shadow-stack but there
-won't be any read cursors pointing to any data before this write cursor, since
-there isn't any data here. Thus this write cursor won't get uncauterized during
-evacuation. We need to restore all such start-of-chunk uncauterized write
-cursors by allocating fresh chunks for them in the nursery. To accomplish this,
-we track all write cursors in a "cauterized environment" that maps a write
-cursor to a list of shadow-stack frames that it appears in. Why a list of frames?
-Because some write cursors may have multiple frames tracking them. E.g. if we
-allocate a region and pass it to a function, and the function immediately pushes
-it to the stack again (e.g. maybe because it makes a function call or allocates
-a new region etc.), we'll have two frames tracking the *same address* in memory.
-Thus, we must track all such frames corresponding to a memory addrerss.
-
-
-*** Sorting roots on the shadow-stack and remembered set:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The order in which GC roots are processed has a huge impact on the
-representation of the evacuated value in the old generation. Ideally we'd like
-to reduce the number of indirections in the evacuated value as much as possible.
-The only indirections we should add are those that represent "real" sharing.
-Consider a situation in which the value shown below is allocated in the nursery,
-and the outermost node and the second leaf are both on the shadow-stack.
-
-┌─────────────┐
-│  N L 1 L 2  │
-└──│─────│────┘
-   x     y
-
-If we process x first and then y, we get the following value:
-
-┌─────────────┐      ┌─────────────┐
-│  I •────────│──┐   │  N L 1 L 2  │
-└──│──────────┘  │   └──│─────│────┘
-   y             │      x     │
-                 └────────────┘
-
-
-However, if we process y first and then x, we get the following value:
-
-
-┌─────────────┐      ┌─────────────┐
-│  L 2        │      │  N L 1 I •  │
-└──│──────────┘      └──│───────│──┘
-   y                    x       │
-   │                            │
-   └────────────────────────────┘
-
-
-TODO.
-
-
-*** Smart inlining policies:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The current heuristic for when to inline indirections/redirections is very
-simple. If the pointed-to region is in the old generation, it is never inlined.
-Maybe we can have a smarter policy which inlines indirections/redirections
-up to a limit (e.g. 2KB) or tries to infer the size of the object based on
-which region it is in. The latter isn't straightforward because a large object
-can *start* in one of the smaller chunks and a huge chunk could have a small
-object too.
-
-Deferred until after the paper deadline...
-
-
-*/
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Garbage Collector; evacuation, promotion etc.
@@ -272,15 +29,58 @@ Deferred until after the paper deadline...
 const CHUNK_SIZE: usize = 1024;
 const MAX_CHUNK_SIZE: usize = 65500;
 
+/// Heuristic for when to collect the old generation. Other possible heuristics:
+/// when oldgen has X bytes or a region has Y depth.
 const COLLECT_MAJOR_K: u8 = 4;
 
+/// A mutable global to store various stats.
 static mut GC_STATS: *mut C_GibGcStats = null_mut();
+
+/// See Note [Restoring uncauterized write cursors].
+///
+/// [2022.07.01] CSK: We don't really need this environment. The only write
+/// cursors that don't get restored during evacuation should be the ones that
+/// are at the start of chunks. We can detect these using our isLoc0 check and
+/// restore them seperately after evacuation.
+type CauterizedEnv = HashMap<*mut i8, Vec<*mut C_GibShadowstackFrame>>;
+
+/// This stores pairs of (start_address -> end_address) of evacuated objects,
+/// in case we need to skip over them during subsequent evacuation. We only
+/// store these for objects starting at non-loc0 positions.
+///
+/// E.g. | A ... C 1 ... | if we evacuate 'C' first, we'll burn it and create a
+/// hole in its place. If we subsequently want to evacuate the bigger object
+/// starting at 'A', we would need to skip over 'C' to get to the next field.
+type SkipOverEnv = HashMap<*mut i8, *mut i8>;
+
+/// When evacuating a value made exclusively of non-forwardable objects and
+/// located in the middle of a chunk, we need to store its forwarding address
+/// separately in this table. We store pairs of (start_address -> fwd_address).
+type ForwardingEnv = HashMap<*mut i8, *mut i8>;
+
+/// Things needed during evacuation. This reduces the number of arguments needed
+/// for the evacuation function, so that all of its arguments can be passed
+/// in registers. This was much more important when evacuation was implemented
+/// as a set of mutually recursive functions, but less so with the new worklist
+/// algorithm.
+#[derive(Debug)]
+struct EvacState<'a> {
+    so_env: &'a mut SkipOverEnv,
+    cenv: &'a mut CauterizedEnv,
+    zct: *mut Zct,
+    nursery: &'a C_GibNursery,
+    // TODO: use the provenance recorded in each shadowstack frame.
+    prov: &'a C_GcRootProv,
+    evac_major: bool,
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 pub fn cleanup(
     rstack: &mut C_GibShadowstack,
     wstack: &mut C_GibShadowstack,
     nursery: &mut C_GibNursery,
-    generations_ptr: *mut C_GibOldGeneration,
+    oldgen: &mut C_GibOldGeneration,
 ) -> Result<()> {
     unsafe {
         // Free the info table.
@@ -288,18 +88,17 @@ pub fn cleanup(
         _INFO_TABLE.shrink_to_fit();
     }
     // Free all the regions.
-    let mut oldgen = OldGeneration(generations_ptr);
     unsafe {
         for frame in rstack.into_iter().chain(wstack.into_iter()) {
             let footer = (*frame).endptr as *const C_GibChunkFooter;
             if !nursery.contains_addr((*frame).endptr) {
-                (*((*generations_ptr).old_zct)).insert((*footer).reg_info);
+                (*((*oldgen).old_zct)).insert((*footer).reg_info);
             }
         }
-        for reg_info in (*((*generations_ptr).old_zct)).drain() {
+        for reg_info in (*((*oldgen).old_zct)).drain() {
             free_region(
                 (*reg_info).first_chunk_footer,
-                (*generations_ptr).new_zct,
+                (*oldgen).new_zct,
                 true,
             )?;
         }
@@ -313,17 +112,16 @@ pub fn garbage_collect(
     rstack: &mut C_GibShadowstack,
     wstack: &mut C_GibShadowstack,
     nursery: &mut C_GibNursery,
-    generations_ref: &mut C_GibOldGeneration,
+    oldgen: &mut C_GibOldGeneration,
     gc_stats: *mut C_GibGcStats,
     _force_major: bool,
 ) -> Result<()> {
-    // println!("gc...");
+    #[cfg(feature = "verbose_evac")]
+    println!("gc...");
+
     unsafe {
         // Start by cauterizing the writers.
         let mut cenv = cauterize_writers(nursery, wstack)?;
-        // Prepare to evacuate the readers.
-        let mut oldgen = OldGeneration(generations_ref);
-
         // let evac_major = force_major
         //     || (*nursery_ptr).num_collections.rem_euclid(COLLECT_MAJOR_K.into())
         //         == 0;
@@ -339,11 +137,13 @@ pub fn garbage_collect(
                 (*GC_STATS).major_collections += 1;
             }
         }
+        // Prepare to evacuate the readers.
 
         // Start collection.
-        let rem_set: &mut C_GibRememberedSet = (*generations_ref).rem_set;
+        let rem_set: &mut C_GibRememberedSet = (*oldgen).rem_set;
         // First evacuate the remembered set, then the shadow-stack.
-        let mut benv = evacuate_remembered_set(
+        /*
+        let mut so_env = evacuate_remembered_set(
             &mut cenv,
             (*generations_ref).new_zct,
             nursery,
@@ -351,13 +151,15 @@ pub fn garbage_collect(
             rem_set,
             evac_major,
         )?;
+         */
+        let mut so_env = HashMap::new();
         rem_set.clear();
         evacuate_shadowstack(
-            &mut benv,
+            &mut so_env,
             &mut cenv,
-            (*generations_ref).new_zct,
+            (*oldgen).new_zct,
             nursery,
-            &mut oldgen,
+            oldgen,
             rstack,
             evac_major,
         )?;
@@ -427,24 +229,7 @@ fn restore_writers(
     Ok(())
 }
 
-/// See Note [Restoring uncauterized write cursors].
-type CauterizedEnv = HashMap<*mut i8, Vec<*mut C_GibShadowstackFrame>>;
-
-/// See Note [Traversing burned data].
-type BurnedAddressEnv = HashMap<*mut i8, *mut i8>;
-
-/// Things needed during evacuation.
-#[derive(Debug)]
-struct EvacState<'a> {
-    benv: &'a mut BurnedAddressEnv,
-    cenv: &'a mut CauterizedEnv,
-    zct: *mut Zct,
-    nursery: &'a C_GibNursery,
-    // heap: Box<&'a mut dyn Heap>,
-    prov: &'a GcRootProv,
-    evac_major: bool,
-}
-
+/*
 /// Copy values at all read cursors from the remembered set to the provided
 /// destination heap. Update the burned environment along the way.
 /// The roots are processed in a left-to-right order based on the addresses of
@@ -458,8 +243,8 @@ unsafe fn evacuate_remembered_set<'a>(
     heap: &mut impl Heap,
     rem_set: &C_GibRememberedSet,
     evac_major: bool,
-) -> Result<BurnedAddressEnv> {
-    let mut benv: BurnedAddressEnv = HashMap::new();
+) -> Result<SkipOverEnv> {
+    let mut so_env: SkipOverEnv = HashMap::new();
     let frames =
         record_time!(sort_roots(rem_set), (*GC_STATS).gc_rootset_sort_time);
     for frame in frames {
@@ -475,11 +260,11 @@ unsafe fn evacuate_remembered_set<'a>(
         let src = tagged.untag();
         // Evacuate the data.
         let mut st = EvacState {
-            benv: &mut benv,
+            so_env: &mut so_env,
             cenv,
             zct,
             nursery,
-            prov: &GcRootProv::RemSet,
+            prov: &C_GcRootProv::RemSet,
             evac_major,
         };
         let (src_after, _dst_after, _dst_after_end, _forwarded) =
@@ -489,15 +274,16 @@ unsafe fn evacuate_remembered_set<'a>(
         // Update the outset in oldgen region.
         add_to_outset((*frame).endptr, dst_end);
         // Update the burned address table.
-        benv.insert(src, src_after);
+        so_env.insert(src, src_after);
     }
-    Ok(benv)
+    Ok(so_env)
 }
+*/
 
 /// Copy values at all read cursors from the nursery to the provided
 /// destination heap. Also uncauterize any writer cursors that are reached.
 unsafe fn evacuate_shadowstack<'a, 'b>(
-    benv: &'a mut BurnedAddressEnv,
+    so_env: &'a mut SkipOverEnv,
     cenv: &'a mut CauterizedEnv,
     zct: *mut Zct,
     // nursery: &'b Nursery<'b, 'c>,
@@ -530,11 +316,11 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
         );
         // Evacuate the data.
         let mut st = EvacState {
-            benv,
+            so_env,
             cenv,
             zct,
             nursery,
-            prov: &GcRootProv::Stk,
+            prov: &C_GcRootProv::Stk,
             evac_major,
         };
         let src = (*frame).ptr;
@@ -578,7 +364,7 @@ enum EvacAction {
     ProcessTy(C_GibDatatype),
     RestoreSrc(*mut i8),
     // A reified continuation of processing the target of an indirection.
-    BenvWrite(*mut i8),
+    SkipOverEnvWrite(*mut i8),
 }
 
 /**
@@ -587,7 +373,7 @@ Evacuate a packed value by referring to the info table.
 
 Arguments:
 
-- benv - an environment that provides the ends of burned fields. only
+- so_env - an environment that provides the ends of burned fields. only
   relevant when evacuating the shadow-stack.
 - cenv - an environment that tracks cauterized write cursors
 - heap - allocation area to copy data into
@@ -707,15 +493,16 @@ unsafe fn evacuate_packed(
                             // Update the burned environment if we're evacuating a root
                             // from the remembered set.
                             match st.prov {
-                                GcRootProv::RemSet => {
+                                C_GcRootProv::RemSet => {
                                     #[cfg(feature = "verbose_evac")]
                                     eprintln!(
-                                        "   pushing BenvWrite action to stack"
+                                        "   pushing SkipOverEnvWrite action to stack"
                                     );
-                                    worklist
-                                        .push(EvacAction::BenvWrite(pointee));
+                                    worklist.push(
+                                        EvacAction::SkipOverEnvWrite(pointee),
+                                    );
                                 }
-                                GcRootProv::Stk => (),
+                                C_GcRootProv::Stk => (),
                             }
 
                             // Same type, new location to evac from:
@@ -818,8 +605,8 @@ unsafe fn evacuate_packed(
                                 fwd_footer_addr,
                             );
                             match st.prov {
-                                GcRootProv::RemSet => {}
-                                GcRootProv::Stk => {
+                                C_GcRootProv::RemSet => {}
+                                C_GcRootProv::Stk => {
                                     let fwd_footer = fwd_footer_addr
                                         as *const C_GibChunkFooter;
                                     record_time!(
@@ -836,11 +623,11 @@ unsafe fn evacuate_packed(
 
                         dst = dst_after_indr;
                         dst_end = dst_end1;
-                        let src_after_burned = st.benv.get(&src);
+                        let src_after_burned = st.so_env.get(&src);
                         if let Some(next) = worklist.pop() {
                             next_action = next;
                             src = *src_after_burned.unwrap_or_else(|| {
-                                panic!("Could not find {:?} in benv", src)
+                                panic!("Could not find {:?} in so_env", src)
                             });
                             continue;
                         } else {
@@ -902,8 +689,8 @@ unsafe fn evacuate_packed(
                                 fwd_footer_addr_avail,
                             );
                             match st.prov {
-                                GcRootProv::RemSet => {}
-                                GcRootProv::Stk => {
+                                C_GcRootProv::RemSet => {}
+                                C_GcRootProv::Stk => {
                                     let fwd_footer = fwd_footer_addr_avail
                                         as *const C_GibChunkFooter;
                                     record_time!(
@@ -920,11 +707,11 @@ unsafe fn evacuate_packed(
 
                         dst = dst_after_indr;
                         dst_end = dst_end1;
-                        let src_after_burned = st.benv.get(&src);
+                        let src_after_burned = st.so_env.get(&src);
                         if let Some(next) = worklist.pop() {
                             next_action = next;
                             src = *src_after_burned.unwrap_or_else(|| {
-                                panic!("Could not find {:?} in benv", src)
+                                panic!("Could not find {:?} in so_env", src)
                             });
                             continue;
                         } else {
@@ -1105,9 +892,6 @@ unsafe fn evacuate_packed(
                                 //   }
                             }
 
-                            // TODO(ckoparkar):
-                            // (1) instead of recursion, use a worklist
-                            // (2) handle redirection nodes properly
                             for ty in field_tys.iter().rev() {
                                 worklist.push(EvacAction::ProcessTy(*ty));
                             }
@@ -1127,13 +911,13 @@ unsafe fn evacuate_packed(
                     }
                 } // End match
             }
-            EvacAction::BenvWrite(pointee) => {
+            EvacAction::SkipOverEnvWrite(pointee) => {
                 #[cfg(feature = "verbose_evac")]
                 eprintln!(
-                    "   performing benv insert continuation: {:?} to {:?}",
+                    "   performing so_env insert continuation: {:?} to {:?}",
                     pointee, src
                 );
-                st.benv.insert(pointee, src);
+                st.so_env.insert(pointee, src);
                 continue;
             }
         }
@@ -1141,12 +925,12 @@ unsafe fn evacuate_packed(
 
     #[cfg(feature = "verbose_evac")]
     eprintln!(
-        " Finished evacuate_packed: recording in benv {:?} -> {:?}",
+        " Finished evacuate_packed: recording in so_env {:?} -> {:?}",
         orig_src, src
     );
     // Provide skip-over information for what we just cleared out.
     // FIXME: only insert if it is a non-zero location?
-    st.benv.insert(orig_src, src);
+    st.so_env.insert(orig_src, src);
 
     (src, dst, dst_end, forwarded)
 }
@@ -1188,8 +972,6 @@ unsafe fn read_mut<A>(cursor: *mut i8) -> (A, *mut i8) {
 #[inline(always)]
 unsafe fn write<A>(cursor: *mut i8, val: A) -> *mut i8 {
     let cursor2 = cursor as *mut A;
-    // TODO(ckoparkar): what's the difference between these?
-    // *cursor2 = val;
     cursor2.write_unaligned(val);
     cursor2.add(1) as *mut i8
 }
@@ -1359,7 +1141,9 @@ trait Heap {
 
             #[cfg(feature = "gcstats")]
             {
-                (*GC_STATS).oldgen_regions += 1;
+                unsafe {
+                    (*GC_STATS).oldgen_regions += 1;
+                }
             }
 
             Ok((start, footer_start))
@@ -1498,12 +1282,9 @@ impl<'a> Heap for C_GibNursery {
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-/// A wrapper over the raw C pointer.
-struct OldGeneration<'a>(*mut C_GibOldGeneration<'a>);
-
-impl<'a> OldGeneration<'a> {
+impl<'a> C_GibOldGeneration<'a> {
     fn collect_regions(&mut self) -> Result<()> {
-        let gen: *mut C_GibOldGeneration = self.0;
+        let gen: *mut C_GibOldGeneration = self;
         unsafe {
             for reg_info in (*((*gen).old_zct)).drain() {
                 let footer = (*reg_info).first_chunk_footer;
@@ -1527,7 +1308,7 @@ impl<'a> OldGeneration<'a> {
     }
 
     fn init_zcts(&mut self) {
-        let gen: *mut C_GibOldGeneration = self.0;
+        let gen: *mut C_GibOldGeneration = self;
         unsafe {
             (*gen).old_zct = &mut *(Box::into_raw(Box::new(HashSet::new())));
             (*gen).new_zct = &mut *(Box::into_raw(Box::new(HashSet::new())));
@@ -1535,7 +1316,7 @@ impl<'a> OldGeneration<'a> {
     }
 
     fn free_zcts(&mut self) {
-        let gen: *mut C_GibOldGeneration = self.0;
+        let gen: *mut C_GibOldGeneration = self;
         unsafe {
             // Rust will drop these heap objects at the end of this scope.
             Box::from_raw((*gen).old_zct);
@@ -1544,7 +1325,7 @@ impl<'a> OldGeneration<'a> {
     }
 
     fn swap_zcts(&mut self) {
-        let gen: *mut C_GibOldGeneration = self.0;
+        let gen: *mut C_GibOldGeneration = self;
         unsafe {
             let tmp = &mut (*gen).old_zct;
             (*gen).old_zct = (*gen).new_zct;
@@ -1553,13 +1334,7 @@ impl<'a> OldGeneration<'a> {
     }
 }
 
-impl<'a> fmt::Debug for OldGeneration<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("{:?}", self.0))
-    }
-}
-
-impl<'a> Heap for OldGeneration<'a> {
+impl<'a> Heap for C_GibOldGeneration<'a> {
     #[inline(always)]
     fn is_nursery(&self) -> bool {
         false
@@ -1596,8 +1371,7 @@ impl<'a> Heap for OldGeneration<'a> {
     }
 }
 
-pub fn init_zcts(generations_ptr: *mut C_GibOldGeneration) {
-    let mut oldgen = OldGeneration(generations_ptr);
+pub fn init_zcts(oldgen: &mut C_GibOldGeneration) {
     oldgen.init_zcts();
 }
 
@@ -1605,13 +1379,6 @@ pub fn init_zcts(generations_ptr: *mut C_GibOldGeneration) {
  * Shadow-stack
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
-
-/// Provenance of a GC root; shadow-stack or remembered set.
-#[derive(Debug, PartialEq, Eq)]
-enum GcRootProv {
-    Stk,
-    RemSet,
-}
 
 impl<'a> C_GibShadowstack {
     /// Length of the shadow-stack.
