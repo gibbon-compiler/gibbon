@@ -12,9 +12,9 @@ asciiInvertPageList list = case list of
             newRst  = asciiInvertPageList rst 
         in Cons newCont newRst
     Snoc rst a ->
-        let newRst  = asciiInvertPageList rst
-            newCont = takeAsciiInverseContent a            
-        in Snoc newRst newCont
+        let newCont = takeAsciiInverseContent a
+            newRst  = asciiInvertPageList rst            
+        in Snoc newRst ( copyPacked newCont )
 
 takeAsciiInverseContent :: Content -> Content
 takeAsciiInverseContent content = case content of 
@@ -517,10 +517,10 @@ printPageList lst =
 
 
 gibbon_main = 
-    let cons_list     = (mkConsRandomTextPageList 30000 500)
+    let cons_list     = (mkConsRandomTextPageList 100000 5000)
         --_             = printPageList cons_list
         --_             = printsym (quote "SPACE")
-        snoc_list     = (mkSnocRandomTextPageList 30000 500)
+        snoc_list     = (mkSnocRandomTextPageList 100000 5000)
         --_             = printPageList snoc_list
         --_             = printsym (quote "SPACE")
         cons_new_list = iterate (asciiInvertPageList cons_list)
