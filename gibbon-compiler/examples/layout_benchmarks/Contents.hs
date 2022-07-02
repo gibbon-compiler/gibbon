@@ -7,7 +7,7 @@ import Strings
 
 data Content  = Image String | Text String
 
-
+ 
 -- make Image
 mkContentImage :: Int -> Content
 mkContentImage n = Image (mkString n)

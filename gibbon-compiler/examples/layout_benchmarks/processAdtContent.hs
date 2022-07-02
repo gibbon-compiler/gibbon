@@ -3,7 +3,7 @@ module Main where
 import Strings
 import Contents
 import Adts
-        
+         
 processAdt :: Adt -> Adt
 processAdt adt = case adt of 
                           Nil -> Nil

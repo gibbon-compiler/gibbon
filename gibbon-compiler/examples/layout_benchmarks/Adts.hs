@@ -3,9 +3,9 @@ module Adts where
 import Strings
 import Contents
 import Tags
+ 
 
-
-data Adt = Nil | CA (Content) (Adt) | AC (Adt) (Content) | TCA (Tags) (Content) (Adt) | ACT (Adt) (Content) (Tags) | TAC (Tags) (Adt) (Content) | ATC (Adt) (Tags) (Content) | CTA (Content) (Tags) (Adt)
+data Adt = Nil | CA (Content) (Adt) | AC (Adt) (Content) | TCA (Tags) (Content) (Adt) | ACT (Adt) (Content) (Tags) | TAC (Tags) (Adt) (Content) | ATC (Adt) (Tags) (Content) | CTA (Content) (Tags) (Adt) | CAT (Content) (Adt) (Tags)
     deriving (Show)
 
 
@@ -71,6 +71,13 @@ mkCTAList len tagLen strLen = if (len <= 0)
                                            rst     = mkCTAList (len-1) tagLen strLen                                   
                                        in CTA content tags rst
                     
+mkCATList :: Int -> Int -> Int -> Adt 
+mkCATList len tagLen strLen = if (len <= 0)
+                                    then Nil
+                                    else let content = mkContentText strLen
+                                             rst     = mkCATList (len-1) tagLen strLen 
+                                             tags    = mkRandomTags tagLen 
+                                         in CAT content rst tags
                     
 printAdt :: Adt -> ()
 printAdt adt =
@@ -139,6 +146,15 @@ printAdt adt =
             _ = printsym (quote "SPACE")
             _ = printsym (quote ")")
             _ = printsym (quote "SPACE")
+        in ()
+    CAT content rst tags ->
+        let _ = printsym (quote "(CAT ")
+            _ = printContent content
+            _ = printAdt rst
+            _ = printTags tags
+            _ = printsym (quote "SPACE")
+            _ = printsym (quote ")")
+            _ = printsym (quote "SPACE")          
         in ()
     
         

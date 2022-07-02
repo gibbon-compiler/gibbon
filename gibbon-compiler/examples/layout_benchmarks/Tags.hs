@@ -2,8 +2,6 @@ module Tags where
 
 data Tags = Nul | Tag Int (Tags)
 
-
-
 searchTag :: Tags -> Tags -> Bool
 searchTag tag tagList = case tag of
                               Nul -> case tagList of
@@ -34,7 +32,7 @@ mkRandomTags :: Int -> Tags
 mkRandomTags len = if (len <= 0)
                       then Nul
                       else let
-                               val = mod rand 1000
+                               val = 100 --mod rand 1000
                                rst = mkRandomTags (len-1)
                            in Tag val rst
                            

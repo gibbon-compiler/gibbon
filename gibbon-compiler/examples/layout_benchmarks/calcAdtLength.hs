@@ -2,7 +2,7 @@ module Main where
 
 import Strings
 import Contents
-import Adts                            
+import Adts                             
 
 -- Recursive function to get length
 getLength :: Adt -> Int

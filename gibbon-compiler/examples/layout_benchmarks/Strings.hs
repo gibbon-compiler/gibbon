@@ -3,7 +3,7 @@ module Strings where
 -- Data type for Strings
 
 data String   = End | Char Int (String)
-
+ 
 
 -- Make a string list which is a Cons Int list
 -- Populate the string with random integers between 0 and 127.  

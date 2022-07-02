@@ -4,7 +4,7 @@ import Strings
 import Contents
 import Adts
 import Tags
-
+ 
 searchTagsAdt :: Adt -> Tags -> Adt
 searchTagsAdt adt tag = case adt of
                              Nil -> Nil
@@ -23,6 +23,9 @@ searchTagsAdt adt tag = case adt of
                              CTA content tags rst -> let present = searchTag tag tags
                                                          newRst  = searchTagsAdt rst tag
                                                      in if (present) then CTA content tags newRst else newRst
+                             CAT content rst tags -> let present = searchTag tag tags
+                                                         newRst  = searchTagsAdt rst tag
+                                                     in if (present) then CAT content newRst tags else newRst
                                                      
                                                      
 add1TagsAdt :: Adt ->  Adt
@@ -43,6 +46,9 @@ add1TagsAdt adt = case adt of
                              CTA content tags rst -> let newTags = add1Tag tags
                                                          newRst  = add1TagsAdt rst 
                                                      in CTA content newTags newRst
+                             CAT content rst tags -> let newTags = add1Tag tags
+                                                         newRst  = add1TagsAdt rst 
+                                                     in CAT content newRst ( copyPacked newTags)
                                                      
 {-
 sumTagsAdt :: Adt -> Tags -> Adt
@@ -66,81 +72,97 @@ sumTagsAdt adt tag = case adt of
 
 -- mk for 3 parameter Adt take, len, tagLen, strLen
 gibbon_main =
-    let tca = mkTCAList 1000 10 10000 
---         _             = printsym (quote "TCA Adt: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt tca
---         _             = printsym (quote "NEWLINE")
-        act = mkACTList 1000 10 10000 
---         _             = printsym (quote "ACT Adt: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt act
---         _             = printsym (quote "NEWLINE")
-        tac = mkTACList 1000 10 10000 
---         _             = printsym (quote "TAC Adt: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt tac
---         _             = printsym (quote "NEWLINE")
-        atc = mkATCList 1000 10 10000 
---         _             = printsym (quote "ATC Adt: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt atc
---         _             = printsym (quote "NEWLINE")
-        cta = mkCTAList 1000 10 10000 
---         _             = printsym (quote "CTA Adt: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt cta
---         _             = printsym (quote "NEWLINE")
-        tag           = Tag 1000000 Nul        
---        search_tca    = iterate (searchTagsAdt tca tag)
---         _             = printsym (quote "TCA Adt after search tags: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt search_tca
---         _             = printsym (quote "NEWLINE")
---        search_act    = iterate (searchTagsAdt act tag)
---         _             = printsym (quote "ACT Adt after search tags: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt search_act
---         _             = printsym (quote "NEWLINE")
---        search_tac    = iterate (searchTagsAdt tac tag)
---         _             = printsym (quote "TAC Adt after search tags: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt search_tac
---         _             = printsym (quote "NEWLINE")
---        search_atc    = iterate (searchTagsAdt atc tag)
---         _             = printsym (quote "ATC Adt after search tags: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt search_atc
---         _             = printsym (quote "NEWLINE")
---        search_cta    = iterate (searchTagsAdt cta tag) 
---         _             = printsym (quote "CTA Adt after search tags: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt search_cta
---         _             = printsym (quote "NEWLINE")   
-
-        add_tca    = iterate (add1TagsAdt tca)
---         _             = printsym (quote "TCA Adt after add tags: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt add_tca
---         _             = printsym (quote "NEWLINE")
-        add_act    = iterate (add1TagsAdt act)
---         _             = printsym (quote "ACT Adt after add tags: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt add_act
---         _             = printsym (quote "NEWLINE")
-        add_tac    = iterate (add1TagsAdt tac)
---         _             = printsym (quote "TAC Adt after add tags: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt add_tac
---         _             = printsym (quote "NEWLINE")
-        add_atc    = iterate (add1TagsAdt atc)
---         _             = printsym (quote "ATC Adt after add tags: ")
---         _             = printsym (quote "NEWLINE")
---         _             = printAdt add_atc
---         _             = printsym (quote "NEWLINE")
-        add_cta    = iterate (add1TagsAdt cta) 
-      {-  _             = printsym (quote "CTA Adt after search tags: ")
+    let tca = mkTCAList 100000 10 20000 
+        -- _             = printsym (quote "TCA Adt: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked tca
+        -- _             = printsym (quote "NEWLINE")
+        act = mkACTList 100000 10 20000  
+        -- _             = printsym (quote "ACT Adt: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked act
+        -- _             = printsym (quote "NEWLINE")
+        tac = mkTACList 100000 10 20000 
+        -- _             = printsym (quote "TAC Adt: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked tac
+        -- _             = printsym (quote "NEWLINE")
+        atc = mkATCList 100000 10 20000 
+        -- _             = printsym (quote "ATC Adt: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked atc
+        -- _             = printsym (quote "NEWLINE")
+        cta = mkCTAList 100000 10 20000
+        -- _             = printsym (quote "CTA Adt: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked cta
+        -- _             = printsym (quote "NEWLINE")
+        cat = mkCATList 100000 10 20000
+        -- _             = printsym (quote "CAT Adt: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked cat
+        -- _             = printsym (quote "NEWLINE")
+        tag = Tag 1000000 Nul        
+        search_tca    = iterate (searchTagsAdt tca tag)
+        -- _             = printsym (quote "TCA Adt after search tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked search_tca
+        -- _             = printsym (quote "NEWLINE")
+        search_act    = iterate (searchTagsAdt act tag)
+        -- _             = printsym (quote "ACT Adt after search tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked search_act
+        -- _             = printsym (quote "NEWLINE")
+        search_tac    = iterate (searchTagsAdt tac tag)
+        -- _             = printsym (quote "TAC Adt after search tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked search_tac
+        -- _             = printsym (quote "NEWLINE")
+        search_atc    = iterate (searchTagsAdt atc tag)
+        -- _             = printsym (quote "ATC Adt after search tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked search_atc
+        -- _             = printsym (quote "NEWLINE")
+        search_cta    = iterate (searchTagsAdt cta tag) 
+        -- _             = printsym (quote "CTA Adt after search tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked search_cta
+        -- _             = printsym (quote "NEWLINE")
+        search_cat    = iterate (searchTagsAdt cat tag) 
+        -- _             = printsym (quote "CAT Adt after search tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked search_cat
+        -- _             = printsym (quote "NEWLINE")
+        _             = printsym (quote "==============================================================================================================================")
         _             = printsym (quote "NEWLINE")
-        _             = printAdt add_cta
-        _             = printsym (quote "NEWLINE")     -}   
+        add_tca    = iterate (add1TagsAdt tca)
+        -- _             = printsym (quote "TCA Adt after add tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked add_tca
+        -- _             = printsym (quote "NEWLINE")
+        add_act    = iterate (add1TagsAdt act)
+        -- _             = printsym (quote "ACT Adt after add tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked add_act
+        -- _             = printsym (quote "NEWLINE")
+        add_tac    = iterate (add1TagsAdt tac)
+        -- _             = printsym (quote "TAC Adt after add tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked add_tac
+        -- _             = printsym (quote "NEWLINE")
+        add_atc    = iterate (add1TagsAdt atc)
+        -- _             = printsym (quote "ATC Adt after add tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked add_atc
+        -- _             = printsym (quote "NEWLINE")
+        add_cta    = iterate (add1TagsAdt cta) 
+        -- _             = printsym (quote "CTA Adt after search tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked add_cta
+        -- _             = printsym (quote "NEWLINE")
+        add_cat       = iterate (add1TagsAdt cat)
+        -- _             = printsym (quote "CAT Adt after search tags: ")
+        -- _             = printsym (quote "NEWLINE")
+        -- _             = printPacked add_cat
+        -- _             = printsym (quote "NEWLINE")
     in ()
