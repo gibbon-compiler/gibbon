@@ -590,6 +590,12 @@ void gib_get_rust_struct_sizes(
     size_t *footer,
     size_t *gc_stats
 );
+void gib_print_nursery_and_oldgen(
+    GibShadowstack *rstack,
+    GibShadowstack *wstack,
+    GibNursery *nursery,
+    GibOldGeneration *oldgen
+);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

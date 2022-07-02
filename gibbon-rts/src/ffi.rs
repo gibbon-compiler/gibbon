@@ -326,3 +326,15 @@ pub extern "C" fn gib_get_rust_struct_sizes(
         *gc_stats = size_of::<C_GibGcStats>();
     }
 }
+
+#[no_mangle]
+pub extern "C" fn gib_print_nursery_and_oldgen(
+    rstack: *const C_GibShadowstack,
+    wstack: *const C_GibShadowstack,
+    nursery: *const C_GibNursery,
+    oldgen: *const C_GibOldGeneration,
+) {
+    unsafe {
+        gc::print_nursery_and_oldgen(&*rstack, &*wstack, &*nursery, &*oldgen);
+    }
+}

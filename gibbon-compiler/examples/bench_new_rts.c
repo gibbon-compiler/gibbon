@@ -1496,6 +1496,7 @@ GibCursorProd _traverse_List(GibCursor end_r_643, GibCursor arg_154_234_345)
 }
 GibCursorProd _print_List(GibCursor end_r_574, GibCursor arg_167_250_336)
 {
+    printf(" %p:", arg_167_250_336);
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;

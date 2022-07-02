@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::intrinsics::ptr_offset_from;
 use std::mem::size_of;
-use std::ptr::{null_mut, write_bytes};
+use std::ptr::{null, null_mut, write_bytes};
 
 use crate::ffi::types::*;
 use crate::record_time;
@@ -115,7 +115,7 @@ pub fn garbage_collect(
     _force_major: bool,
 ) -> Result<()> {
     #[cfg(feature = "verbose_evac")]
-    println!("gc...");
+    eprintln!("gc...");
 
     unsafe {
         // Start by cauterizing the writers.
@@ -161,8 +161,9 @@ pub fn garbage_collect(
             rstack,
             evac_major,
         )?;
-        // Collect dead regions.
-        oldgen.collect_regions()?;
+
+        // // Collect dead regions.
+        // oldgen.collect_regions()?;
 
         // Reset the allocation area and record stats.
         nursery.clear();
@@ -337,7 +338,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
         // FIXME: forwarded is currently true if evacuate forwarded ANYTHING.
         // We need to enforce it for each chunk...
         if !forwarded & is_loc_0 {
-            assert!(dst_after < dst_after_end);
+            debug_assert!(dst_after < dst_after_end);
             write_forwarding_pointer_at(
                 src_after,
                 dst_after,
@@ -642,7 +643,7 @@ unsafe fn evacuate_packed(
                         }
                         // At this point the scan_ptr is one past the
                         // C_COPIED_TO_TAG i.e. at the forwarding pointer.
-                        assert!((src as *const i8) < scan_ptr);
+                        debug_assert!((src as *const i8) < scan_ptr);
                         let offset = scan_ptr.offset_from(src) - 1;
                         // The forwarding pointer that's available.
                         let (tagged_fwd_avail, _): (u64, _) = read(scan_ptr);
@@ -733,7 +734,7 @@ unsafe fn evacuate_packed(
                         eprintln!("   Redirection ptr!: src {:?}, to next chunk {:?}", src, next_chunk);
 
                         // Add a forwarding pointer in the source buffer.
-                        assert!(dst < dst_end);
+                        debug_assert!(dst < dst_end);
                         write_forwarding_pointer_at(
                             src,
                             dst,
@@ -914,7 +915,7 @@ unsafe fn evacuate_packed(
 
     #[cfg(feature = "verbose_evac")]
     eprintln!(
-        " Finished evacuate_packed: recording in so_env {:?} -> {:?}",
+        "Finished evacuate_packed: recording in so_env {:?} -> {:?}",
         orig_src, src
     );
     // Provide skip-over information for what we just cleared out.
@@ -1051,6 +1052,13 @@ pub unsafe fn handle_old_to_old_indirection(
     from_footer_ptr: *mut i8,
     to_footer_ptr: *mut i8,
 ) {
+    #[cfg(feature = "verbose_evac")]
+    eprintln!(
+        "Recording metadata for an old-to-old indirection, {:?}@{:?} -> {:?}@{:?}.",
+        *(from_footer_ptr as *const C_GibChunkFooter), from_footer_ptr,
+        *(to_footer_ptr as *const C_GibChunkFooter), to_footer_ptr
+    );
+
     let added = add_to_outset(from_footer_ptr, to_footer_ptr);
     if added {
         bump_refcount(to_footer_ptr);
@@ -1060,18 +1068,33 @@ pub unsafe fn handle_old_to_old_indirection(
 unsafe fn add_to_outset(from_addr: *mut i8, to_addr: *const i8) -> bool {
     let from_reg_info = (*(from_addr as *mut C_GibChunkFooter)).reg_info;
     let to_reg_info = (*(to_addr as *mut C_GibChunkFooter)).reg_info;
+
+    #[cfg(feature = "verbose_evac")]
+    eprintln!(
+        "  Adding to outset, {:?}@{:?} -> {:?}@{:?}.",
+        *from_reg_info, from_reg_info, *to_reg_info, to_reg_info
+    );
+
     (*((*from_reg_info).outset)).insert(to_reg_info)
 }
 
 unsafe fn bump_refcount(addr: *mut i8) -> u16 {
     let reg_info = (*(addr as *mut C_GibChunkFooter)).reg_info;
     (*reg_info).refcount += 1;
+
+    #[cfg(feature = "verbose_evac")]
+    eprintln!("  Bumped refcount, {:?}@{:?}.", *reg_info, reg_info);
+
     (*reg_info).refcount
 }
 
 unsafe fn decrement_refcount(addr: *mut i8) -> u16 {
     let reg_info = (*(addr as *mut C_GibChunkFooter)).reg_info;
     (*reg_info).refcount -= 1;
+
+    #[cfg(feature = "verbose_evac")]
+    eprintln!("Decremented refcount: {:?}@{:?}", *reg_info, reg_info);
+
     (*reg_info).refcount
 }
 
@@ -1095,6 +1118,13 @@ pub unsafe fn init_footer_at(
     (*footer).reg_info = region_info_ptr;
     (*footer).size = chunk_size - footer_space;
     (*footer).next = null_mut();
+
+    #[cfg(feature = "verbose_evac")]
+    eprintln!(
+        "Initialized footer at {:?}: {:?}; {:?}",
+        footer_start, *footer, *region_info_ptr
+    );
+
     footer_start
 }
 
@@ -1132,7 +1162,7 @@ trait Heap {
         dst: *mut i8,
         dst_end: *mut i8,
     ) -> (*mut i8, *mut i8) {
-        assert!(dst < dst_end);
+        debug_assert!(dst < dst_end);
         let space_avail = unsafe { dst_end.offset_from(dst) as usize };
         if space_avail >= space_reqd {
             (dst, dst_end)
@@ -1173,7 +1203,7 @@ impl<'a> Heap for C_GibNursery {
     #[inline(always)]
     fn space_available(&self) -> usize {
         unsafe {
-            assert!((*self).alloc > (*self).heap_start);
+            debug_assert!((*self).alloc > (*self).heap_start);
             // alloc - heap_start.
             ptr_offset_from((*self).alloc, (*self).heap_start) as usize
         }
@@ -1230,7 +1260,7 @@ impl<'a> Heap for C_GibNursery {
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
         let nursery: *mut C_GibNursery = self;
         unsafe {
-            assert!((*nursery).alloc >= (*nursery).heap_start);
+            debug_assert!((*nursery).alloc >= (*nursery).heap_start);
             let old = (*nursery).alloc as *const i8;
             let bump: *const i8 = old.sub(size);
             let start = (*nursery).heap_start as *const i8;
@@ -1421,7 +1451,7 @@ impl<'a> C_GibShadowstack {
                 ((*self).start as *const i8) as *const C_GibShadowstackFrame,
                 ((*self).alloc as *const i8) as *const C_GibShadowstackFrame,
             );
-            assert!(start_ptr <= end_ptr);
+            debug_assert!(start_ptr <= end_ptr);
             end_ptr.offset_from(start_ptr)
         }
     }
@@ -1429,7 +1459,7 @@ impl<'a> C_GibShadowstack {
     fn print_all(&self) {
         for frame in ShadowstackIter::new(self) {
             unsafe {
-                println!("{:?}", *frame);
+                eprintln!("{:?}", *frame);
             }
         }
     }
@@ -1457,7 +1487,7 @@ pub struct ShadowstackIter {
 
 impl ShadowstackIter {
     fn new(cstk: &C_GibShadowstack) -> ShadowstackIter {
-        assert!((*cstk).start <= (*cstk).alloc);
+        debug_assert!((*cstk).start <= (*cstk).alloc);
         ShadowstackIter { run_ptr: (*cstk).start, end_ptr: (*cstk).alloc }
     }
 }
@@ -1635,3 +1665,179 @@ impl std::fmt::Display for RtsError {
 }
 
 pub type Result<T> = std::result::Result<T, RtsError>;
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ * Printf debugging functions
+ * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ */
+
+/// Print all information about the nursery and oldgen.
+pub fn print_nursery_and_oldgen(
+    rstack: &C_GibShadowstack,
+    wstack: &C_GibShadowstack,
+    nursery: &C_GibNursery,
+    oldgen: &C_GibOldGeneration,
+) {
+    unsafe {
+        let mut info_env: HashMap<*const i8, OldGenerationChunkInfo> =
+            HashMap::new();
+        let mut add_to_info_env =
+            |frame: *const C_GibShadowstackFrame, is_read: bool| -> () {
+                if !nursery.contains_addr((*frame).ptr) {
+                    let chunk_end = (*frame).endptr;
+                    let footer: *const C_GibChunkFooter =
+                        chunk_end as *const C_GibChunkFooter;
+                    let chunk_start = chunk_end.sub((*footer).size);
+                    let info = info_env.entry(chunk_end).or_default();
+                    (*info).start = chunk_start;
+                    (*info).end = chunk_end;
+                    if is_read {
+                        (*info).read_frames.push(frame);
+                    } else {
+                        (*info).write_frames.push(frame);
+                    }
+                }
+            };
+        for frame in rstack.into_iter() {
+            add_to_info_env(frame, true);
+        }
+        for frame in wstack.into_iter() {
+            add_to_info_env(frame, false);
+        }
+        eprintln!("\n--------------------\nNursery:\n--------------------");
+        eprintln!(
+            "start={:?}, end={:?}, alloc={:?}",
+            (*nursery).heap_start,
+            (*nursery).heap_end,
+            (nursery).alloc
+        );
+        eprintln!(
+            "--------------------\nNursery chunks:\n--------------------"
+        );
+
+        // Print nursery chunks in newest-chunk-first order.
+        for (chunk_start, chunk_end, chunk_size) in nursery
+            .into_iter()
+            .collect::<Vec<(*const i8, *const i8, u16)>>()
+            .iter()
+            .rev()
+        {
+            eprint!(
+                "|{:?}...{:?}|{:?}| -> ",
+                chunk_start, chunk_end, chunk_size
+            );
+        }
+        eprintln!("\n");
+        eprintln!("");
+        eprintln!("--------------------\nOldgen:\n--------------------");
+        eprintln!(
+            "rem-set={:?}, old-zct={:?}, new-zct={:?}",
+            (*oldgen).rem_set,
+            (*oldgen).old_zct,
+            (*oldgen).new_zct
+        );
+        (*oldgen).rem_set.print_all();
+        eprintln!(
+            "--------------------\nOldgen chunks:\n--------------------"
+        );
+        for (_, info) in info_env.iter() {
+            eprintln!("{}", info);
+        }
+    }
+}
+
+#[derive(Debug)]
+struct OldGenerationChunkInfo {
+    start: *const i8,
+    end: *const i8,
+    read_frames: Vec<*const C_GibShadowstackFrame>,
+    write_frames: Vec<*const C_GibShadowstackFrame>,
+}
+
+impl Default for OldGenerationChunkInfo {
+    fn default() -> Self {
+        OldGenerationChunkInfo {
+            start: null(),
+            end: null(),
+            read_frames: vec![],
+            write_frames: vec![],
+        }
+    }
+}
+
+impl std::fmt::Display for OldGenerationChunkInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let mut read_frames_str = Vec::new();
+        let mut write_frames_str: Vec<String> = Vec::new();
+        let mut add_frame_str = |frame_ref: &*const C_GibShadowstackFrame,
+                                 is_read|
+         -> () {
+            unsafe {
+                let frame = *frame_ref as *const C_GibShadowstackFrame;
+                let footer = (*frame).endptr as *const C_GibChunkFooter;
+                let reg_info = (*footer).reg_info as *const C_GibRegionInfo;
+                let outset = (*reg_info).outset;
+                let formatted = format!(
+                    "(frame={:?} ; footer={:?} ; reg_info={:?} ; outset={:?})",
+                    *frame, *footer, *reg_info, *outset
+                );
+                if is_read {
+                    read_frames_str.push(formatted);
+                } else {
+                    write_frames_str.push(formatted);
+                }
+            }
+        };
+        for frame_ref in (*self).read_frames.iter() {
+            add_frame_str(frame_ref, true);
+        }
+        for frame_ref in (*self).write_frames.iter() {
+            add_frame_str(frame_ref, false);
+        }
+        write!(f,
+               "OldGenerationChunkInfo {{ start: {:?}, end: {:?}, read_frames: {:?}, write_frames: {:?} }}",
+               (*self).start, (*self).end, read_frames_str, write_frames_str)
+    }
+}
+
+impl<'a> IntoIterator for &C_GibNursery {
+    type Item = (*const i8, *const i8, u16);
+    type IntoIter = NurseryIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+        NurseryIter::new(self)
+    }
+}
+
+pub struct NurseryIter {
+    run_ptr: *const i8,
+    end_ptr: *const i8,
+}
+
+impl NurseryIter {
+    fn new(nursery: &C_GibNursery) -> NurseryIter {
+        NurseryIter { run_ptr: (*nursery).heap_end, end_ptr: (*nursery).alloc }
+    }
+}
+
+/// Traverses the nursery in oldest-chunk-first order.
+impl Iterator for NurseryIter {
+    type Item = (*const i8, *const i8, u16);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        unsafe {
+            if self.run_ptr > self.end_ptr {
+                let chunk_end = self.run_ptr;
+                let footer_start = self.run_ptr.sub(2);
+                let chunk_size: u16 = *(footer_start as *const u16);
+                let chunk_start = footer_start.sub(chunk_size as usize);
+                debug_assert!(chunk_start < footer_start);
+                debug_assert!(footer_start <= chunk_end);
+                self.run_ptr = chunk_start;
+                Some((chunk_start, chunk_end, chunk_size))
+            } else {
+                None
+            }
+        }
+    }
+}

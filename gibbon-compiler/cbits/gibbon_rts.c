@@ -1156,7 +1156,7 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
         footer->next = (GibChunkFooter *) new_footer;
     }
 
-#ifdef _GIBBON_DEBUG
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     GibRegionInfo *reg = (GibRegionInfo*) new_footer->reg_info;
     printf("gib_grow_region: allocated %zu bytes for region %" PRIu64 "\n",
            newsize,
@@ -1505,6 +1505,11 @@ void gib_indirection_barrier(
     bool to_old = !to_young;
     if (from_old) {
         if (to_young) {
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    printf("Writing an old-to-young indirection, %p -> %p.\n", from, to);
+#endif
+
             // (3) oldgen -> nursery
             GibOldGeneration *oldgen = DEFAULT_GENERATION;
             // Store the address of the indirection pointer, *NOT* the address of
@@ -1513,11 +1518,21 @@ void gib_indirection_barrier(
             gib_remset_push(oldgen->rem_set, indr_addr, from_footer, datatype);
             return;
         } else {
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    printf("Writing an old-to-old indirection, %p -> %p.\n", from, to);
+#endif
+
             // (4) oldgen -> oldgen
             gib_handle_old_to_old_indirection(from_footer, to_footer);
             return;
         }
     }
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    printf("Writing a young-to-young indirection, %p -> %p.\n", from, to);
+#endif
+
     return;
 }
 
