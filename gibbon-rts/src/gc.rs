@@ -138,7 +138,6 @@ pub fn garbage_collect(
         let mut so_env = HashMap::new();
         evacuate_shadowstack(
             &mut so_env,
-            (*oldgen).new_zct,
             nursery,
             oldgen,
             rstack,
@@ -235,7 +234,6 @@ fn restore_writers(
 /// destination heap. Also uncauterize any writer cursors that are reached.
 unsafe fn evacuate_shadowstack<'a, 'b>(
     so_env: &'a mut SkipOverEnv,
-    zct: *mut Zct,
     nursery: &'b C_GibNursery,
     oldgen: &'a mut C_GibOldGeneration,
     rstack: &C_GibShadowstack,
@@ -260,7 +258,12 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                 let tagged = TaggedPointer::from_u64(tagged_src);
                 let src = tagged.untag();
                 // Evacuate the data.
-                let mut st = EvacState { so_env, zct, nursery, evac_major };
+                let mut st = EvacState {
+                    so_env,
+                    zct: (*oldgen).new_zct,
+                    nursery,
+                    evac_major,
+                };
                 let (src_after, _dst_after, _dst_after_end, _forwarded) =
                     evacuate_packed(&mut st, oldgen, frame, dst, dst_end);
                 // Update the indirection pointer in oldgen region.
@@ -274,9 +277,11 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                 let root_in_nursery = nursery.contains_addr((*frame).endptr);
                 if !evac_major && !root_in_nursery {
                     let footer = (*frame).endptr as *const C_GibChunkFooter;
+                    /*
                     if (*((*footer).reg_info)).refcount == 0 {
                         (*zct).insert((*footer).reg_info);
                     }
+                     */
                     continue;
                 }
                 // Compute chunk size.
@@ -293,12 +298,19 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                     Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 0)?;
                 // Update ZCT.
                 let footer = dst_end as *const C_GibChunkFooter;
+                /*
                 record_time!(
                     (*zct).insert((*footer).reg_info),
                     (*GC_STATS).gc_zct_mgmt_time
                 );
+                 */
                 // Evacuate the data.
-                let mut st = EvacState { so_env, zct, nursery, evac_major };
+                let mut st = EvacState {
+                    so_env,
+                    zct: (*oldgen).new_zct,
+                    nursery,
+                    evac_major,
+                };
                 let src = (*frame).ptr;
                 let src_end = (*frame).endptr;
                 let is_loc_0 =
@@ -584,6 +596,7 @@ unsafe fn evacuate_packed(
                             C_GcRootProv::Stk => {
                                 let fwd_footer =
                                     fwd_footer_addr as *const C_GibChunkFooter;
+                                /*
                                 record_time!(
                                     (*(st.zct)).remove(
                                         &((*fwd_footer).reg_info
@@ -591,6 +604,7 @@ unsafe fn evacuate_packed(
                                     ),
                                     (*GC_STATS).gc_zct_mgmt_time
                                 );
+                                 */
                                 ()
                             }
                         }
@@ -667,6 +681,7 @@ unsafe fn evacuate_packed(
                             C_GcRootProv::Stk => {
                                 let fwd_footer = fwd_footer_addr_avail
                                     as *const C_GibChunkFooter;
+                                /*
                                 record_time!(
                                     (*(st.zct)).remove(
                                         &((*fwd_footer).reg_info
@@ -674,6 +689,7 @@ unsafe fn evacuate_packed(
                                     ),
                                     (*GC_STATS).gc_zct_mgmt_time
                                 );
+                                 */
                                 ()
                             }
                         }
@@ -771,6 +787,7 @@ unsafe fn evacuate_packed(
                             (*footer1).next = footer2;
                             (*footer1).reg_info = reg_info2;
 
+                            /*
                             // Update ZCT.
                             record_time!(
                                 (*(st.zct)).remove(
@@ -782,6 +799,8 @@ unsafe fn evacuate_packed(
                                 (*(st.zct)).insert(reg_info2),
                                 (*GC_STATS).gc_zct_mgmt_time
                             );
+                             */
+
                             // Stop evacuating.
                             src = src_after_next_chunk as *mut i8;
                             dst = dst_after_redir;
