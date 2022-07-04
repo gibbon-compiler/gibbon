@@ -126,29 +126,16 @@ pub fn garbage_collect(
                 (*GC_STATS).major_collections += 1;
             }
         }
-        // Prepare to evacuate the readers.
 
         // Start collection.
-        let rem_set: &mut C_GibRememberedSet = (*oldgen).rem_set;
-        // First evacuate the remembered set, then the shadow-stack.
-        /*
-        let mut so_env = evacuate_remembered_set(
-            (*generations_ref).new_zct,
-            nursery,
-            &mut oldgen,
-            rem_set,
-            evac_major,
-        )?;
-         */
-        let mut so_env = HashMap::new();
-        rem_set.clear();
-
         #[cfg(feature = "verbose_evac")]
         {
             rstack.print_all("Read");
             wstack.print_all("Write");
         }
 
+        // Evacuate readers.
+        let mut so_env = HashMap::new();
         evacuate_shadowstack(
             &mut so_env,
             (*oldgen).new_zct,
@@ -244,121 +231,105 @@ fn restore_writers(
     Ok(())
 }
 
-/*
-/// Copy values at all read cursors from the remembered set to the provided
-/// destination heap. Update the burned environment along the way.
-/// The roots are processed in a left-to-right order based on the addresses of
-/// the pointers they contain, to avoid the issue of running into holes due to
-/// burning while we're still evacuating the remembered set.
-/// See Note [Granularity of the burned addresses table].
-unsafe fn evacuate_remembered_set<'a>(
-    zct: *mut Zct,
-    nursery: &'a C_GibNursery,
-    heap: &mut impl Heap,
-    rem_set: &C_GibRememberedSet,
-    evac_major: bool,
-) -> Result<SkipOverEnv> {
-    let mut so_env: SkipOverEnv = HashMap::new();
-    let frames =
-        record_time!(sort_roots(rem_set), (*GC_STATS).gc_rootset_sort_time);
-    for frame in frames {
-        let datatype = (*frame).datatype;
-        // let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
-        // Allocate space in the destination.
-        let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 1)?;
-        // The remembered set contains the address where the indirect-
-        // ion pointer is stored. We must read it to get the address of
-        // the pointed-to data.
-        let (tagged_src, _): (u64, _) = read((*frame).ptr);
-        let tagged = TaggedPointer::from_u64(tagged_src);
-        let src = tagged.untag();
-        // Evacuate the data.
-        let mut st = EvacState {
-            so_env: &mut so_env,
-            zct,
-            nursery,
-            evac_major,
-        };
-        let (src_after, _dst_after, _dst_after_end, _forwarded) =
-            evacuate_packed(&mut st, heap, datatype, src, dst, dst_end);
-        // Update the indirection pointer in oldgen region.
-        write((*frame).ptr, dst);
-        // Update the outset in oldgen region.
-        add_to_outset((*frame).endptr, dst_end);
-        // Update the burned address table.
-        so_env.insert(src, src_after);
-    }
-    Ok(so_env)
-}
-*/
-
 /// Copy values at all read cursors from the nursery to the provided
 /// destination heap. Also uncauterize any writer cursors that are reached.
 unsafe fn evacuate_shadowstack<'a, 'b>(
     so_env: &'a mut SkipOverEnv,
     zct: *mut Zct,
-    // nursery: &'b Nursery<'b, 'c>,
     nursery: &'b C_GibNursery,
-    heap: &mut impl Heap,
+    oldgen: &'a mut C_GibOldGeneration,
     rstack: &C_GibShadowstack,
     evac_major: bool,
 ) -> Result<()> {
-    // let frames = rstack.into_iter();
-    let frames = sort_roots(rstack);
+    let rem_set: &&mut C_GibShadowstack = &(*oldgen).rem_set;
+    let frames = record_time!(
+        sort_roots(rstack, rem_set),
+        (*GC_STATS).gc_rootset_sort_time
+    );
     for frame in frames {
-        let root_in_nursery = nursery.contains_addr((*frame).endptr);
-        if !evac_major && !root_in_nursery {
-            let footer = (*frame).endptr as *const C_GibChunkFooter;
-            if (*((*footer).reg_info)).refcount == 0 {
-                (*zct).insert((*footer).reg_info);
+        match (*frame).gc_root_prov {
+            C_GcRootProv::RemSet => {
+                // let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
+                // Allocate space in the destination.
+                let (dst, dst_end) =
+                    Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 1)?;
+                // The remembered set contains the address where the indirect-
+                // ion pointer is stored. We must read it to get the address of
+                // the pointed-to data.
+                let (tagged_src, _): (u64, _) = read((*frame).ptr);
+                let tagged = TaggedPointer::from_u64(tagged_src);
+                let src = tagged.untag();
+                // Evacuate the data.
+                let mut st = EvacState { so_env, zct, nursery, evac_major };
+                let (src_after, _dst_after, _dst_after_end, _forwarded) =
+                    evacuate_packed(&mut st, oldgen, frame, dst, dst_end);
+                // Update the indirection pointer in oldgen region.
+                write((*frame).ptr, dst);
+                // Update the outset in oldgen region.
+                add_to_outset((*frame).endptr, dst_end);
+                // Update the burned address table.
+                so_env.insert(src, src_after);
             }
-            continue;
-        }
-        // Compute chunk size.
-        let chunk_size = if root_in_nursery {
-            let nursery_footer: *mut u16 = (*frame).endptr as *mut u16;
-            *nursery_footer as usize
-        } else {
-            let footer = (*frame).endptr as *const C_GibChunkFooter;
-            (*footer).size
-        };
+            C_GcRootProv::Stk => {
+                let root_in_nursery = nursery.contains_addr((*frame).endptr);
+                if !evac_major && !root_in_nursery {
+                    let footer = (*frame).endptr as *const C_GibChunkFooter;
+                    if (*((*footer).reg_info)).refcount == 0 {
+                        (*zct).insert((*footer).reg_info);
+                    }
+                    continue;
+                }
+                // Compute chunk size.
+                let chunk_size = if root_in_nursery {
+                    let nursery_footer: *mut u16 = (*frame).endptr as *mut u16;
+                    *nursery_footer as usize
+                } else {
+                    let footer = (*frame).endptr as *const C_GibChunkFooter;
+                    (*footer).size
+                };
 
-        // Allocate space in the destination.
-        let (dst, dst_end) = Heap::allocate_first_chunk(heap, CHUNK_SIZE, 0)?;
-        // Update ZCT.
-        let footer = dst_end as *const C_GibChunkFooter;
-        record_time!(
-            (*zct).insert((*footer).reg_info),
-            (*GC_STATS).gc_zct_mgmt_time
-        );
-        // Evacuate the data.
-        let mut st = EvacState { so_env, zct, nursery, evac_major };
-        let src = (*frame).ptr;
-        let src_end = (*frame).endptr;
-        let is_loc_0 = (src_end.offset_from(src)) == chunk_size as isize;
+                // Allocate space in the destination.
+                let (dst, dst_end) =
+                    Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 0)?;
+                // Update ZCT.
+                let footer = dst_end as *const C_GibChunkFooter;
+                record_time!(
+                    (*zct).insert((*footer).reg_info),
+                    (*GC_STATS).gc_zct_mgmt_time
+                );
+                // Evacuate the data.
+                let mut st = EvacState { so_env, zct, nursery, evac_major };
+                let src = (*frame).ptr;
+                let src_end = (*frame).endptr;
+                let is_loc_0 =
+                    (src_end.offset_from(src)) == chunk_size as isize;
 
-        let (src_after, dst_after, dst_after_end, forwarded) =
-            evacuate_packed(&mut st, heap, frame, dst, dst_end);
-        // Update the pointers in shadow-stack.
-        (*frame).ptr = dst;
-        // TODO(ckoparkar): AUDITME.
-        // (*frame).endptr = dst_after_end;
-        (*frame).endptr = dst_end;
+                let (src_after, dst_after, dst_after_end, forwarded) =
+                    evacuate_packed(&mut st, oldgen, frame, dst, dst_end);
+                // Update the pointers in shadow-stack.
+                (*frame).ptr = dst;
+                // TODO(ckoparkar): AUDITME.
+                // (*frame).endptr = dst_after_end;
+                (*frame).endptr = dst_end;
 
-        // Note [Adding a forwarding pointer at the end of every chunk].
+                // Note [Adding a forwarding pointer at the end of every chunk].
 
-        // FIXME: forwarded is currently true if evacuate forwarded ANYTHING.
-        // We need to enforce it for each chunk...
-        if !forwarded & is_loc_0 {
-            debug_assert!(dst_after < dst_after_end);
-            write_forwarding_pointer_at(
-                src_after,
-                dst_after,
-                dst_after_end.offset_from(dst_after) as u16, // .try_into()
-                                                             // .unwrap()
-            );
+                // FIXME: forwarded is currently true if evacuate forwarded ANYTHING.
+                // We need to enforce it for each chunk...
+                if !forwarded & is_loc_0 {
+                    debug_assert!(dst_after < dst_after_end);
+                    write_forwarding_pointer_at(
+                        src_after,
+                        dst_after,
+                        dst_after_end.offset_from(dst_after) as u16, // .try_into()
+                                                                     // .unwrap()
+                    );
+                }
+            }
         }
     }
+    // Clear the remembered set.
+    (*oldgen).rem_set.clear();
     Ok(())
 }
 
@@ -401,7 +372,7 @@ FIXME: forwarded is currently for the entire (multi-chunk) evaluation, and it sh
  */
 unsafe fn evacuate_packed(
     st: &mut EvacState,
-    heap: &mut impl Heap,
+    oldgen: &mut impl Heap,
     frame: *const C_GibShadowstackFrame,
     orig_dst: *mut i8,
     orig_dst_end: *mut i8,
@@ -516,7 +487,7 @@ unsafe fn evacuate_packed(
                         } else {
                             let space_reqd = 32;
                             let (dst1, dst_end1) = Heap::check_bounds(
-                                heap, space_reqd, dst, dst_end,
+                                oldgen, space_reqd, dst, dst_end,
                             );
                             let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                             let dst_after_indr =
@@ -583,8 +554,9 @@ unsafe fn evacuate_packed(
                         let tagged = TaggedPointer::from_u64(tagged_fwd_ptr);
                         let fwd_ptr = tagged.untag();
                         let space_reqd = 32;
-                        let (dst1, dst_end1) =
-                            Heap::check_bounds(heap, space_reqd, dst, dst_end);
+                        let (dst1, dst_end1) = Heap::check_bounds(
+                            oldgen, space_reqd, dst, dst_end,
+                        );
                         let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                         let dst_after_indr =
                             write(dst_after_tag, tagged_fwd_ptr);
@@ -673,8 +645,9 @@ unsafe fn evacuate_packed(
                         )
                         .as_u64();
                         let space_reqd = 32;
-                        let (dst1, dst_end1) =
-                            Heap::check_bounds(heap, space_reqd, dst, dst_end);
+                        let (dst1, dst_end1) = Heap::check_bounds(
+                            oldgen, space_reqd, dst, dst_end,
+                        );
                         let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                         let dst_after_indr = write(dst_after_tag, tagged_want);
 
@@ -840,7 +813,7 @@ unsafe fn evacuate_packed(
                             // and destination buffer respectively.
 
                             let (mut dst2, dst_end2) = Heap::check_bounds(
-                                heap, space_reqd, dst, dst_end,
+                                oldgen, space_reqd, dst, dst_end,
                             );
                             // Copy the tag and the fields.
                             dst2 = write(dst2, tag);
@@ -936,8 +909,10 @@ unsafe fn evacuate_packed(
 }
 
 fn sort_roots(
-    roots: &C_GibShadowstack,
-) -> Box<dyn Iterator<Item = *mut C_GibShadowstackFrame>> {
+    rstack: &C_GibShadowstack,
+    rem_set: &C_GibRememberedSet,
+    // -> Box<dyn Iterator<Item = *mut C_GibShadowstackFrame>>
+) -> Vec<*mut C_GibShadowstackFrame> {
     // Store all the frames in a vector and sort,
     // see Note [Granularity of the burned addresses table] and
     // Note [Sorting roots on the shadow-stack and remembered set].
@@ -946,15 +921,17 @@ fn sort_roots(
     // for oldgen we want to sort using highest depth first,
     // for nursery we want to start with leftmost root first.
     let mut frames_vec: Vec<*mut C_GibShadowstackFrame> = Vec::new();
-    for frame in roots.into_iter() {
+    for frame in rstack.into_iter().chain(rem_set.into_iter()) {
         frames_vec.push(frame);
     }
     frames_vec.sort_unstable_by(|a, b| unsafe {
-        let ptra: *const i8 = (*(*a)).ptr;
-        let ptrb: *const i8 = (*(*b)).ptr;
-        (ptra).cmp(&ptrb)
+        let tagged_a = TaggedPointer::from_u64((*(*a)).ptr as u64);
+        let tagged_b = TaggedPointer::from_u64((*(*b)).ptr as u64);
+        let ptr_a: *const i8 = tagged_a.untag();
+        let ptr_b: *const i8 = tagged_b.untag();
+        (ptr_a).cmp(&ptr_b)
     });
-    Box::new(frames_vec.into_iter())
+    frames_vec
 }
 
 #[inline(always)]

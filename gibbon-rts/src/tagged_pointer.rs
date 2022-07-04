@@ -74,3 +74,19 @@ impl fmt::Binary for TaggedPointer {
         fmt::Binary::fmt(&val, f) // delegate to u64's implementation
     }
 }
+
+#[test]
+fn test_pointer_tagging() {
+    let mut data: u16 = 65535;
+    let ptr = unsafe { libc::malloc(1024) as *mut i8 };
+    let mut tagged_number = TaggedPointer::new(ptr, data).as_u64();
+    let mut tagged = TaggedPointer::from_u64(tagged_number);
+    assert!(tagged.untag() == ptr);
+    assert!(tagged.get_tag() == data);
+
+    data = 0;
+    tagged_number = TaggedPointer::new(ptr, data).as_u64();
+    tagged = TaggedPointer::from_u64(tagged_number);
+    assert!(tagged.untag() == ptr);
+    assert!(tagged.get_tag() == data);
+}
