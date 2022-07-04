@@ -12,10 +12,10 @@ searchTag tag tagList = case tag of
                                                   Tag val' rst' -> if (val == val') then True else (False || searchTag tag rst')
                                                   
                                   
-add1Tag :: Tags -> Tags
-add1Tag tags = case tags of 
-                    Nul -> Nul
-                    Tag val rst -> Tag (val+1) (add1Tag rst)
+addValTag :: Tags -> Int -> Tags
+addValTag tags inVal = case tags of 
+                            Nul -> Nul
+                            Tag val rst -> Tag (val+inVal) (addValTag rst inVal)
                                                   
 countTags :: Tags -> Int
 countTags tags = case tags of 

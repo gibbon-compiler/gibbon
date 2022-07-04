@@ -9,14 +9,23 @@ data Adt = Nil | CA (Content) (Adt) | AC (Adt) (Content) | TCA (Tags) (Content) 
     deriving (Show)
 
 
--- make list for adt CA
+-- make list for adt CA Tail recursive
+mkCAListTR :: Int -> Int -> Adt -> Adt
+mkCAListTR len strLen accumulator = if len <= 0
+                  then accumulator
+                  else
+                    let content = mkContentTextTR strLen
+                        append  = CA content accumulator
+                    in mkCAListTR (len-1) strLen append
+
+-- make list for adt CA non-tail recursive
 mkCAList :: Int -> Int -> Adt
 mkCAList len strLen = if len <= 0
                   then Nil 
                   else
                     let content = mkContentText strLen
                         rst     = mkCAList (len-1) strLen
-                    in CA content rst
+                    in CA content rst                    
                     
 
 -- make list for adt AC
@@ -50,9 +59,9 @@ mkTACList :: Int -> Int -> Int -> Adt
 mkTACList len tagLen strLen = if (len <= 0)
                                   then Nil
                                   else let tags    = mkRandomTags tagLen
-                                           content = mkContentText strLen
                                            rst     = mkTACList (len-1) tagLen strLen
-                                       in TCA tags content rst  
+                                           content = mkContentText strLen
+                                       in TAC tags rst content
                                        
                                        
 mkATCList :: Int -> Int -> Int -> Adt

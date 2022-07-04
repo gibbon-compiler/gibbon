@@ -534,8 +534,8 @@ passes config@Config{dynflags} l0 = do
               -- Note: L1 -> L2
               l2 <- goE2 "inferLocations"  inferLocs    l1
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
-              l2 <- go "regionsInwards"    regionsInwards l2
-              l2 <- go   "L2.typecheck"    L2.tcProg    l2
+              --l2 <- go "regionsInwards"    regionsInwards l2
+              --l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- goE2 "L2.flatten"      flattenL2    l2
               l2 <- go   "L2.typecheck"    L2.tcProg    l2
               l2 <- if gibbon1 || no_rcopies
@@ -625,7 +625,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- TODO: Compose L3.TcM with (ReaderT Config)
               l2 <- if gibbon1
                     then pure l2
-                    else go "inferRegSize" inferRegSize l2
+                    else pure l2
+                    --else go "inferRegSize" inferRegSize l2
               l3 <- go "cursorize"        cursorize     l2
               -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3

@@ -9,6 +9,15 @@ data String   = End | Char Int (String)
 -- Populate the string with random integers between 0 and 127.  
 -- arguments -> Length of desired list
 -- reutns    -> Cons Int List
+mkStringTR :: Int -> String -> String
+mkStringTR len accum = if len <= 0
+                    then accum
+                    else 
+                        let randomChar = mod rand 128
+                            append     = Char randomChar accum
+                        in mkStringTR (len - 1) accum
+
+
 mkString :: Int -> String
 mkString len = if len <= 0
                     then End
@@ -16,6 +25,17 @@ mkString len = if len <= 0
                         let randomChar = mod rand 128
                             rst = mkString (len - 1)
                         in Char randomChar rst
+                        
+
+-- Do some random calculations with string, not dependent on the data layout for now so okay to make common.
+processString :: String -> String 
+processString string = case string of
+                            End -> End
+                            Char val rst -> let addVal = val + 10
+                                                mulVal = addVal * 10
+                                                divVal = mulVal / 2
+                                                modVal = mod divVal 128
+                                            in Char modVal (processString rst)
                         
 -------------------------------- Print utility -------------------------------------
                         
