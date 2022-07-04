@@ -36,14 +36,6 @@ const COLLECT_MAJOR_K: u8 = 4;
 /// A mutable global to store various stats.
 static mut GC_STATS: *mut C_GibGcStats = null_mut();
 
-/// See Note [Restoring uncauterized write cursors].
-///
-/// [2022.07.01] CSK: We don't really need this environment. The only write
-/// cursors that don't get restored during evacuation should be the ones that
-/// are at the start of chunks. We can detect these using our isLoc0 check and
-/// restore them seperately after evacuation.
-type CauterizedEnv = HashMap<*mut i8, Vec<*mut C_GibShadowstackFrame>>;
-
 /// This stores pairs of (start_address -> end_address) of evacuated objects,
 /// in case we need to skip over them during subsequent evacuation. We only
 /// store these for objects starting at non-loc0 positions.
@@ -66,7 +58,6 @@ type ForwardingEnv = HashMap<*mut i8, *mut i8>;
 #[derive(Debug)]
 struct EvacState<'a> {
     so_env: &'a mut SkipOverEnv,
-    cenv: &'a mut CauterizedEnv,
     zct: *mut Zct,
     nursery: &'a C_GibNursery,
     evac_major: bool,
@@ -119,7 +110,7 @@ pub fn garbage_collect(
 
     unsafe {
         // Start by cauterizing the writers.
-        let mut cenv = cauterize_writers(nursery, wstack)?;
+        cauterize_writers(nursery, wstack)?;
         // let evac_major = force_major
         //     || (*nursery_ptr).num_collections.rem_euclid(COLLECT_MAJOR_K.into())
         //         == 0;
@@ -142,7 +133,6 @@ pub fn garbage_collect(
         // First evacuate the remembered set, then the shadow-stack.
         /*
         let mut so_env = evacuate_remembered_set(
-            &mut cenv,
             (*generations_ref).new_zct,
             nursery,
             &mut oldgen,
@@ -152,9 +142,15 @@ pub fn garbage_collect(
          */
         let mut so_env = HashMap::new();
         rem_set.clear();
+
+        #[cfg(feature = "verbose_evac")]
+        {
+            rstack.print_all("Read");
+            wstack.print_all("Write");
+        }
+
         evacuate_shadowstack(
             &mut so_env,
-            &mut cenv,
             (*oldgen).new_zct,
             nursery,
             oldgen,
@@ -165,11 +161,12 @@ pub fn garbage_collect(
         // // Collect dead regions.
         // oldgen.collect_regions()?;
 
+        print_nursery_and_oldgen(rstack, wstack, nursery, oldgen);
+
         // Reset the allocation area and record stats.
         nursery.clear();
-        // Restore the remaining cauterized writers. Allocate space for them
-        // in the nursery, not oldgen.
-        restore_writers(&cenv, nursery)?;
+        // Restore the remaining cauterized writers.
+        restore_writers(wstack, nursery, oldgen)?;
         Ok(())
     }
 }
@@ -179,8 +176,7 @@ pub fn garbage_collect(
 fn cauterize_writers(
     nursery: &C_GibNursery,
     wstack: &C_GibShadowstack,
-) -> Result<CauterizedEnv> {
-    let mut cenv: CauterizedEnv = HashMap::new();
+) -> Result<()> {
     for frame in wstack.into_iter() {
         unsafe {
             if !nursery.contains_addr((*frame).ptr) {
@@ -190,39 +186,58 @@ fn cauterize_writers(
             // Layout for cauterized object is a tag followed by a pointer back to the frame.:
             let ptr_next = write(ptr, C_CAUTERIZED_TAG);
             write(ptr_next, frame);
-            match cenv.get_mut(&ptr) {
-                None => {
-                    cenv.insert(ptr, vec![frame]);
-                    ()
-                }
-                Some(frames) => frames.push(frame),
-            }
         }
     }
-    Ok(cenv)
+    Ok(())
 }
 
 /// See Note [Restoring uncauterized write cursors].
 fn restore_writers(
-    cenv: &CauterizedEnv,
-    heap: &mut C_GibNursery,
+    wstack: &C_GibShadowstack,
+    nursery: &mut C_GibNursery,
+    oldgen: &mut C_GibOldGeneration,
 ) -> Result<()> {
-    // for frame in wstack.into_iter() {}
-    for (_wptr, frames) in cenv.iter() {
-        /*
-        if !(*start_of_chunk) {
-            return Err(RtsError::Gc(format!(
-                "restore_writers: uncauterized cursor that's not at the \
-                 start of a chunk, {:?}",
-                wptr
-            )));
-        }
-         */
-        let (chunk_start, chunk_end) = Heap::allocate(heap, CHUNK_SIZE)?;
-        for frame in frames {
-            unsafe {
-                (*(*frame)).ptr = chunk_start;
-                (*(*frame)).endptr = chunk_end;
+    let mut env: HashMap<*mut i8, (*mut i8, *mut i8)> = HashMap::new();
+    for frame in wstack.into_iter() {
+        unsafe {
+            if nursery.contains_addr((*frame).ptr) {
+                #[cfg(feature = "verbose_evac")]
+                {
+                    if !isLoc0((*frame).ptr, (*frame).endptr, true) {
+                        panic!(
+                            "Uncauterized write cursor and not loc0, {:?}",
+                            *frame
+                        );
+                    }
+                    eprintln!("Restoring writer, {:?}", *frame);
+                }
+                match env.get(&(*frame).ptr) {
+                    None => {
+                        let (chunk_start, chunk_end) =
+                            Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 0)?;
+                        env.insert((*frame).ptr, (chunk_start, chunk_end));
+                        (*frame).ptr = chunk_start;
+                        (*frame).endptr = chunk_end;
+
+                        #[cfg(feature = "verbose_evac")]
+                        eprintln!(
+                            "Restored, ({:?},{:?})",
+                            (*frame).ptr,
+                            (*frame).endptr
+                        );
+                    }
+                    Some((chunk_start, chunk_end)) => {
+                        (*frame).ptr = *chunk_start;
+                        (*frame).endptr = *chunk_end;
+
+                        #[cfg(feature = "verbose_evac")]
+                        eprintln!(
+                            "Restored, ({:?},{:?})",
+                            (*frame).ptr,
+                            (*frame).endptr
+                        );
+                    }
+                }
             }
         }
     }
@@ -237,7 +252,6 @@ fn restore_writers(
 /// burning while we're still evacuating the remembered set.
 /// See Note [Granularity of the burned addresses table].
 unsafe fn evacuate_remembered_set<'a>(
-    cenv: &'a mut CauterizedEnv,
     zct: *mut Zct,
     nursery: &'a C_GibNursery,
     heap: &mut impl Heap,
@@ -261,7 +275,6 @@ unsafe fn evacuate_remembered_set<'a>(
         // Evacuate the data.
         let mut st = EvacState {
             so_env: &mut so_env,
-            cenv,
             zct,
             nursery,
             evac_major,
@@ -283,7 +296,6 @@ unsafe fn evacuate_remembered_set<'a>(
 /// destination heap. Also uncauterize any writer cursors that are reached.
 unsafe fn evacuate_shadowstack<'a, 'b>(
     so_env: &'a mut SkipOverEnv,
-    cenv: &'a mut CauterizedEnv,
     zct: *mut Zct,
     // nursery: &'b Nursery<'b, 'c>,
     nursery: &'b C_GibNursery,
@@ -320,7 +332,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
             (*GC_STATS).gc_zct_mgmt_time
         );
         // Evacuate the data.
-        let mut st = EvacState { so_env, cenv, zct, nursery, evac_major };
+        let mut st = EvacState { so_env, zct, nursery, evac_major };
         let src = (*frame).ptr;
         let src_end = (*frame).endptr;
         let is_loc_0 = (src_end.offset_from(src)) == chunk_size as isize;
@@ -367,7 +379,6 @@ Arguments:
 
 - so_env - an environment that provides the ends of burned fields. only
   relevant when evacuating the shadow-stack.
-- cenv - an environment that tracks cauterized write cursors
 - heap - allocation area to copy data into
 - packed_info - information about the fields of this datatype
 - need_endof_src - if evacuate_packed MUST traverse the value at src and return
@@ -553,14 +564,13 @@ unsafe fn evacuate_packed(
                         let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
                         // Mark this cursor as uncauterized.
                         let _del = (*wframe).ptr;
-                        // st.cenv.remove(&del);
                         // Update the pointers on the shadow-stack.
                         (*wframe).ptr = dst;
                         (*wframe).endptr = dst_end;
 
                         #[cfg(feature = "verbose_evac")]
                         eprintln!(
-                            " Hit cauterize at {:?}, remaining Worklist: {:?}",
+                            " Hit cauterize at {:?}, remaining worklist: {:?}",
                             src, worklist
                         );
                         break; // no change to src, dst, dst_end
@@ -1128,6 +1138,17 @@ pub unsafe fn init_footer_at(
     footer_start
 }
 
+fn isLoc0(addr: *const i8, footer_addr: *const i8, in_nursery: bool) -> bool {
+    unsafe {
+        let chunk_size: usize = if in_nursery {
+            *(footer_addr as *const u16) as usize
+        } else {
+            (*(footer_addr as *const C_GibChunkFooter)).size
+        };
+        addr.add(chunk_size) == footer_addr
+    }
+}
+
 #[inline(always)]
 #[cold]
 fn cold() {}
@@ -1371,6 +1392,12 @@ impl<'a> Heap for C_GibOldGeneration<'a> {
             }
         }
 
+        #[cfg(feature = "gcstats")]
+        eprintln!(
+            "Allocated a oldgen chunk, ({:?}, {:?}).\n",
+            start, footer_start,
+        );
+
         Ok((start, footer_start))
     }
 
@@ -1456,7 +1483,8 @@ impl<'a> C_GibShadowstack {
         }
     }
     /// Print all frames of the shadow-stack.
-    fn print_all(&self) {
+    fn print_all(&self, msg: &str) {
+        eprintln!("{} shadowstack: ", msg);
         for frame in ShadowstackIter::new(self) {
             unsafe {
                 eprintln!("{:?}", *frame);
@@ -1736,7 +1764,7 @@ pub fn print_nursery_and_oldgen(
             (*oldgen).old_zct,
             (*oldgen).new_zct
         );
-        (*oldgen).rem_set.print_all();
+        (*oldgen).rem_set.print_all("Remembered set");
         eprintln!(
             "--------------------\nOldgen chunks:\n--------------------"
         );

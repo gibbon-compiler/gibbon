@@ -1047,6 +1047,10 @@ GibChunk gib_alloc_region_on_heap(size_t size)
 #ifdef _GIBBON_GCSTATS
     GC_STATS->mem_allocated += size;
 #endif
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+        fprintf(stderr, "Allocated a oldgen chunk, (%p, %p).\n",
+                heap_start, footer_start);
+#endif
     return (GibChunk) {heap_start, footer_start};
 }
 
@@ -1067,6 +1071,9 @@ STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collec
         nursery->alloc = bump;
         char *footer = old - sizeof(uint16_t);
         *(uint16_t *) footer = size;
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+        fprintf(stderr, "Allocated a nursery chunk, (%p, %p).\n", bump, footer);
+#endif
         return (GibChunk) {bump, footer};
     } else {
         return gib_alloc_region_in_nursery_slow(size, collected);
@@ -1101,7 +1108,11 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     gc_stats->gc_elapsed_time += gib_difftimespecs(&begin, &end);
     gc_stats->gc_cpu_time += gc_stats->gc_elapsed_time / CLOCKS_PER_SEC;
 #else
-    gib_garbage_collect(rstack, wstack, nursery, oldgen, gc_stats, false);
+    int err = gib_garbage_collect(rstack, wstack, nursery, oldgen, gc_stats, false);
+    if (err < 0) {
+        fprintf(stderr, "Couldn't perform minor collection, errorno=%d.", err);
+        exit(1);
+    }
 #endif
 
     return gib_alloc_region_in_nursery_fast(size, true);

@@ -204,7 +204,7 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor pvrtmp_1386 = tmp_struct_16.field2;
 
     GibChunk region_1378 =
-        gib_alloc_region(gib_get_inf_init_chunk_size());
+        gib_alloc_region(32);
     GibCursor r_720 = region_1378.start;
     GibCursor end_r_720 = region_1378.end;
 
@@ -221,7 +221,7 @@ GibInt do_reverse(GibInt n_19_183_289)
     gib_shadowstack_push(rstack, r_720, end_r_720, Stk, List_T);
 
     GibChunk region_1382 =
-        gib_alloc_region(gib_get_inf_init_chunk_size());
+        gib_alloc_region(32);
     GibCursor r_719 = region_1382.start;
     GibCursor end_r_719 = region_1382.end;
 
@@ -439,7 +439,7 @@ GibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_615, // input r
             // Pushed.
 
             GibChunk region_1353 =
-                gib_alloc_region(18);
+                gib_alloc_region(32);
             GibCursor r_705 = region_1353.start;
             GibCursor end_r_705 = region_1353.end;
 
