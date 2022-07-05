@@ -132,6 +132,8 @@ pub fn garbage_collect(
         {
             rstack.print_all("Read");
             wstack.print_all("Write");
+            (*oldgen).rem_set.print_all("Remembered set");
+            // print_nursery_and_oldgen(rstack, wstack, nursery, oldgen);
         }
 
         // Evacuate readers.
@@ -244,6 +246,13 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
         sort_roots(rstack, rem_set),
         (*GC_STATS).gc_rootset_sort_time
     );
+
+    #[cfg(feature = "verbose_evac")]
+    eprintln!("Sorted roots:");
+    for frame in frames.iter() {
+        eprintln!("{:?}", *(*frame));
+    }
+
     for frame in frames {
         match (*frame).gc_root_prov {
             C_GcRootProv::RemSet => {
@@ -251,12 +260,6 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                 // Allocate space in the destination.
                 let (dst, dst_end) =
                     Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 1)?;
-                // The remembered set contains the address where the indirect-
-                // ion pointer is stored. We must read it to get the address of
-                // the pointed-to data.
-                let (tagged_src, _): (u64, _) = read((*frame).ptr);
-                let tagged = TaggedPointer::from_u64(tagged_src);
-                let src = tagged.untag();
                 // Evacuate the data.
                 let mut st = EvacState {
                     so_env,
@@ -270,12 +273,14 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                 write((*frame).ptr, dst);
                 // Update the outset in oldgen region.
                 add_to_outset((*frame).endptr, dst_end);
-                // Update the burned address table.
-                so_env.insert(src, src_after);
             }
             C_GcRootProv::Stk => {
                 let root_in_nursery = nursery.contains_addr((*frame).endptr);
                 if !evac_major && !root_in_nursery {
+                    eprintln!(
+                        "Evac packed {:?}, skipping oldgen root.",
+                        (*frame).ptr
+                    );
                     let footer = (*frame).endptr as *const C_GibChunkFooter;
                     /*
                     if (*((*footer).reg_info)).refcount == 0 {
@@ -389,8 +394,20 @@ unsafe fn evacuate_packed(
     orig_dst: *mut i8,
     orig_dst_end: *mut i8,
 ) -> (*mut i8, *mut i8, *mut i8, bool) {
+    #[cfg(feature = "verbose_evac")]
+    eprintln!("Start evacuation {:?} -> {:?}", (*frame).ptr, orig_dst);
+
     let orig_typ = (*frame).datatype;
-    let orig_src = (*frame).ptr;
+    let orig_src = match (*frame).gc_root_prov {
+        C_GcRootProv::Stk => (*frame).ptr,
+        C_GcRootProv::RemSet => {
+            // The remembered set contains the address where the indirect-
+            // ion pointer is stored. We must read it to get the address of
+            // the pointed-to data.
+            let (tagged_src, _): (u64, _) = read((*frame).ptr);
+            TaggedPointer::from_u64(tagged_src).untag()
+        }
+    };
 
     // These comprise the main mutable state of the traversal and should be updated
     // together at the end of every iteration:
@@ -407,7 +424,7 @@ unsafe fn evacuate_packed(
     // Stores everything to process AFTER the next_action.
     let mut worklist: Vec<EvacAction> = Vec::new();
 
-    loop {
+    'evac_loop: loop {
         #[cfg(feature = "verbose_evac")]
         eprintln!("  Loop iteration on src {:?} action {:?}, length after this {}, prefix(5): {:?}",
                 src, next_action, worklist.len(), &worklist[..std::cmp::min(5, worklist.len())]);
@@ -467,6 +484,9 @@ unsafe fn evacuate_packed(
                         // Otherwise, write an indirection node at dst and adjust the
                         // refcount and outset.
                         if st.evac_major || st.nursery.contains_addr(pointee) {
+                            #[cfg(feature = "verbose_evac")]
+                            eprintln!("   Inlining indirection.");
+
                             // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
                             if !worklist.is_empty() {
                                 worklist.push(EvacAction::RestoreSrc(
@@ -497,6 +517,9 @@ unsafe fn evacuate_packed(
                             next_action = EvacAction::ProcessTy(next_ty);
                             continue;
                         } else {
+                            #[cfg(feature = "verbose_evac")]
+                            eprintln!("   Keeping indirection.");
+
                             let space_reqd = 32;
                             let (dst1, dst_end1) = Heap::check_bounds(
                                 oldgen, space_reqd, dst, dst_end,
@@ -634,9 +657,20 @@ unsafe fn evacuate_packed(
                             C_GibPackedTag,
                             *const i8,
                         ) = read(src_after_tag);
-                        while scan_tag != C_COPIED_TO_TAG {
-                            (scan_tag, scan_ptr) = read(scan_ptr);
+                        'scan_loop: loop {
+                            match scan_tag {
+                                C_CAUTERIZED_TAG => {
+                                    break 'evac_loop;
+                                }
+                                C_COPIED_TO_TAG => {
+                                    break 'scan_loop;
+                                }
+                                _ => {
+                                    (scan_tag, scan_ptr) = read(scan_ptr);
+                                }
+                            }
                         }
+
                         // At this point the scan_ptr is one past the
                         // C_COPIED_TO_TAG i.e. at the forwarding pointer.
                         debug_assert!((src as *const i8) < scan_ptr);
@@ -1060,9 +1094,9 @@ pub unsafe fn handle_old_to_old_indirection(
 ) {
     #[cfg(feature = "verbose_evac")]
     eprintln!(
-        "Recording metadata for an old-to-old indirection, {:?}@{:?} -> {:?}@{:?}.",
-        *(from_footer_ptr as *const C_GibChunkFooter), from_footer_ptr,
-        *(to_footer_ptr as *const C_GibChunkFooter), to_footer_ptr
+        "Recording metadata for an old-to-old indirection, {:?}:{:?} -> {:?}:{:?}.",
+        from_footer_ptr, *(from_footer_ptr as *const C_GibChunkFooter),
+        to_footer_ptr, *(to_footer_ptr as *const C_GibChunkFooter)
     );
 
     let added = add_to_outset(from_footer_ptr, to_footer_ptr);
@@ -1077,8 +1111,8 @@ unsafe fn add_to_outset(from_addr: *mut i8, to_addr: *const i8) -> bool {
 
     #[cfg(feature = "verbose_evac")]
     eprintln!(
-        "  Adding to outset, {:?}@{:?} -> {:?}@{:?}.",
-        *from_reg_info, from_reg_info, *to_reg_info, to_reg_info
+        "Adding to outset, {:?}:{:?} -> {:?}:{:?}.",
+        from_reg_info, *from_reg_info, to_reg_info, *to_reg_info
     );
 
     (*((*from_reg_info).outset)).insert(to_reg_info)
@@ -1089,7 +1123,7 @@ unsafe fn bump_refcount(addr: *mut i8) -> u16 {
     (*reg_info).refcount += 1;
 
     #[cfg(feature = "verbose_evac")]
-    eprintln!("  Bumped refcount, {:?}@{:?}.", *reg_info, reg_info);
+    eprintln!("Bumped refcount, {:?}:{:?}.", reg_info, *reg_info);
 
     (*reg_info).refcount
 }
@@ -1099,7 +1133,7 @@ unsafe fn decrement_refcount(addr: *mut i8) -> u16 {
     (*reg_info).refcount -= 1;
 
     #[cfg(feature = "verbose_evac")]
-    eprintln!("Decremented refcount: {:?}@{:?}", *reg_info, reg_info);
+    eprintln!("Decremented refcount: {:?}:{:?}", reg_info, *reg_info);
 
     (*reg_info).refcount
 }
@@ -1378,6 +1412,10 @@ impl<'a> Heap for C_GibOldGeneration<'a> {
     ) -> Result<(*mut i8, *mut i8)> {
         let total_size = size + size_of::<C_GibChunkFooter>();
         let (start, end) = self.allocate(total_size)?;
+
+        #[cfg(feature = "gcstats")]
+        eprintln!("Allocated a oldgen chunk, ({:?}, {:?}).", start, end,);
+
         let footer_start =
             unsafe { init_footer_at(end, null_mut(), total_size, refcount) };
 
@@ -1387,12 +1425,6 @@ impl<'a> Heap for C_GibOldGeneration<'a> {
                 (*GC_STATS).oldgen_regions += 1;
             }
         }
-
-        #[cfg(feature = "gcstats")]
-        eprintln!(
-            "Allocated a oldgen chunk, ({:?}, {:?}).\n",
-            start, footer_start,
-        );
 
         Ok((start, footer_start))
     }

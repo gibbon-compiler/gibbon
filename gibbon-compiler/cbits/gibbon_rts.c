@@ -1048,8 +1048,8 @@ GibChunk gib_alloc_region_on_heap(size_t size)
     GC_STATS->mem_allocated += size;
 #endif
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-        fprintf(stderr, "Allocated a oldgen chunk, (%p, %p).\n",
-                heap_start, footer_start);
+        fprintf(stderr, "Allocated a oldgen chunk of size %ld, (%p, %p).\n",
+                size, heap_start, footer_start);
 #endif
     return (GibChunk) {heap_start, footer_start};
 }
@@ -1072,7 +1072,8 @@ STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collec
         char *footer = old - sizeof(uint16_t);
         *(uint16_t *) footer = size;
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-        fprintf(stderr, "Allocated a nursery chunk, (%p, %p).\n", bump, footer);
+        fprintf(stderr, "Allocated a nursery chunk of size %ld, (%p, %p).\n",
+                size, bump, footer);
 #endif
         return (GibChunk) {bump, footer};
     } else {
