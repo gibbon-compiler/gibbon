@@ -39,8 +39,12 @@
 #define INDIRECTION_TAG 254
 
 #define SIZE 4
+
+int ret;
 int events[] = {PAPI_L2_TCM, PAPI_L3_TCM, PAPI_TOT_INS, PAPI_TOT_CYC};
 char* defs[] = {"L2 Cache Misses", "L3 Cache Misses", "Instructions" ,"Total Cycles"};
+
+unsigned long long values[SIZE];
 
 void init_papi(){
   if (PAPI_library_init(PAPI_VER_CURRENT) != PAPI_VER_CURRENT){
@@ -58,6 +62,25 @@ void start_counters() {
   if (PAPI_start_counters(events, SIZE) != PAPI_OK) {
     printf("PAPI Error starting counters\n");
   } 
+}
+
+void read_counters() {
+  // Performance Counters Read
+  ret = PAPI_stop_counters(values, SIZE);
+  if (ret != PAPI_OK) {
+    if (ret == PAPI_ESYS) {
+      printf("error inside PAPI call\n");
+    } else if (ret == PAPI_EINVAL) {
+      printf("error with arguments\n");
+    }
+
+    printf("PAPI Error reading counters\n");
+  }
+}
+
+void print_counters() {
+  for (int i = 0; i < SIZE; ++i)
+    printf("%s : %llu\n", defs[i], values[i]);
 }
 
 // Initial size of BigInfinite buffers
@@ -1367,7 +1390,8 @@ int main(int argc, char** argv)
     //
     //   num iterations: How many times to repeat a benchmark.
     //   tree size: An integer passes to `build_tree()`.
-
+    
+    
     struct rlimit lim;
     int code;
     if ( (code = getrlimit(RLIMIT_STACK, &lim)) ) {
@@ -5047,6 +5071,7 @@ int __main_expr()
     struct timespec begin_pvrtmp_6214;
     struct timespec end_pvrtmp_6214;
     
+    start_counters();
     for (long long iters_pvrtmp_6214 = 0; iters_pvrtmp_6214 <
          global_iters_param; iters_pvrtmp_6214++) {
         if (iters_pvrtmp_6214 != global_iters_param - 1)
@@ -5071,6 +5096,8 @@ int __main_expr()
         
         vector_inplace_update(times_230, iters_pvrtmp_6214, &itertime_227);
     }
+    read_counters();
+    print_counters();
     vector_inplace_sort(times_230, compare_doubles);
     
     double *tmp_231 = (double *) vector_nth(times_230, global_iters_param / 2);
