@@ -130,8 +130,7 @@ void info_table_initialize(void)
 
     GibDatatype field_tys[5];
 
-    error = gib_info_table_insert_packed_dcon(SearchTree_T, 1, 8, 1, 0,
-                                              field_tys, 0);
+    error = gib_info_table_insert_packed_dcon(SearchTree_T, 1, 8, 0, field_tys, 0);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -140,8 +139,7 @@ void info_table_initialize(void)
     }
     field_tys[0] = SearchTree_T;
     field_tys[1] = SearchTree_T;
-    error = gib_info_table_insert_packed_dcon(SearchTree_T, 2, 8, 1, 2,
-                                              field_tys, 2);
+    error = gib_info_table_insert_packed_dcon(SearchTree_T, 2, 8, 0, field_tys, 2);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -150,34 +148,21 @@ void info_table_initialize(void)
     }
     field_tys[0] = SearchTree_T;
     field_tys[1] = SearchTree_T;
-    error = gib_info_table_insert_packed_dcon(SearchTree_T, 154, 24, 3, 2,
-                                              field_tys, 2);
-    if (error < 0) {
-        fprintf(stderr,
-                "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
-                error, SearchTree_T, 154);
-        exit(1);
-    }
-    field_tys[0] = SearchTree_T;
-    field_tys[1] = SearchTree_T;
-    error = gib_info_table_insert_packed_dcon(SearchTree_T, 3, 16, 2, 2,
-                                              field_tys, 2);
+    error = gib_info_table_insert_packed_dcon(SearchTree_T, 3, 16, 1, field_tys, 2);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
                 error, SearchTree_T, 3);
         exit(1);
     }
-    error = gib_info_table_insert_packed_dcon(SearchTree_T, 0, 0, 0, 0,
-                                              field_tys, 0);
+    error = gib_info_table_insert_packed_dcon(SearchTree_T, 0, 0, 0, field_tys, 0);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
                 error, SearchTree_T, 0);
         exit(1);
     }
-    error = gib_info_table_insert_packed_dcon(SearchTree_T, 255, 8, 1, 0,
-                                              field_tys, 0);
+    error = gib_info_table_insert_packed_dcon(SearchTree_T, 255, 8, 0, field_tys, 0);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -1781,181 +1766,6 @@ GibInt caseFn_228(GibCursor end_r_905, GibCursor l_86_229_313_487,
       default:
         {
             printf("%s\n", "Unknown tag in: tmpval_2727");
-            exit(1);
-        }
-    }
-}
-GibCursorGibCursorGibCursorGibCursorProd _add_size_and_rel_offsets_SearchTree(GibCursor end_r_908,
-                                                                              GibCursor end_r_909,
-                                                                              GibCursor loc_907,
-                                                                              GibCursor arg_849)
-{
-    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
-    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibShadowstackFrame *frame;
-
-    if (loc_907 + 34 > end_r_909) {
-        gib_grow_region(&loc_907, &end_r_909);
-    }
-
-    GibPackedTag tmpval_2740 = *(GibPackedTag *) arg_849;
-    GibCursor tmpcur_2741 = arg_849 + 1;
-
-
-  switch_2798:
-    ;
-    switch (tmpval_2740) {
-
-      case 0:
-        {
-            GibCursor jump_1356 = arg_849 + 1;
-
-            *(GibPackedTag *) loc_907 = 0;
-
-            GibCursor writetag_1893 = loc_907 + 1;
-            GibCursor after_tag_1894 = loc_907 + 1;
-
-            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_909,
-                                                               jump_1356,
-                                                               loc_907,
-                                                               after_tag_1894};
-            break;
-        }
-
-      case 1:
-        {
-            GibInt tmpval_2746 = *(GibInt *) tmpcur_2741;
-            GibCursor tmpcur_2747 = tmpcur_2741 + sizeof(GibInt);
-            GibCursor jump_1358 = tmpcur_2741 + 8;
-
-            *(GibPackedTag *) loc_907 = 1;
-
-            GibCursor writetag_1902 = loc_907 + 1;
-            GibCursor after_tag_1903 = loc_907 + 1;
-
-            *(GibInt *) after_tag_1903 = tmpval_2746;
-
-            GibCursor writecur_1907 = after_tag_1903 + sizeof(GibInt);
-
-            return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_909,
-                                                               jump_1358,
-                                                               loc_907,
-                                                               writecur_1907};
-            break;
-        }
-
-      case 2:
-        {
-            GibInt tmpval_2752 = *(GibInt *) tmpcur_2741;
-            GibCursor tmpcur_2753 = tmpcur_2741 + sizeof(GibInt);
-            GibCursor loc_1233 = loc_907 + 25;
-
-            *(GibPackedTag *) loc_907 = 154;
-
-            GibCursor writetag_1914 = loc_907 + 1;
-
-            gib_shadowstack_push(rstack, loc_907, end_r_909, Stk,
-                                 SearchTree_T);
-
-            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_74 =
-                                                      _add_size_and_rel_offsets_SearchTree(end_r_908, end_r_909, loc_1233, tmpcur_2753);
-            GibCursor pvrtmp_2754 = tmp_struct_74.field0;
-            GibCursor pvrtmp_2755 = tmp_struct_74.field1;
-            GibCursor pvrtmp_2756 = tmp_struct_74.field2;
-            GibCursor pvrtmp_2757 = tmp_struct_74.field3;
-
-            frame = gib_shadowstack_pop(rstack);
-            loc_907 = frame->ptr;
-            end_r_909 = frame->endptr;
-            gib_shadowstack_push(rstack, loc_907, pvrtmp_2754, Stk,
-                                 SearchTree_T);
-            gib_shadowstack_push(rstack, loc_1233, pvrtmp_2754, Stk,
-                                 SearchTree_T);
-
-            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_75 =
-                                                      _add_size_and_rel_offsets_SearchTree(end_r_908, pvrtmp_2754, pvrtmp_2757, pvrtmp_2755);
-            GibCursor pvrtmp_2762 = tmp_struct_75.field0;
-            GibCursor pvrtmp_2763 = tmp_struct_75.field1;
-            GibCursor pvrtmp_2764 = tmp_struct_75.field2;
-            GibCursor pvrtmp_2765 = tmp_struct_75.field3;
-
-            frame = gib_shadowstack_pop(rstack);
-            loc_1233 = frame->ptr;
-            pvrtmp_2754 = frame->endptr;
-            frame = gib_shadowstack_pop(rstack);
-            loc_907 = frame->ptr;
-            pvrtmp_2754 = frame->endptr;
-
-            GibInt sizeof_y_856__859 = pvrtmp_2757 - pvrtmp_2756;
-            GibInt sizeof_y_857__860 = pvrtmp_2765 - pvrtmp_2764;
-            GibInt fltPrm_863 = 8 + sizeof_y_856__859;
-            GibInt offset__861 = 0 + fltPrm_863;
-            GibInt fltPrm_865 = sizeof_y_856__859 + sizeof_y_857__860;
-            GibInt fltPrm_864 = 8 + fltPrm_865;
-            GibInt size_dcon_862 = 9 + fltPrm_864;
-            GibCursor after_tag_1915 = loc_907 + 1;
-
-            *(GibInt *) after_tag_1915 = size_dcon_862;
-
-            GibCursor writecur_1919 = after_tag_1915 + sizeof(GibInt);
-
-            *(GibInt *) writecur_1919 = offset__861;
-
-            GibCursor writecur_1920 = writecur_1919 + sizeof(GibInt);
-
-            *(GibInt *) writecur_1920 = tmpval_2752;
-
-            GibCursor writecur_1921 = writecur_1920 + sizeof(GibInt);
-
-            return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_2762,
-                                                               pvrtmp_2763,
-                                                               loc_907,
-                                                               pvrtmp_2765};
-            break;
-        }
-
-      case GIB_INDIRECTION_TAG:
-        {
-            uintptr_t tagged_tmpcur_77 = *(uintptr_t *) tmpcur_2741;
-            GibCursor tmpcur_2774 = GIB_UNTAG(tagged_tmpcur_77);
-            GibCursor tmpaftercur_2775 = tmpcur_2741 + 8;
-            GibCursor jump_1428 = tmpcur_2741 + 8;
-            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_76 =
-                                                      _add_size_and_rel_offsets_SearchTree(end_r_908, end_r_909, loc_907, tmpcur_2774);
-            GibCursor pvrtmp_2776 = tmp_struct_76.field0;
-            GibCursor pvrtmp_2777 = tmp_struct_76.field1;
-            GibCursor pvrtmp_2778 = tmp_struct_76.field2;
-            GibCursor pvrtmp_2779 = tmp_struct_76.field3;
-
-            return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_2776,
-                                                               jump_1428,
-                                                               pvrtmp_2778,
-                                                               pvrtmp_2779};
-            break;
-        }
-
-      case GIB_REDIRECTION_TAG:
-        {
-            uintptr_t tagged_tmpcur_79 = *(uintptr_t *) tmpcur_2741;
-            GibCursor tmpcur_2786 = GIB_UNTAG(tagged_tmpcur_79);
-            GibCursor tmpaftercur_2787 = tmpcur_2741 + 8;
-            GibCursorGibCursorGibCursorGibCursorProd tmp_struct_78 =
-                                                      _add_size_and_rel_offsets_SearchTree(end_r_908, end_r_909, loc_907, tmpcur_2786);
-            GibCursor pvrtmp_2788 = tmp_struct_78.field0;
-            GibCursor pvrtmp_2789 = tmp_struct_78.field1;
-            GibCursor pvrtmp_2790 = tmp_struct_78.field2;
-            GibCursor pvrtmp_2791 = tmp_struct_78.field3;
-
-            return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_2788,
-                                                               pvrtmp_2789,
-                                                               pvrtmp_2790,
-                                                               pvrtmp_2791};
-            break;
-        }
-
-      default:
-        {
-            printf("%s\n", "Unknown tag in: tmpval_2740");
             exit(1);
         }
     }

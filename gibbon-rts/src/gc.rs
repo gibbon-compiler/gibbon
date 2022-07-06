@@ -445,7 +445,8 @@ unsafe fn evacuate_packed(
                 #[cfg(feature = "verbose_evac")]
                 eprintln!("   Read next tag {} from src {:?}", tag, src);
 
-                let packed_info = INFO_TABLE.get_unchecked(next_ty as usize);
+                let packed_info: &&[DataconInfo] =
+                    INFO_TABLE.get_unchecked(next_ty as usize);
                 match tag {
                     // A pointer to a value in another buffer; copy this value
                     // and then switch back to copying rest of the source buffer.
@@ -508,7 +509,13 @@ unsafe fn evacuate_packed(
                                         EvacAction::SkipOverEnvWrite(pointee),
                                     );
                                 }
-                                C_GcRootProv::Stk => (),
+
+                                C_GcRootProv::Stk => {
+                                    // [2022.07.06] we need to add things to this
+                                    // environment if the indirection pointer points
+                                    // to a non loc0 location.
+                                    ()
+                                }
                             }
 
                             // Same type, new location to evac from:
@@ -1568,10 +1575,7 @@ impl Iterator for ShadowstackIter {
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-type _DataconEnv = Vec<DataconInfo>;
-type _DatatypeEnv = Vec<_DatatypeInfo>;
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct DataconInfo {
     /// Bytes before the first packed field.
     scalar_bytes: usize,
@@ -1584,20 +1588,20 @@ struct DataconInfo {
 }
 
 #[derive(Debug, Clone)]
-enum _DatatypeInfo {
-    _Scalar(usize),
-    _Packed(_DataconEnv),
+enum DatatypeInfo {
+    Scalar(usize),
+    Packed(Vec<DataconInfo>),
 }
 
 /// The global info table.
-static mut _INFO_TABLE: _DatatypeEnv = Vec::new();
+static mut _INFO_TABLE: Vec<DatatypeInfo> = Vec::new();
 
 #[inline(always)]
 pub fn info_table_initialize(size: usize) {
     unsafe {
         // If a datatype is not packed, info_table_insert_scalar will
         // overwrite this entry.
-        _INFO_TABLE = vec![_DatatypeInfo::_Packed(Vec::new()); size];
+        _INFO_TABLE = vec![DatatypeInfo::Packed(Vec::new()); size];
     }
 }
 
@@ -1614,14 +1618,14 @@ pub fn info_table_insert_packed_dcon(
         DataconInfo { scalar_bytes, num_scalars, num_packed, field_tys };
     let entry = unsafe { _INFO_TABLE.get_unchecked_mut(datatype as usize) };
     match entry {
-        _DatatypeInfo::_Packed(packed_info) => {
+        DatatypeInfo::Packed(packed_info) => {
             while packed_info.len() <= datacon.into() {
-                packed_info.push(dcon_info.clone());
+                packed_info.push(DataconInfo::default());
             }
             packed_info[datacon as usize] = dcon_info;
             Ok(())
         }
-        _DatatypeInfo::_Scalar(_) => Err(RtsError::InfoTable(format!(
+        DatatypeInfo::Scalar(_) => Err(RtsError::InfoTable(format!(
             "Expected a packed entry for datatype {:?}, got a scalar.",
             datatype
         ))),
@@ -1630,33 +1634,32 @@ pub fn info_table_insert_packed_dcon(
 
 pub fn info_table_insert_scalar(datatype: C_GibDatatype, size: usize) {
     unsafe {
-        _INFO_TABLE[datatype as usize] = _DatatypeInfo::_Scalar(size);
+        _INFO_TABLE[datatype as usize] = DatatypeInfo::Scalar(size);
     }
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
-type DataconEnv = &'static [DataconInfo];
-// type DatatypeEnv = &'static [DatatypeInfo];
-type DatatypeInfo = DataconEnv;
+
+// [2022.07.06] does converting a vector to a slice really help performance?
 
 /// The global info table.
 static mut INFO_TABLE: &[&[DataconInfo]] = &[];
 
 pub fn info_table_finalize() {
     unsafe {
-        let info_table: *mut DatatypeInfo =
-            libc::malloc(_INFO_TABLE.len() * size_of::<DatatypeInfo>())
-                as *mut DatatypeInfo;
+        let info_table: *mut &[DataconInfo] =
+            libc::malloc(_INFO_TABLE.len() * size_of::<&[DataconInfo]>())
+                as *mut &[DataconInfo];
         let mut info_table_alloc = info_table;
         for ty in _INFO_TABLE.iter() {
             match ty {
-                _DatatypeInfo::_Scalar(_size) => {
+                DatatypeInfo::Scalar(_size) => {
                     // let ty_info = DatatypeInfo::Scalar(*size);
                     // // info_table_alloc.write_unaligned(ty_info);
                     // *info_table_alloc = ty_info;
                     info_table_alloc = info_table_alloc.add(1);
                 }
-                _DatatypeInfo::_Packed(_packed_info) => {
+                DatatypeInfo::Packed(_packed_info) => {
                     let packed_info = &_packed_info[..];
                     *info_table_alloc = packed_info;
                     info_table_alloc = info_table_alloc.add(1);
