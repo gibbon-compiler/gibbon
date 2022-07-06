@@ -1435,9 +1435,9 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        [VarTriv loc, VarTriv endloc] = rnds
                    case stk of
                      Write ->
-                       return [ C.BlockStm [cstm| gib_shadowstack_push($id:writeShadowstack, $id:loc, $id:endloc, RemSet, $id:tycon_t); |] ]
+                       return [ C.BlockStm [cstm| gib_shadowstack_push($id:writeShadowstack, $id:loc, $id:endloc, Stk, $id:tycon_t); |] ]
                      Read ->
-                       return [ C.BlockStm [cstm| gib_shadowstack_push($id:readShadowstack, $id:loc, $id:endloc, RemSet, $id:tycon_t); |] ]
+                       return [ C.BlockStm [cstm| gib_shadowstack_push($id:readShadowstack, $id:loc, $id:endloc, Stk, $id:tycon_t); |] ]
 
                  SSPop stk -> do
                    let [VarTriv loc, VarTriv endloc] = rnds

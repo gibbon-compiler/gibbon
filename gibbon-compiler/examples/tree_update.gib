@@ -1,0 +1,82 @@
+#lang gibbon
+
+(data SearchTree
+      [Null]
+      [Leaf Int]
+      [Node Int SearchTree SearchTree])
+
+;; (define (buildtree [n : Int]) : SearchTree
+;;   (helper 0 (- n 1)))
+
+(define (helper [s : Int] [e : Int]) : SearchTree
+  (if (< e s)
+      (Null)
+      (if (= s e)
+          (Leaf s)
+          (let ([m : Int (+ (div (- e s) 2) s)])
+            (Node m (helper s (- m 1))
+                  (helper (+ m 1) e))))))
+
+(define (countnodes [tr : SearchTree]) : Int
+  (case tr
+    [(Null) 0]
+    [(Leaf n) 1]
+    [(Node n l r) (+ 1 (+ (countnodes l) (countnodes r)))]))
+
+(define (sum-tree [tr : SearchTree]) : Int
+  (case tr
+    [(Null) 0]
+    [(Leaf n) n]
+    [(Node n l r) (+ n (+ (sum-tree l) (sum-tree r)))]))
+
+(define (tree-insert [tr : SearchTree] [n : Int]) : SearchTree
+  (case tr
+    [(Null)        (Leaf n)]
+    [(Leaf n1)     (if (< n n1)
+                       (Node n1 (Leaf n) (Null))
+                       (Node n1 (Null) (Leaf n)))]
+    [(Node n1 l r) (if (< n1 n)
+                       (Node n1 (copy-packed l) (tree-insert r n))
+                       (Node n1 (tree-insert l n) (copy-packed r)))]))
+
+(define (min-tree [tr : SearchTree]) : Int
+  (case tr
+    [(Null)       0]
+    [(Leaf n)     n]
+    [(Node n l r) (case l
+                    [(Null)       n]
+                    [(Leaf m)     (min-tree l)]
+                    [(Node x y z) (min-tree l)])]))
+
+(define (tree-delete [tr : SearchTree] [n : Int]) : SearchTree
+  (case tr
+    [(Null)        (Leaf n)]
+    [(Leaf n1)     (if (= n1 n)
+                       (Null)
+                       (Leaf n1))]
+    [(Node n1 l r) (if (= n1 n)
+                       (let* ([k : Int (min-tree r)]
+                              [r1 : SearchTree (tree-delete r k)])
+                         (Node k (copy-packed l) r1))
+                       (if (< n1 n)
+                           (Node n1 (copy-packed l) (tree-delete r n))
+                           (Node n1 (tree-delete r n) (copy-packed r))))]))
+
+(define (loop [tr : SearchTree] [n : Int]) : SearchTree
+  (if (= n 0)
+      tr
+      (let ([j : Int (mod (rand) 1000)])
+        (if (= 0 (mod j 2))
+            (loop (tree-insert tr j) (- n 1))
+            (loop (tree-delete tr (- j 1)) (- n 1))))))
+
+(let ([m : Int (size-param)])
+  ;; (2 ^ (n+1)) - 1
+  (let* ([total-nodes : Int (- (exp 2 20) 1)]
+         [tr0 : SearchTree (time (helper 0 total-nodes))]
+         [n : Int (countnodes tr0)]
+         [tr1 : SearchTree (iterate (loop tr0 (size-param)))]
+         ;; [_ (print-packed tr1)]
+         [_ (printint n)]
+         [_ (printsym (quote newline))])
+    (sum-tree tr1)))

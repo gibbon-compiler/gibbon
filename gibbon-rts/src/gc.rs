@@ -149,8 +149,6 @@ pub fn garbage_collect(
         // // Collect dead regions.
         // oldgen.collect_regions()?;
 
-        print_nursery_and_oldgen(rstack, wstack, nursery, oldgen);
-
         // Reset the allocation area and record stats.
         nursery.clear();
         // Restore the remaining cauterized writers.
