@@ -63,6 +63,7 @@ the file Contents.hs contains the definition of the data type Content which can 
     SELFTIMED: 4.811104e-02
     '#()
     
-    TAC has less L2 and L2 cache misses, kesser instructions and cycles and consequently a lower runtime. 
+    TAC has less L2 and L3 cache misses, lesser instructions and cycles and consequently a lower runtime. 
+
     Speedup ~ 6x.
     
