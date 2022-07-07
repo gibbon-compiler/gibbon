@@ -128,9 +128,9 @@ addRAN needRANsTyCons prg@Prog{ddefs,fundefs,mainExp} = do
     dbgTrace 2 ("Adding random access nodes: " ++ sdoc (S.toList needRANsTyCons)) (return ())
   let iddefs = withRANDDefs needRANsTyCons ddefs
   funs <- mapM (\(nm,f) -> (nm,) <$> addRANFun needRANsTyCons iddefs f) (M.toList fundefs)
-  new_fns <- mapM (genRelOffsetsFunNameFn needRANsTyCons ddefs) (M.elems ddefs)
-  let funs' = (M.fromList funs) `M.union`
-              (M.fromList $ L.map (\f -> (funName f, f)) new_fns)
+  -- new_fns <- mapM (genRelOffsetsFunNameFn needRANsTyCons ddefs) (M.elems ddefs)
+  let funs' = (M.fromList funs)
+              -- `M.union` (M.fromList $ L.map (\f -> (funName f, f)) new_fns)
   mainExp' <-
     case mainExp of
       Just (ex,ty) -> Just <$> (,ty) <$> addRANExp False needRANsTyCons iddefs M.empty ex
@@ -257,11 +257,12 @@ addRANExp dont_change_datacons needRANsTyCons ddfs ienv ex =
             bod' <- addRANExp dont_change_datacons needRANsTyCons ddfs ienv' bod
             bod'' <- addRANExp dont_change_datacons needRANsTyCons ddfs ienv'' bod
             let abs_ran_clause = (toAbsRANDataCon dcon, (L.map (,()) absRanVars) ++ vs, bod')
-            let rel_ran_clause = (toRelRANDataCon dcon, (L.map (,()) relRanVars') ++ vs, bod'')
-            dflags <- getDynFlags
+            let _rel_ran_clause = (toRelRANDataCon dcon, (L.map (,()) relRanVars') ++ vs, bod'')
+            {- dflags <- getDynFlags
             if gopt Opt_RelativeOffsets dflags
               then pure [abs_ran_clause,rel_ran_clause]
-              else pure [abs_ran_clause]
+              else pure [abs_ran_clause] -}
+            pure [abs_ran_clause]
 
 -- | Update data type definitions to include random access nodes.
 withRANDDefs :: Out a => S.Set TyCon -> DDefs (UrTy a) -> DDefs (UrTy a)
@@ -279,9 +280,10 @@ withRANDDefs needRANsTyCons ddfs = M.map go ddfs
                                        let tys'   = [(False,CursorTy) | _ <- [1..n]] ++ tys
                                            dcon'  = toAbsRANDataCon dcon
 
-                                           tys''  = (False,IntTy) : [(False,IntTy) | _ <- [1..n]] ++ tys
-                                           dcon'' = toRelRANDataCon dcon
-                                       in [(dcon',tys'),(dcon'',tys'')] ++ acc)
+                                           _tys''  = (False,IntTy) : [(False,IntTy) | _ <- [1..n]] ++ tys
+                                           -- dcon'' = toRelRANDataCon dcon
+                                       -- in [(dcon',tys'),(dcon'',tys'')] ++ acc)
+                                       in [(dcon',tys')] ++ acc)
                    [] dataCons
       -- Add the new constructors after all the existing constructors.
       -- The order of constructors matters when these become numeric tags after codegen.

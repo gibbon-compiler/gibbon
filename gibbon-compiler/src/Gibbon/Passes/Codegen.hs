@@ -368,9 +368,10 @@ initInfoTable info_tbl =
 
     insert_dcon_info = M.foldrWithKey
                            (\tycon tyc_info acc ->
-                                M.foldrWithKey (\dcon (DataConInfo dcon_tag scalar_bytes num_scalars num_packed field_tys) acc2 ->
+                                M.foldrWithKey (\dcon (DataConInfo dcon_tag scalar_bytes num_shortcut num_scalars num_packed field_tys) acc2 ->
                                                     if GL.isIndirectionTag dcon then acc2 else
-                                                    let set_field_tys =
+                                                    let packed_field_tys = filter GL.isPackedTy field_tys
+                                                        set_field_tys =
                                                             map (\(ty,i) ->
                                                                      let ty' = (case ty of
                                                                                     GL.PackedTy tycon _ -> tycon
@@ -378,9 +379,9 @@ initInfoTable info_tbl =
                                                                                ++ "_T"
                                                                          e = (C.Id ty' noLoc)
                                                                      in C.BlockStm [cstm| field_tys[$int:i] = ($id:e); |])
-                                                                (zip (filter GL.isPackedTy field_tys) [0..])
+                                                                (zip packed_field_tys [0..])
                                                         tycon' = tycon ++ "_T"
-                                                        insert_into_tbl = [ C.BlockStm [cstm| error = gib_info_table_insert_packed_dcon($id:tycon', $int:dcon_tag, $int:scalar_bytes, $int:num_scalars, $int:num_packed, field_tys, $int:(num_packed)); |]
+                                                        insert_into_tbl = [ C.BlockStm [cstm| error = gib_info_table_insert_packed_dcon($id:tycon', $int:dcon_tag, $int:scalar_bytes, $int:num_shortcut, $int:num_scalars, $int:num_packed, field_tys, $int:num_packed); |]
                                                                           , C.BlockStm [cstm| if (error < 0) { fprintf(stderr, "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d", error, $id:tycon', $int:dcon_tag); exit(1); } |] ]
                                              in set_field_tys ++ insert_into_tbl ++ acc2)
                                         acc

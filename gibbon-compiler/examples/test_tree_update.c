@@ -128,9 +128,10 @@ void info_table_initialize(void)
         exit(1);
     }
 
-    GibDatatype field_tys[5];
+    GibDatatype field_tys[3];
 
-    error = gib_info_table_insert_packed_dcon(SearchTree_T, 1, 8, 0, field_tys, 0);
+    error = gib_info_table_insert_packed_dcon(SearchTree_T, 1, 8, 0, 1, 0,
+                                              field_tys, 0);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -139,7 +140,8 @@ void info_table_initialize(void)
     }
     field_tys[0] = SearchTree_T;
     field_tys[1] = SearchTree_T;
-    error = gib_info_table_insert_packed_dcon(SearchTree_T, 2, 8, 0, field_tys, 2);
+    error = gib_info_table_insert_packed_dcon(SearchTree_T, 2, 8, 0, 1, 2,
+                                              field_tys, 2);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -148,25 +150,20 @@ void info_table_initialize(void)
     }
     field_tys[0] = SearchTree_T;
     field_tys[1] = SearchTree_T;
-    error = gib_info_table_insert_packed_dcon(SearchTree_T, 3, 16, 1, field_tys, 2);
+    error = gib_info_table_insert_packed_dcon(SearchTree_T, 3, 8, 1, 1, 2,
+                                              field_tys, 2);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
                 error, SearchTree_T, 3);
         exit(1);
     }
-    error = gib_info_table_insert_packed_dcon(SearchTree_T, 0, 0, 0, field_tys, 0);
+    error = gib_info_table_insert_packed_dcon(SearchTree_T, 0, 0, 0, 0, 0,
+                                              field_tys, 0);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
                 error, SearchTree_T, 0);
-        exit(1);
-    }
-    error = gib_info_table_insert_packed_dcon(SearchTree_T, 255, 8, 0, field_tys, 0);
-    if (error < 0) {
-        fprintf(stderr,
-                "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
-                error, SearchTree_T, 255);
         exit(1);
     }
     gib_info_table_finalize();

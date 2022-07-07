@@ -544,6 +544,7 @@ int gib_info_table_insert_packed_dcon(
     uint32_t datatype,
     uint8_t datacon,
     size_t scalar_bytes,
+    size_t num_shortcut,
     uint8_t num_scalars,
     uint8_t num_packed,
     uint32_t *field_tys,

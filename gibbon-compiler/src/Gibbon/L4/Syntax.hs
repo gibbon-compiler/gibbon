@@ -106,6 +106,7 @@ type TyConInfo = M.Map L.DataCon DataConInfo
 data DataConInfo = DataConInfo
   { dcon_tag :: Tag
   , scalar_bytes :: Int
+  , num_shortcut :: Int
   , num_scalars :: Int
   , num_packed :: Int
   , field_tys :: [L3.Ty3]

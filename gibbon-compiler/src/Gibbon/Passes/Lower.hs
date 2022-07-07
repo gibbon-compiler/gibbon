@@ -375,7 +375,6 @@ lower Prog{fundefs,ddefs,mainExp} = do
   unpackers  <- if gopt Opt_Pointer dflags
                 then mapM genUnpacker (L.filter (not . isVoidDDef) (M.elems ddefs))
                 else pure []
-
   (T.Prog info_tbl sym_tbl) <$> pure (funs ++ unpackers) <*> pure mn
  where
   fund :: M.Map String Word16 -> FunDef3 -> PassM T.FunDecl
@@ -396,22 +395,34 @@ lower Prog{fundefs,ddefs,mainExp} = do
           (\DDef{tyName,dataCons} acc ->
                M.insert
                    (fromVar tyName)
-                   (foldr (\(dcon,tys) dcon_acc -> M.insert dcon (go dcon tys) dcon_acc) M.empty dataCons)
+                   (foldr (\(dcon,tys) dcon_acc ->
+                             if isIndirectionTag dcon || isRedirectionTag dcon
+                             then dcon_acc
+                             else M.insert dcon (go dcon tys) dcon_acc)
+                          M.empty
+                          dataCons)
                    acc)
           M.empty
           ddefs
       where
         go dcon tys =
             let field_tys = map snd tys
-                (num_packed,num_scalars) = (\(a,b) -> ((length a, length b))) $
+                (num_packed,num_scalars) = (\(a,b) ->
+                                              let b' = filter (\x -> case x of
+                                                                       CursorTy -> False
+                                                                       _ -> True)
+                                                              b
+                                              in (length a, length b')) $
                                            L.partition isPackedTy field_tys
-                scalar_bytes = foldl (\acc ty ->
-                                          if isPackedTy ty
-                                          then acc
-                                          else acc + fromJust (sizeOfTy ty))
-                                     0 field_tys
+                (scalar_bytes, num_shortcut) =
+                               foldl (\(acc1,acc2) ty ->
+                                          case ty of
+                                            PackedTy{} -> (acc1,acc2)
+                                            CursorTy -> (acc1, acc2+1)
+                                            _ -> (acc1+fromJust (sizeOfTy ty), acc2))
+                                     (0,0) field_tys
                 dcon_tag = getTagOfDataCon ddefs dcon
-            in (T.DataConInfo dcon_tag scalar_bytes num_scalars num_packed field_tys)
+            in (T.DataConInfo dcon_tag scalar_bytes num_shortcut num_scalars num_packed field_tys)
 
 
   hasCursorTy :: Ty3 -> Bool

@@ -189,7 +189,7 @@ fn restore_writers(
             if nursery.contains_addr((*frame).ptr) {
                 #[cfg(feature = "verbose_evac")]
                 {
-                    if !isLoc0((*frame).ptr, (*frame).endptr, true) {
+                    if !is_loc0((*frame).ptr, (*frame).endptr, true) {
                         panic!(
                             "Uncauterized write cursor and not loc0, {:?}",
                             *frame
@@ -265,7 +265,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                     nursery,
                     evac_major,
                 };
-                let (src_after, _dst_after, _dst_after_end, _forwarded) =
+                let (_src_after, _dst_after, _dst_after_end, _forwarded) =
                     evacuate_packed(&mut st, oldgen, frame, dst, dst_end);
                 // Update the indirection pointer in oldgen region.
                 write((*frame).ptr, dst);
@@ -279,7 +279,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                         "Evac packed {:?}, skipping oldgen root.",
                         (*frame).ptr
                     );
-                    let footer = (*frame).endptr as *const C_GibChunkFooter;
+                    let _footer = (*frame).endptr as *const C_GibChunkFooter;
                     /*
                     if (*((*footer).reg_info)).refcount == 0 {
                         (*zct).insert((*footer).reg_info);
@@ -300,7 +300,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                 let (dst, dst_end) =
                     Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 0)?;
                 // Update ZCT.
-                let footer = dst_end as *const C_GibChunkFooter;
+                let _footer = dst_end as *const C_GibChunkFooter;
                 /*
                 record_time!(
                     (*zct).insert((*footer).reg_info),
@@ -622,7 +622,7 @@ unsafe fn evacuate_packed(
                         match (*frame).gc_root_prov {
                             C_GcRootProv::RemSet => {}
                             C_GcRootProv::Stk => {
-                                let fwd_footer =
+                                let _fwd_footer =
                                     fwd_footer_addr as *const C_GibChunkFooter;
                                 /*
                                 record_time!(
@@ -718,7 +718,7 @@ unsafe fn evacuate_packed(
                         match (*frame).gc_root_prov {
                             C_GcRootProv::RemSet => {}
                             C_GcRootProv::Stk => {
-                                let fwd_footer = fwd_footer_addr_avail
+                                let _fwd_footer = fwd_footer_addr_avail
                                     as *const C_GibChunkFooter;
                                 /*
                                 record_time!(
@@ -850,8 +850,12 @@ unsafe fn evacuate_packed(
 
                     // Regular datatype, copy.
                     _ => {
-                        let DataconInfo { scalar_bytes, field_tys, .. } =
-                            packed_info.get_unchecked(tag as usize);
+                        let DataconInfo {
+                            scalar_bytes,
+                            field_tys,
+                            num_shortcut,
+                            ..
+                        } = packed_info.get_unchecked(tag as usize);
 
                         #[cfg(feature = "verbose_evac")]
                         eprintln!(
@@ -859,7 +863,8 @@ unsafe fn evacuate_packed(
                             field_tys
                         );
 
-                        let scalar_bytes1 = *scalar_bytes;
+                        // TODO: handle shortcut pointers properly.
+                        let scalar_bytes1 = *scalar_bytes + (num_shortcut * 8);
 
                         // Check bound of the destination buffer before copying.
                         // Reserve additional space for a redirection node or a
@@ -1173,7 +1178,7 @@ pub unsafe fn init_footer_at(
     footer_start
 }
 
-fn isLoc0(addr: *const i8, footer_addr: *const i8, in_nursery: bool) -> bool {
+fn is_loc0(addr: *const i8, footer_addr: *const i8, in_nursery: bool) -> bool {
     unsafe {
         let chunk_size: usize = if in_nursery {
             *(footer_addr as *const u16) as usize
@@ -1579,6 +1584,8 @@ impl Iterator for ShadowstackIter {
 struct DataconInfo {
     /// Bytes before the first packed field.
     scalar_bytes: usize,
+    /// Number of shortcut pointer fields.
+    num_shortcut: usize,
     /// Number of scalar fields.
     num_scalars: u8,
     /// Number of packed fields.
@@ -1610,12 +1617,18 @@ pub fn info_table_insert_packed_dcon(
     datatype: C_GibDatatype,
     datacon: C_GibPackedTag,
     scalar_bytes: usize,
+    num_shortcut: usize,
     num_scalars: u8,
     num_packed: u8,
     field_tys: Vec<C_GibDatatype>,
 ) -> Result<()> {
-    let dcon_info =
-        DataconInfo { scalar_bytes, num_scalars, num_packed, field_tys };
+    let dcon_info = DataconInfo {
+        scalar_bytes,
+        num_scalars,
+        num_shortcut,
+        num_packed,
+        field_tys,
+    };
     let entry = unsafe { _INFO_TABLE.get_unchecked_mut(datatype as usize) };
     match entry {
         DatatypeInfo::Packed(packed_info) => {
