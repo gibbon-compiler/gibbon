@@ -351,7 +351,9 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
 #[derive(Debug)]
 // The actions pushed on the stack while evacuating.
 enum EvacAction {
-    ProcessTy(C_GibDatatype),
+    // The datatype to process along with an optional shortcut pointer address
+    // that needs to be updated to point to the new destination of this type.
+    ProcessTy(C_GibDatatype, Option<*mut i8>),
     RestoreSrc(*mut i8),
     // A reified continuation of processing the target of an indirection.
     SkipOverEnvWrite(*mut i8),
@@ -361,29 +363,8 @@ enum EvacAction {
 
 Evacuate a packed value by referring to the info table.
 
-Arguments:
-
-- so_env - an environment that provides the ends of burned fields. only
-  relevant when evacuating the shadow-stack.
-- heap - allocation area to copy data into
-- packed_info - information about the fields of this datatype
-- need_endof_src - if evacuate_packed MUST traverse the value at src and return
-  a proper src_after, or throw an error if it cannot do so.
-- src - a pointer to the value to be copied in source buffer
-- dst - a pointer to the value's new destination in the destination buffer
-- dst_end - end of the destination buffer for bounds checking
-
-Returns: (src_after, dst_after, dst_end, maybe_tag)
-
-- src_after - a pointer in the source buffer that's one past the
-              last cell occupied by the value that was copied
-- dst_after - a pointer in the destination buffer that's one past the
-              last cell occupied by the value in its new home
-- dst_end   - end of the destination buffer (which can change during copying
-              due to bounds checking)
-- forwarded - did the interval evacuated have at least one forwarding pointer written?
-
 FIXME: forwarded is currently for the entire (multi-chunk) evaluation, and it should be per-chunk.
+
  */
 unsafe fn evacuate_packed(
     st: &mut EvacState,
@@ -413,7 +394,7 @@ unsafe fn evacuate_packed(
     let mut dst = orig_dst;
     let mut dst_end = orig_dst_end;
     // The implicit -1th element of the worklist:
-    let mut next_action = EvacAction::ProcessTy(orig_typ);
+    let mut next_action = EvacAction::ProcessTy(orig_typ, None);
     let mut forwarded = false;
 
     #[cfg(feature = "verbose_evac")]
@@ -431,7 +412,7 @@ unsafe fn evacuate_packed(
             EvacAction::RestoreSrc(new_src) => {
                 src = new_src;
 
-                // make this reusable somehow (local macro?)
+                // TODO: make this reusable somehow (local macro?)
                 if let Some(next) = worklist.pop() {
                     next_action = next;
                     continue;
@@ -439,7 +420,13 @@ unsafe fn evacuate_packed(
                     break;
                 }
             }
-            EvacAction::ProcessTy(next_ty) => {
+            EvacAction::ProcessTy(next_ty, mb_shortcut_addr) => {
+                #[cfg(feature = "verbose_evac")]
+                eprintln!(
+                    "   Shortcut pointer at {:?} will be updated",
+                    mb_shortcut_addr
+                );
+
                 let (tag, src_after_tag): (C_GibPackedTag, *mut i8) =
                     read_mut(src);
                 #[cfg(feature = "verbose_evac")]
@@ -519,7 +506,10 @@ unsafe fn evacuate_packed(
                             }
 
                             // Same type, new location to evac from:
-                            next_action = EvacAction::ProcessTy(next_ty);
+                            next_action = EvacAction::ProcessTy(
+                                next_ty,
+                                mb_shortcut_addr,
+                            );
                             continue;
                         } else {
                             #[cfg(feature = "verbose_evac")]
@@ -532,6 +522,11 @@ unsafe fn evacuate_packed(
                             let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                             let dst_after_indr =
                                 write(dst_after_tag, tagged_pointee);
+
+                            // TODO: make this reusable somehow (local macro?)
+                            if let Some(shortcut_addr) = mb_shortcut_addr {
+                                write(shortcut_addr, dst1);
+                            }
 
                             #[cfg(feature = "gcstats")]
                             {
@@ -601,6 +596,11 @@ unsafe fn evacuate_packed(
                         let dst_after_indr =
                             write(dst_after_tag, tagged_fwd_ptr);
 
+                        // TODO: make this reusable somehow (local macro?)
+                        if let Some(shortcut_addr) = mb_shortcut_addr {
+                            write(shortcut_addr, dst1);
+                        }
+
                         #[cfg(feature = "verbose_evac")]
                         eprintln!("   Forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged, dst);
                         forwarded = true; // i.e. ALREADY forwarded.
@@ -640,6 +640,7 @@ unsafe fn evacuate_packed(
                         dst = dst_after_indr;
                         dst_end = dst_end1;
                         let src_after_burned = st.so_env.get(&src);
+                        // TODO: make this reusable somehow (local macro?)
                         if let Some(next) = worklist.pop() {
                             next_action = next;
                             src = *src_after_burned.unwrap_or_else(|| {
@@ -704,6 +705,11 @@ unsafe fn evacuate_packed(
                         let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                         let dst_after_indr = write(dst_after_tag, tagged_want);
 
+                        // TODO: make this reusable somehow (local macro?)
+                        if let Some(shortcut_addr) = mb_shortcut_addr {
+                            write(shortcut_addr, dst1);
+                        }
+
                         #[cfg(feature = "gcstats")]
                         {
                             (*GC_STATS).mem_copied += 9;
@@ -736,6 +742,7 @@ unsafe fn evacuate_packed(
                         dst = dst_after_indr;
                         dst_end = dst_end1;
                         let src_after_burned = st.so_env.get(&src);
+                        // TODO: make this reusable somehow (local macro?)
                         if let Some(next) = worklist.pop() {
                             next_action = next;
                             src = *src_after_burned.unwrap_or_else(|| {
@@ -803,6 +810,11 @@ unsafe fn evacuate_packed(
                             let dst_after_redir =
                                 write(dst_after_tag, tagged_next_chunk);
 
+                            // TODO: make this reusable somehow (local macro?)
+                            if let Some(shortcut_addr) = mb_shortcut_addr {
+                                write(shortcut_addr, dst);
+                            }
+
                             #[cfg(feature = "gcstats")]
                             {
                                 (*GC_STATS).mem_copied += 9;
@@ -863,8 +875,8 @@ unsafe fn evacuate_packed(
                             field_tys
                         );
 
-                        // TODO: handle shortcut pointers properly.
-                        let scalar_bytes1 = *scalar_bytes + (num_shortcut * 8);
+                        let scalar_bytes1 = *scalar_bytes;
+                        let num_shortcut1 = *num_shortcut;
 
                         // Check bound of the destination buffer before copying.
                         // Reserve additional space for a redirection node or a
@@ -878,12 +890,27 @@ unsafe fn evacuate_packed(
                             let (mut dst2, dst_end2) = Heap::check_bounds(
                                 oldgen, space_reqd, dst, dst_end,
                             );
-                            // Copy the tag and the fields.
+
+                            // N.B. it's important to perform this write here
+                            // before we advance dst2 past the tag.
+                            // TODO: make this reusable somehow (local macro?)
+                            if let Some(shortcut_addr) = mb_shortcut_addr {
+                                write(shortcut_addr, dst2);
+                            }
+
+                            // Copy the tag. Move cursors past the tag.
                             dst2 = write(dst2, tag);
-                            dst2.copy_from_nonoverlapping(
-                                src_after_tag,
-                                scalar_bytes1,
-                            );
+                            let mut src2 = src_after_tag;
+
+                            // Store the address where shortcut pointers should
+                            // be written. Move cursors past shortcut pointers.
+                            let dst_shortcuts_start = dst2;
+                            src2 = src2.add(num_shortcut1 * 8);
+                            dst2 = dst2.add(num_shortcut1 * 8);
+
+                            // Copy the scalar fields. Move cursors past scalar fields.
+                            dst2.copy_from_nonoverlapping(src2, scalar_bytes1);
+                            src2 = src2.add(scalar_bytes1);
                             dst2 = dst2.add(scalar_bytes1);
 
                             #[cfg(feature = "gcstats")]
@@ -896,8 +923,7 @@ unsafe fn evacuate_packed(
                             // dst's address at src. Otherwise just write a COPIED tag.
                             // After the forwarding pointer, burn the rest of
                             // space previously occupied by scalars.
-
-                            if scalar_bytes1 >= 8 {
+                            if scalar_bytes1 >= 8 || num_shortcut1 > 0 {
                                 #[cfg(feature = "verbose_evac")]
                                 eprintln!("   Forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
                                 debug_assert!(dst < dst_end);
@@ -921,22 +947,57 @@ unsafe fn evacuate_packed(
                                         scalar_bytes1 as usize,
                                     );
                                 }
-                                // todo: Double check the above versus the old version here:
+                                // TODO: Double check the above versus the old version here:
                                 //   if src_mut > burn {
                                 //     let i = src_mut.offset_from(burn);
                                 //     write_bytes(burn, C_COPIED_TAG, i as usize);
                                 //   }
                             }
 
-                            for ty in field_tys.iter().rev() {
-                                worklist.push(EvacAction::ProcessTy(*ty));
+                            let shortcut_addrs: Vec<Option<*mut i8>> =
+                                if num_shortcut1 > 0 {
+                                    // If a datatype has shortcut pointers, there
+                                    // will be a pointer corresponding to every packed
+                                    // field, except the first one. The pointers
+                                    // will be laid out immediately after the tag.
+                                    // Thus the address of ith shortcut pointer
+                                    // is dst_shortcuts_start + (i * 8).
+                                    let mut addrs = Vec::new();
+                                    addrs.push(None);
+                                    for i in 0..num_shortcut1 {
+                                        addrs.push(Some(
+                                            dst_shortcuts_start.add(i * 8),
+                                        ))
+                                    }
+                                    addrs
+                                } else {
+                                    vec![None; field_tys.len()]
+                                };
+
+                            debug_assert!(
+                                field_tys.len() == shortcut_addrs.len()
+                            );
+
+                            #[cfg(feature = "verbose_evac")]
+                            eprintln!(
+                                "   Need to write shortcut pointers at: {:?}",
+                                shortcut_addrs
+                            );
+
+                            for (ty, shct) in field_tys
+                                .iter()
+                                .zip(shortcut_addrs.iter())
+                                .rev()
+                            {
+                                worklist
+                                    .push(EvacAction::ProcessTy(*ty, *shct));
                             }
 
-                            src = src_after_tag.add(scalar_bytes1);
+                            src = src2;
                             dst = dst2;
                             dst_end = dst_end2;
 
-                            // make this reusable somehow (local macro?)
+                            // TODO: make this reusable somehow (local macro?)
                             if let Some(next) = worklist.pop() {
                                 next_action = next;
                                 continue;
@@ -980,7 +1041,7 @@ fn sort_roots(
     // see Note [Granularity of the burned addresses table] and
     // Note [Sorting roots on the shadow-stack and remembered set].
     //
-    // TODO(ckoparkar): sort roots into oldgen and nursery seperately;
+    // TODO: sort roots into oldgen and nursery seperately;
     // for oldgen we want to sort using highest depth first,
     // for nursery we want to start with leftmost root first.
     let mut frames_vec: Vec<*mut C_GibShadowstackFrame> = Vec::new();
@@ -1680,6 +1741,8 @@ pub fn info_table_finalize() {
             }
         }
         INFO_TABLE = std::slice::from_raw_parts(info_table, _INFO_TABLE.len());
+        #[cfg(feature = "verbose_evac")]
+        eprintln!("INFO_TABLE: {:?}", INFO_TABLE);
     }
 }
 

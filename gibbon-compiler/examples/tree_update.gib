@@ -72,11 +72,12 @@
 
 (let ([m : Int (size-param)])
   ;; (2 ^ (n+1)) - 1
-  (let* ([total-nodes : Int (- (exp 2 20) 1)]
+  (let* ([total-nodes : Int (- (exp 2 2) 1)]
          [tr0 : SearchTree (time (helper 0 total-nodes))]
          [n : Int (countnodes tr0)]
          [tr1 : SearchTree (iterate (loop tr0 (size-param)))]
-         ;; [_ (print-packed tr1)]
-         [_ (printint n)]
-         [_ (printsym (quote newline))])
+         [_ (print-packed tr1)]
+         ;; [_ (printint n)]
+         ;; [_ (printsym (quote newline))]
+         )
     (sum-tree tr1)))

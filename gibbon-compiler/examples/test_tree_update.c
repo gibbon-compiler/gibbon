@@ -1593,6 +1593,7 @@ GibCursorProd _traverse_SearchTree(GibCursor end_r_901,
 GibCursorProd _print_SearchTree(GibCursor end_r_903, GibCursor arg_213_298_472)
 {
     printf("%p:", arg_213_298_472);
+    fflush(stdout);
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
@@ -1634,7 +1635,7 @@ GibCursorProd _print_SearchTree(GibCursor end_r_903, GibCursor arg_213_298_472)
             GibInt tmpval_2716 = *(GibInt *) tmpaftercur_2715;
             GibCursor tmpcur_2717 = tmpaftercur_2715 + sizeof(GibInt);
             unsigned char wildcard_226_308_482 = gib_print_symbol(2244);
-            printf("%p:RAN ", tmpcur_2711);
+            printf("%p:%p ", tmpcur_2711, tmpcur_2714);
             unsigned char y_223_309_483 = printf("%p:%ld ", tmpaftercur_2715, tmpval_2716);
 
             gib_shadowstack_push(rstack, tmpcur_2714, end_r_903, Stk,
