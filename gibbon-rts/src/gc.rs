@@ -246,9 +246,11 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
     );
 
     #[cfg(feature = "verbose_evac")]
-    eprintln!("Sorted roots:");
-    for frame in frames.iter() {
-        eprintln!("{:?}", *(*frame));
+    {
+        eprintln!("Sorted roots:");
+        for frame in frames.iter() {
+            eprintln!("{:?}", *(*frame));
+        }
     }
 
     for frame in frames {
@@ -275,6 +277,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
             C_GcRootProv::Stk => {
                 let root_in_nursery = nursery.contains_addr((*frame).endptr);
                 if !evac_major && !root_in_nursery {
+                    #[cfg(feature = "verbose_evac")]
                     eprintln!(
                         "Evac packed {:?}, skipping oldgen root.",
                         (*frame).ptr
@@ -1484,7 +1487,7 @@ impl<'a> Heap for C_GibOldGeneration<'a> {
         let total_size = size + size_of::<C_GibChunkFooter>();
         let (start, end) = self.allocate(total_size)?;
 
-        #[cfg(feature = "gcstats")]
+        #[cfg(feature = "verbose_evac")]
         eprintln!("Allocated a oldgen chunk, ({:?}, {:?}).", start, end,);
 
         let footer_start =

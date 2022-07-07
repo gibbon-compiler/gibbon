@@ -374,8 +374,11 @@ GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
                                      GibCursor loc_877, GibCursor tr_67_246_390,
                                      GibInt n_68_247_391)
 {
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     _print_SearchTree(end_r_878, tr_67_246_390);
     printf("\n");
+#endif
+
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
@@ -420,8 +423,10 @@ GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
             gib_shadowstack_push(wstack, loc_877, end_r_879, Stk,
                                  SearchTree_T);
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
             _print_SearchTree(NULL, tr_67_246_390);
             printf("\n");
+#endif
 
             GibCursorGibCursorGibCursorProd tmp_struct_11 =
                                              tree_insert(end_r_878, end_r_961, r_961, tr_67_246_390, j_69_248_394);
@@ -1769,7 +1774,7 @@ GibInt caseFn_228(GibCursor end_r_905, GibCursor l_86_229_313_487,
     }
 }
 
-const int TREE_HEIGHT = 2;
+const int TREE_HEIGHT = 7;
 
 int gib_main_expr(void)
 {
@@ -1877,9 +1882,12 @@ int gib_main_expr(void)
     printf("%ld", pvrtmp_2291);
     printf("\n");
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     _print_SearchTree(end_r_924, pvrtmp_2281);
     printf("\n");
     _print_SearchTree(pvrtmp_2259, pvrtmp_2260);
     printf("\n");
+#endif
+
     return 0;
 }

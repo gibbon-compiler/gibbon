@@ -134,7 +134,7 @@ void info_table_initialize(void)
     GibDatatype field_tys[2];
 
     field_tys[0] = List_T;
-    error = gib_info_table_insert_packed_dcon(List_T, 1, 8, 1, 1, 0, field_tys, 1);
+    error = gib_info_table_insert_packed_dcon(List_T, 1, 8, 0, 1, 1, field_tys, 1);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -148,7 +148,7 @@ void info_table_initialize(void)
                 error, List_T, 0);
         exit(1);
     }
-    error = gib_info_table_insert_packed_dcon(Tree_T, 0, 8, 1, 0, 0, field_tys, 0);
+    error = gib_info_table_insert_packed_dcon(Tree_T, 0, 8, 0, 1, 0, field_tys, 0);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -157,7 +157,7 @@ void info_table_initialize(void)
     }
     field_tys[0] = Tree_T;
     field_tys[1] = Tree_T;
-    error = gib_info_table_insert_packed_dcon(Tree_T, 1, 0, 0, 2, 0, field_tys, 2);
+    error = gib_info_table_insert_packed_dcon(Tree_T, 1, 0, 0, 0, 2, field_tys, 2);
     if (error < 0) {
         fprintf(stderr,
                 "Couldn't insert into info table, errorno=%d, tycon=%d, dcon=%d",
@@ -250,9 +250,11 @@ GibInt do_reverse(GibInt n_19_183_289)
     GibCursor pvrtmp_1395 = tmp_struct_17.field2;
     GibCursor pvrtmp_1396 = tmp_struct_17.field3;
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     printf("reversed:");
     _print_List(NULL, pvrtmp_1395);
     printf("\n");
+#endif
 
     GibCursorGibIntProd tmp_struct_18 =  sum_list(pvrtmp_1393, pvrtmp_1395);
     GibCursor pvrtmp_1401 = tmp_struct_18.field0;
@@ -904,7 +906,9 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
                                           GibInt n_41_188_294)
 {
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     printf("loc_651: %p\n", loc_651);
+#endif
 
     if (loc_651 + 32 > end_r_652) {
         gib_grow_region(&loc_651, &end_r_652);
@@ -955,8 +959,10 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
         GibBoxedTag tmpval_1420 = *(GibBoxedTag *) r_740;
         GibCursor tmpcur_1421 = r_740 + 1;
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
         _print_Tree(end_r_740, r_740);
         printf("\n");
+#endif
 
       switch_1432:
         ;
@@ -1036,8 +1042,10 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
         GibCursor pvrtmp_1435 = tmp_struct_7.field2;
         GibInt fltAppE_272_304 = n_41_188_294 - 1;
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
         _print_Tree(pvrtmp_1433, pvrtmp_1434);
         printf("\n");
+#endif
 
         GibCursorGibCursorGibCursorProd tmp_struct_8 =
                                          buildtree(pvrtmp_1433, pvrtmp_1435, fltAppE_272_304);
@@ -1052,11 +1060,13 @@ GibCursorGibCursorGibCursorProd buildtree(GibCursor end_r_652,
         GibCursor pvrtmp_1441 = tmp_struct_8.field1;
         GibCursor pvrtmp_1442 = tmp_struct_8.field2;
 
-        // _print_Tree(pvrtmp_1440, pvrtmp_1441);
-        // printf("\n");
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+        _print_Tree(pvrtmp_1440, pvrtmp_1441);
+        printf("\n");
 
         _print_Tree(pvrtmp_1440, loc_651);
         printf("\n");
+#endif
 
         return (GibCursorGibCursorGibCursorProd) {pvrtmp_1440, loc_651,
                                                   pvrtmp_1442};

@@ -887,7 +887,7 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 #define SHADOWSTACK_SIZE (sizeof(GibShadowstackFrame) * 4 * 1024 * 1024)
 
 // Same as SHADOWSTACK_SIZE, overflows are not checked.
-#define REMEMBERED_SET_SIZE (sizeof(GibRememberedSetElt) * 1024)
+#define REMEMBERED_SET_SIZE (sizeof(GibRememberedSetElt) * 4 * 1024 * 1024)
 
 
 typedef struct gib_region_info {
