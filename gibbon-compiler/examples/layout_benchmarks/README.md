@@ -1,6 +1,6 @@
-# Layout optimization benchmarks (Focusing on Relative ordering of Fields right now.)
-## Long term goal is to show how layout affects performance, add factoring into picture + add string support
-## Tie everything to microservices, (social media apps for instance) + Render Tree benchmarks (Real world applications)
+## Layout optimization benchmarks (Focusing on Relative ordering of Fields right now.)
+* Long term goal is to show how layout affects performance, add factoring into picture + add string support + (after factoring support -> vectorization support)
+* Tie everything to microservices, (social media apps for instance) + Render Tree benchmarks (Real world applications)
 
 This is a collection of some benchmarks that show how layout affects performance.
 In particular this set of benchmarks shows how the position of different fields in the data layout could potentially affect performance. 
