@@ -79,8 +79,12 @@ void read_counters() {
 }
 
 void print_counters() {
-  for (int i = 0; i < SIZE; ++i)
+  for (int i = 0; i < SIZE; ++i){
     printf("%s : %llu\n", defs[i], values[i]);
+  }
+  
+  printf("CPI: %lld\n", values[3]/values[2]);   
+    
 }
 
 // Initial size of BigInfinite buffers
