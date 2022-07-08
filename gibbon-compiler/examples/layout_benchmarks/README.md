@@ -105,7 +105,7 @@ the file Contents.hs contains the definition of the data type Content which can 
 
     Speedup ~ 6x.
 
-   ## MACHINE SPECIFICATIONS (Tested on a machine where PAPI support was available, newer machines not supported by PAPI yet.):
+   ### MACHINE SPECIFICATIONS (Tested on a machine where PAPI support was available, newer machines not supported by PAPI yet.):
    ``` 
    Architecture:                    x86_64
    CPU op-mode(s):                  32-bit, 64-bit
