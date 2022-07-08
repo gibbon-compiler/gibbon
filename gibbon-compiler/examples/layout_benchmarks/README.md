@@ -50,7 +50,9 @@ the file Contents.hs contains the definition of the data type Content which can 
     BATCHTIME: 3.254971e-01
     SELFTIMED: 3.570562e-02
     Count of Adt CA is: 1000000
-    '#() 
+    '#()
+
+    Speedup ~ 70x 
     
     
 2.) Processing the content. Comparing the performance of CA vs AC
