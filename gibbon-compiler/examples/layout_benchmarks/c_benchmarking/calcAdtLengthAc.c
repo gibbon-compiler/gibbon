@@ -36,6 +36,57 @@
 #define REDIRECTION_TAG 255
 #define INDIRECTION_TAG 254
 
+#define SIZE 4
+
+#include <papi.h>
+
+int ret;
+int events[] = {PAPI_L2_TCM, PAPI_L3_TCM, PAPI_TOT_INS, PAPI_TOT_CYC};
+char* defs[] = {"L2 Cache Misses", "L3 Cache Misses", "Instructions" ,"Total Cycles"};
+
+unsigned long long values[SIZE];
+
+void init_papi(){
+  if (PAPI_library_init(PAPI_VER_CURRENT) != PAPI_VER_CURRENT){
+    printf("PAPI Init Error\n");
+    exit(1);
+  }
+  for(int i = 0; i < SIZE; i++){
+    if (PAPI_query_event(events[i]) != PAPI_OK){
+      printf("PAPI Event %d does not exist\n", i);
+    }    
+  }  
+}
+
+void start_counters() {
+  if (PAPI_start_counters(events, SIZE) != PAPI_OK) {
+    printf("PAPI Error starting counters\n");
+  } 
+}
+
+void read_counters() {
+  // Performance Counters Read
+  ret = PAPI_stop_counters(values, SIZE);
+  if (ret != PAPI_OK) {
+    if (ret == PAPI_ESYS) {
+      printf("error inside PAPI call\n");
+    } else if (ret == PAPI_EINVAL) {
+      printf("error with arguments\n");
+    }
+
+    printf("PAPI Error reading counters\n");
+  }
+}
+
+void print_counters() {
+  for (int i = 0; i < SIZE; ++i){
+    printf("%s : %llu\n", defs[i], values[i]);
+  }
+  
+  printf("CPI: %f\n", ((double)values[3]/(double)values[2]));   
+    
+}
+
 // Initial size of BigInfinite buffers
 static long long global_init_biginf_buf_size = (4 * GB);
 
@@ -4337,6 +4388,7 @@ int __main_expr()
     struct timespec begin_timed_4657;
     struct timespec end_timed_4657;
     
+    start_counters();
     for (long long iters_timed_4657 = 0; iters_timed_4657 < global_iters_param;
          iters_timed_4657++) {
         if (iters_timed_4657 != global_iters_param - 1)
@@ -4354,6 +4406,8 @@ int __main_expr()
         
         vector_inplace_update(times_211, iters_timed_4657, &itertime_208);
     }
+    read_counters();
+    print_counters();
     vector_inplace_sort(times_211, compare_doubles);
     
     double *tmp_212 = (double *) vector_nth(times_211, global_iters_param / 2);

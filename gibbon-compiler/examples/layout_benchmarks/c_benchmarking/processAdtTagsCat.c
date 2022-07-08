@@ -83,7 +83,7 @@ void print_counters() {
     printf("%s : %llu\n", defs[i], values[i]);
   }
   
-  printf("CPI: %lld\n", values[3]/values[2]);
+  printf("CPI: %f\n", ((double)values[3]/(double)values[2]));
     
 }
 

@@ -17,7 +17,37 @@ the file Contents.hs contains the definition of the data type Content which can 
     
     Here the CA data layout results in slower performance that the AC layout. 
     This is because the CA layout inserts pointers to the next Adt so that it can quickly skip over the Content and to count the length of the Adt. This causes the program to chases pointes to get to the end of the list. 
-    On the other hand, the AC list does not have these pointers and simply traverses the Next directly since they are contigous in memory. This way it does not have to chase pointes and the program exits when it sees Nil without having to deal with the content. 
+    On the other hand, the AC list does not have these pointers and simply traverses the Next directly since they are contigous in memory. This way it does not have to chase pointes and the program exits when it sees Nil without having to deal with the content.
+   
+    AC
+    Time for Adt: AC
+    L2 Cache Misses : 305988
+    L3 Cache Misses : 33032
+    Instructions : 54003275
+    Total Cycles : 18108744
+    CPI: 0.335327
+    TIMES: [0.000514, 0.000514, 0.000514, 0.000514, 0.000514, 0.000514, 0.000520, 0.000529, 0.000531]
+    ITERS: 9
+    SIZE: 0
+    BATCHTIME: 4.665207e-03
+    SELFTIMED: 5.142910e-04
+    Count of Adt AC is: 1000000
+    '#()
+  
+    CA
+    Time for Adt: CA
+    L2 Cache Misses : 58844120
+    L3 Cache Misses : 58279137
+    Instructions : 54002788
+    Total Cycles : 1302125996
+    CPI: 24.112199
+    TIMES: [0.035460, 0.035528, 0.035551, 0.035585, 0.035706, 0.036255, 0.036775, 0.037116, 0.037521]
+    ITERS: 9
+    SIZE: 0
+    BATCHTIME: 3.254971e-01
+    SELFTIMED: 3.570562e-02
+    Count of Adt CA is: 1000000
+    '#() 
     
     
 2.) Processing the content. Comparing the performance of CA vs AC
@@ -40,27 +70,30 @@ the file Contents.hs contains the definition of the data type Content which can 
     Each cell has a list of 10 tags and Content of size 2000 characters. (in the form of Text string)   
     
     TAC
-    L2 Cache Misses : 1691512
-    L3 Cache Misses : 1077805
-    Instructions : 35909014
-    Total Cycles : 19966967
-    TIMES: [0.007887]
-    ITERS: 1
-    SIZE: 1
-    BATCHTIME: 7.886575e-03
-    SELFTIMED: 7.886575e-03
-    '#()    
+    L2 Cache Misses : 15208512
+    L3 Cache Misses : 9449631
+    Instructions : 323168259
+    Total Cycles : 179453423
+    CPI: 0.555294
+    TIMES: [0.007453, 0.007480, 0.007590, 0.007745, 0.007779, 0.007794, 0.007797, 0.007896, 0.008106]
+    ITERS: 9
+    SIZE: 0
+    BATCHTIME: 6.963932e-02
+    SELFTIMED: 7.778918e-03
+    '#()
+    
     
     CAT
-    L2 Cache Misses : 2188086
-    L3 Cache Misses : 1570776
-    Instructions : 79688633
-    Total Cycles : 82205312
-    TIMES: [0.048111]
-    ITERS: 1
-    SIZE: 1
-    BATCHTIME: 4.811104e-02
-    SELFTIMED: 4.811104e-02
+    L2 Cache Misses : 20032647
+    L3 Cache Misses : 14033895
+    Instructions : 717124396
+    Total Cycles : 742859227
+    CPI: 1.035886
+    TIMES: [0.047035, 0.047063, 0.047065, 0.047089, 0.047130, 0.047576, 0.047665, 0.048015, 0.048623]
+    ITERS: 9
+    SIZE: 0
+    BATCHTIME: 4.272612e-01
+    SELFTIMED: 4.712992e-02
     '#()
     
     TAC has less L2 and L3 cache misses, lesser instructions and cycles and consequently a lower runtime. 
