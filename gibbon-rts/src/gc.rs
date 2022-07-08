@@ -445,7 +445,7 @@ unsafe fn evacuate_packed(
                     // Indirections into oldgen are not inlined in the current version.
                     // See Note [Smart inlining policies].
                     C_INDIRECTION_TAG => {
-                        let (tagged_pointee, src_after_indr): (u64, _) =
+                        let (mut tagged_pointee, src_after_indr): (u64, _) =
                             read(src_after_tag);
 
                         #[cfg(feature = "verbose_evac")]
@@ -457,8 +457,10 @@ unsafe fn evacuate_packed(
                         );
 
                         let src_after_indr1 = src_after_indr as *mut i8;
-                        let tagged = TaggedPointer::from_u64(tagged_pointee);
-                        let pointee = tagged.untag();
+                        let mut tagged =
+                            TaggedPointer::from_u64(tagged_pointee);
+                        let mut pointee = tagged.untag();
+
                         // Add a forwarding pointer in the source buffer.
                         debug_assert!(dst < dst_end);
 
@@ -468,6 +470,41 @@ unsafe fn evacuate_packed(
                             dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                         );
                         forwarded = true;
+
+                        // [2022.07.08] special case added while fixing tree_update.
+                        //
+                        // Suppose there is an indirection pointer pointing to a
+                        // an address ABC within the nursery. However, the address
+                        // ABC contains a redirection pointer.
+                        // Under the usual policy the GC will inline this indirection,
+                        // which is BAD. Redirections stop evacuation; they always
+                        // point to an oldgen chunk and there's never any data after them.
+                        // But inlining a redirection breaks these assumptions.
+                        // Since the GC can very well write data after the inlined
+                        // redirection. The following code prevents this inlining.
+                        // Instead, it'll make the GC write an indirection pointer
+                        // pointing to the target of the redirection.
+                        //
+                        // TODO: add a picture here perhaps.
+                        let (pointee_tag, after_pointee): (
+                            C_GibPackedTag,
+                            *const i8,
+                        ) = read(pointee);
+                        if pointee_tag == C_REDIRECTION_TAG {
+                            let (tagged_redirect, _): (u64, _) =
+                                read(after_pointee);
+
+                            #[cfg(feature = "verbose_evac")]
+                            {
+                                eprintln!("   Found an indirection pointing to a redirection, {:?} -> {:?} ({:?})",
+                                          src, pointee, tagged_redirect);
+                            }
+
+                            tagged_pointee = tagged_redirect;
+                            tagged = TaggedPointer::from_u64(tagged_redirect);
+                            pointee = tagged.untag();
+                        }
+                        // end of special case code.
 
                         // If the pointee is in the nursery, evacuate it.
                         // Otherwise, write an indirection node at dst and adjust the
@@ -515,9 +552,6 @@ unsafe fn evacuate_packed(
                             );
                             continue;
                         } else {
-                            #[cfg(feature = "verbose_evac")]
-                            eprintln!("   Keeping indirection.");
-
                             let space_reqd = 32;
                             let (dst1, dst_end1) = Heap::check_bounds(
                                 oldgen, space_reqd, dst, dst_end,
@@ -530,6 +564,12 @@ unsafe fn evacuate_packed(
                             if let Some(shortcut_addr) = mb_shortcut_addr {
                                 write(shortcut_addr, dst1);
                             }
+
+                            #[cfg(feature = "verbose_evac")]
+                            eprintln!(
+                                "   Keeping indirection {:?} -> {:?}",
+                                dst1, pointee
+                            );
 
                             #[cfg(feature = "gcstats")]
                             {
@@ -907,9 +947,68 @@ unsafe fn evacuate_packed(
 
                             // Store the address where shortcut pointers should
                             // be written. Move cursors past shortcut pointers.
+                            let src_shortcuts_start = src2;
                             let dst_shortcuts_start = dst2;
                             src2 = src2.add(num_shortcut1 * 8);
                             dst2 = dst2.add(num_shortcut1 * 8);
+                            let shortcut_addrs: Vec<Option<*mut i8>> =
+                                if num_shortcut1 > 0 {
+                                    // If a datatype has shortcut pointers, there
+                                    // will be a pointer corresponding to every packed
+                                    // field, except the first one. The pointers
+                                    // will be laid out immediately after the tag.
+                                    // Thus the address of ith shortcut pointer
+                                    // is dst_shortcuts_start + (i * 8).
+                                    let mut addrs = Vec::new();
+                                    addrs.push(None);
+                                    // If a shortcut pointer points into oldgen
+                                    // we should copy it as it is. Otherwise
+                                    // arrange things such that evacuating the
+                                    // nursery value updates the shortcut pointer.
+                                    //
+                                    // TODO: what should happen here if we're
+                                    // evacuating oldgen?
+                                    for i in 0..num_shortcut1 {
+                                        let (shortcut_dst, _): (*const i8, _) =
+                                            read(
+                                                src_shortcuts_start.add(i * 8),
+                                            );
+                                        eprintln!(
+                                            "{:?}, {:?}",
+                                            shortcut_dst,
+                                            st.nursery
+                                                .contains_addr(shortcut_dst)
+                                        );
+                                        if st
+                                            .nursery
+                                            .contains_addr(shortcut_dst)
+                                        {
+                                            addrs.push(Some(
+                                                dst_shortcuts_start.add(i * 8),
+                                            ));
+                                        } else {
+                                            #[cfg(feature = "verbose_evac")]
+                                            eprintln!("   Writing an oldgen shortcut pointer {:?} -> {:?}",
+                                                      dst_shortcuts_start.add(i * 8), shortcut_dst);
+
+                                            write(
+                                                dst_shortcuts_start.add(i * 8),
+                                                shortcut_dst,
+                                            );
+                                        }
+                                    }
+                                    addrs
+                                } else {
+                                    vec![None; field_tys.len()]
+                                };
+                            debug_assert!(
+                                field_tys.len() == shortcut_addrs.len()
+                            );
+                            #[cfg(feature = "verbose_evac")]
+                            eprintln!(
+                                "   Need to write shortcut pointers at: {:?}",
+                                shortcut_addrs
+                            );
 
                             // Copy the scalar fields. Move cursors past scalar fields.
                             dst2.copy_from_nonoverlapping(src2, scalar_bytes1);
@@ -956,36 +1055,6 @@ unsafe fn evacuate_packed(
                                 //     write_bytes(burn, C_COPIED_TAG, i as usize);
                                 //   }
                             }
-
-                            let shortcut_addrs: Vec<Option<*mut i8>> =
-                                if num_shortcut1 > 0 {
-                                    // If a datatype has shortcut pointers, there
-                                    // will be a pointer corresponding to every packed
-                                    // field, except the first one. The pointers
-                                    // will be laid out immediately after the tag.
-                                    // Thus the address of ith shortcut pointer
-                                    // is dst_shortcuts_start + (i * 8).
-                                    let mut addrs = Vec::new();
-                                    addrs.push(None);
-                                    for i in 0..num_shortcut1 {
-                                        addrs.push(Some(
-                                            dst_shortcuts_start.add(i * 8),
-                                        ))
-                                    }
-                                    addrs
-                                } else {
-                                    vec![None; field_tys.len()]
-                                };
-
-                            debug_assert!(
-                                field_tys.len() == shortcut_addrs.len()
-                            );
-
-                            #[cfg(feature = "verbose_evac")]
-                            eprintln!(
-                                "   Need to write shortcut pointers at: {:?}",
-                                shortcut_addrs
-                            );
 
                             for (ty, shct) in field_tys
                                 .iter()
