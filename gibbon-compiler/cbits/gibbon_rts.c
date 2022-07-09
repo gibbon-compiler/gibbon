@@ -47,7 +47,7 @@
 
 // Chunk sizes of buffers, see GitHub #79 and #110.
 static size_t gib_global_biginf_init_chunk_size = 4 * GB;
-static size_t gib_global_inf_init_chunk_size = 1 * KB;
+static size_t gib_global_inf_init_chunk_size = 512;
 
 // Runtime arguments, values updated by the flags parser.
 static GibInt gib_global_size_param = 1;

@@ -253,6 +253,9 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
         }
     }
 
+    let mut st =
+        EvacState { so_env, zct: (*oldgen).new_zct, nursery, evac_major };
+
     for frame in frames {
         match (*frame).gc_root_prov {
             C_GcRootProv::RemSet => {
@@ -261,12 +264,6 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                 let (dst, dst_end) =
                     Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 1)?;
                 // Evacuate the data.
-                let mut st = EvacState {
-                    so_env,
-                    zct: (*oldgen).new_zct,
-                    nursery,
-                    evac_major,
-                };
                 let (_src_after, _dst_after, _dst_after_end, _forwarded) =
                     evacuate_packed(&mut st, oldgen, frame, dst, dst_end);
                 // Update the indirection pointer in oldgen region.
@@ -314,12 +311,6 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                 );
                  */
                 // Evacuate the data.
-                let mut st = EvacState {
-                    so_env,
-                    zct: (*oldgen).new_zct,
-                    nursery,
-                    evac_major,
-                };
                 let src = (*frame).ptr;
                 let src_end = (*frame).endptr;
                 let is_loc_0 =
@@ -582,8 +573,6 @@ unsafe fn evacuate_packed(
                             let pointee_footer_offset = tagged.get_tag();
                             let pointee_footer =
                                 pointee.add(pointee_footer_offset as usize);
-                            // TODO(ckoparkar): incorrect pointee_footer_offset causes
-                            // treeinsert to segfault.
                             handle_old_to_old_indirection(
                                 dst_end1,
                                 pointee_footer,
@@ -981,6 +970,10 @@ unsafe fn evacuate_packed(
                                             .nursery
                                             .contains_addr(shortcut_dst)
                                         {
+                                            #[cfg(feature = "verbose_evac")]
+                                            eprintln!("   Nursery shortcut pointer ({:?} -> {:?}) will be updated",
+                                                      src_shortcuts_start.add(i * 8), shortcut_dst);
+
                                             addrs.push(Some(
                                                 dst_shortcuts_start.add(i * 8),
                                             ));
@@ -993,6 +986,7 @@ unsafe fn evacuate_packed(
                                                 dst_shortcuts_start.add(i * 8),
                                                 shortcut_dst,
                                             );
+                                            addrs.push(None);
                                         }
                                     }
                                     addrs
@@ -1239,6 +1233,16 @@ pub unsafe fn handle_old_to_old_indirection(
         from_footer_ptr, *(from_footer_ptr as *const C_GibChunkFooter),
         to_footer_ptr, *(to_footer_ptr as *const C_GibChunkFooter)
     );
+
+    if from_footer_ptr == to_footer_ptr {
+        #[cfg(feature = "verbose_evac")]
+        {
+            eprintln!(
+                "Indirection has identical source and destination, skipping"
+            );
+        }
+        return;
+    }
 
     let added = add_to_outset(from_footer_ptr, to_footer_ptr);
     if added {

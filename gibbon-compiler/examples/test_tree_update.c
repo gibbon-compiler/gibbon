@@ -406,7 +406,10 @@ GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
         if (fltIf_334_396) {
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
             printf("Inserting...\n");
+            _print_SearchTree(NULL, tr_67_246_390);
+            printf("\n");
 #endif
+
             gib_shadowstack_push(rstack, tr_67_246_390, end_r_878, Stk,
                                  SearchTree_T);
             gib_shadowstack_push(wstack, loc_877, end_r_879, Stk,
@@ -427,6 +430,7 @@ GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
                                  SearchTree_T);
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+            printf("going to insert\n");
             _print_SearchTree(NULL, tr_67_246_390);
             printf("\n");
 #endif
@@ -1635,6 +1639,7 @@ GibCursorProd _print_SearchTree(GibCursor end_r_903, GibCursor arg_213_298_472)
             GibCursor jump_1341 = arg_213_298_472 + 1;
             unsigned char wildcard_214_299_473 = gib_print_symbol(2243);
             unsigned char wildcard_215_300_474 = gib_print_symbol(2242);
+            fflush(stdout);
 
             return (GibCursorProd) {jump_1341};
             break;
@@ -1648,6 +1653,7 @@ GibCursorProd _print_SearchTree(GibCursor end_r_903, GibCursor arg_213_298_472)
             unsigned char wildcard_218_302_476 = gib_print_symbol(2245);
             unsigned char y_217_303_477 = printf("%ld", tmpval_2712);
             unsigned char wildcard_219_304_478 = gib_print_symbol(2242);
+            fflush(stdout);
 
             return (GibCursorProd) {jump_1343};
             break;
@@ -1662,6 +1668,7 @@ GibCursorProd _print_SearchTree(GibCursor end_r_903, GibCursor arg_213_298_472)
             unsigned char wildcard_226_308_482 = gib_print_symbol(2244);
             printf("%p:%p ", tmpcur_2711, tmpcur_2714);
             unsigned char y_223_309_483 = printf("%p:%ld ", tmpaftercur_2715, tmpval_2716);
+            fflush(stdout);
 
             gib_shadowstack_push(rstack, tmpcur_2714, end_r_903, Stk,
                                  SearchTree_T);
@@ -1678,6 +1685,7 @@ GibCursorProd _print_SearchTree(GibCursor end_r_903, GibCursor arg_213_298_472)
                            _print_SearchTree(end_r_903, tmpcur_2714);
             GibCursor pvrtmp_2719 = tmp_struct_67.field0;
             unsigned char wildcard_227_312_486 = gib_print_symbol(2242);
+            fflush(stdout);
 
             return (GibCursorProd) {pvrtmp_2719};
             break;
@@ -1690,8 +1698,10 @@ GibCursorProd _print_SearchTree(GibCursor end_r_903, GibCursor arg_213_298_472)
             GibCursor tmpaftercur_2721 = tmpcur_2711 + 8;
             GibCursor jump_1417 = tmpcur_2711 + 8;
             unsigned char wildcard_1420 = gib_print_symbol(2247);
+            fflush(stdout);
             GibCursorProd tmp_struct_68 =
                            _print_SearchTree(end_r_903, tmpcur_2720);
+            fflush(stdout);
             GibCursor pvrtmp_2722 = tmp_struct_68.field0;
 
             return (GibCursorProd) {jump_1417};
@@ -1704,8 +1714,10 @@ GibCursorProd _print_SearchTree(GibCursor end_r_903, GibCursor arg_213_298_472)
             GibCursor tmpcur_2723 = GIB_UNTAG(tagged_tmpcur_71);
             GibCursor tmpaftercur_2724 = tmpcur_2711 + 8;
             unsigned char wildcard_1420 = gib_print_symbol(2246);
+            fflush(stdout);
             GibCursorProd tmp_struct_70 =
                            _print_SearchTree(end_r_903, tmpcur_2723);
+            fflush(stdout);
             GibCursor pvrtmp_2725 = tmp_struct_70.field0;
 
             return (GibCursorProd) {pvrtmp_2725};
@@ -1794,7 +1806,7 @@ GibInt caseFn_228(GibCursor end_r_905, GibCursor l_86_229_313_487,
     }
 }
 
-const int TREE_HEIGHT = 7;
+const int TREE_HEIGHT = 6;
 
 int gib_main_expr(void)
 {
