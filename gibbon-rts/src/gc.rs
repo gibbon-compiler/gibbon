@@ -80,7 +80,7 @@ pub fn cleanup(
     unsafe {
         for frame in rstack.into_iter().chain(wstack.into_iter()) {
             let footer = (*frame).endptr as *const C_GibChunkFooter;
-            if !nursery.contains_addr((*frame).endptr) {
+            if !nursery.contains_addr((*frame).ptr) {
                 (*((*oldgen).old_zct)).insert((*footer).reg_info);
             }
         }
@@ -275,13 +275,16 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                 add_to_outset((*frame).endptr, dst_end);
             }
             C_GcRootProv::Stk => {
-                let root_in_nursery = nursery.contains_addr((*frame).endptr);
-                if !evac_major && !root_in_nursery {
+                let root_in_nursery = nursery.contains_addr((*frame).ptr);
+                if !root_in_nursery {
                     #[cfg(feature = "verbose_evac")]
-                    eprintln!(
-                        "Evac packed {:?}, skipping oldgen root.",
-                        (*frame).ptr
-                    );
+                    {
+                        eprintln!(
+                            "Evac packed, skipping oldgen root {:?}",
+                            (*frame)
+                        );
+                    }
+
                     let _footer = (*frame).endptr as *const C_GibChunkFooter;
                     /*
                     if (*((*footer).reg_info)).refcount == 0 {
@@ -973,12 +976,7 @@ unsafe fn evacuate_packed(
                                             read(
                                                 src_shortcuts_start.add(i * 8),
                                             );
-                                        eprintln!(
-                                            "{:?}, {:?}",
-                                            shortcut_dst,
-                                            st.nursery
-                                                .contains_addr(shortcut_dst)
-                                        );
+
                                         if st
                                             .nursery
                                             .contains_addr(shortcut_dst)
@@ -1378,6 +1376,7 @@ impl<'a> C_GibNursery {
         (*self).alloc = (*self).heap_end;
     }
 
+    #[inline(always)]
     fn contains_addr(&self, addr: *const i8) -> bool {
         (addr >= (*self).heap_start) && (addr <= (*self).heap_end)
     }

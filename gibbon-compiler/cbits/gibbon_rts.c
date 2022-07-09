@@ -1329,6 +1329,11 @@ static void gib_nursery_initialize(GibNursery *nursery)
     GC_STATS->mem_allocated += NURSERY_SIZE;
 #endif
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    fprintf(stderr, "Nursery: start=%p, end=%p, alloc=%p\n",
+            nursery->heap_start, nursery->heap_end, nursery->alloc);
+#endif
+
     return;
 }
 

@@ -404,6 +404,9 @@ GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
         GibBool fltIf_334_396 = 0 == fltPrm_335_395;
 
         if (fltIf_334_396) {
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+            printf("Inserting...\n");
+#endif
             gib_shadowstack_push(rstack, tr_67_246_390, end_r_878, Stk,
                                  SearchTree_T);
             gib_shadowstack_push(wstack, loc_877, end_r_879, Stk,
@@ -448,6 +451,11 @@ GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
             return (GibCursorGibCursorGibCursorProd) {pvrtmp_2351, pvrtmp_2352,
                                                       pvrtmp_2353};
         } else {
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+            printf("Deleting...\n");
+#endif
+
             GibInt fltAppE_339_399 = j_69_248_394 - 1;
 
             gib_shadowstack_push(rstack, tr_67_246_390, end_r_878, Stk,
@@ -594,6 +602,13 @@ GibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_884,
                                             GibCursor tr_75_254_410,
                                             GibInt n_76_255_411)
 {
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
+    _print_SearchTree(NULL, tr_75_254_410);
+    printf("\n");
+    fflush(stdout);
+#endif
+
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
@@ -761,6 +776,11 @@ GibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_884,
                     GibCursor pvrtmp_2434 = tmp_struct_25.field0;
                     GibCursor pvrtmp_2435 = tmp_struct_25.field1;
                     GibCursor pvrtmp_2436 = tmp_struct_25.field2;
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
+                    _print_SearchTree(NULL, pvrtmp_2435);
+                    printf("\n");
+#endif
 
                     frame = gib_shadowstack_pop(rstack);
                     loc_883 = frame->ptr;
