@@ -64,6 +64,7 @@ the file Contents.hs contains the definition of the data type Content which can 
     AC C code:
     ...
     CursorTy tmpcur_5265 = adt_31_923_1539 + 1;
+    ...
     IntTy fltAppE_1525_1543 = 1 + accumulator_32_924_1540;
     IntTy tailapp_3360 = getLengthTR(end_r_2554, tmpcur_5265, fltAppE_1525_1543);
     ...
@@ -71,6 +72,7 @@ the file Contents.hs contains the definition of the data type Content which can 
     CA C code:
     ...
     CursorTy tmpcur_5890 = adt_31_923_1539 + 1;
+    ...
     CursorTy tmpcur_5891 = *(CursorTy *) tmpcur_5890;
     IntTy fltAppE_1525_1543 = 1 + accumulator_32_924_1540;
     IntTy tailapp_3835 = getLengthTR(end_r_2860, tmpcur_5891, fltAppE_1525_1543);
@@ -79,12 +81,12 @@ the file Contents.hs contains the definition of the data type Content which can 
     Looking at the C code it would seem like the CA layout should have more instructions due to the extra pointer de-reference.
     Assembly Code: 
     
-    AC C code: 
+    AC .S code: 
     The increment of the address is computed via 
     addq	$1, %rsi
     
     
-    CA C code: 
+    CA .S code: 
     The increment of the address is computed via
     movq	1(%rsi), %rsi
     
@@ -98,13 +100,35 @@ the file Contents.hs contains the definition of the data type Content which can 
 
 
 3.) Processing tags when the Abstract data type has 3 fields, Tags, Content and Next Adt. 
-
+    
+    TODO: add numbers for all j X k variations of the source code and data layout.
+    Here j = total number of ways you can traverse the Adt, i.e, the specific order of fields you traverse. (Since the number of fields are 2 its tags first, next adt second or next adt first, tags second)
+         k = total number of different layout = factorial(number of fields) = 3! = 6
+    total variations = j X k = 2 X 6 = 12 variations.
+    
+    notation:
+    t1 -> traverse tags first, next adt second
+    t2 -> traverse next adt first, tags second
+    d1 -> CAT
+    d2 -> CTA
+    d3 -> TAC
+    d4 -> TCA
+    d5 -> ATC
+    d6 -> ACT
+    
+    runtime table:
+    TODO: fill the table
+    
+     k/j | d1  | d2 | d3 | d4 | d5 | d6 | 
+      t1 |     |    |    |    |    |    | 
+      t2 |     |    |    |    |    |    |
+    
     Here we test all the 6 permutations of the layout but specifically discuss the performance of the TAC and CAT layouts. 
     TAC -> Tags, Adt next and then Content is serialized. 
     CAT -> Content, next Adt and then Tags are serialized. 
     
     TAC is faster than CAT. The function adds a set value to all the tags (emulating a traversal over all the tags)
-    TODO: Add more explanation here...
+    TODO: Add more explanation here about the layout of the Adts...
     
     Performance testing using PAPI, we measure the L2, L3 cache misses, number of Instructions and Cycles. 
     
