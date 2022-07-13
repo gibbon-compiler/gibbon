@@ -9,19 +9,20 @@ The file Strings.hs contains the definition of the data type String which is a C
 The file Tags.hs contains the definition of the data type Tags which is also a Cons Int list. 
 the file Contents.hs contains the definition of the data type Content which can be an Image string or Text string. 
 
-3 different senarios: 
+3 different scenarios: 
 
 1.) Counting the length of two different Adts (Abstract data types) 
-    CA (Content) (Adts) -> Content is serialzed first before we serialize the next Adt. 
+    CA (Content) (Adts) -> Content is serialized first before we serialize the next Adt. 
     AC (Adts) (Content) -> The next Adt is serialized first before we serialize any of the Content. 
     
-    Here the fuction simply counts the length of the Adt given these 2 different data layouts. 
+    Here the function simply counts the length of the Adt given these 2 different data layouts. 
     
-    Performance disscussion... 
+    Performance discussion... 
     
     Here the CA data layout results in slower performance that the AC layout. 
-    This is because the CA layout inserts pointers to the next Adt so that it can quickly skip over the Content and to count the length of the Adt. This causes the program to chases pointes to get to the end of the list. 
-    On the other hand, the AC list does not have these pointers and simply traverses the Next directly since they are contigous in memory. This way it does not have to chase pointes and the program exits when it sees Nil without having to deal with the content.
+    This is because the CA layout inserts pointers to the next Adt so that it can skip over the Content (Since there is no processing done with the content) to count the length of the Adt.
+    This causes the program to chases pointers to get to the end of the list. 
+    On the other hand, the AC list does not have these pointers and simply traverses the Next directly since they are contiguous in memory. It does not have to chase pointers and the program exits when it sees Nil without having to deal with the content which is serialized after Nil Cell in the Adt. 
     
     Tested on Adt with number of cells = 1000000
                    size of the content = 100 elements
@@ -56,7 +57,39 @@ the file Contents.hs contains the definition of the data type Content which can 
     Count of Adt CA is: 1000000
     '#()
 
-    Speedup ~ 70x 
+    Speedup ~ 70x
+    
+    Why are the Instructions still approx. the same when measured via PAPI?
+    
+    AC C code:
+    ...
+    CursorTy tmpcur_5265 = adt_31_923_1539 + 1;
+    IntTy fltAppE_1525_1543 = 1 + accumulator_32_924_1540;
+    IntTy tailapp_3360 = getLengthTR(end_r_2554, tmpcur_5265, fltAppE_1525_1543);
+    ...
+    
+    CA C code:
+    ...
+    CursorTy tmpcur_5890 = adt_31_923_1539 + 1;
+    CursorTy tmpcur_5891 = *(CursorTy *) tmpcur_5890;
+    IntTy fltAppE_1525_1543 = 1 + accumulator_32_924_1540;
+    IntTy tailapp_3835 = getLengthTR(end_r_2860, tmpcur_5891, fltAppE_1525_1543);
+    ...
+    
+    Looking at the C code it would seem like the CA layout should have more instructions due to the extra pointer de-reference.
+    Assembly Code: 
+    
+    AC C code: 
+    The increment of the address is computed via 
+    addq	$1, %rsi
+    
+    
+    CA C code: 
+    The increment of the address is computed via
+    movq	1(%rsi), %rsi
+    
+    Since the CISC instruction set has an instruction for loading the pointer with an offset via movq. The total number of instructions remain the same. 
+    
     
     
 2.) Processing the content. Comparing the performance of CA vs AC
