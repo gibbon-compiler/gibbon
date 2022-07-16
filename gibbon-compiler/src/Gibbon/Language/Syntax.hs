@@ -495,14 +495,12 @@ data Prim ty
             -- separated by a space. The Int is the number of lines in the
             -- file.
 
-          | RequestEndOf
-          -- ^ Conveys a demand for the "end of" some packed value, which is
-          -- fulfilled by Cursorize. N.B. the argument must be a VarE that
-          -- refers to a packed value.
-
           | RequestSizeOf
-          -- ^ Like 'RequestEndOf' but gets the size of a packed value. Assume
-          -- that the value is written in a contiguous region, and size = end_v - v.
+          -- ^ Compute the size of a packed value. Assume that the value is
+          -- written in a contiguous region, and size = end_v - v.
+
+          | StartOf
+          -- ^ Start cursor of a packed value.
 
           | Gensym
 

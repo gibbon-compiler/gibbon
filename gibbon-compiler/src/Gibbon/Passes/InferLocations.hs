@@ -932,14 +932,14 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           fcs <- tryInRegion cs'''
           tryBindReg (L2.LetE (vr,[],ty, L2.PrimAppE (ReadArrayFile fp ty0') []) bod'', ty'', fcs)
 
-        -- Don't process the EndOf operation at all, just recur through it
-        PrimAppE RequestEndOf [(VarE v)] -> do
-          (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
-          return (L2.LetE (vr,[],CursorTy, L2.PrimAppE RequestEndOf [(L2.VarE v)]) bod', ty', cs')
-
+        -- Don't process the StartOf or SizeOf operation at all, just recur through it
         PrimAppE RequestSizeOf [(VarE v)] -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
           return (L2.LetE (vr,[],IntTy, L2.PrimAppE RequestSizeOf [(L2.VarE v)]) bod', ty', cs')
+
+        PrimAppE StartOf [(VarE v)] -> do
+          (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
+          return (L2.LetE (vr,[],CursorTy, L2.PrimAppE StartOf [(L2.VarE v)]) bod', ty', cs')
 
         PrimAppE (DictInsertP dty) ls -> do
           (e,ty,cs) <- inferExp env (PrimAppE (DictInsertP dty) ls) NoDest
@@ -1629,8 +1629,8 @@ prim p = case p of
            PrintBool -> return PrintBool
            PrintSym -> return PrintSym
            ReadInt  -> return PrintInt
-           RequestEndOf -> return RequestEndOf
            RequestSizeOf -> return RequestSizeOf
+           StartOf       -> return StartOf
            ErrorP sty ty -> convertTy ty >>= \ty -> return (ErrorP sty ty)
            DictEmptyP dty  -> convertTy dty >>= return . DictEmptyP
            DictInsertP dty -> convertTy dty >>= return . DictInsertP

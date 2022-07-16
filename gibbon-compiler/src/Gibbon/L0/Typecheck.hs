@@ -565,8 +565,8 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
              pure (s1 <> s2, ProdTy [], PrimAppE (WritePackedFile fp (zonkTy s2 ty)) args_tc)
 
         Write3dPpmFile{} -> err $ text "Write3dPpmFile"
-        RequestEndOf -> err $ text "Unexpected RequestEndOf in L0: " <+> exp_doc
         RequestSizeOf-> err $ text "Unexpected RequestSizeOf in L0: " <+> exp_doc
+        StartOf      -> err $ text "Unexpected StartOf in L0: " <+> exp_doc
 
 
     LetE (v, [], gvn_rhs_ty, rhs) bod -> do
@@ -842,7 +842,7 @@ combine v1 v2 | v1 == v2 = v1
                 (ArrowTy xs y, ArrowTy xs' y') -> ArrowTy (zipWith combine xs xs') (combine y y')
                 (VectorTy v1', VectorTy v2') -> VectorTy $ combine v1' v2'
                 (ProdTy v1s, ProdTy v2s) -> ProdTy (zipWith combine v1s v2s)
-                (PackedTy a1 v1s, PackedTy a2 v2s) -> 
+                (PackedTy a1 v1s, PackedTy a2 v2s) ->
                   if a1 == a2 then PackedTy a1 (zipWith combine v1s v2s)
                   else error $ "PackedTy doesn't match "++ sdoc a1 ++ " with v2 = " ++ sdoc a2
                 _ -> error $ "Failed to combine v1 = " ++ sdoc v1 ++ " with v2 = " ++ sdoc v2

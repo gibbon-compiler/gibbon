@@ -630,8 +630,8 @@ recoverType ddfs env2 ex =
         PrintBool    -> ProdTy []
         PrintSym     -> ProdTy []
         ReadInt      -> IntTy
-        RequestEndOf -> error "primRetTy1: RequestEndOf not handled yet"
         RequestSizeOf-> error "primRetTy1: RequestSizeOf not handled yet"
+        StartOf      -> error "primRetTy1: StartOf not handled yet"
         SymSetEmpty  -> error "primRetTy1: SymSetEmpty not handled yet"
         SymSetContains-> error "primRetTy1: SymSetContains not handled yet"
         SymSetInsert -> error "primRetTy1: SymSetInsert not handled yet"

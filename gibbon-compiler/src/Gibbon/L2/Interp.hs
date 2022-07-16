@@ -214,13 +214,6 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                              SOne (fromJust $ byteSizeOfTy SymTy))
         VarE v    -> return (env # v, sizeEnv # v)
 
-        PrimAppE RequestEndOf [arg] ->
-          case arg of
-            VarE v -> do
-              let (VLoc reg off) = env # v
-                  sz  = sizeToInt $ sizeEnv # v
-              return (VPtr reg (off+sz), SOne (fromJust $ byteSizeOfTy CursorTy))
-            _ -> error $ "L2.Interp: RequestEndOf expects a variable argument. Got: " ++ sdoc arg
         PrimAppE p args -> do
             (args',_) <- unzip <$> mapM (go env sizeEnv) args
             case byteSizeOfTy (primRetTy p) of

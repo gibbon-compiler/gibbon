@@ -617,8 +617,8 @@ primArgsTy p =
     WritePackedFile _ ty -> [ty]
     ReadArrayFile{}  -> []
     (ErrorP _ _) -> []
-    RequestEndOf  -> error "primArgsTy: RequestEndOf not handled yet"
     RequestSizeOf -> error "primArgsTy: RequestSizeOf not handled yet"
+    StartOf       -> error "primArgsTy: RequestSizeOf not handled yet"
     Write3dPpmFile{} -> error "primArgsTy: Write3dPpmFile not handled yet"
 
 -- | Return type for a primitive operation.
@@ -710,8 +710,8 @@ primRetTy p =
     ReadPackedFile _ _ _ ty -> ty
     WritePackedFile{} -> ProdTy []
     ReadArrayFile _ ty      -> ty
-    RequestEndOf  -> CursorTy
     RequestSizeOf -> IntTy
+    StartOf       -> CursorTy
     Write3dPpmFile{} -> error "primRetTy: Write3dPpmFile not handled yet"
 
 stripTyLocs :: UrTy a -> UrTy ()

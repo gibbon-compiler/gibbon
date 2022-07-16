@@ -197,8 +197,8 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       DictHasKeyP ty -> text "DictHasKey" <> wty ty
                                       DictInsertP ty -> text "DictInsert" <> wty ty
                                       DictLookupP ty -> text "DictLookup" <> wty ty
-                                      RequestEndOf   -> text "RequestEndOf"
                                       RequestSizeOf  -> text "RequestSizeOf"
+                                      StartOf        -> text "StartOf"
                                       ErrorP str ty  -> text "ErrorP" <> wty ty <+> doubleQuotes (text str) <> space
                                       VAllocP ty -> parens $ text "valloc" <+> doublecolon <+> brackets (pprintWithStyle sty ty)
                                       VFreeP _ty -> parens $ text "vfree"
@@ -239,7 +239,7 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       DictHasKeyP _ty -> text "dictHasKey"
                                       DictInsertP _ty -> text "dictInsert"
                                       DictLookupP _ty -> text "dictLookup"
-                                      RequestEndOf   -> text "RequestEndOf"
+                                      StartOf        -> text "StartOf"
                                       ErrorP str _ty -> text "error" <> doubleQuotes (text str)
                                       ReadPackedFile mb_fp tycon _ _ ->
                                         parens (text "readPackedFile " <+> parens (text (pretty mb_fp))) <+> doublecolon <+> text tycon

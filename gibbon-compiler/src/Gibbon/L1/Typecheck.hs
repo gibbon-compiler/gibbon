@@ -328,15 +328,6 @@ tcExp ddfs env exp =
           then return (VectorTy ty)
           else throwError $ GenericTC "Not a valid list type" exp
 
-        RequestEndOf -> do
-          len1
-          case (es !!! 0) of
-            VarE{} -> return CursorTy
-                -- if isPackedTy (tys !!! 0)
-                -- then return CursorTy
-                -- else throwError $ GenericTC "Expected PackedTy" exp
-            _ -> throwError $ GenericTC "Expected a variable argument" exp
-
         RequestSizeOf -> do
           len1
           case (es !! 0) of
@@ -346,6 +337,12 @@ tcExp ddfs env exp =
                              SymTy -> return IntTy
                              IntTy -> return IntTy
                              _ -> throwError $ GenericTC "Expected PackedTy" exp
+            _ -> throwError $ GenericTC "Expected a variable argument" exp
+
+        StartOf -> do
+          len1
+          case (es !!! 0) of
+            VarE{} -> return CursorTy
             _ -> throwError $ GenericTC "Expected a variable argument" exp
 
         VAllocP elty -> do

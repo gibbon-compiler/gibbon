@@ -371,20 +371,6 @@ tcExp ddfs env funs constrs regs tstatein exp =
                    then return (VectorTy ty, tstate)
                    else throwError $ GenericTC "Not a valid list type" exp
 
-                 RequestEndOf -> do
-                   len1
-                   case (es !! 0) of
-                     VarE{} -> if isPackedTy (tys !! 0)
-                               then return (CursorTy, tstate)
-                               else case (tys !! 0) of
-                                      SymTy -> return (CursorTy, tstate)
-                                      IntTy -> return (CursorTy, tstate)
-                                      CursorTy -> return (CursorTy, tstate)
-                                      ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
-                     -- L _ LitSymE{} -> return (CursorTy, tstate)
-                     -- L _ LitE{} -> return (CursorTy, tstate)
-                     _ -> throwError $ GenericTC "Expected a variable argument" exp
-
                  RequestSizeOf -> do
                    len1
                    case (es !! 0) of
@@ -394,6 +380,15 @@ tcExp ddfs env funs constrs regs tstatein exp =
                                       SymTy -> return (IntTy, tstate)
                                       IntTy -> return (IntTy, tstate)
                                       _ -> throwError $ GenericTC "Expected PackedTy" exp
+                     _ -> throwError $ GenericTC "Expected a variable argument" exp
+
+                 StartOf -> do
+                   len1
+                   case (es !! 0) of
+                     VarE{} -> case (tys !! 0) of
+                                 PackedTy{} -> return (CursorTy, tstate)
+                                 CursorTy -> return (CursorTy, tstate)
+                                 ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
                      _ -> throwError $ GenericTC "Expected a variable argument" exp
 
                  VAllocP elty -> do

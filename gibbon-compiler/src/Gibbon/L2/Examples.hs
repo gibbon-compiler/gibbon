@@ -1345,7 +1345,7 @@ indrBuildTreeFun = FunDef "indrBuildTree" ["i270"] indrBuildTreeTy indrBuildTree
                         LetE ("y277",[],PackedTy "Tree" "l276",
                                  AppE "indrBuildTree" ["l276"] [VarE "i273"]) $
                         LetE ("indr_cur",[],CursorTy,
-                                 PrimAppE RequestEndOf [VarE "x275"]) $
+                                 PrimAppE StartOf [VarE "y277"]) $
                         -- LetE ("indr_node",[], PackedTy "Tree" "loc_indr",
                         --          DataConE "loc_indr" (indirectionTag++"1") [VarE "indr_cur"]) $
                         LetE ("a278",[],PackedTy "Tree" "lout272",

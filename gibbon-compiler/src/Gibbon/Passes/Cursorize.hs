@@ -240,10 +240,6 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
 
     AppE{} -> cursorizeAppE ddfs fundefs denv tenv senv ex
 
-    PrimAppE RequestEndOf [arg] -> do
-      let (VarE v) = arg
-      return $ VarE (toEndV v)
-
     PrimAppE RequestSizeOf [arg] -> do
       let (VarE v) = arg
       case M.lookup v tenv of
@@ -251,6 +247,9 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
         Just ty -> if isPackedTy ty
                    then pure $ Ext $ SubPtr (toEndV v) v
                    else pure $ LitE $ fromJust $ sizeOfTy ty
+
+    PrimAppE StartOf [(VarE v)] -> do
+      return $ VarE v
 
     PrimAppE pr args -> PrimAppE (toL3Prim pr) <$> mapM go args
 

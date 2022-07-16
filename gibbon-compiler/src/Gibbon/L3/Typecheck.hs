@@ -493,8 +493,8 @@ tcExp isPacked ddfs env exp =
           then return (VectorTy ty)
           else throwError $ GenericTC "Not a valid list type" exp
 
-        RequestEndOf  -> error "RequestEndOf shouldn't occur in a L3 program."
         RequestSizeOf -> error "RequestSizeOf shouldn't occur in a L3 program."
+        StartOf -> error "StartOf shouldn't occur in a L3 program."
 
         VAllocP elty -> do
           len1
