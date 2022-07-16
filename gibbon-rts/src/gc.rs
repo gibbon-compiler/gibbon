@@ -259,17 +259,59 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
     for frame in frames {
         match (*frame).gc_root_prov {
             C_GcRootProv::RemSet => {
-                // let packed_info = INFO_TABLE.get_unchecked(datatype as usize);
-                // Allocate space in the destination.
-                let (dst, dst_end) =
-                    Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 1)?;
-                // Evacuate the data.
-                let (_src_after, _dst_after, _dst_after_end, _forwarded) =
-                    evacuate_packed(&mut st, oldgen, frame, dst, dst_end);
-                // Update the indirection pointer in oldgen region.
-                write((*frame).ptr, dst);
-                // Update the outset in oldgen region.
-                add_to_outset((*frame).endptr, dst_end);
+                let (tagged_src, _): (u64, _) = read((*frame).ptr);
+                let src = TaggedPointer::from_u64(tagged_src).untag();
+                let (tag, src_after_tag): (C_GibPackedTag, *mut i8) =
+                    read_mut(src);
+                match tag {
+                    // If the data is already evacuated, don't allocate a fresh
+                    // destination region. Just update the root to point to the
+                    // evacuated data.
+                    C_COPIED_TAG | C_COPIED_TO_TAG => {
+                        #[cfg(feature = "verbose_evac")]
+                        {
+                            eprintln!(
+                                "Optimization! Didn't need to allocate region for root {:?}",
+                                (*frame)
+                            );
+                        }
+                        let tagged_fwd_ptr =
+                            find_forwarding_pointer(tag, src, src_after_tag);
+                        let fwd_ptr = tagged_fwd_ptr.untag();
+                        let fwd_footer_offset = tagged_fwd_ptr.get_tag();
+                        let fwd_footer_addr =
+                            fwd_ptr.add(fwd_footer_offset as usize);
+                        // Update the indirection pointer in oldgen region.
+                        write((*frame).ptr, fwd_ptr);
+                        // Update the outset in oldgen region.
+                        handle_old_to_old_indirection(
+                            (*frame).endptr,
+                            fwd_footer_addr,
+                        );
+                    }
+                    _ => {
+                        // Allocate space in the destination.
+                        let (dst, dst_end) =
+                            Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 1)?;
+                        // Evacuate the data.
+                        let (
+                            _src_after,
+                            _dst_after,
+                            _dst_after_end,
+                            _forwarded,
+                        ) = evacuate_packed(
+                            &mut st, oldgen, frame, dst, dst_end,
+                        );
+                        // Update the indirection pointer in oldgen region.
+                        write((*frame).ptr, dst);
+                        // Update the outset in oldgen region.
+                        //
+                        // We don't need to update the refcount here because we've
+                        // already created the new region with an initial refcount
+                        // of 1 above.
+                        add_to_outset((*frame).endptr, dst_end);
+                    }
+                }
             }
             C_GcRootProv::Stk => {
                 let root_in_nursery = nursery.contains_addr((*frame).ptr);
@@ -290,52 +332,82 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                      */
                     continue;
                 }
-                // Compute chunk size.
-                let chunk_size = if root_in_nursery {
-                    let nursery_footer: *mut u16 = (*frame).endptr as *mut u16;
-                    *nursery_footer as usize
-                } else {
-                    let footer = (*frame).endptr as *const C_GibChunkFooter;
-                    (*footer).size
-                };
 
-                // Allocate space in the destination.
-                let (dst, dst_end) =
-                    Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 0)?;
-                // Update ZCT.
-                let _footer = dst_end as *const C_GibChunkFooter;
-                /*
-                record_time!(
-                    (*zct).insert((*footer).reg_info),
-                    (*GC_STATS).gc_zct_mgmt_time
-                );
-                 */
-                // Evacuate the data.
                 let src = (*frame).ptr;
                 let src_end = (*frame).endptr;
-                let is_loc_0 =
-                    (src_end.offset_from(src)) == chunk_size as isize;
+                let (tag, src_after_tag): (C_GibPackedTag, *mut i8) =
+                    read_mut(src);
+                match tag {
+                    // If the data is already evacuated, don't allocate a fresh
+                    // destination region. Just update the root to point to the
+                    // evacuated data.
+                    C_COPIED_TAG | C_COPIED_TO_TAG => {
+                        #[cfg(feature = "verbose_evac")]
+                        {
+                            eprintln!(
+                                "Optimization! Didn't need to allocate region for root {:?}",
+                                (*frame)
+                            );
+                        }
+                        let tagged_fwd_ptr =
+                            find_forwarding_pointer(tag, src, src_after_tag);
+                        let fwd_ptr = tagged_fwd_ptr.untag();
+                        let fwd_footer_offset = tagged_fwd_ptr.get_tag();
+                        let fwd_footer_addr =
+                            fwd_ptr.add(fwd_footer_offset as usize);
+                        (*frame).ptr = fwd_ptr;
+                        (*frame).endptr = fwd_footer_addr;
+                    }
+                    _ => {
+                        // Compute chunk size.
+                        let chunk_size = if root_in_nursery {
+                            let nursery_footer: *mut u16 =
+                                (*frame).endptr as *mut u16;
+                            *nursery_footer as usize
+                        } else {
+                            let footer =
+                                (*frame).endptr as *const C_GibChunkFooter;
+                            (*footer).size
+                        };
 
-                let (src_after, dst_after, dst_after_end, forwarded) =
-                    evacuate_packed(&mut st, oldgen, frame, dst, dst_end);
-                // Update the pointers in shadow-stack.
-                (*frame).ptr = dst;
-                // TODO(ckoparkar): AUDITME.
-                // (*frame).endptr = dst_after_end;
-                (*frame).endptr = dst_end;
+                        // Allocate space in the destination.
+                        let (dst, dst_end) =
+                            Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 0)?;
+                        // Update ZCT.
+                        let _footer = dst_end as *const C_GibChunkFooter;
+                        /*
+                        record_time!(
+                            (*zct).insert((*footer).reg_info),
+                            (*GC_STATS).gc_zct_mgmt_time
+                        );
+                         */
+                        // Evacuate the data.
+                        let is_loc_0 =
+                            (src_end.offset_from(src)) == chunk_size as isize;
+                        let (src_after, dst_after, dst_after_end, forwarded) =
+                            evacuate_packed(
+                                &mut st, oldgen, frame, dst, dst_end,
+                            );
+                        // Update the pointers in shadow-stack.
+                        (*frame).ptr = dst;
+                        // TODO(ckoparkar): AUDITME.
+                        // (*frame).endptr = dst_after_end;
+                        (*frame).endptr = dst_end;
 
-                // Note [Adding a forwarding pointer at the end of every chunk].
+                        // Note [Adding a forwarding pointer at the end of every chunk].
 
-                // FIXME: forwarded is currently true if evacuate forwarded ANYTHING.
-                // We need to enforce it for each chunk...
-                if !forwarded & is_loc_0 {
-                    debug_assert!(dst_after < dst_after_end);
-                    write_forwarding_pointer_at(
-                        src_after,
-                        dst_after,
-                        dst_after_end.offset_from(dst_after) as u16, // .try_into()
-                                                                     // .unwrap()
-                    );
+                        // FIXME: forwarded is currently true if evacuate forwarded ANYTHING.
+                        // We need to enforce it for each chunk...
+                        if !forwarded & is_loc_0 {
+                            debug_assert!(dst_after < dst_after_end);
+                            write_forwarding_pointer_at(
+                                src_after,
+                                dst_after,
+                                dst_after_end.offset_from(dst_after) as u16, // .try_into()
+                                                                             // .unwrap()
+                            );
+                        }
+                    }
                 }
             }
         }
