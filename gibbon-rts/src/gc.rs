@@ -626,27 +626,29 @@ unsafe fn evacuate_packed(
                     }
 
                     // See Note [Maintaining sharing, Copied and CopiedTo tags].
-                    C_COPIED_TO_TAG => {
-                        let (tagged_fwd_ptr, _): (u64, _) =
-                            read_mut(src_after_tag);
-                        let tagged = TaggedPointer::from_u64(tagged_fwd_ptr);
-                        let fwd_ptr = tagged.untag();
+                    C_COPIED_TO_TAG | C_COPIED_TAG => {
+                        forwarded = true; // i.e. ALREADY forwarded.
+                        let tagged_fwd_ptr =
+                            find_forwarding_pointer(tag, src, src_after_tag);
+                        let fwd_ptr = tagged_fwd_ptr.untag();
+                        let fwd_footer_offset = tagged_fwd_ptr.get_tag();
+                        let fwd_footer_addr =
+                            fwd_ptr.add(fwd_footer_offset as usize);
                         let space_reqd = 32;
                         let (dst1, dst_end1) = Heap::check_bounds(
                             oldgen, space_reqd, dst, dst_end,
                         );
                         let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                         let dst_after_indr =
-                            write(dst_after_tag, tagged_fwd_ptr);
+                            write(dst_after_tag, tagged_fwd_ptr.as_u64());
+
+                        #[cfg(feature = "verbose_evac")]
+                        eprintln!("   Forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged_fwd_ptr, dst);
 
                         // TODO: make this reusable somehow (local macro?)
                         if let Some(shortcut_addr) = mb_shortcut_addr {
                             write(shortcut_addr, dst1);
                         }
-
-                        #[cfg(feature = "verbose_evac")]
-                        eprintln!("   Forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged, dst);
-                        forwarded = true; // i.e. ALREADY forwarded.
 
                         #[cfg(feature = "gcstats")]
                         {
@@ -655,9 +657,6 @@ unsafe fn evacuate_packed(
 
                         // Update outsets and refcounts if evacuating to the oldest
                         // generation.
-                        let fwd_footer_offset = tagged.get_tag();
-                        let fwd_footer_addr =
-                            fwd_ptr.add(fwd_footer_offset as usize);
                         handle_old_to_old_indirection(
                             dst_end,
                             fwd_footer_addr,
@@ -695,122 +694,6 @@ unsafe fn evacuate_packed(
                             src = *src_after_burned.unwrap_or(&null_mut());
                             #[cfg(feature = "verbose_evac")]
                             eprintln!("   Forwarding pointer was last, don't need skip-over, src = {:?}", src);
-                            break;
-                        }
-                    }
-
-                    // See Note [Maintaining sharing, Copied and CopiedTo tags].
-                    C_COPIED_TAG => {
-                        // TODO: bound scanning.
-                        let (mut scan_tag, mut scan_ptr): (
-                            C_GibPackedTag,
-                            *const i8,
-                        ) = read(src_after_tag);
-                        let offset = 'scan_loop: loop {
-                            match scan_tag {
-                                C_CAUTERIZED_TAG => {
-                                    // At this point the scan_ptr is one past the
-                                    // C_CAUTERIZED_TAG i.e. at the reverse-pointer
-                                    // to the shadowstack frame. We must go over
-                                    // it to reach the COPIED_TO_TAG and then over
-                                    // that tag to reach the forwarding pointer.
-                                    scan_ptr = scan_ptr.add(9 as usize);
-                                    let offset = scan_ptr.offset_from(src)
-                                        - (1 as isize) // C_COPIED_TO_TAG
-                                        - (8 as isize) // reverse pointer
-                                        - (1 as isize) // C_CAUTERIZED_TAG
-                                        ;
-                                    break 'scan_loop offset;
-                                }
-                                C_COPIED_TO_TAG => {
-                                    // At this point the scan_ptr is one past the
-                                    // C_COPIED_TO_TAG i.e. at the forwarding pointer.
-                                    let offset = scan_ptr.offset_from(src)
-                                        - (1 as isize) // C_COPIED_TO_TAG
-                                        ;
-                                    break 'scan_loop offset;
-                                }
-                                _ => {
-                                    (scan_tag, scan_ptr) = read(scan_ptr);
-                                }
-                            }
-                        };
-
-                        debug_assert!((src as *const i8) < scan_ptr);
-
-                        // The forwarding pointer that's available.
-                        let (tagged_fwd_avail, _): (u64, _) = read(scan_ptr);
-                        let tagged_avail =
-                            TaggedPointer::from_u64(tagged_fwd_avail);
-                        let fwd_avail = tagged_avail.untag();
-                        let fwd_footer_offset_avail = tagged_avail.get_tag();
-                        let fwd_footer_addr_avail =
-                            fwd_avail.add(fwd_footer_offset_avail as usize);
-                        // The position in the destination buffer we wanted.
-                        let fwd_want = fwd_avail.sub(offset as usize);
-                        let fwd_footer_offset_want =
-                            fwd_footer_addr_avail.offset_from(fwd_want);
-                        let tagged_want: u64 = TaggedPointer::new(
-                            fwd_avail,
-                            fwd_footer_offset_want as u16, // try_into().unwrap()
-                        )
-                        .as_u64();
-                        let space_reqd = 32;
-                        let (dst1, dst_end1) = Heap::check_bounds(
-                            oldgen, space_reqd, dst, dst_end,
-                        );
-                        let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
-                        let dst_after_indr = write(dst_after_tag, tagged_want);
-
-                        // TODO: make this reusable somehow (local macro?)
-                        if let Some(shortcut_addr) = mb_shortcut_addr {
-                            write(shortcut_addr, dst1);
-                        }
-
-                        #[cfg(feature = "gcstats")]
-                        {
-                            (*GC_STATS).mem_copied += 9;
-                        }
-
-                        // Update outsets and refcounts if evacuating to the oldest
-                        // generation.
-                        handle_old_to_old_indirection(
-                            dst_end,
-                            fwd_footer_addr_avail,
-                        );
-                        match (*frame).gc_root_prov {
-                            C_GcRootProv::RemSet => {}
-                            C_GcRootProv::Stk => {
-                                let _fwd_footer = fwd_footer_addr_avail
-                                    as *const C_GibChunkFooter;
-                                /*
-                                record_time!(
-                                    (*(st.zct)).remove(
-                                        &((*fwd_footer).reg_info
-                                            as *const C_GibRegionInfo),
-                                    ),
-                                    (*GC_STATS).gc_zct_mgmt_time
-                                );
-                                 */
-                                ()
-                            }
-                        }
-
-                        dst = dst_after_indr;
-                        dst_end = dst_end1;
-                        let src_after_burned = st.so_env.get(&src);
-                        // TODO: make this reusable somehow (local macro?)
-                        if let Some(next) = worklist.pop() {
-                            next_action = next;
-                            src = *src_after_burned.unwrap_or_else(|| {
-                                panic!("Could not find {:?} in so_env", src)
-                            });
-                            continue;
-                        } else {
-                            // WARNING: allow a corrupt null src return pointer.  Should make it an OPTION.
-                            src = *src_after_burned.unwrap_or(&null_mut());
-                            #[cfg(feature = "verbose_evac")]
-                            eprintln!("   Burned tag was last, don't need skip-over, src = {:?}", src);
                             break;
                         }
                     }
@@ -1187,6 +1070,88 @@ fn gensym() -> u64 {
         let old = GENSYM_COUNTER;
         GENSYM_COUNTER = old + 1;
         old
+    }
+}
+
+unsafe fn find_forwarding_pointer(
+    tag: C_GibPackedTag,
+    addr_of_tag: *const i8,
+    addr_after_tag: *mut i8,
+) -> TaggedPointer {
+    match tag {
+        C_COPIED_TO_TAG => {
+            let (tagged, _): (u64, _) = read_mut(addr_after_tag);
+            let tagged_fwd_ptr = TaggedPointer::from_u64(tagged);
+            #[cfg(feature = "verbose_evac")]
+            eprintln!(
+                "   Found forwarding ptr at {:?}, dest {:?}",
+                addr_after_tag,
+                tagged_fwd_ptr.untag()
+            );
+            return tagged_fwd_ptr;
+        }
+        C_COPIED_TAG => {
+            let (mut scan_tag, mut scan_ptr): (C_GibPackedTag, *const i8) =
+                read(addr_after_tag);
+            let offset = 'scan_loop: loop {
+                match scan_tag {
+                    C_CAUTERIZED_TAG => {
+                        // At this point the scan_ptr is one past the
+                        // C_CAUTERIZED_TAG i.e. at the reverse-pointer
+                        // to the shadowstack frame. We must go over
+                        // it to reach the COPIED_TO_TAG and then over
+                        // that tag to reach the forwarding pointer.
+                        scan_ptr = scan_ptr.add(9 as usize);
+                        let offset = scan_ptr.offset_from(addr_of_tag)
+                                        - (1 as isize) // C_COPIED_TO_TAG
+                                        - (8 as isize) // reverse pointer
+                                        - (1 as isize) // C_CAUTERIZED_TAG
+                                        ;
+                        break 'scan_loop offset;
+                    }
+                    C_COPIED_TO_TAG => {
+                        // At this point the scan_ptr is one past the
+                        // C_COPIED_TO_TAG i.e. at the forwarding pointer.
+                        let offset = scan_ptr.offset_from(addr_of_tag)
+                                        - (1 as isize) // C_COPIED_TO_TAG
+                                        ;
+                        break 'scan_loop offset;
+                    }
+                    _ => {
+                        (scan_tag, scan_ptr) = read(scan_ptr);
+                    }
+                }
+            };
+            // The forwarding pointer that's available.
+            let (tagged_fwd_avail, _): (u64, _) = read(scan_ptr);
+            let tagged_avail = TaggedPointer::from_u64(tagged_fwd_avail);
+            let fwd_avail = tagged_avail.untag();
+            let fwd_footer_offset_avail = tagged_avail.get_tag();
+            let fwd_footer_addr_avail =
+                fwd_avail.add(fwd_footer_offset_avail as usize);
+
+            #[cfg(feature = "verbose_evac")]
+            eprintln!(
+                "   Found forwarding ptr at {:?}, dest {:?}",
+                scan_ptr, fwd_avail
+            );
+
+            // The position in the destination buffer we wanted.
+            let fwd_want = fwd_avail.sub(offset as usize);
+            // The footers of both forwarding pointers (want and avail) are the same.
+            let fwd_footer_offset_want =
+                fwd_footer_addr_avail.offset_from(fwd_want);
+            return TaggedPointer::new(
+                fwd_want,
+                fwd_footer_offset_want as u16,
+            );
+        }
+        _ => {
+            panic!(
+                "find_forwarding_pointer: tag {:?} at {:?} not forwarded",
+                tag, addr_of_tag
+            );
+        }
     }
 }
 
