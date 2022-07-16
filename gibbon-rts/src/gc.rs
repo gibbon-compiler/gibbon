@@ -600,14 +600,22 @@ unsafe fn evacuate_packed(
                     // address in shadow-stack.
                     C_CAUTERIZED_TAG => {
                         // Recover the reverse-pointer back to the shadowstack frame:
-                        let (wframe_ptr, _): (*mut i8, _) =
-                            read(src_after_tag);
+                        let (wframe_ptr, after_wframe_ptr): (
+                            *mut i8,
+                            *mut i8,
+                        ) = read_mut(src_after_tag);
                         let wframe = wframe_ptr as *mut C_GibShadowstackFrame;
-                        // Mark this cursor as uncauterized.
-                        let _del = (*wframe).ptr;
                         // Update the pointers on the shadow-stack.
                         (*wframe).ptr = dst;
                         (*wframe).endptr = dst_end;
+                        // Write a forwarding pointer after the reverse-pointer.
+                        write_forwarding_pointer_at(
+                            after_wframe_ptr,
+                            dst,
+                            dst_end.offset_from(dst) as u16, // .try_into().unwrap()
+                        );
+                        forwarded = true;
+                        src = after_wframe_ptr;
 
                         #[cfg(feature = "verbose_evac")]
                         eprintln!(
@@ -698,24 +706,38 @@ unsafe fn evacuate_packed(
                             C_GibPackedTag,
                             *const i8,
                         ) = read(src_after_tag);
-                        'scan_loop: loop {
+                        let offset = 'scan_loop: loop {
                             match scan_tag {
                                 C_CAUTERIZED_TAG => {
-                                    break 'evac_loop;
+                                    // At this point the scan_ptr is one past the
+                                    // C_CAUTERIZED_TAG i.e. at the reverse-pointer
+                                    // to the shadowstack frame. We must go over
+                                    // it to reach the COPIED_TO_TAG and then over
+                                    // that tag to reach the forwarding pointer.
+                                    scan_ptr = scan_ptr.add(9 as usize);
+                                    let offset = scan_ptr.offset_from(src)
+                                        - (1 as isize) // C_COPIED_TO_TAG
+                                        - (8 as isize) // reverse pointer
+                                        - (1 as isize) // C_CAUTERIZED_TAG
+                                        ;
+                                    break 'scan_loop offset;
                                 }
                                 C_COPIED_TO_TAG => {
-                                    break 'scan_loop;
+                                    // At this point the scan_ptr is one past the
+                                    // C_COPIED_TO_TAG i.e. at the forwarding pointer.
+                                    let offset = scan_ptr.offset_from(src)
+                                        - (1 as isize) // C_COPIED_TO_TAG
+                                        ;
+                                    break 'scan_loop offset;
                                 }
                                 _ => {
                                     (scan_tag, scan_ptr) = read(scan_ptr);
                                 }
                             }
-                        }
+                        };
 
-                        // At this point the scan_ptr is one past the
-                        // C_COPIED_TO_TAG i.e. at the forwarding pointer.
                         debug_assert!((src as *const i8) < scan_ptr);
-                        let offset = scan_ptr.offset_from(src) - 1;
+
                         // The forwarding pointer that's available.
                         let (tagged_fwd_avail, _): (u64, _) = read(scan_ptr);
                         let tagged_avail =
