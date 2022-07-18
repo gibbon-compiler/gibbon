@@ -117,11 +117,16 @@ the file Contents.hs contains the definition of the data type Content which can 
     d6 -> ACT
     
     runtime table:
-    TODO: fill the table
     
-     k/j | d1  | d2 | d3 | d4 | d5 | d6 | 
-      t1 |     |    |    |    |    |    | 
-      t2 |     |    |    |    |    |    |
+     k/j | d1         | d2        | d3        | d4        | d5          | d6          | 
+      t1 | 4.592e-02  | 1.391e-02 | 7.282e-03 | 4.847e-02 | 4.362e-02   |  1.488e-02  | 
+      t2 | 1.366e-02  | 5.003e-02 | 3.918e-02 | 5.026e-02 | 1.416e-02   |  4.565e-02  |
+      
+    L2 cache misses:
+    
+     k/j | d1         | d2        | d3        | d4        | d5          | d6          | 
+      t1 | 4.592e-02  | 1.391e-02 | 7.282e-03 | 4.847e-02 | 4.362e-02   |  1.488e-02  | 
+      t2 | 1.366e-02  | 5.003e-02 | 3.918e-02 | 5.026e-02 | 1.416e-02   |  4.565e-02  |
     
     Here we test all the 6 permutations of the layout but specifically discuss the performance of the TAC and CAT layouts. 
     TAC -> Tags, Adt next and then Content is serialized. 
