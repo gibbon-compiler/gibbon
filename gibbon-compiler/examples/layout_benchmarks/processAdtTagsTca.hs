@@ -5,12 +5,12 @@ import Contents
 import Adts
 import Tags
  
-searchTagsAdt :: Adt -> Tags -> Adt
-searchTagsAdt adt tag = case adt of
-                             Nil -> Nil
-                             TCA tags content rst -> let present = searchTag tag tags
-                                                         newRst  = searchTagsAdt rst tag
-                                                     in if (present) then TCA tags content newRst else newRst
+-- searchTagsAdt :: Adt -> Tags -> Adt
+-- searchTagsAdt adt tag = case adt of
+--                              Nil -> Nil
+--                              TCA tags content rst -> let present = searchTag tag tags
+--                                                          newRst  = searchTagsAdt rst tag
+--                                                      in if (present) then TCA tags content newRst else newRst
                                                      
                                                      
 addValTagsAdt :: Adt ->  Adt
@@ -22,7 +22,7 @@ addValTagsAdt adt = case adt of
 
 -- mk for 3 parameter Adt take, len, tagLen, strLen
 gibbon_main =
-    let tca = mkTCAList 100000 50 1000
+    let tca = mkTCAList 100000 10 2000
         -- _             = printsym (quote "TCA Adt: ")
         -- _             = printsym (quote "NEWLINE")
         -- _             = printPacked tca

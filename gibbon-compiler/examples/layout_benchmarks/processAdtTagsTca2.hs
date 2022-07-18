@@ -8,36 +8,36 @@ import Tags
 -- searchTagsAdt :: Adt -> Tags -> Adt
 -- searchTagsAdt adt tag = case adt of
 --                              Nil -> Nil
---                              CAT content rst tags -> let present = searchTag tag tags
+--                              TCA tags content rst -> let present = searchTag tag tags
 --                                                          newRst  = searchTagsAdt rst tag
---                                                      in if (present) then CAT content newRst tags else newRst
+--                                                      in if (present) then TCA tags content newRst else newRst
                                                      
                                                      
 addValTagsAdt :: Adt ->  Adt
 addValTagsAdt adt = case adt of
                              Nil -> Nil
-                             CAT content rst tags -> let newTags = addValTag tags 10
-                                                         newRst  = addValTagsAdt rst 
-                                                     in CAT content newRst ( copyPacked newTags)
+                             TCA tags content rst -> let newRst  = addValTagsAdt rst
+                                                         newTags = addValTag tags 10 
+                                                     in TCA newTags ( copyPacked content) ( copyPacked newRst)
 
 -- mk for 3 parameter Adt take, len, tagLen, strLen
 gibbon_main =
-    let cat = mkCATList 100000 10 2000
-        -- _             = printsym (quote "CAT Adt: ")
+    let tca = mkTCAList 100000 10 2000
+        -- _             = printsym (quote "TCA Adt: ")
         -- _             = printsym (quote "NEWLINE")
-        -- _             = printPacked cat
+        -- _             = printPacked tca
         -- _             = printsym (quote "NEWLINE")
         --tag = Tag 1000000 Nul        
-        --search_cat    = iterate (searchTagsAdt cat tag) 
-        -- _             = printsym (quote "CAT Adt after search tags: ")
+        --search_tca    = iterate (searchTagsAdt tca tag)
+        -- _             = printsym (quote "TCA Adt after search tags: ")
         -- _             = printsym (quote "NEWLINE")
-        -- _             = printPacked search_cat
+        -- _             = printPacked search_tca
         -- _             = printsym (quote "NEWLINE")
         -- _             = printsym (quote "==============================================================================================================================")
         -- _             = printsym (quote "NEWLINE")
-        add_cat       = iterate (addValTagsAdt cat)
-        -- _             = printsym (quote "CAT Adt after search tags: ")
+        add_tca    = iterate (addValTagsAdt tca)
+        -- _             = printsym (quote "TCA Adt after add tags: ")
         -- _             = printsym (quote "NEWLINE")
-        -- _             = printPacked add_cat
+        -- _             = printPacked add_tca
         -- _             = printsym (quote "NEWLINE")
     in ()

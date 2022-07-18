@@ -16,9 +16,9 @@ import Tags
 addValTagsAdt :: Adt ->  Adt
 addValTagsAdt adt = case adt of
                              Nil -> Nil
-                             CTA content tags rst -> let newTags = addValTag tags 10
-                                                         newRst  = addValTagsAdt rst
-                                                     in CTA content newTags newRst
+                             CTA content tags rst -> let newRst  = addValTagsAdt rst
+                                                         newTags = addValTag tags 10
+                                                     in CTA content (newTags) (copyPacked newRst)
                                                      
 {-
 sumTagsAdt :: Adt -> Tags -> Adt
