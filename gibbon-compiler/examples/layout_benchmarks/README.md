@@ -96,9 +96,15 @@ the file Contents.hs contains the definition of the data type Content which can 
     
 2.) Processing the content. Comparing the performance of CA vs AC
 
-    TODO: add some discussion here... 
-
-
+    t1 -> traverse Content first, next Adt second
+    t2 -> traverse next Adt first, Content second
+    AC -> Next adt fist, Content second
+    CA -> Content first, Next Adt second
+    
+    k/j | AC              | CA             | 
+     t1 | 1.218167e+00    | 2.664190e-01   |
+     t2 | 2.654056e-01    | 1.250884e+00   |
+     
 3.) Processing tags when the Abstract data type has 3 fields, Tags, Content and Next Adt. 
 
     Here we test all the 12 permutations of the layout but and traversal order.
