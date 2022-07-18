@@ -1491,7 +1491,7 @@ CursorCursorCursorCursorProd addValTag(CursorTy end_r_2918, CursorTy end_r_2919,
                                        CursorTy loc_2917,
                                        CursorTy tags_21_907_1525,
                                        IntTy inVal_22_908_1526);
-CursorCursorCursorProd mkCATList(CursorTy end_r_2921, CursorTy loc_2920,
+CursorCursorCursorProd mkATCList(CursorTy end_r_2921, CursorTy loc_2920,
                                  IntTy len_25_911_1531,
                                  IntTy tagLen_26_912_1532,
                                  IntTy strLen_27_913_1533);
@@ -1595,7 +1595,7 @@ CursorCursorCursorProd addValTagsAdt(CursorTy end_r_2914, CursorTy end_r_2915,
             break;
         }
         
-      case 23:
+      case 19:
         {
             RegionTy *region_6199 = alloc_region(global_init_inf_buf_size);
             CursorTy r_3032 = region_6199->reg_heap;
@@ -1607,47 +1607,47 @@ CursorCursorCursorProd addValTagsAdt(CursorTy end_r_2914, CursorTy end_r_2915,
             CursorTy tmpaftercur_6204 = tmpaftercur_6202 + 8;
             CursorTy jump_3949 = tmpaftercur_6202 + 8;
             CursorTy jump_3948 = tmpcur_6194 + 8;
-            
-            *(TagTyPacked *) loc_3022 = 254;
-            
-            CursorTy writetag_4510 = loc_3022 + 1;
-            
-            *(CursorTy *) writetag_4510 = tmpaftercur_6204;
-            
-            CursorTy writecur_4511 = writetag_4510 + 8;
             CursorCursorCursorCursorProd tmp_struct_0 =
-                                          addValTag(end_r_2914, end_r_3032, r_3032, tmpcur_6203, 10);
-            CursorTy pvrtmp_6207 = tmp_struct_0.field0;
-            CursorTy pvrtmp_6208 = tmp_struct_0.field1;
-            CursorTy pvrtmp_6209 = tmp_struct_0.field2;
-            CursorTy pvrtmp_6210 = tmp_struct_0.field3;
+                                          addValTag(end_r_2914, end_r_3032, r_3032, tmpcur_6201, 10);
+            CursorTy pvrtmp_6205 = tmp_struct_0.field0;
+            CursorTy pvrtmp_6206 = tmp_struct_0.field1;
+            CursorTy pvrtmp_6207 = tmp_struct_0.field2;
+            CursorTy pvrtmp_6208 = tmp_struct_0.field3;
             CursorCursorCursorProd tmp_struct_1 =
-                                    addValTagsAdt(end_r_2914, end_r_2915, writecur_4511, tmpcur_6201);
-            CursorTy pvrtmp_6215 = tmp_struct_1.field0;
-            CursorTy pvrtmp_6216 = tmp_struct_1.field1;
-            CursorTy pvrtmp_6217 = tmp_struct_1.field2;
+                                    addValTagsAdt(end_r_2914, end_r_2915, loc_3022, tmpaftercur_6204);
+            CursorTy pvrtmp_6213 = tmp_struct_1.field0;
+            CursorTy pvrtmp_6214 = tmp_struct_1.field1;
+            CursorTy pvrtmp_6215 = tmp_struct_1.field2;
             
-            *(TagTyPacked *) pvrtmp_6217 = 254;
+            *(TagTyPacked *) pvrtmp_6215 = 254;
             
-            CursorTy writetag_4515 = pvrtmp_6217 + 1;
+            CursorTy writetag_4512 = pvrtmp_6215 + 1;
             
-            *(CursorTy *) writetag_4515 = r_3032;
+            *(CursorTy *) writetag_4512 = r_3032;
+            
+            CursorTy writecur_4513 = writetag_4512 + 8;
+            
+            *(TagTyPacked *) writecur_4513 = 254;
+            
+            CursorTy writetag_4515 = writecur_4513 + 1;
+            
+            *(CursorTy *) writetag_4515 = tmpcur_6203;
             
             CursorTy writecur_4516 = writetag_4515 + 8;
             
-            *(TagTyPacked *) loc_2913 = 23;
+            *(TagTyPacked *) loc_2913 = 19;
             
             CursorTy writetag_4518 = loc_2913 + 1;
             
-            *(CursorTy *) writetag_4518 = tmpcur_6201;
+            *(CursorTy *) writetag_4518 = pvrtmp_6215;
             
             CursorTy writecur_4519 = writetag_4518 + 8;
             
-            *(CursorTy *) writecur_4519 = pvrtmp_6217;
+            *(CursorTy *) writecur_4519 = writecur_4513;
             
             CursorTy writecur_4520 = writecur_4519 + 8;
             
-            return (CursorCursorCursorProd) {pvrtmp_6215, loc_2913,
+            return (CursorCursorCursorProd) {pvrtmp_6213, loc_2913,
                                              writecur_4516};
             break;
         }
@@ -1798,7 +1798,7 @@ CursorCursorCursorCursorProd addValTag(CursorTy end_r_2918, CursorTy end_r_2919,
         }
     }
 }
-CursorCursorCursorProd mkCATList(CursorTy end_r_2921, CursorTy loc_2920,
+CursorCursorCursorProd mkATCList(CursorTy end_r_2921, CursorTy loc_2920,
                                  IntTy len_25_911_1531,
                                  IntTy tagLen_26_912_1532,
                                  IntTy strLen_27_913_1533)
@@ -1829,24 +1829,24 @@ CursorCursorCursorProd mkCATList(CursorTy end_r_2921, CursorTy loc_2920,
         
         return (CursorCursorCursorProd) {end_r_2921, loc_2920, writetag_4547};
     } else {
+        IntTy fltAppE_1509_1535 = len_25_911_1531 - 1;
         CursorCursorCursorProd tmp_struct_13 =
-                                mkContentText(end_r_2921, loc_3052, strLen_27_913_1533);
+                                mkATCList(end_r_2921, loc_3052, fltAppE_1509_1535, tagLen_26_912_1532, strLen_27_913_1533);
         CursorTy pvrtmp_6300 = tmp_struct_13.field0;
         CursorTy pvrtmp_6301 = tmp_struct_13.field1;
         CursorTy pvrtmp_6302 = tmp_struct_13.field2;
-        IntTy fltAppE_1509_1536 = len_25_911_1531 - 1;
         CursorCursorCursorProd tmp_struct_14 =
-                                mkCATList(pvrtmp_6300, pvrtmp_6302, fltAppE_1509_1536, tagLen_26_912_1532, strLen_27_913_1533);
+                                mkRandomTags(pvrtmp_6300, pvrtmp_6302, tagLen_26_912_1532);
         CursorTy pvrtmp_6307 = tmp_struct_14.field0;
         CursorTy pvrtmp_6308 = tmp_struct_14.field1;
         CursorTy pvrtmp_6309 = tmp_struct_14.field2;
         CursorCursorCursorProd tmp_struct_15 =
-                                mkRandomTags(pvrtmp_6307, pvrtmp_6309, tagLen_26_912_1532);
+                                mkContentText(pvrtmp_6307, pvrtmp_6309, strLen_27_913_1533);
         CursorTy pvrtmp_6314 = tmp_struct_15.field0;
         CursorTy pvrtmp_6315 = tmp_struct_15.field1;
         CursorTy pvrtmp_6316 = tmp_struct_15.field2;
         
-        *(TagTyPacked *) loc_2920 = 23;
+        *(TagTyPacked *) loc_2920 = 19;
         
         CursorTy writetag_4552 = loc_2920 + 1;
         
@@ -5014,7 +5014,7 @@ int __main_expr()
     IntTy sizeof_end_r_3000_6166 = global_init_inf_buf_size;
     CursorTy end_r_3000 = r_3000 + sizeof_end_r_3000_6166;
     CursorCursorCursorProd tmp_struct_225 =
-                            mkCATList(end_r_3001, r_3001, 100000, 10, 2000);
+                            mkATCList(end_r_3001, r_3001, 100000, 10, 2000);
     CursorTy pvrtmp_6167 = tmp_struct_225.field0;
     CursorTy pvrtmp_6168 = tmp_struct_225.field1;
     CursorTy pvrtmp_6169 = tmp_struct_225.field2;

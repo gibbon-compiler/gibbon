@@ -100,8 +100,10 @@ the file Contents.hs contains the definition of the data type Content which can 
 
 
 3.) Processing tags when the Abstract data type has 3 fields, Tags, Content and Next Adt. 
+
+    Here we test all the 12 permutations of the layout but and traversal order.
     
-    TODO: add numbers for all j X k variations of the source code and data layout.
+    Below are numbers for all j X k variations of the source code and data layout.
     Here j = total number of ways you can traverse the Adt, i.e, the specific order of fields you traverse. (Since the number of fields are 2 its tags first, next adt second or next adt first, tags second)
          k = total number of different layout = factorial(number of fields) = 3! = 6
     total variations = j X k = 2 X 6 = 12 variations.
@@ -109,67 +111,61 @@ the file Contents.hs contains the definition of the data type Content which can 
     notation:
     t1 -> traverse tags first, next adt second
     t2 -> traverse next adt first, tags second
-    d1 -> CAT
-    d2 -> CTA
-    d3 -> TAC
-    d4 -> TCA
-    d5 -> ATC
-    d6 -> ACT
+    d1 -> CAT -> Content first, Next Adt second, Tags third
+    d2 -> CTA -> Content first, Tags second, Next Adt third
+    d3 -> TAC -> Tags first, Next Adt second, Content third
+    d4 -> TCA -> Tags first, Content second, Next Adt third
+    d5 -> ATC -> Next Adt first, Tags second, Content third
+    d6 -> ACT -> Next Adt first, Content second, Tags third
     
-    runtime table:
+    Performance testing using PAPI, we measure the L2, L3 cache misses, number of Instructions and Cycles and the overall runtime.
+    Each cell in the Adt has 10 tags and Content of size 2000 characters. (in the form of Text string)   
+    The test makes an Adt of size 100,000 cells. 
+    
+    runtime table(seconds):
     
      k/j | d1         | d2        | d3        | d4        | d5          | d6          | 
-      t1 | 4.592e-02  | 1.391e-02 | 7.282e-03 | 4.847e-02 | 4.362e-02   |  1.488e-02  | 
+      t1 | 4.592e-02  | 1.391e-02 | 7.282e-03 | 4.847e-02 | 4.362e-02   |  4.441e-02  | 
       t2 | 1.366e-02  | 5.003e-02 | 3.918e-02 | 5.026e-02 | 1.416e-02   |  4.565e-02  |
       
     L2 cache misses:
     
      k/j | d1         | d2        | d3        | d4        | d5          | d6          | 
-      t1 | 4.592e-02  | 1.391e-02 | 7.282e-03 | 4.847e-02 | 4.362e-02   |  1.488e-02  | 
-      t2 | 1.366e-02  | 5.003e-02 | 3.918e-02 | 5.026e-02 | 1.416e-02   |  4.565e-02  |
+      t1 | 2217093    | 2710350   | 1703596   | 3952795   | 2630472     |  2644843    | 
+      t2 | 2496671    | 4381302   | 3370914   | 4531823   | 2704948     |  3782824    |
+      
+    L3 cache misses:
     
-    Here we test all the 6 permutations of the layout but specifically discuss the performance of the TAC and CAT layouts. 
-    TAC -> Tags, Adt next and then Content is serialized. 
-    CAT -> Content, next Adt and then Tags are serialized. 
+     k/j | d1         | d2        | d3        | d4        | d5          | d6          | 
+      t1 | 1579791    | 2183898   | 1070878   | 3316226   | 2128599     |  2114494    | 
+      t2 | 2028287    | 3906609   | 2710199   | 4050117   | 2204083     |  3201695    |
+      
+    Instructions:
     
-    TAC is faster than CAT. The function adds a set value to all the tags (emulating a traversal over all the tags)
-    TODO: Add more explanation here about the layout of the Adts...
+     k/j | d1         | d2        | d3        | d4        | d5          | d6          | 
+      t1 | 79688618   | 35908373  | 35909002  | 79984811  | 79688551    |  79688550   | 
+      t2 | 35709106   | 78885177  | 79185414  | 79185175  | 35709240    |  79788900   |
+      
+    CPI:
     
-    Performance testing using PAPI, we measure the L2, L3 cache misses, number of Instructions and Cycles. 
+     k/j | d1         | d2        | d3        | d4        | d5          | d6          | 
+      t1 | 1.016672   | 1.251593  | 0.550825  | 1.205783  | 0.925680    |  0.952330   | 
+      t2 | 1.258220   | 1.278253  | 0.725601  | 1.302915  | 1.318570    |  1.008022   |
+      
+      
+    Speedup table(Baseline CAT layout, traversal t1):
     
-    The test makes TAC and CAT abstract data layout of size 100,000 cells. 
-    Each cell has 10 tags and Content of size 2000 characters. (in the form of Text string)   
+    k/j  | d1         | d2        | d3        | d4        | d5          | d6          | 
+      t1 | 1          | 3.30      | 6.305     | 0.947     | 1.05        |  1.03       | 
+      t2 | 3.36       | 0.917     | 1.17      | 0.913     | 3.24        |  1.01       |
+      
+    CopyPacked's used:
     
-    TAC
-    L2 Cache Misses : 15208512
-    L3 Cache Misses : 9449631
-    Instructions : 323168259
-    Total Cycles : 179453423
-    CPI: 0.555294
-    TIMES: [0.007453, 0.007480, 0.007590, 0.007745, 0.007779, 0.007794, 0.007797, 0.007896, 0.008106]
-    ITERS: 9
-    SIZE: 0
-    BATCHTIME: 6.963932e-02
-    SELFTIMED: 7.778918e-03
-    '#()
+    k/j  | d1         | d2        | d3        | d4        | d5          | d6         | 
+      t1 | 1          | 0         | 0         | 2         | 1           |  2         | 
+      t2 | 0          | 1         | 1         | 2         | 0           |  2         |
     
     
-    CAT
-    L2 Cache Misses : 20032647
-    L3 Cache Misses : 14033895
-    Instructions : 717124396
-    Total Cycles : 742859227
-    CPI: 1.035886
-    TIMES: [0.047035, 0.047063, 0.047065, 0.047089, 0.047130, 0.047576, 0.047665, 0.048015, 0.048623]
-    ITERS: 9
-    SIZE: 0
-    BATCHTIME: 4.272612e-01
-    SELFTIMED: 4.712992e-02
-    '#()
-    
-    TAC has less L2 and L3 cache misses, lesser instructions and cycles and consequently a lower runtime. 
-
-    Speedup ~ 6x.
 
    ### MACHINE SPECIFICATIONS (Tested on a machine where PAPI support was available, newer machines not supported by PAPI yet.):
    ``` 

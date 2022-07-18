@@ -36,56 +36,7 @@
 #define REDIRECTION_TAG 255
 #define INDIRECTION_TAG 254
 
-#define SIZE 4
-
-#include <papi.h>
-
-int ret;
-int events[] = {PAPI_L2_TCM, PAPI_L3_TCM, PAPI_TOT_INS, PAPI_TOT_CYC};
-char* defs[] = {"L2 Cache Misses", "L3 Cache Misses", "Instructions" ,"Total Cycles"};
-
-unsigned long long values[SIZE];
-
-void init_papi(){
-  if (PAPI_library_init(PAPI_VER_CURRENT) != PAPI_VER_CURRENT){
-    printf("PAPI Init Error\n");
-    exit(1);
-  }
-  for(int i = 0; i < SIZE; i++){
-    if (PAPI_query_event(events[i]) != PAPI_OK){
-      printf("PAPI Event %d does not exist\n", i);
-    }    
-  }  
-}
-
-void start_counters() {
-  if (PAPI_start_counters(events, SIZE) != PAPI_OK) {
-    printf("PAPI Error starting counters\n");
-  } 
-}
-
-void read_counters() {
-  // Performance Counters Read
-  ret = PAPI_stop_counters(values, SIZE);
-  if (ret != PAPI_OK) {
-    if (ret == PAPI_ESYS) {
-      printf("error inside PAPI call\n");
-    } else if (ret == PAPI_EINVAL) {
-      printf("error with arguments\n");
-    }
-
-    printf("PAPI Error reading counters\n");
-  }
-}
-
-void print_counters() {
-  for (int i = 0; i < SIZE; ++i){
-    printf("%s : %llu\n", defs[i], values[i]);
-  }
-  
-  printf("CPI: %f\n", ((double)values[3]/(double)values[2]));   
-    
-}
+#include "_papi.h"
 
 // Initial size of BigInfinite buffers
 static long long global_init_biginf_buf_size = (4 * GB);
