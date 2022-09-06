@@ -364,7 +364,7 @@ typedef GibShadowstack GibRememberedSet;
 
 // Abstract definitions are sufficient.
 typedef struct gib_nursery GibNursery;
-typedef struct gib_old_generation GibOldGeneration;
+typedef struct gib_old_generation GibOldgen;
 typedef struct gib_region_info GibRegionInfo;
 typedef struct gib_gc_stats GibGcStats;
 
@@ -554,7 +554,7 @@ int gib_garbage_collect(
     GibShadowstack *rstack,
     GibShadowstack *wstack,
     GibNursery *nursery,
-    GibOldGeneration *generation,
+    GibOldgen *generation,
     GibGcStats *stats,
     bool force_major
 );
@@ -567,9 +567,9 @@ char *gib_init_footer_at(
     size_t chunk_size,
     uint16_t refcount
 );
-void gib_init_zcts(GibOldGeneration *generation);
+void gib_init_zcts(GibOldgen *generation);
 void gib_insert_into_new_zct(
-    GibOldGeneration *generation,
+    GibOldgen *generation,
     GibRegionInfo *reg_info
 );
 void *gib_clone_zct(void *zct);
@@ -580,7 +580,7 @@ int gib_gc_cleanup(
     GibShadowstack *rstack,
     GibShadowstack *wstack,
     GibNursery *nursery,
-    GibOldGeneration *generation
+    GibOldgen *generation
 );
 void gib_get_rust_struct_sizes(
     size_t *stack,
@@ -595,7 +595,7 @@ void gib_print_nursery_and_oldgen(
     GibShadowstack *rstack,
     GibShadowstack *wstack,
     GibNursery *nursery,
-    GibOldGeneration *oldgen
+    GibOldgen *oldgen
 );
 
 

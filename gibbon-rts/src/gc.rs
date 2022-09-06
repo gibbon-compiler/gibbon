@@ -69,7 +69,7 @@ pub fn cleanup(
     rstack: &mut C_GibShadowstack,
     wstack: &mut C_GibShadowstack,
     nursery: &mut C_GibNursery,
-    oldgen: &mut C_GibOldGeneration,
+    oldgen: &mut C_GibOldgen,
 ) -> Result<()> {
     unsafe {
         // Free the info table.
@@ -79,7 +79,7 @@ pub fn cleanup(
     // Free all the regions.
     unsafe {
         for frame in rstack.into_iter().chain(wstack.into_iter()) {
-            let footer = (*frame).endptr as *const C_GibChunkFooter;
+            let footer = (*frame).endptr as *const C_GibOldgenChunkFooter;
             if !nursery.contains_addr((*frame).ptr) {
                 (*((*oldgen).old_zct)).insert((*footer).reg_info);
             }
@@ -101,7 +101,7 @@ pub fn garbage_collect(
     rstack: &mut C_GibShadowstack,
     wstack: &mut C_GibShadowstack,
     nursery: &mut C_GibNursery,
-    oldgen: &mut C_GibOldGeneration,
+    oldgen: &mut C_GibOldgen,
     gc_stats: *mut C_GibGcStats,
     _force_major: bool,
 ) -> Result<()> {
@@ -181,7 +181,7 @@ fn cauterize_writers(
 fn restore_writers(
     wstack: &C_GibShadowstack,
     nursery: &mut C_GibNursery,
-    oldgen: &mut C_GibOldGeneration,
+    oldgen: &mut C_GibOldgen,
 ) -> Result<()> {
     let mut env: HashMap<*mut i8, (*mut i8, *mut i8)> = HashMap::new();
     for frame in wstack.into_iter() {
@@ -235,7 +235,7 @@ fn restore_writers(
 unsafe fn evacuate_shadowstack<'a, 'b>(
     so_env: &'a mut SkipOverEnv,
     nursery: &'b C_GibNursery,
-    oldgen: &'a mut C_GibOldGeneration,
+    oldgen: &'a mut C_GibOldgen,
     rstack: &C_GibShadowstack,
     evac_major: bool,
 ) -> Result<()> {
@@ -324,7 +324,8 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                         );
                     }
 
-                    let _footer = (*frame).endptr as *const C_GibChunkFooter;
+                    let _footer =
+                        (*frame).endptr as *const C_GibOldgenChunkFooter;
                     /*
                     if (*((*footer).reg_info)).refcount == 0 {
                         (*zct).insert((*footer).reg_info);
@@ -365,8 +366,8 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                                 (*frame).endptr as *mut u16;
                             *nursery_footer as usize
                         } else {
-                            let footer =
-                                (*frame).endptr as *const C_GibChunkFooter;
+                            let footer = (*frame).endptr
+                                as *const C_GibOldgenChunkFooter;
                             (*footer).size
                         };
 
@@ -374,7 +375,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                         let (dst, dst_end) =
                             Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 0)?;
                         // Update ZCT.
-                        let _footer = dst_end as *const C_GibChunkFooter;
+                        let _footer = dst_end as *const C_GibOldgenChunkFooter;
                         /*
                         record_time!(
                             (*zct).insert((*footer).reg_info),
@@ -674,7 +675,7 @@ unsafe fn evacuate_packed(
                                 pointee_footer,
                             );
                             // (*zct).insert(
-                            //     ((*(pointee_footer as *mut C_GibChunkFooter)).reg_info
+                            //     ((*(pointee_footer as *mut C_GibOldgenChunkFooter)).reg_info
                             //         as *const C_GibRegionInfo),
                             // );
 
@@ -760,8 +761,8 @@ unsafe fn evacuate_packed(
                         match (*frame).gc_root_prov {
                             C_GcRootProv::RemSet => {}
                             C_GcRootProv::Stk => {
-                                let _fwd_footer =
-                                    fwd_footer_addr as *const C_GibChunkFooter;
+                                let _fwd_footer = fwd_footer_addr
+                                    as *const C_GibOldgenChunkFooter;
                                 /*
                                 record_time!(
                                     (*(st.zct)).remove(
@@ -860,11 +861,12 @@ unsafe fn evacuate_packed(
                             }
 
                             // Link footers.
-                            let footer1 = dst_end as *mut C_GibChunkFooter;
+                            let footer1 =
+                                dst_end as *mut C_GibOldgenChunkFooter;
                             let next_chunk_footer_offset = tagged.get_tag();
                             let footer2 = next_chunk
                                 .add(next_chunk_footer_offset as usize)
-                                as *mut C_GibChunkFooter;
+                                as *mut C_GibOldgenChunkFooter;
 
                             // Reconcile RegionInfo objects.
                             let reg_info1 = (*footer1).reg_info;
@@ -1153,7 +1155,9 @@ unsafe fn write<A>(cursor: *mut i8, val: A) -> *mut i8 {
  */
 
 impl C_GibRegionInfo {
-    fn new(first_chunk_footer: *const C_GibChunkFooter) -> C_GibRegionInfo {
+    fn new(
+        first_chunk_footer: *const C_GibOldgenChunkFooter,
+    ) -> C_GibRegionInfo {
         C_GibRegionInfo {
             id: gensym(),
             refcount: 0,
@@ -1268,7 +1272,7 @@ unsafe fn write_forwarding_pointer_at(
 }
 
 unsafe fn free_region(
-    footer: *const C_GibChunkFooter,
+    footer: *const C_GibOldgenChunkFooter,
     zct: *mut Zct,
     free_descendants: bool,
 ) -> Result<()> {
@@ -1307,7 +1311,9 @@ unsafe fn free_region(
     Ok(())
 }
 
-unsafe fn addr_to_free(footer: *const C_GibChunkFooter) -> *mut libc::c_void {
+unsafe fn addr_to_free(
+    footer: *const C_GibOldgenChunkFooter,
+) -> *mut libc::c_void {
     ((footer as *const i8).sub((*footer).size)) as *mut libc::c_void
 }
 
@@ -1318,8 +1324,8 @@ pub unsafe fn handle_old_to_old_indirection(
     #[cfg(feature = "verbose_evac")]
     eprintln!(
         "Recording metadata for an old-to-old indirection, {:?}:{:?} -> {:?}:{:?}.",
-        from_footer_ptr, *(from_footer_ptr as *const C_GibChunkFooter),
-        to_footer_ptr, *(to_footer_ptr as *const C_GibChunkFooter)
+        from_footer_ptr, *(from_footer_ptr as *const C_GibOldgenChunkFooter),
+        to_footer_ptr, *(to_footer_ptr as *const C_GibOldgenChunkFooter)
     );
 
     if from_footer_ptr == to_footer_ptr {
@@ -1339,8 +1345,8 @@ pub unsafe fn handle_old_to_old_indirection(
 }
 
 unsafe fn add_to_outset(from_addr: *mut i8, to_addr: *const i8) -> bool {
-    let from_reg_info = (*(from_addr as *mut C_GibChunkFooter)).reg_info;
-    let to_reg_info = (*(to_addr as *mut C_GibChunkFooter)).reg_info;
+    let from_reg_info = (*(from_addr as *mut C_GibOldgenChunkFooter)).reg_info;
+    let to_reg_info = (*(to_addr as *mut C_GibOldgenChunkFooter)).reg_info;
 
     #[cfg(feature = "verbose_evac")]
     eprintln!(
@@ -1352,7 +1358,7 @@ unsafe fn add_to_outset(from_addr: *mut i8, to_addr: *const i8) -> bool {
 }
 
 unsafe fn bump_refcount(addr: *mut i8) -> u16 {
-    let reg_info = (*(addr as *mut C_GibChunkFooter)).reg_info;
+    let reg_info = (*(addr as *mut C_GibOldgenChunkFooter)).reg_info;
     (*reg_info).refcount += 1;
 
     #[cfg(feature = "verbose_evac")]
@@ -1362,7 +1368,7 @@ unsafe fn bump_refcount(addr: *mut i8) -> u16 {
 }
 
 unsafe fn decrement_refcount(addr: *mut i8) -> u16 {
-    let reg_info = (*(addr as *mut C_GibChunkFooter)).reg_info;
+    let reg_info = (*(addr as *mut C_GibOldgenChunkFooter)).reg_info;
     (*reg_info).refcount -= 1;
 
     #[cfg(feature = "verbose_evac")]
@@ -1378,9 +1384,10 @@ pub unsafe fn init_footer_at(
     chunk_size: usize,
     refcount: u16,
 ) -> *mut i8 {
-    let footer_space = size_of::<C_GibChunkFooter>();
+    let footer_space = size_of::<C_GibOldgenChunkFooter>();
     let footer_start = chunk_end.sub(footer_space);
-    let footer: *mut C_GibChunkFooter = footer_start as *mut C_GibChunkFooter;
+    let footer: *mut C_GibOldgenChunkFooter =
+        footer_start as *mut C_GibOldgenChunkFooter;
     let region_info_ptr: *mut C_GibRegionInfo = if reg_info.is_null() {
         let mut region_info = C_GibRegionInfo::new(footer);
         region_info.refcount = refcount;
@@ -1406,7 +1413,7 @@ fn is_loc0(addr: *const i8, footer_addr: *const i8, in_nursery: bool) -> bool {
         let chunk_size: usize = if in_nursery {
             *(footer_addr as *const u16) as usize
         } else {
-            (*(footer_addr as *const C_GibChunkFooter)).size
+            (*(footer_addr as *const C_GibOldgenChunkFooter)).size
         };
         addr.add(chunk_size) == footer_addr
     }
@@ -1571,9 +1578,9 @@ impl<'a> Heap for C_GibNursery {
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-impl<'a> C_GibOldGeneration<'a> {
+impl<'a> C_GibOldgen<'a> {
     fn collect_regions(&mut self) -> Result<()> {
-        let gen: *mut C_GibOldGeneration = self;
+        let gen: *mut C_GibOldgen = self;
         unsafe {
             for reg_info in (*((*gen).old_zct)).drain() {
                 let footer = (*reg_info).first_chunk_footer;
@@ -1597,7 +1604,7 @@ impl<'a> C_GibOldGeneration<'a> {
     }
 
     fn init_zcts(&mut self) {
-        let gen: *mut C_GibOldGeneration = self;
+        let gen: *mut C_GibOldgen = self;
         unsafe {
             (*gen).old_zct = &mut *(Box::into_raw(Box::new(HashSet::new())));
             (*gen).new_zct = &mut *(Box::into_raw(Box::new(HashSet::new())));
@@ -1605,7 +1612,7 @@ impl<'a> C_GibOldGeneration<'a> {
     }
 
     fn free_zcts(&mut self) {
-        let gen: *mut C_GibOldGeneration = self;
+        let gen: *mut C_GibOldgen = self;
         unsafe {
             // Rust will drop these heap objects at the end of this scope.
             Box::from_raw((*gen).old_zct);
@@ -1614,7 +1621,7 @@ impl<'a> C_GibOldGeneration<'a> {
     }
 
     fn swap_zcts(&mut self) {
-        let gen: *mut C_GibOldGeneration = self;
+        let gen: *mut C_GibOldgen = self;
         unsafe {
             let tmp = &mut (*gen).old_zct;
             (*gen).old_zct = (*gen).new_zct;
@@ -1623,7 +1630,7 @@ impl<'a> C_GibOldGeneration<'a> {
     }
 }
 
-impl<'a> Heap for C_GibOldGeneration<'a> {
+impl<'a> Heap for C_GibOldgen<'a> {
     #[inline(always)]
     fn is_nursery(&self) -> bool {
         false
@@ -1644,7 +1651,7 @@ impl<'a> Heap for C_GibOldGeneration<'a> {
         size: usize,
         refcount: u16,
     ) -> Result<(*mut i8, *mut i8)> {
-        let total_size = size + size_of::<C_GibChunkFooter>();
+        let total_size = size + size_of::<C_GibOldgenChunkFooter>();
         let (start, end) = self.allocate(total_size)?;
 
         #[cfg(feature = "verbose_evac")]
@@ -1670,7 +1677,7 @@ impl<'a> Heap for C_GibOldGeneration<'a> {
     ) -> (*mut i8, *mut i8) {
         unsafe {
             // Access the old footer to get the region metadata.
-            let old_footer = dst_end as *mut C_GibChunkFooter;
+            let old_footer = dst_end as *mut C_GibOldgenChunkFooter;
             // Allocate space for the new chunk.
             let mut chunk_size = (*old_footer).size * 2;
             if chunk_size > MAX_CHUNK_SIZE {
@@ -1695,8 +1702,8 @@ impl<'a> Heap for C_GibOldGeneration<'a> {
             let dst_after_tag = write(dst, C_REDIRECTION_TAG);
             write(dst_after_tag, tagged);
             // Link the footers.
-            let new_footer: *mut C_GibChunkFooter =
-                new_footer_start as *mut C_GibChunkFooter;
+            let new_footer: *mut C_GibOldgenChunkFooter =
+                new_footer_start as *mut C_GibOldgenChunkFooter;
             (*old_footer).next = new_footer;
             (new_dst, new_footer_start)
         }
@@ -1704,7 +1711,7 @@ impl<'a> Heap for C_GibOldGeneration<'a> {
 
     #[inline(always)]
     fn allocate(&mut self, size: usize) -> Result<(*mut i8, *mut i8)> {
-        // let gen: *mut C_GibOldGeneration = self.0;
+        // let gen: *mut C_GibOldgen = self.0;
         unsafe {
             let start = libc::malloc(size) as *mut i8;
             if start.is_null() {
@@ -1723,7 +1730,7 @@ impl<'a> Heap for C_GibOldGeneration<'a> {
     }
 }
 
-pub fn init_zcts(oldgen: &mut C_GibOldGeneration) {
+pub fn init_zcts(oldgen: &mut C_GibOldgen) {
     oldgen.init_zcts();
 }
 
@@ -1972,7 +1979,7 @@ pub fn print_nursery_and_oldgen(
     rstack: &C_GibShadowstack,
     wstack: &C_GibShadowstack,
     nursery: &C_GibNursery,
-    oldgen: &C_GibOldGeneration,
+    oldgen: &C_GibOldgen,
 ) {
     unsafe {
         let mut info_env: HashMap<*const i8, OldGenerationChunkInfo> =
@@ -1981,8 +1988,8 @@ pub fn print_nursery_and_oldgen(
             |frame: *const C_GibShadowstackFrame, is_read: bool| -> () {
                 if !nursery.contains_addr((*frame).ptr) {
                     let chunk_end = (*frame).endptr;
-                    let footer: *const C_GibChunkFooter =
-                        chunk_end as *const C_GibChunkFooter;
+                    let footer: *const C_GibOldgenChunkFooter =
+                        chunk_end as *const C_GibOldgenChunkFooter;
                     let chunk_start = chunk_end.sub((*footer).size);
                     let info = info_env.entry(chunk_end).or_default();
                     (*info).start = chunk_start;
@@ -2070,7 +2077,7 @@ impl std::fmt::Display for OldGenerationChunkInfo {
          -> () {
             unsafe {
                 let frame = *frame_ref as *const C_GibShadowstackFrame;
-                let footer = (*frame).endptr as *const C_GibChunkFooter;
+                let footer = (*frame).endptr as *const C_GibOldgenChunkFooter;
                 let reg_info = (*footer).reg_info as *const C_GibRegionInfo;
                 let outset = (*reg_info).outset;
                 let formatted = format!(

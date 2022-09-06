@@ -813,7 +813,7 @@ void gib_write_ppm_loop(FILE *fp, GibInt idx, GibInt end, GibVector *pixels)
 
   Gibbon has "growing regions" i.e each logical region is backed by a singly
   linked-list of smaller chunks which grows as required. In addition to actual
-  data, each chunk stores some additional metadata (GibChunkFooter) to chain
+  data, each chunk stores some additional metadata (GibOldgenChunkFooter) to chain
   the chunks together in a list and for garbage collection. The footer:
 
   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -898,11 +898,11 @@ typedef struct gib_region_info {
     char *first_chunk_footer;
 } GibRegionInfo;
 
-typedef struct gib_chunk_footer {
+typedef struct gib_oldgen_footer {
     GibRegionInfo *reg_info;
     size_t size;
-    struct gib_chunk_footer *next;
-} GibChunkFooter;
+    struct gib_oldgen_footer *next;
+} GibOldgenChunkFooter;
 
 typedef struct gib_nursery {
     // Allocation area.
@@ -922,7 +922,7 @@ typedef struct gib_old_generation {
     void *old_zct;
     void *new_zct;
 
-} GibOldGeneration;
+} GibOldgen;
 
 typedef struct gib_gc_stats {
     // Number of copying minor collections (maintained by Rust RTS).
@@ -963,7 +963,7 @@ typedef struct gib_gc_stats {
 // Array of nurseries, indexed by thread_id.
 GibNursery *gib_global_nurseries = (GibNursery *) NULL;
 // Old generation.
-GibOldGeneration *gib_global_oldgen = (GibOldGeneration *) NULL;
+GibOldgen *gib_global_oldgen = (GibOldgen *) NULL;
 
 // Shadow stacks for readable and writeable locations respectively,
 // indexed by thread_id.
@@ -1007,9 +1007,9 @@ void gib_check_rust_struct_sizes(void)
     assert(*stack == sizeof(GibShadowstack));
     assert(*frame == sizeof(GibShadowstackFrame));
     assert(*nursery == sizeof(GibNursery));
-    assert(*generation == sizeof(GibOldGeneration));
+    assert(*generation == sizeof(GibOldgen));
     assert(*reg_info == sizeof(GibRegionInfo));
-    assert(*footer == sizeof(GibChunkFooter));
+    assert(*footer == sizeof(GibOldgenChunkFooter));
     assert(*gc_stats == sizeof(GibGcStats));
 
     // Done.
@@ -1093,7 +1093,7 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     GibNursery *nursery = DEFAULT_NURSERY;
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibOldGeneration *oldgen = DEFAULT_GENERATION;
+    GibOldgen *oldgen = DEFAULT_GENERATION;
     GibGcStats *gc_stats = GC_STATS;
 
 #ifdef _GIBBON_GCSTATS
@@ -1124,7 +1124,7 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     char *footer_ptr = *footer_addr;
     size_t newsize;
     bool old_chunk_in_nursery;
-    GibChunkFooter *footer = NULL;
+    GibOldgenChunkFooter *footer = NULL;
 
     if (gib_addr_in_nursery(footer_ptr)) {
         old_chunk_in_nursery = true;
@@ -1132,7 +1132,7 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     } else {
         old_chunk_in_nursery = false;
         // Get size from current footer.
-        footer = (GibChunkFooter *) footer_ptr;
+        footer = (GibOldgenChunkFooter *) footer_ptr;
         newsize = (footer->size) << 1;
         // See #110.
         if (newsize > MAX_CHUNK_SIZE) {
@@ -1153,19 +1153,19 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
 
     // Write a new footer for this chunk and link it with the old chunk's footer.
     char *new_footer_start = NULL;
-    GibChunkFooter *new_footer = NULL;
+    GibOldgenChunkFooter *new_footer = NULL;
     if (old_chunk_in_nursery) {
         new_footer_start = gib_init_footer_at(heap_end, newsize, 0);
-        new_footer = (GibChunkFooter *) new_footer_start;
+        new_footer = (GibOldgenChunkFooter *) new_footer_start;
         gib_insert_into_new_zct(DEFAULT_GENERATION, new_footer->reg_info);
     } else {
-        new_footer_start = heap_end - sizeof(GibChunkFooter);
-        new_footer = (GibChunkFooter *) new_footer_start;
+        new_footer_start = heap_end - sizeof(GibOldgenChunkFooter);
+        new_footer = (GibOldgenChunkFooter *) new_footer_start;
         new_footer->reg_info = footer->reg_info;
         new_footer->size = newsize;
-        new_footer->next = (GibChunkFooter *) NULL;
+        new_footer->next = (GibOldgenChunkFooter *) NULL;
         // Link with the old chunk's footer.
-        footer->next = (GibChunkFooter *) new_footer;
+        footer->next = (GibOldgenChunkFooter *) new_footer;
     }
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
@@ -1228,8 +1228,8 @@ static void gib_storage_initialize(void);
 static void gib_storage_free(void);
 static void gib_nursery_initialize(GibNursery *nursery);
 static void gib_nursery_free(GibNursery *nursery);
-static void gib_oldgen_initialize(GibOldGeneration *oldgen);
-static void gib_oldgen_free(GibOldGeneration *oldgen);
+static void gib_oldgen_initialize(GibOldgen *oldgen);
+static void gib_oldgen_free(GibOldgen *oldgen);
 static void gib_shadowstack_initialize(GibShadowstack *stack, size_t stack_size);
 static void gib_shadowstack_free(GibShadowstack *stack);
 static void gib_gc_stats_initialize(GibGcStats *stats);
@@ -1255,7 +1255,7 @@ static void gib_storage_initialize(void)
     }
 
     // Initialize old generation.
-    gib_global_oldgen = (GibOldGeneration *) gib_alloc(sizeof(GibOldGeneration));
+    gib_global_oldgen = (GibOldgen *) gib_alloc(sizeof(GibOldgen));
     gib_oldgen_initialize(gib_global_oldgen);
 
     // Initialize shadow stacks.
@@ -1361,7 +1361,7 @@ STATIC_INLINE bool gib_addr_in_nursery(char *ptr)
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
-static void gib_oldgen_initialize(GibOldGeneration *oldgen)
+static void gib_oldgen_initialize(GibOldgen *oldgen)
 {
     oldgen->old_zct = (void *) NULL;
     oldgen->new_zct = (void *) NULL;
@@ -1377,7 +1377,7 @@ static void gib_oldgen_initialize(GibOldGeneration *oldgen)
     return;
 }
 
-static void gib_oldgen_free(GibOldGeneration *oldgen)
+static void gib_oldgen_free(GibOldgen *oldgen)
 {
     gib_shadowstack_free(oldgen->rem_set);
     free(oldgen->rem_set);
@@ -1528,7 +1528,7 @@ void gib_indirection_barrier(
 #endif
 
             // (3) oldgen -> nursery
-            GibOldGeneration *oldgen = DEFAULT_GENERATION;
+            GibOldgen *oldgen = DEFAULT_GENERATION;
             // Store the address of the indirection pointer, *NOT* the address of
             // the indirection tag, in the remembered set.
             char *indr_addr = (char *) from + sizeof(GibPackedTag);
@@ -1612,7 +1612,7 @@ void gib_gc_save_state(GibGcStateSnapshot *snapshot, uint64_t num_regions, ...)
     GibNursery *nursery = DEFAULT_NURSERY;
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibOldGeneration *oldgen = DEFAULT_GENERATION;
+    GibOldgen *oldgen = DEFAULT_GENERATION;
 
     // nursery
     snapshot->nursery_alloc = nursery->alloc;
@@ -1630,7 +1630,7 @@ void gib_gc_save_state(GibGcStateSnapshot *snapshot, uint64_t num_regions, ...)
     // regions
     snapshot->num_regions = num_regions;
     char *footer_addr;
-    GibChunkFooter *footer;
+    GibOldgenChunkFooter *footer;
     GibRegionInfo *reg_info;
     void *outset;
     va_list ap;
@@ -1639,7 +1639,7 @@ void gib_gc_save_state(GibGcStateSnapshot *snapshot, uint64_t num_regions, ...)
     for (i = 0; i < num_regions; i++) {
         footer_addr = va_arg(ap, char *);
         if (!gib_addr_in_nursery(footer_addr)) {
-            footer = (GibChunkFooter *) footer_addr;
+            footer = (GibOldgenChunkFooter *) footer_addr;
             reg_info = footer->reg_info;
             outset = gib_clone_outset(reg_info->outset);
             snapshot->reg_info_addrs[i] = reg_info;
@@ -1667,7 +1667,7 @@ void gib_gc_restore_state(GibGcStateSnapshot *snapshot)
     GibNursery *nursery = DEFAULT_NURSERY;
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibOldGeneration *oldgen = DEFAULT_GENERATION;
+    GibOldgen *oldgen = DEFAULT_GENERATION;
 
     // nursery
     nursery->alloc = snapshot->nursery_alloc;
@@ -1902,7 +1902,7 @@ int main(int argc, char **argv)
     GibNursery *nursery = DEFAULT_NURSERY;
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
-    GibOldGeneration *oldgen = DEFAULT_GENERATION;
+    GibOldgen *oldgen = DEFAULT_GENERATION;
     gib_init_zcts(oldgen);
 
     // Minimal test to see if FFI is set up correctly.
