@@ -114,6 +114,8 @@ pub mod types {
         pub first_chunk_footer: *const C_GibOldgenChunkFooter,
     }
 
+    pub type C_GibNurseryChunkFooter = u16;
+
     #[repr(C)]
     #[derive(Debug)]
     pub struct C_GibOldgenChunkFooter {

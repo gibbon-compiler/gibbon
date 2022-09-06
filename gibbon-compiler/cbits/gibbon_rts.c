@@ -904,13 +904,14 @@ typedef struct gib_oldgen_footer {
     struct gib_oldgen_footer *next;
 } GibOldgenChunkFooter;
 
+typedef uint16_t GibNurseryChunkFooter;
+
 typedef struct gib_nursery {
     // Allocation area.
     size_t heap_size;
     char *heap_start;
     char *heap_end;
     char *alloc;
-
 } GibNursery;
 
 typedef struct gib_old_generation {
@@ -1066,11 +1067,11 @@ STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collec
 {
     GibNursery *nursery = DEFAULT_NURSERY;
     char *old = nursery->alloc;
-    char *bump = old - size - sizeof(uint16_t);
+    char *bump = old - size - sizeof(GibNurseryChunkFooter);
     if (LIKELY((bump >= nursery->heap_start))) {
         nursery->alloc = bump;
-        char *footer = old - sizeof(uint16_t);
-        *(uint16_t *) footer = size;
+        char *footer = old - sizeof(GibNurseryChunkFooter);
+        *(GibNurseryChunkFooter *) footer = size;
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
         fprintf(stderr, "Allocated a nursery chunk of size %ld, (%p, %p).\n",
                 size, bump, footer);

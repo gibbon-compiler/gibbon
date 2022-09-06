@@ -10,7 +10,7 @@ use libc;
 
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::intrinsics::ptr_offset_from;
+// use std::intrinsics::ptr_offset_from;
 use std::mem::size_of;
 use std::ptr::{null, null_mut, write_bytes};
 
@@ -1481,6 +1481,10 @@ impl<'a> C_GibNursery {
     }
 }
 
+/*
+
+// GC doesn't allocate in the nursery at all.
+
 impl<'a> Heap for C_GibNursery {
     #[inline(always)]
     fn is_nursery(&self) -> bool {
@@ -1509,12 +1513,12 @@ impl<'a> Heap for C_GibNursery {
         if !self.is_oldest() {
             self.allocate(size)
         } else {
-            let total_size = size + size_of::<u16>();
+            let total_size = size + size_of::<C_GibNurseryChunkFooter>();
             let (start, _end) = self.allocate(total_size)?;
             let footer_start = unsafe { start.add(size) };
-            let footer = footer_start as *mut u16;
+            let footer = footer_start as *mut C_GibNurseryChunkFooter;
             unsafe {
-                (*footer) = size as u16;
+                (*footer) = size as C_GibNurseryChunkFooter;
             }
 
             #[cfg(feature = "gcstats")]
@@ -1531,15 +1535,20 @@ impl<'a> Heap for C_GibNursery {
     fn allocate_next_chunk(
         &mut self,
         dst: *mut i8,
-        _dst_end: *mut i8,
+        dst_end: *mut i8,
     ) -> (*mut i8, *mut i8) {
         unsafe {
-            let (new_dst, new_dst_end) =
-                Heap::allocate(self, CHUNK_SIZE).unwrap();
+            let footer = dst_end as *mut C_GibNurseryChunkFooter;
+            let size: u16 = (*footer);
+            let newsize = (size * 2) + size_of::<C_GibNurseryChunkFooter>();
 
-            let footer_start = new_dst.add(CHUNK_SIZE);
-            let footer = footer_start as *mut u16;
-            (*footer) = CHUNK_SIZE as u16;
+            let (new_dst, new_dst_end) =
+                Heap::allocate(self, newsize).unwrap();
+
+            let footer_start =
+                new_dst_end.sub(size_of::<C_GibNurseryChunkFooter>());
+            let footer = footer_start as *mut C_GibNurseryChunkFooter;
+            (*footer) = (size * 2) as C_GibNurseryChunkFooter;
 
             // Write a redirection tag in the old chunk.
             let dst_after_tag = write(dst, C_REDIRECTION_TAG);
@@ -1572,6 +1581,8 @@ impl<'a> Heap for C_GibNursery {
         }
     }
 }
+
+*/
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Old generation
