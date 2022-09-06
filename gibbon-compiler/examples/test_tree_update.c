@@ -370,6 +370,10 @@ GibCursorGibIntProd countnodes(GibCursor end_r_875, GibCursor tr_62_241_382)
         }
     }
 }
+
+#define REGION_SIZE 128
+#define TREE_HEIGHT 4
+
 GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
                                      GibCursor loc_877, GibCursor tr_67_246_390,
                                      GibInt n_68_247_391)
@@ -416,7 +420,7 @@ GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
                                  SearchTree_T);
 
             GibChunk region_2343 =
-                     gib_alloc_region(gib_get_inf_init_chunk_size());
+                     gib_alloc_region(REGION_SIZE);
             GibCursor r_961 = region_2343.start;
             GibCursor end_r_961 = region_2343.end;
 
@@ -468,7 +472,7 @@ GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
                                  SearchTree_T);
 
             GibChunk region_2360 =
-                     gib_alloc_region(gib_get_inf_init_chunk_size());
+                     gib_alloc_region(REGION_SIZE);
             GibCursor r_970 = region_2360.start;
             GibCursor end_r_970 = region_2360.end;
 
@@ -704,7 +708,7 @@ GibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_884,
                                      SearchTree_T);
 
                 GibChunk region_2418 =
-                         gib_alloc_region(gib_get_inf_init_chunk_size());
+                         gib_alloc_region(REGION_SIZE);
                 GibCursor r_1046 = region_2418.start;
                 GibCursor end_r_1046 = region_2418.end;
 
@@ -1806,8 +1810,6 @@ GibInt caseFn_228(GibCursor end_r_905, GibCursor l_86_229_313_487,
     }
 }
 
-const int TREE_HEIGHT = 6;
-
 int gib_main_expr(void)
 {
     info_table_initialize();
@@ -1816,10 +1818,10 @@ int gib_main_expr(void)
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
-    GibChunk region_2248 = gib_alloc_region(gib_get_inf_init_chunk_size());
+    GibChunk region_2248 = gib_alloc_region(REGION_SIZE);
     GibCursor r_925 = region_2248.start;
     GibCursor end_r_925 = region_2248.end;
-    GibChunk region_2249 = gib_alloc_region(gib_get_inf_init_chunk_size());
+    GibChunk region_2249 = gib_alloc_region(REGION_SIZE);
     GibCursor r_924 = region_2249.start;
     GibCursor end_r_924 = region_2249.end;
     GibInt m_52_231_362 = gib_get_size_param();

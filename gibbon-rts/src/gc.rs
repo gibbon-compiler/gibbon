@@ -428,6 +428,28 @@ enum EvacAction {
     SkipOverEnvWrite(*mut i8),
 }
 
+/*
+
+[2022.09.06] Two main todos:
+
+(1) See "special case added while fixing tree_update".
+
+(2) At present, the end-of-input-region pointers never change in a function which
+    is processing a packed value. This was fine in the old version since all
+    end-of-input-region pointers were equivalent i.e. they all pointed to the
+    same region metadata information. In the new version, nursery versus oldgen
+    chunks have completely different footers! Thus, when a packed value processor
+    crosses over from the first nursery chunk to an oldgen chunk, we need to update
+    the corresponding end-of-input-region pointer. There's two places where this
+    needs to happen:
+
+    - redirection pointers. This is fine, redirections are tagged and all pointers
+      are updated properly.
+
+    - shortcut pointers, which may go from nursery chunk to oldgen chunk. TODO.
+
+*/
+
 /**
 
 Evacuate a packed value by referring to the info table.
@@ -501,8 +523,6 @@ unsafe fn evacuate_packed(
                 #[cfg(feature = "verbose_evac")]
                 eprintln!("   Read next tag {} from src {:?}", tag, src);
 
-                let packed_info: &&[DataconInfo] =
-                    INFO_TABLE.get_unchecked(next_ty as usize);
                 match tag {
                     // A pointer to a value in another buffer; copy this value
                     // and then switch back to copying rest of the source buffer.
@@ -551,7 +571,11 @@ unsafe fn evacuate_packed(
                         // Instead, it'll make the GC write an indirection pointer
                         // pointing to the target of the redirection.
                         //
-                        // TODO: add a picture here perhaps.
+                        //
+                        // [2022.09.06]: TODO: We need a more general-purpose
+                        // solution for this. *Any* value being inlined could have
+                        // a redirection pointer in it and we need to handle
+                        // it properly.
                         let (pointee_tag, after_pointee): (
                             C_GibPackedTag,
                             *const i8,
@@ -816,8 +840,11 @@ unsafe fn evacuate_packed(
                             }
                         } else {
                             // A pretenured object whose next chunk is in the old_gen.
+                            // We reconcile the two footers.
+                            // TODO: Document how it happens. Also, very buggy.
+                            // An alternative is to write an indirection node
+                            // which will be way easier.
 
-                            // TODO(ckoparkar): BUGGY, AUDITME.
                             let dst_after_tag = write(dst, C_REDIRECTION_TAG);
                             let dst_after_redir =
                                 write(dst_after_tag, tagged_next_chunk);
@@ -874,6 +901,8 @@ unsafe fn evacuate_packed(
 
                     // Regular datatype, copy.
                     _ => {
+                        let packed_info: &&[DataconInfo] =
+                            INFO_TABLE.get_unchecked(next_ty as usize);
                         let DataconInfo {
                             scalar_bytes,
                             field_tys,
