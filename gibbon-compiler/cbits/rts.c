@@ -291,6 +291,7 @@ char *ALLOC_COUNTED(size_t size) {
 typedef unsigned char TagTyPacked;
 typedef unsigned char TagTyBoxed;
 typedef long long IntTy;
+typedef char CharTy;
 typedef float FloatTy;
 typedef unsigned long long SymTy;
 typedef bool BoolTy;

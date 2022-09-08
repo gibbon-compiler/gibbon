@@ -358,6 +358,7 @@ rewriteReturns tl bnds =
 codegenTriv :: VEnv -> Triv -> C.Exp
 codegenTriv _ (VarTriv v) = C.Var (C.toIdent v noLoc) noLoc
 codegenTriv _ (IntTriv i) = [cexp| $int:i |]
+codegenTriv _ (CharTriv i) = [cexp| $char:i |]
 codegenTriv _ (FloatTriv i) = [cexp| $double:i |]
 codegenTriv _ (BoolTriv b) = case b of
                                True -> [cexp| true |]
@@ -375,7 +376,7 @@ codegenTriv venv (ProdTriv ls) =
 codegenTriv venv (ProjTriv i trv) =
   let field = "field" ++ show i
   in [cexp| $(codegenTriv venv trv).$id:field |]
-codegenTriv _ _ = error $ "codegenTriv: " ++ show (venv, triv)
+
 
 -- Type environment
 type FEnv = M.Map Var ([Ty], Ty)
@@ -921,6 +922,13 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        [] -> pure [ C.BlockStm [cstm| printf("%lld", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
+                 PrintChar ->
+                     let [arg] = rnds in
+                     case bnds of
+                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%c", $(codegenTriv venv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| printf("%c", $(codegenTriv venv arg)); |] ]
+                       _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
+
                  PrintFloat ->
                      let [arg] = rnds in
                      case bnds of
@@ -1162,6 +1170,10 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         tmp <- gensym "tmp"
                         return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:tmp = $exp:xexp; |]
                                , C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', &$id:tmp); |] ]
+                     CharTriv{} -> do
+                        tmp <- gensym "tmp"
+                        return [ C.BlockDecl [cdecl| $ty:(codegenTy CharTy) $id:tmp = $exp:xexp; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', &$id:tmp); |] ]
                      FloatTriv{} -> do
                         tmp <- gensym "tmp"
                         return [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:tmp = $exp:xexp; |]
@@ -1377,6 +1389,7 @@ genSwitch venv fenv sort_fns lbl tr alts lastE ty sync_deps =
 --
 codegenTy :: Ty -> C.Type
 codegenTy IntTy = [cty|typename IntTy|]
+codegenTy CharTy = [cty|typename CharTy|]
 codegenTy FloatTy= [cty|typename FloatTy|]
 codegenTy BoolTy = [cty|typename BoolTy|]
 codegenTy TagTyPacked = [cty|typename TagTyPacked|]
@@ -1403,6 +1416,7 @@ makeName tys = concatMap makeName' tys ++ "Prod"
 
 makeName' :: Ty -> String
 makeName' IntTy       = "Int64"
+makeName' CharTy      = "Char"
 makeName' FloatTy     = "Float32"
 makeName' SymTy       = "Sym"
 makeName' BoolTy      = "Bool"
