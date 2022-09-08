@@ -745,8 +745,6 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l4 <- go "rearrangeFree"  rearrangeFree   l4
               pure l4
             else do
-              -- These additional case branches cause some tests in pointer mode to fail.
-              -- l4 <- go "followRedirects" followRedirects l4
               l4 <- go "rearrangeFree"   rearrangeFree   l4
               -- l4 <- go "inlineTrivL4"    (pure . L4.inlineTrivL4) l4
               pure l4
