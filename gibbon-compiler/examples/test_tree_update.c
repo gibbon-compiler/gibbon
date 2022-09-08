@@ -379,6 +379,7 @@ GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
                                      GibInt n_68_247_391)
 {
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    printf("start of loop:\n");
     _print_SearchTree(end_r_878, tr_67_246_390);
     printf("\n");
 #endif
@@ -409,7 +410,7 @@ GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
 
         if (fltIf_334_396) {
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-            printf("Inserting...\n");
+            printf("going to insert(1):\n");
             _print_SearchTree(NULL, tr_67_246_390);
             printf("\n");
 #endif
@@ -434,7 +435,7 @@ GibCursorGibCursorGibCursorProd loop(GibCursor end_r_878, GibCursor end_r_879,
                                  SearchTree_T);
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-            printf("going to insert\n");
+            printf("going to insert(2):\n");
             _print_SearchTree(NULL, tr_67_246_390);
             printf("\n");
 #endif
@@ -604,14 +605,15 @@ GibCursorGibIntProd sum_tree(GibCursor end_r_881, GibCursor tr_70_249_402)
         }
     }
 }
-GibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_884,
-                                            GibCursor end_r_885,
-                                            GibCursor loc_883,
-                                            GibCursor tr_75_254_410,
+GibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_884, // end input
+                                            GibCursor end_r_885, // end output
+                                            GibCursor loc_883,   // output
+                                            GibCursor tr_75_254_410, // input
                                             GibInt n_76_255_411)
 {
-
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
+    printf("start of delete:\n");
+    printf("end_r_884=%p, tr_75_254_410=%p, diff=%ld\n", end_r_884, tr_75_254_410, end_r_884-tr_75_254_410);
     _print_SearchTree(NULL, tr_75_254_410);
     printf("\n");
     fflush(stdout);
@@ -771,6 +773,10 @@ GibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_884,
 
                     GibCursor writetag_1623 = loc_883 + 1;
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
+                    printf("about to write an indirection:\n");
+                    printf("end_r_884=%p, tmpcur_2417=%p, diff=%ld\n", end_r_884, tmpcur_2417, end_r_884-tmpcur_2417);
+#endif
                     gib_indirection_barrier(loc_1022, end_r_885, tmpcur_2417,
                                             end_r_884, SearchTree_T);
 
@@ -786,6 +792,7 @@ GibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_884,
                     GibCursor pvrtmp_2436 = tmp_struct_25.field2;
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
+                    printf("in the middle of delete:\n");
                     _print_SearchTree(NULL, pvrtmp_2435);
                     printf("\n");
 #endif
@@ -858,9 +865,11 @@ GibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_884,
             uintptr_t tagged_tmpcur_28 = *(uintptr_t *) tmpcur_2399;
             GibCursor tmpcur_2458 = GIB_UNTAG(tagged_tmpcur_28);
             GibCursor tmpaftercur_2459 = tmpcur_2399 + 8;
-            GibCursor jump_1384 = tmpcur_2399 + 8;
+            // GibCursor jump_1384 = tmpcur_2399 + 8;
+            uint16_t tag = GIB_GET_TAG(tagged_tmpcur_28);
+            GibCursor new_end_r_884 = tmpcur_2458 + tag;
             GibCursorGibCursorGibCursorProd tmp_struct_27 =
-                                             tree_delete(end_r_884, end_r_885, loc_883, tmpcur_2458, n_76_255_411);
+                                             tree_delete(new_end_r_884, end_r_885, loc_883, tmpcur_2458, n_76_255_411);
             GibCursor pvrtmp_2460 = tmp_struct_27.field0;
             GibCursor pvrtmp_2461 = tmp_struct_27.field1;
             GibCursor pvrtmp_2462 = tmp_struct_27.field2;
@@ -875,8 +884,10 @@ GibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_884,
             uintptr_t tagged_tmpcur_30 = *(uintptr_t *) tmpcur_2399;
             GibCursor tmpcur_2469 = GIB_UNTAG(tagged_tmpcur_30);
             GibCursor tmpaftercur_2470 = tmpcur_2399 + 8;
+            uint16_t tag = GIB_GET_TAG(tagged_tmpcur_30);
+            GibCursor new_end_r_884 = tmpcur_2469 + tag;
             GibCursorGibCursorGibCursorProd tmp_struct_29 =
-                                             tree_delete(end_r_884, end_r_885, loc_883, tmpcur_2469, n_76_255_411);
+                                             tree_delete(new_end_r_884, end_r_885, loc_883, tmpcur_2469, n_76_255_411);
             GibCursor pvrtmp_2471 = tmp_struct_29.field0;
             GibCursor pvrtmp_2472 = tmp_struct_29.field1;
             GibCursor pvrtmp_2473 = tmp_struct_29.field2;

@@ -424,8 +424,9 @@ enum EvacAction {
     // The datatype to process along with an optional shortcut pointer address
     // that needs to be updated to point to the new destination of this type.
     ProcessTy(C_GibDatatype, Option<*mut i8>),
-    RestoreSrc(*mut i8),
     // A reified continuation of processing the target of an indirection.
+    RestoreSrc(*mut i8),
+    // Update the skip-over environment.
     SkipOverEnvWrite(*mut i8),
 }
 
@@ -433,7 +434,22 @@ enum EvacAction {
 
 [2022.09.06] Two main todos:
 
-(1) See "special case added while fixing tree_update".
+(1)
+
+[2022.07.08] special case added while fixing tree_update.
+
+Suppose there is an indirection pointer pointing to a an address ABC within the
+nursery. However, the address ABC contains a redirection pointer. Under the usual
+policy the GC will inline this indirection, which is BAD. Redirections stop
+evacuation; they always point to an oldgen chunk and there's never any data
+after them. But inlining a redirection breaks these assumptions. Since the GC
+can very well write data after the inlined redirection. The following code
+prevents this inlining. Instead, it'll make the GC write an indirection pointer
+pointing to the target of the redirection.
+
+[2022.09.06]: TODO: We need a more general-purpose solution for this. *Any*
+value being inlined could have a redirection pointer in it and we need to handle
+it properly.
 
 (2) At present, the end-of-input-region pointers never change in a function which
     is processing a packed value. This was fine in the old version since all
@@ -485,6 +501,7 @@ unsafe fn evacuate_packed(
     let mut src = orig_src;
     let mut dst = orig_dst;
     let mut dst_end = orig_dst_end;
+    let mut inlining_underway = false;
     // The implicit -1th element of the worklist:
     let mut next_action = EvacAction::ProcessTy(orig_typ, None);
     let mut forwarded = false;
@@ -503,7 +520,7 @@ unsafe fn evacuate_packed(
         match next_action {
             EvacAction::RestoreSrc(new_src) => {
                 src = new_src;
-
+                inlining_underway = false;
                 // TODO: make this reusable somehow (local macro?)
                 if let Some(next) = worklist.pop() {
                     next_action = next;
@@ -532,7 +549,7 @@ unsafe fn evacuate_packed(
                     // Indirections into oldgen are not inlined in the current version.
                     // See Note [Smart inlining policies].
                     C_INDIRECTION_TAG => {
-                        let (mut tagged_pointee, src_after_indr): (u64, _) =
+                        let (tagged_pointee, src_after_indr): (u64, _) =
                             read(src_after_tag);
 
                         #[cfg(feature = "verbose_evac")]
@@ -544,9 +561,8 @@ unsafe fn evacuate_packed(
                         );
 
                         let src_after_indr1 = src_after_indr as *mut i8;
-                        let mut tagged =
-                            TaggedPointer::from_u64(tagged_pointee);
-                        let mut pointee = tagged.untag();
+                        let tagged = TaggedPointer::from_u64(tagged_pointee);
+                        let pointee = tagged.untag();
 
                         // Add a forwarding pointer in the source buffer.
                         debug_assert!(dst < dst_end);
@@ -557,45 +573,6 @@ unsafe fn evacuate_packed(
                             dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                         );
                         forwarded = true;
-
-                        // [2022.07.08] special case added while fixing tree_update.
-                        //
-                        // Suppose there is an indirection pointer pointing to a
-                        // an address ABC within the nursery. However, the address
-                        // ABC contains a redirection pointer.
-                        // Under the usual policy the GC will inline this indirection,
-                        // which is BAD. Redirections stop evacuation; they always
-                        // point to an oldgen chunk and there's never any data after them.
-                        // But inlining a redirection breaks these assumptions.
-                        // Since the GC can very well write data after the inlined
-                        // redirection. The following code prevents this inlining.
-                        // Instead, it'll make the GC write an indirection pointer
-                        // pointing to the target of the redirection.
-                        //
-                        //
-                        // [2022.09.06]: TODO: We need a more general-purpose
-                        // solution for this. *Any* value being inlined could have
-                        // a redirection pointer in it and we need to handle
-                        // it properly.
-                        let (pointee_tag, after_pointee): (
-                            C_GibPackedTag,
-                            *const i8,
-                        ) = read(pointee);
-                        if pointee_tag == C_REDIRECTION_TAG {
-                            let (tagged_redirect, _): (u64, _) =
-                                read(after_pointee);
-
-                            #[cfg(feature = "verbose_evac")]
-                            {
-                                eprintln!("   Found an indirection pointing to a redirection, {:?} -> {:?} ({:?})",
-                                          src, pointee, tagged_redirect);
-                            }
-
-                            tagged_pointee = tagged_redirect;
-                            tagged = TaggedPointer::from_u64(tagged_redirect);
-                            pointee = tagged.untag();
-                        }
-                        // end of special case code.
 
                         // If the pointee is in the nursery, evacuate it.
                         // Otherwise, write an indirection node at dst and adjust the
@@ -613,6 +590,8 @@ unsafe fn evacuate_packed(
                                 #[cfg(feature = "verbose_evac")]
                                 eprintln!("   tail optimization!");
                             }
+
+                            inlining_underway = true;
                             src = pointee;
 
                             // Update the burned environment if we're evacuating a root
@@ -824,21 +803,29 @@ unsafe fn evacuate_packed(
                         );
                         forwarded = true;
 
-                        // If the next chunk is in the nursery, continue evacuating it.
+                        // If the next chunk is in the nursery, continue evacuation there.
                         // Otherwise, write a redireciton node at dst (pointing to
                         // the start of the oldgen chunk), link the footers and reconcile
                         // the two RegionInfo objects.
+                        //
+                        // [2022.09.08]:
+                        // TODO: instead of copying objects from oldgen when
+                        // inlining is underway, we could write indirections to
+                        // point to those values. we would need to:
+                        // (1) figure out how many values need to be copied, and
+                        // (2) use dummy traversals to find their start addresses.
+                        //
                         if st.evac_major
                             || st.nursery.contains_addr(next_chunk)
+                            || inlining_underway
                         {
                             src = next_chunk;
-                            // TODO: make this reusable somehow (local macro?)
-                            if let Some(next) = worklist.pop() {
-                                next_action = next;
-                                continue;
-                            } else {
-                                break;
-                            }
+                            // Same type, new location to evac from:
+                            next_action = EvacAction::ProcessTy(
+                                next_ty,
+                                mb_shortcut_addr,
+                            );
+                            continue;
                         } else {
                             // A pretenured object whose next chunk is in the old_gen.
                             // We reconcile the two footers.
