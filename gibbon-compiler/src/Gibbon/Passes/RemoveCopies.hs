@@ -98,6 +98,7 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
     -- Straightforward recursion
     VarE{}     -> return ex
     LitE{}     -> return ex
+    CharE{}    -> return ex
     FloatE{}   -> return ex
     LitSymE{}  -> return ex
     AppE{}     -> return ex

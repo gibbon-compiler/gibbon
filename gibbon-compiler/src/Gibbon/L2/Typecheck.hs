@@ -132,6 +132,8 @@ tcExp ddfs env funs constrs regs tstatein exp =
 
       LitE _i -> return (IntTy, tstatein)
 
+      CharE _i -> return (CharTy, tstatein)
+
       FloatE _i -> return (FloatTy, tstatein)
 
       LitSymE _v -> return (SymTy, tstatein)
@@ -594,6 +596,11 @@ tcExp ddfs env funs constrs regs tstatein exp =
                  PrintInt -> do
                    len1
                    _ <- ensureEqualTy (es !!! 0) IntTy (tys !!! 0)
+                   pure (ProdTy [], tstate)
+
+                 PrintChar -> do
+                   len1
+                   _ <- ensureEqualTy (es !!! 0) CharTy (tys !!! 0)
                    pure (ProdTy [], tstate)
 
                  PrintFloat -> do

@@ -43,6 +43,7 @@ inlineTrivExp = go
                      Just e  -> e
       Ext ext   -> Ext $ gInlineTrivExt env ext
       LitE{}    -> e0
+      CharE{}   -> e0
       FloatE{}  -> e0
       LitSymE{} -> e0
 

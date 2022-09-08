@@ -69,6 +69,7 @@ freshTy :: TyVarEnv Ty0 -> Ty0 -> PassM (TyVarEnv Ty0, Ty0)
 freshTy env ty =
   case ty of
      IntTy    -> pure (env, ty)
+     CharTy   -> pure (env, ty)
      FloatTy  -> pure (env, ty)
      SymTy0   -> pure (env, ty)
      BoolTy   -> pure (env, ty)
@@ -111,6 +112,7 @@ freshDictTy :: Monad m => M.Map Var Var -> Ty0 -> m Ty0
 freshDictTy m ty =
     case ty of
      IntTy    -> pure ty
+     CharTy   -> pure ty
      FloatTy  -> pure ty
      SymTy0   -> pure ty
      BoolTy   -> pure ty
@@ -159,6 +161,7 @@ freshExp :: VarEnv -> TyVarEnv Ty0 -> Exp0 -> PassM Exp0
 freshExp venv tvenv exp =
   case exp of
     LitE i    -> return $ LitE i
+    CharE c   -> return $ CharE c
     FloatE i  -> return $ FloatE i
     LitSymE v -> return $ LitSymE v
 
@@ -321,6 +324,7 @@ freshExp1 :: VarEnv -> L1.Exp1 -> PassM L1.Exp1
 freshExp1 vs exp =
   case exp of
     LitE i    -> return $ LitE i
+    CharE c   -> return $ CharE c
     FloatE i  -> return $ FloatE i
     LitSymE v -> return $ LitSymE v
 

@@ -193,6 +193,7 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
     -- Straightforward recursion
     VarE{}     -> pure ex
     LitE{}     -> pure ex
+    CharE{}    -> pure ex
     FloatE{}   -> pure ex
     LitSymE{}  -> pure ex
     PrimAppE{} -> pure ex
@@ -294,6 +295,7 @@ substLocInExp mp ex1 =
   case ex1 of
     VarE{}    -> ex1
     LitE{}    -> ex1
+    CharE{}   -> ex1
     FloatE{}  -> ex1
     LitSymE{} -> ex1
     AppE f locs args -> AppE f (map (\l -> sub l) locs) $ map go args

@@ -375,6 +375,7 @@ codegenTriv venv (ProdTriv ls) =
 codegenTriv venv (ProjTriv i trv) =
   let field = "field" ++ show i
   in [cexp| $(codegenTriv venv trv).$id:field |]
+codegenTriv _ _ = error $ "codegenTriv: " ++ show (venv, triv)
 
 -- Type environment
 type FEnv = M.Map Var ([Ty], Ty)

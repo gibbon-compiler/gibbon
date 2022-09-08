@@ -419,6 +419,7 @@ instance Typeable (PreExp E2Ext LocVar (UrTy LocVar)) where
     case ex of
       VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) v (vEnv env2)
       LitE _       -> IntTy
+      CharE{}      -> CharTy
       FloatE{}     -> FloatTy
       LitSymE _    -> SymTy
       AppE v locs _ -> let fnty  = fEnv env2 # v
@@ -588,6 +589,7 @@ revertExp ex =
   case ex of
     VarE v    -> VarE v
     LitE n    -> LitE n
+    CharE c   -> CharE c
     FloatE n  -> FloatE n
     LitSymE v -> LitSymE v
     AppE v _ args   -> AppE v [] (L.map revertExp args)
@@ -639,6 +641,7 @@ occurs w ex =
   case ex of
     VarE v -> v `S.member` w
     LitE{}    -> False
+    CharE{}   -> False
     FloatE{}  -> False
     LitSymE{} -> False
     AppE _ _ ls   -> any go ls
@@ -684,6 +687,7 @@ mapPacked :: (Var -> l -> UrTy l) -> UrTy l -> UrTy l
 mapPacked fn t =
   case t of
     IntTy  -> IntTy
+    CharTy -> CharTy
     FloatTy-> FloatTy
     BoolTy -> BoolTy
     SymTy  -> SymTy
@@ -704,6 +708,7 @@ constPacked :: UrTy a1 -> UrTy a2 -> UrTy a1
 constPacked c t =
   case t of
     IntTy  -> IntTy
+    CharTy -> CharTy
     FloatTy-> FloatTy
     BoolTy -> BoolTy
     SymTy  -> SymTy
@@ -733,6 +738,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
         case ex of
           VarE v    -> M.insertWith (++) v [v] acc
           LitE{}    -> acc
+          CharE{}   -> acc
           FloatE{}  -> acc
           LitSymE{} -> acc
           AppE _ _ args   -> foldl go acc args
@@ -812,6 +818,7 @@ changeAppToSpawn v args2 ex1 =
   case ex1 of
     VarE{}    -> ex1
     LitE{}    -> ex1
+    CharE{}   -> ex1
     FloatE{}  -> ex1
     LitSymE{} -> ex1
     AppE f locs args | v == f && args == args2 -> SpawnE f locs $ map go args

@@ -101,6 +101,7 @@ bindReturns ex =
   case ex of
     VarE v -> pure (VarE v)
     LitE{} -> handleScalarRet ex id
+    CharE{} -> handleScalarRet ex id
     FloatE{} -> handleScalarRet ex id
     LitSymE{} -> handleScalarRet ex id
     AppE{} -> pure ex
@@ -165,6 +166,7 @@ handleScalarRet bod fn = do
         pure $ fn e1
   case bod of
     LitE n -> bind_and_recur (LitE n) IntTy
+    CharE n -> bind_and_recur (CharE n) CharTy
     FloatE n -> bind_and_recur (FloatE n) FloatTy
     LitSymE n -> bind_and_recur (LitSymE n) SymTy
     PrimAppE MkTrue [] -> bind_and_recur (PrimAppE MkTrue []) BoolTy
@@ -176,6 +178,7 @@ isScalar :: Exp2 -> Bool
 isScalar e1 =
   case e1 of
     LitE{} -> True
+    CharE{} -> True
     FloatE{} -> True
     LitSymE{} -> True
     PrimAppE MkTrue [] -> True
@@ -450,6 +453,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                  exp fns retlocs eor (M.insert v' loc lenv) afterenv (extendVEnv v' ty env2) (e')
 
           LitE i -> return (LitE i)
+          CharE i -> return (CharE i)
           FloatE i -> return (FloatE i)
 
           LitSymE v -> return $ LitSymE v

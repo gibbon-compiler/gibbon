@@ -225,6 +225,7 @@ cursorizeTy :: UrTy a -> UrTy b
 cursorizeTy ty =
   case ty of
     IntTy     -> IntTy
+    CharTy    -> CharTy
     FloatTy   -> FloatTy
     SymTy     -> SymTy
     BoolTy    -> BoolTy
@@ -269,6 +270,7 @@ updateAvailVars froms tos ex =
   case ex of
     VarE v          -> VarE v
     LitE _          -> ex
+    CharE _         -> ex
     FloatE{}        -> ex
     LitSymE _       -> ex
     AppE v loc ls   -> AppE v loc (map go ls)

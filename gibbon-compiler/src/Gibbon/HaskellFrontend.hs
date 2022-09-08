@@ -225,7 +225,7 @@ desugarModule _ _ _ _ m = error $ "desugarModule: " ++ prettyPrint m
 
 stdlibModules :: [String]
 stdlibModules = ["Gibbon.Prim", "Gibbon.Prelude", "Gibbon.Vector", "Gibbon.Vector.Parallel",
-                 "Gibbon.List", "Gibbon.PList"]
+                 "Gibbon.List", "Gibbon.PList", "Gibbon.ByteString"]
 
 processImport :: Config -> IORef ParseState -> [String] -> FilePath -> ImportDecl a -> IO (PassM Prog0)
 processImport cfg pstate_ref import_route dir decl@ImportDecl{..}
@@ -279,6 +279,7 @@ stdlibImportPath mod_name = do
     modNameToFilename "Gibbon.Vector.Parallel" = "Gibbon" </> "Vector" </> "Parallel.hs"
     modNameToFilename "Gibbon.List" = "Gibbon" </> "List.hs"
     modNameToFilename "Gibbon.PList" = "Gibbon" </> "PList.hs"
+    modNameToFilename "Gibbon.ByteString" = "Gibbon" </> "ByteString.hs"
     modNameToFilename oth = error $ "Unknown module: " ++ oth
 
 modImportPath :: ModuleName a -> String -> IO FilePath
@@ -345,6 +346,7 @@ desugarType type_syns ty =
     TyTuple _ Boxed tys   -> ProdTy (map (desugarType type_syns) tys)
     TyCon _ (Special _ (UnitCon _))     -> ProdTy []
     TyCon _ (UnQual _ (Ident _ "Int"))  -> IntTy
+    TyCon _ (UnQual _ (Ident _ "Char")) -> CharTy
     TyCon _ (UnQual _ (Ident _ "Float"))-> FloatTy
     TyCon _ (UnQual _ (Ident _ "Bool")) -> BoolTy
     TyCon _ (UnQual _ (Ident _ "Sym"))  -> SymTy0
@@ -998,6 +1000,17 @@ desugarLiteral lit =
   case lit of
     (Int _ i _)  -> pure $ LitE (fromIntegral i)
     (Frac _ i _) -> pure $ FloatE (fromRational i)
+    (String _ str _) -> do
+      vec <- gensym (toVar "vec")
+      let n = length str
+          init_vec = LetE (vec,[],VectorTy CharTy, PrimAppE (VAllocP CharTy) [LitE n])
+          fn i c b = LetE ("_",[],VectorTy CharTy,
+                           PrimAppE (InplaceVUpdateP CharTy) [VarE vec, LitE i, CharE c])
+                     b
+          add_chars = foldr (\(i,chr) acc -> fn i chr acc) (VarE vec)
+                        (reverse $ zip [0..n-1] str)
+      pure $ init_vec add_chars
+
     _ -> error ("desugarLiteral: Only integer litrals are allowed: " ++ prettyPrint lit)
 
 
@@ -1176,6 +1189,7 @@ fixupSpawn ex =
     -- Straightforward recursion ...
     VarE{}     -> ex
     LitE{}     -> ex
+    CharE{}    -> ex
     FloatE{}   -> ex
     LitSymE{}  -> ex
     AppE fn tyapps args -> AppE fn tyapps (map go args)
@@ -1220,6 +1234,7 @@ verifyBenchEAssumptions bench_allowed ex =
     -- Straightforward recursion ...
     VarE{}     -> ex
     LitE{}     -> ex
+    CharE{}    -> ex
     FloatE{}   -> ex
     LitSymE{}  -> ex
     AppE fn tyapps args -> AppE fn tyapps (map not_allowed args)
@@ -1277,6 +1292,7 @@ desugarLinearExts (Prog ddefs fundefs main) = do
       case ex of
         VarE{}    -> pure ex
         LitE{}    -> pure ex
+        CharE{}   -> pure ex
         FloatE{}  -> pure ex
         LitSymE{} -> pure ex
         AppE f tyapps args -> do args' <- mapM go args

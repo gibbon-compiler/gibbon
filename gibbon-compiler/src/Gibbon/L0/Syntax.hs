@@ -237,6 +237,7 @@ newTyVar = BoundTv <$> genLetter
 
 data Ty0
  = IntTy
+ | CharTy
  | FloatTy
  | SymTy0
  | BoolTy
@@ -271,6 +272,7 @@ instance Renamable Ty0 where
   gRename env ty =
     case ty of
       IntTy  -> IntTy
+      CharTy -> CharTy
       FloatTy-> FloatTy
       SymTy0 -> SymTy0
       BoolTy -> BoolTy
@@ -351,6 +353,7 @@ tyVarsInTys tys = foldr (go []) [] tys
     go bound ty acc =
       case ty of
         IntTy  -> acc
+        CharTy -> acc
         FloatTy-> acc
         SymTy0 -> acc
         BoolTy -> acc
@@ -385,6 +388,7 @@ metaTvsInTys tys = foldr go [] tys
                      then acc
                      else tv : acc
         IntTy   -> acc
+        CharTy  -> acc
         FloatTy -> acc
         SymTy0  -> acc
         BoolTy  -> acc
@@ -419,6 +423,7 @@ arrowTysInTy = go []
     go acc ty =
       case ty of
         IntTy    -> acc
+        CharTy   -> acc
         FloatTy  -> acc
         SymTy0   -> acc
         BoolTy   -> acc
@@ -442,6 +447,7 @@ substTyVar :: M.Map TyVar Ty0 -> Ty0 -> Ty0
 substTyVar mp ty =
   case ty of
     IntTy    -> ty
+    CharTy   -> ty
     FloatTy  -> ty
     SymTy0   -> ty
     BoolTy   -> ty
@@ -463,6 +469,7 @@ substTyVar mp ty =
 
 isScalarTy0 :: Ty0 -> Bool
 isScalarTy0 IntTy  = True
+isScalarTy0 CharTy = True
 isScalarTy0 SymTy0 = True
 isScalarTy0 BoolTy = True
 isScalarTy0 FloatTy= True
@@ -495,6 +502,7 @@ recoverType ddfs env2 ex =
   case ex of
     VarE v       -> M.findWithDefault (error $ "recoverType: Unbound variable " ++ show v) v (vEnv env2)
     LitE _       -> IntTy
+    CharE _      -> CharTy
     FloatE{}     -> FloatTy
     LitSymE _    -> IntTy
     AppE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
@@ -626,6 +634,7 @@ recoverType ddfs env2 ex =
         WritePackedFile{} -> ProdTy []
         ReadArrayFile _ ty      -> ty
         PrintInt     -> ProdTy []
+        PrintChar    -> ProdTy []
         PrintFloat   -> ProdTy []
         PrintBool    -> ProdTy []
         PrintSym     -> ProdTy []

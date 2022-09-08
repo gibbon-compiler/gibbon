@@ -84,6 +84,7 @@ inferExp ddfs fenv env dps expr =
                 Nothing -> error $ "Unknown var: " ++ sdoc v
 
     LitE _    -> (S.empty, Nothing)
+    CharE _   -> (S.empty, Nothing)
     FloatE{}  -> (S.empty, Nothing)
     LitSymE _ -> (S.empty, Nothing)
 

@@ -103,6 +103,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
       else pure (sbst, ty, VarE x)
 
     LitE{}    -> pure (sbst, IntTy, ex)
+    CharE{}   -> pure (sbst, CharTy, ex)
     FloatE{}  -> pure (sbst, FloatTy, ex)
     LitSymE{} -> pure (sbst, SymTy0, ex)
 
@@ -246,6 +247,11 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
         PrintInt -> do
           len1
           s2 <- unify (args !! 0) IntTy (arg_tys' !! 0)
+          pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
+
+        PrintChar -> do
+          len1
+          s2 <- unify (args !! 0) CharTy (arg_tys' !! 0)
           pure (s1 <> s2, ProdTy [], PrimAppE pr args_tc)
 
         PrintFloat -> do
@@ -842,7 +848,7 @@ combine v1 v2 | v1 == v2 = v1
                 (ArrowTy xs y, ArrowTy xs' y') -> ArrowTy (zipWith combine xs xs') (combine y y')
                 (VectorTy v1', VectorTy v2') -> VectorTy $ combine v1' v2'
                 (ProdTy v1s, ProdTy v2s) -> ProdTy (zipWith combine v1s v2s)
-                (PackedTy a1 v1s, PackedTy a2 v2s) -> 
+                (PackedTy a1 v1s, PackedTy a2 v2s) ->
                   if a1 == a2 then PackedTy a1 (zipWith combine v1s v2s)
                   else error $ "PackedTy doesn't match "++ sdoc a1 ++ " with v2 = " ++ sdoc a2
                 _ -> error $ "Failed to combine v1 = " ++ sdoc v1 ++ " with v2 = " ++ sdoc v2
@@ -856,6 +862,7 @@ zonkTy :: Subst -> Ty0 -> Ty0
 zonkTy s@(Subst mp) ty =
   case ty of
     IntTy   -> ty
+    CharTy  -> ty
     FloatTy -> ty
     SymTy0  -> ty
     BoolTy  -> ty
@@ -890,6 +897,7 @@ zonkExp s ex =
   case ex of
     VarE{}    -> ex
     LitE{}    -> ex
+    CharE{}   -> ex
     FloatE{}  -> ex
     LitSymE{} -> ex
     AppE f tyapps args -> let tyapps1 = map (zonkTy s) tyapps
@@ -984,6 +992,7 @@ substTyVarExp s ex =
   case ex of
     VarE{}    -> ex
     LitE{}    -> ex
+    CharE{}   -> ex
     FloatE{}  -> ex
     LitSymE{} -> ex
     AppE f tyapps arg -> let tyapps1 = map (substTyVar s) tyapps
@@ -1074,6 +1083,7 @@ tyVarToMetaTy = go M.empty
     go env ty =
      case ty of
        IntTy    -> pure (env, ty)
+       CharTy   -> pure (env, ty)
        FloatTy  -> pure (env, ty)
        SymTy0   -> pure (env, ty)
        BoolTy   -> pure (env, ty)

@@ -277,6 +277,7 @@ instance (Pretty l) => Pretty (UrTy l) where
     pprintWithStyle sty ty =
         case ty of
           IntTy  -> text "Int"
+          CharTy -> text "Char"
           FloatTy-> text "Float"
           SymTy  -> text "Sym"
           BoolTy -> text "Bool"
@@ -335,6 +336,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
         case ex0 of
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
+          CharE i -> char i
           FloatE i  -> double i
           LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
           AppE v locs ls -> parens $
@@ -488,6 +490,7 @@ instance Pretty L0.Ty0 where
   pprintWithStyle sty ty =
       case ty of
         L0.IntTy      -> text "Int"
+        L0.CharTy     -> text "Char"
         L0.FloatTy    -> text "Float"
         L0.SymTy0     -> text "Sym"
         L0.BoolTy     -> text "Bool"
@@ -581,6 +584,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
         -- Straightforward recursion ...
         VarE{}     -> False
         LitE{}     -> False
+        CharE{}    -> False
         FloatE{}   -> False
         LitSymE{}  -> False
         AppE{}     -> False
@@ -616,6 +620,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
       case ex0 of
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
+          CharE i -> char i
           FloatE i -> double i
           LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
           AppE v _locs ls -> pprintWithStyle sty v <+>

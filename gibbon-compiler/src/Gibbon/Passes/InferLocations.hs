@@ -601,6 +601,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
     SyncE -> pure (SyncE, ProdTy [], [])
 
     LitE n  -> return (LitE n, IntTy, [])
+    CharE n -> return (CharE n, IntTy, [])
     FloatE n-> return (FloatE n, FloatTy, [])
 
     LitSymE s -> return (LitSymE s, SymTy, [])
@@ -891,6 +892,12 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           fcs <- tryInRegion cs''
           tryBindReg (L2.LetE (vr,[],IntTy,L2.LitE i) bod'', ty'', fcs)
 
+        CharE i -> do
+          (bod',ty',cs') <- inferExp (extendVEnv vr CharTy env) bod dest
+          (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
+          fcs <- tryInRegion cs''
+          tryBindReg (L2.LetE (vr,[],CharTy,L2.CharE i) bod'', ty'', fcs)
+
         FloatE i -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr FloatTy env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
@@ -1102,6 +1109,7 @@ finishExp e =
     case e of
       VarE v -> return $ VarE v
       LitE i -> return $ LitE i
+      CharE i -> return $ CharE i
       FloatE i  -> return $ FloatE i
       LitSymE v -> return $ LitSymE v
       AppE v ls es -> do
@@ -1210,6 +1218,7 @@ cleanExp e =
     case e of
       VarE v -> (VarE v, S.empty)
       LitE v -> (LitE v, S.empty)
+      CharE v -> (CharE v, S.empty)
       FloatE v -> (FloatE v, S.empty)
       LitSymE v -> (LitSymE v, S.empty)
       AppE v ls e -> let (e',s') = unzip $ map cleanExp e
@@ -1305,6 +1314,7 @@ fixProj renam pvar proj e =
                   Nothing -> VarE v
                   Just v' -> VarE v'
       LitE v -> LitE v
+      CharE v -> CharE v
       FloatE v -> FloatE v
       LitSymE v -> LitSymE v
       AppE v ls es -> let es' = map (fixProj renam pvar proj) es
@@ -1352,6 +1362,7 @@ moveProjsAfterSync sv ex = go [] (S.singleton sv) ex
       case ex of
         VarE{}    -> ex
         LitE{}    -> ex
+        CharE{}    -> ex
         FloatE{}  -> ex
         LitSymE{} -> ex
         AppE v locs ls   -> ex
@@ -1625,6 +1636,7 @@ prim p = case p of
            SizeParam -> return SizeParam
            IsBig    -> return IsBig
            PrintInt -> return PrintInt
+           PrintChar -> return PrintChar
            PrintFloat -> return PrintFloat
            PrintBool -> return PrintBool
            PrintSym -> return PrintSym

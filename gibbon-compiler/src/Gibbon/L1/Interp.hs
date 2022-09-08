@@ -77,6 +77,7 @@ interp rc valenv ddefs fenv = go valenv
               gInterpExt rc env ddefs fenv ext
 
           LitE c    -> return $ VInt c
+          CharE c   -> return $ VChar c
           FloatE c  -> return $ VFloat c
           LitSymE s -> return $ VSym (fromVar s)
           VarE v    -> do
@@ -125,11 +126,14 @@ interp rc valenv ddefs fenv = go valenv
                    _ -> error$ "L1.Interp: type error, expected data constructor, got: "++ndoc v++
                                "\nWhen evaluating scrutinee of case expression: "++ndoc x1
 
-
           LetE (v,_,_ty,rhs) bod -> do
             rhs' <- go env rhs
             let env' = M.insert v rhs' env
-            go env' bod
+                env'' = case rhs of
+                          (PrimAppE (InplaceVUpdateP _) [VarE x,_,_]) ->
+                            M.insert x rhs' env'
+                          _ -> env'
+            go env'' bod
 
           MkProdE ls -> VProd <$> mapM (go env) ls
           -- TODO: Should check this against the ddefs.

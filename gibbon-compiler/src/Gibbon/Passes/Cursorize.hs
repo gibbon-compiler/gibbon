@@ -145,6 +145,7 @@ cursorizeFunDef ddefs fundefs FunDef{funName,funTy,funArgs,funBody,funRec,funInl
     cursorizeInTy ty =
       case ty of
         IntTy     -> IntTy
+        CharTy    -> CharTy
         FloatTy   -> FloatTy
         SymTy     -> SymTy
         BoolTy    -> BoolTy
@@ -234,6 +235,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
   case ex of
     VarE v    -> return $ VarE v
     LitE n    -> return $ LitE n
+    CharE c   -> return $ CharE c
     FloatE n  -> return $ FloatE n
     LitSymE n -> return $ LitSymE n
 
@@ -381,6 +383,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
       else return $ dl $ VarE v
 
     LitE _n    -> error $ "Shouldn't encounter LitE in packed context:" ++ sdoc ex
+    CharE _n   -> error $ "Shouldn't encounter CharE in packed context:" ++ sdoc ex
     FloatE{}   -> error $ "Shouldn't encounter FloatE in packed context:" ++ sdoc ex
     LitSymE _n -> error $ "Shouldn't encounter LitSymE in packed context:" ++ sdoc ex
 

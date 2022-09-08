@@ -45,6 +45,7 @@ shakeTreeExp = go
 
     (VarE v)           -> VarE v
     (LitE i)           -> LitE i
+    (CharE i)           -> CharE i
     (FloatE i)         -> FloatE i
     (LitSymE v)        -> LitSymE v
     (AppE f locs es)   -> AppE f locs $ map go es
@@ -89,6 +90,7 @@ hasEffect rhs =
     case rhs of
       VarE _ -> False
       LitE _ -> False
+      CharE _ -> False
       FloatE{}  -> False
       LitSymE _ -> False
 

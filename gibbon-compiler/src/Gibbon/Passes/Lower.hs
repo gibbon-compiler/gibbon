@@ -237,6 +237,7 @@ printTy :: Bool -> Ty3 -> [T.Triv] -> (T.Tail -> T.Tail)
 printTy pkd ty trvs =
   case (ty, trvs) of
     (IntTy, [_one])             -> T.LetPrimCallT [] T.PrintInt trvs
+    (CharTy, [_one])            -> T.LetPrimCallT [] T.PrintChar trvs
     (FloatTy, [_one])           -> T.LetPrimCallT [] T.PrintFloat trvs
     (SymTy, [_one])             -> T.LetPrimCallT [] T.PrintSym trvs
     (SymDictTy _ ty', [_one])     -> sandwich (printTy pkd ty' trvs) "Dict"
@@ -427,6 +428,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
         case ex of
           VarE{}    -> syms
           LitE{}    -> syms
+          CharE{}   -> syms
           FloatE{}  -> syms
           LitSymE v -> S.insert (fromVar v) syms
           AppE _ _ args   -> gol args
@@ -960,6 +962,7 @@ triv sym_tbl msg ( e0) =
   case e0 of
     (VarE x) -> T.VarTriv x
     (LitE x) -> T.IntTriv (fromIntegral x)      -- TODO: back propogate Int64 to L1
+    (CharE c) -> T.CharTriv c
     (FloatE x)  -> T.FloatTriv x -- TODO: back propogate Int64 to L1
     (LitSymE v) -> let s = fromVar v in
                    case M.lookup s sym_tbl of
@@ -983,6 +986,7 @@ typ :: UrTy () -> T.Ty
 typ t =
   case t of
     IntTy  -> T.IntTy
+    CharTy -> T.CharTy
     FloatTy-> T.FloatTy
     SymTy  -> T.SymTy
     BoolTy -> T.BoolTy
@@ -1042,6 +1046,7 @@ prim p =
     SizeParam -> T.SizeParam
     IsBig    -> T.IsBig
     PrintInt -> T.PrintInt
+    PrintChar -> T.PrintChar
     PrintFloat -> T.PrintFloat
     PrintBool -> T.PrintBool
     PrintSym -> T.PrintSym

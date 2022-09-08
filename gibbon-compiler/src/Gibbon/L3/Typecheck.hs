@@ -162,6 +162,7 @@ tcExp isPacked ddfs env exp =
 
     VarE v    -> lookupVar env v exp
     LitE _    -> return IntTy
+    CharE _   -> return CharTy
     FloatE{}  -> return FloatTy
     LitSymE _ -> return SymTy
 
@@ -327,6 +328,11 @@ tcExp isPacked ddfs env exp =
         PrintInt -> do
           len1
           _ <- ensureEqualTy (es !! 0) IntTy (tys !! 0)
+          return (ProdTy [])
+
+        PrintChar -> do
+          len1
+          _ <- ensureEqualTy (es !! 0) CharTy (tys !! 0)
           return (ProdTy [])
 
         PrintFloat -> do

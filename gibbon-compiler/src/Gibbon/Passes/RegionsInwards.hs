@@ -160,6 +160,7 @@ placeRegionInwards env scopeSet ex  =
      -- Straightforward recursion ...
     VarE{}                 -> return ex        -- Just return Nothing special here
     LitE{}                 -> return ex        -- Just return Nothing special here
+    CharE{}                -> return ex
     FloatE{}               -> return ex        -- Just return Nothing special here
     LitSymE{}              -> return ex        -- Just return Nothing special here
     AppE f locVars ls      -> do
@@ -205,7 +206,7 @@ placeRegionInwards env scopeSet ex  =
                                      b' <- placeRegionInwards env scopeSet b       -- Recurse on b (Then part)
                                      c' <- placeRegionInwards env scopeSet c       -- Recurse on c (Else part)
                                      let (_, a') = dischargeBinds' newEnv' commonVars a
-                                     return $ IfE a' b' c'                             -- Return the new IfE expression {-dbgTraceIt (sdoc (commonVars, keyList, env, newEnv'))-} 
+                                     return $ IfE a' b' c'                             -- Return the new IfE expression {-dbgTraceIt (sdoc (commonVars, keyList, env, newEnv'))-}
 
     MkProdE ls                    -> MkProdE <$> mapM go ls                            {- Recurse over all expression in the tuple in the expression ls -}
 
@@ -286,7 +287,7 @@ bindDelayedBind delayed body =
 
 
 -- A function for use specific to this pass which gives all the possible variables and local variables that are used in a particular expression
--- This pass was made speciic because other version in gibbon don't return location variables, this version also adds location variables to the 
+-- This pass was made speciic because other version in gibbon don't return location variables, this version also adds location variables to the
 -- returned set
 
 freeVars :: Exp2 -> S.Set Var
