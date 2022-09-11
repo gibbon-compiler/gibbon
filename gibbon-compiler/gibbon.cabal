@@ -54,6 +54,8 @@ library
                        Gibbon.L4.Syntax
                        Gibbon.L4.Interp
 
+                       Gibbon.NewL2.Syntax
+
                        -- compiler passes, roughly in the order they're run
                        Gibbon.Passes.Freshen
                        Gibbon.Passes.Flatten
