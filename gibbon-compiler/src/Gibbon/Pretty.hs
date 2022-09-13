@@ -336,7 +336,7 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
         case ex0 of
           VarE v -> pprintWithStyle sty v
           LitE i -> int i
-          CharE i -> char i
+          CharE i -> quotes (char i)
           FloatE i  -> double i
           LitSymE v -> text "\"" <> pprintWithStyle sty v <> text "\""
           AppE v locs ls -> parens $

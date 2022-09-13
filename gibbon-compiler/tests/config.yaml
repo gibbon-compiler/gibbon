@@ -149,10 +149,6 @@ tests:
     answer-file: examples/void_type.ans
   - name: T64_1.gib
   - name: test_addtrees.gib
-  - name: test_strings.gib
-    # interp outputs 'h' versus the expected h (without quotes)
-    failing: [interp1]
-    answer-file: examples/TestStrings.hs.ans
   - name: TestStrings.hs
     # interp outputs 'h' versus the expected h (without quotes)
     failing: [interp1]

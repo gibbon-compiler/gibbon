@@ -601,7 +601,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
     SyncE -> pure (SyncE, ProdTy [], [])
 
     LitE n  -> return (LitE n, IntTy, [])
-    CharE n -> return (CharE n, IntTy, [])
+    CharE n -> return (CharE n, CharTy, [])
     FloatE n-> return (FloatE n, FloatTy, [])
 
     LitSymE s -> return (LitSymE s, SymTy, [])

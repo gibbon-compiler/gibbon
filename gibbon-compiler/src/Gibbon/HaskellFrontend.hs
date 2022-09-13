@@ -999,6 +999,7 @@ desugarLiteral :: Literal a -> PassM Exp0
 desugarLiteral lit =
   case lit of
     (Int _ i _)  -> pure $ LitE (fromIntegral i)
+    (Char _ chr _) -> pure $ CharE chr
     (Frac _ i _) -> pure $ FloatE (fromRational i)
     (String _ str _) -> do
       vec <- gensym (toVar "vec")
