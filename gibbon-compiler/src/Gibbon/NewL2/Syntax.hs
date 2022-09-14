@@ -1,9 +1,5 @@
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-
-{-# LANGUAGE DeriveAnyClass #-}
 
 {-# OPTIONS_GHC -fno-warn-name-shadowing #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
@@ -14,21 +10,21 @@
 module Gibbon.NewL2.Syntax
     (
     -- * Extended language L2 with location types.
-      E2Ext(..)
-    , Prog2, DDefs2, DDef2, FunDef2, FunDefs2, Exp2, Ty2
-    , Effect(..), ArrowTy2(..) , LocRet(..), LocExp, PreLocExp(..)
+      Old.E2Ext(..)
+    , Prog2, DDefs2, DDef2, FunDef2, FunDefs2, Exp2, Ty2(..)
+    , Old.Effect(..), Old.ArrowTy2(..) , Old.LocRet(..), LocArg(..), LocExp, Old.PreLocExp(..)
 
     -- * Regions and locations
-    , LocVar, Region(..), Modality(..), LRM(..), dummyLRM
-    , Multiplicity(..), RegionSize(..), RegionType(..), regionToVar
+    , LocVar, Old.Region(..), Old.Modality(..), Old.LRM(..), Old.dummyLRM
+    , Old.Multiplicity(..), Old.RegionSize(..), Old.RegionType(..), Old.regionToVar
 
     -- * Operations on types
-    , allLocVars, inLocVars, outLocVars, outRegVars, inRegVars, allRegVars, substLoc
-    , substLocs, substEff, substEffs, extendPatternMatchEnv
-    , locsInTy, dummyTyLocs, allFreeVars, freeLocVars
+    , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
+    , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv
+    , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
 
     -- * Other helpers
-    , revertToL1, occurs, mapPacked, constPacked, depList, changeAppToSpawn
+    , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
 
     , module Gibbon.Language
     )
@@ -43,8 +39,10 @@ import           Text.PrettyPrint.GenericPretty
 
 import           Gibbon.Common
 import           Gibbon.Language
-import           Text.PrettyPrint.HughesPJ
+-- import           Text.PrettyPrint.HughesPJ
 import           Gibbon.L1.Syntax hiding (AddFixed)
+
+import qualified Gibbon.L2.Syntax as Old
 
 --------------------------------------------------------------------------------
 
@@ -56,407 +54,75 @@ type FunDefs2 = FunDefs Exp2
 
 -- | Function types know about locations and traversal effects.
 instance FunctionTy Ty2 where
-  type ArrowTy Ty2 = ArrowTy2
-  inTys = arrIns
-  outTy = arrOut
+  type ArrowTy Ty2 = Old.ArrowTy2 Ty2
+  inTys = Old.arrIns
+  outTy = Old.arrOut
 
 -- | Extended expressions, L2.
 --
 --   By adding a `LocVar` decoration, all data constructors,
 --   applications, and bindings gain a location annotation.
-type Exp2 = PreExp E2Ext LocArg Ty2
+type Exp2   = PreExp Old.E2Ext LocArg Ty2
+type LocExp = Old.PreLocExp LocArg
 
--- type Ty2 = UrTy LocVar
 -- We need a newtype here to avoid overlapping type family instance for FunctionTy
-
 -- | L1 Types extended with abstract Locations.
 newtype Ty2 = MkTy2 { unTy2 :: (UrTy LocVar) }
-  deriving (Read, Show, Eq, Ord, Generic, NFData)
+  deriving (Read, Show, Eq, Ord, Generic)
 
 instance Out Ty2
+instance NFData Ty2
 
 --------------------------------------------------------------------------------
 
-data RegionSize = BoundedSize Int | Undefined
-  deriving (Eq, Read, Show, Generic, NFData, Out)
+data LocArg = Loc Old.LRM
+            | EndWitness Old.LRM Var
+            | Reg Var Old.Modality
+            | EndOfReg Var Old.Modality Var
+  deriving (Read, Show, Eq, Ord, Generic)
 
-data RegionType = IndirectionFree | RightwardLocalIndirections | LocalIndirections | NoSharing
-  deriving (Eq, Ord, Read, Show, Generic, NFData, Out)
-
-
--- | 'Undefined' is at the top of this lattice.
-instance Ord RegionSize where
-  (<=) (BoundedSize sz1) (BoundedSize sz2) = sz1 <= sz2
-  (<=) Undefined         (BoundedSize{})   = False
-  (<=) (BoundedSize{})   Undefined         = True
-  (<=) Undefined         Undefined         = True
-
-instance Semigroup RegionType where
-  -- IndirectionFree < RightwardLocalIndirections < LocalIndirections < NoSharing
-  (<>) IndirectionFree            v                          = v
-  (<>) v                          IndirectionFree            = v
-  (<>) RightwardLocalIndirections v                          = v
-  (<>) v                          RightwardLocalIndirections = v
-  (<>) LocalIndirections          v                          = v
-  (<>) v                          LocalIndirections          = v
-  (<>) NoSharing                  v                          = v
-
-instance Semigroup RegionSize where
-  (<>) (BoundedSize sz1) (BoundedSize sz2) = BoundedSize (sz1 + sz2)
-  (<>) Undefined _         = Undefined
-  (<>) _         Undefined = Undefined
-
-instance Monoid RegionSize where
-  mempty = BoundedSize 0
-
-
--- | The extension that turns L1 into L2.
-data E2Ext loc dec
-  = LetRegionE    Region RegionSize (Maybe RegionType) (PreExp E2Ext loc dec) -- ^ Allocate a new region.
-  | LetParRegionE Region RegionSize (Maybe RegionType) (PreExp E2Ext loc dec) -- ^ Allocate a new region for parallel allocations.
-  | LetLocE LocVar (PreLocExp loc) (PreExp E2Ext loc dec) -- ^ Bind a new location.
-  | RetE [loc] Var          -- ^ Return a value together with extra loc values.
-  | FromEndE loc            -- ^ Bind a location from an EndOf location (for RouteEnds and after).
-  | BoundsCheck Int -- Bytes required
-                loc -- Region
-                loc -- Write cursor
-  | AddFixed Var Int
-  | IndirectionE TyCon     -- Type of the data pointed to by this indirection.
-                 DataCon   -- Constructor for an indirection in this type.
-                 (loc,Var) -- Pointer.
-                 (loc,Var) -- Pointee (the thing that the pointer points to).
-                 (PreExp E2Ext loc dec)
-                              -- If this indirection was added to get rid
-                              -- of a copy_Foo call, we keep the fn call
-                              -- around in case we want to go back to it.
-                              -- E.g. when reverting from L2 to L1.
-    -- ^ A indirection node.
-  | GetCilkWorkerNum
-    -- ^ Translates to  __cilkrts_get_worker_number().
-  | LetAvail [Var] (PreExp E2Ext loc dec) -- ^ These variables are available to use before the join point.
-  | AllocateTagHere LocVar TyCon
-  | AllocateScalarsHere LocVar
-    -- ^ A marker which tells subsequent a compiler pass where to
-    -- move the tag and scalar field allocations so that they happen
-    -- before any of the subsequent packed fields.
-  | SSPush SSModality LocVar LocVar TyCon
-  | SSPop SSModality LocVar LocVar
-    -- ^ Spill and restore from the shadow-stack.
-  deriving (Show, Ord, Eq, Read, Generic, NFData)
-
--- | Define a location in terms of a different location.
-data PreLocExp loc = StartOfLE Region
-                   | AfterConstantLE Int  -- Number of bytes after.
-                                     loc  -- Location which this location is offset from.
-                   | AfterVariableLE Var  -- Name of variable v. This loc is size(v) bytes after.
-                                     loc  -- Location which this location is offset from.
-                                     Bool -- Whether it's running in a stolen continuation i.e
-                                          -- whether this should return an index in a fresh region or not.
-                                          -- It's True by default and flipped by ParAlloc if required.
-                   | InRegionLE Region
-                   | FreeLE
-                   | FromEndLE  loc
-  deriving (Read, Show, Eq, Ord, Generic, NFData)
-
-type LocExp = PreLocExp LocArg
-
--- | Locations (end-witnesses) returned from functions after RouteEnds.
-data LocRet = EndOf LRM
-              deriving (Read, Show, Eq, Ord, Generic, NFData)
-
-data LocArg = Loc LRM
-  deriving (Read, Show, Eq, Ord, Generic, NFData)
+instance Out LocArg
+instance NFData LocArg
 
 toLocVar :: LocArg -> LocVar
 toLocVar arg =
   case arg of
-    Loc lrm -> lrmLoc lrm
+    Loc lrm        -> Old.lrmLoc lrm
+    EndWitness _ v -> v
+    Reg v _        -> v
+    EndOfReg _ _ v -> v
 
-instance Out LocArg
-
--- | Our type for functions grows to include effects, and explicit universal
--- quantification over location/region variables.
-data ArrowTy2 = ArrowTy2
-    { locVars :: [LRM]          -- ^ Universally-quantified location params.
-                                -- Only these should be referenced in arrIn/arrOut.
-    , arrIns  :: [Ty2]          -- ^ Input type for the function.
-    , arrEffs :: (S.Set Effect) -- ^ These are present-but-empty initially,
-                                -- and the populated by InferEffects.
-    , arrOut  :: Ty2            -- ^ Output type for the function.
-    , locRets :: [LocRet]       -- ^ L2B feature: multi-valued returns.
-    , hasParallelism :: Bool        -- ^ Does this function have parallelism
-    }
-  deriving (Read,Show,Eq,Ord, Generic, NFData)
-
--- | The side-effect of evaluating a function.
-data Effect = Traverse LocVar
-              -- ^ The function, during its execution, traverses all
-              -- of the value living at this location.
-  deriving (Read,Show,Eq,Ord, Generic, NFData)
-
-
--- See https://github.com/iu-parfunc/gibbon/issues/79 for more details
--- | Region variants (multiplicities)
-data Multiplicity
-    = Bounded Int -- ^ Contain a finite number of values and can be
-                  --   stack-allocated.
-
-    | Infinite    -- ^ Consist of a linked list of buffers, spread
-                  --   throughout memory (though possible constrained
-                  --   to 4GB regions). Writing into these regions requires
-                  --   bounds-checking. The buffers can start very small
-                  --   at the head of the list, but probably grow
-                  --   geometrically in size, making the cost of traversing
-                  --   all of them logarithmic.
-
-    | BigInfinite -- ^ These regions are infinite, but also have the
-                  --   expectation of containing many values. Thus we give
-                  --   them large initial page sizes. This is also could be
-                  --   the appropriate place to use mmap to grow the region
-                  --   and to establish guard places.
-  deriving (Read,Show,Eq,Ord,Generic)
-
-instance Out Multiplicity where
-  doc = text . show
-
-instance NFData Multiplicity where
-  rnf _ = ()
-
--- | An abstract region identifier.  This is used inside type signatures and elsewhere.
-data Region = GlobR Var Multiplicity -- ^ A global region with lifetime equal to the
-                                     --   whole program.
-            | DynR Var Multiplicity  -- ^ A dynamic region that may be created or
-                                     --   destroyed, tagged by an identifier.
-            | VarR Var               -- ^ A region metavariable that can range over
-                                     --   either global or dynamic regions.
-            | MMapR Var              -- ^ A region that doesn't result in an (explicit)
-                                     --   memory allocation. It merely ensures that there
-                                     --   are no free locations in the program.
-  deriving (Read,Show,Eq,Ord, Generic)
-
-instance Out Region
-
-instance NFData Region where
-  rnf (GlobR v _) = rnf v
-  rnf (DynR v _)  = rnf v
-  rnf (VarR v)    = rnf v
-  rnf (MMapR v)   = rnf v
-
-
--- | The modality of locations and cursors: input/output, for reading
--- and writing, respectively.
-data Modality = Input | Output
-  deriving (Read,Show,Eq,Ord, Generic)
-
-instance Out Modality
-
-instance NFData Modality where
-  rnf Input  = ()
-  rnf Output = ()
-
--- | A location and region, together with modality.
-data LRM = LRM { lrmLoc :: LocVar
-               , lrmReg :: Region
-               , lrmMode :: Modality }
-  deriving (Read,Show,Eq,Ord, Generic)
-
-instance Out LRM
-
-instance NFData LRM where
-  rnf (LRM a b c)  = rnf a `seq` rnf b `seq` rnf c
-
--- | A designated doesn't-really-exist-anywhere location.
-dummyLRM :: LRM
-dummyLRM = LRM "l_dummy" (VarR "r_dummy") Input
-
-regionToVar :: Region -> Var
-regionToVar r = case r of
-                  GlobR v _ -> v
-                  DynR  v _ -> v
-                  VarR  v   -> v
-                  MMapR v   -> v
+instance Out (Old.ArrowTy2 Ty2)
 
 --------------------------------------------------------------------------------
-
-instance FreeVars (E2Ext l d) where
-  gFreeVars e =
-    case e of
-     LetRegionE _ _ _ bod   -> gFreeVars bod
-     LetParRegionE _ _ _ bod   -> gFreeVars bod
-     LetLocE _ rhs bod  -> (case rhs of
-                              AfterVariableLE v _loc _ -> S.singleton v
-                              _ -> S.empty)
-                           `S.union`
-                           gFreeVars bod
-     RetE _ vr          -> S.singleton vr
-     FromEndE _         -> S.empty
-     AddFixed vr _      -> S.singleton vr
-     BoundsCheck{}      -> S.empty
-     IndirectionE _ _ (_,a) (_,b) e -> S.fromList [a,b] `S.union` gFreeVars e
-     GetCilkWorkerNum   -> S.empty
-     LetAvail vs bod    -> S.fromList vs `S.union` gFreeVars bod
-     AllocateTagHere{}  -> S.empty
-     AllocateScalarsHere{}  -> S.empty
-     SSPush{} -> S.empty
-     SSPop{} -> S.empty
-
 
 instance FreeVars LocExp where
   gFreeVars e =
     case e of
-      AfterConstantLE _ loc   -> S.singleton (toLocVar loc)
-      AfterVariableLE v loc _ -> S.fromList [v,toLocVar loc]
+      Old.AfterConstantLE _ loc   -> S.singleton (toLocVar loc)
+      Old.AfterVariableLE v loc _ -> S.fromList [v,toLocVar loc]
       _ -> S.empty
 
-instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
-  type LocOf (E2Ext l d) = l
-  type TyOf (E2Ext l d)  = d
-  isTrivial e =
-    case e of
-      LetRegionE{} -> False
-      LetParRegionE{} -> False
-      LetLocE{}    -> False
-      RetE{}       -> False -- Umm... this one could be potentially.
-      FromEndE{}   -> True
-      AddFixed{}     -> True
-      BoundsCheck{}  -> False
-      IndirectionE{} -> False
-      GetCilkWorkerNum-> False
-      LetAvail{}      -> False
-      AllocateTagHere{} -> False
-      AllocateScalarsHere{} -> False
-      SSPush{} -> False
-      SSPop{} -> False
 
-instance -- (Typeable (PreExp E2Ext LocArg (UrTy LocVar)))
-    Typeable (E2Ext LocArg Ty2) where
+instance Typeable (Old.E2Ext LocArg Ty2) where
   gRecoverType ddfs env2 ex =
     case ex of
-      LetRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
-      LetParRegionE _r _ _ bod -> gRecoverType ddfs env2 bod
-      LetLocE _l _rhs bod -> gRecoverType ddfs env2 bod
-      RetE _loc var       -> case M.lookup var (vEnv env2) of
-                               Just ty -> ty
-                               Nothing -> error $ "gRecoverType: unbound variable " ++ sdoc var
-      FromEndE _loc       -> error "Shouldn't enconter FromEndE in tail position"
-      BoundsCheck{}       -> error "Shouldn't enconter BoundsCheck in tail position"
-      IndirectionE tycon _ _ (to,_) _ -> MkTy2 $ PackedTy tycon (toLocVar to)
-      AddFixed{}          -> error "Shouldn't enconter AddFixed in tail position"
-      GetCilkWorkerNum    -> MkTy2 $ IntTy
-      LetAvail _ bod      -> gRecoverType ddfs env2 bod
-      AllocateTagHere{}   -> MkTy2 $ ProdTy []
-      AllocateScalarsHere{} -> MkTy2 $ProdTy []
-      SSPush{}              -> MkTy2 $ ProdTy []
-      SSPop{}               -> MkTy2 $ ProdTy []
-
-
-instance (Typeable (E2Ext l (UrTy l)),
-          Expression (E2Ext l (UrTy l)),
-          Flattenable (PreExp E2Ext l (UrTy l)))
-      => Flattenable (E2Ext l (UrTy l)) where
-
-  gFlattenGatherBinds ddfs env ex =
-      case ex of
-          LetRegionE r sz ty bod -> do
-                                (bnds,bod') <- go bod
-                                return ([], LetRegionE r sz ty (flatLets bnds bod'))
-
-          LetParRegionE r sz ty bod -> do
-                                (bnds,bod') <- go bod
-                                return ([], LetParRegionE r sz ty (flatLets bnds bod'))
-
-          LetLocE l rhs bod -> do (bnds,bod') <- go bod
-                                  return ([], LetLocE l rhs $ flatLets bnds bod')
-
-          RetE{}        -> return ([],ex)
-          FromEndE{}    -> return ([],ex)
-          AddFixed{}    -> return ([],ex)
-          BoundsCheck{} -> return ([],ex)
-          IndirectionE{}-> return ([],ex)
-          GetCilkWorkerNum-> return ([],ex)
-          LetAvail vs bod -> do (bnds,bod') <- go bod
-                                return ([], LetAvail vs $ flatLets bnds bod')
-          AllocateTagHere{} -> return ([],ex)
-          AllocateScalarsHere{} -> return ([],ex)
-          SSPush{} -> return ([],ex)
-          SSPop{} -> return ([],ex)
-
-    where go = gFlattenGatherBinds ddfs env
-
-  gFlattenExp ddfs env ex = do (_b,e') <- gFlattenGatherBinds ddfs env ex
-                               return e'
-
-instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2Ext l d) where
-  gInlineTrivExt env ext =
-    case ext of
-      LetRegionE r sz ty bod   -> LetRegionE r sz ty (gInlineTrivExp env bod)
-      LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gInlineTrivExp env bod)
-      LetLocE loc le bod -> LetLocE loc le (gInlineTrivExp env bod)
-      RetE{}         -> ext
-      FromEndE{}     -> ext
-      BoundsCheck{}  -> ext
-      IndirectionE{} -> ext
-      AddFixed{}     -> ext
-      GetCilkWorkerNum-> ext
-      LetAvail vs bod -> LetAvail vs (gInlineTrivExp env bod)
-      AllocateTagHere{} -> ext
-      AllocateScalarsHere{} -> ext
-      SSPush{} -> ext
-      SSPop{} -> ext
-
-
-instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E2Ext l d) where
-  gSubstExt old new ext =
-    case ext of
-      LetRegionE r sz ty bod -> LetRegionE r sz ty (gSubst old new bod)
-      LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gSubst old new bod)
-      LetLocE l le bod -> LetLocE l le (gSubst old new bod)
-      RetE{}           -> ext
-      FromEndE{}       -> ext
-      BoundsCheck{}    -> ext
-      IndirectionE{}   -> ext
-      AddFixed{}       -> ext
-      GetCilkWorkerNum -> ext
-      LetAvail vs bod  -> LetAvail vs (gSubst old new bod)
-      AllocateTagHere{} -> ext
-      AllocateScalarsHere{} -> ext
-      SSPush{} -> ext
-      SSPop{} -> ext
-
-  gSubstEExt old new ext =
-    case ext of
-      LetRegionE r sz ty bod -> LetRegionE r sz ty (gSubstE old new bod)
-      LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gSubstE old new bod)
-      LetLocE l le bod -> LetLocE l le (gSubstE old new bod)
-      RetE{}           -> ext
-      FromEndE{}       -> ext
-      BoundsCheck{}    -> ext
-      IndirectionE{}   -> ext
-      AddFixed{}       -> ext
-      GetCilkWorkerNum -> ext
-      LetAvail vs bod  -> LetAvail vs (gSubstE old new bod)
-      AllocateTagHere{} -> ext
-      AllocateScalarsHere{} -> ext
-      SSPush{} -> ext
-      SSPop{} -> ext
-
-instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
-  gRename env ext =
-    case ext of
-      LetRegionE r sz ty bod -> LetRegionE r sz ty (gRename env bod)
-      LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gRename env bod)
-      LetLocE l le bod -> LetLocE l le (gRename env bod)
-      RetE{}           -> ext
-      FromEndE{}       -> ext
-      BoundsCheck{}    -> ext
-      IndirectionE{}   -> ext
-      AddFixed{}       -> ext
-      GetCilkWorkerNum -> ext
-      LetAvail vs bod  -> LetAvail vs (gRename env bod)
-      AllocateTagHere{} -> ext
-      AllocateScalarsHere{} -> ext
-      SSPush{} -> ext
-      SSPop{} -> ext
+      Old.LetRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
+      Old.LetParRegionE _r _ _ bod -> gRecoverType ddfs env2 bod
+      Old.LetLocE _l _rhs bod -> gRecoverType ddfs env2 bod
+      Old.RetE _loc var       -> case M.lookup var (vEnv env2) of
+                                   Just ty -> ty
+                                   Nothing -> error $ "gRecoverType: unbound variable " ++ sdoc var
+      Old.FromEndE _loc       -> error "Shouldn't enconter FromEndE in tail position"
+      Old.BoundsCheck{}       -> error "Shouldn't enconter BoundsCheck in tail position"
+      Old.IndirectionE tycon _ _ (to,_) _ -> MkTy2 $ PackedTy tycon (toLocVar to)
+      Old.AddFixed{}          -> error "Shouldn't enconter AddFixed in tail position"
+      Old.GetCilkWorkerNum    -> MkTy2 $ IntTy
+      Old.LetAvail _ bod      -> gRecoverType ddfs env2 bod
+      Old.AllocateTagHere{}   -> MkTy2 $ ProdTy []
+      Old.AllocateScalarsHere{} -> MkTy2 $ProdTy []
+      Old.SSPush{}              -> MkTy2 $ ProdTy []
+      Old.SSPop{}               -> MkTy2 $ ProdTy []
 
 
 -- | The 'gRecoverType' instance defined in Language.Syntax is incorrect for L2.
@@ -472,7 +138,7 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
 -- in this case, we want the type of (add1 tr1) to be (Tree @ loc2)
 -- and NOT (Tree @ b). We have to do something similar for variables bound by
 -- a pattern match.
-instance Typeable (PreExp E2Ext LocArg Ty2) where
+instance Out (Old.E2Ext LocArg Ty2) => Typeable (PreExp Old.E2Ext LocArg Ty2) where
   gRecoverType ddfs env2 ex =
     case ex of
       VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) v (vEnv env2)
@@ -481,8 +147,8 @@ instance Typeable (PreExp E2Ext LocArg Ty2) where
       LitSymE _    -> MkTy2 $ SymTy
       AppE v locargs _ ->
                        let fnty  = fEnv env2 # v
-                           outty = arrOut fnty
-                           mp = M.fromList $ zip (allLocVars fnty) (map toLocVar locargs)
+                           outty = Old.arrOut fnty
+                           mp = M.fromList $ zip (Old.allLocVars fnty) (map toLocVar locargs)
                        in substLoc mp outty
 
       PrimAppE (DictInsertP ty) ((VarE v):_) -> MkTy2 $ SymDictTy (Just v) $ stripTyLocs (unTy2 ty)
@@ -505,8 +171,8 @@ instance Typeable (PreExp E2Ext LocArg Ty2) where
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
       SpawnE v locargs _ ->
                          let fnty  = fEnv env2 # v
-                             outty = arrOut fnty
-                             mp = M.fromList $ zip (allLocVars fnty) (map toLocVar locargs)
+                             outty = Old.arrOut fnty
+                             mp = M.fromList $ zip (Old.allLocVars fnty) (map toLocVar locargs)
                          in substLoc mp outty
       SyncE -> MkTy2 $ voidTy
       WithArenaE _v e -> gRecoverType ddfs env2 e
@@ -518,43 +184,8 @@ instance Typeable (PreExp E2Ext LocArg Ty2) where
             env2' = extendPatternMatchEnv c ddfs vars locs env2
         in gRecoverType ddfs env2' e
 
---------------------------------------------------------------------------------
--- Do this manually to get prettier formatting: (Issue #90)
-
-instance Out ArrowTy2
-instance Out Effect
-instance Out a => Out (S.Set a) where
-  docPrec n x = docPrec n (S.toList x)
-  doc x = doc (S.toList x)
-instance (Out l, Out d) => Out (E2Ext l d)
-instance Out l => Out (PreLocExp l)
-instance Out LocRet
-
 -------------------------------------------------------------------------------
-
--- | Retrieve all LocVars from a fn type (Arrow)
-allLocVars :: ArrowTy2 -> [LocVar]
-allLocVars ty = L.map (\(LRM l _ _) -> l) (locVars ty)
-
-
-inLocVars :: ArrowTy2 -> [LocVar]
-inLocVars ty = L.map (\(LRM l _ _) -> l) $
-               L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
-
-outLocVars :: ArrowTy2 -> [LocVar]
-outLocVars ty = L.map (\(LRM l _ _) -> l) $
-                L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
-
-outRegVars :: ArrowTy2 -> [LocVar]
-outRegVars ty = L.map (\(LRM _ r _) -> regionToVar r) $
-                L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
-
-inRegVars :: ArrowTy2 -> [LocVar]
-inRegVars ty = L.nub $ L.map (\(LRM _ r _) -> regionToVar r) $
-               L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
-
-allRegVars :: ArrowTy2 -> [LocVar]
-allRegVars ty = L.nub $ L.map (\(LRM _ r _) -> regionToVar r) (locVars ty)
+-- Need to redefine the following because of the Ty2 newtype:
 
 -- | Apply a location substitution to a type.
 substLoc :: M.Map LocVar LocVar -> Ty2 -> Ty2
@@ -594,21 +225,6 @@ extendPatternMatchEnv dcon ddefs vars locs env2 =
                (fragileZip locs tys)
   in extendsVEnv (M.fromList $ fragileZip vars tys') env2
 
--- | Apply a substitution to an effect.
-substEff :: M.Map LocVar LocVar -> Effect -> Effect
-substEff mp (Traverse v) =
-    case M.lookup v mp of
-      Just v2 -> Traverse v2
-      Nothing -> Traverse v
-
--- | Apply a substitution to an effect set.
-substEffs :: M.Map LocVar LocVar -> S.Set Effect -> S.Set Effect
-substEffs mp effs =
-    S.map (\ef -> substEff mp ef) effs
-
-dummyTyLocs :: Applicative f => UrTy () -> f (UrTy LocVar)
-dummyTyLocs ty = traverse (const (pure (toVar "dummy"))) ty
-
 -- | Collect all the locations mentioned in a type.
 locsInTy :: Ty2 -> [LocVar]
 locsInTy ty =
@@ -639,7 +255,7 @@ revertFunDef :: FunDef2 -> FunDef1
 revertFunDef FunDef{funName,funArgs,funTy,funBody,funRec,funInline} =
   FunDef { funName = funName
          , funArgs = funArgs
-         , funTy   = (L.map (stripTyLocs . unTy2) (arrIns funTy), stripTyLocs (unTy2 (arrOut funTy)))
+         , funTy   = (L.map (stripTyLocs . unTy2) (Old.arrIns funTy), stripTyLocs (unTy2 (Old.arrOut funTy)))
          , funBody = revertExp funBody
          , funRec  = funRec
          , funInline = funInline
@@ -654,7 +270,7 @@ revertExp ex =
     LitSymE v -> LitSymE v
     AppE v _ args   -> AppE v [] (L.map revertExp args)
     PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
-    LetE (v,_, ty, (Ext (IndirectionE _ _ _ _ arg))) bod ->
+    LetE (v,_, ty, (Ext (Old.IndirectionE _ _ _ _ arg))) bod ->
       let PackedTy tycon _ =  unTy2 ty in
           LetE (v,[],(stripTyLocs (unTy2 ty)), AppE (mkCopyFunName tycon) [] [revertExp arg]) (revertExp bod)
     LetE (v,_,ty,rhs) bod ->
@@ -670,20 +286,20 @@ revertExp ex =
     WithArenaE v e -> WithArenaE v (revertExp e)
     Ext ext ->
       case ext of
-        LetRegionE _ _ _ bod -> revertExp bod
-        LetParRegionE _ _ _ bod -> revertExp bod
-        LetLocE _ _ bod  -> revertExp bod
-        RetE _ v -> VarE v
-        AddFixed{} -> error "revertExp: TODO AddFixed."
-        FromEndE{} -> error "revertExp: TODO FromEndLE"
-        BoundsCheck{}   -> error "revertExp: TODO BoundsCheck"
-        IndirectionE{}  -> error "revertExp: TODO IndirectionE"
-        GetCilkWorkerNum-> LitE 0
-        LetAvail _ bod  -> revertExp bod
-        AllocateTagHere{} -> error "revertExp: TODO AddFixed."
-        AllocateScalarsHere{} -> error "revertExp: TODO AddFixed."
-        SSPush{} -> error "revertExp: TODO SSPush."
-        SSPop{} -> error "revertExp: TODO SSPop."
+        Old.LetRegionE _ _ _ bod -> revertExp bod
+        Old.LetParRegionE _ _ _ bod -> revertExp bod
+        Old.LetLocE _ _ bod  -> revertExp bod
+        Old.RetE _ v -> VarE v
+        Old.AddFixed{} -> error "revertExp: TODO AddFixed."
+        Old.FromEndE{} -> error "revertExp: TODO FromEndLE"
+        Old.BoundsCheck{}   -> error "revertExp: TODO BoundsCheck"
+        Old.IndirectionE{}  -> error "revertExp: TODO IndirectionE"
+        Old.GetCilkWorkerNum-> LitE 0
+        Old.LetAvail _ bod  -> revertExp bod
+        Old.AllocateTagHere{} -> error "revertExp: TODO AddFixed."
+        Old.AllocateScalarsHere{} -> error "revertExp: TODO AddFixed."
+        Old.SSPush{} -> error "revertExp: TODO SSPush."
+        Old.SSPop{} -> error "revertExp: TODO SSPop."
     MapE{}  -> error $ "revertExp: TODO MapE"
     FoldE{} -> error $ "revertExp: TODO FoldE"
   where
@@ -697,99 +313,6 @@ revertExp ex =
       let (vars,_) = unzip vlocargs
       in (dcon, zip vars (repeat ()), revertExp rhs)
 
-
--- | Does a variable occur in an expression ?
---
--- N.B. it only looks for actual variables, not LocVar's or RegionVar's.
-occurs :: S.Set Var -> Exp2 -> Bool
-occurs w ex =
-  case ex of
-    VarE v -> v `S.member` w
-    LitE{}    -> False
-    FloatE{}  -> False
-    LitSymE{} -> False
-    AppE _ _ ls   -> any go ls
-    PrimAppE _ ls -> any go ls
-    LetE (_,_,_,rhs) bod -> go rhs || go bod
-    IfE a b c   -> go a || go b || go c
-    MkProdE ls  -> any go ls
-    ProjE _ e   -> go e
-    CaseE e brs -> go e || any (\(_,_,bod) -> go bod) brs
-    DataConE _ _ ls  -> any go ls
-    TimeIt e _ _     -> go e
-    SpawnE _ _ ls    -> any go ls
-    SyncE            -> False
-    WithArenaE v rhs -> v `S.member` w || go rhs
-    Ext ext ->
-      case ext of
-        LetRegionE _ _ _ bod  -> go bod
-        LetParRegionE _ _ _ bod  -> go bod
-        LetLocE _ le bod  ->
-          let oc_bod = go bod in
-          case le of
-            AfterVariableLE v _  _ -> v `S.member` w || oc_bod
-            StartOfLE{}         -> oc_bod
-            AfterConstantLE{}   -> oc_bod
-            InRegionLE{}        -> oc_bod
-            FreeLE{}            -> oc_bod
-            FromEndLE{}         -> oc_bod
-        RetE _ v      -> v `S.member` w
-        FromEndE{}    -> False
-        BoundsCheck{} -> False
-        AddFixed v _  -> v `S.member` w
-        IndirectionE _ _ (_,v1) (_,v2) ib ->
-          v1 `S.member` w  || v2 `S.member` w || go ib
-        GetCilkWorkerNum -> False
-        LetAvail _ bod -> go bod
-        AllocateTagHere{} -> False
-        AllocateScalarsHere{} -> False
-        SSPush{} -> False
-        SSPop{} -> False
-    MapE{}  -> error "occurs: TODO MapE"
-    FoldE{} -> error "occurs: TODO FoldE"
-  where
-    go = occurs w
-
-
-mapPacked :: (Var -> l -> UrTy l) -> UrTy l -> UrTy l
-mapPacked fn t =
-  case t of
-    IntTy  -> IntTy
-    FloatTy-> FloatTy
-    BoolTy -> BoolTy
-    SymTy  -> SymTy
-    (ProdTy x)    -> ProdTy $ L.map (mapPacked fn) x
-    (SymDictTy v x) -> SymDictTy v x
-    PDictTy k v -> PDictTy k v
-    PackedTy k l  -> fn (toVar k) l
-    PtrTy    -> PtrTy
-    CursorTy -> CursorTy
-    ArenaTy  -> ArenaTy
-    VectorTy elty -> VectorTy elty
-    ListTy elty   -> ListTy elty
-    SymSetTy -> SymSetTy
-    SymHashTy-> SymHashTy
-    IntHashTy-> IntHashTy
-
-constPacked :: UrTy a1 -> UrTy a2 -> UrTy a1
-constPacked c t =
-  case t of
-    IntTy  -> IntTy
-    FloatTy-> FloatTy
-    BoolTy -> BoolTy
-    SymTy  -> SymTy
-    (ProdTy x)    -> ProdTy $ L.map (constPacked c) x
-    (SymDictTy v _x) -> SymDictTy v $ stripTyLocs c
-    PDictTy k v -> PDictTy (constPacked c k) (constPacked c v)
-    PackedTy _k _l  -> c
-    PtrTy    -> PtrTy
-    CursorTy -> CursorTy
-    ArenaTy  -> ArenaTy
-    VectorTy el_ty -> VectorTy (constPacked c el_ty)
-    ListTy el_ty -> ListTy (constPacked c el_ty)
-    SymSetTy -> SymSetTy
-    SymHashTy-> SymHashTy
-    IntHashTy-> IntHashTy
 
 -- | Build a dependency list which can be later converted to a graph
 depList :: Exp2 -> [(Var, Var, [Var])]
@@ -833,33 +356,33 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
           FoldE{} -> acc
           Ext ext ->
             case ext of
-              LetRegionE r _ _ rhs ->
-                go (M.insertWith (++) (regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
-              LetParRegionE r _ _ rhs ->
-                go (M.insertWith (++) (regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
-              LetLocE loc phs rhs  ->
+              Old.LetRegionE r _ _ rhs ->
+                go (M.insertWith (++) (Old.regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
+              Old.LetParRegionE r _ _ rhs ->
+                go (M.insertWith (++) (Old.regionToVar r) (S.toList $ allFreeVars rhs) acc) rhs
+              Old.LetLocE loc phs rhs  ->
                 go (M.insertWith (++) loc (dep phs ++ (S.toList $ allFreeVars rhs)) acc) rhs
-              RetE{}         -> acc
-              FromEndE{}     -> acc
-              BoundsCheck{}  -> acc
-              IndirectionE{} -> acc
-              AddFixed v _   -> M.insertWith (++) v [v] acc
-              GetCilkWorkerNum -> acc
-              LetAvail _ bod -> go acc bod
-              AllocateTagHere{} -> acc
-              AllocateScalarsHere{} -> acc
-              SSPush{} -> acc
-              SSPop{} -> acc
+              Old.RetE{}         -> acc
+              Old.FromEndE{}     -> acc
+              Old.BoundsCheck{}  -> acc
+              Old.IndirectionE{} -> acc
+              Old.AddFixed v _   -> M.insertWith (++) v [v] acc
+              Old.GetCilkWorkerNum -> acc
+              Old.LetAvail _ bod -> go acc bod
+              Old.AllocateTagHere{} -> acc
+              Old.AllocateScalarsHere{} -> acc
+              Old.SSPush{} -> acc
+              Old.SSPop{} -> acc
 
-      dep :: PreLocExp LocArg -> [Var]
+      dep :: Old.PreLocExp LocArg -> [Var]
       dep ex =
         case ex of
-          StartOfLE r -> [regionToVar r]
-          AfterConstantLE _ loc   -> [toLocVar loc]
-          AfterVariableLE v loc _ -> [v,toLocVar loc]
-          InRegionLE r  -> [regionToVar r]
-          FromEndLE loc -> [toLocVar loc]
-          FreeLE -> []
+          Old.StartOfLE r -> [Old.regionToVar r]
+          Old.AfterConstantLE _ loc   -> [toLocVar loc]
+          Old.AfterVariableLE v loc _ -> [v,toLocVar loc]
+          Old.InRegionLE r  -> [Old.regionToVar r]
+          Old.FromEndLE loc -> [toLocVar loc]
+          Old.FreeLE -> []
 
 -- gFreeVars ++ locations ++ region variables
 allFreeVars :: Exp2 -> S.Set Var
@@ -882,63 +405,21 @@ allFreeVars ex =
     SpawnE _ locs args -> S.fromList (map toLocVar locs) `S.union` (S.unions (map allFreeVars args))
     Ext ext ->
       case ext of
-        LetRegionE r _ _ bod -> S.delete (regionToVar r) (allFreeVars bod)
-        LetParRegionE r _ _ bod -> S.delete (regionToVar r) (allFreeVars bod)
-        LetLocE loc locexp bod -> S.delete loc (allFreeVars bod `S.union` gFreeVars locexp)
-        RetE locs v     -> S.insert v (S.fromList (map toLocVar locs))
-        FromEndE loc    -> S.singleton (toLocVar loc)
-        BoundsCheck _ reg cur -> S.fromList (map toLocVar [reg, cur])
-        IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [toLocVar a, b, toLocVar c, d]
-        AddFixed v _    -> S.singleton v
-        GetCilkWorkerNum-> S.empty
-        LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod
-        AllocateTagHere loc _ -> S.singleton loc
-        AllocateScalarsHere loc -> S.singleton loc
-        SSPush _ a b _ -> S.fromList [a,b]
-        SSPop _ a b -> S.fromList [a,b]
+        Old.LetRegionE r _ _ bod -> S.delete (Old.regionToVar r) (allFreeVars bod)
+        Old.LetParRegionE r _ _ bod -> S.delete (Old.regionToVar r) (allFreeVars bod)
+        Old.LetLocE loc locexp bod -> S.delete loc (allFreeVars bod `S.union` gFreeVars locexp)
+        Old.RetE locs v     -> S.insert v (S.fromList (map toLocVar locs))
+        Old.FromEndE loc    -> S.singleton (toLocVar loc)
+        Old.BoundsCheck _ reg cur -> S.fromList (map toLocVar [reg, cur])
+        Old.IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [toLocVar a, b, toLocVar c, d]
+        Old.AddFixed v _    -> S.singleton v
+        Old.GetCilkWorkerNum-> S.empty
+        Old.LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod
+        Old.AllocateTagHere loc _ -> S.singleton loc
+        Old.AllocateScalarsHere loc -> S.singleton loc
+        Old.SSPush _ a b _ -> S.fromList [a,b]
+        Old.SSPop _ a b -> S.fromList [a,b]
     _ -> gFreeVars ex
 
 freeLocVars :: Exp2 -> [Var]
 freeLocVars ex = S.toList $ (allFreeVars ex) `S.difference` (gFreeVars ex)
-
-changeAppToSpawn :: Var -> [Exp2] -> Exp2 -> Exp2
-changeAppToSpawn v args2 ex1 =
-  case ex1 of
-    VarE{}    -> ex1
-    LitE{}    -> ex1
-    FloatE{}  -> ex1
-    LitSymE{} -> ex1
-    AppE f locs args | v == f && args == args2 -> SpawnE f locs $ map go args
-    AppE f locs args -> AppE f locs $ map go args
-    PrimAppE f args  -> PrimAppE f $ map go args
-    LetE (v,loc,ty,rhs) bod -> LetE (v,loc,ty, go rhs) (go bod)
-    IfE a b c  -> IfE (go a) (go b) (go c)
-    MkProdE xs -> MkProdE $ map go xs
-    ProjE i e  -> ProjE i $ go e
-    DataConE loc dcon args -> DataConE loc dcon $ map go args
-    CaseE scrt mp ->
-      CaseE (go scrt) $ map (\(a,b,c) -> (a,b, go c)) mp
-    TimeIt e ty b  -> TimeIt (go e) ty b
-    WithArenaE v e -> WithArenaE v (go e)
-    SpawnE{} -> ex1
-    SyncE{}  -> ex1
-    Ext ext ->
-      case ext of
-        LetRegionE r sz ty rhs  -> Ext $ LetRegionE r sz ty (go rhs)
-        LetParRegionE r sz ty rhs  -> Ext $ LetParRegionE r sz ty (go rhs)
-        LetLocE l lhs rhs -> Ext $ LetLocE l lhs (go rhs)
-        RetE{}            -> ex1
-        FromEndE{}        -> ex1
-        BoundsCheck{}     -> ex1
-        IndirectionE{}    -> ex1
-        AddFixed{}        -> ex1
-        GetCilkWorkerNum  -> ex1
-        LetAvail vs bod   -> Ext $ LetAvail vs (go bod)
-        AllocateTagHere{} -> ex1
-        AllocateScalarsHere{} -> ex1
-        SSPush{} -> ex1
-        SSPop{} -> ex1
-    MapE{}  -> error "addRANExp: TODO MapE"
-    FoldE{}  -> error "addRANExp: TODO FoldE"
-
-  where go = changeAppToSpawn v args2

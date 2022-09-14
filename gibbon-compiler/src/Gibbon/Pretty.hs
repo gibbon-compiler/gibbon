@@ -307,7 +307,7 @@ instance (Pretty l) => Pretty (UrTy l) where
 instance Pretty ([UrTy ()], UrTy ()) where
     pprintWithStyle sty (as,b) = hsep $ punctuate " ->" $ map (pprintWithStyle sty) (as ++ [b])
 
-instance Pretty ArrowTy2 where
+instance Pretty Ty2 => Pretty (ArrowTy2 Ty2) where
     -- TODO: start metadata at column 0 instead of aligning it with the type
     pprintWithStyle sty fnty =
         case sty of

@@ -56,7 +56,7 @@ type FunDefs2 = FunDefs Exp2
 
 -- | Function types know about locations and traversal effects.
 instance FunctionTy Ty2 where
-  type ArrowTy Ty2 = ArrowTy2
+  type ArrowTy Ty2 = ArrowTy2 Ty2
   inTys = arrIns
   outTy = arrOut
 
@@ -110,7 +110,7 @@ instance Monoid RegionSize where
 data E2Ext loc dec
   = LetRegionE    Region RegionSize (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region.
   | LetParRegionE Region RegionSize (Maybe RegionType) (E2 loc dec) -- ^ Allocate a new region for parallel allocations.
-  | LetLocE    loc    (PreLocExp loc) (E2 loc dec) -- ^ Bind a new location.
+  | LetLocE LocVar (PreLocExp loc) (E2 loc dec) -- ^ Bind a new location.
   | RetE [loc] Var          -- ^ Return a value together with extra loc values.
   | FromEndE loc            -- ^ Bind a location from an EndOf location (for RouteEnds and after).
   | BoundsCheck Int -- Bytes required
@@ -231,10 +231,10 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
       SSPop{} -> ProdTy []
 
 
-instance (Typeable (E2Ext l (UrTy l)),
-          Expression (E2Ext l (UrTy l)),
-          Flattenable (E2 l (UrTy l)))
-      => Flattenable (E2Ext l (UrTy l)) where
+instance (Typeable (E2Ext l d),
+          Expression (E2Ext l d),
+          Flattenable (E2 l d))
+      => Flattenable (E2Ext l d) where
 
   gFlattenGatherBinds ddfs env ex =
       case ex of
@@ -341,13 +341,13 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
 
 -- | Our type for functions grows to include effects, and explicit universal
 -- quantification over location/region variables.
-data ArrowTy2 = ArrowTy2
+data ArrowTy2 ty2 = ArrowTy2
     { locVars :: [LRM]          -- ^ Universally-quantified location params.
                                 -- Only these should be referenced in arrIn/arrOut.
-    , arrIns  :: [Ty2]          -- ^ Input type for the function.
+    , arrIns  :: [ty2]          -- ^ Input type for the function.
     , arrEffs :: (S.Set Effect) -- ^ These are present-but-empty initially,
                                 -- and the populated by InferEffects.
-    , arrOut  :: Ty2            -- ^ Output type for the function.
+    , arrOut  :: ty2            -- ^ Output type for the function.
     , locRets :: [LocRet]       -- ^ L2B feature: multi-valued returns.
     , hasParallelism :: Bool        -- ^ Does this function have parallelism
     }
@@ -499,7 +499,7 @@ instance Typeable (PreExp E2Ext LocVar (UrTy LocVar)) where
 --------------------------------------------------------------------------------
 -- Do this manually to get prettier formatting: (Issue #90)
 
-instance Out ArrowTy2
+instance Out (ArrowTy2 Ty2)
 instance Out Effect
 instance Out a => Out (S.Set a) where
   docPrec n x = docPrec n (S.toList x)
@@ -511,27 +511,27 @@ instance Out LocRet
 -------------------------------------------------------------------------------
 
 -- | Retrieve all LocVars from a fn type (Arrow)
-allLocVars :: ArrowTy2 -> [LocVar]
+allLocVars :: ArrowTy2 ty2 -> [LocVar]
 allLocVars ty = L.map (\(LRM l _ _) -> l) (locVars ty)
 
 
-inLocVars :: ArrowTy2 -> [LocVar]
+inLocVars :: ArrowTy2 ty2 -> [LocVar]
 inLocVars ty = L.map (\(LRM l _ _) -> l) $
                L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
-outLocVars :: ArrowTy2 -> [LocVar]
+outLocVars :: ArrowTy2 ty2 -> [LocVar]
 outLocVars ty = L.map (\(LRM l _ _) -> l) $
                 L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
-outRegVars :: ArrowTy2 -> [LocVar]
+outRegVars :: ArrowTy2 ty2 -> [LocVar]
 outRegVars ty = L.map (\(LRM _ r _) -> regionToVar r) $
                 L.filter (\(LRM _ _ m) -> m == Output) (locVars ty)
 
-inRegVars :: ArrowTy2 -> [LocVar]
+inRegVars :: ArrowTy2 ty2 -> [LocVar]
 inRegVars ty = L.nub $ L.map (\(LRM _ r _) -> regionToVar r) $
                L.filter (\(LRM _ _ m) -> m == Input) (locVars ty)
 
-allRegVars :: ArrowTy2 -> [LocVar]
+allRegVars :: ArrowTy2 ty2 -> [LocVar]
 allRegVars ty = L.nub $ L.map (\(LRM _ r _) -> regionToVar r) (locVars ty)
 
 -- | Apply a location substitution to a type.

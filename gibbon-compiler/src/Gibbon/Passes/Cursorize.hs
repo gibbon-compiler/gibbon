@@ -193,7 +193,7 @@ This is used to create bindings for input location variables.
                                  acc (zip tys [0..])
            _ -> acc
 
-    cursorizeArrowTy :: ArrowTy2 -> ([Ty3] , Ty3)
+    cursorizeArrowTy :: ArrowTy2 Ty2 -> ([Ty3] , Ty3)
     cursorizeArrowTy ty@ArrowTy2{arrIns,arrOut,locVars,locRets} =
       let
           -- Regions corresponding to ouput cursors. (See [Threading regions])

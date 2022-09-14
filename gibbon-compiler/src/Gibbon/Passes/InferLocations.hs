@@ -120,7 +120,7 @@ extendsVEnv env fe@FullEnv{valEnv} = fe { valEnv = valEnv <> env }
 lookupVEnv :: Var -> FullEnv -> Ty2
 lookupVEnv v FullEnv{valEnv} = valEnv # v
 
-lookupFEnv :: Var -> FullEnv -> ArrowTy2
+lookupFEnv :: Var -> FullEnv -> ArrowTy2 Ty2
 lookupFEnv v FullEnv{funEnv} = funEnv # v
 
 -- Types
@@ -130,7 +130,7 @@ lookupFEnv v FullEnv{funEnv} = funEnv # v
 -- If we assume output regions are disjoint from input ones, then we
 -- can instantiate an L1 function type into a polymorphic L2 one,
 -- mechanically.
-convertFunTy :: ([Ty1],Ty1,Bool) -> PassM ArrowTy2
+convertFunTy :: ([Ty1],Ty1,Bool) -> PassM (ArrowTy2 Ty2)
 convertFunTy (from,to,isPar) = do
     from' <- mapM convertTy from
     to'   <- convertTy to

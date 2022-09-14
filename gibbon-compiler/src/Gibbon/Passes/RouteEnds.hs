@@ -500,7 +500,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                mkRet _ e = error $ "Expected variable reference in tail call, got "
                            ++ (show e)
 
-               funtype :: Var -> ArrowTy2
+               funtype :: Var -> ArrowTy2 Ty2
                funtype v = case M.lookup v fns of
                              Nothing -> error $ "Function " ++ (show v) ++ " not found"
                              Just fundef -> funTy fundef

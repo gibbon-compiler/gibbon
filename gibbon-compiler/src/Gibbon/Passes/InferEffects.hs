@@ -19,7 +19,7 @@ import Gibbon.L2.Syntax
 lvl :: Int
 lvl = 5
 
-type FunEnv2 = M.Map Var ArrowTy2
+type FunEnv2 = M.Map Var (ArrowTy2 Ty2)
 
 type Deps = M.Map LocVar LocVar
 
@@ -41,7 +41,7 @@ locsEffect = S.fromList . L.map Traverse
 initialEnv :: FunDefs2 -> FunEnv2
 initialEnv mp = M.map go mp
   where
-    go :: FunDef2 -> ArrowTy2
+    go :: FunDef2 -> (ArrowTy2 Ty2)
     go FunDef{funTy} =
       let locs       = allLocVars funTy
           maxEffects = locsEffect locs
@@ -65,7 +65,7 @@ inferEffects prg@Prog{ddefs,fundefs} = do
          else fixpoint (iter+1) funs funtys
 
 
-inferFunDef :: DDefs Ty2 -> FunEnv2 -> FunDef2 -> ArrowTy2
+inferFunDef :: DDefs Ty2 -> FunEnv2 -> FunDef2 -> ArrowTy2 Ty2
 inferFunDef ddfs fenv FunDef{funArgs,funBody,funTy} = funTy { arrEffs = S.intersection travs eff }
   where
     env0  = M.fromList $ zip funArgs (arrIns funTy)
