@@ -66,8 +66,14 @@ instance FunctionTy Ty2 where
 --   applications, and bindings gain a location annotation.
 type Exp2 = PreExp E2Ext LocArg Ty2
 
+-- type Ty2 = UrTy LocVar
+-- We need a newtype here to avoid overlapping type family instance for FunctionTy
+
 -- | L1 Types extended with abstract Locations.
-type Ty2 = UrTy LocVar
+newtype Ty2 = MkTy2 { unTy2 :: (UrTy LocVar) }
+  deriving (Read, Show, Eq, Ord, Generic, NFData)
+
+instance Out Ty2
 
 --------------------------------------------------------------------------------
 
@@ -323,25 +329,25 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       SSPop{} -> False
 
 instance -- (Typeable (PreExp E2Ext LocArg (UrTy LocVar)))
-    Typeable (E2Ext LocArg (UrTy LocVar)) where
+    Typeable (E2Ext LocArg Ty2) where
   gRecoverType ddfs env2 ex =
     case ex of
-      LetRegionE _r _ _ bod   -> gRecoverType ddfs env2 bod
-      LetParRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
+      LetRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
+      LetParRegionE _r _ _ bod -> gRecoverType ddfs env2 bod
       LetLocE _l _rhs bod -> gRecoverType ddfs env2 bod
       RetE _loc var       -> case M.lookup var (vEnv env2) of
                                Just ty -> ty
                                Nothing -> error $ "gRecoverType: unbound variable " ++ sdoc var
       FromEndE _loc       -> error "Shouldn't enconter FromEndE in tail position"
       BoundsCheck{}       -> error "Shouldn't enconter BoundsCheck in tail position"
-      IndirectionE tycon _ _ (to,_) _ -> PackedTy tycon (toLocVar to)
+      IndirectionE tycon _ _ (to,_) _ -> MkTy2 $ PackedTy tycon (toLocVar to)
       AddFixed{}          -> error "Shouldn't enconter AddFixed in tail position"
-      GetCilkWorkerNum    -> IntTy
-      LetAvail _ bod -> gRecoverType ddfs env2 bod
-      AllocateTagHere{} -> ProdTy []
-      AllocateScalarsHere{} -> ProdTy []
-      SSPush{} -> ProdTy []
-      SSPop{} -> ProdTy []
+      GetCilkWorkerNum    -> MkTy2 $ IntTy
+      LetAvail _ bod      -> gRecoverType ddfs env2 bod
+      AllocateTagHere{}   -> MkTy2 $ ProdTy []
+      AllocateScalarsHere{} -> MkTy2 $ProdTy []
+      SSPush{}              -> MkTy2 $ ProdTy []
+      SSPop{}               -> MkTy2 $ ProdTy []
 
 
 instance (Typeable (E2Ext l (UrTy l)),
@@ -466,34 +472,34 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
 -- in this case, we want the type of (add1 tr1) to be (Tree @ loc2)
 -- and NOT (Tree @ b). We have to do something similar for variables bound by
 -- a pattern match.
-instance Typeable (PreExp E2Ext LocArg (UrTy LocVar)) where
+instance Typeable (PreExp E2Ext LocArg Ty2) where
   gRecoverType ddfs env2 ex =
     case ex of
       VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) v (vEnv env2)
-      LitE _       -> IntTy
-      FloatE{}     -> FloatTy
-      LitSymE _    -> SymTy
+      LitE _       -> MkTy2 $ IntTy
+      FloatE{}     -> MkTy2 $ FloatTy
+      LitSymE _    -> MkTy2 $ SymTy
       AppE v locargs _ ->
                        let fnty  = fEnv env2 # v
                            outty = arrOut fnty
                            mp = M.fromList $ zip (allLocVars fnty) (map toLocVar locargs)
                        in substLoc mp outty
 
-      PrimAppE (DictInsertP ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
-      PrimAppE (DictEmptyP  ty) ((VarE v):_) -> SymDictTy (Just v) $ stripTyLocs ty
-      PrimAppE p _ -> primRetTy p
+      PrimAppE (DictInsertP ty) ((VarE v):_) -> MkTy2 $ SymDictTy (Just v) $ stripTyLocs (unTy2 ty)
+      PrimAppE (DictEmptyP  ty) ((VarE v):_) -> MkTy2 $ SymDictTy (Just v) $ stripTyLocs (unTy2 ty)
+      PrimAppE p _ -> MkTy2 $ primRetTy (fmap unTy2 p)
 
       LetE (v,_,t,_) e -> gRecoverType ddfs (extendVEnv v t env2) e
       IfE _ e _        -> gRecoverType ddfs env2 e
-      MkProdE es       -> ProdTy $ L.map (gRecoverType ddfs env2) es
-      DataConE loc c _ -> PackedTy (getTyOfDataCon ddfs c) (toLocVar loc)
+      MkProdE es       -> MkTy2 $ ProdTy $ L.map (unTy2 . gRecoverType ddfs env2) es
+      DataConE loc c _ -> MkTy2 $ PackedTy (getTyOfDataCon ddfs c) (toLocVar loc)
       TimeIt e _ _     -> gRecoverType ddfs env2 e
       MapE _ e         -> gRecoverType ddfs env2 e
       FoldE _ _ e      -> gRecoverType ddfs env2 e
       Ext ext          -> gRecoverType ddfs env2 ext
       ProjE i e ->
-        case gRecoverType ddfs env2 e of
-          (ProdTy tys) -> tys !! i
+        case unTy2 $ gRecoverType ddfs env2 e of
+          (ProdTy tys) -> MkTy2 $ (tys !! i)
           oth -> error$ "typeExp: Cannot project fields from this type: "++show oth
                         ++"\nExpression:\n  "++ sdoc ex
                         ++"\nEnvironment:\n  "++sdoc (vEnv env2)
@@ -502,7 +508,7 @@ instance Typeable (PreExp E2Ext LocArg (UrTy LocVar)) where
                              outty = arrOut fnty
                              mp = M.fromList $ zip (allLocVars fnty) (map toLocVar locargs)
                          in substLoc mp outty
-      SyncE -> voidTy
+      SyncE -> MkTy2 $ voidTy
       WithArenaE _v e -> gRecoverType ddfs env2 e
       CaseE _ mp ->
         let (c,vlocargs,e) = head mp
@@ -552,15 +558,15 @@ allRegVars ty = L.nub $ L.map (\(LRM _ r _) -> regionToVar r) (locVars ty)
 
 -- | Apply a location substitution to a type.
 substLoc :: M.Map LocVar LocVar -> Ty2 -> Ty2
-substLoc mp ty =
-  case ty of
+substLoc mp ty = MkTy2 $
+  case unTy2 ty of
    SymDictTy v te -> SymDictTy v te -- (go te)
-   ProdTy    ts -> ProdTy (L.map go ts)
+   ProdTy    ts -> ProdTy (L.map (unTy2 . go . MkTy2) ts)
    PackedTy k l ->
        case M.lookup l mp of
              Just v  -> PackedTy k v
              Nothing -> PackedTy k l
-   _ -> ty
+   _ -> unTy2 ty
   where go = substLoc mp
 
 -- | List version of 'substLoc'.
@@ -606,9 +612,9 @@ dummyTyLocs ty = traverse (const (pure (toVar "dummy"))) ty
 -- | Collect all the locations mentioned in a type.
 locsInTy :: Ty2 -> [LocVar]
 locsInTy ty =
-    case ty of
+    case unTy2 ty of
       PackedTy _ lv -> [lv]
-      ProdTy tys -> concatMap locsInTy tys
+      ProdTy tys -> concatMap (locsInTy . MkTy2) tys
       _ -> []
 
 -- Because L2 just adds a bit of metadata and enriched types, it is
@@ -621,19 +627,19 @@ revertToL1 Prog{ddefs,fundefs,mainExp} =
     funefs'  = M.map revertFunDef fundefs
     mainExp' = case mainExp of
                 Nothing -> Nothing
-                Just (e,ty) -> Just (revertExp e, stripTyLocs ty)
+                Just (e,ty) -> Just (revertExp e, stripTyLocs (unTy2 ty))
 
 revertDDef :: DDef Ty2 -> DDef Ty1
 revertDDef (DDef tyargs a b) =
   DDef tyargs a
     (L.filter (\(dcon,_) -> not $ isIndirectionTag dcon) $
-         L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs y)) tys)) b)
+         L.map (\(dcon,tys) -> (dcon, L.map (\(x,y) -> (x, stripTyLocs (unTy2 y))) tys)) b)
 
 revertFunDef :: FunDef2 -> FunDef1
 revertFunDef FunDef{funName,funArgs,funTy,funBody,funRec,funInline} =
   FunDef { funName = funName
          , funArgs = funArgs
-         , funTy   = (L.map stripTyLocs (arrIns funTy), stripTyLocs (arrOut funTy))
+         , funTy   = (L.map (stripTyLocs . unTy2) (arrIns funTy), stripTyLocs (unTy2 (arrOut funTy)))
          , funBody = revertExp funBody
          , funRec  = funRec
          , funInline = funInline
@@ -648,17 +654,17 @@ revertExp ex =
     LitSymE v -> LitSymE v
     AppE v _ args   -> AppE v [] (L.map revertExp args)
     PrimAppE p args -> PrimAppE (revertPrim p) $ L.map revertExp args
-    LetE (v,_,ty, (Ext (IndirectionE _ _ _ _ arg))) bod ->
-      let PackedTy tycon _ =  ty in
-          LetE (v,[],(stripTyLocs ty), AppE (mkCopyFunName tycon) [] [revertExp arg]) (revertExp bod)
+    LetE (v,_, ty, (Ext (IndirectionE _ _ _ _ arg))) bod ->
+      let PackedTy tycon _ =  unTy2 ty in
+          LetE (v,[],(stripTyLocs (unTy2 ty)), AppE (mkCopyFunName tycon) [] [revertExp arg]) (revertExp bod)
     LetE (v,_,ty,rhs) bod ->
-      LetE (v,[], stripTyLocs ty, revertExp rhs) (revertExp bod)
+      LetE (v,[], stripTyLocs (unTy2 ty), revertExp rhs) (revertExp bod)
     IfE a b c  -> IfE (revertExp a) (revertExp b) (revertExp c)
     MkProdE ls -> MkProdE $ L.map revertExp ls
     ProjE i e  -> ProjE i (revertExp e)
     CaseE scrt brs     -> CaseE (revertExp scrt) (L.map docase brs)
     DataConE _ dcon ls -> DataConE () dcon $ L.map revertExp ls
-    TimeIt e ty b -> TimeIt (revertExp e) (stripTyLocs ty) b
+    TimeIt e ty b -> TimeIt (revertExp e) (stripTyLocs (unTy2 ty)) b
     SpawnE v _ args -> SpawnE v [] (L.map revertExp args)
     SyncE -> SyncE
     WithArenaE v e -> WithArenaE v (revertExp e)
@@ -684,7 +690,7 @@ revertExp ex =
     -- Ugh .. this is bad. Can we remove the identity cases here ?
     -- TODO: Get rid of this (and L3.toL3Prim) soon.
     revertPrim :: Prim Ty2 -> Prim Ty1
-    revertPrim pr = fmap stripTyLocs pr
+    revertPrim pr = fmap (stripTyLocs . unTy2) pr
 
     docase :: (DataCon, [(Var,LocArg)], Exp2) -> (DataCon, [(Var,())], Exp1)
     docase (dcon,vlocargs,rhs) =

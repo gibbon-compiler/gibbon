@@ -55,6 +55,7 @@ library
                        Gibbon.L4.Interp
 
                        Gibbon.NewL2.Syntax
+                       Gibbon.NewL2.FromOldL2
 
                        -- compiler passes, roughly in the order they're run
                        Gibbon.Passes.Freshen
