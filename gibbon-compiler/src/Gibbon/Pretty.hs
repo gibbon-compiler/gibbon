@@ -14,6 +14,7 @@ import qualified Data.Map as M
 import qualified Gibbon.L0.Syntax as L0
 import           Gibbon.L1.Syntax as L1
 import           Gibbon.L2.Syntax as L2
+import qualified Gibbon.NewL2.Syntax as NewL2
 import           Gibbon.L3.Syntax as L3
 import           Gibbon.Common
 import           Gibbon.HaskellFrontend ( primMap )
@@ -307,7 +308,7 @@ instance (Pretty l) => Pretty (UrTy l) where
 instance Pretty ([UrTy ()], UrTy ()) where
     pprintWithStyle sty (as,b) = hsep $ punctuate " ->" $ map (pprintWithStyle sty) (as ++ [b])
 
-instance Pretty Ty2 => Pretty (ArrowTy2 Ty2) where
+instance Pretty ty2 => Pretty (ArrowTy2 ty2) where
     -- TODO: start metadata at column 0 instead of aligning it with the type
     pprintWithStyle sty fnty =
         case sty of
@@ -441,7 +442,7 @@ instance Pretty RegionSize where
     pprintWithStyle _ (BoundedSize x) = parens $ text "Bounded" <+> int x
     pprintWithStyle _ Undefined       = text "Unbounded"
 
-instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
+instance HasPrettyToo E2Ext l d => Pretty (L2.E2Ext l d) where
     pprintWithStyle _ ex0 =
         case ex0 of
           L2.AddFixed v i -> text "addfixed" <+>
@@ -473,6 +474,31 @@ instance HasPrettyToo E2Ext l (UrTy l) => Pretty (L2.E2Ext l (UrTy l)) where
           L2.AllocateScalarsHere loc -> text "allocateScalarsHere" <+> pprint loc
           L2.SSPush mode loc endloc tycon -> text "ss_push" <+> doc mode <+> pprint loc <+> pprint endloc <+> doc tycon
           L2.SSPop mode loc endloc -> text "ss_pop" <+> doc mode <+> pprint loc <+> pprint endloc
+
+instance Pretty L2.Region where
+  pprintWithStyle _ reg = parens $ text $ sdoc reg
+
+instance Pretty L2.Modality where
+  pprintWithStyle _ mode = text $ show mode
+
+instance Pretty L2.LRM where
+  pprintWithStyle sty (LRM loc reg mode) =
+    parens $ text "LRM" <+> pprintWithStyle sty loc <+> pprintWithStyle sty reg <+> pprintWithStyle sty mode
+
+instance Pretty NewL2.LocArg where
+  pprintWithStyle sty locarg =
+    case locarg of
+      NewL2.Loc lrm ->
+        text "Loc" <+> pprintWithStyle sty lrm
+      NewL2.EndWitness lrm v ->
+        text "EndWitness" <+> pprintWithStyle sty lrm <+> pprintWithStyle sty v
+      NewL2.Reg v mode ->
+        text "Reg" <+> pprintWithStyle sty v <+> pprintWithStyle sty mode
+      NewL2.EndOfReg v mode w ->
+        text "EndOfReg"<+> pprintWithStyle sty v <+> pprintWithStyle sty mode <+> pprintWithStyle sty w
+
+instance Pretty NewL2.Ty2 where
+  pprintWithStyle sty (NewL2.MkTy2 ty2) = text "MkTy2 " <+> pprintWithStyle sty ty2
 
 -- L3
 instance (Out l, HasPrettyToo E3Ext l (UrTy l)) => Pretty (L3.E3Ext l (UrTy l)) where

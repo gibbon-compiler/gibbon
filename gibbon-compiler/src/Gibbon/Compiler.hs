@@ -77,6 +77,7 @@ import           Gibbon.Passes.ParAlloc       (parAlloc)
 import           Gibbon.Passes.InferRegionScope (inferRegScope)
 import           Gibbon.Passes.RouteEnds      (routeEnds)
 import           Gibbon.Passes.FollowIndirections (followIndirections)
+import           Gibbon.NewL2.FromOldL2       (fromOldL2)
 import           Gibbon.Passes.ThreadRegions  (threadRegions)
 import           Gibbon.Passes.Cursorize      (cursorize)
 import           Gibbon.Passes.FindWitnesses  (findWitnesses)
@@ -713,6 +714,8 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- if gibbon1
                     then pure l2
                     else go "followIndirections" followIndirections l2
+              new_l2 <- go "fromOldL2" fromOldL2 l2
+
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.

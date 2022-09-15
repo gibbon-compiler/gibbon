@@ -126,6 +126,7 @@ data E2Ext loc dec
                               -- around in case we want to go back to it.
                               -- E.g. when reverting from L2 to L1.
     -- ^ A indirection node.
+
   | GetCilkWorkerNum
     -- ^ Translates to  __cilkrts_get_worker_number().
   | LetAvail [Var] (E2 loc dec) -- ^ These variables are available to use before the join point.
@@ -151,7 +152,7 @@ data PreLocExp loc = StartOfLE Region
                    | InRegionLE Region
                    | FreeLE
                    | FromEndLE  loc
-  deriving (Read, Show, Eq, Ord, Generic, NFData)
+  deriving (Read, Show, Eq, Ord, Functor, Generic, NFData)
 
 type LocExp = PreLocExp LocVar
 
@@ -351,7 +352,7 @@ data ArrowTy2 ty2 = ArrowTy2
     , locRets :: [LocRet]       -- ^ L2B feature: multi-valued returns.
     , hasParallelism :: Bool        -- ^ Does this function have parallelism
     }
-  deriving (Read,Show,Eq,Ord, Generic, NFData)
+  deriving (Read, Show, Eq, Ord, Functor, Generic, NFData)
 
 -- | The side-effect of evaluating a function.
 data Effect = Traverse LocVar
