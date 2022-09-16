@@ -470,3 +470,6 @@ tests:
     skip: true
   - name: test17_forfold.gib
     skip: true
+
+  - name: wildcard_case.hs
+    answer-file: examples/wildcard_case.ans

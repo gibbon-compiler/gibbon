@@ -27,6 +27,7 @@ import           System.IO
 import           Gibbon.L0.Syntax as L0
 import           Gibbon.Common
 import           Gibbon.DynFlags
+import Debug.Trace 
 
 --------------------------------------------------------------------------------
 
@@ -1046,7 +1047,15 @@ desugarAlt :: (Show a,  Pretty a) => TypeSynEnv -> TopTyEnv -> Alt a -> PassM (D
 desugarAlt type_syns toplevel alt =
   case alt of
     Alt _ (PApp _ qname ps) (UnGuardedRhs _ rhs) Nothing -> do
-      let conName = qnameToStr qname
+      let conName = qnameToStr qname 
+      desugarCase ps conName rhs
+    Alt _ (PWildCard _) (UnGuardedRhs _ rhs) b -> 
+      desugarCase [] "_default" rhs 
+    Alt _ _ GuardedRhss{} _ -> error "desugarExp: Guarded RHS not supported in case."
+    Alt _ _ _ Just{}        -> error "desugarExp: Where clauses not allowed in case."
+    Alt _ pat _ _           -> error $ "desugarExp: Unsupported pattern in case: " ++ prettyPrint pat
+  where 
+    desugarCase ps conName rhs = do
       ps' <- mapM (\x -> case x of
                             PVar _ v -> (pure . toVar . nameToStr) v
                             PWildCard _ -> gensym "wildcard_"
@@ -1055,9 +1064,6 @@ desugarAlt type_syns toplevel alt =
       rhs' <- desugarExp type_syns toplevel rhs
       ps'' <- mapM (\v -> (v,) <$> newMetaTy) ps'
       pure (conName, ps'', rhs')
-    Alt _ _ GuardedRhss{} _ -> error "desugarExp: Guarded RHS not supported in case."
-    Alt _ _ _ Just{}        -> error "desugarExp: Where clauses not allowed in case."
-    Alt _ pat _ _           -> error $ "desugarExp: Unsupported pattern in case: " ++ prettyPrint pat
 
 generateBind :: (Show a,  Pretty a) => TypeSynEnv -> TopTyEnv -> TopTyEnv -> Decl a -> Exp0 -> PassM (Exp0)
 generateBind type_syns toplevel env decl exp2 =
