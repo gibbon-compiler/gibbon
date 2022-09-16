@@ -23,7 +23,6 @@ import           Gibbon.L0.Syntax as L0
 import           Gibbon.Common
 import           Data.Function
 import           Data.Bitraversable
-import           Debug.Trace
 
 --------------------------------------------------------------------------------
 
@@ -621,21 +620,19 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
       case scrt_ty' of
         (PackedTy tycon drvd_tyargs) -> do
           let ddf = lookupDDef ddefs tycon
-          brs' <- fmap (L.nubBy ((==) `on` fst3) . concat) $ traverse (\x@(a,b,c) -> 
+          ddf' <- substTyVarDDef ddf drvd_tyargs
+          brs' <- L.nubBy ((==) `on` fst3) . concat <$> traverse (\x@(a,_,c) -> 
               if a == "_default" 
                 then traverse (\(a', args) -> do
                         args' <- traverse (bitraverse (\_ -> gensym "wildcard") pure) args
-                        pure $ (a', args', c) 
+                        pure (a', args', c) 
                       ) (dataCons ddf)
                 else pure [x]
             ) brs :: TcM [(DataCon, [(Var, Ty0)], Exp0)]
-          let tycons_brs = map ((getTyOfDataCon ddefs) . fst3) brs'
-          ddf' <- substTyVarDDef ddf drvd_tyargs
+          let tycons_brs = map (getTyOfDataCon ddefs . fst3) brs'
           case L.nub tycons_brs of
             [one] -> if one == tycon
                      then do
-                       let ddf = lookupDDef ddefs tycon
-                       ddf' <- substTyVarDDef ddf drvd_tyargs
                        (s2,t2,brs_tc) <- tcCases ddefs s1 venv fenv bound_tyvars ddf' brs' is_main ex
                        pure (s2, t2, CaseE scrt_tc brs_tc)
                      else err $ text "Couldn't match" <+> doc one

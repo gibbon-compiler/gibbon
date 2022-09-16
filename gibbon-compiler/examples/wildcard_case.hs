@@ -2,10 +2,12 @@ data Foo = A Int Int | B Int | C
 
 -- TODO : process without top level signature
 
+fun1 :: Foo -> Int 
 fun1 x = case x of 
     A a b -> a + b 
     _ -> 36 
 
+fun2 :: Foo -> Int
 fun2 x = case x of 
     B e -> e * 4
     _ -> 98
