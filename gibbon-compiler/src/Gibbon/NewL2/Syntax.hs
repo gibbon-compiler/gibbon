@@ -22,6 +22,7 @@ module Gibbon.NewL2.Syntax
     , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
     , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv
     , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
+    , toLocVar
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
@@ -79,6 +80,7 @@ data LocArg = Loc Old.LRM
             | EndWitness Old.LRM Var
             | Reg Var Old.Modality
             | EndOfReg Var Old.Modality Var
+            | EndOfReg_Tagged Var
   deriving (Read, Show, Eq, Ord, Generic)
 
 instance Out LocArg
@@ -91,6 +93,7 @@ toLocVar arg =
     EndWitness _ v -> v
     Reg v _        -> v
     EndOfReg _ _ v -> v
+    EndOfReg_Tagged v -> v `varAppend` (toVar "_tag")
 
 instance Out (Old.ArrowTy2 Ty2)
 

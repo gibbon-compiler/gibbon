@@ -496,6 +496,8 @@ instance Pretty NewL2.LocArg where
         text "Reg" <+> pprintWithStyle sty v <+> pprintWithStyle sty mode
       NewL2.EndOfReg v mode w ->
         text "EndOfReg"<+> pprintWithStyle sty v <+> pprintWithStyle sty mode <+> pprintWithStyle sty w
+      NewL2.EndOfReg_Tagged v ->
+        text "EndOfReg_Tagged"<+> pprintWithStyle sty (v `varAppend` (toVar "_tag"))
 
 instance Pretty NewL2.Ty2 where
   pprintWithStyle sty (NewL2.MkTy2 ty2) = text "MkTy2 " <+> pprintWithStyle sty ty2

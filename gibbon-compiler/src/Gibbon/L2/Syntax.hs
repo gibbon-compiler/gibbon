@@ -880,7 +880,7 @@ allFreeVars ex =
 freeLocVars :: Exp2 -> [Var]
 freeLocVars ex = S.toList $ (allFreeVars ex) `S.difference` (gFreeVars ex)
 
-changeAppToSpawn :: Var -> [Exp2] -> Exp2 -> Exp2
+changeAppToSpawn :: (Eq loc, Eq dec) => Var -> [PreExp E2Ext loc dec] -> PreExp E2Ext loc dec -> PreExp E2Ext loc dec
 changeAppToSpawn v args2 ex1 =
   case ex1 of
     VarE{}    -> ex1

@@ -1,4 +1,4 @@
-module Gibbon.NewL2.FromOldL2 ( fromOldL2 ) where
+module Gibbon.NewL2.FromOldL2 ( fromOldL2, toOldL2, toOldL2Exp ) where
 
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -243,3 +243,141 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
           New.Loc lrm -> New.Loc (LRM loc (lrmReg lrm) (lrmMode lrm))
           New.EndWitness lrm _ -> New.Loc (LRM loc (lrmReg lrm) (lrmMode lrm))
           oth -> error $ "toLocArg: got" ++ sdoc oth
+
+
+--------------------------------------------------------------------------------
+
+
+toOldL2 :: New.Prog2 -> PassM Prog2
+toOldL2 Prog{ddefs,fundefs,mainExp} = do
+  let ddefs' = M.map (fmap New.unTy2) ddefs
+  fds' <- mapM (toOldL2Fn ddefs fundefs) $ M.elems fundefs
+  let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
+  mainExp' <- case mainExp of
+                Nothing -> return Nothing
+                Just (mn, ty) -> do
+                  let ty' = New.unTy2 ty
+                  mn' <- toOldL2Exp mn
+                  pure $ Just (mn', ty')
+  return $ Prog ddefs' fundefs' mainExp'
+
+
+toOldL2Fn :: DDefs New.Ty2 -> New.FunDefs2 -> New.FunDef2 -> PassM FunDef2
+toOldL2Fn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
+  let initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
+  bod' <- toOldL2Exp funBody
+  return $ f { funBody = bod', funTy = fmap New.unTy2 funTy }
+
+
+toOldL2Exp :: New.Exp2 -> PassM Exp2
+toOldL2Exp ex =
+  case ex of
+    AppE f locs args -> do
+      args' <- mapM go args
+      let locargs = map New.toLocVar locs
+      pure $ AppE f locargs args'
+
+    SpawnE f locs args -> do
+      args' <- mapM go args
+      let locargs = map New.toLocVar locs
+      pure $ SpawnE f locargs args'
+
+    PrimAppE pr args -> do
+      args' <- mapM go args
+      let pr' = fmap New.unTy2 pr
+      pure $ PrimAppE pr' args'
+
+    LetE (v, ewitnesses, ty, rhs) bod -> do
+             let ty' = New.unTy2 ty
+             rhs' <- go rhs
+             bod' <- go bod
+             pure $ LetE (v, [], ty', rhs') bod'
+
+    CaseE scrt brs
+      | VarE v <- scrt ->
+          do let docase (dcon, vlocs, rhs) = do
+                   let (vars,locs) = unzip vlocs
+                       locargs = map New.toLocVar locs
+                       vlocs' = zip vars locargs
+                   rhs' <- go rhs
+                   pure $ (dcon, vlocs', rhs')
+
+             (CaseE (VarE v)) <$> mapM docase brs
+
+      | otherwise -> error $ "toOldL2Exp: CaseE " ++ sdoc scrt
+
+
+    DataConE loc dcon args -> do
+      args' <- mapM go args
+      pure $ DataConE (New.toLocVar loc) dcon args'
+
+    Ext ext ->
+      case ext of
+        LetRegionE reg reg_size mb_ty bod -> do
+          bod' <- go bod
+          pure $ Ext $ LetRegionE reg reg_size mb_ty bod'
+
+        LetParRegionE reg reg_size mb_ty bod -> do
+          bod' <- go bod
+          pure $ Ext $ LetRegionE reg reg_size mb_ty bod'
+
+        LetLocE loc rhs bod -> do
+          let rhs' = fmap New.toLocVar rhs
+          bod' <- go bod
+          pure $ Ext $ LetLocE loc rhs' bod'
+
+        RetE locs v -> do
+          let locargs = map New.toLocVar locs
+          pure $ Ext $ RetE locargs v
+
+        FromEndE loc -> Ext <$> FromEndE <$> pure (New.toLocVar loc)
+
+        BoundsCheck i reg loc -> do
+         pure $ Ext $ BoundsCheck i (New.toLocVar reg) (New.toLocVar loc)
+
+        AddFixed v i -> pure $ Ext $ AddFixed v i
+
+        IndirectionE tycon dcon (from,from_reg) (to,to_reg) e -> do
+          e' <- go e
+          pure $ Ext $
+            IndirectionE
+              tycon
+              dcon
+              (New.toLocVar from, from_reg)
+              (New.toLocVar to, to_reg)
+              e'
+
+        GetCilkWorkerNum -> pure $ Ext GetCilkWorkerNum
+
+        LetAvail avail rhs -> do
+          rhs' <- go rhs
+          pure $ Ext $ LetAvail avail rhs'
+
+        AllocateTagHere loc tycon -> do
+          pure $ Ext $ AllocateTagHere loc tycon
+
+        AllocateScalarsHere loc -> pure $ Ext $ AllocateScalarsHere loc
+
+        SSPush mode loc end_loc tycon -> do
+          pure $ Ext $ SSPush mode loc end_loc tycon
+
+        SSPop mode loc end_loc -> do
+          pure $ Ext $ SSPop mode loc end_loc
+
+    -- straightforward recursion
+    VarE v -> pure $ VarE v
+    LitE i -> pure $ LitE i
+    FloatE i  -> pure $ FloatE i
+    LitSymE s -> pure $ LitSymE s
+    IfE a b c -> IfE <$> go a <*> go b <*> go c
+    MkProdE args  -> MkProdE <$> mapM go args
+    ProjE i e     -> (ProjE i) <$> go e
+    TimeIt e ty b -> do e' <- go e
+                        let ty' = New.unTy2 ty
+                        pure $ TimeIt e' ty' b
+    WithArenaE v rhs -> (WithArenaE v) <$> go rhs
+    SyncE   -> pure SyncE
+    MapE{}  -> error "MapE"
+    FoldE{} -> error "FoldE"
+ where
+  go = toOldL2Exp

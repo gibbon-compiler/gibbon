@@ -714,12 +714,13 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- if gibbon1
                     then pure l2
                     else go "followIndirections" followIndirections l2
-              new_l2 <- go "fromOldL2" fromOldL2 l2
+              l2' <- go "fromOldL2" fromOldL2 l2
 
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
               -- it adds regions to 'locs' in AppE and LetE which the
               -- typechecker doesn't know how to handle.
-              l2 <- go "threadRegions"    threadRegions l2
+              l2' <- go "threadRegions"    threadRegions l2'
+
               -- L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
               l3 <- go "cursorize"        cursorize     l2

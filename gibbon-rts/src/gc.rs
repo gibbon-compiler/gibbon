@@ -447,6 +447,9 @@ can very well write data after the inlined redirection. The following code
 prevents this inlining. Instead, it'll make the GC write an indirection pointer
 pointing to the target of the redirection.
 
+Also, make indirection/redirection branches use the proper end-of-input-region
+by using the tag.
+
 [2022.09.06]: TODO: We need a more general-purpose solution for this. *Any*
 value being inlined could have a redirection pointer in it and we need to handle
 it properly.
