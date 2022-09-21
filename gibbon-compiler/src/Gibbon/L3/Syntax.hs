@@ -27,7 +27,7 @@ import Text.PrettyPrint.GenericPretty
 
 import Gibbon.Common
 import Gibbon.Language hiding (mapMExprs)
-import qualified Gibbon.L2.Syntax as L2
+import qualified Gibbon.NewL2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
@@ -250,7 +250,7 @@ instance (Out l, Out d) => Out (E3Ext l d)
 eraseLocMarkers :: DDef L2.Ty2 -> DDef Ty3
 eraseLocMarkers (DDef tyargs tyname ls) = DDef tyargs tyname $ L.map go ls
   where go :: (DataCon,[(IsBoxed,L2.Ty2)]) -> (DataCon,[(IsBoxed,Ty3)])
-        go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,L2.stripTyLocs ty)) ls')
+        go (dcon,ls') = (dcon, L.map (\(b,ty) -> (b,L2.stripTyLocs (L2.unTy2 ty))) ls')
 
 cursorizeTy :: UrTy a -> UrTy b
 cursorizeTy ty =
@@ -292,7 +292,7 @@ toL3Prim (DictEmptyP  _ty) = DictEmptyP  CursorTy
 toL3Prim (DictInsertP _ty) = DictInsertP CursorTy
 toL3Prim (DictLookupP _ty) = DictLookupP CursorTy
 toL3Prim (DictHasKeyP _ty) = DictHasKeyP CursorTy
-toL3Prim pr = fmap L2.stripTyLocs pr
+toL3Prim pr = fmap (L2.stripTyLocs . L2.unTy2) pr
 
 -- |
 updateAvailVars :: [Var] -> [Var] -> Exp3 -> Exp3
