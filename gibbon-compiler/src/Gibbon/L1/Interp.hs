@@ -224,6 +224,7 @@ applyPrim rc p args =
    (EqBenchProgP _str,[]) -> pure $ VBool False
    (EqIntP,[VInt x, VInt y]) -> pure $ VBool (x==y)
    (EqFloatP,[VFloat x, VFloat y]) -> pure $ VBool (x==y)
+   (EqCharP ,[VChar x , VChar y])  -> pure $ VBool (x==y)
    (LtP,[VInt x, VInt y]) -> pure $ VBool (x < y)
    (GtP,[VInt x, VInt y]) -> pure $ VBool (x > y)
    (LtEqP,[VInt x, VInt y]) -> pure $ VBool (x <= y)

@@ -563,6 +563,7 @@ primArgsTy p =
     EqBenchProgP _ -> []
     EqIntP  -> [IntTy, IntTy]
     EqFloatP-> [FloatTy, FloatTy]
+    EqCharP -> [CharTy, CharTy]
     LtP  -> [IntTy, IntTy]
     GtP  -> [IntTy, IntTy]
     LtEqP-> [IntTy, IntTy]
@@ -660,6 +661,7 @@ primRetTy p =
     EqBenchProgP _ -> BoolTy
     EqIntP  -> BoolTy
     EqFloatP-> BoolTy
+    EqCharP -> BoolTy
     LtP  -> BoolTy
     GtP  -> BoolTy
     LtEqP-> BoolTy

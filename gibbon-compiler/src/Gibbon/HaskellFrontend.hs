@@ -442,6 +442,7 @@ primMap = M.fromList
   , ("sqrt", FSqrtP)
   , ("==", EqIntP)
   , (".==.", EqFloatP)
+  , ("*==*", EqCharP)
   , ("<", LtP)
   , (">", GtP)
   , ("<=", LtEqP)

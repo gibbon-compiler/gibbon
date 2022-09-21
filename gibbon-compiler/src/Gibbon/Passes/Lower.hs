@@ -1033,6 +1033,7 @@ prim p =
     EqBenchProgP str -> T.EqBenchProgP str
     EqIntP -> T.EqP
     EqFloatP -> T.EqP
+    EqCharP  -> T.EqP
     LtP    -> T.LtP
     GtP    -> T.GtP
     LtEqP  -> T.LtEqP

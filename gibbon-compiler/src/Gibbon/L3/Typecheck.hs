@@ -252,6 +252,12 @@ tcExp isPacked ddfs env exp =
             _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
             _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
             pure BoolTy
+            
+          char_cmps = do
+            len2
+            _ <- ensureEqualTy (es !! 0) CharTy (tys !! 0)
+            _ <- ensureEqualTy (es !! 1) CharTy (tys !! 1)
+            pure BoolTy
 
       case pr of
         MkTrue  -> mk_bools
@@ -273,6 +279,7 @@ tcExp isPacked ddfs env exp =
         LtEqP   -> int_cmps
         GtEqP   -> int_cmps
         EqFloatP -> float_cmps
+        EqCharP  -> char_cmps
         FLtP     -> float_cmps
         FGtP     -> float_cmps
         FLtEqP   -> float_cmps
