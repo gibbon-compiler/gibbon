@@ -251,7 +251,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 toOldL2 :: New.Prog2 -> PassM Prog2
 toOldL2 Prog{ddefs,fundefs,mainExp} = do
   let ddefs' = M.map (fmap New.unTy2) ddefs
-  fds' <- mapM (toOldL2Fn ddefs fundefs) $ M.elems fundefs
+  fds' <- mapM toOldL2Fn $ M.elems fundefs
   let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
   mainExp' <- case mainExp of
                 Nothing -> return Nothing
@@ -262,9 +262,8 @@ toOldL2 Prog{ddefs,fundefs,mainExp} = do
   return $ Prog ddefs' fundefs' mainExp'
 
 
-toOldL2Fn :: DDefs New.Ty2 -> New.FunDefs2 -> New.FunDef2 -> PassM FunDef2
-toOldL2Fn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
-  let initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
+toOldL2Fn :: New.FunDef2 -> PassM FunDef2
+toOldL2Fn f@FunDef{funArgs,funTy,funBody} = do
   bod' <- toOldL2Exp funBody
   return $ f { funBody = bod', funTy = fmap New.unTy2 funTy }
 
@@ -287,7 +286,7 @@ toOldL2Exp ex =
       let pr' = fmap New.unTy2 pr
       pure $ PrimAppE pr' args'
 
-    LetE (v, ewitnesses, ty, rhs) bod -> do
+    LetE (v, _ewitnesses, ty, rhs) bod -> do
              let ty' = New.unTy2 ty
              rhs' <- go rhs
              bod' <- go bod

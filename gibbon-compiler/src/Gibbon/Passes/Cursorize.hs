@@ -803,7 +803,6 @@ cursorizeAppE ddfs fundefs denv tenv senv ex =
         _  -> return $ AppE f [] ([VarE (toLocVar loc) | loc <- outs] ++ starts)
     _ -> error $ "cursorizeAppE: Unexpected " ++ sdoc ex
 
-
 {-
 
 Cursorizing projections
@@ -1207,18 +1206,22 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                 -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
                 CursorTy -> do
                   tmp <- gensym "readcursor_indir"
-                  let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy])),
+                  let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy, IntTy])),
                                                    (loc     , MkTy2 CursorTy),
                                                    (v       , MkTy2 CursorTy),
-                                                   (toEndV v, MkTy2 CursorTy)])
+                                                   (toEndV v, MkTy2 CursorTy),
+                                                   (toTagV v, MkTy2 IntTy),
+                                                   (toEndFromTaggedV v, MkTy2 CursorTy)])
                               tenv
                       read_cursor = if isIndirectionTag dcon || isRedirectionTag dcon
                                     then Ext (ReadTaggedCursor cur)
                                     else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
-                      binds = [(tmp     , [], ProdTy [CursorTy, CursorTy], read_cursor),
+                      binds = [(tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
                                (loc     , [], CursorTy, VarE cur),
                                (v       , [], CursorTy, ProjE 0 (VarE tmp)),
-                               (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
+                               (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
+                               (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
+                               (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))]
                   bod <- go (toEndV v) rst_vlocs rst_tys canBind denv tenv'
                   return $ mkLets binds bod
 

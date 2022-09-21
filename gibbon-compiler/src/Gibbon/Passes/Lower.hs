@@ -838,11 +838,13 @@ lower Prog{fundefs,ddefs,mainExp} = do
     LetE(v,_,_,  (Ext (ReadTaggedCursor c))) bod -> do
       vtmp <- gensym $ toVar "tmpcur"
       ctmp <- gensym $ toVar "tmpaftercur"
+      tagtmp <- gensym $ toVar "tmptag"
       -- Here we lamely chase down all the tuple references and make them variables:
       let bod' = L3.substE (ProjE 0 (VarE v)) (VarE vtmp) $
-                 L3.substE (ProjE 1 (VarE v)) (VarE ctmp)
+                 L3.substE (ProjE 1 (VarE v)) (VarE ctmp) $
+                 L3.substE (ProjE 2 (VarE v)) (VarE tagtmp) $
                  bod
-      T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy)] T.ReadTaggedCursor [T.VarTriv c] <$>
+      T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy),(tagtmp,T.IntTy)] T.ReadTaggedCursor [T.VarTriv c] <$>
         tail free_reg sym_tbl bod'
 
     LetE(v,_,_,  (Ext (ReadList c el_ty))) bod -> do

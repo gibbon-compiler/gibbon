@@ -956,13 +956,15 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
 
                  ReadTaggedCursor -> do
                                tagged <- gensym "tagged_tmpcur"
-                               let [(next,CursorTy),(afternext,CursorTy)] = bnds
+                               let [(next,CursorTy),(afternext,CursorTy),(tag,IntTy)] = bnds
                                    [(VarTriv cur)] = rnds
                                    tagged_t = [cty| typename uintptr_t |]
+                                   tag_t = [cty| typename uint16_t |]
                                pure
                                  [ C.BlockDecl [cdecl| $ty:tagged_t $id:tagged = *($ty:tagged_t *) ($id:cur); |]
                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:next = GIB_UNTAG($id:tagged); |]
                                  , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:afternext = ($id:cur) + 8; |]
+                                 , C.BlockDecl [cdecl| $ty:tag_t $id:tag = GIB_GET_TAG($id:tagged); |]
                                  ]
 
 

@@ -26,6 +26,7 @@ module Gibbon.NewL2.Syntax
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
+    , toEndFromTaggedV, toTagV
 
     , module Gibbon.Language
     )
@@ -93,9 +94,15 @@ toLocVar arg =
     EndWitness _ v -> v
     Reg v _        -> v
     EndOfReg _ _ v -> v
-    EndOfReg_Tagged v -> v `varAppend` (toVar "_tag")
+    EndOfReg_Tagged v -> toEndFromTaggedV v
 
 instance Out (Old.ArrowTy2 Ty2)
+
+toTagV :: Var -> Var
+toTagV v = (toVar "tag_") `varAppend` v
+
+toEndFromTaggedV :: Var -> Var
+toEndFromTaggedV v = (toVar "end_from_tagged_") `varAppend` v
 
 --------------------------------------------------------------------------------
 
