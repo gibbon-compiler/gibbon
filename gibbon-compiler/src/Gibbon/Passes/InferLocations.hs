@@ -1630,6 +1630,7 @@ prim p = case p of
            EqBenchProgP str -> return (EqBenchProgP str)
            EqIntP -> return EqIntP
            EqFloatP -> return EqFloatP
+           EqCharP  -> return EqCharP
            MkTrue -> return MkTrue
            MkFalse -> return MkFalse
            Gensym  -> return Gensym

@@ -231,6 +231,12 @@ tcExp ddfs env funs constrs regs tstatein exp =
                      _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
                      _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
                      pure (BoolTy, tstate)
+                   
+                   char_cmps = do 
+                     len2
+                     _ <- ensureEqualTy (es !! 0) CharTy (tys !! 0)
+                     _ <- ensureEqualTy (es !! 1) CharTy (tys !! 1)
+                     pure (BoolTy, tstate)
 
                case pr of
                  MkTrue  -> mk_bools
@@ -252,6 +258,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
                  LtEqP   -> int_cmps
                  GtEqP   -> int_cmps
                  EqFloatP -> float_cmps
+                 EqCharP  -> char_cmps
                  FLtP     -> float_cmps
                  FGtP     -> float_cmps
                  FLtEqP   -> float_cmps
