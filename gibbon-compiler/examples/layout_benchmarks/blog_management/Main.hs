@@ -61,6 +61,14 @@ data BlogElements =   Header Text
 -- This recursive blog just represents a composed Blog.
 data Blog = End | Next BlogElements (Blog)
 
+{-
+
+CK: shouldn't this be:
+
+data Blog = (ID Int) (TagList (PList Text)) (Author Text) (Content Block) ...
+
+-}
+
 -- data type for a list of Blogs, (Maybe we can just use a Packed PList here instead?)
 data BlogList = None | Nxt Blog (BlogList)
 
