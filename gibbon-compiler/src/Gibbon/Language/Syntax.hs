@@ -394,7 +394,7 @@ data Prim ty
           | EqIntP             -- ^ Equality on Int
           | LtP | GtP          -- ^ (<) and (>) for Int's
           | LtEqP | GtEqP      -- ^ <= and >=
-          | FAddP | FSubP | FMulP | FDivP | FExpP | FRandP | EqFloatP | FLtP | FGtP | FLtEqP | FGtEqP | FSqrtP | IntToFloatP | FloatToIntP
+          | FAddP | FSubP | FMulP | FDivP | FExpP | FRandP | EqFloatP | EqCharP | FLtP | FGtP | FLtEqP | FGtEqP | FSqrtP | IntToFloatP | FloatToIntP
           | FTanP              -- ^ Translates to 'tan()' in C.
           | EqSymP             -- ^ Equality on Sym
           | EqBenchProgP String

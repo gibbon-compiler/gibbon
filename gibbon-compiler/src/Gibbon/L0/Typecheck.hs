@@ -184,6 +184,12 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
             s2 <- unify (args !! 0) FloatTy (arg_tys' !! 0)
             s3 <- unify (args !! 1) FloatTy (arg_tys' !! 1)
             pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
+          
+          char_cmps = do
+            len2
+            s2 <- unify (args !! 0) CharTy (arg_tys' !! 0)
+            s3 <- unify (args !! 1) CharTy (arg_tys' !! 1)
+            pure (s1 <> s2 <> s3, BoolTy, PrimAppE pr args_tc)
 
       case pr of
         MkTrue  -> mk_bools
@@ -205,6 +211,7 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
         LtEqP   -> int_cmps
         GtEqP   -> int_cmps
         EqFloatP -> float_cmps
+        EqCharP  -> char_cmps
         FLtP     -> float_cmps
         FGtP     -> float_cmps
         FLtEqP   -> float_cmps
