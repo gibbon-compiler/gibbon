@@ -6,10 +6,8 @@ import Gibbon.Vector
 
 type Text   = Vector Char
 
-type Target = (Text, Text)
-
-type Attr   = (Text, (PList Text), (PList (Text, Text)))
-
+--type Target = (Text, Text)
+--type Attr   = (Text, (PList Text), (PList (Text, Text)))
 --type Format = Format Text
 
 -- For simplicity, we are assuming for this benchmark that data Inline is tokenized at the "word" level.
@@ -44,7 +42,7 @@ data Block =      Plain (PList Inline)
                 | BlockQuote (PList Block)
              -- | OrderedList ListAttributes [[Block]]
              -- | BulletList (PList (PList Block))
-             -- | DefinitionList PList ( PList Inline , PList (PList Block) ) ---> This is resulting in a compile time error (TODO: Will DEBUG this)
+             -- | DefinitionList PList ( PList Inline , PList (PList Block) ) ---> This is resulting in a compile time error (TODO: DEBUG)
              -- | Header Int Attr (PList Inline)
                 | HorizontalRule
              -- | Table Attr Caption [ColSpec] TableHead [TableBody] TableFoot
@@ -52,31 +50,23 @@ data Block =      Plain (PList Inline)
                 | Null
                 deriving (Show)
 
--- A data type for the elements with-in a Blog Structure. 
-data BlogElements =   Header Text
-                    | ID Int
-                    | Author Text
-                    | Date   Text
-                    | Content Block
-                    | TagList (PList Text) 
-                    deriving (Show)
+-- Define Blog elements
+data BlogHeader  = Header Text
+data BlogId      = ID Int
+data BlogAuthor  = Author Text
+data BlogDate    = Date Text
+data BlogContent = Content Block
+data BlogTags    = TagList (PList Text)
 
--- A data type for a Blog Post
--- This is a Recursive field, with Next Blog containing the rest of the elements of the blog.
--- This recursive blog just represents a composed Blog (i.e, a Blog composed of its elements).
-data Blog =   End 
-            | Next BlogElements (Blog) 
-            deriving (Show)
+-- Define packed Blog data Type/s, we can arrange the fields here to change their relative ordering. 
+data Blog = End | 
+            Layout1 (BlogHeader) (BlogId) (BlogAuthor) (BlogDate) (BlogContent) (BlogTags) (Blog)
 
--- A data type for a list of Blogs.
-data BlogList =   None 
-                | Nxt Blog (BlogList)
-                deriving (Show)
 
--- Data structures for a Full Inverted 
+-- Data structures for a Fully Inverted Index table 
 -- LocationInfo = (Doc id or address, location/address in document)
 -- Mapping      = (keyword as text, List of Docs as LocationInfo tuples)
--- But maybe, Mapping and Location Info should be packed data as well ? If we are to run multiple passes on them?
+-- But maybe, Mapping and Location Info should be packed data as well? If we are to run multiple passes on them?
 
 type LocationInfo  = (Int, Int) 
 type Mapping       = (Text, PList Info)
@@ -184,7 +174,6 @@ mkBlockBaseCase option =
    if option == 0 then HorizontalRule
    else Null
 
-
 -- A function to make a list of tags each filled with some random tags
 mkTagList :: Int -> (PList Text)
 mkTagList length = 
@@ -193,42 +182,54 @@ mkTagList length =
             rst  = mkTagList (length - 1)
           in Cons elem rst
 
--- A function to make a Blog with some elements with random data. 
-mkBlog :: Int -> Int -> Int -> Blog
-mkBlog option id tag_length = 
-   if option == 0 
-      then let header = (Header (getRandomString (mod rand 9))) 
-               rst    = (mkBlog 1 id tag_length)
-            in (Next header (rst))
-   else if option == 1 
-      then let blog_id = (ID id)
-               rst     = (mkBlog 2 id tag_length) 
-         in (Next blog_id (rst))
-   else if option == 2 
-      then let author = (Author (getRandomString (mod rand 9)))
-               rst    = (mkBlog 3 id tag_length)
-         in (Next author (rst))  
-   else if option == 3 
-      then let date = (Date (getRandomString (mod rand 9)))
-               rst  = (mkBlog 4 id tag_length)
-         in (Next date (rst))
-   else if option == 4 
-      then let content = (Content (mkBlock (mod rand 2)))
-               rst     = (mkBlog 5 id tag_length)
-         in (Next content (rst)) 
-   else if option == 5 
-      then let taglist = TagList (mkTagList 100)
-               rst     = (mkBlog 6 id tag_length)
-         in (Next taglist (rst)) 
-   else End
+
+-- Utility Functions to make Blogs and its Elements.
+mkBlogHeader :: Text -> BlogHeader
+mkBlogHeader text = Header text 
+
+mkBlogID :: Int -> BlogId 
+mkBlogID val = ID val 
+
+mkBlogAuthor :: Text -> BlogAuthor 
+mkBlogAuthor text = Author text
+
+mkBlogDate :: Text -> BlogDate 
+mkBlogDate text = Date text 
+
+mkBlogContent :: Block -> BlogContent 
+mkBlogContent block = Content block 
+
+mkBlogTags :: (PList Text) -> BlogTags 
+mkBlogTags taglist = TagList taglist
+
+
+-- mkBlogs_layout1 :: Int -> Int -> Int -> Blog
+-- mkBlogs_layout1 length id tag_length =
+--    if length <= 0 then End
+--    else 
+--       let header  = mkBlogHeader (getRandomString (mod rand 9))
+--           blogID  = mkBlogID id
+--           author  = mkBlogAuthor (getRandomString (mod rand 9))
+--           date    = mkBlogDate (getRandomString (mod rand 9))
+--           content = mkBlogContent (mkBlock (mod rand 2))
+--           tags    = mkBlogTags (mkTagList 100)
+--           rst     = mkBlogs_layout1 (length - 1) (id+1) tag_length 
+--          in Layout1 header blogID author date content tags rst
+
+
+mkBlogs_layout1 :: Int -> Int -> Int -> Blog
+mkBlogs_layout1 length id tag_length =
+   if length <= 0 then End
+   else 
+      let header  = Header (getRandomString (mod rand 9))
+          blogID  = ID id
+          author  = Author (getRandomString (mod rand 9))
+          date    = Date (getRandomString (mod rand 9))
+          content = Content (mkBlock (mod rand 2))
+          tags    = TagList (mkTagList 100)
+          rst     = mkBlogs_layout1 (length - 1) (id+1) tag_length 
+         in Layout1 header blogID author date content tags rst
           
--- Recursive function to make a list of blogs
-mkBlogList :: Int -> BlogList
-mkBlogList length = 
-   if length <= 0 then None 
-   else let blog = (mkBlog 0 length 100)
-            rst  = mkBlogList (length - 1)
-         in Nxt blog (rst)     
 
 -- Function to make a text string of some length. 
 -- First argument takes Length, returns a text string.
@@ -260,70 +261,60 @@ mkBlogList length =
 -- searchKeywordText :: Text -> Text -> Bool
 -- searchKeywordText keyword text = False
 
--- Function to compare two words, each represented by a Vector Char. 
+-- Function to compare two words, each represented by Vector Char. 
 compareWord :: Text -> Text -> Bool
-compareWord vec1 vec2 = 
-   let len1        = length vec1 
-       len2        = length vec2
+compareWord word1 word2 = 
+   let len1        = length word1 
+       len2        = length word2
        compare_len = if (len1 == len2) then True else False     
-   in if (compare_len) then (cmp 0 len1 vec1 vec2) else False
+   in if (compare_len) then (cmp 0 len1 word1 word2) else False
 
--- Compare for 2 Vector Char (Text) if their length is same. 
+-- Compare 2 Vector Char (Text) or words for equality if their length is the same. 
 cmp :: Int -> Int -> Vector Char -> Vector Char -> Bool
-cmp start end vec1 vec2 =
+cmp start end word1 word2 =
    if (start < end) then 
-      let a       = nth vec1 start
-          b       = nth vec2 start
-          eq      = True -- if (a == b) then True else False -- For now this is not complemented, TODO: Implement Character comparison. 
-          recurse = cmp (start+1) end vec1 vec2
+      let a       = nth word1 start
+          b       = nth word2 start
+          eq      = if (a *==* b) then True else False 
+          recurse = cmp (start+1) end word1 word2
          in (eq && recurse) 
-      else True
+   else True
 
--- search a taglist for some keyword
+-- Search a TagList (PList Text) for some keyword
 searchTagList :: Text -> PList Text -> Bool 
 searchTagList keyword taglist = case taglist of 
    Nil -> False 
-   Cons word rst -> (compareWord keyword word) || (searchTagList keyword rst)
+   Cons word rst -> (compareWord keyword word) || (searchTagList keyword rst) 
 
 -- Search if a particular Tag exists in the Tag list of the blog
-searchBlogElementForTagKeyword :: Text -> BlogElements -> Bool 
-searchBlogElementForTagKeyword keyword element = 
-   case element of 
-      Header text   -> False
-      ID val        -> False 
-      Author text   -> False 
-      Date   text   -> False
-      Content block -> False
-      TagList list  -> (searchTagList keyword list)
-
--- Search for a keyword in a blog. 
-searchBlogForTagKeyword :: Text -> Blog -> Bool
-searchBlogForTagKeyword keyword blog = 
-   case blog of
+searchKeywordInBlogsTagList :: Text -> Blog -> Bool
+searchKeywordInBlogsTagList keyword blog = 
+   case blog of 
       End -> False 
-      Next element rst -> (searchBlogElementForTagKeyword keyword element) || (searchBlogForTagKeyword keyword rst)
+      Layout1 header id author date content tags rst -> case tags of 
+                                                             TagList list -> (searchTagList keyword list)
 
--- Filter Blogs with a particular keyword
-filterBlogsBasedOnTagKeyword :: Text -> BlogList -> BlogList
-filterBlogsBasedOnTagKeyword keyword blog_list = 
-   case blog_list of 
-      None          -> None
-      Nxt blog rst  -> let exists = searchBlogForTagKeyword keyword blog 
-                           rst'   = filterBlogsBasedOnTagKeyword keyword rst
-                           in if (exists) then (Nxt blog rst')
+-- Filter Blogs with a particular keyword in the TagList of the Blog
+filterBlogsBasedOnKeywordInTagList :: Text -> Blog -> Blog
+filterBlogsBasedOnKeywordInTagList keyword blogs = case blogs of 
+      End                                             -> End
+      Layout1 header id author date content tags rst  -> case tags of 
+         TagList list -> let exists = searchTagList keyword list 
+                             rst'   = filterBlogsBasedOnKeywordInTagList keyword rst
+                           in if (exists) then Layout1 header id author date content (copyPacked tags) rst'
                               else rst'
 
--- Tell if a particular keyword exists in the Content field of the blog or not. (search a Block)
-isKeywordPresentBlock :: Text -> Block -> Bool
-isKeywordPresentBlock keyword contentBlock = 
-   case contentBlock of
+-- Tell if a particular keyword exists in a Block data type or not
+isKeywordPresentInBlock :: Text -> Block -> Bool
+isKeywordPresentInBlock keyword contentBlock = 
+   case contentBlock of 
       Plain list_inline      -> (searchInlineListForKeyword keyword list_inline)
       Para  list_inline      -> (searchInlineListForKeyword keyword list_inline)
       BlockQuote list_block  -> (searchBlockListForKeyword keyword list_block)
       HorizontalRule         -> False
-      Null                   -> False
+      Null                   -> False 
 
--- Tell if a particular keyword exists in the inline or not. (search a Inline)
+-- Tell if a particular keyword exists in an inline data type or not. (search a Inline)
 isKeywordPresentInline :: Text -> Inline -> Bool
 isKeywordPresentInline keyword inline = 
    case inline of 
@@ -345,65 +336,150 @@ searchBlockListForKeyword :: Text -> PList Block -> Bool
 searchBlockListForKeyword keyword block_list = 
    case block_list of 
       Nil             -> False
-      Cons block rst  -> (isKeywordPresentBlock keyword block) || (searchBlockListForKeyword keyword rst) 
+      Cons block rst  -> (isKeywordPresentInBlock keyword block) || (searchBlockListForKeyword keyword rst) 
 
--- Seach an Inline list for a particular keyword
+-- Search an Inline list for a particular keyword
 searchInlineListForKeyword :: Text -> PList Inline -> Bool
 searchInlineListForKeyword keyword inline_list = 
    case inline_list of 
       Nil                -> False 
       Cons inline rst    -> (isKeywordPresentInline keyword inline) || (searchInlineListForKeyword keyword rst)
 
--- search a blog element for a keyword
-searchBlogElementForKeyword :: Text -> BlogElements -> Bool 
-searchBlogElementForKeyword keyword element = 
-   case element of 
-      Header text   -> (compareWord keyword text)
-      ID val        -> False 
-      Author text   -> False 
-      Date   text   -> False
-      Content block -> (isKeywordPresentBlock keyword block)
-      TagList list  -> False
+-- Search blogs for a particular keyword, return a list of bool signifying which block has what keyword in it
+searchBlogContentsForKeyword :: Text -> Blog -> PList Bool
+searchBlogContentsForKeyword keyword blogs = 
+   case blogs of 
+      End -> Nil
+      Layout1 header id author date content tags rst  -> case content of 
+         Content block -> let exists    = isKeywordPresentInBlock keyword block
+                              existsRst = searchBlogContentsForKeyword keyword rst
+                           in Cons exists existsRst
 
--- search for a keyword in a blog. 
-searchBlogForKeyword :: Text -> Blog -> Bool
-searchBlogForKeyword keyword blog = 
-   case blog of
-      End -> False 
-      Next element rst -> (searchBlogElementForKeyword keyword element) || (searchBlogForKeyword keyword rst)
+-- Filter the Blogs based on if some keyword is present in the Contents field of the Blogs or not 
+filterBlogsBasedOnKeywordInContent :: Text -> Blog -> Blog 
+filterBlogsBasedOnKeywordInContent keyword blogs = 
+   case blogs of 
+      End -> End 
+      Layout1 header id author date content tags rst -> case content of 
+         Content block -> let exists = isKeywordPresentInBlock keyword block 
+                              rst'   = filterBlogsBasedOnKeywordInContent keyword rst
+                              in if (exists) then Layout1 header id author date (copyPacked content) tags rst'
+                                 else rst'
 
--- search for a keyword in a list of blogs
-searchBlogsForKeyword :: Text -> BlogList -> Bool
-searchBlogsForKeyword keyword blog_list = 
-   case blog_list of 
-      None          -> False
-      Nxt blog rst  -> (searchBlogForKeyword keyword blog) || (searchBlogsForKeyword keyword rst)
+-- Emphasize a particular keyword in a Block type
+emphasizeKeywordInBlock :: Text -> Block -> Block
+emphasizeKeywordInBlock keyword contentBlock = 
+   case contentBlock of 
+      Plain list_inline      -> Plain (emphasizeInlineListForKeyword keyword list_inline)
+      Para  list_inline      -> Para  (emphasizeInlineListForKeyword keyword list_inline)
+      BlockQuote list_block  -> BlockQuote (emphasizeKeywordInBlockList keyword list_block)
+      HorizontalRule         -> HorizontalRule
+      Null                   -> Null
 
+-- Emphasize a particular keyword in an Inline data type
+emphasizeKeywordInline :: Text -> Inline -> Inline 
+emphasizeKeywordInline keyword inline = 
+   case inline of 
+      Str text           -> let isSame = compareWord keyword text 
+                                in if (isSame) then let
+                                       newlist :: PList Inline 
+                                       newlist = (Cons (copyPacked inline)) Nil                         -- ---> Here we had to use a call to copyPacked in order to copy over the inline to a new region, otherwise segfaults. 
+                                    in (Emph newlist)
+                                   else inline
+      Emph list_inline        -> Emph (emphasizeInlineListForKeyword keyword list_inline)
+      Underline list_inline   -> Underline (emphasizeInlineListForKeyword keyword list_inline)
+      Strong list_inline      -> Strong (emphasizeInlineListForKeyword keyword list_inline)
+      Strikeout list_inline   -> Strikeout (emphasizeInlineListForKeyword keyword list_inline)
+      Superscript list_inline -> Superscript (emphasizeInlineListForKeyword keyword list_inline)
+      Subscript list_inline   -> Subscript (emphasizeInlineListForKeyword keyword list_inline) 
+      SmallCaps list_inline   -> SmallCaps (emphasizeInlineListForKeyword keyword list_inline) 
+      Space                   -> Space
+      SoftBreak               -> SoftBreak 
+      LineBreak               -> LineBreak 
+      Note list_block         -> Note (emphasizeKeywordInBlockList keyword list_block) 
+
+-- Emphasize a particular keyword in an Inline list
+emphasizeInlineListForKeyword :: Text -> PList Inline -> PList Inline
+emphasizeInlineListForKeyword keyword inline_list = 
+   case inline_list of 
+      Nil                -> Nil 
+      Cons inline rst    -> let 
+                             newinline = emphasizeKeywordInline keyword inline
+                             rst'      = emphasizeInlineListForKeyword keyword rst  
+                             in Cons newinline rst'
+
+-- Emphasize a particular keyword in a block list
+emphasizeKeywordInBlockList :: Text -> PList Block -> PList Block 
+emphasizeKeywordInBlockList keyword block_list = 
+   case block_list of 
+      Nil             -> Nil
+      Cons block rst  -> let
+                           newBlock = emphasizeKeywordInBlock keyword block 
+                           rst'     = emphasizeKeywordInBlockList keyword rst 
+                           in Cons newBlock rst'
+
+-- Emphasize a particular keyword in the blogs, return new Blogs
+emphasizeBlogContentsForKeyword :: Text -> Blog -> Blog
+emphasizeBlogContentsForKeyword keyword blogs = 
+   case blogs of 
+      End -> End
+      Layout1 header id author date content tags rst  -> case content of 
+         Content block -> let new_content   = Content (emphasizeKeywordInBlock keyword block)
+                              existsRst     = emphasizeBlogContentsForKeyword keyword rst
+                           in Layout1 header id author date (copyPacked new_content ) tags existsRst
+   
 
 -- main function 
 gibbon_main = 
-   let blog_list = mkBlogList 100
+   let blogs = mkBlogs_layout1 1000 0 100        -- mkBlogs_layout1 length start_id tag_length
        keyword :: Text
-       keyword = (getRandomString (mod rand 9))
-       exists :: Bool 
+       keyword = (getRandomString (mod rand 9))  -- some random keyword
+       exists :: PList Bool 
        some_text :: Text
-       some_text = (getRandomString (mod rand 9))
-       _        = printsym (quote "NEWLINE")
-       _        = printsym (quote "NEWLINE")
-       _        = printPacked blog_list
-       _        = printsym (quote "NEWLINE")
-       _        = printsym (quote "NEWLINE")
-       exists   = searchBlogsForKeyword keyword blog_list
-       _        = printsym (quote "Does keyword exist in blogs: ")
-       _        = printbool exists 
-       _        = printsym (quote "NEWLINE")
-       _        = printsym (quote "NEWLINE")
-       newBlogs = filterBlogsBasedOnTagKeyword keyword blog_list
-       _        = printsym (quote "Print the new blogs")
-       _        = printsym (quote "NEWLINE")
-       _        = printPacked newBlogs
-       _        = printsym (quote "NEWLINE")
+       some_text    = (getRandomString (mod rand 9))
+       _            = printsym (quote "NEWLINE")
+       _            = printsym (quote "NEWLINE")
+       _            = printPacked blogs
+       _            = printsym (quote "NEWLINE")
+       _            = printsym (quote "NEWLINE")
+       exists       = searchBlogContentsForKeyword keyword blogs
+       _            = printsym (quote "Does keyword exist in blogs: ")
+       _            = printPacked exists 
+       _            = printsym (quote "NEWLINE")
+       _            = printsym (quote "NEWLINE")
+       newBlogsTags = filterBlogsBasedOnKeywordInTagList keyword blogs
+       _            = printsym (quote "Print the new blogs after a searching for keywords in the TagList")
+       _            = printsym (quote "NEWLINE")
+       _            = printPacked newBlogsTags
+       _            = printsym (quote "NEWLINE")
+       _            = printsym (quote "NEWLINE")
+       newBlogsCont = filterBlogsBasedOnKeywordInContent keyword blogs
+       _            = printsym (quote "Print the new blogs after searching for keywords in Content")
+       _            = printsym (quote "NEWLINE")
+       _            = printPacked newBlogsTags
+       _            = printsym (quote "NEWLINE")
+       _            = printsym (quote "NEWLINE")
+       word1        = "Same"
+       word2        = "Same"
+       similar      = compareWord word1 word2
+       _            = printsym (quote "Print results after comparing two words: ")
+       _            = printbool similar
+       _            = printsym (quote "NEWLINE")
+       _            = printsym (quote "NEWLINE")
+       _            = printsym (quote "Print blogs after emphasizing a particular keyword.")
+       newBlogsEmph = emphasizeBlogContentsForKeyword keyword blogs
+       _            = printPacked newBlogsEmph
+       _            = printsym (quote "NEWLINE")
+       _            = printsym (quote "NEWLINE")
    in ()
        
 
 -- gibbon --packed --no-gc --toC Main.hs; gcc -g Main.c -o main
+
+-- Passes written so far
+
+-- 1.) Search for a keyword in Content of Blogs 
+-- 2.) Search for a keyword in TagList of Blogs 
+-- 3.) Filter blogs based on a particular keyword
+-- 4.) Filter blogs based on a particular keyword in the TagList
+-- 5.) emphasize a particular keyword in the Content of Blogs
