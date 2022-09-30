@@ -1,14 +1,15 @@
 module Main where
 
-import Gibbon.Prelude
-import Gibbon.PList
-import Gibbon.Vector
+import System.TimeIt
+import qualified Data.Vector as V
+import System.Random
 
-type Text   = Vector Char
+data PList a = Nil | Cons a (PList a) deriving (Show)
+
+type Text   = V.Vector Char   -- -> Maybe this needs to be changed to a String type in haskell ? 
 
 --type Target = (Text, Text)
 --type Attr   = (Text, (PList Text), (PList (Text, Text)))
---type Format = Format Text
 
 -- For simplicity, we are assuming for this benchmark that data Inline is tokenized at the "word" level.
 -- Therefore, The Base case where "Text" is used is going to be a single word, i.e, "Str Text".
@@ -51,14 +52,14 @@ data Block =      Plain (PList Inline)
                 deriving (Show)
 
 -- Define Blog elements
-data BlogHeader  = Header Text
-data BlogId      = ID Int
-data BlogAuthor  = Author Text
-data BlogDate    = Date Text
-data BlogContent = Content Block
-data BlogTags    = TagList (PList Text)
+data BlogHeader  = Header Text           deriving (Show)
+data BlogId      = ID Int                deriving (Show)
+data BlogAuthor  = Author Text           deriving (Show)
+data BlogDate    = Date Text             deriving (Show)
+data BlogContent = Content Block         deriving (Show) 
+data BlogTags    = TagList (PList Text)  deriving (Show)
 
--- Define packed Blog data Type/s, we can arrange the fields here to change their relative ordering. 
+-- Define Blog data Type/s
 data Blog =   End 
             | Layout1 (BlogHeader) (BlogId) (BlogAuthor) (BlogDate) (BlogContent) (BlogTags) (Blog)
             | Layout2 (BlogContent) (BlogTags) (Blog) (BlogHeader) (BlogId) (BlogAuthor) (BlogDate) 
@@ -73,7 +74,7 @@ data Blog =   End
 -- Data structures for a Fully Inverted Index table 
 -- LocationInfo = (Doc id or address, location/address in document)
 -- Mapping      = (keyword as text, List of Docs as LocationInfo tuples)
--- But maybe, Mapping and Location Info should be packed data as well? If we are to run multiple passes on them?
+-- But maybe, Mapping and Location Info should be packed data as well ? If we are to run multiple passes on them?
 
 type LocationInfo  = (Int, Int) 
 type Mapping       = (Text, PList LocationInfo)
@@ -86,39 +87,30 @@ mkChar val = 'a'
 getRandomString :: Int -> Text
 getRandomString option = 
     if option == 0 then 
-        let str :: Text
-            str = generate 5 mkChar
+        let str = V.generate 5 mkChar
             in str
     else if option == 1 then
-        let str :: Text 
-            str = generate 5 mkChar
+        let str = V.generate 5 mkChar
             in str
     else if option == 2 then
-        let str :: Text 
-            str = generate 5 mkChar
+        let str = V.generate 5 mkChar
             in str
     else if option == 3 then
-        let str :: Text 
-            str = generate 5 mkChar
+        let str = V.generate 5 mkChar
             in str
     else if option == 4 then
-        let str :: Text 
-            str = generate 5 mkChar
+        let str = V.generate 5 mkChar
             in str
     else if option == 5 then
-        let str :: Text 
-            str = generate 5 mkChar
+        let str = V.generate 5 mkChar
             in str
     else if option == 6 then
-        let str :: Text 
-            str = generate 5 mkChar
+        let str = V.generate 5 mkChar
             in str
     else if option == 7 then
-        let str :: Text
-            str = generate 5 mkChar
+        let str = V.generate 5 mkChar
             in str
-    else let str :: Text 
-             str = generate 5 mkChar
+    else let str = V.generate 5 mkChar
              in str
 
 -- Make an Inline type, option chooses what kind of Inline data type we are creating
@@ -140,7 +132,7 @@ mkInline option =
 -- This creates all the base cases for the inline type 
 mkInlineBaseCase :: Int -> Inline
 mkInlineBaseCase option = 
-   if option == 0 then (Str (getRandomString (mod rand 9)))   -- get a random word
+   if option == 0 then (Str (getRandomString 0))   -- get a random word
    else if option == 1 then Space
    else if option == 2 then SoftBreak
    else LineBreak 
@@ -151,11 +143,11 @@ mkInlineList length base =
    if length <= 0 then Nil 
    -- If its not base case, then don't stop recursion. 
    else if (base == 0) then 
-      let item = (mkInline (mod rand 8))
+      let item = (mkInline 0)
           rst  = (mkInlineList (length - 1) base)
           in Cons item rst
    -- If its  base case, then stop recursion in Inline data type and only add base cases. 
-   else let item = (mkInlineBaseCase (mod rand 4))
+   else let item = (mkInlineBaseCase 0)
             rst  = mkInlineList (length - 1) base 
          in Cons item rst
 
@@ -164,19 +156,19 @@ mkBlockList :: Int -> Int -> (PList Block)
 mkBlockList length base = 
    if length <= 0 then Nil
    else if (base == 0) then
-      let item = (mkBlock (mod rand 3))
+      let item = (mkBlock 0)
           rst  = (mkBlockList (length - 1) base)
       in Cons item rst
-   else let item = (mkBlockBaseCase (mod rand 2))
+   else let item = (mkBlockBaseCase 0)
             rst  = (mkBlockList (length - 1) base) 
       in Cons item rst
 
 -- Make a Block data type with random data, make depth of recursion to 1 for now
 mkBlock :: Int -> Block
 mkBlock option = 
-   if option == 0 then (Plain (mkInlineList 1000 1))
-   else if option == 1 then (Para (mkInlineList 1000 1))
-   else (BlockQuote (mkBlockList 1000 1))
+   if option == 0 then (Plain (mkInlineList 100 1))
+   else if option == 1 then (Para (mkInlineList 100 1))
+   else (BlockQuote (mkBlockList 100 1))
 
 -- Base case for make Block
 mkBlockBaseCase :: Int -> Block 
@@ -188,7 +180,7 @@ mkBlockBaseCase option =
 mkTagList :: Int -> (PList Text)
 mkTagList length = 
    if length <= 0 then Nil
-   else let elem = (getRandomString (mod rand 9))
+   else let elem = (getRandomString 0) --rand
             rst  = mkTagList (length - 1)
           in Cons elem rst
 
@@ -226,16 +218,15 @@ mkBlogTags taglist = TagList taglist
 --           rst     = mkBlogs_layout1 (length - 1) (id+1) tag_length 
 --          in Layout1 header blogID author date content tags rst
 
-
 mkBlogs_layout1 :: Int -> Int -> Int -> Blog
 mkBlogs_layout1 length id tag_length =
    if length <= 0 then End
    else 
-      let header  = Header (getRandomString (mod rand 9))
+      let header  = Header (getRandomString 0)
           blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))
-          content = Content (mkBlock (mod rand 2))
+          author  = Author (getRandomString 0)
+          date    = Date (getRandomString 0)
+          content = Content (mkBlock 0)
           tags    = TagList (mkTagList 100)
           rst     = mkBlogs_layout1 (length - 1) (id+1) tag_length 
          in Layout1 header blogID author date content tags rst
@@ -245,13 +236,13 @@ mkBlogs_layout2 :: Int -> Int -> Int -> Blog
 mkBlogs_layout2 length id tag_length =
    if length <= 0 then End
    else 
-      let content = Content (mkBlock (mod rand 2))
+      let content = Content (mkBlock 0)
           tags    = TagList (mkTagList 100)  
           rst     = mkBlogs_layout2 (length - 1) (id+1) tag_length
-          header  = Header (getRandomString (mod rand 9))
+          header  = Header (getRandomString 0)
           blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))                  
+          author  = Author (getRandomString 0)
+          date    = Date (getRandomString 0)                  
          in Layout2 content tags rst header blogID author date 
 
 mkBlogs_layout3 :: Int -> Int -> Int -> Blog
@@ -260,11 +251,11 @@ mkBlogs_layout3 length id tag_length =
    else 
       let tags    = TagList (mkTagList 100)
           rst     = mkBlogs_layout3 (length - 1) (id+1) tag_length
-          content = Content (mkBlock (mod rand 2))          
-          header  = Header (getRandomString (mod rand 9))
+          content = Content (mkBlock 0)       
+          header  = Header (getRandomString 0)
           blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))           
+          author  = Author (getRandomString 0)
+          date    = Date (getRandomString 0)           
          in Layout3 tags rst content header blogID author date
 
 mkBlogs_layout4 :: Int -> Int -> Int -> Blog
@@ -272,12 +263,12 @@ mkBlogs_layout4 length id tag_length =
    if length <= 0 then End
    else 
       let tags    = TagList (mkTagList 100)
-          content = Content (mkBlock (mod rand 2))
+          content = Content (mkBlock 0)
           rst     = mkBlogs_layout4 (length - 1) (id+1) tag_length          
-          header  = Header (getRandomString (mod rand 9))          
+          header  = Header (getRandomString 0)          
           blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))           
+          author  = Author (getRandomString 0)
+          date    = Date (getRandomString 0)           
          in Layout4 tags content rst header blogID author date
 
 mkBlogs_layout5 :: Int -> Int -> Int -> Blog
@@ -286,22 +277,22 @@ mkBlogs_layout5 length id tag_length =
    else 
       let rst     = mkBlogs_layout5 (length - 1) (id+1) tag_length
           tags    = TagList (mkTagList 100)
-          content = Content (mkBlock (mod rand 2))                       
-          header  = Header (getRandomString (mod rand 9))
+          content = Content (mkBlock 0)                       
+          header  = Header (getRandomString 0)
           blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))           
+          author  = Author (getRandomString 0)
+          date    = Date (getRandomString 0)           
          in Layout5 rst tags content header blogID author date
 
 mkBlogs_layout6 :: Int -> Int -> Int -> Blog
 mkBlogs_layout6 length id tag_length =
    if length <= 0 then End
    else 
-      let header  = Header (getRandomString (mod rand 9))          
+      let header  = Header (getRandomString 0)          
           blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))
-          content = Content (mkBlock (mod rand 2))                
+          author  = Author (getRandomString 0)
+          date    = Date (getRandomString 0)
+          content = Content (mkBlock 0)                
           rst     = mkBlogs_layout6 (length - 1) (id+1) tag_length
           tags    = TagList (mkTagList 100)        
          in Layout6 header blogID author date content rst tags
@@ -311,11 +302,11 @@ mkBlogs_layout7 length id tag_length =
    if length <= 0 then End
    else 
       let rst     = mkBlogs_layout7 (length - 1) (id+1) tag_length
-          content = Content (mkBlock (mod rand 2))                                 
-          header  = Header (getRandomString (mod rand 9))
+          content = Content (mkBlock 0)                                 
+          header  = Header (getRandomString 0)
           blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))
+          author  = Author (getRandomString 0)
+          date    = Date (getRandomString 0)
           tags    = TagList (mkTagList 100)           
          in Layout7 rst content header blogID author date tags
           
@@ -359,12 +350,12 @@ compareWord word1 word2 =
    in if (compare_len) then (cmp 0 len1 word1 word2) else False
 
 -- Compare 2 Vector Char (Text) or words for equality if their length is the same. 
-cmp :: Int -> Int -> Vector Char -> Vector Char -> Bool
+cmp :: Int -> Int -> V.Vector Char -> V.Vector Char -> Bool
 cmp start end word1 word2 =
    if (start < end) then 
-      let a       = nth word1 start
-          b       = nth word2 start
-          eq      = if (a *==* b) then True else False 
+      let a       = word1 V.! start
+          b       = word2 V.! start
+          eq      = if (a == b) then True else False 
           recurse = cmp (start+1) end word1 word2
          in (eq && recurse) 
    else True
@@ -391,32 +382,32 @@ searchKeywordInBlogsTagList keyword blog =
 
 -- Filter Blogs with a particular keyword in the TagList of the Blog
 filterBlogsBasedOnKeywordInTagList :: Text -> Blog -> Blog
-filterBlogsBasedOnKeywordInTagList keyword blogs = case blogs of
+filterBlogsBasedOnKeywordInTagList keyword blogs = case blogs of 
       End                                             -> End
       Layout1 header id author date content tags rst  -> case tags of 
          TagList list -> let exists = searchTagList keyword list 
                              rst'   = filterBlogsBasedOnKeywordInTagList keyword rst
-                           in if (exists) then Layout1 header id author date content (copyPacked tags) rst'
+                           in if (exists) then Layout1 header id author date content tags rst'
                               else rst'
       Layout2 content tags rst header id author date   -> case tags of 
          TagList list -> let exists = searchTagList keyword list 
                              rst'   = filterBlogsBasedOnKeywordInTagList keyword rst
-                           in if (exists) then Layout2 content (copyPacked tags) rst' header id author date
+                           in if (exists) then Layout2 content tags rst' header id author date
                               else rst'
       Layout3 tags rst content header id author date   -> case tags of 
          TagList list -> let exists = searchTagList keyword list 
                              rst'   = filterBlogsBasedOnKeywordInTagList keyword rst 
-                           in if (exists) then Layout3 (copyPacked tags) rst' content header id author date
+                           in if (exists) then Layout3 tags rst' content header id author date
                               else rst'
       Layout4 tags content rst header id author date   -> case tags of 
          TagList list -> let exists = searchTagList keyword list 
                              rst'   = filterBlogsBasedOnKeywordInTagList keyword rst
-                           in if (exists) then Layout4 (copyPacked tags) content rst' header id author date
+                           in if (exists) then Layout4 tags content rst' header id author date
                               else rst' 
       Layout5 rst tags content header id author date  -> case tags of
          TagList list -> let exists = searchTagList keyword list 
                              rst'   = filterBlogsBasedOnKeywordInTagList keyword rst
-                           in if (exists) then Layout5 rst' (copyPacked tags) content header id author date
+                           in if (exists) then Layout5 rst' tags content header id author date
                               else rst'
       Layout6 header id author date content rst tags  -> case tags of
          TagList list -> let exists = searchTagList keyword list 
@@ -491,7 +482,6 @@ searchBlogContentsForKeyword keyword blogs =
          Content block -> let exists    = isKeywordPresentInBlock keyword block
                               existsRst = searchBlogContentsForKeyword keyword rst
                            in Cons exists existsRst
-      
 
 -- Filter the Blogs based on if some keyword is present in the Contents field of the Blogs or not 
 filterBlogsBasedOnKeywordInContent :: Text -> Blog -> Blog 
@@ -501,22 +491,22 @@ filterBlogsBasedOnKeywordInContent keyword blogs =
       Layout1 header id author date content tags rst -> case content of 
          Content block -> let exists = isKeywordPresentInBlock keyword block 
                               rst'   = filterBlogsBasedOnKeywordInContent keyword rst
-                              in if (exists) then Layout1 header id author date (copyPacked content) tags rst'
+                              in if (exists) then Layout1 header id author date content tags rst'
                                  else rst'
       Layout2 content tags rst header id author date -> case content of 
          Content block -> let exists = isKeywordPresentInBlock keyword block 
                               rst'   = filterBlogsBasedOnKeywordInContent keyword rst
-                              in if (exists) then Layout2 (copyPacked content) tags rst' header id author date
+                              in if (exists) then Layout2 content tags rst' header id author date
                                  else rst'
       Layout3 tags rst content header id author date -> case content of 
          Content block -> let exists = isKeywordPresentInBlock keyword block 
                               rst'   = filterBlogsBasedOnKeywordInContent keyword rst
-                              in if (exists) then Layout3 tags rst' (copyPacked content) header id author date
+                              in if (exists) then Layout3 tags rst' content header id author date
                                  else rst'
       Layout4 tags content rst header id author date -> case content of 
          Content block -> let exists = isKeywordPresentInBlock keyword block 
                               rst'   = filterBlogsBasedOnKeywordInContent keyword rst
-                              in if (exists) then Layout4 tags (copyPacked content) rst' header id author date
+                              in if (exists) then Layout4 tags content rst' header id author date
                                  else rst'
 
 -- Emphasize a particular keyword in a Block type
@@ -536,7 +526,7 @@ emphasizeKeywordInline keyword inline =
       Str text           -> let isSame = compareWord keyword text 
                                 in if (isSame) then let
                                        newlist :: PList Inline 
-                                       newlist = (Cons (copyPacked inline)) Nil                         -- ---> Here we had to use a call to copyPacked in order to copy over the inline to a new region, otherwise segfaults. 
+                                       newlist = (Cons inline) Nil                         -- ---> Here we had to use a call to copyPacked in order to copy over the inline to a new region. 
                                     in (Emph newlist)
                                    else inline
       Emph list_inline        -> Emph (emphasizeInlineListForKeyword keyword list_inline)
@@ -579,85 +569,48 @@ emphasizeBlogContentsForKeyword keyword blogs =
       Layout1 header id author date content tags rst  -> case content of 
          Content block -> let new_content   = Content (emphasizeKeywordInBlock keyword block)
                               existsRst     = emphasizeBlogContentsForKeyword keyword rst
-                           in Layout1 header id author date (copyPacked new_content ) tags existsRst
+                           in Layout1 header id author date new_content tags existsRst
       Layout2 content tags rst header id author date  -> case content of 
          Content block -> let new_content   = Content (emphasizeKeywordInBlock keyword block)
                               existsRst     = emphasizeBlogContentsForKeyword keyword rst
-                           in Layout2 (copyPacked new_content) tags existsRst header id author date
+                           in Layout2 new_content tags existsRst header id author date
       Layout3 tags rst content header id author date  -> case content of 
          Content block -> let new_content   = Content (emphasizeKeywordInBlock keyword block)
                               existsRst     = emphasizeBlogContentsForKeyword keyword rst
-                           in Layout3 tags existsRst (copyPacked new_content) header id author date
+                           in Layout3 tags existsRst new_content header id author date
       Layout4 tags content rst header id author date  -> case content of 
          Content block -> let new_content   = Content (emphasizeKeywordInBlock keyword block)
                               existsRst     = emphasizeBlogContentsForKeyword keyword rst
-                           in Layout4 tags (copyPacked new_content) existsRst header id author date
-      
+                           in Layout4 tags new_content existsRst header id author date
+
 
 -- main function 
-gibbon_main = 
-   let blogs1  = mkBlogs_layout1 5000 0 1000        -- mkBlogs_layout1 length start_id tag_length
-       blogs2  = mkBlogs_layout2 5000 0 1000
-       blogs3  = mkBlogs_layout3 5000 0 1000
-       blogs4  = mkBlogs_layout4 5000 0 1000
-       blogs5  = mkBlogs_layout5 5000 0 1000
-       blogs6  = mkBlogs_layout6 5000 0 1000
-       blogs7  = mkBlogs_layout7 5000 0 1000
-       keyword = (getRandomString 2)             -- some random keyword
-       new_blogs1 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs1)
-       new_blogs2 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs2)
-       new_blogs3 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs3)
-       new_blogs4 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs4)
-       new_blogs5 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs5)
-       new_blogs6 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs6)
-       new_blogs7 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs7)
-       --_          = printPacked new_blogs1
-       --_          = printPacked new_blogs2
-       --_          = printPacked new_blogs3
-       --_          = printPacked new_blogs4
-       --_          = printPacked new_blogs5
-      --  some_text    = (getRandomString (mod rand 9))
-      --  _            = printsym (quote "NEWLINE")
-      --  _            = printsym (quote "NEWLINE")
-      --  _            = printPacked blogs
-      --  _            = printsym (quote "NEWLINE")
-      --  _            = printsym (quote "NEWLINE")
-      --  exists       = searchBlogContentsForKeyword keyword blogs
-      --  _            = printsym (quote "Does keyword exist in blogs: ")
-      --  _            = printPacked exists 
-      --  _            = printsym (quote "NEWLINE")
-      --  _            = printsym (quote "NEWLINE")
-      --  newBlogsTags = filterBlogsBasedOnKeywordInTagList keyword blogs
-      --  _            = printsym (quote "Print the new blogs after a searching for keywords in the TagList")
-      --  _            = printsym (quote "NEWLINE")
-      --  _            = printPacked newBlogsTags
-      --  _            = printsym (quote "NEWLINE")
-      --  _            = printsym (quote "NEWLINE")
-      --  newBlogsCont = filterBlogsBasedOnKeywordInContent keyword blogs
-      --  _            = printsym (quote "Print the new blogs after searching for keywords in Content")
-      --  _            = printsym (quote "NEWLINE")
-      --  _            = printPacked newBlogsTags
-      --  _            = printsym (quote "NEWLINE")
-      --  _            = printsym (quote "NEWLINE")
-      --  word1        = "Same"
-      --  word2        = "Same"
-      --  similar      = compareWord word1 word2
-      --  _            = printsym (quote "Print results after comparing two words: ")
-      --  _            = printbool similar
-      --  _            = printsym (quote "NEWLINE")
-      --  _            = printsym (quote "NEWLINE")
-      --  _            = printsym (quote "Print blogs after emphasizing a particular keyword.")
-      --  newBlogsEmph = emphasizeBlogContentsForKeyword keyword blogs
-      --  _            = printPacked newBlogsEmph
-      --  _            = printsym (quote "NEWLINE")
-      --  _            = printsym (quote "NEWLINE")
-   in ()
-       
+main :: IO ()
+main = 
+    do
+        let blogs1 = mkBlogs_layout1 100 0 10
+            blogs2 = mkBlogs_layout2 100 0 10
+            blogs3 = mkBlogs_layout3 100 0 10
+            blogs4 = mkBlogs_layout4 100 0 10
+            keyword = getRandomString 2
+            --exists = searchBlogContentsForKeyword keyword blogs
+            --newBlogs1 = filterBlogsBasedOnKeywordInTagList keyword blogs1
+            --newBlogs2 = filterBlogsBasedOnKeywordInTagList keyword blogs2
+            --newBlogs3 = filterBlogsBasedOnKeywordInTagList keyword blogs3
+            --newBlogs4 = filterBlogsBasedOnKeywordInTagList keyword blogs4
+            --newBlogsEmph = emphasizeBlogContentsForKeyword keyword blogs
+            time1 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs1)
+            time2 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs2)
+            time3 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs3)
+            time4 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs4)
+            in time1 -- (time1, time2, time3, time4)
 
--- gibbon --packed --no-gc --toC Main.hs; gcc -g Main.c -o main
+
+-- compile with
+-- ghc MainGhc.hs -package vector
+
 
 -- Passes written so far
-
 -- 1.) Search for a keyword in Content of Blogs 
 -- 2.) Search for a keyword in TagList of Blogs 
 -- 3.) Filter blogs based on a particular keyword
