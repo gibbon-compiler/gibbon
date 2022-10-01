@@ -500,7 +500,7 @@ instance Pretty NewL2.LocArg where
         text "EndOfReg_Tagged"<+> pprintWithStyle sty v
 
 instance Pretty NewL2.Ty2 where
-  pprintWithStyle sty (NewL2.MkTy2 ty2) = text "MkTy2 " <+> pprintWithStyle sty ty2
+  pprintWithStyle sty (NewL2.MkTy2 ty2) = parens $ text "MkTy2 " <+> pprintWithStyle sty ty2
 
 -- L3
 instance (Out l, HasPrettyToo E3Ext l (UrTy l)) => Pretty (L3.E3Ext l (UrTy l)) where

@@ -57,13 +57,19 @@ just like we do the output locations.
 
 
 -- Maps a location to a region
-type RegEnv = M.Map LocVar Var
+type RegEnv = M.Map LocVar RegVar
 
 -- Maps the LHS of a constructor to the region of it's last field. Because of
 -- parallelism the last field of constructor may not be in the same region as
 -- it's tag. The region of the last field represents the "finished writing
 -- output here region", so that's the region that should be threaded.
-type LastFieldRegEnv = M.Map Var Var
+type RightmostRegEnv = M.Map LocVar RegVar
+
+-- Location arguments
+type FnLocArgs = [LRM]
+
+-- Allocation env
+type AllocEnv = M.Map Var TyCon
 
 threadRegions :: NewL2.Prog2 -> PassM NewL2.Prog2
 threadRegions Prog{ddefs,fundefs,mainExp} = do
@@ -73,7 +79,7 @@ threadRegions Prog{ddefs,fundefs,mainExp} = do
   mainExp' <- case mainExp of
                 Nothing -> return Nothing
                 Just (mn, ty) -> Just . (,ty) <$>
-                  threadRegionsExp ddefs fundefs True M.empty env2 M.empty M.empty M.empty S.empty mn
+                  threadRegionsExp ddefs fundefs [] M.empty env2 M.empty M.empty M.empty S.empty S.empty mn
   return $ Prog ddefs fundefs' mainExp'
 
 threadRegionsFn :: DDefs Ty2 -> FunDefs2 -> NewL2.FunDef2 -> PassM NewL2.FunDef2
@@ -88,7 +94,8 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
                          _ -> acc)
       rlocs_env = foldr fn M.empty (arrIns funTy)
       wlocs_env = fn (arrOut funTy) M.empty
-  bod' <- threadRegionsExp ddefs fundefs False initRegEnv env2 M.empty rlocs_env wlocs_env S.empty funBody
+      fnlocargs = locVars funTy
+  bod' <- threadRegionsExp ddefs fundefs fnlocargs initRegEnv env2 M.empty rlocs_env wlocs_env S.empty S.empty funBody
   -- Boundschecking
   dflags <- getDynFlags
   let bod'' = if gopt Opt_BigInfiniteRegions dflags
@@ -119,17 +126,17 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
                      (locVars funTy)
   return $ f {funBody = bod''}
 
-threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> Bool -> RegEnv -> Env2 Ty2
-                 -> LastFieldRegEnv -> M.Map Var TyCon -> M.Map Var TyCon -> S.Set LocVar
+threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> [LRM] -> RegEnv -> Env2 Ty2
+                 -> RightmostRegEnv -> AllocEnv -> AllocEnv -> S.Set LocVar -> S.Set LocVar
                  -> NewL2.Exp2 -> PassM NewL2.Exp2
-threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs ex =
+threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env indirs redirs ex =
   case ex of
 
     AppE f applocs args -> do
       let ty = gRecoverType ddefs env2 ex
           argtys = map (gRecoverType ddefs env2) args
           argtylocs = concatMap locsInTy argtys
-          in_regs = foldr (\x acc -> if S.member x indirs
+          in_regs = foldr (\x acc -> if S.member x indirs || S.member x redirs
                                      then (EndOfReg_Tagged x) : acc
                                      else case M.lookup x renv of
                                             Just r -> (NewL2.EndOfReg r Input (toEndV r)) : acc
@@ -145,61 +152,76 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs
         return $ AppE f newapplocs args
       -- Otherwise, only input regions.
       else do
-        let newapplocs = _todo -- (map toEndV in_regs) ++ applocs
+        let newapplocs = in_regs ++ applocs
         return $ AppE f newapplocs args
 
     LetE (v,locs,ty, (AppE f applocs args)) bod -> do
-      let -- argtys = map (gRecoverType ddefs env2) args
-          -- argtylocs = concatMap locsInTy argtys
-          argtylocs = concatMap
+        let argtylocs = concatMap
                         (\arg ->
                              let argty = gRecoverType ddefs env2 arg in
                              case arg of
                                VarE w ->
                                  case unTy2 argty of
+                                   -- Indirection or redirection cursor.
                                    CursorTy -> [w]
                                    _ -> locsInTy argty
                                _ -> locsInTy argty)
                         args
-          in_regs' = foldr (\x acc -> if S.member x indirs
-                                      then (EndOfReg_Tagged x) : acc
-                                      else case M.lookup x renv of
-                                             Just r -> (NewL2.EndOfReg r Input (toEndV r)) : acc
-                                             Nothing -> acc)
-                     [] argtylocs
-          -- Map EndOf locations to input regions
-          -- [2022.09.21]: this looks wrong... why is locs being zipped with in_regs,
-          -- they're unrelated.
-          in_regs_for_renv =
-                    foldr (\x acc -> case M.lookup x renv of
-                                       Just r -> r:acc
-                                       Nothing -> acc)
-                    [] argtylocs
-          renv' = M.union renv (M.fromList $ zip (map toLocVar locs) in_regs_for_renv)
+        let in_regargs =
+              foldr (\x acc -> if S.member x indirs || S.member x redirs
+                               then (EndOfReg_Tagged x) : acc
+                               else case M.lookup x renv of
+                                           Just r -> (NewL2.EndOfReg r Input (toEndV r)) : acc
+                                           Nothing -> acc)
+              [] argtylocs
+        --------------------
+        let outretlocs = if hasPacked (unTy2 ty) then locsInTy ty else []
+            out_regvars = map (renv #) outretlocs
+        out_regvars' <- mapM (\r -> gensym r) out_regvars
+        let out_regargs = map (\r -> NewL2.EndOfReg r Output (toEndV r)) out_regvars
+        let out_regargs' = map (\r -> NewL2.EndOfReg r Output (toEndV r)) out_regvars'
 
-      -- Similar to the AppE case above, this one would have input and
-      -- output regions.
-      if (hasPacked (unTy2 ty))
-      then do
-        let tylocs = locsInTy ty
-            out_regs   = map (renv #) tylocs
-        out_regs' <- mapM (\r -> gensym r) out_regs
-        -- Update all locations to point to the fresh region
-        let renv'' = foldr (\(lc,r,r') acc ->
-                             M.insert lc r' $
-                             M.map (\tyl -> if tyl == r then r' else tyl) acc)
-                    renv'
-                    (L.zip3 tylocs out_regs out_regs')
-            newretlocs = (map (\r -> NewL2.EndOfReg r Output (toEndV r)) out_regs') ++ locs
-            newapplocs = in_regs' ++
-                         (map (\r -> NewL2.EndOfReg r Output (toEndV r)) out_regs) ++
-                         applocs
+        -- Indirections will return end-of-input-region cursor of the region
+        -- where they're written, and not of their target.
+        let in_regvars = map (renv #) argtylocs
+        in_regvars' <- mapM (\r -> gensym r) in_regvars
+        let in_regargs' = map (\r -> NewL2.EndOfReg r Input (toEndV r)) in_regvars'
+        --------------------
+        let newapplocs = in_regargs ++ out_regargs ++ applocs
+        let newretlocs = in_regargs' ++ out_regargs' ++ locs
+        --------------------
+        -- 'locs' only has end-witnesses up to this pass. Make their regions
+        -- same as regions of the locations that the function traverses.
+        let traversed_indices = let fnty = funTy (fundefs # f) in
+                                      map fst $
+                                      filter (\(_i,loc) -> Traverse loc `S.member` (arrEffs fnty)) $
+                                      zip [0..] (allLocVars fnty)
+        let renv1 = M.fromList $ zip (map toLocVar locs) (map (\i -> renv # (argtylocs !! i)) traversed_indices)
+        let renv2 = M.union renv1 renv
+        -- Update input and returned locations to point to the fresh regions
+        let renv3 =
+              foldr (\(lc,r,r') acc ->
+                       M.insert lc r' $
+                       M.map (\w -> if w == r then r' else w) acc)
+              renv2
+              (L.zip3 outretlocs out_regvars out_regvars')
+        let renv4 =
+              foldr (\(lc,r,r') acc ->
+                       if S.member lc indirs then acc else
+                         M.insert lc r' $
+                         M.map (\w -> if w == r then r' else w) acc)
+              renv3
+              (L.zip3 argtylocs in_regvars in_regvars')
+        -- TODO: only keep the rightmost end-of-input-region cursor in renv.
+        --------------------
         let env2' = extendVEnv v ty env2
-            rlocs_env' = case unTy2 ty of
-                           PackedTy tycon loc -> M.insert loc tycon rlocs_env
-                           _ -> error "threadRegionExp: "
+            goTy t acc = case t of
+                           PackedTy tycon loc -> M.insert loc tycon acc
+                           ProdTy tys -> foldr goTy acc tys
+                           _ -> acc
+            rlocs_env' = goTy (unTy2 ty) rlocs_env
             wlocs_env' = foldr (\loc acc -> M.delete loc acc) wlocs_env (locsInTy ty)
-        bod' <- threadRegionsExp ddefs fundefs isMain renv'' env2' lfenv rlocs_env' wlocs_env' indirs bod
+        bod' <- threadRegionsExp ddefs fundefs fnLocArgs renv4 env2' lfenv rlocs_env' wlocs_env' indirs redirs bod
         let -- free = S.fromList $ freeLocVars bod
             free = ss_free_locs (S.fromList (v : locsInTy ty ++ (map toLocVar locs))) env2' bod
             free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
@@ -208,22 +230,10 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs
         let binds = rpush ++ wpush ++ [(v, newretlocs, ty, AppE f newapplocs args)] ++ wpop ++ rpop
         (pure $ mkLets binds bod')
 
-      -- Only input regions.
-      else do
-          let env2' = extendVEnv v ty env2
-          bod' <- threadRegionsExp ddefs fundefs isMain renv' env2' lfenv rlocs_env wlocs_env indirs bod
-          let newapplocs = in_regs' ++ applocs
-          let -- free = S.fromList $ freeLocVars bod
-              free = ss_free_locs (S.fromList (v : locsInTy ty ++ (map toLocVar locs))) env2' bod
-              free_rlocs = free `S.intersection` (M.keysSet rlocs_env)
-              free_wlocs = free `S.intersection` (M.keysSet wlocs_env)
-          (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs
-          let binds = rpush ++ wpush ++ [(v, locs, ty, AppE f newapplocs args)] ++ wpop ++ rpop
-          (pure $ mkLets binds bod')
 
     LetE (v,locs,ty, (SpawnE f applocs args)) bod -> do
       let e' = LetE (v,locs,ty, (AppE f applocs args)) bod
-      e'' <- threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs e'
+      e'' <- threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env indirs redirs e'
       pure $ changeAppToSpawn f args e''
 
     -- AUDITME: this causes all all DataConE's to return an additional cursor.
@@ -237,11 +247,11 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs
                           PackedTy _ last_loc -> do
                             let reg_of_last_arg = renv M.! last_loc
                             if reg_of_tag /= reg_of_last_arg
-                            then M.insert v reg_of_last_arg lfenv
+                            then M.insert loc reg_of_last_arg lfenv
                             else lfenv
                           _ -> lfenv
       LetE <$> (v,locs,ty,) <$> go rhs <*>
-        threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv' rlocs_env wlocs_env indirs bod
+        threadRegionsExp ddefs fundefs fnLocArgs renv (extendVEnv v ty env2) lfenv' rlocs_env wlocs_env indirs redirs bod
 
     -- Sometimes, this expression can have RetE forms. We should collect and update
     -- the locs here appropriately.
@@ -250,28 +260,28 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs
        let retlocs = findRetLocs rhs'
            newretlocs = retlocs ++ locs
        LetE (v, newretlocs,ty, rhs') <$>
-         threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv rlocs_env wlocs_env indirs bod
+         threadRegionsExp ddefs fundefs fnLocArgs renv (extendVEnv v ty env2) lfenv rlocs_env wlocs_env indirs redirs bod
 
     LetE (v,locs,ty,rhs@(Ext (AllocateTagHere x x_tycon))) bod -> do
       let -- x_tycon = (wlocs_env # x)
           rlocs_env' = M.insert x x_tycon rlocs_env
           wlocs_env' = M.delete x wlocs_env
       (LetE (v,locs,ty,rhs)) <$>
-        threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv rlocs_env' wlocs_env' indirs bod
+        threadRegionsExp ddefs fundefs fnLocArgs renv (extendVEnv v ty env2) lfenv rlocs_env' wlocs_env' indirs redirs bod
 
     LetE (v,locs,ty, rhs) bod ->
       LetE <$> (v,locs,ty,) <$> go rhs <*>
-        threadRegionsExp ddefs fundefs isMain renv (extendVEnv v ty env2) lfenv rlocs_env wlocs_env indirs bod
+        threadRegionsExp ddefs fundefs fnLocArgs renv (extendVEnv v ty env2) lfenv rlocs_env wlocs_env indirs redirs bod
 
     WithArenaE v e ->
-      WithArenaE v <$> threadRegionsExp ddefs fundefs isMain renv (extendVEnv v (MkTy2 ArenaTy) env2) lfenv rlocs_env wlocs_env indirs e
+      WithArenaE v <$> threadRegionsExp ddefs fundefs fnLocArgs renv (extendVEnv v (MkTy2 ArenaTy) env2) lfenv rlocs_env wlocs_env indirs redirs e
 
     Ext ext ->
       case ext of
         AddFixed{} -> return ex
         LetLocE loc FreeLE bod ->
           Ext <$> LetLocE loc FreeLE <$>
-            threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs bod
+            threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env indirs redirs bod
 
         -- Update renv with a binding for loc
         LetLocE loc rhs bod -> do
@@ -283,27 +293,22 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs
                       FromEndLE lc           -> renv # (toLocVar lc)
               wlocs_env' = M.insert loc hole_tycon wlocs_env
           Ext <$> LetLocE loc rhs <$>
-            threadRegionsExp ddefs fundefs isMain (M.insert loc reg renv) env2 lfenv rlocs_env wlocs_env' indirs bod
+            threadRegionsExp ddefs fundefs fnLocArgs (M.insert loc reg renv) env2 lfenv rlocs_env wlocs_env' indirs redirs bod
 
         RetE locs v -> do
           let ty = lookupVEnv v env2
-              fn = (\r -> NewL2.EndOfReg r Output (toEndV r))
-          if not isMain && isPackedTy (unTy2 ty)
-          then
-            case M.lookup v lfenv of
-              Nothing -> do
-                let tylocs  = locsInTy ty
-                    regs    = map (renv #) tylocs
-                    newlocs = map fn regs
-                return $ Ext $ RetE (newlocs ++ locs) v
-              Just r  -> return $ Ext $ RetE (fn r : locs) v
-          else if hasPacked (unTy2 ty)
-          then do
-            let tylocs  = locsInTy ty
-                regs    = map (renv #) tylocs
-                newlocs = map fn regs
-            return $ Ext $ RetE (newlocs ++ locs) v
-          else return $ Ext ext
+              fn m = (\r -> NewL2.EndOfReg r m (toEndV r))
+              outtylocs = locsInTy ty
+              outtyregvars =
+                foldr (\loc acc -> case M.lookup loc lfenv of
+                                     Nothing -> (renv # loc) : acc
+                                     Just r  -> r : acc)
+                [] outtylocs
+              outtyregargs = map (fn Output) outtyregvars
+              inregvars = map ((renv #) . lrmLoc) $ filter (\lrm -> lrmMode lrm == Input) fnLocArgs
+              inregargs = map (fn Input) inregvars
+              newlocs = inregargs ++ outtyregargs
+          return $ Ext $ RetE (newlocs ++ locs) v
 
         LetRegionE r sz ty bod -> do
           let -- free = S.fromList $ freeLocVars bod
@@ -343,7 +348,7 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs
       let (VarE v) = scrt
           PackedTy _ tyloc = unTy2 (lookupVEnv v env2)
           reg = renv M.! tyloc
-      CaseE scrt <$> mapM (docase reg renv env2 lfenv rlocs_env wlocs_env indirs) mp
+      CaseE scrt <$> mapM (docase reg renv env2 lfenv rlocs_env wlocs_env indirs redirs) mp
     TimeIt e ty b -> do
       e' <- go e
       return $ TimeIt e' ty b
@@ -353,9 +358,9 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs
     FoldE{} -> error $ "threadRegionsExp: TODO FoldE"
 
   where
-    go = threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs
+    go = threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env indirs redirs
 
-    docase reg renv1 env21 lfenv1 rlocs_env1 wlocs_env1 indirs1 (dcon,vlocargs,bod) = do
+    docase reg renv1 env21 lfenv1 rlocs_env1 wlocs_env1 indirs1 redirs1 (dcon,vlocargs,bod) = do
       -- Update the envs with bindings for pattern matched variables and locations.
       -- The locations point to the same region as the scrutinee.
       let (vars,locargs) = unzip vlocargs
@@ -371,10 +376,13 @@ threadRegionsExp ddefs fundefs isMain renv env2 lfenv rlocs_env wlocs_env indirs
                                   _ -> acc)
                               rlocs_env1
                               (fragileZip locs (lookupDataCon ddefs dcon))
-          indirs1' = if isIndirectionTag dcon || isRedirectionTag dcon
+          indirs1' = if isIndirectionTag dcon
                      then S.insert (head vars) indirs1
                      else indirs1
-      (dcon,vlocargs,) <$> (threadRegionsExp ddefs fundefs isMain renv1' env21' lfenv1 rlocs_env1' wlocs_env1 indirs1' bod)
+          redirs1' = if isRedirectionTag dcon
+                     then S.insert (head vars) redirs1
+                     else redirs1
+      (dcon,vlocargs,) <$> (threadRegionsExp ddefs fundefs fnLocArgs renv1' env21' lfenv1 rlocs_env1' wlocs_env1 indirs1' redirs1' bod)
 
     ss_free_locs :: S.Set Var -> Env2 Ty2 -> Exp2 -> S.Set Var
     ss_free_locs bound env20 ex0 =

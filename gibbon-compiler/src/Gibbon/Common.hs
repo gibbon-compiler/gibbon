@@ -9,7 +9,7 @@
 module Gibbon.Common
        (
          -- * Variables
-         Var(..), LocVar, fromVar, toVar, varAppend, toEndV, toSeqV, cleanFunName
+         Var(..), LocVar, RegVar, fromVar, toVar, varAppend, toEndV, toSeqV, cleanFunName
        , TyVar(..), isUserTv
 
          -- * Gensym monad
@@ -110,6 +110,9 @@ toSeqV v = varAppend v (toVar "_seq")
 
 -- | Abstract location variables.
 type LocVar = Var
+
+-- | Abstract region variables.
+type RegVar = Var
 
 -- | Type variables that enable polymorphism.
 data TyVar = BoundTv Var         -- Type variable bound by a ForAll.

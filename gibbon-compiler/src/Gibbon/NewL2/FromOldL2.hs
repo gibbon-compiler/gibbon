@@ -89,17 +89,18 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
                                            _ -> acc)
                                       []
                                       traversed_args
-                 (ewitnesses', locenv') =
+                 locenv' = updModality ty locenv
+                 (ewitnesses', locenv'') =
                         foldr
                           (\(witloc, tloc) (wits, env) ->
-                             let (New.Loc lrm) = (locenv # tloc)
+                             let (New.Loc lrm) = (env # tloc)
                                  wit' = New.EndWitness lrm witloc
                                  env' = M.insert witloc wit' env
                              in (wit' : wits, env'))
-                          ([], locenv)
+                          ([], locenv')
                           (zip ewitnesses traversed_locs)
              rhs' <- go locenv env2 rhs
-             bod' <- go locenv' (extendVEnv v ty env2) bod
+             bod' <- go locenv'' (extendVEnv v ty env2) bod
              let ty' = New.MkTy2 ty
              (pure $ LetE (v, ewitnesses', ty', rhs') bod')
 
@@ -110,7 +111,8 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
       | null ewitnesses ->
           do let ty' = New.MkTy2 ty
              rhs' <- go locenv env2 rhs
-             bod' <- go locenv (extendVEnv v ty env2) bod
+             let locenv' = updModality ty locenv
+             bod' <- go locenv' (extendVEnv v ty env2) bod
              pure $ LetE (v, [], ty', rhs') bod'
 
       | otherwise -> error $ "fromOldL2Exp: got" ++ sdoc ex
@@ -245,6 +247,16 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
           oth -> error $ "toLocArg: got" ++ sdoc oth
 
 
+  updModality :: Ty2 -> LocEnv -> LocEnv
+  updModality ty env =
+    let locs = locsInTy ty in
+      foldr (\loc acc -> M.adjust (\locarg ->
+                                     case locarg of
+                                       New.Loc lrm -> New.Loc (lrm { lrmMode = Input })
+                                       _ -> locarg)
+                         loc acc)
+      env locs
+
 --------------------------------------------------------------------------------
 
 
@@ -263,7 +275,7 @@ toOldL2 Prog{ddefs,fundefs,mainExp} = do
 
 
 toOldL2Fn :: New.FunDef2 -> PassM FunDef2
-toOldL2Fn f@FunDef{funArgs,funTy,funBody} = do
+toOldL2Fn f@FunDef{funTy,funBody} = do
   bod' <- toOldL2Exp funBody
   return $ f { funBody = bod', funTy = fmap New.unTy2 funTy }
 
