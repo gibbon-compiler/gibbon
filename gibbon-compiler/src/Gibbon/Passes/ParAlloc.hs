@@ -64,13 +64,13 @@ parAlloc Prog{ddefs,fundefs,mainExp} = do
   pure $ Prog ddefs fundefs' mainExp'
   where
     parAllocFn :: FunDef2 -> PassM FunDef2
-    parAllocFn f@FunDef{funArgs,funTy,funBody} =
-      if hasParallelism funTy
-      then do
+    parAllocFn f@FunDef{funArgs,funTy,funBody} = do
+      -- if hasParallelism funTy
+      -- then do
         region_on_spawn <- gopt Opt_RegionOnSpawn <$> getDynFlags
         dflags <- getDynFlags
         let ret_ty = arrOut funTy
-        when (hasPacked ret_ty && gopt Opt_Gibbon1 dflags) $
+        when (hasParallelism funTy && hasPacked ret_ty && gopt Opt_Gibbon1 dflags) $
           error "gibbon: Cannot compile parallel allocations in Gibbon1 mode."
 
         let initRegEnv = M.fromList $ map (\(LRM lc r _) -> (lc, regionToVar r)) (locVars funTy)
@@ -79,7 +79,7 @@ parAlloc Prog{ddefs,fundefs,mainExp} = do
             boundlocs = S.fromList (funArgs ++ allLocVars funTy ++ allRegVars funTy)
         bod' <- parAllocExp ddefs fundefs env2 initRegEnv M.empty Nothing [] S.empty boundlocs region_on_spawn funBody
         pure $ f {funBody = bod'}
-      else pure f
+      -- else pure f
 
 parAllocExp :: DDefs2 -> FunDefs2 -> Env2 Ty2 -> RegEnv -> AfterEnv -> Maybe Var
             -> [PendingBind] -> S.Set Var -> S.Set LocVar -> Bool -> Exp2
@@ -165,10 +165,6 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
           vars = gFreeVars (substLocInExp after_env rhs) `S.difference` (M.keysSet fundefs)
           used = (allFreeVars (substLocInExp after_env rhs)) `S.difference` (M.keysSet fundefs)
 
-      if v == "cpy_18070" || v == "stm_2381_5619_7454"
-      then dbgTraceIt (sdoc (v, vars, spawned, used, boundlocs)) (pure ())
-      else pure ()
-
       -- Swallow this binding, and add v to 'spawned'
       if not (S.disjoint vars spawned)
       then do
@@ -185,7 +181,7 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
       -- Emit this binding as usual
       else if S.disjoint vars spawned && S.isSubsetOf used boundlocs
       then do
-        let boundlocs' = S.insert v boundlocs
+        let boundlocs' = S.insert v boundlocs `S.union` (S.fromList locs)
         LetE <$> (v,locs,ty',) <$> go rhs
              <*> parAllocExp ddefs fundefs env2' reg_env' after_env mb_parent_id pending_binds' spawned boundlocs' region_on_spawn bod
       else error "parAlloc: LetE"
@@ -254,6 +250,13 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                   reg      = reg_env # loc2
                   reg_env' = M.insert loc reg reg_env
               parAllocExp ddefs fundefs env2 reg_env' after_env mb_parent_id pending_binds' spawned boundlocs region_on_spawn bod
+
+            AfterVariableLE v loc2 True | S.member loc2 boundlocs && S.member v boundlocs -> do
+              let reg = reg_env # loc2
+                  reg_env'  = M.insert loc reg reg_env
+                  boundlocs'= S.insert loc boundlocs
+              bod' <- parAllocExp ddefs fundefs env2 reg_env' after_env mb_parent_id pending_binds spawned boundlocs' region_on_spawn bod
+              pure $ Ext $ LetLocE loc (AfterVariableLE v loc2 False) bod'
 
             _ -> do
               let reg = case locexp of
