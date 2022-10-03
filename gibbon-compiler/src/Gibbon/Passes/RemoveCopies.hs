@@ -81,7 +81,7 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
         TagCursor a b -> pure $ Ext $ TagCursor a b
         LetLocE loc rhs bod -> do
           let reg = case rhs of
-                      StartOfLE r  -> regionToVar r
+                      StartOfRegionLE r  -> regionToVar r
                       InRegionLE r -> regionToVar r
                       AfterConstantLE _ lc   -> lenv # lc
                       AfterVariableLE _ lc _ -> lenv # lc

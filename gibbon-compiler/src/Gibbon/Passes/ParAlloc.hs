@@ -244,9 +244,9 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                        IfE (VarE not_stolen)
                            (Ext $ LetAvail [v] $
                             Ext $ LetLocE loc (AfterVariableLE v loc2 False) bod2) -- don't allocate in a fresh region
-                           (Ext $ LetParRegionE newreg Undefined Nothing $ Ext $ LetLocE newloc (StartOfLE newreg) bod1)
+                           (Ext $ LetParRegionE newreg Undefined Nothing $ Ext $ LetLocE newloc (StartOfRegionLE newreg) bod1)
               else
-                pure $ Ext $ LetParRegionE newreg Undefined Nothing $ Ext $ LetLocE newloc (StartOfLE newreg) bod1
+                pure $ Ext $ LetParRegionE newreg Undefined Nothing $ Ext $ LetLocE newloc (StartOfRegionLE newreg) bod1
 
             -- Binding is swallowed, but no fresh region is created. This can brought back safely after a sync.
             AfterVariableLE v loc2 True | not (S.member loc2 boundlocs) || not (S.member v boundlocs) -> do
@@ -269,7 +269,7 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
 
             _ -> do
               let reg = case locexp of
-                          StartOfLE r  -> regionToVar r
+                          StartOfRegionLE r  -> regionToVar r
                           InRegionLE r -> regionToVar r
                           AfterConstantLE _ lc   -> reg_env # lc
                           AfterVariableLE _ lc _ -> reg_env # lc
@@ -350,7 +350,7 @@ substLocInExp mp ex1 =
         sub loc = M.findWithDefault loc loc mp
 
         go2 lexp = case lexp of
-                     StartOfLE{} -> lexp
+                     StartOfRegionLE{} -> lexp
                      AfterConstantLE i loc -> AfterConstantLE i (sub loc)
                      AfterVariableLE i loc b -> AfterVariableLE i (sub loc) b
                      InRegionLE{} -> lexp

@@ -100,7 +100,7 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
             L2.TagCursor a b -> pure $ Ext $ L2.TagCursor a b
             L2.LetLocE loc rhs bod -> do
               let reg = case rhs of
-                      L2.StartOfLE r  -> r
+                      L2.StartOfRegionLE r  -> r
                       L2.InRegionLE r -> r
                       L2.AfterConstantLE _ lc   -> reg_env # lc
                       L2.AfterVariableLE _ lc _ -> reg_env # lc

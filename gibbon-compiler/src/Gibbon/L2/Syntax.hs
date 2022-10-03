@@ -145,7 +145,7 @@ data E2Ext loc dec
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
 -- | Define a location in terms of a different location.
-data PreLocExp loc = StartOfLE Region
+data PreLocExp loc = StartOfRegionLE Region
                    | AfterConstantLE Int  -- Number of bytes after.
                                      loc  -- Location which this location is offset from.
                    | AfterVariableLE Var  -- Name of variable v. This loc is size(v) bytes after.
@@ -729,7 +729,7 @@ occurs w ex =
           let oc_bod = go bod in
           case le of
             AfterVariableLE v _  _ -> v `S.member` w || oc_bod
-            StartOfLE{}         -> oc_bod
+            StartOfRegionLE{}         -> oc_bod
             AfterConstantLE{}   -> oc_bod
             InRegionLE{}        -> oc_bod
             FreeLE{}            -> oc_bod
@@ -859,7 +859,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
       dep :: PreLocExp LocVar -> [Var]
       dep ex =
         case ex of
-          StartOfLE r -> [regionToVar r]
+          StartOfRegionLE r -> [regionToVar r]
           AfterConstantLE _ loc   -> [loc]
           AfterVariableLE v loc _ -> [v,loc]
           InRegionLE r  -> [regionToVar r]

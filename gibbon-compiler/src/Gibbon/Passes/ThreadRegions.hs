@@ -287,7 +287,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ind
         -- Update renv with a binding for loc
         LetLocE loc rhs bod -> do
           let reg = case rhs of
-                      StartOfLE r  -> regionToVar r
+                      StartOfRegionLE r  -> regionToVar r
                       InRegionLE r -> regionToVar r
                       AfterConstantLE _ lc   -> renv # (toLocVar lc)
                       AfterVariableLE _ lc _ -> renv # (toLocVar lc)

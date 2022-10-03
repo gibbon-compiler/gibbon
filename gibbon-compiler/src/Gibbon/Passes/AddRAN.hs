@@ -418,7 +418,7 @@ we need random access for that type.
         LetLocE _loc FreeLE bod -> go bod
         LetLocE loc rhs bod  ->
             let reg = case rhs of
-                        StartOfLE r  -> regionToVar r
+                        StartOfRegionLE r  -> regionToVar r
                         InRegionLE r -> regionToVar r
                         AfterConstantLE _ lc   -> renv # lc
                         AfterVariableLE _ lc _ -> renv # lc

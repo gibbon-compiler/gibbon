@@ -62,7 +62,7 @@ placeRegionInwards env scopeSet ex  =
         LetLocE loc phs rhs -> do                                                --take care of locations
           case phs of
 
-            StartOfLE r -> do
+            StartOfRegionLE r -> do
               let keyList' = M.keys env
                   key'     = F.find (S.member (regionToVar r)) keyList'
                   in case key' of
@@ -302,7 +302,7 @@ freeVars ex = case ex of
       LetRegionE _ _ _ rhs          -> freeVars rhs
       LetLocE _ phs rhs             ->
         case phs of
-        StartOfLE _                 -> freeVars rhs
+        StartOfRegionLE _                 -> freeVars rhs
         AfterConstantLE _ _         -> freeVars rhs
         AfterVariableLE{}           -> freeVars rhs
         InRegionLE _                -> freeVars rhs

@@ -296,7 +296,7 @@ interpExt sizeEnv rc env ddefs fenv ext =
 
     LetLocE loc locexp bod ->
       case locexp of
-        StartOfLE reg -> do
+        StartOfRegionLE reg -> do
           buf_maybe <- lookupInStore (regionToVar reg)
           case buf_maybe of
             Nothing -> error $ "L2.Interp: Unbound region: " ++ sdoc reg

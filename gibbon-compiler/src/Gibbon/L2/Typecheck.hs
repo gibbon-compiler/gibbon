@@ -755,7 +755,7 @@ tcExp ddfs env funs constrs regs tstatein exp =
       Ext (LetLocE v c e) -> do
               let env' = extendVEnv v CursorTy env
               case c of
-                StartOfLE r ->
+                StartOfRegionLE r ->
                     do ensureRegion exp r regs
                        absentStart exp constrs r
                        let tstate1 = extendTS v (Output,False) tstatein

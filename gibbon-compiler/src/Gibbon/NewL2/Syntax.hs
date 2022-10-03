@@ -394,7 +394,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
       dep :: Old.PreLocExp LocArg -> [Var]
       dep ex =
         case ex of
-          Old.StartOfLE r -> [Old.regionToVar r]
+          Old.StartOfRegionLE r -> [Old.regionToVar r]
           Old.AfterConstantLE _ loc   -> [toLocVar loc]
           Old.AfterVariableLE v loc _ -> [v,toLocVar loc]
           Old.InRegionLE r  -> [Old.regionToVar r]

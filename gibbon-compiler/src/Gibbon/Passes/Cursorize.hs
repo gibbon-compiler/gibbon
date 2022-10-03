@@ -765,7 +765,7 @@ But Infinite regions do not support sizes yet. Re-enable this later.
                      if isBound loc tenv
                      then Right (VarE loc, [], tenv, senv)
                      else Left$ M.insertWith (++) loc [(lvar,[],CursorTy,VarE loc)] denv
-    StartOfLE r   -> case r of
+    StartOfRegionLE r   -> case r of
                        GlobR v _ -> Right (VarE v, [], tenv, senv)
                        VarR v    -> Right (VarE v, [], tenv, senv)
                        DynR v _  -> Right (VarE v, [], tenv, senv)

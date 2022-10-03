@@ -479,7 +479,7 @@ routeEnds prg@Prog{ddefs,fundefs,mainExp} = do
                   e' <- go e
                   return $ Ext (LetLocE v locexp e')
             case locexp of
-              StartOfLE{} -> only_recur bod
+              StartOfRegionLE{} -> only_recur bod
               AfterConstantLE{} -> only_recur bod
               AfterVariableLE{} -> only_recur bod
               InRegionLE{} -> only_recur bod

@@ -428,13 +428,13 @@ instance (Pretty l, Pretty d, Ord d, Show d) => Pretty (E1Ext l d) where
 instance Pretty l => Pretty (L2.PreLocExp l) where
     pprintWithStyle _ le =
         case le of
-          StartOfLE r -> lparen <> text "startof" <+> text (sdoc r) <> rparen
+          StartOfRegionLE r -> lparen <> text "startOfRegion" <+> text (sdoc r) <> rparen
           AfterConstantLE i loc   -> lparen <> pprint loc <+> text "+" <+> int i <> rparen
           AfterVariableLE v loc b -> if b
                                      then text "fresh" <> (parens $ pprint loc <+> text "+" <+> doc v)
                                      else parens $ pprint loc <+> text "+" <+> doc v
-          InRegionLE r  -> lparen <> text "inregion" <+> text (sdoc r) <> rparen
-          FromEndLE loc -> lparen <> text "fromendle" <+> pprint loc <> rparen
+          InRegionLE r  -> lparen <> text "inRegion" <+> text (sdoc r) <> rparen
+          FromEndLE loc -> lparen <> text "fromEnd" <+> pprint loc <> rparen
           FreeLE -> lparen <> text "free" <> rparen
 
 instance Pretty RegionSize where

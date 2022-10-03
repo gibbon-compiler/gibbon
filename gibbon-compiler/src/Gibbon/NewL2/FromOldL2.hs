@@ -233,7 +233,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
   toLocArg :: LocVar -> LocExp -> LocEnv -> New.LocArg
   toLocArg loc locexp locenv0 =
     case locexp of
-      StartOfLE reg -> New.Loc (LRM loc reg Output)
+      StartOfRegionLE reg -> New.Loc (LRM loc reg Output)
       AfterConstantLE _ loc2 ->
         let (New.Loc lrm) = locenv0 # loc2
         in New.Loc (LRM loc (lrmReg lrm) Output)

@@ -147,7 +147,7 @@ inferRegScopeExp env ex =
         -- Straightforward recursion
         LetLocE loc le bod -> do
           let le' = case le of
-                      StartOfLE r -> StartOfLE (env # r)
+                      StartOfRegionLE r -> StartOfRegionLE (env # r)
                       InRegionLE r -> InRegionLE (env # r)
                       _ -> le
           Ext <$> LetLocE loc le' <$> (go bod)

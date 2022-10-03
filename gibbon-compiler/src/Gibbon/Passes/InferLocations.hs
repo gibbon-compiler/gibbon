@@ -297,7 +297,7 @@ inferExp' env exp bound dest=
       bindAllUnbound e (lv:ls) = do
         r <- lift $ lift $ freshRegVar
         e' <- bindAllUnbound e ls
-        return $ Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfLE r) e')))
+        return $ Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfRegionLE r) e')))
       bindAllUnbound e _ = return e
 
       bindAllLocations :: Result -> TiM Result
@@ -308,7 +308,7 @@ inferExp' env exp bound dest=
                     case i of
                       AfterConstantL lv1 v lv2 -> Ext (LetLocE lv1 (AfterConstantLE v lv2) a)
                       AfterVariableL lv1 v lv2 -> Ext (LetLocE lv1 (AfterVariableLE v lv2 True) a)
-                      StartRegionL lv r -> Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfLE r) a)))
+                      StartRegionL lv r -> Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv (StartOfRegionLE r) a)))
                       AfterTagL lv1 lv2 -> Ext (LetLocE lv1 (AfterConstantLE 1 lv2) a)
                       FreeL lv -> Ext (LetLocE lv FreeLE a)
                       AfterCopyL lv1 v1 v' lv2 f lvs ->
@@ -347,7 +347,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
              b1 <- noAfterLoc lv' cs' cs'
              if b1
              then do (e'',ty'',cs'') <- bindTrivialAfterLoc lv' (e',ty',cs')
-                     return (Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv' (StartOfLE r) e''))), ty'', cs'')
+                     return (Ext (LetRegionE r Undefined Nothing (Ext (LetLocE lv' (StartOfRegionLE r) e''))), ty'', cs'')
              else return (e',ty',(StartRegionL lv r):cs')
       tryBindReg (e,ty,c:cs) =
           do (e',ty',cs') <- tryBindReg (e,ty,cs)
@@ -907,7 +907,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           (bod',ty',cs') <- inferExp (extendVEnv vr (PackedTy tycon loc) env) bod dest
           (bod'',ty'',cs'') <- handleTrailingBindLoc vr (bod', ty', cs')
           fcs <- tryInRegion cs'
-          tryBindReg ( Ext$ LetRegionE (MMapR r) Undefined Nothing $ Ext $ LetLocE loc (StartOfLE (MMapR r)) $
+          tryBindReg ( Ext$ LetRegionE (MMapR r) Undefined Nothing $ Ext $ LetLocE loc (StartOfRegionLE (MMapR r)) $
                         L2.LetE (vr,[],PackedTy tycon loc,rhs') bod''
                      , ty', fcs)
 
