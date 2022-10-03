@@ -56,7 +56,7 @@ data E3Ext loc dec =
   | ReadTag Var                            -- ^ One cursor in, (tag,cursor) out
   | WriteTag DataCon Var                   -- ^ Write Tag at Cursor, and return a cursor
   | ReadCursor Var                         -- ^ Reads and returns the cursor at Var
-  | ReadTaggedCursor Var                   -- ^ Reads and returns a tagged cursor at Var
+  | ReadTagCursor Var                   -- ^ Reads and returns a tagged cursor at Var
   | WriteCursor Var (PreExp E3Ext loc dec) -- ^ Write a cursor, and return a cursor
   | ReadList Var dec                       -- ^ Read a pointer to a linked list
   | WriteList Var (PreExp E3Ext loc dec) dec       -- ^ Write a pointer to a linked list
@@ -105,7 +105,7 @@ instance FreeVars (E3Ext l d) where
       ReadTag v      -> S.singleton v
       WriteTag _ v   -> S.singleton v
       ReadCursor v       -> S.singleton v
-      ReadTaggedCursor v -> S.singleton v
+      ReadTagCursor v -> S.singleton v
       WriteCursor c ex   -> S.insert c (gFreeVars ex)
       ReadList v _       -> S.singleton v
       WriteList c ex  _  -> S.insert c (gFreeVars ex)
@@ -185,7 +185,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       ReadScalar s v     -> ReadScalar s (go v)
       WriteScalar s v bod-> WriteScalar s (go v) (go bod)
       ReadCursor v       -> ReadCursor (go v)
-      ReadTaggedCursor v -> ReadTaggedCursor (go v)
+      ReadTagCursor v -> ReadTagCursor (go v)
       WriteCursor v bod  -> WriteCursor (go v) (go bod)
       ReadList v el_ty      -> ReadList (go v) el_ty
       WriteList v bod el_ty -> WriteList (go v) (go bod) el_ty

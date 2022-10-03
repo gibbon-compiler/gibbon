@@ -457,6 +457,7 @@ instance HasPrettyToo E2Ext l d => Pretty (L2.E2Ext l d) where
                           doc v
           FromEndE loc -> text "fromende" <+> pprint loc
           L2.StartOfPkd c -> parens $ text "startOfPkd" <+> pprint c
+          L2.TagCursor a b -> parens $ text "tagCursor" <+> pprint a <+> pprint b
           L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> pprint l2
           IndirectionE tc dc (l1,v1) (l2,v2) e -> text "indirection" <+>
                                                      doc tc <+>

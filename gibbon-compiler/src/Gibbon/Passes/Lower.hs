@@ -503,7 +503,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               SizeOfScalar{}     -> syms
               BoundsCheck{}      -> syms
               ReadCursor{}       -> syms
-              ReadTaggedCursor{} -> syms
+              ReadTagCursor{} -> syms
               IndirectionBarrier{} -> syms
               NullCursor         -> syms
               BumpArenaRefCount{}-> error "collect_syms: BumpArenaRefCount not handled."
@@ -835,7 +835,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
       T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy)] T.ReadCursor [T.VarTriv c] <$>
         tail free_reg sym_tbl bod'
 
-    LetE(v,_,_,  (Ext (ReadTaggedCursor c))) bod -> do
+    LetE(v,_,_,  (Ext (ReadTagCursor c))) bod -> do
       vtmp <- gensym $ toVar "tmpcur"
       ctmp <- gensym $ toVar "tmpaftercur"
       tagtmp <- gensym $ toVar "tmptag"
@@ -844,7 +844,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
                  L3.substE (ProjE 1 (VarE v)) (VarE ctmp) $
                  L3.substE (ProjE 2 (VarE v)) (VarE tagtmp) $
                  bod
-      T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy),(tagtmp,T.IntTy)] T.ReadTaggedCursor [T.VarTriv c] <$>
+      T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy),(tagtmp,T.IntTy)] T.ReadTagCursor [T.VarTriv c] <$>
         tail free_reg sym_tbl bod'
 
     LetE(v,_,_,  (Ext (ReadList c el_ty))) bod -> do

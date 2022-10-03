@@ -954,7 +954,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:afternext = ($id:cur) + 8; |]
                                ]
 
-                 ReadTaggedCursor -> do
+                 ReadTagCursor -> do
                                tagged <- gensym "tagged_tmpcur"
                                let [(next,CursorTy),(afternext,CursorTy),(tag,IntTy)] = bnds
                                    [(VarTriv cur)] = rnds

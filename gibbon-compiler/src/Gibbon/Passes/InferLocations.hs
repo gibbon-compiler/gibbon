@@ -1181,6 +1181,7 @@ finishExp e =
              return $ Ext (LetLocE loc' lex' e1')
       Ext (L2.AddFixed cur i) -> pure $ Ext (L2.AddFixed cur i)
       Ext (L2.StartOfPkd cur) -> pure $ Ext (L2.StartOfPkd cur)
+      Ext (L2.TagCursor a b) -> pure $ Ext (L2.TagCursor a b)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 
@@ -1278,6 +1279,7 @@ cleanExp e =
                                     else (e',s')
       Ext (L2.AddFixed cur i) -> (Ext (L2.AddFixed cur i), S.singleton cur)
       Ext (L2.StartOfPkd cur) -> (Ext (L2.StartOfPkd cur), S.singleton cur)
+      Ext (L2.TagCursor a b) -> (Ext (L2.TagCursor a b), S.fromList [a,b])
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 

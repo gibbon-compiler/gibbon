@@ -97,6 +97,7 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
             L2.LetLocE loc L2.FreeLE bod -> do
               Ext <$> (L2.LetLocE loc L2.FreeLE) <$> (go reg_env alloc_env store_env env2 bod)
             L2.StartOfPkd cur -> pure $ Ext $ L2.StartOfPkd cur
+            L2.TagCursor a b -> pure $ Ext $ L2.TagCursor a b
             L2.LetLocE loc rhs bod -> do
               let reg = case rhs of
                       L2.StartOfLE r  -> r

@@ -128,7 +128,8 @@ data E2Ext loc dec
                               -- E.g. when reverting from L2 to L1.
     -- ^ A indirection node.
 
-  | StartOfPkd Var
+  | StartOfPkd Var       -- Cursor to a packed value.
+  | TagCursor Var Var -- Tagged cursor.
 
   | GetCilkWorkerNum
     -- ^ Translates to  __cilkrts_get_worker_number().
@@ -175,6 +176,7 @@ instance FreeVars (E2Ext l d) where
                            `S.union`
                            gFreeVars bod
      StartOfPkd cur     -> S.singleton cur
+     TagCursor a b   -> S.fromList [a,b]
      RetE _ vr          -> S.singleton vr
      FromEndE _         -> S.empty
      AddFixed vr _      -> S.singleton vr
@@ -204,6 +206,7 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       LetParRegionE{} -> False
       LetLocE{}    -> False
       StartOfPkd{} -> False
+      TagCursor{} -> False
       RetE{}       -> False -- Umm... this one could be potentially.
       FromEndE{}   -> True
       AddFixed{}     -> True
@@ -223,6 +226,7 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
       LetParRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
       LetLocE _l _rhs bod -> gRecoverType ddfs env2 bod
       StartOfPkd{}        -> CursorTy
+      TagCursor{}      -> CursorTy
       RetE _loc var       -> case M.lookup var (vEnv env2) of
                                Just ty -> ty
                                Nothing -> error $ "gRecoverType: unbound variable " ++ sdoc var
@@ -256,6 +260,7 @@ instance (Typeable (E2Ext l d),
           LetLocE l rhs bod -> do (bnds,bod') <- go bod
                                   return ([], LetLocE l rhs $ flatLets bnds bod')
 
+          TagCursor{}-> return ([],ex)
           StartOfPkd{}  -> return ([],ex)
           RetE{}        -> return ([],ex)
           FromEndE{}    -> return ([],ex)
@@ -281,7 +286,8 @@ instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2E
       LetRegionE r sz ty bod   -> LetRegionE r sz ty (gInlineTrivExp env bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gInlineTrivExp env bod)
       LetLocE loc le bod -> LetLocE loc le (gInlineTrivExp env bod)
-      StartOfPkd{}    -> ext
+      TagCursor{} -> ext
+      StartOfPkd{}   -> ext
       RetE{}         -> ext
       FromEndE{}     -> ext
       BoundsCheck{}  -> ext
@@ -301,6 +307,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       LetRegionE r sz ty bod -> LetRegionE r sz ty (gSubst old new bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gSubst old new bod)
       LetLocE l le bod -> LetLocE l le (gSubst old new bod)
+      TagCursor{}   -> ext
       StartOfPkd{}     -> ext
       RetE{}           -> ext
       FromEndE{}       -> ext
@@ -319,6 +326,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       LetRegionE r sz ty bod -> LetRegionE r sz ty (gSubstE old new bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gSubstE old new bod)
       LetLocE l le bod -> LetLocE l le (gSubstE old new bod)
+      TagCursor{}   -> ext
       StartOfPkd{}     -> ext
       RetE{}           -> ext
       FromEndE{}       -> ext
@@ -338,6 +346,7 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
       LetRegionE r sz ty bod -> LetRegionE r sz ty (gRename env bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gRename env bod)
       LetLocE l le bod -> LetLocE l le (gRename env bod)
+      TagCursor a b -> TagCursor (gRename env a) (gRename env b)
       StartOfPkd cur   -> StartOfPkd (gRename env cur)
       RetE{}           -> ext
       FromEndE{}       -> ext
@@ -664,6 +673,7 @@ revertExp ex =
         LetParRegionE _ _ _ bod -> revertExp bod
         LetLocE _ _ bod  -> revertExp bod
         StartOfPkd cur -> Ext (L1.StartOfPkd cur)
+        TagCursor a _b -> Ext (L1.StartOfPkd a)
         RetE _ v -> VarE v
         AddFixed{} -> error "revertExp: TODO AddFixed."
         FromEndE{} -> error "revertExp: TODO FromEndLE"
@@ -725,6 +735,7 @@ occurs w ex =
             FreeLE{}            -> oc_bod
             FromEndLE{}         -> oc_bod
         StartOfPkd v  -> v `S.member` w
+        TagCursor a b -> a `S.member` w || b `S.member` w
         RetE _ v      -> v `S.member` w
         FromEndE{}    -> False
         BoundsCheck{} -> False
@@ -843,6 +854,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               SSPush{} -> acc
               SSPop{} -> acc
               StartOfPkd w -> go acc (VarE w)
+              TagCursor a b -> go (go acc (VarE a)) (VarE b)
 
       dep :: PreLocExp LocVar -> [Var]
       dep ex =
@@ -879,6 +891,7 @@ allFreeVars ex =
         LetParRegionE r _ _ bod -> S.delete (regionToVar r) (allFreeVars bod)
         LetLocE loc locexp bod -> S.delete loc (allFreeVars bod `S.union` gFreeVars locexp)
         StartOfPkd cur  -> S.singleton cur
+        TagCursor a b-> S.fromList [a,b]
         RetE locs v     -> S.insert v (S.fromList locs)
         FromEndE loc    -> S.singleton loc
         BoundsCheck _ reg cur -> S.fromList [reg,cur]
@@ -922,6 +935,7 @@ changeAppToSpawn v args2 ex1 =
         LetParRegionE r sz ty rhs  -> Ext $ LetParRegionE r sz ty (go rhs)
         LetLocE l lhs rhs -> Ext $ LetLocE l lhs (go rhs)
         StartOfPkd{}      -> ex1
+        TagCursor{}    -> ex1
         RetE{}            -> ex1
         FromEndE{}        -> ex1
         BoundsCheck{}     -> ex1

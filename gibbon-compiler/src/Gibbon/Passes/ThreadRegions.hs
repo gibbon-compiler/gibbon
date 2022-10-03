@@ -280,6 +280,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ind
       case ext of
         AddFixed{} -> return ex
         StartOfPkd cur -> return $ Ext $ StartOfPkd cur
+        TagCursor a b -> return $ Ext $ TagCursor a b
         LetLocE loc FreeLE bod ->
           Ext <$> LetLocE loc FreeLE <$>
             threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env indirs redirs bod
@@ -455,6 +456,7 @@ findRetLocs e0 = go e0 []
             LetParRegionE _ _ _ bod  -> go bod acc
             LetLocE _ _ bod   -> go bod acc
             StartOfPkd{}      -> acc
+            TagCursor{}    -> acc
             RetE locs _       -> locs ++ acc
             FromEndE{}        -> acc
             BoundsCheck{}     -> acc
@@ -520,6 +522,7 @@ allFreeVars_sans_datacon_args ex =
         LetParRegionE r _sz _ty bod -> S.delete (regionToVar r) (allFreeVars_sans_datacon_args bod)
         LetLocE loc locexp bod -> S.delete loc (allFreeVars_sans_datacon_args bod `S.union` gFreeVars locexp)
         StartOfPkd cur  -> S.singleton cur
+        TagCursor a b-> S.fromList [a,b]
         RetE locs v     -> S.insert v (S.fromList (map toLocVar locs))
         FromEndE loc    -> S.singleton (toLocVar loc)
         BoundsCheck _ reg cur -> S.fromList [toLocVar reg, toLocVar cur]

@@ -57,6 +57,7 @@ placeRegionInwards env scopeSet ex  =
               in placeRegionInwards env' scopeSet rhs
 
         StartOfPkd{} -> return ex
+        TagCursor{} -> return ex
 
         LetLocE loc phs rhs -> do                                                --take care of locations
           case phs of

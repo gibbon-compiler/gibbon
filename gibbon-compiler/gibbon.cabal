@@ -75,6 +75,7 @@ library
                        Gibbon.Passes.RouteEnds
                        Gibbon.Passes.FollowIndirections
                        Gibbon.Passes.ThreadRegions
+                       Gibbon.Passes.TagRAN
                        Gibbon.Passes.Cursorize
                        Gibbon.Passes.FindWitnesses
                        Gibbon.Passes.ShakeTree

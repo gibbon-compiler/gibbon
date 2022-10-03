@@ -214,6 +214,7 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                                     parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned (S.insert (regionToVar r) boundlocs) region_on_spawn bod
 
         StartOfPkd cur -> pure $ Ext $ StartOfPkd cur
+        TagCursor a b -> pure $ Ext $ TagCursor a b
 
         LetLocE loc locexp bod -> do
           case locexp of
@@ -330,6 +331,7 @@ substLocInExp mp ex1 =
         LetParRegionE r sz ty rhs -> Ext $ LetParRegionE r sz ty (go rhs)
         LetLocE l lhs rhs -> Ext $ LetLocE l (go2 lhs) (go rhs)
         StartOfPkd v      -> Ext $ StartOfPkd v
+        TagCursor a b  -> Ext $ TagCursor a b
         RetE locs v       -> Ext $ RetE (map (\l -> sub l) locs) v
         FromEndE loc      -> Ext $ FromEndE (sub loc)
         BoundsCheck i l1 l2 -> Ext $ BoundsCheck i (sub l1) (sub l2)

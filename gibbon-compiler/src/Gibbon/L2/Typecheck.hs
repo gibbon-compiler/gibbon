@@ -797,6 +797,12 @@ tcExp ddfs env funs constrs regs tstatein exp =
           Just (PackedTy{}) -> pure (CursorTy, tstatein)
           ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
 
+      Ext (TagCursor a _b) -> do
+        case M.lookup a (vEnv env) of
+          Just (PackedTy{}) -> pure (CursorTy, tstatein)
+          ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
+
+
       Ext (FromEndE{}) -> throwError $ GenericTC "FromEndE not handled" exp
       Ext (AddFixed{}) -> return (CursorTy,tstatein)
 

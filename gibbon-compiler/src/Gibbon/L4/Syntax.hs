@@ -300,7 +300,7 @@ data Prim
     | ReadCursor
     -- ^ Read and return a cursor
 
-    | ReadTaggedCursor
+    | ReadTagCursor
 
     | WriteCursor
 

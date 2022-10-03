@@ -78,6 +78,7 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
           Ext <$> LetLocE loc FreeLE <$>
             removeCopiesExp ddefs fundefs lenv env2 bod
         StartOfPkd cur -> pure $ Ext $ StartOfPkd cur
+        TagCursor a b -> pure $ Ext $ TagCursor a b
         LetLocE loc rhs bod -> do
           let reg = case rhs of
                       StartOfLE r  -> regionToVar r

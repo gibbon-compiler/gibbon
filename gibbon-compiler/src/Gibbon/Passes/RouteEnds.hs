@@ -146,6 +146,7 @@ bindReturns ex =
           bod' <- bindReturns bod
           pure $ Ext $ LetLocE loc locexp bod'
         L2.StartOfPkd{}-> pure ex
+        L2.TagCursor{}-> pure ex
         RetE{} -> pure ex
         L2.AddFixed{} -> pure ex
         FromEndE{} -> pure ex

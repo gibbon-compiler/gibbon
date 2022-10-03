@@ -323,6 +323,8 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
 
         StartOfPkd cur -> return (VarE cur)
 
+        TagCursor{} -> error "TagCursor"
+
         -- All locations are transformed into cursors here. Location arithmetic
         -- is expressed in terms of corresponding cursor operations.
         -- See `cursorizeLocExp`
@@ -601,7 +603,9 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
                             cursorizePackedExp ddfs fundefs denv' tenv' senv bod
 
 
-        StartOfPkd cur -> go tenv senv (VarE cur)
+        StartOfPkd cur -> return $ dl $ VarE cur
+
+        TagCursor{} -> error "TagCursor"
 
         -- ASSUMPTION: RetE forms are inserted at the tail position of functions,
         -- and we safely just return ends-witnesses & ends of the dilated expressions
@@ -1216,7 +1220,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                                                    (toEndFromTaggedV v, MkTy2 CursorTy)])
                               tenv
                       read_cursor = if isIndirectionTag dcon || isRedirectionTag dcon
-                                    then Ext (ReadTaggedCursor cur)
+                                    then Ext (ReadTagCursor cur)
                                     else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
                       binds = [(tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
                                (loc     , [], CursorTy, VarE cur),
