@@ -323,11 +323,13 @@ interpExt sizeEnv rc env ddefs fenv ext =
             Just val ->
               error $ "L2.Interp: Unexpected value for " ++ sdoc loc2 ++ ":" ++ sdoc val
 
+        FromEndLE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
         InRegionLE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
         FreeLE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
-        FromEndLE{} -> go env sizeEnv bod
+
 
     -- Ignoring end-witnesses atm.
+    StartOfPkd{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     RetE _locs v -> return (env # v, sizeEnv # v)
     FromEndE{} -> error $ "L2.Interp: TODO: " ++ sdoc ext
     BoundsCheck{} -> error $ "L2.Interp: TODO: " ++ sdoc ext

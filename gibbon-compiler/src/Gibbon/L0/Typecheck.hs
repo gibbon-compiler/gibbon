@@ -566,7 +566,6 @@ tcExp ddefs sbst venv fenv bound_tyvars is_main ex = (\(a,b,c) -> (a,b,c)) <$>
 
         Write3dPpmFile{} -> err $ text "Write3dPpmFile"
         RequestSizeOf-> err $ text "Unexpected RequestSizeOf in L0: " <+> exp_doc
-        StartOf      -> err $ text "Unexpected StartOf in L0: " <+> exp_doc
 
 
     LetE (v, [], gvn_rhs_ty, rhs) bod -> do

@@ -15,7 +15,7 @@ import           Gibbon.Common
 import           Gibbon.DynFlags
 import           Gibbon.Passes.AddTraversals ( needsTraversalCase )
 import           Gibbon.L1.Syntax as L1
-import           Gibbon.L2.Syntax
+import           Gibbon.L2.Syntax as L2
 
 {-
 
@@ -299,7 +299,7 @@ mkRANs needRANsExp =
           i <- gensym "ran"
           -- See Note [Reusing RAN's in case expressions]
           let rhs = case arg of
-                      VarE{} -> PrimAppE StartOf [arg]
+                      VarE v -> Ext (L1.StartOfPkd v)
                       -- It's safe to use 'fromJust' here b/c we would only
                       -- request a RAN for a literal iff it occurs after a
                       -- packed datatype. So there has to be random access
@@ -414,6 +414,8 @@ we need random access for that type.
       case ext of
         LetRegionE _ _ _ bod -> go bod
         LetParRegionE _ _ _ bod -> go bod
+        L2.StartOfPkd{} -> S.empty
+        LetLocE _loc FreeLE bod -> go bod
         LetLocE loc rhs bod  ->
             let reg = case rhs of
                         StartOfLE r  -> regionToVar r
@@ -421,7 +423,6 @@ we need random access for that type.
                         AfterConstantLE _ lc   -> renv # lc
                         AfterVariableLE _ lc _ -> renv # lc
                         FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
-                        FreeLE -> error "addRANExp: FreeLE not handled"
             in needsRANExp ddefs fundefs env2 (M.insert loc reg renv) tcenv parlocss bod
         _ -> S.empty
     MapE{}     -> S.empty

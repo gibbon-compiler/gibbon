@@ -165,6 +165,7 @@ inferExp ddfs fenv env dps expr =
     Ext (LetRegionE _ _ _ rhs) -> inferExp ddfs fenv env dps rhs
     Ext (LetParRegionE _ _ _ rhs) -> inferExp ddfs fenv env dps rhs
     Ext (LetLocE _ _ rhs)  -> inferExp ddfs fenv env dps rhs
+    Ext (StartOfPkd{})     -> (S.empty, Nothing)
     Ext (RetE _ _)         -> (S.empty, Nothing)
     Ext (FromEndE _ )      -> (S.empty, Nothing)
     Ext (IndirectionE{})   -> (S.empty, Nothing)

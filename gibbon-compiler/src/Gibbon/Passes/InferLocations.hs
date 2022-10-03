@@ -93,6 +93,7 @@ import Control.Monad
 import Control.Monad.Trans.Except
 import Control.Monad.Trans (lift)
 import Text.PrettyPrint.GenericPretty
+import GHC.Stack (HasCallStack)
 
 import Gibbon.Common
 import Gibbon.L1.Syntax as L1 hiding (extendVEnv, extendsVEnv, lookupVEnv, lookupFEnv)
@@ -829,6 +830,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
               (concat $ [c | (_,_,c) <- pairs]))
 
     Ext (L1.AddFixed cur i) -> pure (L2.Ext (L2.AddFixed cur i), CursorTy, [])
+    Ext (L1.StartOfPkd cur) -> err $ "unbound " ++ sdoc ex0
 
     LetE (vr,locs,bty,rhs) bod | [] <- locs ->
       case rhs of
@@ -936,10 +938,6 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
         PrimAppE RequestSizeOf [(VarE v)] -> do
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
           return (L2.LetE (vr,[],IntTy, L2.PrimAppE RequestSizeOf [(L2.VarE v)]) bod', ty', cs')
-
-        PrimAppE StartOf [(VarE v)] -> do
-          (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
-          return (L2.LetE (vr,[],CursorTy, L2.PrimAppE StartOf [(L2.VarE v)]) bod', ty', cs')
 
         PrimAppE (DictInsertP dty) ls -> do
           (e,ty,cs) <- inferExp env (PrimAppE (DictInsertP dty) ls) NoDest
@@ -1078,6 +1076,10 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
           return (L2.LetE (vr,[],L2.CursorTy,L2.Ext (L2.AddFixed cur i)) bod', ty', cs')
 
+        Ext (L1.StartOfPkd cur) -> do
+          (bod',ty',cs') <- inferExp (extendVEnv vr CursorTy env) bod dest
+          return (L2.LetE (vr,[],L2.CursorTy,L2.Ext (L2.StartOfPkd cur)) bod', ty', cs')
+
         Ext(BenchE{}) -> error "inferExp: BenchE not handled."
 
     LetE{} -> err$ "Malformed let expression: " ++ (show ex0)
@@ -1178,7 +1180,7 @@ finishExp e =
                        oth -> return oth
              return $ Ext (LetLocE loc' lex' e1')
       Ext (L2.AddFixed cur i) -> pure $ Ext (L2.AddFixed cur i)
-      Ext{} -> err$ "Unexpected Ext: " ++ (show e)
+      Ext (L2.StartOfPkd cur) -> pure $ Ext (L2.StartOfPkd cur)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 
@@ -1275,7 +1277,7 @@ cleanExp e =
                                               S.delete loc $ S.union s' $ S.fromList ls)
                                     else (e',s')
       Ext (L2.AddFixed cur i) -> (Ext (L2.AddFixed cur i), S.singleton cur)
-      Ext{} -> err$ "Unexpected Ext: " ++ (show e)
+      Ext (L2.StartOfPkd cur) -> (Ext (L2.StartOfPkd cur), S.singleton cur)
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 
@@ -1576,7 +1578,7 @@ locOfTy :: Ty2 -> LocVar
 locOfTy (PackedTy _ lv) = lv
 locOfTy ty2 = err $ "Expected packed type, got "++show ty2
 
-err :: String -> a
+err :: HasCallStack => String -> a
 err m = error $ "InferLocations: " ++ m
 
 assumeEq :: (Eq a, Show a) => a -> a -> TiM ()
@@ -1630,7 +1632,6 @@ prim p = case p of
            PrintSym -> return PrintSym
            ReadInt  -> return PrintInt
            RequestSizeOf -> return RequestSizeOf
-           StartOf       -> return StartOf
            ErrorP sty ty -> convertTy ty >>= \ty -> return (ErrorP sty ty)
            DictEmptyP dty  -> convertTy dty >>= return . DictEmptyP
            DictInsertP dty -> convertTy dty >>= return . DictInsertP

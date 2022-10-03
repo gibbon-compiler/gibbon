@@ -382,15 +382,6 @@ tcExp ddfs env funs constrs regs tstatein exp =
                                       _ -> throwError $ GenericTC "Expected PackedTy" exp
                      _ -> throwError $ GenericTC "Expected a variable argument" exp
 
-                 StartOf -> do
-                   len1
-                   case (es !! 0) of
-                     VarE{} -> case (tys !! 0) of
-                                 PackedTy{} -> return (CursorTy, tstate)
-                                 CursorTy -> return (CursorTy, tstate)
-                                 ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
-                     _ -> throwError $ GenericTC "Expected a variable argument" exp
-
                  VAllocP elty -> do
                    len1
                    checkListElemTy elty
@@ -798,7 +789,13 @@ tcExp ddfs env funs constrs regs tstatein exp =
                     do let constrs1 = extendConstrs (InRegionC v globalReg) $ constrs
                        (ty,tstate1) <- tcExp ddfs env' funs constrs1 regs tstatein e
                        return (ty,tstate1)
-                _ -> throwError $ GenericTC "Invalid letloc form" exp
+
+                InRegionLE{} -> throwError $ GenericTC ("InRegionLE not handled.")  exp
+
+      Ext (StartOfPkd cur) -> do
+        case M.lookup cur (vEnv env) of
+          Just (PackedTy{}) -> pure (CursorTy, tstatein)
+          ty -> throwError $ GenericTC ("Expected PackedTy, got " ++ sdoc ty)  exp
 
       Ext (FromEndE{}) -> throwError $ GenericTC "FromEndE not handled" exp
       Ext (AddFixed{}) -> return (CursorTy,tstatein)

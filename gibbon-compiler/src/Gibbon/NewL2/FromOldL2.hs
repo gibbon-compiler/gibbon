@@ -178,6 +178,8 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
 
         AddFixed v i -> pure $ Ext $ AddFixed v i
 
+        StartOfPkd cur -> pure $ Ext $ StartOfPkd cur
+
         IndirectionE tycon dcon (from,from_reg) (to,to_reg) e -> do
           e' <- go locenv env2 e
           pure $ Ext $
@@ -227,21 +229,21 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
   go = fromOldL2Exp ddefs fundefs
 
   toLocArg :: LocVar -> LocExp -> LocEnv -> New.LocArg
-  toLocArg loc locexp env =
+  toLocArg loc locexp locenv0 =
     case locexp of
       StartOfLE reg -> New.Loc (LRM loc reg Output)
       AfterConstantLE _ loc2 ->
-        let (New.Loc lrm) = env # loc2
-        in New.Loc (LRM loc (lrmReg lrm) (lrmMode lrm))
+        let (New.Loc lrm) = locenv0 # loc2
+        in New.Loc (LRM loc (lrmReg lrm) Output)
       AfterVariableLE _ loc2 _ ->
-        let (New.Loc lrm) = env # loc2
-        in New.Loc (LRM loc (lrmReg lrm) (lrmMode lrm))
+        let (New.Loc lrm) = locenv0 # loc2
+        in New.Loc (LRM loc (lrmReg lrm) Output)
       InRegionLE reg ->
         New.Loc (LRM loc reg Output)
       FreeLE ->
         New.Loc (LRM loc (VarR "FREE_REG") Output)
       FromEndLE loc2 ->
-        case (env # loc2) of
+        case (locenv0 # loc2) of
           New.Loc lrm -> New.Loc (LRM loc (lrmReg lrm) (lrmMode lrm))
           New.EndWitness lrm _ -> New.Loc (LRM loc (lrmReg lrm) (lrmMode lrm))
           oth -> error $ "toLocArg: got" ++ sdoc oth
@@ -336,6 +338,9 @@ toOldL2Exp ex =
           let rhs' = fmap New.toLocVar rhs
           bod' <- go bod
           pure $ Ext $ LetLocE loc rhs' bod'
+
+        StartOfPkd cur -> do
+          pure $ Ext $ StartOfPkd cur
 
         RetE locs v -> do
           let locargs = map New.toLocVar locs

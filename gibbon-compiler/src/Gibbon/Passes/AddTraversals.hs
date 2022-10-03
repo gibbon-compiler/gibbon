@@ -9,8 +9,8 @@ import Data.Set as S
 import Gibbon.Common
 import Gibbon.DynFlags
 import Gibbon.Passes.InferEffects ( inferExp )
-import Gibbon.L1.Syntax
-import Gibbon.L2.Syntax
+import Gibbon.L1.Syntax hiding (StartOfPkd)
+import Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
@@ -88,14 +88,17 @@ addTraversalsExp ddefs fundefs env2 renv context ex =
       case ext of
         LetRegionE reg sz ty bod -> Ext . LetRegionE reg sz ty <$> go bod
         LetParRegionE reg sz ty bod -> Ext . LetParRegionE reg sz ty <$> go bod
-        LetLocE loc locexp bod ->
+        L2.StartOfPkd cur -> pure $ Ext $ L2.StartOfPkd cur
+        LetLocE loc FreeLE  bod ->
+          Ext <$> LetLocE loc FreeLE <$>
+            addTraversalsExp ddefs fundefs env2 renv context bod
+        LetLocE loc locexp  bod ->
           let reg = case locexp of
                       StartOfLE r  -> regionToVar r
                       InRegionLE r -> regionToVar r
                       AfterConstantLE _ lc   -> renv # lc
                       AfterVariableLE _ lc _ -> renv # lc
                       FromEndLE lc           -> renv # lc -- TODO: This needs to be fixed
-                      FreeLE -> error "addTraversalsExp: FreeLE not handled"
           in Ext <$> LetLocE loc locexp <$>
                addTraversalsExp ddefs fundefs env2 (M.insert loc reg renv) context bod
         _ -> return ex

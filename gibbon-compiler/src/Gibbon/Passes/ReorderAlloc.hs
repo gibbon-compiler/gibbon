@@ -94,6 +94,9 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
             L2.LetParRegionE reg sz ty bod -> do
               let alloc_env' = M.insert reg (RegionLocs [] S.empty) alloc_env
               Ext <$> (L2.LetParRegionE reg sz ty) <$> go reg_env alloc_env' store_env env2 bod
+            L2.LetLocE loc L2.FreeLE bod -> do
+              Ext <$> (L2.LetLocE loc L2.FreeLE) <$> (go reg_env alloc_env store_env env2 bod)
+            L2.StartOfPkd cur -> pure $ Ext $ L2.StartOfPkd cur
             L2.LetLocE loc rhs bod -> do
               let reg = case rhs of
                       L2.StartOfLE r  -> r
@@ -101,7 +104,6 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
                       L2.AfterConstantLE _ lc   -> reg_env # lc
                       L2.AfterVariableLE _ lc _ -> reg_env # lc
                       L2.FromEndLE lc           -> reg_env # lc
-                      L2.FreeLE -> error "allocationOrderMarkers: FreeLE"
                   reg_env' = M.insert loc reg reg_env
               case M.lookup reg alloc_env of
                 Nothing ->

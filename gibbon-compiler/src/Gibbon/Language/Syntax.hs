@@ -27,7 +27,7 @@ module Gibbon.Language.Syntax
 
     -- * Environments
   , TyEnv, Env2(..), emptyEnv2
-  , extendVEnv, extendsVEnv, lookupVEnv, extendFEnv, lookupFEnv
+  , extendVEnv, extendsVEnv, mblookupVEnv, lookupVEnv, extendFEnv, lookupFEnv
 
     -- * Expresssions and thier types
   , PreExp(..), Prim(..), UrTy(..)
@@ -298,6 +298,9 @@ extendsVEnv mp (Env2 ve fe) = Env2 (M.union mp ve) fe
 lookupVEnv :: Out a => Var -> Env2 a -> a
 lookupVEnv v env2 = (vEnv env2) # v
 
+mblookupVEnv :: Var -> Env2 a -> Maybe a
+mblookupVEnv cur env2 = M.lookup cur (vEnv env2)
+
 -- | Extend function type environment.
 extendFEnv :: Var -> ArrowTy a -> Env2 a -> Env2 a
 extendFEnv v t (Env2 ve fe) = Env2 ve (M.insert v t fe)
@@ -498,9 +501,6 @@ data Prim ty
           | RequestSizeOf
           -- ^ Compute the size of a packed value. Assume that the value is
           -- written in a contiguous region, and size = end_v - v.
-
-          | StartOf
-          -- ^ Start cursor of a packed value.
 
           | Gensym
 

@@ -44,7 +44,8 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.Common
 import           Gibbon.Language
 import           Text.PrettyPrint.HughesPJ
-import           Gibbon.L1.Syntax hiding (AddFixed)
+import           Gibbon.L1.Syntax hiding (AddFixed, StartOfPkd)
+import qualified Gibbon.L1.Syntax as L1
 
 --------------------------------------------------------------------------------
 
@@ -127,6 +128,8 @@ data E2Ext loc dec
                               -- E.g. when reverting from L2 to L1.
     -- ^ A indirection node.
 
+  | StartOfPkd Var
+
   | GetCilkWorkerNum
     -- ^ Translates to  __cilkrts_get_worker_number().
   | LetAvail [Var] (E2 loc dec) -- ^ These variables are available to use before the join point.
@@ -171,6 +174,7 @@ instance FreeVars (E2Ext l d) where
                               _ -> S.empty)
                            `S.union`
                            gFreeVars bod
+     StartOfPkd cur     -> S.singleton cur
      RetE _ vr          -> S.singleton vr
      FromEndE _         -> S.empty
      AddFixed vr _      -> S.singleton vr
@@ -199,6 +203,7 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
       LetRegionE{} -> False
       LetParRegionE{} -> False
       LetLocE{}    -> False
+      StartOfPkd{} -> False
       RetE{}       -> False -- Umm... this one could be potentially.
       FromEndE{}   -> True
       AddFixed{}     -> True
@@ -217,6 +222,7 @@ instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)
       LetRegionE _r _ _ bod   -> gRecoverType ddfs env2 bod
       LetParRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
       LetLocE _l _rhs bod -> gRecoverType ddfs env2 bod
+      StartOfPkd{}        -> CursorTy
       RetE _loc var       -> case M.lookup var (vEnv env2) of
                                Just ty -> ty
                                Nothing -> error $ "gRecoverType: unbound variable " ++ sdoc var
@@ -250,6 +256,7 @@ instance (Typeable (E2Ext l d),
           LetLocE l rhs bod -> do (bnds,bod') <- go bod
                                   return ([], LetLocE l rhs $ flatLets bnds bod')
 
+          StartOfPkd{}  -> return ([],ex)
           RetE{}        -> return ([],ex)
           FromEndE{}    -> return ([],ex)
           AddFixed{}    -> return ([],ex)
@@ -274,6 +281,7 @@ instance HasSimplifiableExt E2Ext l d => SimplifiableExt (PreExp E2Ext l d) (E2E
       LetRegionE r sz ty bod   -> LetRegionE r sz ty (gInlineTrivExp env bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gInlineTrivExp env bod)
       LetLocE loc le bod -> LetLocE loc le (gInlineTrivExp env bod)
+      StartOfPkd{}    -> ext
       RetE{}         -> ext
       FromEndE{}     -> ext
       BoundsCheck{}  -> ext
@@ -293,6 +301,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       LetRegionE r sz ty bod -> LetRegionE r sz ty (gSubst old new bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gSubst old new bod)
       LetLocE l le bod -> LetLocE l le (gSubst old new bod)
+      StartOfPkd{}     -> ext
       RetE{}           -> ext
       FromEndE{}       -> ext
       BoundsCheck{}    -> ext
@@ -310,6 +319,7 @@ instance HasSubstitutableExt E2Ext l d => SubstitutableExt (PreExp E2Ext l d) (E
       LetRegionE r sz ty bod -> LetRegionE r sz ty (gSubstE old new bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gSubstE old new bod)
       LetLocE l le bod -> LetLocE l le (gSubstE old new bod)
+      StartOfPkd{}     -> ext
       RetE{}           -> ext
       FromEndE{}       -> ext
       BoundsCheck{}    -> ext
@@ -328,6 +338,7 @@ instance HasRenamable E2Ext l d => Renamable (E2Ext l d) where
       LetRegionE r sz ty bod -> LetRegionE r sz ty (gRename env bod)
       LetParRegionE r sz ty bod -> LetParRegionE r sz ty (gRename env bod)
       LetLocE l le bod -> LetLocE l le (gRename env bod)
+      StartOfPkd cur   -> StartOfPkd (gRename env cur)
       RetE{}           -> ext
       FromEndE{}       -> ext
       BoundsCheck{}    -> ext
@@ -652,6 +663,7 @@ revertExp ex =
         LetRegionE _ _ _ bod -> revertExp bod
         LetParRegionE _ _ _ bod -> revertExp bod
         LetLocE _ _ bod  -> revertExp bod
+        StartOfPkd cur -> Ext (L1.StartOfPkd cur)
         RetE _ v -> VarE v
         AddFixed{} -> error "revertExp: TODO AddFixed."
         FromEndE{} -> error "revertExp: TODO FromEndLE"
@@ -712,6 +724,7 @@ occurs w ex =
             InRegionLE{}        -> oc_bod
             FreeLE{}            -> oc_bod
             FromEndLE{}         -> oc_bod
+        StartOfPkd v  -> v `S.member` w
         RetE _ v      -> v `S.member` w
         FromEndE{}    -> False
         BoundsCheck{} -> False
@@ -829,6 +842,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               AllocateScalarsHere{} -> acc
               SSPush{} -> acc
               SSPop{} -> acc
+              StartOfPkd w -> go acc (VarE w)
 
       dep :: PreLocExp LocVar -> [Var]
       dep ex =
@@ -864,6 +878,7 @@ allFreeVars ex =
         LetRegionE r _ _ bod -> S.delete (regionToVar r) (allFreeVars bod)
         LetParRegionE r _ _ bod -> S.delete (regionToVar r) (allFreeVars bod)
         LetLocE loc locexp bod -> S.delete loc (allFreeVars bod `S.union` gFreeVars locexp)
+        StartOfPkd cur  -> S.singleton cur
         RetE locs v     -> S.insert v (S.fromList locs)
         FromEndE loc    -> S.singleton loc
         BoundsCheck _ reg cur -> S.fromList [reg,cur]
@@ -906,6 +921,7 @@ changeAppToSpawn v args2 ex1 =
         LetRegionE r sz ty rhs  -> Ext $ LetRegionE r sz ty (go rhs)
         LetParRegionE r sz ty rhs  -> Ext $ LetParRegionE r sz ty (go rhs)
         LetLocE l lhs rhs -> Ext $ LetLocE l lhs (go rhs)
+        StartOfPkd{}      -> ex1
         RetE{}            -> ex1
         FromEndE{}        -> ex1
         BoundsCheck{}     -> ex1

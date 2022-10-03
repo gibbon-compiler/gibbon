@@ -1167,7 +1167,6 @@ prim p =
     MkTrue       -> error "lower/prim: internal error. MkTrue should not get here."
     MkFalse      -> error "lower/prim: internal error. MkFalse should not get here."
     RequestSizeOf -> error "lower/prim: internal error. RequestSizeOf shouldn't be here."
-    StartOf       -> error "lower/prim: internal error. StartOf shouldn't be here."
 
 isTrivial' :: Exp3 -> Bool
 isTrivial' e =

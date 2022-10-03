@@ -199,7 +199,6 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       DictInsertP ty -> text "DictInsert" <> wty ty
                                       DictLookupP ty -> text "DictLookup" <> wty ty
                                       RequestSizeOf  -> text "RequestSizeOf"
-                                      StartOf        -> text "StartOf"
                                       ErrorP str ty  -> text "ErrorP" <> wty ty <+> doubleQuotes (text str) <> space
                                       VAllocP ty -> parens $ text "valloc" <+> doublecolon <+> brackets (pprintWithStyle sty ty)
                                       VFreeP _ty -> parens $ text "vfree"
@@ -240,7 +239,6 @@ instance (Show d, Pretty d, Ord d) => Pretty (Prim d) where
                                       DictHasKeyP _ty -> text "dictHasKey"
                                       DictInsertP _ty -> text "dictInsert"
                                       DictLookupP _ty -> text "dictLookup"
-                                      StartOf        -> text "StartOf"
                                       ErrorP str _ty -> text "error" <> doubleQuotes (text str)
                                       ReadPackedFile mb_fp tycon _ _ ->
                                         parens (text "readPackedFile " <+> parens (text (pretty mb_fp))) <+> doublecolon <+> text tycon
@@ -420,7 +418,8 @@ instance HasPrettyToo e l d => Pretty (PreExp e l d) where
 instance (Pretty l, Pretty d, Ord d, Show d) => Pretty (E1Ext l d) where
     pprintWithStyle sty ext =
       case ext of
-        L1.AddFixed v i -> text "addFixed" <+> pprintWithStyle sty v <+> int i
+        L1.AddFixed v i   -> text "addFixed" <+> pprintWithStyle sty v <+> int i
+        L1.StartOfPkd cur -> text "startOfPkd" <+> pprintWithStyle sty cur
         BenchE fn tyapps args b -> text "gibbon_bench" <+> (doubleQuotes $ text "") <+> text (fromVar fn) <+>
                                    (brackets $ hcat (punctuate "," (map pprint tyapps))) <+>
                                    (pprintWithStyle sty args) <+> text (if b then "true" else "false")
@@ -457,6 +456,7 @@ instance HasPrettyToo E2Ext l d => Pretty (L2.E2Ext l d) where
                             lbrack <> hcat (punctuate (text ",") (map pprint ls)) <> rbrack <+>
                           doc v
           FromEndE loc -> text "fromende" <+> pprint loc
+          L2.StartOfPkd c -> parens $ text "startOfPkd" <+> pprint c
           L2.BoundsCheck i l1 l2 -> text "boundscheck" <+> int i <+> pprint l1 <+> pprint l2
           IndirectionE tc dc (l1,v1) (l2,v2) e -> text "indirection" <+>
                                                      doc tc <+>
@@ -610,6 +610,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
       case ex of
         Ext (BenchE{})   -> True
         Ext (L1.AddFixed{}) -> False
+        Ext (L1.StartOfPkd{}) -> False
         -- Straightforward recursion ...
         VarE{}     -> False
         LitE{}     -> False
@@ -725,6 +726,7 @@ pprintHsWithEnv p@Prog{ddefs,fundefs,mainExp} =
           SpawnE{} -> error "ppHsWithEnv: SpawnE not handled."
           SyncE{}  -> error "ppHsWithEnv: SyncE not handled."
           Ext(L1.AddFixed{}) -> error "ppHsWithEnv: AddFixed not handled."
+          Ext(L1.StartOfPkd{}) -> error "ppHsWithEnv: AddFixed not handled."
           Ext (BenchE fn _locs args _b) ->
              --  -- Criterion
              -- let args_doc = hsep $ map (ppExp env2) args

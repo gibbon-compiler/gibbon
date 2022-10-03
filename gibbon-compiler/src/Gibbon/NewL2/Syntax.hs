@@ -42,7 +42,8 @@ import           Text.PrettyPrint.GenericPretty
 import           Gibbon.Common
 import           Gibbon.Language
 -- import           Text.PrettyPrint.HughesPJ
-import           Gibbon.L1.Syntax hiding (AddFixed)
+import           Gibbon.L1.Syntax hiding (AddFixed, StartOfPkd)
+import qualified Gibbon.L1.Syntax as L1
 
 import qualified Gibbon.L2.Syntax as Old
 
@@ -119,6 +120,7 @@ instance Typeable (Old.E2Ext LocArg Ty2) where
     case ex of
       Old.LetRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
       Old.LetParRegionE _r _ _ bod -> gRecoverType ddfs env2 bod
+      Old.StartOfPkd{}        -> MkTy2 $ CursorTy
       Old.LetLocE _l _rhs bod -> gRecoverType ddfs env2 bod
       Old.RetE _loc var       -> case M.lookup var (vEnv env2) of
                                    Just ty -> ty
@@ -299,6 +301,7 @@ revertExp ex =
         Old.LetRegionE _ _ _ bod -> revertExp bod
         Old.LetParRegionE _ _ _ bod -> revertExp bod
         Old.LetLocE _ _ bod  -> revertExp bod
+        Old.StartOfPkd v -> Ext (L1.StartOfPkd v)
         Old.RetE _ v -> VarE v
         Old.AddFixed{} -> error "revertExp: TODO AddFixed."
         Old.FromEndE{} -> error "revertExp: TODO FromEndLE"
@@ -383,6 +386,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
               Old.AllocateScalarsHere{} -> acc
               Old.SSPush{} -> acc
               Old.SSPop{} -> acc
+              Old.StartOfPkd cur -> M.insertWith (++) cur [cur] acc
 
       dep :: Old.PreLocExp LocArg -> [Var]
       dep ex =
@@ -418,6 +422,7 @@ allFreeVars ex =
         Old.LetRegionE r _ _ bod -> S.delete (Old.regionToVar r) (allFreeVars bod)
         Old.LetParRegionE r _ _ bod -> S.delete (Old.regionToVar r) (allFreeVars bod)
         Old.LetLocE loc locexp bod -> S.delete loc (allFreeVars bod `S.union` gFreeVars locexp)
+        Old.StartOfPkd v    -> S.singleton v
         Old.RetE locs v     -> S.insert v (S.fromList (map toLocVar locs))
         Old.FromEndE loc    -> S.singleton (toLocVar loc)
         Old.BoundsCheck _ reg cur -> S.fromList (map toLocVar [reg, cur])

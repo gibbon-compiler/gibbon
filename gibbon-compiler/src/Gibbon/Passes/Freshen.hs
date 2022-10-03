@@ -404,4 +404,12 @@ freshExp1 vs exp =
       args' <- mapM (freshExp1 vs) args
       pure $ Ext (L1.BenchE (cleanFunName fn) tyapps args' b)
 
-    Ext (L1.AddFixed{}) -> error "freshExp1: AddFixed not handled."
+    Ext (L1.StartOfPkd cur) -> do
+      case M.lookup cur vs of
+        Nothing -> return $ Ext $ L1.StartOfPkd cur
+        Just v' -> return $ Ext $ L1.StartOfPkd v'
+
+    Ext (L1.AddFixed v i) -> do
+     case M.lookup v vs of
+        Nothing -> return $ Ext $ L1.AddFixed v i
+        Just v' -> return $ Ext $ L1.AddFixed v' i

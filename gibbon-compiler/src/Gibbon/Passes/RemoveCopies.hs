@@ -74,6 +74,10 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
     Ext ext ->
       case ext of
         -- Update lenv with a binding for loc
+        LetLocE loc FreeLE bod -> do
+          Ext <$> LetLocE loc FreeLE <$>
+            removeCopiesExp ddefs fundefs lenv env2 bod
+        StartOfPkd cur -> pure $ Ext $ StartOfPkd cur
         LetLocE loc rhs bod -> do
           let reg = case rhs of
                       StartOfLE r  -> regionToVar r
@@ -81,7 +85,6 @@ removeCopiesExp ddefs fundefs lenv env2 ex =
                       AfterConstantLE _ lc   -> lenv # lc
                       AfterVariableLE _ lc _ -> lenv # lc
                       FromEndLE lc           -> lenv # lc -- TODO: This needs to be fixed
-                      FreeLE -> toVar "dummy"
           Ext <$> LetLocE loc rhs <$>
             removeCopiesExp ddefs fundefs (M.insert loc reg lenv) env2 bod
        -- Straightforward recursion

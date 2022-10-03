@@ -212,6 +212,9 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                                     parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned (S.insert (regionToVar r) boundlocs) region_on_spawn bod
         LetParRegionE r sz ty bod    -> Ext <$> (LetParRegionE r sz ty) <$>
                                     parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned (S.insert (regionToVar r) boundlocs) region_on_spawn bod
+
+        StartOfPkd cur -> pure $ Ext $ StartOfPkd cur
+
         LetLocE loc locexp bod -> do
           case locexp of
             -- Binding is swallowed, and it's continuation allocates in a fresh region.
@@ -258,6 +261,11 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
               bod' <- parAllocExp ddefs fundefs env2 reg_env' after_env mb_parent_id pending_binds spawned boundlocs' region_on_spawn bod
               pure $ Ext $ LetLocE loc (AfterVariableLE v loc2 False) bod'
 
+            FreeLE -> do
+              let boundlocs'= S.insert loc boundlocs
+              bod' <- parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spawned boundlocs' region_on_spawn bod
+              pure $ Ext $ LetLocE loc locexp bod'
+
             _ -> do
               let reg = case locexp of
                           StartOfLE r  -> regionToVar r
@@ -265,7 +273,6 @@ parAllocExp ddefs fundefs env2 reg_env after_env mb_parent_id pending_binds spaw
                           AfterConstantLE _ lc   -> reg_env # lc
                           AfterVariableLE _ lc _ -> reg_env # lc
                           FromEndLE lc           -> reg_env # lc
-                          FreeLE                 -> undefined
                   reg_env'  = M.insert loc reg reg_env
                   boundlocs'= S.insert loc boundlocs
               bod' <- parAllocExp ddefs fundefs env2 reg_env' after_env mb_parent_id pending_binds spawned boundlocs' region_on_spawn bod
@@ -322,6 +329,7 @@ substLocInExp mp ex1 =
         LetRegionE r sz ty rhs  -> Ext $ LetRegionE r sz ty (go rhs)
         LetParRegionE r sz ty rhs -> Ext $ LetParRegionE r sz ty (go rhs)
         LetLocE l lhs rhs -> Ext $ LetLocE l (go2 lhs) (go rhs)
+        StartOfPkd v      -> Ext $ StartOfPkd v
         RetE locs v       -> Ext $ RetE (map (\l -> sub l) locs) v
         FromEndE loc      -> Ext $ FromEndE (sub loc)
         BoundsCheck i l1 l2 -> Ext $ BoundsCheck i (sub l1) (sub l2)

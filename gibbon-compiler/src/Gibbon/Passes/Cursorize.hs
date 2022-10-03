@@ -251,9 +251,6 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
                    then pure $ Ext $ SubPtr (toEndV v) v
                    else pure $ LitE $ fromJust $ sizeOfTy (unTy2 ty)
 
-    PrimAppE StartOf [(VarE v)] -> do
-      return $ VarE v
-
     PrimAppE pr args -> PrimAppE (toL3Prim pr) <$> mapM go args
 
     LetE (v,_locs, _ty, (PrimAppE (ReadPackedFile path tyc reg ty2) [])) bod ->
@@ -323,6 +320,8 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
           case locs of
               [] -> return (VarE v)
               _  -> return $ L3.MkProdE $ [VarE (toLocVar loc) | loc <- locs] ++ [VarE v]
+
+        StartOfPkd cur -> return (VarE cur)
 
         -- All locations are transformed into cursors here. Location arithmetic
         -- is expressed in terms of corresponding cursor operations.
@@ -600,6 +599,9 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
                        go (M.insert loc (MkTy2 CursorTy) tenv''') senv' bod
             Left denv' -> onDi (mkLets bnds) <$>
                             cursorizePackedExp ddfs fundefs denv' tenv' senv bod
+
+
+        StartOfPkd cur -> go tenv senv (VarE cur)
 
         -- ASSUMPTION: RetE forms are inserted at the tail position of functions,
         -- and we safely just return ends-witnesses & ends of the dilated expressions

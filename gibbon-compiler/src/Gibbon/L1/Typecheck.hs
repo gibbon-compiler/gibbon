@@ -339,12 +339,6 @@ tcExp ddfs env exp =
                              _ -> throwError $ GenericTC "Expected PackedTy" exp
             _ -> throwError $ GenericTC "Expected a variable argument" exp
 
-        StartOf -> do
-          len1
-          case (es !!! 0) of
-            VarE{} -> return CursorTy
-            _ -> throwError $ GenericTC "Expected a variable argument" exp
-
         VAllocP elty -> do
           len1
           checkListElemTy elty
@@ -671,8 +665,14 @@ tcExp ddfs env exp =
     Ext (BenchE fn tyapps args _b) -> do
       go (AppE fn tyapps args)
 
-    Ext (AddFixed{})-> -- throwError $ GenericTC "AddFixed not handled." exp
+    Ext (AddFixed{}) ->
       pure CursorTy
+
+    Ext (StartOfPkd cur) -> do
+      ty <- lookupVar env cur exp
+      if isPackedTy ty
+        then pure CursorTy
+        else throwError $ GenericTC "Expected a packed argument" exp
 
     MapE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc exp
     FoldE{} -> error $ "L1.Typecheck: TODO: " ++ sdoc exp

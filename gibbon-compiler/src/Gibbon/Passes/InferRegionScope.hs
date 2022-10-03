@@ -151,6 +151,7 @@ inferRegScopeExp env ex =
                       InRegionLE r -> InRegionLE (env # r)
                       _ -> le
           Ext <$> LetLocE loc le' <$> (go bod)
+        StartOfPkd{}-> return ex
         RetE{}     -> return ex
         FromEndE{} -> return ex
         BoundsCheck{} -> return ex
