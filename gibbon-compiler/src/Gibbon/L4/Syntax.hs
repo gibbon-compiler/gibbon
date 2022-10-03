@@ -297,10 +297,15 @@ data Prim
     | WriteTag
     -- ^ Write a static tag value, takes a cursor to target.
 
+    | TagCursor
+    -- ^ Create a tagged a cursor
+
+    | ReadTaggedCursor
+
+    | WriteTaggedCursor
+
     | ReadCursor
     -- ^ Read and return a cursor
-
-    | ReadTagCursor
 
     | WriteCursor
 

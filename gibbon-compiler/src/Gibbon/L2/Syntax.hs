@@ -129,7 +129,7 @@ data E2Ext loc dec
     -- ^ A indirection node.
 
   | StartOfPkd Var       -- Cursor to a packed value.
-  | TagCursor Var Var -- Tagged cursor.
+  | TagCursor Var Var -- Create a tagged cursor.
 
   | GetCilkWorkerNum
     -- ^ Translates to  __cilkrts_get_worker_number().
@@ -222,11 +222,11 @@ instance (Out l, Out d, Show l, Show d) => Expression (E2Ext l d) where
 instance (Out l, Show l, Typeable (E2 l (UrTy l))) => Typeable (E2Ext l (UrTy l)) where
   gRecoverType ddfs env2 ex =
     case ex of
-      LetRegionE _r _ _ bod   -> gRecoverType ddfs env2 bod
-      LetParRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
+      LetRegionE _r _ _ bod    -> gRecoverType ddfs env2 bod
+      LetParRegionE _r _ _ bod -> gRecoverType ddfs env2 bod
       LetLocE _l _rhs bod -> gRecoverType ddfs env2 bod
       StartOfPkd{}        -> CursorTy
-      TagCursor{}      -> CursorTy
+      TagCursor{}         -> CursorTy
       RetE _loc var       -> case M.lookup var (vEnv env2) of
                                Just ty -> ty
                                Nothing -> error $ "gRecoverType: unbound variable " ++ sdoc var

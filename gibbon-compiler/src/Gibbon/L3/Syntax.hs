@@ -55,8 +55,10 @@ data E3Ext loc dec =
   | WriteScalar Scalar Var (PreExp E3Ext loc dec) -- ^ Write int at cursor, and return a cursor
   | ReadTag Var                            -- ^ One cursor in, (tag,cursor) out
   | WriteTag DataCon Var                   -- ^ Write Tag at Cursor, and return a cursor
+  | TagCursor Var Var                      -- ^ Create a tagged cursor
+  | WriteTaggedCursor Var (PreExp E3Ext loc dec) -- ^ Write a tagged cursor
+  | ReadTaggedCursor Var                   -- ^ Reads and returns a tagged cursor at Var
   | ReadCursor Var                         -- ^ Reads and returns the cursor at Var
-  | ReadTagCursor Var                   -- ^ Reads and returns a tagged cursor at Var
   | WriteCursor Var (PreExp E3Ext loc dec) -- ^ Write a cursor, and return a cursor
   | ReadList Var dec                       -- ^ Read a pointer to a linked list
   | WriteList Var (PreExp E3Ext loc dec) dec       -- ^ Write a pointer to a linked list
@@ -104,8 +106,10 @@ instance FreeVars (E3Ext l d) where
       WriteScalar _ v ex  -> S.insert v (gFreeVars ex)
       ReadTag v      -> S.singleton v
       WriteTag _ v   -> S.singleton v
+      TagCursor a b      -> S.fromList [a,b]
+      ReadTaggedCursor v -> S.singleton v
+      WriteTaggedCursor v ex -> S.insert v (gFreeVars ex)
       ReadCursor v       -> S.singleton v
-      ReadTagCursor v -> S.singleton v
       WriteCursor c ex   -> S.insert c (gFreeVars ex)
       ReadList v _       -> S.singleton v
       WriteList c ex  _  -> S.insert c (gFreeVars ex)
@@ -184,8 +188,10 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
     case ext of
       ReadScalar s v     -> ReadScalar s (go v)
       WriteScalar s v bod-> WriteScalar s (go v) (go bod)
+      TagCursor a b      -> TagCursor (go a) (go b)
+      ReadTaggedCursor v -> ReadTaggedCursor (go v)
+      WriteTaggedCursor v bod -> WriteTaggedCursor (go v) (go bod)
       ReadCursor v       -> ReadCursor (go v)
-      ReadTagCursor v -> ReadTagCursor (go v)
       WriteCursor v bod  -> WriteCursor (go v) (go bod)
       ReadList v el_ty      -> ReadList (go v) el_ty
       WriteList v bod el_ty -> WriteList (go v) (go bod) el_ty

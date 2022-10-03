@@ -11,7 +11,8 @@ import           Gibbon.DynFlags
 import           Gibbon.Common
 import           Gibbon.NewL2.Syntax
 import           Gibbon.L3.Syntax hiding ( BoundsCheck, RetE, GetCilkWorkerNum, LetAvail,
-                                           AllocateTagHere, AllocateScalarsHere, SSPush, SSPop )
+                                           AllocateTagHere, AllocateScalarsHere, SSPush, SSPop,
+                                           TagCursor )
 import qualified Gibbon.L3.Syntax as L3
 import           Gibbon.Passes.AddRAN ( numRANsDataCon )
 
@@ -323,7 +324,7 @@ cursorizeExp ddfs fundefs denv tenv senv ex =
 
         StartOfPkd cur -> return (VarE cur)
 
-        TagCursor{} -> error "TagCursor"
+        TagCursor a b -> return $ Ext $ L3.TagCursor a b
 
         -- All locations are transformed into cursors here. Location arithmetic
         -- is expressed in terms of corresponding cursor operations.
@@ -545,9 +546,10 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
                 LetE (d',[], CursorTy, Ext $ WriteList d rnd' (stripTyLocs el_ty)) <$>
                   go2 marker_added d' rst
 
+              -- shortcut pointer
               CursorTy -> do
                 rnd' <- cursorizeExp ddfs fundefs denv tenv senv rnd
-                LetE (d',[], CursorTy, Ext $ WriteCursor d rnd') <$>
+                LetE (d',[], CursorTy, Ext $ WriteTaggedCursor d rnd') <$>
                   go2 marker_added d' rst
               _ -> error $ "Unknown type encounterred while cursorizing DataConE. Type was " ++ show ty
 
@@ -605,7 +607,7 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
 
         StartOfPkd cur -> return $ dl $ VarE cur
 
-        TagCursor{} -> error "TagCursor"
+        TagCursor a b -> return $ dl $ Ext $ L3.TagCursor a b
 
         -- ASSUMPTION: RetE forms are inserted at the tail position of functions,
         -- and we safely just return ends-witnesses & ends of the dilated expressions
@@ -1220,7 +1222,7 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                                                    (toEndFromTaggedV v, MkTy2 CursorTy)])
                               tenv
                       read_cursor = if isIndirectionTag dcon || isRedirectionTag dcon
-                                    then Ext (ReadTagCursor cur)
+                                    then Ext (ReadTaggedCursor cur)
                                     else error $ "unpackRegularDataCon: cursorty without indirection/redirection."
                       binds = [(tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
                                (loc     , [], CursorTy, VarE cur),
@@ -1333,10 +1335,11 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
             ((v,locarg):rst_vlocs, (MkTy2 ty):rst_tys) ->
               let loc = toLocVar locarg in
               case ty of
-                -- The random access node
+                -- The random access pointer
                 -- ASSUMPTION: We can always bind it, since it occurs immediately after the tag.
+{-
                 CursorTy -> do
-                  tmp <- gensym "readcursor_tuple"
+                  tmp <- gensym "readcursor_shortcut"
                   let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy])),
                                                    (loc     , MkTy2 CursorTy),
                                                    (v       , MkTy2 CursorTy),
@@ -1349,6 +1352,27 @@ unpackDataCon ddfs fundefs denv1 tenv1 senv isPacked scrtCur (dcon,vlocs1,rhs) =
                                (toEndV v, [], CursorTy, ProjE 1 (VarE tmp))]
                   bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv'
                   return $ mkLets binds bod
+-}
+
+                CursorTy -> do
+                  tmp <- gensym "readcursor_shortcut"
+                  let tenv' = M.union (M.fromList [(tmp     , MkTy2 (ProdTy [CursorTy, CursorTy, IntTy])),
+                                                   (loc     , MkTy2 CursorTy),
+                                                   (v       , MkTy2 CursorTy),
+                                                   (toEndV v, MkTy2 CursorTy),
+                                                   (toTagV v, MkTy2 IntTy),
+                                                   (toEndFromTaggedV v, MkTy2 CursorTy)])
+                              tenv
+                      read_cursor = Ext (ReadTaggedCursor cur)
+                      binds = [(tmp     , [], ProdTy [CursorTy, CursorTy, IntTy], read_cursor),
+                               (loc     , [], CursorTy, VarE cur),
+                               (v       , [], CursorTy, ProjE 0 (VarE tmp)),
+                               (toEndV v, [], CursorTy, ProjE 1 (VarE tmp)),
+                               (toTagV v, [], IntTy   , ProjE 2 (VarE tmp)),
+                               (toEndFromTaggedV v, [], CursorTy, Ext $ AddCursor v (VarE (toTagV v)))]
+                  bod <- go (toEndV v) rst_vlocs rst_tys indirections_env denv tenv'
+                  return $ mkLets binds bod
+
 
                 -- Int, Sym, or Bool
                 _ | isScalarTy ty -> do

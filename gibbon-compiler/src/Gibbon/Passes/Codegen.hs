@@ -948,13 +948,17 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                      [ C.BlockDecl [cdecl| $ty:(codegenTy valTy) $id:valV = *( $ty:(codegenTy valTy) *)($id:cur); |]
                                      , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:curV = ($id:cur) + sizeof( $ty:(codegenTy (scalarToTy s))); |] ]
 
-                 ReadCursor -> let [(next,CursorTy),(afternext,CursorTy)] = bnds
-                                   [(VarTriv cur)] = rnds in pure
-                               [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:next = *($ty:(codegenTy CursorTy) *) ($id:cur); |]
-                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:afternext = ($id:cur) + 8; |]
-                               ]
+                 TagCursor  -> let [(taggedV,_)] = bnds
+                                   [(VarTriv a), (VarTriv b)] = rnds
+                                   tag_t = [cty| typename uint16_t |]
+                                   tagged_ptr_t = [cty| typename uintptr_t |]
+                               in do offset <- gensym "offset"
+                                     pure
+                                       [ C.BlockDecl [cdecl| $ty:tag_t $id:offset = $id:b - $id:a; |]
+                                       , C.BlockDecl [cdecl| $ty:tagged_ptr_t $id:taggedV = GIB_STORE_TAG($id:a, $id:offset); |]
+                                       ]
 
-                 ReadTagCursor -> do
+                 ReadTaggedCursor -> do
                                tagged <- gensym "tagged_tmpcur"
                                let [(next,CursorTy),(afternext,CursorTy),(tag,IntTy)] = bnds
                                    [(VarTriv cur)] = rnds
@@ -967,6 +971,18 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                  , C.BlockDecl [cdecl| $ty:tag_t $id:tag = GIB_GET_TAG($id:tagged); |]
                                  ]
 
+                 WriteTaggedCursor ->
+                                let [(outV,CursorTy)] = bnds
+                                    [val,(VarTriv cur)] = rnds
+                                    tagged_t = [cty| typename uintptr_t |] in pure
+                                 [ C.BlockStm [cstm| *( $ty:tagged_t  *)($id:cur) = $(codegenTriv venv val); |]
+                                 , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:outV = ($id:cur) + 8; |] ]
+
+                 ReadCursor -> let [(next,CursorTy),(afternext,CursorTy)] = bnds
+                                   [(VarTriv cur)] = rnds in pure
+                               [ C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:next = *($ty:(codegenTy CursorTy) *) ($id:cur); |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy CursorTy) $id:afternext = ($id:cur) + 8; |]
+                               ]
 
                  WriteCursor -> let [(outV,CursorTy)] = bnds
                                     [val,(VarTriv cur)] = rnds in pure

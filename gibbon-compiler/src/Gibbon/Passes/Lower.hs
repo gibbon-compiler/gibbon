@@ -486,6 +486,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               AddCursor _ ex   -> go ex
               SubPtr{}         -> syms
               WriteCursor _ ex -> go ex
+              TagCursor{}    -> syms
               ReadScalar{}   -> syms
               ReadTag{}      -> syms
               WriteTag{}     -> syms
@@ -503,7 +504,8 @@ lower Prog{fundefs,ddefs,mainExp} = do
               SizeOfScalar{}     -> syms
               BoundsCheck{}      -> syms
               ReadCursor{}       -> syms
-              ReadTagCursor{} -> syms
+              WriteTaggedCursor{}-> syms
+              ReadTaggedCursor{} -> syms
               IndirectionBarrier{} -> syms
               NullCursor         -> syms
               BumpArenaRefCount{}-> error "collect_syms: BumpArenaRefCount not handled."
@@ -825,17 +827,11 @@ lower Prog{fundefs,ddefs,mainExp} = do
       let args = [T.IntTriv (fromIntegral i), T.VarTriv bound, T.VarTriv cur]
       T.LetPrimCallT [] T.BoundsCheck args <$> tail free_reg sym_tbl bod
 
-    LetE(v,_,_,  (Ext (ReadCursor c))) bod -> do
-      vtmp <- gensym $ toVar "tmpcur"
-      ctmp <- gensym $ toVar "tmpaftercur"
-      -- Here we lamely chase down all the tuple references and make them variables:
-      let bod' = L3.substE (ProjE 0 (VarE v)) (VarE vtmp) $
-                 L3.substE (ProjE 1 (VarE v)) (VarE ctmp)
-                 bod
-      T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy)] T.ReadCursor [T.VarTriv c] <$>
-        tail free_reg sym_tbl bod'
+    LetE(v,_,_,  (Ext (TagCursor a b))) bod -> do
+      T.LetPrimCallT [(v, T.CursorTy)] T.TagCursor [T.VarTriv a, T.VarTriv b] <$>
+        tail free_reg sym_tbl bod
 
-    LetE(v,_,_,  (Ext (ReadTagCursor c))) bod -> do
+    LetE(v,_,_,  (Ext (ReadTaggedCursor c))) bod -> do
       vtmp <- gensym $ toVar "tmpcur"
       ctmp <- gensym $ toVar "tmpaftercur"
       tagtmp <- gensym $ toVar "tmptag"
@@ -844,7 +840,21 @@ lower Prog{fundefs,ddefs,mainExp} = do
                  L3.substE (ProjE 1 (VarE v)) (VarE ctmp) $
                  L3.substE (ProjE 2 (VarE v)) (VarE tagtmp) $
                  bod
-      T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy),(tagtmp,T.IntTy)] T.ReadTagCursor [T.VarTriv c] <$>
+      T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy),(tagtmp,T.IntTy)] T.ReadTaggedCursor [T.VarTriv c] <$>
+        tail free_reg sym_tbl bod'
+
+    LetE (v, _, _,  (Ext (WriteTaggedCursor cur e))) bod ->
+      T.LetPrimCallT [(v,T.CursorTy)] T.WriteTaggedCursor [triv sym_tbl "WriteTaggedCursor arg" e, T.VarTriv cur] <$>
+         tail free_reg sym_tbl bod
+
+    LetE(v,_,_,  (Ext (ReadCursor c))) bod -> do
+      vtmp <- gensym $ toVar "tmpcur"
+      ctmp <- gensym $ toVar "tmpaftercur"
+      -- Here we lamely chase down all the tuple references and make them variables:
+      let bod' = L3.substE (ProjE 0 (VarE v)) (VarE vtmp) $
+                 L3.substE (ProjE 1 (VarE v)) (VarE ctmp)
+                 bod
+      T.LetPrimCallT [(vtmp,T.CursorTy),(ctmp,T.CursorTy)] T.ReadCursor [T.VarTriv c] <$>
         tail free_reg sym_tbl bod'
 
     LetE(v,_,_,  (Ext (ReadList c el_ty))) bod -> do
