@@ -185,13 +185,11 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
         let out_regargs = map (\r -> NewL2.EndOfReg r Output (toEndV r)) out_regvars
         let out_regargs' = map (\r -> NewL2.EndOfReg r Output (toEndV r)) out_regvars'
 
-{-
         -- Indirections will return end-of-input-region cursor of the region
         -- where they're written, and not of their target.
         let in_regvars = map (renv #) argtylocs
         in_regvars' <- mapM (\r -> gensym r) in_regvars
         let in_regargs' = map (\r -> NewL2.EndOfReg r Input (toEndV r)) in_regvars'
--}
         --------------------
         let ran_endofregs = map (\loc -> (loc,renv # loc)) $
                             map (\(PackedTy _ loc) -> loc) $
@@ -199,7 +197,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
         let rans_env1 = rans_env `M.union` (M.fromList ran_endofregs)
         --------------------
         let newapplocs = in_regargs ++ out_regargs ++ applocs
-        let newretlocs = out_regargs' ++ locs
+        let newretlocs = in_regargs' ++ out_regargs' ++ locs
         --------------------
         -- 'locs' only has end-witnesses up to this pass. Make their regions
         -- same as regions of the locations that the function traverses.
@@ -216,7 +214,6 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
                        M.map (\w -> if w == r then r' else w) acc)
               renv2
               (L.zip3 outretlocs out_regvars out_regvars')
-{-
         let renv4 =
               foldr (\(lc,r,r') acc ->
                        if S.member lc indirs then acc else
@@ -225,12 +222,11 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
               renv3
               (L.zip3 argtylocs in_regvars in_regvars')
         -- TODO: only keep the rightmost end-of-input-region cursor in renv.
--}
         --------------------
         let env2' = extendVEnv v ty env2
             rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
             wlocs_env' = foldr (\loc acc -> M.delete loc acc) wlocs_env (locsInTy ty)
-        bod' <- threadRegionsExp ddefs fundefs fnLocArgs renv3 env2' lfenv rlocs_env' wlocs_env' rans_env1 indirs redirs bod
+        bod' <- threadRegionsExp ddefs fundefs fnLocArgs renv4 env2' lfenv rlocs_env' wlocs_env' rans_env1 indirs redirs bod
         let -- free = S.fromList $ freeLocVars bod
             free = ss_free_locs (S.fromList (v : locsInTy ty ++ (map toLocVar locs))) env2' bod
             free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
@@ -334,11 +330,9 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
                                      Just r  -> r : acc)
                 [] outtylocs
               outtyregargs = map (fn Output) outtyregvars
-{-
               inregvars = map ((renv #) . lrmLoc) $ filter (\lrm -> lrmMode lrm == Input) fnLocArgs
               inregargs = map (fn Input) inregvars
--}
-              newlocs = outtyregargs
+              newlocs = inregargs ++ outtyregargs
           return $ Ext $ RetE (newlocs ++ locs) v
 
         TagCursor a b -> return $ Ext $ TagCursor a b
