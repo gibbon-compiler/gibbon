@@ -228,11 +228,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
 -}
         --------------------
         let env2' = extendVEnv v ty env2
-            goTy t acc = case t of
-                           PackedTy tycon loc -> M.insert loc tycon acc
-                           ProdTy tys -> foldr goTy acc tys
-                           _ -> acc
-            rlocs_env' = goTy (unTy2 ty) rlocs_env
+            rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
             wlocs_env' = foldr (\loc acc -> M.delete loc acc) wlocs_env (locsInTy ty)
         bod' <- threadRegionsExp ddefs fundefs fnLocArgs renv3 env2' lfenv rlocs_env' wlocs_env' rans_env1 indirs redirs bod
         let -- free = S.fromList $ freeLocVars bod
@@ -264,13 +260,18 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
                             else lfenv
                           _ -> lfenv
       let rans_env1 = M.insert loc (renv # loc) rans_env
+      let env2' = extendVEnv v ty env2
+          rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
+          wlocs_env' = foldr (\loc2 acc -> M.delete loc2 acc) wlocs_env (locsInTy ty)
       LetE <$> (v,locs,ty,) <$> go rhs <*>
-        threadRegionsExp ddefs fundefs fnLocArgs renv (extendVEnv v ty env2) lfenv' rlocs_env wlocs_env rans_env1 indirs redirs bod
-
+        threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv' rlocs_env' wlocs_env' rans_env1 indirs redirs bod
 
     LetE (v,locs,ty@(MkTy2 (PackedTy _ loc)),rhs@(Ext (IndirectionE{}))) bod -> do
       let rans_env' = M.insert loc (renv # loc) rans_env
-      bod' <- threadRegionsExp ddefs fundefs fnLocArgs renv (extendVEnv v ty env2) lfenv rlocs_env wlocs_env rans_env' indirs redirs bod
+      let env2' = extendVEnv v ty env2
+          rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
+          wlocs_env' = foldr (\loc2 acc -> M.delete loc2 acc) wlocs_env (locsInTy ty)
+      bod' <- threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv rlocs_env' wlocs_env' rans_env' indirs redirs bod
       pure $ LetE (v,locs,ty,rhs) bod'
 
     Ext (StartOfPkd cur) -> do
@@ -285,8 +286,11 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
        rhs' <- go rhs
        let retlocs = findRetLocs rhs'
            newretlocs = retlocs ++ locs
+       let env2' = extendVEnv v ty env2
+           rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
+           wlocs_env' = foldr (\loc acc -> M.delete loc acc) wlocs_env (locsInTy ty)
        LetE (v, newretlocs,ty, rhs') <$>
-         threadRegionsExp ddefs fundefs fnLocArgs renv (extendVEnv v ty env2) lfenv rlocs_env wlocs_env rans_env indirs redirs bod
+         threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv rlocs_env' wlocs_env' rans_env indirs redirs bod
 
     LetE (v,locs,ty,rhs@(Ext (AllocateTagHere x x_tycon))) bod -> do
       let -- x_tycon = (wlocs_env # x)
@@ -451,6 +455,11 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
               wpop = map (\(x,locs,ty,Ext (SSPush a b c _)) -> (x,locs,ty,Ext (SSPop a b c))) (reverse wpush)
           pure (rpush,wpush,rpop,wpop)
 
+    updRLocsEnv t acc =
+                 case t of
+                   PackedTy tycon loc -> M.insert loc tycon acc
+                   ProdTy tys -> foldr updRLocsEnv acc tys
+                   _ -> acc
 
 -- Inspect an AST and return locations in a RetE form.
 findRetLocs :: Exp2 -> [LocArg]
