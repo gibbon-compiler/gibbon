@@ -207,7 +207,7 @@ This is used to create bindings for input location variables.
           -- Adding additional outputs corresponding to end-of-input-value witnesses
           -- We've already computed additional location return value in RouteEnds
           ret_curs = L.map (\_ -> CursorTy) locRets
-          out_curs = inRegs ++ outRegs ++ ret_curs
+          out_curs = outRegs ++ ret_curs
           out_ty = case out_curs of
                      [] -> unTy2 arrOut
                      _  -> ProdTy $ out_curs ++ [unTy2 arrOut]
