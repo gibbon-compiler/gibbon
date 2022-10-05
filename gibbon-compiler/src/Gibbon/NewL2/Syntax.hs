@@ -15,14 +15,14 @@ module Gibbon.NewL2.Syntax
     , Old.Effect(..), Old.ArrowTy2(..) , Old.LocRet(..), LocArg(..), LocExp, Old.PreLocExp(..)
 
     -- * Regions and locations
-    , LocVar, Old.Region(..), Old.Modality(..), Old.LRM(..), Old.dummyLRM
+    , LocVar, Old.Region(..), Old.Modality(..),  Old.LRM(..), LREM(..)
     , Old.Multiplicity(..), Old.RegionSize(..), Old.RegionType(..), Old.regionToVar
 
     -- * Operations on types
     , Old.allLocVars, Old.inLocVars, Old.outLocVars, Old.outRegVars, Old.inRegVars, Old.allRegVars
     , substLoc, substLocs, Old.substEff, Old.substEffs, extendPatternMatchEnv
     , locsInTy, Old.dummyTyLocs, allFreeVars, freeLocVars
-    , toLocVar
+    , toLocVar, fromLRM
 
     -- * Other helpers
     , revertToL1, Old.occurs, Old.mapPacked, Old.constPacked, depList, Old.changeAppToSpawn
@@ -78,11 +78,26 @@ instance NFData Ty2
 
 --------------------------------------------------------------------------------
 
-data LocArg = Loc Old.LRM
-            | EndWitness Old.LRM Var
-            | Reg Var Old.Modality
-            | EndOfReg Var Old.Modality Var
-            | EndOfReg_Tagged Var
+data LREM = LREM { lremLoc    :: LocVar
+                 , lremReg    :: RegVar
+                 , lremEndReg :: RegVar
+                 , lremMode   :: Old.Modality
+                 }
+  deriving (Read,Show,Eq,Ord,Generic)
+
+instance Out LREM
+
+instance NFData LREM where
+  rnf (LREM a b c d)  = rnf a `seq` rnf b `seq` rnf c `seq` rnf d
+
+fromLRM :: Old.LRM -> LREM
+fromLRM (Old.LRM loc reg mode) = LREM loc (Old.regionToVar reg) (toEndV (Old.regionToVar reg)) mode
+
+data LocArg = Loc LREM
+            | EndWitness LREM Var
+            | Reg RegVar Old.Modality
+            | EndOfReg RegVar Old.Modality RegVar
+            | EndOfReg_Tagged RegVar
   deriving (Read, Show, Eq, Ord, Generic)
 
 instance Out LocArg
@@ -91,7 +106,7 @@ instance NFData LocArg
 toLocVar :: LocArg -> LocVar
 toLocVar arg =
   case arg of
-    Loc lrm        -> Old.lrmLoc lrm
+    Loc lrm        -> lremLoc lrm
     EndWitness _ v -> v
     Reg v _        -> v
     EndOfReg _ _ v -> v

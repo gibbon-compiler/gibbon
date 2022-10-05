@@ -31,7 +31,7 @@ fromOldL2Fn :: DDefs Ty2 -> FunDefs2 -> FunDef2 -> PassM New.FunDef2
 fromOldL2Fn ddefs fundefs f@FunDef{funArgs,funTy,funBody} = do
   let initTyEnv  = M.fromList $ zip funArgs (arrIns funTy)
       env2 = Env2 initTyEnv (initFunEnv fundefs)
-      initLocEnv = M.fromList $ map (\lrm -> (lrmLoc lrm, New.Loc lrm)) (locVars funTy)
+      initLocEnv = M.fromList $ map (\lrm -> (lrmLoc lrm, New.Loc (New.fromLRM lrm))) (locVars funTy)
   bod' <- fromOldL2Exp ddefs fundefs initLocEnv env2 funBody
   return $ f { funBody = bod', funTy = fmap New.MkTy2 funTy }
 
@@ -93,8 +93,8 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
                  (ewitnesses', locenv'') =
                         foldr
                           (\(witloc, tloc) (wits, env) ->
-                             let (New.Loc lrm) = (env # tloc)
-                                 wit' = New.EndWitness lrm witloc
+                             let (New.Loc lrem) = (env # tloc)
+                                 wit' = New.EndWitness lrem witloc
                                  env' = M.insert witloc wit' env
                              in (wit' : wits, env'))
                           ([], locenv')
@@ -121,15 +121,16 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
     CaseE scrt brs
       | VarE v <- scrt ->
           do let (PackedTy _ scrt_loc) = lookupVEnv v env2
-                 (New.Loc lrm) = locenv # scrt_loc
+                 (New.Loc lrem) = locenv # scrt_loc
 
                  docase (dcon, vlocs, rhs) = do
-                   let mkLocArg loc = New.Loc $ LRM loc (lrmReg lrm) (lrmMode lrm)
+
+                   let mkLocArg loc = New.Loc $ lrem { New.lremLoc = loc }
                    let (vars,locs) = unzip vlocs
                        locargs = map mkLocArg locs
                        vlocs' = zip vars locargs
                        locenv' = foldr
-                                   (\(New.Loc lrm') acc -> M.insert (lrmLoc lrm') (New.Loc lrm') acc)
+                                   (\(New.Loc lrem') acc -> M.insert (New.lremLoc lrem') (New.Loc lrem') acc)
                                    locenv locargs
                        env2' = extendPatternMatchEnv dcon ddefs vars locs env2
                        locenv'' = if isRedirectionTag dcon || isIndirectionTag dcon
@@ -233,21 +234,21 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
   toLocArg :: LocVar -> LocExp -> LocEnv -> New.LocArg
   toLocArg loc locexp locenv0 =
     case locexp of
-      StartOfRegionLE reg -> New.Loc (LRM loc reg Output)
+      StartOfRegionLE reg -> New.Loc (New.LREM loc (regionToVar reg) (toEndV (regionToVar reg)) Output)
       AfterConstantLE _ loc2 ->
-        let (New.Loc lrm) = locenv0 # loc2
-        in New.Loc (LRM loc (lrmReg lrm) Output)
+        let (New.Loc lrem) = locenv0 # loc2
+        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) Output)
       AfterVariableLE _ loc2 _ ->
-        let (New.Loc lrm) = locenv0 # loc2
-        in New.Loc (LRM loc (lrmReg lrm) Output)
+        let (New.Loc lrem) = locenv0 # loc2
+        in New.Loc (New.LREM loc (New.lremReg lrem) (New.lremEndReg lrem) Output)
       InRegionLE reg ->
-        New.Loc (LRM loc reg Output)
+        New.Loc (New.LREM loc (regionToVar reg) (toEndV (regionToVar reg)) Output)
       FreeLE ->
-        New.Loc (LRM loc (VarR "FREE_REG") Output)
+        New.Loc (New.LREM loc "FREE_REG" "end_FREE_REG" Output)
       FromEndLE loc2 ->
         case (locenv0 # loc2) of
-          New.Loc lrm -> New.Loc (LRM loc (lrmReg lrm) (lrmMode lrm))
-          New.EndWitness lrm _ -> New.Loc (LRM loc (lrmReg lrm) (lrmMode lrm))
+          New.Loc lrem -> New.Loc (lrem { New.lremLoc = loc })
+          New.EndWitness lrem _ -> New.Loc ( lrem { New.lremLoc = loc } )
           oth -> error $ "toLocArg: got" ++ sdoc oth
 
 
@@ -256,7 +257,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
     let locs = locsInTy ty in
       foldr (\loc acc -> M.adjust (\locarg ->
                                      case locarg of
-                                       New.Loc lrm -> New.Loc (lrm { lrmMode = Input })
+                                       New.Loc lrem -> New.Loc (lrem { New.lremMode = Input })
                                        _ -> locarg)
                          loc acc)
       env locs

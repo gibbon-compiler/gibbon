@@ -486,6 +486,10 @@ instance Pretty L2.LRM where
   pprintWithStyle sty (LRM loc reg mode) =
     parens $ text "LRM" <+> pprintWithStyle sty loc <+> pprintWithStyle sty reg <+> pprintWithStyle sty mode
 
+instance Pretty NewL2.LREM where
+  pprintWithStyle sty (NewL2.LREM loc reg end_reg mode) =
+    parens $ text "LRM" <+> pprintWithStyle sty loc <+> pprintWithStyle sty reg <+> pprintWithStyle sty end_reg <+> pprintWithStyle sty mode
+
 instance Pretty NewL2.LocArg where
   pprintWithStyle sty locarg =
     case locarg of

@@ -66,7 +66,7 @@ type RegEnv = M.Map LocVar RegVar
 type RightmostRegEnv = M.Map LocVar RegVar
 
 -- Location arguments
-type FnLocArgs = [LRM]
+type FnLocArgs = [LREM]
 
 -- Allocation env
 type AllocEnv = M.Map Var TyCon
@@ -100,7 +100,7 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
                          _ -> acc)
       rlocs_env = foldr fn M.empty (arrIns funTy)
       wlocs_env = fn (arrOut funTy) M.empty
-      fnlocargs = locVars funTy
+      fnlocargs = map fromLRM (locVars funTy)
       region_locs = M.fromList $ map (\(LRM l r _m) -> (regionToVar r, [l])) (locVars funTy)
   bod' <- threadRegionsExp ddefs fundefs fnlocargs initRegEnv env2 M.empty rlocs_env wlocs_env M.empty region_locs S.empty S.empty funBody
   -- Boundschecking
@@ -122,10 +122,12 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
                 in foldr
                      (\lrm@(LRM loc reg mode) acc ->
                         if mode == Output
-                        then let rv = toEndV $ regionToVar reg
+                        then let rv = regionToVar reg
+                                 end_rv = toEndV rv
+                                 -- rv = end_reg
                                  bc = boundsCheck ddefs (locs_tycons M.! loc)
-                                 locarg = NewL2.Loc lrm
-                                 regarg = NewL2.Reg rv mode
+                                 locarg = NewL2.Loc (LREM loc rv end_rv mode)
+                                 regarg = NewL2.Reg end_rv mode
                              in -- dbgTraceIt ("boundscheck" ++ sdoc ((locs_tycons M.! loc), bc)) $
                                 LetE ("_",[],MkTy2 IntTy, Ext$ BoundsCheck bc regarg locarg) acc
                         else acc)
@@ -133,7 +135,7 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
                      (locVars funTy)
   return $ f {funBody = bod''}
 
-threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> [LRM] -> RegEnv -> Env2 Ty2
+threadRegionsExp :: DDefs Ty2 -> FunDefs2 -> [LREM] -> RegEnv -> Env2 Ty2
                  -> RightmostRegEnv -> AllocEnv -> AllocEnv -> EnvForRAN
                  -> OrderedLocsEnv -> S.Set LocVar -> S.Set LocVar
                  -> NewL2.Exp2 -> PassM NewL2.Exp2
@@ -216,46 +218,59 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
                                                  in r')
                                           traversed_indices)
         let renv2 = M.union renv1 renv
+
         -- Update input and returned locations to point to the fresh regions
-        let region_locs' = foldr (\(r,r') acc -> M.insert r' (acc # r) acc) region_locs (zip in_regvars in_regvars')
-        let region_locs'' = foldr (\(r,r') acc -> M.insert r' (acc # r) acc) region_locs' (zip out_regvars out_regvars')
-        let renv3 =
-              foldr (\(lc,r,r') acc ->
-                       M.insert lc r' $
-                       M.map (\w -> if w == r then r' else w) acc)
-              renv2
+        --
+
+        let region_locs1 = foldr (\(r,r') acc -> M.insert r' (acc # r) acc)
+                             region_locs
+                             (zip in_regvars in_regvars')
+        let region_locs2 = foldr (\(r,r') acc -> M.insert r' (acc # r) acc)
+                             region_locs1
+                             (zip out_regvars out_regvars')
+        -- [2022.10.04]: do outregvars need to updated like inregvars below?
+        let (renv3, bod1) =
+              foldr (\(lc,r,r') (acc, bod_acc) ->
+                       ( (M.insert lc r' $ M.map (\w -> if w == r then r' else w) acc)
+                       ,  substEndReg (Right r) r' bod_acc))
+              (renv2, bod)
               (L.zip3 outretlocs out_regvars out_regvars')
-        let (renv4,region_locs''') =
-              foldr (\(lc,r,r') (acc1,acc2) ->
-                       if S.member lc indirs then (acc1,acc2) else
-                         let locs_in_r = (region_locs'' # r)
-                         in case L.elemIndex lc locs_in_r of
-                              Just idx -> if idx == (length locs_in_r - 1)
-                                          then let fake_last_loc = toVar "fake_" `varAppend` lc
-                                                   acc1' = M.insert fake_last_loc r' acc1
-                                                   acc2' = M.adjust (\ls -> ls ++ [fake_last_loc]) r acc2
-                                                   acc2'' = M.insert r' (acc2' # r) acc2'
-                                                   acc2''' = foldr (\lc2 acc3 -> M.adjust (\ls -> ls ++ [fake_last_loc]) (acc1' # lc2) acc3) acc2'' locs_in_r
-                                               in (acc1', acc2''')
-                                          else let (_, to_update) = splitAt (idx+1) locs_in_r
-                                                   updated = M.mapWithKey (\key val -> if key `elem` to_update then r' else val) acc1
-                                               in (updated, acc2)
-                              Nothing -> error $ "threadRegionsExp: unbound loc " ++ sdoc (lc,locs_in_r,indirs,region_locs',r))
-              (renv3, region_locs'')
+        let (renv4, region_locs3, bod2) =
+              foldr (\(lc,r,r') (acc1,acc2,bod_acc) ->
+                       if S.member lc indirs then (acc1,acc2,bod_acc) else
+                         let locs_in_r = (region_locs2 # r) in
+                           case L.elemIndex lc locs_in_r of
+                             Just idx ->
+                               if idx == (length locs_in_r - 1)
+                               then let fake_last_loc = toVar "fake_" `varAppend` lc
+                                        acc1' = M.insert fake_last_loc r' acc1
+                                        acc2' = M.adjust (\ls -> ls ++ [fake_last_loc]) r acc2
+                                        acc2'' = M.insert r' (acc2' # r) acc2'
+                                        acc2''' = foldr (\lc2 acc3 -> M.adjust (\ls -> ls ++ [fake_last_loc]) (acc1' # lc2) acc3) acc2'' locs_in_r
+                                    in (acc1', acc2''', bod_acc)
+                               else let (_, to_update) = splitAt (idx+1) locs_in_r
+                                        updated = M.mapWithKey (\key val -> if key `elem` to_update then r' else val) acc1
+                                        bod_acc' = foldr
+                                                     (\l b -> substEndReg (Left l) r' b)
+                                                     bod_acc
+                                                     (S.toList (M.keysSet acc1 `S.intersection` (S.fromList to_update)))
+                                    in (updated, acc2, bod_acc')
+                             Nothing -> error $ "threadRegionsExp: unbound loc " ++ sdoc (lc,locs_in_r,indirs,region_locs1,r))
+              (renv3, region_locs2, bod1)
               (L.zip3 argtylocs in_regvars in_regvars')
         -- TODO: only keep the rightmost end-of-input-region cursor in renv.
         --------------------
         let env2' = extendVEnv v ty env2
             rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
             wlocs_env' = foldr (\loc acc -> M.delete loc acc) wlocs_env (locsInTy ty)
-        bod' <- threadRegionsExp ddefs fundefs fnLocArgs renv4 env2' lfenv rlocs_env' wlocs_env' rans_env1 region_locs''' indirs redirs bod
+        bod3 <- threadRegionsExp ddefs fundefs fnLocArgs renv4 env2' lfenv rlocs_env' wlocs_env' rans_env1 region_locs3 indirs redirs bod2
         let -- free = S.fromList $ freeLocVars bod
             free = ss_free_locs (S.fromList (v : locsInTy ty ++ (map toLocVar locs))) env2' bod
             free_rlocs = free `S.intersection` (M.keysSet rlocs_env')
             free_wlocs = free `S.intersection` (M.keysSet wlocs_env')
         (rpush,wpush,rpop,wpop) <- ss_ops free_rlocs free_wlocs
         let binds = rpush ++ wpush ++ [(v, newretlocs, ty, AppE f newapplocs args)] ++ wpop ++ rpop
-        (pure $ mkLets binds bod')
+        (pure $ mkLets binds bod3)
 
 
     LetE (v,locs,ty, (SpawnE f applocs args)) bod -> do
@@ -339,13 +354,13 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
                       AfterVariableLE _ lc _ -> renv # (toLocVar lc)
                       FromEndLE lc           -> renv # (toLocVar lc)
               wlocs_env' = M.insert loc hole_tycon wlocs_env
-              region_locs' = case rhs of
+              region_locs1 = case rhs of
                                AfterConstantLE{} -> M.adjust (\locs -> locs ++ [loc]) reg region_locs
                                AfterVariableLE{} -> M.adjust (\locs -> locs ++ [loc]) reg region_locs
                                StartOfRegionLE{} -> M.insert reg [loc] region_locs
                                _ -> region_locs
           Ext <$> LetLocE loc rhs <$>
-            threadRegionsExp ddefs fundefs fnLocArgs (M.insert loc reg renv) env2 lfenv rlocs_env wlocs_env' rans_env region_locs' indirs redirs bod
+            threadRegionsExp ddefs fundefs fnLocArgs (M.insert loc reg renv) env2 lfenv rlocs_env wlocs_env' rans_env region_locs1 indirs redirs bod
 
         RetE locs v -> do
           let ty = lookupVEnv v env2
@@ -357,11 +372,11 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env ran
                                      Just r  -> r : acc)
                 [] outtylocs
               outtyregargs = map (fn Output) outtyregvars
-              inregvars = map (\lrm -> let r = renv # (lrmLoc lrm)
+              inregvars = map (\lrm -> let r = renv # (lremLoc lrm)
                                            last_loc = last (region_locs # r)
                                            r' = (renv # last_loc)
                                        in r') $
-                          filter (\lrm -> lrmMode lrm == Input) fnLocArgs
+                          filter (\lrm -> lremMode lrm == Input) fnLocArgs
               inregargs = map (fn Input) inregvars
               newlocs = inregargs ++ outtyregargs
           return $ Ext $ RetE (newlocs ++ locs) v
@@ -600,3 +615,63 @@ allFreeVars_sans_datacon_args ex =
         SSPush _ a b _ -> S.fromList [a,b]
         SSPop _ a b -> S.fromList [a,b]
     _ -> gFreeVars ex
+
+
+----------------------------------------
+
+substEndReg :: Either LocVar RegVar -> RegVar -> Exp2 -> Exp2
+substEndReg loc_or_reg end_reg ex =
+  case ex of
+    AppE f locs args -> AppE f (map gosubst locs) (map go args)
+    PrimAppE pr args -> PrimAppE pr (map go args)
+    LetE (v,locs,ty,rhs) bod -> LetE (v,map gosubst locs,ty,go rhs) (go bod)
+    IfE a b c                -> IfE (go a) (go b) (go c)
+    MkProdE args             -> MkProdE (map go args)
+    ProjE i bod              -> ProjE i (go bod)
+    CaseE scrt brs           -> CaseE (go scrt) (map (\(dcon,vlocs,c) -> (dcon,vlocs,go c)) brs)
+    DataConE loc dcon args   -> DataConE (gosubst loc) dcon (map go args)
+    TimeIt e ty b      -> TimeIt (go e) ty b
+    WithArenaE v e     -> WithArenaE v (go e)
+    SpawnE f locs args -> SpawnE f (map gosubst locs) (map go args)
+    Ext ext ->
+      case ext of
+        LetRegionE r sz ty bod    -> Ext $ LetRegionE r sz ty (go bod)
+        LetParRegionE r sz ty bod -> Ext $ LetParRegionE r sz ty (go bod)
+        LetLocE loc locexp bod    -> Ext $ LetLocE loc locexp (go bod)
+        RetE locs v               -> Ext $ RetE (map gosubst locs) v
+        FromEndE loc              -> Ext $ FromEndE (gosubst loc)
+        BoundsCheck i reg cur     -> Ext $ BoundsCheck i (gosubst reg) (gosubst cur)
+        IndirectionE tycon dcon (a,b) (c,d) e ->
+          Ext $ IndirectionE tycon dcon (a, b) (c, d) e
+        LetAvail vs bod -> Ext $ LetAvail vs (go bod)
+        StartOfPkd{}          -> ex
+        TagCursor{}           -> ex
+        AddFixed{}            -> ex
+        GetCilkWorkerNum      -> ex
+        AllocateTagHere{}     -> ex
+        AllocateScalarsHere{} -> ex
+        SSPush{}              -> ex
+        SSPop{}               -> ex
+    _ -> ex
+ where
+  go = substEndReg loc_or_reg end_reg
+
+  gosubst locarg =
+    case locarg of
+      Loc lrem          -> case loc_or_reg of
+                             Left loc0 ->  if lremLoc lrem == loc0
+                                           then Loc (lrem { lremEndReg = end_reg })
+                                           else locarg
+                             Right reg0 -> if lremReg lrem == reg0
+                                           then Loc (lrem { lremEndReg = end_reg })
+                                           else locarg
+      EndWitness lrem v -> case loc_or_reg of
+                             Left loc0 ->  if lremLoc lrem == loc0
+                                           then EndWitness (lrem { lremEndReg = end_reg }) v
+                                           else locarg
+                             Right reg0 -> if lremReg lrem == reg0
+                                           then EndWitness (lrem { lremEndReg = end_reg }) v
+                                           else locarg
+      Reg{}             -> locarg
+      EndOfReg{}        -> locarg
+      EndOfReg_Tagged{} -> locarg
