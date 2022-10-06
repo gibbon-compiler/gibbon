@@ -1189,6 +1189,11 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     *(char **) writeloc_addr = heap_start;
     *(char **) footer_addr = new_footer_start;
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    fprintf(stderr, "Growing a region old=(%p,%p), new=(%p,%p)\n",
+            *writeloc_addr, footer_ptr, heap_start, new_footer_start);
+#endif
+
     return;
 }
 
