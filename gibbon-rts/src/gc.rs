@@ -635,7 +635,17 @@ unsafe fn evacuate_packed(
 
                             // TODO: make this reusable somehow (local macro?)
                             if let Some(shortcut_addr) = mb_shortcut_addr {
-                                write(shortcut_addr, dst1);
+                                let offset = dst_end1.offset_from(dst1);
+                                let tagged: u64 =
+                                    TaggedPointer::new(dst1, offset as u16)
+                                        .as_u64();
+                                write(shortcut_addr, tagged);
+
+                                #[cfg(feature = "verbose_evac")]
+                                eprintln!(
+                                    "   Wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
+                                    shortcut_addr, dst1, offset
+                                );
                             }
 
                             #[cfg(feature = "verbose_evac")]
@@ -726,7 +736,17 @@ unsafe fn evacuate_packed(
 
                         // TODO: make this reusable somehow (local macro?)
                         if let Some(shortcut_addr) = mb_shortcut_addr {
-                            write(shortcut_addr, dst1);
+                            let offset = dst_end1.offset_from(dst1);
+                            let tagged: u64 =
+                                TaggedPointer::new(dst1, offset as u16)
+                                    .as_u64();
+                            write(shortcut_addr, tagged);
+
+                            #[cfg(feature = "verbose_evac")]
+                            eprintln!(
+                                    "   Wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
+                                    shortcut_addr, dst1, offset
+                                );
                         }
 
                         #[cfg(feature = "gcstats")]
@@ -842,7 +862,17 @@ unsafe fn evacuate_packed(
 
                             // TODO: make this reusable somehow (local macro?)
                             if let Some(shortcut_addr) = mb_shortcut_addr {
-                                write(shortcut_addr, dst);
+                                let offset = dst_end.offset_from(dst);
+                                let tagged: u64 =
+                                    TaggedPointer::new(dst, offset as u16)
+                                        .as_u64();
+                                write(shortcut_addr, tagged);
+
+                                #[cfg(feature = "verbose_evac")]
+                                eprintln!(
+                                    "   Wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
+                                    shortcut_addr, dst, offset
+                                );
                             }
 
                             #[cfg(feature = "gcstats")]
@@ -928,7 +958,17 @@ unsafe fn evacuate_packed(
                             // before we advance dst2 past the tag.
                             // TODO: make this reusable somehow (local macro?)
                             if let Some(shortcut_addr) = mb_shortcut_addr {
-                                write(shortcut_addr, dst2);
+                                let offset = dst_end2.offset_from(dst2);
+                                let tagged: u64 =
+                                    TaggedPointer::new(dst2, offset as u16)
+                                        .as_u64();
+                                write(shortcut_addr, tagged);
+
+                                #[cfg(feature = "verbose_evac")]
+                                eprintln!(
+                                    "   Wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
+                                    shortcut_addr, dst2, offset
+                                );
                             }
 
                             // Copy the tag. Move cursors past the tag.
@@ -959,11 +999,16 @@ unsafe fn evacuate_packed(
                                     // TODO: what should happen here if we're
                                     // evacuating oldgen?
                                     for i in 0..num_shortcut1 {
-                                        let (shortcut_dst, _): (*const i8, _) =
-                                            read(
-                                                src_shortcuts_start.add(i * 8),
-                                            );
-
+                                        let (tagged_shortcut_dst, _): (
+                                            u64,
+                                            _,
+                                        ) = read(
+                                            src_shortcuts_start.add(i * 8),
+                                        );
+                                        let tagged = TaggedPointer::from_u64(
+                                            tagged_shortcut_dst,
+                                        );
+                                        let shortcut_dst = tagged.untag();
                                         if st
                                             .nursery
                                             .contains_addr(shortcut_dst)
@@ -978,11 +1023,11 @@ unsafe fn evacuate_packed(
                                         } else {
                                             #[cfg(feature = "verbose_evac")]
                                             eprintln!("   Writing an oldgen shortcut pointer {:?} -> {:?}",
-                                                      dst_shortcuts_start.add(i * 8), shortcut_dst);
+                                                      dst_shortcuts_start.add(i * 8), tagged_shortcut_dst);
 
                                             write(
                                                 dst_shortcuts_start.add(i * 8),
-                                                shortcut_dst,
+                                                tagged_shortcut_dst,
                                             );
                                             addrs.push(None);
                                         }
