@@ -1,8 +1,15 @@
 module Main where
 
 import System.TimeIt
+import System.CPUTime
 import qualified Data.Vector as V
 import System.Random
+import Data.Time.Clock (getCurrentTime, diffUTCTime)
+import Control.Exception (evaluate)
+
+import Control.DeepSeq
+import Data.Int
+import Data.List
 
 data PList a = Nil | Cons a (PList a) deriving (Show)
 
@@ -584,26 +591,73 @@ emphasizeBlogContentsForKeyword keyword blogs =
                            in Layout4 tags new_content existsRst header id author date
 
 
+--------------------------------------------------------------------------------
+-- Timing things
+--------------------------------------------------------------------------------
+median :: [Double] -> Double
+median ls = (sort ls) !! (length ls `div` 2)
+--------------------------------------------------------------------------------
+
+-- Timing for making the layouts
+dotrialMkLayout :: (Int -> Int -> Int -> Blog) -> Int -> Int -> Int -> IO (Blog, Double)
+dotrialMkLayout f length id tag_len = do
+    t1 <- getCurrentTime
+    a <- evaluate $ (f length id tag_len)
+    t2 <- getCurrentTime
+    let delt = fromRational (toRational (diffUTCTime t2 t1))
+    putStrLn ("iter time: " ++ show delt)
+    return $! (a,delt)
+
+benchMkLayout :: (Int -> Int -> Int -> Blog) -> Int -> Int -> Int -> Int -> IO (Blog, Double, Double)
+benchMkLayout f length id tag_len iters = do
+    putStrLn ("Timings for making the particular layout")
+    tups <- mapM (\_ -> dotrialMkLayout f length id tag_len) [1..iters]
+    let (results, times) = unzip tups
+    let selftimed = median times
+        batchtime = sum times
+    return $! (last results, selftimed, batchtime)
+
+-- Timing for filtering the blogs based on a keyword
+dotrialFilterBlogsBasedOnKeywordInTagList :: (Text -> Blog -> Blog) -> Text -> Blog -> IO (Blog, Double)
+dotrialFilterBlogsBasedOnKeywordInTagList f keyword blogs = do
+    t1 <- getCurrentTime
+    a <- evaluate $ (f keyword blogs)
+    t2 <- getCurrentTime
+    let delt = fromRational (toRational (diffUTCTime t2 t1))
+    putStrLn ("iter time: " ++ show delt)
+    return $! (a,delt)
+
+benchFilterBlogsBasedOnKeywordInTagList :: (Text -> Blog -> Blog) -> Text -> Blog -> Int -> IO (Blog, Double, Double)
+benchFilterBlogsBasedOnKeywordInTagList f keyword blog iters = do
+    putStrLn ("Timings for filering blogs based on a keyword in the tag list")
+    tups <- mapM (\_ -> dotrialFilterBlogsBasedOnKeywordInTagList f keyword blog) [1..iters]
+    let (results, times) = unzip tups
+    let selftimed = median times
+        batchtime = sum times
+    return $! (last results, selftimed, batchtime)
+
+
+
 -- main function 
 main :: IO ()
 main = 
-    do
-        let blogs1 = mkBlogs_layout1 100 0 10
-            blogs2 = mkBlogs_layout2 100 0 10
-            blogs3 = mkBlogs_layout3 100 0 10
-            blogs4 = mkBlogs_layout4 100 0 10
-            keyword = getRandomString 2
-            --exists = searchBlogContentsForKeyword keyword blogs
-            --newBlogs1 = filterBlogsBasedOnKeywordInTagList keyword blogs1
-            --newBlogs2 = filterBlogsBasedOnKeywordInTagList keyword blogs2
-            --newBlogs3 = filterBlogsBasedOnKeywordInTagList keyword blogs3
-            --newBlogs4 = filterBlogsBasedOnKeywordInTagList keyword blogs4
-            --newBlogsEmph = emphasizeBlogContentsForKeyword keyword blogs
-            time1 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs1)
-            time2 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs2)
-            time3 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs3)
-            time4 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs4)
-            in time1 -- (time1, time2, time3, time4)
+    do 
+      (blogs1, self1, batch1) <- benchMkLayout mkBlogs_layout1 100 0 10 10
+      (blogs2, self2, batch2) <- benchMkLayout mkBlogs_layout2 100 0 10 10
+      (blogs3, self3, batch3) <- benchMkLayout mkBlogs_layout3 100 0 10 10
+      (blogs4, self4, batch4) <- benchMkLayout mkBlogs_layout4 100 0 10 10
+      (blogs5, self5, batch5) <- benchMkLayout mkBlogs_layout5 100 0 10 10
+      (blogs6, self6 ,batch6) <- benchMkLayout mkBlogs_layout6 100 0 10 10
+      (blogs7, self7, batch7) <- benchMkLayout mkBlogs_layout7 100 0 10 10
+      let keyword = getRandomString 2
+      (newblog1, self8, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs1 20
+      (newblog2, self9, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs2 20
+      (newblog3, self10, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs3 20
+      (newblog4, self11, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs4 20
+      (newblog5, self12, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs5 20
+      (newblog6, self8, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs6 20
+      (newblog7, self8, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs7 20
+      putStrLn $ "Done."
 
 
 -- compile with
@@ -616,3 +670,16 @@ main =
 -- 3.) Filter blogs based on a particular keyword
 -- 4.) Filter blogs based on a particular keyword in the TagList
 -- 5.) emphasize a particular keyword in the Content of Blogs
+
+
+-- let blogs1 = mkBlogs_layout1 100 0 10
+--     blogs2 = mkBlogs_layout2 100 0 10
+--     blogs3 = mkBlogs_layout3 100 0 10
+--     blogs4 = mkBlogs_layout4 100 0 10
+--     keyword = getRandomString 2
+--     start <- getCPUTimeWithUnit
+--     time1 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs1)
+--     time2 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs2)
+--     time3 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs3)
+--     time4 = timeIt $ print (filterBlogsBasedOnKeywordInTagList keyword blogs4)
+--   in time1

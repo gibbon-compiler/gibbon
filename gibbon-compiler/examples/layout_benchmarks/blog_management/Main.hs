@@ -592,17 +592,83 @@ emphasizeBlogContentsForKeyword keyword blogs =
          Content block -> let new_content   = Content (emphasizeKeywordInBlock keyword block)
                               existsRst     = emphasizeBlogContentsForKeyword keyword rst
                            in Layout4 tags (copyPacked new_content) existsRst header id author date
-      
+                           
+-- search blog tags 
+searchBlogTags :: Text -> BlogTags -> Bool 
+searchBlogTags keyword tags = case tags of 
+   TagList list -> searchTagList keyword list
+
+--emphasize blog content 
+emphasizeBlogContent :: Text -> BlogContent -> BlogContent
+emphasizeBlogContent keyword oldContent = case oldContent of 
+                                       Content block -> Content (emphasizeKeywordInBlock keyword block)
+                                              
+
+-- Look for a keyword in the tag-list and emphasize a particular keyword based on that. 
+emphBasedOnTagList :: Text -> Blog -> Blog 
+emphBasedOnTagList keyword blogs = 
+   case blogs of 
+      End -> End 
+      Layout1 header id author date content tags rst -> let present = searchBlogTags keyword tags
+                                                            newRst  = emphBasedOnTagList keyword rst
+                                                         in if (present)
+                                                            then
+                                                               let newContent = emphasizeBlogContent keyword content
+                                                                in Layout1 header id author date (copyPacked newContent) tags newRst
+                                                            else Layout1 header id author date content tags (newRst)
+      -- Layout2 content tags rst header id author date -> let present = searchBlogTags keyword tags 
+      --                                                       newRst = emphBasedOnTagList keyword rst 
+      --                                                       in if (present)
+      --                                                          then 
+      --                                                             let newContent = emphasizeBlogContent keyword content 
+      --                                                               in Layout2 (copyPacked newContent) tags (copyPacked newRst) header id author date
+      --                                                          else Layout2 content tags (copyPacked newRst) header id author date
+
+      -- Layout3 tags rst content header id author date -> let present = searchBlogTags keyword tags 
+      --                                                       newRst = emphBasedOnTagList keyword rst 
+      --                                                       in if (present)
+      --                                                          then 
+      --                                                             let newContent = emphasizeBlogContent keyword content 
+      --                                                               in Layout3 tags (copyPacked newRst) (copyPacked newContent) header id author date
+      --                                                          else Layout3 tags (copyPacked newRst) content header id author date
+      -- Layout4 tags content rst header id author date -> let present = searchBlogTags keyword tags 
+      --                                                       newRst = emphBasedOnTagList keyword rst 
+      --                                                       in if (present)
+      --                                                          then 
+      --                                                             let newContent = emphasizeBlogContent keyword content 
+      --                                                               in Layout4 tags (copyPacked newContent) newRst header id author date
+      --                                                          else Layout4 tags content newRst header id author date
+      -- Layout5 rst tags content header id author date -> let present = searchBlogTags keyword tags 
+      --                                                       newRst = emphBasedOnTagList keyword rst 
+      --                                                       in if (present)
+      --                                                          then 
+      --                                                             let newContent = emphasizeBlogContent keyword content 
+      --                                                               in Layout5 newRst tags (copyPacked newContent) header id author date
+      --                                                          else Layout5 newRst tags content header id author date
+      -- Layout6 header id author date content rst tags -> let present = searchBlogTags keyword tags 
+      --                                                       newRst = emphBasedOnTagList keyword rst 
+      --                                                       in if (present)
+      --                                                          then 
+      --                                                             let newContent = emphasizeBlogContent keyword content 
+      --                                                               in Layout6 header id author date (copyPacked newContent) newRst tags
+      --                                                          else Layout6 header id author date content newRst tags
+      -- Layout7 rst content header id author date tags -> let present = searchBlogTags keyword tags 
+      --                                                       newRst = emphBasedOnTagList keyword rst 
+      --                                                       in if (present)
+      --                                                          then 
+      --                                                             let newContent = emphasizeBlogContent keyword content 
+      --                                                               in Layout7 newRst newContent header id author date tags
+      --                                                          else Layout7 newRst content header id author date tags
 
 -- main function 
 gibbon_main = 
-   let blogs1  = mkBlogs_layout1 5000 0 1000        -- mkBlogs_layout1 length start_id tag_length
-       blogs2  = mkBlogs_layout2 5000 0 1000
-       blogs3  = mkBlogs_layout3 5000 0 1000
-       blogs4  = mkBlogs_layout4 5000 0 1000
-       blogs5  = mkBlogs_layout5 5000 0 1000
-       blogs6  = mkBlogs_layout6 5000 0 1000
-       blogs7  = mkBlogs_layout7 5000 0 1000
+   let blogs1  = mkBlogs_layout1 2 0 2        -- mkBlogs_layout1 length start_id tag_length
+       blogs2  = mkBlogs_layout2 2 0 2
+       blogs3  = mkBlogs_layout3 2 0 2
+       blogs4  = mkBlogs_layout4 2 0 2
+       blogs5  = mkBlogs_layout5 2 0 2
+       blogs6  = mkBlogs_layout6 2 0 2
+       blogs7  = mkBlogs_layout7 2 0 2
        keyword = (getRandomString 2)             -- some random keyword
        new_blogs1 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs1)
        new_blogs2 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs2)
@@ -611,6 +677,8 @@ gibbon_main =
        new_blogs5 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs5)
        new_blogs6 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs6)
        new_blogs7 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs7)
+       a          = emphBasedOnTagList keyword blogs1
+       _          = printPacked a
        --_          = printPacked new_blogs1
        --_          = printPacked new_blogs2
        --_          = printPacked new_blogs3
