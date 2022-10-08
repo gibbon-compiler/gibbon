@@ -190,8 +190,8 @@ void symbol_table_initialize(void)
     gib_add_symbol(2154, " ->r ");
     gib_add_symbol(2155, " ->i ");
 }
-#define REGION_SIZE 128
-#define TREE_HEIGHT 4
+#define REGION_SIZE 256
+#define TREE_HEIGHT 5
 GibCursorGibCursorGibCursorProd helper(GibCursor end_r_853, GibCursor loc_852,
                                        GibInt s_58_236_368, GibInt e_59_237_369)
 {

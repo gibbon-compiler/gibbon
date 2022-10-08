@@ -505,6 +505,7 @@ unsafe fn evacuate_packed(
     let mut dst = orig_dst;
     let mut dst_end = orig_dst_end;
     let mut inlining_underway = false;
+    let mut noburn = false;
     // The implicit -1th element of the worklist:
     let mut next_action = EvacAction::ProcessTy(orig_typ, None);
     let mut forwarded = false;
@@ -524,6 +525,7 @@ unsafe fn evacuate_packed(
             EvacAction::RestoreSrc(new_src) => {
                 src = new_src;
                 inlining_underway = false;
+                noburn = false;
                 // TODO: make this reusable somehow (local macro?)
                 if let Some(next) = worklist.pop() {
                     next_action = next;
@@ -570,12 +572,14 @@ unsafe fn evacuate_packed(
                         // Add a forwarding pointer in the source buffer.
                         debug_assert!(dst < dst_end);
 
-                        write_forwarding_pointer_at(
-                            src,
-                            dst,
-                            dst_end.offset_from(dst) as u16, // .try_into().unwrap()
-                        );
-                        forwarded = true;
+                        if !noburn {
+                            write_forwarding_pointer_at(
+                                src,
+                                dst,
+                                dst_end.offset_from(dst) as u16, // .try_into().unwrap()
+                            );
+                            forwarded = true;
+                        }
 
                         // If the pointee is in the nursery, evacuate it.
                         // Otherwise, write an indirection node at dst and adjust the
@@ -817,14 +821,16 @@ unsafe fn evacuate_packed(
                         #[cfg(feature = "verbose_evac")]
                         eprintln!("   Redirection ptr!: src {:?}, to next chunk {:?}", src, next_chunk);
 
-                        // Add a forwarding pointer in the source buffer.
-                        debug_assert!(dst < dst_end);
-                        write_forwarding_pointer_at(
-                            src,
-                            dst,
-                            dst_end.offset_from(dst) as u16, // .try_into().unwrap()
-                        );
-                        forwarded = true;
+                        if !noburn {
+                            // Add a forwarding pointer in the source buffer.
+                            debug_assert!(dst < dst_end);
+                            write_forwarding_pointer_at(
+                                src,
+                                dst,
+                                dst_end.offset_from(dst) as u16, // .try_into().unwrap()
+                            );
+                            forwarded = true;
+                        }
 
                         // If the next chunk is in the nursery, continue evacuation there.
                         // Otherwise, write a redireciton node at dst (pointing to
@@ -842,6 +848,15 @@ unsafe fn evacuate_packed(
                             || st.nursery.contains_addr(next_chunk)
                             || inlining_underway
                         {
+                            #[cfg(feature = "verbose_evac")]
+                            eprintln!(
+                                "   Inlining redirected (oldgen) data {:?} -> {:?}",
+                                src, next_chunk
+                            );
+
+                            if !st.evac_major && inlining_underway {
+                                noburn = true;
+                            }
                             src = next_chunk;
                             // Same type, new location to evac from:
                             next_action = EvacAction::ProcessTy(
@@ -1023,7 +1038,7 @@ unsafe fn evacuate_packed(
                                         } else {
                                             #[cfg(feature = "verbose_evac")]
                                             eprintln!("   Writing an oldgen shortcut pointer {:?} -> {:?}",
-                                                      dst_shortcuts_start.add(i * 8), tagged_shortcut_dst);
+                                                      dst_shortcuts_start.add(i * 8), tagged_shortcut_dst as *const i8);
 
                                             write(
                                                 dst_shortcuts_start.add(i * 8),
@@ -1055,42 +1070,38 @@ unsafe fn evacuate_packed(
                                 (*GC_STATS).mem_copied += 1 + scalar_bytes1;
                             }
 
-                            // Add forwarding pointers:
-                            // if there's enough space, write a COPIED_TO tag and
-                            // dst's address at src. Otherwise just write a COPIED tag.
-                            // After the forwarding pointer, burn the rest of
-                            // space previously occupied by scalars.
-                            if scalar_bytes1 >= 8 || num_shortcut1 > 0 {
-                                #[cfg(feature = "verbose_evac")]
-                                eprintln!("   Forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
-                                debug_assert!(dst < dst_end);
-                                write_forwarding_pointer_at(
-                                    src,
-                                    dst,
-                                    dst_end.offset_from(dst) as u16, // .try_into().unwrap()
-                                );
-                                forwarded = true;
-                            }
-                            // NOTE: Comment this case to disable burned tags:
-                            else {
-                                #[cfg(feature = "verbose_evac")]
-                                eprintln!("   burning non-forwardable data at {:?}, scalar bytes {}", src, scalar_bytes1);
-                                let _ = write(src, C_COPIED_TAG);
-                                // Also burn any scalar bytes that weren't big enough for a pointer:
-                                if scalar_bytes1 >= 1 {
-                                    write_bytes(
-                                        src_after_tag,
-                                        C_COPIED_TAG,
-                                        scalar_bytes1 as usize,
+                            if !noburn {
+                                // Add forwarding pointers:
+                                // if there's enough space, write a COPIED_TO tag and
+                                // dst's address at src. Otherwise just write a COPIED tag.
+                                // After the forwarding pointer, burn the rest of
+                                // space previously occupied by scalars.
+                                if scalar_bytes1 >= 8 || num_shortcut1 > 0 {
+                                    #[cfg(feature = "verbose_evac")]
+                                    eprintln!("   Forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
+                                    debug_assert!(dst < dst_end);
+                                    write_forwarding_pointer_at(
+                                        src,
+                                        dst,
+                                        dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                                     );
+                                    forwarded = true;
                                 }
-                                // TODO: Double check the above versus the old version here:
-                                //   if src_mut > burn {
-                                //     let i = src_mut.offset_from(burn);
-                                //     write_bytes(burn, C_COPIED_TAG, i as usize);
-                                //   }
+                                // NOTE: Comment this case to disable burned tags:
+                                else {
+                                    #[cfg(feature = "verbose_evac")]
+                                    eprintln!("   burning non-forwardable data at {:?}, scalar bytes {}", src, scalar_bytes1);
+                                    let _ = write(src, C_COPIED_TAG);
+                                    // Also burn any scalar bytes that weren't big enough for a pointer:
+                                    if scalar_bytes1 >= 1 {
+                                        write_bytes(
+                                            src_after_tag,
+                                            C_COPIED_TAG,
+                                            scalar_bytes1 as usize,
+                                        );
+                                    }
+                                }
                             }
-
                             for (ty, shct) in field_tys
                                 .iter()
                                 .zip(shortcut_addrs.iter())
