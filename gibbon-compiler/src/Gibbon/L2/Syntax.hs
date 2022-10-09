@@ -120,8 +120,8 @@ data E2Ext loc dec
   | AddFixed Var Int
   | IndirectionE TyCon     -- Type of the data pointed to by this indirection.
                  DataCon   -- Constructor for an indirection in this type.
-                 (loc,Var) -- Pointer.
-                 (loc,Var) -- Pointee (the thing that the pointer points to).
+                 (loc,loc) -- Pointer.
+                 (loc,loc) -- Pointee (the thing that the pointer points to).
                  (E2 loc dec) -- If this indirection was added to get rid
                               -- of a copy_Foo call, we keep the fn call
                               -- around in case we want to go back to it.
@@ -181,7 +181,7 @@ instance FreeVars (E2Ext l d) where
      FromEndE _         -> S.empty
      AddFixed vr _      -> S.singleton vr
      BoundsCheck{}      -> S.empty
-     IndirectionE _ _ (_,a) (_,b) e -> S.fromList [a,b] `S.union` gFreeVars e
+     IndirectionE _ _ _ _ e -> gFreeVars e
      GetCilkWorkerNum   -> S.empty
      LetAvail vs bod    -> S.fromList vs `S.union` gFreeVars bod
      AllocateTagHere{}  -> S.empty

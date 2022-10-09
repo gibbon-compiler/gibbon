@@ -151,9 +151,11 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
           argtylocs = concatMap locsInTy argtys
           in_regs = foldr (\x acc -> if S.member x indirs || S.member x redirs
                                      then (EndOfReg_Tagged x) : acc
-                                     else case M.lookup x renv of
-                                            Just r -> (NewL2.EndOfReg r Input (toEndV r)) : acc
-                                            Nothing -> acc)
+                                     else case M.lookup x ran_env of
+                                            Just ran -> (EndOfReg_Tagged ran) : acc
+                                            Nothing -> case M.lookup x renv of
+                                                         Just r -> (NewL2.EndOfReg r Input (toEndV r)) : acc
+                                                         Nothing -> acc)
                     [] argtylocs
       -- If this function returns a Packed type, it'll have input and output
       -- locations and therefore, input and output regions.
@@ -310,13 +312,18 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv' rlocs_env' wlocs_env' pkd_env1 region_locs ran_env indirs redirs bod
 
     LetE (v,locs,ty@(MkTy2 (PackedTy _ loc)),(Ext (IndirectionE tcon dcon (a,_b) (c,_d) cpy))) bod -> do
-      let b' = (renv # (toLocVar a))
-          d' = (renv # (toLocVar c))
-          fn2 x = case x of
-                    Loc lrem -> Loc (lrem { lremEndReg = renv # (lremLoc lrem) })
-                    _ -> error "threadRegionsExp: indirectione"
-          a' = fn2 a
-          c' = fn2 c
+      let fn x mode = if S.member x indirs || S.member x redirs
+                      then (EndOfReg_Tagged x)
+                      else case M.lookup x ran_env of
+                             Just ran -> (EndOfReg_Tagged ran)
+                             Nothing -> case M.lookup x renv of
+                                          Just r -> (NewL2.EndOfReg r mode (toEndV r))
+                                          Nothing -> error $ "threadRegionsExp: unbound loc " ++ sdoc x
+      let b' = fn (toLocVar a) Output
+      let d' = fn (toLocVar c) Input
+      let fn2 (Loc lrem) end = Loc (lrem { lremEndReg = end })
+      let a' = fn2 a (toLocVar b')
+          c' = fn2 c (toLocVar d')
       let pkd_env' = M.insert loc (renv # loc) pkd_env
       let env2' = extendVEnv v ty env2
           rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
@@ -629,7 +636,7 @@ allFreeVars_sans_datacon_args ex =
         RetE locs v     -> S.insert v (S.fromList (map toLocVar locs))
         FromEndE loc    -> S.singleton (toLocVar loc)
         BoundsCheck _ reg cur -> S.fromList [toLocVar reg, toLocVar cur]
-        IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [toLocVar a, b, toLocVar c, d]
+        IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [toLocVar a, toLocVar b, toLocVar c, toLocVar d]
         AddFixed v _    -> S.singleton v
         GetCilkWorkerNum-> S.empty
         LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod
@@ -665,7 +672,7 @@ substEndReg loc_or_reg end_reg ex =
         FromEndE loc              -> Ext $ FromEndE (gosubst loc)
         BoundsCheck i reg cur     -> Ext $ BoundsCheck i (gosubst reg) (gosubst cur)
         IndirectionE tycon dcon (a,b) (c,d) e ->
-          Ext $ IndirectionE tycon dcon (a, b) (c, d) e
+          Ext $ IndirectionE tycon dcon (gosubst a, gosubst b) (gosubst c, gosubst d) e
         LetAvail vs bod -> Ext $ LetAvail vs (go bod)
         StartOfPkd{}          -> ex
         TagCursor{}           -> ex

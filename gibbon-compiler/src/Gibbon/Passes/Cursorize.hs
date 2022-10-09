@@ -630,15 +630,15 @@ cursorizePackedExp ddfs fundefs denv tenv senv ex =
 
         IndirectionE tycon dcon (from,from_reg) (to,to_reg) _ -> do
           dflags <- getDynFlags
-          if gopt Opt_DisableGC dflags ||
-             (from_reg == "dummy" || to_reg == "dummy") -- HACK!!!
+          if gopt Opt_DisableGC dflags
+             -- || (from_reg == "dummy" || to_reg == "dummy") -- HACK!!!
              -- [2022.03.02]: ckoparkar:WTH does this hack enable?
           then go tenv senv (DataConE from dcon [VarE (toLocVar to)])
           else do
             start <- gensym "start"
             end <- gensym "end"
             return $ Di $
-              (mkLets [("_",[],ProdTy [],Ext (IndirectionBarrier tycon ((toLocVar from),(toEndV from_reg),(toLocVar to),(toEndV to_reg)))),
+              (mkLets [("_",[],ProdTy [],Ext (IndirectionBarrier tycon ((toLocVar from),(toLocVar from_reg),(toLocVar to),(toLocVar to_reg)))),
                        (start, [], CursorTy, VarE (toLocVar from)),
                        (end, [], CursorTy, Ext $ AddCursor (toLocVar from) (L3.LitE 9))]
                  (MkProdE [VarE start, VarE end]))

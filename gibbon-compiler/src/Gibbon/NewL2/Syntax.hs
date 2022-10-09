@@ -445,7 +445,7 @@ allFreeVars ex =
         Old.RetE locs v     -> S.insert v (S.fromList (map toLocVar locs))
         Old.FromEndE loc    -> S.singleton (toLocVar loc)
         Old.BoundsCheck _ reg cur -> S.fromList (map toLocVar [reg, cur])
-        Old.IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [toLocVar a, b, toLocVar c, d]
+        Old.IndirectionE _ _ (a,b) (c,d) _ -> S.fromList $ [toLocVar a, toLocVar b, toLocVar c, toLocVar d]
         Old.AddFixed v _    -> S.singleton v
         Old.GetCilkWorkerNum-> S.empty
         Old.LetAvail vs bod -> S.fromList vs `S.union` gFreeVars bod

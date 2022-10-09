@@ -189,8 +189,8 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
             IndirectionE
               tycon
               dcon
-              (locenv # from, from_reg)
-              (locenv # to, to_reg)
+              (locenv # from, New.EndOfReg from_reg Output (toEndV from_reg))
+              (locenv # to, New.EndOfReg to_reg Input (toEndV to_reg))
               e'
               -- (locenv # from, New.Reg (VarR from_reg) Output)
               -- (locenv # to, New.Reg (VarR to_reg) Input)
@@ -365,8 +365,8 @@ toOldL2Exp ex =
             IndirectionE
               tycon
               dcon
-              (New.toLocVar from, from_reg)
-              (New.toLocVar to, to_reg)
+              (New.toLocVar from, New.toLocVar from_reg)
+              (New.toLocVar to, New.toLocVar to_reg)
               e'
 
         GetCilkWorkerNum -> pure $ Ext GetCilkWorkerNum

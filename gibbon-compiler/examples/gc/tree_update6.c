@@ -401,11 +401,6 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_858,
                                               GibCursor tr_66_244_387,
                                               GibInt n_67_245_388)
 {
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    printf("start of loop:\n");
-    _print_SearchTree(NULL, tr_66_244_387);
-    printf("\n");
-#endif
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
@@ -431,11 +426,6 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_858,
         GibBool fltIf_332_393 = 0 == fltPrm_333_392;
 
         if (fltIf_332_393) {
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    printf("going to insert(1):\n");
-    _print_SearchTree(NULL, tr_66_244_387);
-    printf("\n");
-#endif
             gib_shadowstack_push(rstack, tr_66_244_387, end_r_858, Stk,
                                  SearchTree_T);
             gib_shadowstack_push(wstack, loc_857, end_r_859, Stk, SearchTree_T);
@@ -452,12 +442,6 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_858,
             tr_66_244_387 = frame->ptr;
             end_r_858 = frame->endptr;
             gib_shadowstack_push(wstack, loc_857, end_r_859, Stk, SearchTree_T);
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    printf("going to insert(2):\n");
-    _print_SearchTree(NULL, tr_66_244_387);
-    printf("\n");
-#endif
 
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_13 =
                                                       tree_insert(end_r_858, end_r_940, r_940, tr_66_244_387, j_68_246_391);
@@ -483,11 +467,6 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_858,
                                                                pvrtmp_2274,
                                                                pvrtmp_2275};
         } else {
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-            printf("Deleting...\n");
-#endif
-
-
             GibInt fltAppE_337_396 = j_68_246_391 - 1;
 
             gib_shadowstack_push(rstack, tr_66_244_387, end_r_858, Stk,
@@ -652,14 +631,6 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                                                      GibCursor tr_74_252_407,
                                                      GibInt n_75_253_408)
 {
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
-    printf("start of delete:\n");
-    printf("end_r_864=%p, tr_74_252_407=%p, diff=%ld\n", end_r_864, tr_74_252_407, end_r_864-tr_74_252_407);
-    _print_SearchTree(NULL, tr_74_252_407);
-    printf("\n");
-    fflush(stdout);
-#endif
-
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
@@ -837,11 +808,6 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
 
                     GibCursor writetag_1604 = loc_863 + 1;
 
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
-                    printf("about to write an indirection (1):\n");
-                    printf("end_r_864=%p, tmpcur_2349=%p, diff=%ld\n", end_r_864, tmpcur_2349, end_r_864-tmpcur_2349);
-#endif
-
                     gib_indirection_barrier(loc_1001, end_r_865, tmpcur_2349,
                                             end_r_864, SearchTree_T);
 
@@ -856,12 +822,6 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                     GibCursor pvrtmp_2370 = tmp_struct_30.field1;
                     GibCursor pvrtmp_2371 = tmp_struct_30.field2;
                     GibCursor pvrtmp_2372 = tmp_struct_30.field3;
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
-                    printf("in the middle of delete:\n");
-                    _print_SearchTree(NULL, pvrtmp_2371);
-                    printf("\n");
-#endif
 
                     frame = gib_shadowstack_pop(rstack);
                     loc_863 = frame->ptr;
@@ -908,16 +868,9 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                     frame = gib_shadowstack_pop(rstack);
                     loc_863 = frame->ptr;
                     end_r_865 = frame->endptr;
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-                    printf("about to write an indirection (2):\n");
-                    printf("pvrtmp_2382=%p, pvrtmp_2384=%p, diff=%ld\n", pvrtmp_2382, pvrtmp_2384, pvrtmp_2382-pvrtmp_2384);
-                    printf("pvrtmp_2381=%p, tmpcur_2345=%p, diff=%ld\n", pvrtmp_2381, tmpcur_2345, pvrtmp_2381-tmpcur_2345);
-                    fflush(stdout);
-#endif
-
                     gib_indirection_barrier(pvrtmp_2384, pvrtmp_2382,
-                                            tmpcur_2345, pvrtmp_2381,
+                                            tmpcur_2345,
+                                            end_from_tagged_absran_807,
                                             SearchTree_T);
 
                     GibCursor end_1618 = pvrtmp_2384 + 9;
@@ -1084,11 +1037,6 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
                                                      GibCursor tr_91_265_428,
                                                      GibInt n_92_266_429)
 {
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
-    assert(tr_91_265_428 < end_r_870);
-    assert(loc_869 < end_r_871);
-#endif
-
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
@@ -1238,11 +1186,6 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
                 GibCursor pvrtmp_2477 = tmp_struct_50.field2;
                 GibCursor pvrtmp_2478 = tmp_struct_50.field3;
 
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
-                // assert(tr_91_265_428 < end_r_870);
-                // assert(loc_869 < end_r_871);
-#endif
-
                 frame = gib_shadowstack_pop(rstack);
                 loc_869 = frame->ptr;
                 end_r_871 = frame->endptr;
@@ -1288,18 +1231,9 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
                 frame = gib_shadowstack_pop(rstack);
                 loc_869 = frame->ptr;
                 end_r_871 = frame->endptr;
-                // gib_indirection_barrier(pvrtmp_2490, pvrtmp_2488, tmpcur_2468,
-                //                         pvrtmp_2487, SearchTree_T);
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
-                printf("about to write an indirection (4):\n");
-                printf("pvrtmp_2488=%p, pvrtmp_2490=%p, diff=%ld\n", pvrtmp_2488, pvrtmp_2490, pvrtmp_2488-pvrtmp_2490);
-                printf("end_r_870=%p, tmpcur_2468=%p, diff=%ld\n", end_r_870, tmpcur_2468, end_r_870-tmpcur_2468);
-                printf("pvrtmp_2487=%p, tmpcur_2468=%p, diff=%ld\n", pvrtmp_2487, tmpcur_2468, pvrtmp_2487-tmpcur_2468);
-                printf("end_from_tagged_absran_823=%p, tmpcur_2468=%p, diff=%ld\n", end_from_tagged_absran_823, tmpcur_2468, end_from_tagged_absran_823-tmpcur_2468);
-#endif
                 gib_indirection_barrier(pvrtmp_2490, pvrtmp_2488, tmpcur_2468,
-                                        end_from_tagged_absran_823, SearchTree_T);
+                                        end_from_tagged_absran_823,
+                                        SearchTree_T);
 
                 GibCursor end_1737 = pvrtmp_2490 + 9;
                 uint16_t offset_53 = pvrtmp_2488 - pvrtmp_2490;
@@ -1831,8 +1765,6 @@ GibCursorGibCursorProd _traverse_SearchTree(GibCursor end_r_881,
 GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_883,
                                          GibCursor arg_212_296_469)
 {
-    printf("%p:", arg_212_296_469);
-    fflush(stdout);
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
@@ -1877,9 +1809,7 @@ GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_883,
             GibInt tmpval_2695 = *(GibInt *) tmpaftercur_2693;
             GibCursor tmpcur_2696 = tmpaftercur_2693 + sizeof(GibInt);
             unsigned char wildcard_225_306_479 = gib_print_symbol(2152);
-            printf("%p:%p ", tmpcur_2689, tagged_tmpcur_89);
             unsigned char y_222_307_480 = printf("%ld", tmpval_2695);
-            fflush(stdout);
 
             gib_shadowstack_push(rstack, tmpcur_2692, end_r_883, Stk,
                                  SearchTree_T);

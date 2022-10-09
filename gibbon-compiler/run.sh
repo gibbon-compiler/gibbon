@@ -8,4 +8,6 @@
 
 # ./examples/gc/tree_update4.exe 14
 
-./examples/gc/tree_update5.exe 14
+# ./examples/gc/tree_update5.exe 14
+
+./examples/gc/tree_update5.exe 33

@@ -463,10 +463,10 @@ instance HasPrettyToo E2Ext l d => Pretty (L2.E2Ext l d) where
                                                      doc tc <+>
                                                      doc dc <+>
                                                      lparen <>
-                                                     hcat (punctuate (text ",") [pprint l1,text (fromVar v1)]) <>
+                                                     hcat (punctuate (text ",") [pprint l1, pprint v1]) <>
                                                      rparen <+>
                                                      lparen <>
-                                                     hcat (punctuate (text ",") [pprint l2,text (fromVar v2)]) <>
+                                                     hcat (punctuate (text ",") [pprint l2, pprint v2]) <>
                                                      rparen <+>
                                                      pprint e
           L2.GetCilkWorkerNum -> text "__cilkrts_get_worker_number()"
