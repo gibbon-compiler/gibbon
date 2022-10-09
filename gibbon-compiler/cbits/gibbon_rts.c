@@ -1171,9 +1171,10 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     GibRegionInfo *reg = (GibRegionInfo*) new_footer->reg_info;
-    printf("gib_grow_region: allocated %zu bytes for region %" PRIu64 "\n",
-           newsize,
-           (new_footer->reg_info)->id);
+    fprintf(stderr,
+            "gib_grow_region: allocated %zu bytes for region %" PRIu64 "\n",
+            newsize,
+            (new_footer->reg_info)->id);
 #endif
 
     // Write a redirection tag at writeloc and make it point to the start of
@@ -1190,8 +1191,8 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     *(char **) footer_addr = new_footer_start;
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    fprintf(stderr, "Growing a region old=(%p,%p), new=(%p,%p)\n",
-            *writeloc_addr, footer_ptr, heap_start, new_footer_start);
+    fprintf(stderr, "Growing a region old=(%p,%p) in nursery=%d, new=(%p,%p)\n",
+            *writeloc_addr, footer_ptr, old_chunk_in_nursery, heap_start, new_footer_start);
 #endif
 
     return;
@@ -1522,6 +1523,11 @@ void gib_indirection_barrier(
     char *indr_ptr_addr = writeloc;
     *(uintptr_t *) writeloc = tagged;
 
+#ifdef _GIBBON_DEBUG
+    assert(from <= from_footer);
+    assert(to <= to_footer);
+#endif
+
     // Add to remembered set if it's an old to young pointer.
     bool from_old = !gib_addr_in_nursery(from);
     bool to_young = gib_addr_in_nursery(to);
@@ -1530,7 +1536,7 @@ void gib_indirection_barrier(
         if (to_young) {
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    printf("Writing an old-to-young indirection, %p -> %p.\n", from, to);
+            fprintf(stderr, "Writing an old-to-young indirection, %p -> %p.\n", from, to);
 #endif
 
             // (3) oldgen -> nursery
@@ -1543,7 +1549,7 @@ void gib_indirection_barrier(
         } else {
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    printf("Writing an old-to-old indirection, %p -> %p.\n", from, to);
+            fprintf(stderr, "Writing an old-to-old indirection, %p -> %p.\n", from, to);
 #endif
 
             // (4) oldgen -> oldgen

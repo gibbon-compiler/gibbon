@@ -191,7 +191,7 @@ void symbol_table_initialize(void)
     gib_add_symbol(2155, " ->i ");
 }
 #define REGION_SIZE 256
-#define TREE_HEIGHT 7
+#define TREE_HEIGHT 3
 GibCursorGibCursorGibCursorProd helper(GibCursor end_r_853, GibCursor loc_852,
                                        GibInt s_58_236_368, GibInt e_59_237_369)
 {
@@ -486,6 +486,7 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_858,
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
             printf("Deleting...\n");
 #endif
+
 
             GibInt fltAppE_337_396 = j_68_246_391 - 1;
 
@@ -895,7 +896,7 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                                          SearchTree_T);
 
                     GibCursorGibCursorGibCursorGibCursorProd tmp_struct_32 =
-                                                              tree_delete(end_from_tagged_absran_807, end_r_865, loc_1017, tmpcur_2345, n_75_253_408);
+                                                              tree_delete(end_r_864, end_r_865, loc_1017, tmpcur_2349, n_75_253_408);
                     GibCursor pvrtmp_2381 = tmp_struct_32.field0;
                     GibCursor pvrtmp_2382 = tmp_struct_32.field1;
                     GibCursor pvrtmp_2383 = tmp_struct_32.field2;
@@ -907,8 +908,16 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                     frame = gib_shadowstack_pop(rstack);
                     loc_863 = frame->ptr;
                     end_r_865 = frame->endptr;
-                    gib_indirection_barrier(pvrtmp_2384, end_r_865, tmpcur_2345,
-                                            end_r_864, SearchTree_T);
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
+                    fprintf(stderr, "about to write an indirection (2):\n");
+                    fprintf(stderr, "pvrtmp_2382=%p, pvrtmp_2384=%p, diff=%ld\n", pvrtmp_2382, pvrtmp_2384, pvrtmp_2382-pvrtmp_2384);
+                    fprintf(stderr, "pvrtmp_2381=%p, tmpcur_2345=%p, diff=%ld\n", pvrtmp_2381, tmpcur_2345, pvrtmp_2381-tmpcur_2345);
+#endif
+
+                    gib_indirection_barrier(pvrtmp_2384, pvrtmp_2382,
+                                            tmpcur_2345, pvrtmp_2381,
+                                            SearchTree_T);
 
                     GibCursor end_1618 = pvrtmp_2384 + 9;
                     uint16_t offset_33 = pvrtmp_2382 - pvrtmp_2384;
@@ -1268,17 +1277,17 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
                 frame = gib_shadowstack_pop(rstack);
                 loc_869 = frame->ptr;
                 end_r_871 = frame->endptr;
+                // gib_indirection_barrier(pvrtmp_2490, pvrtmp_2488, tmpcur_2468,
+                //                         pvrtmp_2487, SearchTree_T);
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
-                fprintf(stderr, "about to write an indirection (2):\n");
-                fprintf(stderr, "pvrtmp_2488=%p, pvrtmp_2490=%p, diff=%ld\n", pvrtmp_2488, pvrtmp_2490, pvrtmp_2488-pvrtmp_2490);
-                fprintf(stderr, "end_r_870=%p, tmpcur_2468=%p, diff=%ld\n", end_r_870, tmpcur_2468, end_r_870-tmpcur_2468);
+                printf("about to write an indirection (1):\n");
+                printf("pvrtmp_2488=%p, pvrtmp_2490=%p, diff=%ld\n", pvrtmp_2488, pvrtmp_2490, pvrtmp_2488-pvrtmp_2490);
+                printf("end_r_870=%p, tmpcur_2468=%p, diff=%ld\n", end_r_870, tmpcur_2468, end_r_870-tmpcur_2468);
+                printf("pvrtmp_2487=%p, tmpcur_2468=%p, diff=%ld\n", pvrtmp_2487, tmpcur_2468, pvrtmp_2487-tmpcur_2468);
 #endif
-
-                // gib_indirection_barrier(pvrtmp_2490, end_r_871, tmpcur_2468,
-                //                         end_r_870, SearchTree_T);
                 gib_indirection_barrier(pvrtmp_2490, pvrtmp_2488, tmpcur_2468,
-                                        end_r_870, SearchTree_T);
+                                        pvrtmp_2487, SearchTree_T);
 
                 GibCursor end_1737 = pvrtmp_2490 + 9;
                 uint16_t offset_53 = pvrtmp_2488 - pvrtmp_2490;
@@ -1857,7 +1866,7 @@ GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_883,
             GibCursor tmpcur_2696 = tmpaftercur_2693 + sizeof(GibInt);
             unsigned char wildcard_225_306_479 = gib_print_symbol(2152);
             printf("%p:%p ", tmpcur_2689, tagged_tmpcur_89);
-            unsigned char y_222_307_480 = printf("%ld ", tmpval_2695);
+            unsigned char y_222_307_480 = printf("%ld", tmpval_2695);
             fflush(stdout);
 
             gib_shadowstack_push(rstack, tmpcur_2692, end_r_883, Stk,
@@ -1919,7 +1928,7 @@ GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_883,
 
       default:
         {
-            printf("Unknown tag in: tmpval_2688 = %d", tmpval_2688);
+            printf("%s\n", "Unknown tag in: tmpval_2688");
             exit(1);
         }
     }

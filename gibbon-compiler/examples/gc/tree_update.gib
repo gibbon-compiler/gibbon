@@ -60,7 +60,7 @@
                          (Node k (copy-packed l) r1))
                        (if (< n1 n)
                            (Node n1 (copy-packed l) (tree-delete r n))
-                           (Node n1 (tree-delete r n) (copy-packed r))))]))
+                           (Node n1 (tree-delete l n) (copy-packed r))))]))
 
 (define (loop [tr : SearchTree] [n : Int]) : SearchTree
   (if (= n 0)

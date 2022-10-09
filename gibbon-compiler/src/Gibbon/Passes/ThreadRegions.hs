@@ -309,13 +309,20 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
       LetE <$> (v,locs,ty,) <$> go rhs <*>
         threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv' rlocs_env' wlocs_env' pkd_env1 region_locs ran_env indirs redirs bod
 
-    LetE (v,locs,ty@(MkTy2 (PackedTy _ loc)),rhs@(Ext (IndirectionE{}))) bod -> do
+    LetE (v,locs,ty@(MkTy2 (PackedTy _ loc)),(Ext (IndirectionE tcon dcon (a,_b) (c,_d) cpy))) bod -> do
+      let b' = (renv # (toLocVar a))
+          d' = (renv # (toLocVar c))
+          fn2 x = case x of
+                    Loc lrem -> Loc (lrem { lremEndReg = renv # (lremLoc lrem) })
+                    _ -> error "threadRegionsExp: indirectione"
+          a' = fn2 a
+          c' = fn2 c
       let pkd_env' = M.insert loc (renv # loc) pkd_env
       let env2' = extendVEnv v ty env2
           rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
           wlocs_env' = foldr (\loc2 acc -> M.delete loc2 acc) wlocs_env (locsInTy ty)
       bod' <- threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv rlocs_env' wlocs_env' pkd_env' region_locs ran_env indirs redirs bod
-      pure $ LetE (v,locs,ty,rhs) bod'
+      pure $ LetE (v,locs,ty,(Ext (IndirectionE tcon dcon (a',b') (c',d') cpy))) bod'
 
     Ext (StartOfPkd cur) -> do
       let (PackedTy _ loc) = unTy2 (lookupVEnv cur env2)
@@ -671,23 +678,25 @@ substEndReg loc_or_reg end_reg ex =
     _ -> ex
  where
   go = substEndReg loc_or_reg end_reg
+  gosubst = substEndReg_locarg loc_or_reg end_reg
 
-  gosubst locarg =
-    case locarg of
-      Loc lrem          -> case loc_or_reg of
-                             Left loc0 ->  if lremLoc lrem == loc0
-                                           then Loc (lrem { lremEndReg = end_reg })
-                                           else locarg
-                             Right reg0 -> if lremReg lrem == reg0
-                                           then Loc (lrem { lremEndReg = end_reg })
-                                           else locarg
-      EndWitness lrem v -> case loc_or_reg of
-                             Left loc0 ->  if lremLoc lrem == loc0
-                                           then EndWitness (lrem { lremEndReg = end_reg }) v
-                                           else locarg
-                             Right reg0 -> if lremReg lrem == reg0
-                                           then EndWitness (lrem { lremEndReg = end_reg }) v
-                                           else locarg
-      Reg{}             -> locarg
-      EndOfReg{}        -> locarg
-      EndOfReg_Tagged{} -> locarg
+substEndReg_locarg :: Either LocVar RegVar -> RegVar -> LocArg -> LocArg
+substEndReg_locarg loc_or_reg end_reg locarg =
+  case locarg of
+    Loc lrem          -> case loc_or_reg of
+                           Left loc0 ->  if lremLoc lrem == loc0
+                                         then Loc (lrem { lremEndReg = end_reg })
+                                         else locarg
+                           Right reg0 -> if lremReg lrem == reg0
+                                         then Loc (lrem { lremEndReg = end_reg })
+                                         else locarg
+    EndWitness lrem v -> case loc_or_reg of
+                           Left loc0 ->  if lremLoc lrem == loc0
+                                         then EndWitness (lrem { lremEndReg = end_reg }) v
+                                         else locarg
+                           Right reg0 -> if lremReg lrem == reg0
+                                         then EndWitness (lrem { lremEndReg = end_reg }) v
+                                         else locarg
+    Reg{}             -> locarg
+    EndOfReg{}        -> locarg
+    EndOfReg_Tagged{} -> locarg
