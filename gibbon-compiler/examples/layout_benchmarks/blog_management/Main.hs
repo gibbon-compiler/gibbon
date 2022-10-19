@@ -67,6 +67,7 @@ data Blog =   End
             | Layout5 (Blog) (BlogTags) (BlogContent) (BlogHeader) (BlogId) (BlogAuthor) (BlogDate)
             | Layout6 (BlogHeader) (BlogId) (BlogAuthor) (BlogDate) (BlogContent) (Blog) (BlogTags)
             | Layout7 (Blog) (BlogContent) (BlogHeader) (BlogId) (BlogAuthor) (BlogDate) (BlogTags)
+            | Layout8 (BlogContent) (Blog) (BlogId) (BlogAuthor) (BlogDate) (BlogHeader) (BlogTags)
             deriving (Show)
 
 
@@ -126,14 +127,14 @@ getRandomString option =
 -- This function crates the recursive fields. 
 mkInline :: Int -> Inline
 mkInline option = 
-   if option == 0 then (Emph (mkInlineList 100 1))
-   else if option == 1 then (Underline (mkInlineList 100 1))
-   else if option == 2 then (Strong (mkInlineList 100 1))
-   else if option == 3 then (Strikeout (mkInlineList 100 1))
-   else if option == 4 then (Superscript (mkInlineList 100 1))
-   else if option == 5 then (Subscript (mkInlineList 100 1))
-   else if option == 6 then (SmallCaps (mkInlineList 100 1))
-   else (Note (mkBlockList 100 1)) 
+   if option == 0 then (Emph (mkInlineList 100 1))                            --- arg
+   else if option == 1 then (Underline (mkInlineList 100 1))                  --- arg
+   else if option == 2 then (Strong (mkInlineList 100 1))                     --- arg
+   else if option == 3 then (Strikeout (mkInlineList 100 1))                  --- arg 
+   else if option == 4 then (Superscript (mkInlineList 100 1))                --- arg
+   else if option == 5 then (Subscript (mkInlineList 100 1))                  --- arg
+   else if option == 6 then (SmallCaps (mkInlineList 100 1))                  --- arg    
+   else (Note (mkBlockList 100 1))                                            --- arg
 
 
 -- Make an Inline type, option chooses what kind of Inline data type we are creating
@@ -174,9 +175,9 @@ mkBlockList length base =
 -- Make a Block data type with random data, make depth of recursion to 1 for now
 mkBlock :: Int -> Block
 mkBlock option = 
-   if option == 0 then (Plain (mkInlineList 1000 1))
-   else if option == 1 then (Para (mkInlineList 1000 1))
-   else (BlockQuote (mkBlockList 1000 1))
+   if option == 0 then (Plain (mkInlineList 100 1))                    --- arg
+   else if option == 1 then (Para (mkInlineList 100 1))                --- arg
+   else (BlockQuote (mkBlockList 100 1))                               --- arg 
 
 -- Base case for make Block
 mkBlockBaseCase :: Int -> Block 
@@ -236,7 +237,7 @@ mkBlogs_layout1 length id tag_length =
           author  = Author (getRandomString (mod rand 9))
           date    = Date (getRandomString (mod rand 9))
           content = Content (mkBlock (mod rand 2))
-          tags    = TagList (mkTagList 100)
+          tags    = TagList (mkTagList tag_length)
           rst     = mkBlogs_layout1 (length - 1) (id+1) tag_length 
          in Layout1 header blogID author date content tags rst
 
@@ -246,7 +247,7 @@ mkBlogs_layout2 length id tag_length =
    if length <= 0 then End
    else 
       let content = Content (mkBlock (mod rand 2))
-          tags    = TagList (mkTagList 100)  
+          tags    = TagList (mkTagList tag_length)  
           rst     = mkBlogs_layout2 (length - 1) (id+1) tag_length
           header  = Header (getRandomString (mod rand 9))
           blogID  = ID id
@@ -258,7 +259,7 @@ mkBlogs_layout3 :: Int -> Int -> Int -> Blog
 mkBlogs_layout3 length id tag_length =
    if length <= 0 then End
    else 
-      let tags    = TagList (mkTagList 100)
+      let tags    = TagList (mkTagList tag_length)
           rst     = mkBlogs_layout3 (length - 1) (id+1) tag_length
           content = Content (mkBlock (mod rand 2))          
           header  = Header (getRandomString (mod rand 9))
@@ -271,7 +272,7 @@ mkBlogs_layout4 :: Int -> Int -> Int -> Blog
 mkBlogs_layout4 length id tag_length =
    if length <= 0 then End
    else 
-      let tags    = TagList (mkTagList 100)
+      let tags    = TagList (mkTagList tag_length)
           content = Content (mkBlock (mod rand 2))
           rst     = mkBlogs_layout4 (length - 1) (id+1) tag_length          
           header  = Header (getRandomString (mod rand 9))          
@@ -285,7 +286,7 @@ mkBlogs_layout5 length id tag_length =
    if length <= 0 then End
    else 
       let rst     = mkBlogs_layout5 (length - 1) (id+1) tag_length
-          tags    = TagList (mkTagList 100)
+          tags    = TagList (mkTagList tag_length)
           content = Content (mkBlock (mod rand 2))                       
           header  = Header (getRandomString (mod rand 9))
           blogID  = ID id
@@ -303,7 +304,7 @@ mkBlogs_layout6 length id tag_length =
           date    = Date (getRandomString (mod rand 9))
           content = Content (mkBlock (mod rand 2))                
           rst     = mkBlogs_layout6 (length - 1) (id+1) tag_length
-          tags    = TagList (mkTagList 100)        
+          tags    = TagList (mkTagList tag_length)        
          in Layout6 header blogID author date content rst tags
 
 mkBlogs_layout7 :: Int -> Int -> Int -> Blog
@@ -316,8 +317,22 @@ mkBlogs_layout7 length id tag_length =
           blogID  = ID id
           author  = Author (getRandomString (mod rand 9))
           date    = Date (getRandomString (mod rand 9))
-          tags    = TagList (mkTagList 100)           
+          tags    = TagList (mkTagList tag_length)           
          in Layout7 rst content header blogID author date tags
+
+-- Layout8 (BlogContent) (Blog) (BlogTags) (BlogId) (BlogAuthor) (BlogDate) (BlogHeader)
+mkBlogs_layout8 :: Int -> Int -> Int -> Blog 
+mkBlogs_layout8 length id tag_length = 
+   if length <= 0 then End 
+   else 
+      let content = Content (mkBlock (mod rand 2))
+          rst     = mkBlogs_layout8 (length - 1) (id+1) tag_length
+          id      = ID id 
+          author  = Author (getRandomString (mod rand 9))
+          date    = Date (getRandomString (mod rand 9))
+          header  = Header (getRandomString (mod rand 9))
+          tags    = TagList (mkTagList tag_length)
+       in Layout8 content rst id author date header tags
           
 
 -- Function to make a text string of some length. 
@@ -598,10 +613,12 @@ searchBlogTags :: Text -> BlogTags -> Bool
 searchBlogTags keyword tags = case tags of 
    TagList list -> searchTagList keyword list
 
---emphasize blog content 
-emphasizeBlogContent :: Text -> BlogContent -> BlogContent
-emphasizeBlogContent keyword oldContent = case oldContent of 
-                                       Content block -> Content (emphasizeKeywordInBlock keyword block)
+-- emphasize blog content, if present is True
+emphasizeBlogContent :: Text -> BlogContent -> Bool -> BlogContent
+emphasizeBlogContent keyword oldContent present = case oldContent of 
+                                                         Content block -> if (present)
+                                                                          then Content (emphasizeKeywordInBlock keyword block)
+                                                                          else Content block
                                               
 
 -- Look for a keyword in the tag-list and emphasize a particular keyword based on that. 
@@ -609,76 +626,91 @@ emphBasedOnTagList :: Text -> Blog -> Blog
 emphBasedOnTagList keyword blogs = 
    case blogs of 
       End -> End 
-      Layout1 header id author date content tags rst -> let present = searchBlogTags keyword tags
-                                                            newRst  = emphBasedOnTagList keyword rst
-                                                         in if (present)
-                                                            then
-                                                               let newContent = emphasizeBlogContent keyword content
-                                                                in Layout1 header id author date (copyPacked newContent) tags newRst
-                                                            else Layout1 header id author date content tags (newRst)
-      -- Layout2 content tags rst header id author date -> let present = searchBlogTags keyword tags 
-      --                                                       newRst = emphBasedOnTagList keyword rst 
-      --                                                       in if (present)
-      --                                                          then 
-      --                                                             let newContent = emphasizeBlogContent keyword content 
-      --                                                               in Layout2 (copyPacked newContent) tags (copyPacked newRst) header id author date
-      --                                                          else Layout2 content tags (copyPacked newRst) header id author date
-
-      -- Layout3 tags rst content header id author date -> let present = searchBlogTags keyword tags 
-      --                                                       newRst = emphBasedOnTagList keyword rst 
-      --                                                       in if (present)
-      --                                                          then 
-      --                                                             let newContent = emphasizeBlogContent keyword content 
-      --                                                               in Layout3 tags (copyPacked newRst) (copyPacked newContent) header id author date
-      --                                                          else Layout3 tags (copyPacked newRst) content header id author date
-      -- Layout4 tags content rst header id author date -> let present = searchBlogTags keyword tags 
-      --                                                       newRst = emphBasedOnTagList keyword rst 
-      --                                                       in if (present)
-      --                                                          then 
-      --                                                             let newContent = emphasizeBlogContent keyword content 
-      --                                                               in Layout4 tags (copyPacked newContent) newRst header id author date
-      --                                                          else Layout4 tags content newRst header id author date
-      -- Layout5 rst tags content header id author date -> let present = searchBlogTags keyword tags 
-      --                                                       newRst = emphBasedOnTagList keyword rst 
-      --                                                       in if (present)
-      --                                                          then 
-      --                                                             let newContent = emphasizeBlogContent keyword content 
-      --                                                               in Layout5 newRst tags (copyPacked newContent) header id author date
-      --                                                          else Layout5 newRst tags content header id author date
-      -- Layout6 header id author date content rst tags -> let present = searchBlogTags keyword tags 
-      --                                                       newRst = emphBasedOnTagList keyword rst 
-      --                                                       in if (present)
-      --                                                          then 
-      --                                                             let newContent = emphasizeBlogContent keyword content 
-      --                                                               in Layout6 header id author date (copyPacked newContent) newRst tags
-      --                                                          else Layout6 header id author date content newRst tags
-      -- Layout7 rst content header id author date tags -> let present = searchBlogTags keyword tags 
-      --                                                       newRst = emphBasedOnTagList keyword rst 
-      --                                                       in if (present)
-      --                                                          then 
-      --                                                             let newContent = emphasizeBlogContent keyword content 
-      --                                                               in Layout7 newRst newContent header id author date tags
-      --                                                          else Layout7 newRst content header id author date tags
+      Layout1 header id author date content tags rst -> let present    = searchBlogTags keyword tags
+                                                            newContent = emphasizeBlogContent keyword content present
+                                                            newRst     = emphBasedOnTagList keyword rst
+                                                          in Layout1 header id author date (copyPacked newContent) (copyPacked tags) (copyPacked newRst)
+      Layout2 content tags rst header id author date -> let present    = searchBlogTags keyword tags 
+                                                            newContent = emphasizeBlogContent keyword content present
+                                                            newRst     = emphBasedOnTagList keyword rst
+                                                          in Layout2 (newContent) (copyPacked tags) (copyPacked newRst) header id author date                                                          
+      Layout3 tags rst content header id author date -> let present = searchBlogTags keyword tags 
+                                                            newContent = emphasizeBlogContent keyword content present
+                                                            newRst = emphBasedOnTagList keyword rst                                        
+                                                          in Layout3 tags (newRst) (newContent) header id author date
+      Layout4 tags content rst header id author date -> let present = searchBlogTags keyword tags 
+                                                            newContent = emphasizeBlogContent keyword content present
+                                                            newRst = emphBasedOnTagList keyword rst
+                                                          in Layout4 tags (newContent) (newRst) header id author date
+      Layout5 rst tags content header id author date -> let present = searchBlogTags keyword tags 
+                                                            newContent = emphasizeBlogContent keyword content present
+                                                            newRst = emphBasedOnTagList keyword rst 
+                                                          in Layout5 newRst (copyPacked tags) (copyPacked newContent) header id author date    
+      Layout6 header id author date content rst tags -> let present = searchBlogTags keyword tags
+                                                            newContent = emphasizeBlogContent keyword content present 
+                                                            newRst = emphBasedOnTagList keyword rst
+                                                          in Layout6 header id author date (newContent) (newRst) tags
+      Layout7 rst content header id author date tags -> let present = searchBlogTags keyword tags 
+                                                            newContent = emphasizeBlogContent keyword content present
+                                                            newRst = emphBasedOnTagList keyword rst
+                                                          in Layout7 (newRst) (copyPacked newContent) header id author date tags
+      Layout8 content rst id author date header tags -> let present = searchBlogTags keyword tags
+                                                            newContent = emphasizeBlogContent keyword content present 
+                                                            newRst     = emphBasedOnTagList keyword rst 
+                                                          in Layout8 (newContent) (newRst) id author date header tags
 
 -- main function 
 gibbon_main = 
-   let blogs1  = mkBlogs_layout1 2 0 2        -- mkBlogs_layout1 length start_id tag_length
-       blogs2  = mkBlogs_layout2 2 0 2
-       blogs3  = mkBlogs_layout3 2 0 2
-       blogs4  = mkBlogs_layout4 2 0 2
-       blogs5  = mkBlogs_layout5 2 0 2
-       blogs6  = mkBlogs_layout6 2 0 2
-       blogs7  = mkBlogs_layout7 2 0 2
+   let blogs1  = mkBlogs_layout1 110000 0 100       -- mkBlogs_layout1 length start_id tag_length
+       blogs2  = mkBlogs_layout2 110000 0 100
+       blogs3  = mkBlogs_layout3 110000 0 100
+       blogs4  = mkBlogs_layout4 110000 0 100
+       blogs5  = mkBlogs_layout5 110000 0 100
+       --blogs6  = mkBlogs_layout6 110000 0 100
+       blogs7  = mkBlogs_layout7 110000 0 100
+       blogs8  = mkBlogs_layout8 110000 0 100
        keyword = (getRandomString 2)             -- some random keyword
-       new_blogs1 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs1)
-       new_blogs2 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs2)
-       new_blogs3 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs3)
-       new_blogs4 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs4)
-       new_blogs5 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs5)
-       new_blogs6 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs6)
-       new_blogs7 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs7)
-       a          = emphBasedOnTagList keyword blogs1
-       _          = printPacked a
+       --new_blogs1 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs1)
+       --new_blogs2 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs2)
+       --new_blogs3 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs3)
+       --new_blogs4 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs4)
+       --new_blogs5 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs5)
+       --new_blogs6 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs6)
+       --new_blogs7 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs7)
+       --a          = emphBasedOnTagList keyword blogs1
+       --_          = printPacked a
+       new_blogs1 = iterate (emphBasedOnTagList keyword blogs1) 
+       new_blogs2 = iterate (emphBasedOnTagList keyword blogs2) 
+       new_blogs3 = iterate (emphBasedOnTagList keyword blogs3) 
+       new_blogs4 = iterate (emphBasedOnTagList keyword blogs4) 
+       new_blogs5 = iterate (emphBasedOnTagList keyword blogs5) 
+       --new_blogs6 = iterate (emphBasedOnTagList keyword blogs6) 
+       new_blogs7 = iterate (emphBasedOnTagList keyword blogs7)
+       new_blogs8 = iterate (emphBasedOnTagList keyword blogs8)
+       --_ = printPacked new_blogs8
+       --_          = printsym (quote "NEWLINE")
+       --_          = printsym (quote "NEWLINE") 
+       --_          = printPacked new_blogs1
+       --_          = printsym (quote "NEWLINE")
+       --_          = printsym (quote "NEWLINE") 
+       --_          = printPacked new_blogs2
+       --_          = printsym (quote "NEWLINE")
+       --_          = printsym (quote "NEWLINE") 
+       --_          = printPacked new_blogs3
+       --_          = printsym (quote "NEWLINE")
+       --_          = printsym (quote "NEWLINE") 
+       --_          = printPacked new_blogs4
+       --_          = printsym (quote "NEWLINE") 
+       --_          = printsym (quote "NEWLINE")
+       --_          = printPacked new_blogs5
+       --_          = printsym (quote "NEWLINE") 
+       --_          = printsym (quote "NEWLINE")
+       --_          = printPacked new_blogs6
+       --_          = printsym (quote "NEWLINE")
+       --_          = printsym (quote "NEWLINE") 
+       --_          = printPacked new_blogs7
+       --_          = printsym (quote "NEWLINE") 
+       --_          = printsym (quote "NEWLINE")
        --_          = printPacked new_blogs1
        --_          = printPacked new_blogs2
        --_          = printPacked new_blogs3
