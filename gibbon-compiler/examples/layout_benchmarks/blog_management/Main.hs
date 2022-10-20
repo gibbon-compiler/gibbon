@@ -127,14 +127,14 @@ getRandomString option =
 -- This function crates the recursive fields. 
 mkInline :: Int -> Inline
 mkInline option = 
-   if option == 0 then (Emph (mkInlineList 100 1))                            --- arg
-   else if option == 1 then (Underline (mkInlineList 100 1))                  --- arg
-   else if option == 2 then (Strong (mkInlineList 100 1))                     --- arg
-   else if option == 3 then (Strikeout (mkInlineList 100 1))                  --- arg 
-   else if option == 4 then (Superscript (mkInlineList 100 1))                --- arg
-   else if option == 5 then (Subscript (mkInlineList 100 1))                  --- arg
-   else if option == 6 then (SmallCaps (mkInlineList 100 1))                  --- arg    
-   else (Note (mkBlockList 100 1))                                            --- arg
+   if option == 0 then (Emph (mkInlineList 500 1))                            --- arg
+   else if option == 1 then (Underline (mkInlineList 500 1))                  --- arg
+   else if option == 2 then (Strong (mkInlineList 500 1))                     --- arg
+   else if option == 3 then (Strikeout (mkInlineList 500 1))                  --- arg 
+   else if option == 4 then (Superscript (mkInlineList 500 1))                --- arg
+   else if option == 5 then (Subscript (mkInlineList 500 1))                  --- arg
+   else if option == 6 then (SmallCaps (mkInlineList 500 1))                  --- arg    
+   else (Note (mkBlockList 500 1))                                            --- arg
 
 
 -- Make an Inline type, option chooses what kind of Inline data type we are creating
@@ -659,16 +659,57 @@ emphBasedOnTagList keyword blogs =
                                                             newRst     = emphBasedOnTagList keyword rst 
                                                           in Layout8 (newContent) (newRst) id author date header tags
 
+searchBlogContent :: Text -> BlogContent -> Bool 
+searchBlogContent keyword content = case content of 
+      Content block -> (isKeywordPresentInBlock keyword block)
+
+emphKeywordInContent :: Text -> Blog -> Blog
+emphKeywordInContent keyword blogs = 
+   case blogs of 
+      End -> End 
+      Layout1 header id author date content tags rst -> let present = searchBlogContent keyword content 
+                                                            newContent = emphasizeBlogContent keyword content present 
+                                                            newRst     = emphKeywordInContent keyword rst 
+                                                         in Layout1 header id author date (copyPacked newContent) tags  newRst
+      Layout2 content tags rst header id author date -> let present = searchBlogContent keyword  content 
+                                                            newContent = emphasizeBlogContent keyword content present 
+                                                            newRst     = emphKeywordInContent keyword rst 
+                                                         in Layout2 (newContent) (copyPacked tags) (copyPacked newRst) header id author date
+      Layout3 tags rst content header id author date -> let present = searchBlogContent keyword content 
+                                                            newContent = emphasizeBlogContent keyword content present 
+                                                            newRst     = emphKeywordInContent keyword rst 
+                                                         in Layout3 tags newRst (copyPacked newContent) header id author date 
+      Layout4 tags content rst header id author date -> let present = searchBlogContent keyword content 
+                                                            newContent = emphasizeBlogContent keyword content present 
+                                                            newRst     = emphKeywordInContent keyword rst 
+                                                         in Layout4 tags newContent newRst header id author date 
+      Layout5 rst tags content header id author date -> let present = searchBlogContent keyword content 
+                                                            newContent = emphasizeBlogContent keyword content present 
+                                                            newRst     = emphKeywordInContent keyword rst 
+                                                         in Layout5 newRst (copyPacked tags) (copyPacked newContent) header id author date 
+      Layout6 header id author date content rst tags -> let present = searchBlogContent keyword content 
+                                                            newContent = emphasizeBlogContent keyword content present 
+                                                            newRst     = emphKeywordInContent keyword rst 
+                                                         in Layout6 header id author date newContent newRst tags 
+      Layout7 rst content header id author date tags -> let present = searchBlogContent keyword content 
+                                                            newContent = emphasizeBlogContent keyword content present 
+                                                            newRst     = emphKeywordInContent keyword rst 
+                                                         in Layout7 newRst (copyPacked newContent) header id author date tags 
+      Layout8 content rst id author date header tags -> let present = searchBlogContent keyword content 
+                                                            newContent = emphasizeBlogContent keyword content present 
+                                                            newRst     = emphKeywordInContent keyword rst 
+                                                         in Layout8 newContent newRst id author date header tags
+
 -- main function 
 gibbon_main = 
-   let blogs1  = mkBlogs_layout1 110000 0 100       -- mkBlogs_layout1 length start_id tag_length
-       blogs2  = mkBlogs_layout2 110000 0 100
-       blogs3  = mkBlogs_layout3 110000 0 100
-       blogs4  = mkBlogs_layout4 110000 0 100
-       blogs5  = mkBlogs_layout5 110000 0 100
-       --blogs6  = mkBlogs_layout6 110000 0 100
-       blogs7  = mkBlogs_layout7 110000 0 100
-       blogs8  = mkBlogs_layout8 110000 0 100
+   let blogs1  = mkBlogs_layout1 50000 0 8000       -- mkBlogs_layout1 length start_id tag_length
+       blogs2  = mkBlogs_layout2 50000 0 8000
+       blogs3  = mkBlogs_layout3 50000 0 8000
+       blogs4  = mkBlogs_layout4 50000 0 8000
+       blogs5  = mkBlogs_layout5 50000 0 8000
+       blogs6  = mkBlogs_layout6 50000 0 8000
+       blogs7  = mkBlogs_layout7 50000 0 8000
+       blogs8  = mkBlogs_layout8 50000 0 8000
        keyword = (getRandomString 2)             -- some random keyword
        --new_blogs1 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs1)
        --new_blogs2 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs2)
@@ -679,14 +720,22 @@ gibbon_main =
        --new_blogs7 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs7)
        --a          = emphBasedOnTagList keyword blogs1
        --_          = printPacked a
-       new_blogs1 = iterate (emphBasedOnTagList keyword blogs1) 
-       new_blogs2 = iterate (emphBasedOnTagList keyword blogs2) 
-       new_blogs3 = iterate (emphBasedOnTagList keyword blogs3) 
-       new_blogs4 = iterate (emphBasedOnTagList keyword blogs4) 
-       new_blogs5 = iterate (emphBasedOnTagList keyword blogs5) 
-       --new_blogs6 = iterate (emphBasedOnTagList keyword blogs6) 
-       new_blogs7 = iterate (emphBasedOnTagList keyword blogs7)
-       new_blogs8 = iterate (emphBasedOnTagList keyword blogs8)
+       -- new_blogs1 = iterate (emphBasedOnTagList keyword blogs1) 
+       -- new_blogs2 = iterate (emphBasedOnTagList keyword blogs2) 
+       -- new_blogs3 = iterate (emphBasedOnTagList keyword blogs3) 
+       -- new_blogs4 = iterate (emphBasedOnTagList keyword blogs4) 
+       -- new_blogs5 = iterate (emphBasedOnTagList keyword blogs5) 
+       -- new_blogs6 = iterate (emphBasedOnTagList keyword blogs6) 
+       -- new_blogs7 = iterate (emphBasedOnTagList keyword blogs7)
+       -- new_blogs8 = iterate (emphBasedOnTagList keyword blogs8)
+       new_blogs1 = iterate (emphKeywordInContent keyword blogs1)
+       new_blogs2 = iterate (emphKeywordInContent keyword blogs2)
+       new_blogs3 = iterate (emphKeywordInContent keyword blogs3) 
+       new_blogs4 = iterate (emphKeywordInContent keyword blogs4) 
+       new_blogs5 = iterate (emphKeywordInContent keyword blogs5) 
+       --new_blogs6 = iterate (emphKeywordInContent keyword blogs6) 
+       new_blogs7 = iterate (emphKeywordInContent keyword blogs7)
+       new_blogs8 = iterate (emphKeywordInContent keyword blogs8)
        --_ = printPacked new_blogs8
        --_          = printsym (quote "NEWLINE")
        --_          = printsym (quote "NEWLINE") 
@@ -709,6 +758,9 @@ gibbon_main =
        --_          = printsym (quote "NEWLINE")
        --_          = printsym (quote "NEWLINE") 
        --_          = printPacked new_blogs7
+       --_          = printsym (quote "NEWLINE") 
+       --_          = printsym (quote "NEWLINE")
+       --_          = printPacked new_blogs8
        --_          = printsym (quote "NEWLINE") 
        --_          = printsym (quote "NEWLINE")
        --_          = printPacked new_blogs1
