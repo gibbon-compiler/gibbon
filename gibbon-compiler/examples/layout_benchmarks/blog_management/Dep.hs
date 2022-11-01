@@ -663,17 +663,42 @@ searchBlogContent :: Text -> BlogContent -> Bool
 searchBlogContent keyword content = case content of 
       Content block -> (isKeywordPresentInBlock keyword block)
 
+addNilPlist :: PList Inline -> PList Inline 
+addNilPlist list1 = case list1 of 
+                     Nil -> Nil
+                     Cons x rst -> Cons x (addNilPlist rst)
+                    
+
+fileToContent :: Vector Char -> Vector Char -> PList Inline -> Int -> Int -> Block
+fileToContent file word plist_inline index max_len = 
+      if index >= max_len then
+                              let new_plist_inline :: PList Inline
+                                  new_plist_inline = addNilPlist plist_inline 
+                                  block = (Plain new_plist_inline)
+                              in block                                                                     
+                           else let 
+                                 character :: Char
+                                 character = nth file index
+                                 (isSL, inline_type)  = if      ( character *==* (head "\n")) then (True, LineBreak)
+                                                         else if ( character *==* (head " ") ) then (True, Space) 
+                                                         else    (False, Space)
+                                 char_vec = (singleton character)
+                                 new_word = if (isSL) then word else (append word char_vec)
+                                in if (isSL) then (fileToContent file word (Cons (inline_type) plist_inline) (index+1) max_len) 
+                                             else (fileToContent file new_word (Cons (Str new_word) plist_inline) (index+1) max_len)
+      
+
 -- main function 
-gibbon_main = 
-   let blogs1  = mkBlogs_layout1 20000 0 1000       -- mkBlogs_layout1 length start_id tag_length
-       blogs2  = mkBlogs_layout2 20000 0 1000
-       blogs3  = mkBlogs_layout3 20000 0 1000
-       blogs4  = mkBlogs_layout4 20000 0 1000
-       blogs5  = mkBlogs_layout5 20000 0 1000
-       blogs6  = mkBlogs_layout6 20000 0 1000
-       blogs7  = mkBlogs_layout7 20000 0 1000
-       blogs8  = mkBlogs_layout8 20000 0 1000
-       keyword = (getRandomString 2)             -- some random keyword
+--gibbon_main = 
+---   let blogs1  = mkBlogs_layout1 20000 0 1000       -- mkBlogs_layout1 length start_id tag_length
+--       blogs2  = mkBlogs_layout2 20000 0 1000
+--       blogs3  = mkBlogs_layout3 20000 0 1000
+--       blogs4  = mkBlogs_layout4 20000 0 1000
+--       blogs5  = mkBlogs_layout5 20000 0 1000
+--       blogs6  = mkBlogs_layout6 20000 0 1000
+--       blogs7  = mkBlogs_layout7 20000 0 1000
+--       blogs8  = mkBlogs_layout8 20000 0 1000
+--       keyword = (getRandomString 2)             -- some random keyword
        --new_blogs1 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs1)
        --new_blogs2 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs2)
        --new_blogs3 = iterate (filterBlogsBasedOnKeywordInTagList keyword blogs3)
@@ -698,7 +723,7 @@ gibbon_main =
        --new_blogs5 = iterate (emphKeywordInContent keyword blogs5) 
        --new_blogs6 = iterate (emphKeywordInContent keyword blogs6) 
        --new_blogs7 = iterate (emphKeywordInContent keyword blogs7)
-       new_blogs8 = iterate (emphKeywordInContent keyword blogs8)
+       --new_blogs8 = iterate (emphKeywordInContent keyword blogs8)
        --_ = printPacked new_blogs8
        --_          = printsym (quote "NEWLINE")
        --_          = printsym (quote "NEWLINE") 
@@ -766,7 +791,7 @@ gibbon_main =
       --  _            = printPacked newBlogsEmph
       --  _            = printsym (quote "NEWLINE")
       --  _            = printsym (quote "NEWLINE")
-   in ()
+   --in ()
        
 
 -- gibbon --packed --no-gc --toC Main.hs; gcc -g Main.c -o main

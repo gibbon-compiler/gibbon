@@ -94,30 +94,30 @@ mkChar val = 'a'
 getRandomString :: Int -> Text
 getRandomString option = 
     if option == 0 then 
-        let str = V.generate 5 mkChar
+        let str = V.generate 100 mkChar
             in str
     else if option == 1 then
-        let str = V.generate 5 mkChar
+        let str = V.generate 100 mkChar
             in str
     else if option == 2 then
-        let str = V.generate 5 mkChar
+        let str = V.generate 100 mkChar
             in str
     else if option == 3 then
-        let str = V.generate 5 mkChar
+        let str = V.generate 100 mkChar
             in str
     else if option == 4 then
-        let str = V.generate 5 mkChar
+        let str = V.generate 100 mkChar
             in str
     else if option == 5 then
-        let str = V.generate 5 mkChar
+        let str = V.generate 100 mkChar
             in str
     else if option == 6 then
-        let str = V.generate 5 mkChar
+        let str = V.generate 100 mkChar
             in str
     else if option == 7 then
-        let str = V.generate 5 mkChar
+        let str = V.generate 100 mkChar
             in str
-    else let str = V.generate 5 mkChar
+    else let str = V.generate 100 mkChar
              in str
 
 -- Make an Inline type, option chooses what kind of Inline data type we are creating
@@ -125,14 +125,14 @@ getRandomString option =
 -- This function crates the recursive fields. 
 mkInline :: Int -> Inline
 mkInline option = 
-   if option == 0 then (Emph (mkInlineList 100 1))
-   else if option == 1 then (Underline (mkInlineList 100 1))
-   else if option == 2 then (Strong (mkInlineList 100 1))
-   else if option == 3 then (Strikeout (mkInlineList 100 1))
-   else if option == 4 then (Superscript (mkInlineList 100 1))
-   else if option == 5 then (Subscript (mkInlineList 100 1))
-   else if option == 6 then (SmallCaps (mkInlineList 100 1))
-   else (Note (mkBlockList 100 1)) 
+   if option == 0 then (Emph (mkInlineList 1 1))
+   else if option == 1 then (Underline (mkInlineList 1 1))
+   else if option == 2 then (Strong (mkInlineList 1 1))
+   else if option == 3 then (Strikeout (mkInlineList 1 1))
+   else if option == 4 then (Superscript (mkInlineList 1 1))
+   else if option == 5 then (Subscript (mkInlineList 1 1))
+   else if option == 6 then (SmallCaps (mkInlineList 1 1))
+   else (Note (mkBlockList 1 1)) 
 
 
 -- Make an Inline type, option chooses what kind of Inline data type we are creating
@@ -173,9 +173,9 @@ mkBlockList length base =
 -- Make a Block data type with random data, make depth of recursion to 1 for now
 mkBlock :: Int -> Block
 mkBlock option = 
-   if option == 0 then (Plain (mkInlineList 100 1))
-   else if option == 1 then (Para (mkInlineList 100 1))
-   else (BlockQuote (mkBlockList 100 1))
+   if option == 0 then (Plain (mkInlineList 1 1))
+   else if option == 1 then (Para (mkInlineList 1 1))
+   else (BlockQuote (mkBlockList 1 1))
 
 -- Base case for make Block
 mkBlockBaseCase :: Int -> Block 
@@ -642,22 +642,23 @@ benchFilterBlogsBasedOnKeywordInTagList f keyword blog iters = do
 main :: IO ()
 main = 
     do 
-      (blogs1, self1, batch1) <- benchMkLayout mkBlogs_layout1 100 0 10 10
-      (blogs2, self2, batch2) <- benchMkLayout mkBlogs_layout2 100 0 10 10
-      (blogs3, self3, batch3) <- benchMkLayout mkBlogs_layout3 100 0 10 10
-      (blogs4, self4, batch4) <- benchMkLayout mkBlogs_layout4 100 0 10 10
-      (blogs5, self5, batch5) <- benchMkLayout mkBlogs_layout5 100 0 10 10
-      (blogs6, self6 ,batch6) <- benchMkLayout mkBlogs_layout6 100 0 10 10
-      (blogs7, self7, batch7) <- benchMkLayout mkBlogs_layout7 100 0 10 10
+      (blogs1, self1, batch1) <- benchMkLayout mkBlogs_layout1 200000 0 1200 1
+      --(blogs2, self2, batch2) <- benchMkLayout mkBlogs_layout2 100 0 10 10
+      --(blogs3, self3, batch3) <- benchMkLayout mkBlogs_layout3 100 0 10 10
+      --(blogs4, self4, batch4) <- benchMkLayout mkBlogs_layout4 100 0 10 10
+      --(blogs5, self5, batch5) <- benchMkLayout mkBlogs_layout5 100 0 10 10
+      --(blogs6, self6 ,batch6) <- benchMkLayout mkBlogs_layout6 100 0 10 10
+      --(blogs7, self7, batch7) <- benchMkLayout mkBlogs_layout7 100 0 10 10
       let keyword = getRandomString 2
-      (newblog1, self8, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs1 20
-      (newblog2, self9, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs2 20
-      (newblog3, self10, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs3 20
-      (newblog4, self11, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs4 20
-      (newblog5, self12, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs5 20
-      (newblog6, self8, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs6 20
-      (newblog7, self8, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs7 20
-      putStrLn $ "Done."
+      (newblog1, self8, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs1 1
+      --(newblog2, self9, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs2 20
+      --(newblog3, self10, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs3 20
+      --(newblog4, self11, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs4 20
+      --(newblog5, self12, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs5 20
+      --(newblog6, self8, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs6 20
+      --(newblog7, self8, batch8) <- benchFilterBlogsBasedOnKeywordInTagList filterBlogsBasedOnKeywordInTagList keyword blogs7 20
+      --putStrLn $ "Done."
+      print newblog1
 
 
 -- compile with
