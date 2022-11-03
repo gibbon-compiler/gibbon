@@ -1,6 +1,6 @@
 
 
-filenamesIn = ["blog1", "blog2", "blog3", "blog4", "blog5", "blog6", "blog7", "blog8", "blog9", "blog10"]
+filenamesIn = ["blog1/blog1", "blog2/blog2", "blog3/blog3", "blog4/blog4", "blog5/blog5", "blog6/blog6", "blog7/blog7", "blog8/blog8", "blog9/blog9", "blog10/blog10"]
 
 for files in filenamesIn:
     filenameOut = files + "Out" + ".txt"

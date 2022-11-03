@@ -211,8 +211,8 @@ mkBlogContent :: Block -> BlogContent
 mkBlogContent block = Content block 
 
 mkBlogTags :: (PList Text) -> BlogTags 
-mkBlogTags taglist = TagList taglist
-
+mkBlogTags taglist = TagList taglist            
+                               
 
 -- mkBlogs_layout1 :: Int -> Int -> Int -> Blog
 -- mkBlogs_layout1 length id tag_length =
@@ -676,7 +676,62 @@ fileToContent file word plist_inline index max_len =
                                  plist_space = (Cons (Space) plist_inline) 
                                 in if (isSpace) then (fileToContent file (singleton (nth file (index+1))) (Cons (Str word) plist_inline) (index+2) max_len)  
                                                 else (fileToContent file (append word char_vec) (plist_inline) (index+1) max_len)
-      
+
+
+mkContentFromText :: Int -> BlogContent 
+mkContentFromText val = 
+   if      (val == 0) then 
+                               let f :: Vector Char 
+                                   f       = readArrayFile (Just ("blog1/blog1Out.txt",  502)) 
+                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                in mkBlogContent block
+   else if (val == 1) then 
+                               let f :: Vector Char 
+                                   f       = readArrayFile (Just ("blog2/blog2Out.txt",  400)) 
+                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                in mkBlogContent block
+   else if (val == 2) then 
+                                 let f :: Vector Char 
+                                     f       = readArrayFile (Just ("blog3/blog3Out.txt",  340)) 
+                                     block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                in mkBlogContent block
+   else if (val == 3) then 
+                               let f :: Vector Char 
+                                   f       = readArrayFile (Just ("blog4/blog4Out.txt",  347)) 
+                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                in mkBlogContent block
+   else if (val == 4) then 
+                               let f :: Vector Char 
+                                   f       = readArrayFile (Just ("blog5/blog5Out.txt",  452)) 
+                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                in mkBlogContent block     
+   else if (val == 5) then 
+                               let f :: Vector Char 
+                                   f       = readArrayFile (Just ("blog6/blog6Out.txt",  260)) 
+                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                 in mkBlogContent block  
+   else if (val == 6) then 
+                               let f :: Vector Char 
+                                   f       = readArrayFile (Just ("blog7/blog7Out.txt",  395)) 
+                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                in mkBlogContent block
+   else if (val == 7) then 
+                                let f :: Vector Char 
+                                    f       = readArrayFile (Just ("blog7/blog7Out.txt",  404)) 
+                                    block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                 in mkBlogContent block     
+   else if (val == 8) then 
+                                 let f :: Vector Char 
+                                     f       = readArrayFile (Just ("blog8/blog8Out.txt",  278)) 
+                                     block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                  in mkBlogContent block
+   else
+         let f :: Vector Char 
+             f       = readArrayFile (Just ("blog9/blog9Out.txt",  299)) 
+             block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+          in mkBlogContent block
+
+                                             
 
 -- main function 
 --gibbon_main = 
