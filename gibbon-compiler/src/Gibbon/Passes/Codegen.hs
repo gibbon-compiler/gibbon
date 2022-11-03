@@ -1031,6 +1031,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                            let parse_in_c t = case t of
                                                 IntTy   -> "%lld"
                                                 FloatTy -> "%f"
+                                                CharTy  -> "%c"
                                                 _ -> error $ "ReadArrayFile: Lists of type " ++ sdoc ty ++ " not allowed."
 
                            elem <- gensym "arr_elem"
@@ -1050,6 +1051,10 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                        one <- gensym "tmp"
                                        let assn = C.BlockStm [cstm| $id:elem = $id:one ; |]
                                        pure ([one], [parse_in_c ty], [ assn ], [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:one; |] ])
+                                     CharTy -> do 
+                                       one <- gensym "tmp"
+                                       let assn = C.BlockStm [cstm| $id:elem = $id:one ; |]
+                                       pure ([one], [parse_in_c ty], [ assn ], [ C.BlockDecl [cdecl| $ty:(codegenTy CharTy) $id:one; |] ])
                                      ProdTy tys -> do
                                        vs <- mapM (\_ -> gensym "tmp") tys
                                        let decls = map (\(name, t) -> C.BlockDecl [cdecl| $ty:(codegenTy t) $id:name; |] ) (zip vs tys)
