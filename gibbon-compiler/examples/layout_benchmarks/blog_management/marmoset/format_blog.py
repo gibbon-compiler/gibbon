@@ -1,21 +1,22 @@
 
-filenameIn = "blog1.txt"
-filenameOut = "blog1_gibbon.txt"
 
-file = open(filenameIn, 'r')
+filenamesIn = ["blog1", "blog2", "blog3", "blog4", "blog5", "blog6", "blog7", "blog8", "blog9", "blog10"]
 
-characters = []
+for files in filenamesIn:
+    filenameOut = files + "Out" + ".txt"
+    file = open(files + ".txt", 'r')
+    characters = []
 
-while True:
+    while True:
+        read = file.read(1)
+        characters.append(read + "\n")
+        if not read:
+            break
 
-    read = file.read(1)
-    characters.append(read + "\n")
-    if not read:
-        break
+    file.close()
 
-file.close()
-
-
-with open(filenameOut, 'w') as fOut:
-    for char in characters:
-        fOut.write(char)
+    print("Length of characters is " + str(len(characters)))
+    
+    with open(filenameOut, 'w') as fOut:
+        for char in characters:
+            fOut.write(char)

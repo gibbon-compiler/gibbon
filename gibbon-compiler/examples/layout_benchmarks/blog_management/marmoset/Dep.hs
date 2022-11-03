@@ -14,37 +14,37 @@ type Text   = Vector Char
 -- Therefore, The Base case where "Text" is used is going to be a single word, i.e, "Str Text".
 data Inline =     Str Text
                 | Emph (PList Inline)
-                | Underline (PList Inline)
-                | Strong (PList Inline)
-                | Strikeout (PList Inline)
-                | Superscript (PList Inline)
-                | Subscript (PList Inline)
-                | SmallCaps (PList Inline)
+             -- | Underline (PList Inline)
+             -- | Strong (PList Inline)
+             -- | Strikeout (PList Inline)
+             -- | Superscript (PList Inline)
+             -- | Subscript (PList Inline)
+             -- | SmallCaps (PList Inline)
              -- | Quoted QuoteType (PList Inline)
              -- | Cite [Citation] (PList Inline)
              -- | Code Attr Text
                 | Space
-                | SoftBreak
-                | LineBreak
+             -- | SoftBreak
+             -- | LineBreak
              -- | Math MathType Text
              -- | RawInline Format Text
              -- | Link Attr (PList Inline) Target
              -- | Image Attr (PList Inline) Target
-                | Note (PList Block)
+             -- | Note (PList Block)
              -- | Span Attr (PList Inline)
                 deriving (Show)  
 
 data Block =      Plain (PList Inline)
-                | Para  (PList Inline)
+             -- | Para  (PList Inline)
              -- | LineBlock (PList (PList Inline))
              -- | CodeBlock Attr Text
              -- | RawBlock Format Text
-                | BlockQuote (PList Block)
+             -- | BlockQuote (PList Block)
              -- | OrderedList ListAttributes [[Block]]
              -- | BulletList (PList (PList Block))
              -- | DefinitionList PList ( PList Inline , PList (PList Block) ) ---> This is resulting in a compile time error (TODO: DEBUG)
              -- | Header Int Attr (PList Inline)
-                | HorizontalRule
+             -- | HorizontalRule
              -- | Table Attr Caption [ColSpec] TableHead [TableBody] TableFoot
              -- | Div Attr (PList Block)
                 | Null
@@ -76,56 +76,56 @@ data Blog =   End
 -- Mapping      = (keyword as text, List of Docs as LocationInfo tuples)
 -- But maybe, Mapping and Location Info should be packed data as well? If we are to run multiple passes on them?
 
-type LocationInfo  = (Int, Int) 
-type Mapping       = (Text, PList LocationInfo)
-type InvertedTable = PList Mapping
+-- type LocationInfo  = (Int, Int) 
+-- type Mapping       = (Text, PList LocationInfo)
+-- type InvertedTable = PList Mapping
 
-mkChar :: Int -> Char 
-mkChar val = 'a'
+--mkChar :: Int -> Char 
+--mkChar val = 'a'
 
 -- Get a random word, based on an Int option
-getRandomString :: Int -> Text
-getRandomString option = 
-    if option == 0 then 
-        let str :: Text
-            str = generate 100 mkChar
-            in str
-    else if option == 1 then
-        let str :: Text 
-            str = generate 100 mkChar
-            in str
-    else if option == 2 then
-        let str :: Text 
-            str = generate 100 mkChar
-            in str
-    else if option == 3 then
-        let str :: Text 
-            str = generate 100 mkChar
-            in str
-    else if option == 4 then
-        let str :: Text 
-            str = generate 100 mkChar
-            in str
-    else if option == 5 then
-        let str :: Text 
-            str = generate 100 mkChar
-            in str
-    else if option == 6 then
-        let str :: Text 
-            str = generate 100 mkChar
-            in str
-    else if option == 7 then
-        let str :: Text
-            str = generate 100 mkChar
-            in str
-    else let str :: Text 
-             str = generate 100 mkChar
-             in str
+--getRandomString :: Int -> Text
+--getRandomString option = 
+--    if option == 0 then 
+--        let str :: Text
+--            str = generate 100 mkChar
+--            in str
+--    else if option == 1 then
+--        let str :: Text 
+--             str = generate 100 mkChar
+--             in str
+--     else if option == 2 then
+--         let str :: Text 
+--             str = generate 100 mkChar
+--             in str
+--     else if option == 3 then
+--         let str :: Text 
+--             str = generate 100 mkChar
+--             in str
+--     else if option == 4 then
+--         let str :: Text 
+--             str = generate 100 mkChar
+--             in str
+--     else if option == 5 then
+--         let str :: Text 
+--             str = generate 100 mkChar
+--             in str
+--     else if option == 6 then
+--         let str :: Text 
+--             str = generate 100 mkChar
+--             in str
+--     else if option == 7 then
+--         let str :: Text
+--             str = generate 100 mkChar
+--             in str
+--     else let str :: Text 
+--              str = generate 100 mkChar
+--              in str
 
 -- Make an Inline type, option chooses what kind of Inline data type we are creating
 -- This will Purposefully make Inline lists at a depth of recursion 1, this can be modified to increase the depth of recursion.
 -- This function crates the recursive fields. 
-mkInline :: Int -> Inline
+{-mkInline :: Int -> Inline
 mkInline option = 
    if option == 0 then (Emph (mkInlineList 1 1))                            --- arg
    else if option == 1 then (Underline (mkInlineList 1 1))                  --- arg
@@ -134,64 +134,64 @@ mkInline option =
    else if option == 4 then (Superscript (mkInlineList 1 1))                --- arg
    else if option == 5 then (Subscript (mkInlineList 1 1))                  --- arg
    else if option == 6 then (SmallCaps (mkInlineList 1 1))                  --- arg    
-   else (Note (mkBlockList 1 1))                                            --- arg
+   else (Note (mkBlockList 1 1))      -}                                      --- arg
 
 
 -- Make an Inline type, option chooses what kind of Inline data type we are creating
 -- This creates all the base cases for the inline type 
-mkInlineBaseCase :: Int -> Inline
-mkInlineBaseCase option = 
-   if option == 0 then (Str (getRandomString (mod rand 9)))   -- get a random word
-   else if option == 1 then Space
-   else if option == 2 then SoftBreak
-   else LineBreak 
+-- mkInlineBaseCase :: Int -> Inline
+-- mkInlineBaseCase option = 
+--    if option == 0 then (Str (getRandomString (mod rand 9)))   -- get a random word
+--    else if option == 1 then Space
+--    else if option == 2 then SoftBreak
+--    else LineBreak 
 
 -- Make a list of Inline data Type.
-mkInlineList :: Int -> Int -> (PList Inline)
-mkInlineList length base = 
-   if length <= 0 then Nil 
-   -- If its not base case, then don't stop recursion. 
-   else if (base == 0) then 
-      let item = (mkInline (mod rand 8))
-          rst  = (mkInlineList (length - 1) base)
-          in Cons item rst
-   -- If its  base case, then stop recursion in Inline data type and only add base cases. 
-   else let item = (mkInlineBaseCase (mod rand 4))
-            rst  = mkInlineList (length - 1) base 
-         in Cons item rst
+-- mkInlineList :: Int -> Int -> (PList Inline)
+-- mkInlineList length base = 
+--    if length <= 0 then Nil 
+--    -- If its not base case, then don't stop recursion. 
+--    else if (base == 0) then 
+--       let item = (mkInline (mod rand 8))
+--           rst  = (mkInlineList (length - 1) base)
+--           in Cons item rst
+--    -- If its  base case, then stop recursion in Inline data type and only add base cases. 
+--    else let item = (mkInlineBaseCase (mod rand 4))
+--             rst  = mkInlineList (length - 1) base 
+--          in Cons item rst
 
 -- Make a list of blocks
-mkBlockList :: Int -> Int -> (PList Block)
-mkBlockList length base = 
-   if length <= 0 then Nil
-   else if (base == 0) then
-      let item = (mkBlock (mod rand 3))
-          rst  = (mkBlockList (length - 1) base)
-      in Cons item rst
-   else let item = (mkBlockBaseCase (mod rand 2))
-            rst  = (mkBlockList (length - 1) base) 
-      in Cons item rst
+-- mkBlockList :: Int -> Int -> (PList Block)
+-- mkBlockList length base = 
+--    if length <= 0 then Nil
+--    else if (base == 0) then
+--       let item = (mkBlock (mod rand 3))
+--           rst  = (mkBlockList (length - 1) base)
+--       in Cons item rst
+--    else let item = (mkBlockBaseCase (mod rand 2))
+--             rst  = (mkBlockList (length - 1) base) 
+--       in Cons item rst
 
 -- Make a Block data type with random data, make depth of recursion to 1 for now
-mkBlock :: Int -> Block
-mkBlock option = 
-   if option == 0 then (Plain (mkInlineList 1 1))                    --- arg
-   else if option == 1 then (Para (mkInlineList 1 1))                --- arg
-   else (BlockQuote (mkBlockList 1 1))                               --- arg 
+-- mkBlock :: Int -> Block
+-- mkBlock option = 
+--    if option == 0 then (Plain (mkInlineList 1 1))                    --- arg
+--    else if option == 1 then (Para (mkInlineList 1 1))                --- arg
+--    else (BlockQuote (mkBlockList 1 1))                               --- arg 
 
 -- Base case for make Block
-mkBlockBaseCase :: Int -> Block 
-mkBlockBaseCase option = 
-   if option == 0 then HorizontalRule
-   else Null
+-- mkBlockBaseCase :: Int -> Block 
+-- mkBlockBaseCase option = 
+--    if option == 0 then HorizontalRule
+--    else Null
 
 -- A function to make a list of tags each filled with some random tags
-mkTagList :: Int -> (PList Text)
-mkTagList length = 
-   if length <= 0 then Nil
-   else let elem = (getRandomString (mod rand 9))
-            rst  = mkTagList (length - 1)
-          in Cons elem rst
+-- mkTagList :: Int -> (PList Text)
+-- mkTagList length = 
+--    if length <= 0 then Nil
+--    else let elem = (getRandomString (mod rand 9))
+--             rst  = mkTagList (length - 1)
+--           in Cons elem rst
 
 
 -- Utility Functions to make Blogs and its Elements.
@@ -228,111 +228,111 @@ mkBlogTags taglist = TagList taglist
 --          in Layout1 header blogID author date content tags rst
 
 
-mkBlogs_layout1 :: Int -> Int -> Int -> Blog
-mkBlogs_layout1 length id tag_length =
-   if length <= 0 then End
-   else 
-      let header  = Header (getRandomString (mod rand 9))
-          blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))
-          content = Content (mkBlock (mod rand 2))
-          tags    = TagList (mkTagList tag_length)
-          rst     = mkBlogs_layout1 (length - 1) (id+1) tag_length 
-         in Layout1 header blogID author date content tags rst
-
-
-mkBlogs_layout2 :: Int -> Int -> Int -> Blog
-mkBlogs_layout2 length id tag_length =
-   if length <= 0 then End
-   else 
-      let content = Content (mkBlock (mod rand 2))
-          tags    = TagList (mkTagList tag_length)  
-          rst     = mkBlogs_layout2 (length - 1) (id+1) tag_length
-          header  = Header (getRandomString (mod rand 9))
-          blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))                  
-         in Layout2 content tags rst header blogID author date 
-
-mkBlogs_layout3 :: Int -> Int -> Int -> Blog
-mkBlogs_layout3 length id tag_length =
-   if length <= 0 then End
-   else 
-      let tags    = TagList (mkTagList tag_length)
-          rst     = mkBlogs_layout3 (length - 1) (id+1) tag_length
-          content = Content (mkBlock (mod rand 2))          
-          header  = Header (getRandomString (mod rand 9))
-          blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))           
-         in Layout3 tags rst content header blogID author date
-
-mkBlogs_layout4 :: Int -> Int -> Int -> Blog
-mkBlogs_layout4 length id tag_length =
-   if length <= 0 then End
-   else 
-      let tags    = TagList (mkTagList tag_length)
-          content = Content (mkBlock (mod rand 2))
-          rst     = mkBlogs_layout4 (length - 1) (id+1) tag_length          
-          header  = Header (getRandomString (mod rand 9))          
-          blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))           
-         in Layout4 tags content rst header blogID author date
-
-mkBlogs_layout5 :: Int -> Int -> Int -> Blog
-mkBlogs_layout5 length id tag_length =
-   if length <= 0 then End
-   else 
-      let rst     = mkBlogs_layout5 (length - 1) (id+1) tag_length
-          tags    = TagList (mkTagList tag_length)
-          content = Content (mkBlock (mod rand 2))                       
-          header  = Header (getRandomString (mod rand 9))
-          blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))           
-         in Layout5 rst tags content header blogID author date
-
-mkBlogs_layout6 :: Int -> Int -> Int -> Blog
-mkBlogs_layout6 length id tag_length =
-   if length <= 0 then End
-   else 
-      let header  = Header (getRandomString (mod rand 9))          
-          blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))
-          content = Content (mkBlock (mod rand 2))                
-          rst     = mkBlogs_layout6 (length - 1) (id+1) tag_length
-          tags    = TagList (mkTagList tag_length)        
-         in Layout6 header blogID author date content rst tags
-
-mkBlogs_layout7 :: Int -> Int -> Int -> Blog
-mkBlogs_layout7 length id tag_length =
-   if length <= 0 then End
-   else 
-      let rst     = mkBlogs_layout7 (length - 1) (id+1) tag_length
-          content = Content (mkBlock (mod rand 2))                                 
-          header  = Header (getRandomString (mod rand 9))
-          blogID  = ID id
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))
-          tags    = TagList (mkTagList tag_length)           
-         in Layout7 rst content header blogID author date tags
-
--- Layout8 (BlogContent) (Blog) (BlogTags) (BlogId) (BlogAuthor) (BlogDate) (BlogHeader)
-mkBlogs_layout8 :: Int -> Int -> Int -> Blog 
-mkBlogs_layout8 length id tag_length = 
-   if length <= 0 then End 
-   else 
-      let content = Content (mkBlock (mod rand 2))
-          rst     = mkBlogs_layout8 (length - 1) (id+1) tag_length
-          id      = ID id 
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))
-          header  = Header (getRandomString (mod rand 9))
-          tags    = TagList (mkTagList tag_length)
-       in Layout8 content rst id author date header tags
+-- mkBlogs_layout1 :: Int -> Int -> Int -> Blog
+-- mkBlogs_layout1 length id tag_length =
+--    if length <= 0 then End
+--    else 
+--       let header  = Header (getRandomString (mod rand 9))
+--           blogID  = ID id
+--           author  = Author (getRandomString (mod rand 9))
+--           date    = Date (getRandomString (mod rand 9))
+--           content = Content (mkBlock (mod rand 2))
+--           tags    = TagList (mkTagList tag_length)
+--           rst     = mkBlogs_layout1 (length - 1) (id+1) tag_length 
+--          in Layout1 header blogID author date content tags rst
+-- 
+-- 
+-- mkBlogs_layout2 :: Int -> Int -> Int -> Blog
+-- mkBlogs_layout2 length id tag_length =
+--    if length <= 0 then End
+--    else 
+--       let content = Content (mkBlock (mod rand 2))
+--           tags    = TagList (mkTagList tag_length)  
+--           rst     = mkBlogs_layout2 (length - 1) (id+1) tag_length
+--           header  = Header (getRandomString (mod rand 9))
+--           blogID  = ID id
+--           author  = Author (getRandomString (mod rand 9))
+--           date    = Date (getRandomString (mod rand 9))                  
+--          in Layout2 content tags rst header blogID author date 
+-- 
+-- mkBlogs_layout3 :: Int -> Int -> Int -> Blog
+-- mkBlogs_layout3 length id tag_length =
+--    if length <= 0 then End
+--    else 
+--       let tags    = TagList (mkTagList tag_length)
+--           rst     = mkBlogs_layout3 (length - 1) (id+1) tag_length
+--           content = Content (mkBlock (mod rand 2))          
+--           header  = Header (getRandomString (mod rand 9))
+--           blogID  = ID id
+--           author  = Author (getRandomString (mod rand 9))
+--           date    = Date (getRandomString (mod rand 9))           
+--          in Layout3 tags rst content header blogID author date
+-- 
+-- mkBlogs_layout4 :: Int -> Int -> Int -> Blog
+-- mkBlogs_layout4 length id tag_length =
+--    if length <= 0 then End
+--    else 
+--       let tags    = TagList (mkTagList tag_length)
+--           content = Content (mkBlock (mod rand 2))
+--           rst     = mkBlogs_layout4 (length - 1) (id+1) tag_length          
+--           header  = Header (getRandomString (mod rand 9))          
+--           blogID  = ID id
+--           author  = Author (getRandomString (mod rand 9))
+--           date    = Date (getRandomString (mod rand 9))           
+--          in Layout4 tags content rst header blogID author date
+-- 
+-- mkBlogs_layout5 :: Int -> Int -> Int -> Blog
+-- mkBlogs_layout5 length id tag_length =
+--    if length <= 0 then End
+--    else 
+--       let rst     = mkBlogs_layout5 (length - 1) (id+1) tag_length
+--           tags    = TagList (mkTagList tag_length)
+--           content = Content (mkBlock (mod rand 2))                       
+--           header  = Header (getRandomString (mod rand 9))
+--           blogID  = ID id
+--           author  = Author (getRandomString (mod rand 9))
+--           date    = Date (getRandomString (mod rand 9))           
+--          in Layout5 rst tags content header blogID author date
+-- 
+-- mkBlogs_layout6 :: Int -> Int -> Int -> Blog
+-- mkBlogs_layout6 length id tag_length =
+--    if length <= 0 then End
+--    else 
+--       let header  = Header (getRandomString (mod rand 9))          
+--           blogID  = ID id
+--           author  = Author (getRandomString (mod rand 9))
+--           date    = Date (getRandomString (mod rand 9))
+--           content = Content (mkBlock (mod rand 2))                
+--           rst     = mkBlogs_layout6 (length - 1) (id+1) tag_length
+--           tags    = TagList (mkTagList tag_length)        
+--          in Layout6 header blogID author date content rst tags
+-- 
+-- mkBlogs_layout7 :: Int -> Int -> Int -> Blog
+-- mkBlogs_layout7 length id tag_length =
+--    if length <= 0 then End
+--    else 
+--       let rst     = mkBlogs_layout7 (length - 1) (id+1) tag_length
+--           content = Content (mkBlock (mod rand 2))                                 
+--           header  = Header (getRandomString (mod rand 9))
+--           blogID  = ID id
+--           author  = Author (getRandomString (mod rand 9))
+--           date    = Date (getRandomString (mod rand 9))
+--           tags    = TagList (mkTagList tag_length)           
+--          in Layout7 rst content header blogID author date tags
+-- 
+-- -- Layout8 (BlogContent) (Blog) (BlogTags) (BlogId) (BlogAuthor) (BlogDate) (BlogHeader)
+-- mkBlogs_layout8 :: Int -> Int -> Int -> Blog 
+-- mkBlogs_layout8 length id tag_length = 
+--    if length <= 0 then End 
+--    else 
+--       let content = Content (mkBlock (mod rand 2))
+--           rst     = mkBlogs_layout8 (length - 1) (id+1) tag_length
+--           id      = ID id 
+--           author  = Author (getRandomString (mod rand 9))
+--           date    = Date (getRandomString (mod rand 9))
+--           header  = Header (getRandomString (mod rand 9))
+--           tags    = TagList (mkTagList tag_length)
+--        in Layout8 content rst id author date header tags
           
 
 -- Function to make a text string of some length. 
@@ -449,9 +449,9 @@ isKeywordPresentInBlock :: Text -> Block -> Bool
 isKeywordPresentInBlock keyword contentBlock = 
    case contentBlock of 
       Plain list_inline      -> (searchInlineListForKeyword keyword list_inline)
-      Para  list_inline      -> (searchInlineListForKeyword keyword list_inline)
-      BlockQuote list_block  -> (searchBlockListForKeyword keyword list_block)
-      HorizontalRule         -> False
+      --Para  list_inline      -> (searchInlineListForKeyword keyword list_inline)
+      --BlockQuote list_block  -> (searchBlockListForKeyword keyword list_block)
+      --HorizontalRule         -> False
       Null                   -> False 
 
 -- Tell if a particular keyword exists in an inline data type or not. (search a Inline)
@@ -460,16 +460,16 @@ isKeywordPresentInline keyword inline =
    case inline of 
       Str text                -> (compareWord keyword text)
       Emph list_inline        -> (searchInlineListForKeyword keyword list_inline)
-      Underline list_inline   -> (searchInlineListForKeyword keyword list_inline)
-      Strong list_inline      -> (searchInlineListForKeyword keyword list_inline)
-      Strikeout list_inline   -> (searchInlineListForKeyword keyword list_inline)
-      Superscript list_inline -> (searchInlineListForKeyword keyword list_inline)
-      Subscript list_inline   -> (searchInlineListForKeyword keyword list_inline) 
-      SmallCaps list_inline   -> (searchInlineListForKeyword keyword list_inline) 
+      --Underline list_inline   -> (searchInlineListForKeyword keyword list_inline)
+      --Strong list_inline      -> (searchInlineListForKeyword keyword list_inline)
+      --Strikeout list_inline   -> (searchInlineListForKeyword keyword list_inline)
+      --Superscript list_inline -> (searchInlineListForKeyword keyword list_inline)
+      --Subscript list_inline   -> (searchInlineListForKeyword keyword list_inline) 
+      --SmallCaps list_inline   -> (searchInlineListForKeyword keyword list_inline) 
       Space                   -> False
-      SoftBreak               -> False 
-      LineBreak               -> False 
-      Note list_block         -> (searchBlockListForKeyword keyword list_block)
+      --SoftBreak               -> False 
+      --LineBreak               -> False 
+      --Note list_block         -> (searchBlockListForKeyword keyword list_block)
 
 -- Search a block list for a particular keyword
 searchBlockListForKeyword :: Text -> PList Block -> Bool 
@@ -539,9 +539,9 @@ emphasizeKeywordInBlock :: Text -> Block -> Block
 emphasizeKeywordInBlock keyword contentBlock = 
    case contentBlock of 
       Plain list_inline      -> Plain (emphasizeInlineListForKeyword keyword list_inline)
-      Para  list_inline      -> Para  (emphasizeInlineListForKeyword keyword list_inline)
-      BlockQuote list_block  -> BlockQuote (emphasizeKeywordInBlockList keyword list_block)
-      HorizontalRule         -> HorizontalRule
+      --Para  list_inline      -> Para  (emphasizeInlineListForKeyword keyword list_inline)
+      --BlockQuote list_block  -> BlockQuote (emphasizeKeywordInBlockList keyword list_block)
+      --HorizontalRule         -> HorizontalRule
       Null                   -> Null
 
 -- Emphasize a particular keyword in an Inline data type
@@ -555,16 +555,16 @@ emphasizeKeywordInline keyword inline =
                                     in (Emph newlist)
                                    else inline
       Emph list_inline        -> Emph (emphasizeInlineListForKeyword keyword list_inline)
-      Underline list_inline   -> Underline (emphasizeInlineListForKeyword keyword list_inline)
-      Strong list_inline      -> Strong (emphasizeInlineListForKeyword keyword list_inline)
-      Strikeout list_inline   -> Strikeout (emphasizeInlineListForKeyword keyword list_inline)
-      Superscript list_inline -> Superscript (emphasizeInlineListForKeyword keyword list_inline)
-      Subscript list_inline   -> Subscript (emphasizeInlineListForKeyword keyword list_inline) 
-      SmallCaps list_inline   -> SmallCaps (emphasizeInlineListForKeyword keyword list_inline) 
+      --Underline list_inline   -> Underline (emphasizeInlineListForKeyword keyword list_inline)
+      --Strong list_inline      -> Strong (emphasizeInlineListForKeyword keyword list_inline)
+      --Strikeout list_inline   -> Strikeout (emphasizeInlineListForKeyword keyword list_inline)
+      --Superscript list_inline -> Superscript (emphasizeInlineListForKeyword keyword list_inline)
+      --Subscript list_inline   -> Subscript (emphasizeInlineListForKeyword keyword list_inline) 
+      --SmallCaps list_inline   -> SmallCaps (emphasizeInlineListForKeyword keyword list_inline) 
       Space                   -> Space
-      SoftBreak               -> SoftBreak 
-      LineBreak               -> LineBreak 
-      Note list_block         -> Note (emphasizeKeywordInBlockList keyword list_block) 
+      --SoftBreak               -> SoftBreak 
+      --LineBreak               -> LineBreak 
+      --Note list_block         -> Note (emphasizeKeywordInBlockList keyword list_block) 
 
 -- Emphasize a particular keyword in an Inline list
 emphasizeInlineListForKeyword :: Text -> PList Inline -> PList Inline
@@ -662,31 +662,20 @@ emphBasedOnTagList keyword blogs =
 searchBlogContent :: Text -> BlogContent -> Bool 
 searchBlogContent keyword content = case content of 
       Content block -> (isKeywordPresentInBlock keyword block)
-
-addNilPlist :: PList Inline -> PList Inline 
-addNilPlist list1 = case list1 of 
-                     Nil -> Nil
-                     Cons x rst -> Cons x (addNilPlist rst)
                     
 
 fileToContent :: Vector Char -> Vector Char -> PList Inline -> Int -> Int -> Block
 fileToContent file word plist_inline index max_len = 
-      if index >= max_len then
-                              let new_plist_inline :: PList Inline
-                                  new_plist_inline = addNilPlist plist_inline 
-                                  block = (Plain new_plist_inline)
-                              in block                                                                     
+      if index >= max_len then (Plain plist_inline)                                                                     
                            else let 
                                  character :: Char
-                                 character = nth file index
-                                 isSL                 = if ( character *==* (head "\n") || character *==* (head " ") ) then True 
-                                                        else False
-                                 inline_type          = if ( character *==* (head "\n")) then LineBreak
-                                                        else Space
-                                 char_vec = (singleton character)
-                                 new_word = if (isSL) then word else (append word char_vec)
-                                in if (isSL) then (fileToContent file word (Cons (inline_type) plist_inline) (index+1) max_len) 
-                                             else (fileToContent file new_word (Cons (Str new_word) plist_inline) (index+1) max_len)
+                                 character    = nth file index
+                                 isSpace      = if ( character *==* (head " ") ) then True else False
+                                 char_vec     = (singleton character)
+                                 plist_space :: PList Inline
+                                 plist_space = (Cons (Space) plist_inline) 
+                                in if (isSpace) then (fileToContent file (singleton (nth file (index+1))) (Cons (Str word) plist_inline) (index+2) max_len)  
+                                                else (fileToContent file (append word char_vec) (plist_inline) (index+1) max_len)
       
 
 -- main function 
