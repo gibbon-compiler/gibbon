@@ -63,6 +63,6 @@ gibbon_main =
        --_          = printsym (quote "NEWLINE")
        --_          = printsym (quote "NEWLINE")
        content :: BlogContent
-       content = mkContentFromText (mod rand 10)
-       _       = printPacked content
+       --content = mkContentFromText (mod rand 10)
+       --_       = printPacked content
    in ()
