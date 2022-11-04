@@ -678,13 +678,15 @@ fileToContent file word plist_inline index max_len =
                                                 else (fileToContent file (append word char_vec) (plist_inline) (index+1) max_len)
 
 
-mkContentFromText :: Int -> BlogContent 
+mkContentFromText :: Int -> (BlogContent, BlogTags) 
 mkContentFromText val = 
    if      (val == 0) then 
                                let f :: Vector Char 
                                    f       = readArrayFile (Just ("blog1/blog1Out.txt",  502)) 
                                    block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
-                                in mkBlogContent block
+                                   content = mkBlogContent block
+                                   tags    = ...
+                                in (content, )
    else if (val == 1) then 
                                let f :: Vector Char 
                                    f       = readArrayFile (Just ("blog2/blog2Out.txt",  400)) 
