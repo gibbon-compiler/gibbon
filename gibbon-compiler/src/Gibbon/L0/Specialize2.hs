@@ -1659,9 +1659,11 @@ floatOutCase (Prog ddefs fundefs mainExp) = do
     float_fn :: Env2 Ty0 -> Exp0 -> FloatM Exp0
     float_fn env2 ex = do
       fundefs' <- get
-      let free = S.toList $ gFreeVars ex `S.difference` (M.keysSet fundefs')
-          in_tys = map (\x -> lookupVEnv x env2) free
-          ret_ty = recoverType ddefs env2 ex
+      let fenv' = M.map funTy fundefs'
+          env2' = env2 {fEnv = fenv'}
+          free = S.toList $ gFreeVars ex `S.difference` (M.keysSet fundefs')
+          in_tys = map (\x -> lookupVEnv x env2') free
+          ret_ty = recoverType ddefs env2' ex
           fn_ty = ForAll [] (ArrowTy in_tys ret_ty)
       fn_name <- lift $ gensym "caseFn"
       args <- mapM (\x -> lift $ gensym x) free
