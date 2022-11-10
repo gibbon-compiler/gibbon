@@ -62,7 +62,11 @@ gibbon_main =
        --_          = printPacked new_blogs1
        --_          = printsym (quote "NEWLINE")
        --_          = printsym (quote "NEWLINE")
-       content :: BlogContent
-       --content = mkContentFromText (mod rand 10)
+       --content :: BlogContent
+       --tags :: BlogTags
+       --(content, tags) = mkContentFromText (mod rand 10)
        --_       = printPacked content
+       --_       = printPacked tags
+       blogs = mkBlogs_layout1 10000
+       _     = printPacked blogs
    in ()

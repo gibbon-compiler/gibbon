@@ -80,47 +80,107 @@ data Blog =   End
 -- type Mapping       = (Text, PList LocationInfo)
 -- type InvertedTable = PList Mapping
 
---mkChar :: Int -> Char 
---mkChar val = 'a'
+getChar :: Int -> Char
+getChar decimal =  
+        if decimal == 0 then '!'
+        else if decimal == 1 then '#'
+        else if decimal == 2 then '$'
+        else if decimal == 3 then '%'
+        else if decimal == 4 then '&'
+        else if decimal == 5 then '('
+        else if decimal == 6 then ')'
+        else if decimal == 7 then '*'
+        else if decimal == 8 then '+'
+        else if decimal == 9 then ','
+        else if decimal == 10 then '-'
+        else if decimal == 11 then '.'
+        else if decimal == 12 then '/'
+        else if decimal == 13 then '0'
+        else if decimal == 14 then '1'           
+        else if decimal == 15 then '2'
+        else if decimal == 16 then '3'
+        else if decimal == 17 then '4'
+        else if decimal == 18 then '5'
+        else if decimal == 19 then '6'
+        else if decimal == 20 then '7'
+        else if decimal == 21 then '8'
+        else if decimal == 22 then '9'
+        else if decimal == 23 then ':'
+        else if decimal == 24 then ';'
+        else if decimal == 25 then '<'
+        else if decimal == 26 then '='
+        else if decimal == 27 then '>'
+        else if decimal == 28 then '?'
+        else if decimal == 29 then '@'
+        else if decimal == 30 then 'A'
+        else if decimal == 31 then 'B'
+        else if decimal == 32 then 'C'
+        else if decimal == 33 then 'D'
+        else if decimal == 34 then 'E'
+        else if decimal == 35 then 'F'
+        else if decimal == 36 then 'G'
+        else if decimal == 37 then 'H'
+        else if decimal == 38 then 'I'
+        else if decimal == 39 then 'J'
+        else if decimal == 40 then 'K'
+        else if decimal == 41 then 'L'
+        else if decimal == 42 then 'M'
+        else if decimal == 43 then 'N'
+        else if decimal == 44 then 'O'
+        else if decimal == 45 then 'P'
+        else if decimal == 46 then 'Q'
+        else if decimal == 47 then 'R'
+        else if decimal == 48 then 'S'
+        else if decimal == 49 then 'T'
+        else if decimal == 50 then 'U'
+        else if decimal == 51 then 'V'
+        else if decimal == 52 then 'W'
+        else if decimal == 53 then 'X'
+        else if decimal == 54 then 'Y'
+        else if decimal == 55 then 'Z'
+        else if decimal == 56 then '['
+        else if decimal == 57 then ']'
+        else if decimal == 58 then '^'
+        else if decimal == 59 then '_'
+        else if decimal == 60 then '`'
+        else if decimal == 61 then 'a'
+        else if decimal == 62 then 'b'
+        else if decimal == 63 then 'c'
+        else if decimal == 64 then 'd'
+        else if decimal == 65 then 'e'
+        else if decimal == 66 then 'f'
+        else if decimal == 67 then 'g'
+        else if decimal == 68 then 'h'
+        else if decimal == 69 then 'i'
+        else if decimal == 70 then 'j'
+        else if decimal == 71 then 'k'
+        else if decimal == 72 then 'l'
+        else if decimal == 73 then 'm'
+        else if decimal == 74 then 'n'
+        else if decimal == 75 then 'o'
+        else if decimal == 76 then 'p'
+        else if decimal == 77 then 'q'
+        else if decimal == 78 then 'r'
+        else if decimal == 79 then 's'
+        else if decimal == 80 then 't'
+        else if decimal == 81 then 'u'
+        else if decimal == 82 then 'v'
+        else if decimal == 83 then 'w'
+        else if decimal == 84 then 'x'
+        else if decimal == 85 then 'y'
+        else if decimal == 86 then 'z'
+        else if decimal == 87 then '{'
+        else if decimal == 88 then '|'
+        else if decimal == 89 then '}'
+        else '~'
 
--- Get a random word, based on an Int option
---getRandomString :: Int -> Text
---getRandomString option = 
---    if option == 0 then 
---        let str :: Text
---            str = generate 100 mkChar
---            in str
---    else if option == 1 then
---        let str :: Text 
---             str = generate 100 mkChar
---             in str
---     else if option == 2 then
---         let str :: Text 
---             str = generate 100 mkChar
---             in str
---     else if option == 3 then
---         let str :: Text 
---             str = generate 100 mkChar
---             in str
---     else if option == 4 then
---         let str :: Text 
---             str = generate 100 mkChar
---             in str
---     else if option == 5 then
---         let str :: Text 
---             str = generate 100 mkChar
---             in str
---     else if option == 6 then
---         let str :: Text 
---             str = generate 100 mkChar
---             in str
---     else if option == 7 then
---         let str :: Text
---             str = generate 100 mkChar
---             in str
---     else let str :: Text 
---              str = generate 100 mkChar
---              in str
+mkChar :: Int -> Char 
+mkChar val = getChar (mod rand 91)
+
+-- Get a random word, Int is the length of the string.
+-- Based on internet, average english word is 5 characters long
+getRandomString :: Int -> Text 
+getRandomString length = generate length mkChar
 
 -- Make an Inline type, option chooses what kind of Inline data type we are creating
 -- This will Purposefully make Inline lists at a depth of recursion 1, this can be modified to increase the depth of recursion.
@@ -228,111 +288,118 @@ mkBlogTags taglist = TagList taglist
 --          in Layout1 header blogID author date content tags rst
 
 
--- mkBlogs_layout1 :: Int -> Int -> Int -> Blog
--- mkBlogs_layout1 length id tag_length =
---    if length <= 0 then End
---    else 
---       let header  = Header (getRandomString (mod rand 9))
---           blogID  = ID id
---           author  = Author (getRandomString (mod rand 9))
---           date    = Date (getRandomString (mod rand 9))
---           content = Content (mkBlock (mod rand 2))
---           tags    = TagList (mkTagList tag_length)
---           rst     = mkBlogs_layout1 (length - 1) (id+1) tag_length 
---          in Layout1 header blogID author date content tags rst
--- 
--- 
--- mkBlogs_layout2 :: Int -> Int -> Int -> Blog
--- mkBlogs_layout2 length id tag_length =
---    if length <= 0 then End
---    else 
---       let content = Content (mkBlock (mod rand 2))
---           tags    = TagList (mkTagList tag_length)  
---           rst     = mkBlogs_layout2 (length - 1) (id+1) tag_length
---           header  = Header (getRandomString (mod rand 9))
---           blogID  = ID id
---           author  = Author (getRandomString (mod rand 9))
---           date    = Date (getRandomString (mod rand 9))                  
---          in Layout2 content tags rst header blogID author date 
--- 
--- mkBlogs_layout3 :: Int -> Int -> Int -> Blog
--- mkBlogs_layout3 length id tag_length =
---    if length <= 0 then End
---    else 
---       let tags    = TagList (mkTagList tag_length)
---           rst     = mkBlogs_layout3 (length - 1) (id+1) tag_length
---           content = Content (mkBlock (mod rand 2))          
---           header  = Header (getRandomString (mod rand 9))
---           blogID  = ID id
---           author  = Author (getRandomString (mod rand 9))
---           date    = Date (getRandomString (mod rand 9))           
---          in Layout3 tags rst content header blogID author date
--- 
--- mkBlogs_layout4 :: Int -> Int -> Int -> Blog
--- mkBlogs_layout4 length id tag_length =
---    if length <= 0 then End
---    else 
---       let tags    = TagList (mkTagList tag_length)
---           content = Content (mkBlock (mod rand 2))
---           rst     = mkBlogs_layout4 (length - 1) (id+1) tag_length          
---           header  = Header (getRandomString (mod rand 9))          
---           blogID  = ID id
---           author  = Author (getRandomString (mod rand 9))
---           date    = Date (getRandomString (mod rand 9))           
---          in Layout4 tags content rst header blogID author date
--- 
--- mkBlogs_layout5 :: Int -> Int -> Int -> Blog
--- mkBlogs_layout5 length id tag_length =
---    if length <= 0 then End
---    else 
---       let rst     = mkBlogs_layout5 (length - 1) (id+1) tag_length
---           tags    = TagList (mkTagList tag_length)
---           content = Content (mkBlock (mod rand 2))                       
---           header  = Header (getRandomString (mod rand 9))
---           blogID  = ID id
---           author  = Author (getRandomString (mod rand 9))
---           date    = Date (getRandomString (mod rand 9))           
---          in Layout5 rst tags content header blogID author date
--- 
--- mkBlogs_layout6 :: Int -> Int -> Int -> Blog
--- mkBlogs_layout6 length id tag_length =
---    if length <= 0 then End
---    else 
---       let header  = Header (getRandomString (mod rand 9))          
---           blogID  = ID id
---           author  = Author (getRandomString (mod rand 9))
---           date    = Date (getRandomString (mod rand 9))
---           content = Content (mkBlock (mod rand 2))                
---           rst     = mkBlogs_layout6 (length - 1) (id+1) tag_length
---           tags    = TagList (mkTagList tag_length)        
---          in Layout6 header blogID author date content rst tags
--- 
--- mkBlogs_layout7 :: Int -> Int -> Int -> Blog
--- mkBlogs_layout7 length id tag_length =
---    if length <= 0 then End
---    else 
---       let rst     = mkBlogs_layout7 (length - 1) (id+1) tag_length
---           content = Content (mkBlock (mod rand 2))                                 
---           header  = Header (getRandomString (mod rand 9))
---           blogID  = ID id
---           author  = Author (getRandomString (mod rand 9))
---           date    = Date (getRandomString (mod rand 9))
---           tags    = TagList (mkTagList tag_length)           
---          in Layout7 rst content header blogID author date tags
--- 
--- -- Layout8 (BlogContent) (Blog) (BlogTags) (BlogId) (BlogAuthor) (BlogDate) (BlogHeader)
--- mkBlogs_layout8 :: Int -> Int -> Int -> Blog 
--- mkBlogs_layout8 length id tag_length = 
---    if length <= 0 then End 
---    else 
---       let content = Content (mkBlock (mod rand 2))
---           rst     = mkBlogs_layout8 (length - 1) (id+1) tag_length
---           id      = ID id 
---           author  = Author (getRandomString (mod rand 9))
---           date    = Date (getRandomString (mod rand 9))
---           header  = Header (getRandomString (mod rand 9))
---           tags    = TagList (mkTagList tag_length)
---        in Layout8 content rst id author date header tags
+mkBlogs_layout1 :: Int -> Blog
+mkBlogs_layout1 length =
+   if length <= 0 then End
+   else 
+      let header  = Header (getRandomString 5)
+          blogID  = ID length
+          author  = Author (getRandomString 5)
+          date    = Date (getRandomString 5)
+          select  = (mod rand 10)
+          content = mkContentFromText select
+          tags    = mkTagsFromText select
+          rst     = mkBlogs_layout1 (length - 1)
+         in Layout1 header blogID author date content tags rst
+
+
+mkBlogs_layout2 :: Int -> Int -> Int -> Blog
+mkBlogs_layout2 length id tag_length =
+   if length <= 0 then End
+   else 
+      let select  = (mod rand 10)
+          content = mkContentFromText select
+          tags    = mkTagsFromText select
+          rst     = mkBlogs_layout2 (length - 1) (id+1) tag_length
+          header  = Header (getRandomString 5)
+          blogID  = ID id
+          author  = Author (getRandomString 5)
+          date    = Date (getRandomString 5)                 
+         in Layout2 content tags rst header blogID author date 
+
+mkBlogs_layout3 :: Int -> Int -> Int -> Blog
+mkBlogs_layout3 length id tag_length =
+   if length <= 0 then End
+   else 
+      let select  = (mod rand 10)
+          tags    = mkTagsFromText select
+          rst     = mkBlogs_layout3 (length - 1) (id+1) tag_length
+          content = mkContentFromText select          
+          header  = Header (getRandomString 5)
+          blogID  = ID id
+          author  = Author (getRandomString 5)
+          date    = Date (getRandomString 5)           
+         in Layout3 tags rst content header blogID author date
+
+mkBlogs_layout4 :: Int -> Int -> Int -> Blog
+mkBlogs_layout4 length id tag_length =
+   if length <= 0 then End
+   else 
+      let select  = (mod rand 10)
+          tags    = mkTagsFromText select
+          content = mkContentFromText select
+          rst     = mkBlogs_layout4 (length - 1) (id+1) tag_length          
+          header  = Header (getRandomString 5)        
+          blogID  = ID id
+          author  = Author (getRandomString 5)
+          date    = Date (getRandomString 5)           
+         in Layout4 tags content rst header blogID author date
+
+mkBlogs_layout5 :: Int -> Int -> Int -> Blog
+mkBlogs_layout5 length id tag_length =
+   if length <= 0 then End
+   else 
+      let select  = (mod rand 10)
+          rst     = mkBlogs_layout5 (length - 1) (id+1) tag_length
+          tags    = mkTagsFromText select
+          content = mkContentFromText select                      
+          header  = Header (getRandomString 5)
+          blogID  = ID id
+          author  = Author (getRandomString 5)
+          date    = Date (getRandomString 5)          
+         in Layout5 rst tags content header blogID author date
+
+mkBlogs_layout6 :: Int -> Int -> Int -> Blog
+mkBlogs_layout6 length id tag_length =
+   if length <= 0 then End
+   else 
+      let select  = (mod rand 10)
+          header  = Header (getRandomString 5)          
+          blogID  = ID id
+          author  = Author (getRandomString 5)
+          date    = Date (getRandomString 5)
+          content = mkContentFromText select                
+          rst     = mkBlogs_layout6 (length - 1) (id+1) tag_length
+          tags    = mkTagsFromText select        
+         in Layout6 header blogID author date content rst tags
+
+mkBlogs_layout7 :: Int -> Int -> Int -> Blog
+mkBlogs_layout7 length id tag_length =
+   if length <= 0 then End
+   else 
+      let select  = (mod rand 10)
+          rst     = mkBlogs_layout7 (length - 1) (id+1) tag_length
+          content = mkContentFromText select                                 
+          header  = Header (getRandomString 5)
+          blogID  = ID id
+          author  = Author (getRandomString 5)
+          date    = Date (getRandomString 5)
+          tags    = mkTagsFromText select           
+         in Layout7 rst content header blogID author date tags
+
+mkBlogs_layout8 :: Int -> Int -> Int -> Blog 
+mkBlogs_layout8 length id tag_length = 
+   if length <= 0 then End 
+   else 
+      let select  = (mod rand 10)
+          content = mkContentFromText select
+          rst     = mkBlogs_layout8 (length - 1) (id+1) tag_length
+          id      = ID id 
+          author  = Author (getRandomString (mod rand 9))
+          date    = Date (getRandomString (mod rand 9))
+          header  = Header (getRandomString (mod rand 9))
+          tags    = mkTagsFromText select
+       in Layout8 content rst id author date header tags
           
 
 -- Function to make a text string of some length. 
@@ -689,99 +756,135 @@ fileToTags file word index max_len =
                                              else (fileToTags file (append word char_vec) (index+1) max_len)       
 
 
-
-mkContentFromText :: Int -> (BlogContent, BlogTags) 
-mkContentFromText val = 
+mkTagsFromText :: Int -> BlogTags
+mkTagsFromText val = 
    if      (val == 0) then 
-                               let f, f' :: Vector Char 
-                                   f       = readArrayFile (Just ("blog1/blog1Out.txt",  502)) 
-                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
-                                   content = mkBlogContent block
-                                   f'      = readArrayFile (Just ("blog1/blog1Tag.txt", 61))
-                                   tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
-                                   tags'    = mkBlogTags tags
-                                in (content, tags')
-   else if (val == 1) then 
-                               let f, f' :: Vector Char 
-                                   f       = readArrayFile (Just ("blog2/blog2Out.txt",  400)) 
-                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
-                                   content = mkBlogContent block 
-                                   f'      = readArrayFile (Just ("blog2/blog2Tag.txt", 59))
-                                   tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
-                                   tags'    = mkBlogTags tags
-                                in (content, tags')
-   else if (val == 2) then 
-                                 let f, f' :: Vector Char 
-                                     f       = readArrayFile (Just ("blog3/blog3Out.txt",  340)) 
-                                     block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
-                                     content = mkBlogContent block 
-                                     f'      = readArrayFile (Just ("blog3/blog3Tag.txt", 51))
-                                     tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
-                                     tags'    = mkBlogTags tags
-                                in (content, tags')
-   else if (val == 3) then 
-                               let f, f' :: Vector Char 
-                                   f       = readArrayFile (Just ("blog4/blog4Out.txt",  347)) 
-                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
-                                   content = mkBlogContent block 
-                                   f'      = readArrayFile (Just ("blog4/blog4Tag.txt", 56))
-                                   tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
-                                   tags'    = mkBlogTags tags
-                                in (content, tags')
-   else if (val == 4) then 
-                               let f, f' :: Vector Char 
-                                   f       = readArrayFile (Just ("blog5/blog5Out.txt",  452)) 
-                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
-                                   content = mkBlogContent block
-                                   f'      = readArrayFile (Just ("blog5/blog5Tag.txt", 59))
-                                   tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
-                                   tags'    = mkBlogTags tags
-                                in (content, tags')     
-   else if (val == 5) then 
-                               let f, f' :: Vector Char 
-                                   f       = readArrayFile (Just ("blog6/blog6Out.txt",  260)) 
-                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
-                                   content = mkBlogContent block
-                                   f'      = readArrayFile (Just ("blog6/blog6Tag.txt", 84))
-                                   tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
-                                   tags'    = mkBlogTags tags
-                                 in (content, tags')  
-   else if (val == 6) then 
-                               let f, f' :: Vector Char 
-                                   f       = readArrayFile (Just ("blog7/blog7Out.txt",  395)) 
-                                   block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
-                                   content = mkBlogContent block 
-                                   f'      = readArrayFile (Just ("blog7/blog7Tag.txt", 70))
-                                   tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
-                                   tags'    = mkBlogTags tags
-                                in (content, tags')
-   else if (val == 7) then 
-                                let f, f' :: Vector Char 
-                                    f       = readArrayFile (Just ("blog8/blog8Out.txt",  404)) 
-                                    block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
-                                    content = mkBlogContent block
-                                    f'      = readArrayFile (Just ("blog8/blog8Tag.txt", 60))
-                                    tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
-                                    tags'    = mkBlogTags tags
-                                 in (content, tags')     
-   else if (val == 8) then 
-                                 let f, f' :: Vector Char 
-                                     f       = readArrayFile (Just ("blog9/blog9Out.txt",  278)) 
-                                     block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
-                                     content = mkBlogContent block
-                                     f'      = readArrayFile (Just ("blog9/blog9Tag.txt", 74))
-                                     tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
-                                     tags'    = mkBlogTags tags
-                                  in (content, tags')
-   else
-         let f, f' :: Vector Char 
-             f       = readArrayFile (Just ("blog10/blog10Out.txt",  299)) 
-             block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
-             content = mkBlogContent block
-             f'      = readArrayFile (Just ("blog10/blog10Tag.txt", 60))
+         let f' :: Vector Char 
+             f'      = readArrayFile (Just ("blog1/blog1Tag.txt", 61))
              tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
-             tags'    = TagList tags
-          in (content, tags')
+             tags'   = mkBlogTags tags
+          in tags'
+   else if (val == 1) then 
+         let f' :: Vector Char 
+             f'      = readArrayFile (Just ("blog2/blog2Tag.txt", 59))
+             tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
+             tags'   = mkBlogTags tags
+          in tags'
+   else if (val == 2) then 
+         let f' :: Vector Char 
+             f'      = readArrayFile (Just ("blog3/blog3Tag.txt", 51))
+             tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
+             tags'   = mkBlogTags tags
+          in tags'
+   else if (val == 3) then 
+         let f' :: Vector Char 
+             f'      = readArrayFile (Just ("blog4/blog4Tag.txt", 56))
+             tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
+             tags'   = mkBlogTags tags
+          in tags'
+   else if (val == 4) then 
+         let f' :: Vector Char 
+             f'      = readArrayFile (Just ("blog5/blog5Tag.txt", 59))
+             tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
+             tags'   = mkBlogTags tags
+          in tags'
+   else if (val == 5) then 
+         let f' :: Vector Char 
+             f'      = readArrayFile (Just ("blog6/blog6Tag.txt", 84))
+             tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
+             tags'   = mkBlogTags tags
+          in tags' 
+   else if (val == 6) then 
+        let f' :: Vector Char 
+            f'      = readArrayFile (Just ("blog7/blog7Tag.txt", 70))
+            tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
+            tags'   = mkBlogTags tags
+          in tags'
+   else if (val == 7) then 
+         let f' :: Vector Char 
+             f'      = readArrayFile (Just ("blog8/blog8Tag.txt", 60))
+             tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
+             tags'   = mkBlogTags tags
+          in tags'    
+   else if (val == 8) then 
+         let f' :: Vector Char 
+             f'      = readArrayFile (Just ("blog9/blog9Tag.txt", 74))
+             tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
+             tags'   = mkBlogTags tags
+          in tags'
+   else
+      let f' :: Vector Char 
+          f'      = readArrayFile (Just ("blog10/blog10Tag.txt", 60))
+          tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
+          tags'   = TagList tags
+       in tags'
+
+
+mkContentFromText :: Int -> BlogContent
+mkContentFromText val = 
+          if      (val == 0) then 
+                                      let f :: Vector Char 
+                                          f       = readArrayFile (Just ("blog1/blog1Out.txt",  502)) 
+                                          block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                          content = mkBlogContent block
+                                       in content
+          else if (val == 1) then 
+                                      let f :: Vector Char
+                                          f       = readArrayFile (Just ("blog2/blog2Out.txt",  400)) 
+                                          block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
+                                          content = mkBlogContent block 
+                                       in content
+          else if (val == 2) then 
+                                        let f :: Vector Char 
+                                            f       = readArrayFile (Just ("blog3/blog3Out.txt",  340)) 
+                                            block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
+                                            content = mkBlogContent block 
+                                       in content
+          else if (val == 3) then 
+                                      let f :: Vector Char 
+                                          f       = readArrayFile (Just ("blog4/blog4Out.txt",  347)) 
+                                          block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
+                                          content = mkBlogContent block 
+                                       in content
+          else if (val == 4) then 
+                                      let f:: Vector Char 
+                                          f       = readArrayFile (Just ("blog5/blog5Out.txt",  452)) 
+                                          block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
+                                          content = mkBlogContent block
+                                       in content 
+          else if (val == 5) then 
+                                      let f :: Vector Char 
+                                          f       = readArrayFile (Just ("blog6/blog6Out.txt",  260)) 
+                                          block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                          content = mkBlogContent block
+                                        in content
+          else if (val == 6) then 
+                                      let f :: Vector Char 
+                                          f       = readArrayFile (Just ("blog7/blog7Out.txt",  395)) 
+                                          block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
+                                          content = mkBlogContent block 
+                                       in content
+          else if (val == 7) then 
+                                       let f :: Vector Char 
+                                           f       = readArrayFile (Just ("blog8/blog8Out.txt",  404)) 
+                                           block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
+                                           content = mkBlogContent block
+                                        in content     
+          else if (val == 8) then 
+                                        let f :: Vector Char 
+                                            f       = readArrayFile (Just ("blog9/blog9Out.txt",  278)) 
+                                            block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
+                                            content = mkBlogContent block
+                                         in content
+          else
+                let f :: Vector Char 
+                    f       = readArrayFile (Just ("blog10/blog10Out.txt",  299)) 
+                    block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
+                    content = mkBlogContent block
+                 in content
+
+
+
 
                                              
 
