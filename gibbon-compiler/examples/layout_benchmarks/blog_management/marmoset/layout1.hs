@@ -67,6 +67,10 @@ gibbon_main =
        --(content, tags) = mkContentFromText (mod rand 10)
        --_       = printPacked content
        --_       = printPacked tags
-       blogs = mkBlogs_layout1 10000
-       _     = printPacked blogs
+       blogs = mkBlogs_layout1 10
+       _ = printPacked blogs
+       keyword :: Vector Char  
+       keyword = "feelings"
+       newblgs = iterate (emphKeywordInContent keyword blogs)
+       _ = printPacked newblgs
    in ()

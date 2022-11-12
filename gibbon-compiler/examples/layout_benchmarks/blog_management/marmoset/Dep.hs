@@ -296,105 +296,105 @@ mkBlogs_layout1 length =
           blogID  = ID length
           author  = Author (getRandomString 5)
           date    = Date (getRandomString 5)
-          select  = (mod rand 10)
+          select  = (mod length 9)
           content = mkContentFromText select
           tags    = mkTagsFromText select
           rst     = mkBlogs_layout1 (length - 1)
          in Layout1 header blogID author date content tags rst
 
 
-mkBlogs_layout2 :: Int -> Int -> Int -> Blog
-mkBlogs_layout2 length id tag_length =
+mkBlogs_layout2 :: Int -> Blog
+mkBlogs_layout2 length =
    if length <= 0 then End
    else 
-      let select  = (mod rand 10)
+      let select  = (mod length 9)
           content = mkContentFromText select
           tags    = mkTagsFromText select
-          rst     = mkBlogs_layout2 (length - 1) (id+1) tag_length
+          rst     = mkBlogs_layout2 (length - 1)
           header  = Header (getRandomString 5)
-          blogID  = ID id
+          blogID  = ID length
           author  = Author (getRandomString 5)
           date    = Date (getRandomString 5)                 
          in Layout2 content tags rst header blogID author date 
 
-mkBlogs_layout3 :: Int -> Int -> Int -> Blog
-mkBlogs_layout3 length id tag_length =
+mkBlogs_layout3 :: Int -> Blog
+mkBlogs_layout3 length =
    if length <= 0 then End
    else 
-      let select  = (mod rand 10)
+      let select  = (mod length 9)
           tags    = mkTagsFromText select
-          rst     = mkBlogs_layout3 (length - 1) (id+1) tag_length
+          rst     = mkBlogs_layout3 (length - 1)
           content = mkContentFromText select          
           header  = Header (getRandomString 5)
-          blogID  = ID id
+          blogID  = ID length
           author  = Author (getRandomString 5)
           date    = Date (getRandomString 5)           
          in Layout3 tags rst content header blogID author date
 
-mkBlogs_layout4 :: Int -> Int -> Int -> Blog
-mkBlogs_layout4 length id tag_length =
+mkBlogs_layout4 :: Int -> Blog
+mkBlogs_layout4 length =
    if length <= 0 then End
    else 
-      let select  = (mod rand 10)
+      let select  = (mod length 9)
           tags    = mkTagsFromText select
           content = mkContentFromText select
-          rst     = mkBlogs_layout4 (length - 1) (id+1) tag_length          
+          rst     = mkBlogs_layout4 (length - 1)        
           header  = Header (getRandomString 5)        
-          blogID  = ID id
+          blogID  = ID length
           author  = Author (getRandomString 5)
           date    = Date (getRandomString 5)           
          in Layout4 tags content rst header blogID author date
 
-mkBlogs_layout5 :: Int -> Int -> Int -> Blog
-mkBlogs_layout5 length id tag_length =
+mkBlogs_layout5 :: Int -> Blog
+mkBlogs_layout5 length =
    if length <= 0 then End
    else 
-      let select  = (mod rand 10)
-          rst     = mkBlogs_layout5 (length - 1) (id+1) tag_length
+      let select  = (mod length 9)
+          rst     = mkBlogs_layout5 (length - 1) 
           tags    = mkTagsFromText select
           content = mkContentFromText select                      
           header  = Header (getRandomString 5)
-          blogID  = ID id
+          blogID  = ID length
           author  = Author (getRandomString 5)
           date    = Date (getRandomString 5)          
          in Layout5 rst tags content header blogID author date
 
-mkBlogs_layout6 :: Int -> Int -> Int -> Blog
-mkBlogs_layout6 length id tag_length =
+mkBlogs_layout6 :: Int -> Blog
+mkBlogs_layout6 length =
    if length <= 0 then End
    else 
-      let select  = (mod rand 10)
+      let select  = (mod length 9)
           header  = Header (getRandomString 5)          
-          blogID  = ID id
+          blogID  = ID length
           author  = Author (getRandomString 5)
           date    = Date (getRandomString 5)
           content = mkContentFromText select                
-          rst     = mkBlogs_layout6 (length - 1) (id+1) tag_length
+          rst     = mkBlogs_layout6 (length - 1)
           tags    = mkTagsFromText select        
          in Layout6 header blogID author date content rst tags
 
-mkBlogs_layout7 :: Int -> Int -> Int -> Blog
-mkBlogs_layout7 length id tag_length =
+mkBlogs_layout7 :: Int -> Blog
+mkBlogs_layout7 length =
    if length <= 0 then End
    else 
-      let select  = (mod rand 10)
-          rst     = mkBlogs_layout7 (length - 1) (id+1) tag_length
+      let select  = (mod length 9)
+          rst     = mkBlogs_layout7 (length - 1)
           content = mkContentFromText select                                 
           header  = Header (getRandomString 5)
-          blogID  = ID id
+          blogID  = ID length
           author  = Author (getRandomString 5)
           date    = Date (getRandomString 5)
           tags    = mkTagsFromText select           
          in Layout7 rst content header blogID author date tags
 
-mkBlogs_layout8 :: Int -> Int -> Int -> Blog 
-mkBlogs_layout8 length id tag_length = 
+mkBlogs_layout8 :: Int -> Blog 
+mkBlogs_layout8 length = 
    if length <= 0 then End 
    else 
-      let select  = (mod rand 10)
+      let select  = (mod length 9)
           content = mkContentFromText select
-          rst     = mkBlogs_layout8 (length - 1) (id+1) tag_length
-          id      = ID id 
+          rst     = mkBlogs_layout8 (length - 1)
+          id      = ID length 
           author  = Author (getRandomString (mod rand 9))
           date    = Date (getRandomString (mod rand 9))
           header  = Header (getRandomString (mod rand 9))
