@@ -6,10 +6,16 @@ emphKeywordInContent :: Text -> Blog -> Blog
 emphKeywordInContent keyword blogs = 
    case blogs of 
       End -> End 
-      Layout1 header id author date content tags rst -> let present = searchBlogContent keyword content 
-                                                            newContent = emphasizeBlogContent keyword content present 
+      Layout1 header id author date content tags rst -> let present = searchBlogContent keyword content
+                                                            --_ = printsym (quote "NEWLINE") 
+                                                            --_       = printbool present
+                                                            --_ = printsym (quote "NEWLINE")
+                                                            newContent = emphasizeBlogContent keyword content present
+                                                            --_ = printsym (quote "NEWLINE")
+                                                            --_          = printPacked newContent
+                                                            --_ = printsym (quote "NEWLINE") 
                                                             newRst     = emphKeywordInContent keyword rst 
-                                                         in Layout1 header id author date (copyPacked newContent) tags  newRst
+                                                         in Layout1 (header) (id) (author) (copyPacked date) (copyPacked newContent) (copyPacked tags)  (copyPacked newRst)
 
 -- main function 
 gibbon_main = 
@@ -67,10 +73,14 @@ gibbon_main =
        --(content, tags) = mkContentFromText (mod rand 10)
        --_       = printPacked content
        --_       = printPacked tags
-       blogs = mkBlogs_layout1 10
-       _ = printPacked blogs
+       blogs = mkBlogs_layout1 100
+       --_ = printPacked blogs
+       --_ = printsym (quote "NEWLINE")
+       --_ = printsym (quote "NEWLINE")
        keyword :: Vector Char  
-       keyword = "feelings"
+       keyword = "as"
        newblgs = iterate (emphKeywordInContent keyword blogs)
-       _ = printPacked newblgs
+       --_ = printPacked newblgs
+       --_ = printsym (quote "NEWLINE")
+       --_ = printsym (quote "NEWLINE")
    in ()

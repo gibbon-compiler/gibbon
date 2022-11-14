@@ -616,6 +616,9 @@ emphasizeKeywordInline :: Text -> Inline -> Inline
 emphasizeKeywordInline keyword inline = 
    case inline of 
       Str text           -> let isSame = compareWord keyword text 
+                                --_ = printsym (quote "NEWLINE")
+                                --_       = printbool isSame
+                                --_ = printsym (quote "NEWLINE")
                                 in if (isSame) then let
                                        newlist :: PList Inline 
                                        newlist = (Cons (copyPacked inline)) Nil                         -- ---> Here we had to use a call to copyPacked in order to copy over the inline to a new region, otherwise segfaults. 
@@ -760,55 +763,55 @@ mkTagsFromText :: Int -> BlogTags
 mkTagsFromText val = 
    if      (val == 0) then 
          let f' :: Vector Char 
-             f'      = readArrayFile (Just ("blog1/blog1Tag.txt", 61))
+             f'      = readArrayFile (Just ("blog1/blog1Tag.txt", 59))
              tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
              tags'   = mkBlogTags tags
           in tags'
    else if (val == 1) then 
          let f' :: Vector Char 
-             f'      = readArrayFile (Just ("blog2/blog2Tag.txt", 59))
+             f'      = readArrayFile (Just ("blog2/blog2Tag.txt", 47))
              tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
              tags'   = mkBlogTags tags
           in tags'
    else if (val == 2) then 
          let f' :: Vector Char 
-             f'      = readArrayFile (Just ("blog3/blog3Tag.txt", 51))
+             f'      = readArrayFile (Just ("blog3/blog3Tag.txt", 62))
              tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
              tags'   = mkBlogTags tags
           in tags'
    else if (val == 3) then 
          let f' :: Vector Char 
-             f'      = readArrayFile (Just ("blog4/blog4Tag.txt", 56))
+             f'      = readArrayFile (Just ("blog4/blog4Tag.txt", 69))
              tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
              tags'   = mkBlogTags tags
           in tags'
    else if (val == 4) then 
          let f' :: Vector Char 
-             f'      = readArrayFile (Just ("blog5/blog5Tag.txt", 59))
+             f'      = readArrayFile (Just ("blog5/blog5Tag.txt", 56))
              tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
              tags'   = mkBlogTags tags
           in tags'
    else if (val == 5) then 
          let f' :: Vector Char 
-             f'      = readArrayFile (Just ("blog6/blog6Tag.txt", 84))
+             f'      = readArrayFile (Just ("blog6/blog6Tag.txt", 72))
              tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
              tags'   = mkBlogTags tags
           in tags' 
    else if (val == 6) then 
         let f' :: Vector Char 
-            f'      = readArrayFile (Just ("blog7/blog7Tag.txt", 70))
+            f'      = readArrayFile (Just ("blog7/blog7Tag.txt", 67))
             tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
             tags'   = mkBlogTags tags
           in tags'
    else if (val == 7) then 
          let f' :: Vector Char 
-             f'      = readArrayFile (Just ("blog8/blog8Tag.txt", 60))
+             f'      = readArrayFile (Just ("blog8/blog8Tag.txt", 74))
              tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
              tags'   = mkBlogTags tags
           in tags'    
    else if (val == 8) then 
          let f' :: Vector Char 
-             f'      = readArrayFile (Just ("blog9/blog9Tag.txt", 74))
+             f'      = readArrayFile (Just ("blog9/blog9Tag.txt", 66))
              tags    = fileToTags f' (singleton (nth f' 0)) 1 (vlength f')
              tags'   = mkBlogTags tags
           in tags'
@@ -824,13 +827,13 @@ mkContentFromText :: Int -> BlogContent
 mkContentFromText val = 
           if      (val == 0) then 
                                       let f :: Vector Char 
-                                          f       = readArrayFile (Just ("blog1/blog1Out.txt",  502)) 
+                                          f       = readArrayFile (Just ("blog1/blog1Out.txt",  505)) 
                                           block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
                                           content = mkBlogContent block
                                        in content
           else if (val == 1) then 
                                       let f :: Vector Char
-                                          f       = readArrayFile (Just ("blog2/blog2Out.txt",  400)) 
+                                          f       = readArrayFile (Just ("blog2/blog2Out.txt",  403)) 
                                           block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
                                           content = mkBlogContent block 
                                        in content
@@ -854,19 +857,19 @@ mkContentFromText val =
                                        in content 
           else if (val == 5) then 
                                       let f :: Vector Char 
-                                          f       = readArrayFile (Just ("blog6/blog6Out.txt",  260)) 
+                                          f       = readArrayFile (Just ("blog6/blog6Out.txt",  263)) 
                                           block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f) 
                                           content = mkBlogContent block
                                         in content
           else if (val == 6) then 
                                       let f :: Vector Char 
-                                          f       = readArrayFile (Just ("blog7/blog7Out.txt",  395)) 
+                                          f       = readArrayFile (Just ("blog7/blog7Out.txt",  398)) 
                                           block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
                                           content = mkBlogContent block 
                                        in content
           else if (val == 7) then 
                                        let f :: Vector Char 
-                                           f       = readArrayFile (Just ("blog8/blog8Out.txt",  404)) 
+                                           f       = readArrayFile (Just ("blog8/blog8Out.txt",  407)) 
                                            block   = fileToContent f  (singleton (nth f  0)) Nil 1 (vlength f)
                                            content = mkBlogContent block
                                         in content     

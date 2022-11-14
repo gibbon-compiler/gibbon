@@ -21,10 +21,14 @@ gibbon_main =
        --_          = printPacked new_blogs1
        --_          = printsym (quote "NEWLINE")
        --_          = printsym (quote "NEWLINE")
-       blogs = mkBlogs_layout2 10
-       _ = printPacked blogs
+       blogs = mkBlogs_layout2 10000
+       --_ = printPacked blogs
+       --_ = printsym (quote "NEWLINE")
+       --_ = printsym (quote "NEWLINE")
        keyword :: Vector Char  
-       keyword = "feelings"
+       keyword = "as"
        newblgs = iterate (emphKeywordInContent keyword blogs)
-       _ = printPacked newblgs
+       --_ = printPacked newblgs
+       --_ = printsym (quote "NEWLINE")
+       --_ = printsym (quote "NEWLINE")
    in ()

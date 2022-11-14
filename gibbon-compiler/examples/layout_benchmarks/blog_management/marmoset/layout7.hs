@@ -9,7 +9,7 @@ emphKeywordInContent keyword blogs =
       Layout7 rst content header id author date tags -> let present = searchBlogContent keyword content 
                                                             newContent = emphasizeBlogContent keyword content present 
                                                             newRst     = emphKeywordInContent keyword rst 
-                                                         in Layout7 newRst (copyPacked newContent) header id author date tags 
+                                                         in Layout7 newRst (copyPacked newContent) (header) id author date tags 
 
 
 
@@ -23,11 +23,14 @@ gibbon_main =
        --_          = printPacked new_blogs1
        --_          = printsym (quote "NEWLINE")
        --_          = printsym (quote "NEWLINE")
-       blogs = mkBlogs_layout7 10
-       _ = printPacked blogs
-       --newblgs = emphKeywordInContent
+       blogs = mkBlogs_layout7 10000
+       --_ = printPacked blogs
+       --_ = printsym (quote "NEWLINE")
+       --_ = printsym (quote "NEWLINE")
        keyword :: Vector Char  
-       keyword = "feelings"
+       keyword = "as"
        newblgs = iterate (emphKeywordInContent keyword blogs)
-       _ = printPacked newblgs
+       --_ = printPacked newblgs
+       --_ = printsym (quote "NEWLINE")
+       --_ = printsym (quote "NEWLINE")
    in ()
