@@ -5,6 +5,7 @@
 module Gibbon.PList where
 
 import Gibbon.Prelude
+import Gibbon.Maybe
 
 --------------------------------------------------------------------------------
 
@@ -17,6 +18,26 @@ elem_plist cmp a list =
     Cons x rst -> if (cmp x a) == 0
                    then True
                    else (False || elem_plist cmp a rst)
+
+
+-- nth element of a plist
+-- takes list
+--       default value 
+--       start index
+--
+
+nth_plist :: PList a -> Maybe a -> Int -> Maybe a
+nth_plist list def index = if (index >= (length_plist list)) then Nothing 
+ 		           else if (index < 0) then Nothing 
+                           else nth_plist_helper list def index 0
+
+-- helper for nth_plist
+nth_plist_helper :: PList a -> Maybe a -> Int -> Int -> Maybe a
+nth_plist_helper list def index cursor = case list of 
+						 Nil -> def 
+                                                 Cons x rst -> if (index == cursor) then (Just x) 
+										    else nth_plist_helper rst def index (cursor+1)  
+
 
 length_plist :: PList a -> Int
 length_plist a = case a of
