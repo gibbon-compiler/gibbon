@@ -19,6 +19,7 @@ library
                        Gibbon.Vector.Parallel
                        Gibbon.List
                        Gibbon.PList
+		       Gibbon.Maybe
   build-depends:       base >=4.11 && <4.16
   ghc-options:         -Wall -Wcompat -fdefer-typed-holes
   default-extensions:  ScopedTypeVariables
