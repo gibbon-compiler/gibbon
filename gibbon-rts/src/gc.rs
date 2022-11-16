@@ -17,6 +17,7 @@ use std::ptr::{null, null_mut, write_bytes};
 use crate::ffi::types::*;
 use crate::record_time;
 use crate::tagged_pointer::*;
+use crate::{dbgprint, dbgprintln};
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Garbage Collector; evacuation, promotion etc.
@@ -65,6 +66,28 @@ struct EvacState<'a> {
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
+#[macro_export]
+macro_rules! dbgprintln {
+    () => {
+        print!("\n")
+    };
+    ($($arg:tt)*) => {{
+        println!($($arg)*);
+
+    }};
+}
+
+#[macro_export]
+macro_rules! dbgprint {
+    () => {
+        print!("\n")
+    };
+    ($($arg:tt)*) => {{
+        print!($($arg)*);
+
+    }};
+}
+
 pub fn cleanup(
     rstack: &mut C_GibShadowstack,
     wstack: &mut C_GibShadowstack,
@@ -106,7 +129,7 @@ pub fn garbage_collect(
     _force_major: bool,
 ) -> Result<()> {
     #[cfg(feature = "verbose_evac")]
-    eprintln!("gc...");
+    dbgprintln!("gc...");
 
     unsafe {
         // Start by cauterizing the writers.
@@ -195,7 +218,7 @@ fn restore_writers(
                             *frame
                         );
                     }
-                    eprintln!("Restoring writer, {:?}", *frame);
+                    dbgprintln!("Restoring writer, {:?}", *frame);
                 }
                 match env.get(&(*frame).ptr) {
                     None => {
@@ -206,7 +229,7 @@ fn restore_writers(
                         (*frame).endptr = chunk_end;
 
                         #[cfg(feature = "verbose_evac")]
-                        eprintln!(
+                        dbgprintln!(
                             "Restored, ({:?},{:?})",
                             (*frame).ptr,
                             (*frame).endptr
@@ -217,7 +240,7 @@ fn restore_writers(
                         (*frame).endptr = *chunk_end;
 
                         #[cfg(feature = "verbose_evac")]
-                        eprintln!(
+                        dbgprintln!(
                             "Restored, ({:?},{:?})",
                             (*frame).ptr,
                             (*frame).endptr
@@ -247,9 +270,9 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
 
     #[cfg(feature = "verbose_evac")]
     {
-        eprintln!("Sorted roots:");
+        dbgprintln!("Sorted roots:");
         for frame in frames.iter() {
-            eprintln!("{:?}", *(*frame));
+            dbgprintln!("{:?}", *(*frame));
         }
     }
 
@@ -270,7 +293,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                     C_COPIED_TAG | C_COPIED_TO_TAG => {
                         #[cfg(feature = "verbose_evac")]
                         {
-                            eprintln!(
+                            dbgprintln!(
                                 "Optimization! Didn't need to allocate region for root {:?} (1)",
                                 (*frame)
                             );
@@ -318,7 +341,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                 if !root_in_nursery {
                     #[cfg(feature = "verbose_evac")]
                     {
-                        eprintln!(
+                        dbgprintln!(
                             "Evac packed, skipping oldgen root {:?}",
                             (*frame)
                         );
@@ -345,7 +368,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                     C_COPIED_TAG | C_COPIED_TO_TAG => {
                         #[cfg(feature = "verbose_evac")]
                         {
-                            eprintln!(
+                            dbgprintln!(
                                 "Optimization! Didn't need to allocate region for root {:?} (2)",
                                 (*frame)
                             );
@@ -485,7 +508,7 @@ unsafe fn evacuate_packed(
     orig_dst_end: *mut i8,
 ) -> (*mut i8, *mut i8, *mut i8, bool) {
     #[cfg(feature = "verbose_evac")]
-    eprintln!("Start evacuation {:?} -> {:?}", (*frame).ptr, orig_dst);
+    dbgprintln!("Start evacuation {:?} -> {:?}", (*frame).ptr, orig_dst);
 
     let orig_typ = (*frame).datatype;
     let orig_src = match (*frame).gc_root_prov {
@@ -511,14 +534,14 @@ unsafe fn evacuate_packed(
     let mut forwarded = false;
 
     #[cfg(feature = "verbose_evac")]
-    eprintln!("Evac packed {:?} -> {:?}", src, dst);
+    dbgprintln!("Evac packed {:?} -> {:?}", src, dst);
 
     // Stores everything to process AFTER the next_action.
     let mut worklist: Vec<EvacAction> = Vec::new();
 
     'evac_loop: loop {
         #[cfg(feature = "verbose_evac")]
-        eprintln!("++Loop iteration on src {:?} action {:?}, length after this {}, prefix(5): {:?}",
+        dbgprintln!("++Loop iteration on src {:?} action {:?}, length after this {}, prefix(5): {:?}",
                 src, next_action, worklist.len(), &worklist[..std::cmp::min(5, worklist.len())]);
 
         match next_action {
@@ -536,7 +559,7 @@ unsafe fn evacuate_packed(
             }
             EvacAction::ProcessTy(next_ty, mb_shortcut_addr) => {
                 #[cfg(feature = "verbose_evac")]
-                eprintln!(
+                dbgprintln!(
                     "   shortcut pointer at {:?} will be updated",
                     mb_shortcut_addr
                 );
@@ -544,7 +567,7 @@ unsafe fn evacuate_packed(
                 let (tag, src_after_tag): (C_GibPackedTag, *mut i8) =
                     read_mut(src);
                 #[cfg(feature = "verbose_evac")]
-                eprintln!("+++Read next tag {} from src {:?}", tag, src);
+                dbgprintln!("+++Read next tag {} from src {:?}", tag, src);
 
                 match tag {
                     // A pointer to a value in another buffer; copy this value
@@ -558,7 +581,7 @@ unsafe fn evacuate_packed(
                             read(src_after_tag);
 
                         #[cfg(feature = "verbose_evac")]
-                        eprintln!(
+                        dbgprintln!(
                             "   indirection! src {:?} dest {:?}, after {:?}",
                             src_after_tag,
                             tagged_pointee as *mut i8,
@@ -586,7 +609,7 @@ unsafe fn evacuate_packed(
                         // refcount and outset.
                         if st.evac_major || st.nursery.contains_addr(pointee) {
                             #[cfg(feature = "verbose_evac")]
-                            eprintln!("   inlining indirection");
+                            dbgprintln!("   inlining indirection");
 
                             // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
                             if !worklist.is_empty() {
@@ -595,13 +618,13 @@ unsafe fn evacuate_packed(
                                 ));
                             } else {
                                 #[cfg(feature = "verbose_evac")]
-                                eprintln!("   tail optimization!");
+                                dbgprintln!("   tail optimization!");
                             }
 
                             inlining_underway = true;
 
                             #[cfg(feature = "verbose_evac")]
-                            eprintln!(
+                            dbgprintln!(
                                 "   pushing SkipOverEnvWrite action to stack (1)"
                             );
 
@@ -616,7 +639,7 @@ unsafe fn evacuate_packed(
                             match (*frame).gc_root_prov {
                                 C_GcRootProv::RemSet => {
                                     #[cfg(feature = "verbose_evac")]
-                                    eprintln!(
+                                    dbgprintln!(
                                         "   pushing SkipOverEnvWrite action to stack (1)"
                                     );
                                     worklist.push(
@@ -625,7 +648,7 @@ unsafe fn evacuate_packed(
                                 }
 
                                 C_GcRootProv::Stk => {
-                                    eprintln!(
+                                    dbgprintln!(
                                         "   did not insert into so_env {:?}",
                                         pointee
                                     );
@@ -662,7 +685,7 @@ unsafe fn evacuate_packed(
                                 write(shortcut_addr, tagged);
 
                                 #[cfg(feature = "verbose_evac")]
-                                eprintln!(
+                                dbgprintln!(
                                     "   wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
                                     shortcut_addr, dst1, offset
                                 );
@@ -670,13 +693,14 @@ unsafe fn evacuate_packed(
 
                             #[cfg(feature = "verbose_evac")]
                             {
-                                eprintln!(
+                                dbgprintln!(
                                     "   kept indirection, new addresses are {:?} -> {:?}",
                                     dst1, pointee
                                 );
-                                eprintln!(
+                                dbgprintln!(
                                     "   inserting into so_env {:?} to {:?}",
-                                    src, src_after_indr1
+                                    src,
+                                    src_after_indr1
                                 );
                             }
 
@@ -735,7 +759,7 @@ unsafe fn evacuate_packed(
                         src = after_wframe_ptr;
 
                         #[cfg(feature = "verbose_evac")]
-                        eprintln!(
+                        dbgprintln!(
                             "++Hit cauterize at {:?}, remaining worklist: {:?}",
                             src, worklist
                         );
@@ -760,7 +784,7 @@ unsafe fn evacuate_packed(
                             write(dst_after_tag, tagged_fwd_ptr.as_u64());
 
                         #[cfg(feature = "verbose_evac")]
-                        eprintln!("   forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged_fwd_ptr, dst);
+                        dbgprintln!("   forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged_fwd_ptr, dst);
 
                         // TODO: make this reusable somehow (local macro?)
                         if let Some(shortcut_addr) = mb_shortcut_addr {
@@ -771,7 +795,7 @@ unsafe fn evacuate_packed(
                             write(shortcut_addr, tagged);
 
                             #[cfg(feature = "verbose_evac")]
-                            eprintln!(
+                            dbgprintln!(
                                 "   wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
                                 shortcut_addr, dst1, offset
                             );
@@ -823,7 +847,7 @@ unsafe fn evacuate_packed(
                             // WARNING: allow a corrupt null src return pointer.  Should make it an OPTION.
                             src = *src_after_burned.unwrap_or(&null_mut());
                             #[cfg(feature = "verbose_evac")]
-                            eprintln!("   forwarding pointer was last, don't need skip-over, src = {:?}", src);
+                            dbgprintln!("   forwarding pointer was last, don't need skip-over, src = {:?}", src);
                             break;
                         }
                     }
@@ -846,7 +870,7 @@ unsafe fn evacuate_packed(
                         let next_chunk = tagged.untag();
 
                         #[cfg(feature = "verbose_evac")]
-                        eprintln!("   redirection ptr!: src {:?}, to next chunk {:?}", src, next_chunk);
+                        dbgprintln!("   redirection ptr!: src {:?}, to next chunk {:?}", src, next_chunk);
 
                         if !noburn {
                             // Add a forwarding pointer in the source buffer.
@@ -876,7 +900,7 @@ unsafe fn evacuate_packed(
                             || inlining_underway
                         {
                             #[cfg(feature = "verbose_evac")]
-                            eprintln!(
+                            dbgprintln!(
                                 "   inlining redirected (oldgen) data {:?} -> {:?}",
                                 src, next_chunk
                             );
@@ -911,7 +935,7 @@ unsafe fn evacuate_packed(
                                 write(shortcut_addr, tagged);
 
                                 #[cfg(feature = "verbose_evac")]
-                                eprintln!(
+                                dbgprintln!(
                                     "   wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
                                     shortcut_addr, dst, offset
                                 );
@@ -975,7 +999,7 @@ unsafe fn evacuate_packed(
                         } = packed_info.get_unchecked(tag as usize);
 
                         #[cfg(feature = "verbose_evac")]
-                        eprintln!(
+                        dbgprintln!(
                             "   regular datacon, field_tys {:?}",
                             field_tys
                         );
@@ -1007,7 +1031,7 @@ unsafe fn evacuate_packed(
                                 write(shortcut_addr, tagged);
 
                                 #[cfg(feature = "verbose_evac")]
-                                eprintln!(
+                                dbgprintln!(
                                     "   wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
                                     shortcut_addr, dst2, offset
                                 );
@@ -1056,7 +1080,7 @@ unsafe fn evacuate_packed(
                                             .contains_addr(shortcut_dst)
                                         {
                                             #[cfg(feature = "verbose_evac")]
-                                            eprintln!("   nursery shortcut pointer ({:?} -> {:?}) will be updated",
+                                            dbgprintln!("   nursery shortcut pointer ({:?} -> {:?}) will be updated",
                                                       src_shortcuts_start.add(i * 8), shortcut_dst);
 
                                             addrs.push(Some(
@@ -1064,7 +1088,7 @@ unsafe fn evacuate_packed(
                                             ));
                                         } else {
                                             #[cfg(feature = "verbose_evac")]
-                                            eprintln!("   writing an oldgen shortcut pointer {:?} -> {:?}",
+                                            dbgprintln!("   writing an oldgen shortcut pointer {:?} -> {:?}",
                                                       dst_shortcuts_start.add(i * 8), tagged_shortcut_dst as *const i8);
 
                                             write(
@@ -1082,7 +1106,7 @@ unsafe fn evacuate_packed(
                                 field_tys.len() == shortcut_addrs.len()
                             );
                             #[cfg(feature = "verbose_evac")]
-                            eprintln!(
+                            dbgprintln!(
                                 "   need to write shortcut pointers at: {:?}",
                                 shortcut_addrs
                             );
@@ -1105,7 +1129,7 @@ unsafe fn evacuate_packed(
                                 // space previously occupied by scalars.
                                 if scalar_bytes1 >= 8 || num_shortcut1 > 0 {
                                     #[cfg(feature = "verbose_evac")]
-                                    eprintln!("   forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
+                                    dbgprintln!("   forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
                                     debug_assert!(dst < dst_end);
                                     write_forwarding_pointer_at(
                                         src,
@@ -1117,7 +1141,7 @@ unsafe fn evacuate_packed(
                                 // NOTE: Comment this case to disable burned tags:
                                 else {
                                     #[cfg(feature = "verbose_evac")]
-                                    eprintln!("   burning non-forwardable data at {:?}, scalar bytes {}", src, scalar_bytes1);
+                                    dbgprintln!("   burning non-forwardable data at {:?}, scalar bytes {}", src, scalar_bytes1);
                                     let _ = write(src, C_COPIED_TAG);
                                     // Also burn any scalar bytes that weren't big enough for a pointer:
                                     if scalar_bytes1 >= 1 {
@@ -1131,7 +1155,7 @@ unsafe fn evacuate_packed(
                             }
 
                             #[cfg(feature = "verbose_evac")]
-                            eprintln!(
+                            dbgprintln!(
                                 "   pushing SkipOverEnvWrite action to stack (2)"
                             );
                             worklist.push(EvacAction::SkipOverEnvWrite(src));
@@ -1162,9 +1186,10 @@ unsafe fn evacuate_packed(
             }
             EvacAction::SkipOverEnvWrite(pointee) => {
                 #[cfg(feature = "verbose_evac")]
-                eprintln!(
+                dbgprintln!(
                     "   performing so_env insert continuation: {:?} to {:?}",
-                    pointee, src
+                    pointee,
+                    src
                 );
                 st.so_env.insert(pointee, src);
                 // continue;
@@ -1180,9 +1205,10 @@ unsafe fn evacuate_packed(
     } // End while
 
     #[cfg(feature = "verbose_evac")]
-    eprintln!(
+    dbgprintln!(
         "+Finished evacuate_packed: recording in so_env {:?} -> {:?}",
-        orig_src, src
+        orig_src,
+        src
     );
     // Provide skip-over information for what we just cleared out.
     // FIXME: only insert if it is a non-zero location?
@@ -1275,7 +1301,7 @@ unsafe fn find_forwarding_pointer(
             let (tagged, _): (u64, _) = read_mut(addr_after_tag);
             let tagged_fwd_ptr = TaggedPointer::from_u64(tagged);
             #[cfg(feature = "verbose_evac")]
-            eprintln!(
+            dbgprintln!(
                 "   Found forwarding ptr at {:?}, dest {:?}",
                 addr_after_tag,
                 tagged_fwd_ptr.untag()
@@ -1323,9 +1349,10 @@ unsafe fn find_forwarding_pointer(
                 fwd_avail.add(fwd_footer_offset_avail as usize);
 
             #[cfg(feature = "verbose_evac")]
-            eprintln!(
+            dbgprintln!(
                 "   found forwarding ptr at {:?}, dest {:?}",
-                scan_ptr, fwd_avail
+                scan_ptr,
+                fwd_avail
             );
 
             // The position in the destination buffer we wanted.
@@ -1409,7 +1436,7 @@ pub unsafe fn handle_old_to_old_indirection(
     to_footer_ptr: *mut i8,
 ) {
     #[cfg(feature = "verbose_evac")]
-    eprintln!(
+    dbgprintln!(
         "   recording metadata for an old-to-old indirection, {:?}:{:?} -> {:?}:{:?}.",
         from_footer_ptr, *(from_footer_ptr as *const C_GibOldgenChunkFooter),
         to_footer_ptr, *(to_footer_ptr as *const C_GibOldgenChunkFooter)
@@ -1418,7 +1445,7 @@ pub unsafe fn handle_old_to_old_indirection(
     if from_footer_ptr == to_footer_ptr {
         #[cfg(feature = "verbose_evac")]
         {
-            eprintln!(
+            dbgprintln!(
                 "   indirection has identical source and destination, skipping"
             );
         }
@@ -1436,9 +1463,12 @@ unsafe fn add_to_outset(from_addr: *mut i8, to_addr: *const i8) -> bool {
     let to_reg_info = (*(to_addr as *mut C_GibOldgenChunkFooter)).reg_info;
 
     #[cfg(feature = "verbose_evac")]
-    eprintln!(
+    dbgprintln!(
         "   adding to outset, {:?}:{:?} -> {:?}:{:?}.",
-        from_reg_info, *from_reg_info, to_reg_info, *to_reg_info
+        from_reg_info,
+        *from_reg_info,
+        to_reg_info,
+        *to_reg_info
     );
 
     (*((*from_reg_info).outset)).insert(to_reg_info)
@@ -1449,7 +1479,7 @@ unsafe fn bump_refcount(addr: *mut i8) -> u16 {
     (*reg_info).refcount += 1;
 
     #[cfg(feature = "verbose_evac")]
-    eprintln!("    bumped refcount, {:?}:{:?}.", reg_info, *reg_info);
+    dbgprintln!("    bumped refcount, {:?}:{:?}.", reg_info, *reg_info);
 
     (*reg_info).refcount
 }
@@ -1459,7 +1489,7 @@ unsafe fn decrement_refcount(addr: *mut i8) -> u16 {
     (*reg_info).refcount -= 1;
 
     #[cfg(feature = "verbose_evac")]
-    eprintln!("    decremented refcount: {:?}:{:?}", reg_info, *reg_info);
+    dbgprintln!("    decremented refcount: {:?}:{:?}", reg_info, *reg_info);
 
     (*reg_info).refcount
 }
@@ -1487,9 +1517,11 @@ pub unsafe fn init_footer_at(
     (*footer).next = null_mut();
 
     #[cfg(feature = "verbose_evac")]
-    eprintln!(
+    dbgprintln!(
         "Initialized footer at {:?}: {:?}; {:?}",
-        footer_start, *footer, *region_info_ptr
+        footer_start,
+        *footer,
+        *region_info_ptr
     );
 
     footer_start
@@ -1498,7 +1530,7 @@ pub unsafe fn init_footer_at(
 fn is_loc0(addr: *const i8, footer_addr: *const i8, in_nursery: bool) -> bool {
     unsafe {
         let chunk_size: usize = if in_nursery {
-            *(footer_addr as *const u16) as usize
+            *(footer_addr as *const C_GibNurseryChunkFooter) as usize
         } else {
             (*(footer_addr as *const C_GibOldgenChunkFooter)).size
         };
@@ -1753,7 +1785,7 @@ impl<'a> Heap for C_GibOldgen<'a> {
         let (start, end) = self.allocate(total_size)?;
 
         #[cfg(feature = "verbose_evac")]
-        eprintln!("Allocated a oldgen chunk, ({:?}, {:?}).", start, end,);
+        dbgprintln!("Allocated a oldgen chunk, ({:?}, {:?}).", start, end,);
 
         let footer_start =
             unsafe { init_footer_at(end, null_mut(), total_size, refcount) };
@@ -1851,10 +1883,10 @@ impl<'a> C_GibShadowstack {
     }
     /// Print all frames of the shadow-stack.
     fn print_all(&self, msg: &str) {
-        eprintln!("{} shadowstack: ", msg);
+        dbgprintln!("{} shadowstack: ", msg);
         for frame in ShadowstackIter::new(self) {
             unsafe {
-                eprintln!("{:?}", *frame);
+                dbgprintln!("{:?}", *frame);
             }
         }
     }
@@ -2010,7 +2042,7 @@ pub fn info_table_finalize() {
         }
         INFO_TABLE = std::slice::from_raw_parts(info_table, _INFO_TABLE.len());
         #[cfg(feature = "verbose_evac")]
-        eprintln!("INFO_TABLE: {:?}", INFO_TABLE);
+        dbgprintln!("INFO_TABLE: {:?}", INFO_TABLE);
     }
 }
 
@@ -2105,14 +2137,14 @@ pub fn print_nursery_and_oldgen(
         for frame in wstack.into_iter() {
             add_to_info_env(frame, false);
         }
-        eprintln!("\n--------------------\nNursery:\n--------------------");
-        eprintln!(
+        dbgprintln!("\n--------------------\nNursery:\n--------------------");
+        dbgprintln!(
             "start={:?}, end={:?}, alloc={:?}",
             (*nursery).heap_start,
             (*nursery).heap_end,
             (nursery).alloc
         );
-        eprintln!(
+        dbgprintln!(
             "--------------------\nNursery chunks:\n--------------------"
         );
 
@@ -2123,26 +2155,28 @@ pub fn print_nursery_and_oldgen(
             .iter()
             .rev()
         {
-            eprint!(
+            dbgprint!(
                 "|{:?}...{:?}|{:?}| -> ",
-                chunk_start, chunk_end, chunk_size
+                chunk_start,
+                chunk_end,
+                chunk_size
             );
         }
-        eprintln!("\n");
-        eprintln!("");
-        eprintln!("--------------------\nOldgen:\n--------------------");
-        eprintln!(
+        dbgprintln!("\n");
+        dbgprintln!("");
+        dbgprintln!("--------------------\nOldgen:\n--------------------");
+        dbgprintln!(
             "rem-set={:?}, old-zct={:?}, new-zct={:?}",
             (*oldgen).rem_set,
             (*oldgen).old_zct,
             (*oldgen).new_zct
         );
         (*oldgen).rem_set.print_all("Remembered set");
-        eprintln!(
+        dbgprintln!(
             "--------------------\nOldgen chunks:\n--------------------"
         );
         for (_, info) in info_env.iter() {
-            eprintln!("{}", info);
+            dbgprintln!("{}", info);
         }
     }
 }
