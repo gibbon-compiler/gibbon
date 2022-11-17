@@ -7,6 +7,7 @@ import qualified Data.Map as M
 import           Gibbon.Common
 import           Gibbon.L1.Syntax
 import           Gibbon.L3.Syntax
+import Data.Bifunctor
 
 
 -- | Directly convert the source program to L3. Used in the pointer mode
@@ -17,9 +18,14 @@ directL3 prg@(Prog ddfs fndefs mnExp) = do
                    Nothing -> Nothing
                    Just (ex,ty) -> Just (go init_fun_env ex, ty)
         fndefs' = M.map fd fndefs
-    return (Prog ddfs fndefs' mnExp')
+        ddfs' = fmap goDDef ddfs
+    return (Prog ddfs' fndefs' mnExp')
   where
     init_fun_env = progToEnv prg
+
+    goDDef :: DDef1 -> DDef3 
+    goDDef ddf@DDef{dataCons} = 
+      ddf{dataCons  = map(second (map(second goTy))) dataCons}
 
     fd :: FunDef1 -> FunDef3
     fd FunDef{funName,funArgs,funTy,funBody,funRec,funInline} =

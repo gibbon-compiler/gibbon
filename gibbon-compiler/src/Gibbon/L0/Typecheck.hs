@@ -1,13 +1,14 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE InstanceSigs #-}
 
 module Gibbon.L0.Typecheck where
 
 import           Control.Monad.State ( MonadState )
 import           Control.Monad.Except
 #if !MIN_VERSION_base(4,15,0)
-import           Control.Monad.Fail
+import           Control.Monad.Fail()
 #endif
 import           Data.Foldable ( foldlM )
 import qualified Data.List as L
@@ -827,6 +828,7 @@ newtype Subst = Subst (M.Map MetaTv Ty0)
 instance Semigroup Subst where
   -- (Subst s1) <> (Subst s2) =
   --   let mp = M.map (zonkTy (Subst s1)) s2 `M.union` s1 in Subst mp
+  (<>) :: Subst -> Subst -> Subst
   (Subst s1) <> (Subst s2) =
     let s2' = M.map (zonkTy (Subst s1)) s2
         mp =  M.unionWith combine s2' s1

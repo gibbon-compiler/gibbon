@@ -116,7 +116,7 @@ unariserExp isTerminal ddfs stk env2 ex =
              case fty of
                -- reconstruct, in case of nested tuple (whether terminal or not)
                ProdTy tys -> do
-                 return $ MkProdE (map (\k -> ProjE k e') [j..(j+length tys-1)])  
+                 return $ MkProdE (map (\k -> ProjE k e') [j..(j+length tys-1)])
                -- if not a tuple, take projection
                _ -> return $ ProjE j e'
 
@@ -165,7 +165,7 @@ unariserExp isTerminal ddfs stk env2 ex =
       case stk of
         -- data constructor arguments are also terminal
         [] -> discharge stk <$>
-              (DataConE loc dcon <$> mapM (go isTerminal env2) args)
+              (DataConE loc dcon <$> mapM (go False env2) args)
         _  -> error $ "Impossible. Non-empty projection stack on DataConE "++show stk
 
     TimeIt e ty b -> do
@@ -289,7 +289,7 @@ flatProjIdx n ty =
 -- ProdTy [IntTy, IntTy, IntTy, IntTy, IntTy, IntTy]
 --
 flattenTy :: Ty3 -> Ty3
-flattenTy ty =
+flattenTy ty = 
   case ty of
     ProdTy _ -> ProdTy $ go ty
     _ -> ty

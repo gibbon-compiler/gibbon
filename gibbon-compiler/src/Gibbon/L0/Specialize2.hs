@@ -28,6 +28,7 @@ import           Gibbon.Pretty
 import           Gibbon.L0.Syntax
 import           Gibbon.L0.Typecheck
 import qualified Gibbon.L1.Syntax as L1
+import Data.Bifunctor
 --------------------------------------------------------------------------------
 
 {-
@@ -977,7 +978,7 @@ specLambdasExp ddefs env2 ex =
     AppE f [] args -> do
       args' <- mapM go args
       let args'' = dropFunRefs f env2 args'
-          refs   = foldr collectFunRefs [] args
+          refs   = foldr collectFunRefs [] args'
       sp_state <- get
       case refs of
         [] ->
@@ -1361,26 +1362,27 @@ bindLambdas prg@Prog{fundefs,mainExp} = do
 
 -- | Desugar parallel tuples to spawn's and sync's, and printPacked into function calls.
 desugarL0 :: Prog0 -> PassM Prog0
-desugarL0 prg@(Prog ddefs _fundefs _mainExp) = do
-  (Prog ddefs' fundefs' mainExp') <- addRepairFns prg
-  let ddefs'' = M.map desugar_tuples ddefs'
+desugarL0 (Prog ddefs fundefs' mainExp') = do
+  -- (Prog ddefs' fundefs' mainExp') <- addRepairFns prg
+  let ddefs'' = M.map desugar_tuples ddefs
   fundefs'' <- mapM (\fn@FunDef{funBody} -> go funBody >>= \b -> pure $ fn {funBody = b}) fundefs'
   mainExp'' <- case mainExp' of
                 Nothing     -> pure Nothing
                 Just (e,ty) -> Just <$> (,ty) <$> go e
-  pure $ Prog ddefs'' fundefs'' mainExp''
+  addRepairFns $ Prog ddefs'' fundefs'' mainExp''
   where
     err1 msg = error $ "desugarL0: " ++ msg
 
     desugar_tuples :: DDef0 -> DDef0
     desugar_tuples d@DDef{dataCons} =
-        let dataCons' = map (\(dcon,tys) -> (dcon, concatMap goty tys)) dataCons
+        let dataCons' = map (second (concatMap goty)) dataCons
         in d { dataCons = dataCons' }
       where
-        goty (is_boxed,ty) =
+        goty :: (t, Ty0) -> [(t, Ty0)]
+        goty (isBoxed, ty) =
           case ty of
-            ProdTy ls -> map (\x -> (is_boxed,x)) ls
-            _ -> [(is_boxed,ty)]
+            ProdTy ls -> concatMap (goty . (isBoxed,)) ls
+            _ -> [(isBoxed, ty)]
 
     go :: Exp0 -> PassM Exp0
     go ex =
@@ -1437,34 +1439,37 @@ desugarL0 prg@(Prog ddefs _fundefs _mainExp) = do
                           let (xs,_tyapps) = unzip vtys
                           bod' <- go bod
                           let dcon_tys = lookupDataCon ddefs dcon
-                          (xs',bod'') <-
-                            foldrM (\(x,xty) (acc1,acc2) ->
-                                       case xty of
-                                            ProdTy ls -> do
-                                              ys <- mapM (\_ -> gensym "y") ls
-                                              let acc2' =
-                                                    foldr (\(i,y) acc2'' -> gSubstE (ProjE i (VarE x)) (VarE y) acc2'')
-                                                          acc2
-                                                          (zip [0..] ys)
-                                              let acc2''' = gSubstE (VarE x) (MkProdE (map VarE ys)) acc2'
-                                              pure (ys ++ acc1, acc2''')
-                                            _ -> pure (x:acc1,acc2))
-                                   ([],bod')
-                                   (zip xs dcon_tys)
-                          let vtys' = (zip xs' (repeat (ProdTy [])))
-                          (pure (dcon, vtys', bod'')))
+                              flattenTupleArgs :: (Var, Ty0) -> ([Var], Exp0) -> PassM ([Var], Exp0)
+                              flattenTupleArgs (v, vty) (vs0, bod0) =
+                                case vty of
+                                  ProdTy ls -> do
+                                    -- create projection variables: v = (y1, y2, ...)
+                                    ys <- mapM (\_ -> gensym "y") ls
+                                    -- substitute projections in body with new variable: yi = ProjE i v
+                                    let bod1 = foldr (\(i, y) bod1' -> gSubstE (ProjE i (VarE v)) (VarE y) bod1') bod0 (zip [0..] ys)
+                                    -- substitute whole variable v with product: v = MkProdE (y1, y2, ...)
+                                    let bod2 = gSubstE (VarE v) (MkProdE (map VarE ys)) bod1
+                                    -- flatten each of yis
+                                    (ys', bod3) <- foldrM flattenTupleArgs (vs0, bod2) (zip ys ls)
+                                    pure (ys', bod3)
+                                  _ -> pure (v:vs0, bod0)
+
+                          (xs',bod'') <- foldrM flattenTupleArgs ([], bod') (zip xs dcon_tys)
+                          let vtys' = zip xs' (repeat (ProdTy []))
+                          pure (dcon, vtys', bod''))
                        brs
           pure $ CaseE scrt' brs'
         DataConE a dcon ls -> do
           ls' <- mapM go ls
           let tys = lookupDataCon ddefs dcon
-          let ls'' = concatMap
-                       (\(ty,arg) ->
-                          case ty of
-                            ProdTy xs -> map (\i -> ProjE i arg) (take (length xs) [0..])
-                            _ -> [arg])
-                       (zip tys ls')
-          pure $ DataConE a dcon ls''
+              flattenTupleArgs :: [Exp0] -> [Ty0] -> [Exp0]
+              flattenTupleArgs args tys' = concatMap (\(ty :: Ty0, arg :: Exp0) ->
+                    case ty of
+                      ProdTy argtys -> let args'' = map (\i -> ProjE i arg) [0..length argtys - 1]
+                                      in flattenTupleArgs args'' argtys
+                      _ -> [arg]
+                  ) (zip tys' args)
+          pure $ DataConE a dcon (flattenTupleArgs ls' tys)
         TimeIt e ty b    -> (\a -> TimeIt a ty b) <$> go e
         WithArenaE v e -> (WithArenaE v) <$> go e
         SpawnE fn tyapps args -> (SpawnE fn tyapps) <$> mapM go args
@@ -1588,7 +1593,7 @@ genTravFn DDef{tyName, dataCons} = do
 -- | Print a packed datatype.
 genPrintFn :: DDef0 -> PassM FunDef0
 genPrintFn DDef{tyName, dataCons} = do
-  arg <- gensym $ "arg"
+  arg <- gensym "arg"
   casebod <- forM dataCons $ \(dcon, tys) ->
              do xs <- mapM (\_ -> gensym "x") tys
                 ys <- mapM (\_ -> gensym "y") tys
@@ -1612,8 +1617,17 @@ genPrintFn DDef{tyName, dataCons} = do
                           (zip3 (map snd tys) xs ys)
                 w1 <- gensym "wildcard"
                 w2 <- gensym "wildcard"
+                let add_spaces :: [(Var, [Ty0], Ty0, PreExp E0Ext Ty0 Ty0)] -> PassM [(Var, [Ty0], Ty0, PreExp E0Ext Ty0 Ty0)]
+                    add_spaces [] = pure []
+                    add_spaces [z] = pure [z] 
+                    add_spaces (z:zs) = do 
+                      zs' <- add_spaces zs 
+                      wi <- gensym "wildcard"
+                      pure $ z:(wi, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar " "))] ):zs'
+
+                bnds'' <- add_spaces bnds
                 let bnds' = [(w1, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar ("(" ++ dcon ++ " ")))])] ++
-                            bnds ++
+                            bnds'' ++
                             [(w2, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar ")"))])]
                     bod = mkLets bnds' (MkProdE [])
                 return (dcon, map (\x -> (x,ProdTy [])) xs, bod)

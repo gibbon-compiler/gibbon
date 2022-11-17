@@ -541,7 +541,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
            let ProdTy tys = lookupVEnv v env
            in unifyAll ds tys
               (return (e', ProdTy tys, []))
-              (err$ "TODO: support copying parts of tuples")
+              (err $ "TODO: support copying parts of tuples " ++ sdoc e' ++ " in " ++ sdoc ds ++ " for types " ++ sdoc tys)
         SingleDest d  -> do
                   let ty  = lookupVEnv v env
                   loc <- case ty of
