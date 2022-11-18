@@ -535,8 +535,8 @@ unsafe fn evacuate_packed(
         }
     };
 
-    // Don't inline any indirections.
-    let noinline = true;
+    //
+    let always_inline_redirections = true;
 
     // These comprise the main mutable state of the traversal and should be updated
     // together at the end of every iteration:
@@ -545,7 +545,7 @@ unsafe fn evacuate_packed(
     let mut dst_end = orig_dst_end;
     let mut inlining_underway = false;
     let mut inlining_underway_upto = null_mut();
-    let mut noburn = false;
+    let mut noburn = true;
     // The implicit -1th element of the worklist:
     let mut next_action = EvacAction::ProcessTy(orig_typ, None);
     let mut forwarded = false;
@@ -556,7 +556,7 @@ unsafe fn evacuate_packed(
     // Stores everything to process AFTER the next_action.
     let mut worklist: Vec<EvacAction> = Vec::new();
 
-    'evac_loop: loop {
+    loop {
         #[cfg(feature = "verbose_evac")]
         dbgprintln!("++Loop iteration on src {:?} action {:?}, length after this {}, prefix(5): {:?}",
                 src, next_action, worklist.len(), &worklist[..std::cmp::min(5, worklist.len())]);
@@ -564,10 +564,12 @@ unsafe fn evacuate_packed(
         match next_action {
             EvacAction::RestoreSrc(new_src) => {
                 src = new_src;
+                /*
                 if new_src == inlining_underway_upto {
                     inlining_underway = false;
                     noburn = false;
                 }
+                 */
 
                 // TODO: make this reusable somehow (local macro?)
                 if let Some(next) = worklist.pop() {
@@ -641,123 +643,66 @@ unsafe fn evacuate_packed(
                         // Otherwise, write an indirection node at dst and adjust the
                         // refcount and outset.
                         if st.evac_major || st.nursery.contains_addr(pointee) {
-                            // Don't inline indirections.
-                            if noinline {
-                                let (dst1, dst_end1) =
-                                    Heap::allocate_first_chunk(
-                                        oldgen, CHUNK_SIZE, 1,
-                                    )
-                                    .unwrap();
+                            #[cfg(feature = "verbose_evac")]
+                            dbgprintln!("   inlining indirection");
 
-                                #[cfg(feature = "verbose_evac")]
-                                {
-                                    dbgprintln!("   not inlining indirection");
-                                    dbgprintln!(
-                                        "   writing indirected data at {:?}",
-                                        dst
-                                    );
-                                }
-
-                                let offset = dst_end1.offset_from(dst1) as u16;
-                                let tagged =
-                                    TaggedPointer::new(dst1, offset).as_u64();
-                                let dst_after_tag =
-                                    write(dst, C_INDIRECTION_TAG);
-                                let dst_after_indr =
-                                    write(dst_after_tag, tagged);
-
-                                if !worklist.is_empty() {
-                                    worklist.push(
-                                        EvacAction::RestoreSrcAndDst(
-                                            src_after_indr1,
-                                            dst_after_indr,
-                                            dst_end,
-                                        ),
-                                    );
-                                } else {
-                                    #[cfg(feature = "verbose_evac")]
-                                    dbgprintln!("   tail optimization!");
-                                }
-
-                                worklist.push(EvacAction::SkipOverEnvWrite(
-                                    pointee,
+                            // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
+                            if !worklist.is_empty() {
+                                worklist.push(EvacAction::RestoreSrc(
+                                    src_after_indr1,
                                 ));
-
-                                src = pointee;
-                                dst = dst1;
-                                dst_end = dst_end1;
-
-                                // Same type, new location to evac from:
-                                next_action = EvacAction::ProcessTy(
-                                    next_ty,
-                                    mb_shortcut_addr,
-                                );
-                                continue;
+                            } else {
+                                #[cfg(feature = "verbose_evac")]
+                                dbgprintln!("   tail optimization!");
                             }
-                            // Inline indirections.
-                            else {
-                                #[cfg(feature = "verbose_evac")]
-                                dbgprintln!("   inlining indirection");
 
-                                // TAIL OPTIMIZATION: if we're the last thing, in the worklist, don't bother restoring src:
-                                if !worklist.is_empty() {
-                                    worklist.push(EvacAction::RestoreSrc(
-                                        src_after_indr1,
-                                    ));
-                                } else {
-                                    #[cfg(feature = "verbose_evac")]
-                                    dbgprintln!("   tail optimization!");
-                                }
+                            inlining_underway = true;
+                            inlining_underway_upto = src_after_indr1;
 
-                                inlining_underway = true;
-                                inlining_underway_upto = src_after_indr1;
-
-                                #[cfg(feature = "verbose_evac")]
-                                dbgprintln!(
+                            #[cfg(feature = "verbose_evac")]
+                            dbgprintln!(
                                     "   pushing SkipOverEnvWrite action to stack (1)"
                                 );
 
-                                worklist.push(EvacAction::SkipOverEnvWrite(
-                                    pointee,
-                                ));
+                            worklist
+                                .push(EvacAction::SkipOverEnvWrite(pointee));
 
-                                src = pointee;
+                            src = pointee;
 
-                                /*
-                                // Update the burned environment if we're evacuating a root
-                                // from the remembered set.
-                                match (*frame).gc_root_prov {
-                                    C_GcRootProv::RemSet => {
-                                        #[cfg(feature = "verbose_evac")]
-                                        dbgprintln!(
-                                            "   pushing SkipOverEnvWrite action to stack (1)"
-                                        );
-                                        worklist.push(
-                                            EvacAction::SkipOverEnvWrite(pointee),
-                                        );
-                                    }
-
-                                    C_GcRootProv::Stk => {
-                                        dbgprintln!(
-                                            "   did not insert into so_env {:?}",
-                                            pointee
-                                        );
-
-                                        // [2022.07.06] we need to add things to this
-                                        // environment if the indirection pointer points
-                                        // to a non loc0 location.
-                                        ()
-                                    }
+                            /*
+                            // Update the burned environment if we're evacuating a root
+                            // from the remembered set.
+                            match (*frame).gc_root_prov {
+                                C_GcRootProv::RemSet => {
+                                    #[cfg(feature = "verbose_evac")]
+                                    dbgprintln!(
+                                        "   pushing SkipOverEnvWrite action to stack (1)"
+                                    );
+                                    worklist.push(
+                                        EvacAction::SkipOverEnvWrite(pointee),
+                                    );
                                 }
-                                 */
 
-                                // Same type, new location to evac from:
-                                next_action = EvacAction::ProcessTy(
-                                    next_ty,
-                                    mb_shortcut_addr,
-                                );
-                                continue;
+                                C_GcRootProv::Stk => {
+                                    dbgprintln!(
+                                        "   did not insert into so_env {:?}",
+                                        pointee
+                                    );
+
+                                    // [2022.07.06] we need to add things to this
+                                    // environment if the indirection pointer points
+                                    // to a non loc0 location.
+                                    ()
+                                }
                             }
+                             */
+
+                            // Same type, new location to evac from:
+                            next_action = EvacAction::ProcessTy(
+                                next_ty,
+                                mb_shortcut_addr,
+                            );
+                            continue;
                         } else {
                             let space_reqd = 32;
                             let (dst1, dst_end1) = Heap::check_bounds(
@@ -1000,6 +945,7 @@ unsafe fn evacuate_packed(
                         if st.evac_major
                             || st.nursery.contains_addr(next_chunk)
                             || inlining_underway
+                            || always_inline_redirections
                         {
                             #[cfg(feature = "verbose_evac")]
                             dbgprintln!(
