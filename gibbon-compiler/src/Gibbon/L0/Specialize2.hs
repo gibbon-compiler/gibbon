@@ -1625,10 +1625,8 @@ genPrintFn DDef{tyName, dataCons} = do
                       wi <- gensym "wildcard"
                       pure $ z:(wi, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar " "))] ):zs'
 
-                bnds'' <- add_spaces bnds
-                let bnds' = [(w1, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar ("(" ++ dcon ++ " ")))])] ++
-                            bnds'' ++
-                            [(w2, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar ")"))])]
+                bnds'' <- add_spaces $ [(w1, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar ("(" ++ dcon)))])] ++ bnds
+                let bnds' = bnds'' ++ [(w2, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar ")"))])]
                     bod = mkLets bnds' (MkProdE [])
                 return (dcon, map (\x -> (x,ProdTy [])) xs, bod)
   return $ FunDef { funName = mkPrinterName (fromVar tyName)
