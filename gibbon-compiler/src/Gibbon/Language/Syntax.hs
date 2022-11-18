@@ -53,8 +53,9 @@ module Gibbon.Language.Syntax
 import           Control.DeepSeq
 import           Control.Monad.State
 import           Control.Monad.Writer
-#if !MIN_VERSION_base(4,15,0)
-import           Control.Monad.Fail
+#if !MIN_VERSION_base(4,13,0)
+-- https://downloads.haskell.org/ghc/8.8.1/docs/html/users_guide/8.8.1-notes.html
+import           Control.Monad.Fail(MonadFail(..))
 #endif
 import qualified Data.Map as M
 import qualified Data.List as L

@@ -4,8 +4,9 @@ module Gibbon.Passes.CalculateBounds where
 import           Gibbon.Common
 import qualified Data.Map                      as M
 import           Gibbon.L2.Syntax
-import           Debug.Trace
 import           Data.List
+import           Debug.Trace
+import           Control.Monad
 
 type LocationRegionMapping = M.Map LocVar Var
 type LocationOffsetMapping = M.Map LocVar RegionSize
@@ -149,14 +150,14 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
                 let regVar = regionToVar reg
                 let regSz  = re # regVar
                 let regTy = Just $ M.findWithDefault IndirectionFree regVar rt
-                traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
+                when (dbgLvl >= 4) $ traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
                 return (Ext $ LetRegionE reg regSz regTy bod', re, rt)
               LetParRegionE reg _ _ bod -> do
                 (bod', re, rt) <- go bod
                 let regVar = regionToVar reg
                 let regSz  = re # regVar
                 let regTy = Just $ M.findWithDefault IndirectionFree regVar rt
-                traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
+                when (dbgLvl >= 4) $ traceM $ ">> Region: " ++ show reg ++ " -> " ++ show regSz ++ " : " ++ show regTy
                 return (Ext $ LetParRegionE reg regSz regTy bod', re, rt)
               LetLocE loc locExp ex1 -> do
                 -- * NOTE: jumps are only necessary for route ends, skipping them.
