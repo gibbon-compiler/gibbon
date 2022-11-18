@@ -1041,7 +1041,7 @@ desugarAlt type_syns toplevel alt =
       pure (conName, ps'', rhs')
     Alt _ _ GuardedRhss{} _ -> error "desugarExp: Guarded RHS not supported in case."
     Alt _ _ _ Just{}        -> error "desugarExp: Where clauses not allowed in case."
-    Alt _ pat _ _           -> error $ "desugarExp: Unsupported pattern in case: " ++ prettyPrint pat
+    Alt _ pat _ _           -> error $ "desugarExp: Unsupported pattern in case: " ++ prettyPrint pat ++ " in " ++ prettyPrint alt
 
 generateBind :: (Show a,  Pretty a) => TypeSynEnv -> TopTyEnv -> TopTyEnv -> Decl a -> Exp0 -> PassM (Exp0)
 generateBind type_syns toplevel env decl exp2 =
