@@ -130,7 +130,7 @@ threadRegionsFn ddefs fundefs f@FunDef{funName,funArgs,funTy,funBody} = do
                                  -- rv = end_reg
                                  bc = boundsCheck ddefs (locs_tycons M.! loc)
                                  locarg = NewL2.Loc (LREM loc rv end_rv mode)
-                                 regarg = NewL2.Reg end_rv mode
+                                 regarg = NewL2.EndOfReg rv mode end_rv
                              in -- dbgTraceIt ("boundscheck" ++ sdoc ((locs_tycons M.! loc), bc)) $
                                 LetE ("_",[],MkTy2 IntTy, Ext$ BoundsCheck bc regarg locarg) acc
                         else acc)
@@ -329,7 +329,12 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
           rlocs_env' = updRLocsEnv (unTy2 ty) rlocs_env
           wlocs_env' = foldr (\loc2 acc -> M.delete loc2 acc) wlocs_env (locsInTy ty)
       bod' <- threadRegionsExp ddefs fundefs fnLocArgs renv env2' lfenv rlocs_env' wlocs_env' pkd_env' region_locs ran_env indirs redirs bod
-      pure $ LetE (v,locs,ty,(Ext (IndirectionE tcon dcon (a',b') (c',d') cpy))) bod'
+      let boundscheck = let locarg = a'
+                            regarg = b'
+                            -- bc = boundsCheck ddefs tcon
+                            bc = 18
+                        in LetE ("_",[],MkTy2 IntTy, Ext$ BoundsCheck bc regarg locarg)
+      pure $ boundscheck $ LetE (v,locs,ty,(Ext (IndirectionE tcon dcon (a',b') (c',d') cpy))) bod'
 
     Ext (StartOfPkd cur) -> do
       let (PackedTy _ loc) = unTy2 (lookupVEnv cur env2)
