@@ -187,11 +187,12 @@ void symbol_table_initialize(void)
     gib_add_symbol(2151, "(Null ");
     gib_add_symbol(2152, "(Node ");
     gib_add_symbol(2153, "(Leaf ");
-    gib_add_symbol(2154, " ->r ");
-    gib_add_symbol(2155, " ->i ");
+    gib_add_symbol(2154, " (->r ");
+    gib_add_symbol(2155, " (->i ");
 }
+
 #define REGION_SIZE 256
-#define TREE_HEIGHT 7
+#define TREE_HEIGHT 2
 GibCursorGibCursorGibCursorProd helper(GibCursor end_r_853, GibCursor loc_852,
                                        GibInt s_58_236_368, GibInt e_59_237_369)
 {
@@ -401,6 +402,12 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_858,
                                               GibCursor tr_66_244_387,
                                               GibInt n_67_245_388)
 {
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    printf("start of loop:\n");
+    _print_SearchTree(NULL, tr_66_244_387);
+    printf("\n");
+    fflush(stdout);
+#endif
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
@@ -412,6 +419,11 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_858,
     GibBool fltIf_330_389 = n_67_245_388 == 0;
 
     if (fltIf_330_389) {
+        if (tr_66_244_387 > end_r_858) {
+            printf("check tr_66_244_387:%p,  end_r_858:%p\n", tr_66_244_387, end_r_858);
+            fflush(stdout);
+        }
+        // assert(tr_66_244_387 < end_r_858);
         gib_indirection_barrier(loc_857, end_r_859, tr_66_244_387, end_r_858,
                                 SearchTree_T);
 
@@ -454,9 +466,11 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_858,
             loc_857 = frame->ptr;
             end_r_859 = frame->endptr;
 
+            assert(pvrtmp_2266 < pvrtmp_2265);
+
             GibInt fltAppE_335_395 = n_67_245_388 - 1;
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_14 =
-                                                      loop(pvrtmp_2265, end_r_859, loc_857, pvrtmp_2266, fltAppE_335_395);
+                    loop(pvrtmp_2265, end_r_859, loc_857, pvrtmp_2266, fltAppE_335_395);
             GibCursor pvrtmp_2272 = tmp_struct_14.field0;
             GibCursor pvrtmp_2273 = tmp_struct_14.field1;
             GibCursor pvrtmp_2274 = tmp_struct_14.field2;
@@ -487,7 +501,7 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_858,
             gib_shadowstack_push(wstack, loc_857, end_r_859, Stk, SearchTree_T);
 
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_15 =
-                                                      tree_delete(end_r_858, end_r_949, r_949, tr_66_244_387, fltAppE_337_396);
+                    tree_delete(end_r_858, end_r_949, r_949, tr_66_244_387, fltAppE_337_396);
             GibCursor pvrtmp_2283 = tmp_struct_15.field0;
             GibCursor pvrtmp_2284 = tmp_struct_15.field1;
             GibCursor pvrtmp_2285 = tmp_struct_15.field2;
@@ -497,9 +511,16 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_858,
             loc_857 = frame->ptr;
             end_r_859 = frame->endptr;
 
+
+            if (pvrtmp_2285 > pvrtmp_2284) {
+                printf("check pvrtmp_2285:%p, pvrtmp_2284:%p\n", pvrtmp_2285, pvrtmp_2284);
+                fflush(stdout);
+            }
+            // assert(pvrtmp_2285 < pvrtmp_2284);
+
             GibInt fltAppE_338_398 = n_67_245_388 - 1;
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_16 =
-                                                      loop(pvrtmp_2284, end_r_859, loc_857, pvrtmp_2285, fltAppE_338_398);
+                    loop(pvrtmp_2284, end_r_859, loc_857, pvrtmp_2285, fltAppE_338_398);
             GibCursor pvrtmp_2291 = tmp_struct_16.field0;
             GibCursor pvrtmp_2292 = tmp_struct_16.field1;
             GibCursor pvrtmp_2293 = tmp_struct_16.field2;
@@ -620,7 +641,7 @@ GibCursorGibCursorGibIntProd sum_tree(GibCursor end_r_861,
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_2301");
+            printf("Unknown tag in: tmpval_2301: %d\n", tmpval_2301);
             exit(1);
         }
     }
@@ -631,6 +652,19 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                                                      GibCursor tr_74_252_407,
                                                      GibInt n_75_253_408)
 {
+
+
+    assert(loc_863 < end_r_865);
+
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
+    printf("start of delete:\nn=%d\n", n_75_253_408);
+    // printf("end_r_864=%p, tr_74_252_407=%p, diff=%ld\n", end_r_864, tr_74_252_407, end_r_864-tr_74_252_407);
+    _print_SearchTree(NULL, tr_74_252_407);
+    printf("\n");
+    fflush(stdout);
+#endif
+
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
@@ -650,12 +684,9 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
       case 0:
         {
             *(GibPackedTag *) loc_863 = 1;
-
             GibCursor writetag_1555 = loc_863 + 1;
             GibCursor after_tag_1556 = loc_863 + 1;
-
             *(GibInt *) after_tag_1556 = n_75_253_408;
-
             GibCursor writecur_1560 = after_tag_1556 + sizeof(GibInt);
 
             return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_864,
@@ -686,9 +717,7 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
 
                 GibCursor writetag_1572 = loc_863 + 1;
                 GibCursor after_tag_1573 = loc_863 + 1;
-
                 *(GibInt *) after_tag_1573 = tmpval_2335;
-
                 GibCursor writecur_1577 = after_tag_1573 + sizeof(GibInt);
 
                 return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_864,
@@ -711,15 +740,11 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
             GibBool fltIf_343_414 = tmpval_2348 == n_75_253_408;
 
             if (fltIf_343_414) {
-                gib_shadowstack_push(rstack, tmpcur_2345, end_r_864, Stk,
-                                     SearchTree_T);
-                gib_shadowstack_push(rstack, tmpcur_2349, end_r_864, Stk,
-                                     SearchTree_T);
-                gib_shadowstack_push(wstack, loc_863, end_r_865, Stk,
-                                     SearchTree_T);
+                gib_shadowstack_push(rstack, tmpcur_2345, end_r_864, Stk, SearchTree_T);
+                gib_shadowstack_push(rstack, tmpcur_2349, end_r_864, Stk, SearchTree_T);
+                gib_shadowstack_push(wstack, loc_863, end_r_865, Stk, SearchTree_T);
 
-                GibCursorGibIntProd tmp_struct_27 =
-                                     min_tree(end_from_tagged_absran_807, tmpcur_2345);
+                GibCursorGibIntProd tmp_struct_27 = min_tree(end_from_tagged_absran_807, tmpcur_2345);
                 GibCursor pvrtmp_2350 = tmp_struct_27.field0;
                 GibInt pvrtmp_2351 = tmp_struct_27.field1;
 
@@ -732,15 +757,15 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                 frame = gib_shadowstack_pop(rstack);
                 tmpcur_2345 = frame->ptr;
                 end_r_864 = frame->endptr;
-                gib_shadowstack_push(rstack, tmpcur_2345, end_r_864, Stk,
-                                     SearchTree_T);
-                gib_shadowstack_push(rstack, tmpcur_2349, end_r_864, Stk,
-                                     SearchTree_T);
-                gib_shadowstack_push(wstack, loc_863, end_r_865, Stk,
-                                     SearchTree_T);
 
-                GibChunk region_2352 =
-                         gib_alloc_region(REGION_SIZE);
+                assert(loc_863 < end_r_865);
+
+                gib_shadowstack_push(rstack, tmpcur_2345, end_r_864, Stk, SearchTree_T);
+                gib_shadowstack_push(rstack, tmpcur_2349, end_r_864, Stk, SearchTree_T);
+                gib_shadowstack_push(wstack, loc_863, end_r_865, Stk, SearchTree_T);
+
+                // gc...
+                GibChunk region_2352 = gib_alloc_region(REGION_SIZE);
                 GibCursor r_1028 = region_2352.start;
                 GibCursor end_r_1028 = region_2352.end;
 
@@ -753,17 +778,26 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                 frame = gib_shadowstack_pop(rstack);
                 tmpcur_2345 = frame->ptr;
                 end_r_864 = frame->endptr;
-                gib_shadowstack_push(rstack, tmpcur_2349, end_r_864, Stk,
-                                     SearchTree_T);
-                gib_shadowstack_push(wstack, loc_863, end_r_865, Stk,
-                                     SearchTree_T);
+
+                if (loc_863 > end_r_1028) {
+                    printf("loc_863: %p, end_r_1028: %p\n", loc_863, end_r_1028);
+                    fflush(stdout);
+                }
+                // todo: assertion fails.
+                // assert(loc_863 < r_1028);
+                // assert(loc_863 < end_r_1028);
+
+                gib_shadowstack_push(rstack, tmpcur_2349, end_r_864, Stk, SearchTree_T);
+                gib_shadowstack_push(wstack, loc_863, end_r_865, Stk, SearchTree_T);
 
                 GibCursorGibCursorGibCursorGibCursorProd tmp_struct_28 =
-                                                          tree_delete(end_from_tagged_absran_807, end_r_1028, r_1028, tmpcur_2345, pvrtmp_2351);
+                        tree_delete(end_from_tagged_absran_807, end_r_1028, r_1028, tmpcur_2345, pvrtmp_2351);
                 GibCursor pvrtmp_2353 = tmp_struct_28.field0;
                 GibCursor pvrtmp_2354 = tmp_struct_28.field1;
                 GibCursor pvrtmp_2355 = tmp_struct_28.field2;
                 GibCursor pvrtmp_2356 = tmp_struct_28.field3;
+
+                // assert(loc_863 < pvrtmp_2354);
 
                 frame = gib_shadowstack_pop(wstack);
                 loc_863 = frame->ptr;
@@ -773,26 +807,30 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                 end_r_864 = frame->endptr;
 
                 GibCursor loc_985 = loc_863 + 17;
-
                 *(GibPackedTag *) loc_863 = 3;
-
                 GibCursor writetag_1588 = loc_863 + 1;
 
-                gib_indirection_barrier(loc_985, end_r_865, tmpcur_2349,
-                                        end_r_864, SearchTree_T);
+                // boundscheck:
+                if (loc_985 + 18 > end_r_865) {
+                    gib_grow_region(&loc_985, &end_r_865);
+                }
+                gib_indirection_barrier(loc_985, end_r_865, tmpcur_2349, end_r_864, SearchTree_T);
 
                 GibCursor end_1586 = loc_985 + 9;
                 uint16_t offset_29 = end_r_1028 - r_1028;
                 uintptr_t ran_810 = GIB_STORE_TAG(r_1028, offset_29);
                 GibCursor after_tag_1589 = loc_863 + 1;
-
                 *(uintptr_t *) after_tag_1589 = ran_810;
-
                 GibCursor writecur_1593 = after_tag_1589 + 8;
-
                 *(GibInt *) writecur_1593 = pvrtmp_2351;
-
                 GibCursor writecur_1594 = writecur_1593 + sizeof(GibInt);
+
+
+                // assert(loc_863 < pvrtmp_2354);
+                if (loc_863 > pvrtmp_2354) {
+                    printf("check loc_863:%p > pvrtmp_2354:%p\n", loc_863, pvrtmp_2354);
+                    fflush(stdout);
+                }
 
                 return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_2353,
                                                                    pvrtmp_2354,
@@ -803,11 +841,12 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
 
                 if (fltIf_345_418) {
                     GibCursor loc_1001 = loc_863 + 17;
-
                     *(GibPackedTag *) loc_863 = 3;
-
                     GibCursor writetag_1604 = loc_863 + 1;
 
+                    if (loc_1001 + 18 > end_r_865) {
+                        gib_grow_region(&loc_1001, &end_r_865);
+                    }
                     gib_indirection_barrier(loc_1001, end_r_865, tmpcur_2349,
                                             end_r_864, SearchTree_T);
 
@@ -832,12 +871,15 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                     GibCursor after_tag_1605 = loc_863 + 1;
 
                     *(uintptr_t *) after_tag_1605 = ran_811;
-
                     GibCursor writecur_1609 = after_tag_1605 + 8;
-
                     *(GibInt *) writecur_1609 = tmpval_2348;
-
                     GibCursor writecur_1610 = writecur_1609 + sizeof(GibInt);
+
+                    if (loc_863 > pvrtmp_2370) {
+                        printf("check loc_863:%p, pvrtmp_2370:%p\n", loc_863, pvrtmp_2370);
+                        fflush(stdout);
+                    }
+                    // assert(loc_863 < pvrtmp_2370);
 
                     return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_2369,
                                                                        pvrtmp_2370,
@@ -845,15 +887,18 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                                                                        pvrtmp_2372};
                 } else {
                     GibCursor loc_1017 = loc_863 + 17;
-
                     *(GibPackedTag *) loc_863 = 3;
-
                     GibCursor writetag_1620 = loc_863 + 1;
 
                     gib_shadowstack_push(rstack, loc_863, end_r_865, Stk,
                                          SearchTree_T);
                     gib_shadowstack_push(rstack, tmpcur_2345, end_r_864, Stk,
                                          SearchTree_T);
+
+                    // if (n_75_253_408 == 536) {
+                    //     printf("TREE_DELETE end_r_864: %p, end_r_865: %p, loc_1017: %p, tmpcur_2349: %p, n_75_253_408: %d\n",
+                    //            end_r_864, end_r_865, loc_1017, tmpcur_2349, n_75_253_408);
+                    // }
 
                     GibCursorGibCursorGibCursorGibCursorProd tmp_struct_32 =
                                                               tree_delete(end_r_864, end_r_865, loc_1017, tmpcur_2349, n_75_253_408);
@@ -868,6 +913,18 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                     frame = gib_shadowstack_pop(rstack);
                     loc_863 = frame->ptr;
                     end_r_865 = frame->endptr;
+
+                    // todo: wrong address here.
+                    if (n_75_253_408 == 536) {
+                        printf("(2) wrong address: loc_1017: %p, pvrtmp_2384: %p, tmpcur_2345: %p: \n",
+                               loc_1017, pvrtmp_2384, tmpcur_2345);
+                    }
+
+                    assert(loc_1017 <= pvrtmp_2384);
+
+                    if (pvrtmp_2384 + 18 > pvrtmp_2382) {
+                        gib_grow_region(&pvrtmp_2384, &pvrtmp_2382);
+                    }
                     gib_indirection_barrier(pvrtmp_2384, pvrtmp_2382,
                                             tmpcur_2345,
                                             end_from_tagged_absran_807,
@@ -877,14 +934,12 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
                     uint16_t offset_33 = pvrtmp_2382 - pvrtmp_2384;
                     uintptr_t ran_812 = GIB_STORE_TAG(pvrtmp_2384, offset_33);
                     GibCursor after_tag_1621 = loc_863 + 1;
-
                     *(uintptr_t *) after_tag_1621 = ran_812;
-
                     GibCursor writecur_1625 = after_tag_1621 + 8;
-
                     *(GibInt *) writecur_1625 = tmpval_2348;
-
                     GibCursor writecur_1626 = writecur_1625 + sizeof(GibInt);
+
+                    assert(loc_863 < pvrtmp_2382);
 
                     return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_2381,
                                                                        pvrtmp_2382,
@@ -904,11 +959,17 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
             GibCursor end_from_tagged_indr_1331 = tmpcur_2395 + tmptag_2397;
             GibCursor jump_1333 = tmpcur_2330 + 8;
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_35 =
-                                                      tree_delete(end_from_tagged_indr_1331, end_r_865, loc_863, tmpcur_2395, n_75_253_408);
+                    tree_delete(end_from_tagged_indr_1331, end_r_865, loc_863, tmpcur_2395, n_75_253_408);
             GibCursor pvrtmp_2398 = tmp_struct_35.field0;
             GibCursor pvrtmp_2399 = tmp_struct_35.field1;
             GibCursor pvrtmp_2400 = tmp_struct_35.field2;
             GibCursor pvrtmp_2401 = tmp_struct_35.field3;
+
+            if (pvrtmp_2400 > pvrtmp_2399) {
+                printf("check pvrtmp_2400: %p, pvrtmp_2399:%p\n", pvrtmp_2400, pvrtmp_2399);
+                fflush(stdout);
+            }
+            // assert(pvrtmp_2400 < pvrtmp_2399);
 
             return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_864,
                                                                pvrtmp_2399,
@@ -930,6 +991,8 @@ GibCursorGibCursorGibCursorGibCursorProd tree_delete(GibCursor end_r_864,
             GibCursor pvrtmp_2412 = tmp_struct_37.field1;
             GibCursor pvrtmp_2413 = tmp_struct_37.field2;
             GibCursor pvrtmp_2414 = tmp_struct_37.field3;
+
+            assert(pvrtmp_2412 < pvrtmp_2413);
 
             return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_2411,
                                                                pvrtmp_2412,
@@ -1037,6 +1100,20 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
                                                      GibCursor tr_91_265_428,
                                                      GibInt n_92_266_429)
 {
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
+    printf("start of insert:\n");
+    printf("tr_91_265_428: %p, end_r_870: %p, n=%d\n",
+           tr_91_265_428, end_r_870, n_92_266_429);
+    _print_SearchTree(NULL, tr_91_265_428);
+    printf("\n");
+    fflush(stdout);
+#endif
+
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 2
+    assert(tr_91_265_428 < end_r_870);
+    assert(loc_869 < end_r_871);
+#endif
+
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
@@ -1063,6 +1140,9 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
             *(GibInt *) after_tag_1653 = n_92_266_429;
 
             GibCursor writecur_1657 = after_tag_1653 + sizeof(GibInt);
+
+
+            assert(writecur_1657 < end_r_871);
 
             return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_870,
                                                                end_r_871,
@@ -1109,6 +1189,8 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
 
                 GibCursor writecur_1683 = writecur_1682 + sizeof(GibInt);
 
+                assert(after_tag_1671 < end_r_871);
+
                 return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_870,
                                                                    end_r_871,
                                                                    loc_869,
@@ -1145,6 +1227,8 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
 
                 GibCursor writecur_1710 = writecur_1709 + sizeof(GibInt);
 
+                assert(writecur_1701 < end_r_871);
+
                 return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_870,
                                                                    end_r_871,
                                                                    loc_869,
@@ -1171,6 +1255,9 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
 
                 GibCursor writetag_1723 = loc_869 + 1;
 
+                if (loc_1088 + 18 > end_r_871) {
+                    gib_grow_region(&loc_1088, &end_r_871);
+                }
                 gib_indirection_barrier(loc_1088, end_r_871, tmpcur_2472,
                                         end_r_870, SearchTree_T);
 
@@ -1202,24 +1289,25 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
 
                 GibCursor writecur_1729 = writecur_1728 + sizeof(GibInt);
 
+                assert(pvrtmp_2478 < pvrtmp_2476);
+
                 return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_2475,
                                                                    pvrtmp_2476,
                                                                    loc_869,
                                                                    pvrtmp_2478};
             } else {
+
+                // know: (loc_869 + 26 > end_r_871)
+
                 GibCursor loc_1104 = loc_869 + 17;
-
                 *(GibPackedTag *) loc_869 = 3;
-
                 GibCursor writetag_1739 = loc_869 + 1;
 
-                gib_shadowstack_push(rstack, loc_869, end_r_871, Stk,
-                                     SearchTree_T);
-                gib_shadowstack_push(rstack, tmpcur_2468, end_r_870, Stk,
-                                     SearchTree_T);
+                gib_shadowstack_push(rstack, loc_869, end_r_871, Stk, SearchTree_T);
+                gib_shadowstack_push(rstack, tmpcur_2468, end_r_870, Stk, SearchTree_T);
 
                 GibCursorGibCursorGibCursorGibCursorProd tmp_struct_52 =
-                                                          tree_insert(end_r_870, end_r_871, loc_1104, tmpcur_2472, n_92_266_429);
+                        tree_insert(end_r_870, end_r_871, loc_1104, tmpcur_2472, n_92_266_429);
                 GibCursor pvrtmp_2487 = tmp_struct_52.field0;
                 GibCursor pvrtmp_2488 = tmp_struct_52.field1;
                 GibCursor pvrtmp_2489 = tmp_struct_52.field2;
@@ -1231,22 +1319,35 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
                 frame = gib_shadowstack_pop(rstack);
                 loc_869 = frame->ptr;
                 end_r_871 = frame->endptr;
+
+                // boundscheck:
+                if (pvrtmp_2490 + 18 > pvrtmp_2488) {
+                    gib_grow_region(&pvrtmp_2490, &pvrtmp_2488);
+                }
+
+                assert(pvrtmp_2490 < pvrtmp_2488);
+                assert((pvrtmp_2490 + 9) < pvrtmp_2488);
+
+                // debug: from > from_footer
                 gib_indirection_barrier(pvrtmp_2490, pvrtmp_2488, tmpcur_2468,
-                                        end_from_tagged_absran_823,
-                                        SearchTree_T);
+                                        end_from_tagged_absran_823, SearchTree_T);
+
 
                 GibCursor end_1737 = pvrtmp_2490 + 9;
                 uint16_t offset_53 = pvrtmp_2488 - pvrtmp_2490;
                 uintptr_t ran_827 = GIB_STORE_TAG(pvrtmp_2490, offset_53);
                 GibCursor after_tag_1740 = loc_869 + 1;
-
                 *(uintptr_t *) after_tag_1740 = ran_827;
-
                 GibCursor writecur_1744 = after_tag_1740 + 8;
-
                 *(GibInt *) writecur_1744 = tmpval_2471;
-
                 GibCursor writecur_1745 = writecur_1744 + sizeof(GibInt);
+
+                if (end_1737 > pvrtmp_2488) {
+                    printf("end_1737: %p, pvrtmp_2488: %p, pvrtmp_2490: %p\n",
+                           end_1737, pvrtmp_2488, pvrtmp_2490);
+                    fflush(stdout);
+                }
+                assert(end_1737 < pvrtmp_2488);
 
                 return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_2487,
                                                                    pvrtmp_2488,
@@ -1264,12 +1365,16 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
             uint16_t tmptag_2503 = GIB_GET_TAG(tagged_tmpcur_56);
             GibCursor end_from_tagged_indr_1341 = tmpcur_2501 + tmptag_2503;
             GibCursor jump_1343 = tmpcur_2445 + 8;
+            printf("tr_91_265_428: %p, tmpcur_2501: %p, tmptag_2503: %d\n",
+                   tr_91_265_428, tmpcur_2501, tmptag_2503);
             GibCursorGibCursorGibCursorGibCursorProd tmp_struct_55 =
-                                                      tree_insert(end_from_tagged_indr_1341, end_r_871, loc_869, tmpcur_2501, n_92_266_429);
+                    tree_insert(end_from_tagged_indr_1341, end_r_871, loc_869, tmpcur_2501, n_92_266_429);
             GibCursor pvrtmp_2504 = tmp_struct_55.field0;
             GibCursor pvrtmp_2505 = tmp_struct_55.field1;
             GibCursor pvrtmp_2506 = tmp_struct_55.field2;
             GibCursor pvrtmp_2507 = tmp_struct_55.field3;
+
+            assert(pvrtmp_2507 < pvrtmp_2505);
 
             return (GibCursorGibCursorGibCursorGibCursorProd) {end_r_870,
                                                                pvrtmp_2505,
@@ -1291,6 +1396,8 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_870,
             GibCursor pvrtmp_2518 = tmp_struct_57.field1;
             GibCursor pvrtmp_2519 = tmp_struct_57.field2;
             GibCursor pvrtmp_2520 = tmp_struct_57.field3;
+
+            assert(pvrtmp_2520 < pvrtmp_2518);
 
             return (GibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_2517,
                                                                pvrtmp_2518,
@@ -1765,6 +1872,8 @@ GibCursorGibCursorProd _traverse_SearchTree(GibCursor end_r_881,
 GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_883,
                                          GibCursor arg_212_296_469)
 {
+    printf("%p:", arg_212_296_469);
+    fflush(stdout);
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
@@ -1809,7 +1918,9 @@ GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_883,
             GibInt tmpval_2695 = *(GibInt *) tmpaftercur_2693;
             GibCursor tmpcur_2696 = tmpaftercur_2693 + sizeof(GibInt);
             unsigned char wildcard_225_306_479 = gib_print_symbol(2152);
-            unsigned char y_222_307_480 = printf("%ld", tmpval_2695);
+            printf("%p:%p ", tmpcur_2689, tagged_tmpcur_89);
+            unsigned char y_222_307_480 = printf("%ld ", tmpval_2695);
+            fflush(stdout);
 
             gib_shadowstack_push(rstack, tmpcur_2692, end_r_883, Stk,
                                  SearchTree_T);
@@ -1842,10 +1953,14 @@ GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_883,
             GibCursor end_from_tagged_indr_1364 = tmpcur_2701 + tmptag_2703;
             GibCursor jump_1366 = tmpcur_2689 + 8;
             unsigned char wildcard_1369 = gib_print_symbol(2155);
-            GibCursorGibCursorProd tmp_struct_90 =
-                                    _print_SearchTree(end_from_tagged_indr_1364, tmpcur_2701);
-            GibCursor pvrtmp_2704 = tmp_struct_90.field0;
-            GibCursor pvrtmp_2705 = tmp_struct_90.field1;
+
+            printf(" *%p <data>", tmpcur_2701);
+            // GibCursorGibCursorProd tmp_struct_90 =
+            //                         _print_SearchTree(end_from_tagged_indr_1364, tmpcur_2701);
+            // GibCursor pvrtmp_2704 = tmp_struct_90.field0;
+            // GibCursor pvrtmp_2705 = tmp_struct_90.field1;
+
+            unsigned char wildcard_218_302_475 = gib_print_symbol(2150);
 
             return (GibCursorGibCursorProd) {end_r_883, jump_1366};
             break;
@@ -1863,6 +1978,7 @@ GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_883,
                                     _print_SearchTree(end_from_tagged_indr_1364, tmpcur_2706);
             GibCursor pvrtmp_2709 = tmp_struct_92.field0;
             GibCursor pvrtmp_2710 = tmp_struct_92.field1;
+            unsigned char wildcard_218_302_475 = gib_print_symbol(2150);
 
             return (GibCursorGibCursorProd) {pvrtmp_2709, pvrtmp_2710};
             break;
@@ -1870,7 +1986,7 @@ GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_883,
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_2688");
+            printf("Unknown tag in: tmpval_2688: %d", tmpval_2688);
             exit(1);
         }
     }
@@ -2076,16 +2192,17 @@ int gib_main_expr(void)
     printf("SIZE: %ld\n", gib_get_size_param());
     printf("BATCHTIME: %e\n", batchtime_110);
     printf("SELFTIMED: %e\n", selftimed_111);
-    gib_shadowstack_push(rstack, r_902, end_r_902, Stk, SearchTree_T);
 
-    GibCursorGibCursorProd tmp_struct_114 =
-                            _print_SearchTree(end_r_902, pvrtmp_2191);
-    GibCursor pvrtmp_2200 = tmp_struct_114.field0;
-    GibCursor pvrtmp_2201 = tmp_struct_114.field1;
+    // gib_shadowstack_push(rstack, r_902, end_r_902, Stk, SearchTree_T);
 
-    frame = gib_shadowstack_pop(rstack);
-    r_902 = frame->ptr;
-    end_r_902 = frame->endptr;
+    // GibCursorGibCursorProd tmp_struct_114 =
+    //                         _print_SearchTree(end_r_902, pvrtmp_2191);
+    // GibCursor pvrtmp_2200 = tmp_struct_114.field0;
+    // GibCursor pvrtmp_2201 = tmp_struct_114.field1;
+
+    // frame = gib_shadowstack_pop(rstack);
+    // r_902 = frame->ptr;
+    // end_r_902 = frame->endptr;
 
     GibCursorGibCursorGibIntProd tmp_struct_115 =
                                   sum_tree(end_r_902, pvrtmp_2191);

@@ -1186,14 +1186,14 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     writeloc += 1;
     *(uintptr_t *) writeloc = tagged;
 
-    // Update start and end cursors.
-    *(char **) writeloc_addr = heap_start;
-    *(char **) footer_addr = new_footer_start;
-
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     fprintf(stderr, "Growing a region old=(%p,%p) in nursery=%d, new=(%p,%p)\n",
             *writeloc_addr, footer_ptr, old_chunk_in_nursery, heap_start, new_footer_start);
 #endif
+
+    // Update start and end cursors.
+    *(char **) writeloc_addr = heap_start;
+    *(char **) footer_addr = new_footer_start;
 
     return;
 }
@@ -1514,6 +1514,12 @@ void gib_indirection_barrier(
     uint32_t datatype
 )
 {
+
+#ifdef _GIBBON_DEBUG
+    assert(from <= from_footer);
+    assert(to <= to_footer);
+#endif
+
     // Write the indirection.
     uint16_t footer_offset = to_footer - to;
     uintptr_t tagged = GIB_STORE_TAG(to, footer_offset);
@@ -1523,15 +1529,11 @@ void gib_indirection_barrier(
     char *indr_ptr_addr = writeloc;
     *(uintptr_t *) writeloc = tagged;
 
-#ifdef _GIBBON_DEBUG
-    assert(from <= from_footer);
-    assert(to <= to_footer);
-#endif
-
     // Add to remembered set if it's an old to young pointer.
     bool from_old = !gib_addr_in_nursery(from);
     bool to_young = gib_addr_in_nursery(to);
     bool to_old = !to_young;
+
     if (from_old) {
         if (to_young) {
 
@@ -1556,11 +1558,14 @@ void gib_indirection_barrier(
             gib_handle_old_to_old_indirection(from_footer, to_footer);
             return;
         }
-    }
+    } else {
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    printf("Writing a young-to-young indirection, %p -> %p.\n", from, to);
+        printf("Writing a young-to-%s indirection, %p -> %p.\n",
+               (to_young ? "young" : old), from, to);
 #endif
+
+   }
 
     return;
 }

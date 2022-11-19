@@ -55,9 +55,8 @@
                        (Null)
                        (Leaf n1))]
     [(Node n1 l r) (if (= n1 n)
-                       (let* ([k : Int (min-tree r)]
-                              [r1 : SearchTree (tree-delete r k)])
-                         (Node k (copy-packed l) r1))
+                       (let* ([k : Int (min-tree r)])
+                         (Node k (copy-packed l) (tree-delete r k)))
                        (if (< n1 n)
                            (Node n1 (copy-packed l) (tree-delete r n))
                            (Node n1 (tree-delete l n) (copy-packed r))))]))
