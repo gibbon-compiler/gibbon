@@ -520,6 +520,7 @@ lower Prog{fundefs,ddefs,mainExp} = do
               EndScalarsAllocation{} -> syms
               SSPush{} -> syms
               SSPop{} -> syms
+              Assert ex -> go ex
           MapE{}         -> syms
           FoldE{}        -> syms
 
@@ -909,6 +910,9 @@ lower Prog{fundefs,ddefs,mainExp} = do
 
     LetE (_v, _, _ty, (Ext (SSPop a b c))) bod ->
       T.LetPrimCallT [] (T.SSPop a) [T.VarTriv b, T.VarTriv c] <$> tail free_reg sym_tbl bod
+
+    LetE (_v, _, _ty, (Ext (Assert a))) bod ->
+      T.LetPrimCallT [] T.Assert [triv sym_tbl "Assert arg" a] <$> tail free_reg sym_tbl bod
 
 
     LetE (_v, _, _ty, rhs@(Ext AllocateTagHere{})) _bod -> error $ "lower: " ++ sdoc rhs

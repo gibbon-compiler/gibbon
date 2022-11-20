@@ -1467,6 +1467,15 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                      [ C.BlockStm [cstm| $id:loc = $id:shadowstackFrame->ptr; |]
                      , C.BlockStm [cstm| $id:endloc = $id:shadowstackFrame->endptr; |]]
 
+                 Assert -> do
+                   let [VarTriv chk] = rnds
+                       ifdef = "#ifdef _GIBBON_DEBUG"
+                       endif = "#endif"
+                   return [ C.BlockStm [cstm| $escstm:ifdef |]
+                          , C.BlockStm [cstm| assert($id:chk); |]
+                          , C.BlockStm [cstm| $escstm:endif |]
+                          ]
+
                  BumpArenaRefCount{} -> error "codegen: BumpArenaRefCount not handled."
                  ReadInt{} -> error "codegen: ReadInt not handled."
 

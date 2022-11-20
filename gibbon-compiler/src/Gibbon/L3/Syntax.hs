@@ -88,14 +88,15 @@ data E3Ext loc dec =
   | RetE [(PreExp E3Ext loc dec)]  -- ^ Analogous to L2's RetE.
   | GetCilkWorkerNum               -- ^ Translates to  __cilkrts_get_worker_number().
   | LetAvail [Var] (PreExp E3Ext loc dec) -- ^ These variables are available to use before the join point
-  | AllocateTagHere Var TyCon -- ^ Analogous to L2's extension.
-  | AllocateScalarsHere Var -- ^ Analogous to L2's extension.
-  | StartTagAllocation Var -- ^ Marks the beginning of tag allocation.
-  | EndTagAllocation Var -- ^ Marks the end of tag allocation.
+  | AllocateTagHere Var TyCon  -- ^ Analogous to L2's extension.
+  | AllocateScalarsHere Var    -- ^ Analogous to L2's extension.
+  | StartTagAllocation Var     -- ^ Marks the beginning of tag allocation.
+  | EndTagAllocation Var       -- ^ Marks the end of tag allocation.
   | StartScalarsAllocation Var -- ^ Marks the beginning of scalar allocation.
-  | EndScalarsAllocation Var -- ^ Marks the end of scalar allocation.
+  | EndScalarsAllocation Var   -- ^ Marks the end of scalar allocation.
   | SSPush SSModality Var Var TyCon
   | SSPop SSModality Var Var
+  | Assert (PreExp E3Ext loc dec) -- ^ Translates to assert statements in C.
     -- ^ Analogous to L2's extensions.
   deriving (Show, Ord, Eq, Read, Generic, NFData)
 
@@ -140,6 +141,7 @@ instance FreeVars (E3Ext l d) where
       EndScalarsAllocation v -> S.singleton v
       SSPush _ a b _ -> S.fromList [a,b]
       SSPop _ a b -> S.fromList [a,b]
+      Assert e -> gFreeVars e
 
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where
@@ -225,6 +227,7 @@ instance HasRenamable E3Ext l d => Renamable (E3Ext l d) where
       EndScalarsAllocation v -> EndScalarsAllocation (go v)
       SSPush a b c d -> SSPush a (go b) (go c) d
       SSPop a b c -> SSPop a (go b) (go c)
+      Assert e -> Assert (go e)
     where
       go :: forall a. Renamable a => a -> a
       go = gRename env

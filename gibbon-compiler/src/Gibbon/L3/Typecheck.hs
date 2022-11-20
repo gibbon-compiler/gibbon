@@ -225,6 +225,11 @@ tcExp isPacked ddfs env exp =
           ensureEqualTyModCursor exp rty2 CursorTy
           return (ProdTy [])
 
+        Assert rhs -> do
+          ety <- go rhs
+          ensureEqualTyModCursor rhs ety BoolTy
+          return (ProdTy [])
+
     -- All the other cases are exactly same as L1.Typecheck
 
     VarE v    -> lookupVar env v exp

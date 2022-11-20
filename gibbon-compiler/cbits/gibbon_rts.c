@@ -638,7 +638,7 @@ void gib_init_list_bumpalloc(void)
         (char*) gib_alloc(gib_global_biginf_init_chunk_size);
     gib_global_list_bumpalloc_heap_ptr_end =
         gib_global_list_bumpalloc_heap_ptr + gib_global_biginf_init_chunk_size;
-#ifdef _GIBBON_DEBUG
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     printf("Arena size for bump alloc: %zu\n", gib_global_biginf_init_chunk_size);
     printf("gib_init_list_bumpalloc DONE: heap_ptr = %p\n",
            gib_global_list_bumpalloc_heap_ptr);
@@ -664,12 +664,12 @@ void *gib_list_bumpalloc(size_t n)
 // Snapshot the current heap pointer value across all threads.
 void gib_list_bumpalloc_save_state(void)
 {
-#ifdef _GIBBON_DEBUG
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     printf("Saving(%p): pos %d", heap_ptr, gib_global_list_num_saved_heap_ptr);
 #endif
     gib_global_list_saved_heap_ptr_stack[gib_global_list_num_saved_heap_ptr] = heap_ptr;
     gib_global_list_num_saved_heap_ptr++;
-#ifdef _GIBBON_DEBUG
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     printf("\n");
 #endif
 }
@@ -681,7 +681,7 @@ void gib_list_bumpalloc_restore_state(void)
         exit(1);
     }
     gib_global_list_num_saved_heap_ptr--;
-#ifdef _GIBBON_DEBUG
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     printf("Restoring(%p): pos %d, discarding %p",
            gib_global_list_saved_heap_ptr_stack[gib_global_list_num_saved_heap_ptr],
            gib_global_list_num_saved_heap_ptr,
@@ -1794,7 +1794,7 @@ int dbgprintf(const char *format, ...)
     int code = 0;
     va_list args;
     va_start(args, format);
-#ifdef _GIBBON_DEBUG
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     code = vprintf(format, args);
 #endif
     va_end(args);

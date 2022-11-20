@@ -157,13 +157,21 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                                          Just r -> (NewL2.EndOfReg r Input (toEndV r)) : acc
                                                          Nothing -> acc)
                     [] argtylocs
+      let applocs' = map (\loc -> case loc of
+                                    NewL2.Loc lrem ->
+                                      let x = lremLoc lrem in
+                                        if S.member x indirs || S.member x redirs
+                                        then NewL2.Loc (lrem { lremEndReg = toEndFromTaggedV x })
+                                        else loc
+                                    _ -> loc)
+                         applocs
       -- If this function returns a Packed type, it'll have input and output
       -- locations and therefore, input and output regions.
       if hasPacked (unTy2 ty)
       then do
         let out_tylocs = locsInTy ty
         let out_regs = map (\l -> let r = (renv # l) in NewL2.EndOfReg r Output (toEndV r)) out_tylocs
-        let newapplocs = in_regs ++ out_regs ++ applocs
+        let newapplocs = in_regs ++ out_regs ++ applocs'
         return $ AppE f newapplocs args
       -- Otherwise, only input regions.
       else do
@@ -210,7 +218,15 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                             getPackedTys (unTy2 ty)
         let pkd_env1 = pkd_env `M.union` (M.fromList ran_endofregs)
         --------------------
-        let newapplocs = in_regargs ++ out_regargs ++ applocs
+        let applocs' = map (\loc -> case loc of
+                                      NewL2.Loc lrem ->
+                                        let x = lremLoc lrem in
+                                          if S.member x indirs || S.member x redirs
+                                          then NewL2.Loc (lrem { lremEndReg = toEndFromTaggedV x })
+                                          else loc
+                                      _ -> loc)
+                           applocs
+        let newapplocs = in_regargs ++ out_regargs ++ applocs'
         let newretlocs = in_regargs' ++ out_regargs' ++ locs
         --------------------
         -- 'locs' only has end-witnesses up to this pass. Make their regions
@@ -240,7 +256,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
         let (renv3, bod1) =
               foldr (\(lc,r,r') (acc, bod_acc) ->
                        ( (M.insert lc r' $ M.map (\w -> if w == r then r' else w) acc)
-                       ,  substEndReg (Right r) r' bod_acc))
+                       ,  substEndReg (Right r) (toEndV r') bod_acc))
               (renv2, bod)
               (L.zip3 outretlocs out_regvars out_regvars')
         let (renv4, region_locs3, bod2) =
@@ -263,7 +279,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
                                else let (_, to_update) = splitAt (idx+1) locs_in_r
                                         updated = M.mapWithKey (\key val -> if key `elem` to_update then r' else val) acc1
                                         bod_acc' = foldr
-                                                     (\l b -> substEndReg (Left l) r' b)
+                                                     (\l b -> substEndReg (Left l) (toEndV r') b)
                                                      bod_acc
                                                      (S.toList (M.keysSet acc1 `S.intersection` (S.fromList to_update)))
                                     in (updated, acc2, bod_acc')

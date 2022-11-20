@@ -6,6 +6,7 @@ import qualified Data.List as L
 import qualified Data.Map as M
 import           Data.Maybe (fromJust)
 import           Text.PrettyPrint.GenericPretty
+import           Data.Foldable ( foldrM )
 
 import           Gibbon.DynFlags
 import           Gibbon.Common
@@ -806,9 +807,20 @@ cursorizeAppE ddfs fundefs denv tenv senv ex =
                             else cursorizeExp ddfs fundefs denv tenv senv a)
                  (zip in_tys args)
       let starts = zipWith giveStarts (map unTy2 argTys) args'
-      case locs of
-        [] -> return $ AppE f [] starts
-        _  -> return $ AppE f [] ([VarE (toLocVar loc) | loc <- outs] ++ starts)
+      let bod = case locs of
+                  [] -> AppE f [] starts
+                  _  -> AppE f [] ([VarE (toLocVar loc) | loc <- outs] ++ starts)
+      asserts <- foldrM (\loc acc ->
+                           case loc of
+                             Loc LREM{lremEndReg,lremLoc} -> do
+                               chk <- gensym "chk"
+                               pure $
+                                 LetE (chk,[],BoolTy,PrimAppE LtP [VarE lremLoc, VarE lremEndReg]) $
+                                 LetE ("_",[],ProdTy [], Ext $ Assert (VarE chk)) $
+                                 acc
+                             _ -> pure acc)
+                        bod locs
+      pure asserts
     _ -> error $ "cursorizeAppE: Unexpected " ++ sdoc ex
 
 {-

@@ -355,6 +355,7 @@ data Prim
 
     | SSPush SSModality TyCon
     | SSPop SSModality
+    | Assert
 
   deriving (Show, Ord, Eq, Generic, NFData, Out)
 
