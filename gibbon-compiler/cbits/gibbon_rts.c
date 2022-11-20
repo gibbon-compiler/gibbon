@@ -1562,7 +1562,7 @@ void gib_indirection_barrier(
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
         printf("Writing a young-to-%s indirection, %p -> %p.\n",
-               (to_young ? "young" : old), from, to);
+               (to_young ? "young" : "old"), from, to);
 #endif
 
    }

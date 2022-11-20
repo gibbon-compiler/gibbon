@@ -536,7 +536,7 @@ unsafe fn evacuate_packed(
     };
 
     //
-    let always_inline_redirections = true;
+    let always_inline_redirections = false;
 
     // These comprise the main mutable state of the traversal and should be updated
     // together at the end of every iteration:
@@ -544,6 +544,8 @@ unsafe fn evacuate_packed(
     let mut dst = orig_dst;
     let mut dst_end = orig_dst_end;
     let mut inlining_underway = false;
+    // Address of the field after the indirection being inlined. When we reach a
+    // RestoreSrc with this address, inlining_underway is set to false again.
     let mut inlining_underway_upto = null_mut();
     let mut noburn = true;
     // The implicit -1th element of the worklist:
@@ -656,13 +658,15 @@ unsafe fn evacuate_packed(
                                 dbgprintln!("   tail optimization!");
                             }
 
-                            inlining_underway = true;
-                            inlining_underway_upto = src_after_indr1;
+                            if !inlining_underway {
+                                inlining_underway = true;
+                                inlining_underway_upto = src_after_indr1;
+                            }
 
                             #[cfg(feature = "verbose_evac")]
                             dbgprintln!(
-                                    "   pushing SkipOverEnvWrite action to stack (1)"
-                                );
+                                "   pushing SkipOverEnvWrite action to stack (1)"
+                            );
 
                             worklist
                                 .push(EvacAction::SkipOverEnvWrite(pointee));
