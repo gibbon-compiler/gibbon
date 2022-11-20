@@ -17,7 +17,7 @@ use std::ptr::{null, null_mut, write_bytes};
 use crate::ffi::types::*;
 use crate::record_time;
 use crate::tagged_pointer::*;
-use crate::{dbgprint, dbgprintln};
+use crate::{dbgprint, dbgprintln, worklist_next, write_shortcut_ptr};
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Garbage Collector; evacuation, promotion etc.
@@ -571,13 +571,7 @@ unsafe fn evacuate_packed(
                 }
                  */
 
-                // TODO: make this reusable somehow (local macro?)
-                if let Some(next) = worklist.pop() {
-                    next_action = next;
-                    continue;
-                } else {
-                    break;
-                }
+                worklist_next!(worklist, next_action);
             }
             EvacAction::ProcessTy(next_ty, mb_shortcut_addr) => {
                 #[cfg(feature = "verbose_evac")]
@@ -711,20 +705,11 @@ unsafe fn evacuate_packed(
                                 );
                             }
 
-                            // TODO: make this reusable somehow (local macro?)
-                            if let Some(shortcut_addr) = mb_shortcut_addr {
-                                let offset = dst_end1.offset_from(dst1);
-                                let tagged: u64 =
-                                    TaggedPointer::new(dst1, offset as u16)
-                                        .as_u64();
-                                write(shortcut_addr, tagged);
-
-                                #[cfg(feature = "verbose_evac")]
-                                dbgprintln!(
-                                    "   wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
-                                    shortcut_addr, dst1, offset
-                                );
-                            }
+                            write_shortcut_ptr!(
+                                mb_shortcut_addr,
+                                dst1,
+                                dst_end1
+                            );
 
                             #[cfg(feature = "verbose_evac")]
                             {
@@ -762,13 +747,7 @@ unsafe fn evacuate_packed(
                             dst = dst_after_indr;
                             dst_end = dst_end1;
 
-                            // TODO: make this reusable somehow (local macro?)
-                            if let Some(next) = worklist.pop() {
-                                next_action = next;
-                                continue;
-                            } else {
-                                break;
-                            }
+                            worklist_next!(worklist, next_action);
                         }
                     }
 
@@ -821,20 +800,7 @@ unsafe fn evacuate_packed(
                         #[cfg(feature = "verbose_evac")]
                         dbgprintln!("   forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged_fwd_ptr, dst);
 
-                        // TODO: make this reusable somehow (local macro?)
-                        if let Some(shortcut_addr) = mb_shortcut_addr {
-                            let offset = dst_end1.offset_from(dst1);
-                            let tagged: u64 =
-                                TaggedPointer::new(dst1, offset as u16)
-                                    .as_u64();
-                            write(shortcut_addr, tagged);
-
-                            #[cfg(feature = "verbose_evac")]
-                            dbgprintln!(
-                                "   wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
-                                shortcut_addr, dst1, offset
-                            );
-                        }
+                        write_shortcut_ptr!(mb_shortcut_addr, dst1, dst_end1);
 
                         #[cfg(feature = "gcstats")]
                         {
@@ -868,7 +834,6 @@ unsafe fn evacuate_packed(
                         dst = dst_after_indr;
                         dst_end = dst_end1;
                         let src_after_burned = st.so_env.get(&src);
-                        // TODO: make this reusable somehow (local macro?)
                         if let Some(next) = worklist.pop() {
                             next_action = next;
                             src = *src_after_burned.unwrap_or_else(|| {
@@ -963,20 +928,11 @@ unsafe fn evacuate_packed(
                             let dst_after_redir =
                                 write(dst_after_tag, tagged_next_chunk);
 
-                            // TODO: make this reusable somehow (local macro?)
-                            if let Some(shortcut_addr) = mb_shortcut_addr {
-                                let offset = dst_end.offset_from(dst);
-                                let tagged: u64 =
-                                    TaggedPointer::new(dst, offset as u16)
-                                        .as_u64();
-                                write(shortcut_addr, tagged);
-
-                                #[cfg(feature = "verbose_evac")]
-                                dbgprintln!(
-                                    "   wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
-                                    shortcut_addr, dst, offset
-                                );
-                            }
+                            write_shortcut_ptr!(
+                                mb_shortcut_addr,
+                                dst,
+                                dst_end
+                            );
 
                             #[cfg(feature = "gcstats")]
                             {
@@ -1059,20 +1015,11 @@ unsafe fn evacuate_packed(
 
                             // N.B. it's important to perform this write here
                             // before we advance dst2 past the tag.
-                            // TODO: make this reusable somehow (local macro?)
-                            if let Some(shortcut_addr) = mb_shortcut_addr {
-                                let offset = dst_end2.offset_from(dst2);
-                                let tagged: u64 =
-                                    TaggedPointer::new(dst2, offset as u16)
-                                        .as_u64();
-                                write(shortcut_addr, tagged);
-
-                                #[cfg(feature = "verbose_evac")]
-                                dbgprintln!(
-                                    "   wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
-                                    shortcut_addr, dst2, offset
-                                );
-                            }
+                            write_shortcut_ptr!(
+                                mb_shortcut_addr,
+                                dst2,
+                                dst_end2
+                            );
 
                             // Copy the tag. Move cursors past the tag.
                             dst2 = write(dst2, tag);
@@ -1222,13 +1169,7 @@ unsafe fn evacuate_packed(
                             dst = dst2;
                             dst_end = dst_end2;
 
-                            // TODO: make this reusable somehow (local macro?)
-                            if let Some(next) = worklist.pop() {
-                                next_action = next;
-                                continue;
-                            } else {
-                                break;
-                            }
+                            worklist_next!(worklist, next_action);
                         }
                     }
                 } // End match tag
@@ -1241,14 +1182,8 @@ unsafe fn evacuate_packed(
                     src
                 );
                 st.so_env.insert(pointee, src);
-                // continue;
-                // TODO: make this reusable somehow (local macro?)
-                if let Some(next) = worklist.pop() {
-                    next_action = next;
-                    continue;
-                } else {
-                    break;
-                }
+
+                worklist_next!(worklist, next_action);
             }
         }
     } // End while
@@ -1309,6 +1244,38 @@ unsafe fn write<A>(cursor: *mut i8, val: A) -> *mut i8 {
     let cursor2 = cursor as *mut A;
     cursor2.write_unaligned(val);
     cursor2.add(1) as *mut i8
+}
+
+#[macro_export]
+macro_rules! worklist_next {
+    ($worklist_:ident, $next_action_:ident) => {
+        if let Some(next) = $worklist_.pop() {
+            $next_action_ = next;
+            continue;
+        } else {
+            break;
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! write_shortcut_ptr {
+    ($mb_shortcut_addr_:ident, $dst_:ident, $dst_end_:ident) => {
+        if let Some(shortcut_addr) = $mb_shortcut_addr_ {
+            let offset = $dst_end_.offset_from($dst_);
+            let tagged: u64 =
+                TaggedPointer::new($dst_, offset as u16).as_u64();
+            write(shortcut_addr, tagged);
+
+            #[cfg(feature = "verbose_evac")]
+            dbgprintln!(
+                "   wrote tagged shortcut pointer {:?} -> ({:?}, {:?})",
+                shortcut_addr,
+                $dst_,
+                offset
+            );
+        }
+    };
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
