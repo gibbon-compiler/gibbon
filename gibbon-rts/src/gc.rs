@@ -460,8 +460,6 @@ enum EvacAction {
     ProcessTy(C_GibDatatype, Option<*mut i8>),
     // A reified continuation of processing the target of an indirection.
     RestoreSrc(*mut i8),
-    //
-    RestoreSrcAndDst(*mut i8, *mut i8, *mut i8),
     // Update the skip-over environment.
     SkipOverEnvWrite(*mut i8),
 }
@@ -572,19 +570,6 @@ unsafe fn evacuate_packed(
                     noburn = false;
                 }
                  */
-
-                // TODO: make this reusable somehow (local macro?)
-                if let Some(next) = worklist.pop() {
-                    next_action = next;
-                    continue;
-                } else {
-                    break;
-                }
-            }
-            EvacAction::RestoreSrcAndDst(new_src, new_dst, new_dst_end) => {
-                src = new_src;
-                dst = new_dst;
-                dst_end = new_dst_end;
 
                 // TODO: make this reusable somehow (local macro?)
                 if let Some(next) = worklist.pop() {
