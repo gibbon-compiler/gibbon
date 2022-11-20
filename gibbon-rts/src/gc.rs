@@ -545,7 +545,7 @@ unsafe fn evacuate_packed(
     // Address of the field after the indirection being inlined. When we reach a
     // RestoreSrc with this address, inlining_underway is set to false again.
     let mut inlining_underway_upto = null_mut();
-    let mut noburn = true;
+    let mut burn = false;
     // The implicit -1th element of the worklist:
     let mut next_action = EvacAction::ProcessTy(orig_typ, None);
     let mut forwarded = false;
@@ -559,7 +559,7 @@ unsafe fn evacuate_packed(
     loop {
         #[cfg(feature = "verbose_evac")]
         dbgprintln!("++Loop iteration on src {:?} action {:?}, length after this {}, prefix(5): {:?}",
-                src, next_action, worklist.len(), &worklist[..std::cmp::min(5, worklist.len())]);
+                    src, next_action, worklist.len(), &worklist[..std::cmp::min(5, worklist.len())]);
 
         match next_action {
             EvacAction::RestoreSrc(new_src) => {
@@ -567,7 +567,7 @@ unsafe fn evacuate_packed(
                 /*
                 if new_src == inlining_underway_upto {
                     inlining_underway = false;
-                    noburn = false;
+                    burn = true;
                 }
                  */
 
@@ -611,7 +611,7 @@ unsafe fn evacuate_packed(
                         // Add a forwarding pointer in the source buffer.
                         debug_assert!(dst < dst_end);
 
-                        if !noburn {
+                        if burn {
                             write_forwarding_pointer_at(
                                 src,
                                 dst,
@@ -873,7 +873,7 @@ unsafe fn evacuate_packed(
                         dbgprintln!("   redirection ptr!: src {:?}, to next chunk {:?}, inlining_underway={:?}",
                                     src, next_chunk, inlining_underway);
 
-                        if !noburn {
+                        if burn {
                             // Add a forwarding pointer in the source buffer.
                             debug_assert!(dst < dst_end);
                             write_forwarding_pointer_at(
@@ -908,7 +908,7 @@ unsafe fn evacuate_packed(
                             );
 
                             if !st.evac_major && inlining_underway {
-                                noburn = true;
+                                burn = false;
                             }
                             src = next_chunk;
                             // Same type, new location to evac from:
@@ -1062,7 +1062,7 @@ unsafe fn evacuate_packed(
 
                                         #[cfg(feature = "verbose_evac")]
                                         dbgprintln!("   shortcut dst {:?}, in nursery {:?}",
-                                                        shortcut_dst, st.nursery.contains_addr(shortcut_dst));
+                                                    shortcut_dst, st.nursery.contains_addr(shortcut_dst));
 
                                         if st
                                             .nursery
@@ -1070,7 +1070,7 @@ unsafe fn evacuate_packed(
                                         {
                                             #[cfg(feature = "verbose_evac")]
                                             dbgprintln!("   nursery shortcut pointer ({:?} -> {:?}) will be updated",
-                                                      src_shortcuts_start.add(i * 8), shortcut_dst);
+                                                        src_shortcuts_start.add(i * 8), shortcut_dst);
 
                                             addrs.push(Some(
                                                 dst_shortcuts_start.add(i * 8),
@@ -1078,7 +1078,7 @@ unsafe fn evacuate_packed(
                                         } else {
                                             #[cfg(feature = "verbose_evac")]
                                             dbgprintln!("   writing an oldgen shortcut pointer {:?} -> {:?}",
-                                                      dst_shortcuts_start.add(i * 8), tagged_shortcut_dst as *const i8);
+                                                        dst_shortcuts_start.add(i * 8), tagged_shortcut_dst as *const i8);
 
                                             write(
                                                 dst_shortcuts_start.add(i * 8),
@@ -1110,7 +1110,7 @@ unsafe fn evacuate_packed(
                                 (*GC_STATS).mem_copied += 1 + scalar_bytes1;
                             }
 
-                            if !noburn {
+                            if burn {
                                 // Add forwarding pointers:
                                 // if there's enough space, write a COPIED_TO tag and
                                 // dst's address at src. Otherwise just write a COPIED tag.
