@@ -174,6 +174,7 @@ pub fn garbage_collect(
 
         // Reset the allocation area and record stats.
         nursery.clear();
+
         // Restore the remaining cauterized writers.
         restore_writers(wstack, nursery, oldgen)?;
         Ok(())
@@ -268,6 +269,13 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
         (*GC_STATS).gc_rootset_sort_time
     );
 
+    #[cfg(debug_assertions)]
+    {
+        for frame in frames.iter() {
+            assert!((*(*frame)).ptr < (*(*frame)).endptr);
+        }
+    }
+
     #[cfg(feature = "verbose_evac")]
     {
         dbgprintln!("Sorted roots:");
@@ -280,6 +288,9 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
         EvacState { so_env, zct: (*oldgen).new_zct, nursery, evac_major };
 
     for frame in frames {
+        #[cfg(feature = "verbose_evac")]
+        dbgprintln!("+Evacuating root {:?}", (*frame));
+
         match (*frame).gc_root_prov {
             C_GcRootProv::RemSet => {
                 let (tagged_src, _): (u64, _) = read((*frame).ptr);
@@ -291,26 +302,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                     // destination region. Just update the root to point to the
                     // evacuated data.
                     C_COPIED_TAG | C_COPIED_TO_TAG => {
-                        #[cfg(feature = "verbose_evac")]
-                        {
-                            dbgprintln!(
-                                "Optimization! Didn't need to allocate region for root {:?} (1)",
-                                (*frame)
-                            );
-                        }
-                        let tagged_fwd_ptr =
-                            find_forwarding_pointer(tag, src, src_after_tag);
-                        let fwd_ptr = tagged_fwd_ptr.untag();
-                        let fwd_footer_offset = tagged_fwd_ptr.get_tag();
-                        let fwd_footer_addr =
-                            fwd_ptr.add(fwd_footer_offset as usize);
-                        // Update the indirection pointer in oldgen region.
-                        write((*frame).ptr, fwd_ptr);
-                        // Update the outset in oldgen region.
-                        handle_old_to_old_indirection(
-                            (*frame).endptr,
-                            fwd_footer_addr,
-                        );
+                        evacuate_copied(frame, tag, src, src_after_tag);
                     }
                     _ => {
                         // Allocate space in the destination.
@@ -372,32 +364,19 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                 let src_end = (*frame).endptr;
                 let (tag, src_after_tag): (C_GibPackedTag, *mut i8) =
                     read_mut(src);
+
                 match tag {
                     // If the data is already evacuated, don't allocate a fresh
                     // destination region. Just update the root to point to the
                     // evacuated data.
                     C_COPIED_TAG | C_COPIED_TO_TAG => {
-                        #[cfg(feature = "verbose_evac")]
-                        {
-                            dbgprintln!(
-                                "Optimization! Didn't need to allocate region for root {:?} (2)",
-                                (*frame)
-                            );
-                        }
-                        let tagged_fwd_ptr =
-                            find_forwarding_pointer(tag, src, src_after_tag);
-                        let fwd_ptr = tagged_fwd_ptr.untag();
-                        let fwd_footer_offset = tagged_fwd_ptr.get_tag();
-                        let fwd_footer_addr =
-                            fwd_ptr.add(fwd_footer_offset as usize);
-                        (*frame).ptr = fwd_ptr;
-                        (*frame).endptr = fwd_footer_addr;
+                        evacuate_copied(frame, tag, src, src_after_tag);
                     }
                     _ => {
                         // Compute chunk size.
                         let chunk_size = if root_in_nursery {
-                            let nursery_footer: *mut u16 =
-                                (*frame).endptr as *mut u16;
+                            let nursery_footer: *mut C_GibNurseryChunkFooter =
+                                (*frame).endptr as *mut C_GibNurseryChunkFooter;
                             *nursery_footer as usize
                         } else {
                             let footer = (*frame).endptr
@@ -450,6 +429,29 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
     // Clear the remembered set.
     (*oldgen).rem_set.clear();
     Ok(())
+}
+
+#[inline(always)]
+unsafe fn evacuate_copied(
+    frame: *mut C_GibShadowstackFrame,
+    tag: u8,
+    src: *mut i8,
+    src_after_tag: *mut i8,
+) {
+    #[cfg(feature = "verbose_evac")]
+    dbgprintln!(
+        "   optimization! Didn't need to allocate region for root {:?}",
+        (*frame)
+    );
+
+    let tagged_fwd_ptr = find_forwarding_pointer(tag, src, src_after_tag);
+    let fwd_ptr = tagged_fwd_ptr.untag();
+    let fwd_footer_offset = tagged_fwd_ptr.get_tag();
+    let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
+    // Update the indirection pointer in oldgen region.
+    write((*frame).ptr, fwd_ptr);
+    // Update the outset in oldgen region.
+    handle_old_to_old_indirection((*frame).endptr, fwd_footer_addr);
 }
 
 #[derive(Debug)]
@@ -533,9 +535,6 @@ unsafe fn evacuate_packed(
         }
     };
 
-    //
-    let always_inline_redirections = false;
-
     // These comprise the main mutable state of the traversal and should be updated
     // together at the end of every iteration:
     let mut src = orig_src;
@@ -545,7 +544,7 @@ unsafe fn evacuate_packed(
     // Address of the field after the indirection being inlined. When we reach a
     // RestoreSrc with this address, inlining_underway is set to false again.
     let mut inlining_underway_upto = null_mut();
-    let mut burn = false;
+    let burn = false;
     // The implicit -1th element of the worklist:
     let mut next_action = EvacAction::ProcessTy(orig_typ, None);
     let mut forwarded = false;
@@ -880,7 +879,6 @@ unsafe fn evacuate_packed(
                         if st.evac_major
                             || st.nursery.contains_addr(next_chunk)
                             || inlining_underway
-                            || always_inline_redirections
                         {
                             #[cfg(feature = "verbose_evac")]
                             dbgprintln!(
@@ -889,8 +887,9 @@ unsafe fn evacuate_packed(
                             );
 
                             if !st.evac_major && inlining_underway {
-                                burn = false;
+                                // burn = false;
                             }
+
                             src = next_chunk;
                             // Same type, new location to evac from:
                             next_action = EvacAction::ProcessTy(
@@ -1387,7 +1386,7 @@ unsafe fn write_forwarding_pointer_at(
 unsafe fn free_region(
     footer: *const C_GibOldgenChunkFooter,
     zct: *mut Zct,
-    free_descendants: bool,
+    cleaning_up: bool,
 ) -> Result<()> {
     #[cfg(feature = "gcstats")]
     {
@@ -1403,7 +1402,7 @@ unsafe fn free_region(
     for o_reg_info in outset.into_iter() {
         (*(o_reg_info as *mut C_GibRegionInfo)).refcount -= 1;
         if (*o_reg_info).refcount == 0 {
-            if free_descendants {
+            if cleaning_up {
                 free_region((*o_reg_info).first_chunk_footer, zct, true)?;
             } else {
                 (*zct).insert(o_reg_info);
