@@ -564,12 +564,11 @@ unsafe fn evacuate_packed(
         match next_action {
             EvacAction::RestoreSrc(new_src) => {
                 src = new_src;
-                /*
+
                 if new_src == inlining_underway_upto {
                     inlining_underway = false;
-                    burn = true;
+                    // burn = true;
                 }
-                 */
 
                 worklist_next!(worklist, next_action);
             }
@@ -582,6 +581,7 @@ unsafe fn evacuate_packed(
 
                 let (tag, src_after_tag): (C_GibPackedTag, *mut i8) =
                     read_mut(src);
+
                 #[cfg(feature = "verbose_evac")]
                 dbgprintln!("+++Read next tag {} from src {:?}", tag, src);
 
@@ -642,14 +642,8 @@ unsafe fn evacuate_packed(
                                 inlining_underway_upto = src_after_indr1;
                             }
 
-                            #[cfg(feature = "verbose_evac")]
-                            dbgprintln!(
-                                "   pushing SkipOverEnvWrite action to stack (1)"
-                            );
-
                             worklist
                                 .push(EvacAction::SkipOverEnvWrite(pointee));
-
                             src = pointee;
 
                             /*
@@ -694,43 +688,12 @@ unsafe fn evacuate_packed(
                             let dst_after_tag = write(dst1, C_INDIRECTION_TAG);
                             let dst_after_indr =
                                 write(dst_after_tag, tagged_pointee);
-
-                            #[cfg(feature = "verbose_evac")]
-                            {
-                                let tagged =
-                                    TaggedPointer::from_u64(tagged_pointee);
-                                dbgprintln!(
-                                    "   wrote tagged indirection pointer {:?} -> ({:?},{:?})",
-                                    dst_after_tag, tagged.untag(), tagged.get_tag()
-                                );
-                            }
-
                             write_shortcut_ptr!(
                                 mb_shortcut_addr,
                                 dst1,
                                 dst_end1
                             );
-
-                            #[cfg(feature = "verbose_evac")]
-                            {
-                                dbgprintln!(
-                                    "   kept indirection, new addresses are {:?} -> {:?}",
-                                    dst1, pointee
-                                );
-                                dbgprintln!(
-                                    "   inserting into so_env {:?} to {:?}",
-                                    src,
-                                    src_after_indr1
-                                );
-                            }
-
                             st.so_env.insert(src, src_after_indr1);
-
-                            #[cfg(feature = "gcstats")]
-                            {
-                                (*GC_STATS).mem_copied += 9;
-                            }
-
                             let pointee_footer_offset = tagged.get_tag();
                             let pointee_footer =
                                 pointee.add(pointee_footer_offset as usize);
@@ -746,6 +709,24 @@ unsafe fn evacuate_packed(
                             src = src_after_indr1;
                             dst = dst_after_indr;
                             dst_end = dst_end1;
+
+                            #[cfg(feature = "verbose_evac")]
+                            {
+                                dbgprintln!(
+                                "   wrote tagged indirection pointer {:?} -> ({:?},{:?})",
+                                dst_after_tag, tagged.untag(), tagged.get_tag()
+                            );
+                                dbgprintln!(
+                                    "   inserting into so_env {:?} to {:?}",
+                                    src,
+                                    src_after_indr1
+                                );
+                            }
+
+                            #[cfg(feature = "gcstats")]
+                            {
+                                (*GC_STATS).mem_copied += 9;
+                            }
 
                             worklist_next!(worklist, next_action);
                         }
@@ -975,7 +956,7 @@ unsafe fn evacuate_packed(
                             // Stop evacuating.
                             src = src_after_next_chunk as *mut i8;
                             dst = dst_after_redir;
-                            // dst_end??
+                            // TODO: dst_end??
                             break;
                         }
                     }
@@ -1119,6 +1100,7 @@ unsafe fn evacuate_packed(
                                 if scalar_bytes1 >= 8 || num_shortcut1 > 0 {
                                     #[cfg(feature = "verbose_evac")]
                                     dbgprintln!("   forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
+
                                     debug_assert!(dst < dst_end);
                                     write_forwarding_pointer_at(
                                         src,
@@ -1131,6 +1113,7 @@ unsafe fn evacuate_packed(
                                 else {
                                     #[cfg(feature = "verbose_evac")]
                                     dbgprintln!("   burning non-forwardable data at {:?}, scalar bytes {}", src, scalar_bytes1);
+
                                     let _ = write(src, C_COPIED_TAG);
                                     // Also burn any scalar bytes that weren't big enough for a pointer:
                                     if scalar_bytes1 >= 1 {
