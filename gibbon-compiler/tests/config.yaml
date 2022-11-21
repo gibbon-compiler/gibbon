@@ -466,3 +466,24 @@ tests:
     skip: true
   - name: test17_forfold.gib
     skip: true
+
+  - name: test_153.hs
+    run-modes: [pointer]
+    answer-file: test_153.ans
+
+  - name: test_164.hs
+    run-modes: [pointer]
+    answer-file: test_164.ans
+
+  - name: test_166.hs
+    run-modes: [pointer]
+    answer-file: test_166.ans
+
+  - name: test_167.hs
+    run-modes: [packed]
+
+  - name: test_circsim.hs # covers #174
+    answer-file: test_circsim.ans
+
+  - name: test_power.hs
+    answer-file: test_power.ans
