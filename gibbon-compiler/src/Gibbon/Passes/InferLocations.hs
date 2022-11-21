@@ -559,7 +559,7 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
     ProjE i w -> do
         (e', ty) <- case w of
           VarE v -> pure (ProjE i (VarE v), let ProdTy tys = lookupVEnv v env in tys !! i)
-          w' -> (\(e, b, _) -> (e, b)) <$> inferExp env w dest
+          w' -> (\(e, ProdTy bs, _) -> (ProjE i e, bs !! i)) <$> inferExp env w dest
         case dest of
             NoDest -> return (e', ty, [])
             TupleDest ds -> err "TODO: handle tuple of destinations for ProjE"
