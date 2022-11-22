@@ -468,20 +468,21 @@ tests:
     skip: true
 
   - name: test_153.hs
-    failing: [gibbon2,gibbon1]
+    failing: [gibbon2,gibbon1,interp1]
     answer-file: examples/test_153.ans
 
   - name: test_164.hs
-    failing: [gibbon2,gibbon1]
+    failing: [gibbon2,gibbon1,interp1]
     answer-file: examples/test_164.ans
 
   - name: test_166.hs
-    failing: [gibbon2,gibbon1]
+    failing: [gibbon2,gibbon1,interp1]
     answer-file: examples/test_166.ans
 
   - name: test_167.hs
+    answer-file: examples/test_167.ans
 
-  - name: test_circsim.hs # covers #174
+  - name: test_circsim.hs # covers #164, #166, #167, #174, #175
     answer-file: examples/test_circsim.ans
 
   - name: test_power.hs

@@ -9,5 +9,7 @@ head a = case a of
 
 gibbon_main = 
   let xs = Cons (1, ((False, 2), True)) Nil
-      _ = head xs
-  in ()
+      (a, b) = head xs
+      (b1, b2) = b 
+      (b11, b12) = b1 
+  in b12
