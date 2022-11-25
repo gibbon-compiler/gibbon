@@ -1462,14 +1462,26 @@ desugarL0 (Prog ddefs fundefs' mainExp') = do
         DataConE a dcon ls -> do
           ls' <- mapM go ls
           let tys = lookupDataCon ddefs dcon
-              flattenTupleArgs :: [Exp0] -> [Ty0] -> [Exp0]
-              flattenTupleArgs args tys' = concatMap (\(ty :: Ty0, arg :: Exp0) ->
-                    case ty of
-                      ProdTy argtys -> let args'' = map (\i -> ProjE i arg) [0..length argtys - 1]
-                                      in flattenTupleArgs args'' argtys
-                      _ -> [arg]
-                  ) (zip tys' args)
-          pure $ DataConE a dcon (flattenTupleArgs ls' tys)
+              flattenTupleArgs :: Exp0 -> Ty0 -> PassM ([(Var, [loc], Ty0, Exp0)] ,[Exp0])
+              flattenTupleArgs arg ty = case ty of 
+                ProdTy tys' -> 
+                  case arg of 
+                    MkProdE args -> do
+                      (bnds', args') <- unzip <$> zipWithM flattenTupleArgs args tys' 
+                      pure (concat bnds',concat args')
+                    _ -> do 
+                      -- generating alias so that repeated expression is 
+                      -- eliminated and we are taking projection of trivial varEs
+                      argalias <- gensym "alias" 
+                      ys <- mapM (\_ -> gensym "proj") tys' 
+                      let vs = map VarE ys
+                      (bnds', args') <- unzip <$> zipWithM flattenTupleArgs vs tys' 
+                      let bnds'' = (argalias,[],ty, arg):[(y,[],ty',ProjE i (VarE argalias))| (y, ty', i) <- zip3 ys tys' [0..]] 
+                      pure (bnds'' ++ concat bnds', concat args')
+                _ -> do
+                  pure ([], [arg])
+          (binds, args) <- unzip <$> zipWithM flattenTupleArgs ls' tys
+          pure $ mkLets (concat binds) $ DataConE a dcon (concat args) 
         TimeIt e ty b    -> (\a -> TimeIt a ty b) <$> go e
         WithArenaE v e -> (WithArenaE v) <$> go e
         SpawnE fn tyapps args -> (SpawnE fn tyapps) <$> mapM go args
