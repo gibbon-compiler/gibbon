@@ -482,6 +482,9 @@ tests:
   - name: test_167.hs
     answer-file: examples/test_167.ans
 
+  - name: test_168.hs
+    answer-file: examples/test_168.ans
+
   - name: test_circsim.hs # covers #164, #166, #167, #174, #175
     answer-file: examples/test_circsim.ans
 
