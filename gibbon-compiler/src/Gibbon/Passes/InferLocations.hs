@@ -1040,17 +1040,30 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           -- variable reference (because of ANF), and the AppE/DataConE cases
           -- above will do the right thing.
           lsrec <- mapM (\e -> inferExp env e NoDest) ls
-          ty <- lift $ lift $ convertTy bty
+          ty@(ProdTy tys) <- lift $ lift $ convertTy bty
           let env' = extendVEnv vr ty env 
           (bod',ty',cs') <- inferExp env' bod dest
           let als = [a | (a,_,_) <- lsrec]
               acs = concat $ [c | (_,_,c) <- lsrec]
               aty = [b | (_,b,_) <- lsrec]
-          vrdest <- TupleDest <$> mapM destFromType' aty
-          (VarE vr', vty, vcs) <- inferExp env' (VarE vr) vrdest -- unify projection locations with variable type locations 
-          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty, L.nub $ cs' ++ acs ++ vcs)
+           -- unify projection locations with variable type locations: this kind of does what copyTuple should be doing 
+          adests <- mapM destFromType' tys
+          let e' = L2.LetE (vr,[], ty, L2.MkProdE als) bod'
+          let go (e'', tys) r@(l, t, dt) 
+                = case t of 
+                      PackedTy _ loc -> case dt of 
+                        SingleDest lv -> do 
+                          v <- lift $ lift $ gensym "copyProj"
+                          (l', t', []) <- copy (l, t, []) lv
+                          pure (L2.LetE (v,[],t',l') e'', t:tys)
+                        TupleDest ds -> do 
+                          error $ "tupledest: " ++ show r ++ " for " ++ sdoc e''  
+                        NoDest -> pure (e'', tys)                       
+                      _ -> pure (e'', tys)
+          (L2.LetE bind@(vr',_,_,_) bod1, ty1) <- foldM go (e', aty) $ zip3 als aty adests
+          (bod'',ty'',cs''') <- handleTrailingBindLoc vr' (bod1, ProdTy ty1, L.nub $ cs' ++ acs)
           fcs <- tryInRegion cs'''
-          tryBindReg (L2.LetE (vr',[], vty, L2.MkProdE als) bod'', ty'', fcs)
+          tryBindReg (L2.LetE bind bod'', ty'', fcs)
 
         WithArenaE v e -> do
           (e',ty,cs) <- inferExp (extendVEnv v ArenaTy env) e NoDest
