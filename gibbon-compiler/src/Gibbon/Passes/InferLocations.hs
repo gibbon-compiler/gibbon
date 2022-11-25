@@ -1041,13 +1041,16 @@ inferExp env@FullEnv{dataDefs} ex0 dest =
           -- above will do the right thing.
           lsrec <- mapM (\e -> inferExp env e NoDest) ls
           ty <- lift $ lift $ convertTy bty
-          (bod',ty',cs') <- inferExp (extendVEnv vr ty env) bod dest
+          let env' = extendVEnv vr ty env 
+          (bod',ty',cs') <- inferExp env' bod dest
           let als = [a | (a,_,_) <- lsrec]
               acs = concat $ [c | (_,_,c) <- lsrec]
               aty = [b | (_,b,_) <- lsrec]
-          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty', L.nub $ cs' ++ acs)
+          vrdest <- TupleDest <$> mapM destFromType' aty
+          (VarE vr', vty, vcs) <- inferExp env' (VarE vr) vrdest -- unify projection locations with variable type locations 
+          (bod'',ty'',cs''') <- handleTrailingBindLoc vr (bod', ty, L.nub $ cs' ++ acs ++ vcs)
           fcs <- tryInRegion cs'''
-          tryBindReg (L2.LetE (vr,[], ProdTy aty,L2.MkProdE als) bod'', ty'', fcs)
+          tryBindReg (L2.LetE (vr',[], vty, L2.MkProdE als) bod'', ty'', fcs)
 
         WithArenaE v e -> do
           (e',ty,cs) <- inferExp (extendVEnv v ArenaTy env) e NoDest

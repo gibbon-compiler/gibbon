@@ -1151,12 +1151,11 @@ extendConstrs :: LocConstraint -> ConstraintSet -> ConstraintSet
 extendConstrs c (ConstraintSet cs) = ConstraintSet $ S.insert c cs
 
 switchOutLoc :: Exp -> LocationTypeState -> LocVar -> TcM LocationTypeState
-switchOutLoc exp (LocationTypeState ls) l =
+switchOutLoc exp ts@(LocationTypeState ls) l =
     case M.lookup l ls of
       Nothing -> throwError $ GenericTC ("Unknown location " ++ (show l)) exp
       Just (Output,a) -> return $ LocationTypeState $ M.update (\_ -> Just (Input,a)) l ls
-      Just (Input,_a) -> throwError $ ModalityTC "Expected output location" exp l $
-                                      LocationTypeState ls
+      Just (Input,_a) -> return ts
 
 _absentAfter :: Exp -> LocationTypeState -> LocVar -> TcM ()
 _absentAfter exp (LocationTypeState ls) l =
