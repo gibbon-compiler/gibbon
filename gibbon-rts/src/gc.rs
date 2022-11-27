@@ -169,8 +169,8 @@ pub fn garbage_collect(
             evac_major,
         )?;
 
-        // // Collect dead regions.
-        // oldgen.collect_regions()?;
+        // Collect dead regions.
+        oldgen.collect_regions()?;
 
         // Reset the allocation area and record stats.
         nursery.clear();
@@ -544,7 +544,7 @@ unsafe fn evacuate_packed(
     // Address of the field after the indirection being inlined. When we reach a
     // RestoreSrc with this address, inlining_underway is set to false again.
     let mut inlining_underway_upto = null_mut();
-    let burn = false;
+    let burn = true;
     // The implicit -1th element of the worklist:
     let mut next_action = EvacAction::ProcessTy(orig_typ, None);
     let mut forwarded = false;
@@ -1395,6 +1395,10 @@ unsafe fn free_region(
 
     // Rust drops this heap allocated object when reg_info goes out of scope.
     let reg_info = Box::from_raw((*footer).reg_info);
+
+    #[cfg(feature = "verbose_evac")]
+    dbgprintln!("Freeing region {:?}, {:?}", (*footer), reg_info);
+
     // Decrement refcounts of all regions in the outset and add the ones with a
     // zero refcount to the ZCT. Also free the HashSet backing the outset for
     // this region.
