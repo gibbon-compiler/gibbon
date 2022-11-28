@@ -547,7 +547,7 @@ unsafe fn evacuate_packed(
     // Address of the field after the indirection being inlined. When we reach a
     // RestoreSrc with this address, inlining_underway is set to false again.
     let mut inlining_underway_upto = null_mut();
-    let burn = true;
+    let mut burn = true;
     // The implicit -1th element of the worklist:
     let mut next_action = EvacAction::ProcessTy(orig_typ, None);
     let mut forwarded = false;
@@ -569,7 +569,7 @@ unsafe fn evacuate_packed(
 
                 if new_src == inlining_underway_upto {
                     inlining_underway = false;
-                    // burn = true;
+                    burn = true;
                 }
 
                 worklist_next!(worklist, next_action);
@@ -909,7 +909,7 @@ unsafe fn evacuate_packed(
                             );
 
                             if !st.evac_major && inlining_underway {
-                                // burn = false;
+                                burn = false;
                             }
 
                             src = next_chunk;
