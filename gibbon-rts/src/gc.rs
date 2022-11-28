@@ -444,7 +444,10 @@ unsafe fn evacuate_copied(
         (*frame)
     );
 
-    let tagged_fwd_ptr = find_forwarding_pointer(tag, src, src_after_tag);
+    let tagged_fwd_ptr = record_time!(
+        { find_forwarding_pointer(tag, src, src_after_tag,) },
+        (*GC_STATS).gc_find_fwdptr_time
+    );
     let fwd_ptr = tagged_fwd_ptr.untag();
     let fwd_footer_offset = tagged_fwd_ptr.get_tag();
     let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
@@ -617,6 +620,11 @@ unsafe fn evacuate_packed(
                                 dst_end.offset_from(dst) as u16, // .try_into().unwrap()
                             );
                             forwarded = true;
+
+                            #[cfg(feature = "gcstats")]
+                            {
+                                (*GC_STATS).forwarded += 1;
+                            }
                         }
 
                         // If the pointee is in the nursery, evacuate it.
@@ -644,6 +652,11 @@ unsafe fn evacuate_packed(
                             worklist
                                 .push(EvacAction::SkipOverEnvWrite(pointee));
                             src = pointee;
+
+                            #[cfg(feature = "gcstats")]
+                            {
+                                (*GC_STATS).indirs_inlined += 1;
+                            }
 
                             /*
                             // Update the burned environment if we're evacuating a root
@@ -712,9 +725,9 @@ unsafe fn evacuate_packed(
                             #[cfg(feature = "verbose_evac")]
                             {
                                 dbgprintln!(
-                                "   wrote tagged indirection pointer {:?} -> ({:?},{:?})",
-                                dst_after_tag, tagged.untag(), tagged.get_tag()
-                            );
+                                    "   wrote tagged indirection pointer {:?} -> ({:?},{:?})",
+                                    dst_after_tag, tagged.untag(), tagged.get_tag()
+                                );
                                 dbgprintln!(
                                     "   inserting into so_env {:?} to {:?}",
                                     src,
@@ -725,6 +738,7 @@ unsafe fn evacuate_packed(
                             #[cfg(feature = "gcstats")]
                             {
                                 (*GC_STATS).mem_copied += 9;
+                                (*GC_STATS).indirs_not_inlined += 1;
                             }
 
                             worklist_next!(worklist, next_action);
@@ -763,8 +777,16 @@ unsafe fn evacuate_packed(
                     // See Note [Maintaining sharing, Copied and CopiedTo tags].
                     C_COPIED_TO_TAG | C_COPIED_TAG => {
                         forwarded = true; // i.e. ALREADY forwarded.
-                        let tagged_fwd_ptr =
-                            find_forwarding_pointer(tag, src, src_after_tag);
+                        let tagged_fwd_ptr = record_time!(
+                            {
+                                find_forwarding_pointer(
+                                    tag,
+                                    src,
+                                    src_after_tag,
+                                )
+                            },
+                            (*GC_STATS).gc_find_fwdptr_time
+                        );
                         let fwd_ptr = tagged_fwd_ptr.untag();
                         let fwd_footer_offset = tagged_fwd_ptr.get_tag();
                         let fwd_footer_addr =
@@ -891,6 +913,12 @@ unsafe fn evacuate_packed(
                             }
 
                             src = next_chunk;
+
+                            #[cfg(feature = "gcstats")]
+                            {
+                                (*GC_STATS).redirs_inlined += 1;
+                            }
+
                             // Same type, new location to evac from:
                             next_action = EvacAction::ProcessTy(
                                 next_ty,
@@ -917,6 +945,7 @@ unsafe fn evacuate_packed(
                             #[cfg(feature = "gcstats")]
                             {
                                 (*GC_STATS).mem_copied += 9;
+                                (*GC_STATS).redirs_not_inlined += 1;
                             }
 
                             // Link footers.
@@ -1094,33 +1123,61 @@ unsafe fn evacuate_packed(
                                 // Add forwarding pointers:
                                 // if there's enough space, write a COPIED_TO tag and
                                 // dst's address at src. Otherwise just write a COPIED tag.
-                                // After the forwarding pointer, burn the rest of
-                                // space previously occupied by scalars.
+                                // After the forwarding pointer, we don't burn the rest of
+                                // space previously occupied by scalars because nothing
+                                // can point to the scalars directly nor can someone
+                                // trying to find a forwarding pointer reach the scalars
+                                // as they'll reach this forwarding pointer and stop.
                                 if scalar_bytes1 >= 8 || num_shortcut1 > 0 {
                                     #[cfg(feature = "verbose_evac")]
                                     dbgprintln!("   forwarding constructor at {:?}, to dst {:?}, scalar bytes {}", src, dst, scalar_bytes1);
 
                                     debug_assert!(dst < dst_end);
-                                    write_forwarding_pointer_at(
-                                        src,
-                                        dst,
-                                        dst_end.offset_from(dst) as u16, // .try_into().unwrap()
+
+                                    record_time!(
+                                        {
+                                            write_forwarding_pointer_at(
+                                                src,
+                                                dst,
+                                                dst_end.offset_from(dst)
+                                                    as u16, // .try_into().unwrap()
+                                            );
+                                        },
+                                        (*GC_STATS).gc_burn_time
                                     );
+
                                     forwarded = true;
+
+                                    #[cfg(feature = "gcstats")]
+                                    {
+                                        (*GC_STATS).forwarded += 1;
+                                    }
                                 }
                                 // NOTE: Comment this case to disable burned tags:
                                 else {
                                     #[cfg(feature = "verbose_evac")]
                                     dbgprintln!("   burning non-forwardable data at {:?}, scalar bytes {}", src, scalar_bytes1);
 
-                                    let _ = write(src, C_COPIED_TAG);
-                                    // Also burn any scalar bytes that weren't big enough for a pointer:
-                                    if scalar_bytes1 >= 1 {
-                                        write_bytes(
-                                            src_after_tag,
-                                            C_COPIED_TAG,
-                                            scalar_bytes1 as usize,
-                                        );
+                                    record_time!(
+                                        {
+                                            let _ = write(src, C_COPIED_TAG);
+                                            // Also burn any scalar bytes that weren't big enough for a pointer:
+                                            if scalar_bytes1 >= 1 {
+                                                write_bytes(
+                                                    src_after_tag,
+                                                    C_COPIED_TAG,
+                                                    scalar_bytes1 as usize,
+                                                );
+                                            }
+                                        },
+                                        (*GC_STATS).gc_burn_time
+                                    );
+
+                                    #[cfg(feature = "gcstats")]
+                                    {
+                                        (*GC_STATS).not_forwarded += 1;
+                                        (*GC_STATS).mem_burned +=
+                                            1 + scalar_bytes1;
                                     }
                                 }
                             }

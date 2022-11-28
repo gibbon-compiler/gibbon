@@ -941,6 +941,18 @@ typedef struct gib_gc_stats {
     // Overall memory burned (maintained by Rust RTS).
     size_t mem_burned;
 
+    // Total number of forwarding pointers that could be added vs not added.
+    uint64_t forwarded;
+    uint64_t not_forwarded;
+
+    // Total number of indirections inlined vs not inlined.
+    uint64_t indirs_inlined;
+    uint64_t indirs_not_inlined;
+
+    // Total number of redirections inlined vs not inlined.
+    uint64_t redirs_inlined;
+    uint64_t redirs_not_inlined;
+
     // Number of regions in the nursery (maintained by C RTS).
     uint64_t nursery_regions;
 
@@ -1332,9 +1344,9 @@ static void gib_nursery_initialize(GibNursery *nursery)
     nursery->heap_end = nursery->heap_start + NURSERY_SIZE;
     nursery->alloc = nursery->heap_end;
 
-#ifdef _GIBBON_GCSTATS
-    GC_STATS->mem_allocated += NURSERY_SIZE;
-#endif
+// #ifdef _GIBBON_GCSTATS
+//     GC_STATS->mem_allocated += NURSERY_SIZE;
+// #endif
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
     fprintf(stderr, "Nursery: start=%p, end=%p, alloc=%p\n",
@@ -1441,6 +1453,12 @@ static void gib_gc_stats_initialize(GibGcStats *stats)
     stats->mem_allocated = 0;
     stats->mem_copied = 0;
     stats->mem_burned = 0;
+    stats->forwarded = 0;
+    stats->not_forwarded = 0;
+    stats->indirs_inlined = 0;
+    stats->indirs_not_inlined = 0;
+    stats->redirs_inlined = 0;
+    stats->redirs_not_inlined = 0;
     stats->nursery_regions = 0;
     stats->oldgen_regions = 0;
     stats->gc_elapsed_time = 0;
@@ -1467,6 +1485,18 @@ static void gib_gc_stats_print(GibGcStats *stats)
     printf("Mem allocated:\t\t\t %zu\n", stats->mem_allocated);
     printf("Mem copied:\t\t\t %zu\n", stats->mem_copied);
     printf("Mem burned:\t\t\t %zu\n", stats->mem_burned);
+
+    printf("\n");
+    printf("Ctors forwarded:\t\t %" PRIu64 "\n", stats->forwarded);
+    printf("Ctors not forwarded:\t\t %" PRIu64 "\n", stats->not_forwarded);
+
+    printf("\n");
+    printf("Indirs inlined:\t\t\t %" PRIu64 "\n", stats->indirs_inlined);
+    printf("Indirs not inlined:\t\t %" PRIu64 "\n", stats->indirs_not_inlined);
+
+    printf("\n");
+    printf("Redirs inlined:\t\t\t %" PRIu64 "\n", stats->redirs_inlined);
+    printf("Redirs not inlined:\t\t %" PRIu64 "\n", stats->redirs_not_inlined);
 
     printf("\n");
     printf("GC nursery regions:\t\t %lu\n", stats->nursery_regions);

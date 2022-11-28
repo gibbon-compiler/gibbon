@@ -7,6 +7,7 @@
 #include <uthash.h>
 #include <assert.h>
 #include <limits.h>
+#include <time.h>
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Translating Gibbon's types to C
