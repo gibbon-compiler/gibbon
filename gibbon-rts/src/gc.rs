@@ -412,7 +412,7 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
 
                         // FIXME: forwarded is currently true if evacuate forwarded ANYTHING.
                         // We need to enforce it for each chunk...
-                        if !forwarded & is_loc_0 {
+                        if !forwarded && is_loc_0 {
                             debug_assert!(dst_after < dst_after_end);
                             write_forwarding_pointer_at(
                                 src_after,
@@ -448,13 +448,35 @@ unsafe fn evacuate_copied(
         { find_forwarding_pointer(tag, src, src_after_tag,) },
         (*GC_STATS).gc_find_fwdptr_time
     );
+
     let fwd_ptr = tagged_fwd_ptr.untag();
     let fwd_footer_offset = tagged_fwd_ptr.get_tag();
     let fwd_footer_addr = fwd_ptr.add(fwd_footer_offset as usize);
-    // Update the indirection pointer in oldgen region.
-    write((*frame).ptr, fwd_ptr);
-    // Update the outset in oldgen region.
-    handle_old_to_old_indirection((*frame).endptr, fwd_footer_addr);
+
+    match (*frame).gc_root_prov {
+        C_GcRootProv::Stk => {
+            dbgprintln!(
+                "+Restoring reader {:?} to {:?}",
+                (*frame).ptr,
+                fwd_ptr
+            );
+            (*frame).ptr = fwd_ptr;
+            (*frame).endptr = fwd_footer_addr;
+        }
+        C_GcRootProv::RemSet => {
+            dbgprintln!(
+                "*Writing {:?} at {:?} in oldgen",
+                fwd_ptr,
+                (*frame).ptr
+            );
+
+            // Update the indirection pointer in oldgen region.
+            write((*frame).ptr, fwd_ptr);
+
+            // Update the outset in oldgen region.
+            handle_old_to_old_indirection((*frame).endptr, fwd_footer_addr);
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -609,6 +631,9 @@ unsafe fn evacuate_packed(
                         let src_after_indr1 = src_after_indr as *mut i8;
                         let tagged = TaggedPointer::from_u64(tagged_pointee);
                         let pointee = tagged.untag();
+                        let pointee_footer_offset = tagged.get_tag();
+                        let pointee_footer =
+                            pointee.add(pointee_footer_offset as usize);
 
                         // Add a forwarding pointer in the source buffer.
                         debug_assert!(dst < dst_end);
@@ -649,8 +674,6 @@ unsafe fn evacuate_packed(
                                 inlining_underway_upto = src_after_indr1;
                             }
 
-                            worklist
-                                .push(EvacAction::SkipOverEnvWrite(pointee));
                             src = pointee;
 
                             #[cfg(feature = "gcstats")]
@@ -658,14 +681,14 @@ unsafe fn evacuate_packed(
                                 (*GC_STATS).indirs_inlined += 1;
                             }
 
-                            /*
                             // Update the burned environment if we're evacuating a root
-                            // from the remembered set.
+                            // from the remembered set of if we're evacuating an
+                            // indirection pointer that points to a non-zero location.
                             match (*frame).gc_root_prov {
                                 C_GcRootProv::RemSet => {
-                                    #[cfg(feature = "verbose_evac")]
                                     dbgprintln!(
-                                        "   pushing SkipOverEnvWrite action to stack (1)"
+                                        "   pushing SkipOverEnvWrite({:?}) action to stack for indir, root in remembered set",
+                                        src,
                                     );
                                     worklist.push(
                                         EvacAction::SkipOverEnvWrite(pointee),
@@ -673,18 +696,27 @@ unsafe fn evacuate_packed(
                                 }
 
                                 C_GcRootProv::Stk => {
-                                    dbgprintln!(
-                                        "   did not insert into so_env {:?}",
-                                        pointee
-                                    );
+                                    if !is_loc0(pointee, pointee_footer, true)
+                                    {
+                                        dbgprintln!(
+                                            "   pushing SkipOverEnvWrite({:?}) action to stack for indir, root in nursery",
+                                            src,
+                                        );
 
-                                    // [2022.07.06] we need to add things to this
-                                    // environment if the indirection pointer points
-                                    // to a non loc0 location.
-                                    ()
+                                        worklist.push(
+                                            EvacAction::SkipOverEnvWrite(
+                                                pointee,
+                                            ),
+                                        );
+                                    } else {
+                                        dbgprintln!(
+                                            "   optimization! did not push SkipOverEnvWrite({:?} to {:?}) to stack",
+                                            pointee,
+                                            src
+                                        );
+                                    }
                                 }
                             }
-                             */
 
                             // Same type, new location to evac from:
                             next_action = EvacAction::ProcessTy(
@@ -705,7 +737,40 @@ unsafe fn evacuate_packed(
                                 dst1,
                                 dst_end1
                             );
-                            st.so_env.insert(src, src_after_indr1);
+
+                            // Update the burned environment if we're evacuating a root
+                            // from the remembered set of if we're evacuating an
+                            // indirection pointer that points to a non-zero location.
+                            match (*frame).gc_root_prov {
+                                C_GcRootProv::RemSet => {
+                                    dbgprintln!(
+                                        "   inserting ({:?} to {:?}) to so_env, root in remembered set",
+                                        src,
+                                        src_after_indr1,
+                                    );
+                                    st.so_env.insert(src, src_after_indr1);
+                                }
+
+                                C_GcRootProv::Stk => {
+                                    if !is_loc0(pointee, pointee_footer, true)
+                                    {
+                                        dbgprintln!(
+                                            "   inserting ({:?} to {:?}) to so_env, root in nursery",
+                                            src,
+                                            src_after_indr1,
+                                        );
+
+                                        st.so_env.insert(src, src_after_indr1);
+                                    } else {
+                                        dbgprintln!(
+                                            "   optimization! did not insert ({:?} to {:?}) to so_env",
+                                            pointee,
+                                            src
+                                        );
+                                    }
+                                }
+                            }
+
                             let pointee_footer_offset = tagged.get_tag();
                             let pointee_footer =
                                 pointee.add(pointee_footer_offset as usize);
@@ -713,6 +778,7 @@ unsafe fn evacuate_packed(
                                 dst_end1,
                                 pointee_footer,
                             );
+
                             // (*zct).insert(
                             //     ((*(pointee_footer as *mut C_GibOldgenChunkFooter)).reg_info
                             //         as *const C_GibRegionInfo),
@@ -722,18 +788,10 @@ unsafe fn evacuate_packed(
                             dst = dst_after_indr;
                             dst_end = dst_end1;
 
-                            #[cfg(feature = "verbose_evac")]
-                            {
-                                dbgprintln!(
-                                    "   wrote tagged indirection pointer {:?} -> ({:?},{:?})",
-                                    dst_after_tag, tagged.untag(), tagged.get_tag()
-                                );
-                                dbgprintln!(
-                                    "   inserting into so_env {:?} to {:?}",
-                                    src,
-                                    src_after_indr1
-                                );
-                            }
+                            dbgprintln!(
+                                "   wrote tagged indirection pointer {:?} -> ({:?},{:?})",
+                                dst_after_tag, tagged.untag(), tagged.get_tag()
+                            );
 
                             #[cfg(feature = "gcstats")]
                             {
@@ -1173,6 +1231,8 @@ unsafe fn evacuate_packed(
                                         (*GC_STATS).gc_burn_time
                                     );
 
+                                    forwarded = false;
+
                                     #[cfg(feature = "gcstats")]
                                     {
                                         (*GC_STATS).not_forwarded += 1;
@@ -1182,11 +1242,19 @@ unsafe fn evacuate_packed(
                                 }
                             }
 
-                            #[cfg(feature = "verbose_evac")]
-                            dbgprintln!(
-                                "   pushing SkipOverEnvWrite action to stack (2)"
-                            );
-                            worklist.push(EvacAction::SkipOverEnvWrite(src));
+                            match (*frame).gc_root_prov {
+                                C_GcRootProv::RemSet => {
+                                    dbgprintln!(
+                                        "   pushing SkipOverEnvWrite({:?}) action to stack for ctor, root in remembered set",
+                                        src
+                                    );
+                                    worklist.push(
+                                        EvacAction::SkipOverEnvWrite(src),
+                                    );
+                                }
+
+                                C_GcRootProv::Stk => (),
+                            }
 
                             for (ty, shct) in field_tys
                                 .iter()
