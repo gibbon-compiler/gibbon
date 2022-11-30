@@ -44,7 +44,7 @@ static mut GC_STATS: *mut C_GibGcStats = null_mut();
 /// E.g. | A ... C 1 ... | if we evacuate 'C' first, we'll burn it and create a
 /// hole in its place. If we subsequently want to evacuate the bigger object
 /// starting at 'A', we would need to skip over 'C' to get to the next field.
-type SkipOverEnv = HashMap<*mut i8, *mut i8>;
+type SkipoverEnv = HashMap<*mut i8, *mut i8>;
 
 /// When evacuating a value made exclusively of non-forwardable objects and
 /// located in the middle of a chunk, we need to store its forwarding address
@@ -58,7 +58,7 @@ type ForwardingEnv = HashMap<*mut i8, *mut i8>;
 /// algorithm.
 #[derive(Debug)]
 struct EvacState<'a> {
-    so_env: &'a mut SkipOverEnv,
+    so_env: &'a mut SkipoverEnv,
     zct: *mut Zct,
     nursery: &'a C_GibNursery,
     evac_major: bool,
@@ -271,7 +271,7 @@ fn restore_writers(
 /// Copy values at all read cursors from the nursery to the provided
 /// destination heap. Also uncauterize any writer cursors that are reached.
 unsafe fn evacuate_shadowstack<'a, 'b>(
-    so_env: &'a mut SkipOverEnv,
+    so_env: &'a mut SkipoverEnv,
     nursery: &'b C_GibNursery,
     oldgen: &'a mut C_GibOldgen,
     rstack: &C_GibShadowstack,
@@ -509,7 +509,7 @@ enum EvacAction {
     // A reified continuation of processing the target of an indirection.
     RestoreSrc(*mut i8),
     // Update the skip-over environment.
-    SkipOverEnvWrite(*mut i8),
+    SkipoverEnvWrite(*mut i8),
 }
 
 /*
@@ -700,11 +700,11 @@ unsafe fn evacuate_packed(
                             match (*frame).gc_root_prov {
                                 C_GcRootProv::RemSet => {
                                     dbgprintln!(
-                                        "   pushing SkipOverEnvWrite({:?}) action to stack for indir, root in remembered set",
+                                        "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in remembered set",
                                         src,
                                     );
                                     worklist.push(
-                                        EvacAction::SkipOverEnvWrite(pointee),
+                                        EvacAction::SkipoverEnvWrite(pointee),
                                     );
                                 }
 
@@ -712,18 +712,18 @@ unsafe fn evacuate_packed(
                                     if !is_loc0(pointee, pointee_footer, true)
                                     {
                                         dbgprintln!(
-                                            "   pushing SkipOverEnvWrite({:?}) action to stack for indir, root in nursery",
+                                            "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in nursery",
                                             src,
                                         );
 
                                         worklist.push(
-                                            EvacAction::SkipOverEnvWrite(
+                                            EvacAction::SkipoverEnvWrite(
                                                 pointee,
                                             ),
                                         );
                                     } else {
                                         dbgprintln!(
-                                            "   optimization! did not push SkipOverEnvWrite({:?} to {:?}) to stack",
+                                            "   optimization! did not push SkipoverEnvWrite({:?} to {:?}) to stack",
                                             pointee,
                                             src
                                         );
@@ -1246,11 +1246,11 @@ unsafe fn evacuate_packed(
                             match (*frame).gc_root_prov {
                                 C_GcRootProv::RemSet => {
                                     dbgprintln!(
-                                        "   pushing SkipOverEnvWrite({:?}) action to stack for ctor, root in remembered set",
+                                        "   pushing SkipoverEnvWrite({:?}) action to stack for ctor, root in remembered set",
                                         src
                                     );
                                     worklist.push(
-                                        EvacAction::SkipOverEnvWrite(src),
+                                        EvacAction::SkipoverEnvWrite(src),
                                     );
                                 }
 
@@ -1281,7 +1281,7 @@ unsafe fn evacuate_packed(
                     }
                 } // End match tag
             }
-            EvacAction::SkipOverEnvWrite(pointee) => {
+            EvacAction::SkipoverEnvWrite(pointee) => {
                 dbgprintln!(
                     "   performing so_env insert continuation: {:?} to {:?}",
                     pointee,
