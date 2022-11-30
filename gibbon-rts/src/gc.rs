@@ -657,7 +657,7 @@ unsafe fn evacuate_packed(
                             write_forwarding_pointer_at(
                                 src,
                                 dst,
-                                dst_end.offset_from(dst) as u16, // .try_into().unwrap()
+                                dst_end.offset_from(dst) as u16,
                             );
                             forwarded = true;
 
@@ -832,7 +832,7 @@ unsafe fn evacuate_packed(
                         write_forwarding_pointer_at(
                             after_wframe_ptr,
                             dst,
-                            dst_end.offset_from(dst) as u16, // .try_into().unwrap()
+                            dst_end.offset_from(dst) as u16,
                         );
                         forwarded = true;
                         src = after_wframe_ptr;
@@ -948,7 +948,7 @@ unsafe fn evacuate_packed(
                             write_forwarding_pointer_at(
                                 src,
                                 dst,
-                                dst_end.offset_from(dst) as u16, // .try_into().unwrap()
+                                dst_end.offset_from(dst) as u16,
                             );
                             forwarded = true;
                         }
@@ -1200,7 +1200,7 @@ unsafe fn evacuate_packed(
                                                 src,
                                                 dst,
                                                 dst_end.offset_from(dst)
-                                                    as u16, // .try_into().unwrap()
+                                                    as u16,
                                             );
                                         },
                                         (*GC_STATS).gc_burn_time
@@ -1943,7 +1943,7 @@ impl<'a> Heap for C_GibOldgen<'a> {
             );
             // Write a redirection tag in the old chunk.
             let footer_offset: u16 =
-                new_footer_start.offset_from(new_dst) as u16; // .try_into().unwrap()
+                new_footer_start.offset_from(new_dst) as u16;
 
             let tagged: u64 =
                 TaggedPointer::new(new_dst, footer_offset).as_u64();
