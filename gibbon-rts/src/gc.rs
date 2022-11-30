@@ -307,7 +307,10 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
         match (*frame).gc_root_prov {
             C_GcRootProv::RemSet => {
                 let (tagged_src, _): (u64, _) = read((*frame).ptr);
-                let src = TaggedPointer::from_u64(tagged_src).untag();
+                let tagged = TaggedPointer::from_u64(tagged_src);
+                let src = tagged.untag();
+                let src_footer_offset = tagged.get_tag();
+                // let src_end = src.add(src_footer_offset as usize);
                 let (tag, src_after_tag): (C_GibPackedTag, *mut i8) =
                     read_mut(src);
                 match tag {
@@ -323,9 +326,9 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                             Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 1)?;
                         // Evacuate the data.
                         let (
-                            _src_after,
-                            _dst_after,
-                            _dst_after_end,
+                            src_after,
+                            dst_after,
+                            dst_after_end,
                             _forwarded,
                         ) = evacuate_packed(
                             &mut st, oldgen, frame, dst, dst_end,
@@ -354,6 +357,30 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                         // already created the new region with an initial refcount
                         // of 1 above.
                         add_to_outset((*frame).endptr, dst_end);
+
+                        // Note [Adding a forwarding pointer at the end of every chunk].
+                        // Compute chunk size.
+                        let src_footer: *mut C_GibNurseryChunkFooter =
+                            (*frame).endptr as *mut C_GibNurseryChunkFooter;
+                        let chunk_size = *src_footer as usize;
+                        let is_loc_0 =
+                            (src_footer_offset as usize) == chunk_size;
+
+                        // Write a forwarding pointer if we burned a hole in
+                        // the middle of a buffer.
+                        if is_loc_0 {
+                            // Write forwarding pointer at the end of chunk.
+                            debug_assert!(dst_after < dst_after_end);
+                            write_forwarding_pointer_at(
+                                src_after,
+                                dst_after,
+                                dst_after_end.offset_from(dst_after) as u16,
+                            );
+                        } else {
+                            // No forwarding pointer can be written,
+                            // add an entry o forwarding env.
+                            // TODO:
+                        }
                     }
                 }
             }
@@ -388,16 +415,12 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                         evacuate_copied(frame, tag, src, src_after_tag);
                     }
                     _ => {
+                        // We already know that this root is in the nursery.
+
                         // Compute chunk size.
-                        let chunk_size = if root_in_nursery {
-                            let nursery_footer: *mut C_GibNurseryChunkFooter =
-                                (*frame).endptr as *mut C_GibNurseryChunkFooter;
-                            *nursery_footer as usize
-                        } else {
-                            let footer = (*frame).endptr
-                                as *const C_GibOldgenChunkFooter;
-                            (*footer).size
-                        };
+                        let src_footer: *mut C_GibNurseryChunkFooter =
+                            (*frame).endptr as *mut C_GibNurseryChunkFooter;
+                        let chunk_size = *src_footer as usize;
 
                         // Allocate space in the destination.
                         let (dst, dst_end) =
@@ -411,8 +434,6 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                         );
                          */
                         // Evacuate the data.
-                        let is_loc_0 =
-                            (src_end.offset_from(src)) == chunk_size as isize;
                         let (src_after, dst_after, dst_after_end, forwarded) =
                             evacuate_packed(
                                 &mut st, oldgen, frame, dst, dst_end,
@@ -426,22 +447,28 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
 
                         // Update the pointers in shadow-stack.
                         (*frame).ptr = dst;
-                        // TODO(ckoparkar): AUDITME.
+                        // TODO: AUDITME.
                         // (*frame).endptr = dst_after_end;
                         (*frame).endptr = dst_end;
 
                         // Note [Adding a forwarding pointer at the end of every chunk].
-
-                        // FIXME: forwarded is currently true if evacuate forwarded ANYTHING.
-                        // We need to enforce it for each chunk...
-                        if !forwarded && is_loc_0 {
-                            debug_assert!(dst_after < dst_after_end);
-                            write_forwarding_pointer_at(
-                                src_after,
-                                dst_after,
-                                dst_after_end.offset_from(dst_after) as u16, // .try_into()
-                                                                             // .unwrap()
-                            );
+                        let is_loc_0 =
+                            (src_end.offset_from(src)) == chunk_size as isize;
+                        if !forwarded {
+                            if is_loc_0 {
+                                // Write forwarding pointer at the end of chunk.
+                                debug_assert!(dst_after < dst_after_end);
+                                write_forwarding_pointer_at(
+                                    src_after,
+                                    dst_after,
+                                    dst_after_end.offset_from(dst_after)
+                                        as u16,
+                                );
+                            } else {
+                                // No forwarding pointer can be written,
+                                // add an entry o forwarding env.
+                                // TODO:
+                            }
                         }
                     }
                 }
@@ -514,7 +541,7 @@ enum EvacAction {
 
 /*
 
-[2022.09.06] Two main todos:
+[2022.09.06] Main todo:
 
 (1)
 
@@ -532,23 +559,7 @@ pointing to the target of the redirection.
 Also, make indirection/redirection branches use the proper end-of-input-region
 by using the tag.
 
-[2022.09.06]: TODO: We need a more general-purpose solution for this. *Any*
-value being inlined could have a redirection pointer in it and we need to handle
-it properly.
-
-(2) At present, the end-of-input-region pointers never change in a function which
-    is processing a packed value. This was fine in the old version since all
-    end-of-input-region pointers were equivalent i.e. they all pointed to the
-    same region metadata information. In the new version, nursery versus oldgen
-    chunks have completely different footers! Thus, when a packed value processor
-    crosses over from the first nursery chunk to an oldgen chunk, we need to update
-    the corresponding end-of-input-region pointer. There's two places where this
-    needs to happen:
-
-    - redirection pointers. This is fine, redirections are tagged and all pointers
-      are updated properly.
-
-    - shortcut pointers, which may go from nursery chunk to oldgen chunk. TODO.
+[2022.11.30]: this is implemented but redirection pointers are still buggy.
 
 */
 
@@ -1646,6 +1657,7 @@ pub unsafe fn init_footer_at(
     footer_start
 }
 
+#[inline(always)]
 fn is_loc0(addr: *const i8, footer_addr: *const i8, in_nursery: bool) -> bool {
     unsafe {
         let chunk_size: usize = if in_nursery {
@@ -1833,7 +1845,7 @@ impl<'a> C_GibOldgen<'a> {
         unsafe {
             for reg_info in (*((*gen).old_zct)).drain() {
                 let footer = (*reg_info).first_chunk_footer;
-                // TODO(ckoparkar): review ZCT usage.
+                // TODO: review ZCT usage.
                 if (*reg_info).refcount == 0
                     && !(*((*gen).new_zct)).contains(&reg_info)
                     && !(*((*gen).new_zct)).contains(
