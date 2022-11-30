@@ -1722,8 +1722,8 @@ void gib_gc_restore_state(GibGcStateSnapshot *snapshot)
 
     // oldgen
     (oldgen->rem_set)->alloc = snapshot->gen_rem_set_alloc;
-    gib_free_zct(oldgen->old_zct);
-    gib_free_zct(oldgen->new_zct);
+    // gib_free_zct(oldgen->old_zct);
+    // gib_free_zct(oldgen->new_zct);
     oldgen->old_zct = snapshot->gen_old_zct;
     oldgen->new_zct = snapshot->gen_new_zct;
 

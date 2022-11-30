@@ -2460,10 +2460,14 @@ int gib_main_expr(void)
     struct timespec begin_pvrtmp_2257;
     struct timespec end_pvrtmp_2257;
 
+    GibGcStateSnapshot *snapshot = gib_gc_init_state(2);
+
     for (long long iters_pvrtmp_2257 = 0; iters_pvrtmp_2257 <
          gib_get_iters_param(); iters_pvrtmp_2257++) {
-        if (iters_pvrtmp_2257 != gib_get_iters_param() - 1)
+        if (iters_pvrtmp_2257 != gib_get_iters_param() - 1) {
+            gib_gc_save_state(snapshot, 2, region_2223.end, region_2224.end);
             gib_list_bumpalloc_save_state();
+        }
         clock_gettime(CLOCK_MONOTONIC_RAW, &begin_pvrtmp_2257);
 
         GibInt fltAppE_316_364 = gib_get_size_param();
@@ -2490,8 +2494,10 @@ int gib_main_expr(void)
         pvrtmp_2258 = pvrtmp_2249;
         pvrtmp_2259 = pvrtmp_2250;
         clock_gettime(CLOCK_MONOTONIC_RAW, &end_pvrtmp_2257);
-        if (iters_pvrtmp_2257 != gib_get_iters_param() - 1)
+        if (iters_pvrtmp_2257 != gib_get_iters_param() - 1) {
+            gib_gc_restore_state(snapshot);
             gib_list_bumpalloc_restore_state();
+        }
 
         double itertime_127 = gib_difftimespecs(&begin_pvrtmp_2257,
                                                 &end_pvrtmp_2257);

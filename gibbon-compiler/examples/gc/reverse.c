@@ -365,7 +365,7 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_842");
+            printf("Unknown tag in tmpval_842(%p), %d\n", xs_21_85_129, tmpval_842);
             exit(1);
         }
     }
@@ -465,7 +465,7 @@ GibCursorGibCursorGibIntProd sumList(GibCursor end_r_285,
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_898");
+            printf("Unknown tag in: tmpval_898(%p) %d", xs_25_89_134, tmpval_898);
             exit(1);
         }
     }
@@ -964,7 +964,7 @@ GibCursorGibCursorProd _print_PList(GibCursor end_r_299,
             GibBool chk_667 = tmpcur_1053 < end_r_299;
 
             #ifdef _GIBBON_DEBUG
-            assert(chk_667);
+            // assert(chk_667);
             #endif
 
             GibCursorGibCursorProd tmp_struct_41 =
@@ -999,7 +999,7 @@ GibCursorGibCursorProd _print_PList(GibCursor end_r_299,
             GibBool chk_672 = tmpcur_1056 < end_from_tagged_indr_463;
 
             #ifdef _GIBBON_DEBUG
-            assert(chk_672);
+            // assert(chk_672);
             #endif
 
             GibCursorGibCursorProd tmp_struct_42 =
@@ -1022,7 +1022,7 @@ GibCursorGibCursorProd _print_PList(GibCursor end_r_299,
             GibBool chk_676 = tmpcur_1061 < end_from_tagged_indr_463;
 
             #ifdef _GIBBON_DEBUG
-            assert(chk_676);
+            // assert(chk_676);
             #endif
 
             GibCursorGibCursorProd tmp_struct_44 =
@@ -1036,7 +1036,7 @@ GibCursorGibCursorProd _print_PList(GibCursor end_r_299,
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1050");
+            printf("Unknown tag in: tmpval_1050 %d", tmpval_1050);
             exit(1);
         }
     }
@@ -1125,6 +1125,7 @@ int gib_main_expr(void)
     r_317 = frame->ptr;
     pvrtmp_815 = frame->endptr;
     gib_shadowstack_push(rstack, r_315, pvrtmp_828, Stk, PList_T);
+    pvrtmp_816 = r_317;
 
     GibBool chk_691 = r_317 < pvrtmp_815;
 

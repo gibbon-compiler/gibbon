@@ -3,7 +3,7 @@
 debug_flags="-D_GIBBON_GCSTATS -D_GIBBON_VERBOSITY=3 -D_GIBBON_DEBUG -DNURSERY_SIZE=4096 -O0"
 rust_rts="$GIBBONDIR/gibbon-rts/target/debug"
 
-# debug_flags="-D_GIBBON_GCSTATS -D_GIBBON_VERBOSITY=1 -DNURSERY_SIZE=4096 -O3"
+# debug_flags="-D_GIBBON_GCSTATS -D_GIBBON_VERBOSITY=1 -DNURSERY_SIZE=1024000 -O3"
 # rust_rts="$GIBBONDIR/gibbon-rts/target/release"
 
 # gcc -std=gnu11  -fcilkplus -Wno-unused-variable -Wno-unused-label -Wall -Wextra -Wpedantic  -O3 $debug_flags  -flto -I $GIBBONDIR/gibbon-compiler/cbits  -L$GIBBONDIR/gibbon-rts/target/debug -Wl,-rpath=$GIBBONDIR/gibbon-rts/target/debug -c $GIBBONDIR/gibbon-compiler/cbits/gibbon_rts.c -o $GIBBONDIR/gibbon-compiler/cbits/gibbon_rts.o  -lm -lgibbon_rts && gcc -std=gnu11  -fcilkplus  -Wno-unused-variable -Wno-unused-label -Wall -Wextra -Wpedantic  -O3 -g $debug_flags  -flto     $GIBBONDIR/gibbon-compiler/cbits/gibbon_rts.o -I$GIBBONDIR/gibbon-compiler/cbits  -L$GIBBONDIR/gibbon-rts/target/debug    -Wl,-rpath=$GIBBONDIR/gibbon-rts/target/debug $GIBBONDIR/gibbon-compiler/examples/gc/bench_new_rts.c    -o $GIBBONDIR/gibbon-compiler/examples/gc/bench_new_rts.exe -lm -lgibbon_rts
