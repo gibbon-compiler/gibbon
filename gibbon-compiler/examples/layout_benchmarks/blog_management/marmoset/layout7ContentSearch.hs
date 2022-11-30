@@ -1,4 +1,5 @@
-import Dep
+import Basics
+import GenerateLayout7
 
 type Text   = Vector Char
 

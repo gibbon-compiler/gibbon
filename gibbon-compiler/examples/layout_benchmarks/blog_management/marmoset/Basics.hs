@@ -215,142 +215,11 @@ mkListFiles f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 len = if len < 0 then Nil
                                                                 rst = (mkListFiles f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 (len - 1))
                                                               in Cons f rst
 
-mkBlogs_layout1 :: PList Text -> PList Text -> Int -> Blog
-mkBlogs_layout1 contentfiles tagfiles length =
-   if length < 0 then End
-   else 
-      let header  = Header (getRandomString 5)
-          blogID  = ID (10 - (mod length 10))
-          author  = Author (getRandomString 5)
-          date    = Date (getRandomString 5)
-          select  = (mod length 10)
-          def     = "default file"  -- this is un-necessary and just used for a default value
-          fc      = fromMaybe def (nth_plist contentfiles Nothing select)
-          content = mkContentFromText fc
-          ft      = fromMaybe def (nth_plist tagfiles Nothing select)
-          tags    = mkTagsFromText ft
-          rst     = mkBlogs_layout1 contentfiles tagfiles (length - 1)
-         in Layout1 header blogID author date content tags rst
 
-
-mkBlogs_layout2 :: PList Text -> PList Text -> Int -> Blog
-mkBlogs_layout2 contentfiles tagfiles length =
-   if length < 0 then End
-   else 
-      let select  = (mod length 10)
-          def     = "default file"
-          fc      = fromMaybe def (nth_plist contentfiles Nothing select)
-          content = mkContentFromText fc
-          ft      = fromMaybe def (nth_plist tagfiles Nothing select)
-          tags    = mkTagsFromText ft
-          rst     = mkBlogs_layout2 contentfiles tagfiles (length - 1)
-          header  = Header (getRandomString 5)
-          blogID  = ID (10 - (mod length 10))
-          author  = Author (getRandomString 5)
-          date    = Date (getRandomString 5)                 
-         in Layout2 content tags rst header blogID author date 
-
-mkBlogs_layout3 :: PList Text -> PList Text -> Int -> Blog
-mkBlogs_layout3 contentfiles tagfiles length =
-   if length < 0 then End
-   else 
-      let select  = (mod length 10)
-          def     = "default file"
-          ft      = fromMaybe def (nth_plist tagfiles Nothing select)
-          tags    = mkTagsFromText ft
-          rst     = mkBlogs_layout3 contentfiles tagfiles (length - 1)
-          fc      = fromMaybe def (nth_plist contentfiles Nothing select)
-          content = mkContentFromText fc
-          header  = Header (getRandomString 5)
-          blogID  = ID (10 - (mod length 10))
-          author  = Author (getRandomString 5)
-          date    = Date (getRandomString 5)           
-         in Layout3 tags rst content header blogID author date
-
-mkBlogs_layout4 :: PList Text -> PList Text -> Int -> Blog
-mkBlogs_layout4 contentfiles tagfiles length =
-   if length < 0 then End
-   else 
-      let select  = (mod length 10)
-          def     = "default file"
-          ft      = fromMaybe def (nth_plist tagfiles Nothing select)
-          tags    = mkTagsFromText ft
-          fc      = fromMaybe def (nth_plist contentfiles Nothing select)
-          content = mkContentFromText fc
-          rst     = mkBlogs_layout4 contentfiles tagfiles (length - 1)        
-          header  = Header (getRandomString 5)        
-          blogID  = ID (10 - (mod length 10))
-          author  = Author (getRandomString 5)
-          date    = Date (getRandomString 5)           
-         in Layout4 tags content rst header blogID author date
-
-mkBlogs_layout5 :: PList Text -> PList Text -> Int -> Blog
-mkBlogs_layout5 contentfiles tagfiles length =
-   if length < 0 then End
-   else 
-      let select  = (mod length 10)
-          def     = "default file"
-          rst     = mkBlogs_layout5 contentfiles tagfiles (length - 1)
-          ft      = fromMaybe def (nth_plist tagfiles Nothing select) 
-          tags    = mkTagsFromText ft
-          fc      = fromMaybe def (nth_plist contentfiles Nothing select)
-          content = mkContentFromText fc                     
-          header  = Header (getRandomString 5)
-          blogID  = ID (10 - (mod length 10))
-          author  = Author (getRandomString 5)
-          date    = Date (getRandomString 5)          
-         in Layout5 rst tags content header blogID author date
-
-mkBlogs_layout6 :: PList Text -> PList Text -> Int -> Blog
-mkBlogs_layout6 contentfiles tagfiles length =
-   if length < 0 then End
-   else 
-      let select  = (mod length 10)
-          def     = "default file" 
-          header  = Header (getRandomString 5)          
-          blogID  = ID (10 - (mod length 10))
-          author  = Author (getRandomString 5)
-          date    = Date (getRandomString 5)
-          fc      = fromMaybe def (nth_plist contentfiles Nothing select)
-          content = mkContentFromText fc              
-          rst     = mkBlogs_layout6 contentfiles tagfiles (length - 1)
-          ft      = fromMaybe def (nth_plist tagfiles Nothing select)
-          tags    = mkTagsFromText ft        
-         in Layout6 header blogID author date content rst tags
-
-mkBlogs_layout7 :: PList Text -> PList Text -> Int -> Blog
-mkBlogs_layout7 contentfiles tagfiles length =
-   if length < 0 then End
-   else 
-      let select  = (mod length 10)
-          def     = "default file" 
-          rst     = mkBlogs_layout7 contentfiles tagfiles (length - 1)
-          fc      = fromMaybe def (nth_plist contentfiles Nothing select)
-          content = mkContentFromText fc                                
-          header  = Header (getRandomString 5)
-          blogID  = ID (10 - (mod length 10))
-          author  = Author (getRandomString 5)
-          date    = Date (getRandomString 5)
-          ft      = fromMaybe def (nth_plist tagfiles Nothing select)
-          tags    = mkTagsFromText ft           
-         in Layout7 rst content header blogID author date tags
-
-mkBlogs_layout8 :: PList Text -> PList Text -> Int -> Blog
-mkBlogs_layout8 contentfiles tagfiles length = 
-   if length < 0 then End 
-   else 
-      let select  = (mod length 10)
-          def     = "default file"
-          fc      = fromMaybe def (nth_plist contentfiles Nothing select)
-          content = mkContentFromText fc
-          rst     = mkBlogs_layout8 contentfiles tagfiles (length - 1)
-          id      = ID (10 - (mod length 10)) 
-          author  = Author (getRandomString (mod rand 9))
-          date    = Date (getRandomString (mod rand 9))
-          header  = Header (getRandomString (mod rand 9))
-          ft      = fromMaybe def (nth_plist tagfiles Nothing select)
-          tags    = mkTagsFromText ft
-       in Layout8 content rst id author date header tags
+checkBlogID :: BlogId -> Int -> Bool
+checkBlogID id val = case id of 
+                        ID x -> if ( x == val ) then True 
+                                                else False
 
 -- Function to compare two words, each represented by Vector Char. 
 compareWord :: Text -> Text -> Bool
@@ -383,6 +252,12 @@ deleteTagList keyword taglist = case taglist of
    Nil -> Nil 
    Cons word rst -> if (compareWord keyword word) then (deleteTagList keyword rst) 
                     else Cons word (deleteTagList keyword rst)
+
+
+insertTagList :: Text -> PList Text -> PList Text 
+insertTagList keyword taglist = case taglist of 
+   Nil -> (Cons keyword) Nil
+   Cons word rst -> insertTagList keyword rst
 
 -- Tell if a particular keyword exists in a Block data type or not
 isKeywordPresentInBlock :: Text -> Block -> Bool
@@ -489,6 +364,10 @@ searchBlogTags keyword tags = case tags of
 deleteBlogTags :: Text -> BlogTags -> BlogTags
 deleteBlogTags keyword tags = case tags of 
    TagList list -> TagList (deleteTagList keyword list)
+
+insertBlogTags :: Text -> BlogTags -> BlogTags 
+insertBlogTags keyword tags = case tags of 
+   TagList list -> TagList (insertTagList keyword list)
 
 -- emphasize blog content, if present is True
 emphasizeBlogContent' :: Text -> BlogContent -> BlogContent
