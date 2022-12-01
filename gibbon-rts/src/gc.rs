@@ -325,14 +325,10 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                         let (dst, dst_end) =
                             Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 1)?;
                         // Evacuate the data.
-                        let (
-                            src_after,
-                            dst_after,
-                            dst_after_end,
-                            _forwarded,
-                        ) = evacuate_packed(
-                            &mut st, oldgen, frame, dst, dst_end,
-                        );
+                        let (src_after, dst_after, dst_after_end, _forwarded) =
+                            evacuate_packed(
+                                &mut st, oldgen, frame, dst, dst_end,
+                            );
                         // Update the indirection pointer in oldgen region.
                         let offset = dst_end.offset_from(dst);
                         let tagged: u64 =
@@ -426,13 +422,12 @@ unsafe fn evacuate_shadowstack<'a, 'b>(
                         let (dst, dst_end) =
                             Heap::allocate_first_chunk(oldgen, CHUNK_SIZE, 0)?;
                         // Update ZCT.
-                        let _footer = dst_end as *const C_GibOldgenChunkFooter;
-                        /*
+                        let footer = dst_end as *const C_GibOldgenChunkFooter;
                         record_time!(
-                            (*zct).insert((*footer).reg_info),
+                            (*(st.zct)).insert((*footer).reg_info),
                             (*GC_STATS).gc_zct_mgmt_time
                         );
-                         */
+
                         // Evacuate the data.
                         let (src_after, dst_after, dst_after_end, forwarded) =
                             evacuate_packed(
@@ -611,11 +606,14 @@ unsafe fn evacuate_packed(
     let mut worklist: Vec<EvacAction> = Vec::new();
 
     loop {
-        dbgprintln!("++Loop iteration on src {:?} action {:?}, length after this {}, prefix(5): {:?}",
-                    src, next_action, worklist.len(), &worklist[..std::cmp::min(5, worklist.len())]);
+        dbgprintln!("++Loop iteration on src {:?}, inlining_underway {:?}, action {:?}, length after this {}, prefix(5): {:?}",
+                    src, inlining_underway, next_action, worklist.len(), &worklist[..std::cmp::min(5, worklist.len())]);
 
         match next_action {
             EvacAction::RestoreSrc(new_src) => {
+                dbgprintln!("+++Restoring source from {:?} to {:?}, inlining_underway_upto={:?}",
+                            src, new_src, inlining_underway_upto);
+
                 src = new_src;
 
                 if new_src == inlining_underway_upto {
@@ -803,18 +801,20 @@ unsafe fn evacuate_packed(
                                 pointee_footer,
                             );
 
-                            // (*zct).insert(
-                            //     ((*(pointee_footer as *mut C_GibOldgenChunkFooter)).reg_info
-                            //         as *const C_GibRegionInfo),
-                            // );
+                            (*(st.zct)).insert(
+                                (*(pointee_footer
+                                    as *mut C_GibOldgenChunkFooter))
+                                    .reg_info
+                                    as *const C_GibRegionInfo,
+                            );
 
                             src = src_after_indr1;
                             dst = dst_after_indr;
                             dst_end = dst_end1;
 
                             dbgprintln!(
-                                "   wrote tagged indirection pointer {:?} -> ({:?},{:?})",
-                                dst_after_tag, tagged.untag(), tagged.get_tag()
+                                "   wrote tagged indirection pointer {:?} -> ({:p},{:?})",
+                                dst_after_tag, tagged.untag() as *const i8, tagged.get_tag()
                             );
 
                             #[cfg(feature = "gcstats")]
@@ -880,7 +880,8 @@ unsafe fn evacuate_packed(
                         let dst_after_indr =
                             write(dst_after_tag, tagged_fwd_ptr.as_u64());
 
-                        dbgprintln!("   forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}", src, tagged_fwd_ptr, dst);
+                        dbgprintln!("   forwarding ptr!: src {:?}, wrote tagged ptr {:?} to dest {:?}",
+                                    src, tagged_fwd_ptr, dst);
 
                         write_shortcut_ptr!(mb_shortcut_addr, dst1, dst_end1);
 
@@ -898,17 +899,15 @@ unsafe fn evacuate_packed(
                         match (*frame).gc_root_prov {
                             C_GcRootProv::RemSet => {}
                             C_GcRootProv::Stk => {
-                                let _fwd_footer = fwd_footer_addr
+                                let fwd_footer = fwd_footer_addr
                                     as *const C_GibOldgenChunkFooter;
-                                /*
-                                    record_time!(
+                                record_time!(
                                     (*(st.zct)).remove(
-                                    &((*fwd_footer).reg_info
-                                    as *const C_GibRegionInfo),
-                                ),
+                                        &((*fwd_footer).reg_info
+                                            as *const C_GibRegionInfo),
+                                    ),
                                     (*GC_STATS).gc_zct_mgmt_time
                                 );
-                                     */
                                 ()
                             }
                         }
@@ -1009,6 +1008,12 @@ unsafe fn evacuate_packed(
                             // An alternative is to write an indirection node
                             // which will be way easier.
 
+                            dbgprintln!(
+                                "   writing redirection node {:?} -> {:?}",
+                                dst,
+                                tagged_next_chunk as *const i8
+                            );
+
                             let dst_after_tag = write(dst, C_REDIRECTION_TAG);
                             let dst_after_redir =
                                 write(dst_after_tag, tagged_next_chunk);
@@ -1033,6 +1038,14 @@ unsafe fn evacuate_packed(
                                 .add(next_chunk_footer_offset as usize)
                                 as *mut C_GibOldgenChunkFooter;
 
+                            dbgprintln!(
+                                "   reconciling footers {:?}, {:?} and {:?}, {:?}",
+                                (*footer1),
+                                *((*footer1).reg_info),
+                                (*footer2),
+                                *((*footer2).reg_info),
+                            );
+
                             // Reconcile RegionInfo objects.
                             let reg_info1 = (*footer1).reg_info;
                             let reg_info2 = (*footer2).reg_info;
@@ -1044,19 +1057,23 @@ unsafe fn evacuate_packed(
                             (*footer1).next = footer2;
                             (*footer1).reg_info = reg_info2;
 
-                            /*
-                                // Update ZCT.
-                                record_time!(
+                            dbgprintln!(
+                                "   reconciled footer {:?}, {:?}",
+                                (*footer1),
+                                *((*footer1).reg_info),
+                            );
+
+                            // Update ZCT.
+                            record_time!(
                                 (*(st.zct)).remove(
-                                &(reg_info1 as *const C_GibRegionInfo)
-                            ),
+                                    &(reg_info1 as *const C_GibRegionInfo)
+                                ),
                                 (*GC_STATS).gc_zct_mgmt_time
                             );
-                                record_time!(
+                            record_time!(
                                 (*(st.zct)).insert(reg_info2),
                                 (*GC_STATS).gc_zct_mgmt_time
                             );
-                                 */
 
                             // Stop evacuating.
                             src = src_after_next_chunk as *mut i8;
@@ -1432,9 +1449,9 @@ unsafe fn find_forwarding_pointer(
             let (tagged, _): (u64, _) = read_mut(addr_after_tag);
             let tagged_fwd_ptr = TaggedPointer::from_u64(tagged);
             dbgprintln!(
-                "   Found forwarding ptr at {:?}, dest {:?}",
+                "   Found forwarding ptr at {:?}, dest {:p}",
                 addr_after_tag,
-                tagged_fwd_ptr.untag()
+                tagged_fwd_ptr.untag() as *const i8
             );
             return tagged_fwd_ptr;
         }
@@ -1516,7 +1533,11 @@ unsafe fn write_forwarding_pointer_at(
 ) -> *mut i8 {
     let tagged: u64 = TaggedPointer::new(fwd, tag).as_u64();
     let addr1 = write(addr, C_COPIED_TO_TAG);
-    dbgprintln!("   writing forwarding pointer {:?} at {:?}", tagged, addr1);
+    dbgprintln!(
+        "   writing forwarding pointer {:p} at {:?}",
+        tagged as *const i8,
+        addr1
+    );
     write(addr1, tagged)
 }
 
@@ -1553,11 +1574,13 @@ unsafe fn free_region(
     let mut free_this = addr_to_free(footer);
     let mut next_chunk_footer = (*footer).next;
     // Free the first chunk and then all others.
-    libc::free(free_this);
+    dbgprintln!("  freeing {:?}", free_this);
+    // libc::free(free_this);
     while !next_chunk_footer.is_null() {
         free_this = addr_to_free(next_chunk_footer);
         next_chunk_footer = (*next_chunk_footer).next;
-        libc::free(free_this);
+        dbgprintln!("  freeing {:?}", free_this);
+        // libc::free(free_this);
     }
     drop(reg_info);
     Ok(())
