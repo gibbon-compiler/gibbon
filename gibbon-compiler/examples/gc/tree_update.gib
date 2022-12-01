@@ -32,12 +32,16 @@
 (define (tree-insert [tr : SearchTree] [n : Int]) : SearchTree
   (case tr
     [(Null)        (Leaf n)]
-    [(Leaf n1)     (if (< n n1)
-                       (Node n1 (Leaf n) (Null))
-                       (Node n1 (Null) (Leaf n)))]
-    [(Node n1 l r) (if (< n1 n)
-                       (Node n1 (copy-packed l) (tree-insert r n))
-                       (Node n1 (tree-insert l n) (copy-packed r)))]))
+    [(Leaf n1)     (if (= n n1)
+                       (Leaf n1)
+                       (if (< n n1)
+                           (Node n1 (Leaf n) (Null))
+                           (Node n1 (Null) (Leaf n))))]
+    [(Node n1 l r) (if (= n1 n)
+                       (Node n1 (copy-packed l) (copy-packed r))
+                       (if (< n1 n)
+                           (Node n1 (copy-packed l) (tree-insert r n))
+                           (Node n1 (tree-insert l n) (copy-packed r))))]))
 
 (define (min-tree [tr : SearchTree]) : Int
   (case tr
@@ -45,12 +49,12 @@
     [(Leaf n)     n]
     [(Node n l r) (case l
                     [(Null)       n]
-                    [(Leaf m)     (min-tree l)]
-                    [(Node x y z) (min-tree l)])]))
+                    [(Leaf m)     m]
+                    [(Node x y z) (min-tree y)])]))
 
 (define (tree-delete [tr : SearchTree] [n : Int]) : SearchTree
   (case tr
-    [(Null)        (Leaf n)]
+    [(Null)        (Null)]
     [(Leaf n1)     (if (= n1 n)
                        (Null)
                        (Leaf n1))]
@@ -64,19 +68,18 @@
 (define (loop [tr : SearchTree] [n : Int]) : SearchTree
   (if (= n 0)
       tr
-      (let ([j : Int (mod (rand) 1000)])
+       (let ([j : Int (mod (rand) 10)])
         (if (= 0 (mod j 2))
             (loop (tree-insert tr j) (- n 1))
             (loop (tree-delete tr (- j 1)) (- n 1))))))
 
 (let ([m : Int (size-param)])
   ;; (2 ^ (n+1)) - 1
-  (let* ([total-nodes : Int (- (exp 2 2) 1)]
+  (let* ([total-nodes : Int (- (exp 2 3) 1)]
          [tr0 : SearchTree (time (helper 0 total-nodes))]
-         [n : Int (countnodes tr0)]
          [tr1 : SearchTree (iterate (loop tr0 (size-param)))]
-         [_ (print-packed tr1)]
+         ;; [_ (print-packed tr1)]
          ;; [_ (printint n)]
          ;; [_ (printsym (quote newline))]
          )
-    (sum-tree tr1)))
+    (countnodes tr1)))

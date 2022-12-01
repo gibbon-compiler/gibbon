@@ -120,6 +120,8 @@ GibCursorGibCursorProd _traverse_SearchTree(GibCursor end_r_879,
                                             GibCursor arg_202_287_461);
 GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_881,
                                          GibCursor arg_211_294_468);
+GibCursorGibCursorProd _print_SearchTree2(GibCursor end_r_881,
+                                          GibCursor arg_211_294_468);
 GibCursorGibIntProd caseFn_226(GibCursor end_r_883, GibInt n_83_227_309_483,
                                GibCursor l_84_228_310_484);
 typedef enum {
@@ -438,10 +440,12 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_856,
                                               GibInt n_67_244_387)
 {
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    // printf("start of loop:\n");
+    printf("start of loop, n_67_244_387: %lld\n", n_67_244_387);
+    printf("loc_855: %p, tr_66_243_386: %p, end_r_856: %p\n",
+           loc_855, tr_66_243_386, end_r_856);
     // _print_SearchTree(NULL, tr_66_243_386);
     // printf("\n");
-    // fflush(stdout);
+    fflush(stdout);
 #endif
 
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
@@ -476,6 +480,17 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_856,
                                  SearchTree_T);
             gib_shadowstack_push(wstack, loc_855, end_r_857, Stk, SearchTree_T);
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    printf("going to insert, j_68_245_390: %lld\n", j_68_245_390);
+    if (j_68_245_390 == 996) {
+        _print_SearchTree(NULL, tr_66_243_386);
+        printf("\n");
+        _print_SearchTree2(NULL, tr_66_243_386);
+        printf("\n");
+    }
+    fflush(stdout);
+#endif
+
             GibChunk region_2330 =
                      gib_alloc_region(REGION_SIZE);
             GibCursor r_938 = region_2330.start;
@@ -489,9 +504,23 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_856,
             end_r_856 = frame->endptr;
             gib_shadowstack_push(wstack, loc_855, end_r_857, Stk, SearchTree_T);
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+            if (j_68_245_390 == 996) {
+                _print_SearchTree(NULL, tr_66_243_386);
+                printf("\n");
+                _print_SearchTree2(NULL, tr_66_243_386);
+                printf("\n");
+            }
+            fflush(stdout);
+#endif
+
             GibBool chk_1536 = tr_66_243_386 < end_r_856;
 
             #ifdef _GIBBON_DEBUG
+            if (tr_66_243_386 > end_r_856) {
+                printf("tr_66_243_386: %p, end_r_856: %p\n", tr_66_243_386, end_r_856);
+                fflush(stdout);
+            }
             assert(chk_1536);
             #endif
 
@@ -512,11 +541,19 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_856,
             loc_855 = frame->ptr;
             end_r_857 = frame->endptr;
 
+#ifdef _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+            if (j_68_245_390 == 160) {
+                printf("pvrtmp_2333: %p, pvrtmp_2334: %p, pvrtmp_2332: %p\n",
+                       pvrtmp_2333, pvrtmp_2334, pvrtmp_2332);
+                fflush(stdout);
+            }
+#endif
+
             GibInt fltAppE_333_394 = n_67_244_387 - 1;
             GibBool chk_1539 = r_938 < pvrtmp_2332;
 
             #ifdef _GIBBON_DEBUG
-            assert(chk_1539);
+            // assert(chk_1539);
             #endif
 
             GibBool chk_1538 = loc_855 < end_r_857;
@@ -537,6 +574,7 @@ GibCursorGibCursorGibCursorGibCursorProd loop(GibCursor end_r_856,
                                                                pvrtmp_2341,
                                                                pvrtmp_2342};
         } else {
+
             GibInt fltAppE_335_395 = j_68_245_390 - 1;
 
             gib_shadowstack_push(rstack, tr_66_243_386, end_r_856, Stk,
@@ -1542,7 +1580,7 @@ GibCursorGibCursorGibCursorGibCursorProd tree_insert(GibCursor end_r_868,
 
       default:
         {
-            printf("Unknown tag in: tmpval_2510: %d", tmpval_2510);
+            printf("Unknown tag in: tmpval_2510: %d, tr_90_263_427: %p", tmpval_2510, tr_90_263_427);
             exit(1);
         }
     }
@@ -2172,7 +2210,7 @@ GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_881,
             GibInt tmpval_2761 = *(GibInt *) tmpaftercur_2759;
             GibCursor tmpcur_2762 = tmpaftercur_2759 + sizeof(GibInt);
             unsigned char wildcard_224_304_478 = gib_print_symbol(2219);
-            unsigned char y_221_305_479 = printf("%ld", tmpval_2761);
+            unsigned char y_221_305_479 = printf("%ld ", tmpval_2761);
 
             gib_shadowstack_push(rstack, tmpcur_2758, end_r_881, Stk,
                                  SearchTree_T);
@@ -2249,6 +2287,146 @@ GibCursorGibCursorProd _print_SearchTree(GibCursor end_r_881,
 
             GibCursorGibCursorProd tmp_struct_110 =
                                     _print_SearchTree(end_from_tagged_indr_1361, tmpcur_2772);
+            GibCursor pvrtmp_2775 = tmp_struct_110.field0;
+            GibCursor pvrtmp_2776 = tmp_struct_110.field1;
+
+            return (GibCursorGibCursorProd) {pvrtmp_2775, pvrtmp_2776};
+            break;
+        }
+
+      default:
+        {
+            printf("%s\n", "Unknown tag in: tmpval_2754");
+            exit(1);
+        }
+    }
+}
+GibCursorGibCursorProd _print_SearchTree2(GibCursor end_r_881,
+                                         GibCursor arg_211_294_468)
+{
+    printf("%p:", arg_211_294_468);
+    fflush(stdout);
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    GibShadowstackFrame *frame;
+    GibPackedTag tmpval_2754 = *(GibPackedTag *) arg_211_294_468;
+    GibCursor tmpcur_2755 = arg_211_294_468 + 1;
+
+
+  switch_2777:
+    ;
+    switch (tmpval_2754) {
+
+      case 0:
+        {
+            GibCursor jump_1294 = arg_211_294_468 + 1;
+            unsigned char wildcard_212_295_469 = gib_print_symbol(2218);
+            unsigned char wildcard_213_296_470 = gib_print_symbol(2217);
+
+            return (GibCursorGibCursorProd) {end_r_881, jump_1294};
+            break;
+        }
+
+      case 1:
+        {
+            GibInt tmpval_2756 = *(GibInt *) tmpcur_2755;
+            GibCursor tmpcur_2757 = tmpcur_2755 + sizeof(GibInt);
+            GibCursor jump_1296 = tmpcur_2755 + 8;
+            unsigned char wildcard_216_298_472 = gib_print_symbol(2220);
+            unsigned char y_215_299_473 = printf("%ld", tmpval_2756);
+            unsigned char wildcard_217_300_474 = gib_print_symbol(2217);
+
+            return (GibCursorGibCursorProd) {end_r_881, jump_1296};
+            break;
+        }
+
+      case 3:
+        {
+            uintptr_t tagged_tmpcur_107 = *(uintptr_t *) tmpcur_2755;
+            GibCursor tmpcur_2758 = GIB_UNTAG(tagged_tmpcur_107);
+            GibCursor tmpaftercur_2759 = tmpcur_2755 + 8;
+            uint16_t tmptag_2760 = GIB_GET_TAG(tagged_tmpcur_107);
+            GibCursor end_from_tagged_absran_840 = tmpcur_2758 + tmptag_2760;
+            GibInt tmpval_2761 = *(GibInt *) tmpaftercur_2759;
+            GibCursor tmpcur_2762 = tmpaftercur_2759 + sizeof(GibInt);
+            unsigned char wildcard_224_304_478 = gib_print_symbol(2219);
+            unsigned char y_221_305_479 = printf("%ld ", tmpval_2761);
+
+            gib_shadowstack_push(rstack, tmpcur_2758, end_r_881, Stk,
+                                 SearchTree_T);
+
+            GibBool chk_1911 = tmpcur_2762 < end_r_881;
+
+            #ifdef _GIBBON_DEBUG
+            // assert(chk_1911);
+            #endif
+
+            GibCursorGibCursorProd tmp_struct_105 =
+                                    _print_SearchTree2(end_r_881, tmpcur_2762);
+            GibCursor pvrtmp_2763 = tmp_struct_105.field0;
+            GibCursor pvrtmp_2764 = tmp_struct_105.field1;
+
+            frame = gib_shadowstack_pop(rstack);
+            tmpcur_2758 = frame->ptr;
+            end_r_881 = frame->endptr;
+
+            GibBool chk_1913 = tmpcur_2758 < end_from_tagged_absran_840;
+
+            #ifdef _GIBBON_DEBUG
+            assert(chk_1913);
+            #endif
+
+            GibCursorGibCursorProd tmp_struct_106 =
+                                    _print_SearchTree2(end_from_tagged_absran_840, tmpcur_2758);
+            GibCursor pvrtmp_2765 = tmp_struct_106.field0;
+            GibCursor pvrtmp_2766 = tmp_struct_106.field1;
+            unsigned char wildcard_225_308_482 = gib_print_symbol(2217);
+
+            return (GibCursorGibCursorProd) {pvrtmp_2765, pvrtmp_2766};
+            break;
+        }
+
+      case GIB_INDIRECTION_TAG:
+        {
+            uintptr_t tagged_tmpcur_109 = *(uintptr_t *) tmpcur_2755;
+            GibCursor tmpcur_2767 = GIB_UNTAG(tagged_tmpcur_109);
+            GibCursor tmpaftercur_2768 = tmpcur_2755 + 8;
+            uint16_t tmptag_2769 = GIB_GET_TAG(tagged_tmpcur_109);
+            GibCursor end_from_tagged_indr_1361 = tmpcur_2767 + tmptag_2769;
+            GibCursor jump_1363 = tmpcur_2755 + 8;
+            unsigned char wildcard_1366 = gib_print_symbol(2222);
+            GibBool chk_1917 = tmpcur_2767 < end_from_tagged_indr_1361;
+
+            #ifdef _GIBBON_DEBUG
+            assert(chk_1917);
+            #endif
+
+            printf(" (*%p <data>)", tmpcur_2767);
+            // GibCursorGibCursorProd tmp_struct_108 =
+            //                         _print_SearchTree2(end_from_tagged_indr_1361, tmpcur_2767);
+            // GibCursor pvrtmp_2770 = tmp_struct_108.field0;
+            // GibCursor pvrtmp_2771 = tmp_struct_108.field1;
+
+            return (GibCursorGibCursorProd) {end_r_881, jump_1363};
+            break;
+        }
+
+      case GIB_REDIRECTION_TAG:
+        {
+            uintptr_t tagged_tmpcur_111 = *(uintptr_t *) tmpcur_2755;
+            GibCursor tmpcur_2772 = GIB_UNTAG(tagged_tmpcur_111);
+            GibCursor tmpaftercur_2773 = tmpcur_2755 + 8;
+            uint16_t tmptag_2774 = GIB_GET_TAG(tagged_tmpcur_111);
+            GibCursor end_from_tagged_indr_1361 = tmpcur_2772 + tmptag_2774;
+            unsigned char wildcard_1366 = gib_print_symbol(2221);
+            GibBool chk_1921 = tmpcur_2772 < end_from_tagged_indr_1361;
+
+            #ifdef _GIBBON_DEBUG
+            assert(chk_1921);
+            #endif
+
+            GibCursorGibCursorProd tmp_struct_110 =
+                                    _print_SearchTree2(end_from_tagged_indr_1361, tmpcur_2772);
             GibCursor pvrtmp_2775 = tmp_struct_110.field0;
             GibCursor pvrtmp_2776 = tmp_struct_110.field1;
 

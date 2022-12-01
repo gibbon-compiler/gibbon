@@ -1548,7 +1548,7 @@ unsafe fn free_region(
 ) -> Result<()> {
     #[cfg(feature = "gcstats")]
     {
-        (*GC_STATS).oldgen_regions -= 1;
+        // (*GC_STATS).oldgen_regions -= 1;
     }
 
     // Rust drops this heap allocated object when reg_info goes out of scope.

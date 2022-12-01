@@ -1616,7 +1616,7 @@ void gib_indirection_barrier(
 typedef struct gib_gc_state_snapshot {
     // nursery
     char *nursery_alloc;
-    char *nursery_heap;
+    char *nursery_heap_start;
 
     // generations
     char *gen_rem_set_alloc;
@@ -1641,8 +1641,8 @@ GibGcStateSnapshot *gib_gc_init_state(uint64_t num_regions)
         fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu", sizeof(GibGcStateSnapshot));
         exit(1);
     }
-    snapshot->nursery_heap = gib_alloc(NURSERY_SIZE);
-    if (snapshot->nursery_heap == NULL) {
+    snapshot->nursery_heap_start = gib_alloc(NURSERY_SIZE);
+    if (snapshot->nursery_heap_start == NULL) {
         fprintf(stderr, "gib_gc_save_state: gib_alloc failed: %zu", (size_t) NURSERY_SIZE);
         exit(1);
     }
@@ -1670,7 +1670,7 @@ void gib_gc_save_state(GibGcStateSnapshot *snapshot, uint64_t num_regions, ...)
 
     // nursery
     snapshot->nursery_alloc = nursery->alloc;
-    memcpy(snapshot->nursery_heap, nursery->heap_start, NURSERY_SIZE);
+    memcpy(snapshot->nursery_heap_start, nursery->heap_start, NURSERY_SIZE);
 
     // old generation
     snapshot->gen_rem_set_alloc = (oldgen->rem_set)->alloc;
@@ -1725,7 +1725,7 @@ void gib_gc_restore_state(GibGcStateSnapshot *snapshot)
 
     // nursery
     nursery->alloc = snapshot->nursery_alloc;
-    memcpy(nursery->heap_start, snapshot->nursery_heap, NURSERY_SIZE);
+    memcpy(nursery->heap_start, snapshot->nursery_heap_start, NURSERY_SIZE);
 
     // oldgen
     (oldgen->rem_set)->alloc = snapshot->gen_rem_set_alloc;
@@ -1752,7 +1752,7 @@ void gib_gc_restore_state(GibGcStateSnapshot *snapshot)
 
 void gib_gc_free_state(GibGcStateSnapshot *snapshot)
 {
-    free(snapshot->nursery_heap);
+    free(snapshot->nursery_heap_start);
     free(snapshot->reg_info_addrs);
     free(snapshot->outsets);
     free(snapshot);
