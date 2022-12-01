@@ -74,6 +74,7 @@ maybeLit exp =
     Plus _ _ -> islitConstant
 
 isLit :: Float -> Bool
+{-# INLINE isLit #-}
 isLit f = if ((f .-. islitConstant) .<. 0.01) then False else True
 
 foldConstants2 :: Exp -> Exp

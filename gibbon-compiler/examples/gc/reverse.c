@@ -162,9 +162,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
 
-    if (loc_273 + 18 > end_r_276) {
-        gib_grow_region(&loc_273, &end_r_276);
-    }
+    // if (loc_273 + 18 > end_r_276) {
+    //     gib_grow_region(&loc_273, &end_r_276);
+    // }
 
     GibPackedTag tmpval_850 = *(GibPackedTag *) xs_22_82_122;
     GibCursor tmpcur_851 = xs_22_82_122 + 1;
@@ -205,7 +205,7 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end
             gib_shadowstack_push(rstack, tmpcur_857, end_r_274, Stk, PList_T);
             gib_shadowstack_push(wstack, loc_273, end_r_276, Stk, PList_T);
 
-            GibChunk region_858 = gib_alloc_region(27);
+            GibChunk region_858 = gib_alloc_region(32);
             GibCursor r_328 = region_858.start;
             GibCursor end_r_328 = region_858.end;
 
@@ -230,9 +230,9 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end
 
             GibCursor writecur_527 = after_tag_523 + sizeof(GibInt);
 
-            if (loc_317 + 18 > end_r_328) {
-                gib_grow_region(&loc_317, &end_r_328);
-            }
+            // if (loc_317 + 18 > end_r_328) {
+            //     gib_grow_region(&loc_317, &end_r_328);
+            // }
             gib_indirection_barrier(loc_317, end_r_328, acc_23_83_123,
                                     end_r_275, PList_T);
 
@@ -866,7 +866,7 @@ int gib_main_expr(void)
     GibChunk region_813 = gib_alloc_region(gib_get_inf_init_chunk_size());
     GibCursor r_310 = region_813.start;
     GibCursor end_r_310 = region_813.end;
-    GibChunk region_814 = gib_alloc_region(gib_get_inf_init_chunk_size());
+    GibChunk region_814 = gib_alloc_region(32);
     GibCursor r_309 = region_814.start;
     GibCursor end_r_309 = region_814.end;
     GibChunk region_815 = gib_alloc_region(gib_get_inf_init_chunk_size());

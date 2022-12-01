@@ -9,10 +9,10 @@ import BinTree
 import KdTree
 import Bhut
 import Coins
-import Countnodes
+-- import Countnodes
 {- import Ray -}
 import FoldConstants
-import RacketGrammar
+-- import RacketGrammar
 
 import Gibbon.Prelude
 import Gibbon.Vector
@@ -272,25 +272,25 @@ bench_parcoins =
         tr = iterate (payA_par 3 amt coins6)
     in check_coins amt tr
 
-bench_seqcountnodes :: ()
-bench_seqcountnodes =
-  let e = readPackedFile @Toplvl Nothing
-      -- to ensure that mmap'd stuff is in memory.
-      _ = countNodesSeq e
-      n = iterate (countNodesSeq e)
-      _ = printint n
-      _ = printsym (quote "\n")
-  in ()
+-- bench_seqcountnodes :: ()
+-- bench_seqcountnodes =
+--   let e = readPackedFile @Toplvl Nothing
+--       -- to ensure that mmap'd stuff is in memory.
+--       _ = countNodesSeq e
+--       n = iterate (countNodesSeq e)
+--       _ = printint n
+--       _ = printsym (quote "\n")
+--   in ()
 
-bench_parcountnodes :: ()
-bench_parcountnodes =
-  let e = readPackedFile @Toplvl Nothing
-      -- to ensure that mmap'd stuff is in memory.
-      _ = countNodesSeq e
-      n = iterate (countNodesPar e)
-      _ = printint n
-      _ = printsym (quote "\n")
-  in ()
+-- bench_parcountnodes :: ()
+-- bench_parcountnodes =
+--   let e = readPackedFile @Toplvl Nothing
+--       -- to ensure that mmap'd stuff is in memory.
+--       _ = countNodesSeq e
+--       n = iterate (countNodesPar e)
+--       _ = printint n
+--       _ = printsym (quote "\n")
+--   in ()
 
 bench_seqfoldconstants :: ()
 bench_seqfoldconstants =
@@ -308,67 +308,67 @@ bench_parfoldconstants =
         _ = printint m
     in ()
 
-bench_treejoin :: ()
-bench_treejoin =
-    let n  = sizeParam
-        f1, f2 :: Vector (Int, Int, Int)
-        f1 = readArrayFile Nothing 
-        f2 = readArrayFile Nothing
-        fk = (\(x, _, _) -> x)
-        t1 = mkTree fk f1 Empty
-        t2 = mkTree fk f2 Empty
-        _  = join t1 t2 Empty
-    in ()
+-- bench_treejoin :: ()
+-- bench_treejoin =
+--     let n  = sizeParam
+--         f1, f2 :: Vector (Int, Int, Int)
+--         f1 = readArrayFile Nothing
+--         f2 = readArrayFile Nothing
+--         fk = (\(x, _, _) -> x)
+--         t1 = mkTree fk f1 Empty
+--         t2 = mkTree fk f2 Empty
+--         _  = join t1 t2 Empty
+--     in ()
 
 gibbon_main =
     if eqBenchProg "seqfib"
     then bench_seqfib
-    else if eqBenchProg "parfib"
-    then bench_parfib
+    -- else if eqBenchProg "parfib"
+    -- then bench_parfib
     else if eqBenchProg "seqbuildfib"
     then bench_seqbuildfib
-    else if eqBenchProg "parbuildfib"
-    then bench_parbuildfib
+    -- else if eqBenchProg "parbuildfib"
+    -- then bench_parbuildfib
     else if eqBenchProg "seqbuildtree"
     then bench_seqbuildtree
-    else if eqBenchProg "parbuildtree"
-    then bench_parbuildtree
+    -- else if eqBenchProg "parbuildtree"
+    -- then bench_parbuildtree
     else if eqBenchProg "seqadd1tree"
     then bench_seqadd1tree
-    else if eqBenchProg "paradd1tree"
-    then bench_paradd1tree
+    -- else if eqBenchProg "paradd1tree"
+    -- then bench_paradd1tree
     else if eqBenchProg "seqsumtree"
     then bench_seqsumtree
-    else if eqBenchProg "parsumtree"
-    then bench_parsumtree
+    -- else if eqBenchProg "parsumtree"
+    -- then bench_parsumtree
     else if eqBenchProg "seqbuildkdtree"
     then bench_seqbuildkdtree
-    else if eqBenchProg "parbuildkdtree"
-    then bench_parbuildkdtree
+    -- else if eqBenchProg "parbuildkdtree"
+    -- then bench_parbuildkdtree
     else if eqBenchProg "seqcountcorr"
     then bench_seqcountcorr
-    else if eqBenchProg "parcountcorr"
-    then bench_parcountcorr
+    -- else if eqBenchProg "parcountcorr"
+    -- then bench_parcountcorr
     else if eqBenchProg "seqnearest"
     then bench_seqnearest
-    else if eqBenchProg "parnearest"
-    then bench_parnearest
+    -- else if eqBenchProg "parnearest"
+    -- then bench_parnearest
     else if eqBenchProg "seqbuildquadtree"
     then bench_seqbuildquadtree
-    else if eqBenchProg "parbuildquadtree"
-    then bench_parbuildquadtree
+    -- else if eqBenchProg "parbuildquadtree"
+    -- then bench_parbuildquadtree
     else if eqBenchProg "seqbhut"
     then bench_seqbhut
-    else if eqBenchProg "parbhut"
-    then bench_parbhut
+    -- else if eqBenchProg "parbhut"
+    -- then bench_parbhut
     else if eqBenchProg "seqcoins"
     then bench_seqcoins
-    else if eqBenchProg "parcoins"
-    then bench_parcoins
-    else if eqBenchProg "seqcountnodes"
-    then bench_seqcountnodes
-    else if eqBenchProg "parcountnodes"
-    then bench_parcountnodes
+    -- else if eqBenchProg "parcoins"
+    -- then bench_parcoins
+    -- else if eqBenchProg "seqcountnodes"
+    -- then bench_seqcountnodes
+    -- else if eqBenchProg "parcountnodes"
+    -- then bench_parcountnodes
 {-
     else if eqBenchProg "seqmkbvh"
     then bench_seqmkbvh
@@ -381,8 +381,8 @@ gibbon_main =
 -}
     else if eqBenchProg "seqfoldconstants"
     then bench_seqfoldconstants
-    else if eqBenchProg "parfoldconstants"
-    then bench_parfoldconstants
-    else if eqBenchProg "treejoin"
-    then bench_treejoin
+    -- else if eqBenchProg "parfoldconstants"
+    -- then bench_parfoldconstants
+    -- else if eqBenchProg "treejoin"
+    -- then bench_treejoin
     else printsym (quote "benchrunner: select benchmark to run with --bench-prog\n")
