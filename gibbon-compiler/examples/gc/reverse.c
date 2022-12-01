@@ -86,23 +86,23 @@ typedef struct GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd_struct
             GibCursor field5;
         } GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd;
 GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
-reverse(GibCursor end_r_281, GibCursor end_r_282, GibCursor end_r_283,
-        GibCursor loc_280, GibCursor xs_21_85_129, GibCursor acc_22_86_130);
-GibCursorGibCursorGibIntProd sumList(GibCursor end_r_285,
-                                     GibCursor xs_25_89_134);
-GibCursorGibCursorGibCursorProd buildList(GibCursor end_r_287,
-                                          GibCursor loc_286,
-                                          GibInt n_28_92_138);
+reverse(GibCursor end_r_274, GibCursor end_r_275, GibCursor end_r_276,
+        GibCursor loc_273, GibCursor xs_22_82_122, GibCursor acc_23_83_123);
+GibCursorGibCursorGibIntProd sumList(GibCursor end_r_278,
+                                     GibCursor xs_26_86_127);
+GibCursorGibCursorGibCursorProd buildList(GibCursor end_r_280,
+                                          GibCursor loc_279,
+                                          GibInt n_29_89_131);
 GibCursorGibCursorGibCursorGibCursorGibCursorProd
-_copy_PList(GibCursor end_r_290, GibCursor end_r_291, GibCursor loc_289,
-            GibCursor arg_57_93_142);
+_copy_PList(GibCursor end_r_283, GibCursor end_r_284, GibCursor loc_282,
+            GibCursor arg_54_90_135);
 GibCursorGibCursorGibCursorGibCursorGibCursorProd
-_copy_without_ptrs_PList(GibCursor end_r_294, GibCursor end_r_295,
-                         GibCursor loc_293, GibCursor arg_62_98_147);
-GibCursorGibCursorProd _traverse_PList(GibCursor end_r_297,
-                                       GibCursor arg_67_103_152);
-GibCursorGibCursorProd _print_PList(GibCursor end_r_299,
-                                    GibCursor arg_72_107_156);
+_copy_without_ptrs_PList(GibCursor end_r_287, GibCursor end_r_288,
+                         GibCursor loc_286, GibCursor arg_59_95_140);
+GibCursorGibCursorProd _traverse_PList(GibCursor end_r_290,
+                                       GibCursor arg_64_100_145);
+GibCursorGibCursorProd _print_PList(GibCursor end_r_292,
+                                    GibCursor arg_69_104_149);
 typedef enum {
             GibInt_T,
             GibFloat_T,
@@ -145,898 +145,712 @@ void info_table_initialize(void)
 }
 void symbol_table_initialize(void)
 {
-    gib_add_symbol(809, ")");
-    gib_add_symbol(810, "(Nil ");
-    gib_add_symbol(811, "(Cons ");
-    gib_add_symbol(812, " ->r ");
-    gib_add_symbol(813, " ->i ");
+    gib_add_symbol(808, ")");
+    gib_add_symbol(809, "(Nil ");
+    gib_add_symbol(810, "(Cons ");
+    gib_add_symbol(811, " ->r ");
+    gib_add_symbol(812, " ->i ");
 }
-GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_281,
-                                                                   GibCursor end_r_282,
-                                                                   GibCursor end_r_283,
-                                                                   GibCursor loc_280,
-                                                                   GibCursor xs_21_85_129,
-                                                                   GibCursor acc_22_86_130)
+GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end_r_274,
+                                                                   GibCursor end_r_275,
+                                                                   GibCursor end_r_276,
+                                                                   GibCursor loc_273,
+                                                                   GibCursor xs_22_82_122,
+                                                                   GibCursor acc_23_83_123)
 {
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
 
-    if (loc_280 + 18 > end_r_283) {
-        gib_grow_region(&loc_280, &end_r_283);
+    if (loc_273 + 18 > end_r_276) {
+        gib_grow_region(&loc_273, &end_r_276);
     }
 
-    GibPackedTag tmpval_842 = *(GibPackedTag *) xs_21_85_129;
-    GibCursor tmpcur_843 = xs_21_85_129 + 1;
+    GibPackedTag tmpval_850 = *(GibPackedTag *) xs_22_82_122;
+    GibCursor tmpcur_851 = xs_22_82_122 + 1;
 
 
-  switch_897:
+  switch_905:
     ;
-    switch (tmpval_842) {
+    switch (tmpval_850) {
 
       case 1:
         {
-            GibCursor jump_397 = xs_21_85_129 + 1;
+            GibCursor jump_390 = xs_22_82_122 + 1;
 
-            if (loc_280 + 18 > end_r_283) {
-                gib_grow_region(&loc_280, &end_r_283);
+            if (loc_273 + 18 > end_r_276) {
+                gib_grow_region(&loc_273, &end_r_276);
             }
-            gib_indirection_barrier(loc_280, end_r_283, acc_22_86_130,
-                                    end_r_282, PList_T);
+            gib_indirection_barrier(loc_273, end_r_276, acc_23_83_123,
+                                    end_r_275, PList_T);
 
-            GibCursor end_525 = loc_280 + 9;
+            GibCursor end_515 = loc_273 + 9;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_281,
-                                                                                 end_r_282,
-                                                                                 end_r_283,
-                                                                                 jump_397,
-                                                                                 loc_280,
-                                                                                 end_525};
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_274,
+                                                                                 end_r_275,
+                                                                                 end_r_276,
+                                                                                 jump_390,
+                                                                                 loc_273,
+                                                                                 end_515};
             break;
         }
 
       case 0:
         {
-            GibInt tmpval_848 = *(GibInt *) tmpcur_843;
-            GibCursor tmpcur_849 = tmpcur_843 + sizeof(GibInt);
+            GibInt tmpval_856 = *(GibInt *) tmpcur_851;
+            GibCursor tmpcur_857 = tmpcur_851 + sizeof(GibInt);
 
-            gib_shadowstack_push(rstack, acc_22_86_130, end_r_282, Stk,
+            gib_shadowstack_push(rstack, acc_23_83_123, end_r_275, Stk,
                                  PList_T);
-            gib_shadowstack_push(rstack, tmpcur_849, end_r_281, Stk, PList_T);
-            gib_shadowstack_push(wstack, loc_280, end_r_283, Stk, PList_T);
+            gib_shadowstack_push(rstack, tmpcur_857, end_r_274, Stk, PList_T);
+            gib_shadowstack_push(wstack, loc_273, end_r_276, Stk, PList_T);
 
-            GibChunk region_850 = gib_alloc_region(64);
-            GibCursor r_335 = region_850.start;
-            GibCursor end_r_335 = region_850.end;
+            GibChunk region_858 = gib_alloc_region(27);
+            GibCursor r_328 = region_858.start;
+            GibCursor end_r_328 = region_858.end;
 
             frame = gib_shadowstack_pop(wstack);
-            loc_280 = frame->ptr;
-            end_r_283 = frame->endptr;
+            loc_273 = frame->ptr;
+            end_r_276 = frame->endptr;
             frame = gib_shadowstack_pop(rstack);
-            tmpcur_849 = frame->ptr;
-            end_r_281 = frame->endptr;
+            tmpcur_857 = frame->ptr;
+            end_r_274 = frame->endptr;
             frame = gib_shadowstack_pop(rstack);
-            acc_22_86_130 = frame->ptr;
-            end_r_282 = frame->endptr;
+            acc_23_83_123 = frame->ptr;
+            end_r_275 = frame->endptr;
 
-            GibCursor loc_324 = r_335 + 9;
+            GibCursor loc_317 = r_328 + 9;
 
-            *(GibPackedTag *) r_335 = 0;
+            *(GibPackedTag *) r_328 = 0;
 
-            GibCursor writetag_532 = r_335 + 1;
-            GibCursor after_tag_533 = r_335 + 1;
+            GibCursor writetag_522 = r_328 + 1;
+            GibCursor after_tag_523 = r_328 + 1;
 
-            *(GibInt *) after_tag_533 = tmpval_848;
+            *(GibInt *) after_tag_523 = tmpval_856;
 
-            GibCursor writecur_537 = after_tag_533 + sizeof(GibInt);
+            GibCursor writecur_527 = after_tag_523 + sizeof(GibInt);
 
-            if (loc_324 + 18 > end_r_335) {
-                gib_grow_region(&loc_324, &end_r_335);
+            if (loc_317 + 18 > end_r_328) {
+                gib_grow_region(&loc_317, &end_r_328);
             }
-            gib_indirection_barrier(loc_324, end_r_335, acc_22_86_130,
-                                    end_r_282, PList_T);
+            gib_indirection_barrier(loc_317, end_r_328, acc_23_83_123,
+                                    end_r_275, PList_T);
 
-            GibCursor end_530 = loc_324 + 9;
-            GibBool chk_543 = tmpcur_849 < end_r_281;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_543);
-            #endif
-
-            GibBool chk_542 = r_335 < end_r_335;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_542);
-            #endif
-
-            GibBool chk_541 = loc_280 < end_r_283;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_541);
-            #endif
-
+            GibCursor end_520 = loc_317 + 9;
             GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
             tmp_struct_3 =
-             reverse(end_r_281, end_r_335, end_r_283, loc_280, tmpcur_849, r_335);
-            GibCursor pvrtmp_855 = tmp_struct_3.field0;
-            GibCursor pvrtmp_856 = tmp_struct_3.field1;
-            GibCursor pvrtmp_857 = tmp_struct_3.field2;
-            GibCursor pvrtmp_858 = tmp_struct_3.field3;
-            GibCursor pvrtmp_859 = tmp_struct_3.field4;
-            GibCursor pvrtmp_860 = tmp_struct_3.field5;
+             reverse(end_r_274, end_r_328, end_r_276, loc_273, tmpcur_857, r_328);
+            GibCursor pvrtmp_863 = tmp_struct_3.field0;
+            GibCursor pvrtmp_864 = tmp_struct_3.field1;
+            GibCursor pvrtmp_865 = tmp_struct_3.field2;
+            GibCursor pvrtmp_866 = tmp_struct_3.field3;
+            GibCursor pvrtmp_867 = tmp_struct_3.field4;
+            GibCursor pvrtmp_868 = tmp_struct_3.field5;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_855,
-                                                                                 end_r_282,
-                                                                                 pvrtmp_857,
-                                                                                 pvrtmp_858,
-                                                                                 pvrtmp_859,
-                                                                                 pvrtmp_860};
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_863,
+                                                                                 end_r_275,
+                                                                                 pvrtmp_865,
+                                                                                 pvrtmp_866,
+                                                                                 pvrtmp_867,
+                                                                                 pvrtmp_868};
             break;
         }
 
       case GIB_INDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_8 = *(uintptr_t *) tmpcur_843;
-            GibCursor tmpcur_867 = GIB_UNTAG(tagged_tmpcur_8);
-            GibCursor tmpaftercur_868 = tmpcur_843 + 8;
-            uint16_t tmptag_869 = GIB_GET_TAG(tagged_tmpcur_8);
-            GibCursor end_from_tagged_indr_433 = tmpcur_867 + tmptag_869;
-            GibCursor jump_435 = tmpcur_843 + 8;
-            GibBool chk_549 = tmpcur_867 < end_from_tagged_indr_433;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_549);
-            #endif
-
-            GibBool chk_548 = acc_22_86_130 < end_r_282;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_548);
-            #endif
-
-            GibBool chk_547 = loc_280 < end_r_283;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_547);
-            #endif
-
+            uintptr_t tagged_tmpcur_8 = *(uintptr_t *) tmpcur_851;
+            GibCursor tmpcur_875 = GIB_UNTAG(tagged_tmpcur_8);
+            GibCursor tmpaftercur_876 = tmpcur_851 + 8;
+            uint16_t tmptag_877 = GIB_GET_TAG(tagged_tmpcur_8);
+            GibCursor end_from_tagged_indr_426 = tmpcur_875 + tmptag_877;
+            GibCursor jump_428 = tmpcur_851 + 8;
             GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
             tmp_struct_7 =
-             reverse(end_from_tagged_indr_433, end_r_282, end_r_283, loc_280, tmpcur_867, acc_22_86_130);
-            GibCursor pvrtmp_870 = tmp_struct_7.field0;
-            GibCursor pvrtmp_871 = tmp_struct_7.field1;
-            GibCursor pvrtmp_872 = tmp_struct_7.field2;
-            GibCursor pvrtmp_873 = tmp_struct_7.field3;
-            GibCursor pvrtmp_874 = tmp_struct_7.field4;
-            GibCursor pvrtmp_875 = tmp_struct_7.field5;
+             reverse(end_from_tagged_indr_426, end_r_275, end_r_276, loc_273, tmpcur_875, acc_23_83_123);
+            GibCursor pvrtmp_878 = tmp_struct_7.field0;
+            GibCursor pvrtmp_879 = tmp_struct_7.field1;
+            GibCursor pvrtmp_880 = tmp_struct_7.field2;
+            GibCursor pvrtmp_881 = tmp_struct_7.field3;
+            GibCursor pvrtmp_882 = tmp_struct_7.field4;
+            GibCursor pvrtmp_883 = tmp_struct_7.field5;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_281,
-                                                                                 pvrtmp_871,
-                                                                                 pvrtmp_872,
-                                                                                 jump_435,
-                                                                                 pvrtmp_874,
-                                                                                 pvrtmp_875};
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_274,
+                                                                                 pvrtmp_879,
+                                                                                 pvrtmp_880,
+                                                                                 jump_428,
+                                                                                 pvrtmp_882,
+                                                                                 pvrtmp_883};
             break;
         }
 
       case GIB_REDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_10 = *(uintptr_t *) tmpcur_843;
-            GibCursor tmpcur_882 = GIB_UNTAG(tagged_tmpcur_10);
-            GibCursor tmpaftercur_883 = tmpcur_843 + 8;
-            uint16_t tmptag_884 = GIB_GET_TAG(tagged_tmpcur_10);
-            GibCursor end_from_tagged_indr_433 = tmpcur_882 + tmptag_884;
-            GibBool chk_555 = tmpcur_882 < end_from_tagged_indr_433;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_555);
-            #endif
-
-            GibBool chk_554 = acc_22_86_130 < end_r_282;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_554);
-            #endif
-
-            GibBool chk_553 = loc_280 < end_r_283;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_553);
-            #endif
-
+            uintptr_t tagged_tmpcur_10 = *(uintptr_t *) tmpcur_851;
+            GibCursor tmpcur_890 = GIB_UNTAG(tagged_tmpcur_10);
+            GibCursor tmpaftercur_891 = tmpcur_851 + 8;
+            uint16_t tmptag_892 = GIB_GET_TAG(tagged_tmpcur_10);
+            GibCursor end_from_tagged_indr_426 = tmpcur_890 + tmptag_892;
             GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
             tmp_struct_9 =
-             reverse(end_from_tagged_indr_433, end_r_282, end_r_283, loc_280, tmpcur_882, acc_22_86_130);
-            GibCursor pvrtmp_885 = tmp_struct_9.field0;
-            GibCursor pvrtmp_886 = tmp_struct_9.field1;
-            GibCursor pvrtmp_887 = tmp_struct_9.field2;
-            GibCursor pvrtmp_888 = tmp_struct_9.field3;
-            GibCursor pvrtmp_889 = tmp_struct_9.field4;
-            GibCursor pvrtmp_890 = tmp_struct_9.field5;
+             reverse(end_from_tagged_indr_426, end_r_275, end_r_276, loc_273, tmpcur_890, acc_23_83_123);
+            GibCursor pvrtmp_893 = tmp_struct_9.field0;
+            GibCursor pvrtmp_894 = tmp_struct_9.field1;
+            GibCursor pvrtmp_895 = tmp_struct_9.field2;
+            GibCursor pvrtmp_896 = tmp_struct_9.field3;
+            GibCursor pvrtmp_897 = tmp_struct_9.field4;
+            GibCursor pvrtmp_898 = tmp_struct_9.field5;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_885,
-                                                                                 pvrtmp_886,
-                                                                                 pvrtmp_887,
-                                                                                 pvrtmp_888,
-                                                                                 pvrtmp_889,
-                                                                                 pvrtmp_890};
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_893,
+                                                                                 pvrtmp_894,
+                                                                                 pvrtmp_895,
+                                                                                 pvrtmp_896,
+                                                                                 pvrtmp_897,
+                                                                                 pvrtmp_898};
             break;
         }
 
       default:
         {
-            printf("Unknown tag in tmpval_842(%p), %d\n", xs_21_85_129, tmpval_842);
+            printf("%s\n", "Unknown tag in: tmpval_850");
             exit(1);
         }
     }
 }
-GibCursorGibCursorGibIntProd sumList(GibCursor end_r_285,
-                                     GibCursor xs_25_89_134)
+GibCursorGibCursorGibIntProd sumList(GibCursor end_r_278,
+                                     GibCursor xs_26_86_127)
 {
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
-    GibPackedTag tmpval_898 = *(GibPackedTag *) xs_25_89_134;
-    GibCursor tmpcur_899 = xs_25_89_134 + 1;
+    GibPackedTag tmpval_906 = *(GibPackedTag *) xs_26_86_127;
+    GibCursor tmpcur_907 = xs_26_86_127 + 1;
 
 
-  switch_917:
+  switch_925:
     ;
-    switch (tmpval_898) {
+    switch (tmpval_906) {
 
       case 1:
         {
-            GibCursor jump_402 = xs_25_89_134 + 1;
+            GibCursor jump_395 = xs_26_86_127 + 1;
 
-            return (GibCursorGibCursorGibIntProd) {end_r_285, jump_402, 0};
+            return (GibCursorGibCursorGibIntProd) {end_r_278, jump_395, 0};
             break;
         }
 
       case 0:
         {
-            GibInt tmpval_900 = *(GibInt *) tmpcur_899;
-            GibCursor tmpcur_901 = tmpcur_899 + sizeof(GibInt);
-            GibBool chk_560 = tmpcur_901 < end_r_285;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_560);
-            #endif
-
+            GibInt tmpval_908 = *(GibInt *) tmpcur_907;
+            GibCursor tmpcur_909 = tmpcur_907 + sizeof(GibInt);
             GibCursorGibCursorGibIntProd tmp_struct_14 =
-                                          sumList(end_r_285, tmpcur_901);
-            GibCursor pvrtmp_902 = tmp_struct_14.field0;
-            GibCursor pvrtmp_903 = tmp_struct_14.field1;
-            GibInt pvrtmp_904 = tmp_struct_14.field2;
-            GibInt tailprim_405 = tmpval_900 + pvrtmp_904;
+                                          sumList(end_r_278, tmpcur_909);
+            GibCursor pvrtmp_910 = tmp_struct_14.field0;
+            GibCursor pvrtmp_911 = tmp_struct_14.field1;
+            GibInt pvrtmp_912 = tmp_struct_14.field2;
+            GibInt tailprim_398 = tmpval_908 + pvrtmp_912;
 
-            return (GibCursorGibCursorGibIntProd) {pvrtmp_902, pvrtmp_903,
-                                                   tailprim_405};
+            return (GibCursorGibCursorGibIntProd) {pvrtmp_910, pvrtmp_911,
+                                                   tailprim_398};
             break;
         }
 
       case GIB_INDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_16 = *(uintptr_t *) tmpcur_899;
-            GibCursor tmpcur_905 = GIB_UNTAG(tagged_tmpcur_16);
-            GibCursor tmpaftercur_906 = tmpcur_899 + 8;
-            uint16_t tmptag_907 = GIB_GET_TAG(tagged_tmpcur_16);
-            GibCursor end_from_tagged_indr_439 = tmpcur_905 + tmptag_907;
-            GibCursor jump_441 = tmpcur_899 + 8;
-            GibBool chk_564 = tmpcur_905 < end_from_tagged_indr_439;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_564);
-            #endif
-
+            uintptr_t tagged_tmpcur_16 = *(uintptr_t *) tmpcur_907;
+            GibCursor tmpcur_913 = GIB_UNTAG(tagged_tmpcur_16);
+            GibCursor tmpaftercur_914 = tmpcur_907 + 8;
+            uint16_t tmptag_915 = GIB_GET_TAG(tagged_tmpcur_16);
+            GibCursor end_from_tagged_indr_432 = tmpcur_913 + tmptag_915;
+            GibCursor jump_434 = tmpcur_907 + 8;
             GibCursorGibCursorGibIntProd tmp_struct_15 =
-                                          sumList(end_from_tagged_indr_439, tmpcur_905);
-            GibCursor pvrtmp_908 = tmp_struct_15.field0;
-            GibCursor pvrtmp_909 = tmp_struct_15.field1;
-            GibInt pvrtmp_910 = tmp_struct_15.field2;
+                                          sumList(end_from_tagged_indr_432, tmpcur_913);
+            GibCursor pvrtmp_916 = tmp_struct_15.field0;
+            GibCursor pvrtmp_917 = tmp_struct_15.field1;
+            GibInt pvrtmp_918 = tmp_struct_15.field2;
 
-            return (GibCursorGibCursorGibIntProd) {end_r_285, jump_441,
-                                                   pvrtmp_910};
+            return (GibCursorGibCursorGibIntProd) {end_r_278, jump_434,
+                                                   pvrtmp_918};
             break;
         }
 
       case GIB_REDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_18 = *(uintptr_t *) tmpcur_899;
-            GibCursor tmpcur_911 = GIB_UNTAG(tagged_tmpcur_18);
-            GibCursor tmpaftercur_912 = tmpcur_899 + 8;
-            uint16_t tmptag_913 = GIB_GET_TAG(tagged_tmpcur_18);
-            GibCursor end_from_tagged_indr_439 = tmpcur_911 + tmptag_913;
-            GibBool chk_568 = tmpcur_911 < end_from_tagged_indr_439;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_568);
-            #endif
-
+            uintptr_t tagged_tmpcur_18 = *(uintptr_t *) tmpcur_907;
+            GibCursor tmpcur_919 = GIB_UNTAG(tagged_tmpcur_18);
+            GibCursor tmpaftercur_920 = tmpcur_907 + 8;
+            uint16_t tmptag_921 = GIB_GET_TAG(tagged_tmpcur_18);
+            GibCursor end_from_tagged_indr_432 = tmpcur_919 + tmptag_921;
             GibCursorGibCursorGibIntProd tmp_struct_17 =
-                                          sumList(end_from_tagged_indr_439, tmpcur_911);
-            GibCursor pvrtmp_914 = tmp_struct_17.field0;
-            GibCursor pvrtmp_915 = tmp_struct_17.field1;
-            GibInt pvrtmp_916 = tmp_struct_17.field2;
+                                          sumList(end_from_tagged_indr_432, tmpcur_919);
+            GibCursor pvrtmp_922 = tmp_struct_17.field0;
+            GibCursor pvrtmp_923 = tmp_struct_17.field1;
+            GibInt pvrtmp_924 = tmp_struct_17.field2;
 
-            return (GibCursorGibCursorGibIntProd) {pvrtmp_914, pvrtmp_915,
-                                                   pvrtmp_916};
+            return (GibCursorGibCursorGibIntProd) {pvrtmp_922, pvrtmp_923,
+                                                   pvrtmp_924};
             break;
         }
 
       default:
         {
-            printf("Unknown tag in: tmpval_898(%p) %d", xs_25_89_134, tmpval_898);
+            printf("%s\n", "Unknown tag in: tmpval_906");
             exit(1);
         }
     }
 }
-GibCursorGibCursorGibCursorProd buildList(GibCursor end_r_287,
-                                          GibCursor loc_286, GibInt n_28_92_138)
+GibCursorGibCursorGibCursorProd buildList(GibCursor end_r_280,
+                                          GibCursor loc_279, GibInt n_29_89_131)
 {
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
 
-    if (loc_286 + 18 > end_r_287) {
-        gib_grow_region(&loc_286, &end_r_287);
+    if (loc_279 + 18 > end_r_280) {
+        gib_grow_region(&loc_279, &end_r_280);
     }
 
-    GibBool fltIf_120_139 = n_28_92_138 == 0;
+    GibBool fltIf_115_132 = n_29_89_131 == 0;
 
-    if (fltIf_120_139) {
-        *(GibPackedTag *) loc_286 = 1;
+    if (fltIf_115_132) {
+        *(GibPackedTag *) loc_279 = 1;
 
-        GibCursor writetag_570 = loc_286 + 1;
-        GibCursor after_tag_571 = loc_286 + 1;
+        GibCursor writetag_560 = loc_279 + 1;
+        GibCursor after_tag_561 = loc_279 + 1;
 
-        return (GibCursorGibCursorGibCursorProd) {end_r_287, loc_286,
-                                                  after_tag_571};
+        return (GibCursorGibCursorGibCursorProd) {end_r_280, loc_279,
+                                                  after_tag_561};
     } else {
-        GibInt fltAppE_122_140 = n_28_92_138 - 1;
-        GibCursor loc_345 = loc_286 + 9;
+        GibInt fltAppE_117_133 = n_29_89_131 - 1;
+        GibCursor loc_338 = loc_279 + 9;
 
-        *(GibPackedTag *) loc_286 = 0;
+        *(GibPackedTag *) loc_279 = 0;
 
-        GibCursor writetag_579 = loc_286 + 1;
-        GibCursor after_tag_580 = loc_286 + 1;
+        GibCursor writetag_569 = loc_279 + 1;
+        GibCursor after_tag_570 = loc_279 + 1;
 
-        *(GibInt *) after_tag_580 = n_28_92_138;
+        *(GibInt *) after_tag_570 = n_29_89_131;
 
-        GibCursor writecur_584 = after_tag_580 + sizeof(GibInt);
+        GibCursor writecur_574 = after_tag_570 + sizeof(GibInt);
 
-        gib_shadowstack_push(rstack, loc_286, end_r_287, Stk, PList_T);
-
-        GibBool chk_577 = loc_345 < end_r_287;
-
-        #ifdef _GIBBON_DEBUG
-        assert(chk_577);
-        #endif
+        gib_shadowstack_push(rstack, loc_279, end_r_280, Stk, PList_T);
 
         GibCursorGibCursorGibCursorProd tmp_struct_19 =
-                                         buildList(end_r_287, loc_345, fltAppE_122_140);
-        GibCursor pvrtmp_922 = tmp_struct_19.field0;
-        GibCursor pvrtmp_923 = tmp_struct_19.field1;
-        GibCursor pvrtmp_924 = tmp_struct_19.field2;
+                                         buildList(end_r_280, loc_338, fltAppE_117_133);
+        GibCursor pvrtmp_930 = tmp_struct_19.field0;
+        GibCursor pvrtmp_931 = tmp_struct_19.field1;
+        GibCursor pvrtmp_932 = tmp_struct_19.field2;
 
         frame = gib_shadowstack_pop(rstack);
-        loc_286 = frame->ptr;
-        end_r_287 = frame->endptr;
-        return (GibCursorGibCursorGibCursorProd) {pvrtmp_922, loc_286,
-                                                  pvrtmp_924};
+        loc_279 = frame->ptr;
+        end_r_280 = frame->endptr;
+        return (GibCursorGibCursorGibCursorProd) {pvrtmp_930, loc_279,
+                                                  pvrtmp_932};
     }
 }
-GibCursorGibCursorGibCursorGibCursorGibCursorProd _copy_PList(GibCursor end_r_290,
-                                                              GibCursor end_r_291,
-                                                              GibCursor loc_289,
-                                                              GibCursor arg_57_93_142)
+GibCursorGibCursorGibCursorGibCursorGibCursorProd _copy_PList(GibCursor end_r_283,
+                                                              GibCursor end_r_284,
+                                                              GibCursor loc_282,
+                                                              GibCursor arg_54_90_135)
 {
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
 
-    if (loc_289 + 18 > end_r_291) {
-        gib_grow_region(&loc_289, &end_r_291);
+    if (loc_282 + 18 > end_r_284) {
+        gib_grow_region(&loc_282, &end_r_284);
     }
 
-    GibPackedTag tmpval_933 = *(GibPackedTag *) arg_57_93_142;
-    GibCursor tmpcur_934 = arg_57_93_142 + 1;
+    GibPackedTag tmpval_941 = *(GibPackedTag *) arg_54_90_135;
+    GibCursor tmpcur_942 = arg_54_90_135 + 1;
 
 
-  switch_982:
+  switch_990:
     ;
-    switch (tmpval_933) {
+    switch (tmpval_941) {
 
       case 0:
         {
-            GibInt tmpval_935 = *(GibInt *) tmpcur_934;
-            GibCursor tmpcur_936 = tmpcur_934 + sizeof(GibInt);
-            GibCursor loc_357 = loc_289 + 9;
+            GibInt tmpval_943 = *(GibInt *) tmpcur_942;
+            GibCursor tmpcur_944 = tmpcur_942 + sizeof(GibInt);
+            GibCursor loc_350 = loc_282 + 9;
 
-            *(GibPackedTag *) loc_289 = 0;
+            *(GibPackedTag *) loc_282 = 0;
 
-            GibCursor writetag_593 = loc_289 + 1;
-            GibCursor after_tag_594 = loc_289 + 1;
+            GibCursor writetag_583 = loc_282 + 1;
+            GibCursor after_tag_584 = loc_282 + 1;
 
-            *(GibInt *) after_tag_594 = tmpval_935;
+            *(GibInt *) after_tag_584 = tmpval_943;
 
-            GibCursor writecur_598 = after_tag_594 + sizeof(GibInt);
+            GibCursor writecur_588 = after_tag_584 + sizeof(GibInt);
 
-            gib_shadowstack_push(rstack, loc_289, end_r_291, Stk, PList_T);
-
-            GibBool chk_591 = tmpcur_936 < end_r_290;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_591);
-            #endif
-
-            GibBool chk_590 = loc_357 < end_r_291;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_590);
-            #endif
+            gib_shadowstack_push(rstack, loc_282, end_r_284, Stk, PList_T);
 
             GibCursorGibCursorGibCursorGibCursorGibCursorProd tmp_struct_23 =
-                                                               _copy_PList(end_r_290, end_r_291, loc_357, tmpcur_936);
-            GibCursor pvrtmp_937 = tmp_struct_23.field0;
-            GibCursor pvrtmp_938 = tmp_struct_23.field1;
-            GibCursor pvrtmp_939 = tmp_struct_23.field2;
-            GibCursor pvrtmp_940 = tmp_struct_23.field3;
-            GibCursor pvrtmp_941 = tmp_struct_23.field4;
+                                                               _copy_PList(end_r_283, end_r_284, loc_350, tmpcur_944);
+            GibCursor pvrtmp_945 = tmp_struct_23.field0;
+            GibCursor pvrtmp_946 = tmp_struct_23.field1;
+            GibCursor pvrtmp_947 = tmp_struct_23.field2;
+            GibCursor pvrtmp_948 = tmp_struct_23.field3;
+            GibCursor pvrtmp_949 = tmp_struct_23.field4;
 
             frame = gib_shadowstack_pop(rstack);
-            loc_289 = frame->ptr;
-            end_r_291 = frame->endptr;
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_937,
-                                                                        pvrtmp_938,
-                                                                        pvrtmp_939,
-                                                                        loc_289,
-                                                                        pvrtmp_941};
+            loc_282 = frame->ptr;
+            end_r_284 = frame->endptr;
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_945,
+                                                                        pvrtmp_946,
+                                                                        pvrtmp_947,
+                                                                        loc_282,
+                                                                        pvrtmp_949};
             break;
         }
 
       case 1:
         {
-            GibCursor jump_411 = arg_57_93_142 + 1;
+            GibCursor jump_404 = arg_54_90_135 + 1;
 
-            *(GibPackedTag *) loc_289 = 1;
+            *(GibPackedTag *) loc_282 = 1;
 
-            GibCursor writetag_603 = loc_289 + 1;
-            GibCursor after_tag_604 = loc_289 + 1;
+            GibCursor writetag_593 = loc_282 + 1;
+            GibCursor after_tag_594 = loc_282 + 1;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_290,
-                                                                        end_r_291,
-                                                                        jump_411,
-                                                                        loc_289,
-                                                                        after_tag_604};
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_283,
+                                                                        end_r_284,
+                                                                        jump_404,
+                                                                        loc_282,
+                                                                        after_tag_594};
             break;
         }
 
       case GIB_INDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_25 = *(uintptr_t *) tmpcur_934;
-            GibCursor tmpcur_954 = GIB_UNTAG(tagged_tmpcur_25);
-            GibCursor tmpaftercur_955 = tmpcur_934 + 8;
-            uint16_t tmptag_956 = GIB_GET_TAG(tagged_tmpcur_25);
-            GibCursor end_from_tagged_indr_445 = tmpcur_954 + tmptag_956;
-            GibCursor jump_447 = tmpcur_934 + 8;
-            GibBool chk_613 = tmpcur_954 < end_from_tagged_indr_445;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_613);
-            #endif
-
-            GibBool chk_612 = loc_289 < end_r_291;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_612);
-            #endif
-
+            uintptr_t tagged_tmpcur_25 = *(uintptr_t *) tmpcur_942;
+            GibCursor tmpcur_962 = GIB_UNTAG(tagged_tmpcur_25);
+            GibCursor tmpaftercur_963 = tmpcur_942 + 8;
+            uint16_t tmptag_964 = GIB_GET_TAG(tagged_tmpcur_25);
+            GibCursor end_from_tagged_indr_438 = tmpcur_962 + tmptag_964;
+            GibCursor jump_440 = tmpcur_942 + 8;
             GibCursorGibCursorGibCursorGibCursorGibCursorProd tmp_struct_24 =
-                                                               _copy_PList(end_from_tagged_indr_445, end_r_291, loc_289, tmpcur_954);
-            GibCursor pvrtmp_957 = tmp_struct_24.field0;
-            GibCursor pvrtmp_958 = tmp_struct_24.field1;
-            GibCursor pvrtmp_959 = tmp_struct_24.field2;
-            GibCursor pvrtmp_960 = tmp_struct_24.field3;
-            GibCursor pvrtmp_961 = tmp_struct_24.field4;
+                                                               _copy_PList(end_from_tagged_indr_438, end_r_284, loc_282, tmpcur_962);
+            GibCursor pvrtmp_965 = tmp_struct_24.field0;
+            GibCursor pvrtmp_966 = tmp_struct_24.field1;
+            GibCursor pvrtmp_967 = tmp_struct_24.field2;
+            GibCursor pvrtmp_968 = tmp_struct_24.field3;
+            GibCursor pvrtmp_969 = tmp_struct_24.field4;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_290,
-                                                                        pvrtmp_958,
-                                                                        jump_447,
-                                                                        pvrtmp_960,
-                                                                        pvrtmp_961};
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_283,
+                                                                        pvrtmp_966,
+                                                                        jump_440,
+                                                                        pvrtmp_968,
+                                                                        pvrtmp_969};
             break;
         }
 
       case GIB_REDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_27 = *(uintptr_t *) tmpcur_934;
-            GibCursor tmpcur_968 = GIB_UNTAG(tagged_tmpcur_27);
-            GibCursor tmpaftercur_969 = tmpcur_934 + 8;
-            uint16_t tmptag_970 = GIB_GET_TAG(tagged_tmpcur_27);
-            GibCursor end_from_tagged_indr_445 = tmpcur_968 + tmptag_970;
-            GibBool chk_618 = tmpcur_968 < end_from_tagged_indr_445;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_618);
-            #endif
-
-            GibBool chk_617 = loc_289 < end_r_291;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_617);
-            #endif
-
+            uintptr_t tagged_tmpcur_27 = *(uintptr_t *) tmpcur_942;
+            GibCursor tmpcur_976 = GIB_UNTAG(tagged_tmpcur_27);
+            GibCursor tmpaftercur_977 = tmpcur_942 + 8;
+            uint16_t tmptag_978 = GIB_GET_TAG(tagged_tmpcur_27);
+            GibCursor end_from_tagged_indr_438 = tmpcur_976 + tmptag_978;
             GibCursorGibCursorGibCursorGibCursorGibCursorProd tmp_struct_26 =
-                                                               _copy_PList(end_from_tagged_indr_445, end_r_291, loc_289, tmpcur_968);
-            GibCursor pvrtmp_971 = tmp_struct_26.field0;
-            GibCursor pvrtmp_972 = tmp_struct_26.field1;
-            GibCursor pvrtmp_973 = tmp_struct_26.field2;
-            GibCursor pvrtmp_974 = tmp_struct_26.field3;
-            GibCursor pvrtmp_975 = tmp_struct_26.field4;
+                                                               _copy_PList(end_from_tagged_indr_438, end_r_284, loc_282, tmpcur_976);
+            GibCursor pvrtmp_979 = tmp_struct_26.field0;
+            GibCursor pvrtmp_980 = tmp_struct_26.field1;
+            GibCursor pvrtmp_981 = tmp_struct_26.field2;
+            GibCursor pvrtmp_982 = tmp_struct_26.field3;
+            GibCursor pvrtmp_983 = tmp_struct_26.field4;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_971,
-                                                                        pvrtmp_972,
-                                                                        pvrtmp_973,
-                                                                        pvrtmp_974,
-                                                                        pvrtmp_975};
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_979,
+                                                                        pvrtmp_980,
+                                                                        pvrtmp_981,
+                                                                        pvrtmp_982,
+                                                                        pvrtmp_983};
             break;
         }
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_933");
+            printf("%s\n", "Unknown tag in: tmpval_941");
             exit(1);
         }
     }
 }
-GibCursorGibCursorGibCursorGibCursorGibCursorProd _copy_without_ptrs_PList(GibCursor end_r_294,
-                                                                           GibCursor end_r_295,
-                                                                           GibCursor loc_293,
-                                                                           GibCursor arg_62_98_147)
+GibCursorGibCursorGibCursorGibCursorGibCursorProd _copy_without_ptrs_PList(GibCursor end_r_287,
+                                                                           GibCursor end_r_288,
+                                                                           GibCursor loc_286,
+                                                                           GibCursor arg_59_95_140)
 {
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
-    GibPackedTag tmpval_983 = *(GibPackedTag *) arg_62_98_147;
-    GibCursor tmpcur_984 = arg_62_98_147 + 1;
+    GibPackedTag tmpval_991 = *(GibPackedTag *) arg_59_95_140;
+    GibCursor tmpcur_992 = arg_59_95_140 + 1;
 
 
-  switch_1032:
+  switch_1040:
     ;
-    switch (tmpval_983) {
+    switch (tmpval_991) {
 
       case 0:
         {
-            GibInt tmpval_985 = *(GibInt *) tmpcur_984;
-            GibCursor tmpcur_986 = tmpcur_984 + sizeof(GibInt);
-            GibCursor loc_370 = loc_293 + 9;
+            GibInt tmpval_993 = *(GibInt *) tmpcur_992;
+            GibCursor tmpcur_994 = tmpcur_992 + sizeof(GibInt);
+            GibCursor loc_363 = loc_286 + 9;
 
-            *(GibPackedTag *) loc_293 = 0;
+            *(GibPackedTag *) loc_286 = 0;
 
-            GibCursor writetag_625 = loc_293 + 1;
-            GibCursor after_tag_626 = loc_293 + 1;
+            GibCursor writetag_615 = loc_286 + 1;
+            GibCursor after_tag_616 = loc_286 + 1;
 
-            *(GibInt *) after_tag_626 = tmpval_985;
+            *(GibInt *) after_tag_616 = tmpval_993;
 
-            GibCursor writecur_630 = after_tag_626 + sizeof(GibInt);
+            GibCursor writecur_620 = after_tag_616 + sizeof(GibInt);
 
-            gib_shadowstack_push(rstack, loc_293, end_r_295, Stk, PList_T);
-
-            GibBool chk_623 = tmpcur_986 < end_r_294;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_623);
-            #endif
-
-            GibBool chk_622 = loc_370 < end_r_295;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_622);
-            #endif
+            gib_shadowstack_push(rstack, loc_286, end_r_288, Stk, PList_T);
 
             GibCursorGibCursorGibCursorGibCursorGibCursorProd tmp_struct_31 =
-                                                               _copy_without_ptrs_PList(end_r_294, end_r_295, loc_370, tmpcur_986);
-            GibCursor pvrtmp_987 = tmp_struct_31.field0;
-            GibCursor pvrtmp_988 = tmp_struct_31.field1;
-            GibCursor pvrtmp_989 = tmp_struct_31.field2;
-            GibCursor pvrtmp_990 = tmp_struct_31.field3;
-            GibCursor pvrtmp_991 = tmp_struct_31.field4;
+                                                               _copy_without_ptrs_PList(end_r_287, end_r_288, loc_363, tmpcur_994);
+            GibCursor pvrtmp_995 = tmp_struct_31.field0;
+            GibCursor pvrtmp_996 = tmp_struct_31.field1;
+            GibCursor pvrtmp_997 = tmp_struct_31.field2;
+            GibCursor pvrtmp_998 = tmp_struct_31.field3;
+            GibCursor pvrtmp_999 = tmp_struct_31.field4;
 
             frame = gib_shadowstack_pop(rstack);
-            loc_293 = frame->ptr;
-            end_r_295 = frame->endptr;
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_987,
-                                                                        pvrtmp_988,
-                                                                        pvrtmp_989,
-                                                                        loc_293,
-                                                                        pvrtmp_991};
+            loc_286 = frame->ptr;
+            end_r_288 = frame->endptr;
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_995,
+                                                                        pvrtmp_996,
+                                                                        pvrtmp_997,
+                                                                        loc_286,
+                                                                        pvrtmp_999};
             break;
         }
 
       case 1:
         {
-            GibCursor jump_416 = arg_62_98_147 + 1;
+            GibCursor jump_409 = arg_59_95_140 + 1;
 
-            *(GibPackedTag *) loc_293 = 1;
+            *(GibPackedTag *) loc_286 = 1;
 
-            GibCursor writetag_635 = loc_293 + 1;
-            GibCursor after_tag_636 = loc_293 + 1;
+            GibCursor writetag_625 = loc_286 + 1;
+            GibCursor after_tag_626 = loc_286 + 1;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_294,
-                                                                        end_r_295,
-                                                                        jump_416,
-                                                                        loc_293,
-                                                                        after_tag_636};
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_287,
+                                                                        end_r_288,
+                                                                        jump_409,
+                                                                        loc_286,
+                                                                        after_tag_626};
             break;
         }
 
       case GIB_INDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_33 = *(uintptr_t *) tmpcur_984;
-            GibCursor tmpcur_1004 = GIB_UNTAG(tagged_tmpcur_33);
-            GibCursor tmpaftercur_1005 = tmpcur_984 + 8;
-            uint16_t tmptag_1006 = GIB_GET_TAG(tagged_tmpcur_33);
-            GibCursor end_from_tagged_indr_451 = tmpcur_1004 + tmptag_1006;
-            GibCursor jump_453 = tmpcur_984 + 8;
-            GibBool chk_645 = tmpcur_1004 < end_from_tagged_indr_451;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_645);
-            #endif
-
-            GibBool chk_644 = loc_293 < end_r_295;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_644);
-            #endif
-
+            uintptr_t tagged_tmpcur_33 = *(uintptr_t *) tmpcur_992;
+            GibCursor tmpcur_1012 = GIB_UNTAG(tagged_tmpcur_33);
+            GibCursor tmpaftercur_1013 = tmpcur_992 + 8;
+            uint16_t tmptag_1014 = GIB_GET_TAG(tagged_tmpcur_33);
+            GibCursor end_from_tagged_indr_444 = tmpcur_1012 + tmptag_1014;
+            GibCursor jump_446 = tmpcur_992 + 8;
             GibCursorGibCursorGibCursorGibCursorGibCursorProd tmp_struct_32 =
-                                                               _copy_without_ptrs_PList(end_from_tagged_indr_451, end_r_295, loc_293, tmpcur_1004);
-            GibCursor pvrtmp_1007 = tmp_struct_32.field0;
-            GibCursor pvrtmp_1008 = tmp_struct_32.field1;
-            GibCursor pvrtmp_1009 = tmp_struct_32.field2;
-            GibCursor pvrtmp_1010 = tmp_struct_32.field3;
-            GibCursor pvrtmp_1011 = tmp_struct_32.field4;
+                                                               _copy_without_ptrs_PList(end_from_tagged_indr_444, end_r_288, loc_286, tmpcur_1012);
+            GibCursor pvrtmp_1015 = tmp_struct_32.field0;
+            GibCursor pvrtmp_1016 = tmp_struct_32.field1;
+            GibCursor pvrtmp_1017 = tmp_struct_32.field2;
+            GibCursor pvrtmp_1018 = tmp_struct_32.field3;
+            GibCursor pvrtmp_1019 = tmp_struct_32.field4;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_294,
-                                                                        pvrtmp_1008,
-                                                                        jump_453,
-                                                                        pvrtmp_1010,
-                                                                        pvrtmp_1011};
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_287,
+                                                                        pvrtmp_1016,
+                                                                        jump_446,
+                                                                        pvrtmp_1018,
+                                                                        pvrtmp_1019};
             break;
         }
 
       case GIB_REDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_35 = *(uintptr_t *) tmpcur_984;
-            GibCursor tmpcur_1018 = GIB_UNTAG(tagged_tmpcur_35);
-            GibCursor tmpaftercur_1019 = tmpcur_984 + 8;
-            uint16_t tmptag_1020 = GIB_GET_TAG(tagged_tmpcur_35);
-            GibCursor end_from_tagged_indr_451 = tmpcur_1018 + tmptag_1020;
-            GibBool chk_650 = tmpcur_1018 < end_from_tagged_indr_451;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_650);
-            #endif
-
-            GibBool chk_649 = loc_293 < end_r_295;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_649);
-            #endif
-
+            uintptr_t tagged_tmpcur_35 = *(uintptr_t *) tmpcur_992;
+            GibCursor tmpcur_1026 = GIB_UNTAG(tagged_tmpcur_35);
+            GibCursor tmpaftercur_1027 = tmpcur_992 + 8;
+            uint16_t tmptag_1028 = GIB_GET_TAG(tagged_tmpcur_35);
+            GibCursor end_from_tagged_indr_444 = tmpcur_1026 + tmptag_1028;
             GibCursorGibCursorGibCursorGibCursorGibCursorProd tmp_struct_34 =
-                                                               _copy_without_ptrs_PList(end_from_tagged_indr_451, end_r_295, loc_293, tmpcur_1018);
-            GibCursor pvrtmp_1021 = tmp_struct_34.field0;
-            GibCursor pvrtmp_1022 = tmp_struct_34.field1;
-            GibCursor pvrtmp_1023 = tmp_struct_34.field2;
-            GibCursor pvrtmp_1024 = tmp_struct_34.field3;
-            GibCursor pvrtmp_1025 = tmp_struct_34.field4;
+                                                               _copy_without_ptrs_PList(end_from_tagged_indr_444, end_r_288, loc_286, tmpcur_1026);
+            GibCursor pvrtmp_1029 = tmp_struct_34.field0;
+            GibCursor pvrtmp_1030 = tmp_struct_34.field1;
+            GibCursor pvrtmp_1031 = tmp_struct_34.field2;
+            GibCursor pvrtmp_1032 = tmp_struct_34.field3;
+            GibCursor pvrtmp_1033 = tmp_struct_34.field4;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_1021,
-                                                                        pvrtmp_1022,
-                                                                        pvrtmp_1023,
-                                                                        pvrtmp_1024,
-                                                                        pvrtmp_1025};
+            return (GibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_1029,
+                                                                        pvrtmp_1030,
+                                                                        pvrtmp_1031,
+                                                                        pvrtmp_1032,
+                                                                        pvrtmp_1033};
             break;
         }
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_983");
+            printf("%s\n", "Unknown tag in: tmpval_991");
             exit(1);
         }
     }
 }
-GibCursorGibCursorProd _traverse_PList(GibCursor end_r_297,
-                                       GibCursor arg_67_103_152)
+GibCursorGibCursorProd _traverse_PList(GibCursor end_r_290,
+                                       GibCursor arg_64_100_145)
 {
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
-    GibPackedTag tmpval_1033 = *(GibPackedTag *) arg_67_103_152;
-    GibCursor tmpcur_1034 = arg_67_103_152 + 1;
+    GibPackedTag tmpval_1041 = *(GibPackedTag *) arg_64_100_145;
+    GibCursor tmpcur_1042 = arg_64_100_145 + 1;
 
 
-  switch_1049:
+  switch_1057:
     ;
-    switch (tmpval_1033) {
+    switch (tmpval_1041) {
 
       case 0:
         {
-            GibInt tmpval_1035 = *(GibInt *) tmpcur_1034;
-            GibCursor tmpcur_1036 = tmpcur_1034 + sizeof(GibInt);
-            GibBool chk_654 = tmpcur_1036 < end_r_297;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_654);
-            #endif
-
+            GibInt tmpval_1043 = *(GibInt *) tmpcur_1042;
+            GibCursor tmpcur_1044 = tmpcur_1042 + sizeof(GibInt);
             GibCursorGibCursorProd tmp_struct_36 =
-                                    _traverse_PList(end_r_297, tmpcur_1036);
-            GibCursor pvrtmp_1037 = tmp_struct_36.field0;
-            GibCursor pvrtmp_1038 = tmp_struct_36.field1;
+                                    _traverse_PList(end_r_290, tmpcur_1044);
+            GibCursor pvrtmp_1045 = tmp_struct_36.field0;
+            GibCursor pvrtmp_1046 = tmp_struct_36.field1;
 
-            return (GibCursorGibCursorProd) {pvrtmp_1037, pvrtmp_1038};
+            return (GibCursorGibCursorProd) {pvrtmp_1045, pvrtmp_1046};
             break;
         }
 
       case 1:
         {
-            GibCursor jump_421 = arg_67_103_152 + 1;
+            GibCursor jump_414 = arg_64_100_145 + 1;
 
-            return (GibCursorGibCursorProd) {end_r_297, jump_421};
+            return (GibCursorGibCursorProd) {end_r_290, jump_414};
             break;
         }
 
       case GIB_INDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_38 = *(uintptr_t *) tmpcur_1034;
-            GibCursor tmpcur_1039 = GIB_UNTAG(tagged_tmpcur_38);
-            GibCursor tmpaftercur_1040 = tmpcur_1034 + 8;
-            uint16_t tmptag_1041 = GIB_GET_TAG(tagged_tmpcur_38);
-            GibCursor end_from_tagged_indr_457 = tmpcur_1039 + tmptag_1041;
-            GibCursor jump_459 = tmpcur_1034 + 8;
-            GibBool chk_659 = tmpcur_1039 < end_from_tagged_indr_457;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_659);
-            #endif
-
+            uintptr_t tagged_tmpcur_38 = *(uintptr_t *) tmpcur_1042;
+            GibCursor tmpcur_1047 = GIB_UNTAG(tagged_tmpcur_38);
+            GibCursor tmpaftercur_1048 = tmpcur_1042 + 8;
+            uint16_t tmptag_1049 = GIB_GET_TAG(tagged_tmpcur_38);
+            GibCursor end_from_tagged_indr_450 = tmpcur_1047 + tmptag_1049;
+            GibCursor jump_452 = tmpcur_1042 + 8;
             GibCursorGibCursorProd tmp_struct_37 =
-                                    _traverse_PList(end_from_tagged_indr_457, tmpcur_1039);
-            GibCursor pvrtmp_1042 = tmp_struct_37.field0;
-            GibCursor pvrtmp_1043 = tmp_struct_37.field1;
+                                    _traverse_PList(end_from_tagged_indr_450, tmpcur_1047);
+            GibCursor pvrtmp_1050 = tmp_struct_37.field0;
+            GibCursor pvrtmp_1051 = tmp_struct_37.field1;
 
-            return (GibCursorGibCursorProd) {end_r_297, jump_459};
+            return (GibCursorGibCursorProd) {end_r_290, jump_452};
             break;
         }
 
       case GIB_REDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_40 = *(uintptr_t *) tmpcur_1034;
-            GibCursor tmpcur_1044 = GIB_UNTAG(tagged_tmpcur_40);
-            GibCursor tmpaftercur_1045 = tmpcur_1034 + 8;
-            uint16_t tmptag_1046 = GIB_GET_TAG(tagged_tmpcur_40);
-            GibCursor end_from_tagged_indr_457 = tmpcur_1044 + tmptag_1046;
-            GibBool chk_663 = tmpcur_1044 < end_from_tagged_indr_457;
-
-            #ifdef _GIBBON_DEBUG
-            assert(chk_663);
-            #endif
-
+            uintptr_t tagged_tmpcur_40 = *(uintptr_t *) tmpcur_1042;
+            GibCursor tmpcur_1052 = GIB_UNTAG(tagged_tmpcur_40);
+            GibCursor tmpaftercur_1053 = tmpcur_1042 + 8;
+            uint16_t tmptag_1054 = GIB_GET_TAG(tagged_tmpcur_40);
+            GibCursor end_from_tagged_indr_450 = tmpcur_1052 + tmptag_1054;
             GibCursorGibCursorProd tmp_struct_39 =
-                                    _traverse_PList(end_from_tagged_indr_457, tmpcur_1044);
-            GibCursor pvrtmp_1047 = tmp_struct_39.field0;
-            GibCursor pvrtmp_1048 = tmp_struct_39.field1;
+                                    _traverse_PList(end_from_tagged_indr_450, tmpcur_1052);
+            GibCursor pvrtmp_1055 = tmp_struct_39.field0;
+            GibCursor pvrtmp_1056 = tmp_struct_39.field1;
 
-            return (GibCursorGibCursorProd) {pvrtmp_1047, pvrtmp_1048};
+            return (GibCursorGibCursorProd) {pvrtmp_1055, pvrtmp_1056};
             break;
         }
 
       default:
         {
-            printf("%s\n", "Unknown tag in: tmpval_1033");
+            printf("%s\n", "Unknown tag in: tmpval_1041");
             exit(1);
         }
     }
 }
-GibCursorGibCursorProd _print_PList(GibCursor end_r_299,
-                                    GibCursor arg_72_107_156)
+GibCursorGibCursorProd _print_PList(GibCursor end_r_292,
+                                    GibCursor arg_69_104_149)
 {
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
-    GibPackedTag tmpval_1050 = *(GibPackedTag *) arg_72_107_156;
-    GibCursor tmpcur_1051 = arg_72_107_156 + 1;
+    GibPackedTag tmpval_1058 = *(GibPackedTag *) arg_69_104_149;
+    GibCursor tmpcur_1059 = arg_69_104_149 + 1;
 
 
-  switch_1066:
+  switch_1074:
     ;
-    switch (tmpval_1050) {
+    switch (tmpval_1058) {
 
       case 0:
         {
-            GibInt tmpval_1052 = *(GibInt *) tmpcur_1051;
-            GibCursor tmpcur_1053 = tmpcur_1051 + sizeof(GibInt);
-            unsigned char wildcard_77_110_159 = gib_print_symbol(811);
-            unsigned char y_75_111_160 = printf("%ld", tmpval_1052);
-            GibBool chk_667 = tmpcur_1053 < end_r_299;
-
-            #ifdef _GIBBON_DEBUG
-            // assert(chk_667);
-            #endif
-
+            GibInt tmpval_1060 = *(GibInt *) tmpcur_1059;
+            GibCursor tmpcur_1061 = tmpcur_1059 + sizeof(GibInt);
+            unsigned char wildcard_74_107_152 = gib_print_symbol(810);
+            unsigned char y_72_108_153 = printf("%ld", tmpval_1060);
             GibCursorGibCursorProd tmp_struct_41 =
-                                    _print_PList(end_r_299, tmpcur_1053);
-            GibCursor pvrtmp_1054 = tmp_struct_41.field0;
-            GibCursor pvrtmp_1055 = tmp_struct_41.field1;
-            unsigned char wildcard_78_113_162 = gib_print_symbol(809);
+                                    _print_PList(end_r_292, tmpcur_1061);
+            GibCursor pvrtmp_1062 = tmp_struct_41.field0;
+            GibCursor pvrtmp_1063 = tmp_struct_41.field1;
+            unsigned char wildcard_75_110_155 = gib_print_symbol(808);
 
-            return (GibCursorGibCursorProd) {pvrtmp_1054, pvrtmp_1055};
+            return (GibCursorGibCursorProd) {pvrtmp_1062, pvrtmp_1063};
             break;
         }
 
       case 1:
         {
-            GibCursor jump_426 = arg_72_107_156 + 1;
-            unsigned char wildcard_79_114_163 = gib_print_symbol(810);
-            unsigned char wildcard_80_115_164 = gib_print_symbol(809);
+            GibCursor jump_419 = arg_69_104_149 + 1;
+            unsigned char wildcard_76_111_156 = gib_print_symbol(809);
+            unsigned char wildcard_77_112_157 = gib_print_symbol(808);
 
-            return (GibCursorGibCursorProd) {end_r_299, jump_426};
+            return (GibCursorGibCursorProd) {end_r_292, jump_419};
             break;
         }
 
       case GIB_INDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_43 = *(uintptr_t *) tmpcur_1051;
-            GibCursor tmpcur_1056 = GIB_UNTAG(tagged_tmpcur_43);
-            GibCursor tmpaftercur_1057 = tmpcur_1051 + 8;
-            uint16_t tmptag_1058 = GIB_GET_TAG(tagged_tmpcur_43);
-            GibCursor end_from_tagged_indr_463 = tmpcur_1056 + tmptag_1058;
-            GibCursor jump_465 = tmpcur_1051 + 8;
-            unsigned char wildcard_468 = gib_print_symbol(813);
-            GibBool chk_672 = tmpcur_1056 < end_from_tagged_indr_463;
-
-            #ifdef _GIBBON_DEBUG
-            // assert(chk_672);
-            #endif
-
+            uintptr_t tagged_tmpcur_43 = *(uintptr_t *) tmpcur_1059;
+            GibCursor tmpcur_1064 = GIB_UNTAG(tagged_tmpcur_43);
+            GibCursor tmpaftercur_1065 = tmpcur_1059 + 8;
+            uint16_t tmptag_1066 = GIB_GET_TAG(tagged_tmpcur_43);
+            GibCursor end_from_tagged_indr_456 = tmpcur_1064 + tmptag_1066;
+            GibCursor jump_458 = tmpcur_1059 + 8;
+            unsigned char wildcard_461 = gib_print_symbol(812);
             GibCursorGibCursorProd tmp_struct_42 =
-                                    _print_PList(end_from_tagged_indr_463, tmpcur_1056);
-            GibCursor pvrtmp_1059 = tmp_struct_42.field0;
-            GibCursor pvrtmp_1060 = tmp_struct_42.field1;
+                                    _print_PList(end_from_tagged_indr_456, tmpcur_1064);
+            GibCursor pvrtmp_1067 = tmp_struct_42.field0;
+            GibCursor pvrtmp_1068 = tmp_struct_42.field1;
 
-            return (GibCursorGibCursorProd) {end_r_299, jump_465};
+            return (GibCursorGibCursorProd) {end_r_292, jump_458};
             break;
         }
 
       case GIB_REDIRECTION_TAG:
         {
-            uintptr_t tagged_tmpcur_45 = *(uintptr_t *) tmpcur_1051;
-            GibCursor tmpcur_1061 = GIB_UNTAG(tagged_tmpcur_45);
-            GibCursor tmpaftercur_1062 = tmpcur_1051 + 8;
-            uint16_t tmptag_1063 = GIB_GET_TAG(tagged_tmpcur_45);
-            GibCursor end_from_tagged_indr_463 = tmpcur_1061 + tmptag_1063;
-            unsigned char wildcard_468 = gib_print_symbol(812);
-            GibBool chk_676 = tmpcur_1061 < end_from_tagged_indr_463;
-
-            #ifdef _GIBBON_DEBUG
-            // assert(chk_676);
-            #endif
-
+            uintptr_t tagged_tmpcur_45 = *(uintptr_t *) tmpcur_1059;
+            GibCursor tmpcur_1069 = GIB_UNTAG(tagged_tmpcur_45);
+            GibCursor tmpaftercur_1070 = tmpcur_1059 + 8;
+            uint16_t tmptag_1071 = GIB_GET_TAG(tagged_tmpcur_45);
+            GibCursor end_from_tagged_indr_456 = tmpcur_1069 + tmptag_1071;
+            unsigned char wildcard_461 = gib_print_symbol(811);
             GibCursorGibCursorProd tmp_struct_44 =
-                                    _print_PList(end_from_tagged_indr_463, tmpcur_1061);
-            GibCursor pvrtmp_1064 = tmp_struct_44.field0;
-            GibCursor pvrtmp_1065 = tmp_struct_44.field1;
+                                    _print_PList(end_from_tagged_indr_456, tmpcur_1069);
+            GibCursor pvrtmp_1072 = tmp_struct_44.field0;
+            GibCursor pvrtmp_1073 = tmp_struct_44.field1;
 
-            return (GibCursorGibCursorProd) {pvrtmp_1064, pvrtmp_1065};
+            return (GibCursorGibCursorProd) {pvrtmp_1072, pvrtmp_1073};
             break;
         }
 
       default:
         {
-            printf("Unknown tag in: tmpval_1050 %d", tmpval_1050);
+            printf("%s\n", "Unknown tag in: tmpval_1058");
             exit(1);
         }
     }
@@ -1049,120 +863,104 @@ int gib_main_expr(void)
     GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
     GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
     GibShadowstackFrame *frame;
-    GibInt n_17_81_123 = gib_get_size_param();
+    GibChunk region_813 = gib_alloc_region(gib_get_inf_init_chunk_size());
+    GibCursor r_310 = region_813.start;
+    GibCursor end_r_310 = region_813.end;
     GibChunk region_814 = gib_alloc_region(gib_get_inf_init_chunk_size());
-    GibCursor r_317 = region_814.start;
-    GibCursor end_r_317 = region_814.end;
-    GibBool chk_678 = r_317 < end_r_317;
-
-    #ifdef _GIBBON_DEBUG
-    assert(chk_678);
-    #endif
-
+    GibCursor r_309 = region_814.start;
+    GibCursor end_r_309 = region_814.end;
+    GibChunk region_815 = gib_alloc_region(gib_get_inf_init_chunk_size());
+    GibCursor r_308 = region_815.start;
+    GibCursor end_r_308 = region_815.end;
+    GibInt n_18_78_118 = gib_get_size_param();
     GibCursorGibCursorGibCursorProd tmp_struct_46 =
-                                     buildList(end_r_317, r_317, n_17_81_123);
-    GibCursor pvrtmp_815 = tmp_struct_46.field0;
-    GibCursor pvrtmp_816 = tmp_struct_46.field1;
-    GibCursor pvrtmp_817 = tmp_struct_46.field2;
+                                     buildList(end_r_310, r_310, n_18_78_118);
+    GibCursor pvrtmp_816 = tmp_struct_46.field0;
+    GibCursor pvrtmp_817 = tmp_struct_46.field1;
+    GibCursor pvrtmp_818 = tmp_struct_46.field2;
 
-    gib_shadowstack_push(rstack, r_317, pvrtmp_815, Stk, PList_T);
-
-    GibChunk region_822 = gib_alloc_region(gib_get_inf_init_chunk_size());
-    GibCursor r_316 = region_822.start;
-    GibCursor end_r_316 = region_822.end;
-
+    gib_shadowstack_push(rstack, r_310, pvrtmp_816, Stk, PList_T);
     frame = gib_shadowstack_pop(rstack);
-    r_317 = frame->ptr;
-    pvrtmp_815 = frame->endptr;
-    *(GibPackedTag *) r_316 = 1;
+    r_310 = frame->ptr;
+    pvrtmp_816 = frame->endptr;
+    *(GibPackedTag *) r_309 = 1;
 
-    GibCursor writetag_680 = r_316 + 1;
-    GibCursor after_tag_681 = r_316 + 1;
+    GibCursor writetag_670 = r_309 + 1;
+    GibCursor after_tag_671 = r_309 + 1;
 
-    gib_shadowstack_push(rstack, r_317, pvrtmp_815, Stk, PList_T);
-    gib_shadowstack_push(rstack, r_316, end_r_316, Stk, PList_T);
-
-    GibChunk region_825 = gib_alloc_region(gib_get_inf_init_chunk_size());
-    GibCursor r_315 = region_825.start;
-    GibCursor end_r_315 = region_825.end;
-
+    gib_shadowstack_push(rstack, r_309, end_r_309, Stk, PList_T);
+    gib_shadowstack_push(rstack, r_310, pvrtmp_816, Stk, PList_T);
     frame = gib_shadowstack_pop(rstack);
-    r_316 = frame->ptr;
-    end_r_316 = frame->endptr;
+    r_310 = frame->ptr;
+    pvrtmp_816 = frame->endptr;
     frame = gib_shadowstack_pop(rstack);
-    r_317 = frame->ptr;
-    pvrtmp_815 = frame->endptr;
-    gib_shadowstack_push(rstack, r_317, pvrtmp_815, Stk, PList_T);
+    r_309 = frame->ptr;
+    end_r_309 = frame->endptr;
 
-    GibBool chk_689 = r_317 < pvrtmp_815;
+    GibCursor pvrtmp_837;
+    GibCursor pvrtmp_838;
+    GibCursor pvrtmp_839;
+    GibVector *times_51 = gib_vector_alloc(gib_get_iters_param(),
+                                           sizeof(double));
+    struct timespec begin_pvrtmp_837;
+    struct timespec end_pvrtmp_837;
 
-    #ifdef _GIBBON_DEBUG
-    assert(chk_689);
-    #endif
+    GibGcStateSnapshot *snapshot = gib_gc_init_state(3);
 
-    GibBool chk_688 = r_316 < end_r_316;
+    for (long long iters_pvrtmp_837 = 0; iters_pvrtmp_837 <
+         gib_get_iters_param(); iters_pvrtmp_837++) {
+        if (iters_pvrtmp_837 != gib_get_iters_param() - 1) {
+            gib_gc_save_state(snapshot, 3, region_813.end, region_814.end, region_815.end);
+            gib_list_bumpalloc_save_state();
+        }
+        clock_gettime(CLOCK_MONOTONIC_RAW, &begin_pvrtmp_837);
 
-    #ifdef _GIBBON_DEBUG
-    assert(chk_688);
-    #endif
+        GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd tmp_struct_47
+                                                                   =
+                                                                    reverse(pvrtmp_816, end_r_309, end_r_308, r_308, pvrtmp_817, r_309);
+        GibCursor pvrtmp_825 = tmp_struct_47.field0;
+        GibCursor pvrtmp_826 = tmp_struct_47.field1;
+        GibCursor pvrtmp_827 = tmp_struct_47.field2;
+        GibCursor pvrtmp_828 = tmp_struct_47.field3;
+        GibCursor pvrtmp_829 = tmp_struct_47.field4;
+        GibCursor pvrtmp_830 = tmp_struct_47.field5;
 
-    GibBool chk_687 = r_315 < end_r_315;
+        pvrtmp_837 = pvrtmp_827;
+        pvrtmp_838 = pvrtmp_829;
+        pvrtmp_839 = pvrtmp_830;
+        clock_gettime(CLOCK_MONOTONIC_RAW, &end_pvrtmp_837);
+        if (iters_pvrtmp_837 != gib_get_iters_param() - 1) {
+            gib_gc_restore_state(snapshot);
+            gib_list_bumpalloc_restore_state();
+        }
 
-    #ifdef _GIBBON_DEBUG
-    assert(chk_687);
-    #endif
+        double itertime_48 = gib_difftimespecs(&begin_pvrtmp_837,
+                                               &end_pvrtmp_837);
 
-    GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd tmp_struct_47 =
-                                                                reverse(pvrtmp_815, end_r_316, end_r_315, r_315, pvrtmp_816, r_316);
-    GibCursor pvrtmp_826 = tmp_struct_47.field0;
-    GibCursor pvrtmp_827 = tmp_struct_47.field1;
-    GibCursor pvrtmp_828 = tmp_struct_47.field2;
-    GibCursor pvrtmp_829 = tmp_struct_47.field3;
-    GibCursor pvrtmp_830 = tmp_struct_47.field4;
-    GibCursor pvrtmp_831 = tmp_struct_47.field5;
-
-    frame = gib_shadowstack_pop(rstack);
-    r_317 = frame->ptr;
-    pvrtmp_815 = frame->endptr;
-    gib_shadowstack_push(rstack, r_315, pvrtmp_828, Stk, PList_T);
-    pvrtmp_816 = r_317;
-
-    GibBool chk_691 = r_317 < pvrtmp_815;
-
-    #ifdef _GIBBON_DEBUG
-    assert(chk_691);
-    #endif
-
-    GibCursorGibCursorGibIntProd tmp_struct_48 =
-                                  sumList(pvrtmp_815, pvrtmp_816);
-    GibCursor pvrtmp_836 = tmp_struct_48.field0;
-    GibCursor pvrtmp_837 = tmp_struct_48.field1;
-    GibInt pvrtmp_838 = tmp_struct_48.field2;
-
-    frame = gib_shadowstack_pop(rstack);
-    r_315 = frame->ptr;
-    pvrtmp_828 = frame->endptr;
-
-    GibBool chk_693 = r_315 < pvrtmp_828;
-
-    #ifdef _GIBBON_DEBUG
-    assert(chk_693);
-    #endif
-
-    GibCursorGibCursorGibIntProd tmp_struct_49 =
-                                  sumList(pvrtmp_828, pvrtmp_830);
-    GibCursor pvrtmp_839 = tmp_struct_49.field0;
-    GibCursor pvrtmp_840 = tmp_struct_49.field1;
-    GibInt pvrtmp_841 = tmp_struct_49.field2;
-    GibBool tailprim_431 = pvrtmp_838 == pvrtmp_841;
-
-    if (tailprim_431) {
-        printf("#t");
-        printf("\n");
-        return 0;
-    } else {
-        printf("#f");
-        printf("\n");
-        return 0;
+        printf("itertime: %lf\n", itertime_48);
+        gib_vector_inplace_update(times_51, iters_pvrtmp_837, &itertime_48);
     }
+    gib_vector_inplace_sort(times_51, gib_compare_doubles);
+
+    double *tmp_52 = (double *) gib_vector_nth(times_51, gib_get_iters_param() /
+                                               2);
+    double selftimed_50 = *tmp_52;
+    double batchtime_49 = gib_sum_timing_array(times_51);
+
+    gib_print_timing_array(times_51);
+    gib_vector_free(times_51);
+    printf("ITERS: %ld\n", gib_get_iters_param());
+    printf("SIZE: %ld\n", gib_get_size_param());
+    printf("BATCHTIME: %e\n", batchtime_49);
+    printf("SELFTIMED: %e\n", selftimed_50);
+
+    GibCursorGibCursorGibIntProd tmp_struct_53 =
+                                  sumList(end_r_308, pvrtmp_838);
+    GibCursor pvrtmp_847 = tmp_struct_53.field0;
+    GibCursor pvrtmp_848 = tmp_struct_53.field1;
+    GibInt pvrtmp_849 = tmp_struct_53.field2;
+
+    printf("%ld", pvrtmp_849);
+    printf("\n");
+    return 0;
 }

@@ -23,6 +23,7 @@ sumList xs =
 gibbon_main =
   let n   = sizeParam
       ls  = buildList n
+      -- m = sumList ls
       acc = Nil
-      rev = reverse ls acc
-  in (sumList ls == sumList rev)
+      rev = iterate (reverse ls acc)
+  in sumList rev
