@@ -1109,6 +1109,11 @@ static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected)
     GibOldgen *oldgen = DEFAULT_GENERATION;
     GibGcStats *gc_stats = GC_STATS;
 
+#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    fprintf(stderr, "Performing a minor collection.\n");
+    fflush(stderr);
+#endif
+
 #ifdef _GIBBON_GCSTATS
     struct timespec begin;
     struct timespec end;
@@ -1182,9 +1187,11 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     }
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
+    fprintf(stderr, "Growing a region old=(%p,%p) in nursery=%d, new=(%p,%p)\n",
+            *writeloc_addr, footer_ptr, old_chunk_in_nursery, heap_start, new_footer_start);
     GibRegionInfo *reg = (GibRegionInfo*) new_footer->reg_info;
     fprintf(stderr,
-            "gib_grow_region: allocated %zu bytes for region %" PRIu64 "\n",
+            "  allocated %zu bytes for region %" PRIu64 "\n",
             newsize,
             (new_footer->reg_info)->id);
 #endif
@@ -1199,8 +1206,8 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     *(uintptr_t *) writeloc = tagged;
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-    fprintf(stderr, "Growing a region old=(%p,%p) in nursery=%d, new=(%p,%p)\n",
-            *writeloc_addr, footer_ptr, old_chunk_in_nursery, heap_start, new_footer_start);
+    fprintf(stderr, "  wrote a redirection pointer at %p to %p\n",
+            *writeloc_addr, heap_start);
 #endif
 
     // Update start and end cursors.
@@ -1591,8 +1598,8 @@ void gib_indirection_barrier(
     } else {
 
 #if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-        printf("Writing a young-to-%s indirection, %p -> %p.\n",
-               (to_young ? "young" : "old"), from, to);
+        fprintf(stderr, "Writing a young-to-%s indirection, %p -> %p.\n",
+                (to_young ? "young" : "old"), from, to);
 #endif
 
    }
