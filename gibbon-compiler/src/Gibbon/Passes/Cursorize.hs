@@ -820,7 +820,10 @@ cursorizeAppE ddfs fundefs denv tenv senv ex =
                                  acc
                              _ -> pure acc)
                         bod locs
-      pure asserts
+      dflags <- getDynFlags
+      if gopt Opt_RtsDebug dflags
+        then pure asserts
+        else pure bod
     _ -> error $ "cursorizeAppE: Unexpected " ++ sdoc ex
 
 {-
