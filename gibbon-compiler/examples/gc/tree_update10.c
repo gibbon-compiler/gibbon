@@ -2154,7 +2154,7 @@ int gib_main_expr(void)
         GibCursor pvrtmp_2745 = tmp_struct_119.field1;
         GibCursor pvrtmp_2746 = tmp_struct_119.field2;
         GibCursorGibCursorGibCursorGibCursorProd tmp_struct_120 =
-                                                  loop(pvrtmp_2744, end_r_1443, r_1443, pts_78_753_913, 0, pvrtmp_2745, n_79_754_914);
+                                                  loop2(pvrtmp_2744, end_r_1443, r_1443, pts_78_753_913, 0, pvrtmp_2745, n_79_754_914);
         GibCursor pvrtmp_2751 = tmp_struct_120.field0;
         GibCursor pvrtmp_2752 = tmp_struct_120.field1;
         GibCursor pvrtmp_2753 = tmp_struct_120.field2;

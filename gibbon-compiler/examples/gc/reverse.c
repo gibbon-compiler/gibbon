@@ -177,15 +177,11 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end
       case 1:
         {
             GibCursor jump_390 = xs_22_82_122 + 1;
-
             if (loc_273 + 18 > end_r_276) {
                 gib_grow_region(&loc_273, &end_r_276);
             }
-            gib_indirection_barrier(loc_273, end_r_276, acc_23_83_123,
-                                    end_r_275, PList_T);
-
+            gib_indirection_barrier(loc_273, end_r_276, acc_23_83_123, end_r_275, PList_T);
             GibCursor end_515 = loc_273 + 9;
-
             return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {end_r_274,
                                                                                  end_r_275,
                                                                                  end_r_276,
@@ -200,8 +196,7 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end
             GibInt tmpval_856 = *(GibInt *) tmpcur_851;
             GibCursor tmpcur_857 = tmpcur_851 + sizeof(GibInt);
 
-            gib_shadowstack_push(rstack, acc_23_83_123, end_r_275, Stk,
-                                 PList_T);
+            gib_shadowstack_push(rstack, acc_23_83_123, end_r_275, Stk, PList_T);
             gib_shadowstack_push(rstack, tmpcur_857, end_r_274, Stk, PList_T);
             gib_shadowstack_push(wstack, loc_273, end_r_276, Stk, PList_T);
 
@@ -220,39 +215,34 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end
             end_r_275 = frame->endptr;
 
             GibCursor loc_317 = r_328 + 9;
-
             *(GibPackedTag *) r_328 = 0;
-
             GibCursor writetag_522 = r_328 + 1;
             GibCursor after_tag_523 = r_328 + 1;
-
             *(GibInt *) after_tag_523 = tmpval_856;
-
             GibCursor writecur_527 = after_tag_523 + sizeof(GibInt);
 
             // if (loc_317 + 18 > end_r_328) {
             //     gib_grow_region(&loc_317, &end_r_328);
             // }
-            gib_indirection_barrier(loc_317, end_r_328, acc_23_83_123,
-                                    end_r_275, PList_T);
+            gib_indirection_barrier(loc_317, end_r_328, acc_23_83_123, end_r_275, PList_T);
 
             GibCursor end_520 = loc_317 + 9;
-            GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
-            tmp_struct_3 =
-             reverse(end_r_274, end_r_328, end_r_276, loc_273, tmpcur_857, r_328);
-            GibCursor pvrtmp_863 = tmp_struct_3.field0;
-            GibCursor pvrtmp_864 = tmp_struct_3.field1;
-            GibCursor pvrtmp_865 = tmp_struct_3.field2;
-            GibCursor pvrtmp_866 = tmp_struct_3.field3;
-            GibCursor pvrtmp_867 = tmp_struct_3.field4;
-            GibCursor pvrtmp_868 = tmp_struct_3.field5;
+            // GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
+            //   tmp_struct_3 =
+            return reverse(end_r_274, end_r_328, end_r_276, loc_273, tmpcur_857, r_328);
+            // GibCursor pvrtmp_863 = tmp_struct_3.field0;
+            // GibCursor pvrtmp_864 = tmp_struct_3.field1;
+            // GibCursor pvrtmp_865 = tmp_struct_3.field2;
+            // GibCursor pvrtmp_866 = tmp_struct_3.field3;
+            // GibCursor pvrtmp_867 = tmp_struct_3.field4;
+            // GibCursor pvrtmp_868 = tmp_struct_3.field5;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_863,
-                                                                                 end_r_275,
-                                                                                 pvrtmp_865,
-                                                                                 pvrtmp_866,
-                                                                                 pvrtmp_867,
-                                                                                 pvrtmp_868};
+            // return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_863,
+            //                                                                      end_r_275,
+            //                                                                      pvrtmp_865,
+            //                                                                      pvrtmp_866,
+            //                                                                      pvrtmp_867,
+            //                                                                      pvrtmp_868};
             break;
         }
 
@@ -290,22 +280,22 @@ GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd reverse(GibCursor end
             GibCursor tmpaftercur_891 = tmpcur_851 + 8;
             uint16_t tmptag_892 = GIB_GET_TAG(tagged_tmpcur_10);
             GibCursor end_from_tagged_indr_426 = tmpcur_890 + tmptag_892;
-            GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
-            tmp_struct_9 =
-             reverse(end_from_tagged_indr_426, end_r_275, end_r_276, loc_273, tmpcur_890, acc_23_83_123);
-            GibCursor pvrtmp_893 = tmp_struct_9.field0;
-            GibCursor pvrtmp_894 = tmp_struct_9.field1;
-            GibCursor pvrtmp_895 = tmp_struct_9.field2;
-            GibCursor pvrtmp_896 = tmp_struct_9.field3;
-            GibCursor pvrtmp_897 = tmp_struct_9.field4;
-            GibCursor pvrtmp_898 = tmp_struct_9.field5;
+            // GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd
+            // tmp_struct_9 =
+            return reverse(end_from_tagged_indr_426, end_r_275, end_r_276, loc_273, tmpcur_890, acc_23_83_123);
+            // GibCursor pvrtmp_893 = tmp_struct_9.field0;
+            // GibCursor pvrtmp_894 = tmp_struct_9.field1;
+            // GibCursor pvrtmp_895 = tmp_struct_9.field2;
+            // GibCursor pvrtmp_896 = tmp_struct_9.field3;
+            // GibCursor pvrtmp_897 = tmp_struct_9.field4;
+            // GibCursor pvrtmp_898 = tmp_struct_9.field5;
 
-            return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_893,
-                                                                                 pvrtmp_894,
-                                                                                 pvrtmp_895,
-                                                                                 pvrtmp_896,
-                                                                                 pvrtmp_897,
-                                                                                 pvrtmp_898};
+            // return (GibCursorGibCursorGibCursorGibCursorGibCursorGibCursorProd) {pvrtmp_893,
+            //                                                                      pvrtmp_894,
+            //                                                                      pvrtmp_895,
+            //                                                                      pvrtmp_896,
+            //                                                                      pvrtmp_897,
+            //                                                                      pvrtmp_898};
             break;
         }
 

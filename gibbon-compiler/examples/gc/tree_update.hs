@@ -86,14 +86,10 @@ loop nums idx tr n =
           else loop nums idx1 (treeDelete tr (j-1)) (n-1)
 
 
-benchTreeUpdate :: Vector Int -> Int -> SearchTree
-{-# INLINE benchTreeUpdate #-}
-benchTreeUpdate input n = loop input 0 (helper 0 3) n
-
-
 gibbon_main =
   let pts :: Vector Int
       pts = readArrayFile Nothing
       n = sizeParam
-      tr = iterate (benchTreeUpdate pts n)
-  in countnodes tr
+      tr = (helper 0 3)
+      upd = iterate (loop pts 0 tr n)
+  in countnodes upd
