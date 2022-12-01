@@ -11,6 +11,13 @@ data SearchTree = Null
                 | Leaf Int
                 | Node Int SearchTree SearchTree
 
+copySearchTree :: SearchTree -> SearchTree
+copySearchTree tr =
+  case tr of
+    Null -> Null
+    Leaf i -> Leaf i
+    Node i x y -> Node i (copySearchTree x) (copySearchTree y)
+
 helper :: Int -> Int -> SearchTree
 helper s e =
   if e < s

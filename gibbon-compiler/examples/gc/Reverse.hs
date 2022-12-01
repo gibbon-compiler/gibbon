@@ -1,6 +1,13 @@
-module Main where
+module Reverse where
 
 data PList = Cons Int PList | Nil
+
+copyPList :: PList -> PList
+copyPList ls =
+  case ls of
+    Nil -> Nil
+    Cons i rst -> Cons i (copyPList rst)
+
 
 reverse :: PList -> PList -> PList
 reverse xs acc =
@@ -14,11 +21,11 @@ buildList n =
     then Nil
     else Cons n (buildList (n-1))
 
-sumList :: PList -> Int
-sumList xs =
+sumPList :: PList -> Int
+sumPList xs =
   case xs of
     Nil -> 0
-    Cons y ys -> y + sumList ys
+    Cons y ys -> y + sumPList ys
 
 gibbon_main =
   let n   = sizeParam
@@ -26,4 +33,4 @@ gibbon_main =
       -- m = sumList ls
       acc = Nil
       rev = iterate (reverse ls acc)
-  in sumList rev
+  in sumPList rev

@@ -703,42 +703,42 @@ unsafe fn evacuate_packed(
                                 (*GC_STATS).indirs_inlined += 1;
                             }
 
-                            // // Update the burned environment if we're evacuating a root
-                            // // from the remembered set of if we're evacuating an
-                            // // indirection pointer that points to a non-zero location.
-                            // match (*frame).gc_root_prov {
-                            //     C_GcRootProv::RemSet => {
-                            //         dbgprintln!(
-                            //             "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in remembered set",
-                            //             src,
-                            //         );
-                            //         worklist.push(
-                            //             EvacAction::SkipoverEnvWrite(pointee),
-                            //         );
-                            //     }
+                            // Update the burned environment if we're evacuating a root
+                            // from the remembered set of if we're evacuating an
+                            // indirection pointer that points to a non-zero location.
+                            match (*frame).gc_root_prov {
+                                C_GcRootProv::RemSet => {
+                                    dbgprintln!(
+                                        "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in remembered set",
+                                        src,
+                                    );
+                                    worklist.push(
+                                        EvacAction::SkipoverEnvWrite(pointee),
+                                    );
+                                }
 
-                            //     C_GcRootProv::Stk => {
-                            //         if !is_loc0(pointee, pointee_footer, true)
-                            //         {
-                            //             dbgprintln!(
-                            //                 "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in nursery",
-                            //                 src,
-                            //             );
+                                C_GcRootProv::Stk => {
+                                    if !is_loc0(pointee, pointee_footer, true)
+                                    {
+                                        dbgprintln!(
+                                            "   pushing SkipoverEnvWrite({:?}) action to stack for indir, root in nursery",
+                                            src,
+                                        );
 
-                            //             worklist.push(
-                            //                 EvacAction::SkipoverEnvWrite(
-                            //                     pointee,
-                            //                 ),
-                            //             );
-                            //         } else {
-                            //             dbgprintln!(
-                            //                 "   optimization! did not push SkipoverEnvWrite({:?} to {:?}) to stack",
-                            //                 pointee,
-                            //                 src
-                            //             );
-                            //         }
-                            //     }
-                            // }
+                                        worklist.push(
+                                            EvacAction::SkipoverEnvWrite(
+                                                pointee,
+                                            ),
+                                        );
+                                    } else {
+                                        dbgprintln!(
+                                            "   optimization! did not push SkipoverEnvWrite({:?} to {:?}) to stack",
+                                            pointee,
+                                            src
+                                        );
+                                    }
+                                }
+                            }
 
                             // Same type, new location to evac from:
                             next_action = EvacAction::ProcessTy(
@@ -760,38 +760,38 @@ unsafe fn evacuate_packed(
                                 dst_end1
                             );
 
-                            // // Update the burned environment if we're evacuating a root
-                            // // from the remembered set of if we're evacuating an
-                            // // indirection pointer that points to a non-zero location.
-                            // match (*frame).gc_root_prov {
-                            //     C_GcRootProv::RemSet => {
-                            //         dbgprintln!(
-                            //             "   inserting ({:?} to {:?}) to so_env, root in remembered set",
-                            //             src,
-                            //             src_after_indr1,
-                            //         );
-                            //         st.so_env.insert(src, src_after_indr1);
-                            //     }
+                            // Update the burned environment if we're evacuating a root
+                            // from the remembered set of if we're evacuating an
+                            // indirection pointer that points to a non-zero location.
+                            match (*frame).gc_root_prov {
+                                C_GcRootProv::RemSet => {
+                                    dbgprintln!(
+                                        "   inserting ({:?} to {:?}) to so_env, root in remembered set",
+                                        src,
+                                        src_after_indr1,
+                                    );
+                                    st.so_env.insert(src, src_after_indr1);
+                                }
 
-                            //     C_GcRootProv::Stk => {
-                            //         if !is_loc0(pointee, pointee_footer, true)
-                            //         {
-                            //             dbgprintln!(
-                            //                 "   inserting ({:?} to {:?}) to so_env, root in nursery",
-                            //                 src,
-                            //                 src_after_indr1,
-                            //             );
+                                C_GcRootProv::Stk => {
+                                    if !is_loc0(pointee, pointee_footer, true)
+                                    {
+                                        dbgprintln!(
+                                            "   inserting ({:?} to {:?}) to so_env, root in nursery",
+                                            src,
+                                            src_after_indr1,
+                                        );
 
-                            //             st.so_env.insert(src, src_after_indr1);
-                            //         } else {
-                            //             dbgprintln!(
-                            //                 "   optimization! did not insert ({:?} to {:?}) to so_env",
-                            //                 pointee,
-                            //                 src
-                            //             );
-                            //         }
-                            //     }
-                            // }
+                                        st.so_env.insert(src, src_after_indr1);
+                                    } else {
+                                        dbgprintln!(
+                                            "   optimization! did not insert ({:?} to {:?}) to so_env",
+                                            pointee,
+                                            src
+                                        );
+                                    }
+                                }
+                            }
 
                             let pointee_footer_offset = tagged.get_tag();
                             let pointee_footer =
@@ -1273,19 +1273,19 @@ unsafe fn evacuate_packed(
                                 }
                             }
 
-                            // match (*frame).gc_root_prov {
-                            //     C_GcRootProv::RemSet => {
-                            //         dbgprintln!(
-                            //             "   pushing SkipoverEnvWrite({:?}) action to stack for ctor, root in remembered set",
-                            //             src
-                            //         );
-                            //         worklist.push(
-                            //             EvacAction::SkipoverEnvWrite(src),
-                            //         );
-                            //     }
+                            match (*frame).gc_root_prov {
+                                C_GcRootProv::RemSet => {
+                                    dbgprintln!(
+                                        "   pushing SkipoverEnvWrite({:?}) action to stack for ctor, root in remembered set",
+                                        src
+                                    );
+                                    worklist.push(
+                                        EvacAction::SkipoverEnvWrite(src),
+                                    );
+                                }
 
-                            //     C_GcRootProv::Stk => (),
-                            // }
+                                C_GcRootProv::Stk => (),
+                            }
 
                             for (ty, shct) in field_tys
                                 .iter()
@@ -1317,7 +1317,7 @@ unsafe fn evacuate_packed(
                     pointee,
                     src
                 );
-                // st.so_env.insert(pointee, src);
+                st.so_env.insert(pointee, src);
 
                 worklist_next!(worklist, next_action);
             }
@@ -1329,9 +1329,9 @@ unsafe fn evacuate_packed(
         orig_src,
         src
     );
-    // // Provide skip-over information for what we just cleared out.
-    // // FIXME: only insert if it is a non-zero location?
-    // st.so_env.insert(orig_src, src);
+    // Provide skip-over information for what we just cleared out.
+    // FIXME: only insert if it is a non-zero location?
+    st.so_env.insert(orig_src, src);
 
     (src, dst, dst_end, forwarded)
 }

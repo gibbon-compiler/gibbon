@@ -35,6 +35,14 @@ data KdTree = KdLeaf Float  -- ^ x coord
 
            | KdEmpty
 
+copy_kdtree :: KdTree -> KdTree
+copy_kdtree tr =
+  case tr of
+    KdEmpty -> KdEmpty
+    KdLeaf x y z -> KdLeaf x y z
+    KdNode x y z a b c d e f g h i left right ->
+      KdNode x y z a b c d e f g h i (copy_kdtree left) (copy_kdtree right)
+
 print_kdtree :: KdTree -> ()
 print_kdtree tr =
   case tr of
