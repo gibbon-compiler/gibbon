@@ -15,7 +15,7 @@ layout6 :  H I A D C R T
 layout7 :  R C H I A D T
 layout8 :  C R I A D H T  
 
-Time in seconds
+Time in seconds, 9 iterations per layout
 
 *********************************************************************************************************************************************************************************************
  Passes                        | layout1           | layout2          | layout3            | layout4          | layout5          | layout6          | layout7          |  layout8           |
