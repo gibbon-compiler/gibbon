@@ -1,4 +1,4 @@
-## Timings for hand written benchmarks
+#Timings for hand written benchmarks
 
 ```
 H : Header 
@@ -10,16 +10,16 @@ T : Tags
 R : Rst of Blogs 
 ```
 
-# layout1 :  H I A D C T R
-# layout2 :  C T R H I A D
-# layout3 :  T R C H I A D 
-# layout4 :  T C R H I A D
-# layout5 :  R T C H I A D
-# layout6 :  H I A D C R T
-# layout7 :  R C H I A D T
-# layout8 :  C R I A D H T  
+## layout1 :  H I A D C T R
+## layout2 :  C T R H I A D
+## layout3 :  T R C H I A D 
+## layout4 :  T C R H I A D
+## layout5 :  R T C H I A D
+## layout6 :  H I A D C R T
+## layout7 :  R C H I A D T
+## layout8 :  C R I A D H T  
 
-## Time in seconds, 9 iterations per layout
+#Time in seconds, 9 iterations per layout
 
 ```
 *********************************************************************************************************************************************************************************************
