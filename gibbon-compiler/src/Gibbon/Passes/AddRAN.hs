@@ -158,6 +158,7 @@ addRANExp dont_change_datacons needRANsTyCons ddfs ex =
     -- standard recursion here
     VarE{}    -> return ex
     LitE{}    -> return ex
+    CharE{}   -> return ex
     FloatE{}  -> return ex
     LitSymE{} -> return ex
     AppE f locs args -> AppE f locs <$> mapM go args
@@ -188,6 +189,7 @@ addRANExp dont_change_datacons needRANsTyCons ddfs ex =
       case ex1 of
         VarE{}    -> ex1
         LitE{}    -> ex1
+        CharE{}   -> ex1
         FloatE{}  -> ex1
         LitSymE{} -> ex1
         AppE f locs args -> AppE f locs $ map changeSpawnToApp args
@@ -353,6 +355,7 @@ needsRANExp ddefs fundefs env2 renv tcenv parlocss ex =
     -- Standard recursion here (ASSUMPTION: everything is flat)
     VarE{}     -> S.empty
     LitE{}     -> S.empty
+    CharE{}    -> S.empty
     FloatE{}   -> S.empty
     LitSymE{}  -> S.empty
     -- We do not process the function body here, assuming that the main analysis does it.

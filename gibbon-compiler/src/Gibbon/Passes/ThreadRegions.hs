@@ -454,6 +454,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
 
     VarE{}     -> return ex
     LitE{}     -> return ex
+    CharE{}    -> return ex
     FloatE{}   -> return ex
     LitSymE{}  -> return ex
     PrimAppE{} -> return ex
@@ -565,6 +566,7 @@ findRetLocs e0 = go e0 []
       case ex of
         VarE{}    -> acc
         LitE{}    -> acc
+        CharE{}   -> acc
         FloatE{}  -> acc
         LitSymE{} -> acc
         AppE _ _ args   -> foldr go acc args

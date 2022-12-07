@@ -54,6 +54,7 @@ data MainExp
 data Triv
     = VarTriv Var
     | IntTriv Int64
+    | CharTriv Char
     | FloatTriv Double
     | BoolTriv Bool
     | TagTriv Tag
@@ -67,6 +68,7 @@ typeOfTriv env trv =
   case trv of
     VarTriv v   -> env M.! v
     IntTriv{}   -> IntTy
+    CharTriv{}  -> CharTy
     FloatTriv{} -> FloatTy
     BoolTriv{}  -> BoolTy
     TagTriv{}   -> TagTyPacked
@@ -178,6 +180,7 @@ data Tail
 
 data Ty
     = IntTy        -- ^ 8 byte integers.
+    | CharTy       -- ^ 4 byte characters.
     | FloatTy      -- ^ 8 byte floating point numbers
     | BoolTy       -- ^ 1 byte integers.
     | TagTyPacked  -- ^ A single byte / Word8.  Used in PACKED mode.
@@ -336,6 +339,7 @@ data Prim
     | GetFirstWord -- ^ takes a PtrTy, returns IntTy containing the (first) word pointed to.
 
     | PrintInt    -- ^ Print an integer to stdout.
+    | PrintChar   -- ^ Print a character to stdout.
     | PrintFloat  -- ^ Print a floating point number to stdout.
     | PrintBool   -- ^ Print a boolean to stdout.
     | PrintSym    -- ^ Fetch a symbol from the symbol table, and print it.
@@ -424,6 +428,7 @@ fromL3Ty :: L3.Ty3 -> Ty
 fromL3Ty ty =
   case ty of
     L.IntTy   -> IntTy
+    L.CharTy  -> CharTy
     L.FloatTy -> FloatTy
     L.SymTy   -> SymTy
     L.BoolTy  -> BoolTy

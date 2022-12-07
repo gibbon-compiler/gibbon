@@ -131,6 +131,10 @@ tests:
     answer-file: examples/void_type.ans
   - name: T64_1.gib
   - name: test_addtrees.gib
+  - name: TestStrings.hs
+    # interp outputs 'h' versus the expected h (without quotes)
+    failing: [interp1]
+    answer-file: examples/TestStrings.hs.ans
 
   # There's still a bug somewhere. Uncomment the main expression to reproduce.
   # Plus, #lang gibbon is having some problems with dictionaries.
@@ -484,3 +488,6 @@ tests:
     skip: true
   - name: test17_forfold.gib
     skip: true
+
+  - name: wildcard_case.hs
+    answer-file: examples/wildcard_case.ans

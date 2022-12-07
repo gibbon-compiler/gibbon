@@ -20,7 +20,7 @@ import qualified Data.List as L
 import Data.Loc ( Loc(..), Pos(..))
 import qualified Data.Map as M
 import qualified Data.Set as S
-import Data.Text hiding (map, head, init, last, length, zip)
+import Data.Text hiding (map, head, init, last, length, zip, reverse, foldr)
 import qualified Data.Text as T
 import Data.Text.IO (readFile)
 import System.FilePath
@@ -147,6 +147,7 @@ tagDataCons ddefs = go allCons
        VarE{}          -> pure ex
        LitSymE{}       -> pure ex
        LitE _          -> pure ex
+       CharE _         -> pure ex
        FloatE _        -> pure ex
        PrimAppE p ls   -> PrimAppE p <$> mapM (go cons) ls
        ProjE i e  -> ProjE i <$> (go cons e)
@@ -375,6 +376,16 @@ exp se =
    -- Any other naked symbol is a variable:
    A l v          -> pure $ Ext $ L (toLoc l) $ VarE (textToVar v)
    G l (HSInt n)  -> pure $ Ext $ L (toLoc l) $ LitE (fromIntegral n)
+   G l (HSString txt) -> do
+     vec <- gensym (toVar "vec")
+     let n = T.length txt
+         init_vec = LetE (vec,[],VectorTy CharTy, PrimAppE (VAllocP CharTy) [LitE n])
+         fn i c b = LetE ("_",[],VectorTy CharTy,
+                          PrimAppE (InplaceVUpdateP CharTy) [VarE vec, LitE i, CharE c])
+                    b
+         add_chars = foldr (\(i,chr) acc -> fn i chr acc) (VarE vec)
+                       (reverse $ zip [0..n-1] (T.unpack txt))
+     pure $ Ext $ L (toLoc l) $ init_vec add_chars
 
    -- This type gets replaced later in flatten:
    Ls2 l "time" arg -> do
@@ -663,6 +674,7 @@ primMap = M.fromList
   , ("False", MkFalse)
   , ("gensym", Gensym)
   , ("printint", PrintInt)
+  , ("printchar", PrintChar)
   , ("printfloat", PrintFloat)
   , ("printbool", PrintBool)
   , ("printsym", PrintSym)

@@ -237,6 +237,7 @@ newTyVar = BoundTv <$> genLetter
 
 data Ty0
  = IntTy
+ | CharTy
  | FloatTy
  | SymTy0
  | BoolTy
@@ -271,6 +272,7 @@ instance Renamable Ty0 where
   gRename env ty =
     case ty of
       IntTy  -> IntTy
+      CharTy -> CharTy
       FloatTy-> FloatTy
       SymTy0 -> SymTy0
       BoolTy -> BoolTy
@@ -351,6 +353,7 @@ tyVarsInTys tys = foldr (go []) [] tys
     go bound ty acc =
       case ty of
         IntTy  -> acc
+        CharTy -> acc
         FloatTy-> acc
         SymTy0 -> acc
         BoolTy -> acc
@@ -385,6 +388,7 @@ metaTvsInTys tys = foldr go [] tys
                      then acc
                      else tv : acc
         IntTy   -> acc
+        CharTy  -> acc
         FloatTy -> acc
         SymTy0  -> acc
         BoolTy  -> acc
@@ -419,6 +423,7 @@ arrowTysInTy = go []
     go acc ty =
       case ty of
         IntTy    -> acc
+        CharTy   -> acc
         FloatTy  -> acc
         SymTy0   -> acc
         BoolTy   -> acc
@@ -442,6 +447,7 @@ substTyVar :: M.Map TyVar Ty0 -> Ty0 -> Ty0
 substTyVar mp ty =
   case ty of
     IntTy    -> ty
+    CharTy   -> ty
     FloatTy  -> ty
     SymTy0   -> ty
     BoolTy   -> ty
@@ -463,6 +469,7 @@ substTyVar mp ty =
 
 isScalarTy0 :: Ty0 -> Bool
 isScalarTy0 IntTy  = True
+isScalarTy0 CharTy = True
 isScalarTy0 SymTy0 = True
 isScalarTy0 BoolTy = True
 isScalarTy0 FloatTy= True
@@ -495,13 +502,14 @@ recoverType ddfs env2 ex =
   case ex of
     VarE v       -> M.findWithDefault (error $ "recoverType: Unbound variable " ++ show v) v (vEnv env2)
     LitE _       -> IntTy
+    CharE _      -> CharTy
     FloatE{}     -> FloatTy
     LitSymE _    -> IntTy
     AppE v tyapps _ -> let (ForAll tyvars (ArrowTy _ retty)) = fEnv env2 # v
                        in substTyVar (M.fromList (fragileZip tyvars tyapps)) retty
     -- PrimAppE (DictInsertP ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty
     -- PrimAppE (DictEmptyP  ty) ((L _ (VarE v)):_) -> SymDictTy (Just v) ty
-    PrimAppE p exs -> dbgTraceIt ("recovertype/primapp: " ++ show p ++ " " ++ show exs) $ primRetTy1 p
+    PrimAppE p exs -> dbgTrace 5 ("recovertype/primapp: " ++ show p ++ " " ++ show exs) $ primRetTy1 p
     LetE (v,_,t,_) e -> recoverType ddfs (extendVEnv v t env2) e
     IfE _ e _        -> recoverType ddfs env2 e
     MkProdE es       -> ProdTy $ map (recoverType ddfs env2) es
@@ -576,6 +584,7 @@ recoverType ddfs env2 ex =
         EqBenchProgP _ -> BoolTy
         EqIntP  -> BoolTy
         EqFloatP-> BoolTy
+        EqCharP -> BoolTy
         LtP  -> BoolTy
         GtP  -> BoolTy
         OrP  -> BoolTy
@@ -626,6 +635,7 @@ recoverType ddfs env2 ex =
         WritePackedFile{} -> ProdTy []
         ReadArrayFile _ ty      -> ty
         PrintInt     -> ProdTy []
+        PrintChar    -> ProdTy []
         PrintFloat   -> ProdTy []
         PrintBool    -> ProdTy []
         PrintSym     -> ProdTy []

@@ -166,6 +166,7 @@ placeRegionInwards env scopeSet ex  =
      -- Straightforward recursion ...
     VarE{}                 -> return ex        -- Just return Nothing special here
     LitE{}                 -> return ex        -- Just return Nothing special here
+    CharE{}                -> return ex
     FloatE{}               -> return ex        -- Just return Nothing special here
     LitSymE{}              -> return ex        -- Just return Nothing special here
     AppE f locVars ls      -> do

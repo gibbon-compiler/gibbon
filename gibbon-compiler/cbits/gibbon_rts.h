@@ -38,6 +38,7 @@
 typedef uint8_t GibPackedTag;
 typedef uint8_t GibBoxedTag;
 typedef int64_t GibInt;
+typedef char GibChar;
 typedef float GibFloat;
 typedef uint64_t GibSym;
 typedef bool GibBool;

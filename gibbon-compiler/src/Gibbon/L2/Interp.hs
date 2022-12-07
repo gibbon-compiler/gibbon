@@ -178,6 +178,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
                                    f v2 =
                                      case v2 of
                                        VInt i -> ( insertAtBuffer off (SerInt i) acc , new_off1 )
+                                       VChar i -> ( insertAtBuffer off (SerChar i) acc , new_off1 )
                                        VFloat{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
                                        VSym{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
                                        VBool{} -> error $ "L2.Interp: DataConE todo" ++ sdoc v2
@@ -209,6 +210,7 @@ interp szenv rc valenv ddefs fenv e = go valenv szenv e
         -- Straightforward recursion (same as the L1 interpreter)
         Ext ext -> interpExt sizeEnv rc env ddefs fenv ext
         LitE n    -> return (VInt n, SOne (fromJust $ byteSizeOfTy IntTy))
+        CharE n   -> return (VChar n, SOne (fromJust $ byteSizeOfTy CharTy))
         FloatE n  -> return (VFloat n, SOne (fromJust $ byteSizeOfTy FloatTy))
         LitSymE s -> return (VInt (strToInt $ fromVar s),
                              SOne (fromJust $ byteSizeOfTy SymTy))
@@ -401,6 +403,7 @@ dropInBuffer off (Buffer ls) = Buffer (S.drop off ls)
 data SerializedVal
     = SerTag Word8 DataCon
     | SerInt Int
+    | SerChar Char
     | SerBool Int
     | SerFloat Double
     | SerPtr { bufID :: Var, offset :: Int }
@@ -417,6 +420,7 @@ byteSize (SerTag{})   = 1
 byteSize (SerBool{})  = 1
 byteSize (SerPad)     = 1
 byteSize (SerInt{})   = 8
+byteSize (SerChar{})  = 1
 byteSize (SerFloat{}) = 8
 byteSize (SerPtr{})   = 8
 

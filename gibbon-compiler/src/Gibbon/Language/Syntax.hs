@@ -329,8 +329,9 @@ lookupFEnv v env2 = (fEnv env2) # v
 data PreExp (ext :: Type -> Type -> Type) loc dec =
      VarE Var              -- ^ Variable reference
    | LitE Int              -- ^ Numeric literal
+   | CharE Char            -- ^ A character literal
    | FloatE Double         -- ^ Floating point literal
-   | LitSymE Var           -- ^ A quoted symbol literal.
+   | LitSymE Var           -- ^ A quoted symbol literal
    | AppE Var [loc] [EXP]
      -- ^ Apply a top-level / first-order function.  Instantiate
      -- its type schema by providing location-variable arguments,
@@ -396,7 +397,7 @@ data Prim ty
           | EqIntP             -- ^ Equality on Int
           | LtP | GtP          -- ^ (<) and (>) for Int's
           | LtEqP | GtEqP      -- ^ <= and >=
-          | FAddP | FSubP | FMulP | FDivP | FExpP | FRandP | EqFloatP | FLtP | FGtP | FLtEqP | FGtEqP | FSqrtP | IntToFloatP | FloatToIntP
+          | FAddP | FSubP | FMulP | FDivP | FExpP | FRandP | EqFloatP | EqCharP | FLtP | FGtP | FLtEqP | FGtEqP | FSqrtP | IntToFloatP | FloatToIntP
           | FTanP              -- ^ Translates to 'tan()' in C.
           | EqSymP             -- ^ Equality on Sym
           | EqBenchProgP String
@@ -414,6 +415,7 @@ data Prim ty
           | GetNumProcessors -- ^ Return the number of processors
 
           | PrintInt   -- ^ Print an integer to standard out
+          | PrintChar   -- ^ Print a character to standard out
           | PrintFloat -- ^ Print a floating point number to standard out
           | PrintBool  -- ^ Print a boolean to standard out
           | PrintSym   -- ^ Print a symbol to standard out
@@ -516,6 +518,7 @@ data Prim ty
 -- annotation on Packed types later on.
 data UrTy a =
           IntTy
+        | CharTy
         | FloatTy
         | SymTy -- ^ Symbols used in writing compiler passes.
         | BoolTy
@@ -697,6 +700,7 @@ class Interp s e => InterpProg s e where
 
 -- | It's a first order language with simple values.
 data Value e = VInt Int
+             | VChar Char
              | VFloat Double
              | VSym String
              | VBool Bool
@@ -722,6 +726,7 @@ instance Show e => Show (Value e) where
  show v =
   case v of
    VInt n   -> show n
+   VChar c  -> show c
    VFloat n -> show n
    VSym s   -> "'" ++ s
    VBool b  -> if b then truePrinted else falsePrinted

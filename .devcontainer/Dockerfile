@@ -15,3 +15,4 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
 RUN curl -sSL https://get.haskellstack.org/ | sh
 ENV PATH /opt/ghc/bin:/opt/cabal/bin:$PATH
 RUN sudo ln -sf /usr/bin/gcc-7 /usr/bin/gcc
+RUN cabal update

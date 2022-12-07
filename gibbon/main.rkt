@@ -180,6 +180,7 @@ lit := int | #t | #f
 
 
 (define-type Int Fixnum)
+(define-type Char rChar)
 (define-type Sym Symbol)
 (define-type Bool Boolean)
 (define-type Float Flonum)

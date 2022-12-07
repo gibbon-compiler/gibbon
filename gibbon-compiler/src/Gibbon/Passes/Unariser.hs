@@ -33,7 +33,7 @@ import Gibbon.Passes.Flatten()
 -- We can recursively propagate terminality based on expression type. This way all intermediate
 -- expressions will enjoy benefit from flattening, but we still retain same output for terminal expressions.
 -- We can have a separate function to recover after unarising but that won't have the env2/ddefs values
--- and we won't be able to fuse it into unariser cases. But on the other hands, defining a separate function 
+-- and we won't be able to fuse it into unariser cases. But on the other hands, defining a separate function
 -- can eliminate missed cases, but there are only few, so combining recovering terminal expressions in unariser
 -- seems best.
 
@@ -96,8 +96,8 @@ unariserExp isTerminal ddfs stk env2 ex =
     -- to match the flattened representation. And if the ith projection was a
     -- product before, we have to reconstruct it here, since it will be flattened
     -- after this pass.
-    -- 
-    -- if it's a terminal expression, then ith projection should be a terminal, 
+    --
+    -- if it's a terminal expression, then ith projection should be a terminal,
     -- we can reuse reconstruciton logic.
     ProjE i e ->
       case e of
@@ -116,7 +116,7 @@ unariserExp isTerminal ddfs stk env2 ex =
              case fty of
                -- reconstruct, in case of nested tuple (whether terminal or not)
                ProdTy tys -> do
-                 return $ MkProdE (map (\k -> ProjE k e') [j..(j+length tys-1)])  
+                 return $ MkProdE (map (\k -> ProjE k e') [j..(j+length tys-1)])
                -- if not a tuple, take projection
                _ -> return $ ProjE j e'
 
@@ -125,6 +125,11 @@ unariserExp isTerminal ddfs stk env2 ex =
     VarE{} -> return . (if isTerminal then recover0 else id) $ discharge stk ex
 
     LitE{} ->
+      case stk of
+        [] -> return ex
+        _  -> error $ "Impossible. Non-empty projection stack on LitE "++show stk
+
+    CharE{} ->
       case stk of
         [] -> return ex
         _  -> error $ "Impossible. Non-empty projection stack on LitE "++show stk

@@ -445,6 +445,7 @@ rewriteReturns tl bnds =
 codegenTriv :: VEnv -> Triv -> C.Exp
 codegenTriv _ (VarTriv v) = C.Var (C.toIdent v noLoc) noLoc
 codegenTriv _ (IntTriv i) = [cexp| $int:i |]
+codegenTriv _ (CharTriv i) = [cexp| $char:i |]
 codegenTriv _ (FloatTriv i) = [cexp| $double:i |]
 codegenTriv _ (BoolTriv b) = case b of
                                True -> [cexp| true |]
@@ -462,6 +463,7 @@ codegenTriv venv (ProdTriv ls) =
 codegenTriv venv (ProjTriv i trv) =
   let field = "field" ++ show i
   in [cexp| $(codegenTriv venv trv).$id:field |]
+
 
 -- Type environment
 type FEnv = M.Map Var ([Ty], Ty)
@@ -1068,6 +1070,13 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        [] -> pure [ C.BlockStm [cstm| printf("%ld", $(codegenTriv venv arg)); |] ]
                        _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
 
+                 PrintChar ->
+                     let [arg] = rnds in
+                     case bnds of
+                       [(outV,ty)] -> pure [ C.BlockDecl [cdecl| $ty:(codegenTy ty) $id:outV = printf("%c", $(codegenTriv venv arg)); |] ]
+                       [] -> pure [ C.BlockStm [cstm| printf("%c", $(codegenTriv venv arg)); |] ]
+                       _ -> error $ "wrong number of return bindings from PrintInt: "++show bnds
+
                  PrintFloat ->
                      let [arg] = rnds in
                      case bnds of
@@ -1170,6 +1179,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                            let parse_in_c t = case t of
                                                 IntTy   -> "%ld"
                                                 FloatTy -> "%f"
+                                                CharTy  -> "%c"
                                                 _ -> error $ "ReadArrayFile: Lists of type " ++ sdoc ty ++ " not allowed."
 
                            elem <- gensym "arr_elem"
@@ -1189,6 +1199,10 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                                        one <- gensym "tmp"
                                        let assn = C.BlockStm [cstm| $id:elem = $id:one ; |]
                                        pure ([one], [parse_in_c ty], [ assn ], [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:one; |] ])
+                                     CharTy -> do
+                                       one <- gensym "tmp"
+                                       let assn = C.BlockStm [cstm| $id:elem = $id:one ; |]
+                                       pure ([one], [parse_in_c ty], [ assn ], [ C.BlockDecl [cdecl| $ty:(codegenTy CharTy) $id:one; |] ])
                                      ProdTy tys -> do
                                        vs <- mapM (\_ -> gensym "tmp") tys
                                        let decls = map (\(name, t) -> C.BlockDecl [cdecl| $ty:(codegenTy t) $id:name; |] ) (zip vs tys)
@@ -1309,6 +1323,10 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                         tmp <- gensym "tmp"
                         return [ C.BlockDecl [cdecl| $ty:(codegenTy IntTy) $id:tmp = $exp:xexp; |]
                                , C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = gib_vector_inplace_update($id:old_ls, $exp:i', &$id:tmp); |] ]
+                     CharTriv{} -> do
+                        tmp <- gensym "tmp"
+                        return [ C.BlockDecl [cdecl| $ty:(codegenTy CharTy) $id:tmp = $exp:xexp; |]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', &$id:tmp); |] ]
                      FloatTriv{} -> do
                         tmp <- gensym "tmp"
                         return [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:tmp = $exp:xexp; |]
@@ -1492,7 +1510,7 @@ codegenMultiplicity mul =
     BigInfinite -> [cexp| gib_get_biginf_init_chunk_size() |]
     Infinite    -> [cexp| gib_get_inf_init_chunk_size() |]
     Bounded i   ->
-      let rounded = i+9
+      let rounded = i+18
       in [cexp| $int:rounded |]
 
 -- | Round up a number to a power of 2.
@@ -1549,6 +1567,7 @@ genSwitch venv fenv sort_fns lbl tr alts lastE ty sync_deps =
 --
 codegenTy :: Ty -> C.Type
 codegenTy IntTy = [cty|typename GibInt|]
+codegenTy CharTy = [cty|typename GibChar|]
 codegenTy FloatTy= [cty|typename GibFloat|]
 codegenTy BoolTy = [cty|typename GibBool|]
 codegenTy TagTyPacked = [cty|typename GibPackedTag|]
@@ -1575,6 +1594,7 @@ makeName tys = concatMap makeName' tys ++ "Prod"
 
 makeName' :: Ty -> String
 makeName' IntTy       = "GibInt"
+makeName' CharTy      = "GibChar"
 makeName' FloatTy     = "GibFloat"
 makeName' SymTy       = "GibSym"
 makeName' BoolTy      = "GibBool"

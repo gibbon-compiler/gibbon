@@ -35,6 +35,7 @@ tcExp ddfs env exp =
   case exp of
     VarE v    -> lookupVar env v exp
     LitE _    -> return IntTy
+    CharE _   -> return CharTy
     FloatE{}  -> return FloatTy
     LitSymE _ -> return SymTy
 
@@ -124,6 +125,12 @@ tcExp ddfs env exp =
             _ <- ensureEqualTy (es !! 0) FloatTy (tys !! 0)
             _ <- ensureEqualTy (es !! 1) FloatTy (tys !! 1)
             pure BoolTy
+            
+          char_cmps = do
+            len2
+            _ <- ensureEqualTy (es !! 0) CharTy (tys !! 0)
+            _ <- ensureEqualTy (es !! 1) CharTy (tys !! 1)
+            pure BoolTy            
 
       case pr of
         MkTrue  -> mk_bools
@@ -151,7 +158,7 @@ tcExp ddfs env exp =
         FGtEqP   -> float_cmps
         OrP     -> bool_ops
         AndP    -> bool_ops
-
+        EqCharP  -> char_cmps
         Gensym -> len0 >>= \_ -> pure SymTy
 
         EqSymP -> do
@@ -189,6 +196,11 @@ tcExp ddfs env exp =
         PrintInt -> do
           len1
           _ <- ensureEqualTy (es !!! 0) IntTy (tys !!! 0)
+          return (ProdTy [])
+
+        PrintChar -> do
+          len1
+          _ <- ensureEqualTy (es !!! 0) CharTy (tys !!! 0)
           return (ProdTy [])
 
         PrintFloat -> do

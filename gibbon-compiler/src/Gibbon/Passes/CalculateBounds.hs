@@ -87,6 +87,7 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
           Just _ -> return (ex, regSzEnv, regTyEnv)
           _      -> case ex of
             LitE    _           -> err
+            CharE   _           -> err
             FloatE  _           -> err
             LitSymE _           -> err
             ProjE{}             -> pass
