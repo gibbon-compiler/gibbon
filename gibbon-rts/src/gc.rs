@@ -142,7 +142,7 @@ pub fn garbage_collect(
     nursery: &mut C_GibNursery,
     oldgen: &mut C_GibOldgen,
     gc_stats: *mut C_GibGcStats,
-    _force_major: bool,
+    force_major: bool,
 ) -> Result<()> {
     dbgprintln!("gc...");
 
@@ -152,7 +152,7 @@ pub fn garbage_collect(
         // let evac_major = force_major
         //     || (*nursery_ptr).num_collections.rem_euclid(COLLECT_MAJOR_K.into())
         //         == 0;
-        let evac_major = false;
+        let evac_major = force_major;
 
         // Set the global stats object pointer.
         GC_STATS = gc_stats;

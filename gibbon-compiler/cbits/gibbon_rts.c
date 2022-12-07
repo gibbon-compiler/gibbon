@@ -1217,6 +1217,20 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     return;
 }
 
+void performGC(bool force_major)
+{
+    GibNursery *nursery = DEFAULT_NURSERY;
+    GibShadowstack *rstack = DEFAULT_READ_SHADOWSTACK;
+    GibShadowstack *wstack = DEFAULT_WRITE_SHADOWSTACK;
+    GibOldgen *oldgen = DEFAULT_GENERATION;
+    GibGcStats *gc_stats = GC_STATS;
+    int err = gib_garbage_collect(rstack, wstack, nursery, oldgen, gc_stats, force_major);
+    if (err < 0) {
+        fprintf(stderr, "Couldn't perform minor collection, errorno=%d.", err);
+        exit(1);
+    }
+}
+
 // Functions related to counting the number of allocated regions.
 GibChunk gib_alloc_counted_region(size_t size)
 {

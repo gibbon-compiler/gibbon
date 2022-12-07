@@ -405,6 +405,9 @@ GibChunk gib_alloc_region(size_t size);
 GibChunk gib_alloc_region_on_heap(size_t size);
 void gib_grow_region(char **writeloc_addr, char **footer_addr);
 
+// GC.
+void performGC(bool force_major);
+
 // Functions related to counting the number of allocated regions.
 GibChunk gib_alloc_counted_region(size_t size);
 void gib_print_global_region_count(void);
@@ -621,6 +624,17 @@ INLINE_HEADER uint8_t gib_log2(size_t x)
 {
     return sizeof(uint32_t) * CHAR_BIT - __builtin_clz(x) - 1;
 }
+
+// From Chandler Carruth's CppCon 2015 talk.
+INLINE_HEADER void escape(void *p) {
+    asm volatile("" : : "g"(p) : "memory");
+}
+
+// From Chandler Carruth's CppCon 2015 talk.
+INLINE_HEADER void clobber() {
+    asm volatile("" : : : "memory");
+}
+
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  * Main functions

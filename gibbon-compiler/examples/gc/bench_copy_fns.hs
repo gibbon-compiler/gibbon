@@ -9,7 +9,7 @@ import TreeUpdate
 benchcopyList :: ()
 benchcopyList =
   let ls = buildList sizeParam
-      ls2 = copyPList ls
+      ls2 = iterate (copyPList ls)
   in ()
 
 benchevacList :: ()
