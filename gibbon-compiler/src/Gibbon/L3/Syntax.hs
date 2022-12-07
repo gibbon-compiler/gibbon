@@ -141,7 +141,7 @@ instance FreeVars (E3Ext l d) where
       EndScalarsAllocation v -> S.singleton v
       SSPush _ a b _ -> S.fromList [a,b]
       SSPop _ a b -> S.fromList [a,b]
-      Assert e -> gFreeVars e
+      Assert a -> gFreeVars a
 
 
 instance (Out l, Out d, Show l, Show d) => Expression (E3Ext l d) where

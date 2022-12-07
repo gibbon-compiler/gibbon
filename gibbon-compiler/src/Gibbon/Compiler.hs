@@ -67,7 +67,7 @@ import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv, simpl
 import           Gibbon.Passes.DirectL3       (directL3)
 import           Gibbon.Passes.InferLocations (inferLocs)
 -- This is the custom pass reference to issue #133 that moves regionsInwards
--- import           Gibbon.Passes.RegionsInwards (regionsInwards)
+import           Gibbon.Passes.RegionsInwards (regionsInwards)
 -- import           Gibbon.Passes.RepairProgram  (repairProgram)
 import           Gibbon.Passes.AddRAN         (addRAN,needsRAN)
 import           Gibbon.Passes.AddTraversals  (addTraversals)
@@ -89,7 +89,7 @@ import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
 import           Gibbon.Passes.Codegen        (codegenProg)
 import           Gibbon.Passes.Fusion2        (fusion2)
--- import Gibbon.Passes.CalculateBounds          (inferRegSize)
+import Gibbon.Passes.CalculateBounds          (inferRegSize)
 import           Gibbon.Pretty
 
 

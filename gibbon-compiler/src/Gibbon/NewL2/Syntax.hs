@@ -171,6 +171,7 @@ instance Out (Old.E2Ext LocArg Ty2) => Typeable (PreExp Old.E2Ext LocArg Ty2) wh
     case ex of
       VarE v       -> M.findWithDefault (error $ "Cannot find type of variable " ++ show v ++ " in " ++ show (vEnv env2)) v (vEnv env2)
       LitE _       -> MkTy2 $ IntTy
+      CharE _      -> MkTy2 $ CharTy
       FloatE{}     -> MkTy2 $ FloatTy
       LitSymE _    -> MkTy2 $ SymTy
       AppE v locargs _ ->
@@ -294,6 +295,7 @@ revertExp ex =
   case ex of
     VarE v    -> VarE v
     LitE n    -> LitE n
+    CharE n  -> CharE n
     FloatE n  -> FloatE n
     LitSymE v -> LitSymE v
     AppE v _ args   -> AppE v [] (L.map revertExp args)
@@ -357,6 +359,7 @@ depList = L.map (\(a,b) -> (a,a,b)) . M.toList . go M.empty
         case ex of
           VarE v    -> M.insertWith (++) v [v] acc
           LitE{}    -> acc
+          CharE{}  -> acc
           FloatE{}  -> acc
           LitSymE{} -> acc
           AppE _ _ args   -> foldl go acc args

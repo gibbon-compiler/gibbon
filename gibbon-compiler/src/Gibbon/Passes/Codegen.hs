@@ -1326,7 +1326,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                      CharTriv{} -> do
                         tmp <- gensym "tmp"
                         return [ C.BlockDecl [cdecl| $ty:(codegenTy CharTy) $id:tmp = $exp:xexp; |]
-                               , C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = vector_inplace_update($id:old_ls, $exp:i', &$id:tmp); |] ]
+                               , C.BlockDecl [cdecl| $ty:(codegenTy (VectorTy elty)) $id:outV = gib_vector_inplace_update($id:old_ls, $exp:i', &$id:tmp); |] ]
                      FloatTriv{} -> do
                         tmp <- gensym "tmp"
                         return [ C.BlockDecl [cdecl| $ty:(codegenTy FloatTy) $id:tmp = $exp:xexp; |]

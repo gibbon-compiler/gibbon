@@ -382,6 +382,7 @@ mkScalar ty = error $ "mkScalar: Not a scalar type: " ++ sdoc ty
 
 scalarToTy :: L3.Scalar -> Ty
 scalarToTy L3.IntS  = IntTy
+scalarToTy L3.CharS = CharTy
 scalarToTy L3.SymS  = SymTy
 scalarToTy L3.BoolS = BoolTy
 scalarToTy L3.FloatS = FloatTy

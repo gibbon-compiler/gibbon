@@ -216,6 +216,7 @@ fromOldL2Exp ddefs fundefs locenv env2 ex =
     -- straightforward recursion
     VarE v -> pure $ VarE v
     LitE i -> pure $ LitE i
+    CharE i -> pure $ CharE i
     FloatE i  -> pure $ FloatE i
     LitSymE s -> pure $ LitSymE s
     IfE a b c -> IfE <$> go locenv env2 a <*> go locenv env2 b <*> go locenv env2 c
@@ -389,6 +390,7 @@ toOldL2Exp ex =
     -- straightforward recursion
     VarE v -> pure $ VarE v
     LitE i -> pure $ LitE i
+    CharE i -> pure $ CharE i
     FloatE i  -> pure $ FloatE i
     LitSymE s -> pure $ LitSymE s
     IfE a b c -> IfE <$> go a <*> go b <*> go c
