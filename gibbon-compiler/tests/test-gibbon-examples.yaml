@@ -180,6 +180,7 @@ tests:
   - name: bench_tree_insert.gib
     bench: true
     more-iters: [pointer, gibbon2]
+    skip: true
 
   - name: bench_repmax.gib
     bench: true
@@ -269,6 +270,7 @@ tests:
   - name: unariser_bug1.hs
     answer-file: examples/unariser_bug1.ans
     failing: [gibbon1, gibbon2]
+    skip: true
 
   - name: ParseLinearTypes.hs
     test-flags: ["--ghc-tc"]
