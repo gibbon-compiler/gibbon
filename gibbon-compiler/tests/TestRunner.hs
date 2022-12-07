@@ -159,7 +159,7 @@ data Result = Pass | Fail
 
 -- Not used atm.
 -- | Gibbon mode to run programs in
-data Mode = Gibbon2 | Pointer | Interp1 | Gibbon1
+data Mode = Gibbon3 | Gibbon2 | Pointer | Interp1 | Gibbon1
   deriving (Show, Eq, Read, Ord, Bounded, Enum)
 
 instance FromJSON Mode where
@@ -172,6 +172,7 @@ allModes = [minBound ..]
 readMode :: T.Text -> Mode
 readMode s =
     case T.toLower s of
+        "gibbon3" -> Gibbon3
         "gibbon2" -> Gibbon2
         "pointer" -> Pointer
         "interp1" -> Interp1
@@ -180,19 +181,22 @@ readMode s =
 
 -- Must match the flag expected by Gibbon.
 modeRunFlags :: Mode -> [String]
-modeRunFlags Gibbon2  = ["--run", "--packed"]
+modeRunFlags Gibbon3  = ["--run", "--packed"]
+modeRunFlags Gibbon2  = ["--run", "--packed", "--nongen-gc"]
 modeRunFlags Pointer = ["--run", "--pointer"]
 modeRunFlags Interp1 = ["--interp1"]
 modeRunFlags Gibbon1 = ["--run", "--packed", "--gibbon1"]
 
 -- Must match the flag expected by Gibbon.
 modeExeFlags :: Mode -> [String]
-modeExeFlags Gibbon2 = ["--to-exe", "--packed"]
+modeExeFlags Gibbon3 = ["--to-exe", "--packed"]
+modeExeFlags Gibbon2 = ["--to-exe", "--packed", "--nongen-gc"]
 modeExeFlags Pointer = ["--to-exe", "--pointer"]
 modeExeFlags Interp1 = error "Cannot compile in Interp1 mode."
 modeExeFlags Gibbon1 = ["--to-exe", "--packed", "--gibbon1"]
 
 modeFileSuffix :: Mode -> String
+modeFileSuffix Gibbon3  = "_gibbon3"
 modeFileSuffix Gibbon2  = "_gibbon2"
 modeFileSuffix Pointer = "_ptr"
 modeFileSuffix Interp1 = "_interp1"

@@ -235,6 +235,23 @@ pub extern "C" fn gib_garbage_collect(
 }
 
 #[no_mangle]
+pub extern "C" fn gib_free_region_(
+    footer: *const C_GibOldgenChunkFooter,
+) -> i32 {
+    unsafe {
+        match gc::free_region(footer, null_mut()) {
+            Ok(()) => 0,
+            Err(err) => {
+                if cfg!(debug_assertions) {
+                    println!("{:?}", err);
+                }
+                -1
+            }
+        }
+    }
+}
+
+#[no_mangle]
 pub extern "C" fn gib_handle_old_to_old_indirection(
     from_footer_ptr: *mut i8,
     to_footer_ptr: *mut i8,

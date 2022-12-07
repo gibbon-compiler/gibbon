@@ -402,7 +402,9 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
                                  then "/target/debug"
                                  else "/target/release")
 
-            let compile_rust_rts_cmd = "cargo build" ++ (if rts_debug then "" else " --release")
+            let compile_rust_rts_cmd = "cargo build " ++
+                                       (if rts_debug then " --features=verbose_evac " else " --release ") ++
+                                       (if print_gc_stats then " --features=gcstats " else "")
 
             compile (Just rust_rts_dir)
                     compile_rust_rts_cmd
@@ -422,7 +424,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
             let rts_o_path = replaceExtension rtsPath ".o"
             let rts_header_dir = takeDirectory rts_o_path
             let compile_rts_cmd = compilationCmd backend cfg
-                                  ++ (if rts_debug then " -D_GIBBON_DEBUG -O0 -g" else "")
+                                  ++ (if rts_debug then " -D_GIBBON_DEBUG -D_GIBBON_VERBOSITY=3 -O0 -g" else "")
                                   ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
                                   ++ (if print_gc_stats then " -D_GIBBON_GCSTATS " else "")
                                   ++" -I " ++ rts_header_dir ++ " "
@@ -441,7 +443,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
             let rts_header_dir = takeDirectory rts_o_path
             let compile_prog_cmd = compilationCmd backend cfg
                                    ++" " ++ rts_o_path
-                                   ++ (if rts_debug then " -D_GIBBON_DEBUG -O0 -g" else "")
+                                   ++ (if rts_debug then " -D_GIBBON_DEBUG -D_GIBBON_VERBOSITY=3 -O0 -g " else "")
                                    ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
                                    ++" -I" ++ rts_header_dir ++ " "
                                    ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "

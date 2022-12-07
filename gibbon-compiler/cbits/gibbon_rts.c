@@ -159,13 +159,6 @@ void *gib_alloc(size_t n) { return malloc(n); }
 void gib_free(void *ptr) { return free(ptr); }
 #endif // ifdef _GIBBON_POINTER
 
-static void gib_bump_global_region_count(void);
-
-void *gib_counted_alloc(size_t n) {
-    gib_bump_global_region_count();
-    return gib_alloc(n);
-}
-
 // Could try alloca() here.  Better yet, we could keep our own,
 // separate stack and insert our own code to restore the pointer
 // before any function that (may have) called gib_scoped_alloc returns.
@@ -1061,7 +1054,7 @@ GibChunk gib_alloc_region_on_heap(size_t size)
         exit(1);
     }
     char *heap_end = heap_start + size;
-    char *footer_start = gib_init_footer_at(heap_end, size, 0);
+    char *footer_start = gib_init_footer_at(heap_end, size, 1);
 #ifdef _GIBBON_GCSTATS
     GC_STATS->mem_allocated += size;
 #endif
@@ -1185,7 +1178,7 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
         new_footer_start = heap_end - sizeof(GibOldgenChunkFooter);
         new_footer = (GibOldgenChunkFooter *) new_footer_start;
         new_footer->reg_info = footer->reg_info;
-        new_footer->size = newsize;
+        new_footer->size = (size_t) (new_footer_start - heap_start);
         new_footer->next = (GibOldgenChunkFooter *) NULL;
         // Link with the old chunk's footer.
         footer->next = (GibOldgenChunkFooter *) new_footer;
@@ -1222,6 +1215,18 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
     return;
 }
 
+void gib_free_region(char *footer_ptr)
+{
+    if (gib_addr_in_nursery(footer_ptr)) {
+        return;
+    }
+    GibOldgenChunkFooter *footer = (GibOldgenChunkFooter *) footer_ptr;
+    if ((footer->reg_info)->refcount == 1) {
+        (footer->reg_info)->refcount--;
+        gib_free_region_(footer);
+    }
+}
+
 void performGC(bool force_major)
 {
     GibNursery *nursery = DEFAULT_NURSERY;
@@ -1236,12 +1241,19 @@ void performGC(bool force_major)
     }
 }
 
+static void gib_bump_global_region_count(void);
+
 // Functions related to counting the number of allocated regions.
 GibChunk gib_alloc_counted_region(size_t size)
 {
     // Bump the count.
     gib_bump_global_region_count();
     return gib_alloc_region(size);
+}
+
+void *gib_alloc_counted_struct(size_t n) {
+    gib_bump_global_region_count();
+    return gib_alloc(n);
 }
 
 static void gib_bump_global_region_count(void)

@@ -138,7 +138,6 @@ static const uintptr_t GIB_POINTER_MASK = (UINTPTR_MAX >> GIB_TAG_BITS);
  */
 
 void *gib_alloc(size_t size);
-void *gib_counted_alloc(size_t size);
 void *gib_scoped_alloc(size_t size);
 void gib_free(void *ptr);
 
@@ -406,13 +405,15 @@ void gib_check_rust_struct_sizes(void);
 GibChunk gib_alloc_region(size_t size);
 GibChunk gib_alloc_region_on_heap(size_t size);
 void gib_grow_region(char **writeloc_addr, char **footer_addr);
+void gib_free_region(char *footer_ptr);
 
-// GC.
+// Trigger GC.
 void performGC(bool force_major);
 
 // Functions related to counting the number of allocated regions.
 GibChunk gib_alloc_counted_region(size_t size);
 void gib_print_global_region_count(void);
+void *gib_alloc_counted_struct(size_t size);
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -543,6 +544,9 @@ void gib_gc_free_state(GibGcStateSnapshot *snapshot);
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
  */
 
+// Abstract definition is sufficient.
+typedef struct gib_oldgen_footer GibOldgenChunkFooter;
+
 int gib_info_table_initialize(size_t size);
 int gib_info_table_finalize(void);
 int gib_info_table_insert_scalar(uint32_t datatype, size_t size);
@@ -564,6 +568,7 @@ int gib_garbage_collect(
     GibGcStats *stats,
     bool force_major
 );
+int gib_free_region_(GibOldgenChunkFooter *footer);
 void gib_handle_old_to_old_indirection(
     char *from_footer,
     char *to_footer

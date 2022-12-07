@@ -124,11 +124,7 @@ pub fn cleanup(
             }
         }
         for reg_info in (*((*oldgen).old_zct)).drain() {
-            free_region(
-                (*reg_info).first_chunk_footer,
-                (*oldgen).new_zct,
-                true,
-            )?;
+            free_region((*reg_info).first_chunk_footer, null_mut())?;
         }
     }
     // Free ZCTs associated with the oldest generation.
@@ -488,7 +484,7 @@ unsafe fn evacuate_copied(
     );
 
     let tagged_fwd_ptr = record_time!(
-        { find_forwarding_pointer(tag, src, src_after_tag,) },
+        find_forwarding_pointer(tag, src, src_after_tag,),
         (*GC_STATS).gc_find_fwdptr_time
     );
 
@@ -1545,10 +1541,9 @@ unsafe fn write_forwarding_pointer_at(
     write(addr1, tagged)
 }
 
-unsafe fn free_region(
+pub unsafe fn free_region(
     footer: *const C_GibOldgenChunkFooter,
     zct: *mut Zct,
-    cleaning_up: bool,
 ) -> Result<()> {
     #[cfg(feature = "gcstats")]
     {
@@ -1567,29 +1562,44 @@ unsafe fn free_region(
     for o_reg_info in outset.into_iter() {
         (*(o_reg_info as *mut C_GibRegionInfo)).refcount -= 1;
         if (*o_reg_info).refcount == 0 {
-            if cleaning_up {
-                free_region((*o_reg_info).first_chunk_footer, zct, true)?;
+            if zct.is_null() {
+                free_region((*o_reg_info).first_chunk_footer, zct)?;
             } else {
                 (*zct).insert(o_reg_info);
             }
         }
     }
+
+    #[cfg(feature = "verbose_evac")]
+    {
+        dbgprint!("  chunks: ");
+        let mut current_footer = footer;
+        let mut start;
+        while !current_footer.is_null() {
+            start = addr_to_free(current_footer);
+            dbgprint!("({:?}, {:?}) ", start, current_footer);
+            current_footer = (*current_footer).next;
+        }
+        dbgprintln!("");
+    }
+
     // Free the chunks in this region.
     let mut free_this = addr_to_free(footer);
     let mut next_chunk_footer = (*footer).next;
     // Free the first chunk and then all others.
     dbgprintln!("  freeing {:?}", free_this);
-    // libc::free(free_this);
+    libc::free(free_this);
     while !next_chunk_footer.is_null() {
         free_this = addr_to_free(next_chunk_footer);
         next_chunk_footer = (*next_chunk_footer).next;
         dbgprintln!("  freeing {:?}", free_this);
-        // libc::free(free_this);
+        libc::free(free_this);
     }
     drop(reg_info);
     Ok(())
 }
 
+#[inline(always)]
 unsafe fn addr_to_free(
     footer: *const C_GibOldgenChunkFooter,
 ) -> *mut libc::c_void {
@@ -1882,7 +1892,6 @@ impl<'a> C_GibOldgen<'a> {
                     free_region(
                         (*reg_info).first_chunk_footer,
                         (*gen).new_zct,
-                        false,
                     )?;
                 }
             }
