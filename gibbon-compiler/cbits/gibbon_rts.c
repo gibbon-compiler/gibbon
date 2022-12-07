@@ -146,8 +146,10 @@ GibSym gib_read_gensym_counter(void)
 
 #ifdef _GIBBON_POINTER
 #ifndef _GIBBON_PARALLEL
-void *gib_alloc(size_t n) { return GC_MALLOC(n); }
-void gib_free(void *ptr) { return GC_FREE(ptr); }
+// void *gib_alloc(size_t n) { return GC_MALLOC(n); }
+// void gib_free(void *ptr) { return GC_FREE(ptr); }
+void *gib_alloc(size_t n) { return malloc(n); }
+void gib_free(void *ptr) { return free(ptr); }
 #else
 void *gib_alloc(size_t n) { return malloc(n); }
 void gib_free(void *ptr) { return free(ptr); }
