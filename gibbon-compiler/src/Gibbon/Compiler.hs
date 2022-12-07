@@ -423,6 +423,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
             let rts_header_dir = takeDirectory rts_o_path
             let compile_rts_cmd = compilationCmd backend cfg
                                   ++ (if rts_debug then " -D_GIBBON_DEBUG -O0 -g" else "")
+                                  ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
                                   ++ (if print_gc_stats then " -D_GIBBON_GCSTATS " else "")
                                   ++" -I " ++ rts_header_dir ++ " "
                                   ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "
@@ -441,6 +442,7 @@ compileAndRunExe cfg@Config{backend,arrayInput,benchInput,mode,cfile,exefile} fp
             let compile_prog_cmd = compilationCmd backend cfg
                                    ++" " ++ rts_o_path
                                    ++ (if rts_debug then " -D_GIBBON_DEBUG -O0 -g" else "")
+                                   ++ (if rts_debug && pointer then " -DGC_DEBUG " else "")
                                    ++" -I" ++ rts_header_dir ++ " "
                                    ++" -L" ++ rust_rts_path ++ " -Wl,-rpath=" ++ rust_rts_path ++ " "
                                    ++outfile ++ " -o " ++ exe ++ links

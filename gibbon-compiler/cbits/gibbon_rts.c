@@ -147,11 +147,14 @@ GibSym gib_read_gensym_counter(void)
 #ifdef _GIBBON_POINTER
 #ifndef _GIBBON_PARALLEL
 void *gib_alloc(size_t n) { return GC_MALLOC(n); }
+void gib_free(void *ptr) { return GC_FREE(ptr); }
 #else
 void *gib_alloc(size_t n) { return malloc(n); }
+void gib_free(void *ptr) { return free(ptr); }
 #endif // ifndef _GIBBON_PARALLEL
 #else
 void *gib_alloc(size_t n) { return malloc(n); }
+void gib_free(void *ptr) { return free(ptr); }
 #endif // ifdef _GIBBON_POINTER
 
 static void gib_bump_global_region_count(void);
@@ -191,9 +194,9 @@ GibArena *gib_alloc_arena(void)
 
 void gib_free_arena(GibArena *ar)
 {
-    free(ar->mem);
+    gib_free(ar->mem);
     // TODO(vollmerm): free everything in ar->reflist
-    free(ar);
+    gib_free(ar);
     return;
 }
 
@@ -415,7 +418,7 @@ void gib_free_symtable(void)
     GibSymtable *elt, *tmp;
     HASH_ITER(hh, global_sym_table, elt, tmp) {
         HASH_DEL(global_sym_table,elt);
-        free(elt);
+        gib_free(elt);
     }
     return;
 }
@@ -563,8 +566,8 @@ GibVector *gib_vector_concat(GibVector *vec)
 
 void gib_vector_free(GibVector *vec)
 {
-    free(vec->data);
-    free(vec);
+    gib_free(vec->data);
+    gib_free(vec);
     return;
 }
 
@@ -747,8 +750,8 @@ GibList* gib_list_tail(GibList *ls)
 
 void gib_list_free(GibList *ls)
 {
-    free(ls->data);
-    free(ls);
+    gib_free(ls->data);
+    gib_free(ls);
     return;
 }
 
@@ -1007,7 +1010,7 @@ void gib_check_rust_struct_sizes(void)
 {
     // Sizes in the Rust RTS.
     size_t *stack, *frame, *nursery, *generation, *reg_info, *footer, *gc_stats;
-    stack = (size_t *) malloc(sizeof(size_t) * 7);
+    stack = (size_t *) gib_alloc(sizeof(size_t) * 7);
     frame = (size_t *) ((char *) stack + sizeof(size_t));
     nursery = (size_t *) ((char *) frame + sizeof(size_t));
     generation = (size_t *) ((char *) nursery + sizeof(size_t));
@@ -1026,7 +1029,7 @@ void gib_check_rust_struct_sizes(void)
     assert(*gc_stats == sizeof(GibGcStats));
 
     // Done.
-    free(stack);
+    gib_free(stack);
 
     return;
 }
@@ -1327,11 +1330,11 @@ static void gib_storage_free(void)
     for (n = 0; n < gib_global_num_threads; n++) {
         gib_nursery_free(&(gib_global_nurseries[n]));
      }
-    free(gib_global_nurseries);
+    gib_free(gib_global_nurseries);
 
     // Free oldgen.
     gib_oldgen_free(gib_global_oldgen);
-    free(gib_global_oldgen);
+    gib_free(gib_global_oldgen);
 
     // Free shadow-stacks.
     int ss;
@@ -1339,8 +1342,8 @@ static void gib_storage_free(void)
         gib_shadowstack_free(&(gib_global_read_shadowstacks[ss]));
         gib_shadowstack_free(&(gib_global_write_shadowstacks[ss]));
     }
-    free(gib_global_read_shadowstacks);
-    free(gib_global_write_shadowstacks);
+    gib_free(gib_global_read_shadowstacks);
+    gib_free(gib_global_write_shadowstacks);
 
     // Free the stats object.
     gib_gc_stats_free(gib_global_gc_stats);
@@ -1380,7 +1383,7 @@ static void gib_nursery_initialize(GibNursery *nursery)
 // Free data associated with a nursery.
 static void gib_nursery_free(GibNursery *nursery)
 {
-    free(nursery->heap_start);
+    gib_free(nursery->heap_start);
     return;
 }
 
@@ -1420,7 +1423,7 @@ static void gib_oldgen_initialize(GibOldgen *oldgen)
 static void gib_oldgen_free(GibOldgen *oldgen)
 {
     gib_shadowstack_free(oldgen->rem_set);
-    free(oldgen->rem_set);
+    gib_free(oldgen->rem_set);
     return;
 }
 
@@ -1447,7 +1450,7 @@ static void gib_shadowstack_initialize(GibShadowstack* stack, size_t stack_size)
 
 static void gib_shadowstack_free(GibShadowstack* stack)
 {
-    free(stack->start);
+    gib_free(stack->start);
     return;
 }
 
@@ -1493,7 +1496,7 @@ static void gib_gc_stats_initialize(GibGcStats *stats)
 
 static void gib_gc_stats_free(GibGcStats *stats)
 {
-    free(stats);
+    gib_free(stats);
 }
 
 static void gib_gc_stats_print(GibGcStats *stats)
@@ -1766,10 +1769,10 @@ void gib_gc_restore_state(GibGcStateSnapshot *snapshot)
 
 void gib_gc_free_state(GibGcStateSnapshot *snapshot)
 {
-    free(snapshot->nursery_heap_start);
-    free(snapshot->reg_info_addrs);
-    free(snapshot->outsets);
-    free(snapshot);
+    gib_free(snapshot->nursery_heap_start);
+    gib_free(snapshot->reg_info_addrs);
+    gib_free(snapshot->outsets);
+    gib_free(snapshot);
 }
 
 
@@ -1980,8 +1983,8 @@ int main(int argc, char **argv)
     gib_main_expr();
 
     // Free all objects initialized by the Rust RTS.
-    free(gib_global_bench_prog_param);
-    // gib_gc_cleanup(rstack, wstack, nursery, oldgen);
+    gib_free(gib_global_bench_prog_param);
+    gib_gc_cleanup(rstack, wstack, nursery, oldgen);
 
 #ifdef _GIBBON_GCSTATS
     // Print GC statistics.

@@ -140,6 +140,7 @@ static const uintptr_t GIB_POINTER_MASK = (UINTPTR_MAX >> GIB_TAG_BITS);
 void *gib_alloc(size_t size);
 void *gib_counted_alloc(size_t size);
 void *gib_scoped_alloc(size_t size);
+void gib_free(void *ptr);
 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
