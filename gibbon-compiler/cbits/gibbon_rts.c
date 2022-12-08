@@ -1144,12 +1144,14 @@ void gib_grow_region(char **writeloc_addr, char **footer_addr)
 
     if (gib_addr_in_nursery(footer_ptr)) {
         old_chunk_in_nursery = true;
-        newsize = gib_global_inf_init_chunk_size;
+        GibNurseryChunkFooter oldsize = (GibNurseryChunkFooter *) footer_ptr;
+        newsize = oldsize * 2;
     } else {
         old_chunk_in_nursery = false;
         // Get size from current footer.
         footer = (GibOldgenChunkFooter *) footer_ptr;
-        newsize = (footer->size) << 1;
+        newsize = sizeof(GibOldgenChunkFooter) + (footer->size);
+        newsize = newsize << 1;
         // See #110.
         if (newsize > MAX_CHUNK_SIZE) {
             newsize = MAX_CHUNK_SIZE;

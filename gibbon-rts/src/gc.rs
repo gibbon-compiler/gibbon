@@ -1975,7 +1975,8 @@ impl<'a> Heap for C_GibOldgen<'a> {
             // Access the old footer to get the region metadata.
             let old_footer = dst_end as *mut C_GibOldgenChunkFooter;
             // Allocate space for the new chunk.
-            let mut chunk_size = (*old_footer).size * 2;
+            let mut chunk_size =
+                ((*old_footer).size + size_of::<C_GibOldgenChunkFooter>()) * 2;
             if chunk_size > MAX_CHUNK_SIZE {
                 chunk_size = MAX_CHUNK_SIZE;
             }
