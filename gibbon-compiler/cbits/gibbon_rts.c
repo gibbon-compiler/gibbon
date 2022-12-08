@@ -904,25 +904,6 @@ typedef struct gib_oldgen_footer {
 
 typedef uint16_t GibNurseryChunkFooter;
 
-typedef struct gib_nursery {
-    // Allocation area.
-    size_t heap_size;
-    char *heap_start;
-    char *heap_end;
-    char *alloc;
-} GibNursery;
-
-typedef struct gib_old_generation {
-    // Remembered set to store old to young pointers.
-    GibRememberedSet *rem_set;
-
-    // Zero count tables; pointers to structures that are initialized and
-    // tracked on the Rust Heap.
-    void *old_zct;
-    void *new_zct;
-
-} GibOldgen;
-
 typedef struct gib_gc_stats {
     // Number of copying minor collections (maintained by Rust RTS).
     uint64_t minor_collections;
@@ -987,11 +968,8 @@ GibShadowstack *gib_global_write_shadowstacks = (GibShadowstack *) NULL;
 // Collect GC statistics.
 GibGcStats *gib_global_gc_stats = (GibGcStats *) NULL;
 
-// Convenience macros since we don't really need the arrays of nurseries and
-// shadowstacks since mutators are still sequential.
-// #define DEFAULT_NURSERY gib_global_nurseries
-#define DEFAULT_NURSERY gib_global_nurseries
-#define DEFAULT_GENERATION gib_global_oldgen
+
+// Convenience macro.
 #define GC_STATS gib_global_gc_stats
 
 
@@ -1039,7 +1017,6 @@ void gib_check_rust_struct_sizes(void)
 STATIC_INLINE GibChunk gib_alloc_region_in_nursery(size_t size);
 STATIC_INLINE GibChunk gib_alloc_region_in_nursery_fast(size_t size, bool collected);
 static GibChunk gib_alloc_region_in_nursery_slow(size_t size, bool collected);
-STATIC_INLINE bool gib_addr_in_nursery(char *ptr);
 
 GibChunk gib_alloc_region(size_t size)
 {
@@ -1403,16 +1380,6 @@ static void gib_nursery_free(GibNursery *nursery)
     return;
 }
 
-// TODO:
-// If we allocate the nursery at a high address AND ensure that all of the
-// subsequent mallocs return a block at addresses lower than this, we can
-// implement addr_in_nursery with one address check instead than two. -- RRN
-STATIC_INLINE bool gib_addr_in_nursery(char *ptr)
-{
-    GibNursery *nursery = DEFAULT_NURSERY;
-    return ((ptr >= nursery->heap_start) && (ptr <= nursery->heap_end));
-}
-
 
 /*
  * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1553,91 +1520,6 @@ static void gib_gc_stats_print(GibGcStats *stats)
     printf("GC info table lookup time:\t %e\n", stats->gc_info_tbl_lkp_time);
     printf("GC ZCT mgmt time:\t\t %e\n", stats->gc_zct_mgmt_time);
 
-}
-
-/*
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- * Write barrier
- * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
- *
- * INLINE!!!
- *
- * The following is how different types of indirections are handled:
- *
- * (1) oldgen -> nursery
- *
- *     Add to remembered set.
- *
- * (2) oldgen -> oldgen
- *
- *     Same as old Gibbon, bump refcount and insert into outset.
- *
- */
-void gib_indirection_barrier(
-    // Address where the indirection tag is written.
-    GibCursor from,
-    GibCursor from_footer,
-    // Address of the pointed-to data.
-    GibCursor to,
-    GibCursor to_footer,
-    // Data type written at from/to.
-    uint32_t datatype
-)
-{
-
-#ifdef _GIBBON_DEBUG
-    assert(from <= from_footer);
-    assert(to <= to_footer);
-#endif
-
-    // Write the indirection.
-    uint16_t footer_offset = to_footer - to;
-    uintptr_t tagged = GIB_STORE_TAG(to, footer_offset);
-    GibCursor writeloc = from;
-    *(GibBoxedTag *) writeloc = GIB_INDIRECTION_TAG;
-    writeloc += sizeof(GibPackedTag);
-    char *indr_ptr_addr = writeloc;
-    *(uintptr_t *) writeloc = tagged;
-
-    // Add to remembered set if it's an old to young pointer.
-    bool from_old = !gib_addr_in_nursery(from);
-    bool to_young = gib_addr_in_nursery(to);
-    bool to_old = !to_young;
-
-    if (from_old) {
-        if (to_young) {
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-            fprintf(stderr, "Writing an old-to-young indirection, %p -> %p.\n", from, to);
-#endif
-
-            // (3) oldgen -> nursery
-            GibOldgen *oldgen = DEFAULT_GENERATION;
-            // Store the address of the indirection pointer, *NOT* the address of
-            // the indirection tag, in the remembered set.
-            char *indr_addr = (char *) from + sizeof(GibPackedTag);
-            gib_remset_push(oldgen->rem_set, indr_addr, from_footer, datatype);
-            return;
-        } else {
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-            fprintf(stderr, "Writing an old-to-old indirection, %p -> %p.\n", from, to);
-#endif
-
-            // (4) oldgen -> oldgen
-            gib_handle_old_to_old_indirection(from_footer, to_footer);
-            return;
-        }
-    } else {
-
-#if defined _GIBBON_VERBOSITY && _GIBBON_VERBOSITY >= 3
-        fprintf(stderr, "Writing a young-to-%s indirection, %p -> %p.\n",
-                (to_young ? "young" : "old"), from, to);
-#endif
-
-   }
-
-    return;
 }
 
 /*
