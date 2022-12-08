@@ -1496,7 +1496,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                        ifdef = "#ifdef _GIBBON_DEBUG"
                        endif = "#endif"
                    return [ C.BlockStm [cstm| $escstm:ifdef |]
-                          , C.BlockStm [cstm| assert($id:chk); |]
+                          -- , C.BlockStm [cstm| assert($id:chk); |]
                           , C.BlockStm [cstm| $escstm:endif |]
                           ]
 

@@ -121,8 +121,13 @@ calculateBoundsExp ddefs env2 varSzEnv varLocEnv locRegEnv locOffEnv regSzEnv re
               let regSzEnv3 = M.unionWith max regSzEnv' regSzEnv''
               let regSzEnv4 = case ty0 of
                     -- TODO sizeofTy ty0 is incalculable? -> assume as 0 to give preference to analysis in other locations
-                    PackedTy _tag loc -> M.insertWith max (locRegEnv # loc) (locOffEnv # loc <> (maybe (BoundedSize 0) BoundedSize . sizeOfTy) ty0) regSzEnv3
-                    _                 -> regSzEnv3
+                    PackedTy _tag loc ->
+                      -- Make the chunk at least 32 bytes.
+                      let sz = case (locOffEnv # loc <> (maybe (BoundedSize 0) BoundedSize . sizeOfTy) ty0) of
+                                 BoundedSize i -> BoundedSize (max i 32)
+                                 Undefined -> Undefined
+                      in M.insertWith max (locRegEnv # loc) sz regSzEnv3
+                    _ -> regSzEnv3
               return (LetE (v, locs, ty0, bind') bod', regSzEnv4, M.union regTyEnv' regTyEnv'')
             CaseE ex2 cases -> do
               (cases', res, rts) <-
