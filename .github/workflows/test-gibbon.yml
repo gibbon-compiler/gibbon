@@ -34,7 +34,7 @@ jobs:
       - run: cabal v2-update -w /opt/ghc/9.0.1/bin/ghc
       - run: cabal v2-freeze -w /opt/ghc/9.0.1/bin/ghc
       - name: cache-cabal
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           key: ${{ runner.os }}-cabal-${{ hashFiles('cabal.project.freeze') }}
           restore-keys: |
@@ -48,11 +48,6 @@ jobs:
           cd gibbon-compiler
           cabal v2-update -w /opt/ghc/9.0.1/bin/ghc
           cabal v2-build -w /opt/ghc/9.0.1/bin/ghc .
-      - name: cache-answers
-        uses: actions/cache@v2
-        with:
-          key: ${{ runner.os }}-answers
-          path: gibbon-compiler/examples/build_tmp/*.ans
       - name: answers
         run: |
           cd gibbon-compiler
