@@ -1,5 +1,5 @@
-module Gibbon.Passes.FollowIndirections
-  ( followIndirections )
+module Gibbon.Passes.FollowPtrs
+  ( followPtrs )
   where
 
 import qualified Data.Map as M
@@ -14,8 +14,9 @@ import           Gibbon.L2.Syntax as L2
 
 --------------------------------------------------------------------------------
 
-followIndirections :: Prog2 -> PassM Prog2
-followIndirections (Prog ddefs fundefs mainExp) = do
+-- | Generate code for indirection and redirection pointer branches in the case expression.
+followPtrs :: Prog2 -> PassM Prog2
+followPtrs (Prog ddefs fundefs mainExp) = do
     fds' <- mapM gofun (M.elems fundefs)
     let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
     pure $ Prog ddefs fundefs' mainExp

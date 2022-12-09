@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Gibbon.Passes.ReorderAlloc
-  ( reorderAlloc, allocationOrderMarkers )
+module Gibbon.Passes.ReorderScalarWrites
+  ( reorderScalarWrites, writeOrderMarkers )
   where
 
 import qualified Data.List as L
@@ -10,7 +10,7 @@ import qualified Data.Set as S
 import qualified Data.Graph as G
 import           Data.Maybe ( fromJust )
 
-import           Gibbon.Common
+import           Gibbon.Common hiding ( Mode )
 import           Gibbon.Language
 import qualified Gibbon.L2.Syntax as L2
 import qualified Gibbon.L3.Syntax as L3
@@ -20,8 +20,8 @@ import qualified Gibbon.L3.Syntax as L3
 -- | Inserts markers which tells subsequent a compiler pass where to
 -- move the tag and scalar field allocations so that they happen
 -- before any of the subsequent packed fields.
-allocationOrderMarkers :: L2.Prog2 -> PassM L2.Prog2
-allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
+writeOrderMarkers :: L2.Prog2 -> PassM L2.Prog2
+writeOrderMarkers (Prog ddefs fundefs mainExp) = do
     fds' <- mapM gofun (M.elems fundefs)
     let fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
     mainExp' <- case mainExp of
@@ -83,7 +83,7 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
                                LetE (v,locs,ty,rhs) <$>
                                  go reg_env' alloc_env' store_env' env2' bod)
 
-            ls -> error $ "allocationOrderMarkers: encountered allocation to more" ++
+            ls -> error $ "writeOrderMarkers: encountered allocation to more" ++
                           " than one output location; " ++ sdoc ls ++ " in " ++ sdoc ex
 
         Ext ext ->
@@ -160,9 +160,9 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
         recur = go reg_env alloc_env store_env env2
         isAllocationOk loc rhs bod =
           case M.lookup loc reg_env of
-            Nothing  -> error $ "allocationOrderMarkers: free location " ++ sdoc loc
+            Nothing  -> error $ "writeOrderMarkers: free location " ++ sdoc loc
             Just reg -> case M.lookup reg alloc_env of
-                          Nothing -> error $ "allocationOrderMarkers: free region " ++ sdoc reg
+                          Nothing -> error $ "writeOrderMarkers: free region " ++ sdoc reg
                           Just rloc@(RegionLocs locs allocated_to) ->
                             let locs_before = takeWhile (/= loc) locs in
                               case locs_before of
@@ -319,8 +319,8 @@ data RegionLocs = RegionLocs { locs :: [LocVar], allocated_to :: S.Set LocVar }
 
 --------------------------------------------------------------------------------
 
-reorderAlloc :: L3.Prog3 -> PassM L3.Prog3
-reorderAlloc (Prog ddefs fundefs mainExp) = do
+reorderScalarWrites :: L3.Prog3 -> PassM L3.Prog3
+reorderScalarWrites (Prog ddefs fundefs mainExp) = do
     let fds' = map gofun (M.elems fundefs)
         fundefs' = M.fromList $ map (\f -> (funName f,f)) fds'
         mainExp' = case mainExp of
@@ -371,7 +371,7 @@ collectBinds collect loc ex0 =
     invert (Ext (L3.StartScalarsAllocation loc2)) = (Ext (L3.EndScalarsAllocation loc2))
     invert oth = error $ "collectBinds: " ++ sdoc oth
 
-    go :: Gibbon.Passes.ReorderAlloc.Mode -> [(Var,[()],L3.Ty3,L3.Exp3)] -> L3.Exp3
+    go :: Mode -> [(Var,[()],L3.Ty3,L3.Exp3)] -> L3.Exp3
        -> ([(Var,[()],L3.Ty3,L3.Exp3)], L3.Exp3)
     go mode acc ex =
       case ex of

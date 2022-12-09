@@ -62,8 +62,6 @@ import           Gibbon.Passes.Freshen        (freshNames)
 import           Gibbon.Passes.Flatten        (flattenL1, flattenL2, flattenL3)
 import           Gibbon.Passes.InlineTriv     (inlineTriv)
 import           Gibbon.Passes.Simplifier     (simplifyL1, lateInlineTriv, simplifyLocBinds)
--- import           Gibbon.Passes.Sequentialize  (sequentialize)
-
 import           Gibbon.Passes.DirectL3       (directL3)
 import           Gibbon.Passes.InferLocations (inferLocs)
 -- This is the custom pass reference to issue #133 that moves regionsInwards
@@ -76,14 +74,14 @@ import           Gibbon.Passes.InferEffects   (inferEffects)
 import           Gibbon.Passes.ParAlloc       (parAlloc)
 import           Gibbon.Passes.InferRegionScope (inferRegScope)
 import           Gibbon.Passes.RouteEnds      (routeEnds)
-import           Gibbon.Passes.FollowIndirections (followIndirections)
+import           Gibbon.Passes.FollowPtrs     (followPtrs)
 import           Gibbon.NewL2.FromOldL2       (fromOldL2)
 import           Gibbon.Passes.ThreadRegions  (threadRegions)
 import           Gibbon.Passes.Cursorize      (cursorize)
 import           Gibbon.Passes.FindWitnesses  (findWitnesses)
 -- -- import           Gibbon.Passes.ShakeTree      (shakeTree)
 import           Gibbon.Passes.HoistNewBuf    (hoistNewBuf)
-import           Gibbon.Passes.ReorderAlloc   (allocationOrderMarkers, reorderAlloc)
+import           Gibbon.Passes.ReorderScalarWrites  ( reorderScalarWrites, writeOrderMarkers )
 import           Gibbon.Passes.Unariser       (unariser)
 import           Gibbon.Passes.Lower          (lower)
 import           Gibbon.Passes.RearrangeFree  (rearrangeFree)
@@ -705,7 +703,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "simplifyLocBinds" simplifyLocBinds l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
-              l2 <- go "allocationOrderMarkers" allocationOrderMarkers l2
+              l2 <- go "writeOrderMarkers" writeOrderMarkers l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
               l2 <- goE2 "routeEnds"      routeEnds     l2
               l2 <- go "L2.typecheck"     L2.tcProg     l2
@@ -717,7 +715,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
                     else go "inferRegSize" inferRegSize l2
               l2 <- if gibbon1
                     then pure l2
-                    else go "followIndirections" followIndirections l2
+                    else go "followPtrs" followPtrs l2
               l2' <- go "fromOldL2" fromOldL2 l2
 
               -- N.B ThreadRegions doesn't produce a type-correct L2 program --
@@ -728,7 +726,7 @@ Also see Note [Adding dummy traversals] and Note [Adding random access nodes].
               -- L2 -> L3
               -- TODO: Compose L3.TcM with (ReaderT Config)
               l3 <- go "cursorize"        cursorize     l2'
-              l3 <- go "reorderAlloc"     reorderAlloc  l3
+              l3 <- go "reorderScalarWrites" reorderScalarWrites  l3
               -- _ <- lift $ putStrLn (pprender l3)
               l3 <- go "L3.flatten"       flattenL3     l3
               l3 <- go "L3.typecheck"     tcProg3       l3

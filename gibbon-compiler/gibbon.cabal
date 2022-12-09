@@ -73,13 +73,13 @@ library
                        Gibbon.Passes.ParAlloc
                        Gibbon.Passes.InferRegionScope
                        Gibbon.Passes.RouteEnds
-                       Gibbon.Passes.FollowIndirections
+                       Gibbon.Passes.FollowPtrs
                        Gibbon.Passes.ThreadRegions
                        Gibbon.Passes.Cursorize
                        Gibbon.Passes.FindWitnesses
                        Gibbon.Passes.ShakeTree
                        Gibbon.Passes.HoistNewBuf
-                       Gibbon.Passes.ReorderAlloc
+                       Gibbon.Passes.ReorderScalarWrites
                        Gibbon.Passes.Unariser
                        Gibbon.Passes.Lower
                        Gibbon.Passes.RearrangeFree
