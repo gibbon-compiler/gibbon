@@ -12,6 +12,7 @@
 {-# HLINT ignore "Use any" #-}
 {-# HLINT ignore "Avoid lambda" #-}
 {-# HLINT ignore "Redundant if" #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 #ifdef __GLASGOW_HASKELL__ 
 import Prelude hiding (map, concat,head,length,splitAt,zipWith,Just,Nothing,Maybe,repeat,replicate,reverse,take,filter,foldr,foldl,zip,scanl,tail,maximum,or,not,until,(!!),fst,snd,or,any)
@@ -39,11 +40,11 @@ data Outport = Outport Int Boolean Bool Int Bool Int deriving (Show)
 
 data Pair a b = Pair a b deriving (Show)
 
-fst :: Pair a b -> a
-fst p = case p of Pair x y -> x
+fstP :: Pair a b -> a
+fstP p = case p of Pair x y -> x
 
-snd :: Pair a b -> b
-snd p = case p of Pair x y -> y
+sndP :: Pair a b -> b
+sndP p = case p of Pair x y -> y
 
 type Label = Pair Int Int
 
@@ -93,7 +94,7 @@ maximum :: PList Int -> Int
 maximum a =
   case a of
     Nil -> 0
-    Cons z zs -> let m = maximum zs in max z m
+    Cons z zs -> let m = maximum zs in if z > m then z else m
 
 foldr :: (a -> b -> b) -> b -> PList a -> b
 foldr f z a =
@@ -250,7 +251,9 @@ scanR f u xs =
 scanlr ::
   (a -> a -> a) -> (a -> a -> a) -> a -> a -> PList a -> Pair (Pair a a) (PList (Pair a a))
 scanlr f g lu ru xs =
-  let up p1 p2 = case p1 of Pair lx ly -> case p2 of Pair rx ry -> Pair (f lx rx) (g ly ry)
+  let up :: Pair a a -> Pair a a -> Pair a a 
+      up p1 p2 = case p1 of Pair lx ly -> case p2 of Pair rx ry -> Pair (f lx rx) (g ly ry)
+      down :: Pair a b -> Pair a a -> Pair a a -> Pair (Pair a a) (Pair a a)
       down p1 p2 p3 = case p1 of Pair lx ly -> case p2 of Pair rx ry -> case p3 of Pair a b -> Pair (Pair a (g ry b)) (Pair (f a lx) b)
       xs' = map (\x -> Pair x x) xs
    in case sweep_ud up down (Pair lu ru) (put xs') of
@@ -476,7 +479,7 @@ send_left p1 p2 = case p1 of
         else Packet ia sa ma qla dla qra dra (ea + eb)
 
 send :: PList Packet -> Pair (Pair Packet Packet) (PList (Pair Packet Packet))
-send = scanlr send_right send_left emptyPacket emptyPacket
+send xs = scanlr send_right send_left emptyPacket emptyPacket xs
 
 circuit_simulate :: PList (PList Boolean) -> Circuit -> PList (PList Boolean)
 circuit_simulate inputs_list circuit = map collect_outputs (simulate inputs_list circuit)
@@ -486,6 +489,7 @@ collect_outputs c1 = case c1 of
   Circuit size ins outs states ->
     let -- get_output (Pair (label) (p))
         -- 		 = third (head [ head (inports s) | s<-states, p==pid s])
+        third :: Inport -> Boolean
         third i1 = case i1 of Inport _ _ v -> v
         get_first_inport s = head (inports s)
         get_output :: Pair Int Int -> Boolean
@@ -526,7 +530,7 @@ restore_requests :: PList State -> PList State -> PList State
 restore_requests old_states new_states = zipWith restore old_states new_states
 
 do_sends :: Int -> PList State -> PList State
-do_sends d = until (acknowledge d) (do_send d)
+do_sends d states = until (acknowledge d) (do_send d) states
 
 check_lr_requests :: Outport -> Bool
 check_lr_requests o1 = case o1 of Outport p m ql dl qr dr -> ql || qr
@@ -543,7 +547,7 @@ do_send :: Int -> PList State -> PList State
 do_send d states =
   let states1 = map (check_depth d) states
       pss = transpose (pad_packets (map make_packet states1))
-      send_results = map (\x -> snd (send x)) pss
+      send_results = map (\(x :: PList Packet) -> sndP (send x)) pss
       pss' = transpose send_results
    in zipWith (update_io d) pss' states
 
@@ -574,7 +578,7 @@ update_i :: Pair Packet Packet -> PList Inport -> PList Inport
 update_i p1 ins = case p1 of Pair l r -> up_i l (up_i r ins)
 
 up_i :: Packet -> PList Inport -> PList Inport
-up_i p1 = case p1 of Packet i p m' _ _ _ _ _ -> map (compare_and_update (Inport i p m'))
+up_i p1 ins = case p1 of Packet i p m' _ _ _ _ _ -> map (compare_and_update (Inport i p m')) ins
 
 compare_and_update :: Inport -> Inport -> Inport
 compare_and_update i1 i2 = case i1 of
@@ -587,7 +591,7 @@ compare_and_update i1 i2 = case i1 of
 make_packet :: State -> PList Packet
 make_packet state =
   map
-    (\o1 -> case o1 of Outport p m ql dl qr dr -> Packet (pid state) p m ql dl qr dr 1)
+    (\(o1 :: Outport) -> case o1 of Outport p m ql dl qr dr -> Packet (pid state) p m ql dl qr dr 1)
     (outports state)
 
 pad :: Int -> PList Packet -> PList Packet
@@ -605,17 +609,17 @@ check_depth d state =
 update_requests :: Bool -> State -> State
 update_requests b state =
   let outports' =
-        map (\o1 -> case o1 of Outport p m ql dl qr dr -> Outport p m b dl b dr) (outports state)
+        map (\(o1 :: Outport) -> case o1 of Outport p m ql dl qr dr -> Outport p m b dl b dr) (outports state)
    in setOutports state outports'
 
 simulate_components :: Int -> PList State -> PList State
-simulate_components depth = map (simulate_component depth)
+simulate_components depth state = map (simulate_component depth) state
 
 simulate_component :: Int -> State -> State
 simulate_component d state =
   if d == pathDepth state
     then
-      let out_signals = map (\i1 -> case i1 of Inport _ _ sig -> sig) (inports state)
+      let out_signals = map (\(i1 :: Inport) -> case i1 of Inport _ _ sig -> sig) (inports state)
           new_value = apply_component (compType state) out_signals
        in case new_value of
             Nothing -> state
@@ -651,9 +655,9 @@ store_inputs label_inputs state =
     then
       head
         ( map
-            (\p1 -> case p1 of Pair p2 value -> case p2 of Pair label input_pid -> update_outports state value)
+            (\(p1 :: Pair (Pair  Int Int) Boolean)  -> case p1 of Pair p2 value -> case p2 of Pair label input_pid -> update_outports state value)
             ( filter
-                (\p1 -> case p1 of Pair p2 value -> case p2 of Pair label input_pid -> pid state == input_pid)
+                (\(p1 :: Pair (Pair  Int Int) Boolean)  -> case p1 of Pair p2 value -> case p2 of Pair label input_pid -> pid state == input_pid)
                 label_inputs
             )
         )
@@ -690,7 +694,10 @@ update_outports :: State -> Boolean -> State
 update_outports state value =
   setOutports
     state
-    (map (\o1 -> case o1 of Outport p m ql dl qr dr -> Outport p value ql dl qr dr) (outports state))
+    ( map
+        (\(o1 :: Outport) -> case o1 of Outport p m ql dl qr dr -> Outport p value ql dl qr dr)
+        (outports state)
+    )
 
 regs :: Int -> Circuit
 regs bits =
