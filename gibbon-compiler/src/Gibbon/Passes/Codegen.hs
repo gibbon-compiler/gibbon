@@ -1492,7 +1492,7 @@ codegenTail venv fenv sort_fns (LetPrimCallT bnds prm rnds body) ty sync_deps =
                      , C.BlockStm [cstm| $id:endloc = $id:shadowstackFrame->endptr; |]]
 
                  Assert -> do
-                   let [VarTriv chk] = rnds
+                   let [VarTriv _chk] = rnds
                        ifdef = "#ifdef _GIBBON_DEBUG"
                        endif = "#endif"
                    return [ C.BlockStm [cstm| $escstm:ifdef |]

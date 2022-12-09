@@ -472,6 +472,8 @@ deserialize ddefs store (Buffer seq0) = final
          -- let (more,rst') = readN (n-1) rst
          -- in (VInt (-1) : more, rst')
 
+       oth -> error $ "todo: " ++ show oth
+
 data Size = SOne Int
           | SMany [Size]
   deriving (Read, Show, Eq, Ord, Generic, Out)

@@ -1190,7 +1190,18 @@ finishExp e =
       Ext (L2.AddFixed cur i) -> pure $ Ext (L2.AddFixed cur i)
       Ext (L2.StartOfPkd cur) -> pure $ Ext (L2.StartOfPkd cur)
       Ext (L2.TagCursor a b) -> pure $ Ext (L2.TagCursor a b)
-      MapE{} -> err$ "MapE not supported"
+      Ext (LetParRegionE{})       -> err $ "todo: " ++ sdoc e
+      Ext (RetE{})                -> err $ "todo: " ++ sdoc e
+      Ext (FromEndE{})            -> err $ "todo: " ++ sdoc e
+      Ext (BoundsCheck{})         -> err $ "todo: " ++ sdoc e
+      Ext (IndirectionE{})        -> err $ "todo: " ++ sdoc e
+      Ext (GetCilkWorkerNum{})    -> err $ "todo: " ++ sdoc e
+      Ext (LetAvail{})            -> err $ "todo: " ++ sdoc e
+      Ext (AllocateTagHere{})     -> err $ "todo: " ++ sdoc e
+      Ext (AllocateScalarsHere{}) -> err $ "todo: " ++ sdoc e
+      Ext (SSPush{})              -> err $ "todo: " ++ sdoc e
+      Ext (SSPop{})               -> err $ "todo: " ++ sdoc e
+      MapE{}  -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 
 finishTy :: Ty2 -> TiM Ty2
@@ -1289,6 +1300,16 @@ cleanExp e =
       Ext (L2.AddFixed cur i) -> (Ext (L2.AddFixed cur i), S.singleton cur)
       Ext (L2.StartOfPkd cur) -> (Ext (L2.StartOfPkd cur), S.singleton cur)
       Ext (L2.TagCursor a b) -> (Ext (L2.TagCursor a b), S.fromList [a,b])
+      Ext (RetE{})                -> err $ "todo: " ++ sdoc e
+      Ext (FromEndE{})            -> err $ "todo: " ++ sdoc e
+      Ext (BoundsCheck{})         -> err $ "todo: " ++ sdoc e
+      Ext (IndirectionE{})        -> err $ "todo: " ++ sdoc e
+      Ext (GetCilkWorkerNum{})    -> err $ "todo: " ++ sdoc e
+      Ext (LetAvail{})            -> err $ "todo: " ++ sdoc e
+      Ext (AllocateTagHere{})     -> err $ "todo: " ++ sdoc e
+      Ext (AllocateScalarsHere{}) -> err $ "todo: " ++ sdoc e
+      Ext (SSPush{})              -> err $ "todo: " ++ sdoc e
+      Ext (SSPop{})               -> err $ "todo: " ++ sdoc e
       MapE{} -> err$ "MapE not supported"
       FoldE{} -> err$ "FoldE not supported"
 

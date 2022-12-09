@@ -128,6 +128,7 @@ allocationOrderMarkers (Prog ddefs fundefs mainExp) = do
         -- straightforward recursion (assumption: a-normal form)
         VarE{}     -> pure ex
         LitE{}     -> pure ex
+        CharE{}    -> pure ex
         FloatE{}   -> pure ex
         LitSymE{}  -> pure ex
         AppE{}     -> pure ex
@@ -211,6 +212,7 @@ checkScalarDeps ddefs in_scope tag_loc ex0 =
       case ex of
         VarE{}     -> (dep_env,move_set,move)
         LitE{}     -> (dep_env,move_set,move)
+        CharE{}    -> (dep_env,move_set,move)
         FloatE{}   -> (dep_env,move_set,move)
         LitSymE{}  -> (dep_env,move_set,move)
         AppE{}     -> (dep_env,move_set,move)

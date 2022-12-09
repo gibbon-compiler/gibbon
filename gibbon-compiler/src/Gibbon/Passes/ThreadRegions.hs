@@ -338,6 +338,7 @@ threadRegionsExp ddefs fundefs fnLocArgs renv env2 lfenv rlocs_env wlocs_env pkd
       let b' = fn (toLocVar a) Output
       let d' = fn (toLocVar c) Input
       let fn2 (Loc lrem) end = Loc (lrem { lremEndReg = end })
+          fn2 oth _ = error $ "fn2: " ++ sdoc oth
       let a' = fn2 a (toLocVar b')
           c' = fn2 c (toLocVar d')
       let pkd_env' = M.insert loc (renv # loc) pkd_env
