@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
 
 {- L0 Specializer (part 2):
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -352,7 +353,10 @@ monomorphize p@Prog{ddefs,fundefs,mainExp} = do
                                , mono_funs_todo = M.fromList rst }
         put mono_st'
         -- Collect any more obligations generated due to the monormorphization
-        let env21 = Env2 (M.fromList $ zip funArgs (inTys funTy')) (M.map funTy fundefs1)
+        let argEnv = M.fromList $ zip funArgs (inTys funTy')
+        let (argFenv, argVenv) = M.partition (\case ArrowTy {} -> True; _ -> False) argEnv
+        let argFenv' = M.map (ForAll []) argFenv
+        let env21 = Env2 argVenv (M.union argFenv' (M.map funTy fundefs1))
         funBody'' <- collectMonoObls ddefs env21 toplevel funBody'
         funBody''' <- monoLambdas funBody''
         let fn' = fn { funName = new_fun_name, funTy = funTy', funBody = funBody''' }
@@ -1463,25 +1467,25 @@ desugarL0 (Prog ddefs fundefs' mainExp') = do
           ls' <- mapM go ls
           let tys = lookupDataCon ddefs dcon
               flattenTupleArgs :: Exp0 -> Ty0 -> PassM ([(Var, [loc], Ty0, Exp0)] ,[Exp0])
-              flattenTupleArgs arg ty = case ty of 
-                ProdTy tys' -> 
-                  case arg of 
+              flattenTupleArgs arg ty = case ty of
+                ProdTy tys' ->
+                  case arg of
                     MkProdE args -> do
-                      (bnds', args') <- unzip <$> zipWithM flattenTupleArgs args tys' 
+                      (bnds', args') <- unzip <$> zipWithM flattenTupleArgs args tys'
                       pure (concat bnds',concat args')
-                    _ -> do 
+                    _ -> do
                       -- generating alias so that repeated expression is 
                       -- eliminated and we are taking projection of trivial varEs
-                      argalias <- gensym "alias" 
-                      ys <- mapM (\_ -> gensym "proj") tys' 
+                      argalias <- gensym "alias"
+                      ys <- mapM (\_ -> gensym "proj") tys'
                       let vs = map VarE ys
-                      (bnds', args') <- unzip <$> zipWithM flattenTupleArgs vs tys' 
-                      let bnds'' = (argalias,[],ty, arg):[(y,[],ty',ProjE i (VarE argalias))| (y, ty', i) <- zip3 ys tys' [0..]] 
+                      (bnds', args') <- unzip <$> zipWithM flattenTupleArgs vs tys'
+                      let bnds'' = (argalias,[],ty, arg):[(y,[],ty',ProjE i (VarE argalias))| (y, ty', i) <- zip3 ys tys' [0..]]
                       pure (bnds'' ++ concat bnds', concat args')
                 _ -> do
                   pure ([], [arg])
           (binds, args) <- unzip <$> zipWithM flattenTupleArgs ls' tys
-          pure $ mkLets (concat binds) $ DataConE a dcon (concat args) 
+          pure $ mkLets (concat binds) $ DataConE a dcon (concat args)
         TimeIt e ty b    -> (\a -> TimeIt a ty b) <$> go e
         WithArenaE v e -> (WithArenaE v) <$> go e
         SpawnE fn tyapps args -> (SpawnE fn tyapps) <$> mapM go args
@@ -1631,9 +1635,9 @@ genPrintFn DDef{tyName, dataCons} = do
                 w2 <- gensym "wildcard"
                 let add_spaces :: [(Var, [Ty0], Ty0, PreExp E0Ext Ty0 Ty0)] -> PassM [(Var, [Ty0], Ty0, PreExp E0Ext Ty0 Ty0)]
                     add_spaces [] = pure []
-                    add_spaces [z] = pure [z] 
-                    add_spaces (z:zs) = do 
-                      zs' <- add_spaces zs 
+                    add_spaces [z] = pure [z]
+                    add_spaces (z:zs) = do
+                      zs' <- add_spaces zs
                       wi <- gensym "wildcard"
                       pure $ z:(wi, [], ProdTy [], PrimAppE PrintSym [(LitSymE (toVar " "))] ):zs'
 
